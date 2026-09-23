@@ -71,6 +71,9 @@ export function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera
   scene.traverse((o) => { if (o.frustumCulled) { o.frustumCulled = false; unculled.push(o); } });
   const prev = renderer.getRenderTarget();
   renderer.setRenderTarget(target);
+  // twice: the shadow pass of a render sees the light setup of the previous one, and
+  // shadow depth programs are keyed by light counts, so the first pass compiles unlit variants
+  renderer.render(scene, camera);
   renderer.render(scene, camera);
   renderer.setRenderTarget(prev);
   for (const o of unculled) o.frustumCulled = true;
