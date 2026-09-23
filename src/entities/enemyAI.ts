@@ -59,10 +59,11 @@ function fireBolt(e: Enemy, angleOffset = 0, lead = true): void {
   const a = Math.atan2(tx - origin.x, tz - origin.z) + angleOffset;
   _dir.set(Math.sin(a), 0, Math.cos(a));
   origin.y = 1.1;
+  const glow = pj.glow ?? 1;
   spawnProjectile({
     pos: origin, dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true,
-    color: pj.color, size: pj.radius * 0.7, intensity: 5,
-    trail: { color: pj.color, colorEnd: pj.trail ?? 0x200030, size: pj.radius * 1.6, rate: 60, life: 0.4 },
+    color: pj.color, size: pj.radius * 0.7, intensity: 5 * glow,
+    trail: { color: pj.color, colorEnd: pj.trail ?? 0x200030, intensity: 2.5 * glow, size: pj.radius * 1.6, rate: 60, life: 0.4 },
     onHit: (_target, proj) => {
       hurtPlayer(e.damage, e.def.damageType, proj.pos);
       burst(proj.pos, { count: 16, color: pj.color, speed: 4, life: 0.4, size: 0.3 });
