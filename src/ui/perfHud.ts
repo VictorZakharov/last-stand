@@ -7,6 +7,8 @@ import { readCookie, writeCookie } from '../core/cookies';
 import { programsCompiledInGame, lateCompiles } from '../core/shaders';
 
 const COOKIE = 'last-stand-perf-hud';
+// the hashed bundle name identifies the build a report came from
+const BUILD = import.meta.url.split('/').pop()?.replace(/\?.*$/, '') ?? 'unknown';
 const WINDOW_MS = 15_000;     // history shown in the graph
 const BUCKET_MS = 500;        // one graph point per bucket
 const REDRAW_MS = 250;
@@ -193,7 +195,7 @@ function report(): string {
   const info = renderer.info;
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   return [
-    `Last Stand performance report (${new Date().toISOString()})`,
+    `Last Stand performance report (${new Date().toISOString()}, build ${BUILD})`,
     `FPS now ${fmtFps(s.fps)} | 15s avg ${fmtFps(s.avgFps)} | 1% low ${fmtFps(s.lowFps)}`,
     `Frame p50 ${fmt(s.p50)} ms | p95 ${fmt(s.p95)} ms | CPU ${fmt(s.cpu, 2)} ms | GPU ${timerExt ? fmt(s.gpu, 2) + ' ms' : 'n/a'}`,
     `Draw calls ${frameCalls} | triangles ${frameTris} | programs ${info.programs?.length ?? 0} (compiled after load ${programsCompiledInGame()}) | geometries ${info.memory.geometries} | textures ${info.memory.textures}`,
