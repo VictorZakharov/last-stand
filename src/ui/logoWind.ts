@@ -1,8 +1,9 @@
 // The loading screen's exit: a gust from the right blows the logo's letters away to the left as
 // dust and snow, then the swirl gathers again into the lobby's logo (top left) and becomes it.
-// The steel letters (SVG) are snapshotted to device pixels and every pixel becomes a point on the
-// pixel grid, so at rest the particle field is the letters exactly and replaces them invisibly;
-// the glows stay live and fade. Motion is closed-form in the vertex shader (hundreds of thousands
+// The steel letters (SVG) are snapshotted and every pixel becomes a point. A point is only drawn
+// once the wind has picked it up: the real letters stay on screen and are wiped away just behind the
+// wind front, so no copy of them at rest is ever seen (a coarser snapshot would show as a swap).
+// The glows stay live and fade. Motion is closed-form in the vertex shader (hundreds of thousands
 // of points, no per-frame CPU work) and driven by smooth noise of each point's starting position,
 // so neighbours move together in streaks and eddies, like real wind.
 //
@@ -16,11 +17,17 @@ export const REVEAL_AT = 1.2;      // s: the loading backdrop starts fading to t
 const GATHER = 1.45;               // s: points start flying to the lobby logo...
 const GATHER_SPREAD = 0.65;        // ...staggered left to right across it...
 const GATHER_TIME = 0.85;          // ...each taking this long
-const SETTLE = GATHER + GATHER_SPREAD + 0.2 + GATHER_TIME;   // all points are in place
-const HANDOFF = 0.35;              // s: particles crossfade to the real lobby logo
-// s: the particles fade in over the (still opaque) SVG letters before the wind starts. The
-// snapshot matches except for the brushed grain, which the browser samples on its own grid.
-const LEAD = 0.25;
+// the handoff to the real lobby logo: every point of a column (x 0..1 across the letters) has
+// landed by LANDED + GATHER_SPREAD * x. The logo is uncovered left to right along that line, under
+// points that have just landed (in the logo's own colours by then), which then fade
+const LANDED = GATHER + 0.2 + GATHER_TIME;
+const HANDOFF = 0.3;               // s: a landed point fades over the uncovered logo
+const GLOW_IN = GATHER_SPREAD + 0.3;   // s: the lobby logo's glow fades in as it is uncovered
+// the wind front (as in the shader): a point at x (0..1 across the letters, right = 0 s) starts
+// moving at (1 - x + tear) / OVER * SWEEP, the tear being up to TEAR
+const TEAR = 0.07, OVER = 1.07;
+/** the letters are wiped this far (fraction of their width) behind the front, where every point there has lifted */
+const WIPE_LAG = TEAR + 0.02;
 const MAX_POINTS = 1_500_000;      // point budget of a capable desktop
 const LOW_POINTS = 120_000;        // ...and of a phone, tablet or low-end machine
 /** the watchdog: below this frame rate over the first frames of the wind, the exit is cut short */
@@ -89,9 +96,20 @@ export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null)
     for (let j = 0; j < 4; j++) rnd[c * 4 + j] = Math.random() * 256;
     c++;
   }
+  const tMetal = target && letters(target);
   const gather = dst && dst.width > 10 ? { x: dst.left, y: dst.top, scale: dst.width / box.width } : null;
+  // the lobby logo is drawn at its own size (its rim, shadow and shine don't simply scale), so the
+  // points take its colours as they land: a snapshot of it on the canvas's pixel grid
+  let home: HomeTex | null = null;
+  if (gather && dst && tMetal) {
+    const hx = Math.floor((dst.left - dst.width * PAD_X) * dpr), hy = Math.floor((dst.top - dst.height * PAD_Y) * dpr);
+    const hw = Math.ceil((dst.right + dst.width * PAD_X) * dpr) - hx, hh = Math.ceil((dst.bottom + dst.height * PAD_Y) * dpr) - hy;
+    const tk = dst.width / vb.width;
+    const data = await snapshot(tMetal, [vb.x + (hx / dpr - dst.left) / tk, vb.y + (hy / dpr - dst.top) / tk, hw / dpr / tk, hh / dpr / tk], hw, hh);
+    if (data) home = { data, x: hx / dpr, y: hy / dpr, w: hw, h: hh };
+  }
   // a point covers its share of the grid, in canvas pixels
-  const field = createField(pos, col, rnd, c, { box, dpr, pointPx: step * dpr / grid, gather });
+  const field = createField(pos, col, rnd, c, { box, dpr, pointPx: step * dpr / grid, gather, home });
   if (import.meta.env.DEV) console.info(`logo wind: ${c} points (budget ${budget}), grid ${grid.toFixed(2)}x, canvas ${dpr}x`);
   if (!field) return null;
   // the lobby logo is made of the particles until they have settled. It stays on its own layer at
@@ -106,28 +124,49 @@ export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null)
   return {
     cancel,
     start(reveal, done) {
-      let revealed = false, handed = false, swapped = false;
+      let revealed = false, handed = false, swapped = false, glowing = false;
+      const tGlow = target?.querySelector<SVGSVGElement>('svg.logo-glow');
       field.canvas.style.visibility = 'visible';
-      field.canvas.animate([{ opacity: 0 }, { opacity: 1 }], { duration: LEAD * 1000 });
       field.run((t) => {
-        if (!swapped && t >= 0) {
+        if (!swapped) {
           swapped = true;
-          metal.style.visibility = 'hidden';   // the particles are the letters now
+          // the letters are cut away right to left, following the front (a straight line trailing
+          // its torn edge): what has gone is dust by then. The clip runs from beyond the letters'
+          // right edge (their rim and shadow) to beyond the left one
+          const at = (s: number): string => `inset(-50% ${((s * OVER / SWEEP - WIPE_LAG) * 100).toFixed(2)}% -50% -50%)`;
+          const end = (1 + PAD_X + WIPE_LAG) * SWEEP / OVER;
+          metal.animate([{ clipPath: at(0) }, { clipPath: at(end) }], { duration: end * 1000, easing: 'linear', fill: 'forwards' });
           // the glow has nothing left to light: it fades as the front crosses
           glow?.animate([{ opacity: getComputedStyle(glow).opacity }, { opacity: 0 }], { duration: SWEEP * 1000, easing: 'ease-in', fill: 'forwards' });
         }
         if (!revealed && t >= REVEAL_AT) { revealed = true; reveal(); }
-        if (gather && !handed && t >= SETTLE) {
-          handed = true;
-          target!.style.transition = `opacity ${HANDOFF}s linear`;
+        if (gather && !glowing && t >= LANDED - 0.1) {
+          glowing = true;
+          // the logo shows from here, its letters still cut away (the swarm is them for now)
+          if (tMetal) tMetal.style.clipPath = 'inset(-50% 150% -50% -50%)';
           target!.style.opacity = '';
-          target!.addEventListener('transitionend', () => { target!.style.transition = ''; target!.style.willChange = ''; }, { once: true });
+          tGlow?.animate([{ opacity: 0 }, { opacity: getComputedStyle(tGlow).opacity }], { duration: GLOW_IN * 1000, easing: 'ease-in', fill: 'backwards' });
+        }
+        if (gather && !handed && t >= LANDED) {
+          handed = true;
+          // uncover the logo left to right, from its rim on the left (those points land with the
+          // letters' left edge) to the one on the right
+          const cut = (x: number): string => `inset(-50% ${((1 - x) * 100).toFixed(2)}% -50% -50%)`;
+          if (tMetal) {
+            tMetal.style.clipPath = '';
+            tMetal.animate([{ clipPath: cut(0) }, { clipPath: cut(1 + PAD_X) }], { duration: GATHER_SPREAD * (1 + PAD_X) * 1000, easing: 'linear' });
+          }
+          target!.style.willChange = '';
         }
       }, () => { field.dispose(); done(); }, () => {
         // too slow for this device: the lobby (and its logo) take over now, and later launches use the plain fade
         turnOff();
         if (!revealed) { revealed = true; reveal(); }
-        if (gather && !handed) { handed = true; target!.style.transition = 'opacity .3s linear'; target!.style.opacity = ''; target!.style.willChange = ''; }
+        if (gather && !handed) {
+          handed = true;
+          if (tMetal) tMetal.style.clipPath = '';
+          target!.style.transition = 'opacity .3s linear'; target!.style.opacity = ''; target!.style.willChange = '';
+        }
       });
     },
   };
@@ -169,13 +208,16 @@ async function fontFace(family: string, weight: number): Promise<string> {
 
 const VERT = /* glsl */`#version 300 es
 in vec2 aPos; in vec4 aCol; in vec4 aRnd;
-uniform float uT, uPx, uDpr, uFade;
+uniform float uT, uPx, uDpr;
+uniform sampler2D uHome;   // the lobby logo's snapshot...
+uniform vec3 uHomeAt;      // ...its left, top (CSS px) and whether there is one
 uniform vec2 uView;
 uniform vec4 uBox;   // letters' left, top, width, height (CSS px)
 uniform vec4 uDst;   // lobby logo left, top, scale; w = 1 when there is one to gather into
 out vec4 vCol; out float vRound;
-const float SWEEP = ${SWEEP.toFixed(2)}, TEAR = 0.07, OVER = 1.07;
+const float SWEEP = ${SWEEP.toFixed(2)}, TEAR = ${TEAR.toFixed(2)}, OVER = ${OVER.toFixed(2)};
 const float GATHER = ${GATHER.toFixed(2)}, SPREAD = ${GATHER_SPREAD.toFixed(2)}, GTIME = ${GATHER_TIME.toFixed(2)};
+const float LANDED = ${LANDED.toFixed(2)}, HANDOFF = ${HANDOFF.toFixed(2)};
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -226,20 +268,31 @@ void main() {
 
   float blown = clamp(age * 5.0, 0.0, 1.0) * (1.0 - g);
   float a;
-  if (gathers) a = uFade * mix(1.0, flake ? 1.0 : 0.75, blown);   // airborne dust thins a little
+  // airborne dust thins a little; landed, a point fades once the logo is uncovered under it
+  if (gathers) a = mix(1.0, flake ? 1.0 : 0.75, blown) * (1.0 - clamp((uT - LANDED - SPREAD * max(n.x, 0.0) - 0.04) / HANDOFF, 0.0, 1.0));
   else {
     float life = flake ? 2.1 + 1.0 * r : 0.8 + 0.9 * r, k = age / life;
     a = k >= 1.0 ? 0.0 : (flake ? 1.0 - k * k : (1.0 - k) * (1.0 - k));
   }
+  // not drawn until the wind lifts it: the letters themselves are still there
+  if (age <= 0.0 && g <= 0.0) a = 0.0;
   // flakes whiten while airborne, like snow
-  vec3 c = mix(aCol.rgb, vec3(0.95, 0.96, 1.0), flake ? 0.6 * blown : 0.0);
-  float alpha = mix(aCol.a, flake ? max(aCol.a, 0.9) : aCol.a, blown);
+  vec4 col = aCol;
+  if (uHomeAt.z > 0.5 && g > 0.0) {
+    // landing: into the lobby logo's own colour at that pixel
+    ivec2 size = textureSize(uHome, 0);
+    ivec2 at = clamp(ivec2((home - uHomeAt.xy) * uDpr), ivec2(0), size - 1);
+    col = mix(aCol, texelFetch(uHome, at, 0), smoothstep(0.4, 1.0, g));
+  }
+  vec3 c = mix(col.rgb, vec3(0.95, 0.96, 1.0), flake ? 0.6 * blown : 0.0);
+  float alpha = mix(col.a, flake ? max(col.a, 0.9) : col.a, blown);
   vCol = vec4(c * alpha, alpha) * a;
   vRound = flake ? blown : 0.0;
-  // one device pixel at rest; dust stays fine, flakes grow; settled points match the lobby logo's scale
+  // one grid pixel at rest; dust stays fine, flakes grow; settled points match the lobby logo's scale
   float settled = uPx * mix(1.0, max(uDst.z, 0.75), g);
   gl_PointSize = a > 0.0 ? mix(settled, flake ? uDpr * (2.2 + 1.6 * aRnd.y) : uPx * 1.25, blown) : 0.0;
   gl_Position = vec4(p.x / uView.x * 2.0 - 1.0, 1.0 - p.y / uView.y * 2.0, 0.0, 1.0);
+  if (a <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);   // outside the view: some GPUs draw a 0-size point as 1 pixel
 }`;
 const FRAG = /* glsl */`#version 300 es
 precision mediump float;
@@ -250,7 +303,9 @@ void main() {
   o = vCol * mix(1.0, 1.0 - smoothstep(0.2, 0.5, d), vRound);
 }`;
 
-interface FieldOpts { box: DOMRect; dpr: number; pointPx: number; gather: { x: number; y: number; scale: number } | null }
+/** A snapshot of the lobby logo: RGBA on the canvas's pixel grid, its top left in CSS px. */
+interface HomeTex { data: Uint8ClampedArray; x: number; y: number; w: number; h: number }
+interface FieldOpts { box: DOMRect; dpr: number; pointPx: number; gather: { x: number; y: number; scale: number } | null; home: HomeTex | null }
 
 function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count: number, o: FieldOpts) {
   const canvas = document.createElement('canvas');
@@ -289,31 +344,40 @@ function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count:
   gl.uniform4f(u('uDst'), g?.x ?? 0, g?.y ?? 0, g?.scale ?? 1, g ? 1 : 0);
   gl.uniform1f(u('uPx'), o.pointPx);
   gl.uniform1f(u('uDpr'), o.dpr);
-  const uT = u('uT'), uFade = u('uFade');
+  const h = o.home;
+  gl.uniform3f(u('uHomeAt'), h?.x ?? 0, h?.y ?? 0, h ? 1 : 0);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  if (h) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, h.w, h.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, h.data);
+  else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.uniform1i(u('uHome'), 0);
+  const uT = u('uT');
   gl.viewport(0, 0, canvas.width, canvas.height);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   const draw = (t: number): void => {
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.uniform1f(uT, t);
-    gl.uniform1f(uFade, g ? 1 - Math.min(1, Math.max(0, (t - SETTLE) / HANDOFF)) : 1);
     gl.drawArrays(gl.POINTS, 0, count);
   };
   draw(0);   // compile and upload now, not on the first frame of the exit
   document.body.appendChild(canvas);
   // gathering: settled and handed over; otherwise the last flakes (released at SWEEP) fade by then
-  const END = g ? SETTLE + HANDOFF : SWEEP + 3.2;
+  const END = g ? LANDED + GATHER_SPREAD * (1 + PAD_X) + 0.04 + HANDOFF : SWEEP + 3.2;
   let disposed = false;
   return {
     canvas,
-    /** `tick` gets the exit's time: negative during the fade-in lead, then seconds since the wind started. */
+    /** `tick` gets the exit's time: seconds since the wind started. */
     /** `slow` fires if the watchdog cuts the exit short; `done` still follows once the backdrop has faded. */
     run(tick: (t: number) => void, done: () => void, slow: () => void): void {
       const t0 = performance.now();
       let last = t0, samples = 0, spent = 0;
       const frame = (now: number): void => {
         if (disposed) return;
-        const t = (now - t0) / 1000 - LEAD;   // negative while fading in: at rest
+        const t = (now - t0) / 1000;
         // the watchdog: the first frames of the wind show whether the device keeps up
         if (t > 0 && samples < SLOW_SAMPLES) {
           spent += now - last;
@@ -325,7 +389,7 @@ function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count:
           }
         }
         last = now;
-        draw(Math.max(0, t));
+        draw(t);
         tick(t);
         if (t < END) requestAnimationFrame(frame); else done();
       };
