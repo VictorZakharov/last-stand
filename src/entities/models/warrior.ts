@@ -306,6 +306,17 @@ export function buildWarrior(): Model {
         j.shoulderL.rotation.z += 0.9 * w; R.z += -0.9 * w;
         j.shoulderL.rotation.x += 0.3 * w; R.x += 0.3 * w;
         j.spine.rotation.x += -0.2 * w; j.neck.rotation.x += -0.35 * w;
+      } else if (a.name === 'stagger') {
+        // guard broken: thrown back with the arms flung open, then hunched and reeling until it passes
+        const hit = 1 - ramp(k, 0, 0.3), reel = ramp(k, 0.1, 0.3) * (1 - ramp(k, 0.8, 1));
+        const sway = Math.sin(t * 7) * reel;
+        j.spine.rotation.x += -0.45 * hit + 0.3 * reel; j.neck.rotation.x += -0.35 * hit + 0.15 * reel;
+        j.spine.rotation.z += 0.12 * sway; j.neck.rotation.z += -0.1 * sway;
+        j.shoulderL.rotation.set(-0.2 * reel, 0, 0.9 * hit + 0.35 * reel); j.elbowL.rotation.set(-0.3 - 0.4 * reel, 0, 0);
+        R.x += 0.4 * hit + 0.5 * reel; R.z += -0.6 * hit - 0.2 * reel; j.elbowR.rotation.x += 0.4 * hit;
+        j.body.position.y += -0.05 * reel;
+        j.kneeL.rotation.x += 0.35 * hit + 0.2 * reel; j.kneeR.rotation.x += 0.15 * hit + 0.2 * reel;
+        j.thighR.rotation.x += 0.35 * hit;
       } else if (a.name === 'cast') {
         const w = pulse(k, 0, 1);
         R.x += -1.2 * w; j.chest.rotation.y += 0.3 * w;

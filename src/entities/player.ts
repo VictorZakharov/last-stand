@@ -64,8 +64,10 @@ export class Player {
   gear: Gear = { weapon: null, twoHanded: false, shield: false };
   /** seconds until the shield can block again, and when it last did */
   blockCd = 0;
-  /** game time until which a broken guard keeps the shield down */
+  /** game time until which a broken guard keeps the shield down and the character staggered:
+   *  it can move but not attack, cast or raise the shield */
   guardBroken = -1;
+  get staggered(): boolean { return this.guardBroken > G.time; }
   lastBlock = -99;
   life = 0;
   energy = 0;
@@ -189,7 +191,7 @@ export class Player {
 
     // a channel ends when the key that started it is released
     if (this.channel && !isDown(this.channel.key)) this.stopChannel();
-    if (input.mouse.overUI || this.dash) return;
+    if (input.mouse.overUI || this.dash || this.staggered) return;
     for (const key of SKILL_KEYS) {
       if (!isDown(key)) continue;
       const skill = this.skillAt(key);
@@ -200,7 +202,7 @@ export class Player {
   }
 
   tryCast(s: KnownSkill): boolean {
-    if (this.casting || this.channel || this.dash || this.cooldownLeft(s.def.impl) > 0 || !this.alive) return false;
+    if (this.casting || this.channel || this.dash || this.staggered || this.cooldownLeft(s.def.impl) > 0 || !this.alive) return false;
     if (!this.sandbox && this.energy < s.def.cost) { this.lowEnergy(); return false; }
     const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
     const target = this.aim.clone();
@@ -229,7 +231,7 @@ export class Player {
   startChannel(s: KnownSkill, key: SkillKey): void {
     if (!s.impl.channel) return;
     // a broken guard can't be raised again until the shield recovers
-    if (s.def.block && this.guardBroken > G.time) return;
+    if (this.staggered) return;
     if (!this.sandbox && this.energy < s.def.cost * 0.2) { this.lowEnergy(); return; }
     this.channel = { skill: s, key, state: s.impl.start(this, s.def) };
   }
@@ -311,7 +313,8 @@ export class Player {
     const side = Math.cos(this.facing) * this.vel.x - Math.sin(this.facing) * this.vel.z;
     this.phase += dt * speed * 2.1 * (fwd < -0.5 ? -1 : 1);
     let action: ActionState | null = null;
-    if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / this.dash.dur) };
+    if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };
+    else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / this.dash.dur) };
     else if (this.casting) action = { name: this.casting.skill.impl.anim || 'cast', t: this.casting.t / this.casting.dur };
     else if (this.channel) action = { name: this.channel.skill.impl.anim || 'channel', t: 0.5 };
     this.pose(dt, t, Math.min(1, speed / this.stats.moveSpeed), 1, side / this.stats.moveSpeed, action);
@@ -393,6 +396,7 @@ export class Player {
       this.guardBroken = G.time + BLOCK.guardBreak;
       this.blockCd = BLOCK.guardBreak;
       this.stopChannel();
+      this.casting = null;
       floatText(this.pos.x, 2.7, this.pos.z, 'Guard broken', 'info', '#ff8a50');
       addShake(0.25);
     } else floatText(this.pos.x, 2.5, this.pos.z, `Block ${Math.round(blocked)}`, 'info', '#ffd9a0');

@@ -57,7 +57,7 @@ export interface DerivedStats {
 
 export type SkillKey = 'mouse0' | 'mouse2' | '1' | '2' | '3' | '4' | 'q';
 /** pose a model plays while the skill casts; a class's model interprets each name in its own way */
-export type CastAnim = 'cast' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'spin' | 'block' | null;
+export type CastAnim = 'cast' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'spin' | 'block' | 'stagger' | null;
 
 /** Skill tuning data. Behavior-specific numbers are optional fields. */
 export interface SkillDef {
