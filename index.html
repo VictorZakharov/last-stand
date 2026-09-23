@@ -71,12 +71,20 @@
     @keyframes ld-flicker { 0% { opacity: .75; } 40% { opacity: 1; } 55% { opacity: .82; } 100% { opacity: .95; } }
     @keyframes ld-drift { from { transform: translate(-6%, 3%); } to { transform: translate(6%, -4%); } }
     @keyframes ld-rise { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: .95; } 60% { transform: translate(var(--dx, 20px), -55vh); } 100% { transform: translate(calc(var(--dx, 20px) * -.4), -95vh); opacity: 0; } }
+    /* short screens (phones held sideways): the tip joins the column below the status instead of
+       sitting at the screen's bottom edge, where the centred column would run into it; it keeps
+       two lines' height so a longer tip doesn't shift the logo, and the logo fits what is left */
+    @media (max-height: 520px) {
+      #loading { gap: 10px; }
+      #loading .ld-logo { width: min(620px, 88vw, (100vh - 190px) * 2.12); width: min(620px, 88vw, (100dvh - 190px) * 2.12); }
+      #loading .ld-tip { position: relative; left: auto; bottom: auto; translate: none; margin-top: 4px; font-size: 15px; line-height: 1.3; min-height: 2.6em; }
+    }
     @media (prefers-reduced-motion: reduce) {
       #loading .ld-glow, #loading .logo-glow, #loading .ld-smoke, #loading .ld-bar::after { animation: none; }
       #loading .ld-ember { display: none; }
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-tE2_x3Ib.js"></script>
+  <script type="module" crossorigin src="./assets/index-YNpqnhCZ.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/three-gQDWbOaO.js">
   <link rel="stylesheet" crossorigin href="./assets/index-Cbiv6s1I.css">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
