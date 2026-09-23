@@ -1,7 +1,8 @@
 // Loading screen. The markup and styles are inline in index.html so it paints before the
 // bundle has loaded; boot() reports its steps here and yields so each one gets painted.
 import { TIPS } from '../data/tips';
-import { prepareBlow, type LogoBlow } from './logoWind';
+import { prepareBlow, logoWindOff, type LogoBlow } from './logoWind';
+import { qualityLevel } from '../core/quality';
 
 const el = (): HTMLElement => document.getElementById('loading')!;
 const sub = (): HTMLElement => el().querySelector<HTMLElement>('.ld-sub')!;
@@ -30,9 +31,11 @@ const SMOOTH_FRAMES = 8, SMOOTH_MS = 70, MAX_WAIT_MS = 4000;
 export function loadingDone(onReveal: () => void): void {
   const l = el();
   l.style.setProperty('--p', '1');
-  // the logo's particle field is built meanwhile (reduced motion: a plain fade instead); it
-  // gathers into the lobby's logo
-  let blow: LogoBlow | null | undefined = matchMedia('(prefers-reduced-motion: reduce)').matches ? null : undefined;
+  // the logo's particle field is built meanwhile; it gathers into the lobby's logo. A plain fade
+  // instead with reduced motion, on low graphics quality (picked, or where Auto settled last time),
+  // and on a device where the particles were too slow before
+  const plain = matchMedia('(prefers-reduced-motion: reduce)').matches || qualityLevel() === 'low' || logoWindOff();
+  let blow: LogoBlow | null | undefined = plain ? null : undefined;
   let left = false;
   if (blow === undefined) {
     prepareBlow(l.querySelector<HTMLElement>('.ld-logo')!, document.querySelector<HTMLElement>('#menu .logo-art'))

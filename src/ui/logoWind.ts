@@ -5,6 +5,11 @@
 // the glows stay live and fade. Motion is closed-form in the vertex shader (hundreds of thousands
 // of points, no per-frame CPU work) and driven by smooth noise of each point's starting position,
 // so neighbours move together in streaks and eddies, like real wind.
+//
+// It is heavy (up to 1.5M points while the lobby renders behind), so it scales to the device:
+// phones and low-end machines snapshot the letters at a lower resolution to stay within a much
+// smaller point budget, and a watchdog cuts the exit short (and remembers not to run it again on
+// this device) when it still can't keep up. loading.ts falls back to a plain fade then.
 
 const SWEEP = 1.1;                 // s for the wind front to cross the letters, right to left
 export const REVEAL_AT = 1.2;      // s: the loading backdrop starts fading to the lobby
@@ -16,7 +21,26 @@ const HANDOFF = 0.35;              // s: particles crossfade to the real lobby l
 // s: the particles fade in over the (still opaque) SVG letters before the wind starts. The
 // snapshot matches except for the brushed grain, which the browser samples on its own grid.
 const LEAD = 0.25;
-const MAX_POINTS = 1_500_000;      // above this the snapshot is sampled every other pixel
+const MAX_POINTS = 1_500_000;      // point budget of a capable desktop
+const LOW_POINTS = 120_000;        // ...and of a phone, tablet or low-end machine
+/** the watchdog: below this frame rate over the first frames of the wind, the exit is cut short */
+const SLOW_FRAME_MS = 50, SLOW_SAMPLES = 10;
+const OFF_KEY = 'last-stand.logo-wind-off';
+/** s: the loading backdrop's fade (#loading.done in index.html) */
+const BACKDROP_FADE = 0.9;
+
+/** Whether this device showed it can't run the exit smoothly (cut short on an earlier launch). */
+export function logoWindOff(): boolean {
+  try { return localStorage.getItem(OFF_KEY) === '1'; } catch { return false; }
+}
+function turnOff(): void { try { localStorage.setItem(OFF_KEY, '1'); } catch { /* ignore */ } }
+
+/** How many points the device can move smoothly: touch devices and small or low-memory machines get far fewer. */
+function pointBudget(): number {
+  const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;
+  const low = matchMedia('(pointer: coarse)').matches || (navigator.hardwareConcurrency || 8) <= 4 || mem <= 4;
+  return low ? LOW_POINTS : MAX_POINTS;
+}
 const PAD_X = 0.12, PAD_Y = 0.22;  // the letters' rim and drop shadow reach this far outside their box
 
 export interface LogoBlow {
@@ -35,32 +59,40 @@ export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null)
   const box = metal.getBoundingClientRect();
   const dst = target && letters(target)?.getBoundingClientRect();
   if (box.width < 10) return null;
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
-  // snapshot area on the device pixel grid, so every point lands exactly on the pixel it copies
-  const x0 = Math.floor((box.left - box.width * PAD_X) * dpr), y0 = Math.floor((box.top - box.height * PAD_Y) * dpr);
-  const pw = Math.ceil((box.right + box.width * PAD_X) * dpr) - x0, ph = Math.ceil((box.bottom + box.height * PAD_Y) * dpr) - y0;
+  const budget = pointBudget();
+  // the canvas: device pixels, but no more than 2x on a device with a small budget
+  const dpr = Math.min(window.devicePixelRatio || 1, budget < MAX_POINTS ? 2 : 3);
+  // the snapshot grid: device pixels when the budget allows (every point lands exactly on the pixel it
+  // copies), else coarser, sized from the letters' area (about 45% of their padded box is lit)
+  const area = box.width * (1 + 2 * PAD_X) * box.height * (1 + 2 * PAD_Y) * 0.45;
+  const grid = Math.max(1, Math.min(dpr, Math.sqrt(budget / area)));
+  const x0 = Math.floor((box.left - box.width * PAD_X) * grid), y0 = Math.floor((box.top - box.height * PAD_Y) * grid);
+  const pw = Math.ceil((box.right + box.width * PAD_X) * grid) - x0, ph = Math.ceil((box.bottom + box.height * PAD_Y) * grid) - y0;
   const vb = metal.viewBox.baseVal, k = box.width / vb.width;   // CSS px per viewBox unit
-  const view = [vb.x + (x0 / dpr - box.left) / k, vb.y + (y0 / dpr - box.top) / k, pw / dpr / k, ph / dpr / k];
+  const view = [vb.x + (x0 / grid - box.left) / k, vb.y + (y0 / grid - box.top) / k, pw / grid / k, ph / grid / k];
   const px = await snapshot(metal, view, pw, ph);
   if (!px) return null;
 
   let lit = 0;
   for (let i = 3; i < px.length; i += 4) if (px[i] > 0) lit++;
-  const step = lit > MAX_POINTS ? 2 : 1;
+  // should the estimate have been low, sample every step-th pixel to stay within the budget
+  const step = Math.max(1, Math.ceil(Math.sqrt(lit / budget)));
   const n = Math.ceil(lit / (step * step)) + 16;
   const pos = new Float32Array(n * 2), col = new Uint8Array(n * 4), rnd = new Uint8Array(n * 4);
   let c = 0;
   for (let y = 0; y < ph; y += step) for (let x = 0; x < pw; x += step) {
     const o = (y * pw + x) * 4;
     if (px[o + 3] === 0 || c >= n) continue;
-    pos[c * 2] = (x0 + x + step / 2) / dpr;   // pixel centre, CSS px
-    pos[c * 2 + 1] = (y0 + y + step / 2) / dpr;
+    pos[c * 2] = (x0 + x + step / 2) / grid;   // pixel centre, CSS px
+    pos[c * 2 + 1] = (y0 + y + step / 2) / grid;
     col.set(px.subarray(o, o + 4), c * 4);
     for (let j = 0; j < 4; j++) rnd[c * 4 + j] = Math.random() * 256;
     c++;
   }
   const gather = dst && dst.width > 10 ? { x: dst.left, y: dst.top, scale: dst.width / box.width } : null;
-  const field = createField(pos, col, rnd, c, { box, dpr, pointPx: step, gather });
+  // a point covers its share of the grid, in canvas pixels
+  const field = createField(pos, col, rnd, c, { box, dpr, pointPx: step * dpr / grid, gather });
+  if (import.meta.env.DEV) console.info(`logo wind: ${c} points (budget ${budget}), grid ${grid.toFixed(2)}x, canvas ${dpr}x`);
   if (!field) return null;
   // the lobby logo is made of the particles until they have settled. It stays on its own layer at
   // a (not quite zero) opacity so the browser keeps it painted: repainting its SVG filters when it
@@ -74,9 +106,9 @@ export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null)
   return {
     cancel,
     start(reveal, done) {
+      let revealed = false, handed = false, swapped = false;
       field.canvas.style.visibility = 'visible';
       field.canvas.animate([{ opacity: 0 }, { opacity: 1 }], { duration: LEAD * 1000 });
-      let revealed = false, handed = false, swapped = false;
       field.run((t) => {
         if (!swapped && t >= 0) {
           swapped = true;
@@ -91,7 +123,12 @@ export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null)
           target!.style.opacity = '';
           target!.addEventListener('transitionend', () => { target!.style.transition = ''; target!.style.willChange = ''; }, { once: true });
         }
-      }, () => { field.dispose(); done(); });
+      }, () => { field.dispose(); done(); }, () => {
+        // too slow for this device: the lobby (and its logo) take over now, and later launches use the plain fade
+        turnOff();
+        if (!revealed) { revealed = true; reveal(); }
+        if (gather && !handed) { handed = true; target!.style.transition = 'opacity .3s linear'; target!.style.opacity = ''; target!.style.willChange = ''; }
+      });
     },
   };
 }
@@ -270,11 +307,24 @@ function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count:
   return {
     canvas,
     /** `tick` gets the exit's time: negative during the fade-in lead, then seconds since the wind started. */
-    run(tick: (t: number) => void, done: () => void): void {
+    /** `slow` fires if the watchdog cuts the exit short; `done` still follows once the backdrop has faded. */
+    run(tick: (t: number) => void, done: () => void, slow: () => void): void {
       const t0 = performance.now();
+      let last = t0, samples = 0, spent = 0;
       const frame = (now: number): void => {
         if (disposed) return;
         const t = (now - t0) / 1000 - LEAD;   // negative while fading in: at rest
+        // the watchdog: the first frames of the wind show whether the device keeps up
+        if (t > 0 && samples < SLOW_SAMPLES) {
+          spent += now - last;
+          if (++samples === SLOW_SAMPLES && spent / samples > SLOW_FRAME_MS) {
+            slow();
+            canvas.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 250, fill: 'forwards' });
+            setTimeout(done, BACKDROP_FADE * 1000);
+            return;
+          }
+        }
+        last = now;
         draw(Math.max(0, t));
         tick(t);
         if (t < END) requestAnimationFrame(frame); else done();
