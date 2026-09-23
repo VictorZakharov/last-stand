@@ -52,6 +52,7 @@ async function boot() {
   initFloaters($('#floaters'));
 
   await loadingStep('Summoning the hero', 0.35);
+  initAudio();   // resumed by the first user gesture
   G.profile = loadProfile();
   G.player = new Player(G.profile.classId, G.profile.equipped);
 
