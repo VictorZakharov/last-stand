@@ -1,0 +1,35 @@
+name: Branch policy
+
+# PR branches must be linear (rebase onto main, never merge main into them);
+# main itself only receives merge commits from PRs (repo setting).
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  linear-history:
+    name: PR must be linear (no merge commits)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Check out PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Fail on merge commits in PR range
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          merges=$(git rev-list --merges --count "$BASE..$HEAD")
+          if [ "$merges" -ne 0 ]; then
+            echo "::error::PR branch contains $merges merge commit(s). Rebase onto main instead: git fetch origin && git rebase origin/main"
+            git rev-list --merges --oneline "$BASE..$HEAD"
+            exit 1
+          fi
+          echo "OK: no merge commits in PR range."

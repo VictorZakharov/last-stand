@@ -17,6 +17,7 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
 ## Workflow
 
 - **Every change goes through a PR** from a branch off `main`; never push to `main` directly. Each PR gets a live preview at `https://victorzakharov.github.io/last-stand/pr-preview/pr-N/` (sticky PR comment, `.github/workflows/pr-preview.yml`). Merging to `main` deploys production (`deploy-pages.yml`).
+- **`main` is protected:** PRs only, merged with a merge commit (squash and rebase merges are disabled), and the branch must be up to date. **PR branches must be linear:** `git rebase origin/main` to update, never merge `main` into a branch. The `branch-policy.yml` check fails any PR containing merge commits. Merged branches are deleted automatically.
 - Pages is served from an aggregated `gh-pages` branch: production at the root, open PR previews under `pr-preview/`. Don't switch Pages to "GitHub Actions only" and don't delete that branch.
 - Keep PRs focused on one feature.
 
