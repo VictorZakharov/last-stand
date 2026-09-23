@@ -1,9 +1,10 @@
 // Renderer, post-processing chain and the top-down camera rig.
+// The scene renders into its own MSAA target; the post passes (sanitize, bloom, grade)
+// run on plain single-sample targets, since multisampled post targets cost a resolve per
+// pass (very slow on tile-based GPUs such as Apple's).
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
@@ -24,6 +25,9 @@ const GradeShader = {
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
     void main(){
       vec4 c = texture2D(tDiffuse, vUv);
+      // tone mapping + sRGB here instead of a separate OutputPass (renderer settings, drawn to the screen)
+      c.rgb = toneMapping(c.rgb);
+      c = linearToOutputTexel(c);
       vec2 d = vUv - 0.5;
       float r = dot(d, d);
       float vig = 1.0 - smoothstep(0.12, 0.75, r * uVignette);
@@ -49,7 +53,7 @@ const SanitizeShader = {
     }`,
 };
 
-let composer: EffectComposer, grade: ShaderPass, gl: THREE.WebGLRenderer;
+let composer: EffectComposer, grade: ShaderPass, gl: THREE.WebGLRenderer, sceneRT: THREE.WebGLRenderTarget;
 const rig = {
   zoom: 1,
   targetZoom: 1,
@@ -76,15 +80,15 @@ export function initRenderer(container: HTMLElement) {
   const camera = new THREE.PerspectiveCamera(CAMERA.fov, window.innerWidth / window.innerHeight, 0.5, 300);
 
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-  const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
-  composer = new EffectComposer(renderer, target);
-  composer.addPass(new RenderPass(scene, camera));
+  sceneRT = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+  composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, depthBuffer: false }));
   // Kill NaN/Inf pixels before bloom: a single bad pixel would otherwise be blurred
-  // into large black rectangles.
-  composer.addPass(new ShaderPass(SanitizeShader));
+  // into large black rectangles. It reads the scene target itself ('none': not the read buffer).
+  const sanitize = new ShaderPass(SanitizeShader, 'none');
+  sanitize.uniforms.tDiffuse.value = sceneRT.texture;
+  composer.addPass(sanitize);
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.85, 0.55, 0.9);
   composer.addPass(bloom);
-  composer.addPass(new OutputPass());
   grade = new ShaderPass(GradeShader);
   composer.addPass(grade);
 
@@ -93,6 +97,7 @@ export function initRenderer(container: HTMLElement) {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
     composer.setSize(window.innerWidth, window.innerHeight);
+    fitSceneTarget();
   });
 
   G.scene = scene; G.camera = camera; G.renderer = renderer;
@@ -100,14 +105,20 @@ export function initRenderer(container: HTMLElement) {
 }
 
 /** The offscreen target the scene is rendered into (shaders must be compiled for it). */
-export const sceneTarget = (): THREE.WebGLRenderTarget => composer.readBuffer;
+export const sceneTarget = (): THREE.WebGLRenderTarget => sceneRT;
+
+const _size = new THREE.Vector2();
+function fitSceneTarget(): void {
+  gl.getDrawingBufferSize(_size);
+  sceneRT.setSize(_size.x, _size.y);
+}
 
 /** Apply the render-cost settings of a quality preset, live. None of them change shader variants. */
 export function setRenderQuality(p: QualityPreset): void {
   const pr = Math.min(window.devicePixelRatio, p.pixelRatio);
-  if (pr !== gl.getPixelRatio()) { gl.setPixelRatio(pr); composer.setPixelRatio(pr); }
+  if (pr !== gl.getPixelRatio()) { gl.setPixelRatio(pr); composer.setPixelRatio(pr); fitSceneTarget(); }
   // a render target re-initialises with the new sample count on its next use
-  for (const t of [composer.renderTarget1, composer.renderTarget2]) if (t.samples !== p.msaa) { t.samples = p.msaa; t.dispose(); }
+  if (sceneRT.samples !== p.msaa) { sceneRT.samples = p.msaa; sceneRT.dispose(); }
 }
 
 export function addShake(amount: number): void { rig.shake = Math.min(1.2, rig.shake + amount); }
@@ -151,5 +162,7 @@ export function updateCamera(dt: number, focus: THREE.Vector3): void {
 export function render(): void {
   grade.uniforms.uTime.value = G.time;
   grade.uniforms.uHurt.value = rig.hurt;
+  gl.setRenderTarget(sceneRT);
+  gl.render(G.scene, G.camera);
   composer.render();
 }
