@@ -120,18 +120,31 @@ const fmtTime = (s: number): string => `${String(Math.floor(s / 60)).padStart(2,
 
 let lastBuffs = '';
 
+// The HUD updates every frame. Look static elements up once, and only write values that
+// changed: every DOM write invalidates style, which the browser then recalculates.
+const hudEls = new Map<string, HTMLElement>();
+const h = (s: string): HTMLElement => { let e = hudEls.get(s); if (!e) hudEls.set(s, e = $(s)); return e; };
+const written = new WeakMap<Element, string>();
+function setText(el: Element, v: string): void { if (written.get(el) !== v) { el.textContent = v; written.set(el, v); } }
+function setStyle(el: HTMLElement, prop: string, v: string): void {
+  const key = `${prop}:${v}`;
+  if (written.get(el) !== key) { el.style.setProperty(prop, v); written.set(el, key); }
+}
+const pct = (k: number): string => `${(k * 100).toFixed(1)}%`;
+let minimapT = 0;
+
 export function updateHud(): void {
   const p = G.player, r = G.run;
   if (!p || !r) return;
   const s = p.stats;
   const lifeK = Math.max(0, p.life / s.maxLife);
-  $('.bar.life .fill').style.width = `${lifeK * 100}%`;
-  $('.bar.life .lag').style.width = `${lifeK * 100}%`;
-  $('.bar.life').classList.toggle('low', lifeK < 0.3);
-  $('.bar.life .txt').textContent = `${Math.ceil(p.life)} / ${Math.round(s.maxLife)}`;
-  $('.bar.energy .fill').style.width = `${(p.energy / s.maxEnergy) * 100}%`;
-  $('.bar.energy .txt').textContent = `${Math.floor(p.energy)} / ${Math.round(s.maxEnergy)}`;
-  $('.gem-num').textContent = String(r.wave);
+  setStyle(h('.bar.life .fill'), 'width', pct(lifeK));
+  setStyle(h('.bar.life .lag'), 'width', pct(lifeK));
+  h('.bar.life').classList.toggle('low', lifeK < 0.3);
+  setText(h('.bar.life .txt'), `${Math.ceil(p.life)} / ${Math.round(s.maxLife)}`);
+  setStyle(h('.bar.energy .fill'), 'width', pct(p.energy / s.maxEnergy));
+  setText(h('.bar.energy .txt'), `${Math.floor(p.energy)} / ${Math.round(s.maxEnergy)}`);
+  setText(h('.gem-num'), String(r.wave));
 
   for (const slot of slots) {
     const sk = p.skillAt(slot.key);
@@ -139,40 +152,42 @@ export function updateHud(): void {
     // cooldowns belong to the skill, so duplicates on several keys share one timer
     const left = p.cooldownLeft(sk.def.impl), total = p.cooldownOf(sk.def);
     const k = total > 0 ? left / total : 0;
-    slot.cd.style.setProperty('--p', `${k * 100}%`);
-    slot.cdt.textContent = left > 0.05 ? (left < 1 ? left.toFixed(1) : String(Math.ceil(left))) : '';
+    setStyle(slot.cd, '--p', pct(k));
+    setText(slot.cdt, left > 0.05 ? (left < 1 ? left.toFixed(1) : String(Math.ceil(left))) : '');
     slot.el.classList.toggle('nomana', p.energy < (sk.def.channel ? sk.def.cost * 0.2 : sk.def.cost));
     slot.el.classList.toggle('active', p.channel?.key === slot.key || p.casting?.skill === sk);
   }
 
   // buffs
-  const buffs = $('#buffs');
+  const buffs = h('#buffs');
   const wardHtml = p.ward ? `<div class="buff" style="color:#c9b8ff">◈<span class="bt">${Math.ceil(p.ward.t)}</span></div>` : '';
   if (lastBuffs !== wardHtml) { buffs.innerHTML = wardHtml; lastBuffs = wardHtml; }
 
   // score box
-  $('.sb-score').textContent = Math.round(r.score).toLocaleString();
-  $('.sb-kills b').textContent = String(r.phase === 'fighting' ? r.remaining : 0);
-  $('.sb-time b').textContent = r.phase === 'countdown' ? `-${Math.ceil(r.timer)}` : fmtTime(r.waveTime);
-  const m = $('.sb-mult');
-  m.textContent = `x${r.multiplier}`;
+  setText(h('.sb-score'), Math.round(r.score).toLocaleString());
+  setText(h('.sb-kills b'), String(r.phase === 'fighting' ? r.remaining : 0));
+  setText(h('.sb-time b'), r.phase === 'countdown' ? `-${Math.ceil(r.timer)}` : fmtTime(r.waveTime));
+  const m = h('.sb-mult');
+  setText(m, `x${r.multiplier}`);
   if (r.multiplier !== lastMult) { m.classList.add('bump'); setTimeout(() => m.classList.remove('bump'), 180); lastMult = r.multiplier; }
-  $('.sb-wave').textContent = String(r.wave);
+  setText(h('.sb-wave'), String(r.wave));
 
   // objectives
-  const ol = $('.obj-line');
+  const ol = h('.obj-line');
   const txt = r.phase === 'countdown' ? `Wave ${r.wave} begins in ${Math.ceil(r.timer)}…`
     : r.phase === 'fighting' ? `Eliminate all enemies (${r.remaining})`
     : r.phase === 'cleared' ? 'Bank your spoils or continue' : 'Fallen';
-  $('.obj-text', ol).textContent = txt;
+  setText(h('.obj-line .obj-text'), txt);
   ol.classList.toggle('done', r.phase === 'cleared');
 
   updateTarget();
-  drawMinimap();
+  // the minimap is a 200px canvas: 30 Hz is plenty
+  minimapT -= G.dt;
+  if (minimapT <= 0) { minimapT = 1 / 30; drawMinimap(); }
 }
 
 function updateTarget() {
-  const box = $('#target');
+  const box = h('#target');
   let e = G.enemies.find((x) => x.boss && x.alive);
   if (!e) {
     let best = 2.2;
@@ -185,11 +200,11 @@ function updateTarget() {
   if (!e) { box.classList.add('hidden'); return; }
   box.classList.remove('hidden');
   box.classList.toggle('boss', e.boss);
-  $('.t-name', box).textContent = e.name;
-  $('.t-sub', box).textContent = e.boss ? 'Boss' : e.hero ? 'Hero' : '';
-  const k = `${(e.life / e.maxLife) * 100}%`;
-  $('.t-fill', box).style.width = k;
-  $('.t-ghost', box).style.width = k;
+  setText(h('#target .t-name'), e.name);
+  setText(h('#target .t-sub'), e.boss ? 'Boss' : e.hero ? 'Hero' : '');
+  const k = pct(e.life / e.maxLife);
+  setStyle(h('#target .t-fill'), 'width', k);
+  setStyle(h('#target .t-ghost'), 'width', k);
 }
 
 function drawMinimap() {
