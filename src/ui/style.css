@@ -250,6 +250,7 @@ button { font-family: inherit; }
 .sf-chip .x { font-size: 15px; line-height: 1; color: var(--ink-dim); }
 .sf-chip:hover { border-color: var(--gold); }
 .sf-chip:hover .x { color: var(--red); }
+.sf-chip.more { padding: 1px 9px; color: var(--bronze-hi); }
 #stash-filter-btn { flex: 0 0 auto; align-self: flex-start; width: 26px; height: 26px; padding: 3px; cursor: pointer; color: var(--ink-dim);
   background: none; border: 1px solid transparent; border-radius: 3px; }
 #stash-filter-btn svg { display: block; width: 100%; height: 100%; }

@@ -74,17 +74,30 @@ export function initStashFilter(changed: () => void): void {
   panel.querySelectorAll<HTMLElement>('.sf-opt').forEach((b) => { b.onclick = () => toggle(b.dataset.stat as StatKey); });
 }
 
-/** Chips for the chosen stats (click to remove) and the panel's pressed states. */
+/** Chips for the chosen stats (click to remove) and the panel's pressed states. Past
+ *  MAX_CHIPS the rest fold into a "+N" chip that opens the panel: more rows of chips
+ *  would push the stash out of the lobby panel. */
+const MAX_CHIPS = 3;
+
 export function renderStashFilter(): void {
   const chips = document.getElementById('stash-chips')!;
   chips.innerHTML = '';
-  for (const k of active) {
+  const shown = active.length > MAX_CHIPS ? active.slice(0, MAX_CHIPS - 1) : active;
+  for (const k of shown) {
     const c = document.createElement('button');
     c.className = 'sf-chip';
     c.title = `Stop filtering by ${LABEL[k]}`;
     c.innerHTML = `${LABEL[k]}<span class="x" aria-hidden="true">×</span>`;
     c.onclick = () => toggle(k);
     chips.appendChild(c);
+  }
+  if (shown.length < active.length) {
+    const more = document.createElement('button');
+    more.className = 'sf-chip more';
+    more.title = active.slice(shown.length).map((k) => LABEL[k]).join(', ');
+    more.textContent = `+${active.length - shown.length}`;
+    more.onclick = () => { sfx.click(); openStashFilter(true); };
+    chips.appendChild(more);
   }
   document.getElementById('stash-filter-btn')!.classList.toggle('on', active.length > 0);
   const panel = document.getElementById('stash-filter')!;
