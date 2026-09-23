@@ -62,9 +62,15 @@ export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null)
   const gather = dst && dst.width > 10 ? { x: dst.left, y: dst.top, scale: dst.width / box.width } : null;
   const field = createField(pos, col, rnd, c, { box, dpr, pointPx: step, gather });
   if (!field) return null;
-  // the lobby logo is made of the particles until they have settled
-  if (gather) target!.style.opacity = '0';
-  const cancel = (): void => { if (target) target.style.opacity = ''; field.dispose(); };
+  // the lobby logo is made of the particles until they have settled. It stays on its own layer at
+  // a (not quite zero) opacity so the browser keeps it painted: repainting its SVG filters when it
+  // reappears would stall that frame
+  const hide = (on: boolean): void => {
+    target!.style.willChange = on ? 'opacity' : '';
+    target!.style.opacity = on ? '0.001' : '';
+  };
+  if (gather) hide(true);
+  const cancel = (): void => { if (gather) hide(false); field.dispose(); };
   return {
     cancel,
     start(reveal, done) {
@@ -83,7 +89,7 @@ export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null)
           handed = true;
           target!.style.transition = `opacity ${HANDOFF}s linear`;
           target!.style.opacity = '';
-          target!.addEventListener('transitionend', () => { target!.style.transition = ''; }, { once: true });
+          target!.addEventListener('transitionend', () => { target!.style.transition = ''; target!.style.willChange = ''; }, { once: true });
         }
       }, () => { field.dispose(); done(); });
     },
@@ -279,8 +285,10 @@ function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count:
     dispose(): void {
       if (disposed) return;
       disposed = true;
-      gl.getExtension('WEBGL_lose_context')?.loseContext();
-      canvas.remove();
+      // hide first, tear down a little later: removing a full-screen WebGL canvas and losing its
+      // context in the same frame can flash the whole page in some browsers
+      canvas.style.display = 'none';
+      setTimeout(() => { canvas.remove(); gl.getExtension('WEBGL_lose_context')?.loseContext(); }, 500);
     },
   };
 }
