@@ -13,7 +13,7 @@ export type DamageType = 'arcane' | 'cold' | 'fire' | 'lightning' | 'physical' |
 /** Stats rolled on items (keys of data/items STATS). */
 export type StatKey =
   | 'damagePct' | 'arcanePct' | 'elementalPct' | 'life' | 'energy' | 'lifeRegen' | 'energyRegen'
-  | 'castSpeed' | 'cdr' | 'crit' | 'critDmg' | 'moveSpeed' | 'leech' | 'armor' | 'resist';
+  | 'castSpeed' | 'cdr' | 'crit' | 'critDmg' | 'moveSpeed' | 'leech' | 'armor' | 'resist' | 'block' | 'blockAmount';
 
 export type StatBlock = Partial<Record<StatKey, number>>;
 
@@ -47,13 +47,17 @@ export interface DerivedStats {
   castSpeed: number;
   cdr: number;
   leech: number;
+  /** % chance to block a hit (shields), and the damage a block absorbs */
+  block: number;
+  blockAmount: number;
 }
 
 // ---------------------------------------------------------------------------
 // Classes & skills
 
 export type SkillKey = 'mouse0' | 'mouse2' | '1' | '2' | '3' | '4' | 'q';
-export type CastAnim = 'cast' | 'slam' | 'buff' | 'channel' | null;
+/** pose a model plays while the skill casts; a class's model interprets each name in its own way */
+export type CastAnim = 'cast' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'spin' | 'block' | 'stagger' | null;
 
 /** Skill tuning data. Behavior-specific numbers are optional fields. */
 export interface SkillDef {
@@ -90,6 +94,18 @@ export interface SkillDef {
   pull?: number;
   absorbPct?: number;
   healPct?: number;
+  /** melee arc in radians */
+  arc?: number;
+  knock?: number;
+  /** energy restored per enemy hit */
+  gain?: number;
+  /** when the cast lands, as a fraction of the cast time (default 0.55) */
+  fireAt?: number;
+  /** Raise Shield: blocks absorb this many times the block amount */
+  block?: number;
+  /** only works with a shield equipped; otherwise the key uses the fallback for the weapon held */
+  needs?: 'shield';
+  fallback?: { twoHanded?: string; oneHanded?: string };
 }
 
 export interface ClassDef {
@@ -97,10 +113,27 @@ export interface ClassDef {
   name: string;
   tagline: string;
   model: string;
+  /** CSS colour of the class name in the lobby */
+  accent: string;
+  /** title of the lobby's skill loadout panel */
+  book: string;
+  /** the light that follows the cast point, and the motes drifting off the off-hand (if any) */
+  aura: { light: number; intensity: number; motes?: [color: number, end: number] };
   base: BaseStats;
   skills: SkillDef[];
   starterGear: { slot: Slot; rarity: RarityId; ilvl: number }[];
+  /** item base names per slot (default: data/items SLOT_INFO) */
+  bases?: Partial<Record<Slot, string[]>>;
+  /** stats that never roll on this class's items (no skill of the class uses them) */
+  excludeStats?: StatKey[];
+  /** implicit stats per slot, replacing the defaults (data/items SLOT_INFO) */
+  implicits?: Partial<Record<Slot, [StatKey, number][]>>;
+  /** weapon bases held in both hands: they leave no room for an off-hand */
+  twoHanded?: string[];
 }
+
+/** What the character holds, derived from the equipped items (drives model and skills). */
+export interface Gear { weapon: string | null; twoHanded: boolean; shield: boolean }
 
 // ---------------------------------------------------------------------------
 // Items
@@ -118,6 +151,7 @@ export interface Item {
   stats: StatBlock;
 }
 
+/** One class's saved progress: every class keeps its own gear, stash and records. */
 export interface Profile {
   classId: string;
   equipped: Partial<Record<Slot, Item>>;
@@ -179,6 +213,8 @@ export interface AnimState {
   lean?: number;
   action: ActionState | null;
   hit: number;
+  /** 1 at the moment a shield blocks a hit, fading out over a quarter second */
+  blockHit?: number;
   /** -1 = alive, otherwise 0..1 death progress */
   dead: number;
   charge?: number;
@@ -203,6 +239,12 @@ export interface Model {
   worldObjects?: THREE.Object3D[];
   /** re-settle simulated parts after a teleport */
   reset?(): void;
+  /** show the equipped weapon / shield */
+  setGear?(gear: Gear): void;
+  /** direction of the current melee swing: +1 sweeps right to left, -1 left to right */
+  readonly swing?: number;
+  /** distance from the body to the weapon's tip */
+  readonly reach?: number;
   dispose(): void;
 }
 

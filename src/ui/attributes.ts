@@ -48,6 +48,8 @@ export const ATTRIBUTE_GROUPS: [string, AttributeDef[]][] = [
   ['Defense', [
     { label: 'Physical reduction', value: 'armor', stat: 'armor', base: 'armor', cap: 70, fmt: pct },
     { label: 'Magic resistance', value: 'resist', stat: 'resist', base: 'resist', cap: 75, fmt: pct },
+    { label: 'Block chance', value: 'block', stat: 'block', cap: 60, fmt: pct, note: 'Shields only. After a block the shield needs a moment to recover.' },
+    { label: 'Block amount', value: 'blockAmount', stat: 'blockAmount', fmt: (v) => String(Math.round(v)), note: 'Damage a block absorbs. A raised shield blocks every hit from the front, for more.' },
   ]],
 ];
 
@@ -89,10 +91,11 @@ function formatBase(def: AttributeDef, v: number): string {
 
 /** Render the attributes list into `el` and bind the breakdown tooltips. */
 export function renderAttributes(el: HTMLElement): void {
-  const s = G.player.stats;
+  const s = G.player.stats, unused = G.player.cls.excludeStats ?? [];
+  // stats the class can never roll are left out
   el.innerHTML = ATTRIBUTE_GROUPS.map(([title, defs], gi) =>
-    `<div class="grp">${title}</div>` + defs.map((d, di) =>
-      `<div class="row" data-attr="${gi}:${di}"><span>${d.label}</span><b>${d.fmt(s[d.value])}</b></div>`).join('')).join('');
+    `<div class="grp">${title}</div>` + defs.map((d, di) => (d.stat && unused.includes(d.stat) ? '' :
+      `<div class="row" data-attr="${gi}:${di}"><span>${d.label}</span><b>${d.fmt(s[d.value])}</b></div>`)).join('')).join('');
   el.querySelectorAll<HTMLElement>('[data-attr]').forEach((row) => {
     const [gi, di] = row.dataset.attr!.split(':').map(Number);
     bindTooltip(row, () => breakdown(ATTRIBUTE_GROUPS[gi][1][di]));

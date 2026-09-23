@@ -1,5 +1,6 @@
 // Model registry: id -> builder. Class and enemy data refer to these ids.
 import { buildMage } from './mage';
+import { buildWarrior } from './warrior';
 import { buildHusk } from './husk';
 import { buildImp } from './imp';
 import { buildWitch } from './witch';
@@ -14,6 +15,7 @@ import type { Model } from '../../types';
 
 export const MODELS: Record<string, () => Model> = {
   mage: buildMage,
+  warrior: buildWarrior,
   husk: buildHusk,
   imp: buildImp,
   witch: buildWitch,

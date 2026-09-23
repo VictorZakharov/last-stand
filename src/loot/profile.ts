@@ -1,15 +1,25 @@
-// Persistent profile: equipment, stash and records (localStorage).
+// Persistent profiles, one per class: equipment, stash and records (localStorage).
+// Classes share nothing, so each has its own loot and starting waves.
 import { CLASSES, DEFAULT_CLASS } from '../data/classes/index';
 import { RUN } from '../data/balance';
-import { makeItem, byValue } from './items';
+import { readCookie, writeCookie } from '../core/cookies';
+import { makeItem, byValue, isTwoHanded } from './items';
 import type { Item, Profile, Slot } from '../types';
 
-const KEY = 'last-stand.profile.v1';
+const KEY = (classId: string) => `last-stand.profile.${classId}.v1`;
+/** the single profile from before there were classes to choose from: the mage's */
+const LEGACY = 'last-stand.profile.v1';
+const CLASS_COOKIE = 'last-stand-class';
 
-function fresh(): Profile {
-  const cls = CLASSES[DEFAULT_CLASS];
+function fresh(classId: string): Profile {
+  const cls = CLASSES[classId];
   const equipped: Profile['equipped'] = {};
-  for (const g of cls.starterGear) equipped[g.slot] = makeItem(g);
+  for (const g of cls.starterGear) {
+    // starter weapons are one-handed, so a starter off-hand fits
+    let it = makeItem({ ...g, cls });
+    for (let i = 0; i < 20 && isTwoHanded(it, cls); i++) it = makeItem({ ...g, cls });
+    equipped[g.slot] = it;
+  }
   return {
     classId: cls.id,
     equipped,
@@ -18,29 +28,50 @@ function fresh(): Profile {
   };
 }
 
-export function loadProfile(): Profile {
+function read(key: string): Profile | null {
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  const p = JSON.parse(raw);
+  if (!p || !p.equipped || !Array.isArray(p.stash)) return null;
+  p.records.bestBanked ??= {}; // older profiles: bestWave counts deaths too, so start over
+  return p;
+}
+
+export function loadProfile(classId: string): Profile {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) {
-      const p = JSON.parse(raw);
-      if (p && p.equipped && Array.isArray(p.stash)) {
-        p.records.bestBanked ??= {}; // older profiles: bestWave counts deaths too, so start over
-        return p;
+    const p = read(KEY(classId));
+    if (p) return { ...p, classId };
+    if (classId === 'mage') {
+      const old = read(LEGACY);
+      if (old) {
+        old.classId = classId;
+        saveProfile(old);
+        localStorage.removeItem(LEGACY);
+        return old;
       }
     }
   } catch { /* storage unavailable or corrupt: start fresh */ }
-  return fresh();
+  return fresh(classId);
 }
 
 export function saveProfile(p: Profile): void {
-  try { localStorage.setItem(KEY, JSON.stringify(p)); } catch { /* ignore */ }
+  try { localStorage.setItem(KEY(p.classId), JSON.stringify(p)); } catch { /* ignore */ }
 }
 
-export function resetProfile(): Profile {
-  const p = fresh();
+/** Start the class over (the other classes keep theirs). */
+export function resetProfile(classId: string): Profile {
+  const p = fresh(classId);
   saveProfile(p);
   return p;
 }
+
+/** The class picked last time in the lobby (cookie). */
+export function savedClass(): string {
+  const id = readCookie(CLASS_COOKIE);
+  return id && Object.hasOwn(CLASSES, id) ? id : DEFAULT_CLASS;
+}
+
+export function saveClass(classId: string): void { writeCookie(CLASS_COOKIE, classId); }
 
 // Move an item from the stash into its slot (swapping out the current one).
 export function equipFromStash(p: Profile, itemId: string): void {
@@ -48,8 +79,14 @@ export function equipFromStash(p: Profile, itemId: string): void {
   if (idx < 0) return;
   const item = p.stash[idx];
   const prev = p.equipped[item.slot];
+  // a two-handed weapon and an off-hand don't go together: the other one goes to the stash
+  const cls = CLASSES[p.classId];
+  const clash = item.slot === 'weapon' && isTwoHanded(item, cls) ? 'offhand' : item.slot === 'offhand' && isTwoHanded(p.equipped.weapon, cls) ? 'weapon' : null;
+  const bumped = clash ? p.equipped[clash] : undefined;
+  if (bumped && p.stash.length + (prev ? 1 : 0) > RUN.bagLimit) return;
   p.stash.splice(idx, 1);
   if (prev) p.stash.splice(idx, 0, prev);
+  if (bumped) { delete p.equipped[clash!]; p.stash.unshift(bumped); }
   p.equipped[item.slot] = item;
   saveProfile(p);
 }

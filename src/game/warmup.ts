@@ -8,6 +8,8 @@ import { sceneTarget } from '../core/renderer';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { SLOTS } from '../data/items';
 import { SKILL_IMPLS } from '../combat/skills/index';
+import { CLASSES } from '../data/classes/index';
+import { buildModel } from '../entities/models/index';
 import { spawnEnemy } from '../entities/spawner';
 import { clearEnemies } from '../entities/enemy';
 import { makeItem } from '../loot/items';
@@ -23,8 +25,12 @@ export async function warmShaders(): Promise<void> {
   shockwave(p); groundFlash(p); decal(p); decal(p, { type: 'frost' }); telegraph(p, 2, 1);
   lightning(at, new THREE.Vector3(1, 1, 1)); iceSpikes(p, 2); glyphMarker(p); lightPillar(p); crackDecal(p); crystalBurst(p);
   const extra = Object.values(SKILL_IMPLS).flatMap((s) => s.warm?.() ?? []);
+  // every other class's model, so picking a class in the lobby compiles nothing
+  const heroes = Object.values(CLASSES).filter((c) => c.model !== G.player.cls.model).map((c) => buildModel(c.model));
+  for (const m of heroes) extra.push(m.root, ...(m.worldObjects ?? []));
 
   await warmUp(G.renderer, G.scene, G.camera, sceneTarget(), extra);
+  for (const m of heroes) m.dispose();
 
   clearEnemies(); clearDrops(); clearEffects(); clearLights(); particles.clear();
 }

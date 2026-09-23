@@ -31,6 +31,26 @@ Everything is procedural: models, animation, textures, VFX and sound are generat
 | --- | --- |
 | `W A S D` | Move |
 | Mouse | Aim |
+| Left click, right click, `1`–`4`, `Q` | Skills (see the classes below) |
+| Mouse wheel | Zoom |
+| Middle mouse (hold and drag) | Rotate the camera |
+| `B` / `C` | Bank / Continue after a wave |
+| `Esc` | Pause |
+
+Skills can be **remapped in the lobby**: drag a skill from the spellbook (the warrior's arsenal) onto any key (the same skill may sit on several keys), drag keys onto each other to swap. The loadout is saved in a cookie per class. You can also walk around and try every skill for free in the lobby.
+
+## Classes
+
+Pick a class in the lobby. Every class keeps its **own profile**: equipment, stash, records and the starting waves unlocked in each biome. Loot found by one class is made for it and stays with it, and each class has its own stash filter.
+
+Both wear a real position-based-dynamics cloth cape that collides with the animated body, using the solver from [cape-physics](https://github.com/VictorZakharov/cape-physics).
+
+### The Mage
+
+Robes, skirt panels and a crystal staff; arcane and elemental spells from range.
+
+| Key | Spell |
+| --- | --- |
 | Left click | Splintering Bolt — seeking arcane bolts that split on impact |
 | Right click | Starfall — crystal meteors crash onto the target area |
 | `1` (hold) | Void Lance — channeled piercing beam |
@@ -38,16 +58,22 @@ Everything is procedural: models, animation, textures, VFX and sound are generat
 | `3` | Maelstrom — roaming vortex that pulls enemies in and shocks them |
 | `4` | Arcane Aegis — damage-absorbing ward |
 | `Q` | Healing Draught |
-| Mouse wheel | Zoom |
-| Middle mouse (hold and drag) | Rotate the camera |
-| `B` / `C` | Bank / Continue after a wave |
-| `Esc` | Pause |
 
-Spells can be **remapped in the lobby**: drag a spell from the spellbook onto any key (the same spell may sit on several keys), drag keys onto each other to swap. The loadout is saved in a cookie. You can also walk around and try every spell for free in the lobby.
+### The Warrior
 
-## The Mage
+Plate armour, a crested helm and a cape; tougher, and fights up close. Fights with a one-handed weapon and a shield, or a two-handed weapon (it can't hold both), and the model shows what is equipped.
 
-The first playable class. Robes, skirt panels and staff are animated procedurally; the cape is a real position-based-dynamics cloth simulation that collides with the animated body, using the solver from [cape-physics](https://github.com/VictorZakharov/cape-physics).
+Shields **block**: each hit has the shield's Block Chance to be blocked, absorbing its Block Amount, after which the shield needs a moment to recover. Holding right click raises the shield to block every hit from the front, for three times the Block Amount; a hit bigger than that breaks the guard and staggers you: for 1.5 seconds you can only move, not block, attack or cast.
+
+| Key | Skill |
+| --- | --- |
+| Left click | Rending Cleave — wide sweep in front of you; each hit restores energy |
+| Right click (hold) | Raise Shield — block every frontal blow; without a shield: Steel Tempest with a two-handed weapon, Thunder Crescent with a one-handed one |
+| `1` (hold) | Steel Tempest — spin with the blade out, shredding everything around you |
+| `2` | Bull Rush — shield charge that tramples and hurls foes aside |
+| `3` | Power Strike — charge for 1.5 seconds, then a crushing overhead blow |
+| `4` | Iron Bellow — war cry that hurls foes back and grants a damage-absorbing ward |
+| `Q` | Healing Draught |
 
 ## Tech
 
@@ -75,7 +101,7 @@ npm run build      # type-check + production build into dist/
 | `src/game/run.ts` | Wave flow, scoring, loot rolls, bank / continue |
 | `src/world/` | The biome arenas (`crypt.ts`, `forest.ts`), shared props, collision |
 | `src/fx/` | Particles, effects, pooled lights |
-| `src/loot/` | Items, persistent profile (stash / equipment), spell loadout |
+| `src/loot/` | Items, persistent profiles (one per class: stash / equipment / records), skill loadout |
 | `src/ui/` | HUD, menus, tooltips, loadout editor |
 | `src/vendor/cape/` | Vendored cape-physics solver and its web worker (see its README and LICENSE) |
 

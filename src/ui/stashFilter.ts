@@ -1,38 +1,51 @@
 // Stash filter: the stats the player is hunting for (cog button on the stash title).
-// Items with none of them are greyed out but stay usable, and sort last. Kept in localStorage.
+// Items with none of them are greyed out but stay usable, and sort last. Kept in localStorage, per class.
+import { G } from '../state';
 import { STATS, STAT_INCLUDES } from '../data/items';
 import { byValue, itemPower } from '../loot/items';
 import { ATTRIBUTE_GROUPS } from './attributes';
 import { sfx } from '../core/audio';
 import type { Item, StatKey } from '../types';
 
-const KEY = 'last-stand.stash-filter.v1';
+const KEY = (classId: string) => `last-stand.stash-filter.${classId}.v1`;
+/** the filter from before classes had their own: the mage's */
+const LEGACY = 'last-stand.stash-filter.v1';
 const LABEL = Object.fromEntries(ATTRIBUTE_GROUPS.flatMap(([, defs]) => defs.flatMap((d) => (d.stat ? [[d.stat, d.label]] : [])))) as Record<StatKey, string>;
 
-let active: StatKey[] = load();
+let active: StatKey[] = [];
+let loadedFor = '';
 let onChange: () => void = () => {};
 
-function load(): StatKey[] {
+function load(classId: string): StatKey[] {
   try {
-    const v: unknown = JSON.parse(localStorage.getItem(KEY) ?? '[]');
+    let raw = localStorage.getItem(KEY(classId));
+    if (raw === null && classId === 'mage') raw = localStorage.getItem(LEGACY);
+    const v: unknown = JSON.parse(raw ?? '[]');
     return Array.isArray(v) ? v.filter((k): k is StatKey => typeof k === 'string' && k in STATS) : [];
   } catch { return []; }
 }
 
 function save(): void {
-  try { localStorage.setItem(KEY, JSON.stringify(active)); } catch { /* ignore */ }
+  try { localStorage.setItem(KEY(loadedFor), JSON.stringify(active)); localStorage.removeItem(LEGACY); } catch { /* ignore */ }
 }
 
 /** The item's value for a filtered stat, counting the general stats that feed it. */
 const valueFor = (it: Item, k: StatKey): number =>
   (it.stats[k] ?? 0) + (STAT_INCLUDES[k] ?? []).reduce((s, g) => s + (it.stats[g] ?? 0), 0);
 
+/** The current class's filter (switching class in the lobby swaps it). */
+function sync(): void {
+  const id = G.player.cls.id;
+  if (id !== loadedFor) { loadedFor = id; active = load(id); }
+}
+
 /** True when there is no filter or the item has one of the chosen stats. */
-export const matchesFilter = (it: Item): boolean => !active.length || active.some((k) => valueFor(it, k) > 0);
+export const matchesFilter = (it: Item): boolean => (sync(), !active.length) || active.some((k) => valueFor(it, k) > 0);
 
 /** Stash order: matches first (by the stat with one filter, by power with several), then the
  *  rest; best first otherwise (the sort is stable, so ties keep that order). */
 export function sortStash(items: Item[]): Item[] {
+  sync();
   const sorted = items.slice().sort(byValue);
   if (!active.length) return sorted;
   const score = active.length === 1 ? (it: Item) => valueFor(it, active[0]) : itemPower;
@@ -80,6 +93,7 @@ export function initStashFilter(changed: () => void): void {
 const MAX_CHIPS = 3;
 
 export function renderStashFilter(): void {
+  sync();
   const chips = document.getElementById('stash-chips')!;
   chips.innerHTML = '';
   const shown = active.length > MAX_CHIPS ? active.slice(0, MAX_CHIPS - 1) : active;
@@ -101,6 +115,10 @@ export function renderStashFilter(): void {
   }
   document.getElementById('stash-filter-btn')!.classList.toggle('on', active.length > 0);
   const panel = document.getElementById('stash-filter')!;
-  panel.querySelectorAll<HTMLElement>('.sf-opt').forEach((b) => b.setAttribute('aria-pressed', String(active.includes(b.dataset.stat as StatKey))));
+  const unused = G.player.cls.excludeStats ?? [];
+  panel.querySelectorAll<HTMLElement>('.sf-opt').forEach((b) => {
+    b.setAttribute('aria-pressed', String(active.includes(b.dataset.stat as StatKey)));
+    b.classList.toggle('hidden', unused.includes(b.dataset.stat as StatKey));
+  });
   panel.querySelector<HTMLElement>('.sf-clear')!.classList.toggle('hidden', !active.length);
 }

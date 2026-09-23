@@ -3,7 +3,7 @@ import { G } from '../state';
 import { SLOTS, SLOT_INFO } from '../data/items';
 import { RUN } from '../data/balance';
 import { WAVES } from '../data/waves';
-import { CLASSES } from '../data/classes/index';
+import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { rarityOf, itemPower, byValue } from '../loot/items';
 import { SKILL_KEYS } from '../loot/loadout';
 import { equipFromStash, unequip, salvage, salvageEquipped, resetProfile } from '../loot/profile';
@@ -31,6 +31,7 @@ export interface MenuHooks {
   resume(): void;
   abandon(): void;
   profileChanged(): void;
+  switchClass(id: string): void;
 }
 
 let hooks: MenuHooks;
@@ -58,6 +59,11 @@ export function initMenus(h: MenuHooks): void {
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => {
     b.onclick = () => { sfx.click(); setQuality(b.dataset.q as QualitySetting); renderQualityOptions(); };
   });
+  const classes = $('#opt-class');
+  classes.innerHTML = CLASS_IDS.map((id) => `<button data-c="${id}">${CLASSES[id].name}</button>`).join('');
+  classes.querySelectorAll<HTMLElement>('button').forEach((b) => {
+    b.onclick = () => { sfx.click(); hooks.switchClass(b.dataset.c!); renderMenu(); };
+  });
   const biomes = $('#opt-biome');
   biomes.insertAdjacentHTML('afterbegin', BIOME_IDS.map((id) => `<button data-b="${id}">${BIOMES[id].label}</button>`).join(''));
   biomes.querySelectorAll<HTMLElement>('button').forEach((b) => {
@@ -71,8 +77,9 @@ export function initMenus(h: MenuHooks): void {
   $('#btn-help').onclick = () => { renderControlsHelp(); $('#help').classList.remove('hidden'); };
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
   $('#btn-reset').onclick = () => {
-    if (!confirm('Reset your profile? Your stash, equipment and records will be erased.')) return;
-    G.profile = resetProfile();
+    const name = CLASSES[G.profile.classId].name;
+    if (!confirm(`Reset the ${name}? Their stash, equipment and records will be erased (other classes keep theirs).`)) return;
+    G.profile = resetProfile(G.profile.classId);
     hooks.profileChanged();
     renderMenu();
   };
@@ -159,6 +166,10 @@ export function renderMenu(): void {
   renderBiomeOptions();
   renderWaveOptions();
   const cls = CLASSES[p.classId];
+  document.querySelectorAll<HTMLElement>('#opt-class button').forEach((b) => b.classList.toggle('active', b.dataset.c === cls.id));
+  $('.class-card').style.setProperty('--cc', cls.accent);
+  $('.lo-title').textContent = cls.book;
+  document.querySelectorAll<HTMLElement>('#equip .doll').forEach((d) => d.classList.toggle('hidden', d.dataset.class !== cls.id));
   $('.cc-name').textContent = cls.name;
   $('.cc-tag').textContent = cls.tagline;
   const sk = $('.cc-skills');
@@ -189,7 +200,7 @@ export function renderMenu(): void {
     const color = it ? rarityOf(it.rarity).color : '#666';
     d.style.boxShadow = `inset 0 0 0 1px ${it ? color : 'rgba(160,124,70,.5)'}`;
     d.style.setProperty('--c', color);
-    d.innerHTML = `<span class="elabel">${SLOT_INFO[slot].label}</span>${it ? itemIconSVG(it) : slotPlaceholderSVG(slot)}
+    d.innerHTML = `<span class="elabel">${SLOT_INFO[slot].label}</span>${it ? itemIconSVG(it) : slotPlaceholderSVG(slot, cls)}
       <span class="ename2" style="color:${color}">${it ? it.name : ''}</span>${GLOW}`;
     bindSlotFocus(d, slot);
     if (it) {

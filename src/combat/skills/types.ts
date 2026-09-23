@@ -13,6 +13,8 @@ interface SkillBase {
 export interface InstantSkill extends SkillBase {
   channel?: false;
   cast(player: Player, def: SkillDef, target: THREE.Vector3): void;
+  /** every frame of the cast before it lands; k: 0..1 of the cast time */
+  charging?(player: Player, def: SkillDef, k: number, dt: number): void;
 }
 
 /** Runs every frame while its key is held. `start` returns per-channel state. */

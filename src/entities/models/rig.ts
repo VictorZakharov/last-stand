@@ -153,3 +153,32 @@ export function deathFall(j: Joints, k: number, dirSign = -1): void {
 export const pulse = (t: number, a: number, b: number): number => (t <= a || t >= b ? 0 : Math.sin(((t - a) / (b - a)) * Math.PI));
 /** Ramp 0 → 1 between a and b. */
 export const ramp = (t: number, a: number, b: number): number => Math.min(1, Math.max(0, (t - a) / (b - a)));
+
+const _t = new THREE.Vector3(), _h = new THREE.Vector3(), _e = new THREE.Vector3(), _p = new THREE.Vector3();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
+const X_AXIS = new THREE.Vector3(1, 0, 0), DOWN = new THREE.Vector3(0, -1, 0);
+
+/**
+ * Two-bone IK: pose an arm so its hand reaches `target` (in the shoulder's parent space, e.g. the
+ * chest), with the elbow bending forward (the rig's elbows hinge on X) and turned towards `pole`.
+ * Overwrites the shoulder and elbow rotations. Out of reach, the arm points straight at the target.
+ */
+export function reachArm(shoulder: THREE.Object3D, elbow: THREE.Object3D, upper: number, fore: number, target: THREE.Vector3, pole: THREE.Vector3): void {
+  _t.copy(target).sub(shoulder.position);
+  const d = Math.min(Math.max(_t.length(), 0.02), upper + fore - 1e-4);
+  const cosE = (upper * upper + fore * fore - d * d) / (2 * upper * fore);
+  const bend = Math.PI - Math.acos(Math.min(1, Math.max(-1, cosE)));
+  elbow.rotation.set(-bend, 0, 0);
+  // where the hand is with the shoulder unrotated, then turn that onto the target
+  _h.set(0, -fore, 0).applyAxisAngle(X_AXIS, -bend).add(_e.set(0, -upper, 0)).normalize();
+  _t.normalize();
+  _q.setFromUnitVectors(_h, _t);
+  // twist about the reach so the elbow points at the pole
+  _e.copy(DOWN).multiplyScalar(upper).applyQuaternion(_q).projectOnPlane(_t);
+  _p.copy(pole).projectOnPlane(_t);
+  if (_e.lengthSq() > 1e-8 && _p.lengthSq() > 1e-8) {
+    const ang = _e.angleTo(_p) * Math.sign(_t.dot(_h.crossVectors(_e, _p)));
+    _q.premultiply(_q2.setFromAxisAngle(_t, ang));
+  }
+  shoulder.quaternion.copy(_q);
+}

@@ -1,6 +1,6 @@
 // Mage: arcane + elemental caster.
 // A class = base stats + a skill loadout + a model id + starter gear.
-// Each skill's `impl` names a behavior registered in src/combat/skills/index.js;
+// Each skill's `impl` names a behavior registered in src/combat/skills/index.ts;
 // every other field is tuning data read by that behavior.
 import type { ClassDef } from '../../types';
 
@@ -9,6 +9,9 @@ const mage: ClassDef = {
   name: 'Mage',
   tagline: 'Wielder of raw arcana and the fury of the heavens.',
   model: 'mage',
+  accent: '#9fffd0',
+  book: 'Spellbook',
+  aura: { light: 0x5dffa8, intensity: 3, motes: [0x5dffa8, 0x1060ff] },
 
   base: {
     life: 950,
@@ -76,7 +79,10 @@ const mage: ClassDef = {
     },
   ],
 
-  // Common items granted to a brand-new profile (see loot/items.js makeItem).
+  // Common items granted to a brand-new profile (see loot/items.ts makeItem).
+  // the block stats only come on warrior shields
+  excludeStats: ['block', 'blockAmount'],
+
   starterGear: [
     { slot: 'weapon', rarity: 'common', ilvl: 1 },
     { slot: 'chest', rarity: 'common', ilvl: 1 },
