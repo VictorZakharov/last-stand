@@ -19,8 +19,9 @@ const GRAPH_W = 160, GRAPH_H = 40;
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 
 /** One frame: rAF time, interval since the previous one, our total / update / render time,
- *  how late our callback started after the rAF timestamp, and what was on screen. */
-interface Sample { t: number; frame: number; cpu: number; upd: number; rnd: number; late: number; ctx: string }
+ *  how late our callback started after the rAF timestamp, the update split by stage, and what was on screen. */
+interface Sample { t: number; frame: number; cpu: number; upd: number; rnd: number; late: number; stages: Stages; ctx: string }
+type Stages = Record<string, number>;
 
 let enabled = false;
 let el: HTMLElement;
@@ -64,7 +65,7 @@ export function perfBeginFrame(now: number): void {
   renderer.info.reset();
   if (!enabled) return;
   cpuStart = performance.now();
-  if (lastFrame) samples.push({ t: now, frame: now - lastFrame, cpu: 0, upd: 0, rnd: 0, late: cpuStart - now, ctx: '' });
+  if (lastFrame) samples.push({ t: now, frame: now - lastFrame, cpu: 0, upd: 0, rnd: 0, late: cpuStart - now, stages: {}, ctx: '' });
   lastFrame = now;
   if (gl && timerExt) {
     pollQueries();
@@ -78,6 +79,15 @@ export function perfBeginFrame(now: number): void {
 const split = { upd: 0, rnd: 0 };
 /** Time spent in update() and render() this frame (ms), for the worst-frames breakdown. */
 export function perfSplit(upd: number, rnd: number): void { split.upd = upd; split.rnd = rnd; }
+
+let lapT = 0, stages: Stages = {};
+/** Update-stage timer: call with no name to start, then with a stage name after each stage. */
+export function perfLap(stage?: string): void {
+  if (!enabled) return;
+  const now = performance.now();
+  if (stage) stages[stage] = (stages[stage] ?? 0) + now - lapT;
+  lapT = now;
+}
 const frameContext = (): string => `${G.mode}, ${G.enemies.length} foes, ${particles.glow.count + particles.smoke.count} particles, ${renderer.info.render.calls} draws`;
 
 /** Call after the frame has been rendered. */
@@ -85,7 +95,8 @@ export function perfEndFrame(): void {
   if (!enabled) return;
   const now = performance.now();
   const last = samples[samples.length - 1];
-  if (last) { last.cpu = now - cpuStart; last.upd = split.upd; last.rnd = split.rnd; if (last.frame > 10) last.ctx = frameContext(); }
+  if (last) { last.cpu = now - cpuStart; last.upd = split.upd; last.rnd = split.rnd; last.stages = stages; if (last.frame > 10) last.ctx = frameContext(); }
+  stages = {};
   frameCalls = renderer.info.render.calls;
   frameTris = renderer.info.render.triangles;
   if (gl && timerExt && activeQuery) {
@@ -200,6 +211,28 @@ function placeBesideLobby(): void {
 }
 
 // --- report -----------------------------------------------------------------------
+/** Per update stage over the window: mean, p95 and max (ms), slowest first. */
+function stageStats(): string[] {
+  const all = new Map<string, number[]>();
+  for (const s of samples) for (const k in s.stages) (all.get(k) ?? all.set(k, []).get(k)!).push(s.stages[k]);
+  return [...all].map(([k, v]) => ({ k, mean: mean(v), sorted: v.sort((a, b) => a - b) }))
+    .sort((a, b) => b.mean - a.mean)
+    .map(({ k, mean, sorted }) => `  ${k.padEnd(12)} ${fmt(mean, 2).padStart(6)} ${fmt(percentile(sorted, 0.95), 2).padStart(6)} ${fmt(sorted[sorted.length - 1], 2).padStart(6)}`);
+}
+
+/** The slowest stages of one frame, e.g. "player 31.2, effects 4.0". */
+const topStages = (s: Stages): string => Object.entries(s).sort((a, b) => b[1] - a[1]).slice(0, 3)
+  .filter(([, v]) => v >= 0.5).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(', ');
+
+/** A fixed CPU workload: how fast this machine runs our kind of JS right now (ms). */
+function jsBench(): number {
+  const a = new Float32Array(4096);
+  const t = performance.now();
+  for (let r = 0; r < 120; r++) for (let i = 0; i < a.length; i++) a[i] = a[i] * 0.98 + Math.sin(i * 0.01 + r);
+  const ms = performance.now() - t;
+  return a[7] > 1e9 ? -1 : ms;   // reads the result so the loop can't be optimised away
+}
+
 function report(): string {
   const s = computeStats(performance.now());
   const info = renderer.info;
@@ -213,13 +246,15 @@ function report(): string {
     `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
     `Quality ${qualityLevel()} (setting ${qualitySetting()}) | MSAA ${QUALITY[qualityLevel()].msaa} | shadow map ${QUALITY[qualityLevel()].shadowMap}`,
     `Mode ${G.mode} | enemies ${G.enemies.length} | projectiles ${G.projectiles.length} | particles ${particles.glow.count + particles.smoke.count}`,
-    `GPU ${gpuName}`,
+    `GPU ${gpuName} | CPU cores ${navigator.hardwareConcurrency ?? '?'} | JS bench ${fmt(jsBench(), 2)} ms`,
     `UA ${navigator.userAgent}`,
     `FPS history (0.5s buckets) ${s.buckets.map((v) => v === null ? '-' : Math.round(v)).join(' ')}`,
     'Worst frames (interval ms: ours = update + render, late = callback start delay):',
     ...[...samples].sort((a, b) => b.frame - a.frame).slice(0, 8).map((f) =>
-      `  ${f.frame.toFixed(1)} ms at -${((performance.now() - f.t) / 1000).toFixed(1)}s: ours ${f.cpu.toFixed(1)} = ${f.upd.toFixed(1)} + ${f.rnd.toFixed(1)}, late ${f.late.toFixed(1)} | ${f.ctx}`),
+      `  ${f.frame.toFixed(1)} ms at -${((performance.now() - f.t) / 1000).toFixed(1)}s: ours ${f.cpu.toFixed(1)} = ${f.upd.toFixed(1)} + ${f.rnd.toFixed(1)}, late ${f.late.toFixed(1)} | ${f.ctx}${topStages(f.stages) ? ` | ${topStages(f.stages)}` : ''}`),
     `CPU p95 ${fmt(percentile(samples.map((f) => f.cpu).sort((a, b) => a - b), 0.95), 2)} ms max ${fmt(Math.max(...samples.map((f) => f.cpu)), 2)} | GPU p95 ${fmt(percentile(gpuTimes.map((g) => g.ms).sort((a, b) => a - b), 0.95), 2)} ms max ${fmt(Math.max(...gpuTimes.map((g) => g.ms)), 2)}`,
+    'Update stages (ms: mean p95 max):',
+    ...stageStats(),
     ...(lateCompiles.length ? ['Shaders compiled after load:', ...lateCompiles.slice(-40).map((l) => '  ' + l)] : []),
   ].join('\n');
 }

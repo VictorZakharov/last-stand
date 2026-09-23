@@ -25,12 +25,10 @@ import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initItemIcons } from './ui/itemIcons';
-import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit } from './ui/perfHud';
+import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap } from './ui/perfHud';
 import { warmShaders } from './game/warmup';
 import { initQuality, sampleQuality } from './core/quality';
 import { pinPrograms, markLoaded, warmUp } from './core/shaders';
-import { configureCapeEnvironment } from './vendor/cape/world/caveProfile';
-import { groundHeight } from './world/arena';
 import { loadingStep, loadingDone, loadingFailed } from './ui/loading';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
@@ -47,7 +45,6 @@ async function boot() {
   initLights(scene);
   initEffects();
   G.arena = buildArena(scene, renderer);
-  configureCapeEnvironment({ groundHeight });
   initQuality();
   initFloaters($('#floaters'));
 
@@ -153,30 +150,32 @@ function handleGlobalKeys() {
   }
 }
 
+// perfLap() marks the end of each stage for the performance report's breakdown
 function update(dt: number): void {
+  perfLap();
   updateInputRay();
   if (input.wheel && !input.mouse.overUI) zoomBy(input.wheel);
   if (input.orbit) orbitBy(input.orbit);
 
   // the player can move and cast in both the arena and the lobby (sandbox)
-  G.player.update(dt);
-  updateProjectiles(dt);
+  G.player.update(dt); perfLap('player');
+  updateProjectiles(dt); perfLap('projectiles');
   // enemies in the arena, training dummies in the lobby
   if (G.mode === 'run') updateRun(dt);
   updateEnemies(dt);
-  separateEnemies();
+  separateEnemies(); perfLap('enemies');
   if (G.mode === 'run') {
     updateDrops(dt);
-    updateHud();
+    updateHud(); perfLap('hud');
   }
   updateCamera(dt, G.player.pos);
 
-  G.arena.update(dt, G.time);
-  updateEffects(dt);
-  updateLights(dt);
-  particles.update(dt);
-  updateTimers(dt);
-  updateFloaters(dt);
+  G.arena.update(dt, G.time); perfLap('arena');
+  updateEffects(dt); perfLap('effects');
+  updateLights(dt); perfLap('lights');
+  particles.update(dt); perfLap('particles');
+  updateTimers(dt); perfLap('timers');
+  updateFloaters(dt); perfLap('floaters');
 }
 
 function frame(timestamp: number): void {

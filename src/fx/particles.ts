@@ -47,6 +47,7 @@ class Pool {
   readonly s0: Float32Array; readonly s1: Float32Array; readonly c0: Float32Array; readonly c1: Float32Array;
   readonly a0: Float32Array; readonly grav: Float32Array; readonly drag: Float32Array;
   readonly aPos: THREE.BufferAttribute; readonly aCol: THREE.BufferAttribute; readonly aSize: THREE.BufferAttribute;
+  private readonly attrs: THREE.BufferAttribute[];
   readonly mat: THREE.ShaderMaterial;
   readonly points: THREE.Points;
 
@@ -74,6 +75,7 @@ class Pool {
     geo.setAttribute('position', this.aPos);
     geo.setAttribute('aColor', this.aCol);
     geo.setAttribute('aSize', this.aSize);
+    this.attrs = [this.aPos, this.aCol, this.aSize];
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e4);
     this.mat = new THREE.ShaderMaterial({
       vertexShader: VERT, fragmentShader: FRAG,
@@ -122,7 +124,8 @@ class Pool {
       i++;
     }
     this.points.geometry.setDrawRange(0, this.count);
-    this.aPos.needsUpdate = this.aCol.needsUpdate = this.aSize.needsUpdate = true;
+    // upload only the live particles, not the whole pool (a zero-length range would upload all of it)
+    if (this.count) for (const a of this.attrs) { a.clearUpdateRanges(); a.addUpdateRange(0, this.count * a.itemSize); a.needsUpdate = true; }
     this.mat.uniforms.uScale.value = G.renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(G.camera.fov) / 2));
   }
 
