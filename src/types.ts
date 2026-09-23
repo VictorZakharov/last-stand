@@ -149,9 +149,9 @@ export interface EnemyDef {
   score: number;
   keepAway?: number;
   slamRadius?: number;
-  /** glow scales the bolt's core and trail brightness (default 1); pale colours like lime bloom far more than
-   *  deep ones, and a boss fires a dozen at once */
-  projectile?: { speed: number; radius: number; color: number; trail?: number; glow?: number };
+  /** glow scales the bolt's brightness (default 1) and core its visible size as a fraction of radius (default
+   *  0.7); pale colours bloom far more than deep ones, and a boss fires a dozen at once */
+  projectile?: { speed: number; radius: number; color: number; trail?: number; glow?: number; core?: number };
   /** boss colour: aura, slam telegraph and shockwaves, death flash */
   accent?: number;
   /** walk cycle speed per unit moved (default 2.3; small, skittering enemies use more) */
