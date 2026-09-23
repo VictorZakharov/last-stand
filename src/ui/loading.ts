@@ -30,24 +30,32 @@ const SMOOTH_FRAMES = 8, SMOOTH_MS = 70, MAX_WAIT_MS = 4000;
 export function loadingDone(onReveal: () => void): void {
   const l = el();
   l.style.setProperty('--p', '1');
-  // the logo's particle field is built meanwhile (reduced motion: a plain fade instead)
+  // the logo's particle field is built meanwhile (reduced motion: a plain fade instead); it
+  // gathers into the lobby's logo
   let blow: LogoBlow | null | undefined = matchMedia('(prefers-reduced-motion: reduce)').matches ? null : undefined;
-  if (blow === undefined) prepareBlow(l.querySelector<HTMLElement>('.ld-logo')!).then((b) => { blow = b; }, () => { blow = null; });
+  let left = false;
+  if (blow === undefined) {
+    prepareBlow(l.querySelector<HTMLElement>('.ld-logo')!, document.querySelector<HTMLElement>('#menu .logo-art'))
+      .then((b) => { if (left) b?.cancel(); else blow = b; }, () => { blow = null; });
+  }
   const start = performance.now();
   let last = start, smooth = 0;
+  const reveal = (): void => { l.classList.add('done'); onReveal(); };
   const tick = (now: number): void => {
     smooth = now - last < SMOOTH_MS ? smooth + 1 : 0;
     last = now;
     const waiting = smooth < SMOOTH_FRAMES || blow === undefined;
     if (waiting && now - start < MAX_WAIT_MS) { requestAnimationFrame(tick); return; }
+    left = true;
     clearInterval(tipTimer);
     l.querySelector('.ld-tip')!.classList.remove('on');
-    l.classList.add('done');
-    onReveal();
-    // the backdrop fades while the wind blows the logo away
-    if (blow) blow.start(() => l.remove());
-    else {
+    if (blow) {
+      // the logo blows away over the loading backdrop first; the lobby shows a moment later
+      l.classList.add('blowing');
+      blow.start(reveal, () => l.remove());
+    } else {
       l.classList.add('plain');
+      reveal();
       l.addEventListener('transitionend', () => l.remove(), { once: true });
     }
   };

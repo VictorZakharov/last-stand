@@ -19,10 +19,10 @@
       gap: 14px; padding: 16px; overflow: hidden; color: #a8988a; font-family: 'Alegreya Sans', system-ui, sans-serif; }
     #loading .ld-back { position: absolute; inset: 0; overflow: hidden; pointer-events: none;
       background: radial-gradient(ellipse 80% 60% at 50% 46%, #2a0a06 0%, #120504 45%, #050303 100%); }
-    /* exit: everything but the logo fades while ui/logoWind.ts blows the logo away as particles; with reduced motion it all fades */
+    /* exit: ui/logoWind.ts blows the logo away as particles (.blowing), then the backdrop fades to the lobby (.done); with reduced motion it all just fades */
+    #loading.blowing > :is(.ld-rule, .ld-bar, .ld-sub, .ld-tip) { opacity: 0; transition: opacity .4s; }
     #loading.done { pointer-events: none; }
-    #loading.done > :not(.ld-logo), #loading.done.plain { opacity: 0; transition: opacity .9s; }
-    #loading.done .logo-glow { animation: none; }   /* steady, as in the particle snapshot */
+    #loading.done > .ld-back, #loading.done.plain { opacity: 0; transition: opacity .9s; }
     /* smoke: a turbulence texture rendered once, drifted by the compositor */
     #loading .ld-smoke { position: absolute; left: -25%; top: -25%; width: 150%; height: 150%; opacity: .55; will-change: transform; pointer-events: none;
       -webkit-mask-image: radial-gradient(ellipse 42% 38% at 50% 48%, #000 15%, transparent 72%); mask-image: radial-gradient(ellipse 42% 38% at 50% 48%, #000 15%, transparent 72%);
