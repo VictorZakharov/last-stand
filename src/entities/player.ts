@@ -64,6 +64,8 @@ export class Player {
   gear: Gear = { weapon: null, twoHanded: false, shield: false };
   /** seconds until the shield can block again, and when it last did */
   blockCd = 0;
+  /** game time until which a broken guard keeps the shield down */
+  guardBroken = -1;
   lastBlock = -99;
   life = 0;
   energy = 0;
@@ -144,6 +146,7 @@ export class Player {
     this.ward = null;
     this.hitT = 0;
     this.blockCd = 0;
+    this.guardBroken = -1;
     this.lastLowEnergy = 0;
     this.cooldowns.clear();
     this.pos.set(0, 0, 3);
@@ -225,6 +228,8 @@ export class Player {
 
   startChannel(s: KnownSkill, key: SkillKey): void {
     if (!s.impl.channel) return;
+    // a broken guard can't be raised again until the shield recovers
+    if (s.def.block && this.guardBroken > G.time) return;
     if (!this.sandbox && this.energy < s.def.cost * 0.2) { this.lowEnergy(); return; }
     this.channel = { skill: s, key, state: s.impl.start(this, s.def) };
   }
@@ -383,7 +388,14 @@ export class Player {
     const blocked = Math.min(amount, absorb);
     this.lastBlock = G.time;
     const p = this.palmPoint;
-    floatText(this.pos.x, 2.5, this.pos.z, `Block ${Math.round(blocked)}`, 'info', '#ffd9a0');
+    if (raised && amount > absorb) {
+      // more than a raised shield can hold: the guard breaks, the rest gets through
+      this.guardBroken = G.time + BLOCK.guardBreak;
+      this.blockCd = BLOCK.guardBreak;
+      this.stopChannel();
+      floatText(this.pos.x, 2.7, this.pos.z, 'Guard broken', 'info', '#ff8a50');
+      addShake(0.25);
+    } else floatText(this.pos.x, 2.5, this.pos.z, `Block ${Math.round(blocked)}`, 'info', '#ffd9a0');
     for (let i = 0; i < 8; i++) {
       particles.glow.spawn({ x: p.x, y: p.y, z: p.z, vx: rand(-4, 4), vy: rand(0, 4), vz: rand(-4, 4), life: rand(0.2, 0.35), size: rand(0.04, 0.09), sizeEnd: 0,
         color: col(0xffe0a0, 2), colorEnd: col(0xff5010, 0.4), gravity: 12 });

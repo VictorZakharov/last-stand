@@ -63,7 +63,7 @@ Robes, skirt panels and a crystal staff; arcane and elemental spells from range.
 
 Plate armour, a crested helm and a cape; tougher, and fights up close. Fights with a one-handed weapon and a shield, or a two-handed weapon (it can't hold both), and the model shows what is equipped.
 
-Shields **block**: each hit has the shield's Block Chance to be blocked, absorbing its Block Amount, after which the shield needs a moment to recover. Holding right click raises the shield to block every hit from the front.
+Shields **block**: each hit has the shield's Block Chance to be blocked, absorbing its Block Amount, after which the shield needs a moment to recover. Holding right click raises the shield to block every hit from the front, for three times the Block Amount; a hit bigger than that breaks the guard, and the shield can neither be raised nor block for 1.5 seconds.
 
 | Key | Skill |
 | --- | --- |

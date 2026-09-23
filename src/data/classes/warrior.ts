@@ -44,7 +44,7 @@ const warrior: ClassDef = {
     },
     {
       key: 'mouse2', impl: 'raiseShield', name: 'Raise Shield',
-      desc: 'Hold your shield up: every blow from the front is blocked, for three times your Block Amount. Drains Energy while held.',
+      desc: 'Hold your shield up: every blow from the front is blocked, for three times your Block Amount. A bigger blow breaks your guard and knocks the shield down for a moment. Drains Energy while held.',
       tags: ['defense'], cost: 6, cooldown: 0, castTime: 0, channel: true,
       block: 3, moveMult: 0.45,
       needs: 'shield', fallback: { twoHanded: 'tempest', oneHanded: 'crescent' },
