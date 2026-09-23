@@ -358,6 +358,7 @@ button { font-family: inherit; }
 #spellbook .slot { width: 42px; height: 42px; cursor: grab; }
 #spellbook .slot .key { display: none; }
 #spellbook .slot .icon { font-size: 22px; }
+#spellbook .slot.unusable { opacity: .45; filter: grayscale(.75); }
 #loadout-bar .slot { width: 46px; height: 46px; }
 #loadout-bar .slot .icon { font-size: 25px; }
 #loadout-bar .slot.sep { margin-left: 6px; }

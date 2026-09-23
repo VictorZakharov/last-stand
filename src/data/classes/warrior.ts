@@ -24,7 +24,7 @@ const warrior: ClassDef = {
   },
 
   // Right click raises the shield; without one it falls back to the weapon held (a two-hander
-  // spins, a lone one-hander looses a crescent). A key's default is the last skill listing it.
+  // spins, a lone one-hander looses a crescent). The crescent can't be swung with a shield. A key's default is the last skill listing it.
   skills: [
     {
       key: 'mouse0', impl: 'cleave', name: 'Rending Cleave',
@@ -39,6 +39,7 @@ const warrior: ClassDef = {
       desc: 'Swing a crescent of lightning that tears through every foe in its path.',
       tags: ['lightning'], cost: 24, cooldown: 0.8, castTime: 0.45,
       damage: 95, speed: 17, range: 15, width: 2.1,
+      needs: 'noShield', fallback: { shield: 'raiseShield' },   // a swing that needs the free hand
       color: 0x5a8cff,   // a deep blue: pale colours bloom to white
       icon: { glyph: '☾', color: '#9fc8ff' },
     },

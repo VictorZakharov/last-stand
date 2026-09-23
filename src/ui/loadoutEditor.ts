@@ -71,6 +71,7 @@ export function renderLoadoutEditor(): void {
   b.innerHTML = '';
   for (const { def } of p.known.values()) {
     const el = makeSkillSlot(def);
+    el.classList.toggle('unusable', !p.usable(def));   // not with the gear held (see its tooltip)
     el.draggable = true;
     el.addEventListener('dragstart', (e) => startDrag(e, { kind: 'book', id: def.impl }, el));
     el.addEventListener('dragend', endDrag);

@@ -144,6 +144,9 @@ export function skillTooltip(def: SkillDef): () => TooltipContent {
     if (def.needs === 'shield') {
       const two = alt(def.fallback?.twoHanded), one = alt(def.fallback?.oneHanded);
       html += `<div class="tt-foot">Needs a shield. Without one this key uses ${[two && `${two} with a two-handed weapon`, one && `${one} with a one-handed weapon`].filter(Boolean).join(', or ')}.</div>`;
+    } else if (def.needs === 'noShield') {
+      const sh = alt(def.fallback?.shield);
+      html += `<div class="tt-foot">Can't be used with a shield${sh ? `: with one, this key uses ${sh}` : ''}.</div>`;
     }
     html += '</div>';
     return { html, color: def.icon.color };
