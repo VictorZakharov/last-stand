@@ -90,20 +90,24 @@ export class SkeletonCape {
   update(dt: number, velocity: THREE.Vector3): void {
     const anchors = this.updateAnchors();
     const colliders = this.updateColliders();
+    let stepped = false;
     // large jumps (respawn / teleport) re-drape instead of whipping across the arena
     if (this.needsReset || this.sim.getParticlePosition(6, 0).distanceTo(_p.copy(anchors.left).lerp(anchors.right, 0.5)) > 2) {
       this.sim.reset(anchors);
       this.needsReset = false;
       this.acc = 0;
+      stepped = true;
     }
     this.acc = Math.min(this.acc + dt, PHYSICS_STEP * MAX_PHYSICS_STEPS);
     while (this.acc >= PHYSICS_STEP) {
       this.acc -= PHYSICS_STEP;
       this.time += PHYSICS_STEP;
       this.sim.step(PHYSICS_STEP, anchors, colliders, [], velocity, this.time);
+      stepped = true;
     }
-    // step() only advances particles; upload them to the rendered mesh
-    this.sim.syncGeometry();
+    // step() only advances particles; upload them (and recompute normals, which costs
+    // more than a step) only when they moved: at 144 Hz about one frame in six has no step
+    if (stepped) this.sim.syncGeometry();
   }
 
   setVisible(v: boolean): void { this.mesh.visible = v; }
