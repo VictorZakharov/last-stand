@@ -26,6 +26,8 @@ import { initUIScale } from './ui/scale';
 import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initItemIcons } from './ui/itemIcons';
 import { initPerfHud, perfBeginFrame, perfEndFrame } from './ui/perfHud';
+import { warmShaders } from './game/warmup';
+import { pinPrograms, markLoaded } from './core/shaders';
 import { configureCapeEnvironment } from './vendor/cape/world/caveProfile';
 import { groundHeight } from './world/arena';
 
@@ -63,9 +65,12 @@ function boot() {
   // dev-only handle for debugging and automated screenshots (stripped from production builds)
   if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE } });
 
+  warmShaders();
   enterMenu();
   // compile shaders before revealing the scene to avoid first-frame hitches
   renderer.compile(scene, G.camera);
+  pinPrograms(renderer);
+  markLoaded();
   requestAnimationFrame(() => $('#loading').classList.add('done'));
   requestAnimationFrame(frame);
 }
@@ -170,6 +175,7 @@ function frame(timestamp: number): void {
     update(dt);
   }
   render();
+  pinPrograms(G.renderer);
   endInputFrame();
   perfEndFrame();
 }
