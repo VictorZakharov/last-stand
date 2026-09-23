@@ -25,6 +25,7 @@ import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initItemIcons } from './ui/itemIcons';
+import { initPerfHud, perfBeginFrame, perfEndFrame } from './ui/perfHud';
 import { configureCapeEnvironment } from './vendor/cape/world/caveProfile';
 import { groundHeight } from './world/arena';
 
@@ -47,6 +48,7 @@ function boot() {
   G.player = new Player(G.profile.classId, G.profile.equipped);
 
   initHud();
+  initPerfHud(renderer);
   buildHotbar(G.player);
   initRun({ banner, showDecision, hideDecision, showSummary });
   initMenus({ start, toMenu, resume, abandon, profileChanged });
@@ -117,14 +119,14 @@ function profileChanged() { G.player.recomputeStats(G.profile.equipped); G.playe
 
 // --- loop ---------------------------------------------------------------------------
 function handleGlobalKeys() {
-  if (G.mode === 'menu' && wasPressed('space')) toggleMenuStowed();
-  if (G.mode !== 'run') return;
+  if (G.mode === 'menu' && !G.paused && wasPressed('space')) toggleMenuStowed();
   if (wasPressed('escape')) {
     const r = G.run;
-    if (r && (r.phase === 'banked' || r.phase === 'dead')) return;
+    if (G.mode === 'run' && r && (r.phase === 'banked' || r.phase === 'dead')) return;
     G.paused = !G.paused;
     showPause(G.paused);
   }
+  if (G.mode !== 'run') return;
   if (!G.paused && G.run?.phase === 'cleared') {
     if (wasPressed('b')) bankRun();
     if (wasPressed('c')) continueRun();
@@ -158,6 +160,7 @@ function update(dt: number): void {
 
 function frame(timestamp: number): void {
   requestAnimationFrame(frame);
+  perfBeginFrame(timestamp);
   timer.update(timestamp);
   const dt = Math.min(timer.getDelta(), 1 / 20);
   handleGlobalKeys();
@@ -168,6 +171,7 @@ function frame(timestamp: number): void {
   }
   render();
   endInputFrame();
+  perfEndFrame();
 }
 
 boot();

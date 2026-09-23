@@ -15,6 +15,31 @@
   <div id="game"></div>
   <div id="floaters"></div>
 
+  <!-- Optional performance overlay (pause menu toggle) -->
+  <div id="perf" class="hidden" role="button" tabindex="0" title="Click to copy a performance report">
+    <div class="pf-head"><b data-p="fps">--</b><i>FPS</i><span class="pf-ms"><b data-p="ms">--</b> ms · p95 <b data-p="p95">--</b></span></div>
+    <div class="pf-graph">
+      <svg viewBox="0 0 160 40" preserveAspectRatio="none" aria-hidden="true">
+        <line x1="0" y1="1" x2="160" y2="1"></line><line x1="0" y1="20" x2="160" y2="20"></line>
+        <path class="pf-line" d=""></path>
+      </svg>
+      <span class="pf-top" data-p="top">60</span><span class="pf-mid" data-p="mid">30</span>
+    </div>
+    <div class="pf-sub">15s avg <b data-p="avg">--</b> · 1% low <b data-p="low">--</b></div>
+    <dl>
+      <dt>CPU</dt><dd><b data-p="cpu">--</b> ms</dd>
+      <dt>GPU</dt><dd><b data-p="gpu">--</b> ms</dd>
+      <dt>Draws</dt><dd data-p="calls">--</dd>
+      <dt>Tris</dt><dd data-p="tris">--</dd>
+      <dt>Shaders</dt><dd data-p="progs">--</dd>
+      <dt>Geo / Tex</dt><dd><span data-p="geo">--</span> / <span data-p="tex">--</span></dd>
+      <dt>Canvas</dt><dd data-p="res">--</dd>
+      <dt>Foes / Proj / Fx</dt><dd data-p="ents">--</dd>
+    </dl>
+    <div class="pf-gpu" data-p="gpuname"></div>
+    <div class="pf-copy" data-p="copy">Click to copy a report</div>
+  </div>
+
   <!-- In-run HUD -->
   <div id="hud" class="hidden">
     <div id="target" class="hidden">
@@ -179,6 +204,7 @@
   <div id="pause" class="modal hidden"><div class="modal-box">
     <div class="sm-title">Paused</div>
     <div class="controls-help"></div>
+    <label class="opt-row"><input type="checkbox" id="opt-perf"> Show performance stats</label>
     <div class="dc-buttons">
       <button class="btn danger" id="btn-abandon">Abandon run (lose spoils)</button>
       <button class="btn primary" id="btn-resume">Resume</button>
