@@ -81,7 +81,7 @@ npm run build      # type-check + production build into dist/
 
 ## Feedback
 
-This is an early build — feedback, bug reports and ideas are very welcome in [Issues](https://github.com/VictorZakharov/last-stand/issues).
+This is an early build — feedback, bug reports and ideas are very welcome in [Issues](https://github.com/VictorZakharov/last-stand/issues). To contribute code, see [CONTRIBUTE.md](CONTRIBUTE.md).
 
 ## License
 
