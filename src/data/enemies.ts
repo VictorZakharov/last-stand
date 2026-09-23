@@ -3,7 +3,7 @@
 // Stats are wave-1 values; see SCALING for per-wave growth.
 import type { EnemyDef } from '../types';
 
-export type EnemyId = 'imp' | 'husk' | 'witch' | 'brute' | 'colossus';
+export type EnemyId = 'imp' | 'husk' | 'witch' | 'brute' | 'colossus' | 'dummy';
 
 export const ENEMIES: Record<EnemyId, EnemyDef> = {
   imp: {
@@ -38,6 +38,13 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     projectile: { speed: 12, radius: 0.5, color: 0xff6a2a },
     summon: 'imp',
     cost: 0, score: 60, knockbackResist: 1, freezeResist: 0.7, boss: true,
+  },
+  // lobby target practice; never part of a wave
+  dummy: {
+    name: 'Training Dummy', model: 'dummy', ai: 'idle',
+    life: 1, damage: 0, damageType: 'physical', speed: 0, radius: 0.55,
+    range: 0, windup: 0, recover: 0, cooldown: 0,
+    cost: 0, score: 0, knockbackResist: 1, dummy: true,
   },
 };
 

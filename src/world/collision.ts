@@ -43,9 +43,15 @@ export function separateEnemies(): void {
       const d2 = dx * dx + dz * dz;
       if (d2 < min * min && d2 > 1e-6) {
         const d = Math.sqrt(d2);
-        // enemies yield most of the overlap so the player isn't shoved around
-        a.pos.x = p.pos.x + (dx / d) * min;
-        a.pos.z = p.pos.z + (dz / d) * min;
+        if (a.def.dummy) {
+          // training dummies are planted: the player slides around them
+          p.pos.x = a.pos.x - (dx / d) * min;
+          p.pos.z = a.pos.z - (dz / d) * min;
+        } else {
+          // enemies yield the overlap so the player isn't shoved around
+          a.pos.x = p.pos.x + (dx / d) * min;
+          a.pos.z = p.pos.z + (dz / d) * min;
+        }
       }
     }
   }
