@@ -183,7 +183,7 @@ function waveCleared(): void {
   // reward cache erupts from the center of the dais
   const n = LOOT.waveRewards(r.wave);
   const center = new THREE.Vector3(0, 1.2, 0);
-  for (let i = 0; i < n; i++) schedule(0.25 + i * 0.16, () => { if (G.run === r) dropItem(rollDrop(r.wave, LOOT.waveRewardBonus(r.wave)), center); });
+  for (let i = 0; i < n; i++) schedule(0.25 + i * 0.16, () => { if (G.run === r) dropItem(rollDrop(G.player.cls, r.wave, LOOT.waveRewardBonus(r.wave)), center); });
   G.arena.setCalm(1);
   sfx.waveClear();
   ui.banner(`Wave ${r.wave} Cleared`, 'Bank your spoils, or press on');
@@ -243,6 +243,6 @@ function onEnemyKilled(e: Enemy): void {
   r.multTimer = 0;
   if (++r.multKills >= RUN.killsPerMultiplier && r.multiplier < RUN.multiplierMax) { r.multiplier++; r.multKills = 0; }
   const from = new THREE.Vector3(e.pos.x, 1, e.pos.z);
-  if (e.boss) for (let i = 0; i < LOOT.bossDrops; i++) dropItem(rollDrop(r.wave + 1, 0.8), from);
-  else if (e.hero ? Math.random() < LOOT.heroDropChance : Math.random() < LOOT.killDropChance) dropItem(rollDrop(r.wave, e.hero ? 0.4 : 0), from);
+  if (e.boss) for (let i = 0; i < LOOT.bossDrops; i++) dropItem(rollDrop(G.player.cls, r.wave + 1, 0.8), from);
+  else if (e.hero ? Math.random() < LOOT.heroDropChance : Math.random() < LOOT.killDropChance) dropItem(rollDrop(G.player.cls, r.wave, e.hero ? 0.4 : 0), from);
 }

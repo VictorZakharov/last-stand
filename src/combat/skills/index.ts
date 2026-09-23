@@ -10,7 +10,16 @@ import glacialNova from './glacialNova';
 import maelstrom from './maelstrom';
 import aegis from './aegis';
 import potion from './potion';
+import cleave from './cleave';
+import crescent from './crescent';
+import tempest from './tempest';
+import bullRush from './bullRush';
+import moltenRift from './moltenRift';
+import ironBellow from './ironBellow';
 
 import type { SkillImpl } from './types';
 
-export const SKILL_IMPLS: Record<string, SkillImpl> = { splinterBolt, starfall, voidLance, glacialNova, maelstrom, aegis, potion };
+export const SKILL_IMPLS: Record<string, SkillImpl> = {
+  splinterBolt, starfall, voidLance, glacialNova, maelstrom, aegis, potion,
+  cleave, crescent, tempest, bullRush, moltenRift, ironBellow,
+};

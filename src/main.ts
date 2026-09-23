@@ -7,16 +7,16 @@ import { initInput, updateInputRay, endInputFrame, input, wasPressed } from './c
 import { initAudio } from './core/audio';
 import { updateTimers } from './core/timers';
 import { particles } from './fx/particles';
-import { initLights, updateLights } from './fx/lights';
-import { initEffects, updateEffects } from './fx/effects';
+import { initLights, updateLights, clearLights } from './fx/lights';
+import { initEffects, updateEffects, clearEffects } from './fx/effects';
 import { buildArena } from './world/arena';
 import { separateEnemies } from './world/collision';
 import { Player } from './entities/player';
 import { updateEnemies, clearEnemies } from './entities/enemy';
 import { spawnEnemy } from './entities/spawner';
-import { updateProjectiles } from './combat/projectiles';
+import { updateProjectiles, clearProjectiles } from './combat/projectiles';
 import { updateDrops } from './loot/drops';
-import { loadProfile } from './loot/profile';
+import { loadProfile, savedClass, saveClass } from './loot/profile';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun } from './game/run';
 import { initFloaters, updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, updateHud, renderSpoils } from './ui/hud';
@@ -52,14 +52,14 @@ async function boot() {
 
   await loadingStep('Summoning the hero', 0.35);
   initAudio();   // resumed by the first user gesture
-  G.profile = loadProfile();
+  G.profile = loadProfile(savedClass());
   G.player = new Player(G.profile.classId, G.profile.equipped);
 
   initHud();
   initPerfHud(renderer);
   buildHotbar(G.player);
   initRun({ banner, showDecision, hideDecision, showSummary });
-  initMenus({ start, toMenu, resume, abandon, profileChanged });
+  initMenus({ start, toMenu, resume, abandon, profileChanged, switchClass });
   initLoadoutEditor(() => buildHotbar(G.player));
   $('#decision .bank').onclick = () => bankRun();
   $('#decision .cont').onclick = () => continueRun();
@@ -132,6 +132,19 @@ function abandon() {
   G.paused = false;
   showPause(false);
   toMenu();
+}
+
+/** Lobby class pick: the new class brings its own profile (gear, stash, records) and loadout. */
+function switchClass(id: string) {
+  if (G.mode !== 'menu' || id === G.player.cls.id) return;
+  saveClass(id);
+  G.player.dispose();
+  // the old class's skill visuals go with it
+  clearProjectiles(); clearEffects(); clearLights(); particles.clear();
+  G.profile = loadProfile(id);
+  G.player = new Player(id, G.profile.equipped);
+  G.player.sandbox = true;
+  buildHotbar(G.player);
 }
 
 function profileChanged() { G.player.recomputeStats(G.profile.equipped); G.player.reset(); }

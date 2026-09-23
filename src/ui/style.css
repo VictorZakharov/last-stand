@@ -170,7 +170,9 @@ button { font-family: inherit; }
 .logo .logo-glow { opacity: .8; }
 .logo-tag { margin-top: 10px; font-size: 16px; color: var(--ink-dim); font-style: italic; }
 .class-card { padding: 16px 18px; background: var(--panel-2); border: 1px solid rgba(160,124,70,.5); }
-.cc-name { font-family: var(--serif); font-size: 28px; color: #9fffd0; text-shadow: 0 0 10px rgba(93,255,168,.35); }
+.cc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cc-name { font-family: var(--serif); font-size: 28px; color: var(--cc, #9fffd0); text-shadow: 0 0 10px color-mix(in srgb, var(--cc, #9fffd0) 35%, transparent); }
+#opt-class button { font-size: 14px; padding: 5px 12px; }
 .cc-tag { color: var(--ink-dim); font-size: 16px; margin-bottom: 12px; }
 .cc-skills { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .cc-skills .slot { width: auto; aspect-ratio: 1; height: auto; border-radius: 4px; }

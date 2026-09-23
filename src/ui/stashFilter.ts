@@ -1,5 +1,6 @@
 // Stash filter: the stats the player is hunting for (cog button on the stash title).
 // Items with none of them are greyed out but stay usable, and sort last. Kept in localStorage.
+import { G } from '../state';
 import { STATS, STAT_INCLUDES } from '../data/items';
 import { byValue, itemPower } from '../loot/items';
 import { ATTRIBUTE_GROUPS } from './attributes';
@@ -101,6 +102,10 @@ export function renderStashFilter(): void {
   }
   document.getElementById('stash-filter-btn')!.classList.toggle('on', active.length > 0);
   const panel = document.getElementById('stash-filter')!;
-  panel.querySelectorAll<HTMLElement>('.sf-opt').forEach((b) => b.setAttribute('aria-pressed', String(active.includes(b.dataset.stat as StatKey))));
+  const unused = G.player.cls.excludeStats ?? [];
+  panel.querySelectorAll<HTMLElement>('.sf-opt').forEach((b) => {
+    b.setAttribute('aria-pressed', String(active.includes(b.dataset.stat as StatKey)));
+    b.classList.toggle('hidden', unused.includes(b.dataset.stat as StatKey));
+  });
   panel.querySelector<HTMLElement>('.sf-clear')!.classList.toggle('hidden', !active.length);
 }

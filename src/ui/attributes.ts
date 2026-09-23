@@ -89,10 +89,11 @@ function formatBase(def: AttributeDef, v: number): string {
 
 /** Render the attributes list into `el` and bind the breakdown tooltips. */
 export function renderAttributes(el: HTMLElement): void {
-  const s = G.player.stats;
+  const s = G.player.stats, unused = G.player.cls.excludeStats ?? [];
+  // stats the class can never roll are left out
   el.innerHTML = ATTRIBUTE_GROUPS.map(([title, defs], gi) =>
-    `<div class="grp">${title}</div>` + defs.map((d, di) =>
-      `<div class="row" data-attr="${gi}:${di}"><span>${d.label}</span><b>${d.fmt(s[d.value])}</b></div>`).join('')).join('');
+    `<div class="grp">${title}</div>` + defs.map((d, di) => (d.stat && unused.includes(d.stat) ? '' :
+      `<div class="row" data-attr="${gi}:${di}"><span>${d.label}</span><b>${d.fmt(s[d.value])}</b></div>`)).join('')).join('');
   el.querySelectorAll<HTMLElement>('[data-attr]').forEach((row) => {
     const [gi, di] = row.dataset.attr!.split(':').map(Number);
     bindTooltip(row, () => breakdown(ATTRIBUTE_GROUPS[gi][1][di]));

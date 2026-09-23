@@ -53,7 +53,8 @@ export interface DerivedStats {
 // Classes & skills
 
 export type SkillKey = 'mouse0' | 'mouse2' | '1' | '2' | '3' | '4' | 'q';
-export type CastAnim = 'cast' | 'slam' | 'buff' | 'channel' | null;
+/** pose a model plays while the skill casts; a class's model interprets each name in its own way */
+export type CastAnim = 'cast' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | null;
 
 /** Skill tuning data. Behavior-specific numbers are optional fields. */
 export interface SkillDef {
@@ -90,6 +91,11 @@ export interface SkillDef {
   pull?: number;
   absorbPct?: number;
   healPct?: number;
+  /** melee arc in radians */
+  arc?: number;
+  knock?: number;
+  /** energy restored per enemy hit */
+  gain?: number;
 }
 
 export interface ClassDef {
@@ -97,9 +103,19 @@ export interface ClassDef {
   name: string;
   tagline: string;
   model: string;
+  /** CSS colour of the class name in the lobby */
+  accent: string;
+  /** title of the lobby's skill loadout panel */
+  book: string;
+  /** the light that follows the cast point, and the motes drifting off the off-hand (if any) */
+  aura: { light: number; intensity: number; motes?: [color: number, end: number] };
   base: BaseStats;
   skills: SkillDef[];
   starterGear: { slot: Slot; rarity: RarityId; ilvl: number }[];
+  /** item base names per slot (default: data/items SLOT_INFO) */
+  bases?: Partial<Record<Slot, string[]>>;
+  /** stats that never roll on this class's items (no skill of the class uses them) */
+  excludeStats?: StatKey[];
 }
 
 // ---------------------------------------------------------------------------
@@ -118,6 +134,7 @@ export interface Item {
   stats: StatBlock;
 }
 
+/** One class's saved progress: every class keeps its own gear, stash and records. */
 export interface Profile {
   classId: string;
   equipped: Partial<Record<Slot, Item>>;

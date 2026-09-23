@@ -27,12 +27,15 @@ export interface Ward { amount: number; t: number; onHit?(absorbed: number): voi
 
 interface CastState { skill: KnownSkill; t: number; dur: number; fireAt: number; fired: boolean; target: THREE.Vector3 }
 interface ChannelState { skill: KnownSkill; key: SkillKey; state: unknown }
+/** A movement skill's dash: a fixed velocity that input can't steer, with a per-frame hook. */
+interface DashState { vx: number; vz: number; t: number; dur: number; step?(): void }
 
 export class Player {
   readonly cls: ClassDef;
   readonly model: Model;
   readonly obj = new THREE.Group();
-  readonly staffLight = new THREE.PointLight(0x5dffa8, 3, 6, 2);
+  /** follows the cast point; every class has one, so switching class keeps the light count */
+  readonly staffLight: THREE.PointLight;
 
   readonly pos = new THREE.Vector3(0, 0, 3);
   readonly vel = new THREE.Vector3();
@@ -57,12 +60,14 @@ export class Player {
   deadT = -1;
   casting: CastState | null = null;
   channel: ChannelState | null = null;
+  dash: DashState | null = null;
   ward: Ward | null = null;
   hitT = 0;
   lastLowEnergy = 0;
 
   constructor(classId: string, equipped: Profile['equipped']) {
     this.cls = CLASSES[classId];
+    this.staffLight = new THREE.PointLight(this.cls.aura.light, this.cls.aura.intensity, 6, 2);
     this.model = buildModel(this.cls.model);
     this.obj.add(this.model.root);
     applyShadowDetail(this.obj);
@@ -76,6 +81,15 @@ export class Player {
     this.loadout = loadLoadout(this.cls);
     this.recomputeStats(equipped);
     this.reset();
+  }
+
+  /** Take the character out of the scene (switching class in the lobby). */
+  dispose(): void {
+    this.stopChannel();
+    this.ward?.onEnd?.();
+    G.scene.remove(this.obj, this.staffLight, ...(this.model.worldObjects ?? []));
+    this.model.dispose();
+    this.staffLight.dispose();
   }
 
   /** Bind a skill (or nothing) to a key and persist the loadout. */
@@ -106,6 +120,7 @@ export class Player {
     this.deadT = -1;
     this.casting = null;
     this.channel = null;
+    this.dash = null;
     this.ward = null;
     this.hitT = 0;
     this.lastLowEnergy = 0;
@@ -150,7 +165,7 @@ export class Player {
 
     // a channel ends when the key that started it is released
     if (this.channel && !isDown(this.channel.key)) this.stopChannel();
-    if (input.mouse.overUI) return;
+    if (input.mouse.overUI || this.dash) return;
     for (const key of SKILL_KEYS) {
       if (!isDown(key)) continue;
       const skill = this.skillAt(key);
@@ -161,7 +176,7 @@ export class Player {
   }
 
   tryCast(s: KnownSkill): boolean {
-    if (this.casting || this.channel || this.cooldownLeft(s.def.impl) > 0 || !this.alive) return false;
+    if (this.casting || this.channel || this.dash || this.cooldownLeft(s.def.impl) > 0 || !this.alive) return false;
     if (!this.sandbox && this.energy < s.def.cost) { this.lowEnergy(); return false; }
     const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
     const target = this.aim.clone();
@@ -179,6 +194,12 @@ export class Player {
       this.cooldowns.set(s.def.impl, this.cooldownOf(s.def));
     }
     s.impl.cast(this, s.def, target);
+  }
+
+  /** Rush along `dir` (normalized, on the ground) at `speed` for `dur` seconds; `step` runs every frame of it. */
+  startDash(dir: THREE.Vector3, speed: number, dur: number, step?: () => void): void {
+    this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, step };
+    this.facing = Math.atan2(dir.x, dir.z);
   }
 
   startChannel(s: KnownSkill, key: SkillKey): void {
@@ -232,9 +253,15 @@ export class Player {
     }
 
     // movement
+    const d = this.dash;
+    if (d) { this.vel.set(d.vx, 0, d.vz); d.t += dt; }
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     resolveWorld(this.pos, this.radius);
+    if (d) {
+      d.step?.();
+      if (d.t >= d.dur) { this.dash = null; this.vel.multiplyScalar(this.stats.moveSpeed / Math.max(1e-3, Math.hypot(d.vx, d.vz))); }
+    }
     const speed = Math.hypot(this.vel.x, this.vel.z);
     if (!this.casting && !this.channel && speed > 0.5) {
       this.facing = angleDamp(this.facing, Math.atan2(this.vel.x, this.vel.z), 14, dt);
@@ -255,16 +282,18 @@ export class Player {
     const side = Math.cos(this.facing) * this.vel.x - Math.sin(this.facing) * this.vel.z;
     this.phase += dt * speed * 2.1 * (fwd < -0.5 ? -1 : 1);
     let action: ActionState | null = null;
-    if (this.casting) action = { name: this.casting.skill.impl.anim || 'cast', t: this.casting.t / this.casting.dur };
+    if (this.dash) action = { name: 'charge', t: Math.min(1, this.dash.t / this.dash.dur) };
+    else if (this.casting) action = { name: this.casting.skill.impl.anim || 'cast', t: this.casting.t / this.casting.dur };
     else if (this.channel) action = { name: 'channel', t: 0.5 };
     this.pose(dt, t, Math.min(1, speed / this.stats.moveSpeed), 1, side / this.stats.moveSpeed, action);
 
-    // ambient arcane motes around the offhand
-    if (Math.random() < dt * 20) {
+    // ambient motes around the offhand (the mage's arcana)
+    const motes = this.cls.aura.motes;
+    if (motes && Math.random() < dt * 20) {
       const p = this.palmPoint;
       particles.glow.spawn({
         x: p.x + rand(-0.08, 0.08), y: p.y + rand(-0.05, 0.08), z: p.z + rand(-0.08, 0.08), vy: rand(0.2, 0.6),
-        life: rand(0.4, 0.8), size: rand(0.06, 0.14), sizeEnd: 0, color: col(0x5dffa8, 2.5), colorEnd: col(0x1060ff, 0.5),
+        life: rand(0.4, 0.8), size: rand(0.06, 0.14), sizeEnd: 0, color: col(motes[0], 2.5), colorEnd: col(motes[1], 0.5),
       });
     }
   }
@@ -280,7 +309,8 @@ export class Player {
     });
     this.model.kit.u.uHit.value = this.hitT * 0.5;
     this.staffLight.position.copy(this.castPoint);
-    this.staffLight.intensity = 3 + (this.channel ? 6 : 0) + Math.sin(t * 6) * 0.4;
+    const glow = this.cls.aura.intensity;
+    this.staffLight.intensity = glow * (1 + (this.channel ? 2 : 0) + Math.sin(t * 6) * 0.13);
   }
 
   heal(amount: number, silent = false): void {
@@ -317,6 +347,7 @@ export class Player {
     this.deadT = 0;
     this.stopChannel();
     this.casting = null;
+    this.dash = null;
     this.ward?.onEnd?.();
     this.ward = null;
     sfx.death();

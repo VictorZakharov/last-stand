@@ -2,7 +2,7 @@
 import { SLOTS, SLOT_INFO, RARITIES, STATS, AFFIX_NAMES, LEGENDARY_NAMES, type RarityInfo } from '../data/items';
 import { LOOT } from '../data/waves';
 import { pick, rand, randInt, weighted } from '../util';
-import type { BaseStats, DerivedStats, Item, Profile, RarityId, Slot, StatBlock, StatKey } from '../types';
+import type { BaseStats, ClassDef, DerivedStats, Item, Profile, RarityId, Slot, StatBlock, StatKey } from '../types';
 
 let uid = Date.now() % 1e6;
 
@@ -27,14 +27,17 @@ export function rollRarity(wave: number, bonus = 0): RarityId {
   return weighted(RARITIES.map((r, i) => [r.id, w[i]] as const));
 }
 
-/** Create an item. Everything is plain JSON so it can be saved directly. */
-export function makeItem({ slot = pick(SLOTS), rarity = 'common', ilvl = 1 }: { slot?: Slot; rarity?: RarityId; ilvl?: number } = {}): Item {
+/** Item base names of a slot for a class (its own, or the defaults). */
+export const basesFor = (slot: Slot, cls?: ClassDef): string[] => cls?.bases?.[slot] ?? SLOT_INFO[slot].bases;
+
+/** Create an item for `cls` (its base names and stats). Everything is plain JSON so it can be saved directly. */
+export function makeItem({ slot = pick(SLOTS), rarity = 'common', ilvl = 1, cls }: { slot?: Slot; rarity?: RarityId; ilvl?: number; cls?: ClassDef } = {}): Item {
   const info = SLOT_INFO[slot];
   const r = rarityOf(rarity);
   const stats: StatBlock = {};
   for (const [stat, weight] of info.implicit) stats[stat] = rollStat(stat, ilvl, r.power, weight);
 
-  const pool = STAT_KEYS.filter((s) => !(s in stats));
+  const pool = STAT_KEYS.filter((s) => !(s in stats) && !cls?.excludeStats?.includes(s));
   const count = randInt(r.affixes[0], r.affixes[1]);
   const affixes: StatKey[] = [];
   for (let i = 0; i < count && pool.length; i++) {
@@ -43,7 +46,7 @@ export function makeItem({ slot = pick(SLOTS), rarity = 'common', ilvl = 1 }: { 
     affixes.push(stat);
   }
 
-  const base = pick(info.bases);
+  const base = pick(basesFor(slot, cls));
   let name = base;
   if (rarity === 'legendary') name = pick(LEGENDARY_NAMES);
   else if (affixes.length) {
@@ -55,8 +58,8 @@ export function makeItem({ slot = pick(SLOTS), rarity = 'common', ilvl = 1 }: { 
   return { id: `i${(uid++).toString(36)}`, slot, rarity, ilvl, name, base, stats };
 }
 
-export function rollDrop(wave: number, bonus = 0): Item {
-  return makeItem({ rarity: rollRarity(wave, bonus), ilvl: wave + randInt(0, 1) });
+export function rollDrop(cls: ClassDef, wave: number, bonus = 0): Item {
+  return makeItem({ rarity: rollRarity(wave, bonus), ilvl: wave + randInt(0, 1), cls });
 }
 
 export function formatStat(stat: StatKey, v: number): string {

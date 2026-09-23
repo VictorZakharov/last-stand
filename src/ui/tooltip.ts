@@ -109,6 +109,7 @@ export function skillTooltip(def: SkillDef): () => TooltipContent {
     html += `<div class="tt-desc">${def.desc}</div>`;
     const bits = [];
     if (def.cost) bits.push(def.channel ? `${def.cost} Energy / sec` : `${def.cost} Energy`);
+    if (def.gain) bits.push(`+${def.gain} Energy per hit`);
     if (def.cooldown) bits.push(`${def.cooldown}s cooldown`);
     if (def.damage) bits.push(`${def.damage}${def.channel || def.impl === 'maelstrom' ? ' dmg / sec' : ' damage'}`);
     html += `<div class="tt-foot">${bits.join(' · ')}</div></div>`;

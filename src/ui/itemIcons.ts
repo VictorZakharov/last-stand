@@ -2,8 +2,8 @@
 // single hidden <defs> block of gradients and filters (injected once), so each
 // icon is a small string of shapes. Gems and glows take the item's rarity color.
 import { SLOT_INFO } from '../data/items';
-import { rarityOf } from '../loot/items';
-import type { Item, RarityId, Slot } from '../types';
+import { rarityOf, basesFor } from '../loot/items';
+import type { ClassDef, Item, RarityId, Slot } from '../types';
 
 const RARITY_IDS: RarityId[] = ['common', 'magic', 'rare', 'epic', 'legendary'];
 
@@ -63,6 +63,12 @@ const shaft = (x1: number, y1: number, x2: number, y2: number, w: number, fill: 
   const a = Math.atan2(y2 - y1, x2 - x1), nx = -Math.sin(a) * w / 2, ny = Math.cos(a) * w / 2;
   return `<path d="M${x1 + nx} ${y1 + ny}L${x2 + nx} ${y2 + ny}L${x2 - nx} ${y2 - ny}L${x1 - nx} ${y1 - ny}Z" fill="url(#${fill})" stroke="#140c06" stroke-width=".8"/>`;
 };
+/** Closed star outline: `n` points on radius ro, notches on ri (mace flanges). */
+const star = (cx: number, cy: number, ro: number, ri: number, n: number) =>
+  'M' + Array.from({ length: n * 2 }, (_, i) => {
+    const a = (i / (n * 2)) * Math.PI * 2, r = i % 2 ? ri : ro;
+    return `${(cx + Math.cos(a) * r).toFixed(1)} ${(cy + Math.sin(a) * r).toFixed(1)}`;
+  }).join('L') + 'Z';
 const band = (x: number, y: number, w: number, h: number, rot: number) =>
   `<rect x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="1" fill="url(#gold)" stroke="#3a2608" stroke-width=".6" transform="rotate(${rot} ${x} ${y})"/>`;
 
@@ -86,7 +92,29 @@ const DRAW: Record<string, Draw> = {
     `<path d="M31 32l7-14 9-9" stroke="#fff" stroke-width="1" opacity=".7" fill="none"/>` +
     `<circle cx="42" cy="18" r="12" fill="url(#aura-${g})"/>`,
 
+  Sword: (g) => `<path d="M18.7 40.7L45.7 13.7L55 9L50.3 18.3L23.3 45.3Z" fill="url(#steel)" stroke="#1b1f28" stroke-width="1"/>` +
+    `<path d="M22 42L49 15" stroke="#fff" stroke-width="1" opacity=".55"/>` +
+    shaft(19, 45, 11, 53, 4, 'leather') + `<path d="M13 35L29 51" stroke="url(#gold)" stroke-width="4" stroke-linecap="round"/>` +
+    `<circle cx="9.5" cy="54.5" r="3.6" fill="url(#gold)" stroke="#3a2608" stroke-width=".8"/>` + gemAt(21, 43, 2.2, g),
+  Axe: (g) => shaft(12, 56, 44, 16, 4, 'wood') +
+    `<path d="M38 18L44 12C52 10 58 18 56 29C52 26 46 26 42 28Z" fill="url(#steel)" stroke="#1b1f28" stroke-width="1"/>` +
+    `<path d="M46 13C53 13 56 20 55 27" fill="none" stroke="#fff" stroke-width="1" opacity=".6"/>` +
+    `<path d="M38 18L31 13L35 23Z" fill="url(#darksteel)" stroke="#111" stroke-width=".8"/>` + band(38, 22, 8, 3.4, -51) + gemAt(44, 20, 2.6, g),
+  Mace: (g) => shaft(14, 54, 38, 26, 4.4, 'darksteel') + shaft(14, 54, 22, 45, 5.2, 'leather') +
+    `<path d="${star(42, 21, 13, 8, 8)}" fill="url(#steel)" stroke="#1b1f28" stroke-width="1"/>` +
+    `<circle cx="42" cy="21" r="7" fill="url(#darksteel)" stroke="#111" stroke-width=".8"/>` + gemAt(42, 21, 3.4, g),
+
   // --- off-hands
+  Shield: (g, c) => `<circle cx="32" cy="32" r="23" fill="url(#darksteel)" stroke="#111" stroke-width="1.2"/>` +
+    `<circle cx="32" cy="32" r="19.5" fill="url(#${c})"/>` +
+    `<circle cx="32" cy="32" r="21.5" fill="none" stroke="url(#gold)" stroke-width="2.4"/>` +
+    `<path d="M18 18l28 28M46 18L18 46" stroke="url(#gold)" stroke-width="3" opacity=".9"/>` +
+    `<circle cx="32" cy="32" r="7.5" fill="url(#steel)" stroke="#1b1f28" stroke-width="1"/>` + gemAt(32, 32, 3.2, g),
+  Buckler: (g) => `<circle cx="32" cy="32" r="19" fill="url(#steel)" stroke="#1b1f28" stroke-width="1.2"/>` +
+    `<circle cx="32" cy="32" r="13" fill="none" stroke="url(#darksteel)" stroke-width="2.4"/>` +
+    [0, 1, 2, 3, 4, 5].map((i) => `<circle cx="${(32 + Math.cos(i * Math.PI / 3) * 16).toFixed(1)}" cy="${(32 + Math.sin(i * Math.PI / 3) * 16).toFixed(1)}" r="1.4" fill="url(#gold)"/>`).join('') +
+    `<circle cx="32" cy="32" r="7" fill="url(#gold)" stroke="#3a2608" stroke-width="1"/>` + gemAt(32, 32, 3.6, g) +
+    `<ellipse cx="25" cy="23" rx="6" ry="3" fill="#fff" opacity=".35" transform="rotate(-35 25 23)"/>`,
   Tome: (g, c) => `<path d="M14 16l26-6 10 8v34l-26 6-10-8z" fill="url(#paper)"/>` +
     `<path d="M14 16l26-6v34l-26 6z" fill="url(#${c})" stroke="#140c06" stroke-width="1"/>` +
     `<path d="M40 10l10 8v34l-10-8z" fill="url(#paper)" stroke="#6a5530" stroke-width=".8"/>` +
@@ -138,7 +166,29 @@ const DRAW: Record<string, Draw> = {
     `<circle cx="23" cy="29" r="6" fill="url(#aura-${g})"/><circle cx="41" cy="29" r="6" fill="url(#aura-${g})"/>` +
     `<path d="M26 44h12" stroke="#1b1f28" stroke-width="1.4"/>`,
 
+  Helm: (g, c) => `<path d="M30 7c-3-4 5-5 6-1l-2 5z" fill="url(#${c})" stroke="#140c06" stroke-width=".8"/>` +
+    `<path d="M16 22c0-9 7-15 16-15s16 6 16 15v24c0 5-7 10-16 10s-16-5-16-10z" fill="url(#steel)" stroke="#1b1f28" stroke-width="1.2"/>` +
+    `<path d="M32 8v44" stroke="url(#gold)" stroke-width="2.2"/>` +
+    `<rect x="18" y="27" width="28" height="4" rx="1" fill="#07060a"/>` +
+    `<path d="M20 29h24" stroke="url(#gem-${g})" stroke-width="1.6"/>` + `<ellipse cx="32" cy="29" rx="14" ry="5" fill="url(#aura-${g})"/>` +
+    `<path d="M24 38v10M28 39v11M36 39v11M40 38v10" stroke="#1b1f28" stroke-width="1.4"/>`,
+  Greathelm: (g, c) => `<path d="M24 12c0-8 16-8 16 0" fill="url(#${c})" stroke="#140c06" stroke-width=".8"/>` +
+    `<path d="M14 14h36v34c0 6-8 10-18 10s-18-4-18-10z" fill="url(#steel)" stroke="#1b1f28" stroke-width="1.2"/>` +
+    `<path d="M14 14h36" stroke="url(#gold)" stroke-width="3"/>` +
+    `<path d="M17 28h30M32 20v34" stroke="#07060a" stroke-width="3.4"/>` +
+    `<path d="M18 28h28" stroke="url(#gem-${g})" stroke-width="1.4"/>` + `<ellipse cx="32" cy="28" rx="15" ry="5" fill="url(#aura-${g})"/>` +
+    `<circle cx="20" cy="46" r="1.5" fill="url(#gold)"/><circle cx="44" cy="46" r="1.5" fill="url(#gold)"/>`,
+
   // --- chest
+  Cuirass: (g) => `<path d="M16 10l10-2c2 5 10 5 12 0l10 2 4 14-6 4v22c-6 5-26 5-32 0V28l-6-4z" fill="url(#steel)" stroke="#1b1f28" stroke-width="1.2"/>` +
+    `<path d="M32 16v36" stroke="#1b1f28" stroke-width="1" opacity=".6"/>` +
+    `<path d="M26 8c2 5 10 5 12 0" fill="none" stroke="url(#gold)" stroke-width="2.4"/>` +
+    `<path d="M18 40c8 3 20 3 28 0" fill="none" stroke="url(#darksteel)" stroke-width="2.4"/>` +
+    `<ellipse cx="25" cy="24" rx="4" ry="7" fill="#fff" opacity=".3"/>` + gemAt(32, 24, 3.2, g),
+  Hauberk: (g) => `<path d="M20 10l12 4 12-4 10 10-6 8-3-2v30H19V26l-3 2-6-8z" fill="url(#darksteel)" stroke="#111" stroke-width="1.2"/>` +
+    `<path d="M20 20h24M19 26h26M19 32h26M19 44h26M19 50h26" stroke="url(#steel)" stroke-width="1.6" stroke-dasharray="1.6 1.4" opacity=".85"/>` +
+    `<rect x="18" y="36" width="28" height="5" fill="url(#leather)" stroke="#140c06" stroke-width=".8"/>` +
+    `<rect x="29" y="35" width="6" height="7" rx="1" fill="url(#gold)" stroke="#3a2608"/>` + gemAt(32, 38.5, 1.8, g),
   Robes: (g, c) => `<path d="M22 8l10 4 10-4 12 8-6 10-4-2 4 32H16l4-32-4 2-6-10z" fill="url(#${c})" stroke="#140c06" stroke-width="1.2"/>` +
     `<path d="M26 10l6 14 6-14" fill="none" stroke="url(#gold)" stroke-width="2"/>` +
     `<path d="M20 32h24" stroke="url(#gold)" stroke-width="3"/>` + gemAt(32, 32, 2.8, g) +
@@ -159,6 +209,10 @@ const DRAW: Record<string, Draw> = {
   // --- hands
   Gloves: (g) => `<path d="M20 58V36l-4-10c-1-3 3-5 5-2l4 8V14c0-3 5-3 5 0v14-18c0-3 5-3 5 0v18-15c0-3 5-3 5 0v17-12c0-3 5-3 5 0v26c0 6-2 10-4 12v8z" fill="url(#leather)" stroke="#140c06" stroke-width="1.2"/>` +
     `<rect x="18" y="46" width="28" height="8" rx="2" fill="url(#steel)" stroke="#1b1f28"/>` + gemAt(32, 50, 2.6, g),
+  Gauntlets: (g) => `<path d="M20 58V36l-4-10c-1-3 3-5 5-2l4 8V14c0-3 5-3 5 0v14-18c0-3 5-3 5 0v18-15c0-3 5-3 5 0v17-12c0-3 5-3 5 0v26c0 6-2 10-4 12v8z" fill="url(#steel)" stroke="#1b1f28" stroke-width="1.2"/>` +
+    `<path d="M25 18h5M30 16h5M35 18h5M40 22h5M25 24h5M30 22h5M35 24h5M40 28h5" stroke="#1b1f28" stroke-width="1" opacity=".7"/>` +
+    `<rect x="17" y="44" width="30" height="10" rx="2" fill="url(#steel)" stroke="#1b1f28"/>` +
+    `<path d="M17 47h30" stroke="url(#gold)" stroke-width="2"/>` + gemAt(32, 50, 2.6, g),
   Wraps: (g) => `<path d="M20 58V36l-4-10c-1-3 3-5 5-2l4 8V14c0-3 5-3 5 0v14-18c0-3 5-3 5 0v18-15c0-3 5-3 5 0v17-12c0-3 5-3 5 0v26c0 6-2 10-4 12v8z" fill="url(#paper)" stroke="#6a5530" stroke-width="1.2"/>` +
     `<path d="M20 40l24-6M20 46l24-6M20 52l24-6M25 30l20-5" stroke="#8a7348" stroke-width="1.4"/>` +
     `<path d="M44 34c4 6 6 14 4 22" fill="none" stroke="url(#gem-${g})" stroke-width="1.6"/>`,
@@ -212,8 +266,8 @@ export function itemIconSVG(item: Item): string {
   return `<svg class="item-icon" viewBox="0 0 64 64" aria-hidden="true"><g filter="url(#icoShadow)">${draw(item.rarity, cloth)}</g></svg>`;
 }
 
-/** Faded silhouette for an empty equipment slot. */
-export function slotPlaceholderSVG(slot: Slot): string {
-  const draw = DRAW[SLOT_INFO[slot].bases[0]];
+/** Faded silhouette for an empty equipment slot (in the class's own gear). */
+export function slotPlaceholderSVG(slot: Slot, cls?: ClassDef): string {
+  const draw = DRAW[basesFor(slot, cls)[0]];
   return `<svg class="item-icon placeholder" viewBox="0 0 64 64" aria-hidden="true">${draw('common', 'clothUmber')}</svg>`;
 }
