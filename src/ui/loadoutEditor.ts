@@ -76,7 +76,7 @@ export function renderLoadoutEditor(): void {
   const p = G.player;
   // the bindings shown belong to the weapon style held (each style keeps its own)
   const style = p.weaponStyle;
-  document.querySelector('#loadout .lo-style-name')!.textContent = style ? `${STYLE_NAME[style]}:` : '';
+  document.querySelector('#loadout .lo-style-name')!.textContent = style ? `${STYLE_NAME[style]} ·` : '';
   const b = book();
   b.innerHTML = '';
   for (const { def } of p.known.values()) {

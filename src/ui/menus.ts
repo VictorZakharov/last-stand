@@ -10,6 +10,7 @@ import { equipFromStash, unequip, salvage, salvageEquipped, resetProfile, slotsF
 import { bindTooltip, hideTooltip, itemTooltip } from './tooltip';
 import { makeSkillSlot, KEY_LABEL } from './hud';
 import { renderLoadoutEditor } from './loadoutEditor';
+import { initSkillStrip, syncSkillStrip } from './skillStrip';
 import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
 import { renderAttributes } from './attributes';
 import { initStashFilter, renderStashFilter, openStashFilter, sortStash, matchesFilter } from './stashFilter';
@@ -119,6 +120,7 @@ export function initMenus(h: MenuHooks): void {
     };
   });
   initStashFilter(renderMenu);
+  initSkillStrip($('.cc-strip'));
   const stash = $('#stash');
   stash.addEventListener('contextmenu', (e) => e.preventDefault());
   stash.addEventListener('dragover', (e) => { if (drag?.from === 'equip') e.preventDefault(); });
@@ -213,8 +215,10 @@ export function renderMenu(): void {
   $('.cc-name').textContent = cls.name;
   $('.cc-tag').textContent = cls.tagline;
   const sk = $('.cc-skills');
+  if (sk.dataset.cls !== cls.id) { sk.dataset.cls = cls.id; sk.scrollLeft = 0; }   // another class starts at its first skills
   sk.innerHTML = '';
-  for (const def of cls.skills) sk.appendChild(makeSkillSlot(def));
+  for (const def of cls.skills) sk.appendChild(makeSkillSlot(def)).classList.toggle('unusable', !G.player.usable(def));
+  syncSkillStrip();
 
   const r = p.records;
   const rec = (icon: string, value: string | number, label: string) =>

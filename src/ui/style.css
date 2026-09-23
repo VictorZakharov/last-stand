@@ -174,9 +174,20 @@ button { font-family: inherit; }
 .cc-name { font-family: var(--serif); font-size: 28px; color: var(--cc, #9fffd0); text-shadow: 0 0 10px color-mix(in srgb, var(--cc, #9fffd0) 35%, transparent); }
 #opt-class button { font-size: 14px; padding: 5px 12px; }
 .cc-tag { color: var(--ink-dim); font-size: 16px; margin-bottom: 12px; }
-.cc-skills { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.cc-skills .slot { width: auto; aspect-ratio: 1; height: auto; border-radius: 4px; }
-.cc-skills .slot .icon { font-size: 44px; }
+/* one row, four at a time (ui/skillStrip.ts): arrows, the wheel, a drag or a swipe show the rest */
+.cc-strip { display: flex; align-items: center; gap: 6px; }
+.cc-skills { flex: 1; min-width: 0; display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 3 * 10px) / 4); gap: 10px;
+  overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; cursor: grab; }
+.cc-skills::-webkit-scrollbar { display: none; }
+.cc-skills.dragging { scroll-snap-type: none; cursor: grabbing; user-select: none; }
+.cc-skills .slot { width: auto; aspect-ratio: 1; height: auto; border-radius: 4px; scroll-snap-align: start; }
+.cc-skills.dragging .slot { pointer-events: none; }
+.cc-arrow { flex: none; width: 26px; align-self: stretch; font-size: 30px; line-height: 1; color: var(--bronze-hi); background: none; border: 1px solid rgba(160,124,70,.35); border-radius: 3px; cursor: pointer; }
+.cc-arrow:hover:not(:disabled) { background: rgba(160,124,70,.15); }
+.cc-arrow:disabled { opacity: .25; cursor: default; }
+.cc-strip.fits .cc-arrow { display: none; }
+.cc-skills .slot .icon { font-size: 40px; }
+.cc-skills .slot.unusable { opacity: .45; filter: grayscale(.75); }
 .cc-skills .slot .key { font-size: 14px; right: 6px; bottom: 4px; }
 .records { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .rec { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center;
@@ -353,13 +364,16 @@ button { font-family: inherit; }
 #loadout { pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 12px 10px;
   max-width: 100%; zoom: var(--ui, 1); }
 #loadout .lo-head { display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: 440px; text-align: center; }
+/* the title line also names the weapon style the bindings belong to, and resets them */
+#loadout .lo-top { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; column-gap: 14px; }
 #loadout .lo-title { font-family: var(--serif); font-size: 16px; color: var(--bronze-hi); }
-#loadout .lo-style { display: flex; gap: 10px; align-items: baseline; font-size: 12px; color: var(--ink-dim); }
+#loadout .lo-style { display: flex; gap: 8px; align-items: baseline; font-size: 12px; color: var(--ink-dim); }
 #loadout .lo-style-name:empty { display: none; }
 #loadout #btn-lo-reset { font-size: 12px; }
 #loadout .lo-hint { font-size: 11px; color: var(--ink-dim); line-height: 1.3; }
-#spellbook { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 6px 10px; border: 1px dashed transparent; border-radius: 4px; transition: border-color .15s, background .15s; }
-#spellbook .slot { width: 42px; height: 42px; cursor: grab; }
+/* the tiles flow as inline boxes so the rows balance when they must wrap (5 + 4, not 8 + 1) */
+#spellbook { text-align: center; text-wrap: balance; line-height: 0; padding: 3px 7px; border: 1px dashed transparent; border-radius: 4px; transition: border-color .15s, background .15s; }
+#spellbook .slot { display: inline-flex; vertical-align: top; margin: 3px; width: 42px; height: 42px; cursor: grab; }
 #spellbook .slot .key { display: none; }
 #spellbook .slot .icon { font-size: 22px; }
 #spellbook .slot.unusable { opacity: .45; filter: grayscale(.75); }
@@ -496,7 +510,7 @@ body.touch .stow-hint kbd { display: none; }
   #menu .menu-left, #menu .menu-right, #menu .menu-center { display: none; grid-column: 2; min-height: 0; overflow-y: auto; }
   #menu[data-tab="hero"] .menu-left, #menu[data-tab="gear"] .menu-right, #menu[data-tab="skills"] .menu-center { display: flex; }
   .menu-left { width: 460px; gap: 10px; padding: 14px 20px; }
-  .menu-left .logo, .cc-skills { display: none; }
+  .menu-left .logo, .cc-strip { display: none; }
   .records { grid-template-columns: repeat(4, 1fr); }
   .rec { grid-template-columns: 1fr; text-align: center; padding: 6px 4px; } .rec-icon { display: none; }
   .menu-center { justify-content: flex-start; }
