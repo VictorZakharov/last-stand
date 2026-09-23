@@ -90,11 +90,17 @@ export function initMenus(h: MenuHooks): void {
     endDrag();
     changed();
   });
+  // holding Shift in the sanctuary shows the junk bin: Shift-click salvages a stash item
+  const setShift = (on: boolean): void => { if (on !== shiftHeld) { shiftHeld = on; syncJunk(); } };
+  window.addEventListener('keydown', (e) => { if (e.key === 'Shift') setShift(true); });
+  window.addEventListener('keyup', (e) => { if (e.key === 'Shift') setShift(false); });
+  window.addEventListener('blur', () => setShift(false));
 }
 
 export function showMenu(v: boolean): void {
   $('#menu').classList.toggle('hidden', !v);
   if (v) { toggleMenuStowed(false); renderMenu(); }
+  syncJunk();
 }
 
 /** Fade the lobby panels out (to walk around and practice on the dummies) or back in. */
@@ -104,6 +110,7 @@ export function toggleMenuStowed(stowed?: boolean): void {
   focusSlot(null);
   hideTooltip();
   if (menu.classList.contains('stowed')) endDrag();
+  syncJunk();
 }
 export function markNew(items: Item[]): void { for (const it of items) newIds.add(it.id); }
 
@@ -171,9 +178,17 @@ export function renderMenu(): void {
     d.dataset.slot = it.slot;
     d.innerHTML = itemIconSVG(it) + GLOW;
     bindSlotFocus(d, it.slot);
-    bindTooltip(d, () => ({ ...itemTooltip(it)(), foot: 'Right-click or drag to equip · Drag to the junk bin to salvage' }));
+    bindTooltip(d, () => ({ ...itemTooltip(it)(), foot: 'Right-click or drag to equip · Shift-click or drag to the junk bin to salvage' }));
     const equip = () => { newIds.delete(it.id); equipFromStash(p, it.id); hideTooltip(); sfx.click(); changed(); };
-    d.onclick = equip;
+    d.onclick = (e) => {
+      if (!e.shiftKey) { equip(); return; }
+      flyToJunk(d);
+      newIds.delete(it.id);
+      salvage(p, it.id);
+      hideTooltip();
+      sfx.salvage();
+      changed();
+    };
     d.oncontextmenu = (e) => { e.preventDefault(); equip(); };
     makeDraggable(d, { from: 'stash', item: it });
     st.appendChild(d);
@@ -227,8 +242,46 @@ function makeDraggable(el: HTMLElement, payload: ItemDrag): void {
 // Also called from drop handlers: a re-render may remove the dragged node before 'dragend' fires.
 function endDrag(): void {
   drag = null;
-  $('#junk').classList.add('hidden');
+  syncJunk();
   document.querySelectorAll('.droppable, .over').forEach((n) => n.classList.remove('droppable', 'over'));
+}
+
+// --- junk bin -----------------------------------------------------------------------
+let shiftHeld = false;
+
+/** The bin shows while an item is dragged, or while Shift is held over the open sanctuary. */
+function syncJunk(): void {
+  const menu = $('#menu');
+  const discard = shiftHeld && !drag && !menu.classList.contains('hidden') && !menu.classList.contains('stowed');
+  menu.classList.toggle('discard', discard);
+  const junk = $('#junk');
+  junk.classList.toggle('hidden', !drag && !discard);
+  junk.classList.toggle('shift', discard);
+}
+
+/** A copy of the item's icon arcs into the junk bin, spinning and shrinking, and the bin gulps. */
+function flyToJunk(from: HTMLElement): void {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const bin = $('#junk .junk-icon');
+  const a = from.getBoundingClientRect(), b = bin.getBoundingClientRect();
+  const ghost = from.cloneNode(true) as HTMLElement;
+  ghost.classList.add('junk-fly');
+  Object.assign(ghost.style, { left: `${a.left}px`, top: `${a.top}px`, width: `${a.width}px`, height: `${a.height}px` });
+  document.body.appendChild(ghost);
+  // a quadratic arc that rises before dropping into the bin
+  const dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + b.height / 2 - (a.top + a.height / 2);
+  const cx = dx * 0.35, cy = Math.min(dy, 0) - 90 - Math.abs(dx) * 0.15;
+  const spin = dx < 0 ? -1 : 1;
+  const frames: Keyframe[] = [];
+  for (let i = 0; i <= 10; i++) {
+    const t = i / 10, u = 1 - t;
+    const x = 2 * u * t * cx + t * t * dx, y = 2 * u * t * cy + t * t * dy;
+    frames.push({ transform: `translate(${x}px, ${y}px) rotate(${spin * 320 * t * t}deg) scale(${1 - 0.72 * t})`, opacity: t < 0.85 ? 1 : (1 - t) / 0.15 });
+  }
+  ghost.animate(frames, { duration: 560, easing: 'cubic-bezier(.35,0,.65,1)' }).finished.then(() => {
+    ghost.remove();
+    bin.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.35) rotate(-10deg)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' });
+  });
 }
 
 function changed(): void {
