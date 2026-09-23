@@ -10,14 +10,25 @@ export async function loadingStep(label: string, progress: number): Promise<void
   await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r)));
 }
 
-/** Fade out once the first frame of the lobby is on screen. */
+// the game runs behind the loading screen until this many frames in a row come in under
+// SMOOTH_MS: the very first frames can still stall on work the driver or browser does on first
+// use (on a first visit its shader cache is cold), and that should not be seen as a stutter
+const SMOOTH_FRAMES = 8, SMOOTH_MS = 70, MAX_WAIT_MS = 4000;
+
+/** Call when the game loop starts; fades out once the lobby renders smoothly. */
 export function loadingDone(): void {
   const l = el();
   l.style.setProperty('--p', '1');
-  requestAnimationFrame(() => {
+  const start = performance.now();
+  let last = start, smooth = 0;
+  const tick = (now: number): void => {
+    smooth = now - last < SMOOTH_MS ? smooth + 1 : 0;
+    last = now;
+    if (smooth < SMOOTH_FRAMES && now - start < MAX_WAIT_MS) { requestAnimationFrame(tick); return; }
     l.classList.add('done');
     l.addEventListener('transitionend', () => l.remove(), { once: true });
-  });
+  };
+  requestAnimationFrame(tick);
 }
 
 export function loadingFailed(err: unknown): void {
