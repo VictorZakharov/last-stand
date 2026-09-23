@@ -96,6 +96,9 @@ export function initRenderer(container: HTMLElement) {
   return { scene, camera, renderer };
 }
 
+/** The offscreen target the scene is rendered into (shaders must be compiled for it). */
+export const sceneTarget = (): THREE.WebGLRenderTarget => composer.readBuffer;
+
 export function addShake(amount: number): void { rig.shake = Math.min(1.2, rig.shake + amount); }
 export function flashHurt(amount: number): void { rig.hurt = Math.min(1, rig.hurt + amount); }
 export function setZoom(z: number): void { rig.targetZoom = clamp(z, CAMERA.minZoom, CAMERA.maxZoom); }

@@ -1,7 +1,7 @@
 // Entry point: boots every system, owns the main loop and the menu <-> run flow.
 import * as THREE from 'three';
 import { G } from './state';
-import { initRenderer, updateCamera, render, zoomBy, setZoom } from './core/renderer';
+import { initRenderer, updateCamera, render, zoomBy, setZoom, sceneTarget } from './core/renderer';
 import { CAMERA, LOBBY } from './data/balance';
 import { initInput, updateInputRay, endInputFrame, input, wasPressed } from './core/input';
 import { initAudio } from './core/audio';
@@ -27,7 +27,7 @@ import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initItemIcons } from './ui/itemIcons';
 import { initPerfHud, perfBeginFrame, perfEndFrame } from './ui/perfHud';
 import { warmShaders } from './game/warmup';
-import { pinPrograms, markLoaded } from './core/shaders';
+import { pinPrograms, markLoaded, warmUp } from './core/shaders';
 import { configureCapeEnvironment } from './vendor/cape/world/caveProfile';
 import { groundHeight } from './world/arena';
 
@@ -67,9 +67,8 @@ function boot() {
 
   warmShaders();
   enterMenu();
-  // compile shaders before revealing the scene to avoid first-frame hitches
-  renderer.compile(scene, G.camera);
-  pinPrograms(renderer);
+  // compile the lobby's shaders before revealing the scene to avoid first-frame hitches
+  warmUp(renderer, scene, G.camera, sceneTarget());
   markLoaded();
   requestAnimationFrame(() => $('#loading').classList.add('done'));
   requestAnimationFrame(frame);

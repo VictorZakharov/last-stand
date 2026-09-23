@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { warmUp } from '../core/shaders';
+import { sceneTarget } from '../core/renderer';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { SLOTS } from '../data/items';
 import { SKILL_IMPLS } from '../combat/skills/index';
@@ -23,7 +24,7 @@ export function warmShaders(): void {
   lightning(at, new THREE.Vector3(1, 1, 1)); iceSpikes(p, 2); glyphMarker(p); lightPillar(p); crackDecal(p); crystalBurst(p);
   const extra = Object.values(SKILL_IMPLS).flatMap((s) => s.warm?.() ?? []);
 
-  warmUp(G.renderer, G.scene, G.camera, extra);
+  warmUp(G.renderer, G.scene, G.camera, sceneTarget(), extra);
 
   clearEnemies(); clearDrops(); clearEffects(); clearLights(); particles.clear();
 }
