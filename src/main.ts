@@ -29,8 +29,6 @@ import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap } from '.
 import { warmShaders } from './game/warmup';
 import { initQuality, sampleQuality } from './core/quality';
 import { pinPrograms, markLoaded, warmUp } from './core/shaders';
-import { configureCapeEnvironment } from './vendor/cape/world/caveProfile';
-import { groundHeight } from './world/arena';
 import { loadingStep, loadingDone, loadingFailed } from './ui/loading';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
@@ -47,7 +45,6 @@ async function boot() {
   initLights(scene);
   initEffects();
   G.arena = buildArena(scene, renderer);
-  configureCapeEnvironment({ groundHeight });
   initQuality();
   initFloaters($('#floaters'));
 

@@ -3,10 +3,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA } from '../data/balance';
+import { groundHeight } from './ground';
 import { cobblestone, slabs, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { mulberry, rand, TAU } from '../util';
 import type { Obstacle } from '../types';
+
+export { groundHeight };
 
 type Updater = (dt: number, t: number) => void;
 
@@ -204,13 +207,6 @@ function bakeStaticShadows(scene: THREE.Scene): void {
   scene.add(caster);
 }
 
-// Height of the walkable floor (dais tiers).
-export function groundHeight(x: number, z: number): number {
-  const m = Math.max(Math.abs(x), Math.abs(z));
-  if (m < ARENA.daisHalf) return ARENA.daisHeight;
-  if (m < ARENA.daisHalf + 0.7) return 0.18;
-  return 0;
-}
 
 // ---------------------------------------------------------------------------
 // helpers

@@ -75,7 +75,7 @@ npm run build      # type-check + production build into dist/
 | `src/fx/` | Particles, effects, pooled lights |
 | `src/loot/` | Items, persistent profile (stash / equipment), spell loadout |
 | `src/ui/` | HUD, menus, tooltips, loadout editor |
-| `src/vendor/cape/` | Vendored cape-physics CPU solver (see its README) |
+| `src/vendor/cape/` | Vendored cape-physics solver and its web worker (see its README and LICENSE) |
 
 **Adding a class:** create a data file in `src/data/classes/`, register it in `src/data/classes/index.ts`, add a model in `src/entities/models/`, and implement any new skills in `src/combat/skills/`.
 
@@ -85,4 +85,4 @@ This is an early build — feedback, bug reports and ideas are very welcome in [
 
 ## License
 
-[MIT](LICENSE). Includes the cape solver from [cape-physics](https://github.com/VictorZakharov/cape-physics) (MIT).
+[MIT](LICENSE). Includes the cape solver from [cape-physics](https://github.com/VictorZakharov/cape-physics) by Victor Zakharov (MIT, see [src/vendor/cape/LICENSE](src/vendor/cape/LICENSE)).
