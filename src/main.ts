@@ -31,11 +31,13 @@ import { initQuality, sampleQuality } from './core/quality';
 import { pinPrograms, markLoaded, warmUp } from './core/shaders';
 import { configureCapeEnvironment } from './vendor/cape/world/caveProfile';
 import { groundHeight } from './world/arena';
+import { loadingStep, loadingDone, loadingFailed } from './ui/loading';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 const timer = new THREE.Timer();
 
-function boot() {
+async function boot() {
+  await loadingStep('Forging the arena', 0.08);
   initUIScale();
   initItemIcons();
   const { scene, renderer } = initRenderer($('#game'));
@@ -48,6 +50,7 @@ function boot() {
   initQuality();
   initFloaters($('#floaters'));
 
+  await loadingStep('Summoning the hero', 0.35);
   G.profile = loadProfile();
   G.player = new Player(G.profile.classId, G.profile.equipped);
 
@@ -67,14 +70,16 @@ function boot() {
   // dev-only handle for debugging and automated screenshots (stripped from production builds)
   if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE } });
 
-  warmShaders();
+  await loadingStep('Conjuring foes and spells', 0.55);
+  await warmShaders();
+  await loadingStep('Lighting the lobby', 0.85);
   enterMenu();
   // compile the lobby's shaders before revealing the scene to avoid first-frame hitches
-  warmUp(renderer, scene, G.camera, sceneTarget());
+  await warmUp(renderer, scene, G.camera, sceneTarget());
   render();   // one full frame compiles the post-processing passes (bloom, grade...)
   pinPrograms(renderer);
   markLoaded();
-  requestAnimationFrame(() => $('#loading').classList.add('done'));
+  loadingDone();
   requestAnimationFrame(frame);
 }
 
@@ -190,4 +195,4 @@ function frame(timestamp: number): void {
   perfEndFrame();
 }
 
-boot();
+boot().catch((e) => { console.error(e); loadingFailed(e); });

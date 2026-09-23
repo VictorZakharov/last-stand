@@ -16,7 +16,7 @@ import { clearEffects, shockwave, groundFlash, decal, telegraph, lightning, iceS
 import { clearLights } from '../fx/lights';
 import { particles } from '../fx/particles';
 
-export function warmShaders(): void {
+export async function warmShaders(): Promise<void> {
   const at = new THREE.Vector3(), p = { x: 0, z: 0 };
   for (const id of Object.keys(ENEMIES) as EnemyId[]) { spawnEnemy(id, at); spawnEnemy(id, at, { hero: true }); }
   for (const rarity of ['common', 'rare'] as const) dropItem(makeItem({ slot: SLOTS[0], rarity }), at);
@@ -24,7 +24,7 @@ export function warmShaders(): void {
   lightning(at, new THREE.Vector3(1, 1, 1)); iceSpikes(p, 2); glyphMarker(p); lightPillar(p); crackDecal(p); crystalBurst(p);
   const extra = Object.values(SKILL_IMPLS).flatMap((s) => s.warm?.() ?? []);
 
-  warmUp(G.renderer, G.scene, G.camera, sceneTarget(), extra);
+  await warmUp(G.renderer, G.scene, G.camera, sceneTarget(), extra);
 
   clearEnemies(); clearDrops(); clearEffects(); clearLights(); particles.clear();
 }

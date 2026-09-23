@@ -65,11 +65,15 @@ export const programsCompiledInGame = (): number => compiled - atLoad;
  * a render target (tone mapping, output colour space), the game always draws into the
  * post-processing `target`, and compile() skips the shadow-map depth shaders.
  */
-export function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, objects: THREE.Object3D[] = []): void {
+export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, objects: THREE.Object3D[] = []): Promise<void> {
   for (const o of objects) scene.add(o);
   const unculled: THREE.Object3D[] = [];
   scene.traverse((o) => { if (o.frustumCulled) { o.frustumCulled = false; unculled.push(o); } });
   const prev = renderer.getRenderTarget();
+  renderer.setRenderTarget(target);
+  // compile in the background first where the browser can (KHR_parallel_shader_compile), so the
+  // loading screen stays live; the target is set because program variants depend on it
+  await renderer.compileAsync(scene, camera);
   renderer.setRenderTarget(target);
   // twice: the shadow pass of a render sees the light setup of the previous one, and
   // shadow depth programs are keyed by light counts, so the first pass compiles unlit variants
