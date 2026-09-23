@@ -213,6 +213,8 @@ export interface AnimState {
   lean?: number;
   action: ActionState | null;
   hit: number;
+  /** 1 at the moment a shield blocks a hit, fading out over a quarter second */
+  blockHit?: number;
   /** -1 = alive, otherwise 0..1 death progress */
   dead: number;
   charge?: number;

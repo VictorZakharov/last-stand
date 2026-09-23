@@ -19,6 +19,9 @@ const ALONG_ARM = Math.PI - GRIP;
 /** arm length (upper + fore + hand), before the model's 1.1 scale */
 const ARM = 0.63;
 const _grip = new THREE.Vector3(), _pole = new THREE.Vector3(1, -0.7, -0.6);
+const SHIELD_SIDE = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2, 0));
+const SHIELD_FRONT = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
+const SIDE_POS = new THREE.Vector3(0.07, -0.02, 0), FRONT_POS = new THREE.Vector3(0, -0.1, 0);
 
 /** Crimson cape with a dark iron trim, matching the tabard. */
 const WARRIOR_CAPE_PALETTE: CapeFabricPalette = Object.freeze({
@@ -173,9 +176,9 @@ export function buildWarrior(): Model {
   const offGrip = joint(grip, 0, -0.24, 0);
   let held: Weapon | null = null;
 
-  // --- round shield held out in front of the left fist: its face (local +Z) points out of the hand
+  // --- round shield on the left fist. At rest it hangs at the side facing outwards; raised (or
+  // charging) it swings round in front of the fist, facing out of the hand. Its face is local +Z.
   const shield = joint(j.handL, 0, -0.1, 0);
-  shield.rotation.x = Math.PI / 2;
   shield.visible = false;
   part(new THREE.CylinderGeometry(0.33, 0.33, 0.035, 28).rotateX(Math.PI / 2), dark, shield);
   part(new THREE.CylinderGeometry(0.3, 0.3, 0.02, 28).rotateX(Math.PI / 2), cloth, shield, 0, 0, 0.012);
@@ -216,6 +219,7 @@ export function buildWarrior(): Model {
   // right-arm swings and chops yaw last, so the straight arm sweeps around the vertical axis
   // (with no yaw this order poses exactly like the default)
   j.shoulderR.rotation.order = 'YXZ';
+  j.shoulderL.rotation.order = 'YXZ';
 
   // swings alternate forehand / backhand; a new swing starts when the action restarts
   let side = 1, lastK = 1, lastName = '';
@@ -241,7 +245,9 @@ export function buildWarrior(): Model {
     walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: 0.2, bob: 0.08, dir });
     if (two) { j.shoulderR.rotation.x += -0.5; j.shoulderR.rotation.z += 0.2; j.elbowR.rotation.x += -1.0; }
     else { j.shoulderR.rotation.x += -0.3; j.shoulderR.rotation.z += -0.1; j.elbowR.rotation.x += -0.8; }
-    if (shield.visible) { j.shoulderL.rotation.x += -0.45; j.shoulderL.rotation.z += 0.12; j.elbowL.rotation.x += -1.1; j.elbowL.rotation.y += 0.5; }
+    // shield carried low at the side, the arm held a little out so it clears the leg
+    if (shield.visible) { j.shoulderL.rotation.z += 0.2; j.elbowL.rotation.x += -0.35; }
+    let guard = 0;   // 0: shield at the side, 1: in front
     j.spine.rotation.x += move * 0.14 * dir;
     j.body.rotation.z += (st.lean || 0) * 0.12;
     j.kneeL.rotation.x += 0.1 * (1 - move); j.kneeR.rotation.x += 0.1 * (1 - move);
@@ -288,17 +294,33 @@ export function buildWarrior(): Model {
         j.kneeL.rotation.x += 0.35; j.kneeR.rotation.x += 0.35; j.thighL.rotation.x += -0.2; j.thighR.rotation.x += -0.2;
         j.body.position.y += -0.06;
       } else if (a.name === 'block') {
-        // Raise Shield: shield high in front, weapon drawn back, braced
-        j.shoulderL.rotation.set(-1.35, 0, 0.25); j.elbowL.rotation.set(-0.35, 0, 0);
-        R.x += 0.35; j.elbowR.rotation.x += -0.3;
-        j.spine.rotation.x += 0.15; j.neck.rotation.x += -0.1;
-        j.kneeL.rotation.x += 0.3; j.kneeR.rotation.x += 0.3; j.thighL.rotation.x += -0.25; j.thighR.rotation.x += -0.1;
-        j.body.position.y += -0.05;
+        // Raise Shield: side-on behind the shield, left foot forward and low, the shield drawn in tight
+        // before the chest and chin, the weapon cocked over it; a blocked blow jolts it all back
+        const w = k, stance = w * (1 - move * 0.7), jolt = st.blockHit ?? 0;
+        guard = w;
+        j.chest.rotation.y += -0.35 * w; j.spine.rotation.y += -0.15 * w;
+        j.spine.rotation.x += (0.18 - 0.2 * jolt) * w; j.neck.rotation.x += (-0.2 + 0.1 * jolt) * w;
+        // the forearm points forward so the shield (facing out of the fist) faces the foe; the yaw
+        // undoes the chest's turn
+        const L = j.shoulderL.rotation;
+        L.x = lerp(L.x, -0.35 + 0.25 * jolt, w); L.z = lerp(L.z, -0.3, w); L.y = 0.5 * w;
+        j.elbowL.rotation.set(lerp(j.elbowL.rotation.x, -1.35 + 0.35 * jolt, w), 0, 0);
+        R.x = lerp(R.x, -1.7, w); R.z = lerp(R.z, -0.35, w); R.y = 0.2 * w;
+        j.elbowR.rotation.x = lerp(j.elbowR.rotation.x, -1.2, w);
+        j.handR.rotation.x += 0.5 * w;
+        j.thighL.rotation.x += -0.4 * stance; j.kneeL.rotation.x += 0.5 * stance;
+        j.thighR.rotation.x += 0.35 * stance; j.kneeR.rotation.x += 0.45 * stance;
+        j.body.position.y += (-0.1 * stance - 0.03 * jolt);
+        j.body.position.z += -0.06 * jolt * w;
       } else if (a.name === 'charge') {
         // shoulder into the charge, weapon back
         const w = Math.min(1, k * 6) * (1 - ramp(k, 0.85, 1));
+        guard = shield.visible ? w : 0;
         j.spine.rotation.x += 0.45 * w; j.neck.rotation.x += -0.3 * w;
-        j.shoulderL.rotation.x += -0.7 * w; j.elbowL.rotation.x += 0.3 * w;
+        j.chest.rotation.y += -0.3 * w;
+        const L = j.shoulderL.rotation;
+        if (shield.visible) { L.x = lerp(L.x, -0.5, w); L.z = lerp(L.z, -0.2, w); L.y = 0.4 * w; j.elbowL.rotation.x = lerp(j.elbowL.rotation.x, -1.2, w); }
+        else { L.x += -0.7 * w; j.elbowL.rotation.x += 0.3 * w; }
         R.x += 0.6 * w; j.elbowR.rotation.x += 0.4 * w;
       } else if (a.name === 'buff') {
         // war cry: chest out, arms flung wide, head back
@@ -324,6 +346,9 @@ export function buildWarrior(): Model {
     }
     if (st.hit > 0) { j.spine.rotation.x += -0.2 * st.hit; j.neck.rotation.x += -0.15 * st.hit; }
     if (st.dead >= 0) deathFall(j, st.dead, -1);
+
+    shield.quaternion.slerpQuaternions(SHIELD_SIDE, SHIELD_FRONT, guard);
+    shield.position.lerpVectors(SIDE_POS, FRONT_POS, guard);
 
     // a two-hander: the left hand follows the grip wherever the right arm takes the weapon
     if (two) {

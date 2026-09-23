@@ -66,8 +66,8 @@ const warrior: ClassDef = {
     },
     {
       key: '3', impl: 'powerStrike', name: 'Power Strike',
-      desc: 'Gather your strength for two seconds, then bring your weapon down in a crushing overhead blow.',
-      tags: ['physical'], cost: 35, cooldown: 5, castTime: 2, fireAt: 0.9,
+      desc: 'Gather your strength for a moment and a half, then bring your weapon down in a crushing overhead blow.',
+      tags: ['physical'], cost: 35, cooldown: 5, castTime: 1.5, fireAt: 0.9,
       damage: 520, range: 3.9, arc: 1.2, knock: 9,
       color: 0xffc070,
       icon: { glyph: '⚒', color: '#ffc070' },

@@ -5,10 +5,14 @@ import { G } from '../state';
 import { additive } from '../core/materials';
 import { radialDecal, runeCircle } from '../core/textures';
 import { rand } from '../util';
+import { groundHeight } from '../world/ground';
 import type { Effect, XYZ } from '../types';
 
 /** Positions accept any {x, z} with optional y (ground height). */
 type Pos = { x: number; y?: number; z: number };
+
+/** Where a ground effect sits: on the floor under it (the central dais is raised), or at `pos.y` if that is higher. */
+const floor = (pos: Pos): number => Math.max(pos.y ?? 0, groundHeight(pos.x, pos.z));
 
 const active: Effect[] = [];
 const GEO = {} as Record<'ring' | 'disc' | 'plane' | 'spike' | 'pillar' | 'crystal', THREE.BufferGeometry>;
@@ -44,7 +48,7 @@ function tracked(obj: THREE.Object3D, mats: THREE.Material[]): () => void {
 }
 
 // Expanding ground shockwave ring.
-export function shockwave(pos: Pos, { color = 0xffffff, intensity = 3, from = 0.3, to = 4, life = 0.45, y = 0.08, thickness = 1 } = {}) {
+export function shockwave(pos: Pos, { color = 0xffffff, intensity = 3, from = 0.3, to = 4, life = 0.45, y = floor(pos) + 0.08, thickness = 1 } = {}) {
   const mat = additive(color, intensity);
   const m = new THREE.Mesh(GEO.ring, mat);
   m.position.set(pos.x, y, pos.z);
@@ -67,7 +71,7 @@ export function groundFlash(pos: Pos, { color = 0xffffff, intensity = 2, radius 
   const mat = additive(color, intensity);
   mat.map = TEX.soft;
   const m = new THREE.Mesh(GEO.plane, mat);
-  m.position.set(pos.x, 0.06, pos.z);
+  m.position.set(pos.x, floor(pos) + 0.06, pos.z);
   m.scale.setScalar(radius);
   const dispose = tracked(m, [mat]);
   let t = 0;
@@ -79,7 +83,7 @@ export function decal(pos: Pos, { type = 'scorch' as 'scorch' | 'frost', size = 
   const mat = new THREE.MeshBasicMaterial({ map: TEX[type], transparent: true, depthWrite: false, opacity, polygonOffset: true, polygonOffsetFactor: -2 });
   if (type === 'frost') { mat.blending = THREE.AdditiveBlending; mat.color.setScalar(0.8); }
   const m = new THREE.Mesh(GEO.plane, mat);
-  m.position.set(pos.x, 0.03 + Math.random() * 0.01, pos.z);
+  m.position.set(pos.x, floor(pos) + 0.03 + Math.random() * 0.01, pos.z);
   m.rotation.y = Math.random() * Math.PI * 2;
   m.scale.setScalar(size);
   m.renderOrder = 1;
@@ -96,7 +100,7 @@ export function telegraph(pos: Pos, radius: number, duration: number, color: THR
   const fill = new THREE.Mesh(GEO.disc, fillMat);
   const g = new THREE.Group();
   g.add(ring, fill);
-  g.position.set(pos.x, 0.07, pos.z);
+  g.position.set(pos.x, floor(pos) + 0.07, pos.z);
   ring.scale.set(radius, 1, radius);
   const dispose = tracked(g, [ringMat, fillMat]);
   let t = 0, dead = false;
@@ -184,7 +188,7 @@ export function iceSpikes(center: Pos, radius: number, count = 28): Effect {
         if (t > life - 0.5) k *= Math.max(0, (life - t) / 0.5);
         e.set(d.tilt, d.rot, d.tilt2); q.setFromEuler(e);
         s.set(d.s * (0.6 + 0.4 * k), d.s * k + 0.001, d.s * (0.6 + 0.4 * k));
-        p.set(d.x, -0.1, d.z);
+        p.set(d.x, groundHeight(d.x, d.z) - 0.1, d.z);
         m4.compose(p, q, s);
         inst.setMatrixAt(i, m4);
       }
@@ -227,7 +231,7 @@ function crackTexture(): THREE.CanvasTexture {
 export function glyphMarker(pos: Pos, { radius = 1.2, color = 0xffffff, intensity = 1.2, life = 0.5 } = {}) {
   const mat = new THREE.MeshBasicMaterial({ map: TEX.rune, color: new THREE.Color(color).multiplyScalar(intensity), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 });
   const m = new THREE.Mesh(GEO.plane, mat);
-  m.position.set(pos.x, (pos.y ?? 0) + 0.05, pos.z);
+  m.position.set(pos.x, floor(pos) + 0.05, pos.z);
   const dispose = tracked(m, [mat]);
   let t = 0, dead = false;
   const e = addEffect({
@@ -249,7 +253,7 @@ export function lightPillar(pos: Pos, { color = 0xffffff, intensity = 3, radius 
   const mat = additive(color, intensity);
   mat.side = THREE.DoubleSide;
   const m = new THREE.Mesh(GEO.pillar, mat);
-  m.position.set(pos.x, pos.y ?? 0, pos.z);
+  m.position.set(pos.x, floor(pos), pos.z);
   const dispose = tracked(m, [mat]);
   let t = 0;
   return addEffect({
@@ -269,7 +273,7 @@ export function crackDecal(pos: Pos, { size = 3, color = 0xffffff, intensity = 2
   const mat = new THREE.MeshBasicMaterial({ map: TEX.cracks, color: new THREE.Color(color).multiplyScalar(intensity), transparent: true,
     blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
   const m = new THREE.Mesh(GEO.plane, mat);
-  m.position.set(pos.x, (pos.y ?? 0) + 0.04, pos.z);
+  m.position.set(pos.x, floor(pos) + 0.04, pos.z);
   m.rotation.y = Math.random() * Math.PI * 2;
   m.scale.setScalar(size);
   const dispose = tracked(m, [mat]);
@@ -313,7 +317,7 @@ export function crystalBurst(center: Pos, { count = 8, radius = 1.6, color = 0x5
         // axis tilted away from the centre: rotate around the tangent
         e.set(Math.sin(d.a) * d.tilt, d.spin, -Math.cos(d.a) * d.tilt, 'YXZ'); q.setFromEuler(e);
         s.set(d.s, d.s * grow + 0.001, d.s);
-        p.set(d.x, (center.y ?? 0) - 0.15, d.z);
+        p.set(d.x, Math.max(center.y ?? 0, groundHeight(d.x, d.z)) - 0.15, d.z);
         inst.setMatrixAt(i, m4.compose(p, q, s));
       }
       inst.instanceMatrix.needsUpdate = true;

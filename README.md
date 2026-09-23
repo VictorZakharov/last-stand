@@ -71,7 +71,7 @@ Shields **block**: each hit has the shield's Block Chance to be blocked, absorbi
 | Right click (hold) | Raise Shield — block every frontal blow; without a shield: Steel Tempest with a two-handed weapon, Thunder Crescent with a one-handed one |
 | `1` (hold) | Steel Tempest — spin with the blade out, shredding everything around you |
 | `2` | Bull Rush — shield charge that tramples and hurls foes aside |
-| `3` | Power Strike — charge for two seconds, then a crushing overhead blow |
+| `3` | Power Strike — charge for 1.5 seconds, then a crushing overhead blow |
 | `4` | Iron Bellow — war cry that hurls foes back and grants a damage-absorbing ward |
 | `Q` | Healing Draught |
 

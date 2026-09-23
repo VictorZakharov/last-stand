@@ -30,7 +30,7 @@ export interface Ward { amount: number; t: number; onHit?(absorbed: number): voi
 const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
 interface CastState { skill: KnownSkill; t: number; dur: number; fireAt: number; fired: boolean; target: THREE.Vector3 }
-interface ChannelState { skill: KnownSkill; key: SkillKey; state: unknown }
+interface ChannelState { skill: KnownSkill; key: SkillKey; state: unknown; t: number }
 /** A movement skill's dash: a fixed velocity that input can't steer, with a per-frame hook; `lift`
  *  makes it a jump of that peak height, and `anim` is the pose it plays. */
 interface DashState { vx: number; vz: number; t: number; dur: number; lift: number; anim: CastAnim; step?(): void }
@@ -233,7 +233,7 @@ export class Player {
     // a broken guard can't be raised again until the shield recovers
     if (this.staggered) return;
     if (!this.sandbox && this.energy < s.def.cost * 0.2) { this.lowEnergy(); return; }
-    this.channel = { skill: s, key, state: s.impl.start(this, s.def) };
+    this.channel = { skill: s, key, state: s.impl.start(this, s.def), t: 0 };
   }
 
   stopChannel(): void {
@@ -316,7 +316,8 @@ export class Player {
     if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };
     else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / this.dash.dur) };
     else if (this.casting) action = { name: this.casting.skill.impl.anim || 'cast', t: this.casting.t / this.casting.dur };
-    else if (this.channel) action = { name: this.channel.skill.impl.anim || 'channel', t: 0.5 };
+    // a channel's t ramps 0 -> 1 over its first 0.2 s (the pose settling in), then holds
+    else if (this.channel) action = { name: this.channel.skill.impl.anim || 'channel', t: Math.min(1, (this.channel.t += dt) / 0.2) };
     this.pose(dt, t, Math.min(1, speed / this.stats.moveSpeed), 1, side / this.stats.moveSpeed, action);
 
     // ambient motes around the offhand (the mage's arcana)
@@ -338,7 +339,7 @@ export class Player {
     this.model.root.position.y = d ? d.lift * 4 * k * (1 - k) : 0;
     this.model.animate({
       t, dt, phase: this.phase, move, moveDir: dir, lean, action,
-      hit: this.hitT, dead: this.deadT >= 0 ? Math.min(1, this.deadT / 1.0) : -1,
+      hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead: this.deadT >= 0 ? Math.min(1, this.deadT / 1.0) : -1,
       charge: this.channel ? 1 : this.casting ? this.casting.t / this.casting.dur : 0,
       velocity: this.vel,
     });

@@ -10,34 +10,74 @@ import { addShake } from '../../core/renderer';
 import { schedule } from '../../core/timers';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
+import { groundHeight } from '../../world/ground';
 import type { InstantSkill, Needs } from './types';
 
 type Def = Needs<'damage' | 'radius' | 'knock' | 'absorbPct' | 'duration'>;
 const GOLD = 0xffc85a;
 const SHIELDS = 3;
+const _w = new THREE.Vector3();
+// a thin ring of light on the floor
+const haloGeo = new THREE.RingGeometry(1.05, 1.15, 64, 1, 0, Math.PI * 2);
 
-// a spectral kite shield: a glowing face and a bright rim, facing +Z
-const face = new THREE.CircleGeometry(0.3, 24).scale(0.85, 1.1, 1);
-const rim = new THREE.TorusGeometry(0.3, 0.025, 6, 28).scale(0.85, 1.1, 1);
-const boss = new THREE.SphereGeometry(0.06, 10, 8);
+// a spectral kite shield (face along +Z): a shimmering translucent face, a bright rim and a glowing
+// emblem, all additive
+function kite(s: number): THREE.Shape {
+  const k = new THREE.Shape();
+  k.moveTo(0, 0.36 * s);
+  k.quadraticCurveTo(0.3 * s, 0.36 * s, 0.29 * s, 0.08 * s);
+  k.quadraticCurveTo(0.26 * s, -0.2 * s, 0, -0.42 * s);
+  k.quadraticCurveTo(-0.26 * s, -0.2 * s, -0.29 * s, 0.08 * s);
+  k.quadraticCurveTo(-0.3 * s, 0.36 * s, 0, 0.36 * s);
+  return k;
+}
+const faceGeo = new THREE.ShapeGeometry(kite(1), 12);
+const rimShape = kite(1.08);
+rimShape.holes.push(kite(0.92));
+const rimGeo = new THREE.ShapeGeometry(rimShape, 12);
+const emblemGeo = new THREE.ShapeGeometry(kite(0.34), 8);
+
+function faceMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(GOLD) }, uFade: { value: 0 }, uFlash: { value: 0 }, uTime: { value: 0 } },
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    vertexShader: /* glsl */`
+      varying vec2 vP;
+      void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */`
+      varying vec2 vP;
+      uniform vec3 uColor; uniform float uFade, uFlash, uTime;
+      void main(){
+        // brighter towards the rim (distance from the centre), a band of light scanning down,
+        // fine horizontal striations, and a white flare when a blow lands
+        float edge = smoothstep(0.1, 0.4, length(vP * vec2(1.0, 0.85)));
+        float scan = exp(-pow(fract(vP.y * 1.2 - uTime * 0.9) - 0.5, 2.0) * 60.0);
+        float lines = 0.75 + 0.25 * sin(vP.y * 120.0 + uTime * 4.0);
+        float i = (0.12 + edge * 0.35 + scan * 0.35) * lines + uFlash * 0.35;
+        gl_FragColor = vec4(mix(uColor, vec3(1.0), uFlash * 0.3) * i * uFade, i * uFade);
+      }`,
+  });
+}
 
 function shieldMaterials() {
-  const m = (c: number, k: number, o: number) => new THREE.MeshBasicMaterial({
-    color: new THREE.Color(c).multiplyScalar(k), transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+  const m = (c: number, k: number) => new THREE.MeshBasicMaterial({
+    color: new THREE.Color(c).multiplyScalar(k), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
   });
-  return { face: m(GOLD, 0.3, 0.3), rim: m(0xffe2a0, 0.7, 1) };
+  return { face: faceMaterial(), rim: m(0xffe2a0, 0.9), emblem: m(0xfff0c8, 1.2) };
 }
 
 function buildShield(mats: ReturnType<typeof shieldMaterials>): THREE.Group {
   const g = new THREE.Group();
-  g.add(new THREE.Mesh(face, mats.face), new THREE.Mesh(rim, mats.rim), new THREE.Mesh(boss, mats.rim));
+  const emblem = new THREE.Mesh(emblemGeo, mats.emblem);
+  emblem.position.z = 0.01;
+  g.add(new THREE.Mesh(faceGeo, mats.face), new THREE.Mesh(rimGeo, mats.rim), emblem);
   g.traverse((o) => { o.frustumCulled = false; });
   return g;
 }
 
 const skill: InstantSkill = {
   anim: 'buff',
-  warm: () => [buildShield(shieldMaterials())],
+  warm: () => [buildShield(shieldMaterials()), new THREE.Mesh(haloGeo, new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))],
   cast(player, rawDef) {
     const def = rawDef as Def;
     const c = player.pos.clone();
@@ -46,7 +86,7 @@ const skill: InstantSkill = {
       schedule(i * 0.09, () => shockwave(c, { color: i ? GOLD : 0xffffff, intensity: 2.2 - i * 0.5, from: 0.4, to: def.radius * (1 - i * 0.18), life: 0.5 }));
     }
     groundFlash(c, { color: GOLD, intensity: 1, radius: def.radius * 0.8, life: 0.35 });
-    crackDecal(c, { size: 3, color: GOLD, intensity: 1.2, life: 1.6 });
+    crackDecal(c, { size: 2.2, color: GOLD, intensity: 0.6, life: 1.4 });
     for (let i = 0; i < 16; i++) {
       const a = (i / 16) * Math.PI * 2;
       smokePuff({ x: c.x + Math.cos(a) * 1.2, y: 0, z: c.z + Math.sin(a) * 1.2 }, { count: 1, color: 0x2a241c, alpha: 0.45, size: 0.8, sizeEnd: 2.2, life: 0.9, speed: 0.4 });
@@ -66,7 +106,11 @@ const skill: InstantSkill = {
     const shields = Array.from({ length: SHIELDS }, () => buildShield(mats));
     const root = new THREE.Group();
     root.add(...shields);
-    G.scene.add(root);
+    const haloMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(GOLD).multiplyScalar(0.8), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+    const halo = new THREE.Mesh(haloGeo, haloMat);
+    halo.rotation.x = -Math.PI / 2;
+    halo.frustumCulled = false;
+    G.scene.add(root, halo);
     let ended = false, hitFlash = 0, t = 0;
     const amount = player.stats.maxLife * def.absorbPct;
     const ward = {
@@ -90,20 +134,29 @@ const skill: InstantSkill = {
           s.rotation.y = a;   // face outwards
           s.scale.setScalar(grow * (1 + hitFlash * 0.25));
         });
-        mats.face.opacity = (0.18 + hitFlash * 0.4) * left;
-        mats.rim.opacity = (0.55 + hitFlash * 0.45) * left;
-        if (Math.random() < dt * 20) {
-          const s = shields[Math.floor(Math.random() * SHIELDS)];
-          const w = s.getWorldPosition(new THREE.Vector3());
-          particles.glow.spawn({ x: w.x, y: w.y, z: w.z, vy: rand(0.3, 1), life: rand(0.3, 0.6), size: rand(0.04, 0.1), sizeEnd: 0, color: col(GOLD, 2.4), colorEnd: col(0x802000, 0.3) });
+        const flick = 0.9 + Math.random() * 0.1;
+        const fu = mats.face.uniforms;
+        fu.uTime.value = t; fu.uFade.value = grow * left * flick; fu.uFlash.value = hitFlash;
+        mats.rim.opacity = (0.6 + hitFlash * 0.25) * grow * left * flick;
+        mats.emblem.opacity = (0.5 + 0.2 * Math.sin(t * 6) + hitFlash * 0.5) * grow * left;
+        // each shield leaves a thin trail of motes as it circles
+        for (const s of shields) {
+          if (Math.random() > dt * 40) continue;
+          s.getWorldPosition(_w);
+          particles.glow.spawn({ x: _w.x + rand(-0.15, 0.15), y: _w.y + rand(-0.3, 0.3), z: _w.z + rand(-0.15, 0.15), vy: rand(0.1, 0.5),
+            life: rand(0.3, 0.55), size: rand(0.04, 0.09), sizeEnd: 0, color: col(GOLD, 1.8), colorEnd: col(0x802000, 0.2) });
         }
+        // a slow golden ring of light on the floor beneath the warrior
+        halo.position.set(p.x, groundHeight(p.x, p.z) + 0.05, p.z);
+        halo.rotation.z = t * 0.6;
+        haloMat.opacity = 0.35 * grow * left;
         if (ended || !player.alive) {
           for (const s of shields) burst(s.getWorldPosition(new THREE.Vector3()), { count: 14, color: GOLD, speed: 4, life: 0.45, size: 0.18, gravity: 3 });
           return false;
         }
         return true;
       },
-      dispose() { G.scene.remove(root); mats.face.dispose(); mats.rim.dispose(); },
+      dispose() { G.scene.remove(root, halo); mats.face.dispose(); mats.rim.dispose(); mats.emblem.dispose(); haloMat.dispose(); },
     });
   },
 };

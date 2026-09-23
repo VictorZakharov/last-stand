@@ -1,4 +1,4 @@
-// Power Strike: two seconds of gathering strength around the weapon, then a crushing overhead blow.
+// Power Strike: a second and a half of gathering strength around the weapon, then a crushing overhead blow.
 import * as THREE from 'three';
 import { shockwave, groundFlash, crackDecal, decal } from '../../fx/effects';
 import { particles, col, debris, smokePuff } from '../../fx/particles';
@@ -49,7 +49,7 @@ const skill: InstantSkill = {
     // the chop comes down in a vertical plane: from above the head to the ground in front
     slashArc({
       x: p.x, z: p.z, y: 1.55, facing, radius: (player.model.reach ?? 2) + 0.2, arc: 2.0, roll: Math.PI / 2, pitch: -0.3, dir: -1,
-      color: def.color, sweep: (player.casting?.dur ?? 2) * 0.07, fade: 0.3,
+      color: def.color, sweep: (player.casting?.dur ?? 1.5) * 0.07, fade: 0.3,
     });
     const c = new THREE.Vector3(p.x + dir.x * 2.2, 0, p.z + dir.z * 2.2);
     shockwave(c, { color: def.color, intensity: 2.5, from: 0.3, to: 3.2, life: 0.45 });
