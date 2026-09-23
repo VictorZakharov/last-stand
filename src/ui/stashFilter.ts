@@ -87,7 +87,7 @@ export function renderStashFilter(): void {
     const c = document.createElement('button');
     c.className = 'sf-chip';
     c.title = `Stop filtering by ${LABEL[k]}`;
-    c.innerHTML = `${LABEL[k]}<span class="x" aria-hidden="true">×</span>`;
+    c.innerHTML = `<span class="l">${LABEL[k]}</span><span class="x" aria-hidden="true">×</span>`;
     c.onclick = () => toggle(k);
     chips.appendChild(c);
   }
