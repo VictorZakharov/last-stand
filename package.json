@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
+    "check:pages": "node scripts/check-pages-build.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
