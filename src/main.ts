@@ -25,7 +25,7 @@ import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initItemIcons } from './ui/itemIcons';
-import { initPerfHud, perfBeginFrame, perfEndFrame } from './ui/perfHud';
+import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit } from './ui/perfHud';
 import { warmShaders } from './game/warmup';
 import { initQuality, sampleQuality } from './core/quality';
 import { pinPrograms, markLoaded, warmUp } from './core/shaders';
@@ -175,13 +175,16 @@ function frame(timestamp: number): void {
   const rawDt = timer.getDelta();
   const dt = Math.min(rawDt, 1 / 20);
   handleGlobalKeys();
+  const t0 = performance.now();
   if (!G.paused) {
     sampleQuality(rawDt);
     G.dt = dt;
     G.time += dt;
     update(dt);
   }
+  const t1 = performance.now();
   render();
+  perfSplit(t1 - t0, performance.now() - t1);
   pinPrograms(G.renderer, compileContext);
   endInputFrame();
   perfEndFrame();
