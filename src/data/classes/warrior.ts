@@ -104,6 +104,7 @@ const warrior: ClassDef = {
   },
   excludeStats: ['arcanePct'],
   twoHanded: ['Greatsword', 'Greataxe', 'Maul'],
+  dualWield: true,   // a one-hander in each hand
   // shields block (see Player.tryBlock) instead of feeding energy
   implicits: { offhand: [['block', 1], ['blockAmount', 1], ['armor', 0.5]] },
 };

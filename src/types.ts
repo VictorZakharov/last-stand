@@ -130,10 +130,12 @@ export interface ClassDef {
   implicits?: Partial<Record<Slot, [StatKey, number][]>>;
   /** weapon bases held in both hands: they leave no room for an off-hand */
   twoHanded?: string[];
+  /** a one-handed weapon can go in the off-hand too */
+  dualWield?: boolean;
 }
 
 /** What the character holds, derived from the equipped items (drives model and skills). */
-export interface Gear { weapon: string | null; twoHanded: boolean; shield: boolean }
+export interface Gear { weapon: string | null; twoHanded: boolean; shield: boolean; /** a weapon held in the off-hand */ offWeapon: string | null }
 
 // ---------------------------------------------------------------------------
 // Items

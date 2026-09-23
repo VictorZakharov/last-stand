@@ -1,6 +1,7 @@
 // Lobby spell loadout editor: a spellbook row (every class spell) and the key
 // bar. Drag spellbook -> key to bind (duplicates allowed), key -> key to swap,
-// key -> spellbook (or right-click) to clear. Saved via Player.bind (cookie).
+// key -> spellbook (or right-click) to clear. Saved via Player.bind (cookie), one loadout per weapon
+// style for a class whose skills depend on the gear held.
 import { G } from '../state';
 import { SKILL_KEYS } from '../loot/loadout';
 import { makeSkillSlot } from './hud';
@@ -8,6 +9,11 @@ import { hideTooltip } from './tooltip';
 import { isTouch } from './touch';
 import { sfx } from '../core/audio';
 import type { SkillKey } from '../types';
+import type { WeaponStyle } from '../loot/loadout';
+
+const STYLE_NAME: Record<WeaponStyle, string> = {
+  shield: 'Weapon and shield', twoHanded: 'Two-handed weapon', dual: 'A weapon in each hand', oneHanded: 'One-handed weapon',
+};
 
 type Payload = { kind: 'book'; id: string } | { kind: 'slot'; key: SkillKey };
 let drag: Payload | null = null;
@@ -20,6 +26,7 @@ const bar = () => document.getElementById('loadout-bar')!;
 
 export function initLoadoutEditor(changed: () => void): void {
   onChange = changed;
+  document.getElementById('btn-lo-reset')!.onclick = () => { G.player.resetLoadout(); picked = null; hideTooltip(); sfx.click(); commit(); };
   // dropping a key onto the spellbook clears it
   const b = book();
   b.addEventListener('dragover', (e) => { if (drag?.kind === 'slot') { e.preventDefault(); b.classList.add('over'); } });
@@ -67,6 +74,9 @@ function dropOnKey(key: SkillKey): void {
 
 export function renderLoadoutEditor(): void {
   const p = G.player;
+  // the bindings shown belong to the weapon style held (each style keeps its own)
+  const style = p.weaponStyle;
+  document.querySelector('#loadout .lo-style-name')!.textContent = style ? `${STYLE_NAME[style]}:` : '';
   const b = book();
   b.innerHTML = '';
   for (const { def } of p.known.values()) {

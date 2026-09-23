@@ -1,8 +1,9 @@
 // Item & skill tooltips. Item tooltips can show a side-by-side comparison
 // with the item currently equipped in the same slot.
 import { SLOT_INFO, STATS } from '../data/items';
-import { rarityOf, formatStat, itemPower, statEntries, implicitsFor, isTwoHanded } from '../loot/items';
+import { rarityOf, formatStat, itemPower, statEntries, implicitsFor, isTwoHanded, fitsOffhand } from '../loot/items';
 import { G } from '../state';
+import { BLOCK } from '../data/balance';
 import { input } from '../core/input';
 import { itemIconSVG } from './itemIcons';
 import type { Item, SkillDef, StatKey } from '../types';
@@ -49,7 +50,7 @@ function card(item: Item, { header = '', other = null as Item | null, showDelta 
   html += `<div class="tt-head"><div class="tt-icon" style="--c:${r.color}">${itemIconSVG(item)}</div><div class="tt-name" style="color:${r.color}">${item.name}</div></div>`;
   const pw = itemPower(item), opw = other ? itemPower(other) : 0;
   const pdelta = showDelta && other && pw !== opw ? `<span class="tt-delta ${pw > opw ? 'up' : 'down'}">${pw > opw ? '▲' : '▼'} ${Math.abs(pw - opw)}</span>` : '';
-  html += `<div class="tt-type">${r.name} ${isTwoHanded(item, cls) ? 'Two-handed ' : ''}${SLOT_INFO[item.slot].label} · Item level ${item.ilvl} · Power ${pw}${pdelta ? ' ' + pdelta : ''}</div>`;
+  html += `<div class="tt-type">${r.name} ${isTwoHanded(item, cls) ? 'Two-handed ' : fitsOffhand(item, cls) ? 'One-handed ' : ''}${SLOT_INFO[item.slot].label} · Item level ${item.ilvl} · Power ${pw}${pdelta ? ' ' + pdelta : ''}</div>`;
   for (const [k, v] of statEntries(item.stats)) {
     const d = showDelta ? v - (other?.stats[k] || 0) : 0;
     html += `<div class="tt-stat ${implicit.has(k) ? 'implicit' : ''}">${formatStat(k, v)}${showDelta ? deltaHTML(k, d) : ''}</div>`;
@@ -61,7 +62,20 @@ function card(item: Item, { header = '', other = null as Item | null, showDelta 
       html += `<div class="tt-stat lost"><s>${formatStat(k, v)}</s> <span class="tt-delta down">(−${round(k, v)})</span></div>`;
     }
   }
-  return html + '</div>';
+  return html + blockNote(item) + '</div>';
+}
+
+/** A shield spells out how its block works (Player.tryBlock), with its own numbers. */
+function blockNote(item: Item): string {
+  const chance = item.stats.block ?? 0, amount = Math.round(item.stats.blockAmount ?? 0);
+  if (amount <= 0) return '';
+  const raise = G.player.cls.skills.find((s) => s.block);
+  let t = `Lowered, the shield has a ${Math.round(chance)}% chance to stop ${amount} damage of a hit, then needs ${BLOCK.recovery}s to recover.`;
+  if (raise) {
+    t += ` Held up with ${raise.name}, it stops ${Math.round(amount * raise.block!)} damage of every hit from the front.`
+      + ` A bigger hit breaks the guard: ${BLOCK.guardBreak}s of stagger, when you can only move.`;
+  }
+  return `<div class="tt-foot tt-block">${t}</div>`;
 }
 
 /** equipped: undefined = no comparison, null = empty slot, Item = compare against it. */

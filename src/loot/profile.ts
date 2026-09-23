@@ -3,7 +3,7 @@
 import { CLASSES, DEFAULT_CLASS } from '../data/classes/index';
 import { RUN } from '../data/balance';
 import { readCookie, writeCookie } from '../core/cookies';
-import { makeItem, byValue, isTwoHanded } from './items';
+import { makeItem, byValue, isTwoHanded, fitsOffhand } from './items';
 import type { Item, Profile, Slot } from '../types';
 
 const KEY = (classId: string) => `last-stand.profile.${classId}.v1`;
@@ -73,21 +73,30 @@ export function savedClass(): string {
 
 export function saveClass(classId: string): void { writeCookie(CLASS_COOKIE, classId); }
 
-// Move an item from the stash into its slot (swapping out the current one).
-export function equipFromStash(p: Profile, itemId: string): void {
+/** The slots an item can go in: its own, and the off-hand for a one-handed weapon of a class that dual-wields. */
+export function slotsFor(p: Profile, item: Item): Slot[] {
+  return fitsOffhand(item, CLASSES[p.classId]) ? ['weapon', 'offhand'] : [item.slot];
+}
+
+// Move an item from the stash into a slot (swapping out the current one). Without a slot, it goes in
+// its own, except a one-handed weapon fills an empty off-hand next to another one-hander
+export function equipFromStash(p: Profile, itemId: string, to?: Slot): void {
   const idx = p.stash.findIndex((i) => i.id === itemId);
   if (idx < 0) return;
   const item = p.stash[idx];
-  const prev = p.equipped[item.slot];
-  // a two-handed weapon and an off-hand don't go together: the other one goes to the stash
   const cls = CLASSES[p.classId];
-  const clash = item.slot === 'weapon' && isTwoHanded(item, cls) ? 'offhand' : item.slot === 'offhand' && isTwoHanded(p.equipped.weapon, cls) ? 'weapon' : null;
+  const main = p.equipped.weapon;
+  const slot = to ?? (fitsOffhand(item, cls) && main && !isTwoHanded(main, cls) && !p.equipped.offhand ? 'offhand' : item.slot);
+  if (!slotsFor(p, item).includes(slot)) return;
+  const prev = p.equipped[slot];
+  // a two-handed weapon and an off-hand don't go together: the other one goes to the stash
+  const clash = slot === 'weapon' && isTwoHanded(item, cls) ? 'offhand' : slot === 'offhand' && isTwoHanded(main, cls) ? 'weapon' : null;
   const bumped = clash ? p.equipped[clash] : undefined;
   if (bumped && p.stash.length + (prev ? 1 : 0) > RUN.bagLimit) return;
   p.stash.splice(idx, 1);
   if (prev) p.stash.splice(idx, 0, prev);
   if (bumped) { delete p.equipped[clash!]; p.stash.unshift(bumped); }
-  p.equipped[item.slot] = item;
+  p.equipped[slot] = item;
   saveProfile(p);
 }
 

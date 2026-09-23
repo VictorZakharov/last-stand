@@ -176,6 +176,20 @@ export function buildWarrior(): Model {
   const offGrip = joint(grip, 0, -0.24, 0);
   let held: Weapon | null = null;
 
+  // dual-wielding: a one-hander in the left fist too, the mirror image of the right grip (the
+  // copies share geometry and materials)
+  const gripL = joint(j.handL, 0, -0.06, 0.01);
+  gripL.rotation.x = GRIP;
+  gripL.scale.x = -1;
+  const offWeapons = new Map<string, Weapon>();
+  for (const [name, w] of weapons) {
+    if (w.off != null) continue;   // two-handers
+    const g = w.group.clone();
+    gripL.add(g);
+    offWeapons.set(name, { ...w, group: g });
+  }
+  let offHeld: Weapon | null = null;
+
   // --- round shield on the left fist. At rest it hangs at the side facing outwards; raised (or
   // charging) it swings round in front of the fist, facing out of the hand. Its face is local +Z.
   const shield = joint(j.handL, 0, -0.1, 0);
@@ -221,16 +235,27 @@ export function buildWarrior(): Model {
   j.shoulderR.rotation.order = 'YXZ';
   j.shoulderL.rotation.order = 'YXZ';
 
-  // swings alternate forehand / backhand; a new swing starts when the action restarts
+  // swings alternate forehand / backhand; a new swing starts when the action restarts. With a
+  // weapon in each hand they alternate hands instead: the backhand side is the left hand's forehand
   let side = 1, lastK = 1, lastName = '';
 
   function setGear(gear: Gear): void {
     for (const w of weapons.values()) w.group.visible = false;
     held = gear.weapon ? weapons.get(gear.weapon) ?? weapons.get('Sword')! : null;
     if (held) held.group.visible = true;
-    tip.position.y = held?.len ?? 0;
     if (held?.off != null) offGrip.position.y = held.off;
     shield.visible = gear.shield;
+    for (const w of offWeapons.values()) w.group.visible = false;
+    offHeld = gear.offWeapon ? offWeapons.get(gear.offWeapon) ?? offWeapons.get('Sword')! : null;
+    if (offHeld) offHeld.group.visible = true;
+    tipOn(false);
+  }
+
+  /** The tip the skills read (trail, cast point): the left weapon's during a left-hand swing. */
+  function tipOn(left: boolean): void {
+    const at = left && offHeld ? gripL : grip;
+    if (tip.parent !== at) at.add(tip);
+    tip.position.y = (left && offHeld ? offHeld : held)?.len ?? 0;
   }
 
   function animate(st: AnimState): void {
@@ -245,8 +270,10 @@ export function buildWarrior(): Model {
     walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: 0.2, bob: 0.08, dir });
     if (two) { j.shoulderR.rotation.x += -0.5; j.shoulderR.rotation.z += 0.2; j.elbowR.rotation.x += -1.0; }
     else { j.shoulderR.rotation.x += -0.3; j.shoulderR.rotation.z += -0.1; j.elbowR.rotation.x += -0.8; }
-    // shield carried low at the side, the arm held a little out so it clears the leg
+    // shield carried low at the side, the arm held a little out so it clears the leg; a second
+    // weapon held like the first, mirrored
     if (shield.visible) { j.shoulderL.rotation.z += 0.2; j.elbowL.rotation.x += -0.35; }
+    else if (offHeld) { j.shoulderL.rotation.x += -0.3; j.shoulderL.rotation.z += 0.1; j.elbowL.rotation.x += -0.8; }
     let guard = 0;   // 0: shield at the side, 1: in front
     j.spine.rotation.x += move * 0.14 * dir;
     j.body.rotation.z += (st.lean || 0) * 0.12;
@@ -255,7 +282,10 @@ export function buildWarrior(): Model {
     const a = st.action;
     if (a && (a.name !== lastName || a.t < lastK - 0.2) && a.name === 'swing') side = -side;
     lastName = a?.name ?? ''; lastK = a?.t ?? 1;
-    const R = j.shoulderR.rotation;
+    const left = !!offHeld && a?.name === 'swing' && side < 0;
+    tipOn(left);
+    // the swinging arm: the left one mirrors the right (the same pitch, the yaw and roll turned over)
+    const R = left ? j.shoulderL.rotation : j.shoulderR.rotation;
     if (a) {
       const k = a.t;
       if (a.name === 'swing') {
@@ -268,9 +298,11 @@ export function buildWarrior(): Model {
         j.spine.rotation.y += 0.3 * body * theta * w;
         j.chest.rotation.y += 0.7 * body * theta * w;
         R.x = lerp(R.x, -1.25, w); R.z = lerp(R.z, 0, w); R.y = ((1 - body) * theta + (two ? 0.45 : 0)) * w;
-        j.elbowR.rotation.x = lerp(j.elbowR.rotation.x, two ? -0.5 : -0.1, w);
-        j.handR.rotation.x += ALONG_ARM * w;
-        j.thighL.rotation.x += -0.3 * w; j.kneeR.rotation.x += 0.3 * w;
+        const elbow = left ? j.elbowL : j.elbowR;
+        elbow.rotation.x = lerp(elbow.rotation.x, two ? -0.5 : -0.1, w);
+        (left ? j.handL : j.handR).rotation.x += ALONG_ARM * w;
+        // the leg opposite the swinging arm steps in
+        (left ? j.thighR : j.thighL).rotation.x += -0.3 * w; (left ? j.kneeL : j.kneeR).rotation.x += 0.3 * w;
       } else if (a.name === 'chop') {
         // Power Strike: the weapon rises overhead and trembles while the charge builds, then comes down
         // in a vertical arc at 0.9 of the cast (the skill's fireAt)

@@ -31,6 +31,11 @@ export function rollRarity(wave: number, bonus = 0): RarityId {
 export const implicitsFor = (slot: Slot, cls?: ClassDef): [StatKey, number][] => cls?.implicits?.[slot] ?? SLOT_INFO[slot].implicit;
 /** A weapon held in both hands (no off-hand with it). */
 export const isTwoHanded = (it: Item | undefined, cls?: ClassDef): boolean => !!it && it.slot === 'weapon' && !!cls?.twoHanded?.includes(it.base);
+/** A one-handed weapon of a class that dual-wields: it can go in the off-hand. */
+export const fitsOffhand = (it: Item | undefined, cls?: ClassDef): boolean => !!it && it.slot === 'weapon' && !!cls?.dualWield && !isTwoHanded(it, cls);
+/** A weapon in the off-hand counts its implicit (the weapon's damage) at this much: two one-handers
+ *  come to a little less than a two-hander's 1.8x, and pay for the second set of affixes with the block. */
+export const OFFHAND_WEAPON = 0.6;
 
 /** Item base names of a slot for a class (its own, or the defaults). */
 export const basesFor = (slot: Slot, cls?: ClassDef): string[] => cls?.bases?.[slot] ?? SLOT_INFO[slot].bases;
@@ -83,12 +88,15 @@ export function itemPower(item: Item): number {
 export const byValue = (a: Item, b: Item): number => rarityIndex(b.rarity) - rarityIndex(a.rarity) || itemPower(b) - itemPower(a);
 
 /** Combine class base stats with equipped items into final derived stats. */
+const WEAPON_IMPLICIT = new Set(SLOT_INFO.weapon.implicit.map(([k]) => k));
+
 export function computeStats(base: BaseStats, equipped: Profile['equipped']): DerivedStats {
   const add = Object.fromEntries(STAT_KEYS.map((k) => [k, 0])) as Record<StatKey, number>;
   for (const slot of SLOTS) {
     const it = equipped[slot];
     if (!it) continue;
-    for (const [k, v] of statEntries(it.stats)) add[k] += v;
+    const offWeapon = slot === 'offhand' && it.slot === 'weapon';
+    for (const [k, v] of statEntries(it.stats)) add[k] += offWeapon && WEAPON_IMPLICIT.has(k) ? v * OFFHAND_WEAPON : v;
   }
   const capped = (k: StatKey, cap: number) => Math.min(cap, add[k]);
   return {
