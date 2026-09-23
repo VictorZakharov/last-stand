@@ -69,6 +69,8 @@ function boot() {
   enterMenu();
   // compile the lobby's shaders before revealing the scene to avoid first-frame hitches
   warmUp(renderer, scene, G.camera, sceneTarget());
+  render();   // one full frame compiles the post-processing passes (bloom, grade...)
+  pinPrograms(renderer);
   markLoaded();
   requestAnimationFrame(() => $('#loading').classList.add('done'));
   requestAnimationFrame(frame);

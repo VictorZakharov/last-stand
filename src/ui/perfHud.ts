@@ -204,6 +204,7 @@ function report(): string {
     `GPU ${gpuName}`,
     `UA ${navigator.userAgent}`,
     `FPS history (0.5s buckets) ${s.buckets.map((v) => v === null ? '-' : Math.round(v)).join(' ')}`,
+    ...(lateCompiles.length ? ['Shaders compiled after load:', ...lateCompiles.slice(-40).map((l) => '  ' + l)] : []),
   ].join('\n');
 }
 

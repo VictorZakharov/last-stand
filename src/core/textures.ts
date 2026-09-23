@@ -198,13 +198,19 @@ export function burlap(): PBRCanvases {
   return maps;
 }
 
+// Textures are shared per (maps, repeat): every enemy of a kind reuses one GPU upload
+// instead of uploading (and mipmapping) its own copies when it first comes into view.
+const mapTextures = new WeakMap<PBRCanvases, Map<number, { map: THREE.Texture; normalMap: THREE.Texture; roughnessMap: THREE.Texture }>>();
+
 export function pbrMaterialMaps(maps: PBRCanvases, repeat: number, normalScale = 1) {
-  return {
-    map: toTexture(maps.albedo, true, repeat),
-    normalMap: toTexture(maps.normal, false, repeat),
-    roughnessMap: toTexture(maps.rough, false, repeat),
-    normalScale: new THREE.Vector2(normalScale, normalScale),
-  };
+  let byRepeat = mapTextures.get(maps);
+  if (!byRepeat) mapTextures.set(maps, byRepeat = new Map());
+  let tex = byRepeat.get(repeat);
+  if (!tex) {
+    tex = { map: toTexture(maps.albedo, true, repeat), normalMap: toTexture(maps.normal, false, repeat), roughnessMap: toTexture(maps.rough, false, repeat) };
+    byRepeat.set(repeat, tex);
+  }
+  return { ...tex, normalScale: new THREE.Vector2(normalScale, normalScale) };
 }
 
 export function textureFromCanvas(c: HTMLCanvasElement, srgb = true): THREE.CanvasTexture {
