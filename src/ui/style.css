@@ -165,11 +165,9 @@ button { font-family: inherit; }
 #menu .panel { pointer-events: auto; }
 .menu-left { width: 420px; padding: 24px 28px; display: flex; flex-direction: column; gap: 14px; background: linear-gradient(90deg, rgba(8,7,9,.94), rgba(8,7,9,.84)); }
 .logo { text-align: center; padding: 6px 0 4px; }
-.logo-top, .logo-bot { font-family: var(--serif); font-weight: 900; line-height: .9; letter-spacing: 10px;
-  background: linear-gradient(#fff2c8, #d0a050 55%, #7a5420); -webkit-background-clip: text; background-clip: text; color: transparent;
-  filter: drop-shadow(0 3px 2px #000) drop-shadow(0 0 16px rgba(240,180,80,.3)); }
-.logo-top { font-size: 54px; }
-.logo-bot { font-size: 76px; }
+/* the logo art (SVG, shared with the loading screen) is defined in index.html */
+.logo .logo-art { width: 100%; max-width: 330px; margin: 0 auto; }
+.logo .logo-glow { opacity: .8; }
 .logo-tag { margin-top: 10px; font-size: 16px; color: var(--ink-dim); font-style: italic; }
 .class-card { padding: 16px 18px; background: var(--panel-2); border: 1px solid rgba(160,124,70,.5); }
 .cc-name { font-family: var(--serif); font-size: 28px; color: #9fffd0; text-shadow: 0 0 10px rgba(93,255,168,.35); }
