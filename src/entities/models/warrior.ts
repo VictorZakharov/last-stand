@@ -282,7 +282,8 @@ export function buildWarrior(): Model {
     const a = st.action;
     if (a && (a.name !== lastName || a.t < lastK - 0.2) && a.name === 'swing') side = -side;
     lastName = a?.name ?? ''; lastK = a?.t ?? 1;
-    const left = !!offHeld && a?.name === 'swing' && side < 0;
+    // Twin Fangs strikes right, then left (in step with skills/twinFangs STRIKES)
+    const left = !!offHeld && ((a?.name === 'swing' && side < 0) || (a?.name === 'flurry' && a.t > 0.5));
     tipOn(left);
     // the swinging arm: the left one mirrors the right (the same pitch, the yaw and roll turned over)
     const R = left ? j.shoulderL.rotation : j.shoulderR.rotation;
@@ -303,6 +304,25 @@ export function buildWarrior(): Model {
         (left ? j.handL : j.handR).rotation.x += ALONG_ARM * w;
         // the leg opposite the swinging arm steps in
         (left ? j.thighR : j.thighL).rotation.x += -0.3 * w; (left ? j.kneeL : j.kneeR).rotation.x += 0.3 * w;
+      } else if (a.name === 'flurry') {
+        // Twin Fangs: a low lunge, each blade cutting down across the body from high on its own side,
+        // right then left (the left arm mirrors the right: the same pitch, yaw turned over)
+        const w = ramp(k, 0, 0.12) * (1 - ramp(k, 0.9, 1));
+        j.spine.rotation.x += 0.3 * w; j.neck.rotation.x += -0.2 * w;
+        j.thighL.rotation.x += -0.55 * w; j.kneeL.rotation.x += 0.5 * w;
+        j.thighR.rotation.x += 0.35 * w; j.kneeR.rotation.x += 0.5 * w;
+        j.body.position.y += -0.12 * w;
+        const cut = (arm: THREE.Euler, elbow: THREE.Object3D, hand: THREE.Object3D, s: number, from: number, to: number): void => {
+          const up = ramp(k, from - 0.15, from), down = ramp(k, from, to), aw = up * (1 - ramp(k, to + 0.05, to + 0.25));
+          arm.x = lerp(arm.x, lerp(-2.4, -0.7, down), aw);
+          arm.y = s * lerp(0.5, -0.7, down) * aw;
+          arm.z = lerp(arm.z, 0, aw);
+          elbow.rotation.x = lerp(elbow.rotation.x, -0.25, aw);
+          hand.rotation.x += ALONG_ARM * aw;
+          j.chest.rotation.y += s * lerp(0.35, -0.35, down) * aw;
+        };
+        cut(j.shoulderR.rotation, j.elbowR, j.handR, 1, 0.3, 0.52);
+        cut(j.shoulderL.rotation, j.elbowL, j.handL, -1, 0.7, 0.92);
       } else if (a.name === 'chop') {
         // Power Strike: the weapon rises overhead and trembles while the charge builds, then comes down
         // in a vertical arc at 0.9 of the cast (the skill's fireAt)

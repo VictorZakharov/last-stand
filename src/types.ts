@@ -57,7 +57,7 @@ export interface DerivedStats {
 
 export type SkillKey = 'mouse0' | 'mouse2' | '1' | '2' | '3' | '4' | 'q';
 /** pose a model plays while the skill casts; a class's model interprets each name in its own way */
-export type CastAnim = 'cast' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'spin' | 'block' | 'stagger' | null;
+export type CastAnim = 'cast' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'spin' | 'block' | 'stagger' | 'flurry' | null;
 
 /** Skill tuning data. Behavior-specific numbers are optional fields. */
 export interface SkillDef {
@@ -103,9 +103,9 @@ export interface SkillDef {
   fireAt?: number;
   /** Raise Shield: blocks absorb this many times the block amount */
   block?: number;
-  /** only works with a shield, or with a two-handed weapon; otherwise the key uses the fallback for the gear held */
-  needs?: 'shield' | 'twoHanded';
-  fallback?: { shield?: string; twoHanded?: string; oneHanded?: string };
+  /** only works with a shield, a two-handed weapon or a weapon in each hand; otherwise the key uses the fallback for the gear held */
+  needs?: 'shield' | 'twoHanded' | 'dual';
+  fallback?: { shield?: string; twoHanded?: string; dual?: string; oneHanded?: string };
 }
 
 export interface ClassDef {

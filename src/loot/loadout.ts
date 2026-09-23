@@ -18,16 +18,16 @@ export function weaponStyle(cls: ClassDef, gear: Gear): WeaponStyle | null {
   return gear.shield ? 'shield' : gear.twoHanded ? 'twoHanded' : gear.offWeapon ? 'dual' : 'oneHanded';
 }
 
-/** Whether the gear held allows a skill (some need a shield, some a two-handed weapon). */
+/** Whether the gear held allows a skill (some need a shield, a two-handed weapon or two weapons). */
 export function usableWith(def: SkillDef, gear: Gear): boolean {
-  return def.needs === 'shield' ? gear.shield : def.needs === 'twoHanded' ? gear.twoHanded : true;
+  return def.needs === 'shield' ? gear.shield : def.needs === 'twoHanded' ? gear.twoHanded : def.needs === 'dual' ? !!gear.offWeapon : true;
 }
 
 /** The skill a key bound to `def` fires with this gear: itself, its fallback for the gear, or none. */
 export function resolveFor(def: SkillDef, gear: Gear): string | null {
   if (usableWith(def, gear)) return def.impl;
   const fb = def.fallback;
-  return (gear.shield ? fb?.shield : gear.twoHanded ? fb?.twoHanded : fb?.oneHanded) ?? null;
+  return (gear.shield ? fb?.shield : gear.twoHanded ? fb?.twoHanded : gear.offWeapon ? fb?.dual : fb?.oneHanded) ?? null;
 }
 
 const COOKIE = (classId: string, style: WeaponStyle | null) => `last-stand-loadout-${classId}${style ? '-' + style : ''}`;

@@ -80,7 +80,7 @@ Shields **block**: each hit has the shield's Block Chance to be blocked, absorbi
 | Key | Skill |
 | --- | --- |
 | Left click | Rending Cleave — wide sweep in front of you; each hit restores energy |
-| Right click (hold) | Raise Shield — block every frontal blow; with a two-handed weapon instead: Steel Tempest (a lone one-hander leaves it free to bind; Thunder Crescent needs a two-hander) |
+| Right click (hold) | Raise Shield — block every frontal blow; with a two-handed weapon instead: Steel Tempest; with a weapon in each hand: Twin Fangs, an instant lunge and a strike with each blade (a lone one-hander leaves it free to bind; Thunder Crescent needs a two-hander) |
 | `1` (hold) | Steel Tempest — spin with the blade out, shredding everything around you |
 | `2` | Bull Rush — shield charge that tramples and hurls foes aside |
 | `3` | Power Strike — charge for 1.5 seconds, then a crushing overhead blow |
