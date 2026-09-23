@@ -13,7 +13,7 @@ import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
 import { renderAttributes } from './attributes';
 import { sfx } from '../core/audio';
 import type { RunSummary } from '../game/run';
-import type { Item } from '../types';
+import type { Item, Slot } from '../types';
 
 /** querySelector that asserts the element exists (menu markup is static). */
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -104,6 +104,7 @@ export function renderMenu(): void {
     + rec('⟳', r.runs, 'Runs') + rec('⛁', r.banked, 'Items banked');
 
   // equipment
+  focusSlot(null); // hovered nodes are about to be replaced
   const eq = $('#equip');
   eq.querySelectorAll('.eslot').forEach((n) => n.remove()); // keep the silhouette svg
   for (const slot of SLOTS) {
@@ -121,7 +122,8 @@ export function renderMenu(): void {
     d.style.boxShadow = `inset 0 0 0 1px ${it ? color : 'rgba(160,124,70,.5)'}`;
     d.style.setProperty('--c', color);
     d.innerHTML = `<span class="elabel">${SLOT_INFO[slot].label}</span>${it ? itemIconSVG(it) : slotPlaceholderSVG(slot)}
-      <span class="ename2" style="color:${color}">${it ? it.name : ''}</span>`;
+      <span class="ename2" style="color:${color}">${it ? it.name : ''}</span>${GLOW}`;
+    bindSlotFocus(d, slot);
     if (it) {
       bindTooltip(d, itemTooltip(it, false));
       const doUnequip = () => { unequip(p, slot); hideTooltip(); sfx.click(); changed(); };
@@ -140,15 +142,16 @@ export function renderMenu(): void {
   $('#stash-count').textContent = `(${p.stash.length}/${RUN.bagLimit})`;
   const st = $('#stash');
   st.innerHTML = '';
-  const sorted = p.stash.slice().sort((a, b) => rarityIndex(b.rarity) - rarityIndex(a.rarity) || itemPower(b) - itemPower(a));
-  for (const it of sorted) {
+  const sorted = p.stash.slice().sort((a, b) => rarityIndex(b.rarity) - rarityIndex(a.rarity) || itemPower(b) - itemPower(a));  for (const it of sorted) {
     const d = document.createElement('div');
     const color = rarityOf(it.rarity).color;
     const eqd = p.equipped[it.slot];
     d.className = 'sitem' + (newIds.has(it.id) ? ' new' : '') + (!eqd || itemPower(it) > itemPower(eqd) ? ' up' : '');
     d.style.setProperty('--c', color);
     d.style.color = color;
-    d.innerHTML = itemIconSVG(it);
+    d.dataset.slot = it.slot;
+    d.innerHTML = itemIconSVG(it) + GLOW;
+    bindSlotFocus(d, it.slot);
     bindTooltip(d, () => ({ ...itemTooltip(it)(), foot: 'Right-click or drag to equip · Drag to the junk bin to salvage' }));
     const equip = () => { newIds.delete(it.id); equipFromStash(p, it.id); hideTooltip(); sfx.click(); changed(); };
     d.onclick = equip;
@@ -166,6 +169,23 @@ export function renderMenu(): void {
   renderLoadoutEditor();
 }
 
+// --- slot focus -------------------------------------------------------------------
+// Hovering an equipment slot lights up every stash item that fits it (and dims the
+// rest); hovering a stash item lights up the slot it goes into.
+const GLOW = '<span class="slot-glow"></span>';
+
+function focusSlot(slot: Slot | null): void {
+  const menu = $('#menu');
+  menu.classList.toggle('slot-focus', slot !== null);
+  menu.querySelectorAll('.match').forEach((n) => n.classList.remove('match'));
+  if (slot) menu.querySelectorAll(`.sitem[data-slot="${slot}"], .eslot[data-slot="${slot}"]`).forEach((n) => n.classList.add('match'));
+}
+
+function bindSlotFocus(el: HTMLElement, slot: Slot): void {
+  el.addEventListener('pointerenter', () => { if (!drag) focusSlot(slot); });
+  el.addEventListener('pointerleave', () => focusSlot(null));
+}
+
 // --- item drag & drop -------------------------------------------------------------
 interface ItemDrag { from: 'stash' | 'equip'; item: Item }
 let drag: ItemDrag | null = null;
@@ -175,6 +195,7 @@ function makeDraggable(el: HTMLElement, payload: ItemDrag): void {
   el.addEventListener('dragstart', (e) => {
     drag = payload;
     hideTooltip();
+    focusSlot(null);
     e.dataTransfer!.effectAllowed = 'move';
     e.dataTransfer!.setData('text/plain', payload.item.id);
     $('#junk').classList.remove('hidden');
