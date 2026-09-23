@@ -127,7 +127,7 @@ export interface Profile {
 // ---------------------------------------------------------------------------
 // Enemies
 
-export type EnemyAIKind = 'melee' | 'ranged' | 'slam' | 'boss';
+export type EnemyAIKind = 'melee' | 'ranged' | 'slam' | 'boss' | 'idle';
 
 export interface EnemyDef {
   name: string;
@@ -151,6 +151,8 @@ export interface EnemyDef {
   knockbackResist?: number;
   freezeResist?: number;
   boss?: boolean;
+  /** training dummy: never dies, meters the damage it takes instead */
+  dummy?: boolean;
 }
 
 // ---------------------------------------------------------------------------

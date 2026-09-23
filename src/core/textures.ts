@@ -162,6 +162,42 @@ export function grunge(): PBRCanvases {
   return maps;
 }
 
+/** Weathered wood: warped grain streaks running along v. */
+export function wood(): PBRCanvases {
+  if (cache.wood) return cache.wood;
+  const fbm = makeFbm(77, 4, 5);
+  const maps = buildPBR(256, (u, v, o) => {
+    const warp = fbm(u, v) * 3;
+    const grain = 0.5 + 0.5 * Math.sin((u * 26 + warp) * Math.PI * 2);
+    const n = fbm(u * 2, v * 2);
+    o.h = grain * 0.6 + n * 0.4;
+    const k = 0.55 + grain * 0.25 + n * 0.2;
+    o.r = 0.42 * k; o.g = 0.29 * k; o.b = 0.18 * k;
+    o.rough = 0.75 + (1 - grain) * 0.2;
+  }, 3);
+  cache.wood = maps;
+  return maps;
+}
+
+/** Coarse burlap weave. */
+export function burlap(): PBRCanvases {
+  if (cache.burlap) return cache.burlap;
+  const fbm = makeFbm(91, 4, 4);
+  const threads = 48;
+  const maps = buildPBR(256, (u, v, o) => {
+    const a = Math.sin(u * threads * Math.PI * 2), b = Math.sin(v * threads * Math.PI * 2);
+    // over / under: which thread is on top alternates per cell
+    const top = (Math.floor(u * threads) + Math.floor(v * threads)) % 2 === 0 ? Math.abs(a) : Math.abs(b);
+    const n = fbm(u, v);
+    o.h = top * 0.7 + n * 0.3;
+    const k = 0.62 + top * 0.25 + (n - 0.5) * 0.3;
+    o.r = 0.66 * k; o.g = 0.53 * k; o.b = 0.34 * k;
+    o.rough = 0.95;
+  }, 2);
+  cache.burlap = maps;
+  return maps;
+}
+
 export function pbrMaterialMaps(maps: PBRCanvases, repeat: number, normalScale = 1) {
   return {
     map: toTexture(maps.albedo, true, repeat),

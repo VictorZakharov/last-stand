@@ -4,6 +4,7 @@ import { buildHusk } from './husk';
 import { buildImp } from './imp';
 import { buildWitch } from './witch';
 import { buildBrute } from './brute';
+import { buildDummy } from './dummy';
 
 import type { Model } from '../../types';
 
@@ -14,6 +15,7 @@ export const MODELS: Record<string, () => Model> = {
   witch: buildWitch,
   brute: () => buildBrute('brute'),
   colossus: () => buildBrute('colossus'),
+  dummy: buildDummy,
 };
 
 export function buildModel(id: string): Model {

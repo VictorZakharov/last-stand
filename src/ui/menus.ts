@@ -85,7 +85,19 @@ export function initMenus(h: MenuHooks): void {
   });
 }
 
-export function showMenu(v: boolean): void { $('#menu').classList.toggle('hidden', !v); if (v) renderMenu(); }
+export function showMenu(v: boolean): void {
+  $('#menu').classList.toggle('hidden', !v);
+  if (v) { toggleMenuStowed(false); renderMenu(); }
+}
+
+/** Fade the lobby panels out (to walk around and practice on the dummies) or back in. */
+export function toggleMenuStowed(stowed?: boolean): void {
+  const menu = $('#menu');
+  menu.classList.toggle('stowed', stowed);
+  focusSlot(null);
+  hideTooltip();
+  if (menu.classList.contains('stowed')) endDrag();
+}
 export function markNew(items: Item[]): void { for (const it of items) newIds.add(it.id); }
 
 export function renderMenu(): void {

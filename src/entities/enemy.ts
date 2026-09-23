@@ -8,7 +8,8 @@ import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
 import { AI } from './enemyAI';
 import { addAnchored, removeAnchored } from '../ui/floaters';
-import { burst, smokePuff, col, particles } from '../fx/particles';
+import { DamageMeter } from '../ui/damageMeter';
+import { burst, debris, smokePuff, col, particles } from '../fx/particles';
 import { flash } from '../fx/lights';
 import { additive } from '../core/materials';
 import { sfx } from '../core/audio';
@@ -80,6 +81,8 @@ export class Enemy {
   auraColor: number | null = null;
   bar: HTMLElement | null = null;
   barFill: HTMLElement | null = null;
+  /** training dummies meter damage instead of losing life */
+  meter: DamageMeter | null = null;
 
   constructor(typeId: EnemyId, { wave = 1, hero = false, pos }: { wave?: number; hero?: boolean; pos: THREE.Vector3 }) {
     const def = ENEMIES[typeId];
@@ -117,7 +120,8 @@ export class Enemy {
     this.model.root.rotation.y = this.facing;
     G.scene.add(this.obj);
 
-    if (!this.boss) this.createBar();
+    if (def.dummy) this.meter = new DamageMeter(def.name, () => ({ x: this.pos.x, y: this.obj.position.y + this.height + 0.3, z: this.pos.z }));
+    else if (!this.boss) this.createBar();
   }
 
   createBar(): void {
@@ -215,6 +219,7 @@ export class Enemy {
     this.model.kit.u.uFrozen.value = damp(this.model.kit.u.uFrozen.value, frozen ? 1 : this.chill > 0 ? 0.35 : 0, 10, dt);
     this.model.kit.u.uHit.value = this.hitT;
     if (this.barFill) this.barFill.style.width = `${(this.life / this.maxLife) * 100}%`;
+    this.meter?.update();
     if (this.aura && this.auraMat) { this.aura.rotation.y += dt; this.auraMat.opacity = 0.5 + Math.sin(t * 4) * 0.2; }
     return true;
   }
@@ -233,7 +238,7 @@ export class Enemy {
 
   takeDamage(amount: number, info: DamageInfo = {}): number {
     if (!this.alive) return 0;
-    this.life -= amount;
+    if (!this.meter) this.life -= amount;
     this.hitT = 1;
     if (info.chill) this.chill = Math.max(this.chill, info.chill);
     if (info.freeze) this.frozen = Math.max(this.frozen, info.freeze * (1 - (this.def.freezeResist || 0)));
@@ -242,7 +247,10 @@ export class Enemy {
       const dx = this.pos.x - info.from.x, dz = this.pos.z - info.from.z, d = Math.hypot(dx, dz) || 1;
       this.knock.x += (dx / d) * k; this.knock.z += (dz / d) * k;
     }
-    if (this.life <= 0) this.die();
+    if (this.meter) {
+      this.meter.record(amount);
+      debris({ x: this.pos.x, y: this.height * 0.6, z: this.pos.z }, { count: 3, color: 0xc9a54e, speed: 3, size: 0.07, life: 0.7 });
+    } else if (this.life <= 0) this.die();
     return amount;
   }
 
@@ -280,6 +288,7 @@ export class Enemy {
 
   dispose(): void {
     removeAnchored(this.bar);
+    this.meter?.dispose();
     G.scene.remove(this.obj);
     this.model.dispose();
     this.auraMat?.dispose();

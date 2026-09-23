@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { G } from './state';
 import { initRenderer, updateCamera, render, zoomBy, setZoom } from './core/renderer';
-import { CAMERA } from './data/balance';
+import { CAMERA, LOBBY } from './data/balance';
 import { initInput, updateInputRay, endInputFrame, input, wasPressed } from './core/input';
 import { initAudio } from './core/audio';
 import { updateTimers } from './core/timers';
@@ -12,7 +12,7 @@ import { initEffects, updateEffects } from './fx/effects';
 import { buildArena } from './world/arena';
 import { separateEnemies } from './world/collision';
 import { Player } from './entities/player';
-import { updateEnemies } from './entities/enemy';
+import { updateEnemies, clearEnemies } from './entities/enemy';
 import { spawnEnemy } from './entities/spawner';
 import { updateProjectiles } from './combat/projectiles';
 import { updateDrops } from './loot/drops';
@@ -20,7 +20,7 @@ import { loadProfile } from './loot/profile';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun } from './game/run';
 import { initFloaters, updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, updateHud, renderSpoils } from './ui/hud';
-import { initMenus, showMenu, showSummary, hideSummary, showPause } from './ui/menus';
+import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed } from './ui/menus';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { initLoadoutEditor } from './ui/loadoutEditor';
@@ -80,6 +80,12 @@ function enterMenu() {
   G.player.reset();
   G.player.sandbox = true;   // lobby: walk around and try skills freely
   setZoom(CAMERA.lobbyZoom);
+  spawnDummies();
+}
+
+function spawnDummies() {
+  clearEnemies();
+  for (const [x, z] of LOBBY.dummies) spawnEnemy('dummy', new THREE.Vector3(x, 0, z));
 }
 
 function start() {
@@ -111,6 +117,7 @@ function profileChanged() { G.player.recomputeStats(G.profile.equipped); G.playe
 
 // --- loop ---------------------------------------------------------------------------
 function handleGlobalKeys() {
+  if (G.mode === 'menu' && wasPressed('space')) toggleMenuStowed();
   if (G.mode !== 'run') return;
   if (wasPressed('escape')) {
     const r = G.run;
@@ -131,10 +138,11 @@ function update(dt: number): void {
   // the player can move and cast in both the arena and the lobby (sandbox)
   G.player.update(dt);
   updateProjectiles(dt);
+  // enemies in the arena, training dummies in the lobby
+  if (G.mode === 'run') updateRun(dt);
+  updateEnemies(dt);
+  separateEnemies();
   if (G.mode === 'run') {
-    updateRun(dt);
-    updateEnemies(dt);
-    separateEnemies();
     updateDrops(dt);
     updateHud();
   }

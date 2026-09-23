@@ -71,6 +71,7 @@ function fireBolt(e: Enemy, angleOffset = 0, lead = true): void {
 }
 
 export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
+  idle() {},
   melee(e) {
     const { dx, dz, dist } = e.toPlayer();
     e.faceTo(G.player.pos.x, G.player.pos.z);
