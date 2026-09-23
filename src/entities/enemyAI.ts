@@ -33,7 +33,7 @@ function meleeStrike(e: Enemy): void {
   }
 }
 
-function slamAt(e: Enemy, x: number, z: number, radius: number, color: number = DAMAGE_COLORS.fire): void {
+function slamAt(e: Enemy, x: number, z: number, radius: number, color = e.def.accent ?? DAMAGE_COLORS[e.def.damageType]): void {
   const pos = new THREE.Vector3(x, 0, z);
   shockwave(pos, { color, intensity: 2.5, from: 0.5, to: radius * 1.15, life: 0.5 });
   shockwave(pos, { color: 0xffffff, intensity: 1, from: 0.2, to: radius * 0.8, life: 0.3 });
@@ -62,7 +62,7 @@ function fireBolt(e: Enemy, angleOffset = 0, lead = true): void {
   spawnProjectile({
     pos: origin, dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true,
     color: pj.color, size: pj.radius * 0.7, intensity: 5,
-    trail: { color: pj.color, colorEnd: 0x200030, size: pj.radius * 1.6, rate: 60, life: 0.4 },
+    trail: { color: pj.color, colorEnd: pj.trail ?? 0x200030, size: pj.radius * 1.6, rate: 60, life: 0.4 },
     onHit: (_target, proj) => {
       hurtPlayer(e.damage, e.def.damageType, proj.pos);
       burst(proj.pos, { count: 16, color: pj.color, speed: 4, life: 0.4, size: 0.3 });
@@ -143,9 +143,10 @@ export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
       }
       if (dist < d.range + 1.5) {
         e.cd = d.cooldown;
-        const tg = telegraph(e.pos, slamRadius, d.windup, 0xa040ff);
+        const accent = d.accent ?? 0xb070ff;
+        const tg = telegraph(e.pos, slamRadius, d.windup, accent);
         const x = e.pos.x, z = e.pos.z;
-        e.startAction('slam', d.windup + d.recover, [[d.windup / (d.windup + d.recover), () => slamAt(e, x, z, slamRadius, 0xb070ff)]], () => tg.cancel());
+        e.startAction('slam', d.windup + d.recover, [[d.windup / (d.windup + d.recover), () => slamAt(e, x, z, slamRadius, accent)]], () => tg.cancel());
         return;
       }
       if (dist < 18) {
@@ -167,6 +168,6 @@ function bossSummon(e: Enemy): void {
     const pos = new THREE.Vector3(e.pos.x + Math.cos(a) * 3.5, 0, e.pos.z + Math.sin(a) * 3.5);
     spawnEnemy((e.def.summon ?? 'imp') as EnemyId, pos, { wave: G.run?.wave ?? 1 });
   }
-  shockwave(e.pos, { color: 0xb070ff, intensity: 3, from: 1, to: 8, life: 0.8 });
+  shockwave(e.pos, { color: e.def.accent ?? 0xb070ff, intensity: 3, from: 1, to: 8, life: 0.8 });
   addShake(0.4);
 }

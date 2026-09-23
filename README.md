@@ -16,7 +16,8 @@ Everything is procedural: models, animation, textures, VFX and sound are generat
 
 ## How to play
 
-- Survive each wave inside the arena. Every fifth wave, a **Colossus** arrives.
+- Pick a battleground in the lobby, the **Crypt** or the **Forest** (or the dice for a random one each run). Each has its own enemies.
+- Survive each wave inside the arena. Every fifth wave, a boss arrives: the **Colossus** in the Crypt, the **Thornheart** in the Forest.
 - After every wave, choose:
   - **Bank** — leave the arena and move everything you picked up into your stash, or
   - **Continue** — face a harder wave with better loot (you recover 25% health).
@@ -67,11 +68,11 @@ npm run build      # type-check + production build into dist/
 
 | Path | Contents |
 | --- | --- |
-| `src/data/` | Tuning data: classes & skills, enemies, items, waves, balance |
+| `src/data/` | Tuning data: classes & skills, enemies, biomes, items, waves, balance |
 | `src/combat/skills/` | Skill behaviors, referenced by name from class data |
 | `src/entities/` | Player, enemies, enemy AI, procedural models (`models/`) |
 | `src/game/run.ts` | Wave flow, scoring, loot rolls, bank / continue |
-| `src/world/` | Arena construction and collision |
+| `src/world/` | The biome arenas (`crypt.ts`, `forest.ts`), shared props, collision |
 | `src/fx/` | Particles, effects, pooled lights |
 | `src/loot/` | Items, persistent profile (stash / equipment), spell loadout |
 | `src/ui/` | HUD, menus, tooltips, loadout editor |

@@ -110,7 +110,7 @@ export class Enemy {
     if (hero) this.model.root.scale.multiplyScalar(HERO.scale);
     applyShadowDetail(this.obj);
     if (hero || this.boss) {
-      const c = this.boss ? 0x9a40ff : pick(HERO.auraColors);
+      const c = this.boss ? def.accent ?? 0x9a40ff : pick(HERO.auraColors);
       this.auraMat = additive(c, 1.6, 0.8);
       this.aura = new THREE.Mesh(auraGeo, this.auraMat);
       this.aura.scale.setScalar(this.radius * 1.6);
@@ -214,7 +214,7 @@ export class Enemy {
 
     if (!frozen) this.facing = angleDamp(this.facing, this.targetFacing, this.action ? 6 : 9, dt);
     const speedK = Math.hypot(this.vel.x, this.vel.z) / this.speed;
-    this.phase += dt * Math.hypot(this.vel.x, this.vel.z) * (this.def.model === 'imp' ? 3.2 : 2.3) / Math.max(0.6, this.height * 0.5);
+    this.phase += dt * Math.hypot(this.vel.x, this.vel.z) * (this.def.gait ?? 2.3) / Math.max(0.6, this.height * 0.5);
     // frozen enemies hold their pose: animate with the time they were frozen at
     this.animate(frozen ? 0 : dt, frozen ? this.frozenAt : t, Math.min(1, speedK));
     if (!frozen) this.frozenAt = t;
@@ -267,7 +267,7 @@ export class Enemy {
     const center = new THREE.Vector3(this.pos.x, this.height * 0.5, this.pos.z);
     burst(center, { count: this.boss ? 120 : 26, color: c, speed: this.boss ? 9 : 5, up: 3, life: 0.9, size: 0.3 });
     smokePuff(this.pos, { count: this.boss ? 20 : 5, size: this.radius * 1.5, sizeEnd: this.radius * 3 });
-    if (this.boss) flash({ color: 0xb070ff, intensity: 80, distance: 20, life: 1.2, pos: center });
+    if (this.boss) flash({ color: this.def.accent ?? 0xb070ff, intensity: 80, distance: 20, life: 1.2, pos: center });
     sfx.enemyDie();
     this.model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = false; });
     emit('enemyKilled', this);

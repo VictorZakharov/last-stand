@@ -5,6 +5,7 @@ import { G } from '../state';
 import { RUN } from '../data/balance';
 import { WAVES, LOOT } from '../data/waves';
 import { ENEMIES } from '../data/enemies';
+import { BIOMES } from '../data/biomes';
 import { spawnEnemy } from '../entities/spawner';
 import { clearEnemies } from '../entities/enemy';
 import { clearProjectiles } from '../combat/projectiles';
@@ -87,7 +88,7 @@ export function startRun(): void {
   G.profile.records.runs++;
   saveProfile(G.profile);
   G.arena.setCalm(0);
-  ui.banner('Wave 1', 'Survive the onslaught');
+  ui.banner('Wave 1', `${BIOMES[G.arena.biome].title} · Survive the onslaught`);
 }
 
 export function abandonRun(): void {
@@ -98,19 +99,21 @@ export function abandonRun(): void {
 }
 
 function buildWave(w: number): SpawnUnit[][] {
-  const pool = WAVES.pool(w);
+  const biome = BIOMES[G.arena.biome];
+  const pool = biome.pool(w);
   let budget = WAVES.budget(w);
   const units: SpawnUnit[] = [];
-  if (w % WAVES.bossEvery === 0) { units.push({ type: 'colossus', hero: false }); budget *= 0.55; }
+  if (w % WAVES.bossEvery === 0) { units.push({ type: biome.boss, hero: false }); budget *= 0.55; }
   while (budget > 0) {
     const type = weighted(pool);
     budget -= ENEMIES[type].cost;
-    units.push({ type, hero: Math.random() < WAVES.heroChance(w) * (type === 'brute' ? 0.5 : 0.25) });
+    // heavies (slammers) become heroes more often
+    units.push({ type, hero: Math.random() < WAVES.heroChance(w) * (ENEMIES[type].ai === 'slam' ? 0.5 : 0.25) });
   }
   // split into groups
   const groups = WAVES.groups(w);
   const out: SpawnUnit[][] = Array.from({ length: groups }, () => []);
-  units.forEach((u, i) => out[u.type === 'colossus' ? 0 : i % groups].push(u));
+  units.forEach((u, i) => out[ENEMIES[u.type].boss ? 0 : i % groups].push(u));
   return out.filter((g) => g.length);
 }
 
@@ -130,11 +133,12 @@ function spawnGroup(group: SpawnUnit[]): void {
   const r = G.run!;
   r.pending += group.length;
   group.forEach((u, i) => {
-    const portal = u.type === 'colossus' ? portals[1] : used[i % 2];
+    const boss = !!ENEMIES[u.type].boss;
+    const portal = boss ? portals[1] : used[i % 2];
     portal.pulse();
     const side = new THREE.Vector3(-portal.dir.z, 0, portal.dir.x);
     const pos = portal.pos.clone()
-      .addScaledVector(portal.dir, rand(0.5, 3.5) + (u.type === 'colossus' ? 2 : 0))
+      .addScaledVector(portal.dir, rand(0.5, 3.5) + (boss ? 2 : 0))
       .addScaledVector(side, rand(-3, 3));
     schedule(i * 0.09, () => {
       r.pending--;
@@ -198,7 +202,7 @@ export function continueRun(): void {
   G.arena.setCalm(0);
   ui.hideDecision();
   const boss = r.wave % WAVES.bossEvery === 0;
-  ui.banner(`Wave ${r.wave}`, boss ? 'A colossal presence approaches…' : 'Hold the line');
+  ui.banner(`Wave ${r.wave}`, boss ? BIOMES[G.arena.biome].bossBanner : 'Hold the line');
 }
 
 export function bankRun(): void {

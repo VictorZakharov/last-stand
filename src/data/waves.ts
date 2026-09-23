@@ -1,6 +1,5 @@
 // Wave composition rules. A wave is built from a point budget spent on the
-// enemy pool unlocked at that wave; boss waves add the Colossus.
-import type { EnemyId } from './enemies';
+// biome's enemy pool unlocked at that wave (data/biomes.ts); boss waves add its boss.
 
 export const WAVES = {
   budget: (w: number) => 9 + w * 3.2,
@@ -9,12 +8,6 @@ export const WAVES = {
   maxAlive: (w: number) => Math.min(38, 14 + w * 2),
   bossEvery: 5,
   heroChance: (w: number) => (w < 3 ? 0 : Math.min(0.45, 0.12 + w * 0.03)),
-  pool: (w: number): [EnemyId, number][] => {
-    const p: [EnemyId, number][] = [['imp', 3], ['husk', 4]];
-    if (w >= 2) p.push(['witch', 2 + w * 0.2]);
-    if (w >= 3) p.push(['brute', 0.6 + w * 0.12]);
-    return p;
-  },
 };
 
 // Loot rules per wave.

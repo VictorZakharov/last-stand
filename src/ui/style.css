@@ -163,10 +163,10 @@ button { font-family: inherit; }
 #menu { position: fixed; inset: 0; z-index: 20; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; align-items: stretch; padding: 28px; pointer-events: none; }
 .menu-center { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; min-width: 0; }
 #menu .panel { pointer-events: auto; }
-.menu-left { width: 420px; padding: 24px 28px; display: flex; flex-direction: column; gap: 14px; background: linear-gradient(90deg, rgba(8,7,9,.94), rgba(8,7,9,.84)); }
+.menu-left { width: 420px; padding: 22px 28px; display: flex; flex-direction: column; gap: 12px; background: linear-gradient(90deg, rgba(8,7,9,.94), rgba(8,7,9,.84)); }
 .logo { text-align: center; padding: 6px 0 4px; }
 /* the logo art (SVG, shared with the loading screen) is defined in index.html */
-.logo .logo-art { width: 100%; max-width: 330px; margin: 0 auto; }
+.logo .logo-art { width: 100%; max-width: 300px; margin: 0 auto; }
 .logo .logo-glow { opacity: .8; }
 .logo-tag { margin-top: 10px; font-size: 16px; color: var(--ink-dim); font-style: italic; }
 .class-card { padding: 16px 18px; background: var(--panel-2); border: 1px solid rgba(160,124,70,.5); }
@@ -184,7 +184,12 @@ button { font-family: inherit; }
   color: var(--bronze-hi); border: 1px solid rgba(160,124,70,.5); border-radius: 50%; background: radial-gradient(circle at 50% 35%, #3a3024, #0c0a0a 75%);
   text-shadow: 0 0 8px rgba(240,190,90,.45); }
 .rec-val { font-family: var(--serif); font-size: 24px; font-weight: 700; line-height: 1; color: #f3e1b0; }
-.rec-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-dim); }.menu-links { display: flex; justify-content: space-between; margin-top: auto; }
+.rec-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-dim); }.biome-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.br-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-dim); }
+#opt-biome button { font-size: 15px; padding: 6px 14px; }
+#opt-biome .dice { display: flex; align-items: center; padding: 4px 10px; }
+#opt-biome .dice svg { width: 20px; height: 20px; }
+.menu-links { display: flex; justify-content: space-between; margin-top: auto; }
 
 .menu-right { width: 540px; padding: 14px 20px 16px; overflow: hidden; display: flex; flex-direction: column; background: linear-gradient(270deg, rgba(8,7,9,.94), rgba(8,7,9,.84)); }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid rgba(160,124,70,.45); margin-bottom: 10px; }

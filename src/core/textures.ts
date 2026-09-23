@@ -1,4 +1,4 @@
-// Procedural textures: cobblestone, slabs, grunge, rune circles, decals.
+// Procedural textures: cobblestone, slabs, forest floor, bark, grunge, rune circles, decals.
 // Everything is generated on the CPU once at startup (no external art assets).
 import * as THREE from 'three';
 import { makeFbm, mulberry, clamp, smooth } from '../util';
@@ -195,6 +195,53 @@ export function burlap(): PBRCanvases {
     o.rough = 0.95;
   }, 2);
   cache.burlap = maps;
+  return maps;
+}
+
+/** Forest floor: dark soil with leaf litter and a few pebbles (moss is added in world space by the biome, so it doesn't tile). */
+export function forestFloor(): PBRCanvases {
+  if (cache.forest) return cache.forest;
+  const fine = makeFbm(29, 48, 3);
+  const leaves = makeVoronoi(17, 44);
+  const pebbles = makeVoronoi(23, 20);
+  const maps = buildPBR(1024, (u, v, o) => {
+    const f = fine(u, v);
+    // the Voronoi result object is reused: read each lookup before the next
+    const lc = leaves(u, v);
+    // scattered leaves: small blobs around some cell centers, not whole cells (that reads as paving)
+    const leafId = lc.id, leaf = leafId < 0.45 ? smooth(clamp((0.26 - lc.f1) / 0.08, 0, 1)) * (0.5 + f) : 0;
+    const pc = pebbles(u, v);
+    const stone = pc.id > 0.86 ? smooth(clamp((0.3 - pc.f1) / 0.12, 0, 1)) : 0;
+    const k = 0.8 + f * 0.4;
+    let r = 0.15 * k, g = 0.11 * k, b = 0.075 * k, h = f * 0.25, rough = 0.95;
+    const mix = (w: number, cr: number, cg: number, cb: number, ch: number, cro: number) => {
+      r += (cr - r) * w; g += (cg - g) * w; b += (cb - b) * w; h += (ch - h) * w; rough += (cro - rough) * w;
+    };
+    mix(leaf, 0.26 + leafId * 0.3, 0.14 + leafId * 0.14, 0.05, 0.4 + f * 0.1, 0.7);
+    mix(stone, 0.22 * k, 0.22 * k, 0.2 * k, 0.8, 0.6);
+    o.r = clamp(r, 0, 1); o.g = clamp(g, 0, 1); o.b = clamp(b, 0, 1); o.h = h; o.rough = rough;
+  }, 3);
+  cache.forest = maps;
+  return maps;
+}
+
+/** Tree bark: deep vertical furrows between rough plates (v runs along the trunk). */
+export function bark(): PBRCanvases {
+  if (cache.bark) return cache.bark;
+  const fbm = makeFbm(61, 4, 5);
+  const fine = makeFbm(67, 32, 3);
+  const maps = buildPBR(512, (u, v, o) => {
+    const warp = fbm(u, v) * 2.5;
+    const plate = Math.abs(Math.sin((u * 12 + warp) * Math.PI));
+    const f = fine(u, v);
+    const breaks = smooth(clamp((fine(v, u) - 0.3) / 0.3, 0, 1));
+    const hgt = Math.sqrt(plate) * (0.6 + breaks * 0.4) + f * 0.2;
+    o.h = hgt;
+    const k = 0.35 + hgt * 0.6;
+    o.r = 0.21 * k; o.g = 0.16 * k; o.b = 0.12 * k;
+    o.rough = 0.8 + (1 - plate) * 0.2;
+  }, 4);
+  cache.bark = maps;
   return maps;
 }
 
