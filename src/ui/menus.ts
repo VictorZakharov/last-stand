@@ -61,7 +61,7 @@ export function initMenus(h: MenuHooks): void {
   const biomes = $('#opt-biome');
   biomes.insertAdjacentHTML('afterbegin', BIOME_IDS.map((id) => `<button data-b="${id}">${BIOMES[id].label}</button>`).join(''));
   biomes.querySelectorAll<HTMLElement>('button').forEach((b) => {
-    b.onclick = () => { sfx.click(); setBiomeSetting(b.dataset.b as BiomeSetting); renderBiomeOptions(); };
+    b.onclick = () => { sfx.click(); setBiomeSetting(b.dataset.b as BiomeSetting); renderBiomeOptions(); renderWaveOptions(); };
   });
   const waves = $('#opt-wave');
   waves.querySelectorAll<HTMLElement>('button').forEach((b) => {
@@ -134,22 +134,23 @@ function renderBiomeOptions(): void {
   document.querySelectorAll<HTMLElement>('#opt-biome button').forEach((b) => b.classList.toggle('active', b.dataset.b === s));
 }
 
-// Starting wave: any wave up to the best one beaten, defaulting to the best (and jumping
-// to a new best when one is set).
-let startWave = 1, seenBest = 0;
+// Starting wave: any wave up to the best one beaten in the chosen biome (on Random, in
+// every biome), defaulting to that best and jumping back to it when the biome or best changes.
+let startWave = 1, maxWave = 1, seen = '';
 export const selectedWave = (): number => startWave;
 
 function stepWave(d: number): void {
-  const w = Math.min(Math.max(startWave + d, 1), seenBest);
+  const w = Math.min(Math.max(startWave + d, 1), maxWave);
   if (w !== startWave) { startWave = w; renderWaveOptions(); }
 }
 
 function renderWaveOptions(): void {
-  const best = Math.max(1, G.profile.records.bestWave);
-  if (best !== seenBest) startWave = seenBest = best;
+  const s = biomeSetting(), bests = G.profile.records.bestWaves;
+  const best = Math.max(1, s === 'random' ? Math.min(...BIOME_IDS.map((id) => bests[id] ?? 0)) : bests[s] ?? 0);
+  if (`${s}:${best}` !== seen) { seen = `${s}:${best}`; startWave = maxWave = best; }
   const box = $('#opt-wave');
   $('.wv-val', box).innerHTML = `Wave ${startWave}${startWave % WAVES.bossEvery === 0 ? ' <small>Boss</small>' : ''}`;
-  box.querySelectorAll<HTMLButtonElement>('button').forEach((b) => { b.disabled = Number(b.dataset.d) < 0 ? startWave <= 1 : startWave >= best; });
+  box.querySelectorAll<HTMLButtonElement>('button').forEach((b) => { b.disabled = Number(b.dataset.d) < 0 ? startWave <= 1 : startWave >= maxWave; });
 }
 
 export function renderMenu(): void {

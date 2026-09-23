@@ -14,7 +14,7 @@ function fresh(): Profile {
     classId: cls.id,
     equipped,
     stash: [],
-    records: { bestWave: 0, runs: 0, banked: 0, bestScore: 0 },
+    records: { bestWave: 0, bestWaves: {}, runs: 0, banked: 0, bestScore: 0 },
   };
 }
 
@@ -23,7 +23,11 @@ export function loadProfile(): Profile {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const p = JSON.parse(raw);
-      if (p && p.equipped && Array.isArray(p.stash)) return p;
+      if (p && p.equipped && Array.isArray(p.stash)) {
+        // older profiles kept one best wave, from before there was more than the crypt
+        p.records.bestWaves ??= p.records.bestWave ? { crypt: p.records.bestWave } : {};
+        return p;
+      }
     }
   } catch { /* storage unavailable or corrupt: start fresh */ }
   return fresh();

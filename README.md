@@ -17,7 +17,7 @@ Everything is procedural: models, animation, textures, VFX and sound are generat
 ## How to play
 
 - Pick a battleground in the lobby, the **Crypt** or the **Forest** (or the dice for a random one each run). Each has its own enemies.
-- Start a run at any wave up to your best one beaten (the lobby defaults to your best), so you can jump straight back to where you left off.
+- Start a run at any wave up to your best one beaten in that battleground (the lobby defaults to it), so you can jump straight back to where you left off. On Random, the range is the waves beaten in every battleground.
 - Survive each wave inside the arena. Every fifth wave, a boss arrives: the **Colossus** in the Crypt, the **Thornheart** in the Forest.
 - After every wave, choose:
   - **Bank** — leave the arena and move everything you picked up into your stash, or
