@@ -24,6 +24,7 @@ import { initMenus, showMenu, showSummary, hideSummary, showPause } from './ui/m
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { initLoadoutEditor } from './ui/loadoutEditor';
+import { initItemIcons } from './ui/itemIcons';
 import { configureCapeEnvironment } from './vendor/cape/world/caveProfile';
 import { groundHeight } from './world/arena';
 
@@ -32,6 +33,7 @@ const timer = new THREE.Timer();
 
 function boot() {
   initUIScale();
+  initItemIcons();
   const { scene, renderer } = initRenderer($('#game'));
   initInput(renderer.domElement);
   particles.init(scene);

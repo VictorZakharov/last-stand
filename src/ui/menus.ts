@@ -9,9 +9,11 @@ import { equipFromStash, unequip, salvage, salvageEquipped, resetProfile } from 
 import { bindTooltip, hideTooltip, itemTooltip } from './tooltip';
 import { makeSkillSlot, KEY_LABEL } from './hud';
 import { renderLoadoutEditor } from './loadoutEditor';
+import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
+import { renderAttributes } from './attributes';
 import { sfx } from '../core/audio';
 import type { RunSummary } from '../game/run';
-import type { DerivedStats, Item } from '../types';
+import type { Item } from '../types';
 
 /** querySelector that asserts the element exists (menu markup is static). */
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -86,25 +88,6 @@ export function initMenus(h: MenuHooks): void {
 export function showMenu(v: boolean): void { $('#menu').classList.toggle('hidden', !v); if (v) renderMenu(); }
 export function markNew(items: Item[]): void { for (const it of items) newIds.add(it.id); }
 
-function statGroups(s: DerivedStats): [string, [string, string | number][]][] {
-  return [
-    ['Vitals', [
-      ['Health', Math.round(s.maxLife)], ['Health regeneration', `${s.lifeRegen.toFixed(1)} / s`],
-      ['Energy', Math.round(s.maxEnergy)], ['Energy regeneration', `${s.energyRegen.toFixed(1)} / s`],
-      ['Movement speed', s.moveSpeed.toFixed(1)],
-    ]],
-    ['Offense', [
-      ['All damage', `+${Math.round(s.damagePct)}%`], ['Arcane damage', `+${Math.round(s.arcanePct)}%`],
-      ['Elemental damage', `+${Math.round(s.elementalPct)}%`], ['Critical chance', `${s.crit.toFixed(1)}%`],
-      ['Critical damage', `+${Math.round(s.critDmg)}%`], ['Casting speed', `+${Math.round(s.castSpeed)}%`],
-      ['Cooldown reduction', `${Math.round(s.cdr)}%`], ['Life leech', `${s.leech.toFixed(1)}%`],
-    ]],
-    ['Defense', [
-      ['Physical reduction', `${Math.round(s.armor)}%`], ['Magic resistance', `${Math.round(s.resist)}%`],
-    ]],
-  ];
-}
-
 export function renderMenu(): void {
   const p = G.profile;
   const cls = CLASSES[p.classId];
@@ -136,7 +119,8 @@ export function renderMenu(): void {
     });
     const color = it ? rarityOf(it.rarity).color : '#666';
     d.style.boxShadow = `inset 0 0 0 1px ${it ? color : 'rgba(160,124,70,.5)'}`;
-    d.innerHTML = `<span class="elabel">${SLOT_INFO[slot].label}</span><span class="eglyph" style="color:${color}">${SLOT_INFO[slot].glyph}</span>
+    d.style.setProperty('--c', color);
+    d.innerHTML = `<span class="elabel">${SLOT_INFO[slot].label}</span>${it ? itemIconSVG(it) : slotPlaceholderSVG(slot)}
       <span class="ename2" style="color:${color}">${it ? it.name : ''}</span>`;
     if (it) {
       bindTooltip(d, itemTooltip(it, false));
@@ -150,8 +134,7 @@ export function renderMenu(): void {
 
   // stats
   G.player.recomputeStats(p.equipped);
-  $('#stats').innerHTML = statGroups(G.player.stats).map(([title, rows]) =>
-    `<div class="grp">${title}</div>` + rows.map(([k, v]) => `<div class="row"><span>${k}</span><b>${v}</b></div>`).join('')).join('');
+  renderAttributes($('#stats'));
 
   // stash (sorted: rarity desc, then power)
   $('#stash-count').textContent = `(${p.stash.length}/${RUN.bagLimit})`;
@@ -165,7 +148,7 @@ export function renderMenu(): void {
     d.className = 'sitem' + (newIds.has(it.id) ? ' new' : '') + (!eqd || itemPower(it) > itemPower(eqd) ? ' up' : '');
     d.style.setProperty('--c', color);
     d.style.color = color;
-    d.textContent = SLOT_INFO[it.slot].glyph;
+    d.innerHTML = itemIconSVG(it);
     bindTooltip(d, () => ({ ...itemTooltip(it)(), foot: 'Right-click or drag to equip · Drag to the junk bin to salvage' }));
     const equip = () => { newIds.delete(it.id); equipFromStash(p, it.id); hideTooltip(); sfx.click(); changed(); };
     d.onclick = equip;
