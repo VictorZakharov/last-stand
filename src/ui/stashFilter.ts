@@ -1,0 +1,93 @@
+// Stash filter: the stats the player is hunting for (cog button on the stash title).
+// Items with none of them are greyed out but stay usable, and sort last. Kept in localStorage.
+import { STATS, STAT_INCLUDES } from '../data/items';
+import { byValue, itemPower } from '../loot/items';
+import { ATTRIBUTE_GROUPS } from './attributes';
+import { sfx } from '../core/audio';
+import type { Item, StatKey } from '../types';
+
+const KEY = 'last-stand.stash-filter.v1';
+const LABEL = Object.fromEntries(ATTRIBUTE_GROUPS.flatMap(([, defs]) => defs.flatMap((d) => (d.stat ? [[d.stat, d.label]] : [])))) as Record<StatKey, string>;
+
+let active: StatKey[] = load();
+let onChange: () => void = () => {};
+
+function load(): StatKey[] {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((k): k is StatKey => typeof k === 'string' && k in STATS) : [];
+  } catch { return []; }
+}
+
+function save(): void {
+  try { localStorage.setItem(KEY, JSON.stringify(active)); } catch { /* ignore */ }
+}
+
+/** The item's value for a filtered stat, counting the general stats that feed it. */
+const valueFor = (it: Item, k: StatKey): number =>
+  (it.stats[k] ?? 0) + (STAT_INCLUDES[k] ?? []).reduce((s, g) => s + (it.stats[g] ?? 0), 0);
+
+/** True when there is no filter or the item has one of the chosen stats. */
+export const matchesFilter = (it: Item): boolean => !active.length || active.some((k) => valueFor(it, k) > 0);
+
+/** Stash order: matches first (by the stat with one filter, by power with several), then the
+ *  rest; best first otherwise (the sort is stable, so ties keep that order). */
+export function sortStash(items: Item[]): Item[] {
+  const sorted = items.slice().sort(byValue);
+  if (!active.length) return sorted;
+  const score = active.length === 1 ? (it: Item) => valueFor(it, active[0]) : itemPower;
+  const hits = sorted.filter(matchesFilter).sort((a, b) => score(b) - score(a));
+  return hits.concat(sorted.filter((it) => !matchesFilter(it)));
+}
+
+function set(next: StatKey[]): void {
+  active = next;
+  save();
+  sfx.click();
+  onChange();
+}
+
+const toggle = (k: StatKey) => set(active.includes(k) ? active.filter((a) => a !== k) : [...active, k]);
+
+export function openStashFilter(open: boolean): void {
+  document.getElementById('stash-filter')!.classList.toggle('hidden', !open);
+  document.getElementById('stash-filter-btn')!.setAttribute('aria-expanded', String(open));
+}
+
+export function initStashFilter(changed: () => void): void {
+  onChange = changed;
+  const panel = document.getElementById('stash-filter')!;
+  const btn = document.getElementById('stash-filter-btn')!;
+  btn.onclick = () => { sfx.click(); openStashFilter(panel.classList.contains('hidden')); };
+  // a click anywhere else closes the panel
+  document.addEventListener('pointerdown', (e) => {
+    if (!panel.classList.contains('hidden') && !panel.contains(e.target as Node) && !btn.contains(e.target as Node)) openStashFilter(false);
+  });
+  const feeds = new Map<StatKey, StatKey[]>();
+  for (const [k, gs] of Object.entries(STAT_INCLUDES) as [StatKey, StatKey[]][]) for (const g of gs) feeds.set(g, [...(feeds.get(g) ?? []), k]);
+  const notes = [...feeds].map(([g, ks]) => `${LABEL[g]} also counts toward ${ks.map((k) => LABEL[k]).join(' and ')}.`);
+  panel.innerHTML = `<div class="sf-top"><span>Show items with</span><button class="link sf-clear">Clear</button></div>`
+    + ATTRIBUTE_GROUPS.map(([grp, defs]) => `<div class="sf-grp">${grp}</div><div class="sf-opts">`
+      + defs.map((d) => (d.stat ? `<button class="sf-opt" data-stat="${d.stat}" aria-pressed="false">${d.label}</button>` : '')).join('') + '</div>').join('')
+    + `<div class="sf-note">Other items are greyed out. One stat sorts the stash by it, several by item power. ${notes.join(' ')}</div>`;
+  panel.querySelector<HTMLElement>('.sf-clear')!.onclick = () => set([]);
+  panel.querySelectorAll<HTMLElement>('.sf-opt').forEach((b) => { b.onclick = () => toggle(b.dataset.stat as StatKey); });
+}
+
+/** Chips for the chosen stats (click to remove) and the panel's pressed states. */
+export function renderStashFilter(): void {
+  const chips = document.getElementById('stash-chips')!;
+  chips.innerHTML = '';
+  for (const k of active) {
+    const c = document.createElement('button');
+    c.className = 'sf-chip';
+    c.title = `Stop filtering by ${LABEL[k]}`;
+    c.innerHTML = `${LABEL[k]}<span class="x" aria-hidden="true">×</span>`;
+    c.onclick = () => toggle(k);
+    chips.appendChild(c);
+  }
+  document.getElementById('stash-filter-btn')!.classList.toggle('on', active.length > 0);
+  const panel = document.getElementById('stash-filter')!;
+  panel.querySelectorAll<HTMLElement>('.sf-opt').forEach((b) => b.setAttribute('aria-pressed', String(active.includes(b.dataset.stat as StatKey))));
+  panel.querySelector<HTMLElement>('.sf-clear')!.classList.toggle('hidden', !active.length);
+}

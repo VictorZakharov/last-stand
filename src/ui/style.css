@@ -240,6 +240,38 @@ button { font-family: inherit; }
 .junk-fly { position: fixed; margin: 0; z-index: 40; pointer-events: none; box-shadow: 0 0 14px var(--c, #fff); }
 .hint { margin-top: 8px; font-size: 12px; color: var(--ink-dim); text-align: center; }
 
+/* stash stat filter: chips for the chosen stats, and a cog whose panel opens upwards over
+   the paper doll, so the stash re-sorting stays in view while stats are toggled */
+.stash-head { position: relative; display: flex; align-items: center; gap: 8px; }
+.stash-head > span:first-child { white-space: nowrap; }
+#stash-chips { flex: 1; display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.sf-chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 6px 1px 9px; font: 13px var(--sans); color: #f3e1b0; cursor: pointer;
+  background: linear-gradient(#2a2218, #120e0a); border: 1px solid rgba(226,192,126,.55); border-radius: 11px; }
+.sf-chip .x { font-size: 15px; line-height: 1; color: var(--ink-dim); }
+.sf-chip:hover { border-color: var(--gold); }
+.sf-chip:hover .x { color: var(--red); }
+#stash-filter-btn { flex: 0 0 auto; align-self: flex-start; width: 26px; height: 26px; padding: 3px; cursor: pointer; color: var(--ink-dim);
+  background: none; border: 1px solid transparent; border-radius: 3px; }
+#stash-filter-btn svg { display: block; width: 100%; height: 100%; }
+#stash-filter-btn.on { color: var(--gold); }
+#stash-filter-btn:hover, #stash-filter-btn[aria-expanded="true"] { color: var(--bronze-hi); border-color: rgba(160,124,70,.5); background: rgba(240,200,96,.06); }
+#stash-filter { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 5; width: 100%; padding: 10px 12px 12px; font: 14px var(--sans); color: var(--ink);
+  background: #161418; border: 1px solid rgba(160,124,70,.6); box-shadow: 0 10px 30px rgba(0,0,0,.85); animation: sf-open .15s ease-out; }
+.sf-top { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--serif); font-size: 15px; color: var(--bronze-hi); }
+.sf-top .link { font-size: 13px; padding: 0; }
+.sf-grp { margin: 8px 0 4px; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-dim); }
+.sf-opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.sf-opt { padding: 4px 8px; text-align: left; font: 13px var(--sans); color: var(--ink-dim); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: rgba(255,255,255,.03); border: 1px solid rgba(160,124,70,.3); border-radius: 3px; }
+.sf-opt:hover { color: var(--ink); border-color: rgba(160,124,70,.7); }
+.sf-opt[aria-pressed="true"] { color: #f3e1b0; background: linear-gradient(#2a2218, #120e0a); border-color: var(--gold); box-shadow: inset 0 0 8px rgba(240,200,96,.25); }
+.sf-opt[aria-pressed="true"]::before { content: '✓ '; color: var(--gold); }
+.sf-note { margin-top: 9px; font-size: 12px; line-height: 1.3; color: var(--ink-dim); }
+@keyframes sf-open { from { opacity: 0; transform: translateY(6px); } }
+/* items without any chosen stat: greyed out, still usable */
+.sitem.filtered { opacity: .3; filter: grayscale(.9); }
+.sitem.filtered:hover { opacity: .75; filter: grayscale(.4) brightness(1.3); }
+
 #tooltip { position: fixed; z-index: 50; pointer-events: none; font-size: 14px; }
 .tt-cards { display: flex; gap: 6px; align-items: flex-start; }
 .tt-cards.stack { flex-direction: column; }
@@ -374,6 +406,7 @@ button { font-family: inherit; }
 @keyframes glow-sheen { 0% { background-position: 100% 0; } 60%, 100% { background-position: 0 0; } }
 @media (prefers-reduced-motion: reduce) {
   .slot-glow, .slot-glow::before, .slot-glow::after { animation: none; }
+  #stash-filter { animation: none; }
 }
 
 /* ---------- training dummy damage meter ---------- */

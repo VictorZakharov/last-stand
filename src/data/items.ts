@@ -45,6 +45,13 @@ export const STATS: Record<StatKey, StatInfo> = {
   resist:      { base: 4,   grow: 0.04, fmt: '+{v}% Magic Resistance', cap: 35 },
 };
 
+// General stats that also count toward a specific one when filtering the stash
+// (All Damage applies to arcane and elemental skills too).
+export const STAT_INCLUDES: Partial<Record<StatKey, StatKey[]>> = {
+  arcanePct: ['damagePct'],
+  elementalPct: ['damagePct'],
+};
+
 // Affix name parts per stat (prefix or suffix is chosen at random).
 export const AFFIX_NAMES: Record<StatKey, [prefix: string, suffix: string]> = {
   damagePct:    ['Ruinous', 'of Devastation'],
