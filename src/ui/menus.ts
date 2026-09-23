@@ -11,6 +11,7 @@ import { makeSkillSlot, KEY_LABEL } from './hud';
 import { renderLoadoutEditor } from './loadoutEditor';
 import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
 import { renderAttributes } from './attributes';
+import { initStashFilter, renderStashFilter, openStashFilter, sortStash, matchesFilter } from './stashFilter';
 import { sfx } from '../core/audio';
 import { perfHudEnabled, setPerfHud } from './perfHud';
 import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
@@ -69,6 +70,7 @@ export function initMenus(h: MenuHooks): void {
       document.querySelectorAll<HTMLElement>('.menu-right .tab-page').forEach((pg) => pg.classList.toggle('hidden', pg.dataset.page !== tab.dataset.tab));
     };
   });
+  initStashFilter(renderMenu);
   const stash = $('#stash');
   stash.addEventListener('contextmenu', (e) => e.preventDefault());
   stash.addEventListener('dragover', (e) => { if (drag?.from === 'equip') e.preventDefault(); });
@@ -109,7 +111,7 @@ export function toggleMenuStowed(stowed?: boolean): void {
   menu.classList.toggle('stowed', stowed);
   focusSlot(null);
   hideTooltip();
-  if (menu.classList.contains('stowed')) endDrag();
+  if (menu.classList.contains('stowed')) { endDrag(); openStashFilter(false); }
   syncJunk();
 }
 export function markNew(items: Item[]): void { for (const it of items) newIds.add(it.id); }
@@ -164,16 +166,18 @@ export function renderMenu(): void {
   G.player.recomputeStats(p.equipped);
   renderAttributes($('#stats'));
 
-  // stash (sorted: rarity desc, then power)
+  // stash (sorted: rarity desc, then power; the stat filter moves its matches first)
   $('#stash-count').textContent = `(${p.stash.length}/${RUN.bagLimit})`;
+  renderStashFilter();
   const st = $('#stash');
   st.innerHTML = '';
-  const sorted = p.stash.slice().sort(byValue);
+  const sorted = sortStash(p.stash);
   for (const it of sorted) {
     const d = document.createElement('div');
     const color = rarityOf(it.rarity).color;
     const eqd = p.equipped[it.slot];
-    d.className = 'sitem' + (newIds.has(it.id) ? ' new' : '') + (!eqd || itemPower(it) > itemPower(eqd) ? ' up' : '');
+    d.className = 'sitem' + (newIds.has(it.id) ? ' new' : '') + (!eqd || itemPower(it) > itemPower(eqd) ? ' up' : '')
+      + (matchesFilter(it) ? '' : ' filtered');
     d.style.setProperty('--c', color);
     d.style.color = color;
     d.dataset.slot = it.slot;

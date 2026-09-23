@@ -20,6 +20,7 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
 - **`main` is protected:** PRs only, merged with a merge commit (squash and rebase merges are disabled), and the branch must be up to date. **PR branches must be linear:** `git rebase origin/main` to update, never merge `main` into a branch. The `branch-policy.yml` check fails any PR containing merge commits. Merged branches are deleted automatically.
 - Pages is served from an aggregated `gh-pages` branch: production at the root, open PR previews under `pr-preview/`. Don't switch Pages to "GitHub Actions only" and don't delete that branch.
 - Keep PRs focused on one feature.
+- **Prompt starts with `new issue:`** (fork workflow): run `scripts/issue.sh "title" "description"` with a title and description you write from the prompt, then do the work on the branch it creates. When done, run `scripts/commit.sh "PR title" "PR description"` instead of committing yourself, and reply with the PR link.
 
 ## Product rules
 

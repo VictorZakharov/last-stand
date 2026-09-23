@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Fork workflow, step 2: commit the issue branch, push it to the fork and open the upstream PR.
 # Rerun after review changes: it commits, rebases and pushes to the same PR.
-# Usage: scripts/commit.sh   (prompts for a title and, for a new PR, a description)
+# Usage: scripts/commit.sh ["title" ["description"]]   (prompts for whatever is missing)
+# The title is the commit message (and the PR title for a new PR); the description is only used for a new PR.
 # See CONTRIBUTE.md.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -34,13 +35,11 @@ else
   default="Address review feedback"
 fi
 
-title=""
-if [[ -n $dirty || -z $pr ]]; then
-  read -r -p "title [$default]: " title
-  title=${title:-$default}
-fi
-descr=""
-if [[ -z $pr ]]; then echo "descr (Ctrl-D to finish):"; descr=$(cat); fi
+title=${1:-}
+if [[ -z $title && ( -n $dirty || -z $pr ) ]]; then read -r -p "title [$default]: " title; fi
+title=${title:-$default}
+descr=${2:-}
+if [[ -z $pr && $# -lt 2 ]]; then echo "descr (Ctrl-D to finish):"; descr=$(cat); fi
 
 if [[ -n $dirty ]]; then
   git add -A

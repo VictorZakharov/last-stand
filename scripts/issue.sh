@@ -36,7 +36,7 @@ $title
 
 $descr
 
-When done, run npm run build and npm run check:pages. Don't commit or push: I'll run scripts/commit.sh. End with a short PR description (what changed, how it was tested)."
+When done, run scripts/commit.sh with the PR title and description (what changed, how it was tested) as its two arguments: it builds, commits, pushes and opens the PR. Don't commit or push any other way."
 
 echo "Issue:  $url"
 echo "Branch: $branch"
@@ -45,4 +45,5 @@ echo "Prompt for Claude:"
 echo "----"
 echo "$prompt"
 echo "----"
-if command -v pbcopy >/dev/null; then printf '%s' "$prompt" | pbcopy && echo "(copied to clipboard)"; fi
+# Only copy for a human at a terminal: when an agent runs this, the prompt is already in its output.
+if [[ -t 1 ]] && command -v pbcopy >/dev/null; then printf '%s' "$prompt" | pbcopy && echo "(copied to clipboard)"; fi
