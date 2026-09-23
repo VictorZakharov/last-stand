@@ -1,6 +1,7 @@
 // Loading screen. The markup and styles are inline in index.html so it paints before the
 // bundle has loaded; boot() reports its steps here and yields so each one gets painted.
 import { TIPS } from '../data/tips';
+import { prepareBlow, type LogoBlow } from './logoWind';
 
 const el = (): HTMLElement => document.getElementById('loading')!;
 const sub = (): HTMLElement => el().querySelector<HTMLElement>('.ld-sub')!;
@@ -25,20 +26,38 @@ export async function loadingStep(label: string, progress: number): Promise<void
 // use (on a first visit its shader cache is cold), and that should not be seen as a stutter
 const SMOOTH_FRAMES = 8, SMOOTH_MS = 70, MAX_WAIT_MS = 4000;
 
-/** Call when the game loop starts; fades out once the lobby renders smoothly, calling `onReveal` as it does. */
+/** Call when the game loop starts; once the lobby renders smoothly, calls `onReveal` and leaves. */
 export function loadingDone(onReveal: () => void): void {
   const l = el();
   l.style.setProperty('--p', '1');
+  // the logo's particle field is built meanwhile (reduced motion: a plain fade instead); it
+  // gathers into the lobby's logo
+  let blow: LogoBlow | null | undefined = matchMedia('(prefers-reduced-motion: reduce)').matches ? null : undefined;
+  let left = false;
+  if (blow === undefined) {
+    prepareBlow(l.querySelector<HTMLElement>('.ld-logo')!, document.querySelector<HTMLElement>('#menu .logo-art'))
+      .then((b) => { if (left) b?.cancel(); else blow = b; }, () => { blow = null; });
+  }
   const start = performance.now();
   let last = start, smooth = 0;
+  const reveal = (): void => { l.classList.add('done'); onReveal(); };
   const tick = (now: number): void => {
     smooth = now - last < SMOOTH_MS ? smooth + 1 : 0;
     last = now;
-    if (smooth < SMOOTH_FRAMES && now - start < MAX_WAIT_MS) { requestAnimationFrame(tick); return; }
+    const waiting = smooth < SMOOTH_FRAMES || blow === undefined;
+    if (waiting && now - start < MAX_WAIT_MS) { requestAnimationFrame(tick); return; }
+    left = true;
     clearInterval(tipTimer);
-    l.classList.add('done');
-    onReveal();
-    l.addEventListener('transitionend', () => l.remove(), { once: true });
+    l.querySelector('.ld-tip')!.classList.remove('on');
+    if (blow) {
+      // the logo blows away over the loading backdrop first; the lobby shows a moment later
+      l.classList.add('blowing');
+      blow.start(reveal, () => l.remove());
+    } else {
+      l.classList.add('plain');
+      reveal();
+      l.addEventListener('transitionend', () => l.remove(), { once: true });
+    }
   };
   requestAnimationFrame(tick);
 }
