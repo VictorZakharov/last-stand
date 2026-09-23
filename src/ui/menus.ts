@@ -2,6 +2,7 @@
 import { G } from '../state';
 import { SLOTS, SLOT_INFO } from '../data/items';
 import { RUN } from '../data/balance';
+import { WAVES } from '../data/waves';
 import { CLASSES } from '../data/classes/index';
 import { rarityOf, itemPower, byValue } from '../loot/items';
 import { SKILL_KEYS } from '../loot/loadout';
@@ -60,8 +61,13 @@ export function initMenus(h: MenuHooks): void {
   const biomes = $('#opt-biome');
   biomes.insertAdjacentHTML('afterbegin', BIOME_IDS.map((id) => `<button data-b="${id}">${BIOMES[id].label}</button>`).join(''));
   biomes.querySelectorAll<HTMLElement>('button').forEach((b) => {
-    b.onclick = () => { sfx.click(); setBiomeSetting(b.dataset.b as BiomeSetting); renderBiomeOptions(); };
+    b.onclick = () => { sfx.click(); setBiomeSetting(b.dataset.b as BiomeSetting); renderBiomeOptions(); renderWaveOptions(); };
   });
+  const waves = $('#opt-wave');
+  waves.querySelectorAll<HTMLElement>('button').forEach((b) => {
+    b.onclick = () => { sfx.click(); stepWave(Number(b.dataset.d)); };
+  });
+  waves.addEventListener('wheel', (e) => { e.preventDefault(); stepWave(e.deltaY < 0 ? 1 : -1); }, { passive: false });
   $('#btn-help').onclick = () => { renderControlsHelp(); $('#help').classList.remove('hidden'); };
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
   $('#btn-reset').onclick = () => {
@@ -128,9 +134,30 @@ function renderBiomeOptions(): void {
   document.querySelectorAll<HTMLElement>('#opt-biome button').forEach((b) => b.classList.toggle('active', b.dataset.b === s));
 }
 
+// Starting wave: any wave up to the best one cleared and banked in the chosen biome (on
+// Random, in every biome), defaulting to that best and jumping back to it when the biome or
+// best changes.
+let startWave = 1, maxWave = 1, seen = '';
+export const selectedWave = (): number => startWave;
+
+function stepWave(d: number): void {
+  const w = Math.min(Math.max(startWave + d, 1), maxWave);
+  if (w !== startWave) { startWave = w; renderWaveOptions(); }
+}
+
+function renderWaveOptions(): void {
+  const s = biomeSetting(), bests = G.profile.records.bestBanked;
+  const best = Math.max(1, s === 'random' ? Math.min(...BIOME_IDS.map((id) => bests[id] ?? 0)) : bests[s] ?? 0);
+  if (`${s}:${best}` !== seen) { seen = `${s}:${best}`; startWave = maxWave = best; }
+  const box = $('#opt-wave');
+  $('.wv-val', box).innerHTML = `Wave ${startWave}${startWave % WAVES.bossEvery === 0 ? ' <small>Boss</small>' : ''}`;
+  box.querySelectorAll<HTMLButtonElement>('button').forEach((b) => { b.disabled = Number(b.dataset.d) < 0 ? startWave <= 1 : startWave >= maxWave; });
+}
+
 export function renderMenu(): void {
   const p = G.profile;
   renderBiomeOptions();
+  renderWaveOptions();
   const cls = CLASSES[p.classId];
   $('.cc-name').textContent = cls.name;
   $('.cc-tag').textContent = cls.tagline;

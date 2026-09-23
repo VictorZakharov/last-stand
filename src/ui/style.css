@@ -184,11 +184,18 @@ button { font-family: inherit; }
   color: var(--bronze-hi); border: 1px solid rgba(160,124,70,.5); border-radius: 50%; background: radial-gradient(circle at 50% 35%, #3a3024, #0c0a0a 75%);
   text-shadow: 0 0 8px rgba(240,190,90,.45); }
 .rec-val { font-family: var(--serif); font-size: 24px; font-weight: 700; line-height: 1; color: #f3e1b0; }
-.rec-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-dim); }.biome-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.rec-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-dim); }
+.biome-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .br-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-dim); }
 #opt-biome button { font-size: 15px; padding: 6px 14px; }
 #opt-biome .dice { display: flex; align-items: center; padding: 4px 10px; }
 #opt-biome .dice svg { width: 20px; height: 20px; }
+#opt-wave button { font-size: 18px; line-height: 1; padding: 5px 12px; }
+#opt-wave button:disabled { cursor: default; opacity: .35; }
+#opt-wave button:disabled:hover { color: var(--ink-dim); }
+#opt-wave .wv-val { min-width: 7.5em; padding: 6px 8px; text-align: center; font-size: 15px; color: #ffe7b0; border-left: 1px solid rgba(160,124,70,.35);
+  background: linear-gradient(#141212, #0a0909); user-select: none; }
+#opt-wave .wv-val small { color: var(--bronze-hi); }
 .menu-links { display: flex; justify-content: space-between; margin-top: auto; }
 
 .menu-right { width: 540px; padding: 14px 20px 16px; overflow: hidden; display: flex; flex-direction: column; background: linear-gradient(270deg, rgba(8,7,9,.94), rgba(8,7,9,.84)); }

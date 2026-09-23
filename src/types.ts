@@ -3,6 +3,7 @@
 import type * as THREE from 'three';
 import type { createKit } from './core/materials';
 import type { Joints } from './entities/models/rig';
+import type { BiomeId } from './data/biomes';
 
 // ---------------------------------------------------------------------------
 // Damage & stats
@@ -121,7 +122,9 @@ export interface Profile {
   classId: string;
   equipped: Partial<Record<Slot, Item>>;
   stash: Item[];
-  records: { bestWave: number; runs: number; banked: number; bestScore: number };
+  /** bestWave: best wave cleared in any biome; bestBanked: per biome, the best wave whose spoils were banked
+   *  (the lobby's starting-wave range) */
+  records: { bestWave: number; bestBanked: Partial<Record<BiomeId, number>>; runs: number; banked: number; bestScore: number };
 }
 
 // ---------------------------------------------------------------------------
