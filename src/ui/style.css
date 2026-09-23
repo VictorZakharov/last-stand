@@ -273,10 +273,7 @@ button { font-family: inherit; }
 .help-text { text-align: left; font-size: 15px; line-height: 1.45; }
 .gold { color: var(--gold); } .red { color: var(--red); }
 
-#loading { position: fixed; inset: 0; z-index: 100; background: #030307; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity .8s; }
-#loading.done { opacity: 0; pointer-events: none; }
-.ld-title { font-family: var(--serif); font-size: 64px; font-weight: 900; letter-spacing: 12px; color: #d0a050; }
-.ld-sub { color: var(--ink-dim); letter-spacing: 3px; animation: lowpulse 1s infinite alternate; }
+/* #loading is styled inline in index.html so it paints before this stylesheet and the bundle load */
 
 /* ---------- responsive UI scale ----------
    --ui is set from JS (ui/scale.js) relative to a 1600x900 reference layout.
