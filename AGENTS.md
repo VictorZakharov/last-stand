@@ -51,6 +51,9 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
 
 - **NaN means black lines or boxes on screen.** Bloom smears NaN/Inf pixels across the frame. Known causes: GLSL `smoothstep(a, b, x)` with `a >= b` (it's undefined, so write `1.0 - smoothstep(b, a, x)`), and `atan(0, 0)`. `renderer.ts` has a sanitize pass before bloom as a safety net; still fix the source.
 - **Point lights:** use the pooled slots in `fx/lights.ts`. Never add ad-hoc `PointLight`s, because changing the light count recompiles every shader.
+- **Shaders compile at load, never mid-game.** `core/shaders.ts` pins every compiled program (three.js would delete it when its last material is disposed) and `game/warmup.ts` renders one of every enemy, effect, drop and skill visual at boot. A skill with its own materials must return sample meshes from its `warm()` hook. The perf overlay (pause menu) shows `Shaders N (+M)`: M must stay 0 during play, and the copied report says what compiled late.
+- **Quality presets** (`data/quality.ts`, pause menu, Auto by default) change pixel ratio, MSAA, shadow map size and which small character parts cast shadows, all live and without shader changes. Keep new settings in that category, or they cause compile hitches when switched.
+- **Static shadow casters are baked:** `bakeStaticShadows()` in `world/arena.ts` merges every non-instanced arena caster into one shadow-only mesh. Arena props must not move after the arena is built.
 - **Cape:** `SkeletonCape.update` must call `sim.syncGeometry()` after stepping, or the cape freezes at spawn. Colliders are capsules built from rig joints in `models/mage.ts`.
 - **Lobby sandbox:** in the lobby `player.sandbox = true` (free casting, no costs or cooldowns). `start()` clears it.
 - **Cooldowns are per skill id**, shared by every key the skill is bound to (the same spell may sit on several keys).

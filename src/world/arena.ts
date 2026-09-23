@@ -169,14 +169,39 @@ export function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
     }
   });
 
+  bakeStaticShadows(scene);
+
   return {
     obstacles,
+    moon,
     portals,           // [{pos: Vector3, dir: Vector3 (into arena), pulse()}]
     radius: ARENA.radius,
     groundHeight,
     setCalm(v: number) { calmTarget = v; },
     update(dt: number, t: number) { for (const u of updaters) u(dt, t); },
   };
+}
+
+/**
+ * The arena's shadow casters never move, but each one cost a draw call in the shadow pass
+ * every frame. Merge them (world space, positions only) into one caster that draws nothing
+ * in the main pass, and stop the originals casting. Instanced props are already one call.
+ */
+function bakeStaticShadows(scene: THREE.Scene): void {
+  scene.updateMatrixWorld(true);
+  const parts: THREE.BufferGeometry[] = [];
+  scene.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !m.castShadow || (m as THREE.InstancedMesh).isInstancedMesh) return;
+    const g = new THREE.BufferGeometry().setAttribute('position', m.geometry.getAttribute('position'));
+    g.setIndex(m.geometry.getIndex());
+    parts.push((g.index ? g.toNonIndexed() : g.clone()).applyMatrix4(m.matrixWorld));
+    m.castShadow = false;
+  });
+  const caster = new THREE.Mesh(mergeGeometries(parts), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));
+  caster.castShadow = true;
+  caster.name = 'static shadow caster';
+  scene.add(caster);
 }
 
 // Height of the walkable floor (dais tiers).

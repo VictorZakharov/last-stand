@@ -13,6 +13,8 @@ import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
 import { renderAttributes } from './attributes';
 import { sfx } from '../core/audio';
 import { perfHudEnabled, setPerfHud } from './perfHud';
+import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
+import { QUALITY, type QualitySetting } from '../data/quality';
 import type { RunSummary } from '../game/run';
 import type { Item, Slot } from '../types';
 
@@ -49,6 +51,9 @@ export function initMenus(h: MenuHooks): void {
   $('#btn-resume').onclick = () => { sfx.click(); hooks.resume(); };
   $('#btn-abandon').onclick = () => { sfx.click(); hooks.abandon(); };
   $<HTMLInputElement>('#opt-perf').onchange = (e) => setPerfHud((e.target as HTMLInputElement).checked);
+  document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => {
+    b.onclick = () => { sfx.click(); setQuality(b.dataset.q as QualitySetting); renderQualityOptions(); };
+  });
   $('#btn-help').onclick = () => { renderControlsHelp(); $('#help').classList.remove('hidden'); };
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
   $('#btn-reset').onclick = () => {
@@ -257,10 +262,18 @@ export function showSummary({ outcome, wave, score, kills, bag, lost = 0 }: RunS
 }
 
 export function hideSummary(): void { $('#summary').classList.add('hidden'); hideTooltip(); }
+function renderQualityOptions(): void {
+  const s = qualitySetting();
+  document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => b.classList.toggle('active', b.dataset.q === s));
+  // Auto shows the level it is currently running at
+  $('#opt-quality [data-q="auto"] small').textContent = s === 'auto' ? `(${QUALITY[qualityLevel()].label})` : '';
+}
+
 export function showPause(v: boolean): void {
   if (v) {
     renderControlsHelp();
     $<HTMLInputElement>('#opt-perf').checked = perfHudEnabled();
+    renderQualityOptions();
     // in the lobby there is no run to abandon
     $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run');
   }

@@ -16,6 +16,7 @@ import { particles, col } from '../fx/particles';
 import { sfx } from '../core/audio';
 import { emit } from '../events';
 import { angleDamp, damp, rand } from '../util';
+import { applyShadowDetail } from '../core/quality';
 import type { ActionState, ClassDef, DamageType, DerivedStats, Model, Profile, SkillDef, SkillKey } from '../types';
 
 /** A skill the class knows: its tuning data + behavior. Keyed by `def.impl`. */
@@ -64,6 +65,7 @@ export class Player {
     this.cls = CLASSES[classId];
     this.model = buildModel(this.cls.model);
     this.obj.add(this.model.root);
+    applyShadowDetail(this.obj);
     G.scene.add(this.obj, this.staffLight, ...(this.model.worldObjects ?? []));
 
     for (const def of this.cls.skills) {

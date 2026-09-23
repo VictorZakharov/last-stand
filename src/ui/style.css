@@ -423,3 +423,10 @@ button { font-family: inherit; }
 .pf-copy { margin-top: 4px; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: rgba(226,192,126,.5); }
 .opt-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 14px 0 4px; font-size: 14px; color: var(--ink); cursor: pointer; }
 .opt-row input { accent-color: var(--bronze-hi); width: 16px; height: 16px; cursor: pointer; }
+.quality-row { cursor: default; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid rgba(160,124,70,.55); border-radius: 3px; overflow: hidden; }
+.seg button { cursor: pointer; font: inherit; font-size: 13px; color: var(--ink-dim); padding: 5px 10px; background: linear-gradient(#141212, #0a0909); border: none; border-left: 1px solid rgba(160,124,70,.35); }
+.seg button:first-child { border-left: none; }
+.seg button:hover { color: var(--ink); }
+.seg button.active { color: #ffe7b0; background: linear-gradient(#5a3e18, #2a1c0a); box-shadow: inset 0 0 0 1px var(--bronze-hi); }
+.seg small { margin-left: 4px; font-size: 11px; opacity: .75; }

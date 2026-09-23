@@ -5,6 +5,8 @@ import { G } from '../state';
 import { particles } from '../fx/particles';
 import { readCookie, writeCookie } from '../core/cookies';
 import { programsCompiledInGame, lateCompiles } from '../core/shaders';
+import { qualitySetting, qualityLevel } from '../core/quality';
+import { QUALITY } from '../data/quality';
 
 const COOKIE = 'last-stand-perf-hud';
 // the hashed bundle name identifies the build a report came from
@@ -172,6 +174,7 @@ function draw(now: number): void {
   set('geo', String(info.memory.geometries));
   set('tex', String(info.memory.textures));
   set('res', `${size.x}×${size.y} @${renderer.getPixelRatio().toFixed(2)}`);
+  set('quality', `${QUALITY[qualityLevel()].label}${qualitySetting() === 'auto' ? ' (auto)' : ''}`);
   set('ents', `${G.enemies.length} / ${G.projectiles.length} / ${particles.glow.count + particles.smoke.count}`);
   set('gpuname', gpuName);
   el.querySelector('.pf-line')!.setAttribute('d', graphPath(s.buckets, top));
@@ -200,6 +203,7 @@ function report(): string {
     `Frame p50 ${fmt(s.p50)} ms | p95 ${fmt(s.p95)} ms | CPU ${fmt(s.cpu, 2)} ms | GPU ${timerExt ? fmt(s.gpu, 2) + ' ms' : 'n/a'}`,
     `Draw calls ${frameCalls} | triangles ${frameTris} | programs ${info.programs?.length ?? 0} (compiled after load ${programsCompiledInGame()}) | geometries ${info.memory.geometries} | textures ${info.memory.textures}`,
     `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
+    `Quality ${qualityLevel()} (setting ${qualitySetting()}) | MSAA ${QUALITY[qualityLevel()].msaa} | shadow map ${QUALITY[qualityLevel()].shadowMap}`,
     `Mode ${G.mode} | enemies ${G.enemies.length} | projectiles ${G.projectiles.length} | particles ${particles.glow.count + particles.smoke.count}`,
     `GPU ${gpuName}`,
     `UA ${navigator.userAgent}`,
