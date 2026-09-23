@@ -8,5 +8,6 @@ export const TIPS: string[] = [
   'The mouse wheel zooms the camera in and out. Hold the middle button and drag to rotate it.',
   'Graphics quality adapts on its own. Pick a fixed level in the pause menu (Esc).',
   'After a wave is cleared, B banks your spoils and C continues.',
+  'A run can start at any wave you have already beaten. The lobby starts you at your best one.',
   'Pick the Crypt or the Forest in the sanctuary, or roll the dice for a random battleground every run.',
 ];

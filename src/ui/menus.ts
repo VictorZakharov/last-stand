@@ -2,6 +2,7 @@
 import { G } from '../state';
 import { SLOTS, SLOT_INFO } from '../data/items';
 import { RUN } from '../data/balance';
+import { WAVES } from '../data/waves';
 import { CLASSES } from '../data/classes/index';
 import { rarityOf, itemPower, byValue } from '../loot/items';
 import { SKILL_KEYS } from '../loot/loadout';
@@ -62,6 +63,11 @@ export function initMenus(h: MenuHooks): void {
   biomes.querySelectorAll<HTMLElement>('button').forEach((b) => {
     b.onclick = () => { sfx.click(); setBiomeSetting(b.dataset.b as BiomeSetting); renderBiomeOptions(); };
   });
+  const waves = $('#opt-wave');
+  waves.querySelectorAll<HTMLElement>('button').forEach((b) => {
+    b.onclick = () => { sfx.click(); stepWave(Number(b.dataset.d)); };
+  });
+  waves.addEventListener('wheel', (e) => { e.preventDefault(); stepWave(e.deltaY < 0 ? 1 : -1); }, { passive: false });
   $('#btn-help').onclick = () => { renderControlsHelp(); $('#help').classList.remove('hidden'); };
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
   $('#btn-reset').onclick = () => {
@@ -128,9 +134,28 @@ function renderBiomeOptions(): void {
   document.querySelectorAll<HTMLElement>('#opt-biome button').forEach((b) => b.classList.toggle('active', b.dataset.b === s));
 }
 
+// Starting wave: any wave up to the best one beaten, defaulting to the best (and jumping
+// to a new best when one is set).
+let startWave = 1, seenBest = 0;
+export const selectedWave = (): number => startWave;
+
+function stepWave(d: number): void {
+  const w = Math.min(Math.max(startWave + d, 1), seenBest);
+  if (w !== startWave) { startWave = w; renderWaveOptions(); }
+}
+
+function renderWaveOptions(): void {
+  const best = Math.max(1, G.profile.records.bestWave);
+  if (best !== seenBest) startWave = seenBest = best;
+  const box = $('#opt-wave');
+  $('.wv-val', box).innerHTML = `Wave ${startWave}${startWave % WAVES.bossEvery === 0 ? ' <small>Boss</small>' : ''}`;
+  box.querySelectorAll<HTMLButtonElement>('button').forEach((b) => { b.disabled = Number(b.dataset.d) < 0 ? startWave <= 1 : startWave >= best; });
+}
+
 export function renderMenu(): void {
   const p = G.profile;
   renderBiomeOptions();
+  renderWaveOptions();
   const cls = CLASSES[p.classId];
   $('.cc-name').textContent = cls.name;
   $('.cc-tag').textContent = cls.tagline;

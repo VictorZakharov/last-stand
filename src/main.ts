@@ -20,7 +20,7 @@ import { loadProfile } from './loot/profile';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun } from './game/run';
 import { initFloaters, updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, updateHud, renderSpoils } from './ui/hud';
-import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed } from './ui/menus';
+import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, selectedWave } from './ui/menus';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { initLoadoutEditor } from './ui/loadoutEditor';
@@ -117,7 +117,7 @@ function start() {
   G.player.sandbox = false;
   rollBiome();
   setZoom(1);
-  startRun();
+  startRun(selectedWave());
   renderSpoils();
 }
 

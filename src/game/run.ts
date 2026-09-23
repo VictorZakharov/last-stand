@@ -76,19 +76,21 @@ function cleanupWorld(): void {
   clearTimers();
 }
 
-export function startRun(): void {
+/** Start a run at `wave` (the lobby allows any wave up to the best one beaten). */
+export function startRun(wave = 1): void {
   cleanupWorld();
   G.player.recomputeStats(G.profile.equipped);
   G.player.reset();
   G.run = {
-    wave: 1, phase: 'countdown', timer: RUN.countdown, waveTime: 0,
+    wave, phase: 'countdown', timer: RUN.countdown, waveTime: 0,
     bag: [], score: 0, multiplier: 1, multKills: 0, multTimer: 0, kills: 0,
     queue: [], nextGroupT: 0, pending: 0, remaining: 0,
   };
   G.profile.records.runs++;
   saveProfile(G.profile);
   G.arena.setCalm(0);
-  ui.banner('Wave 1', `${BIOMES[G.arena.biome].title} · Survive the onslaught`);
+  const biome = BIOMES[G.arena.biome];
+  ui.banner(`Wave ${wave}`, wave % WAVES.bossEvery === 0 ? biome.bossBanner : `${biome.title} · Survive the onslaught`);
 }
 
 export function abandonRun(): void {
