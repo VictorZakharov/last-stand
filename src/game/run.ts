@@ -76,7 +76,7 @@ function cleanupWorld(): void {
   clearTimers();
 }
 
-/** Start a run at `wave` (the lobby allows any wave up to the best one beaten in the biome). */
+/** Start a run at `wave` (the lobby allows any wave up to the best one banked in the biome). */
 export function startRun(wave = 1): void {
   cleanupWorld();
   G.player.recomputeStats(G.profile.equipped);
@@ -179,7 +179,6 @@ function waveCleared(): void {
   r.phase = 'cleared';
   const rec = G.profile.records;
   rec.bestWave = Math.max(rec.bestWave, r.wave);
-  rec.bestWaves[G.arena.biome] = Math.max(rec.bestWaves[G.arena.biome] ?? 0, r.wave);
   saveProfile(G.profile);
   // reward cache erupts from the center of the dais
   const n = LOOT.waveRewards(r.wave);
@@ -212,6 +211,9 @@ export function bankRun(): void {
   const r = G.run;
   if (!r || r.phase !== 'cleared') return;
   vacuumDrops();
+  // banking unlocks this wave as a start; dying does not
+  const best = G.profile.records.bestBanked;
+  best[G.arena.biome] = Math.max(best[G.arena.biome] ?? 0, r.wave);
   finishRun('banked', bankItems(G.profile, r.bag));
 }
 

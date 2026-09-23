@@ -134,8 +134,9 @@ function renderBiomeOptions(): void {
   document.querySelectorAll<HTMLElement>('#opt-biome button').forEach((b) => b.classList.toggle('active', b.dataset.b === s));
 }
 
-// Starting wave: any wave up to the best one beaten in the chosen biome (on Random, in
-// every biome), defaulting to that best and jumping back to it when the biome or best changes.
+// Starting wave: any wave up to the best one cleared and banked in the chosen biome (on
+// Random, in every biome), defaulting to that best and jumping back to it when the biome or
+// best changes.
 let startWave = 1, maxWave = 1, seen = '';
 export const selectedWave = (): number => startWave;
 
@@ -145,7 +146,7 @@ function stepWave(d: number): void {
 }
 
 function renderWaveOptions(): void {
-  const s = biomeSetting(), bests = G.profile.records.bestWaves;
+  const s = biomeSetting(), bests = G.profile.records.bestBanked;
   const best = Math.max(1, s === 'random' ? Math.min(...BIOME_IDS.map((id) => bests[id] ?? 0)) : bests[s] ?? 0);
   if (`${s}:${best}` !== seen) { seen = `${s}:${best}`; startWave = maxWave = best; }
   const box = $('#opt-wave');

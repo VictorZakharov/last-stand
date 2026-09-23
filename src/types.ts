@@ -122,8 +122,9 @@ export interface Profile {
   classId: string;
   equipped: Partial<Record<Slot, Item>>;
   stash: Item[];
-  /** bestWave is across all biomes; bestWaves per biome sets the lobby's starting-wave range */
-  records: { bestWave: number; bestWaves: Partial<Record<BiomeId, number>>; runs: number; banked: number; bestScore: number };
+  /** bestWave: best wave cleared in any biome; bestBanked: per biome, the best wave whose spoils were banked
+   *  (the lobby's starting-wave range) */
+  records: { bestWave: number; bestBanked: Partial<Record<BiomeId, number>>; runs: number; banked: number; bestScore: number };
 }
 
 // ---------------------------------------------------------------------------
