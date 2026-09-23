@@ -47,12 +47,14 @@ Prompts for whatever you don't pass (end the description with Ctrl-D), then:
 4. creates the branch `fix/issue-N` off `main`, where N is the new issue's number
 5. prints a prompt for Claude to start on the issue (and copies it to the clipboard on macOS)
 
-### `scripts/commit.sh`
+With Claude you can skip both scripts' prompts: start your message with `new issue:` and describe the issue. Claude runs `scripts/issue.sh` with a title and description, does the work, and runs `scripts/commit.sh` when it's done (see AGENTS.md).
+
+### `scripts/commit.sh ["title" ["description"]]`
 
 Run it on an issue branch (its name ends in `issue-N`). It:
 
 1. runs `npm run build` and `npm run check:pages`, and stops if either fails
-2. asks for a title (the issue title by default) and, for a new PR, a description (end with Ctrl-D)
+2. takes a title (the issue title by default) and, for a new PR, a description, prompting for whatever you don't pass (end the description with Ctrl-D)
 3. commits all changes, using the title as the message (skipped when nothing is uncommitted)
 4. rebases the branch onto `upstream/main` and pushes it to your fork
 5. opens the PR into upstream `main`, with `Closes #N` at the top of the body so the PR and the issue are linked
