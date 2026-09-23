@@ -307,7 +307,7 @@ function changed(): void {
   renderMenu();
 }
 
-export function showSummary({ outcome, wave, score, kills, bag, lost = [] }: RunSummary): void {
+export function showSummary({ outcome, wave, score, kills, bag, lost = [], replaced = [] }: RunSummary): void {
   const box = $('#summary');
   const dead = outcome === 'dead';
   const gone = new Set(lost.map((it) => it.id));
@@ -317,7 +317,9 @@ export function showSummary({ outcome, wave, score, kills, bag, lost = [] }: Run
   t.classList.toggle('dead', dead);
   $('.sm-sub', box).innerHTML = dead
     ? (bag.length ? `The arena claims your <b class="red">${bag.length}</b> unbanked item${bag.length === 1 ? '' : 's'}.` : 'You carried nothing out — and lost nothing.')
-    : `${kept.length} item${kept.length === 1 ? '' : 's'} moved to your stash.${lost.length ? ` <b class="red">${lost.length} weakest discarded — stash full.</b>` : ''}`;
+    : `${kept.length} item${kept.length === 1 ? '' : 's'} moved to your stash.${
+      replaced.length ? ` Stash full: ${replaced.length} weaker stash item${replaced.length === 1 ? '' : 's'} salvaged to make room.` : ''}${
+      lost.length ? ` <b class="red">${lost.length} discarded — nothing weaker left in the stash.</b>` : ''}`;
   $('.sm-stats', box).innerHTML = `<div><b>${wave}</b>Wave</div><div><b>${score.toLocaleString()}</b>Score</div><div><b>${kills}</b>Slain</div>`;
   const items = $('.sm-items', box);
   items.className = 'sm-items' + (dead ? ' lost' : '');

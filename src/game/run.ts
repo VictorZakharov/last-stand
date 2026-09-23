@@ -47,7 +47,7 @@ export interface RunState {
   remaining: number;
 }
 
-export interface RunSummary { outcome: 'dead' | 'banked'; wave: number; score: number; kills: number; bag: Item[]; lost?: Item[] }
+export interface RunSummary { outcome: 'dead' | 'banked'; wave: number; score: number; kills: number; bag: Item[]; lost?: Item[]; replaced?: Item[] }
 
 /** UI callbacks the run controller drives. */
 export interface RunUI {
@@ -209,8 +209,7 @@ export function bankRun(): void {
   const r = G.run;
   if (!r || r.phase !== 'cleared') return;
   vacuumDrops();
-  const lost = bankItems(G.profile, r.bag);
-  finishRun('banked', { lost });
+  finishRun('banked', bankItems(G.profile, r.bag));
 }
 
 function onPlayerDied(): void {
@@ -221,7 +220,7 @@ function onPlayerDied(): void {
   schedule(2.6, () => { if (G.run === r) finishRun('dead'); });
 }
 
-function finishRun(outcome: 'dead' | 'banked', extra: { lost?: Item[] } = {}): void {
+function finishRun(outcome: 'dead' | 'banked', extra: { lost?: Item[]; replaced?: Item[] } = {}): void {
   const r = G.run!;
   const rec = G.profile.records;
   rec.bestScore = Math.max(rec.bestScore, Math.round(r.score));

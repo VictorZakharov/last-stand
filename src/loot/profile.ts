@@ -69,13 +69,15 @@ export function salvageEquipped(p: Profile, slot: Slot): void {
   saveProfile(p);
 }
 
-// Best loot goes in first, so when the stash fills up only the weakest items are
-// discarded. Returns the items that did not fit (weakest last).
-export function bankItems(p: Profile, items: Item[]): Item[] {
-  const sorted = items.slice().sort(byValue);
-  const kept = sorted.slice(0, Math.max(0, RUN.bagLimit - p.stash.length));
-  p.stash.push(...kept);
+// When the stash would overflow, the least valuable items of stash and loot together
+// go, so new loot pushes out weaker stash items and is only discarded when nothing in
+// the stash is weaker (on a tie the stash item stays).
+export function bankItems(p: Profile, items: Item[]): { lost: Item[]; replaced: Item[] } {
+  const keep = new Set([...p.stash, ...items].sort(byValue).slice(0, RUN.bagLimit));
+  const replaced = p.stash.filter((i) => !keep.has(i));
+  const kept = items.filter((i) => keep.has(i)).sort(byValue);
+  p.stash = p.stash.filter((i) => keep.has(i)).concat(kept);
   p.records.banked += kept.length;
   saveProfile(p);
-  return sorted.slice(kept.length);
+  return { lost: items.filter((i) => !keep.has(i)), replaced };
 }
