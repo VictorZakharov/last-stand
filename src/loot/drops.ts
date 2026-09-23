@@ -60,6 +60,7 @@ export function dropItem(item: Item, from: THREE.Vector3): Drop {
   const ri = rarityIndex(item.rarity);
   const color = new THREE.Color(r.color);
   const obj = new THREE.Group();
+  obj.name = 'drop';
   const geo = shapeCache[item.slot] ??= SHAPES[item.slot]();
   const mat = new THREE.MeshStandardMaterial({ color: 0x9a9aa4, metalness: 0.9, roughness: 0.3, emissive: color, emissiveIntensity: 0.6 + ri * 0.4 });
   const mesh = new THREE.Mesh(geo, mat);

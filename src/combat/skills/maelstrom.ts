@@ -40,8 +40,11 @@ function funnelMaterial(color: THREE.ColorRepresentation, speed: number, stripes
   });
 }
 
+const funnelMaterials = () => [funnelMaterial(BLUE, 1.6, 3), funnelMaterial(0xc8d4ff, 2.4, 5), funnelMaterial(FIRE, 1.1, 2)];
+
 const skill: InstantSkill = {
   anim: 'cast',
+  warm: () => funnelMaterials().map((m) => new THREE.Mesh(funnelGeo, m)),
   cast(player, rawDef, target) {
     const def = rawDef as Needs<'damage' | 'radius' | 'duration' | 'speed' | 'pull'>;
     const dir = new THREE.Vector3(target.x - player.pos.x, 0, target.z - player.pos.z);
@@ -49,7 +52,7 @@ const skill: InstantSkill = {
     dir.normalize();
     const pos = player.pos.clone().addScaledVector(dir, 1.8);
     const group = new THREE.Group();
-    const mats = [funnelMaterial(BLUE, 1.6, 3), funnelMaterial(0xc8d4ff, 2.4, 5), funnelMaterial(FIRE, 1.1, 2)];
+    const mats = funnelMaterials();
     const scales = [[def.radius * 0.9, 4.2], [def.radius * 0.6, 3.6], [def.radius * 0.45, 2.4]];
     const meshes = mats.map((m, i) => {
       const mesh = new THREE.Mesh(funnelGeo, m);

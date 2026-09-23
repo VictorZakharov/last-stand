@@ -3,16 +3,20 @@ import type * as THREE from 'three';
 import type { Player } from '../../entities/player';
 import type { CastAnim, SkillDef } from '../../types';
 
-/** Fires once when the cast completes. */
-export interface InstantSkill {
+interface SkillBase {
   anim: CastAnim;
+  /** Meshes using the skill's own materials, compiled at load so the first cast doesn't hitch. */
+  warm?(): THREE.Object3D[];
+}
+
+/** Fires once when the cast completes. */
+export interface InstantSkill extends SkillBase {
   channel?: false;
   cast(player: Player, def: SkillDef, target: THREE.Vector3): void;
 }
 
 /** Runs every frame while its key is held. `start` returns per-channel state. */
-export interface ChannelSkill<S = unknown> {
-  anim: CastAnim;
+export interface ChannelSkill<S = unknown> extends SkillBase {
   channel: true;
   start(player: Player, def: SkillDef): S;
   tick(player: Player, def: SkillDef, dt: number, state: S): void;

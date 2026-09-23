@@ -104,6 +104,7 @@ export class Enemy {
 
     this.model = buildModel(def.model);
     this.height = this.model.height * (hero ? HERO.scale : 1);
+    this.obj.name = typeId;   // names show up in the perf report
     this.obj.add(this.model.root);
     if (hero) this.model.root.scale.multiplyScalar(HERO.scale);
     if (hero || this.boss) {
@@ -290,6 +291,8 @@ export class Enemy {
     removeAnchored(this.bar);
     this.meter?.dispose();
     G.scene.remove(this.obj);
+    // model geometry is built per enemy; free it (the aura ring is shared)
+    this.obj.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && g !== auraGeo) g.dispose(); });
     this.model.dispose();
     this.auraMat?.dispose();
   }

@@ -61,6 +61,7 @@ const _dir = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _end = new T
 const skill: ChannelSkill<LanceState> = {
   anim: 'channel',
   channel: true,
+  warm: () => [new THREE.Mesh(beamGeo, beamMaterial(false))],
   start() {
     const outerMat = beamMaterial(false), coreMat = beamMaterial(true);
     const outer = new THREE.Mesh(beamGeo, outerMat), core = new THREE.Mesh(beamGeo, coreMat);

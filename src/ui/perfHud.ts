@@ -4,8 +4,11 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { particles } from '../fx/particles';
 import { readCookie, writeCookie } from '../core/cookies';
+import { programsCompiledInGame, lateCompiles } from '../core/shaders';
 
 const COOKIE = 'last-stand-perf-hud';
+// the hashed bundle name identifies the build a report came from
+const BUILD = import.meta.url.split('/').pop()?.replace(/\?.*$/, '') ?? 'unknown';
 const WINDOW_MS = 15_000;     // history shown in the graph
 const BUCKET_MS = 500;        // one graph point per bucket
 const REDRAW_MS = 250;
@@ -165,7 +168,7 @@ function draw(now: number): void {
   set('mid', String(top / 2));
   set('calls', kilo(frameCalls));
   set('tris', kilo(frameTris));
-  set('progs', String(info.programs?.length ?? 0));
+  set('progs', `${info.programs?.length ?? 0} (+${programsCompiledInGame()})`);
   set('geo', String(info.memory.geometries));
   set('tex', String(info.memory.textures));
   set('res', `${size.x}×${size.y} @${renderer.getPixelRatio().toFixed(2)}`);
@@ -192,15 +195,16 @@ function report(): string {
   const info = renderer.info;
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   return [
-    `Last Stand performance report (${new Date().toISOString()})`,
+    `Last Stand performance report (${new Date().toISOString()}, build ${BUILD})`,
     `FPS now ${fmtFps(s.fps)} | 15s avg ${fmtFps(s.avgFps)} | 1% low ${fmtFps(s.lowFps)}`,
     `Frame p50 ${fmt(s.p50)} ms | p95 ${fmt(s.p95)} ms | CPU ${fmt(s.cpu, 2)} ms | GPU ${timerExt ? fmt(s.gpu, 2) + ' ms' : 'n/a'}`,
-    `Draw calls ${frameCalls} | triangles ${frameTris} | programs ${info.programs?.length ?? 0} | geometries ${info.memory.geometries} | textures ${info.memory.textures}`,
+    `Draw calls ${frameCalls} | triangles ${frameTris} | programs ${info.programs?.length ?? 0} (compiled after load ${programsCompiledInGame()}) | geometries ${info.memory.geometries} | textures ${info.memory.textures}`,
     `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
     `Mode ${G.mode} | enemies ${G.enemies.length} | projectiles ${G.projectiles.length} | particles ${particles.glow.count + particles.smoke.count}`,
     `GPU ${gpuName}`,
     `UA ${navigator.userAgent}`,
     `FPS history (0.5s buckets) ${s.buckets.map((v) => v === null ? '-' : Math.round(v)).join(' ')}`,
+    ...(lateCompiles.length ? ['Shaders compiled after load:', ...lateCompiles.slice(-40).map((l) => '  ' + l)] : []),
   ].join('\n');
 }
 

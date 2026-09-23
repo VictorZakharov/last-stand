@@ -43,6 +43,7 @@ function wardMaterial() {
 
 const skill: InstantSkill = {
   anim: 'buff',
+  warm: () => [new THREE.Mesh(geo, wardMaterial())],
   cast(player, rawDef) {
     const def = rawDef as Needs<'absorbPct' | 'duration'>;
     const mat = wardMaterial();

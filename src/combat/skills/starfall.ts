@@ -24,10 +24,12 @@ const streakGeo = new THREE.ConeGeometry(0.28, 1, 12, 1, true).translate(0, 0.5,
 let meteorMat: THREE.MeshStandardMaterial | null = null;
 const _up = new THREE.Vector3(0, 1, 0);
 
+const getMeteorMat = () => meteorMat ??= new THREE.MeshStandardMaterial({ color: 0x0b2a1c, emissive: new THREE.Color(COLOR), emissiveIntensity: 4, roughness: 0.2, flatShading: true });
+const streakMaterial = () => new THREE.MeshBasicMaterial({ color: new THREE.Color(COLOR).multiplyScalar(2.2), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8 });
+
 function dropMeteor(def: Def, landing: THREE.Vector3, delay: number): void {
-  meteorMat ??= new THREE.MeshStandardMaterial({ color: 0x0b2a1c, emissive: new THREE.Color(COLOR), emissiveIntensity: 4, roughness: 0.2, flatShading: true });
-  const streakMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(COLOR).multiplyScalar(2.2), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8 });
-  const meteor = new THREE.Mesh(meteorGeo, meteorMat!);
+  const streakMat = streakMaterial();
+  const meteor = new THREE.Mesh(meteorGeo, getMeteorMat());
   const streak = new THREE.Mesh(streakGeo, streakMat);
   const group = new THREE.Group();
   group.add(meteor, streak);
@@ -98,6 +100,7 @@ function impact(def: Def, p: THREE.Vector3): void {
 
 const skill: InstantSkill = {
   anim: 'cast',
+  warm: () => [new THREE.Mesh(meteorGeo, getMeteorMat()), new THREE.Mesh(streakGeo, streakMaterial())],
   cast(_player, rawDef, target) {
     const def = rawDef as Def;
     sfx.starfallCall();
