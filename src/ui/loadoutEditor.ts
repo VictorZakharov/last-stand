@@ -5,12 +5,15 @@ import { G } from '../state';
 import { SKILL_KEYS } from '../loot/loadout';
 import { makeSkillSlot } from './hud';
 import { hideTooltip } from './tooltip';
+import { isTouch } from './touch';
 import { sfx } from '../core/audio';
 import type { SkillKey } from '../types';
 
 type Payload = { kind: 'book'; id: string } | { kind: 'slot'; key: SkillKey };
 let drag: Payload | null = null;
 let onChange: () => void = () => {};
+/** touch: the key picked to receive the next tapped skill */
+let picked: SkillKey | null = null;
 
 const book = () => document.getElementById('spellbook')!;
 const bar = () => document.getElementById('loadout-bar')!;
@@ -71,6 +74,15 @@ export function renderLoadoutEditor(): void {
     el.draggable = true;
     el.addEventListener('dragstart', (e) => startDrag(e, { kind: 'book', id: def.impl }, el));
     el.addEventListener('dragend', endDrag);
+    // touch: a tapped skill goes onto the picked key (with no key picked, the tap shows its tooltip)
+    el.addEventListener('click', () => {
+      if (!isTouch() || !picked) return;
+      p.bind(picked, def.impl);
+      picked = null;
+      hideTooltip();
+      sfx.click();
+      commit();
+    });
     b.appendChild(el);
   }
 
@@ -80,6 +92,15 @@ export function renderLoadoutEditor(): void {
     const skill = p.skillAt(key);
     const el = makeSkillSlot(skill?.def ?? null, key);
     if (key === 'q') el.classList.add('sep');
+    el.classList.toggle('picking', key === picked);
+    // touch: tap a key to pick it, tap it again to clear it
+    el.addEventListener('click', () => {
+      if (!isTouch()) return;
+      hideTooltip();
+      if (picked === key) { p.bind(key, null); picked = null; sfx.salvage(); }
+      else { picked = key; sfx.click(); }
+      commit();
+    });
     if (skill) {
       el.draggable = true;
       el.addEventListener('dragstart', (e) => startDrag(e, { kind: 'slot', key }, el));

@@ -8,6 +8,7 @@ export const TIPS: string[] = [
   "The Warrior's Rending Cleave restores energy for every foe it hits.",
   'Right-click gear to equip it. Shift-click it, or drag it to the junk bin, to salvage it.',
   'The mouse wheel zooms the camera in and out. Hold the middle button and drag to rotate it.',
+  'On a phone or tablet, drag a skill button to aim it and let go to cast. A tap casts at the nearest foe.',
   'Graphics quality adapts on its own. Pick a fixed level in the pause menu (Esc).',
   'After a wave is cleared, B banks your spoils and C continues.',
   'Bank after a wave and future runs in that battleground can start from it. Dying there does not count.',

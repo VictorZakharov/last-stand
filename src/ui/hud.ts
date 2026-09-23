@@ -7,6 +7,7 @@ import { WAVES } from '../data/waves';
 import { BIOMES } from '../data/biomes';
 import { bindTooltip, itemTooltip, skillTooltip } from './tooltip';
 import { on } from '../events';
+import { buildTouchSkills } from './touch';
 
 import { SKILL_KEYS } from '../loot/loadout';
 import type { Player } from '../entities/player';
@@ -40,6 +41,8 @@ export function buildHotbar(player: Player): void {
     bar.appendChild(el);
     return { key, el, cd: $('.cd', el), cdt: $('.cdt', el), boundId: player.loadout[key] };
   });
+  // Circular (touch -> hud -> touch) but only used at runtime, which is safe.
+  buildTouchSkills();
 }
 
 /** A skill icon slot. `def` null renders an empty slot; `key` adds a key label. */

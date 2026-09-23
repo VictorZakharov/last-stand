@@ -1,7 +1,7 @@
 // Entry point: boots every system, owns the main loop and the menu <-> run flow.
 import * as THREE from 'three';
 import { G } from './state';
-import { initRenderer, updateCamera, render, zoomBy, orbitBy, setZoom, sceneTarget } from './core/renderer';
+import { initRenderer, updateCamera, render, zoomBy, orbitBy, setZoom, sceneTarget, setViewShift } from './core/renderer';
 import { CAMERA, LOBBY } from './data/balance';
 import { initInput, updateInputRay, endInputFrame, input, wasPressed } from './core/input';
 import { initAudio } from './core/audio';
@@ -20,10 +20,11 @@ import { loadProfile, savedClass, saveClass } from './loot/profile';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun } from './game/run';
 import { initFloaters, updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, updateHud, renderSpoils } from './ui/hud';
-import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, selectedWave } from './ui/menus';
+import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, selectedWave, lobbyViewShift } from './ui/menus';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { initLoadoutEditor } from './ui/loadoutEditor';
+import { initTouch, updateTouch } from './ui/touch';
 import { initItemIcons } from './ui/itemIcons';
 import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap } from './ui/perfHud';
 import { warmShaders } from './game/warmup';
@@ -56,6 +57,7 @@ async function boot() {
   G.player = new Player(G.profile.classId, G.profile.equipped);
 
   initHud();
+  initTouch();
   initPerfHud(renderer);
   buildHotbar(G.player);
   initRun({ banner, showDecision, hideDecision, showSummary });
@@ -186,6 +188,8 @@ function update(dt: number): void {
     updateDrops(dt);
     updateHud(); perfLap('hud');
   }
+  const vs = lobbyViewShift();
+  setViewShift(vs.x, vs.y);
   updateCamera(dt, G.player.pos);
 
   G.arena.update(dt, G.time); perfLap('arena');
@@ -202,7 +206,7 @@ function frame(timestamp: number): void {
   timer.update(timestamp);
   const rawDt = timer.getDelta();
   const dt = Math.min(rawDt, 1 / 20);
-  if (revealed) handleGlobalKeys();
+  if (revealed) { updateTouch(dt); handleGlobalKeys(); }
   const t0 = performance.now();
   if (!G.paused && revealed) {
     sampleQuality(rawDt);

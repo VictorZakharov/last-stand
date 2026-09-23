@@ -28,7 +28,13 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
 - **Everything is procedural.** No downloaded models, textures or audio: geometry, canvas textures, rigs/animation, VFX and WebAudio sfx are generated at runtime. Don't add binary assets (screenshots in `docs/` are the exception).
 - **Originality:** this is open source. Skill, item, enemy and class names must be original. No Grim Dawn (or other game) names, trademarks or assets.
 - The game is class-agnostic by name ("Last Stand"). More classes are planned, so keep class-specific code in class data, models and skills, not in the shared systems.
-- **The UI must fit any screen size.** Anything that overflows or overlaps at some viewport size is a bug. Scale uses `--ui` (see `src/ui/scale.ts`), and the lobby is a CSS grid `[left | center loadout | right]`. Check small (1024×700) and large (1920×1080) viewports.
+- **The UI must fit any screen size, desktop and mobile.** Anything that overflows or overlaps at some viewport size is a bug.
+  - Scale: `--ui` for the lobby and modals, `--hud` for the in-run HUD, `--touch` for the touch controls (all set in `src/ui/scale.ts`).
+  - Layouts: on desktop the lobby is a CSS grid `[left | center loadout | right]`. Short screens (phones held sideways, height ≤ 520) and upright tablets show one panel at a time, picked from `#lobby-rail`, and the camera view shifts so the character stays beside the panel (`lobbyViewShift`). Phones held upright get a "turn your device" overlay.
+  - Check desktop at 1024×700 and 1920×1080, a phone at 844×390 and a tablet at 1180×820 and 820×1180 (Playwright with `isMobile` + `hasTouch`).
+- **Touch** (`src/ui/touch.ts`): touch mode (`body.touch`, `input.touchMode`) follows the last pointer used, and the browser's emulated mouse events are ignored in it.
+  - Controls: a move stick on the left half and the skill buttons on the right. Tap casts at the nearest foe; drag aims by hand and casts on release. The basic attack and channels act while held.
+  - Everything hover-only needs a touch path. Tooltips open on tap (`bindTooltip`); items open an action sheet (`openItemSheet`); skills are bound by tapping a key and then the skill. Drag and drop and Shift are desktop extras.
 
 ## Architecture
 
