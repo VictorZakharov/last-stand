@@ -27,6 +27,14 @@ Everything is procedural: models, animation, textures, VFX and sound are generat
 
 ### Controls
 
+Plays with a keyboard and mouse, or by touch on phones and tablets (hold a phone sideways):
+- **Move:** a stick anywhere on the left half of the screen.
+- **Skills:** the buttons on the right. Tap to cast at the nearest foe, or drag to aim and let go to cast there; hold the attack button or a channelled skill to keep it going.
+- **Other:** pinch to zoom, and the ❚❚ button pauses.
+- **Lobby:** tap items to equip or salvage them, and tap a key, then a skill, to rebind it.
+
+Keyboard and mouse:
+
 | Input | Action |
 | --- | --- |
 | `W A S D` | Move |

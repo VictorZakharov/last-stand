@@ -14,6 +14,7 @@ import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
 import { renderAttributes } from './attributes';
 import { initStashFilter, renderStashFilter, openStashFilter, sortStash, matchesFilter } from './stashFilter';
 import { sfx } from '../core/audio';
+import { isTouch } from './touch';
 import { perfHudEnabled, setPerfHud } from './perfHud';
 import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
 import { QUALITY, type QualitySetting } from '../data/quality';
@@ -37,8 +38,16 @@ export interface MenuHooks {
 let hooks: MenuHooks;
 const newIds = new Set<string>();
 
-/** Controls help reflects the current key bindings. */
+/** Controls help reflects the current key bindings (or the touch controls, when a finger is the input). */
 export function renderControlsHelp(): void {
+  if (isTouch()) {
+    const rows = [['Left half', 'Drag to move'], ['Big button', 'Attack (hold to keep attacking)'],
+      ['Skill buttons', 'Tap: cast at the nearest foe'], ['', 'Drag, then let go: cast where you aim'], ['', 'Hold a channelled skill to keep it going'],
+      ['Pinch', 'Zoom'], ['❚❚', 'Pause'], ['Bank / Continue', 'The buttons after each wave']];
+    const html = rows.map(([k, v]) => `<span class="k">${k}</span><span>${v}</span>`).join('');
+    document.querySelectorAll('.controls-help').forEach((el) => { el.innerHTML = html; });
+    return;
+  }
   const skillRows = SKILL_KEYS.map((k) => {
     const s = G.player.skillAt(k);
     const label = k === 'mouse0' ? 'Left click' : k === 'mouse2' ? 'Right click' : KEY_LABEL[k];
@@ -74,7 +83,26 @@ export function initMenus(h: MenuHooks): void {
     b.onclick = () => { sfx.click(); stepWave(Number(b.dataset.d)); };
   });
   waves.addEventListener('wheel', (e) => { e.preventDefault(); stepWave(e.deltaY < 0 ? 1 : -1); }, { passive: false });
+  // short screens: the rail picks the one panel shown
+  const menu = $('#menu');
+  const pickTab = (t: string) => {
+    menu.dataset.tab = t;
+    document.querySelectorAll<HTMLElement>('#lobby-rail [data-lt]').forEach((b) => b.classList.toggle('active', b.dataset.lt === t));
+  };
+  document.querySelectorAll<HTMLElement>('#lobby-rail [data-lt]').forEach((b) => {
+    b.onclick = () => { sfx.click(); toggleMenuStowed(false); pickTab(b.dataset.lt!); };
+  });
+  $('#rail-practice').onclick = () => { sfx.click(); toggleMenuStowed(); };
+  $('#rail-play').onclick = () => { sfx.click(); hooks.start(); };
+  $('.stow-hint').onclick = () => { sfx.click(); toggleMenuStowed(); };
   $('#btn-help').onclick = () => { renderControlsHelp(); $('#help').classList.remove('hidden'); };
+  // fullscreen: the browser's bars take a lot of a phone's screen
+  const fs = $('#btn-fullscreen');
+  const syncFs = () => { fs.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen'; };
+  fs.classList.toggle('hidden', !document.fullscreenEnabled);
+  fs.onclick = () => { sfx.click(); (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen({ navigationUI: 'hide' })).catch(() => {}); };
+  document.addEventListener('fullscreenchange', syncFs);
+  syncFs();
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
   $('#btn-reset').onclick = () => {
     const name = CLASSES[G.profile.classId].name;
@@ -134,6 +162,18 @@ export function toggleMenuStowed(stowed?: boolean): void {
   if (menu.classList.contains('stowed')) { endDrag(); openStashFilter(false); }
   syncJunk();
 }
+// Short screens and upright tablets show one lobby panel at a time over the scene; the view moves
+// so the character stands in the free space beside it (or below it, upright).
+const onePanel = matchMedia('(max-height: 520px), (orientation: portrait) and (max-width: 1000px)');
+export function lobbyViewShift(): { x: number; y: number } {
+  const menu = $('#menu');
+  if (!onePanel.matches || menu.classList.contains('hidden') || menu.classList.contains('stowed')) return { x: 0, y: 0 };
+  const panel = [...menu.querySelectorAll<HTMLElement>('.menu-left, .menu-center, .menu-right')].find((p) => p.offsetParent);
+  if (!panel) return { x: 0, y: 0 };
+  const r = panel.getBoundingClientRect();
+  return window.innerWidth > window.innerHeight ? { x: r.right / 2, y: 0 } : { x: 0, y: r.bottom / 2 };
+}
+
 export function markNew(items: Item[]): void { for (const it of items) newIds.add(it.id); }
 
 function renderBiomeOptions(): void {
@@ -206,7 +246,10 @@ export function renderMenu(): void {
     if (it) {
       bindTooltip(d, itemTooltip(it, false));
       const doUnequip = () => { unequip(p, slot); hideTooltip(); sfx.click(); changed(); };
-      d.onclick = doUnequip;
+      d.onclick = () => {
+        if (!isTouch()) { doUnequip(); return; }
+        openItemSheet(it, false, 'Unequip', p.stash.length < RUN.bagLimit ? doUnequip : null, () => { salvageEquipped(p, slot); newIds.delete(it.id); sfx.salvage(); changed(); });
+      };
       d.oncontextmenu = (e) => { e.preventDefault(); doUnequip(); };
       makeDraggable(d, { from: 'equip', item: it });
     }
@@ -237,6 +280,7 @@ export function renderMenu(): void {
     bindTooltip(d, () => ({ ...itemTooltip(it)(), foot: 'Right-click or drag to equip · Shift-click or drag to the junk bin to salvage' }));
     const equip = () => { newIds.delete(it.id); equipFromStash(p, it.id); hideTooltip(); sfx.click(); changed(); };
     d.onclick = (e) => {
+      if (isTouch()) { openItemSheet(it, true, 'Equip', equip, () => { newIds.delete(it.id); salvage(p, it.id); sfx.salvage(); changed(); }); return; }
       if (!e.shiftKey) { equip(); return; }
       flyToJunk(d);
       newIds.delete(it.id);
@@ -257,6 +301,23 @@ export function renderMenu(): void {
   }
 
   renderLoadoutEditor();
+}
+
+// --- touch: a tapped item opens a sheet with its card and what can be done with it ----
+function openItemSheet(it: Item, compare: boolean, label: string, act: (() => void) | null, salvageIt: () => void): void {
+  hideTooltip();
+  const box = $('#item-sheet');
+  const close = () => box.classList.add('hidden');
+  $('.is-card', box).innerHTML = itemTooltip(it, compare)().html;
+  const a = $<HTMLButtonElement>('.is-a', box);
+  a.textContent = act ? label : `${label} (stash full)`;
+  a.className = 'btn primary is-a';
+  a.disabled = !act;
+  a.onclick = () => { close(); act?.(); };
+  $('.is-salvage', box).onclick = () => { close(); salvageIt(); };
+  $('.is-close', box).onclick = () => { sfx.click(); close(); };
+  box.onclick = (e) => { if (e.target === box) close(); };
+  box.classList.remove('hidden');
 }
 
 // --- slot focus -------------------------------------------------------------------

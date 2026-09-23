@@ -3,6 +3,7 @@
 import { SLOT_INFO, STATS } from '../data/items';
 import { rarityOf, formatStat, itemPower, statEntries, implicitsFor, isTwoHanded } from '../loot/items';
 import { G } from '../state';
+import { input } from '../core/input';
 import { itemIconSVG } from './itemIcons';
 import type { Item, SkillDef, StatKey } from '../types';
 
@@ -79,20 +80,44 @@ export function itemTooltipHTML(item: Item, equipped?: Item | null): TooltipCont
   return { html, color: r.color };
 }
 
-export function bindTooltip(node: HTMLElement, getContent: () => TooltipContent | null): void {
-  node.addEventListener('mouseenter', (e) => {
-    const c = getContent();
-    if (!c) return;
-    const t = el();
-    t.innerHTML = c.html + (c.foot ? `<div class="tt-footbar">${c.foot}</div>` : '');
-    t.classList.remove('hidden');
-    place(e);
-  });
-  node.addEventListener('mousemove', place);
-  node.addEventListener('mouseleave', hideTooltip);
+function show(c: TooltipContent, at: { clientX: number; clientY: number }): void {
+  const t = el();
+  t.innerHTML = c.html + (c.foot ? `<div class="tt-footbar">${c.foot}</div>` : '');
+  t.classList.remove('hidden');
+  place(at as MouseEvent);
 }
 
-export function hideTooltip(): void { el().classList.add('hidden'); }
+// With a mouse the tooltip follows hovering. With touch (where the browser's emulated mouse events
+// are ignored) a tap opens it pinned beside the element, and the next tap anywhere closes it.
+let pinned = false;
+document.addEventListener('pointerdown', (e) => {
+  if (pinned && !el().contains(e.target as Node)) hideTooltip();
+}, true);
+
+export function bindTooltip(node: HTMLElement, getContent: () => TooltipContent | null): void {
+  node.addEventListener('mouseenter', (e) => {
+    if (input.touchMode) return;
+    const c = getContent();
+    if (c) show(c, e);
+  });
+  node.addEventListener('mousemove', (e) => { if (!input.touchMode && !pinned) place(e); });
+  node.addEventListener('mouseleave', () => { if (!input.touchMode) hideTooltip(); });
+  node.addEventListener('click', () => {
+    if (!input.touchMode) return;
+    const c = getContent();
+    if (!c) return;
+    const r = node.getBoundingClientRect();
+    show(c, { clientX: r.right - 6, clientY: r.top });
+    pinned = true;
+    el().classList.add('pinned');
+  });
+}
+
+export function hideTooltip(): void {
+  el().classList.add('hidden');
+  el().classList.remove('pinned');
+  pinned = false;
+}
 
 export function itemTooltip(item: Item, withCompare = true): () => TooltipContent {
   return () => {

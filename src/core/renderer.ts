@@ -133,8 +133,18 @@ export function orbitBy(px: number): void { rig.targetYaw -= px * CAMERA.orbitSp
 /** Camera yaw in radians: screen-up is world (-sin, -cos) on XZ. */
 export const cameraYaw = (): number => rig.yaw;
 
+/** Screen px to move the view by, so the character stays in sight beside (x) or below (y) a lobby panel. */
+const shift = { x: 0, y: 0, tx: 0, ty: 0 };
+export function setViewShift(x: number, y: number): void { shift.tx = x; shift.ty = y; }
+
 export function updateCamera(dt: number, focus: THREE.Vector3): void {
   const cam = G.camera;
+  shift.x = damp(shift.x, shift.tx, 6, dt);
+  shift.y = damp(shift.y, shift.ty, 6, dt);
+  if (Math.abs(shift.x) + Math.abs(shift.y) > 0.5) {
+    const w = window.innerWidth, h = window.innerHeight;
+    cam.setViewOffset(w, h, -shift.x, -shift.y, w, h);
+  } else if (cam.view) cam.clearViewOffset();
   rig.zoom = damp(rig.zoom, rig.targetZoom, 8, dt);
   rig.focus.x = damp(rig.focus.x, focus.x, CAMERA.follow, dt);
   rig.focus.z = damp(rig.focus.z, focus.z, CAMERA.follow, dt);

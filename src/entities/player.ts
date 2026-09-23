@@ -177,12 +177,14 @@ export class Player {
     if (isDown('s') || isDown('arrowdown')) mz += 1;
     if (isDown('a') || isDown('arrowleft')) mx -= 1;
     if (isDown('d') || isDown('arrowright')) mx += 1;
+    // the touch stick is analog: a small push walks
+    if (!mx && !mz) { mx = input.stick.x; mz = input.stick.y; }
     const len = Math.hypot(mx, mz);
     let speed = this.stats.moveSpeed;
     if (this.casting) speed *= 0.45;
     if (this.channel) speed *= this.channel.skill.def.moveMult ?? 0.4;
     const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);
-    const k = len ? speed / len : 0;
+    const k = len ? speed * Math.min(1, len) / len : 0;
     const tx = (mx * cy + mz * sy) * k, tz = (mz * cy - mx * sy) * k;
     this.vel.x = damp(this.vel.x, tx, 14, dt);
     this.vel.z = damp(this.vel.z, tz, 14, dt);
@@ -191,7 +193,7 @@ export class Player {
 
     // a channel ends when the key that started it is released
     if (this.channel && !isDown(this.channel.key)) this.stopChannel();
-    if (input.mouse.overUI || this.dash || this.staggered) return;
+    if ((input.mouse.overUI && !input.touchMode) || this.dash || this.staggered) return;
     for (const key of SKILL_KEYS) {
       if (!isDown(key)) continue;
       const skill = this.skillAt(key);
