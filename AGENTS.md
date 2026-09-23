@@ -35,10 +35,11 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
 | Path | Contents |
 | --- | --- |
 | `src/types.ts` | Shared types: data definitions (`SkillDef`, `ClassDef`, `EnemyDef`, `Item`...) and runtime (`Model`, `Effect`...) |
-| `src/data/` | Pure tuning data typed against `types.ts`: classes & skills, enemies, items/affixes, waves, `balance.ts` (camera, arena, run constants) |
+| `src/data/` | Pure tuning data typed against `types.ts`: classes & skills, enemies, biomes (roster, boss per biome), items/affixes, waves, `balance.ts` (camera, arena, run constants) |
 | `src/combat/skills/` | Skill behaviours, registered in `index.ts` (`SKILL_IMPLS`) and referenced from class data by `impl` name. Instant: `cast()`. Channel: `start/tick/stop` with a typed state object. Use `Needs<'field'>` to require optional `SkillDef` tuning fields |
 | `src/entities/models/` | Procedural models, registered in `index.ts` (`MODELS`); `rig.ts` = shared humanoid skeleton + pose helpers |
 | `src/game/run.ts` | Wave flow, scoring, loot rolls, bank / continue |
+| `src/world/` | `arena.ts` builds every biome at boot and switches between them; one builder per biome (`crypt.ts`, `forest.ts`), shared pieces in `props.ts` |
 | `src/loot/` | Item generation, persistent profile (`localStorage` `last-stand.profile.v1`), spell loadout (cookie `last-stand-loadout-<classId>`) |
 | `src/fx/` | CPU particle pools, a fixed pool of 8 point lights (`lights.ts`), transient effects (`effects.ts`) |
 | `src/core/` | Renderer + post chain, input, audio, procedural textures & materials, game-time scheduler (`timers.ts`) |
@@ -48,6 +49,8 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
 
 **Adding a class:** a data file in `src/data/classes/` registered in its `index.ts`, a model in `entities/models/`, and skills in `combat/skills/`.
 
+**Adding a biome:** an entry in `data/biomes.ts` (enemy pool, boss, minimap), a builder in `world/` registered in `arena.ts`, and its enemies in `data/enemies.ts` with models in `entities/models/`.
+
 ## Gotchas
 
 - **NaN means black lines or boxes on screen.** Bloom smears NaN/Inf pixels across the frame. Known causes: GLSL `smoothstep(a, b, x)` with `a >= b` (it's undefined, so write `1.0 - smoothstep(b, a, x)`), and `atan(0, 0)`. `renderer.ts` has a sanitize pass before bloom as a safety net; still fix the source.
@@ -55,7 +58,8 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
 - **Shaders compile at load, never mid-game.** `core/shaders.ts` pins every compiled program (three.js would delete it when its last material is disposed) and `game/warmup.ts` renders one of every enemy, effect, drop and skill visual at boot. A skill with its own materials must return sample meshes from its `warm()` hook. The perf overlay (pause menu) shows `Shaders N (+M)`: M must stay 0 during play, and the copied report says what compiled late.
 - **Loading screen:** `#loading` (markup, SVG logo and styles) is inline in `index.html` so it paints before the bundle. The game renders behind it but only advances once it fades (`revealed` in `main.ts`), so the lobby intro is seen. Tips are in `data/tips.ts`. Its exit (`ui/logoWind.ts`) snapshots the SVG letters (the font is inlined, since an SVG image can't load web fonts) onto the device pixel grid, turns every pixel into a WebGL point, blows them away and gathers them into the lobby logo (`#menu .logo-art`, kept hidden until then). The motion is closed-form in the vertex shader, and it falls back to a plain fade.
 - **Quality presets** (`data/quality.ts`, pause menu, Auto by default) change pixel ratio, MSAA, shadow map size and which small character parts cast shadows, all live and without shader changes. Keep new settings in that category, or they cause compile hitches when switched.
-- **Static shadow casters are baked:** `bakeStaticShadows()` in `world/arena.ts` merges every non-instanced arena caster into one shadow-only mesh. Arena props must not move after the arena is built.
+- **Static shadow casters are baked:** `bakeStaticShadows()` in `world/props.ts` merges every non-instanced caster of a biome into one shadow-only mesh. Arena props must not move after the arena is built.
+- **Biomes:** every biome is built at boot into its own group, and switching only toggles visibility and sets the shared lights, fog and environment (`BiomeLook`), so it's instant. Each biome must add exactly **6 point lights** (a different count recompiles every lit shader; dev builds log an error), keep the central dais footprint (`world/ground.ts` is shared with the cape worker) and the four gates at the same angles. Boot warms up the lobby in every biome. The lobby choice is a cookie (`last-stand-biome`); Random rolls a biome when a run starts.
 - **Cape:** the cloth steps in a web worker (the solver's own `WebGlCapeWorkerPool`); the main thread applies the latest result, shifted onto the current neckline to hide the round trip. Without workers it steps on the main thread within a per-frame budget, so a slow frame can't snowball into more catch-up steps. `SkeletonCape.update` must call `sim.syncGeometry()` after new particle positions arrive, or the cape freezes at spawn. The floor shim imports `world/ground.ts` directly (a worker shares no state with the page). Colliders are capsules built from rig joints in `models/mage.ts`.
 - **Lobby sandbox:** in the lobby `player.sandbox = true` (free casting, no costs or cooldowns). `start()` clears it.
 - **Cooldowns are per skill id**, shared by every key the skill is bound to (the same spell may sit on several keys).

@@ -4,6 +4,7 @@ import { input } from '../core/input';
 import { cameraYaw } from '../core/renderer';
 import { rarityOf, byValue } from '../loot/items';
 import { WAVES } from '../data/waves';
+import { BIOMES } from '../data/biomes';
 import { bindTooltip, itemTooltip, skillTooltip } from './tooltip';
 import { on } from '../events';
 
@@ -94,7 +95,7 @@ export function showDecision(): void {
     const onFloor = G.drops.length;
     $('.dc-risk', box).innerHTML = `If you fall, <b>${r.bag.length + onFloor} unbanked item${r.bag.length + onFloor === 1 ? '' : 's'}</b> will be lost forever.`;
     const next = r.wave + 1;
-    $('.cont-label', box).textContent = next % WAVES.bossEvery === 0 ? `Face wave ${next} (Colossus)` : `Continue to wave ${next}`;
+    $('.cont-label', box).textContent = next % WAVES.bossEvery === 0 ? `Face wave ${next} (${BIOMES[G.arena.biome].bossShort})` : `Continue to wave ${next}`;
   };
   refresh();
   refreshDecision = refresh;
@@ -214,11 +215,13 @@ function drawMinimap() {
   c.save();
   c.translate(W / 2, W / 2);
   c.rotate(cameraYaw()); // screen-up on the map is screen-up in the view
-  // octagon wall
+  // boundary: the crypt's octagon wall or the forest's ring of thicket
+  const mm = BIOMES[G.arena.biome].minimap;
   c.strokeStyle = 'rgba(200,190,170,.55)'; c.lineWidth = 3;
   c.fillStyle = 'rgba(60,58,62,.35)';
   c.beginPath();
-  for (let k = 0; k <= 8; k++) {
+  if (mm.wall === 'circle') c.arc(0, 0, 29 * S, 0, Math.PI * 2);
+  else for (let k = 0; k <= 8; k++) {
     const a = (k / 8) * Math.PI * 2 + Math.PI / 8, R = 30 * S;
     k ? c.lineTo(Math.cos(a) * R, Math.sin(a) * R) : c.moveTo(Math.cos(a) * R, Math.sin(a) * R);
   }
@@ -228,7 +231,7 @@ function drawMinimap() {
   c.strokeRect(-5.9 * S, -5.9 * S, 11.8 * S, 11.8 * S);
   // portals
   for (const pt of G.arena.portals) {
-    c.fillStyle = '#b050ff';
+    c.fillStyle = mm.portal;
     c.beginPath(); c.arc(pt.pos.x * S * 1.08, pt.pos.z * S * 1.08, 3.5, 0, Math.PI * 2); c.fill();
   }
   // drops

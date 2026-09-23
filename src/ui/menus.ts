@@ -16,6 +16,8 @@ import { sfx } from '../core/audio';
 import { perfHudEnabled, setPerfHud } from './perfHud';
 import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
 import { QUALITY, type QualitySetting } from '../data/quality';
+import { BIOMES, BIOME_IDS, type BiomeSetting } from '../data/biomes';
+import { biomeSetting, setBiomeSetting } from '../game/biome';
 import type { RunSummary } from '../game/run';
 import type { Item, Slot } from '../types';
 
@@ -54,6 +56,11 @@ export function initMenus(h: MenuHooks): void {
   $<HTMLInputElement>('#opt-perf').onchange = (e) => setPerfHud((e.target as HTMLInputElement).checked);
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => {
     b.onclick = () => { sfx.click(); setQuality(b.dataset.q as QualitySetting); renderQualityOptions(); };
+  });
+  const biomes = $('#opt-biome');
+  biomes.insertAdjacentHTML('afterbegin', BIOME_IDS.map((id) => `<button data-b="${id}">${BIOMES[id].label}</button>`).join(''));
+  biomes.querySelectorAll<HTMLElement>('button').forEach((b) => {
+    b.onclick = () => { sfx.click(); setBiomeSetting(b.dataset.b as BiomeSetting); renderBiomeOptions(); };
   });
   $('#btn-help').onclick = () => { renderControlsHelp(); $('#help').classList.remove('hidden'); };
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
@@ -116,8 +123,14 @@ export function toggleMenuStowed(stowed?: boolean): void {
 }
 export function markNew(items: Item[]): void { for (const it of items) newIds.add(it.id); }
 
+function renderBiomeOptions(): void {
+  const s = biomeSetting();
+  document.querySelectorAll<HTMLElement>('#opt-biome button').forEach((b) => b.classList.toggle('active', b.dataset.b === s));
+}
+
 export function renderMenu(): void {
   const p = G.profile;
+  renderBiomeOptions();
   const cls = CLASSES[p.classId];
   $('.cc-name').textContent = cls.name;
   $('.cc-tag').textContent = cls.tagline;

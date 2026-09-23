@@ -146,7 +146,11 @@ export interface EnemyDef {
   score: number;
   keepAway?: number;
   slamRadius?: number;
-  projectile?: { speed: number; radius: number; color: number };
+  projectile?: { speed: number; radius: number; color: number; trail?: number };
+  /** boss colour: aura, slam telegraph and shockwaves, death flash */
+  accent?: number;
+  /** walk cycle speed per unit moved (default 2.3; small, skittering enemies use more) */
+  gait?: number;
   summon?: string;
   knockbackResist?: number;
   freezeResist?: number;

@@ -5,6 +5,10 @@ import { buildImp } from './imp';
 import { buildWitch } from './witch';
 import { buildBrute } from './brute';
 import { buildDummy } from './dummy';
+import { buildThornling } from './thornling';
+import { buildMossback } from './mossback';
+import { buildSporecaller } from './sporecaller';
+import { buildTreant } from './treant';
 
 import type { Model } from '../../types';
 
@@ -15,6 +19,11 @@ export const MODELS: Record<string, () => Model> = {
   witch: buildWitch,
   brute: () => buildBrute('brute'),
   colossus: () => buildBrute('colossus'),
+  thornling: buildThornling,
+  mossback: buildMossback,
+  sporecaller: buildSporecaller,
+  barkhulk: () => buildTreant('barkhulk'),
+  thornheart: () => buildTreant('thornheart'),
   dummy: buildDummy,
 };
 

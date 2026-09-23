@@ -1,16 +1,17 @@
-// Enemy archetypes. `ai` selects a behavior in entities/enemyAI.js,
+// Enemy archetypes (data/biomes.ts says which appear where). `ai` selects a behavior in entities/enemyAI.js,
 // `model` selects a builder in entities/models/index.js.
 // Stats are wave-1 values; see SCALING for per-wave growth.
 import type { EnemyDef } from '../types';
 
-export type EnemyId = 'imp' | 'husk' | 'witch' | 'brute' | 'colossus' | 'dummy';
+export type EnemyId = 'imp' | 'husk' | 'witch' | 'brute' | 'colossus'
+  | 'thornling' | 'mossback' | 'sporecaller' | 'barkhulk' | 'thornheart' | 'dummy';
 
 export const ENEMIES: Record<EnemyId, EnemyDef> = {
   imp: {
     name: 'Voidling', model: 'imp', ai: 'melee',
     life: 70, damage: 14, damageType: 'physical', speed: 6.2, radius: 0.45,
     range: 1.3, windup: 0.45, recover: 0.5, cooldown: 0.9,
-    cost: 1, score: 1,
+    cost: 1, score: 1, gait: 3.2,
   },
   husk: {
     name: 'Hollow Husk', model: 'husk', ai: 'melee',
@@ -37,7 +38,42 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     range: 4.2, slamRadius: 5.5, windup: 1.2, recover: 1.0, cooldown: 2.0,
     projectile: { speed: 12, radius: 0.5, color: 0xff6a2a },
     summon: 'imp',
-    cost: 0, score: 60, knockbackResist: 1, freezeResist: 0.7, boss: true,
+    cost: 0, score: 60, knockbackResist: 1, freezeResist: 0.7, boss: true, accent: 0xb070ff,
+  },
+
+  // --- forest ---
+  thornling: {
+    name: 'Thornling', model: 'thornling', ai: 'melee',
+    life: 62, damage: 13, damageType: 'physical', speed: 6.6, radius: 0.42,
+    range: 1.25, windup: 0.4, recover: 0.5, cooldown: 0.85,
+    cost: 1, score: 1, gait: 3.2,
+  },
+  mossback: {
+    name: 'Mossback', model: 'mossback', ai: 'melee',
+    life: 150, damage: 25, damageType: 'physical', speed: 3.5, radius: 0.62,
+    range: 1.8, windup: 0.65, recover: 0.6, cooldown: 1.35,
+    cost: 1.5, score: 1.5, knockbackResist: 0.3,
+  },
+  sporecaller: {
+    name: 'Sporecaller', model: 'sporecaller', ai: 'ranged',
+    life: 95, damage: 32, damageType: 'vitality', speed: 4.0, radius: 0.5,
+    range: 12.5, keepAway: 8, windup: 0.8, recover: 0.4, cooldown: 2.3,
+    projectile: { speed: 11.5, radius: 0.38, color: 0x9cff3a, trail: 0x143008 },
+    cost: 2, score: 2,
+  },
+  barkhulk: {
+    name: 'Barkhide Hulk', model: 'barkhulk', ai: 'slam',
+    life: 660, damage: 76, damageType: 'physical', speed: 2.8, radius: 1.0,
+    range: 3.0, slamRadius: 3.4, windup: 1.1, recover: 0.8, cooldown: 2.6,
+    cost: 5, score: 6, knockbackResist: 0.75, accent: 0x9cff3a,
+  },
+  thornheart: {
+    name: 'The Elder Thornheart', model: 'thornheart', ai: 'boss',
+    life: 5400, damage: 105, damageType: 'vitality', speed: 2.7, radius: 1.8,
+    range: 4.2, slamRadius: 5.5, windup: 1.2, recover: 1.0, cooldown: 2.0,
+    projectile: { speed: 12, radius: 0.5, color: 0xb8ff4a, trail: 0x183a08 },
+    summon: 'thornling',
+    cost: 0, score: 60, knockbackResist: 1, freezeResist: 0.7, boss: true, accent: 0x7aff50,
   },
   // lobby target practice; never part of a wave
   dummy: {

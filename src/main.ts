@@ -29,6 +29,8 @@ import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap } from '.
 import { warmShaders } from './game/warmup';
 import { initQuality, sampleQuality } from './core/quality';
 import { pinPrograms, markLoaded, warmUp } from './core/shaders';
+import { initBiome, rollBiome } from './game/biome';
+import { BIOME_IDS } from './data/biomes';
 import { loadingStep, loadingDone, loadingFailed } from './ui/loading';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
@@ -73,8 +75,9 @@ async function boot() {
   await warmShaders();
   await loadingStep('Lighting the lobby', 0.85);
   enterMenu();
-  // compile the lobby's shaders before revealing the scene to avoid first-frame hitches
-  await warmUp(renderer, scene, G.camera, sceneTarget());
+  // compile the lobby's shaders (every biome's) before revealing the scene to avoid hitches
+  for (const id of BIOME_IDS) { G.arena.setBiome(id); await warmUp(renderer, scene, G.camera, sceneTarget()); }
+  initBiome();
   render();   // one full frame compiles the post-processing passes (bloom, grade...)
   pinPrograms(renderer);
   markLoaded();
@@ -112,6 +115,7 @@ function start() {
   buildHotbar(G.player);   // the loadout may have changed in the lobby
   G.mode = 'run';
   G.player.sandbox = false;
+  rollBiome();
   setZoom(1);
   startRun();
   renderSpoils();
