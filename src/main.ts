@@ -35,6 +35,7 @@ import { loadingStep, loadingDone, loadingFailed } from './ui/loading';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 const timer = new THREE.Timer();
+let revealed = false;   // loading screen gone: the game may advance
 
 async function boot() {
   await loadingStep('Forging the arena', 0.08);
@@ -79,7 +80,10 @@ async function boot() {
   render();   // one full frame compiles the post-processing passes (bloom, grade...)
   pinPrograms(renderer);
   markLoaded();
-  loadingDone();
+  // the lobby renders behind the loading screen (to settle) but only starts moving at the
+  // reveal, so its opening camera zoom is seen
+  updateCamera(0, G.player.pos);
+  loadingDone(() => { revealed = true; });
   requestAnimationFrame(frame);
 }
 
@@ -179,9 +183,9 @@ function frame(timestamp: number): void {
   timer.update(timestamp);
   const rawDt = timer.getDelta();
   const dt = Math.min(rawDt, 1 / 20);
-  handleGlobalKeys();
+  if (revealed) handleGlobalKeys();
   const t0 = performance.now();
-  if (!G.paused) {
+  if (!G.paused && revealed) {
     sampleQuality(rawDt);
     G.dt = dt;
     G.time += dt;
