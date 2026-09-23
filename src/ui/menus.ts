@@ -3,7 +3,7 @@ import { G } from '../state';
 import { SLOTS, SLOT_INFO } from '../data/items';
 import { RUN } from '../data/balance';
 import { CLASSES } from '../data/classes/index';
-import { rarityOf, rarityIndex, itemPower } from '../loot/items';
+import { rarityOf, itemPower, byValue } from '../loot/items';
 import { SKILL_KEYS } from '../loot/loadout';
 import { equipFromStash, unequip, salvage, salvageEquipped, resetProfile } from '../loot/profile';
 import { bindTooltip, hideTooltip, itemTooltip } from './tooltip';
@@ -168,7 +168,8 @@ export function renderMenu(): void {
   $('#stash-count').textContent = `(${p.stash.length}/${RUN.bagLimit})`;
   const st = $('#stash');
   st.innerHTML = '';
-  const sorted = p.stash.slice().sort((a, b) => rarityIndex(b.rarity) - rarityIndex(a.rarity) || itemPower(b) - itemPower(a));  for (const it of sorted) {
+  const sorted = p.stash.slice().sort(byValue);
+  for (const it of sorted) {
     const d = document.createElement('div');
     const color = rarityOf(it.rarity).color;
     const eqd = p.equipped[it.slot];
@@ -289,28 +290,30 @@ function changed(): void {
   renderMenu();
 }
 
-export function showSummary({ outcome, wave, score, kills, bag, lost = 0 }: RunSummary): void {
+export function showSummary({ outcome, wave, score, kills, bag, lost = [] }: RunSummary): void {
   const box = $('#summary');
   const dead = outcome === 'dead';
+  const gone = new Set(lost.map((it) => it.id));
+  const kept = bag.filter((it) => !gone.has(it.id));
   const t = $('.sm-title', box);
   t.textContent = dead ? 'You Have Fallen' : 'Spoils Secured';
   t.classList.toggle('dead', dead);
   $('.sm-sub', box).innerHTML = dead
     ? (bag.length ? `The arena claims your <b class="red">${bag.length}</b> unbanked item${bag.length === 1 ? '' : 's'}.` : 'You carried nothing out — and lost nothing.')
-    : `${bag.length} item${bag.length === 1 ? '' : 's'} moved to your stash.${lost ? ` <b class="red">${lost} discarded — stash full.</b>` : ''}`;
+    : `${kept.length} item${kept.length === 1 ? '' : 's'} moved to your stash.${lost.length ? ` <b class="red">${lost.length} weakest discarded — stash full.</b>` : ''}`;
   $('.sm-stats', box).innerHTML = `<div><b>${wave}</b>Wave</div><div><b>${score.toLocaleString()}</b>Score</div><div><b>${kills}</b>Slain</div>`;
   const items = $('.sm-items', box);
   items.className = 'sm-items' + (dead ? ' lost' : '');
   items.innerHTML = '';
-  for (const it of bag) {
+  for (const it of bag.slice().sort(byValue)) {
     const c = document.createElement('span');
-    c.className = 'chip';
+    c.className = 'chip' + (gone.has(it.id) ? ' lost' : '');
     c.style.color = rarityOf(it.rarity).color;
     c.textContent = it.name;
     if (!dead) bindTooltip(c, itemTooltip(it));
     items.appendChild(c);
   }
-  if (!dead) markNew(bag);
+  if (!dead) markNew(kept);
   box.classList.remove('hidden');
 }
 

@@ -1,7 +1,7 @@
 // Persistent profile: equipment, stash and records (localStorage).
 import { CLASSES, DEFAULT_CLASS } from '../data/classes/index';
 import { RUN } from '../data/balance';
-import { makeItem } from './items';
+import { makeItem, byValue } from './items';
 import type { Item, Profile, Slot } from '../types';
 
 const KEY = 'last-stand.profile.v1';
@@ -69,14 +69,13 @@ export function salvageEquipped(p: Profile, slot: Slot): void {
   saveProfile(p);
 }
 
-// Returns how many items did not fit.
-export function bankItems(p: Profile, items: Item[]): number {
-  let lost = 0;
-  for (const it of items) {
-    if (p.stash.length < RUN.bagLimit) p.stash.push(it);
-    else lost++;
-  }
-  p.records.banked += items.length - lost;
+// Best loot goes in first, so when the stash fills up only the weakest items are
+// discarded. Returns the items that did not fit (weakest last).
+export function bankItems(p: Profile, items: Item[]): Item[] {
+  const sorted = items.slice().sort(byValue);
+  const kept = sorted.slice(0, Math.max(0, RUN.bagLimit - p.stash.length));
+  p.stash.push(...kept);
+  p.records.banked += kept.length;
   saveProfile(p);
-  return lost;
+  return sorted.slice(kept.length);
 }

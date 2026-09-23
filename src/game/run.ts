@@ -46,7 +46,7 @@ export interface RunState {
   remaining: number;
 }
 
-export interface RunSummary { outcome: 'dead' | 'banked'; wave: number; score: number; kills: number; bag: Item[]; lost?: number }
+export interface RunSummary { outcome: 'dead' | 'banked'; wave: number; score: number; kills: number; bag: Item[]; lost?: Item[] }
 
 /** UI callbacks the run controller drives. */
 export interface RunUI {
@@ -217,7 +217,7 @@ function onPlayerDied(): void {
   schedule(2.6, () => { if (G.run === r) finishRun('dead'); });
 }
 
-function finishRun(outcome: 'dead' | 'banked', extra: { lost?: number } = {}): void {
+function finishRun(outcome: 'dead' | 'banked', extra: { lost?: Item[] } = {}): void {
   const r = G.run!;
   const rec = G.profile.records;
   rec.bestScore = Math.max(rec.bestScore, Math.round(r.score));

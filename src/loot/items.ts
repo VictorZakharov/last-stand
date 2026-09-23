@@ -70,6 +70,9 @@ export function itemPower(item: Item): number {
   return Math.round(p * 10);
 }
 
+/** Sort comparator: best first (rarity, then power). */
+export const byValue = (a: Item, b: Item): number => rarityIndex(b.rarity) - rarityIndex(a.rarity) || itemPower(b) - itemPower(a);
+
 /** Combine class base stats with equipped items into final derived stats. */
 export function computeStats(base: BaseStats, equipped: Profile['equipped']): DerivedStats {
   const add = Object.fromEntries(STAT_KEYS.map((k) => [k, 0])) as Record<StatKey, number>;
