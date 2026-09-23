@@ -71,7 +71,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     name: 'The Elder Thornheart', model: 'thornheart', ai: 'boss',
     life: 5400, damage: 105, damageType: 'vitality', speed: 2.7, radius: 1.8,
     range: 4.2, slamRadius: 5.5, windup: 1.2, recover: 1.0, cooldown: 2.0,
-    projectile: { speed: 12, radius: 0.5, color: 0xb8ff4a, trail: 0x183a08 },
+    projectile: { speed: 12, radius: 0.5, color: 0x6fd82a, trail: 0x0c2404, glow: 0.5, core: 0.45 },
     summon: 'thornling',
     cost: 0, score: 60, knockbackResist: 1, freezeResist: 0.7, boss: true, accent: 0x7aff50,
   },
