@@ -271,7 +271,7 @@ button { font-family: inherit; }
 .sm-stats b { font-family: var(--serif); font-size: 24px; color: var(--ink); }
 .sm-items { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
 .sm-items .chip { font-size: 13px; padding: 2px 7px; background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.1); }
-.sm-items.lost .chip { text-decoration: line-through; opacity: .55; }
+.sm-items.lost .chip, .sm-items .chip.lost { text-decoration: line-through; opacity: .55; }
 .controls-help { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; text-align: left; font-size: 14px; }
 .controls-help .k { font-family: var(--serif); color: var(--bronze-hi); text-align: right; }
 .help-text { text-align: left; font-size: 15px; line-height: 1.45; }

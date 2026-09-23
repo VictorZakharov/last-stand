@@ -1,7 +1,7 @@
 // In-run HUD: bars, hotbar, score, target frame, minimap, spoils, decision panel.
 import { G } from '../state';
 import { input } from '../core/input';
-import { rarityOf } from '../loot/items';
+import { rarityOf, byValue } from '../loot/items';
 import { WAVES } from '../data/waves';
 import { bindTooltip, itemTooltip, skillTooltip } from './tooltip';
 import { on } from '../events';
@@ -89,7 +89,7 @@ export function showDecision(): void {
     const bag = $('.dc-bag', box);
     bag.innerHTML = '';
     if (!r.bag.length) bag.innerHTML = '<span class="chip" style="color:#9a8f7c">No spoils yet — loot on the floor will be collected automatically</span>';
-    for (const it of r.bag) bag.appendChild(chip(it));
+    for (const it of r.bag.slice().sort(byValue)) bag.appendChild(chip(it));
     const onFloor = G.drops.length;
     $('.dc-risk', box).innerHTML = `If you fall, <b>${r.bag.length + onFloor} unbanked item${r.bag.length + onFloor === 1 ? '' : 's'}</b> will be lost forever.`;
     const next = r.wave + 1;
@@ -107,7 +107,7 @@ export function renderSpoils(): void {
   $('.sp-count').textContent = String(r.bag.length);
   const list = $('.sp-list');
   list.innerHTML = '';
-  for (const it of r.bag.slice(-9).reverse()) {
+  for (const it of r.bag.slice().sort(byValue).slice(0, 9)) {
     const d = document.createElement('div');
     d.style.color = rarityOf(it.rarity).color;
     d.textContent = it.name;
