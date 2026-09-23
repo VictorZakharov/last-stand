@@ -142,17 +142,27 @@ function abandon() {
 function switchClass(id: string) {
   if (G.mode !== 'menu' || id === G.player.cls.id) return;
   saveClass(id);
+  // the new hero takes the old one's place: a swap in place, not a respawn
+  const at = G.player.pos.clone(), facing = G.player.facing;
   G.player.dispose();
   // the old class's skill visuals go with it
   clearProjectiles(); clearEffects(); clearLights(); particles.clear();
   G.profile = loadProfile(id);
   G.player = new Player(id, G.profile.equipped);
+  G.player.place(at, facing);
   G.player.sandbox = true;
   buildHotbar(G.player);
 }
 
-// gear can change what a key fires (a shield skill falls back without one), so the hotbar is rebuilt
-function profileChanged() { G.player.recomputeStats(G.profile.equipped); G.player.reset(); buildHotbar(G.player); }
+// gear can change what a key fires (a shield skill falls back without one), so the hotbar is rebuilt.
+// The hero stays where it stands (the lobby can be practised in)
+function profileChanged() {
+  const p = G.player, at = p.pos.clone(), facing = p.facing;
+  p.recomputeStats(G.profile.equipped);
+  p.reset();
+  p.place(at, facing);
+  buildHotbar(p);
+}
 
 const compileContext = () => `(${G.mode}${G.run ? ` wave ${G.run.wave}` : ''}, t=${G.time.toFixed(1)}s, ${G.enemies.length} foes)`;
 

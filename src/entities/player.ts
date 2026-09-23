@@ -115,12 +115,18 @@ export class Player {
     saveLoadout(this.cls, this.loadout);
   }
 
-  /** The skill a key fires. A skill that needs a shield gives way to its fallback for the weapon held. */
+  /** Whether the gear held allows a skill (some need a shield, some a two-handed weapon). */
+  usable(def: SkillDef): boolean {
+    return def.needs === 'shield' ? this.gear.shield : def.needs === 'twoHanded' ? this.gear.twoHanded : true;
+  }
+
+  /** The skill a key fires. A skill the gear doesn't allow gives way to its fallback for the gear held. */
   skillAt(key: SkillKey): KnownSkill | null {
     const id = this.loadout[key];
     const s = id ? this.known.get(id) ?? null : null;
-    if (s?.def.needs === 'shield' && !this.gear.shield) {
-      const alt = this.gear.twoHanded ? s.def.fallback?.twoHanded : s.def.fallback?.oneHanded;
+    if (s && !this.usable(s.def)) {
+      const fb = s.def.fallback;
+      const alt = this.gear.shield ? fb?.shield : this.gear.twoHanded ? fb?.twoHanded : fb?.oneHanded;
       return alt ? this.known.get(alt) ?? null : null;
     }
     return s;
@@ -133,6 +139,15 @@ export class Player {
     this.gear = { weapon: weapon?.base ?? null, twoHanded: isTwoHanded(weapon, this.cls), shield: (equipped.offhand?.stats.blockAmount ?? 0) > 0 };   // shields are the off-hands that block
     this.model.setGear?.(this.gear);
     this.life = this.stats.maxLife * prevLifePct;
+  }
+
+  /** Stand at a spot facing a direction, as if always there (the cape settles in place). */
+  place(pos: THREE.Vector3, facing: number): void {
+    this.pos.set(pos.x, 0, pos.z);
+    this.facing = facing;
+    this.obj.position.set(pos.x, groundHeight(pos.x, pos.z), pos.z);
+    this.model.root.rotation.y = facing;
+    this.model.reset?.();
   }
 
   reset(): void {

@@ -29,9 +29,9 @@ const mage: ClassDef = {
   skills: [
     {
       key: 'mouse0', impl: 'splinterBolt', name: 'Splintering Bolt',
-      desc: 'Launch a volley of seeking arcane bolts that shatter into smaller bolts on impact.',
-      tags: ['arcane'], cost: 13, cooldown: 0, castTime: 0.34,
-      damage: 36, missiles: 3, spread: 0.22, speed: 24, splitCount: 2, splitDamage: 0.6, range: 22,
+      desc: 'Launch a seeking arcane bolt that shatters into smaller bolts on impact. Costs no Energy.',
+      tags: ['arcane'], cost: 0, cooldown: 0, castTime: 0.34,
+      damage: 36, missiles: 1, spread: 0.22, speed: 24, splitCount: 2, splitDamage: 0.6, range: 22,
       color: 0xff4fd8, trailEnd: 0x6a1cff,   // VFX colors
       icon: { glyph: '✧', color: '#ff6fe0' },
     },

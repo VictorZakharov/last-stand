@@ -23,8 +23,8 @@ const warrior: ClassDef = {
     resist: 6,
   },
 
-  // Right click raises the shield; without one it falls back to the weapon held (a two-hander
-  // spins, a lone one-hander looses a crescent). A key's default is the last skill listing it.
+  // Right click raises the shield; with a two-hander instead it spins (Steel Tempest), and with a lone
+  // one-hander it is empty until the player binds something. The crescent takes a two-handed weapon. A key's default is the last skill listing it.
   skills: [
     {
       key: 'mouse0', impl: 'cleave', name: 'Rending Cleave',
@@ -39,6 +39,7 @@ const warrior: ClassDef = {
       desc: 'Swing a crescent of lightning that tears through every foe in its path.',
       tags: ['lightning'], cost: 24, cooldown: 0.8, castTime: 0.45,
       damage: 95, speed: 17, range: 15, width: 2.1,
+      needs: 'twoHanded',   // a swing of a great weapon
       color: 0x5a8cff,   // a deep blue: pale colours bloom to white
       icon: { glyph: '☾', color: '#9fc8ff' },
     },
@@ -47,7 +48,7 @@ const warrior: ClassDef = {
       desc: 'Hold your shield up: every blow from the front is blocked, for three times your Block Amount. A bigger blow breaks your guard and staggers you: for a moment you can only move. Drains Energy while held.',
       tags: ['defense'], cost: 6, cooldown: 0, castTime: 0, channel: true,
       block: 3, moveMult: 0.45,
-      needs: 'shield', fallback: { twoHanded: 'tempest', oneHanded: 'crescent' },
+      needs: 'shield', fallback: { twoHanded: 'tempest' },
       icon: { glyph: '⛉', color: '#e8d2a0' },
     },
     {

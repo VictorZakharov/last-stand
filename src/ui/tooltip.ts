@@ -143,7 +143,12 @@ export function skillTooltip(def: SkillDef): () => TooltipContent {
     const alt = (id?: string) => (id ? G.player.known.get(id)?.def.name : undefined);
     if (def.needs === 'shield') {
       const two = alt(def.fallback?.twoHanded), one = alt(def.fallback?.oneHanded);
-      html += `<div class="tt-foot">Needs a shield. Without one this key uses ${[two && `${two} with a two-handed weapon`, one && `${one} with a one-handed weapon`].filter(Boolean).join(', or ')}.</div>`;
+      const alts = [two && `${two} with a two-handed weapon`, one && `${one} with a one-handed weapon`].filter(Boolean);
+      html += `<div class="tt-foot">Needs a shield.${alts.length ? ` Without one this key uses ${alts.join(', or ')}.` : ''}</div>`;
+    } else if (def.needs === 'twoHanded') {
+      const sh = alt(def.fallback?.shield), one = alt(def.fallback?.oneHanded);
+      const alts = [sh && `${sh} with a shield`, one && `${one} with a one-handed weapon`].filter(Boolean);
+      html += `<div class="tt-foot">Needs a two-handed weapon.${alts.length ? ` Without one this key uses ${alts.join(', or ')}.` : ''}</div>`;
     }
     html += '</div>';
     return { html, color: def.icon.color };
