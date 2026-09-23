@@ -4,6 +4,8 @@ let master: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 const last: Record<string, number> = {};
 
+/** Called at boot (the context starts suspended: opening the audio device is slow, so it happens
+ *  behind the loading screen) and on every user gesture (which lets it resume). */
 export function initAudio(): void {
   if (ctx) { if (ctx.state === 'suspended') void ctx.resume(); return; }
   try {
