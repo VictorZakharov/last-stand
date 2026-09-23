@@ -24,7 +24,7 @@ const skill: InstantSkill = {
     let dust = 0;
     sfx.rush();
     smokePuff(player.pos, { count: 6, color: 0x2a241c, size: 0.8, sizeEnd: 2, speed: 2 });
-    player.startDash(dir, def.speed, def.range / def.speed, () => {
+    player.startDash(dir, def.speed, def.range / def.speed, { step: () => {
       const p = player.pos;
       if ((dust -= G.dt) <= 0) { dust = 0.04; smokePuff(p, { count: 1, color: 0x2a241c, alpha: 0.4, size: 0.6, sizeEnd: 1.8, life: 0.8, speed: 0.5 }); }
       for (const e of G.enemies) {
@@ -38,7 +38,7 @@ const skill: InstantSkill = {
       }
       const d = player.dash;
       if (d && d.t >= d.dur) shockwave(p, { color: 0xffb46a, intensity: 1.5, from: 0.3, to: 2.4, life: 0.35 });
-    });
+    } });
   },
 };
 

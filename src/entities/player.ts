@@ -5,7 +5,8 @@ import { CLASSES } from '../data/classes/index';
 import { buildModel } from './models/index';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
-import { computeStats } from '../loot/items';
+import { computeStats, isTwoHanded } from '../loot/items';
+import { BLOCK } from '../data/balance';
 import { SKILL_KEYS, loadLoadout, saveLoadout, type Loadout } from '../loot/loadout';
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
@@ -17,7 +18,7 @@ import { sfx } from '../core/audio';
 import { emit } from '../events';
 import { angleDamp, damp, rand } from '../util';
 import { applyShadowDetail } from '../core/quality';
-import type { ActionState, ClassDef, DamageType, DerivedStats, Model, Profile, SkillDef, SkillKey } from '../types';
+import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SkillDef, SkillKey } from '../types';
 
 /** A skill the class knows: its tuning data + behavior. Keyed by `def.impl`. */
 export interface KnownSkill { def: SkillDef; impl: SkillImpl }
@@ -25,10 +26,15 @@ export interface KnownSkill { def: SkillDef; impl: SkillImpl }
 /** Damage absorption shield (see the Arcane Aegis skill). */
 export interface Ward { amount: number; t: number; onHit?(absorbed: number): void; onEnd?(): void }
 
+/** Absolute difference between two headings. */
+const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+
 interface CastState { skill: KnownSkill; t: number; dur: number; fireAt: number; fired: boolean; target: THREE.Vector3 }
 interface ChannelState { skill: KnownSkill; key: SkillKey; state: unknown }
-/** A movement skill's dash: a fixed velocity that input can't steer, with a per-frame hook. */
-interface DashState { vx: number; vz: number; t: number; dur: number; step?(): void }
+/** A movement skill's dash: a fixed velocity that input can't steer, with a per-frame hook; `lift`
+ *  makes it a jump of that peak height, and `anim` is the pose it plays. */
+interface DashState { vx: number; vz: number; t: number; dur: number; lift: number; anim: CastAnim; step?(): void }
+export interface DashOpts { lift?: number; anim?: CastAnim; step?(): void }
 
 export class Player {
   readonly cls: ClassDef;
@@ -54,6 +60,11 @@ export class Player {
   readonly cooldowns = new Map<string, number>();
 
   stats!: DerivedStats;
+  /** what the character holds (from the equipped items) */
+  gear: Gear = { weapon: null, twoHanded: false, shield: false };
+  /** seconds until the shield can block again, and when it last did */
+  blockCd = 0;
+  lastBlock = -99;
   life = 0;
   energy = 0;
   alive = true;
@@ -100,14 +111,23 @@ export class Player {
     saveLoadout(this.cls, this.loadout);
   }
 
+  /** The skill a key fires. A skill that needs a shield gives way to its fallback for the weapon held. */
   skillAt(key: SkillKey): KnownSkill | null {
     const id = this.loadout[key];
-    return id ? this.known.get(id) ?? null : null;
+    const s = id ? this.known.get(id) ?? null : null;
+    if (s?.def.needs === 'shield' && !this.gear.shield) {
+      const alt = this.gear.twoHanded ? s.def.fallback?.twoHanded : s.def.fallback?.oneHanded;
+      return alt ? this.known.get(alt) ?? null : null;
+    }
+    return s;
   }
 
   recomputeStats(equipped: Profile['equipped']): void {
     const prevLifePct = this.stats ? this.life / this.stats.maxLife : 1;
     this.stats = computeStats(this.cls.base, equipped);
+    const weapon = equipped.weapon;
+    this.gear = { weapon: weapon?.base ?? null, twoHanded: isTwoHanded(weapon, this.cls), shield: (equipped.offhand?.stats.blockAmount ?? 0) > 0 };   // shields are the off-hands that block
+    this.model.setGear?.(this.gear);
     this.life = this.stats.maxLife * prevLifePct;
   }
 
@@ -123,6 +143,7 @@ export class Player {
     this.dash = null;
     this.ward = null;
     this.hitT = 0;
+    this.blockCd = 0;
     this.lastLowEnergy = 0;
     this.cooldowns.clear();
     this.pos.set(0, 0, 3);
@@ -181,7 +202,7 @@ export class Player {
     const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
     const target = this.aim.clone();
     if (dur <= 0) { this.fire(s, target); return true; }
-    this.casting = { skill: s, t: 0, dur, fireAt: dur * 0.55, fired: false, target };
+    this.casting = { skill: s, t: 0, dur, fireAt: dur * (s.def.fireAt ?? 0.55), fired: false, target };
     this.faceTowards(target, true);
     return true;
   }
@@ -197,8 +218,8 @@ export class Player {
   }
 
   /** Rush along `dir` (normalized, on the ground) at `speed` for `dur` seconds; `step` runs every frame of it. */
-  startDash(dir: THREE.Vector3, speed: number, dur: number, step?: () => void): void {
-    this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, step };
+  startDash(dir: THREE.Vector3, speed: number, dur: number, { lift = 0, anim = 'charge', step }: DashOpts = {}): void {
+    this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, lift, anim, step };
     this.facing = Math.atan2(dir.x, dir.z);
   }
 
@@ -238,6 +259,8 @@ export class Player {
       const c = this.casting;
       c.t += dt;
       this.faceTowards(c.target);
+      const impl = c.skill.impl;
+      if (!c.fired && !impl.channel) impl.charging?.(this, c.skill.def, c.t / c.fireAt, dt);
       if (!c.fired && c.t >= c.fireAt) { c.fired = true; this.fire(c.skill, this.aim.clone()); }
       if (c.t >= c.dur) this.casting = null;
     }
@@ -272,6 +295,7 @@ export class Player {
     if (!this.channel) this.energy = Math.min(this.stats.maxEnergy, this.energy + this.stats.energyRegen * dt);
     for (const [id, cd] of this.cooldowns) this.cooldowns.set(id, Math.max(0, cd - dt));
     this.hitT = Math.max(0, this.hitT - dt * 4);
+    this.blockCd = Math.max(0, this.blockCd - dt);
     if (this.ward) {
       this.ward.t -= dt;
       if (this.ward.t <= 0 || this.ward.amount <= 0) { this.ward.onEnd?.(); this.ward = null; }
@@ -282,9 +306,9 @@ export class Player {
     const side = Math.cos(this.facing) * this.vel.x - Math.sin(this.facing) * this.vel.z;
     this.phase += dt * speed * 2.1 * (fwd < -0.5 ? -1 : 1);
     let action: ActionState | null = null;
-    if (this.dash) action = { name: 'charge', t: Math.min(1, this.dash.t / this.dash.dur) };
+    if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / this.dash.dur) };
     else if (this.casting) action = { name: this.casting.skill.impl.anim || 'cast', t: this.casting.t / this.casting.dur };
-    else if (this.channel) action = { name: 'channel', t: 0.5 };
+    else if (this.channel) action = { name: this.channel.skill.impl.anim || 'channel', t: 0.5 };
     this.pose(dt, t, Math.min(1, speed / this.stats.moveSpeed), 1, side / this.stats.moveSpeed, action);
 
     // ambient motes around the offhand (the mage's arcana)
@@ -301,6 +325,9 @@ export class Player {
   pose(dt: number, t: number, move: number, dir: number, lean: number, action: ActionState | null): void {
     this.obj.position.set(this.pos.x, damp(this.obj.position.y, groundHeight(this.pos.x, this.pos.z), 14, dt), this.pos.z);
     this.model.root.rotation.y = this.facing;
+    // a jumping dash lifts the model along a parabola
+    const d = this.dash, k = d ? Math.min(1, d.t / d.dur) : 0;
+    this.model.root.position.y = d ? d.lift * 4 * k * (1 - k) : 0;
     this.model.animate({
       t, dt, phase: this.phase, move, moveDir: dir, lean, action,
       hit: this.hitT, dead: this.deadT >= 0 ? Math.min(1, this.deadT / 1.0) : -1,
@@ -321,8 +348,10 @@ export class Player {
   }
 
   /** Apply already-mitigated damage (see combat/damage hurtPlayer). Returns damage taken. */
-  takeDamage(amount: number, _type: DamageType, _from: THREE.Vector3 | null): number {
+  takeDamage(amount: number, _type: DamageType, from: THREE.Vector3 | null): number {
     if (!this.alive) return 0;
+    amount = this.tryBlock(amount, from);
+    if (amount <= 0) return 0;
     if (this.ward) {
       const absorbed = Math.min(this.ward.amount, amount);
       this.ward.amount -= absorbed;
@@ -339,6 +368,28 @@ export class Player {
     emit('playerHurt', amount);
     if (this.life <= 0) this.die();
     return amount;
+  }
+
+  /** Shield block: a chance per hit (then a short recovery), or every frontal hit while the shield is raised. */
+  tryBlock(amount: number, from: THREE.Vector3 | null): number {
+    const s = this.stats;
+    if (!this.gear.shield || s.blockAmount <= 0) return amount;
+    const raised = this.channel?.skill.def.block ?? 0;
+    const front = !from || angleOff(Math.atan2(from.x - this.pos.x, from.z - this.pos.z), this.facing) < BLOCK.arc;
+    let absorb: number;
+    if (raised && front) absorb = s.blockAmount * raised;
+    else if (this.blockCd <= 0 && Math.random() * 100 < s.block) { absorb = s.blockAmount; this.blockCd = BLOCK.recovery; }
+    else return amount;
+    const blocked = Math.min(amount, absorb);
+    this.lastBlock = G.time;
+    const p = this.palmPoint;
+    floatText(this.pos.x, 2.5, this.pos.z, `Block ${Math.round(blocked)}`, 'info', '#ffd9a0');
+    for (let i = 0; i < 8; i++) {
+      particles.glow.spawn({ x: p.x, y: p.y, z: p.z, vx: rand(-4, 4), vy: rand(0, 4), vz: rand(-4, 4), life: rand(0.2, 0.35), size: rand(0.04, 0.09), sizeEnd: 0,
+        color: col(0xffe0a0, 2), colorEnd: col(0xff5010, 0.4), gravity: 12 });
+    }
+    sfx.clang();
+    return amount - blocked;
   }
 
   die(): void {

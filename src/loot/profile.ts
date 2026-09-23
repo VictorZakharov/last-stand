@@ -3,7 +3,7 @@
 import { CLASSES, DEFAULT_CLASS } from '../data/classes/index';
 import { RUN } from '../data/balance';
 import { readCookie, writeCookie } from '../core/cookies';
-import { makeItem, byValue } from './items';
+import { makeItem, byValue, isTwoHanded } from './items';
 import type { Item, Profile, Slot } from '../types';
 
 const KEY = (classId: string) => `last-stand.profile.${classId}.v1`;
@@ -14,7 +14,12 @@ const CLASS_COOKIE = 'last-stand-class';
 function fresh(classId: string): Profile {
   const cls = CLASSES[classId];
   const equipped: Profile['equipped'] = {};
-  for (const g of cls.starterGear) equipped[g.slot] = makeItem({ ...g, cls });
+  for (const g of cls.starterGear) {
+    // starter weapons are one-handed, so a starter off-hand fits
+    let it = makeItem({ ...g, cls });
+    for (let i = 0; i < 20 && isTwoHanded(it, cls); i++) it = makeItem({ ...g, cls });
+    equipped[g.slot] = it;
+  }
   return {
     classId: cls.id,
     equipped,
@@ -74,8 +79,14 @@ export function equipFromStash(p: Profile, itemId: string): void {
   if (idx < 0) return;
   const item = p.stash[idx];
   const prev = p.equipped[item.slot];
+  // a two-handed weapon and an off-hand don't go together: the other one goes to the stash
+  const cls = CLASSES[p.classId];
+  const clash = item.slot === 'weapon' && isTwoHanded(item, cls) ? 'offhand' : item.slot === 'offhand' && isTwoHanded(p.equipped.weapon, cls) ? 'weapon' : null;
+  const bumped = clash ? p.equipped[clash] : undefined;
+  if (bumped && p.stash.length + (prev ? 1 : 0) > RUN.bagLimit) return;
   p.stash.splice(idx, 1);
   if (prev) p.stash.splice(idx, 0, prev);
+  if (bumped) { delete p.equipped[clash!]; p.stash.unshift(bumped); }
   p.equipped[item.slot] = item;
   saveProfile(p);
 }

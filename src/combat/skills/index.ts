@@ -14,12 +14,13 @@ import cleave from './cleave';
 import crescent from './crescent';
 import tempest from './tempest';
 import bullRush from './bullRush';
-import moltenRift from './moltenRift';
+import raiseShield from './raiseShield';
+import powerStrike from './powerStrike';
 import ironBellow from './ironBellow';
 
 import type { SkillImpl } from './types';
 
 export const SKILL_IMPLS: Record<string, SkillImpl> = {
   splinterBolt, starfall, voidLance, glacialNova, maelstrom, aegis, potion,
-  cleave, crescent, tempest, bullRush, moltenRift, ironBellow,
+  cleave, crescent, raiseShield, tempest, bullRush, powerStrike, ironBellow,
 };

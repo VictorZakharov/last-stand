@@ -80,6 +80,9 @@ const mage: ClassDef = {
   ],
 
   // Common items granted to a brand-new profile (see loot/items.ts makeItem).
+  // the block stats only come on warrior shields
+  excludeStats: ['block', 'blockAmount'],
+
   starterGear: [
     { slot: 'weapon', rarity: 'common', ilvl: 1 },
     { slot: 'chest', rarity: 'common', ilvl: 1 },

@@ -13,7 +13,7 @@ export type DamageType = 'arcane' | 'cold' | 'fire' | 'lightning' | 'physical' |
 /** Stats rolled on items (keys of data/items STATS). */
 export type StatKey =
   | 'damagePct' | 'arcanePct' | 'elementalPct' | 'life' | 'energy' | 'lifeRegen' | 'energyRegen'
-  | 'castSpeed' | 'cdr' | 'crit' | 'critDmg' | 'moveSpeed' | 'leech' | 'armor' | 'resist';
+  | 'castSpeed' | 'cdr' | 'crit' | 'critDmg' | 'moveSpeed' | 'leech' | 'armor' | 'resist' | 'block' | 'blockAmount';
 
 export type StatBlock = Partial<Record<StatKey, number>>;
 
@@ -47,6 +47,9 @@ export interface DerivedStats {
   castSpeed: number;
   cdr: number;
   leech: number;
+  /** % chance to block a hit (shields), and the damage a block absorbs */
+  block: number;
+  blockAmount: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,7 +57,7 @@ export interface DerivedStats {
 
 export type SkillKey = 'mouse0' | 'mouse2' | '1' | '2' | '3' | '4' | 'q';
 /** pose a model plays while the skill casts; a class's model interprets each name in its own way */
-export type CastAnim = 'cast' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | null;
+export type CastAnim = 'cast' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'spin' | 'block' | null;
 
 /** Skill tuning data. Behavior-specific numbers are optional fields. */
 export interface SkillDef {
@@ -96,6 +99,13 @@ export interface SkillDef {
   knock?: number;
   /** energy restored per enemy hit */
   gain?: number;
+  /** when the cast lands, as a fraction of the cast time (default 0.55) */
+  fireAt?: number;
+  /** Raise Shield: blocks absorb this many times the block amount */
+  block?: number;
+  /** only works with a shield equipped; otherwise the key uses the fallback for the weapon held */
+  needs?: 'shield';
+  fallback?: { twoHanded?: string; oneHanded?: string };
 }
 
 export interface ClassDef {
@@ -116,7 +126,14 @@ export interface ClassDef {
   bases?: Partial<Record<Slot, string[]>>;
   /** stats that never roll on this class's items (no skill of the class uses them) */
   excludeStats?: StatKey[];
+  /** implicit stats per slot, replacing the defaults (data/items SLOT_INFO) */
+  implicits?: Partial<Record<Slot, [StatKey, number][]>>;
+  /** weapon bases held in both hands: they leave no room for an off-hand */
+  twoHanded?: string[];
 }
+
+/** What the character holds, derived from the equipped items (drives model and skills). */
+export interface Gear { weapon: string | null; twoHanded: boolean; shield: boolean }
 
 // ---------------------------------------------------------------------------
 // Items
@@ -220,6 +237,12 @@ export interface Model {
   worldObjects?: THREE.Object3D[];
   /** re-settle simulated parts after a teleport */
   reset?(): void;
+  /** show the equipped weapon / shield */
+  setGear?(gear: Gear): void;
+  /** direction of the current melee swing: +1 sweeps right to left, -1 left to right */
+  readonly swing?: number;
+  /** distance from the body to the weapon's tip */
+  readonly reach?: number;
   dispose(): void;
 }
 

@@ -3,13 +3,22 @@
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps } from '../../core/textures';
-import { buildHumanoid, part, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp } from './rig';
-import { clamp } from '../../util';
+import { buildHumanoid, part, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm } from './rig';
+import { clamp, lerp } from '../../util';
 import { SkeletonCape } from './cape';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
-import type { AnimState, Model } from '../../types';
+import type { AnimState, Gear, Model } from '../../types';
 
 const ZERO = new THREE.Vector3();
+/** a held weapon: its tip along the grip, and where the left hand holds it (two-handers) */
+interface Weapon { group: THREE.Group; len: number; off: number | null }
+/** the grip turns the weapon's +Y forward and a little up out of the bent arm */
+const GRIP = Math.PI / 2 + 0.7;
+/** straightens the weapon along the arm, for swings that trace the damage arc */
+const ALONG_ARM = Math.PI - GRIP;
+/** arm length (upper + fore + hand), before the model's 1.1 scale */
+const ARM = 0.63;
+const _grip = new THREE.Vector3(), _pole = new THREE.Vector3(1, -0.7, -0.6);
 
 /** Crimson cape with a dark iron trim, matching the tabard. */
 const WARRIOR_CAPE_PALETTE: CapeFabricPalette = Object.freeze({
@@ -29,6 +38,7 @@ export function buildWarrior(): Model {
   const cloth = kit.std({ color: 0x6a1016, roughness: 0.85, roughnessMap: g.roughnessMap, normalMap: g.normalMap, side: THREE.DoubleSide });
   const leather = kit.std({ color: 0x2e2018, roughness: 0.7, normalMap: g.normalMap });
   const mail = kit.std({ color: 0x4a4e58, metalness: 0.8, roughness: 0.55, normalMap: g.normalMap, normalScale: new THREE.Vector2(2, 2) });
+  const wood = kit.std({ color: 0x3a2616, roughness: 0.7, normalMap: g.normalMap });
   const face = kit.std({ color: 0x050506, roughness: 1 });
   const ember = kit.glow(0xff8a3a, 4);
   // the fuller only glows while a skill charges
@@ -96,23 +106,77 @@ export function buildWarrior(): Model {
     fin.rotation.x = -a;
   }
 
-  // --- sword (right hand): the blade runs along the hand's +Z, perpendicular to the forearm
-  const sword = joint(j.handR, 0, -0.06, 0.01);
-  sword.rotation.x = Math.PI / 2 + 0.7;   // with the bent arm the blade points forward, slightly up
-  part(new THREE.CylinderGeometry(0.022, 0.024, 0.2, 8), leather, sword, 0, 0, 0);
-  part(new THREE.SphereGeometry(0.04, 10, 8), brass, sword, 0, -0.12, 0);
-  part(new THREE.BoxGeometry(0.26, 0.035, 0.05), brass, sword, 0, 0.11, 0);
-  for (const s of [1, -1]) part(new THREE.SphereGeometry(0.026, 8, 6), brass, sword, s * 0.13, 0.11, 0);
-  // diamond-section blade (a 4-sided cylinder has its corners on the axes), flat across X
-  part(new THREE.CylinderGeometry(0.034, 0.048, 0.92, 4).scale(1, 1, 0.26), plate, sword, 0, 0.59, 0);
-  part(new THREE.ConeGeometry(0.034, 0.13, 4).scale(1, 1, 0.26), plate, sword, 0, 1.115, 0);
-  const fuller = part(new THREE.BoxGeometry(0.01, 0.74, 0.03), edge, sword, 0, 0.55, 0);
-  fuller.castShadow = false;
-  const tip = joint(sword, 0, 1.12, 0);
+  // --- weapons in the right hand, built along the grip's +Y (blade up); setGear shows the equipped one.
+  // The grip turns +Y to point forward, slightly up, out of the bent arm.
+  const grip = joint(j.handR, 0, -0.06, 0.01);
+  grip.rotation.x = GRIP;
+  const weapons = new Map<string, Weapon>();
+  const add = (name: string, len: number, off: number | null, build: (g: THREE.Group) => void) => {
+    const g = new THREE.Group();
+    grip.add(g);
+    build(g);
+    g.visible = false;
+    weapons.set(name, { group: g, len, off });
+  };
+  const blade = (g: THREE.Group, w: number, len: number, at: number) => {
+    // diamond section (a 4-sided cylinder has its corners on the axes), flat across X
+    part(new THREE.CylinderGeometry(w * 0.7, w, len, 4).scale(1, 1, 0.26), plate, g, 0, at + len / 2, 0);
+    part(new THREE.ConeGeometry(w * 0.7, w * 2.7, 4).scale(1, 1, 0.26), plate, g, 0, at + len + w * 1.35, 0);
+    part(new THREE.BoxGeometry(0.01, len * 0.8, w * 0.62), edge, g, 0, at + len * 0.45, 0).castShadow = false;
+  };
+  const haft = (g: THREE.Group, from: number, to: number, r = 0.022) => part(new THREE.CylinderGeometry(r, r * 1.1, to - from, 8), wood, g, 0, (from + to) / 2, 0);
+  // an axe blade: a wedge of a disc standing in the haft's plane, centred on +X (or -X)
+  const axeHead = (g: THREE.Group, r: number, at: number, side: number) =>
+    part(new THREE.CylinderGeometry(r, r, 0.026, 18, 1, false, side * Math.PI / 2 - 0.8, 1.6).rotateX(Math.PI / 2), plate, g, side * 0.02, at, 0);
+
+  add('Sword', 1.12, null, (g) => {
+    part(new THREE.CylinderGeometry(0.022, 0.024, 0.2, 8), leather, g);
+    part(new THREE.SphereGeometry(0.04, 10, 8), brass, g, 0, -0.12, 0);
+    part(new THREE.BoxGeometry(0.26, 0.035, 0.05), brass, g, 0, 0.11, 0);
+    blade(g, 0.048, 0.92, 0.13);
+  });
+  add('Axe', 0.74, null, (g) => {
+    haft(g, -0.14, 0.72);
+    axeHead(g, 0.2, 0.6, 1);
+    part(new THREE.BoxGeometry(0.1, 0.05, 0.04), dark, g, -0.06, 0.6, 0);
+    part(new THREE.CylinderGeometry(0.03, 0.03, 0.08, 8), brass, g, 0, 0.6, 0);
+  });
+  add('Mace', 0.72, null, (g) => {
+    haft(g, -0.14, 0.62, 0.024);
+    part(new THREE.SphereGeometry(0.085, 12, 10), dark, g, 0, 0.64, 0);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      part(new THREE.BoxGeometry(0.02, 0.16, 0.07), plate, g, Math.cos(a) * 0.075, 0.64, Math.sin(a) * 0.075).rotation.y = -a;
+    }
+  });
+  add('Greatsword', 1.62, -0.24, (g) => {
+    part(new THREE.CylinderGeometry(0.024, 0.026, 0.44, 8), leather, g, 0, -0.1, 0);
+    part(new THREE.SphereGeometry(0.05, 10, 8), brass, g, 0, -0.35, 0);
+    part(new THREE.BoxGeometry(0.44, 0.045, 0.06), brass, g, 0, 0.14, 0);
+    for (const s of [1, -1]) part(new THREE.SphereGeometry(0.032, 8, 6), brass, g, s * 0.22, 0.14, 0);
+    blade(g, 0.064, 1.3, 0.16);
+  });
+  add('Greataxe', 1.12, -0.3, (g) => {
+    haft(g, -0.42, 1.1, 0.026);
+    for (const s of [1, -1]) axeHead(g, 0.27, 0.9, s);
+    part(new THREE.CylinderGeometry(0.036, 0.036, 0.1, 8), brass, g, 0, 0.9, 0);
+    part(new THREE.ConeGeometry(0.03, 0.12, 6), plate, g, 0, 1.14, 0);
+  });
+  add('Maul', 1.1, -0.28, (g) => {
+    haft(g, -0.38, 0.92, 0.027);
+    part(new THREE.BoxGeometry(0.4, 0.22, 0.22), plate, g, 0, 1.0, 0);
+    for (const s of [1, -1]) part(new THREE.BoxGeometry(0.03, 0.24, 0.24), brass, g, s * 0.14, 1.0, 0);
+    part(new THREE.CylinderGeometry(0.035, 0.035, 0.1, 8), brass, g, 0, 0.84, 0);
+  });
+  const tip = joint(grip, 0, 1.12, 0);
+  // where the left hand holds a two-handed weapon
+  const offGrip = joint(grip, 0, -0.24, 0);
+  let held: Weapon | null = null;
 
   // --- round shield held out in front of the left fist: its face (local +Z) points out of the hand
   const shield = joint(j.handL, 0, -0.1, 0);
   shield.rotation.x = Math.PI / 2;
+  shield.visible = false;
   part(new THREE.CylinderGeometry(0.33, 0.33, 0.035, 28).rotateX(Math.PI / 2), dark, shield);
   part(new THREE.CylinderGeometry(0.3, 0.3, 0.02, 28).rotateX(Math.PI / 2), cloth, shield, 0, 0, 0.012);
   part(new THREE.TorusGeometry(0.325, 0.022, 8, 32), brass, shield, 0, 0, 0.012);
@@ -149,20 +213,35 @@ export function buildWarrior(): Model {
     ],
   });
 
+  // right-arm swings and chops yaw last, so the straight arm sweeps around the vertical axis
+  // (with no yaw this order poses exactly like the default)
+  j.shoulderR.rotation.order = 'YXZ';
+
   // swings alternate forehand / backhand; a new swing starts when the action restarts
   let side = 1, lastK = 1, lastName = '';
+
+  function setGear(gear: Gear): void {
+    for (const w of weapons.values()) w.group.visible = false;
+    held = gear.weapon ? weapons.get(gear.weapon) ?? weapons.get('Sword')! : null;
+    if (held) held.group.visible = true;
+    tip.position.y = held?.len ?? 0;
+    if (held?.off != null) offGrip.position.y = held.off;
+    shield.visible = gear.shield;
+  }
 
   function animate(st: AnimState): void {
     const { t, dt } = st;
     resetPose(j);
     const move = st.move;
     const dir = st.moveDir ?? 1;
+    const two = held?.off != null;
 
-    // base stance: sword forward at the hip, shield up in front
+    // base stance: weapon forward at the hip (a two-hander held across the body), shield up in front
     idle(j, t, 1 - move * 0.6);
     walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: 0.2, bob: 0.08, dir });
-    j.shoulderR.rotation.x += -0.3; j.shoulderR.rotation.z += -0.1; j.elbowR.rotation.x += -0.8;
-    j.shoulderL.rotation.x += -0.45; j.shoulderL.rotation.z += 0.12; j.elbowL.rotation.x += -1.1; j.elbowL.rotation.y += 0.5;
+    if (two) { j.shoulderR.rotation.x += -0.5; j.shoulderR.rotation.z += 0.2; j.elbowR.rotation.x += -1.0; }
+    else { j.shoulderR.rotation.x += -0.3; j.shoulderR.rotation.z += -0.1; j.elbowR.rotation.x += -0.8; }
+    if (shield.visible) { j.shoulderL.rotation.x += -0.45; j.shoulderL.rotation.z += 0.12; j.elbowL.rotation.x += -1.1; j.elbowL.rotation.y += 0.5; }
     j.spine.rotation.x += move * 0.14 * dir;
     j.body.rotation.z += (st.lean || 0) * 0.12;
     j.kneeL.rotation.x += 0.1 * (1 - move); j.kneeR.rotation.x += 0.1 * (1 - move);
@@ -170,57 +249,78 @@ export function buildWarrior(): Model {
     const a = st.action;
     if (a && (a.name !== lastName || a.t < lastK - 0.2) && a.name === 'swing') side = -side;
     lastName = a?.name ?? ''; lastK = a?.t ?? 1;
+    const R = j.shoulderR.rotation;
     if (a) {
       const k = a.t;
       if (a.name === 'swing') {
-        // wind up across the body, cut through, recover
-        const prep = ramp(k, 0, 0.4), cut = ramp(k, 0.4, 0.62), back = 1 - ramp(k, 0.72, 1);
-        const s = side;
-        j.chest.rotation.y += s * (0.7 * prep - 1.5 * cut) * back;
-        j.spine.rotation.y += s * (0.25 * prep - 0.5 * cut) * back;
-        j.shoulderR.rotation.x += (-1.25 * prep) * back;
-        j.shoulderR.rotation.z += (s > 0 ? -0.9 * prep + 1.6 * cut : 0.7 * prep - 1.3 * cut) * back;
-        j.elbowR.rotation.x += (0.55 * prep) * back;
-        j.handR.rotation.z += s * (0.6 * prep - 1.2 * cut) * back;
-        j.handR.rotation.x += 0.9 * prep * back;   // blade level for the cut
-        j.shoulderL.rotation.x += 0.2 * prep * back;
-        j.thighL.rotation.x += -0.25 * cut * back; j.kneeR.rotation.x += 0.25 * cut * back;
-      } else if (a.name === 'channel') {
-        // spin with the blade held out
+        // the straight arm and weapon sweep the damage arc: raised out to the starting side, then the
+        // tip crosses it from 0.55 to 0.85 of the cast, in step with the trail (skills/cleave swingArc)
+        const w = ramp(k, 0, 0.3) * (1 - ramp(k, 0.9, 1));
+        const theta = side * 1.2 * (2 * ramp(k, 0.55, 0.85) - 1);
+        // a two-hander turns more with the body and keeps the grip in front of the chest, in the left hand's reach
+        const body = two ? 0.75 : 0.45;
+        j.spine.rotation.y += 0.3 * body * theta * w;
+        j.chest.rotation.y += 0.7 * body * theta * w;
+        R.x = lerp(R.x, -1.25, w); R.z = lerp(R.z, 0, w); R.y = ((1 - body) * theta + (two ? 0.45 : 0)) * w;
+        j.elbowR.rotation.x = lerp(j.elbowR.rotation.x, two ? -0.5 : -0.1, w);
+        j.handR.rotation.x += ALONG_ARM * w;
+        j.thighL.rotation.x += -0.3 * w; j.kneeR.rotation.x += 0.3 * w;
+      } else if (a.name === 'chop') {
+        // Power Strike: the weapon rises overhead and trembles while the charge builds, then comes down
+        // in a vertical arc at 0.9 of the cast (the skill's fireAt)
+        const w = ramp(k, 0, 0.12) * (1 - ramp(k, 0.97, 1));
+        const lift = ramp(k, 0, 0.3), blow = ramp(k, 0.9, 0.97);
+        const pitch = lerp(lerp(-1.3, -2.95, lift), -0.8, blow) + (1 - blow) * lift * Math.sin(t * 45) * 0.02;
+        // a two-hander is raised over the middle of the head, within the left hand's reach
+        R.x = lerp(R.x, pitch, w); R.z = lerp(R.z, 0, w); R.y = (two ? 0.7 : 0.25) * w;
+        j.elbowR.rotation.x = lerp(j.elbowR.rotation.x, two ? -0.55 : -0.1, w);
+        j.handR.rotation.x += ALONG_ARM * w;
+        j.spine.rotation.x += (-0.25 * lift * (1 - blow) + 0.45 * blow) * w;
+        j.body.position.y += -0.16 * blow * w;
+        j.kneeL.rotation.x += 0.55 * blow * w; j.kneeR.rotation.x += 0.4 * blow * w;
+        j.thighL.rotation.x += -0.45 * blow * w;
+      } else if (a.name === 'spin') {
+        // Steel Tempest: spin with the weapon held out
         j.body.rotation.y += t * 15;
-        j.shoulderR.rotation.x += -0.1; j.shoulderR.rotation.z += -1.35; j.elbowR.rotation.x += 0.7;
+        R.x += -0.1; R.z += -1.35; j.elbowR.rotation.x += 0.7;
         j.shoulderL.rotation.x += 0.2; j.shoulderL.rotation.z += 0.9; j.elbowL.rotation.x += 0.5;
         j.spine.rotation.x += 0.12;
         j.kneeL.rotation.x += 0.35; j.kneeR.rotation.x += 0.35; j.thighL.rotation.x += -0.2; j.thighR.rotation.x += -0.2;
         j.body.position.y += -0.06;
+      } else if (a.name === 'block') {
+        // Raise Shield: shield high in front, weapon drawn back, braced
+        j.shoulderL.rotation.set(-1.35, 0, 0.25); j.elbowL.rotation.set(-0.35, 0, 0);
+        R.x += 0.35; j.elbowR.rotation.x += -0.3;
+        j.spine.rotation.x += 0.15; j.neck.rotation.x += -0.1;
+        j.kneeL.rotation.x += 0.3; j.kneeR.rotation.x += 0.3; j.thighL.rotation.x += -0.25; j.thighR.rotation.x += -0.1;
+        j.body.position.y += -0.05;
       } else if (a.name === 'charge') {
-        // shoulder into the shield, sword back
+        // shoulder into the charge, weapon back
         const w = Math.min(1, k * 6) * (1 - ramp(k, 0.85, 1));
         j.spine.rotation.x += 0.45 * w; j.neck.rotation.x += -0.3 * w;
         j.shoulderL.rotation.x += -0.7 * w; j.elbowL.rotation.x += 0.3 * w;
-        j.shoulderR.rotation.x += 0.6 * w; j.elbowR.rotation.x += 0.4 * w;
-      } else if (a.name === 'slam') {
-        // two-handed overhead drive into the ground
-        const up = ramp(k, 0, 0.45) * (1 - ramp(k, 0.5, 0.66));
-        const down = ramp(k, 0.5, 0.66) * (1 - ramp(k, 0.82, 1));
-        j.shoulderR.rotation.x += -2.9 * up - 1.1 * down; j.elbowR.rotation.x += 0.3 * up + 0.6 * down;
-        j.shoulderL.rotation.x += -1.2 * up - 0.3 * down;
-        j.body.position.y += -0.2 * down; j.kneeL.rotation.x += 0.7 * down; j.kneeR.rotation.x += 0.5 * down;
-        j.thighL.rotation.x += -0.5 * down; j.thighR.rotation.x += -0.2 * down;
-        j.spine.rotation.x += 0.5 * down - 0.2 * up;
+        R.x += 0.6 * w; j.elbowR.rotation.x += 0.4 * w;
       } else if (a.name === 'buff') {
         // war cry: chest out, arms flung wide, head back
         const w = pulse(k, 0, 1);
-        j.shoulderL.rotation.z += 0.9 * w; j.shoulderR.rotation.z += -0.9 * w;
-        j.shoulderL.rotation.x += 0.3 * w; j.shoulderR.rotation.x += 0.3 * w;
+        j.shoulderL.rotation.z += 0.9 * w; R.z += -0.9 * w;
+        j.shoulderL.rotation.x += 0.3 * w; R.x += 0.3 * w;
         j.spine.rotation.x += -0.2 * w; j.neck.rotation.x += -0.35 * w;
       } else if (a.name === 'cast') {
         const w = pulse(k, 0, 1);
-        j.shoulderR.rotation.x += -1.2 * w; j.chest.rotation.y += 0.3 * w;
+        R.x += -1.2 * w; j.chest.rotation.y += 0.3 * w;
       }
     }
     if (st.hit > 0) { j.spine.rotation.x += -0.2 * st.hit; j.neck.rotation.x += -0.15 * st.hit; }
     if (st.dead >= 0) deathFall(j, st.dead, -1);
+
+    // a two-hander: the left hand follows the grip wherever the right arm takes the weapon
+    if (two) {
+      root.updateMatrixWorld(true);
+      offGrip.getWorldPosition(_grip);
+      j.chest.worldToLocal(_grip);
+      reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL + j.P.handR, _grip, _pole);
+    }
 
     // tabard flaps swing with the legs and trail with speed
     const legs = -(j.thighL.rotation.x + j.thighR.rotation.x) * 0.5;
@@ -232,13 +332,15 @@ export function buildWarrior(): Model {
     if (dt > 0) cape.update(dt, st.velocity ?? ZERO);
     cape.setVisible(st.dead < 0.6);
 
-    // the visor slit and blade pulse faintly, brighter while an action runs
+    // the visor slit pulses faintly; the blade's fuller glows while a skill charges
     ember.emissiveIntensity = 4 + Math.sin(t * 5) * 0.5;
     edge.emissiveIntensity = (st.charge || 0) * 1.5;
   }
 
   return {
-    root, kit, joints: j, animate, tip, palm, height: 2.05,
+    root, kit, joints: j, animate, tip, palm, height: 2.05, setGear,
+    get swing() { return side; },
+    get reach() { return (ARM + (held?.len ?? 0)) * root.scale.x; },
     worldObjects: [cape.mesh],
     reset: () => cape.reset(),
     dispose() {

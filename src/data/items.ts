@@ -5,7 +5,8 @@ export const SLOTS: Slot[] = ['weapon', 'offhand', 'head', 'chest', 'hands', 'am
 
 export interface SlotInfo { label: string; bases: string[]; implicit: [StatKey, number][]; glyph: string }
 export interface RarityInfo { id: RarityId; name: string; color: string; affixes: [number, number]; power: number }
-export interface StatInfo { base: number; grow: number; fmt: string; cap?: number; dec?: number }
+/** implicitOnly: never rolls as an affix, only as an item's implicit (shield block stats) */
+export interface StatInfo { base: number; grow: number; fmt: string; cap?: number; dec?: number; implicitOnly?: boolean }
 
 export const SLOT_INFO: Record<Slot, SlotInfo> = {
   weapon:  { label: 'Weapon',  bases: ['Staff', 'Scepter', 'Wand', 'Rod', 'Spire'],        implicit: [['damagePct', 1.4]], glyph: '/' },
@@ -43,6 +44,8 @@ export const STATS: Record<StatKey, StatInfo> = {
   leech:       { base: 1,   grow: 0.03, fmt: '{v}% of Damage Leeched as Health', cap: 8, dec: 1 },
   armor:       { base: 3,   grow: 0.04, fmt: '+{v}% Physical Damage Reduction', cap: 30 },
   resist:      { base: 4,   grow: 0.04, fmt: '+{v}% Magic Resistance', cap: 35 },
+  block:       { base: 12,  grow: 0.02, fmt: '{v}% Chance to Block', cap: 30, implicitOnly: true },
+  blockAmount: { base: 45,  grow: 0.12, fmt: '{v} Damage Blocked', implicitOnly: true },
 };
 
 // General stats that also count toward a specific one when filtering the stash
@@ -69,6 +72,8 @@ export const AFFIX_NAMES: Record<StatKey, [prefix: string, suffix: string]> = {
   leech:        ['Vampiric', 'of the Leech'],
   armor:        ['Warded', 'of the Bastion'],
   resist:       ['Runed', 'of Warding'],
+  block:        ['Bulwark', 'of the Wall'],
+  blockAmount:  ['Bulwark', 'of the Wall'],
 };
 
 export const LEGENDARY_NAMES = [

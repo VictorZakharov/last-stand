@@ -17,7 +17,7 @@ const COLOR = 0xe8eef8;
 const BLADE = 0.68;
 
 const skill: ChannelSkill<TempestState> = {
-  anim: 'channel',
+  anim: 'spin',
   channel: true,
   warm: () => [slashMesh(ARC, 0.55, COLOR).mesh],
   start() {

@@ -47,3 +47,7 @@ export const RUN = {
 };
 
 export const PICKUP_RADIUS = 1.8;
+
+/** Shield block: after a block the shield needs `recovery` seconds before it can block again
+ *  (raised, it blocks every hit within `arc` radians of the facing, with no recovery). */
+export const BLOCK = { recovery: 0.7, arc: 1.4 };

@@ -104,6 +104,19 @@ const DRAW: Record<string, Draw> = {
     `<path d="${star(42, 21, 13, 8, 8)}" fill="url(#steel)" stroke="#1b1f28" stroke-width="1"/>` +
     `<circle cx="42" cy="21" r="7" fill="url(#darksteel)" stroke="#111" stroke-width=".8"/>` + gemAt(42, 21, 3.4, g),
 
+  Greatsword: (g) => `<path d="M13.6 45.6L47.6 11.6L58 6L52.4 16.4L18.4 50.4Z" fill="url(#steel)" stroke="#1b1f28" stroke-width="1"/>` +
+    `<path d="M17 48L50 15" stroke="#fff" stroke-width="1" opacity=".55"/>` +
+    shaft(15, 49, 6, 58, 4, 'leather') + `<path d="M7 40L24 57" stroke="url(#gold)" stroke-width="4.4" stroke-linecap="round"/>` +
+    `<circle cx="5" cy="59" r="3.2" fill="url(#gold)" stroke="#3a2608" stroke-width=".8"/>` + gemAt(16, 48, 2.4, g),
+  Greataxe: (g) => shaft(8, 60, 50, 12, 4.2, 'wood') +
+    `<path d="M40 22L46 16C54 14 60 22 58 34C54 31 48 30 44 32Z" fill="url(#steel)" stroke="#1b1f28" stroke-width="1"/>` +
+    `<path d="M40 22L34 16C32 8 40 2 52 4C49 8 48 14 50 18Z" fill="url(#steel)" stroke="#1b1f28" stroke-width="1"/>` +
+    `<path d="M48 17C55 17 58 24 57 31" fill="none" stroke="#fff" stroke-width="1" opacity=".6"/>` + band(41, 21, 9, 3.6, -49) + gemAt(42, 20, 2.6, g),
+  Maul: (g) => shaft(10, 58, 38, 26, 4.6, 'wood') + shaft(10, 58, 18, 49, 5.4, 'leather') +
+    `<path d="M30 16L44 2L60 18L46 32Z" fill="url(#steel)" stroke="#1b1f28" stroke-width="1.2"/>` +
+    `<path d="M34 12L50 28M40 6L56 22" stroke="url(#gold)" stroke-width="2.4"/>` +
+    `<path d="M44 2L60 18" stroke="#fff" stroke-width="1" opacity=".5"/>` + gemAt(45, 17, 3, g),
+
   // --- off-hands
   Shield: (g, c) => `<circle cx="32" cy="32" r="23" fill="url(#darksteel)" stroke="#111" stroke-width="1.2"/>` +
     `<circle cx="32" cy="32" r="19.5" fill="url(#${c})"/>` +

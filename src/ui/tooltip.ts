@@ -1,7 +1,7 @@
 // Item & skill tooltips. Item tooltips can show a side-by-side comparison
 // with the item currently equipped in the same slot.
 import { SLOT_INFO, STATS } from '../data/items';
-import { rarityOf, formatStat, itemPower, statEntries } from '../loot/items';
+import { rarityOf, formatStat, itemPower, statEntries, implicitsFor, isTwoHanded } from '../loot/items';
 import { G } from '../state';
 import { itemIconSVG } from './itemIcons';
 import type { Item, SkillDef, StatKey } from '../types';
@@ -41,13 +41,14 @@ function deltaHTML(k: StatKey, d: number): string {
 /** One item card. `other` (optional) = item to diff against (shows per-stat deltas). */
 function card(item: Item, { header = '', other = null as Item | null, showDelta = false } = {}): string {
   const r = rarityOf(item.rarity);
-  const implicit = new Set(SLOT_INFO[item.slot].implicit.map(([k]) => k));
+  const cls = G.player.cls;
+  const implicit = new Set(implicitsFor(item.slot, cls).map(([k]) => k));
   let html = `<div class="tt-card" style="--c:${r.color}">`;
   if (header) html += `<div class="tt-header">${header}</div>`;
   html += `<div class="tt-head"><div class="tt-icon" style="--c:${r.color}">${itemIconSVG(item)}</div><div class="tt-name" style="color:${r.color}">${item.name}</div></div>`;
   const pw = itemPower(item), opw = other ? itemPower(other) : 0;
   const pdelta = showDelta && other && pw !== opw ? `<span class="tt-delta ${pw > opw ? 'up' : 'down'}">${pw > opw ? '▲' : '▼'} ${Math.abs(pw - opw)}</span>` : '';
-  html += `<div class="tt-type">${r.name} ${SLOT_INFO[item.slot].label} · Item level ${item.ilvl} · Power ${pw}${pdelta ? ' ' + pdelta : ''}</div>`;
+  html += `<div class="tt-type">${r.name} ${isTwoHanded(item, cls) ? 'Two-handed ' : ''}${SLOT_INFO[item.slot].label} · Item level ${item.ilvl} · Power ${pw}${pdelta ? ' ' + pdelta : ''}</div>`;
   for (const [k, v] of statEntries(item.stats)) {
     const d = showDelta ? v - (other?.stats[k] || 0) : 0;
     html += `<div class="tt-stat ${implicit.has(k) ? 'implicit' : ''}">${formatStat(k, v)}${showDelta ? deltaHTML(k, d) : ''}</div>`;
@@ -110,9 +111,16 @@ export function skillTooltip(def: SkillDef): () => TooltipContent {
     const bits = [];
     if (def.cost) bits.push(def.channel ? `${def.cost} Energy / sec` : `${def.cost} Energy`);
     if (def.gain) bits.push(`+${def.gain} Energy per hit`);
+    if (def.castTime >= 1) bits.push(`${def.castTime}s to charge`);
     if (def.cooldown) bits.push(`${def.cooldown}s cooldown`);
     if (def.damage) bits.push(`${def.damage}${def.channel || def.impl === 'maelstrom' ? ' dmg / sec' : ' damage'}`);
-    html += `<div class="tt-foot">${bits.join(' · ')}</div></div>`;
+    html += `<div class="tt-foot">${bits.join(' · ')}</div>`;
+    const alt = (id?: string) => (id ? G.player.known.get(id)?.def.name : undefined);
+    if (def.needs === 'shield') {
+      const two = alt(def.fallback?.twoHanded), one = alt(def.fallback?.oneHanded);
+      html += `<div class="tt-foot">Needs a shield. Without one this key uses ${[two && `${two} with a two-handed weapon`, one && `${one} with a one-handed weapon`].filter(Boolean).join(', or ')}.</div>`;
+    }
+    html += '</div>';
     return { html, color: def.icon.color };
   };
 }

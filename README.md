@@ -41,7 +41,7 @@ Skills can be **remapped in the lobby**: drag a skill from the spellbook (the wa
 
 ## Classes
 
-Pick a class in the lobby. Every class keeps its **own profile**: equipment, stash, records and the starting waves unlocked in each biome. Loot found by one class is made for it and stays with it.
+Pick a class in the lobby. Every class keeps its **own profile**: equipment, stash, records and the starting waves unlocked in each biome. Loot found by one class is made for it and stays with it, and each class has its own stash filter.
 
 Both wear a real position-based-dynamics cloth cape that collides with the animated body, using the solver from [cape-physics](https://github.com/VictorZakharov/cape-physics).
 
@@ -61,15 +61,17 @@ Robes, skirt panels and a crystal staff; arcane and elemental spells from range.
 
 ### The Warrior
 
-Plate armour, a crested helm, sword and shield; tougher, and fights up close.
+Plate armour, a crested helm and a cape; tougher, and fights up close. Fights with a one-handed weapon and a shield, or a two-handed weapon (it can't hold both), and the model shows what is equipped.
+
+Shields **block**: each hit has the shield's Block Chance to be blocked, absorbing its Block Amount, after which the shield needs a moment to recover. Holding right click raises the shield to block every hit from the front.
 
 | Key | Skill |
 | --- | --- |
 | Left click | Rending Cleave — wide sweep in front of you; each hit restores energy |
-| Right click | Thunder Crescent — a travelling arc of lightning that cuts through every foe in its path |
+| Right click (hold) | Raise Shield — block every frontal blow; without a shield: Steel Tempest with a two-handed weapon, Thunder Crescent with a one-handed one |
 | `1` (hold) | Steel Tempest — spin with the blade out, shredding everything around you |
 | `2` | Bull Rush — shield charge that tramples and hurls foes aside |
-| `3` | Molten Rift — split the ground in a line of erupting fire |
+| `3` | Power Strike — charge for two seconds, then a crushing overhead blow |
 | `4` | Iron Bellow — war cry that hurls foes back and grants a damage-absorbing ward |
 | `Q` | Healing Draught |
 

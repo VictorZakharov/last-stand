@@ -48,6 +48,8 @@ export const ATTRIBUTE_GROUPS: [string, AttributeDef[]][] = [
   ['Defense', [
     { label: 'Physical reduction', value: 'armor', stat: 'armor', base: 'armor', cap: 70, fmt: pct },
     { label: 'Magic resistance', value: 'resist', stat: 'resist', base: 'resist', cap: 75, fmt: pct },
+    { label: 'Block chance', value: 'block', stat: 'block', cap: 60, fmt: pct, note: 'Shields only. After a block the shield needs a moment to recover.' },
+    { label: 'Block amount', value: 'blockAmount', stat: 'blockAmount', fmt: (v) => String(Math.round(v)), note: 'Damage a block absorbs. A raised shield blocks every hit from the front, for more.' },
   ]],
 ];
 

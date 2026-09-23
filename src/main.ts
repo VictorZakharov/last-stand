@@ -147,7 +147,8 @@ function switchClass(id: string) {
   buildHotbar(G.player);
 }
 
-function profileChanged() { G.player.recomputeStats(G.profile.equipped); G.player.reset(); }
+// gear can change what a key fires (a shield skill falls back without one), so the hotbar is rebuilt
+function profileChanged() { G.player.recomputeStats(G.profile.equipped); G.player.reset(); buildHotbar(G.player); }
 
 const compileContext = () => `(${G.mode}${G.run ? ` wave ${G.run.wave}` : ''}, t=${G.time.toFixed(1)}s, ${G.enemies.length} foes)`;
 

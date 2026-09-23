@@ -52,6 +52,9 @@ export interface SlashOpts {
   /** seconds for the head to cross the arc, and to fade out afterwards */
   sweep?: number; fade?: number;
   inner?: number;
+  /** tilt of the arc's plane: roll about the facing (PI/2 stands it upright, for an overhead chop),
+   *  then pitch (negative raises the arc's middle) */
+  roll?: number; pitch?: number;
 }
 
 /** A single sweep that plays out and removes itself. */
@@ -62,11 +65,14 @@ export function slashArc(o: SlashOpts): Effect {
   const u = mat.uniforms;
   u.uStart.value = -Math.PI / 2 - o.arc / 2; u.uLen.value = o.arc; u.uInner.value = inner; u.uDir.value = o.dir ?? 1;
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(o.x, o.y ?? 1.0, o.z);
-  mesh.rotation.y = o.facing;
-  mesh.scale.setScalar(o.radius);
+  mesh.rotation.set(o.pitch ?? 0, 0, o.roll ?? 0);
   mesh.frustumCulled = false;
-  G.scene.add(mesh);
+  const group = new THREE.Group();
+  group.add(mesh);
+  group.position.set(o.x, o.y ?? 1.0, o.z);
+  group.rotation.y = o.facing;
+  group.scale.setScalar(o.radius);
+  G.scene.add(group);
   let t = 0;
   return addEffect({
     update(dt) {
@@ -75,7 +81,7 @@ export function slashArc(o: SlashOpts): Effect {
       u.uFade.value = Math.max(0, 1 - Math.max(0, t - sweep) / fade);
       return t < sweep + fade;
     },
-    dispose() { G.scene.remove(mesh); geo.dispose(); mat.dispose(); },
+    dispose() { G.scene.remove(group); geo.dispose(); mat.dispose(); },
   });
 }
 

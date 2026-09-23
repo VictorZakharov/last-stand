@@ -27,17 +27,24 @@ export function rollRarity(wave: number, bonus = 0): RarityId {
   return weighted(RARITIES.map((r, i) => [r.id, w[i]] as const));
 }
 
+/** Implicit stats of a slot for a class (its own, or the defaults). */
+export const implicitsFor = (slot: Slot, cls?: ClassDef): [StatKey, number][] => cls?.implicits?.[slot] ?? SLOT_INFO[slot].implicit;
+/** A weapon held in both hands (no off-hand with it). */
+export const isTwoHanded = (it: Item | undefined, cls?: ClassDef): boolean => !!it && it.slot === 'weapon' && !!cls?.twoHanded?.includes(it.base);
+
 /** Item base names of a slot for a class (its own, or the defaults). */
 export const basesFor = (slot: Slot, cls?: ClassDef): string[] => cls?.bases?.[slot] ?? SLOT_INFO[slot].bases;
 
 /** Create an item for `cls` (its base names and stats). Everything is plain JSON so it can be saved directly. */
 export function makeItem({ slot = pick(SLOTS), rarity = 'common', ilvl = 1, cls }: { slot?: Slot; rarity?: RarityId; ilvl?: number; cls?: ClassDef } = {}): Item {
-  const info = SLOT_INFO[slot];
   const r = rarityOf(rarity);
+  const base = pick(basesFor(slot, cls));
   const stats: StatBlock = {};
-  for (const [stat, weight] of info.implicit) stats[stat] = rollStat(stat, ilvl, r.power, weight);
+  // a two-handed weapon makes up for the missing off-hand with a much bigger implicit
+  const hands = cls?.twoHanded?.includes(base) ? 1.8 : 1;
+  for (const [stat, weight] of implicitsFor(slot, cls)) stats[stat] = rollStat(stat, ilvl, r.power, weight * hands);
 
-  const pool = STAT_KEYS.filter((s) => !(s in stats) && !cls?.excludeStats?.includes(s));
+  const pool = STAT_KEYS.filter((s) => !(s in stats) && !STATS[s].implicitOnly && !cls?.excludeStats?.includes(s));
   const count = randInt(r.affixes[0], r.affixes[1]);
   const affixes: StatKey[] = [];
   for (let i = 0; i < count && pool.length; i++) {
@@ -46,7 +53,6 @@ export function makeItem({ slot = pick(SLOTS), rarity = 'common', ilvl = 1, cls 
     affixes.push(stat);
   }
 
-  const base = pick(basesFor(slot, cls));
   let name = base;
   if (rarity === 'legendary') name = pick(LEGENDARY_NAMES);
   else if (affixes.length) {
@@ -101,5 +107,7 @@ export function computeStats(base: BaseStats, equipped: Profile['equipped']): De
     castSpeed: capped('castSpeed', 60),
     cdr: capped('cdr', 40),
     leech: capped('leech', 15),
+    block: capped('block', 60),
+    blockAmount: add.blockAmount,
   };
 }

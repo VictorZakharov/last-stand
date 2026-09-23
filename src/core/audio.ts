@@ -106,7 +106,8 @@ export const sfx = {
   swing: guard(() => { if (throttle('swing', 70)) return; noise({ dur: 0.2, freq: 900, sweep: 2600, q: 1.4, gain: 0.2, attack: 0.03 }); }),
   clang: guard(() => { if (throttle('clang', 60)) return; noise({ dur: 0.15, freq: 3200, q: 3, gain: 0.14 }); tone({ freq: 1180, to: 900, dur: 0.18, type: 'triangle', gain: 0.04 }); tone({ freq: 220, to: 110, dur: 0.12, type: 'square', gain: 0.04 }); }),
   rush: guard(() => { noise({ dur: 0.45, freq: 220, sweep: 600, type: 'lowpass', gain: 0.45, attack: 0.04 }); tone({ freq: 70, to: 45, dur: 0.4, gain: 0.3 }); }),
-  flame: guard(() => { if (throttle('flame', 60)) return; noise({ dur: 0.5, freq: 500, sweep: 160, q: 0.8, gain: 0.3, attack: 0.02 }); }),
+  /** a rising hum over a skill's charge-up of `dur` seconds */
+  charge: guard((dur: number) => { tone({ freq: 70, to: 260, dur, type: 'sawtooth', gain: 0.05, attack: 0.3 }); noise({ dur, freq: 300, sweep: 2400, q: 3, gain: 0.08, attack: 0.4 }); }),
   roar: guard(() => { tone({ freq: 95, to: 70, dur: 0.9, type: 'sawtooth', gain: 0.1, attack: 0.05 }); tone({ freq: 142, to: 104, dur: 0.9, type: 'sawtooth', gain: 0.06, attack: 0.06 }); noise({ dur: 0.8, freq: 600, q: 0.8, gain: 0.25, attack: 0.06 }); }),
   click: guard(() => tone({ freq: 700, dur: 0.05, gain: 0.04, type: 'triangle' })),
   spawn: guard(() => { if (throttle('spawn', 150)) return; noise({ dur: 0.6, freq: 250, sweep: 1500, q: 6, gain: 0.12, attack: 0.1 }); }),
