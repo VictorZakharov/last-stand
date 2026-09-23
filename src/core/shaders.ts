@@ -4,6 +4,7 @@
 // The set of distinct programs is small and bounded, so we keep all of them for the
 // whole session, and compile the known ones up front (warmUp) before the first frame.
 import type * as THREE from 'three';
+import { G } from '../state';
 
 const pinned = new WeakSet<object>();
 const known: { name: string; key: string[] }[] = [];
@@ -19,9 +20,24 @@ export function pinPrograms(renderer: THREE.WebGLRenderer, context?: () => strin
     p.usedTimes++;
     compiled++;
     const key = p.cacheKey.split(',');
-    if (loaded) lateCompiles.push(`${p.name} ${context?.() ?? ''} | ${describeNew(p.name, key)}`);
+    if (loaded) lateCompiles.push(`${ownerOf(renderer, p)} ${context?.() ?? ''} | ${describeNew(p.name, key)}`);
     known.push({ name: p.name, key });
   }
+}
+
+/** Which scene object renders with program `p` (for the report): material type and object path. */
+function ownerOf(renderer: THREE.WebGLRenderer, p: THREE.WebGLProgram): string {
+  let found = 'unknown owner (shadow / post pass?)';
+  G.scene.traverse((o) => {
+    const mats = (o as THREE.Mesh).material;
+    for (const m of Array.isArray(mats) ? mats : mats ? [mats] : []) {
+      if ((renderer.properties.get(m) as { currentProgram?: unknown }).currentProgram !== p) continue;
+      const path: string[] = [];
+      for (let a: THREE.Object3D | null = o; a && a !== G.scene; a = a.parent) path.unshift(a.name || a.type);
+      found = `${m.type}${m.name ? ` "${m.name}"` : ''} on ${path.join(' > ')}`;
+    }
+  });
+  return found;
 }
 
 /** Field-level diff against the closest known program of the same kind. */

@@ -104,6 +104,7 @@ export class Enemy {
 
     this.model = buildModel(def.model);
     this.height = this.model.height * (hero ? HERO.scale : 1);
+    this.obj.name = typeId;   // names show up in the perf report
     this.obj.add(this.model.root);
     if (hero) this.model.root.scale.multiplyScalar(HERO.scale);
     if (hero || this.boss) {

@@ -73,6 +73,7 @@ export class Projectile {
     this.trail = o.trail;
     this.color = o.color ?? 0xffffff;
     this.mesh = new THREE.Mesh(coreGeo, coreMat(this.color, o.intensity ?? 4));
+    this.mesh.name = 'projectile';
     this.mesh.scale.setScalar(o.size ?? 0.12);
     this.mesh.position.copy(this.pos);
     G.scene.add(this.mesh);
