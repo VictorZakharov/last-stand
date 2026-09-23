@@ -121,6 +121,8 @@ function abandon() {
 
 function profileChanged() { G.player.recomputeStats(G.profile.equipped); G.player.reset(); }
 
+const compileContext = () => `(${G.mode}${G.run ? ` wave ${G.run.wave}` : ''}, t=${G.time.toFixed(1)}s, ${G.enemies.length} foes)`;
+
 // --- loop ---------------------------------------------------------------------------
 function handleGlobalKeys() {
   if (G.mode === 'menu' && !G.paused && wasPressed('space')) toggleMenuStowed();
@@ -174,7 +176,7 @@ function frame(timestamp: number): void {
     update(dt);
   }
   render();
-  pinPrograms(G.renderer);
+  pinPrograms(G.renderer, compileContext);
   endInputFrame();
   perfEndFrame();
 }

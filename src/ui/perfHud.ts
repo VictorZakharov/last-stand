@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { particles } from '../fx/particles';
 import { readCookie, writeCookie } from '../core/cookies';
-import { programsCompiledInGame } from '../core/shaders';
+import { programsCompiledInGame, lateCompiles } from '../core/shaders';
 
 const COOKIE = 'last-stand-perf-hud';
 const WINDOW_MS = 15_000;     // history shown in the graph
