@@ -40,6 +40,8 @@ export interface SkeletonCapeOptions {
 }
 
 const _p = new THREE.Vector3();
+/** Main-thread time the cloth may take per frame (a step costs about 2.5 ms on a fast desktop). */
+const STEP_BUDGET_MS = 4;
 
 export class SkeletonCape {
   readonly sim: CapeSimulation;
@@ -99,11 +101,15 @@ export class SkeletonCape {
       stepped = true;
     }
     this.acc = Math.min(this.acc + dt, PHYSICS_STEP * MAX_PHYSICS_STEPS);
+    const start = performance.now();
     while (this.acc >= PHYSICS_STEP) {
       this.acc -= PHYSICS_STEP;
       this.time += PHYSICS_STEP;
       this.sim.step(PHYSICS_STEP, anchors, colliders, [], velocity, this.time);
       stepped = true;
+      // Slow frames owe more catch-up steps, which make the next frame slower still. Past the
+      // budget the cape drops its backlog and runs behind real time instead of spiralling.
+      if (performance.now() - start > STEP_BUDGET_MS) { this.acc = 0; break; }
     }
     // step() only advances particles; upload them (and recompute normals, which costs
     // more than a step) only when they moved: at 144 Hz about one frame in six has no step
