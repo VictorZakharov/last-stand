@@ -115,9 +115,9 @@ export class Player {
     saveLoadout(this.cls, this.loadout);
   }
 
-  /** Whether the gear held allows a skill (some need a shield, some can't be used with one). */
+  /** Whether the gear held allows a skill (some need a shield, some a two-handed weapon). */
   usable(def: SkillDef): boolean {
-    return def.needs === 'shield' ? this.gear.shield : def.needs === 'noShield' ? !this.gear.shield : true;
+    return def.needs === 'shield' ? this.gear.shield : def.needs === 'twoHanded' ? this.gear.twoHanded : true;
   }
 
   /** The skill a key fires. A skill the gear doesn't allow gives way to its fallback for the gear held. */

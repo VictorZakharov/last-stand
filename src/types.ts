@@ -103,8 +103,8 @@ export interface SkillDef {
   fireAt?: number;
   /** Raise Shield: blocks absorb this many times the block amount */
   block?: number;
-  /** only works with (or only without) a shield equipped; otherwise the key uses the fallback for the gear held */
-  needs?: 'shield' | 'noShield';
+  /** only works with a shield, or with a two-handed weapon; otherwise the key uses the fallback for the gear held */
+  needs?: 'shield' | 'twoHanded';
   fallback?: { shield?: string; twoHanded?: string; oneHanded?: string };
 }
 
