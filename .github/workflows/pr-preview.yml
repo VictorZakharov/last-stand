@@ -1,115 +1,156 @@
 name: PR preview
 
-# Builds each same-repository pull request into `pr-preview/pr-N/` on the
+# Publishes what pr-preview-build.yml built into `pr-preview/pr-N/` on the
 # aggregate `gh-pages` branch, redeploys Pages, and keeps a sticky PR comment
 # with the preview link. Closing the PR without merging removes the preview;
 # merged previews are cleaned up by the next production deploy.
+#
+# This runs on `workflow_run`, so it uses the workflow from main with a write
+# token even for fork PRs. It never runs PR code: the artifact is only copied as
+# static files, and its PR number is checked against the API (the PR's head
+# must be the commit that was built).
 
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, reopened, synchronize, closed]
+  workflow_run:
+    workflows: [PR preview build]
+    types: [requested, completed]
 
 permissions:
   contents: read
 
-concurrency:
-  group: pages-publisher
-  cancel-in-progress: false
-
 jobs:
-  publish:
-    name: Build or remove PR preview
-    if: >-
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.user.login != 'dependabot[bot]' &&
-      (github.event.action != 'closed' || github.event.pull_request.merged != true)
+  building:
+    name: Mark PR preview as building
+    if: github.event.workflow_run.event == 'pull_request' && github.event.action == 'requested'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 2
     permissions:
-      contents: write
       pull-requests: write
-    env:
-      SITE_ORIGIN: ${{ vars.SITE_ORIGIN || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}
-    outputs:
-      preview_url: ${{ steps.preview-paths.outputs.preview_url }}
-      should_deploy: ${{ steps.stage-preview.outputs.changed }}
     steps:
-      - name: Check out pull request
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Find the open pull request
+        id: pr
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const prs = await github.paginate(github.rest.pulls.list, { ...context.repo, state: 'open', per_page: 100 });
+            core.setOutput('number', String(prs.find((p) => p.head.sha === context.payload.workflow_run.head_sha)?.number ?? ''));
 
       - name: Mark preview as building
-        if: github.event.action != 'closed'
+        if: steps.pr.outputs.number != ''
         uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3
         with:
           header: last-stand-pr-preview
+          number: ${{ steps.pr.outputs.number }}
           message: |
-            **PR preview:** building `${{ github.event.pull_request.head.sha }}`.
+            **PR preview:** building `${{ github.event.workflow_run.head_sha }}`.
 
-      - name: Resolve preview paths
-        id: preview-paths
-        shell: bash
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO_NAME: ${{ github.event.repository.name }}
-        run: |
-          set -euo pipefail
-          preview_base="/${REPO_NAME}/pr-preview/pr-${PR_NUMBER}/"
-          preview_url="${SITE_ORIGIN%/}/pr-preview/pr-${PR_NUMBER}/"
-          echo "preview_base=${preview_base}" >> "${GITHUB_OUTPUT}"
-          echo "preview_url=${preview_url}" >> "${GITHUB_OUTPUT}"
-
-      - name: Set up Node.js
-        if: github.event.action != 'closed'
-        uses: actions/setup-node@v4
+  publish:
+    name: Publish PR preview
+    if: >-
+      github.event.workflow_run.event == 'pull_request' && github.event.action == 'completed' &&
+      github.event.workflow_run.conclusion != 'cancelled' && github.event.workflow_run.conclusion != 'skipped'
+    runs-on: ubuntu-24.04
+    # Pages deployments can wait in GitHub's queue for a few minutes.
+    timeout-minutes: 15
+    concurrency:
+      group: pages-publisher
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: write
+      pages: write
+      id-token: write
+      pull-requests: write
+    environment:
+      name: github-pages-preview
+    env:
+      SITE_ORIGIN: ${{ vars.SITE_ORIGIN || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Download preview
+        if: github.event.workflow_run.conclusion == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          node-version: 22
-          cache: npm
+          name: pr-preview
+          path: ${{ runner.temp }}/preview
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
 
-      - name: Install dependencies
-        if: github.event.action != 'closed'
-        run: npm ci
-
-      - name: Type-check and build preview
-        if: github.event.action != 'closed'
+      - name: Resolve pull request
+        id: pr
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          PREVIEW_BASE: ${{ steps.preview-paths.outputs.preview_base }}
-        run: |
-          npm run typecheck
-          npx vite build --base="${PREVIEW_BASE}"
+          PREVIEW_DIR: ${{ runner.temp }}/preview
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        with:
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+            const sha = process.env.HEAD_SHA;
+            const done = (mode, number = '') => {
+              core.info(`mode=${mode} pr=${number}`);
+              core.setOutput('mode', mode);
+              core.setOutput('number', String(number));
+            };
+            const openPrForSha = async () => {
+              const prs = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 });
+              return prs.find((p) => p.head.sha === sha)?.number;
+            };
 
-      - name: Verify preview asset paths
-        if: github.event.action != 'closed'
-        env:
-          PAGES_BASE: ${{ steps.preview-paths.outputs.preview_base }}
-        run: npm run check:pages
+            // the build ran PR code: its pr.json is untrusted until the API agrees
+            const meta = `${process.env.PREVIEW_DIR}/pr.json`;
+            if (process.env.RUN_CONCLUSION !== 'success' || !fs.existsSync(meta)) {
+              const number = await openPrForSha();
+              return number ? done('failed', number) : done('skip');
+            }
+            const { number, action } = JSON.parse(fs.readFileSync(meta, 'utf8'));
+            if (!Number.isInteger(number) || number <= 0) throw new Error(`bad PR number ${number}`);
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+            if (pr.head.sha !== sha) return done('skip'); // superseded by a newer push
+            if (action === 'closed') return pr.state === 'closed' && !pr.merged ? done('remove', number) : done('skip');
+            return pr.state === 'open' ? done('publish', number) : done('skip');
+
+      - name: Mark build as failed
+        if: steps.pr.outputs.mode == 'failed'
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3
+        with:
+          header: last-stand-pr-preview
+          number: ${{ steps.pr.outputs.number }}
+          message: |
+            **PR preview:** build failed.
+
+            [Open workflow run](${{ github.event.workflow_run.html_url }})
+
+      - name: Check out gh-pages
+        if: steps.pr.outputs.mode == 'publish' || steps.pr.outputs.mode == 'remove'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: gh-pages
+          path: pages
 
       - name: Stage or remove preview
-        id: stage-preview
+        id: stage
+        if: steps.pr.outputs.mode == 'publish' || steps.pr.outputs.mode == 'remove'
         shell: bash
         env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_ACTION: ${{ github.event.action }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MODE: ${{ steps.pr.outputs.mode }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          SITE_DIR: ${{ runner.temp }}/preview/site
         run: |
           set -euo pipefail
-          pages_dir="${RUNNER_TEMP}/pages"
+          pages_dir="${GITHUB_WORKSPACE}/pages"
           preview_dir="${pages_dir}/pr-preview/pr-${PR_NUMBER}"
 
-          if ! git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
-            echo "The gh-pages aggregate branch is missing. Run the production Pages workflow first."
-            exit 1
-          fi
-
-          git fetch --no-tags --depth=1 origin +refs/heads/gh-pages:refs/remotes/origin/gh-pages
-          git worktree add --detach "${pages_dir}" origin/gh-pages
-
-          if [[ "${PR_ACTION}" == "closed" ]]; then
+          if [[ "${MODE}" == "remove" ]]; then
             rm -rf "${preview_dir}"
           else
+            # plain files only: no nested repos or links out of the preview
+            find "${SITE_DIR}" -name .git -prune -exec rm -rf {} +
+            find "${SITE_DIR}" -type l -delete
+            rm -rf "${preview_dir}"
             mkdir -p "${preview_dir}"
-            find "${preview_dir}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-            cp -a dist/. "${preview_dir}/"
+            cp -a "${SITE_DIR}/." "${preview_dir}/"
             printf '{"headSha":"%s"}\n' "${HEAD_SHA}" > "${preview_dir}/preview-metadata.json"
           fi
           touch "${pages_dir}/.nojekyll"
@@ -123,85 +164,46 @@ jobs:
             exit 0
           fi
 
-          git -C "${pages_dir}" commit -m "Preview PR #${PR_NUMBER}: ${PR_ACTION}"
+          git -C "${pages_dir}" commit -m "Preview PR #${PR_NUMBER}: ${MODE}"
           git -C "${pages_dir}" push origin HEAD:gh-pages
           echo "changed=true" >> "${GITHUB_OUTPUT}"
 
       - name: Upload aggregated Pages artifact
-        if: steps.stage-preview.outputs.changed == 'true'
+        if: steps.stage.outputs.changed == 'true'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: ${{ runner.temp }}/pages
+          path: pages
           include-hidden-files: true
 
-      - name: Mark unchanged preview as ready
-        if: github.event.action != 'closed' && steps.stage-preview.outputs.changed == 'false' && success()
-        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3
-        with:
-          header: last-stand-pr-preview
-          message: |
-            **PR preview:** ready for `${{ github.event.pull_request.head.sha }}`.
-
-            [Open preview](${{ steps.preview-paths.outputs.preview_url }})
-
-      - name: Mark removed preview
-        if: github.event.action == 'closed' && steps.stage-preview.outputs.changed == 'false' && success()
-        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3
-        with:
-          header: last-stand-pr-preview
-          message: '**PR preview:** removed.'
-
-      - name: Mark preview workflow as failed
-        if: failure()
-        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3
-        with:
-          header: last-stand-pr-preview
-          message: |
-            **PR preview:** failed before publication.
-
-            [Open workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-  deploy:
-    name: Publish PR preview
-    needs: publish
-    if: needs.publish.outputs.should_deploy == 'true'
-    runs-on: ubuntu-24.04
-    # Pages deployments can wait in GitHub's queue for a few minutes.
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-      pull-requests: write
-    environment:
-      name: github-pages-preview
-      url: ${{ needs.publish.outputs.preview_url }}
-    steps:
       - name: Deploy aggregated Pages artifact
+        if: steps.stage.outputs.changed == 'true'
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
 
-      - name: Mark published preview as ready
-        if: success() && github.event.action != 'closed'
+      - name: Mark preview as ready
+        if: steps.pr.outputs.mode == 'publish' && success()
         uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3
         with:
           header: last-stand-pr-preview
+          number: ${{ steps.pr.outputs.number }}
           message: |
-            **PR preview:** ready for `${{ github.event.pull_request.head.sha }}`.
+            **PR preview:** ready for `${{ env.HEAD_SHA }}`.
 
-            [Open preview](${{ needs.publish.outputs.preview_url }})
+            [Open preview](${{ env.SITE_ORIGIN }}/pr-preview/pr-${{ steps.pr.outputs.number }}/)
 
-      - name: Mark published preview as removed
-        if: success() && github.event.action == 'closed'
+      - name: Mark preview as removed
+        if: steps.pr.outputs.mode == 'remove' && success()
         uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3
         with:
           header: last-stand-pr-preview
+          number: ${{ steps.pr.outputs.number }}
           message: '**PR preview:** removed.'
 
-      - name: Mark preview publication as failed
-        if: failure()
+      - name: Mark publication as failed
+        if: failure() && steps.pr.outputs.number != ''
         uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3
         with:
           header: last-stand-pr-preview
+          number: ${{ steps.pr.outputs.number }}
           message: |
             **PR preview:** publication failed.
 
