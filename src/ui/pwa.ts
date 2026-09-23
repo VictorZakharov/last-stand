@@ -50,22 +50,54 @@ function offerUpdate(apply: () => void): void {
   show();
 }
 
-/** Browsers that support it (Chrome, Edge, Android) fire a prompt event: an Install link offers it. */
+/** Running as the installed app (its own window, not a browser tab). */
+const installed = (): boolean =>
+  matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+
+type Platform = 'ios' | 'android' | 'other';
+function platform(): Platform {
+  const ua = navigator.userAgent;
+  // iPadOS reports itself as a Mac; its touch screen gives it away
+  if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios';
+  return /Android/.test(ua) ? 'android' : 'other';
+}
+
+/** Where the browser keeps "add to home screen" when it offers no prompt of its own. */
+function steps(p: Platform): string {
+  if (p === 'ios') return `<p>Tap the <b class="gold">Share</b> button (the square with an arrow) in the browser bar, then <b class="gold">Add to Home Screen</b>.</p>
+    <p>No such entry? Open this page in <b>Safari</b> and try again.</p>`;
+  return `<p>Open the browser menu (<b class="gold">&#8942;</b>, top or bottom corner) and pick <b class="gold">Install app</b> or <b class="gold">Add to Home screen</b>.</p>
+    <p>No such entry? Open this page in <b>Chrome</b> and try again.</p>`;
+}
+
+/**
+ * The Install link. Chrome and Edge fire a prompt event, and the link opens that prompt. Safari and
+ * Firefox never do (and Chrome holds it back for a while), so on a phone or tablet the link is
+ * always there, and without a prompt it shows where the browser keeps "add to home screen".
+ */
 function initInstall(): void {
-  const btn = $('#btn-install');
+  const btn = $('#btn-install'), modal = $('#install');
+  const p = platform();
   let prompt: InstallPrompt | null = null;
+  const show = (on: boolean): void => { btn.classList.toggle('hidden', !on || installed()); };
+  show(p !== 'other');
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     prompt = e as InstallPrompt;
-    btn.classList.remove('hidden');
+    show(true);
   });
-  window.addEventListener('appinstalled', () => { prompt = null; btn.classList.add('hidden'); });
+  window.addEventListener('appinstalled', () => { prompt = null; show(false); });
+  $('#btn-install-close').onclick = () => { sfx.click(); modal.classList.add('hidden'); };
   btn.onclick = async () => {
-    if (!prompt) return;
     sfx.click();
+    if (!prompt) {
+      modal.querySelector<HTMLElement>('.install-steps')!.innerHTML = steps(p);
+      modal.classList.remove('hidden');
+      return;
+    }
     await prompt.prompt();
-    await prompt.userChoice;
-    prompt = null;
-    btn.classList.add('hidden');
+    const { outcome } = await prompt.userChoice;
+    prompt = null;   // a prompt can be shown once; the steps are still there if it was dismissed
+    show(outcome !== 'accepted' && p !== 'other');
   };
 }

@@ -33,6 +33,7 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
   - Layouts: on desktop the lobby is a CSS grid `[left | center loadout | right]`. Short screens (phones held sideways, height ≤ 520) and upright tablets show one panel at a time, picked from `#lobby-rail`, and the camera view shifts so the character stays beside the panel (`lobbyViewShift`). Phones held upright get a "turn your device" overlay.
   - Check desktop at 1024×700 and 1920×1080, a phone at 844×390 and a tablet at 1180×820 and 820×1180 (Playwright with `isMobile` + `hasTouch`).
 - **Installable, offline (PWA):** `public/manifest.webmanifest` plus a build plugin (`scripts/pwa.ts`, production builds only).
+  - Install: Chrome and Edge fire `beforeinstallprompt`, and the lobby's Install link opens it. Safari (iOS) and Firefox never fire it, so on phones and tablets the link is always shown (unless already running installed) and opens `#install`, the add-to-home-screen steps for that platform.
   - The plugin renders the PNG app icons from `public/icon.svg` at build time (no binary assets in the repo) and writes `dist/sw.js`, which precaches every built file.
   - The worker's cache name is a hash of the build, so each deploy installs its own cache. `src/ui/pwa.ts` registers the worker, shows the Install link and offers a reload (lobby only) when a new version is waiting.
   - The worker serves cache-first. Production's scope contains the PR previews, so it skips `pr-preview/` paths (each preview registers its own).
