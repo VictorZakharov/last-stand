@@ -37,6 +37,7 @@ Everything is procedural: models, animation, textures, VFX and sound are generat
 | `4` | Arcane Aegis — damage-absorbing ward |
 | `Q` | Healing Draught |
 | Mouse wheel | Zoom |
+| Middle mouse (hold and drag) | Rotate the camera |
 | `B` / `C` | Bank / Continue after a wave |
 | `Esc` | Pause |
 

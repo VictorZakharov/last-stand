@@ -10,7 +10,7 @@ import { SKILL_KEYS, loadLoadout, saveLoadout, type Loadout } from '../loot/load
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
 import { input, isDown } from '../core/input';
-import { flashHurt, addShake } from '../core/renderer';
+import { flashHurt, addShake, cameraYaw } from '../core/renderer';
 import { floatText } from '../ui/floaters';
 import { particles, col } from '../fx/particles';
 import { sfx } from '../core/audio';
@@ -130,7 +130,7 @@ export class Player {
 
   // --- input & skills -------------------------------------------------------------
   handleInput(dt: number): void {
-    // movement: camera looks toward -Z, so W is -Z
+    // movement is screen-relative: W is away from the camera, whatever its yaw
     let mx = 0, mz = 0;
     if (isDown('w') || isDown('arrowup')) mz -= 1;
     if (isDown('s') || isDown('arrowdown')) mz += 1;
@@ -140,7 +140,9 @@ export class Player {
     let speed = this.stats.moveSpeed;
     if (this.casting) speed *= 0.45;
     if (this.channel) speed *= this.channel.skill.def.moveMult ?? 0.4;
-    const tx = len ? (mx / len) * speed : 0, tz = len ? (mz / len) * speed : 0;
+    const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);
+    const k = len ? speed / len : 0;
+    const tx = (mx * cy + mz * sy) * k, tz = (mz * cy - mx * sy) * k;
     this.vel.x = damp(this.vel.x, tx, 14, dt);
     this.vel.z = damp(this.vel.z, tz, 14, dt);
 

@@ -5,8 +5,9 @@ import { G } from '../state';
 export const input = {
   down: new Set<string>(),
   pressed: new Set<string>(),
-  mouse: { x: 0, y: 0, left: false, right: false, overUI: false },
+  mouse: { x: 0, y: 0, left: false, right: false, middle: false, overUI: false },
   wheel: 0,
+  orbit: 0,                      // horizontal middle-drag this frame, px (rotates the camera)
   ground: new THREE.Vector3(),   // cursor projected onto the arena floor
 };
 
@@ -28,18 +29,22 @@ export function initInput(canvas: HTMLCanvasElement): void {
     if (k === 'space' || k === 'tab') e.preventDefault();
   });
   window.addEventListener('keyup', (e) => input.down.delete(keyName(e)));
-  window.addEventListener('blur', () => { input.down.clear(); input.mouse.left = input.mouse.right = false; });
+  window.addEventListener('blur', () => { input.down.clear(); input.mouse.left = input.mouse.right = input.mouse.middle = false; });
   window.addEventListener('mousemove', (e) => {
     input.mouse.x = e.clientX; input.mouse.y = e.clientY;
     input.mouse.overUI = e.target !== canvas;
+    // the drag keeps rotating over the UI; `buttons` catches a release outside the window
+    if (input.mouse.middle) { if (e.buttons & 4) input.orbit += e.movementX; else input.mouse.middle = false; }
   });
   canvas.addEventListener('mousedown', (e) => {
     if (e.button === 0) { input.mouse.left = true; input.pressed.add('mouse0'); }
     if (e.button === 2) { input.mouse.right = true; input.pressed.add('mouse2'); }
+    if (e.button === 1) { input.mouse.middle = true; e.preventDefault(); } // no autoscroll
   });
   window.addEventListener('mouseup', (e) => {
     if (e.button === 0) input.mouse.left = false;
     if (e.button === 2) input.mouse.right = false;
+    if (e.button === 1) input.mouse.middle = false;
   });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('wheel', (e) => { input.wheel += Math.sign(e.deltaY); e.preventDefault(); }, { passive: false });
@@ -54,6 +59,7 @@ export function updateInputRay(): void {
 export function endInputFrame(): void {
   input.pressed.clear();
   input.wheel = 0;
+  input.orbit = 0;
 }
 
 export const isDown = (k: string): boolean =>

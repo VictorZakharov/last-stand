@@ -1,7 +1,7 @@
 // Entry point: boots every system, owns the main loop and the menu <-> run flow.
 import * as THREE from 'three';
 import { G } from './state';
-import { initRenderer, updateCamera, render, zoomBy, setZoom, sceneTarget } from './core/renderer';
+import { initRenderer, updateCamera, render, zoomBy, orbitBy, setZoom, sceneTarget } from './core/renderer';
 import { CAMERA, LOBBY } from './data/balance';
 import { initInput, updateInputRay, endInputFrame, input, wasPressed } from './core/input';
 import { initAudio } from './core/audio';
@@ -156,6 +156,7 @@ function handleGlobalKeys() {
 function update(dt: number): void {
   updateInputRay();
   if (input.wheel && !input.mouse.overUI) zoomBy(input.wheel);
+  if (input.orbit) orbitBy(input.orbit);
 
   // the player can move and cast in both the arena and the lobby (sandbox)
   G.player.update(dt);
