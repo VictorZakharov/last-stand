@@ -317,3 +317,30 @@ button { font-family: inherit; }
 #loadout-bar .slot.over { box-shadow: inset 0 0 0 2px var(--gold), 0 0 16px rgba(240,200,96,.7) !important; filter: brightness(1.4); }
 .slot.dragging { opacity: .4; }
 .slot.empty { background: radial-gradient(circle, #151315, #070607 75%); }
+
+/* ---------- item icons ---------- */
+.item-icon { display: block; width: 100%; height: 100%; overflow: visible; }
+.item-icon.placeholder { opacity: .16; filter: grayscale(1); }
+.eslot .item-icon { width: 46px; height: 46px; margin-top: 6px; }
+.sitem { padding: 3px; background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--c, #555) 22%, #151315), #080708 78%); }
+.sitem .item-icon { width: 100%; height: 100%; }
+#equip .eslot:not(.empty) { background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--c) 18%, rgba(28,26,28,.55)), rgba(10,9,10,.5)); }
+.tt-head { display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
+.tt-icon { flex: 0 0 52px; height: 52px; padding: 3px; border: 1px solid color-mix(in srgb, var(--c) 60%, #000);
+  background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--c) 25%, #151315), #080708 80%); }
+
+/* ---------- attribute breakdown ---------- */
+#stats .row[data-attr] { cursor: help; }
+#stats .row[data-attr]:hover { background: rgba(240,200,96,.08); color: var(--ink); }
+.attr-card { width: 300px; }
+.attr-total { font-family: var(--serif); font-size: 26px; color: #f3e1b0; margin: 2px 0 8px; }
+.attr-rows { display: flex; flex-direction: column; gap: 4px; }
+.attr-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; }
+.attr-row b { font-weight: 700; white-space: nowrap; }
+.attr-row b.up { color: #4cff6a; }
+.attr-src { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.attr-src span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attr-src .item-icon { flex: 0 0 24px; width: 24px; height: 24px; }
+.attr-src.base { color: var(--ink-dim); }
+.attr-empty { font-size: 12px; color: var(--ink-dim); font-style: italic; }
+.tt-foot.capped { color: var(--gold); }

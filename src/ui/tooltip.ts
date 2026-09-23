@@ -3,6 +3,7 @@
 import { SLOT_INFO, STATS } from '../data/items';
 import { rarityOf, formatStat, itemPower, statEntries } from '../loot/items';
 import { G } from '../state';
+import { itemIconSVG } from './itemIcons';
 import type { Item, SkillDef, StatKey } from '../types';
 
 /** Tooltip content: HTML, accent color and optional footer hint. */
@@ -43,7 +44,7 @@ function card(item: Item, { header = '', other = null as Item | null, showDelta 
   const implicit = new Set(SLOT_INFO[item.slot].implicit.map(([k]) => k));
   let html = `<div class="tt-card" style="--c:${r.color}">`;
   if (header) html += `<div class="tt-header">${header}</div>`;
-  html += `<div class="tt-name" style="color:${r.color}">${item.name}</div>`;
+  html += `<div class="tt-head"><div class="tt-icon" style="--c:${r.color}">${itemIconSVG(item)}</div><div class="tt-name" style="color:${r.color}">${item.name}</div></div>`;
   const pw = itemPower(item), opw = other ? itemPower(other) : 0;
   const pdelta = showDelta && other && pw !== opw ? `<span class="tt-delta ${pw > opw ? 'up' : 'down'}">${pw > opw ? '▲' : '▼'} ${Math.abs(pw - opw)}</span>` : '';
   html += `<div class="tt-type">${r.name} ${SLOT_INFO[item.slot].label} · Item level ${item.ilvl} · Power ${pw}${pdelta ? ' ' + pdelta : ''}</div>`;
