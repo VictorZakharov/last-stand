@@ -56,6 +56,8 @@ const rig = {
   shake: 0,
   focus: new THREE.Vector3(),
   hurt: 0,
+  yaw: 0,          // rotation around the focus; 0 looks toward -Z
+  targetYaw: 0,
 };
 
 export function initRenderer(container: HTMLElement) {
@@ -115,18 +117,25 @@ export function setZoom(z: number): void { rig.targetZoom = clamp(z, CAMERA.minZ
 otches = mouse-wheel steps (positive = zoom out). */
 export function zoomBy(notches: number): void { rig.targetZoom = clamp(rig.targetZoom * CAMERA.zoomStep ** notches, CAMERA.minZoom, CAMERA.maxZoom); }
 
+/** Middle-drag orbit: dragging right turns the world right (the camera swings left). */
+export function orbitBy(px: number): void { rig.targetYaw -= px * CAMERA.orbitSpeed; }
+/** Camera yaw in radians: screen-up is world (-sin, -cos) on XZ. */
+export const cameraYaw = (): number => rig.yaw;
+
 export function updateCamera(dt: number, focus: THREE.Vector3): void {
   const cam = G.camera;
   rig.zoom = damp(rig.zoom, rig.targetZoom, 8, dt);
   rig.focus.x = damp(rig.focus.x, focus.x, CAMERA.follow, dt);
   rig.focus.z = damp(rig.focus.z, focus.z, CAMERA.follow, dt);
   rig.focus.y = 0;
+  rig.yaw = damp(rig.yaw, rig.targetYaw, 18, dt);
   const d = CAMERA.distance * rig.zoom;
   // tilt towards the horizon as we zoom in
   const k = clamp((rig.zoom - CAMERA.minZoom) / (1 - CAMERA.minZoom), 0, 1);
   const pitch = CAMERA.closePitch + (CAMERA.pitch - CAMERA.closePitch) * k;
   const lookY = 0.6 + (1 - k) * 0.7;
-  cam.position.set(rig.focus.x, Math.sin(pitch) * d, rig.focus.z + Math.cos(pitch) * d);
+  const r = Math.cos(pitch) * d;
+  cam.position.set(rig.focus.x + Math.sin(rig.yaw) * r, Math.sin(pitch) * d, rig.focus.z + Math.cos(rig.yaw) * r);
   if (rig.shake > 0.001) {
     const s = rig.shake * rig.shake * 0.6;
     const t = G.time * 60;

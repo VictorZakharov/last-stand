@@ -11,6 +11,7 @@ export const CAMERA = {
   lobbyZoom: 0.45,     // closer view while in the lobby
   maxZoom: 1.7,
   zoomStep: 1.12,      // multiplicative zoom per mouse-wheel notch
+  orbitSpeed: 0.006,   // radians of camera yaw per pixel of middle-drag
 };
 
 export const ARENA = {

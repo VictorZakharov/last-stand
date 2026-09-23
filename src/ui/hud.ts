@@ -1,6 +1,7 @@
 // In-run HUD: bars, hotbar, score, target frame, minimap, spoils, decision panel.
 import { G } from '../state';
 import { input } from '../core/input';
+import { cameraYaw } from '../core/renderer';
 import { rarityOf, byValue } from '../loot/items';
 import { WAVES } from '../data/waves';
 import { bindTooltip, itemTooltip, skillTooltip } from './tooltip';
@@ -212,6 +213,7 @@ function drawMinimap() {
   c.clearRect(0, 0, W, W);
   c.save();
   c.translate(W / 2, W / 2);
+  c.rotate(cameraYaw()); // screen-up on the map is screen-up in the view
   // octagon wall
   c.strokeStyle = 'rgba(200,190,170,.55)'; c.lineWidth = 3;
   c.fillStyle = 'rgba(60,58,62,.35)';
