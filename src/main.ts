@@ -25,6 +25,7 @@ import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initTouch, updateTouch } from './ui/touch';
+import { initPwa } from './ui/pwa';
 import { initItemIcons } from './ui/itemIcons';
 import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap } from './ui/perfHud';
 import { warmShaders } from './game/warmup';
@@ -63,6 +64,7 @@ async function boot() {
   initRun({ banner, showDecision, hideDecision, showSummary });
   initMenus({ start, toMenu, resume, abandon, profileChanged, switchClass });
   initLoadoutEditor(() => buildHotbar(G.player));
+  initPwa();
   $('#decision .bank').onclick = () => bankRun();
   $('#decision .cont').onclick = () => continueRun();
 

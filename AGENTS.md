@@ -32,6 +32,11 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
   - Scale: `--ui` for the lobby and modals, `--hud` for the in-run HUD, `--touch` for the touch controls (all set in `src/ui/scale.ts`).
   - Layouts: on desktop the lobby is a CSS grid `[left | center loadout | right]`. Short screens (phones held sideways, height ≤ 520) and upright tablets show one panel at a time, picked from `#lobby-rail`, and the camera view shifts so the character stays beside the panel (`lobbyViewShift`). Phones held upright get a "turn your device" overlay.
   - Check desktop at 1024×700 and 1920×1080, a phone at 844×390 and a tablet at 1180×820 and 820×1180 (Playwright with `isMobile` + `hasTouch`).
+- **Installable, offline (PWA):** `public/manifest.webmanifest` plus a build plugin (`scripts/pwa.ts`, production builds only).
+  - The plugin renders the PNG app icons from `public/icon.svg` at build time (no binary assets in the repo) and writes `dist/sw.js`, which precaches every built file.
+  - The worker's cache name is a hash of the build, so each deploy installs its own cache. `src/ui/pwa.ts` registers the worker, shows the Install link and offers a reload (lobby only) when a new version is waiting.
+  - The worker serves cache-first. Production's scope contains the PR previews, so it skips `pr-preview/` paths (each preview registers its own).
+  - Test offline behaviour with `npm run build` + `vite preview`: the dev server has no worker.
 - **Touch** (`src/ui/touch.ts`): touch mode (`body.touch`, `input.touchMode`) follows the last pointer used, and the browser's emulated mouse events are ignored in it.
   - Controls: a move stick on the left half and the skill buttons on the right. Tap casts at the nearest foe; drag aims by hand and casts on release. The basic attack and channels act while held.
   - Everything hover-only needs a touch path. Tooltips open on tap (`bindTooltip`); items open an action sheet (`openItemSheet`); skills are bound by tapping a key and then the skill. Drag and drop and Shift are desktop extras.

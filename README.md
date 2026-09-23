@@ -25,6 +25,10 @@ Everything is procedural: models, animation, textures, VFX and sound are generat
 - If you die, **all unbanked spoils are lost**.
 - Equip what you find between runs; items roll random affixes across five rarities.
 
+### Install and play offline
+
+Last Stand is an installable web app. Use the **Install** link in the lobby (Chrome, Edge, Android), or *Add to Home Screen* on iOS. Once it has loaded, it also plays without a connection. A new version downloads in the background, and the lobby offers a reload when it's ready.
+
 ### Controls
 
 Plays with a keyboard and mouse, or by touch on phones and tablets (hold a phone sideways):
