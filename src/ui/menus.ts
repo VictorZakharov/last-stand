@@ -12,6 +12,7 @@ import { renderLoadoutEditor } from './loadoutEditor';
 import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
 import { renderAttributes } from './attributes';
 import { sfx } from '../core/audio';
+import { perfHudEnabled, setPerfHud } from './perfHud';
 import type { RunSummary } from '../game/run';
 import type { Item, Slot } from '../types';
 
@@ -47,6 +48,7 @@ export function initMenus(h: MenuHooks): void {
   $('#btn-summary').onclick = () => { sfx.click(); hooks.toMenu(); };
   $('#btn-resume').onclick = () => { sfx.click(); hooks.resume(); };
   $('#btn-abandon').onclick = () => { sfx.click(); hooks.abandon(); };
+  $<HTMLInputElement>('#opt-perf').onchange = (e) => setPerfHud((e.target as HTMLInputElement).checked);
   $('#btn-help').onclick = () => { renderControlsHelp(); $('#help').classList.remove('hidden'); };
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
   $('#btn-reset').onclick = () => {
@@ -255,4 +257,12 @@ export function showSummary({ outcome, wave, score, kills, bag, lost = 0 }: RunS
 }
 
 export function hideSummary(): void { $('#summary').classList.add('hidden'); hideTooltip(); }
-export function showPause(v: boolean): void { if (v) renderControlsHelp(); $('#pause').classList.toggle('hidden', !v); }
+export function showPause(v: boolean): void {
+  if (v) {
+    renderControlsHelp();
+    $<HTMLInputElement>('#opt-perf').checked = perfHudEnabled();
+    // in the lobby there is no run to abandon
+    $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run');
+  }
+  $('#pause').classList.toggle('hidden', !v);
+}
