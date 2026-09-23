@@ -8,6 +8,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
+import type { QualityPreset } from '../data/quality';
 
 const GradeShader = {
   uniforms: {
@@ -48,7 +49,7 @@ const SanitizeShader = {
     }`,
 };
 
-let composer: EffectComposer, grade: ShaderPass;
+let composer: EffectComposer, grade: ShaderPass, gl: THREE.WebGLRenderer;
 const rig = {
   zoom: 1,
   targetZoom: 1,
@@ -58,7 +59,7 @@ const rig = {
 };
 
 export function initRenderer(container: HTMLElement) {
-  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  const renderer = gl = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
@@ -98,6 +99,14 @@ export function initRenderer(container: HTMLElement) {
 
 /** The offscreen target the scene is rendered into (shaders must be compiled for it). */
 export const sceneTarget = (): THREE.WebGLRenderTarget => composer.readBuffer;
+
+/** Apply the render-cost settings of a quality preset, live. None of them change shader variants. */
+export function setRenderQuality(p: QualityPreset): void {
+  const pr = Math.min(window.devicePixelRatio, p.pixelRatio);
+  if (pr !== gl.getPixelRatio()) { gl.setPixelRatio(pr); composer.setPixelRatio(pr); }
+  // a render target re-initialises with the new sample count on its next use
+  for (const t of [composer.renderTarget1, composer.renderTarget2]) if (t.samples !== p.msaa) { t.samples = p.msaa; t.dispose(); }
+}
 
 export function addShake(amount: number): void { rig.shake = Math.min(1.2, rig.shake + amount); }
 export function flashHurt(amount: number): void { rig.hurt = Math.min(1, rig.hurt + amount); }

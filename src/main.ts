@@ -27,6 +27,7 @@ import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initItemIcons } from './ui/itemIcons';
 import { initPerfHud, perfBeginFrame, perfEndFrame } from './ui/perfHud';
 import { warmShaders } from './game/warmup';
+import { initQuality, sampleQuality } from './core/quality';
 import { pinPrograms, markLoaded, warmUp } from './core/shaders';
 import { configureCapeEnvironment } from './vendor/cape/world/caveProfile';
 import { groundHeight } from './world/arena';
@@ -44,6 +45,7 @@ function boot() {
   initEffects();
   G.arena = buildArena(scene, renderer);
   configureCapeEnvironment({ groundHeight });
+  initQuality();
   initFloaters($('#floaters'));
 
   G.profile = loadProfile();
@@ -170,9 +172,11 @@ function frame(timestamp: number): void {
   requestAnimationFrame(frame);
   perfBeginFrame(timestamp);
   timer.update(timestamp);
-  const dt = Math.min(timer.getDelta(), 1 / 20);
+  const rawDt = timer.getDelta();
+  const dt = Math.min(rawDt, 1 / 20);
   handleGlobalKeys();
   if (!G.paused) {
+    sampleQuality(rawDt);
     G.dt = dt;
     G.time += dt;
     update(dt);

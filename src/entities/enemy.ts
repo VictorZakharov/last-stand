@@ -15,6 +15,7 @@ import { additive } from '../core/materials';
 import { sfx } from '../core/audio';
 import { emit } from '../events';
 import { angleDamp, damp, pick, rand } from '../util';
+import { applyShadowDetail } from '../core/quality';
 import type { DamageType, EnemyDef, Model, XZ } from '../types';
 
 const auraGeo = new THREE.RingGeometry(0.7, 1, 48).rotateX(-Math.PI / 2);
@@ -107,6 +108,7 @@ export class Enemy {
     this.obj.name = typeId;   // names show up in the perf report
     this.obj.add(this.model.root);
     if (hero) this.model.root.scale.multiplyScalar(HERO.scale);
+    applyShadowDetail(this.obj);
     if (hero || this.boss) {
       const c = this.boss ? 0x9a40ff : pick(HERO.auraColors);
       this.auraMat = additive(c, 1.6, 0.8);
