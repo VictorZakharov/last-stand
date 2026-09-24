@@ -334,8 +334,12 @@ function update(dt: number): void {
   setViewShift(vs.x, vs.y);
   const focus = focusPlayer();
   updateCamera(dt, focus.pos, focus.model.height);
-  // through the eyes the body would fill the view (it still casts, animates and blocks)
-  G.player.model.root.visible = !(focus === G.player && viewMode() === 'first' && viewSettled());
+  // through the eyes the body would fill the view (it still casts, animates and blocks), and so would
+  // the cape, which lives in the world beside it
+  const eyes = focus === G.player && viewMode() === 'first' && viewSettled();
+  G.player.model.root.visible = !eyes;
+  for (const o of G.player.model.worldObjects ?? []) o.visible = !eyes && G.player.obj.visible;
+
 
 
   G.arena.update(dt, G.time); perfLap('arena');

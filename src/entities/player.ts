@@ -11,7 +11,8 @@ import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resol
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
 import { input, isDown } from '../core/input';
-import { flashHurt, addShake, cameraYaw, lookFacing } from '../core/renderer';
+import { flashHurt, addShake, cameraYaw, lookFacing, viewMode, viewSettled } from '../core/renderer';
+
 import { floatText } from '../ui/floaters';
 import { particles, col } from '../fx/particles';
 import { sfx } from '../core/audio';
@@ -264,11 +265,18 @@ export class Player {
   get inRun(): boolean { return !this.away && !this.out; }
 
   get castPoint(): THREE.Vector3 {
-    return (this.model.tip ?? this.model.root).getWorldPosition(new THREE.Vector3());
+    return this.viewHand() ?? (this.model.tip ?? this.model.root).getWorldPosition(new THREE.Vector3());
   }
 
   get palmPoint(): THREE.Vector3 {
-    return (this.model.palm ?? this.model.root).getWorldPosition(new THREE.Vector3());
+    return this.viewHand() ?? (this.model.palm ?? this.model.root).getWorldPosition(new THREE.Vector3());
+  }
+
+  /** Seen through this hero's eyes, where a hand would be in view (right of and below the camera,
+   *  ahead of it): the hidden body's hands are at the camera, so a beam would leave from the head. */
+  private viewHand(): THREE.Vector3 | null {
+    if (!this.local || viewMode() !== 'first' || !viewSettled()) return null;
+    return new THREE.Vector3(0.28, -0.4, -0.65).applyMatrix4(G.camera.matrixWorld);
   }
 
   cooldownOf(def: SkillDef): number { return def.cooldown * (1 - this.stats.cdr / 100); }

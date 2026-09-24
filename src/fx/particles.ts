@@ -10,9 +10,9 @@ const VERT = /* glsl */`
   uniform float uScale;
   void main(){
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    // fade out right at the lens: in first person a burst around the player starts at the camera,
-    // where each point would cover much of the screen
-    vColor = vec4(aColor.rgb, aColor.a * smoothstep(0.4, 1.6, -mv.z));
+    // fade out near the lens: in first person a burst around the player starts at the camera, a bolt's
+    // trail stacks along the view as it flies at it, and each point there covers much of the screen
+    vColor = vec4(aColor.rgb, aColor.a * smoothstep(0.5, 3.5, -mv.z));
     gl_PointSize = aSize * uScale / -mv.z;
     gl_Position = projectionMatrix * mv;
   }`;

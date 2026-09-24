@@ -165,7 +165,7 @@ export function lightning(from: THREE.Vector3, to: THREE.Vector3, { color = 0x9f
 }
 
 // Ice spikes erupting from the ground in a radius.
-export function iceSpikes(center: Pos, radius: number, count = 28): Effect {
+export function iceSpikes(center: Pos, radius: number, count = 28, inner = 0): Effect {
   const mat = new THREE.MeshPhysicalMaterial({
     color: 0xbfe8ff, emissive: 0x3aa0ff, emissiveIntensity: 0.6, roughness: 0.15, metalness: 0,
     transparent: true, opacity: 0.9, clearcoat: 1, flatShading: true,
@@ -174,7 +174,8 @@ export function iceSpikes(center: Pos, radius: number, count = 28): Effect {
   inst.castShadow = true;
   const data: { x: number; z: number; s: number; delay: number; tilt: number; rot: number; tilt2: number }[] = [];
   for (let i = 0; i < count; i++) {
-    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * radius;
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(inner * inner + Math.random() * (radius * radius - inner * inner));
+
     data.push({ x: center.x + Math.cos(a) * r, z: center.z + Math.sin(a) * r, s: rand(0.5, 1.3), delay: (r / radius) * 0.25, tilt: rand(-0.5, 0.5), rot: rand(0, 6.28), tilt2: rand(-0.5, 0.5) });
   }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
