@@ -54,7 +54,7 @@ export function renderControlsHelp(): void {
     const label = k === 'mouse0' ? 'Left click' : k === 'mouse2' ? 'Right click' : KEY_LABEL[k];
     return [s?.def.channel ? `${label} (hold)` : label, s ? s.def.name : '—'];
   });
-  const rows = [['W A S D', 'Move'], ['Mouse', 'Aim'], ...skillRows, ['Mouse wheel', 'Zoom'], ['Middle drag', 'Rotate camera'], ['B / C', 'Bank / Continue after a wave'], ['Esc', 'Pause']];
+  const rows = [['W A S D', 'Move'], ['Mouse', 'Aim'], ...skillRows, ['Mouse wheel', 'Zoom'], ['Middle drag', 'Rotate camera'], ['V', 'View: top-down, over the shoulder, first person'], ['B / C', 'Bank / Continue after a wave'], ['Esc', 'Pause']];
   const html = rows.map(([k, v]) => `<span class="k">${k}</span><span>${v}</span>`).join('');
   document.querySelectorAll('.controls-help').forEach((el) => { el.innerHTML = html; });
 }

@@ -124,6 +124,12 @@ button { font-family: inherit; }
 .sp-list { font-size: 13px; font-weight: 500; max-height: 170px; overflow: hidden; }
 .sp-list div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px #000; }
 
+/* the close views (V): a crosshair at the centre, and the click that takes the mouse for looking */
+#crosshair { position: absolute; left: 50%; top: 50%; width: calc(22px * var(--hud, 1)); height: calc(22px * var(--hud, 1)); transform: translate(-50%, -50%); }
+#crosshair::before, #crosshair::after { content: ''; position: absolute; filter: drop-shadow(0 0 1.5px #000); --c: rgba(255, 240, 210, 0.9); }
+#crosshair::before { left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: linear-gradient(var(--c) 0 35%, transparent 35% 65%, var(--c) 65%); }
+#crosshair::after { top: 50%; left: 0; right: 0; height: 2px; margin-top: -1px; background: linear-gradient(90deg, var(--c) 0 35%, transparent 35% 65%, var(--c) 65%); }
+#look-hint { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); padding: 0.5em 1em; border-radius: 6px; background: rgba(8, 8, 14, 0.75); color: #f0e6d0; font-size: calc(15px * var(--hud, 1)); white-space: nowrap; }
 #banner { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); text-align: center; animation: banner 2.8s ease forwards; }
 .b-title { font-family: var(--serif); font-size: 54px; font-weight: 900; letter-spacing: 4px; color: #f3e1b0;
   text-shadow: 0 0 20px rgba(0,0,0,.9), 0 4px 6px #000, 0 0 40px rgba(240,190,90,.35); }
