@@ -1,7 +1,8 @@
-// Building blocks shared by the biome arenas: the biome contract, UV-scaled boxes,
-// the spawn-portal membrane, the environment map and the static shadow bake.
+// Building blocks shared by the biome arenas: the biome contract, UV-scaled boxes, instancing
+// and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { TAU } from '../util';
 import type { Obstacle } from '../types';
 
 export type Updater = (dt: number, t: number) => void;
@@ -39,6 +40,44 @@ export type BiomeBuilder = (group: THREE.Group, renderer: THREE.WebGLRenderer) =
 
 export const WALL_R = 28.5;   // radius of the arena's boundary (inner face)
 export const GATE_W = 4.2;    // spawn gate width
+
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
+export function setInstance(mesh: THREE.InstancedMesh, i: number, x: number, y: number, z: number, rx: number, ry: number, rz: number, sx: number, sy = sx, sz = sx): void {
+  _e.set(rx, ry, rz); _q.setFromEuler(_e);
+  mesh.setMatrixAt(i, _m.compose(_p.set(x, y, z), _q, _s.set(sx, sy, sz)));
+}
+
+/** Nudge every vertex along its direction from the origin by a hash of its position, so
+ * duplicated (non-indexed) corners move together and the surface stays closed. */
+export function lumpy(g: THREE.BufferGeometry, amount: number, seed: number): THREE.BufferGeometry {
+  const pos = g.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const k = Math.sin(v.x * 12.9898 + v.y * 78.233 + v.z * 37.719 + seed) * 43758.5453;
+    const n = (k - Math.floor(k)) * 2 - 1;
+    v.multiplyScalar(1 + n * amount);
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+/** A tuft of thin curved blades with vertex colors (`base` at the root, `tip` at the tips, linear
+ * RGB); normals point up so the tufts light like the ground they grow from. */
+export function buildGrassGeo(rng: () => number, base: RGB, tip: RGB): THREE.BufferGeometry {
+  const pos: number[] = [], colr: number[] = [];
+  for (let i = 0; i < 7; i++) {
+    const a = rng() * TAU, d = rng() * 0.12, w = 0.03 + rng() * 0.02, ht = 0.25 + rng() * 0.3, bend = 0.08 + rng() * 0.12;
+    const cx = Math.cos(a) * d, cz = Math.sin(a) * d, px = -Math.sin(a) * w, pz = Math.cos(a) * w;
+    pos.push(cx - px, 0, cz - pz, cx + px, 0, cz + pz, cx + Math.cos(a) * bend, ht, cz + Math.sin(a) * bend);
+    colr.push(...base, ...base, ...tip);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
+  return g;
+}
 
 // Box whose UVs are scaled by world size so textures don't stretch.
 export function boxWithUV(w: number, h: number, d: number, texel = 0.5): THREE.BufferGeometry {
