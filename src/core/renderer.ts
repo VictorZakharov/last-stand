@@ -222,12 +222,13 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
     rig.blend = Math.min(1, rig.blend + dt / CAMERA.switchTime);
     const e = ease(rig.blend);
     cam.position.lerpVectors(rig.fromPos, cam.position, e);
-    // turn early to what the new view looks at, seen from where the camera is along the way: a
-    // plain turn would leave the player out of the frame mid-glide (rising out of first person
-    // while still looking at the horizon)
-    cam.lookAt(_look);
-    _quat.copy(cam.quaternion);   // (slerpQuaternions copies its first argument in before reading the second)
-    cam.quaternion.slerpQuaternions(rig.fromQuat, _quat, ease(Math.min(1, rig.blend / 0.4)));
+    // aim at the character all the way (turning to it early), and settle into the new view's own
+    // framing (over the shoulder, through the eyes) only over the last stretch
+    _quat.copy(cam.quaternion);
+    cam.lookAt(focus.x, height * 0.55, focus.z);
+    _quat2.copy(cam.quaternion);   // (slerpQuaternions copies its first argument in before reading the second)
+    cam.quaternion.slerpQuaternions(rig.fromQuat, _quat2, ease(Math.min(1, rig.blend / 0.4)));
+    cam.quaternion.slerp(_quat, ease(clamp((rig.blend - 0.6) / 0.4, 0, 1)));
     fov = rig.fromFov + (fov - rig.fromFov) * e;
     near = 0.5 + (near - 0.5) * e;
   }
@@ -244,7 +245,7 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
 }
 
 const ease = (t: number): number => t * t * (3 - 2 * t);
-const _fwd = new THREE.Vector3(), _pivot = new THREE.Vector3(), _look = new THREE.Vector3(), _quat = new THREE.Quaternion();
+const _fwd = new THREE.Vector3(), _pivot = new THREE.Vector3(), _look = new THREE.Vector3(), _quat = new THREE.Quaternion(), _quat2 = new THREE.Quaternion();
 /** How far back from `p` (against `f`) the camera can sit before a prop or the arena wall. */
 function clearBehind(p: THREE.Vector3, f: THREE.Vector3, max: number): number {
   const bx = -f.x, bz = -f.z, h = Math.hypot(bx, bz);
