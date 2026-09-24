@@ -4,6 +4,7 @@ const REF_W = 1500, REF_H = 780;
 
 function apply() {
   const w = window.innerWidth, h = window.innerHeight;
+  if (w < 1 || h < 1) return;   // mid-move between monitors: keep the last real size
   // short screens (phones held sideways) get their own one-panel lobby layout, sized to the height
   const upright = h > w && w <= 1000;   // upright tablet: one lobby panel at a time, spanning the width
   const fit = Math.min(1.35, Math.max(0.6, Math.min(w / REF_W, h / REF_H)));
