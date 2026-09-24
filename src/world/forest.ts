@@ -376,7 +376,7 @@ function buildRootGate(scene: THREE.Object3D, angle: number, barkMat: THREE.Mate
   crown.castShadow = true;
   g.add(crown);
 
-  const { portal } = portalMembrane(g, angle, { a: [0.04, 0.45, 0.2], b: [0.45, 0.9, 0.15], core: [0.7, 1.0, 0.55] }, updaters);
+  const { portal } = portalMembrane(g, angle, { a: [0.04, 0.45, 0.2], b: [0.45, 0.9, 0.15], core: [0.7, 1.0, 0.55] }, updaters, true);
   placeGate(g, angle);
   scene.add(g);
   return portal;
