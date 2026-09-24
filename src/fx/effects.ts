@@ -96,7 +96,7 @@ export function decal(pos: Pos, { type = 'scorch' as 'scorch' | 'frost', size = 
 export function telegraph(pos: Pos, radius: number, duration: number, color: THREE.ColorRepresentation = 0xff3020): Effect & { cancel(): void; group: THREE.Group } {
   const g0 = glowScale(color);
   const ringMat = additive(color, 1.6 * g0, 0.9);
-  const fillMat = additive(color, 0.8 * g0, 0.35);
+  const fillMat = additive(color, 0.55 * g0, 0.35);
   const ring = new THREE.Mesh(GEO.ring, ringMat);
   const fill = new THREE.Mesh(GEO.disc, fillMat);
   const g = new THREE.Group();

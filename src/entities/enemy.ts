@@ -145,7 +145,7 @@ export class Enemy {
     applyShadowDetail(this.obj);
     if (hero || this.boss) {
       const c = this.boss ? def.accent ?? 0x9a40ff : pick(HERO.auraColors);
-      this.auraMat = additive(c, 1.6 * glowScale(c), 0.8);
+      this.auraMat = additive(c, 1.1 * glowScale(c), 0.6);
       this.aura = new THREE.Mesh(auraGeo, this.auraMat);
       this.aura.scale.setScalar(this.radius * 1.6);
       this.aura.position.y = 0.05;
@@ -289,7 +289,8 @@ export class Enemy {
     this.model.kit.u.uHit.value = this.hitT;
     if (this.barFill) this.barFill.style.width = `${(this.life / this.maxLife) * 100}%`;
     this.meter?.update();
-    if (this.aura && this.auraMat) { this.aura.rotation.y += dt; this.auraMat.opacity = 0.5 + Math.sin(t * 4) * 0.2; }
+    if (this.aura && this.auraMat) { this.aura.rotation.y += dt; this.auraMat.opacity = 0.4 + Math.sin(t * 4) * 0.12; }
+
     return true;
   }
 
