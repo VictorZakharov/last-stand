@@ -2,10 +2,10 @@
 import { G } from '../state';
 import { input } from '../core/input';
 import { cameraYaw } from '../core/renderer';
-import { rarityOf, byValue } from '../loot/items';
+import { rarityCounts } from '../loot/items';
 import { WAVES } from '../data/waves';
 import { BIOMES } from '../data/biomes';
-import { bindTooltip, itemTooltip, skillTooltip } from './tooltip';
+import { bindTooltip, skillTooltip } from './tooltip';
 import { on } from '../events';
 import { buildTouchSkills } from './touch';
 
@@ -25,8 +25,8 @@ let mmCtx: CanvasRenderingContext2D;
 
 export function initHud(): void {
   mmCtx = $<HTMLCanvasElement>('#minimap').getContext('2d')!;
-  on('itemPicked', renderSpoils);
-  on('waveStarted', renderSpoils);
+  on('lootGained', renderSpoils);
+  on('waveStarted', () => renderSpoils());
 }
 
 export function showHud(v: boolean): void { $('#hud').classList.toggle('hidden', !v); }
@@ -71,13 +71,9 @@ export function banner(title: string, sub = ''): void {
   bannerTimer = setTimeout(() => b.classList.add('hidden'), 2800);
 }
 
-function chip(item: Item): HTMLSpanElement {
-  const d = document.createElement('span');
-  d.className = 'chip';
-  d.style.color = rarityOf(item.rarity).color;
-  d.textContent = item.name;
-  bindTooltip(d, itemTooltip(item));
-  return d;
+/** The unbanked spoils as counts per rarity ("2 Epic"): what the items are shows only once banked. */
+export function rarityChips(bag: Item[], cls = 'chip'): string {
+  return rarityCounts(bag).map(({ rarity, n }) => `<span class="${cls}" data-r="${rarity.id}" style="color:${rarity.color}">${n} ${rarity.name}</span>`).join('');
 }
 
 let refreshDecision: (() => void) | null = null;
@@ -93,10 +89,10 @@ export function showDecision(): void {
     $('.dc-sub', box).textContent = `Score ${Math.round(r.score).toLocaleString()} · ${r.kills} slain · Health ${Math.round(G.player.life)}/${Math.round(G.player.stats.maxLife)}`;
     const bag = $('.dc-bag', box);
     bag.innerHTML = '';
-    if (!r.bag.length) bag.innerHTML = '<span class="chip" style="color:#9a8f7c">No spoils yet — loot on the floor will be collected automatically</span>';
-    for (const it of r.bag.slice().sort(byValue)) bag.appendChild(chip(it));
-    const onFloor = G.drops.length;
-    $('.dc-risk', box).innerHTML = `If you fall, <b>${r.bag.length + onFloor} unbanked item${r.bag.length + onFloor === 1 ? '' : 's'}</b> will be lost forever.`;
+    if (!r.bag.length) bag.innerHTML = '<span class="chip" style="color:#9a8f7c">No spoils yet</span>';
+    // what they are stays hidden until banked: the gamble is on the counts alone
+    else bag.innerHTML = rarityChips(r.bag) + '<span class="chip sealed">revealed when you bank</span>';
+    $('.dc-risk', box).innerHTML = `If you fall, <b>${r.bag.length} unbanked item${r.bag.length === 1 ? '' : 's'}</b> will be lost forever.`;
     const next = r.wave + 1;
     $('.cont-label', box).textContent = next % WAVES.bossEvery === 0 ? `Face wave ${next} (${BIOMES[G.arena.biome].bossShort})` : `Continue to wave ${next}`;
   };
@@ -106,18 +102,14 @@ export function showDecision(): void {
 
 export function hideDecision(): void { $('#decision').classList.add('hidden'); }
 
-export function renderSpoils(): void {
+/** `gained`: the item just added, whose rarity's count pulses. */
+export function renderSpoils(gained?: Item): void {
   const r = G.run;
   if (!r) return;
   $('.sp-count').textContent = String(r.bag.length);
   const list = $('.sp-list');
-  list.innerHTML = '';
-  for (const it of r.bag.slice().sort(byValue).slice(0, 9)) {
-    const d = document.createElement('div');
-    d.style.color = rarityOf(it.rarity).color;
-    d.textContent = it.name;
-    list.appendChild(d);
-  }
+  list.innerHTML = rarityChips(r.bag, 'sp-r');
+  if (gained) list.querySelector(`[data-r="${gained.rarity}"]`)?.classList.add('bump');
   refreshDecision?.();
 }
 
@@ -181,7 +173,7 @@ export function updateHud(): void {
   const ol = h('.obj-line');
   const txt = r.phase === 'countdown' ? `Wave ${r.wave} begins in ${Math.ceil(r.timer)}…`
     : r.phase === 'fighting' ? `Eliminate all enemies (${r.remaining})`
-    : r.phase === 'cleared' ? 'Bank your spoils or continue' : 'Fallen';
+    : r.phase === 'cleared' ? 'Bank your spoils or continue' : r.phase === 'banked' ? 'Spoils banked' : 'Fallen';
   setText(h('.obj-line .obj-text'), txt);
   ol.classList.toggle('done', r.phase === 'cleared');
 
@@ -236,11 +228,6 @@ function drawMinimap() {
   for (const pt of G.arena.portals) {
     c.fillStyle = mm.portal;
     c.beginPath(); c.arc(pt.pos.x * S * 1.08, pt.pos.z * S * 1.08, 3.5, 0, Math.PI * 2); c.fill();
-  }
-  // drops
-  for (const d of G.drops) {
-    c.fillStyle = rarityOf(d.item.rarity).color;
-    c.fillRect(d.to.x * S - 2, d.to.z * S - 2, 4, 4);
   }
   // enemies
   for (const e of G.enemies) {

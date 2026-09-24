@@ -2,6 +2,7 @@
 export const TIPS: string[] = [
   'After every wave, bank your spoils and leave, or press on for a harder wave and better loot.',
   'Dying loses everything you have not banked.',
+  'You only see the rarity of what you carry. Bank to find out what it is. Is one more wave worth the risk?',
   'Press Space in the sanctuary to hide the menus and practice on the training dummies.',
   'Drag skills from the Spellbook or Arsenal onto keys. A skill can sit on several keys, and they share its cooldown.',
   'Each class keeps its own gear, stash and records. Switch between the Mage and the Warrior in the sanctuary.',

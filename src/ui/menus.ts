@@ -4,11 +4,11 @@ import { SLOTS, SLOT_INFO } from '../data/items';
 import { RUN } from '../data/balance';
 import { WAVES } from '../data/waves';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
-import { rarityOf, itemPower, byValue, OFFHAND_WEAPON } from '../loot/items';
+import { rarityOf, rarityIndex, itemPower, byValue, OFFHAND_WEAPON } from '../loot/items';
 import { SKILL_KEYS } from '../loot/loadout';
 import { equipFromStash, unequip, salvage, salvageEquipped, resetProfile, slotsFor } from '../loot/profile';
 import { bindTooltip, hideTooltip, itemTooltip } from './tooltip';
-import { makeSkillSlot, KEY_LABEL } from './hud';
+import { makeSkillSlot, KEY_LABEL, rarityChips } from './hud';
 import { renderLoadoutEditor } from './loadoutEditor';
 import { initSkillStrip, syncSkillStrip } from './skillStrip';
 import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
@@ -425,27 +425,40 @@ export function showSummary({ outcome, wave, score, kills, bag, lost = [], repla
   t.textContent = dead ? 'You Have Fallen' : 'Spoils Secured';
   t.classList.toggle('dead', dead);
   $('.sm-sub', box).innerHTML = dead
-    ? (bag.length ? `The arena claims your <b class="red">${bag.length}</b> unbanked item${bag.length === 1 ? '' : 's'}.` : 'You carried nothing out — and lost nothing.')
+    ? (bag.length ? `The arena claims your <b class="red">${bag.length}</b> unbanked item${bag.length === 1 ? '' : 's'}, never seen.` : 'You carried nothing out — and lost nothing.')
     : `${kept.length} item${kept.length === 1 ? '' : 's'} moved to your stash.${
       replaced.length ? ` Stash full: ${replaced.length} weaker stash item${replaced.length === 1 ? '' : 's'} salvaged to make room.` : ''}${
       lost.length ? ` <b class="red">${lost.length} discarded — nothing weaker left in the stash.</b>` : ''}`;
   $('.sm-stats', box).innerHTML = `<div><b>${wave}</b>Wave</div><div><b>${score.toLocaleString()}</b>Score</div><div><b>${kills}</b>Slain</div>`;
   const items = $('.sm-items', box);
-  items.className = 'sm-items' + (dead ? ' lost' : '');
+  items.className = 'sm-items';
   items.innerHTML = '';
-  for (const it of bag.slice().sort(byValue)) {
-    const c = document.createElement('span');
-    c.className = 'chip' + (gone.has(it.id) ? ' lost' : '');
-    c.style.color = rarityOf(it.rarity).color;
-    c.textContent = it.name;
-    if (!dead) bindTooltip(c, itemTooltip(it));
-    items.appendChild(c);
+  clearReveal();
+  // a fall loses them unseen (only their rarities show); banking reveals them one by one, the best last
+  if (dead) items.innerHTML = rarityChips(bag, 'chip lost');
+  else {
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    bag.slice().sort(byValue).reverse().forEach((it, i) => {
+      const c = document.createElement('span');
+      c.className = 'chip reveal' + (gone.has(it.id) ? ' lost' : '');
+      c.style.color = rarityOf(it.rarity).color;
+      c.style.animationDelay = `${0.3 + i * REVEAL_STEP}s`;
+      c.textContent = it.name;
+      bindTooltip(c, itemTooltip(it));
+      items.prepend(c);   // the best ends up first in the list
+      if (!still) revealTimers.push(setTimeout(() => sfx.loot(rarityIndex(it.rarity)), (0.3 + i * REVEAL_STEP) * 1000));
+    });
   }
   if (!dead) markNew(kept);
   box.classList.remove('hidden');
 }
 
-export function hideSummary(): void { $('#summary').classList.add('hidden'); hideTooltip(); }
+export function hideSummary(): void { $('#summary').classList.add('hidden'); hideTooltip(); clearReveal(); }
+
+/** seconds between one cache opening and the next on the summary */
+const REVEAL_STEP = 0.22;
+let revealTimers: ReturnType<typeof setTimeout>[] = [];
+function clearReveal(): void { revealTimers.forEach(clearTimeout); revealTimers = []; }
 function renderQualityOptions(): void {
   const s = qualitySetting();
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => b.classList.toggle('active', b.dataset.q === s));

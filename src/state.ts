@@ -5,7 +5,6 @@ import type { Arena } from './world/arena';
 import type { Player } from './entities/player';
 import type { Enemy } from './entities/enemy';
 import type { Projectile } from './combat/projectiles';
-import type { Drop } from './loot/drops';
 import type { RunState } from './game/run';
 import type { Profile } from './types';
 
@@ -25,7 +24,6 @@ export interface GameState {
   player: Player;
   enemies: Enemy[];
   projectiles: Projectile[];
-  drops: Drop[];
 
   // run / meta
   run: RunState | null;
@@ -41,6 +39,5 @@ export const G = {
   mode: 'menu',
   enemies: [],
   projectiles: [],
-  drops: [],
   run: null,
 } as unknown as GameState;
