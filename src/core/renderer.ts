@@ -11,20 +11,34 @@ import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
 import type { QualityPreset } from '../data/quality';
 
+/** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept). */
+const HI_KNEE = 1, HI_CAP = 2;
+/** How strongly glare around a pixel darkens it (the eye adapting to a flash). */
+const GLARE_ADAPT = 1.5;
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
     uTime: { value: 0 },
     uHurt: { value: 0 },
     uVignette: { value: 1.05 },
+    tGlare: { value: null as THREE.Texture | null },
   },
   vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse; uniform float uTime; uniform float uHurt; uniform float uVignette;
+    uniform sampler2D tDiffuse; uniform float uTime; uniform float uHurt; uniform float uVignette; uniform sampler2D tGlare;
     varying vec2 vUv;
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
     void main(){
       vec4 c = texture2D(tDiffuse, vUv);
+      // the eye adapts: where a big flash glares (bloom's blurriest level), everything around it
+      // is seen darker, so a bright effect doesn't wash out the view
+      vec3 gl = texture2D(tGlare, vUv).rgb;
+      c.rgb /= 1.0 + ${GLARE_ADAPT.toFixed(2)} * max(gl.r, max(gl.g, gl.b));
+      // the scene and its bloom, compressed like the eye: the brightest channel eases towards a
+      // ceiling and the others keep their ratio to it, so a stack of lights stays its own colour
+      // (tone mapping would turn anything far over 1 white)
+      float m = max(c.r, max(c.g, c.b));
+      if (m > ${HI_KNEE.toFixed(2)}) c.rgb *= (${HI_KNEE.toFixed(2)} + ${(HI_CAP - HI_KNEE).toFixed(2)} * (1.0 - exp(-(m - ${HI_KNEE.toFixed(2)}) / ${(HI_CAP - HI_KNEE).toFixed(2)}))) / m;
       // tone mapping + sRGB here instead of a separate OutputPass (renderer settings, drawn to the screen)
       c.rgb = toneMapping(c.rgb);
       c = linearToOutputTexel(c);
@@ -41,12 +55,6 @@ const GradeShader = {
     }`,
 };
 
-/**
- * Before bloom: kill NaN/Inf pixels, and ease very bright pixels towards a ceiling (above KNEE,
- * brightness approaches KNEE + ROOM), keeping their hue. Stacked additive effects (a spell spammed,
- * a boss slam) would otherwise add up to many times the brightest glow and bloom over half the screen.
- */
-const KNEE = 3, ROOM = 5;
 const SanitizeShader = {
   uniforms: { tDiffuse: { value: null } },
   vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
@@ -55,11 +63,7 @@ const SanitizeShader = {
     void main(){
       vec4 c = texture2D(tDiffuse, vUv);
       bool bad = any(isnan(c)) || any(isinf(c)) || c.r != c.r || c.g != c.g || c.b != c.b;
-      c = clamp(c, 0.0, 64.0);
-      float m = max(c.r, max(c.g, c.b)), over = m - ${KNEE.toFixed(1)};
-      if (over > 0.0) c.rgb *= (${KNEE.toFixed(1)} + over / (1.0 + over / ${ROOM.toFixed(1)})) / m;
-      gl_FragColor = bad ? vec4(0.0, 0.0, 0.0, 1.0) : c;
-
+      gl_FragColor = bad ? vec4(0.0, 0.0, 0.0, 1.0) : clamp(c, 0.0, 64.0);
     }`,
 };
 
@@ -113,6 +117,7 @@ export function initRenderer(container: HTMLElement) {
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.85, 0.55, 0.9);
   composer.addPass(bloom);
   grade = new ShaderPass(GradeShader);
+  grade.uniforms.tGlare.value = bloom.renderTargetsVertical[bloom.nMips - 1].texture;
   composer.addPass(grade);
   // the perf overlay times each pass on the GPU
   for (const [label, pass] of [['sanitize', sanitize], ['bloom', bloom], ['grade', grade]] as const) {

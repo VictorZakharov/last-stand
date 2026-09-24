@@ -2,7 +2,7 @@
 // sap glowing through its bark, branch antlers, leafy shoulders and root-like feet.
 // The boss carries a glowing heart in a cage of branches and a ring of orbiting thorns.
 import * as THREE from 'three';
-import { createKit, glowScale } from '../../core/materials';
+import { createKit } from '../../core/materials';
 import { bark, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, part, joint, resetPose, walkCycle, idle, deathFall, ramp } from './rig';
 import type { AnimState, Model } from '../../types';
@@ -19,11 +19,10 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
   const kit = createKit(V.sap);
   const b = pbrMaterialMaps(bark(), 2, 2);
   const skin = kit.std({ color: V.skin, roughness: 0.9, map: b.map, normalMap: b.normalMap, normalScale: new THREE.Vector2(2, 2) });
-  // green glows read far brighter than their strength suggests: scaled like every other glow
-  const sap = kit.glow(V.sap, 1.8 * glowScale(V.sap));
+  const sap = kit.glow(V.sap, 1.8);
   const wood = kit.std({ color: 0x3a2e24, roughness: 0.85, map: b.map });
   const leaf = kit.std({ color: V.leaf, roughness: 0.85, flatShading: true });
-  const eye = kit.glow(V.sap, 6 * glowScale(V.sap));
+  const eye = kit.glow(V.sap, 6);
 
   const j = buildHumanoid({ skin }, {
     hipY: 0.82, hipW: 0.26, thighL: 0.4, shinL: 0.38, thighR: 0.13, shinR: 0.11,
@@ -70,7 +69,7 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
   let orbitRing: THREE.Group | null = null;
   let heart: THREE.Mesh | null = null;
   if (V.heart) {
-    const hm = kit.glow(V.heart, 2 * glowScale(V.heart));
+    const hm = kit.glow(V.heart, 3.5);
     // heart glowing inside a cage of branches on the chest
     heart = part(new THREE.IcosahedronGeometry(0.1, 1), hm, j.chest, 0, 0.22, 0.25);
     heart.castShadow = false;
@@ -85,9 +84,7 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
       c.rotation.z = -Math.sin(a) * 0.6;
     }
     const ring = joint(j.root, 0, 1.4, 0);
-    const thorn = kit.glow(V.heart, 1.4 * glowScale(V.heart));
-
-
+    const thorn = kit.glow(V.heart, 2.2);
     for (let i = 0; i < 6; i++) {
       const o = joint(ring);
       part(new THREE.ConeGeometry(0.06, 0.34, 5), thorn, o, 0.95, 0, 0).castShadow = false;

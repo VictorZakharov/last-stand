@@ -94,9 +94,9 @@ export function decal(pos: Pos, { type = 'scorch' as 'scorch' | 'frost', size = 
 
 // Enemy attack telegraph: outline ring + filling disc. Call cancel() to remove early.
 export function telegraph(pos: Pos, radius: number, duration: number, color: THREE.ColorRepresentation = 0xff3020): Effect & { cancel(): void; group: THREE.Group } {
-  const g0 = glowScale(color);
-  const ringMat = additive(color, 1.6 * g0, 0.9);
-  const fillMat = additive(color, 0.55 * g0, 0.35);
+  const gs = glowScale(color);
+  const ringMat = additive(color, 1.6 * gs, 0.9);
+  const fillMat = additive(color, 0.8 * gs, 0.35);
   const ring = new THREE.Mesh(GEO.ring, ringMat);
   const fill = new THREE.Mesh(GEO.disc, fillMat);
   const g = new THREE.Group();
@@ -113,7 +113,6 @@ export function telegraph(pos: Pos, radius: number, duration: number, color: THR
       fill.scale.set(radius * k, 1, radius * k);
       // a slow pulse: a large ring flashing 3+ times a second is a photosensitivity hazard
       ringMat.opacity = 0.75 + 0.25 * Math.sin(t * 9);
-
       return !dead && k < 1;
     }, dispose,
   });

@@ -63,9 +63,10 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
 }
 
 /**
- * How much to scale a glow of this colour so it looks as bright as a violet one: effects are tuned
- * on violet, and at the same strength a green one (mostly the eye's brightest channel) is nearly
- * three times as bright and blooms to white. Never brightens a dim colour.
+ * How much to scale a large glowing surface (a telegraph, a ground flash, an aura ring) of this
+ * colour so it looks as bright as a violet one, which the effects are tuned on: at the same
+ * strength a green one (mostly the eye's brightest channel) is nearly three times as bright.
+ * Never brightens. Small glows and lights keep their strength.
  */
 export function glowScale(color: THREE.ColorRepresentation): number {
   const c = new THREE.Color(color);
@@ -74,7 +75,6 @@ export function glowScale(color: THREE.ColorRepresentation): number {
 }
 
 // Additive, unlit HDR material for VFX meshes.
-
 export function additive(color: THREE.ColorRepresentation, intensity = 2, opacity = 1): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({
     color: new THREE.Color(color).multiplyScalar(intensity),

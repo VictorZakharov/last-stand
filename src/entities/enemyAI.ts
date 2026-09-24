@@ -11,7 +11,6 @@ import { telegraph, shockwave, decal, groundFlash } from '../fx/effects';
 import { burst, debris, smokePuff } from '../fx/particles';
 import { flash } from '../fx/lights';
 import { glowScale } from '../core/materials';
-
 import { addShake } from '../core/renderer';
 import { sfx } from '../core/audio';
 import { rand } from '../util';
@@ -69,9 +68,7 @@ export const FX = {
     debris(pos, { count: 22, speed: radius * 2 });
     smokePuff(pos, { count: 10, color: 0x1a1612, size: 1.4, sizeEnd: 3.5, speed: radius });
     decal(pos, { type: 'scorch', size: radius * 1.1, life: 8 });
-    // high enough not to burn whoever stands next to it white
-    flash({ color, intensity: 40 * g, distance: radius * 4, life: 0.35, pos: { x, y: 3, z } });
-
+    flash({ color, intensity: 40, distance: radius * 4, life: 0.35, pos: { x, y: 1.5, z } });
     addShake(boss ? 0.8 : 0.45);
     sfx.slam();
   },
@@ -82,12 +79,11 @@ export const FX = {
     if (!e || !pj) return;
     _dir.set(Math.sin(angle), 0, Math.cos(angle));
     // the trail's many overlapping particles add up, so it dims with the square of glow
-    const glow = pj.glow ?? 1, size = pj.radius * (pj.core ?? 0.7), type: DamageType = e.def.damageType, g = glowScale(pj.color);
+    const glow = pj.glow ?? 1, size = pj.radius * (pj.core ?? 0.7), type: DamageType = e.def.damageType;
     spawnProjectile({
       pos: new THREE.Vector3(ox, 1.1, oz), dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true,
-      color: pj.color, size, intensity: 5 * glow * g,
-      trail: { color: pj.color, colorEnd: pj.trail ?? 0x200030, intensity: 2.5 * glow * glow * g, size: size * 2.3, rate: 60, life: 0.4 },
-
+      color: pj.color, size, intensity: 5 * glow,
+      trail: { color: pj.color, colorEnd: pj.trail ?? 0x200030, intensity: 2.5 * glow * glow, size: size * 2.3, rate: 60, life: 0.4 },
       onHit: (target, proj) => {
         hurtPlayer(target as Player, damage, type, proj.pos);
         burst(proj.pos, { count: 16, color: pj.color, speed: 4, life: 0.4, size: 0.3 });
@@ -100,7 +96,7 @@ export const FX = {
     G.enemies.find((e) => e.id === id)?.onDeath.push(() => tg.cancel());
   },
   summon(x: number, z: number, color: number) {
-    shockwave({ x, z }, { color, intensity: 3 * glowScale(color), from: 1, to: 8, life: 0.8 });
+    shockwave({ x, z }, { color, intensity: 3, from: 1, to: 8, life: 0.8 });
     addShake(0.4);
   },
   cast() { sfx.witchCast(); },

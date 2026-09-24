@@ -24,6 +24,18 @@ export const input = {
   aim: null as THREE.Vector3 | null,
 };
 
+/**
+ * Let go of everything held: keys, mouse buttons, the touch stick and buttons. On leaving a run,
+ * a release the page never saw (the hero died mid-stride, the touch controls hid under the finger)
+ * mustn't keep the hero walking in the lobby.
+ */
+export function releaseInput(): void {
+  input.down.clear(); input.pressed.clear(); input.touch.clear();
+  input.mouse.left = input.mouse.right = input.mouse.middle = false;
+  input.stick.x = input.stick.y = 0;
+  input.aim = null;
+}
+
 let canvasEl: HTMLCanvasElement;
 /** the close views lock the pointer for mouse look while a wave is on */
 let lockWanted = false, lockTried = 0;
@@ -70,7 +82,7 @@ export function initInput(canvas: HTMLCanvasElement): void {
     if (k === 'space' || k === 'tab') e.preventDefault();
   });
   window.addEventListener('keyup', (e) => input.down.delete(keyName(e)));
-  window.addEventListener('blur', () => { input.down.clear(); input.mouse.left = input.mouse.right = input.mouse.middle = false; });
+  window.addEventListener('blur', releaseInput);
   window.addEventListener('mousemove', (e) => {
     if (input.touchMode) return;
     if (pointerLocked()) { input.look.x += e.movementX; input.look.y += e.movementY; input.mouse.overUI = false; return; }

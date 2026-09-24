@@ -96,9 +96,9 @@ export class Projectile {
     }
     this.pos.addScaledVector(this.vel, dt);
     this.mesh.position.copy(this.pos);
-    // in first person a bolt aimed at the player flies through the lens: its glowing core would fill the view
-    this.mesh.visible = this.pos.distanceToSquared(G.camera.position) > 1;
-
+    // in first person a bolt aimed at the player flies at the lens: its glowing core would fill the view
+    // for its last few frames
+    this.mesh.visible = this.pos.distanceToSquared(G.camera.position) > 2.5 * 2.5;
 
     if (this.trail) {
       const tr = this.trail;
