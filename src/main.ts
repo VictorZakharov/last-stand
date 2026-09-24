@@ -177,9 +177,10 @@ function syncView(): void {
   const v = G.mode === 'run' && !input.touchMode ? runView : 'top';
   setView(v);
   input.centerAim = v !== 'top';
-  // mouse look holds the pointer while a wave is on, and lets go for the menus between waves
+  // mouse look holds the pointer through the run, the bank-or-continue choice included (B / C
+  // pick there), and lets go for the pause menu and the run's end
   const phase = G.run?.phase;
-  const look = v !== 'top' && !G.paused && G.player.alive && (phase === 'countdown' || phase === 'fighting');
+  const look = v !== 'top' && !G.paused && G.player.alive && (phase === 'countdown' || phase === 'fighting' || phase === 'cleared');
   wantPointerLock(look);
   crosshair.classList.toggle('hidden', v === 'top');
   lookHint.classList.toggle('hidden', !look || pointerLocked());
