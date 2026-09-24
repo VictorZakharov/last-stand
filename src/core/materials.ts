@@ -63,16 +63,19 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
 }
 
 /**
- * How much to scale a large glowing surface (a telegraph, a ground flash, an aura ring) of this
- * colour so it looks as bright as a violet one, which the effects are tuned on: at the same
- * strength a green one (mostly the eye's brightest channel) is nearly three times as bright.
- * Never brightens. Small glows and lights keep their strength.
+ * How much to scale a glow of this colour so it looks as bright as a violet one, which the effects
+ * are tuned on: at the same strength a green one (mostly the eye's brightest channel) is nearly
+ * three times as bright, and blooms that much more. Never brightens. Large glowing surfaces (a
+ * telegraph, a ground flash, an aura ring) take all of it (`amount` 1); small glows (eyes, cores,
+ * bolts) take `SMALL_GLOW` of it, so they still bloom rather than turn flat. Lights keep their strength.
  */
-export function glowScale(color: THREE.ColorRepresentation): number {
+export function glowScale(color: THREE.ColorRepresentation, amount = 1): number {
   const c = new THREE.Color(color);
   const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
-  return Math.min(1, 0.3 / Math.max(lum, 1e-3));
+  return Math.min(1, 0.3 / Math.max(lum, 1e-3)) ** amount;
 }
+export const SMALL_GLOW = 0.75;
+
 
 // Additive, unlit HDR material for VFX meshes.
 export function additive(color: THREE.ColorRepresentation, intensity = 2, opacity = 1): THREE.MeshBasicMaterial {

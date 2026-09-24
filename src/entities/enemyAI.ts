@@ -10,7 +10,8 @@ import { spawnProjectile } from '../combat/projectiles';
 import { telegraph, shockwave, decal, groundFlash } from '../fx/effects';
 import { burst, debris, smokePuff } from '../fx/particles';
 import { flash } from '../fx/lights';
-import { glowScale } from '../core/materials';
+import { glowScale, SMALL_GLOW } from '../core/materials';
+
 import { addShake } from '../core/renderer';
 import { sfx } from '../core/audio';
 import { rand } from '../util';
@@ -79,11 +80,11 @@ export const FX = {
     if (!e || !pj) return;
     _dir.set(Math.sin(angle), 0, Math.cos(angle));
     // the trail's many overlapping particles add up, so it dims with the square of glow
-    const glow = pj.glow ?? 1, size = pj.radius * (pj.core ?? 0.7), type: DamageType = e.def.damageType;
+    const glow = pj.glow ?? 1, size = pj.radius * (pj.core ?? 0.7), type: DamageType = e.def.damageType, g = glowScale(pj.color, SMALL_GLOW);
     spawnProjectile({
       pos: new THREE.Vector3(ox, 1.1, oz), dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true,
-      color: pj.color, size, intensity: 5 * glow,
-      trail: { color: pj.color, colorEnd: pj.trail ?? 0x200030, intensity: 2.5 * glow * glow, size: size * 2.3, rate: 60, life: 0.4 },
+      color: pj.color, size, intensity: 5 * glow * g,
+      trail: { color: pj.color, colorEnd: pj.trail ?? 0x200030, intensity: 2.5 * glow * glow * g, size: size * 2.3, rate: 60, life: 0.4 },
       onHit: (target, proj) => {
         hurtPlayer(target as Player, damage, type, proj.pos);
         burst(proj.pos, { count: 16, color: pj.color, speed: 4, life: 0.4, size: 0.3 });
