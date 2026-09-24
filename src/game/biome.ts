@@ -29,3 +29,8 @@ export function setBiomeSetting(s: BiomeSetting): void {
 export function rollBiome(): void {
   if (setting === 'random') G.arena.setBiome(pick(BIOME_IDS));
 }
+
+/** Back to the lobby's own choice (after a co-op host's): the chosen biome, or Random's current one. */
+export function showBiomeSetting(): void {
+  if (setting !== 'random') G.arena.setBiome(setting);
+}

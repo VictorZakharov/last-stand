@@ -84,7 +84,7 @@ const skill: InstantSkill = {
           if (!e.alive || hit.has(e)) continue;
           if (Math.hypot(e.pos.x - fx, e.pos.z - fz) > R * 0.85 + e.radius) continue;
           hit.add(e);
-          hitEnemy(e, def.damage, { tags: def.tags, type: 'lightning', knock: 1.5, from: pos });
+          hitEnemy(e, def.damage, { by: player, tags: def.tags, type: 'lightning', knock: 1.5, from: pos });
           const at = new THREE.Vector3(e.pos.x, e.height * 0.6, e.pos.z);
           lightning(new THREE.Vector3(fx, 1.1, fz), at, { color: def.color, intensity: 3, life: 0.14, branches: 2 });
           burst(at, { count: 12, color: 0xcfe4ff, speed: 5, life: 0.35, size: 0.2 });

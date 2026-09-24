@@ -6,12 +6,13 @@ import { burst } from '../../fx/particles';
 import { flash } from '../../fx/lights';
 import type { InstantSkill, Needs } from './types';
 import type { Enemy } from '../../entities/enemy';
+import type { Player } from '../../entities/player';
 
 type Def = Needs<'damage' | 'missiles' | 'spread' | 'speed' | 'splitCount' | 'splitDamage' | 'range' | 'color' | 'trailEnd'>;
 import type { SkillDef } from '../../types';
 import { sfx } from '../../core/audio';
 
-function launch(origin: THREE.Vector3, angle: number, def: Def, damage: number, gen: number, ignore: Set<Enemy>, withLight: boolean): void {
+function launch(player: Player, origin: THREE.Vector3, angle: number, def: Def, damage: number, gen: number, ignore: Set<Enemy>, withLight: boolean): void {
   const dir = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
   spawnProjectile({
     pos: origin, dir, speed: def.speed * (gen ? 0.85 : 1), radius: gen ? 0.3 : 0.38,
@@ -21,7 +22,7 @@ function launch(origin: THREE.Vector3, angle: number, def: Def, damage: number, 
     trail: { color: def.color, colorEnd: def.trailEnd, size: gen ? 0.22 : 0.34, rate: gen ? 50 : 90, life: 0.3 },
     onHit: (target, proj) => {
       const enemy = target as Enemy;   // friendly projectiles only hit enemies
-      hitEnemy(enemy, damage, { tags: def.tags, type: 'arcane', knock: 1.2, from: proj.pos });
+      hitEnemy(enemy, damage, { by: player, tags: def.tags, type: 'arcane', knock: 1.2, from: proj.pos });
       burst(proj.pos, { count: gen ? 8 : 14, color: def.color, speed: 4, life: 0.35, size: 0.28 });
       sfx.boltHit();
       if (gen === 0) {
@@ -30,7 +31,7 @@ function launch(origin: THREE.Vector3, angle: number, def: Def, damage: number, 
         const n = def.splitCount;
         for (let i = 0; i < n; i++) {
           const a = heading + (i - (n - 1) / 2) * 1.1;
-          launch(proj.pos.clone(), a, def, damage * def.splitDamage, 1, new Set([enemy]), false);
+          launch(player, proj.pos.clone(), a, def, damage * def.splitDamage, 1, new Set([enemy]), false);
         }
       }
     },
@@ -47,7 +48,7 @@ const skill: InstantSkill = {
     const n = def.missiles;
     for (let i = 0; i < n; i++) {
       const a = base + (i - (n - 1) / 2) * def.spread;
-      launch(origin.clone(), a, def, def.damage, 0, new Set(), i === Math.floor(n / 2));
+      launch(player, origin.clone(), a, def, def.damage, 0, new Set(), i === Math.floor(n / 2));
     }
     burst(origin, { count: 10, color: def.color, speed: 2, life: 0.25, size: 0.25, gravity: 0 });
     sfx.bolt();

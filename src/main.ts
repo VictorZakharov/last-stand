@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { G } from './state';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, viewMode, viewSettled, VIEWS, type ViewMode } from './core/renderer';
 import { CAMERA, LOBBY } from './data/balance';
-import { initInput, updateInputRay, endInputFrame, input, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt } from './core/input';
+import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt } from './core/input';
 import { initAudio } from './core/audio';
 import { updateTimers } from './core/timers';
 import { particles } from './fx/particles';
@@ -16,7 +16,7 @@ import { updateEnemies, clearEnemies } from './entities/enemy';
 import { spawnEnemy } from './entities/spawner';
 import { updateProjectiles, clearProjectiles } from './combat/projectiles';
 import { loadProfile, savedClass, saveClass } from './loot/profile';
-import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun } from './game/run';
+import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { initFloaters, updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, updateHud, renderSpoils } from './ui/hud';
 import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, selectedWave, lobbyViewShift } from './ui/menus';
@@ -34,6 +34,11 @@ import { initBiome, rollBiome } from './game/biome';
 import { BIOME_IDS } from './data/biomes';
 import { loadingStep, loadingDone, loadingFailed } from './ui/loading';
 import { preloadTextures } from './core/textures';
+import { initSync } from './net/sync';
+import { initSession, joinRoom, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, partnerInRun } from './net/session';
+import { isCoop, isGuest, isHost, simulates } from './net/role';
+import { initCoop, renderCoop, updateCoopHud, touchReviving } from './ui/coop';
+import type { BiomeId } from './data/biomes';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 const timer = new THREE.Timer();
@@ -59,19 +64,23 @@ async function boot() {
   initAudio();   // resumed by the first user gesture
   G.profile = loadProfile(savedClass());
   G.player = new Player(G.profile.classId, G.profile.equipped);
+  G.players = [G.player];
 
   initHud();
   initTouch();
   initPerfHud(renderer);
   buildHotbar(G.player);
   initRun({ banner, showDecision, hideDecision, showSummary });
-  initMenus({ start, toMenu, resume, abandon, profileChanged, switchClass });
+  initMenus({ start, toMenu, resume, abandon, profileChanged, switchClass, summaryDone, lobbyChanged: sendLobbyChoice });
+  initSync();
+  initSession({ startRun: guestStart, hostGone, changed: () => { renderCoop(); sendLobbyChoice(); } });
+  initCoop();
   // losing the pointer mid-wave (Esc, switching windows) pauses, as mouse look can't carry on
-  onPointerLockLost(() => { if (G.mode === 'run' && !G.paused) { G.paused = true; showPause(true); } });
+  onPointerLockLost(() => { if (G.mode === 'run' && !G.menuOpen) openPause(true); });
   initLoadoutEditor(() => buildHotbar(G.player));
   initPwa();
-  $('#decision .bank').onclick = () => bankRun();
-  $('#decision .cont').onclick = () => continueRun();
+  $('#decision .bank').onclick = () => chooseBank();
+  $('#decision .cont').onclick = () => chooseContinue();
 
   const unlockAudio = () => initAudio();
   window.addEventListener('pointerdown', unlockAudio);
@@ -93,23 +102,31 @@ async function boot() {
   // the lobby renders behind the loading screen (to settle) but only starts moving at the
   // reveal, so its opening camera zoom is seen
   updateCamera(0, G.player.pos, G.player.model.height);
-  loadingDone(() => { revealed = true; });
+  loadingDone(() => {
+    revealed = true;
+    // an invite link: straight into the friend's room
+    const room = invitedRoom();
+    if (room) void joinRoom(room);
+  });
   requestAnimationFrame(frame);
 }
 
 // --- flow -------------------------------------------------------------------------
 function enterMenu() {
   G.mode = 'menu';
-  G.paused = false;
+  G.paused = G.menuOpen = G.player.idle = false;
+  runOver = false;
   showHud(false);
   showPause(false);
   hideSummary();
   showMenu(true);
   G.arena.setCalm(1);
-  G.player.reset();
+  syncAway();
+  for (const p of G.players) p.reset();
   G.player.sandbox = true;   // lobby: walk around and try skills freely
   setZoom(CAMERA.lobbyZoom);
   spawnDummies();
+  renderCoop();
 }
 
 function spawnDummies() {
@@ -117,16 +134,30 @@ function spawnDummies() {
   for (const [x, z] of LOBBY.dummies) spawnEnemy('dummy', new THREE.Vector3(x, 0, z));
 }
 
+/** The lobby's start: solo, or the host (whose guests come along). A guest waits for the host. */
 function start() {
+  if (isGuest() || (isHost() && partnerInRun())) return;
+  rollBiome();
+  sendStart(G.arena.biome, selectedWave());
+  beginRun(selectedWave());
+}
+
+/** A guest: the host started a run. */
+function guestStart(biome: BiomeId, wave: number) {
+  G.arena.setBiome(biome);
+  beginRun(wave);
+}
+
+function beginRun(wave: number) {
   showMenu(false);
   hideTooltip();
   showHud(true);
   buildHotbar(G.player);   // the loadout may have changed in the lobby
   G.mode = 'run';
   G.player.sandbox = false;
-  rollBiome();
+  syncAway();
   setZoom(1);
-  startRun(selectedWave());
+  startRun(wave);
   renderSpoils();
 }
 
@@ -135,12 +166,54 @@ function toMenu() {
   enterMenu();
 }
 
-function resume() { G.paused = false; showPause(false); }
+/** The host's battleground and starting wave, shown in the guests' lobbies. */
+function sendLobbyChoice() {
+  if (!isGuest()) sendLobby(G.arena.biome, selectedWave());
+}
 
-function abandon() {
-  G.paused = false;
-  showPause(false);
+/** The summary closed: back to the lobby, or (in co-op, with the run still on) watch the others. */
+function summaryDone() {
+  if (G.run && G.run.phase !== 'over' && G.players.some((p) => !p.local && p.inRun)) { hideSummary(); return; }
   toMenu();
+}
+
+/** The host left mid-run: the guest keeps its spoils. */
+function hostGone() {
+  if (G.mode === 'run') hostLeft();
+}
+
+// --- choices -------------------------------------------------------------------------
+function chooseBank() {
+  const r = G.run;
+  if (!r || r.phase !== 'cleared' || !G.player.active) return;
+  if (isGuest()) sendControl({ t: 'bank' });
+  bankRun();
+}
+
+function chooseContinue() {
+  const r = G.run;
+  if (!r || r.phase !== 'cleared' || !G.player.active || r.votes.has(G.player.slot)) return;
+  if (isGuest()) sendControl({ t: 'vote' });
+  continueRun();
+}
+
+/** The pause menu. Solo it stops the game; in co-op the game goes on and the character stands idle. */
+function openPause(open: boolean) {
+  G.menuOpen = open;
+  G.paused = open && !isCoop();
+  G.player.idle = open && isCoop();
+  showPause(open);
+}
+
+function resume() { openPause(false); }
+
+/** Abandon from the pause menu: solo back to the lobby; in co-op out of the run (spoils lost), watching the rest. */
+function abandon() {
+  openPause(false);
+  if (!isCoop() || G.mode !== 'run' || !G.run || G.run.phase === 'over' || !G.player.inRun) { toMenu(); return; }
+  if (isGuest()) sendControl({ t: 'abandon' });
+  if (G.player.alive) G.player.die();
+  playerOut(G.player, 'dead');
 }
 
 /** Lobby class pick: the new class brings its own profile (gear, stash, records) and loadout. */
@@ -153,10 +226,15 @@ function switchClass(id: string) {
   // the old class's skill visuals go with it
   clearProjectiles(); clearEffects(); clearLights(); particles.clear();
   G.profile = loadProfile(id);
+  const old = G.player;
   G.player = new Player(id, G.profile.equipped);
+  G.player.slot = old.slot;
+  G.player.spawn.copy(old.spawn);
+  G.players[G.players.indexOf(old)] = G.player;
   G.player.place(at, facing);
   G.player.sandbox = true;
   buildHotbar(G.player);
+  sendLook();
 }
 
 // gear can change what a key fires (a shield skill falls back without one), so the hotbar is rebuilt.
@@ -167,6 +245,7 @@ function profileChanged() {
   p.reset();
   p.place(at, facing);
   buildHotbar(p);
+  sendLook();
 }
 
 const compileContext = () => `(${G.mode}${G.run ? ` wave ${G.run.wave}` : ''}, t=${G.time.toFixed(1)}s, ${G.enemies.length} foes)`;
@@ -183,7 +262,7 @@ function syncView(): void {
   // mouse look holds the pointer through the run, the bank-or-continue choice included (B / C
   // pick there), and lets go for the pause menu and the run's end
   const phase = G.run?.phase;
-  const look = v !== 'top' && !G.paused && G.player.alive && (phase === 'countdown' || phase === 'fighting' || phase === 'cleared');
+  const look = v !== 'top' && !G.menuOpen && G.player.active && (phase === 'countdown' || phase === 'fighting' || phase === 'cleared');
   wantPointerLock(look);
   crosshair.classList.toggle('hidden', v === 'top');
   lookHint.classList.toggle('hidden', !look || pointerLocked());
@@ -191,21 +270,39 @@ function syncView(): void {
 
 // --- loop ---------------------------------------------------------------------------
 function handleGlobalKeys() {
-  if (G.mode === 'menu' && !G.paused && wasPressed('space')) toggleMenuStowed();
+  if (G.mode === 'menu' && !G.menuOpen && wasPressed('space')) toggleMenuStowed();
   // the Esc that released the mouse-look pointer already paused the game
   if (wasPressed('escape') && performance.now() - lockLostAt < 300) return;
   if (wasPressed('escape')) {
-    const r = G.run;
-    if (G.mode === 'run' && r && (r.phase === 'banked' || r.phase === 'dead')) return;
-    G.paused = !G.paused;
-    showPause(G.paused);
+    // out of the run, the summary (or the watching) has no pause
+    if (G.mode === 'run' && G.run && !G.player.inRun) return;
+    openPause(!G.menuOpen);
   }
   if (G.mode !== 'run') return;
-  if (!G.paused && wasPressed('v')) runView = VIEWS[(VIEWS.indexOf(runView) + 1) % VIEWS.length];
-  if (!G.paused && G.run?.phase === 'cleared') {
-    if (wasPressed('b')) bankRun();
-    if (wasPressed('c')) continueRun();
+  if (!G.menuOpen && wasPressed('v')) runView = VIEWS[(VIEWS.indexOf(runView) + 1) % VIEWS.length];
+  if (!G.menuOpen && G.run?.phase === 'cleared') {
+    if (wasPressed('b')) chooseBank();
+    if (wasPressed('c')) chooseContinue();
   }
+}
+
+/** Who the camera follows: the local player, or once out of a co-op run, a partner still in it. */
+function focusPlayer() {
+  if (G.mode !== 'run' || G.player.inRun) return G.player;
+  return G.players.find((p) => !p.local && p.inRun) ?? G.player;
+}
+
+/** The run is over for everyone: once the summary is closed, back to the lobby. */
+let runOver = false;
+function checkRunOver() {
+  const r = G.run;
+  if (!r || G.mode !== 'run') return;
+  // the host (or solo) ends the run once nobody is left in it
+  if (!isGuest() && r.phase !== 'over' && !G.players.some((p) => p.inRun)) endRun();
+  if (r.phase !== 'over' || runOver || !r.summarized || !$('#summary').classList.contains('hidden')) return;
+  runOver = true;
+  banner('The run is over', 'Back to the sanctuary');
+  setTimeout(() => { if (G.mode === 'run' && runOver) toMenu(); }, 2500);
 }
 
 // perfLap() marks the end of each stage for the performance report's breakdown
@@ -216,21 +313,29 @@ function update(dt: number): void {
   if (input.orbit) orbitBy(input.orbit);
   if (input.look.x || input.look.y) lookBy(input.look.x, input.look.y);
 
-  // the player can move and cast in both the arena and the lobby (sandbox)
-  G.player.update(dt); perfLap('player');
+  // the player can move and cast in both the arena and the lobby (sandbox); co-op partners as reported
+  G.player.reviving = G.mode === 'run' && !G.menuOpen && (isDown('e') || touchReviving());
+  for (const p of G.players) p.update(dt);
+  perfLap('player');
   updateProjectiles(dt); perfLap('projectiles');
   // enemies in the arena, training dummies in the lobby
-  if (G.mode === 'run') updateRun(dt);
+  if (G.mode === 'run') { updateRun(dt); checkRunOver(); }
   updateEnemies(dt);
-  separateEnemies(); perfLap('enemies');
+  if (simulates()) separateEnemies();
+  perfLap('enemies');
+  updateSession(dt, G.player.reviving);
   if (G.mode === 'run') {
-    updateHud(); perfLap('hud');
+    updateHud();
+    updateCoopHud();
+    perfLap('hud');
   }
   const vs = lobbyViewShift();
   setViewShift(vs.x, vs.y);
-  updateCamera(dt, G.player.pos, G.player.model.height);
+  const focus = focusPlayer();
+  updateCamera(dt, focus.pos, focus.model.height);
   // through the eyes the body would fill the view (it still casts, animates and blocks)
-  G.player.model.root.visible = !(viewMode() === 'first' && viewSettled());
+  G.player.model.root.visible = !(focus === G.player && viewMode() === 'first' && viewSettled());
+
 
   G.arena.update(dt, G.time); perfLap('arena');
   updateEffects(dt); perfLap('effects');
@@ -240,8 +345,31 @@ function update(dt: number): void {
   updateFloaters(dt); perfLap('floaters');
 }
 
+/**
+ * A co-op host's game runs the fight for everyone, so it can't stop when its tab goes to the
+ * background (the browser stops drawing it): a timer steps it meanwhile. Browsers slow such
+ * timers down to about once a second, so each tick catches up in short steps.
+ */
+let lastStep = 0;
+function backgroundStep(): void {
+  const now = performance.now();
+  if (!document.hidden || !isHost() || !revealed || G.paused) { lastStep = now; return; }
+  let left = Math.min(1.5, (now - lastStep) / 1000);
+  lastStep = now;
+  while (left > 1e-3) {
+    const dt = Math.min(left, 1 / 20);
+    G.dt = dt;
+    G.time += dt;
+    update(dt);
+    left -= dt;
+  }
+}
+setInterval(backgroundStep, 100);
+
 function frame(timestamp: number): void {
   requestAnimationFrame(frame);
+  lastStep = performance.now();
+
   perfBeginFrame(timestamp);
   timer.update(timestamp);
   const rawDt = timer.getDelta();

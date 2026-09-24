@@ -66,7 +66,7 @@ const skill: InstantSkill = {
       for (const e of G.enemies) {
         if (!e.alive || hit.has(e) || Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > 1.1 + e.radius) continue;
         hit.add(e);
-        hitEnemy(e, def.damage, { tags: def.tags, type: 'physical', knock: def.knock, from: p });
+        hitEnemy(e, def.damage, { by: player, tags: def.tags, type: 'physical', knock: def.knock, from: p });
         sparks(e.pos.x, e.height * 0.5, e.pos.z, 0xffc080, 16);
         shockwave(e.pos, { color: EMBER, intensity: 1.5, from: 0.2, to: 1.4, life: 0.25 });
         debris(e.pos, { count: 6, speed: 5 });

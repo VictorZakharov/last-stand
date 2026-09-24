@@ -55,6 +55,7 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
 | `src/loot/` | Item generation (base names and excluded stats per class), persistent profiles, one per class (`localStorage` `last-stand.profile.<classId>.v1`; the pre-class `last-stand.profile.v1` migrates to the mage), the lobby's class (cookie `last-stand-class`), skill loadout (cookie `last-stand-loadout-<classId>`; a class with gear-driven skills keeps one per weapon style, `last-stand-loadout-<classId>-<style>`) |
 | `src/fx/` | CPU particle pools, a fixed pool of 8 point lights (`lights.ts`), transient effects (`effects.ts`) |
 | `src/core/` | Renderer + post chain, input, audio, procedural textures & materials, game-time scheduler (`timers.ts`) |
+| `src/net/` | Co-op: who simulates what (`role.ts`), the links (`transport.ts`: Trystero over Nostr relays, or `?net=local`), rooms, lobby and each player's own state (`session.ts`), the host's reports of the fight (`sync.ts`) |
 | `src/ui/` | DOM HUD, lobby/menus, tooltips, loadout editor, item icons (inline SVG), attributes |
 | `src/vendor/cape/` | Vendored cape-physics PBD solver + shims. Keep the solver files unmodified (see its README); adapt in `entities/models/cape.ts` and the shims |
 | `src/state.ts` / `src/events.ts` | Typed global state `G` and a typed event bus |
@@ -82,7 +83,18 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
 - **Cooldowns are per skill id**, shared by every key the skill is bound to (the same spell may sit on several keys).
 - **Asset paths:** Vite `base` is `./`. In `index.html` reference assets root-absolute (`/favicon.svg`) so Vite rewrites them; `check:pages` fails on paths that would break under `/last-stand/pr-preview/pr-N/`.
 - Three.js 0.185: use `THREE.Timer` (not `Clock`) and `PCFShadowMap` (not `PCFSoftShadowMap`). Both old forms log deprecation warnings.
-- **Dev hooks:** in dev builds, `window.__G` (game state) and `window.__dev.spawnEnemy` are exposed for scripted testing and screenshots (stripped from production). Spawn enemies well away from the player (near the arena edge) or the player dies before the shot.
+- **Co-op** (`src/net/`, rules in `game/run.ts`, UI in `ui/coop.ts`):
+  - **Who runs what.** Every game moves and casts its own player and reports it (`pl` state at `COOP.sendRate`, `ev` actions: cast / fire / channel start and stop), in the lobby and in runs; the others replay it on a remote `Player` (`local` false, `replay()`, `updateRemote`). The host's game simulates the fight (enemies, damage, loot, waves, downs) and reports it (`net/sync.ts`: events every frame, a snapshot at the send rate); a guest's enemies are copies (`Enemy.net`) that don't think.
+  - **Anything with gameplay effect goes through the checks in `net/role.ts`:** `hitEnemy` needs `by` (the casting player: its stats, the kill, leech) and only deals damage where `dealsDamage(by)`; `hurtPlayer(p, ...)` only where `simulates()`. Skill code runs on every game for its visuals, so keep its damage in `hitEnemy` and its hits on players in `hurtPlayer`.
+  - **An enemy attack's visuals go through `fx()` in `enemyAI.ts`** (named `FX` entries with numeric arguments), which guests replay. New attack effects go there.
+  - **Hooks, not imports:** the host reports through sinks set by `net/sync.ts` (`setSpawnSink`, `setFxSink`, `setNumberSink`, `setHitSink`, `runHooks`), so solo code has no network dependency and the relay library only loads when a room opens.
+  - **Enemies target `e.target`** (the nearest active player, `nearestPlayer`), with a flow field per player slot. Use `G.players` (the local player first) for anything that concerns every player, and `G.player` only for the local one.
+  - **A remote player has no staff light** (another point light would recompile every shader); its model is already warmed with the other classes.
+  - The pause menu doesn't stop a co-op game (`G.menuOpen` with `G.paused` false; the local player goes `idle`), and a host in a background tab keeps stepping on a timer.
+  - Bump `PROTOCOL` in `session.ts` (and the app id in `transport.ts` if the link itself changes) when the messages change: rooms only hold one version.
+  - Test locally with two tabs of one browser and `?net=local` (a BroadcastChannel instead of relays): open a room in one, then open the invite link in the other.
+- **Dev hooks:** in dev builds,
+ `window.__G` (game state) and `window.__dev.spawnEnemy` are exposed for scripted testing and screenshots (stripped from production). Spawn enemies well away from the player (near the arena edge) or the player dies before the shot.
 
 ## Style
 

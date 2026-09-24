@@ -42,7 +42,7 @@ export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, fa
     const dx = e.pos.x - p.x, dz = e.pos.z - p.z, d = Math.hypot(dx, dz);
     if (d > def.range + e.radius) continue;
     if (d > e.radius + 0.6 && angleBetween(Math.atan2(dx, dz), facing) > def.arc / 2) continue;
-    hitEnemy(e, def.damage, { tags: def.tags, type: opts.type ?? 'physical', knock: opts.knock, from: p });
+    hitEnemy(e, def.damage, { by: player, tags: def.tags, type: opts.type ?? 'physical', knock: opts.knock, from: p });
     sparks(e.pos.x, e.height * 0.55, e.pos.z, 0xffd9a0, 8);
     hits++;
   }

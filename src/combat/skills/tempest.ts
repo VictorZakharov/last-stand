@@ -52,7 +52,7 @@ const skill: ChannelSkill<TempestState> = {
     let hits = 0;
     for (const e of G.enemies) {
       if (!e.alive || Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > def.radius + e.radius) continue;
-      hitEnemy(e, def.damage * TICK, { tags: def.tags, type: 'physical', knock: 0.8, from: p });
+      hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'physical', knock: 0.8, from: p });
       sparks(e.pos.x, e.height * 0.55, e.pos.z, 0xffe0b0, 4);
       hits++;
     }

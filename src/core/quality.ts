@@ -44,7 +44,7 @@ function apply(l: QualityLevel): void {
     shadow.map?.dispose();
     shadow.map = null;   // recreated at the new size on the next render
   }
-  if (G.player) applyShadowDetail(G.player.obj);
+  for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   frames = time = 0;
   settle = AUTO_QUALITY.settle;

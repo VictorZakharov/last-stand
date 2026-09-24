@@ -17,7 +17,7 @@ export function resolveWorld(pos: { x: number; z: number }, radius: number): voi
   if (r > R) { pos.x *= R / r; pos.z *= R / r; }
 }
 
-/** Push overlapping enemies apart (and away from the player). */
+/** Push overlapping enemies apart (and away from the players). */
 export function separateEnemies(): void {
   const list = G.enemies;
   for (let i = 0; i < list.length; i++) {
@@ -36,17 +36,19 @@ export function separateEnemies(): void {
         b.pos.x += (dx / d) * push * wb * 2; b.pos.z += (dz / d) * push * wb * 2;
       }
     }
-    const p = G.player;
-    if (p && p.alive) {
+    for (const p of G.players) {
+      if (!p.active) continue;
       const dx = a.pos.x - p.pos.x, dz = a.pos.z - p.pos.z;
       const min = a.radius + p.radius;
       const d2 = dx * dx + dz * dz;
       if (d2 < min * min && d2 > 1e-6) {
         const d = Math.sqrt(d2);
         if (a.def.dummy) {
-          // training dummies are planted: the player slides around them
+          // training dummies are planted: the player slides around them (a partner is moved by its own game)
+          if (!p.local) continue;
           p.pos.x = a.pos.x - (dx / d) * min;
           p.pos.z = a.pos.z - (dz / d) * min;
+
         } else {
           // enemies yield the overlap so the player isn't shoved around
           a.pos.x = p.pos.x + (dx / d) * min;

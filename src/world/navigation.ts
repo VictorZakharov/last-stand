@@ -93,10 +93,11 @@ function pop(cost: Float32Array): number {
   return top;
 }
 
-/** Path lengths to (tx, tz) for bodies up to radius `r`, over the cells wide enough for them. */
-function getField(g: Grid, r: number, tx: number, tz: number): Field {
+/** Path lengths to (tx, tz) for bodies up to radius `r`, over the cells wide enough for them.
+ *  Each co-op player (`slot`) has fields of their own, as enemies go for either. */
+function getField(g: Grid, r: number, tx: number, tz: number, slot: number): Field {
   const size = SIZES.find((s) => r <= s) ?? r;
-  const key = Math.round(size * 100), target = cellOf(g, tx, tz);
+  const key = Math.round(size * 100) + slot * 1000, target = cellOf(g, tx, tz);
   let f = fields.get(key);
   // at most one field is rebuilt per frame (a couple of ms each): the others wait their turn
   if (f && (f.cell === target || G.time - f.t < REFRESH || rebuiltAt === G.time)) return f;
@@ -142,10 +143,11 @@ function getField(g: Grid, r: number, tx: number, tz: number): Field {
  * Where a body of radius `r` at (x, z) should head to reach (tx, tz): the target itself when the way
  * is clear, else a waypoint around what's in the way. Writes the waypoint into `out`.
  */
-export function navTarget(x: number, z: number, r: number, tx: number, tz: number, out: { x: number; z: number }): void {
+export function navTarget(x: number, z: number, r: number, tx: number, tz: number, slot: number, out: { x: number; z: number }): void {
   out.x = tx; out.z = tz;
   if (lineClear(x, z, tx, tz, r + MARGIN)) return;
-  const g = getGrid(), f = getField(g, r, tx, tz), cost = f.cost;
+  const g = getGrid(), f = getField(g, r, tx, tz, slot), cost = f.cost;
+
   let c = cellOf(g, x, z);
   // pushed into a cell too narrow for it (against a pillar or the edge): start from the best neighbour
   if (!Number.isFinite(cost[c])) {
