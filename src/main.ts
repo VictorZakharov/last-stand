@@ -15,7 +15,6 @@ import { Player } from './entities/player';
 import { updateEnemies, clearEnemies } from './entities/enemy';
 import { spawnEnemy } from './entities/spawner';
 import { updateProjectiles, clearProjectiles } from './combat/projectiles';
-import { updateDrops } from './loot/drops';
 import { loadProfile, savedClass, saveClass } from './loot/profile';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun } from './game/run';
 import { initFloaters, updateFloaters } from './ui/floaters';
@@ -221,7 +220,6 @@ function update(dt: number): void {
   updateEnemies(dt);
   separateEnemies(); perfLap('enemies');
   if (G.mode === 'run') {
-    updateDrops(dt);
     updateHud(); perfLap('hud');
   }
   const vs = lobbyViewShift();

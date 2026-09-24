@@ -24,7 +24,7 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
 
 ## Product rules
 
-- **Core loop:** after *every* wave the player chooses Bank (keep all loot, leave) or Continue (harder wave, better loot). Dying loses all unbanked loot. Don't change this without being asked.
+- **Core loop:** after *every* wave the player chooses Bank (keep all loot, leave) or Continue (harder wave, better loot). Dying loses all unbanked loot. Loot is **hidden until banked**: nothing drops on the floor, items go straight into the run's bag (`gainLoot` in `game/run.ts`), and the HUD shows only counts per rarity. The bank summary reveals the items one by one. Don't show what an unbanked item is (name, base, stats) anywhere. Don't change this without being asked.
 - **Everything is procedural.** No downloaded models, textures or audio: geometry, canvas textures, rigs/animation, VFX and WebAudio sfx are generated at runtime. Don't add binary assets (screenshots in `docs/` are the exception).
 - **Originality:** this is open source. Skill, item, enemy and class names must be original. No Grim Dawn (or other game) names, trademarks or assets.
 - The game is class-agnostic by name ("Last Stand"). More classes are planned, so keep class-specific code in class data, models and skills, not in the shared systems.

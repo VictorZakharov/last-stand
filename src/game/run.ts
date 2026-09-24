@@ -12,10 +12,9 @@ import { clearProjectiles } from '../combat/projectiles';
 import { clearEffects } from '../fx/effects';
 import { clearLights } from '../fx/lights';
 import { particles } from '../fx/particles';
-import { dropItem, vacuumDrops, clearDrops } from '../loot/drops';
-import { rollDrop } from '../loot/items';
+import { rollDrop, rarityOf, rarityIndex } from '../loot/items';
 import { bankItems, saveProfile } from '../loot/profile';
-import { clearFloaters } from '../ui/floaters';
+import { clearFloaters, floatText } from '../ui/floaters';
 import { sfx } from '../core/audio';
 import { schedule, clearTimers } from '../core/timers';
 import { on, emit } from '../events';
@@ -70,7 +69,6 @@ function cleanupWorld(): void {
   clearProjectiles();
   clearEffects();
   clearLights();
-  clearDrops();
   clearFloaters();
   particles.clear();
   clearTimers();
@@ -180,10 +178,9 @@ function waveCleared(): void {
   const rec = G.profile.records;
   rec.bestWave = Math.max(rec.bestWave, r.wave);
   saveProfile(G.profile);
-  // reward cache erupts from the center of the dais
+  // the wave's reward, counted in one by one
   const n = LOOT.waveRewards(r.wave);
-  const center = new THREE.Vector3(0, 1.2, 0);
-  for (let i = 0; i < n; i++) schedule(0.25 + i * 0.16, () => { if (G.run === r) dropItem(rollDrop(G.player.cls, r.wave, LOOT.waveRewardBonus(r.wave)), center); });
+  for (let i = 0; i < n; i++) schedule(0.25 + i * 0.16, () => { if (G.run === r) gainLoot(rollDrop(G.player.cls, r.wave, LOOT.waveRewardBonus(r.wave))); });
   G.arena.setCalm(1);
   sfx.waveClear();
   ui.banner(`Wave ${r.wave} Cleared`, 'Bank your spoils, or press on');
@@ -194,7 +191,6 @@ function waveCleared(): void {
 export function continueRun(): void {
   const r = G.run;
   if (!r || r.phase !== 'cleared') return;
-  vacuumDrops();
   const p = G.player;
   p.heal(p.stats.maxLife * RUN.healOnContinue);
   p.energy = Math.min(p.stats.maxEnergy, p.energy + p.stats.maxEnergy * RUN.energyOnContinue);
@@ -210,7 +206,6 @@ export function continueRun(): void {
 export function bankRun(): void {
   const r = G.run;
   if (!r || r.phase !== 'cleared') return;
-  vacuumDrops();
   // banking unlocks this wave as a start; dying does not
   const best = G.profile.records.bestBanked;
   best[G.arena.biome] = Math.max(best[G.arena.biome] ?? 0, r.wave);
@@ -242,7 +237,20 @@ function onEnemyKilled(e: Enemy): void {
   r.score += e.score * RUN.scorePerKill * r.multiplier;
   r.multTimer = 0;
   if (++r.multKills >= RUN.killsPerMultiplier && r.multiplier < RUN.multiplierMax) { r.multiplier++; r.multKills = 0; }
-  const from = new THREE.Vector3(e.pos.x, 1, e.pos.z);
-  if (e.boss) for (let i = 0; i < LOOT.bossDrops; i++) dropItem(rollDrop(G.player.cls, r.wave + 1, 0.8), from);
-  else if (e.hero ? Math.random() < LOOT.heroDropChance : Math.random() < LOOT.killDropChance) dropItem(rollDrop(G.player.cls, r.wave, e.hero ? 0.4 : 0), from);
+  if (e.boss) for (let i = 0; i < LOOT.bossDrops; i++) schedule(i * 0.25, () => { if (G.run === r) gainLoot(rollDrop(G.player.cls, r.wave + 1, 0.8)); });
+  else if (e.hero ? Math.random() < LOOT.heroDropChance : Math.random() < LOOT.killDropChance) gainLoot(rollDrop(G.player.cls, r.wave, e.hero ? 0.4 : 0));
+}
+
+/**
+ * Loot goes straight into the run's bag, with nothing on the floor. Only its rarity shows (a
+ * "+1 Epic" over the player and the HUD's counts) until the run is banked.
+ */
+function gainLoot(item: Item): void {
+  const r = G.run;
+  if (!r || r.phase === 'dead') return;
+  r.bag.push(item);
+  const info = rarityOf(item.rarity), p = G.player.pos;
+  floatText(p.x, 2.7, p.z, `+1 ${info.name}`, 'info', info.color);
+  sfx.loot(rarityIndex(item.rarity));
+  emit('lootGained', item);
 }

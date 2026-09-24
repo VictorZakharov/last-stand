@@ -20,9 +20,10 @@ Everything is procedural: models, animation, textures, VFX and sound are generat
 - Start a run at any wave up to the best one you cleared **and banked** in that battleground (the lobby defaults to it); a run you died in doesn't count. On Random, the range is the waves banked in every battleground.
 - Survive each wave inside the arena. Every fifth wave, a boss arrives: the **Colossus** in the Crypt, the **Thornheart** in the Forest.
 - After every wave, choose:
-  - **Bank** — leave the arena and move everything you picked up into your stash, or
+  - **Bank** — leave the arena and move everything you found into your stash, or
   - **Continue** — face a harder wave with better loot (you recover 25% health).
-- If you die, **all unbanked spoils are lost**.
+- Loot goes straight into your bag, **unseen**: you only know how many items of each rarity you carry (1 Legendary, 2 Epic...). Banking reveals what they are.
+- If you die, **all unbanked spoils are lost**, never seen.
 - Equip what you find between runs; items roll random affixes across five rarities.
 
 ### Install and play offline

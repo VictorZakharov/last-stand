@@ -6,7 +6,7 @@ export interface GameEvents {
   enemyKilled: [enemy: Enemy];
   playerDied: [];
   playerHurt: [amount: number];
-  itemPicked: [item: Item];
+  lootGained: [item: Item];
   waveCleared: [wave: number];
   waveStarted: [wave: number];
 }

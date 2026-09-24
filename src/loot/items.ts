@@ -11,6 +11,9 @@ const STAT_KEYS = Object.keys(STATS) as StatKey[];
 export const statEntries = (s: StatBlock) => Object.entries(s) as [StatKey, number][];
 
 export const rarityOf = (id: RarityId): RarityInfo => RARITIES.find((r) => r.id === id) ?? RARITIES[0];
+/** How many items of each rarity, best first (rarities with none left out). */
+export const rarityCounts = (items: Item[]): { rarity: RarityInfo; n: number }[] =>
+  RARITIES.map((rarity) => ({ rarity, n: items.filter((it) => it.rarity === rarity.id).length })).filter((c) => c.n).reverse();
 export const rarityIndex = (id: RarityId): number => RARITIES.findIndex((r) => r.id === id);
 
 function rollStat(stat: StatKey, ilvl: number, power: number, weight = 1): number {
