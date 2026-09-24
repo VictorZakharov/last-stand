@@ -1,9 +1,9 @@
 // Entry point: boots every system, owns the main loop and the menu <-> run flow.
 import * as THREE from 'three';
 import { G } from './state';
-import { initRenderer, updateCamera, render, zoomBy, orbitBy, setZoom, sceneTarget, setViewShift } from './core/renderer';
+import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, viewMode, viewSettled, VIEWS, type ViewMode } from './core/renderer';
 import { CAMERA, LOBBY } from './data/balance';
-import { initInput, updateInputRay, endInputFrame, input, wasPressed } from './core/input';
+import { initInput, updateInputRay, endInputFrame, input, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt } from './core/input';
 import { initAudio } from './core/audio';
 import { updateTimers } from './core/timers';
 import { particles } from './fx/particles';
@@ -63,6 +63,8 @@ async function boot() {
   buildHotbar(G.player);
   initRun({ banner, showDecision, hideDecision, showSummary });
   initMenus({ start, toMenu, resume, abandon, profileChanged, switchClass });
+  // losing the pointer mid-wave (Esc, switching windows) pauses, as mouse look can't carry on
+  onPointerLockLost(() => { if (G.mode === 'run' && !G.paused) { G.paused = true; showPause(true); } });
   initLoadoutEditor(() => buildHotbar(G.player));
   initPwa();
   $('#decision .bank').onclick = () => bankRun();
@@ -87,7 +89,7 @@ async function boot() {
   markLoaded();
   // the lobby renders behind the loading screen (to settle) but only starts moving at the
   // reveal, so its opening camera zoom is seen
-  updateCamera(0, G.player.pos);
+  updateCamera(0, G.player.pos, G.player.model.height);
   loadingDone(() => { revealed = true; });
   requestAnimationFrame(frame);
 }
@@ -166,9 +168,29 @@ function profileChanged() {
 
 const compileContext = () => `(${G.mode}${G.run ? ` wave ${G.run.wave}` : ''}, t=${G.time.toFixed(1)}s, ${G.enemies.length} foes)`;
 
+// --- views ------------------------------------------------------------------------
+/** the run's view, cycled with V (the lobby, and touch play, stay top-down) */
+let runView: ViewMode = 'top';
+const crosshair = document.getElementById('crosshair')!, lookHint = document.getElementById('look-hint')!;
+
+function syncView(): void {
+  const v = G.mode === 'run' && !input.touchMode ? runView : 'top';
+  setView(v);
+  input.centerAim = v !== 'top';
+  // mouse look holds the pointer through the run, the bank-or-continue choice included (B / C
+  // pick there), and lets go for the pause menu and the run's end
+  const phase = G.run?.phase;
+  const look = v !== 'top' && !G.paused && G.player.alive && (phase === 'countdown' || phase === 'fighting' || phase === 'cleared');
+  wantPointerLock(look);
+  crosshair.classList.toggle('hidden', v === 'top');
+  lookHint.classList.toggle('hidden', !look || pointerLocked());
+}
+
 // --- loop ---------------------------------------------------------------------------
 function handleGlobalKeys() {
   if (G.mode === 'menu' && !G.paused && wasPressed('space')) toggleMenuStowed();
+  // the Esc that released the mouse-look pointer already paused the game
+  if (wasPressed('escape') && performance.now() - lockLostAt < 300) return;
   if (wasPressed('escape')) {
     const r = G.run;
     if (G.mode === 'run' && r && (r.phase === 'banked' || r.phase === 'dead')) return;
@@ -176,6 +198,7 @@ function handleGlobalKeys() {
     showPause(G.paused);
   }
   if (G.mode !== 'run') return;
+  if (!G.paused && wasPressed('v')) runView = VIEWS[(VIEWS.indexOf(runView) + 1) % VIEWS.length];
   if (!G.paused && G.run?.phase === 'cleared') {
     if (wasPressed('b')) bankRun();
     if (wasPressed('c')) continueRun();
@@ -188,6 +211,7 @@ function update(dt: number): void {
   updateInputRay();
   if (input.wheel && !input.mouse.overUI) zoomBy(input.wheel);
   if (input.orbit) orbitBy(input.orbit);
+  if (input.look.x || input.look.y) lookBy(input.look.x, input.look.y);
 
   // the player can move and cast in both the arena and the lobby (sandbox)
   G.player.update(dt); perfLap('player');
@@ -202,7 +226,9 @@ function update(dt: number): void {
   }
   const vs = lobbyViewShift();
   setViewShift(vs.x, vs.y);
-  updateCamera(dt, G.player.pos);
+  updateCamera(dt, G.player.pos, G.player.model.height);
+  // through the eyes the body would fill the view (it still casts, animates and blocks)
+  G.player.model.root.visible = !(viewMode() === 'first' && viewSettled());
 
   G.arena.update(dt, G.time); perfLap('arena');
   updateEffects(dt); perfLap('effects');
@@ -218,7 +244,7 @@ function frame(timestamp: number): void {
   timer.update(timestamp);
   const rawDt = timer.getDelta();
   const dt = Math.min(rawDt, 1 / 20);
-  if (revealed) { updateTouch(dt); handleGlobalKeys(); }
+  if (revealed) { updateTouch(dt); handleGlobalKeys(); syncView(); }
   const t0 = performance.now();
   if (!G.paused && revealed) {
     sampleQuality(rawDt);

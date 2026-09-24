@@ -2,6 +2,7 @@
 // (ui/touch.ts) feed the same state: a move stick, held skill keys and an aim point.
 import * as THREE from 'three';
 import { G } from '../state';
+import { CAMERA } from '../data/balance';
 
 export const input = {
   down: new Set<string>(),
@@ -9,6 +10,9 @@ export const input = {
   mouse: { x: 0, y: 0, left: false, right: false, middle: false, overUI: false },
   wheel: 0,
   orbit: 0,                      // horizontal middle-drag this frame, px (rotates the camera)
+  look: { x: 0, y: 0 },          // mouse movement this frame while the pointer is locked, px
+  /** the close views aim at the screen centre (the crosshair), not the cursor */
+  centerAim: false,
   ground: new THREE.Vector3(),   // cursor projected onto the arena floor
   /** touch is the active input: the browser's emulated mouse events are ignored */
   touchMode: false,
@@ -19,6 +23,28 @@ export const input = {
   /** touch aim point on the floor, replacing the cursor while set */
   aim: null as THREE.Vector3 | null,
 };
+
+let canvasEl: HTMLCanvasElement;
+/** the close views lock the pointer for mouse look while a wave is on */
+let lockWanted = false, lockTried = 0;
+/** when the pointer lock was lost without being asked to (Esc): that same Esc mustn't also unpause */
+export let lockLostAt = -1;
+let onLockLost: () => void = () => {};
+export const pointerLocked = (): boolean => !!canvasEl && document.pointerLockElement === canvasEl;
+function requestLock(): void {
+  lockTried = performance.now();
+  try { Promise.resolve(canvasEl.requestPointerLock()).catch(() => {}); } catch { /* not allowed right now */ }
+}
+/**
+ * Called every frame: whether mouse look should hold the pointer. It's taken while the browser
+ * still counts a recent key press or click as the player's (else the player clicks for it).
+ */
+export function wantPointerLock(on: boolean): void {
+  lockWanted = on;
+  if (!on) { if (pointerLocked()) document.exitPointerLock(); return; }
+  if (!pointerLocked() && navigator.userActivation?.isActive && performance.now() - lockTried > 600) requestLock();
+}
+export function onPointerLockLost(fn: () => void): void { onLockLost = fn; }
 
 const ray = new THREE.Raycaster();
 const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -31,6 +57,12 @@ function keyName(e: KeyboardEvent): string {
 }
 
 export function initInput(canvas: HTMLCanvasElement): void {
+  canvasEl = canvas;
+  document.addEventListener('pointerlockchange', () => {
+    if (pointerLocked() || !lockWanted) return;
+    lockLostAt = performance.now();
+    onLockLost();
+  });
   window.addEventListener('keydown', (e) => {
     const k = keyName(e);
     if (!input.down.has(k)) input.pressed.add(k);
@@ -41,6 +73,7 @@ export function initInput(canvas: HTMLCanvasElement): void {
   window.addEventListener('blur', () => { input.down.clear(); input.mouse.left = input.mouse.right = input.mouse.middle = false; });
   window.addEventListener('mousemove', (e) => {
     if (input.touchMode) return;
+    if (pointerLocked()) { input.look.x += e.movementX; input.look.y += e.movementY; input.mouse.overUI = false; return; }
     input.mouse.x = e.clientX; input.mouse.y = e.clientY;
     input.mouse.overUI = e.target !== canvas;
     // the drag keeps rotating over the UI; `buttons` catches a release outside the window
@@ -48,6 +81,8 @@ export function initInput(canvas: HTMLCanvasElement): void {
   });
   canvas.addEventListener('mousedown', (e) => {
     if (input.touchMode) return;
+    // the click that takes the pointer for mouse look doesn't also attack
+    if (lockWanted && !pointerLocked()) { requestLock(); return; }
     if (e.button === 0) { input.mouse.left = true; input.pressed.add('mouse0'); }
     if (e.button === 2) { input.mouse.right = true; input.pressed.add('mouse2'); }
     if (e.button === 1) { input.mouse.middle = true; e.preventDefault(); } // no autoscroll
@@ -64,15 +99,46 @@ export function initInput(canvas: HTMLCanvasElement): void {
 export function updateInputRay(): void {
   if (input.aim) { input.ground.copy(input.aim); return; }
   if (input.touchMode) return;
+  if (input.centerAim) { aimAtCenter(); return; }
   ndc.set((input.mouse.x / window.innerWidth) * 2 - 1, -(input.mouse.y / window.innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, G.camera);
   ray.ray.intersectPlane(plane, input.ground);
+}
+
+/**
+ * The crosshair's aim: the foe under it (at its feet, where ground-targeted skills land), else the
+ * floor it points at, else a point ahead at aim range when it points above the floor.
+ */
+function aimAtCenter(): void {
+  ndc.set(0, 0);
+  ray.setFromCamera(ndc, G.camera);
+  const o = ray.ray.origin, d = ray.ray.direction, h = Math.hypot(d.x, d.z);
+  let best = Infinity;
+  for (const e of G.enemies) {
+    if (!e.alive || h < 1e-4) continue;
+    // the foe as an upright cylinder: where the ray passes closest to its axis, seen from above
+    const ex = e.pos.x - o.x, ez = e.pos.z - o.z;
+    const t = (ex * d.x + ez * d.z) / (h * h);
+    if (t <= 0 || t >= best) continue;
+    const px = d.x * t - ex, pz = d.z * t - ez, y = o.y + d.y * t;
+    if (px * px + pz * pz > e.radius * e.radius || y < 0 || y > e.height) continue;
+    best = t;
+    input.ground.set(e.pos.x, 0, e.pos.z);
+  }
+  if (best < Infinity) return;
+  const range = CAMERA.aimRange;
+  if (d.y < -1e-4) {
+    const t = -o.y / d.y;
+    if (Math.hypot(d.x * t, d.z * t) <= range) { input.ground.set(o.x + d.x * t, 0, o.z + d.z * t); return; }
+  }
+  if (h > 1e-4) input.ground.set(o.x + (d.x / h) * range, 0, o.z + (d.z / h) * range);
 }
 
 export function endInputFrame(): void {
   input.pressed.clear();
   input.wheel = 0;
   input.orbit = 0;
+  input.look.x = input.look.y = 0;
 }
 
 export const isDown = (k: string): boolean =>

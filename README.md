@@ -46,6 +46,7 @@ Keyboard and mouse:
 | Left click, right click, `1`–`4`, `Q` | Skills (see the classes below) |
 | Mouse wheel | Zoom |
 | Middle mouse (hold and drag) | Rotate the camera |
+| `V` | Change view (in a run): top-down, over the shoulder, first person. The close views use mouse look and aim at the crosshair |
 | `B` / `C` | Bank / Continue after a wave |
 | `Esc` | Pause |
 

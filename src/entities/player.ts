@@ -11,7 +11,7 @@ import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resol
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
 import { input, isDown } from '../core/input';
-import { flashHurt, addShake, cameraYaw } from '../core/renderer';
+import { flashHurt, addShake, cameraYaw, lookFacing } from '../core/renderer';
 import { floatText } from '../ui/floaters';
 import { particles, col } from '../fx/particles';
 import { sfx } from '../core/audio';
@@ -329,7 +329,9 @@ export class Player {
       if (d.t >= d.dur) { this.dash = null; this.vel.multiplyScalar(this.stats.moveSpeed / Math.max(1e-3, Math.hypot(d.vx, d.vz))); }
     }
     const speed = Math.hypot(this.vel.x, this.vel.z);
-    if (!this.casting && !this.channel && speed > 0.5) {
+    const look = lookFacing();
+    if (look !== null && !d) this.facing = look;
+    else if (!this.casting && !this.channel && speed > 0.5) {
       this.facing = angleDamp(this.facing, Math.atan2(this.vel.x, this.vel.z), 14, dt);
     }
 

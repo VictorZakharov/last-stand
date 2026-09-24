@@ -12,6 +12,12 @@ export const CAMERA = {
   maxZoom: 1.7,
   zoomStep: 1.12,      // multiplicative zoom per mouse-wheel notch
   orbitSpeed: 0.006,   // radians of camera yaw per pixel of middle-drag
+  // the close views (V cycles top-down, third person, first person): mouse look, aim at the crosshair
+  lookSpeed: 0.0025,   // radians per pixel of mouse movement
+  third: { fov: 55, boom: 4.6, minBoom: 2.4, maxBoom: 8, side: 0.55, pitch: 0.28, minPitch: -0.45, maxPitch: 1.2 },
+  first: { fov: 66, pitch: 0.1, minPitch: -1.2, maxPitch: 1.3 },
+  switchTime: 0.45,    // seconds to glide from one view to the next
+  aimRange: 24,        // how far ahead the crosshair aims when it points above the floor
 };
 
 export const ARENA = {
