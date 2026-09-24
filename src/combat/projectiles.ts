@@ -5,15 +5,19 @@ import { particles, col, burst } from '../fx/particles';
 import { flash, release, type LightSlot } from '../fx/lights';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
+import { nearGlow } from '../core/materials';
 
 const coreGeo = new THREE.SphereGeometry(1, 12, 8);
 const matCache = new Map<string, THREE.MeshBasicMaterial>();
 function coreMat(color: THREE.ColorRepresentation, intensity: number): THREE.MeshBasicMaterial {
   const key = `${color}:${intensity}`;
   let m = matCache.get(key);
-  if (!m) { m = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(intensity) }); matCache.set(key, m); }
+  if (!m) { m = nearGlow(new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(intensity) })); matCache.set(key, m); }
   return m;
 }
+
+/** A core for the load-time warm-up: every core shares its program (the colour is a uniform). */
+export const coreSample = (): THREE.Mesh => new THREE.Mesh(coreGeo, coreMat(0xffffff, 4));
 
 export interface TrailOpts { color: THREE.ColorRepresentation; colorEnd?: THREE.ColorRepresentation; intensity?: number; size?: number; rate?: number; life?: number }
 

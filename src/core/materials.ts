@@ -3,12 +3,22 @@
 // with a single write each frame.
 import * as THREE from 'three';
 
+/**
+ * Effect glows dim with their distance from the camera, the way a light up close dazzles and the eye stops
+ * down: full strength from NEAR_GLOW.ref metres (the top-down camera, which effects are tuned for), then
+ * (distance / ref)^pow, never below min.
+ */
+export const NEAR_GLOW = { ref: 20, pow: 0.75, min: 0.25 };
+const NEAR_GLOW_GLSL = /* glsl */`
+float nearGlow(){ return clamp(pow((1.0 / gl_FragCoord.w) / ${NEAR_GLOW.ref.toFixed(1)}, ${NEAR_GLOW.pow.toFixed(2)}), ${NEAR_GLOW.min.toFixed(2)}, 1.0); }`;
+
 const FX_CHUNK_COMMON = /* glsl */ `
 uniform float uDissolve;
 uniform float uFrozen;
 uniform float uHit;
 uniform vec3 uEdge;
 varying vec3 vFxPos;
+${NEAR_GLOW_GLSL}
 float fxHash(vec3 p){ p = fract(p*0.3183099+.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
 float fxNoise(vec3 x){
   vec3 i=floor(x); vec3 f=fract(x); f=f*f*(3.0-2.0*f);
@@ -42,8 +52,8 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
           float edge = uDissolve > 0.0 ? (1.0 - smoothstep(uDissolve, uDissolve + 0.09, dn)) : 0.0;
           totalEmissiveRadiance += uEdge * edge * 3.0;
           totalEmissiveRadiance += vec3(0.25,0.55,0.9) * uFrozen * 0.35;
-          // a tint, not white: up close a body fills much of the screen
-          totalEmissiveRadiance += vec3(1.0,0.9,0.85) * uHit * 0.45;`);
+          // a tint, not white, dimmer near the camera like the effect glows: up close a body fills much of the screen
+          totalEmissiveRadiance += vec3(1.0,0.9,0.85) * uHit * 0.45 * nearGlow();`);
     };
     m.customProgramCacheKey = () => 'entityfx';
     mats.push(m);
@@ -63,14 +73,6 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
   };
 }
 
-/**
- * Effect glows dim with their distance from the camera, the way a light up close dazzles and the eye stops
- * down: full strength from NEAR_GLOW.ref metres (the top-down camera, which effects are tuned for), then
- * (distance / ref)^pow, never below min.
- */
-export const NEAR_GLOW = { ref: 20, pow: 0.75, min: 0.25 };
-const NEAR_GLOW_GLSL = /* glsl */`
-float nearGlow(){ return clamp(pow((1.0 / gl_FragCoord.w) / ${NEAR_GLOW.ref.toFixed(1)}, ${NEAR_GLOW.pow.toFixed(2)}), ${NEAR_GLOW.min.toFixed(2)}, 1.0); }`;
 /**
  * Makes an effect material (built-in or a ShaderMaterial writing gl_FragColor at the end of main) dim
  * with distance, see NEAR_GLOW. Only for effects: the world's own glows keep their look.
