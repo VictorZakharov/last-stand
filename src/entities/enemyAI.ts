@@ -11,6 +11,7 @@ import { flash } from '../fx/lights';
 import { addShake } from '../core/renderer';
 import { sfx } from '../core/audio';
 import { rand } from '../util';
+import { navTarget, lineClear, steerClear, MARGIN } from '../world/navigation';
 // Circular (spawner -> enemy -> enemyAI -> spawner) but only used at runtime, which is safe.
 import { spawnEnemy } from './spawner';
 import type { Enemy } from './enemy';
@@ -18,10 +19,28 @@ import type { EnemyAIKind } from '../types';
 import type { EnemyId } from '../data/enemies';
 
 const _dir = new THREE.Vector3();
+const _way = { x: 0, z: 0 };
 
-function seek(e: Enemy, dx: number, dz: number, dist: number, speedMul = 1): void {
+/** Move along (dx, dz), bent round any obstacle ahead within `reach` (by default ~1s of walking). */
+function seek(e: Enemy, dx: number, dz: number, dist: number, speedMul = 1, reach = e.speed * speedMul): void {
   if (dist < 1e-3) return;
-  e.desired.set((dx / dist) * e.speed * speedMul, 0, (dz / dist) * e.speed * speedMul);
+  steerClear(e.pos.x, e.pos.z, e.radius, dx / dist, dz / dist, Math.max(reach, e.radius + 1), _way);
+  e.desired.set(_way.x * e.speed * speedMul, 0, _way.z * e.speed * speedMul);
+}
+
+/** Head for the player, around whatever stands between. */
+function chase(e: Enemy, speedMul = 1): void {
+  const p = G.player.pos;
+  navTarget(e.pos.x, e.pos.z, e.radius, p.x, p.z, _way);
+  // the line to the waypoint is already clear: look no further than it
+  const dx = _way.x - e.pos.x, dz = _way.z - e.pos.z, d = Math.hypot(dx, dz);
+  seek(e, dx, dz, d, speedMul, Math.min(d, e.speed * speedMul));
+}
+
+/** Would a bolt from this enemy reach the player, or hit an obstacle first? */
+function canShoot(e: Enemy): boolean {
+  const p = G.player.pos, r = (e.def.projectile?.radius ?? 0.3) * 0.5;
+  return lineClear(e.pos.x, e.pos.z, p.x, p.z, r);
 }
 
 function meleeStrike(e: Enemy): void {
@@ -84,9 +103,10 @@ export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
       e.startAction('attack', d.windup + d.recover, [[d.windup / (d.windup + d.recover), () => meleeStrike(e)]]);
       return;
     }
-    // slight flanking so packs surround the player instead of forming a line
+    // slight flanking so packs surround the player instead of forming a line (on open ground)
     const b = e.brain;
     b.flank ??= rand(-0.6, 0.6);
+    if (!lineClear(e.pos.x, e.pos.z, G.player.pos.x, G.player.pos.z, e.radius + MARGIN)) { chase(e); return; }
     const ang = Math.atan2(dx, dz) + (dist > 3 ? b.flank : 0);
     seek(e, Math.sin(ang), Math.cos(ang), 1);
   },
@@ -101,10 +121,14 @@ export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
     b.strafe ??= Math.random() < 0.5 ? 1 : -1;
     b.switchT = (b.switchT ?? rand(1.5, 3)) - dt;
     if (b.switchT <= 0) { b.strafe *= -1; b.switchT = rand(1.5, 3); }
-    if (dist > d.range) seek(e, dx, dz, dist);
+    // no shot past an obstacle: walk round it until the player is in the open, and keep at it a
+    // moment after, so backing off doesn't hide the player again at once
+    const shot = canShoot(e);
+    b.roundT = shot ? (b.roundT ?? 0) - dt : 0.6;
+    if (dist > d.range || b.roundT > 0) chase(e);
     else if (dist < keepAway) seek(e, -dx, -dz, dist, 0.9);
-    else e.desired.set((-dz / dist) * e.speed * 0.5 * b.strafe, 0, (dx / dist) * e.speed * 0.5 * b.strafe);
-    if (dist < d.range && e.cd <= 0) {
+    else seek(e, -dz * b.strafe, dx * b.strafe, dist, 0.5);
+    if (dist < d.range && shot && e.cd <= 0) {
       e.cd = d.cooldown * rand(0.8, 1.2);
       sfx.witchCast();
       e.startAction('attack', d.windup + d.recover, [[d.windup / (d.windup + d.recover), () => fireBolt(e)]]);
@@ -125,7 +149,7 @@ export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
       e.startAction('slam', d.windup + d.recover, [[d.windup / (d.windup + d.recover), () => slamAt(e, tx, tz, slamRadius)]], () => tg.cancel());
       return;
     }
-    seek(e, dx, dz, dist);
+    chase(e);
   },
 
   boss(e, dt) {
@@ -151,7 +175,8 @@ export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
         e.startAction('slam', d.windup + d.recover, [[d.windup / (d.windup + d.recover), () => slamAt(e, x, z, slamRadius, accent)]], () => tg.cancel());
         return;
       }
-      if (dist < 18) {
+      // the volley would only hit the pillar the player hides behind: go round it instead
+      if (dist < 18 && canShoot(e)) {
         e.cd = d.cooldown * 1.3;
         e.startAction('cast', 1.3, [
           [0.45, () => { for (let i = -3; i <= 3; i++) fireBolt(e, i * 0.14, false); sfx.witchCast(); }],
@@ -160,7 +185,7 @@ export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
         return;
       }
     }
-    seek(e, dx, dz, dist, 1);
+    chase(e);
   },
 };
 
