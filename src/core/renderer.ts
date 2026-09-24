@@ -105,16 +105,33 @@ export function initRenderer(container: HTMLElement) {
   grade = new ShaderPass(GradeShader);
   composer.addPass(grade);
 
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    composer.setSize(window.innerWidth, window.innerHeight);
-    fitSceneTarget();
-  });
-
   G.scene = scene; G.camera = camera; G.renderer = renderer;
+  window.addEventListener('resize', fitViewport);
+  fitViewport();
   return { scene, camera, renderer };
+}
+
+/** the window size and device pixel ratio the canvas was last fitted to, and the quality's pixel ratio cap */
+const fitted = { w: 0, h: 0, dpr: 0 };
+let pixelRatioCap = 1.5;
+/**
+ * Fit the canvas, render targets and camera to the window. Runs on resize and every frame, as
+ * moving the window to another monitor can change the pixel ratio without a resize event, and can
+ * report a zero size on the way: that would leave zero-sized render targets (a black screen) until
+ * the next resize, so the last real size stays. Returns whether anything changed.
+ */
+function fitViewport(): boolean {
+  const w = window.innerWidth, h = window.innerHeight, dpr = window.devicePixelRatio || 1;
+  if (w < 1 || h < 1 || (w === fitted.w && h === fitted.h && dpr === fitted.dpr)) return false;
+  fitted.w = w; fitted.h = h; fitted.dpr = dpr;
+  G.camera.aspect = w / h;
+  G.camera.updateProjectionMatrix();
+  const pr = Math.min(dpr, pixelRatioCap);
+  if (pr !== gl.getPixelRatio()) { gl.setPixelRatio(pr); composer.setPixelRatio(pr); }
+  gl.setSize(w, h);
+  composer.setSize(w, h);
+  fitSceneTarget();
+  return true;
 }
 
 /** The offscreen target the scene is rendered into (shaders must be compiled for it). */
@@ -128,7 +145,8 @@ function fitSceneTarget(): void {
 
 /** Apply the render-cost settings of a quality preset, live. None of them change shader variants. */
 export function setRenderQuality(p: QualityPreset): void {
-  const pr = Math.min(window.devicePixelRatio, p.pixelRatio);
+  pixelRatioCap = p.pixelRatio;
+  const pr = Math.min(window.devicePixelRatio || 1, p.pixelRatio);
   if (pr !== gl.getPixelRatio()) { gl.setPixelRatio(pr); composer.setPixelRatio(pr); fitSceneTarget(); }
   // a render target re-initialises with the new sample count on its next use
   if (sceneRT.samples !== p.msaa) { sceneRT.samples = p.msaa; sceneRT.dispose(); }
@@ -181,7 +199,7 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
   shift.x = damp(shift.x, shift.tx, 6, dt);
   shift.y = damp(shift.y, shift.ty, 6, dt);
   if (Math.abs(shift.x) + Math.abs(shift.y) > 0.5) {
-    const w = window.innerWidth, h = window.innerHeight;
+    const w = fitted.w, h = fitted.h;
     cam.setViewOffset(w, h, -shift.x, -shift.y, w, h);
   } else if (cam.view) cam.clearViewOffset();
   rig.zoom = damp(rig.zoom, rig.targetZoom, 8, dt);
@@ -269,6 +287,8 @@ function clearBehind(p: THREE.Vector3, f: THREE.Vector3, max: number): number {
 }
 
 export function render(): void {
+  // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
+  if (fitViewport()) window.dispatchEvent(new Event('resize'));
   grade.uniforms.uTime.value = G.time;
   grade.uniforms.uHurt.value = rig.hurt;
   gl.setRenderTarget(sceneRT);
