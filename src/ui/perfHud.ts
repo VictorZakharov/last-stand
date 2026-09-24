@@ -7,6 +7,7 @@ import { readCookie, writeCookie } from '../core/cookies';
 import { programsCompiledInGame, lateCompiles } from '../core/shaders';
 import { qualitySetting, qualityLevel } from '../core/quality';
 import { QUALITY } from '../data/quality';
+import { gpuMarks, viewMode } from '../core/renderer';
 
 const COOKIE = 'last-stand-perf-hud';
 // the hashed bundle name identifies the build a report came from
@@ -31,12 +32,19 @@ const samples: Sample[] = [];   // one per frame inside WINDOW_MS
 let lastFrame = 0, cpuStart = 0, lastDraw = 0;
 let frameCalls = 0, frameTris = 0;
 
-// GPU time via EXT_disjoint_timer_query_webgl2 (Chrome/Edge/Firefox; not Safari)
+// GPU time via EXT_disjoint_timer_query_webgl2 (Chrome/Edge/Firefox; not Safari). Only one query
+// can run at a time, so every few frames one is timed in back-to-back parts (shadow map, scene,
+// each post pass) for the split. The queries between parts slow the GPU a little, so the frame
+// time itself comes from the frames timed whole.
 let gl: WebGL2RenderingContext | null = null;
 let timerExt: { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null = null;
-let activeQuery: WebGLQuery | null = null;
-const pendingQueries: WebGLQuery[] = [];
+type Part = [label: string, q: WebGLQuery];
+const SPLIT_EVERY = 4;
+let frameParts: Part[] | null = null;   // the frame being timed
+let frameNo = 0, splitting = false;
+const pendingFrames: { parts: Part[]; split: boolean }[] = [];
 const gpuTimes: { t: number; ms: number }[] = [];
+const gpuParts: Record<string, number>[] = [];   // the latest split frames
 
 export function initPerfHud(r: THREE.WebGLRenderer): void {
   renderer = r;
@@ -45,6 +53,16 @@ export function initPerfHud(r: THREE.WebGLRenderer): void {
   renderer.info.autoReset = false;
   gl = renderer.getContext() as WebGL2RenderingContext;
   timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+  gpuMarks.mark = gpuMark;
+  // the shadow map renders inside the scene's render call
+  const sm = renderer.shadowMap, smRender = sm.render.bind(sm);
+  sm.render = (lights, scene, camera) => {
+    // post passes render too (a full-screen quad): only the game scene has shadows
+    const resume = frameParts?.[frameParts.length - 1]?.[0];
+    if (scene !== G.scene || !resume) return smRender(lights, scene, camera);
+    gpuMark('shadow'); smRender(lights, scene, camera); gpuMark(resume);
+  };
+
   const dbg = gl.getExtension('WEBGL_debug_renderer_info');
   gpuName = String(gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
   el.onclick = copyReport;
@@ -56,7 +74,11 @@ export const perfHudEnabled = (): boolean => enabled;
 export function setPerfHud(on: boolean, persist = true): void {
   enabled = on;
   el.classList.toggle('hidden', !on);
-  samples.length = 0; gpuTimes.length = 0; lastFrame = 0;
+  samples.length = 0; gpuTimes.length = 0; gpuParts.length = 0; lastFrame = 0;
+
+  if (frameParts?.length && gl && timerExt) gl.endQuery(timerExt.TIME_ELAPSED_EXT);
+  frameParts = null;
+
   if (persist) writeCookie(COOKIE, on ? '1' : '0');
 }
 
@@ -69,11 +91,18 @@ export function perfBeginFrame(now: number): void {
   lastFrame = now;
   if (gl && timerExt) {
     pollQueries();
-    if (pendingQueries.length < 3) {
-      activeQuery = gl.createQuery();
-      gl.beginQuery(timerExt.TIME_ELAPSED_EXT, activeQuery);
-    }
+    if (pendingFrames.length < 3) { frameParts = []; splitting = ++frameNo % SPLIT_EVERY === 0; }
   }
+}
+
+/** From here on the GPU work of this frame counts towards `label`, until the next mark. */
+function gpuMark(label: string): void {
+  if (!frameParts || !gl || !timerExt) return;
+  if (frameParts.length && !splitting) return;   // timed whole: the first mark's query runs to the end
+  if (frameParts.length) gl.endQuery(timerExt.TIME_ELAPSED_EXT);
+  const q = gl.createQuery();
+  gl.beginQuery(timerExt.TIME_ELAPSED_EXT, q);
+  frameParts.push([label, q]);
 }
 
 const split = { upd: 0, rnd: 0 };
@@ -99,10 +128,9 @@ export function perfEndFrame(): void {
   stages = {};
   frameCalls = renderer.info.render.calls;
   frameTris = renderer.info.render.triangles;
-  if (gl && timerExt && activeQuery) {
-    gl.endQuery(timerExt.TIME_ELAPSED_EXT);
-    pendingQueries.push(activeQuery);
-    activeQuery = null;
+  if (gl && timerExt && frameParts) {
+    if (frameParts.length) { gl.endQuery(timerExt.TIME_ELAPSED_EXT); pendingFrames.push({ parts: frameParts, split: splitting }); }
+    frameParts = null;
   }
   const cutoff = now - WINDOW_MS;
   while (samples.length && samples[0].t < cutoff) samples.shift();
@@ -112,15 +140,30 @@ export function perfEndFrame(): void {
 
 function pollQueries(): void {
   if (!gl || !timerExt) return;
-  while (pendingQueries.length) {
-    const q = pendingQueries[0];
-    if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
-    pendingQueries.shift();
+  while (pendingFrames.length) {
+    const f = pendingFrames[0];
+    if (!gl.getQueryParameter(f.parts[f.parts.length - 1][1], gl.QUERY_RESULT_AVAILABLE)) break;
+    pendingFrames.shift();
     const disjoint = gl.getParameter(timerExt.GPU_DISJOINT_EXT) as boolean;
-    const ns = gl.getQueryParameter(q, gl.QUERY_RESULT) as number;
-    gl.deleteQuery(q);
-    if (!disjoint) gpuTimes.push({ t: performance.now(), ms: ns / 1e6 });
+    const parts: Record<string, number> = {};
+    let ms = 0;
+    for (const [label, q] of f.parts) {
+      const v = (gl.getQueryParameter(q, gl.QUERY_RESULT) as number) / 1e6;
+      gl.deleteQuery(q);
+      parts[label] = (parts[label] ?? 0) + v; ms += v;
+    }
+    if (disjoint) continue;
+    if (!f.split) gpuTimes.push({ t: performance.now(), ms });
+    else if (gpuParts.push(parts) > 30) gpuParts.shift();
   }
+}
+
+/** Each part's share of the GPU frame, e.g. "scene 80% | bloom 11% | shadow 4%". */
+function gpuSplit(): string {
+  const sum: Record<string, number> = {};
+  let all = 0;
+  for (const g of gpuParts) for (const k in g) { sum[k] = (sum[k] ?? 0) + g[k]; all += g[k]; }
+  return Object.entries(sum).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${Math.round((100 * v) / all)}%`).join(' | ');
 }
 
 // --- stats ------------------------------------------------------------------------
@@ -245,7 +288,9 @@ function report(): string {
     `Draw calls ${frameCalls} | triangles ${frameTris} | programs ${info.programs?.length ?? 0} (compiled after load ${programsCompiledInGame()}) | geometries ${info.memory.geometries} | textures ${info.memory.textures}`,
     `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
     `Quality ${qualityLevel()} (setting ${qualitySetting()}) | MSAA ${QUALITY[qualityLevel()].msaa} | shadow map ${QUALITY[qualityLevel()].shadowMap}`,
-    `Mode ${G.mode} | enemies ${G.enemies.length} | projectiles ${G.projectiles.length} | particles ${particles.glow.count + particles.smoke.count}`,
+    ...(gpuParts.length ? [`GPU split: ${gpuSplit()}`] : []),
+    `Mode ${G.mode} | biome ${G.arena.biome} | view ${viewMode()} | enemies ${G.enemies.length} | projectiles ${G.projectiles.length} | particles ${particles.glow.count + particles.smoke.count}`,
+
     `GPU ${gpuName} | CPU cores ${navigator.hardwareConcurrency ?? '?'} | JS bench ${fmt(jsBench(), 2)} ms`,
     `UA ${navigator.userAgent}`,
     `FPS history (0.5s buckets) ${s.buckets.map((v) => v === null ? '-' : Math.round(v)).join(' ')}`,
