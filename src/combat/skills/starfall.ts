@@ -2,6 +2,7 @@
 // Visual beats: rune glyph marks the spot -> meteor with comet streak -> impact
 // (light pillar, erupting crystals that later shatter, glowing cracks, debris).
 import * as THREE from 'three';
+import { nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { addEffect, shockwave, decal, glyphMarker, lightPillar, crackDecal, crystalBurst } from '../../fx/effects';
@@ -26,7 +27,7 @@ let meteorMat: THREE.MeshStandardMaterial | null = null;
 const _up = new THREE.Vector3(0, 1, 0);
 
 const getMeteorMat = () => meteorMat ??= new THREE.MeshStandardMaterial({ color: 0x0b2a1c, emissive: new THREE.Color(COLOR), emissiveIntensity: 4, roughness: 0.2, flatShading: true });
-const streakMaterial = () => new THREE.MeshBasicMaterial({ color: new THREE.Color(COLOR).multiplyScalar(2.2), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8 });
+const streakMaterial = () => nearGlow(new THREE.MeshBasicMaterial({ color: new THREE.Color(COLOR).multiplyScalar(2.2), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8 }));
 
 function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: number): void {
   const streakMat = streakMaterial();

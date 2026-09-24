@@ -1,6 +1,7 @@
 // Raise Shield: hold the shield up. While held, Player.tryBlock blocks every frontal hit (for
 // def.block times the block amount); this draws the ward in front and flares it on each block.
 import * as THREE from 'three';
+import { nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { BLOCK } from '../../data/balance';
 import type { ChannelSkill } from './types';
@@ -12,7 +13,7 @@ const GOLD = new THREE.Color(0xffd08a);
 const geo = new THREE.CylinderGeometry(0.95, 0.95, 1.6, 28, 1, true, -BLOCK.arc, BLOCK.arc * 2);
 
 function guardMaterial(): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+  return nearGlow(new THREE.ShaderMaterial({
     uniforms: { uColor: { value: GOLD }, uFade: { value: 0 }, uHit: { value: 0 }, uTime: { value: 0 } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
@@ -29,7 +30,7 @@ function guardMaterial(): THREE.ShaderMaterial {
         float i = sides * (0.05 + rim * 0.45 + bands * 0.04 + uHit * (0.25 + rim * 0.5)) * uFade;
         gl_FragColor = vec4(uColor * i * 0.7, i);
       }`,
-  });
+  }));
 }
 
 const skill: ChannelSkill<GuardState> = {

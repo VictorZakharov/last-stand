@@ -2,6 +2,7 @@
 // and one alpha-blended pool (smoke, dust, debris).
 import * as THREE from 'three';
 import { G } from '../state';
+import { nearGlow } from '../core/materials';
 
 const VERT = /* glsl */`
   attribute float aSize;
@@ -84,6 +85,8 @@ class Pool {
       uniforms: { uScale: { value: 400 }, uSoft: { value: soft } },
       transparent: true, depthWrite: false, blending,
     });
+    // glowing (additive) particles dim with distance like every effect glow
+    if (blending === THREE.AdditiveBlending) nearGlow(this.mat);
     this.points = new THREE.Points(geo, this.mat);
     this.points.frustumCulled = false;
     this.points.renderOrder = blending === THREE.AdditiveBlending ? 20 : 10;

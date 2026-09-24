@@ -1,5 +1,6 @@
 // Maelstrom: a roaming storm vortex that pulls enemies in and strikes them with lightning.
 import * as THREE from 'three';
+import { nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { addEffect, lightning, shockwave } from '../../fx/effects';
@@ -16,7 +17,7 @@ const TICK = 0.25;
 const funnelGeo = new THREE.CylinderGeometry(1, 0.18, 1, 32, 8, true).translate(0, 0.5, 0);
 
 function funnelMaterial(color: THREE.ColorRepresentation, speed: number, stripes: number): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+  return nearGlow(new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uColor: { value: new THREE.Color(color) }, uFade: { value: 0 } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
@@ -39,7 +40,7 @@ function funnelMaterial(color: THREE.ColorRepresentation, speed: number, stripes
         float a = band * fade * uFade * 0.7 * smoothstep(0.5, 3.5, 1.0 / gl_FragCoord.w);
         gl_FragColor = vec4(uColor * 2.2 * a, a);
       }`,
-  });
+  }));
 }
 
 const funnelMaterials = () => [funnelMaterial(BLUE, 1.6, 3), funnelMaterial(0xc8d4ff, 2.4, 5), funnelMaterial(FIRE, 1.1, 2)];

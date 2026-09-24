@@ -63,11 +63,35 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
   };
 }
 
-// Additive, unlit HDR material for VFX meshes.
+/**
+ * Effect glows dim with their distance from the camera, the way a light up close dazzles and the eye stops
+ * down: full strength from NEAR_GLOW.ref metres (the top-down camera, which effects are tuned for), then
+ * (distance / ref)^pow, never below min.
+ */
+export const NEAR_GLOW = { ref: 20, pow: 0.75, min: 0.25 };
+const NEAR_GLOW_GLSL = /* glsl */`
+float nearGlow(){ return clamp(pow((1.0 / gl_FragCoord.w) / ${NEAR_GLOW.ref.toFixed(1)}, ${NEAR_GLOW.pow.toFixed(2)}), ${NEAR_GLOW.min.toFixed(2)}, 1.0); }`;
+/**
+ * Makes an effect material (built-in or a ShaderMaterial writing gl_FragColor at the end of main) dim
+ * with distance, see NEAR_GLOW. Only for effects: the world's own glows keep their look.
+ */
+export function nearGlow<T extends THREE.Material>(m: T): T {
+  m.onBeforeCompile = (sh) => {
+    const f = sh.fragmentShader.replace(/void\s+main\s*\(\s*\)/, `${NEAR_GLOW_GLSL}
+void main()`);
+    const end = f.lastIndexOf('}');
+    sh.fragmentShader = `${f.slice(0, end)}  gl_FragColor.rgb *= nearGlow();
+}${f.slice(end + 1)}`;
+  };
+  m.customProgramCacheKey = () => 'nearGlow';
+  return m;
+}
+
+// Additive, unlit HDR material for VFX meshes (dimming with distance, see nearGlow).
 export function additive(color: THREE.ColorRepresentation, intensity = 2, opacity = 1): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({
+  return nearGlow(new THREE.MeshBasicMaterial({
     color: new THREE.Color(color).multiplyScalar(intensity),
     transparent: true, opacity, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide, toneMapped: true,
-  });
+  }));
 }

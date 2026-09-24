@@ -1,6 +1,7 @@
 // Iron Bellow: a war cry that hurls back nearby foes and raises three spectral shields that circle
 // the warrior as a damage-absorbing ward; each blow they soak flares them, and they shatter at the end.
 import * as THREE from 'three';
+import { nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { addEffect, shockwave, groundFlash, crackDecal } from '../../fx/effects';
@@ -38,7 +39,7 @@ const rimGeo = new THREE.ShapeGeometry(rimShape, 12);
 const emblemGeo = new THREE.ShapeGeometry(kite(0.34), 8);
 
 function faceMaterial(): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+  return nearGlow(new THREE.ShaderMaterial({
     uniforms: { uColor: { value: new THREE.Color(GOLD) }, uFade: { value: 0 }, uFlash: { value: 0 }, uTime: { value: 0 } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
@@ -56,13 +57,13 @@ function faceMaterial(): THREE.ShaderMaterial {
         float i = (0.12 + edge * 0.35 + scan * 0.35) * lines + uFlash * 0.35;
         gl_FragColor = vec4(mix(uColor, vec3(1.0), uFlash * 0.3) * i * uFade, i * uFade);
       }`,
-  });
+  }));
 }
 
 function shieldMaterials() {
-  const m = (c: number, k: number) => new THREE.MeshBasicMaterial({
+  const m = (c: number, k: number) => nearGlow(new THREE.MeshBasicMaterial({
     color: new THREE.Color(c).multiplyScalar(k), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-  });
+  }));
   return { face: faceMaterial(), rim: m(0xffe2a0, 0.9), emblem: m(0xfff0c8, 1.2) };
 }
 
@@ -77,7 +78,7 @@ function buildShield(mats: ReturnType<typeof shieldMaterials>): THREE.Group {
 
 const skill: InstantSkill = {
   anim: 'buff',
-  warm: () => [buildShield(shieldMaterials()), new THREE.Mesh(haloGeo, new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))],
+  warm: () => [buildShield(shieldMaterials()), new THREE.Mesh(haloGeo, nearGlow(new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })))],
   cast(player, rawDef) {
     const def = rawDef as Def;
     const c = player.pos.clone();
@@ -106,7 +107,7 @@ const skill: InstantSkill = {
     const shields = Array.from({ length: SHIELDS }, () => buildShield(mats));
     const root = new THREE.Group();
     root.add(...shields);
-    const haloMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(GOLD).multiplyScalar(0.8), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+    const haloMat = nearGlow(new THREE.MeshBasicMaterial({ color: new THREE.Color(GOLD).multiplyScalar(0.8), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
     const halo = new THREE.Mesh(haloGeo, haloMat);
     halo.rotation.x = -Math.PI / 2;
     halo.frustumCulled = false;

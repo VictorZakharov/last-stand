@@ -1,5 +1,6 @@
 // Void Lance: channeled piercing beam.
 import * as THREE from 'three';
+import { nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { particles, col, burst } from '../../fx/particles';
@@ -26,7 +27,7 @@ const TICK = 0.12;
 const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true).translate(0, 0.5, 0);
 
 function beamMaterial(core: boolean): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+  return nearGlow(new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uLen: { value: 10 }, uColor: { value: COLOR.clone() }, uCore: { value: core ? 1 : 0 }, uFade: { value: 0 } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
@@ -53,7 +54,7 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
         float a = body * ends * (uCore > 0.5 ? 1.0 : (0.35 + flow * 0.65)) * uFade;
         gl_FragColor = vec4(c * a, a);
       }`,
-  });
+  }));
 }
 
 const _dir = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _end = new THREE.Vector3();

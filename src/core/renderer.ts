@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
@@ -18,8 +19,14 @@ const HI_KNEE = 1, HI_CAP = 2;
  * in a large glare (GLARE_FROM..GLARE_TO): a big bright area stays its colour, a small hot core may go white.
  */
 const HUE_FROM = 1, HUE_TO = 1.6, GLARE_FROM = 0.05, GLARE_TO = 0.4;
-/** How strongly glare around a pixel darkens it (the eye adapting to a flash). */
-const GLARE_ADAPT = 1.5;
+/**
+ * The eye adapts to how bright an area is, at two scales: where the average light around a pixel is over
+ * the target, the pixel is scaled by target / average. A small area (a 16x9 grid of the frame) may be quite
+ * bright, a hot spot in the dark; a large one (4x3) much less, a wash over much of the view. The averages
+ * are taken after bloom: the eye sees the halos too. Both targets sit just above ordinary scenes (the
+ * staff orb up close in third person, the crypt lobby), which they leave untouched.
+ */
+const ADAPT_SMALL = 2, ADAPT_LARGE = 0.12;
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -27,19 +34,23 @@ const GradeShader = {
     uHurt: { value: 0 },
     uVignette: { value: 1.05 },
     tGlare: { value: null as THREE.Texture | null },
+    tArea: { value: null as THREE.Texture | null },
+    tAreaL: { value: null as THREE.Texture | null },
   },
   vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse; uniform float uTime; uniform float uHurt; uniform float uVignette; uniform sampler2D tGlare;
+    uniform sampler2D tDiffuse; uniform float uTime; uniform float uHurt; uniform float uVignette; uniform sampler2D tGlare; uniform sampler2D tArea; uniform sampler2D tAreaL;
     varying vec2 vUv;
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
     void main(){
       vec4 c = texture2D(tDiffuse, vUv);
-      // the eye adapts: where a big flash glares (bloom's blurriest level), everything around it
-      // is seen darker, so a bright effect doesn't wash out the view
+      // the eye adapts to a bright area: everything in it is seen darker, so a big effect doesn't wash out the view
+      const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
+      float small = dot(texture2D(tArea, vUv).rgb, LUM), large = dot(texture2D(tAreaL, vUv).rgb, LUM);
+      c.rgb *= min(1.0, min(${ADAPT_SMALL.toFixed(3)} / max(small, 1e-4), ${ADAPT_LARGE.toFixed(3)} / max(large, 1e-4)));
+      // glare (bloom's blurriest level): how large a bright spot is
       vec3 gl = texture2D(tGlare, vUv).rgb;
       float glare = max(gl.r, max(gl.g, gl.b));
-      c.rgb /= 1.0 + ${GLARE_ADAPT.toFixed(2)} * glare;
       // the scene and its bloom, compressed like the eye: the brightest channel eases towards a
       // ceiling and the others keep their ratio to it, so a stack of lights stops adding up
       float m = max(c.r, max(c.g, c.b));
@@ -65,6 +76,38 @@ const GradeShader = {
       gl_FragColor = c;
     }`,
 };
+
+/** The frame's average light over two coarse grids (box downsamples), for the grade's adaptation. */
+class AreaPass extends Pass {
+  private a = new THREE.WebGLRenderTarget(64, 36, { type: THREE.HalfFloatType, depthBuffer: false });
+  readonly small = new THREE.WebGLRenderTarget(16, 9, { type: THREE.HalfFloatType, depthBuffer: false });
+  readonly large = new THREE.WebGLRenderTarget(4, 3, { type: THREE.HalfFloatType, depthBuffer: false });
+  private mat = new THREE.ShaderMaterial({
+    uniforms: { tDiffuse: { value: null as THREE.Texture | null }, uStep: { value: new THREE.Vector2() } },
+    vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+    // 8x8 bilinear taps spread over the output texel: a box average of its footprint
+    fragmentShader: /* glsl */`
+      uniform sampler2D tDiffuse; uniform vec2 uStep; varying vec2 vUv;
+      void main(){
+        vec3 s = vec3(0.0);
+        for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++)
+          s += texture2D(tDiffuse, vUv + (vec2(float(x), float(y)) - 3.5) * uStep).rgb;
+        gl_FragColor = vec4(s / 64.0, 1.0);
+      }`,
+    depthTest: false, depthWrite: false,
+  });
+  private quad = new FullScreenQuad(this.mat);
+  constructor() { super(); this.needsSwap = false; }
+  override render(r: THREE.WebGLRenderer, _w: THREE.WebGLRenderTarget, read: THREE.WebGLRenderTarget): void {
+    for (const [src, dst] of [[read, this.a], [this.a, this.small], [this.small, this.large]] as const) {
+      this.mat.uniforms.tDiffuse.value = src.texture;
+      // taps an eighth of an output texel apart
+      this.mat.uniforms.uStep.value.set(1 / dst.width / 8, 1 / dst.height / 8);
+      r.setRenderTarget(dst);
+      this.quad.render(r);
+    }
+  }
+}
 
 const SanitizeShader = {
   uniforms: { tDiffuse: { value: null } },
@@ -127,11 +170,16 @@ export function initRenderer(container: HTMLElement) {
   composer.addPass(sanitize);
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.85, 0.55, 0.9);
   composer.addPass(bloom);
+  // after bloom: the eye adapts to all the light that reaches it, halos included
+  const area = new AreaPass();
+  composer.addPass(area);
   grade = new ShaderPass(GradeShader);
   grade.uniforms.tGlare.value = bloom.renderTargetsVertical[bloom.nMips - 1].texture;
+  grade.uniforms.tArea.value = area.small.texture;
+  grade.uniforms.tAreaL.value = area.large.texture;
   composer.addPass(grade);
   // the perf overlay times each pass on the GPU
-  for (const [label, pass] of [['sanitize', sanitize], ['bloom', bloom], ['grade', grade]] as const) {
+  for (const [label, pass] of [['sanitize', sanitize], ['area', area], ['bloom', bloom], ['grade', grade]] as [string, Pass][]) {
     const run = pass.render.bind(pass);
     pass.render = (...a: Parameters<typeof run>) => { gpuMarks.mark(label); run(...a); };
   }

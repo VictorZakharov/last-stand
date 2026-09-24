@@ -2,7 +2,7 @@
 // Each effect is { update(dt) -> boolean alive, dispose() }.
 import * as THREE from 'three';
 import { G } from '../state';
-import { additive } from '../core/materials';
+import { additive, nearGlow } from '../core/materials';
 import { radialDecal, runeCircle } from '../core/textures';
 import { rand } from '../util';
 import { groundHeight } from '../world/ground';
@@ -230,7 +230,7 @@ function crackTexture(): THREE.CanvasTexture {
 
 /** Small rotating rune glyph marking a target spot. Returns an effect with cancel(). */
 export function glyphMarker(pos: Pos, { radius = 1.2, color = 0xffffff, intensity = 1.2, life = 0.5 } = {}) {
-  const mat = new THREE.MeshBasicMaterial({ map: TEX.rune, color: new THREE.Color(color).multiplyScalar(intensity), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 });
+  const mat = nearGlow(new THREE.MeshBasicMaterial({ map: TEX.rune, color: new THREE.Color(color).multiplyScalar(intensity), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 }));
   const m = new THREE.Mesh(GEO.plane, mat);
   m.position.set(pos.x, floor(pos) + 0.05, pos.z);
   const dispose = tracked(m, [mat]);
@@ -271,8 +271,8 @@ export function lightPillar(pos: Pos, { color = 0xffffff, intensity = 3, radius 
 
 /** Glowing cracks in the floor that cool down and fade. */
 export function crackDecal(pos: Pos, { size = 3, color = 0xffffff, intensity = 2.5, life = 3 } = {}) {
-  const mat = new THREE.MeshBasicMaterial({ map: TEX.cracks, color: new THREE.Color(color).multiplyScalar(intensity), transparent: true,
-    blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
+  const mat = nearGlow(new THREE.MeshBasicMaterial({ map: TEX.cracks, color: new THREE.Color(color).multiplyScalar(intensity), transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
   const m = new THREE.Mesh(GEO.plane, mat);
   m.position.set(pos.x, floor(pos) + 0.04, pos.z);
   m.rotation.y = Math.random() * Math.PI * 2;
