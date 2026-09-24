@@ -1,9 +1,9 @@
 // Last Stand service worker, generated at build time by scripts/pwa.ts.
 // Everything the game needs is precached at install, and served cache-first, so it runs offline.
 // A new deploy installs its own cache and waits; the page offers a reload (skip-waiting message).
-const CACHE = 'last-stand-0882491daa7c';
+const CACHE = 'last-stand-5a0efedff4ec';
 const FONTS = 'last-stand-fonts';
-const FILES = ["./","./apple-touch-icon.png","./assets/CapePhysicsWorker-BI9waX2Z.js","./assets/index-DCuodc2z.css","./assets/index-EyHJD2bt.js","./assets/three-gQDWbOaO.js","./favicon.svg","./icon-192.png","./icon-512.png","./icon.svg","./index.html","./manifest.webmanifest"];
+const FILES = ["./","./apple-touch-icon.png","./assets/CapePhysicsWorker-BI9waX2Z.js","./assets/index-Ca3j7NDL.css","./assets/index-o-p_S4du.js","./assets/three-gQDWbOaO.js","./favicon.svg","./icon-192.png","./icon-512.png","./icon.svg","./index.html","./manifest.webmanifest"];
 const SCOPE = new URL(self.registration.scope).pathname;
 
 self.addEventListener('install', (e) => {
