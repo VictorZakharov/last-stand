@@ -8,7 +8,7 @@ import { ARENA } from '../data/balance';
 import { forestFloor, bark, slabs, grunge, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
-import { boxWithUV, buildEnvMap, placeGate, portalMembrane, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
+import { boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
 import type { Obstacle } from '../types';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
@@ -67,12 +67,6 @@ function mossyGround<M extends THREE.Material>(m: M): M {
   };
   m.customProgramCacheKey = () => 'mossyground';
   return m;
-}
-
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
-function setInstance(mesh: THREE.InstancedMesh, i: number, x: number, y: number, z: number, rx: number, ry: number, rz: number, sx: number, sy = sx, sz = sx): void {
-  _e.set(rx, ry, rz); _q.setFromEuler(_e);
-  mesh.setMatrixAt(i, _m.compose(_p.set(x, y, z), _q, _s.set(sx, sy, sz)));
 }
 
 export const buildForest: BiomeBuilder = (scene, renderer) => {
@@ -227,7 +221,7 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   // --- Undergrowth: grass tufts, small glowing mushrooms, pebbles ---------------------
   const clump = makeFbm(5, 6, 3);
   const free = (x: number, z: number, pad: number) => Math.max(Math.abs(x), Math.abs(z)) > h + 0.9 && obstacles.every((o) => Math.hypot(x - o.x, z - o.z) > o.r + pad);
-  const grass = new THREE.InstancedMesh(buildGrassGeo(rng), grassMat, 1600);
+  const grass = new THREE.InstancedMesh(buildGrassGeo(rng, [0.02, 0.035, 0.012], [0.12, 0.2, 0.05]), grassMat, 1600);
   let gi = 0;
   for (let tries = 0; gi < grass.count && tries < 20000; tries++) {
     const a = r(0, TAU), rr = Math.sqrt(r(0.02, 1)) * (WALL_R + 1.5);
@@ -311,21 +305,6 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
 // ---------------------------------------------------------------------------
 // helpers
 
-/** Nudge every vertex along its direction from the origin by a hash of its position, so
- * duplicated (non-indexed) corners move together and the surface stays closed. */
-function lumpy(g: THREE.BufferGeometry, amount: number, seed: number): THREE.BufferGeometry {
-  const pos = g.attributes.position, v = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
-    v.fromBufferAttribute(pos, i);
-    const k = Math.sin(v.x * 12.9898 + v.y * 78.233 + v.z * 37.719 + seed) * 43758.5453;
-    const n = (k - Math.floor(k)) * 2 - 1;
-    v.multiplyScalar(1 + n * amount);
-    pos.setXYZ(i, v.x, v.y, v.z);
-  }
-  g.computeVertexNormals();
-  return g;
-}
-
 function buildMenhirGeo(rng: () => number): THREE.BufferGeometry {
   const base = new THREE.CylinderGeometry(0.95, 1.05, 0.35, 7).translate(0, 0.17, 0);
   const shaft = new THREE.CylinderGeometry(0.42, 0.7, 4.0, 6, 3).translate(0, 2.3, 0);
@@ -369,24 +348,6 @@ function buildStumpGeo(): THREE.BufferGeometry {
   return lumpy(mergeGeometries(parts.map((p) => p.toNonIndexed())), 0.05, 11);
 }
 
-/** A tuft of thin curved blades with vertex colors (dark base, light tips); normals point up
- * so the tufts light like the ground they grow from. */
-function buildGrassGeo(rng: () => number): THREE.BufferGeometry {
-  const pos: number[] = [], colr: number[] = [];
-  const base = [0.02, 0.035, 0.012], tip = [0.12, 0.2, 0.05];
-  for (let i = 0; i < 7; i++) {
-    const a = rng() * TAU, d = rng() * 0.12, w = 0.03 + rng() * 0.02, ht = 0.25 + rng() * 0.3, bend = 0.08 + rng() * 0.12;
-    const cx = Math.cos(a) * d, cz = Math.sin(a) * d, px = -Math.sin(a) * w, pz = Math.cos(a) * w;
-    pos.push(cx - px, 0, cz - pz, cx + px, 0, cz + pz, cx + Math.cos(a) * bend, ht, cz + Math.sin(a) * bend);
-    colr.push(...base, ...base, ...tip);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
-  return g;
-}
-
 function buildRootGate(scene: THREE.Object3D, angle: number, barkMat: THREE.Material, leafMat: THREE.Material, updaters: Updater[]): Portal {
   const g = new THREE.Group();
   const half = GATE_W / 2 + 0.45;
@@ -415,7 +376,7 @@ function buildRootGate(scene: THREE.Object3D, angle: number, barkMat: THREE.Mate
   crown.castShadow = true;
   g.add(crown);
 
-  const { portal } = portalMembrane(g, angle, { a: [0.04, 0.45, 0.2], b: [0.45, 0.9, 0.15], core: [0.7, 1.0, 0.55] }, updaters);
+  const { portal } = portalMembrane(g, angle, { a: [0.04, 0.45, 0.2], b: [0.45, 0.9, 0.15], core: [0.7, 1.0, 0.55] }, updaters, true);
   placeGate(g, angle);
   scene.add(g);
   return portal;
