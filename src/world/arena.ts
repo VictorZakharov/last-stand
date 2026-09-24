@@ -14,9 +14,9 @@ export type { Portal } from './props';
 
 const BUILDERS: Record<BiomeId, BiomeBuilder> = { crypt: buildCrypt, forest: buildForest };
 
-export type Arena = ReturnType<typeof buildArena>;
+export type Arena = Awaited<ReturnType<typeof buildArena>>;
 
-export function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
+export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
   const hemi = new THREE.HemisphereLight();
   const moon = new THREE.DirectionalLight();
   moon.target.position.set(0, 0, 0);
@@ -31,6 +31,9 @@ export function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
 
   const biomes = {} as Record<BiomeId, { group: THREE.Group; b: Biome }>;
   for (const id of BIOME_IDS) {
+    // one biome at a time, letting the page paint between them (a window moved to another
+    // monitor stays black until the main thread is free)
+    await new Promise((r) => setTimeout(r));
     const group = new THREE.Group();
     group.name = id;
     const b = BUILDERS[id](group, renderer);

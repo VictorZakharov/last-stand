@@ -17,11 +17,18 @@ import { particles } from '../fx/particles';
 
 export async function warmShaders(): Promise<void> {
   const at = new THREE.Vector3(), p = { x: 0, z: 0 };
-  for (const id of Object.keys(ENEMIES) as EnemyId[]) { spawnEnemy(id, at); spawnEnemy(id, at, { hero: true }); }
+  // a few enemies at a time, letting the page paint in between (a window moved to another monitor
+  // stays black while the main thread is busy)
+  for (const [i, id] of (Object.keys(ENEMIES) as EnemyId[]).entries()) {
+    if (i % 3 === 0) await new Promise((r) => setTimeout(r));
+    spawnEnemy(id, at); spawnEnemy(id, at, { hero: true });
+  }
+  await new Promise((r) => setTimeout(r));
   shockwave(p); groundFlash(p); decal(p); decal(p, { type: 'frost' }); telegraph(p, 2, 1);
   lightning(at, new THREE.Vector3(1, 1, 1)); iceSpikes(p, 2); glyphMarker(p); lightPillar(p); crackDecal(p); crystalBurst(p);
   const extra = Object.values(SKILL_IMPLS).flatMap((s) => s.warm?.() ?? []);
   // every other class's model, so picking a class in the lobby compiles nothing
+  await new Promise((r) => setTimeout(r));
   const heroes = Object.values(CLASSES).filter((c) => c.model !== G.player.cls.model).map((c) => buildModel(c.model));
   for (const m of heroes) extra.push(m.root, ...(m.worldObjects ?? []));
 

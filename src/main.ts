@@ -33,6 +33,7 @@ import { pinPrograms, markLoaded, warmUp } from './core/shaders';
 import { initBiome, rollBiome } from './game/biome';
 import { BIOME_IDS } from './data/biomes';
 import { loadingStep, loadingDone, loadingFailed } from './ui/loading';
+import { preloadTextures } from './core/textures';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 const timer = new THREE.Timer();
@@ -40,6 +41,8 @@ let revealed = false;   // loading screen gone: the game may advance
 
 async function boot() {
   await loadingStep('Forging the arena', 0.08);
+  // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second)
+  const textures = preloadTextures();
   initUIScale();
   initItemIcons();
   const { scene, renderer } = initRenderer($('#game'));
@@ -47,7 +50,8 @@ async function boot() {
   particles.init(scene);
   initLights(scene);
   initEffects();
-  G.arena = buildArena(scene, renderer);
+  await textures;
+  G.arena = await buildArena(scene, renderer);
   initQuality();
   initFloaters($('#floaters'));
 
