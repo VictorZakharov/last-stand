@@ -198,7 +198,8 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
     const lookY = 0.6 + (1 - k) * 0.7;
     const r = Math.cos(pitch) * d;
     cam.position.set(rig.focus.x + Math.sin(rig.yaw) * r, Math.sin(pitch) * d, rig.focus.z + Math.cos(rig.yaw) * r);
-    cam.lookAt(rig.focus.x, lookY, rig.focus.z);
+    _look.set(rig.focus.x, lookY, rig.focus.z);
+    cam.lookAt(_look);
   } else {
     // close views sit right on the character: no follow lag, or the aim would swim
     const sy = Math.sin(rig.yaw), cy = Math.cos(rig.yaw), cp = Math.cos(rig.look), sp = Math.sin(rig.look);
@@ -219,9 +220,14 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
   }
   if (rig.blend < 1) {
     rig.blend = Math.min(1, rig.blend + dt / CAMERA.switchTime);
-    const e = rig.blend * rig.blend * (3 - 2 * rig.blend);
+    const e = ease(rig.blend);
     cam.position.lerpVectors(rig.fromPos, cam.position, e);
-    cam.quaternion.slerpQuaternions(rig.fromQuat, cam.quaternion, e);
+    // turn early to what the new view looks at, seen from where the camera is along the way: a
+    // plain turn would leave the player out of the frame mid-glide (rising out of first person
+    // while still looking at the horizon)
+    cam.lookAt(_look);
+    _quat.copy(cam.quaternion);   // (slerpQuaternions copies its first argument in before reading the second)
+    cam.quaternion.slerpQuaternions(rig.fromQuat, _quat, ease(Math.min(1, rig.blend / 0.4)));
     fov = rig.fromFov + (fov - rig.fromFov) * e;
     near = 0.5 + (near - 0.5) * e;
   }
@@ -237,7 +243,8 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
   rig.hurt = Math.max(0, rig.hurt - dt * 1.6);
 }
 
-const _fwd = new THREE.Vector3(), _pivot = new THREE.Vector3(), _look = new THREE.Vector3();
+const ease = (t: number): number => t * t * (3 - 2 * t);
+const _fwd = new THREE.Vector3(), _pivot = new THREE.Vector3(), _look = new THREE.Vector3(), _quat = new THREE.Quaternion();
 /** How far back from `p` (against `f`) the camera can sit before a prop or the arena wall. */
 function clearBehind(p: THREE.Vector3, f: THREE.Vector3, max: number): number {
   const bx = -f.x, bz = -f.z, h = Math.hypot(bx, bz);
