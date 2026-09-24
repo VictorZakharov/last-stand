@@ -2,7 +2,7 @@
 // Each effect is { update(dt) -> boolean alive, dispose() }.
 import * as THREE from 'three';
 import { G } from '../state';
-import { additive, glowScale } from '../core/materials';
+import { additive } from '../core/materials';
 import { radialDecal, runeCircle } from '../core/textures';
 import { rand } from '../util';
 import { groundHeight } from '../world/ground';
@@ -94,9 +94,8 @@ export function decal(pos: Pos, { type = 'scorch' as 'scorch' | 'frost', size = 
 
 // Enemy attack telegraph: outline ring + filling disc. Call cancel() to remove early.
 export function telegraph(pos: Pos, radius: number, duration: number, color: THREE.ColorRepresentation = 0xff3020): Effect & { cancel(): void; group: THREE.Group } {
-  const gs = glowScale(color);
-  const ringMat = additive(color, 1.6 * gs, 0.9);
-  const fillMat = additive(color, 0.8 * gs, 0.35);
+  const ringMat = additive(color, 1.6, 0.9);
+  const fillMat = additive(color, 0.8, 0.35);
   const ring = new THREE.Mesh(GEO.ring, ringMat);
   const fill = new THREE.Mesh(GEO.disc, fillMat);
   const g = new THREE.Group();
@@ -175,7 +174,6 @@ export function iceSpikes(center: Pos, radius: number, count = 28, inner = 0): E
   const data: { x: number; z: number; s: number; delay: number; tilt: number; rot: number; tilt2: number }[] = [];
   for (let i = 0; i < count; i++) {
     const a = Math.random() * Math.PI * 2, r = Math.sqrt(inner * inner + Math.random() * (radius * radius - inner * inner));
-
     data.push({ x: center.x + Math.cos(a) * r, z: center.z + Math.sin(a) * r, s: rand(0.5, 1.3), delay: (r / radius) * 0.25, tilt: rand(-0.5, 0.5), rot: rand(0, 6.28), tilt2: rand(-0.5, 0.5) });
   }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();

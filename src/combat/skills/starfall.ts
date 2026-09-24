@@ -8,7 +8,6 @@ import { addEffect, shockwave, decal, glyphMarker, lightPillar, crackDecal, crys
 import { burst, particles, col, smokePuff, debris } from '../../fx/particles';
 import { flash } from '../../fx/lights';
 import { addShake } from '../../core/renderer';
-import { glowScale, SMALL_GLOW } from '../../core/materials';
 import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import type { InstantSkill, Needs } from './types';
@@ -70,9 +69,7 @@ function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: num
 
 function impact(player: Player, def: Def, p: THREE.Vector3): void {
   const at = new THREE.Vector3(p.x, p.y + 0.3, p.z);
-  // the pale core is bright: scaled like every glow of its colour
-  lightPillar(p, { color: CORE, intensity: 2.2 * glowScale(CORE, SMALL_GLOW), radius: 0.55, height: 10, life: 0.35 });
-
+  lightPillar(p, { color: CORE, intensity: 2.2, radius: 0.55, height: 10, life: 0.35 });
   shockwave(p, { color: COLOR, intensity: 1.3, from: 0.4, to: def.radius * 1.25, life: 0.35, y: p.y + 0.06 });
   crackDecal(p, { size: def.radius * 0.95, color: COLOR, intensity: 2.2, life: 3.5 });
   decal(p, { type: 'scorch', size: def.radius * 0.8, life: 7 });

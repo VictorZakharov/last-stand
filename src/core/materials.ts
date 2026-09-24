@@ -42,7 +42,8 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
           float edge = uDissolve > 0.0 ? (1.0 - smoothstep(uDissolve, uDissolve + 0.09, dn)) : 0.0;
           totalEmissiveRadiance += uEdge * edge * 3.0;
           totalEmissiveRadiance += vec3(0.25,0.55,0.9) * uFrozen * 0.35;
-          totalEmissiveRadiance += vec3(1.0,0.9,0.85) * uHit * 0.9;`);
+          // a tint, not white: up close a body fills much of the screen
+          totalEmissiveRadiance += vec3(1.0,0.9,0.85) * uHit * 0.45;`);
     };
     m.customProgramCacheKey = () => 'entityfx';
     mats.push(m);
@@ -61,21 +62,6 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
     dispose() { for (const m of mats) m.dispose(); },
   };
 }
-
-/**
- * How much to scale a glow of this colour so it looks as bright as a violet one, which the effects
- * are tuned on: at the same strength a green one (mostly the eye's brightest channel) is nearly
- * three times as bright, and blooms that much more. Never brightens. Large glowing surfaces (a
- * telegraph, a ground flash, an aura ring) take all of it (`amount` 1); small glows (eyes, cores,
- * bolts) take `SMALL_GLOW` of it, so they still bloom rather than turn flat. Lights keep their strength.
- */
-export function glowScale(color: THREE.ColorRepresentation, amount = 1): number {
-  const c = new THREE.Color(color);
-  const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
-  return Math.min(1, 0.3 / Math.max(lum, 1e-3)) ** amount;
-}
-export const SMALL_GLOW = 0.75;
-
 
 // Additive, unlit HDR material for VFX meshes.
 export function additive(color: THREE.ColorRepresentation, intensity = 2, opacity = 1): THREE.MeshBasicMaterial {

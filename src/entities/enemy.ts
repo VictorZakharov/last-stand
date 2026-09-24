@@ -11,10 +11,10 @@ import { addAnchored, removeAnchored } from '../ui/floaters';
 import { DamageMeter } from '../ui/damageMeter';
 import { burst, debris, smokePuff, col, particles } from '../fx/particles';
 import { flash } from '../fx/lights';
-import { additive, glowScale } from '../core/materials';
+import { additive } from '../core/materials';
 import { sfx } from '../core/audio';
 import { emit } from '../events';
-import { angleDamp, damp, pick, rand } from '../util';
+import { angleDamp, damp, hitFlash, pick, rand } from '../util';
 import { applyShadowDetail } from '../core/quality';
 import type { DamageType, EnemyDef, Model, XZ } from '../types';
 import type { Player } from './player';
@@ -89,6 +89,7 @@ export class Enemy {
   frozenAt = 0;
   chill = 0;
   hitT = 0;
+  flashAt = -1;
   deadT = -1;
   phase = Math.random() * 10;
   /** scratch space for the AI */
@@ -145,7 +146,7 @@ export class Enemy {
     applyShadowDetail(this.obj);
     if (hero || this.boss) {
       const c = this.boss ? def.accent ?? 0x9a40ff : pick(HERO.auraColors);
-      this.auraMat = additive(c, 1.6 * glowScale(c), 0.8);
+      this.auraMat = additive(c, 1.6, 0.8);
       this.aura = new THREE.Mesh(auraGeo, this.auraMat);
       this.aura.scale.setScalar(this.radius * 1.6);
       this.aura.position.y = 0.05;
@@ -308,7 +309,7 @@ export class Enemy {
   takeDamage(amount: number, info: DamageInfo = {}): number {
     if (!this.alive) return 0;
     if (!this.meter) this.life -= amount;
-    this.hitT = 1;
+    hitFlash(this, G.time);
     if (info.by) this.killer = info.by;
     if (info.chill) this.chill = Math.max(this.chill, info.chill);
     if (info.freeze) this.frozen = Math.max(this.frozen, info.freeze * (1 - (this.def.freezeResist || 0)));

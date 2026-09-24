@@ -13,6 +13,11 @@ import type { QualityPreset } from '../data/quality';
 
 /** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept). */
 const HI_KNEE = 1, HI_CAP = 2;
+/**
+ * Tone mapping keeps the colour of a bright pixel (brightest channel over HUE_FROM, fully over HUE_TO)
+ * in a large glare (GLARE_FROM..GLARE_TO): a big bright area stays its colour, a small hot core may go white.
+ */
+const HUE_FROM = 1, HUE_TO = 1.6, GLARE_FROM = 0.05, GLARE_TO = 0.4;
 /** How strongly glare around a pixel darkens it (the eye adapting to a flash). */
 const GLARE_ADAPT = 1.5;
 const GradeShader = {
@@ -33,14 +38,20 @@ const GradeShader = {
       // the eye adapts: where a big flash glares (bloom's blurriest level), everything around it
       // is seen darker, so a bright effect doesn't wash out the view
       vec3 gl = texture2D(tGlare, vUv).rgb;
-      c.rgb /= 1.0 + ${GLARE_ADAPT.toFixed(2)} * max(gl.r, max(gl.g, gl.b));
+      float glare = max(gl.r, max(gl.g, gl.b));
+      c.rgb /= 1.0 + ${GLARE_ADAPT.toFixed(2)} * glare;
       // the scene and its bloom, compressed like the eye: the brightest channel eases towards a
-      // ceiling and the others keep their ratio to it, so a stack of lights stays its own colour
-      // (tone mapping would turn anything far over 1 white)
+      // ceiling and the others keep their ratio to it, so a stack of lights stops adding up
       float m = max(c.r, max(c.g, c.b));
       if (m > ${HI_KNEE.toFixed(2)}) c.rgb *= (${HI_KNEE.toFixed(2)} + ${(HI_CAP - HI_KNEE).toFixed(2)} * (1.0 - exp(-(m - ${HI_KNEE.toFixed(2)}) / ${(HI_CAP - HI_KNEE).toFixed(2)}))) / m;
-      // tone mapping + sRGB here instead of a separate OutputPass (renderer settings, drawn to the screen)
-      c.rgb = toneMapping(c.rgb);
+      // tone mapping + sRGB here instead of a separate OutputPass (renderer settings, drawn to the screen).
+      // Per channel it squeezes the brightest channel most, so any bright colour ends up white. The eye
+      // adapts to a large bright area and sees its colour, so there pixels are mapped by their brightest
+      // channel instead, keeping their colour; a small hot core may still go white, and ordinary pixels are as before
+      m = max(max(c.r, max(c.g, c.b)), 1e-4);
+      vec3 hue = c.rgb / m * toneMapping(vec3(m)).g;
+      float keep = smoothstep(${HUE_FROM.toFixed(2)}, ${HUE_TO.toFixed(2)}, m) * smoothstep(${GLARE_FROM.toFixed(2)}, ${GLARE_TO.toFixed(2)}, glare);
+      c.rgb = mix(toneMapping(c.rgb), hue, keep);
       c = linearToOutputTexel(c);
       vec2 d = vUv - 0.5;
       float r = dot(d, d);
@@ -67,12 +78,7 @@ const SanitizeShader = {
     }`,
 };
 
-let composer: EffectComposer, grade: ShaderPass, bloom: UnrealBloomPass, gl: THREE.WebGLRenderer, sceneRT: THREE.WebGLRenderTarget;
-/**
- * Bloom strength: effects are tuned for the top-down camera 30m away; from the close views the same
- * glow fills 5-10 times more of the screen, and so would its halo.
- */
-const BLOOM = { top: 0.85, close: 0.4 };
+let composer: EffectComposer, grade: ShaderPass, gl: THREE.WebGLRenderer, sceneRT: THREE.WebGLRenderTarget;
 const rig = {
   zoom: 1,
   targetZoom: 1,
@@ -87,8 +93,6 @@ const rig = {
   targetBoom: CAMERA.third.boom,
   /** a view switch glides from the pose the camera had (blend 0) to the new view's (1) */
   blend: 1,
-  /** 0 in the top-down view, 1 in the close ones, eased across a switch */
-  close: 0,
   fromPos: new THREE.Vector3(),
   fromQuat: new THREE.Quaternion(),
   fromFov: CAMERA.fov,
@@ -121,7 +125,7 @@ export function initRenderer(container: HTMLElement) {
   const sanitize = new ShaderPass(SanitizeShader, 'none');
   sanitize.uniforms.tDiffuse.value = sceneRT.texture;
   composer.addPass(sanitize);
-  bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), BLOOM.top, 0.55, 0.9);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.85, 0.55, 0.9);
   composer.addPass(bloom);
   grade = new ShaderPass(GradeShader);
   grade.uniforms.tGlare.value = bloom.renderTargetsVertical[bloom.nMips - 1].texture;
@@ -234,7 +238,6 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
   rig.focus.z = damp(rig.focus.z, focus.z, CAMERA.follow, dt);
   rig.focus.y = 0;
   rig.yaw = damp(rig.yaw, rig.targetYaw, 18, dt);
-  rig.close = damp(rig.close, rig.view === 'top' ? 0 : 1, 4, dt);
   let fov: number = CAMERA.fov, near = 0.5;
   if (rig.view === 'top') {
     const d = CAMERA.distance * rig.zoom;
@@ -322,10 +325,8 @@ export function render(): void {
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
   grade.uniforms.uTime.value = G.time;
   grade.uniforms.uHurt.value = rig.hurt;
-  bloom.strength = BLOOM.top + (BLOOM.close - BLOOM.top) * rig.close;
   gl.setRenderTarget(sceneRT);
   gpuMarks.mark('scene');
   gl.render(G.scene, G.camera);
   composer.render();
-
 }

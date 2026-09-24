@@ -12,12 +12,11 @@ import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
 import { input, isDown } from '../core/input';
 import { flashHurt, addShake, cameraYaw, lookFacing, viewMode, viewSettled } from '../core/renderer';
-
 import { floatText } from '../ui/floaters';
 import { particles, col } from '../fx/particles';
 import { sfx } from '../core/audio';
 import { emit } from '../events';
-import { angleDamp, damp, rand } from '../util';
+import { angleDamp, damp, hitFlash, rand } from '../util';
 import { applyShadowDetail } from '../core/quality';
 import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SkillDef, SkillKey } from '../types';
 
@@ -114,6 +113,7 @@ export class Player {
   dash: DashState | null = null;
   ward: Ward | null = null;
   hitT = 0;
+  flashAt = -1;
   lastLowEnergy = 0;
 
   // co-op
@@ -624,7 +624,7 @@ export class Player {
     }
     if (r.absorbed > 0) this.ward?.onHit?.(r.absorbed);
     if (r.taken <= 0) return;
-    this.hitT = 1;
+    hitFlash(this, G.time);
     floatText(this.pos.x, 2.3, this.pos.z, Math.round(r.taken), 'player', this.local ? '#ff4a3a' : '#ff9a80');
     if (!this.local) return;
     flashHurt(Math.min(0.7, (r.taken / this.stats.maxLife) * 4));
