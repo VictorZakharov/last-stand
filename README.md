@@ -73,14 +73,14 @@ Robes, skirt panels and a crystal staff; arcane and elemental spells from range.
 
 ### The Warrior
 
-Plate armour, a crested helm and a cape; tougher, and fights up close. Fights with a one-handed weapon and a shield, or a two-handed weapon (it can't hold both), and the model shows what is equipped.
+Plate armour, a crested helm and a cape; tougher, and fights up close. Fights with a one-handed weapon and a shield, a one-handed weapon in each hand (the swings alternate hands; the off-hand weapon adds 60% of its damage bonus), or a two-handed weapon, and the model shows what is equipped. Each of these styles remembers its own skill bindings, with a button in the lobby to reset them to the defaults.
 
 Shields **block**: each hit has the shield's Block Chance to be blocked, absorbing its Block Amount, after which the shield needs a moment to recover. Holding right click raises the shield to block every hit from the front, for three times the Block Amount; a hit bigger than that breaks the guard and staggers you: for 1.5 seconds you can only move, not block, attack or cast.
 
 | Key | Skill |
 | --- | --- |
 | Left click | Rending Cleave — wide sweep in front of you; each hit restores energy |
-| Right click (hold) | Raise Shield — block every frontal blow; with a two-handed weapon instead: Steel Tempest (a lone one-hander leaves it free to bind; Thunder Crescent needs a two-hander) |
+| Right click (hold) | Raise Shield — block every frontal blow; with a two-handed weapon instead: Steel Tempest; with a weapon in each hand: Twin Fangs, an instant lunge and a strike with each blade (a lone one-hander leaves it free to bind; Thunder Crescent needs a two-hander) |
 | `1` (hold) | Steel Tempest — spin with the blade out, shredding everything around you |
 | `2` | Bull Rush — shield charge that tramples and hurls foes aside |
 | `3` | Power Strike — charge for 1.5 seconds, then a crushing overhead blow |

@@ -23,8 +23,9 @@ const warrior: ClassDef = {
     resist: 6,
   },
 
-  // Right click raises the shield; with a two-hander instead it spins (Steel Tempest), and with a lone
-  // one-hander it is empty until the player binds something. The crescent takes a two-handed weapon. A key's default is the last skill listing it.
+  // Right click raises the shield; with a two-hander instead it spins (Steel Tempest), with a weapon in
+  // each hand it strikes with both (Twin Fangs), and with a lone one-hander it is empty until the player
+  // binds something. The crescent takes a two-handed weapon. A key's default is the last skill listing it.
   skills: [
     {
       key: 'mouse0', impl: 'cleave', name: 'Rending Cleave',
@@ -44,11 +45,20 @@ const warrior: ClassDef = {
       icon: { glyph: '☾', color: '#9fc8ff' },
     },
     {
+      key: 'mouse2', impl: 'twinFangs', name: 'Twin Fangs',
+      desc: 'Lunge at the foe and strike with both blades in quick succession, right then left. Instant.',
+      tags: ['physical'], cost: 24, cooldown: 3, castTime: 0,
+      damage: 150, range: 3.2, arc: 1.3,
+      needs: 'dual',
+      color: 0xbfe0ff,
+      icon: { glyph: '✕', color: '#bfe0ff' },
+    },
+    {
       key: 'mouse2', impl: 'raiseShield', name: 'Raise Shield',
       desc: 'Hold your shield up: every blow from the front is blocked, for three times your Block Amount. A bigger blow breaks your guard and staggers you: for a moment you can only move. Drains Energy while held.',
       tags: ['defense'], cost: 6, cooldown: 0, castTime: 0, channel: true,
       block: 3, moveMult: 0.45,
-      needs: 'shield', fallback: { twoHanded: 'tempest' },
+      needs: 'shield', fallback: { twoHanded: 'tempest', dual: 'twinFangs' },
       icon: { glyph: '⛉', color: '#e8d2a0' },
     },
     {
@@ -104,6 +114,7 @@ const warrior: ClassDef = {
   },
   excludeStats: ['arcanePct'],
   twoHanded: ['Greatsword', 'Greataxe', 'Maul'],
+  dualWield: true,   // a one-hander in each hand
   // shields block (see Player.tryBlock) instead of feeding energy
   implicits: { offhand: [['block', 1], ['blockAmount', 1], ['armor', 0.5]] },
 };

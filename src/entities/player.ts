@@ -7,7 +7,7 @@ import { SKILL_IMPLS } from '../combat/skills/index';
 import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
 import { computeStats, isTwoHanded } from '../loot/items';
 import { BLOCK } from '../data/balance';
-import { SKILL_KEYS, loadLoadout, saveLoadout, type Loadout } from '../loot/loadout';
+import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, type Loadout, type WeaponStyle } from '../loot/loadout';
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
 import { input, isDown } from '../core/input';
@@ -55,13 +55,15 @@ export class Player {
   /** all skills of the class, by id */
   readonly known = new Map<string, KnownSkill>();
   /** key -> skill id; any skill may be bound to any (or several) keys */
-  loadout: Loadout;
+  loadout!: Loadout;
+  /** the weapon style the loadout belongs to */
+  private style: WeaponStyle | null = null;
   /** remaining cooldown per skill id (shared by every key bound to it) */
   readonly cooldowns = new Map<string, number>();
 
   stats!: DerivedStats;
   /** what the character holds (from the equipped items) */
-  gear: Gear = { weapon: null, twoHanded: false, shield: false };
+  gear: Gear = { weapon: null, twoHanded: false, shield: false, offWeapon: null };
   /** seconds until the shield can block again, and when it last did */
   blockCd = 0;
   /** game time until which a broken guard keeps the shield down and the character staggered:
@@ -93,8 +95,7 @@ export class Player {
       if (!impl) throw new Error(`Missing skill impl "${def.impl}"`);
       this.known.set(def.impl, { def, impl });
     }
-    this.loadout = loadLoadout(this.cls);
-    this.recomputeStats(equipped);
+    this.recomputeStats(equipped);   // loads the loadout for the gear held
     this.reset();
   }
 
@@ -107,36 +108,54 @@ export class Player {
     this.staffLight.dispose();
   }
 
-  /** Bind a skill (or nothing) to a key and persist the loadout. */
+  /** Bind a skill (or nothing) to a key and persist the loadout (of the weapon style held). */
   bind(key: SkillKey, skillId: string | null): void {
-    if (skillId !== null && !this.known.has(skillId)) return;
+    const s = skillId !== null ? this.known.get(skillId) : null;
+    if (skillId !== null && (!s || !this.usable(s.def))) return;   // not with the gear held
     if (this.channel?.key === key) this.stopChannel();
     this.loadout[key] = skillId;
-    saveLoadout(this.cls, this.loadout);
+    saveLoadout(this.cls, this.gear, this.loadout);
   }
 
-  /** Whether the gear held allows a skill (some need a shield, some a two-handed weapon). */
-  usable(def: SkillDef): boolean {
-    return def.needs === 'shield' ? this.gear.shield : def.needs === 'twoHanded' ? this.gear.twoHanded : true;
+  /** Back to the class's default bindings for the weapon style held. */
+  resetLoadout(): void {
+    if (this.channel) this.stopChannel();
+    this.loadout = defaultLoadout(this.cls, this.gear);
+    saveLoadout(this.cls, this.gear, this.loadout);
   }
+
+  /** The weapon style the loadout belongs to (null: the class has one loadout). */
+  get weaponStyle(): WeaponStyle | null { return this.style; }
+
+  /** Whether the gear held allows a skill (some need a shield, some a two-handed weapon). */
+  usable(def: SkillDef): boolean { return usableWith(def, this.gear); }
 
   /** The skill a key fires. A skill the gear doesn't allow gives way to its fallback for the gear held. */
   skillAt(key: SkillKey): KnownSkill | null {
     const id = this.loadout[key];
     const s = id ? this.known.get(id) ?? null : null;
-    if (s && !this.usable(s.def)) {
-      const fb = s.def.fallback;
-      const alt = this.gear.shield ? fb?.shield : this.gear.twoHanded ? fb?.twoHanded : fb?.oneHanded;
-      return alt ? this.known.get(alt) ?? null : null;
-    }
-    return s;
+    if (!s || this.usable(s.def)) return s;
+    const alt = resolveFor(s.def, this.gear);
+    return alt ? this.known.get(alt) ?? null : null;
   }
 
   recomputeStats(equipped: Profile['equipped']): void {
     const prevLifePct = this.stats ? this.life / this.stats.maxLife : 1;
     this.stats = computeStats(this.cls.base, equipped);
     const weapon = equipped.weapon;
-    this.gear = { weapon: weapon?.base ?? null, twoHanded: isTwoHanded(weapon, this.cls), shield: (equipped.offhand?.stats.blockAmount ?? 0) > 0 };   // shields are the off-hands that block
+    const off = equipped.offhand;
+    this.gear = {
+      weapon: weapon?.base ?? null, twoHanded: isTwoHanded(weapon, this.cls),
+      shield: (off?.stats.blockAmount ?? 0) > 0,   // shields are the off-hands that block
+      offWeapon: off?.slot === 'weapon' ? off.base : null,
+    };
+    // each weapon style has its own loadout: switching style brings back the one left there
+    const style = weaponStyle(this.cls, this.gear);
+    if (!this.loadout || style !== this.style) {
+      if (this.channel) this.stopChannel();
+      this.style = style;
+      this.loadout = loadLoadout(this.cls, this.gear);
+    }
     this.model.setGear?.(this.gear);
     this.life = this.stats.maxLife * prevLifePct;
   }

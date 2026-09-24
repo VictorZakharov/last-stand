@@ -4,12 +4,13 @@ import { SLOTS, SLOT_INFO } from '../data/items';
 import { RUN } from '../data/balance';
 import { WAVES } from '../data/waves';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
-import { rarityOf, itemPower, byValue } from '../loot/items';
+import { rarityOf, itemPower, byValue, OFFHAND_WEAPON } from '../loot/items';
 import { SKILL_KEYS } from '../loot/loadout';
-import { equipFromStash, unequip, salvage, salvageEquipped, resetProfile } from '../loot/profile';
+import { equipFromStash, unequip, salvage, salvageEquipped, resetProfile, slotsFor } from '../loot/profile';
 import { bindTooltip, hideTooltip, itemTooltip } from './tooltip';
 import { makeSkillSlot, KEY_LABEL } from './hud';
 import { renderLoadoutEditor } from './loadoutEditor';
+import { initSkillStrip, syncSkillStrip } from './skillStrip';
 import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
 import { renderAttributes } from './attributes';
 import { initStashFilter, renderStashFilter, openStashFilter, sortStash, matchesFilter } from './stashFilter';
@@ -119,12 +120,13 @@ export function initMenus(h: MenuHooks): void {
     };
   });
   initStashFilter(renderMenu);
+  initSkillStrip($('.cc-strip'));
   const stash = $('#stash');
   stash.addEventListener('contextmenu', (e) => e.preventDefault());
   stash.addEventListener('dragover', (e) => { if (drag?.from === 'equip') e.preventDefault(); });
   stash.addEventListener('drop', (e) => {
     e.preventDefault();
-    if (drag?.from === 'equip') { unequip(G.profile, drag.item.slot); sfx.click(); endDrag(); changed(); }
+    if (drag?.from === 'equip') { unequip(G.profile, drag.slot); sfx.click(); endDrag(); changed(); }
   });
   const junk = $('#junk');
   junk.addEventListener('dragover', (e) => { if (drag) { e.preventDefault(); junk.classList.add('over'); } });
@@ -135,7 +137,7 @@ export function initMenus(h: MenuHooks): void {
     const { from, item } = drag;
     newIds.delete(item.id);
     if (from === 'stash') salvage(G.profile, item.id);
-    else salvageEquipped(G.profile, item.slot);
+    else salvageEquipped(G.profile, drag.slot);
     sfx.salvage();
     endDrag();
     changed();
@@ -213,8 +215,10 @@ export function renderMenu(): void {
   $('.cc-name').textContent = cls.name;
   $('.cc-tag').textContent = cls.tagline;
   const sk = $('.cc-skills');
+  if (sk.dataset.cls !== cls.id) { sk.dataset.cls = cls.id; sk.scrollLeft = 0; }   // another class starts at its first skills
   sk.innerHTML = '';
-  for (const def of cls.skills) sk.appendChild(makeSkillSlot(def));
+  for (const def of cls.skills) sk.appendChild(makeSkillSlot(def)).classList.toggle('unusable', !G.player.usable(def));
+  syncSkillStrip();
 
   const r = p.records;
   const rec = (icon: string, value: string | number, label: string) =>
@@ -231,11 +235,13 @@ export function renderMenu(): void {
     const d = document.createElement('div');
     d.className = 'eslot' + (it ? '' : ' empty');
     d.dataset.slot = slot;
-    d.addEventListener('dragover', (e) => { if (drag?.from === 'stash' && drag.item.slot === slot) { e.preventDefault(); d.classList.add('over'); } });
+    // a slot takes the items that fit it (a one-handed weapon also fits a dual-wielder's off-hand)
+    const fits = (): boolean => drag?.from === 'stash' && slotsFor(p, drag.item).includes(slot);
+    d.addEventListener('dragover', (e) => { if (fits()) { e.preventDefault(); d.classList.add('over'); } });
     d.addEventListener('dragleave', () => d.classList.remove('over'));
     d.addEventListener('drop', (e) => {
       e.preventDefault();
-      if (drag?.from === 'stash' && drag.item.slot === slot) { newIds.delete(drag.item.id); equipFromStash(p, drag.item.id); sfx.click(); endDrag(); changed(); }
+      if (drag && fits()) { newIds.delete(drag.item.id); equipFromStash(p, drag.item.id, slot); sfx.click(); endDrag(); changed(); }
     });
     const color = it ? rarityOf(it.rarity).color : '#666';
     d.style.boxShadow = `inset 0 0 0 1px ${it ? color : 'rgba(160,124,70,.5)'}`;
@@ -244,14 +250,17 @@ export function renderMenu(): void {
       <span class="ename2" style="color:${color}">${it ? it.name : ''}</span>${GLOW}`;
     bindSlotFocus(d, slot);
     if (it) {
-      bindTooltip(d, itemTooltip(it, false));
+      // a weapon in the off-hand: its damage (the implicit) counts for less
+      bindTooltip(d, slot === 'offhand' && it.slot === 'weapon'
+        ? () => ({ ...itemTooltip(it, false)(), foot: `In the off-hand its damage bonus (the implicit) counts at ${OFFHAND_WEAPON * 100}%` })
+        : itemTooltip(it, false));
       const doUnequip = () => { unequip(p, slot); hideTooltip(); sfx.click(); changed(); };
       d.onclick = () => {
         if (!isTouch()) { doUnequip(); return; }
         openItemSheet(it, false, 'Unequip', p.stash.length < RUN.bagLimit ? doUnequip : null, () => { salvageEquipped(p, slot); newIds.delete(it.id); sfx.salvage(); changed(); });
       };
       d.oncontextmenu = (e) => { e.preventDefault(); doUnequip(); };
-      makeDraggable(d, { from: 'equip', item: it });
+      makeDraggable(d, { from: 'equip', item: it, slot });
     }
     eq.appendChild(d);
   }
@@ -290,7 +299,7 @@ export function renderMenu(): void {
       changed();
     };
     d.oncontextmenu = (e) => { e.preventDefault(); equip(); };
-    makeDraggable(d, { from: 'stash', item: it });
+    makeDraggable(d, { from: 'stash', item: it, slot: it.slot });
     st.appendChild(d);
   }
   for (let i = sorted.length; i < RUN.bagLimit; i++) {
@@ -338,7 +347,8 @@ function bindSlotFocus(el: HTMLElement, slot: Slot): void {
 }
 
 // --- item drag & drop -------------------------------------------------------------
-interface ItemDrag { from: 'stash' | 'equip'; item: Item }
+/** `slot`: where an equipped item came from (a weapon can sit in the off-hand) */
+interface ItemDrag { from: 'stash' | 'equip'; item: Item; slot: Slot }
 let drag: ItemDrag | null = null;
 
 function makeDraggable(el: HTMLElement, payload: ItemDrag): void {
