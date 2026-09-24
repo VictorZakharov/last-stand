@@ -96,7 +96,7 @@ const skill: InstantSkill = {
     sfx.roar();
     for (const e of G.enemies) {
       if (e.alive && Math.hypot(e.pos.x - c.x, e.pos.z - c.z) < def.radius + e.radius) {
-        hitEnemy(e, def.damage, { tags: ['physical'], type: 'physical', knock: def.knock, from: c });
+        hitEnemy(e, def.damage, { by: player, tags: ['physical'], type: 'physical', knock: def.knock, from: c });
       }
     }
 

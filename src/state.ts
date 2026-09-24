@@ -11,7 +11,10 @@ import type { Profile } from './types';
 export interface GameState {
   time: number;                 // seconds since start (unpaused)
   dt: number;                   // frame delta (seconds, clamped)
+  /** the game is stopped (solo pause) */
   paused: boolean;
+  /** the pause menu is open: solo it stops the game, in co-op the game carries on behind it */
+  menuOpen: boolean;
   mode: 'menu' | 'run';
 
   // three.js core (set by core/renderer)
@@ -21,7 +24,10 @@ export interface GameState {
 
   // world
   arena: Arena;
+  /** the local player (the one this game controls) */
   player: Player;
+  /** every player, the local one first; co-op partners are remote */
+  players: Player[];
   enemies: Enemy[];
   projectiles: Projectile[];
 
@@ -36,8 +42,11 @@ export const G = {
   time: 0,
   dt: 0,
   paused: false,
+  menuOpen: false,
+
   mode: 'menu',
   enemies: [],
+  players: [],
   projectiles: [],
   run: null,
 } as unknown as GameState;

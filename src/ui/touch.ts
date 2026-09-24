@@ -179,9 +179,10 @@ function aimFor(p: Press, out: THREE.Vector3): THREE.Vector3 {
 /** Per frame, before the player updates: the aim point, and whether the controls show at all. */
 export function updateTouch(dt: number): void {
   const menu = $('#menu');
-  const show = input.touchMode && !G.paused && (G.mode === 'run'
-    ? !!G.run && G.run.phase !== 'dead' && G.run.phase !== 'banked'
+  const show = input.touchMode && !G.menuOpen && (G.mode === 'run'
+    ? !!G.run && G.player.active
     : menu.classList.contains('stowed'));
+
   $('#touch').classList.toggle('hidden', !show);
   if (!show && (press || stick)) { press = null; stick = null; input.stick.x = input.stick.y = 0; input.touch.clear(); }
 

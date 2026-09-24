@@ -6,7 +6,7 @@ import { buildModel } from './models/index';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
 import { computeStats, isTwoHanded } from '../loot/items';
-import { BLOCK } from '../data/balance';
+import { BLOCK, COOP } from '../data/balance';
 import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, type Loadout, type WeaponStyle } from '../loot/loadout';
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
@@ -29,19 +29,52 @@ export interface Ward { amount: number; t: number; onHit?(absorbed: number): voi
 /** Absolute difference between two headings. */
 const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
-interface CastState { skill: KnownSkill; t: number; dur: number; fireAt: number; fired: boolean; target: THREE.Vector3 }
+/** `replay`: a remote player's cast, shown for its pose and charge; its owner says when it fires */
+interface CastState { skill: KnownSkill; t: number; dur: number; fireAt: number; fired: boolean; target: THREE.Vector3; replay?: boolean }
 interface ChannelState { skill: KnownSkill; key: SkillKey; state: unknown; t: number }
 /** A movement skill's dash: a fixed velocity that input can't steer, with a per-frame hook; `lift`
  *  makes it a jump of that peak height, and `anim` is the pose it plays. */
 interface DashState { vx: number; vz: number; t: number; dur: number; lift: number; anim: CastAnim; step?(): void }
 export interface DashOpts { lift?: number; anim?: CastAnim; step?(): void }
 
+/** What the local player does that the other players' games replay (see net/session). */
+export type PlayerAction =
+  | { t: 'cast'; s: string; dur: number; x: number; z: number }
+  | { t: 'fire'; s: string; x: number; z: number; px: number; pz: number; f: number }
+  | { t: 'chs'; s: string; k: SkillKey }
+  | { t: 'che' };
+let actionSink: ((a: PlayerAction) => void) | null = null;
+/** Co-op: where the local player's casts are reported. */
+export function setActionSink(fn: ((a: PlayerAction) => void) | null): void { actionSink = fn; }
+
+/** How a hit on a player turned out. It's worked out where the fight is simulated (solo, or the
+ *  co-op host) and shown from this on every screen. */
+export interface HitResult { taken: number; blocked: number; broke: boolean; absorbed: number }
+
+/** A remote player as its owner last reported it (position, velocity, facing, aim), and when. */
+export interface RemoteState { x: number; z: number; vx: number; vz: number; f: number; ax: number; az: number; at: number }
+
+/** Out of a co-op run for the rest of it: banked, or dead for good. */
+export type PlayerOut = 'banked' | 'dead' | null;
+
+/** Reports each hit on a player to the co-op partners (set by net/sync on the host). */
+let hitSink: ((p: Player, r: HitResult, from: THREE.Vector3 | null) => void) | null = null;
+export function setHitSink(fn: typeof hitSink): void { hitSink = fn; }
+
 export class Player {
   readonly cls: ClassDef;
   readonly model: Model;
   readonly obj = new THREE.Group();
-  /** follows the cast point; every class has one, so switching class keeps the light count */
-  readonly staffLight: THREE.PointLight;
+  /** follows the cast point; every class has one, so switching class keeps the light count. A
+   *  remote player has none: another light would change the count and recompile every shader */
+  readonly staffLight: THREE.PointLight | null;
+  /** played here (a co-op partner is remote: driven by what its own game reports) */
+  readonly local: boolean;
+  /** co-op: the player's place in the party (0 = the host), and its spawn point */
+  slot = 0;
+  readonly spawn = new THREE.Vector3(0, 0, 3);
+  /** a remote player: its latest reported state */
+  readonly remote: RemoteState = { x: 0, z: 3, vx: 0, vz: 0, f: Math.PI, ax: 0, az: 0, at: 0 };
 
   readonly pos = new THREE.Vector3(0, 0, 3);
   readonly vel = new THREE.Vector3();
@@ -82,13 +115,34 @@ export class Player {
   hitT = 0;
   lastLowEnergy = 0;
 
-  constructor(classId: string, equipped: Profile['equipped']) {
+  // co-op
+  /** at 0 health (alive false) but waiting for a teammate: seconds left before bleeding out */
+  downed = false;
+  bleed = 0;
+  /** 0..1: how far a teammate is with raising this downed player */
+  revive = 0;
+  /** out of the run for good (banked, or dead): watching the rest of it */
+  out: PlayerOut = null;
+  /** not in the arena with us (a partner in the lobby while we fight, or the other way round) */
+  away = false;
+  /** game time until which a raised player can't be hurt */
+  guardUntil = -1;
+  /** getting back up after a revive: seconds left of the rise */
+  rising = 0;
+  /** the pause menu is open in co-op (the game can't stop for one player): the character stands idle */
+  idle = false;
+  /** a remote player holds its revive key (reported with its state) */
+  reviving = false;
+
+  constructor(classId: string, equipped: Profile['equipped'], local = true) {
     this.cls = CLASSES[classId];
-    this.staffLight = new THREE.PointLight(this.cls.aura.light, this.cls.aura.intensity, 6, 2);
+    this.local = local;
+    this.sandbox = !local;   // a remote player's casts replay as its owner fires them: no costs here
+    this.staffLight = local ? new THREE.PointLight(this.cls.aura.light, this.cls.aura.intensity, 6, 2) : null;
     this.model = buildModel(this.cls.model);
     this.obj.add(this.model.root);
     applyShadowDetail(this.obj);
-    G.scene.add(this.obj, this.staffLight, ...(this.model.worldObjects ?? []));
+    G.scene.add(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.model.worldObjects ?? []));
 
     for (const def of this.cls.skills) {
       const impl = SKILL_IMPLS[def.impl];
@@ -103,9 +157,9 @@ export class Player {
   dispose(): void {
     this.stopChannel();
     this.ward?.onEnd?.();
-    G.scene.remove(this.obj, this.staffLight, ...(this.model.worldObjects ?? []));
+    G.scene.remove(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.model.worldObjects ?? []));
     this.model.dispose();
-    this.staffLight.dispose();
+    this.staffLight?.dispose();
   }
 
   /** Bind a skill (or nothing) to a key and persist the loadout (of the weapon style held). */
@@ -185,12 +239,29 @@ export class Player {
     this.guardBroken = -1;
     this.lastLowEnergy = 0;
     this.cooldowns.clear();
-    this.pos.set(0, 0, 3);
+    this.downed = false;
+    this.bleed = this.revive = this.rising = 0;
+    this.out = null;
+    this.guardUntil = -1;
+    this.pos.copy(this.spawn);
+    this.remote.x = this.spawn.x; this.remote.z = this.spawn.z;
     this.vel.set(0, 0, 0);
     this.model.kit.u.uDissolve.value = 0;
-    this.obj.visible = true;
+    this.show(!this.away);
     this.model.reset?.();
   }
+
+  /** Show or hide the character, with what it keeps in the world (its cape). */
+  show(v: boolean): void {
+    this.obj.visible = v;
+    for (const o of this.model.worldObjects ?? []) o.visible = v;
+  }
+
+  /** In the fight: standing, in the arena and still in the run (what enemies go for). */
+
+  get active(): boolean { return this.alive && !this.away && !this.out; }
+  /** Still in the run, standing or downed (not banked or dead for good). */
+  get inRun(): boolean { return !this.away && !this.out; }
 
   get castPoint(): THREE.Vector3 {
     return (this.model.tip ?? this.model.root).getWorldPosition(new THREE.Vector3());
@@ -205,6 +276,13 @@ export class Player {
 
   // --- input & skills -------------------------------------------------------------
   handleInput(dt: number): void {
+    if (this.idle) {
+      // the co-op pause menu: stand still and let go of any channel
+      this.vel.x = damp(this.vel.x, 0, 14, dt);
+      this.vel.z = damp(this.vel.z, 0, 14, dt);
+      if (this.channel) this.stopChannel();
+      return;
+    }
     // movement is screen-relative: W is away from the camera, whatever its yaw
     let mx = 0, mz = 0;
     if (isDown('w') || isDown('arrowup')) mz -= 1;
@@ -245,6 +323,7 @@ export class Player {
     if (dur <= 0) { this.fire(s, target); return true; }
     this.casting = { skill: s, t: 0, dur, fireAt: dur * (s.def.fireAt ?? 0.55), fired: false, target };
     this.faceTowards(target, true);
+    actionSink?.({ t: 'cast', s: s.def.impl, dur, x: target.x, z: target.z });
     return true;
   }
 
@@ -255,7 +334,26 @@ export class Player {
       this.energy -= s.def.cost;
       this.cooldowns.set(s.def.impl, this.cooldownOf(s.def));
     }
+    if (this.local) actionSink?.({ t: 'fire', s: s.def.impl, x: target.x, z: target.z, px: this.pos.x, pz: this.pos.z, f: this.facing });
     s.impl.cast(this, s.def, target);
+  }
+
+  /** A remote player's action, replayed as its owner reported it. */
+  replay(a: PlayerAction): void {
+    if (a.t === 'che') { this.stopChannel(); return; }
+    const s = this.known.get(a.s);
+    if (!s || !this.alive) return;
+    if (a.t === 'cast') {
+      this.casting = { skill: s, t: 0, dur: a.dur, fireAt: a.dur * (s.def.fireAt ?? 0.55), fired: false, target: new THREE.Vector3(a.x, 0, a.z), replay: true };
+    } else if (a.t === 'fire') {
+      // from where it stood and the way it faced as it fired, so reach and aim match what its player saw
+      this.pos.x = this.remote.x = a.px; this.pos.z = this.remote.z = a.pz;
+      this.facing = a.f;
+      if (this.casting) this.casting.fired = true;
+      this.fire(s, new THREE.Vector3(a.x, 0, a.z));
+    } else if (!this.channel) {
+      this.channel = { skill: s, key: a.k, state: (s.impl as ChannelSkill).start(this, s.def), t: 0 };
+    }
   }
 
   /** Rush along `dir` (normalized, on the ground) at `speed` for `dur` seconds; `step` runs every frame of it. */
@@ -270,6 +368,7 @@ export class Player {
     if (this.staggered) return;
     if (!this.sandbox && this.energy < s.def.cost * 0.2) { this.lowEnergy(); return; }
     this.channel = { skill: s, key, state: s.impl.start(this, s.def), t: 0 };
+    actionSink?.({ t: 'chs', s: s.def.impl, k: key });
   }
 
   stopChannel(): void {
@@ -277,6 +376,7 @@ export class Player {
     if (!ch) return;
     this.channel = null;
     (ch.skill.impl as ChannelSkill).stop(this, ch.skill.def, ch.state);
+    if (this.local) actionSink?.({ t: 'che' });
   }
 
   lowEnergy(): void {
@@ -293,7 +393,9 @@ export class Player {
   // --- update -----------------------------------------------------------------------
   update(dt: number): void {
     const t = G.time;
+    if (!this.local) this.follow(dt);
     if (!this.alive) { this.updateDeath(dt); return; }
+    if (!this.local) { this.updateRemote(dt, t); return; }
 
     this.handleInput(dt);
 
@@ -336,17 +438,64 @@ export class Player {
     }
 
     // resources & cooldowns
-    this.life = Math.min(this.stats.maxLife, this.life + this.stats.lifeRegen * dt);
     if (!this.channel) this.energy = Math.min(this.stats.maxEnergy, this.energy + this.stats.energyRegen * dt);
     for (const [id, cd] of this.cooldowns) this.cooldowns.set(id, Math.max(0, cd - dt));
+    this.tickVitals(dt);
+    this.animateBody(dt, t, speed);
+  }
+
+  /** Health regeneration, hit flash, block recovery and the ward's timer. */
+  private tickVitals(dt: number): void {
+    this.life = Math.min(this.stats.maxLife, this.life + this.stats.lifeRegen * dt);
     this.hitT = Math.max(0, this.hitT - dt * 4);
     this.blockCd = Math.max(0, this.blockCd - dt);
+    this.rising = Math.max(0, this.rising - dt);
     if (this.ward) {
       this.ward.t -= dt;
       if (this.ward.t <= 0 || this.ward.amount <= 0) { this.ward.onEnd?.(); this.ward = null; }
     }
+  }
 
-    // animation
+  /**
+   * A co-op partner: it glides to where its game last put it (carried on along its velocity for
+   * the time since, to make up for the lag), and its casts and channels play out as reported.
+   */
+  private updateRemote(dt: number, t: number): void {
+    const r = this.remote;
+    if (this.casting) {
+      const c = this.casting;
+      c.t += dt;
+      if (!c.fired && !c.skill.impl.channel) c.skill.impl.charging?.(this, c.skill.def, Math.min(1, c.t / c.fireAt), dt);
+      if (c.t >= c.dur) this.casting = null;
+    }
+    if (this.channel) (this.channel.skill.impl as ChannelSkill).tick(this, this.channel.skill.def, dt, this.channel.state);
+    const d = this.dash;
+    if (d) {
+      d.t += dt;
+      d.step?.();
+      if (d.t >= d.dur) this.dash = null;
+    }
+    this.tickVitals(dt);
+    this.animateBody(dt, t, Math.hypot(r.vx, r.vz));
+  }
+
+  /** A remote player moves (and lies, when down) where its game reports it. */
+  private follow(dt: number): void {
+    const r = this.remote;
+    const lead = this.alive ? Math.min(0.2, Math.max(0, (performance.now() - r.at) / 1000)) : 0;
+    const tx = r.x + r.vx * lead, tz = r.z + r.vz * lead;
+    // a jump (a respawn, a long stall) is taken at once rather than slid across the arena
+    if (Math.hypot(tx - this.pos.x, tz - this.pos.z) > 4) { this.pos.x = tx; this.pos.z = tz; }
+    this.pos.x = damp(this.pos.x, tx, 14, dt);
+    this.pos.z = damp(this.pos.z, tz, 14, dt);
+    if (!this.alive) return;
+    this.vel.set(r.vx, 0, r.vz);
+    this.facing = angleDamp(this.facing, r.f, 16, dt);
+    this.aim.set(r.ax, 0, r.az);
+  }
+
+  private animateBody(dt: number, t: number, speed: number): void {
+
     const fwd = Math.sin(this.facing) * this.vel.x + Math.cos(this.facing) * this.vel.z;
     const side = Math.cos(this.facing) * this.vel.x - Math.sin(this.facing) * this.vel.z;
     this.phase += dt * speed * 2.1 * (fwd < -0.5 ? -1 : 1);
@@ -375,16 +524,23 @@ export class Player {
     // a jumping dash lifts the model along a parabola
     const d = this.dash, k = d ? Math.min(1, d.t / d.dur) : 0;
     this.model.root.position.y = d ? d.lift * 4 * k * (1 - k) : 0;
+    // a raised player gets up the way it went down, in reverse
+    const dead = this.deadT >= 0 ? Math.min(1, this.deadT / 1.0) : this.rising > 0 ? this.rising / RISE : -1;
     this.model.animate({
       t, dt, phase: this.phase, move, moveDir: dir, lean, action,
-      hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead: this.deadT >= 0 ? Math.min(1, this.deadT / 1.0) : -1,
+      hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,
       charge: this.channel ? 1 : this.casting ? this.casting.t / this.casting.dur : 0,
       velocity: this.vel,
     });
     this.model.kit.u.uHit.value = this.hitT * 0.5;
-    this.staffLight.position.copy(this.castPoint);
-    const glow = this.cls.aura.intensity;
-    this.staffLight.intensity = glow * (1 + (this.channel ? 2 : 0) + Math.sin(t * 6) * 0.13);
+    // the model shows its cape as it animates: a hidden character keeps it hidden
+    if (!this.obj.visible) for (const o of this.model.worldObjects ?? []) o.visible = false;
+    if (this.staffLight) {
+
+      this.staffLight.position.copy(this.castPoint);
+      const glow = this.cls.aura.intensity;
+      this.staffLight.intensity = glow * (1 + (this.channel ? 2 : 0) + Math.sin(t * 6) * 0.13);
+    }
   }
 
   heal(amount: number, silent = false): void {
@@ -396,55 +552,77 @@ export class Player {
 
   /** Apply already-mitigated damage (see combat/damage hurtPlayer). Returns damage taken. */
   takeDamage(amount: number, _type: DamageType, from: THREE.Vector3 | null): number {
-    if (!this.alive) return 0;
-    amount = this.tryBlock(amount, from);
-    if (amount <= 0) return 0;
-    if (this.ward) {
-      const absorbed = Math.min(this.ward.amount, amount);
-      this.ward.amount -= absorbed;
-      amount -= absorbed;
-      this.ward.onHit?.(absorbed);
-      if (amount <= 0) return 0;
-    }
-    this.life -= amount;
-    this.hitT = 1;
-    flashHurt(Math.min(0.7, (amount / this.stats.maxLife) * 4));
-    addShake(Math.min(0.35, (amount / this.stats.maxLife) * 2));
-    floatText(this.pos.x, 2.3, this.pos.z, Math.round(amount), 'player', '#ff4a3a');
-    sfx.hurt();
-    emit('playerHurt', amount);
+    if (!this.alive || G.time < this.guardUntil) return 0;
+    const r = this.resolveHit(amount, from);
+    this.showHit(r);
+    hitSink?.(this, r, from);
     if (this.life <= 0) this.die();
-    return amount;
+    return r.taken;
   }
 
-  /** Shield block: a chance per hit (then a short recovery), or every frontal hit while the shield is raised. */
-  tryBlock(amount: number, from: THREE.Vector3 | null): number {
+  /** Work out a hit: the shield's block, then the ward, then health. */
+  private resolveHit(amount: number, from: THREE.Vector3 | null): HitResult {
+    const r: HitResult = { taken: 0, blocked: 0, broke: false, absorbed: 0 };
     const s = this.stats;
-    if (!this.gear.shield || s.blockAmount <= 0) return amount;
-    const raised = this.channel?.skill.def.block ?? 0;
-    const front = !from || angleOff(Math.atan2(from.x - this.pos.x, from.z - this.pos.z), this.facing) < BLOCK.arc;
-    let absorb: number;
-    if (raised && front) absorb = s.blockAmount * raised;
-    else if (this.blockCd <= 0 && Math.random() * 100 < s.block) { absorb = s.blockAmount; this.blockCd = BLOCK.recovery; }
-    else return amount;
-    const blocked = Math.min(amount, absorb);
-    this.lastBlock = G.time;
-    const p = this.palmPoint;
-    if (raised && amount > absorb) {
-      // more than a raised shield can hold: the guard breaks, the rest gets through
-      this.guardBroken = G.time + BLOCK.guardBreak;
-      this.blockCd = BLOCK.guardBreak;
-      this.stopChannel();
-      this.casting = null;
-      floatText(this.pos.x, 2.7, this.pos.z, 'Guard broken', 'info', '#ff8a50');
-      addShake(0.25);
-    } else floatText(this.pos.x, 2.5, this.pos.z, `Block ${Math.round(blocked)}`, 'info', '#ffd9a0');
-    for (let i = 0; i < 8; i++) {
-      particles.glow.spawn({ x: p.x, y: p.y, z: p.z, vx: rand(-4, 4), vy: rand(0, 4), vz: rand(-4, 4), life: rand(0.2, 0.35), size: rand(0.04, 0.09), sizeEnd: 0,
-        color: col(0xffe0a0, 2), colorEnd: col(0xff5010, 0.4), gravity: 12 });
+    // shield block: a chance per hit (then a short recovery), or every frontal hit while the shield is raised
+    if (this.gear.shield && s.blockAmount > 0) {
+      const raised = this.channel?.skill.def.block ?? 0;
+      const front = !from || angleOff(Math.atan2(from.x - this.pos.x, from.z - this.pos.z), this.facing) < BLOCK.arc;
+      let absorb = 0;
+      if (raised && front) absorb = s.blockAmount * raised;
+      else if (this.blockCd <= 0 && Math.random() * 100 < s.block) { absorb = s.blockAmount; this.blockCd = BLOCK.recovery; }
+      if (absorb > 0) {
+        r.blocked = Math.min(amount, absorb);
+        // more than a raised shield can hold: the guard breaks, the rest gets through
+        r.broke = raised > 0 && amount > absorb;
+        amount -= r.blocked;
+      }
     }
-    sfx.clang();
-    return amount - blocked;
+    if (amount > 0 && this.ward) {
+      r.absorbed = Math.min(this.ward.amount, amount);
+      this.ward.amount -= r.absorbed;
+      amount -= r.absorbed;
+    }
+    r.taken = amount;
+    this.life -= amount;
+    return r;
+  }
+
+  /** A co-op partner's hit, as the host worked it out: its effects here, and its feedback. */
+  applyHit(r: HitResult): void {
+    if (this.ward && r.absorbed) this.ward.amount -= r.absorbed;
+    this.life = Math.max(0, this.life - r.taken);
+    this.showHit(r);
+  }
+
+  /** The feedback of a hit: sparks off a block, the ward flaring, the number, the screen's flinch. */
+  private showHit(r: HitResult): void {
+    if (r.blocked > 0) {
+      this.lastBlock = G.time;
+      const p = this.palmPoint;
+      if (r.broke) {
+        this.guardBroken = G.time + BLOCK.guardBreak;
+        this.blockCd = BLOCK.guardBreak;
+        this.stopChannel();
+        this.casting = null;
+        floatText(this.pos.x, 2.7, this.pos.z, 'Guard broken', 'info', '#ff8a50');
+        if (this.local) addShake(0.25);
+      } else floatText(this.pos.x, 2.5, this.pos.z, `Block ${Math.round(r.blocked)}`, 'info', '#ffd9a0');
+      for (let i = 0; i < 8; i++) {
+        particles.glow.spawn({ x: p.x, y: p.y, z: p.z, vx: rand(-4, 4), vy: rand(0, 4), vz: rand(-4, 4), life: rand(0.2, 0.35), size: rand(0.04, 0.09), sizeEnd: 0,
+          color: col(0xffe0a0, 2), colorEnd: col(0xff5010, 0.4), gravity: 12 });
+      }
+      sfx.clang();
+    }
+    if (r.absorbed > 0) this.ward?.onHit?.(r.absorbed);
+    if (r.taken <= 0) return;
+    this.hitT = 1;
+    floatText(this.pos.x, 2.3, this.pos.z, Math.round(r.taken), 'player', this.local ? '#ff4a3a' : '#ff9a80');
+    if (!this.local) return;
+    flashHurt(Math.min(0.7, (r.taken / this.stats.maxLife) * 4));
+    addShake(Math.min(0.35, (r.taken / this.stats.maxLife) * 2));
+    sfx.hurt();
+    emit('playerHurt', r.taken);
   }
 
   die(): void {
@@ -457,12 +635,52 @@ export class Player {
     this.ward?.onEnd?.();
     this.ward = null;
     sfx.death();
-    emit('playerDied');
+    emit('playerDied', this);
+  }
+
+  /** Co-op: fallen but not gone, until a teammate raises it or it bleeds out. */
+  goDown(): void {
+    this.downed = true;
+    this.bleed = COOP.bleedOut;
+    this.revive = 0;
+  }
+
+  /** Dead for good: a downed player that bled out starts to fade from here. */
+  bleedOut(): void {
+    this.downed = false;
+    this.deadT = Math.min(this.deadT, 1.2);
+  }
+
+  /** Raised by a teammate: back on its feet with some health, untouchable for a moment. */
+  raise(lifeK = COOP.reviveLife): void {
+    this.downed = false;
+    this.alive = true;
+    this.deadT = -1;
+    this.revive = 0;
+    this.rising = RISE;
+    this.life = this.stats.maxLife * lifeK;
+    this.guardUntil = G.time + COOP.reviveGuard;
+    this.model.kit.u.uDissolve.value = 0;
+    const p = this.pos;
+    for (let i = 0; i < 40; i++) {
+      const a = Math.random() * Math.PI * 2, r = rand(0.2, 0.9);
+      particles.glow.spawn({
+        x: p.x + Math.cos(a) * r, y: rand(0, 0.4), z: p.z + Math.sin(a) * r, vy: rand(2, 4.5),
+        life: rand(0.5, 0.9), size: rand(0.08, 0.2), sizeEnd: 0, color: col(0xfff0c0, 2.5), colorEnd: col(0xffa040, 0.4), drag: 1.5,
+      });
+    }
+    sfx.potion();
   }
 
   updateDeath(dt: number): void {
     this.deadT += dt;
+    if (this.downed) this.bleed = Math.max(0, this.bleed - dt);
+    this.hitT = Math.max(0, this.hitT - dt * 4);
     this.pose(dt, G.time, 0, 1, 0, null);
-    this.model.kit.u.uDissolve.value = Math.min(0.85, Math.max(0, (this.deadT - 1.2) / 3));
+    // a downed player lies there whole; the dead fade
+    this.model.kit.u.uDissolve.value = this.downed ? 0 : Math.min(0.85, Math.max(0, (this.deadT - 1.2) / 3));
   }
 }
+
+/** seconds to get back up after a revive */
+const RISE = 0.6;

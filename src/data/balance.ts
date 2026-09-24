@@ -57,3 +57,20 @@ export const RUN = {
  *  bigger than it can hold breaks the guard: the character staggers for `guardBreak` seconds, able
  *  to move but not to block, attack or cast. */
 export const BLOCK = { recovery: 0.7, arc: 1.4, guardBreak: 1.5 };
+
+/** Co-op: party size, reviving a downed teammate, and how much more the arena throws at a party. */
+export const COOP = {
+  maxPlayers: 2,
+  /** seconds a downed player lasts before bleeding out, and a teammate's hold (E) to raise them */
+  bleedOut: 20,
+  reviveTime: 3,
+  /** how close the teammate must stand (m), the health they get back, and a moment untouchable */
+  reviveRange: 2.4,
+  reviveLife: 0.35,
+  reviveGuard: 1.5,
+  /** per player beyond the first: more foes in a wave, and more life on each */
+  budgetPerPlayer: 0.6,
+  lifePerPlayer: 0.35,
+  /** state updates sent per second */
+  sendRate: 20,
+};

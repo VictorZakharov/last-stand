@@ -24,7 +24,8 @@ export interface ProjectileOpts {
   speed: number;
   radius?: number;
   life?: number;
-  /** hostile projectiles hit the player, friendly ones hit enemies */
+  /** hostile projectiles hit the players, friendly ones hit enemies */
+
   hostile?: boolean;
   color?: THREE.ColorRepresentation;
   size?: number;
@@ -119,10 +120,11 @@ export class Projectile {
 
     // target collision
     if (this.hostile) {
-      const p = G.player;
-      if (p.alive && (p.pos.x - this.pos.x) ** 2 + (p.pos.z - this.pos.z) ** 2 < (p.radius + this.radius) ** 2) {
-        this.onHit?.(p, this);
-        return this.kill();
+      for (const p of G.players) {
+        if (p.active && (p.pos.x - this.pos.x) ** 2 + (p.pos.z - this.pos.z) ** 2 < (p.radius + this.radius) ** 2) {
+          this.onHit?.(p, this);
+          return this.kill();
+        }
       }
     } else {
       for (const e of G.enemies) {

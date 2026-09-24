@@ -26,6 +26,16 @@ Everything is procedural: models, animation, textures, VFX and sound are generat
 - If you die, **all unbanked spoils are lost**, never seen.
 - Equip what you find between runs; items roll random affixes across five rarities.
 
+### Play together
+
+Two players can hold the arena together over the internet. In the lobby, **Play together** → **Open a room** gives a short code and an invite link to send a friend; opening the link (or entering the code) joins the room. There's no server: the games connect directly to each other (WebRTC), after finding each other through free public relays.
+
+- Each player brings their own hero, gear and loadout, and keeps their own spoils: loot goes to whoever lands the kill (a boss pays everyone), and each bag stays hidden until its owner banks.
+- The host picks the battleground and starting wave and starts the run. A party faces more foes, each with more life.
+- After every wave everyone chooses: **Bank** leaves the run with your spoils right away; the next wave starts once everyone staying chose **Continue**. Players who left watch the rest of the run.
+- At 0 health you go **down** rather than die. A teammate can raise you by standing next to you and holding **E** (the **Revive** button on touch) for 3 seconds. If you're not raised within 20 seconds, or you're still down when the wave ends, you fall and lose your spoils. With nobody left standing, the run is lost for everyone still in it.
+- The game can't pause for one player: the pause menu only stops your hero. If the host leaves mid-run, the others keep what they found, as if banked.
+
 ### Install and play offline
 
 Last Stand is an installable web app. Use the **Install** link in the lobby (Chrome, Edge, Android), or *Add to Home Screen* on iOS. Once it has loaded, it also plays without a connection. A new version downloads in the background, and the lobby offers a reload when it's ready.
@@ -49,6 +59,7 @@ Keyboard and mouse:
 | Middle mouse (hold and drag) | Rotate the camera |
 | `V` | Change view (in a run): top-down, over the shoulder, first person. The close views use mouse look and aim at the crosshair |
 | `B` / `C` | Bank / Continue after a wave |
+| `E` (hold) | Revive a downed partner (co-op) |
 | `Esc` | Pause |
 
 Skills can be **remapped in the lobby**: drag a skill from the spellbook (the warrior's arsenal) onto any key (the same skill may sit on several keys), drag keys onto each other to swap. The loadout is saved in a cookie per class. You can also walk around and try every skill for free in the lobby.
@@ -95,6 +106,8 @@ Shields **block**: each hit has the shield's Block Chance to be blocked, absorbi
 - TypeScript (strict) + [Vite](https://vite.dev/)
 - Procedural textures (cobblestone, slabs, runes), procedural humanoid rigs and animation, CPU particles, pooled dynamic lights
 - WebAudio-synthesized sound effects
+- Co-op over WebRTC data channels, connected through public Nostr relays ([Trystero](https://github.com/dmotz/trystero))
+
 
 ## Development
 
@@ -116,6 +129,7 @@ npm run build      # type-check + production build into dist/
 | `src/world/` | The biome arenas (`crypt.ts`, `forest.ts`), shared props, collision |
 | `src/fx/` | Particles, effects, pooled lights |
 | `src/loot/` | Items, persistent profiles (one per class: stash / equipment / records), skill loadout |
+| `src/net/` | Co-op: rooms and links between the games, the players' state, the host's reports of the fight |
 | `src/ui/` | HUD, menus, tooltips, loadout editor |
 | `src/vendor/cape/` | Vendored cape-physics solver and its web worker (see its README and LICENSE) |
 

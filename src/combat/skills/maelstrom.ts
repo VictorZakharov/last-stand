@@ -107,7 +107,7 @@ const skill: InstantSkill = {
         if (tick >= TICK && t < def.duration - 0.2) {
           tick -= TICK;
           const inside = G.enemies.filter((e) => e.alive && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < def.radius + e.radius);
-          for (const e of inside) hitEnemy(e, def.damage * TICK, { tags: def.tags, type: 'lightning', silent: true });
+          for (const e of inside) hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'lightning', silent: true });
           const top = new THREE.Vector3(pos.x, 4, pos.z);
           const targets = inside.sort(() => Math.random() - 0.5).slice(0, 2);
           if (targets.length) {

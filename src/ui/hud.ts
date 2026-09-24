@@ -8,6 +8,8 @@ import { BIOMES } from '../data/biomes';
 import { bindTooltip, skillTooltip } from './tooltip';
 import { on } from '../events';
 import { buildTouchSkills } from './touch';
+import { partyDecision, waitingForParty } from './coop';
+import { isCoop } from '../net/role';
 
 import { SKILL_KEYS } from '../loot/loadout';
 import type { Player } from '../entities/player';
@@ -94,7 +96,14 @@ export function showDecision(): void {
     else bag.innerHTML = rarityChips(r.bag) + '<span class="chip sealed">revealed when you bank</span>';
     $('.dc-risk', box).innerHTML = `If you fall, <b>${r.bag.length} unbanked item${r.bag.length === 1 ? '' : 's'}</b> will be lost forever.`;
     const next = r.wave + 1;
-    $('.cont-label', box).textContent = next % WAVES.bossEvery === 0 ? `Face wave ${next} (${BIOMES[G.arena.biome].bossShort})` : `Continue to wave ${next}`;
+    // co-op: the next wave waits for everyone staying
+    const waiting = waitingForParty();
+    $('.cont-label', box).textContent = waiting ? 'Waiting for the others…'
+      : next % WAVES.bossEvery === 0 ? `Face wave ${next} (${BIOMES[G.arena.biome].bossShort})` : `Continue to wave ${next}`;
+    $<HTMLButtonElement>('.cont', box).disabled = waiting;
+    const party = partyDecision();
+    $('.dc-party', box).textContent = party;
+    $('.dc-party', box).classList.toggle('hidden', !party);
   };
   refresh();
   refreshDecision = refresh;
@@ -128,7 +137,7 @@ function setStyle(el: HTMLElement, prop: string, v: string): void {
   if (written.get(el) !== key) { el.style.setProperty(prop, v); written.set(el, key); }
 }
 const pct = (k: number): string => `${(k * 100).toFixed(1)}%`;
-let minimapT = 0;
+let minimapT = 0, partyT = 0;
 
 export function updateHud(): void {
   const p = G.player, r = G.run;
@@ -173,9 +182,14 @@ export function updateHud(): void {
   const ol = h('.obj-line');
   const txt = r.phase === 'countdown' ? `Wave ${r.wave} begins in ${Math.ceil(r.timer)}…`
     : r.phase === 'fighting' ? `Eliminate all enemies (${r.remaining})`
-    : r.phase === 'cleared' ? 'Bank your spoils or continue' : r.phase === 'banked' ? 'Spoils banked' : 'Fallen';
+    : r.phase === 'cleared' ? (G.player.active ? 'Bank your spoils or continue' : 'The others decide')
+    : G.player.out === 'banked' ? 'Spoils banked' : G.player.out === 'dead' ? 'Fallen' : 'The run is over';
+
   setText(h('.obj-line .obj-text'), txt);
   ol.classList.toggle('done', r.phase === 'cleared');
+
+  // co-op: the partners' choices after a wave come in as the host reports them
+  if (r.phase === 'cleared' && isCoop()) { partyT -= G.dt; if (partyT <= 0) { partyT = 0.25; refreshDecision?.(); } }
 
   updateTarget();
   // the minimap is a 200px canvas: 30 Hz is plenty
@@ -235,11 +249,15 @@ function drawMinimap() {
     c.fillStyle = e.boss ? '#c070ff' : e.hero ? '#ffb040' : '#ff3a30';
     c.beginPath(); c.arc(e.pos.x * S, e.pos.z * S, e.boss ? 5 : e.hero ? 3.5 : 2.2, 0, Math.PI * 2); c.fill();
   }
-  // player arrow
-  const p = G.player;
-  c.translate(p.pos.x * S, p.pos.z * S);
-  c.rotate(-p.facing + Math.PI);
-  c.fillStyle = '#6dffb0';
-  c.beginPath(); c.moveTo(0, -6); c.lineTo(4.5, 5); c.lineTo(0, 2.5); c.lineTo(-4.5, 5); c.closePath(); c.fill();
+  // player arrows: ours in green, co-op partners in blue
+  for (const p of [...G.players].reverse()) {
+    if (p.away || p.out === 'banked') continue;
+    c.save();
+    c.translate(p.pos.x * S, p.pos.z * S);
+    c.rotate(-p.facing + Math.PI);
+    c.fillStyle = p.local ? '#6dffb0' : p.alive ? '#6ab8ff' : '#56627a';
+    c.beginPath(); c.moveTo(0, -6); c.lineTo(4.5, 5); c.lineTo(0, 2.5); c.lineTo(-4.5, 5); c.closePath(); c.fill();
+    c.restore();
+  }
   c.restore();
 }

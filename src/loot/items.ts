@@ -5,6 +5,8 @@ import { pick, rand, randInt, weighted } from '../util';
 import type { BaseStats, ClassDef, DerivedStats, Item, Profile, RarityId, Slot, StatBlock, StatKey } from '../types';
 
 let uid = Date.now() % 1e6;
+/** A fresh item id (an item from a co-op host gets one here, so it can't clash with the stash). */
+export const newItemId = (): string => `i${(uid++).toString(36)}`;
 
 const STAT_KEYS = Object.keys(STATS) as StatKey[];
 /** Typed Object.entries for a stat block. */
@@ -69,7 +71,7 @@ export function makeItem({ slot = pick(SLOTS), rarity = 'common', ilvl = 1, cls 
     name = `${pre} ${base}${suf ? ' ' + suf : ''}`;
   }
 
-  return { id: `i${(uid++).toString(36)}`, slot, rarity, ilvl, name, base, stats };
+  return { id: newItemId(), slot, rarity, ilvl, name, base, stats };
 }
 
 export function rollDrop(cls: ClassDef, wave: number, bonus = 0): Item {

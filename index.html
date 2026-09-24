@@ -197,12 +197,18 @@
       <div class="dc-title">The wave is broken</div>
       <div class="dc-sub"></div>
       <div class="dc-bag"></div>
+      <div class="dc-party hidden"></div>
       <div class="dc-risk"></div>
       <div class="dc-buttons">
         <button class="btn bank"><span class="k">B</span> Bank spoils &amp; leave</button>
         <button class="btn primary cont"><span class="k">C</span> <span class="cont-label">Continue</span></button>
       </div>
     </div>
+    <!-- co-op (ui/coop.ts): partners' frames, being down, watching the rest of a run, reviving on touch -->
+    <div id="party"></div>
+    <div id="down-note" class="hidden"></div>
+    <div id="spectate" class="hidden"></div>
+    <button id="btn-revive" class="hidden">Revive</button>
     <div id="hurt-vignette"></div>
     <button id="btn-pause" class="touch-only" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
   </div>
@@ -256,9 +262,11 @@
           <button data-d="-1" aria-label="Earlier wave">&lsaquo;</button><span class="wv-val"></span><button data-d="1" aria-label="Later wave">&rsaquo;</button>
         </div>
       </div>
+      <div id="coop-bar" class="hidden" role="button" tabindex="0"></div>
       <button class="btn primary big" id="btn-start">Enter the Arena</button>
       <div class="menu-links">
         <button class="link" id="btn-help">How to play</button>
+        <button class="link" id="btn-coop">Play together</button>
         <button class="link hidden" id="btn-install">Install</button>
         <button class="link" id="btn-reset">Reset profile</button>
       </div>
@@ -414,6 +422,7 @@
     <div class="sm-sub"></div>
     <div class="sm-stats"></div>
     <div class="sm-items"></div>
+    <div class="sm-note"></div>
     <button class="btn primary big" id="btn-summary">Return to the Sanctuary</button>
   </div></div>
 
@@ -431,6 +440,7 @@
 
   <div id="pause" class="modal hidden"><div class="modal-box">
     <div class="sm-title">Paused</div>
+    <div class="pause-note hidden">Playing together, the game goes on: your hero stands still until you resume.</div>
     <div class="controls-help"></div>
     <div class="opt-row quality-row">Graphics
       <div class="seg" id="opt-quality">
@@ -445,7 +455,15 @@
     </div>
   </div></div>
 
+  <!-- co-op rooms (ui/coop.ts) -->
+  <div id="coop" class="modal hidden"><div class="modal-box">
+    <div class="sm-title">Play together</div>
+    <div class="coop-body"></div>
+    <button class="btn" id="btn-coop-close">Close</button>
+  </div></div>
+
   <!-- browsers with no install prompt (Safari, Firefox...): how to add the game to the home screen (ui/pwa.ts) -->
+
   <div id="install" class="modal hidden"><div class="modal-box">
     <div class="sm-title">Install Last Stand</div>
     <div class="help-text"><div class="install-steps"></div><p>Installed, it opens fullscreen from its own icon and plays offline.</p></div>
@@ -461,6 +479,7 @@
       <b class="gold">Continue</b> — face a harder wave with better loot.</p>
       <p>You only see the rarity of the loot you carry: what it is shows once you bank.</p>
       <p>If you die, <b class="red">all unbanked spoils are lost</b>. Every fifth wave, a boss comes.</p>
+      <p><b class="gold">Play together</b> (in the lobby) opens a room for a friend. Each keeps their own spoils; a fallen hero can be raised by a teammate before bleeding out.</p>
     </div>
     <button class="btn primary" id="btn-help-close">Got it</button>
   </div></div>

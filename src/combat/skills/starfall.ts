@@ -11,6 +11,7 @@ import { addShake } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import type { InstantSkill, Needs } from './types';
+import type { Player } from '../../entities/player';
 
 type Def = Needs<'damage' | 'shards' | 'radius' | 'scatter' | 'chill'>;
 import type { SkillDef } from '../../types';
@@ -27,7 +28,7 @@ const _up = new THREE.Vector3(0, 1, 0);
 const getMeteorMat = () => meteorMat ??= new THREE.MeshStandardMaterial({ color: 0x0b2a1c, emissive: new THREE.Color(COLOR), emissiveIntensity: 4, roughness: 0.2, flatShading: true });
 const streakMaterial = () => new THREE.MeshBasicMaterial({ color: new THREE.Color(COLOR).multiplyScalar(2.2), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8 });
 
-function dropMeteor(def: Def, landing: THREE.Vector3, delay: number): void {
+function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: number): void {
   const streakMat = streakMaterial();
   const meteor = new THREE.Mesh(meteorGeo, getMeteorMat());
   const streak = new THREE.Mesh(streakGeo, streakMat);
@@ -59,14 +60,14 @@ function dropMeteor(def: Def, landing: THREE.Vector3, delay: number): void {
         vx: -dir.x * 3 + rand(-0.6, 0.6), vy: -dir.y * 3 + rand(-0.6, 0.6), vz: -dir.z * 3 + rand(-0.6, 0.6),
         life: 0.45, size: rand(0.25, 0.55), sizeEnd: 0.02, color: col(i % 2 ? COLOR : CORE, 2.4), colorEnd: col(0x1040ff, 0.4), drag: 2,
       });
-      if (k >= 1) { landed = true; marker.cancel(); impact(def, landing); }
+      if (k >= 1) { landed = true; marker.cancel(); impact(player, def, landing); }
       return true;
     },
     dispose() { G.scene.remove(group); streakMat.dispose(); },
   });
 }
 
-function impact(def: Def, p: THREE.Vector3): void {
+function impact(player: Player, def: Def, p: THREE.Vector3): void {
   const at = new THREE.Vector3(p.x, p.y + 0.3, p.z);
   lightPillar(p, { color: CORE, intensity: 2.2, radius: 0.55, height: 10, life: 0.35 });
   shockwave(p, { color: COLOR, intensity: 1.3, from: 0.4, to: def.radius * 1.25, life: 0.35, y: p.y + 0.06 });
@@ -93,7 +94,7 @@ function impact(def: Def, p: THREE.Vector3): void {
   for (const e of G.enemies) {
     if (!e.alive) continue;
     if (Math.hypot(e.pos.x - p.x, e.pos.z - p.z) < def.radius + e.radius * 0.5) {
-      hitEnemy(e, def.damage, { tags: def.tags, type: 'arcane', chill: def.chill, knock: 4, from: p });
+      hitEnemy(e, def.damage, { by: player, tags: def.tags, type: 'arcane', chill: def.chill, knock: 4, from: p });
     }
   }
 }
@@ -101,7 +102,7 @@ function impact(def: Def, p: THREE.Vector3): void {
 const skill: InstantSkill = {
   anim: 'cast',
   warm: () => [new THREE.Mesh(meteorGeo, getMeteorMat()), new THREE.Mesh(streakGeo, streakMaterial())],
-  cast(_player, rawDef, target) {
+  cast(player, rawDef, target) {
     const def = rawDef as Def;
     sfx.starfallCall();
     const R = G.arena.radius - 1;
@@ -111,7 +112,7 @@ const skill: InstantSkill = {
       const len = Math.hypot(land.x, land.z);
       if (len > R) land.multiplyScalar(R / len);
       land.y = groundHeight(land.x, land.z);
-      dropMeteor(def, land, i * 0.14);
+      dropMeteor(player, def, land, i * 0.14);
     }
   },
 };
