@@ -104,6 +104,11 @@ export function initRenderer(container: HTMLElement) {
   composer.addPass(bloom);
   grade = new ShaderPass(GradeShader);
   composer.addPass(grade);
+  // the perf overlay times each pass on the GPU
+  for (const [label, pass] of [['sanitize', sanitize], ['bloom', bloom], ['grade', grade]] as const) {
+    const run = pass.render.bind(pass);
+    pass.render = (...a: Parameters<typeof run>) => { gpuMarks.mark(label); run(...a); };
+  }
 
   G.scene = scene; G.camera = camera; G.renderer = renderer;
   window.addEventListener('resize', fitViewport);
@@ -286,12 +291,17 @@ function clearBehind(p: THREE.Vector3, f: THREE.Vector3, max: number): number {
   return best;
 }
 
+/** Where the perf overlay's GPU timing moves on to the next part of the frame (a no-op unless it's on). */
+export const gpuMarks = { mark: (_label: string): void => {} };
+
 export function render(): void {
   // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
   grade.uniforms.uTime.value = G.time;
   grade.uniforms.uHurt.value = rig.hurt;
   gl.setRenderTarget(sceneRT);
+  gpuMarks.mark('scene');
   gl.render(G.scene, G.camera);
+
   composer.render();
 }

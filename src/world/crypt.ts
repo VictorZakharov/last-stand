@@ -47,29 +47,69 @@ function outsideDim<M extends THREE.Material>(m: M): M {
   return m;
 }
 
+/** World span (m) of one tile of the damp map; it repeats beyond, deep in the fog. */
+const DAMP_SPAN = 128;
+
+/**
+ * The floor's damp, brightness drift and moss patches, baked once into a tiling map: the value
+ * noise per pixel cost about a fifth of the frame's GPU time (the ground covers most of the screen).
+ * Channels: r = damp amount, g = brightness drift, b = moss. Each noise has a whole number of
+ * cells per tile, so the map repeats without a seam.
+ */
+function dampMap(size = 512): THREE.DataTexture {
+  const noise = (freq: number, seed: number) => {
+    const n = Math.max(1, Math.round(freq * DAMP_SPAN)), rng = mulberry(seed), lat = Float32Array.from({ length: n * n }, rng);
+    const at = (i: number, j: number) => lat[((j % n) * n) + (i % n)];
+    return (u: number, v: number): number => {
+      const x = u * n, y = v * n, i = Math.floor(x), j = Math.floor(y);
+      let fx = x - i, fy = y - j; fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+      const a = at(i, j) + (at(i + 1, j) - at(i, j)) * fx, b = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * fx;
+      return a + (b - a) * fy;
+    };
+  };
+  const smooth = (e0: number, e1: number, x: number) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+  const big = noise(0.13, 11), fine = noise(0.45, 12), drift = noise(0.05, 13), moss = noise(0.6, 14);
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0, k = 0; y < size; y++) for (let x = 0; x < size; x++, k += 4) {
+    const u = (x + 0.5) / size, v = (y + 0.5) / size;
+    data[k] = 255 * smooth(0.52, 0.72, big(u, v) * 0.65 + fine(u, v) * 0.35);
+    data[k + 1] = 255 * drift(u, v);
+    data[k + 2] = 255 * smooth(0.35, 0.7, moss(u, v));
+    data[k + 3] = 255;
+  }
+  const t = new THREE.DataTexture(data, size, size);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  t.needsUpdate = true;
+  return t;
+}
+
 /** Damp patches and a slow brightness drift over the cobbles in world space, so the floor doesn't
  * read as one tiled texture; the damp is darker and glossy, catching the moonlight. */
 function dampGround<M extends THREE.MeshStandardMaterial>(m: M): M {
+  const damp = { value: dampMap() };
   m.onBeforeCompile = (shader) => {
     dimOutside(shader);
+    shader.uniforms.uDamp = damp;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vDampXZ;')
       .replace('#include <project_vertex>', '#include <project_vertex>\nvDampXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         varying vec2 vDampXZ;
-        float dampH(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-        float dampN(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
-          return mix(mix(dampH(i), dampH(i+vec2(1,0)), f.x), mix(dampH(i+vec2(0,1)), dampH(i+vec2(1,1)), f.x), f.y); }
+        uniform sampler2D uDamp;
         float dampAmt;`)
       .replace('#include <map_fragment>', `#include <map_fragment>
-        float dampV = dampN(vDampXZ * 0.13 + 3.0) * 0.65 + dampN(vDampXZ * 0.45) * 0.35;
-        dampAmt = smoothstep(0.52, 0.72, dampV);
-        diffuseColor.rgb *= 0.82 + dampN(vDampXZ * 0.05) * 0.36;
+        vec3 dampS = texture2D(uDamp, vDampXZ * ${(1 / DAMP_SPAN).toFixed(6)}).rgb;
+        dampAmt = dampS.r;
+        diffuseColor.rgb *= 0.82 + dampS.g * 0.36;
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.5, 0.55, 0.68), dampAmt);
         // moss creeping in from the wall
-        float mossR = smoothstep(22.0, 28.0, length(vDampXZ)) * smoothstep(0.35, 0.7, dampN(vDampXZ * 0.6 + 11.0));
+        float mossR = smoothstep(22.0, 28.0, length(vDampXZ)) * dampS.b;
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.075, 0.035), mossR * 0.7);`)
+
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor = mix(roughnessFactor, 0.42, dampAmt);`);
   };
@@ -394,13 +434,15 @@ function fluted(g: THREE.BufferGeometry, axis: 'x' | 'y'): void {
 }
 
 /** Night sky dome: fog colour at the horizon (where the ground fades into it), a faint glow
- * just above, darker overhead, a moon and a sprinkle of stars. Unfogged, drawn behind everything. */
+ * just above, darker overhead, a moon and a sprinkle of stars. Unfogged, behind everything. */
+
 function buildSky(): THREE.Mesh {
   const fog = new THREE.Color(FOG);
   const mat = new THREE.ShaderMaterial({
     uniforms: { uFog: { value: new THREE.Vector3(fog.r, fog.g, fog.b) }, uMoon: { value: MOON_DIR } },
     side: THREE.BackSide, depthWrite: false, fog: false,
-    vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    // on the far plane, drawn after everything opaque: the depth test skips every covered pixel
+    vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); gl_Position.z = gl_Position.w; }`,
     fragmentShader: `
       varying vec3 vDir; uniform vec3 uFog; uniform vec3 uMoon;
       float h(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
@@ -418,7 +460,7 @@ function buildSky(): THREE.Mesh {
       }`,
   });
   const sky = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), mat);
-  sky.renderOrder = -1;
+  sky.renderOrder = 100;
   sky.frustumCulled = false;
   return sky;
 }
