@@ -2,7 +2,7 @@
 // Each effect is { update(dt) -> boolean alive, dispose() }.
 import * as THREE from 'three';
 import { G } from '../state';
-import { additive } from '../core/materials';
+import { additive, glowScale } from '../core/materials';
 import { radialDecal, runeCircle } from '../core/textures';
 import { rand } from '../util';
 import { groundHeight } from '../world/ground';
@@ -94,8 +94,9 @@ export function decal(pos: Pos, { type = 'scorch' as 'scorch' | 'frost', size = 
 
 // Enemy attack telegraph: outline ring + filling disc. Call cancel() to remove early.
 export function telegraph(pos: Pos, radius: number, duration: number, color: THREE.ColorRepresentation = 0xff3020): Effect & { cancel(): void; group: THREE.Group } {
-  const ringMat = additive(color, 1.6, 0.9);
-  const fillMat = additive(color, 0.8, 0.35);
+  const g0 = glowScale(color);
+  const ringMat = additive(color, 1.6 * g0, 0.9);
+  const fillMat = additive(color, 0.8 * g0, 0.35);
   const ring = new THREE.Mesh(GEO.ring, ringMat);
   const fill = new THREE.Mesh(GEO.disc, fillMat);
   const g = new THREE.Group();
@@ -110,7 +111,9 @@ export function telegraph(pos: Pos, radius: number, duration: number, color: THR
     update(dt: number) {
       t += dt; const k = Math.min(1, t / duration);
       fill.scale.set(radius * k, 1, radius * k);
-      ringMat.opacity = 0.6 + 0.4 * Math.sin(t * 20);
+      // a slow pulse: a large ring flashing 3+ times a second is a photosensitivity hazard
+      ringMat.opacity = 0.75 + 0.25 * Math.sin(t * 9);
+
       return !dead && k < 1;
     }, dispose,
   });
@@ -241,7 +244,7 @@ export function glyphMarker(pos: Pos, { radius = 1.2, color = 0xffffff, intensit
       const k = Math.min(1, t / life);
       m.scale.setScalar(radius * (1.3 - 0.3 * k));
       m.rotation.y += dt * 2.5;
-      mat.opacity = Math.min(1, t * 6) * (0.6 + 0.4 * Math.sin(t * 25));
+      mat.opacity = Math.min(1, t * 6) * (0.75 + 0.25 * Math.sin(t * 9));
       return !dead && t < life + 0.1;
     }, dispose,
   });

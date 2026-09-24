@@ -9,8 +9,11 @@ const VERT = /* glsl */`
   varying vec4 vColor;
   uniform float uScale;
   void main(){
-    vColor = aColor;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    // fade out right at the lens: in first person a burst around the player starts at the camera,
+    // where each point would cover much of the screen
+    vColor = vec4(aColor.rgb, aColor.a * smoothstep(0.4, 1.6, -mv.z));
+
     gl_PointSize = aSize * uScale / -mv.z;
     gl_Position = projectionMatrix * mv;
   }`;

@@ -10,6 +10,8 @@ import { spawnProjectile } from '../combat/projectiles';
 import { telegraph, shockwave, decal, groundFlash } from '../fx/effects';
 import { burst, debris, smokePuff } from '../fx/particles';
 import { flash } from '../fx/lights';
+import { glowScale } from '../core/materials';
+
 import { addShake } from '../core/renderer';
 import { sfx } from '../core/audio';
 import { rand } from '../util';
@@ -60,14 +62,14 @@ export const FX = {
     burst(new THREE.Vector3(x, 1.1, z), { count: 10, color: 0xff3020, speed: 4, life: 0.35, size: 0.2 });
   },
   slam(x: number, z: number, radius: number, color: number, boss: number) {
-    const pos = new THREE.Vector3(x, 0, z);
-    shockwave(pos, { color, intensity: 2.5, from: 0.5, to: radius * 1.15, life: 0.5 });
+    const pos = new THREE.Vector3(x, 0, z), g = glowScale(color);
+    shockwave(pos, { color, intensity: 2.5 * g, from: 0.5, to: radius * 1.15, life: 0.5 });
     shockwave(pos, { color: 0xffffff, intensity: 1, from: 0.2, to: radius * 0.8, life: 0.3 });
-    groundFlash(pos, { color, intensity: 2, radius: radius * 1.1, life: 0.4 });
+    groundFlash(pos, { color, intensity: 2 * g, radius: radius * 1.1, life: 0.4 });
     debris(pos, { count: 22, speed: radius * 2 });
     smokePuff(pos, { count: 10, color: 0x1a1612, size: 1.4, sizeEnd: 3.5, speed: radius });
     decal(pos, { type: 'scorch', size: radius * 1.1, life: 8 });
-    flash({ color, intensity: 40, distance: radius * 4, life: 0.35, pos: { x, y: 1.5, z } });
+    flash({ color, intensity: 40 * g, distance: radius * 4, life: 0.35, pos: { x, y: 1.5, z } });
     addShake(boss ? 0.8 : 0.45);
     sfx.slam();
   },
@@ -95,7 +97,7 @@ export const FX = {
     G.enemies.find((e) => e.id === id)?.onDeath.push(() => tg.cancel());
   },
   summon(x: number, z: number, color: number) {
-    shockwave({ x, z }, { color, intensity: 3, from: 1, to: 8, life: 0.8 });
+    shockwave({ x, z }, { color, intensity: 3 * glowScale(color), from: 1, to: 8, life: 0.8 });
     addShake(0.4);
   },
   cast() { sfx.witchCast(); },

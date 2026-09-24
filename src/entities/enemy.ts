@@ -11,7 +11,7 @@ import { addAnchored, removeAnchored } from '../ui/floaters';
 import { DamageMeter } from '../ui/damageMeter';
 import { burst, debris, smokePuff, col, particles } from '../fx/particles';
 import { flash } from '../fx/lights';
-import { additive } from '../core/materials';
+import { additive, glowScale } from '../core/materials';
 import { sfx } from '../core/audio';
 import { emit } from '../events';
 import { angleDamp, damp, pick, rand } from '../util';
@@ -145,7 +145,7 @@ export class Enemy {
     applyShadowDetail(this.obj);
     if (hero || this.boss) {
       const c = this.boss ? def.accent ?? 0x9a40ff : pick(HERO.auraColors);
-      this.auraMat = additive(c, 1.6, 0.8);
+      this.auraMat = additive(c, 1.6 * glowScale(c), 0.8);
       this.aura = new THREE.Mesh(auraGeo, this.auraMat);
       this.aura.scale.setScalar(this.radius * 1.6);
       this.aura.position.y = 0.05;
@@ -336,7 +336,8 @@ export class Enemy {
     const center = new THREE.Vector3(this.pos.x, this.height * 0.5, this.pos.z);
     burst(center, { count: this.boss ? 120 : 26, color: c, speed: this.boss ? 9 : 5, up: 3, life: 0.9, size: 0.3 });
     smokePuff(this.pos, { count: this.boss ? 20 : 5, size: this.radius * 1.5, sizeEnd: this.radius * 3 });
-    if (this.boss) flash({ color: this.def.accent ?? 0xb070ff, intensity: 80, distance: 20, life: 1.2, pos: center });
+    if (this.boss) { const a = this.def.accent ?? 0xb070ff; flash({ color: a, intensity: 80 * glowScale(a), distance: 20, life: 1.2, pos: center }); }
+
     sfx.enemyDie();
     this.model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = false; });
     emit('enemyKilled', this);

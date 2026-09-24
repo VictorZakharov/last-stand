@@ -34,8 +34,11 @@ function funnelMaterial(color: THREE.ColorRepresentation, speed: number, stripes
         float s = sin((vUv.x * ${stripes.toFixed(1)} + vUv.y * 2.5 - uTime * ${speed.toFixed(2)}) * 6.2831);
         float band = smoothstep(0.2, 1.0, s);
         float fade = smoothstep(0.0, 0.25, vUv.y) * (1.0 - smoothstep(0.6, 1.0, vUv.y));
-        float a = band * fade * uFade * 0.7;
-        gl_FragColor = vec4(uColor * 2.2 * a, a);
+        // the storm starts right in front of the caster: in first person the camera is inside the
+        // funnel, so its near walls fade out rather than stacking with the far ones
+        float a = band * fade * uFade * 0.7 * smoothstep(0.5, 3.5, 1.0 / gl_FragCoord.w);
+        gl_FragColor = vec4(uColor * 1.7 * a, a);
+
       }`,
   });
 }

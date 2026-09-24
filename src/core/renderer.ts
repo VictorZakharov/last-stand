@@ -41,6 +41,12 @@ const GradeShader = {
     }`,
 };
 
+/**
+ * Before bloom: kill NaN/Inf pixels, and ease very bright pixels towards a ceiling (above KNEE,
+ * brightness approaches KNEE + ROOM), keeping their hue. Stacked additive effects (a spell spammed,
+ * a boss slam) would otherwise add up to many times the brightest glow and bloom over half the screen.
+ */
+const KNEE = 3, ROOM = 5;
 const SanitizeShader = {
   uniforms: { tDiffuse: { value: null } },
   vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
@@ -49,7 +55,11 @@ const SanitizeShader = {
     void main(){
       vec4 c = texture2D(tDiffuse, vUv);
       bool bad = any(isnan(c)) || any(isinf(c)) || c.r != c.r || c.g != c.g || c.b != c.b;
-      gl_FragColor = bad ? vec4(0.0, 0.0, 0.0, 1.0) : clamp(c, 0.0, 64.0);
+      c = clamp(c, 0.0, 64.0);
+      float m = max(c.r, max(c.g, c.b)), over = m - ${KNEE.toFixed(1)};
+      if (over > 0.0) c.rgb *= (${KNEE.toFixed(1)} + over / (1.0 + over / ${ROOM.toFixed(1)})) / m;
+      gl_FragColor = bad ? vec4(0.0, 0.0, 0.0, 1.0) : c;
+
     }`,
 };
 
