@@ -85,6 +85,8 @@ export interface SkillDef {
   shards?: number;
   radius?: number;
   scatter?: number;
+  /** area damage at `radius`, as a share of a direct hit (eased in between) */
+  edge?: number;
   chill?: number;
   length?: number;
   width?: number;
