@@ -39,7 +39,7 @@ const mage: ClassDef = {
       key: 'mouse2', impl: 'starfall', name: 'Starfall',
       desc: 'Call down arcane crystals from the heavens on the target area, chilling survivors.',
       tags: ['arcane', 'cold'], cost: 38, cooldown: 3, castTime: 0.4,
-      damage: 150, shards: 3, radius: 2.5, scatter: 1.9, chill: 2.0,
+      damage: 150, shards: 3, radius: 2.5, core: 0.7, edge: 0.35, scatter: 1.9, chill: 2.0,
       icon: { glyph: '☄', color: '#8fd8ff' },
     },
     {

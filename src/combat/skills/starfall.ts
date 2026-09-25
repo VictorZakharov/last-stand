@@ -14,7 +14,7 @@ import { groundHeight } from '../../world/arena';
 import type { InstantSkill, Needs } from './types';
 import type { Player } from '../../entities/player';
 
-type Def = Needs<'damage' | 'shards' | 'radius' | 'scatter' | 'chill'>;
+type Def = Needs<'damage' | 'shards' | 'radius' | 'core' | 'edge' | 'scatter' | 'chill'>;
 import type { SkillDef } from '../../types';
 import { rand } from '../../util';
 
@@ -94,8 +94,11 @@ function impact(player: Player, def: Def, p: THREE.Vector3): void {
   sfx.starfallImpact();
   for (const e of G.enemies) {
     if (!e.alive) continue;
-    if (Math.hypot(e.pos.x - p.x, e.pos.z - p.z) < def.radius + e.radius * 0.5) {
-      hitEnemy(e, def.damage, { by: player, tags: def.tags, type: 'arcane', chill: def.chill, knock: 4, from: p });
+    const d = Math.hypot(e.pos.x - p.x, e.pos.z - p.z) - e.radius * 0.5;
+    if (d < def.radius) {
+      // a direct hit takes full damage; further out it falls to the edge's share
+      const k = d <= def.core ? 1 : 1 - (1 - def.edge) * (d - def.core) / (def.radius - def.core);
+      hitEnemy(e, def.damage * k, { by: player, tags: def.tags, type: 'arcane', chill: def.chill, knock: 4 * k, from: p });
     }
   }
 }
