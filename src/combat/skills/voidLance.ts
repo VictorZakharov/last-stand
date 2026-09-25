@@ -45,7 +45,14 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
         vUv = uv;
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         vec3 n = normalize(normalMatrix * normal);
-        vFres = abs(dot(n, normalize(-mv.xyz)));
+        // how far across the tube this point is, seen from the camera: the view direction flattened onto
+        // the tube's cross-section, so a beam seen along its length (the close views) keeps its bright
+        // middle instead of reading as all edge and fading away
+        vec3 axis = normalize(normalMatrix * vec3(0.0, 1.0, 0.0));
+        vec3 v = normalize(-mv.xyz);
+        vec3 across = v - axis * dot(v, axis);
+        float l = length(across);
+        vFres = l > 1e-3 ? abs(dot(n, across / l)) : 1.0;
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */`
@@ -159,7 +166,7 @@ const skill: ChannelSkill<LanceState> = {
     // the portal hangs in front of the chest, where the free hand pushes into it; seen through the
     // eyes, a smaller one in front of the hand in view (full size, it would fill the view)
     const eyes = player.local && viewMode() === 'first' && viewSettled();
-    if (eyes) _c.copy(hand).addScaledVector(_dir, 0.35);
+    if (eyes) _c.copy(hand).addScaledVector(_dir, 0.6);
     else _c.set(player.pos.x + _dir.x * 0.85, 1.7, player.pos.z + _dir.z * 0.85);
     const origin = _c;
 
@@ -169,7 +176,7 @@ const skill: ChannelSkill<LanceState> = {
     _v.crossVectors(_n, _u);
     st.portal.quaternion.setFromRotationMatrix(_m.makeBasis(_u, _v, _n));
     st.portal.position.copy(origin);
-    const radius = PORTAL_R * (eyes ? 0.4 : 1) * (0.2 + 0.8 * easeOutBack(open)) * (st.firing ? 0.9 + Math.sin(st.t * 9) * 0.03 : 1);
+    const radius = PORTAL_R * (eyes ? 0.22 : 1) * (0.2 + 0.8 * easeOutBack(open)) * (st.firing ? 0.9 + Math.sin(st.t * 9) * 0.03 : 1);
     st.portal.scale.setScalar(radius / RIM);
     st.portalMat.uniforms.uTime.value = G.time;
     st.portalMat.uniforms.uOpen.value = open;
@@ -217,8 +224,10 @@ const skill: ChannelSkill<LanceState> = {
     const fadeIn = Math.min(1, ft / 0.12);
     // it bursts out wide and settles
     const w = def.width * (0.9 + Math.sin(st.t * 30) * 0.08) * (1 + 0.5 * Math.max(0, 1 - ft / 0.25));
-    // the glow's radius is the width the lance hits (half of it): a wider soft tube reads as haze round it
-    for (const [m, mat, scale] of [[st.outer, st.outerMat, w * 0.5], [st.core, st.coreMat, w * 0.18]] as const) {
+    // top-down the glow's radius is the width the lance hits (half of it): a wider soft tube reads as a haze
+    // round it from above. Up close the beam is seen along its length, where that thin a glow is barely a line
+    const glow = player.local && viewMode() !== 'top' ? 1 : 0.5;
+    for (const [m, mat, scale] of [[st.outer, st.outerMat, w * glow], [st.core, st.coreMat, w * 0.36 * glow]] as const) {
       m.position.copy(origin);
       m.quaternion.setFromUnitVectors(_up, _dir);
       m.scale.set(scale, len, scale);
