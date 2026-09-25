@@ -85,9 +85,10 @@ const skill: ChannelSkill<LanceState> = {
     if (_dir.lengthSq() < 1e-4) _dir.set(Math.sin(player.facing), 0, Math.cos(player.facing));
     _dir.normalize();
 
-    // beam stops at obstacles (not enemies: it pierces)
+    // beam stops at obstacles that reach up to it (not enemies: it pierces)
     let len = def.length;
     for (const o of G.arena.obstacles) {
+      if (o.h <= origin.y) continue;
       const ox = o.x - origin.x, oz = o.z - origin.z;
       const proj = ox * _dir.x + oz * _dir.z;
       if (proj <= 0 || proj > len) continue;

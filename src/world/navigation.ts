@@ -55,10 +55,12 @@ const cellOf = (g: Grid, x: number, z: number): number => {
 const cx = (g: Grid, c: number): number => ((c % g.n) + 0.5) * CELL - g.half;
 const cz = (g: Grid, c: number): number => (Math.floor(c / g.n) + 0.5) * CELL - g.half;
 
-/** Is the straight line from a to b clear of obstacles for a body of this radius? */
-export function lineClear(ax: number, az: number, bx: number, bz: number, radius: number): boolean {
+/** Is the straight line from a to b clear of obstacles for a body of this radius? `above`: the line
+ *  runs at that height (a shot), so obstacles whose top is lower don't block it. */
+export function lineClear(ax: number, az: number, bx: number, bz: number, radius: number, above = -Infinity): boolean {
   const dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz;
   for (const o of G.arena.obstacles) {
+    if (o.h <= above) continue;
     const k = len2 > 1e-9 ? Math.min(1, Math.max(0, ((o.x - ax) * dx + (o.z - az) * dz) / len2)) : 0;
     const px = ax + dx * k - o.x, pz = az + dz * k - o.z, r = o.r + radius;
     if (px * px + pz * pz < r * r) return false;
