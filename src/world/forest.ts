@@ -373,6 +373,8 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
 
   return {
     look: {
+      // daylight: its ordinary scenes are about 2.3 times as bright as the night crypt's
+      adapt: 2.3,
       background: FOG,
       fog: { color: FOG, near: 42, far: 95 },
       hemi: { sky: 0xcfe4ff, ground: 0x4a5a2c, intensity: 1.4 },

@@ -32,6 +32,15 @@ const HUE_FROM = 1, HUE_TO = 1.6, GLARE_FROM = 0.05, GLARE_TO = 0.4;
  */
 const ADAPT = { top: [0.35, 0.11], lobby: [0.45, 0.13], third: [1.2, 0.26], first: [0.5, 0.13] } as const;
 const ADAPT_BASE = 0.04;
+/**
+ * The top view's large target is for the night crypt; a brighter biome's ordinary scenes sit higher (the
+ * daylit forest's 4x3 areas average about 2.3 times the crypt's), so the biome scales it (`BiomeLook.adapt`).
+ * At the crypt's target the forest sat right at it doing nothing, and any effect tipped the area round it
+ * over: all its ground compressed into a flat grey veil. (The small target is local enough, and the close
+ * views look at the sky, which needs their targets as they are.)
+ */
+let adaptScale = 1;
+export function setAdaptScale(k: number): void { adaptScale = k; }
 /** Bloom's blur levels, tightest to widest: the halo round an effect, and only a trace of the screen-wide veil. */
 const BLOOM_LEVELS = [0.56, 0.5, 0.35, 0.12, 0.03];
 const GradeShader = {
@@ -380,7 +389,7 @@ export function render(): void {
   grade.uniforms.uHurt.value = rig.hurt;
   // the adaptation targets glide with the view
   const target = (v: ViewMode, i: 0 | 1): number => v !== 'top' ? ADAPT[v][i]
-    : ADAPT.lobby[i] + (ADAPT.top[i] - ADAPT.lobby[i]) * clamp((rig.zoom - CAMERA.lobbyZoom) / (1 - CAMERA.lobbyZoom), 0, 1);
+    : ADAPT.lobby[i] + (ADAPT.top[i] * (i === 1 ? adaptScale : 1) - ADAPT.lobby[i]) * clamp((rig.zoom - CAMERA.lobbyZoom) / (1 - CAMERA.lobbyZoom), 0, 1);
   const e = ease(rig.blend), u = grade.uniforms;
   u.uSmall.value = target(rig.fromView, 0) + (target(rig.view, 0) - target(rig.fromView, 0)) * e;
   u.uLarge.value = target(rig.fromView, 1) + (target(rig.view, 1) - target(rig.fromView, 1)) * e;

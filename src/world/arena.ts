@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { groundHeight } from './ground';
+import { setAdaptScale } from '../core/renderer';
 import { bakeStaticShadows, type Biome, type BiomeBuilder } from './props';
 import { buildCrypt } from './crypt';
 import { buildForest } from './forest';
@@ -61,6 +62,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     moon.color.set(L.moon.color); moon.intensity = L.moon.intensity; moon.position.set(...L.moon.pos);
     scene.environment = L.env;
     scene.environmentIntensity = L.envIntensity;
+    setAdaptScale(L.adapt ?? 1);
   }
   setBiome(biome);
 

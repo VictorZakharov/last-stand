@@ -21,6 +21,8 @@ export interface BiomeLook {
   moon: { color: number; intensity: number; pos: [number, number, number] };
   env: THREE.Texture;
   envIntensity: number;
+  /** how much brighter the biome's ordinary scenes are than the crypt's: scales the top view's large adaptation target (default 1) */
+  adapt?: number;
 }
 
 /**
