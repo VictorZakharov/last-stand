@@ -1,5 +1,6 @@
 // Arcane Aegis: a hexagonal ward that absorbs incoming damage.
 import * as THREE from 'three';
+import { nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { addEffect, shockwave } from '../../fx/effects';
 import { burst } from '../../fx/particles';
@@ -11,7 +12,7 @@ const COLOR = new THREE.Color(0xa890ff);
 const geo = new THREE.IcosahedronGeometry(1, 4);
 
 function wardMaterial() {
-  return new THREE.ShaderMaterial({
+  return nearGlow(new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uHit: { value: 0 }, uFade: { value: 0 }, uColor: { value: COLOR } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
@@ -38,7 +39,7 @@ function wardMaterial() {
         float i = pow(fres, 2.2) * 1.4 + edge * (0.25 + shimmer * 0.25) + uHit * (0.6 + edge);
         gl_FragColor = vec4(uColor * i * 1.6 * uFade, i * uFade);
       }`,
-  });
+  }));
 }
 
 const skill: InstantSkill = {

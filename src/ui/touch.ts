@@ -88,6 +88,8 @@ export function initTouch(): void {
   };
   pad.addEventListener('pointerup', endStick);
   pad.addEventListener('pointercancel', endStick);
+  // the pad hides when the hero falls: the finger's release never reaches it, only the capture is lost
+  pad.addEventListener('lostpointercapture', endStick);
 
   // pinch to zoom, with two fingers anywhere but the buttons
   const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);

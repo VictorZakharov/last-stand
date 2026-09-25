@@ -58,6 +58,11 @@ export function flash({ color = 0xffffff, intensity = 20, distance = 10, life = 
   return slot;
 }
 
+/** Like flash, but only takes a free light (null when all are busy): for many small lights, like a volley's bolts. */
+export function flashFree(o: FlashOpts): LightSlot | null {
+  return lights.some((l) => l.life <= 0) ? flash(o) : null;
+}
+
 export function release(slot: LightSlot | null | undefined): void { if (slot) slot.life = 0; }
 
 export function updateLights(dt: number): void {

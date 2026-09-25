@@ -187,7 +187,8 @@ export interface EnemyDef {
   slamRadius?: number;
   /** glow scales the bolt's brightness (default 1) and core its visible size as a fraction of radius (default
    *  0.7); pale colours bloom far more than deep ones, and a boss fires a dozen at once */
-  projectile?: { speed: number; radius: number; color: number; trail?: number; glow?: number; core?: number };
+  /** `look: 'spore'`: a swirling spore orb trailing spores and smoke (`trail` is the smoke's colour) instead of a glowing bolt */
+  projectile?: { speed: number; radius: number; color: number; trail?: number; glow?: number; core?: number; look?: 'spore' };
   /** boss colour: aura, slam telegraph and shockwaves, death flash */
   accent?: number;
   /** walk cycle speed per unit moved (default 2.3; small, skittering enemies use more) */

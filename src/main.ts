@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { G } from './state';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, viewMode, viewSettled, VIEWS, type ViewMode } from './core/renderer';
 import { CAMERA, LOBBY } from './data/balance';
-import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt } from './core/input';
+import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt, releaseInput } from './core/input';
 import { initAudio } from './core/audio';
 import { updateTimers } from './core/timers';
 import { particles } from './fx/particles';
@@ -115,6 +115,7 @@ async function boot() {
 function enterMenu() {
   G.mode = 'menu';
   G.paused = G.menuOpen = G.player.idle = false;
+  releaseInput();
   runOver = false;
   showHud(false);
   showPause(false);
@@ -333,8 +334,12 @@ function update(dt: number): void {
   setViewShift(vs.x, vs.y);
   const focus = focusPlayer();
   updateCamera(dt, focus.pos, focus.model.height);
-  // through the eyes the body would fill the view (it still casts, animates and blocks)
-  G.player.model.root.visible = !(focus === G.player && viewMode() === 'first' && viewSettled());
+  // through the eyes the body would fill the view (it still casts, animates and blocks), and so would
+  // the cape, which lives in the world beside it
+  const eyes = focus === G.player && viewMode() === 'first' && viewSettled();
+  G.player.model.root.visible = !eyes;
+  for (const o of G.player.model.worldObjects ?? []) o.visible = !eyes && G.player.obj.visible;
+
 
 
   G.arena.update(dt, G.time); perfLap('arena');

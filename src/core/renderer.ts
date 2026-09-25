@@ -6,27 +6,71 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
 import type { QualityPreset } from '../data/quality';
 
+/** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept). */
+const HI_KNEE = 1, HI_CAP = 2;
+/**
+ * Tone mapping keeps the colour of a bright pixel (brightest channel over HUE_FROM, fully over HUE_TO)
+ * in a large glare (GLARE_FROM..GLARE_TO): a big bright area stays its colour, a small hot core may go white.
+ */
+const HUE_FROM = 1, HUE_TO = 1.6, GLARE_FROM = 0.05, GLARE_TO = 0.4;
+/**
+ * The eye adapts to how bright an area is, at two scales: where the average light over a small area (a 16x9
+ * grid of the frame) or a large one (4x3) is over its target, the light above ADAPT_BASE is compressed on a
+ * power curve that brings that average down to the target. The dim part of every pixel is kept, so the ground
+ * round a bright effect never darkens into a shadow, and a curve (not a scale) keeps a glow's falloff instead
+ * of flattening it into a disc. Measured after bloom, which then still sees the full light (the eye sees the
+ * halos too). The targets [small, large] sit just above each view's ordinary scenes (the close views see the
+ * ground the staff light lights up close; the top view's is for its full distance and eases towards `lobby`
+ * as it zooms in), which they leave untouched.
+ */
+const ADAPT = { top: [0.35, 0.11], lobby: [0.45, 0.13], third: [1.2, 0.26], first: [0.5, 0.13] } as const;
+const ADAPT_BASE = 0.04;
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
     uTime: { value: 0 },
     uHurt: { value: 0 },
     uVignette: { value: 1.05 },
+    tGlare: { value: null as THREE.Texture | null },
+    tSmall: { value: null as THREE.Texture | null }, tLarge: { value: null as THREE.Texture | null },
+    uSmall: { value: ADAPT.top[0] }, uLarge: { value: ADAPT.top[1] },
   },
   vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse; uniform float uTime; uniform float uHurt; uniform float uVignette;
+    uniform sampler2D tDiffuse; uniform float uTime; uniform float uHurt; uniform float uVignette; uniform sampler2D tGlare;
+    uniform sampler2D tSmall; uniform sampler2D tLarge; uniform float uSmall; uniform float uLarge;
     varying vec2 vUv;
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
+    // the power of the light over the base that brings an area's average down to its target
+    float adapt(float avg, float target){ return avg > target ? log(target / ${ADAPT_BASE.toFixed(3)}) / log(avg / ${ADAPT_BASE.toFixed(3)}) : 1.0; }
     void main(){
       vec4 c = texture2D(tDiffuse, vUv);
-      // tone mapping + sRGB here instead of a separate OutputPass (renderer settings, drawn to the screen)
-      c.rgb = toneMapping(c.rgb);
+      // the eye adapts to a bright area, so a big effect doesn't wash out the view
+      const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
+      float g = min(adapt(dot(texture2D(tSmall, vUv).rgb, LUM), uSmall), adapt(dot(texture2D(tLarge, vUv).rgb, LUM), uLarge));
+      float lum = dot(c.rgb, LUM);
+      if (lum > ${ADAPT_BASE.toFixed(3)}) c.rgb *= ${ADAPT_BASE.toFixed(3)} * pow(lum / ${ADAPT_BASE.toFixed(3)}, g) / lum;
+      // glare (bloom's blurriest level): how large a bright spot is
+      vec3 gl = texture2D(tGlare, vUv).rgb;
+      float glare = max(gl.r, max(gl.g, gl.b));
+      // the scene and its bloom, compressed like the eye: the brightest channel eases towards a
+      // ceiling and the others keep their ratio to it, so a stack of lights stops adding up
+      float m = max(c.r, max(c.g, c.b));
+      if (m > ${HI_KNEE.toFixed(2)}) c.rgb *= (${HI_KNEE.toFixed(2)} + ${(HI_CAP - HI_KNEE).toFixed(2)} * (1.0 - exp(-(m - ${HI_KNEE.toFixed(2)}) / ${(HI_CAP - HI_KNEE).toFixed(2)}))) / m;
+      // tone mapping + sRGB here instead of a separate OutputPass (renderer settings, drawn to the screen).
+      // Per channel it squeezes the brightest channel most, so any bright colour ends up white. The eye
+      // adapts to a large bright area and sees its colour, so there pixels are mapped by their brightest
+      // channel instead, keeping their colour; a small hot core may still go white, and ordinary pixels are as before
+      m = max(max(c.r, max(c.g, c.b)), 1e-4);
+      vec3 hue = c.rgb / m * toneMapping(vec3(m)).g;
+      float keep = smoothstep(${HUE_FROM.toFixed(2)}, ${HUE_TO.toFixed(2)}, m) * smoothstep(${GLARE_FROM.toFixed(2)}, ${GLARE_TO.toFixed(2)}, glare);
+      c.rgb = mix(toneMapping(c.rgb), hue, keep);
       c = linearToOutputTexel(c);
       vec2 d = vUv - 0.5;
       float r = dot(d, d);
@@ -40,6 +84,39 @@ const GradeShader = {
       gl_FragColor = c;
     }`,
 };
+
+/** The frame's average light (box downsamples to one pixel), for the grade's adaptation. */
+class AreaPass extends Pass {
+  private steps = [[64, 36], [16, 9], [4, 3]].map(([w, h]) => new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, depthBuffer: false }));
+  readonly small = this.steps[1];
+  readonly large = this.steps[2];
+  private mat = new THREE.ShaderMaterial({
+    uniforms: { tDiffuse: { value: null as THREE.Texture | null }, uStep: { value: new THREE.Vector2() } },
+    vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+    // 8x8 bilinear taps spread over the output texel: a box average of its footprint
+    fragmentShader: /* glsl */`
+      uniform sampler2D tDiffuse; uniform vec2 uStep; varying vec2 vUv;
+      void main(){
+        vec3 s = vec3(0.0);
+        for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++)
+          { vec3 v = texture2D(tDiffuse, vUv + (vec2(float(x), float(y)) - 3.5) * uStep).rgb; s += any(isnan(v)) || any(isinf(v)) ? vec3(0.0) : min(v, vec3(64.0)); }
+        gl_FragColor = vec4(s / 64.0, 1.0);
+      }`,
+    depthTest: false, depthWrite: false,
+  });
+  private quad = new FullScreenQuad(this.mat);
+  constructor() { super(); this.needsSwap = false; }
+  override render(r: THREE.WebGLRenderer, _w: THREE.WebGLRenderTarget, read: THREE.WebGLRenderTarget): void {
+    let src = read;
+    for (const dst of this.steps) {
+      this.mat.uniforms.tDiffuse.value = src.texture; src = dst;
+      // taps an eighth of an output texel apart
+      this.mat.uniforms.uStep.value.set(1 / dst.width / 8, 1 / dst.height / 8);
+      r.setRenderTarget(dst);
+      this.quad.render(r);
+    }
+  }
+}
 
 const SanitizeShader = {
   uniforms: { tDiffuse: { value: null } },
@@ -63,6 +140,7 @@ const rig = {
   yaw: 0,          // rotation around the focus; 0 looks toward -Z
   targetYaw: 0,
   view: 'top' as ViewMode,
+  fromView: 'top' as ViewMode,
   look: 0,         // close views: pitch below the horizon
   boom: CAMERA.third.boom,
   targetBoom: CAMERA.third.boom,
@@ -102,10 +180,16 @@ export function initRenderer(container: HTMLElement) {
   composer.addPass(sanitize);
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.85, 0.55, 0.9);
   composer.addPass(bloom);
+  // after bloom: the eye adapts to all the light that reaches it, halos included
+  const area = new AreaPass();
+  composer.addPass(area);
   grade = new ShaderPass(GradeShader);
+  grade.uniforms.tGlare.value = bloom.renderTargetsVertical[bloom.nMips - 1].texture;
+  grade.uniforms.tSmall.value = area.small.texture;
+  grade.uniforms.tLarge.value = area.large.texture;
   composer.addPass(grade);
   // the perf overlay times each pass on the GPU
-  for (const [label, pass] of [['sanitize', sanitize], ['bloom', bloom], ['grade', grade]] as const) {
+  for (const [label, pass] of [['sanitize', sanitize], ['area', area], ['bloom', bloom], ['grade', grade]] as [string, Pass][]) {
     const run = pass.render.bind(pass);
     pass.render = (...a: Parameters<typeof run>) => { gpuMarks.mark(label); run(...a); };
   }
@@ -187,7 +271,7 @@ export function setView(v: ViewMode): void {
   rig.fromPos.copy(cam.position); rig.fromQuat.copy(cam.quaternion); rig.fromFov = cam.fov;
   rig.blend = 0;
   if (v !== 'top') rig.look = CAMERA[v].pitch;
-  rig.view = v;
+  rig.fromView = rig.view; rig.view = v;
 }
 /** The first-person view is still gliding in (the body stays visible until the camera reaches the eyes). */
 export const viewSettled = (): boolean => rig.blend >= 1;
@@ -299,9 +383,14 @@ export function render(): void {
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
   grade.uniforms.uTime.value = G.time;
   grade.uniforms.uHurt.value = rig.hurt;
+  // the adaptation targets glide with the view
+  const target = (v: ViewMode, i: 0 | 1): number => v !== 'top' ? ADAPT[v][i]
+    : ADAPT.lobby[i] + (ADAPT.top[i] - ADAPT.lobby[i]) * clamp((rig.zoom - CAMERA.lobbyZoom) / (1 - CAMERA.lobbyZoom), 0, 1);
+  const e = ease(rig.blend), u = grade.uniforms;
+  u.uSmall.value = target(rig.fromView, 0) + (target(rig.view, 0) - target(rig.fromView, 0)) * e;
+  u.uLarge.value = target(rig.fromView, 1) + (target(rig.view, 1) - target(rig.fromView, 1)) * e;
   gl.setRenderTarget(sceneRT);
   gpuMarks.mark('scene');
   gl.render(G.scene, G.camera);
-
   composer.render();
 }

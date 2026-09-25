@@ -21,9 +21,11 @@ const skill: InstantSkill = {
     shockwave(c, { color: ICE, intensity: 3, from: 0.5, to: def.radius, life: 0.45 });
     shockwave(c, { color: 0xffffff, intensity: 2, from: 0.3, to: def.radius * 0.7, life: 0.3 });
     groundFlash(c, { color: ICE, intensity: 2.5, radius: def.radius, life: 0.5 });
-    iceSpikes(c, def.radius * 0.95, 42);
+    // none through the caster (in first person they'd rise through the camera)
+    iceSpikes(c, def.radius * 0.95, 42, 1.2);
     decal(c, { type: 'frost', size: def.radius * 1.05, life: 6, opacity: 0.8 });
-    flash({ color: ICE, intensity: 60, distance: 16, life: 0.5, pos: { x: c.x, y: 2, z: c.z } });
+    // above the caster's head: in first person it would sit at the camera and burn what's near white
+    flash({ color: ICE, intensity: 60, distance: 18, life: 0.5, pos: { x: c.x, y: 4, z: c.z } });
     addShake(0.3);
     sfx.nova();
     for (let i = 0; i < 160; i++) {

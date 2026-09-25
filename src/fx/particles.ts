@@ -2,6 +2,7 @@
 // and one alpha-blended pool (smoke, dust, debris).
 import * as THREE from 'three';
 import { G } from '../state';
+import { nearGlow } from '../core/materials';
 
 const VERT = /* glsl */`
   attribute float aSize;
@@ -9,8 +10,10 @@ const VERT = /* glsl */`
   varying vec4 vColor;
   uniform float uScale;
   void main(){
-    vColor = aColor;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    // fade out near the lens: in first person a burst around the player starts at the camera, a bolt's
+    // trail stacks along the view as it flies at it, and each point there covers much of the screen
+    vColor = vec4(aColor.rgb, aColor.a * smoothstep(0.5, 3.5, -mv.z));
     gl_PointSize = aSize * uScale / -mv.z;
     gl_Position = projectionMatrix * mv;
   }`;
@@ -82,6 +85,8 @@ class Pool {
       uniforms: { uScale: { value: 400 }, uSoft: { value: soft } },
       transparent: true, depthWrite: false, blending,
     });
+    // glowing (additive) particles dim with distance like every effect glow
+    if (blending === THREE.AdditiveBlending) nearGlow(this.mat);
     this.points = new THREE.Points(geo, this.mat);
     this.points.frustumCulled = false;
     this.points.renderOrder = blending === THREE.AdditiveBlending ? 20 : 10;

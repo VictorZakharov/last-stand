@@ -2,7 +2,7 @@
 // Each effect is { update(dt) -> boolean alive, dispose() }.
 import * as THREE from 'three';
 import { G } from '../state';
-import { additive } from '../core/materials';
+import { additive, nearGlow } from '../core/materials';
 import { radialDecal, runeCircle } from '../core/textures';
 import { rand } from '../util';
 import { groundHeight } from '../world/ground';
@@ -110,7 +110,8 @@ export function telegraph(pos: Pos, radius: number, duration: number, color: THR
     update(dt: number) {
       t += dt; const k = Math.min(1, t / duration);
       fill.scale.set(radius * k, 1, radius * k);
-      ringMat.opacity = 0.6 + 0.4 * Math.sin(t * 20);
+      // a slow pulse: a large ring flashing 3+ times a second is a photosensitivity hazard
+      ringMat.opacity = 0.75 + 0.25 * Math.sin(t * 9);
       return !dead && k < 1;
     }, dispose,
   });
@@ -163,7 +164,7 @@ export function lightning(from: THREE.Vector3, to: THREE.Vector3, { color = 0x9f
 }
 
 // Ice spikes erupting from the ground in a radius.
-export function iceSpikes(center: Pos, radius: number, count = 28): Effect {
+export function iceSpikes(center: Pos, radius: number, count = 28, inner = 0): Effect {
   const mat = new THREE.MeshPhysicalMaterial({
     color: 0xbfe8ff, emissive: 0x3aa0ff, emissiveIntensity: 0.6, roughness: 0.15, metalness: 0,
     transparent: true, opacity: 0.9, clearcoat: 1, flatShading: true,
@@ -172,7 +173,7 @@ export function iceSpikes(center: Pos, radius: number, count = 28): Effect {
   inst.castShadow = true;
   const data: { x: number; z: number; s: number; delay: number; tilt: number; rot: number; tilt2: number }[] = [];
   for (let i = 0; i < count; i++) {
-    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * radius;
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(inner * inner + Math.random() * (radius * radius - inner * inner));
     data.push({ x: center.x + Math.cos(a) * r, z: center.z + Math.sin(a) * r, s: rand(0.5, 1.3), delay: (r / radius) * 0.25, tilt: rand(-0.5, 0.5), rot: rand(0, 6.28), tilt2: rand(-0.5, 0.5) });
   }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
@@ -229,7 +230,7 @@ function crackTexture(): THREE.CanvasTexture {
 
 /** Small rotating rune glyph marking a target spot. Returns an effect with cancel(). */
 export function glyphMarker(pos: Pos, { radius = 1.2, color = 0xffffff, intensity = 1.2, life = 0.5 } = {}) {
-  const mat = new THREE.MeshBasicMaterial({ map: TEX.rune, color: new THREE.Color(color).multiplyScalar(intensity), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 });
+  const mat = nearGlow(new THREE.MeshBasicMaterial({ map: TEX.rune, color: new THREE.Color(color).multiplyScalar(intensity), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 }));
   const m = new THREE.Mesh(GEO.plane, mat);
   m.position.set(pos.x, floor(pos) + 0.05, pos.z);
   const dispose = tracked(m, [mat]);
@@ -241,7 +242,7 @@ export function glyphMarker(pos: Pos, { radius = 1.2, color = 0xffffff, intensit
       const k = Math.min(1, t / life);
       m.scale.setScalar(radius * (1.3 - 0.3 * k));
       m.rotation.y += dt * 2.5;
-      mat.opacity = Math.min(1, t * 6) * (0.6 + 0.4 * Math.sin(t * 25));
+      mat.opacity = Math.min(1, t * 6) * (0.75 + 0.25 * Math.sin(t * 9));
       return !dead && t < life + 0.1;
     }, dispose,
   });
@@ -270,8 +271,8 @@ export function lightPillar(pos: Pos, { color = 0xffffff, intensity = 3, radius 
 
 /** Glowing cracks in the floor that cool down and fade. */
 export function crackDecal(pos: Pos, { size = 3, color = 0xffffff, intensity = 2.5, life = 3 } = {}) {
-  const mat = new THREE.MeshBasicMaterial({ map: TEX.cracks, color: new THREE.Color(color).multiplyScalar(intensity), transparent: true,
-    blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
+  const mat = nearGlow(new THREE.MeshBasicMaterial({ map: TEX.cracks, color: new THREE.Color(color).multiplyScalar(intensity), transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
   const m = new THREE.Mesh(GEO.plane, mat);
   m.position.set(pos.x, floor(pos) + 0.04, pos.z);
   m.rotation.y = Math.random() * Math.PI * 2;

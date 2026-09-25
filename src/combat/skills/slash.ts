@@ -1,12 +1,13 @@
 // Swept blade arcs for melee skills: a flat ring segment on the ground plane whose
 // glowing head sweeps across it, leaving a fading trail. Shared by the warrior's skills.
 import * as THREE from 'three';
+import { nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { addEffect } from '../../fx/effects';
 import type { Effect } from '../../types';
 
 export function slashMaterial(color: THREE.ColorRepresentation): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+  return nearGlow(new THREE.ShaderMaterial({
     uniforms: {
       uColor: { value: new THREE.Color(color) }, uProg: { value: 0 }, uFade: { value: 1 }, uDir: { value: 1 },
       uStart: { value: 0 }, uLen: { value: 1 }, uInner: { value: 0.3 }, uEven: { value: 0 },
@@ -34,7 +35,7 @@ export function slashMaterial(color: THREE.ColorRepresentation): THREE.ShaderMat
         float i = trail * edge * tips * uFade;
         gl_FragColor = vec4(mix(uColor, vec3(1.0), trail * r * 0.3) * i * 1.3, i);
       }`,
-  });
+  }));
 }
 
 /** Ring segment of `arc` radians centred on local +Z after laying it flat, outer radius 1. */

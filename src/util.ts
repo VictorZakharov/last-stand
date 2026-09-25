@@ -67,3 +67,11 @@ export function makeFbm(seed: number, basePeriod: number, octaves = 4): Noise2D 
     return sum / norm;
   };
 }
+
+/**
+ * A hit's flash on a body (`hitT`, faded by its owner): full at most every 0.7s, a faint tick between,
+ * so a stream of hits can't strobe a body white (3+ flashes a second is a photosensitivity hazard).
+ */
+export function hitFlash(o: { hitT: number; flashAt: number }, now: number): void {
+  if (now - o.flashAt >= 0.7) { o.hitT = 1; o.flashAt = now; } else o.hitT = Math.max(o.hitT, 0.25);
+}

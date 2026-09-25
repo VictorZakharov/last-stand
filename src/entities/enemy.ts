@@ -14,7 +14,7 @@ import { flash } from '../fx/lights';
 import { additive } from '../core/materials';
 import { sfx } from '../core/audio';
 import { emit } from '../events';
-import { angleDamp, damp, pick, rand } from '../util';
+import { angleDamp, damp, hitFlash, pick, rand } from '../util';
 import { applyShadowDetail } from '../core/quality';
 import type { DamageType, EnemyDef, Model, XZ } from '../types';
 import type { Player } from './player';
@@ -89,6 +89,7 @@ export class Enemy {
   frozenAt = 0;
   chill = 0;
   hitT = 0;
+  flashAt = -1;
   deadT = -1;
   phase = Math.random() * 10;
   /** scratch space for the AI */
@@ -308,7 +309,7 @@ export class Enemy {
   takeDamage(amount: number, info: DamageInfo = {}): number {
     if (!this.alive) return 0;
     if (!this.meter) this.life -= amount;
-    this.hitT = 1;
+    hitFlash(this, G.time);
     if (info.by) this.killer = info.by;
     if (info.chill) this.chill = Math.max(this.chill, info.chill);
     if (info.freeze) this.frozen = Math.max(this.frozen, info.freeze * (1 - (this.def.freezeResist || 0)));
