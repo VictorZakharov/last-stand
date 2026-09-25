@@ -112,6 +112,96 @@ export function rag(w: number, h: number, seed = 1, tears = 3): THREE.BufferGeom
   return g;
 }
 
+/** An open robe cone (top radius r0 at y = 0, bottom r1 at -h) with folds and a torn, uneven hem. */
+export function tatteredSkirt(r0: number, r1: number, h: number, seed: number, radial = 28): THREE.BufferGeometry {
+  if (replaying) return NONE;
+  const r = mulberry(seed), geo = new THREE.CylinderGeometry(r0, r1, h, radial, 8, true).translate(0, -h / 2, 0);
+  const cuts = Array.from({ length: radial + 1 }, () => r());
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), k = -y / h;
+    const a = Math.atan2(z, x), c = cuts[Math.round(((a / (Math.PI * 2)) + 1) % 1 * radial)];
+    // folds, and the lower edge torn into tongues of different lengths
+    const fold = 1 + Math.sin(a * 9 + seed) * 0.06 * k;
+    p.setXYZ(i, x * fold, k > 0.99 ? y + h * 0.55 * c * c : y, z * fold);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * A leaf blade growing along +Y from its stalk at the origin, facing +Z: `len` long, `w` wide, its halves
+ * folded up along the midrib by `fold` and the blade curling back (-Z) by `curl`. Draw it double-sided.
+ */
+export function leaf(len: number, w: number, fold = 0.35, curl = 0.3, segs = 6): THREE.BufferGeometry {
+  if (replaying) return NONE;
+  const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs, half = (w / 2) * Math.sin(Math.PI * Math.pow(t, 0.75)), y = len * t, z = -curl * len * t * t;
+    for (const k of [-1, 0, 1]) { pos.push(k * half, y, z + Math.abs(k) * fold * half); uv.push(k * 0.5 + 0.5, t); }
+  }
+  for (let i = 0; i < segs; i++) for (let k = 0; k < 2; k++) {
+    const a = i * 3 + k, b = a + 3;
+    idx.push(a, a + 1, b, a + 1, b + 1, b);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** A fern frond along +Y: an arching stem with paired leaflets shrinking to the tip; arches towards +Z. */
+export function frond(len: number, pairs = 7, arch = 0.5, seed = 1): THREE.BufferGeometry {
+  if (replaying) return NONE;
+  const r = mulberry(seed), parts: THREE.BufferGeometry[] = [];
+  const at = (t: number) => V3(0, len * t, arch * len * t * t);
+  parts.push(taperTube([at(0), at(0.33), at(0.66), at(1)], (t) => len * 0.02 * (1 - t * 0.8), 8, 4));
+  for (let i = 1; i <= pairs; i++) {
+    const t = i / (pairs + 1), p = at(t), s = 1 - t * 0.75, tilt = Math.atan2(2 * arch * t, 1);
+    for (const side of [-1, 1]) {
+      const l = leaf(len * 0.26 * s, len * 0.07 * s, 0.3, 0.3, 3);
+      l.rotateZ(-side * (1.05 + (r() - 0.5) * 0.2)).rotateX(tilt).translate(p.x, p.y, p.z);
+      parts.push(l.index ? l.toNonIndexed() : l);
+    }
+  }
+  const g = mergeGeometries(parts.map((x) => (x.index ? x.toNonIndexed() : x)))!;
+  for (const x of parts) x.dispose();
+  return g;
+}
+
+/** A strand winding round the Y axis from y = 0 down to -len: a vine or root wrapping a limb or trunk. */
+export function twist(len: number, rad: number, thick: number, turns: number, phase = 0): THREE.BufferGeometry {
+  if (replaying) return NONE;
+  const pts: THREE.Vector3[] = [];
+  for (let i = 0; i <= 8; i++) { const t = i / 8, a = phase + t * turns * Math.PI * 2; pts.push(V3(Math.cos(a) * rad, -len * t, Math.sin(a) * rad)); }
+  return taperTube(pts, (t) => thick * (1 - t * 0.5), 12, 4);
+}
+
+/**
+ * A branching limb: a bent tube from `from` along `dir`, forking `depth` more times. Pushes each tube into
+ * `out` and every twig end into `tips` (for leaves or blossoms). Seeded: the same rng gives the same tree.
+ */
+export function branches(rng: () => number, from: THREE.Vector3, dir: THREE.Vector3, len: number, rad: number, depth: number,
+  out: THREE.BufferGeometry[], tips: THREE.Vector3[], spread = 0.6, radial = 6): void {
+  const d = dir.clone().normalize(), pts = [from.clone()], p = from.clone();
+  for (let i = 1; i <= 3; i++) {
+    d.x += (rng() - 0.5) * 0.35; d.z += (rng() - 0.5) * 0.35; d.normalize();
+    pts.push(p.addScaledVector(d, len / 3).clone());
+  }
+  const end = depth > 0 ? 0.62 : 0.15;
+  out.push(taperTube(pts, (t) => rad * (1 - t * (1 - end)), 8, radial));
+  if (depth <= 0) { tips.push(p.clone()); return; }
+  const side = V3(rng() - 0.5, 0, rng() - 0.5).cross(d).normalize();
+  for (let k = 0; k < 2; k++) {
+    const at = pts[2 + k].clone(), nd = d.clone().applyAxisAngle(side, (k ? 1 : -1) * spread * (0.7 + rng() * 0.6)).applyAxisAngle(d, rng() * Math.PI * 2);
+    branches(rng, at, nd, len * (0.6 + rng() * 0.15), rad * end, depth - 1, out, tips, spread, Math.max(4, radial - 1));
+  }
+}
+
+const V3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+
 /** Smooth 3D value noise in [0, 1]. */
 export function noise3(seed: number): (x: number, y: number, z: number) => number {
   const r = mulberry(seed), perm = new Uint8Array(512), val = new Float32Array(256);
@@ -215,7 +305,7 @@ export class Sculpt {
     return this;
   }
 
-  /** pieces in this material cast no shadow (glows) */
+  /** pieces in this material cast no shadow (glows, and leaves: small and thin, their shadows add little) */
   glow(mat: THREE.Material): this { this.noShadow.add(mat); return this; }
 
   build(): THREE.Mesh[] {

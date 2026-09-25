@@ -5,29 +5,11 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, idle, pulse } from './rig';
-import { Sculpt, bend, horn, lathe, limb, organic, rag, skipping, stripRig, taperTube } from './shapes';
+import { Sculpt, bend, horn, lathe, limb, organic, rag, stripRig, taperTube, tatteredSkirt } from './shapes';
 import type { AnimState, Model } from '../../types';
 import { particles, col } from '../../fx/particles';
-import { mulberry } from '../../util';
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-
-/** an open robe cone (top radius r0 at y = 0, bottom r1 at -h) with a torn, uneven hem */
-function tatteredSkirt(r0: number, r1: number, h: number, seed: number, radial = 28): THREE.BufferGeometry {
-  if (skipping()) return new THREE.BufferGeometry();
-  const r = mulberry(seed), geo = new THREE.CylinderGeometry(r0, r1, h, radial, 8, true).translate(0, -h / 2, 0);
-  const cuts = Array.from({ length: radial + 1 }, () => r());
-  const p = geo.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), k = -y / h;
-    const a = Math.atan2(z, x), c = cuts[Math.round(((a / (Math.PI * 2)) + 1) % 1 * radial)];
-    // folds, and the lower edge torn into tongues of different lengths
-    const fold = 1 + Math.sin(a * 9 + seed) * 0.06 * k;
-    p.setXYZ(i, x * fold, k > 0.99 ? y + h * 0.55 * c * c : y, z * fold);
-  }
-  geo.computeVertexNormals();
-  return geo;
-}
 
 export function buildWitch(): Model {
   const kit = createKit(0xd070ff);
