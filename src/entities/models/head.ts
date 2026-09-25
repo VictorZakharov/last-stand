@@ -15,6 +15,8 @@ const G = (dx: number, dy: number, s: number): number => Math.exp(-(dx * dx + dy
 const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 /** half-size of the head (m) and its centre above the joint */
 const SX = 0.077, SY = 0.106, SZ = 0.097, CY = 0.1, CZ = 0.012;
+/** the skull's half-size and centre in the head's group, for anything fitted to it (a helmet) */
+export const SKULL = { SX, SY, SZ, CY, CZ };
 
 /** How much beard covers a point of the unit head (0..1): jaw, chin and upper lip, clear of the lips. */
 function beardAt(x: number, y: number, z: number): number {
@@ -153,8 +155,11 @@ export interface Head { face: THREE.Mesh; hair: THREE.Mesh; eyes: THREE.Mesh[]; 
 /** head size relative to the rig: a heroic proportion, a little over life */
 const HEAD_SCALE = 1.12;
 
-/** Build the head on `headJoint` (the rig's head joint); `beard`: a full beard hanging that far (m) below the chin. */
-export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, seed = 7, o: { beard?: number } = {}): Head {
+/**
+ * Build the head on `headJoint` (the rig's head joint); `beard`: a full beard hanging that far (m) below
+ * the chin; `locks` false leaves only the hair's cap (under a helmet).
+ */
+export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, seed = 7, o: { beard?: number; locks?: boolean } = {}): Head {
   const head = new THREE.Group();
   head.scale.setScalar(HEAD_SCALE);
   headJoint.add(head);
@@ -257,7 +262,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, seed = 7,
     }
     locks.push(taperTube(pts, (t) => r * (1 - t * 0.7) * (0.85 + 0.15 * Math.sin(t * 11 + az0)), lod(11, 5), 4).toNonIndexed());
   };
-  const nLocks = lod(90, 30);
+  const nLocks = o.locks === false ? 0 : lod(90, 30);
   for (let i = 0; i < nLocks; i++) {
     const az0 = (rng() - 0.5) * Math.PI * 1.9, side = Math.sign(az0) || 1;
     const el0 = 0.55 + rng() * 0.8;
@@ -266,7 +271,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, seed = 7,
     lock(az0, el0, az1, -0.3 - rng() * 0.35, 0.03 + rng() * 0.07, 0.004 + rng() * 0.005, (0.006 + rng() * 0.005) * Math.sqrt(90 / nLocks));
   }
   // one loose strand fallen forward over the brow
-  locks.push(taperTube([dir(0.25, 1.1, 0.14), dir(0.4, 0.75, 0.13), dir(0.5, 0.55, 0.1), dir(0.62, 0.4, 0.07)], (t) => 0.007 * (1 - t * 0.7), 10, 4).toNonIndexed());
+  if (nLocks) locks.push(taperTube([dir(0.25, 1.1, 0.14), dir(0.4, 0.75, 0.13), dir(0.5, 0.55, 0.1), dir(0.62, 0.4, 0.07)], (t) => 0.007 * (1 - t * 0.7), 10, 4).toNonIndexed());
   // a full beard: locks from the jaw, chin and cheeks falling onto the chest, fuller in the middle,
   // tapering to a rough point
   if (o.beard) {

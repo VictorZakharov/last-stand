@@ -7,15 +7,15 @@ import { leather as leatherMaps, mail as mailMaps, cloth as clothMaps, steel as 
 import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
-import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, type SurfaceFn } from './armor';
-import { buildHead } from './head';
+import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, lod, type SurfaceFn } from './armor';
+import { buildHead, SKULL } from './head';
 import { buildHand, poseHand, hold } from './hands';
 import { clamp, lerp, mulberry } from '../../util';
 import { SkeletonCape } from './cape';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
 import type { AnimState, Gear, Model } from '../../types';
 
-const ZERO = new THREE.Vector3();
+const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
 /** a held weapon: its tip along the grip, and where the left hand holds it (two-handers) */
 interface Weapon { group: THREE.Group; len: number; off: number | null; /** the grip's radius, for the fingers */ r: number }
 /** the grip turns the weapon's +Y forward and a little up out of the bent arm */
@@ -223,8 +223,73 @@ export function buildWarrior(): Model {
     }
   }
 
-  // --- the head: face, beard and hair
-  buildHead(j.head, kit, 7);
+  // --- the head, and an open-faced helmet over it: a steel skull with a low crest, bands riveted over
+  // it and round the brow, a nasal down the nose, cheek guards over the ears and a mail curtain over the
+  // nape. The face stays bare; of the hair only the cap round the temples shows.
+  const head = buildHead(j.head, kit, 7, { locks: false });
+  {
+    const { SX, SY, SZ, CY, CZ } = SKULL, hg = head.group, h = new Sculpt(), C = V(0, CY, CZ);
+    /** the shell towards `a` round the head (0 the face) and `el` up it, `lift` out from it (in head radii) */
+    const shell = (a: number, el: number, lift = 0, out = new THREE.Vector3()) => {
+      const x = Math.sin(a) * Math.cos(el), y = Math.sin(el), z = Math.cos(a) * Math.cos(el);
+      const r = 1.17 + lift + 0.045 * Math.exp(-((x / 0.12) ** 2)) * sm(0.1, 0.8, y);
+      const fz = z > 0 ? 1 - 0.18 * sm(0.3, 1, z) : 1.05;
+      return out.set(x * SX * r * 1.04, y * SY * r * (y > 0 ? 0.93 : 1) + CY + 0.006, z * SZ * r * fz + CZ - 0.004);
+    };
+    const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+    // the rim: just above the brows, over the ears at the sides, down to the nape behind
+    const rimEl = (a: number) => Math.asin(lerp(0.3, -0.35, sm(0.5, 2.7, Math.abs(wrap(a)))));
+    const out = (p: THREE.Vector3, o: THREE.Vector3) => o.subVectors(p, C).normalize();
+    const dome = new THREE.SphereGeometry(1, lod(56, 28), lod(20, 10)), dp = dome.attributes.position, duv = dome.attributes.uv;
+    for (let i = 0; i < dp.count; i++) {
+      // round from the back (the sphere's seam) the same way the sphere winds, from the rim to the top
+      const a = wrap(duv.getX(i) * Math.PI * 2 + Math.PI);
+      shell(a, lerp(rimEl(a), Math.PI / 2, duv.getY(i)), 0, _v);
+      dp.setXYZ(i, _v.x, _v.y, _v.z);
+    }
+    dome.computeVertexNormals();
+    h.add(scaleUV(dome, 4, 1.5), plateM, hg);
+    const ring = (el: (a: number) => number, lift: number, n: number) => Array.from({ length: n }, (_, k) => { const a = (k / n) * Math.PI * 2 - Math.PI; return shell(a, el(a), lift); });
+    // a rolled rim, the brow band over it, four bands meeting at the crown and a rivet on top
+    const rim = ring(rimEl, 0.01, 48);
+    h.add(taperTube([...rim, rim[0]], () => 0.0055, lod(96, 48), 6), plateM, hg);
+    h.add(strap(ring((a) => rimEl(a) + 0.13, 0, 48), 0.032, 0.0035, true, out, 96), darkSteel, hg);
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2;
+      h.add(strap(Array.from({ length: 10 }, (_, q) => shell(a, lerp(rimEl(a) + 0.26, Math.PI / 2 - 0.02, q / 9), 0)), 0.022, 0.003, false, out), darkSteel, hg);
+      for (let q = 0; q < 3; q++) { const e = lerp(rimEl(a) + 0.4, 1.35, q / 2); studAt(shell(a, e, 0.03), out(shell(a, e), V(0, 0, 0)), 0.0038); }
+    }
+    for (let k = 0; k < 20; k++) { const a = (k / 20) * Math.PI * 2 - Math.PI, e = rimEl(a) + 0.13; studAt(shell(a, e, 0.035), out(shell(a, e), V(0, 0, 0)), 0.0036); }
+    const top = shell(0, Math.PI / 2, 0.03);
+    h.add(new THREE.SphereGeometry(0.009, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), plateM, hg, top.toArray(), [0, 0, 0], [1, 0.7, 1]);
+    // the nasal: a ridged bar from the brow band down the bridge of the nose, narrowing to a rounded end
+    const nTop = shell(0, rimEl(0) + 0.22, 0.045);
+    const nasal: SurfaceFn = (u, v, o) => {
+      const c = 2 * u - 1, w = lerp(0.0055, 0.009, v) * Math.sqrt(1 - (1 - sm(0, 0.12, v)) ** 2 * 0.75), x = c * w;
+      return o.set(x, lerp(0.094, nTop.y, v), lerp(0.117, nTop.z, v ** 1.4) + 0.0025 * (1 - c * c) - x * x * 4);
+    };
+    h.add(plate(nasal, 6, 12, 0.003, undefined, C), plateM, hg);
+    studAt(nasal(0.5, 0.88, new THREE.Vector3()).add(V(0, 0, 0.002)), V(0, 0, 1), 0.0035);
+    // cheek guards over the ears, curving in under the cheekbones, their front edge clear of the face
+    for (const s of [1, -1]) {
+      const guard: SurfaceFn = (u, v, o) => {
+        const a = s * lerp(0.88, 2.0, u), e0 = lerp(-0.66, -0.3, u) - 0.1 * Math.sin(u * Math.PI), el = lerp(e0, rimEl(a) + 0.08, v);
+        return shell(a, el, 0.012 - 0.12 * sm(0.15, -0.6, Math.sin(el)) - 0.05 * (1 - u) * sm(0.3, -0.3, Math.sin(el)), o);
+      };
+      h.add(plate(guard, lod(12, 6), lod(12, 6), 0.005, undefined, C), plateM, hg);
+      h.add(edgeTube(guard, 'v0', 0.0035, 16), plateM, hg);
+      h.add(edgeTube(guard, 'u0', 0.0035, 12), plateM, hg);
+      for (const [u, v] of [[0.3, 0.82], [0.7, 0.82], [0.45, 0.25]]) { const p = guard(u, v, new THREE.Vector3()); studAt(p.addScaledVector(out(p, _v), 0.004), out(p, V(0, 0, 0)), 0.0035); }
+    }
+    // mail hanging from under the rim behind the cheek guards, over the nape
+    const aventail: SurfaceFn = (u, v, o) => {
+      const a = Math.PI + (u - 0.5) * 2.7, p = shell(a, rimEl(a) + 0.05, -0.02, o), r = V(p.x, 0, p.z - CZ).normalize();
+      return p.addScaledVector(r, 0.028 * (1 - v)).add(V(0, -0.085 * (1 - v), 0));
+    };
+    h.add(scaleUV(plate(aventail, lod(28, 12), 4, 0.003, undefined, C), 3, 3), mail, hg);
+    h.add(merge(studs.splice(0)), plateM, hg);
+    h.build();
+  }
 
   // --- weapons in the right hand, built along the grip's +Y (blade up); setGear shows the equipped one.
   // The grip turns +Y to point forward, slightly up, out of the bent arm.
