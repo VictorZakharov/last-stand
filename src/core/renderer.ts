@@ -139,6 +139,8 @@ const rig = {
   hurt: 0,
   yaw: 0,          // rotation around the focus; 0 looks toward -Z
   targetYaw: 0,
+  /** the top-down view's yaw (its middle-drag orbit), kept while a close view turns the camera */
+  topYaw: 0,
   view: 'top' as ViewMode,
   fromView: 'top' as ViewMode,
   look: 0,         // close views: pitch below the horizon
@@ -271,6 +273,12 @@ export function setView(v: ViewMode): void {
   rig.fromPos.copy(cam.position); rig.fromQuat.copy(cam.quaternion); rig.fromFov = cam.fov;
   rig.blend = 0;
   if (v !== 'top') rig.look = CAMERA[v].pitch;
+  // leaving top-down keeps its yaw; coming back swings to it the short way round, not the way mouse look left it
+  if (rig.view === 'top') rig.topYaw = rig.targetYaw;
+  else if (v === 'top') {
+    const turn = Math.PI * 2;
+    rig.targetYaw = rig.topYaw + Math.round((rig.yaw - rig.topYaw) / turn) * turn;
+  }
   rig.fromView = rig.view; rig.view = v;
 }
 /** The first-person view is still gliding in (the body stays visible until the camera reaches the eyes). */
