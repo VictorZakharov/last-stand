@@ -551,7 +551,7 @@ export class Player {
 
       this.staffLight.position.copy(this.castPoint);
       const glow = this.cls.aura.intensity;
-      this.staffLight.intensity = glow * (1 + (this.channel ? 2 : 0) + Math.sin(t * 6) * 0.13);
+      this.staffLight.intensity = glow * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
     }
   }
 

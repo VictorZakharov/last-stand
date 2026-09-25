@@ -45,7 +45,14 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
         vUv = uv;
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         vec3 n = normalize(normalMatrix * normal);
-        vFres = abs(dot(n, normalize(-mv.xyz)));
+        // how far across the tube this point is, seen from the camera: the view direction flattened onto
+        // the tube's cross-section, so a beam seen along its length (the close views) keeps its bright
+        // middle instead of reading as all edge and fading away
+        vec3 axis = normalize(normalMatrix * vec3(0.0, 1.0, 0.0));
+        vec3 v = normalize(-mv.xyz);
+        vec3 across = v - axis * dot(v, axis);
+        float l = length(across);
+        vFres = l > 1e-3 ? abs(dot(n, across / l)) : 1.0;
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */`
@@ -59,7 +66,9 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
         float flow = n(vec2(vUv.x * 10.0, along * 1.4 - uTime * 14.0)) * 0.6 + n(vec2(vUv.x * 22.0, along * 3.0 - uTime * 22.0)) * 0.4;
         float ends = smoothstep(0.0, 0.03, vUv.y) * (1.0 - smoothstep(0.9, 1.0, vUv.y));
         float body = pow(vFres, uCore > 0.5 ? 2.5 : 1.2);
-        vec3 c = uCore > 0.5 ? mix(uColor, vec3(1.0), 0.7) * 2.5 : uColor * (0.4 + flow * 1.6);
+        // not far over bloom's threshold: seen low along its length (the lobby) the beam covers much of the
+        // screen, and a hotter one blooms into a green haze over the ground round it
+        vec3 c = uCore > 0.5 ? mix(uColor, vec3(1.0), 0.7) * 1.6 : uColor * (0.35 + flow * 1.1);
         float a = body * ends * (uCore > 0.5 ? 1.0 : (0.35 + flow * 0.65)) * uFade;
         gl_FragColor = vec4(c * a, a);
       }`,
@@ -139,8 +148,10 @@ const skill: ChannelSkill<LanceState> = {
     if (opens > 0) sfx.charge(opens);
     return {
       outer, core, portal, outerMat, coreMat, portalMat, tick: 0, t: 0, firing: false,
-      lightA: flash({ color: 0x5dffa8, intensity: 6, distance: 8, life: 1, hold: 999 }),
-      lightB: flash({ color: 0x5dffa8, intensity: 0, distance: 7, life: 1, hold: 999 }),
+      // a glow at the hand and a pool where it hits, a few metres across: green light washed over a wide
+      // circle of ground reads as a haze round the whole cast
+      lightA: flash({ color: 0x5dffa8, intensity: 2, distance: 4, life: 1, hold: 999 }),
+      lightB: flash({ color: 0x5dffa8, intensity: 0, distance: 4.5, life: 1, hold: 999 }),
     };
   },
 
@@ -157,7 +168,7 @@ const skill: ChannelSkill<LanceState> = {
     // the portal hangs in front of the chest, where the free hand pushes into it; seen through the
     // eyes, a smaller one in front of the hand in view (full size, it would fill the view)
     const eyes = player.local && viewMode() === 'first' && viewSettled();
-    if (eyes) _c.copy(hand).addScaledVector(_dir, 0.35);
+    if (eyes) _c.copy(hand).addScaledVector(_dir, 0.6);
     else _c.set(player.pos.x + _dir.x * 0.85, 1.7, player.pos.z + _dir.z * 0.85);
     const origin = _c;
 
@@ -167,12 +178,12 @@ const skill: ChannelSkill<LanceState> = {
     _v.crossVectors(_n, _u);
     st.portal.quaternion.setFromRotationMatrix(_m.makeBasis(_u, _v, _n));
     st.portal.position.copy(origin);
-    const radius = PORTAL_R * (eyes ? 0.4 : 1) * (0.2 + 0.8 * easeOutBack(open)) * (st.firing ? 0.9 + Math.sin(st.t * 9) * 0.03 : 1);
+    const radius = PORTAL_R * (eyes ? 0.22 : 1) * (0.2 + 0.8 * easeOutBack(open)) * (st.firing ? 0.9 + Math.sin(st.t * 9) * 0.03 : 1);
     st.portal.scale.setScalar(radius / RIM);
     st.portalMat.uniforms.uTime.value = G.time;
     st.portalMat.uniforms.uOpen.value = open;
     st.lightA.light.position.copy(origin);
-    st.lightA.peak = 6 + 14 * open;
+    st.lightA.peak = 2 + 5 * open;
 
     if (!st.firing) {
       // sparks thrown off the tracing head, falling away
@@ -195,7 +206,7 @@ const skill: ChannelSkill<LanceState> = {
       st.outer.visible = st.core.visible = true;
       st.stopHum = sfx.lance();
       burst(origin, { count: 18, color: 0x5dffa8, speed: 5, life: 0.35, size: 0.22, gravity: 2 });
-      st.lightB.peak = 25;
+      st.lightB.peak = 10;
     }
     const ft = st.t - opens;
 
@@ -215,7 +226,10 @@ const skill: ChannelSkill<LanceState> = {
     const fadeIn = Math.min(1, ft / 0.12);
     // it bursts out wide and settles
     const w = def.width * (0.9 + Math.sin(st.t * 30) * 0.08) * (1 + 0.5 * Math.max(0, 1 - ft / 0.25));
-    for (const [m, mat, scale] of [[st.outer, st.outerMat, w], [st.core, st.coreMat, w * 0.3]] as const) {
+    // top-down the glow's radius is the width the lance hits (half of it): a wider soft tube reads as a haze
+    // round it from above. Up close the beam is seen along its length, where that thin a glow is barely a line
+    const glow = player.local && viewMode() !== 'top' ? 1 : 0.5;
+    for (const [m, mat, scale] of [[st.outer, st.outerMat, w * glow], [st.core, st.coreMat, w * 0.36 * glow]] as const) {
       m.position.copy(origin);
       m.quaternion.setFromUnitVectors(_up, _dir);
       m.scale.set(scale, len, scale);
@@ -226,15 +240,16 @@ const skill: ChannelSkill<LanceState> = {
     _end.copy(origin).addScaledVector(_dir, len);
     st.lightB.light.position.copy(_end);
 
-    // particles swirling along the beam
-    for (let i = 0; i < 6; i++) {
+    // sparks streaming along the beam: few and small, since a dense stream of soft particles smears
+    // into a haze round it
+    for (let i = 0; i < 2; i++) {
       const d = Math.random() * len;
       const a = Math.random() * Math.PI * 2;
       particles.glow.spawn({
         // offset on the ring around the beam axis (perpendicular = (-dir.z, dir.x))
         x: origin.x + _dir.x * d - _dir.z * Math.cos(a) * w * 0.5, y: origin.y + Math.sin(a) * w * 0.5, z: origin.z + _dir.z * d + _dir.x * Math.cos(a) * w * 0.5,
         vx: _dir.x * 6 + rand(-1, 1), vy: rand(-0.5, 1), vz: _dir.z * 6 + rand(-1, 1),
-        life: 0.3, size: rand(0.1, 0.25), sizeEnd: 0, color: col(0x5dffa8, 3), colorEnd: col(0x2050ff, 0.5), drag: 4,
+        life: 0.3, size: rand(0.04, 0.09), sizeEnd: 0, color: col(0x5dffa8, 3), colorEnd: col(0x2050ff, 0.5), drag: 4,
       });
     }
     burst(_end, { count: 2, color: 0x5dffa8, speed: 3, life: 0.3, size: 0.3, gravity: 3 });
