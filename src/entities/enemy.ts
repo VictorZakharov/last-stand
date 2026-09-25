@@ -364,7 +364,8 @@ export class Enemy {
     this.meter?.dispose();
     G.scene.remove(this.obj);
     // model geometry is built per enemy; free it (the aura ring is shared)
-    this.obj.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && g !== auraGeo) g.dispose(); });
+    // shared geometry (models/shapes.ts Sculpt) belongs to every enemy of the kind
+    this.obj.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && g !== auraGeo && !g.userData.shared) g.dispose(); });
     this.model.dispose();
     this.auraMat?.dispose();
   }

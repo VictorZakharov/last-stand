@@ -36,19 +36,24 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
   };
   const mats: THREE.Material[] = [];
 
-  /** near: an enemy's glow dims near the camera like the effect glows (its eyes up close would dazzle) */
-  function patch<M extends THREE.Material>(m: M, near = false): M {
+  /**
+   * near: an enemy's glow dims near the camera like the effect glows (its eyes up close would dazzle).
+   * rim: light added at glancing angles, the cheap stand-in for a physical material's sheen.
+   */
+  function patch<M extends THREE.Material>(m: M, near = false, rim?: THREE.Color): M {
     m.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, u);
+      if (rim) shader.uniforms.uRim = { value: rim };
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vFxPos;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFxPos = position;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\n' + FX_CHUNK_COMMON)
+        .replace('#include <common>', '#include <common>\n' + FX_CHUNK_COMMON + (rim ? 'uniform vec3 uRim;' : ''))
         .replace('#include <color_fragment>', `#include <color_fragment>
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55,0.8,1.0), uFrozen*0.75);`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
           ${near ? 'totalEmissiveRadiance *= nearGlow();' : ''}
+          ${rim ? 'totalEmissiveRadiance += uRim * pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);' : ''}
           float dn = fxNoise(vFxPos*7.0)*0.65 + fxNoise(vFxPos*19.0)*0.35;
           if (uDissolve > 0.0 && dn < uDissolve) discard;
           float edge = uDissolve > 0.0 ? (1.0 - smoothstep(uDissolve, uDissolve + 0.09, dn)) : 0.0;
@@ -57,7 +62,7 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
           // a tint, not white, dimmer near the camera like the effect glows: up close a body fills much of the screen
           totalEmissiveRadiance += vec3(1.0,0.9,0.85) * uHit * 0.45 * nearGlow();`);
     };
-    m.customProgramCacheKey = () => (near ? 'entityfx-near' : 'entityfx');
+    m.customProgramCacheKey = () => (near ? 'entityfx-near' : 'entityfx') + (rim ? '-rim' : '');
     mats.push(m);
     return m;
   }
@@ -67,6 +72,9 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
     mats,
     std: (p?: THREE.MeshStandardMaterialParameters) => patch(new THREE.MeshStandardMaterial(p)),
     phys: (p?: THREE.MeshPhysicalMaterialParameters) => patch(new THREE.MeshPhysicalMaterial(p)),
+    /** a standard material with a rim of `rim` light at glancing angles (skin, cloth) */
+    rim: (p: THREE.MeshStandardMaterialParameters, rim: THREE.ColorRepresentation, strength = 1) =>
+      patch(new THREE.MeshStandardMaterial(p), false, new THREE.Color(rim).multiplyScalar(strength)),
     // Unlit glow (eyes, crystals) - still dissolves via patch on MeshStandard with black base.
     // `near`: dims near the camera (enemies' glows; the heroes keep theirs)
     glow: (color: THREE.ColorRepresentation, intensity = 3, near = true) => patch(new THREE.MeshStandardMaterial({
