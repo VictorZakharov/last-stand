@@ -66,7 +66,9 @@ function beamMaterial(core: boolean): THREE.ShaderMaterial {
         float flow = n(vec2(vUv.x * 10.0, along * 1.4 - uTime * 14.0)) * 0.6 + n(vec2(vUv.x * 22.0, along * 3.0 - uTime * 22.0)) * 0.4;
         float ends = smoothstep(0.0, 0.03, vUv.y) * (1.0 - smoothstep(0.9, 1.0, vUv.y));
         float body = pow(vFres, uCore > 0.5 ? 2.5 : 1.2);
-        vec3 c = uCore > 0.5 ? mix(uColor, vec3(1.0), 0.7) * 2.5 : uColor * (0.4 + flow * 1.6);
+        // not far over bloom's threshold: seen low along its length (the lobby) the beam covers much of the
+        // screen, and a hotter one blooms into a green haze over the ground round it
+        vec3 c = uCore > 0.5 ? mix(uColor, vec3(1.0), 0.7) * 1.6 : uColor * (0.35 + flow * 1.1);
         float a = body * ends * (uCore > 0.5 ? 1.0 : (0.35 + flow * 0.65)) * uFade;
         gl_FragColor = vec4(c * a, a);
       }`,
