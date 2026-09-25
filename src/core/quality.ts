@@ -6,6 +6,7 @@ import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySetting } from '../data/quality';
 import { setRenderQuality } from './renderer';
 import { readCookie, writeCookie } from './cookies';
+import { setHeroDetail } from '../entities/models/armor';
 
 const COOKIE = 'last-stand-quality';
 const AUTO_COOKIE = 'last-stand-quality-auto';   // level auto settled on (next session starts there)
@@ -38,6 +39,7 @@ function apply(l: QualityLevel): void {
   level = l;
   const p = QUALITY[l];
   setRenderQuality(p);
+  setHeroDetail(p.heroDetail);
   const shadow = G.arena.moon.shadow;
   if (shadow.mapSize.x !== p.shadowMap) {
     shadow.mapSize.set(p.shadowMap, p.shadowMap);

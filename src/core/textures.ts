@@ -51,6 +51,12 @@ export const wood = (): PBRCanvases => pbrCanvases('wood');
 export const burlap = (): PBRCanvases => pbrCanvases('burlap');
 export const forestFloor = (): PBRCanvases => pbrCanvases('forestFloor');
 export const bark = (): PBRCanvases => pbrCanvases('bark');
+/** the heroes' materials: neutral albedo, tinted by the material's colour */
+export const leather = (): PBRCanvases => pbrCanvases('leather');
+export const mail = (): PBRCanvases => pbrCanvases('mail');
+export const cloth = (): PBRCanvases => pbrCanvases('cloth');
+export const steel = (): PBRCanvases => pbrCanvases('steel');
+export const fur = (): PBRCanvases => pbrCanvases('fur');
 
 /**
  * Make the game's PBR maps in workers, in parallel, while the page stays responsive: done on the
