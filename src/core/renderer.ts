@@ -21,14 +21,16 @@ const HI_KNEE = 1, HI_CAP = 2;
 const HUE_FROM = 1, HUE_TO = 1.6, GLARE_FROM = 0.05, GLARE_TO = 0.4;
 /**
  * The eye adapts to how bright an area is, at two scales: where the average light over a small area (a 16x9
- * grid of the frame) or a large one (4x3) is over its target, the light above ADAPT_BASE is scaled by target /
- * average. The dim part of every pixel is kept, so the ground round a bright effect never darkens into a
- * shadow. Measured before bloom, so halos shrink with the light they come from. The targets [small, large]
- * sit just above each view's ordinary scenes (the close views see the ground the staff light lights up close;
- * the top view's is for its full distance and eases towards `lobby` as it zooms in), which they leave untouched.
+ * grid of the frame) or a large one (4x3) is over its target, the light above ADAPT_BASE is compressed on a
+ * power curve that brings that average down to the target. The dim part of every pixel is kept, so the ground
+ * round a bright effect never darkens into a shadow, and a curve (not a scale) keeps a glow's falloff instead
+ * of flattening it into a disc. Measured after bloom, which then still sees the full light (the eye sees the
+ * halos too). The targets [small, large] sit just above each view's ordinary scenes (the close views see the
+ * ground the staff light lights up close; the top view's is for its full distance and eases towards `lobby`
+ * as it zooms in), which they leave untouched.
  */
-const ADAPT = { top: [0.22, 0.075], lobby: [0.16, 0.095], third: [0.6, 0.16], first: [0.4, 0.14] } as const;
-const ADAPT_BASE = 0.08;
+const ADAPT = { top: [0.35, 0.11], lobby: [0.45, 0.13], third: [1.2, 0.26], first: [0.5, 0.13] } as const;
+const ADAPT_BASE = 0.04;
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -36,14 +38,24 @@ const GradeShader = {
     uHurt: { value: 0 },
     uVignette: { value: 1.05 },
     tGlare: { value: null as THREE.Texture | null },
+    tSmall: { value: null as THREE.Texture | null }, tLarge: { value: null as THREE.Texture | null },
+    uSmall: { value: ADAPT.top[0] }, uLarge: { value: ADAPT.top[1] },
   },
   vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader: /* glsl */`
     uniform sampler2D tDiffuse; uniform float uTime; uniform float uHurt; uniform float uVignette; uniform sampler2D tGlare;
+    uniform sampler2D tSmall; uniform sampler2D tLarge; uniform float uSmall; uniform float uLarge;
     varying vec2 vUv;
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
+    // the power of the light over the base that brings an area's average down to its target
+    float adapt(float avg, float target){ return avg > target ? log(target / ${ADAPT_BASE.toFixed(3)}) / log(avg / ${ADAPT_BASE.toFixed(3)}) : 1.0; }
     void main(){
       vec4 c = texture2D(tDiffuse, vUv);
+      // the eye adapts to a bright area, so a big effect doesn't wash out the view
+      const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
+      float g = min(adapt(dot(texture2D(tSmall, vUv).rgb, LUM), uSmall), adapt(dot(texture2D(tLarge, vUv).rgb, LUM), uLarge));
+      float lum = dot(c.rgb, LUM);
+      if (lum > ${ADAPT_BASE.toFixed(3)}) c.rgb *= ${ADAPT_BASE.toFixed(3)} * pow(lum / ${ADAPT_BASE.toFixed(3)}, g) / lum;
       // glare (bloom's blurriest level): how large a bright spot is
       vec3 gl = texture2D(tGlare, vUv).rgb;
       float glare = max(gl.r, max(gl.g, gl.b));
@@ -93,9 +105,9 @@ class AreaPass extends Pass {
     depthTest: false, depthWrite: false,
   });
   private quad = new FullScreenQuad(this.mat);
-  constructor(private source: THREE.WebGLRenderTarget) { super(); this.needsSwap = false; }
-  override render(r: THREE.WebGLRenderer): void {
-    let src = this.source;
+  constructor() { super(); this.needsSwap = false; }
+  override render(r: THREE.WebGLRenderer, _w: THREE.WebGLRenderTarget, read: THREE.WebGLRenderTarget): void {
+    let src = read;
     for (const dst of this.steps) {
       this.mat.uniforms.tDiffuse.value = src.texture; src = dst;
       // taps an eighth of an output texel apart
@@ -107,29 +119,18 @@ class AreaPass extends Pass {
 }
 
 const SanitizeShader = {
-  uniforms: {
-    tDiffuse: { value: null }, tSmall: { value: null as THREE.Texture | null }, tLarge: { value: null as THREE.Texture | null },
-    uSmall: { value: ADAPT.top[0] }, uLarge: { value: ADAPT.top[1] }, uBase: { value: ADAPT_BASE },
-  },
+  uniforms: { tDiffuse: { value: null } },
   vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse; uniform sampler2D tSmall; uniform sampler2D tLarge; uniform float uSmall; uniform float uLarge; uniform float uBase; varying vec2 vUv;
+    uniform sampler2D tDiffuse; varying vec2 vUv;
     void main(){
       vec4 c = texture2D(tDiffuse, vUv);
       bool bad = any(isnan(c)) || any(isinf(c)) || c.r != c.r || c.g != c.g || c.b != c.b;
-      c = bad ? vec4(0.0, 0.0, 0.0, 1.0) : clamp(c, 0.0, 64.0);
-      // the eye adapts to a bright view, so a big effect doesn't wash it out. Before bloom, so the halos
-      // shrink with the light they come from
-      const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
-      float small = dot(texture2D(tSmall, vUv).rgb, LUM), large = dot(texture2D(tLarge, vUv).rgb, LUM);
-      float k = min(1.0, min(uSmall / max(small, 1e-4), uLarge / max(large, 1e-4)));
-      float lum = dot(c.rgb, LUM);
-      if (lum > uBase) c.rgb *= (uBase + (lum - uBase) * k) / lum;
-      gl_FragColor = c;
+      gl_FragColor = bad ? vec4(0.0, 0.0, 0.0, 1.0) : clamp(c, 0.0, 64.0);
     }`,
 };
 
-let composer: EffectComposer, grade: ShaderPass, sanitize: ShaderPass, gl: THREE.WebGLRenderer, sceneRT: THREE.WebGLRenderTarget;
+let composer: EffectComposer, grade: ShaderPass, gl: THREE.WebGLRenderer, sceneRT: THREE.WebGLRenderTarget;
 const rig = {
   zoom: 1,
   targetZoom: 1,
@@ -172,20 +173,20 @@ export function initRenderer(container: HTMLElement) {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   sceneRT = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
   composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, depthBuffer: false }));
-  // the scene's average light, for the eye adaptation in the sanitize pass
-  const area = new AreaPass(sceneRT);
-  composer.addPass(area);
   // Kill NaN/Inf pixels before bloom: a single bad pixel would otherwise be blurred
   // into large black rectangles. It reads the scene target itself ('none': not the read buffer).
-  sanitize = new ShaderPass(SanitizeShader, 'none');
+  const sanitize = new ShaderPass(SanitizeShader, 'none');
   sanitize.uniforms.tDiffuse.value = sceneRT.texture;
-  sanitize.uniforms.tSmall.value = area.small.texture;
-  sanitize.uniforms.tLarge.value = area.large.texture;
   composer.addPass(sanitize);
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.85, 0.55, 0.9);
   composer.addPass(bloom);
+  // after bloom: the eye adapts to all the light that reaches it, halos included
+  const area = new AreaPass();
+  composer.addPass(area);
   grade = new ShaderPass(GradeShader);
   grade.uniforms.tGlare.value = bloom.renderTargetsVertical[bloom.nMips - 1].texture;
+  grade.uniforms.tSmall.value = area.small.texture;
+  grade.uniforms.tLarge.value = area.large.texture;
   composer.addPass(grade);
   // the perf overlay times each pass on the GPU
   for (const [label, pass] of [['sanitize', sanitize], ['area', area], ['bloom', bloom], ['grade', grade]] as [string, Pass][]) {
@@ -385,7 +386,7 @@ export function render(): void {
   // the adaptation targets glide with the view
   const target = (v: ViewMode, i: 0 | 1): number => v !== 'top' ? ADAPT[v][i]
     : ADAPT.lobby[i] + (ADAPT.top[i] - ADAPT.lobby[i]) * clamp((rig.zoom - CAMERA.lobbyZoom) / (1 - CAMERA.lobbyZoom), 0, 1);
-  const e = ease(rig.blend), u = sanitize.uniforms;
+  const e = ease(rig.blend), u = grade.uniforms;
   u.uSmall.value = target(rig.fromView, 0) + (target(rig.view, 0) - target(rig.fromView, 0)) * e;
   u.uLarge.value = target(rig.fromView, 1) + (target(rig.view, 1) - target(rig.fromView, 1)) * e;
   gl.setRenderTarget(sceneRT);

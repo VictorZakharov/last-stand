@@ -81,7 +81,7 @@ export const FX = {
     const glow = pj.glow ?? 1, size = pj.radius * (pj.core ?? 0.7), type: DamageType = e.def.damageType;
     spawnProjectile({
       pos: new THREE.Vector3(ox, 1.1, oz), dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true,
-      color: pj.color, size, intensity: 5 * glow,
+      color: pj.color, size, intensity: 5 * glow, glow: 4,
       trail: { color: pj.color, colorEnd: pj.trail ?? 0x200030, intensity: 2.5 * glow * glow, size: size * 2.3, rate: 60, life: 0.4 },
       onHit: (target, proj) => {
         hurtPlayer(target as Player, damage, type, proj.pos);

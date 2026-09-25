@@ -2,22 +2,33 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { particles, col, burst } from '../fx/particles';
-import { flash, release, type LightSlot } from '../fx/lights';
+import { flash, flashFree, release, type LightSlot } from '../fx/lights';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
 import { nearGlow } from '../core/materials';
 
 const coreGeo = new THREE.SphereGeometry(1, 12, 8);
-const matCache = new Map<string, THREE.MeshBasicMaterial>();
-function coreMat(color: THREE.ColorRepresentation, intensity: number): THREE.MeshBasicMaterial {
-  const key = `${color}:${intensity}`;
+const matCache = new Map<string, THREE.Material>();
+/** A hostile bolt's core is an orb: hot in the middle, fading to its rim, so up close it reads as glowing, not a flat disc. */
+const orbShader = {
+  vertexShader: /* glsl */`varying vec3 vN; varying vec3 vV;
+    void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+  fragmentShader: /* glsl */`uniform vec3 uColor; varying vec3 vN; varying vec3 vV;
+    void main(){ float f = max(dot(normalize(vN), normalize(vV)), 0.0); gl_FragColor = vec4(uColor * (0.3 + 1.3 * f * f), 1.0); }`,
+};
+function coreMat(color: THREE.ColorRepresentation, intensity: number, orb: boolean): THREE.Material {
+  const key = `${color}:${intensity}:${orb}`;
   let m = matCache.get(key);
-  if (!m) { m = nearGlow(new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(intensity) })); matCache.set(key, m); }
+  if (!m) {
+    const c = new THREE.Color(color).multiplyScalar(intensity);
+    m = orb ? nearGlow(new THREE.ShaderMaterial({ ...orbShader, uniforms: { uColor: { value: c } } })) : nearGlow(new THREE.MeshBasicMaterial({ color: c }));
+    matCache.set(key, m);
+  }
   return m;
 }
 
-/** A core for the load-time warm-up: every core shares its program (the colour is a uniform). */
-export const coreSample = (): THREE.Mesh => new THREE.Mesh(coreGeo, coreMat(0xffffff, 4));
+/** Cores for the load-time warm-up: each kind shares its program (the colour is a uniform). */
+export const coreSamples = (): THREE.Mesh[] => [false, true].map((orb) => new THREE.Mesh(coreGeo, coreMat(0xffffff, 4, orb)));
 
 export interface TrailOpts { color: THREE.ColorRepresentation; colorEnd?: THREE.ColorRepresentation; intensity?: number; size?: number; rate?: number; life?: number }
 
@@ -34,7 +45,7 @@ export interface ProjectileOpts {
   color?: THREE.ColorRepresentation;
   size?: number;
   intensity?: number;
-  /** attach a dynamic light of this intensity (0 = none) */
+  /** attach a dynamic light of this intensity (0 = none); a hostile bolt's only takes a free light */
   glow?: number;
   trail?: TrailOpts;
   /** steering rate towards the nearest enemy in front (rad/s-ish) */
@@ -77,12 +88,13 @@ export class Projectile {
     this.onExpire = o.onExpire;
     this.trail = o.trail;
     this.color = o.color ?? 0xffffff;
-    this.mesh = new THREE.Mesh(coreGeo, coreMat(this.color, o.intensity ?? 4));
+    this.mesh = new THREE.Mesh(coreGeo, coreMat(this.color, o.intensity ?? 4, this.hostile));
     this.mesh.name = 'projectile';
     this.mesh.scale.setScalar(o.size ?? 0.12);
     this.mesh.position.copy(this.pos);
     G.scene.add(this.mesh);
-    this.light = o.glow ? flash({ color: this.color, intensity: o.glow, distance: 6, life: 1, hold: 99, follow: this.mesh }) : null;
+    const lo = { color: this.color, intensity: o.glow, distance: 6, life: 1, hold: 99, follow: this.mesh };
+    this.light = !o.glow ? null : this.hostile ? flashFree(lo) : flash(lo);
   }
 
   /** Advance; returns false once the projectile is gone. */
