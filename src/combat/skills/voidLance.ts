@@ -215,7 +215,8 @@ const skill: ChannelSkill<LanceState> = {
     const fadeIn = Math.min(1, ft / 0.12);
     // it bursts out wide and settles
     const w = def.width * (0.9 + Math.sin(st.t * 30) * 0.08) * (1 + 0.5 * Math.max(0, 1 - ft / 0.25));
-    for (const [m, mat, scale] of [[st.outer, st.outerMat, w], [st.core, st.coreMat, w * 0.3]] as const) {
+    // the glow's radius is the width the lance hits (half of it): a wider soft tube reads as haze round it
+    for (const [m, mat, scale] of [[st.outer, st.outerMat, w * 0.5], [st.core, st.coreMat, w * 0.18]] as const) {
       m.position.copy(origin);
       m.quaternion.setFromUnitVectors(_up, _dir);
       m.scale.set(scale, len, scale);
@@ -226,15 +227,16 @@ const skill: ChannelSkill<LanceState> = {
     _end.copy(origin).addScaledVector(_dir, len);
     st.lightB.light.position.copy(_end);
 
-    // particles swirling along the beam
-    for (let i = 0; i < 6; i++) {
+    // sparks streaming along the beam: few and small, since a dense stream of soft particles smears
+    // into a haze round it
+    for (let i = 0; i < 2; i++) {
       const d = Math.random() * len;
       const a = Math.random() * Math.PI * 2;
       particles.glow.spawn({
         // offset on the ring around the beam axis (perpendicular = (-dir.z, dir.x))
         x: origin.x + _dir.x * d - _dir.z * Math.cos(a) * w * 0.5, y: origin.y + Math.sin(a) * w * 0.5, z: origin.z + _dir.z * d + _dir.x * Math.cos(a) * w * 0.5,
         vx: _dir.x * 6 + rand(-1, 1), vy: rand(-0.5, 1), vz: _dir.z * 6 + rand(-1, 1),
-        life: 0.3, size: rand(0.1, 0.25), sizeEnd: 0, color: col(0x5dffa8, 3), colorEnd: col(0x2050ff, 0.5), drag: 4,
+        life: 0.3, size: rand(0.04, 0.09), sizeEnd: 0, color: col(0x5dffa8, 3), colorEnd: col(0x2050ff, 0.5), drag: 4,
       });
     }
     burst(_end, { count: 2, color: 0x5dffa8, speed: 3, life: 0.3, size: 0.3, gravity: 3 });
