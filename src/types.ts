@@ -102,6 +102,8 @@ export interface SkillDef {
   /** energy restored per enemy hit */
   gain?: number;
   /** when the cast lands, as a fraction of the cast time (default 0.55) */
+  /** a channel opens over this many seconds before it acts (its look and pose show the opening) */
+  opening?: number;
   fireAt?: number;
   /** Raise Shield: blocks absorb this many times the block amount */
   block?: number;
@@ -209,7 +211,9 @@ export interface EnemyDef {
 // ---------------------------------------------------------------------------
 // Models & animation
 
-export interface ActionState { name: string; t: number }
+/** `t`: the action's progress (0..1). A channel's also has `time` (seconds since it began) and `open`
+ *  (0..1 through its opening, 1 once open, or at once without one). */
+export interface ActionState { name: string; t: number; time?: number; open?: number }
 
 /** Per-frame input to a model's procedural animation. */
 export interface AnimState {

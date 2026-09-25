@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, part, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp } from './rig';
-import { clamp } from '../../util';
+import { clamp, TAU } from '../../util';
 import { SkeletonCape } from './cape';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
 import type { AnimState, Model } from '../../types';
@@ -119,6 +119,46 @@ export function buildMage(): Model {
   // offhand focus point (left palm)
   const palm = joint(j.handL, 0, -0.08, 0.03);
 
+  // --- gloved fingers: four and a thumb on each hand, two knuckles each. The palm faces -z, so a
+  // finger curls with +x; the thumb sits on the inner side. The right hand grips the staff.
+  interface Finger { base: THREE.Group; mid: THREE.Group }
+  function fingers(hand: THREE.Group, s: number): { f: Finger[]; thumb: Finger } {
+    const seg = (parent: THREE.Group, len: number, r: number) => {
+      const m = part(new THREE.CapsuleGeometry(r, len - 2 * r, 3, 6), leather, parent, 0, -len / 2, 0);
+      m.castShadow = false;
+    };
+    // index (next to the thumb) to little finger: offset across the hand, knuckle lengths
+    const f = ([[-0.026, 0.034, 0.027], [-0.009, 0.037, 0.03], [0.008, 0.034, 0.027], [0.024, 0.028, 0.022]] as const).map(([x, l1, l2]) => {
+      const base = joint(hand, s * x, -0.098, -0.004);
+      seg(base, l1, 0.0088);
+      const mid = joint(base, 0, -l1, 0);
+      seg(mid, l2, 0.0078);
+      return { base, mid };
+    });
+    const tb = joint(hand, -s * 0.034, -0.05, -0.012);
+    seg(tb, 0.032, 0.0095);
+    const tm = joint(tb, 0, -0.032, 0);
+    seg(tm, 0.026, 0.0085);
+    return { f, thumb: { base: tb, mid: tm } };
+  }
+  const handL = fingers(j.handL, 1), handR = fingers(j.handR, -1);
+  /**
+   * Pose a hand: `curl` bends every finger into the palm (0 flat, ~1.4 a fist), `spread` fans them,
+   * `point` straightens the index and middle fingers (the other two stay curled), `twitch` a tremor.
+   */
+  function poseHand(h: typeof handL, s: number, curl: number, spread: number, point = 0, t = 0, twitch = 0): void {
+    h.f.forEach((f, i) => {
+      const c = (i < 2 ? curl * (1 - point) : curl + point * 1.1) * (0.9 + i * 0.07) + Math.sin(t * 23 + i * 1.7) * twitch;
+      f.base.rotation.set(c, 0, s * (i - 1.5) * spread * 0.35);
+      f.mid.rotation.set(c * 1.15, 0, 0);
+    });
+    const tc = curl * 0.6 + point * 0.5;
+    h.thumb.base.rotation.set(0.35 + tc * 0.5, 0, -s * (0.55 - spread * 0.4));
+    h.thumb.mid.rotation.set(tc * 0.8, 0, 0);
+  }
+  /** set once a channel's opening completes, for the thrust into the portal */
+  let openedAt = -1;
+
   const root = j.root;
   root.scale.setScalar(1.08);
 
@@ -160,7 +200,11 @@ export function buildMage(): Model {
     j.spine.rotation.x += move * 0.12 * dir;
     j.body.rotation.z += (st.lean || 0) * 0.12;
 
+    // hands at rest: the free one loosely curled and breathing, the other gripping the staff
+    poseHand(handL, 1, 0.45 + Math.sin(t * 1.3) * 0.06, 0.12);
+    poseHand(handR, -1, 1.45, 0);
     const a = st.action;
+    if (!a || a.name !== 'channel') openedAt = -1;
     if (a) {
       const k = a.t;
       if (a.name === 'cast') {
@@ -168,11 +212,41 @@ export function buildMage(): Model {
         j.shoulderR.rotation.x += -1.05 * w; j.elbowR.rotation.x += 0.45 * w;
         j.shoulderL.rotation.x += -1.2 * w; j.shoulderL.rotation.z += 0.25 * w; j.elbowL.rotation.x += -0.2 * w;
         j.chest.rotation.y += 0.35 * w; j.spine.rotation.x += 0.12 * w;
+        // the hand gathers into a claw, then flicks open as the spell leaves it
+        const gather = pulse(k, 0, 0.5), release = ramp(k, 0.4, 0.6) * (1 - ramp(k, 0.75, 1));
+        j.handL.rotation.x += -0.5 * gather - 0.9 * release;
+        poseHand(handL, 1, 0.35 + 0.6 * gather - 0.35 * release, 0.1 + 0.5 * release);
       } else if (a.name === 'channel') {
-        const tr = Math.sin(t * 40) * 0.02;
-        j.shoulderL.rotation.x += -1.45 + tr; j.shoulderL.rotation.z += -0.2; j.elbowL.rotation.x += 0.05;
-        j.shoulderR.rotation.x += -0.9; j.elbowR.rotation.x += 0.2;
-        j.chest.rotation.y += 0.25; j.spine.rotation.x += 0.15;
+        const open = a.open ?? 1, time = a.time ?? 0;
+        const up = ramp(time, 0, 0.18);
+        if (open < 1) {
+          // drawing the portal: two fingers out, the hand traces the circle with its spark (one turn
+          // by 0.7 of the opening), then draws back to gather for the thrust
+          openedAt = -1;
+          const trace = Math.min(1, open / 0.7), ang = trace * TAU, draw = 1 - ramp(open, 0.7, 0.85);
+          const gather = ramp(open, 0.72, 1);
+          j.shoulderL.rotation.x += (-1.2 - Math.cos(ang) * 0.3 * draw + 0.25 * gather) * up;
+          j.shoulderL.rotation.z += (-Math.sin(ang) * 0.32 * draw - 0.12) * up;
+          j.elbowL.rotation.x += (-0.35 - 0.7 * gather) * up;
+          j.handL.rotation.x += (-0.4 + 0.3 * gather) * up;
+          poseHand(handL, 1, 0.15 + gather * 0.9, 0.05, draw * (1 - gather));
+          // the free shoulder leads (a turn of the chest brings it forward)
+          j.chest.rotation.y += -0.15 * up - 0.1 * gather; j.spine.rotation.x += 0.08 * up;
+          j.neck.rotation.x += 0.1 * up;
+          j.shoulderR.rotation.x += -0.5 * up; j.elbowR.rotation.x += -0.2 * up;
+        } else {
+          // the thrust: palm driven into the portal, a recoil as the lance bursts out, then braced
+          if (openedAt < 0) openedAt = time;
+          const ft = time - openedAt, kick = Math.exp(-ft * 9) * ramp(ft, 0, 0.04), tr = Math.sin(t * 40) * 0.02;
+          const sway = Math.sin(t * 2.3) * 0.04;
+          j.shoulderL.rotation.x += -1.45 + tr + kick * 0.3 + sway * 0.5; j.shoulderL.rotation.z += -0.4 + sway * 0.4; j.elbowL.rotation.x += 0.05 - kick * 0.4;
+          // the wrist bent back so the palm faces the portal, fingers spread and straining
+          j.handL.rotation.x += -1.25 + kick * 0.3;
+          poseHand(handL, 1, 0.1 + kick * 0.3, 0.6, 0, t, 0.04);
+          j.shoulderR.rotation.x += -0.9; j.elbowR.rotation.x += 0.2;
+          j.chest.rotation.y += -0.25; j.spine.rotation.x += 0.15 - kick * 0.12;
+          j.body.position.z += -kick * 0.05;
+        }
       } else if (a.name === 'slam') {
         const up = ramp(k, 0, 0.45) * (1 - ramp(k, 0.5, 0.7));
         const down = ramp(k, 0.5, 0.7) * (1 - ramp(k, 0.8, 1));
@@ -181,11 +255,16 @@ export function buildMage(): Model {
         j.body.position.y += -0.16 * down; j.kneeL.rotation.x += 0.5 * down; j.kneeR.rotation.x += 0.5 * down;
         j.thighL.rotation.x += -0.35 * down; j.thighR.rotation.x += -0.35 * down;
         j.spine.rotation.x += 0.35 * down - 0.15 * up;
+        // fists raised, then splayed hands driven down
+        poseHand(handL, 1, 0.45 + 0.95 * up - 0.4 * down, 0.12 + 0.5 * down);
       } else if (a.name === 'buff') {
         const w = pulse(k, 0, 1);
         j.shoulderL.rotation.x += -1.6 * w; j.shoulderL.rotation.z += 0.8 * w;
         j.shoulderR.rotation.x += -0.8 * w; j.shoulderR.rotation.z += -0.6 * w;
         j.neck.rotation.x += -0.3 * w;
+        // palm up and open, fingers spread to the ward
+        j.handL.rotation.x += -0.6 * w;
+        poseHand(handL, 1, 0.45 - 0.35 * w, 0.12 + 0.45 * w);
       }
     }
     if (st.hit > 0) { j.spine.rotation.x += -0.25 * st.hit; j.neck.rotation.x += -0.2 * st.hit; }

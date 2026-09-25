@@ -44,8 +44,8 @@ const mage: ClassDef = {
     },
     {
       key: '1', impl: 'voidLance', name: 'Void Lance',
-      desc: 'Channel a piercing lance of raw arcana. Drains energy while held.',
-      tags: ['arcane'], cost: 34, cooldown: 0, castTime: 0, channel: true,
+      desc: 'Draw a portal in the air, then channel a piercing lance of raw arcana through it. Drains energy while held.',
+      tags: ['arcane'], cost: 34, cooldown: 0, castTime: 0, channel: true, opening: 0.75,
       damage: 210, length: 17, width: 0.75, moveMult: 0.35,
       icon: { glyph: '⟿', color: '#5dffa8' },
     },
