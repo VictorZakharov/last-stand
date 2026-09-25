@@ -122,7 +122,7 @@ function portalMaterial(): THREE.ShaderMaterial {
 }
 
 const _dir = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _end = new THREE.Vector3(), _c = new THREE.Vector3();
-const _u = new THREE.Vector3(), _v = new THREE.Vector3(), _n = new THREE.Vector3(), _cam = new THREE.Vector3(), _m = new THREE.Matrix4();
+const _u = new THREE.Vector3(), _v = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4();
 const easeOutBack = (k: number) => 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2;
 
 const skill: ChannelSkill<LanceState> = {
@@ -161,11 +161,9 @@ const skill: ChannelSkill<LanceState> = {
     else _c.set(player.pos.x + _dir.x * 0.85, 1.7, player.pos.z + _dir.z * 0.85);
     const origin = _c;
 
-    // the portal stands across the beam, its top leaning away (clear of the body) the more the camera
-    // looks down on it: upright it would be edge-on from the top-down view
-    G.camera.getWorldDirection(_cam);
+    // the portal stands upright across the beam
     _u.set(-_dir.z, 0, _dir.x);
-    _n.copy(_dir).negate().addScaledVector(_up, THREE.MathUtils.clamp(-_cam.y * 1.3, 0, 1.1)).normalize();
+    _n.copy(_dir).negate();
     _v.crossVectors(_n, _u);
     st.portal.quaternion.setFromRotationMatrix(_m.makeBasis(_u, _v, _n));
     st.portal.position.copy(origin);
