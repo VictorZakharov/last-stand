@@ -1,0 +1,46 @@
+// Reusable pieces of the bronze-and-steel look.
+@use 'sass:list';
+@use 'theme' as *;
+
+// the bronze frame of panels, bars and modals: a dark border with a bright inner line,
+// plus any further shadows
+@mixin frame($line: var(--bronze), $shadows...) {
+  border: 2px solid var(--bronze-lo);
+  @if list.length($shadows) == 0 { box-shadow: inset 0 0 0 1px $line; }
+  @else { box-shadow: inset 0 0 0 1px $line, $shadows; }
+}
+
+// a round bronze-rimmed gem (the wave and the score multiplier)
+@mixin gem($rim: 3px) {
+  background: $gem-face;
+  border: $rim solid var(--bronze);
+}
+
+// bright L-shaped brackets in the four corners of a box (use on ::before over its inset border)
+@mixin corner-brackets($len: 26px, $thick: 2px, $color: var(--bronze-hi)) {
+  --c: linear-gradient(#{$color}, #{$color});
+  background: var(--c) 0 0 / #{$len} #{$thick}, var(--c) 0 0 / #{$thick} #{$len}, var(--c) 100% 0 / #{$len} #{$thick}, var(--c) 100% 0 / #{$thick} #{$len},
+    var(--c) 0 100% / #{$len} #{$thick}, var(--c) 0 100% / #{$thick} #{$len}, var(--c) 100% 100% / #{$len} #{$thick}, var(--c) 100% 100% / #{$thick} #{$len};
+  background-repeat: no-repeat;
+}
+
+// a line fading in from the left (in) or out to the right (out)
+@function fade-line($color, $dir: out) {
+  @if $dir == in { @return linear-gradient(90deg, transparent, $color); }
+  @return linear-gradient(90deg, $color, transparent);
+}
+
+// a horizontal rule with a glowing diamond in the middle: <div><i></i></div>
+@mixin diamond-rule($line: var(--bronze), $edge: var(--bronze-hi), $core: #3a0c08, $glow: rgba(230, 70, 40, .7)) {
+  display: flex; align-items: center; gap: 10px;
+  &::before, &::after { content: ''; flex: 1; height: 1px; background: fade-line($line, in); }
+  &::after { background: fade-line($line); }
+  i { width: 7px; height: 7px; rotate: 45deg; border: 1px solid $edge; background: $core; box-shadow: 0 0 8px $glow; }
+}
+
+// a small-caps section heading trailed by a fading line
+@mixin section-head($color: var(--bronze-hi)) {
+  display: flex; align-items: center; gap: 10px;
+  font: 700 13px var(--serif); letter-spacing: 3px; text-transform: uppercase; color: $color;
+  &::after { content: ''; flex: 1; height: 1px; background: fade-line(rgba($bronze, .5)); }
+}

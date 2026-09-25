@@ -57,7 +57,7 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
 | `src/fx/` | CPU particle pools, a fixed pool of 8 point lights (`lights.ts`), transient effects (`effects.ts`) |
 | `src/core/` | Renderer + post chain, input, audio, procedural textures & materials, game-time scheduler (`timers.ts`) |
 | `src/net/` | Co-op: who simulates what (`role.ts`), the links (`transport.ts`: Trystero over Nostr relays, or `?net=local`), rooms, lobby and each player's own state (`session.ts`), the host's reports of the fight (`sync.ts`) |
-| `src/ui/` | DOM HUD, lobby/menus, tooltips, loadout editor, item icons (inline SVG), attributes |
+| `src/ui/` | DOM HUD, lobby/menus, tooltips, loadout editor, item icons (inline SVG), attributes; the stylesheets (`styles/`, SCSS) |
 | `src/vendor/cape/` | Vendored cape-physics PBD solver + shims. Keep the solver files unmodified (see its README); adapt in `entities/models/cape.ts` and the shims |
 | `src/state.ts` / `src/events.ts` | Typed global state `G` and a typed event bus |
 
@@ -106,4 +106,4 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
 
 - TypeScript strict. Keep data (`src/data`) separate from behaviour, and type new data against `types.ts`.
 - Match surrounding code: short header comment per file, sparse comments explaining *why*, compact one-line helpers where the file already uses them.
-- CSS lives in `src/ui/style.css`, and UI scales via the `--ui` variable. Honour `prefers-reduced-motion` for decorative animation.
+- Styles are SCSS in `src/ui/styles/`: one partial per area (`_hud.scss`, `_lobby.scss`, `_modals.scss`...), imported by `index.scss` in cascade order (later files override earlier ones; a moved rule can change what wins). Use the theme (`_theme.scss`: colours, surfaces, `ui()` / `hud()` / `touch()` scale helpers) and the mixins (`_mixins.scss`: bronze frame, gem, corner brackets, diamond rule, section heading) instead of copying values: plain colours as `var(--bronze)`, translucent ones as `rgba($bronze, .35)`. The loading screen's styles stay inline in `index.html`. UI scales via the `--ui` variable. Honour `prefers-reduced-motion` for decorative animation.

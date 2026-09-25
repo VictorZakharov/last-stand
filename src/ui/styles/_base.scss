@@ -1,0 +1,30 @@
+// Base: the theme published as custom properties, the reset, and the page itself.
+@use 'sass:meta';
+@use 'theme' as *;
+
+:root {
+  --bronze: #{$bronze};
+  --bronze-hi: #{$bronze-hi};
+  --bronze-lo: #{$bronze-lo};
+  --panel: #{$panel};
+  --panel-2: #{$panel-2};
+  --ink: #{$ink};
+  --ink-dim: #{$ink-dim};
+  --life: #{$life};
+  --energy: #{$energy};
+  --gold: #{$gold};
+  --red: #{$red};
+  --serif: #{meta.inspect($serif)};
+  --sans: #{meta.inspect($sans)};
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #030307; color: var(--ink); font-family: var(--sans); user-select: none; }
+#game { position: fixed; inset: 0; }
+#game canvas { display: block; }
+.hidden { display: none !important; }
+button { font-family: inherit; }
+html, body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; overscroll-behavior: none; }
+#game { touch-action: none; }
+
+/* #loading is styled inline in index.html so it paints before this stylesheet and the bundle load */

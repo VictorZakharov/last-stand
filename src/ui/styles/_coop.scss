@@ -1,0 +1,68 @@
+// Co-op (ui/coop.ts): the room bar and modal, partner frames and tags, revive, spectating.
+@use 'theme' as *;
+
+/* ---------- co-op (ui/coop.ts) ---------- */
+#coop-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 8px; padding: 6px 10px; cursor: pointer; font-size: 15px;
+  background: linear-gradient(#141a22, #0a0d12); border: 1px solid rgba($ally, .45); border-radius: 3px; color: var(--ink); }
+#coop-bar:hover { filter: brightness(1.25); }
+#coop-bar .cb-room b { font-family: var(--serif); letter-spacing: 2px; color: $ally-hi; }
+#coop-bar .cb-who { color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+#coop .modal-box { width: 560px; max-width: 94vw; }
+.coop-body { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.coop-intro { margin: 0; color: var(--ink-dim); font-size: 15px; line-height: 1.4; }
+.coop-error { margin: 0; color: var(--red); }
+.coop-choice { display: flex; gap: 14px; align-self: stretch; }
+.coop-col { flex: 1; display: flex; flex-direction: column; gap: 8px; align-items: center; padding: 12px; background: rgba(0,0,0,.35); border: 1px solid rgba($bronze, .35); }
+.coop-col p { margin: 0; color: var(--ink-dim); font-size: 14px; }
+.coop-h { font-family: var(--serif); font-size: 18px; color: var(--bronze-hi); }
+.coop-join { display: flex; gap: 6px; }
+.coop-join input, .coop-link input { font: 700 18px var(--serif); letter-spacing: 3px; text-transform: uppercase; width: 7.5em; padding: 7px 8px; text-align: center;
+  color: #ffe7b0; background: #0a0909; border: 1px solid rgba($bronze, .55); border-radius: 3px; user-select: text; }
+.coop-link { display: flex; gap: 6px; align-self: stretch; }
+.coop-link input { flex: 1; min-width: 0; width: auto; font: 14px var(--sans); letter-spacing: 0; text-transform: none; text-align: left; color: var(--ink); }
+.coop-room { font-size: 16px; color: var(--ink-dim); }
+.coop-code { font-family: var(--serif); font-size: 30px; letter-spacing: 5px; color: $ally-hi; }
+.coop-room .coop-code { display: block; }
+.coop-list { list-style: none; margin: 0; padding: 0; font-size: 16px; }
+.coop-list li { padding: 2px 0; }
+.coop-dot { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: $ally; box-shadow: 0 0 6px $ally; }
+.coop-wait { color: var(--ink-dim); }
+@media (max-width: 560px) { .coop-choice { flex-direction: column; } }
+@media (max-height: 520px) { .coop-body { gap: 6px; } .coop-intro { font-size: 13px; } #coop .sm-title { font-size: 24px; } .coop-col { padding: 8px; } .coop-code { font-size: 24px; } }
+
+/* the partners' frames, top left (below the bars on touch) */
+#party { position: absolute; top: 14px; left: calc(14px + env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 6px; scale: var(--hud, 1); transform-origin: left top; }
+body.touch #party { top: touch(104px); left: calc(64px * var(--touch, 1) + env(safe-area-inset-left, 0px)); scale: var(--touch, 1); }
+.pf { width: 200px; padding: 5px 8px 6px; background: rgba(8,8,12,.72); border: 1px solid rgba($ally, .4); border-radius: 3px; }
+.pf-name { font-family: var(--serif); font-size: 13px; color: #cfe6ff; }
+.pf-bar { height: 8px; margin-top: 3px; background: rgba(0,0,0,.8); box-shadow: 0 0 0 1px rgba($bronze, .35); }
+.pf-fill { height: 100%; background: linear-gradient(#ff5a4a, #8a0c10); transition: width .15s linear; }
+.pf-state { font-size: 12px; color: var(--ink-dim); min-height: 0; }
+.pf-state:empty { display: none; }
+.pf.down { border-color: var(--red); animation: lowpulse .6s infinite alternate; }
+.pf.out { opacity: .55; }
+/* over a partner's head */
+.ptag { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: none; }
+.ptag-name { font-family: var(--serif); font-size: 12px; color: $ally-hi; text-shadow: $outline; white-space: nowrap; }
+.ptag .efill { background: linear-gradient($ally, #1d4f8a); }
+/* the revive prompt on the floor by a downed partner */
+.rvtag { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; }
+.rvtag span { font-size: 14px; color: #ffe6a0; text-shadow: $outline; white-space: nowrap; }
+.rv-ring { width: 40px; height: 40px; border-radius: 50%; --p: 0%;
+  background: conic-gradient(#ffe6a0 var(--p), rgba(0,0,0,.55) 0); -webkit-mask: radial-gradient(circle, transparent 13px, #000 14px); mask: radial-gradient(circle, transparent 13px, #000 14px); }
+#down-note { position: absolute; left: 50%; top: 32%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center;
+  scale: var(--hud, 1); transform-origin: left top; text-shadow: 0 2px 4px #000; }
+#down-note b { font-family: var(--serif); font-size: 34px; color: #ff5040; letter-spacing: 2px; }
+#down-note span { font-size: 17px; color: var(--ink); }
+.dn-bar { width: 220px; height: 6px; background: rgba(0,0,0,.7); }
+.dn-bar div { height: 100%; background: #ffe6a0; }
+#spectate { position: absolute; left: 50%; top: hud(86px); transform: translateX(-50%); padding: 5px 14px; border-radius: 4px; font-size: hud(15px);
+  background: rgba(8,8,14,.72); color: #cfe6ff; white-space: nowrap; }
+#btn-revive { position: absolute; right: calc(290px * var(--touch, 1) + env(safe-area-inset-right, 0px)); bottom: touch(24px); width: 84px; height: 84px; border-radius: 50%;
+  font-family: var(--serif); font-size: 16px; color: #ffe6a0; background: radial-gradient(circle at 50% 40%, #5a4a20, #1a140a 75%); border: 2px solid var(--gold);
+  box-shadow: 0 0 16px rgba($gold, .5); touch-action: none; pointer-events: auto; }
+.dc-party { color: $ally-hi; font-size: 15px; margin: -4px 0 10px; }
+.dc-buttons .cont:disabled { cursor: default; filter: grayscale(.5) brightness(.85); }
+.sm-note { color: $ally-hi; }
+.sm-note:empty { display: none; }
+#hud.watching #bottombar, #hud.watching #buffs, #hud.watching #spoils, #hud.watching #crosshair { display: none; }

@@ -1,0 +1,39 @@
+// The theme: colours, fonts, surfaces and the UI scale helpers. No CSS output of its own:
+// _base.scss publishes the colours as custom properties (var(--bronze)...) for the markup
+// and scripts. Plain colours read the custom property; translucent ones take rgba($colour, a).
+
+// bronze trim, from dark to bright
+$bronze: #a07c46;
+$bronze-hi: #e2c07e;
+$bronze-lo: #4a3620;
+$gold: #f0c860;
+$ember: #f0be5a;      // warm glow behind gold text
+$ally: #6ab8ff;       // co-op partners
+$ally-hi: #9ccfff;
+
+$panel: rgba(12, 11, 14, 0.92);
+$panel-2: rgba(22, 20, 24, 0.95);
+$ink: #e6dcc8;
+$ink-dim: #9a8f7c;
+$life: #c4141c;
+$energy: #1fae8a;
+$red: #ff5a4a;
+
+$serif: 'Cinzel', 'Trajan Pro', Georgia, serif;
+$sans: 'Alegreya Sans', 'Segoe UI', sans-serif;
+
+// surfaces: a dark well (tabs, segmented buttons, fields), the same lit when chosen,
+// and the tray behind a row of skill slots
+$well: linear-gradient(#141212, #0a0909);
+$well-lit: linear-gradient(#2a2218, #120e0a);
+$tray: linear-gradient(#1a1614, #0a0909);
+$gem-face: radial-gradient(circle at 50% 35%, #3a3430, #0c0a0a 70%);
+
+// text that must read over the 3D scene
+$outline: 0 1px 2px #000, 0 0 6px #000;
+
+// sizes that follow a scale set in ui/scale.ts: --ui (lobby, modals), --hud (the run's HUD),
+// --touch (the touch controls)
+@function ui($v) { @return calc(#{$v} * var(--ui, 1)); }
+@function hud($v) { @return calc(#{$v} * var(--hud, 1)); }
+@function touch($v) { @return calc(#{$v} * var(--touch, 1)); }
