@@ -10,8 +10,7 @@ import { nearGlow } from '../core/materials';
 const coreGeo = new THREE.SphereGeometry(1, 12, 8);
 const matCache = new Map<string, THREE.Material>();
 /**
- * A hostile bolt's core is burning energy, not a ball: added light, white-hot in the middle and its colour
- * towards a soft rim.
+ * A hostile bolt's core is energy, not a ball: added light, brightest in the middle, fading to a soft rim.
  */
 const orbShader = {
   vertexShader: /* glsl */`varying vec3 vN; varying vec3 vV;
@@ -19,7 +18,7 @@ const orbShader = {
   fragmentShader: /* glsl */`uniform vec3 uColor; varying vec3 vN; varying vec3 vV;
     void main(){
       float f = max(dot(normalize(vN), normalize(vV)), 0.0);
-      vec3 c = uColor * (0.15 + 1.4 * f * f) + vec3(1.0, 1.0, 0.85) * pow(f, 6.0) * max(uColor.r, max(uColor.g, uColor.b)) * 0.9;
+      vec3 c = uColor * (0.15 + 1.1 * f * f);
       gl_FragColor = vec4(c, 1.0);
     }`,
   transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
@@ -80,6 +79,8 @@ export class Projectile {
   readonly ignore: Set<Enemy>;
   readonly onHit?: ProjectileOpts['onHit'];
   readonly tick?: ProjectileOpts['tick'];
+  /** its own mesh (not a glowing core): it may come close to the lens */
+  readonly ownMesh: boolean;
   readonly onExpire?: ProjectileOpts['onExpire'];
   readonly trail?: TrailOpts;
   readonly color: THREE.ColorRepresentation;
@@ -99,6 +100,7 @@ export class Projectile {
     this.ignore = o.ignore ?? new Set();
     this.onHit = o.onHit;
     this.tick = o.tick;
+    this.ownMesh = !!o.mesh;
     this.onExpire = o.onExpire;
     this.trail = o.trail;
     this.color = o.color ?? 0xffffff;
@@ -128,7 +130,7 @@ export class Projectile {
     this.mesh.position.copy(this.pos);
     // in first person a bolt aimed at the player flies at the lens: its glowing core would fill the view
     // for its last few frames
-    this.mesh.visible = this.pos.distanceToSquared(G.camera.position) > 2.5 * 2.5;
+    this.mesh.visible = this.pos.distanceToSquared(G.camera.position) > (this.ownMesh ? 1 : 2.5 * 2.5);
     this.tick?.(this, dt);
 
     if (this.trail) {

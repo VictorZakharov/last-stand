@@ -82,7 +82,7 @@ export function seedPodTick(mesh: THREE.Object3D, pos: THREE.Vector3, vel: THREE
   mesh.rotation.x += dt * 7; mesh.rotation.y += dt * 3;
   if (mat?.emissiveMap) mat.emissiveMap.offset.set(G.time * 0.15, G.time * 0.35);
   _dir.copy(vel).normalize();
-  const r = mesh.scale.x * 3.5, sc = col(smoke), sw = col(color, 0.35), gc = col(color, 1.4);
+  const r = mesh.scale.x * 3.5, sc = col(smoke), body = col(color, 0.55), sw = col(color, 0.35), gc = col(color, 1.4);
   acc.t += dt * 60;
   while (acc.t >= 1) {
     acc.t -= 1;
@@ -100,11 +100,14 @@ export function seedPodTick(mesh: THREE.Object3D, pos: THREE.Vector3, vel: THREE
       x: _off.x, y: _off.y, z: _off.z, vx: vel.x + _sw.x * 7, vy: vel.y + _sw.y * 7, vz: vel.z + _sw.z * 7,
       life: 0.2, size: 0.1, sizeEnd: 0.03, color: gc, drag: 0,
     });
-    inBall(pos, r * 0.7, false);
-    particles.smoke.spawn({
-      x: _off.x, y: _off.y, z: _off.z, vx: vel.x + _sw.x * 3, vy: vel.y + _sw.y * 3, vz: vel.z + _sw.z * 3,
-      life: 0.25, size: 0.4, sizeEnd: 0.25, color: sc, alpha: 0.35, drag: 0,
-    });
+    // the swarm's body: light green smoke (not a light, so it stays visible up close without glare)
+    for (let i = 0; i < 2; i++) {
+      inBall(pos, r * 0.75, false);
+      particles.smoke.spawn({
+        x: _off.x, y: _off.y, z: _off.z, vx: vel.x + _sw.x * 3, vy: vel.y + _sw.y * 3, vz: vel.z + _sw.z * 3,
+        life: 0.25, size: 0.45, sizeEnd: 0.3, color: body, alpha: 0.4, drag: 0,
+      });
+    }
     // the spore smoke it leaves behind
     if (Math.random() < 0.5) particles.smoke.spawn({
       x: pos.x + (Math.random() - 0.5) * 0.3, y: pos.y + (Math.random() - 0.5) * 0.3, z: pos.z + (Math.random() - 0.5) * 0.3,

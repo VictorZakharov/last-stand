@@ -96,8 +96,8 @@ export const FX = {
     }
     spawnProjectile({
       pos, dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true,
-      color: pj.color, size, intensity: 5 * glow, glow: 4,
-      trail: { color: pj.color, colorEnd: pj.trail ?? 0x200030, intensity: 2.5 * glow * glow, size: size * 2.3, rate: 60, life: 0.4 },
+      color: pj.color, size, intensity: 3.5 * glow, glow: 2,
+      trail: { color: pj.color, colorEnd: pj.trail ?? 0x200030, intensity: 1.3 * glow * glow, size: size * 2.3, rate: 60, life: 0.4 },
       onHit,
     });
   },
