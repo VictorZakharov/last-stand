@@ -198,6 +198,71 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
   return { mesh, portal: { pos, dir, pulse() { pulse = 1; } } };
 }
 
+/** Night sky dome: fog colour at the horizon (where the ground fades into it), a faint glow
+ * just above, `zenith` overhead, a moon towards `moonDir` and a sprinkle of stars. Unfogged, behind everything. */
+export function buildSky(fogColor: number, moonDir: THREE.Vector3, zenith: RGB = [0.004, 0.005, 0.012]): THREE.Mesh {
+  const fog = new THREE.Color(fogColor);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uFog: { value: new THREE.Vector3(fog.r, fog.g, fog.b) }, uMoon: { value: moonDir }, uZenith: { value: new THREE.Vector3(...zenith) } },
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    // on the far plane, drawn after everything opaque: the depth test skips every covered pixel
+    vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); gl_Position.z = gl_Position.w; }`,
+    fragmentShader: `
+      varying vec3 vDir; uniform vec3 uFog; uniform vec3 uMoon; uniform vec3 uZenith;
+      float h(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      void main(){
+        vec3 d = normalize(vDir);
+        float y = max(d.y, 0.0);
+        vec3 c = mix(uFog, uFog * vec3(1.5, 1.45, 1.35), 1.0 - smoothstep(0.0, 0.18, abs(y - 0.05)));
+        c = mix(c, uZenith, smoothstep(0.08, 0.7, y));
+        float m = max(dot(d, uMoon), 0.0);
+        c += vec3(0.06, 0.07, 0.12) * pow(m, 300.0) + vec3(0.02, 0.025, 0.04) * pow(m, 8.0);
+        c = mix(c, vec3(0.5, 0.54, 0.64) * (0.85 + 0.15 * h(floor(d * 900.0))), smoothstep(0.99988, 0.99993, m));
+        vec3 g = floor(d * 700.0);
+        c += vec3(0.5, 0.55, 0.7) * step(0.9975, h(g)) * smoothstep(0.12, 0.4, y) * (0.4 + 0.6 * h(g + 1.0));
+        gl_FragColor = vec4(c, 1.0);
+      }`,
+  });
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), mat);
+  sky.renderOrder = 100;
+  sky.frustumCulled = false;
+  return sky;
+}
+
+/** Day sky dome: `horizon` (the fog colour, where the ground fades into it) rising into `zenith`, a sun
+ * towards `sunDir` with a warm glow round it, and slow soft clouds. Unfogged, behind everything. */
+export function buildDaySky(horizon: number, zenith: RGB, sunDir: THREE.Vector3): { mesh: THREE.Mesh; update: (t: number) => void } {
+  const hz = new THREE.Color(horizon);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uHorizon: { value: new THREE.Vector3(hz.r, hz.g, hz.b) }, uZenith: { value: new THREE.Vector3(...zenith) }, uSun: { value: sunDir.clone().normalize() }, uTime: { value: 0 } },
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    // on the far plane, drawn after everything opaque: the depth test skips every covered pixel
+    vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); gl_Position.z = gl_Position.w; }`,
+    fragmentShader: `
+      varying vec3 vDir; uniform vec3 uHorizon; uniform vec3 uZenith; uniform vec3 uSun; uniform float uTime;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+        return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
+      void main(){
+        vec3 d = normalize(vDir);
+        float y = max(d.y, 0.0);
+        vec3 c = mix(uHorizon, uZenith, smoothstep(0.0, 0.55, y));
+        float m = max(dot(d, uSun), 0.0);
+        c += vec3(0.5, 0.42, 0.28) * pow(m, 12.0) * 0.35 + vec3(1.0, 0.92, 0.75) * smoothstep(0.9993, 0.9996, m) * 2.5;
+        // clouds on a plane overhead, thinning towards the horizon
+        vec2 p = d.xz / max(d.y, 0.08) * 1.6 + vec2(uTime * 0.01, uTime * 0.004);
+        float cl = n(p) * 0.55 + n(p * 2.3 + 5.0) * 0.3 + n(p * 5.1 + 9.0) * 0.15;
+        cl = smoothstep(0.5, 0.8, cl) * smoothstep(0.04, 0.3, y);
+        c = mix(c, uHorizon * 1.25 + vec3(0.08, 0.07, 0.05) * pow(m, 4.0), cl * 0.7);
+        gl_FragColor = vec4(c, 1.0);
+      }`,
+  });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), mat);
+  mesh.renderOrder = 100;
+  mesh.frustumCulled = false;
+  return { mesh, update: (t) => { mat.uniforms.uTime.value = t; } };
+}
+
 /** Place a gate group on the boundary at `angle`, its local +Z facing the arena center. */
 export function placeGate(g: THREE.Object3D, angle: number): void {
   const r = WALL_R + 0.8;

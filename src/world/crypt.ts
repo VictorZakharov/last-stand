@@ -9,7 +9,7 @@ import { cobblestone, slabs, grunge, bark, pbrMaterialMaps, runeCircle } from '.
 import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
-import { boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
+import { buildSky, boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
 import type { Obstacle } from '../types';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
@@ -147,7 +147,7 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
   const nicheMat = new THREE.MeshStandardMaterial({ color: 0x06070a, roughness: 1 });
 
   // --- Sky: a horizon glow, a painted moon and stars ------------------------------
-  scene.add(buildSky());
+  scene.add(buildSky(FOG, MOON_DIR));
 
   // --- Ground ---------------------------------------------------------------
   const ground = new THREE.Mesh(new THREE.CircleGeometry(110, 128).rotateX(-Math.PI / 2), groundMat);
@@ -431,38 +431,6 @@ function fluted(g: THREE.BufferGeometry, axis: 'x' | 'y'): void {
     if (axis === 'y') pos.setXYZ(i, x * k, y, z * k); else pos.setXYZ(i, x, y * k, z * k);
   }
   g.computeVertexNormals();
-}
-
-/** Night sky dome: fog colour at the horizon (where the ground fades into it), a faint glow
- * just above, darker overhead, a moon and a sprinkle of stars. Unfogged, behind everything. */
-
-function buildSky(): THREE.Mesh {
-  const fog = new THREE.Color(FOG);
-  const mat = new THREE.ShaderMaterial({
-    uniforms: { uFog: { value: new THREE.Vector3(fog.r, fog.g, fog.b) }, uMoon: { value: MOON_DIR } },
-    side: THREE.BackSide, depthWrite: false, fog: false,
-    // on the far plane, drawn after everything opaque: the depth test skips every covered pixel
-    vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); gl_Position.z = gl_Position.w; }`,
-    fragmentShader: `
-      varying vec3 vDir; uniform vec3 uFog; uniform vec3 uMoon;
-      float h(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
-      void main(){
-        vec3 d = normalize(vDir);
-        float y = max(d.y, 0.0);
-        vec3 c = mix(uFog, uFog * vec3(1.5, 1.45, 1.35), 1.0 - smoothstep(0.0, 0.18, abs(y - 0.05)));
-        c = mix(c, vec3(0.004, 0.005, 0.012), smoothstep(0.08, 0.7, y));
-        float m = max(dot(d, uMoon), 0.0);
-        c += vec3(0.06, 0.07, 0.12) * pow(m, 300.0) + vec3(0.02, 0.025, 0.04) * pow(m, 8.0);
-        c = mix(c, vec3(0.5, 0.54, 0.64) * (0.85 + 0.15 * h(floor(d * 900.0))), smoothstep(0.99988, 0.99993, m));
-        vec3 g = floor(d * 700.0);
-        c += vec3(0.5, 0.55, 0.7) * step(0.9975, h(g)) * smoothstep(0.12, 0.4, y) * (0.4 + 0.6 * h(g + 1.0));
-        gl_FragColor = vec4(c, 1.0);
-      }`,
-  });
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), mat);
-  sky.renderOrder = 100;
-  sky.frustumCulled = false;
-  return sky;
 }
 
 /** Flat ring of flagstones between radii r0 and r1, the slabs following the ring. */
