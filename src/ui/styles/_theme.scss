@@ -1,26 +1,26 @@
 // The theme: colours, fonts, surfaces and the UI scale helpers. No CSS output of its own:
-// _base.scss publishes the colours as custom properties (var(--bronze)...) for the markup
+// _base.scss publishes the colours as custom properties (var(--frame)...) for the markup
 // and scripts. Plain colours read the custom property; translucent ones take rgba($colour, a).
 
-// bronze trim, from dark to bright
-$bronze: #a07c46;
-$bronze-hi: #e2c07e;
-$bronze-lo: #4a3620;
-$gold: #f0c860;
-$ember: #f0be5a;      // warm glow behind gold text
-$ally: #6ab8ff;       // co-op partners
-$ally-hi: #9ccfff;
+// Named by role, not by colour, so a new theme only changes the values here.
+$frame: #a07c46;         // frame lines and borders
+$frame-dark: #4a3620;    // the dark outer border of framed boxes
+$accent: #e2c07e;        // headings, titles, active tabs
+$accent-glow: #f0be5a;   // the glow behind accent text
+$highlight: #f0c860;     // what's chosen, new or hovered; values worth noticing
+$ally: #6ab8ff;          // co-op partners
+$ally-text: #9ccfff;
 
-$panel: rgba(12, 11, 14, 0.92);
-$panel-2: rgba(22, 20, 24, 0.95);
-$ink: #e6dcc8;
-$ink-dim: #9a8f7c;
+$panel: rgba(12, 11, 14, 0.92);         // panel background
+$panel-raised: rgba(22, 20, 24, 0.95);  // a card on a panel
+$ink: #e6dcc8;           // text
+$ink-dim: #9a8f7c;       // secondary text
 $life: #c4141c;
 $energy: #1fae8a;
-$red: #ff5a4a;
+$danger: #ff5a4a;        // warnings, losses, discarding
 
-$serif: 'Cinzel', 'Trajan Pro', Georgia, serif;
-$sans: 'Alegreya Sans', 'Segoe UI', sans-serif;
+$font-display: 'Cinzel', 'Trajan Pro', Georgia, serif;
+$font-body: 'Alegreya Sans', 'Segoe UI', sans-serif;
 
 // surfaces: a dark well (tabs, segmented buttons, fields), the same lit when chosen,
 // and the tray behind a row of skill slots

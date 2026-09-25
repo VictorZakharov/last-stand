@@ -3,23 +3,23 @@
 @use 'theme' as *;
 
 :root {
-  --bronze: #{$bronze};
-  --bronze-hi: #{$bronze-hi};
-  --bronze-lo: #{$bronze-lo};
+  --frame: #{$frame};
+  --accent: #{$accent};
+  --frame-dark: #{$frame-dark};
   --panel: #{$panel};
-  --panel-2: #{$panel-2};
+  --panel-raised: #{$panel-raised};
   --ink: #{$ink};
   --ink-dim: #{$ink-dim};
   --life: #{$life};
   --energy: #{$energy};
-  --gold: #{$gold};
-  --red: #{$red};
-  --serif: #{meta.inspect($serif)};
-  --sans: #{meta.inspect($sans)};
+  --highlight: #{$highlight};
+  --danger: #{$danger};
+  --font-display: #{meta.inspect($font-display)};
+  --font-body: #{meta.inspect($font-body)};
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: #030307; color: var(--ink); font-family: var(--sans); user-select: none; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #030307; color: var(--ink); font-family: var(--font-body); user-select: none; }
 #game { position: fixed; inset: 0; }
 #game canvas { display: block; }
 .hidden { display: none !important; }

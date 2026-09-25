@@ -11,9 +11,9 @@
 
 /* ---------- attribute breakdown ---------- */
 #stats .row[data-attr] { cursor: help; }
-#stats .row[data-attr]:hover { background: rgba($gold, .08); color: var(--ink); }
+#stats .row[data-attr]:hover { background: rgba($highlight, .08); color: var(--ink); }
 .attr-card { width: 300px; }
-.attr-total { font-family: var(--serif); font-size: 26px; color: #f3e1b0; margin: 2px 0 8px; }
+.attr-total { font-family: var(--font-display); font-size: 26px; color: #f3e1b0; margin: 2px 0 8px; }
 .attr-rows { display: flex; flex-direction: column; gap: 4px; }
 .attr-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; }
 .attr-row b { font-weight: 700; white-space: nowrap; }
@@ -23,7 +23,7 @@
 .attr-src .item-icon { flex: 0 0 24px; width: 24px; height: 24px; }
 .attr-src.base { color: var(--ink-dim); }
 .attr-empty { font-size: 12px; color: var(--ink-dim); font-style: italic; }
-.tt-foot.capped { color: var(--gold); }
+.tt-foot.capped { color: var(--highlight); }
 
 /* ---------- slot focus: hovering a slot lights up the stash items that fit it ---------- */
 /* The glow is always rendered but transparent, so it can fade in and out (switching between
@@ -31,7 +31,7 @@
 @property --glow-a { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
 .slot-glow { position: absolute; inset: -3px; pointer-events: none; z-index: 2; opacity: 0; transform: scale(1.18);
   transition: opacity .3s ease-out, transform .3s ease-out;
-  box-shadow: inset 0 0 0 1px rgba($gold, .75), 0 0 14px 2px rgba($gold, .5), inset 0 0 16px rgba($gold, .3);
+  box-shadow: inset 0 0 0 1px rgba($highlight, .75), 0 0 14px 2px rgba($highlight, .5), inset 0 0 16px rgba($highlight, .3);
   animation: glow-pulse 1.3s ease-in-out infinite alternate; }
 .match .slot-glow { opacity: 1; transform: none; transition-timing-function: ease-out, cubic-bezier(.2,1.6,.4,1); }
 /* a bright arc chasing around the border */
@@ -48,7 +48,7 @@
 #menu.slot-focus .sitem:not(.match) { opacity: .28; filter: grayscale(.85); }
 #menu.slot-focus .eslot:not(.match) { opacity: .45; }
 .sitem, .eslot { transition: opacity .3s, filter .3s, transform .3s; }
-@keyframes glow-pulse { to { box-shadow: inset 0 0 0 1px rgba(255,236,190,.95), 0 0 22px 5px rgba($gold, .7), inset 0 0 22px rgba($gold, .45); } }
+@keyframes glow-pulse { to { box-shadow: inset 0 0 0 1px rgba(255,236,190,.95), 0 0 22px 5px rgba($highlight, .7), inset 0 0 22px rgba($highlight, .45); } }
 @keyframes glow-spin { to { --glow-a: 360deg; } }
 @keyframes glow-sheen { 0% { background-position: 100% 0; } 60%, 100% { background-position: 0 0; } }
 @media (prefers-reduced-motion: reduce) { .slot-glow, .slot-glow::before, .slot-glow::after { animation: none; } }
