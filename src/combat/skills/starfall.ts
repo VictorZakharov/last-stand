@@ -14,7 +14,7 @@ import { groundHeight } from '../../world/arena';
 import type { InstantSkill, Needs } from './types';
 import type { Player } from '../../entities/player';
 
-type Def = Needs<'damage' | 'shards' | 'radius' | 'core' | 'edge' | 'scatter' | 'chill'>;
+type Def = Needs<'damage' | 'shards' | 'radius' | 'edge' | 'scatter' | 'chill'>;
 import type { SkillDef } from '../../types';
 import { rand } from '../../util';
 
@@ -96,8 +96,8 @@ function impact(player: Player, def: Def, p: THREE.Vector3): void {
     if (!e.alive) continue;
     const d = Math.hypot(e.pos.x - p.x, e.pos.z - p.z) - e.radius * 0.5;
     if (d < def.radius) {
-      // a direct hit takes full damage; further out it falls to the edge's share
-      const k = d <= def.core ? 1 : 1 - (1 - def.edge) * (d - def.core) / (def.radius - def.core);
+      // a direct hit takes full damage, easing down to the edge's share (smoothstep: no kinks)
+      const x = Math.max(0, d) / def.radius, k = 1 - (1 - def.edge) * x * x * (3 - 2 * x);
       hitEnemy(e, def.damage * k, { by: player, tags: def.tags, type: 'arcane', chill: def.chill, knock: 4 * k, from: p });
     }
   }
