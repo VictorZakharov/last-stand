@@ -1,0 +1,31 @@
+// Shared controls: buttons, links, panels, option rows and segmented buttons.
+@use 'theme' as *;
+@use 'mixins' as *;
+
+/* ---------- buttons & panels ---------- */
+.btn { pointer-events: auto; cursor: pointer; font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: 1px; color: var(--ink);
+  padding: 10px 18px; background: linear-gradient(#2a2420, #141110); border: 1px solid #000; box-shadow: inset 0 0 0 1px var(--frame), 0 2px 6px rgba(0,0,0,.6);
+  border-radius: 3px; transition: filter .12s, transform .08s; }
+.btn:hover { filter: brightness(1.35); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: linear-gradient(#6a4a1c, #2e1e0a); color: #ffe7b0; box-shadow: inset 0 0 0 1px var(--accent), 0 0 14px rgba($accent-glow, .25); }
+.btn.danger { background: linear-gradient(#5a1a14, #260a08); }
+.btn.big { font-size: 24px; padding: 18px 24px; width: 100%; }
+.btn .k { display: inline-block; min-width: 20px; padding: 0 4px; margin-right: 6px; font-size: 12px; border: 1px solid var(--frame); border-radius: 2px; color: var(--accent); }
+.link { background: none; border: none; color: var(--ink-dim); cursor: pointer; font-size: 16px; text-decoration: underline; padding: 4px; }
+.link:hover { color: var(--ink); }
+
+.panel { background: var(--panel); @include frame(rgba($frame, .6), 0 10px 40px rgba(0,0,0,.8)); }
+.panel-title { font-family: var(--font-display); font-size: 18px; color: var(--accent); border-bottom: 1px solid rgba($frame, .35); padding-bottom: 4px; margin: 10px 0 8px; }
+.panel-title.small { font-size: 14px; margin-top: 4px; }
+
+.opt-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 14px 0 4px; font-size: 14px; color: var(--ink); cursor: pointer; }
+.opt-row input { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+.quality-row { cursor: default; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid rgba($frame, .55); border-radius: 3px; overflow: hidden; }
+.seg button { cursor: pointer; font: inherit; font-size: 13px; color: var(--ink-dim); padding: 5px 10px; background: $well; border: none; border-left: 1px solid rgba($frame, .35); }
+.seg button:first-child { border-left: none; }
+.seg button:hover { color: var(--ink); }
+.seg button.active { color: #ffe7b0; background: linear-gradient(#5a3e18, #2a1c0a); box-shadow: inset 0 0 0 1px var(--accent); }
+.seg small { margin-left: 4px; font-size: 11px; opacity: .75; }
+.seg button:disabled { cursor: default; }

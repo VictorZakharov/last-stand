@@ -1,0 +1,39 @@
+// The theme: colours, fonts, surfaces and the UI scale helpers. No CSS output of its own:
+// _base.scss publishes the colours as custom properties (var(--frame)...) for the markup
+// and scripts. Plain colours read the custom property; translucent ones take rgba($colour, a).
+
+// Named by role, not by colour, so a new theme only changes the values here.
+$frame: #a07c46;         // frame lines and borders
+$frame-dark: #4a3620;    // the dark outer border of framed boxes
+$accent: #e2c07e;        // headings, titles, active tabs
+$accent-glow: #f0be5a;   // the glow behind accent text
+$highlight: #f0c860;     // what's chosen, new or hovered; values worth noticing
+$ally: #6ab8ff;          // co-op partners
+$ally-text: #9ccfff;
+
+$panel: rgba(12, 11, 14, 0.92);         // panel background
+$panel-raised: rgba(22, 20, 24, 0.95);  // a card on a panel
+$ink: #e6dcc8;           // text
+$ink-dim: #9a8f7c;       // secondary text
+$life: #c4141c;
+$energy: #1fae8a;
+$danger: #ff5a4a;        // warnings, losses, discarding
+
+$font-display: 'Cinzel', 'Trajan Pro', Georgia, serif;
+$font-body: 'Alegreya Sans', 'Segoe UI', sans-serif;
+
+// surfaces: a dark well (tabs, segmented buttons, fields), the same lit when chosen,
+// and the tray behind a row of skill slots
+$well: linear-gradient(#141212, #0a0909);
+$well-lit: linear-gradient(#2a2218, #120e0a);
+$tray: linear-gradient(#1a1614, #0a0909);
+$gem-face: radial-gradient(circle at 50% 35%, #3a3430, #0c0a0a 70%);
+
+// text that must read over the 3D scene
+$outline: 0 1px 2px #000, 0 0 6px #000;
+
+// sizes that follow a scale set in ui/scale.ts: --ui (lobby, modals), --hud (the run's HUD),
+// --touch (the touch controls)
+@function ui($v) { @return calc(#{$v} * var(--ui, 1)); }
+@function hud($v) { @return calc(#{$v} * var(--hud, 1)); }
+@function touch($v) { @return calc(#{$v} * var(--touch, 1)); }

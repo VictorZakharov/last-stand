@@ -19,6 +19,7 @@
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^26.6.2",
     "@types/three": "0.185.4",
+    "sass": "^1.105.0",
     "typescript": "6.0.2",
     "vite": "8.2.2"
   }

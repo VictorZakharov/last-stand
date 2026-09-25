@@ -1,0 +1,29 @@
+// World overlays: damage numbers, enemy bars and names, the training dummy's meter.
+@use 'theme' as *;
+
+/* ---------- world overlays ---------- */
+#floaters { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
+.float { position: absolute; left: 0; top: 0; font-family: var(--font-display); font-weight: 700; font-size: 17px; white-space: nowrap;
+  text-shadow: 0 0 3px #000, 0 2px 3px #000, 0 0 8px rgba(0,0,0,.8); will-change: transform, opacity; }
+.float.crit { font-size: 26px; color: #ffe070 !important; }
+.float.crit::after { content: '!'; }
+.float.player { font-size: 20px; }
+.float.heal { font-size: 18px; }
+.float.info { font-family: var(--font-body); font-size: 16px; font-weight: 500; }
+
+.ebar { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: none; }
+.etrack { width: 56px; height: 5px; background: rgba(0,0,0,.75); border: 1px solid rgba(0,0,0,.9); box-shadow: 0 0 0 1px rgba($frame, .25); }
+.efill { height: 100%; width: 100%; background: linear-gradient(#e03030, #8a0c10); transition: width .08s; }
+.ebar.hero .etrack { width: 84px; height: 7px; box-shadow: 0 0 0 1px rgba($highlight, .6); }
+.ebar.hero .efill { background: linear-gradient(#ffb040, #b0400c); }
+.ename { font-family: var(--font-display); font-size: 12px; color: #f5c060; text-shadow: $outline; white-space: nowrap; }
+
+/* ---------- training dummy damage meter ---------- */
+.dmeter { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; pointer-events: none; white-space: nowrap;
+  text-shadow: 0 1px 3px #000, 0 0 8px rgba(0,0,0,.8); transition: opacity .4s; }
+.dm-name { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-dim); }
+.dm-dps { font-family: var(--font-display); font-size: 15px; color: var(--ink-dim); }
+.dm-dps b { font-size: 22px; color: #f3e1b0; }
+.dm-sub { font-size: 12px; color: var(--ink-dim); }
+.dmeter.idle .dm-dps, .dmeter.idle .dm-sub { display: none; }
+.dmeter.done { opacity: .55; }
