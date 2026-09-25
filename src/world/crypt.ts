@@ -9,6 +9,7 @@ import { cobblestone, slabs, grunge, bark, pbrMaterialMaps, runeCircle } from '.
 import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
+import { seeThrough } from '../core/seeThrough';
 import { buildSky, boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
 import type { Obstacle } from '../types';
 
@@ -181,6 +182,8 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
   // obelisks at the dais corners
   const obeliskGeo = buildObeliskGeo();
   const glyphMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x3ab8ff, emissiveIntensity: 2.2 });
+  // the props and walls dissolve between the camera and the player in the close views (the camera never pulls in)
+  for (const m of [wallMat, darkStone, carved, iron, boneMat, deadWood, banner, gold, weedMat, wax, flameMat, nicheMat, glyphMat]) seeThrough(m, 'prop');
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     const x = sx * (h - 0.5), z = sz * (h - 0.5);
     const ob = new THREE.Mesh(obeliskGeo, darkStone);
@@ -656,7 +659,7 @@ function buildBeacon(scene: THREE.Object3D, x: number, z: number, stone: THREE.M
 
   const flame = new THREE.Mesh(teardropGeo(), flameMat);
   flame.position.set(x, 1.12, z);
-  const core = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xc8e8ff).multiplyScalar(2.2) }));
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), seeThrough(new THREE.MeshBasicMaterial({ color: new THREE.Color(0xc8e8ff).multiplyScalar(2.2) }), 'prop'));
   core.position.set(x, 1.42, z);
   const ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x5ab0ff).multiplyScalar(1.6), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
   const rings = [0.5, 0.36].map((rad) => {
@@ -760,7 +763,7 @@ function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: number, ir
   const bowl = new THREE.Mesh(new THREE.LatheGeometry(pts, 12), iron);
   bowl.position.set(x, lift, z); bowl.castShadow = true;
   scene.add(bowl);
-  const coals = new THREE.Mesh(new THREE.CircleGeometry(0.5, 12).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff5010).multiplyScalar(2.5) }));
+  const coals = new THREE.Mesh(new THREE.CircleGeometry(0.5, 12).rotateX(-Math.PI / 2), seeThrough(new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff5010).multiplyScalar(2.5) }), 'prop'));
   coals.position.set(x, lift + 1.2, z);
   scene.add(coals);
   const light = new THREE.PointLight(0xff7a30, 16, 15, 2);

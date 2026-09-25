@@ -10,6 +10,7 @@ import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
+import { updateSeeThrough } from './seeThrough';
 import type { QualityPreset } from '../data/quality';
 
 /** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept). */
@@ -322,10 +323,10 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
     if (rig.view === 'third') {
       fov = CAMERA.third.fov;
       rig.boom = damp(rig.boom, rig.targetBoom, 6, dt);
-      // the shoulder the camera looks over, then back along the view until a wall or a prop
+      // the shoulder the camera looks over, then back along the view. It never closes in on the
+      // character: props and walls in the way dissolve instead (core/seeThrough.ts)
       _pivot.set(focus.x + cy * CAMERA.third.side, height * 0.82, focus.z - sy * CAMERA.third.side);
-      const boom = Math.min(rig.boom, clearBehind(_pivot, _fwd, rig.boom));
-      cam.position.copy(_pivot).addScaledVector(_fwd, -boom);
+      cam.position.copy(_pivot).addScaledVector(_fwd, -rig.boom);
       cam.position.y = Math.max(0.4, cam.position.y);
     } else {
       fov = CAMERA.first.fov; near = 0.08;
@@ -347,6 +348,9 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
     fov = rig.fromFov + (fov - rig.fromFov) * e;
     near = 0.5 + (near - 0.5) * e;
   }
+  // props dissolve over the shoulder view, fading in and out with the glide to and from it
+  const e = ease(rig.blend);
+  updateSeeThrough(focus.x, height * 0.6, focus.z, (rig.view === 'third' ? e : 0) + (rig.fromView === 'third' ? 1 - e : 0));
   if (cam.fov !== fov || cam.near !== near) { cam.fov = fov; cam.near = near; cam.updateProjectionMatrix(); }
   if (rig.shake > 0.001) {
     const s = rig.shake * rig.shake * (rig.view === 'top' ? 0.6 : 0.12);
@@ -361,28 +365,6 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
 
 const ease = (t: number): number => t * t * (3 - 2 * t);
 const _fwd = new THREE.Vector3(), _pivot = new THREE.Vector3(), _look = new THREE.Vector3(), _quat = new THREE.Quaternion(), _quat2 = new THREE.Quaternion();
-/** How far back from `p` (against `f`) the camera can sit before a prop or the arena wall. */
-function clearBehind(p: THREE.Vector3, f: THREE.Vector3, max: number): number {
-  const bx = -f.x, bz = -f.z, h = Math.hypot(bx, bz);
-  if (h < 1e-4) return max;
-  // along the ground the boom covers h per metre of its length
-  let best = max;
-  const wall = G.arena.radius + 1.2;
-  // the wall: solve |p + b*s| = wall on the ground plane
-  const pb = p.x * bx + p.z * bz, pp = p.x * p.x + p.z * p.z;
-  const sw = (-pb + Math.sqrt(Math.max(0, pb * pb - h * h * (pp - wall * wall)))) / (h * h);
-  best = Math.min(best, Math.max(0.6, sw));
-  for (const o of G.arena.obstacles) {
-    const ox = o.x - p.x, oz = o.z - p.z, R = o.r + 0.35;
-    const t = (ox * bx + oz * bz) / (h * h), cx = ox - bx * t, cz = oz - bz * t;
-    const miss = R * R - (cx * cx + cz * cz);
-    if (t <= 0 || miss <= 0) continue;
-    const s = t - Math.sqrt(miss) / h;
-    if (s < best) best = Math.max(0.6, s);
-  }
-  return best;
-}
-
 /** Where the perf overlay's GPU timing moves on to the next part of the frame (a no-op unless it's on). */
 export const gpuMarks = { mark: (_label: string): void => {} };
 
