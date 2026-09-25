@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G } from '../state';
+import { seeThrough } from '../core/seeThrough';
 import { ARENA } from '../data/balance';
 import { forestFloor, bark, slabs, grunge, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
@@ -20,39 +21,6 @@ const SUN = new THREE.Vector3(-18, 40, 14);
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 /** angular distance from `a` to the nearest spawn gate */
 const gateGap = (a: number) => Math.min(...GATES.map((g) => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g)))));
-
-/**
- * Foliage between the camera and the player dissolves (screen-door dither), so the tree
- * line never hides the player at the edge of the clearing. Only the main pass: shadows stay.
- */
-const focus = { value: new THREE.Vector3() };
-function seeThrough<M extends THREE.Material>(m: M): M {
-  m.onBeforeCompile = (shader) => {
-    shader.uniforms.uFocus = focus;
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vSeeWp;')
-      .replace('#include <project_vertex>', `#include <project_vertex>
-        vec4 seeWp = vec4(transformed, 1.0);
-        #ifdef USE_INSTANCING
-          seeWp = instanceMatrix * seeWp;
-        #endif
-        vSeeWp = (modelMatrix * seeWp).xyz;`);
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vSeeWp;\nuniform vec3 uFocus;')
-      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
-        vec3 seeCa = uFocus - cameraPosition;
-        float seeL = length(seeCa);
-        vec3 seeDir = seeCa / seeL, seeCp = vSeeWp - cameraPosition;
-        float seeAlong = dot(seeCp, seeDir);
-        if (seeAlong > 0.0 && seeAlong < seeL - 1.0) {
-          float seeFade = 1.0 - smoothstep(2.5, 5.0, length(seeCp - seeDir * seeAlong));
-          float seeN = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
-          if (seeN < seeFade * 0.9) discard;
-        }`);
-  };
-  m.customProgramCacheKey = () => 'seethrough';
-  return m;
-}
 
 /** Large moss patches tinted over the floor in world space (a texture this big would tile visibly). */
 function mossyGround<M extends THREE.Material>(m: M): M {
@@ -92,12 +60,12 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   const barkMat = new THREE.MeshStandardMaterial({ ...barkMaps, color: 0xd8c8b0 });
   // foliage: leaf cards cut out of painted textures round darker cores; instance colours set each plant's hue
   const clusterTex = leafClusterTexture();
-  const canopyMat = seeThrough(new THREE.MeshStandardMaterial({ map: clusterTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }));
-  const coreMat = seeThrough(new THREE.MeshStandardMaterial({ color: 0x8a9a80, roughness: 0.95 }));
+  const canopyMat = seeThrough(new THREE.MeshStandardMaterial({ map: clusterTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), 'foliage');
+  const coreMat = seeThrough(new THREE.MeshStandardMaterial({ color: 0x8a9a80, roughness: 0.95 }), 'foliage');
   // the same for single meshes, which have no instance colour: the tint is in the material
-  const archCanopy = seeThrough(new THREE.MeshStandardMaterial({ map: clusterTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x5e8048 }));
-  const archCore = seeThrough(new THREE.MeshStandardMaterial({ color: 0x2c3c22, roughness: 0.95 }));
-  const fernMat = seeThrough(new THREE.MeshStandardMaterial({ map: fernTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }));
+  const archCanopy = seeThrough(new THREE.MeshStandardMaterial({ map: clusterTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x5e8048 }), 'foliage');
+  const archCore = seeThrough(new THREE.MeshStandardMaterial({ color: 0x2c3c22, roughness: 0.95 }), 'foliage');
+  const fernMat = seeThrough(new THREE.MeshStandardMaterial({ map: fernTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), 'foliage');
   const oneLeaf = leafTexture();
   const litterMat = new THREE.MeshStandardMaterial({ map: oneLeaf, alphaTest: 0.5, roughness: 0.9 });
   const ivyMat = new THREE.MeshStandardMaterial({ map: oneLeaf, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x3e6a2a });
@@ -108,6 +76,8 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   const capMat = new THREE.MeshStandardMaterial({ color: 0x0c2a24, emissive: 0x2affc8, emissiveIntensity: 0.75, roughness: 0.5 });
   const stemMat = new THREE.MeshStandardMaterial({ color: 0xb8b09a, roughness: 0.8 });
   const glyphMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x6aff7a, emissiveIntensity: 2.0 });
+  // the props dissolve between the camera and the player in the close views (the camera never pulls in)
+  for (const m of [stone, mossStone, barkMat, ivyMat, mossMat, hangMat, heartwood, capMat, stemMat, glyphMat]) seeThrough(m, 'prop');
 
   // --- Sky: a summer sky with slow clouds above the canopy -----------------------------
   const sky = buildDaySky(FOG, [0.2, 0.4, 0.75], SUN);
@@ -382,7 +352,6 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   let moteT = 0;
   updaters.push((dt, t) => {
     beams.update(t); sky.update(t);
-    focus.value.set(G.player.pos.x, 1.2, G.player.pos.z);
     moteT += dt;
     while (moteT > 0.06) {
       moteT -= 0.06;
