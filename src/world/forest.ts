@@ -136,7 +136,7 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
     const ivyM = new THREE.Mesh(mergeAll(ivy), ivyMat);
     ivyM.receiveShadow = true;
     scene.add(ivyM);
-    obstacles.push({ x, z, r: 0.95 });
+    obstacles.push({ x, z, r: 0.95, h: 4 });
   }
 
   // --- Boundary: a wall of thicket and boulders, trees beyond --------------------
@@ -196,12 +196,12 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   // --- Glowcap clusters (teal) and bonfires (orange): the biome's 6 point lights -----
   for (const [x, z] of [[-11, -11], [11, -11], [-11, 11], [11, 11]]) {
     buildGlowcaps(scene, x, z, rng, capMat, stemMat, updaters);
-    obstacles.push({ x, z, r: 0.75 });
+    obstacles.push({ x, z, r: 0.75, h: 1.7 });
   }
   for (const a of [Math.PI / 4, (5 * Math.PI) / 4]) {
     const x = Math.cos(a) * (WALL_R - 2.4), z = Math.sin(a) * (WALL_R - 2.4);
     buildBonfire(scene, x, z, stone, barkMat, updaters);
-    obstacles.push({ x, z, r: 0.9 });
+    obstacles.push({ x, z, r: 0.9, h: 1 });
   }
 
   // --- Floor obstacles: stumps, fallen logs, boulders -------------------------------
@@ -209,9 +209,9 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   const stumpSpots = [[15, 0.4], [19, 2.0], [14, 3.45], [20, 4.35], [18, 5.85], [9, 1.2]];
   const stumps = new THREE.InstancedMesh(buildStumpGeo(rng), barkMat, stumpSpots.length);
   stumpSpots.forEach(([rr, a], i) => {
-    const x = Math.cos(a) * rr, z = Math.sin(a) * rr, s = r(0.8, 1.15);
-    setInstance(stumps, i, x, 0, z, 0, r(0, TAU), 0, s, r(0.8, 1.4), s);
-    obstacles.push({ x, z, r: 0.75 * s });
+    const x = Math.cos(a) * rr, z = Math.sin(a) * rr, s = r(0.8, 1.15), yaw = r(0, TAU), sy = r(0.8, 1.4);
+    setInstance(stumps, i, x, 0, z, 0, yaw, 0, s, sy, s);
+    obstacles.push({ x, z, r: 0.75 * s, h: sy });
   });
   stumps.castShadow = stumps.receiveShadow = true;
   scene.add(stumps);
@@ -228,7 +228,7 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
       scene.add(m);
     }
     // collision: circles along the log
-    for (const u of [-1.6, 0, 1.6]) obstacles.push({ x: x + Math.cos(yaw) * u, z: z - Math.sin(yaw) * u, r: 0.55 });
+    for (const u of [-1.6, 0, 1.6]) obstacles.push({ x: x + Math.cos(yaw) * u, z: z - Math.sin(yaw) * u, r: 0.55, h: 0.9 });
   }
 
   const boulderSpots = [[24, 0.75, 1.1], [16, 2.75, 0.8], [23, 3.6, 1.2], [13, 5.2, 0.7], [24, 5.2, 1.0], [8, 3.9, 0.6], [17, 1.55, 0.7]];
@@ -236,7 +236,7 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   boulderSpots.forEach(([rr, a, s], i) => {
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
     setInstance(boulders, i, x, s * 0.25, z, r(0, 3), r(0, 3), r(0, 3), s, s * 0.8, s);
-    obstacles.push({ x, z, r: s * 0.95 });
+    obstacles.push({ x, z, r: s * 0.95, h: s * 1.05 });
   });
   boulders.castShadow = boulders.receiveShadow = true;
   scene.add(boulders);

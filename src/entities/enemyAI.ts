@@ -42,10 +42,12 @@ function chase(e: Enemy, speedMul = 1): void {
   seek(e, dx, dz, d, speedMul, Math.min(d, e.speed * speedMul));
 }
 
-/** Would a bolt from this enemy reach the target, or hit an obstacle first? */
+/** Height a hostile bolt flies at. */
+const BOLT_Y = 1.1;
+/** Would a bolt from this enemy reach the target, or hit an obstacle first? (It flies over low cover.) */
 function canShoot(e: Enemy): boolean {
   const p = e.target!.pos, r = (e.def.projectile?.radius ?? 0.3) * 0.5;
-  return lineClear(e.pos.x, e.pos.z, p.x, p.z, r);
+  return lineClear(e.pos.x, e.pos.z, p.x, p.z, r, BOLT_Y - r);
 }
 
 // --- what attacks look like -----------------------------------------------------------
@@ -86,7 +88,7 @@ export const FX = {
       burst(proj.pos, { count: 16, color: pj.color, speed: 4, life: 0.4, size: 0.3 });
       if (pj.look === 'spore') smokePuff(proj.pos, { count: 6, color: pj.trail, alpha: 0.4, size: 0.6, sizeEnd: 1.8, life: 0.9, rise: 0.4 });
     };
-    const pos = new THREE.Vector3(ox, 1.1, oz);
+    const pos = new THREE.Vector3(ox, BOLT_Y, oz);
     if (pj.look === 'void' || pj.look === 'magma') {
       const look = pj.look, acc = { t: 0, a: 0 }, smoke = pj.trail ?? 0x100818;
       riftBoltLaunch(look, pos, pj.color, size);

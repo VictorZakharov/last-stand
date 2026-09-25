@@ -156,8 +156,10 @@ export class Projectile {
 
     // world collision
     if (Math.hypot(this.pos.x, this.pos.z) > 28) return this.expire();
+    // only what reaches up to the bolt: it flies over low cover
+    const low = this.pos.y - this.radius * 0.5;
     for (const o of G.arena.obstacles) {
-      if ((this.pos.x - o.x) ** 2 + (this.pos.z - o.z) ** 2 < (o.r + this.radius * 0.5) ** 2) return this.expire();
+      if (o.h > low && (this.pos.x - o.x) ** 2 + (this.pos.z - o.z) ** 2 < (o.r + this.radius * 0.5) ** 2) return this.expire();
     }
 
     // target collision

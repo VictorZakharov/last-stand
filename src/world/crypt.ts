@@ -196,7 +196,7 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
       strip.position.set(x + fx * 0.5, ARENA.daisHeight + 2.0, z + fz * 0.5);
       scene.add(strip);
     }
-    obstacles.push({ x, z, r: 0.95 });
+    obstacles.push({ x, z, r: 0.95, h: 6 });
   }
 
   // --- Flagstone paths from the gates to the dais, and a ring walk ---------------------
@@ -267,13 +267,13 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
   const beaconFlame = beaconFlameMat(updaters);
   for (const [x, z] of beaconSpots) {
     buildBeacon(scene, x, z, darkStone, iron, beaconFlame, updaters);
-    obstacles.push({ x, z, r: 0.65 });
+    obstacles.push({ x, z, r: 0.65, h: 2.2 });
   }
   // on stepped plinths in the middle of two opposite solid (non-gate) wall sides
   for (const a of [Math.PI / 4, (5 * Math.PI) / 4]) {
     const [x, z] = polar(WALL_R - 2.4, a);
     buildBrazier(scene, x, z, a, iron, daisMat, updaters);
-    obstacles.push({ x, z, r: 1.45 });
+    obstacles.push({ x, z, r: 1.45, h: 1.8 });
   }
 
   // --- Floor obstacles: broken columns, fallen drums, sarcophagi, gravestones -------------
@@ -284,7 +284,7 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
   colSpots.forEach(([rr, a, ht], i) => {
     const [x, z] = polar(rr, a);
     setInstance(columns, i, x, 0, z, 0, r(0, TAU), 0, 1, ht / 4, 1);
-    obstacles.push({ x, z, r: 0.85 });
+    obstacles.push({ x, z, r: 0.85, h: ht });
     candleSpots.push([x + 0.9, z + 0.3, 0]);
   });
   columns.castShadow = columns.receiveShadow = true;
@@ -298,11 +298,11 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
   for (const [rr, a, rot] of [[22, 1.3, 0.5], [21.5, 5.0, -0.6], [11.5, 2.3, 1.1]]) {
     const [x, z] = polar(rr, a), yaw = a + rot;
     setInstance(drums, di++, x, 0.42, z, 0, yaw, 0, 3.2, 1, 1);
-    for (const u of [-1.1, 0, 1.1]) obstacles.push({ x: x + Math.cos(yaw) * u, z: z - Math.sin(yaw) * u, r: 0.55 });
+    for (const u of [-1.1, 0, 1.1]) obstacles.push({ x: x + Math.cos(yaw) * u, z: z - Math.sin(yaw) * u, r: 0.55, h: 0.9 });
     // a drum broken off the end
     const ex = x + Math.cos(yaw) * 2.4, ez = z - Math.sin(yaw) * 2.4;
     setInstance(drums, di++, ex, 0.44, ez, 0, yaw + r(0.3, 0.9), r(-0.1, 0.1), 0.9, 1, 1);
-    obstacles.push({ x: ex, z: ez, r: 0.6 });
+    obstacles.push({ x: ex, z: ez, r: 0.6, h: 0.9 });
   }
   drums.count = di;
   drums.castShadow = drums.receiveShadow = true;
@@ -323,7 +323,7 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
     lid.castShadow = lid.receiveShadow = true;
     scene.add(lid);
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
-    for (const u of [-0.65, 0.65]) obstacles.push({ x: x + fx * u, z: z + fz * u, r: 0.8 });
+    for (const u of [-0.65, 0.65]) obstacles.push({ x: x + fx * u, z: z + fz * u, r: 0.8, h: 1.25 });
     candleSpots.push([x + fx * 1.55, z + fz * 1.55, 0], [x - fx * 1.55 + fz * 0.4, z - fz * 1.55 - fx * 0.4, 0]);
   });
 
@@ -340,7 +340,7 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
       const lean = rng() < 0.3 ? r(-0.2, 0.2) : r(-0.04, 0.04);
       if (k === n - 1 && rng() < 0.4) setInstance(crosses, ci++, gx, 0, gz, lean, yaw + r(-0.08, 0.08), r(-0.05, 0.05), s);
       else setInstance(heads, hi++, gx, 0, gz, lean, yaw + r(-0.08, 0.08), r(-0.05, 0.05), s);
-      obstacles.push({ x: gx, z: gz, r: 0.45 });
+      obstacles.push({ x: gx, z: gz, r: 0.45, h: 1.1 * s });
       // a few candles left at a grave's foot
       if (rng() < 0.25) candleSpots.push([gx - Math.cos(a) * 0.6, gz - Math.sin(a) * 0.6, 0]);
     }

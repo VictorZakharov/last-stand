@@ -269,4 +269,6 @@ export interface Effect {
   cancel?(): void;
 }
 
-export interface Obstacle { x: number; z: number; r: number }
+/** A prop's footprint on the floor (a circle), and `h`: the height of its top. Everything walks round
+ *  it; only a shot below its top hits it (projectiles fly level, so they pass over low cover). */
+export interface Obstacle { x: number; z: number; r: number; h: number }
