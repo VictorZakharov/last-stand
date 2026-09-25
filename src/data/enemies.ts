@@ -58,7 +58,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     name: 'Sporecaller', model: 'sporecaller', ai: 'ranged',
     life: 95, damage: 32, damageType: 'vitality', speed: 4.0, radius: 0.5,
     range: 12.5, keepAway: 8, windup: 0.8, recover: 0.4, cooldown: 2.3,
-    projectile: { speed: 11.5, radius: 0.38, color: 0x9cff3a, trail: 0x143008 },
+    projectile: { speed: 11.5, radius: 0.38, color: 0x9cff3a, trail: 0x2c4a1c, core: 0.6, look: 'spore' },
     cost: 2, score: 2,
   },
   barkhulk: {

@@ -81,6 +81,8 @@ export class Projectile {
   readonly tick?: ProjectileOpts['tick'];
   /** its own mesh (not a glowing core): it may come close to the lens */
   readonly ownMesh: boolean;
+  /** the mesh's full scale */
+  readonly size: number;
   readonly onExpire?: ProjectileOpts['onExpire'];
   readonly trail?: TrailOpts;
   readonly color: THREE.ColorRepresentation;
@@ -107,6 +109,7 @@ export class Projectile {
     this.mesh = o.mesh ?? new THREE.Mesh(coreGeo, coreMat(this.color, o.intensity ?? 4, this.hostile));
     this.mesh.name = 'projectile';
     if (!o.mesh) this.mesh.scale.setScalar(o.size ?? 0.12);
+    this.size = this.mesh.scale.x;
     this.mesh.position.copy(this.pos);
     G.scene.add(this.mesh);
     const lo = { color: this.color, intensity: o.glow, distance: 6, life: 1, hold: 99, follow: this.mesh };
@@ -128,9 +131,12 @@ export class Projectile {
     }
     this.pos.addScaledVector(this.vel, dt);
     this.mesh.position.copy(this.pos);
-    // in first person a bolt aimed at the player flies at the lens: its glowing core would fill the view
-    // for its last few frames
-    this.mesh.visible = this.pos.distanceToSquared(G.camera.position) > (this.ownMesh ? 1 : 2.5 * 2.5);
+    // in first person a bolt aimed at the player flies at the lens: it shrinks away over its last metres
+    // (a glowing core sooner, it would fill the view) rather than vanishing at once
+    const d = this.pos.distanceTo(G.camera.position), [d0, d1] = this.ownMesh ? [0.6, 2] : [1.2, 3.5];
+    const k = Math.min(1, Math.max(0, (d - d0) / (d1 - d0)));
+    this.mesh.scale.setScalar(this.size * k * k * (3 - 2 * k));
+    this.mesh.visible = k > 0;
     this.tick?.(this, dt);
 
     if (this.trail) {

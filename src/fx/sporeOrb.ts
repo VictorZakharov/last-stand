@@ -1,4 +1,4 @@
-// A spore orb (the Thornheart's volleys): a ball of swirling toxic spores, drawn as animated noise with sap
+// A spore orb (the Thornheart's and the Sporecallers' volleys): a ball of swirling toxic spores, drawn as animated noise with sap
 // veins crawling over it and soft, see-through edges. It is blended over the scene, not added as light, so
 // it reads as a thing thrown at you without glare, near or far. It trails spores and smoke.
 import * as THREE from 'three';
@@ -6,11 +6,14 @@ import { G } from '../state';
 import { particles, col } from './particles';
 
 const geo = new THREE.SphereGeometry(1, 20, 14);
-let mat: THREE.ShaderMaterial | null = null;
+/** one per colour (same program); their time moves together */
+const mats = new Map<number, THREE.ShaderMaterial>();
+const time = { value: 0 };
 
 function material(color: number): THREE.ShaderMaterial {
-  return mat ??= new THREE.ShaderMaterial({
-    uniforms: { uColor: { value: new THREE.Color(color) }, uTime: { value: 0 } },
+  let m = mats.get(color);
+  if (!m) mats.set(color, m = new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(color) }, uTime: time },
     vertexShader: /* glsl */`varying vec3 vP; varying vec3 vN; varying vec3 vV;
       void main(){ vP = position; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
     fragmentShader: /* glsl */`uniform vec3 uColor; uniform float uTime; varying vec3 vP; varying vec3 vN; varying vec3 vV;
@@ -32,10 +35,11 @@ function material(color: number): THREE.ShaderMaterial {
         gl_FragColor = vec4(c, smoothstep(0.0, 0.6, f) * min(1.0, 0.2 + 0.75 * dense + vein));
       }`,
     transparent: true, depthWrite: false,
-  });
+  }));
+  return m;
 }
 
-/** An orb of radius `size` in the boss's sap colour. */
+/** An orb of radius `size` in the thrower's spore colour. */
 export function sporeOrb(color: number, size: number): THREE.Mesh {
   const mesh = new THREE.Mesh(geo, material(color));
   mesh.scale.setScalar(size);
@@ -44,7 +48,7 @@ export function sporeOrb(color: number, size: number): THREE.Mesh {
 
 /** Each frame of an orb's flight: the swirl moves on, and it trails spores and smoke. */
 export function sporeOrbTick(mesh: THREE.Object3D, pos: THREE.Vector3, color: number, smoke: number, dt: number, acc: { t: number }): void {
-  if (mat) mat.uniforms.uTime.value = G.time;
+  time.value = G.time;
   mesh.rotation.y += dt * 2;
   const r = mesh.scale.x, sc = col(smoke), gc = col(color, 1.2);
   acc.t += dt * 45;

@@ -17,7 +17,7 @@ export function buildSporecaller(): Model {
   const spots = kit.glow(0xc8ff60, 2.5);
   const gills = kit.std({ color: 0xd8cfa8, roughness: 0.9, side: THREE.DoubleSide });
   const wood = kit.std({ color: 0x7a6450, roughness: 0.9, map: b.map, normalMap: b.normalMap });
-  const pod = kit.glow(0x9cff3a, 4);
+  const pod = kit.glow(0x9cff3a, 1.2);
   const eye = kit.glow(0xc8ff60, 5);
 
   const j = buildHumanoid({ skin: flesh, torso: robe, legs: robe, feet: flesh, arms: robe, hands: flesh }, {
@@ -71,10 +71,10 @@ export function buildSporecaller(): Model {
       j.shoulderR.rotation.x += -1.3 * w; j.elbowR.rotation.x += 0.7 * w;
       j.spine.rotation.x += -0.25 * w;
       j.head.rotation.x += -0.2 * w;
-      glow = 1 + w * 3;
+      glow = 1 + w * 1.5;
     }
     podMesh.scale.setScalar(0.9 + glow * 0.1 + Math.sin(t * 6) * 0.05);
-    pod.emissiveIntensity = 3 * glow;
+    pod.emissiveIntensity = 1.2 * glow;
     if (st.hit > 0) j.spine.rotation.x += -0.4 * st.hit;
     if (st.dead >= 0) deathFall(j, st.dead, 1);
 

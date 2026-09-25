@@ -74,10 +74,10 @@ export function buildWitch(): Model {
       j.elbowL.rotation.x += 0.6 * w; j.elbowR.rotation.x += 0.6 * w;
       j.spine.rotation.x += -0.2 * w;
       orbJ.position.z = 0.38 + w * 0.25;
-      glow = 1 + w * 3;
+      glow = 1 + w * 1.5;
     } else orbJ.position.z = 0.38;
     orb.scale.setScalar(glow * 0.8 + Math.sin(t * 8) * 0.05);
-    orbMat.emissiveIntensity = 3 * glow;
+    orbMat.emissiveIntensity = 2 * glow;
     if (st.hit > 0) j.spine.rotation.x += -0.4 * st.hit;
     if (st.dead >= 0) { j.body.position.y *= 1 - st.dead; j.body.rotation.x = st.dead * 0.8; }
 
