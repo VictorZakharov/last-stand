@@ -28,6 +28,9 @@ import type { RunSummary } from '../game/run';
 
 import type { Item, Slot } from '../types';
 
+/** Commit and build time, set by vite.config.ts. */
+declare const __BUILD__: { ref: string; time: string };
+
 /** querySelector that asserts the element exists (menu markup is static). */
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 
@@ -72,6 +75,8 @@ export function initMenus(h: MenuHooks): void {
   $('#btn-start').onclick = () => { sfx.click(); hooks.start(); };
   $('#btn-summary').onclick = () => { sfx.click(); hooks.summaryDone(); };
   $('#btn-resume').onclick = () => { sfx.click(); hooks.resume(); };
+  const built = new Date(__BUILD__.time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  $('#pause .build-info').textContent = `Build ${__BUILD__.ref} · ${built}${import.meta.env.DEV ? ' (dev server)' : ''}`;
   $('#btn-abandon').onclick = () => { sfx.click(); hooks.abandon(); };
   $<HTMLInputElement>('#opt-perf').onchange = (e) => setPerfHud((e.target as HTMLInputElement).checked);
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => {
