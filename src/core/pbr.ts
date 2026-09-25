@@ -206,8 +206,88 @@ function bark(): PBRData {
   return maps;
 }
 
+// --- the heroes' materials. Their albedo is neutral (a light grey with the pattern's shading), so the
+// material's colour tints it: one map serves every leather, cloth or steel of any hue.
+
+/** Worn leather: a fine pebbled grain, soft creases, scuffed lighter patches and a few scratches. */
+function leather(): PBRData {
+  const grain = makeVoronoi(131, 90);
+  const crease = makeFbm(137, 6, 4), wear = makeFbm(139, 3, 4), scratch = makeFbm(141, 24, 2);
+  return buildPBR(512, (u, v, o) => {
+    const g = grain(u, v), pebble = smooth(clamp((g.f2 - g.f1) / 0.35, 0, 1));
+    const c = crease(u, v), line = clamp(1 - Math.abs(c - 0.5) * 22, 0, 1);
+    const w = smooth(clamp((wear(u, v) - 0.45) / 0.3, 0, 1));
+    const s = clamp(1 - Math.abs(scratch(u * 0.3, v * 3) - 0.5) * 60, 0, 1) * 0.6;
+    o.h = pebble * 0.35 - line * 0.2 - s * 0.3;
+    const k = 0.62 + pebble * 0.1 - line * 0.08 + w * 0.3 + s * 0.2 + (g.id - 0.5) * 0.05;
+    o.r = o.g = o.b = clamp(k, 0, 1);
+    o.rough = clamp(0.78 - w * 0.25 - pebble * 0.08 + line * 0.15, 0.3, 1);
+  }, 3);
+}
+
+/** Riveted mail: rows of interlocking rings (each row half a ring over), dark between them. */
+function mail(): PBRData {
+  const rows = 32, fbm = makeFbm(151, 8, 3);
+  return buildPBR(512, (u, v, o) => {
+    let h = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      const ry = Math.floor(v * rows) + dy, shift = (ry & 1) * 0.5;
+      for (let dx = -1; dx <= 1; dx++) {
+        const rx = Math.floor(u * rows - shift) + dx;
+        const cx = (rx + 0.5 + shift) / rows, cy = (ry + 0.5) / rows;
+        // rings a little taller than wide, overlapping their neighbours; the lower one on top
+        const d = Math.hypot((u - cx) * rows, (v - cy) * rows * 0.85);
+        const ring = clamp(1 - Math.abs(d - 0.52) / 0.2, 0, 1);
+        h = Math.max(h, Math.sqrt(ring) * (0.8 + 0.2 * (dy + 1) / 2));
+      }
+    }
+    const n = fbm(u, v);
+    o.h = h;
+    o.r = o.g = o.b = clamp(0.08 + h * (0.72 + (n - 0.5) * 0.3), 0, 1);
+    o.rough = clamp(0.95 - h * 0.55 + (n - 0.5) * 0.15, 0.25, 1);
+  }, 5);
+}
+
+/** Wool twill: fine diagonal ribs over threads, with a little uneven dye. */
+function cloth(): PBRData {
+  const fbm = makeFbm(161, 4, 4), fine = makeFbm(163, 64, 2);
+  const threads = 96;
+  return buildPBR(512, (u, v, o) => {
+    const twill = 0.5 + 0.5 * Math.sin((u + v) * threads * Math.PI);
+    const warp = 0.5 + 0.5 * Math.sin(u * threads * 2 * Math.PI), f = fine(u, v), n = fbm(u, v);
+    o.h = twill * 0.6 + warp * 0.2 + f * 0.2;
+    o.r = o.g = o.b = clamp(0.72 + twill * 0.12 + (n - 0.5) * 0.25 + (f - 0.5) * 0.1, 0, 1);
+    o.rough = 0.9 + (f - 0.5) * 0.1;
+  }, 1.5);
+}
+
+/** Worn steel: hammer dimples, fine brushing along u, long scratches, grime settled in the low spots. */
+function steel(): PBRData {
+  const dents = makeVoronoi(171, 12), brush = makeFbm(173, 128, 2), grime = makeFbm(177, 4, 5), scr = makeFbm(179, 16, 3);
+  return buildPBR(512, (u, v, o) => {
+    const d = dents(u, v), dimple = smooth(clamp(d.f1 / 0.7, 0, 1));
+    const b = brush(u * 0.05, v);
+    const s = clamp(1 - Math.abs(scr(u * 0.4 + v * 0.1, v * 2.5) - 0.5) * 70, 0, 1);
+    const gr = smooth(clamp((grime(u, v) - 0.42) / 0.35, 0, 1));
+    o.h = dimple * 0.5 + b * 0.1 - s * 0.15;
+    o.r = o.g = o.b = clamp(0.78 + (b - 0.5) * 0.15 - gr * 0.4 * (1 - dimple * 0.5) + s * 0.2, 0, 1);
+    o.rough = clamp(0.32 + gr * 0.4 + (b - 0.5) * 0.15 - s * 0.12, 0.12, 1);
+  }, 1.5);
+}
+
+/** Fur: long streaks of hair along v, darker at the roots between tufts. */
+function fur(): PBRData {
+  const tuft = makeFbm(181, 6, 3), hair = makeFbm(183, 96, 2);
+  return buildPBR(256, (u, v, o) => {
+    const t = tuft(u, v), s = hair(u, v * 0.08);
+    o.h = s * 0.7 + t * 0.3;
+    o.r = o.g = o.b = clamp(0.35 + s * 0.55 + (t - 0.5) * 0.4, 0, 1);
+    o.rough = 0.95;
+  }, 3);
+}
+
 /** Every recipe, by name; its arguments are part of what it makes. */
-export const RECIPES = { cobblestone, slabs, grunge, wood, burlap, forestFloor, bark };
+export const RECIPES = { cobblestone, slabs, grunge, wood, burlap, forestFloor, bark, leather, mail, cloth, steel, fur };
 export type RecipeName = keyof typeof RECIPES;
 export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
@@ -219,4 +299,5 @@ export const recipeKey = (name: RecipeName, args: readonly unknown[]): string =>
 export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = [
   ['forestFloor', []], ['cobblestone', []], ['bark', []], ['slabs', [21, 6, 3]], ['slabs', [33, 5, 5]], ['slabs', [47, 5, 5]],
   ['slabs', [33, 2, 2]], ['grunge', []], ['wood', []], ['burlap', []],
+  ['leather', []], ['mail', []], ['cloth', []], ['steel', []], ['fur', []],
 ];

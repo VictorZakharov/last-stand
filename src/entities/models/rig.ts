@@ -182,3 +182,43 @@ export function reachArm(shoulder: THREE.Object3D, elbow: THREE.Object3D, upper:
   }
   shoulder.quaternion.copy(_q);
 }
+
+const _a = new THREE.Vector3(), _hip = new THREE.Vector3(), _k = new THREE.Quaternion(), _r = new THREE.Quaternion(), _eu = new THREE.Euler();
+
+/**
+ * Leg IK against the ground (the model root's y = 0): an ankle posed below `footH` (the foot would sink
+ * into the floor, as when the body crouches for a slam or a block) is lifted back to it by bending the
+ * hip and knee, the foot staying where it was over the ground; and a foot at or near the floor turns
+ * flat on it. Runs after the pose, before anything reads the joints' world matrices. Not while dying.
+ */
+export function groundFeet(j: Joints, footH: number): void {
+  const root = j.root;
+  root.updateMatrixWorld(true);
+  for (const [thigh, knee, ankle] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
+    ankle.getWorldPosition(_a); root.worldToLocal(_a);
+    const sink = footH - _a.y;
+    if (sink > 0) {
+      // the target in the hip's parent (hips) space: the same spot, raised to the floor
+      _a.y = footH;
+      root.localToWorld(_a); thigh.parent!.worldToLocal(_a);
+      _hip.copy(thigh.position);
+      const L1 = j.P.thighL, L2 = j.P.shinL;
+      const dy = _a.y - _hip.y, dz = _a.z - _hip.z, d = Math.min(Math.hypot(dy, dz), L1 + L2 - 1e-4);
+      // knee bend from the triangle, then the thigh pitched so the ankle lands on the target (the knee
+      // forward); the thigh's own roll and yaw stay as posed
+      const bend = Math.PI - Math.acos(Math.min(1, Math.max(-1, (L1 * L1 + L2 * L2 - d * d) / (2 * L1 * L2))));
+      const toT = Math.atan2(dz, -dy), inner = Math.asin(Math.min(1, L2 * Math.sin(bend) / Math.max(d, 1e-4)));
+      thigh.rotation.x = -(toT + inner);
+      knee.rotation.x = bend;
+      root.updateMatrixWorld(true);
+    }
+    // a foot within a few cm of the floor lies flat on it: cancel the leg's pitch at the ankle
+    ankle.getWorldPosition(_a); root.worldToLocal(_a);
+    const planted = 1 - Math.min(1, Math.max(0, (_a.y - footH) / 0.05));
+    if (planted > 0) {
+      knee.getWorldQuaternion(_k); root.getWorldQuaternion(_r);
+      _eu.setFromQuaternion(_r.invert().multiply(_k), 'YXZ');
+      ankle.rotation.x += (-_eu.x - ankle.rotation.x) * planted;
+    }
+  }
+}
