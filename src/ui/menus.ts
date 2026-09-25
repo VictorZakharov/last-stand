@@ -50,6 +50,15 @@ export interface MenuHooks {
 let hooks: MenuHooks;
 const newIds = new Set<string>();
 
+/** A key label as keycaps: 'W A S D' is four keys, 'B / C' two, '(hold)' a note after them. */
+function keycaps(label: string): string {
+  const hold = label.endsWith(' (hold)');
+  const keys = hold ? label.slice(0, -7) : label;
+  const caps = (/^(\S( \S)+|\S \/ \S)$/.test(keys) ? keys.split(' ') : [keys])
+    .map((k) => (k === '/' ? '<i>/</i>' : `<kbd>${k}</kbd>`)).join('');
+  return caps + (hold ? '<i>hold</i>' : '');
+}
+
 /** Controls help reflects the current key bindings (or the touch controls, when a finger is the input). */
 export function renderControlsHelp(): void {
   if (isTouch()) {
@@ -66,7 +75,7 @@ export function renderControlsHelp(): void {
     return [s?.def.channel ? `${label} (hold)` : label, s ? s.def.name : '—'];
   });
   const rows = [['W A S D', 'Move'], ['Mouse', 'Aim'], ...skillRows, ['Mouse wheel', 'Zoom'], ['Middle drag', 'Rotate camera'], ['V', 'View: top-down, over the shoulder, first person'], ['B / C', 'Bank / Continue after a wave'], ['E (hold)', 'Revive a downed partner (co-op)'], ['Esc', 'Pause']];
-  const html = rows.map(([k, v]) => `<span class="k">${k}</span><span>${v}</span>`).join('');
+  const html = rows.map(([k, v]) => `<span class="k">${keycaps(k)}</span><span>${v}</span>`).join('');
   document.querySelectorAll('.controls-help').forEach((el) => { el.innerHTML = html; });
 }
 
