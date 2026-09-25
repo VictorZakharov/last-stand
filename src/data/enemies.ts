@@ -23,7 +23,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     name: 'Rift Witch', model: 'witch', ai: 'ranged',
     life: 105, damage: 34, damageType: 'vitality', speed: 4.3, radius: 0.5,
     range: 13, keepAway: 8.5, windup: 0.75, recover: 0.4, cooldown: 2.2,
-    projectile: { speed: 13, radius: 0.35, color: 0xc050ff },
+    projectile: { speed: 13, radius: 0.35, color: 0xc050ff, trail: 0x1a0428, core: 0.7, look: 'void' },
     cost: 2, score: 2,
   },
   brute: {
@@ -36,7 +36,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     name: 'The Hollow Colossus', model: 'colossus', ai: 'boss',
     life: 5200, damage: 110, damageType: 'fire', speed: 2.9, radius: 1.8,
     range: 4.2, slamRadius: 5.5, windup: 1.2, recover: 1.0, cooldown: 2.0,
-    projectile: { speed: 12, radius: 0.5, color: 0xff6a2a },
+    projectile: { speed: 12, radius: 0.5, color: 0xff6a2a, trail: 0x1a1210, core: 0.5, look: 'magma' },
     summon: 'imp',
     cost: 0, score: 60, knockbackResist: 1, freezeResist: 0.7, boss: true, accent: 0xb070ff,
   },
