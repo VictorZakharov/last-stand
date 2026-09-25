@@ -700,5 +700,6 @@ body.touch #party { top: calc(104px * var(--touch, 1)); left: calc(64px * var(--
 .sm-note { color: #9ccfff; }
 .sm-note:empty { display: none; }
 .pause-note { color: #9ccfff; font-size: 14px; }
+#pause .build-info { margin-top: 12px; color: #7d7466; font-size: 12px; user-select: text; }
 #hud.watching #bottombar, #hud.watching #buffs, #hud.watching #spoils, #hud.watching #crosshair { display: none; }
 #lobby-rail button:disabled { opacity: .45; cursor: default; }

@@ -1,5 +1,5 @@
 // Installable, offline game (PWA). Registers the service worker that scripts/pwa.ts builds, offers
-// the browser's install prompt from the lobby, and asks to reload once a new version is cached.
+// the browser's install prompt from the lobby, and offers a reload once a new version took over.
 // Production builds only: the dev server has no worker.
 import { G } from '../state';
 import { sfx } from '../core/audio';
@@ -14,21 +14,34 @@ export function initPwa(): void {
   if (!('serviceWorker' in navigator) || import.meta.env.DEV) return;
   const base = import.meta.env.BASE_URL;
   const sw = navigator.serviceWorker;
-  let reloading = false, asked = false;
+  let hadWorker = !!sw.controller;
   sw.addEventListener('controllerchange', () => {
-    // the new version took over because the player asked for it
-    if (asked && !reloading) { reloading = true; location.reload(); return; }
+    // a new deploy's worker took over (it does at once): this page still runs the old build
+    if (hadWorker) { stale().then((old) => { if (old) offerUpdate(() => location.reload()); }); return; }
     // first install: the worker now sees requests, so fetch the fonts again to cache them for offline
+    hadWorker = true;
     cacheFonts();
   });
-  sw.register(`${base}sw.js`, { scope: base }).then((reg) => {
-    const offer = () => { if (reg.waiting && sw.controller) offerUpdate(() => { asked = true; reg.waiting?.postMessage('skip-waiting'); }); };
-    offer();
-    reg.addEventListener('updatefound', () => {
-      const w = reg.installing;
-      w?.addEventListener('statechange', () => { if (w.state === 'installed') offer(); });
-    });
+  // updateViaCache 'none': update checks skip the HTTP cache (Pages sends max-age=600)
+  sw.register(`${base}sw.js`, { scope: base, updateViaCache: 'none' }).then((reg) => {
+    // a tab left open checks again when it comes back into view
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
   }).catch(() => { /* no worker (private mode, file://): the game still runs online */ });
+}
+
+/** This page runs an older build than the controlling worker serves (its bundle isn't in that cache). */
+async function stale(): Promise<boolean> {
+  const worker = navigator.serviceWorker.controller;
+  if (!worker) return false;
+  try {
+    const name = await new Promise<string>((res, rej) => {
+      const ch = new MessageChannel();
+      ch.port1.onmessage = (e) => res(e.data as string);
+      worker.postMessage('cache', [ch.port2]);
+      setTimeout(rej, 3000);
+    });
+    return !(await (await caches.open(name)).match(import.meta.url, { ignoreVary: true }));
+  } catch { return false; }
 }
 
 /** The fonts are cross-origin (Google Fonts); re-requesting them through the worker stores them. */
@@ -41,7 +54,7 @@ async function cacheFonts(): Promise<void> {
   } catch { /* offline: next time */ }
 }
 
-/** A new version is cached: offer a reload in the lobby (never in the middle of a run). */
+/** A new version took over: offer a reload in the lobby (never in the middle of a run). */
 function offerUpdate(apply: () => void): void {
   const toast = $('#update-toast');
   const show = () => { if (G.mode === 'menu') toast.classList.remove('hidden'); else setTimeout(show, 2000); };
