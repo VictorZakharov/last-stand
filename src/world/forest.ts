@@ -1,6 +1,6 @@
-// The Thornwood: a moonlit clearing walled in by thickets, boulders and old trees,
-// with four root-arch spawn gates, a mossy stone dais ringed by standing stones,
-// glowcap mushroom clusters and two bonfires. Stumps, logs and boulders break up the floor.
+// The Thornwood: a sunlit clearing walled in by thickets, boulders and old trees, ancient giants
+// standing over the forest beyond, with four root-arch spawn gates, a mossy stone dais ringed by
+// standing stones, glowcap mushroom clusters and two bonfires. Stumps, logs and boulders break up the floor.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G } from '../state';
@@ -8,14 +8,15 @@ import { ARENA } from '../data/balance';
 import { forestFloor, bark, slabs, grunge, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
-import { buildSky, boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
-import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, litterGeo, moonbeams } from './foliage';
-import { bend, rag, taperTube, twist } from '../entities/models/shapes';
+import { buildDaySky, boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
+import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
+import { bend, branches, rag, taperTube, twist } from '../entities/models/shapes';
 import type { Obstacle } from '../types';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
-const FOG = 0x0e1a12;
-const MOON = new THREE.Vector3(-16, 34, 12);
+/** daylight haze: the fog, and the sky at the horizon */
+const FOG = 0x9ab4a6;
+const SUN = new THREE.Vector3(-18, 40, 14);
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 /** angular distance from `a` to the nearest spawn gate */
 const gateGap = (a: number) => Math.min(...GATES.map((g) => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g)))));
@@ -108,8 +109,9 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   const stemMat = new THREE.MeshStandardMaterial({ color: 0xb8b09a, roughness: 0.8 });
   const glyphMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x6aff7a, emissiveIntensity: 2.0 });
 
-  // --- Sky: a moon and stars above the canopy ----------------------------------------
-  scene.add(buildSky(FOG, MOON.clone().normalize(), [0.003, 0.008, 0.006]));
+  // --- Sky: a summer sky with slow clouds above the canopy -----------------------------
+  const sky = buildDaySky(FOG, [0.2, 0.4, 0.75], SUN);
+  scene.add(sky.mesh);
 
   // --- Ground ---------------------------------------------------------------
   // it reaches past the fog's far end, so its edge melts into the sky's horizon
@@ -196,25 +198,27 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   const treeN = 120;
   const trunks = new THREE.InstancedMesh(buildTrunkGeo(rng), barkMat, treeN);
   const crown = canopyGeo(rng, [[0, 0, 0, 1], [0.8, -0.25, 0.3, 0.72], [-0.75, -0.1, -0.4, 0.78], [0.1, 0.45, -0.25, 0.7], [-0.25, -0.35, 0.8, 0.66], [0.35, -0.2, -0.85, 0.6]], 16, 0.95);
-  const crowns = new THREE.InstancedMesh(crown.core, coreMat, treeN);
-  const crownCards = new THREE.InstancedMesh(crown.cards, canopyMat, treeN);
+  // two crown clusters a tree: the top, and a smaller one lower down on a limb
+  const crowns = new THREE.InstancedMesh(crown.core, coreMat, treeN * 2);
+  const crownCards = new THREE.InstancedMesh(crown.cards, canopyMat, treeN * 2);
   let ti = 0;
   for (let tries = 0; ti < treeN && tries < treeN * 20; tries++) {
     const a = r(0, TAU), rr = 34 + Math.pow(r(0, 1), 1.4) * 26;
     if (rr < 42 && gateGap(a) < 0.1) continue;   // keep a path open behind each gate
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
-    const th = Math.min(17, 7 + (rr - 34) * 0.45) * r(0.85, 1.15), tw = r(0.8, 1.3) * (th / 10) ** 0.6;
+    const th = Math.min(17, 7 + (rr - 34) * 0.45) * r(0.85, 1.15), tw = r(1.1, 1.7) * (th / 10) ** 0.6;
     setInstance(trunks, ti, x, 0, z, 0, r(0, TAU), 0, tw, th, tw);
-    const cw = r(2.4, 3.6) * (th / 10) ** 0.7;
-    setInstance(crowns, ti, x, th * 0.86, z, r(-0.15, 0.15), r(0, TAU), r(-0.15, 0.15), cw, cw * r(0.75, 0.95), cw);
-    crowns.getMatrixAt(ti, _mx); crownCards.setMatrixAt(ti, _mx);
+    const cw = r(3.0, 4.2) * (th / 10) ** 0.7, side = r(0, TAU);
     plantCol.setRGB(r(0.08, 0.15), r(0.16, 0.26), r(0.06, 0.1));
-    crowns.setColorAt(ti, plantCol); crownCards.setColorAt(ti, plantCol);
+    setInstance(crowns, ti * 2, x, th * 0.8, z, r(-0.15, 0.15), r(0, TAU), r(-0.15, 0.15), cw, cw * r(0.75, 0.95), cw);
+    setInstance(crowns, ti * 2 + 1, x + Math.cos(side) * cw * 0.75, th * 0.56, z + Math.sin(side) * cw * 0.75, r(-0.2, 0.2), r(0, TAU), r(-0.2, 0.2), cw * 0.62, cw * 0.5, cw * 0.62);
+    for (const k of [ti * 2, ti * 2 + 1]) { crowns.getMatrixAt(k, _mx); crownCards.setMatrixAt(k, _mx); crowns.setColorAt(k, plantCol); crownCards.setColorAt(k, plantCol); }
     ti++;
   }
-  trunks.count = crowns.count = crownCards.count = ti;
+  trunks.count = ti; crowns.count = crownCards.count = ti * 2;
   trunks.castShadow = crownCards.castShadow = trunks.receiveShadow = crowns.receiveShadow = crownCards.receiveShadow = true;
   scene.add(trunks, crowns, crownCards);
+  buildGiants(scene, rng, barkMat, crown, coreMat, canopyMat);
 
   // --- Gates: arches of twisted roots around a green portal -----------------------
   const portals: Portal[] = GATES.map((a) => buildRootGate(scene, a, barkMat, mossStone, { canopyMat: archCanopy, coreMat: archCore, hangMat, ivyMat }, rng, updaters));
@@ -361,8 +365,8 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   litter.receiveShadow = true;
   scene.add(litter);
 
-  // moonbeams slanting down through gaps in the canopy onto the edges of the clearing
-  const beams = moonbeams([[16, 1.0, 1.8], [21, 2.3, 2.2], [14, 4.0, 1.6], [20, 5.1, 2.0], [23, 3.3, 1.5]].map(([rr, a, rad]) => [Math.cos(a) * rr, Math.sin(a) * rr, rad]), MOON);
+  // sunbeams slanting down through gaps in the canopy onto the edges of the clearing
+  const beams = lightShafts([[16, 1.0, 1.8], [21, 2.3, 2.2], [14, 4.0, 1.6], [20, 5.1, 2.0], [23, 3.3, 1.5]].map(([rr, a, rad]) => [Math.cos(a) * rr, Math.sin(a) * rr, rad]), SUN, new THREE.Color(0.075, 0.065, 0.035));
   scene.add(beams.group);
 
   const pebbles = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.2, 0), stone, 160);
@@ -374,10 +378,10 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   pebbles.receiveShadow = true;
   scene.add(pebbles);
 
-  // --- Ambient: fireflies and low mist -------------------------------------------------
+  // --- Ambient: drifting pollen and a light haze ---------------------------------------
   let moteT = 0;
   updaters.push((dt, t) => {
-    beams.update(t);
+    beams.update(t); sky.update(t);
     focus.value.set(G.player.pos.x, 1.2, G.player.pos.z);
     moteT += dt;
     while (moteT > 0.06) {
@@ -385,14 +389,14 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
       const a = Math.random() * TAU, rr = Math.sqrt(Math.random()) * 29;
       particles.glow.spawn({
         x: Math.cos(a) * rr, y: rand(0.3, 3), z: Math.sin(a) * rr,
-        vx: rand(-0.35, 0.35), vy: rand(-0.1, 0.25), vz: rand(-0.35, 0.35),
-        life: rand(2, 4.5), size: rand(0.05, 0.1), color: col(0xd8ff70, 1.6), colorEnd: col(0x40a020, 0.3), alpha: 0.9,
+        vx: rand(-0.25, 0.25), vy: rand(-0.08, 0.12), vz: rand(-0.25, 0.25),
+        life: rand(3, 5), size: rand(0.035, 0.06), color: col(0xfff2c0, 0.45), colorEnd: col(0xd8c890, 0.1), alpha: 0.7,
       });
       if (Math.random() < 0.25) {
         const b = Math.random() * TAU, br = rand(10, 28);
         particles.smoke.spawn({
           x: Math.cos(b) * br, y: 0.3, z: Math.sin(b) * br, vx: rand(-0.3, 0.3), vz: rand(-0.3, 0.3), vy: 0.02,
-          life: rand(6, 10), size: rand(5, 8), sizeEnd: 10, color: col(0x2c4034), alpha: 0.07,
+          life: rand(6, 10), size: rand(5, 8), sizeEnd: 10, color: col(0xb8ccc0), alpha: 0.05,
         });
       }
     }
@@ -400,12 +404,13 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
 
   return {
     look: {
-      background: 0x0a120c,
-      fog: { color: FOG, near: 42, far: 85 },
-      hemi: { sky: 0x9ac8aa, ground: 0x1c2412, intensity: 1.15 },
-      moon: { color: 0xd8ecdc, intensity: 3.0, pos: [-16, 34, 12] },
-      env: buildEnvMap(renderer, [0.18, 0.3, 0.24], [0.8, 1.0, 0.9]),
-      envIntensity: 0.45,
+      background: FOG,
+      fog: { color: FOG, near: 42, far: 95 },
+      hemi: { sky: 0xcfe4ff, ground: 0x4a5a2c, intensity: 1.4 },
+      // the sun: the shared key light
+      moon: { color: 0xfff0d6, intensity: 4.0, pos: [SUN.x, SUN.y, SUN.z] },
+      env: buildEnvMap(renderer, [0.55, 0.7, 0.8], [1.3, 1.25, 1.1]),
+      envIntensity: 0.6,
     },
     obstacles,
     portals,
@@ -481,6 +486,72 @@ function buildLogGeo(rng: () => number): { bark: THREE.BufferGeometry; inner: TH
   const caps: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 4; i++) caps.push(new THREE.CylinderGeometry(0.2 - i * 0.03, 0.05, 0.06, 12, 1, false, 0, Math.PI).rotateY(-Math.PI / 2).translate(-0.6 + i * 0.35, 0.05 - i * 0.12, 0.45));
   return { bark, inner: inside, moss, fungus: mergeAll(caps) };
+}
+
+/** Stretch a geometry's uvs, so a bark texture keeps its scale along a long trunk or root. */
+function scaleUV<T extends THREE.BufferGeometry>(g: T, su: number, sv: number): T {
+  const uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
+  return g;
+}
+
+/**
+ * An ancient giant, about 30 m: a broad bole twisting up out of great buttress roots, limbs forking out
+ * into the crown. Returns its geometry and the twig ends where its crown clusters sit.
+ */
+function buildGiantGeo(rng: () => number): { geo: THREE.BufferGeometry; tips: THREE.Vector3[] } {
+  const H = 30;
+  const bole = new THREE.CylinderGeometry(1.3, 2.1, H, 18, 16).translate(0, H / 2, 0);
+  const p = bole.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    // the base flares into the roots and the grain twists as it rises
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), f = 1 + 1.2 * Math.exp(-y / 2.2), tw = y * 0.035;
+    p.setXYZ(i, (x * Math.cos(tw) - z * Math.sin(tw)) * f, y, (x * Math.sin(tw) + z * Math.cos(tw)) * f);
+  }
+  const parts: THREE.BufferGeometry[] = [lumpy(scaleUV(bole, 4, H / 5), 0.012, 7)];
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * TAU + rng() * 0.3, c = Math.cos(a), s = Math.sin(a), reach = 6.5 + rng() * 2;
+    parts.push(scaleUV(taperTube([V(c * 1.4, 4.5, s * 1.4), V(c * 2.8, 1.6, s * 2.8), V(c * reach * 0.7, 0.2, s * reach * 0.7), V(c * reach, -0.3, s * reach)], (t) => 1.05 * (1 - t * 0.85), 12, 8), 2, 3));
+  }
+  const limbs: THREE.BufferGeometry[] = [], tips: THREE.Vector3[] = [];
+  for (let k = 0; k < 4; k++) {
+    const a = k * 2.2 + rng() * 0.6;
+    branches(rng, V(0, 15 + k * 3.5, 0), V(Math.cos(a), 0.85, Math.sin(a)), 9 + rng() * 2, 0.75, 1, limbs, tips, 0.5, 8);
+  }
+  branches(rng, V(0, H - 1, 0), V(0.1, 1, 0.05), 6, 0.9, 1, limbs, tips, 0.45, 8);
+  for (const l of limbs) parts.push(scaleUV(l, 2, 3));
+  return { geo: mergeAll(parts), tips };
+}
+
+/** A ring of ancient giants beyond the thicket, standing over the forest the way the crypt's towers do,
+ * clear of the gates. Their crowns share the trees' canopy geometry and materials. */
+function buildGiants(scene: THREE.Object3D, rng: () => number, bark: THREE.Material, crown: { core: THREE.BufferGeometry; cards: THREE.BufferGeometry }, coreMat: THREE.Material, canopyMat: THREE.Material): void {
+  const { geo, tips } = buildGiantGeo(rng);
+  const spots: [number, number][] = [];
+  for (let i = 0; i < 12; i++) {
+    const a = ((i + 0.5) / 12) * TAU + (rng() - 0.5) * 0.15;
+    if (gateGap(a) > 0.3) spots.push([a, 38 + rng() * 8]);
+  }
+  const trunks = new THREE.InstancedMesh(geo, bark, spots.length);
+  const cores = new THREE.InstancedMesh(crown.core, coreMat, spots.length * tips.length);
+  const cards = new THREE.InstancedMesh(crown.cards, canopyMat, spots.length * tips.length);
+  const m = new THREE.Matrix4(), cm = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), at = new THREE.Vector3(), col = new THREE.Color();
+  let ci = 0;
+  spots.forEach(([a, rr], i) => {
+    const sc = 0.9 + rng() * 0.25, yaw = rng() * TAU;
+    m.compose(V(Math.cos(a) * rr, 0, Math.sin(a) * rr), q.setFromAxisAngle(V(0, 1, 0), yaw), s.setScalar(sc));
+    trunks.setMatrixAt(i, m);
+    for (const tp of tips) {
+      at.copy(tp).applyMatrix4(m);
+      const cs = (4.2 + rng() * 1.6) * sc;
+      setInstance(cores, ci, at.x, at.y + cs * 0.2, at.z, (rng() - 0.5) * 0.3, rng() * TAU, (rng() - 0.5) * 0.3, cs, cs * (0.65 + rng() * 0.2), cs);
+      cores.getMatrixAt(ci, cm); cards.setMatrixAt(ci, cm);
+      col.setRGB(0.08 + rng() * 0.06, 0.16 + rng() * 0.09, 0.05 + rng() * 0.04);
+      cores.setColorAt(ci, col); cards.setColorAt(ci++, col);
+    }
+  });
+  trunks.castShadow = trunks.receiveShadow = cards.castShadow = cards.receiveShadow = cores.receiveShadow = true;
+  scene.add(trunks, cores, cards);
 }
 
 /** A broken stump: a jagged, splintered top, buttress roots, bark lumps. */

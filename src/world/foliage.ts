@@ -1,6 +1,6 @@
 // Foliage for the Thornwood: canvas-painted leaf textures (a cluster of leaves, a fern frond, a single
 // leaf) cut out with alpha test, and the geometry that carries them: canopies and bushes of leaf cards
-// round a dark core, fern clumps, leaf litter, and moonbeams slanting down through the canopy.
+// round a dark core, fern clumps, leaf litter, and shafts of sunlight slanting down through the canopy.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ctx2d, textureFromCanvas } from '../core/textures';
@@ -27,11 +27,11 @@ function paintLeaf(g: CanvasRenderingContext2D, x: number, y: number, a: number,
  * neutral green, so each tree's instance colour sets its hue; darker leaves at the back of the pile.
  */
 export function leafClusterTexture(seed = 7): THREE.CanvasTexture {
-  const S = 256, c = canvas(S), g = ctx2d(c), r = mulberry(seed);
+  const S = 512, c = canvas(S), g = ctx2d(c), r = mulberry(seed);
   const leaves: [number, number, number, number, number][] = [];
-  for (let i = 0; i < 90; i++) {
-    const a = r() * TAU, d = Math.sqrt(r()) * S * 0.36;
-    leaves.push([S / 2 + Math.cos(a) * d, S / 2 + Math.sin(a) * d, a + (r() - 0.5) * 1.4, S * (0.1 + r() * 0.07) * (1 - d / S * 0.7), r()]);
+  for (let i = 0; i < 220; i++) {
+    const a = r() * TAU, d = Math.sqrt(r()) * S * 0.37;
+    leaves.push([S / 2 + Math.cos(a) * d, S / 2 + Math.sin(a) * d, a + (r() - 0.5) * 1.4, S * (0.065 + r() * 0.045) * (1 - d / S * 0.7), r()]);
   }
   // paint back to front: the outer and darker leaves first
   leaves.sort((p, q) => p[4] - q[4]);
@@ -74,17 +74,24 @@ export function leafTexture(): THREE.CanvasTexture {
 
 /**
  * A canopy: leaf cards over overlapping blobs [x, y, z, radius], each card facing out from its blob,
- * plus a dark core that fills the gaps. The cards' normals point out from the blob, not the card, so the
- * whole crown lights as one soft mass instead of a heap of flat planes.
+ * plus a dark core that fills the gaps. The normals of both point out from the blob, not the card or the
+ * core's facets, so the whole crown lights as one soft mass instead of a heap of flat planes.
  */
 export function canopyGeo(rng: () => number, blobs: [number, number, number, number][], cardsPerBlob: number, card: number): { core: THREE.BufferGeometry; cards: THREE.BufferGeometry } {
   const cores: THREE.BufferGeometry[] = [], cards: THREE.BufferGeometry[] = [];
   const q = new THREE.Quaternion(), z = new THREE.Vector3(0, 0, 1), roll = new THREE.Quaternion(), n = new THREE.Vector3();
+  // out from the blob, tipped up: the top of a crown catches the light
+  const soft = (g: THREE.BufferGeometry, x: number, y: number, zz: number, s: number) => {
+    const p = g.attributes.position, nr = g.attributes.normal;
+    for (let k = 0; k < p.count; k++) { n.set(p.getX(k) - x, (p.getY(k) - y) * 1.3 + s * 0.3, p.getZ(k) - zz).normalize(); nr.setXYZ(k, n.x, n.y, n.z); }
+  };
   blobs.forEach(([x, y, zz, s], bi) => {
-    cores.push(lumpy(new THREE.IcosahedronGeometry(1, 1), 0.15, bi * 7 + rng()).scale(s * 0.78, s * 0.66, s * 0.78).translate(x, y, zz));
+    const core = lumpy(new THREE.IcosahedronGeometry(1, 1), 0.15, bi * 7 + rng()).scale(s * 0.62, s * 0.52, s * 0.62).translate(x, y, zz);
+    soft(core, x, y, zz, s);
+    cores.push(core);
     for (let i = 0; i < cardsPerBlob; i++) {
-      // directions biased upwards: the top of a crown is where the light and the camera are
-      const d = new THREE.Vector3(rng() * 2 - 1, rng() * 1.6 - 0.5, rng() * 2 - 1).normalize();
+      // all round, a little more on top, where the light and the camera are: a crown has no flat underside
+      const d = new THREE.Vector3(rng() * 2 - 1, rng() * 2 - 0.85, rng() * 2 - 1).normalize();
       const size = card * (0.8 + rng() * 0.45) * s;
       const g = new THREE.PlaneGeometry(size, size);
       q.setFromUnitVectors(z, d);
@@ -94,11 +101,7 @@ export function canopyGeo(rng: () => number, blobs: [number, number, number, num
       g.rotateX((rng() - 0.5) * 0.9).rotateZ((rng() - 0.5) * 0.9);
       const at = d.clone().multiplyScalar(s * (0.62 + rng() * 0.3));
       g.translate(x + at.x, y + at.y, zz + at.z);
-      const p = g.attributes.position, nr = g.attributes.normal;
-      for (let k = 0; k < p.count; k++) {
-        n.set(p.getX(k) - x, (p.getY(k) - y) * 1.3 + s * 0.3, p.getZ(k) - zz).normalize();
-        nr.setXYZ(k, n.x, n.y, n.z);
-      }
+      soft(g, x, y, zz, s);
       cards.push(g);
     }
   });
@@ -135,13 +138,13 @@ export function fernClumpGeo(rng: () => number, fronds = 7): THREE.BufferGeometr
 export const litterGeo = (): THREE.BufferGeometry => new THREE.PlaneGeometry(0.13, 0.19).rotateX(-Math.PI / 2).translate(0, 0.015, 0);
 
 /**
- * Moonbeams: soft columns of light slanting down along `dir` onto each spot, brightest along their axis
- * as seen from the camera (a volume, not a tube), fading in from the canopy and out at the ground, with
- * slow motes of dust drifting through. Additive and dim: they're the moonlight's own glow, and they never flash.
+ * Shafts of light: soft columns slanting down along `dir` (towards the sun) onto each spot, brightest along
+ * their axis as seen from the camera (a volume, not a tube), fading in from the canopy and out at the ground,
+ * with slow motes of dust drifting through. Additive and faint (`color`), and they never flash.
  */
-export function moonbeams(spots: [number, number, number][], dir: THREE.Vector3): { group: THREE.Group; update: (t: number) => void } {
+export function lightShafts(spots: [number, number, number][], dir: THREE.Vector3, color: THREE.Color): { group: THREE.Group; update: (t: number) => void } {
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uColor: { value: new THREE.Color(0.045, 0.06, 0.045) } },
+    uniforms: { uTime: { value: 0 }, uColor: { value: color } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
     vertexShader: /* glsl */`
       varying vec3 vN; varying vec3 vV; varying float vH; varying vec2 vUv;

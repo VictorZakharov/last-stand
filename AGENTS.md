@@ -52,7 +52,7 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
 | `src/combat/skills/` | Skill behaviours, registered in `index.ts` (`SKILL_IMPLS`) and referenced from class data by `impl` name. Instant: `cast()`. Channel: `start/tick/stop` with a typed state object. Use `Needs<'field'>` to require optional `SkillDef` tuning fields |
 | `src/entities/models/` | Procedural models, registered in `index.ts` (`MODELS`); `rig.ts` = shared humanoid skeleton + pose helpers |
 | `src/game/run.ts` | Wave flow, scoring, loot rolls, bank / continue |
-| `src/world/` | `arena.ts` builds every biome at boot and switches between them; one builder per biome (`crypt.ts`, `forest.ts`), shared pieces in `props.ts` (the night sky too), the Thornwood's leaf-card foliage in `foliage.ts` |
+| `src/world/` | `arena.ts` builds every biome at boot and switches between them; one builder per biome (`crypt.ts`, `forest.ts`), shared pieces in `props.ts` (the night and day skies too), the Thornwood's leaf-card foliage in `foliage.ts` |
 | `src/loot/` | Item generation (base names and excluded stats per class), persistent profiles, one per class (`localStorage` `last-stand.profile.<classId>.v1`; the pre-class `last-stand.profile.v1` migrates to the mage), the lobby's class (cookie `last-stand-class`), skill loadout (cookie `last-stand-loadout-<classId>`; a class with gear-driven skills keeps one per weapon style, `last-stand-loadout-<classId>-<style>`) |
 | `src/fx/` | CPU particle pools, a fixed pool of 8 point lights (`lights.ts`), transient effects (`effects.ts`) |
 | `src/core/` | Renderer + post chain, input, audio, procedural textures & materials, game-time scheduler (`timers.ts`) |
