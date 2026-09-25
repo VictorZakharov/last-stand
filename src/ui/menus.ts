@@ -26,7 +26,7 @@ import { session, partnerInRun } from '../net/session';
 
 import type { RunSummary } from '../game/run';
 
-import type { Item, Slot } from '../types';
+import type { Item, Slot, SkillKey } from '../types';
 
 /** Commit and build time, set by vite.config.ts. */
 declare const __BUILD__: { ref: string; time: string };
@@ -57,17 +57,86 @@ export function renderControlsHelp(): void {
       ['Skill buttons', 'Tap: cast at the nearest foe'], ['', 'Drag, then let go: cast where you aim'], ['', 'Hold a channelled skill to keep it going'],
       ['Pinch', 'Zoom'], ['❚❚', 'Pause'], ['Bank / Continue', 'The buttons after each wave'], ['Revive', 'Hold it by a downed partner (co-op)']];
     const html = rows.map(([k, v]) => `<span class="k">${k}</span><span>${v}</span>`).join('');
-    document.querySelectorAll('.controls-help').forEach((el) => { el.innerHTML = html; });
+    document.querySelectorAll('.controls-help').forEach((el) => { el.classList.remove('diagrams'); el.innerHTML = html; });
     return;
   }
-  const skillRows = SKILL_KEYS.map((k) => {
-    const s = G.player.skillAt(k);
-    const label = k === 'mouse0' ? 'Left click' : k === 'mouse2' ? 'Right click' : KEY_LABEL[k];
-    return [s?.def.channel ? `${label} (hold)` : label, s ? s.def.name : '—'];
-  });
-  const rows = [['W A S D', 'Move'], ['Mouse', 'Aim'], ...skillRows, ['Mouse wheel', 'Zoom'], ['Middle drag', 'Rotate camera'], ['V', 'View: top-down, over the shoulder, first person'], ['B / C', 'Bank / Continue after a wave'], ['E (hold)', 'Revive a downed partner (co-op)'], ['Esc', 'Pause']];
-  const html = rows.map(([k, v]) => `<span class="k">${k}</span><span>${v}</span>`).join('');
-  document.querySelectorAll('.controls-help').forEach((el) => { el.innerHTML = html; });
+  // each copy (pause menu, How to play) gets its own SVG ids: a hidden copy's gradients don't paint
+  document.querySelectorAll('.controls-help').forEach((el, i) => { el.classList.add('diagrams'); el.innerHTML = keyboardDiagram() + mouseDiagram(`ms${i}`); });
+}
+
+/** What a skill key does, for the diagrams: the skill's icon, name and whether it is held. */
+function skillOn(k: SkillKey): { icon: string; color: string; name: string; hold: boolean } | null {
+  const s = G.player.skillAt(k);
+  return s ? { icon: s.def.icon.glyph, color: s.def.icon.color, name: s.def.name, hold: !!s.def.channel } : null;
+}
+
+/**
+ * The left of a keyboard, rows staggered like the real thing: the keys the game uses are lit and
+ * show what they do (a skill's icon in its colour, or a word), the rest are dim.
+ */
+function keyboardDiagram(): string {
+  type Cap = { k: string; w?: number; icon?: string; color?: string; cap?: string; tip?: string; hold?: boolean };
+  const used: Record<string, Omit<Cap, 'k'>> = {
+    esc: { cap: 'Pause', tip: 'Pause' },
+    w: { icon: '▲', cap: 'Move', tip: 'Move' }, a: { icon: '◀', cap: 'Move', tip: 'Move' },
+    s: { icon: '▼', cap: 'Move', tip: 'Move' }, d: { icon: '▶', cap: 'Move', tip: 'Move' },
+    v: { icon: '◎', cap: 'View', tip: 'View: top-down, over the shoulder, first person' },
+    b: { icon: '⛁', cap: 'Bank', tip: 'Bank after a wave' }, c: { icon: '➜', cap: 'Continue', tip: 'Continue after a wave' },
+    e: { icon: '✚', cap: 'Revive', tip: 'Revive a downed partner (co-op)', hold: true },
+  };
+  for (const k of SKILL_KEYS) {
+    if (k.startsWith('mouse')) continue;
+    const sk = skillOn(k);
+    used[k] = sk ? { icon: sk.icon, color: sk.color, cap: sk.name, tip: sk.name, hold: sk.hold } : { cap: '—', tip: 'No skill bound' };
+  }
+  const rows: Cap[][] = [
+    [{ k: 'esc' }],
+    [{ k: '`' }, ...'123456'.split('').map((k) => ({ k }))],
+    [{ k: 'tab', w: 1.5 }, ...'qwerty'.split('').map((k) => ({ k }))],
+    [{ k: 'caps', w: 1.75 }, ...'asdfgh'.split('').map((k) => ({ k }))],
+    [{ k: 'shift', w: 2.25 }, ...'zxcvbn'.split('').map((k) => ({ k }))],
+  ];
+  const cap = (c: Cap): string => {
+    const u = used[c.k];
+    const label = c.k.length > 1 ? c.k[0].toUpperCase() + c.k.slice(1) : c.k.toUpperCase();
+    const style = `--w:${c.w ?? 1}${u?.color ? `;--c:${u.color}` : ''}`;
+    if (!u) return `<span class="kb-key" style="${style}"><b>${label}</b></span>`;
+    return `<span class="kb-key on" style="${style}" title="${label}: ${u.tip}${u.hold ? ' (hold)' : ''}"><b>${label}</b>` +
+      (u.icon ? `<i>${u.icon}</i>` : '') + `<small>${u.cap}</small>${u.hold ? '<em>hold</em>' : ''}</span>`;
+  };
+  return `<div class="kb" aria-label="Keyboard controls">${rows.map((r) => `<div class="kb-row">${r.map(cap).join('')}</div>`).join('')}</div>`;
+}
+
+/** A mouse with callouts: each button's skill, the wheel (zoom, drag to turn the camera) and aiming. */
+function mouseDiagram(id: string): string {
+  const btn = (k: SkillKey, side: string): string => {
+    const sk = skillOn(k);
+    return `<div class="ms-label ${side}" style="--c:${sk?.color ?? 'var(--ink-dim)'}"><span class="ms-what">${side === 'lb' ? 'Left' : 'Right'} click${sk?.hold ? ' <em>hold</em>' : ''}</span>` +
+      `<span class="ms-do">${sk ? `<i>${sk.icon}</i>${sk.name}` : '—'}</span></div>`;
+  };
+  const l = skillOn('mouse0')?.color ?? '#555', r = skillOn('mouse2')?.color ?? '#555';
+  return `<div class="ms" aria-label="Mouse controls">
+    <svg viewBox="0 0 460 170" aria-hidden="true">
+      <defs>
+        <linearGradient id="${id}-body" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a3026"/><stop offset="1" stop-color="#110d0a"/></linearGradient>
+        <radialGradient id="${id}-l" cx=".6" cy=".7" r=".9"><stop offset="0" stop-color="${l}" stop-opacity=".75"/><stop offset="1" stop-color="${l}" stop-opacity=".12"/></radialGradient>
+        <radialGradient id="${id}-r" cx=".4" cy=".7" r=".9"><stop offset="0" stop-color="${r}" stop-opacity=".75"/><stop offset="1" stop-color="${r}" stop-opacity=".12"/></radialGradient>
+      </defs>
+      <path d="M230 12 C 196 12 184 36 184 64 L 184 118 C 184 146 204 162 230 162 C 256 162 276 146 276 118 L 276 64 C 276 36 264 12 230 12 Z" fill="url(#${id}-body)" stroke="#a07c46" stroke-width="2"/>
+      <path d="M228 14 C 198 16 187 38 186 66 L 228 66 Z" fill="url(#${id}-l)"/>
+      <path d="M232 14 C 262 16 273 38 274 66 L 232 66 Z" fill="url(#${id}-r)"/>
+      <path d="M185 67 L 275 67 M 230 12 L 230 67" stroke="#a07c46" stroke-width="1.5"/>
+      <rect x="224" y="26" width="12" height="26" rx="6" fill="#e2c07e" stroke="#15100a" stroke-width="2"/>
+      <path d="M226 33 h8 M226 39 h8 M226 45 h8" stroke="#6a4f2a" stroke-width="1.5"/>
+      <g fill="none" stroke="#a07c46" stroke-width="1" stroke-dasharray="3 3">
+        <path d="M204 42 L 150 42"/><path d="M256 42 L 310 42"/><path d="M236 50 L 262 100 L 310 100"/><path d="M200 130 L 150 130"/>
+      </g>
+      <g fill="#e2c07e"><circle cx="204" cy="42" r="3"/><circle cx="256" cy="42" r="3"/><circle cx="236" cy="50" r="3"/><circle cx="200" cy="130" r="3"/></g>
+    </svg>
+    ${btn('mouse0', 'lb')}${btn('mouse2', 'rb')}
+    <div class="ms-label wheel"><span class="ms-what">Wheel</span><span class="ms-do">Scroll to zoom · drag to turn the camera</span></div>
+    <div class="ms-label move"><span class="ms-what">Move</span><span class="ms-do">Aim</span></div>
+  </div>`;
 }
 
 export function initMenus(h: MenuHooks): void {
