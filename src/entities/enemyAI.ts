@@ -7,7 +7,7 @@ import { G } from '../state';
 import { DAMAGE_COLORS } from '../data/balance';
 import { hurtPlayer } from '../combat/damage';
 import { spawnProjectile, type Projectile } from '../combat/projectiles';
-import { seedPod, seedPodTick } from '../fx/seedPod';
+import { sporeOrb, sporeOrbTick } from '../fx/sporeOrb';
 import { telegraph, shockwave, decal, groundFlash } from '../fx/effects';
 import { burst, debris, smokePuff } from '../fx/particles';
 import { flash } from '../fx/lights';
@@ -83,14 +83,14 @@ export const FX = {
     const onHit = (target: Enemy | Player, proj: Projectile) => {
       hurtPlayer(target as Player, damage, type, proj.pos);
       burst(proj.pos, { count: 16, color: pj.color, speed: 4, life: 0.4, size: 0.3 });
-      if (pj.look === 'seed') smokePuff(proj.pos, { count: 6, color: pj.trail, alpha: 0.4, size: 0.6, sizeEnd: 1.8, life: 0.9, rise: 0.4 });
+      if (pj.look === 'spore') smokePuff(proj.pos, { count: 6, color: pj.trail, alpha: 0.4, size: 0.6, sizeEnd: 1.8, life: 0.9, rise: 0.4 });
     };
     const pos = new THREE.Vector3(ox, 1.1, oz);
-    if (pj.look === 'seed') {
+    if (pj.look === 'spore') {
       const acc = { t: 0 }, smoke = pj.trail ?? 0x2c4a1c;
       spawnProjectile({
-        pos, dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true, color: pj.color, mesh: seedPod(pj.color, size * 0.4),
-        tick: (p, dt) => seedPodTick(p.mesh, p.pos, p.vel, pj.color, smoke, dt, acc), onHit,
+        pos, dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true, color: pj.color, mesh: sporeOrb(pj.color, size),
+        tick: (p, dt) => sporeOrbTick(p.mesh, p.pos, pj.color, smoke, dt, acc), onHit,
       });
       return;
     }
