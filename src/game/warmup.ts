@@ -16,6 +16,7 @@ import { clearLights } from '../fx/lights';
 import { particles } from '../fx/particles';
 import { coreSamples } from '../combat/projectiles';
 import { sporeOrbSample } from '../fx/sporeOrb';
+import { riftBoltSamples } from '../fx/riftBolts';
 
 export async function warmShaders(): Promise<void> {
   const at = new THREE.Vector3(), p = { x: 0, z: 0 };
@@ -28,7 +29,7 @@ export async function warmShaders(): Promise<void> {
   await new Promise((r) => setTimeout(r));
   shockwave(p); groundFlash(p); decal(p); decal(p, { type: 'frost' }); telegraph(p, 2, 1);
   lightning(at, new THREE.Vector3(1, 1, 1)); iceSpikes(p, 2); glyphMarker(p); lightPillar(p); crackDecal(p); crystalBurst(p);
-  const extra: THREE.Object3D[] = [...coreSamples(), sporeOrbSample(), ...Object.values(SKILL_IMPLS).flatMap((s) => s.warm?.() ?? [])];
+  const extra: THREE.Object3D[] = [...coreSamples(), sporeOrbSample(), ...riftBoltSamples(), ...Object.values(SKILL_IMPLS).flatMap((s) => s.warm?.() ?? [])];
   // every other class's model, so picking a class in the lobby compiles nothing
   await new Promise((r) => setTimeout(r));
   const heroes = Object.values(CLASSES).filter((c) => c.model !== G.player.cls.model).map((c) => buildModel(c.model));

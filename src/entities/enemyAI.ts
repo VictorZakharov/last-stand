@@ -8,6 +8,7 @@ import { DAMAGE_COLORS } from '../data/balance';
 import { hurtPlayer } from '../combat/damage';
 import { spawnProjectile, type Projectile } from '../combat/projectiles';
 import { sporeOrb, sporeOrbTick } from '../fx/sporeOrb';
+import { riftBolt, riftBoltTick, riftBoltLaunch, riftBoltImpact, riftBoltFizzle } from '../fx/riftBolts';
 import { telegraph, shockwave, decal, groundFlash } from '../fx/effects';
 import { burst, debris, smokePuff } from '../fx/particles';
 import { flash } from '../fx/lights';
@@ -86,6 +87,17 @@ export const FX = {
       if (pj.look === 'spore') smokePuff(proj.pos, { count: 6, color: pj.trail, alpha: 0.4, size: 0.6, sizeEnd: 1.8, life: 0.9, rise: 0.4 });
     };
     const pos = new THREE.Vector3(ox, 1.1, oz);
+    if (pj.look === 'void' || pj.look === 'magma') {
+      const look = pj.look, acc = { t: 0, a: 0 }, smoke = pj.trail ?? 0x100818;
+      riftBoltLaunch(look, pos, pj.color, size);
+      spawnProjectile({
+        pos, dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true, color: pj.color, mesh: riftBolt(look, pj.color, size),
+        tick: (p, dt) => riftBoltTick(look, p.mesh, p.pos, p.vel, pj.color, smoke, dt, acc),
+        onHit: (target, proj) => { hurtPlayer(target as Player, damage, type, proj.pos); riftBoltImpact(look, proj.pos, pj.color, smoke, size); },
+        onExpire: (proj) => riftBoltFizzle(look, proj.pos, pj.color, smoke, size),
+      });
+      return;
+    }
     if (pj.look === 'spore') {
       const acc = { t: 0 }, smoke = pj.trail ?? 0x2c4a1c;
       spawnProjectile({
