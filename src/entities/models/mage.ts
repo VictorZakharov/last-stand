@@ -31,7 +31,7 @@ export function buildMage(): Model {
   const leather = kit.std({ color: 0x2c1f18, roughness: 0.7, normalMap: g.normalMap });
   const wood = kit.std({ color: 0x2a1a12, roughness: 0.6, normalMap: g.normalMap });
   const face = kit.std({ color: 0x050508, roughness: 1 });
-  const glow = kit.glow(0x5dffa8, 5);
+  const glow = kit.glow(0x5dffa8, 5, false);
   const gem = kit.phys({ color: 0x2aff9a, emissive: 0x2aff9a, emissiveIntensity: 2.5, roughness: 0.05, metalness: 0, clearcoat: 1, flatShading: true });
 
   const j = buildHumanoid({ skin: face, torso: robe, legs: leather, feet: steel, arms: robe, hands: leather }, {

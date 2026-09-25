@@ -9,12 +9,20 @@ import { nearGlow } from '../core/materials';
 
 const coreGeo = new THREE.SphereGeometry(1, 12, 8);
 const matCache = new Map<string, THREE.Material>();
-/** A hostile bolt's core is an orb: hot in the middle, fading to its rim, so up close it reads as glowing, not a flat disc. */
+/**
+ * A hostile bolt's core is burning energy, not a ball: added light, white-hot in the middle and its colour
+ * towards a soft rim.
+ */
 const orbShader = {
   vertexShader: /* glsl */`varying vec3 vN; varying vec3 vV;
     void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
   fragmentShader: /* glsl */`uniform vec3 uColor; varying vec3 vN; varying vec3 vV;
-    void main(){ float f = max(dot(normalize(vN), normalize(vV)), 0.0); gl_FragColor = vec4(uColor * (0.3 + 1.3 * f * f), 1.0); }`,
+    void main(){
+      float f = max(dot(normalize(vN), normalize(vV)), 0.0);
+      vec3 c = uColor * (0.15 + 1.4 * f * f) + vec3(1.0, 1.0, 0.85) * pow(f, 6.0) * max(uColor.r, max(uColor.g, uColor.b)) * 0.9;
+      gl_FragColor = vec4(c, 1.0);
+    }`,
+  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
 };
 function coreMat(color: THREE.ColorRepresentation, intensity: number, orb: boolean): THREE.Material {
   const key = `${color}:${intensity}:${orb}`;
@@ -51,6 +59,10 @@ export interface ProjectileOpts {
   /** steering rate towards the nearest enemy in front (rad/s-ish) */
   homing?: number;
   ignore?: Set<Enemy>;
+  /** a mesh of its own instead of the glowing core (sized by the caller) */
+  mesh?: THREE.Mesh;
+  /** every frame of its flight, after it moved (its own look: spin, trail...) */
+  tick?(proj: Projectile, dt: number): void;
   onHit?(target: Enemy | Player, proj: Projectile): void;
   onExpire?(proj: Projectile): void;
 }
@@ -67,6 +79,7 @@ export class Projectile {
   readonly homing: number;
   readonly ignore: Set<Enemy>;
   readonly onHit?: ProjectileOpts['onHit'];
+  readonly tick?: ProjectileOpts['tick'];
   readonly onExpire?: ProjectileOpts['onExpire'];
   readonly trail?: TrailOpts;
   readonly color: THREE.ColorRepresentation;
@@ -85,12 +98,13 @@ export class Projectile {
     this.homing = o.homing ?? 0;
     this.ignore = o.ignore ?? new Set();
     this.onHit = o.onHit;
+    this.tick = o.tick;
     this.onExpire = o.onExpire;
     this.trail = o.trail;
     this.color = o.color ?? 0xffffff;
-    this.mesh = new THREE.Mesh(coreGeo, coreMat(this.color, o.intensity ?? 4, this.hostile));
+    this.mesh = o.mesh ?? new THREE.Mesh(coreGeo, coreMat(this.color, o.intensity ?? 4, this.hostile));
     this.mesh.name = 'projectile';
-    this.mesh.scale.setScalar(o.size ?? 0.12);
+    if (!o.mesh) this.mesh.scale.setScalar(o.size ?? 0.12);
     this.mesh.position.copy(this.pos);
     G.scene.add(this.mesh);
     const lo = { color: this.color, intensity: o.glow, distance: 6, life: 1, hold: 99, follow: this.mesh };
@@ -115,6 +129,7 @@ export class Projectile {
     // in first person a bolt aimed at the player flies at the lens: its glowing core would fill the view
     // for its last few frames
     this.mesh.visible = this.pos.distanceToSquared(G.camera.position) > 2.5 * 2.5;
+    this.tick?.(this, dt);
 
     if (this.trail) {
       const tr = this.trail;

@@ -43,9 +43,9 @@ export function buildWarrior(): Model {
   const mail = kit.std({ color: 0x4a4e58, metalness: 0.8, roughness: 0.55, normalMap: g.normalMap, normalScale: new THREE.Vector2(2, 2) });
   const wood = kit.std({ color: 0x3a2616, roughness: 0.7, normalMap: g.normalMap });
   const face = kit.std({ color: 0x050506, roughness: 1 });
-  const ember = kit.glow(0xff8a3a, 4);
+  const ember = kit.glow(0xff8a3a, 4, false);
   // the fuller only glows while a skill charges
-  const edge = kit.glow(0xffb070, 0);
+  const edge = kit.glow(0xffb070, 0, false);
 
   const j = buildHumanoid({ skin: face, torso: mail, legs: mail, feet: plate, arms: mail, hands: dark }, {
     chestW: 0.25, chestD: 0.16, waistW: 0.18, shoulderW: 0.28, upperR: 0.068, foreR: 0.058, handR: 0.058,

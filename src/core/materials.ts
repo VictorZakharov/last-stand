@@ -36,7 +36,8 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
   };
   const mats: THREE.Material[] = [];
 
-  function patch<M extends THREE.Material>(m: M): M {
+  /** near: an enemy's glow dims near the camera like the effect glows (its eyes up close would dazzle) */
+  function patch<M extends THREE.Material>(m: M, near = false): M {
     m.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, u);
       shader.vertexShader = shader.vertexShader
@@ -47,6 +48,7 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
         .replace('#include <color_fragment>', `#include <color_fragment>
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55,0.8,1.0), uFrozen*0.75);`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+          ${near ? 'totalEmissiveRadiance *= nearGlow();' : ''}
           float dn = fxNoise(vFxPos*7.0)*0.65 + fxNoise(vFxPos*19.0)*0.35;
           if (uDissolve > 0.0 && dn < uDissolve) discard;
           float edge = uDissolve > 0.0 ? (1.0 - smoothstep(uDissolve, uDissolve + 0.09, dn)) : 0.0;
@@ -55,7 +57,7 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
           // a tint, not white, dimmer near the camera like the effect glows: up close a body fills much of the screen
           totalEmissiveRadiance += vec3(1.0,0.9,0.85) * uHit * 0.45 * nearGlow();`);
     };
-    m.customProgramCacheKey = () => 'entityfx';
+    m.customProgramCacheKey = () => (near ? 'entityfx-near' : 'entityfx');
     mats.push(m);
     return m;
   }
@@ -66,9 +68,10 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
     std: (p?: THREE.MeshStandardMaterialParameters) => patch(new THREE.MeshStandardMaterial(p)),
     phys: (p?: THREE.MeshPhysicalMaterialParameters) => patch(new THREE.MeshPhysicalMaterial(p)),
     // Unlit glow (eyes, crystals) - still dissolves via patch on MeshStandard with black base.
-    glow: (color: THREE.ColorRepresentation, intensity = 3) => patch(new THREE.MeshStandardMaterial({
+    // `near`: dims near the camera (enemies' glows; the heroes keep theirs)
+    glow: (color: THREE.ColorRepresentation, intensity = 3, near = true) => patch(new THREE.MeshStandardMaterial({
       color: 0x000000, emissive: new THREE.Color(color), emissiveIntensity: intensity, roughness: 1,
-    })),
+    }), near),
     dispose() { for (const m of mats) m.dispose(); },
   };
 }

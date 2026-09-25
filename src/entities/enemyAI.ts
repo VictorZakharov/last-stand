@@ -6,7 +6,8 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { DAMAGE_COLORS } from '../data/balance';
 import { hurtPlayer } from '../combat/damage';
-import { spawnProjectile } from '../combat/projectiles';
+import { spawnProjectile, type Projectile } from '../combat/projectiles';
+import { seedPod, seedPodTick } from '../fx/seedPod';
 import { telegraph, shockwave, decal, groundFlash } from '../fx/effects';
 import { burst, debris, smokePuff } from '../fx/particles';
 import { flash } from '../fx/lights';
@@ -79,14 +80,25 @@ export const FX = {
     _dir.set(Math.sin(angle), 0, Math.cos(angle));
     // the trail's many overlapping particles add up, so it dims with the square of glow
     const glow = pj.glow ?? 1, size = pj.radius * (pj.core ?? 0.7), type: DamageType = e.def.damageType;
+    const onHit = (target: Enemy | Player, proj: Projectile) => {
+      hurtPlayer(target as Player, damage, type, proj.pos);
+      burst(proj.pos, { count: 16, color: pj.color, speed: 4, life: 0.4, size: 0.3 });
+      if (pj.look === 'seed') smokePuff(proj.pos, { count: 6, color: pj.trail, alpha: 0.4, size: 0.6, sizeEnd: 1.8, life: 0.9, rise: 0.4 });
+    };
+    const pos = new THREE.Vector3(ox, 1.1, oz);
+    if (pj.look === 'seed') {
+      const acc = { t: 0 }, smoke = pj.trail ?? 0x2c4a1c;
+      spawnProjectile({
+        pos, dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true, color: pj.color, mesh: seedPod(pj.color, size * 0.4),
+        tick: (p, dt) => seedPodTick(p.mesh, p.pos, p.vel, pj.color, smoke, dt, acc), onHit,
+      });
+      return;
+    }
     spawnProjectile({
-      pos: new THREE.Vector3(ox, 1.1, oz), dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true,
+      pos, dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true,
       color: pj.color, size, intensity: 5 * glow, glow: 4,
       trail: { color: pj.color, colorEnd: pj.trail ?? 0x200030, intensity: 2.5 * glow * glow, size: size * 2.3, rate: 60, life: 0.4 },
-      onHit: (target, proj) => {
-        hurtPlayer(target as Player, damage, type, proj.pos);
-        burst(proj.pos, { count: 16, color: pj.color, speed: 4, life: 0.4, size: 0.3 });
-      },
+      onHit,
     });
   },
   /** the red ring where a slam will land; it goes if the enemy dies before it lands */

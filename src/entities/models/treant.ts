@@ -12,7 +12,7 @@ type Variant = 'barkhulk' | 'thornheart';
 // glow: the boss's yellow-green glows are much brighter to the eye than violet at the same strength, and it is big
 const VARIANTS: Record<Variant, { skin: number; sap: number; leaf: number; heart: number | null; scale: number; glow: number }> = {
   barkhulk: { skin: 0x8a7458, sap: 0x8cff30, leaf: 0x3a6224, heart: null, scale: 1.45, glow: 1 },
-  thornheart: { skin: 0x5e5044, sap: 0x6aff50, leaf: 0x28502c, heart: 0xb8ff4a, scale: 2.35, glow: 0.5 },
+  thornheart: { skin: 0x5e5044, sap: 0x6aff50, leaf: 0x28502c, heart: 0xb8ff4a, scale: 2.35, glow: 0.7 },
 };
 
 export function buildTreant(variant: Variant = 'barkhulk'): Model {
