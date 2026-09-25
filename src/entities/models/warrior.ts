@@ -136,7 +136,7 @@ export function buildWarrior(): Model {
   }, 0.06, 0.011), furM, j.chest);
   // a high collar of the gambeson inside the fur, and the neck
   S.add(new THREE.CylinderGeometry(0.075, 0.09, 0.06, 20, 1, true), cloth, j.chest, [0, 0.27, 0]);
-  S.add(new THREE.CylinderGeometry(0.05, 0.056, 0.14, 16), skinTip, j.neck, [0, 0.04, 0]);
+  S.add(new THREE.CylinderGeometry(0.06, 0.07, 0.15, 18), skinTip, j.neck, [0, 0.04, 0.005]);
 
   // --- pauldrons: three steel lames over each shoulder with a rolled rim, an engraved medallion on the
   // top one, fur spilling out from under it

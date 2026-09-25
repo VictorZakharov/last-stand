@@ -76,7 +76,7 @@ export function buildMage(): Model {
   // --- the robe's body, a teal inner layer showing at the collar, the neck
   S.add(scaleUV(lathe(TORSO, 28), 3, 1.5), robe, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, DEPTH]);
   S.add(scaleUV(lathe([[0.15, -0.05], [0.16, 0.08], [0.17, 0.2], [0.18, 0.26]], 24), 3, 1), robe, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.8]);
-  S.add(new THREE.CylinderGeometry(0.05, 0.056, 0.14, 16), skinTip, j.neck, [0, 0.04, 0]);
+  S.add(new THREE.CylinderGeometry(0.06, 0.07, 0.15, 18), skinTip, j.neck, [0, 0.04, 0.005]);
   // gold piping down the front of the robe on each side, and a diamond brooch set with a stone
   for (const s of [1, -1]) {
     const pts: THREE.Vector3[] = [];

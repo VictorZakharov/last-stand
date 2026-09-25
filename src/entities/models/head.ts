@@ -20,7 +20,8 @@ const SX = 0.077, SY = 0.106, SZ = 0.097, CY = 0.1, CZ = 0.012;
 function beardAt(x: number, y: number, z: number): number {
   const face = sm(-0.4, 0.05, z);
   // up the jaw to the cheeks (higher at the sides, a clean line across the cheek)
-  const jaw = sm(-0.14, -0.24, y + 0.15 * Math.max(0, 0.6 - Math.abs(x)) - 0.1 * sm(0.5, 0.9, Math.abs(x))) * face;
+  const top = lerp(-0.3, 0.08, sm(0.3, 0.92, Math.abs(x)));
+  const jaw = sm(top + 0.04, top - 0.06, y) * face;
   const stache = G(x / 1.7, y + 0.33, 0.05) * sm(0.55, 0.8, z);
   const lips = Math.exp(-((x / 0.22) ** 2)) * G(0, y + 0.46, 0.06) * sm(0.6, 0.85, z);
   return clamp(Math.max(jaw, stache) - lips * 1.5, 0, 1);
@@ -57,8 +58,8 @@ function surf(x: number, y: number, z: number, lift: number, out: THREE.Vector3)
   const r = 1 + relief(x, y, z) + lift;
   // the jaw narrows a little to a broad chin with a flat underside, the face is flatter than a sphere,
   // the skull rounder at the back
-  const jaw = 1 - 0.2 * sm(-0.1, -1, y) - 0.05 * sm(0.1, -0.4, y) * sm(0.2, 0.8, z);
-  const flat = z > 0 ? 1 - 0.12 * sm(0.3, 1, z) : 1.1;
+  const jaw = (1 - 0.2 * sm(-0.1, -1, y) - 0.05 * sm(0.1, -0.4, y) * sm(0.2, 0.8, z)) * (1 - 0.1 * sm(0.1, 0.95, z));
+  const flat = z > 0 ? 1 - 0.16 * sm(0.3, 1, z) : 1.1;
   const under = y < -0.75 ? (y + 0.75) * 0.35 : 0;
   return out.set(x * r * SX * jaw, (y - under) * r * SY + CY, z * r * SZ * flat + CZ);
 }
@@ -200,15 +201,16 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, seed = 7,
     const ux = s * 0.31, uy = 0.05;
     surf(ux, uy, Math.sqrt(1 - ux * ux - uy * uy), 0, v);
     // the eyeball's front stands a few mm proud of the socket
-    const at = new THREE.Vector3(v.x, v.y, v.z - ER + 0.006);
+    const at = new THREE.Vector3(v.x, v.y, v.z - ER + 0.0045);
     const m = part(e, eyeMat, head, at.x, at.y, at.z);
+    m.scale.set(1.15, 0.95, 1);
     m.castShadow = false;
     eyes.push(m);
     // lids: shells a little larger than the eye over its top and bottom, leaving an almond opening;
     // lashes along the upper lid's edge
-    lids.push(new THREE.SphereGeometry(ER * 1.08, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.39).rotateX(0.14).translate(at.x, at.y, at.z));
-    lids.push(new THREE.SphereGeometry(ER * 1.05, 18, 6, 0, Math.PI * 2, Math.PI * 0.72, Math.PI * 0.28).rotateX(-0.15).translate(at.x, at.y, at.z));
-    lashes.push(new THREE.SphereGeometry(ER * 1.13, 18, 1, Math.PI * 0.12, Math.PI * 0.76, Math.PI * 0.37, Math.PI * 0.04).rotateX(0.14).translate(at.x, at.y, at.z));
+    lids.push(new THREE.SphereGeometry(ER * 1.05, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.39).rotateX(0.14).scale(1.15, 0.95, 1).translate(at.x, at.y, at.z));
+    lids.push(new THREE.SphereGeometry(ER * 1.04, 18, 6, 0, Math.PI * 2, Math.PI * 0.72, Math.PI * 0.28).rotateX(-0.15).scale(1.15, 0.95, 1).translate(at.x, at.y, at.z));
+    lashes.push(new THREE.SphereGeometry(ER * 1.13, 18, 1, Math.PI * 0.12, Math.PI * 0.76, Math.PI * 0.37, Math.PI * 0.04).rotateX(0.14).scale(1.15, 0.95, 1).translate(at.x, at.y, at.z));
   }
   part(mergeGeometries(lids)!, lidSkin, head).castShadow = false;
   part(mergeGeometries(lashes)!, lash, head).castShadow = false;
@@ -220,11 +222,12 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, seed = 7,
     return sm(thr, thr + 0.2, y);
   };
   const cap = new THREE.SphereGeometry(1, lod(48, 28), lod(36, 20)), cp = cap.attributes.position;
-  const lump = (x: number, y: number, z: number) => Math.sin(x * 9 + y * 4) * Math.sin(z * 8 - y * 5) * 0.5 + 0.5;
+  // shallow ridges running back over the skull, as if combed
+  const lump = (x: number, y: number, z: number) => Math.sin(Math.atan2(x, z) * 16 + y * 2) * 0.5 + 0.5;
   const keep = new Uint8Array(cp.count);
   for (let i = 0; i < cp.count; i++) {
     const x = cp.getX(i), y = cp.getY(i), z = cp.getZ(i), h = clamp(hairline(x, y, z), 0, 1);
-    surf(x, y, z, (0.08 + 0.08 * lump(x, y, z)) * h * (1 - 0.6 * sm(0.3, 0.9, z) * (1 - sm(0.55, 0.85, y))) - 0.02, v);
+    surf(x, y, z, (0.1 + 0.035 * lump(x, y, z)) * h * (1 - 0.6 * sm(0.3, 0.9, z) * (1 - sm(0.55, 0.85, y))) - 0.02, v);
     cp.setXYZ(i, v.x, v.y, v.z);
     keep[i] = h > 0.02 ? 1 : 0;
   }
@@ -245,7 +248,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, seed = 7,
     const pts: THREE.Vector3[] = [];
     for (let k = 0; k <= 6; k++) {
       const t = k / 6;
-      pts.push(dir(az0 + (az1 - az0) * Math.sqrt(t), el0 + (el1 - el0) * t ** 1.5, 0.15 + 0.03 * Math.sin(t * 4 + az0 * 5) + wave * 2 * Math.sin(t * 9 + az0)));
+      pts.push(dir(az0 + (az1 - az0) * Math.sqrt(t), el0 + (el1 - el0) * t ** 1.5, 0.04 + 0.11 * sm(0, 0.25, t) + 0.03 * Math.sin(t * 4 + az0 * 5) * sm(0, 0.25, t) + wave * 2 * Math.sin(t * 9 + az0)));
     }
     const last = pts[pts.length - 1], out = new THREE.Vector3(last.x, 0, last.z - CZ).normalize();
     for (let k = 1; k <= 3; k++) {
