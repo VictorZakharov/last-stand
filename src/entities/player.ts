@@ -512,7 +512,11 @@ export class Player {
     else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / this.dash.dur) };
     else if (this.casting) action = { name: this.casting.skill.impl.anim || 'cast', t: this.casting.t / this.casting.dur };
     // a channel's t ramps 0 -> 1 over its first 0.2 s (the pose settling in), then holds
-    else if (this.channel) action = { name: this.channel.skill.impl.anim || 'channel', t: Math.min(1, (this.channel.t += dt) / 0.2) };
+    else if (this.channel) {
+      const ch = this.channel, opens = ch.skill.def.opening ?? 0;
+      ch.t += dt;
+      action = { name: ch.skill.impl.anim || 'channel', t: Math.min(1, ch.t / 0.2), time: ch.t, open: opens > 0 ? Math.min(1, ch.t / opens) : 1 };
+    }
     this.pose(dt, t, Math.min(1, speed / this.stats.moveSpeed), 1, side / this.stats.moveSpeed, action);
 
     // ambient motes around the offhand (the mage's arcana)
