@@ -139,8 +139,10 @@ const skill: ChannelSkill<LanceState> = {
     if (opens > 0) sfx.charge(opens);
     return {
       outer, core, portal, outerMat, coreMat, portalMat, tick: 0, t: 0, firing: false,
-      lightA: flash({ color: 0x5dffa8, intensity: 6, distance: 8, life: 1, hold: 999 }),
-      lightB: flash({ color: 0x5dffa8, intensity: 0, distance: 7, life: 1, hold: 999 }),
+      // a glow at the hand and a pool where it hits, a few metres across: green light washed over a wide
+      // circle of ground reads as a haze round the whole cast
+      lightA: flash({ color: 0x5dffa8, intensity: 2, distance: 4, life: 1, hold: 999 }),
+      lightB: flash({ color: 0x5dffa8, intensity: 0, distance: 4.5, life: 1, hold: 999 }),
     };
   },
 
@@ -172,7 +174,7 @@ const skill: ChannelSkill<LanceState> = {
     st.portalMat.uniforms.uTime.value = G.time;
     st.portalMat.uniforms.uOpen.value = open;
     st.lightA.light.position.copy(origin);
-    st.lightA.peak = 6 + 14 * open;
+    st.lightA.peak = 2 + 5 * open;
 
     if (!st.firing) {
       // sparks thrown off the tracing head, falling away
@@ -195,7 +197,7 @@ const skill: ChannelSkill<LanceState> = {
       st.outer.visible = st.core.visible = true;
       st.stopHum = sfx.lance();
       burst(origin, { count: 18, color: 0x5dffa8, speed: 5, life: 0.35, size: 0.22, gravity: 2 });
-      st.lightB.peak = 25;
+      st.lightB.peak = 10;
     }
     const ft = st.t - opens;
 

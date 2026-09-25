@@ -33,7 +33,7 @@ const HUE_FROM = 1, HUE_TO = 1.6, GLARE_FROM = 0.05, GLARE_TO = 0.4;
 const ADAPT = { top: [0.35, 0.11], lobby: [0.45, 0.13], third: [1.2, 0.26], first: [0.5, 0.13] } as const;
 const ADAPT_BASE = 0.04;
 /** Bloom's blur levels, tightest to widest: the halo round an effect, and only a trace of the screen-wide veil. */
-const BLOOM_LEVELS = [0.56, 0.58, 0.6, 0.3, 0.08];
+const BLOOM_LEVELS = [0.56, 0.5, 0.35, 0.12, 0.03];
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
