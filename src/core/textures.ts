@@ -184,3 +184,30 @@ export function cracks(seed = 5): THREE.CanvasTexture {
   texCache[key] = toTexture(c, true, 1);
   return texCache[key];
 }
+
+// Emissive veins: sparse branching lines on black that tile (corruption spreading under skin).
+export function veins(seed = 3, count = 7): THREE.CanvasTexture {
+  const key = `veins${seed},${count}`;
+  if (texCache[key]) return texCache[key];
+  const r = mulberry(seed), size = 512, c = canvasOf(size), g = ctx2d(c);
+  g.fillStyle = '#000'; g.fillRect(0, 0, size, size);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const branch = (x: number, y: number, a: number, w: number, len: number, depth: number): void => {
+    const pts: [number, number][] = [[x, y]];
+    for (let i = 0; i < len; i++) { a += (r() - 0.5) * 0.9; x += Math.cos(a) * 9; y += Math.sin(a) * 9; pts.push([x, y]); }
+    // drawn at every tile offset so the texture wraps without seams
+    for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) {
+      g.beginPath(); g.moveTo(pts[0][0] + ox, pts[0][1] + oy);
+      for (const [px, py] of pts) g.lineTo(px + ox, py + oy);
+      g.lineWidth = w * 3.5; g.strokeStyle = 'rgba(255,255,255,0.12)'; g.stroke();
+      g.lineWidth = w; g.strokeStyle = 'rgba(255,255,255,0.9)'; g.stroke();
+    }
+    if (depth > 0) for (let k = 0; k < 2; k++) {
+      const [bx, by] = pts[Math.floor(r() * (pts.length - 1)) + 1];
+      branch(bx, by, a + (r() < 0.5 ? -1 : 1) * (0.5 + r() * 0.7), w * 0.6, Math.floor(len * 0.6), depth - 1);
+    }
+  };
+  for (let i = 0; i < count; i++) branch(r() * size, r() * size, r() * Math.PI * 2, 2.6, 14 + Math.floor(r() * 10), 2);
+  texCache[key] = toTexture(c, true, 1);
+  return texCache[key];
+}
