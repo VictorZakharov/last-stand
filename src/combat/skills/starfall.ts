@@ -56,10 +56,11 @@ function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: num
       meteor.rotation.y += dt * 14;
       // streak grows as it accelerates
       streak.scale.set(1, 1.5 + k * 5, 1);
-      for (let i = 0; i < 5; i++) particles.glow.spawn({
+      // a thin trail of sparks: a dense stream of soft particles smears into a pale column from above
+      for (let i = 0; i < 3; i++) particles.glow.spawn({
         x: group.position.x + rand(-0.25, 0.25), y: group.position.y + rand(-0.25, 0.25), z: group.position.z + rand(-0.25, 0.25),
         vx: -dir.x * 3 + rand(-0.6, 0.6), vy: -dir.y * 3 + rand(-0.6, 0.6), vz: -dir.z * 3 + rand(-0.6, 0.6),
-        life: 0.45, size: rand(0.25, 0.55), sizeEnd: 0.02, color: col(i % 2 ? COLOR : CORE, 2.4), colorEnd: col(0x1040ff, 0.4), drag: 2,
+        life: 0.45, size: rand(0.12, 0.3), sizeEnd: 0.02, color: col(i % 2 ? COLOR : CORE, 2.4), colorEnd: col(0x1040ff, 0.4), drag: 2,
       });
       if (k >= 1) { landed = true; marker.cancel(); impact(player, def, landing); }
       return true;
@@ -70,7 +71,8 @@ function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: num
 
 function impact(player: Player, def: Def, p: THREE.Vector3): void {
   const at = new THREE.Vector3(p.x, p.y + 0.3, p.z);
-  lightPillar(p, { color: CORE, intensity: 2.2, radius: 0.55, height: 10, life: 0.35 });
+  // a slim pillar: a wide pale one blooms into a haze over the whole impact
+  lightPillar(p, { color: CORE, intensity: 1.8, radius: 0.25, height: 7, life: 0.3 });
   shockwave(p, { color: COLOR, intensity: 1.3, from: 0.4, to: def.radius * 1.25, life: 0.35, y: p.y + 0.06 });
   crackDecal(p, { size: def.radius * 0.95, color: COLOR, intensity: 2.2, life: 3.5 });
   decal(p, { type: 'scorch', size: def.radius * 0.8, life: 7 });
@@ -89,7 +91,8 @@ function impact(player: Player, def: Def, p: THREE.Vector3): void {
     particles.smoke.spawn({ x: p.x, y: p.y + 0.2, z: p.z, vx: Math.cos(a) * 4, vy: 0.3, vz: Math.sin(a) * 4, life: 1.2, size: 0.9, sizeEnd: 2.6, color: dust, alpha: 0.45, drag: 2.5 });
   }
   smokePuff(p, { count: 4, color: 0x20303a, alpha: 0.3, size: 1, sizeEnd: 2.5 });
-  flash({ color: COLOR, intensity: 22, distance: 9, life: 0.3, pos: { x: p.x, y: p.y + 1.5, z: p.z } });
+  // lights the impact, not the whole area (several land at once)
+  flash({ color: COLOR, intensity: 14, distance: 5, life: 0.3, pos: { x: p.x, y: p.y + 1.5, z: p.z } });
   addShake(0.16);
   sfx.starfallImpact();
   for (const e of G.enemies) {
