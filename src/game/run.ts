@@ -269,8 +269,9 @@ export function showCleared(): void {
   if (G.player.active) rec.bestWave = Math.max(rec.bestWave, r.wave);
   saveProfile(G.profile);
   sfx.waveClear();
-  ui.banner(`Wave ${r.wave} Cleared`, G.player.active ? 'Bank your spoils, or press on' : '');
+  // a player still in gets the choice, which grows out of the wave badge and says it all
   if (G.player.active) ui.showDecision();
+  else ui.banner(`Wave ${r.wave} Cleared`);
 }
 
 /** The local player chose Continue: the next wave starts once everyone still in has. */

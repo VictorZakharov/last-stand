@@ -22,7 +22,6 @@ export const KEY_LABEL: Record<SkillKey, string> = { mouse0: 'LMB', mouse2: 'RMB
 interface HotbarSlot { key: SkillKey; el: HTMLElement; cd: HTMLElement; cdt: HTMLElement; boundId: string | null }
 let slots: HotbarSlot[] = [];
 let bannerTimer: ReturnType<typeof setTimeout> | undefined;
-let lastMult = 1;
 let mmCtx: CanvasRenderingContext2D;
 
 export function initHud(): void {
@@ -79,14 +78,32 @@ export function rarityChips(bag: Item[], cls = 'chip'): string {
 }
 
 let refreshDecision: (() => void) | null = null;
+let decisionTimer: ReturnType<typeof setTimeout> | undefined;
+/** The choice folds down to its two buttons after this long. */
+const DECISION_DETAILS_MS = 10000;
+/** How long the choice takes to fold back into the wave badge (`dc-close` in _hud.scss). */
+const DECISION_CLOSE_MS = 650;
 
+/**
+ * The choice after a wave unfolds from the wave badge at the top (the badge fades as its frame grows
+ * out of it), shows the details for a while, then folds down to its buttons. Called again while it
+ * shows (a partner's vote, new loot), it only refreshes.
+ */
 export function showDecision(): void {
   const r = G.run;
   if (!r) return;
   const box = $('#decision');
-  box.classList.remove('hidden');
+  if (box.classList.contains('hidden') || box.classList.contains('closing')) {
+    clearTimeout(decisionTimer);
+    box.classList.remove('hidden', 'closing', 'compact', 'opening');
+    void box.offsetWidth;   // restart the unfolding
+    box.classList.add('opening');
+    $('#wavebadge').classList.remove('back');
+    $('#wavebadge').classList.add('morphed');
+    decisionTimer = setTimeout(() => box.classList.add('compact'), DECISION_DETAILS_MS);
+  }
   const refresh = () => {
-    if (box.classList.contains('hidden')) return;
+    if (box.classList.contains('hidden') || box.classList.contains('closing')) return;
     $('.dc-title', box).textContent = `Wave ${r.wave} is broken`;
     $('.dc-sub', box).textContent = `Score ${Math.round(r.score).toLocaleString()} · ${r.kills} slain · Health ${Math.round(G.player.life)}/${Math.round(G.player.stats.maxLife)}`;
     const bag = $('.dc-bag', box);
@@ -109,7 +126,23 @@ export function showDecision(): void {
   refreshDecision = refresh;
 }
 
-export function hideDecision(): void { $('#decision').classList.add('hidden'); }
+/** Folds the choice back into the wave badge, which pops up again (with the next wave's number). */
+export function hideDecision(): void {
+  const box = $('#decision'), badge = $('#wavebadge');
+  if (box.classList.contains('hidden') || box.classList.contains('closing')) return;
+  clearTimeout(decisionTimer);
+  box.classList.remove('opening');
+  box.classList.add('closing');
+  // the badge fades in under the shrinking circle, and flares once the box is gone
+  decisionTimer = setTimeout(() => {
+    badge.classList.remove('morphed');
+    decisionTimer = setTimeout(() => {
+      box.classList.add('hidden');
+      box.classList.remove('closing', 'compact');
+      badge.classList.add('back');
+    }, DECISION_CLOSE_MS * 0.6);
+  }, DECISION_CLOSE_MS * 0.4);
+}
 
 /** `gained`: the item just added, whose rarity's count pulses. */
 export function renderSpoils(gained?: Item): void {
@@ -121,8 +154,6 @@ export function renderSpoils(gained?: Item): void {
   if (gained) list.querySelector(`[data-r="${gained.rarity}"]`)?.classList.add('bump');
   refreshDecision?.();
 }
-
-const fmtTime = (s: number): string => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 let lastBuffs = '';
 
@@ -168,15 +199,6 @@ export function updateHud(): void {
   const buffs = h('#buffs');
   const wardHtml = p.ward ? `<div class="buff" style="color:#c9b8ff">◈<span class="bt">${Math.ceil(p.ward.t)}</span></div>` : '';
   if (lastBuffs !== wardHtml) { buffs.innerHTML = wardHtml; lastBuffs = wardHtml; }
-
-  // score box
-  setText(h('.sb-score'), Math.round(r.score).toLocaleString());
-  setText(h('.sb-kills b'), String(r.phase === 'fighting' ? r.remaining : 0));
-  setText(h('.sb-time b'), r.phase === 'countdown' ? `-${Math.ceil(r.timer)}` : fmtTime(r.waveTime));
-  const m = h('.sb-mult');
-  setText(m, `x${r.multiplier}`);
-  if (r.multiplier !== lastMult) { m.classList.add('bump'); setTimeout(() => m.classList.remove('bump'), 180); lastMult = r.multiplier; }
-  setText(h('.sb-wave'), String(r.wave));
 
   // objectives
   const ol = h('.obj-line');

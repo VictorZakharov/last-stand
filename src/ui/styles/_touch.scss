@@ -37,7 +37,6 @@ body.touch .bar { width: 220px; height: 24px; border-radius: 12px !important; bo
 body.touch .bar .txt { font-size: 13px; }
 body.touch .bar .bar-label { display: none; }
 body.touch #buffs { left: touch(64px); top: touch(76px); bottom: auto; transform-origin: left top; }
-body.touch #decision { bottom: auto; top: 50%; translate: 0 -50%; }
 body.touch #decision .k { display: none; }
 
 .mouse-only { display: inline; } .touch-inline { display: none; }
