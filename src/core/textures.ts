@@ -4,9 +4,9 @@ import * as THREE from 'three';
 import { makeFbm, mulberry, clamp } from '../util';
 import { RECIPES, PRELOAD, recipeKey, makeVoronoi, type PBRData, type RecipeName, type RecipeArgs } from './pbr';
 
-function canvasOf(size: number): HTMLCanvasElement {
+function canvasOf(size: number, height = size): HTMLCanvasElement {
   const c = document.createElement('canvas');
-  c.width = c.height = size;
+  c.width = size; c.height = height;
   return c;
 }
 
@@ -38,7 +38,8 @@ function pbrCanvases<N extends RecipeName>(name: N, ...args: RecipeArgs<N>): PBR
   if (maps) return maps;
   const d = made.get(key) ?? (RECIPES[name] as (...a: RecipeArgs<N>) => PBRData)(...args);
   made.delete(key);
-  const mk = (data: Uint8ClampedArray<ArrayBuffer>) => { const c = canvasOf(d.size); ctx2d(c).putImageData(new ImageData(data, d.size, d.size), 0, 0); return c; };
+  const h = d.height ?? d.size;
+  const mk = (data: Uint8ClampedArray<ArrayBuffer>) => { const c = canvasOf(d.size, h); ctx2d(c).putImageData(new ImageData(data, d.size, h), 0, 0); return c; };
   cache.set(key, maps = { albedo: mk(d.albedo), normal: mk(d.normal), rough: mk(d.rough) });
   return maps;
 }
@@ -57,6 +58,8 @@ export const mail = (): PBRCanvases => pbrCanvases('mail');
 export const cloth = (): PBRCanvases => pbrCanvases('cloth');
 export const steel = (): PBRCanvases => pbrCanvases('steel');
 export const fur = (): PBRCanvases => pbrCanvases('fur');
+/** a hero's painted face (entities/models/face.ts), on its head's ray grid */
+export const faceCanvases = (who: 'warrior' | 'mage'): PBRCanvases => pbrCanvases('face', who);
 
 /**
  * Make the game's PBR maps in workers, in parallel, while the page stays responsive: done on the

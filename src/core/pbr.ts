@@ -2,12 +2,13 @@
 // worker can make them (core/pbr.worker.ts) while the loading screen stays live. `core/textures.ts`
 // turns them into canvases and textures.
 import { makeFbm, mulberry, clamp, smooth } from '../util';
+import { faceData } from '../entities/models/face';
 
 /** Per-pixel output of a PBR sampler: height, albedo rgb (0..1), roughness. */
 interface PBRSample { h: number; r: number; g: number; b: number; rough: number }
 type PBRSampler = (u: number, v: number, out: PBRSample) => void;
-/** A material's maps as RGBA pixels, `size` square. */
-export interface PBRData { size: number; albedo: Uint8ClampedArray<ArrayBuffer>; normal: Uint8ClampedArray<ArrayBuffer>; rough: Uint8ClampedArray<ArrayBuffer> }
+/** A material's maps as RGBA pixels, `size` square (or `size` wide and `height` tall). */
+export interface PBRData { size: number; height?: number; albedo: Uint8ClampedArray<ArrayBuffer>; normal: Uint8ClampedArray<ArrayBuffer>; rough: Uint8ClampedArray<ArrayBuffer> }
 
 // Builds albedo / normal / roughness maps from per-pixel callbacks.
 function buildPBR(size: number, sampler: PBRSampler, normalStrength = 2.5): PBRData {
@@ -287,7 +288,7 @@ function fur(): PBRData {
 }
 
 /** Every recipe, by name; its arguments are part of what it makes. */
-export const RECIPES = { cobblestone, slabs, grunge, wood, burlap, forestFloor, bark, leather, mail, cloth, steel, fur };
+export const RECIPES = { cobblestone, slabs, grunge, wood, burlap, forestFloor, bark, leather, mail, cloth, steel, fur, face: faceData };
 export type RecipeName = keyof typeof RECIPES;
 export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
@@ -297,6 +298,8 @@ export const recipeKey = (name: RecipeName, args: readonly unknown[]): string =>
  * the main thread when first asked for, so keep this in step with the calls (a miss is only slower).
  */
 export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = [
+  // the longest first, so the workers finish together
+  ['face', ['warrior']], ['face', ['mage']],
   ['forestFloor', []], ['cobblestone', []], ['bark', []], ['slabs', [21, 6, 3]], ['slabs', [33, 5, 5]], ['slabs', [47, 5, 5]],
   ['slabs', [33, 2, 2]], ['grunge', []], ['wood', []], ['burlap', []],
   ['leather', []], ['mail', []], ['cloth', []], ['steel', []], ['fur', []],

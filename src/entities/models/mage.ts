@@ -9,7 +9,7 @@ import { engravedSteel, embroidered, arcaneColumn, projectUV, steelRegion } from
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, gem as gemGeo, Skirt, scaleUV, type SurfaceFn } from './armor';
-import { buildHead } from './head';
+import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
 import { buildHand, poseHand, hold } from './hands';
 import { clamp, lerp, TAU, mulberry } from '../../util';
 import { SkeletonCape } from './cape';
@@ -29,9 +29,12 @@ const MAGE_CAPE_PALETTE: CapeFabricPalette = Object.freeze({
   materialName: 'Woven navy mage cape',
 });
 
-// the robe's upper body (chest joint space): its radius across (x) and depth (z) at height y
-const TORSO: [number, number][] = [[0.15, -0.12], [0.18, -0.02], [0.2, 0.1], [0.195, 0.18], [0.16, 0.25], [0.08, 0.29]];
-const DEPTH = 0.72;
+// the robe's upper body (chest joint space): its half-width (x) at height y, and its depth (z) as a share
+// of that: a man's chest (ANSUR II: 29 cm across, 25 deep) with the robe over it, rising to the shoulders
+const TORSO: [number, number][] = [[0.145, -0.12], [0.155, -0.02], [0.165, 0.1], [0.168, 0.18], [0.15, 0.245], [0.1, 0.28], [0.075, 0.29]];
+const DEPTH = 0.86;
+/** the pauldrons' size against the shoulder */
+const PAULDRON = 0.72;
 function torsoR(y: number): number {
   for (let i = 1; i < TORSO.length; i++) if (y <= TORSO[i][1]) { const [r0, y0] = TORSO[i - 1], [r1, y1] = TORSO[i]; return lerp(r0, r1, clamp((y - y0) / (y1 - y0), 0, 1)); }
   return TORSO[TORSO.length - 1][0];
@@ -68,15 +71,14 @@ export function buildMage(): Model {
   const tail = kit.rim({ color: 0xffffff, roughness: 1, map: tailTex.map, normalMap: tailTex.normalMap, roughnessMap: tailTex.roughnessMap, side: THREE.DoubleSide }, 0x2a6a70, 0.3);
 
   const j = buildHumanoid({ skin: robe }, {
-    chestW: 0.21, chestD: 0.14, shoulderW: 0.25, upperR: 0.06, foreR: 0.05, shinL: 0.41,
+    chestW: 0.17, chestD: 0.14, shoulderW: 0.2, shoulderY: 0.45, upperR: 0.06, foreR: 0.05, shinL: 0.41,
   });
   stripRig(j.root);
   const S = new Sculpt();
 
   // --- the robe's body, a teal inner layer showing at the collar, the neck
   S.add(scaleUV(lathe(TORSO, 28), 3, 1.5), robe, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, DEPTH]);
-  S.add(scaleUV(lathe([[0.15, -0.05], [0.16, 0.08], [0.17, 0.2], [0.18, 0.26]], 24), 3, 1), robe, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.8]);
-  S.add(new THREE.CylinderGeometry(0.06, 0.07, 0.15, 18), skinTip, j.neck, [0, 0.04, 0.005]);
+  S.add(scaleUV(lathe([[0.148, -0.05], [0.15, 0.08], [0.152, 0.2], [0.155, 0.26]], 24), 3, 1), robe, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
   // gold piping down the front of the robe on each side, and a diamond brooch set with a stone
   for (const s of [1, -1]) {
     const pts: THREE.Vector3[] = [];
@@ -89,7 +91,7 @@ export function buildMage(): Model {
 
   // --- the cowl: the hood down, bunched round the neck in teal folds, its crown lying on the upper back
   {
-    const g = lathe([[0.1, 0.2], [0.17, 0.235], [0.175, 0.27], [0.14, 0.31], [0.1, 0.34], [0.085, 0.36]], 36), q = g.attributes.position;
+    const g = lathe([[0.1, 0.2], [0.155, 0.235], [0.16, 0.27], [0.13, 0.31], [0.095, 0.34], [0.085, 0.36]], 36), q = g.attributes.position;
     for (let i = 0; i < q.count; i++) {
       const x = q.getX(i), z = q.getZ(i), a = Math.atan2(x, z), k = 1 + 0.07 * Math.sin(a * 7 + 1) + 0.03 * Math.sin(a * 13);
       q.setXYZ(i, x * k, q.getY(i) - 0.02 * Math.max(0, Math.cos(a)), z * k * 0.95);
@@ -111,7 +113,10 @@ export function buildMage(): Model {
   }
 
   // --- pauldrons: two lames of black leather rimmed in gold, a gold boss set with a stone, a spike
-  for (const [s, sh] of [[1, j.shoulderL], [-1, j.shoulderR]] as const) {
+  for (const [s, joint0] of [[1, j.shoulderL], [-1, j.shoulderR]] as const) {
+    // sized to sit over a man's deltoid (they were cut for a far broader frame)
+    const sh = joint(joint0);
+    sh.scale.setScalar(PAULDRON);
     const lame = (R: number, lat0: number, lat1: number, y: number): SurfaceFn => (u, v, out) => {
       const lon = (u - 0.5) * 3.2, lat = lerp(lat0, lat1, v);
       return out.set(s * Math.cos(lat) * Math.cos(lon) * R * 1.1 + s * 0.015, Math.sin(lat) * R * 0.75 + y, Math.cos(lat) * Math.sin(lon) * R);
@@ -177,12 +182,12 @@ export function buildMage(): Model {
 
   // --- the belt: wide leather with a gold medallion and a stone, a second belt slung across the hips
   // with pouches, a hanging strap with a gold charm
-  S.add(belt(0.19, 0.155, 0.02, 0.07, 0.012), leather, j.spine);
-  for (const y of [-0.01, 0.05]) S.add(belt(0.198, 0.162, y, 0.008, 0.004), gold, j.spine);
+  S.add(belt(0.165, 0.142, 0.02, 0.07, 0.012), leather, j.spine);
+  for (const y of [-0.01, 0.05]) S.add(belt(0.173, 0.149, y, 0.008, 0.004), gold, j.spine);
   const md = disc(0.05, 0.016);
   projectUV(md, steelRegion('disc'), (x, y) => [(x / 0.05 + 1) / 2, (y / 0.05 + 1) / 2]);
-  S.add(md, goldE, j.spine, [0, 0.02, 0.168]);
-  S.add(gemGeo(0.017), stone, j.spine, [0, 0.02, 0.18]);
+  S.add(md, goldE, j.spine, [0, 0.02, 0.155]);
+  S.add(gemGeo(0.017), stone, j.spine, [0, 0.02, 0.167]);
   S.add(strap(Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * TAU; return V(Math.sin(a) * 0.215, -0.01 - 0.05 * Math.sin(a + 0.6) - 0.02 * Math.cos(a), Math.cos(a) * 0.18); }), 0.035, 0.01, true), leather, j.hips);
   for (const [x, z, ry] of [[0.2, 0.07, 0.9], [0.17, -0.1, 2.1]] as const) {
     S.add(new THREE.BoxGeometry(0.075, 0.1, 0.04), leather, j.hips, [x, -0.07, z], [0, ry, 0]);
@@ -219,24 +224,31 @@ export function buildMage(): Model {
 
   // --- the head: face, a full beard, hair, and a wide-brimmed pointed hat, its crown bent back by
   // its own weight, a gold band with a stone
-  const head = buildHead(j.head, kit, 7, { beard: 0.17 });
+  const head = buildHead(j.head, kit, 'mage', { beard: 160, hair: true });
+  buildNeck(j.neck, kit, 'mage', j.P.neckL);
   {
-    const w = new Sculpt(), hg = head.group;
-    const brim = lathe([[0.115, 0.004], [0.15, 0.0], [0.185, -0.01], [0.205, -0.025], [0.202, -0.031], [0.18, -0.018], [0.14, -0.008], [0.115, -0.006]], 40);
+    // sized to the head (mm, see head.ts): the band round the brow above the ears, over the hair
+    const w = new Sculpt(), hg = head.group, M = HEAD_MM, at = toGroup(0, 168, -9), tilt: [number, number, number] = [-0.12, 0, 0];
+    const RX = 86, DZ = 1.2;
+    const brim = lathe(([[RX, 4], [120, 0], [160, -9], [194, -24], [205, -30], [202, -34], [180, -21], [140, -10], [100, -5], [RX, -4]] as [number, number][]).map(([r, y]) => [r * M, y * M]), 40);
     const q = brim.attributes.position;
     // a gentle wave round the brim, dipping at the front and back
-    for (let i = 0; i < q.count; i++) { const x = q.getX(i), z = q.getZ(i), a = Math.atan2(x, z), r = Math.hypot(x, z); q.setY(i, q.getY(i) - (r - 0.115) * (0.12 * Math.cos(2 * a) + 0.05 * Math.sin(a * 5))); }
+    for (let i = 0; i < q.count; i++) { const x = q.getX(i), z = q.getZ(i), a = Math.atan2(x, z), r = Math.hypot(x, z); q.setY(i, q.getY(i) - (r - RX * M) * (0.12 * Math.cos(2 * a) + 0.05 * Math.sin(a * 5))); }
     brim.computeVertexNormals();
-    w.add(scaleUV(brim, 3, 1), robe, hg, [0, 0.195, 0.0], [-0.12, 0, 0], [1, 1, 1.08]);
-    w.add(scaleUV(brim.clone(), 3, 1), lining, hg, [0, 0.193, 0.0], [-0.12, 0, 0], [1, 1, 1.08]);
+    w.add(scaleUV(brim, 3, 1), robe, hg, at.toArray(), tilt, [1, 1, DZ]);
+    w.add(scaleUV(brim.clone(), 3, 1), lining, hg, [at.x, at.y - 0.002, at.z], tilt, [1, 1, DZ]);
+    // the crown: tapering up from the band, bent back by its own weight
     const crown: THREE.Vector3[] = [];
-    for (let k = 0; k <= 8; k++) { const t = k / 8; crown.push(V(0.012 * Math.sin(t * 4), 0.19 + t * 0.36 - t * t * 0.06, -0.01 - 0.16 * t ** 2.2)); }
-    const cg = taperTube(crown, (t) => (0.118 * (1 - t) ** 0.9 + 0.004) * (1 + 0.04 * Math.sin(t * 20)), lod(24, 10), lod(24, 12));
-    w.add(scaleUV(cg, 3, 3), robe, hg, [0, 0, 0], [-0.1, 0, 0], [1, 1, 1.06]);
-    w.add(belt(0.121, 0.128, 0.225, 0.028, 0.006, 0.004, 28), leather, hg, [0, 0, 0], [-0.1, 0, 0]);
-    for (const y of [0.212, 0.238]) w.add(belt(0.123, 0.13, y, 0.004, 0.004, 0.004, 28), gold, hg, [0, 0, 0], [-0.1, 0, 0]);
-    w.add(new THREE.OctahedronGeometry(0.022, 0), gold, hg, [0, 0.23, 0.13], [-0.1, 0, 0], [0.8, 1.1, 0.35]);
-    w.add(gemGeo(0.01), stone, hg, [0, 0.231, 0.137], [-0.1, 0, 0]);
+    for (let k = 0; k <= 8; k++) { const t = k / 8; crown.push(V(10 * M * Math.sin(t * 4), (t * 300 - t * t * 50) * M, -140 * M * t ** 2.2)); }
+    const cg = taperTube(crown, (t) => (RX * M * (1 - t) ** 0.9 + 0.004) * (1 + 0.04 * Math.sin(t * 20)), lod(24, 10), lod(24, 12));
+    w.add(scaleUV(cg, 3, 3), robe, hg, at.toArray(), tilt, [1, 1, DZ]);
+    // a leather band with gold edges, a gold diamond set with a stone at the front
+    const band = (y: number, wd: number, k = 0) => belt((RX + 2 + k) * M, (RX + 2 + k) * M * DZ, y * M, wd * M, 4 * M, 0.004, 28);
+    w.add(band(14, 24), leather, hg, at.toArray(), tilt);
+    for (const y of [3, 25]) w.add(band(y, 4, 1.5), gold, hg, at.toArray(), tilt);
+    const front = V(0, 14 * M, (RX + 6) * M * DZ).applyEuler(new THREE.Euler(...tilt)).add(at);
+    w.add(new THREE.OctahedronGeometry(0.022, 0), gold, hg, front.toArray(), tilt, [0.8, 1.1, 0.35]);
+    w.add(gemGeo(0.01), stone, hg, [front.x, front.y, front.z + 0.007], tilt);
     w.build();
   }
 
@@ -279,15 +291,15 @@ export function buildMage(): Model {
   // cowl and colliding with a capsule rig that follows the animated skeleton.
   const cape = new SkeletonCape({
     anchor: j.chest, root,
-    left: [0.11, 0.3, -0.17], right: [-0.11, 0.3, -0.17],
+    left: [0.1, 0.3, -0.15], right: [-0.1, 0.3, -0.15],
     palette: MAGE_CAPE_PALETTE,
     // narrower than the cape-physics default: the mage holds staff and orb in front,
     // so a wide cape would drape over the arms and stick out forward
-    settings: { length: 1.42, width: 0.74 },
+    settings: { length: 1.42, width: 0.64 },
     capsules: [
-      { name: 'shoulders', a: j.shoulderL, offA: [0.02, 0.03, 0], b: j.shoulderR, offB: [-0.02, 0.03, 0], radius: 0.12, clearance: 0.008 },
-      { name: 'gorget', a: j.chest, offA: [0, 0.27, 0], radius: 0.19, clearance: 0.006, faceSampleSpacing: 0.03 },
-      { name: 'upper torso', a: j.chest, offA: [0, 0.22, 0], offB: [0, -0.02, 0], radius: 0.24, depthRadius: 0.19, clearance: 0.006, faceSampleSpacing: 0.07 },
+      { name: 'shoulders', a: j.shoulderL, offA: [0.01, 0.03, 0], b: j.shoulderR, offB: [-0.01, 0.03, 0], radius: 0.1, clearance: 0.008 },
+      { name: 'gorget', a: j.chest, offA: [0, 0.27, 0], radius: 0.17, clearance: 0.006, faceSampleSpacing: 0.03 },
+      { name: 'upper torso', a: j.chest, offA: [0, 0.22, 0], offB: [0, -0.02, 0], radius: 0.2, depthRadius: 0.17, clearance: 0.006, faceSampleSpacing: 0.07 },
       { name: 'hips', a: j.hips, offA: [0, 0.02, 0], offB: [0, -0.25, 0], radius: 0.26, depthRadius: 0.23, clearance: 0.008, faceSampleSpacing: 0.08 },
       { name: 'robe skirt', a: j.hips, offA: [0, -0.3, 0], offB: [0, -0.62, 0], radius: 0.34, depthRadius: 0.3, clearance: 0.008, faceSampleSpacing: 0.08 },
       { name: 'left arm', a: j.shoulderL, offA: [0, -0.02, 0], b: j.elbowL, radius: 0.08, clearance: 0.006 },

@@ -8,7 +8,7 @@ import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, lod, type SurfaceFn } from './armor';
-import { buildHead, SKULL } from './head';
+import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
 import { buildHand, poseHand, hold } from './hands';
 import { clamp, lerp, mulberry } from '../../util';
 import { SkeletonCape } from './cape';
@@ -41,16 +41,19 @@ const WARRIOR_CAPE_PALETTE: CapeFabricPalette = Object.freeze({
   materialName: 'Heavy navy warrior cape',
 });
 
-// --- the breastplate: a torso-shaped shell, broad at the chest with a gentle keel and pectoral swell,
-// its top dipping a little at the collar (chest joint space)
-const bpRx = (y: number) => 0.2 + 0.05 * sm(-0.07, 0.12, y) - 0.035 * sm(0.17, 0.25, y);
-const bpRz = (y: number) => 0.152 + 0.032 * sm(-0.07, 0.1, y) - 0.035 * sm(0.16, 0.25, y);
+// --- the breastplate: a torso-shaped shell over the gambeson, as broad as a strong man's chest (ANSUR
+// II: 29 cm across, 25 deep, plus padding and steel), with a gentle keel and pectoral swell, its top
+// dipping a little at the collar (chest joint space)
+const bpRx = (y: number) => 0.148 + 0.034 * sm(-0.07, 0.12, y) - 0.024 * sm(0.17, 0.25, y);
+const bpRz = (y: number) => 0.128 + 0.026 * sm(-0.07, 0.1, y) - 0.028 * sm(0.16, 0.25, y);
 const BP_A = 1.75;
+/** the pauldrons' size against the shoulder */
+const PAULDRON = 0.7;
 const bpTop = (a: number) => 0.235 - 0.03 * Math.cos(a) ** 2;
 function bpPoint(a: number, y: number, out: THREE.Vector3, lift = 0): THREE.Vector3 {
   const x = Math.sin(a) * (bpRx(y) + lift);
   const G = (dx: number, dy: number, s: number) => Math.exp(-(dx * dx + dy * dy) / (s * s));
-  const pec = 0.014 * G(Math.abs(x) - 0.1, y - 0.12, 0.09) + 0.007 * Math.exp(-((x / 0.025) ** 2)) * sm(-0.07, 0.05, y);
+  const pec = 0.012 * G(Math.abs(x) - 0.075, y - 0.12, 0.07) + 0.007 * Math.exp(-((x / 0.025) ** 2)) * sm(-0.07, 0.05, y);
   return out.set(x, y, Math.cos(a) * (bpRz(y) + lift) + (Math.cos(a) > 0 ? pec * Math.cos(a) : 0));
 }
 const breast: SurfaceFn = (u, v, out) => { const a = (u - 0.5) * 2 * BP_A; return bpPoint(a, lerp(-0.07, bpTop(a), v), out); };
@@ -81,7 +84,7 @@ export function buildWarrior(): Model {
   const edge = kit.glow(0xffb070, 0, false);
 
   const j = buildHumanoid({ skin: leather }, {
-    chestW: 0.25, chestD: 0.16, waistW: 0.18, shoulderW: 0.28, upperR: 0.068, foreR: 0.058, handR: 0.058,
+    chestW: 0.18, chestD: 0.14, waistW: 0.16, shoulderW: 0.21, shoulderY: 0.45, upperR: 0.068, foreR: 0.058, handR: 0.058,
     thighR: 0.1, shinR: 0.078, headR: 0.125, shinL: 0.41,
   });
   stripRig(j.root);
@@ -89,9 +92,9 @@ export function buildWarrior(): Model {
   const S = new Sculpt().glow(furM);
 
   // --- torso: a quilted gambeson under it all, layered leather at the waist, the breastplate on top
-  S.add(scaleUV(lathe([[0.17, -0.12], [0.2, -0.02], [0.222, 0.1], [0.215, 0.18], [0.17, 0.25], [0.085, 0.29]], 24), 3, 1.5), cloth, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, 0.68]);
-  S.add(scaleUV(lathe([[0.15, -0.05], [0.16, 0.08], [0.18, 0.2], [0.19, 0.26]], 24), 3, 1), leatherDark, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.8]);
-  for (const [y, g] of [[0.19, 0.006], [0.125, 0]] as const) S.add(belt(0.19 + g, 0.155 + g, y, 0.06, 0.01), leather, j.spine);
+  S.add(scaleUV(lathe([[0.14, -0.12], [0.152, -0.02], [0.165, 0.1], [0.162, 0.18], [0.14, 0.25], [0.08, 0.29]], 24), 3, 1.5), cloth, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, 0.84]);
+  S.add(scaleUV(lathe([[0.14, -0.05], [0.145, 0.08], [0.152, 0.2], [0.155, 0.26]], 24), 3, 1), leatherDark, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
+  for (const [y, g] of [[0.19, 0.006], [0.125, 0]] as const) S.add(belt(0.16 + g, 0.137 + g, y, 0.06, 0.01), leather, j.spine);
   // rivets along each band
   const studs: THREE.BufferGeometry[] = [];
   const studAt = (p: THREE.Vector3, n: THREE.Vector3, r: number) => {
@@ -102,12 +105,12 @@ export function buildWarrior(): Model {
   };
   for (const [y, g] of [[0.19, 0.006], [0.125, 0]] as const) for (let k = 0; k < 14; k++) {
     const a = (k / 14 - 0.5) * 2.6;
-    studAt(V(Math.sin(a) * (0.2 + g), y - 0.02, Math.cos(a) * (0.165 + g)), V(Math.sin(a), 0, Math.cos(a)), 0.005);
+    studAt(V(Math.sin(a) * (0.165 + g), y - 0.02, Math.cos(a) * (0.142 + g)), V(Math.sin(a), 0, Math.cos(a)), 0.005);
   }
   S.add(merge(studs.splice(0)), brass, j.spine);
   // the breastplate, engraved across the front (projected straight on), and a plain back plate
   const bp = plate(breast, 28, 14, 0.008);
-  projectUV(bp, steelRegion('chest'), (x, y) => [(x + 0.3) / 0.6, (y + 0.12) / 0.42]);
+  projectUV(bp, steelRegion('chest'), (x, y) => [(x + 0.22) / 0.44, (y + 0.12) / 0.42]);
   S.add(bp, engraved, j.chest);
   S.add(plate(back, 20, 10, 0.008), plateM, j.chest);
   S.add(edgeTube(breast, 'v1', 0.008, 28), plateM, j.chest);
@@ -118,11 +121,11 @@ export function buildWarrior(): Model {
   }
   S.add(merge(studs.splice(0)), plateM, j.chest);
   // side straps joining front and back plates under the arms
-  for (const s of [1, -1]) for (const y of [0.02, 0.1]) S.add(strap([V(s * 0.19, y, 0.1), V(s * 0.225, y, 0), V(s * 0.19, y, -0.1)], 0.028, 0.006), leather, j.chest);
+  for (const s of [1, -1]) for (const y of [0.02, 0.1]) S.add(strap([V(s * 0.155, y, 0.1), V(s * 0.188, y, 0), V(s * 0.155, y, -0.1)], 0.028, 0.006), leather, j.chest);
   // crossed straps over the chest, each with a buckle; they run on over the shoulders
   for (const s of [1, -1]) {
-    const pts: THREE.Vector3[] = [V(s * 0.12, 0.27, -0.12), V(s * 0.14, 0.29, -0.02), V(s * 0.13, 0.25, 0.1)];
-    for (let k = 0; k <= 6; k++) { const t = k / 6; pts.push(onPlate(lerp(s * 0.12, -s * 0.2, t), lerp(0.2, -0.04, t), 0.004)); }
+    const pts: THREE.Vector3[] = [V(s * 0.1, 0.27, -0.1), V(s * 0.115, 0.29, -0.02), V(s * 0.105, 0.25, 0.09)];
+    for (let k = 0; k <= 6; k++) { const t = k / 6; pts.push(onPlate(lerp(s * 0.1, -s * 0.16, t), lerp(0.2, -0.04, t), 0.004)); }
     S.add(strap(pts, 0.04, 0.007), leather, j.chest);
     const mid = onPlate(s * -0.01, 0.1, 0.012);
     S.add(buckle(0.05, 0.05), plateM, j.chest, mid.toArray(), [0, 0, s * 0.62]);
@@ -131,16 +134,18 @@ export function buildWarrior(): Model {
   // --- fur collar round the neck and over the shoulder tops
   S.add(furTufts(rng, 280, (i, o) => {
     const a = rng() * Math.PI * 2, r = 0.55 + rng() * 0.45, sa = Math.sin(a), ca = Math.cos(a);
-    o.p.set(sa * (0.1 + 0.15 * r), 0.24 + rng() * 0.04 - Math.abs(sa) * r * 0.02, ca * (0.1 + 0.05 * r));
+    o.p.set(sa * (0.09 + 0.1 * r), 0.24 + rng() * 0.04 - Math.abs(sa) * r * 0.02, ca * (0.09 + 0.045 * r));
     o.d.set(sa, 0.5 + rng() * 0.5, ca);
   }, 0.06, 0.011), furM, j.chest);
   // a high collar of the gambeson inside the fur, and the neck
   S.add(new THREE.CylinderGeometry(0.075, 0.09, 0.06, 20, 1, true), cloth, j.chest, [0, 0.27, 0]);
-  S.add(new THREE.CylinderGeometry(0.06, 0.07, 0.15, 18), skinTip, j.neck, [0, 0.04, 0.005]);
 
   // --- pauldrons: three steel lames over each shoulder with a rolled rim, an engraved medallion on the
   // top one, fur spilling out from under it
-  for (const [s, sh] of [[1, j.shoulderL], [-1, j.shoulderR]] as const) {
+  for (const [s, joint0] of [[1, j.shoulderL], [-1, j.shoulderR]] as const) {
+    // sized to sit over a man's deltoid (they were cut for a far broader frame)
+    const sh = joint(joint0);
+    sh.scale.setScalar(PAULDRON);
     const lame = (R: number, lat0: number, lat1: number, y: number): SurfaceFn => (u, v, out) => {
       const lon = (u - 0.5) * 3.3, lat = lerp(lat0, lat1, v);
       return out.set(s * Math.cos(lat) * Math.cos(lon) * R * 1.12 + s * 0.02, Math.sin(lat) * R * 0.78 + y, Math.cos(lat) * Math.sin(lon) * R);
@@ -196,22 +201,22 @@ export function buildWarrior(): Model {
   }
 
   // --- below the belt: a mail skirt with leather tassets over it
-  S.add(belt(0.2, 0.162, 0.01, 0.06, 0.012), leather, j.spine);
+  S.add(belt(0.168, 0.145, 0.01, 0.06, 0.012), leather, j.spine);
   const bk = disc(0.046, 0.016);
   projectUV(bk, steelRegion('disc'), (x, y) => [(x / 0.046 + 1) / 2, (y / 0.046 + 1) / 2]);
-  S.add(bk, engraved, j.spine, [0, 0.01, 0.176]);
+  S.add(bk, engraved, j.spine, [0, 0.01, 0.152]);
   // a second belt slung lower across the hips, and a pouch on it
-  S.add(strap(Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * Math.PI * 2; return V(Math.sin(a) * 0.225, 0.02 - 0.05 * Math.sin(a + 0.8) - 0.02 * Math.cos(a), Math.cos(a) * 0.185); }), 0.04, 0.01, true), leather, j.hips);
-  S.add(new THREE.BoxGeometry(0.08, 0.1, 0.045), leatherDark, j.hips, [-0.2, -0.05, 0.08], [0, -0.8, 0]);
-  S.add(new THREE.BoxGeometry(0.086, 0.04, 0.05), leather, j.hips, [-0.2, -0.005, 0.08], [0, -0.8, 0]);
-  const skirt = new Skirt({ r0: 0.212, r1: 0.27, len: 0.36, depth: 0.8, folds: 7, foldAmp: 0.03, flare: 0.7, rows: 6 });
+  S.add(strap(Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * Math.PI * 2; return V(Math.sin(a) * 0.2, 0.02 - 0.05 * Math.sin(a + 0.8) - 0.02 * Math.cos(a), Math.cos(a) * 0.17); }), 0.04, 0.01, true), leather, j.hips);
+  S.add(new THREE.BoxGeometry(0.08, 0.1, 0.045), leatherDark, j.hips, [-0.18, -0.05, 0.08], [0, -0.8, 0]);
+  S.add(new THREE.BoxGeometry(0.086, 0.04, 0.05), leather, j.hips, [-0.18, -0.005, 0.08], [0, -0.8, 0]);
+  const skirt = new Skirt({ r0: 0.19, r1: 0.25, len: 0.36, depth: 0.8, folds: 7, foldAmp: 0.03, flare: 0.7, rows: 6 });
   const skirtMesh = new THREE.Mesh(skirt.geo, mail);
   skirtMesh.position.y = 0.04; skirtMesh.castShadow = skirtMesh.receiveShadow = true;
   j.hips.add(skirtMesh);
   const tassets: { g: THREE.Group; s: number }[] = [];
   for (const s of [1, -1]) {
     for (const [k, off] of [[0, 0.55], [1, 1.05]] as const) {
-      const g = joint(j.hips, s * Math.sin(off) * 0.225, 0.05, Math.cos(off) * 0.19);
+      const g = joint(j.hips, s * Math.sin(off) * 0.2, 0.05, Math.cos(off) * 0.172);
       g.rotation.order = 'YXZ'; g.rotation.y = s * off;
       const tf: SurfaceFn = (u, v, out) => { const x = (u - 0.5) * 0.12, yb = -0.3 + k * 0.04 + 0.03 * (2 * u - 1) ** 2; return out.set(x, lerp(yb, 0, v), 0.012 * Math.sin(u * Math.PI)); };
       const ta = new Sculpt();
@@ -225,20 +230,20 @@ export function buildWarrior(): Model {
 
   // --- the head, and an open-faced helmet over it: a steel skull with a low crest, bands riveted over
   // it and round the brow, a nasal down the nose, cheek guards over the ears and a mail curtain over the
-  // nape. The face stays bare; of the hair only the cap round the temples shows.
-  const head = buildHead(j.head, kit, 7, { locks: false });
+  // nape. It is shaped on the head itself (padded over the scalp); the face stays bare.
+  const head = buildHead(j.head, kit, 'warrior');
+  buildNeck(j.neck, kit, 'warrior', j.P.neckL);
   {
-    const { SX, SY, SZ, CY, CZ } = SKULL, hg = head.group, h = new Sculpt(), C = V(0, CY, CZ);
-    /** the shell towards `a` round the head (0 the face) and `el` up it, `lift` out from it (in head radii) */
+    const hg = head.group, h = new Sculpt(), C = toGroup(0, 128, -12), M = HEAD_MM;
+    /** the shell towards `a` round the head (0 the face) and `el` up it, padded over the scalp, with a
+     *  low crest along the middle; `lift` mm further out */
     const shell = (a: number, el: number, lift = 0, out = new THREE.Vector3()) => {
-      const x = Math.sin(a) * Math.cos(el), y = Math.sin(el), z = Math.cos(a) * Math.cos(el);
-      const r = 1.17 + lift + 0.045 * Math.exp(-((x / 0.12) ** 2)) * sm(0.1, 0.8, y);
-      const fz = z > 0 ? 1 - 0.18 * sm(0.3, 1, z) : 1.05;
-      return out.set(x * SX * r * 1.04, y * SY * r * (y > 0 ? 0.93 : 1) + CY + 0.006, z * SZ * r * fz + CZ - 0.004);
+      const x = Math.sin(a) * Math.cos(el), y = Math.sin(el);
+      return head.surface(a, el, 12 + lift + 4.5 * Math.exp(-((x / 0.12) ** 2)) * sm(0.1, 0.8, y), out);
     };
     const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
     // the rim: just above the brows, over the ears at the sides, down to the nape behind
-    const rimEl = (a: number) => Math.asin(lerp(0.3, -0.35, sm(0.5, 2.7, Math.abs(wrap(a)))));
+    const rimEl = (a: number) => Math.asin(lerp(0.36, -0.35, sm(0.5, 2.7, Math.abs(wrap(a)))));
     const out = (p: THREE.Vector3, o: THREE.Vector3) => o.subVectors(p, C).normalize();
     const dome = new THREE.SphereGeometry(1, lod(56, 28), lod(20, 10)), dp = dome.attributes.position, duv = dome.attributes.uv;
     for (let i = 0; i < dp.count; i++) {
@@ -251,30 +256,33 @@ export function buildWarrior(): Model {
     h.add(scaleUV(dome, 4, 1.5), plateM, hg);
     const ring = (el: (a: number) => number, lift: number, n: number) => Array.from({ length: n }, (_, k) => { const a = (k / n) * Math.PI * 2 - Math.PI; return shell(a, el(a), lift); });
     // a rolled rim, the brow band over it, four bands meeting at the crown and a rivet on top
-    const rim = ring(rimEl, 0.01, 48);
+    const rim = ring(rimEl, 1, 48);
     h.add(taperTube([...rim, rim[0]], () => 0.0055, lod(96, 48), 6), plateM, hg);
     h.add(strap(ring((a) => rimEl(a) + 0.13, 0, 48), 0.032, 0.0035, true, out, 96), darkSteel, hg);
     for (let k = 0; k < 4; k++) {
       const a = (k / 4) * Math.PI * 2;
       h.add(strap(Array.from({ length: 10 }, (_, q) => shell(a, lerp(rimEl(a) + 0.26, Math.PI / 2 - 0.02, q / 9), 0)), 0.022, 0.003, false, out), darkSteel, hg);
-      for (let q = 0; q < 3; q++) { const e = lerp(rimEl(a) + 0.4, 1.35, q / 2); studAt(shell(a, e, 0.03), out(shell(a, e), V(0, 0, 0)), 0.0038); }
+      for (let q = 0; q < 3; q++) { const e = lerp(rimEl(a) + 0.4, 1.35, q / 2); studAt(shell(a, e, 3), out(shell(a, e), V(0, 0, 0)), 0.0038); }
     }
-    for (let k = 0; k < 20; k++) { const a = (k / 20) * Math.PI * 2 - Math.PI, e = rimEl(a) + 0.13; studAt(shell(a, e, 0.035), out(shell(a, e), V(0, 0, 0)), 0.0036); }
-    const top = shell(0, Math.PI / 2, 0.03);
+    for (let k = 0; k < 20; k++) { const a = (k / 20) * Math.PI * 2 - Math.PI, e = rimEl(a) + 0.13; studAt(shell(a, e, 3.5), out(shell(a, e), V(0, 0, 0)), 0.0036); }
+    const top = shell(0, Math.PI / 2, 3);
     h.add(new THREE.SphereGeometry(0.009, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), plateM, hg, top.toArray(), [0, 0, 0], [1, 0.7, 1]);
-    // the nasal: a ridged bar from the brow band down the bridge of the nose, narrowing to a rounded end
-    const nTop = shell(0, rimEl(0) + 0.22, 0.045);
+    // the nasal: a ridged bar from the brow band down the bridge of the nose, clear of it, narrowing to
+    // a rounded end
+    const nTop = shell(0, rimEl(0) + 0.22, 4.5), nTopY = nTop.y / M;
     const nasal: SurfaceFn = (u, v, o) => {
-      const c = 2 * u - 1, w = lerp(0.0055, 0.009, v) * Math.sqrt(1 - (1 - sm(0, 0.12, v)) ** 2 * 0.75), x = c * w;
-      return o.set(x, lerp(0.094, nTop.y, v), lerp(0.117, nTop.z, v ** 1.4) + 0.0025 * (1 - c * c) - x * x * 4);
+      const c = 2 * u - 1, w = lerp(5.5, 9, v) * Math.sqrt(1 - (1 - sm(0, 0.12, v)) ** 2 * 0.75), x = c * w;
+      const y = lerp(100, nTopY, v), z = lerp(head.midZ(y) + 4, nTop.z / M + 5, sm(0.55, 1, v));
+      return toGroup(x, y, z + 2.5 * (1 - c * c) - x * x * 0.04, o);
     };
     h.add(plate(nasal, 6, 12, 0.003, undefined, C), plateM, hg);
     studAt(nasal(0.5, 0.88, new THREE.Vector3()).add(V(0, 0, 0.002)), V(0, 0, 1), 0.0035);
-    // cheek guards over the ears, curving in under the cheekbones, their front edge clear of the face
+    // cheek guards over the ears, their lower edge tucked in over the beard, their front edge clear of
+    // the face
     for (const s of [1, -1]) {
       const guard: SurfaceFn = (u, v, o) => {
-        const a = s * lerp(0.88, 2.0, u), e0 = lerp(-0.66, -0.3, u) - 0.1 * Math.sin(u * Math.PI), el = lerp(e0, rimEl(a) + 0.08, v);
-        return shell(a, el, 0.012 - 0.12 * sm(0.15, -0.6, Math.sin(el)) - 0.05 * (1 - u) * sm(0.3, -0.3, Math.sin(el)), o);
+        const a = s * lerp(0.95, 2.0, u), e0 = lerp(-0.62, -0.3, u) - 0.1 * Math.sin(u * Math.PI), el = lerp(e0, rimEl(a) + 0.08, v);
+        return shell(a, el, 1.2 - 3 * sm(-0.2, -0.6, Math.sin(el)), o);
       };
       h.add(plate(guard, lod(12, 6), lod(12, 6), 0.005, undefined, C), plateM, hg);
       h.add(edgeTube(guard, 'v0', 0.0035, 16), plateM, hg);
@@ -283,8 +291,8 @@ export function buildWarrior(): Model {
     }
     // mail hanging from under the rim behind the cheek guards, over the nape
     const aventail: SurfaceFn = (u, v, o) => {
-      const a = Math.PI + (u - 0.5) * 2.7, p = shell(a, rimEl(a) + 0.05, -0.02, o), r = V(p.x, 0, p.z - CZ).normalize();
-      return p.addScaledVector(r, 0.028 * (1 - v)).add(V(0, -0.085 * (1 - v), 0));
+      const a = Math.PI + (u - 0.5) * 2.7, p = shell(a, rimEl(a) + 0.05, -2, o), r = V(p.x, 0, p.z - C.z).normalize();
+      return p.addScaledVector(r, 0.03 * (1 - v)).add(V(0, -0.09 * (1 - v), 0));
     };
     h.add(scaleUV(plate(aventail, lod(28, 12), 4, 0.003, undefined, C), 3, 3), mail, hg);
     h.add(merge(studs.splice(0)), plateM, hg);
@@ -433,14 +441,14 @@ export function buildWarrior(): Model {
   // --- cape pinned under the pauldrons, colliding with the armoured body
   const cape = new SkeletonCape({
     anchor: j.chest, root,
-    left: [0.14, 0.3, -0.19], right: [-0.14, 0.3, -0.19],
+    left: [0.11, 0.3, -0.165], right: [-0.11, 0.3, -0.165],
     palette: WARRIOR_CAPE_PALETTE,
-    settings: { length: 1.2, width: 0.72 },
+    settings: { length: 1.2, width: 0.62 },
     capsules: [
-      { name: 'shoulders', a: j.shoulderL, offA: [0.03, 0.04, 0], b: j.shoulderR, offB: [-0.03, 0.04, 0], radius: 0.16, clearance: 0.008 },
-      { name: 'gorget', a: j.chest, offA: [0, 0.27, 0], radius: 0.2, clearance: 0.006, faceSampleSpacing: 0.03 },
-      { name: 'upper torso', a: j.chest, offA: [0, 0.22, 0], offB: [0, -0.02, 0], radius: 0.29, depthRadius: 0.2, clearance: 0.006, faceSampleSpacing: 0.07 },
-      { name: 'hips', a: j.hips, offA: [0, 0.02, 0], offB: [0, -0.2, 0], radius: 0.28, depthRadius: 0.24, clearance: 0.008, faceSampleSpacing: 0.08 },
+      { name: 'shoulders', a: j.shoulderL, offA: [0.02, 0.04, 0], b: j.shoulderR, offB: [-0.02, 0.04, 0], radius: 0.12, clearance: 0.008 },
+      { name: 'gorget', a: j.chest, offA: [0, 0.27, 0], radius: 0.17, clearance: 0.006, faceSampleSpacing: 0.03 },
+      { name: 'upper torso', a: j.chest, offA: [0, 0.22, 0], offB: [0, -0.02, 0], radius: 0.21, depthRadius: 0.17, clearance: 0.006, faceSampleSpacing: 0.07 },
+      { name: 'hips', a: j.hips, offA: [0, 0.02, 0], offB: [0, -0.2, 0], radius: 0.25, depthRadius: 0.22, clearance: 0.008, faceSampleSpacing: 0.08 },
       { name: 'left arm', a: j.shoulderL, offA: [0, -0.02, 0], b: j.elbowL, radius: 0.085, clearance: 0.006 },
       { name: 'right arm', a: j.shoulderR, offA: [0, -0.02, 0], b: j.elbowR, radius: 0.085, clearance: 0.006 },
       { name: 'left thigh', a: j.thighL, offA: [0, -0.1, 0], b: j.kneeL, radius: 0.13 },
