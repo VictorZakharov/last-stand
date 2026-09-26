@@ -2,7 +2,9 @@
 @use 'theme' as *;
 @use 'mixins' as *;
 
-/* ---------- lobby spell loadout: the key bar; the book slides up over it only to remap ---------- */
+/* ---------- lobby spell loadout: the key bar; the book slides up over it only to remap ----------
+   Kept as plain as can be (no frames, a dark backing only), to leave the eye on the skills. */
+#menu #loadout { border: none; box-shadow: none; background: rgba(8,7,9,.8); border-radius: 6px 6px 0 0; }
 #loadout { position: relative; pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 12px 10px;
   max-width: 100%; zoom: var(--ui, 1); }
 .lo-book { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 100%; animation: lo-open .18s ease-out; }
@@ -29,16 +31,14 @@
 #spellbook.over { background: rgba(120,24,16,.5) !important; }
 /* the key bar, and beside it the chevron that opens the book above it (up) and folds it back down */
 .lo-keys { display: flex; gap: 6px; max-width: 100%; }
-#loadout-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; min-width: 0; padding: 6px 10px; background: $tray;
-  @include frame(rgba($frame, .6), 0 0 0 1px #000); border-radius: 4px; }
+#loadout-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; min-width: 0; }
 #lo-toggle { flex: none; width: 26px; display: flex; align-items: center; justify-content: center; padding: 0; color: var(--accent); cursor: pointer;
-  background: $well; border: 1px solid rgba($frame, .45); border-radius: 3px; }
+  background: none; border: none; border-radius: 3px; }
 #lo-toggle svg { width: 14px; height: 9px; transition: transform .2s; }
-#lo-toggle:hover { background: $well-lit; border-color: rgba($frame, .8); }
+#lo-toggle:hover { background: rgba($frame, .15); }
 #loadout.open #lo-toggle svg { transform: rotate(180deg); }
 /* its fold tab (see .fold-tab) is on the top edge; folded, it names the panel beside the chevron */
-#skills-fold { bottom: calc(100% - 1px); left: 50%; translate: -50% 0; min-width: 40px; height: 18px; gap: 8px; border-bottom: none; border-radius: 6px 6px 0 0;
-  box-shadow: inset 0 1px 0 rgba($frame, .6), inset 1px 0 0 rgba($frame, .6), inset -1px 0 0 rgba($frame, .6); }
+#skills-fold { bottom: calc(100% - 1px); left: 50%; translate: -50% 0; min-width: 40px; height: 18px; gap: 8px; border: none; border-radius: 6px 6px 0 0; background: rgba(8,7,9,.8); }
 #skills-fold svg { width: 14px; height: 9px; flex: none; }
 #loadout.folded #skills-fold { height: 22px; padding: 0 14px; }
 #loadout.folded { translate: 0 100%; }
