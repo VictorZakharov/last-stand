@@ -341,7 +341,7 @@ export function buildMage(): Model {
     if (a?.name === 'point') aimedAt = t;
     aim = damp(aim, t - aimedAt < 0.3 ? 1 : 0, 14, dt);
     j.shoulderR.rotation.x += -0.3 * aim; j.elbowR.rotation.x += 0.15 * aim; j.spine.rotation.x += 0.12 * aim;
-    staff.rotation.x = STAFF_PITCH + 1.55 * aim;
+    staff.rotation.x = STAFF_PITCH + 1.75 * aim;
     if (a) {
       const k = a.t;
       if (a.name === 'cast') {
