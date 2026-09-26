@@ -84,9 +84,9 @@
       #loading .ld-ember { display: none; }
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-ijcwJcKb.js"></script>
+  <script type="module" crossorigin src="./assets/index-DfDyTk6y.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/three-DkllKPK_.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-DZTsjf4S.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-BSEgy-JC.css">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 </head>
 <body>
@@ -158,18 +158,6 @@
       <div class="t-sub"></div>
       <div class="t-bar"><div class="t-fill"></div><div class="t-ghost"></div></div>
     </div>
-
-    <div id="scorebox">
-      <div class="sb-main">
-        <div class="sb-score">0</div>
-        <div class="sb-row">
-          <span class="sb-kills" title="Enemies remaining">☠ <b>0</b></span>
-          <span class="sb-time" title="Wave time">⧗ <b>00:00</b></span>
-        </div>
-      </div>
-      <div class="sb-mult">x1</div>
-      <div class="sb-wave" title="Wave">1</div>
-    </div>
     <div id="minimap-wrap">
       <div class="mm-title">The Last Stand</div>
       <canvas id="minimap" width="200" height="200"></canvas>
@@ -196,12 +184,16 @@
       <div class="bar energy"><div class="fill"></div><span class="txt"></span><span class="bar-label">Energy</span></div>
     </div>
 
+    <!-- bank or continue (ui/hud.ts showDecision): unfolds from the wave badge, folds down to its
+         buttons after a while, and back into the badge once chosen -->
     <div id="decision" class="hidden">
-      <div class="dc-title">The wave is broken</div>
-      <div class="dc-sub"></div>
-      <div class="dc-bag"></div>
-      <div class="dc-party hidden"></div>
-      <div class="dc-risk"></div>
+      <div class="dc-details"><div>
+        <div class="dc-title">The wave is broken</div>
+        <div class="dc-sub"></div>
+        <div class="dc-bag"></div>
+        <div class="dc-party hidden"></div>
+        <div class="dc-risk"></div>
+      </div></div>
       <div class="dc-buttons">
         <button class="btn bank"><span class="k">B</span> Bank spoils &amp; leave</button>
         <button class="btn primary cont"><span class="k">C</span> <span class="cont-label">Continue</span></button>
