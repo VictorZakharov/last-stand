@@ -258,7 +258,8 @@ export function buildMage(): Model {
   // Held GRIP further up the haft than its old balance point, so the crystal rides at head height
   // and the bolts it casts fly at the foes, not over them.
   const staff = joint(j.handR, 0, -0.05, 0.02);
-  staff.rotation.x = 1.25;
+  const STAFF_PITCH = 1.25;
+  staff.rotation.x = STAFF_PITCH;
   const GRIP = 0.62;
   {
     const w = new Sculpt(), pts: THREE.Vector3[] = [];
@@ -332,12 +333,14 @@ export function buildMage(): Model {
     // hands at rest: the free one loosely curled and breathing, the other gripping the staff
     poseHand(handL, 0.45 + Math.sin(t * 1.3) * 0.06, 0.12);
     const a = st.action;
+    staff.rotation.x = STAFF_PITCH;
     if (!a || a.name !== 'channel') openedAt = -1;
     if (a) {
       const k = a.t;
       if (a.name === 'cast') {
         const w = pulse(k, 0, 1);
-        j.shoulderR.rotation.x += -1.05 * w; j.elbowR.rotation.x += 0.45 * w;
+        // the staff swings down to point at the target, so a bolt leaves its crystal at a foe's chest
+        j.shoulderR.rotation.x += -0.3 * w; j.elbowR.rotation.x += 0.15 * w; staff.rotation.x = STAFF_PITCH + 1.4 * w;
         j.shoulderL.rotation.x += -1.2 * w; j.shoulderL.rotation.z += 0.25 * w; j.elbowL.rotation.x += -0.2 * w;
         j.chest.rotation.y += 0.35 * w; j.spine.rotation.x += 0.12 * w;
         // the hand gathers into a claw, then flicks open as the spell leaves it
