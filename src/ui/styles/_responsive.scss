@@ -34,9 +34,12 @@ body.touch .stow-hint kbd { display: none; }
   .menu-left { flex: 1; max-width: 520px; }
   /* the stash's width is capped so its six rows fit the height (its items would size the panel to the screen) */
   .menu-right .tab-page[data-page="gear"] { display: grid; grid-template-columns: auto minmax(360px, 600px); grid-template-rows: auto auto 1fr; column-gap: 18px; }
+  /* the panel spans the screen: ten to a row, the filter as wide as the stash, nothing to fold away */
+  #stash { grid-template-columns: repeat(10, 1fr); }
+  #stash-filter { width: 100%; }
+  .fold-tab { display: none; }
   .menu-right #equip { grid-row: 1 / 4; align-self: start; margin-top: 18px; }
   .menu-right .stash-head { margin-top: 0; }
-  .menu-right #stash { align-content: start; }
 }
 /* phones held sideways: a small minimap, no objectives or spoils list; the stash's title is at the
    top of the panel, so its filter opens downwards, over the stash */

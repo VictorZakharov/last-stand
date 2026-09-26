@@ -276,19 +276,25 @@
       <div class="stow-hint"><kbd>Space</kbd><span class="sh-hide">Hide the lobby to practice on the dummies</span><span class="sh-show">Show the lobby</span></div>
       <!-- the key bar; the skill book slides up over it only to remap (ui/loadoutEditor.ts) -->
       <div id="loadout" class="panel">
+        <!-- folds the panel away to the bottom, and back (the tab stays at the screen's edge) -->
+        <button id="skills-fold" class="fold-tab" aria-expanded="true" title="Hide the skills" aria-label="Hide the skills"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6.5 7-6.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <div class="lo-book" id="lo-book">
           <div class="lo-head"><div class="lo-top"><span class="lo-title">Spellbook</span>
             <span class="lo-style"><span class="lo-style-name"></span><button class="link" id="btn-lo-reset">Reset to defaults</button></span></div>
             <span class="lo-hint mouse-only">Click a key, then a skill, or drag a skill onto a key · drag keys to swap · right-click a key to clear</span><span class="lo-hint touch-inline">Tap a key, then the skill to put on it · tap a picked key again to clear it</span></div>
           <div id="spellbook"></div>
         </div>
-        <div id="loadout-bar"></div>
-        <button id="lo-toggle" aria-expanded="false" aria-controls="lo-book"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 9.5l7-6.5 7 6.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="lt-open">Remap keys</span><span class="lt-close">Done</span></button>
+        <div class="lo-keys">
+          <div id="loadout-bar"></div>
+          <button id="lo-toggle" aria-expanded="false" aria-controls="lo-book" title="Remap keys" aria-label="Remap keys"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 9.5l7-6.5 7 6.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
       </div>
     </div>
     <div class="menu-right panel">
+      <!-- folds the panel away to the right, and back (the tab stays at the screen's edge) -->
+      <button id="gear-fold" class="fold-tab" aria-expanded="true" title="Hide the equipment" aria-label="Hide the equipment"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M3.5 3l6 7-6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <div class="tabs">
-        <button class="tab active" data-tab="gear">Equipment &amp; Stash</button>
+        <button class="tab active" data-tab="gear">Equipment</button>
         <button class="tab" data-tab="attrs">Attributes</button>
       </div>
       <div class="tab-page" data-page="gear">

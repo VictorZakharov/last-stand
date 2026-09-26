@@ -3,9 +3,11 @@
 
 /* ---------- menu ---------- */
 /* lobby layout: [left panel] [center column: spell loadout at the bottom] [right panel]. The side
-   panels end after their content, so the arena shows below them (they scroll if a screen is too short). */
+   panels end after their content, so the arena shows below them (the left one scrolls if a screen is
+   too short; the right one's stash does). */
 #menu { position: fixed; inset: 0; z-index: 20; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr); gap: 16px; align-items: stretch; padding: 28px; pointer-events: none; }
-.menu-left, .menu-right { align-self: start; max-height: 100%; overflow-y: auto; scrollbar-width: thin; }
+.menu-left, .menu-right { align-self: start; max-height: 100%; }
+.menu-left { overflow-y: auto; scrollbar-width: thin; }
 .menu-center { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; min-width: 0; }
 #menu .panel { pointer-events: auto; }
 .menu-left { width: 420px; padding: 22px 28px; display: flex; flex-direction: column; gap: 12px; background: linear-gradient(90deg, rgba(8,7,9,.94), rgba(8,7,9,.84)); }
@@ -56,10 +58,10 @@
 #opt-wave .wv-val small { color: var(--accent); }
 .menu-links { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0 6px; }
 
-.menu-right { width: 540px; padding: 14px 20px 16px; display: grid; grid-template-rows: auto 1fr; background: linear-gradient(270deg, rgba(8,7,9,.94), rgba(8,7,9,.84)); }
+.menu-right { position: relative; width: 290px; padding: 12px 14px 14px; display: grid; grid-template-rows: auto minmax(0, 1fr); background: linear-gradient(270deg, rgba(8,7,9,.94), rgba(8,7,9,.84)); }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid rgba($frame, .45); margin-bottom: 10px; }
-.tab { flex: 1; cursor: pointer; font-family: var(--font-display); font-size: 15px; font-weight: 700; letter-spacing: 1px; color: var(--ink-dim);
-  padding: 9px 10px; background: $well; border: 1px solid rgba($frame, .35); border-bottom: none; border-radius: 3px 3px 0 0; }
+.tab { flex: 1; cursor: pointer; font-family: var(--font-display); font-size: 13px; font-weight: 700; letter-spacing: .5px; color: var(--ink-dim);
+  padding: 8px 6px; background: $well; border: 1px solid rgba($frame, .35); border-bottom: none; border-radius: 3px 3px 0 0; }
 .tab:hover { color: var(--ink); }
 .tab.active { color: var(--accent); background: $well-lit; box-shadow: inset 0 2px 0 var(--accent); }
 /* both pages share one cell, so the panel keeps the equipment page's height on either tab: the
@@ -68,6 +70,23 @@
 .tab-page.off { visibility: hidden; }
 .tab-page[data-page="attrs"] { contain: size; overflow-y: auto; scrollbar-width: thin; }
 .tab-page .panel-title { margin-top: 12px; }
+
+/* Folding (ui/menus.ts): the equipment panel slides off to the right and the skills panel down, each
+   on its own, by a tab on the edge facing the arena that stays at the screen's edge in between (the
+   equipment's with a dot while the stash holds new items). The slide clears the lobby's padding. */
+.fold-tab { position: absolute; display: flex; align-items: center; justify-content: center; padding: 0; color: var(--accent); cursor: pointer;
+  background: var(--panel); border: 2px solid var(--frame-dark); }
+.fold-tab:hover { background: #1c1712; }
+.fold-tab svg { transition: transform .3s; }
+.panel.folded { box-shadow: none; }
+.panel.folded > :not(.fold-tab) { visibility: hidden; transition: visibility 0s .3s; }
+.panel.folded .fold-tab svg { transform: rotate(180deg); }
+#gear-fold { right: calc(100% - 1px); top: 10px; width: 24px; height: 40px; border-right: none; border-radius: 6px 0 0 6px;
+  box-shadow: inset 1px 0 0 rgba($frame, .6), inset 0 1px 0 rgba($frame, .6), inset 0 -1px 0 rgba($frame, .6); }
+#gear-fold svg { width: 9px; height: 15px; }
+.menu-right.folded { translate: calc(100% + 28px) 0; }
+.menu-right.folded #gear-fold.new::after { content: ''; position: absolute; top: 5px; left: 5px; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--highlight); box-shadow: 0 0 6px var(--highlight); }
 
 /* paper doll: square slots arranged around a character silhouette (an item's name is in its tooltip) */
 #equip { position: relative; display: grid; gap: 8px 14px; justify-content: center;
@@ -85,7 +104,9 @@
 #stats div.row { display: flex; justify-content: space-between; color: var(--ink-dim); padding: 3px 4px; }
 #stats div.row:nth-child(odd) { background: rgba(255,255,255,.025); }
 #stats b { color: var(--ink); font-weight: 500; }
-#stash { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
+/* five to a row, scrolling (padded so the edge items' glow isn't clipped) */
+#stash { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-content: start;
+  overflow-y: auto; scrollbar-width: thin; padding: 4px; margin: -4px; }
 .sitem { aspect-ratio: 1; font-size: 22px; border: 1px solid #000; background: radial-gradient(circle, #1c1a1c, #0a090a); display: flex; align-items: center; justify-content: center;
   font-size: 20px; cursor: pointer; position: relative; box-shadow: inset 0 0 0 1px var(--c, #555); }
 .sitem:hover, .eslot:hover { filter: brightness(1.5); }
@@ -128,8 +149,9 @@
 #stash-filter-btn svg { display: block; width: 100%; height: 100%; }
 #stash-filter-btn.on { color: var(--highlight); }
 #stash-filter-btn:hover, #stash-filter-btn[aria-expanded="true"] { color: var(--accent); border-color: rgba($frame, .5); background: rgba($highlight, .06); }
-/* each group's name heads its row of options, so the panel fits over the paper doll */
-#stash-filter { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 5; width: 100%; padding: 8px 12px 10px; font: 14px var(--font-body); color: var(--ink);
+/* each group's name heads its row of options, so the panel fits over the paper doll (it reaches past
+   the lobby panel's left edge, over the arena) */
+#stash-filter { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 5; width: 500px; padding: 8px 12px 10px; font: 14px var(--font-body); color: var(--ink);
   display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 10px; align-items: start;
   background: #161418; border: 1px solid rgba($frame, .6); box-shadow: 0 10px 30px rgba(0,0,0,.85); animation: sf-open .15s ease-out; }
 .sf-top { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; font-family: var(--font-display); font-size: 15px; color: var(--accent); }
@@ -153,7 +175,7 @@
 #menu .panel { zoom: var(--ui, 1); }
 
 /* ---------- lobby stowed (Space): panels fade out, the arena stays playable ---------- */
-#menu .panel { transition: opacity .35s ease, transform .35s ease; }
+#menu .panel { transition: opacity .35s ease, transform .35s ease, translate .3s ease, box-shadow .3s; }
 #menu.stowed .panel { opacity: 0; pointer-events: none; }
 #menu.stowed .menu-left { transform: translateX(-24px); }
 #menu.stowed .menu-right { transform: translateX(24px); }

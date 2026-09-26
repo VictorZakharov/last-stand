@@ -62,7 +62,7 @@ Keyboard and mouse:
 | `E` (hold) | Revive a downed partner (co-op) |
 | `Esc` | Pause |
 
-Skills can be **remapped in the lobby**: *Remap keys* above the key bar (or a click on a key) opens the spellbook (the warrior's arsenal). Click a key, then a skill, or drag a skill onto any key (the same skill may sit on several keys); drag keys onto each other to swap. The loadout is saved in a cookie per class and save slot. You can also walk around and try every skill for free in the lobby.
+Skills can be **remapped in the lobby**: the chevron beside the key bar (or a click on a key) opens the spellbook (the warrior's arsenal) above it. Click a key, then a skill, or drag a skill onto any key (the same skill may sit on several keys); drag keys onto each other to swap. The loadout is saved in a cookie per class and save slot. You can also walk around and try every skill for free in the lobby, and fold the equipment panel away to the right or the key bar down, each by the tab on its edge (the lobby remembers).
 
 ## Classes
 

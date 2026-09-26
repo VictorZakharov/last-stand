@@ -1,5 +1,5 @@
 // Lobby spell loadout editor: the key bar, and a spellbook row (every class spell) that opens
-// over it only to remap: its toggle, or a click on a key (which picks that key). Click a key then a
+// over it only to remap: the chevron beside the bar, or a click on a key (which picks that key). Click a key then a
 // skill (or tap, on touch) to bind; drag spellbook -> key to bind (duplicates allowed), key -> key to
 // swap, key -> spellbook (or right-click) to clear. Saved via Player.bind (cookie), one loadout per
 // weapon style for a class whose skills depend on the gear held.
@@ -46,7 +46,10 @@ export function initLoadoutEditor(changed: () => void): void {
 export function openBook(v: boolean): void {
   open = v;
   document.getElementById('loadout')!.classList.toggle('open', v);
-  document.getElementById('lo-toggle')!.setAttribute('aria-expanded', String(v));
+  const t = document.getElementById('lo-toggle')!;
+  t.setAttribute('aria-expanded', String(v));
+  t.title = v ? 'Close the skill book' : 'Remap keys';
+  t.setAttribute('aria-label', t.title);
   if (!v && picked) { picked = null; renderLoadoutEditor(); }
 }
 

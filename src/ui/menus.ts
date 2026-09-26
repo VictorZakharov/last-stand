@@ -207,6 +207,9 @@ export function initMenus(h: MenuHooks): void {
       document.querySelectorAll<HTMLElement>('.menu-right .tab-page').forEach((pg) => pg.classList.toggle('off', pg.dataset.page !== tab.dataset.tab));
     };
   });
+  for (const f of FOLDS) $(f.tab).onclick = () => { sfx.click(); f.folded = !f.folded; storeFold(f); syncFolds(); };
+  onePanel.addEventListener('change', syncFolds);
+  syncFolds();
   initStashFilter(renderMenu);
   initSkillStrip($('.cc-strip'));
   const stash = $('#stash');
@@ -256,6 +259,32 @@ export function toggleMenuStowed(stowed?: boolean): void {
 // Short screens and upright tablets show one lobby panel at a time over the scene; the view moves
 // so the character stands in the free space beside it (or below it, upright).
 const onePanel = matchMedia('(max-height: 520px), (orientation: portrait) and (max-width: 1000px)');
+
+// The equipment panel folds away to the right and the skills panel down, each on its own (a per-viewer
+// preference, kept for every save slot); one panel at a time never folds them.
+interface Fold { panel: string; tab: string; what: string; key: string; folded: boolean; onFold: () => void }
+const readFold = (key: string): boolean => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
+const FOLDS: Fold[] = [
+  { panel: '.menu-right', tab: '#gear-fold', what: 'the equipment', key: 'last-stand.equipment-folded', folded: false,
+    onFold: () => { focusSlot(null); openStashFilter(false); } },
+  { panel: '#loadout', tab: '#skills-fold', what: 'the skills', key: 'last-stand.skills-folded', folded: false, onFold: () => openBook(false) },
+];
+for (const f of FOLDS) f.folded = readFold(f.key);
+
+function storeFold(f: Fold): void {
+  try { if (f.folded) localStorage.setItem(f.key, '1'); else localStorage.removeItem(f.key); } catch { /* storage unavailable */ }
+}
+
+function syncFolds(): void {
+  for (const f of FOLDS) {
+    const folded = f.folded && !onePanel.matches, tab = $(f.tab);
+    $(f.panel).classList.toggle('folded', folded);
+    tab.setAttribute('aria-expanded', String(!folded));
+    tab.title = `${folded ? 'Show' : 'Hide'} ${f.what}`;
+    tab.setAttribute('aria-label', tab.title);
+    if (folded) { hideTooltip(); f.onFold(); }
+  }
+}
 export function lobbyViewShift(): { x: number; y: number } {
   const menu = $('#menu');
   if (!onePanel.matches || menu.classList.contains('hidden') || menu.classList.contains('stowed')) return { x: 0, y: 0 };
@@ -378,6 +407,7 @@ export function renderMenu(): void {
 
   // stash (sorted: rarity desc, then power; the stat filter moves its matches first)
   $('#stash-count').textContent = `(${p.stash.length}/${RUN.bagLimit})`;
+  $('#gear-fold').classList.toggle('new', p.stash.some((it) => newIds.has(it.id)));   // shown while folded
   renderStashFilter();
   const st = $('#stash');
   st.innerHTML = '';

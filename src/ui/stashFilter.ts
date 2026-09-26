@@ -104,16 +104,17 @@ export function initStashFilter(changed: () => void): void {
   panel.querySelectorAll<HTMLElement>('.sf-opt').forEach((b) => { b.onclick = () => toggle(b.dataset.stat as StatKey); });
 }
 
-/** Chips for the chosen stats (click to remove) and the panel's pressed states. Past
- *  MAX_CHIPS the rest fold into a "+N" chip that opens the panel: more rows of chips
- *  would push the stash out of the lobby panel. */
+/** Chips for the chosen stats (click to remove) and the panel's pressed states. Past as many as
+ *  fit the stash's title line (up to MAX_CHIPS) the rest fold into a "+N" chip that opens the panel:
+ *  more rows of chips would push the stash down. */
 const MAX_CHIPS = 3;
 
 export function renderStashFilter(): void {
   sync();
   const chips = document.getElementById('stash-chips')!;
   chips.innerHTML = '';
-  const shown = active.length > MAX_CHIPS ? active.slice(0, MAX_CHIPS - 1) : active;
+  const fit = Math.min(MAX_CHIPS, Math.max(1, Math.floor(chips.clientWidth / 90)));
+  const shown = active.length > fit ? active.slice(0, fit - 1) : active;
   for (const k of shown) {
     const c = document.createElement('button');
     c.className = 'sf-chip';
