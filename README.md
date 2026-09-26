@@ -62,11 +62,13 @@ Keyboard and mouse:
 | `E` (hold) | Revive a downed partner (co-op) |
 | `Esc` | Pause |
 
-Skills can be **remapped in the lobby**: drag a skill from the spellbook (the warrior's arsenal) onto any key (the same skill may sit on several keys), drag keys onto each other to swap. The loadout is saved in a cookie per class. You can also walk around and try every skill for free in the lobby.
+Skills can be **remapped in the lobby**: drag a skill from the spellbook (the warrior's arsenal) onto any key (the same skill may sit on several keys), drag keys onto each other to swap. The loadout is saved in a cookie per class and save slot. You can also walk around and try every skill for free in the lobby.
 
 ## Classes
 
 Pick a class in the lobby. Every class keeps its **own profile**: equipment, stash, records and the starting waves unlocked in each biome. Loot found by one class is made for it and stays with it, and each class has its own stash filter.
+
+There are **three save slots** (the lobby's *Save slot* link), each a separate save with its own heroes, skill loadouts and stash filters. The save slots screen shows what each one holds: every hero's best wave and starting waves per battleground, gear with its item levels, skills, attributes, stash, records and time played. From there you play a slot or delete one (typing DELETE to confirm). An empty slot is a fresh start, for instance to play from the beginning with a friend. Progress from before save slots is in slot 1.
 
 Both wear a real position-based-dynamics cloth cape that collides with the animated body, using the solver from [cape-physics](https://github.com/VictorZakharov/cape-physics).
 
@@ -128,7 +130,7 @@ npm run build      # type-check + production build into dist/
 | `src/game/run.ts` | Wave flow, scoring, loot rolls, bank / continue |
 | `src/world/` | The biome arenas (`crypt.ts`, `forest.ts`), shared props, collision |
 | `src/fx/` | Particles, effects, pooled lights |
-| `src/loot/` | Items, persistent profiles (one per class: stash / equipment / records), skill loadout |
+| `src/loot/` | Items, persistent profiles (one per class and save slot: stash / equipment / records), save slots, skill loadout |
 | `src/net/` | Co-op: rooms and links between the games, the players' state, the host's reports of the fight |
 | `src/ui/` | HUD, menus, tooltips, loadout editor |
 | `src/vendor/cape/` | Vendored cape-physics solver and its web worker (see its README and LICENSE) |

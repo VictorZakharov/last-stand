@@ -2,7 +2,7 @@
 import { SLOTS, SLOT_INFO, RARITIES, STATS, AFFIX_NAMES, LEGENDARY_NAMES, type RarityInfo } from '../data/items';
 import { LOOT } from '../data/waves';
 import { pick, rand, randInt, weighted } from '../util';
-import type { BaseStats, ClassDef, DerivedStats, Item, Profile, RarityId, Slot, StatBlock, StatKey } from '../types';
+import type { BaseStats, ClassDef, DerivedStats, Gear, Item, Profile, RarityId, Slot, StatBlock, StatKey } from '../types';
 
 let uid = Date.now() % 1e6;
 /** A fresh item id (an item from a co-op host gets one here, so it can't clash with the stash). */
@@ -41,6 +41,16 @@ export const fitsOffhand = (it: Item | undefined, cls?: ClassDef): boolean => !!
 /** A weapon in the off-hand counts its implicit (the weapon's damage) at this much: two one-handers
  *  come to a little less than a two-hander's 1.8x, and pay for the second set of affixes with the block. */
 export const OFFHAND_WEAPON = 0.6;
+
+/** What a hero holds, from the equipped items (drives the model and the skills). */
+export function gearOf(cls: ClassDef, equipped: Profile['equipped']): Gear {
+  const weapon = equipped.weapon, off = equipped.offhand;
+  return {
+    weapon: weapon?.base ?? null, twoHanded: isTwoHanded(weapon, cls),
+    shield: (off?.stats.blockAmount ?? 0) > 0,   // shields are the off-hands that block
+    offWeapon: off?.slot === 'weapon' ? off.base : null,
+  };
+}
 
 /** Item base names of a slot for a class (its own, or the defaults). */
 export const basesFor = (slot: Slot, cls?: ClassDef): string[] => cls?.bases?.[slot] ?? SLOT_INFO[slot].bases;

@@ -10,6 +10,7 @@
 #coop .modal-box { width: 560px; max-width: 94vw; }
 .coop-body { display: flex; flex-direction: column; gap: 10px; align-items: center; }
 .coop-intro { margin: 0; color: var(--ink-dim); font-size: 15px; line-height: 1.4; }
+.coop-intro .link { padding: 0; font-size: inherit; color: $ally-text; }
 .coop-error { margin: 0; color: var(--danger); }
 .coop-choice { display: flex; gap: 14px; align-self: stretch; }
 .coop-col { flex: 1; display: flex; flex-direction: column; gap: 8px; align-items: center; padding: 12px; background: rgba(0,0,0,.35); border: 1px solid rgba($frame, .35); }

@@ -7,6 +7,8 @@ import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { rarityOf, rarityIndex, itemPower, byValue, OFFHAND_WEAPON } from '../loot/items';
 import { SKILL_KEYS } from '../loot/loadout';
 import { equipFromStash, unequip, salvage, salvageEquipped, resetProfile, slotsFor } from '../loot/profile';
+import { saveSlot } from '../loot/saveSlots';
+import { openSaves } from './saves';
 import { bindTooltip, hideTooltip, itemTooltip } from './tooltip';
 import { makeSkillSlot, KEY_LABEL, rarityChips } from './hud';
 import { renderLoadoutEditor } from './loadoutEditor';
@@ -154,7 +156,8 @@ export function initMenus(h: MenuHooks): void {
   const classes = $('#opt-class');
   classes.innerHTML = CLASS_IDS.map((id) => `<button data-c="${id}">${CLASSES[id].name}</button>`).join('');
   classes.querySelectorAll<HTMLElement>('button').forEach((b) => {
-    b.onclick = () => { sfx.click(); hooks.switchClass(b.dataset.c!); renderMenu(); };
+    // the class's records set the starting wave: a co-op host shows its guests
+    b.onclick = () => { sfx.click(); hooks.switchClass(b.dataset.c!); renderMenu(); hooks.lobbyChanged(); };
   });
   const biomes = $('#opt-biome');
   biomes.insertAdjacentHTML('afterbegin', BIOME_IDS.map((id) => `<button data-b="${id}">${BIOMES[id].label}</button>`).join(''));
@@ -192,7 +195,7 @@ export function initMenus(h: MenuHooks): void {
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
   $('#btn-reset').onclick = () => {
     const name = CLASSES[G.profile.classId].name;
-    if (!confirm(`Reset the ${name}? Their stash, equipment and records will be erased (other classes keep theirs).`)) return;
+    if (!confirm(`Reset the ${name} of save slot ${saveSlot()}? Their stash, equipment and records will be erased (other classes and slots keep theirs).`)) return;
     G.profile = resetProfile(G.profile.classId);
     hooks.profileChanged();
     renderMenu();
@@ -237,6 +240,7 @@ export function initMenus(h: MenuHooks): void {
 export function showMenu(v: boolean): void {
   $('#menu').classList.toggle('hidden', !v);
   if (v) { toggleMenuStowed(false); renderMenu(); }
+  else openSaves(false);   // a co-op host can start the run while the save slots are open
   syncJunk();
 }
 
@@ -319,6 +323,7 @@ export function renderMenu(): void {
   for (const def of cls.skills) sk.appendChild(makeSkillSlot(def)).classList.toggle('unusable', !G.player.usable(def));
   syncSkillStrip();
 
+  $('#btn-saves').textContent = `Save slot ${saveSlot()}`;
   const r = p.records;
   const rec = (icon: string, value: string | number, label: string) =>
     `<div class="rec"><span class="rec-icon">${icon}</span><span class="rec-val">${value}</span><span class="rec-label">${label}</span></div>`;

@@ -6,7 +6,7 @@ import { G } from '../state';
 import { BLOCK } from '../data/balance';
 import { input } from '../core/input';
 import { itemIconSVG } from './itemIcons';
-import type { Item, SkillDef, StatKey } from '../types';
+import type { ClassDef, Item, SkillDef, StatKey } from '../types';
 
 /** Tooltip content: HTML, accent color and optional footer hint. */
 export interface TooltipContent { html: string; color: string; foot?: string }
@@ -40,10 +40,10 @@ function deltaHTML(k: StatKey, d: number): string {
   return ` <span class="tt-delta ${cls}">(${d > 0 ? '+' : '−'}${round(k, Math.abs(d))})</span>`;
 }
 
-/** One item card. `other` (optional) = item to diff against (shows per-stat deltas). */
-function card(item: Item, { header = '', other = null as Item | null, showDelta = false } = {}): string {
+/** One item card. `other` (optional) = item to diff against (shows per-stat deltas). `cls`: the
+ *  class it belongs to (the hero's by default; the save slots screen shows every class's gear). */
+function card(item: Item, { header = '', other = null as Item | null, showDelta = false, cls = G.player.cls } = {}): string {
   const r = rarityOf(item.rarity);
-  const cls = G.player.cls;
   const implicit = new Set(implicitsFor(item.slot, cls).map(([k]) => k));
   let html = `<div class="tt-card" style="--c:${r.color}">`;
   if (header) html += `<div class="tt-header">${header}</div>`;
@@ -62,14 +62,14 @@ function card(item: Item, { header = '', other = null as Item | null, showDelta 
       html += `<div class="tt-stat lost"><s>${formatStat(k, v)}</s> <span class="tt-delta down">(−${round(k, v)})</span></div>`;
     }
   }
-  return html + blockNote(item) + '</div>';
+  return html + blockNote(item, cls) + '</div>';
 }
 
 /** A shield spells out how its block works (Player.tryBlock), with its own numbers. */
-function blockNote(item: Item): string {
+function blockNote(item: Item, cls: ClassDef): string {
   const chance = item.stats.block ?? 0, amount = Math.round(item.stats.blockAmount ?? 0);
   if (amount <= 0) return '';
-  const raise = G.player.cls.skills.find((s) => s.block);
+  const raise = cls.skills.find((s) => s.block);
   let t = `Lowered, the shield has a ${Math.round(chance)}% chance to stop ${amount} damage of a hit, then needs ${BLOCK.recovery}s to recover.`;
   if (raise) {
     t += ` Held up with ${raise.name}, it stops ${Math.round(amount * raise.block!)} damage of every hit from the front.`
@@ -79,10 +79,10 @@ function blockNote(item: Item): string {
 }
 
 /** equipped: undefined = no comparison, null = empty slot, Item = compare against it. */
-export function itemTooltipHTML(item: Item, equipped?: Item | null): TooltipContent {
+export function itemTooltipHTML(item: Item, equipped?: Item | null, cls?: ClassDef): TooltipContent {
   const r = rarityOf(item.rarity);
   // equipped === undefined: no comparison; null: slot is empty; item: compare against it
-  if (equipped === undefined) return { html: card(item), color: r.color };
+  if (equipped === undefined) return { html: card(item, { cls }), color: r.color };
   let html = '<div class="tt-cards">';
   html += card(item, { other: equipped, showDelta: true });
   if (equipped) {

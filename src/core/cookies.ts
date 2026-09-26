@@ -12,3 +12,7 @@ export function readCookie(name: string): string | null {
 export function writeCookie(name: string, value: string): void {
   document.cookie = `${name}=${encodeURIComponent(value)}; max-age=${MAX_AGE}; path=/; SameSite=Lax`;
 }
+
+export function removeCookie(name: string): void {
+  document.cookie = `${name}=; max-age=0; path=/; SameSite=Lax`;
+}

@@ -1,13 +1,14 @@
-// Persistent profiles, one per class: equipment, stash and records (localStorage).
+// Persistent profiles, one per class and save slot: equipment, stash and records (localStorage).
 // Classes share nothing, so each has its own loot and starting waves.
-import { CLASSES, DEFAULT_CLASS } from '../data/classes/index';
+import { CLASSES, CLASS_IDS, DEFAULT_CLASS } from '../data/classes/index';
 import { RUN } from '../data/balance';
-import { readCookie, writeCookie } from '../core/cookies';
+import { readCookie, writeCookie, removeCookie } from '../core/cookies';
+import { saveKey, saveSlot } from './saveSlots';
 import { makeItem, byValue, isTwoHanded, fitsOffhand } from './items';
 import type { Item, Profile, Slot } from '../types';
 
-const KEY = (classId: string) => `last-stand.profile.${classId}.v1`;
-/** the single profile from before there were classes to choose from: the mage's */
+const KEY = (classId: string, slot?: number) => saveKey(`last-stand.profile.${classId}.v1`, slot);
+/** the single profile from before there were classes to choose from: the mage's (in slot 1) */
 const LEGACY = 'last-stand.profile.v1';
 const CLASS_COOKIE = 'last-stand-class';
 
@@ -24,7 +25,7 @@ function fresh(classId: string): Profile {
     classId: cls.id,
     equipped,
     stash: [],
-    records: { bestWave: 0, bestBanked: {}, runs: 0, banked: 0, bestScore: 0 },
+    records: { bestWave: 0, bestBanked: {}, runs: 0, banked: 0, bestScore: 0, kills: 0, time: 0 },
   };
 }
 
@@ -41,7 +42,7 @@ export function loadProfile(classId: string): Profile {
   try {
     const p = read(KEY(classId));
     if (p) return { ...p, classId };
-    if (classId === 'mage') {
+    if (classId === 'mage' && saveSlot() === 1) {
       const old = read(LEGACY);
       if (old) {
         old.classId = classId;
@@ -55,7 +56,24 @@ export function loadProfile(classId: string): Profile {
 }
 
 export function saveProfile(p: Profile): void {
+  p.saved = Date.now();
   try { localStorage.setItem(KEY(p.classId), JSON.stringify(p)); } catch { /* ignore */ }
+}
+
+/** A class's profile in a save slot as stored, without touching it (null: never played there). */
+export function peekProfile(classId: string, slot: number): Profile | null {
+  try {
+    return read(KEY(classId, slot)) ?? (classId === 'mage' && slot === 1 ? read(LEGACY) : null);
+  } catch { return null; }
+}
+
+/** Erase a save slot's heroes (every class) and the class it was on. */
+export function eraseProfiles(slot: number): void {
+  try {
+    for (const id of CLASS_IDS) localStorage.removeItem(KEY(id, slot));
+    if (slot === 1) localStorage.removeItem(LEGACY);
+  } catch { /* storage unavailable */ }
+  removeCookie(saveKey(CLASS_COOKIE, slot));
 }
 
 /** Start the class over (the other classes keep theirs). */
@@ -65,13 +83,13 @@ export function resetProfile(classId: string): Profile {
   return p;
 }
 
-/** The class picked last time in the lobby (cookie). */
-export function savedClass(): string {
-  const id = readCookie(CLASS_COOKIE);
-  return id && Object.hasOwn(CLASSES, id) ? id : DEFAULT_CLASS;
+/** The class picked last time in the lobby, in the save slot in use (cookie). */
+export function savedClass(fallback = DEFAULT_CLASS): string {
+  const id = readCookie(saveKey(CLASS_COOKIE));
+  return id && Object.hasOwn(CLASSES, id) ? id : fallback;
 }
 
-export function saveClass(classId: string): void { writeCookie(CLASS_COOKIE, classId); }
+export function saveClass(classId: string): void { writeCookie(saveKey(CLASS_COOKIE), classId); }
 
 /** The slots an item can go in: its own, and the off-hand for a one-handed weapon of a class that dual-wields. */
 export function slotsFor(p: Profile, item: Item): Slot[] {
