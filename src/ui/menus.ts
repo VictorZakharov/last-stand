@@ -260,11 +260,13 @@ export function toggleMenuStowed(stowed?: boolean): void {
 // so the character stands in the free space beside it (or below it, upright).
 const onePanel = matchMedia('(max-height: 520px), (orientation: portrait) and (max-width: 1000px)');
 
-// The equipment panel folds away to the right and the skills panel down, each on its own (a per-viewer
-// preference, kept for every save slot); one panel at a time never folds them.
-interface Fold { panel: string; tab: string; what: string; key: string; folded: boolean; onFold: () => void }
+// The hero panel folds away to the left, the equipment panel to the right and the skills panel down,
+// each on its own (a per-viewer preference, kept for every save slot); one panel at a time never
+// folds them.
+interface Fold { panel: string; tab: string; what: string; key: string; folded: boolean; onFold?: () => void }
 const readFold = (key: string): boolean => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
 const FOLDS: Fold[] = [
+  { panel: '.menu-left', tab: '#hero-fold', what: 'the hero panel', key: 'last-stand.hero-folded', folded: false },
   { panel: '.menu-right', tab: '#gear-fold', what: 'the equipment', key: 'last-stand.equipment-folded', folded: false,
     onFold: () => { focusSlot(null); openStashFilter(false); } },
   { panel: '#loadout', tab: '#skills-fold', what: 'the skills', key: 'last-stand.skills-folded', folded: false, onFold: () => openBook(false) },
@@ -282,7 +284,7 @@ function syncFolds(): void {
     tab.setAttribute('aria-expanded', String(!folded));
     tab.title = `${folded ? 'Show' : 'Hide'} ${f.what}`;
     tab.setAttribute('aria-label', tab.title);
-    if (folded) { hideTooltip(); f.onFold(); }
+    if (folded) { hideTooltip(); f.onFold?.(); }
   }
 }
 export function lobbyViewShift(): { x: number; y: number } {

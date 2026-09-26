@@ -18,7 +18,8 @@ body.touch .stow-hint kbd { display: none; }
   #menu .menu-left, #menu .menu-right, #menu .menu-center { display: none; grid-column: 2; align-self: auto; min-height: 0; overflow-y: auto; }
   #menu[data-tab="hero"] .menu-left, #menu[data-tab="skills"] .menu-center { display: flex; }
   #menu[data-tab="gear"] .menu-right { display: grid; }
-  .menu-left { width: 460px; gap: 10px; padding: 14px 20px; }
+  .menu-left { width: 460px; }
+  .ml-body { flex: 1 1 auto; gap: 10px; padding: 14px 20px; }
   .menu-left .logo, .cc-strip { display: none; }
   .records { grid-template-columns: repeat(4, 1fr); }
   .rec { grid-template-columns: 1fr; text-align: center; padding: 6px 4px; } .rec-icon { display: none; }
