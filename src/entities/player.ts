@@ -324,7 +324,9 @@ export class Player {
     const target = this.aim.clone();
     if (dur <= 0) { this.fire(s, target); return true; }
     this.casting = { skill: s, t: 0, dur, fireAt: dur * (s.def.fireAt ?? 0.55), fired: false, target };
-    this.faceTowards(target, true);
+    // top-down turns at once to the click; behind the hero, the view turns under mouse look, so it follows
+    // the crosshair smoothly (a snap to each cast's aim turns it in steps while the mouse moves)
+    this.faceTowards(target, viewMode() !== 'third');
     actionSink?.({ t: 'cast', s: s.def.impl, dur, x: target.x, z: target.z });
     return true;
   }
@@ -405,7 +407,7 @@ export class Player {
     if (this.casting) {
       const c = this.casting;
       c.t += dt;
-      this.faceTowards(c.target);
+      this.faceTowards(viewMode() === 'third' ? this.aim : c.target);
       const impl = c.skill.impl;
       if (!c.fired && !impl.channel) impl.charging?.(this, c.skill.def, c.t / c.fireAt, dt);
       if (!c.fired && c.t >= c.fireAt) { c.fired = true; this.fire(c.skill, this.aim.clone()); }
