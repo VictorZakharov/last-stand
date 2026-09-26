@@ -11,7 +11,7 @@ import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, gem as gemGeo, Skirt, scaleUV, type SurfaceFn } from './armor';
 import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
 import { buildHand, poseHand, hold } from './hands';
-import { clamp, lerp, TAU, mulberry } from '../../util';
+import { clamp, lerp, damp, TAU, mulberry } from '../../util';
 import { SkeletonCape } from './cape';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
 import type { AnimState, Model } from '../../types';
@@ -287,6 +287,8 @@ export function buildMage(): Model {
 
   /** set once a channel's opening completes, for the thrust into the portal */
   let openedAt = -1;
+  /** staff shots: how far the staff is lowered at the target (0..1), and when the last shot was */
+  let aim = 0, aimedAt = -9;
 
   const root = j.root;
   root.scale.setScalar(1.08);
@@ -333,14 +335,19 @@ export function buildMage(): Model {
     // hands at rest: the free one loosely curled and breathing, the other gripping the staff
     poseHand(handL, 0.45 + Math.sin(t * 1.3) * 0.06, 0.12);
     const a = st.action;
-    staff.rotation.x = STAFF_PITCH;
     if (!a || a.name !== 'channel') openedAt = -1;
+    // staff shots: the staff swings down level with the target and stays there while the shots keep
+    // coming (a held button), so each bolt leaves the crystal at a foe's chest; it rises once they stop
+    if (a?.name === 'point') aimedAt = t;
+    aim = damp(aim, t - aimedAt < 0.3 ? 1 : 0, 14, dt);
+    const kick = a?.name === 'point' ? pulse(a.t, 0.45, 0.9) : 0;
+    j.shoulderR.rotation.x += -0.3 * aim; j.elbowR.rotation.x += 0.15 * aim; j.spine.rotation.x += 0.12 * aim;
+    staff.rotation.x = STAFF_PITCH + 1.55 * aim - 0.12 * kick;
     if (a) {
       const k = a.t;
       if (a.name === 'cast') {
         const w = pulse(k, 0, 1);
-        // the staff swings down to point at the target, so a bolt leaves its crystal at a foe's chest
-        j.shoulderR.rotation.x += -0.3 * w; j.elbowR.rotation.x += 0.15 * w; staff.rotation.x = STAFF_PITCH + 1.4 * w;
+        j.shoulderR.rotation.x += -1.05 * w; j.elbowR.rotation.x += 0.45 * w;
         j.shoulderL.rotation.x += -1.2 * w; j.shoulderL.rotation.z += 0.25 * w; j.elbowL.rotation.x += -0.2 * w;
         j.chest.rotation.y += 0.35 * w; j.spine.rotation.x += 0.12 * w;
         // the hand gathers into a claw, then flicks open as the spell leaves it

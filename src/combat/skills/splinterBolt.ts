@@ -39,7 +39,7 @@ function launch(player: Player, origin: THREE.Vector3, angle: number, def: Def, 
 }
 
 const skill: InstantSkill = {
-  anim: 'cast',
+  anim: 'point',
   cast(player, rawDef, target) {
     const def = rawDef as Def;
     const origin = player.castPoint;
