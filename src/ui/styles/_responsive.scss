@@ -15,9 +15,11 @@ body.touch .stow-hint kbd { display: none; }
   #menu:not(.stowed) #rail-practice .sh-show, #menu.stowed #rail-practice .sh-hide { display: none; }
   #menu.stowed #lobby-rail { opacity: 1; pointer-events: auto; transform: none; background: none; border-color: transparent; box-shadow: none; }
   #menu.stowed #lobby-rail button:not(#rail-practice) { visibility: hidden; }
-  #menu .menu-left, #menu .menu-right, #menu .menu-center { display: none; grid-column: 2; min-height: 0; overflow-y: auto; }
-  #menu[data-tab="hero"] .menu-left, #menu[data-tab="gear"] .menu-right, #menu[data-tab="skills"] .menu-center { display: flex; }
-  .menu-left { width: 460px; gap: 10px; padding: 14px 20px; }
+  #menu .menu-left, #menu .menu-right, #menu .menu-center { display: none; grid-column: 2; align-self: auto; min-height: 0; overflow-y: auto; }
+  #menu[data-tab="hero"] .menu-left, #menu[data-tab="skills"] .menu-center { display: flex; }
+  #menu[data-tab="gear"] .menu-right { display: grid; }
+  .menu-left { width: 460px; }
+  .ml-body { flex: 1 1 auto; gap: 10px; padding: 14px 20px; }
   .menu-left .logo, .cc-strip { display: none; }
   .records { grid-template-columns: repeat(4, 1fr); }
   .rec { grid-template-columns: 1fr; text-align: center; padding: 6px 4px; } .rec-icon { display: none; }
@@ -26,15 +28,24 @@ body.touch .stow-hint kbd { display: none; }
   #spellbook .slot { width: 56px; height: 56px; } #spellbook .slot .icon { font-size: 29px; }
   #loadout-bar .slot { width: 60px; height: 60px; } #loadout-bar .slot .icon { font-size: 31px; }
   #loadout .lo-hint { font-size: 13px; }
+  /* the skills panel is only shown to remap, so its book stays open */
+  #loadout:not(.open) .lo-book { display: flex; }
+  #lo-toggle { display: none; }
   .menu-right { width: auto; }
   .menu-left { flex: 1; max-width: 520px; }
-  .menu-right .tab-page[data-page="gear"]:not(.hidden) { display: grid; grid-template-columns: auto minmax(360px, 1fr); grid-template-rows: auto auto 1fr; column-gap: 18px; }
+  /* the stash's width is capped so its six rows fit the height (its items would size the panel to the screen) */
+  .menu-right .tab-page[data-page="gear"] { display: grid; grid-template-columns: auto minmax(360px, 600px); grid-template-rows: auto auto 1fr; column-gap: 18px; }
+  /* the panel spans the screen: ten to a row, the filter as wide as the stash, nothing to fold away */
+  #stash { grid-template-columns: repeat(10, 1fr); }
+  #stash-filter { width: 100%; }
+  .fold-tab { display: none; }
   .menu-right #equip { grid-row: 1 / 4; align-self: start; margin-top: 18px; }
   .menu-right .stash-head { margin-top: 0; }
-  .menu-right #stash { align-content: start; }
 }
-/* phones held sideways: a small minimap, no objectives or spoils list */
+/* phones held sideways: a small minimap, no objectives or spoils list; the stash's title is at the
+   top of the panel, so its filter opens downwards, over the stash */
 @media (max-height: 520px) {
+  #stash-filter { top: calc(100% + 6px); bottom: auto; }
   #minimap-wrap .mm-title, #minimap-wrap .objectives { display: none; }
   #minimap-wrap { width: 180px; }
   #minimap { width: 150px; height: 150px; }
@@ -44,8 +55,8 @@ body.touch .stow-hint kbd { display: none; }
   #menu { grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto; align-items: start; }
   #menu .menu-left, #menu .menu-right, #menu .menu-center { max-height: calc(100vh / var(--ui, 1) - 40px); }
   .menu-left, .menu-right { width: auto; max-width: none; }
-  .menu-right .tab-page[data-page="gear"]:not(.hidden) { display: flex; }
-  .menu-right #equip { margin-top: 0; }
+  .menu-right .tab-page[data-page="gear"] { display: flex; }
+  .menu-right #equip { margin-top: 0; align-self: auto; }
   .menu-center { align-items: stretch; }
 }
 

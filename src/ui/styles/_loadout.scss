@@ -1,10 +1,15 @@
-// The lobby's spell loadout: the skill book and the bar the skills are bound to.
+// The lobby's spell loadout: the bar the skills are bound to, and the skill book that opens over it.
 @use 'theme' as *;
 @use 'mixins' as *;
 
-/* ---------- lobby spell loadout ---------- */
-#loadout { pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 12px 10px;
+/* ---------- lobby spell loadout: the key bar; the book slides up over it only to remap ----------
+   Kept as plain as can be (no frames, a dark backing only), to leave the eye on the skills. */
+#menu #loadout { border: none; box-shadow: none; background: rgba(8,7,9,.8); border-radius: 6px 6px 0 0; }
+#loadout { position: relative; pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 12px 10px;
   max-width: 100%; zoom: var(--ui, 1); }
+.lo-book { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 100%; animation: lo-open .18s ease-out; }
+#loadout:not(.open) .lo-book { display: none; }
+@keyframes lo-open { from { opacity: 0; transform: translateY(10px); } }
 #loadout .lo-head { display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: 440px; text-align: center; }
 /* the title line also names the weapon style the bindings belong to, and resets them */
 #loadout .lo-top { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; column-gap: 14px; }
@@ -24,10 +29,29 @@
 #loadout-bar .slot.sep { margin-left: 6px; }
 #loadout.drag-slot #spellbook { border-color: rgba(255,90,70,.6); background: rgba(80,16,12,.35); }
 #spellbook.over { background: rgba(120,24,16,.5) !important; }
-#loadout-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; padding: 6px 10px; background: $tray;
-  @include frame(rgba($frame, .6), 0 0 0 1px #000); border-radius: 4px; }
+/* the key bar, and beside it the chevron that opens the book above it (up) and folds it back down */
+.lo-keys { display: flex; gap: 6px; max-width: 100%; }
+#loadout-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; min-width: 0; }
+#lo-toggle { flex: none; width: 26px; display: flex; align-items: center; justify-content: center; padding: 0; color: var(--accent); cursor: pointer;
+  background: none; border: none; border-radius: 3px; }
+#lo-toggle svg { width: 14px; height: 9px; transition: transform .2s; }
+#lo-toggle:hover { background: rgba($frame, .15); }
+#loadout.open #lo-toggle svg { transform: rotate(180deg); }
+/* its fold tab (see .fold-tab) is on the top edge; folded, it names the panel beside the chevron */
+#skills-fold { bottom: calc(100% - 1px); left: 50%; translate: -50% 0; min-width: 40px; height: 18px; gap: 8px; border: none; border-radius: 6px 6px 0 0; background: rgba(8,7,9,.8); }
+#skills-fold svg { width: 14px; height: 9px; flex: none; }
+#loadout.folded #skills-fold { height: 22px; padding: 0 14px; }
+#loadout.folded { translate: 0 100%; }
+#loadout-bar .slot { cursor: pointer; }
 #loadout-bar .slot[draggable="true"] { cursor: grab; }
+/* a key picked to take the next skill clicked (or tapped) in the book */
+#loadout-bar .slot.picking { box-shadow: inset 0 0 0 2px var(--highlight), 0 0 16px rgba($highlight, .7); animation: lowpulse .6s infinite alternate; }
 #loadout.drag-book #loadout-bar .slot, #loadout.drag-slot #loadout-bar .slot { box-shadow: inset 0 0 0 2px rgba($highlight, .55), 0 0 10px rgba($highlight, .25); }
 #loadout-bar .slot.over { box-shadow: inset 0 0 0 2px var(--highlight), 0 0 16px rgba($highlight, .7) !important; filter: brightness(1.4); }
 .slot.dragging { opacity: .4; }
 .slot.empty { background: radial-gradient(circle, #151315, #070607 75%); }
+@media (prefers-reduced-motion: reduce) {
+  .lo-book { animation: none; }
+  #lo-toggle svg, .fold-tab svg { transition: none; }
+  #menu .panel { transition: opacity .35s ease, transform .35s ease; }   /* folding is instant */
+}

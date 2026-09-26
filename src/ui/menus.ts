@@ -11,7 +11,7 @@ import { saveSlot } from '../loot/saveSlots';
 import { openSaves } from './saves';
 import { bindTooltip, hideTooltip, itemTooltip } from './tooltip';
 import { makeSkillSlot, KEY_LABEL, rarityChips } from './hud';
-import { renderLoadoutEditor } from './loadoutEditor';
+import { renderLoadoutEditor, openBook } from './loadoutEditor';
 import { initSkillStrip, syncSkillStrip } from './skillStrip';
 import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
 import { renderAttributes } from './attributes';
@@ -204,9 +204,12 @@ export function initMenus(h: MenuHooks): void {
     tab.onclick = () => {
       sfx.click();
       document.querySelectorAll('.menu-right .tab').forEach((t) => t.classList.toggle('active', t === tab));
-      document.querySelectorAll<HTMLElement>('.menu-right .tab-page').forEach((pg) => pg.classList.toggle('hidden', pg.dataset.page !== tab.dataset.tab));
+      document.querySelectorAll<HTMLElement>('.menu-right .tab-page').forEach((pg) => pg.classList.toggle('off', pg.dataset.page !== tab.dataset.tab));
     };
   });
+  for (const f of FOLDS) $(f.tab).onclick = () => { sfx.click(); f.folded = !f.folded; storeFold(f); syncFolds(); };
+  onePanel.addEventListener('change', syncFolds);
+  syncFolds();
   initStashFilter(renderMenu);
   initSkillStrip($('.cc-strip'));
   const stash = $('#stash');
@@ -239,7 +242,7 @@ export function initMenus(h: MenuHooks): void {
 
 export function showMenu(v: boolean): void {
   $('#menu').classList.toggle('hidden', !v);
-  if (v) { toggleMenuStowed(false); renderMenu(); }
+  if (v) { toggleMenuStowed(false); openBook(false); renderMenu(); }
   else openSaves(false);   // a co-op host can start the run while the save slots are open
   syncJunk();
 }
@@ -256,6 +259,34 @@ export function toggleMenuStowed(stowed?: boolean): void {
 // Short screens and upright tablets show one lobby panel at a time over the scene; the view moves
 // so the character stands in the free space beside it (or below it, upright).
 const onePanel = matchMedia('(max-height: 520px), (orientation: portrait) and (max-width: 1000px)');
+
+// The hero panel folds away to the left, the equipment panel to the right and the skills panel down,
+// each on its own (a per-viewer preference, kept for every save slot); one panel at a time never
+// folds them.
+interface Fold { panel: string; tab: string; what: string; key: string; folded: boolean; onFold?: () => void }
+const readFold = (key: string): boolean => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
+const FOLDS: Fold[] = [
+  { panel: '.menu-left', tab: '#hero-fold', what: 'the hero panel', key: 'last-stand.hero-folded', folded: false },
+  { panel: '.menu-right', tab: '#gear-fold', what: 'the equipment', key: 'last-stand.equipment-folded', folded: false,
+    onFold: () => { focusSlot(null); openStashFilter(false); } },
+  { panel: '#loadout', tab: '#skills-fold', what: 'the skills', key: 'last-stand.skills-folded', folded: false, onFold: () => openBook(false) },
+];
+for (const f of FOLDS) f.folded = readFold(f.key);
+
+function storeFold(f: Fold): void {
+  try { if (f.folded) localStorage.setItem(f.key, '1'); else localStorage.removeItem(f.key); } catch { /* storage unavailable */ }
+}
+
+function syncFolds(): void {
+  for (const f of FOLDS) {
+    const folded = f.folded && !onePanel.matches, tab = $(f.tab);
+    $(f.panel).classList.toggle('folded', folded);
+    tab.setAttribute('aria-expanded', String(!folded));
+    tab.title = `${folded ? 'Show' : 'Hide'} ${f.what}`;
+    tab.setAttribute('aria-label', tab.title);
+    if (folded) { hideTooltip(); f.onFold?.(); }
+  }
+}
 export function lobbyViewShift(): { x: number; y: number } {
   const menu = $('#menu');
   if (!onePanel.matches || menu.classList.contains('hidden') || menu.classList.contains('stowed')) return { x: 0, y: 0 };
@@ -350,14 +381,17 @@ export function renderMenu(): void {
     const color = it ? rarityOf(it.rarity).color : '#666';
     d.style.boxShadow = `inset 0 0 0 1px ${it ? color : 'rgba(160,124,70,.5)'}`;
     d.style.setProperty('--c', color);
-    d.innerHTML = `<span class="elabel">${SLOT_INFO[slot].label}</span>${it ? itemIconSVG(it) : slotPlaceholderSVG(slot, cls)}
-      <span class="ename2" style="color:${color}">${it ? it.name : ''}</span>${GLOW}`;
+    // an icon only: the slot's name and the item's are in the tooltips
+    const label = SLOT_INFO[slot].label;
+    d.innerHTML = (it ? itemIconSVG(it) : slotPlaceholderSVG(slot, cls)) + GLOW;
+    d.setAttribute('aria-label', `${label}: ${it ? it.name : 'empty'}`);
     bindSlotFocus(d, slot);
-    if (it) {
+    if (!it) bindTooltip(d, () => ({ html: `<div class="tt-card empty"><div class="tt-name">${label}</div><div class="tt-type">Empty</div></div>`, color: '#666' }));
+    else {
       // a weapon in the off-hand: its damage (the implicit) counts for less
-      bindTooltip(d, slot === 'offhand' && it.slot === 'weapon'
-        ? () => ({ ...itemTooltip(it, false)(), foot: `In the off-hand its damage bonus (the implicit) counts at ${OFFHAND_WEAPON * 100}%` })
-        : itemTooltip(it, false));
+      const how = 'Click or drag to the stash to unequip · drag to the junk bin to salvage';
+      bindTooltip(d, () => ({ ...itemTooltip(it, false)(), foot: slot === 'offhand' && it.slot === 'weapon'
+        ? `In the off-hand its damage bonus (the implicit) counts at ${OFFHAND_WEAPON * 100}%<br>${how}` : how }));
       const doUnequip = () => { unequip(p, slot); hideTooltip(); sfx.click(); changed(); };
       d.onclick = () => {
         if (!isTouch()) { doUnequip(); return; }
@@ -375,6 +409,7 @@ export function renderMenu(): void {
 
   // stash (sorted: rarity desc, then power; the stat filter moves its matches first)
   $('#stash-count').textContent = `(${p.stash.length}/${RUN.bagLimit})`;
+  $('#gear-fold').classList.toggle('new', p.stash.some((it) => newIds.has(it.id)));   // shown while folded
   renderStashFilter();
   const st = $('#stash');
   st.innerHTML = '';

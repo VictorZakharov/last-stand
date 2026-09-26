@@ -4,7 +4,7 @@ export const TIPS: string[] = [
   'Dying loses everything you have not banked.',
   'You only see the rarity of what you carry. Bank to find out what it is. Is one more wave worth the risk?',
   'Press Space in the sanctuary to hide the menus and practice on the training dummies.',
-  'Drag skills from the Spellbook or Arsenal onto keys. A skill can sit on several keys, and they share its cooldown.',
+  'Remap keys in the lobby: click a key, then a skill from the Spellbook or Arsenal. A skill can sit on several keys, and they share its cooldown.',
   'Each class keeps its own gear, stash and records. Switch between the Mage and the Warrior in the sanctuary.',
   "The Warrior's Rending Cleave restores energy for every foe it hits.",
   'Right-click gear to equip it. Shift-click it, or drag it to the junk bin, to salvage it.',
