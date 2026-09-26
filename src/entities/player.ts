@@ -542,8 +542,10 @@ export class Player {
     // the model shows its cape as it animates: a hidden character keeps it hidden
     if (!this.obj.visible) for (const o of this.model.worldObjects ?? []) o.visible = false;
     if (this.staffLight) {
-
+      // a little above the cast point: right at it, the metal round a staff's crystal (a few cm off,
+      // with the light's inverse-square falloff) burns out white-green
       this.staffLight.position.copy(this.castPoint);
+      this.staffLight.position.y += 0.35;
       const glow = this.cls.aura.intensity;
       this.staffLight.intensity = glow * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
     }

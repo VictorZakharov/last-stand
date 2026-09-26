@@ -11,7 +11,7 @@ const mage: ClassDef = {
   model: 'mage',
   accent: '#9fffd0',
   book: 'Spellbook',
-  aura: { light: 0x5dffa8, intensity: 3, motes: [0x5dffa8, 0x1060ff] },
+  aura: { light: 0x5dffa8, intensity: 1.8, motes: [0x5dffa8, 0x1060ff] },
 
   base: {
     life: 950,
