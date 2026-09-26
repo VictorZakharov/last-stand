@@ -41,7 +41,7 @@ export interface SkeletonCapeOptions {
   settings?: Partial<CapePhysicsSettings>;
 }
 
-const _p = new THREE.Vector3(), _neck = new THREE.Vector3(), _q = new THREE.Quaternion();
+const _p = new THREE.Vector3(), _neck = new THREE.Vector3(), _q = new THREE.Quaternion(), _v = new THREE.Vector3();
 /** Main-thread time the cloth may take per frame (a step costs about 2.5 ms on a fast desktop). */
 const STEP_BUDGET_MS = 4;
 /** A worker that falls this far behind gets no new steps until it catches up (slow motion, no backlog). */
@@ -64,6 +64,8 @@ export class SkeletonCape {
   private acc = 0;
   private time = 0;
   private needsReset = true;
+  /** the neckline's middle last frame, for its own velocity */
+  private readonly lastNeck = new THREE.Vector3();
 
   constructor(private readonly o: SkeletonCapeOptions) {
     this.anchors = { left: new THREE.Vector3(), right: new THREE.Vector3(), back: new THREE.Vector3(0, 0, -1) };
@@ -117,7 +119,15 @@ export class SkeletonCape {
       this.needsReset = false;
       this.acc = 0;
       reset = true;
+      this.lastNeck.copy(neck);
     }
+    // The solver sleeps a settled cape until the character moves faster than a crawl, and turning on
+    // the spot isn't moving: asleep, the cloth hung still in the world while the body turned under it
+    // and came round to the front. The neckline's own motion counts too, turning included.
+    const neckVel = _v.subVectors(neck, this.lastNeck).divideScalar(dt);
+    this.lastNeck.copy(neck);
+    if (neckVel.lengthSq() > 144) neckVel.setLength(12);
+    if (neckVel.lengthSq() > velocity.lengthSq()) velocity = neckVel;
     this.acc = Math.min(this.acc + dt, PHYSICS_STEP * MAX_PHYSICS_STEPS);
     // a failed worker stops driving the cape and it carries on here from the last result
     const synced = pool?.isDrivingCape(this.id) ? this.stepInWorker(anchors, colliders, velocity) : this.stepHere(anchors, colliders, velocity);
