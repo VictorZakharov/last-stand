@@ -254,23 +254,26 @@ export function buildMage(): Model {
 
   // --- staff (right hand): a gnarled haft bound in gold, its head two curling prongs cradling a
   // floating crystal
-  // turned in the fist so it stands up out of the forward-reaching forearm, the orb up and ahead
+  // turned in the fist so it stands up out of the forward-reaching forearm, the orb up and ahead.
+  // Held GRIP further up the haft than its old balance point, so the crystal rides at head height
+  // and the bolts it casts fly at the foes, not over them.
   const staff = joint(j.handR, 0, -0.05, 0.02);
   staff.rotation.x = 1.25;
+  const GRIP = 0.62;
   {
     const w = new Sculpt(), pts: THREE.Vector3[] = [];
-    for (let k = 0; k <= 10; k++) { const y = -0.52 + k * 0.176; pts.push(V(Math.sin(k * 1.7) * 0.008, y, Math.cos(k * 2.3) * 0.008)); }
+    for (let k = 0; k <= 10; k++) { const y = -0.52 - GRIP + k * 0.176; pts.push(V(Math.sin(k * 1.7) * 0.008, y, Math.cos(k * 2.3) * 0.008)); }
     w.add(scaleUV(taperTube(pts, (t) => 0.024 * (1 - t * 0.2) * (1 + 0.12 * Math.sin(t * 40)), 40, 8), 2, 6), wood, staff);
-    for (const y of [-0.45, 0.0, 0.9, 1.05]) w.add(new THREE.CylinderGeometry(0.03, 0.03, 0.045, 12), gold, staff, [0, y, 0]);
-    w.add(new THREE.ConeGeometry(0.028, 0.12, 10), gold, staff, [0, -0.58, 0], [Math.PI, 0, 0]);
+    for (const y of [-0.45, 0.0, 0.9, 1.05]) w.add(new THREE.CylinderGeometry(0.03, 0.03, 0.045, 12), gold, staff, [0, y - GRIP, 0]);
+    w.add(new THREE.ConeGeometry(0.028, 0.12, 10), gold, staff, [0, -0.58 - GRIP, 0], [Math.PI, 0, 0]);
     for (let k = 0; k < 3; k++) {
       const a = k * TAU / 3, curl: THREE.Vector3[] = [];
-      for (let q = 0; q <= 8; q++) { const t = q / 8, r = 0.03 + Math.sin(t * Math.PI) * 0.1; curl.push(V(Math.cos(a + t * 1.2) * r, 1.14 + t * 0.34, Math.sin(a + t * 1.2) * r)); }
+      for (let q = 0; q <= 8; q++) { const t = q / 8, r = 0.03 + Math.sin(t * Math.PI) * 0.1; curl.push(V(Math.cos(a + t * 1.2) * r, 1.14 - GRIP + t * 0.34, Math.sin(a + t * 1.2) * r)); }
       w.add(taperTube(curl, (t) => 0.017 * (1 - t * 0.7), 16, 6), gold, staff);
     }
     w.build();
   }
-  const tip = joint(staff, 0, 1.36, 0);
+  const tip = joint(staff, 0, 1.36 - GRIP, 0);
   const crystal = part(new THREE.OctahedronGeometry(0.07, 0).scale(0.8, 1.6, 0.8), gem, tip);
   crystal.castShadow = false;
   const ringA = part(new THREE.TorusGeometry(0.14, 0.004, 4, 32), glow, tip);
