@@ -1,42 +1,58 @@
 // Stash filter: the stats the player is hunting for (cog button on the stash title).
-// Items with none of them are greyed out but stay usable, and sort last. Kept in localStorage, per class.
+// Items with none of them are greyed out but stay usable, and sort last. Kept in localStorage, per
+// class and save slot.
 import { G } from '../state';
 import { STATS, STAT_INCLUDES } from '../data/items';
+import { CLASS_IDS } from '../data/classes/index';
 import { byValue, itemPower } from '../loot/items';
+import { saveKey } from '../loot/saveSlots';
 import { ATTRIBUTE_GROUPS } from './attributes';
 import { sfx } from '../core/audio';
 import type { Item, StatKey } from '../types';
 
-const KEY = (classId: string) => `last-stand.stash-filter.${classId}.v1`;
-/** the filter from before classes had their own: the mage's */
+const KEY = (classId: string, slot?: number) => saveKey(`last-stand.stash-filter.${classId}.v1`, slot);
+/** the filter from before classes had their own: the mage's (in slot 1) */
 const LEGACY = 'last-stand.stash-filter.v1';
 const LABEL = Object.fromEntries(ATTRIBUTE_GROUPS.flatMap(([, defs]) => defs.flatMap((d) => (d.stat ? [[d.stat, d.label]] : [])))) as Record<StatKey, string>;
 
 let active: StatKey[] = [];
+/** the storage key of the filter loaded (the class's, in the save slot in use) */
 let loadedFor = '';
 let onChange: () => void = () => {};
 
-function load(classId: string): StatKey[] {
+function load(key: string): StatKey[] {
   try {
-    let raw = localStorage.getItem(KEY(classId));
-    if (raw === null && classId === 'mage') raw = localStorage.getItem(LEGACY);
+    let raw = localStorage.getItem(key);
+    if (raw === null && key === KEY('mage', 1)) raw = localStorage.getItem(LEGACY);
     const v: unknown = JSON.parse(raw ?? '[]');
     return Array.isArray(v) ? v.filter((k): k is StatKey => typeof k === 'string' && k in STATS) : [];
   } catch { return []; }
 }
 
 function save(): void {
-  try { localStorage.setItem(KEY(loadedFor), JSON.stringify(active)); localStorage.removeItem(LEGACY); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(loadedFor, JSON.stringify(active));
+    if (loadedFor === KEY('mage', 1)) localStorage.removeItem(LEGACY);
+  } catch { /* ignore */ }
+}
+
+/** Erase a save slot's filters (every class). */
+export function eraseStashFilters(slot: number): void {
+  try {
+    for (const id of CLASS_IDS) localStorage.removeItem(KEY(id, slot));
+    if (slot === 1) localStorage.removeItem(LEGACY);
+  } catch { /* storage unavailable */ }
+  loadedFor = '';   // read again at the next use
 }
 
 /** The item's value for a filtered stat, counting the general stats that feed it. */
 const valueFor = (it: Item, k: StatKey): number =>
   (it.stats[k] ?? 0) + (STAT_INCLUDES[k] ?? []).reduce((s, g) => s + (it.stats[g] ?? 0), 0);
 
-/** The current class's filter (switching class in the lobby swaps it). */
+/** The current class's filter (switching class or save slot in the lobby swaps it). */
 function sync(): void {
-  const id = G.player.cls.id;
-  if (id !== loadedFor) { loadedFor = id; active = load(id); }
+  const key = KEY(G.player.cls.id);
+  if (key !== loadedFor) { loadedFor = key; active = load(key); }
 }
 
 /** True when there is no filter or the item has one of the chosen stats. */

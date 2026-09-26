@@ -6,6 +6,7 @@ import { session, hostRoom, joinRoom, leaveRoom, inviteLink, partners } from '..
 import { isCoop } from '../net/role';
 import { addAnchored, removeAnchored } from './floaters';
 import { renderLobbyOptions } from './menus';
+import { openSaves } from './saves';
 import { isTouch } from './touch';
 import { sfx } from '../core/audio';
 import type { Player } from '../entities/player';
@@ -45,6 +46,7 @@ export function renderCoop(): void {
   if (s === 'off' || s === 'failed') {
     body.innerHTML = `
       <p class="coop-intro">Fight side by side over the internet, up to ${COOP.maxPlayers} heroes. Each brings their own hero and gear and keeps their own spoils.</p>
+      <p class="coop-intro">Starting over together? <button class="link coop-saves">Pick an empty save slot</button> first: your saved heroes stay as they are.</p>
       ${s === 'failed' ? `<p class="coop-error">${esc(session.error)}</p>` : ''}
       <div class="coop-choice">
         <div class="coop-col"><div class="coop-h">Host</div><p>Open a room and send your friend the link.</p>
@@ -53,6 +55,7 @@ export function renderCoop(): void {
           <form class="coop-join"><input id="coop-code" maxlength="8" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="Room code"><button class="btn" type="submit">Join</button></form></div>
       </div>`;
     $('#btn-coop-host', body).onclick = () => { sfx.click(); void hostRoom(); };
+    $('.coop-saves', body).onclick = () => { sfx.click(); openCoop(false); openSaves(true); };
     $<HTMLFormElement>('.coop-join', body).onsubmit = (e) => {
       e.preventDefault();
       const code = $<HTMLInputElement>('#coop-code', body).value.trim();

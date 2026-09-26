@@ -5,7 +5,7 @@ import { CLASSES } from '../data/classes/index';
 import { buildModel } from './models/index';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
-import { computeStats, isTwoHanded } from '../loot/items';
+import { computeStats, gearOf } from '../loot/items';
 import { BLOCK, COOP } from '../data/balance';
 import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, type Loadout, type WeaponStyle } from '../loot/loadout';
 import { groundHeight } from '../world/arena';
@@ -197,13 +197,7 @@ export class Player {
   recomputeStats(equipped: Profile['equipped']): void {
     const prevLifePct = this.stats ? this.life / this.stats.maxLife : 1;
     this.stats = computeStats(this.cls.base, equipped);
-    const weapon = equipped.weapon;
-    const off = equipped.offhand;
-    this.gear = {
-      weapon: weapon?.base ?? null, twoHanded: isTwoHanded(weapon, this.cls),
-      shield: (off?.stats.blockAmount ?? 0) > 0,   // shields are the off-hands that block
-      offWeapon: off?.slot === 'weapon' ? off.base : null,
-    };
+    this.gear = gearOf(this.cls, equipped);
     // each weapon style has its own loadout: switching style brings back the one left there
     const style = weaponStyle(this.cls, this.gear);
     if (!this.loadout || style !== this.style) {

@@ -16,10 +16,12 @@ import { updateEnemies, clearEnemies } from './entities/enemy';
 import { spawnEnemy } from './entities/spawner';
 import { updateProjectiles, clearProjectiles } from './combat/projectiles';
 import { loadProfile, savedClass, saveClass } from './loot/profile';
+import { setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { initFloaters, updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, updateHud, renderSpoils } from './ui/hud';
-import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, selectedWave, lobbyViewShift } from './ui/menus';
+import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, selectedWave, lobbyViewShift, renderMenu } from './ui/menus';
+import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { initLoadoutEditor } from './ui/loadoutEditor';
@@ -72,6 +74,7 @@ async function boot() {
   buildHotbar(G.player);
   initRun({ banner, showDecision, hideDecision, showSummary });
   initMenus({ start, toMenu, resume, abandon, profileChanged, switchClass, summaryDone, lobbyChanged: sendLobbyChoice });
+  initSaves({ use: switchSaveSlot });
   initSync();
   initSession({ startRun: guestStart, hostGone, changed: () => { renderCoop(); sendLobbyChoice(); } });
   initCoop();
@@ -221,10 +224,26 @@ function abandon() {
 function switchClass(id: string) {
   if (G.mode !== 'menu' || id === G.player.cls.id) return;
   saveClass(id);
-  // the new hero takes the old one's place: a swap in place, not a respawn
+  swapHero(id);
+}
+
+/** Lobby save slot pick (or the slot in play erased): the slot's last hero, or in an empty slot a
+ *  fresh one of the class on show. */
+function switchSaveSlot(n: number) {
+  if (G.mode !== 'menu') return;
+  setSaveSlot(n);
+  const id = savedClass(G.player.cls.id);
+  saveClass(id);
+  swapHero(id);
+  renderMenu();
+  sendLobbyChoice();   // its records set the starting wave
+}
+
+/** The hero of `id` from the save slot in play takes the old one's place: a swap in place, not a respawn. */
+function swapHero(id: string) {
   const at = G.player.pos.clone(), facing = G.player.facing;
   G.player.dispose();
-  // the old class's skill visuals go with it
+  // the old hero's skill visuals go with it
   clearProjectiles(); clearEffects(); clearLights(); particles.clear();
   G.profile = loadProfile(id);
   const old = G.player;
@@ -271,6 +290,8 @@ function syncView(): void {
 
 // --- loop ---------------------------------------------------------------------------
 function handleGlobalKeys() {
+  // the save slots screen takes the keys: Esc goes back (out of its delete popup first)
+  if (savesOpen()) { if (wasPressed('escape')) savesBack(); return; }
   if (G.mode === 'menu' && !G.menuOpen && wasPressed('space')) toggleMenuStowed();
   // the Esc that released the mouse-look pointer already paused the game
   if (wasPressed('escape') && performance.now() - lockLostAt < 300) return;

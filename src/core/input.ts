@@ -68,6 +68,10 @@ function keyName(e: KeyboardEvent): string {
   return e.code.toLowerCase(); // space, escape, shiftleft, ...
 }
 
+/** Typing in a text field (a room code, a confirmation) isn't playing: WASD mustn't walk the hero. */
+const typing = (e: KeyboardEvent): boolean => e.target instanceof HTMLElement
+  && (e.target.matches('textarea, input:not([type=checkbox], [type=radio], [type=range])') || e.target.isContentEditable);
+
 export function initInput(canvas: HTMLCanvasElement): void {
   canvasEl = canvas;
   document.addEventListener('pointerlockchange', () => {
@@ -76,6 +80,7 @@ export function initInput(canvas: HTMLCanvasElement): void {
     onLockLost();
   });
   window.addEventListener('keydown', (e) => {
+    if (typing(e)) return;
     const k = keyName(e);
     if (!input.down.has(k)) input.pressed.add(k);
     input.down.add(k);

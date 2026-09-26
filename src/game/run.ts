@@ -58,6 +58,9 @@ export interface RunState {
   votes: Set<number>;
   /** the local player's summary has been shown (the lobby waits for it to be closed) */
   summarized: boolean;
+  /** game time at the start, and whether the run's time and kills went into the records yet */
+  started: number;
+  tallied: boolean;
 }
 
 export interface RunSummary { outcome: 'dead' | 'banked'; wave: number; score: number; kills: number; bag: Item[]; lost?: Item[]; replaced?: Item[]; note?: string }
@@ -112,6 +115,7 @@ export function startRun(wave = 1): void {
     wave, phase: 'countdown', timer: RUN.countdown, waveTime: 0,
     bag: [], score: 0, multiplier: 1, multKills: 0, multTimer: 0, kills: 0,
     queue: [], nextGroupT: 0, pending: 0, remaining: 0, party: 1, votes: new Set(), summarized: false,
+    started: G.time, tallied: false,
   };
   G.profile.records.runs++;
   saveProfile(G.profile);
@@ -121,10 +125,21 @@ export function startRun(wave = 1): void {
 }
 
 export function abandonRun(): void {
-  if (!G.run) return;
+  const r = G.run;
+  if (!r) return;
+  // abandoned from the pause menu: its time and kills still count
+  if (!r.tallied) { tally(r); saveProfile(G.profile); }
   G.run = null;
   for (const p of G.players) p.stopChannel();
   cleanupWorld();
+}
+
+/** The run's time and kills go into the records, once, however it ends for the local player. */
+function tally(r: RunState): void {
+  r.tallied = true;
+  const rec = G.profile.records;
+  rec.kills = (rec.kills ?? 0) + r.kills;
+  rec.time = Math.round((rec.time ?? 0) + G.time - r.started);
 }
 
 /** The players still in the run (standing or downed). */
@@ -366,6 +381,7 @@ function finishLocal(kind: 'banked' | 'dead', note?: string): void {
     extra = bankItems(G.profile, r.bag);
   }
   rec.bestScore = Math.max(rec.bestScore, Math.round(r.score));
+  if (!r.tallied) tally(r);
   saveProfile(G.profile);
   const show = () => { r.summarized = true; ui.showSummary({ outcome: kind, wave: r.wave, score: Math.round(r.score), kills: r.kills, bag: r.bag.slice(), ...extra, note }); };
 
