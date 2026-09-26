@@ -340,9 +340,8 @@ export function buildMage(): Model {
     // coming (a held button), so each bolt leaves the crystal at a foe's chest; it rises once they stop
     if (a?.name === 'point') aimedAt = t;
     aim = damp(aim, t - aimedAt < 0.3 ? 1 : 0, 14, dt);
-    const kick = a?.name === 'point' ? pulse(a.t, 0.45, 0.9) : 0;
     j.shoulderR.rotation.x += -0.3 * aim; j.elbowR.rotation.x += 0.15 * aim; j.spine.rotation.x += 0.12 * aim;
-    staff.rotation.x = STAFF_PITCH + 1.55 * aim - 0.12 * kick;
+    staff.rotation.x = STAFF_PITCH + 1.55 * aim;
     if (a) {
       const k = a.t;
       if (a.name === 'cast') {
