@@ -24,7 +24,7 @@ export const DEFAULT_PROPORTIONS = {
   hipY: 0.95, hipW: 0.2,
   thighL: 0.46, shinL: 0.44, thighR: 0.085, shinR: 0.065,
   torsoL: 0.5, chestW: 0.2, chestD: 0.13, waistW: 0.15,
-  shoulderW: 0.23, upperL: 0.3, foreL: 0.27, upperR: 0.055, foreR: 0.045, handR: 0.05,
+  shoulderW: 0.23, shoulderY: 0.36, upperL: 0.3, foreL: 0.27, upperR: 0.055, foreR: 0.045, handR: 0.05,
   neckL: 0.1, headR: 0.12,
 };
 export type Proportions = typeof DEFAULT_PROPORTIONS;
@@ -74,7 +74,7 @@ export function buildHumanoid(M: Partial<Record<BodyPart, THREE.Material>> & { s
   const head = joint(neck, 0, P.neckL, 0);
 
   const arm = (s: number) => {
-    const shoulder = joint(chest, s * P.shoulderW, P.torsoL * 0.36, 0);
+    const shoulder = joint(chest, s * P.shoulderW, P.torsoL * P.shoulderY, 0);
     part(new THREE.SphereGeometry(P.upperR * 1.35, 12, 10), mat('arms'), shoulder);
     part(capsule(P.upperR, P.upperL), mat('arms'), shoulder, 0, -P.upperL / 2, 0);
     const elbow = joint(shoulder, 0, -P.upperL, 0);
