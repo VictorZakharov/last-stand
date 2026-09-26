@@ -39,11 +39,10 @@ function launch(player: Player, origin: THREE.Vector3, angle: number, def: Def, 
 }
 
 const skill: InstantSkill = {
-  anim: 'cast',
+  anim: 'point',
   cast(player, rawDef, target) {
     const def = rawDef as Def;
     const origin = player.castPoint;
-    origin.y = Math.max(1.0, origin.y - 0.3);
     const base = Math.atan2(target.x - origin.x, target.z - origin.z);
     const n = def.missiles;
     for (let i = 0; i < n; i++) {
