@@ -59,8 +59,8 @@ export function buildMage(): Model {
   const leather = kit.std({ color: 0x3e281a, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
   const wood = kit.std({ color: 0x5a3d28, roughness: 1, ...tex(woodMaps(), 1, 1.5) });
   const skinTip = kit.rim({ color: 0xc9957c, roughness: 0.6 }, 0x6a2a1c, 0.25);
-  const glow = kit.glow(0x5dffa8, 5);
-  const gem = kit.phys({ color: 0x2aff9a, emissive: 0x2aff9a, emissiveIntensity: 2.5, roughness: 0.05, metalness: 0, clearcoat: 1, flatShading: true });
+  const glow = kit.glow(0x5dffa8, 2.5);
+  const gem = kit.phys({ color: 0x2aff9a, emissive: 0x2aff9a, emissiveIntensity: 1.2, roughness: 0.05, metalness: 0, clearcoat: 1, flatShading: true });
   // set stones: green, lit from within a little
   const stone = kit.phys({ color: 0x0f7a4a, emissive: 0x1aff8a, emissiveIntensity: 0.6, roughness: 0.08, metalness: 0, clearcoat: 1, flatShading: true });
   // embroidered panels: the long front panel with its column of arcane signs, the teal tails and collar
@@ -89,7 +89,8 @@ export function buildMage(): Model {
   S.add(new THREE.OctahedronGeometry(0.032, 0), gold, j.chest, br.toArray(), [0, 0, 0], [0.75, 1.1, 0.35]);
   S.add(gemGeo(0.014), stone, j.chest, [br.x, br.y, br.z + 0.01], [0, 0, 0], [1, 1.4, 1]);
 
-  // --- the cowl: the hood down, bunched round the neck in teal folds, its crown lying on the upper back
+  // --- the cowl: the hood down, bunched round the neck in teal folds, its crown lying flat on the upper
+  // back, inside the cape's torso collider: any fuller, it pokes out through the cape as two humps
   {
     const g = lathe([[0.1, 0.2], [0.155, 0.235], [0.16, 0.27], [0.13, 0.31], [0.095, 0.34], [0.085, 0.36]], 36), q = g.attributes.position;
     for (let i = 0; i < q.count; i++) {
@@ -98,7 +99,7 @@ export function buildMage(): Model {
     }
     g.computeVertexNormals();
     S.add(scaleUV(g, 3, 1), teal, j.chest);
-    const hood: SurfaceFn = (u, v, out) => { const a = Math.PI + (u - 0.5) * 2.2, y = lerp(0.3, 0.1, v), r = 0.13 + 0.06 * Math.sin(v * Math.PI) + 0.012 * Math.sin(u * 17); return out.set(Math.sin(a) * r, y, Math.cos(a) * r * 0.9 - 0.05); };
+    const hood: SurfaceFn = (u, v, out) => { const a = Math.PI + (u - 0.5) * 2.2, y = lerp(0.3, 0.1, v), r = 0.105 + 0.01 * Math.sin(v * Math.PI) + 0.005 * Math.sin(u * 17); return out.set(Math.sin(a) * r, y, Math.cos(a) * r * 0.9 - 0.05); };
     S.add(plate(hood, 16, 8, 0.008, undefined, V(0, 0.2, 0)), teal, j.chest);
     S.add(edgeTube(hood, 'v1', 0.005, 16), gold, j.chest);
   }
