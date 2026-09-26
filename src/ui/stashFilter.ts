@@ -15,6 +15,10 @@ const KEY = (classId: string, slot?: number) => saveKey(`last-stand.stash-filter
 const LEGACY = 'last-stand.stash-filter.v1';
 const LABEL = Object.fromEntries(ATTRIBUTE_GROUPS.flatMap(([, defs]) => defs.flatMap((d) => (d.stat ? [[d.stat, d.label]] : [])))) as Record<StatKey, string>;
 
+/** the stats each general stat also counts toward (All damage: Arcane and Elemental damage) */
+const FEEDS = new Map<StatKey, StatKey[]>();
+for (const [k, gs] of Object.entries(STAT_INCLUDES) as [StatKey, StatKey[]][]) for (const g of gs) FEEDS.set(g, [...(FEEDS.get(g) ?? []), k]);
+
 let active: StatKey[] = [];
 /** the storage key of the filter loaded (the class's, in the save slot in use) */
 let loadedFor = '';
@@ -92,13 +96,10 @@ export function initStashFilter(changed: () => void): void {
   document.addEventListener('pointerdown', (e) => {
     if (!panel.classList.contains('hidden') && !panel.contains(e.target as Node) && !btn.contains(e.target as Node)) openStashFilter(false);
   });
-  const feeds = new Map<StatKey, StatKey[]>();
-  for (const [k, gs] of Object.entries(STAT_INCLUDES) as [StatKey, StatKey[]][]) for (const g of gs) feeds.set(g, [...(feeds.get(g) ?? []), k]);
-  const notes = [...feeds].map(([g, ks]) => `${LABEL[g]} also counts toward ${ks.map((k) => LABEL[k]).join(' and ')}.`);
   panel.innerHTML = `<div class="sf-top"><span>Show items with</span><button class="link sf-clear">Clear</button></div>`
     + ATTRIBUTE_GROUPS.map(([grp, defs]) => `<div class="sf-grp">${grp}</div><div class="sf-opts">`
       + defs.map((d) => (d.stat ? `<button class="sf-opt" data-stat="${d.stat}" aria-pressed="false">${d.label}</button>` : '')).join('') + '</div>').join('')
-    + `<div class="sf-note">Other items are greyed out. One stat sorts the stash by it, several by item power. ${notes.join(' ')}</div>`;
+    + `<div class="sf-note">Other items are greyed out. One stat sorts the stash by it, several by item power.</div>`;
   panel.querySelector<HTMLElement>('.sf-clear')!.onclick = () => set([]);
   panel.querySelectorAll<HTMLElement>('.sf-opt').forEach((b) => { b.onclick = () => toggle(b.dataset.stat as StatKey); });
 }
@@ -133,8 +134,12 @@ export function renderStashFilter(): void {
   const panel = document.getElementById('stash-filter')!;
   const unused = G.player.cls.excludeStats ?? [];
   panel.querySelectorAll<HTMLElement>('.sf-opt').forEach((b) => {
-    b.setAttribute('aria-pressed', String(active.includes(b.dataset.stat as StatKey)));
-    b.classList.toggle('hidden', unused.includes(b.dataset.stat as StatKey));
+    const k = b.dataset.stat as StatKey;
+    b.setAttribute('aria-pressed', String(active.includes(k)));
+    b.classList.toggle('hidden', unused.includes(k));
+    // a general stat counts toward the ones it feeds (All damage: the class's damage types)
+    const fed = FEEDS.get(k)?.filter((f) => !unused.includes(f)) ?? [];
+    b.title = fed.length ? `Also counts toward ${fed.map((f) => LABEL[f]).join(' and ')}` : '';
   });
   panel.querySelector<HTMLElement>('.sf-clear')!.classList.toggle('hidden', !active.length);
 }

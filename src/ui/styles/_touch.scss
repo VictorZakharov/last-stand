@@ -42,4 +42,3 @@ body.touch #decision .k { display: none; }
 
 .mouse-only { display: inline; } .touch-inline { display: none; }
 body.touch .mouse-only { display: none; } body.touch .touch-inline { display: inline; }
-#loadout-bar .slot.picking { box-shadow: inset 0 0 0 2px var(--highlight), 0 0 16px rgba($highlight, .7); animation: lowpulse .6s infinite alternate; }

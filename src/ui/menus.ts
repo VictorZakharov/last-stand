@@ -11,7 +11,7 @@ import { saveSlot } from '../loot/saveSlots';
 import { openSaves } from './saves';
 import { bindTooltip, hideTooltip, itemTooltip } from './tooltip';
 import { makeSkillSlot, KEY_LABEL, rarityChips } from './hud';
-import { renderLoadoutEditor } from './loadoutEditor';
+import { renderLoadoutEditor, openBook } from './loadoutEditor';
 import { initSkillStrip, syncSkillStrip } from './skillStrip';
 import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
 import { renderAttributes } from './attributes';
@@ -204,7 +204,7 @@ export function initMenus(h: MenuHooks): void {
     tab.onclick = () => {
       sfx.click();
       document.querySelectorAll('.menu-right .tab').forEach((t) => t.classList.toggle('active', t === tab));
-      document.querySelectorAll<HTMLElement>('.menu-right .tab-page').forEach((pg) => pg.classList.toggle('hidden', pg.dataset.page !== tab.dataset.tab));
+      document.querySelectorAll<HTMLElement>('.menu-right .tab-page').forEach((pg) => pg.classList.toggle('off', pg.dataset.page !== tab.dataset.tab));
     };
   });
   initStashFilter(renderMenu);
@@ -239,7 +239,7 @@ export function initMenus(h: MenuHooks): void {
 
 export function showMenu(v: boolean): void {
   $('#menu').classList.toggle('hidden', !v);
-  if (v) { toggleMenuStowed(false); renderMenu(); }
+  if (v) { toggleMenuStowed(false); openBook(false); renderMenu(); }
   else openSaves(false);   // a co-op host can start the run while the save slots are open
   syncJunk();
 }
@@ -350,14 +350,17 @@ export function renderMenu(): void {
     const color = it ? rarityOf(it.rarity).color : '#666';
     d.style.boxShadow = `inset 0 0 0 1px ${it ? color : 'rgba(160,124,70,.5)'}`;
     d.style.setProperty('--c', color);
-    d.innerHTML = `<span class="elabel">${SLOT_INFO[slot].label}</span>${it ? itemIconSVG(it) : slotPlaceholderSVG(slot, cls)}
-      <span class="ename2" style="color:${color}">${it ? it.name : ''}</span>${GLOW}`;
+    // an icon only: the slot's name and the item's are in the tooltips
+    const label = SLOT_INFO[slot].label;
+    d.innerHTML = (it ? itemIconSVG(it) : slotPlaceholderSVG(slot, cls)) + GLOW;
+    d.setAttribute('aria-label', `${label}: ${it ? it.name : 'empty'}`);
     bindSlotFocus(d, slot);
-    if (it) {
+    if (!it) bindTooltip(d, () => ({ html: `<div class="tt-card empty"><div class="tt-name">${label}</div><div class="tt-type">Empty</div></div>`, color: '#666' }));
+    else {
       // a weapon in the off-hand: its damage (the implicit) counts for less
-      bindTooltip(d, slot === 'offhand' && it.slot === 'weapon'
-        ? () => ({ ...itemTooltip(it, false)(), foot: `In the off-hand its damage bonus (the implicit) counts at ${OFFHAND_WEAPON * 100}%` })
-        : itemTooltip(it, false));
+      const how = 'Click or drag to the stash to unequip · drag to the junk bin to salvage';
+      bindTooltip(d, () => ({ ...itemTooltip(it, false)(), foot: slot === 'offhand' && it.slot === 'weapon'
+        ? `In the off-hand its damage bonus (the implicit) counts at ${OFFHAND_WEAPON * 100}%<br>${how}` : how }));
       const doUnequip = () => { unequip(p, slot); hideTooltip(); sfx.click(); changed(); };
       d.onclick = () => {
         if (!isTouch()) { doUnequip(); return; }

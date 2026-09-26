@@ -1,7 +1,8 @@
-// Lobby spell loadout editor: a spellbook row (every class spell) and the key
-// bar. Drag spellbook -> key to bind (duplicates allowed), key -> key to swap,
-// key -> spellbook (or right-click) to clear. Saved via Player.bind (cookie), one loadout per weapon
-// style for a class whose skills depend on the gear held.
+// Lobby spell loadout editor: the key bar, and a spellbook row (every class spell) that opens
+// over it only to remap: its toggle, or a click on a key (which picks that key). Click a key then a
+// skill (or tap, on touch) to bind; drag spellbook -> key to bind (duplicates allowed), key -> key to
+// swap, key -> spellbook (or right-click) to clear. Saved via Player.bind (cookie), one loadout per
+// weapon style for a class whose skills depend on the gear held.
 import { G } from '../state';
 import { SKILL_KEYS } from '../loot/loadout';
 import { makeSkillSlot } from './hud';
@@ -18,8 +19,9 @@ const STYLE_NAME: Record<WeaponStyle, string> = {
 type Payload = { kind: 'book'; id: string } | { kind: 'slot'; key: SkillKey };
 let drag: Payload | null = null;
 let onChange: () => void = () => {};
-/** touch: the key picked to receive the next tapped skill */
+/** the key picked to receive the next skill clicked (or tapped) in the book */
 let picked: SkillKey | null = null;
+let open = false;
 
 const book = () => document.getElementById('spellbook')!;
 const bar = () => document.getElementById('loadout-bar')!;
@@ -27,6 +29,7 @@ const bar = () => document.getElementById('loadout-bar')!;
 export function initLoadoutEditor(changed: () => void): void {
   onChange = changed;
   document.getElementById('btn-lo-reset')!.onclick = () => { G.player.resetLoadout(); picked = null; hideTooltip(); sfx.click(); commit(); };
+  document.getElementById('lo-toggle')!.onclick = () => { sfx.click(); openBook(!open); };
   // dropping a key onto the spellbook clears it
   const b = book();
   b.addEventListener('dragover', (e) => { if (drag?.kind === 'slot') { e.preventDefault(); b.classList.add('over'); } });
@@ -37,6 +40,14 @@ export function initLoadoutEditor(changed: () => void): void {
     endDrag();
     commit();
   });
+}
+
+/** Open the skill book over the key bar, or close it (which drops a picked key). */
+export function openBook(v: boolean): void {
+  open = v;
+  document.getElementById('loadout')!.classList.toggle('open', v);
+  document.getElementById('lo-toggle')!.setAttribute('aria-expanded', String(v));
+  if (!v && picked) { picked = null; renderLoadoutEditor(); }
 }
 
 function startDrag(e: DragEvent, payload: Payload, el: HTMLElement): void {
@@ -85,9 +96,9 @@ export function renderLoadoutEditor(): void {
     el.draggable = true;
     el.addEventListener('dragstart', (e) => startDrag(e, { kind: 'book', id: def.impl }, el));
     el.addEventListener('dragend', endDrag);
-    // touch: a tapped skill goes onto the picked key (with no key picked, the tap shows its tooltip)
+    // a clicked (or tapped) skill goes onto the picked key (with no key picked, a tap shows its tooltip)
     el.addEventListener('click', () => {
-      if (!isTouch() || !picked) return;
+      if (!picked) return;
       p.bind(picked, def.impl);
       picked = null;
       hideTooltip();
@@ -104,12 +115,13 @@ export function renderLoadoutEditor(): void {
     const el = makeSkillSlot(skill?.def ?? null, key);
     if (key === 'q') el.classList.add('sep');
     el.classList.toggle('picking', key === picked);
-    // touch: tap a key to pick it, tap it again to clear it
+    // click a key to pick it (opening the book), again to let it go; touch has no right-click,
+    // so a second tap clears it
     el.addEventListener('click', () => {
-      if (!isTouch()) return;
       hideTooltip();
-      if (picked === key) { p.bind(key, null); picked = null; sfx.salvage(); }
-      else { picked = key; sfx.click(); }
+      if (picked !== key) { picked = key; sfx.click(); openBook(true); }
+      else if (isTouch()) { p.bind(key, null); picked = null; sfx.salvage(); }
+      else { picked = null; sfx.click(); }
       commit();
     });
     if (skill) {
