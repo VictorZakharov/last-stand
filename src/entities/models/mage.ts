@@ -59,8 +59,10 @@ export function buildMage(): Model {
   const leather = kit.std({ color: 0x3e281a, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
   const wood = kit.std({ color: 0x5a3d28, roughness: 1, ...tex(woodMaps(), 1, 1.5) });
   const skinTip = kit.rim({ color: 0xc9957c, roughness: 0.6 }, 0x6a2a1c, 0.25);
-  const glow = kit.glow(0x5dffa8, 2.5);
-  const gem = kit.phys({ color: 0x2aff9a, emissive: 0x2aff9a, emissiveIntensity: 1.2, roughness: 0.05, metalness: 0, clearcoat: 1, flatShading: true });
+  const glow = kit.glow(0x5dffa8, 1.5);
+  // the staff's crystal: glowing softly, a little more while casting (animate() sets it each frame)
+  const GEM_GLOW = 0.4;
+  const gem = kit.phys({ color: 0x2aff9a, emissive: 0x2aff9a, emissiveIntensity: GEM_GLOW, roughness: 0.05, metalness: 0, clearcoat: 1, flatShading: true });
   // set stones: green, lit from within a little
   const stone = kit.phys({ color: 0x0f7a4a, emissive: 0x1aff8a, emissiveIntensity: 0.6, roughness: 0.08, metalness: 0, clearcoat: 1, flatShading: true });
   // embroidered panels: the long front panel with its column of arcane signs, the teal tails and collar
@@ -290,6 +292,8 @@ export function buildMage(): Model {
   let openedAt = -1;
   /** staff shots: how far the staff is lowered at the target (0..1), and when the last shot was */
   let aim = 0, aimedAt = -9;
+  /** the crystal's casting glow, eased: a held stream of casts keeps it up instead of flashing each one */
+  let charged = 0;
 
   const root = j.root;
   root.scale.setScalar(1.08);
@@ -432,8 +436,8 @@ export function buildMage(): Model {
     crystal.position.y = Math.sin(t * 3) * 0.02;
     ringA.rotation.set(t * 1.7, t * 1.1, 0);
     ringB.rotation.set(-t * 1.3, 0, t * 2.1);
-    const charge = st.charge || 0;
-    gem.emissiveIntensity = 2.5 + charge * 6 + Math.sin(t * 6) * 0.4;
+    charged = damp(charged, st.charge || 0, 4, dt);
+    gem.emissiveIntensity = GEM_GLOW * (1 + charged * 0.6 + Math.sin(t * 6) * 0.08);
   }
 
   return {
