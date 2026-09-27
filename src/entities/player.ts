@@ -11,7 +11,7 @@ import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resol
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
 import { input, isDown } from '../core/input';
-import { flashHurt, addShake, cameraYaw, lookFacing, viewMode, viewSettled } from '../core/renderer';
+import { flashHurt, addShake, cameraYaw, lookFacing } from '../core/renderer';
 import { floatText } from '../ui/floaters';
 import { particles, col } from '../fx/particles';
 import { sfx } from '../core/audio';
@@ -258,19 +258,13 @@ export class Player {
   /** Still in the run, standing or downed (not banked or dead for good). */
   get inRun(): boolean { return !this.away && !this.out; }
 
+  // through the eyes, the weapon and hand in view: the model stays placed there until the next pose
   get castPoint(): THREE.Vector3 {
-    return this.viewHand() ?? (this.model.tip ?? this.model.root).getWorldPosition(new THREE.Vector3());
+    return (this.model.tip ?? this.model.root).getWorldPosition(new THREE.Vector3());
   }
 
   get palmPoint(): THREE.Vector3 {
-    return this.viewHand() ?? (this.model.palm ?? this.model.root).getWorldPosition(new THREE.Vector3());
-  }
-
-  /** Seen through this hero's eyes, where a hand would be in view (right of and below the camera,
-   *  ahead of it): the hidden body's hands are at the camera, so a beam would leave from the head. */
-  private viewHand(): THREE.Vector3 | null {
-    if (!this.local || viewMode() !== 'first' || !viewSettled()) return null;
-    return new THREE.Vector3(0.28, -0.4, -0.65).applyMatrix4(G.camera.matrixWorld);
+    return (this.model.palm ?? this.model.root).getWorldPosition(new THREE.Vector3());
   }
 
   cooldownOf(def: SkillDef): number { return def.cooldown * (1 - this.stats.cdr / 100); }
@@ -528,10 +522,11 @@ export class Player {
 
   pose(dt: number, t: number, move: number, dir: number, lean: number, action: ActionState | null): void {
     this.obj.position.set(this.pos.x, damp(this.obj.position.y, groundHeight(this.pos.x, this.pos.z), 14, dt), this.pos.z);
-    this.model.root.rotation.y = this.facing;
+    // (all of it: through the eyes the last frame placed the model in view, entities/viewModel.ts)
+    this.model.root.rotation.set(0, this.facing, 0);
     // a jumping dash lifts the model along a parabola
     const d = this.dash, k = d ? Math.min(1, d.t / d.dur) : 0;
-    this.model.root.position.y = d ? d.lift * 4 * k * (1 - k) : 0;
+    this.model.root.position.set(0, d ? d.lift * 4 * k * (1 - k) : 0, 0);
     // a raised player gets up the way it went down, in reverse
     const dead = this.deadT >= 0 ? Math.min(1, this.deadT / 1.0) : this.rising > 0 ? this.rising / RISE : -1;
     this.model.animate({

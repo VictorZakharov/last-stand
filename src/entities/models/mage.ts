@@ -137,6 +137,7 @@ export function buildMage(): Model {
 
   // --- arms: robe sleeves widening into long bell sleeves lined in teal, leather bracers with a stone,
   // fingerless gloves
+  const bells: THREE.Group[] = [];
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
     S.add(scaleUV(limb(0.3, 0.075, 0.07, 0.05, 0.3, 14), 2, 1), robe, sh);
     // the bell: from above the elbow, flaring, longest on the underside of the arm (+z hangs below
@@ -148,15 +149,18 @@ export function buildMage(): Model {
       q.setXYZ(i, x * fold, y - hang, z * fold);
     }
     bell.computeVertexNormals();
-    S.add(scaleUV(bell, 3, 1), robe, el, [0, 0.07, 0]);
-    S.add(scaleUV(bell.clone(), 3, 1), lining, el, [0, 0.07, 0], [0, 0, 0], [0.97, 1, 0.97]);
+    // on a joint of its own, so the first-person view can narrow it (from behind, it hides the hand)
+    const bj = joint(el, 0, 0.07, 0);
+    bells.push(bj);
+    S.add(scaleUV(bell, 3, 1), robe, bj);
+    S.add(scaleUV(bell.clone(), 3, 1), lining, bj, [0, 0, 0], [0, 0, 0], [0.97, 1, 0.97]);
     // gold border round the opening
     const rim: THREE.Vector3[] = [];
     for (let k = 0; k <= 28; k++) {
       const a = (k / 28) * TAU, x = Math.sin(a) * 0.15, z = Math.cos(a) * 0.15, aa = Math.atan2(x, -z);
       rim.push(V(x * (1 + 0.08 * Math.sin(Math.atan2(z, x) * 7)), -0.3 + 0.07 - 0.12 * (0.5 + 0.5 * Math.cos(aa)), z * (1 + 0.08 * Math.sin(Math.atan2(z, x) * 7))));
     }
-    S.add(taperTube(rim, () => 0.007, 56, 5), gold, el);
+    S.add(taperTube(rim, () => 0.007, 56, 5), gold, bj, [0, -0.07, 0]);
     S.add(scaleUV(lathe([[0.046, -0.26], [0.052, -0.2], [0.058, -0.12], [0.06, -0.1]], 16), 2, 1), leather, el);
     for (const y of [-0.13, -0.245]) S.add(belt(0.058 - (y + 0.13) * 0.1, 0.058 - (y + 0.13) * 0.1, y, 0.012, 0.005, 0, 14), gold, el);
     S.add(new THREE.OctahedronGeometry(0.02, 0), gold, el, [s * 0.058, -0.19, 0], [0, 0, 0], [0.4, 1.2, 1]);
@@ -444,6 +448,8 @@ export function buildMage(): Model {
     root, kit, joints: j, animate, tip, palm, height: 2.0,
     worldObjects: [cape.mesh],
     reset: () => cape.reset(),
+    // through the eyes the bells, seen from behind, would hide the hands: narrow and shorter
+    firstPerson: (on) => { for (const b of bells) b.scale.set(on ? 0.6 : 1, on ? 0.75 : 1, on ? 0.6 : 1); },
     dispose() {
       kit.dispose();
       cape.dispose();
