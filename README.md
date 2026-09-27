@@ -46,7 +46,7 @@ Plays with a keyboard and mouse, or by touch on phones and tablets (hold a phone
 - **Move:** a stick anywhere on the left half of the screen.
 - **Skills:** the buttons on the right. Tap to cast at the nearest foe, or drag to aim and let go to cast there; hold the attack button or a channelled skill to keep it going.
 - **Other:** pinch to zoom, and the ❚❚ button pauses.
-- **Lobby:** tap items to equip or salvage them, and tap a key, then a skill, to rebind it.
+- **Lobby:** tap items to equip them or drop them on the floor, and tap a key, then a skill, to rebind it.
 
 Keyboard and mouse:
 

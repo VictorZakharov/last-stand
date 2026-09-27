@@ -126,14 +126,27 @@ export function unequip(p: Profile, slot: Slot): void {
   saveProfile(p);
 }
 
-export function salvage(p: Profile, itemId: string): void {
-  p.stash = p.stash.filter((i) => i.id !== itemId);
+/** Take an item out of the stash (to throw it on the lobby floor). */
+export function discard(p: Profile, itemId: string): Item | undefined {
+  const it = p.stash.find((i) => i.id === itemId);
+  p.stash = p.stash.filter((i) => i !== it);
   saveProfile(p);
+  return it;
 }
 
-export function salvageEquipped(p: Profile, slot: Slot): void {
+export function discardEquipped(p: Profile, slot: Slot): Item | undefined {
+  const it = p.equipped[slot];
   delete p.equipped[slot];
   saveProfile(p);
+  return it;
+}
+
+/** An item picked up off the lobby floor; false when the stash is full. */
+export function addToStash(p: Profile, item: Item): boolean {
+  if (p.stash.length >= RUN.bagLimit) return false;
+  p.stash.unshift(item);
+  saveProfile(p);
+  return true;
 }
 
 // When the stash would overflow, the least valuable items of stash and loot together

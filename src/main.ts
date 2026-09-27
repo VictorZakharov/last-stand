@@ -15,12 +15,13 @@ import { Player } from './entities/player';
 import { updateEnemies, clearEnemies } from './entities/enemy';
 import { spawnEnemy } from './entities/spawner';
 import { updateProjectiles, clearProjectiles } from './combat/projectiles';
-import { loadProfile, savedClass, saveClass } from './loot/profile';
+import { loadProfile, savedClass, saveClass, addToStash } from './loot/profile';
+import { initGround, updateGround, clearGround } from './game/groundItems';
 import { setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { initFloaters, updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, updateHud, renderSpoils } from './ui/hud';
-import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, selectedWave, lobbyViewShift, renderMenu } from './ui/menus';
+import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, selectedWave, lobbyViewShift, renderMenu, markNew } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
@@ -75,6 +76,8 @@ async function boot() {
   initRun({ banner, showDecision, hideDecision, showSummary });
   initMenus({ start, toMenu, resume, abandon, profileChanged, switchClass, summaryDone, lobbyChanged: sendLobbyChoice });
   initSaves({ use: switchSaveSlot });
+  // an item picked up off the lobby floor goes back in the stash, marked new
+  initGround((it) => { if (!addToStash(G.profile, it)) return false; markNew([it]); renderMenu(); return true; });
   initSync();
   initSession({ startRun: guestStart, hostGone, changed: () => { renderCoop(); sendLobbyChoice(); } });
   initCoop();
@@ -153,6 +156,7 @@ function guestStart(biome: BiomeId, wave: number) {
 }
 
 function beginRun(wave: number) {
+  clearGround();   // what's left on the lobby floor is lost
   showMenu(false);
   hideTooltip();
   showHud(true);
@@ -338,6 +342,7 @@ function update(dt: number): void {
   // the player can move and cast in both the arena and the lobby (sandbox); co-op partners as reported
   G.player.reviving = G.mode === 'run' && !G.menuOpen && (isDown('e') || touchReviving());
   for (const p of G.players) p.update(dt);
+  updateGround(dt);
   perfLap('player');
   updateProjectiles(dt); perfLap('projectiles');
   // enemies in the arena, training dummies in the lobby

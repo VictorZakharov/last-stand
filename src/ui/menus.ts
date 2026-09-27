@@ -6,7 +6,8 @@ import { WAVES } from '../data/waves';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { rarityOf, rarityIndex, itemPower, byValue, OFFHAND_WEAPON } from '../loot/items';
 import { SKILL_KEYS } from '../loot/loadout';
-import { equipFromStash, unequip, salvage, salvageEquipped, resetProfile, slotsFor } from '../loot/profile';
+import { equipFromStash, unequip, discard, discardEquipped, resetProfile, slotsFor } from '../loot/profile';
+import { throwItem } from '../game/groundItems';
 import { saveSlot } from '../loot/saveSlots';
 import { openSaves } from './saves';
 import { bindTooltip, hideTooltip, itemTooltip } from './tooltip';
@@ -51,6 +52,8 @@ export interface MenuHooks {
 
 let hooks: MenuHooks;
 const newIds = new Set<string>();
+/** Gear given up in the lobby is thrown on the floor, where it can be picked up again. */
+const toss = (it: Item | undefined): void => { if (it) throwItem(it); };
 
 /** Controls help reflects the current key bindings (or the touch controls, when a finger is the input). */
 export function renderControlsHelp(): void {
@@ -227,13 +230,12 @@ export function initMenus(h: MenuHooks): void {
     if (!drag) return;
     const { from, item } = drag;
     newIds.delete(item.id);
-    if (from === 'stash') salvage(G.profile, item.id);
-    else salvageEquipped(G.profile, drag.slot);
+    toss(from === 'stash' ? discard(G.profile, item.id) : discardEquipped(G.profile, drag.slot));
     sfx.salvage();
     endDrag();
     changed();
   });
-  // holding Shift in the sanctuary shows the junk bin: Shift-click salvages a stash item
+  // holding Shift in the sanctuary shows the junk bin: Shift-click throws a stash item on the floor
   const setShift = (on: boolean): void => { if (on !== shiftHeld) { shiftHeld = on; syncJunk(); } };
   window.addEventListener('keydown', (e) => { if (e.key === 'Shift') setShift(true); });
   window.addEventListener('keyup', (e) => { if (e.key === 'Shift') setShift(false); });
@@ -389,13 +391,13 @@ export function renderMenu(): void {
     if (!it) bindTooltip(d, () => ({ html: `<div class="tt-card empty"><div class="tt-name">${label}</div><div class="tt-type">Empty</div></div>`, color: '#666' }));
     else {
       // a weapon in the off-hand: its damage (the implicit) counts for less
-      const how = 'Click or drag to the stash to unequip · drag to the junk bin to salvage';
+      const how = 'Click or drag to the stash to unequip · drag to the bin to throw it on the floor';
       bindTooltip(d, () => ({ ...itemTooltip(it, false)(), foot: slot === 'offhand' && it.slot === 'weapon'
         ? `In the off-hand its damage bonus (the implicit) counts at ${OFFHAND_WEAPON * 100}%<br>${how}` : how }));
       const doUnequip = () => { unequip(p, slot); hideTooltip(); sfx.click(); changed(); };
       d.onclick = () => {
         if (!isTouch()) { doUnequip(); return; }
-        openItemSheet(it, false, 'Unequip', p.stash.length < RUN.bagLimit ? doUnequip : null, () => { salvageEquipped(p, slot); newIds.delete(it.id); sfx.salvage(); changed(); });
+        openItemSheet(it, false, 'Unequip', p.stash.length < RUN.bagLimit ? doUnequip : null, () => { toss(discardEquipped(p, slot)); newIds.delete(it.id); sfx.salvage(); changed(); });
       };
       d.oncontextmenu = (e) => { e.preventDefault(); doUnequip(); };
       makeDraggable(d, { from: 'equip', item: it, slot });
@@ -425,14 +427,14 @@ export function renderMenu(): void {
     d.dataset.slot = it.slot;
     d.innerHTML = itemIconSVG(it) + GLOW;
     bindSlotFocus(d, it.slot);
-    bindTooltip(d, () => ({ ...itemTooltip(it)(), foot: 'Right-click or drag to equip · Shift-click or drag to the junk bin to salvage' }));
+    bindTooltip(d, () => ({ ...itemTooltip(it)(), foot: 'Right-click or drag to equip · Shift-click or drag to the bin to throw it on the floor' }));
     const equip = () => { newIds.delete(it.id); equipFromStash(p, it.id); hideTooltip(); sfx.click(); changed(); };
     d.onclick = (e) => {
-      if (isTouch()) { openItemSheet(it, true, 'Equip', equip, () => { newIds.delete(it.id); salvage(p, it.id); sfx.salvage(); changed(); }); return; }
+      if (isTouch()) { openItemSheet(it, true, 'Equip', equip, () => { newIds.delete(it.id); toss(discard(p, it.id)); sfx.salvage(); changed(); }); return; }
       if (!e.shiftKey) { equip(); return; }
       flyToJunk(d);
       newIds.delete(it.id);
-      salvage(p, it.id);
+      toss(discard(p, it.id));
       hideTooltip();
       sfx.salvage();
       changed();
@@ -452,7 +454,7 @@ export function renderMenu(): void {
 }
 
 // --- touch: a tapped item opens a sheet with its card and what can be done with it ----
-function openItemSheet(it: Item, compare: boolean, label: string, act: (() => void) | null, salvageIt: () => void): void {
+function openItemSheet(it: Item, compare: boolean, label: string, act: (() => void) | null, dropIt: () => void): void {
   hideTooltip();
   const box = $('#item-sheet');
   const close = () => box.classList.add('hidden');
@@ -462,7 +464,7 @@ function openItemSheet(it: Item, compare: boolean, label: string, act: (() => vo
   a.className = 'btn primary is-a';
   a.disabled = !act;
   a.onclick = () => { close(); act?.(); };
-  $('.is-salvage', box).onclick = () => { close(); salvageIt(); };
+  $('.is-salvage', box).onclick = () => { close(); dropIt(); };
   $('.is-close', box).onclick = () => { sfx.click(); close(); };
   box.onclick = (e) => { if (e.target === box) close(); };
   box.classList.remove('hidden');
