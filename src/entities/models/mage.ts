@@ -295,7 +295,9 @@ export function buildMage(): Model {
   /** set once a channel's opening completes, for the thrust into the portal */
   let openedAt = -1;
   /** staff shots: how far the staff is lowered at the target (0..1), and when the last shot was */
-  let aim = 0, aimedAt = -9;
+  let aim = 0, aimV = 0, aimedAt = -9;
+  /** how long after a shot the staff stays down */
+  const AIM_HOLD = 1.2;
   /** the crystal's casting glow, eased: a held stream of casts keeps it up instead of flashing each one */
   let charged = 0;
 
@@ -346,9 +348,13 @@ export function buildMage(): Model {
     const a = st.action;
     if (!a || a.name !== 'channel') openedAt = -1;
     // staff shots: the staff swings down level with the target and stays there while the shots keep
-    // coming (a held button), so each bolt leaves the crystal at a foe's chest; it rises once they stop
+    // coming (a held button, or clicks), so each bolt leaves the crystal at a foe's chest; it rises
+    // once they stop for a while. A spring, so it starts and stops moving gently (an ease that starts
+    // at full speed jerks the staff down at each first shot): quick to lower, slow to rise
     if (a?.name === 'point') aimedAt = t;
-    aim = damp(aim, t - aimedAt < 0.3 ? 1 : 0, 14, dt);
+    const down = t - aimedAt < AIM_HOLD, w0 = down ? 14 : 5;
+    aimV += (w0 * w0 * ((down ? 1 : 0) - aim) - 2 * w0 * aimV) * Math.min(dt, 0.05);
+    aim = clamp(aim + aimV * Math.min(dt, 0.05), 0, 1);
     j.shoulderR.rotation.x += -0.3 * aim; j.elbowR.rotation.x += 0.15 * aim; j.spine.rotation.x += 0.12 * aim;
     staff.rotation.x = STAFF_PITCH + 1.75 * aim;
     if (a) {

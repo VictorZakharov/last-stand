@@ -11,7 +11,7 @@ import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resol
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
 import { input, isDown } from '../core/input';
-import { flashHurt, addShake, cameraYaw, lookFacing } from '../core/renderer';
+import { flashHurt, addShake, cameraYaw, lookFacing, viewMode, viewSettled } from '../core/renderer';
 import { floatText } from '../ui/floaters';
 import { particles, col } from '../fx/particles';
 import { sfx } from '../core/audio';
@@ -541,8 +541,16 @@ export class Player {
     if (this.staffLight) {
       // a little above the cast point: right at it, the metal round a staff's crystal (a few cm off,
       // with the light's inverse-square falloff) burns out white-green
-      this.staffLight.position.copy(this.castPoint);
-      this.staffLight.position.y += 0.35;
+      // Through the eyes the crystal is in view a little ahead of the camera: a light there floods the
+      // sleeve filling the corner of the view, and the eye's adaptation darkens the rest. It shines on
+      // ahead and above instead, as the staff would light the ground in front
+      if (this.local && viewMode() === 'first' && viewSettled()) {
+        const cam = G.camera.position, yaw = cameraYaw();
+        this.staffLight.position.set(cam.x - Math.sin(yaw) * 1.5, cam.y + 0.8, cam.z - Math.cos(yaw) * 1.5);
+      } else {
+        this.staffLight.position.copy(this.castPoint);
+        this.staffLight.position.y += 0.35;
+      }
       const glow = this.cls.aura.intensity;
       this.staffLight.intensity = glow * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
     }

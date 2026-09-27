@@ -71,6 +71,9 @@ export function buildWarrior(): Model {
   const E = engravedSteel();
   const engraved = kit.std({ color: 0xc4c8cf, metalness: 0.92, roughness: 1, map: E.map, normalMap: E.normalMap, roughnessMap: E.roughnessMap, normalScale: new THREE.Vector2(1.4, 1.4) });
   const plateM = kit.std({ color: 0xa9adb5, metalness: 0.92, roughness: 1, ...tex(steelMaps(), 1, 0.8) });
+  // blades: a thin blade turned away from the lights only mirrors its surroundings, and the dark ground
+  // and horizon of a night sky turn it black: a cool rim of light on its bevels keeps the steel readable
+  const bladeM = kit.rim({ color: 0xa9adb5, metalness: 0.92, roughness: 1, ...tex(steelMaps(), 1, 0.8) }, 0x9aa8c0, 0.6);
   const darkSteel = kit.std({ color: 0x5b5f68, metalness: 0.9, roughness: 1, ...tex(steelMaps(), 1, 0.6) });
   const brass = kit.std({ color: 0xb08a4a, metalness: 1, roughness: 0.38 });
   const leather = kit.std({ color: 0x4e3222, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
@@ -320,7 +323,9 @@ export function buildWarrior(): Model {
     const ring = (i: number) => { const y = i / rows, k = y < 0.82 ? 1 - y * 0.18 : (1 - y) / 0.18 * 0.85, f = y < 0.75 ? 1 : Math.max(0, 1 - (y - 0.75) / 0.1); return sec(Math.max(k, 0.001), f).map(([x, z]) => V(x, at + y * len, z)); };
     for (let i = 0; i < rows; i++) {
       const A = ring(i), B = ring(i + 1);
-      for (let q = 0; q < A.length; q++) { const r = (q + 1) % A.length; pos.push(...A[q].toArray(), ...A[r].toArray(), ...B[q].toArray(), ...B[q].toArray(), ...A[r].toArray(), ...B[r].toArray()); }
+      // wound so the faces (and the normals made from them) point out of the blade: turned inwards, the
+      // inside of the far face was drawn, lit from the wrong side (black against the light)
+      for (let q = 0; q < A.length; q++) { const r = (q + 1) % A.length; pos.push(...A[q].toArray(), ...B[q].toArray(), ...A[r].toArray(), ...B[q].toArray(), ...B[r].toArray(), ...A[r].toArray()); }
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -328,7 +333,7 @@ export function buildWarrior(): Model {
     for (let i = 0; i < pos.length; i += 3) uv.push(pos[i] * 3, pos[i + 1] * 3);
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     geo.computeVertexNormals();
-    w.add(geo, plateM, g);
+    w.add(geo, bladeM, g);
     w.add(new THREE.BoxGeometry(0.004, len * 0.7, bw * 0.3), edge, g, [0, at + len * 0.4, 0]);
   };
   const haft = (w: Sculpt, g: THREE.Group, from: number, to: number, r = 0.022) => {
@@ -404,6 +409,10 @@ export function buildWarrior(): Model {
     offWeapons.set(name, { ...w, group: g });
   }
   let offHeld: Weapon | null = null;
+  /** seen through its own eyes (entities/viewModel.ts): Power Strike's high guard (shoulder pitch, elbow,
+   *  how far the blade turns towards the arm) */
+  let fp = false;
+  const FP_GUARD = [-0.5, -1.2, 1];
 
   // --- round shield on the left fist: planks behind a painted navy face, a steel rim with rivets and a
   // domed boss. At rest it hangs at the side facing outwards; raised (or charging) it swings round in
@@ -434,6 +443,7 @@ export function buildWarrior(): Model {
   const palm = joint(shield, 0, 0, 0.1);
 
   S.build();
+  const elbowFur = [j.elbowL, j.elbowR].flatMap((e) => e.children.filter((c) => (c as THREE.Mesh).material === furM));
 
   const root = j.root;
   root.scale.setScalar(1.1);
@@ -558,12 +568,26 @@ export function buildWarrior(): Model {
         // in a vertical arc at 0.9 of the cast (the skill's fireAt)
         const w = ramp(k, 0, 0.12) * (1 - ramp(k, 0.97, 1));
         const lift = ramp(k, 0, 0.3), blow = ramp(k, 0.9, 0.97);
-        const pitch = lerp(lerp(-1.3, -2.95, lift), -0.8, blow) + (1 - blow) * lift * Math.sin(t * 45) * 0.02;
+        const shake = (1 - blow) * lift * Math.sin(t * 45) * 0.02;
+        // through the eyes, a weapon raised overhead leaves the view and the raised upper arms loom past
+        // the camera: a high guard instead, upper arms forward and low, forearms up, blades standing up in
+        // front of the face, and from there the same blow
+        const g = FP_GUARD;
+        const pitch = fp ? lerp(g[0], -0.8, blow) + shake : lerp(lerp(-1.3, -2.95, lift), -0.8, blow) + shake;
+        const bend = fp ? lerp(g[1], -0.1, blow) : two ? -0.55 : -0.1;
+        const along = ALONG_ARM * (fp ? lerp(g[2], 1, blow) : 1) * w;
         // a two-hander is raised over the middle of the head, within the left hand's reach
         R.x = lerp(R.x, pitch, w); R.z = lerp(R.z, 0, w); R.y = (two ? 0.7 : 0.25) * w;
-        j.elbowR.rotation.x = lerp(j.elbowR.rotation.x, two ? -0.55 : -0.1, w);
-        j.handR.rotation.x += ALONG_ARM * w;
-        j.spine.rotation.x += (-0.25 * lift * (1 - blow) + 0.45 * blow) * w;
+        j.elbowR.rotation.x = lerp(j.elbowR.rotation.x, bend, w);
+        j.handR.rotation.x += along;
+        // two weapons: both rise and come down together, the left arm the mirror image of the right
+        if (offHeld) {
+          const L = j.shoulderL.rotation;
+          L.x = lerp(L.x, pitch, w); L.z = lerp(L.z, 0, w); L.y = -0.25 * w;
+          j.elbowL.rotation.x = lerp(j.elbowL.rotation.x, bend, w);
+          j.handL.rotation.x += along;
+        }
+        j.spine.rotation.x += ((fp ? 0 : -0.25) * lift * (1 - blow) + 0.45 * blow) * w;
         j.body.position.y += -0.16 * blow * w;
         j.kneeL.rotation.x += 0.55 * blow * w; j.kneeR.rotation.x += 0.4 * blow * w;
         j.thighL.rotation.x += -0.45 * blow * w;
@@ -669,6 +693,8 @@ export function buildWarrior(): Model {
     get reach() { return (ARM + (held?.len ?? 0)) * root.scale.x; },
     worldObjects: [cape.mesh],
     reset: () => cape.reset(),
+    // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
+    firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on; },
     dispose() {
       kit.dispose();
       cape.dispose();

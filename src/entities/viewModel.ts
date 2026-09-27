@@ -1,5 +1,5 @@
 // First person: the hero's own arms and weapon in view. The body animates as in every other view, so each
-// attack moves the same; through the eyes everything but the forearms goes on a layer the camera doesn't
+// attack moves the same; through the eyes everything but the arms goes on a layer the camera doesn't
 // draw, and the model is placed so its eyes are the camera's and it tilts with the view's pitch, the arms
 // brought a little up and forward so the hands and weapon sit in the frame. The placement holds until
 // the next frame's pose, so skills cast in between leave from the weapon in view (`Player.castPoint`).
@@ -8,7 +8,9 @@ import type { Model } from '../types';
 
 /** Where the eyes sit against the arms, in the hero's space (x left, y up, z forward): moved back and
  *  down from the head, so the hands and weapon come into the lower part of the view. */
-const OFFSET = new THREE.Vector3(0, 0.2, 0.3);
+const OFFSET = new THREE.Vector3(0, 0.12, 0.06);
+/** and tipped back about the eyes, so what the hands hold low and ahead rises into the frame */
+const TILT = -0.3;
 const HIDDEN = 1;
 
 const body = new WeakMap<Model, THREE.Object3D[]>();
@@ -16,21 +18,24 @@ const shown = new WeakSet<Model>();
 /** The pose's own placement of the root, and ours over it: a frame with no new pose (paused) starts again
  *  from the pose's, or the eyes would be measured from where we put the hero last time */
 const placed = new WeakMap<Model, { pos: THREE.Vector3; quat: THREE.Quaternion; ourPos: THREE.Vector3; ourQuat: THREE.Quaternion }>();
-const _eye = new THREE.Vector3(), _m = new THREE.Matrix4(), _t = new THREE.Matrix4(), _flip = new THREE.Matrix4().makeRotationY(Math.PI);
+const _eye = new THREE.Vector3(), _m = new THREE.Matrix4(), _t = new THREE.Matrix4(), _t2 = new THREE.Matrix4(), _s = new THREE.Vector3(), _flip = new THREE.Matrix4().makeRotationY(Math.PI).multiply(new THREE.Matrix4().makeRotationX(TILT));
 
-/** The meshes that aren't the forearms (with the hands and what they hold): seen from the eyes, the
- *  upper arms and shoulders would fill the view's edges. */
+/** The meshes that aren't the arms (with the hands and what they hold). Of what hangs on a shoulder, only
+ *  its own meshes (the upper arm) and the elbow's show: a pauldron, on a joint of its own, would fill the
+ *  view's edge. */
 function bodyOf(m: Model): THREE.Object3D[] {
   let list = body.get(m);
   if (list) return list;
-  const j = m.joints, arms = j ? [j.elbowL, j.elbowR] : [];
+  const j = m.joints, shoulders: THREE.Object3D[] = j ? [j.shoulderL, j.shoulderR] : [], elbows: THREE.Object3D[] = j ? [j.elbowL, j.elbowR] : [];
   list = [];
-  const walk = (o: THREE.Object3D): void => {
-    if (arms.includes(o as THREE.Group)) return;
-    if ((o as THREE.Mesh).isMesh) list!.push(o);
-    for (const c of o.children) walk(c);
+  const walk = (o: THREE.Object3D, onArm: boolean): void => {
+    if (elbows.includes(o)) return;
+    if ((o as THREE.Mesh).isMesh) { if (!onArm) list!.push(o); }
+    else if (onArm) { hideAll(o); return; }
+    for (const c of o.children) walk(c, shoulders.includes(o));
   };
-  walk(m.root);
+  const hideAll = (o: THREE.Object3D): void => o.traverse((c) => { if ((c as THREE.Mesh).isMesh) list!.push(c); });
+  walk(m.root, false);
   body.set(m, list);
   return list;
 }
@@ -52,8 +57,10 @@ export function viewArms(m: Model, on: boolean, cam: THREE.Camera): void {
   root.updateWorldMatrix(true, false);
   cam.updateMatrixWorld();
   root.worldToLocal(_eye.setFromMatrixPosition(cam.matrixWorld)).sub(OFFSET);
-  _m.copy(cam.matrixWorld).multiply(_flip).multiply(_t.makeTranslation(-_eye.x, -_eye.y, -_eye.z));
+  _m.copy(cam.matrixWorld).multiply(_flip);
+  // (the model's own scale kept: the heroes are built a little over life size, and reach reads it)
+  _m.multiply(_t.makeScale(root.scale.x, root.scale.y, root.scale.z)).multiply(_t2.makeTranslation(-_eye.x, -_eye.y, -_eye.z));
   _m.premultiply(_t.copy(parent.matrixWorld).invert());
-  _m.decompose(root.position, root.quaternion, root.scale);
+  _m.decompose(root.position, root.quaternion, _s);
   p.ourPos.copy(root.position); p.ourQuat.copy(root.quaternion);
 }

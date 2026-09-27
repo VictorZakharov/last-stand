@@ -252,8 +252,8 @@ export interface Model {
   joints?: Joints;
   /** objects simulated in world space (e.g. a cape) that the owner adds to the scene */
   worldObjects?: THREE.Object3D[];
-  /** seen through its own eyes (only the forearms show, entities/viewModel.ts): trim what would hide the
-   *  hands and weapon */
+  /** seen through its own eyes (only the arms show, entities/viewModel.ts): adjust what reads badly from
+   *  there (a sleeve hiding the hand, an arm raised out of the frame) */
   firstPerson?(on: boolean): void;
   /** re-settle simulated parts after a teleport */
   reset?(): void;

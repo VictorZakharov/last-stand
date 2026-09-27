@@ -362,7 +362,7 @@ function update(dt: number): void {
   const focus = focusPlayer();
   updateCamera(dt, focus.pos, focus.model.height);
   // through the eyes the body would fill the view (it still casts, animates and blocks): only the
-  // forearms and what they hold show, and the cape (in the world beside it) hides
+  // arms and what they hold show, and the cape (in the world beside it) hides
   const eyes = focus === G.player && viewMode() === 'first' && viewSettled();
   viewArms(G.player.model, eyes, G.camera);
   for (const o of G.player.model.worldObjects ?? []) o.visible = !eyes && G.player.obj.visible;
