@@ -1,5 +1,5 @@
 // Items on the lobby floor. Gear thrown out of the stash lands here instead of vanishing, so it can be
-// picked up again (walk over it) or, in co-op, by a partner. Whatever is left there is lost when a run
+// picked up again (click its name) or, in co-op, by a partner. Whatever is left there is lost when a run
 // starts. In co-op every game shows every drop, and the host says who got one first (net/session).
 import * as THREE from 'three';
 import { G } from '../state';
@@ -12,6 +12,7 @@ import { basesFor, newItemId, rarityOf } from '../loot/items';
 import { groundHeight } from '../world/ground';
 import { project, floatText } from '../ui/floaters';
 import { bindTooltip, hideTooltip, itemTooltip, itemTooltipHTML } from '../ui/tooltip';
+import { input } from '../core/input';
 import { itemIconSVG } from '../ui/itemIcons';
 import type { Item, RarityId } from '../types';
 
@@ -28,8 +29,6 @@ export interface GroundNet {
   taken(id: string): void;
 }
 
-/** metres: close enough to pick a drop up; a drop that lands this close waits until the player steps off */
-const REACH = 0.8, ARM = 1.3;
 /** seconds in the air */
 const TOSS = 0.55;
 /** a guest's request to the host: tried again after this long without an answer */
@@ -39,12 +38,8 @@ interface Drop extends GroundDrop {
   group: THREE.Group; shard: THREE.Mesh; beam: THREE.Group; glow: THREE.Mesh; label: HTMLElement;
   /** age (s): the toss, then the beam growing */
   t: number;
-  /** the local player may pick it up (not while standing where it landed) */
-  armed: boolean;
   /** when a guest last asked the host for it */
   asked: number;
-  /** a "can't take it" note was shown (once per approach) */
-  noted: boolean;
   /** the label's size (px), measured once shown */
   w: number; h: number;
 }
@@ -134,12 +129,17 @@ export function addDrop(g: GroundDrop, toss = true): void {
   label.className = 'gdrop';
   label.style.setProperty('--c', rarityOf(g.item.rarity).color);
   label.innerHTML = `${itemIconSVG(g.item)}<span>${g.item.name}</span>`;
-  const d: Drop = { ...g, group, shard, beam, glow, label, t: toss ? 0 : TOSS + 1, armed: true, asked: -Infinity, noted: false, w: 0, h: 0 };
-  d.armed = Math.hypot(G.player.pos.x - g.x, G.player.pos.z - g.z) > ARM;
+  const d: Drop = { ...g, group, shard, beam, glow, label, t: toss ? 0 : TOSS + 1, asked: -Infinity, w: 0, h: 0 };
   bindTooltip(label, () => {
     const own = usersOf(d.item).some((c) => c.id === G.player.cls.id);
-    const how = own ? 'Walk over it to pick it up' : `Only a ${usersOf(d.item).map((c) => c.name).join(' or ') || 'nobody'} can use it`;
+    const how = own ? (input.touchMode ? 'Tap again to pick it up' : 'Click to pick it up') : `Only a ${usersOf(d.item).map((c) => c.name).join(' or ') || 'nobody'} can use it`;
     return { ...(own ? itemTooltip(d.item)() : itemTooltipHTML(d.item)), foot: `${how}<br>Left on the floor, it's lost when a run starts` };
+  });
+  // picked up only on purpose: a click (a tap shows the card first, the next tap takes it)
+  label.addEventListener('click', () => {
+    if (input.touchMode && tapped !== d.id) { tapped = d.id; return; }
+    tapped = null;
+    pickUp(d);
   });
   label.style.display = 'none';
   document.getElementById('floaters')?.appendChild(label);
@@ -221,32 +221,36 @@ function placeLabels(): void {
   }
 }
 
-/** Every frame: the drops' motion, and the local player picking one up by walking over it. */
+/** the label a touch tapped last: the next tap on it picks the item up */
+let tapped: string | null = null;
+
+/** The local player picks a drop up: into the stash, if the class can use it and there's room. */
+function pickUp(d: Drop): void {
+  const p = G.player;
+  if (G.mode !== 'menu' || d.t < TOSS || G.time - d.asked < ASK_AGAIN) return;
+  const own = usersOf(d.item).some((c) => c.id === p.cls.id);
+  if (!own || G.profile.stash.length >= RUN.bagLimit) {
+    floatText(d.x, 1.6, d.z, own ? 'Stash full' : `Not for a ${p.cls.name}`, 'info', '#ffcf70');
+    return;
+  }
+  hideTooltip();
+  // a guest asks the host, who may have given it to someone else already
+  if (net?.ask(d.id)) { d.asked = G.time; return; }
+  const g = removeDrop(d.id);
+  if (!g) return;
+  net?.taken(g.id);
+  if (picked({ ...g.item, id: newItemId() })) sfx.pickup();
+}
+
+/** Every frame: the drops' motion and labels. */
 export function updateGround(dt: number): void {
-  const lobby = G.mode === 'menu', p = G.player;
+  const lobby = G.mode === 'menu';
   for (const d of drops.values()) {
     d.t += dt;
     d.group.visible = lobby;
     pose(d);
     // the class on show can change (a class or save slot switch in the lobby)
-    const own = usersOf(d.item).some((c) => c.id === p.cls.id);
-    d.label.classList.toggle('other', !own);
-    if (!lobby || d.t < TOSS || !p.alive) continue;
-    const dist = Math.hypot(p.pos.x - d.x, p.pos.z - d.z);
-    if (dist > ARM) { d.armed = true; d.noted = false; continue; }
-    if (!d.armed || dist > REACH || G.time - d.asked < ASK_AGAIN) continue;
-    const room = G.profile.stash.length < RUN.bagLimit;
-    if (!own || !room) {
-      if (!d.noted) floatText(d.x, 1.6, d.z, own ? 'Stash full' : `Not for a ${p.cls.name}`, 'info', '#ffcf70');
-      d.noted = true;
-      continue;
-    }
-    // a guest asks the host, who may have given it to someone else already
-    if (net?.ask(d.id)) { d.asked = G.time; continue; }
-    const g = removeDrop(d.id);
-    if (!g) continue;
-    net?.taken(g.id);
-    if (picked({ ...g.item, id: newItemId() })) sfx.pickup();
+    d.label.classList.toggle('other', !usersOf(d.item).some((c) => c.id === G.player.cls.id));
   }
   placeLabels();
 }

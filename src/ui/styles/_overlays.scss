@@ -20,7 +20,7 @@
 
 // an item on the lobby floor: its name in its rarity's colour, the item card on hover (or tap)
 .gdrop { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: ui(5px); padding: ui(2px) ui(8px) ui(2px) ui(4px);
-  pointer-events: auto; cursor: help; white-space: nowrap; font-family: var(--font-display); font-size: ui(13px); color: var(--c);
+  pointer-events: auto; cursor: pointer; white-space: nowrap; font-family: var(--font-display); font-size: ui(13px); color: var(--c);
   background: rgba($panel, .8); border: 1px solid color-mix(in srgb, var(--c) 55%, transparent); border-radius: ui(3px); text-shadow: $outline;
   svg { width: ui(20px); height: ui(20px); flex: none; }
   &.other { opacity: .6; }
