@@ -11,11 +11,12 @@ import { openLink, type Link } from './transport';
 import { role } from './role';
 import { showBiomeSetting } from '../game/biome';
 import { hostSync, stopSync, onWorld, onGuestControl, sendWorld } from './sync';
+import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGround, type GroundDrop } from '../game/groundItems';
 
 import type { Profile } from '../types';
 
 /** bumped when the messages change: games of different versions don't play together */
-const PROTOCOL = 1;
+const PROTOCOL = 2;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** room codes: no look-alike letters or digits */
@@ -126,6 +127,9 @@ export function leaveRoom(): void {
   clearTimeout(joinTimer);
   if (link) { link.send('ctl', { t: 'bye' }); link.leave(); }
   link = null;
+  // the lobby floor is the host's: a guest leaving it leaves what's there (the host keeps it)
+  if (session.status === 'joined') clearGround();
+  setGroundNet(null);
   for (const peer of session.peers.values()) dropPlayer(peer);
   session.peers.clear();
   session.status = 'off';
@@ -166,6 +170,16 @@ function wire(l: Link): void {
     else if (ch === 'ctl') onControl(from, m);
   });
   if (session.status === 'joining') role.current = 'guest';
+  // items on the lobby floor: every game shows them, the host says who got one first
+  setGroundNet({
+    dropped: (d) => send('ctl', { t: 'gdrop', d }),
+    ask: (id) => {
+      if (role.current !== 'guest' || !session.hostId) return false;
+      send('ctl', { t: 'gtake', id }, session.hostId);
+      return true;
+    },
+    taken: (id) => send('ctl', { t: 'gtaken', id, to: l.self }),
+  });
 }
 
 const hello = () => ({ v: PROTOCOL, look: myLook(), slot: G.player.slot, host: role.current === 'host' });
@@ -187,6 +201,7 @@ function onHello(from: string, m: Record<string, unknown>): void {
     if (slot >= COOP.maxPlayers) { send('ctl', { t: 'refuse', why: 'full' }, from); return; }
     addPeer(from, slot, look);
     send('ctl', { t: 'welcome', slot, biome: G.arena.biome, wave: session.wave, inRun: G.mode === 'run' }, from);
+    send('ctl', { t: 'gall', list: groundDrops() }, from);
     send('hello', hello(), from);
     hooks.changed();
     return;
@@ -200,6 +215,7 @@ function onHello(from: string, m: Record<string, unknown>): void {
 
 function onControl(from: string, m: Record<string, unknown>): void {
   if (m.t === 'bye') { peerLeft(from); return; }
+  if (onGround(from, m)) return;
   if (role.current === 'guest') {
     if (m.t === 'welcome') {
       clearTimeout(joinTimer);
@@ -213,6 +229,8 @@ function onControl(from: string, m: Record<string, unknown>): void {
       // step over to our side of the spawn
       if (G.mode === 'menu') G.player.place(G.player.spawn, G.player.facing);
       send('hello', hello());   // our slot, to everyone
+      // what we threw on the floor before joining is on the host's floor now
+      for (const d of groundDrops()) send('ctl', { t: 'gdrop', d, still: 1 });
       hooks.changed();
     } else if (m.t === 'refuse') {
       fail(m.why === 'full' ? 'That room is full.' : 'That game is on another version: both reload the page to play together.');
@@ -231,6 +249,20 @@ function onControl(from: string, m: Record<string, unknown>): void {
   // host: a guest's choices in the run
   const peer = session.peers.get(from);
   if (peer?.player) onGuestControl(peer.player, m);
+}
+
+/** Items on the lobby floor: thrown, asked for (the host decides) and taken. Returns whether `m` was one. */
+function onGround(from: string, m: Record<string, unknown>): boolean {
+  if (m.t === 'gdrop') addDrop(m.d as GroundDrop, !m.still);
+  else if (m.t === 'gall') for (const d of m.list as GroundDrop[]) addDrop(d, false);
+  else if (m.t === 'gtake') {
+    // first come, first served: whoever asks for a drop still on the floor gets it
+    if (role.current === 'host' && removeDrop(m.id as string)) send('ctl', { t: 'gtaken', id: m.id, to: from });
+  } else if (m.t === 'gtaken') {
+    const d = removeDrop(m.id as string);
+    if (d && m.to === link?.self) receiveItem(d.item);
+  } else return false;
+  return true;
 }
 
 function onLook(from: string, look: Look): void {

@@ -18,6 +18,14 @@
 .ebar.hero .efill { background: linear-gradient(#ffb040, #b0400c); }
 .ename { font-family: var(--font-display); font-size: 12px; color: #f5c060; text-shadow: $outline; white-space: nowrap; }
 
+// an item on the lobby floor: its name in its rarity's colour, the item card on hover (or tap)
+.gdrop { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: ui(5px); padding: ui(2px) ui(8px) ui(2px) ui(4px);
+  pointer-events: auto; cursor: pointer; white-space: nowrap; font-family: var(--font-display); font-size: ui(13px); color: var(--c);
+  background: rgba($panel, .8); border: 1px solid color-mix(in srgb, var(--c) 55%, transparent); border-radius: ui(3px); text-shadow: $outline;
+  svg { width: ui(20px); height: ui(20px); flex: none; }
+  &.other { opacity: .6; }
+}
+
 /* ---------- training dummy damage meter ---------- */
 .dmeter { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; pointer-events: none; white-space: nowrap;
   text-shadow: 0 1px 3px #000, 0 0 8px rgba(0,0,0,.8); transition: opacity .4s; }

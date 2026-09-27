@@ -171,7 +171,7 @@ function unplayed(cls: ClassDef): HTMLElement {
   return el;
 }
 
-/** The junk bin's can (narrow panes show only it) */
+/** A trash can (narrow panes show only it) */
 const TRASH = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M9.5 6V4.2h5V6M6.2 6.8l1 13.2h9.6l1-13.2M10 10v7M14 10v7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 /** An empty heraldic shield */
