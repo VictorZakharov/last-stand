@@ -7,7 +7,7 @@ export const TIPS: string[] = [
   'Remap keys in the lobby: click a key, then a skill from the Spellbook or Arsenal. A skill can sit on several keys, and they share its cooldown.',
   'Each class keeps its own gear, stash and records. Switch between the Mage and the Warrior in the sanctuary.',
   "The Warrior's Rending Cleave restores energy for every foe it hits.",
-  'Right-click gear to equip it. Shift-click it, or drag it to the bin, to throw it on the floor: click its name there to pick it up again. Whatever is left there is lost when a run starts.',
+  'Right-click gear to equip it. Shift-click it, or drag it out onto the floor, to throw it there: click its name there to pick it up again. Whatever is left there is lost when a run starts.',
   'The mouse wheel zooms the camera in and out. Hold the middle button and drag to rotate it.',
   'On a phone or tablet, drag a skill button to aim it and let go to cast. A tap casts at the nearest foe.',
   'Graphics quality adapts on its own. Pick a fixed level in the pause menu (Esc).',

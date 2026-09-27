@@ -29,6 +29,8 @@ export interface GroundNet {
   taken(id: string): void;
 }
 
+/** metres: the farthest an item is thrown (dragged farther, it lands this far out that way) */
+const THROW_MAX = 9;
 /** seconds in the air */
 const TOSS = 0.55;
 /** a guest's request to the host: tried again after this long without an answer */
@@ -87,12 +89,17 @@ export function groundSamples(): THREE.Object3D[] {
 const usersOf = (it: Item) => Object.values(CLASSES).filter((c) => basesFor(it.slot, c).includes(it.base));
 
 /** Throw an item from the local player's stash onto the floor, a couple of metres ahead. */
-export function throwItem(item: Item): void {
-  const p = G.player, f = p.facing, sx = Math.sin(f), sz = Math.cos(f);
-  // ahead, a little to either side, clear of the other drops
+export function throwItem(item: Item, at?: { x: number; z: number }): void {
+  const p = G.player;
+  // towards `at` (where it was dragged to, within a throw), else a few metres ahead
+  let f = p.facing, reach = 2.4;
+  if (at) { f = Math.atan2(at.x - p.pos.x, at.z - p.pos.z); reach = Math.min(THROW_MAX, Math.max(1.5, Math.hypot(at.x - p.pos.x, at.z - p.pos.z))); }
+  const sx = Math.sin(f), sz = Math.cos(f);
+  // a little to either side, clear of the other drops
   let x = 0, z = 0;
   for (let i = 0; i < 8; i++) {
-    const ahead = 2.4 + Math.random() * 0.8, side = (Math.random() - 0.5) * 1.6;
+    const ahead = at ? reach + (i ? (Math.random() - 0.5) * 0.8 : 0) : reach + Math.random() * 0.8;
+    const side = at ? (i ? (Math.random() - 0.5) * 0.8 : 0) : (Math.random() - 0.5) * 1.6;
     x = p.pos.x + sx * ahead + sz * side;
     z = p.pos.z + sz * ahead - sx * side;
     const r = Math.hypot(x, z), max = ARENA.radius - 1;
@@ -104,6 +111,15 @@ export function throwItem(item: Item): void {
   net?.dropped(d);
 }
 
+const ray = new THREE.Raycaster(), floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ndc = new THREE.Vector2(), hit = new THREE.Vector3();
+/** The floor under a point of the screen (client px), or null when it points above the horizon. */
+export function floorAt(cx: number, cy: number): { x: number; z: number } | null {
+  const r = G.renderer.domElement.getBoundingClientRect();
+  ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, G.camera);
+  return ray.ray.intersectPlane(floorPlane, hit) ? { x: hit.x, z: hit.z } : null;
+}
+
 /** A drop appears: thrown from where it was thrown from, or already lying there (`toss` false). */
 export function addDrop(g: GroundDrop, toss = true): void {
   if (drops.has(g.id)) return;
@@ -112,6 +128,7 @@ export function addDrop(g: GroundDrop, toss = true): void {
   const shard = new THREE.Mesh(geo!.shard, m.shard);
   const glow = new THREE.Mesh(geo!.glow, m.glow);
   glow.scale.setScalar(0.9);
+  glow.position.y = 0.04;   // clear of the floor: level with it, the two flicker in and out
   // a soft shaft of light, two crossed cards
   const beam = new THREE.Group();
   for (const a of [0, Math.PI / 2]) {

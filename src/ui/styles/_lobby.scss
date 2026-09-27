@@ -139,18 +139,9 @@
 .eslot.over { filter: brightness(1.8); }
 #stash.droppable { outline: 2px dashed rgba($highlight, .6); outline-offset: 3px; }
 .sitem[draggable="true"], .eslot[draggable="true"] { cursor: grab; }
-#junk { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); pointer-events: auto; z-index: 30;
-  display: flex; align-items: center; gap: 12px; padding: 18px 34px; font-family: var(--font-display); font-size: 18px; color: #ffb0a0;
-  background: linear-gradient(rgba(60,14,10,.95), rgba(24,6,5,.95)); border: 2px dashed rgba(255,90,70,.6); border-radius: 6px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.8); animation: rise .2s ease; }
-#junk .junk-icon { width: 30px; height: 30px; }
-#junk.over { background: linear-gradient(rgba(120,24,16,.97), rgba(50,10,8,.97)); border-color: #ff5a4a; transform: translateX(-50%) scale(1.06); }
-#junk .junk-shift, #junk.shift .junk-drop { display: none; }
-#junk.shift .junk-shift { display: inline; }
-/* Shift held: stash items show they will be salvaged on click */
+/* Shift held: stash items show a click throws them on the floor */
 #menu.discard .sitem[draggable="true"] { cursor: pointer; }
 #menu.discard .sitem[draggable="true"]:hover { filter: none; box-shadow: inset 0 0 0 2px #ff5a4a, 0 0 12px rgba(255,90,70,.6); }
-.junk-fly { position: fixed; margin: 0; z-index: 40; pointer-events: none; box-shadow: 0 0 14px var(--c, #fff); }
 
 /* stash stat filter: chips for the chosen stats, and a cog whose panel opens upwards over
    the paper doll, so the stash re-sorting stays in view while stats are toggled. Toggling must
@@ -192,7 +183,6 @@
 /* items without any chosen stat: greyed out, still usable */
 .sitem.filtered { opacity: .3; filter: grayscale(.9); }
 .sitem.filtered:hover { opacity: .75; filter: grayscale(.4) brightness(1.3); }
-#junk      { scale: var(--ui, 1); transform-origin: left bottom; }
 #menu .panel { zoom: var(--ui, 1); }
 
 /* ---------- lobby stowed (Space): panels fade out, the arena stays playable ---------- */

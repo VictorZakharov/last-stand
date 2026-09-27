@@ -7,7 +7,7 @@ import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { rarityOf, rarityIndex, itemPower, byValue, OFFHAND_WEAPON } from '../loot/items';
 import { SKILL_KEYS } from '../loot/loadout';
 import { equipFromStash, unequip, discard, discardEquipped, resetProfile, slotsFor } from '../loot/profile';
-import { throwItem } from '../game/groundItems';
+import { throwItem, floorAt } from '../game/groundItems';
 import { saveSlot } from '../loot/saveSlots';
 import { openSaves } from './saves';
 import { bindTooltip, hideTooltip, itemTooltip } from './tooltip';
@@ -53,7 +53,7 @@ export interface MenuHooks {
 let hooks: MenuHooks;
 const newIds = new Set<string>();
 /** Gear given up in the lobby is thrown on the floor, where it can be picked up again. */
-const toss = (it: Item | undefined): void => { if (it) throwItem(it); };
+const toss = (it: Item | undefined, at?: { x: number; z: number } | null): void => { if (it) throwItem(it, at ?? undefined); };
 
 /** Controls help reflects the current key bindings (or the touch controls, when a finger is the input). */
 export function renderControlsHelp(): void {
@@ -222,21 +222,22 @@ export function initMenus(h: MenuHooks): void {
     e.preventDefault();
     if (drag?.from === 'equip') { unequip(G.profile, drag.slot); sfx.click(); endDrag(); changed(); }
   });
-  const junk = $('#junk');
-  junk.addEventListener('dragover', (e) => { if (drag) { e.preventDefault(); junk.classList.add('over'); } });
-  junk.addEventListener('dragleave', () => junk.classList.remove('over'));
-  junk.addEventListener('drop', (e) => {
+  // an item dragged out of the panels onto the game field is thrown on the floor
+  const field = (t: EventTarget | null): boolean => t === G.renderer.domElement || !!(t as Element | null)?.closest?.('#floaters');
+  document.addEventListener('dragover', (e) => { if (drag && field(e.target)) { e.preventDefault(); e.dataTransfer!.dropEffect = 'move'; } });
+  document.addEventListener('drop', (e) => {
+    if (!drag || !field(e.target)) return;
     e.preventDefault();
-    if (!drag) return;
     const { from, item } = drag;
     newIds.delete(item.id);
-    toss(from === 'stash' ? discard(G.profile, item.id) : discardEquipped(G.profile, drag.slot));
+    // it lands where it was let go (within a throw)
+    toss(from === 'stash' ? discard(G.profile, item.id) : discardEquipped(G.profile, drag.slot), floorAt(e.clientX, e.clientY));
     sfx.salvage();
     endDrag();
     changed();
   });
-  // holding Shift in the sanctuary shows the junk bin: Shift-click throws a stash item on the floor
-  const setShift = (on: boolean): void => { if (on !== shiftHeld) { shiftHeld = on; syncJunk(); } };
+  // holding Shift in the sanctuary marks the stash items: Shift-click throws one on the floor
+  const setShift = (on: boolean): void => { if (on !== shiftHeld) { shiftHeld = on; syncDiscard(); } };
   window.addEventListener('keydown', (e) => { if (e.key === 'Shift') setShift(true); });
   window.addEventListener('keyup', (e) => { if (e.key === 'Shift') setShift(false); });
   window.addEventListener('blur', () => setShift(false));
@@ -246,7 +247,7 @@ export function showMenu(v: boolean): void {
   $('#menu').classList.toggle('hidden', !v);
   if (v) { toggleMenuStowed(false); openBook(false); renderMenu(); }
   else openSaves(false);   // a co-op host can start the run while the save slots are open
-  syncJunk();
+  syncDiscard();
 }
 
 /** Fade the lobby panels out (to walk around and practice on the dummies) or back in. */
@@ -256,7 +257,7 @@ export function toggleMenuStowed(stowed?: boolean): void {
   focusSlot(null);
   hideTooltip();
   if (menu.classList.contains('stowed')) { endDrag(); openStashFilter(false); }
-  syncJunk();
+  syncDiscard();
 }
 // Short screens and upright tablets show one lobby panel at a time over the scene; the view moves
 // so the character stands in the free space beside it (or below it, upright).
@@ -391,7 +392,7 @@ export function renderMenu(): void {
     if (!it) bindTooltip(d, () => ({ html: `<div class="tt-card empty"><div class="tt-name">${label}</div><div class="tt-type">Empty</div></div>`, color: '#666' }));
     else {
       // a weapon in the off-hand: its damage (the implicit) counts for less
-      const how = 'Click or drag to the stash to unequip · drag to the bin to throw it on the floor';
+      const how = 'Click or drag to the stash to unequip · drag it onto the floor to throw it there';
       bindTooltip(d, () => ({ ...itemTooltip(it, false)(), foot: slot === 'offhand' && it.slot === 'weapon'
         ? `In the off-hand its damage bonus (the implicit) counts at ${OFFHAND_WEAPON * 100}%<br>${how}` : how }));
       const doUnequip = () => { unequip(p, slot); hideTooltip(); sfx.click(); changed(); };
@@ -427,12 +428,11 @@ export function renderMenu(): void {
     d.dataset.slot = it.slot;
     d.innerHTML = itemIconSVG(it) + GLOW;
     bindSlotFocus(d, it.slot);
-    bindTooltip(d, () => ({ ...itemTooltip(it)(), foot: 'Right-click or drag to equip · Shift-click or drag to the bin to throw it on the floor' }));
+    bindTooltip(d, () => ({ ...itemTooltip(it)(), foot: 'Right-click or drag to equip · Shift-click, or drag it onto the floor, to throw it there' }));
     const equip = () => { newIds.delete(it.id); equipFromStash(p, it.id); hideTooltip(); sfx.click(); changed(); };
     d.onclick = (e) => {
       if (isTouch()) { openItemSheet(it, true, 'Equip', equip, () => { newIds.delete(it.id); toss(discard(p, it.id)); sfx.salvage(); changed(); }); return; }
       if (!e.shiftKey) { equip(); return; }
-      flyToJunk(d);
       newIds.delete(it.id);
       toss(discard(p, it.id));
       hideTooltip();
@@ -500,7 +500,6 @@ function makeDraggable(el: HTMLElement, payload: ItemDrag): void {
     focusSlot(null);
     e.dataTransfer!.effectAllowed = 'move';
     e.dataTransfer!.setData('text/plain', payload.item.id);
-    $('#junk').classList.remove('hidden');
     if (payload.from === 'stash') document.querySelector(`.eslot[data-slot="${payload.item.slot}"]`)?.classList.add('droppable');
     else $('#stash').classList.add('droppable');
   });
@@ -510,46 +509,16 @@ function makeDraggable(el: HTMLElement, payload: ItemDrag): void {
 // Also called from drop handlers: a re-render may remove the dragged node before 'dragend' fires.
 function endDrag(): void {
   drag = null;
-  syncJunk();
+  syncDiscard();
   document.querySelectorAll('.droppable, .over').forEach((n) => n.classList.remove('droppable', 'over'));
 }
 
-// --- junk bin -----------------------------------------------------------------------
+// --- Shift: a click throws a stash item on the floor ---------------------------------
 let shiftHeld = false;
 
-/** The bin shows while an item is dragged, or while Shift is held over the open sanctuary. */
-function syncJunk(): void {
+function syncDiscard(): void {
   const menu = $('#menu');
-  const discard = shiftHeld && !drag && !menu.classList.contains('hidden') && !menu.classList.contains('stowed');
-  menu.classList.toggle('discard', discard);
-  const junk = $('#junk');
-  junk.classList.toggle('hidden', !drag && !discard);
-  junk.classList.toggle('shift', discard);
-}
-
-/** A copy of the item's icon arcs into the junk bin, spinning and shrinking, and the bin gulps. */
-function flyToJunk(from: HTMLElement): void {
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const bin = $('#junk .junk-icon');
-  const a = from.getBoundingClientRect(), b = bin.getBoundingClientRect();
-  const ghost = from.cloneNode(true) as HTMLElement;
-  ghost.classList.add('junk-fly');
-  Object.assign(ghost.style, { left: `${a.left}px`, top: `${a.top}px`, width: `${a.width}px`, height: `${a.height}px` });
-  document.body.appendChild(ghost);
-  // a quadratic arc that rises before dropping into the bin
-  const dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + b.height / 2 - (a.top + a.height / 2);
-  const cx = dx * 0.35, cy = Math.min(dy, 0) - 90 - Math.abs(dx) * 0.15;
-  const spin = dx < 0 ? -1 : 1;
-  const frames: Keyframe[] = [];
-  for (let i = 0; i <= 10; i++) {
-    const t = i / 10, u = 1 - t;
-    const x = 2 * u * t * cx + t * t * dx, y = 2 * u * t * cy + t * t * dy;
-    frames.push({ transform: `translate(${x}px, ${y}px) rotate(${spin * 320 * t * t}deg) scale(${1 - 0.72 * t})`, opacity: t < 0.85 ? 1 : (1 - t) / 0.15 });
-  }
-  ghost.animate(frames, { duration: 560, easing: 'cubic-bezier(.35,0,.65,1)' }).finished.then(() => {
-    ghost.remove();
-    bin.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.35) rotate(-10deg)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' });
-  });
+  menu.classList.toggle('discard', shiftHeld && !drag && !menu.classList.contains('hidden') && !menu.classList.contains('stowed'));
 }
 
 function changed(): void {
