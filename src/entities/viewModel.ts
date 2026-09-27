@@ -1,22 +1,22 @@
 // First person: the hero's own arms and weapon in view. The body animates as in every other view, so each
 // attack moves the same; through the eyes everything but the arms goes on a layer the camera doesn't
-// draw, and the model is placed so its eyes are the camera's and it tilts with the view's pitch, the arms
-// brought a little up and forward so the hands and weapon sit in the frame. The placement holds until
-// the next frame's pose, so skills cast in between leave from the weapon in view (`Player.castPoint`).
+// draw, and the model is placed so the camera sits just above its neck, turned and tilted with the view
+// and tipped back a little so the hands and weapon sit in the frame. The placement holds until the next
+// frame's pose, so skills cast in between leave from the weapon in view (`Player.castPoint`).
 import * as THREE from 'three';
 import type { Model } from '../types';
 
-/** Where the eyes sit against the arms, in the hero's space (x left, y up, z forward): moved back and
- *  down from the head, so the hands and weapon come into the lower part of the view. */
-const OFFSET = new THREE.Vector3(0, 0.12, 0.06);
-/** and tipped back about the eyes, so what the hands hold low and ahead rises into the frame */
-const TILT = -0.3;
+/** Where the camera sits against the neck, in the hero's space (x left, y up, z forward): just above
+ *  it, so the shoulders stay below the view and the hands and weapon come into its lower part. */
+const NECK_CAM = new THREE.Vector3(0, 0.25, 0.1);
+/** tipped back about the camera, so what the hands hold low and ahead rises into the frame */
+const TILT = -0.4;
 const HIDDEN = 1;
 
 const body = new WeakMap<Model, THREE.Object3D[]>();
 const shown = new WeakSet<Model>();
 /** The pose's own placement of the root, and ours over it: a frame with no new pose (paused) starts again
- *  from the pose's, or the eyes would be measured from where we put the hero last time */
+ *  from the pose's, or the neck would be measured where we put the hero last time */
 const placed = new WeakMap<Model, { pos: THREE.Vector3; quat: THREE.Quaternion; ourPos: THREE.Vector3; ourQuat: THREE.Quaternion }>();
 const _eye = new THREE.Vector3(), _m = new THREE.Matrix4(), _t = new THREE.Matrix4(), _t2 = new THREE.Matrix4(), _s = new THREE.Vector3(), _flip = new THREE.Matrix4().makeRotationY(Math.PI).multiply(new THREE.Matrix4().makeRotationX(TILT));
 
@@ -53,10 +53,13 @@ export function viewArms(m: Model, on: boolean, cam: THREE.Camera): void {
   if (!on || !parent) return;
   if (!p) placed.set(m, p = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), ourPos: new THREE.Vector3(), ourQuat: new THREE.Quaternion() });
   p.pos.copy(root.position); p.quat.copy(root.quaternion);
-  // the eyes in the hero's space as it stands, then the hero placed so they are the camera's
   root.updateWorldMatrix(true, false);
   cam.updateMatrixWorld();
-  root.worldToLocal(_eye.setFromMatrixPosition(cam.matrixWorld)).sub(OFFSET);
+  // the camera sits just above the neck, wherever the pose has taken it: the head rides the spine, so a
+  // lean or a crouch doesn't bring the shoulders up under the camera
+  const neck = m.joints?.neck;
+  if (neck) root.worldToLocal(neck.getWorldPosition(_eye)).add(NECK_CAM);
+  else root.worldToLocal(_eye.setFromMatrixPosition(cam.matrixWorld));
   _m.copy(cam.matrixWorld).multiply(_flip);
   // (the model's own scale kept: the heroes are built a little over life size, and reach reads it)
   _m.multiply(_t.makeScale(root.scale.x, root.scale.y, root.scale.z)).multiply(_t2.makeTranslation(-_eye.x, -_eye.y, -_eye.z));

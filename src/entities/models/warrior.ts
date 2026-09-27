@@ -409,10 +409,13 @@ export function buildWarrior(): Model {
     offWeapons.set(name, { ...w, group: g });
   }
   let offHeld: Weapon | null = null;
-  /** seen through its own eyes (entities/viewModel.ts): Power Strike's high guard (shoulder pitch, elbow,
-   *  how far the blade turns towards the arm) */
+  /** seen through its own eyes (entities/viewModel.ts), what would sit out of the frame is brought into
+   *  it: Power Strike's high guard (shoulder pitch, elbow, how far the blade turns towards the arm), the
+   *  resting weapons (shoulder, elbow) and the raised shield (added to shoulder and elbow) */
   let fp = false;
-  const FP_GUARD = [-0.5, -1.2, 1];
+  const FP_GUARD = [-1.0, -0.8, 1];
+  const FP_STANCE = [-0.4, -0.3];
+  const FP_BLOCK = [-0.25, 0.05], NO_BLOCK = [0, 0];
 
   // --- round shield on the left fist: planks behind a painted navy face, a steel rim with rivets and a
   // domed boss. At rest it hangs at the side facing outwards; raised (or charging) it swings round in
@@ -514,6 +517,11 @@ export function buildWarrior(): Model {
     // weapon held like the first, mirrored
     if (shield.visible) { j.shoulderL.rotation.z += 0.2; j.elbowL.rotation.x += -0.35; }
     else if (offHeld) { j.shoulderL.rotation.x += -0.3; j.shoulderL.rotation.z += 0.1; j.elbowL.rotation.x += -0.8; }
+    // through the eyes the weapons are held higher and further out, or the hands sit below the frame
+    if (fp) {
+      j.shoulderR.rotation.x += FP_STANCE[0]; j.elbowR.rotation.x += FP_STANCE[1];
+      if (offHeld) { j.shoulderL.rotation.x += FP_STANCE[0]; j.elbowL.rotation.x += FP_STANCE[1]; }
+    }
     let guard = 0;   // 0: shield at the side, 1: in front
     j.spine.rotation.x += move * 0.14 * dir;
     j.body.rotation.z += (st.lean || 0) * 0.12;
@@ -609,8 +617,10 @@ export function buildWarrior(): Model {
         // the forearm points forward so the shield (facing out of the fist) faces the foe; the yaw
         // undoes the chest's turn
         const L = j.shoulderL.rotation;
-        L.x = lerp(L.x, -0.35 + 0.25 * jolt, w); L.z = lerp(L.z, -0.3, w); L.y = 0.5 * w;
-        j.elbowL.rotation.set(lerp(j.elbowL.rotation.x, -1.35 + 0.35 * jolt, w), 0, 0);
+        // (seen through the eyes, raised higher: at its usual height it stays below the view)
+        const bg = fp ? FP_BLOCK : NO_BLOCK;
+        L.x = lerp(L.x, -0.35 + bg[0] + 0.25 * jolt, w); L.z = lerp(L.z, -0.3, w); L.y = 0.5 * w;
+        j.elbowL.rotation.set(lerp(j.elbowL.rotation.x, -1.35 + bg[1] + 0.35 * jolt, w), 0, 0);
         R.x = lerp(R.x, -1.7, w); R.z = lerp(R.z, -0.35, w); R.y = 0.2 * w;
         j.elbowR.rotation.x = lerp(j.elbowR.rotation.x, -1.2, w);
         j.handR.rotation.x += 0.5 * w;

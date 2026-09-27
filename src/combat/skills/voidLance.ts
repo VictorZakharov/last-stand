@@ -29,6 +29,8 @@ const COLOR = new THREE.Color(0x5dffa8);
 const TICK = 0.12;
 /** the portal's radius once open (m); it opens from a spark to this, and shrinks a little while the beam pours out */
 const PORTAL_R = 0.72;
+/** seen through the eyes, a hand's length from the camera: its share of the full size */
+const EYES_R = 0.45;
 
 const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true).translate(0, 0.5, 0);
 /** the portal's quad spans -1..1; its rim sits at RIM of that */
@@ -166,9 +168,9 @@ const skill: ChannelSkill<LanceState> = {
     if (_dir.lengthSq() < 1e-4) _dir.set(Math.sin(player.facing), 0, Math.cos(player.facing));
     _dir.normalize();
     // the portal hangs in front of the chest, where the free hand pushes into it; seen through the
-    // eyes, a smaller one in front of the hand in view (full size, it would fill the view)
+    // eyes, a smaller one just ahead of the hand in view (full size, it would fill the view)
     const eyes = player.local && viewMode() === 'first' && viewSettled();
-    if (eyes) _c.copy(hand).addScaledVector(_dir, 0.6);
+    if (eyes) _c.copy(hand).addScaledVector(_dir, 0.45);
     else _c.set(player.pos.x + _dir.x * 0.85, 1.7, player.pos.z + _dir.z * 0.85);
     const origin = _c;
 
@@ -178,7 +180,7 @@ const skill: ChannelSkill<LanceState> = {
     _v.crossVectors(_n, _u);
     st.portal.quaternion.setFromRotationMatrix(_m.makeBasis(_u, _v, _n));
     st.portal.position.copy(origin);
-    const radius = PORTAL_R * (eyes ? 0.22 : 1) * (0.2 + 0.8 * easeOutBack(open)) * (st.firing ? 0.9 + Math.sin(st.t * 9) * 0.03 : 1);
+    const radius = PORTAL_R * (eyes ? EYES_R : 1) * (0.2 + 0.8 * easeOutBack(open)) * (st.firing ? 0.9 + Math.sin(st.t * 9) * 0.03 : 1);
     st.portal.scale.setScalar(radius / RIM);
     st.portalMat.uniforms.uTime.value = G.time;
     st.portalMat.uniforms.uOpen.value = open;
