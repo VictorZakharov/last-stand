@@ -25,6 +25,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
+      actions: read
       pull-requests: write
     steps:
       - name: Find the open pull request
@@ -32,6 +33,10 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
+            // this job can wait for a runner longer than a quick build takes: once the build is done,
+            // the comment is the publish job's, and "building" would overwrite its link
+            const { data: build } = await github.rest.actions.getWorkflowRun({ ...context.repo, run_id: context.payload.workflow_run.id });
+            if (build.status === 'completed') { core.info('build already finished'); return core.setOutput('number', ''); }
             const prs = await github.paginate(github.rest.pulls.list, { ...context.repo, state: 'open', per_page: 100 });
             core.setOutput('number', String(prs.find((p) => p.head.sha === context.payload.workflow_run.head_sha)?.number ?? ''));
 
