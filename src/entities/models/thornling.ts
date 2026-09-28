@@ -141,9 +141,9 @@ export function buildThornling(): Model {
     const a = st.action;
     if (a && a.name === 'attack') {
       // leap-slash with both claws
-      const k = a.t;
-      const wind = ramp(k, 0, 0.5) * (1 - ramp(k, 0.55, 0.7));
-      const strike = ramp(k, 0.55, 0.68) * (1 - ramp(k, 0.8, 1));
+      const k = a.t, h = a.hit ?? 0.5;
+      const wind = ramp(k, 0, h - 0.16) * (1 - ramp(k, h - 0.14, h));
+      const strike = ramp(k, h - 0.14, h) * (1 - ramp(k, h + 0.05, 1));
       j.shoulderL.rotation.x += -2.4 * wind + 0.8 * strike; j.shoulderR.rotation.x += -2.4 * wind + 0.8 * strike;
       j.spine.rotation.x += -0.35 * wind + 0.55 * strike;
       j.kneeL.rotation.x += 0.5 * wind; j.kneeR.rotation.x += 0.5 * wind;

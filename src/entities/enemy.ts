@@ -301,7 +301,8 @@ export class Enemy {
     this.model.root.rotation.y = this.facing;
     this.model.animate({
       t, dt, phase: this.phase, move,
-      action: this.action ? { name: this.action.name, t: Math.min(1, this.action.t / this.action.dur) } : null,
+      // (from the data, so a co-op guest's copy has it too)
+      action: this.action ? { name: this.action.name, t: Math.min(1, this.action.t / this.action.dur), hit: this.def.windup / Math.max(0.01, this.def.windup + this.def.recover) } : null,
       hit: this.hitT, dead: this.deadT >= 0 ? Math.min(1, this.deadT / 0.8) : -1,
     });
   }

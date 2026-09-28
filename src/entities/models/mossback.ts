@@ -128,9 +128,9 @@ export function buildMossback(): Model {
     const a = st.action;
     if (a && a.name === 'attack') {
       // overhead double-fist smash
-      const k = a.t;
-      const up = ramp(k, 0, 0.55) * (1 - ramp(k, 0.6, 0.72));
-      const down = ramp(k, 0.6, 0.72) * (1 - ramp(k, 0.85, 1));
+      const k = a.t, h = a.hit ?? 0.5;
+      const up = ramp(k, 0, h - 0.16) * (1 - ramp(k, h - 0.14, h));
+      const down = ramp(k, h - 0.14, h) * (1 - ramp(k, h + 0.05, 1));
       j.shoulderL.rotation.x += -2.6 * up - 0.3 * down; j.shoulderR.rotation.x += -2.6 * up - 0.3 * down;
       j.spine.rotation.x += -0.4 * up + 0.6 * down;
       j.body.position.y += -0.08 * down;

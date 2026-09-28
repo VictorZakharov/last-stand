@@ -143,9 +143,10 @@ export function buildHusk(): Model {
 
     const a = st.action;
     if (a && a.name === 'attack') {
-      const k = a.t;
-      const up = ramp(k, 0, 0.55) * (1 - ramp(k, 0.6, 0.75));
-      const swing = ramp(k, 0.6, 0.75) * (1 - ramp(k, 0.8, 1));
+      // the blow comes down to connect at `hit`, when the damage lands
+      const k = a.t, h = a.hit ?? 0.5;
+      const up = ramp(k, 0, h - 0.16) * (1 - ramp(k, h - 0.14, h));
+      const swing = ramp(k, h - 0.14, h) * (1 - ramp(k, h + 0.05, 1));
       j.shoulderL.rotation.x += -1.9 * up + 0.4 * swing; j.shoulderR.rotation.x += -1.7 * up + 0.4 * swing;
       j.spine.rotation.x += -0.25 * up + 0.45 * swing;
       jaw.rotation.x += 0.5 * pulse(k, 0.4, 0.8);

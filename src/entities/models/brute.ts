@@ -168,8 +168,8 @@ export function buildBrute(variant: Variant = 'brute'): Model {
     if (a) {
       const k = a.t;
       if (a.name === 'slam' || a.name === 'attack') {
-        const up = ramp(k, 0, 0.7) * (1 - ramp(k, 0.72, 0.8));
-        const down = ramp(k, 0.72, 0.8) * (1 - ramp(k, 0.9, 1));
+        const h = a.hit ?? 0.55, up = ramp(k, 0, h - 0.12) * (1 - ramp(k, h - 0.1, h));
+        const down = ramp(k, h - 0.1, h) * (1 - ramp(k, h + 0.08, 1));
         j.shoulderL.rotation.x += -2.9 * up - 0.9 * down; j.shoulderR.rotation.x += -2.9 * up - 0.9 * down;
         j.elbowL.rotation.x += -0.5 * up; j.elbowR.rotation.x += -0.5 * up;
         j.spine.rotation.x += -0.35 * up + 0.7 * down;
