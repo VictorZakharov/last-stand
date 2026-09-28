@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
 import { engravedSteel, embroidered, arcaneColumn, projectUV, steelRegion } from '../../core/engraving';
-import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet } from './rig';
+import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, gem as gemGeo, Skirt, scaleUV, type SurfaceFn } from './armor';
 import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
@@ -298,6 +298,14 @@ export function buildMage(): Model {
   let aim = 0, aimV = 0, aimedAt = -9;
   /** how long after a shot the staff stays down */
   const AIM_HOLD = 1.2;
+  /** seen through its own eyes (entities/viewModel.ts); per gesture, how far the free hand moves (chest
+   *  space: x left, y up, z forward) as the gesture plays */
+  let fp = false;
+  /** the staff arm through the eyes: added to its shoulder (pitch, roll, yaw), and pitch undone while casting */
+  const FP_STAFF = [0.1, -0.3, -0.2, 0.6];
+  const FP_POSE: Record<string, number[]> = { cast: [-0.2, 0.35, 0.12], channel: [0.5, 0.12, -0.1], buff: [-0.25, 0.05, 0.15] };
+  /** where the free arm's elbow points when it reaches (out to the left, down and back) */
+  const POLE_L = V(1, -0.7, -0.6);
   /** the crystal's casting glow, eased: a held stream of casts keeps it up instead of flashing each one */
   let charged = 0;
 
@@ -419,6 +427,23 @@ export function buildMage(): Model {
         poseHand(handL, 0.45 - 0.35 * w, 0.12 + 0.45 * w);
       }
     }
+    // through the eyes the free hand's gestures play higher and to the left, where they're seen but leave
+    // the middle of the view clear (as posed, they pass low in its corner or right through its middle):
+    // the hand keeps its motion, shifted in the chest's space, and the arm reaches it
+    // and the staff is held out to the right, its crystal clear of the middle; the cast's raise of the
+    // staff arm is kept down
+    if (fp) {
+      const S = FP_STAFF, c = a?.name === 'cast' ? pulse(a.t, 0, 1) : 0;
+      j.shoulderR.rotation.x += S[0] + S[3] * c; j.shoulderR.rotation.z += S[1]; j.shoulderR.rotation.y += S[2];
+    }
+    const shift = fp && a ? FP_POSE[a.name] : undefined;
+    if (shift) {
+      const w = a!.name === 'channel' ? ramp(a!.time ?? 0, 0, 0.18) : pulse(a!.t, 0, 1);
+      root.updateMatrixWorld(true);
+      j.chest.worldToLocal(j.handL.getWorldPosition(_hp));
+      _hp.x += shift[0] * w; _hp.y += shift[1] * w; _hp.z += shift[2] * w;
+      reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, _hp, POLE_L);
+    }
     if (st.hit > 0) { j.spine.rotation.x += -0.25 * st.hit; j.neck.rotation.x += -0.2 * st.hit; }
     if (st.dead >= 0) deathFall(j, st.dead, -1);
     // feet on the floor: a crouch bends the knees instead of sinking the feet, a planted foot lies flat
@@ -455,7 +480,7 @@ export function buildMage(): Model {
     worldObjects: [cape.mesh],
     reset: () => cape.reset(),
     // through the eyes the bells, seen from behind, would hide the hands: narrow and shorter
-    firstPerson: (on) => { for (const b of bells) b.scale.set(on ? 0.6 : 1, on ? 0.75 : 1, on ? 0.6 : 1); },
+    firstPerson: (on) => { fp = on; for (const b of bells) b.scale.set(on ? 0.6 : 1, on ? 0.75 : 1, on ? 0.6 : 1); },
     dispose() {
       kit.dispose();
       cape.dispose();
