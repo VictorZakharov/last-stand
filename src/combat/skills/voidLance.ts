@@ -9,6 +9,8 @@ import { flash, release } from '../../fx/lights';
 import { sfx } from '../../core/audio';
 import { viewMode } from '../../core/renderer';
 import { rand } from '../../util';
+import { hurtProp, PROP_DAMAGE } from '../../world/destructible';
+import type { Obstacle } from '../../types';
 import type { ChannelSkill, Needs } from './types';
 import type { LightSlot } from '../../fx/lights';
 
@@ -213,15 +215,17 @@ const skill: ChannelSkill<LanceState> = {
     const ft = st.t - opens;
 
     // beam stops at obstacles that reach up to it (not enemies: it pierces)
-    let len = def.length;
+    let len = def.length, blocker: Obstacle | null = null;
     for (const o of G.arena.obstacles) {
       if (o.h <= origin.y) continue;
       const ox = o.x - origin.x, oz = o.z - origin.z;
       const proj = ox * _dir.x + oz * _dir.z;
       if (proj <= 0 || proj > len) continue;
       const perp = Math.abs(ox * _dir.z - oz * _dir.x);
-      if (perp < o.r) len = Math.min(len, proj - Math.sqrt(o.r * o.r - perp * perp));
+      if (perp < o.r) { const l = proj - Math.sqrt(o.r * o.r - perp * perp); if (l < len) { len = l; blocker = o; } }
     }
+    // focused fire wears down what stops it
+    if (blocker && st.firing) hurtProp(blocker, PROP_DAMAGE.beam * dt);
     const edge = G.arena.radius + 1;
     for (let k = 0; k < 20 && Math.hypot(origin.x + _dir.x * len, origin.z + _dir.z * len) > edge; k++) len *= 0.95;
 

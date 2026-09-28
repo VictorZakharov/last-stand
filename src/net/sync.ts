@@ -9,6 +9,7 @@ import { setSpawnSink, spawnEnemy } from '../entities/spawner';
 import { setFxSink, FX, type FxName } from '../entities/enemyAI';
 import { setNumberSink, damageNumber } from '../combat/damage';
 import { setHitSink, type HitResult } from '../entities/player';
+import { setPropSink, setPropLife } from '../world/destructible';
 import { runHooks, vote, playerOut, showCleared, startNextWave, gainLoot, localOut, endRun, bankedAway, type RunPhase } from '../game/run';
 import { on, emit } from '../events';
 import { sfx } from '../core/audio';
@@ -25,6 +26,7 @@ type WorldEvent =
   | { k: 'fx'; n: FxName; a: number[] }
   | { k: 'num'; s: number; id: number; v: number; c: 0 | 1; ty: DamageType }
   | { k: 'hit'; s: number; r: HitResult }
+  | { k: 'prop'; i: number; l: number }
   | { k: 'clear' }
   | { k: 'next'; w: number }
   | { k: 'loot'; s: number; item: Item }
@@ -51,6 +53,7 @@ export function initSync(): void {
   setFxSink((n, a) => push({ k: 'fx', n, a: a.map(r2) }));
   setNumberSink((by, e, v, c, ty) => push({ k: 'num', s: by.slot, id: e.id, v: Math.round(v), c: c ? 1 : 0, ty }));
   setHitSink((p, r) => push({ k: 'hit', s: p.slot, r: { taken: r2(r.taken), blocked: r2(r.blocked), broke: r.broke, absorbed: r2(r.absorbed) } }));
+  setPropSink((i, l) => push({ k: 'prop', i, l }));
   on('enemyKilled', (e) => push({ k: 'die', id: e.id }));
   runHooks.cleared = () => push({ k: 'clear' });
   runHooks.nextWave = () => push({ k: 'next', w: G.run!.wave });
@@ -110,6 +113,7 @@ function apply(ev: WorldEvent): void {
       return;
     }
     case 'hit': bySlot(ev.s)?.applyHit(ev.r); return;
+    case 'prop': { const p = G.arena.props[ev.i]; if (p) setPropLife(p, ev.l); return; }
     case 'clear': G.run!.phase = 'cleared'; G.run!.votes.clear(); G.arena.setCalm(1); showCleared(); return;
     case 'next': G.run!.wave = ev.w; G.run!.phase = 'countdown'; startNextWave(); return;
     case 'loot': if (ev.s === G.player.slot) gainLoot({ ...ev.item, id: newItemId() }); return;

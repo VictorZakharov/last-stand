@@ -7,7 +7,7 @@ export type FloatKind = 'dmg' | 'crit' | 'heal' | 'player' | 'info';
 
 interface Floater { el: HTMLDivElement; x: number; y: number; z: number; t: number; life: number; vx: number }
 /** DOM element tracking a world position; `getPos` returns null to hide it. */
-type Anchored = HTMLElement & { _getPos: () => WorldPos | null };
+type Anchored = HTMLElement & { _getPos: () => WorldPos | null; _clamp?: boolean };
 
 let layer: HTMLElement | null = null;
 const floats: Floater[] = [];
@@ -33,9 +33,10 @@ export function floatText(x: number, y: number, z: number, text: string | number
 }
 
 /** Attach an element that tracks a world position. Remove it with removeAnchored(). */
-export function addAnchored(el: HTMLElement, getPos: () => WorldPos | null): HTMLElement {
+export function addAnchored(el: HTMLElement, getPos: () => WorldPos | null, clamp = false): HTMLElement {
   const a = el as Anchored;
   a._getPos = getPos;
+  a._clamp = clamp;
   layer?.appendChild(a);
   anchored.add(a);
   return a;
@@ -65,7 +66,10 @@ export function updateFloaters(dt: number): void {
     const p = project(w.x, w.y, w.z);
     if (p.behind) { el.style.display = 'none'; continue; }
     el.style.display = '';
-    el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%,-100%)`;
+    // a clamped one stays on screen (above the hotbar, below the top): a tall prop seen from close by reaches past the frame
+    const x = el._clamp ? Math.min(window.innerWidth - 40, Math.max(40, p.x)) : p.x;
+    const y = el._clamp ? Math.min(window.innerHeight - 110, Math.max(40, p.y)) : p.y;
+    el.style.transform = `translate(${x}px, ${y}px) translate(-50%,-100%)`;
   }
 }
 

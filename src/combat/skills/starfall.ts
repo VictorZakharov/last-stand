@@ -11,6 +11,7 @@ import { flash } from '../../fx/lights';
 import { addShake } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
+import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
 import type { InstantSkill, Needs } from './types';
 import type { Player } from '../../entities/player';
 
@@ -95,6 +96,7 @@ function impact(player: Player, def: Def, p: THREE.Vector3): void {
   flash({ color: COLOR, intensity: 14, distance: 5, life: 0.3, pos: { x: p.x, y: p.y + 1.5, z: p.z } });
   addShake(0.16);
   sfx.starfallImpact();
+  hurtPropsIn(player, p.x, p.z, def.radius * 0.8, PROP_DAMAGE.blast);
   for (const e of G.enemies) {
     if (!e.alive) continue;
     const d = Math.hypot(e.pos.x - p.x, e.pos.z - p.z) - e.radius * 0.5;

@@ -9,6 +9,7 @@ import { setAdaptScale } from '../core/renderer';
 import { bakeStaticShadows, type Biome, type BiomeBuilder } from './props';
 import { buildCrypt } from './crypt';
 import { buildForest } from './forest';
+import { restoreProps } from './destructible';
 
 export { groundHeight };
 export type { Portal } from './props';
@@ -69,6 +70,10 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   return {
     get biome() { return biome; },
     get obstacles() { return active.obstacles; },
+    /** the breakable ones (`world/destructible.ts`) */
+    get props() { return active.props; },
+    /** every biome's props whole again (a new run, the lobby) */
+    restoreProps() { for (const id of BIOME_IDS) restoreProps(biomes[id].b.props); },
     /** spawn gates: {pos, dir (into the arena), pulse()} */
     get portals() { return active.portals; },
     moon,

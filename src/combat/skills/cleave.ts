@@ -8,6 +8,8 @@ import { sfx } from '../../core/audio';
 import { rand } from '../../util';
 import { slashArc, slashMaterial, angleBetween } from './slash';
 import type { InstantSkill, Needs } from './types';
+import { hurtProp, PROP_DAMAGE, type Prop } from '../../world/destructible';
+import { dealsDamage } from '../../net/role';
 import type { Player } from '../../entities/player';
 
 type Def = Needs<'damage' | 'range' | 'arc' | 'knock' | 'color'>;
@@ -45,6 +47,18 @@ export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, fa
     hitEnemy(e, def.damage, { by: player, tags: def.tags, type: opts.type ?? 'physical', knock: opts.knock, from: p });
     sparks(e.pos.x, e.height * 0.55, e.pos.z, 0xffd9a0, 8);
     hits++;
+  }
+  // and the props in reach take the blow too (a log is several circles, but one prop takes one blow)
+  if (dealsDamage(player)) {
+    const struck = new Set<Prop>();
+    for (const o of G.arena.obstacles) {
+      if (!o.prop || struck.has(o.prop)) continue;
+      const dx = o.x - p.x, dz = o.z - p.z, d = Math.hypot(dx, dz);
+      if (d > def.range + o.r || (d > o.r + 0.6 && angleBetween(Math.atan2(dx, dz), facing) > def.arc / 2)) continue;
+      struck.add(o.prop);
+      if (hurtProp(o, PROP_DAMAGE.swing)) continue;
+      sparks(o.x, Math.min(o.h, 1) * 0.6, o.z, 0xffd9a0, 5);
+    }
   }
   return hits;
 }

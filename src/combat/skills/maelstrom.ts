@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
+import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
 import { addEffect, lightning, shockwave } from '../../fx/effects';
 import { particles, col } from '../../fx/particles';
 import { flash, release } from '../../fx/lights';
@@ -110,6 +111,7 @@ const skill: InstantSkill = {
         if (tick >= TICK && t < def.duration - 0.2) {
           tick -= TICK;
           const inside = G.enemies.filter((e) => e.alive && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < def.radius + e.radius);
+          hurtPropsIn(player, pos.x, pos.z, def.radius, PROP_DAMAGE.zone * TICK);
           for (const e of inside) hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'lightning', silent: true });
           const top = new THREE.Vector3(pos.x, 4, pos.z);
           const targets = inside.sort(() => Math.random() - 0.5).slice(0, 2);

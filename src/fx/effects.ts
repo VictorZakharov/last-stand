@@ -1,6 +1,7 @@
 // Transient visual effects (shockwaves, decals, telegraphs, lightning, ice).
 // Each effect is { update(dt) -> boolean alive, dispose() }.
 import * as THREE from 'three';
+import { initRubble, updateRubble, clearRubble } from './rubble';
 import { G } from '../state';
 import { additive, nearGlow } from '../core/materials';
 import { radialDecal, runeCircle } from '../core/textures';
@@ -19,6 +20,7 @@ const GEO = {} as Record<'ring' | 'disc' | 'plane' | 'spike' | 'pillar' | 'cryst
 const TEX = {} as Record<'scorch' | 'frost' | 'soft' | 'rune' | 'cracks', THREE.Texture>;
 
 export function initEffects(): void {
+  initRubble();
   GEO.ring = new THREE.RingGeometry(0.82, 1, 64, 1).rotateX(-Math.PI / 2);
   GEO.disc = new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2);
   GEO.plane = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
@@ -35,12 +37,13 @@ export function initEffects(): void {
 export function addEffect<E extends Effect>(e: E): E { active.push(e); return e; }
 
 export function updateEffects(dt: number): void {
+  updateRubble(dt);
   for (let i = active.length - 1; i >= 0; i--) {
     if (!active[i].update(dt)) { active[i].dispose?.(); active.splice(i, 1); }
   }
 }
 
-export function clearEffects(): void { for (const e of active) e.dispose?.(); active.length = 0; }
+export function clearEffects(): void { for (const e of active) e.dispose?.(); active.length = 0; clearRubble(); }
 
 function tracked(obj: THREE.Object3D, mats: THREE.Material[]): () => void {
   G.scene.add(obj);

@@ -5,6 +5,7 @@ import { hitEnemy } from '../damage';
 import { sfx } from '../../core/audio';
 import { slashMesh } from './slash';
 import { sparks } from './cleave';
+import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
 import type { ChannelSkill, Needs } from './types';
 
 type Def = Needs<'damage' | 'radius'>;
@@ -50,6 +51,7 @@ const skill: ChannelSkill<TempestState> = {
     st.tick -= TICK;
     const p = player.pos;
     let hits = 0;
+    hurtPropsIn(player, p.x, p.z, def.radius, PROP_DAMAGE.zone * TICK);
     for (const e of G.enemies) {
       if (!e.alive || Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > def.radius + e.radius) continue;
       hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'physical', knock: 0.8, from: p });

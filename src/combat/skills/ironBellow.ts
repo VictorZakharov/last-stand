@@ -12,6 +12,7 @@ import { schedule } from '../../core/timers';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
 import { groundHeight } from '../../world/ground';
+import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
 import type { InstantSkill, Needs } from './types';
 
 type Def = Needs<'damage' | 'radius' | 'knock' | 'absorbPct' | 'duration'>;
@@ -98,6 +99,7 @@ const skill: InstantSkill = {
     flash({ color: GOLD, intensity: 12, distance: 10, life: 0.4, pos: player.eyes ? player.lightAhead(new THREE.Vector3()) : { x: c.x, y: 2, z: c.z } });
     addShake(0.3);
     sfx.roar();
+    hurtPropsIn(player, c.x, c.z, def.radius, PROP_DAMAGE.burst);
     for (const e of G.enemies) {
       if (e.alive && Math.hypot(e.pos.x - c.x, e.pos.z - c.z) < def.radius + e.radius) {
         hitEnemy(e, def.damage, { by: player, tags: ['physical'], type: 'physical', knock: def.knock, from: c });

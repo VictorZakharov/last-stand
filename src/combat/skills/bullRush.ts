@@ -12,6 +12,7 @@ import { sfx } from '../../core/audio';
 import { rand } from '../../util';
 import { sparks } from './cleave';
 import { slashMesh, slashArc } from './slash';
+import { hurtPropsIn, PROP_DAMAGE, type Prop } from '../../world/destructible';
 import type { InstantSkill, Needs } from './types';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
@@ -53,7 +54,7 @@ const skill: InstantSkill = {
     // aiming at your own feet still charges the full distance, the way you face
     if (dir.lengthSq() < 0.01) dir.set(Math.sin(player.facing), 0, Math.cos(player.facing));
     dir.normalize();
-    const hit = new Set<Enemy>();
+    const hit = new Set<Enemy>(), struck = new Set<Prop>();
     let dust = 0, scrape = 0, arrived = false;
     sfx.rush();
     if (player.local) addShake(0.2);
@@ -90,6 +91,7 @@ const skill: InstantSkill = {
           life: rand(0.08, 0.16), size: rand(0.03, 0.06), sizeEnd: 0, color: col(0xffe0b0, 1.6), colorEnd: col(0x803010, 0.2),
         });
       }
+      hurtPropsIn(player, p.x, p.z, 1.1, PROP_DAMAGE.trample, struck);
       for (const e of G.enemies) {
         if (!e.alive || hit.has(e) || Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > 1.1 + e.radius) continue;
         hit.add(e);
