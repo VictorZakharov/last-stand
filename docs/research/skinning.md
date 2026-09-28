@@ -2,7 +2,7 @@
 
 Question: could a GPU auto-rigging and skinning solver like Needle's [Mesh Baker](https://mesh-baker.needle.tools/) Deform mode give our heroes and creatures smooth, continuous bodies? Should we use it, borrow the technique, or skip it?
 
-**Verdict:** don't use Mesh Baker. Borrow the idea in its simplest form: give the heroes skin weights computed from their own geometry when they are built, and only for the parts that cross a joint. Prototype that on the mage's neck and sleeve before committing. Leave the enemies and the IK code as they are.
+**Verdict:** don't use Mesh Baker. Borrow the idea in its simplest form: give the heroes and the enemies skin weights computed from their own geometry when they are built, for the parts that cross a joint. Prototype it on the mage's neck and sleeve and on one enemy before rolling out, so the crowd cost is measured, not guessed. Leave the IK code as it is.
 
 ## 1. Can we use Mesh Baker's solver?
 
@@ -42,7 +42,7 @@ Estimated from the code and three.js's behaviour; **nothing here has been measur
 - **Frame time:** a skinned vertex pays a bone-texture fetch ×4 in the vertex shader, in the colour pass and again in the shadow pass. A hero is a few tens of thousands of vertices and there are only a handful of them (co-op), so this should be small on a desktop GPU; a phone is the case to measure.
 - **Shader programs:** each skinned material adds its own variant (`USE_SKINNING`) plus a skinned depth variant for shadows. That is the one real risk to the "0 late compiles" rule. `game/warmup.ts` already renders one of every hero model, so a skinned hero is warmed by the same path, but the count at boot (110 today) will rise and must be checked constant during play, including across class switch, shadow-quality change and first person (`viewModel.ts` moves and re-layers the hero's meshes).
 - **Culling:** three culls a `SkinnedMesh` by its bind-pose bounding sphere, so a lunging or death-falling hero can be culled wrongly. Set `frustumCulled = false` on the hero, or bound it generously.
-- **Enemies:** a crowd of rigid creatures is cheap today because `Sculpt` caches and shares geometry per kind. Skinned enemies would multiply vertex work by the crowd. Not worth it: creatures are seen small and from above, and their joints are hidden by fur, bark and armour.
+- **Enemies:** the game should not have rigid creatures either, so they are in scope. A skinned enemy can still share its cached geometry per kind (`Sculpt`'s cache); each instance only needs its own `Skeleton` and bone texture. The cost is vertex work times the crowd, and the shadow pass repeats it. Levers if the crowd measures too dear: fewer bones and weights per vertex on small foes, skinning only within a distance of the camera, and a per-preset switch like `heroDetail` (rigid on Low). Each of those must keep the program set fixed (a rigid and a skinned variant of a material both exist, both warmed).
 
 ## 5. What would change in the code
 
@@ -67,6 +67,6 @@ No. Skinning only decides how a mesh follows the joints; where the joints go is 
    - draw calls, frame time on Low and High, and programs (0 late compiles through class switch, quality change and view change);
    - culling during the death fall.
 3. **Decide after that** whether to roll it out to the warrior and the rest of the body. Go if the seams visibly close and the program count stays flat; otherwise drop it and note why here.
-4. **Not** the enemies.
+4. **Enemies too**, starting with one (a bruiser such as the brute, whose body bends most) with a crowd of them, to measure the per-crowd cost and decide the levers above before the rest.
 
 Not done here: no prototype was built and nothing was measured. The cost section is reasoned from the code, not from a run.
