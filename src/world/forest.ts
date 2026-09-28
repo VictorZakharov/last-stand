@@ -203,7 +203,7 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
     scene.add(g);
     buildGlowcaps(g, x, z, rng, capMat, stemMat, updaters);
     obstacles.push({ x, z, r: 0.75, h: 1.7 });
-    breakable.add(obstacles.length - 1, 9, 0x40b090, groupLook(g, updaters, u0));
+    breakable.add(obstacles.length - 1, 9, 0x40b090, groupLook(g, updaters, u0), 'shroom');
   }
   for (const a of [Math.PI / 4, (5 * Math.PI) / 4]) {
     const x = Math.cos(a) * (WALL_R - 2.4), z = Math.sin(a) * (WALL_R - 2.4);
@@ -211,7 +211,7 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
     scene.add(g);
     buildBonfire(g, x, z, stone, barkMat, updaters);
     obstacles.push({ x, z, r: 0.9, h: 1 });
-    breakable.add(obstacles.length - 1, 12, 0x5a4a38, groupLook(g, updaters, u0));
+    breakable.add(obstacles.length - 1, 12, 0x5a4a38, groupLook(g, updaters, u0), 'ember');
   }
 
   // --- Floor obstacles: stumps, fallen logs, boulders -------------------------------
@@ -222,7 +222,7 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr, s = r(0.8, 1.15), yaw = r(0, TAU), sy = r(0.8, 1.4);
     setInstance(stumps, i, x, 0, z, 0, yaw, 0, s, sy, s);
     obstacles.push({ x, z, r: 0.75 * s, h: sy });
-    breakable.add(obstacles.length - 1, 6, 0x4a3520, instanceLook(stumps, i));
+    breakable.add(obstacles.length - 1, 6, 0x4a3520, instanceLook(stumps, i), 'wood');
   });
   stumps.castShadow = stumps.receiveShadow = true;
   scene.add(stumps);
@@ -241,7 +241,7 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
     }
     // collision: circles along the log
     for (const u of [-1.6, 0, 1.6]) obstacles.push({ x: x + Math.cos(yaw) * u, z: z - Math.sin(yaw) * u, r: 0.55, h: 0.9 });
-    breakable.add(n0, 10, 0x4a3520, meshLook(...parts));
+    breakable.add(n0, 10, 0x4a3520, meshLook(...parts), 'wood');
   }
 
   const boulderSpots = [[24, 0.75, 1.1], [16, 2.75, 0.8], [23, 3.6, 1.2], [13, 5.2, 0.7], [24, 5.2, 1.0], [8, 3.9, 0.6], [17, 1.55, 0.7]];

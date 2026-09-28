@@ -10,7 +10,7 @@ import type { Updater } from './props';
 import { simulates, dealsDamage } from '../net/role';
 import type { Player } from '../entities/player';
 import { burst, debris, smokePuff } from '../fx/particles';
-import { rubble } from '../fx/rubble';
+import { rubble, type RubbleKind } from '../fx/rubble';
 import { addShake } from '../core/renderer';
 import { sfx } from '../core/audio';
 import { G } from '../state';
@@ -22,6 +22,8 @@ export interface Prop {
   max: number;
   broken: boolean;
   color: number;
+  /** what it's made of: the pieces it breaks into */
+  kind: RubbleKind;
   /** its circles, and the biome's list they stand in */
   parts: Obstacle[];
   list: Obstacle[];
@@ -53,9 +55,9 @@ export class PropSet {
   constructor(private obstacles: Obstacle[]) {}
   /** The obstacle circles pushed since `from` (an index into the list) become one prop of `hp`. `hide` /
    *  `show` take its look away and bring it back. */
-  add(from: number, hp: number, color: number, look: { hide(): void; show(): void }): void {
+  add(from: number, hp: number, color: number, look: { hide(): void; show(): void }, kind: RubbleKind = 'stone'): void {
     const parts = this.obstacles.slice(from);
-    const prop: Prop = { id: this.list.length, life: hp, max: hp, broken: false, color, parts, list: this.obstacles, chipT: 0, hurtT: -1e9, bar: null, fill: null, ...look };
+    const prop: Prop = { id: this.list.length, life: hp, max: hp, broken: false, color, kind, parts, list: this.obstacles, chipT: 0, hurtT: -1e9, bar: null, fill: null, ...look };
     for (const o of parts) o.prop = prop;
     this.list.push(prop);
   }
@@ -94,7 +96,7 @@ export function hurtProp(o: Obstacle, amount: number): boolean {
     p.chipT = now;
     propSink(p.id, Math.round(p.life * 10) / 10);
     debris(centre(p, _p), { count: 3, color: p.color, speed: 3, size: 0.12, life: 0.7 });
-    rubble(_p.x, _p.z, { count: 1, color: p.color, radius: 0.4, height: 0.3, size: 0.1, speed: 2 });
+    rubble(_p.x, _p.z, { count: 1, color: p.color, kind: p.kind, radius: 0.4, height: 0.3, size: 0.1, speed: 2 });
     sfx.clang();
   }
   return false;
@@ -168,7 +170,7 @@ export function breakProp(p: Prop): void {
   const c = centre(p, _p), size = Math.max(...p.parts.map((o) => o.r)) + p.parts.length * 0.25;
   // the prop comes apart: chunks that fly, bounce and lie a few seconds before they crumble away
   const reach = Math.max(...p.parts.map((o) => Math.hypot(o.x - c.x, o.z - c.z) + o.r));
-  rubble(c.x, c.z, { count: Math.min(30, Math.round(8 + size * 10)), color: p.color, radius: reach * 0.8, height: Math.min(2, Math.max(...p.parts.map((o) => o.h))) * 0.7, size: 0.16 + size * 0.09, speed: 2.5 + size });
+  rubble(c.x, c.z, { count: Math.min(36, Math.round(8 + size * 10) * (p.kind === 'wood' ? 1.4 : 1)), color: p.color, kind: p.kind, radius: reach * 0.8, height: Math.min(2, Math.max(...p.parts.map((o) => o.h))) * 0.7, size: 0.16 + size * 0.09, speed: 2.5 + size });
   debris(c, { count: 8, color: p.color, speed: 4 + size * 2, size: 0.14 });
   smokePuff(c, { count: 4 + Math.round(size * 3), color: p.color, alpha: 0.4, size: 0.8 + size * 0.4, sizeEnd: 2 + size, life: 1.2, speed: 1.6 });
   burst(c, { count: 6, color: 0xffd9a0, intensity: 1.5, speed: 4, life: 0.35, size: 0.1, gravity: 8 });
