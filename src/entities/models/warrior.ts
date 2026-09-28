@@ -443,11 +443,15 @@ export function buildWarrior(): Model {
   /** One-handed moves through the eyes, placed in the view (the right hand's grip and its blade's direction,
    *  camera space; the left hand's mirrors it): Power Strike raises both blades to cross over the top of the
    *  view, trembling as the charge builds, then drives them down through it; Twin Fangs cuts each blade from
-   *  high on its own side down across the view; Bull Rush leads with the blades held low and out, like tusks.
+   *  high on its own side down across the view; Bull Rush draws the blades back, drives them ahead through
+   *  the rush and flings them out to the sides as it lands.
    *  (Posed by joint angles the raised arms loomed over the camera and the blades went out of the frame.) */
   const FP_CHOP = { up: [V(0.34, -0.02, -0.5), V(-0.55, 0.62, -0.7)], down: [V(0.24, -0.3, -0.5), V(-0.55, -0.2, -0.8)] };
   const FP_CUT = { up: [V(0.36, -0.06, -0.6), V(-0.6, 0.45, -0.65)], down: [V(-0.14, -0.3, -0.5), V(-0.85, -0.25, -0.45)] };
-  const FP_TUSK = [V(0.33, -0.28, -0.55), V(0.3, 0.5, -0.8)];
+  const FP_RUSH = { back: [V(0.38, -0.4, -0.4), V(0.35, 0.55, -0.75)], ahead: [V(0.28, -0.34, -0.6), V(-0.12, 0.18, -0.98)], out: [V(0.45, -0.22, -0.5), V(0.75, 0.4, -0.5)] };
+  const FP_TWO_RUSH = { ahead: [V(0.12, -0.3, -0.55), V(-0.3, 0.3, -0.9)], out: [V(0.24, -0.22, -0.5), V(0.85, 0.35, -0.4)] };
+  /** Bull Rush: the share of its pose that is the rush (skills/bullRush RUSH); the rest is the follow-through */
+  const RUSH = 0.6;
   /** where each elbow points while the arm is placed in the view (chest space: out to its side, down) */
   const POLE_VR = V(-0.6, -1, 0), POLE_VL = V(0.6, -1, 0);
   /** Power Strike there: raised to a high guard on the right, blade up and forward, then the blow ahead */
@@ -754,21 +758,45 @@ export function buildWarrior(): Model {
         j.body.position.y += (-0.1 * stance - 0.03 * jolt);
         j.body.position.z += -0.06 * jolt * w;
       } else if (a.name === 'charge') {
-        // shoulder into the charge, weapon back
-        const w = Math.min(1, k * 6) * (1 - ramp(k, 0.85, 1));
-        guard = shield.visible ? w : 0; aw = w;
+        // shoulder into the charge, weapon back; as it lands (RUSH) the weapons sweep out to both sides
+        const w = Math.min(1, k * 6 / RUSH) * (1 - ramp(k, RUSH - 0.05, RUSH + 0.05));
+        const hw = ramp(k, RUSH - 0.04, RUSH + 0.04) * (1 - ramp(k, 0.85, 1)), hu = ramp(k, RUSH, RUSH + 0.2);
+        guard = shield.visible ? Math.max(w, hw) : 0; aw = Math.max(w, hw);
         j.spine.rotation.x += 0.45 * w; j.neck.rotation.x += -0.3 * w;
         j.chest.rotation.y += -0.3 * w;
         const L = j.shoulderL.rotation;
-        if (shield.visible) { L.x = lerp(L.x, -0.5, w); L.z = lerp(L.z, -0.2, w); L.y = 0.4 * w; j.elbowL.rotation.x = lerp(j.elbowL.rotation.x, -1.2, w); }
+        // (the shield stays up in front through the landing; through the eyes a little lower as the body
+        // straightens, or it rises over half the view)
+        if (shield.visible) { const sw = Math.max(w, hw), low = fp ? 0.45 * hw * (1 - w) : 0; L.x = lerp(L.x, -0.5 + low, sw); L.z = lerp(L.z, -0.2, sw); L.y = 0.4 * sw; j.elbowL.rotation.x = lerp(j.elbowL.rotation.x, -1.2, sw); }
         // (a second weapon trails the same as the first)
         else if (offHeld) { L.x += 0.6 * w; j.elbowL.rotation.x += 0.4 * w; }
         else { L.x += -0.7 * w; j.elbowL.rotation.x += 0.3 * w; }
         R.x += 0.6 * w; j.elbowR.rotation.x += 0.4 * w;
-        // (through the eyes the blades lead the charge instead, low and out where they're seen)
+        // the sweep out: the arm raised level ahead and turned out to its side, the weapon along it
+        const out = (arm: THREE.Euler, elbow: THREE.Object3D, hand: THREE.Object3D, s: number): void => {
+          arm.x = lerp(arm.x, -1.35, hw); arm.z = lerp(arm.z, 0, hw); arm.y = lerp(arm.y, s * lerp(0.2, -1.3, hu), hw);
+          elbow.rotation.x = lerp(elbow.rotation.x, -0.15, hw);
+          hand.rotation.x += ALONG_ARM * hw;
+        };
+        if (held) out(R, j.elbowR, j.handR, 1);
+        if (offHeld) out(j.shoulderL.rotation, j.elbowL, j.handL, -1);
+        // (through the eyes placed in the view: drawn back, driven ahead through the rush, flung out)
         if (fp && !two) {
-          _ra.copy(FP_TUSK[0]); _rd.copy(FP_TUSK[1]); wR = w;
-          if (offHeld) { _la.copy(FP_TUSK[0]); _la.x = -_la.x; _ld.copy(FP_TUSK[1]); _ld.x = -_ld.x; wL = w; }
+          const u = ramp(k, 0.06, 0.2), P = FP_RUSH;
+          _ra.lerpVectors(P.back[0], P.ahead[0], u).lerp(P.out[0], hu);
+          _rd.copy(P.back[1]).normalize().lerp(_vg.copy(P.ahead[1]).normalize(), u).lerp(_vg.copy(P.out[1]).normalize(), hu);
+          // (a jolt as the rush lands)
+          _ra.z += 0.06 * Math.sin(Math.PI * ramp(k, RUSH - 0.06, RUSH + 0.06));
+          const vw2 = Math.min(1, k * 8) * (1 - ramp(k, 0.85, 1));
+          wR = held ? vw2 : 0;
+          if (offHeld) { _la.copy(_ra); _la.x = -_la.x; _ld.copy(_rd); _ld.x = -_ld.x; wL = vw2; }
+        }
+        // (a two-hander the same way: levelled ahead across the view through the rush, swept out to the right)
+        if (fp && two) {
+          const u = ramp(k, 0.06, 0.2), P = FP_TWO_RUSH;
+          _va.lerpVectors(FP_TWO_AT, P.ahead[0], u).lerp(P.out[0], hu);
+          _vd.copy(FP_TWO_DIR).lerp(_vg.copy(P.ahead[1]).normalize(), u).lerp(_vg.copy(P.out[1]).normalize(), hu);
+          vw = 1; aw = 0;
         }
       } else if (a.name === 'buff') {
         // war cry: chest out, arms flung wide, head back
