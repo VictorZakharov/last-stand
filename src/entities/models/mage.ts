@@ -139,7 +139,8 @@ export function buildMage(): Model {
   // fingerless gloves
   const bells: THREE.Group[] = [];
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
-    S.add(scaleUV(limb(0.3, 0.075, 0.07, 0.05, 0.3, 14), 2, 1), robe, sh);
+    // the sleeve carries on 8cm past the elbow, under the bell, and follows the forearm there
+    S.skin(scaleUV(limb(0.38, 0.075, 0.068, 0.05, 0.24, 14), 2, 1), robe, sh, el, 0.2, 0.33);
     // the bell: from above the elbow, flaring, longest on the underside of the arm (+z hangs below
     // the forearm when the arm is raised forward)
     const bell = new THREE.CylinderGeometry(0.075, 0.15, 0.3, 28, 6, true).translate(0, -0.15, 0), q = bell.attributes.position;
@@ -232,7 +233,7 @@ export function buildMage(): Model {
   // --- the head: face, a full beard, hair, and a wide-brimmed pointed hat, its crown bent back by
   // its own weight, a gold band with a stone
   const head = buildHead(j.head, kit, 'mage', { beard: 160, hair: true });
-  buildNeck(j.neck, kit, 'mage', j.P.neckL);
+  buildNeck(j.neck, kit, 'mage', j.P.neckL, j.head);
   {
     // sized to the head (mm, see head.ts): the band round the brow above the ears, over the hair
     const w = new Sculpt(), hg = head.group, M = HEAD_MM, at = toGroup(0, 168, -9), tilt: [number, number, number] = [-0.12, 0, 0];

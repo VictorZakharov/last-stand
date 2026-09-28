@@ -160,6 +160,7 @@ export class Player {
     this.stopChannel();
     this.ward?.onEnd?.();
     G.scene.remove(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.model.worldObjects ?? []));
+    this.obj.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as THREE.Material).dispose(); } });   // (skinned meshes own a copy of their material)
     this.model.dispose();
     this.staffLight?.dispose();
   }

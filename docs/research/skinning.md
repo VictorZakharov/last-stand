@@ -35,7 +35,7 @@ This costs nothing at load beyond a loop over vertices (a few ms per hero), so t
 
 ## 4. Cost
 
-Estimated from the code and three.js's behaviour; **nothing here has been measured yet**, which is the point of the prototype.
+Estimated from the code and three.js's behaviour before the prototype; see section 8 for what it measured.
 
 - **Load time:** negligible, as above. Heroes are built once per class and slot switch.
 - **Draw calls:** should go down for a skinned hero. `Sculpt` makes one mesh per (joint, material); a `SkinnedMesh` is one per material for the whole body. Rigid pieces (weapons, pauldrons) stay on their joints, so only the body cloth and skin change.
@@ -69,4 +69,20 @@ No. Skinning only decides how a mesh follows the joints; where the joints go is 
 3. **Decide after that** whether to roll it out to the warrior and the rest of the body. Go if the seams visibly close and the program count stays flat; otherwise drop it and note why here.
 4. **Enemies too**, starting with one (a bruiser such as the brute, whose body bends most) with a crowd of them, to measure the per-crowd cost and decide the levers above before the rest.
 
-Not done here: no prototype was built and nothing was measured. The cost section is reasoned from the code, not from a run.
+## 8. Prototype results (issue #113)
+
+What was built: `Sculpt.skin()` / `skinPair()` (analytic weights, as in section 3), used for the mage's neck (neck to head) and both sleeves (shoulder to elbow), and the brute's arms and thighs (to the elbow and knee). `?skin=0` in the URL puts every such piece back rigidly on its joint, for A/B runs. Measured in headless Chromium on a desktop GPU (D3D11), Thornwood, High unless stated; vsync off for frame times.
+
+**Looks.** The mage's elbow is the clear win. Rigid, the sleeve's rounded end pokes out of the bell as a hump when the arm bends; skinned, it tucks under the bell and follows the forearm. The neck now follows the head at its top; the difference is subtle from the game's cameras. The brute's elbows and knees render correctly and bend, but the gain is small: its joints are hidden by pauldrons, guards and rock, as expected, so skinning them is a modest polish, not a visible leap. Third and first person show no regression at rest (the first-person cast pose with the sleeves in view was not checked: the probe couldn't cast with the pointer stubbed).
+
+**Shader programs.** 110 at boot become 114 (skinned colour and depth variants). The count stayed 114 through a run with every enemy kind, third / first / top views, Low / Medium / High, the player's death, and mage to warrior to mage switches: no late compiles. Skinned meshes are freed on dispose (the texture count returned to its earlier value after each class switch).
+
+**Frame cost, 30 brutes in view.** Median frame time is level with rigid (13.4 vs 13.5 ms on High over five runs, 16.0 vs 15.6 on Low, 91 vs 87 with the CPU throttled 4x). GPU time from timer queries: about 12.0 vs 11.2 ms (+0.8 ms). Draw calls fall slightly (3506 vs 3687), because a creature's skinned pieces become one mesh. Boot time was not measured separately; the weights are a loop over a few thousand vertices per creature kind, and the kind's geometry is cached as before.
+
+**Two things cost a crowd dearly until fixed**, both three.js state thrash where a skinned mesh and a rigid one share something. Without the fixes 30 brutes ran up to about 5 ms slower (17.4 vs 13.7 ms median):
+1. **A material shared by a rigid and a skinned mesh**: three rebuilds the program's parameters each time the draw switches between them. Skinned meshes get their own copy of the material (`onBeforeCompile` and its cache key carried over, so the hit flash, dissolve and freeze still work; the copy is disposed with the model).
+2. **The shadow pass draws every caster with one depth material**, so casters alternating skinned and rigid did the same. Skinned meshes get a depth material of their own (`customDepthMaterial`).
+
+**Not verified.** A phone or weak GPU (the +0.8 ms may not scale kindly); many skinned meshes with a real fight's spawn / death churn (the crowd was static); the warrior; the first-person cast pose; co-op guests (they build the same models). One measurement oddity: with vsync off, skinned runs showed more frames at exactly two vsync intervals (about 5% against 1%) although their median matched. It appeared only in one probe and not in a differently written one, and I did not find the cause; GPU time near the 16.7 ms boundary is the likely reason.
+
+**Verdict on the prototype.** Go for the heroes: the seam it removes is visible and the cost is small. For creatures the seam is mostly hidden by their gear, so extend it only where a creature has a bare, bending limb (the husk, the imp), one by one. Either way the two fixes above are the price of admission and are now in `Sculpt`.

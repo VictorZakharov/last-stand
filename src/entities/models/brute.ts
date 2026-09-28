@@ -49,7 +49,8 @@ export function buildBrute(variant: Variant = 'brute'): Model {
   const rivets = (parent: THREE.Object3D, pts: [number, number, number][]) => { for (const p of pts) S.add(new THREE.SphereGeometry(0.014, 6, 4), rivet, parent, p); };
 
   // --- legs: pillars of stone, iron knee guards, broad clawed feet
-  S.pair(lim(P.thighL, 0.14, 0.11, 0.3, 0.3), skin, j.thighL, j.thighR);
+  // thighs and upper arms run on past the knee and elbow and follow the lower limb there, so the joint bends smoothly
+  S.skinPair(lim(P.thighL + 0.07, 0.14, 0.11, 0.3, 0.28), skin, j.thighL, j.kneeL, j.thighR, j.kneeR, P.thighL - 0.14, P.thighL);
   S.pair(lim(P.shinL, 0.11, 0.09, 0.35, 0.25), skin, j.kneeL, j.kneeR);
   S.pair(new THREE.SphereGeometry(0.1, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), iron, j.kneeL, j.kneeR, [0, 0.0, 0.05], [Math.PI / 2, 0, 0], [1, 0.7, 1]);
   S.pair(boulder(0.1, 0.06, 0.16, 4), rock, j.ankleL, j.ankleR, [0, -0.04, 0.06]);
@@ -103,7 +104,7 @@ export function buildBrute(variant: Variant = 'brute'): Model {
   for (let i = 0; i < 3; i++) S.add(organic(new THREE.ConeGeometry(0.06, 0.26 - i * 0.05, 5, 2), 0.02, 12, 20 + i), rock, j.shoulderR, [-0.06 - i * 0.03, 0.2, (i - 1) * 0.07], [(i - 1) * 0.3, 0, 0.4 + i * 0.15]);
 
   // --- arms: forearms bigger than the upper arm, fists like boulders with iron knuckles, shackles
-  S.pair(lim(P.upperL, 0.13, 0.1, 0.35), skin, j.shoulderL, j.shoulderR);
+  S.skinPair(lim(P.upperL + 0.08, 0.13, 0.1, 0.35, 0.3), skin, j.shoulderL, j.elbowL, j.shoulderR, j.elbowR, P.upperL - 0.16, P.upperL);
   S.pair(lim(P.foreL, 0.13, 0.12, 0.4, 0.3), skin, j.elbowL, j.elbowR);
   S.pair(new THREE.CylinderGeometry(0.135, 0.14, 0.12, 14), iron, j.elbowL, j.elbowR, [0, -P.foreL + 0.08, 0]);
   S.pair(new THREE.TorusGeometry(0.14, 0.02, 6, 16).rotateX(Math.PI / 2), rivet, j.elbowL, j.elbowR, [0, -P.foreL + 0.08, 0]);
