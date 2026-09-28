@@ -40,6 +40,23 @@ function bodyOf(m: Model): THREE.Object3D[] {
   return list;
 }
 
+const _r = new THREE.Quaternion().setFromRotationMatrix(_flip).invert();
+
+/**
+ * Where a point of the eyes' view (camera space: x right, y up, looking down -z, in metres) will be once
+ * `viewArms` has placed the model (`root`), in its world as posed so far: for a pose that puts the hands
+ * where they are seen. Needs the model's world matrices up to date (where the neck is).
+ */
+export function fromEyes(root: THREE.Object3D, neck: THREE.Object3D, p: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+  root.worldToLocal(neck.getWorldPosition(_eye)).add(NECK_CAM);
+  out.copy(p).applyQuaternion(_r).divideScalar(root.scale.x).add(_eye);
+  return root.localToWorld(out);
+}
+/** A direction of the eyes' view in the model's world, as `fromEyes` */
+export function dirFromEyes(root: THREE.Object3D, d: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+  return out.copy(d).applyQuaternion(_r).transformDirection(root.matrixWorld);
+}
+
 /** Show `m` through the camera's eyes (`on`), or as a whole body. Call after the camera has moved. */
 export function viewArms(m: Model, on: boolean, cam: THREE.Camera): void {
   if (on !== shown.has(m)) {
