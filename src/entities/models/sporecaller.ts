@@ -142,14 +142,14 @@ export function buildSporecaller(): Model {
     j.head.rotation.z = Math.sin(t * 1.4) * 0.08;
     capJ.rotation.x = Math.sin(t * 1.1) * 0.04; capJ.rotation.z = Math.sin(t * 1.3 + 1) * 0.04;
     // staff held upright out front
-    j.shoulderR.rotation.x += -0.5; j.elbowR.rotation.x += -0.9; staff.rotation.x = 0.7;
+    j.shoulderR.rotation.x += -0.5; j.elbowR.rotation.x += -0.9; staff.rotation.x = 2.7;
     j.shoulderL.rotation.x += -0.3; j.elbowL.rotation.x += -0.5;
     skirt.rotation.x = -st.move * 0.2 + Math.sin(t * 2) * 0.03;
     let glow = 1;
     const a = st.action;
     if (a && a.name === 'attack') {
       const w = pulse(a.t, 0, 1);
-      j.shoulderR.rotation.x += -0.5 * w; j.elbowR.rotation.x += 0.2 * w; staff.rotation.x += -0.45 * w;
+      j.shoulderR.rotation.x += -0.2 * w; j.elbowR.rotation.x += 0.1 * w; staff.rotation.x += 0.2 * w;
       j.spine.rotation.x += -0.25 * w;
       j.head.rotation.x += -0.2 * w;
       glow = 1 + w * 1.5;
