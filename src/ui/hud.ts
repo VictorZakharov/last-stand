@@ -144,6 +144,15 @@ export function hideDecision(): void {
   }, DECISION_CLOSE_MS * 0.4);
 }
 
+/** The choice gone at once, mid-animation or not: a run left without choosing (abandoned, or a new one starting) must not
+ * show the last one's. */
+export function resetDecision(): void {
+  clearTimeout(decisionTimer);
+  $('#decision').classList.remove('opening', 'closing', 'compact');
+  $('#decision').classList.add('hidden');
+  $('#wavebadge').classList.remove('morphed', 'back');
+}
+
 /** `gained`: the item just added, whose rarity's count pulses. */
 export function renderSpoils(gained?: Item): void {
   const r = G.run;
