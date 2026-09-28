@@ -45,8 +45,8 @@ export function buildMossback(): Model {
   };
 
   // --- legs: short and thick, a mossy knee, broad feet with three claws
-  S.pair(lim(P.thighL, 0.13, 0.1, 0.3, 0.3), hide, j.thighL, j.thighR);
-  S.pair(lim(P.shinL, 0.1, 0.08, 0.3, 0.25), hide, j.kneeL, j.kneeR);
+  S.skinPair(lim(P.thighL + 0.117, 0.13, 0.1, 0.3, 0.3), hide, j.thighL, j.kneeL, j.thighR, j.kneeR, P.thighL - 0.156, P.thighL);
+  S.skinPair(lim(P.shinL + 0.09, 0.1, 0.08, 0.3, 0.25), hide, j.kneeL, j.ankleL, j.kneeR, j.ankleR, P.shinL - 0.12, P.shinL);
   S.pair(lump(0.07, 0.06, 0.05, 3), moss, j.kneeL, j.kneeR, [0.02, 0.0, 0.07]);
   S.pair(lump(0.09, 0.055, 0.14, 4, 0.1), hide, j.ankleL, j.ankleR, [0, -0.04, 0.05]);
   for (const x of [-0.05, 0, 0.05]) S.pair(horn(0.08, 0.02, 0.9, V(1, 0, 0), V(0, -0.2, 1)), claw, j.ankleL, j.ankleR, [x, -0.05, 0.15]);
@@ -97,8 +97,8 @@ export function buildMossback(): Model {
   S.pair(lump(0.16, 0.13, 0.16, 15, 0.2, 1.5), moss, j.shoulderL, j.shoulderR, [0.02, 0.05, -0.02]);
   S.pair(organic(new THREE.DodecahedronGeometry(1, 0), 0.08, 2, 16), stone, j.shoulderL, j.shoulderR, [0.06, 0.16, -0.04], [0.4, 0.3, 0], [0.07, 0.06, 0.07]);
   S.pair(frond(0.24, 6, 0.5, 17), fern, j.shoulderL, j.shoulderR, [0.02, 0.15, -0.06], [-0.5, 0, -0.5]);
-  S.pair(lim(P.upperL, 0.1, 0.085, 0.3), hide, j.shoulderL, j.shoulderR);
-  S.pair(lim(P.foreL, 0.11, 0.1, 0.4, 0.3), hide, j.elbowL, j.elbowR);
+  S.skinPair(lim(P.upperL + 0.09, 0.1, 0.085, 0.3), hide, j.shoulderL, j.elbowL, j.shoulderR, j.elbowR, P.upperL - 0.12, P.upperL);
+  S.skinPair(lim(P.foreL + 0.099, 0.11, 0.1, 0.4, 0.3), hide, j.elbowL, j.handL, j.elbowR, j.handR, P.foreL - 0.132, P.foreL);
   S.pair(lump(0.09, 0.14, 0.08, 18, 0.2, 2), moss, j.elbowL, j.elbowR, [0.02, -0.1, -0.07]);
   for (const [el, s] of [[j.elbowL, 1], [j.elbowR, -1]] as const) beard(el, [s * 0.02, -0.16, -0.1], 3, 0.06, 0.24, s > 0 ? 100 : 110, Math.PI);
   S.pair(lump(0.12, 0.12, 0.12, 19, 0.12), hide, j.handL, j.handR, [0, -0.09, 0.02]);

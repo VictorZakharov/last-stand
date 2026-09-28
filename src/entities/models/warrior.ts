@@ -7,6 +7,7 @@ import { leather as leatherMaps, mail as mailMaps, cloth as clothMaps, steel as 
 import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
+import { FurSway } from './furSway';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, lod, type SurfaceFn } from './armor';
 import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, fistReach } from './hands';
@@ -485,8 +486,9 @@ export function buildWarrior(): Model {
   }
   const palm = joint(shield, 0, 0, 0.1);
 
-  S.build();
-  const elbowFur = [j.elbowL, j.elbowR].flatMap((e) => e.children.filter((c) => (c as THREE.Mesh).material === furM));
+  // the fur sways: a spring on each collar and cuff lags the joint's acceleration (furSway.ts)
+  const furs = S.build().filter((m) => m.material === furM).map((m) => { m.userData.fur = true; return new FurSway(m, furM); });
+  const elbowFur = [j.elbowL, j.elbowR].flatMap((e) => e.children.filter((c) => c.userData.fur));
 
   const root = j.root;
   root.scale.setScalar(1.1);
@@ -889,7 +891,7 @@ export function buildWarrior(): Model {
     else if (twoHeld && held) hold(handL, along(grip), held.r, _up);
     else poseHand(handL, shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 0.08);
 
-    if (dt > 0) cape.update(dt, st.velocity ?? ZERO);
+    if (dt > 0) { cape.update(dt, st.velocity ?? ZERO); for (const f of furs) f.update(dt); }
     cape.setVisible(st.dead < 0.6);
 
     // the blade's fuller glows while a skill charges
@@ -907,6 +909,7 @@ export function buildWarrior(): Model {
     firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on; },
     dispose() {
       kit.dispose();
+      for (const f of furs) f.dispose();
       cape.dispose();
       root.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
     },
