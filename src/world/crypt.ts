@@ -11,6 +11,7 @@ import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
 import { seeThrough } from '../core/seeThrough';
 import { buildSky, boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
+import { PropSet, instanceLook, meshLook } from './destructible';
 import type { Obstacle } from '../types';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
@@ -122,6 +123,7 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
   const rng = mulberry(1337);
   const r = (a: number, b: number) => a + rng() * (b - a);
   const obstacles: Obstacle[] = [];
+  const breakable = new PropSet(obstacles);
   const updaters: Updater[] = [];
   const h = ARENA.daisHalf;
 
@@ -297,12 +299,15 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
   let di = 0;
   for (const [rr, a, rot] of [[22, 1.3, 0.5], [21.5, 5.0, -0.6], [11.5, 2.3, 1.1]]) {
     const [x, z] = polar(rr, a), yaw = a + rot;
+    const shaft = di, n0 = obstacles.length;
     setInstance(drums, di++, x, 0.42, z, 0, yaw, 0, 3.2, 1, 1);
     for (const u of [-1.1, 0, 1.1]) obstacles.push({ x: x + Math.cos(yaw) * u, z: z - Math.sin(yaw) * u, r: 0.55, h: 0.9 });
+    breakable.add(n0, 14, 0x8a8478, instanceLook(drums, shaft));
     // a drum broken off the end
     const ex = x + Math.cos(yaw) * 2.4, ez = z - Math.sin(yaw) * 2.4;
-    setInstance(drums, di++, ex, 0.44, ez, 0, yaw + r(0.3, 0.9), r(-0.1, 0.1), 0.9, 1, 1);
+    setInstance(drums, di, ex, 0.44, ez, 0, yaw + r(0.3, 0.9), r(-0.1, 0.1), 0.9, 1, 1);
     obstacles.push({ x: ex, z: ez, r: 0.6, h: 0.9 });
+    breakable.add(obstacles.length - 1, 7, 0x8a8478, instanceLook(drums, di++));
   }
   drums.count = di;
   drums.castShadow = drums.receiveShadow = true;
@@ -322,8 +327,9 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
     if (i === 2) { lid.position.x += Math.cos(yaw) * 0.45; lid.position.z -= Math.sin(yaw) * 0.45; lid.rotation.y += 0.3; lid.rotation.z = -0.1; }
     lid.castShadow = lid.receiveShadow = true;
     scene.add(lid);
-    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    const fx = Math.sin(yaw), fz = Math.cos(yaw), n0 = obstacles.length;
     for (const u of [-0.65, 0.65]) obstacles.push({ x: x + fx * u, z: z + fz * u, r: 0.8, h: 1.25 });
+    breakable.add(n0, 16, 0x8a8478, meshLook(s, lid));
     candleSpots.push([x + fx * 1.55, z + fz * 1.55, 0], [x - fx * 1.55 + fz * 0.4, z - fz * 1.55 - fx * 0.4, 0]);
   });
 
@@ -338,9 +344,11 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
       const gx = cx + tx * u, gz = cz + tz * u, s = r(0.85, 1.15);
       // mostly upright; the odd one settled and leaning
       const lean = rng() < 0.3 ? r(-0.2, 0.2) : r(-0.04, 0.04);
-      if (k === n - 1 && rng() < 0.4) setInstance(crosses, ci++, gx, 0, gz, lean, yaw + r(-0.08, 0.08), r(-0.05, 0.05), s);
-      else setInstance(heads, hi++, gx, 0, gz, lean, yaw + r(-0.08, 0.08), r(-0.05, 0.05), s);
+      let look: ReturnType<typeof instanceLook>;
+      if (k === n - 1 && rng() < 0.4) { setInstance(crosses, ci, gx, 0, gz, lean, yaw + r(-0.08, 0.08), r(-0.05, 0.05), s); look = instanceLook(crosses, ci++); }
+      else { setInstance(heads, hi, gx, 0, gz, lean, yaw + r(-0.08, 0.08), r(-0.05, 0.05), s); look = instanceLook(heads, hi++); }
       obstacles.push({ x: gx, z: gz, r: 0.45, h: 1.1 * s });
+      breakable.add(obstacles.length - 1, 4, 0x8a8478, look);
       // a few candles left at a grave's foot
       if (rng() < 0.25) candleSpots.push([gx - Math.cos(a) * 0.6, gz - Math.sin(a) * 0.6, 0]);
     }
@@ -408,6 +416,7 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
       envIntensity: 0.55,
     },
     obstacles,
+    props: breakable.list,
     portals,
     setCalm(v: number) { calmTarget = v; },
     update(dt: number, t: number) { for (const u of updaters) u(dt, t); },

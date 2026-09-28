@@ -96,6 +96,8 @@ export const sfx = {
   hurt: guard(() => { if (throttle('hurt', 120)) return; noise({ dur: 0.18, freq: 500, type: 'lowpass', gain: 0.35 }); tone({ freq: 160, to: 90, dur: 0.15, type: 'square', gain: 0.05 }); }),
   enemyDie: guard(() => { if (throttle('die', 40)) return; noise({ dur: 0.35, freq: 700, sweep: 200, q: 1, gain: 0.18 }); }),
   slam: guard(() => { noise({ dur: 0.8, freq: 120, type: 'lowpass', gain: 0.7 }); tone({ freq: 60, to: 28, dur: 0.6, gain: 0.5 }); }),
+  /** a prop breaking: rock and timber giving way */
+  crumble: guard(() => { noise({ dur: 0.55, freq: 700, sweep: 140, type: 'lowpass', q: 1.2, gain: 0.5 }); noise({ dur: 0.2, freq: 2400, q: 2, gain: 0.12 }); tone({ freq: 90, to: 40, dur: 0.4, gain: 0.3 }); }),
   witchCast: guard(() => { if (throttle('wc', 90)) return; tone({ freq: 300, to: 700, dur: 0.3, type: 'sawtooth', gain: 0.03 }); }),
   loot: guard((r: number) => { const base = [520, 620, 740, 880, 1040][r] || 520; tone({ freq: base, dur: 0.35, gain: 0.08 }); if (r >= 3) tone({ freq: base * 1.5, dur: 0.6, gain: 0.07, delay: 0.08 }); if (r >= 4) tone({ freq: base * 2, dur: 0.9, gain: 0.06, delay: 0.16 }); }),
   pickup: guard(() => { if (throttle('pickup', 60)) return; tone({ freq: 1200, to: 1600, dur: 0.08, gain: 0.05 }); }),

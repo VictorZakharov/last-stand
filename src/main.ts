@@ -158,6 +158,7 @@ function guestStart(biome: BiomeId, wave: number) {
 
 function beginRun(wave: number) {
   clearGround();   // what's left on the lobby floor is lost
+  G.arena.restoreProps();
   showMenu(false);
   hideTooltip();
   showHud(true);
@@ -166,6 +167,7 @@ function beginRun(wave: number) {
   G.player.sandbox = false;
   syncAway();
   setZoom(1);
+  G.arena.restoreProps();
   startRun(wave);
   renderSpoils();
 }

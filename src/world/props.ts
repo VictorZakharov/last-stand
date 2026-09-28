@@ -5,6 +5,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rand, TAU } from '../util';
 import { particles } from '../fx/particles';
 import type { Obstacle } from '../types';
+import type { Prop } from './destructible';
 
 export type Updater = (dt: number, t: number) => void;
 /** Linear RGB, used as-is in shaders. */
@@ -34,6 +35,8 @@ export interface BiomeLook {
 export interface Biome {
   look: BiomeLook;
   obstacles: Obstacle[];
+  /** the breakable ones among them (a prop's index is its id on the network) */
+  props: Prop[];
   portals: Portal[];
   setCalm(v: number): void;
   update(dt: number, t: number): void;
@@ -296,14 +299,15 @@ export function buildEnvMap(renderer: THREE.WebGLRenderer, sky: RGB, panel: RGB)
 /**
  * A biome's shadow casters never move, but each one cost a draw call in the shadow pass
  * every frame. Merge them (positions only) into one caster that draws nothing in the
- * main pass, and stop the originals casting. Instanced props are already one call.
+ * main pass, and stop the originals casting. Instanced props are already one call, and a mesh that can
+ * still go (`userData.noBake`: a breakable prop) keeps casting for itself.
  */
 export function bakeStaticShadows(group: THREE.Group): void {
   group.updateMatrixWorld(true);
   const parts: THREE.BufferGeometry[] = [];
   group.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (!m.isMesh || !m.castShadow || (m as THREE.InstancedMesh).isInstancedMesh) return;
+    if (!m.isMesh || !m.castShadow || (m as THREE.InstancedMesh).isInstancedMesh || m.userData.noBake) return;
     const g = new THREE.BufferGeometry().setAttribute('position', m.geometry.getAttribute('position'));
     g.setIndex(m.geometry.getIndex());
     parts.push((g.index ? g.toNonIndexed() : g.clone()).applyMatrix4(m.matrixWorld));

@@ -9,6 +9,7 @@
 // strafing, backing off) round what's ahead before touching it, so enemies never bump and slide.
 import { G } from '../state';
 import type { Obstacle } from '../types';
+import { state as propState } from './destructible';
 
 /** cell size (m), and how often a field follows the player (s) */
 const CELL = 0.5, REFRESH = 0.2;
@@ -19,7 +20,7 @@ const LOOKAHEAD = 20;
 /** bodies share the field of the smallest size class that holds them (fewer fields to keep fresh) */
 const SIZES = [0.65, 1.05];
 
-interface Grid { obstacles: Obstacle[]; n: number; half: number; clear: Float32Array; steps: Int32Array; weights: Float32Array; sideX: Int32Array; sideZ: Int32Array }
+interface Grid { obstacles: Obstacle[]; rev: number; n: number; half: number; clear: Float32Array; steps: Int32Array; weights: Float32Array; sideX: Int32Array; sideZ: Int32Array }
 interface Field { r: number; open: Uint8Array; cost: Float32Array; t: number; cell: number }
 
 let grid: Grid | null = null;
@@ -29,7 +30,7 @@ let rebuiltAt = -1;
 /** The clearance grid of the current biome (rebuilt when the biome's obstacles change). */
 function getGrid(): Grid {
   const obstacles = G.arena.obstacles;
-  if (grid?.obstacles === obstacles) return grid;
+  if (grid?.obstacles === obstacles && grid.rev === propState.rev) return grid;
   // the outermost cells lie beyond the arena edge, so they're never open: no bounds checks needed
   const R = G.arena.radius, n = Math.ceil((2 * R) / CELL) + 2, half = (n * CELL) / 2;
   const clear = new Float32Array(n * n);
@@ -44,7 +45,7 @@ function getGrid(): Grid {
   const sideX = new Int32Array([0, 0, 0, 0, 1, -1, 1, -1]), sideZ = new Int32Array([0, 0, 0, 0, n, n, -n, -n]);
   const weights = new Float32Array([1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2].map((w) => w * CELL));
   fields.clear();
-  return (grid = { obstacles, n, half, clear, steps, weights, sideX, sideZ });
+  return (grid = { obstacles, rev: propState.rev, n, half, clear, steps, weights, sideX, sideZ });
 }
 
 const cellOf = (g: Grid, x: number, z: number): number => {

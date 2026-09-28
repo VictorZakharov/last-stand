@@ -6,6 +6,7 @@ import { flash, flashFree, release, type LightSlot } from '../fx/lights';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
 import { nearGlow } from '../core/materials';
+import { hurtProp, PROP_DAMAGE } from '../world/destructible';
 
 const coreGeo = new THREE.SphereGeometry(1, 12, 8);
 const matCache = new Map<string, THREE.Material>();
@@ -159,7 +160,10 @@ export class Projectile {
     // only what reaches up to the bolt: it flies over low cover
     const low = this.pos.y - this.radius * 0.5;
     for (const o of G.arena.obstacles) {
-      if (o.h > low && (this.pos.x - o.x) ** 2 + (this.pos.z - o.z) ** 2 < (o.r + this.radius * 0.5) ** 2) return this.expire();
+      if (o.h > low && (this.pos.x - o.x) ** 2 + (this.pos.z - o.z) ** 2 < (o.r + this.radius * 0.5) ** 2) {
+        hurtProp(o, this.hostile ? PROP_DAMAGE.hostile : PROP_DAMAGE.bolt);
+        return this.expire();
+      }
     }
 
     // target collision
