@@ -11,7 +11,7 @@ import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
 import { seeThrough } from '../core/seeThrough';
 import { buildSky, boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
-import { PropSet, instanceLook, meshLook } from './destructible';
+import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import type { Obstacle } from '../types';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
@@ -187,18 +187,20 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
   // the props and walls dissolve between the camera and the player in the close views (the camera never pulls in)
   for (const m of [wallMat, darkStone, carved, iron, boneMat, deadWood, banner, gold, weedMat, wax, flameMat, nicheMat, glyphMat]) seeThrough(m, 'prop');
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const x = sx * (h - 0.5), z = sz * (h - 0.5);
+    const x = sx * (h - 0.5), z = sz * (h - 0.5), g = new THREE.Group();
+    scene.add(g);
     const ob = new THREE.Mesh(obeliskGeo, darkStone);
     ob.position.set(x, ARENA.daisHeight, z);
     ob.castShadow = ob.receiveShadow = true;
-    scene.add(ob);
+    g.add(ob);
     // glowing glyph strips on the two outward faces
     for (const [fx, fz] of [[sx, 0], [0, sz]]) {
       const strip = new THREE.Mesh(new THREE.BoxGeometry(fx ? 0.02 : 0.12, 1.6, fz ? 0.02 : 0.12), glyphMat);
       strip.position.set(x + fx * 0.5, ARENA.daisHeight + 2.0, z + fz * 0.5);
-      scene.add(strip);
+      g.add(strip);
     }
     obstacles.push({ x, z, r: 0.95, h: 6 });
+    breakable.add(obstacles.length - 1, 60, 0x4a4a58, groupLook(g, updaters, updaters.length));
   }
 
   // --- Flagstone paths from the gates to the dais, and a ring walk ---------------------
@@ -268,14 +270,20 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
   const beaconSpots = [[-11, -11], [11, -11], [-11, 11], [11, 11]];
   const beaconFlame = beaconFlameMat(updaters);
   for (const [x, z] of beaconSpots) {
-    buildBeacon(scene, x, z, darkStone, iron, beaconFlame, updaters);
+    const g = new THREE.Group(), u0 = updaters.length;
+    scene.add(g);
+    buildBeacon(g, x, z, darkStone, iron, beaconFlame, updaters);
     obstacles.push({ x, z, r: 0.65, h: 2.2 });
+    breakable.add(obstacles.length - 1, 20, 0x3a3a48, groupLook(g, updaters, u0));
   }
   // on stepped plinths in the middle of two opposite solid (non-gate) wall sides
   for (const a of [Math.PI / 4, (5 * Math.PI) / 4]) {
     const [x, z] = polar(WALL_R - 2.4, a);
-    buildBrazier(scene, x, z, a, iron, daisMat, updaters);
+    const g = new THREE.Group(), u0 = updaters.length;
+    scene.add(g);
+    buildBrazier(g, x, z, a, iron, daisMat, updaters);
     obstacles.push({ x, z, r: 1.45, h: 1.8 });
+    breakable.add(obstacles.length - 1, 30, 0x3a3a48, groupLook(g, updaters, u0));
   }
 
   // --- Floor obstacles: broken columns, fallen drums, sarcophagi, gravestones -------------
@@ -287,6 +295,7 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
     const [x, z] = polar(rr, a);
     setInstance(columns, i, x, 0, z, 0, r(0, TAU), 0, 1, ht / 4, 1);
     obstacles.push({ x, z, r: 0.85, h: ht });
+    breakable.add(obstacles.length - 1, 12 + ht * 5, 0x8a8478, instanceLook(columns, i));
     candleSpots.push([x + 0.9, z + 0.3, 0]);
   });
   columns.castShadow = columns.receiveShadow = true;

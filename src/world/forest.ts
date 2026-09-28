@@ -12,7 +12,7 @@ import { makeFbm, mulberry, rand, TAU } from '../util';
 import { buildDaySky, boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
 import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
 import { bend, branches, rag, taperTube, twist } from '../entities/models/shapes';
-import { PropSet, instanceLook, meshLook } from './destructible';
+import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import type { Obstacle } from '../types';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
@@ -110,22 +110,23 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   // standing stones at the dais corners, each with a glowing rune strip facing out
   const menhirGeo = buildMenhirGeo(rng);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const x = sx * (h - 0.5), z = sz * (h - 0.5);
+    const x = sx * (h - 0.5), z = sz * (h - 0.5), g = new THREE.Group();
+    scene.add(g);
     const mh = new THREE.Mesh(menhirGeo, stone);
     mh.position.set(x, ARENA.daisHeight, z);
     mh.rotation.y = Math.atan2(sx, sz);
     mh.castShadow = mh.receiveShadow = true;
-    scene.add(mh);
+    g.add(mh);
     const strip = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 0.02), glyphMat);
     strip.position.set(x + sx * 0.4, ARENA.daisHeight + 1.9, z + sz * 0.4);
     strip.rotation.set(0, Math.atan2(sx, sz), 0);
     strip.rotateX(-0.08);
-    scene.add(strip);
+    g.add(strip);
     // moss on its shoulders and ivy climbing the side away from the glyphs
     const moss = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.55, 14, 8, 0, TAU, 0, Math.PI * 0.45), 0.12, sx + sz * 3).scale(1.05, 0.5, 0.85), mossMat);
     moss.position.set(x, ARENA.daisHeight + 4.35, z);
     moss.receiveShadow = true;
-    scene.add(moss);
+    g.add(moss);
     const ivy: THREE.BufferGeometry[] = [];
     for (let k = 0; k < 3; k++) {
       const len = r(2.2, 3.6), ph = r(0, TAU), yaw = Math.atan2(sx, sz) + Math.PI;
@@ -137,8 +138,9 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
     }
     const ivyM = new THREE.Mesh(mergeAll(ivy), ivyMat);
     ivyM.receiveShadow = true;
-    scene.add(ivyM);
+    g.add(ivyM);
     obstacles.push({ x, z, r: 0.95, h: 4 });
+    breakable.add(obstacles.length - 1, 60, 0x7a8070, groupLook(g, updaters, updaters.length));
   }
 
   // --- Boundary: a wall of thicket and boulders, trees beyond --------------------
@@ -197,13 +199,19 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
 
   // --- Glowcap clusters (teal) and bonfires (orange): the biome's 6 point lights -----
   for (const [x, z] of [[-11, -11], [11, -11], [-11, 11], [11, 11]]) {
-    buildGlowcaps(scene, x, z, rng, capMat, stemMat, updaters);
+    const g = new THREE.Group(), u0 = updaters.length;
+    scene.add(g);
+    buildGlowcaps(g, x, z, rng, capMat, stemMat, updaters);
     obstacles.push({ x, z, r: 0.75, h: 1.7 });
+    breakable.add(obstacles.length - 1, 9, 0x40b090, groupLook(g, updaters, u0));
   }
   for (const a of [Math.PI / 4, (5 * Math.PI) / 4]) {
     const x = Math.cos(a) * (WALL_R - 2.4), z = Math.sin(a) * (WALL_R - 2.4);
-    buildBonfire(scene, x, z, stone, barkMat, updaters);
+    const g = new THREE.Group(), u0 = updaters.length;
+    scene.add(g);
+    buildBonfire(g, x, z, stone, barkMat, updaters);
     obstacles.push({ x, z, r: 0.9, h: 1 });
+    breakable.add(obstacles.length - 1, 12, 0x5a4a38, groupLook(g, updaters, u0));
   }
 
   // --- Floor obstacles: stumps, fallen logs, boulders -------------------------------

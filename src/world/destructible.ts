@@ -6,6 +6,7 @@
 // prop's health (`setPropSink` / `setPropLife`). A damaged prop shows a bar for a few seconds. A new run brings everything back (`restoreProps`).
 import * as THREE from 'three';
 import type { Obstacle } from '../types';
+import type { Updater } from './props';
 import { simulates } from '../net/role';
 import { burst, debris, smokePuff } from '../fx/particles';
 import { addShake } from '../core/renderer';
@@ -122,6 +123,23 @@ function showBar(p: Prop): void {
   p.fill!.style.width = `${Math.max(0, p.life / p.max) * 100}%`;
 }
 function hideBar(p: Prop): void { removeAnchored(p.bar); p.bar = p.fill = null; }
+
+/** hide / show for everything a builder put in `group` (built into it instead of the scene): its meshes go
+ *  (and stay out of the shadow bake), its animation stops (the `updaters` it added since `from`), and its
+ *  lights go dark but stay in the scene, since a different light count would recompile every shader */
+export function groupLook(group: THREE.Object3D, updaters: Updater[], from: number): { hide(): void; show(): void } {
+  const lights: [THREE.PointLight, number][] = [], shown: THREE.Object3D[] = [];
+  group.traverse((o) => {
+    if ((o as THREE.PointLight).isPointLight) lights.push([o as THREE.PointLight, (o as THREE.PointLight).intensity]);
+    else if ((o as THREE.Mesh).isMesh || (o as THREE.Points).isPoints) { shown.push(o); o.userData.noBake = true; }
+  });
+  let gone = false;
+  for (let i = from; i < updaters.length; i++) { const u = updaters[i]; updaters[i] = (dt, t) => { if (!gone) u(dt, t); }; }
+  return {
+    hide() { gone = true; for (const o of shown) o.visible = false; for (const [l] of lights) l.intensity = 0; },
+    show() { gone = false; for (const o of shown) o.visible = true; for (const [l, v] of lights) l.intensity = v; },
+  };
+}
 
 /** The prop goes: its circles, its mesh, and a burst of rubble */
 export function breakProp(p: Prop): void {

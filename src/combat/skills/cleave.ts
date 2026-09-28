@@ -48,8 +48,8 @@ export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, fa
     sparks(e.pos.x, e.height * 0.55, e.pos.z, 0xffd9a0, 8);
     hits++;
   }
-  // a swing that found no foe bites into the props in reach (a log is several circles, but one prop takes one blow)
-  if (!hits && dealsDamage(player)) {
+  // and the props in reach take the blow too (a log is several circles, but one prop takes one blow)
+  if (dealsDamage(player)) {
     const struck = new Set<Prop>();
     for (const o of G.arena.obstacles) {
       if (!o.prop || struck.has(o.prop)) continue;
