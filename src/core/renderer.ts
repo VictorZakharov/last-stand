@@ -148,6 +148,8 @@ const rig = {
   zoom: 1,
   targetZoom: 1,
   shake: 0,
+  /** the field of view's widening for speed (kickFov), and what it eases to this frame */
+  kick: 0, kickTo: 0,
   focus: new THREE.Vector3(),
   hurt: 0,
   yaw: 0,          // rotation around the focus; 0 looks toward -Z
@@ -260,6 +262,9 @@ export function setRenderQuality(p: QualityPreset): void {
 }
 
 export function addShake(amount: number): void { rig.shake = Math.min(1.2, rig.shake + amount); }
+/** Widen the close views' field of view by `deg` while called each frame (a rush's speed): it eases in
+ *  and back out. */
+export function kickFov(deg: number): void { rig.kickTo = Math.max(rig.kickTo, deg); }
 export function flashHurt(amount: number): void { rig.hurt = Math.min(1, rig.hurt + amount); }
 export function setZoom(z: number): void { rig.targetZoom = clamp(z, CAMERA.minZoom, CAMERA.maxZoom); }
 /** 
@@ -366,6 +371,8 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
   // props dissolve over the shoulder view, fading in and out with the glide to and from it
   const e = ease(rig.blend);
   updateSeeThrough(focus.x, height * 0.6, focus.z, (rig.view === 'third' ? e : 0) + (rig.fromView === 'third' ? 1 - e : 0));
+  rig.kick = damp(rig.kick, rig.kickTo, rig.kickTo > rig.kick ? 14 : 6, dt); rig.kickTo = 0;
+  if (rig.view !== 'top') fov += rig.kick * e;
   if (cam.fov !== fov || cam.near !== near) { cam.fov = fov; cam.near = near; cam.updateProjectionMatrix(); }
   if (rig.shake > 0.001) {
     const s = rig.shake * rig.shake * (rig.view === 'top' ? 0.6 : 0.12);

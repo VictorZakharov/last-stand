@@ -1,12 +1,13 @@
 // The heroes' hands: a sculpted palm with a thumb pad and knuckles, three-jointed fingers and thumb, a
-// glove over the palm and first knuckles (the fingertips bare). A hand holding something wraps its
-// fingers round the handle's actual radius, and the whole hand turns so the handle runs across the palm
-// (`hold`), whatever angle the weapon is held at: the weapon itself stays where the animation puts it.
+// glove over the palm and first knuckles (the fingertips bare). A hand holding something stays on its
+// wrist and turns so the handle runs across the palm, the weapon seated in it (`seat`), whatever angle
+// it is held at, and wraps its fingers round the handle's actual radius (`hold`).
 import * as THREE from 'three';
 import { limb } from './shapes';
 import { part, joint } from './rig';
+import { clamp } from '../../util';
 
-export interface Digit { j: THREE.Group[]; len: number[] }
+export interface Digit { j: THREE.Group[]; len: number[]; /** its radius */ r: number }
 export interface Hand {
   /** the posed hand, a child of the rig's hand joint (turned into a grip by `hold`) */
   vis: THREE.Group;
@@ -54,7 +55,7 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
       m.castShadow = false;
       if (n < 2) { at = joint(at, 0, -l, 0); js.push(at); }
     });
-    return { j: js, len };
+    return { j: js, len, r };
   });
   // the thumb: rooted low on the inner side of the palm, turned out across it
   const tj: THREE.Group[] = [], tl = [0.032, 0.028, 0.023];
@@ -64,7 +65,7 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
     part(seg(l, 0.0118 - n * 0.0012, 0.0105 - n * 0.0012), n === 0 ? glove : skin, at).castShadow = false;
     if (n < 2) { at = joint(at, 0, -l, 0); tj.push(at); }
   });
-  return { vis, f, thumb: { j: tj, len: tl }, s };
+  return { vis, f, thumb: { j: tj, len: tl, r: 0.0118 }, s };
 }
 
 /**
@@ -88,43 +89,99 @@ export function poseHand(h: Hand, curl: number, spread: number, point = 0, t = 0
   h.thumb.j[2].rotation.set(tc * 0.6, 0, 0);
 }
 
-const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _c = new THREE.Vector3();
+const _d = new THREE.Vector3(), _u = new THREE.Vector3(), _s = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
+/** where a held handle's axis runs across the hand (its own space): against the lower palm and the knuckles */
+const GRIP_Y = -0.092, GRIP_GAP = 0.011;
+/** how far a finger joint bends at most */
+const BEND = 1.65;
+/** the thumb wraps a little clear of the handle, over the fingers' ends */
+const THUMB_OVER = 0.006;
 
 /**
- * Hold a handle of radius `r` running along `dir` through `origin` (world space): the hand turns so the
- * handle lies across its palm with the thumb towards +dir (the blade, the staff's head), and the fingers
- * and thumb wrap round it. Call after the arm is posed and the model's world matrices are up to date.
+ * Curl a digit round a handle running across the hand (along x) through (cy, cz) in the hand's space,
+ * its centre-line on a circle of radius `rho`: each segment bends just enough for its end to land on
+ * the circle, so it hugs the handle however thick that is. The fingers curl one way round from the
+ * knuckles (`sense` 1); the thumb (-1) comes the other way, over the top from its root, which turns freely.
  */
-export function hold(h: Hand, origin: THREE.Vector3, dir: THREE.Vector3, r: number): void {
-  const hand = h.vis.parent!;
-  hand.updateWorldMatrix(true, false);
-  _o.copy(origin); hand.worldToLocal(_o);
-  _q.setFromRotationMatrix(_m.extractRotation(hand.matrixWorld)).invert();
-  _d.copy(dir).applyQuaternion(_q).normalize();
-  const k = h.vis.scale.x;
-  // across the palm: the handle, thumb end towards +dir (the thumb is on -s x)
-  _x.copy(_d).multiplyScalar(-h.s);
-  // up the hand (+y): back towards the wrist, square to the handle
-  _y.copy(_o).negate().addScaledVector(_x, _o.dot(_x));
-  if (_y.lengthSq() < 1e-8) _y.set(0, 1, 0);
+function wrap(f: Digit, cy: number, cz: number, rho: number, sense = 1): void {
+  let py = f.j[0].position.y, pz = f.j[0].position.z, phi = 0;   // phi: the curl so far (0 hangs down -y)
+  for (let n = 0; n < 3; n++) {
+    const l = f.len[n], wy = py - cy, wz = pz - cz, M = Math.max(1e-6, Math.hypot(wy, wz));
+    // the segment's direction (-cos φ, -sin φ) points at the handle's axis at φ0; its end lands on the
+    // circle at φ0 ∓ acos(K / M), and the one short of φ0 keeps it outside the handle. A segment too
+    // short to reach the circle runs along the tangent to it, so the next can go on round.
+    let a0 = Math.atan2(wz, wy) - phi;
+    a0 -= Math.round(a0 / (2 * Math.PI)) * 2 * Math.PI;
+    const K = (M * M + l * l - rho * rho) / (2 * l);
+    const off = l * l < M * M - rho * rho ? Math.asin(clamp(rho / M, -1, 1)) : Math.acos(clamp(K / M, -1, 1));
+    const to = a0 - sense * off;
+    // (turned round its length, the thumb's joints bend it the other way)
+    if (sense < 0 && n === 0) { phi = to; f.j[0].rotation.set(phi, Math.PI, 0); }
+    else { const bend = clamp(sense * to, 0, BEND); f.j[n].rotation.set(bend, 0, 0); phi += sense * bend; }
+    py -= l * Math.cos(phi); pz -= l * Math.sin(phi);
+  }
+}
+
+/**
+ * The fist's turn for a handle along `d` (normalized): the handle runs across the palm with the thumb
+ * towards +d (the blade, the staff's head), and the hand's length keeps to `up` (towards the wrist) as
+ * far as that allows, the wrist bending only as the handle needs. `d` and `up` in one space, the turn in it.
+ */
+function fist(h: Hand, d: THREE.Vector3, up: THREE.Vector3, out: THREE.Quaternion): THREE.Quaternion {
+  // across the palm: the handle (the thumb is on -s x); up the hand (+y): `up`, square to the handle
+  _x.copy(d).multiplyScalar(-h.s);
+  _y.copy(up).addScaledVector(_x, -_x.dot(up));
+  if (_y.lengthSq() < 1e-6) _y.set(0, 0, 1).addScaledVector(_x, -_x.z);
   _y.normalize();
   _z.crossVectors(_x, _y);
-  _m.makeBasis(_x, _y, _z);
-  h.vis.quaternion.setFromRotationMatrix(_m);
-  // the handle's centre in the unturned hand: across the finger roots, in front of the palm
-  const R = r + 0.0165;
-  _c.set(0, -0.098, -R).multiplyScalar(k).applyQuaternion(h.vis.quaternion);
-  h.vis.position.copy(_o).sub(_c);
-  // each finger wraps an arc of radius R + its own half-thickness round the handle
-  const wrap = R + 0.009;
-  h.f.forEach((f) => {
-    f.j[0].rotation.set(f.len[0] / (2 * wrap) + 0.25, 0, 0);
-    f.j[1].rotation.set((f.len[0] + f.len[1]) / (2 * wrap), 0, 0);
-    f.j[2].rotation.set(Math.min(1.3, (f.len[1] + f.len[2]) / (2 * wrap)), 0, 0);
-  });
-  // the thumb closes over the fingers from the other side
-  h.thumb.j[0].rotation.set(0.9, h.s * 1.0, -h.s * 0.35);
-  h.thumb.j[1].rotation.set(0.55, 0, 0);
-  h.thumb.j[2].rotation.set(0.5, 0, 0);
+  return out.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
+}
+
+/** where the handle's axis runs through that fist, from its wrist (unscaled: the hand joint's own units) */
+function fistAxis(h: Hand, q: THREE.Quaternion, r: number, out: THREE.Vector3): THREE.Vector3 {
+  const k = h.vis.scale.x;
+  return out.set(0, GRIP_Y, -(r / k + GRIP_GAP)).multiplyScalar(k).applyQuaternion(q);
+}
+
+/**
+ * Seat a held thing in the fist: `grip` (a child of the hand's joint, turned so its +Y runs along the
+ * handle, its origin where the hand holds it) moves so the handle runs through the palm of the hand on
+ * the wrist, its length along the forearm. Call whenever the grip's turn changes.
+ */
+export function seat(h: Hand, grip: THREE.Object3D, r: number): void {
+  fistAxis(h, fist(h, _d.set(0, 1, 0).applyQuaternion(grip.quaternion), _u.set(0, 1, 0), _q), r, grip.position);
+}
+
+/**
+ * For a hand reaching a grip it doesn't carry (a two-hander's lower grip): from its wrist to where a
+ * handle of radius `r` along `dir` runs through the fist, the hand's length along `up` (world, towards
+ * the wrist; the line from the grip to the shoulder, say). Put the wrist there and `hold` with the same `up`.
+ */
+export function fistReach(h: Hand, dir: THREE.Vector3, up: THREE.Vector3, r: number, out: THREE.Vector3): THREE.Vector3 {
+  const hand = h.vis.parent!;
+  hand.updateWorldMatrix(true, false);
+  return fistAxis(h, fist(h, _d.copy(dir).normalize(), _u.copy(up).normalize(), _q), r, out).multiplyScalar(_s.setFromMatrixScale(hand.matrixWorld).x);
+}
+
+/**
+ * Close the hand round a handle of radius `r` running along `dir` (world): the hand stays on its wrist and
+ * turns so the handle lies across its palm (where `seat` or `fistReach` put it), its length along the
+ * forearm (or `up`, world), and the fingers and thumb wrap round it. Call after the arm is posed and the
+ * model's world matrices are up to date.
+ */
+export function hold(h: Hand, dir: THREE.Vector3, r: number, up?: THREE.Vector3): void {
+  const hand = h.vis.parent!;
+  hand.updateWorldMatrix(true, false);
+  _q2.setFromRotationMatrix(_m.extractRotation(hand.matrixWorld));
+  if (up) _u.copy(up).normalize(); else _u.set(0, 1, 0).applyQuaternion(_q2);
+  fist(h, _d.copy(dir).normalize(), _u, _q);
+  h.vis.position.set(0, 0, 0);
+  h.vis.quaternion.copy(_q2.invert()).multiply(_q);
+  // (the handle's radius in the hand's own units, which its scale `k` scales)
+  const rh = r / h.vis.scale.x, cz = -(rh + GRIP_GAP);
+  // the fingers close snugly round it
+  for (const f of h.f) wrap(f, GRIP_Y, cz, rh + f.r);
+  // the thumb closes over them from the other side
+  wrap(h.thumb, GRIP_Y, cz, rh + h.thumb.r + THUMB_OVER, -1);
 }

@@ -6,11 +6,11 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
 import { engravedSteel, embroidered, arcaneColumn, projectUV, steelRegion } from '../../core/engraving';
-import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet } from './rig';
+import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, gem as gemGeo, Skirt, scaleUV, type SurfaceFn } from './armor';
 import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
-import { buildHand, poseHand, hold } from './hands';
+import { buildHand, poseHand, hold, seat } from './hands';
 import { clamp, lerp, damp, TAU, mulberry } from '../../util';
 import { SkeletonCape } from './cape';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
@@ -137,6 +137,7 @@ export function buildMage(): Model {
 
   // --- arms: robe sleeves widening into long bell sleeves lined in teal, leather bracers with a stone,
   // fingerless gloves
+  const bells: THREE.Group[] = [];
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
     S.add(scaleUV(limb(0.3, 0.075, 0.07, 0.05, 0.3, 14), 2, 1), robe, sh);
     // the bell: from above the elbow, flaring, longest on the underside of the arm (+z hangs below
@@ -148,15 +149,18 @@ export function buildMage(): Model {
       q.setXYZ(i, x * fold, y - hang, z * fold);
     }
     bell.computeVertexNormals();
-    S.add(scaleUV(bell, 3, 1), robe, el, [0, 0.07, 0]);
-    S.add(scaleUV(bell.clone(), 3, 1), lining, el, [0, 0.07, 0], [0, 0, 0], [0.97, 1, 0.97]);
+    // on a joint of its own, so the first-person view can narrow it (from behind, it hides the hand)
+    const bj = joint(el, 0, 0.07, 0);
+    bells.push(bj);
+    S.add(scaleUV(bell, 3, 1), robe, bj);
+    S.add(scaleUV(bell.clone(), 3, 1), lining, bj, [0, 0, 0], [0, 0, 0], [0.97, 1, 0.97]);
     // gold border round the opening
     const rim: THREE.Vector3[] = [];
     for (let k = 0; k <= 28; k++) {
       const a = (k / 28) * TAU, x = Math.sin(a) * 0.15, z = Math.cos(a) * 0.15, aa = Math.atan2(x, -z);
       rim.push(V(x * (1 + 0.08 * Math.sin(Math.atan2(z, x) * 7)), -0.3 + 0.07 - 0.12 * (0.5 + 0.5 * Math.cos(aa)), z * (1 + 0.08 * Math.sin(Math.atan2(z, x) * 7))));
     }
-    S.add(taperTube(rim, () => 0.007, 56, 5), gold, el);
+    S.add(taperTube(rim, () => 0.007, 56, 5), gold, bj, [0, -0.07, 0]);
     S.add(scaleUV(lathe([[0.046, -0.26], [0.052, -0.2], [0.058, -0.12], [0.06, -0.1]], 16), 2, 1), leather, el);
     for (const y of [-0.13, -0.245]) S.add(belt(0.058 - (y + 0.13) * 0.1, 0.058 - (y + 0.13) * 0.1, y, 0.012, 0.005, 0, 14), gold, el);
     S.add(new THREE.OctahedronGeometry(0.02, 0), gold, el, [s * 0.058, -0.19, 0], [0, 0, 0], [0.4, 1.2, 1]);
@@ -261,7 +265,7 @@ export function buildMage(): Model {
   // Held GRIP further up the haft than its old balance point, so the crystal rides at head height
   // and the bolts it casts fly at the foes, not over them.
   const staff = joint(j.handR, 0, -0.05, 0.02);
-  const STAFF_PITCH = 1.25;
+  const STAFF_PITCH = 1.25, STAFF_R = 0.026;
   staff.rotation.x = STAFF_PITCH;
   const GRIP = 0.62;
   {
@@ -291,7 +295,17 @@ export function buildMage(): Model {
   /** set once a channel's opening completes, for the thrust into the portal */
   let openedAt = -1;
   /** staff shots: how far the staff is lowered at the target (0..1), and when the last shot was */
-  let aim = 0, aimedAt = -9;
+  let aim = 0, aimV = 0, aimedAt = -9;
+  /** how long after a shot the staff stays down */
+  const AIM_HOLD = 1.2;
+  /** seen through its own eyes (entities/viewModel.ts); per gesture, how far the free hand moves (chest
+   *  space: x left, y up, z forward) as the gesture plays */
+  let fp = false;
+  /** the staff arm through the eyes: added to its shoulder (pitch, roll, yaw), and pitch undone while casting */
+  const FP_STAFF = [0.1, -0.3, -0.2, 0.6];
+  const FP_POSE: Record<string, number[]> = { cast: [-0.2, 0.35, 0.12], channel: [0.5, 0.12, -0.1], buff: [-0.25, 0.05, 0.15] };
+  /** where the free arm's elbow points when it reaches (out to the left, down and back) */
+  const POLE_L = V(1, -0.7, -0.6);
   /** the crystal's casting glow, eased: a held stream of casts keeps it up instead of flashing each one */
   let charged = 0;
 
@@ -342,11 +356,17 @@ export function buildMage(): Model {
     const a = st.action;
     if (!a || a.name !== 'channel') openedAt = -1;
     // staff shots: the staff swings down level with the target and stays there while the shots keep
-    // coming (a held button), so each bolt leaves the crystal at a foe's chest; it rises once they stop
+    // coming (a held button, or clicks), so each bolt leaves the crystal at a foe's chest; it rises
+    // once they stop for a while. A spring, so it starts and stops moving gently (an ease that starts
+    // at full speed jerks the staff down at each first shot): quick to lower, slow to rise
     if (a?.name === 'point') aimedAt = t;
-    aim = damp(aim, t - aimedAt < 0.3 ? 1 : 0, 14, dt);
+    const down = t - aimedAt < AIM_HOLD, w0 = down ? 14 : 5;
+    aimV += (w0 * w0 * ((down ? 1 : 0) - aim) - 2 * w0 * aimV) * Math.min(dt, 0.05);
+    aim = clamp(aim + aimV * Math.min(dt, 0.05), 0, 1);
     j.shoulderR.rotation.x += -0.3 * aim; j.elbowR.rotation.x += 0.15 * aim; j.spine.rotation.x += 0.12 * aim;
     staff.rotation.x = STAFF_PITCH + 1.75 * aim;
+    // (the haft sits in the fist, the hand on its wrist)
+    seat(handR, staff, STAFF_R);
     if (a) {
       const k = a.t;
       if (a.name === 'cast') {
@@ -409,6 +429,23 @@ export function buildMage(): Model {
         poseHand(handL, 0.45 - 0.35 * w, 0.12 + 0.45 * w);
       }
     }
+    // through the eyes the free hand's gestures play higher and to the left, where they're seen but leave
+    // the middle of the view clear (as posed, they pass low in its corner or right through its middle):
+    // the hand keeps its motion, shifted in the chest's space, and the arm reaches it
+    // and the staff is held out to the right, its crystal clear of the middle; the cast's raise of the
+    // staff arm is kept down
+    if (fp) {
+      const S = FP_STAFF, c = a?.name === 'cast' ? pulse(a.t, 0, 1) : 0;
+      j.shoulderR.rotation.x += S[0] + S[3] * c; j.shoulderR.rotation.z += S[1]; j.shoulderR.rotation.y += S[2];
+    }
+    const shift = fp && a ? FP_POSE[a.name] : undefined;
+    if (shift) {
+      const w = a!.name === 'channel' ? ramp(a!.time ?? 0, 0, 0.18) : pulse(a!.t, 0, 1);
+      root.updateMatrixWorld(true);
+      j.chest.worldToLocal(j.handL.getWorldPosition(_hp));
+      _hp.x += shift[0] * w; _hp.y += shift[1] * w; _hp.z += shift[2] * w;
+      reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, _hp, POLE_L);
+    }
     if (st.hit > 0) { j.spine.rotation.x += -0.25 * st.hit; j.neck.rotation.x += -0.2 * st.hit; }
     if (st.dead >= 0) deathFall(j, st.dead, -1);
     // feet on the floor: a crouch bends the knees instead of sinking the feet, a planted foot lies flat
@@ -425,7 +462,7 @@ export function buildMage(): Model {
 
     // the right hand closes round the staff wherever the arm has taken it
     root.updateMatrixWorld(true);
-    hold(handR, staff.getWorldPosition(_hp), _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), 0.026);
+    hold(handR, _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), STAFF_R);
 
     // cloth runs after the pose so it collides with this frame's skeleton
     if (dt > 0) cape.update(dt, st.velocity ?? ZERO);
@@ -444,6 +481,8 @@ export function buildMage(): Model {
     root, kit, joints: j, animate, tip, palm, height: 2.0,
     worldObjects: [cape.mesh],
     reset: () => cape.reset(),
+    // through the eyes the bells, seen from behind, would hide the hands: narrow and shorter
+    firstPerson: (on) => { fp = on; for (const b of bells) b.scale.set(on ? 0.6 : 1, on ? 0.75 : 1, on ? 0.6 : 1); },
     dispose() {
       kit.dispose();
       cape.dispose();

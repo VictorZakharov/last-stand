@@ -33,9 +33,10 @@ const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(
 interface CastState { skill: KnownSkill; t: number; dur: number; fireAt: number; fired: boolean; target: THREE.Vector3; replay?: boolean }
 interface ChannelState { skill: KnownSkill; key: SkillKey; state: unknown; t: number }
 /** A movement skill's dash: a fixed velocity that input can't steer, with a per-frame hook; `lift`
- *  makes it a jump of that peak height, and `anim` is the pose it plays. */
-interface DashState { vx: number; vz: number; t: number; dur: number; lift: number; anim: CastAnim; step?(): void }
-export interface DashOpts { lift?: number; anim?: CastAnim; step?(): void }
+ *  makes it a jump of that peak height, and `anim` is the pose it plays, over the rush and `hold`
+ *  seconds more standing where it ended (a lunge's strikes follow through). */
+interface DashState { vx: number; vz: number; t: number; dur: number; hold: number; lift: number; anim: CastAnim; step?(): void }
+export interface DashOpts { lift?: number; anim?: CastAnim; hold?: number; step?(): void }
 
 /** What the local player does that the other players' games replay (see net/session). */
 export type PlayerAction =
@@ -258,19 +259,25 @@ export class Player {
   /** Still in the run, standing or downed (not banked or dead for good). */
   get inRun(): boolean { return !this.away && !this.out; }
 
+  // through the eyes, the weapon and hand in view: the model stays placed there until the next pose
   get castPoint(): THREE.Vector3 {
-    return this.viewHand() ?? (this.model.tip ?? this.model.root).getWorldPosition(new THREE.Vector3());
+    return (this.model.tip ?? this.model.root).getWorldPosition(new THREE.Vector3());
+  }
+
+  /** seen through its own eyes (the local player in first person): effects that start at the body show
+   *  from the camera, so some place themselves where they're seen instead */
+  get eyes(): boolean { return this.local && viewMode() === 'first' && viewSettled(); }
+
+  /** Where a light for an effect round the body goes when seen through the eyes: ahead in the view, a
+   *  little above it. At the body it's at the camera and burns the weapons in view white; straight above,
+   *  their steel still mirrors it back into the view. */
+  lightAhead(out: THREE.Vector3, ahead = 3, up = 0.6): THREE.Vector3 {
+    const cam = G.camera.position, yaw = cameraYaw();
+    return out.set(cam.x - Math.sin(yaw) * ahead, cam.y + up, cam.z - Math.cos(yaw) * ahead);
   }
 
   get palmPoint(): THREE.Vector3 {
-    return this.viewHand() ?? (this.model.palm ?? this.model.root).getWorldPosition(new THREE.Vector3());
-  }
-
-  /** Seen through this hero's eyes, where a hand would be in view (right of and below the camera,
-   *  ahead of it): the hidden body's hands are at the camera, so a beam would leave from the head. */
-  private viewHand(): THREE.Vector3 | null {
-    if (!this.local || viewMode() !== 'first' || !viewSettled()) return null;
-    return new THREE.Vector3(0.28, -0.4, -0.65).applyMatrix4(G.camera.matrixWorld);
+    return (this.model.palm ?? this.model.root).getWorldPosition(new THREE.Vector3());
   }
 
   cooldownOf(def: SkillDef): number { return def.cooldown * (1 - this.stats.cdr / 100); }
@@ -361,8 +368,8 @@ export class Player {
   }
 
   /** Rush along `dir` (normalized, on the ground) at `speed` for `dur` seconds; `step` runs every frame of it. */
-  startDash(dir: THREE.Vector3, speed: number, dur: number, { lift = 0, anim = 'charge', step }: DashOpts = {}): void {
-    this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, lift, anim, step };
+  startDash(dir: THREE.Vector3, speed: number, dur: number, { lift = 0, anim = 'charge', hold = 0, step }: DashOpts = {}): void {
+    this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, hold, lift, anim, step };
     this.facing = Math.atan2(dir.x, dir.z);
   }
 
@@ -426,13 +433,13 @@ export class Player {
 
     // movement
     const d = this.dash;
-    if (d) { this.vel.set(d.vx, 0, d.vz); d.t += dt; }
+    if (d) { if (d.t < d.dur) this.vel.set(d.vx, 0, d.vz); else this.vel.set(0, 0, 0); d.t += dt; }
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     resolveWorld(this.pos, this.radius);
     if (d) {
       d.step?.();
-      if (d.t >= d.dur) { this.dash = null; this.vel.multiplyScalar(this.stats.moveSpeed / Math.max(1e-3, Math.hypot(d.vx, d.vz))); }
+      if (d.t >= d.dur + d.hold) { this.dash = null; this.vel.multiplyScalar(this.stats.moveSpeed / Math.max(1e-3, Math.hypot(d.vx, d.vz))); }
     }
     const speed = Math.hypot(this.vel.x, this.vel.z);
     const look = lookFacing();
@@ -477,7 +484,7 @@ export class Player {
     if (d) {
       d.t += dt;
       d.step?.();
-      if (d.t >= d.dur) this.dash = null;
+      if (d.t >= d.dur + d.hold) this.dash = null;
     }
     this.tickVitals(dt);
     this.animateBody(dt, t, Math.hypot(r.vx, r.vz));
@@ -505,7 +512,7 @@ export class Player {
     this.phase += dt * speed * 2.1 * (fwd < -0.5 ? -1 : 1);
     let action: ActionState | null = null;
     if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };
-    else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / this.dash.dur) };
+    else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / (this.dash.dur + this.dash.hold)) };
     else if (this.casting) action = { name: this.casting.skill.impl.anim || 'cast', t: this.casting.t / this.casting.dur };
     // a channel's t ramps 0 -> 1 over its first 0.2 s (the pose settling in), then holds
     else if (this.channel) {
@@ -528,10 +535,11 @@ export class Player {
 
   pose(dt: number, t: number, move: number, dir: number, lean: number, action: ActionState | null): void {
     this.obj.position.set(this.pos.x, damp(this.obj.position.y, groundHeight(this.pos.x, this.pos.z), 14, dt), this.pos.z);
-    this.model.root.rotation.y = this.facing;
+    // (all of it: through the eyes the last frame placed the model in view, entities/viewModel.ts)
+    this.model.root.rotation.set(0, this.facing, 0);
     // a jumping dash lifts the model along a parabola
     const d = this.dash, k = d ? Math.min(1, d.t / d.dur) : 0;
-    this.model.root.position.y = d ? d.lift * 4 * k * (1 - k) : 0;
+    this.model.root.position.set(0, d ? d.lift * 4 * k * (1 - k) : 0, 0);
     // a raised player gets up the way it went down, in reverse
     const dead = this.deadT >= 0 ? Math.min(1, this.deadT / 1.0) : this.rising > 0 ? this.rising / RISE : -1;
     this.model.animate({
@@ -546,8 +554,16 @@ export class Player {
     if (this.staffLight) {
       // a little above the cast point: right at it, the metal round a staff's crystal (a few cm off,
       // with the light's inverse-square falloff) burns out white-green
-      this.staffLight.position.copy(this.castPoint);
-      this.staffLight.position.y += 0.35;
+      // Through the eyes the crystal is in view a little ahead of the camera: a light there floods the
+      // sleeve filling the corner of the view, and the eye's adaptation darkens the rest. It shines on
+      // ahead and above instead, as the staff would light the ground in front
+      if (this.eyes) {
+        const cam = G.camera.position, yaw = cameraYaw();
+        this.staffLight.position.set(cam.x - Math.sin(yaw) * 1.5, cam.y + 0.8, cam.z - Math.cos(yaw) * 1.5);
+      } else {
+        this.staffLight.position.copy(this.castPoint);
+        this.staffLight.position.y += 0.35;
+      }
       const glow = this.cls.aura.intensity;
       this.staffLight.intensity = glow * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
     }

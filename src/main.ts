@@ -12,6 +12,7 @@ import { initEffects, updateEffects, clearEffects } from './fx/effects';
 import { buildArena } from './world/arena';
 import { separateEnemies } from './world/collision';
 import { Player } from './entities/player';
+import { viewArms } from './entities/viewModel';
 import { updateEnemies, clearEnemies } from './entities/enemy';
 import { spawnEnemy } from './entities/spawner';
 import { updateProjectiles, clearProjectiles } from './combat/projectiles';
@@ -360,10 +361,10 @@ function update(dt: number): void {
   setViewShift(vs.x, vs.y);
   const focus = focusPlayer();
   updateCamera(dt, focus.pos, focus.model.height);
-  // through the eyes the body would fill the view (it still casts, animates and blocks), and so would
-  // the cape, which lives in the world beside it
+  // through the eyes the body would fill the view (it still casts, animates and blocks): only the
+  // arms and what they hold show, and the cape (in the world beside it) hides
   const eyes = focus === G.player && viewMode() === 'first' && viewSettled();
-  G.player.model.root.visible = !eyes;
+  viewArms(G.player.model, eyes, G.camera);
   for (const o of G.player.model.worldObjects ?? []) o.visible = !eyes && G.player.obj.visible;
 
 

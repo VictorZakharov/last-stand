@@ -246,12 +246,17 @@ export interface Model {
   height: number;
   /** cast origin (staff tip / orb) */
   tip?: THREE.Object3D;
+  /** the other hand's weapon tip, while there's a weapon in each (a charge gathers into both) */
+  readonly offTip?: THREE.Object3D | null;
   /** offhand focus point */
   palm?: THREE.Object3D;
   /** skeleton, for humanoid models */
   joints?: Joints;
   /** objects simulated in world space (e.g. a cape) that the owner adds to the scene */
   worldObjects?: THREE.Object3D[];
+  /** seen through its own eyes (only the arms show, entities/viewModel.ts): adjust what reads badly from
+   *  there (a sleeve hiding the hand, an arm raised out of the frame) */
+  firstPerson?(on: boolean): void;
   /** re-settle simulated parts after a teleport */
   reset?(): void;
   /** show the equipped weapon / shield */

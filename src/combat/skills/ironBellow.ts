@@ -17,6 +17,9 @@ import type { InstantSkill, Needs } from './types';
 type Def = Needs<'damage' | 'radius' | 'knock' | 'absorbPct' | 'duration'>;
 const GOLD = 0xffc85a;
 const SHIELDS = 3;
+/** the shields' circle round the warrior: height and radius; through the eyes higher and wider, where
+ *  they're seen (at the waist and close in they circle under the view) */
+const RING = { y: 1.1, r: 0.95 }, RING_EYES = { y: 1.25, r: 1.5 };
 const _w = new THREE.Vector3();
 // a thin ring of light on the floor
 const haloGeo = new THREE.RingGeometry(1.05, 1.15, 64, 1, 0, Math.PI * 2);
@@ -92,7 +95,7 @@ const skill: InstantSkill = {
       const a = (i / 16) * Math.PI * 2;
       smokePuff({ x: c.x + Math.cos(a) * 1.2, y: 0, z: c.z + Math.sin(a) * 1.2 }, { count: 1, color: 0x2a241c, alpha: 0.45, size: 0.8, sizeEnd: 2.2, life: 0.9, speed: 0.4 });
     }
-    flash({ color: GOLD, intensity: 12, distance: 10, life: 0.4, pos: { x: c.x, y: 2, z: c.z } });
+    flash({ color: GOLD, intensity: 12, distance: 10, life: 0.4, pos: player.eyes ? player.lightAhead(new THREE.Vector3()) : { x: c.x, y: 2, z: c.z } });
     addShake(0.3);
     sfx.roar();
     for (const e of G.enemies) {
@@ -124,14 +127,15 @@ const skill: InstantSkill = {
       update(dt) {
         t += dt;
         const p = player.pos;
-        root.position.set(p.x, player.obj.position.y + 1.1, p.z);
+        const ring = player.eyes ? RING_EYES : RING;
+        root.position.set(p.x, player.obj.position.y + ring.y, p.z);
         // they rise out of the ground, orbit, and dim as the ward is used up
         const grow = Math.min(1, t / 0.25);
         const left = Math.max(0.25, ward.amount / amount);
         hitFlash = Math.max(0, hitFlash - dt * 4);
         shields.forEach((s, i) => {
           const a = t * 2.4 + (i / SHIELDS) * Math.PI * 2;
-          s.position.set(Math.sin(a) * 0.95, Math.sin(t * 3 + i) * 0.08 - (1 - grow) * 1.1, Math.cos(a) * 0.95);
+          s.position.set(Math.sin(a) * ring.r, Math.sin(t * 3 + i) * 0.08 - (1 - grow) * 1.1, Math.cos(a) * ring.r);
           s.rotation.y = a;   // face outwards
           s.scale.setScalar(grow * (1 + hitFlash * 0.25));
         });
