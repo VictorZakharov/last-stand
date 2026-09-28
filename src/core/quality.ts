@@ -7,6 +7,7 @@ import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySe
 import { setRenderQuality } from './renderer';
 import { readCookie, writeCookie } from './cookies';
 import { setHeroDetail } from '../entities/models/armor';
+import { setRubbleShadows } from '../fx/rubble';
 
 const COOKIE = 'last-stand-quality';
 const AUTO_COOKIE = 'last-stand-quality-auto';   // level auto settled on (next session starts there)
@@ -46,6 +47,7 @@ function apply(l: QualityLevel): void {
     shadow.map?.dispose();
     shadow.map = null;   // recreated at the new size on the next render
   }
+  setRubbleShadows(p.minCasterRadius);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   frames = time = 0;

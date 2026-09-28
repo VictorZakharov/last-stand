@@ -15,11 +15,14 @@ type Shape = 'stone' | 'coal' | 'shell' | 'stem' | 'stub' | 'splinter' | 'chip' 
 /** what a prop is made of: sets its pieces */
 export type RubbleKind = 'stone' | 'wood' | 'shroom' | 'ember';
 
-/** pool size and number of different shapes, per shape (each variant is its own mesh with `max` pieces) */
-const POOL: Record<Shape, { max: number; variants: number }> = {
-  stone: { max: 60, variants: 4 }, coal: { max: 40, variants: 3 }, shell: { max: 40, variants: 3 }, stem: { max: 30, variants: 3 }, stub: { max: 20, variants: 2 },
-  splinter: { max: 40, variants: 3 }, chip: { max: 50, variants: 3 }, bark: { max: 30, variants: 2 },
+/** pool size and number of different shapes, per shape (each variant is its own mesh with `max` pieces), and roughly how
+ * big its pieces are (m): a pool casts shadows only where the quality preset's caster size allows (each is a draw call
+ * in every shadow pass) */
+const POOL: Record<Shape, { max: number; variants: number; radius: number }> = {
+  stone: { max: 60, variants: 4, radius: 0.25 }, coal: { max: 40, variants: 3, radius: 0.08 }, shell: { max: 40, variants: 3, radius: 0.2 }, stem: { max: 30, variants: 3, radius: 0.2 }, stub: { max: 20, variants: 2, radius: 0.2 },
+  splinter: { max: 40, variants: 3, radius: 0.12 }, chip: { max: 50, variants: 3, radius: 0.1 }, bark: { max: 30, variants: 2, radius: 0.1 },
 };
+let minCaster = 0;
 /** seconds a piece lies before it goes, and how long it takes to shrink away */
 const LIFE = 6, SHRINK = 1.3;
 const GRAVITY = 15, BOUNCE = 0.35, HALF = Math.PI / 2;
@@ -79,11 +82,18 @@ export function initRubble(): void {
       for (let i = 0; i < max; i++) mesh.setColorAt(i, _c.set(0x808080));
       mesh.count = 0;
       mesh.frustumCulled = false;
-      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.castShadow = POOL[shape].radius >= minCaster;
+      mesh.receiveShadow = true;
       G.scene.add(mesh);
       pools[`${shape}:${v}`] = { mesh, chunks: [], next: 0, max };
     }
   }
+}
+
+/** The quality preset's smallest shadow caster (m): smaller kinds of piece stop casting, live */
+export function setRubbleShadows(min: number): void {
+  minCaster = min;
+  for (const k in pools) pools[k].mesh.castShadow = POOL[k.split(':')[0] as Shape].radius >= min;
 }
 
 export interface RubbleOpts { count: number; color: number; kind?: RubbleKind; /** where the pieces start: a circle round x, z, and a height range */ radius: number; height: number; /** the pieces' size (m) and how hard they fly */ size: number; speed: number }
