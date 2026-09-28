@@ -1,58 +1,152 @@
-// Rubble: the chunks a broken prop leaves. Real geometry that tumbles, bounces off the floor and comes to
-// rest, lies there a few seconds and shrinks away. One instanced mesh from a fixed pool (the oldest chunk is
-// reused when it runs out), so it's one draw call and its shader is warmed with the effects.
+// Rubble: the pieces a broken prop leaves, shaped like what broke (their look is in `rubbleGeo.ts`). Stone breaks into
+// faceted shards, wood into tapered splinters, flakes and bark strips, a glowcap into glowing cap fragments and torn
+// stem pieces, a bonfire into charred sticks and glowing coals. Real geometry that tumbles, bounces off the floor and
+// topples onto its broad face (nothing rests on its end), stays a few seconds and shrinks away. One instanced mesh
+// per shape variant, from fixed pools (the oldest piece is reused when one runs out). Every material is a standard
+// one, so the few programs are all warmed in `warmup.ts`.
 import * as THREE from 'three';
 import { G } from '../state';
 import { groundHeight } from '../world/ground';
 import { rand } from '../util';
+import { textureFromCanvas } from '../core/textures';
+import { stoneGeometry, rockBump, coalTexture, woodAtlas, flakeGeometry, mushroomAtlas, tornTubeGeometry, shellGeometry, STEM_COLS, STUB_COLS } from './rubbleGeo';
 
-const MAX = 240;
-/** seconds a chunk lies before it goes, and how long it takes to shrink away */
+type Shape = 'stone' | 'coal' | 'shell' | 'stem' | 'stub' | 'splinter' | 'chip' | 'bark';
+/** what a prop is made of: sets its pieces */
+export type RubbleKind = 'stone' | 'wood' | 'shroom' | 'ember';
+
+/** pool size and number of different shapes, per shape (each variant is its own mesh with `max` pieces) */
+const POOL: Record<Shape, { max: number; variants: number }> = {
+  stone: { max: 60, variants: 4 }, coal: { max: 40, variants: 3 }, shell: { max: 40, variants: 3 }, stem: { max: 30, variants: 3 }, stub: { max: 20, variants: 2 },
+  splinter: { max: 40, variants: 3 }, chip: { max: 50, variants: 3 }, bark: { max: 30, variants: 2 },
+};
+/** seconds a piece lies before it goes, and how long it takes to shrink away */
 const LIFE = 6, SHRINK = 1.3;
-const GRAVITY = 15, BOUNCE = 0.35;
+const GRAVITY = 15, BOUNCE = 0.35, HALF = Math.PI / 2;
 
-interface Chunk { x: number; y: number; z: number; vx: number; vy: number; vz: number; rx: number; ry: number; rz: number; wx: number; wy: number; wz: number; sx: number; sy: number; sz: number; t: number; life: number; rest: boolean }
-const chunks: Chunk[] = [];
-let next = 0;
-let mesh: THREE.InstancedMesh | null = null;
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
+interface Chunk { shape: Shape; pool: string; x: number; y: number; z: number; vx: number; vy: number; vz: number; rx: number; ry: number; rz: number; wx: number; wy: number; wz: number; sx: number; sy: number; sz: number; t: number; life: number; rest: boolean; tx: number; tz: number }
+interface Pool { mesh: THREE.InstancedMesh; chunks: Chunk[]; next: number; max: number }
+const pools: Record<string, Pool> = {};
+let coalMat: THREE.MeshStandardMaterial | null = null;
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(0, 0, 0, 'YXZ'), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
+
+/** One kind of piece in a recipe: its shape, its share of a prop's pieces, its size along each axis (a splinter's
+ * grain runs along z, a tube's y) and its colour (`null`: the prop's own) */
+interface Part { shape: Shape; w: number; sx: number; sy: number; sz: number; color: number | null; shade?: number }
+const RECIPES: Record<RubbleKind, Part[]> = {
+  stone: [
+    { shape: 'stone', w: 5, sx: 1, sy: 0.75, sz: 0.9, color: null },
+    { shape: 'stone', w: 3, sx: 1.15, sy: 0.32, sz: 0.95, color: null },                // slabs
+    { shape: 'stone', w: 3, sx: 0.4, sy: 0.35, sz: 0.4, color: null, shade: 0.75 },     // grit
+  ],
+  wood: [
+    { shape: 'splinter', w: 4, sx: 0.3, sy: 0.22, sz: 2.4, color: 0xffffff },   // splinters, pale where it split
+    { shape: 'chip', w: 5, sx: 0.55, sy: 0.16, sz: 0.85, color: 0xf2e4c8 },     // flakes
+    { shape: 'bark', w: 2, sx: 0.5, sy: 0.12, sz: 1.5, color: 0xffffff },       // bark strips
+    { shape: 'stub', w: 1, sx: 0.5, sy: 0.45, sz: 0.5, color: 0xd8c8b0 },       // a torn stub of trunk
+  ],
+  shroom: [
+    { shape: 'shell', w: 5, sx: 1, sy: 0.55, sz: 0.85, color: 0xffffff },       // cap fragments (they glow)
+    { shape: 'stem', w: 3, sx: 0.4, sy: 0.7, sz: 0.4, color: 0xd8d8d0 },        // torn stem pieces
+    { shape: 'shell', w: 2, sx: 0.4, sy: 0.25, sz: 0.4, color: 0xc8d4cc },
+  ],
+  ember: [
+    { shape: 'splinter', w: 4, sx: 0.3, sy: 0.25, sz: 2.2, color: 0x2a1e16 },   // charred sticks
+    { shape: 'bark', w: 2, sx: 0.5, sy: 0.15, sz: 1.2, color: 0x4a3a2c },
+    { shape: 'coal', w: 4, sx: 0.4, sy: 0.35, sz: 0.4, color: 0x5a2a12 },       // coals (they glow)
+  ],
+};
 
 export function initRubble(): void {
-  const geo = new THREE.DodecahedronGeometry(1, 0);
-  mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0.05, flatShading: true }), MAX);
-  // the colour attribute exists from the start (adding it later would change the shader)
-  for (let i = 0; i < MAX; i++) mesh.setColorAt(i, _c.set(0x808080));
-  mesh.count = 0;
-  mesh.frustumCulled = false;
-  mesh.castShadow = mesh.receiveShadow = true;
-  G.scene.add(mesh);
+  const wood = woodAtlas(), shroom = mushroomAtlas();
+  const std = (o: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0.05, ...o });
+  const stoneMat = std({ flatShading: true, vertexColors: true, bumpMap: rockBump(), bumpScale: 1.5 });
+  coalMat = std({ flatShading: true, emissive: 0xffffff, emissiveIntensity: 2.2, emissiveMap: coalTexture() });
+  const woodMat = std({ map: textureFromCanvas(wood.albedo), bumpMap: textureFromCanvas(wood.height, false), bumpScale: 2, roughness: 0.85, metalness: 0 });
+  const shroomMat = std({ map: textureFromCanvas(shroom.albedo), bumpMap: textureFromCanvas(shroom.height, false), bumpScale: 2, emissive: 0xffffff, emissiveMap: textureFromCanvas(shroom.glow), emissiveIntensity: 1.1, roughness: 0.6, metalness: 0 });
+  const mats: Record<Shape, THREE.Material> = { stone: stoneMat, coal: coalMat, shell: shroomMat, stem: shroomMat, stub: woodMat, splinter: woodMat, chip: woodMat, bark: woodMat };
+  for (const shape of Object.keys(POOL) as Shape[]) {
+    const { max, variants } = POOL[shape];
+    for (let v = 0; v < variants; v++) {
+      const seed = 7 + v * 13 + shape.length * 3;
+      const geo = shape === 'stone' || shape === 'coal' ? stoneGeometry(seed)
+        : shape === 'shell' ? shellGeometry(seed)
+        : shape === 'stem' ? tornTubeGeometry(seed, STEM_COLS)
+        : shape === 'stub' ? tornTubeGeometry(seed, STUB_COLS)
+        : flakeGeometry(shape, seed);
+      const mesh = new THREE.InstancedMesh(geo, mats[shape], max);
+      // the colour attribute exists from the start (adding it later would change the shader)
+      for (let i = 0; i < max; i++) mesh.setColorAt(i, _c.set(0x808080));
+      mesh.count = 0;
+      mesh.frustumCulled = false;
+      mesh.castShadow = mesh.receiveShadow = true;
+      G.scene.add(mesh);
+      pools[`${shape}:${v}`] = { mesh, chunks: [], next: 0, max };
+    }
+  }
 }
 
-export interface RubbleOpts { count: number; color: number; /** where the chunks start: a circle round x, z, and a height range */ radius: number; height: number; /** the chunks' size (m) and how hard they fly */ size: number; speed: number }
+export interface RubbleOpts { count: number; color: number; kind?: RubbleKind; /** where the pieces start: a circle round x, z, and a height range */ radius: number; height: number; /** the pieces' size (m) and how hard they fly */ size: number; speed: number }
 
-/** A prop's worth of chunks at (x, z) */
-export function rubble(x: number, z: number, { count, color, radius, height, size, speed }: RubbleOpts): void {
-  if (!mesh) return;
-  const base = new THREE.Color(color);
+/** A prop's worth of pieces at (x, z) */
+export function rubble(x: number, z: number, { count, color, kind = 'stone', radius, height, size, speed }: RubbleOpts): void {
+  if (!pools['stone:0']) return;
+  const parts = RECIPES[kind], total = parts.reduce((a, q) => a + q.w, 0), dirty = new Set<Pool>();
   for (let i = 0; i < count; i++) {
-    const c = chunks[next] ??= {} as Chunk, slot = next;
-    next = (next + 1) % MAX;
+    let r = Math.random() * total, part = parts[0];
+    for (const q of parts) { if ((r -= q.w) < 0) { part = q; break; } }
+    const key = `${part.shape}:${Math.floor(Math.random() * POOL[part.shape].variants)}`;
+    const pool = pools[key], slot = pool.next, c = pool.chunks[slot] ??= {} as Chunk;
+    pool.next = (slot + 1) % pool.max;
     const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * radius, s = size * rand(0.4, 1);
     Object.assign(c, {
+      shape: part.shape, pool: key,
       x: x + Math.cos(a) * d, y: groundHeight(x, z) + 0.15 + Math.random() * height, z: z + Math.sin(a) * d,
       vx: Math.cos(a) * speed * rand(0.3, 1), vy: rand(1.5, 4.5) * (speed / 4), vz: Math.sin(a) * speed * rand(0.3, 1),
       rx: rand(0, 6), ry: rand(0, 6), rz: rand(0, 6), wx: rand(-9, 9), wy: rand(-9, 9), wz: rand(-9, 9),
-      // slabs and splinters more than cubes
-      sx: s * rand(0.6, 1.3), sy: s * rand(0.35, 0.9), sz: s * rand(0.5, 1.2), t: 0, life: LIFE + rand(0, 3), rest: false,
+      sx: s * part.sx * rand(0.8, 1.2), sy: s * part.sy * rand(0.8, 1.2), sz: s * part.sz * rand(0.8, 1.2), t: 0, life: LIFE + rand(0, 3), rest: false, tx: 0, tz: 0,
     });
-    mesh.setColorAt(slot, _c.copy(base).multiplyScalar(rand(0.6, 1.15)));
+    pool.mesh.setColorAt(slot, _c.set(part.color ?? color).multiplyScalar((part.shade ?? 1) * rand(0.75, 1.15)));
+    pool.mesh.count = Math.min(pool.max, Math.max(pool.mesh.count, pool.chunks.length));
+    dirty.add(pool);
   }
-  mesh.instanceColor!.needsUpdate = true;
-  mesh.count = Math.min(MAX, Math.max(mesh.count, chunks.length));
+  for (const pool of dirty) pool.mesh.instanceColor!.needsUpdate = true;
+}
+
+/** how far the piece's lowest point is below its centre, for the way it's turned (its box, a little smaller for the
+ * rounder stones) */
+function halfHeight(c: Chunk): number {
+  const e = _m.makeRotationFromEuler(_e.set(c.rx, c.ry, c.rz)).elements;
+  if (c.shape === 'stem' || c.shape === 'stub') return Math.abs(e[5]) * c.sy + Math.hypot(e[1], e[9]) * c.sx;
+  // a cap fragment's rim, its lowest point, is well below its middle but nowhere near the box's floor
+  if (c.shape === 'shell') return (Math.abs(e[1]) * c.sx + Math.abs(e[9]) * c.sz) * 0.8 + Math.abs(e[5]) * c.sy * 0.35;
+  const h = Math.abs(e[1]) * c.sx + Math.abs(e[5]) * c.sy + Math.abs(e[9]) * c.sz;
+  return c.shape === 'stone' || c.shape === 'coal' ? h * 0.8 : h;
+}
+
+/** The quarter turns nearest the piece's tilt that lay it lowest, its broadest face down: nothing rests on its end */
+function settle(c: Chunk): void {
+  const bx = Math.round(c.rx / HALF), bz = Math.round(c.rz / HALF), rx = c.rx, rz = c.rz;
+  // a cap fragment is a dome: it lies on its rim, convex side up, so it may turn right over to do it
+  const span = c.shape === 'shell' ? 2 : 1;
+  let best = 1e9;
+  for (let i = -span; i <= span; i++) for (let k = -span; k <= span; k++) {
+    c.rx = (bx + i) * HALF; c.rz = (bz + k) * HALF;
+    const flipped = c.shape === 'shell' && _m.makeRotationFromEuler(_e.set(c.rx, c.ry, c.rz)).elements[5] < 0.5;
+    const score = halfHeight(c) + 0.02 * (Math.abs(i) + Math.abs(k)) + (flipped ? 1 : 0);
+    if (score < best) { best = score; c.tx = c.rx; c.tz = c.rz; }
+  }
+  c.rx = rx; c.rz = rz;
 }
 
 export function updateRubble(dt: number): void {
-  if (!mesh || !mesh.count) return;
+  // the coals breathe, slowly (about 0.6 Hz)
+  if (coalMat) coalMat.emissiveIntensity = 2.2 + 0.5 * Math.sin(G.time * 3.8);
+  for (const k in pools) updatePool(pools[k], dt);
+}
+
+function updatePool({ mesh, chunks }: Pool, dt: number): void {
+  if (!mesh.count) return;
   let live = 0;
   for (let i = 0; i < mesh.count; i++) {
     const c = chunks[i];
@@ -63,12 +157,19 @@ export function updateRubble(dt: number): void {
       c.vy -= GRAVITY * dt;
       c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
       c.rx += c.wx * dt; c.ry += c.wy * dt; c.rz += c.wz * dt;
-      const floor = groundHeight(c.x, c.z) + c.sy * 0.6;
+      const floor = groundHeight(c.x, c.z) + halfHeight(c);
       if (c.y < floor) {
         c.y = floor;
         if (c.vy < -1.2) {
           c.vy *= -BOUNCE; c.vx *= 0.6; c.vz *= 0.6; c.wx *= 0.5; c.wy *= 0.5; c.wz *= 0.5;
-        } else { c.rest = true; c.vx = c.vy = c.vz = 0; }
+        } else { c.rest = true; c.vx = c.vy = c.vz = 0; c.wx = c.wy = c.wz = 0; settle(c); }
+      }
+    } else {
+      // it topples onto its broad face
+      const k = Math.min(1, dt * 12), { tx, tz } = c;
+      if (Math.abs(tx - c.rx) + Math.abs(tz - c.rz) > 1e-3) {
+        c.rx += (tx - c.rx) * k; c.rz += (tz - c.rz) * k;
+        c.y = groundHeight(c.x, c.z) + halfHeight(c);
       }
     }
     const k = c.life - c.t < SHRINK ? Math.max(0, (c.life - c.t) / SHRINK) : 1;
@@ -79,4 +180,6 @@ export function updateRubble(dt: number): void {
   if (!live) mesh.count = 0;
 }
 
-export function clearRubble(): void { chunks.length = 0; next = 0; if (mesh) mesh.count = 0; }
+export function clearRubble(): void {
+  for (const k in pools) { const p = pools[k]; p.chunks.length = 0; p.next = 0; p.mesh.count = 0; }
+}
