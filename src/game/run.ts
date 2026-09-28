@@ -70,6 +70,7 @@ export interface RunUI {
   banner(title: string, sub?: string): void;
   showDecision(): void;
   hideDecision(): void;
+  resetDecision(): void;
   showSummary(s: RunSummary): void;
 }
 
@@ -94,6 +95,7 @@ export function initRun(uiHooks: RunUI): void {
 }
 
 function cleanupWorld(): void {
+  ui.resetDecision();
   clearEnemies();
   clearProjectiles();
   clearEffects();

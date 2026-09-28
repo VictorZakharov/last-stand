@@ -21,7 +21,7 @@ import { initGround, updateGround, clearGround } from './game/groundItems';
 import { setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { initFloaters, updateFloaters } from './ui/floaters';
-import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, updateHud, renderSpoils } from './ui/hud';
+import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
 import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, selectedWave, lobbyViewShift, renderMenu, markNew } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { hideTooltip } from './ui/tooltip';
@@ -74,7 +74,7 @@ async function boot() {
   initTouch();
   initPerfHud(renderer);
   buildHotbar(G.player);
-  initRun({ banner, showDecision, hideDecision, showSummary });
+  initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
   initMenus({ start, toMenu, resume, abandon, profileChanged, switchClass, summaryDone, lobbyChanged: sendLobbyChoice });
   initSaves({ use: switchSaveSlot });
   // an item picked up off the lobby floor goes back in the stash, marked new
