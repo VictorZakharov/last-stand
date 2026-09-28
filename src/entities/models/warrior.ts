@@ -9,7 +9,7 @@ import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ram
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, lod, type SurfaceFn } from './armor';
 import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
-import { buildHand, poseHand, hold } from './hands';
+import { buildHand, poseHand, hold, seat, fistReach } from './hands';
 import { clamp, lerp, mulberry } from '../../util';
 import { SkeletonCape } from './cape';
 import { fromEyes, dirFromEyes } from '../viewModel';
@@ -28,7 +28,7 @@ const ARM = 0.63;
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3();
 const _grip = new THREE.Vector3(), _pole = new THREE.Vector3(1, -0.7, -0.6);
 const _gw = new THREE.Vector3(), _dw = new THREE.Vector3(), _cur = new THREE.Vector3(), _hq = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _sq = new THREE.Quaternion();
-const IDENT = new THREE.Quaternion(), _va = new THREE.Vector3(), _vd = new THREE.Vector3();
+const IDENT = new THREE.Quaternion(), _va = new THREE.Vector3(), _vd = new THREE.Vector3(), _up = new THREE.Vector3();
 const SHIELD_SIDE = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2, 0));
 const SHIELD_FRONT = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
 const SIDE_POS = new THREE.Vector3(0.07, -0.02, 0), FRONT_POS = new THREE.Vector3(0, -0.1, 0);
@@ -176,6 +176,8 @@ export function buildWarrior(): Model {
     for (const y of [-0.13, -0.21]) S.add(belt(0.078, 0.078, y, 0.024, 0.006, 0, 14), leather, sh);
     S.add(furTufts(rng, 40, (i, o) => { const a = (i / 40) * Math.PI * 2; o.p.set(Math.sin(a) * 0.06, -0.035, Math.cos(a) * 0.06); o.d.set(Math.sin(a), 0.6, Math.cos(a)); }, 0.035, 0.009), furM, el);
     S.add(scaleUV(lathe([[0.052, -0.26], [0.06, -0.2], [0.066, -0.1], [0.07, -0.05], [0.068, -0.035]], 16), 2, 1), leather, el);
+    // its top closed under the elbow's fur (through the eyes, with the fur hidden, it would show open)
+    S.add(new THREE.CircleGeometry(0.069, 16).rotateX(-Math.PI / 2), leather, el, [0, -0.037, 0]);
     const vb: SurfaceFn = (u, v, out) => { const a = (u - 0.5) * 1.8, y = lerp(-0.24, -0.06, v), r = 0.066 + 0.01 * sm(-0.24, -0.08, y) + 0.004; return out.set(s * Math.cos(a) * r, y, Math.sin(a) * r); };
     S.add(plate(vb, 10, 8, 0.005), plateM, el);
     for (const y of [-0.09, -0.2]) S.add(belt(0.072, 0.072, y, 0.018, 0.006, 0, 14), leatherDark, el);
@@ -421,7 +423,7 @@ export function buildWarrior(): Model {
    *  a high guard, blades spread (shoulder pitch, elbow, blade towards the arm, yaw, wrist roll); the
    *  raised shield higher, its rim just under the crosshair (added to shoulder and elbow) */
   let fp = false;
-  const FP_STANCE = [-0.4, -0.3, 0.7, 0, 0];
+  const FP_STANCE = [-0.6, 0, 0.7, 0, -0.2];
   const FP_STANCE_TWO = [-0.2, -0.2, 1.3, -1.0, -0.3];
   const FP_SWING = [-1.35, -0.4, 0.5, 0.6, 0.55];
   const FP_SWING_TWO = [-1.2, -0.4, 0.1, 0.6, 0.55];
@@ -513,6 +515,9 @@ export function buildWarrior(): Model {
     for (const w of offWeapons.values()) w.group.visible = false;
     offHeld = gear.offWeapon ? offWeapons.get(gear.offWeapon) ?? offWeapons.get('Sword')! : null;
     if (offHeld) offHeld.group.visible = true;
+    // each seated in its fist, the hand on its wrist
+    if (held) seat(handR, grip, held.r);
+    if (offHeld) seat(handL, gripL, offHeld.r);
     tipOn(false);
   }
 
@@ -772,6 +777,13 @@ export function buildWarrior(): Model {
         _sq.copy(j.shoulderL.quaternion);
         const e0 = j.elbowL.rotation.x;
         reachArm(j.shoulderL, j.elbowL, j.P.upperL, fore, _grip, _pole);
+        // then the wrist where the fist closes round the lower grip (a hand stays on its wrist), the hand's
+        // length along the line to the shoulder, the wrist bending the rest of the way
+        if (twoHeld) {
+          j.shoulderL.getWorldPosition(_up).sub(offGrip.getWorldPosition(_gw));
+          fistReach(handL, _hd.set(0, 1, 0).transformDirection(grip.matrixWorld), _up, held!.r, _cur);
+          reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, j.chest.worldToLocal(_gw.sub(_cur)), _pole);
+        }
         if (k < 1) { j.shoulderL.quaternion.slerp(_sq, 1 - k); j.elbowL.rotation.x = lerp(e0, j.elbowL.rotation.x, k); }
       }
     }
@@ -784,10 +796,10 @@ export function buildWarrior(): Model {
     // fists round whatever they hold; an empty hand hangs loosely curled
     root.updateMatrixWorld(true);
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
-    if (held) hold(handR, grip.getWorldPosition(_hp), along(grip), held.r);
+    if (held) hold(handR, along(grip), held.r);
     else poseHand(handR, 0.5 + Math.sin(t * 1.3) * 0.05, 0.1);
-    if (offHeld) hold(handL, gripL.getWorldPosition(_hp), along(gripL), offHeld.r);
-    else if (twoHeld && held) hold(handL, offGrip.getWorldPosition(_hp), along(grip), held.r);
+    if (offHeld) hold(handL, along(gripL), offHeld.r);
+    else if (twoHeld && held) hold(handL, along(grip), held.r, _up);
     else poseHand(handL, shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 0.08);
 
     if (dt > 0) cape.update(dt, st.velocity ?? ZERO);

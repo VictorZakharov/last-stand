@@ -10,7 +10,7 @@ import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, puls
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, gem as gemGeo, Skirt, scaleUV, type SurfaceFn } from './armor';
 import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
-import { buildHand, poseHand, hold } from './hands';
+import { buildHand, poseHand, hold, seat } from './hands';
 import { clamp, lerp, damp, TAU, mulberry } from '../../util';
 import { SkeletonCape } from './cape';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
@@ -265,7 +265,7 @@ export function buildMage(): Model {
   // Held GRIP further up the haft than its old balance point, so the crystal rides at head height
   // and the bolts it casts fly at the foes, not over them.
   const staff = joint(j.handR, 0, -0.05, 0.02);
-  const STAFF_PITCH = 1.25;
+  const STAFF_PITCH = 1.25, STAFF_R = 0.026;
   staff.rotation.x = STAFF_PITCH;
   const GRIP = 0.62;
   {
@@ -365,6 +365,8 @@ export function buildMage(): Model {
     aim = clamp(aim + aimV * Math.min(dt, 0.05), 0, 1);
     j.shoulderR.rotation.x += -0.3 * aim; j.elbowR.rotation.x += 0.15 * aim; j.spine.rotation.x += 0.12 * aim;
     staff.rotation.x = STAFF_PITCH + 1.75 * aim;
+    // (the haft sits in the fist, the hand on its wrist)
+    seat(handR, staff, STAFF_R);
     if (a) {
       const k = a.t;
       if (a.name === 'cast') {
@@ -460,7 +462,7 @@ export function buildMage(): Model {
 
     // the right hand closes round the staff wherever the arm has taken it
     root.updateMatrixWorld(true);
-    hold(handR, staff.getWorldPosition(_hp), _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), 0.026);
+    hold(handR, _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), STAFF_R);
 
     // cloth runs after the pose so it collides with this frame's skeleton
     if (dt > 0) cape.update(dt, st.velocity ?? ZERO);
