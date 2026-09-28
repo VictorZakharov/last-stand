@@ -44,6 +44,8 @@ function chase(e: Enemy, speedMul = 1): void {
 
 /** Height a hostile bolt flies at. */
 const BOLT_Y = 1.1;
+/** A bolt leaves the caster's tip wherever it is and settles to BOLT_Y over this many metres. */
+const SETTLE = 2.2;
 /** Would a bolt from this enemy reach the target, or hit an obstacle first? (It flies over low cover.) */
 function canShoot(e: Enemy): boolean {
   const p = e.target!.pos, r = (e.def.projectile?.radius ?? 0.3) * 0.5;
@@ -76,7 +78,7 @@ export const FX = {
     sfx.slam();
   },
   /** a bolt from enemy `id` (its damage rides along for the game that deals it) */
-  bolt(id: number, ox: number, oz: number, angle: number, damage: number) {
+  bolt(id: number, ox: number, oz: number, angle: number, damage: number, oy = BOLT_Y) {
     const e = G.enemies.find((x) => x.id === id);
     const pj = e?.def.projectile;
     if (!e || !pj) return;
@@ -88,13 +90,15 @@ export const FX = {
       burst(proj.pos, { count: 16, color: pj.color, speed: 4, life: 0.4, size: 0.3 });
       if (pj.look === 'spore') smokePuff(proj.pos, { count: 6, color: pj.trail, alpha: 0.4, size: 0.6, sizeEnd: 1.8, life: 0.9, rise: 0.4 });
     };
-    const pos = new THREE.Vector3(ox, BOLT_Y, oz);
+    const oy0 = Math.min(2, Math.max(0.7, oy)), pos = new THREE.Vector3(ox, oy0, oz);
+    // out of the pod, then level: hits and the clear-shot check assume BOLT_Y
+    const settle = (p: Projectile): void => { p.pos.y = BOLT_Y + (oy0 - BOLT_Y) * Math.max(0, 1 - Math.hypot(p.pos.x - ox, p.pos.z - oz) / SETTLE); };
     if (pj.look === 'void' || pj.look === 'magma') {
       const look = pj.look, acc = { t: 0, a: 0 }, smoke = pj.trail ?? 0x100818;
       riftBoltLaunch(look, pos, pj.color, size);
       spawnProjectile({
         pos, dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true, color: pj.color, mesh: riftBolt(look, pj.color, size),
-        tick: (p, dt) => riftBoltTick(look, p.mesh, p.pos, p.vel, pj.color, smoke, dt, acc),
+        tick: (p, dt) => { settle(p); riftBoltTick(look, p.mesh, p.pos, p.vel, pj.color, smoke, dt, acc); },
         onHit: (target, proj) => { hurtPlayer(target as Player, damage, type, proj.pos); riftBoltImpact(look, proj.pos, pj.color, smoke, size); },
         onExpire: (proj) => riftBoltFizzle(look, proj.pos, pj.color, smoke, size),
       });
@@ -104,13 +108,13 @@ export const FX = {
       const acc = { t: 0 }, smoke = pj.trail ?? 0x2c4a1c;
       spawnProjectile({
         pos, dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true, color: pj.color, mesh: sporeOrb(pj.color, size),
-        tick: (p, dt) => sporeOrbTick(p.mesh, p.pos, pj.color, smoke, dt, acc), onHit,
+        tick: (p, dt) => { settle(p); sporeOrbTick(p.mesh, p.pos, pj.color, smoke, dt, acc); }, onHit,
       });
       return;
     }
     spawnProjectile({
       pos, dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true,
-      color: pj.color, size, intensity: 3.5 * glow, glow: 2,
+      color: pj.color, size, intensity: 3.5 * glow, glow: 2, tick: settle,
       trail: { color: pj.color, colorEnd: pj.trail ?? 0x200030, intensity: 1.3 * glow * glow, size: size * 2.3, rate: 60, life: 0.4 },
       onHit,
     });
@@ -158,7 +162,7 @@ function fireBolt(e: Enemy, angleOffset = 0, lead = true): void {
   if (e.model.tip) e.model.tip.getWorldPosition(origin);
   else origin.set(e.pos.x, e.height * 0.6, e.pos.z);
   const tx = p.pos.x + (lead ? p.vel.x * 0.35 : 0), tz = p.pos.z + (lead ? p.vel.z * 0.35 : 0);
-  fx('bolt', e.id, origin.x, origin.z, Math.atan2(tx - origin.x, tz - origin.z) + angleOffset, e.damage);
+  fx('bolt', e.id, origin.x, origin.z, Math.atan2(tx - origin.x, tz - origin.z) + angleOffset, e.damage, origin.y);
 }
 
 /** A slam's telegraph, taken down with the action if the enemy dies first. */
