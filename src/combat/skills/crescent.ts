@@ -9,6 +9,7 @@ import { sfx } from '../../core/audio';
 import { rand } from '../../util';
 import { slashArc, slashMesh } from './slash';
 import { swingArc } from './cleave';
+import { hurtPropsIn, PROP_DAMAGE, type Prop } from '../../world/destructible';
 import type { InstantSkill, Needs } from './types';
 import type { Enemy } from '../../entities/enemy';
 
@@ -42,7 +43,7 @@ const skill: InstantSkill = {
     group.position.set(pos.x, 0.7, pos.z);
     G.scene.add(group);
     const light = flash({ color: def.color, intensity: 6, distance: 7, life: 1, hold: 99, follow: () => new THREE.Vector3(pos.x + dir.x * R, 1.2, pos.z + dir.z * R) });
-    const hit = new Set<Enemy>();
+    const hit = new Set<Enemy>(), struck = new Set<Prop>();
     const life = def.range / def.speed;
     let t = 0, crackle = 0, trail = 0;
 
@@ -80,6 +81,7 @@ const skill: InstantSkill = {
         if ((trail -= dt) <= 0) { trail = 0.07; groundFlash({ x: pos.x + dir.x * R * 0.7, z: pos.z + dir.z * R * 0.7 }, { color: def.color, intensity: 0.35, radius: R * 0.7, life: 0.25 }); }
 
         const fx = pos.x + dir.x * R * 0.8, fz = pos.z + dir.z * R * 0.8;
+        hurtPropsIn(player, fx, fz, R * 0.85, PROP_DAMAGE.swing, struck);
         for (const e of G.enemies) {
           if (!e.alive || hit.has(e)) continue;
           if (Math.hypot(e.pos.x - fx, e.pos.z - fz) > R * 0.85 + e.radius) continue;

@@ -7,8 +7,10 @@
 import * as THREE from 'three';
 import type { Obstacle } from '../types';
 import type { Updater } from './props';
-import { simulates } from '../net/role';
+import { simulates, dealsDamage } from '../net/role';
+import type { Player } from '../entities/player';
 import { burst, debris, smokePuff } from '../fx/particles';
+import { rubble } from '../fx/rubble';
 import { addShake } from '../core/renderer';
 import { sfx } from '../core/audio';
 import { G } from '../state';
@@ -36,7 +38,7 @@ export interface Prop {
 export const state = { rev: 0 };
 
 /** How much one strike takes off a prop's `hp`: a player's bolt, an enemy's bolt, a melee swing, a second of the Void Lance */
-export const PROP_DAMAGE = { bolt: 1, hostile: 0.5, swing: 1, beam: 3 };
+export const PROP_DAMAGE = { bolt: 1, hostile: 0.5, swing: 1, beam: 3, /** a blast (a Starfall shard) */ blast: 2, /** a nova, a war cry */ burst: 4, /** per second, in a channelled area (Maelstrom, Tempest) */ zone: 3, /** a charge running one down */ trample: 3 };
 
 let propSink: (id: number, life: number) => void = () => {};
 /** the fight's owner reports each prop's health as it changes (0: broken) */
@@ -92,11 +94,24 @@ export function hurtProp(o: Obstacle, amount: number): boolean {
     p.chipT = now;
     propSink(p.id, Math.round(p.life * 10) / 10);
     debris(centre(p, _p), { count: 3, color: p.color, speed: 3, size: 0.12, life: 0.7 });
+    rubble(_p.x, _p.z, { count: 1, color: p.color, radius: 0.4, height: 0.3, size: 0.1, speed: 2 });
     sfx.clang();
   }
   return false;
 }
 
+/** An area attack of `by` (a circle at x, z): every prop it touches takes `amount`, once per call (a `seen`
+ *  set makes it once for a moving one, like Crescent's) */
+export function hurtPropsIn(by: Player, x: number, z: number, radius: number, amount: number, seen?: Set<Prop>): void {
+  if (!dealsDamage(by)) return;
+  const hit = seen ?? new Set<Prop>();
+  for (const o of [...G.arena.obstacles]) {   // (a copy: breaking one takes its circles out)
+    const p = o.prop;
+    if (!p || hit.has(p) || Math.hypot(o.x - x, o.z - z) > radius + o.r) continue;
+    hit.add(p);
+    hurtProp(o, amount);
+  }
+}
 /** A prop's health as the fight's owner reports it (a co-op guest) */
 export function setPropLife(p: Prop, life: number): void {
   if (life <= 0) { breakProp(p); return; }
@@ -117,8 +132,9 @@ function showBar(p: Prop): void {
       const age = G.time - p.hurtT;
       if (p.broken || age > BAR_SHOWN + BAR_FADE) { hideBar(p); return null; }
       el.style.opacity = String(age <= BAR_SHOWN ? 1 : 1 - (age - BAR_SHOWN) / BAR_FADE);
-      return centre(p, new THREE.Vector3()).setY(Math.max(...p.parts.map((o) => o.h)) + 0.3);
-    });
+      // over its top, but no higher than a man: a pillar's own top is off the frame when close to it
+      return centre(p, new THREE.Vector3()).setY(Math.min(2.2, Math.max(...p.parts.map((o) => o.h)) + 0.3));
+    }, true);
   }
   p.fill!.style.width = `${Math.max(0, p.life / p.max) * 100}%`;
 }
@@ -150,7 +166,10 @@ export function breakProp(p: Prop): void {
   for (const o of p.parts) { const i = p.list.indexOf(o); if (i >= 0) p.list.splice(i, 1); }
   state.rev++;
   const c = centre(p, _p), size = Math.max(...p.parts.map((o) => o.r)) + p.parts.length * 0.25;
-  debris(c, { count: 10 + Math.round(size * 8), color: p.color, speed: 4 + size * 2, size: 0.2 });
+  // the prop comes apart: chunks that fly, bounce and lie a few seconds before they crumble away
+  const reach = Math.max(...p.parts.map((o) => Math.hypot(o.x - c.x, o.z - c.z) + o.r));
+  rubble(c.x, c.z, { count: Math.min(30, Math.round(8 + size * 10)), color: p.color, radius: reach * 0.8, height: Math.min(2, Math.max(...p.parts.map((o) => o.h))) * 0.7, size: 0.16 + size * 0.09, speed: 2.5 + size });
+  debris(c, { count: 8, color: p.color, speed: 4 + size * 2, size: 0.14 });
   smokePuff(c, { count: 4 + Math.round(size * 3), color: p.color, alpha: 0.4, size: 0.8 + size * 0.4, sizeEnd: 2 + size, life: 1.2, speed: 1.6 });
   burst(c, { count: 6, color: 0xffd9a0, intensity: 1.5, speed: 4, life: 0.35, size: 0.1, gravity: 8 });
   addShake(0.06 + size * 0.05);

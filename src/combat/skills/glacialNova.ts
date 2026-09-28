@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
+import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
 import { shockwave, groundFlash, decal, iceSpikes } from '../../fx/effects';
 import { particles, col } from '../../fx/particles';
 import { flash } from '../../fx/lights';
@@ -37,6 +38,7 @@ const skill: InstantSkill = {
         life: rand(0.4, 0.9), size: rand(0.12, 0.35), sizeEnd: 0.02, color: col(i % 3 ? ICE : 0xffffff, 2.5), colorEnd: col(0x2060ff, 0.4), drag: 3.5,
       });
     }
+    hurtPropsIn(player, c.x, c.z, def.radius, PROP_DAMAGE.burst);
     for (const e of G.enemies) {
       if (!e.alive) continue;
       if (Math.hypot(e.pos.x - c.x, e.pos.z - c.z) < def.radius + e.radius) {

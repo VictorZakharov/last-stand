@@ -12,6 +12,7 @@ import { buildModel } from '../entities/models/index';
 import { spawnEnemy } from '../entities/spawner';
 import { clearEnemies } from '../entities/enemy';
 import { clearEffects, shockwave, groundFlash, decal, telegraph, lightning, iceSpikes, glyphMarker, lightPillar, crackDecal, crystalBurst } from '../fx/effects';
+import { rubble } from '../fx/rubble';
 import { clearLights } from '../fx/lights';
 import { particles } from '../fx/particles';
 import { coreSamples } from '../combat/projectiles';
@@ -30,6 +31,7 @@ export async function warmShaders(): Promise<void> {
   await new Promise((r) => setTimeout(r));
   shockwave(p); groundFlash(p); decal(p); decal(p, { type: 'frost' }); telegraph(p, 2, 1);
   lightning(at, new THREE.Vector3(1, 1, 1)); iceSpikes(p, 2); glyphMarker(p); lightPillar(p); crackDecal(p); crystalBurst(p);
+  rubble(0, 0, { count: 2, color: 0x808080, radius: 0.1, height: 0.1, size: 0.2, speed: 1 });
   const extra: THREE.Object3D[] = [...coreSamples(), sporeOrbSample(), ...riftBoltSamples(), ...groundSamples(), ...Object.values(SKILL_IMPLS).flatMap((s) => s.warm?.() ?? [])];
   // every other class's model, so picking a class in the lobby compiles nothing
   await new Promise((r) => setTimeout(r));
