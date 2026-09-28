@@ -214,7 +214,8 @@ export function buildSky(fogColor: number, moonDir: THREE.Vector3, zenith: RGB =
     vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); gl_Position.z = gl_Position.w; }`,
     fragmentShader: `
       varying vec3 vDir; uniform vec3 uFog; uniform vec3 uMoon; uniform vec3 uZenith;
-      float h(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      // no sin(): its precision loss on big cell coordinates lines the stars up in rings round the zenith
+      float h(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
       void main(){
         vec3 d = normalize(vDir);
         float y = max(d.y, 0.0);
@@ -223,8 +224,13 @@ export function buildSky(fogColor: number, moonDir: THREE.Vector3, zenith: RGB =
         float m = max(dot(d, uMoon), 0.0);
         c += vec3(0.06, 0.07, 0.12) * pow(m, 300.0) + vec3(0.02, 0.025, 0.04) * pow(m, 8.0);
         c = mix(c, vec3(0.5, 0.54, 0.64) * (0.85 + 0.15 * h(floor(d * 900.0))), smoothstep(0.99988, 0.99993, m));
+        // cubic cells cut the sphere unevenly (more cells towards the diagonals): scale them to even the density out
+        vec3 ad = abs(d);
         vec3 g = floor(d * 700.0);
-        c += vec3(0.5, 0.55, 0.7) * step(0.9975, h(g)) * smoothstep(0.12, 0.4, y) * (0.4 + 0.6 * h(g + 1.0));
+        float dens = 0.004 * 1.732 / (ad.x + ad.y + ad.z);
+        float b = h(g + 1.0);
+        vec3 tint = mix(vec3(0.6, 0.68, 1.0), vec3(1.0, 0.85, 0.7), h(g + 2.0));
+        c += tint * 0.55 * step(1.0 - dens, h(g)) * smoothstep(0.12, 0.4, y) * (0.25 + 1.1 * b * b * b);
         gl_FragColor = vec4(c, 1.0);
       }`,
   });
