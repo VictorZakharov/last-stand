@@ -246,6 +246,8 @@ export interface Model {
   height: number;
   /** cast origin (staff tip / orb) */
   tip?: THREE.Object3D;
+  /** the other hand's weapon tip, while there's a weapon in each (a charge gathers into both) */
+  readonly offTip?: THREE.Object3D | null;
   /** offhand focus point */
   palm?: THREE.Object3D;
   /** skeleton, for humanoid models */

@@ -11,10 +11,13 @@ import type { Player } from '../../entities/player';
 
 type Def = Needs<'damage' | 'range' | 'arc' | 'color'>;
 
-/** the lunge: seconds, and how far short of the aim it stops (the strikes reach the rest) */
-const LUNGE = 0.3, SHORT = 1.3, MAX_LUNGE = 2.2;
-/** when the two blades cross the target, into the lunge (in step with the model's 'flurry') */
-const STRIKES = [0.09, 0.21];
+/** the lunge: seconds, how long the strikes follow through standing after it (at full speed the two
+ *  cuts were over before the eye caught them), and how far short of the aim it stops (the strikes reach
+ *  the rest) */
+const LUNGE = 0.3, HOLD = 0.35, SHORT = 1.3, MAX_LUNGE = 2.2;
+/** when the two blades cross the target, into the lunge (in step with the model's 'flurry': its cuts
+ *  start at 0.3 and 0.7 of it) */
+const STRIKES = [0.3 * (LUNGE + HOLD), 0.7 * (LUNGE + HOLD)];
 
 function strike(player: Player, def: Def, i: number): void {
   if (!player.alive) return;
@@ -23,7 +26,7 @@ function strike(player: Player, def: Def, i: number): void {
   const s = i === 0 ? 1 : -1;
   slashArc({
     x: p.x, z: p.z, facing, ...swingArc(player, def.arc), y: 1.15, dir: s, roll: s * 0.55, pitch: -0.15,
-    color: def.color, sweep: 0.07, fade: 0.2,
+    color: def.color, sweep: 0.13, fade: 0.25,
   });
   sfx.swing();
   if (sweep(player, def, facing, { knock: 1.2 })) { sfx.clang(); addShake(0.1 + i * 0.05); }
@@ -39,7 +42,7 @@ const skill: InstantSkill = {
     const dir = d > 1e-3 ? new THREE.Vector3(dx / d, 0, dz / d) : new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
     // closes in on the aim, but never runs past it
     const lunge = Math.min(MAX_LUNGE, Math.max(0, d - SHORT));
-    player.startDash(dir, lunge / LUNGE, LUNGE, { anim: 'flurry' });
+    player.startDash(dir, lunge / LUNGE, LUNGE, { anim: 'flurry', hold: HOLD });
     STRIKES.forEach((at, i) => schedule(at, () => strike(player, def, i)));
   },
 };

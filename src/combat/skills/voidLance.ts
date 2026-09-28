@@ -7,7 +7,7 @@ import { hitEnemy } from '../damage';
 import { particles, col, burst } from '../../fx/particles';
 import { flash, release } from '../../fx/lights';
 import { sfx } from '../../core/audio';
-import { viewMode, viewSettled } from '../../core/renderer';
+import { viewMode } from '../../core/renderer';
 import { rand } from '../../util';
 import type { ChannelSkill, Needs } from './types';
 import type { LightSlot } from '../../fx/lights';
@@ -169,7 +169,7 @@ const skill: ChannelSkill<LanceState> = {
     _dir.normalize();
     // the portal hangs in front of the chest, where the free hand pushes into it; seen through the
     // eyes, a smaller one just ahead of the hand in view (full size, it would fill the view)
-    const eyes = player.local && viewMode() === 'first' && viewSettled();
+    const eyes = player.eyes;
     if (eyes) _c.copy(hand).addScaledVector(_dir, 0.45);
     else _c.set(player.pos.x + _dir.x * 0.85, 1.7, player.pos.z + _dir.z * 0.85);
     const origin = _c;

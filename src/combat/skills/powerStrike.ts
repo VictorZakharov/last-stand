@@ -23,10 +23,12 @@ const skill: InstantSkill = {
     if (c && !charged.has(c)) { charged.add(c); sfx.charge(c.fireAt); }
     // keep turning towards the aim while charging
     c?.target.copy(player.aim);
-    // motes stream into the weapon, faster and hotter as the charge builds
-    const tip = player.castPoint;
-    const n = Math.random() < dt * (30 + k * 90) ? 1 + Math.floor(k * 2) : 0;
+    // motes stream into the weapon (each of two), faster and hotter as the charge builds
+    const tips = [player.castPoint], off = player.model.offTip;
+    if (off) tips.push(off.getWorldPosition(new THREE.Vector3()));
+    const n = Math.random() < dt * (30 + k * 90) * tips.length ? 1 + Math.floor(k * 2) : 0;
     for (let i = 0; i < n; i++) {
+      const tip = tips[Math.floor(Math.random() * tips.length)];
       const a = Math.random() * Math.PI * 2, r = rand(0.9, 1.6), y = rand(-0.6, 0.8);
       const life = rand(0.25, 0.45);
       const ox = Math.cos(a) * r, oz = Math.sin(a) * r;
