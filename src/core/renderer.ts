@@ -363,8 +363,10 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
     _quat.copy(cam.quaternion);
     cam.lookAt(focus.x, height * 0.55, focus.z);
     _quat2.copy(cam.quaternion);   // (slerpQuaternions copies its first argument in before reading the second)
+    // (into the eyes the character's direction swings wildly as the camera closes on it, so the settling
+    // follows the distance closed, not the clock)
     cam.quaternion.slerpQuaternions(rig.fromQuat, _quat2, ease(Math.min(1, rig.blend / 0.4)));
-    cam.quaternion.slerp(_quat, ease(clamp((rig.blend - 0.6) / 0.4, 0, 1)));
+    cam.quaternion.slerp(_quat, rig.view === 'first' ? ease(clamp((e - 0.3) / 0.65, 0, 1)) : ease(clamp((rig.blend - 0.6) / 0.4, 0, 1)));
     fov = rig.fromFov + (fov - rig.fromFov) * e;
     near = 0.5 + (near - 0.5) * e;
   }
