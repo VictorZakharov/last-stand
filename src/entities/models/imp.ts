@@ -144,9 +144,9 @@ export function buildImp(): Model {
     let spread = 0.15 + st.move * 0.35 + Math.sin(t * 2.3) * 0.05;
     const a = st.action;
     if (a && a.name === 'attack') {
-      const k = a.t;
-      const wind = ramp(k, 0, 0.5) * (1 - ramp(k, 0.55, 0.7));
-      const strike = ramp(k, 0.55, 0.7) * (1 - ramp(k, 0.8, 1));
+      const k = a.t, h = a.hit ?? 0.5;
+      const wind = ramp(k, 0, h - 0.16) * (1 - ramp(k, h - 0.14, h));
+      const strike = ramp(k, h - 0.14, h) * (1 - ramp(k, h + 0.05, 1));
       j.shoulderR.rotation.x += -2.2 * wind + 0.6 * strike; j.shoulderR.rotation.z += -0.4 * wind;
       j.shoulderL.rotation.x += -1.0 * strike;
       j.spine.rotation.x += -0.3 * wind + 0.5 * strike;

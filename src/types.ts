@@ -214,9 +214,11 @@ export interface EnemyDef {
 // ---------------------------------------------------------------------------
 // Models & animation
 
-/** `t`: the action's progress (0..1). A channel's also has `time` (seconds since it began) and `open`
- *  (0..1 through its opening, 1 once open, or at once without one). */
-export interface ActionState { name: string; t: number; time?: number; open?: number }
+/** `t`: the action's progress (0..1). `hit`: an enemy's attack or slam, the progress at which its blow lands
+ *  (the data's windup): its model brings the blow down to connect then, which is when the damage comes.
+ *  A channel's also has `time` (seconds since it began) and `open` (0..1 through its opening, 1 once open,
+ *  or at once without one). */
+export interface ActionState { name: string; t: number; hit?: number; time?: number; open?: number }
 
 /** Per-frame input to a model's procedural animation. */
 export interface AnimState {

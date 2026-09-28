@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, veins } from '../../core/textures';
-import { buildHumanoid, joint, resetPose, idle, pulse } from './rig';
+import { buildHumanoid, joint, resetPose, idle, ramp } from './rig';
 import { Sculpt, bend, horn, lathe, limb, organic, rag, stripRig, taperTube, tatteredSkirt } from './shapes';
 import type { AnimState, Model } from '../../types';
 import { particles, col } from '../../fx/particles';
@@ -121,7 +121,7 @@ export function buildWitch(): Model {
     let glow = 1;
     const a = st.action;
     if (a && a.name === 'attack') {
-      const w = pulse(a.t, 0, 1);
+      const h = a.hit ?? 0.5, w = ramp(a.t, 0, h) * (1 - ramp(a.t, h, Math.min(1, h + 0.3)));
       j.shoulderL.rotation.x += -0.8 * w; j.shoulderR.rotation.x += -0.8 * w;
       j.elbowL.rotation.x += 0.6 * w; j.elbowR.rotation.x += 0.6 * w;
       j.spine.rotation.x += -0.2 * w;

@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { bark, grunge, pbrMaterialMaps, veins } from '../../core/textures';
-import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse } from './rig';
+import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, ramp } from './rig';
 import { Sculpt, lathe, limb, organic, stripRig, taperTube, tatteredSkirt, skipping } from './shapes';
 import type { AnimState, Model } from '../../types';
 import { particles, col } from '../../fx/particles';
@@ -148,7 +148,7 @@ export function buildSporecaller(): Model {
     let glow = 1;
     const a = st.action;
     if (a && a.name === 'attack') {
-      const w = pulse(a.t, 0, 1);
+      const h = a.hit ?? 0.5, w = ramp(a.t, 0, h) * (1 - ramp(a.t, h, Math.min(1, h + 0.3)));
       j.shoulderR.rotation.x += -0.2 * w; j.elbowR.rotation.x += 0.1 * w; staff.rotation.x += 0.2 * w;
       j.spine.rotation.x += -0.25 * w;
       j.head.rotation.x += -0.2 * w;
