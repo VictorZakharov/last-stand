@@ -11,10 +11,11 @@ import * as THREE from 'three';
 const CLOTH = typeof location === 'undefined' || !/[?&]cloth=0/.test(location.search);
 const NC = 28, NR = 7, N = NC * NR;
 const STEP = 1 / 60, MAX_STEPS = 3, ITER = 3;
-/** how hard each row is pulled to its animated place (per step), and how far it may stray from it, in the joint's metres */
-const HOLD = [1, 0.5, 0.32, 0.22, 0.16, 0.12, 0.1];
-const STRAY = [0, 0.05, 0.08, 0.11, 0.14, 0.17, 0.2];
-const DAMP = 0.965, GRAVITY = 9.8 * 0.55;
+/** how hard each row is pulled to its animated place (per step: barely, or the cloth turns to rubber; it hangs by gravity from its top ring and only keeps its
+ *  cut through its constraints), and how far it may stray from it, in the joint's metres */
+const HOLD = [1, 0.02, 0.01, 0.006, 0.004, 0.003, 0.002];
+const STRAY = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
+const DAMP = 0.94, GRAVITY = 9.8;
 const _m = new THREE.Matrix4(), _inv = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _n = new THREE.Vector3();
 
 export interface BellOptions {
@@ -43,6 +44,7 @@ export class BellCloth {
   private readonly rim: THREE.BufferGeometry;
   private readonly pairs: [number, number][] = [];
   private readonly len: Float32Array;
+  private readonly stiff: Float32Array;
   private readonly local = new Float32Array(N * 3);
   private readonly flip: number;
   private acc = 0;
@@ -65,6 +67,11 @@ export class BellCloth {
       }
       if (r + 2 < NR) this.pairs.push([id(r, c), id(r + 2, c)]);       // bend
     }
+    this.stiff = new Float32Array(this.pairs.length).fill(1);
+    // hoops: each ring keeps its round section (across and quarter-way round), gently, so the bell hangs open rather than flat
+    for (let r = 1; r < NR; r++) for (let c = 0; c < NC / 2; c++) { this.pairs.push([id(r, c), id(r, c + NC / 2)]); this.pairs.push([id(r, c), id(r, c + NC / 4)]); }
+    const hoops = new Float32Array(this.pairs.length); hoops.set(this.stiff); hoops.fill(0.35, this.stiff.length);
+    this.stiff = hoops;
     this.len = new Float32Array(this.pairs.length);
     this.outer = o.shape.clone();
     this.inner = o.shape.clone();
@@ -154,7 +161,7 @@ export class BellCloth {
         const wa = a < NC ? 0 : 1, wb = b < NC ? 0 : 1, w = wa + wb;
         if (!w) continue;
         const dx = pos[ib] - pos[ia], dy = pos[ib + 1] - pos[ia + 1], dz = pos[ib + 2] - pos[ia + 2];
-        const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6, f = (d - this.len[k]) / d / w;
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6, f = (d - this.len[k]) / d / w * this.stiff[k];
         pos[ia] += dx * f * wa; pos[ia + 1] += dy * f * wa; pos[ia + 2] += dz * f * wa;
         pos[ib] -= dx * f * wb; pos[ib + 1] -= dy * f * wb; pos[ib + 2] -= dz * f * wb;
       }
