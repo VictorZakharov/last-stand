@@ -3,9 +3,9 @@
 // the network when it can (a plain reload shows a new deploy), the hashed files from the cache.
 // A new deploy's worker takes over at once; the previous build's cache stays, so a page still
 // running the old build can load its remaining chunks.
-const CACHE = 'last-stand-ba16f0c94e0e';
+const CACHE = 'last-stand-cceeca6958a8';
 const FONTS = 'last-stand-fonts';
-const FILES = ["./","./apple-touch-icon.png","./assets/CapePhysicsWorker-BI9waX2Z.js","./assets/index-BZ8Gh0H0.css","./assets/index-Ba9FvMMK.js","./assets/nostr-C4hmC5-m.js","./assets/pbr.worker-QRb_HYK5.js","./assets/three-DdM5cfVC.js","./favicon.svg","./icon-192.png","./icon-512.png","./icon.svg","./index.html","./manifest.webmanifest"];
+const FILES = ["./","./apple-touch-icon.png","./assets/CapePhysicsWorker-BI9waX2Z.js","./assets/index-BZ8Gh0H0.css","./assets/index-CQBqzv8t.js","./assets/nostr-C4hmC5-m.js","./assets/pbr.worker-QRb_HYK5.js","./assets/three-DdM5cfVC.js","./favicon.svg","./icon-192.png","./icon-512.png","./icon.svg","./index.html","./manifest.webmanifest"];
 const SCOPE = new URL(self.registration.scope).pathname;
 const PAGE_WAIT = 4000;   // ms before a slow network gives way to the cached page
 
