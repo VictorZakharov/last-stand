@@ -6,6 +6,7 @@ import { createKit } from '../../core/materials';
 import { bark, pbrMaterialMaps, veins } from '../../core/textures';
 import type { AnimState, Model } from '../../types';
 import { buildHumanoid, joint, resetPose, walkCycle, deathFall, ramp, pulse } from './rig';
+import { LegIK } from './ik';
 import { Sculpt, horn, leaf, limb, organic, stripRig, taperTube, twist } from './shapes';
 import { mulberry } from '../../util';
 
@@ -124,6 +125,7 @@ export function buildThornling(): Model {
 
   const root = j.root;
 
+  const legs = new LegIK(j);
   function animate(st: AnimState): void {
     const { t } = st;
     resetPose(j);
@@ -154,7 +156,7 @@ export function buildThornling(): Model {
       jaw.rotation.x += 0.45 * pulse(k, 0.3, 0.85);
     }
     if (st.hit > 0) { j.spine.rotation.x += -0.5 * st.hit; jaw.rotation.x += 0.3 * st.hit; }
-    if (st.dead >= 0) deathFall(j, st.dead, 1);
+    if (st.dead >= 0) { deathFall(j, st.dead, 1); legs.reset(); } else legs.update(st.dt, st.phase, st.dead);
   }
 
   return { root, kit, joints: j, animate, height: 1.1, dispose() { kit.dispose(); } };

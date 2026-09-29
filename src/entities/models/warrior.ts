@@ -8,6 +8,7 @@ import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { FurSway } from './furSway';
+import { LegIK } from './ik';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, lod, type SurfaceFn } from './armor';
 import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, fistReach } from './hands';
@@ -490,6 +491,7 @@ export function buildWarrior(): Model {
   const palm = joint(shield, 0, 0, 0.1);
 
   // the fur sways: a spring on each collar and cuff lags the joint's acceleration (furSway.ts)
+  const legs = new LegIK(j);
   const furs = S.build().filter((m) => m.material === furM).map((m) => { m.userData.fur = true; return new FurSway(m, furM); });
   const elbowFur = [j.elbowL, j.elbowR].flatMap((e) => e.children.filter((c) => c.userData.fur));
 
@@ -829,9 +831,12 @@ export function buildWarrior(): Model {
       }
     }
     if (st.hit > 0) { j.spine.rotation.x += -0.2 * st.hit; j.neck.rotation.x += -0.15 * st.hit; }
-    if (st.dead >= 0) deathFall(j, st.dead, -1);
-    // feet on the floor: a crouch bends the knees instead of sinking the feet, a planted foot lies flat
-    else groundFeet(j, 0.07);
+    if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
+    else {
+      // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
+      legs.update(dt, st.phase, st.dead);
+      groundFeet(j, 0.07);
+    }
     // through the eyes a two-hander rests in both hands where both are seen (held out on the right, the
     // left hand on the lower grip), and the attacks take it from there
     // after Power Strike's blow the blades stay down a moment, then come back to rest (the cast ends right
@@ -907,7 +912,7 @@ export function buildWarrior(): Model {
     get offTip() { return offHeld ? tipL : null; },
     get reach() { return (ARM + (held?.len ?? 0)) * root.scale.x; },
     worldObjects: [cape.mesh],
-    reset: () => cape.reset(),
+    reset: () => { cape.reset(); legs.reset(); },
     // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
     firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on; },
     dispose() {

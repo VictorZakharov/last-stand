@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, cracks } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, ramp } from './rig';
+import { LegIK } from './ik';
 import { Sculpt, horn, limb, organic, stripRig, taperTube } from './shapes';
 import type { AnimState, Model } from '../../types';
 import { mulberry } from '../../util';
@@ -153,6 +154,7 @@ export function buildBrute(variant: Variant = 'brute'): Model {
   const root = j.root;
   root.scale.setScalar(C.scale);
 
+  const legs = new LegIK(j);
   function animate(st: AnimState): void {
     const { t } = st;
     resetPose(j);
@@ -190,7 +192,7 @@ export function buildBrute(variant: Variant = 'brute'): Model {
       }
     }
     if (st.hit > 0) j.spine.rotation.x += -0.15 * st.hit;
-    if (st.dead >= 0) deathFall(j, st.dead, 1);
+    if (st.dead >= 0) { deathFall(j, st.dead, 1); legs.reset(); } else legs.update(st.dt, st.phase, st.dead);
     // the molten heart beats; the chains hang down from the swinging arms
     heat.emissiveIntensity = 3.2 + Math.max(0, Math.sin(t * 2.6)) ** 4 * 3;
     chains.forEach((list, s) => {
