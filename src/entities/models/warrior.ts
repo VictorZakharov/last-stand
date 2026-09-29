@@ -184,6 +184,8 @@ export function buildWarrior(): Model {
     const vb: SurfaceFn = (u, v, out) => { const a = (u - 0.5) * 1.8, y = lerp(-0.24, -0.06, v), r = 0.066 + 0.01 * sm(-0.24, -0.08, y) + 0.004; return out.set(s * Math.cos(a) * r, y, Math.sin(a) * r); };
     S.add(plate(vb, 10, 8, 0.005), plateM, el);
     for (const y of [-0.09, -0.2]) S.add(belt(0.072, 0.072, y, 0.018, 0.006, 0, 14), leatherDark, el);
+    // the glove's cuff: from under the bracer down over the wrist into the palm, following the hand, so the hand joins the forearm (the bracer ends above the wrist)
+    S.skin(scaleUV(lathe([[0.041, -0.315], [0.043, -0.29], [0.045, -0.265], [0.048, -0.235], [0.052, -0.2]], 16), 2, 1), leather, el, hd, 0.25, 0.29);
   }
   const handL = buildHand(j.handL, 1, leather, skinTip, 1.08), handR = buildHand(j.handR, -1, leather, skinTip, 1.08);
 
