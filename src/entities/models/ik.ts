@@ -56,6 +56,8 @@ function footShape(ankle: THREE.Object3D, root: THREE.Object3D): { sole: number;
 const TAU = Math.PI * 2;
 /** radians of forward lean per m/s of speed */
 const LEAN = 0.03;
+/** how far a planted foot may be turned from the body's facing (rad) */
+const YAW_MAX = 0.5;
 const smooth = (t: number): number => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
 
 /** How far a half stride (one foot's step) is at `speed` (m/s) for legs `leg` long (world m): walks take short
@@ -76,6 +78,8 @@ class Foot {
   /** progress of a swing 0..1; a timed swing (the standing re-step) runs `dur` seconds */
   t = 0; dur = 0.25;
   stance = 0;
+  /** a timed step taken at a run: quick, and eased out like a swing, so a foot left behind catches up with the body */
+  fast = false;
   /** the ankle's target this frame, in the world */
   pos = new THREE.Vector3();
   pitch = 0;
@@ -97,6 +101,9 @@ export class LegIK {
   readonly feet = [new Foot(), new Foot()];
   private readonly last = new THREE.Vector3();
   private readonly v = new THREE.Vector3();
+  /** the ground speed, smoothed as a number: the vector's length collapses when the direction flips */
+  private sp = 0;
+  private readonly gv = new THREE.Vector3();
   private lastPhase = 0;
   private dphase = 0;
   private moving = false;
@@ -155,13 +162,17 @@ export class LegIK {
     if (this.fresh || (rx - this.last.x) ** 2 + (rz - this.last.z) ** 2 > 4) this.start(legs, yaw, phase, rx, rz);
     // the body's own velocity, smoothed; the phase rate too
     _h.set(rx - this.last.x, 0, rz - this.last.z).divideScalar(dt);
-    this.v.lerp(_h, 1 - Math.exp(-dt * 14));
+    const k14 = 1 - Math.exp(-dt * 14);
+    this.v.lerp(_h, k14);
+    this.sp += (_h.length() - this.sp) * k14;
     this.last.set(rx, 0, rz);
     this.dphase += ((phase - this.lastPhase) / dt - this.dphase) * (1 - Math.exp(-dt * 14));
     this.lastPhase = phase;
-    const speed = this.v.length();
+    const speed = this.sp;
     this.moving = speed > (this.moving ? 0.25 : 0.55);
-    const vd = speed > 0.05 ? _t.copy(this.v).divideScalar(speed) : _t.set(0, 0, 0);
+    // the way it travels: the smoothed velocity's, or (through a reversal, when that is nearly nothing) the latest
+    const lv = this.v.length(), vd = speed > 0.05 ? _t.copy(lv > 0.35 * speed ? this.v : _h).normalize() : _t.set(0, 0, 0);
+    this.gv.copy(vd).multiplyScalar(speed);
     // the share of the cycle on the ground: less as the speed rises (a run has both feet in the air a while), so the stance's travel stays within the legs' reach
     const duty = Math.min(0.62, Math.max(0.28, 0.75 - 0.13 * speed));
     const w2 = (1 - duty) / 2;
@@ -185,16 +196,19 @@ export class LegIK {
         f.yawA += this.angle(f.yaw, f.yawA, yaw) * smooth(f.t);
         f.carry = Math.max(0, f.pos.y - groundHeight(f.pos.x, f.pos.z) - sole * sc); f.pitch0 = f.shown;
         f.A.copy(f.pos); f.A.y = groundHeight(f.A.x, f.A.z);
-        f.state = 'timed'; f.dur = 0.3; f.t = 0;
+        f.state = 'timed'; f.dur = 0.3; f.t = 0; f.fast = false;
       }
       if (f.state === 'timed') { f.t += dt / f.dur; if (f.t >= 1) this.land(f, yaw); }
 
       // a planted foot that has fallen too far from under its hip (a turn, a sudden start) steps back under it
       if (f.state === 'plant') {
         f.stance += dt;
+        // a foot pivots with the body when it turns, rather than staying across the leg
+        const dy = this.angle(0, f.yaw, yaw);
+        if (Math.abs(dy) > YAW_MAX) f.yaw = yaw - Math.sign(dy) * YAW_MAX;
         const dev = Math.hypot(f.P.x - _h.x, f.P.z - _h.z);
-        if (dev > (this.moving ? 0.85 : 0.1) * Lw && other.state === 'plant' && f.stance > (this.moving ? 0.12 : 0.05)) {
-          f.state = 'timed'; f.t = 0; f.dur = Math.min(0.5, 0.25 + dev * 0.3); f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown;
+        if (dev > (this.moving ? 0.45 : 0.1) * Lw && (this.moving ? other.state !== 'timed' : other.state === 'plant') && f.stance > (this.moving ? 0.12 : 0.05)) {
+          f.state = 'timed'; f.t = 0; f.fast = this.moving; f.dur = this.moving ? Math.min(0.3, Math.max(0.12, (1 - duty) * cycleT)) : Math.min(0.5, 0.25 + dev * 0.3); f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown;
           f.B.set(_h.x + vd.x * half, 0, _h.z + vd.z * half);
           f.stance = 0;
         }
@@ -202,8 +216,8 @@ export class LegIK {
       if (f.state === 'swing' || f.state === 'timed') {
         // where it will land: under where its hip will be by then, a half stance ahead
         const remain = f.state === 'swing' ? (1 - f.t) * (1 - duty) * cycleT : (1 - f.t) * f.dur;
-        f.B.set(_h.x + this.v.x * remain + vd.x * (f.state === 'swing' ? half : 0), 0, _h.z + this.v.z * remain + vd.z * (f.state === 'swing' ? half : 0));
-        const e = f.state === 'swing' ? 0.6 * f.t * (2 - f.t) + 0.4 * smooth(f.t) : smooth(f.t), lift = Math.min(0.2, Math.max(0.05, 0.04 + 0.03 * speed)) * sc * Math.sin(Math.PI * Math.min(1, f.t));
+        f.B.set(_h.x + this.gv.x * remain + vd.x * (f.state === 'swing' ? half : 0), 0, _h.z + this.gv.z * remain + vd.z * (f.state === 'swing' ? half : 0));
+        const e = f.state === 'swing' || f.fast ? 0.6 * f.t * (2 - f.t) + 0.4 * smooth(f.t) : smooth(f.t), lift = Math.min(0.2, Math.max(0.05, 0.04 + 0.03 * speed)) * sc * Math.sin(Math.PI * Math.min(1, f.t));
         f.pos.set(f.A.x + (f.B.x - f.A.x) * e, 0, f.A.z + (f.B.z - f.A.z) * e);
         const gA = groundHeight(f.A.x, f.A.z), gB = groundHeight(f.B.x, f.B.z);
         const tilt = this.tilt(fs, f.pitch) * sc;
@@ -222,7 +236,9 @@ export class LegIK {
     for (let i = 0; i < 2; i++) {
       const f = this.feet[i];
       _p.copy(legs[i][0].position).applyMatrix4(j.hips.matrixWorld);
-      const dx = f.pos.x - _p.x, dz = f.pos.z - _p.z, h = Math.hypot(dx, dz), hmax = 0.7 * (L1 + L2) * sc;
+      // as far out as the leg reaches with the pelvis dropped a little (a foot out wider or farther back would squat the body)
+      const dy = Math.max(0, _p.y - f.pos.y - 0.1 * Lw), lm = 0.97 * Lw;
+      const dx = f.pos.x - _p.x, dz = f.pos.z - _p.z, h = Math.hypot(dx, dz), hmax = Math.min(0.7 * Lw, Math.max(0.2 * Lw, Math.sqrt(Math.max(0, lm * lm - dy * dy))));
       if (h > hmax) {
         const k = hmax / h;
         f.pos.x = _p.x + dx * k; f.pos.z = _p.z + dz * k;
@@ -309,7 +325,7 @@ export class LegIK {
       f.state = 'plant'; f.P.set(_h.x, groundHeight(_h.x, _h.z), _h.z); f.yaw = f.yawA = yaw; f.t = 0; f.stance = 0;
     }
     this.last.set(rx, 0, rz); this.leanX = this.leanZ = 0;
-    this.v.set(0, 0, 0); this.dphase = 0; this.lastPhase = phase; this.moving = false; this.drop = 0;
+    this.v.set(0, 0, 0); this.gv.set(0, 0, 0); this.sp = 0; this.dphase = 0; this.lastPhase = phase; this.moving = false; this.drop = 0;
     this.fresh = false;
   }
 }

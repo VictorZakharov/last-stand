@@ -15,6 +15,8 @@ const STEP = 1 / 60, MAX_STEPS = 3, ITER = 3;
  *  cut through its constraints), and how far it may stray from it, in the joint's metres */
 const HOLD = [1, 0.02, 0.01, 0.006, 0.004, 0.003, 0.002];
 const STRAY = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
+/** how far up the forearm each row may slide from where the animation holds it (world m at scale 1) */
+const SLIP = [0, 0.015, 0.03, 0.04, 0.05, 0.055, 0.06];
 const DAMP = 0.94, GRAVITY = 9.8;
 /** the share of the animation's own motion (the body running, the arm swinging) the free cloth is carried along with, so it trails less like a flag: a shift of
  *  position and previous position together, so it adds no speed and no spring */
@@ -211,7 +213,13 @@ export class BellCloth {
         }
         // and never far from its place, whatever the arm did
         const ex = pos[i] - tgt[i], ey = pos[i + 1] - tgt[i + 1], ez = pos[i + 2] - tgt[i + 2], ed = Math.sqrt(ex * ex + ey * ey + ez * ez), lim = STRAY[r] * sc;
-        if (ed > lim) { const s = lim / ed; pos[i] = tgt[i] + ex * s; pos[i + 1] = tgt[i + 1] + ey * s; pos[i + 2] = tgt[i + 2] + ez * s; }
+        let cx = ex, cy = ey, cz = ez;
+        if (ed > lim) { const s = lim / ed; cx *= s; cy *= s; cz *= s; pos[i] = tgt[i] + cx; pos[i + 1] = tgt[i + 1] + cy; pos[i + 2] = tgt[i + 2] + cz; }
+        // and it rides up the forearm by no more than a hand's breadth (a turn or a lean swings the arm faster than the cloth follows, which would bare the hand)
+        {
+          const il = 1 / Math.sqrt(cl2 || 1), up = (cx * _q.x + cy * _q.y + cz * _q.z) * il, slip = SLIP[r] * sc;
+          if (up < -slip) { const k = (-slip - up) * il; pos[i] += _q.x * k; pos[i + 1] += _q.y * k; pos[i + 2] += _q.z * k; }
+        }
       }
       if (it === ITER - 1) this.collideBody(bodies);
     }

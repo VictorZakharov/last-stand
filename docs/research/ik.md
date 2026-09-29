@@ -39,10 +39,25 @@ Foot slide is the ankle's ground speed while it is within ~4 cm of the floor (a 
 
 Planting the feet alone made the body look like it stood still while the legs reached: nothing leaned into the motion. `LegIK` now tips the whole body about the ground under it by 0.03 rad per m/s (at most 0.22 forward, 0.12 sideways, damped, off in first person), keeps the head level, and takes landings nearer under the body at a run. The warrior's own forward spine lean is reduced to match, its arm swing is halved (a carried weapon and shield hardly swing), and the arms ease back by most of the lean so the weapon and shield keep the angle they were held at. A stopped character re-steps to a neutral, feet-under-hips stance after a moment. The mage was left as it was.
 
+## Direction changes (found by playing it)
+
+Turning while running gave squatting, splayed poses in the warrior (the mage's robe hid most of it). Measured with `turns.mjs` (a run with w/a/s/d changes, per-frame pelvis drop, foot spacing, foot yaw), and fixed:
+
+- **Feet stayed turned across the leg.** A planted foot kept the world yaw it landed with while the body turned (up to 1.6 rad off). A planted foot now pivots with the body (`YAW_MAX` 0.5 rad).
+- **The gait's speed collapsed through a reversal.** It came from the length of a smoothed velocity vector, which passes through zero when the direction flips; it is now a smoothed scalar, with the direction falling back to the latest velocity.
+- **A foot left behind by a turn stayed there.** The re-step threshold at a run fell from 0.85 to 0.45 of the leg, may start while the other foot swings, and takes a swing's duration and ease-out (`Foot.fast`) instead of a standing step's 0.25-0.5 s ease-in, which the body outran.
+- **A foot too far out squatted the pelvis.** Feet are dragged in to what the leg reaches with the pelvis dropped by about 0.1 of the leg, instead of letting the pelvis sink by up to 0.2.
+
+Warrior's largest pelvis drop through the sequence: 0.19 m to 0.08 m; hip height minimum 0.78 to 0.92. The mage's remaining 0.18 m is the sprint's own foot lift (its hip minimum, above).
+
+The mage's bell sleeves rode up the forearm when the arm swung faster than the cloth followed (a turn with the lean), baring the hand (hem 0.08 of the way along the forearm at worst, against 0.46 with the walk cycle's legs). Each row's slide up the forearm from where the animation holds it is now capped (`SLIP` in `sleeve.ts`); the hem stays at 0.9 or more.
+
+Also looked at now: the warrior with a two-hander and with two one-handers, running and turning from the side (the weapons keep their angle, the lower grip stays in the left hand).
+
 ## Not verified
 
 - A phone or a weak GPU: only CPU time of the animation was measured, on a desktop. No LOD was added (the arena's crowd cost is small); if a low-end profile shows it, skip enemies beyond a distance and restart them under the hips when they come back (`reset()`).
-- Side views of every enemy: the husk and both heroes were looked at frame by frame; the others only by the numbers above.
+- Side views of every enemy: the husk and both heroes were looked at frame by frame; the others only by the numbers above (with the direction-change fixes their slide and hip numbers are unchanged).
 - Sprinting is very fast for the legs (6 m/s on 0.9 m legs): the steps are capped at 1.05 m, so the cadence at a sprint is high (about 6 steps a second).
 - A hero's leg poses inside skills (the lunge of a slam, Bull Rush's wide stance) are now the feet's plant and the pelvis, not the FK pose; nothing looked broken, but each skill was not compared against `?ik=0`.
 
