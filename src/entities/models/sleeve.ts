@@ -16,6 +16,9 @@ const STEP = 1 / 60, MAX_STEPS = 3, ITER = 3;
 const HOLD = [1, 0.02, 0.01, 0.006, 0.004, 0.003, 0.002];
 const STRAY = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
 const DAMP = 0.94, GRAVITY = 9.8;
+/** the share of the animation's own motion (the body running, the arm swinging) the free cloth is carried along with, so it trails less like a flag: a shift of
+ *  position and previous position together, so it adds no speed and no spring */
+const CARRY = 0.6;
 const _m = new THREE.Matrix4(), _inv = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _n = new THREE.Vector3();
 
 export interface BellOptions {
@@ -38,12 +41,15 @@ export class BellCloth {
   private readonly pos = new Float32Array(N * 3);
   private readonly prev = new Float32Array(N * 3);
   private readonly tgt = new Float32Array(N * 3);
+  private readonly lastTgt = new Float32Array(N * 3);
   private readonly rest: Float32Array;
   private readonly outer: THREE.BufferGeometry;
   private readonly inner: THREE.BufferGeometry;
   private readonly rim: THREE.BufferGeometry;
   private readonly pairs: [number, number][] = [];
   private readonly len: Float32Array;
+  /** how far each particle may be from its column's top ring: the cloth's length down to it, which fast running would otherwise stretch */
+  private readonly tether = new Float32Array(N);
   private readonly stiff: Float32Array;
   private readonly local = new Float32Array(N * 3);
   private readonly flip: number;
@@ -59,19 +65,18 @@ export class BellCloth {
       this.rest[i * 3] = src.getX(s); this.rest[i * 3 + 1] = src.getY(s); this.rest[i * 3 + 2] = src.getZ(s);
     }
     const id = (r: number, c: number): number => r * NC + ((c + NC) % NC);
+    const w: number[] = [], link = (x: number, y: number, k: number): void => { this.pairs.push([x, y]); w.push(k); };
     for (let r = 0; r < NR; r++) for (let c = 0; c < NC; c++) {
-      this.pairs.push([id(r, c), id(r, c + 1)]);                       // round the ring
+      link(id(r, c), id(r, c + 1), 1);                                        // round the ring
       if (r + 1 < NR) {
-        this.pairs.push([id(r, c), id(r + 1, c)]);                     // down
-        this.pairs.push([id(r, c), id(r + 1, c + 1)], [id(r, c + 1), id(r + 1, c)]);   // shear
+        link(id(r, c), id(r + 1, c), 1);                                      // down
+        link(id(r, c), id(r + 1, c + 1), 0.6); link(id(r, c + 1), id(r + 1, c), 0.6);   // shear
       }
-      if (r + 2 < NR) this.pairs.push([id(r, c), id(r + 2, c)]);       // bend
+      if (r + 2 < NR) link(id(r, c), id(r + 2, c), 0.25);                     // bend: soft, or the tube stands out like a pipe
     }
-    this.stiff = new Float32Array(this.pairs.length).fill(1);
     // hoops: each ring keeps its round section (across and quarter-way round), gently, so the bell hangs open rather than flat
-    for (let r = 1; r < NR; r++) for (let c = 0; c < NC / 2; c++) { this.pairs.push([id(r, c), id(r, c + NC / 2)]); this.pairs.push([id(r, c), id(r, c + NC / 4)]); }
-    const hoops = new Float32Array(this.pairs.length); hoops.set(this.stiff); hoops.fill(0.35, this.stiff.length);
-    this.stiff = hoops;
+    for (let r = 1; r < NR; r++) for (let c = 0; c < NC / 2; c++) { link(id(r, c), id(r, c + NC / 2), 0.15); link(id(r, c), id(r, c + NC / 4), 0.15); }
+    this.stiff = Float32Array.from(w);
     this.len = new Float32Array(this.pairs.length);
     this.outer = o.shape.clone();
     this.inner = o.shape.clone();
@@ -121,17 +126,27 @@ export class BellCloth {
       const dx = this.tgt[a * 3] - this.tgt[b * 3], dy = this.tgt[a * 3 + 1] - this.tgt[b * 3 + 1], dz = this.tgt[a * 3 + 2] - this.tgt[b * 3 + 2];
       this.len[k] = Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
+    for (let c = 0; c < NC; c++) {
+      let run = 0;
+      for (let r = 1; r < NR; r++) {
+        const a = ((r - 1) * NC + c) * 3, b = (r * NC + c) * 3, dx = this.tgt[a] - this.tgt[b], dy = this.tgt[a + 1] - this.tgt[b + 1], dz = this.tgt[a + 2] - this.tgt[b + 2];
+        run += Math.sqrt(dx * dx + dy * dy + dz * dz);
+        this.tether[r * NC + c] = run * 1.04;
+      }
+    }
     _p.set(e[12], e[13], e[14]);
     const jumped = this.last.distanceToSquared(_p) > 2.25;   // a teleport: settle where it landed
     this.last.copy(_p);
     if (!CLOTH || this.needsReset || jumped || !Number.isFinite(this.pos[0])) {
       this.pos.set(this.tgt); this.prev.set(this.tgt); this.needsReset = false; this.acc = 0;
     } else {
+      for (let i = NC * 3; i < N * 3; i++) { const d = (this.tgt[i] - this.lastTgt[i]) * CARRY; this.pos[i] += d; this.prev[i] += d; }
       this.acc += Math.min(dt, 0.05);
       let n = 0;
       while (this.acc >= STEP && n++ < MAX_STEPS) { this.acc -= STEP; this.step(sc); }
       if (n >= MAX_STEPS) this.acc = 0;
     }
+    this.lastTgt.set(this.tgt);
     this.write();
   }
 
@@ -167,6 +182,9 @@ export class BellCloth {
       }
       for (let r = 1; r < NR; r++) for (let c = 0; c < NC; c++) {
         const i = (r * NC + c) * 3;
+        // never further from the top ring than the cloth is long
+        const dx0 = pos[i] - tgt[c * 3], dy0 = pos[i + 1] - tgt[c * 3 + 1], dz0 = pos[i + 2] - tgt[c * 3 + 2], d0 = Math.sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0), tl = this.tether[r * NC + c];
+        if (d0 > tl) { const k = tl / d0; pos[i] = tgt[c * 3] + dx0 * k; pos[i + 1] = tgt[c * 3 + 1] + dy0 * k; pos[i + 2] = tgt[c * 3 + 2] + dz0 * k; }
         // out of the forearm
         _p.set(pos[i], pos[i + 1], pos[i + 2]);
         const t = Math.max(0, Math.min(1, ((_p.x - _a.x) * _q.x + (_p.y - _a.y) * _q.y + (_p.z - _a.z) * _q.z) / (cl2 || 1)));
