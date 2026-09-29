@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { lod } from './armor';
 import { part } from './rig';
+import { Sculpt } from './shapes';
 import { clamp, lerp, mulberry } from '../../util';
 import { fur, faceCanvases, pbrMaterialMaps } from '../../core/textures';
 import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, headSDF, gridDir, scalp, type FaceShape, type HeadGrid } from './face';
@@ -439,7 +440,8 @@ function hairCard(pts: THREE.Vector3[], width: (t: number) => number, centre: TH
  * a man's neck (ANSUR II: 40 cm round), the two muscles from behind the ears to the breastbone showing
  * as a V from the front, the Adam's apple. `len`: the neck joint to the head joint (m).
  */
-export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, len: number): THREE.Mesh {
+/** With the head's joint, the top of the neck follows the head (skinned; see Sculpt.skin) */
+export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, len: number, headJoint?: THREE.Object3D): void {
   const rings = 10, segs = lod(28, 14), pos: number[] = [], idx: number[] = [];
   for (let k = 0; k <= rings; k++) {
     const t = k / rings, y = lerp(-0.03, len + 0.012, t);
@@ -459,5 +461,6 @@ export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setIndex(idx);
   g.computeVertexNormals();
-  return part(g, plainSkin(kit, who), neckJoint);
+  if (headJoint) new Sculpt().skin(g, plainSkin(kit, who), neckJoint, headJoint, len * 0.35, len).build();
+  else part(g, plainSkin(kit, who), neckJoint);
 }

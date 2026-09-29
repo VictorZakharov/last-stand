@@ -57,8 +57,8 @@ export function buildImp(): Model {
   const lim = (len: number, r0: number, r1: number, b = 0, at = 0.35) => organic(limb(len, r0, r1, b, at), r0 * 0.1, 30, len * 50);
 
   // --- legs: corded thighs, a spur at the hock, long taloned feet
-  S.pair(lim(P.thighL, 0.06, 0.04, 0.35, 0.3), skin, j.thighL, j.thighR);
-  S.pair(lim(P.shinL, 0.042, 0.028, 0.35, 0.2), skin, j.kneeL, j.kneeR);
+  S.skinPair(lim(P.thighL + 0.054, 0.06, 0.04, 0.35, 0.3), skin, j.thighL, j.kneeL, j.thighR, j.kneeR, P.thighL - 0.072, P.thighL);
+  S.skinPair(lim(P.shinL + 0.038, 0.042, 0.028, 0.35, 0.2), skin, j.kneeL, j.ankleL, j.kneeR, j.ankleR, P.shinL - 0.05, P.shinL);
   S.pair(horn(0.1, 0.014, 0.6, V(1, 0, 0), V(0, 0.2, -1)), horny, j.ankleL, j.ankleR, [0, 0.02, -0.02]);
   S.pair(organic(new THREE.SphereGeometry(1, 10, 8), 0.1, 4, 2), skin, j.ankleL, j.ankleR, [0, -0.02, 0.04], [0, 0, 0], [0.035, 0.025, 0.08]);
   for (const x of [-0.022, 0, 0.022]) S.pair(taperTube([V(0, 0, 0), V(0, -0.005, 0.04), V(0, -0.03, 0.065)], (t) => 0.011 * (1 - t * 0.8), 8, 5), claw, j.ankleL, j.ankleR, [x, -0.025, 0.1]);
@@ -92,8 +92,8 @@ export function buildImp(): Model {
 
   // --- arms: wiry, a spur off each elbow, hooked claws
   S.pair(organic(new THREE.SphereGeometry(0.045, 10, 8), 0.005, 40, 13), skin, j.shoulderL, j.shoulderR, [0, 0.005, 0]);
-  S.pair(lim(P.upperL, 0.042, 0.03, 0.35), skin, j.shoulderL, j.shoulderR);
-  S.pair(lim(P.foreL, 0.032, 0.024, 0.3, 0.25), skin, j.elbowL, j.elbowR);
+  S.skinPair(lim(P.upperL + 0.038, 0.042, 0.03, 0.35), skin, j.shoulderL, j.elbowL, j.shoulderR, j.elbowR, P.upperL - 0.05, P.upperL);
+  S.skinPair(lim(P.foreL + 0.029, 0.032, 0.024, 0.3, 0.25), skin, j.elbowL, j.handL, j.elbowR, j.handR, P.foreL - 0.038, P.foreL);
   S.pair(horn(0.09, 0.013, 0.5, V(1, 0, 0), V(0, 0.4, -1)), horny, j.elbowL, j.elbowR, [0, -0.01, -0.02]);
   S.pair(organic(new THREE.SphereGeometry(1, 10, 8), 0.08, 5, 14), skin, j.handL, j.handR, [0, -0.03, 0], [0, 0, 0], [0.035, 0.04, 0.02]);
   for (let f = 0; f < 3; f++) {

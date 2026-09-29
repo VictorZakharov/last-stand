@@ -13,6 +13,7 @@ import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat } from './hands';
 import { clamp, lerp, damp, TAU, mulberry } from '../../util';
 import { SkeletonCape } from './cape';
+import { BellCloth } from './sleeve';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
 import type { AnimState, Model } from '../../types';
 
@@ -138,8 +139,16 @@ export function buildMage(): Model {
   // --- arms: robe sleeves widening into long bell sleeves lined in teal, leather bracers with a stone,
   // fingerless gloves
   const bells: THREE.Group[] = [];
+  const cloths: BellCloth[] = [];
+  // what the bells must not sink into (the cape's own body colliders, roughly): the torso, the hips and the robe's skirt
+  const bodies = [
+    { joint: j.chest, y0: 0.22, y1: -0.02, rx: 0.2, rz: 0.17 },
+    { joint: j.hips, y0: 0.02, y1: -0.25, rx: 0.26, rz: 0.23 },
+    { joint: j.hips, y0: -0.3, y1: -0.62, rx: 0.34, rz: 0.3 },
+  ];
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
-    S.add(scaleUV(limb(0.3, 0.075, 0.07, 0.05, 0.3, 14), 2, 1), robe, sh);
+    // the sleeve carries on 8cm past the elbow, under the bell, and follows the forearm there
+    S.skin(scaleUV(limb(0.38, 0.075, 0.068, 0.05, 0.24, 14), 2, 1), robe, sh, el, 0.2, 0.33);
     // the bell: from above the elbow, flaring, longest on the underside of the arm (+z hangs below
     // the forearm when the arm is raised forward)
     const bell = new THREE.CylinderGeometry(0.075, 0.15, 0.3, 28, 6, true).translate(0, -0.15, 0), q = bell.attributes.position;
@@ -152,15 +161,9 @@ export function buildMage(): Model {
     // on a joint of its own, so the first-person view can narrow it (from behind, it hides the hand)
     const bj = joint(el, 0, 0.07, 0);
     bells.push(bj);
-    S.add(scaleUV(bell, 3, 1), robe, bj);
-    S.add(scaleUV(bell.clone(), 3, 1), lining, bj, [0, 0, 0], [0, 0, 0], [0.97, 1, 0.97]);
-    // gold border round the opening
-    const rim: THREE.Vector3[] = [];
-    for (let k = 0; k <= 28; k++) {
-      const a = (k / 28) * TAU, x = Math.sin(a) * 0.15, z = Math.cos(a) * 0.15, aa = Math.atan2(x, -z);
-      rim.push(V(x * (1 + 0.08 * Math.sin(Math.atan2(z, x) * 7)), -0.3 + 0.07 - 0.12 * (0.5 + 0.5 * Math.cos(aa)), z * (1 + 0.08 * Math.sin(Math.atan2(z, x) * 7))));
-    }
-    S.add(taperTube(rim, () => 0.007, 56, 5), gold, bj, [0, -0.07, 0]);
+    // the bell is cloth: its top ring on the forearm, the rest hanging with weight and following the arm
+    // (sleeve.ts); the lining and the gold hem ride the same particles
+    cloths.push(new BellCloth({ joint: bj, hand: hd, shape: scaleUV(bell, 3, 1), outer: robe, lining, rim: gold, armRadius: 0.066, rimRadius: 0.007, bodies }));
     S.add(scaleUV(lathe([[0.046, -0.26], [0.052, -0.2], [0.058, -0.12], [0.06, -0.1]], 16), 2, 1), leather, el);
     for (const y of [-0.13, -0.245]) S.add(belt(0.058 - (y + 0.13) * 0.1, 0.058 - (y + 0.13) * 0.1, y, 0.012, 0.005, 0, 14), gold, el);
     S.add(new THREE.OctahedronGeometry(0.02, 0), gold, el, [s * 0.058, -0.19, 0], [0, 0, 0], [0.4, 1.2, 1]);
@@ -232,7 +235,7 @@ export function buildMage(): Model {
   // --- the head: face, a full beard, hair, and a wide-brimmed pointed hat, its crown bent back by
   // its own weight, a gold band with a stone
   const head = buildHead(j.head, kit, 'mage', { beard: 160, hair: true });
-  buildNeck(j.neck, kit, 'mage', j.P.neckL);
+  buildNeck(j.neck, kit, 'mage', j.P.neckL, j.head);
   {
     // sized to the head (mm, see head.ts): the band round the brow above the ears, over the hair
     const w = new Sculpt(), hg = head.group, M = HEAD_MM, at = toGroup(0, 168, -9), tilt: [number, number, number] = [-0.12, 0, 0];
@@ -465,7 +468,7 @@ export function buildMage(): Model {
     hold(handR, _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), STAFF_R);
 
     // cloth runs after the pose so it collides with this frame's skeleton
-    if (dt > 0) cape.update(dt, st.velocity ?? ZERO);
+    if (dt > 0) { cape.update(dt, st.velocity ?? ZERO); for (const c of cloths) c.update(dt); }
     cape.setVisible(st.dead < 0.6);
 
     // staff crystal
@@ -480,7 +483,8 @@ export function buildMage(): Model {
   return {
     root, kit, joints: j, animate, tip, palm, height: 2.0,
     worldObjects: [cape.mesh],
-    reset: () => cape.reset(),
+    cloths,
+    reset: () => { cape.reset(); for (const c of cloths) c.reset(); },
     // through the eyes the bells, seen from behind, would hide the hands: narrow and shorter
     firstPerson: (on) => { fp = on; for (const b of bells) b.scale.set(on ? 0.6 : 1, on ? 0.75 : 1, on ? 0.6 : 1); },
     dispose() {

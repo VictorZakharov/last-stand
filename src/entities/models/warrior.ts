@@ -7,6 +7,7 @@ import { leather as leatherMaps, mail as mailMaps, cloth as clothMaps, steel as 
 import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
+import { FurSway } from './furSway';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, lod, type SurfaceFn } from './armor';
 import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, fistReach } from './hands';
@@ -173,7 +174,8 @@ export function buildWarrior(): Model {
   // --- arms: navy sleeves strapped at the upper arm, fur at the elbow, leather bracers with a steel
   // plate, fingerless gloves
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
-    S.add(scaleUV(limb(0.3, 0.078, 0.064, 0.12, 0.3, 14), 2, 1), cloth, sh);
+    // the sleeve, thigh and shin run on past their joints under the bracer, the knee cop and the boot, and follow the lower limb there
+    S.skin(scaleUV(limb(0.38, 0.078, 0.064, 0.12, 0.24, 14), 2, 1), cloth, sh, el, 0.2, 0.32);
     for (const y of [-0.13, -0.21]) S.add(belt(0.078, 0.078, y, 0.024, 0.006, 0, 14), leather, sh);
     S.add(furTufts(rng, 40, (i, o) => { const a = (i / 40) * Math.PI * 2; o.p.set(Math.sin(a) * 0.06, -0.035, Math.cos(a) * 0.06); o.d.set(Math.sin(a), 0.6, Math.cos(a)); }, 0.035, 0.009), furM, el);
     S.add(scaleUV(lathe([[0.052, -0.26], [0.06, -0.2], [0.066, -0.1], [0.07, -0.05], [0.068, -0.035]], 16), 2, 1), leather, el);
@@ -182,13 +184,15 @@ export function buildWarrior(): Model {
     const vb: SurfaceFn = (u, v, out) => { const a = (u - 0.5) * 1.8, y = lerp(-0.24, -0.06, v), r = 0.066 + 0.01 * sm(-0.24, -0.08, y) + 0.004; return out.set(s * Math.cos(a) * r, y, Math.sin(a) * r); };
     S.add(plate(vb, 10, 8, 0.005), plateM, el);
     for (const y of [-0.09, -0.2]) S.add(belt(0.072, 0.072, y, 0.018, 0.006, 0, 14), leatherDark, el);
+    // the glove's cuff: from under the bracer down over the wrist into the palm, following the hand, so the hand joins the forearm (the bracer ends above the wrist)
+    S.skin(scaleUV(lathe([[0.041, -0.315], [0.043, -0.29], [0.045, -0.265], [0.048, -0.235], [0.052, -0.2]], 16), 2, 1), leather, el, hd, 0.25, 0.29);
   }
   const handL = buildHand(j.handL, 1, leather, skinTip, 1.08), handR = buildHand(j.handR, -1, leather, skinTip, 1.08);
 
   // --- legs: leather trousers, engraved knee cops, tall boots with fur tops, straps and a steel toe
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
-    S.add(scaleUV(limb(0.46, 0.108, 0.078, 0.14, 0.3, 14), 2, 1.5), leatherDark, th);
-    S.add(scaleUV(limb(0.41, 0.076, 0.058, 0.1, 0.35, 12), 2, 1.5), leatherDark, kn);
+    S.skin(scaleUV(limb(0.54, 0.108, 0.078, 0.14, 0.26, 14), 2, 1.5), leatherDark, th, kn, 0.32, 0.46);
+    S.skin(scaleUV(limb(0.46, 0.076, 0.058, 0.1, 0.32, 12), 2, 1.5), leatherDark, kn, an, 0.3, 0.41);
     const cop: SurfaceFn = (u, v, out) => { const lon = (u - 0.5) * 2.5, lat = lerp(-0.95, 1.05, v); return out.set(Math.sin(lon) * Math.cos(lat) * 0.082, Math.sin(lat) * 0.085, Math.cos(lon) * Math.cos(lat) * 0.075 + 0.012); };
     const kg = plate(cop, 14, 12, 0.006);
     projectUV(kg, steelRegion('knee'), (x, y) => [(x / 0.082 + 1) / 2, (y / 0.085 + 1) / 2]);
@@ -485,8 +489,9 @@ export function buildWarrior(): Model {
   }
   const palm = joint(shield, 0, 0, 0.1);
 
-  S.build();
-  const elbowFur = [j.elbowL, j.elbowR].flatMap((e) => e.children.filter((c) => (c as THREE.Mesh).material === furM));
+  // the fur sways: a spring on each collar and cuff lags the joint's acceleration (furSway.ts)
+  const furs = S.build().filter((m) => m.material === furM).map((m) => { m.userData.fur = true; return new FurSway(m, furM); });
+  const elbowFur = [j.elbowL, j.elbowR].flatMap((e) => e.children.filter((c) => c.userData.fur));
 
   const root = j.root;
   root.scale.setScalar(1.1);
@@ -889,7 +894,7 @@ export function buildWarrior(): Model {
     else if (twoHeld && held) hold(handL, along(grip), held.r, _up);
     else poseHand(handL, shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 0.08);
 
-    if (dt > 0) cape.update(dt, st.velocity ?? ZERO);
+    if (dt > 0) { cape.update(dt, st.velocity ?? ZERO); for (const f of furs) f.update(dt); }
     cape.setVisible(st.dead < 0.6);
 
     // the blade's fuller glows while a skill charges
@@ -907,6 +912,7 @@ export function buildWarrior(): Model {
     firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on; },
     dispose() {
       kit.dispose();
+      for (const f of furs) f.dispose();
       cape.dispose();
       root.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
     },

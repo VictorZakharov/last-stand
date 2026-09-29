@@ -35,7 +35,7 @@ This costs nothing at load beyond a loop over vertices (a few ms per hero), so t
 
 ## 4. Cost
 
-Estimated from the code and three.js's behaviour; **nothing here has been measured yet**, which is the point of the prototype.
+Estimated from the code and three.js's behaviour before the prototype; see section 8 for what it measured.
 
 - **Load time:** negligible, as above. Heroes are built once per class and slot switch.
 - **Draw calls:** should go down for a skinned hero. `Sculpt` makes one mesh per (joint, material); a `SkinnedMesh` is one per material for the whole body. Rigid pieces (weapons, pauldrons) stay on their joints, so only the body cloth and skin change.
@@ -69,4 +69,64 @@ No. Skinning only decides how a mesh follows the joints; where the joints go is 
 3. **Decide after that** whether to roll it out to the warrior and the rest of the body. Go if the seams visibly close and the program count stays flat; otherwise drop it and note why here.
 4. **Enemies too**, starting with one (a bruiser such as the brute, whose body bends most) with a crowd of them, to measure the per-crowd cost and decide the levers above before the rest.
 
-Not done here: no prototype was built and nothing was measured. The cost section is reasoned from the code, not from a run.
+## 8. Prototype results (issue #113)
+
+What was built: `Sculpt.skin()` / `skinPair()` (analytic weights, as in section 3), used for the mage's neck (neck to head) and both sleeves (shoulder to elbow), and the brute's arms and thighs (to the elbow and knee). `?skin=0` in the URL puts every such piece back rigidly on its joint, for A/B runs. Measured in headless Chromium on a desktop GPU (D3D11), Thornwood, High unless stated; vsync off for frame times.
+
+**Looks.** The mage's elbow is the clear win. Rigid, the sleeve's rounded end pokes out of the bell as a hump when the arm bends; skinned, it tucks under the bell and follows the forearm. The neck now follows the head at its top; the difference is subtle from the game's cameras. The brute's elbows and knees render correctly and bend, but the gain is small: its joints are hidden by pauldrons, guards and rock, as expected, so skinning them is a modest polish, not a visible leap. Third and first person show no regression at rest (the first-person cast pose with the sleeves in view was not checked: the probe couldn't cast with the pointer stubbed).
+
+**Shader programs.** 110 at boot become 114 (skinned colour and depth variants). The count stayed 114 through a run with every enemy kind, third / first / top views, Low / Medium / High, the player's death, and mage to warrior to mage switches: no late compiles. Skinned meshes are freed on dispose (the texture count returned to its earlier value after each class switch).
+
+**Frame cost, 30 brutes in view.** Median frame time is level with rigid (13.4 vs 13.5 ms on High over five runs, 16.0 vs 15.6 on Low, 91 vs 87 with the CPU throttled 4x). GPU time from timer queries: about 12.0 vs 11.2 ms (+0.8 ms). Draw calls fall slightly (3506 vs 3687), because a creature's skinned pieces become one mesh. Boot time was not measured separately; the weights are a loop over a few thousand vertices per creature kind, and the kind's geometry is cached as before.
+
+**Two things cost a crowd dearly until fixed**, both three.js state thrash where a skinned mesh and a rigid one share something. Without the fixes 30 brutes ran up to about 5 ms slower (17.4 vs 13.7 ms median):
+1. **A material shared by a rigid and a skinned mesh**: three rebuilds the program's parameters each time the draw switches between them. Skinned meshes get their own copy of the material (`onBeforeCompile` and its cache key carried over, so the hit flash, dissolve and freeze still work; the copy is disposed with the model).
+2. **The shadow pass draws every caster with one depth material**, so casters alternating skinned and rigid did the same. Skinned meshes get a depth material of their own (`customDepthMaterial`).
+
+**Not verified.** A phone or weak GPU (the +0.8 ms may not scale kindly); many skinned meshes with a real fight's spawn / death churn (the crowd was static); the warrior; the first-person cast pose; co-op guests (they build the same models). One measurement oddity: with vsync off, skinned runs showed more frames at exactly two vsync intervals (about 5% against 1%) although their median matched. It appeared only in one probe and not in a differently written one, and I did not find the cause; GPU time near the 16.7 ms boundary is the likely reason.
+
+**Verdict on the prototype.** Go for the heroes: the seam it removes is visible and the cost is small. For creatures the seam is mostly hidden by their gear, so extend it only where a creature has a bare, bending limb (the husk, the imp), one by one. Either way the two fixes above are the price of admission and are now in `Sculpt`.
+
+## 9. Second round: what was verified, and what was added
+
+Everything in section 8 that was listed as not verified was tried, except a phone or weak GPU (no such hardware here; CPU throttling is the only stand-in).
+
+**Verified**
+- **First-person cast with the sleeves in view** (skill keys 1 to 4 in first person, cloth on and off): the free hand and its sleeve show in the corner, the bell narrows as before, nothing artifacts.
+- **Co-op** (two tabs, `?net=local`, a mage hosting and a warrior joining): each game shows both heroes with their sleeves, skinned neck and fur; programs stay constant; no errors.
+- **A real fight** (waves, casting, moving, god mode, 40 s each, mage and warrior): frame times are the same with skinning, cloth and fur all on as all off (p50 4.3 vs 4.2 ms mage, 3.3 vs 3.3 warrior; p99 within 1 ms), programs constant, no non-finite value in the cloth, no errors. Only wave 1 (up to 10 foes) was reached, so a late wave's crowd and churn is not covered.
+- **Teleports and death** with cloth and fur live: no non-finite values, no errors.
+- **The warrior** builds and renders with the fur sway and no other change.
+
+**Added**
+- **Bell sleeves as cloth** (`entities/models/sleeve.ts`, the mage). The cape's solver can't be reused: it is a rectangular sheet pinned along two neckline anchors, on a fixed grid, in a worker. A sleeve is a tube pinned by a ring, so a small solver of the same kind lives in its own file: 28 x 7 particles per sleeve, verlet with gravity, distance, shear and bend constraints, full gravity, hoop constraints so each ring keeps its round section, a cap on how far it may stray, and a capsule for the forearm. (The first version pulled every particle towards where the animation would hold it, which made the sleeves bounce like rubber; now that pull is almost nil, so the sleeve hangs from its top ring by gravity, drooping below a raised forearm and settling after one small overshoot: hem height measured after a raise / lower, 1 and 2 peaks.) so the cloth never sinks into the arm. The lining and the gold hem ride the same particles. Costs about 0.05 ms per frame for both sleeves in a real fight (0.27 ms in the scripted flail). `?cloth=0` holds the sleeves at their animated shape (the old rigid bell). Known gaps: no collision with the torso or the skirt (the bell can pass through the robe when the arm crosses the body), it is not scaled down on Low, and it runs on every game for every hero including remote ones.
+- **Fur sway** (`entities/models/furSway.ts`, the warrior). The tufts stay one static merged mesh per joint. Each fur mesh gets a damped spring (3.2 Hz, capped at 5 cm) that lags the acceleration of the joint it rides, applied in the vertex shader, weighted by distance along the tuft (its uv's v, so roots stay put and tips swing), plus a small flutter. One material copy per mesh (a uniform is uploaded only when the material changes). One more shader program. `?fur=0` keeps the fur still. Measured lag under a scripted shake is about 4 cm at the tips and about 0 at rest. Not a strand simulation: the tufts don't collide or clump, they just swing.
+- **Skinning on more creatures**: the husk's, imp's and mossback's limbs, like the brute's (thigh to knee, shin to ankle, upper arm to elbow, forearm to hand). The bent knees and elbows are visibly smoother (imp and mossback most). A mixed crowd of 40 (husk, imp, mossback, brute) was level with rigid in frame time, with about 490 fewer draw calls (3933 vs 4422), and programs 111 to 117 at boot, constant in play.
+
+**Still open:** a phone or weak GPU; late waves; torso and skirt collision for the sleeves; whether the sleeve solver should run in the cape's worker or be scaled by quality; the mage's robe skirt, the warrior's cloth and the remaining creatures (thornling, sporecaller, witch, treant) aren't skinned; and the shader compile warnings the driver prints at boot (X4122, X3577: not looked into, not checked whether they predate this branch).
+
+## 10. Bugs found in play, and their fixes
+
+- **Sleeves like rubber**: an elastic pull towards the animated shape. Removed; gravity and constraints shape the sleeve.
+- **Sleeve flying off the arm while running**: the pinned top ring moves about 10 cm a frame at a run, and three constraint iterations can't pull a six-row chain along, so the cloth stretched (the farthest hem particle was 0.62 m from the elbow on a sleeve about 0.4 m long) and streamed behind like a flag. Two fixes: a hard tether from every particle to its column's top ring (the cloth's own length, times 1.04), and carrying the free cloth along with 60% of the animation's own motion each frame (a shift of position and previous position together, so it adds no speed and no spring). Hem-to-elbow distance while running is now bounded by the sleeve's length, and the sleeve still droops below a raised forearm.
+- **Reported lag in third person, at startup and when moving**: not reproduced. Run start and the first moves show the same single 133 ms hitch and 60 fps with skinning, cloth and fur on or off, at 1280x720, 1600x900 and 2560x1440 (GPU time about 5.3 vs 5.2 ms per frame at 2560x1440, CPU render time about 4.2 vs 4.4), in the dev and production builds, with no extra JS heap churn. If the lag was the sleeve trailing the arm, the fix above is the cause; otherwise a perf overlay report from the affected machine (pause menu) and a run with `?skin=0`, `?cloth=0` and `?fur=0` in turn would show which part costs.
+- **Forearm out of the sleeve** (reported with a screenshot): with gravity alone the fabric hung below a raised arm like a curtain and left the arm outside it. Each particle is now also kept within the radius it was cut to round the forearm's axis (a per-particle envelope, 6% slack), so gravity can pull the cloth onto the arm but not off it: the bell hangs open round the forearm and the hand comes out of the cuff.
+
+## 11. Third round: the backlog
+
+- **Sleeves against the body**: the bells now collide with the torso, hips and robe skirt (the cape's body colliders, as elliptical capsules in `BellOptions.bodies`). With the arm across the chest no sleeve particle ends inside any of them in the poses tried (arm across, arm across with the chest turned, at rest, down); the bell rests on the robe.
+- **Quality scaling for the sleeve solver**: not done, and not needed: it costs about 0.05 to 0.09 ms a frame for both sleeves in a fight.
+- **The warrior is skinned**: the sleeve (shoulder to elbow), the trousers (thigh to knee) and the shin trousers (knee to ankle) run on past their joints under the bracer, the knee cop and the boot and follow the lower limb there. The rounded sleeve end that showed at a bent elbow is gone; the change is subtle, as with the mage.
+- **Every creature is skinned now**: thornling and treant (their strands too), witch and sporecaller (sleeves, and the sporecaller's shin) join the brute, husk, imp and mossback.
+- **Programs**: 110 at main, 119 here at boot, constant through views, quality presets, class switches, death, all enemy kinds and co-op.
+- **Crowd of 40 with all eight kinds**: median frame time 21.4 ms skinned against 22.5 rigid (this machine's crowd is GPU-bound at about 20 ms; the two are level within noise), draw calls 3492 against 4035.
+- **Late waves**: waves 15 and 20 (the lobby's wave selector, a real fight with casting and moving, god mode, 40 s each) on the mage in the Thornwood and the crypt: no errors, no non-finite cloth values, programs constant, frame times level with all features off (p50 8.3 vs 8.6 ms at wave 15; the crypt wave 20 run had one 247 ms frame that I did not compare against an all-off run). The warrior's late-wave runs did not reach the selected wave, so the warrior is only covered at wave 1.
+- **Still open:** a phone or weak GPU; the crypt wave 20 hitch; the run-start GPU stall you measured (632 ms; about 133-167 ms here with features on or off, so it predates them, cause not found); the driver's shader compile warnings at boot; full-body IK is a separate feature, filed as #115.
+
+## 12. Loose ends closed
+
+- **The run-start stall** (632 ms in a user report, 117 to 167 ms in my runs): not reproducible, and not the game. A profile shows the time is native (the JS stays under 20 ms), and a Chrome trace puts it inside the browser's own raster work in the GPU process. Bisecting CSS effects at the user's window size gave 117 ms once and 17 ms the next time for the same baseline, so it is noise; another browser under test runs on the same machine, which the user confirmed. Conclusion: repeat, interleave and compare medians before believing a spike (this is how the earlier crowd numbers were settled too). The crypt wave-20 247 ms frame is the same kind of spike.
+- **The warrior at late waves**: wave 20, 40 s of casting and moving, twice with everything on and twice with it off: p50 4.6 and 3.7 ms on against 4.8 and 4.1 ms off, p99 5.8 to 6.8 ms, no frame over 20 ms, programs constant, no errors.
+- **The driver's shader compile warnings at boot** (one X4122, two X3577): identical on `main` and on this branch, so they predate this work.
+- **The robe skirt and the warrior's mail skirt** are not skinned: both are `Skirt` meshes, already continuous and swung by the legs, so skinning them would add nothing.
+- **The warrior's hand apart from its forearm** (reported with a screenshot, third person, side view): an existing gap, identical on `main` and with every feature off. The bracer ends above the wrist and the palm starts at the wrist joint, with nothing between. A leather glove cuff now runs from under the bracer down over the wrist into the palm, skinned from the elbow joint to the hand joint so it bends with the wrist (checked walking, at rest and with the wrist bent).

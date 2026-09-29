@@ -38,9 +38,9 @@ export function buildHusk(): Model {
   const lim = (len: number, r0: number, r1: number, b = 0, at = 0.35) => organic(limb(len, r0, r1, b, at), r0 * 0.12, 28, len * 100);
 
   // --- legs: wasted thighs, knobbly knees, long bony feet
-  S.pair(lim(P.thighL, 0.072, 0.048, 0.22, 0.3), flesh, j.thighL, j.thighR);
+  S.skinPair(lim(P.thighL + 0.065, 0.072, 0.048, 0.22, 0.3), flesh, j.thighL, j.kneeL, j.thighR, j.kneeR, P.thighL - 0.086, P.thighL);
   S.pair(new THREE.SphereGeometry(0.042, 10, 8), bone, j.kneeL, j.kneeR, [0, 0.01, 0.035], [0, 0, 0], [1, 1.1, 0.8]);
-  S.pair(lim(P.shinL, 0.05, 0.032, 0.28, 0.22), flesh, j.kneeL, j.kneeR);
+  S.skinPair(lim(P.shinL + 0.045, 0.05, 0.032, 0.28, 0.22), flesh, j.kneeL, j.ankleL, j.kneeR, j.ankleR, P.shinL - 0.06, P.shinL);
   S.pair(organic(new THREE.SphereGeometry(1, 12, 8), 0.12, 3, 3), flesh, j.ankleL, j.ankleR, [0, -0.035, 0.05], [0, 0, 0], [0.045, 0.03, 0.11]);
   for (const x of [-0.025, 0, 0.025]) {
     S.pair(taperTube([V(0, 0, 0), V(0, -0.01, 0.05), V(0, -0.03, 0.08)], (t) => 0.012 * (1 - t * 0.7)), bone, j.ankleL, j.ankleR, [x, -0.03, 0.13]);
@@ -89,9 +89,9 @@ export function buildHusk(): Model {
 
   // --- arms: long and thin, fingers like roots
   S.pair(new THREE.SphereGeometry(0.05, 10, 8), bone, j.shoulderL, j.shoulderR, [0, 0.01, 0]);
-  S.pair(lim(P.upperL, 0.048, 0.034, 0.2), flesh, j.shoulderL, j.shoulderR);
+  S.skinPair(lim(P.upperL + 0.043, 0.048, 0.034, 0.2), flesh, j.shoulderL, j.elbowL, j.shoulderR, j.elbowR, P.upperL - 0.058, P.upperL);
   S.pair(new THREE.SphereGeometry(0.03, 8, 6), bone, j.elbowL, j.elbowR, [0, 0, -0.025]);
-  S.pair(lim(P.foreL, 0.036, 0.026, 0.25, 0.25), flesh, j.elbowL, j.elbowR);
+  S.skinPair(lim(P.foreL + 0.032, 0.036, 0.026, 0.25, 0.25), flesh, j.elbowL, j.handL, j.elbowR, j.handR, P.foreL - 0.043, P.foreL);
   S.pair(organic(new THREE.SphereGeometry(1, 10, 8), 0.1, 4, 8), flesh, j.handL, j.handR, [0, -0.04, 0.005], [0, 0, 0], [0.04, 0.05, 0.022]);
   for (let f = 0; f < 4; f++) {
     const x = (f - 1.5) * 0.017, len = f === 0 || f === 3 ? 0.085 : 0.1;

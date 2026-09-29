@@ -259,6 +259,8 @@ export interface Model {
   /** seen through its own eyes (only the arms show, entities/viewModel.ts): adjust what reads badly from
    *  there (a sleeve hiding the hand, an arm raised out of the frame) */
   firstPerson?(on: boolean): void;
+  /** cloth simulated on the model's own joints (a sleeve; models/sleeve.ts): stepped in `animate` */
+  readonly cloths?: { update(dt: number): void; reset(): void }[];
   /** re-settle simulated parts after a teleport */
   reset?(): void;
   /** show the equipped weapon / shield */

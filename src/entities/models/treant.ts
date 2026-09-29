@@ -52,9 +52,11 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
   const burl = (sx: number, sy: number, sz: number, seed: number, amp = 0.16, f = 1.8) => organic(new THREE.IcosahedronGeometry(1, Math.max(sx, sy, sz) > 0.12 ? 2 : 1), amp, f, seed).scale(sx, sy, sz);
   const shelfGeo = (rad: number) => lathe([[0.001, 0.3 * rad], [0.6 * rad, 0.26 * rad], [rad, 0.04 * rad], [0.9 * rad, 0], [0.001, 0.02 * rad]], 12);
   // a limb with roots winding round it
-  const rooted = (len: number, r0: number, r1: number, pl: THREE.Object3D, pr: THREE.Object3D, b = 0.3, at = 0.35, n = 2) => {
-    S.pair(lim(len, r0, r1, b, at), skin, pl, pr);
-    for (let k = 0; k < n; k++) S.pair(twist(len * 0.95, (r0 + r1) * 0.5, r0 * 0.22, 0.6, k * 2.4 + len), wood, pl, pr);
+  // a limb piece runs on past its joint and follows the next joint there (the roots too), so the limb bends smoothly
+  const rooted = (len: number, r0: number, r1: number, pl: THREE.Object3D, pr: THREE.Object3D, nl: THREE.Object3D, nr: THREE.Object3D, b = 0.3, at = 0.35, n = 2) => {
+    const ext = r0 * 0.9, band = r0 * 1.2;
+    S.skinPair(lim(len + ext, r0, r1, b, at), skin, pl, nl, pr, nr, len - band, len);
+    for (let k = 0; k < n; k++) S.skinPair(twist(len * 0.95 + ext, (r0 + r1) * 0.5, r0 * 0.22, 0.6, k * 2.4 + len), wood, pl, nl, pr, nr, len - band, len);
   };
   // leaves in a spray round a twig end
   const spray = (parent: THREE.Object3D, at: THREE.Vector3, n: number, size: number) => {
@@ -73,8 +75,8 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
   };
 
   // --- legs: trunks wound with roots, a burl at the knee, roots splaying from the feet into the ground
-  rooted(P.thighL, 0.16, 0.13, j.thighL, j.thighR, 0.25, 0.3, 3);
-  rooted(P.shinL, 0.13, 0.12, j.kneeL, j.kneeR, 0.2, 0.3, 2);
+  rooted(P.thighL, 0.16, 0.13, j.thighL, j.thighR, j.kneeL, j.kneeR, 0.25, 0.3, 3);
+  rooted(P.shinL, 0.13, 0.12, j.kneeL, j.kneeR, j.ankleL, j.ankleR, 0.2, 0.3, 2);
   S.pair(burl(0.12, 0.1, 0.1, 3), skin, j.kneeL, j.kneeR, [0, 0.01, 0.05]);
   S.pair(burl(0.13, 0.08, 0.16, 4, 0.12), skin, j.ankleL, j.ankleR, [0, -0.03, 0.04]);
   for (let i = 0; i < 5; i++) {
@@ -125,8 +127,8 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
     S.add(burl(0.18, 0.13, 0.17, s > 0 ? 12 : 13, 0.2, 2), moss, sh, [s * 0.02, 0.07, 0]);
     bough(sh, V(s * 0.05, 0.14, -0.04), V(s * 0.5, 1, -0.2), 0.26, 0.032, 1, 6, 0.13);
   }
-  rooted(P.upperL, 0.13, 0.11, j.shoulderL, j.shoulderR, 0.3);
-  rooted(P.foreL, 0.13, 0.12, j.elbowL, j.elbowR, 0.4, 0.3);
+  rooted(P.upperL, 0.13, 0.11, j.shoulderL, j.shoulderR, j.elbowL, j.elbowR, 0.3);
+  rooted(P.foreL, 0.13, 0.12, j.elbowL, j.elbowR, j.handL, j.handR, 0.4, 0.3);
   S.pair(burl(0.14, 0.13, 0.12, 14), skin, j.handL, j.handR, [0, -0.08, 0.02]);
   for (let f = 0; f < 4; f++) {
     S.pair(taperTube([V(0, 0, 0), V(0, -0.08, 0.02), V(0, -0.15, 0.06), V(0, -0.18, 0.11)], (t) => 0.03 * (1 - t * 0.75), 10, 6), wood, j.handL, j.handR, [(f - 1.5) * 0.055, -0.14, 0.04], [0, 0, (f - 1.5) * 0.12]);

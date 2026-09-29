@@ -78,7 +78,7 @@ export function buildWitch(): Model {
 
   // --- arms: bell sleeves, grey skin, long clawed fingers
   S.pair(organic(new THREE.SphereGeometry(1, 12, 8), 0.05, 5, 6), robe, j.shoulderL, j.shoulderR, [0, 0, 0], [0, 0, 0], [0.065, 0.06, 0.065]);
-  S.pair(limb(P.upperL, 0.05, 0.045, 0.1), robe, j.shoulderL, j.shoulderR);
+  S.skinPair(limb(P.upperL + 0.045, 0.05, 0.045, 0.1), robe, j.shoulderL, j.elbowL, j.shoulderR, j.elbowR, P.upperL - 0.06, P.upperL);
   S.pair(lathe([[0.001, -P.foreL - 0.04], [0.085, -P.foreL - 0.02], [0.075, -P.foreL + 0.05], [0.048, -0.05], [0.045, 0.02], [0.001, 0.03]], 16), robe, j.elbowL, j.elbowR);
   S.pair(organic(new THREE.SphereGeometry(1, 10, 8), 0.06, 5, 7), skin, j.handL, j.handR, [0, -0.03, 0.005], [0, 0, 0], [0.035, 0.045, 0.018]);
   for (let f = 0; f < 4; f++) {

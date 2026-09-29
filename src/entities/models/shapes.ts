@@ -254,6 +254,11 @@ const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Eule
 
 /** merged geometry per creature kind, shared by every creature of that kind (never disposed) */
 const CACHE = new Map<string, THREE.BufferGeometry[]>();
+/** Skin weights across joints (prototype, issue #85): `?skin=0` puts every spanning piece back on its one joint */
+export const SKINNING = typeof location === 'undefined' || !/[?&]skin=0/.test(location.search);
+/** The shadow pass draws every caster with one shared depth material, so a skinned caster among rigid ones made
+ *  three rebuild that material's program parameters at each switch; skinned meshes get a depth material of their own */
+const SKIN_DEPTH = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
 /** pieces smaller than this (bounding radius, m) cast no shadow: chain links, claws, charms */
 const SHADOW_MIN = 0.07;
 
@@ -266,6 +271,8 @@ const SHADOW_MIN = 0.07;
  */
 export class Sculpt {
   private groups = new Map<THREE.Object3D, Map<THREE.Material, THREE.BufferGeometry[]>>();
+  private skins = new Map<THREE.Object3D, Map<THREE.Material, THREE.BufferGeometry[]>>();
+  private bones: THREE.Object3D[] = [];
   private noShadow = new Set<THREE.Material>();
   private cached: THREE.BufferGeometry[] | undefined;
 
@@ -288,9 +295,58 @@ export class Sculpt {
     return this;
   }
 
-  private push(parent: THREE.Object3D, mat: THREE.Material, g: THREE.BufferGeometry): void {
-    let m = this.groups.get(parent);
-    if (!m) this.groups.set(parent, (m = new Map()));
+  /**
+   * A piece hung on joint `a` that carries on past its child joint `b` (a sleeve over the elbow, the neck up
+   * into the head): its vertices follow `a` above `from` and `b` below `to` (metres along the bone, from
+   * `a`), blended between, so the surface bends with the joint instead of leaving a gap. `geo` is in `a`'s
+   * space, placed like `add`. `b` must be a direct child of `a`. Without skinning it is a rigid piece of `a`.
+   */
+  skin(geo: THREE.BufferGeometry, mat: THREE.Material, a: THREE.Object3D, b: THREE.Object3D, from: number, to: number,
+    pos: [number, number, number] = [0, 0, 0], rot: [number, number, number] = [0, 0, 0], scale: number | [number, number, number] = 1): this {
+    if (!SKINNING) return this.add(geo, mat, a, pos, rot, scale);
+    const ia = this.bone(a), ib = this.bone(b);
+    // a creature's skinned pieces are one mesh per material on the root (draws are what a crowd pays for);
+    // a hero's stay on their joint, which the first-person view shows or hides by
+    let space = a;
+    if (this.kind) while (space.parent) space = space.parent;
+    if (this.cached) { this.pushTo(this.skins, space, mat, NONE); return this; }
+    const sc = typeof scale === 'number' ? _s.setScalar(scale) : _s.set(...scale);
+    _m.compose(_v.set(...pos), _q.setFromEuler(_e.set(...rot)), sc);
+    const g = (geo.index ? geo.toNonIndexed() : geo.clone()).applyMatrix4(_m);
+    if (geo.index) geo.dispose();
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k);
+    if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    const axis = b.position.clone().normalize(), p = g.attributes.position, idx = new Uint16Array(p.count * 4), w = new Float32Array(p.count * 4);
+    for (let i = 0; i < p.count; i++) {
+      const t = Math.min(1, Math.max(0, (_v.fromBufferAttribute(p, i).dot(axis) - from) / (to - from))), k = t * t * (3 - 2 * t);
+      idx[i * 4] = ia; idx[i * 4 + 1] = ib; w[i * 4] = 1 - k; w[i * 4 + 1] = k;
+    }
+    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
+    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(w, 4));
+    if (space !== a) {   // into the root's space, as the joints stand now (at rest)
+      a.updateWorldMatrix(true, false);
+      g.applyMatrix4(_m.copy(space.matrixWorld).invert().multiply(a.matrixWorld));
+    }
+    this.pushTo(this.skins, space, mat, g);
+    return this;
+  }
+  /** `skin` on both sides: the piece on the left joints and its mirror image on the right */
+  skinPair(geo: THREE.BufferGeometry, mat: THREE.Material, aL: THREE.Object3D, bL: THREE.Object3D, aR: THREE.Object3D, bR: THREE.Object3D, from: number, to: number,
+    pos: [number, number, number] = [0, 0, 0]): this {
+    const mirror = this.cached ? geo.clone() : mirrorX(geo.index ? geo.toNonIndexed() : geo.clone());
+    this.skin(geo, mat, aL, bL, from, to, pos);
+    return this.skin(mirror, mat, aR, bR, from, to, [-pos[0], pos[1], pos[2]]);
+  }
+  private bone(o: THREE.Object3D): number {
+    let i = this.bones.indexOf(o);
+    if (i < 0) i = this.bones.push(o) - 1;
+    return i;
+  }
+
+  private push(parent: THREE.Object3D, mat: THREE.Material, g: THREE.BufferGeometry): void { this.pushTo(this.groups, parent, mat, g); }
+  private pushTo(store: Map<THREE.Object3D, Map<THREE.Material, THREE.BufferGeometry[]>>, parent: THREE.Object3D, mat: THREE.Material, g: THREE.BufferGeometry): void {
+    let m = store.get(parent);
+    if (!m) store.set(parent, (m = new Map()));
     let list = m.get(mat);
     if (!list) m.set(mat, (list = []));
     list.push(g);
@@ -327,8 +383,39 @@ export class Sculpt {
       parent.add(mesh);
       out.push(mesh);
     }
+    if (this.skins.size) {
+      // one skeleton over the joints the spanning pieces use; each joint's pieces are a SkinnedMesh on it
+      let top = this.bones[0];
+      while (top.parent) top = top.parent;
+      top.updateMatrixWorld(true);
+      const skeleton = new THREE.Skeleton(this.bones as unknown as THREE.Bone[]), twins = new Map<THREE.Material, THREE.Material>();
+      for (const [parent, m] of this.skins) for (const [mat, list] of m) {
+        let g = this.cached?.[i++];
+        if (!g) {
+          g = list.length === 1 ? list[0] : mergeGeometries(list)!;
+          if (list.length > 1) for (const x of list) x.dispose();
+          g.computeBoundingSphere();
+          if (this.kind) g.userData.shared = true;
+        }
+        made.push(g);
+        // its own copy of the material: one shared with rigid meshes makes three rebuild its program's
+        // parameters on every switch between the two (it was the whole cost of a crowd)
+        let sm = twins.get(mat);
+        if (!sm) { twins.set(mat, sm = mat.clone()); sm.onBeforeCompile = mat.onBeforeCompile; sm.customProgramCacheKey = mat.customProgramCacheKey; }
+        const mesh = new THREE.SkinnedMesh(g, sm);
+        mesh.castShadow = !this.noShadow.has(mat) && g.boundingSphere!.radius > SHADOW_MIN;
+        mesh.receiveShadow = true;
+        mesh.frustumCulled = false;   // the bounds are the bind pose's
+        mesh.customDepthMaterial = SKIN_DEPTH;
+        parent.add(mesh);
+        mesh.updateWorldMatrix(true, false);
+        mesh.bind(skeleton);
+        out.push(mesh);
+      }
+    }
     if (this.kind && !this.cached) CACHE.set(this.kind, made);
     this.groups.clear();
+    this.skins.clear();
     return out;
   }
 }
