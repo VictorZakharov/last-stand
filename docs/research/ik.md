@@ -59,16 +59,27 @@ Also looked at now: the warrior with a two-hander and with two one-handers, runn
 A side view of the warrior at a run read as a squat even with the pelvis no longer dropping (hips 0.97-1.06 m on flat ground, frame rate made no difference: 0.95 at 55 ms frames). What the numbers showed:
 
 - **The rest pose stands with bent knees.** Hip to ankle is 0.955 of the leg (a third of a radian of knee), so every frame started from a sitting stance. The pelvis is now lifted by `RISE` (3 cm) and held where the legs reach (`lmax` 0.98).
-- **Stance and stride were lopsided and long.** Feet landed 0.18 ahead of the hip and were left 0.41 behind (a 0.59 m stance travel), 0.79 m apart at most, with both knees bent. The landing offset is now the half of the travel (capped at 0.26 of the leg) and the step is capped at 0.85 m per 0.9 m of leg: 0.66 m apart at most, hips 1.04 m on average (0.98 before), lowest 0.99 (0.86).
 - Off the dais the two steps down (0.35 m in 0.7 m) still fold the knees for a moment (hips 0.91 m above the ground under them); the body's height follows the ground with a rate of 14, so a step is taken in about a tenth of a second.
 
-Foot slide in the straight run (`slide.mjs`): warrior 0.83 to 0.79 m/s, mage 0.55 to 0.89 (its contact frames now include the swing foot near the floor). Crowd of 40: 0.65 ms with IK against 0.47 without. A lower heel kick (0.15 m) made the metric worse, so the lift stays.
+Playing it still read as wrong (a lunge, "running on one leg", a slow lunge on stopping), so it was measured against a runner instead of judged by the pelvis. `rec.mjs` records the joints of a scenario (run, stop, start, turn, tap), `stick.py` draws them as stick figures (side and front, in the body's frame), `film.mjs` films the model from any angle over a plain floor, `gait.py` computes a runner's numbers. What that showed at 6.2 m/s (the one speed a keyboard gives):
+
+| | before | a human at 5-6 m/s |
+| --- | --- | --- |
+| steps per second | 7 | 3.2-3.8 (4.5+ sprinting) |
+| flight, share of the time | 47 % | 20-40 % |
+| foot behind the hip at lift-off (m) | 0.20 | 0.35-0.55 |
+| hip lowest | in flight (inverted) | as the foot takes the weight, highest in flight |
+| body sideways over the stance foot | none | 3-7 cm |
+
+Seven steps a second with both legs on one line read from the side as one pumping leg. Now: the step follows the speed like a runner's (`stepLength`: at most 1.5 leg lengths, 4.4 steps a second at 6.2 m/s), the contact is longer (duty down to 0.31, contact 0.14 s, flight 36 %), a planted foot creeps along at a run by `SLIP` (0.3) of the body's speed (with none the feet run out of reach and re-step twice a stride; `?slip=` to compare), the landing offset is capped at 0.38 of the leg, the body is lowest as a foot takes the weight (`walkCycle`: the bob flips with the speed, halved at a run) and shifts 2 cm over the foot it stands on, and the forward lean is 0.045 rad per m/s (at most 0.3). Measured: flight 36 %, contact 0.14 s, foot ahead at touchdown 0.29 m and behind at lift-off 0.28 m, bounce 7-8 cm, lean 17-21 degrees, peak swing knee 93 degrees, peak hip flexion 66. A stop no longer holds a lunge: both feet re-step together (the second when the first is a fifth of the way through), and the body's speed eases in and out (`handleInput`: rate 9 up, 12 down, where it was 14 both ways).
+
+Turns on open ground: largest pelvis drop 0.11 m (0.09 before this pass), hips 0.95 m at the lowest (0.95), feet up to 1.1 m apart in the body's frame while it turns (0.86). Foot slide in the straight run (`slide.mjs`): warrior 0.83 to 0.79 m/s, mage 0.55 to 0.89. Crowd of 40: 0.65 ms with IK against 0.47 without.
 
 ## Not verified
 
 - A phone or a weak GPU: only CPU time of the animation was measured, on a desktop. No LOD was added (the arena's crowd cost is small); if a low-end profile shows it, skip enemies beyond a distance and restart them under the hips when they come back (`reset()`).
 - Side views of every enemy: the husk and both heroes were looked at frame by frame; the others only by the numbers above (with the direction-change fixes their slide and hip numbers are unchanged).
-- Sprinting is very fast for the legs (6 m/s on 0.9 m legs): the steps are capped at 0.85 m per 0.9 m of leg, so the cadence at a sprint is high (about 7 steps a second).
+- Sprinting is very fast for the legs (6 m/s on 0.9 m legs): this is a sprint's stride (4.4 steps a second, above a runner's 3.2-3.8), and only the warrior and the mage were measured against a runner's numbers, the enemies only by the earlier slide and height numbers.
 - A hero's leg poses inside skills (the lunge of a slam, Bull Rush's wide stance) are now the feet's plant and the pelvis, not the FK pose; nothing looked broken, but each skill was not compared against `?ik=0`.
 
 ## Not in this PR (issue #115's remainder)

@@ -55,16 +55,18 @@ function footShape(ankle: THREE.Object3D, root: THREE.Object3D): { sole: number;
 }
 const TAU = Math.PI * 2;
 /** radians of forward lean per m/s of speed */
-const LEAN = 0.03;
+const LEAN = 0.045;
 /** how far a planted foot may be turned from the body's facing (rad) */
 const YAW_MAX = 0.5;
 /** how far the pelvis is lifted over the pose (rig units) before the reach limit brings it back: the rest pose stands with bent knees */
 const RISE = 0.03;
+/** the share of the body's speed a planted foot moves at during a run */
+const SLIP = +(typeof location === 'undefined' ? '0.3' : (new URLSearchParams(location.search).get('slip') ?? '0.3'));
 const smooth = (t: number): number => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
 
 /** How far a half stride (one foot's step) is at `speed` (m/s) for legs `leg` long (world m): walks take short
  *  steps, runs long ones; the walk cycle's phase then advances π per step (`gaitRate`). */
-export const stepLength = (speed: number, leg: number): number => Math.min(0.85, Math.max(0.35, 0.22 + 0.24 * speed)) * (leg / 0.9);
+export const stepLength = (speed: number, leg: number): number => Math.min(1.5 * leg, Math.max(0.3 * leg, speed / (1.7 + 0.32 * speed) * (leg / 0.9)));
 /** the walk cycle's phase change per metre travelled at `speed`: a half cycle (π) per step */
 export const gaitRate = (speed: number, leg: number): number => IK ? Math.PI / stepLength(speed, leg) : 2.1;
 
@@ -151,7 +153,7 @@ export class LegIK {
     {
       const lv = this.v, lf = Math.sin(this.lastYaw) * lv.x + Math.cos(this.lastYaw) * lv.z, ls = Math.cos(this.lastYaw) * lv.x - Math.sin(this.lastYaw) * lv.z;
       const k = LEAN * lean * weight;
-      this.leanX = damp(this.leanX, Math.max(-0.12, Math.min(0.22, lf * k)), 6, dt);
+      this.leanX = damp(this.leanX, Math.max(-0.12, Math.min(0.3, lf * k)), 6, dt);
       this.leanZ = damp(this.leanZ, Math.max(-0.12, Math.min(0.12, -ls * k)), 6, dt);
       j.body.rotation.x += this.leanX; j.body.rotation.z += this.leanZ;
       j.neck.rotation.x -= this.leanX * 0.5; j.head.rotation.x -= this.leanX * 0.3;
@@ -176,10 +178,12 @@ export class LegIK {
     const lv = this.v.length(), vd = speed > 0.05 ? _t.copy(lv > 0.35 * speed ? this.v : _h).normalize() : _t.set(0, 0, 0);
     this.gv.copy(vd).multiplyScalar(speed);
     // the share of the cycle on the ground: less as the speed rises (a run has both feet in the air a while), so the stance's travel stays within the legs' reach
-    const duty = Math.min(0.62, Math.max(0.28, 0.75 - 0.13 * speed));
+    const duty = Math.min(0.62, Math.max(0.31, 0.75 - 0.13 * speed));
     const w2 = (1 - duty) / 2;
     const cycleT = TAU / Math.max(Math.abs(this.dphase), 0.5);
-    const half = Math.min(speed * duty * cycleT * 0.5, 0.26 * Lw);
+    const half = Math.min(speed * duty * cycleT * 0.5 * (1 - SLIP * smooth((speed - 2) / 3.5)), 0.38 * Lw);
+    // at a run a planted foot creeps on with the body a little (SLIP of its speed), so the stance keeps to a range the legs can take without the splits
+    const slip = SLIP * smooth((speed - 2) / 3.5);
     const anyTimed = this.feet.some((f) => f.state === 'timed');
 
     for (let i = 0; i < 2; i++) {
@@ -198,19 +202,20 @@ export class LegIK {
         f.yawA += this.angle(f.yaw, f.yawA, yaw) * smooth(f.t);
         f.carry = Math.max(0, f.pos.y - groundHeight(f.pos.x, f.pos.z) - sole * sc); f.pitch0 = f.shown;
         f.A.copy(f.pos); f.A.y = groundHeight(f.A.x, f.A.z);
-        f.state = 'timed'; f.dur = 0.3; f.t = 0; f.fast = false;
+        f.state = 'timed'; f.dur = 0.22; f.t = 0; f.fast = false;
       }
       if (f.state === 'timed') { f.t += dt / f.dur; if (f.t >= 1) this.land(f, yaw); }
 
       // a planted foot that has fallen too far from under its hip (a turn, a sudden start) steps back under it
       if (f.state === 'plant') {
         f.stance += dt;
+        if (this.moving && slip > 0) { f.P.x += this.gv.x * slip * dt; f.P.z += this.gv.z * slip * dt; }
         // a foot pivots with the body when it turns, rather than staying across the leg
         const dy = this.angle(0, f.yaw, yaw);
         if (Math.abs(dy) > YAW_MAX) f.yaw = yaw - Math.sign(dy) * YAW_MAX;
         const dev = Math.hypot(f.P.x - _h.x, f.P.z - _h.z);
-        if (dev > (this.moving ? 0.45 : 0.1) * Lw && (this.moving ? other.state !== 'timed' : other.state === 'plant') && f.stance > (this.moving ? 0.12 : 0.05)) {
-          f.state = 'timed'; f.t = 0; f.fast = this.moving; f.dur = this.moving ? Math.min(0.3, Math.max(0.12, (1 - duty) * cycleT)) : Math.min(0.5, 0.25 + dev * 0.3); f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown;
+        if (dev > (this.moving ? 0.45 : 0.1) * Lw && (this.moving ? other.state !== 'timed' : other.state === 'plant' || (other.state === 'timed' && other.t > 0.2)) && f.stance > (this.moving ? 0.12 : 0.05)) {
+          f.state = 'timed'; f.t = 0; f.fast = this.moving; f.dur = this.moving ? Math.min(0.3, Math.max(0.12, (1 - duty) * cycleT)) : Math.min(0.4, 0.16 + dev * 0.3); f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown;
           f.B.set(_h.x + vd.x * half, 0, _h.z + vd.z * half);
           f.stance = 0;
         }

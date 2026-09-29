@@ -594,7 +594,7 @@ export function buildWarrior(): Model {
     idle(j, t, 1 - move * 0.6);
     // (through the eyes the arms barely swing with the stride: a swinging arm sweeps a weapon across the view)
     const cy0 = j.chest.rotation.y, hy0 = j.hips.rotation.y, eL0 = j.elbowL.rotation.x, eR0 = j.elbowR.rotation.x;
-    walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: fp ? 0.03 : 0.1, bob: 0.08, dir });
+    walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: fp ? 0.03 : 0.1, bob: 0.08, dir, run: true });
     if (fp) {
       const k = 0.2;
       j.chest.rotation.y = cy0 + (j.chest.rotation.y - cy0) * k; j.hips.rotation.y = hy0 + (j.hips.rotation.y - hy0) * k;

@@ -108,7 +108,8 @@ export function resetPose(j: Joints): void {
  * Procedural walk/run cycle. `amt` 0..1 blends from standing to full stride.
  * `dir` is +1 forward / -1 backpedal.
  */
-export interface WalkOpts { stride?: number; knee?: number; arm?: number; bob?: number; dir?: number }
+export interface WalkOpts { stride?: number; knee?: number; arm?: number; bob?: number; dir?: number; /** a runner's body (see below), for a model whose full speed is a run */ run?: boolean }
+const IK_ON = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
 export function walkCycle(j: Joints, phase: number, amt: number, o: WalkOpts = {}): void {
   const stride = o.stride ?? 0.55, knee = o.knee ?? 1.0, arm = o.arm ?? 0.45, bob = o.bob ?? 0.06, dir = o.dir ?? 1;
   const s = Math.sin(phase) * dir, c = Math.cos(phase);
@@ -122,7 +123,11 @@ export function walkCycle(j: Joints, phase: number, amt: number, o: WalkOpts = {
   j.shoulderR.rotation.x += -s * arm * amt;
   j.elbowL.rotation.x += -(0.25 + Math.max(0, -s) * 0.4) * amt;
   j.elbowR.rotation.x += -(0.25 + Math.max(0, s) * 0.4) * amt;
-  j.body.position.y += (Math.abs(c) - 0.6) * bob * amt;
+  // a walk is highest as the legs pass (the body vaulting over a straight leg); a run is lowest there (the leg compressing under it) and highest in flight
+  const run = IK_ON && o.run ? Math.min(1, Math.max(0, (amt - 0.45) / 0.35)) : 0;
+  j.body.position.y += (Math.abs(c) - 0.6) * (1 - 2 * run) * (1 - 0.5 * run) * bob * amt;
+  // the body's weight goes over the foot it stands on (left at phase 0, right at π, as `LegIK` times its steps), so the two legs read apart from behind and in front
+  if (IK_ON) j.body.position.x += c * 0.02 * run * amt;
   j.hips.rotation.y += s * 0.12 * amt;
   j.chest.rotation.y += -s * 0.16 * amt;
   j.hips.rotation.z += c * 0.04 * amt;

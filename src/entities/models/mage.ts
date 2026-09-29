@@ -351,7 +351,7 @@ export function buildMage(): Model {
 
     // base stance: staff held at the side, slightly forward
     idle(j, t, 1 - move * 0.6);
-    walkCycle(j, st.phase, move, { stride: 0.5, knee: 0.95, arm: 0.35, bob: 0.07, dir });
+    walkCycle(j, st.phase, move, { stride: 0.5, knee: 0.95, arm: 0.35, bob: 0.07, dir, run: true });
     j.shoulderR.rotation.x += -0.35; j.shoulderR.rotation.z += -0.12; j.elbowR.rotation.x += -0.55;
     j.spine.rotation.x += move * 0.12 * dir;
     j.body.rotation.z += (st.lean || 0) * 0.12;

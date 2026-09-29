@@ -314,8 +314,10 @@ export class Player {
     const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const k = len ? speed * Math.min(1, len) / len : 0;
     const tx = (mx * cy + mz * sy) * k, tz = (mz * cy - mx * sy) * k;
-    this.vel.x = damp(this.vel.x, tx, 14, dt);
-    this.vel.z = damp(this.vel.z, tz, 14, dt);
+    // it takes a moment to get going and to stop (the legs and the lean follow it), a little quicker to stop than to start
+    const kv = tx * tx + tz * tz > this.vel.x * this.vel.x + this.vel.z * this.vel.z ? 9 : 12;
+    this.vel.x = damp(this.vel.x, tx, kv, dt);
+    this.vel.z = damp(this.vel.z, tz, kv, dt);
 
     this.aim.copy(input.ground);
 
