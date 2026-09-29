@@ -50,6 +50,8 @@ export class BellCloth {
   private readonly len: Float32Array;
   /** how far each particle may be from its column's top ring: the cloth's length down to it, which fast running would otherwise stretch */
   private readonly tether = new Float32Array(N);
+  /** how far each particle may be from the forearm's axis: the radius it was cut to, so the sleeve stays a tube round the arm and never lets it out */
+  private readonly envelope = new Float32Array(N);
   private readonly stiff: Float32Array;
   private readonly local = new Float32Array(N * 3);
   private readonly flip: number;
@@ -170,6 +172,11 @@ export class BellCloth {
     _b.addScaledVector(_q, 0.05 * sc);
     _q.copy(_b).sub(_a);
     const cl2 = _q.lengthSq(), rad = this.o.armRadius * sc;
+    for (let i = NC; i < N; i++) {
+      const k = i * 3, ux = tgt[k] - _a.x, uy = tgt[k + 1] - _a.y, uz = tgt[k + 2] - _a.z, t = (ux * _q.x + uy * _q.y + uz * _q.z) / (cl2 || 1);
+      const px = ux - _q.x * t, py = uy - _q.y * t, pz = uz - _q.z * t;
+      this.envelope[i] = Math.sqrt(px * px + py * py + pz * pz) * 1.06 + 0.006 * sc;
+    }
     for (let it = 0; it < ITER; it++) {
       for (let k = 0; k < this.pairs.length; k++) {
         const [a, b] = this.pairs[k], ia = a * 3, ib = b * 3;
@@ -191,6 +198,12 @@ export class BellCloth {
         _n.copy(_a).addScaledVector(_q, t);
         const dx = _p.x - _n.x, dy = _p.y - _n.y, dz = _p.z - _n.z, d = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (d < rad && d > 1e-6) { const s = rad / d; pos[i] = _n.x + dx * s; pos[i + 1] = _n.y + dy * s; pos[i + 2] = _n.z + dz * s; }
+        // and not out of the tube it was cut to round the arm (gravity may pull it onto the arm, not off it)
+        {
+          const ux = pos[i] - _a.x, uy = pos[i + 1] - _a.y, uz = pos[i + 2] - _a.z, t2 = (ux * _q.x + uy * _q.y + uz * _q.z) / (cl2 || 1);
+          const px = ux - _q.x * t2, py = uy - _q.y * t2, pz = uz - _q.z * t2, pd = Math.sqrt(px * px + py * py + pz * pz), mx = this.envelope[r * NC + c];
+          if (pd > mx) { const k = mx / pd; pos[i] = _a.x + _q.x * t2 + px * k; pos[i + 1] = _a.y + _q.y * t2 + py * k; pos[i + 2] = _a.z + _q.z * t2 + pz * k; }
+        }
         // and never far from its place, whatever the arm did
         const ex = pos[i] - tgt[i], ey = pos[i + 1] - tgt[i + 1], ez = pos[i + 2] - tgt[i + 2], ed = Math.sqrt(ex * ex + ey * ey + ez * ez), lim = STRAY[r] * sc;
         if (ed > lim) { const s = lim / ed; pos[i] = tgt[i] + ex * s; pos[i + 1] = tgt[i + 1] + ey * s; pos[i + 2] = tgt[i + 2] + ez * s; }
