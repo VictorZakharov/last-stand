@@ -455,7 +455,7 @@ export function buildMage(): Model {
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
     else {
       // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
-      legs.update(dt, st.phase, st.dead);
+      legs.update(dt, st.phase, st.dead, 1, fp ? 0 : 1);
       groundFeet(j, 0.07);
     }
 

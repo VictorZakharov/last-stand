@@ -54,6 +54,8 @@ function footShape(ankle: THREE.Object3D, root: THREE.Object3D): { sole: number;
   return any ? { sole: Math.min(0.25, Math.max(0.03, sole)), toe: Math.min(0.4, Math.max(0.05, toe)), heel: Math.min(0.2, Math.max(0.02, heel)) } : { sole: FOOT_H, toe: 0.14, heel: 0.05 };
 }
 const TAU = Math.PI * 2;
+/** radians of forward lean per m/s of speed */
+const LEAN = 0.03;
 const smooth = (t: number): number => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
 
 /** How far a half stride (one foot's step) is at `speed` (m/s) for legs `leg` long (world m): walks take short
@@ -100,6 +102,9 @@ export class LegIK {
   private moving = false;
   private fresh = true;
   private drop = 0;
+  /** the body's lean into its motion (forward, sideways), damped */
+  private lastYaw = 0;
+  private leanX = 0; private leanZ = 0;
   private shape: { sole: number; toe: number; heel: number }[] | null = null;
   /** the smoothed blend over the walk cycle's legs */
   private w = 0;
@@ -113,7 +118,7 @@ export class LegIK {
    * Take the legs over, after the pose and before anything reads their world matrices. `phase` is the walk
    * cycle's; `dead` the death progress (-1 alive: the fall stays as posed).
    */
-  update(dt: number, phase: number, dead: number, weight = 1): void {
+  update(dt: number, phase: number, dead: number, weight = 1, lean = 1): void {
     const j = this.j, root = j.root;
     if (!IK) return;
     if (dead >= 0) { this.fresh = true; this.w = 0; return; }
@@ -129,15 +134,26 @@ export class LegIK {
     const sc = _s.x, L1 = j.P.thighL, L2 = j.P.shinL, Lw = (L1 + L2) * sc;
     _f.set(0, 0, 1).transformDirection(rm);
     const yaw = Math.atan2(_f.x, _f.z);
+    const rx = _c.x, rz = _c.z;
+    // leaning into the motion, like a body falling forward onto its feet: the whole body tips about the ground under it, the head stays level
+    {
+      const lv = this.v, lf = Math.sin(this.lastYaw) * lv.x + Math.cos(this.lastYaw) * lv.z, ls = Math.cos(this.lastYaw) * lv.x - Math.sin(this.lastYaw) * lv.z;
+      const k = LEAN * lean * weight;
+      this.leanX = damp(this.leanX, Math.max(-0.12, Math.min(0.22, lf * k)), 6, dt);
+      this.leanZ = damp(this.leanZ, Math.max(-0.12, Math.min(0.12, -ls * k)), 6, dt);
+      j.body.rotation.x += this.leanX; j.body.rotation.z += this.leanZ;
+      j.neck.rotation.x -= this.leanX * 0.5; j.head.rotation.x -= this.leanX * 0.3;
+    }
+    this.lastYaw = yaw;
     j.body.updateWorldMatrix(false, false); j.hips.updateWorldMatrix(false, false);
     _c.setFromMatrixPosition(j.hips.matrixWorld);
     const legs: [THREE.Object3D, THREE.Object3D, THREE.Object3D][] = [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]];
 
-    if (this.fresh || _c.distanceToSquared(this.last) > 4) this.start(legs, yaw, phase);
+    if (this.fresh || (rx - this.last.x) ** 2 + (rz - this.last.z) ** 2 > 4) this.start(legs, yaw, phase, rx, rz);
     // the body's own velocity, smoothed; the phase rate too
-    _h.copy(_c).sub(this.last).divideScalar(dt); _h.y = 0;
+    _h.set(rx - this.last.x, 0, rz - this.last.z).divideScalar(dt);
     this.v.lerp(_h, 1 - Math.exp(-dt * 14));
-    this.last.copy(_c);
+    this.last.set(rx, 0, rz);
     this.dphase += ((phase - this.lastPhase) / dt - this.dphase) * (1 - Math.exp(-dt * 14));
     this.lastPhase = phase;
     const speed = this.v.length();
@@ -147,7 +163,7 @@ export class LegIK {
     const duty = Math.min(0.62, Math.max(0.28, 0.75 - 0.13 * speed));
     const w2 = (1 - duty) / 2;
     const cycleT = TAU / Math.max(Math.abs(this.dphase), 0.5);
-    const half = Math.min(speed * duty * cycleT * 0.5, 0.3 * Lw);
+    const half = Math.min(speed * duty * cycleT * 0.5, (0.3 - 0.1 * Math.min(1, speed / 6)) * Lw);
     const anyTimed = this.feet.some((f) => f.state === 'timed');
 
     for (let i = 0; i < 2; i++) {
@@ -174,7 +190,7 @@ export class LegIK {
       if (f.state === 'plant') {
         f.stance += dt;
         const dev = Math.hypot(f.P.x - _h.x, f.P.z - _h.z);
-        if (dev > (this.moving ? 0.85 : 0.3) * Lw && other.state === 'plant' && f.stance > 0.12) {
+        if (dev > (this.moving ? 0.85 : 0.1) * Lw && other.state === 'plant' && f.stance > (this.moving ? 0.12 : 0.05)) {
           f.state = 'timed'; f.t = 0; f.dur = Math.min(0.5, 0.25 + dev * 0.3); f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown;
           f.B.set(_h.x + vd.x * half, 0, _h.z + vd.z * half);
           f.stance = 0;
@@ -283,13 +299,13 @@ export class LegIK {
     f.state = 'plant'; f.P.copy(f.B); f.P.y = groundHeight(f.P.x, f.P.z); f.yaw = yaw; f.t = 0; f.stance = 0; f.carry = 0;
   }
 
-  private start(legs: [THREE.Object3D, THREE.Object3D, THREE.Object3D][], yaw: number, phase: number): void {
+  private start(legs: [THREE.Object3D, THREE.Object3D, THREE.Object3D][], yaw: number, phase: number, rx: number, rz: number): void {
     for (let i = 0; i < 2; i++) {
       const f = this.feet[i];
       legs[i][0].getWorldPosition(_h);
       f.state = 'plant'; f.P.set(_h.x, groundHeight(_h.x, _h.z), _h.z); f.yaw = f.yawA = yaw; f.t = 0; f.stance = 0;
     }
-    this.j.hips.getWorldPosition(this.last);
+    this.last.set(rx, 0, rz); this.leanX = this.leanZ = 0;
     this.v.set(0, 0, 0); this.dphase = 0; this.lastPhase = phase; this.moving = false; this.drop = 0;
     this.fresh = false;
   }
