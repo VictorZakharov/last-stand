@@ -178,13 +178,12 @@ export class LegIK {
     const lv = this.v.length(), vd = speed > 0.05 ? _t.copy(lv > 0.35 * speed ? this.v : _h).normalize() : _t.set(0, 0, 0);
     this.gv.copy(vd).multiplyScalar(speed);
     // the share of the cycle on the ground: less as the speed rises (a run has both feet in the air a while), so the stance's travel stays within the legs' reach
-    const duty = Math.min(0.62, Math.max(0.31, 0.75 - 0.13 * speed));
+    const duty = Math.min(0.62, Math.max(0.31, 0.6 - 0.2 * (speed - 1.5)));
     const w2 = (1 - duty) / 2;
     const cycleT = TAU / Math.max(Math.abs(this.dphase), 0.5);
     const half = Math.min(speed * duty * cycleT * 0.5 * (1 - SLIP * smooth((speed - 2) / 3.5)), 0.38 * Lw);
     // at a run a planted foot creeps on with the body a little (SLIP of its speed), so the stance keeps to a range the legs can take without the splits
     const slip = SLIP * smooth((speed - 2) / 3.5);
-    const anyTimed = this.feet.some((f) => f.state === 'timed');
 
     for (let i = 0; i < 2; i++) {
       const f = this.feet[i], [thigh, knee, ankle] = legs[i];
@@ -193,10 +192,13 @@ export class LegIK {
       const other = this.feet[1 - i], fs = this.shape![i], sole = fs.sole;
       const u = ((phase / TAU + i * 0.5) % 1 + 1) % 1, inWin = Math.abs(u - 0.5) < w2;
 
-      if (this.moving && !anyTimed) {
-        if (inWin && f.state === 'plant') { f.state = 'swing'; f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; }
-        else if (!inWin && f.state === 'swing') this.land(f, yaw);
-        if (f.state === 'swing') { const ts = (u - (0.5 - w2)) / (2 * w2); f.t = Math.min(1, Math.max(0, this.dphase < 0 ? 1 - ts : ts)); }
+      if (this.moving) {
+        // (a foot re-stepping does not take the other one's swing with it, or both leave the ground at once and the body drops between them; at a walk the other waits)
+        if (f.state !== 'timed') {
+          if (inWin && f.state === 'plant' && !(other.state === 'timed' && duty > 0.45)) { f.state = 'swing'; f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; }
+          else if (!inWin && f.state === 'swing') this.land(f, yaw);
+          if (f.state === 'swing') { const ts = (u - (0.5 - w2)) / (2 * w2); f.t = Math.min(1, Math.max(0, this.dphase < 0 ? 1 - ts : ts)); }
+        }
       } else if (f.state === 'swing') {
         // it stopped mid-step: finish the step in time from where the foot is now, landing under the hip
         f.yawA += this.angle(f.yaw, f.yawA, yaw) * smooth(f.t);
@@ -214,7 +216,7 @@ export class LegIK {
         const dy = this.angle(0, f.yaw, yaw);
         if (Math.abs(dy) > YAW_MAX) f.yaw = yaw - Math.sign(dy) * YAW_MAX;
         const dev = Math.hypot(f.P.x - _h.x, f.P.z - _h.z);
-        if (dev > (this.moving ? 0.45 : 0.1) * Lw && (this.moving ? other.state !== 'timed' : other.state === 'plant' || (other.state === 'timed' && other.t > 0.2)) && f.stance > (this.moving ? 0.12 : 0.05)) {
+        if (dev > (this.moving ? 0.55 : 0.1) * Lw && (this.moving ? other.state !== 'timed' : other.state === 'plant' || (other.state === 'timed' && other.t > 0.2)) && f.stance > (this.moving ? 0.12 : 0.05)) {
           f.state = 'timed'; f.t = 0; f.fast = this.moving; f.dur = this.moving ? Math.min(0.3, Math.max(0.12, (1 - duty) * cycleT)) : Math.min(0.4, 0.16 + dev * 0.3); f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown;
           f.B.set(_h.x + vd.x * half, 0, _h.z + vd.z * half);
           f.stance = 0;
