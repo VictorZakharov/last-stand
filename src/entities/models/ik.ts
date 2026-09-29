@@ -58,11 +58,13 @@ const TAU = Math.PI * 2;
 const LEAN = 0.03;
 /** how far a planted foot may be turned from the body's facing (rad) */
 const YAW_MAX = 0.5;
+/** how far the pelvis is lifted over the pose (rig units) before the reach limit brings it back: the rest pose stands with bent knees */
+const RISE = 0.03;
 const smooth = (t: number): number => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
 
 /** How far a half stride (one foot's step) is at `speed` (m/s) for legs `leg` long (world m): walks take short
  *  steps, runs long ones; the walk cycle's phase then advances π per step (`gaitRate`). */
-export const stepLength = (speed: number, leg: number): number => Math.min(1.05, Math.max(0.35, 0.22 + 0.24 * speed)) * (leg / 0.9);
+export const stepLength = (speed: number, leg: number): number => Math.min(0.85, Math.max(0.35, 0.22 + 0.24 * speed)) * (leg / 0.9);
 /** the walk cycle's phase change per metre travelled at `speed`: a half cycle (π) per step */
 export const gaitRate = (speed: number, leg: number): number => IK ? Math.PI / stepLength(speed, leg) : 2.1;
 
@@ -177,7 +179,7 @@ export class LegIK {
     const duty = Math.min(0.62, Math.max(0.28, 0.75 - 0.13 * speed));
     const w2 = (1 - duty) / 2;
     const cycleT = TAU / Math.max(Math.abs(this.dphase), 0.5);
-    const half = Math.min(speed * duty * cycleT * 0.5, (0.3 - 0.1 * Math.min(1, speed / 6)) * Lw);
+    const half = Math.min(speed * duty * cycleT * 0.5, 0.26 * Lw);
     const anyTimed = this.feet.some((f) => f.state === 'timed');
 
     for (let i = 0; i < 2; i++) {
@@ -245,17 +247,18 @@ export class LegIK {
         if (f.state === 'plant') { f.P.x = f.pos.x; f.P.z = f.pos.z; }
       }
     }
-    // the pelvis drops until both feet are in reach
+    // the pelvis stands as tall as the legs allow (the rig's rest pose has the knees bent by a third of a radian), and drops until both feet are in reach
+    j.body.position.y += RISE; j.body.updateWorldMatrix(false, false); j.hips.updateWorldMatrix(false, false);
     let need = 0;
     _m.copy(j.hips.matrixWorld).invert();
     for (let i = 0; i < 2; i++) {
       const thigh = legs[i][0];
       _p.copy(this.feet[i].pos).applyMatrix4(_m);
-      const dx = _p.x - thigh.position.x, dy = _p.y - thigh.position.y, dz = _p.z - thigh.position.z, d = Math.sqrt(dx * dx + dy * dy + dz * dz), lmax = 0.97 * (L1 + L2);
+      const dx = _p.x - thigh.position.x, dy = _p.y - thigh.position.y, dz = _p.z - thigh.position.z, d = Math.sqrt(dx * dx + dy * dy + dz * dz), lmax = 0.98 * (L1 + L2);
       if (d > lmax) need = Math.max(need, (d - lmax) / Math.max(0.35, -dy / d));
     }
     // (never more than a crouch: a lunge or a leap takes the body away from its feet, and the feet then follow it, below)
-    this.drop = damp(this.drop, Math.min(need, 0.2 * Lw), need > this.drop ? 30 : 9, dt);
+    this.drop = damp(this.drop, Math.min(need, 0.2 * Lw + RISE), need > this.drop ? 30 : 9, dt);
     if (this.drop > 1e-4) {
       j.body.position.y -= this.drop; j.body.updateWorldMatrix(false, false); j.hips.updateWorldMatrix(false, false);
       _m.copy(j.hips.matrixWorld).invert();

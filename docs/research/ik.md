@@ -33,7 +33,7 @@ Foot slide is the ankle's ground speed while it is within ~4 cm of the floor (a 
 - Hero attacks and skills 1-4, standing and running: hips stay within ~0.1-0.15 m of the walk cycle's; no NaN. A lunge or lean thrown at the body drags the planted feet sideways (they follow, up to 0.7 of the leg's reach) instead of sinking the pelvis.
 - Teleport, the three views, enemy deaths and spawns: finite poses, feet under the hips again at once; shader programs constant at 119; two-tab co-op (`?net=local`) without errors.
 - **Crowd cost:** 40 enemies of six kinds, the models' `animate` summed per frame, medians of three interleaved rounds: 0.44 ms without, 0.60 ms with leg IK and head look-at: about +0.15-0.3 ms a frame for 40 foes. The first version cost +1.5 ms because it updated the whole skeleton's matrices twice; it now updates only the hip chain.
-- Things found and fixed on the way: the sole was assumed 7 cm under the ankle (`footShape` now measures each model's foot, skinned shins included), a foot pitched onto its toe or heel went through the floor (the pivot is lifted), the pelvis dropped without bound when a body lunged away from its feet (now capped, feet dragged), the guard for a body off the ground fired on the dais steps (now only far off, at spawn), stopping mid-stride snapped the swinging foot under the body (a timed step now starts from where the foot is, with its height, turn and pitch), and the stride at a sprint reached farther than the legs (`stepLength` capped at 1.05 m for a 0.9 m leg).
+- Things found and fixed on the way: the sole was assumed 7 cm under the ankle (`footShape` now measures each model's foot, skinned shins included), a foot pitched onto its toe or heel went through the floor (the pivot is lifted), the pelvis dropped without bound when a body lunged away from its feet (now capped, feet dragged), the guard for a body off the ground fired on the dais steps (now only far off, at spawn), stopping mid-stride snapped the swinging foot under the body (a timed step now starts from where the foot is, with its height, turn and pitch), and the stride at a sprint reached farther than the legs (`stepLength` capped, now at 0.85 m for a 0.9 m leg).
 
 ## Body lean and the warrior's hold
 
@@ -54,11 +54,21 @@ The mage's bell sleeves rode up the forearm when the arm swung faster than the c
 
 Also looked at now: the warrior with a two-hander and with two one-handers, running and turning from the side (the weapons keep their angle, the lower grip stays in the left hand).
 
+## The warrior still crouched at a run (second look)
+
+A side view of the warrior at a run read as a squat even with the pelvis no longer dropping (hips 0.97-1.06 m on flat ground, frame rate made no difference: 0.95 at 55 ms frames). What the numbers showed:
+
+- **The rest pose stands with bent knees.** Hip to ankle is 0.955 of the leg (a third of a radian of knee), so every frame started from a sitting stance. The pelvis is now lifted by `RISE` (3 cm) and held where the legs reach (`lmax` 0.98).
+- **Stance and stride were lopsided and long.** Feet landed 0.18 ahead of the hip and were left 0.41 behind (a 0.59 m stance travel), 0.79 m apart at most, with both knees bent. The landing offset is now the half of the travel (capped at 0.26 of the leg) and the step is capped at 0.85 m per 0.9 m of leg: 0.66 m apart at most, hips 1.04 m on average (0.98 before), lowest 0.99 (0.86).
+- Off the dais the two steps down (0.35 m in 0.7 m) still fold the knees for a moment (hips 0.91 m above the ground under them); the body's height follows the ground with a rate of 14, so a step is taken in about a tenth of a second.
+
+Foot slide in the straight run (`slide.mjs`): warrior 0.83 to 0.79 m/s, mage 0.55 to 0.89 (its contact frames now include the swing foot near the floor). Crowd of 40: 0.65 ms with IK against 0.47 without. A lower heel kick (0.15 m) made the metric worse, so the lift stays.
+
 ## Not verified
 
 - A phone or a weak GPU: only CPU time of the animation was measured, on a desktop. No LOD was added (the arena's crowd cost is small); if a low-end profile shows it, skip enemies beyond a distance and restart them under the hips when they come back (`reset()`).
 - Side views of every enemy: the husk and both heroes were looked at frame by frame; the others only by the numbers above (with the direction-change fixes their slide and hip numbers are unchanged).
-- Sprinting is very fast for the legs (6 m/s on 0.9 m legs): the steps are capped at 1.05 m, so the cadence at a sprint is high (about 6 steps a second).
+- Sprinting is very fast for the legs (6 m/s on 0.9 m legs): the steps are capped at 0.85 m per 0.9 m of leg, so the cadence at a sprint is high (about 7 steps a second).
 - A hero's leg poses inside skills (the lunge of a slam, Bull Rush's wide stance) are now the feet's plant and the pelvis, not the FK pose; nothing looked broken, but each skill was not compared against `?ik=0`.
 
 ## Not in this PR (issue #115's remainder)
