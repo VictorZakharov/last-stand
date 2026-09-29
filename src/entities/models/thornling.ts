@@ -35,16 +35,18 @@ export function buildThornling(): Model {
   const r = mulberry(17);
   const lim = (len: number, r0: number, r1: number, b = 0, at = 0.35) => organic(limb(len, r0, r1, b, at, 10), r0 * 0.18, 26, len * 40);
   // a limb of braided twigs: a core and two strands winding round it
-  const braid = (len: number, r0: number, r1: number, parentL: THREE.Object3D, parentR: THREE.Object3D, b = 0.25) => {
-    S.pair(lim(len, r0, r1, b), wood, parentL, parentR);
-    for (let k = 0; k < 2; k++) S.pair(twist(len * 0.95, (r0 + r1) * 0.45, r0 * 0.32, 0.8, k * Math.PI), strand, parentL, parentR);
+  // a limb piece runs on past its joint and follows the next joint there (the strands too), so the limb bends smoothly
+  const braid = (len: number, r0: number, r1: number, parentL: THREE.Object3D, parentR: THREE.Object3D, nextL: THREE.Object3D, nextR: THREE.Object3D, b = 0.25) => {
+    const ext = r0 * 0.9, band = r0 * 1.2;
+    S.skinPair(lim(len + ext, r0, r1, b), wood, parentL, nextL, parentR, nextR, len - band, len);
+    for (let k = 0; k < 2; k++) S.skinPair(twist(len * 0.95 + ext, (r0 + r1) * 0.45, r0 * 0.32, 0.8, k * Math.PI), strand, parentL, nextL, parentR, nextR, len - band, len);
   };
   const thornAt = (parent: THREE.Object3D, pos: [number, number, number], len: number, dir: THREE.Vector3, curl = -0.6) =>
     S.add(horn(len, len * 0.16, curl, V(1, 0, 0), dir), thorn, parent, pos);
 
   // --- legs: braided, a knot at the knee, three root toes and a spur behind
-  braid(P.thighL, 0.058, 0.042, j.thighL, j.thighR, 0.3);
-  braid(P.shinL, 0.044, 0.03, j.kneeL, j.kneeR, 0.2);
+  braid(P.thighL, 0.058, 0.042, j.thighL, j.thighR, j.kneeL, j.kneeR, 0.3);
+  braid(P.shinL, 0.044, 0.03, j.kneeL, j.kneeR, j.ankleL, j.ankleR, 0.2);
   S.pair(organic(new THREE.SphereGeometry(0.045, 10, 8), 0.012, 30, 3), wood, j.kneeL, j.kneeR, [0, 0, 0.01]);
   S.pair(organic(new THREE.SphereGeometry(1, 10, 8), 0.1, 4, 4), wood, j.ankleL, j.ankleR, [0, -0.015, 0.02], [0, 0, 0], [0.035, 0.028, 0.05]);
   for (const a of [-0.45, 0, 0.45]) {
@@ -97,8 +99,8 @@ export function buildThornling(): Model {
 
   // --- arms: long and braided, thorns on the forearms, hooked twig claws
   S.pair(organic(new THREE.SphereGeometry(0.04, 10, 8), 0.01, 30, 10), wood, j.shoulderL, j.shoulderR);
-  braid(P.upperL, 0.04, 0.03, j.shoulderL, j.shoulderR);
-  braid(P.foreL, 0.034, 0.024, j.elbowL, j.elbowR, 0.15);
+  braid(P.upperL, 0.04, 0.03, j.shoulderL, j.shoulderR, j.elbowL, j.elbowR);
+  braid(P.foreL, 0.034, 0.024, j.elbowL, j.elbowR, j.handL, j.handR, 0.15);
   for (let i = 0; i < 3; i++) {
     S.pair(horn(0.07 - i * 0.012, 0.011, -0.5, V(1, 0, 0), V(0.3, -0.4, -1)), thorn, j.elbowL, j.elbowR, [0.01, -0.05 - i * 0.07, -0.02]);
   }

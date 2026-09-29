@@ -174,7 +174,8 @@ export function buildWarrior(): Model {
   // --- arms: navy sleeves strapped at the upper arm, fur at the elbow, leather bracers with a steel
   // plate, fingerless gloves
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
-    S.add(scaleUV(limb(0.3, 0.078, 0.064, 0.12, 0.3, 14), 2, 1), cloth, sh);
+    // the sleeve, thigh and shin run on past their joints under the bracer, the knee cop and the boot, and follow the lower limb there
+    S.skin(scaleUV(limb(0.38, 0.078, 0.064, 0.12, 0.24, 14), 2, 1), cloth, sh, el, 0.2, 0.32);
     for (const y of [-0.13, -0.21]) S.add(belt(0.078, 0.078, y, 0.024, 0.006, 0, 14), leather, sh);
     S.add(furTufts(rng, 40, (i, o) => { const a = (i / 40) * Math.PI * 2; o.p.set(Math.sin(a) * 0.06, -0.035, Math.cos(a) * 0.06); o.d.set(Math.sin(a), 0.6, Math.cos(a)); }, 0.035, 0.009), furM, el);
     S.add(scaleUV(lathe([[0.052, -0.26], [0.06, -0.2], [0.066, -0.1], [0.07, -0.05], [0.068, -0.035]], 16), 2, 1), leather, el);
@@ -188,8 +189,8 @@ export function buildWarrior(): Model {
 
   // --- legs: leather trousers, engraved knee cops, tall boots with fur tops, straps and a steel toe
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
-    S.add(scaleUV(limb(0.46, 0.108, 0.078, 0.14, 0.3, 14), 2, 1.5), leatherDark, th);
-    S.add(scaleUV(limb(0.41, 0.076, 0.058, 0.1, 0.35, 12), 2, 1.5), leatherDark, kn);
+    S.skin(scaleUV(limb(0.54, 0.108, 0.078, 0.14, 0.26, 14), 2, 1.5), leatherDark, th, kn, 0.32, 0.46);
+    S.skin(scaleUV(limb(0.46, 0.076, 0.058, 0.1, 0.32, 12), 2, 1.5), leatherDark, kn, an, 0.3, 0.41);
     const cop: SurfaceFn = (u, v, out) => { const lon = (u - 0.5) * 2.5, lat = lerp(-0.95, 1.05, v); return out.set(Math.sin(lon) * Math.cos(lat) * 0.082, Math.sin(lat) * 0.085, Math.cos(lon) * Math.cos(lat) * 0.075 + 0.012); };
     const kg = plate(cop, 14, 12, 0.006);
     projectUV(kg, steelRegion('knee'), (x, y) => [(x / 0.082 + 1) / 2, (y / 0.085 + 1) / 2]);

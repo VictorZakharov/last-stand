@@ -57,7 +57,7 @@ export function buildSporecaller(): Model {
   const shelfGeo = (rad: number) => lathe([[0.001, 0.3 * rad], [0.6 * rad, 0.26 * rad], [rad, 0.04 * rad], [0.9 * rad, 0], [0.001, 0.02 * rad]], 12);
 
   // --- legs: hidden under the robes but for bare knotted feet
-  S.pair(limb(P.shinL, 0.04, 0.035), flesh, j.kneeL, j.kneeR);
+  S.skinPair(limb(P.shinL + 0.036, 0.04, 0.035), flesh, j.kneeL, j.ankleL, j.kneeR, j.ankleR, P.shinL - 0.048, P.shinL);
   S.pair(organic(new THREE.SphereGeometry(1, 10, 8), 0.1, 5, 1), flesh, j.ankleL, j.ankleR, [0, -0.02, 0.04], [0, 0, 0], [0.04, 0.025, 0.08]);
 
   // --- robes: two torn layers from the waist, the inner one threaded with glowing mycelium; a rope belt with spore sacs
@@ -107,7 +107,7 @@ export function buildSporecaller(): Model {
 
   // --- arms: bell sleeves, pale knotted hands with long fingers
   S.pair(organic(new THREE.SphereGeometry(1, 12, 8), 0.05, 5, 5), robe, j.shoulderL, j.shoulderR, [0, 0, 0], [0, 0, 0], [0.07, 0.065, 0.07]);
-  S.pair(limb(P.upperL, 0.055, 0.05, 0.1), robe, j.shoulderL, j.shoulderR);
+  S.skinPair(limb(P.upperL + 0.05, 0.055, 0.05, 0.1), robe, j.shoulderL, j.elbowL, j.shoulderR, j.elbowR, P.upperL - 0.066, P.upperL);
   S.pair(lathe([[0.001, -P.foreL - 0.04], [0.09, -P.foreL - 0.02], [0.08, -P.foreL + 0.05], [0.052, -0.05], [0.05, 0.02], [0.001, 0.03]], 16), robe, j.elbowL, j.elbowR);
   S.pair(organic(new THREE.SphereGeometry(1, 10, 8), 0.08, 5, 6), flesh, j.handL, j.handR, [0, -0.03, 0.005], [0, 0, 0], [0.035, 0.045, 0.02]);
   for (let f = 0; f < 3; f++) {

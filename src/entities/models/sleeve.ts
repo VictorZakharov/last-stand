@@ -33,6 +33,8 @@ export interface BellOptions {
   rim: THREE.Material;
   /** radius the cloth keeps from the forearm's axis */
   armRadius: number;
+  /** the body the cloth must not sink into: vertical capsules on a joint (from `y0` to `y1` in its space), elliptical with radii `rx`, `rz` */
+  bodies?: { joint: THREE.Object3D; y0: number; y1: number; rx: number; rz: number }[];
   rimRadius: number;
 }
 
@@ -52,6 +54,7 @@ export class BellCloth {
   private readonly tether = new Float32Array(N);
   /** how far each particle may be from the forearm's axis: the radius it was cut to, so the sleeve stays a tube round the arm and never lets it out */
   private readonly envelope = new Float32Array(N);
+  private readonly bodyInv: THREE.Matrix4[] = [];
   private readonly stiff: Float32Array;
   private readonly local = new Float32Array(N * 3);
   private readonly flip: number;
@@ -177,6 +180,8 @@ export class BellCloth {
       const px = ux - _q.x * t, py = uy - _q.y * t, pz = uz - _q.z * t;
       this.envelope[i] = Math.sqrt(px * px + py * py + pz * pz) * 1.06 + 0.006 * sc;
     }
+    const bodies = this.o.bodies ?? [];
+    for (let b = 0; b < bodies.length; b++) (this.bodyInv[b] ??= new THREE.Matrix4()).copy(bodies[b].joint.matrixWorld).invert();
     for (let it = 0; it < ITER; it++) {
       for (let k = 0; k < this.pairs.length; k++) {
         const [a, b] = this.pairs[k], ia = a * 3, ib = b * 3;
@@ -207,6 +212,25 @@ export class BellCloth {
         // and never far from its place, whatever the arm did
         const ex = pos[i] - tgt[i], ey = pos[i + 1] - tgt[i + 1], ez = pos[i + 2] - tgt[i + 2], ed = Math.sqrt(ex * ex + ey * ey + ez * ez), lim = STRAY[r] * sc;
         if (ed > lim) { const s = lim / ed; pos[i] = tgt[i] + ex * s; pos[i + 1] = tgt[i + 1] + ey * s; pos[i + 2] = tgt[i + 2] + ez * s; }
+      }
+      if (it === ITER - 1) this.collideBody(bodies);
+    }
+  }
+
+  /** push the free cloth out of the body's capsules (elliptical, in their joints' spaces) */
+  private collideBody(bodies: NonNullable<BellOptions['bodies']>): void {
+    const pos = this.pos;
+    for (let b = 0; b < bodies.length; b++) {
+      const B = bodies[b], inv = this.bodyInv[b], M = B.joint.matrixWorld, rm = (B.rx + B.rz) * 0.5;
+      for (let i = NC; i < N; i++) {
+        _p.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]).applyMatrix4(inv);
+        const cy = Math.max(B.y1, Math.min(B.y0, _p.y)), dy = _p.y - cy;
+        // (y0 above y1) inside the capsule's height it is the ellipse alone; past its ends a rounded cap
+        const ex = _p.x / B.rx, ez = _p.z / B.rz, ey = dy / rm, e = Math.sqrt(ex * ex + ez * ez + ey * ey);
+        if (e >= 1 || e < 1e-6) continue;
+        const k = 1 / e;
+        _p.set(_p.x * k, cy + dy * k, _p.z * k).applyMatrix4(M);
+        pos[i * 3] = _p.x; pos[i * 3 + 1] = _p.y; pos[i * 3 + 2] = _p.z;
       }
     }
   }
