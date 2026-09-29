@@ -18,12 +18,47 @@ import { damp } from '../../util';
 const IK = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
 /** the ankle joint's height above the sole, the same as `groundFeet`'s */
 const FOOT_H = 0.07;
+/** how a foot's sole hangs below its ankle, and how far it reaches ahead of it and behind it (rig units), from its meshes' bounds */
+function footShape(ankle: THREE.Object3D, root: THREE.Object3D): { sole: number; toe: number; heel: number } {
+  let sole = 0, toe = 0, heel = 0, any = false;
+  const m = new THREE.Matrix4(), v = new THREE.Vector3();
+  ankle.updateMatrix();
+  const walk = (o: THREE.Object3D, acc: THREE.Matrix4): void => {
+    for (const c of o.children) {
+      c.updateMatrix(); const cm = acc.clone().multiply(c.matrix);
+      const g = (c as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
+      if (g && (c as THREE.Mesh).isMesh && c.visible) {
+        const pa = g.attributes.position;
+        for (let i = 0; i < pa.count; i++) { v.fromBufferAttribute(pa, i).applyMatrix4(cm); sole = Math.max(sole, -v.y); toe = Math.max(toe, v.z); heel = Math.max(heel, -v.z); any = true; }
+      }
+      walk(c, cm);
+    }
+  };
+  walk(ankle, m.identity());
+  // skinned pieces (a shin ending below the ankle): the vertices this bone owns, in the bone's own space at the bind pose
+  root.traverse((o) => {
+    const sm = o as THREE.SkinnedMesh;
+    if (!sm.isSkinnedMesh || !sm.visible) return;
+    const bi = sm.skeleton.bones.indexOf(ankle as THREE.Bone);
+    if (bi < 0) return;
+    const pos = sm.geometry.attributes.position, si = sm.geometry.attributes.skinIndex, sw = sm.geometry.attributes.skinWeight;
+    if (!si || !sw) return;
+    m.copy(sm.skeleton.boneInverses[bi]).multiply(sm.bindMatrix);
+    for (let i = 0; i < pos.count; i += 3) {
+      let w = 0;
+      for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === bi) w += sw.getComponent(i, k);
+      if (w < 0.999) continue;
+      v.fromBufferAttribute(pos, i).applyMatrix4(m); sole = Math.max(sole, -v.y); toe = Math.max(toe, v.z); heel = Math.max(heel, -v.z); any = true;
+    }
+  });
+  return any ? { sole: Math.min(0.25, Math.max(0.03, sole)), toe: Math.min(0.4, Math.max(0.05, toe)), heel: Math.min(0.2, Math.max(0.02, heel)) } : { sole: FOOT_H, toe: 0.14, heel: 0.05 };
+}
 const TAU = Math.PI * 2;
 const smooth = (t: number): number => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
 
 /** How far a half stride (one foot's step) is at `speed` (m/s) for legs `leg` long (world m): walks take short
  *  steps, runs long ones; the walk cycle's phase then advances π per step (`gaitRate`). */
-export const stepLength = (speed: number, leg: number): number => Math.min(1.45, Math.max(0.35, 0.22 + 0.24 * speed)) * (leg / 0.9);
+export const stepLength = (speed: number, leg: number): number => Math.min(1.05, Math.max(0.35, 0.22 + 0.24 * speed)) * (leg / 0.9);
 /** the walk cycle's phase change per metre travelled at `speed`: a half cycle (π) per step */
 export const gaitRate = (speed: number, leg: number): number => IK ? Math.PI / stepLength(speed, leg) : 2.1;
 
@@ -42,6 +77,8 @@ class Foot {
   /** the ankle's target this frame, in the world */
   pos = new THREE.Vector3();
   pitch = 0;
+  /** what the ankle's pitch was last frame; a timed step eases from it, and from the height and turn the foot had, so stopping mid-stride never snaps */
+  shown = 0; pitch0 = 0; carry = 0;
   fk = { thigh: new THREE.Quaternion(), knee: new THREE.Quaternion(), ankle: new THREE.Quaternion() };
 }
 
@@ -63,6 +100,7 @@ export class LegIK {
   private moving = false;
   private fresh = true;
   private drop = 0;
+  private shape: { sole: number; toe: number; heel: number }[] | null = null;
   /** the smoothed blend over the walk cycle's legs */
   private w = 0;
 
@@ -83,10 +121,11 @@ export class LegIK {
     // only the chain down to the hips is brought up to date here (the renderer updates the rest): a crowd pays for this every frame
     root.updateWorldMatrix(true, false);
     const rm = root.matrixWorld;
-    // off the ground (rising out of it at spawn, lifted by something): nothing to plant a foot on; the pose stands
+    // far off the ground (rising out of it at spawn): nothing to plant a foot on, the pose stands; (the body lags the dais steps by up to their height, which the pelvis and dragged feet absorb)
     _c.setFromMatrixPosition(rm);
-    if (Math.abs(_c.y - groundHeight(_c.x, _c.z)) > 0.2) { this.fresh = true; this.w = 0; return; }
+    if (Math.abs(_c.y - groundHeight(_c.x, _c.z)) > 0.5) { this.fresh = true; this.w = 0; return; }
     _s.setFromMatrixScale(rm);
+    this.shape ??= [footShape(j.ankleL, root), footShape(j.ankleR, root)];
     const sc = _s.x, L1 = j.P.thighL, L2 = j.P.shinL, Lw = (L1 + L2) * sc;
     _f.set(0, 0, 1).transformDirection(rm);
     const yaw = Math.atan2(_f.x, _f.z);
@@ -115,16 +154,19 @@ export class LegIK {
       const f = this.feet[i], [thigh, knee, ankle] = legs[i];
       f.fk.thigh.copy(thigh.quaternion); f.fk.knee.copy(knee.quaternion); f.fk.ankle.copy(ankle.quaternion);
       _h.copy(thigh.position).applyMatrix4(j.hips.matrixWorld);   // the hip joint
-      const other = this.feet[1 - i];
+      const other = this.feet[1 - i], fs = this.shape![i], sole = fs.sole;
       const u = ((phase / TAU + i * 0.5) % 1 + 1) % 1, inWin = Math.abs(u - 0.5) < w2;
 
       if (this.moving && !anyTimed) {
-        if (inWin && f.state === 'plant') { f.state = 'swing'; f.A.copy(f.P); f.yawA = f.yaw; }
+        if (inWin && f.state === 'plant') { f.state = 'swing'; f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; }
         else if (!inWin && f.state === 'swing') this.land(f, yaw);
         if (f.state === 'swing') { const ts = (u - (0.5 - w2)) / (2 * w2); f.t = Math.min(1, Math.max(0, this.dphase < 0 ? 1 - ts : ts)); }
       } else if (f.state === 'swing') {
-        // it stopped mid-step: finish the step in time, landing where it was heading
-        f.state = 'timed'; f.dur = 0.2;
+        // it stopped mid-step: finish the step in time from where the foot is now, landing under the hip
+        f.yawA += this.angle(f.yaw, f.yawA, yaw) * smooth(f.t);
+        f.carry = Math.max(0, f.pos.y - groundHeight(f.pos.x, f.pos.z) - sole * sc); f.pitch0 = f.shown;
+        f.A.copy(f.pos); f.A.y = groundHeight(f.A.x, f.A.z);
+        f.state = 'timed'; f.dur = 0.3; f.t = 0;
       }
       if (f.state === 'timed') { f.t += dt / f.dur; if (f.t >= 1) this.land(f, yaw); }
 
@@ -133,7 +175,7 @@ export class LegIK {
         f.stance += dt;
         const dev = Math.hypot(f.P.x - _h.x, f.P.z - _h.z);
         if (dev > (this.moving ? 0.85 : 0.3) * Lw && other.state === 'plant' && f.stance > 0.12) {
-          f.state = 'timed'; f.t = 0; f.dur = Math.min(0.4, 0.2 + dev * 0.3); f.A.copy(f.P); f.yawA = f.yaw;
+          f.state = 'timed'; f.t = 0; f.dur = Math.min(0.5, 0.25 + dev * 0.3); f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown;
           f.B.set(_h.x + vd.x * half, 0, _h.z + vd.z * half);
           f.stance = 0;
         }
@@ -145,26 +187,40 @@ export class LegIK {
         const e = f.state === 'swing' ? 0.6 * f.t * (2 - f.t) + 0.4 * smooth(f.t) : smooth(f.t), lift = Math.min(0.2, Math.max(0.05, 0.04 + 0.03 * speed)) * sc * Math.sin(Math.PI * Math.min(1, f.t));
         f.pos.set(f.A.x + (f.B.x - f.A.x) * e, 0, f.A.z + (f.B.z - f.A.z) * e);
         const gA = groundHeight(f.A.x, f.A.z), gB = groundHeight(f.B.x, f.B.z);
-        f.pos.y = gA + (gB - gA) * e + FOOT_H * sc + lift;
+        const tilt = this.tilt(fs, f.pitch) * sc;
+        f.pos.y = gA + (gB - gA) * e + sole * sc + lift + f.carry * (1 - e) + tilt;
         // toe down as it leaves, up as it lands
         f.pitch = 0.32 * (1 - smooth(f.t * 2.5)) - 0.26 * smooth((f.t - 0.7) / 0.3);
+        if (f.state === 'timed') f.pitch = f.pitch0 + (f.pitch - f.pitch0) * smooth(f.t * 3);
         f.stance = 0;
       } else {
-        f.pos.set(f.P.x, groundHeight(f.P.x, f.P.z) + FOOT_H * sc, f.P.z);
-        f.pitch = 0;
+        f.pitch = this.stancePitch(f, i, phase, duty, w2);
+        f.pos.set(f.P.x, groundHeight(f.P.x, f.P.z) + sole * sc + this.tilt(fs, f.pitch) * sc, f.P.z);
       }
     }
 
+    // a body thrown away from its feet (an attack's lunge or lean, a hit) takes them along sideways, rather than sinking to reach them
+    for (let i = 0; i < 2; i++) {
+      const f = this.feet[i];
+      _p.copy(legs[i][0].position).applyMatrix4(j.hips.matrixWorld);
+      const dx = f.pos.x - _p.x, dz = f.pos.z - _p.z, h = Math.hypot(dx, dz), hmax = 0.7 * (L1 + L2) * sc;
+      if (h > hmax) {
+        const k = hmax / h;
+        f.pos.x = _p.x + dx * k; f.pos.z = _p.z + dz * k;
+        if (f.state === 'plant') { f.P.x = f.pos.x; f.P.z = f.pos.z; }
+      }
+    }
     // the pelvis drops until both feet are in reach
     let need = 0;
     _m.copy(j.hips.matrixWorld).invert();
     for (let i = 0; i < 2; i++) {
       const thigh = legs[i][0];
       _p.copy(this.feet[i].pos).applyMatrix4(_m);
-      const dx = _p.x - thigh.position.x, dy = _p.y - thigh.position.y, dz = _p.z - thigh.position.z, d = Math.sqrt(dx * dx + dy * dy + dz * dz), lmax = 0.985 * (L1 + L2);
+      const dx = _p.x - thigh.position.x, dy = _p.y - thigh.position.y, dz = _p.z - thigh.position.z, d = Math.sqrt(dx * dx + dy * dy + dz * dz), lmax = 0.97 * (L1 + L2);
       if (d > lmax) need = Math.max(need, (d - lmax) / Math.max(0.35, -dy / d));
     }
-    this.drop = damp(this.drop, need, need > this.drop ? 30 : 9, dt);
+    // (never more than a crouch: a lunge or a leap takes the body away from its feet, and the feet then follow it, below)
+    this.drop = damp(this.drop, Math.min(need, 0.2 * Lw), need > this.drop ? 30 : 9, dt);
     if (this.drop > 1e-4) {
       j.body.position.y -= this.drop; j.body.updateWorldMatrix(false, false); j.hips.updateWorldMatrix(false, false);
       _m.copy(j.hips.matrixWorld).invert();
@@ -175,11 +231,21 @@ export class LegIK {
     for (let i = 0; i < 2; i++) {
       const f = this.feet[i], [thigh, knee, ankle] = legs[i];
       _p.copy(f.pos).applyMatrix4(_m);
+      // a foot the body has left behind (a lunge, a leap) is dragged after it, a planted one to its new spot
+      _f.copy(_p).sub(thigh.position);
+      const reach = _f.length(), rmax = 0.99 * (L1 + L2);
+      if (reach > rmax) {
+        _p.copy(thigh.position).addScaledVector(_f, rmax / reach).applyMatrix4(j.hips.matrixWorld);
+        if (f.state === 'plant') { f.P.x = _p.x; f.P.z = _p.z; }
+        f.pos.x = _p.x; f.pos.z = _p.z;
+        _p.copy(f.pos).applyMatrix4(_m);
+      }
       _pole.set(i === 0 ? 0.12 : -0.12, 0, 1);
       reachArm(thigh, knee, L1, L2, _p, _pole, -1);
       // the foot lies level, turned to the way it was planted (or, in a swing, towards where the body faces)
       const yawNow = f.state === 'plant' ? f.yaw : f.yawA + this.angle(f.yaw, f.yawA, yaw) * smooth(f.t);
-      _e.set(f.state === 'plant' ? this.stancePitch(f, i, phase, duty, w2) : f.pitch, yawNow, 0, 'YXZ');
+      f.shown = f.pitch;
+      _e.set(f.shown, yawNow, 0, 'YXZ');
       _q2.setFromEuler(_e);
       _q.copy(_hq).multiply(thigh.quaternion).multiply(knee.quaternion).invert();
       ankle.quaternion.copy(_q.multiply(_q2));
@@ -189,6 +255,12 @@ export class LegIK {
         ankle.quaternion.copy(f.fk.ankle).slerp(ankle.quaternion, this.w);
       }
     }
+  }
+
+  /** how much a foot pitched by `p` (toe down positive) must be raised so the toe or the heel does not go through the floor */
+  private tilt(fs: { sole: number; toe: number; heel: number }, p: number): number {
+    const a = Math.abs(p);
+    return fs.sole * (Math.cos(a) - 1) + (p > 0 ? fs.toe : fs.heel) * Math.sin(a) + 0 * 0;
   }
 
   private angle(_to: number, from: number, now: number): number {
@@ -208,7 +280,7 @@ export class LegIK {
   }
 
   private land(f: Foot, yaw: number): void {
-    f.state = 'plant'; f.P.copy(f.B); f.P.y = groundHeight(f.P.x, f.P.z); f.yaw = yaw; f.t = 0; f.stance = 0;
+    f.state = 'plant'; f.P.copy(f.B); f.P.y = groundHeight(f.P.x, f.P.z); f.yaw = yaw; f.t = 0; f.stance = 0; f.carry = 0;
   }
 
   private start(legs: [THREE.Object3D, THREE.Object3D, THREE.Object3D][], yaw: number, phase: number): void {

@@ -15,28 +15,31 @@ Follow-up to the skinning research (`skinning.md`) and issue #115. Everything is
 
 Co-op needs nothing: each game computes the legs from the motion it replays (a copy's phase already came from its own velocity), so there is no protocol change.
 
-## Measured (dev build, headless d3d11, mage unless stated)
+## Measured (dev build, headless d3d11)
 
-Foot slide is the ankle's ground speed while it is within ~4 cm of the floor; hip height is above the ground.
+Foot slide is the ankle's ground speed while it is within ~4 cm of the floor (a foot pitched on its toe is lifted by the pivot, so fewer frames count as contact than with the walk cycle's legs: compare the medians and the lowest-vertex rows more than the means). Hip height is above the ground.
 
 | | FK (`?ik=0`) | IK |
 | --- | --- | --- |
-| hero run straight, slide mean / median / p90 (m/s) | 5.2 / 2.5 / 13.5 | 1.3 / 0.27 / 4.4 |
-| hero run in a circle, slide mean (m/s) | 4.6 | 0.8 |
-| hero standing still, slide | 0 | 0.04-0.06 |
-| hero run, hip height min / max (m) | 0.98 / 1.06 | 0.84 / 1.03 |
-| enemies chasing, slide mean (m/s) husk, brute, mossback, thornling | 1.7, 1.3, 1.8, 2.7 | 1.0, 1.1, 1.1, 1.2 |
-| ankle below the ground on the dais steps, worst (m) | -0.061 (12 frames sunk) | +0.036 (1 frame under 5 cm) |
+| mage run straight, slide mean / p90 (m/s) | 5.2 / 13.5 | 0.5 / 2.2 |
+| mage run in a circle, slide mean (m/s) | 4.6 | 0.13 |
+| standing still, slide (m/s) | 0 | 0.04-0.06 |
+| hero run, hip height min (m) | 0.98 | 0.88 (mage), 0.94 (warrior) |
+| enemies chasing, slide mean (m/s) husk, brute, mossback, thornling | 1.8, 1.4, 1.5, 3.1 | 0.5, 0.4, 0.3, 0.7 |
+| lowest vertex of the feet, walking on flat ground (m) | -0.06 hero, -0.26 brute, -0.21 mossback, -0.18 thornling | 0 to -0.01 for both heroes and every enemy tried |
+| the same while enemies attack (brute slam etc.) | up to -0.26 (the slam's crouch drives the feet into the floor) | 0 |
+| ankle below the ground on the dais steps, worst (m) | -0.061 (12 frames sunk) | +0.07 |
 
-- Hero attacks and skills 1-4, standing and running (warrior): the pelvis stayed above 0.83 m and the feet on the floor; no NaN.
-- Teleport, the three views, enemy deaths, and enemy spawns: finite poses, feet under the hips again at once; shader programs constant at 119; two-tab co-op (`?net=local`) without errors.
-- **Crowd cost:** 40 enemies of six kinds, the models' `animate` summed per frame, medians of three interleaved rounds: 0.48 ms without, 0.71-0.74 ms with (leg IK, then head look-at): about +0.2-0.3 ms a frame for 40 foes, ~6 us each. The first version cost +1.5 ms: it updated the whole skeleton's matrices twice (`updateMatrixWorld(true)`, `getWorldPosition` chains); it now updates only the hip chain and lets the renderer do the rest.
+- Hero attacks and skills 1-4, standing and running: hips stay within ~0.1-0.15 m of the walk cycle's; no NaN. A lunge or lean thrown at the body drags the planted feet sideways (they follow, up to 0.7 of the leg's reach) instead of sinking the pelvis.
+- Teleport, the three views, enemy deaths and spawns: finite poses, feet under the hips again at once; shader programs constant at 119; two-tab co-op (`?net=local`) without errors.
+- **Crowd cost:** 40 enemies of six kinds, the models' `animate` summed per frame, medians of three interleaved rounds: 0.44 ms without, 0.60 ms with leg IK and head look-at: about +0.15-0.3 ms a frame for 40 foes. The first version cost +1.5 ms because it updated the whole skeleton's matrices twice; it now updates only the hip chain.
+- Things found and fixed on the way: the sole was assumed 7 cm under the ankle (`footShape` now measures each model's foot, skinned shins included), a foot pitched onto its toe or heel went through the floor (the pivot is lifted), the pelvis dropped without bound when a body lunged away from its feet (now capped, feet dragged), the guard for a body off the ground fired on the dais steps (now only far off, at spawn), stopping mid-stride snapped the swinging foot under the body (a timed step now starts from where the foot is, with its height, turn and pitch), and the stride at a sprint reached farther than the legs (`stepLength` capped at 1.05 m for a 0.9 m leg).
 
 ## Not verified
 
 - A phone or a weak GPU: only CPU time of the animation was measured, on a desktop. No LOD was added (the arena's crowd cost is small); if a low-end profile shows it, skip enemies beyond a distance and restart them under the hips when they come back (`reset()`).
 - Side views of every enemy: the husk and both heroes were looked at frame by frame; the others only by the numbers above.
-- Sprinting is very fast for the legs (6 m/s on 0.9 m legs): the pelvis drops ~15 cm at the fastest strides and the feet skate a little at landings (slide p90 4.4 m/s). A longer flight phase or a slightly slower cadence would tighten it.
+- Sprinting is very fast for the legs (6 m/s on 0.9 m legs): the steps are capped at 1.05 m, so the cadence at a sprint is high (about 6 steps a second).
 - A hero's leg poses inside skills (the lunge of a slam, Bull Rush's wide stance) are now the feet's plant and the pelvis, not the FK pose; nothing looked broken, but each skill was not compared against `?ik=0`.
 
 ## Not in this PR (issue #115's remainder)
