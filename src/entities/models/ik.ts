@@ -15,7 +15,7 @@ import { groundHeight } from '../../world/ground';
 import { damp } from '../../util';
 
 /** `?ik=0` keeps the walk cycle's own legs and its old gait, for A/B comparison */
-const IK = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
+export const IK = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
 /** the ankle joint's height above the sole, the same as `groundFeet`'s */
 const FOOT_H = 0.07;
 /** how a foot's sole hangs below its ankle, and how far it reaches ahead of it and behind it (rig units), from its meshes' bounds */
@@ -110,6 +110,9 @@ export class LegIK {
   private w = 0;
 
   constructor(private readonly j: Joints) { j.root.userData.legs = this; }   // (read by probes)
+
+  /** how far the body leans forward this frame (rad): a pose that holds something at an angle in the world eases its arms by it */
+  get lean(): number { return IK ? this.leanX : 0; }
 
   /** the next frame starts from the pose as it stands (a teleport, a respawn) */
   reset(): void { this.fresh = true; }

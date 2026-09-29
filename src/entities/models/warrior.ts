@@ -8,7 +8,7 @@ import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { FurSway } from './furSway';
-import { LegIK } from './ik';
+import { LegIK, IK } from './ik';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, lod, type SurfaceFn } from './armor';
 import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, fistReach } from './hands';
@@ -594,12 +594,15 @@ export function buildWarrior(): Model {
     idle(j, t, 1 - move * 0.6);
     // (through the eyes the arms barely swing with the stride: a swinging arm sweeps a weapon across the view)
     const cy0 = j.chest.rotation.y, hy0 = j.hips.rotation.y, eL0 = j.elbowL.rotation.x, eR0 = j.elbowR.rotation.x;
-    walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: fp ? 0.03 : 0.2, bob: 0.08, dir });
+    walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: fp ? 0.03 : 0.1, bob: 0.08, dir });
     if (fp) {
       const k = 0.2;
       j.chest.rotation.y = cy0 + (j.chest.rotation.y - cy0) * k; j.hips.rotation.y = hy0 + (j.hips.rotation.y - hy0) * k;
       j.elbowL.rotation.x = eL0 + (j.elbowL.rotation.x - eL0) * k; j.elbowR.rotation.x = eR0 + (j.elbowR.rotation.x - eR0) * k;
     }
+    // the body leans into its stride (models/ik.ts): the arms ease back by part of it, so the weapon and shield are carried at the angle they were, not tipped forward with the torso
+    const lean = fp ? 0 : legs.lean;
+    j.shoulderR.rotation.x -= lean * 0.7; if (shield.visible || offHeld) j.shoulderL.rotation.x -= lean * 0.6;
     if (two) { j.shoulderR.rotation.x += -0.5; j.shoulderR.rotation.z += 0.2; j.elbowR.rotation.x += -1.0; }
     else { j.shoulderR.rotation.x += -0.3; j.shoulderR.rotation.z += -0.1; j.elbowR.rotation.x += -0.8; }
     // shield carried low at the side, the arm held a little out so it clears the leg; a second
@@ -615,7 +618,7 @@ export function buildWarrior(): Model {
     }
     let guard = 0;   // 0: shield at the side, 1: in front
     // (not through the eyes: the camera stays level, so a lean only tips the weapons into the middle of the view)
-    j.spine.rotation.x += move * (fp ? 0 : 0.14) * dir;
+    j.spine.rotation.x += move * (fp ? 0 : IK ? 0.05 : 0.14) * dir;
     j.body.rotation.z += (st.lean || 0) * 0.12;
     j.kneeL.rotation.x += 0.1 * (1 - move); j.kneeR.rotation.x += 0.1 * (1 - move);
 

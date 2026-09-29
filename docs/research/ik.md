@@ -35,6 +35,10 @@ Foot slide is the ankle's ground speed while it is within ~4 cm of the floor (a 
 - **Crowd cost:** 40 enemies of six kinds, the models' `animate` summed per frame, medians of three interleaved rounds: 0.44 ms without, 0.60 ms with leg IK and head look-at: about +0.15-0.3 ms a frame for 40 foes. The first version cost +1.5 ms because it updated the whole skeleton's matrices twice; it now updates only the hip chain.
 - Things found and fixed on the way: the sole was assumed 7 cm under the ankle (`footShape` now measures each model's foot, skinned shins included), a foot pitched onto its toe or heel went through the floor (the pivot is lifted), the pelvis dropped without bound when a body lunged away from its feet (now capped, feet dragged), the guard for a body off the ground fired on the dais steps (now only far off, at spawn), stopping mid-stride snapped the swinging foot under the body (a timed step now starts from where the foot is, with its height, turn and pitch), and the stride at a sprint reached farther than the legs (`stepLength` capped at 1.05 m for a 0.9 m leg).
 
+## Body lean and the warrior's hold
+
+Planting the feet alone made the body look like it stood still while the legs reached: nothing leaned into the motion. `LegIK` now tips the whole body about the ground under it by 0.03 rad per m/s (at most 0.22 forward, 0.12 sideways, damped, off in first person), keeps the head level, and takes landings nearer under the body at a run. The warrior's own forward spine lean is reduced to match, its arm swing is halved (a carried weapon and shield hardly swing), and the arms ease back by most of the lean so the weapon and shield keep the angle they were held at. A stopped character re-steps to a neutral, feet-under-hips stance after a moment. The mage was left as it was.
+
 ## Not verified
 
 - A phone or a weak GPU: only CPU time of the animation was measured, on a desktop. No LOD was added (the arena's crowd cost is small); if a low-end profile shows it, skip enemies beyond a distance and restart them under the hips when they come back (`reset()`).
