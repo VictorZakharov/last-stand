@@ -108,10 +108,10 @@ export function resetPose(j: Joints): void {
  * Procedural walk/run cycle. `amt` 0..1 blends from standing to full stride.
  * `dir` is +1 forward / -1 backpedal.
  */
-export interface WalkOpts { stride?: number; knee?: number; arm?: number; bob?: number; dir?: number; /** a runner's body (see below), for a model whose full speed is a run */ run?: boolean }
+export interface WalkOpts { stride?: number; knee?: number; arm?: number; /** the left arm's swing where it differs from `arm` (a shield arm) */ armL?: number; bob?: number; dir?: number; /** a runner's body (see below), for a model whose full speed is a run */ run?: boolean }
 const IK_ON = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
 export function walkCycle(j: Joints, phase: number, amt: number, o: WalkOpts = {}): void {
-  const stride = o.stride ?? 0.55, knee = o.knee ?? 1.0, arm = o.arm ?? 0.45, bob = o.bob ?? 0.06, dir = o.dir ?? 1;
+  const stride = o.stride ?? 0.55, knee = o.knee ?? 1.0, arm = o.arm ?? 0.45, armL = o.armL ?? arm, bob = o.bob ?? 0.06, dir = o.dir ?? 1;
   const s = Math.sin(phase) * dir, c = Math.cos(phase);
   j.thighL.rotation.x += -s * stride * amt;
   j.thighR.rotation.x += s * stride * amt;
@@ -119,7 +119,7 @@ export function walkCycle(j: Joints, phase: number, amt: number, o: WalkOpts = {
   j.kneeR.rotation.x += (Math.max(0, -c * dir) * knee + 0.08) * amt;
   j.ankleL.rotation.x += -j.thighL.rotation.x * 0.3 - j.kneeL.rotation.x * 0.4;
   j.ankleR.rotation.x += -j.thighR.rotation.x * 0.3 - j.kneeR.rotation.x * 0.4;
-  j.shoulderL.rotation.x += s * arm * amt;
+  j.shoulderL.rotation.x += s * armL * amt;
   j.shoulderR.rotation.x += -s * arm * amt;
   j.elbowL.rotation.x += -(0.25 + Math.max(0, -s) * 0.4) * amt;
   j.elbowR.rotation.x += -(0.25 + Math.max(0, s) * 0.4) * amt;

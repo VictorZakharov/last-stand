@@ -25,6 +25,8 @@ interface Weapon { group: THREE.Group; len: number; off: number | null; /** the 
 const GRIP = Math.PI / 2 + 0.7;
 /** straightens the weapon along the arm, for swings that trace the damage arc */
 const ALONG_ARM = Math.PI - GRIP;
+/** how far a weapon arm swings at a run (rad), and the share of it the wrist turns back so the blade stays put */
+const ARM_SWING = 0.4, WRIST = 0.8;
 /** arm length (upper + fore + hand), before the model's 1.1 scale */
 const ARM = 0.63;
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3();
@@ -594,7 +596,10 @@ export function buildWarrior(): Model {
     idle(j, t, 1 - move * 0.6);
     // (through the eyes the arms barely swing with the stride: a swinging arm sweeps a weapon across the view)
     const cy0 = j.chest.rotation.y, hy0 = j.hips.rotation.y, eL0 = j.elbowL.rotation.x, eR0 = j.elbowR.rotation.x;
-    walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: fp ? 0.03 : 0.1, bob: 0.08, dir, run: true });
+    // the arms pump against the legs, the hands (and so the blades) held steady by the wrists: a weapon arm swings by 0.4 at a run, a shield arm less, a two-hander's hardly (the left hand is on its grip)
+    const armR = fp ? 0.03 : two ? 0.12 : ARM_SWING, armL = fp ? 0.03 : two ? 0.12 : shield.visible ? 0.6 * ARM_SWING : ARM_SWING;
+    walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: armR, armL, bob: 0.08, dir, run: true });
+    if (!fp) { const sw = Math.sin(st.phase) * dir * move; j.handR.rotation.x += sw * armR * WRIST; if (shield.visible || offHeld) j.handL.rotation.x += -sw * armL * WRIST; }
     if (fp) {
       const k = 0.2;
       j.chest.rotation.y = cy0 + (j.chest.rotation.y - cy0) * k; j.hips.rotation.y = hy0 + (j.hips.rotation.y - hy0) * k;

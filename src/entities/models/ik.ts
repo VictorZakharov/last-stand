@@ -127,10 +127,8 @@ export class LegIK {
   /** how far the pelvis is turned from the way the body faces, towards the way it travels (rad), damped */
   private twist = 0;
   private shape: { sole: number; toe: number; heel: number }[] | null = null;
-  /** the hands' world turn, and the hands' and elbows' world spots, as the pose left them (`captureArms`) */
+  /** the hands' world turn as the pose left it (`captureArms`) */
   private readonly hq = [new THREE.Quaternion(), new THREE.Quaternion()];
-  private readonly hp = [new THREE.Vector3(), new THREE.Vector3()];
-  private readonly ep = [new THREE.Vector3(), new THREE.Vector3()];
   private armsCaptured = false;
   /** the smoothed blend over the walk cycle's legs */
   private w = 0;
@@ -141,23 +139,22 @@ export class LegIK {
   get lean(): number { return IK ? this.leanX : 0; }
 
   /**
-   * Call after the pose has put the arms where it wants them and before `update`: the hands are held at
-   * these world spots and turns through whatever `update` does to the body (the lean, the pelvis dropping),
-   * see `holdArms`.
+   * Call after the pose has put the hands where it wants them and before `update`: the hands' turn in the
+   * world is kept through whatever `update` does to the body (the lean, the pelvis dropping), see `holdArms`.
    */
   captureArms(): void {
     if (!IK) return;
     const j = this.j;
     j.root.updateMatrixWorld(true);
-    j.elbowL.getWorldPosition(this.ep[0]); j.handL.getWorldPosition(this.hp[0]); j.handL.getWorldQuaternion(this.hq[0]);
-    j.elbowR.getWorldPosition(this.ep[1]); j.handR.getWorldPosition(this.hp[1]); j.handR.getWorldQuaternion(this.hq[1]);
+    j.handL.getWorldQuaternion(this.hq[0]); j.handR.getWorldQuaternion(this.hq[1]);
     this.armsCaptured = true;
   }
 
   /**
-   * Call after `update`: each arm is solved again (two-bone IK, the elbow where the pose had it) so the hand
-   * is back where `captureArms` saw it and turned the way it was, and a weapon or shield in it keeps its
-   * angle while the body leans and dips under it. `weight` 0..1 blends over the arm as posed.
+   * Call after `update`: each wrist turns back so the hand is turned in the world as `captureArms` saw it, and
+   * a weapon or shield in it keeps its angle while the body leans and dips. The arms themselves follow the
+   * body (pinning the hands' positions too folds the elbows up into the chest as the trunk leans onto them).
+   * `weight` 0..1 blends over the hand as posed.
    */
   holdArms(weight = 1): void {
     if (!IK || !this.armsCaptured) return;
@@ -167,12 +164,7 @@ export class LegIK {
     j.root.updateMatrixWorld(true);
     for (let i = 0; i < 2; i++) {
       const shoulder = i === 0 ? j.shoulderL : j.shoulderR, elbow = i === 0 ? j.elbowL : j.elbowR, hand = i === 0 ? j.handL : j.handR;
-      _q2.copy(shoulder.quaternion); const e0 = elbow.rotation.x; _q.copy(hand.quaternion);
-      _p.copy(this.hp[i]); j.chest.worldToLocal(_p);
-      _pole.copy(this.ep[i]); j.chest.worldToLocal(_pole).sub(shoulder.position);
-      reachArm(shoulder, elbow, j.P.upperL, j.P.foreL, _p, _pole);
-      if (weight < 1) { shoulder.quaternion.slerp(_q2, 1 - weight); elbow.rotation.x = e0 + (elbow.rotation.x - e0) * weight; }
-      // the hand keeps the turn it had in the world
+      _q.copy(hand.quaternion);
       j.chest.getWorldQuaternion(_hq).multiply(shoulder.quaternion).multiply(elbow.quaternion).invert().multiply(this.hq[i]);
       hand.quaternion.copy(_q).slerp(_hq, weight);
     }
