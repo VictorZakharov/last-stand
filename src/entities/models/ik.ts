@@ -61,12 +61,16 @@ const YAW_MAX = 0.5;
 /** how far the pelvis is lifted over the pose (rig units) before the reach limit brings it back: the rest pose stands with bent knees */
 const RISE = 0.03;
 /** the share of the body's speed a planted foot moves at during a run */
-const SLIP = +(typeof location === 'undefined' ? '0.3' : (new URLSearchParams(location.search).get('slip') ?? '0.3'));
+const SLIP = +(typeof location === 'undefined' ? '0.2' : (new URLSearchParams(location.search).get('slip') ?? '0.2'));
+/** how far ahead of its hip a foot may land, in leg lengths */
+const AHEAD = 0.4;
+/** a swing lands with this share of the stance's backward stroke (relative to the hip), so a foot never skids as it takes the ground and paws back a little as it lands, as a runner's does; it leaves with less, or it trails far behind the hip before it comes forward */
+const STROKE_IN = 0.8, STROKE_OUT = 0.5;
 const smooth = (t: number): number => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
 
 /** How far a half stride (one foot's step) is at `speed` (m/s) for legs `leg` long (world m): walks take short
  *  steps, runs long ones; the walk cycle's phase then advances π per step (`gaitRate`). */
-export const stepLength = (speed: number, leg: number): number => Math.min(1.5 * leg, Math.max(0.3 * leg, speed / (1.7 + 0.32 * speed) * (leg / 0.9)));
+export const stepLength = (speed: number, leg: number): number => Math.min(1.65 * leg, Math.max(0.3 * leg, speed / (1.7 + 0.32 * speed) * (leg / 0.9)));
 /** the walk cycle's phase change per metre travelled at `speed`: a half cycle (π) per step */
 export const gaitRate = (speed: number, leg: number): number => IK ? Math.PI / stepLength(speed, leg) : 2.1;
 
@@ -84,6 +88,8 @@ class Foot {
   stance = 0;
   /** a timed step taken at a run: quick, and eased out like a swing, so a foot left behind catches up with the body */
   fast = false;
+  /** how far ahead of its hip (along the way it travels) the foot was when its swing began */
+  rel0 = 0;
   /** the ankle's target this frame, in the world */
   pos = new THREE.Vector3();
   pitch = 0;
@@ -178,10 +184,10 @@ export class LegIK {
     const lv = this.v.length(), vd = speed > 0.05 ? _t.copy(lv > 0.35 * speed ? this.v : _h).normalize() : _t.set(0, 0, 0);
     this.gv.copy(vd).multiplyScalar(speed);
     // the share of the cycle on the ground: less as the speed rises (a run has both feet in the air a while), so the stance's travel stays within the legs' reach
-    const duty = Math.min(0.62, Math.max(0.31, 0.6 - 0.2 * (speed - 1.5)));
+    const duty = Math.min(0.62, Math.max(0.31, 0.62 - 0.19 * (speed - 1.5)));
     const w2 = (1 - duty) / 2;
     const cycleT = TAU / Math.max(Math.abs(this.dphase), 0.5);
-    const half = Math.min(speed * duty * cycleT * 0.5 * (1 - SLIP * smooth((speed - 2) / 3.5)), 0.38 * Lw);
+    const half = Math.min(speed * duty * cycleT * 0.5 * (1 - SLIP * smooth((speed - 2) / 3.5)), AHEAD * Lw);
     // at a run a planted foot creeps on with the body a little (SLIP of its speed), so the stance keeps to a range the legs can take without the splits
     const slip = SLIP * smooth((speed - 2) / 3.5);
 
@@ -195,7 +201,7 @@ export class LegIK {
       if (this.moving) {
         // (a foot re-stepping does not take the other one's swing with it, or both leave the ground at once and the body drops between them; at a walk the other waits)
         if (f.state !== 'timed') {
-          if (inWin && f.state === 'plant' && !(other.state === 'timed' && duty > 0.45)) { f.state = 'swing'; f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; }
+          if (inWin && f.state === 'plant' && !(other.state === 'timed' && duty > 0.45)) { f.state = 'swing'; f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.rel0 = (f.P.x - _h.x) * vd.x + (f.P.z - _h.z) * vd.z; }
           else if (!inWin && f.state === 'swing') this.land(f, yaw);
           if (f.state === 'swing') { const ts = (u - (0.5 - w2)) / (2 * w2); f.t = Math.min(1, Math.max(0, this.dphase < 0 ? 1 - ts : ts)); }
         }
@@ -226,8 +232,17 @@ export class LegIK {
         // where it will land: under where its hip will be by then, a half stance ahead
         const remain = f.state === 'swing' ? (1 - f.t) * (1 - duty) * cycleT : (1 - f.t) * f.dur;
         f.B.set(_h.x + this.gv.x * remain + vd.x * (f.state === 'swing' ? half : 0), 0, _h.z + this.gv.z * remain + vd.z * (f.state === 'swing' ? half : 0));
-        const e = f.state === 'swing' || f.fast ? 0.6 * f.t * (2 - f.t) + 0.4 * smooth(f.t) : smooth(f.t), lift = Math.min(0.2, Math.max(0.05, 0.04 + 0.03 * speed)) * sc * Math.sin(Math.PI * Math.min(1, f.t));
+        const e = f.fast ? 0.6 * f.t * (2 - f.t) + 0.4 * smooth(f.t) : smooth(f.t), run = smooth((speed - 2) / 3.5);
+        // (a run lifts the foot higher, and later in the swing: the heel comes up under the seat)
+        const lift = (1 + 0.5 * run) * Math.min(0.2, Math.max(0.05, 0.04 + 0.03 * speed)) * sc * Math.sin(Math.PI * Math.pow(Math.min(1, f.t), 1 - 0.2 * run));
         f.pos.set(f.A.x + (f.B.x - f.A.x) * e, 0, f.A.z + (f.B.z - f.A.z) * e);
+        if (f.state === 'swing' && speed > 0.5) {
+          // the swing in the hip's frame, along the way it travels: it leaves with the stance's backward stroke, passes under the hip and reaches ahead, then paws back as it lands, so it never skids
+          const T = (1 - duty) * cycleT, m = -(1 - slip) * speed * T, s1 = f.t, s2 = s1 * s1, s3 = s2 * s1;
+          const x = (2 * s3 - 3 * s2 + 1) * f.rel0 + (s3 - 2 * s2 + s1) * STROKE_OUT * m + (-2 * s3 + 3 * s2) * half + (s3 - s2) * STROKE_IN * m;
+          const along = (f.pos.x - _h.x) * vd.x + (f.pos.z - _h.z) * vd.z;
+          f.pos.x += vd.x * (x - along); f.pos.z += vd.z * (x - along);
+        }
         const gA = groundHeight(f.A.x, f.A.z), gB = groundHeight(f.B.x, f.B.z);
         const tilt = this.tilt(fs, f.pitch) * sc;
         f.pos.y = gA + (gB - gA) * e + sole * sc + lift + f.carry * (1 - e) + tilt;
@@ -318,7 +333,8 @@ export class LegIK {
     if (!this.moving) return 0;
     const u = ((phase / TAU + i * 0.5) % 1 + 1) % 1, sp = (((u - (0.5 + w2)) % 1) + 1) % 1 / Math.max(0.05, 1 - 2 * w2);
     void f;
-    if (sp > 0.75 && sp < 1) return 0.35 * (sp - 0.75) / 0.25;
+    const run = smooth((this.sp - 2) / 3.5), at = 0.75 - 0.15 * run;
+    if (sp > at && sp < 1) return (0.35 + 0.25 * run) * (sp - at) / (1 - at);
     if (sp < 0.15) return -0.2 * (1 - sp / 0.15);
     void duty;
     return 0;

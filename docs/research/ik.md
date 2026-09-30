@@ -85,12 +85,34 @@ Measured after the change, warrior and mage, steady 6.2 m/s run: warrior 4.0 ste
 
 Turns on open ground: largest pelvis drop 0.11 m (0.09 before this pass), hips 0.95 m at the lowest (0.95), feet up to 1.1 m apart in the body's frame while it turns (0.86). Foot slide in the straight run (`slide.mjs`): warrior 0.83 to 0.79 m/s, mage 0.55 to 0.89. Crowd of 40: 0.62 ms with IK against 0.37 without.
 
+## The squat was in the swing, not the pelvis (third look)
+
+Played in the third-person view (a warrior with two swords, running sideways to the camera), the warrior still ran in a deep squat: knees flexed all the way round, both feet passing under an upright torso, no flight to speak of. The pelvis-height and foot-offset numbers above had passed it (hips 0.97-1.04 m against 1.06 standing), which is why two rounds of tuning by those numbers missed it. Comparing the joint angles over the gait cycle with a runner's (hip and knee flexion against the phase from touchdown) showed what the eye saw:
+
+| phase of the cycle, from touchdown (%) | 0 | 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| hip flexion, a runner | 35 | 28 | 12 | -5 | -14 | -6 | 18 | 40 | 52 | 50 | 38 |
+| hip flexion, before | 32 | 25 | 11 | 5 | 28 | 51 | 63 | 63 | 51 | 40 | 36 |
+| hip flexion, now | 34 | 27 | 13 | -3 | -5 | 14 | 42 | 64 | 62 | 44 | 35 |
+| knee flexion, a runner | 20 | 40 | 38 | 30 | 35 | 60 | 95 | 105 | 80 | 45 | 22 |
+| knee flexion, before | 35 | 44 | 42 | 49 | 77 | 88 | 80 | 61 | 37 | 21 | 29 |
+| knee flexion, now | 30 | 46 | 53 | 53 | 67 | 97 | 110 | 97 | 69 | 31 | 17 |
+
+(A runner's figures are approximate published curves for about 5 m/s; the contact ends nearer 30 % than 40 % at 6 m/s, so the swing's peaks come a little earlier here.) The hip never extended (+6 degrees at toe-off against about -14: the thigh stayed in front of the pelvis all the way round, a seated posture) and the swing knee peaked at 50 % of the cycle instead of 70 %, so the foot was pulled up early and hung ahead of the body. Two causes:
+
+- **The swing was eased in the world frame.** The foot was moved from where it left to where it would land with an ease-out, so its speed relative to the ground started at zero while the hip was moving at 6 m/s: it either trailed far behind the hip or, with the ease-out that hid that, rushed ahead of it, reached the landing early, then hung. A swing is now drawn in the hip's frame (`LegIK.update`, the `f.state === 'swing'` block): a cubic Hermite from where the foot left (relative to the hip) to `half` ahead, its tangents the stance's backward stroke (`STROKE_OUT` 0.5 at lift-off, `STROKE_IN` 0.8 at landing), so the foot leaves with the ground's motion, passes under the hip, reaches ahead and paws back as it lands (never skids), which is also what a runner's foot does.
+- **The stance was too short for the speed.** With a planted-foot creep of 0.3 of the body's speed the foot ended 0.27 m behind the hip. The creep is real (the ankle rolls forward over the contact point as the foot goes from heel to toe) but its share is about 0.2, with the heel coming up at the end of the stance (toe pitch 0.6 rad over the last 40 % of the stance at a run). The stride is longer (`stepLength` at most 1.65 legs, 3.9-4.3 steps a second at 6.2 m/s) and the landing offset up to 0.4 of the leg. The foot now lands 0.36 m ahead and leaves 0.36 m behind (0.30 / 0.27 before).
+- At a run the swing foot lifts higher (up to 1.5x) and later in the swing, so the heel comes up under the seat.
+- The share of the cycle on the ground now falls as `0.62 - 0.19 * (speed - 1.5)`, so a jog at 2.8 m/s (casting or attacking slows the body to 0.45 of the run) has 24 % flight and a 0.22 s contact, not a run's third.
+
+Measured now (warrior with two swords; the mage's numbers agree to within a few degrees): steady 6.2 m/s run: contact 0.15 s, flight 36 %, foot ahead at touchdown 0.36 m and behind at lift-off 0.36 m, peak swing knee 113 degrees, peak hip flexion 67, bounce 6-7 cm, lean 18 degrees, pelvis 1.00-1.04 m in the run and 0.99 m at the lowest through starts, stops and taps. Unchanged: no double re-step while moving in any of the run, start, stop, tap, turn and attack recordings of either hero; largest pelvis drop through the direction changes 0.10 m (warrior) and 0.11 m (mage); crowd of 40 at 0.58 ms with IK against 0.37 ms without; shader programs constant at 119. A random-play harness (third person, WASD and mouse-look flicks, obstacles and frame-time hitches, two swords) finds no frame with the hips under 0.94 m off the dais steps. Filmed in the game's third-person camera and from a strict side view: a stride with the rear leg extended, the heel up under the seat and the front leg reaching, where the last version was a squat-walk.
+
 ## Not verified
 
 - A phone or a weak GPU: only CPU time of the animation was measured, on a desktop. No LOD was added (the arena's crowd cost is small); if a low-end profile shows it, skip enemies beyond a distance and restart them under the hips when they come back (`reset()`).
 - Side views of every enemy: the husk and both heroes were looked at frame by frame; the others only by the numbers above (with the direction-change fixes their slide and hip numbers are unchanged).
 - Walking while attacking travels at 45-100 degrees to the way the body faces (it faces the aim). The feet land along the direction of travel, so in that case they cross in the body's frame; there is no sidestep gait (strafing was left out on purpose: it only shows in first person, where the legs are not drawn). It films as a walk from every angle tried, but a sideways-travelling body at a walk was judged by eye and by the joint recordings, not against a sidestep's numbers.
-- Sprinting is very fast for the legs (6 m/s on 0.9 m legs): this is a sprint's stride (4.4 steps a second, above a runner's 3.2-3.8), and only the warrior and the mage were measured against a runner's numbers, the enemies only by the earlier slide and height numbers.
+- Sprinting is very fast for the legs (6 m/s on 0.9 m legs): this is a sprint's stride (about 4 steps a second, at the top of a runner's 3.2-3.8), and only the warrior and the mage were measured against a runner's curves, the enemies only by the earlier slide and height numbers (their swing is the hip-frame one too now).
 - A hero's leg poses inside skills (the lunge of a slam, Bull Rush's wide stance) are now the feet's plant and the pelvis, not the FK pose; nothing looked broken, but each skill was not compared against `?ik=0`.
 
 ## Not in this PR (issue #115's remainder)
