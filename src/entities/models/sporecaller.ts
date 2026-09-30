@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { bark, grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, ramp } from './rig';
+import { LegIK } from './ik';
 import { Sculpt, lathe, limb, organic, stripRig, taperTube, tatteredSkirt, skipping } from './shapes';
 import type { AnimState, Model } from '../../types';
 import { particles, col } from '../../fx/particles';
@@ -133,6 +134,7 @@ export function buildSporecaller(): Model {
   let acc = 0;
   const wp = new THREE.Vector3();
 
+  const legs = new LegIK(j);
   function animate(st: AnimState): void {
     const { t, dt } = st;
     resetPose(j);
@@ -158,7 +160,7 @@ export function buildSporecaller(): Model {
     pod.emissiveIntensity = 1.2 * glow;
     spots.emissiveIntensity = 2.2 + Math.sin(t * 1.8) * 0.4;
     if (st.hit > 0) j.spine.rotation.x += -0.4 * st.hit;
-    if (st.dead >= 0) deathFall(j, st.dead, 1);
+    if (st.dead >= 0) { deathFall(j, st.dead, 1); legs.reset(); } else legs.update(st.dt, st.phase, st.dead);
 
     // spores drift down from under the cap
     acc += dt;

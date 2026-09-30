@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp } from './rig';
+import { LegIK } from './ik';
 import { Sculpt, bend, limb, organic, rag, stripRig, taperTube } from './shapes';
 import type { AnimState, Model } from '../../types';
 import { mulberry } from '../../util';
@@ -129,6 +130,7 @@ export function buildHusk(): Model {
   const root = j.root;
   root.scale.setScalar(1.05);
 
+  const legs = new LegIK(j);
   function animate(st: AnimState): void {
     const { t } = st;
     resetPose(j);
@@ -152,7 +154,7 @@ export function buildHusk(): Model {
       jaw.rotation.x += 0.5 * pulse(k, 0.4, 0.8);
     }
     if (st.hit > 0) j.spine.rotation.x += -0.4 * st.hit;
-    if (st.dead >= 0) deathFall(j, st.dead, 1);
+    if (st.dead >= 0) { deathFall(j, st.dead, 1); legs.reset(); } else legs.update(st.dt, st.phase, st.dead);
 
     // the chain hangs from the wrist: undo the arm's swing so it keeps pointing down, and trail it
     const arm = j.shoulderL.rotation.x + j.elbowL.rotation.x + j.spine.rotation.x + j.chest.rotation.x;

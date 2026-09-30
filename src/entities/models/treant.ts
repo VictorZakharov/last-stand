@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { bark, grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, ramp } from './rig';
+import { LegIK } from './ik';
 import { Sculpt, bend, branches, horn, lathe, leaf, limb, organic, rag, stripRig, taperTube, twist } from './shapes';
 import type { AnimState, Model } from '../../types';
 import { mulberry } from '../../util';
@@ -175,6 +176,7 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
   const root = j.root;
   root.scale.setScalar(C.scale);
 
+  const legs = new LegIK(j);
   function animate(st: AnimState): void {
     const { t } = st;
     resetPose(j);
@@ -212,7 +214,7 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
       }
     }
     if (st.hit > 0) j.spine.rotation.x += -0.15 * st.hit;
-    if (st.dead >= 0) deathFall(j, st.dead, 1);
+    if (st.dead >= 0) { deathFall(j, st.dead, 1); legs.reset(); } else legs.update(st.dt, st.phase, st.dead);
     sap.emissiveIntensity = 2.2 * C.glow * (0.85 + Math.sin(t * 1.4) * 0.15);
     if (heart && heartMat) {
       const beat = Math.max(0, Math.sin(t * 3.2)) ** 4;

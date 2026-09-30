@@ -1,6 +1,7 @@
 // Enemy entity: movement, status effects, actions, damage, death.
 // Decision-making lives in enemyAI; visuals come from models/.
 import * as THREE from 'three';
+import { gaitRate, legLength } from './models/ik';
 import { G } from '../state';
 import { ENEMIES, HERO, SCALING, type EnemyId } from '../data/enemies';
 import { buildModel } from './models/index';
@@ -18,7 +19,10 @@ import { angleDamp, damp, hitFlash, pick, rand } from '../util';
 import { applyShadowDetail } from '../core/quality';
 import type { DamageType, EnemyDef, Model, XZ } from '../types';
 import type { Player } from './player';
+
+const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3();
 import { nearestPlayer } from '../net/role';
+import { LookAt } from './models/ik';
 
 const auraGeo = new THREE.RingGeometry(0.7, 1, 48).rotateX(-Math.PI / 2);
 
@@ -108,6 +112,8 @@ export class Enemy {
   readonly onDeath: (() => void)[] = [];
 
   readonly model: Model;
+  /** the head turning to its target (models/ik.ts) */
+  private look: LookAt | null = null;
   readonly height: number;
   readonly obj = new THREE.Group();
   aura: THREE.Mesh | null = null;
@@ -251,7 +257,7 @@ export class Enemy {
 
     if (!frozen) this.facing = angleDamp(this.facing, this.targetFacing, this.action ? 6 : 9, dt);
     const speedK = Math.hypot(this.vel.x, this.vel.z) / this.speed;
-    this.phase += dt * Math.hypot(this.vel.x, this.vel.z) * (this.def.gait ?? 2.3) / Math.max(0.6, this.height * 0.5);
+    this.phase += dt * this.gait();
     // frozen enemies hold their pose: animate with the time they were frozen at
     this.animate(frozen ? 0 : dt, frozen ? this.frozenAt : t, Math.min(1, speedK));
     if (!frozen) this.frozenAt = t;
@@ -279,7 +285,7 @@ export class Enemy {
     this.facing = angleDamp(this.facing, n.f, 10, dt);
     const a = this.action;
     if (a) { a.t += dt; if (a.t >= a.dur) this.action = null; }
-    this.phase += dt * Math.hypot(this.vel.x, this.vel.z) * (this.def.gait ?? 2.3) / Math.max(0.6, this.height * 0.5);
+    this.phase += dt * this.gait();
     this.animate(frozen ? 0 : dt, frozen ? this.frozenAt : t, Math.min(1, Math.hypot(this.vel.x, this.vel.z) / this.speed));
     if (!frozen) this.frozenAt = t;
     return this.updateLooks(dt, t, frozen);
@@ -294,6 +300,12 @@ export class Enemy {
     return true;
   }
 
+  /** how far the walk cycle's phase turns this frame per second: a step per half cycle, its length by the speed and the legs (models/ik.ts), scaled by the enemy's own gait */
+  private gait(): number {
+    const speed = Math.hypot(this.vel.x, this.vel.z);
+    return speed * gaitRate(speed, legLength(this.model)) * (this.def.gait ?? 2.3) / 2.3;
+  }
+
   animate(dt: number, t: number, move: number): void {
     this.obj.position.x = this.pos.x;
     this.obj.position.z = this.pos.z;
@@ -305,6 +317,17 @@ export class Enemy {
       action: this.action ? { name: this.action.name, t: Math.min(1, this.action.t / this.action.dur), hit: this.def.windup / Math.max(0.01, this.def.windup + this.def.recover) } : null,
       hit: this.hitT, dead: this.deadT >= 0 ? Math.min(1, this.deadT / 0.8) : -1,
     });
+    this.lookAtTarget(dt);
+  }
+
+  /** the head follows its target (the players in the fight, for a co-op guest's copy too) */
+  private lookAtTarget(dt: number): void {
+    const j = this.model.joints;
+    if (!j || this.def.dummy) return;
+    const look = this.look ??= new LookAt(j);
+    const p = this.deadT >= 0 || this.spawning ? null : this.target ?? nearestPlayer(this.pos.x, this.pos.z);
+    _lookFrom.set(this.pos.x, this.obj.position.y, this.pos.z);
+    look.update(dt, _lookFrom, this.facing, p ? _lookAt.set(p.pos.x, p.obj.position.y + 1.5, p.pos.z) : null);
   }
 
   takeDamage(amount: number, info: DamageInfo = {}): number {

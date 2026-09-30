@@ -14,6 +14,7 @@ import { buildHand, poseHand, hold, seat } from './hands';
 import { clamp, lerp, damp, TAU, mulberry } from '../../util';
 import { SkeletonCape } from './cape';
 import { BellCloth } from './sleeve';
+import { LegIK } from './ik';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
 import type { AnimState, Model } from '../../types';
 
@@ -140,6 +141,7 @@ export function buildMage(): Model {
   // fingerless gloves
   const bells: THREE.Group[] = [];
   const cloths: BellCloth[] = [];
+  const legs = new LegIK(j);
   // what the bells must not sink into (the cape's own body colliders, roughly): the torso, the hips and the robe's skirt
   const bodies = [
     { joint: j.chest, y0: 0.22, y1: -0.02, rx: 0.2, rz: 0.17 },
@@ -349,7 +351,7 @@ export function buildMage(): Model {
 
     // base stance: staff held at the side, slightly forward
     idle(j, t, 1 - move * 0.6);
-    walkCycle(j, st.phase, move, { stride: 0.5, knee: 0.95, arm: 0.35, bob: 0.07, dir });
+    walkCycle(j, st.phase, move, { stride: 0.5, knee: 0.95, arm: 0.35, bob: 0.07, dir, run: true });
     j.shoulderR.rotation.x += -0.35; j.shoulderR.rotation.z += -0.12; j.elbowR.rotation.x += -0.55;
     j.spine.rotation.x += move * 0.12 * dir;
     j.body.rotation.z += (st.lean || 0) * 0.12;
@@ -450,9 +452,14 @@ export function buildMage(): Model {
       reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, _hp, POLE_L);
     }
     if (st.hit > 0) { j.spine.rotation.x += -0.25 * st.hit; j.neck.rotation.x += -0.2 * st.hit; }
-    if (st.dead >= 0) deathFall(j, st.dead, -1);
-    // feet on the floor: a crouch bends the knees instead of sinking the feet, a planted foot lies flat
-    else groundFeet(j, 0.07);
+    if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
+    else {
+      // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
+      if (!fp) legs.captureArms();
+      legs.update(dt, st.phase, st.dead, 1, fp ? 0 : 1);
+      groundFeet(j, 0.07);
+      if (!fp) legs.holdArms();
+    }
 
     // the skirts swing with the legs; the panels hanging over them follow the leg on their side
     const fL = -j.thighL.rotation.x, fR = -j.thighR.rotation.x;
@@ -484,7 +491,7 @@ export function buildMage(): Model {
     root, kit, joints: j, animate, tip, palm, height: 2.0,
     worldObjects: [cape.mesh],
     cloths,
-    reset: () => { cape.reset(); for (const c of cloths) c.reset(); },
+    reset: () => { cape.reset(); legs.reset(); for (const c of cloths) c.reset(); },
     // through the eyes the bells, seen from behind, would hide the hands: narrow and shorter
     firstPerson: (on) => { fp = on; for (const b of bells) b.scale.set(on ? 0.6 : 1, on ? 0.75 : 1, on ? 0.6 : 1); },
     dispose() {

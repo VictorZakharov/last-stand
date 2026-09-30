@@ -108,9 +108,10 @@ export function resetPose(j: Joints): void {
  * Procedural walk/run cycle. `amt` 0..1 blends from standing to full stride.
  * `dir` is +1 forward / -1 backpedal.
  */
-export interface WalkOpts { stride?: number; knee?: number; arm?: number; bob?: number; dir?: number }
+export interface WalkOpts { stride?: number; knee?: number; arm?: number; /** the left arm's swing where it differs from `arm` (a shield arm) */ armL?: number; bob?: number; dir?: number; /** a runner's body (see below), for a model whose full speed is a run */ run?: boolean }
+const IK_ON = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
 export function walkCycle(j: Joints, phase: number, amt: number, o: WalkOpts = {}): void {
-  const stride = o.stride ?? 0.55, knee = o.knee ?? 1.0, arm = o.arm ?? 0.45, bob = o.bob ?? 0.06, dir = o.dir ?? 1;
+  const stride = o.stride ?? 0.55, knee = o.knee ?? 1.0, arm = o.arm ?? 0.45, armL = o.armL ?? arm, bob = o.bob ?? 0.06, dir = o.dir ?? 1;
   const s = Math.sin(phase) * dir, c = Math.cos(phase);
   j.thighL.rotation.x += -s * stride * amt;
   j.thighR.rotation.x += s * stride * amt;
@@ -118,11 +119,15 @@ export function walkCycle(j: Joints, phase: number, amt: number, o: WalkOpts = {
   j.kneeR.rotation.x += (Math.max(0, -c * dir) * knee + 0.08) * amt;
   j.ankleL.rotation.x += -j.thighL.rotation.x * 0.3 - j.kneeL.rotation.x * 0.4;
   j.ankleR.rotation.x += -j.thighR.rotation.x * 0.3 - j.kneeR.rotation.x * 0.4;
-  j.shoulderL.rotation.x += s * arm * amt;
+  j.shoulderL.rotation.x += s * armL * amt;
   j.shoulderR.rotation.x += -s * arm * amt;
   j.elbowL.rotation.x += -(0.25 + Math.max(0, -s) * 0.4) * amt;
   j.elbowR.rotation.x += -(0.25 + Math.max(0, s) * 0.4) * amt;
-  j.body.position.y += (Math.abs(c) - 0.6) * bob * amt;
+  // a walk is highest as the legs pass (the body vaulting over a straight leg); a run is lowest there (the leg compressing under it) and highest in flight
+  const run = IK_ON && o.run ? Math.min(1, Math.max(0, (amt - 0.45) / 0.35)) : 0;
+  j.body.position.y += (Math.abs(c) - 0.6) * (1 - 2 * run) * (1 - 0.5 * run) * bob * amt;
+  // the body's weight goes over the foot it stands on (left at phase 0, right at π, as `LegIK` times its steps), so the two legs read apart from behind and in front
+  if (IK_ON) j.body.position.x += c * 0.02 * run * amt;
   j.hips.rotation.y += s * 0.12 * amt;
   j.chest.rotation.y += -s * 0.16 * amt;
   j.hips.rotation.z += c * 0.04 * amt;
@@ -162,15 +167,16 @@ const X_AXIS = new THREE.Vector3(1, 0, 0), DOWN = new THREE.Vector3(0, -1, 0);
  * Two-bone IK: pose an arm so its hand reaches `target` (in the shoulder's parent space, e.g. the
  * chest), with the elbow bending forward (the rig's elbows hinge on X) and turned towards `pole`.
  * Overwrites the shoulder and elbow rotations. Out of reach, the arm points straight at the target.
+ * `hinge` -1 bends the other way: a leg, whose knee folds the shin backwards (+x) with the pole in front.
  */
-export function reachArm(shoulder: THREE.Object3D, elbow: THREE.Object3D, upper: number, fore: number, target: THREE.Vector3, pole: THREE.Vector3): void {
+export function reachArm(shoulder: THREE.Object3D, elbow: THREE.Object3D, upper: number, fore: number, target: THREE.Vector3, pole: THREE.Vector3, hinge = 1): void {
   _t.copy(target).sub(shoulder.position);
   const d = Math.min(Math.max(_t.length(), 0.02), upper + fore - 1e-4);
   const cosE = (upper * upper + fore * fore - d * d) / (2 * upper * fore);
   const bend = Math.PI - Math.acos(Math.min(1, Math.max(-1, cosE)));
-  elbow.rotation.set(-bend, 0, 0);
+  elbow.rotation.set(-bend * hinge, 0, 0);
   // where the hand is with the shoulder unrotated, then turn that onto the target
-  _h.set(0, -fore, 0).applyAxisAngle(X_AXIS, -bend).add(_e.set(0, -upper, 0)).normalize();
+  _h.set(0, -fore, 0).applyAxisAngle(X_AXIS, -bend * hinge).add(_e.set(0, -upper, 0)).normalize();
   _t.normalize();
   _q.setFromUnitVectors(_h, _t);
   // twist about the reach so the elbow points at the pole

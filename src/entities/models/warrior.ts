@@ -8,6 +8,7 @@ import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { FurSway } from './furSway';
+import { LegIK, IK } from './ik';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, lod, type SurfaceFn } from './armor';
 import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, fistReach } from './hands';
@@ -24,6 +25,8 @@ interface Weapon { group: THREE.Group; len: number; off: number | null; /** the 
 const GRIP = Math.PI / 2 + 0.7;
 /** straightens the weapon along the arm, for swings that trace the damage arc */
 const ALONG_ARM = Math.PI - GRIP;
+/** how far a weapon arm swings at a run (rad), and the share of it the wrist turns back so the blade stays put */
+const ARM_SWING = 0.4, WRIST = 0.8;
 /** arm length (upper + fore + hand), before the model's 1.1 scale */
 const ARM = 0.63;
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3();
@@ -490,6 +493,7 @@ export function buildWarrior(): Model {
   const palm = joint(shield, 0, 0, 0.1);
 
   // the fur sways: a spring on each collar and cuff lags the joint's acceleration (furSway.ts)
+  const legs = new LegIK(j);
   const furs = S.build().filter((m) => m.material === furM).map((m) => { m.userData.fur = true; return new FurSway(m, furM); });
   const elbowFur = [j.elbowL, j.elbowR].flatMap((e) => e.children.filter((c) => c.userData.fur));
 
@@ -592,12 +596,16 @@ export function buildWarrior(): Model {
     idle(j, t, 1 - move * 0.6);
     // (through the eyes the arms barely swing with the stride: a swinging arm sweeps a weapon across the view)
     const cy0 = j.chest.rotation.y, hy0 = j.hips.rotation.y, eL0 = j.elbowL.rotation.x, eR0 = j.elbowR.rotation.x;
-    walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: fp ? 0.03 : 0.2, bob: 0.08, dir });
+    // the arms pump against the legs, the hands (and so the blades) held steady by the wrists: a weapon arm swings by 0.4 at a run, a shield arm less, a two-hander's hardly (the left hand is on its grip)
+    const armR = fp ? 0.03 : two ? 0.12 : ARM_SWING, armL = fp ? 0.03 : two ? 0.12 : shield.visible ? 0.6 * ARM_SWING : ARM_SWING;
+    walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: armR, armL, bob: 0.08, dir, run: true });
+    if (!fp) { const sw = Math.sin(st.phase) * dir * move; j.handR.rotation.x += sw * armR * WRIST; if (shield.visible || offHeld) j.handL.rotation.x += -sw * armL * WRIST; }
     if (fp) {
       const k = 0.2;
       j.chest.rotation.y = cy0 + (j.chest.rotation.y - cy0) * k; j.hips.rotation.y = hy0 + (j.hips.rotation.y - hy0) * k;
       j.elbowL.rotation.x = eL0 + (j.elbowL.rotation.x - eL0) * k; j.elbowR.rotation.x = eR0 + (j.elbowR.rotation.x - eR0) * k;
     }
+    // (the body leans into its stride, models/ik.ts: the hands are held where this pose puts them through it, `holdArms`, so the weapon and shield keep their angle)
     if (two) { j.shoulderR.rotation.x += -0.5; j.shoulderR.rotation.z += 0.2; j.elbowR.rotation.x += -1.0; }
     else { j.shoulderR.rotation.x += -0.3; j.shoulderR.rotation.z += -0.1; j.elbowR.rotation.x += -0.8; }
     // shield carried low at the side, the arm held a little out so it clears the leg; a second
@@ -613,7 +621,7 @@ export function buildWarrior(): Model {
     }
     let guard = 0;   // 0: shield at the side, 1: in front
     // (not through the eyes: the camera stays level, so a lean only tips the weapons into the middle of the view)
-    j.spine.rotation.x += move * (fp ? 0 : 0.14) * dir;
+    j.spine.rotation.x += move * (fp ? 0 : IK ? 0.05 : 0.14) * dir;
     j.body.rotation.z += (st.lean || 0) * 0.12;
     j.kneeL.rotation.x += 0.1 * (1 - move); j.kneeR.rotation.x += 0.1 * (1 - move);
 
@@ -829,9 +837,14 @@ export function buildWarrior(): Model {
       }
     }
     if (st.hit > 0) { j.spine.rotation.x += -0.2 * st.hit; j.neck.rotation.x += -0.15 * st.hit; }
-    if (st.dead >= 0) deathFall(j, st.dead, -1);
-    // feet on the floor: a crouch bends the knees instead of sinking the feet, a planted foot lies flat
-    else groundFeet(j, 0.07);
+    if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
+    else {
+      // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
+      if (!fp) legs.captureArms();
+      legs.update(dt, st.phase, st.dead, 1, fp ? 0 : 1);
+      groundFeet(j, 0.07);
+      if (!fp) legs.holdArms();
+    }
     // through the eyes a two-hander rests in both hands where both are seen (held out on the right, the
     // left hand on the lower grip), and the attacks take it from there
     // after Power Strike's blow the blades stay down a moment, then come back to rest (the cast ends right
@@ -907,7 +920,7 @@ export function buildWarrior(): Model {
     get offTip() { return offHeld ? tipL : null; },
     get reach() { return (ARM + (held?.len ?? 0)) * root.scale.x; },
     worldObjects: [cape.mesh],
-    reset: () => cape.reset(),
+    reset: () => { cape.reset(); legs.reset(); },
     // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
     firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on; },
     dispose() {

@@ -6,6 +6,7 @@ import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import type { AnimState, Model } from '../../types';
 import { buildHumanoid, joint, resetPose, walkCycle, deathFall, ramp, pulse } from './rig';
+import { LegIK } from './ik';
 import { Sculpt, horn, limb, organic, skipping, stripRig, taperTube } from './shapes';
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -123,6 +124,7 @@ export function buildImp(): Model {
 
   const root = j.root;
 
+  const legs = new LegIK(j);
   function animate(st: AnimState): void {
     const { t } = st;
     resetPose(j);
@@ -157,7 +159,7 @@ export function buildImp(): Model {
     const flap = Math.sin(t * (st.move > 0.5 ? 9 : 3)) * (0.08 + st.move * 0.15);
     wingL.rotation.set(0.2, -0.9 + spread, 0.3 + flap); wingR.rotation.set(0.2, 0.9 - spread, -0.3 - flap);
     if (st.hit > 0) { j.spine.rotation.x += -0.5 * st.hit; jaw.rotation.x += 0.4 * st.hit; }
-    if (st.dead >= 0) deathFall(j, st.dead, 1);
+    if (st.dead >= 0) { deathFall(j, st.dead, 1); legs.reset(); } else legs.update(st.dt, st.phase, st.dead);
   }
 
   return { root, kit, joints: j, animate, height: 1.1, dispose() { kit.dispose(); } };

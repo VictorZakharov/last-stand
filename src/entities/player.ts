@@ -1,5 +1,6 @@
 // The player character: input -> movement/skills, resources, damage, animation.
 import * as THREE from 'three';
+import { gaitRate, legLength, LookAt } from './models/ik';
 import { G } from '../state';
 import { CLASSES } from '../data/classes/index';
 import { buildModel } from './models/index';
@@ -19,6 +20,9 @@ import { emit } from '../events';
 import { angleDamp, damp, hitFlash, rand } from '../util';
 import { applyShadowDetail } from '../core/quality';
 import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SkillDef, SkillKey } from '../types';
+import type { Enemy } from './enemy';
+
+const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3();
 
 /** A skill the class knows: its tuning data + behavior. Keyed by `def.impl`. */
 export interface KnownSkill { def: SkillDef; impl: SkillImpl }
@@ -65,6 +69,8 @@ export function setHitSink(fn: typeof hitSink): void { hitSink = fn; }
 export class Player {
   readonly cls: ClassDef;
   readonly model: Model;
+  /** the head turning to the nearest foe (models/ik.ts) */
+  private look: LookAt | null = null;
   readonly obj = new THREE.Group();
   /** follows the cast point; every class has one, so switching class keeps the light count. A
    *  remote player has none: another light would change the count and recompile every shader */
@@ -308,8 +314,10 @@ export class Player {
     const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const k = len ? speed * Math.min(1, len) / len : 0;
     const tx = (mx * cy + mz * sy) * k, tz = (mz * cy - mx * sy) * k;
-    this.vel.x = damp(this.vel.x, tx, 14, dt);
-    this.vel.z = damp(this.vel.z, tz, 14, dt);
+    // it takes a moment to get going and to stop (the legs and the lean follow it), a little quicker to stop than to start
+    const kv = tx * tx + tz * tz > this.vel.x * this.vel.x + this.vel.z * this.vel.z ? 9 : 12;
+    this.vel.x = damp(this.vel.x, tx, kv, dt);
+    this.vel.z = damp(this.vel.z, tz, kv, dt);
 
     this.aim.copy(input.ground);
 
@@ -510,7 +518,7 @@ export class Player {
 
     const fwd = Math.sin(this.facing) * this.vel.x + Math.cos(this.facing) * this.vel.z;
     const side = Math.cos(this.facing) * this.vel.x - Math.sin(this.facing) * this.vel.z;
-    this.phase += dt * speed * 2.1 * (fwd < -0.5 ? -1 : 1);
+    this.phase += dt * speed * gaitRate(speed, legLength(this.model)) * (fwd < -0.5 ? -1 : 1);
     let action: ActionState | null = null;
     if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };
     else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / (this.dash.dur + this.dash.hold)) };
@@ -534,6 +542,22 @@ export class Player {
     }
   }
 
+  /** the head glances at the nearest foe within a dozen metres (not through the eyes: the camera rides the head) */
+  private lookAtFoe(dt: number, dead: number): void {
+    const j = this.model.joints;
+    if (!j) return;
+    const look = this.look ??= new LookAt(j);
+    if (dead >= 0 || this.eyes) { look.reset(); return; }
+    let best: Enemy | null = null, bd = 144;
+    for (const e of G.enemies) {
+      if (!e.alive || e.spawning) continue;
+      const d = (e.pos.x - this.pos.x) ** 2 + (e.pos.z - this.pos.z) ** 2;
+      if (d < bd) { bd = d; best = e; }
+    }
+    _lookFrom.set(this.pos.x, this.obj.position.y, this.pos.z);
+    look.update(dt, _lookFrom, this.facing, best ? _lookAt.set(best.pos.x, best.obj.position.y + best.height * 0.6, best.pos.z) : null);
+  }
+
   pose(dt: number, t: number, move: number, dir: number, lean: number, action: ActionState | null): void {
     this.obj.position.set(this.pos.x, damp(this.obj.position.y, groundHeight(this.pos.x, this.pos.z), 14, dt), this.pos.z);
     // (all of it: through the eyes the last frame placed the model in view, entities/viewModel.ts)
@@ -550,6 +574,7 @@ export class Player {
       velocity: this.vel,
     });
     this.model.kit.u.uHit.value = this.hitT * 0.5;
+    this.lookAtFoe(dt, dead);
     // the model shows its cape as it animates: a hidden character keeps it hidden
     if (!this.obj.visible) for (const o of this.model.worldObjects ?? []) o.visible = false;
     if (this.staffLight) {
