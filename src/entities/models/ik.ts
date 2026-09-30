@@ -58,6 +58,8 @@ const TAU = Math.PI * 2;
 const LEAN = 0.045;
 /** how far a planted foot may be turned from the body's facing (rad) */
 const YAW_MAX = 0.5;
+/** how far the pelvis may turn from the chest (rad) to face the way the body travels while its chest faces the aim */
+const TWIST = 1.15;
 /** how far the pelvis is lifted over the pose (rig units) before the reach limit brings it back: the rest pose stands with bent knees */
 const RISE = 0.03;
 /** the share of the body's speed a planted foot moves at during a run */
@@ -122,7 +124,14 @@ export class LegIK {
   /** the body's lean into its motion (forward, sideways), damped */
   private lastYaw = 0;
   private leanX = 0; private leanZ = 0;
+  /** how far the pelvis is turned from the way the body faces, towards the way it travels (rad), damped */
+  private twist = 0;
   private shape: { sole: number; toe: number; heel: number }[] | null = null;
+  /** the hands' world turn, and the hands' and elbows' world spots, as the pose left them (`captureArms`) */
+  private readonly hq = [new THREE.Quaternion(), new THREE.Quaternion()];
+  private readonly hp = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly ep = [new THREE.Vector3(), new THREE.Vector3()];
+  private armsCaptured = false;
   /** the smoothed blend over the walk cycle's legs */
   private w = 0;
 
@@ -130,6 +139,44 @@ export class LegIK {
 
   /** how far the body leans forward this frame (rad): a pose that holds something at an angle in the world eases its arms by it */
   get lean(): number { return IK ? this.leanX : 0; }
+
+  /**
+   * Call after the pose has put the arms where it wants them and before `update`: the hands are held at
+   * these world spots and turns through whatever `update` does to the body (the lean, the pelvis dropping),
+   * see `holdArms`.
+   */
+  captureArms(): void {
+    if (!IK) return;
+    const j = this.j;
+    j.root.updateMatrixWorld(true);
+    j.elbowL.getWorldPosition(this.ep[0]); j.handL.getWorldPosition(this.hp[0]); j.handL.getWorldQuaternion(this.hq[0]);
+    j.elbowR.getWorldPosition(this.ep[1]); j.handR.getWorldPosition(this.hp[1]); j.handR.getWorldQuaternion(this.hq[1]);
+    this.armsCaptured = true;
+  }
+
+  /**
+   * Call after `update`: each arm is solved again (two-bone IK, the elbow where the pose had it) so the hand
+   * is back where `captureArms` saw it and turned the way it was, and a weapon or shield in it keeps its
+   * angle while the body leans and dips under it. `weight` 0..1 blends over the arm as posed.
+   */
+  holdArms(weight = 1): void {
+    if (!IK || !this.armsCaptured) return;
+    this.armsCaptured = false;
+    if (weight <= 0) return;
+    const j = this.j;
+    j.root.updateMatrixWorld(true);
+    for (let i = 0; i < 2; i++) {
+      const shoulder = i === 0 ? j.shoulderL : j.shoulderR, elbow = i === 0 ? j.elbowL : j.elbowR, hand = i === 0 ? j.handL : j.handR;
+      _q2.copy(shoulder.quaternion); const e0 = elbow.rotation.x; _q.copy(hand.quaternion);
+      _p.copy(this.hp[i]); j.chest.worldToLocal(_p);
+      _pole.copy(this.ep[i]); j.chest.worldToLocal(_pole).sub(shoulder.position);
+      reachArm(shoulder, elbow, j.P.upperL, j.P.foreL, _p, _pole);
+      if (weight < 1) { shoulder.quaternion.slerp(_q2, 1 - weight); elbow.rotation.x = e0 + (elbow.rotation.x - e0) * weight; }
+      // the hand keeps the turn it had in the world
+      j.chest.getWorldQuaternion(_hq).multiply(shoulder.quaternion).multiply(elbow.quaternion).invert().multiply(this.hq[i]);
+      hand.quaternion.copy(_q).slerp(_hq, weight);
+    }
+  }
 
   /** the next frame starts from the pose as it stands (a teleport, a respawn) */
   reset(): void { this.fresh = true; }
@@ -165,11 +212,23 @@ export class LegIK {
       j.neck.rotation.x -= this.leanX * 0.5; j.head.rotation.x -= this.leanX * 0.3;
     }
     this.lastYaw = yaw;
+    // a body that travels sideways to where it faces (aiming, casting) turns its pelvis and legs towards the way it goes, the chest staying on the aim, instead of crossing its feet
+    {
+      let want = 0;
+      if (this.sp > 0.6 && lean > 0) {
+        const rel = this.angle(0, yaw, Math.atan2(this.v.x, this.v.z)), a = Math.abs(rel);
+        // (from sideways on round to backing up, the pelvis eases back to the aim: the legs go backwards under it)
+        want = Math.sign(rel) * (a <= TWIST ? a : a <= 2 ? TWIST : TWIST * smooth((Math.PI - a) / (Math.PI - 2))) * smooth((this.sp - 0.6) / 1.2);
+      }
+      this.twist = damp(this.twist, want, 9, dt);
+      j.hips.rotation.y += this.twist; j.spine.rotation.y -= this.twist * 0.5; j.chest.rotation.y -= this.twist * 0.5;
+    }
+    const pyaw = yaw + this.twist;
     j.body.updateWorldMatrix(false, false); j.hips.updateWorldMatrix(false, false);
     _c.setFromMatrixPosition(j.hips.matrixWorld);
     const legs: [THREE.Object3D, THREE.Object3D, THREE.Object3D][] = [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]];
 
-    if (this.fresh || (rx - this.last.x) ** 2 + (rz - this.last.z) ** 2 > 4) this.start(legs, yaw, phase, rx, rz);
+    if (this.fresh || (rx - this.last.x) ** 2 + (rz - this.last.z) ** 2 > 4) this.start(legs, pyaw, phase, rx, rz);
     // the body's own velocity, smoothed; the phase rate too
     _h.set(rx - this.last.x, 0, rz - this.last.z).divideScalar(dt);
     const k14 = 1 - Math.exp(-dt * 14);
@@ -202,25 +261,25 @@ export class LegIK {
         // (a foot re-stepping does not take the other one's swing with it, or both leave the ground at once and the body drops between them; at a walk the other waits)
         if (f.state !== 'timed') {
           if (inWin && f.state === 'plant' && !(other.state === 'timed' && duty > 0.45)) { f.state = 'swing'; f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.rel0 = (f.P.x - _h.x) * vd.x + (f.P.z - _h.z) * vd.z; }
-          else if (!inWin && f.state === 'swing') this.land(f, yaw);
+          else if (!inWin && f.state === 'swing') this.land(f, pyaw);
           if (f.state === 'swing') { const ts = (u - (0.5 - w2)) / (2 * w2); f.t = Math.min(1, Math.max(0, this.dphase < 0 ? 1 - ts : ts)); }
         }
       } else if (f.state === 'swing') {
         // it stopped mid-step: finish the step in time from where the foot is now, landing under the hip
-        f.yawA += this.angle(f.yaw, f.yawA, yaw) * smooth(f.t);
+        f.yawA += this.angle(f.yaw, f.yawA, pyaw) * smooth(f.t);
         f.carry = Math.max(0, f.pos.y - groundHeight(f.pos.x, f.pos.z) - sole * sc); f.pitch0 = f.shown;
         f.A.copy(f.pos); f.A.y = groundHeight(f.A.x, f.A.z);
         f.state = 'timed'; f.dur = 0.22; f.t = 0; f.fast = false;
       }
-      if (f.state === 'timed') { f.t += dt / f.dur; if (f.t >= 1) this.land(f, yaw); }
+      if (f.state === 'timed') { f.t += dt / f.dur; if (f.t >= 1) this.land(f, pyaw); }
 
       // a planted foot that has fallen too far from under its hip (a turn, a sudden start) steps back under it
       if (f.state === 'plant') {
         f.stance += dt;
         if (this.moving && slip > 0) { f.P.x += this.gv.x * slip * dt; f.P.z += this.gv.z * slip * dt; }
         // a foot pivots with the body when it turns, rather than staying across the leg
-        const dy = this.angle(0, f.yaw, yaw);
-        if (Math.abs(dy) > YAW_MAX) f.yaw = yaw - Math.sign(dy) * YAW_MAX;
+        const dy = this.angle(0, f.yaw, pyaw);
+        if (Math.abs(dy) > YAW_MAX) f.yaw = pyaw - Math.sign(dy) * YAW_MAX;
         const dev = Math.hypot(f.P.x - _h.x, f.P.z - _h.z);
         if (dev > (this.moving ? 0.55 : 0.1) * Lw && (this.moving ? other.state !== 'timed' : other.state === 'plant' || (other.state === 'timed' && other.t > 0.2)) && f.stance > (this.moving ? 0.12 : 0.05)) {
           f.state = 'timed'; f.t = 0; f.fast = this.moving; f.dur = this.moving ? Math.min(0.3, Math.max(0.12, (1 - duty) * cycleT)) : Math.min(0.4, 0.16 + dev * 0.3); f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown;
@@ -303,7 +362,7 @@ export class LegIK {
       _pole.set(i === 0 ? 0.12 : -0.12, 0, 1);
       reachArm(thigh, knee, L1, L2, _p, _pole, -1);
       // the foot lies level, turned to the way it was planted (or, in a swing, towards where the body faces)
-      const yawNow = f.state === 'plant' ? f.yaw : f.yawA + this.angle(f.yaw, f.yawA, yaw) * smooth(f.t);
+      const yawNow = f.state === 'plant' ? f.yaw : f.yawA + this.angle(f.yaw, f.yawA, pyaw) * smooth(f.t);
       f.shown = f.pitch;
       _e.set(f.shown, yawNow, 0, 'YXZ');
       _q2.setFromEuler(_e);
@@ -351,7 +410,7 @@ export class LegIK {
       f.state = 'plant'; f.P.set(_h.x, groundHeight(_h.x, _h.z), _h.z); f.yaw = f.yawA = yaw; f.t = 0; f.stance = 0;
     }
     this.last.set(rx, 0, rz); this.leanX = this.leanZ = 0;
-    this.v.set(0, 0, 0); this.gv.set(0, 0, 0); this.sp = 0; this.dphase = 0; this.lastPhase = phase; this.moving = false; this.drop = 0;
+    this.v.set(0, 0, 0); this.gv.set(0, 0, 0); this.sp = 0; this.twist = 0; this.dphase = 0; this.lastPhase = phase; this.moving = false; this.drop = 0;
     this.fresh = false;
   }
 }

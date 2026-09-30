@@ -600,9 +600,7 @@ export function buildWarrior(): Model {
       j.chest.rotation.y = cy0 + (j.chest.rotation.y - cy0) * k; j.hips.rotation.y = hy0 + (j.hips.rotation.y - hy0) * k;
       j.elbowL.rotation.x = eL0 + (j.elbowL.rotation.x - eL0) * k; j.elbowR.rotation.x = eR0 + (j.elbowR.rotation.x - eR0) * k;
     }
-    // the body leans into its stride (models/ik.ts): the arms ease back by part of it, so the weapon and shield are carried at the angle they were, not tipped forward with the torso
-    const lean = fp ? 0 : legs.lean;
-    j.shoulderR.rotation.x -= lean * 0.7; if (shield.visible || offHeld) j.shoulderL.rotation.x -= lean * 0.6;
+    // (the body leans into its stride, models/ik.ts: the hands are held where this pose puts them through it, `holdArms`, so the weapon and shield keep their angle)
     if (two) { j.shoulderR.rotation.x += -0.5; j.shoulderR.rotation.z += 0.2; j.elbowR.rotation.x += -1.0; }
     else { j.shoulderR.rotation.x += -0.3; j.shoulderR.rotation.z += -0.1; j.elbowR.rotation.x += -0.8; }
     // shield carried low at the side, the arm held a little out so it clears the leg; a second
@@ -837,8 +835,10 @@ export function buildWarrior(): Model {
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
     else {
       // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
+      if (!fp) legs.captureArms();
       legs.update(dt, st.phase, st.dead, 1, fp ? 0 : 1);
       groundFeet(j, 0.07);
+      if (!fp) legs.holdArms();
     }
     // through the eyes a two-hander rests in both hands where both are seen (held out on the right, the
     // left hand on the lower grip), and the attacks take it from there
