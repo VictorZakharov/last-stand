@@ -9,7 +9,7 @@ const _t = new THREE.Vector3(), _f = new THREE.Vector3(), _m = new THREE.Vector3
 const _q = new THREE.Quaternion(), _hw = new THREE.Quaternion(), _r = new THREE.Quaternion();
 
 /** where a model drinks from: the wrist's place from the mouth (the head's frame: x left, y up, z forward; m) and where the elbow points (the chest's frame) */
-export interface DrinkHold { wrist: THREE.Vector3; pole: THREE.Vector3 }
+export interface DrinkHold { wrist: THREE.Vector3; /** the wrist as it drinks: above and before the mouth, so the neck points down into the lips and the bottom is tipped up */ tipped: THREE.Vector3; pole: THREE.Vector3 }
 
 /** a round-bottomed flask of glowing red draught with a brass neck and a leather stopper, its mouth up its +y, its base at the origin (held in a fist by its base, the body and neck out past the fingers so it is seen); `cap` and `stopper` are materials the model already has */
 export function buildFlask(kit: MaterialKit, cap: THREE.Material, stopper: THREE.Material): THREE.Group {
@@ -45,7 +45,7 @@ export function drink(j: Joints, k: number, mouth: THREE.Object3D, hold: DrinkHo
     // the wrist where the model holds it from (`hold`), the elbow towards its pole
     mouth.getWorldPosition(_m);
     j.head.getWorldQuaternion(_q);
-    _t.copy(_m).add(_f.copy(hold.wrist).applyQuaternion(_q).multiplyScalar(sc));
+    _t.copy(_m).add(_f.lerpVectors(hold.wrist, hold.tipped, tip * tip * (3 - 2 * tip)).applyQuaternion(_q).multiplyScalar(sc));
     j.chest.worldToLocal(_t);
     _q.copy(j.shoulderL.quaternion);
     const e0 = j.elbowL.rotation.x;
@@ -53,11 +53,10 @@ export function drink(j: Joints, k: number, mouth: THREE.Object3D, hold: DrinkHo
     // (blended from the pose's own turn: the IK's is copied first, slerpQuaternions would read the one it writes)
     _r.copy(j.shoulderL.quaternion); j.shoulderL.quaternion.copy(_q).slerp(_r, e);
     j.elbowL.rotation.x = e0 + (j.elbowL.rotation.x - e0) * e;
-    // the fist points the flask's neck (out past the fingers) at the lips, its bottom tipping up as it is drunk
+    // the fist points the flask's neck (out past the fingers) at the lips: from below as it comes up, from above as it is drunk (the bottom tipped up)
     j.root.updateMatrixWorld(true);
     j.handL.getWorldPosition(_w);
     _f.subVectors(_m, _w).normalize();
-    _f.y -= 0.9 * tip; _f.normalize();
     j.handL.getWorldQuaternion(_hw);
     _d.set(0, -1, 0).applyQuaternion(_hw);
     _r.setFromUnitVectors(_d, _f).multiply(_hw);

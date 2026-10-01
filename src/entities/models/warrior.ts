@@ -54,7 +54,7 @@ const TAIL: Record<string, number> = { chop: 0.3, buff: 0.55, flurry: 0.15 }, TA
 /** the wrist's turn that holds a blade at rest edge on to the foe (rad) */
 const EDGE = 1.95, EDGE_TWO = Math.PI / 2;
 /** drinking: the elbow raised out to the side, the wrist out to the left of the chin (as from a horn: the shield on that forearm turns edge on beside the head, not over the face) */
-const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.1, -0.08, 0.17), pole: new THREE.Vector3(1, -0.2, 0) };
+const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.1, -0.06, 0.2), tipped: new THREE.Vector3(0.09, 0.1, 0.19), pole: new THREE.Vector3(1, -0.2, 0) };
 const REST_FEET = [0.13, 0.09, 0.15, -0.14, -0.1, -0.55], FIGHT_FEET = [0.13, 0.22, 0.15, -0.14, -0.15, -0.55];
 /** Twin Fangs: the share of it that is the lunge (skills/twinFangs LUNGE / (LUNGE + HOLD)), and the lunge stance after it */
 const FANG_LUNGE = 0.39, FANG_FEET = [0.13, 0.34, 0.1, -0.15, -0.25, -0.5];
@@ -619,8 +619,9 @@ export function buildWarrior(): Model {
   // the healing draught, in the left fist while it is drunk
   const flask = buildFlask(kit, brass, leatherDark); flask.name = 'flask'; j.handL.add(flask); flask.position.set(0, -0.07, 0.03); flask.rotation.x = Math.PI;
   let flaskOut = 0, shieldHang = 0, drinkOn = 0;
-  // a weapon in the left hand hangs here on the belt while the hand is busy with the flask: grip at the left hip, blade down and back
-  const hipLoop = joint(j.hips, 0.2, -0.02, 0.04); hipLoop.rotation.set(Math.PI + 0.35, 0, -0.12);
+  // a weapon in the left hand hangs here on the belt while the hand is busy with the flask
+  // (out past the hip and behind it, the blade raked back and out, as from a scabbard worn behind the hip: clear of the striding leg)
+  const hipLoop = joint(j.hips, 0.22, 0, -0.06); hipLoop.rotation.set(Math.PI + 0.6, 0, -0.3);
   let sheathed = false;
   const _s1 = new THREE.Vector3(), _s2 = new THREE.Vector3(), _s3 = new THREE.Vector3(), _s4 = new THREE.Vector3(), _s5 = new THREE.Vector3(), _sm = new THREE.Matrix4(), _shq = new THREE.Quaternion();
   /** turn a hand by `ang` about the length of the weapon in its grip */
