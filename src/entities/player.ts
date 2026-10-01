@@ -518,7 +518,9 @@ export class Player {
 
     const fwd = Math.sin(this.facing) * this.vel.x + Math.cos(this.facing) * this.vel.z;
     const side = Math.cos(this.facing) * this.vel.x - Math.sin(this.facing) * this.vel.z;
-    this.phase += dt * speed * gaitRate(speed, legLength(this.model)) * (fwd < -0.5 ? -1 : 1);
+    // (a dash's legs step at a sprint's cadence, not at the dash's speed)
+    const gs = this.dash ? Math.min(speed, this.stats.moveSpeed) : speed;
+    this.phase += dt * gs * gaitRate(gs, legLength(this.model)) * (fwd < -0.5 ? -1 : 1);
     let action: ActionState | null = null;
     if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };
     else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / (this.dash.dur + this.dash.hold)) };
@@ -572,9 +574,9 @@ export class Player {
       hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,
       charge: this.channel ? 1 : this.casting ? this.casting.t / this.casting.dur : 0,
       velocity: this.vel,
+      look: () => this.lookAtFoe(dt, dead),
     });
     this.model.kit.u.uHit.value = this.hitT * 0.5;
-    this.lookAtFoe(dt, dead);
     // the model shows its cape as it animates: a hidden character keeps it hidden
     if (!this.obj.visible) for (const o of this.model.worldObjects ?? []) o.visible = false;
     if (this.staffLight) {

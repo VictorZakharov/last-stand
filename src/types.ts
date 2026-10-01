@@ -237,6 +237,9 @@ export interface AnimState {
   charge?: number;
   /** world-space velocity of the character (drives cloth inertia) */
   velocity?: THREE.Vector3;
+  /** turns the chest, neck and head onto what the character looks at: a model with cloth calls it before
+   *  the leg IK and the cloth step, so the sleeves and cape follow the arms the turn moves */
+  look?: () => void;
 }
 
 export type MaterialKit = ReturnType<typeof createKit>;

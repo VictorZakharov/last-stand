@@ -452,6 +452,7 @@ export function buildMage(): Model {
       reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, _hp, POLE_L);
     }
     if (st.hit > 0) { j.spine.rotation.x += -0.25 * st.hit; j.neck.rotation.x += -0.2 * st.hit; }
+    st.look?.();
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
     else {
       // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
