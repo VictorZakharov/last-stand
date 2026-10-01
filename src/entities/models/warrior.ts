@@ -10,7 +10,7 @@ import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
 import { curve, PoseFade, type Keys } from './motion';
-import { buildFlask, drink, type DrinkHold } from './flask';
+import { buildFlask, drink, DRINK_SHEATHED, type DrinkHold } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, lod, type SurfaceFn } from './armor';
 import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, fistReach } from './hands';
@@ -50,11 +50,11 @@ const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a
 // the hips turn first, then the spine and chest, the arm and wrist come last.
 /** where the feet stand (left x, z, turn, then right), rig units: at rest, fighting, Power Strike's step in, behind the shield */
 /** a move's end held a moment after its cast is over (seconds), so a short cast's blow or throw is seen, then how long it takes to ease back to the stance */
-const TAIL: Record<string, number> = { chop: 0.3, buff: 0.55, flurry: 0.15, drink: 0.12 }, TAIL_OUT: Record<string, number> = { chop: 0.55, buff: 0.6, flurry: 0.35, drink: 0.4 };
+const TAIL: Record<string, number> = { chop: 0.3, buff: 0.55, flurry: 0.15 }, TAIL_OUT: Record<string, number> = { chop: 0.55, buff: 0.6, flurry: 0.35 };
 /** the wrist's turn that holds a blade at rest edge on to the foe (rad) */
 const EDGE = 1.95, EDGE_TWO = Math.PI / 2;
 /** drinking: the elbow raised out to the side, the wrist out to the left of the chin (as from a horn: the shield on that forearm turns edge on beside the head, not over the face) */
-const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.08, -0.05, 0.12), pole: new THREE.Vector3(1, -0.2, 0) };
+const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.1, -0.08, 0.17), pole: new THREE.Vector3(1, -0.2, 0) };
 const REST_FEET = [0.13, 0.09, 0.15, -0.14, -0.1, -0.55], FIGHT_FEET = [0.13, 0.22, 0.15, -0.14, -0.15, -0.55];
 /** Twin Fangs: the share of it that is the lunge (skills/twinFangs LUNGE / (LUNGE + HOLD)), and the lunge stance after it */
 const FANG_LUNGE = 0.39, FANG_FEET = [0.13, 0.34, 0.1, -0.15, -0.25, -0.5];
@@ -598,7 +598,8 @@ export function buildWarrior(): Model {
     if (held) held.group.visible = true;
     if (held?.off != null) offGrip.position.y = held.off;
     shield.visible = gear.shield;
-    for (const w of offWeapons.values()) w.group.visible = false;
+    for (const w of offWeapons.values()) { w.group.visible = false; gripL.add(w.group); }
+    sheathed = false;
     offHeld = gear.offWeapon ? offWeapons.get(gear.offWeapon) ?? offWeapons.get('Sword')! : null;
     if (offHeld) offHeld.group.visible = true;
     // each seated in its fist, the hand on its wrist
@@ -616,8 +617,11 @@ export function buildWarrior(): Model {
 
   const shY = j.shoulderL.position.y;
   // the healing draught, in the left fist while it is drunk
-  const flask = buildFlask(kit, brass, leatherDark); flask.name = 'flask'; j.handL.add(flask); flask.position.set(0, -0.06, 0.03); flask.rotation.x = Math.PI;
+  const flask = buildFlask(kit, brass, leatherDark); flask.name = 'flask'; j.handL.add(flask); flask.position.set(0, -0.07, 0.03); flask.rotation.x = Math.PI;
   let flaskOut = 0, shieldHang = 0, drinkOn = 0;
+  // a weapon in the left hand hangs here on the belt while the hand is busy with the flask: grip at the left hip, blade down and back
+  const hipLoop = joint(j.hips, 0.2, -0.02, 0.04); hipLoop.rotation.set(Math.PI + 0.35, 0, -0.12);
+  let sheathed = false;
   const _s1 = new THREE.Vector3(), _s2 = new THREE.Vector3(), _s3 = new THREE.Vector3(), _s4 = new THREE.Vector3(), _s5 = new THREE.Vector3(), _sm = new THREE.Matrix4(), _shq = new THREE.Quaternion();
   /** turn a hand by `ang` about the length of the weapon in its grip */
   const edgeOn = (hand: THREE.Object3D, g: THREE.Object3D, ang: number): void => {
@@ -731,6 +735,9 @@ export function buildWarrior(): Model {
     const still = 1 - Math.min(1, move * 4);
     feet = null;
     let flaskWant = 0, drinkLift = 0;
+    // (the off-hand weapon on the hip while drinking: hung there as the hand reaches the belt, drawn again as it comes back)
+    const sheathe = !!offHeld && a?.name === 'drink' && !fp && a.t > DRINK_SHEATHED[0] && a.t < DRINK_SHEATHED[1];
+    if (offHeld && sheathe !== sheathed) { sheathed = sheathe; (sheathe ? hipLoop : gripL).add(offHeld.group); }
     if (chopTail > 0) chopTail = Math.max(0, chopTail - dt / 0.3);
     const began = !!raw && (raw.name !== lastName || raw.t < lastK - 0.2), ended = !raw && lastName !== '';
     if ((ended || began) && lastName === 'swing') swingEnd = t;
@@ -1031,7 +1038,7 @@ export function buildWarrior(): Model {
       } else if (a.name === 'drink' && !fp) {
         // the healing draught: the free hand takes the flask from the belt and drinks it (models/flask.ts); the shield
         // stays on its arm, a two-hander's left hand lets go of the grip (out of its reach)
-        flaskWant = drink(j, k, mouth, DRINK); aw = 1; guard = 0; drinkLift = sm(0.26, 0.5, k);
+        flaskWant = drink(j, k, mouth, DRINK); aw = 1; guard = 0; drinkLift = sm(0.26, 0.46, k) * (1 - sm(0.7, 0.84, k));
       } else if (a.name === 'buff') {
         // war cry: gathered in, hunched over the fists, then thrown open, chest out, arms flung wide and up,
         // head back in the roar (held as the cast ends: the fade out of it is slow)
@@ -1064,7 +1071,9 @@ export function buildWarrior(): Model {
     if (st.hit > 0) { j.spine.rotation.x += -0.2 * st.hit; j.neck.rotation.x += -0.15 * st.hit; }
     // at rest a blade is held edge on to the foe, not flat: the wrist turns it a quarter turn about its own
     // length (the swings already lead with the edge; starting one fades this out)
-    if (!fp && !a) { if (held) edgeOn(j.handR, grip, two ? EDGE_TWO : EDGE); if (offHeld) edgeOn(j.handL, gripL, -EDGE); }
+    // (not an attack: drinking keeps the blades as they rest, the one on the hip aside)
+    const rest = !a || a.name === 'drink';
+    if (!fp && rest) { if (held) edgeOn(j.handR, grip, two ? EDGE_TWO : EDGE); if (offHeld && !sheathed) edgeOn(j.handL, gripL, -EDGE); }
     if (st.dead < 0) fade.apply(dt); else fade.reset();
     st.look?.();
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
@@ -1151,7 +1160,7 @@ export function buildWarrior(): Model {
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
     if (held) hold(handR, along(grip), held.r);
     else poseHand(handR, 0.5 + Math.sin(t * 1.3) * 0.05, 0.1);
-    if (offHeld) hold(handL, along(gripL), offHeld.r);
+    if (offHeld && !sheathed) hold(handL, along(gripL), offHeld.r);
     else if (twoHeld && held) hold(handL, along(grip), held.r, _up);
     else poseHand(handL, flaskOut > 0.3 ? 1.1 : shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 0.08);
     // the flask comes out of the fist and is put away again

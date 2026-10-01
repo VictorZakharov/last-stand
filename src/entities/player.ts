@@ -310,7 +310,7 @@ export class Player {
     if (!mx && !mz) { mx = input.stick.x; mz = input.stick.y; }
     const len = Math.hypot(mx, mz);
     let speed = this.stats.moveSpeed;
-    if (this.casting) speed *= 0.45;
+    if (this.casting && !this.casting.skill.def.freeMove) speed *= 0.45;
     if (this.channel) speed *= this.channel.skill.def.moveMult ?? 0.4;
     const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const k = len ? speed * Math.min(1, len) / len : 0;
@@ -343,7 +343,7 @@ export class Player {
     this.casting = { skill: s, t: 0, dur, fireAt: dur * (s.def.fireAt ?? 0.55), fired: false, target };
     // the hero turns after the live aim, never snapping to each cast's: with fire held while the mouse
     // moves, a snap per cast (and holding that aim through the cast) turns it in steps
-    this.faceTowards(target);
+    if (!s.def.freeMove) this.faceTowards(target);
     actionSink?.({ t: 'cast', s: s.def.impl, dur, x: target.x, z: target.z });
     return true;
   }
@@ -424,7 +424,7 @@ export class Player {
     if (this.casting) {
       const c = this.casting;
       c.t += dt;
-      this.faceTowards(this.aim);
+      if (!c.skill.def.freeMove) this.faceTowards(this.aim);
       const impl = c.skill.impl;
       if (!c.fired && !impl.channel) impl.charging?.(this, c.skill.def, c.t / c.fireAt, dt);
       if (!c.fired && c.t >= c.fireAt) { c.fired = true; this.fire(c.skill, this.aim.clone()); }
@@ -459,7 +459,7 @@ export class Player {
     const speed = Math.hypot(this.vel.x, this.vel.z);
     const look = lookFacing();
     if (look !== null && !d) this.facing = look;
-    else if (!this.casting && !this.channel && speed > 0.5) {
+    else if ((!this.casting || this.casting.skill.def.freeMove) && !this.channel && speed > 0.5) {
       this.facing = angleDamp(this.facing, Math.atan2(this.vel.x, this.vel.z), 14, dt);
     }
 

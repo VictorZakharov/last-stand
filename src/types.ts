@@ -92,6 +92,8 @@ export interface SkillDef {
   length?: number;
   width?: number;
   moveMult?: number;
+  /** a cast that leaves the hero free to move (drinking a draught): full speed, facing the way they go, not the aim; it still blocks every other skill */
+  freeMove?: boolean;
   freeze?: number;
   duration?: number;
   pull?: number;
