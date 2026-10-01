@@ -1,7 +1,7 @@
 // Enemy entity: movement, status effects, actions, damage, death.
 // Decision-making lives in enemyAI; visuals come from models/.
 import * as THREE from 'three';
-import { gaitRate, legLength } from './models/ik';
+import { gaitRate, legLength, type LegIK } from './models/ik';
 import { G } from '../state';
 import { ENEMIES, HERO, SCALING, type EnemyId } from '../data/enemies';
 import { buildModel } from './models/index';
@@ -16,11 +16,22 @@ import { additive } from '../core/materials';
 import { sfx } from '../core/audio';
 import { emit } from '../events';
 import { angleDamp, damp, hitFlash, pick, rand } from '../util';
-import { applyShadowDetail } from '../core/quality';
+import { applyShadowDetail, qualityLevel } from '../core/quality';
+import { QUALITY } from '../data/quality';
 import type { DamageType, EnemyDef, Model, XZ } from '../types';
 import type { Player } from './player';
 
 const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3();
+// the view's frustum, taken once a frame: an enemy out of it skips the leg IK
+const _frustum = new THREE.Frustum(), _pm = new THREE.Matrix4(), _sph = new THREE.Sphere();
+let _frustumAt = -1;
+function inView(x: number, y: number, z: number, r: number): boolean {
+  if (_frustumAt !== G.time) {
+    _frustumAt = G.time;
+    _frustum.setFromProjectionMatrix(_pm.multiplyMatrices(G.camera.projectionMatrix, G.camera.matrixWorldInverse));
+  }
+  return _frustum.intersectsSphere(_sph.set(_sph.center.set(x, y, z), r));
+}
 import { nearestPlayer } from '../net/role';
 import { LookAt } from './models/ik';
 
@@ -311,6 +322,13 @@ export class Enemy {
     this.obj.position.z = this.pos.z;
     if (!this.spawning) this.obj.position.y = damp(this.obj.position.y, groundHeight(this.pos.x, this.pos.z), 12, G.dt);
     this.model.root.rotation.y = this.facing;
+    // the leg IK only where its feet are seen: in view and (on Low) near the player
+    const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
+    if (legs) {
+      const h = this.height, me = G.player, range = QUALITY[qualityLevel()].ikRange;
+      legs.active = inView(this.pos.x, this.obj.position.y + h * 0.5, this.pos.z, h)
+        && (range === Infinity || !me || (me.pos.x - this.pos.x) ** 2 + (me.pos.z - this.pos.z) ** 2 < range * range);
+    }
     this.model.animate({
       t, dt, phase: this.phase, move,
       // (from the data, so a co-op guest's copy has it too)

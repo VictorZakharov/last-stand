@@ -32,6 +32,8 @@ const ARM = 0.63;
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3();
 const _grip = new THREE.Vector3(), _pole = new THREE.Vector3(1, -0.7, -0.6);
 const _gw = new THREE.Vector3(), _dw = new THREE.Vector3(), _cur = new THREE.Vector3(), _hq = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _sq = new THREE.Quaternion();
+/** the legs' own blend over the pose this frame (left, right), see `legs.update` */
+const _legW: [number, number] = [1, 1];
 const IDENT = new THREE.Quaternion(), _va = new THREE.Vector3(), _vd = new THREE.Vector3(), _up = new THREE.Vector3(), _vg = new THREE.Vector3();
 const _ra = new THREE.Vector3(), _rd = new THREE.Vector3(), _la = new THREE.Vector3(), _ld = new THREE.Vector3();
 const SHIELD_SIDE = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2, 0));
@@ -633,6 +635,9 @@ export function buildWarrior(): Model {
     let wR = 0, wL = 0;
     // how far the pose owns the legs (a lunge, a charge: the body leaves its feet behind at a dash's speed, so the leg IK would kneel): the pose's own legs show until the dash is over, and the feet start again under the hips
     let legOwn = 0;
+    // and how far it owns one leg (a step in, a lunge) while the other stands: standing only, moving the IK steps
+    let ownL = 0, ownR = 0;
+    const still = 1 - Math.min(1, move * 4);
     if (chopTail > 0) chopTail = Math.max(0, chopTail - dt / 0.3);
     if (a && (a.name !== lastName || a.t < lastK - 0.2) && a.name === 'swing') side = -side;
     lastName = a?.name ?? ''; lastK = a?.t ?? 1;
@@ -671,6 +676,7 @@ export function buildWarrior(): Model {
         }
         // the leg opposite the swinging arm steps in
         (left ? j.thighR : j.thighL).rotation.x += -0.3 * w; (left ? j.kneeL : j.kneeR).rotation.x += 0.3 * w;
+        if (left) ownR = w * still; else ownL = w * still;
       } else if (a.name === 'flurry') {
         // Twin Fangs: a low lunge, each blade cutting down across the body from high on its own side,
         // right then left (the left arm mirrors the right: the same pitch, yaw turned over)
@@ -742,6 +748,7 @@ export function buildWarrior(): Model {
         j.body.position.y += -0.16 * blow * w;
         j.kneeL.rotation.x += 0.55 * blow * w; j.kneeR.rotation.x += 0.4 * blow * w;
         j.thighL.rotation.x += -0.45 * blow * w;
+        ownL = blow * w * still;
       } else if (a.name === 'spin') {
         // Steel Tempest: spin with the weapon held out
         aw = 1;
@@ -845,7 +852,8 @@ export function buildWarrior(): Model {
     else {
       // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
       if (!fp) legs.captureArms();
-      legs.update(dt, st.phase, st.dead, 1 - legOwn, fp ? 0 : 1);
+      _legW[0] = 1 - ownL; _legW[1] = 1 - ownR;
+      legs.update(dt, st.phase, st.dead, 1 - legOwn, fp ? 0 : 1, _legW);
       groundFeet(j, 0.07);
       if (!fp) legs.holdArms();
     }
