@@ -1,7 +1,7 @@
 // Bull Rush: a charge along the aim that tramples and hurls aside what it meets. A brace and a push-off
 // that cracks the ground, then a few huge driving strides behind the shoulder, a wedge of force leading,
 // dust bursting at each footfall and streaming behind, and the stop lands as a ground-shaking impact,
-// the weapons sweeping out to both sides (the model's 'charge': BRACE, then the rush up to RUSH of it).
+// the weapons cutting down across the front, crossing (the model's 'charge': BRACE, then the rush up to RUSH of it).
 import * as THREE from 'three';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
@@ -59,12 +59,12 @@ function footfall(p: THREE.Vector3, dir: THREE.Vector3, side: number): void {
   decal(f, { type: 'scorch', size: 0.6, life: 2.5, opacity: 0.45 });
 }
 
-/** the weapons sweep out from the front to each side as the charge lands */
+/** the weapons cut down across the front as the charge lands, crossing in an X (one weapon: one diagonal cut) */
 function hurl(player: Player, dir: THREE.Vector3): void {
   const f = Math.atan2(dir.x, dir.z), p = player.pos, radius = Math.max(1.4, (player.model.reach ?? 2) * 0.85);
-  // the right weapon, and the left if there's one (dir -1 sweeps towards the right)
+  // the right weapon from high on the right, and the left from high on the left if there's one
   const sides = player.model.offTip ? [1, -1] : [1];
-  for (const s of sides) slashArc({ x: p.x, z: p.z, y: 1.05, facing: f - s * 0.7, radius, arc: 1.4, dir: -s, color: EMBER, sweep: 0.12, fade: 0.25 });
+  for (const s of sides) slashArc({ x: p.x, z: p.z, y: 1.1, facing: f, radius, arc: 1.5, dir: s, roll: s * 0.55, pitch: -0.15, color: EMBER, sweep: 0.12, fade: 0.25 });
 }
 
 function arrive(c: THREE.Vector3, dir: THREE.Vector3): void {

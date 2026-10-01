@@ -50,7 +50,7 @@ function onChest(x: number, y: number, lift: number, out = new THREE.Vector3()):
 
 /** where the feet stand (left x, z, turn, then right), rig units: at rest, throwing a spell (the left steps in), slamming the ground, aiming the staff (the right forward), bracing for the lance */
 /** a move's end held a moment after its cast is over (seconds), so a short cast's blow or throw is seen, then how long it takes to ease back to the stance */
-const TAIL: Record<string, number> = { cast: 0.35, slam: 0.4, buff: 0.5 }, TAIL_OUT: Record<string, number> = { cast: 0.45, slam: 0.6, buff: 0.5 };
+const TAIL: Record<string, number> = { cast: 0.35, summon: 0.35, slam: 0.4, buff: 0.5 }, TAIL_OUT: Record<string, number> = { cast: 0.45, summon: 0.45, slam: 0.6, buff: 0.5 };
 const REST_FEET = [0.12, 0.06, 0.22, -0.12, -0.05, -0.35], CAST_FEET = [0.13, 0.2, 0.15, -0.13, -0.1, -0.45];
 const SLAM_FEET = [0.2, 0.06, 0.4, -0.2, -0.04, -0.4], AIM_FEET = [0.13, -0.04, 0.35, -0.12, 0.14, -0.05], LANCE_FEET = [0.14, 0.24, 0.1, -0.15, -0.14, -0.55];
 
@@ -64,6 +64,16 @@ const CA_ARM_Z: Keys = [[0, 0], [0.4, -0.45], [0.5, -0.45], [0.62, 0.12], [1, 0.
 const CA_ELBOW: Keys = [[0, -0.3], [0.4, -1.75], [0.5, -1.8], [0.62, -0.12], [0.8, -0.1], [1, -0.25]];
 const CA_FWD: Keys = [[0, 0], [0.42, -0.05], [0.62, 0.06], [1, 0.05]];
 const CA_BEND: Keys = [[0, 0], [0.42, -0.06], [0.62, 0.14], [1, 0.1]];
+
+// --- Starfall (summon): the free hand reaches up into the sky, the head and chest lifting after it, the
+// staff rising too, then at the release it is pulled down at the target, the body bending after it
+const SU_ARM_X: Keys = [[0, -0.2], [0.42, -2.85], [0.5, -2.95], [0.6, -1.3], [0.7, -1.0], [1, -1.08]];
+const SU_ARM_Z: Keys = [[0, 0], [0.42, 0.28], [0.5, 0.28], [0.62, 0.02], [1, 0]];
+const SU_ELBOW: Keys = [[0, -0.3], [0.42, -0.12], [0.5, -0.35], [0.62, -0.05], [1, -0.1]];
+const SU_BEND: Keys = [[0, 0], [0.42, -0.2], [0.5, -0.22], [0.62, 0.2], [1, 0.14]];
+const SU_LOOK: Keys = [[0, 0], [0.4, -0.38], [0.5, -0.38], [0.62, 0.08], [1, 0.04]];
+const SU_DIP: Keys = [[0, 0], [0.42, 0.03], [0.5, 0.03], [0.62, -0.06], [1, -0.045]];
+const SU_FWD: Keys = [[0, 0], [0.42, -0.04], [0.62, 0.07], [1, 0.05]];
 
 // --- Glacial Nova (slam): up on the toes with both arms raised, then driven down into a deep crouch, the
 // hands slammed to the ground, held as the cast ends (the fade out of it is slow)
@@ -339,7 +349,7 @@ export function buildMage(): Model {
   let fp = false;
   /** the staff arm through the eyes: added to its shoulder (pitch, roll, yaw), and pitch undone while casting */
   const FP_STAFF = [0.1, -0.3, -0.2, 0.6];
-  const FP_POSE: Record<string, number[]> = { cast: [-0.2, 0.35, 0.12], channel: [0.5, 0.12, -0.1], buff: [-0.25, 0.05, 0.15] };
+  const FP_POSE: Record<string, number[]> = { cast: [-0.2, 0.35, 0.12], summon: [-0.2, 0.35, 0.12], channel: [0.5, 0.12, -0.1], buff: [-0.25, 0.05, 0.15] };
   /** where the free arm's elbow points when it reaches (out to the left, down and back) */
   const POLE_L = V(1, -0.7, -0.6);
   /** the crystal's casting glow, eased: a held stream of casts keeps it up instead of flashing each one */
@@ -452,7 +462,8 @@ export function buildMage(): Model {
         j.handL.rotation.x += -0.6 * gather - 0.9 * release;
         poseHand(handL, 0.35 + 0.6 * gather - 0.35 * release, 0.1 + 0.5 * release);
         feet = CAST_FEET;
-      } else if (a.name === 'cast') {
+      } else if (a.name === 'cast' || (a.name === 'summon' && fp)) {
+        // (through the eyes: Starfall plays the cast's gesture, placed in the view)
         const w = pulse(k, 0, 1);
         j.shoulderR.rotation.x += -1.05 * w; j.elbowR.rotation.x += 0.45 * w;
         j.shoulderL.rotation.x += -1.2 * w; j.shoulderL.rotation.z += 0.25 * w; j.elbowL.rotation.x += -0.2 * w;
@@ -494,6 +505,19 @@ export function buildMage(): Model {
           // (braced: the left foot forward, low, the weight leaning into the portal)
           if (!fp) { j.body.position.z += 0.05; j.body.position.y += -0.06; j.hips.rotation.y += -0.15; j.spine.rotation.x += 0.06; feet = LANCE_FEET; }
         }
+      } else if (a.name === 'summon' && !fp) {
+        const w = ramp(k, 0, 0.15), rise = ramp(k, 0, 0.45) * (1 - ramp(k, 0.5, 0.62)), pull = ramp(k, 0.5, 0.62);
+        j.shoulderL.rotation.x = lerp(j.shoulderL.rotation.x, curve(SU_ARM_X, k), w); j.shoulderL.rotation.z = lerp(j.shoulderL.rotation.z, curve(SU_ARM_Z, k), w);
+        j.elbowL.rotation.x = lerp(j.elbowL.rotation.x, curve(SU_ELBOW, k), w);
+        // the staff rises with the reach, and comes down level as the stars are called
+        j.shoulderR.rotation.x += (-0.5 * rise - 0.15 * pull) * w;
+        const b = curve(SU_BEND, k);
+        j.spine.rotation.x += b * w; j.neck.rotation.x += curve(SU_LOOK, k) * w; j.chest.rotation.y += (0.1 * rise - 0.2 * pull) * w;
+        j.body.position.y += curve(SU_DIP, k) * w; j.body.position.z += curve(SU_FWD, k) * w * (1 - move * 0.6);
+        // the palm open to the sky, then clawing the stars down
+        j.handL.rotation.x += -0.4 * rise - 0.8 * pull;
+        poseHand(handL, 0.15 + 0.7 * pull * (1 - ramp(k, 0.75, 1) * 0.6), 0.5 * rise + 0.2);
+        feet = CAST_FEET;
       } else if (a.name === 'slam' && !fp) {
         const w = ramp(k, 0, 0.15), arms = curve(SL_ARMS, k), sp = curve(SL_SPREAD, k), b = curve(SL_BEND, k), down = ramp(k, 0.5, 0.64);
         j.shoulderL.rotation.x = lerp(j.shoulderL.rotation.x, arms, w); j.shoulderR.rotation.x = lerp(j.shoulderR.rotation.x, arms + 0.3 * (1 - down), w);
@@ -531,7 +555,7 @@ export function buildMage(): Model {
     // and the staff is held out to the right, its crystal clear of the middle; the cast's raise of the
     // staff arm is kept down
     if (fp) {
-      const S = FP_STAFF, c = a?.name === 'cast' ? pulse(a.t, 0, 1) : 0;
+      const S = FP_STAFF, c = a?.name === 'cast' || a?.name === 'summon' ? pulse(a.t, 0, 1) : 0;
       j.shoulderR.rotation.x += S[0] + S[3] * c; j.shoulderR.rotation.z += S[1]; j.shoulderR.rotation.y += S[2];
     }
     const shift = fp && a ? FP_POSE[a.name] : undefined;

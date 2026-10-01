@@ -109,7 +109,7 @@ function impact(player: Player, def: Def, p: THREE.Vector3): void {
 }
 
 const skill: InstantSkill = {
-  anim: 'cast',
+  anim: 'summon',
   warm: () => [new THREE.Mesh(meteorGeo, getMeteorMat()), new THREE.Mesh(streakGeo, streakMaterial())],
   cast(player, rawDef, target) {
     const def = rawDef as Def;

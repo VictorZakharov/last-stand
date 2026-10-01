@@ -86,7 +86,7 @@ const warrior: ClassDef = {
     {
       key: '4', impl: 'ironBellow', name: 'Iron Bellow',
       desc: 'A war cry that hurls back nearby foes and raises spectral shields that absorb the next blows.',
-      tags: ['defense'], cost: 30, cooldown: 14, castTime: 0.3,
+      tags: ['defense'], cost: 30, cooldown: 14, castTime: 0.65,
       damage: 40, radius: 6, knock: 8, absorbPct: 0.3, duration: 6,
       icon: { glyph: '⛨', color: '#ffd36a' },
     },
