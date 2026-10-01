@@ -92,6 +92,8 @@ class Foot {
   fast = false;
   /** how far ahead of its hip (along the way it travels) the foot was when its swing began */
   rel0 = 0;
+  /** which way the phase ran and the way the body travelled when its swing began: a swing can't follow either flipping (the swing would cross to the other end of its arc at once) */
+  sdir = 1; svd = new THREE.Vector3();
   /** the ankle's target this frame, in the world */
   pos = new THREE.Vector3();
   pitch = 0;
@@ -290,9 +292,18 @@ export class LegIK {
       if (this.moving && !own) {
         // (a foot re-stepping does not take the other one's swing with it, or both leave the ground at once and the body drops between them; at a walk the other waits)
         if (f.state !== 'timed') {
-          if (inWin && f.state === 'plant' && !(other.state === 'timed' && duty > 0.45)) { f.state = 'swing'; f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.rel0 = (f.P.x - _h.x) * vd.x + (f.P.z - _h.z) * vd.z; }
-          else if (!inWin && f.state === 'swing') this.land(f, pyaw);
-          if (f.state === 'swing') { const ts = (u - (0.5 - w2)) / (2 * w2); f.t = Math.min(1, Math.max(0, this.dphase < 0 ? 1 - ts : ts)); }
+          const ts = (u - (0.5 - w2)) / (2 * w2), tw = Math.min(1, Math.max(0, this.dphase < 0 ? 1 - ts : ts)), swingT = (1 - duty) * cycleT;
+          if (inWin && f.state === 'plant' && !(other.state === 'timed' && duty > 0.45)) {
+            f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0;
+            // (a swing whose window is already well under way, the foot held back till now, would start part way along its arc: it steps there in the time left instead)
+            if (tw > 0.15) this.restep(f, (1 - tw) * swingT, sole * sc);
+            else { f.state = 'swing'; f.rel0 = (f.P.x - _h.x) * vd.x + (f.P.z - _h.z) * vd.z; f.sdir = Math.sign(this.dphase) || 1; f.svd.copy(vd); }
+          } else if (f.state === 'swing') {
+            // the swing follows the phase and the way the body goes; when either turns round (an attack turning the body onto its aim, a reversal) or the window closes early, the foot steps on from where it is rather than jumping along its arc
+            if ((Math.sign(this.dphase) || 1) !== f.sdir || Math.abs(this.dphase) < 1 || f.svd.dot(vd) < 0.5 || (!inWin && f.t < 0.85)) this.restep(f, Math.max(0.1, (1 - f.t) * swingT), sole * sc);
+            else if (!inWin) this.land(f, pyaw);
+          }
+          if (f.state === 'swing') f.t = tw;
         }
       } else if (f.state === 'swing') {
         // it stopped mid-step: finish the step in time from where the foot is now, landing under the hip
@@ -436,6 +447,12 @@ export class LegIK {
     if (sp < 0.15) return -0.2 * (1 - sp / 0.15);
     void duty;
     return 0;
+  }
+
+  /** a step that can't go on as the gait's swing: a quick timed one from where the foot is now, landing under the hip */
+  private restep(f: Foot, dur: number, sole: number): void {
+    if (f.state === 'swing') { f.carry = Math.max(0, f.pos.y - groundHeight(f.pos.x, f.pos.z) - sole); f.A.copy(f.pos); f.A.y = groundHeight(f.A.x, f.A.z); f.yawA = f.yaw; }
+    f.pitch0 = f.shown; f.state = 'timed'; f.t = 0; f.fast = true; f.dur = Math.min(0.3, Math.max(0.1, dur)); f.stance = 0;
   }
 
   private land(f: Foot, yaw: number): void {

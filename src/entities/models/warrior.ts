@@ -75,6 +75,10 @@ const SW_DIP: Keys = [[0, -0.02], [0.45, -0.04], [0.66, -0.085], [1, -0.06]];
 /** the trunk: drawn up as it winds, crunching over into the blow; the shoulders tipping from the high side to the low */
 const SW_BEND: Keys = [[0, 0], [0.45, -0.06], [0.7, 0.16], [1, 0.18]];
 /** the forearm's roll that leads a swing with the edge (rad): a forehand palm up, a backhand (share of it) palm down */
+/** a one-hander at the ready (shoulder pitch, elbow, wrist, over the stance's arm): the forearm angled down and the
+ *  wrist nearly straight, so the blade rises from the fist (the grip tips it forward of square to the hand, GRIP);
+ *  a two-hander's (then the arm's turn in) held before the middle of the body, where the left hand reaches its lower grip */
+const REST_ARM = [-0.35, 0.25, -0.5], REST_TWO = [-0.3, 0.2, -0.45, 0.4];
 const SW_ROLL = Math.PI / 2, SW_BACK = 0.75, FANG_ROLL = -0.8;
 const SW_TILT: Keys = [[0, 0.08], [0.45, 0.12], [0.7, -0.02], [1, -0.1]];
 
@@ -725,10 +729,10 @@ export function buildWarrior(): Model {
     // standing, at the ready: the blade raised before the body, the shield half up, a second blade the mirror of the first, a two-hander across the body
     if (!fp) {
       const ia = 1 - Math.min(1, move * 2), sway = Math.sin(t * 0.7) * 0.03;
-      if (two) { j.shoulderR.rotation.x += (-0.15 + sway) * ia; j.elbowR.rotation.x += -0.25 * ia; }
-      else { j.shoulderR.rotation.x += (-0.2 + sway) * ia; j.shoulderR.rotation.z += 0.08 * ia; j.elbowR.rotation.x += -0.3 * ia; j.handR.rotation.x += 0.15 * ia; j.handR.rotation.z += -0.3 * ia; }
+      if (two) { j.shoulderR.rotation.x += (REST_TWO[0] + sway) * ia; j.elbowR.rotation.x += REST_TWO[1] * ia; j.handR.rotation.x += REST_TWO[2] * ia; j.shoulderR.rotation.y += REST_TWO[3] * ia; }
+      else { j.shoulderR.rotation.x += (REST_ARM[0] + sway) * ia; j.shoulderR.rotation.z += 0.08 * ia; j.elbowR.rotation.x += REST_ARM[1] * ia; j.handR.rotation.x += REST_ARM[2] * ia; }
       if (shield.visible) { j.shoulderL.rotation.x += (-0.3 - sway) * ia; j.shoulderL.rotation.z += -0.12 * ia; j.elbowL.rotation.x += -0.95 * ia; guard = 0.45 * ia; }
-      else if (offHeld) { j.shoulderL.rotation.x += (-0.2 - sway) * ia; j.shoulderL.rotation.z += -0.08 * ia; j.elbowL.rotation.x += -0.3 * ia; j.handL.rotation.x += 0.15 * ia; j.handL.rotation.z += 0.3 * ia; }
+      else if (offHeld) { j.shoulderL.rotation.x += (REST_ARM[0] - sway) * ia; j.shoulderL.rotation.z += -0.08 * ia; j.elbowL.rotation.x += REST_ARM[1] * ia; j.handL.rotation.x += REST_ARM[2] * ia; }
     }
     // (not through the eyes: the camera stays level, so a lean only tips the weapons into the middle of the view)
     j.spine.rotation.x += move * (fp ? 0 : IK ? 0.05 : 0.14) * dir;
