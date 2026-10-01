@@ -15,6 +15,7 @@ import { clamp, lerp, damp, TAU, mulberry } from '../../util';
 import { SkeletonCape } from './cape';
 import { BellCloth } from './sleeve';
 import { LegIK } from './ik';
+import { curve, PoseFade, type Keys } from './motion';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
 import type { AnimState, Model } from '../../types';
 
@@ -46,6 +47,28 @@ function onChest(x: number, y: number, lift: number, out = new THREE.Vector3()):
   const r = torsoR(y), a = Math.asin(clamp(x / r, -1, 1));
   return out.set(Math.sin(a) * (r + lift), y, Math.cos(a) * (r * DEPTH + lift));
 }
+
+/** where the feet stand (left x, z, turn, then right), rig units: at rest, throwing a spell (the left steps in), slamming the ground, aiming the staff (the right forward), bracing for the lance */
+const REST_FEET = [0.12, 0.06, 0.22, -0.12, -0.05, -0.35], CAST_FEET = [0.13, 0.2, 0.15, -0.13, -0.1, -0.45];
+const SLAM_FEET = [0.2, 0.06, 0.4, -0.2, -0.04, -0.4], AIM_FEET = [0.13, -0.04, 0.35, -0.12, 0.14, -0.05], LANCE_FEET = [0.14, 0.24, 0.1, -0.15, -0.14, -0.55];
+
+// --- a spell thrown from the free hand (cast: Starfall, Maelstrom), keyed over the cast, released at 0.55
+// (the skill fires): the body coils away (the right shoulder forward, the weight back) as the hand gathers
+// at the chest, then the hips and chest drive round and the arm throws the spell out, the weight forward
+const CA_CHEST: Keys = [[0, 0], [0.4, 0.38], [0.5, 0.35], [0.62, -0.28], [0.8, -0.32], [1, -0.25]];
+const CA_HIPS: Keys = [[0, 0], [0.38, 0.18], [0.48, 0.15], [0.58, -0.15], [1, -0.12]];
+const CA_ARM_X: Keys = [[0, -0.2], [0.4, -0.75], [0.5, -0.8], [0.62, -1.5], [0.8, -1.45], [1, -1.3]];
+const CA_ARM_Z: Keys = [[0, 0], [0.4, -0.45], [0.5, -0.45], [0.62, 0.12], [1, 0.08]];
+const CA_ELBOW: Keys = [[0, -0.3], [0.4, -1.75], [0.5, -1.8], [0.62, -0.12], [0.8, -0.1], [1, -0.25]];
+const CA_FWD: Keys = [[0, 0], [0.42, -0.05], [0.62, 0.06], [1, 0.05]];
+const CA_BEND: Keys = [[0, 0], [0.42, -0.06], [0.62, 0.14], [1, 0.1]];
+
+// --- Glacial Nova (slam): up on the toes with both arms raised, then driven down into a deep crouch, the
+// hands slammed to the ground, held as the cast ends (the fade out of it is slow)
+const SL_ARMS: Keys = [[0, -0.3], [0.4, -2.75], [0.5, -2.8], [0.62, -0.9], [0.7, -0.6], [1, -0.65]];
+const SL_SPREAD: Keys = [[0, 0], [0.4, 0.3], [0.5, 0.32], [0.65, 0.15], [1, 0.2]];
+const SL_DIP: Keys = [[0, 0], [0.4, 0.03], [0.5, 0.03], [0.64, -0.22], [0.72, -0.26], [1, -0.24]];
+const SL_BEND: Keys = [[0, 0], [0.4, -0.18], [0.5, -0.18], [0.64, 0.45], [0.72, 0.52], [1, 0.48]];
 
 export function buildMage(): Model {
   const kit = createKit(0x5dffa8);
@@ -142,6 +165,11 @@ export function buildMage(): Model {
   const bells: THREE.Group[] = [];
   const cloths: BellCloth[] = [];
   const legs = new LegIK(j);
+  /** smooths every cut between poses: an action starting, restarting or ending */
+  const fade = new PoseFade(j);
+  let lastName = '', lastK = 1;
+  /** a staff shot's kick, 1 as it leaves, dying away */
+  let recoil = 0;
   // what the bells must not sink into (the cape's own body colliders, roughly): the torso, the hips and the robe's skirt
   const bodies = [
     { joint: j.chest, y0: 0.22, y1: -0.02, rx: 0.2, rz: 0.17 },
@@ -343,6 +371,9 @@ export function buildMage(): Model {
     ],
   });
 
+  const shY = j.shoulderL.position.y;
+  let feet: readonly number[] | null = null;
+
   function animate(st: AnimState): void {
     const { t, dt } = st;
     resetPose(j);
@@ -351,6 +382,16 @@ export function buildMage(): Model {
 
     // base stance: staff held at the side, slightly forward
     idle(j, t, 1 - move * 0.6);
+    // at rest: the weight on one leg, the other easy (the hips tipping and the shoulders answering them),
+    // shifting slowly from foot to foot, leaning a little on the staff; the free hand drifts and the head wanders
+    if (!fp) {
+      const amt = 1 - Math.min(1, move * 2), sway = Math.sin(t * 0.45) + 0.3 * Math.sin(t * 1.07 + 2), br = Math.sin(t * 1.8);
+      j.body.position.x += 0.025 * sway * amt; j.hips.rotation.z += 0.055 * sway * amt; j.spine.rotation.z += -0.035 * sway * amt - 0.03 * amt; j.neck.rotation.z += -0.025 * sway * amt;
+      j.hips.rotation.y += -0.12 * amt; j.chest.rotation.y += 0.08 * amt;
+      j.neck.rotation.y += 0.12 * Math.sin(t * 0.31) * amt; j.neck.rotation.x += 0.04 * Math.sin(t * 0.53 + 1) * amt;
+      j.shoulderL.rotation.x += (-0.15 + 0.05 * Math.sin(t * 0.6)) * amt; j.elbowL.rotation.x += -0.35 * amt;
+      j.shoulderL.position.y = j.shoulderR.position.y = shY + 0.006 * br * amt;
+    }
     walkCycle(j, st.phase, move, { stride: 0.5, knee: 0.95, arm: 0.35, bob: 0.07, dir, run: true });
     j.shoulderR.rotation.x += -0.35; j.shoulderR.rotation.z += -0.12; j.elbowR.rotation.x += -0.55;
     j.spine.rotation.x += move * 0.12 * dir;
@@ -359,6 +400,12 @@ export function buildMage(): Model {
     // hands at rest: the free one loosely curled and breathing, the other gripping the staff
     poseHand(handL, 0.45 + Math.sin(t * 1.3) * 0.06, 0.12);
     const a = st.action;
+    feet = null;
+    const began = !!a && (a.name !== lastName || a.t < lastK - 0.2), ended = !a && lastName !== '';
+    if (began) fade.cut(a.name === 'point' && lastName === 'point' ? 0.06 : 0.14); else if (ended) fade.cut(lastName === 'slam' || lastName === 'buff' ? 0.55 : lastName === 'point' ? 0.2 : 0.35);
+    if (began && a.name === 'point') recoil = 1;
+    recoil = Math.max(0, recoil - dt * 6);
+    lastName = a?.name ?? ''; lastK = a?.t ?? 1;
     if (!a || a.name !== 'channel') openedAt = -1;
     // staff shots: the staff swings down level with the target and stays there while the shots keep
     // coming (a held button, or clicks), so each bolt leaves the crystal at a foe's chest; it rises
@@ -369,12 +416,34 @@ export function buildMage(): Model {
     aimV += (w0 * w0 * ((down ? 1 : 0) - aim) - 2 * w0 * aimV) * Math.min(dt, 0.05);
     aim = clamp(aim + aimV * Math.min(dt, 0.05), 0, 1);
     j.shoulderR.rotation.x += -0.3 * aim; j.elbowR.rotation.x += 0.15 * aim; j.spine.rotation.x += 0.12 * aim;
+    // (the staff side turned to the foe, the weight forward behind it; each shot kicks the staff and the chest back)
+    if (!fp) {
+      const rc = recoil * recoil;
+      j.hips.rotation.y += 0.18 * aim; j.chest.rotation.y += 0.22 * aim - 0.06 * rc; j.neck.rotation.y += -0.3 * aim;
+      j.body.position.z += (0.03 * aim - 0.025 * rc) * (1 - move); j.spine.rotation.x += -0.07 * rc; j.shoulderR.rotation.x += -0.12 * rc;
+      if (aim > 0.3) feet = AIM_FEET;
+    }
     staff.rotation.x = STAFF_PITCH + 1.75 * aim;
     // (the haft sits in the fist, the hand on its wrist)
     seat(handR, staff, STAFF_R);
     if (a) {
       const k = a.t;
-      if (a.name === 'cast') {
+      if (a.name === 'cast' && !fp) {
+        const w = ramp(k, 0, 0.2);
+        j.shoulderL.rotation.x = lerp(j.shoulderL.rotation.x, curve(CA_ARM_X, k), w); j.shoulderL.rotation.z = lerp(j.shoulderL.rotation.z, curve(CA_ARM_Z, k), w);
+        j.elbowL.rotation.x = lerp(j.elbowL.rotation.x, curve(CA_ELBOW, k), w);
+        // the staff arm draws back against the throw
+        j.shoulderR.rotation.x += (-0.25 * ramp(k, 0, 0.45) + 0.45 * ramp(k, 0.5, 0.65)) * w;
+        const ch = curve(CA_CHEST, k), b = curve(CA_BEND, k);
+        j.chest.rotation.y += ch * w; j.hips.rotation.y += curve(CA_HIPS, k) * w; j.neck.rotation.y -= 0.6 * ch * w;
+        j.spine.rotation.x += b * w; j.neck.rotation.x -= 0.4 * b * w;
+        j.body.position.z += curve(CA_FWD, k) * w * (1 - move * 0.6); j.body.position.y += -0.03 * ramp(k, 0.5, 0.65) * w;
+        // the hand gathers into a claw, then flicks open as the spell leaves it
+        const gather = pulse(k, 0, 0.55), release = ramp(k, 0.5, 0.62) * (1 - ramp(k, 0.85, 1) * 0.5);
+        j.handL.rotation.x += -0.6 * gather - 0.9 * release;
+        poseHand(handL, 0.35 + 0.6 * gather - 0.35 * release, 0.1 + 0.5 * release);
+        feet = CAST_FEET;
+      } else if (a.name === 'cast') {
         const w = pulse(k, 0, 1);
         j.shoulderR.rotation.x += -1.05 * w; j.elbowR.rotation.x += 0.45 * w;
         j.shoulderL.rotation.x += -1.2 * w; j.shoulderL.rotation.z += 0.25 * w; j.elbowL.rotation.x += -0.2 * w;
@@ -413,7 +482,18 @@ export function buildMage(): Model {
           j.shoulderR.rotation.x += -0.9; j.elbowR.rotation.x += 0.2;
           j.chest.rotation.y += -0.25; j.spine.rotation.x += 0.15 - kick * 0.12;
           j.body.position.z += -kick * 0.05;
+          // (braced: the left foot forward, low, the weight leaning into the portal)
+          if (!fp) { j.body.position.z += 0.05; j.body.position.y += -0.06; j.hips.rotation.y += -0.15; j.spine.rotation.x += 0.06; feet = LANCE_FEET; }
         }
+      } else if (a.name === 'slam' && !fp) {
+        const w = ramp(k, 0, 0.15), arms = curve(SL_ARMS, k), sp = curve(SL_SPREAD, k), b = curve(SL_BEND, k), down = ramp(k, 0.5, 0.64);
+        j.shoulderL.rotation.x = lerp(j.shoulderL.rotation.x, arms, w); j.shoulderR.rotation.x = lerp(j.shoulderR.rotation.x, arms + 0.3 * (1 - down), w);
+        j.shoulderL.rotation.z = lerp(j.shoulderL.rotation.z, sp, w); j.shoulderR.rotation.z = lerp(j.shoulderR.rotation.z, -sp, w);
+        j.elbowL.rotation.x = lerp(j.elbowL.rotation.x, -0.25 - 0.3 * (1 - down), w); j.elbowR.rotation.x = lerp(j.elbowR.rotation.x, -0.35, w);
+        j.spine.rotation.x += b * w; j.neck.rotation.x -= 0.45 * b * w; j.body.position.y += curve(SL_DIP, k) * w;
+        // fists raised, then splayed hands driven down
+        poseHand(handL, 0.45 + 0.95 * (1 - down) * ramp(k, 0, 0.4) - 0.4 * down, 0.12 + 0.5 * down);
+        feet = SLAM_FEET;
       } else if (a.name === 'slam') {
         const up = ramp(k, 0, 0.45) * (1 - ramp(k, 0.5, 0.7));
         const down = ramp(k, 0.5, 0.7) * (1 - ramp(k, 0.8, 1));
@@ -425,7 +505,9 @@ export function buildMage(): Model {
         // fists raised, then splayed hands driven down
         poseHand(handL, 0.45 + 0.95 * up - 0.4 * down, 0.12 + 0.5 * down);
       } else if (a.name === 'buff') {
-        const w = pulse(k, 0, 1);
+        // (raised and held: the fade out of it is slow)
+        const w = fp ? pulse(k, 0, 1) : Math.sin(Math.min(1, k * 1.4) * Math.PI / 2);
+        if (!fp) { j.spine.rotation.x += -0.08 * w; j.chest.rotation.y += -0.15 * w; j.body.position.y += 0.015 * w; }
         j.shoulderL.rotation.x += -1.6 * w; j.shoulderL.rotation.z += 0.8 * w;
         j.shoulderR.rotation.x += -0.8 * w; j.shoulderR.rotation.z += -0.6 * w;
         j.neck.rotation.x += -0.3 * w;
@@ -452,11 +534,14 @@ export function buildMage(): Model {
       reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, _hp, POLE_L);
     }
     if (st.hit > 0) { j.spine.rotation.x += -0.25 * st.hit; j.neck.rotation.x += -0.2 * st.hit; }
+    if (st.dead < 0) fade.apply(dt); else fade.reset();
     st.look?.();
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
     else {
       // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
       if (!fp) legs.captureArms();
+      const F = feet ?? REST_FEET;
+      legs.stance(0, F[0], F[1], F[2]); legs.stance(1, F[3], F[4], F[5]);
       legs.update(dt, st.phase, st.dead, 1, fp ? 0 : 1);
       groundFeet(j, 0.07);
       if (!fp) legs.holdArms();
@@ -492,7 +577,7 @@ export function buildMage(): Model {
     root, kit, joints: j, animate, tip, palm, height: 2.0,
     worldObjects: [cape.mesh],
     cloths,
-    reset: () => { cape.reset(); legs.reset(); for (const c of cloths) c.reset(); },
+    reset: () => { cape.reset(); legs.reset(); fade.reset(); for (const c of cloths) c.reset(); },
     // through the eyes the bells, seen from behind, would hide the hands: narrow and shorter
     firstPerson: (on) => { fp = on; for (const b of bells) b.scale.set(on ? 0.6 : 1, on ? 0.75 : 1, on ? 0.6 : 1); },
     dispose() {

@@ -100,6 +100,8 @@ class Foot {
   fk = { thigh: new THREE.Quaternion(), knee: new THREE.Quaternion(), ankle: new THREE.Quaternion() };
   /** this leg's own blend over the pose (`update`'s `legW`), smoothed, and whether the pose owned it last frame */
   lw = 1; own = false;
+  /** where a standing body wants this foot (`LegIK.stance`): in the root's own frame, and turned out by `syaw`; null under its hip */
+  stand: THREE.Vector3 | null = null; syaw = 0;
 }
 
 const _s = new THREE.Vector3(), _c = new THREE.Vector3(), _f = new THREE.Vector3(), _h = new THREE.Vector3(), _t = new THREE.Vector3(), _p = new THREE.Vector3();
@@ -130,12 +132,25 @@ export class LegIK {
   private leanX = 0; private leanZ = 0;
   /** how far the pelvis is turned from the way the body faces, towards the way it travels (rad), damped */
   private twist = 0;
+  /** 1 standing, 0 moving, eased: how far the knees follow the way the feet point */
+  private standK = 1;
   private shape: { sole: number; toe: number; heel: number }[] | null = null;
   /** the hands' world turn as the pose left it (`captureArms`) */
   private readonly hq = [new THREE.Quaternion(), new THREE.Quaternion()];
   private armsCaptured = false;
   /** the smoothed blend over the walk cycle's legs */
   private w = 0;
+
+  /**
+   * Where a standing body puts its feet (a fighting stance, a step in): each foot's spot in the root's own frame
+   * (x left, z forward, rig units) and how far it is turned out (rad, + to the left); null puts it under its hip.
+   * A planted foot further than a few cm from its spot steps there, one foot at a time; moving, the gait ignores it.
+   */
+  stance(i: number, x: number | null, z = 0, yaw = 0): void {
+    const f = this.feet[i];
+    if (x === null) { f.stand = null; f.syaw = 0; return; }
+    (f.stand ??= new THREE.Vector3()).set(x, 0, z); f.syaw = yaw;
+  }
 
   /** false: the walk cycle's own legs this frame (an enemy off screen or far away), restarting under the hips when it is back */
   active = true;
@@ -245,6 +260,7 @@ export class LegIK {
     this.lastPhase = phase;
     const speed = this.sp;
     this.moving = speed > (this.moving ? 0.25 : 0.55);
+    this.standK = damp(this.standK, this.moving ? 0 : 1, 6, dt);
     // the way it travels: the smoothed velocity's, or (through a reversal, when that is nearly nothing) the latest
     const lv = this.v.length(), vd = speed > 0.05 ? _t.copy(lv > 0.35 * speed ? this.v : _h).normalize() : _t.set(0, 0, 0);
     this.gv.copy(vd).multiplyScalar(speed);
@@ -285,26 +301,29 @@ export class LegIK {
         f.A.copy(f.pos); f.A.y = groundHeight(f.A.x, f.A.z);
         f.state = 'timed'; f.dur = 0.22; f.t = 0; f.fast = false;
       }
-      if (f.state === 'timed') { f.t += dt / f.dur; if (f.t >= 1) this.land(f, pyaw); }
+      if (f.state === 'timed') { f.t += dt / f.dur; if (f.t >= 1) this.land(f, pyaw + (this.moving ? 0 : f.syaw)); }
 
       // a planted foot that has fallen too far from under its hip (a turn, a sudden start) steps back under it
       if (f.state === 'plant') {
         f.stance += dt;
         if (this.moving && slip > 0) { f.P.x += this.gv.x * slip * dt; f.P.z += this.gv.z * slip * dt; }
         // a foot pivots with the body when it turns, rather than staying across the leg
-        const dy = this.angle(0, f.yaw, pyaw);
-        if (Math.abs(dy) > YAW_MAX) f.yaw = pyaw - Math.sign(dy) * YAW_MAX;
-        const dev = Math.hypot(f.P.x - _h.x, f.P.z - _h.z);
-        if (!own && dev > (this.moving ? 0.55 : 0.1) * Lw && (this.moving ? other.state !== 'timed' : other.state === 'plant' || (other.state === 'timed' && other.t > 0.2)) && f.stance > (this.moving ? 0.12 : 0.05)) {
+        const fyaw = pyaw + (this.moving ? 0 : f.syaw), dy = this.angle(0, f.yaw, fyaw);
+        if (Math.abs(dy) > YAW_MAX) f.yaw = fyaw - Math.sign(dy) * YAW_MAX;
+        // (standing, its spot is the stance's; else under the hip)
+        const spot = !this.moving && f.stand ? _ps.copy(f.stand).applyMatrix4(rm) : _ps.copy(_h);
+        const dev = Math.hypot(f.P.x - spot.x, f.P.z - spot.z) + (!this.moving && f.stand ? 0.15 * Lw * Math.abs(this.angle(0, f.yaw, fyaw)) : 0);
+        if (!own && dev > (this.moving ? 0.55 : f.stand ? 0.07 : 0.1) * Lw && (this.moving ? other.state !== 'timed' : other.state === 'plant' || (other.state === 'timed' && other.t > 0.2)) && f.stance > (this.moving ? 0.12 : 0.05)) {
           f.state = 'timed'; f.t = 0; f.fast = this.moving; f.dur = this.moving ? Math.min(0.3, Math.max(0.12, (1 - duty) * cycleT)) : Math.min(0.4, 0.16 + dev * 0.3); f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown;
-          f.B.set(_h.x + vd.x * half, 0, _h.z + vd.z * half);
+          f.B.set(spot.x + vd.x * half, 0, spot.z + vd.z * half);
           f.stance = 0;
         }
       }
       if (f.state === 'swing' || f.state === 'timed') {
         // where it will land: under where its hip will be by then, a half stance ahead
         const remain = f.state === 'swing' ? (1 - f.t) * (1 - duty) * cycleT : (1 - f.t) * f.dur;
-        f.B.set(_h.x + this.gv.x * remain + vd.x * (f.state === 'swing' ? half : 0), 0, _h.z + this.gv.z * remain + vd.z * (f.state === 'swing' ? half : 0));
+        if (!this.moving && f.stand && f.state === 'timed') f.B.copy(f.stand).applyMatrix4(rm);
+        else f.B.set(_h.x + this.gv.x * remain + vd.x * (f.state === 'swing' ? half : 0), 0, _h.z + this.gv.z * remain + vd.z * (f.state === 'swing' ? half : 0));
         const e = f.fast ? 0.6 * f.t * (2 - f.t) + 0.4 * smooth(f.t) : smooth(f.t), run = smooth((speed - 2) / 3.5);
         // (a run lifts the foot higher, and later in the swing: the heel comes up under the seat)
         const lift = (1 + 0.5 * run) * Math.min(0.2, Math.max(0.05, 0.04 + 0.03 * speed)) * sc * Math.sin(Math.PI * Math.pow(Math.min(1, f.t), 1 - 0.2 * run));
@@ -361,6 +380,8 @@ export class LegIK {
       _m.copy(j.hips.matrixWorld).invert();
     }
     j.hips.matrixWorld.decompose(_pp, _hq, _ps);
+    _t.set(0, 0, 1).applyQuaternion(_hq);
+    const hy = Math.atan2(_t.x, _t.z);
 
     for (let i = 0; i < 2; i++) {
       const f = this.feet[i], [thigh, knee, ankle] = legs[i];
@@ -374,10 +395,12 @@ export class LegIK {
         f.pos.x = _p.x; f.pos.z = _p.z;
         _p.copy(f.pos).applyMatrix4(_m);
       }
-      _pole.set(i === 0 ? 0.12 : -0.12, 0, 1);
+      // the foot lies level, turned to the way it was planted (or, in a swing, towards where the body faces), and the knee bends over it
+      const yawNow = f.state === 'plant' ? f.yaw : f.yawA + this.angle(f.yaw, f.yawA, pyaw + (this.moving ? 0 : f.syaw)) * smooth(f.t);
+      // (standing only, and only ever outwards: a running knee pointed off the stride twists the thigh across the body)
+      const ky = this.standK * (i === 0 ? Math.max(-0.1, Math.min(0.9, this.angle(0, hy, yawNow))) : Math.max(-0.9, Math.min(0.1, this.angle(0, hy, yawNow))));
+      _pole.set(Math.sin(ky) + (i === 0 ? 0.12 : -0.12), 0, Math.cos(ky));
       reachArm(thigh, knee, L1, L2, _p, _pole, -1);
-      // the foot lies level, turned to the way it was planted (or, in a swing, towards where the body faces)
-      const yawNow = f.state === 'plant' ? f.yaw : f.yawA + this.angle(f.yaw, f.yawA, pyaw) * smooth(f.t);
       f.shown = f.pitch;
       _e.set(f.shown, yawNow, 0, 'YXZ');
       _q2.setFromEuler(_e);
