@@ -65,11 +65,15 @@ const TWIST = 1.15;
 /** how far out of the pelvis's middle a foot lands at least, and how far across it a planted foot may be before it steps back (m at a man's scale) */
 /** how long the legs go backwards along the pelvis's line after a reversal before it turns round to the new way (s) */
 const BACK_HOLD = 0.7;
+/** where the ball of the foot is, as a share of the way from the ankle to the toes: a planted foot turns about it */
+const BALL = 0.7;
 const GAP = 0.05, CROSS = 0.03;
 /** how far the pelvis is lifted over the pose (rig units) before the reach limit brings it back: the rest pose stands with bent knees */
 const RISE = 0.03;
 /** the share of the body's speed a planted foot moves at during a run */
-const SLIP = +(typeof location === 'undefined' ? '0.2' : (new URLSearchParams(location.search).get('slip') ?? '0.2'));
+const SLIP = +(typeof location === 'undefined' ? '0' : (new URLSearchParams(location.search).get('slip') ?? '0'));
+/** the most ground a planted foot passes under the body in one contact (leg lengths): faster, the contact is shorter, as a runner's is, rather than the foot sliding to keep up */
+const STANCE = +(typeof location === 'undefined' ? '0.9' : (new URLSearchParams(location.search).get('stance') ?? '0.9'));
 /** how far ahead of its hip a foot may land, in leg lengths */
 const AHEAD = 0.4;
 /** a swing lands with this share of the stance's backward stroke (relative to the hip), so a foot never skids as it takes the ground and paws back a little as it lands, as a runner's does; it leaves with less, or it trails far behind the hip before it comes forward */
@@ -112,6 +116,8 @@ class Foot {
   last = new THREE.Vector3(); seen = false;
   /** where in its window (0..1) the swing began: its arc runs over what was left of the window */
   tw0 = 0;
+  /** the body went out of its reach last frame: a planted foot steps at once */
+  over = false;
 }
 
 const _s = new THREE.Vector3(), _c = new THREE.Vector3(), _f = new THREE.Vector3(), _h = new THREE.Vector3(), _t = new THREE.Vector3(), _p = new THREE.Vector3();
@@ -288,7 +294,8 @@ export class LegIK {
     const lv = this.v.length(), vd = speed > 0.05 ? _t.copy(lv > 0.35 * speed ? this.v : _h).normalize() : _t.set(0, 0, 0);
     this.gv.copy(vd).multiplyScalar(speed);
     // the share of the cycle on the ground: less as the speed rises (a run has both feet in the air a while), so the stance's travel stays within the legs' reach
-    const duty = Math.min(0.62, Math.max(0.31, 0.62 - 0.19 * (speed - 1.5)));
+    const cyc0 = TAU / Math.max(Math.abs(this.dphase), 0.5);
+    const duty = Math.min(0.62, Math.max(0.31, 0.62 - 0.19 * (speed - 1.5)), Math.max(0.2, STANCE * Lw / Math.max(0.1, speed * cyc0)));
     const w2 = (1 - duty) / 2;
     const cycleT = TAU / Math.max(Math.abs(this.dphase), 0.5);
     const half = Math.min(speed * duty * cycleT * 0.5 * (1 - SLIP * smooth((speed - 2) / 3.5)), AHEAD * Lw);
@@ -318,7 +325,7 @@ export class LegIK {
         // (a foot re-stepping does not take the other one's swing with it, or both leave the ground at once and the body drops between them; at a walk the other waits)
         if (f.state !== 'timed') {
           const ts = (u - (0.5 - w2)) / (2 * w2), tw = Math.min(1, Math.max(0, this.dphase < 0 ? 1 - ts : ts));
-          if (inWin && f.state === 'plant' && !(other.state === 'timed' && duty > 0.45)) { f.state = 'swing'; f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.rel0 = (f.P.x - _h.x) * vd.x + (f.P.z - _h.z) * vd.z; f.tw0 = Math.min(0.85, tw); }
+          if (inWin && f.state === 'plant' && !(other.state === 'timed' && duty > 0.45)) { f.state = 'swing'; f.A.set(f.pos.x, groundHeight(f.pos.x, f.pos.z), f.pos.z); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown; f.rel0 = (f.pos.x - _h.x) * vd.x + (f.pos.z - _h.z) * vd.z; f.tw0 = Math.min(0.85, Math.max(0, tw - Math.abs(this.dphase) * dt / (TAU * 2 * w2))); }
           else if (!inWin && f.state === 'swing') this.land(f, pyaw);
           // (a swing whose window was already under way when the foot could leave runs its whole arc in the time left, rather than starting part way along it)
           if (f.state === 'swing') f.t = Math.min(1, Math.max(0, (tw - f.tw0) / (1 - f.tw0)));
@@ -338,13 +345,19 @@ export class LegIK {
         if (this.moving && slip > 0) { f.P.x += this.gv.x * slip * dt; f.P.z += this.gv.z * slip * dt; }
         // a foot pivots with the body when it turns, rather than staying across the leg
         const fyaw = pyaw + (this.moving ? 0 : f.syaw), dy = this.angle(0, f.yaw, fyaw);
-        if (Math.abs(dy) > YAW_MAX) f.yaw = fyaw - Math.sign(dy) * YAW_MAX;
+        if (Math.abs(dy) > YAW_MAX) {
+          // (about the ball of the foot, which stays where it is: turned about the ankle, the toes and heel would sweep the ground)
+          const y1 = fyaw - Math.sign(dy) * YAW_MAX, bl = BALL * fs.toe * sc;
+          f.P.x += bl * (Math.sin(f.yaw) - Math.sin(y1)); f.P.z += bl * (Math.cos(f.yaw) - Math.cos(y1)); f.yaw = y1;
+        }
         // (standing, its spot is the stance's; else under the hip)
         const spot = !this.moving && f.stand ? _ps.copy(f.stand).applyMatrix4(rm) : _ps.copy(_h);
         const dev = Math.hypot(f.P.x - spot.x, f.P.z - spot.z) + (!this.moving && f.stand ? 0.15 * Lw * Math.abs(this.angle(0, f.yaw, fyaw)) : 0);
         // (a foot the pelvis has turned past, onto the other leg's side, steps back to its own: the legs never stay crossed)
         const crossed = lat(f.P) < -CROSS * sc;
-        if (!own && (crossed || dev > (this.moving ? 0.55 : f.stand ? 0.07 : 0.1) * Lw) && (this.moving ? other.state !== 'timed' : other.state === 'plant' || (other.state === 'timed' && other.t > 0.2)) && f.stance > (this.moving ? 0.12 : 0.05)) {
+        // (one the body has gone out of reach of steps at once, whatever the other foot is doing: dragged along, it would slide)
+        const over = f.over && f.stance > 0.04; f.over = false;
+        if (!own && (over || ((crossed || dev > (this.moving ? Math.max(0.55 * Lw, half + 0.3 * Lw) : (f.stand ? 0.07 : 0.1) * Lw)) && (this.moving ? other.state !== 'timed' : other.state === 'plant' || (other.state === 'timed' && other.t > 0.2)) && f.stance > (this.moving ? 0.12 : 0.05)))) {
           f.state = 'timed'; f.t = 0; f.fast = this.moving; f.dur = this.moving ? Math.min(0.3, Math.max(0.12, (1 - duty) * cycleT)) : Math.min(0.4, 0.16 + dev * 0.3); f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown;
           f.B.set(spot.x + vd.x * half, 0, spot.z + vd.z * half);
           f.stance = 0;
@@ -373,12 +386,15 @@ export class LegIK {
         const tilt = this.tilt(fs, f.pitch) * sc;
         f.pos.y = gA + (gB - gA) * e + sole * sc + lift + f.carry * (1 - e) + tilt;
         // toe down as it leaves, up as it lands
-        f.pitch = 0.32 * (1 - smooth(f.t * 2.5)) - 0.26 * smooth((f.t - 0.7) / 0.3);
-        if (f.state === 'timed') f.pitch = f.pitch0 + (f.pitch - f.pitch0) * smooth(f.t * 3);
+        f.pitch = 0.32 * (1 - smooth(f.t * 2.5)) - 0.2 * smooth((f.t - 0.7) / 0.3);
+        // (from the pitch the foot had as it left: a heel already peeled up carries on into the swing)
+        f.pitch = f.pitch0 + (f.pitch - f.pitch0) * smooth(f.t * 3);
         f.stance = 0;
       } else {
         f.pitch = this.stancePitch(f, i, phase, duty, w2);
-        f.pos.set(f.P.x, groundHeight(f.P.x, f.P.z) + sole * sc + this.tilt(fs, f.pitch) * sc, f.P.z);
+        // (the foot rolls over the ground instead of sliding on it: the heel stays put as the foot lands and flattens, the toes as the heel peels up, the ankle moving only round them)
+        const roll = this.roll(fs, f.pitch) * sc;
+        f.pos.set(f.P.x + Math.sin(f.yaw) * roll, groundHeight(f.P.x, f.P.z) + sole * sc + this.tilt(fs, f.pitch) * sc, f.P.z + Math.cos(f.yaw) * roll);
       }
       // (no step moves a foot faster than a running swing does: when the plan jumps, the phase or the way the body goes turning round as an attack turns the body onto its aim while it strafes or backs up, the foot catches up over a few frames instead of teleporting)
       if (f.seen && !own) {
@@ -398,7 +414,8 @@ export class LegIK {
       if (h > hmax) {
         const k = hmax / h;
         f.pos.x = _p.x + dx * k; f.pos.z = _p.z + dz * k;
-        if (f.state === 'plant') { f.P.x = f.pos.x; f.P.z = f.pos.z; }
+        // (a planted foot keeps its spot, and steps next frame)
+        if (f.state === 'plant') f.over = true;
       }
     }
     // the pelvis stands as tall as the legs allow (the rig's rest pose has the knees bent by a third of a radian), and drops until both feet are in reach
@@ -428,10 +445,15 @@ export class LegIK {
       _p.copy(f.pos).applyMatrix4(_m);
       // a foot the body has left behind (a lunge, a leap) is dragged after it, a planted one to its new spot
       _f.copy(_p).sub(thigh.position);
-      const reach = _f.length(), rmax = 0.99 * (L1 + L2);
-      if (reach > rmax) {
+      const reach = _f.length(), rmax = 0.99 * (L1 + L2), soft = 0.93 * (L1 + L2);
+      if (f.state !== 'plant' && reach > soft) {
+        // (a foot in the air eases into the leg's full stretch rather than meeting it: a knee snapping straight and stopping dead reads as a jerk)
+        const r = soft + (rmax - soft) * Math.tanh((reach - soft) / (rmax - soft));
+        _p.copy(thigh.position).addScaledVector(_f, r / reach);
+        f.pos.copy(_p).applyMatrix4(j.hips.matrixWorld);
+      } else if (reach > rmax) {
         _p.copy(thigh.position).addScaledVector(_f, rmax / reach).applyMatrix4(j.hips.matrixWorld);
-        if (f.state === 'plant') { f.P.x = _p.x; f.P.z = _p.z; }
+        if (f.state === 'plant') f.over = true;
         f.pos.x = _p.x; f.pos.z = _p.z;
         _p.copy(f.pos).applyMatrix4(_m);
       }
@@ -456,6 +478,11 @@ export class LegIK {
   }
 
   /** how much a foot pitched by `p` (toe down positive) must be raised so the toe or the heel does not go through the floor */
+  /** how far forward the ankle moves when the foot is pitched by `p` about the edge it stands on (the toes for a heel up, the heel for a toe up), that edge staying put */
+  private roll(fs: { sole: number; toe: number; heel: number }, p: number): number {
+    return (p > 0 ? fs.toe : -fs.heel) * (1 - Math.cos(p)) + fs.sole * Math.sin(p);
+  }
+
   private tilt(fs: { sole: number; toe: number; heel: number }, p: number): number {
     const a = Math.abs(p);
     return fs.sole * (Math.cos(a) - 1) + (p > 0 ? fs.toe : fs.heel) * Math.sin(a) + 0 * 0;
@@ -472,14 +499,16 @@ export class LegIK {
     const u = ((phase / TAU + i * 0.5) % 1 + 1) % 1, sp = (((u - (0.5 + w2)) % 1) + 1) % 1 / Math.max(0.05, 1 - 2 * w2);
     void f;
     const run = smooth((this.sp - 2) / 3.5), at = 0.75 - 0.15 * run;
-    if (sp > at && sp < 1) return (0.35 + 0.25 * run) * (sp - at) / (1 - at);
-    if (sp < 0.15) return -0.2 * (1 - sp / 0.15);
+    if (sp > at && sp < 1) return (0.35 + 0.25 * run) * smooth((sp - at) / (1 - at));
+    if (sp < 0.15) return -0.2 * (1 - smooth(sp / 0.15));
     void duty;
     return 0;
   }
 
   private land(f: Foot, yaw: number): void {
-    f.state = 'plant'; f.P.copy(f.B); f.P.y = groundHeight(f.P.x, f.P.z); f.yaw = yaw; f.t = 0; f.stance = 0; f.carry = 0;
+    // (where the ankle came down, which a capped step may have left short of its target: the foot never slides on after it lands; the spot is the flat foot's, under the heel it lands on)
+    const fs = this.shape?.[this.feet.indexOf(f)], r = fs ? this.roll(fs, f.pitch) * this.j.root.scale.x : 0;
+    f.state = 'plant'; f.P.set(f.pos.x - Math.sin(yaw) * r, 0, f.pos.z - Math.cos(yaw) * r); f.P.y = groundHeight(f.P.x, f.P.z); f.yaw = yaw; f.t = 0; f.stance = 0; f.carry = 0;
   }
 
   private start(legs: [THREE.Object3D, THREE.Object3D, THREE.Object3D][], yaw: number, phase: number, rx: number, rz: number): void {
