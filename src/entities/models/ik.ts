@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import type { Joints } from './rig';
 import { reachArm } from './rig';
 import { groundHeight } from '../../world/ground';
-import { damp } from '../../util';
+import { angleDamp, damp } from '../../util';
 
 /** `?ik=0` keeps the walk cycle's own legs and its old gait, for A/B comparison */
 export const IK = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
@@ -62,13 +62,19 @@ const FOOT_V = 4, FOOT_VK = 2.5;
 const YAW_MAX = 0.5;
 /** how far the pelvis may turn from the chest (rad) to face the way the body travels while its chest faces the aim */
 const TWIST = 0.8;
-/** how far out of the pelvis's middle a foot lands at least, and how far across it a planted foot may be before it steps back (m at a man's scale) */
 /** how long the legs go backwards along the pelvis's line after a reversal before it turns round to the new way (s) */
 const BACK_HOLD = 0.7;
+/** choosing whether the legs walk forwards or backwards along the pelvis: what a radian of the pelvis's turn costs against a radian of the legs going off its line */
+const TURN_COST = 0.4, HYST = 0.15;
+/** how fast the pelvis may turn on the legs (rad/s) */
+const TWIST_RATE = 4.5;
+/** how far off the pelvis's line the legs step before it turns towards the way they go (rad): a diagonal is walked with the hips half turned, as a person does, so going from forwards to backwards along it turns them less */
+const SLACK = 0.35;
 /** where the ball of the foot is, as a share of the way from the ankle to the toes: a planted foot turns about it */
 const BALL = 0.7;
 /** how far before its window (a share of the window) a stride may start, when the body would otherwise leave the planted foot behind */
 const EARLY = -1;
+/** how far out of the pelvis's middle a foot lands at least, and how far across it a planted foot may be before it steps back (m at a man's scale) */
 const GAP = 0.05, CROSS = 0.08;
 /** how far the pelvis is lifted over the pose (rig units) before the reach limit brings it back: the rest pose stands with bent knees */
 const RISE = 0.03;
@@ -122,6 +128,8 @@ class Foot {
   span = 0.5;
   /** the way the body went when the stride began */
   svd = new THREE.Vector3();
+  /** the way the stride is drawn along: turning towards the way the body goes, not snapping to it (the foot would whip across) */
+  dir = new THREE.Vector3(); dirYaw = 0;
   /** the body went out of its reach last frame: a planted foot steps at once */
   over = false;
 }
@@ -272,13 +280,20 @@ export class LegIK {
       if (this.spSlow > 0.6 && lean > 0 && this.v.length() < 0.6 * this.sp) want = this.twist / Math.max(this.w, 1e-3);
       else if (this.spSlow > 0.6 && lean > 0) {
         const rel = this.angle(0, yaw, Math.atan2(this.v.x, this.v.z)), back = this.angle(0, 0, rel + Math.PI);
-        const pel = (r: number): number => { const a = Math.abs(r); return Math.sign(r) * (a <= TWIST ? a : a <= 2 ? TWIST : TWIST * smooth((Math.PI - a) / (Math.PI - 2))); };
-        const wf = pel(rel), wb = pel(back);
-        if (!this.backing && Math.abs(wb - this.twist) + 0.3 < Math.abs(wf - this.twist)) { this.backing = true; this.backT = 0; }
-        if (this.backing) { this.backT += dt; if (this.backT > BACK_HOLD || Math.abs(wf - this.twist) <= Math.abs(wb - this.twist)) this.backing = false; }
+        // (the legs walk along the pelvis's line, forwards or backwards: going back and to the side it turns the other way
+        // and backpedals, rather than turning towards the way it goes and stepping sideways backwards across it)
+        const pel = (r: number): number => Math.sign(r) * Math.min(TWIST, Math.max(0, Math.abs(r) - SLACK));
+        const wf = pel(rel), wb = pel(back), cur = this.twist / Math.max(this.w, 1e-3);
+        // (each way's cost: how far the legs go off the pelvis's line, and how far the pelvis has to turn to get there)
+        const mf = Math.abs(rel - wf), mb = Math.abs(back - wb), cf = mf + TURN_COST * Math.abs(wf - cur), cb = mb + TURN_COST * Math.abs(wb - cur);
+        if (!this.backing && cb + HYST < cf) { this.backing = true; this.backT = 0; }
+        // (a reversal's backing turns round once the body keeps going the new way and walking forwards fits it as well)
+        else if (this.backing) { this.backT += dt; if (cf + HYST < cb || (this.backT > BACK_HOLD && mf <= mb + 0.1)) this.backing = false; }
         want = (this.backing ? wb : wf) * smooth((this.spSlow - 0.6) / 1.2);
       } else this.backing = false;
-      this.twist = damp(this.twist, want * this.w, 9, dt);
+      // (no faster than hips really turn: flipped round at once between walking forwards and backpedalling, it twitches)
+      const tw1 = damp(this.twist, want * this.w, 9, dt);
+      this.twist += Math.max(-TWIST_RATE * dt, Math.min(TWIST_RATE * dt, tw1 - this.twist));
       j.hips.rotation.y += this.twist; j.spine.rotation.y -= this.twist * 0.5; j.chest.rotation.y -= this.twist * 0.5;
     }
     const pyaw = yaw + this.twist;
@@ -342,12 +357,16 @@ export class LegIK {
             && (f.over || lat(f.P) < 0 || Math.hypot(f.P.x - _h.x, f.P.z - _h.z) > 0.9 * Math.max(0.55 * Lw, half + 0.3 * Lw));
           // (a foot only just down doesn't go again: a reversal can bring its window round at once)
           const settled = f.stance > 0.5 * duty * cycleT;
-          if (((inWin && settled) || early) && f.state === 'plant' && !(other.state === 'timed' && duty > 0.45)) { f.state = 'swing'; f.A.set(f.pos.x, groundHeight(f.pos.x, f.pos.z), f.pos.z); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown; f.rel0 = (f.pos.x - _h.x) * vd.x + (f.pos.z - _h.z) * vd.z; f.t = 0; f.span = 2 * w2 * Math.max(0.15, 1 - (early ? twx : Math.min(0.85, tw))); f.over = false; f.svd.copy(vd); }
+          if (((inWin && settled) || early) && f.state === 'plant' && !(other.state === 'timed' && duty > 0.45)) { f.state = 'swing'; f.A.set(f.pos.x, groundHeight(f.pos.x, f.pos.z), f.pos.z); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown; f.rel0 = (f.pos.x - _h.x) * vd.x + (f.pos.z - _h.z) * vd.z; f.t = 0; f.span = 2 * w2 * Math.max(0.15, 1 - (early ? twx : Math.min(0.85, tw))); f.over = false; f.svd.copy(vd); f.dirYaw = Math.atan2(vd.x, vd.z); f.dir.copy(vd); }
           // the stride goes on by however far the cycle moves, whichever way it runs (a reversal turns the phase back: following it, the foot would swing back the way it came), landing at its end
           else if (f.state === 'swing') {
             // (the way the body goes turned round under a stride: the same stride is aimed afresh from where the foot is, in the time it has left)
-            if (f.svd.dot(vd) < 0.3) { f.carry = Math.max(0, f.pos.y - groundHeight(f.pos.x, f.pos.z) - sole * sc); f.A.set(f.pos.x, groundHeight(f.pos.x, f.pos.z), f.pos.z); f.rel0 = (f.pos.x - _h.x) * vd.x + (f.pos.z - _h.z) * vd.z; f.pitch0 = f.shown; f.span = Math.max(0.05, f.span * (1 - f.t)); f.t = 0; f.svd.copy(vd); }
+            if (f.svd.dot(vd) < 0.3) { f.carry = Math.max(0, f.pos.y - groundHeight(f.pos.x, f.pos.z) - sole * sc); f.A.set(f.pos.x, groundHeight(f.pos.x, f.pos.z), f.pos.z); f.pitch0 = f.shown; f.span = Math.max(0.7 * w2, f.span * (1 - f.t)); f.t = 0; f.svd.copy(vd); f.rel0 = NaN; }
             f.t = Math.min(1, f.t + this.dU / f.span); if (f.t >= 1) this.land(f, pyaw);
+            else {
+              f.dirYaw = angleDamp(f.dirYaw, Math.atan2(vd.x, vd.z), 10, dt); f.dir.set(Math.sin(f.dirYaw), 0, Math.cos(f.dirYaw));
+              if (Number.isNaN(f.rel0)) f.rel0 = (f.pos.x - _h.x) * f.dir.x + (f.pos.z - _h.z) * f.dir.z;
+            }
           }
         }
       } else if (f.state === 'swing') {
@@ -390,7 +409,7 @@ export class LegIK {
         // (a phase that has all but stopped, turning round, would put the landing metres off)
         const remain = Math.min(0.6, f.state === 'swing' ? (1 - f.t) * (1 - duty) * cycleT : (1 - f.t) * f.dur);
         if (!this.moving && f.stand && f.state === 'timed') f.B.copy(f.stand).applyMatrix4(rm);
-        else f.B.set(_h.x + this.gv.x * remain + vd.x * (f.state === 'swing' ? half : 0), 0, _h.z + this.gv.z * remain + vd.z * (f.state === 'swing' ? half : 0));
+        else { const ah = f.state === 'swing' ? half : 0, sv = f.state === 'swing' ? f.dir : vd; f.B.set(_h.x + this.gv.x * remain + sv.x * ah, 0, _h.z + this.gv.z * remain + sv.z * ah); }
         keepSide(f.B);
         const e = f.fast ? 0.6 * f.t * (2 - f.t) + 0.4 * smooth(f.t) : smooth(f.t), run = smooth((speed - 2) / 3.5);
         // (a run lifts the foot higher, and later in the swing: the heel comes up under the seat)
@@ -400,8 +419,8 @@ export class LegIK {
           // the swing in the hip's frame, along the way it travels: it leaves with the stance's backward stroke, passes under the hip and reaches ahead, then paws back as it lands, so it never skids
           const T = (1 - duty) * cycleT, m = -(1 - slip) * speed * T, s1 = f.t, s2 = s1 * s1, s3 = s2 * s1;
           const x = (2 * s3 - 3 * s2 + 1) * f.rel0 + (s3 - 2 * s2 + s1) * STROKE_OUT * m + (-2 * s3 + 3 * s2) * half + (s3 - s2) * STROKE_IN * m;
-          const along = (f.pos.x - _h.x) * vd.x + (f.pos.z - _h.z) * vd.z;
-          f.pos.x += vd.x * (x - along); f.pos.z += vd.z * (x - along);
+          const sv = f.dir, along = (f.pos.x - _h.x) * sv.x + (f.pos.z - _h.z) * sv.z;
+          f.pos.x += sv.x * (x - along); f.pos.z += sv.z * (x - along);
         }
         keepSide(f.pos);
         const gA = groundHeight(f.A.x, f.A.z), gB = groundHeight(f.B.x, f.B.z);
