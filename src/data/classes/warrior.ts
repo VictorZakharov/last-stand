@@ -93,7 +93,7 @@ const warrior: ClassDef = {
     {
       key: 'q', impl: 'potion', name: 'Healing Draught',
       desc: 'Instantly restore a large portion of Health.',
-      tags: ['consumable'], cost: 0, cooldown: 11, castTime: 0,
+      tags: ['consumable'], cost: 0, cooldown: 11, castTime: 0.7, fireAt: 0.65,
       healPct: 0.45,
       icon: { glyph: '⚗', color: '#ff5b5b' },
     },

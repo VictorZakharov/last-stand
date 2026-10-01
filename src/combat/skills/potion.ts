@@ -10,7 +10,7 @@ import { rand } from '../../util';
 const _ahead = new THREE.Vector3();
 
 const skill: InstantSkill = {
-  anim: null,
+  anim: 'drink',
   cast(player, rawDef) {
     const def = rawDef as Needs<'healPct'>;
     player.heal(player.stats.maxLife * def.healPct);

@@ -10,10 +10,11 @@ import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
 import { curve, PoseFade, type Keys } from './motion';
+import { buildFlask, drink, type DrinkHold } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, lod, type SurfaceFn } from './armor';
 import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, fistReach } from './hands';
-import { clamp, lerp, mulberry } from '../../util';
+import { clamp, lerp, mulberry, damp } from '../../util';
 import { SkeletonCape } from './cape';
 import { fromEyes, dirFromEyes } from '../viewModel';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
@@ -49,9 +50,11 @@ const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a
 // the hips turn first, then the spine and chest, the arm and wrist come last.
 /** where the feet stand (left x, z, turn, then right), rig units: at rest, fighting, Power Strike's step in, behind the shield */
 /** a move's end held a moment after its cast is over (seconds), so a short cast's blow or throw is seen, then how long it takes to ease back to the stance */
-const TAIL: Record<string, number> = { chop: 0.3, buff: 0.55, flurry: 0.15 }, TAIL_OUT: Record<string, number> = { chop: 0.55, buff: 0.6, flurry: 0.35 };
+const TAIL: Record<string, number> = { chop: 0.3, buff: 0.55, flurry: 0.15, drink: 0.12 }, TAIL_OUT: Record<string, number> = { chop: 0.55, buff: 0.6, flurry: 0.35, drink: 0.4 };
 /** the wrist's turn that holds a blade at rest edge on to the foe (rad) */
 const EDGE = 1.95, EDGE_TWO = Math.PI / 2;
+/** drinking: the elbow raised out to the side, the wrist out to the left of the chin (as from a horn: the shield on that forearm turns edge on beside the head, not over the face) */
+const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.08, -0.05, 0.12), pole: new THREE.Vector3(1, -0.2, 0) };
 const REST_FEET = [0.13, 0.09, 0.15, -0.14, -0.1, -0.55], FIGHT_FEET = [0.13, 0.22, 0.15, -0.14, -0.15, -0.55];
 /** Twin Fangs: the share of it that is the lunge (skills/twinFangs LUNGE / (LUNGE + HOLD)), and the lunge stance after it */
 const FANG_LUNGE = 0.39, FANG_FEET = [0.13, 0.34, 0.1, -0.15, -0.25, -0.5];
@@ -293,6 +296,8 @@ export function buildWarrior(): Model {
   // it and round the brow, a nasal down the nose, cheek guards over the ears and a mail curtain over the
   // nape. It is shaped on the head itself (padded over the scalp); the face stays bare.
   const head = buildHead(j.head, kit, 'warrior');
+  // (a point just before the lips, for the flask)
+  const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, 'warrior', j.P.neckL);
   {
     const hg = head.group, h = new Sculpt(), C = toGroup(0, 128, -12), M = HEAD_MM;
@@ -610,6 +615,10 @@ export function buildWarrior(): Model {
   }
 
   const shY = j.shoulderL.position.y;
+  // the healing draught, in the left fist while it is drunk
+  const flask = buildFlask(kit, brass, leatherDark); flask.name = 'flask'; j.handL.add(flask); flask.position.set(0, -0.06, 0.03); flask.rotation.x = Math.PI;
+  let flaskOut = 0, shieldHang = 0, drinkOn = 0;
+  const _s1 = new THREE.Vector3(), _s2 = new THREE.Vector3(), _s3 = new THREE.Vector3(), _s4 = new THREE.Vector3(), _s5 = new THREE.Vector3(), _sm = new THREE.Matrix4(), _shq = new THREE.Quaternion();
   /** turn a hand by `ang` about the length of the weapon in its grip */
   const edgeOn = (hand: THREE.Object3D, g: THREE.Object3D, ang: number): void => {
     _hd.set(0, 1, 0).applyQuaternion(g.quaternion);
@@ -721,13 +730,14 @@ export function buildWarrior(): Model {
     let ownL = 0, ownR = 0;
     const still = 1 - Math.min(1, move * 4);
     feet = null;
+    let flaskWant = 0, drinkLift = 0;
     if (chopTail > 0) chopTail = Math.max(0, chopTail - dt / 0.3);
     const began = !!raw && (raw.name !== lastName || raw.t < lastK - 0.2), ended = !raw && lastName !== '';
     if ((ended || began) && lastName === 'swing') swingEnd = t;
     if (began && raw.name === 'swing') { side = -side; chain = t - swingEnd < 0.25; }
     // (a swing straight after a swing starts where that one ended: a short fade; out of an action back to the stance, a slow one)
     if (began) fade.cut(chain && raw.name === 'swing' ? 0.08 : 0.14); else if (ended && !inTail) fade.cut(0.3);
-    if (a && a.name !== 'buff' && a.name !== 'cast' && a.name !== 'stagger') fightT = t;
+    if (a && a.name !== 'buff' && a.name !== 'cast' && a.name !== 'stagger' && a.name !== 'drink') fightT = t;
     lastName = raw?.name ?? ''; lastK = raw?.t ?? 1;
     // Twin Fangs strikes right, then left (in step with skills/twinFangs STRIKES)
     const left = !!offHeld && ((a?.name === 'swing' && side < 0) || (a?.name === 'flurry' && a.t > 0.5));
@@ -1018,6 +1028,10 @@ export function buildWarrior(): Model {
           _vd.copy(FP_TWO_DIR).lerp(_vg.copy(P.ahead[1]).normalize(), u).lerp(_vg.copy(P.out[1]).normalize(), hu);
           vw = 1; aw = 0;
         }
+      } else if (a.name === 'drink' && !fp) {
+        // the healing draught: the free hand takes the flask from the belt and drinks it (models/flask.ts); the shield
+        // stays on its arm, a two-hander's left hand lets go of the grip (out of its reach)
+        flaskWant = drink(j, k, mouth, DRINK); aw = 1; guard = 0; drinkLift = sm(0.26, 0.5, k);
       } else if (a.name === 'buff') {
         // war cry: gathered in, hunched over the fists, then thrown open, chest out, arms flung wide and up,
         // head back in the roar (held as the cast ends: the fade out of it is slow)
@@ -1086,6 +1100,20 @@ export function buildWarrior(): Model {
 
     shield.quaternion.slerpQuaternions(SHIELD_SIDE, SHIELD_FRONT, guard);
     shield.position.lerpVectors(SIDE_POS, FRONT_POS, guard);
+    // drinking, the forearm comes up across the face: the shield hangs from it before the chest instead, facing
+    // ahead and shifted towards the elbow, the face and the flask clear above it
+    shieldHang = damp(shieldHang, drinkLift, 12, dt); drinkOn = damp(drinkOn, a?.name === 'drink' ? 1 : 0, 12, dt);
+    if (shieldHang > 0.01 && shield.visible) {
+      root.updateMatrixWorld(true);
+      j.elbowL.getWorldPosition(_s1); j.handL.getWorldPosition(_s2);
+      const a = _s3.subVectors(_s2, _s1).normalize(), n = _s4.set(0, 0, 1).transformDirection(root.matrixWorld);
+      n.addScaledVector(a, -a.dot(n)).normalize();
+      _sm.makeBasis(_s5.crossVectors(a, n), a, n);
+      _sq.setFromRotationMatrix(_sm).premultiply(j.handL.getWorldQuaternion(_shq).invert());
+      shield.quaternion.slerp(_sq, shieldHang);
+      _s1.lerp(_s2, 0.3).addScaledVector(_s4.set(0, -1, 0), 0.26 * root.scale.x).addScaledVector(n, 0.07 * root.scale.x);
+      shield.position.lerp(j.handL.worldToLocal(_s1), shieldHang);
+    }
 
     // a two-hander: the left hand follows the grip wherever the right arm takes the weapon, and lets go
     // where it can't reach (a pose that flings the arms apart), the arm easing back to the pose's own
@@ -1095,9 +1123,9 @@ export function buildWarrior(): Model {
       offGrip.getWorldPosition(_grip);
       j.chest.worldToLocal(_grip);
       const fore = j.P.foreL + j.P.handR, out = _grip.distanceTo(j.shoulderL.position) - (j.P.upperL + fore);
-      // (a few cm short doesn't show: the stances hold it at full stretch)
-      const k = 1 - ramp(out, 0.07, 0.2);
-      twoHeld = out < 0.07;
+      // (a few cm short doesn't show: the stances hold it at full stretch; drinking, it lets go for the flask)
+      const k = (1 - ramp(out, 0.07, 0.2)) * (1 - drinkOn);
+      twoHeld = out < 0.07 && drinkOn < 0.5;
       if (k > 0) {
         _sq.copy(j.shoulderL.quaternion);
         const e0 = j.elbowL.rotation.x;
@@ -1125,7 +1153,9 @@ export function buildWarrior(): Model {
     else poseHand(handR, 0.5 + Math.sin(t * 1.3) * 0.05, 0.1);
     if (offHeld) hold(handL, along(gripL), offHeld.r);
     else if (twoHeld && held) hold(handL, along(grip), held.r, _up);
-    else poseHand(handL, shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 0.08);
+    else poseHand(handL, flaskOut > 0.3 ? 1.1 : shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 0.08);
+    // the flask comes out of the fist and is put away again
+    flaskOut = damp(flaskOut, flaskWant, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
 
     if (dt > 0) { cape.update(dt, st.velocity ?? ZERO); for (const f of furs) f.update(dt); }
     cape.setVisible(st.dead < 0.6);

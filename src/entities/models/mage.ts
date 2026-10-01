@@ -16,6 +16,7 @@ import { SkeletonCape } from './cape';
 import { BellCloth } from './sleeve';
 import { LegIK } from './ik';
 import { curve, PoseFade, type Keys } from './motion';
+import { buildFlask, drink, type DrinkHold } from './flask';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
 import type { ActionState, AnimState, Model } from '../../types';
 
@@ -50,7 +51,9 @@ function onChest(x: number, y: number, lift: number, out = new THREE.Vector3()):
 
 /** where the feet stand (left x, z, turn, then right), rig units: at rest, throwing a spell (the left steps in), slamming the ground, aiming the staff (the right forward), bracing for the lance */
 /** a move's end held a moment after its cast is over (seconds), so a short cast's blow or throw is seen, then how long it takes to ease back to the stance */
-const TAIL: Record<string, number> = { cast: 0.35, summon: 0.35, slam: 0.4, buff: 0.5 }, TAIL_OUT: Record<string, number> = { cast: 0.45, summon: 0.45, slam: 0.6, buff: 0.5 };
+const TAIL: Record<string, number> = { cast: 0.35, summon: 0.35, slam: 0.4, buff: 0.5, drink: 0.12 }, TAIL_OUT: Record<string, number> = { cast: 0.45, summon: 0.45, slam: 0.6, buff: 0.5, drink: 0.4 };
+/** drinking: the flask raised straight up before the chin, the elbow down and forward (the bell sleeve falls back off the forearm) */
+const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.02, -0.09, 0.13), pole: new THREE.Vector3(0.4, -1, 0.5) };
 const REST_FEET = [0.12, 0.06, 0.22, -0.12, -0.05, -0.35], CAST_FEET = [0.13, 0.2, 0.15, -0.13, -0.1, -0.45];
 const SLAM_FEET = [0.2, 0.06, 0.4, -0.2, -0.04, -0.4], AIM_FEET = [0.13, -0.04, 0.35, -0.12, 0.14, -0.05], LANCE_FEET = [0.14, 0.24, 0.1, -0.15, -0.14, -0.55];
 
@@ -278,6 +281,8 @@ export function buildMage(): Model {
   // --- the head: face, a full beard, hair, and a wide-brimmed pointed hat, its crown bent back by
   // its own weight, a gold band with a stone
   const head = buildHead(j.head, kit, 'mage', { beard: 160, hair: true });
+  // (a point just before the lips, for the flask)
+  const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, 'mage', j.P.neckL, j.head);
   {
     // sized to the head (mm, see head.ts): the band round the brow above the ears, over the hair
@@ -385,6 +390,9 @@ export function buildMage(): Model {
   });
 
   const shY = j.shoulderL.position.y;
+  // the healing draught, in the free fist while it is drunk
+  const flask = buildFlask(kit, gold, leather); flask.name = 'flask'; j.handL.add(flask); flask.position.set(0, -0.06, 0.03); flask.rotation.x = Math.PI;
+  let flaskOut = 0;
   let feet: readonly number[] | null = null;
 
   function animate(st: AnimState): void {
@@ -414,6 +422,7 @@ export function buildMage(): Model {
     poseHand(handL, 0.45 + Math.sin(t * 1.3) * 0.06, 0.12);
     const raw = st.action;
     feet = null;
+    let flaskWant = 0;
     // (the tail: the last spell's end pose held a moment after it, unless the body moves off or another action starts)
     if (!raw && lastName !== '' && (TAIL[lastName] ?? 0) > 0 && !fp) { tailName = lastName; tailT = TAIL[lastName]; }
     if (raw || move > 0.3) { if (tailT > 0 && !raw) fade.cut(0.25); tailT = 0; }
@@ -505,6 +514,9 @@ export function buildMage(): Model {
           // (braced: the left foot forward, low, the weight leaning into the portal)
           if (!fp) { j.body.position.z += 0.05; j.body.position.y += -0.06; j.hips.rotation.y += -0.15; j.spine.rotation.x += 0.06; feet = LANCE_FEET; }
         }
+      } else if (a.name === 'drink' && !fp) {
+        // the healing draught: taken from the belt and drunk (models/flask.ts)
+        flaskWant = drink(j, k, mouth, DRINK);
       } else if (a.name === 'summon' && !fp) {
         const w = ramp(k, 0, 0.15), rise = ramp(k, 0, 0.45) * (1 - ramp(k, 0.5, 0.62)), pull = ramp(k, 0.5, 0.62);
         j.shoulderL.rotation.x = lerp(j.shoulderL.rotation.x, curve(SU_ARM_X, k), w); j.shoulderL.rotation.z = lerp(j.shoulderL.rotation.z, curve(SU_ARM_Z, k), w);
@@ -589,6 +601,9 @@ export function buildMage(): Model {
       f.g.rotation.x = -(Math.max(-0.05, (fL * wl + fR * (1 - wl)) * Math.cos(f.a)) * 0.85 + 0.26 + move * 0.08 + Math.sin(t * 3 + f.a * 3) * 0.015);
     }
 
+    // the flask comes out of the fist and is put away again (the fist closed round it)
+    flaskOut = damp(flaskOut, flaskWant, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
+    if (flaskOut > 0.3) poseHand(handL, 1.1, 0.08);
     // the right hand closes round the staff wherever the arm has taken it
     root.updateMatrixWorld(true);
     hold(handR, _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), STAFF_R);
