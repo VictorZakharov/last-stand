@@ -298,15 +298,18 @@ export function buildWarrior(): Model {
     }
   }
 
-  // --- the head, and an open-faced helmet over it: a steel skull with a low crest, bands riveted over
-  // it and round the brow, a nasal down the nose, cheek guards over the ears and a mail curtain over the
-  // nape. It is shaped on the head itself (padded over the scalp); the face stays bare.
-  const head = buildHead(j.head, kit, 'warrior');
+  // --- the head, with shoulder-length wavy hair, and an open-faced helmet worn over it when a head item is
+  // equipped: a steel skull with a low crest, bands riveted over it and round the brow, a nasal down the nose,
+  // cheek guards over the ears and a mail curtain over the nape. It is shaped on the head itself (padded over
+  // the scalp); the face stays bare.
+  const head = buildHead(j.head, kit, 'warrior', { hair: 'loose' });
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, 'warrior', j.P.neckL);
+  // (worn only with a head item equipped: bareheaded, the hair shows; setGear)
+  const helm = new THREE.Group(); helm.name = 'helm'; head.group.add(helm); helm.visible = false;
   {
-    const hg = head.group, h = new Sculpt(), C = toGroup(0, 128, -12), M = HEAD_MM;
+    const h = new Sculpt(), C = toGroup(0, 128, -12), M = HEAD_MM;
     /** the shell towards `a` round the head (0 the face) and `el` up it, padded over the scalp, with a
      *  low crest along the middle; `lift` mm further out */
     const shell = (a: number, el: number, lift = 0, out = new THREE.Vector3()) => {
@@ -325,20 +328,20 @@ export function buildWarrior(): Model {
       dp.setXYZ(i, _v.x, _v.y, _v.z);
     }
     dome.computeVertexNormals();
-    h.add(scaleUV(dome, 4, 1.5), plateM, hg);
+    h.add(scaleUV(dome, 4, 1.5), plateM, helm);
     const ring = (el: (a: number) => number, lift: number, n: number) => Array.from({ length: n }, (_, k) => { const a = (k / n) * Math.PI * 2 - Math.PI; return shell(a, el(a), lift); });
     // a rolled rim, the brow band over it, four bands meeting at the crown and a rivet on top
     const rim = ring(rimEl, 1, 48);
-    h.add(taperTube([...rim, rim[0]], () => 0.0055, lod(96, 48), 6), plateM, hg);
-    h.add(strap(ring((a) => rimEl(a) + 0.13, 0, 48), 0.032, 0.0035, true, out, 96), darkSteel, hg);
+    h.add(taperTube([...rim, rim[0]], () => 0.0055, lod(96, 48), 6), plateM, helm);
+    h.add(strap(ring((a) => rimEl(a) + 0.13, 0, 48), 0.032, 0.0035, true, out, 96), darkSteel, helm);
     for (let k = 0; k < 4; k++) {
       const a = (k / 4) * Math.PI * 2;
-      h.add(strap(Array.from({ length: 10 }, (_, q) => shell(a, lerp(rimEl(a) + 0.26, Math.PI / 2 - 0.02, q / 9), 0)), 0.022, 0.003, false, out), darkSteel, hg);
+      h.add(strap(Array.from({ length: 10 }, (_, q) => shell(a, lerp(rimEl(a) + 0.26, Math.PI / 2 - 0.02, q / 9), 0)), 0.022, 0.003, false, out), darkSteel, helm);
       for (let q = 0; q < 3; q++) { const e = lerp(rimEl(a) + 0.4, 1.35, q / 2); studAt(shell(a, e, 3), out(shell(a, e), V(0, 0, 0)), 0.0038); }
     }
     for (let k = 0; k < 20; k++) { const a = (k / 20) * Math.PI * 2 - Math.PI, e = rimEl(a) + 0.13; studAt(shell(a, e, 3.5), out(shell(a, e), V(0, 0, 0)), 0.0036); }
     const top = shell(0, Math.PI / 2, 3);
-    h.add(new THREE.SphereGeometry(0.009, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), plateM, hg, top.toArray(), [0, 0, 0], [1, 0.7, 1]);
+    h.add(new THREE.SphereGeometry(0.009, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), plateM, helm, top.toArray(), [0, 0, 0], [1, 0.7, 1]);
     // the nasal: a ridged bar from the brow band down the bridge of the nose, clear of it, narrowing to
     // a rounded end
     const nTop = shell(0, rimEl(0) + 0.22, 4.5), nTopY = nTop.y / M;
@@ -347,7 +350,7 @@ export function buildWarrior(): Model {
       const y = lerp(100, nTopY, v), z = lerp(head.midZ(y) + 4, nTop.z / M + 5, sm(0.55, 1, v));
       return toGroup(x, y, z + 2.5 * (1 - c * c) - x * x * 0.04, o);
     };
-    h.add(plate(nasal, 6, 12, 0.003, undefined, C), plateM, hg);
+    h.add(plate(nasal, 6, 12, 0.003, undefined, C), plateM, helm);
     studAt(nasal(0.5, 0.88, new THREE.Vector3()).add(V(0, 0, 0.002)), V(0, 0, 1), 0.0035);
     // cheek guards over the ears, their lower edge tucked in over the beard, their front edge clear of
     // the face
@@ -356,9 +359,9 @@ export function buildWarrior(): Model {
         const a = s * lerp(0.95, 2.0, u), e0 = lerp(-0.62, -0.3, u) - 0.1 * Math.sin(u * Math.PI), el = lerp(e0, rimEl(a) + 0.08, v);
         return shell(a, el, 1.2 - 3 * sm(-0.2, -0.6, Math.sin(el)), o);
       };
-      h.add(plate(guard, lod(12, 6), lod(12, 6), 0.005, undefined, C), plateM, hg);
-      h.add(edgeTube(guard, 'v0', 0.0035, 16), plateM, hg);
-      h.add(edgeTube(guard, 'u0', 0.0035, 12), plateM, hg);
+      h.add(plate(guard, lod(12, 6), lod(12, 6), 0.005, undefined, C), plateM, helm);
+      h.add(edgeTube(guard, 'v0', 0.0035, 16), plateM, helm);
+      h.add(edgeTube(guard, 'u0', 0.0035, 12), plateM, helm);
       for (const [u, v] of [[0.3, 0.82], [0.7, 0.82], [0.45, 0.25]]) { const p = guard(u, v, new THREE.Vector3()); studAt(p.addScaledVector(out(p, _v), 0.004), out(p, V(0, 0, 0)), 0.0035); }
     }
     // mail hanging from under the rim behind the cheek guards, over the nape
@@ -366,8 +369,8 @@ export function buildWarrior(): Model {
       const a = Math.PI + (u - 0.5) * 2.7, p = shell(a, rimEl(a) + 0.05, -2, o), r = V(p.x, 0, p.z - C.z).normalize();
       return p.addScaledVector(r, 0.03 * (1 - v)).add(V(0, -0.09 * (1 - v), 0));
     };
-    h.add(scaleUV(plate(aventail, lod(28, 12), 4, 0.003, undefined, C), 3, 3), mail, hg);
-    h.add(merge(studs.splice(0)), plateM, hg);
+    h.add(scaleUV(plate(aventail, lod(28, 12), 4, 0.003, undefined, C), 3, 3), mail, helm);
+    h.add(merge(studs.splice(0)), plateM, helm);
     h.build();
   }
 
@@ -604,6 +607,7 @@ export function buildWarrior(): Model {
     if (held) held.group.visible = true;
     if (held?.off != null) offGrip.position.y = held.off;
     shield.visible = gear.shield;
+    helm.visible = gear.helm; for (const m of head.hair) m.visible = !gear.helm;
     for (const w of offWeapons.values()) { w.group.visible = false; gripL.add(w.group); w.group.position.set(0, 0, 0); }
     sheathed = false;
     offHeld = gear.offWeapon ? offWeapons.get(gear.offWeapon) ?? offWeapons.get('Sword')! : null;

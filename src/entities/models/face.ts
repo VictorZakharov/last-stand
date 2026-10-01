@@ -32,11 +32,13 @@ export interface FaceShape {
   iris: [number, number, number];
   /** how far a short beard stands off the skin, mm */
   beardDepth: number;
+  /** a high nose bridge (mm): the nose rises straight from between the brows instead of from a dip */
+  bridge?: number;
 }
 
 export const FACES: Record<'warrior' | 'mage', FaceShape> = {
-  // broad jaw and chin, heavy brow, a nose with a bump on its bridge
-  warrior: { jaw: 55, chin: 22, chinFwd: 3, brow: 1.25, cheek: 1.1, noseLen: 54, noseW: 18, nosePro: 1.05, hump: 1.6, lips: 0.9, long: 1, eyeOpen: 4.1, iris: [0.36, 0.45, 0.52], beardDepth: 5 },
+  // broad jaw and chin, a heavy brow over deep-set eyes, high cheekbones, a straight nose
+  warrior: { jaw: 55, chin: 22, chinFwd: 6, brow: 1.4, cheek: 1.2, noseLen: 54, noseW: 16.5, nosePro: 1.14, hump: 0.9, lips: 0.9, long: 1, eyeOpen: 3.8, iris: [0.42, 0.47, 0.5], beardDepth: 5, bridge: 6 },
   // longer and leaner, high cheekbones, a long straight nose
   mage: { jaw: 50, chin: 19, chinFwd: 0, brow: 1.05, cheek: 1.25, noseLen: 57, noseW: 16.5, nosePro: 1.1, hump: 0.4, lips: 1, long: 1.04, eyeOpen: 4.3, iris: [0.3, 0.42, 0.34], beardDepth: 6 },
 };
@@ -171,6 +173,7 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
     const tilt = Math.atan2(tz - 88, 124 - ty);
     d = smin(d, tilted(ax, y, z, 0, (124 + ty) / 2 + 2, (88 + tz) / 2 - 1.5, 5.2, nl / 2 + 3, 4.6, tilt), 5);
     d = smin(d, tilted(ax, y, z, 0, lerp(124, ty, 0.64), lerp(88, tz, 0.64) - 8, 10, nl * 0.42, 7.5, tilt), 7);
+    if (F.bridge) d = smin(d, ell(ax, y, z, 0, 126, 86 + F.bridge, 7, 10, 5), 5);
     if (F.hump > 0) d = smin(d, ell(ax, y, z, 0, 124 - nl * 0.42, 90 + 12.5 * np, 5, 7, 3 + F.hump), 4);
     d = smin(d, ell(ax, y, z, 0, ty, tz - 7, 9, 7.5, 8.5), 4);
     d = smin(d, ell(ax, y, z, F.noseW - 6.5, ty - 3, tz - 18, 6.8, 6, 8), 3.5);
@@ -291,10 +294,14 @@ export interface FaceLook {
   beard: number;
   /** age: deeper lines on the brow and round the eyes */
   age: number;
+  /** how heavy the brows are (1 average): thicker and denser */
+  brows?: number;
+  /** how much lower the hairline comes over the forehead (mm) */
+  hairDrop?: number;
 }
 
 export const LOOKS: Record<keyof typeof FACES, FaceLook> = {
-  warrior: { skin: [0.72, 0.5, 0.39], hair: [0.13, 0.085, 0.06], streak: [0.3, 0.2, 0.13], grey: 0.02, beard: 1, age: 0.8 },
+  warrior: { skin: [0.7, 0.52, 0.43], hair: [0.15, 0.1, 0.07], streak: [0.36, 0.25, 0.16], grey: 0.02, beard: 1, age: 0.25, brows: 1.4, hairDrop: 12 },
   mage: { skin: [0.78, 0.57, 0.46], hair: [0.12, 0.08, 0.058], streak: [0.28, 0.19, 0.13], grey: 0.06, beard: 1, age: 1 },
 };
 
@@ -329,15 +336,19 @@ function tnoise(x: number, y: number, px: number, seed: number): number {
 
 /** 0 on the face, 1 where hair grows on the scalp: the forehead's line with recessions at the temples,
  *  sideburns in front of the ears, above the ears, down to the nape */
-export function scalp(ax: number, y: number, z: number): number {
+export function scalp(ax: number, y: number, z: number, drop = 0): number {
+  const line = hairline(ax, z, drop);
+  return sm(line - 3, line + 5, y);
+}
+
+/** the hairline's height (mm) round the head at (ax, z), `drop` mm lower over the forehead */
+export function hairline(ax: number, z: number, drop = 0): number {
   const a = Math.atan2(ax, z + 12);
-  // the hairline's height round the head
-  const line = a < 0.35 ? lerp(188, 194, sm(0, 0.35, a))
+  return -drop * (1 - sm(0.6, 1.1, a)) + (a < 0.35 ? lerp(188, 194, sm(0, 0.35, a))
     : a < 0.8 ? lerp(194, 170, sm(0.35, 0.8, a))
     : a < 1.25 ? lerp(170, 104, sm(0.8, 1.2, a))
     : a < 1.7 ? lerp(104, 132, sm(1.3, 1.62, a))
-    : lerp(132, 78, sm(1.75, 2.6, a));
-  return sm(line - 3, line + 5, y);
+    : lerp(132, 78, sm(1.75, 2.6, a)));
 }
 
 /** How much beard grows at a point (0..1): the jaw and chin, the cheeks below a line from the sideburns
@@ -423,12 +434,12 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
       const bx = ax - 6;
       if (bx > -2 && bx < 48 && yy > 118 && yy < 150) {
         const top = 136 + 5 * Math.sin(Math.min(1, bx / 30) * Math.PI * 0.7) - 0.06 * Math.max(0, bx - 30) ** 1.5;
-        const thick = lerp(8, 3.2, sm(0, 44, bx));
+        const bk = L.brows ?? 1, thick = lerp(8, 3.2, sm(0, 44, bx)) * bk;
         const d = (yy - (top - thick / 2)) / (thick / 2);
         const brow = Math.exp(-(d * d) * 1.2) * sm(-2, 3, bx) * sm(48, 38, bx) * face;
         if (brow > 0.01) {
           const s1 = tnoise(tx * 0.12, ty * 2.2, w * 0.12, 5), s2 = tnoise(tx * 0.3, ty * 3.1, w * 0.3, 6);
-          const hairs = brow * sm(0.35, 0.65, s1 * 0.6 + s2 * 0.4);
+          const hairs = brow * sm(0.35 - 0.25 * (bk - 1), 0.65 - 0.2 * (bk - 1), s1 * 0.6 + s2 * 0.4);
           mix(0.95 * hairs, HAIR[0], HAIR[1], HAIR[2]); hh += hairs * 0.7; rr += hairs * 0.25;
         }
       }
@@ -474,7 +485,7 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         hh += b * (s1 * 0.9 + s3 * 0.3); rr = lerp(rr, 0.8, clamp(cover, 0, 1));
       }
       // --- the scalp under the hair
-      const sc = yy > 70 ? scalp(ax, yy, z) : 0;
+      const sc = yy > 70 ? scalp(ax, yy, z, L.hairDrop) : 0;
       if (sc > 0) {
         const s1 = tnoise(tx * 0.9, ty * 0.15, w * 0.9, 12);
         mix(sc * 0.97, lerp(HAIR[0], L.streak[0], s1 * 0.4), lerp(HAIR[1], L.streak[1], s1 * 0.4), lerp(HAIR[2], L.streak[2], s1 * 0.4));

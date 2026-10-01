@@ -283,7 +283,7 @@ export function buildMage(): Model {
 
   // --- the head: face, a full beard, hair, and a wide-brimmed pointed hat, its crown bent back by
   // its own weight, a gold band with a stone
-  const head = buildHead(j.head, kit, 'mage', { beard: 160, hair: true });
+  const head = buildHead(j.head, kit, 'mage', { beard: 160, hair: 'swept' });
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, 'mage', j.P.neckL, j.head);

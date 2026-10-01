@@ -142,7 +142,7 @@ export interface ClassDef {
 }
 
 /** What the character holds, derived from the equipped items (drives model and skills). */
-export interface Gear { weapon: string | null; twoHanded: boolean; shield: boolean; /** a weapon held in the off-hand */ offWeapon: string | null }
+export interface Gear { weapon: string | null; twoHanded: boolean; shield: boolean; /** a weapon held in the off-hand */ offWeapon: string | null; /** a head item is worn (a model may show a helmet over the hair) */ helm: boolean }
 
 // ---------------------------------------------------------------------------
 // Items

@@ -9,7 +9,7 @@ import { part } from './rig';
 import { Sculpt } from './shapes';
 import { clamp, lerp, mulberry } from '../../util';
 import { fur, faceCanvases, pbrMaterialMaps } from '../../core/textures';
-import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, headSDF, gridDir, scalp, type FaceShape, type HeadGrid } from './face';
+import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, headSDF, gridDir, scalp, hairline, type FaceShape, type HeadGrid } from './face';
 import type { MaterialKit } from '../../types';
 
 /** metres per millimetre of the face's frame: the head is 1/7.5 of the heroes' stature */
@@ -133,14 +133,17 @@ export interface Head {
   surface(az: number, el: number, lift?: number, out?: THREE.Vector3): THREE.Vector3;
   /** how far forward the skin is (mm, the face's frame) down the middle of the face at height `y` mm */
   midZ(y: number): number;
+  /** the hair over the scalp (its cap and locks): a model hides it under a helmet */
+  hair: THREE.Mesh[];
 }
 
 /**
  * Build the head of `who` on `headJoint` (the rig's head joint). `hair`: a cap of hair over the scalp
- * with locks swept back behind the ears to the nape (under a helmet leave it out: the scalp is painted);
+ * with locks of cards over it, `swept` back behind the ears to the nape, or `loose`: parted in the middle
+ * and falling in waves past the ears to the shoulders (left out, the scalp is painted);
  * `beard`: a full beard hanging that far (mm) below the chin.
  */
-export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, o: { beard?: number; hair?: boolean } = {}): Head {
+export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, o: { beard?: number; hair?: 'swept' | 'loose' } = {}): Head {
   const F: FaceShape = FACES[who];
   const head = new THREE.Group();
   headJoint.add(head);
@@ -197,7 +200,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   const L = LOOKS[who], rng = mulberry(7);
   const hairCol = new THREE.Color().setRGB(L.hair[0] * 1.9, L.hair[1] * 1.9, L.hair[2] * 1.9, THREE.SRGBColorSpace);
   const cards = kit.std({ color: hairCol, map: strandMap(), alphaTest: 0.35, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.55 });
-  const lockGeo: THREE.BufferGeometry[] = [];
+  const lockGeo: THREE.BufferGeometry[] = [], hair: THREE.Mesh[] = [];
   const skullC = toGroup(0, 128, -12);
   if (o.hair) {
     const hm = pbrMaterialMaps(fur(), 3, 0.8);
@@ -207,10 +210,11 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     for (let j = 0; j <= g.nv; j++) for (let i = 0; i <= g.nu; i++) {
       const k = j * W + i, r = g.r[k];
       gridDir(g.az[i], g.el[j], d); origin(g.el[j], C);
-      const x = C.x + d.x * r, y = C.y + d.y * r, z = C.z + d.z * r, sc = scalp(Math.abs(x), y, z);
+      const x = C.x + d.x * r, y = C.y + d.y * r, z = C.z + d.z * r, sc = scalp(Math.abs(x), y, z, L.hairDrop);
       // thicker on top, combed into shallow ridges running back
       // (starting behind the painted hairline, its edge sunk into the skin: the grid's steps never show)
-      const lift = sm(0.9, 1, sc + 0.02 * sm(1, 0, sc)) * (6 + 6 * sm(120, 200, y) + 2 * Math.sin(Math.atan2(x, z) * 18 + y * 0.05)) - 1.2;
+      // (rising gradually from behind the hairline: a step over a cell or two of the grid shows as a stair)
+      const lift = sm(-1, 16, y - hairline(Math.abs(x), z, L.hairDrop)) * (6 + 6 * sm(120, 200, y) + 2 * Math.sin(Math.atan2(x, z) * 18 + y * 0.05)) - 1.2;
       toGroup(x + d.x * lift, y + d.y * lift, z + d.z * lift, q);
       pos[k * 3] = q.x; pos[k * 3 + 1] = q.y; pos[k * 3 + 2] = q.z;
       uv[k * 2] = i / g.nu * 6; uv[k * 2 + 1] = j / g.nv * 3;
@@ -226,11 +230,12 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     cap.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     cap.setIndex(idx);
     cap.computeVertexNormals();
-    part(cap, capMat, head);
+    hair.push(part(cap, capMat, head));
+    if (o.hair === 'loose') looseLocks(surface, rng, skullC, lockGeo);
     // locks: rooted over the crown and down the sides, swept back round the head (round towards the
     // back faster than they fall) to the jaw line behind the ear or the nape, then hanging a little lower
     // with an outward curl; three layers
-    const n = lod(120, 40);
+    const n = o.hair === 'swept' ? lod(120, 40) : 0;
     for (let i = 0; i < n; i++) {
       const layer = i % 3, az0 = (rng() - 0.5) * Math.PI * 1.7, side = Math.sign(az0) || 1;
       const el0 = 0.7 + rng() * 0.65;
@@ -248,6 +253,13 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
       const w = (11 + rng() * 7) * HEAD_MM;
       lockGeo.push(hairCard(pts, (t) => w * (1 - 0.5 * t), skullC, lod(14, 6), (rng() - 0.5) * 0.8));
     }
+  }
+  if (lockGeo.length) {
+    const m = part(mergeGeometries(lockGeo)!, cards, head);
+    for (const x of lockGeo) x.dispose();
+    m.castShadow = true;
+    hair.push(m);
+    lockGeo.length = 0;
   }
   if (o.beard) {
     // the beard: cards from the jaw, chin and moustache falling onto the chest, longest at the chin and
@@ -275,7 +287,48 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     m.castShadow = true;
   }
   const midZ = (y: number) => { let z = 140; while (z > 0 && headSDF(0, y, z, F) > 0) z -= 0.25; return z; };
-  return { group: head, face, eyes, surface, midZ };
+  return { group: head, face, eyes, surface, midZ, hair };
+}
+
+/**
+ * Shoulder-length hair, parted in the middle: locks rooted along the parting and over the crown fall
+ * down the sides (the front ones framing the face, clear of the brow and eyes, the rest over and behind
+ * the ears and down the nape), standing off the head over the ears, then hang to the shoulders in loose
+ * waves, their ends turning out; three layers.
+ */
+function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.Vector3, out: THREE.BufferGeometry[]): void {
+  const n = lod(180, 60), up = new THREE.Vector3(0, 1, 0);
+  for (let i = 0; i < n; i++) {
+    const layer = i % 3, side = i % 2 ? 1 : -1, front = rng() < 0.42;
+    // roots: along the parting (front) or spread over the crown and the back of the head
+    const az0 = side * (front ? 0.04 + rng() * 0.1 : 0.3 + rng() * 2.75), el0 = front ? 1.05 + rng() * 0.4 : 0.75 + rng() * 0.6;
+    // where it falls from: beside the cheek and over the ear for the front locks, else round to the nape
+    const az1 = side * (front ? 1.15 + rng() * 0.35 : Math.min(Math.PI * 0.99, Math.abs(az0) * 0.6 + 1.3 + rng() * 0.9)), el1 = -0.2 - rng() * 0.2;
+    // (the front ones first across the top of the forehead to the temple, just over the hairline, so they
+    // cover its edge and leave the brow and eyes clear, then down beside the cheek)
+    const azM = side * (0.5 + rng() * 0.15), elM = 0.74 + rng() * 0.05;
+    const path = (t: number): [number, number] => {
+      if (!front) return [az0 + (az1 - az0) * Math.sqrt(t), el0 + (el1 - el0) * t ** 1.6];
+      if (t < 0.4) { const q = t / 0.4; return [az0 + (azM - az0) * Math.sqrt(q), el0 + (elM - el0) * q]; }
+      const q = (t - 0.4) / 0.6; return [azM + (az1 - azM) * Math.sqrt(q), elM + (el1 - elM) * q ** 1.3];
+    };
+    const pts: THREE.Vector3[] = [];
+    for (let k = 0; k <= 6; k++) {
+      const t = k / 6, [az, el] = path(t);
+      // (standing off over the ears, fuller as it falls)
+      const ear = Math.exp(-(((Math.abs(az) - 1.55) / 0.45) ** 2)) * sm(0.6, -0.1, el);
+      pts.push(surface(az, el, 3 + layer * 4 + rng() * 3 + 10 * sm(0, 0.6, t) + 24 * ear));
+    }
+    // then hanging in waves to the shoulders, the end turning out
+    const last = pts[6], o = new THREE.Vector3(last.x - skullC.x, 0, last.z - skullC.z).normalize(), tg = new THREE.Vector3().crossVectors(up, o);
+    const fall = (70 + rng() * 70) * HEAD_MM, ph = rng() * Math.PI * 2, amp = (6 + rng() * 5) * HEAD_MM;
+    for (let k = 1; k <= 5; k++) {
+      const t = k / 5, wave = Math.sin(ph + t * Math.PI * 2.4) * amp, curl = t * t * 14 * HEAD_MM;
+      pts.push(last.clone().addScaledVector(o, curl + wave * 0.6).addScaledVector(tg, wave).add(new THREE.Vector3(0, -fall * t, 0)));
+    }
+    const w = (12 + rng() * 8) * HEAD_MM;
+    out.push(hairCard(pts, (t) => w * (1 - 0.45 * t), skullC, lod(18, 8), (rng() - 0.5) * (front ? 0.3 : 1.2)));
+  }
 }
 
 const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };

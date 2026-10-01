@@ -49,6 +49,7 @@ export function gearOf(cls: ClassDef, equipped: Profile['equipped']): Gear {
     weapon: weapon?.base ?? null, twoHanded: isTwoHanded(weapon, cls),
     shield: (off?.stats.blockAmount ?? 0) > 0,   // shields are the off-hands that block
     offWeapon: off?.slot === 'weapon' ? off.base : null,
+    helm: !!equipped.head,
   };
 }
 
