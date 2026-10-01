@@ -22,7 +22,7 @@ import type { ActionState, AnimState, Gear, Model } from '../../types';
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
 /** a held weapon: its tip along the grip, and where the left hand holds it (two-handers) */
-interface Weapon { group: THREE.Group; len: number; off: number | null; /** the grip's radius, for the fingers */ r: number }
+interface Weapon { group: THREE.Group; len: number; off: number | null; /** the grip's radius, for the fingers */ r: number; /** worn on the belt: the point along it that sits in the frog, and whether it hangs blade down (a sword, from its guard) or head up (an axe or mace, its haft through the ring) */ hang?: { at: number; down: boolean } }
 /** the grip turns the weapon's +Y forward and a little up out of the bent arm */
 const GRIP = Math.PI / 2 + 0.7;
 /** straightens the weapon along the arm, for swings that trace the damage arc */
@@ -370,14 +370,14 @@ export function buildWarrior(): Model {
   const grip = joint(j.handR, 0, -0.06, 0.01);
   grip.rotation.x = GRIP;
   const weapons = new Map<string, Weapon>();
-  const add = (name: string, len: number, off: number | null, r: number, build: (w: Sculpt, g: THREE.Group) => void) => {
+  const add = (name: string, len: number, off: number | null, r: number, build: (w: Sculpt, g: THREE.Group) => void, hang?: Weapon['hang']) => {
     const g = new THREE.Group();
     grip.add(g);
     const w = new Sculpt();
     build(w, g);
     w.glow(edge).build();
     g.visible = false;
-    weapons.set(name, { group: g, len, off, r });
+    weapons.set(name, { group: g, len, off, r, hang });
   };
   /** a blade along +Y from `at`: a flattened diamond with a fuller (a groove down its middle) tapering to the point */
   const blade = (w: Sculpt, g: THREE.Group, bw: number, len: number, at: number) => {
@@ -418,13 +418,13 @@ export function buildWarrior(): Model {
     w.add(new THREE.SphereGeometry(0.012, 8, 6), brass, g, [0, 0.1 - gripL - 0.02, 0.012]);
   };
 
-  add('Sword', 1.12, null, 0.024, (w, g) => { hilt(w, g, 0.2, 0.14); blade(w, g, 0.045, 0.94, 0.12); });
+  add('Sword', 1.12, null, 0.024, (w, g) => { hilt(w, g, 0.2, 0.14); blade(w, g, 0.045, 0.94, 0.12); }, { at: 0.115, down: true });
   add('Axe', 0.74, null, 0.024, (w, g) => {
     haft(w, g, -0.14, 0.72);
     axeHead(w, g, 0.2, 0.6, 1);
     w.add(new THREE.BoxGeometry(0.1, 0.05, 0.04), darkSteel, g, [-0.06, 0.6, 0]);
     w.add(new THREE.CylinderGeometry(0.03, 0.03, 0.08, 8), brass, g, [0, 0.6, 0]);
-  });
+  }, { at: 0.44, down: false });
   add('Mace', 0.72, null, 0.026, (w, g) => {
     haft(w, g, -0.14, 0.62, 0.024);
     w.add(new THREE.SphereGeometry(0.075, 14, 10), darkSteel, g, [0, 0.64, 0]);
@@ -433,7 +433,7 @@ export function buildWarrior(): Model {
       w.add(new THREE.BoxGeometry(0.018, 0.17, 0.075), plateM, g, [Math.cos(a) * 0.07, 0.64, Math.sin(a) * 0.07], [0, -a, 0]);
     }
     w.add(new THREE.ConeGeometry(0.025, 0.07, 8), plateM, g, [0, 0.74, 0]);
-  });
+  }, { at: 0.54, down: false });
   add('Greatsword', 1.62, -0.24, 0.026, (w, g) => {
     hilt(w, g, 0.44, 0.24);
     for (const s of [1, -1]) w.add(new THREE.SphereGeometry(0.022, 8, 6), brass, g, [s * 0.24, 0.14, 0]);
@@ -598,9 +598,10 @@ export function buildWarrior(): Model {
     if (held) held.group.visible = true;
     if (held?.off != null) offGrip.position.y = held.off;
     shield.visible = gear.shield;
-    for (const w of offWeapons.values()) { w.group.visible = false; gripL.add(w.group); }
+    for (const w of offWeapons.values()) { w.group.visible = false; gripL.add(w.group); w.group.position.set(0, 0, 0); }
     sheathed = false;
     offHeld = gear.offWeapon ? offWeapons.get(gear.offWeapon) ?? offWeapons.get('Sword')! : null;
+    frog.visible = !!offHeld; rings[0].visible = !!offHeld?.hang?.down; rings[1].visible = !!offHeld && !offHeld.hang?.down;
     if (offHeld) offHeld.group.visible = true;
     // each seated in its fist, the hand on its wrist
     if (held) seat(handR, grip, held.r);
@@ -619,9 +620,21 @@ export function buildWarrior(): Model {
   // the healing draught, in the left fist while it is drunk
   const flask = buildFlask(kit, brass, leatherDark); flask.name = 'flask'; j.handL.add(flask); flask.position.set(0, -0.07, 0.03); flask.rotation.x = Math.PI;
   let flaskOut = 0, shieldHang = 0, drinkOn = 0;
-  // a weapon in the left hand hangs here on the belt while the hand is busy with the flask
-  // (out past the hip and behind it, the blade raked back and out, as from a scabbard worn behind the hip: clear of the striding leg)
-  const hipLoop = joint(j.hips, 0.22, 0, -0.06); hipLoop.rotation.set(Math.PI + 0.6, 0, -0.3);
+  // a weapon in the left hand hangs on the belt while the hand is busy with the flask: in a leather frog at the
+  // left hip, worn whenever there is a second weapon. A sword sits in it by its guard, the hilt forward and up
+  // and the blade raked back along the outside of the thigh, flat to it; an axe or mace by its haft, head up.
+  const frog = joint(j.hips, 0.212, -0.012, 0.03); frog.name = 'frog';
+  const hangDown = joint(frog), hangUp = joint(frog);
+  const basis = (o: THREE.Object3D, y: THREE.Vector3) => {
+    const z = V(1, 0, 0).addScaledVector(y, -y.x).normalize(), x = new THREE.Vector3().crossVectors(y, z);
+    o.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  };
+  basis(hangDown, V(0.16, -0.72, -0.68).normalize()); basis(hangUp, V(0.06, 0.97, 0.22).normalize());
+  const tab = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.07, 0.034), leather); tab.position.set(0.004, 0.012, 0); frog.add(tab);
+  const ring = (o: THREE.Object3D, r: number, sx: number) => { const m = new THREE.Mesh(new THREE.TorusGeometry(r, 0.007, 6, 14), leatherDark); m.rotation.x = Math.PI / 2; m.scale.set(sx, 1, 1); m.position.y = -0.01; o.add(m); return m; };
+  const rings = [ring(hangDown, 0.034, 1.5), ring(hangUp, 0.03, 1)];
+  for (const m of [tab, ...rings]) m.castShadow = false;
+  frog.visible = false;
   let sheathed = false;
   const _s1 = new THREE.Vector3(), _s2 = new THREE.Vector3(), _s3 = new THREE.Vector3(), _s4 = new THREE.Vector3(), _s5 = new THREE.Vector3(), _sm = new THREE.Matrix4(), _shq = new THREE.Quaternion();
   /** turn a hand by `ang` about the length of the weapon in its grip */
@@ -738,7 +751,12 @@ export function buildWarrior(): Model {
     let flaskWant = 0, drinkLift = 0;
     // (the off-hand weapon on the hip while drinking: hung there as the hand reaches the belt, drawn again as it comes back)
     const sheathe = !!offHeld && a?.name === 'drink' && !fp && a.t > DRINK_SHEATHED[0] && a.t < DRINK_SHEATHED[1];
-    if (offHeld && sheathe !== sheathed) { sheathed = sheathe; (sheathe ? hipLoop : gripL).add(offHeld.group); }
+    if (offHeld && sheathe !== sheathed) {
+      sheathed = sheathe;
+      const h = offHeld.hang ?? { at: 0.1, down: true };
+      (sheathe ? (h.down ? hangDown : hangUp) : gripL).add(offHeld.group);
+      offHeld.group.position.set(0, sheathe ? -h.at : 0, 0);
+    }
     if (chopTail > 0) chopTail = Math.max(0, chopTail - dt / 0.3);
     const began = !!raw && (raw.name !== lastName || raw.t < lastK - 0.2), ended = !raw && lastName !== '';
     if ((ended || began) && lastName === 'swing') swingEnd = t;
