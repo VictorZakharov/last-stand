@@ -98,6 +98,8 @@ class Foot {
   /** what the ankle's pitch was last frame; a timed step eases from it, and from the height and turn the foot had, so stopping mid-stride never snaps */
   shown = 0; pitch0 = 0; carry = 0;
   fk = { thigh: new THREE.Quaternion(), knee: new THREE.Quaternion(), ankle: new THREE.Quaternion() };
+  /** this leg's own blend over the pose (`update`'s `legW`), smoothed, and whether the pose owned it last frame */
+  lw = 1; own = false;
 }
 
 const _s = new THREE.Vector3(), _c = new THREE.Vector3(), _f = new THREE.Vector3(), _h = new THREE.Vector3(), _t = new THREE.Vector3(), _p = new THREE.Vector3();
@@ -120,6 +122,8 @@ export class LegIK {
   private dphase = 0;
   private moving = false;
   private fresh = true;
+  /** the pose owned the legs last frame */
+  private owned = false;
   private drop = 0;
   /** the body's lean into its motion (forward, sideways), damped */
   private lastYaw = 0;
@@ -132,6 +136,9 @@ export class LegIK {
   private armsCaptured = false;
   /** the smoothed blend over the walk cycle's legs */
   private w = 0;
+
+  /** false: the walk cycle's own legs this frame (an enemy off screen or far away), restarting under the hips when it is back */
+  active = true;
 
   constructor(private readonly j: Joints) { j.root.userData.legs = this; }   // (read by probes)
 
@@ -175,13 +182,20 @@ export class LegIK {
 
   /**
    * Take the legs over, after the pose and before anything reads their world matrices. `phase` is the walk
-   * cycle's; `dead` the death progress (-1 alive: the fall stays as posed).
+   * cycle's; `dead` the death progress (-1 alive: the fall stays as posed). `weight` blends both legs and the
+   * body's lean, twist and pelvis over the pose; `legW` (left, right) blends one leg more: a leg under a half is
+   * the pose's (a step in, a lunge), its foot planted where the pose puts it, while the other one steps.
    */
-  update(dt: number, phase: number, dead: number, weight = 1, lean = 1): void {
+  update(dt: number, phase: number, dead: number, weight = 1, lean = 1, legW?: readonly [number, number]): void {
     const j = this.j, root = j.root;
     if (!IK) return;
-    if (dead >= 0) { this.fresh = true; this.w = 0; return; }
+    if (dead >= 0 || !this.active) { this.fresh = true; this.w = 0; return; }
     if (dt <= 0) return;
+    // a pose that owns the legs (a lunge, a charge) takes them from the IK: its own legs show, and the feet follow them (restarting each frame where the pose has them) so the gait picks up from there when it gives them back
+    this.w = damp(this.w, weight, 10, dt);
+    // (and once more on the frame it gives them back: the pose has changed by then)
+    if (weight < 0.5 || this.owned) this.fresh = true;
+    this.owned = weight < 0.5;
     // only the chain down to the hips is brought up to date here (the renderer updates the rest): a crowd pays for this every frame
     root.updateWorldMatrix(true, false);
     const rm = root.matrixWorld;
@@ -197,7 +211,7 @@ export class LegIK {
     // leaning into the motion, like a body falling forward onto its feet: the whole body tips about the ground under it, the head stays level
     {
       const lv = this.v, lf = Math.sin(this.lastYaw) * lv.x + Math.cos(this.lastYaw) * lv.z, ls = Math.cos(this.lastYaw) * lv.x - Math.sin(this.lastYaw) * lv.z;
-      const k = LEAN * lean * weight;
+      const k = LEAN * lean * this.w;
       this.leanX = damp(this.leanX, Math.max(-0.12, Math.min(0.3, lf * k)), 6, dt);
       this.leanZ = damp(this.leanZ, Math.max(-0.12, Math.min(0.12, -ls * k)), 6, dt);
       j.body.rotation.x += this.leanX; j.body.rotation.z += this.leanZ;
@@ -212,7 +226,7 @@ export class LegIK {
         // (from sideways on round to backing up, the pelvis eases back to the aim: the legs go backwards under it)
         want = Math.sign(rel) * (a <= TWIST ? a : a <= 2 ? TWIST : TWIST * smooth((Math.PI - a) / (Math.PI - 2))) * smooth((this.sp - 0.6) / 1.2);
       }
-      this.twist = damp(this.twist, want, 9, dt);
+      this.twist = damp(this.twist, want * this.w, 9, dt);
       j.hips.rotation.y += this.twist; j.spine.rotation.y -= this.twist * 0.5; j.chest.rotation.y -= this.twist * 0.5;
     }
     const pyaw = yaw + this.twist;
@@ -245,11 +259,19 @@ export class LegIK {
     for (let i = 0; i < 2; i++) {
       const f = this.feet[i], [thigh, knee, ankle] = legs[i];
       f.fk.thigh.copy(thigh.quaternion); f.fk.knee.copy(knee.quaternion); f.fk.ankle.copy(ankle.quaternion);
+      // a leg the pose owns: its foot stays where the pose puts it (and once more as it gives it back), so the gait picks up from there
+      const lwt = legW ? legW[i] : 1, own = lwt < 0.5;
+      f.lw = damp(f.lw, lwt, 10, dt);
+      if (own || f.own) {
+        ankle.updateWorldMatrix(true, false); _p.setFromMatrixPosition(ankle.matrixWorld);
+        f.state = 'plant'; f.P.set(_p.x, groundHeight(_p.x, _p.z), _p.z); f.yaw = pyaw; f.t = 0; f.stance = 0;
+      }
+      f.own = own;
       _h.copy(thigh.position).applyMatrix4(j.hips.matrixWorld);   // the hip joint
       const other = this.feet[1 - i], fs = this.shape![i], sole = fs.sole;
       const u = ((phase / TAU + i * 0.5) % 1 + 1) % 1, inWin = Math.abs(u - 0.5) < w2;
 
-      if (this.moving) {
+      if (this.moving && !own) {
         // (a foot re-stepping does not take the other one's swing with it, or both leave the ground at once and the body drops between them; at a walk the other waits)
         if (f.state !== 'timed') {
           if (inWin && f.state === 'plant' && !(other.state === 'timed' && duty > 0.45)) { f.state = 'swing'; f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.rel0 = (f.P.x - _h.x) * vd.x + (f.P.z - _h.z) * vd.z; }
@@ -273,7 +295,7 @@ export class LegIK {
         const dy = this.angle(0, f.yaw, pyaw);
         if (Math.abs(dy) > YAW_MAX) f.yaw = pyaw - Math.sign(dy) * YAW_MAX;
         const dev = Math.hypot(f.P.x - _h.x, f.P.z - _h.z);
-        if (dev > (this.moving ? 0.55 : 0.1) * Lw && (this.moving ? other.state !== 'timed' : other.state === 'plant' || (other.state === 'timed' && other.t > 0.2)) && f.stance > (this.moving ? 0.12 : 0.05)) {
+        if (!own && dev > (this.moving ? 0.55 : 0.1) * Lw && (this.moving ? other.state !== 'timed' : other.state === 'plant' || (other.state === 'timed' && other.t > 0.2)) && f.stance > (this.moving ? 0.12 : 0.05)) {
           f.state = 'timed'; f.t = 0; f.fast = this.moving; f.dur = this.moving ? Math.min(0.3, Math.max(0.12, (1 - duty) * cycleT)) : Math.min(0.4, 0.16 + dev * 0.3); f.A.copy(f.P); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown;
           f.B.set(_h.x + vd.x * half, 0, _h.z + vd.z * half);
           f.stance = 0;
@@ -321,24 +343,25 @@ export class LegIK {
       }
     }
     // the pelvis stands as tall as the legs allow (the rig's rest pose has the knees bent by a third of a radian), and drops until both feet are in reach
-    j.body.position.y += RISE; j.body.updateWorldMatrix(false, false); j.hips.updateWorldMatrix(false, false);
+    j.body.position.y += RISE * this.w; j.body.updateWorldMatrix(false, false); j.hips.updateWorldMatrix(false, false);
     let need = 0;
     _m.copy(j.hips.matrixWorld).invert();
     for (let i = 0; i < 2; i++) {
       const thigh = legs[i][0];
+      if (this.feet[i].own) continue;   // (the pose's own leg: its foot is where it reaches)
       _p.copy(this.feet[i].pos).applyMatrix4(_m);
       const dx = _p.x - thigh.position.x, dy = _p.y - thigh.position.y, dz = _p.z - thigh.position.z, d = Math.sqrt(dx * dx + dy * dy + dz * dz), lmax = 0.98 * (L1 + L2);
       if (d > lmax) need = Math.max(need, (d - lmax) / Math.max(0.35, -dy / d));
     }
     // (never more than a crouch: a lunge or a leap takes the body away from its feet, and the feet then follow it, below)
     this.drop = damp(this.drop, Math.min(need, 0.2 * Lw + RISE), need > this.drop ? 30 : 9, dt);
-    if (this.drop > 1e-4) {
-      j.body.position.y -= this.drop; j.body.updateWorldMatrix(false, false); j.hips.updateWorldMatrix(false, false);
+    const dip = this.drop * this.w;
+    if (dip > 1e-4) {
+      j.body.position.y -= dip; j.body.updateWorldMatrix(false, false); j.hips.updateWorldMatrix(false, false);
       _m.copy(j.hips.matrixWorld).invert();
     }
     j.hips.matrixWorld.decompose(_pp, _hq, _ps);
 
-    this.w = damp(this.w, weight, 10, dt);
     for (let i = 0; i < 2; i++) {
       const f = this.feet[i], [thigh, knee, ankle] = legs[i];
       _p.copy(f.pos).applyMatrix4(_m);
@@ -360,10 +383,11 @@ export class LegIK {
       _q2.setFromEuler(_e);
       _q.copy(_hq).multiply(thigh.quaternion).multiply(knee.quaternion).invert();
       ankle.quaternion.copy(_q.multiply(_q2));
-      if (this.w < 0.999) {
-        thigh.quaternion.copy(f.fk.thigh).slerp(thigh.quaternion, this.w);
-        knee.quaternion.copy(f.fk.knee).slerp(knee.quaternion, this.w);
-        ankle.quaternion.copy(f.fk.ankle).slerp(ankle.quaternion, this.w);
+      const wf = this.w * f.lw;
+      if (wf < 0.999) {
+        thigh.quaternion.copy(f.fk.thigh).slerp(thigh.quaternion, wf);
+        knee.quaternion.copy(f.fk.knee).slerp(knee.quaternion, wf);
+        ankle.quaternion.copy(f.fk.ankle).slerp(ankle.quaternion, wf);
       }
     }
   }
@@ -398,7 +422,8 @@ export class LegIK {
   private start(legs: [THREE.Object3D, THREE.Object3D, THREE.Object3D][], yaw: number, phase: number, rx: number, rz: number): void {
     for (let i = 0; i < 2; i++) {
       const f = this.feet[i];
-      legs[i][0].getWorldPosition(_h);
+      // (where the pose has the foot: a lunge's stance stays put, and the re-steps bring it in)
+      legs[i][2].getWorldPosition(_h);
       f.state = 'plant'; f.P.set(_h.x, groundHeight(_h.x, _h.z), _h.z); f.yaw = f.yawA = yaw; f.t = 0; f.stance = 0;
     }
     this.last.set(rx, 0, rz); this.leanX = this.leanZ = 0;
@@ -408,7 +433,7 @@ export class LegIK {
 }
 
 /**
- * The head looks at something: the neck and the head turn (and nod) onto a world point, shared 40 / 60,
+ * The head looks at something: the chest, neck and head turn onto a world point (20 / 30 / 50; the neck and head nod 40 / 60),
  * within what a neck allows, eased so it glances rather than snaps, and back ahead when the point is behind
  * the body or out of range. Applied on top of the pose (after `animate`), so it moves only the head and what
  * rides on it; the spine and arms stay as the pose put them. Works from the body's position and facing alone,
@@ -441,7 +466,8 @@ export class LookAt {
     }
     this.yaw = damp(this.yaw, ty * weight, 7, dt);
     this.pitch = damp(this.pitch, tp * weight, 7, dt);
-    j.neck.rotation.y += this.yaw * 0.4; j.head.rotation.y += this.yaw * 0.6;
+    // (the turn starts low: the chest takes a share, the neck and head the rest)
+    j.chest.rotation.y += this.yaw * 0.2; j.neck.rotation.y += this.yaw * 0.3; j.head.rotation.y += this.yaw * 0.5;
     j.neck.rotation.x += this.pitch * 0.4; j.head.rotation.x += this.pitch * 0.6;
   }
 }
