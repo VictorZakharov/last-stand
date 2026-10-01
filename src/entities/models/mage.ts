@@ -17,7 +17,7 @@ import { BellCloth } from './sleeve';
 import { LegIK } from './ik';
 import { curve, PoseFade, type Keys } from './motion';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
-import type { AnimState, Model } from '../../types';
+import type { ActionState, AnimState, Model } from '../../types';
 
 const ZERO = new THREE.Vector3();
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3();
@@ -49,6 +49,8 @@ function onChest(x: number, y: number, lift: number, out = new THREE.Vector3()):
 }
 
 /** where the feet stand (left x, z, turn, then right), rig units: at rest, throwing a spell (the left steps in), slamming the ground, aiming the staff (the right forward), bracing for the lance */
+/** a move's end held a moment after its cast is over (seconds), so a short cast's blow or throw is seen, then how long it takes to ease back to the stance */
+const TAIL: Record<string, number> = { cast: 0.35, slam: 0.4, buff: 0.5 }, TAIL_OUT: Record<string, number> = { cast: 0.45, slam: 0.6, buff: 0.5 };
 const REST_FEET = [0.12, 0.06, 0.22, -0.12, -0.05, -0.35], CAST_FEET = [0.13, 0.2, 0.15, -0.13, -0.1, -0.45];
 const SLAM_FEET = [0.2, 0.06, 0.4, -0.2, -0.04, -0.4], AIM_FEET = [0.13, -0.04, 0.35, -0.12, 0.14, -0.05], LANCE_FEET = [0.14, 0.24, 0.1, -0.15, -0.14, -0.55];
 
@@ -168,6 +170,7 @@ export function buildMage(): Model {
   /** smooths every cut between poses: an action starting, restarting or ending */
   const fade = new PoseFade(j);
   let lastName = '', lastK = 1;
+  let tailName = '', tailT = 0;
   /** a staff shot's kick, 1 as it leaves, dying away */
   let recoil = 0;
   // what the bells must not sink into (the cape's own body colliders, roughly): the torso, the hips and the robe's skirt
@@ -399,13 +402,19 @@ export function buildMage(): Model {
 
     // hands at rest: the free one loosely curled and breathing, the other gripping the staff
     poseHand(handL, 0.45 + Math.sin(t * 1.3) * 0.06, 0.12);
-    const a = st.action;
+    const raw = st.action;
     feet = null;
-    const began = !!a && (a.name !== lastName || a.t < lastK - 0.2), ended = !a && lastName !== '';
-    if (began) fade.cut(a.name === 'point' && lastName === 'point' ? 0.06 : 0.14); else if (ended) fade.cut(lastName === 'slam' || lastName === 'buff' ? 0.55 : lastName === 'point' ? 0.2 : 0.35);
-    if (began && a.name === 'point') recoil = 1;
+    // (the tail: the last spell's end pose held a moment after it, unless the body moves off or another action starts)
+    if (!raw && lastName !== '' && (TAIL[lastName] ?? 0) > 0 && !fp) { tailName = lastName; tailT = TAIL[lastName]; }
+    if (raw || move > 0.3) { if (tailT > 0 && !raw) fade.cut(0.25); tailT = 0; }
+    const inTail = !raw && tailT > 0;
+    if (inTail) { tailT -= dt; if (tailT <= 0) fade.cut(TAIL_OUT[tailName] ?? 0.4); }
+    const a: ActionState | null = raw ?? (inTail ? { name: tailName, t: 1 } : null);
+    const began = !!raw && (raw.name !== lastName || raw.t < lastK - 0.2), ended = !raw && lastName !== '';
+    if (began) fade.cut(raw.name === 'point' && lastName === 'point' ? 0.06 : 0.14); else if (ended && !inTail) fade.cut(lastName === 'point' ? 0.2 : 0.35);
+    if (began && raw.name === 'point') recoil = 1;
     recoil = Math.max(0, recoil - dt * 6);
-    lastName = a?.name ?? ''; lastK = a?.t ?? 1;
+    lastName = raw?.name ?? ''; lastK = raw?.t ?? 1;
     if (!a || a.name !== 'channel') openedAt = -1;
     // staff shots: the staff swings down level with the target and stays there while the shots keep
     // coming (a held button, or clicks), so each bolt leaves the crystal at a foe's chest; it rises

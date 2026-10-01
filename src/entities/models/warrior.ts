@@ -17,7 +17,7 @@ import { clamp, lerp, mulberry } from '../../util';
 import { SkeletonCape } from './cape';
 import { fromEyes, dirFromEyes } from '../viewModel';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
-import type { AnimState, Gear, Model } from '../../types';
+import type { ActionState, AnimState, Gear, Model } from '../../types';
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
 /** a held weapon: its tip along the grip, and where the left hand holds it (two-handers) */
@@ -48,7 +48,10 @@ const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a
 // 0.55 to 0.85 in step with the trail (skills/cleave swingArc) and carries on past it. The body leads it:
 // the hips turn first, then the spine and chest, the arm and wrist come last.
 /** where the feet stand (left x, z, turn, then right), rig units: at rest, fighting, Power Strike's step in, behind the shield */
+/** a move's end held a moment after its cast is over (seconds), so a short cast's blow or throw is seen, then how long it takes to ease back to the stance */
+const TAIL: Record<string, number> = { chop: 0.3, buff: 0.55, flurry: 0.15 }, TAIL_OUT: Record<string, number> = { chop: 0.55, buff: 0.6, flurry: 0.35 };
 const REST_FEET = [0.13, 0.09, 0.15, -0.14, -0.1, -0.55], FIGHT_FEET = [0.13, 0.22, 0.15, -0.14, -0.15, -0.55];
+const BRACE_FEET = [0.13, 0.2, 0.1, -0.15, -0.3, -0.4], SKID_FEET = [0.18, 0.3, 0.2, -0.17, -0.12, -0.5];
 const WIDE_FEET = [0.2, 0.08, 0.35, -0.2, -0.06, -0.45];
 const CHOP_FEET = [0.12, 0.36, 0.1, -0.15, -0.2, -0.6], GUARD_FEET = [0.13, 0.26, 0.3, -0.13, -0.2, -0.7];
 const SW_TIP: Keys = [[0, -1.3], [0.3, -1.25], [0.5, -1.35], [0.55, -1], [0.85, 1], [0.95, 1.3], [1, 1.35]];
@@ -495,8 +498,8 @@ export function buildWarrior(): Model {
   const FP_CUT = { up: [V(0.36, -0.06, -0.6), V(-0.6, 0.45, -0.65)], down: [V(-0.14, -0.3, -0.5), V(-0.85, -0.25, -0.45)] };
   const FP_RUSH = { back: [V(0.38, -0.4, -0.4), V(0.35, 0.55, -0.75)], ahead: [V(0.28, -0.34, -0.6), V(-0.12, 0.18, -0.98)], out: [V(0.45, -0.22, -0.5), V(0.75, 0.4, -0.5)] };
   const FP_TWO_RUSH = { ahead: [V(0.12, -0.3, -0.55), V(-0.3, 0.3, -0.9)], out: [V(0.24, -0.22, -0.5), V(0.85, 0.35, -0.4)] };
-  /** Bull Rush: the share of its pose that is the rush (skills/bullRush RUSH); the rest is the follow-through */
-  const RUSH = 0.6;
+  /** Bull Rush: the share of its pose that is the brace before it goes, and where the rush ends (skills/bullRush BRACE, RUN, HOLD); the rest is the follow-through */
+  const BRACE = 0.16, RUSH = 0.58, STRIDES = 2.5;
   /** where each elbow points while the arm is placed in the view (chest space: out to its side, down) */
   const POLE_VR = V(-0.6, -1, 0), POLE_VL = V(0.6, -1, 0);
   /** Power Strike there: raised to a high guard on the right, blade up and forward, then the blow ahead */
@@ -570,6 +573,7 @@ export function buildWarrior(): Model {
   // swings alternate forehand / backhand; a new swing starts when the action restarts. With a
   // weapon in each hand they alternate hands instead: the backhand side is the left hand's forehand
   let side = 1, lastK = 1, lastName = '';
+  let tailName = '', tailT = 0;
   /** when a swing last ended, and whether this one follows straight on from it (it starts wound, where the last one finished) */
   let swingEnd = -9, chain = false;
   /** when the last attack was: the feet keep the fighting stance a while after it */
@@ -690,7 +694,13 @@ export function buildWarrior(): Model {
     j.body.rotation.z += (st.lean || 0) * 0.12;
     j.kneeL.rotation.x += 0.1 * (1 - move); j.kneeR.rotation.x += 0.1 * (1 - move);
 
-    const a = st.action;
+    const raw = st.action;
+    // (the tail: the last move's end pose held a moment after it, unless the body moves off or another action starts)
+    if (!raw && lastName !== '' && (TAIL[lastName] ?? 0) > 0 && !fp) { tailName = lastName; tailT = TAIL[lastName]; }
+    if (raw || move > 0.3) { if (tailT > 0 && !raw) fade.cut(0.25); tailT = 0; }
+    const inTail = !raw && tailT > 0;
+    if (inTail) { tailT -= dt; if (tailT <= 0) fade.cut(TAIL_OUT[tailName] ?? 0.4); }
+    const a: ActionState | null = raw ?? (inTail ? { name: tailName, t: 1 } : null);
     // a two-hander through the eyes: how far a move posed in the hero's own space takes over from holding it
     // in the view, and how far a move placed in the view takes it from rest there (to _va, _vd)
     let aw = 0, vw = 0;
@@ -703,13 +713,13 @@ export function buildWarrior(): Model {
     const still = 1 - Math.min(1, move * 4);
     feet = null;
     if (chopTail > 0) chopTail = Math.max(0, chopTail - dt / 0.3);
-    const began = !!a && (a.name !== lastName || a.t < lastK - 0.2), ended = !a && lastName !== '';
+    const began = !!raw && (raw.name !== lastName || raw.t < lastK - 0.2), ended = !raw && lastName !== '';
     if ((ended || began) && lastName === 'swing') swingEnd = t;
-    if (began && a.name === 'swing') { side = -side; chain = t - swingEnd < 0.25; }
+    if (began && raw.name === 'swing') { side = -side; chain = t - swingEnd < 0.25; }
     // (a swing straight after a swing starts where that one ended: a short fade; out of an action back to the stance, a slow one)
-    if (began) fade.cut(chain && a.name === 'swing' ? 0.08 : 0.14); else if (ended) fade.cut(lastName === 'chop' ? 0.5 : lastName === 'buff' ? 0.6 : 0.3);
+    if (began) fade.cut(chain && raw.name === 'swing' ? 0.08 : 0.14); else if (ended && !inTail) fade.cut(0.3);
     if (a && a.name !== 'buff' && a.name !== 'cast' && a.name !== 'stagger') fightT = t;
-    lastName = a?.name ?? ''; lastK = a?.t ?? 1;
+    lastName = raw?.name ?? ''; lastK = raw?.t ?? 1;
     // Twin Fangs strikes right, then left (in step with skills/twinFangs STRIKES)
     const left = !!offHeld && ((a?.name === 'swing' && side < 0) || (a?.name === 'flurry' && a.t > 0.5));
     tipOn(left);
@@ -906,9 +916,34 @@ export function buildWarrior(): Model {
         j.body.position.z += -0.06 * jolt * w;
       } else if (a.name === 'charge') {
         // shoulder into the charge, weapon back; as it lands (RUSH) the weapons sweep out to both sides
-        const w = Math.min(1, k * 6 / RUSH) * (1 - ramp(k, RUSH - 0.05, RUSH + 0.05));
+        // (third person: a brace, low and coiled with the weight on the rear foot, then the rush: the whole
+        // body leaning into it from the feet, the shield shoulder leading, huge bounding strides, then a skid
+        // into the stop, braced wide and leaning back against it)
+        const brace = ramp(k, 0, BRACE * 0.7) * (1 - ramp(k, BRACE, BRACE + 0.04)), run = ramp(k, BRACE - 0.02, BRACE + 0.03) * (1 - ramp(k, RUSH - 0.02, RUSH + 0.03));
+        const skid = ramp(k, RUSH - 0.03, RUSH) * (1 - ramp(k, 0.8, 1));
+        const w = fp ? Math.min(1, k * 6 / RUSH) * (1 - ramp(k, RUSH - 0.05, RUSH + 0.05)) : Math.max(brace, run);
         const hw = ramp(k, RUSH - 0.04, RUSH + 0.04) * (1 - ramp(k, 0.85, 1)), hu = ramp(k, RUSH, RUSH + 0.2);
-        guard = shield.visible ? lerp(guard, 1, Math.max(w, hw)) : 0; aw = Math.max(w, hw); legOwn = Math.min(1, k * 10) * (1 - ramp(k, RUSH, RUSH + 0.03));
+        guard = shield.visible ? lerp(guard, 1, Math.max(w, hw)) : 0; aw = Math.max(w, hw); legOwn = fp ? Math.min(1, k * 10) * (1 - ramp(k, RUSH, RUSH + 0.03)) : run;
+        if (!fp) {
+          const cp = clamp((k - BRACE) / (RUSH - BRACE), 0, 1) * STRIDES * Math.PI, sc = Math.sin(cp), cc = Math.cos(cp);
+          // the brace
+          j.body.position.y += -0.14 * brace; j.body.position.z += -0.07 * brace; j.hips.rotation.y += -0.25 * brace;
+          if (brace > 0.3) feet = BRACE_FEET;
+          // the rush: leaning from the feet, low, bobbing over each stride
+          j.body.rotation.x += 0.32 * run; j.body.position.y += (-0.08 + 0.06 * Math.abs(cc)) * run;
+          j.chest.rotation.y += -0.2 * run; j.chest.rotation.z += -0.1 * run; j.neck.rotation.y += 0.45 * Math.max(brace, run); j.neck.rotation.x += -0.3 * run;
+          const lerpX = (o: THREE.Object3D, v: number) => { o.rotation.x = lerp(o.rotation.x, v, run); };
+          lerpX(j.thighL, -0.35 - 0.85 * sc); lerpX(j.thighR, -0.35 + 0.85 * sc);
+          lerpX(j.kneeL, 0.35 + 1.2 * Math.max(0, cc)); lerpX(j.kneeR, 0.35 + 1.2 * Math.max(0, -cc));
+          lerpX(j.ankleL, 0.25 * sc); lerpX(j.ankleR, -0.25 * sc);
+          j.thighL.rotation.z = lerp(j.thighL.rotation.z, 0.06, run); j.thighR.rotation.z = lerp(j.thighR.rotation.z, -0.06, run);
+          // (an arm with no shield pumps with the strides; a shield is driven up before the leading shoulder)
+          if (!shield.visible && !offHeld) { j.shoulderL.rotation.x += 0.5 * sc * run; }
+          if (shield.visible) { j.shoulderL.rotation.x += -0.95 * run; j.elbowL.rotation.x += 0.3 * run; }
+          // the skid: braced wide, leaning back against the stop
+          j.spine.rotation.x += -0.2 * skid; j.body.position.y += -0.12 * skid; j.body.position.z += -0.05 * skid;
+          if (skid > 0.2) feet = SKID_FEET;
+        }
         j.spine.rotation.x += 0.45 * w; j.neck.rotation.x += -0.3 * w;
         j.chest.rotation.y += -0.3 * w;
         const L = j.shoulderL.rotation;

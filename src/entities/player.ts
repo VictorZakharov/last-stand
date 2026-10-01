@@ -39,8 +39,9 @@ interface ChannelState { skill: KnownSkill; key: SkillKey; state: unknown; t: nu
 /** A movement skill's dash: a fixed velocity that input can't steer, with a per-frame hook; `lift`
  *  makes it a jump of that peak height, and `anim` is the pose it plays, over the rush and `hold`
  *  seconds more standing where it ended (a lunge's strikes follow through). */
-interface DashState { vx: number; vz: number; t: number; dur: number; hold: number; lift: number; anim: CastAnim; step?(): void }
-export interface DashOpts { lift?: number; anim?: CastAnim; hold?: number; step?(): void }
+interface DashState { vx: number; vz: number; t: number; dur: number; hold: number; lift: number; anim: CastAnim; step?(): void; pace?(u: number): number }
+/** `pace` (optional) is the share of the way covered by `u` (0..1 of `dur`), rising from 0 to 1: a dash that braces before it goes, or skids at its end, covering the same distance */
+export interface DashOpts { lift?: number; anim?: CastAnim; hold?: number; step?(): void; pace?(u: number): number }
 
 /** What the local player does that the other players' games replay (see net/session). */
 export type PlayerAction =
@@ -377,8 +378,8 @@ export class Player {
   }
 
   /** Rush along `dir` (normalized, on the ground) at `speed` for `dur` seconds; `step` runs every frame of it. */
-  startDash(dir: THREE.Vector3, speed: number, dur: number, { lift = 0, anim = 'charge', hold = 0, step }: DashOpts = {}): void {
-    this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, hold, lift, anim, step };
+  startDash(dir: THREE.Vector3, speed: number, dur: number, { lift = 0, anim = 'charge', hold = 0, step, pace }: DashOpts = {}): void {
+    this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, hold, lift, anim, step, pace };
     this.facing = Math.atan2(dir.x, dir.z);
   }
 
@@ -442,7 +443,12 @@ export class Player {
 
     // movement
     const d = this.dash;
-    if (d) { if (d.t < d.dur) this.vel.set(d.vx, 0, d.vz); else this.vel.set(0, 0, 0); d.t += dt; }
+    if (d) {
+      if (d.t >= d.dur) this.vel.set(0, 0, 0);
+      else if (d.pace && dt > 0) { const k = (d.pace(Math.min(1, (d.t + dt) / d.dur)) - d.pace(d.t / d.dur)) * d.dur / dt; this.vel.set(d.vx * k, 0, d.vz * k); }
+      else this.vel.set(d.vx, 0, d.vz);
+      d.t += dt;
+    }
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     resolveWorld(this.pos, this.radius);
