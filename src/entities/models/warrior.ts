@@ -51,8 +51,8 @@ const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a
 /** where the feet stand (left x, z, turn, then right), rig units: at rest, fighting, Power Strike's step in, behind the shield */
 /** a move's end held a moment after its cast is over (seconds), so a short cast's blow or throw is seen, then how long it takes to ease back to the stance */
 const TAIL: Record<string, number> = { chop: 0.3, buff: 0.55, flurry: 0.15 }, TAIL_OUT: Record<string, number> = { chop: 0.55, buff: 0.6, flurry: 0.35 };
-/** the wrist's turn that holds a blade at rest edge on to the foe (rad) */
-const EDGE = 1.95, EDGE_TWO = Math.PI / 2;
+/** a blade's turn in the fist about its own length (third person): its flats along the palm, its edge (an axe's bit) out over the knuckles, as a real one is held */
+const MOUNT = -Math.PI / 2;
 /** drinking: the elbow raised out to the side, the wrist out to the left of the chin (as from a horn: the shield on that forearm turns edge on beside the head, not over the face) */
 const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.1, -0.06, 0.2), tipped: new THREE.Vector3(0.09, 0.1, 0.19), pole: new THREE.Vector3(1, -0.2, 0) };
 const REST_FEET = [0.13, 0.09, 0.15, -0.14, -0.1, -0.55], FIGHT_FEET = [0.13, 0.22, 0.15, -0.14, -0.15, -0.55];
@@ -74,6 +74,8 @@ const SW_FWD: Keys = [[0, -0.02], [0.45, -0.05], [0.65, 0.06], [0.9, 0.08], [1, 
 const SW_DIP: Keys = [[0, -0.02], [0.45, -0.04], [0.66, -0.085], [1, -0.06]];
 /** the trunk: drawn up as it winds, crunching over into the blow; the shoulders tipping from the high side to the low */
 const SW_BEND: Keys = [[0, 0], [0.45, -0.06], [0.7, 0.16], [1, 0.18]];
+/** the forearm's roll that leads a swing with the edge (rad): a forehand palm up, a backhand (share of it) palm down */
+const SW_ROLL = Math.PI / 2, SW_BACK = 0.75, FANG_ROLL = -0.8;
 const SW_TILT: Keys = [[0, 0.08], [0.45, 0.12], [0.7, -0.02], [1, -0.1]];
 
 // --- Power Strike (third person), keyed over its 1.5s cast, the blow at 0.9 (the skill's fireAt): a step in
@@ -601,6 +603,7 @@ export function buildWarrior(): Model {
     for (const w of offWeapons.values()) { w.group.visible = false; gripL.add(w.group); w.group.position.set(0, 0, 0); }
     sheathed = false;
     offHeld = gear.offWeapon ? offWeapons.get(gear.offWeapon) ?? offWeapons.get('Sword')! : null;
+    mountAll();
     frog.visible = !!offHeld; rings[0].visible = !!offHeld?.hang?.down; rings[1].visible = !!offHeld && !offHeld.hang?.down;
     if (offHeld) offHeld.group.visible = true;
     // each seated in its fist, the hand on its wrist
@@ -637,6 +640,8 @@ export function buildWarrior(): Model {
   frog.visible = false;
   let sheathed = false;
   const _s1 = new THREE.Vector3(), _s2 = new THREE.Vector3(), _s3 = new THREE.Vector3(), _s4 = new THREE.Vector3(), _s5 = new THREE.Vector3(), _sm = new THREE.Matrix4(), _shq = new THREE.Quaternion();
+  /** seat every weapon in its fist the way a real one is held (through the eyes the hand-placed poses keep their own) */
+  function mountAll(): void { for (const w of [...weapons.values(), ...offWeapons.values()]) w.group.rotation.y = fp || (w === offHeld && sheathed) ? 0 : MOUNT; }
   /** turn a hand by `ang` about the length of the weapon in its grip */
   const edgeOn = (hand: THREE.Object3D, g: THREE.Object3D, ang: number): void => {
     _hd.set(0, 1, 0).applyQuaternion(g.quaternion);
@@ -755,7 +760,7 @@ export function buildWarrior(): Model {
       sheathed = sheathe;
       const h = offHeld.hang ?? { at: 0.1, down: true };
       (sheathe ? (h.down ? hangDown : hangUp) : gripL).add(offHeld.group);
-      offHeld.group.position.set(0, sheathe ? -h.at : 0, 0);
+      offHeld.group.position.set(0, sheathe ? -h.at : 0, 0); offHeld.group.rotation.y = sheathe || fp ? 0 : MOUNT;
     }
     if (chopTail > 0) chopTail = Math.max(0, chopTail - dt / 0.3);
     const began = !!raw && (raw.name !== lastName || raw.t < lastK - 0.2), ended = !raw && lastName !== '';
@@ -783,6 +788,8 @@ export function buildWarrior(): Model {
         const elbow = left ? j.elbowL : j.elbowR, hand = left ? j.handL : j.handR;
         elbow.rotation.x = lerp(elbow.rotation.x, curve(two ? SW_ELBOW2 : SW_ELBOW, k), w);
         hand.rotation.x += ALONG_ARM * curve(SW_WRIST, k) * w;
+        // (the forearm rolls the edge into the cut: palm up on a forehand, down on a backhand)
+        if (!fp) edgeOn(hand, left ? gripL : grip, s * SW_ROLL * ((left ? s < 0 : s > 0) ? 1 : SW_BACK) * w);
         // the weight: back onto the rear foot, then forward and down into the blow (less while moving: the legs are stepping)
         const ws = w * (0.4 + 0.6 * still), bend = curve(SW_BEND, k);
         j.body.position.z += curve(SW_FWD, k) * ws; j.body.position.y += curve(SW_DIP, k) * ws;
@@ -841,6 +848,8 @@ export function buildWarrior(): Model {
           arm.z = lerp(arm.z, 0, aw);
           elbow.rotation.x = lerp(elbow.rotation.x, -0.25, aw);
           hand.rotation.x += ALONG_ARM * aw;
+          // (the forearm rolls the edge down into the cut, the palm turning down)
+          if (!fp) edgeOn(hand, s > 0 ? grip : gripL, s * FANG_ROLL * aw);
           j.chest.rotation.y += s * lerp(0.35, -0.35, down) * aw;
         };
         cut(j.shoulderR.rotation, j.elbowR, j.handR, 1, 0.3, 0.52);
@@ -1088,11 +1097,6 @@ export function buildWarrior(): Model {
       }
     }
     if (st.hit > 0) { j.spine.rotation.x += -0.2 * st.hit; j.neck.rotation.x += -0.15 * st.hit; }
-    // at rest a blade is held edge on to the foe, not flat: the wrist turns it a quarter turn about its own
-    // length (the swings already lead with the edge; starting one fades this out)
-    // (not an attack: drinking keeps the blades as they rest, the one on the hip aside)
-    const rest = !a || a.name === 'drink';
-    if (!fp && rest) { if (held) edgeOn(j.handR, grip, two ? EDGE_TWO : EDGE); if (offHeld && !sheathed) edgeOn(j.handL, gripL, -EDGE); }
     if (st.dead < 0) fade.apply(dt); else fade.reset();
     st.look?.();
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
@@ -1200,7 +1204,7 @@ export function buildWarrior(): Model {
     worldObjects: [cape.mesh],
     reset: () => { cape.reset(); legs.reset(); fade.reset(); },
     // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
-    firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on; },
+    firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on; mountAll(); },
     dispose() {
       kit.dispose();
       for (const f of furs) f.dispose();
