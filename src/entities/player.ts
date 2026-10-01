@@ -31,6 +31,8 @@ export interface KnownSkill { def: SkillDef; impl: SkillImpl }
 export interface Ward { amount: number; t: number; onHit?(absorbed: number): void; onEnd?(): void }
 
 /** Absolute difference between two headings. */
+/** after an attack or cast, the body stays on its aim this long (s) before turning to face the way it goes */
+const AIM_HOLD = 0.45;
 const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
 /** `replay`: a remote player's cast, shown for its pose and charge; its owner says when it fires */
@@ -39,8 +41,9 @@ interface ChannelState { skill: KnownSkill; key: SkillKey; state: unknown; t: nu
 /** A movement skill's dash: a fixed velocity that input can't steer, with a per-frame hook; `lift`
  *  makes it a jump of that peak height, and `anim` is the pose it plays, over the rush and `hold`
  *  seconds more standing where it ended (a lunge's strikes follow through). */
-interface DashState { vx: number; vz: number; t: number; dur: number; hold: number; lift: number; anim: CastAnim; step?(): void }
-export interface DashOpts { lift?: number; anim?: CastAnim; hold?: number; step?(): void }
+interface DashState { vx: number; vz: number; t: number; dur: number; hold: number; lift: number; anim: CastAnim; step?(): void; pace?(u: number): number }
+/** `pace` (optional) is the share of the way covered by `u` (0..1 of `dur`), rising from 0 to 1: a dash that braces before it goes, or skids at its end, covering the same distance */
+export interface DashOpts { lift?: number; anim?: CastAnim; hold?: number; step?(): void; pace?(u: number): number }
 
 /** What the local player does that the other players' games replay (see net/session). */
 export type PlayerAction =
@@ -88,6 +91,8 @@ export class Player {
   readonly aim = new THREE.Vector3();
   readonly radius = 0.45;
   facing = Math.PI;
+  /** how much longer the body stays on its aim after an attack or cast (s), see AIM_HOLD */
+  private aimHold = 0;
   phase = 0;
   /** true in the lobby: free casting, no costs, no cooldowns */
   sandbox = false;
@@ -309,7 +314,7 @@ export class Player {
     if (!mx && !mz) { mx = input.stick.x; mz = input.stick.y; }
     const len = Math.hypot(mx, mz);
     let speed = this.stats.moveSpeed;
-    if (this.casting) speed *= 0.45;
+    if (this.casting && !this.casting.skill.def.freeMove) speed *= 0.45;
     if (this.channel) speed *= this.channel.skill.def.moveMult ?? 0.4;
     const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const k = len ? speed * Math.min(1, len) / len : 0;
@@ -342,7 +347,7 @@ export class Player {
     this.casting = { skill: s, t: 0, dur, fireAt: dur * (s.def.fireAt ?? 0.55), fired: false, target };
     // the hero turns after the live aim, never snapping to each cast's: with fire held while the mouse
     // moves, a snap per cast (and holding that aim through the cast) turns it in steps
-    this.faceTowards(target);
+    if (!s.def.freeMove) this.faceTowards(target);
     actionSink?.({ t: 'cast', s: s.def.impl, dur, x: target.x, z: target.z });
     return true;
   }
@@ -377,8 +382,8 @@ export class Player {
   }
 
   /** Rush along `dir` (normalized, on the ground) at `speed` for `dur` seconds; `step` runs every frame of it. */
-  startDash(dir: THREE.Vector3, speed: number, dur: number, { lift = 0, anim = 'charge', hold = 0, step }: DashOpts = {}): void {
-    this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, hold, lift, anim, step };
+  startDash(dir: THREE.Vector3, speed: number, dur: number, { lift = 0, anim = 'charge', hold = 0, step, pace }: DashOpts = {}): void {
+    this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, hold, lift, anim, step, pace };
     this.facing = Math.atan2(dir.x, dir.z);
   }
 
@@ -423,7 +428,7 @@ export class Player {
     if (this.casting) {
       const c = this.casting;
       c.t += dt;
-      this.faceTowards(this.aim);
+      if (!c.skill.def.freeMove) this.faceTowards(this.aim);
       const impl = c.skill.impl;
       if (!c.fired && !impl.channel) impl.charging?.(this, c.skill.def, c.t / c.fireAt, dt);
       if (!c.fired && c.t >= c.fireAt) { c.fired = true; this.fire(c.skill, this.aim.clone()); }
@@ -442,7 +447,12 @@ export class Player {
 
     // movement
     const d = this.dash;
-    if (d) { if (d.t < d.dur) this.vel.set(d.vx, 0, d.vz); else this.vel.set(0, 0, 0); d.t += dt; }
+    if (d) {
+      if (d.t >= d.dur) this.vel.set(0, 0, 0);
+      else if (d.pace && dt > 0) { const k = (d.pace(Math.min(1, (d.t + dt) / d.dur)) - d.pace(d.t / d.dur)) * d.dur / dt; this.vel.set(d.vx * k, 0, d.vz * k); }
+      else this.vel.set(d.vx, 0, d.vz);
+      d.t += dt;
+    }
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     resolveWorld(this.pos, this.radius);
@@ -452,8 +462,13 @@ export class Player {
     }
     const speed = Math.hypot(this.vel.x, this.vel.z);
     const look = lookFacing();
+    // (between one attack or cast and the next, the body stays on its aim a moment rather than wheeling round to the way it
+    // goes and back: held attacks while backing off or moving sideways would swing the body half round at every blow)
+    const fighting = (this.casting && !this.casting.skill.def.freeMove) || this.channel;
+    this.aimHold = fighting ? AIM_HOLD : Math.max(0, this.aimHold - dt);
     if (look !== null && !d) this.facing = look;
-    else if (!this.casting && !this.channel && speed > 0.5) {
+    else if (!fighting && this.aimHold > 0) this.faceTowards(this.aim);
+    else if ((!this.casting || this.casting.skill.def.freeMove) && !this.channel && speed > 0.5) {
       this.facing = angleDamp(this.facing, Math.atan2(this.vel.x, this.vel.z), 14, dt);
     }
 

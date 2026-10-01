@@ -9,18 +9,20 @@ import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ram
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
+import { curve, PoseFade, type Keys } from './motion';
+import { buildFlask, drink, drinkUp, DRINK_SHEATHED, type DrinkHold } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, lod, type SurfaceFn } from './armor';
 import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, fistReach } from './hands';
-import { clamp, lerp, mulberry } from '../../util';
+import { clamp, lerp, mulberry, damp } from '../../util';
 import { SkeletonCape } from './cape';
 import { fromEyes, dirFromEyes } from '../viewModel';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
-import type { AnimState, Gear, Model } from '../../types';
+import type { ActionState, AnimState, Gear, Model } from '../../types';
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
 /** a held weapon: its tip along the grip, and where the left hand holds it (two-handers) */
-interface Weapon { group: THREE.Group; len: number; off: number | null; /** the grip's radius, for the fingers */ r: number }
+interface Weapon { group: THREE.Group; len: number; off: number | null; /** the grip's radius, for the fingers */ r: number; /** worn on the belt: the point along it that sits in the frog, and whether it hangs blade down (a sword, from its guard) or head up (an axe or mace, its haft through the ring) */ hang?: { at: number; down: boolean } }
 /** the grip turns the weapon's +Y forward and a little up out of the bent arm */
 const GRIP = Math.PI / 2 + 0.7;
 /** straightens the weapon along the arm, for swings that trace the damage arc */
@@ -41,6 +43,56 @@ const SHIELD_FRONT = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI
 const SIDE_POS = new THREE.Vector3(0.07, -0.02, 0), FRONT_POS = new THREE.Vector3(0, -0.1, 0);
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+// --- the basic swing (third person), keyed over the cast. The tip goes round in units of half the arc
+// (-1 wound to the start side, +1 at the far side): it winds, loads a little deeper, crosses the arc from
+// 0.55 to 0.85 in step with the trail (skills/cleave swingArc) and carries on past it. The body leads it:
+// the hips turn first, then the spine and chest, the arm and wrist come last.
+/** where the feet stand (left x, z, turn, then right), rig units: at rest, fighting, Power Strike's step in, behind the shield */
+/** a move's end held a moment after its cast is over (seconds), so a short cast's blow or throw is seen, then how long it takes to ease back to the stance */
+const TAIL: Record<string, number> = { chop: 0.3, buff: 0.55, flurry: 0.15 }, TAIL_OUT: Record<string, number> = { chop: 0.55, buff: 0.6, flurry: 0.35 };
+/** a blade's turn in the fist about its own length (third person): its flats along the palm, its edge (an axe's bit) out over the knuckles, as a real one is held */
+const MOUNT = -Math.PI / 2;
+/** drinking: the elbow raised out to the side, the wrist out to the left of the chin (as from a horn: the shield on that forearm turns edge on beside the head, not over the face) */
+const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.1, -0.06, 0.2), tipped: new THREE.Vector3(0.09, 0.1, 0.19), pole: new THREE.Vector3(1, -0.2, 0) };
+const REST_FEET = [0.13, 0.09, 0.15, -0.14, -0.1, -0.55], FIGHT_FEET = [0.13, 0.22, 0.15, -0.14, -0.15, -0.55];
+/** Twin Fangs: the share of it that is the lunge (skills/twinFangs LUNGE / (LUNGE + HOLD)), and the lunge stance after it */
+const FANG_LUNGE = 0.39, FANG_FEET = [0.13, 0.34, 0.1, -0.15, -0.25, -0.5];
+const BRACE_FEET = [0.13, 0.2, 0.1, -0.15, -0.3, -0.4], SKID_FEET = [0.18, 0.3, 0.2, -0.17, -0.12, -0.5];
+const WIDE_FEET = [0.2, 0.08, 0.35, -0.2, -0.06, -0.45];
+const CHOP_FEET = [0.12, 0.36, 0.1, -0.15, -0.2, -0.6], GUARD_FEET = [0.13, 0.26, 0.3, -0.13, -0.2, -0.7];
+const SW_TIP: Keys = [[0, -1.3], [0.3, -1.25], [0.5, -1.35], [0.55, -1], [0.85, 1], [0.95, 1.3], [1, 1.35]];
+/** the upper arm's pitch: raised as it winds, level through the blow, dropping as it carries on */
+const SW_PITCH: Keys = [[0, -1.3], [0.45, -1.45], [0.58, -1.35], [0.72, -1.2], [0.88, -0.95], [1, -0.75]];
+/** the elbow: cocked, thrown straight into the blow, giving a little after it (a two-hander's stays bent, both hands on the grip) */
+const SW_ELBOW: Keys = [[0, -1.0], [0.45, -1.25], [0.62, -0.15], [0.8, -0.1], [1, -0.55]];
+const SW_ELBOW2: Keys = [[0, -0.9], [0.45, -1.1], [0.62, -0.5], [1, -0.6]];
+/** the wrist: cocked back, then snapped through so the blade leads the hand */
+const SW_WRIST: Keys = [[0, 0.6], [0.48, 0.45], [0.62, 1], [1, 0.95]];
+/** the pelvis: back onto the rear foot and loading as it winds, forward and down into the blow */
+const SW_FWD: Keys = [[0, -0.02], [0.45, -0.05], [0.65, 0.06], [0.9, 0.08], [1, 0.06]];
+const SW_DIP: Keys = [[0, -0.02], [0.45, -0.04], [0.66, -0.085], [1, -0.06]];
+/** the trunk: drawn up as it winds, crunching over into the blow; the shoulders tipping from the high side to the low */
+const SW_BEND: Keys = [[0, 0], [0.45, -0.06], [0.7, 0.16], [1, 0.18]];
+/** the forearm's roll that leads a swing with the edge (rad): a forehand palm up, a backhand (share of it) palm down */
+/** a one-hander at the ready (shoulder pitch, elbow, wrist, over the stance's arm): the forearm angled down and the
+ *  wrist nearly straight, so the blade rises from the fist (the grip tips it forward of square to the hand, GRIP);
+ *  a two-hander's (then the arm's turn in) held before the middle of the body, where the left hand reaches its lower grip */
+const REST_ARM = [-0.35, 0.25, -0.5], REST_TWO = [-0.3, 0.2, -0.45, 0.4];
+const SW_ROLL = Math.PI / 2, SW_BACK = 0.75, FANG_ROLL = -0.8;
+const SW_TILT: Keys = [[0, 0.08], [0.45, 0.12], [0.7, -0.02], [1, -0.1]];
+
+// --- Power Strike (third person), keyed over its 1.5s cast, the blow at 0.9 (the skill's fireAt): a step in
+// as the weapon goes up, the body rising and arching back over the rear foot while the charge gathers (the
+// knees loading), then everything thrown down onto the front foot, the trunk crunching over the blow
+const PS_PITCH: Keys = [[0, -1.3], [0.25, -2.95], [0.86, -3.05], [0.9, -2.75], [0.95, -1.3], [0.975, -1.08], [1, -1.12]];
+const PS_WRIST: Keys = [[0, 1], [0.92, 1], [0.975, 0.15], [1, 0.1]];
+const PS_ELBOW: Keys = [[0, -0.35], [0.25, -0.55], [0.86, -0.7], [0.93, -0.15], [1, -0.12]];
+const PS_BEND: Keys = [[0, 0], [0.25, -0.18], [0.86, -0.26], [0.9, -0.2], [0.95, 0.42], [0.975, 0.52], [1, 0.48]];
+const PS_FWD: Keys = [[0, 0], [0.25, -0.05], [0.86, -0.08], [0.95, 0.13], [1, 0.14]];
+const PS_DIP: Keys = [[0, 0], [0.25, 0.01], [0.86, -0.05], [0.9, -0.03], [0.96, -0.19], [0.98, -0.21], [1, -0.2]];
+/** the hips open towards the weapon side as it rises and drive square into the blow */
+const PS_HIPS: Keys = [[0, 0], [0.25, -0.15], [0.86, -0.22], [0.95, 0.1], [1, 0.08]];
 
 /** Navy wool cape with a leather trim, matching the sleeves. */
 const WARRIOR_CAPE_PALETTE: CapeFabricPalette = Object.freeze({
@@ -250,6 +302,8 @@ export function buildWarrior(): Model {
   // it and round the brow, a nasal down the nose, cheek guards over the ears and a mail curtain over the
   // nape. It is shaped on the head itself (padded over the scalp); the face stays bare.
   const head = buildHead(j.head, kit, 'warrior');
+  // (a point just before the lips, for the flask)
+  const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, 'warrior', j.P.neckL);
   {
     const hg = head.group, h = new Sculpt(), C = toGroup(0, 128, -12), M = HEAD_MM;
@@ -322,14 +376,14 @@ export function buildWarrior(): Model {
   const grip = joint(j.handR, 0, -0.06, 0.01);
   grip.rotation.x = GRIP;
   const weapons = new Map<string, Weapon>();
-  const add = (name: string, len: number, off: number | null, r: number, build: (w: Sculpt, g: THREE.Group) => void) => {
+  const add = (name: string, len: number, off: number | null, r: number, build: (w: Sculpt, g: THREE.Group) => void, hang?: Weapon['hang']) => {
     const g = new THREE.Group();
     grip.add(g);
     const w = new Sculpt();
     build(w, g);
     w.glow(edge).build();
     g.visible = false;
-    weapons.set(name, { group: g, len, off, r });
+    weapons.set(name, { group: g, len, off, r, hang });
   };
   /** a blade along +Y from `at`: a flattened diamond with a fuller (a groove down its middle) tapering to the point */
   const blade = (w: Sculpt, g: THREE.Group, bw: number, len: number, at: number) => {
@@ -370,13 +424,13 @@ export function buildWarrior(): Model {
     w.add(new THREE.SphereGeometry(0.012, 8, 6), brass, g, [0, 0.1 - gripL - 0.02, 0.012]);
   };
 
-  add('Sword', 1.12, null, 0.024, (w, g) => { hilt(w, g, 0.2, 0.14); blade(w, g, 0.045, 0.94, 0.12); });
+  add('Sword', 1.12, null, 0.024, (w, g) => { hilt(w, g, 0.2, 0.14); blade(w, g, 0.045, 0.94, 0.12); }, { at: 0.115, down: true });
   add('Axe', 0.74, null, 0.024, (w, g) => {
     haft(w, g, -0.14, 0.72);
     axeHead(w, g, 0.2, 0.6, 1);
     w.add(new THREE.BoxGeometry(0.1, 0.05, 0.04), darkSteel, g, [-0.06, 0.6, 0]);
     w.add(new THREE.CylinderGeometry(0.03, 0.03, 0.08, 8), brass, g, [0, 0.6, 0]);
-  });
+  }, { at: 0.44, down: false });
   add('Mace', 0.72, null, 0.026, (w, g) => {
     haft(w, g, -0.14, 0.62, 0.024);
     w.add(new THREE.SphereGeometry(0.075, 14, 10), darkSteel, g, [0, 0.64, 0]);
@@ -385,7 +439,7 @@ export function buildWarrior(): Model {
       w.add(new THREE.BoxGeometry(0.018, 0.17, 0.075), plateM, g, [Math.cos(a) * 0.07, 0.64, Math.sin(a) * 0.07], [0, -a, 0]);
     }
     w.add(new THREE.ConeGeometry(0.025, 0.07, 8), plateM, g, [0, 0.74, 0]);
-  });
+  }, { at: 0.54, down: false });
   add('Greatsword', 1.62, -0.24, 0.026, (w, g) => {
     hilt(w, g, 0.44, 0.24);
     for (const s of [1, -1]) w.add(new THREE.SphereGeometry(0.022, 8, 6), brass, g, [s * 0.24, 0.14, 0]);
@@ -459,8 +513,8 @@ export function buildWarrior(): Model {
   const FP_CUT = { up: [V(0.36, -0.06, -0.6), V(-0.6, 0.45, -0.65)], down: [V(-0.14, -0.3, -0.5), V(-0.85, -0.25, -0.45)] };
   const FP_RUSH = { back: [V(0.38, -0.4, -0.4), V(0.35, 0.55, -0.75)], ahead: [V(0.28, -0.34, -0.6), V(-0.12, 0.18, -0.98)], out: [V(0.45, -0.22, -0.5), V(0.75, 0.4, -0.5)] };
   const FP_TWO_RUSH = { ahead: [V(0.12, -0.3, -0.55), V(-0.3, 0.3, -0.9)], out: [V(0.24, -0.22, -0.5), V(0.85, 0.35, -0.4)] };
-  /** Bull Rush: the share of its pose that is the rush (skills/bullRush RUSH); the rest is the follow-through */
-  const RUSH = 0.6;
+  /** Bull Rush: the share of its pose that is the brace before it goes, and where the rush ends (skills/bullRush BRACE, RUN, HOLD); the rest is the follow-through */
+  const BRACE = 0.16, RUSH = 0.58, STRIDES = 2.5;
   /** where each elbow points while the arm is placed in the view (chest space: out to its side, down) */
   const POLE_VR = V(-0.6, -1, 0), POLE_VL = V(0.6, -1, 0);
   /** Power Strike there: raised to a high guard on the right, blade up and forward, then the blow ahead */
@@ -496,6 +550,8 @@ export function buildWarrior(): Model {
 
   // the fur sways: a spring on each collar and cuff lags the joint's acceleration (furSway.ts)
   const legs = new LegIK(j);
+  /** smooths every cut between poses: an action starting, restarting or ending */
+  const fade = new PoseFade(j);
   const furs = S.build().filter((m) => m.material === furM).map((m) => { m.userData.fur = true; return new FurSway(m, furM); });
   const elbowFur = [j.elbowL, j.elbowR].flatMap((e) => e.children.filter((c) => c.userData.fur));
 
@@ -532,6 +588,13 @@ export function buildWarrior(): Model {
   // swings alternate forehand / backhand; a new swing starts when the action restarts. With a
   // weapon in each hand they alternate hands instead: the backhand side is the left hand's forehand
   let side = 1, lastK = 1, lastName = '';
+  let tailName = '', tailT = 0;
+  /** when a swing last ended, and whether this one follows straight on from it (it starts wound, where the last one finished) */
+  let swingEnd = -9, chain = false;
+  /** when the last attack was: the feet keep the fighting stance a while after it */
+  let fightT = -9;
+  /** where an action puts the feet this frame (standing): the left foot's spot and turn, then the right's (LegIK.stance); null the fighting stance */
+  let feet: readonly number[] | null = null;
   /** through the eyes, how far Power Strike's blow is still held after the cast (1 at the end, fading) */
   let chopTail = 0;
 
@@ -541,8 +604,11 @@ export function buildWarrior(): Model {
     if (held) held.group.visible = true;
     if (held?.off != null) offGrip.position.y = held.off;
     shield.visible = gear.shield;
-    for (const w of offWeapons.values()) w.group.visible = false;
+    for (const w of offWeapons.values()) { w.group.visible = false; gripL.add(w.group); w.group.position.set(0, 0, 0); }
+    sheathed = false;
     offHeld = gear.offWeapon ? offWeapons.get(gear.offWeapon) ?? offWeapons.get('Sword')! : null;
+    mountAll();
+    frog.visible = !!offHeld; rings[0].visible = !!offHeld?.hang?.down; rings[1].visible = !!offHeld && !offHeld.hang?.down;
     if (offHeld) offHeld.group.visible = true;
     // each seated in its fist, the hand on its wrist
     if (held) seat(handR, grip, held.r);
@@ -557,6 +623,34 @@ export function buildWarrior(): Model {
     tip.position.y = (left && offHeld ? offHeld : held)?.len ?? 0;
   }
 
+  const shY = j.shoulderL.position.y;
+  // the healing draught, in the left fist while it is drunk
+  const flask = buildFlask(kit, brass, leatherDark); flask.name = 'flask'; j.handL.add(flask); flask.position.set(0, -0.07, 0.03); flask.rotation.x = Math.PI;
+  let flaskOut = 0, shieldHang = 0, drinkOn = 0;
+  // a weapon in the left hand hangs on the belt while the hand is busy with the flask: in a leather frog at the
+  // left hip, worn whenever there is a second weapon. A sword sits in it by its guard, the hilt forward and up
+  // and the blade raked back along the outside of the thigh, flat to it; an axe or mace by its haft, head up.
+  const frog = joint(j.hips, 0.212, -0.012, 0.03); frog.name = 'frog';
+  const hangDown = joint(frog), hangUp = joint(frog);
+  const basis = (o: THREE.Object3D, y: THREE.Vector3) => {
+    const z = V(1, 0, 0).addScaledVector(y, -y.x).normalize(), x = new THREE.Vector3().crossVectors(y, z);
+    o.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  };
+  basis(hangDown, V(0.16, -0.72, -0.68).normalize()); basis(hangUp, V(0.06, 0.97, 0.22).normalize());
+  const tab = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.07, 0.034), leather); tab.position.set(0.004, 0.012, 0); frog.add(tab);
+  const ring = (o: THREE.Object3D, r: number, sx: number) => { const m = new THREE.Mesh(new THREE.TorusGeometry(r, 0.007, 6, 14), leatherDark); m.rotation.x = Math.PI / 2; m.scale.set(sx, 1, 1); m.position.y = -0.01; o.add(m); return m; };
+  const rings = [ring(hangDown, 0.034, 1.5), ring(hangUp, 0.03, 1)];
+  for (const m of [tab, ...rings]) m.castShadow = false;
+  frog.visible = false;
+  let sheathed = false;
+  const _s1 = new THREE.Vector3(), _s2 = new THREE.Vector3(), _s3 = new THREE.Vector3(), _s4 = new THREE.Vector3(), _s5 = new THREE.Vector3(), _sm = new THREE.Matrix4(), _shq = new THREE.Quaternion();
+  /** seat every weapon in its fist the way a real one is held (through the eyes the hand-placed poses keep their own) */
+  function mountAll(): void { for (const w of [...weapons.values(), ...offWeapons.values()]) w.group.rotation.y = fp || (w === offHeld && sheathed) ? 0 : MOUNT; }
+  /** turn a hand by `ang` about the length of the weapon in its grip */
+  const edgeOn = (hand: THREE.Object3D, g: THREE.Object3D, ang: number): void => {
+    _hd.set(0, 1, 0).applyQuaternion(g.quaternion);
+    hand.quaternion.multiply(_hq.setFromAxisAngle(_hd, ang));
+  };
   const ARM_R = { shoulder: j.shoulderR, elbow: j.elbowR, hand: j.handR, grip }, ARM_L = { shoulder: j.shoulderL, elbow: j.elbowL, hand: j.handL, grip: gripL };
 
   /** Through the eyes, a weapon held where it's seen: the arm reaches so its grip sits at `at` in the view
@@ -596,6 +690,16 @@ export function buildWarrior(): Model {
 
     // base stance: weapon forward at the hip (a two-hander held across the body), shield up in front
     idle(j, t, 1 - move * 0.6);
+    // a fighter's stance: side-on with the left side forward (the feet, below), the knees soft, the weight
+    // settling from foot to foot and the body swaying over them, the chest and head turned back to the front
+    if (!fp) {
+      const amt = 1 - Math.min(1, move * 2), sway = Math.sin(t * 0.5) + 0.35 * Math.sin(t * 1.13 + 1), br = Math.sin(t * 1.8);
+      j.hips.rotation.y += -0.3 * amt; j.spine.rotation.y += 0.1 * amt; j.chest.rotation.y += 0.12 * amt; j.neck.rotation.y += 0.08 * amt;
+      j.body.position.x += 0.02 * sway * amt; j.hips.rotation.z += 0.045 * sway * amt; j.spine.rotation.z += -0.03 * sway * amt; j.neck.rotation.z += -0.02 * sway * amt;
+      j.body.position.y += -0.035 * amt; j.spine.rotation.x += 0.05 * amt;
+      // (the shoulders rise with each breath)
+      j.shoulderL.position.y = j.shoulderR.position.y = shY + 0.006 * br * amt;
+    }
     // (through the eyes the arms barely swing with the stride: a swinging arm sweeps a weapon across the view)
     const cy0 = j.chest.rotation.y, hy0 = j.hips.rotation.y, eL0 = j.elbowL.rotation.x, eR0 = j.elbowR.rotation.x;
     // the arms pump against the legs, the hands (and so the blades) held steady by the wrists: a weapon arm swings by 0.4 at a run, a shield arm less, a two-hander's hardly (the left hand is on its grip)
@@ -622,12 +726,26 @@ export function buildWarrior(): Model {
       if (offHeld) { j.shoulderL.rotation.x += S[0]; j.elbowL.rotation.x += S[1]; j.handL.rotation.x += S[2]; j.handL.rotation.z -= S[3]; j.shoulderL.rotation.z -= S[4]; }
     }
     let guard = 0;   // 0: shield at the side, 1: in front
+    // standing, at the ready: the blade raised before the body, the shield half up, a second blade the mirror of the first, a two-hander across the body
+    if (!fp) {
+      const ia = 1 - Math.min(1, move * 2), sway = Math.sin(t * 0.7) * 0.03;
+      if (two) { j.shoulderR.rotation.x += (REST_TWO[0] + sway) * ia; j.elbowR.rotation.x += REST_TWO[1] * ia; j.handR.rotation.x += REST_TWO[2] * ia; j.shoulderR.rotation.y += REST_TWO[3] * ia; }
+      else { j.shoulderR.rotation.x += (REST_ARM[0] + sway) * ia; j.shoulderR.rotation.z += 0.08 * ia; j.elbowR.rotation.x += REST_ARM[1] * ia; j.handR.rotation.x += REST_ARM[2] * ia; }
+      if (shield.visible) { j.shoulderL.rotation.x += (-0.3 - sway) * ia; j.shoulderL.rotation.z += -0.12 * ia; j.elbowL.rotation.x += -0.95 * ia; guard = 0.45 * ia; }
+      else if (offHeld) { j.shoulderL.rotation.x += (REST_ARM[0] - sway) * ia; j.shoulderL.rotation.z += -0.08 * ia; j.elbowL.rotation.x += REST_ARM[1] * ia; j.handL.rotation.x += REST_ARM[2] * ia; }
+    }
     // (not through the eyes: the camera stays level, so a lean only tips the weapons into the middle of the view)
     j.spine.rotation.x += move * (fp ? 0 : IK ? 0.05 : 0.14) * dir;
     j.body.rotation.z += (st.lean || 0) * 0.12;
     j.kneeL.rotation.x += 0.1 * (1 - move); j.kneeR.rotation.x += 0.1 * (1 - move);
 
-    const a = st.action;
+    const raw = st.action;
+    // (the tail: the last move's end pose held a moment after it, unless the body moves off or another action starts)
+    if (!raw && lastName !== '' && (TAIL[lastName] ?? 0) > 0 && !fp) { tailName = lastName; tailT = TAIL[lastName]; }
+    if (raw || move > 0.3) { if (tailT > 0 && !raw) fade.cut(0.25); tailT = 0; }
+    const inTail = !raw && tailT > 0;
+    if (inTail) { tailT -= dt; if (tailT <= 0) fade.cut(TAIL_OUT[tailName] ?? 0.4); }
+    const a: ActionState | null = raw ?? (inTail ? { name: tailName, t: 1 } : null);
     // a two-hander through the eyes: how far a move posed in the hero's own space takes over from holding it
     // in the view, and how far a move placed in the view takes it from rest there (to _va, _vd)
     let aw = 0, vw = 0;
@@ -638,9 +756,24 @@ export function buildWarrior(): Model {
     // and how far it owns one leg (a step in, a lunge) while the other stands: standing only, moving the IK steps
     let ownL = 0, ownR = 0;
     const still = 1 - Math.min(1, move * 4);
+    feet = null;
+    let flaskWant = 0, drinkLift = 0;
+    // (the off-hand weapon on the hip while drinking: hung there as the hand reaches the belt, drawn again as it comes back)
+    const sheathe = !!offHeld && a?.name === 'drink' && !fp && a.t > DRINK_SHEATHED[0] && a.t < DRINK_SHEATHED[1];
+    if (offHeld && sheathe !== sheathed) {
+      sheathed = sheathe;
+      const h = offHeld.hang ?? { at: 0.1, down: true };
+      (sheathe ? (h.down ? hangDown : hangUp) : gripL).add(offHeld.group);
+      offHeld.group.position.set(0, sheathe ? -h.at : 0, 0); offHeld.group.rotation.y = sheathe || fp ? 0 : MOUNT;
+    }
     if (chopTail > 0) chopTail = Math.max(0, chopTail - dt / 0.3);
-    if (a && (a.name !== lastName || a.t < lastK - 0.2) && a.name === 'swing') side = -side;
-    lastName = a?.name ?? ''; lastK = a?.t ?? 1;
+    const began = !!raw && (raw.name !== lastName || raw.t < lastK - 0.2), ended = !raw && lastName !== '';
+    if ((ended || began) && lastName === 'swing') swingEnd = t;
+    if (began && raw.name === 'swing') { side = -side; chain = t - swingEnd < 0.25; }
+    // (a swing straight after a swing starts where that one ended: a short fade; out of an action back to the stance, a slow one)
+    if (began) fade.cut(chain && raw.name === 'swing' ? 0.08 : 0.14); else if (ended && !inTail) fade.cut(0.3);
+    if (a && a.name !== 'buff' && a.name !== 'cast' && a.name !== 'stagger' && a.name !== 'drink') fightT = t;
+    lastName = raw?.name ?? ''; lastK = raw?.t ?? 1;
     // Twin Fangs strikes right, then left (in step with skills/twinFangs STRIKES)
     const left = !!offHeld && ((a?.name === 'swing' && side < 0) || (a?.name === 'flurry' && a.t > 0.5));
     tipOn(left);
@@ -648,7 +781,33 @@ export function buildWarrior(): Model {
     const R = left ? j.shoulderL.rotation : j.shoulderR.rotation;
     if (a) {
       const k = a.t;
-      if (a.name === 'swing') {
+      if (a.name === 'swing' && !fp) {
+        // the arm and weapon sweep the damage arc, led by the body: see the keys (SW_*)
+        const s = side, w = chain ? 1 : ramp(k, 0, 0.25), U = curve(SW_TIP, k), theta = s * 1.2 * U;
+        // (a two-hander turns more with the body, keeping the grip before the chest in the left hand's reach)
+        const share = two ? 1.3 : 1, hy = s * 0.3 * share * curve(SW_TIP, k + 0.07), sy = s * 0.14 * share * curve(SW_TIP, k + 0.04), cy = s * 0.26 * share * curve(SW_TIP, k + 0.02);
+        j.hips.rotation.y += hy * w; j.spine.rotation.y += sy * w; j.chest.rotation.y += cy * w;
+        const body = hy + sy + cy;
+        R.x = lerp(R.x, curve(SW_PITCH, k), w); R.z = lerp(R.z, 0, w); R.y = (theta - body + (two ? 0.45 : 0)) * w;
+        const elbow = left ? j.elbowL : j.elbowR, hand = left ? j.handL : j.handR;
+        elbow.rotation.x = lerp(elbow.rotation.x, curve(two ? SW_ELBOW2 : SW_ELBOW, k), w);
+        hand.rotation.x += ALONG_ARM * curve(SW_WRIST, k) * w;
+        // (the forearm rolls the edge into the cut: palm up on a forehand, down on a backhand)
+        if (!fp) edgeOn(hand, left ? gripL : grip, s * SW_ROLL * ((left ? s < 0 : s > 0) ? 1 : SW_BACK) * w);
+        // the weight: back onto the rear foot, then forward and down into the blow (less while moving: the legs are stepping)
+        const ws = w * (0.4 + 0.6 * still), bend = curve(SW_BEND, k);
+        j.body.position.z += curve(SW_FWD, k) * ws; j.body.position.y += curve(SW_DIP, k) * ws;
+        j.spine.rotation.x += bend * w; j.chest.rotation.z += -s * curve(SW_TILT, k) * w;
+        // the head stays on the foe through it all
+        j.neck.rotation.y -= 0.7 * body * w; j.neck.rotation.x -= 0.5 * bend * w;
+        // the other arm pulls back against the blow, and swings out of its way as a forehand carries across to it
+        if (!two) {
+          const O = left ? j.shoulderR.rotation : j.shoulderL.rotation, oe = left ? j.elbowR : j.elbowL, out = left ? -1 : 1, fore = left ? s < 0 : s > 0;
+          // (a shield stays before the body as the blow winds up across it, dropping out of its way)
+          if (shield.visible && !left) O.x += (U > 0 ? 0.25 * U : 0.15 * -U) * w; else { O.x += 0.25 * U * w; oe.rotation.x += -0.3 * Math.max(0, -U) * w; }
+          O.z += out * (fore ? 0.4 * Math.max(0, U) : 0.15 * Math.max(0, -U)) * w;
+        }
+      } else if (a.name === 'swing') {
         // the straight arm and weapon sweep the damage arc: raised out to the starting side, then the
         // tip crosses it from 0.55 to 0.85 of the cast, in step with the trail (skills/cleave swingArc)
         const w = ramp(k, 0, 0.3) * (1 - ramp(k, 0.9, 1));
@@ -693,16 +852,56 @@ export function buildWarrior(): Model {
           arm.z = lerp(arm.z, 0, aw);
           elbow.rotation.x = lerp(elbow.rotation.x, -0.25, aw);
           hand.rotation.x += ALONG_ARM * aw;
+          // (the forearm rolls the edge down into the cut, the palm turning down)
+          if (!fp) edgeOn(hand, s > 0 ? grip : gripL, s * FANG_ROLL * aw);
           j.chest.rotation.y += s * lerp(0.35, -0.35, down) * aw;
         };
         cut(j.shoulderR.rotation, j.elbowR, j.handR, 1, 0.3, 0.52);
         cut(j.shoulderL.rotation, j.elbowL, j.handL, -1, 0.7, 0.92);
+        if (!fp) {
+          // the body leads each cut: the hips turn into it a beat ahead, the trunk crunches over it and the body
+          // drops into it; the lunge over, the feet are the leg IK's again, planted wide with the left forward
+          for (const [s, from, to] of [[1, 0.3, 0.52], [-1, 0.7, 0.92]] as const) {
+            const lead = ramp(k, from - 0.18, from - 0.02) * (1 - ramp(k, to + 0.1, to + 0.3)), d = ramp(k, from - 0.05, to - 0.06), hit = Math.sin(Math.PI * ramp(k, from, to + 0.06));
+            j.hips.rotation.y += s * lerp(0.28, -0.32, d) * lead;
+            j.spine.rotation.x += 0.16 * hit; j.neck.rotation.x += -0.1 * hit; j.body.position.y += -0.05 * hit;
+            // (the other arm draws back as this one cuts)
+            (s > 0 ? j.shoulderL : j.shoulderR).rotation.x += 0.35 * hit * (offHeld ? 0.4 : 1);
+          }
+          legOwn = ramp(k, 0, 0.1) * (1 - ramp(k, FANG_LUNGE, FANG_LUNGE + 0.06));
+          if (k > FANG_LUNGE) feet = FANG_FEET;
+        }
         // (through the eyes each blade is placed in the view, cutting down across it from high on its side)
         if (fp && !two) {
           const cw = (from: number, to: number) => ramp(k, from - 0.15, from) * (1 - ramp(k, to + 0.05, to + 0.25));
           inView(FP_CUT, ramp(k, 0.3, 0.52), true, false); wR = cw(0.3, 0.52);
           if (offHeld) { inView(FP_CUT, ramp(k, 0.7, 0.92), false, true); wL = cw(0.7, 0.92); }
         }
+      } else if (a.name === 'chop' && !fp) {
+        // Power Strike (PS_*): the arms raise the weapon overhead and tremble while the charge builds, then bring it down
+        const w = ramp(k, 0, 0.1), blow = ramp(k, 0.9, 0.97), lift = ramp(k, 0, 0.3);
+        const shake = (1 - blow) * lift * Math.sin(t * 45) * 0.02 * (0.5 + ramp(k, 0.3, 0.88));
+        const pitch = curve(PS_PITCH, k) + shake, bend = curve(two ? [[0, -0.55], [1, -0.55]] : PS_ELBOW, k);
+        R.x = lerp(R.x, pitch, w); R.z = lerp(R.z, 0, w); R.y = (two ? 0.7 : 0.25) * w;
+        j.elbowR.rotation.x = lerp(j.elbowR.rotation.x, bend, w);
+        // (the wrists cock back as the blow lands, so a one-hander finishes pointing ahead, not into the ground)
+        const wr = ALONG_ARM * (two ? 1 : curve(PS_WRIST, k)) * w;
+        j.handR.rotation.x += wr;
+        if (offHeld) {
+          const L = j.shoulderL.rotation;
+          L.x = lerp(L.x, pitch, w); L.z = lerp(L.z, 0, w); L.y = -0.25 * w;
+          j.elbowL.rotation.x = lerp(j.elbowL.rotation.x, bend, w);
+          j.handL.rotation.x += wr;
+        } else if (shield.visible) {
+          // the shield arm swings back and out as the body arches, and is thrown down and back with the blow
+          j.shoulderL.rotation.x += (0.35 * lift - 0.1 * blow) * w; j.shoulderL.rotation.z += 0.3 * lift * w;
+        }
+        const sb = curve(PS_BEND, k), ws = w * (0.4 + 0.6 * still);
+        j.spine.rotation.x += sb * w; j.neck.rotation.x -= 0.55 * sb * w;
+        j.hips.rotation.y += curve(PS_HIPS, k) * w; j.chest.rotation.y -= 0.6 * curve(PS_HIPS, k) * w;
+        j.body.position.z += curve(PS_FWD, k) * ws; j.body.position.y += curve(PS_DIP, k) * ws;
+        // (a step in with the left foot as the weapon rises; the right stays back, turned out)
+        feet = CHOP_FEET;
       } else if (a.name === 'chop') {
         // Power Strike: the weapon rises overhead and trembles while the charge builds, then comes down
         // in a vertical arc at 0.9 of the cast (the skill's fireAt)
@@ -750,20 +949,24 @@ export function buildWarrior(): Model {
         j.thighL.rotation.x += -0.45 * blow * w;
         ownL = blow * w * still;
       } else if (a.name === 'spin') {
-        // Steel Tempest: spin with the weapon held out
-        aw = 1;
+        // Steel Tempest: spin with the weapon held out, pivoting on both feet in a wide, low stance (the legs
+        // turn with the body: feet can't step at this speed), the trunk leaning out over the blade and the
+        // chest and arm trailing the hips so the weapon is dragged round
+        aw = 1; legOwn = 1;
         j.body.rotation.y += t * 15;
-        R.x += -0.1; R.z += -1.35; j.elbowR.rotation.x += 0.7;
+        R.x += -0.1; R.z += -1.35; R.y += -0.3; j.elbowR.rotation.x += 0.7;
         j.shoulderL.rotation.x += 0.2; j.shoulderL.rotation.z += 0.9; j.elbowL.rotation.x += 0.5;
-        j.spine.rotation.x += 0.12;
-        j.kneeL.rotation.x += 0.35; j.kneeR.rotation.x += 0.35; j.thighL.rotation.x += -0.2; j.thighR.rotation.x += -0.2;
-        j.body.position.y += -0.06;
+        j.spine.rotation.x += 0.15; j.spine.rotation.z += -0.12; j.chest.rotation.y += -0.25; j.neck.rotation.y += 0.25; j.neck.rotation.z += 0.08;
+        j.thighL.rotation.set(-0.35, 0, 0.22); j.thighR.rotation.set(-0.35, 0, -0.22);
+        j.kneeL.rotation.x = 0.6; j.kneeR.rotation.x = 0.6; j.ankleL.rotation.set(-0.25, 0, -0.2); j.ankleR.rotation.set(-0.25, 0, 0.2);
+        j.body.position.y += -0.1 + 0.015 * Math.sin(t * 30);
       } else if (a.name === 'block') {
         // Raise Shield: side-on behind the shield, left foot forward and low, the shield drawn in tight
         // before the chest and chin, the weapon cocked over it; a blocked blow jolts it all back
         const w = k, stance = w * (1 - move * 0.7), jolt = st.blockHit ?? 0;
         // (standing, the guard's own stance shows: left foot forward, right back; moving, the leg IK steps)
-        guard = w; aw = w; legOwn = w * (1 - Math.min(1, move * 4));
+        guard = lerp(guard, 1, w); aw = w; legOwn = fp ? w * (1 - Math.min(1, move * 4)) : 0;
+        if (w > 0.3) feet = GUARD_FEET;
         j.chest.rotation.y += -0.35 * w; j.spine.rotation.y += -0.15 * w;
         j.spine.rotation.x += (0.18 - 0.2 * jolt) * w; j.neck.rotation.x += (-0.2 + 0.1 * jolt) * w;
         // the forearm points forward so the shield (facing out of the fist) faces the foe; the yaw
@@ -779,12 +982,39 @@ export function buildWarrior(): Model {
         j.thighL.rotation.x += -0.4 * stance; j.kneeL.rotation.x += 0.5 * stance;
         j.thighR.rotation.x += 0.35 * stance; j.kneeR.rotation.x += 0.45 * stance;
         j.body.position.y += (-0.1 * stance - 0.03 * jolt);
+        // (the hips turn side-on behind the shield, the weight back over the rear foot until a blow lands on it)
+        if (!fp) { j.hips.rotation.y += -0.2 * w; j.body.position.z += -0.03 * stance; }
         j.body.position.z += -0.06 * jolt * w;
       } else if (a.name === 'charge') {
         // shoulder into the charge, weapon back; as it lands (RUSH) the weapons sweep out to both sides
-        const w = Math.min(1, k * 6 / RUSH) * (1 - ramp(k, RUSH - 0.05, RUSH + 0.05));
+        // (third person: a brace, low and coiled with the weight on the rear foot, then the rush: the whole
+        // body leaning into it from the feet, the shield shoulder leading, huge bounding strides, then a skid
+        // into the stop, braced wide and leaning back against it)
+        const brace = ramp(k, 0, BRACE * 0.7) * (1 - ramp(k, BRACE, BRACE + 0.04)), run = ramp(k, BRACE - 0.02, BRACE + 0.03) * (1 - ramp(k, RUSH - 0.02, RUSH + 0.03));
+        const skid = ramp(k, RUSH - 0.03, RUSH) * (1 - ramp(k, 0.8, 1));
+        const w = fp ? Math.min(1, k * 6 / RUSH) * (1 - ramp(k, RUSH - 0.05, RUSH + 0.05)) : Math.max(brace, run);
         const hw = ramp(k, RUSH - 0.04, RUSH + 0.04) * (1 - ramp(k, 0.85, 1)), hu = ramp(k, RUSH, RUSH + 0.2);
-        guard = shield.visible ? Math.max(w, hw) : 0; aw = Math.max(w, hw); legOwn = Math.min(1, k * 10) * (1 - ramp(k, RUSH, RUSH + 0.03));
+        guard = shield.visible ? lerp(guard, 1, Math.max(w, hw)) : 0; aw = Math.max(w, hw); legOwn = fp ? Math.min(1, k * 10) * (1 - ramp(k, RUSH, RUSH + 0.03)) : run;
+        if (!fp) {
+          const cp = clamp((k - BRACE) / (RUSH - BRACE), 0, 1) * STRIDES * Math.PI, sc = Math.sin(cp), cc = Math.cos(cp);
+          // the brace
+          j.body.position.y += -0.14 * brace; j.body.position.z += -0.07 * brace; j.hips.rotation.y += -0.25 * brace;
+          if (brace > 0.3) feet = BRACE_FEET;
+          // the rush: leaning from the feet, low, bobbing over each stride
+          j.body.rotation.x += 0.32 * run; j.body.position.y += (-0.08 + 0.06 * Math.abs(cc)) * run;
+          j.chest.rotation.y += -0.2 * run; j.chest.rotation.z += -0.1 * run; j.neck.rotation.y += 0.45 * Math.max(brace, run); j.neck.rotation.x += -0.3 * run;
+          const lerpX = (o: THREE.Object3D, v: number) => { o.rotation.x = lerp(o.rotation.x, v, run); };
+          lerpX(j.thighL, -0.35 - 0.85 * sc); lerpX(j.thighR, -0.35 + 0.85 * sc);
+          lerpX(j.kneeL, 0.35 + 1.2 * Math.max(0, cc)); lerpX(j.kneeR, 0.35 + 1.2 * Math.max(0, -cc));
+          lerpX(j.ankleL, 0.25 * sc); lerpX(j.ankleR, -0.25 * sc);
+          j.thighL.rotation.z = lerp(j.thighL.rotation.z, 0.06, run); j.thighR.rotation.z = lerp(j.thighR.rotation.z, -0.06, run);
+          // (an arm with no shield pumps with the strides; a shield is driven up before the leading shoulder)
+          if (!shield.visible && !offHeld) { j.shoulderL.rotation.x += 0.5 * sc * run; }
+          if (shield.visible) { j.shoulderL.rotation.x += -0.95 * run; j.elbowL.rotation.x += 0.3 * run; }
+          // the skid: braced wide, leaning back against the stop
+          j.spine.rotation.x += -0.2 * skid; j.body.position.y += -0.12 * skid; j.body.position.z += -0.05 * skid;
+          if (skid > 0.2) feet = SKID_FEET;
+        }
         j.spine.rotation.x += 0.45 * w; j.neck.rotation.x += -0.3 * w;
         j.chest.rotation.y += -0.3 * w;
         const L = j.shoulderL.rotation;
@@ -801,18 +1031,34 @@ export function buildWarrior(): Model {
           elbow.rotation.x = lerp(elbow.rotation.x, -0.15, hw);
           hand.rotation.x += ALONG_ARM * hw;
         };
-        if (held) out(R, j.elbowR, j.handR, 1);
-        if (offHeld) out(j.shoulderL.rotation, j.elbowL, j.handL, -1);
+        // (third person: each blade raised high on its own side through the last stride, then cut down across
+        // the front as it lands, the two crossing; through the eyes a two-hander still sweeps out)
+        const cu = ramp(k, RUSH - 0.12, RUSH - 0.02), cd = ramp(k, RUSH - 0.01, RUSH + 0.1), cw = cu * (1 - ramp(k, 0.82, 1));
+        const cross = (arm: THREE.Euler, elbow: THREE.Object3D, hand: THREE.Object3D, s: number): void => {
+          arm.x = lerp(arm.x, lerp(-2.4, -0.7, cd), cw); arm.y = lerp(arm.y, s * lerp(0.5, -0.7, cd), cw); arm.z = lerp(arm.z, 0, cw);
+          elbow.rotation.x = lerp(elbow.rotation.x, -0.25, cw);
+          hand.rotation.x += ALONG_ARM * cw;
+        };
+        if (fp && two) { if (held) out(R, j.elbowR, j.handR, 1); }
+        else {
+          if (held) cross(R, j.elbowR, j.handR, 1);
+          if (offHeld) cross(j.shoulderL.rotation, j.elbowL, j.handL, -1);
+          if (!fp) { j.spine.rotation.x += 0.25 * cd * cw; j.neck.rotation.x += -0.15 * cd * cw; }
+        }
         // (through the eyes placed in the view: drawn back, driven ahead through the rush, flung out)
         if (fp && !two) {
           const u = ramp(k, 0.06, 0.2), P = FP_RUSH;
-          _ra.lerpVectors(P.back[0], P.ahead[0], u).lerp(P.out[0], hu);
-          _rd.copy(P.back[1]).normalize().lerp(_vg.copy(P.ahead[1]).normalize(), u).lerp(_vg.copy(P.out[1]).normalize(), hu);
+          _va.lerpVectors(P.back[0], P.ahead[0], u);
+          _vd.copy(P.back[1]).normalize().lerp(_vg.copy(P.ahead[1]).normalize(), u);
           // (a jolt as the rush lands)
-          _ra.z += 0.06 * Math.sin(Math.PI * ramp(k, RUSH - 0.06, RUSH + 0.06));
+          _va.z += 0.06 * Math.sin(Math.PI * ramp(k, RUSH - 0.06, RUSH + 0.06));
+          // (then the blades cut down across the view, crossing, as in Twin Fangs)
+          inView(FP_CUT, cd, true, !!offHeld);
+          _ra.lerpVectors(_va, _ra, cu); _rd.lerpVectors(_vd, _rd, cu);
+          if (offHeld) { _vg.copy(_va); _vg.x = -_vg.x; _la.lerpVectors(_vg, _la, cu); _vg.copy(_vd); _vg.x = -_vg.x; _ld.lerpVectors(_vg, _ld, cu); }
           const vw2 = Math.min(1, k * 8) * (1 - ramp(k, 0.85, 1));
           wR = held ? vw2 : 0;
-          if (offHeld) { _la.copy(_ra); _la.x = -_la.x; _ld.copy(_rd); _ld.x = -_ld.x; wL = vw2; }
+          if (offHeld) wL = vw2;
         }
         // (a two-hander the same way: levelled ahead across the view through the rush, swept out to the right)
         if (fp && two) {
@@ -821,13 +1067,21 @@ export function buildWarrior(): Model {
           _vd.copy(FP_TWO_DIR).lerp(_vg.copy(P.ahead[1]).normalize(), u).lerp(_vg.copy(P.out[1]).normalize(), hu);
           vw = 1; aw = 0;
         }
+      } else if (a.name === 'drink' && !fp) {
+        // the healing draught: the free hand takes the flask from the belt and drinks it (models/flask.ts); the shield
+        // stays on its arm, a two-hander's left hand lets go of the grip (out of its reach)
+        flaskWant = drink(j, k, mouth, DRINK); aw = 1; guard = 0; drinkLift = drinkUp(k);
       } else if (a.name === 'buff') {
-        // war cry: chest out, arms flung wide, head back
-        const w = pulse(k, 0, 1);
-        aw = w;
-        j.shoulderL.rotation.z += 0.9 * w; R.z += -0.9 * w;
-        j.shoulderL.rotation.x += 0.3 * w; R.x += 0.3 * w;
-        j.spine.rotation.x += -0.2 * w; j.neck.rotation.x += -0.35 * w;
+        // war cry: gathered in, hunched over the fists, then thrown open, chest out, arms flung wide and up,
+        // head back in the roar (held as the cast ends: the fade out of it is slow)
+        const g = ramp(k, 0, 0.3) * (1 - ramp(k, 0.4, 0.6)), r = ramp(k, 0.38, 0.62);
+        aw = Math.max(g, r);
+        j.shoulderL.rotation.x += -0.5 * g + 0.15 * r; R.x += -0.5 * g + 0.15 * r;
+        j.shoulderL.rotation.z += -0.1 * g + 1.15 * r; R.z += 0.1 * g - 1.15 * r;
+        j.elbowL.rotation.x += -1.1 * g - 0.25 * r; j.elbowR.rotation.x += -0.9 * g;
+        j.spine.rotation.x += 0.25 * g - 0.1 * r; j.chest.rotation.x += -0.08 * r; j.neck.rotation.x += 0.15 * g - 0.3 * r;
+        j.body.position.y += -0.07 * g + 0.02 * r; j.body.position.z += -0.03 * r;
+        feet = WIDE_FEET;
       } else if (a.name === 'stagger') {
         // guard broken: thrown back with the arms flung open, then hunched and reeling until it passes
         const hit = 1 - ramp(k, 0, 0.3), reel = ramp(k, 0.1, 0.3) * (1 - ramp(k, 0.8, 1));
@@ -847,12 +1101,16 @@ export function buildWarrior(): Model {
       }
     }
     if (st.hit > 0) { j.spine.rotation.x += -0.2 * st.hit; j.neck.rotation.x += -0.15 * st.hit; }
+    if (st.dead < 0) fade.apply(dt); else fade.reset();
     st.look?.();
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
     else {
       // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
       if (!fp) legs.captureArms();
       _legW[0] = 1 - ownL; _legW[1] = 1 - ownR;
+      // the feet: side-on, the left forward and the right back and turned out; fighting, the left steps further in
+      const F = feet ?? (t - fightT < 1.6 ? FIGHT_FEET : REST_FEET);
+      legs.stance(0, F[0], F[1], F[2]); legs.stance(1, F[3], F[4], F[5]);
       legs.update(dt, st.phase, st.dead, 1 - legOwn, fp ? 0 : 1, _legW);
       groundFeet(j, 0.07);
       if (!fp) legs.holdArms();
@@ -878,6 +1136,20 @@ export function buildWarrior(): Model {
 
     shield.quaternion.slerpQuaternions(SHIELD_SIDE, SHIELD_FRONT, guard);
     shield.position.lerpVectors(SIDE_POS, FRONT_POS, guard);
+    // drinking, the forearm comes up across the face: the shield hangs from it before the chest instead, facing
+    // ahead and shifted towards the elbow, the face and the flask clear above it
+    shieldHang = damp(shieldHang, drinkLift, 12, dt); drinkOn = damp(drinkOn, a?.name === 'drink' ? 1 : 0, 12, dt);
+    if (shieldHang > 0.01 && shield.visible) {
+      root.updateMatrixWorld(true);
+      j.elbowL.getWorldPosition(_s1); j.handL.getWorldPosition(_s2);
+      const a = _s3.subVectors(_s2, _s1).normalize(), n = _s4.set(0, 0, 1).transformDirection(root.matrixWorld);
+      n.addScaledVector(a, -a.dot(n)).normalize();
+      _sm.makeBasis(_s5.crossVectors(a, n), a, n);
+      _sq.setFromRotationMatrix(_sm).premultiply(j.handL.getWorldQuaternion(_shq).invert());
+      shield.quaternion.slerp(_sq, shieldHang);
+      _s1.lerp(_s2, 0.3).addScaledVector(_s4.set(0, -1, 0), 0.26 * root.scale.x).addScaledVector(n, 0.07 * root.scale.x);
+      shield.position.lerp(j.handL.worldToLocal(_s1), shieldHang);
+    }
 
     // a two-hander: the left hand follows the grip wherever the right arm takes the weapon, and lets go
     // where it can't reach (a pose that flings the arms apart), the arm easing back to the pose's own
@@ -887,9 +1159,9 @@ export function buildWarrior(): Model {
       offGrip.getWorldPosition(_grip);
       j.chest.worldToLocal(_grip);
       const fore = j.P.foreL + j.P.handR, out = _grip.distanceTo(j.shoulderL.position) - (j.P.upperL + fore);
-      // (a few cm short doesn't show: the stances hold it at full stretch)
-      const k = 1 - ramp(out, 0.07, 0.2);
-      twoHeld = out < 0.07;
+      // (a few cm short doesn't show: the stances hold it at full stretch; drinking, it lets go for the flask)
+      const k = (1 - ramp(out, 0.07, 0.2)) * (1 - drinkOn);
+      twoHeld = out < 0.07 && drinkOn < 0.5;
       if (k > 0) {
         _sq.copy(j.shoulderL.quaternion);
         const e0 = j.elbowL.rotation.x;
@@ -915,9 +1187,11 @@ export function buildWarrior(): Model {
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
     if (held) hold(handR, along(grip), held.r);
     else poseHand(handR, 0.5 + Math.sin(t * 1.3) * 0.05, 0.1);
-    if (offHeld) hold(handL, along(gripL), offHeld.r);
+    if (offHeld && !sheathed) hold(handL, along(gripL), offHeld.r);
     else if (twoHeld && held) hold(handL, along(grip), held.r, _up);
-    else poseHand(handL, shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 0.08);
+    else poseHand(handL, lerp(shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 1.1, flaskOut), 0.08);
+    // the flask comes out of the fist and is put away again
+    flaskOut = damp(flaskOut, flaskWant, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
 
     if (dt > 0) { cape.update(dt, st.velocity ?? ZERO); for (const f of furs) f.update(dt); }
     cape.setVisible(st.dead < 0.6);
@@ -932,9 +1206,9 @@ export function buildWarrior(): Model {
     get offTip() { return offHeld ? tipL : null; },
     get reach() { return (ARM + (held?.len ?? 0)) * root.scale.x; },
     worldObjects: [cape.mesh],
-    reset: () => { cape.reset(); legs.reset(); },
+    reset: () => { cape.reset(); legs.reset(); fade.reset(); },
     // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
-    firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on; },
+    firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on; mountAll(); },
     dispose() {
       kit.dispose();
       for (const f of furs) f.dispose();

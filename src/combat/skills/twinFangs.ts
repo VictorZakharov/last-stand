@@ -14,7 +14,7 @@ type Def = Needs<'damage' | 'range' | 'arc' | 'color'>;
 /** the lunge: seconds, how long the strikes follow through standing after it (at full speed the two
  *  cuts were over before the eye caught them), and how far short of the aim it stops (the strikes reach
  *  the rest) */
-const LUNGE = 0.3, HOLD = 0.35, SHORT = 1.3, MAX_LUNGE = 2.2;
+const LUNGE = 0.35, HOLD = 0.55, SHORT = 1.3, MAX_LUNGE = 2.2;
 /** when the two blades cross the target, into the lunge (in step with the model's 'flurry': its cuts
  *  start at 0.3 and 0.7 of it) */
 const STRIKES = [0.3 * (LUNGE + HOLD), 0.7 * (LUNGE + HOLD)];

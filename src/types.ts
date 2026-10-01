@@ -58,7 +58,7 @@ export interface DerivedStats {
 export type SkillKey = 'mouse0' | 'mouse2' | '1' | '2' | '3' | '4' | 'q';
 /** pose a model plays while the skill casts; a class's model interprets each name in its own way */
 /** `point`: a shot from the staff or weapon, held level at the target while shots follow each other. */
-export type CastAnim = 'cast' | 'point' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'spin' | 'block' | 'stagger' | 'flurry' | null;
+export type CastAnim = 'cast' | 'summon' | 'drink' | 'point' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'spin' | 'block' | 'stagger' | 'flurry' | null;
 
 /** Skill tuning data. Behavior-specific numbers are optional fields. */
 export interface SkillDef {
@@ -92,6 +92,8 @@ export interface SkillDef {
   length?: number;
   width?: number;
   moveMult?: number;
+  /** a cast that leaves the hero free to move (drinking a draught): full speed, facing the way they go, not the aim; it still blocks every other skill */
+  freeMove?: boolean;
   freeze?: number;
   duration?: number;
   pull?: number;
