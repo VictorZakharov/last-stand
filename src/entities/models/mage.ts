@@ -16,7 +16,7 @@ import { SkeletonCape } from './cape';
 import { BellCloth } from './sleeve';
 import { LegIK } from './ik';
 import { curve, PoseFade, type Keys } from './motion';
-import { buildFlask, drink, type DrinkHold } from './flask';
+import { buildFlask, drink, drinkUp, type DrinkHold } from './flask';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
 import type { ActionState, AnimState, Model } from '../../types';
 
@@ -519,7 +519,7 @@ export function buildMage(): Model {
         }
       } else if (a.name === 'drink' && !fp) {
         // the healing draught: taken from the belt and drunk (models/flask.ts)
-        flaskWant = drink(j, k, mouth, DRINK); drinkLift = ramp(k, 0.26, 0.46) * (1 - ramp(k, 0.7, 0.84));
+        flaskWant = drink(j, k, mouth, DRINK); drinkLift = drinkUp(k);
       } else if (a.name === 'summon' && !fp) {
         const w = ramp(k, 0, 0.15), rise = ramp(k, 0, 0.45) * (1 - ramp(k, 0.5, 0.62)), pull = ramp(k, 0.5, 0.62);
         j.shoulderL.rotation.x = lerp(j.shoulderL.rotation.x, curve(SU_ARM_X, k), w); j.shoulderL.rotation.z = lerp(j.shoulderL.rotation.z, curve(SU_ARM_Z, k), w);
@@ -606,7 +606,7 @@ export function buildMage(): Model {
 
     // the flask comes out of the fist and is put away again (the fist closed round it)
     flaskOut = damp(flaskOut, flaskWant, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
-    if (flaskOut > 0.3) poseHand(handL, 1.1, 0.08);
+    if (flaskOut > 0.01) poseHand(handL, lerp(0.45, 1.1, flaskOut), 0.08 + 0.04 * (1 - flaskOut));
     // (drinking, the left sleeve is pushed back up the arm, its bell shorter, so the hand and the flask at the lips come out of it)
     sleeveUp = damp(sleeveUp, drinkLift, 8, dt);
     if (!fp) { bells[0].position.y = BELL_Y + 0.17 * sleeveUp; bells[0].scale.y = 1 - 0.25 * sleeveUp; }

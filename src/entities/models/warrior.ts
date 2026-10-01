@@ -10,7 +10,7 @@ import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
 import { curve, PoseFade, type Keys } from './motion';
-import { buildFlask, drink, DRINK_SHEATHED, type DrinkHold } from './flask';
+import { buildFlask, drink, drinkUp, DRINK_SHEATHED, type DrinkHold } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, lod, type SurfaceFn } from './armor';
 import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, fistReach } from './hands';
@@ -1039,7 +1039,7 @@ export function buildWarrior(): Model {
       } else if (a.name === 'drink' && !fp) {
         // the healing draught: the free hand takes the flask from the belt and drinks it (models/flask.ts); the shield
         // stays on its arm, a two-hander's left hand lets go of the grip (out of its reach)
-        flaskWant = drink(j, k, mouth, DRINK); aw = 1; guard = 0; drinkLift = sm(0.26, 0.46, k) * (1 - sm(0.7, 0.84, k));
+        flaskWant = drink(j, k, mouth, DRINK); aw = 1; guard = 0; drinkLift = drinkUp(k);
       } else if (a.name === 'buff') {
         // war cry: gathered in, hunched over the fists, then thrown open, chest out, arms flung wide and up,
         // head back in the roar (held as the cast ends: the fade out of it is slow)
@@ -1163,7 +1163,7 @@ export function buildWarrior(): Model {
     else poseHand(handR, 0.5 + Math.sin(t * 1.3) * 0.05, 0.1);
     if (offHeld && !sheathed) hold(handL, along(gripL), offHeld.r);
     else if (twoHeld && held) hold(handL, along(grip), held.r, _up);
-    else poseHand(handL, flaskOut > 0.3 ? 1.1 : shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 0.08);
+    else poseHand(handL, lerp(shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 1.1, flaskOut), 0.08);
     // the flask comes out of the fist and is put away again
     flaskOut = damp(flaskOut, flaskWant, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
 

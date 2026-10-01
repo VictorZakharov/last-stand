@@ -73,7 +73,7 @@ const mage: ClassDef = {
     {
       key: 'q', impl: 'potion', name: 'Healing Draught',
       desc: 'Instantly restore a large portion of Health.',
-      tags: ['consumable'], cost: 0, cooldown: 11, castTime: 1, fireAt: 0.6, freeMove: true,
+      tags: ['consumable'], cost: 0, cooldown: 11, castTime: 1.4, fireAt: 0.5, freeMove: true,
       healPct: 0.45,
       icon: { glyph: '⚗', color: '#ff5b5b' },
     },
