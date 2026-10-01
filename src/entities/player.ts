@@ -31,6 +31,8 @@ export interface KnownSkill { def: SkillDef; impl: SkillImpl }
 export interface Ward { amount: number; t: number; onHit?(absorbed: number): void; onEnd?(): void }
 
 /** Absolute difference between two headings. */
+/** after an attack or cast, the body stays on its aim this long (s) before turning to face the way it goes */
+const AIM_HOLD = 0.45;
 const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
 /** `replay`: a remote player's cast, shown for its pose and charge; its owner says when it fires */
@@ -89,6 +91,8 @@ export class Player {
   readonly aim = new THREE.Vector3();
   readonly radius = 0.45;
   facing = Math.PI;
+  /** how much longer the body stays on its aim after an attack or cast (s), see AIM_HOLD */
+  private aimHold = 0;
   phase = 0;
   /** true in the lobby: free casting, no costs, no cooldowns */
   sandbox = false;
@@ -458,7 +462,12 @@ export class Player {
     }
     const speed = Math.hypot(this.vel.x, this.vel.z);
     const look = lookFacing();
+    // (between one attack or cast and the next, the body stays on its aim a moment rather than wheeling round to the way it
+    // goes and back: held attacks while backing off or moving sideways would swing the body half round at every blow)
+    const fighting = (this.casting && !this.casting.skill.def.freeMove) || this.channel;
+    this.aimHold = fighting ? AIM_HOLD : Math.max(0, this.aimHold - dt);
     if (look !== null && !d) this.facing = look;
+    else if (!fighting && this.aimHold > 0) this.faceTowards(this.aim);
     else if ((!this.casting || this.casting.skill.def.freeMove) && !this.channel && speed > 0.5) {
       this.facing = angleDamp(this.facing, Math.atan2(this.vel.x, this.vel.z), 14, dt);
     }
