@@ -211,13 +211,13 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     for (let j = 0; j <= g.nv; j++) for (let i = 0; i <= g.nu; i++) {
       const k = j * W + i, r = g.r[k];
       gridDir(g.az[i], g.el[j], d); origin(g.el[j], C);
-      const x = C.x + d.x * r, y = C.y + d.y * r, z = C.z + d.z * r, sc = scalp(Math.abs(x), y, z, L.hairDrop);
+      const x = C.x + d.x * r, y = C.y + d.y * r, z = C.z + d.z * r, sc = scalp(Math.abs(x), y, z, L.hairDrop, L.templeDrop);
       // thicker on top, combed into shallow ridges running back
       // (starting behind the painted hairline, its edge sunk into the skin: the grid's steps never show)
       // (rising gradually from behind the hairline: a step over a cell or two of the grid shows as a stair)
       // (and as gradually beside a hairline that runs steeply down, at the temples: measured across it too)
       const ha = Math.atan2(Math.abs(x), z + 12), hr = Math.hypot(Math.abs(x), z + 12);
-      const inside = (da: number) => y - hairline(hr * Math.sin(Math.max(0, ha - da)), hr * Math.cos(Math.max(0, ha - da)) - 12, L.hairDrop);
+      const inside = (da: number) => y - hairline(hr * Math.sin(Math.max(0, ha - da)), hr * Math.cos(Math.max(0, ha - da)) - 12, L.hairDrop, L.templeDrop);
       const lift = sm(-1, 16, inside(0)) * sm(-1, 10, inside(0.12)) * sm(-1, 6, inside(0.25)) * (6 + 6 * sm(120, 200, y) + 2 * Math.sin(Math.atan2(x, z) * 18 + y * 0.05)) - 1.2;
       toGroup(x + d.x * lift, y + d.y * lift, z + d.z * lift, q);
       pos[k * 3] = q.x; pos[k * 3 + 1] = q.y; pos[k * 3 + 2] = q.z;
@@ -310,20 +310,20 @@ function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
     let at: (t: number) => [number, number, number];
     if (front && rng() < 0.45) {
       // from the hairline straight back over the top, the volume swept off the forehead
-      const az0 = side * (0.03 + rng() * 0.45), el0 = 0.74 + rng() * 0.08, az1 = side * (2.4 + rng() * 0.7), el1 = -0.2 - rng() * 0.3, top = 12 + rng() * 8;
+      const az0 = side * (0.03 + rng() * 0.45), el0 = 0.74 + rng() * 0.08, az1 = side * (2.4 + rng() * 0.7), el1 = -0.2 - rng() * 0.3, top = 13 + rng() * 7;
       at = (t) => [az0 + (az1 - az0) * sm(0.25, 1, t), el0 + (Math.PI / 2 - 0.05 - el0) * Math.sin(Math.min(1, t / 0.45) * Math.PI / 2) * (1 - sm(0.45, 1, t)) + (el1 - el0) * sm(0.45, 1, t), lerp(3, top, sm(0, 0.3, t))];
     } else if (front) {
       // from the hairline, up and back off the forehead, then round past the temple and down over the ear
-      const az0 = side * (0.04 + rng() * 0.55), el0 = 0.74 + rng() * 0.08, azT = side * (0.7 + rng() * 0.4), elT = 0.9 + rng() * 0.15;
-      const az1 = side * (1.45 + rng() * 0.4), el1 = -0.05 - rng() * 0.3, top = 10 + rng() * 6;
+      const az0 = side * (0.04 + rng() * 0.55), el0 = 0.74 + rng() * 0.08, azT = side * (0.62 + rng() * 0.3), elT = 0.62 + rng() * 0.18;
+      const az1 = side * (1.2 + rng() * 0.35), el1 = -0.05 - rng() * 0.3, top = 7 + rng() * 5;
       at = (t) => t < 0.35
         ? [lerp(az0, azT, sm(0, 0.35, t)), lerp(el0, elT, Math.sin(t / 0.35 * Math.PI / 2)), lerp(2, top, sm(0, 0.25, t))]
-        : [lerp(azT, az1, sm(0.35, 1, t)), lerp(elT, el1, sm(0.3, 1, t) ** 0.8), lerp(top, 24, sm(0.35, 0.8, t))];
+        : [lerp(azT, az1, sm(0.35, 1, t)), lerp(elT, el1, sm(0.3, 1, t) ** 0.8), lerp(top, 14, sm(0.35, 0.8, t))];
     } else {
       // from the crown down the side or the back of the head
       const az0 = side * (0.2 + rng() * 2.9), el0 = 0.9 + rng() * 0.6;
       const az1 = side * Math.min(Math.PI * 0.99, Math.abs(az0) * 0.5 + 1.4 + rng() * 1.2), el1 = -0.15 - rng() * 0.35;
-      const full = 20 + rng() * 8;
+      const full = 12 + rng() * 6;
       at = (t) => [az0 + (az1 - az0) * Math.sqrt(t), el0 + (el1 - el0) * t ** 1.3, lerp(4, full, sm(0, 0.45, t))];
     }
     pts.length = 0;
@@ -331,14 +331,15 @@ function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
       const t = k / 8, [az, el, lift0] = at(t);
       // (in waves along its length; standing well off over the ears)
       const ear = Math.exp(-(((Math.abs(az) - 1.55) / 0.5) ** 2)) * sm(0.7, -0.1, el);
-      pts.push(surface(az + wob * Math.sin(ph + t * waves * Math.PI), el, lift0 + layer * 4.5 + 22 * ear + 6 * Math.sin(ph * 1.7 + t * waves * Math.PI) * sm(0.2, 0.6, t)));
+      pts.push(surface(az + wob * Math.sin(ph + t * waves * Math.PI), el, lift0 + layer * 3.5 + 12 * ear + 5 * Math.sin(ph * 1.7 + t * waves * Math.PI) * sm(0.2, 0.6, t)));
     }
     // then down to about the chin in waves, the end flicking out (a wisp further, thinner)
     const last = pts[8], o = new THREE.Vector3(last.x - skullC.x, 0, last.z - skullC.z).normalize(), tg = new THREE.Vector3().crossVectors(up, o);
-    const fall = (wisp ? 60 + rng() * 40 : 30 + rng() * 45) * HEAD_MM, amp = (9 + rng() * 8) * HEAD_MM;
-    for (let k = 1; k <= 5; k++) {
-      const t = k / 5, wave = Math.sin(ph + (1 + t) * waves * Math.PI) * amp, flick = t ** 1.8 * (26 + rng() * 16) * HEAD_MM;
-      pts.push(last.clone().addScaledVector(o, flick + wave * 0.7).addScaledVector(tg, wave).add(new THREE.Vector3(0, -fall * t + flick * 0.5, 0)));
+    const fall = (wisp ? 80 + rng() * 40 : 45 + rng() * 45) * HEAD_MM, amp = (8 + rng() * 7) * HEAD_MM;
+    for (let k = 1; k <= 7; k++) {
+      // (curling more towards the end, out from the head as much as across it, so it shows from the front too)
+      const t = k / 7, wave = Math.sin(ph + (1 + t * 1.4) * waves * Math.PI) * amp * (0.6 + 0.9 * t), flick = t ** 1.8 * (16 + rng() * 12) * HEAD_MM;
+      pts.push(last.clone().addScaledVector(o, flick + wave).addScaledVector(tg, wave * 0.8).add(new THREE.Vector3(0, -fall * t + flick * 0.5, 0)));
     }
     const w = (wisp ? 4 + rng() * 3 : 9 + rng() * 7) * HEAD_MM;
     // (each lock its own shade, darker at the root and in the hollows of its waves, catching the light on their crests)
