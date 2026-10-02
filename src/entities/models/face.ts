@@ -126,12 +126,15 @@ function maskSDF(ax: number, y: number, z: number, M: FaceMask): number {
   // (behind its widest point the taper inside the skull stays round)
   const q = z > Zc && M.pz ? knots(M.y, M.pz, y) : p;
   const u = ax / W, v = Math.abs(z - Zc) / D;
-  const up = Math.pow(u, p), vq = Math.pow(v, q), f = up + vq - 1;
+  // (round where the front meets the back: v^q with q under 2 turns infinitely sharply there, a crease down the face's
+  // side; eased into a square near v = 0 it keeps its line further out)
+  const e2 = 0.0144, vv = v * v + e2, vq = Math.pow(vv, q / 2) - Math.pow(e2, q / 2);
+  const up = Math.pow(u, p), f = up + vq - 1;
   let d: number;
   if (u + v < 1e-6) d = -Math.min(W, D);
   else {
     // (over its gradient: a distance near the surface)
-    const gx = u > 0 ? p * up / u / W : 0, gz = v > 0 ? q * vq / v / D : 0;
+    const gx = u > 0 ? p * up / u / W : 0, gz = q * v * Math.pow(vv, q / 2 - 1) / D;
     d = f / Math.max(1e-6, Math.hypot(gx, gz));
   }
   if (M.hollow && z > Zc) {
@@ -154,18 +157,17 @@ export function faceY(y: number, F: FaceShape): number {
 }
 
 export const FACES: Record<'warrior' | 'mage', FaceShape> = {
-  // broad jaw and chin, a heavy brow over deep-set eyes, high cheekbones, a straight nose
-  warrior: { jaw: 50, chin: 14, chinFwd: 5, brow: 1.4, cheek: 0.9, noseLen: 50, noseW: 13.2, nosePro: 1.5, hump: 0, lips: 0.72, long: 0.96, tip: 1.15, eyeOpen: 3.2, iris: [0.31, 0.32, 0.26], beardDepth: 0.8, browFwd: 17, foreheadFwd: 10, noseRoot: 11, skullFwd: 14, lipFwd: 8, mouthUp: 6, beardLine: 22, browDrop: 8, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -16, neckBlend: 9, lidSoft: 4, earFlare: 0.3, zygo: 2, bridgeW: 6.8, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, muzzleFwd: 7,
-    templeNarrow: 12, lidFold: 5, mouthW: 0.88,
-    // (the face's front measured off the reference's turnaround: its profile, its front view's outline)
+  // a strong jaw and chin, a brow over deep-set eyes, a straight nose
+  warrior: { jaw: 55.2, chin: 10, chinFwd: -3.4, brow: 1.7, cheek: 0.9, noseLen: 50, noseW: 13.2, nosePro: 1.5, hump: 0, lips: 0.72, long: 0.96, tip: 1.15, eyeOpen: 3.2, iris: [0.31, 0.32, 0.26], beardDepth: 0.8, browFwd: 5.5, foreheadFwd: 10, noseRoot: 11, skullFwd: -3.7, lipFwd: 16.5, mouthUp: 6, beardLine: 22, browDrop: 2.6, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -16, neckBlend: 9, lidSoft: 4, earFlare: 0.3, zygo: 2, bridgeW: 6.8, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, muzzleFwd: -1.5,
+    templeNarrow: -4.4, lidFold: 5, mouthW: 0.88,
+    // (the mask, the skull and the jaw fitted by least squares (tools/facelab/fit.mjs) to the reference rebuilt in 3D from its
+    // turnaround (within 1 mm rms) and to its front view's widths; the nose, lips and eyes to the pictures' landmarks)
     mask: { y: [-2, 8, 18, 30, 45, 60, 75, 90, 100, 110, 120, 132, 145, 160, 175, 190],
-      front: [95, 102, 104, 104, 108, 109, 106, 100, 92, 88, 96, 106, 106, 102, 94, 80],
-      half: [20, 30, 42, 53, 60, 64, 66, 68.5, 67, 65, 63, 62, 62, 63, 63, 58],
-      side: [60, 45, 30, 15, 15, 18, 22, 25, 25, 25, 25, 25, 20, 12, 0, -10],
-      // (square across the cheeks, the front turning into the side in a line from the cheekbone down to the jaw's angle)
-      p: [2, 2, 2, 2.1, 2.4, 2.8, 3, 2.8, 2.6, 2.2, 2.2, 2.4, 2.6, 2.6, 2.4, 2.2],
-      // (the jaw lean: its sides run nearly straight back from the chin, not swelling out)
-      pz: [1.2, 1.2, 1.25, 1.3, 1.5, 1.9, 2.2, 2.4, 2.4, 2.2, 2.2, 2.4, 2.6, 2.6, 2.4, 2.2], hollow: 1.5 } },
+      front: [95, 96.5, 97.5, 99.3, 101.1, 101.3, 100.2, 98, 95.6, 93.7, 94.4, 98.1, 99.9, 98.6, 94, 80],
+      half: [20, 32.6, 45.1, 56.4, 63.8, 66.8, 68, 69.5, 69, 67.2, 66.2, 65.2, 65.1, 65.1, 63, 58],
+      side: [60, 48.6, 38.1, 29, 21.3, 15.5, 11.8, 10.4, 10.1, 10.7, 11.8, 11.7, 10, 6.3, 0, -10],
+      p: [2, 2.15, 2.22, 2.21, 2.11, 1.98, 1.84, 1.76, 1.8, 2.02, 2.36, 2.5, 2.44, 2.39, 2.4, 2.2],
+      pz: [1.2, 1.2, 1.2, 1.2, 1.22, 1.58, 2.11, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2], hollow: 0 } },
   // longer and leaner, high cheekbones, a long straight nose
   mage: { jaw: 50, chin: 19, chinFwd: 0, brow: 1.05, cheek: 1.25, noseLen: 57, noseW: 16.5, nosePro: 1.1, hump: 0.4, lips: 1, long: 1.04, eyeOpen: 4.3, iris: [0.3, 0.42, 0.34], beardDepth: 6 },
 };
@@ -267,12 +269,13 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
   if (!M) d = smin(d, ell(ax, yl, z, (F.masseter ?? 47) + zg * 0.6, 76, 20, 12, 30, 24), 18);
   // the top of the neck under the jaw and the skull (the rig's neck carries on below it)
   d = smin(d, ell(ax, y, z, 0, 0, F.neckBack ?? -8, F.neckW ?? 57, 58, 53), F.neckBlend ?? 18);
-  // the cheekbones' arches back towards the ears
-  d = smin(d, seg(ax, yl, z, 55 + zg, 102, 44, 59 + zg, 100, 14, 5, 4.5), 14);
+  // the cheekbones' arches back towards the ears (a measured face's mask has its own cheekbones: these stood out of it
+  // with grooves between them)
+  if (!M) d = smin(d, seg(ax, yl, z, 55 + zg, 102, 44, 59 + zg, 100, 14, 5, 4.5), 14);
   // (and the temples above them, the muscle there filling the side of the head out to the arches)
-  if (zg) d = smin(d, ell(ax, y, z, 56 + zg * 0.6, 120, 28, 9, 22, 24), 14);
-  // nothing below reaches this far back
-  if (z < 25) return d;
+  if (zg && !M) d = smin(d, ell(ax, y, z, 56 + zg * 0.6, 120, 28, 9, 22, 24), 14);
+  // nothing below reaches this far back (but a measured face's beard does: cut off here it left a step down the jaw)
+  if (z < 25) return M ? beardOn(d, ax, y, z, F) : d;
   // brow ridge: from the glabella out over each eye, heavier in the middle
   const b = F.brow;
   const bd = F.browDrop ?? 0, bf = F.browFwd ?? 0;
@@ -280,7 +283,7 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
   // cheekbones, the cheeks' fullness below them
   const c = F.cheek;
   // (over a hollow the cheekbone stands further out, catching the light above it)
-  d = smin(d, ell(ax, yl, z, 50, 101 + (F.hollow ?? 0) * 0.6, 57 + (F.hollow ?? 0) * 0.9, 15 * c, 11, 16), 10);
+  if (!M) d = smin(d, ell(ax, yl, z, 50, 101 + (F.hollow ?? 0) * 0.6, 57 + (F.hollow ?? 0) * 0.9, 15 * c, 11, 16), 10);
   if (!M) d = smin(d, ell(ax, yl, z, 40, 78, 62, 18, 20, 15), 12);
   // (in front of the face's side, so the outline keeps its line)
   if (F.hollow) d = smax(d, -ell(ax, yl, z, 38, 66, 62 + F.hollow * 2.2, 11, 15, 11), 14);
@@ -334,14 +337,16 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
     d = smin(d, ell(ax, y, z, 0, ty, tz - 7 - 1.5 * (tp - 1), 9 * tp, 7.5 * tp, 8.5 * tp), 4);
     d = smin(d, ell(ax, y, z, F.noseW - 6.5, ty - 3, tz - 18, 6.8, 6, 8), 3.5);
   }
-  // a short beard stands off the skin
-  if (F.beardDepth > 0 && y < 125 && z > -30) {
-    // easing in across its edge, and shorter round the lips
-    const b = beardAt(ax, y, z, F, 2.5), my = mouthY(Math.min(axm, 24));
-    const nearLips = sm(32, 20, ax) * sm(my + 18, my + 8, y) * sm(my - 22, my - 12, y);
-    d -= F.beardDepth * b * b * (3 - 2 * b) * (1 - 0.85 * nearLips);
-  }
-  return d;
+  return beardOn(d, ax, y, z, F);
+}
+
+/** a short beard standing off the skin: easing in across its edge, and shorter round the lips */
+function beardOn(d: number, ax: number, y: number, z: number, F: FaceShape): number {
+  if (!(F.beardDepth > 0 && y < 125 && z > -30)) return d;
+  // (eased out towards the back, where it ends: z > 25 always has all of it, so a face whose beard stops there is as it was)
+  const b = beardAt(ax, y, z, F, 2.5) * sm(-30, -15, z), my = mouthY(Math.min(ax / (F.mouthW ?? 1), 24));
+  const nearLips = sm(32, 20, ax) * sm(my + 18, my + 8, y) * sm(my - 22, my - 12, y);
+  return d - F.beardDepth * b * b * (3 - 2 * b) * (1 - 0.85 * nearLips);
 }
 
 // --- the grid the skin is meshed on (and its uvs) -------------------------------------------------
@@ -694,7 +699,9 @@ export function beardAt(ax: number, y: number, z: number, F: FaceShape, soft = 1
   }
   // its back edge: in front of the ears, then behind the jaw's angle and down and forward along the
   // neck to the throat; nothing below the throat
-  const back = y > 60 ? 4 : lerp(-12, 30, sm(50, -30, y));
+  const lo = lerp(-12, 30, sm(50, -30, y));
+  // (a measured face eases from one to the other: the step showed as a notch in its beard behind the jaw)
+  const back = F.mask ? lerp(lo, 4, sm(54, 66, y)) : y > 60 ? 4 : lo;
   let out = b * sm(back - 4, back + 6, z) * sm(F.beardUnder ?? -45, (F.beardUnder ?? -45) + 20, y);
   if (F.neckW !== undefined && y < 40) {
     // (with a jaw standing out over the neck, below its angle the beard grows on the jaw, not down the neck)
