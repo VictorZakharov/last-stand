@@ -6,3 +6,4 @@ dist/
 # the face harness (tools/facelab): its Python environment and what it writes
 tools/facelab/.venv/
 tools/facelab/out/
+tools/facelab/__pycache__/
