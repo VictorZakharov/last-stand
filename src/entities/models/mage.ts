@@ -1,7 +1,9 @@
 // The Mage: the same bare-headed man in layered navy and teal robes, the hood down in a cowl round
 // the neck, gold-trimmed and embroidered with arcane signs, long bell sleeves, black-and-gold spiked
 // pauldrons set with green stones, a wide medallion belt with pouches and charms, strapped boots with
-// gold caps, a cape, and a gnarled staff cradling a floating crystal. Fully procedural.
+// gold caps, a cape, and a gnarled staff cradling a floating crystal. The pauldrons, the collar's flaps and
+// the brooch are the chest item's, the bracers and gloves the hands item's: without them the plain robe, its
+// sleeves on to the wrists and bare hands. Fully procedural.
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
@@ -9,8 +11,8 @@ import { engravedSteel, embroidered, arcaneColumn, projectUV, steelRegion } from
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, gem as gemGeo, Skirt, scaleUV, type SurfaceFn } from './armor';
-import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
-import { buildHand, poseHand, hold, seat } from './hands';
+import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
+import { buildHand, poseHand, hold, seat, bare } from './hands';
 import { clamp, lerp, damp, TAU, mulberry } from '../../util';
 import { SkeletonCape } from './cape';
 import { BellCloth } from './sleeve';
@@ -117,6 +119,9 @@ export function buildMage(): Model {
   });
   stripRig(j.root);
   const S = new Sculpt();
+  // what comes off (setGear): the chest item's, the hands item's, and what shows without the latter
+  const A = new Sculpt(), H = new Sculpt(), B = new Sculpt();
+  const bareSkin = handSkin(kit, 'mage');
 
   // --- the robe's body, a teal inner layer showing at the collar, the neck
   S.add(scaleUV(lathe(TORSO, 28), 3, 1.5), robe, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, DEPTH]);
@@ -128,8 +133,8 @@ export function buildMage(): Model {
     S.add(taperTube(pts, () => 0.005, 16, 5), gold, j.chest);
   }
   const br = onChest(0, 0.1, 0.012);
-  S.add(new THREE.OctahedronGeometry(0.032, 0), gold, j.chest, br.toArray(), [0, 0, 0], [0.75, 1.1, 0.35]);
-  S.add(gemGeo(0.014), stone, j.chest, [br.x, br.y, br.z + 0.01], [0, 0, 0], [1, 1.4, 1]);
+  A.add(new THREE.OctahedronGeometry(0.032, 0), gold, j.chest, br.toArray(), [0, 0, 0], [0.75, 1.1, 0.35]);
+  A.add(gemGeo(0.014), stone, j.chest, [br.x, br.y, br.z + 0.01], [0, 0, 0], [1, 1.4, 1]);
 
   // --- the cowl: the hood down, bunched round the neck in teal folds, its crown lying flat on the upper
   // back, inside the cape's torso collider: any fuller, it pokes out through the cape as two humps
@@ -151,8 +156,8 @@ export function buildMage(): Model {
       const y = lerp(0.26, 0.0, v), x0 = lerp(0.045, 0.02, v), x1 = lerp(0.2, 0.05, v ** 0.8);
       return onChest(s * lerp(x0, x1, u), y, 0.012 + 0.004 * v, out);
     };
-    S.add(plate(flap, 8, 10, 0.004, (u, v) => [s > 0 ? u : 1 - u, 1 - v * 0.8]), tail, j.chest);
-    S.add(edgeTube(flap, s > 0 ? 'u1' : 'u1', 0.0045, 12), gold, j.chest);
+    A.add(plate(flap, 8, 10, 0.004, (u, v) => [s > 0 ? u : 1 - u, 1 - v * 0.8]), tail, j.chest);
+    A.add(edgeTube(flap, s > 0 ? 'u1' : 'u1', 0.0045, 12), gold, j.chest);
   }
 
   // --- pauldrons: two lames of black leather rimmed in gold, a gold boss set with a stone, a spike
@@ -165,14 +170,14 @@ export function buildMage(): Model {
       return out.set(s * Math.cos(lat) * Math.cos(lon) * R * 1.1 + s * 0.015, Math.sin(lat) * R * 0.75 + y, Math.cos(lat) * Math.sin(lon) * R);
     };
     for (const L of [lame(0.145, -0.3, 0.2, -0.01), lame(0.135, 0.1, 1.45, 0.01)]) {
-      S.add(plate(L, 16, 6, 0.006), blackLeather, sh);
-      S.add(edgeTube(L, 'v0', 0.006, 16), gold, sh);
+      A.add(plate(L, 16, 6, 0.006), blackLeather, sh);
+      A.add(edgeTube(L, 'v0', 0.006, 16), gold, sh);
     }
     const md = disc(0.036, 0.014);
     projectUV(md, steelRegion('disc'), (x, y) => [(x / 0.036 + 1) / 2, (y / 0.036 + 1) / 2]);
-    S.add(md, goldE, sh, [s * 0.095, 0.075, 0.07], [-0.55, s * 0.7, 0]);
-    S.add(gemGeo(0.014), stone, sh, [s * 0.104, 0.083, 0.08], [-0.55, s * 0.7, 0]);
-    S.add(taperTube([V(0, 0, 0), V(s * 0.02, 0.05, 0), V(s * 0.05, 0.1, -0.01)], (t) => 0.018 * (1 - t), 8, 6), gold, sh, [s * 0.07, 0.1, -0.01]);
+    A.add(md, goldE, sh, [s * 0.095, 0.075, 0.07], [-0.55, s * 0.7, 0]);
+    A.add(gemGeo(0.014), stone, sh, [s * 0.104, 0.083, 0.08], [-0.55, s * 0.7, 0]);
+    A.add(taperTube([V(0, 0, 0), V(s * 0.02, 0.05, 0), V(s * 0.05, 0.1, -0.01)], (t) => 0.018 * (1 - t), 8, 6), gold, sh, [s * 0.07, 0.1, -0.01]);
   }
 
   // --- arms: robe sleeves widening into long bell sleeves lined in teal, leather bracers with a stone,
@@ -213,10 +218,14 @@ export function buildMage(): Model {
     // the bell is cloth: its top ring on the forearm, the rest hanging with weight and following the arm
     // (sleeve.ts); the lining and the gold hem ride the same particles
     cloths.push(new BellCloth({ joint: bj, hand: hd, shape: scaleUV(bell, 3, 1), outer: robe, lining, rim: gold, armRadius: 0.066, rimRadius: 0.007, bodies }));
-    S.add(scaleUV(lathe([[0.046, -0.26], [0.052, -0.2], [0.058, -0.12], [0.06, -0.1]], 16), 2, 1), leather, el);
-    for (const y of [-0.13, -0.245]) S.add(belt(0.058 - (y + 0.13) * 0.1, 0.058 - (y + 0.13) * 0.1, y, 0.012, 0.005, 0, 14), gold, el);
-    S.add(new THREE.OctahedronGeometry(0.02, 0), gold, el, [s * 0.058, -0.19, 0], [0, 0, 0], [0.4, 1.2, 1]);
-    S.add(gemGeo(0.009), stone, el, [s * 0.064, -0.19, 0], [0, s * Math.PI / 2, 0]);
+    H.add(scaleUV(lathe([[0.046, -0.26], [0.052, -0.2], [0.058, -0.12], [0.06, -0.1]], 16), 2, 1), leather, el);
+    for (const y of [-0.13, -0.245]) H.add(belt(0.058 - (y + 0.13) * 0.1, 0.058 - (y + 0.13) * 0.1, y, 0.012, 0.005, 0, 14), gold, el);
+    H.add(new THREE.OctahedronGeometry(0.02, 0), gold, el, [s * 0.058, -0.19, 0], [0, 0, 0], [0.4, 1.2, 1]);
+    H.add(gemGeo(0.009), stone, el, [s * 0.064, -0.19, 0], [0, s * Math.PI / 2, 0]);
+    // bare: the robe's sleeve on down the forearm under the bell, a gold-edged cuff, the wrist into the palm
+    B.add(scaleUV(lathe([[0.044, -0.25], [0.047, -0.2], [0.052, -0.12], [0.056, -0.04], [0.056, 0]], 16), 2, 1), robe, el);
+    B.add(belt(0.046, 0.046, -0.245, 0.01, 0.004, 0, 14), gold, el);
+    B.skin(lathe([[0.033, -0.3], [0.034, -0.28], [0.036, -0.255], [0.04, -0.235]], 16), bareSkin, el, hd, 0.25, 0.29);
   }
   const handL = buildHand(j.handL, 1, leather, skinTip), handR = buildHand(j.handR, -1, leather, skinTip);
 
@@ -346,6 +355,7 @@ export function buildMage(): Model {
   // offhand focus point (left palm)
   const palm = joint(j.handL, 0, -0.08, 0.03);
   S.build();
+  const pauldrons = A.build(), bracers = H.build(), sleeves = B.build();
 
   /** set once a channel's opening completes, for the thrust into the portal */
   let openedAt = -1;
@@ -632,7 +642,13 @@ export function buildMage(): Model {
     root, kit, joints: j, animate, tip, palm, height: 2.0,
     worldObjects: [cape.mesh],
     cloths,
-    setGear: (gear: Gear) => { hat.visible = gear.helm; },
+    setGear: (gear: Gear) => {
+      hat.visible = gear.helm;
+      for (const o of pauldrons) o.visible = gear.chest;
+      for (const o of bracers) o.visible = gear.hands;
+      for (const o of sleeves) o.visible = !gear.hands;
+      bare(handL, gear.hands ? null : bareSkin); bare(handR, gear.hands ? null : bareSkin);
+    },
     reset: () => { cape.reset(); legs.reset(); fade.reset(); for (const c of cloths) c.reset(); },
     // through the eyes the bells, seen from behind, would hide the hands: narrow and shorter
     firstPerson: (on) => { fp = on; for (const b of bells) b.scale.set(on ? 0.6 : 1, on ? 0.75 : 1, on ? 0.6 : 1); },

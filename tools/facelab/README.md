@@ -47,7 +47,14 @@ where you like and pass its path. Any front view of a face works, a full-body sh
    region's lightness also against the forehead's (the lighting cancels out) and its spread (texture, shading). The
    hair: how it frames the forehead (the bare skin's width row by row above the brows), how high it stands and how
    low it falls, its tones (lightness percentiles: roots and crests) and colour, and which way its strands run (the
-   structure tensor cell by cell: swept from a part, or combed flat).
+   structure tensor cell by cell: swept from a part, or combed flat). The beard: its lightness percentiles region by
+   region (its dark hairs against the skin between them: a flat tone reads as a block) and the lightness down each
+   cheek into it (where it starts, how softly). The mouth's width by the lips' colour, and the eyes' look: the
+   reference's opening from its lid contour, ours from the eyeball the render shows (`ours-parts.png`), their width,
+   height and height across them (an almond tapers to its corners, a slot stays tall), the iris against the eye and
+   the white either side of it. On our render the detector's points follow its own idea of a face (they barely moved
+   when our lips widened, and drew an almond round an eye that rendered as a slot): ours is measured from the
+   render's own passes or colours where it matters.
 
 4. **Shape** (the face's form, which paint and hair hide; judge it first, colour after): the head in grey clay from all
    round (`clay-*.png`, `sheet-clay.png`), lit from high to one side so its forms throw shadows, and in clay under the

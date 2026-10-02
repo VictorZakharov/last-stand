@@ -9,7 +9,7 @@ import { part } from './rig';
 import { Sculpt } from './shapes';
 import { clamp, lerp, mulberry } from '../../util';
 import { fur, faceCanvases, pbrMaterialMaps } from '../../core/textures';
-import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, headSDF, gridDir, scalp, hairline, neckShade, type FaceShape, type HeadGrid } from './face';
+import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, neckShade, type FaceShape, type HeadGrid } from './face';
 import type { MaterialKit } from '../../types';
 
 /** metres per millimetre of the face's frame: the head is 1/7.5 of the heroes' stature */
@@ -22,17 +22,21 @@ const ORIGIN = { x: 0, y: 0, z: 5 };
 export const toGroup = (x: number, y: number, z: number, out = new THREE.Vector3()): THREE.Vector3 =>
   out.set((x - ORIGIN.x) * HEAD_MM, (y - ORIGIN.y) * HEAD_MM, (z - ORIGIN.z) * HEAD_MM);
 
-/** bare skin away from the painted face (ears, neck): one material setup, so one shader */
-const plainSkin = (kit: MaterialKit, who: keyof typeof FACES, vertexColors = false) => {
+/** bare skin away from the painted face (ears, neck, bare hands): one material setup, so one shader */
+export const plainSkin = (kit: MaterialKit, who: keyof typeof FACES, vertexColors = false) => {
   const s = LOOKS[who].skin;
   // (shaded by its vertex colours, it is rougher too: a shine would light up a neck that the jaw shades)
   return kit.rim({ color: new THREE.Color().setRGB(s[0] * 0.97, s[1] * 0.97, s[2] * 0.97, THREE.SRGBColorSpace), roughness: vertexColors ? 0.88 : 0.6, vertexColors }, 0x6a2a1c, 0.25);
 };
 
+/** bare hands' skin: the ears' and neck's a shade darker (beside the face's paint, shaded where light falls less, plain
+ *  skin reads pale) */
+export const handSkin = (kit: MaterialKit, who: keyof typeof FACES) => { const m = plainSkin(kit, who); m.color.multiplyScalar(0.86); return m; };
+
 const grids = new Map<string, HeadGrid>();
 /** the skin's ray grid for a face at the current detail, cast once */
 function gridFor(name: keyof typeof FACES): HeadGrid {
-  const nu = lod(112, 40), nv = lod(88, 32), key = `${name}:${nu}x${nv}`;
+  const [nu, nv] = gridSize(FACES[name], lod(112, 40), lod(88, 32)), key = `${name}:${nu}x${nv}`;
   let g = grids.get(key);
   if (!g) grids.set(key, (g = headGrid(FACES[name], nu, nv)));
   return g;
@@ -91,7 +95,7 @@ function eyeMap(iris: [number, number, number], shade = 0): THREE.CanvasTexture 
     const mm = r * EYE.r;
     let c: number[];
     // (a deep-set eye's pupil a little smaller: a big one reads as a doll's)
-    const pr = shade ? 1.6 : 1.9, ir = shade ? 6.4 : 5.9;
+    const pr = shade ? 1.6 : 1.9, ir = 5.9;
     if (mm < pr) c = [0.02, 0.018, 0.02];
     else if (mm < ir) {
       // (a deep-set eye's iris seen in the lid's shade: its fibres soft, a dark ring at its rim, lighter round the pupil)
@@ -177,7 +181,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     const N = 14, row: THREE.Vector3[][] = [];
     for (let k = 0; k <= N; k++) {
       // (a deep-set eye's stop short of its corners: past them they read as a line drawn round the eye)
-      const t = shaded ? lerp(-0.8, 0.82, k / N) : lerp(-0.92, 0.95, k / N), xe = t * 15 - 0.5;
+      const t = shaded ? lerp(-0.8, 0.82, k / N) : lerp(-0.92, 0.95, k / N), xe = t * (F.eyeW ?? 15) - 0.5;
       let ye = 0;
       // the lid's edge: where the opening's top crosses this column
       for (let y = 8; y > -2; y -= 0.05) if (eyeOpening(xe, y, F) <= 0) { ye = y; break; }

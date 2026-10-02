@@ -1,5 +1,5 @@
 // The heroes' hands: a sculpted palm with a thumb pad and knuckles, three-jointed fingers and thumb, a
-// glove over the palm and first knuckles (the fingertips bare). A hand holding something stays on its
+// glove over the palm and first knuckles (the fingertips bare), or bare (`bare`: no hands item worn). A hand holding something stays on its
 // wrist and turns so the handle runs across the palm, the weapon seated in it (`seat`), whatever angle
 // it is held at, and wraps its fingers round the handle's actual radius (`hold`).
 import * as THREE from 'three';
@@ -14,6 +14,8 @@ export interface Hand {
   f: Digit[]; thumb: Digit;
   /** +1 the left hand, -1 the right */
   s: number;
+  /** its pieces, each with the material it was built in (`bare` swaps them) */
+  parts: THREE.Mesh[];
 }
 
 /** a finger segment: a slightly tapered, rounded tube hanging down its joint */
@@ -38,12 +40,13 @@ function palmGeo(): THREE.BufferGeometry {
  * knuckles, `skin` the rest; `k` scales it.
  */
 export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material, skin: THREE.Material, k = 1): Hand {
-  const vis = joint(hand);
+  const vis = joint(hand), parts: THREE.Mesh[] = [];
   vis.scale.setScalar(k);
-  part(palmGeo(), glove, vis).castShadow = true;
+  const P = (g: THREE.BufferGeometry, m: THREE.Material, at: THREE.Object3D, x = 0, y = 0, z = 0) => { const p = part(g, m, at, x, y, z); p.userData.own = m; parts.push(p); return p; };
+  P(palmGeo(), glove, vis).castShadow = true;
   // the thumb's pad at the heel of the palm, and knuckles across its top
-  part(new THREE.SphereGeometry(0.02, 10, 8).scale(1, 1.5, 0.9), glove, vis, -s * 0.024, -0.042, -0.009).castShadow = false;
-  part(new THREE.CylinderGeometry(0.009, 0.009, 0.068, 8).rotateZ(Math.PI / 2), glove, vis, 0, -0.1, 0.002).castShadow = false;
+  P(new THREE.SphereGeometry(0.02, 10, 8).scale(1, 1.5, 0.9), glove, vis, -s * 0.024, -0.042, -0.009).castShadow = false;
+  P(new THREE.CylinderGeometry(0.009, 0.009, 0.068, 8).rotateZ(Math.PI / 2), glove, vis, 0, -0.1, 0.002).castShadow = false;
   // index (next to the thumb) to little finger: x across the hand, how far down its knuckle sits, lengths
   const specs: [number, number, number[]][] = [[-0.028, -0.1, [0.043, 0.026, 0.021]], [-0.0095, -0.103, [0.047, 0.029, 0.022]], [0.0095, -0.1, [0.044, 0.027, 0.021]], [0.027, -0.093, [0.035, 0.021, 0.019]]];
   const f = specs.map(([x, y, len], i) => {
@@ -51,7 +54,7 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
     let at = joint(vis, s * x, y, 0.001);
     js.push(at);
     len.forEach((l, n) => {
-      const m = part(seg(l, r * (1 - n * 0.1), r * (0.92 - n * 0.1)), n === 0 ? glove : skin, at);
+      const m = P(seg(l, r * (1 - n * 0.1), r * (0.92 - n * 0.1)), n === 0 ? glove : skin, at);
       m.castShadow = false;
       if (n < 2) { at = joint(at, 0, -l, 0); js.push(at); }
     });
@@ -62,10 +65,15 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
   let at = joint(vis, -s * 0.034, -0.03, -0.006);
   tj.push(at);
   tl.forEach((l, n) => {
-    part(seg(l, 0.0118 - n * 0.0012, 0.0105 - n * 0.0012), n === 0 ? glove : skin, at).castShadow = false;
+    P(seg(l, 0.0118 - n * 0.0012, 0.0105 - n * 0.0012), n === 0 ? glove : skin, at).castShadow = false;
     if (n < 2) { at = joint(at, 0, -l, 0); tj.push(at); }
   });
-  return { vis, f, thumb: { j: tj, len: tl, r: 0.0118 }, s };
+  return { vis, f, thumb: { j: tj, len: tl, r: 0.0118 }, s, parts };
+}
+
+/** the hand bare, every piece in `skin` (no glove: no hands item worn), or back in its glove with `null` */
+export function bare(h: Hand, skin: THREE.Material | null): void {
+  for (const p of h.parts) p.material = skin ?? (p.userData.own as THREE.Material);
 }
 
 /**

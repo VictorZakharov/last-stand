@@ -33,10 +33,11 @@ export async function warmShaders(): Promise<void> {
   lightning(at, new THREE.Vector3(1, 1, 1)); iceSpikes(p, 2); glyphMarker(p); lightPillar(p); crackDecal(p); crystalBurst(p);
   for (const kind of ['stone', 'wood', 'shroom', 'ember'] as const) rubble(0, 0, { count: 24, color: 0x808080, kind, radius: 0.1, height: 0.1, size: 0.2, speed: 1 });
   const extra: THREE.Object3D[] = [...coreSamples(), sporeOrbSample(), ...riftBoltSamples(), ...groundSamples(), ...Object.values(SKILL_IMPLS).flatMap((s) => s.warm?.() ?? [])];
-  // every other class's model, so picking a class in the lobby compiles nothing
+  // every class's model with all it can wear shown at once (a model hides what isn't worn, and a hidden mesh
+  // compiles nothing), so picking a class or equipping anything in the lobby compiles nothing
   await new Promise((r) => setTimeout(r));
-  const heroes = Object.values(CLASSES).filter((c) => c.model !== G.player.cls.model).map((c) => buildModel(c.model));
-  for (const m of heroes) extra.push(m.root, ...(m.worldObjects ?? []));
+  const heroes = [...new Set(Object.values(CLASSES).map((c) => c.model))].map((m) => buildModel(m));
+  for (const m of heroes) { m.root.traverse((o) => { o.visible = true; }); extra.push(m.root, ...(m.worldObjects ?? [])); }
 
   await warmUp(G.renderer, G.scene, G.camera, sceneTarget(), extra);
   for (const m of heroes) m.dispose();
