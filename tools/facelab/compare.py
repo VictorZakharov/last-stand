@@ -418,6 +418,14 @@ for k, s in stats.items():
     dE = float(np.linalg.norm(np.subtract(o, r))); dEs.append(dE); s['dE'] = dE
     lines.append(f'  {k:14s} {r[0]:5.1f} {r[1]:5.1f} {r[2]:5.1f}   {o[0]:5.1f} {o[1]:5.1f} {o[2]:5.1f}   {dE:5.1f}   {r[0] - fl_r:+8.1f} / {o[0] - fl_o:+6.1f}   {s["ref_sd"]:5.1f}/{s["ours_sd"]:4.1f}')
 lines.append(f'  mean dE over the regions {np.mean(dEs):.1f}')
+# (the iris's own colour: at a full-body shot's resolution an iris is a few pixels, its mean mixed with the pupil, lashes
+# and the lid's shadow; its lightest quarter is the iris itself)
+for side in ('R', 'L'):
+    on = REG[f'iris ring {side}'] == 1
+    if on.sum() >= 8:
+        q = lambda L_: (lambda px: px[px[:, 0] >= np.percentile(px[:, 0], 75)].mean(0))(L_[on])
+        a_, b_ = q(labR), q(labO)
+        lines.append(f'  iris {side} lightest quarter: ref L {a_[0]:4.1f} a {a_[1]:4.1f} b {a_[2]:4.1f}   ours L {b_[0]:4.1f} a {b_[1]:4.1f} b {b_[2]:4.1f}')
 # a heat map of the colour difference (blurred over about a reference pixel: its noise isn't a difference)
 dmap = np.linalg.norm(cv2.GaussianBlur(labO, (0, 0), ZM) - cv2.GaussianBlur(labR, (0, 0), ZM), axis=2)
 heat = cv2.applyColorMap(np.uint8(np.clip(dmap / 40 * 255, 0, 255)), cv2.COLORMAP_INFERNO)

@@ -93,9 +93,11 @@ function eyeMap(iris: [number, number, number], shade = 0): THREE.CanvasTexture 
     // radius in mm on the eye's face (the texture spans the eyeball's 24 mm)
     const mm = r * EYE.r;
     let c: number[];
-    if (mm < 1.9) c = [0.02, 0.018, 0.02];
+    // (a deep-set eye's pupil a little smaller: a big one reads as a doll's)
+    const pr = shade ? 1.5 : 1.9;
+    if (mm < pr) c = [0.02, 0.018, 0.02];
     else if (mm < 5.9) {
-      const k = (mm - 1.9) / 4, fib = 0.75 + 0.25 * Math.sin(a * 37 + Math.sin(a * 11) * 2) * Math.sin(a * 23 + mm), ring = 1 - 0.45 * Math.exp(-(((mm - 2.2) / 0.5) ** 2));
+      const k = (mm - pr) / (5.9 - pr), fib = 0.75 + 0.25 * Math.sin(a * 37 + Math.sin(a * 11) * 2) * Math.sin(a * 23 + mm), ring = 1 - 0.45 * Math.exp(-(((mm - 2.2) / 0.5) ** 2));
       const edge = 1 - 0.6 * clamp((k - 0.8) / 0.2, 0, 1);
       c = iris.map((ch, i) => ch * fib * ring * edge * (0.75 + 0.5 * k) + (i === 0 ? 0.04 : 0.02) * (1 - k));
     } else if (mm < 6.4) c = [0.08, 0.08, 0.09];
@@ -161,7 +163,8 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   face.name = 'face';
 
   // --- eyes: glossy balls in the sockets behind the lids, and lashes along the upper lids
-  const eyeMat = kit.std({ map: eyeMap(F.iris, LOOKS[who].eyeShade), roughness: 0.08 });
+  // (a deep-set eye's shine softer: a sharp one on a dark iris reads as a marble)
+  const eyeMat = kit.std({ map: eyeMap(F.iris, LOOKS[who].eyeShade), roughness: LOOKS[who].eyeShade ? 0.2 : 0.08 });
   const shaded = !!LOOKS[who].eyeShade, lash = kit.std({ color: shaded ? 0x2e2016 : 0x1c120c, roughness: 0.9, side: THREE.DoubleSide });
   const eyes: THREE.Mesh[] = [], lashes: number[] = [];
   const eg = eyeGeometry();
