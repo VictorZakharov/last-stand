@@ -55,11 +55,13 @@ export interface FaceShape {
   beardUnder?: number;
   /** how softly the lower lid blends into the cheek (mm; 0 a lid standing out of the socket, its edge a crease) */
   lidSoft?: number;
+  /** how far the ears' backs stand out from the head (radians, 0.5 average) */
+  earFlare?: number;
 }
 
 export const FACES: Record<'warrior' | 'mage', FaceShape> = {
   // broad jaw and chin, a heavy brow over deep-set eyes, high cheekbones, a straight nose
-  warrior: { jaw: 50, chin: 14, chinFwd: 6, brow: 1.4, cheek: 1.1, noseLen: 55, noseW: 13.2, nosePro: 1.14, hump: 0.9, lips: 0.72, long: 0.98, tip: 1.25, eyeOpen: 2.9, iris: [0.3, 0.27, 0.2], beardDepth: 1.8, bridge: 6, beardLine: 14, browDrop: 8, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -16, neckBlend: 9, lidSoft: 4 },
+  warrior: { jaw: 50, chin: 14, chinFwd: 6, brow: 1.4, cheek: 1.22, noseLen: 55, noseW: 13.2, nosePro: 1.14, hump: 0.9, lips: 0.72, long: 0.98, tip: 1.25, eyeOpen: 2.9, iris: [0.25, 0.2, 0.13], beardDepth: 1.8, bridge: 6, beardLine: 22, browDrop: 8, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -16, neckBlend: 9, lidSoft: 4, earFlare: 0.3 },
   // longer and leaner, high cheekbones, a long straight nose
   mage: { jaw: 50, chin: 19, chinFwd: 0, brow: 1.05, cheek: 1.25, noseLen: 57, noseW: 16.5, nosePro: 1.1, hump: 0.4, lips: 1, long: 1.04, eyeOpen: 4.3, iris: [0.3, 0.42, 0.34], beardDepth: 6 },
 };
@@ -361,10 +363,15 @@ export interface FaceLook {
   beardHair?: [number, number, number];
   /** how much the upper lid shades the eye under it (0 none, 1 deep-set) and how dim the white of the eye is */
   eyeShade?: number;
+  /** how rosy the cheeks, nose, chin and lips' surround are (1 average) */
+  flush?: number;
+  /** the face's outer edge darker, the temples and the cheeks' sides, as the hair standing over them shades them, and the
+   *  cheekbones turning away under the eyes (0 none, 1 under thick hair) */
+  cheekShade?: number;
 }
 
 export const LOOKS: Record<keyof typeof FACES, FaceLook> = {
-  warrior: { skin: [0.8, 0.68, 0.65], hair: [0.15, 0.112, 0.078], streak: [0.4, 0.3, 0.19], ao: 0.55, beardHair: [0.36, 0.26, 0.18], eyeShade: 0.55, grey: 0.02, beard: 1, age: 0.25, brows: 1.4, hairDrop: 20, stubble: 0.8, contour: 0.45, browArch: 0.2, pores: 0.45, lipTint: 0.8, nostrils: 1.6, browTail: 0, browFill: 0.3, under: 0, browLift: 2.5, templeDrop: 22 },
+  warrior: { skin: [0.8, 0.68, 0.65], hair: [0.155, 0.112, 0.07], streak: [0.4, 0.3, 0.18], ao: 0.55, beardHair: [0.38, 0.27, 0.16], eyeShade: 0.55, flush: 2.2, grey: 0.02, beard: 1, age: 0.25, brows: 1.05, hairDrop: 20, cheekShade: 1, stubble: 0.8, contour: 0.45, browArch: 0.2, pores: 0.45, lipTint: 1.1, nostrils: 1.1, browTail: 0, browFill: 0.15, under: 0, browLift: 2.5, templeDrop: 22 },
   mage: { skin: [0.78, 0.57, 0.46], hair: [0.12, 0.08, 0.058], streak: [0.28, 0.19, 0.13], grey: 0.06, beard: 1, age: 1 },
 };
 
@@ -428,8 +435,11 @@ export function beardAt(ax: number, y: number, z: number, F: FaceShape, soft = 1
   const nb = 124 - F.noseLen + 4 - 5;
   // (a trimmed one follows the upper lip, curving down and thinning to the mouth's corners)
   const sc = F.stacheCurve ?? 0, nbx = nb - sc * (ax / 24) ** 2;
+  // (a trimmed one thins in the groove under the nose)
   const stache = sm(nbx + 1, nbx - 4, y) * (sc ? sm(30, 16, ax) : sm(28, 20, ax)) * sm(80, 90, z);
   b = Math.max(b, stache);
+  // (a trimmed one thins in the groove under the nose)
+  if (sc) b *= 1 - 0.6 * sm(9, 3, ax) * sm(nb + 2, nb - 4, y) * sm(mouthY(0) + 4, mouthY(0) + 9, y);
   // the lips stay bare, right up to their border
   if (ax < 26 && y > 25 && y < 62 && z > 82) {
     const top = lipBorder(ax, 1, F), bot = lipBorder(ax, -1, F);
@@ -509,14 +519,22 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
       c[0] = S[0] * k; c[1] = S[1] * k * (0.98 + 0.04 * m1); c[2] = S[2] * k;
       if (z > 20) {
         const warm = 0.75 * G(ax - 42, yy - 88, z - 70, 16) + 0.8 * G(x, yy - (nb + 6), z - tz, 12) + 0.35 * G(x, yy - 18, z - 90, 18) + 0.3 * G(x, yy - 58, z - 95, 14) + 0.25 * G(x, yy - 160, z - 88, 30);
-        c[0] *= 1 + 0.08 * warm; c[1] *= 1 - 0.07 * warm; c[2] *= 1 - 0.05 * warm;
+        const fl = L.flush ?? 1;
+        c[0] *= 1 + 0.08 * fl * warm; c[1] *= 1 - 0.07 * fl * warm; c[2] *= 1 - 0.05 * fl * warm;
       }
       if (L.contour && z > 20) {
         const ex0 = ax - EYE.x, ey0 = yy - EYE.y;
         const shade = 0.9 * G(ex0 + 12, ey0 - 2, 0, 9) + 0.6 * G(ex0, ey0 - 9, 0, 11) + 0.55 * G(ax - 17, yy - (nb + 12), 0, 7)
-          + 0.45 * G(ax - 48, yy - 66, 0, 14) * sm(40, 65, z) + 0.5 * sm(30, 12, yy) * sm(10, 30, ax);
+          + 0.45 * G(ax - 48, yy - 66, 0, 14) * sm(40, 65, z) + 0.5 * sm(30, 12, yy) * sm(10, 30, ax)
+          + (L.cheekShade ? 1.6 * G(ax - 13, yy - 99, (z - 88) * 0.5, 6) : 0);
         const k2 = 1 - L.contour * 0.22 * Math.min(1.2, shade);
         c[0] *= k2; c[1] *= k2 * 0.98; c[2] *= k2 * 0.98;
+      }
+      if (L.cheekShade && z > 0) {
+        // (the face's outer edge, the temples and the cheeks' sides, under the hair standing over them)
+        // (and softly over the cheekbone, turning away under the eye: a patch, not a band down the cheek, which looks gaunt)
+        const k3 = 1 - L.cheekShade * (0.3 * sm(44, 60, ax) * sm(70, 88, yy) * sm(155, 135, yy) * (1 - sm(45, 75, z)) + 0.26 * G(ax - 46, yy - 90, 0, 13) * sm(30, 55, z));
+        c[0] *= k3 ** 0.85; c[1] *= k3; c[2] *= k3 ** 1.12;
       }
       let hh = ((tnoise(tx * 0.9, ty * 0.9, w * 0.9, 3) - 0.5) * 0.35 + (tnoise(tx * 0.3, ty * 0.3, w * 0.3, 4) - 0.5) * 0.2) * (L.pores ?? 1);
       let rr = 0.55 - 0.12 * face * (sm(150, 175, yy) * sm(200, 180, yy) + G(x, yy - 100, z - 105, 18)) + 0.06 * m2;
@@ -546,7 +564,7 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
           const s1 = tnoise(tx * 0.12, ty * 2.2, w * 0.12, 5), s2 = tnoise(tx * 0.3, ty * 3.1, w * 0.3, 6);
           // (filled solid in its middle, the hairs showing at its edges)
           const hairs = brow * lerp(sm(0.35 - 0.25 * (bk - 1), 0.65 - 0.2 * (bk - 1), s1 * 0.6 + s2 * 0.4), 1, (L.browFill ?? 0) * sm(0.35, 0.75, brow));
-          mix(0.95 * hairs, BROW[0], BROW[1], BROW[2]); hh += hairs * 0.7; rr += hairs * 0.25;
+          mix((L.beardHair ? 0.72 : 0.95) * hairs, BROW[0], BROW[1], BROW[2]); hh += hairs * 0.7; rr += hairs * 0.25;
         }
       }
       // --- nostrils
@@ -588,7 +606,7 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         const st = L.stubble ?? 0, s4 = tnoise(tx * 2.6, ty * 2.6, w * 2.6, 13);
         // (thickest on the chin and the moustache)
         const thick = Math.max(sm(22, 10, ax) * sm(40, 20, yy), sm(24, 12, ax) * sm(mouthY(0) + 2, mouthY(0) + 6, yy) * sm(nb, nb - 4, yy));
-        const cover = (dense * (0.78 + 0.22 * sm(0.3, 0.7, s1)) + (1 - dense) * sm(0.55, 0.8, s3) * b * 2) * (1 - st * (0.62 - 0.45 * sm(0.45, 0.72, s4)) * (1 - 0.2 * thick)) * (1 - st * 0.35 * sm(24, 40, ax) * sm(45, 65, yy));
+        const cover = (dense * (0.78 + 0.22 * sm(0.3, 0.7, s1)) + (1 - dense) * sm(0.55, 0.8, s3) * b * 2) * (1 - st * (0.62 - 0.45 * sm(0.45, 0.72, s4)) * (1 - 0.2 * thick)) * (1 - st * 0.35 * sm(24, 40, ax) * sm(45, 65, yy)) * (1 - st * 0.4 * sm(18, 30, ax) * sm(26, 44, yy) * sm(70, 58, yy));
         const strand = sm(0.55, 0.8, s2);
         const sk = 0.55 * (1 - 0.6 * st0), dk = 1 - 0.3 * st0;
         let hr = lerp(BH[0], L.streak[0], strand * sk) * dk, hg = lerp(BH[1], L.streak[1], strand * sk) * dk, hb = lerp(BH[2], L.streak[2], strand * sk) * dk;
@@ -607,7 +625,7 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         // (light that does reach a crease has gone through skin: it comes out redder; and the neck is in the jaw's shadow)
         // (the jaw's shadow on the neck is a warm brown, not red)
         const ns = neckShade(ax, yy), k = 1 - L.ao! * (1 - aoAt(tx, ty)), kn = 1 - ns;
-        c[0] *= k ** 0.8 * kn ** 0.9; c[1] *= k * kn ** 0.95; c[2] *= k ** 1.05 * kn ** 1.2;
+        c[0] *= k ** 0.75 * kn ** 0.8; c[1] *= k * kn ** 0.95; c[2] *= k ** 1.15 * kn ** 1.2;
         // (and no shine where it's shaded)
         rr = lerp(rr, 0.92, ns / 0.82);
       }

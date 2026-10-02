@@ -173,7 +173,8 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     // lashes: a thin fringe along the upper lid's edge, curving out and up
     const N = 14, row: THREE.Vector3[][] = [];
     for (let k = 0; k <= N; k++) {
-      const t = lerp(-0.92, 0.95, k / N), xe = t * 15 - 0.5;
+      // (a deep-set eye's stop short of its corners: past them they read as a line drawn round the eye)
+      const t = shaded ? lerp(-0.8, 0.82, k / N) : lerp(-0.92, 0.95, k / N), xe = t * 15 - 0.5;
       let ye = 0;
       // the lid's edge: where the opening's top crosses this column
       for (let y = 8; y > -2; y -= 0.05) if (eyeOpening(xe, y, F) <= 0) { ye = y; break; }
@@ -354,9 +355,10 @@ function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
     if (kind < 0.12) {
       // the front, along the hairline: lifted up and back off the forehead, then out over the top and down the side
       // (it covers the part's front and frames the forehead's top, flat across it rather than arched)
-      az0 = PART + s * rng() * 0.42; el0 = hairEl(az0) + 0.02;
+      // (some rooted just across the part, so its front is covered)
+      az0 = PART + s * (rng() * 0.48 - 0.07); el0 = hairEl(az0) + 0.02;
       mid = [PART + s * (0.12 + Math.abs(az0 - PART) * 0.8), el0 + 0.32 + rng() * 0.1];
-      az1 = s * (1.3 + rng() * 0.4) + (s > 0 ? 0.15 : 0); el1 = 0.42 + rng() * 0.15 + (s > 0 ? 0.1 : 0);
+      az1 = s * (1.45 + rng() * 0.35) + (s > 0 ? 0.1 : 0); el1 = 0.46 + rng() * 0.15 + (s > 0 ? 0.08 : 0);
       top = 18 + rng() * 9; yEnd = -55 + rng() * 45; w = 15 + rng() * 8;
     } else if (kind < 0.46) {
       // from the part (a line from the front of the hairline back over the top to the crown), out over the top and down
@@ -367,12 +369,13 @@ function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
       dirOf(PART, hairEl(PART) + 0.04, d0); dirOf(Math.PI - 0.25, 1.0, d1);
       const pa = d0.angleTo(d1), pd = d.copy(d0).multiplyScalar(Math.sin((1 - u) * pa)).addScaledVector(d1, Math.sin(u * pa)).normalize();
       az0 = Math.atan2(pd.x, pd.z) + s * (0.04 + 0.1 * rng() + 0.12 * (1 - sm(0, 0.15, u))) / Math.max(0.3, Math.cos(Math.asin(clamp(pd.y, -1, 1)))); el0 = Math.asin(clamp(pd.y, -1, 1));
-      az1 = s * lerp(1.15, 2.6, u) * (0.92 + 0.16 * rng()) + (s > 0 ? 0.15 : 0); el1 = lerp(0.36, 0.42, u) + 0.12 * rng() + (s > 0 ? 0.12 : -0.04);
+      // (over the ear and down behind it, the ear showing below: none hang in front of it over the cheek)
+      az1 = s * lerp(1.38, 2.6, u) * (0.94 + 0.12 * rng()) + (s > 0 ? 0.1 : 0); el1 = lerp(0.42, 0.45, u) + 0.12 * rng() + (s > 0 ? 0.1 : -0.02);
       top = 13 + rng() * 9; yEnd = -65 + rng() * 45; w = 15 + rng() * 9;
     } else if (kind < 0.64) {
       // the sides above the ears, back and down past them
-      az0 = s * (0.8 + rng() * 1.2); el0 = 0.45 + rng() * 0.55;
-      az1 = s * (Math.abs(az0) + 0.3 + rng() * 0.4); el1 = 0.28 + rng() * 0.18;
+      az0 = s * (1.0 + rng() * 1.0); el0 = 0.5 + rng() * 0.5;
+      az1 = s * (Math.abs(az0) + 0.45 + rng() * 0.4); el1 = 0.3 + rng() * 0.18;
       top = 14 + rng() * 9; yEnd = -65 + rng() * 45; w = 14 + rng() * 8;
     } else if (kind < 0.72) {
       // over the crown: from the part ahead of the top of the head, straight back over it and down the back (where the
@@ -387,7 +390,7 @@ function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
       az0 = s * (1.9 + rng() * 1.24); el0 = 0.3 + rng() * 0.65;
       az1 = s * Math.min(Math.PI, Math.abs(az0) + rng() * 0.3); el1 = -0.05 + rng() * 0.2;
       top = 12 + rng() * 8; yEnd = -40 + rng() * 40; w = 18 + rng() * 9;
-    } else if (kind < 0.96) {
+    } else if (kind < 0.94) {
       // framing the forehead (more on his right, as the part leaves more hair that side): from the front of the hairline
       // out and down over the temple, beside the eye, curling away from the face
       frame = true;
@@ -417,23 +420,25 @@ function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
       // (along the great circle between the two, in waves across it and in and out)
       const t = k / N;
       if (mid) { if (t < 0.4) slerp(d0, dm, t / 0.4); else slerp(dm, d1, (t - 0.4) / 0.6); } else slerp(d0, d1, t);
-      const az = Math.atan2(d.x, d.z) + 0.05 * Math.sin(ph + t * waves * Math.PI) * sm(0.15, 0.5, t), el = Math.asin(clamp(d.y, -1, 1));
-      const lift = lerp(1.5, top + layer * 3.5, sm(0, 0.42, t)) + 4 * Math.sin(ph * 1.7 + t * waves * Math.PI) * sm(0.2, 0.6, t) + (frame ? 9 * sm(0.75, 1, t) : 0);
+      const az = Math.atan2(d.x, d.z) + 0.08 * Math.sin(ph + t * waves * Math.PI) * sm(0.15, 0.5, t), el = Math.asin(clamp(d.y, -1, 1));
+      const lift = lerp(1.5, top + layer * 3.5, sm(0, 0.42, t)) + 6 * Math.sin(ph * 1.7 + t * waves * Math.PI) * sm(0.2, 0.6, t) + (frame ? 9 * sm(0.75, 1, t) : 0);
       pts.push(surface(az, el, lift));
     }
+    // then down to its end in a loose curl (a helix widening towards the end, the card turning with it: seen from any
+    // side it waves, wide where it faces you and thin where it turns away), the end flicking out and up
+    const last = pts[N], o = new V(last.x - skullC.x, 0, last.z - skullC.z).normalize(), tg = new V().crossVectors(up, o);
+    const turns = 1.5 + rng() * 1.3;
     if (!frame) {
-      // then down to its end in waves, flaring out a little, the end curling out
-      const last = pts[N], o = new V(last.x - skullC.x, 0, last.z - skullC.z).normalize(), tg = new V().crossVectors(up, o);
       toFace(last, q);
-      const fall = Math.max(18, q.y - yEnd) * HEAD_MM, amp = (7 + rng() * 6) * HEAD_MM, M = 8;
-      const lead = new V().subVectors(pts[N], pts[N - 1]).normalize();
+      const fall = Math.max(18, q.y - yEnd) * HEAD_MM, R0 = (3 + rng() * 3) * HEAD_MM, R1 = (10 + rng() * 6) * HEAD_MM, M = 16;
+      const lead = new V().subVectors(pts[N], pts[N - 1]).normalize(), fk = (12 + rng() * 10) * HEAD_MM;
       for (let k = 1; k <= M; k++) {
-        const t = k / M, wave = Math.sin(ph + (1 + t * 1.5) * waves * Math.PI) * amp * (0.5 + t);
-        const flick = t ** 2.2 * (9 + rng() * 9) * HEAD_MM, flare = (1 + 3 * t) * HEAD_MM;
+        const t = k / M, phi = ph + t * turns * Math.PI * 2, R = lerp(R0, R1, t) * sm(0, 0.25, t);
+        const flick = t ** 2.2 * fk, flare = (0.5 + 1.5 * t) * HEAD_MM;
         // (carrying on the way it left the head at first, then hanging)
         const carry = (1 - t) ** 2 * 18 * HEAD_MM;
-        const p = last.clone().addScaledVector(lead, carry).addScaledVector(o, flare + flick + wave * 0.6).addScaledVector(tg, wave * 0.8);
-        p.y = last.y - fall * t + flick * 0.6;
+        const p = last.clone().addScaledVector(lead, carry).addScaledVector(o, flare + flick + R * Math.cos(phi)).addScaledVector(tg, R * Math.sin(phi));
+        p.y = last.y - fall * t + flick * 0.7;
         pushOut(p, 3 + layer * 2.5);
         pts.push(p);
       }
@@ -447,8 +452,17 @@ function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
     const occAt = (t: number) => { const f = t * (occ.length - 1), j = Math.min(occ.length - 2, Math.floor(f)); return lerp(occ[j], occ[j + 1], f - j); };
     const root = kind < 0.12 ? 0.85 : 0.62, shade = (t: number) => tone * (root + (1 - root) * sm(0, 0.25, t)) * (0.8 + 0.09 * layer) * (1 + 0.38 * Math.sin(ph + t * waves * Math.PI * 1.6)) * occAt(t);
     const tw = (rng() - 0.5) * (frame ? 0.4 : 0.9), wm = w * HEAD_MM;
+    // (where it hangs, the card faces out from the curl's axis, turning with it)
+    let h0 = 1;
+    if (!frame) { let all = 0, onHead = 0; for (let k = 1; k < pts.length; k++) { const l = pts[k].distanceTo(pts[k - 1]); all += l; if (k <= N) onHead += l; } h0 = onHead / all; }
+    const fv = new V(), facing = frame ? undefined : (t: number, O: THREE.Vector3) => {
+      if (t <= h0) return;
+      const phi = ph + (t - h0) / (1 - h0) * turns * Math.PI * 2;
+      // (only partly: edge on, a card shows its pointed outline as a spike)
+      O.lerp(fv.copy(o).multiplyScalar(Math.cos(phi)).addScaledVector(tg, Math.sin(phi)), 0.55 * sm(h0, h0 + 0.12, t)).normalize();
+    };
     // (narrow at the root, so its end never shows as a block)
-    out.push(hairCard(pts, (t) => wm * (0.35 + 0.65 * sm(0, 0.12, t)) * (1 - 0.6 * t ** 1.5), skullC, lod(40, 12), tw, shade));
+    out.push(hairCard(pts, (t) => wm * (0.35 + 0.65 * sm(0, 0.12, t)) * (1 - 0.45 * t ** 2), skullC, lod(56, 14), tw, shade, facing));
   }
 }
 
@@ -499,7 +513,7 @@ function earGeometry(s: number, F: FaceShape, ao = 0): THREE.BufferGeometry {
   // the side of the head at the ear canal
   let sx = 40;
   while (sx < 90 && headSDF(sx, 97, 0, F) < 0) sx += 0.5;
-  const tilt = 0.26, flare = 0.5, cu = -8, cv = 3;
+  const tilt = 0.26, flare = F.earFlare ?? 0.5, cu = -8, cv = 3;
   const place = (u: number, v: number, h: number, out: THREE.Vector3) => {
     // tilt the ear back, then flare it out from the head about its front edge
     const u1 = u * Math.cos(tilt) - v * Math.sin(tilt), v1 = u * Math.sin(tilt) + v * Math.cos(tilt);
@@ -524,7 +538,7 @@ function earGeometry(s: number, F: FaceShape, ao = 0): THREE.BufferGeometry {
       place(u, vv, h, v); front.push(v.x, v.y, v.z);
       place(u, vv, h - thick * (1 + 0.6 * lobe), v); backP.push(v.x, v.y, v.z);
       // (occlusion: deep in the bowl, the back against the head; all of it in the hair's shade, the top most)
-      const k = 1 - ao * (0.25 + 0.15 * sm(-10, 25, vv) + 0.5 * sm(0, -6, h)), kb = k * (1 - 0.45 * ao);
+      const k = ao ? 1 - (0.55 + 0.1 * sm(-10, 25, vv) + 0.2 * sm(0, -6, h)) : 1, kb = k * (1 - 0.45 * ao);
       cf.push(k ** 0.8, k, k ** 1.05); cb.push(kb ** 0.8, kb, kb ** 1.05);
     }
   }
@@ -606,15 +620,17 @@ function strandMap(dense = false): THREE.CanvasTexture {
 
 /**
  * A hair card: a ribbon `width(t)` wide along a curve through `pts`, lying flat on the head (its face
- * turned out from `centre`), the strands running along it.
+ * turned out from `centre`, unless `facing` turns it), the strands running along it.
  */
-function hairCard(pts: THREE.Vector3[], width: (t: number) => number, centre: THREE.Vector3, segs: number, twist = 0, shade: (t: number) => number = () => 1): THREE.BufferGeometry {
+function hairCard(pts: THREE.Vector3[], width: (t: number) => number, centre: THREE.Vector3, segs: number, twist = 0, shade: (t: number) => number = () => 1,
+  facing?: (t: number, O: THREE.Vector3) => void): THREE.BufferGeometry {
   const curve = new THREE.CatmullRomCurve3(pts), pos: number[] = [], uv: number[] = [], idx: number[] = [], col: number[] = [];
   const p = new THREE.Vector3(), T = new THREE.Vector3(), O = new THREE.Vector3(), X = new THREE.Vector3();
   for (let i = 0; i <= segs; i++) {
     const t = i / segs;
     curve.getPointAt(t, p); curve.getTangentAt(t, T);
     O.subVectors(p, centre).normalize();
+    facing?.(t, O);
     X.crossVectors(T, O).normalize().applyAxisAngle(T, twist * t);
     const w = width(t) / 2;
     pos.push(p.x - X.x * w, p.y - X.y * w, p.z - X.z * w, p.x + X.x * w, p.y + X.y * w, p.z + X.z * w);
@@ -654,7 +670,7 @@ export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: keyo
       pos.push(Math.sin(a) * (rx + scm) * HEAD_MM, y, (cz + Math.cos(a) * (rz + scm + adam)) * HEAD_MM);
       // (its top in the jaw's shadow, as the face's own skin under the jaw: a warm brown)
       const k = ao ? 1 - neckShade(Math.abs(Math.sin(a)) * rx, (y - len) / HEAD_MM) : 1;
-      col.push(k ** 0.9, k ** 0.95, k ** 1.2);
+      col.push(k ** 0.8, k ** 0.95, k ** 1.2);
     }
   }
   const W = segs + 1;
