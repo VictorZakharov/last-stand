@@ -32,6 +32,9 @@ export interface FaceShape {
   iris: [number, number, number];
   /** how far a short beard stands off the skin, mm */
   beardDepth: number;
+  /** a full beard: how much further it stands off the skin at the jaw and the chin (mm), growing from the cheeks down and
+   *  hanging below the chin, thinning down the throat (`beardLift`) */
+  beardFull?: number;
   /** a high nose bridge (mm): the nose rises straight from between the brows instead of from a dip */
   bridge?: number;
   /** half the width of the nose's ridge (mm, 5.2): a broader one runs straight down to the tip instead of pinching in */
@@ -175,7 +178,7 @@ export const FACES: Record<'warrior' | 'mage', FaceShape> = {
       p: [2, 2.15, 2.22, 2.21, 2.11, 1.98, 1.84, 1.76, 1.8, 2.02, 2.36, 2.5, 2.44, 2.39, 2.4, 2.2],
       pz: [1.2, 1.2, 1.2, 1.2, 1.22, 1.58, 2.11, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2], hollow: 0 } },
   // longer and leaner, a long straight nose
-  mage: { jaw: 27, chin: 11.3, chinFwd: 9, brow: 0.7, cheek: 1.25, noseLen: 57, noseW: 16.5, nosePro: 1.1, hump: 0, noseRoot: 6, bridgeW: 6.5, lips: 1, long: 1.04, eyeOpen: 4.3, iris: [0.3, 0.42, 0.34], beardDepth: 6, beardLine: 12,
+  mage: { jaw: 27, chin: 11.3, chinFwd: 9, brow: 0.7, cheek: 1.25, noseLen: 57, noseW: 16.5, nosePro: 1.1, hump: 0, noseRoot: 6, bridgeW: 6.5, lips: 1, long: 1.04, eyeOpen: 4.3, iris: [0.3, 0.42, 0.34], beardDepth: 6, beardFull: 24, beardLine: 12, neckBack: -5,
     // (the mask and the broad shape fitted by least squares (tools/facelab/fit.mjs) to the real face nearest his old one,
     // built of blobs: its cheekbones stood up to 12 mm out of any real face's; the nose straight, its bridge raised to
     // the mask's front (a hump stood out of a sunken ridge with a cliff at its top))
@@ -372,6 +375,19 @@ function beardOn(d: number, ax: number, y: number, z: number, F: FaceShape): num
   const b = beardAt(ax, y, z, F, thick ? 7 : 2.5) * sm(-30, -15, z) * thin, my = mouthY(Math.min(ax / (F.mouthW ?? 1), 24));
   const nearLips = sm(32 + lw, 20 - lw, ax) * sm(my + 18 + lw, my + 8 - lw, y) * sm(my - 22 - lw, my - 12 + lw, y);
   return d - F.beardDepth * (thick ? b : b * b * (3 - 2 * b)) * (1 - 0.85 * nearLips);
+}
+
+/**
+ * A full beard's volume over the skin at a point of it (mm, along the grid's ray there; 0 without one): from the cheeks
+ * down, standing furthest off at the jaw and the chin and hanging below it, not down the throat behind them, short round
+ * the lips. A mesh of its own (head.ts): in the skin's own distance field the rays, cast from above the jaw, met its
+ * hanging underside and the neck behind it by turns, and its lower edge came out as a row of teeth.
+ */
+export function beardLift(ax: number, y: number, z: number, F: FaceShape): number {
+  if (!F.beardFull) return 0;
+  const b = beardAt(ax, y, z, F, 7) * sm(-30, -15, z), my = mouthY(Math.min(ax / (F.mouthW ?? 1), 24));
+  const nearLips = sm(36, 16, ax) * sm(my + 22, my + 4, y) * sm(my - 26, my - 8, y);
+  return F.beardFull * b * sm(80, 20, y) * sm(28, 58, z) * (1 - 0.9 * nearLips);
 }
 
 // --- the grid the skin is meshed on (and its uvs) -------------------------------------------------

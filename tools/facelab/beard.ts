@@ -1,9 +1,11 @@
 // Face harness: a full beard's shape, in the head's own millimetres (the face's frame), seen square from the front and the
-// side: its hair cards and the painted beard on the skin, z-buffered against each other and the body. Row by row below the
-// chin: its width, the runs it splits into (a fork, tails beside the neck), how full it is between its edges, how it tapers
-// against the jaw's width; its back edge from the side; where the painted cheek line runs; and how much of the cards the
-// body hides (buried in a cowl). Hung straight down from the jaw, the old beard stood out as a ruff, its sides as two
-// tails and its middle inside the robe's cowl, which none of the face's measures saw. Run in the page by facelab.mjs.
+// side: its meshes (a volume over the skin and its tufts, or cards) and the painted beard on the skin, z-buffered against
+// each other and the body. Row by row below the chin: its width, the runs it splits into (a fork, tails beside the neck),
+// how full it is between its edges, how it tapers against the jaw's width; from the side its back and front edges and how
+// deep it is (a volume, or a sheet lying on what is under it); where the painted cheek line runs; and how much of it the
+// body hides (buried in a cowl). Hung straight down from the jaw as cards, a beard stood out as a ruff, its sides as two
+// tails and its middle inside the robe's cowl; draped over the cowl, a thin sheet of cards read as a liquid. Run in the
+// page by facelab.mjs.
 import * as THREE from 'three';
 import { FACES, LOOKS, beardAt, headSDF } from '../../src/entities/models/face';
 import { HEAD_MM } from '../../src/entities/models/head';
@@ -19,8 +21,8 @@ export interface BeardShape {
   hidden: number;
   /** the painted cheek line's height (mm) at 20, 30, 40 and 50 mm from the middle, and at the face's outline */
   cheek: number[]; cheekOut: number;
-  /** the side view's back and front edge (z, mm) every 20 mm down from 40 */
-  side: string[];
+  /** the side view's back and front edge (z, mm) every 20 mm down from 40, and how deep its own meshes are below the chin */
+  side: string[]; depth: number;
   /** the masks (PNG data urls): skin, painted beard, cards, body; cards the body hides in red */
   front: string; sideView: string;
 }
@@ -36,7 +38,7 @@ export function measureBeard(root: THREE.Object3D, who: keyof typeof FACES): Bea
   const head = face!.parent!, Hinv = head.matrixWorld.clone().invert();
   const shown = (o: THREE.Object3D) => { for (let q: THREE.Object3D | null = o; q; q = q.parent) if (!q.visible) return false; return true; };
   const inHead = (o: THREE.Object3D) => { for (let q: THREE.Object3D | null = o; q; q = q.parent) if (q === head) return true; return false; };
-  const beard = head.children.find((o) => o.name === 'beard' && o.visible) as THREE.Mesh | undefined;
+  const beards = head.children.filter((o) => o.name === 'beard' && o.visible) as THREE.Mesh[];
   const mk = (n: number) => new Float32Array(n).fill(-1e9);
   const fBody = mk(W * H), fFace = mk(W * H), fCard = mk(W * H), sBody = mk(D * H), sFace = mk(D * H), sCard = mk(D * H);
   const fFlag = new Uint8Array(W * H), sFlag = new Uint8Array(D * H);
@@ -76,7 +78,7 @@ export function measureBeard(root: THREE.Object3D, who: keyof typeof FACES): Bea
     const fl = y < 125 && z > -40 && L.beard * beardAt(Math.abs(x), y, z, F, 1.5 + 2.5 * (L.stubble ?? 0)) > 0.5 ? 1 : 2;
     tri(fFace, fFlag, fl, W, X0, a, b, c, 0, 2); tri(sFace, sFlag, fl, D, Z0, a, b, c, 2, 0);
   });
-  if (beard) each(beard, (a, b, c) => { tri(fCard, null, 0, W, X0, a, b, c, 0, 2); tri(sCard, null, 0, D, Z0, a, b, c, 2, 0); });
+  for (const beard of beards) each(beard, (a, b, c) => { tri(fCard, null, 0, W, X0, a, b, c, 0, 2); tri(sCard, null, 0, D, Z0, a, b, c, 2, 0); });
   // what shows: 0 nothing, 1 skin, 2 painted beard, 3 cards, 4 body; and the cards the body hides
   const view = (NW: number, body: Float32Array, fz: Float32Array, fl: Uint8Array, card: Float32Array) => {
     const out = new Uint8Array(NW * H), hid = new Uint8Array(NW * H);
@@ -92,9 +94,10 @@ export function measureBeard(root: THREE.Object3D, who: keyof typeof FACES): Bea
   const isB = (c: number) => c === 2 || c === 3;
   const rows: { y: number; w: number; fill: number; runs: number }[] = [];
   for (let y = 0; y < H; y++) {
+    // (a split is a gap of 6 mm or more: a ragged edge of tufts is a beard's)
     let lo = -1, hi = -1, n = 0, runs = 0, gap = 99;
     for (let x = 0; x < W; x++) {
-      if (isB(FV.out[y * W + x])) { if (lo < 0) lo = x; hi = x; n++; if (gap >= 3) runs++; gap = 0; } else gap++;
+      if (isB(FV.out[y * W + x])) { if (lo < 0) lo = x; hi = x; n++; if (gap >= 6) runs++; gap = 0; } else gap++;
     }
     if (lo >= 0) rows.push({ y: y + Y0, w: hi - lo + 1, fill: n / (hi - lo + 1), runs });
   }
@@ -102,11 +105,16 @@ export function measureBeard(root: THREE.Object3D, who: keyof typeof FACES): Bea
   // the chin's underside, from the distance field
   let chin = 40;
   for (let y = 40; y > -60; y -= 0.25) { let inside = false; for (let z = 40; z < 140 && !inside; z += 1) inside = headSDF(0, y, z, F) < 0; if (!inside) { chin = y; break; } }
-  let jawW = 0; for (let y = 15; y <= 45; y++) jawW = Math.max(jawW, skinW(y));
+  // (the jaw's width from the distance field: a beard's volume over it hides the skin)
+  let jawW = 0;
+  for (let y = 15; y <= 45; y += 2) for (let z = 30; z < 120; z += 4) { let x = 100; while (x > 0 && headSDF(x, y, z, F) > 0) x -= 0.5; jawW = Math.max(jawW, 2 * x); }
   const bottom = rows.length ? Math.min(...rows.map((q) => q.y)) : chin, len = chin - bottom;
   const at = (y: number) => rows.find((q) => q.y === Math.round(y));
-  const below = rows.filter((q) => q.y < chin - 3);
+  const below = rows.filter((q) => q.y < chin - 3), body = below.filter((q) => q.y > chin - 0.7 * len);
   const cheekAt = (x: number) => { const c = Math.round(x) - X0; for (let y = 125 - Y0; y >= 0; y--) if (FV.out[y * W + c] === 2) return y + Y0; return NaN; };
+  // (how deep its own meshes are below the chin, front to back: a volume, or a sheet lying on what is under it)
+  let depth = 0;
+  for (let y = Math.round(chin); y > chin - 60; y--) { const r = y - Y0; let lo = -1, hi = -1; for (let z = 0; z < D; z++) if (SV.out[r * D + z] === 3) { if (lo < 0) lo = z; hi = z; } if (lo >= 0) depth = Math.max(depth, hi - lo); }
   const sideAt = (y: number) => { const r = y - Y0; let lo = -1, hi = -1; for (let z = 0; z < D; z++) if (isB(SV.out[r * D + z])) { if (lo < 0) lo = z; hi = z; } return lo < 0 ? `${y}: -` : `${y}: ${lo + Z0}..${hi + Z0}`; };
   let cards = 0, hid = 0; for (let k = 0; k < W * H; k++) if (fCard[k] > -1e8) { cards++; if (FV.hid[k]) hid++; }
   const pic = (NW: number, V: { out: Uint8Array; hid: Uint8Array }) => {
@@ -119,12 +127,12 @@ export function measureBeard(root: THREE.Object3D, who: keyof typeof FACES): Bea
   const r2 = (x: number) => Math.round(x * 100) / 100;
   return {
     chin, jawW, bottom, len,
-    flare: r2(Math.max(0, ...below.map((q) => q.w)) / jawW), split: r2(below.filter((q) => q.runs > 1).length / Math.max(1, below.length)),
+    flare: r2(Math.max(0, ...below.map((q) => q.w)) / jawW), split: r2(body.filter((q) => q.runs > 1).length / Math.max(1, body.length)),
     fill: r2(below.reduce((s, q) => s + q.fill, 0) / Math.max(1, below.length)),
     taper: [0.25, 0.5, 0.75, 0.9].map((f) => r2((at(chin - f * len)?.w ?? 0) / jawW)),
     hidden: Math.round((hid / Math.max(1, cards)) * 1000) / 1000,
     cheek: [20, 30, 40, 50].map(cheekAt), cheekOut: cheekAt(skinW(95) / 2 - 4),
-    side: [40, 20, 0, -20, -40, -60, -80, -100, -120].map(sideAt),
+    side: [40, 20, 0, -20, -40, -60, -80, -100, -120].map(sideAt), depth,
     front: pic(W, FV), sideView: pic(D, SV),
   };
 }

@@ -120,14 +120,20 @@ where you like and pass its path. Any front view of a face works, a full-body sh
    dir> nearest <class>` writes that face, fitted to our surface, as the target, and the fit keeps the face's own
    proportions on a surface a real face could have (its lumps and shelves smoothed away). Start it from a mask copied
    from a face that has one.
-8. **A beard of cards** (`beard.ts`, for a hero that has one): its shape in the face's own millimetres, square from the
-   front and the side, the cards and the painted beard z-buffered against each other and the body, on a model built
+8. **A full beard** (`beard.ts`, for a hero that has one): its shape in the face's own millimetres, square from the
+   front and the side, its meshes (its volume and tufts) and the painted beard z-buffered against each other and the body, on a model built
    afresh at rest over each body the beard may lie on (the chest item worn or not), and its cards the body hides as
    the hero stands. Below the chin, row by row: its width against the jaw's (a full beard tapers to a rounded end,
    never wider than the jaw), the rows it splits into two or more runs (a fork, tails beside the neck), how full it is
    between its edges; the painted cheek line's height across the cheek and at the face's outline; the side's back and
-   front edges; the share of the cards the body hides (buried in a robe's cowl). None of the face's measures saw the old
-   beard: hung straight down from the jaw, a ruff with its sides as two tails and its middle inside the cowl.
+   front edges and how deep its own meshes are below the chin (a volume, or a sheet lying on the body); the share of it
+   the body hides (buried in a robe's cowl). None of the face's measures saw the old beards: hung straight down from the
+   jaw, a ruff with its sides as two tails and its middle inside the cowl; draped over the cowl, a sheet like a liquid.
+9. **The hair and the shoulders** (`hair.ts`, `shoulders.ts`, on a model at rest): how far the hair stands off the
+   skin just behind the hairline (a wig's edge is a ledge), where its locks end round the head (a level hem all round
+   is a bob), how much of the ears it covers; the body's outline from the neck out over each shoulder, its slope (a
+   man's trapezius, about 20 degrees) and any bump where it rises again (an arm's tube standing over the body: a coat
+   hanger), without armour and with the chest item. `body.txt`, added to the report.
 
 ## Output (`tools/facelab/out/<tag>/`)
 

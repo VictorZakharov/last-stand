@@ -1,15 +1,15 @@
 // The heroes' head: the sculpted skin of models/face.ts (meshed on its ray grid, painted in the loading
-// workers), glossy eyes under lids with lashes, sculpted ears, hair and a long beard as hair cards, and
+// workers), glossy eyes under lids with lashes, sculpted ears, hair and a full beard (a volume, with tufts of cards), and
 // the neck below it. Built on the rig's head joint, in metres, the chin's underside level with the joint;
 // the head is 1/7.5 of the heroes' stature (a realistic figure: an ideal one is 8 heads, a heroic 8.5).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { lod } from './armor';
 import { part } from './rig';
-import { Sculpt, SKINNING } from './shapes';
+import { Sculpt } from './shapes';
 import { clamp, lerp, mulberry } from '../../util';
-import { fur, faceCanvases, pbrMaterialMaps } from '../../core/textures';
-import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, neckShade, type FaceShape, type HeadGrid } from './face';
+import { faceCanvases } from '../../core/textures';
+import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, neckShade, beardLift, mouthY, type FaceShape, type HeadGrid } from './face';
 import type { MaterialKit } from '../../types';
 
 /** metres per millimetre of the face's frame: the head is 1/7.5 of the heroes' stature */
@@ -148,22 +148,17 @@ export interface Head {
   midZ(y: number): number;
   /** the hair over the scalp (its cap and locks): a model hides it under a helmet */
   hair: THREE.Mesh[];
-  /** the beard's cards, one for each of `rest.bodies` in its order (or one): a model shows the one for what it wears */
+  /** a full beard's volume and its tufts (`FACES[...].beardFull`) */
   beards: THREE.Mesh[];
-  /** turn the beard's end with the head's turn: call each frame once the head is posed (its look-at included) */
-  settle(): void;
 }
 
 /**
  * Build the head of `who` on `headJoint` (the rig's head joint). `hair`: a cap of hair over the scalp
  * with locks of cards over it, `swept` back behind the ears to the nape, or `loose`: parted a little off the
- * middle, swept out over the temples and falling in waves past the ears to the chin (left out, the scalp is painted);
- * `beard`: a full beard hanging that far (mm) below the chin, lying over each of `rest.bodies` (signed distances (m) at a
- * point of `rest.joint`'s space, as the joints stand now: the bodies it may lie on, such as a robe's cowl and a plain
- * tunic) and riding that joint below the chin.
+ * middle, swept out over the temples and falling in waves past the ears to the chin (left out, the scalp is painted).
+ * A face with `beardFull` gets a full beard: a volume over the skin and tufts of cards along it.
  */
-export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES,
-  o: { beard?: number; hair?: 'swept' | 'loose'; rest?: { joint: THREE.Object3D; bodies: ((p: THREE.Vector3) => number)[] } } = {}): Head {
+export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, o: { hair?: 'swept' | 'loose' } = {}): Head {
   const F: FaceShape = FACES[who];
   const head = new THREE.Group();
   headJoint.add(head);
@@ -219,19 +214,20 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     return toGroup(C.x + d.x * r, C.y + d.y * r, C.z + d.z * r, out);
   };
 
-  // --- hair: a cap with some body over the scalp, locks of hair cards swept back over it to the nape;
-  // a full beard of cards hanging from the jaw and chin
+  // --- hair: a cap with some body over the scalp, locks of hair cards swept back over it to the nape
   const L = LOOKS[who], rng = mulberry(7);
-  const hk = o.hair === 'loose' ? 2.4 : 1.9, hairCol = new THREE.Color().setRGB(L.hair[0] * hk, L.hair[1] * hk, L.hair[2] * hk, THREE.SRGBColorSpace);
-  const cards = kit.std({ color: hairCol, map: strandMap(o.hair === 'loose'), alphaTest: 0.35, alphaToCoverage: true, side: THREE.DoubleSide, roughness: o.hair === 'loose' ? 0.72 : 0.55, vertexColors: true });
+  // (both styles' locks in the dense clump texture: thin strands of high contrast read as wood grain, and sparse cards
+  // hanging apart read as a wig's fringe)
+  const hk = o.hair === 'loose' ? 2.4 : 2.1, hairCol = new THREE.Color().setRGB(L.hair[0] * hk, L.hair[1] * hk, L.hair[2] * hk, THREE.SRGBColorSpace);
+  const cards = kit.std({ color: hairCol, map: strandMap(true), alphaTest: 0.35, alphaToCoverage: true, side: THREE.DoubleSide, roughness: o.hair === 'loose' ? 0.72 : 0.62, vertexColors: true });
   const lockGeo: THREE.BufferGeometry[] = [], hair: THREE.Mesh[] = [];
   const skullC = toGroup(0, 128, -12);
   if (o.hair) {
-    const hm = pbrMaterialMaps(fur(), 3, 0.8);
-    // (under loose locks the cap is only the shadow between them: darker and plain, as its texture would show the grid's
-    // rows closing to a point on top as a starburst through the part)
-    const loose = o.hair === 'loose', ck = loose ? 1.3 : 1.6, capCol = new THREE.Color().setRGB(L.hair[0] * ck, L.hair[1] * ck, L.hair[2] * ck, THREE.SRGBColorSpace);
-    const capMat = loose ? kit.std({ color: capCol, roughness: 0.8 }) : kit.std({ color: capCol, roughness: 0.6, map: hm.map, normalMap: hm.normalMap, normalScale: hm.normalScale });
+    // (under the locks the cap is only the shadow between them: darker and plain, as its texture would show the grid's
+    // rows closing to a point on top as a starburst through the part; and a cap of combed fur with a sharp edge, the swept
+    // locks over it few and apart, read as a wig)
+    const loose = o.hair === 'loose', capCol = new THREE.Color().setRGB(L.hair[0] * 1.3, L.hair[1] * 1.3, L.hair[2] * 1.3, THREE.SRGBColorSpace);
+    const capMat = kit.std({ color: capCol, roughness: 0.8 });
     const W = g.nu + 1, pos = new Float32Array((g.nv + 1) * W * 3), uv = new Float32Array((g.nv + 1) * W * 2), keep = new Uint8Array((g.nv + 1) * W);
     const d = { x: 0, y: 0, z: 0 }, C = { x: 0, y: 0, z: 0 }, q = new THREE.Vector3();
     for (let j = 0; j <= g.nv; j++) for (let i = 0; i <= g.nu; i++) {
@@ -244,7 +240,10 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
       // (and as gradually beside a hairline that runs steeply down, at the temples: measured across it too)
       const ha = Math.atan2(Math.abs(x), z + 12), hr = Math.hypot(Math.abs(x), z + 12);
       const inside = (da: number) => y - hairline(hr * Math.sin(Math.max(0, ha - da)), hr * Math.cos(Math.max(0, ha - da)) - 12, L.hairDrop, L.templeDrop);
-      const lift = sm(-1, 16, inside(0)) * sm(-1, 10, inside(0.12)) * sm(-1, 6, inside(0.25)) * (6 + 6 * sm(120, 200, y) + 2 * Math.sin(Math.atan2(x, z) * 18 + y * 0.05)) - 1.2;
+      // (swept back, it lies close to the scalp at the hairline and gains body over the crown: standing 6 mm off within
+      // 16 mm of the hairline, it was a wig's edge)
+      const lift = loose ? sm(-1, 16, inside(0)) * sm(-1, 10, inside(0.12)) * sm(-1, 6, inside(0.25)) * (6 + 6 * sm(120, 200, y) + 2 * Math.sin(Math.atan2(x, z) * 18 + y * 0.05)) - 1.2
+        : sm(-1, 30, inside(0)) * sm(-1, 14, inside(0.12)) * (2.5 + 4.5 * sm(150, 215, y)) - 1.2;
       toGroup(x + d.x * lift, y + d.y * lift, z + d.z * lift, q);
       pos[k * 3] = q.x; pos[k * 3 + 1] = q.y; pos[k * 3 + 2] = q.z;
       uv[k * 2] = i / g.nu * 6; uv[k * 2 + 1] = j / g.nv * 3;
@@ -262,27 +261,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     cap.computeVertexNormals();
     hair.push(part(cap, capMat, head));
     if (o.hair === 'loose') looseLocks(surface, rng, skullC, lockGeo, F, L.hairDrop ?? 0, L.templeDrop ?? 0);
-    // locks: rooted over the crown and down the sides, swept back round the head (round towards the
-    // back faster than they fall) to the jaw line behind the ear or the nape, then hanging a little lower
-    // with an outward curl; three layers
-    const n = o.hair === 'swept' ? lod(120, 40) : 0;
-    for (let i = 0; i < n; i++) {
-      const layer = i % 3, az0 = (rng() - 0.5) * Math.PI * 1.7, side = Math.sign(az0) || 1;
-      const el0 = 0.95 + rng() * 0.45;
-      const az1 = side * Math.min(Math.PI * 0.98, Math.abs(az0) * 0.4 + 2.0 + rng() * 0.95), el1 = -0.3 - rng() * 0.35;
-      const lift = 7 + layer * 4 + rng() * 3, pts: THREE.Vector3[] = [];
-      for (let k = 0; k <= 6; k++) {
-        const t = k / 6;
-        pts.push(surface(az0 + (az1 - az0) * Math.sqrt(t), el0 + (el1 - el0) * t ** 1.5, lift * (0.2 + 0.8 * sm(0, 0.35, t)) + 3 * Math.sin(t * 3 + az0 * 4)));
-      }
-      const last = pts[6], out = new THREE.Vector3(last.x, 0, last.z - skullC.z).normalize(), fall = (40 + rng() * 60) * HEAD_MM;
-      for (let k = 1; k <= 3; k++) {
-        const t = k / 3;
-        pts.push(last.clone().add(new THREE.Vector3(out.x * t * t * 12 * HEAD_MM, -fall * t, out.z * t * t * 12 * HEAD_MM)));
-      }
-      const w = (11 + rng() * 7) * HEAD_MM;
-      lockGeo.push(hairCard(pts, (t) => w * (1 - 0.5 * t), skullC, lod(14, 6), (rng() - 0.5) * 0.8));
-    }
+    else sweptLocks(surface, rng, skullC, lockGeo, F, L.hairDrop ?? 0, L.templeDrop ?? 0);
   }
   if (lockGeo.length) {
     const m = part(mergeGeometries(lockGeo)!, cards, head);
@@ -291,153 +270,84 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     hair.push(m);
     lockGeo.length = 0;
   }
-  // the beard's cards: one set for each body it may lie on (the same cards, draped over each)
+  // a full beard's volume over the face (face.ts `beardLift`): the skin's grid points lifted along their rays, leaning down
+  // below the mouth (it hangs), painted as the face is (its uvs the grid's), its edges sunk into the skin; and short tufts
+  // of cards over its lower part and out past its edge, so its outline is hair, not a smooth rim
   const beards: THREE.Mesh[] = [];
-  let settle = () => {};
-  if (o.beard) {
-    // its end lies on the body: a joint of its own there, at the head joint, turned with the head's turn about the neck
-    // but never tipped with its nod (with the head, it sank into the chest whenever the hero looked down at a foe; with
-    // the chest, it hooked round to the side whenever he looked aside)
-    let end: THREE.Object3D | undefined;
-    if (o.rest && SKINNING) {
-      const rest = o.rest.joint;
-      let top: THREE.Object3D = headJoint;
-      while (top.parent) top = top.parent;
-      top.updateMatrixWorld(true);
-      end = new THREE.Object3D(); end.name = 'beard end'; rest.add(end);
-      new THREE.Matrix4().copy(rest.matrixWorld).invert().multiply(headJoint.matrixWorld).decompose(end.position, end.quaternion, end.scale);
-      end.updateMatrixWorld(true);
-      const q0 = end.quaternion.clone(), qc = new THREE.Quaternion(), qh = new THREE.Quaternion(), f = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
-      const ahead = (): number => {
-        rest.getWorldQuaternion(qc); headJoint.getWorldQuaternion(qh);
-        f.set(0, 0, 1).applyQuaternion(qh).applyQuaternion(qc.invert());
-        return Math.atan2(f.x, f.z);
-      };
-      const yaw0 = ahead();
-      settle = () => { end!.quaternion.setFromAxisAngle(Y, 0.75 * (ahead() - yaw0)).multiply(q0); };
+  if (F.beardFull) {
+    const W = g.nu + 1, pos = new Float32Array((g.nv + 1) * W * 3), uv = new Float32Array((g.nv + 1) * W * 2), lifts = new Float32Array((g.nv + 1) * W);
+    const d = { x: 0, y: 0, z: 0 }, q = new THREE.Vector3();
+    for (let j = 0; j <= g.nv; j++) for (let i = 0; i <= g.nu; i++) {
+      const k = j * W + i, x = g.p[k * 3], y = g.p[k * 3 + 1], z = g.p[k * 3 + 2], lift = beardLift(Math.abs(x), y, z, F) - 1.2;
+      gridDir(g.az[i], g.el[j], d);
+      d.y -= BEARD_HANG * clamp((45 - y) / 45, 0, 1);
+      const dl = Math.hypot(d.x, d.y, d.z);
+      toGroup(x + (d.x / dl) * lift, y + (d.y / dl) * lift, z + (d.z / dl) * lift, q);
+      pos[k * 3] = q.x; pos[k * 3 + 1] = q.y; pos[k * 3 + 2] = q.z;
+      uv[k * 2] = i / g.nu; uv[k * 2 + 1] = j / g.nv; lifts[k] = lift;
     }
-    // (its own copy of the material, skinned: one shared with the rigid locks would rebuild its program's parameters at
-    // every switch between the two; rougher, its strands dense: lying on a cowl, seen along them, its cards caught the sky
-    // and showed the cowl between their strands)
-    // (darker than the scalp's locks: lit from above, lying on a cowl, they read lighter than the painted beard they grow from)
-    const bm = end ? Object.assign(cards.clone(), { roughness: 0.85, map: strandMap(true), color: hairCol.clone().multiplyScalar(1.4 / hk) }) : cards;
-    for (const body of o.rest?.bodies ?? [null]) beards.push(beardMesh(F, surface, head, bm, o.beard, body && o.rest ? { joint: o.rest.joint, end, body } : undefined));
+    const idx: number[] = [];
+    for (let j = 0; j < g.nv; j++) for (let i = 0; i < g.nu; i++) {
+      const a = j * W + i, b = a + 1, c = a + W + 1, e = a + W;
+      if (lifts[a] > 0 || lifts[b] > 0 || lifts[c] > 0 || lifts[e] > 0) idx.push(a, b, c, a, c, e);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    beards.push(part(geo, skin, head));
+    // (the tufts in the painted beard's colour, darker than the scalp's locks; their strands dense)
+    const tuftMat = Object.assign(cards.clone(), { map: strandMap(true), roughness: 0.85, color: hairCol.clone().multiplyScalar(1.2 / hk) });
+    beards.push(beardTufts(geo, lifts, g, tuftMat, head, rng));
     for (const m of beards) m.name = 'beard';
   }
   // (named, so a probe or a tool can find them)
   for (const m of hair) m.name = 'hair';
   const midZ = (y: number) => { let z = 140; while (z > 0 && headSDF(0, y, z, F) > 0) z -= 0.25; return z; };
-  return { group: head, face, eyes, surface, midZ, hair, beards, settle };
+  return { group: head, face, eyes, surface, midZ, hair, beards };
 }
 
-/** the neck's skin (mm, the face's frame; < 0 inside): `buildNeck`'s oval, from its base below the jaw up into the head */
-function neckSDF(x: number, y: number, z: number, F: FaceShape): number {
-  const t = sm(0, 1, (y + 123) / 133), rx = lerp(66, (F.neckW ?? 54) + 3, t), rz = lerp(62, 52, t), cz = lerp(-2, -13, t);
-  return (Math.hypot(x / rx, (z - cz) / rz) - 1) * Math.min(rx, rz);
-}
+/** how far a full beard's volume leans down from its rays below the mouth (it hangs: lifted along them, from above the jaw,
+ *  the chin's beard jutted forward like a spade) */
+const BEARD_HANG = 1.2;
 
 /**
- * A full beard of hair cards hanging `len` mm below the chin, the way one grows: from the jaw's edge and the chin's front
- * (rooted in the painted beard's volume), the sides drawn down and forward along the jaw into the mass in front of the
- * throat, longest in the middle and gathering to a rounded end, lying over what is under it (`rest.body`: its signed
- * distance (m) at a point of `rest.joint`'s space, the joints as they stand now, at rest). Hung straight down from the jaw
- * all round, the cards stood out as a ruff, the sides beside the neck as two tails and the middle ones inside a robe's
- * cowl; turned out from the chin, the middle ones stood edge on to the front and the beard looked forked: they face out
- * from the beard's middle instead. The part lying on the body rides `rest.joint` (skinned): the head turns up to 0.9 rad
- * and drops 0.45 rad against the chest, and a beard fixed to the head sank into it.
+ * Tufts over a full beard's volume (`cap`, its lifts along the rays in mm): short cards rooted in its lower part, lying
+ * along it down the way it grows and out past its edge, in the beard's colour, darker at the root.
  */
-function beardMesh(F: FaceShape, surface: Head['surface'], head: THREE.Group, mat: THREE.Material, len: number,
-  rest?: { joint: THREE.Object3D; end?: THREE.Object3D; body: (p: THREE.Vector3) => number }): THREE.Mesh {
-  const rng = mulberry(11), V = THREE.Vector3, q = new V(), r = new V();
-  // the chin's underside and its front, where it stands furthest out (mm)
-  let chinY = 40;
-  for (let y = 40; y > -60; y -= 0.5) { let inside = false; for (let z = 40; z < 140 && !inside; z += 1) inside = headSDF(0, y, z, F) < 0; if (!inside) { chinY = y; break; } }
-  let zChin = 0;
-  for (let y = chinY + 4; y < chinY + 36; y += 2) { let z = 140; while (z > 0 && headSDF(0, y, z, F) > 0) z -= 0.5; zChin = Math.max(zChin, z); }
-  // the body under it, in the face's frame (mm)
-  let toRest: THREE.Matrix4 | null = null;
-  if (rest) {
-    let top: THREE.Object3D = head;
-    while (top.parent) top = top.parent;
-    top.updateMatrixWorld(true);
-    toRest = new THREE.Matrix4().copy(rest.joint.matrixWorld).invert().multiply(head.matrixWorld);
+function beardTufts(cap: THREE.BufferGeometry, lifts: Float32Array, g: HeadGrid, cards: THREE.MeshStandardMaterial, head: THREE.Group, rng: () => number): THREE.Mesh {
+  const P = cap.attributes.position, N = cap.attributes.normal, roots: number[] = [];
+  // (where it stands well off the skin, below the cheeks)
+  // (not round the mouth: tufts at its corners hung over the lips like fangs)
+  for (let k = 0; k < lifts.length; k++) {
+    const ax = Math.abs(g.p[k * 3]), y = g.p[k * 3 + 1];
+    if (lifts[k] > 3 && y < 60 && (ax > 34 || y < mouthY(Math.min(ax, 24)) - 14)) roots.push(k);
   }
-  const fromRest = toRest ? new THREE.Matrix4().copy(toRest).invert() : null;
-  const body = (p: THREE.Vector3) => (toRest ? rest!.body(toGroup(p.x, p.y, p.z, q).applyMatrix4(toRest)) / HEAD_MM : 1e3);
-  // how far a point is outside the beard's volume and the neck, each by its own margin (mm)
-  const gap = (x: number, y: number, z: number, mh: number, mb: number) => Math.min(headSDF(x, y, z, F) - mh, neckSDF(x, y, z, F) - mb);
-  const pushOut = (p: THREE.Vector3, mh: number, mb: number) => {
-    for (let k = 0; k < 6; k++) {
-      const d = gap(p.x, p.y, p.z, mh, mb);
-      if (d >= 0) break;
-      r.set(gap(p.x + 0.5, p.y, p.z, mh, mb) - gap(p.x - 0.5, p.y, p.z, mh, mb), gap(p.x, p.y + 0.5, p.z, mh, mb) - gap(p.x, p.y - 0.5, p.z, mh, mb),
-        gap(p.x, p.y, p.z + 0.5, mh, mb) - gap(p.x, p.y, p.z - 0.5, mh, mb)).normalize();
-      p.addScaledVector(r, 0.3 - d);
+  const n = Math.min(roots.length, lod(220, 70)), out: THREE.BufferGeometry[] = [], V = THREE.Vector3;
+  const p = new V(), nr = new V(), t = new V(), down = new V(0, -1, 0), centre = toGroup(0, 40, 20);
+  for (let c = 0; c < n; c++) {
+    const k = roots[Math.floor(rng() * roots.length)], y = g.p[k * 3 + 1], low = clamp((30 - y) / 50, 0, 1);
+    p.fromBufferAttribute(P, k); nr.fromBufferAttribute(N, k).normalize();
+    // down along the surface, out over its edge where it faces down
+    t.copy(down).addScaledVector(nr, -down.dot(nr));
+    if (t.lengthSq() < 0.1) t.copy(down).addScaledVector(nr, 0.6);
+    t.normalize();
+    // (short: longer ones hung from the beard's edge as drips)
+    const len = (8 + rng() * 7 + 6 * low) * HEAD_MM, w = (7 + rng() * 4) * HEAD_MM, curl = (rng() - 0.5) * 6 * HEAD_MM, pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= 4; i++) {
+      const s = i / 4;
+      pts.push(p.clone().addScaledVector(nr, (-1.5 + 2.5 * s * (1 - 0.4 * s)) * HEAD_MM).addScaledVector(t, len * s).addScaledVector(down, len * 0.25 * s * s)
+        .add(new V(curl * s * s, 0, 0)));
     }
-    // and out of the body: straight forward in its own frame, onto its front, the beard's outline kept (along its distance's
-    // gradient a point under the chin went up to the lid closing a cowl's ring round the neck, and on into the chin; out
-    // from its axis the sides spread over a cowl's roll as a bib twice the jaw's width)
-    if (!fromRest || body(p) >= mb) return;
-    r.set(0, 0, 1).transformDirection(fromRest);
-    for (let k = 0; k < 250 && body(p) < mb; k++) p.add(r);
-  };
-  // a point on the skin (its beard's volume included) towards `az` at height `y` (mm), the first one down the face
-  const rootAt = (az: number, y: number, out: THREE.Vector3) => {
-    let best = Infinity;
-    for (let el = 0.4; el > -1.5; el -= 0.01) {
-      toFace(surface(az, el), r);
-      if (Math.abs(r.y - y) < best) { best = Math.abs(r.y - y); out.copy(r); }
-      if (r.y < y - 6) break;
-    }
-    return out;
-  };
-  const n = lod(108, 36), per = Math.ceil(n / 3), K = 9, cards: THREE.BufferGeometry[] = [], root = new V();
-  const axis = toGroup(0, 0, 10), zA = axis.z;
-  const facing = (_t: number, O: THREE.Vector3, p: THREE.Vector3) => { O.set(p.x, 0, p.z - zA).normalize(); };
-  for (let i = 0; i < n; i++) {
-    // three layers, each across the jaw from one angle to the other (u), the outer ones rooted higher and lying further out
-    const layer = i % 3, u = ((Math.floor(i / 3) + rng()) / per) * 2 - 1, au = Math.abs(u);
-    rootAt(u * 1.22, lerp(chinY + 14, chinY + 48, au ** 1.3) + layer * 5 + (rng() - 0.5) * 6, root);
-    const mh = 1 + layer * 2.5, mb = 3 + layer * 2.5;
-    const L = len * (1 - 0.55 * au ** 1.8) * (0.92 + 0.16 * rng()), yEnd = chinY - L, zEnd = lerp(zChin + 6, zChin - 22, au);
-    const pts: THREE.Vector3[] = [];
-    for (let k = 0; k <= K; k++) {
-      // (drawn in as it falls, more at the end: a full beard's outline, rounded at the bottom)
-      const t = k / K, p = new V(root.x * (1 - 0.5 * t ** 1.6), lerp(root.y, yEnd, t), lerp(root.z, zEnd, sm(0, 0.5, t)) + 5 * Math.sin(t * Math.PI) * (1 - au));
-      if (k > 0) pushOut(p, mh, mb);
-      else p.addScaledVector(r.set(root.x, 0, root.z - 10).normalize(), mh);
-      pts.push(toGroup(p.x, p.y, p.z));
-    }
-    const w = (13 + rng() * 7) * HEAD_MM, tone = 0.72 + 0.14 * layer;
-    cards.push(hairCard(pts, (t) => w * (1 - 0.5 * t), axis, lod(10, 5), (rng() - 0.5) * 0.5, (t) => tone * (0.8 + 0.2 * sm(0, 0.3, t)), facing));
+    const shade = 0.6 + 0.25 * rng();
+    out.push(hairCard(pts, (s) => w * (1 - 0.7 * s), centre, lod(4, 2), (rng() - 0.5) * 0.8, (s) => shade * (0.75 + 0.25 * s), (_s, O) => { O.copy(nr); }));
   }
-  const g = mergeGeometries(cards)!;
-  for (const c of cards) c.dispose();
-  if (!rest?.end) { const m = part(g, mat, head); m.castShadow = true; return m; }
-  // the roots ride the head, the end its own joint on the body, the share easing over the length between (a beard is
-  // springy: handed over just under the chin, it bent there)
-  const P = g.attributes.position, si = new Uint16Array(P.count * 4), sw = new Float32Array(P.count * 4);
-  for (let i = 0; i < P.count; i++) {
-    const w = sm(chinY - 4, chinY - 0.85 * len, P.getY(i) / HEAD_MM + ORIGIN.y);
-    si[i * 4 + 1] = 1; sw[i * 4] = 1 - w; sw[i * 4 + 1] = w;
-  }
-  g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
-  g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
-  const m = new THREE.SkinnedMesh(g, mat);
-  m.castShadow = m.receiveShadow = true;
-  m.frustumCulled = false;   // the bounds are the bind pose's
-  m.customDepthMaterial = beardDepth(mat as THREE.MeshStandardMaterial);
-  head.add(m);
-  m.updateWorldMatrix(true, false);
-  m.bind(new THREE.Skeleton([head.parent!, rest.end] as unknown as THREE.Bone[]));
+  const geo = mergeGeometries(out)!;
+  for (const x of out) x.dispose();
+  const m = part(geo, cards, head);
+  m.castShadow = true;
   return m;
-}
-/** the beard's shadow: its own depth material (a skinned mesh's), cut out by the cards' strands */
-const beardDepths = new Map<THREE.Texture | null, THREE.MeshDepthMaterial>();
-function beardDepth(m: THREE.MeshStandardMaterial): THREE.MeshDepthMaterial {
-  let d = beardDepths.get(m.map);
-  if (!d) beardDepths.set(m.map, d = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: m.map, alphaTest: m.alphaTest }));
-  return d;
 }
 
 /** a point of the head group's space (m) in the face's frame (mm) */
@@ -450,23 +360,22 @@ const toFace = (p: THREE.Vector3, out = new THREE.Vector3()): THREE.Vector3 => o
  * stray wisps. Locks of cards in layers, each lifted further off the scalp, every point kept clear of the skin and
  * the ears (the head's own distance field).
  */
-function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.Vector3, out: THREE.BufferGeometry[], F: FaceShape, drop: number, temple: number): void {
-  const n = lod(460, 130), PART = 0.08, V = THREE.Vector3;
+/** what the locks of either style are laid with: a direction from its angles, the hairline's elevation towards an azimuth
+ *  (the first point up the skin where the scalp grows hair), how far a point (mm) is from the skin or the ear standing off
+ *  the side of the head, and a point (the group's metres) pushed out to `margin` mm from them, along the distance's gradient */
+function hairTools(surface: Head['surface'], F: FaceShape, drop: number, temple: number) {
+  const V = THREE.Vector3, q = new V(), g = new V();
   const dirOf = (az: number, el: number, v = new V()) => v.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
-  const q = new V(), g = new V();
-  // the hairline's elevation towards az: the first point up the skin where the scalp grows hair
   const hairEl = (az: number) => {
     for (let el = 0.2; el < 1.5; el += 0.01) { toFace(surface(az, el), q); if (scalp(Math.abs(q.x), q.y, q.z, drop, temple) > 0.6) return el; }
     return 1.5;
   };
-  // how far a point (mm) is from the skin, or from the ear standing off the side of the head
   let earX = 40;
   while (earX < 90 && headSDF(earX, 97, 0, F) < 0) earX += 0.5;
   const clear = (x: number, y: number, z: number) => {
     const ex = (Math.abs(x) - earX - 7) / 12, ey = (y - 98) / 36, ez = (z + 8) / 25;
     return Math.min(headSDF(x, y, z, F), (Math.sqrt(ex * ex + ey * ey + ez * ez) - 1) * 15);
   };
-  /** push a point (the group's metres) out to `margin` mm from the head, along the distance's gradient */
   const pushOut = (p: THREE.Vector3, margin: number) => {
     for (let k = 0; k < 3; k++) {
       toFace(p, q);
@@ -476,6 +385,12 @@ function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
       p.addScaledVector(g, (margin - d) * HEAD_MM);
     }
   };
+  return { dirOf, hairEl, clear, pushOut };
+}
+
+function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.Vector3, out: THREE.BufferGeometry[], F: FaceShape, drop: number, temple: number): void {
+  const n = lod(460, 130), PART = 0.08, V = THREE.Vector3;
+  const { dirOf, hairEl, clear, pushOut } = hairTools(surface, F, drop, temple), q = new V();
   const d0 = new V(), d1 = new V(), d = new V(), pts: THREE.Vector3[] = [], up = new V(0, 1, 0);
   for (let i = 0; i < n; i++) {
     const layer = i % 4, kind = rng(), s = rng() < 0.55 ? -1 : 1;
@@ -596,6 +511,75 @@ function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
     };
     // (narrow at the root, so its end never shows as a block)
     out.push(hairCard(pts, (t) => wm * (0.35 + 0.65 * sm(0, 0.12, t)) * (1 - 0.45 * t ** 2), skullC, lod(56, 14), tw, shade, facing));
+  }
+}
+
+/**
+ * Hair combed straight back, as a portrait shows it: from the hairline back over the top of the head and round above the
+ * ears, lying on the head all the way down to the nape (close at the hairline and over the temples, with body over the
+ * crown) and ending just below the nape's hairline and behind the ears, the tips flicking out a little. Locks of cards in
+ * layers, each lifted further off the scalp, every point kept clear of the skin and the ears (the head's own distance
+ * field). (Fewer locks standing well off a cap of combed fur read as a wig; and hung straight down from where they left the
+ * head, all ending about the jaw, they made a bob over the ears.)
+ */
+function sweptLocks(surface: Head['surface'], rng: () => number, skullC: THREE.Vector3, out: THREE.BufferGeometry[], F: FaceShape, drop: number, temple: number): void {
+  const n = lod(400, 120), V = THREE.Vector3;
+  const { dirOf, hairEl, clear, pushOut } = hairTools(surface, F, drop, temple), q = new V();
+  const d0 = new V(), d1 = new V(), d = new V(), pts: THREE.Vector3[] = [];
+  const slerp = (A: THREE.Vector3, B: THREE.Vector3, t: number) => {
+    const ang = A.angleTo(B), a = ang > 1e-4 ? Math.sin((1 - t) * ang) / Math.sin(ang) : 1 - t, b = ang > 1e-4 ? Math.sin(t * ang) / Math.sin(ang) : t;
+    return d.copy(A).multiplyScalar(a).addScaledVector(B, b).normalize();
+  };
+  for (let i = 0; i < n; i++) {
+    const layer = i % 4, kind = rng(), s = rng() < 0.5 ? -1 : 1, ph = rng() * Math.PI * 2, tone = 0.72 + rng() * 0.45;
+    // over the head from (az0, el0) to its end (az1, el1), `top` mm off the scalp at its fullest; `w` its width (mm)
+    let az0: number, el0: number, az1: number, el1: number, top: number, w: number;
+    if (kind < 0.3) {
+      // from along the front of the hairline straight back over the top to the nape (rooted on it: no lock's end shows there)
+      az0 = (rng() - 0.5) * 1.7; el0 = hairEl(az0) + 0.015;
+      az1 = (Math.sign(az0) || s) * (Math.PI - 0.1 - 0.35 * Math.abs(az0) - 0.2 * rng()); el1 = -0.12 - rng() * 0.12;
+      top = 5 + rng() * 3; w = 16 + rng() * 8;
+    } else if (kind < 0.5) {
+      // the temples, back round above the ears to behind them
+      az0 = s * (0.85 + rng() * 0.6); el0 = hairEl(az0) + 0.015;
+      az1 = s * (2.05 + rng() * 0.45); el1 = 0.02 + rng() * 0.2;
+      top = 4 + rng() * 3; w = 14 + rng() * 7;
+    } else if (kind < 0.75) {
+      // the crown, behind the hairline, straight back over it to the nape
+      az0 = (rng() - 0.5) * 1.4; el0 = hairEl(az0) + 0.15 + rng() * 0.45;
+      az1 = (Math.sign(az0) || s) * (Math.PI - 0.05 - 0.45 * rng()); el1 = -0.16 - rng() * 0.1;
+      top = 8 + rng() * 4; w = 18 + rng() * 9;
+    } else {
+      // the back of the head, down to the nape (the deeper layers)
+      az0 = s * (1.6 + rng() * 1.5); el0 = 0.4 + rng() * 0.55;
+      az1 = s * Math.min(Math.PI, Math.abs(az0) + rng() * 0.25); el1 = -0.2 - rng() * 0.1;
+      top = 6 + rng() * 4; w = 18 + rng() * 9;
+    }
+    pts.length = 0;
+    const N = 12;
+    dirOf(az0, el0, d0); dirOf(az1, el1, d1);
+    for (let k = 0; k <= N; k++) {
+      // (along the great circle between the two: combed, a gentle wave across it and in and out; settling onto the neck
+      // at its end, the tip flicking out)
+      const t = k / N;
+      slerp(d0, d1, t);
+      const az = Math.atan2(d.x, d.z) + 0.03 * Math.sin(ph + t * Math.PI * 2) * sm(0.2, 0.6, t), el = Math.asin(clamp(d.y, -1, 1));
+      const lift = lerp(1, top + layer * 2.5, sm(0, 0.4, t)) * (1 - 0.65 * sm(0.75, 1, t)) + 1.5 * Math.sin(ph * 1.3 + t * Math.PI * 2) * sm(0.25, 0.6, t) + (4 + 3 * rng()) * sm(0.9, 1, t);
+      pts.push(surface(az, el, lift));
+    }
+    for (let k = 2; k <= N; k++) pushOut(pts[k], 1.5 + layer * 1.8);
+    // (smoothed once: a point pushed out on its own would kink the lock)
+    for (let k = 1; k < pts.length - 1; k++) pts[k].lerp(new V().addVectors(pts[k - 1], pts[k + 1]).multiplyScalar(0.5), 0.3);
+    // (each lock its own shade: darker at the root, in the deeper layers and where it lies close to the head)
+    const occ = pts.map((p) => { toFace(p, q); return 0.6 + 0.4 * sm(2, 24, clear(q.x, q.y, q.z)); });
+    const occAt = (t: number) => { const f = t * (occ.length - 1), j = Math.min(occ.length - 2, Math.floor(f)); return lerp(occ[j], occ[j + 1], f - j); };
+    const shade = (t: number) => tone * (0.7 + 0.3 * sm(0, 0.2, t)) * (0.8 + 0.07 * layer) * (1 + 0.2 * Math.sin(ph + t * Math.PI * 3)) * occAt(t);
+    const wm = w * HEAD_MM;
+    // (the strands' texture's body along the lock and its tip only at the end: stretched over the lock, its tip, a third
+    // of it, narrowing and fading, was the back of the head, and the hair seemed to stop at the crown's back)
+    const vAt = (t: number) => (t < 0.88 ? 0.7 * t / 0.88 : 0.7 + 0.3 * (t - 0.88) / 0.12);
+    // (narrow at the root, so its end never shows as a block)
+    out.push(hairCard(pts, (t) => wm * (0.35 + 0.65 * sm(0, 0.1, t)) * (1 - 0.4 * t ** 2), skullC, lod(40, 12), (rng() - 0.5) * 0.6, shade, undefined, vAt));
   }
 }
 
@@ -756,7 +740,7 @@ function strandMap(dense = false): THREE.CanvasTexture {
  * turned out from `centre`, unless `facing` turns it), the strands running along it.
  */
 function hairCard(pts: THREE.Vector3[], width: (t: number) => number, centre: THREE.Vector3, segs: number, twist = 0, shade: (t: number) => number = () => 1,
-  facing?: (t: number, O: THREE.Vector3, p: THREE.Vector3) => void): THREE.BufferGeometry {
+  facing?: (t: number, O: THREE.Vector3, p: THREE.Vector3) => void, vAt: (t: number) => number = (t) => t): THREE.BufferGeometry {
   const curve = new THREE.CatmullRomCurve3(pts), pos: number[] = [], uv: number[] = [], idx: number[] = [], col: number[] = [];
   const p = new THREE.Vector3(), T = new THREE.Vector3(), O = new THREE.Vector3(), X = new THREE.Vector3();
   for (let i = 0; i <= segs; i++) {
@@ -767,7 +751,7 @@ function hairCard(pts: THREE.Vector3[], width: (t: number) => number, centre: TH
     X.crossVectors(T, O).normalize().applyAxisAngle(T, twist * t);
     const w = width(t) / 2;
     pos.push(p.x - X.x * w, p.y - X.y * w, p.z - X.z * w, p.x + X.x * w, p.y + X.y * w, p.z + X.z * w);
-    uv.push(0, 1 - t, 1, 1 - t);
+    uv.push(0, 1 - vAt(t), 1, 1 - vAt(t));
     const c = shade(t); col.push(c, c, c, c, c, c);
     if (i < segs) { const a = i * 2; idx.push(a, a + 1, a + 3, a, a + 3, a + 2); }
   }
