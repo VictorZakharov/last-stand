@@ -56,7 +56,7 @@ def landmarks(img, what):
             r = fm.process(cv2.cvtColor(c, cv2.COLOR_BGR2RGB))
             if r.multi_face_landmarks:
                 ch, cw = c.shape[:2]
-                return np.array([[x0 + p.x * cw / k, y0 + p.y * ch / k] for p in r.multi_face_landmarks[0].landmark], np.float64)
+                return np.array([[x0 + p.x * cw / k, y0 + p.y * ch / k, p.z * cw / k] for p in r.multi_face_landmarks[0].landmark], np.float64)
     raise SystemExit(f'no face found in {what}')
 
 
@@ -67,7 +67,8 @@ def eye_centre(L, side):
 ref = cv2.imread(REF)
 ours = cv2.imread(f'{OUT}/ours.png')
 hair = cv2.imread(f'{OUT}/ours-hair.png', cv2.IMREAD_GRAYSCALE)
-LR, LO = landmarks(ref, 'the reference'), landmarks(ours, 'ours')
+LR3, LO3 = landmarks(ref, 'the reference'), landmarks(ours, 'ours')
+LR, LO = LR3[:, :2].copy(), LO3[:, :2].copy()
 # the model's own points where the detector misreads it (the chin under a beard), from render.mjs
 PTS = json.load(open(f'{OUT}/points.json'))
 sanity = {k: float(np.linalg.norm(LO[i] - np.array(PTS[k]))) for k, i in (('chin', 152), ('pupilR', 468), ('pupilL', 473))}
@@ -391,6 +392,9 @@ REG = {
     'sclera R': mask_poly(LR4[EYE_R]) * (1 - mask_circle(LR4[468], ring(468) * 1.1)),
     'sclera L': mask_poly(LR4[EYE_L]) * (1 - mask_circle(LR4[473], ring(473) * 1.1)),
     'under eye R': mask_poly(band(LOW_R, 0.14)), 'under eye L': mask_poly(band(LOW_L, 0.14)),
+    # (the lid between the eye and the brow: shaded under a heavy brow, bright on a flat-lit face)
+    'upper lid R': mask_poly(np.r_[LR4[[33, 246, 161, 160, 159, 158, 157, 173, 133]], LR4[[55, 65, 52, 53, 46]]]),
+    'upper lid L': mask_poly(np.r_[LR4[[263, 466, 388, 387, 386, 385, 384, 398, 362]], LR4[[285, 295, 282, 283, 276]]]),
     'cheekbone R': mask_circle(LR4[50], 0.1 * iod * ZM), 'cheekbone L': mask_circle(LR4[280], 0.1 * iod * ZM),
     'lower cheek R': mask_circle((LR4[50] + LR4[136]) / 2, 0.09 * iod * ZM), 'lower cheek L': mask_circle((LR4[280] + LR4[365]) / 2, 0.09 * iod * ZM),
     'nose bridge': mask_circle(LR4[197], 0.06 * iod * ZM), 'nose tip': mask_circle(LR4[4], 0.07 * iod * ZM),
@@ -622,6 +626,93 @@ for nm, ci, up_, lo_ in (('right', 468, 159, 145), ('left', 473, 386, 374)):
     a_, b_ = cover(LR), cover(LO)
     lines.append(f'iris covered by the lids, {nm:5s} eye (top, bottom; shares of its height): ref {a_[0]:.2f}, {a_[1]:.2f}   ours {b_[0]:.2f}, {b_[1]:.2f}')
 
+# --- the face's 3D shape: the depth of each landmark as the detector reconstructs the face from the picture, the same
+# way on both (cheekbones standing out, hollows under them, how the face curves back to its sides, how far the eyes sit
+# behind the brow): a face can match in outline and colour and still be the wrong shape
+from scipy.interpolate import LinearNDInterpolator
+sc_ = float(np.sqrt(abs(np.linalg.det(M[:, :2]))))
+
+
+def depth(L3, pts2):
+    """toward the camera from the eye corners' depth, in eye distances, at the landmarks"""
+    z = -(L3[:, 2] - L3[[33, 133, 362, 263], 2].mean())
+    return z
+
+
+zR = depth(LR3, LR) / iod
+zO = depth(LO3, LOa) * sc_ / iod
+interR = LinearNDInterpolator(LR[:468], zR[:468])
+interO = LinearNDInterpolator(LOa[:468, :2], zO[:468])
+ec2 = (eye_centre(LR, 'r') + eye_centre(LR, 'l')) / 2
+ex2 = (eye_centre(LR, 'l') - eye_centre(LR, 'r')) / iod; ey2 = np.array([-ex2[1], ex2[0]])
+F2 = lambda u, v: ec2 + (u * ex2 + v * ey2) * iod
+lines.append('')
+lines.append('the face\'s 3D shape (depth toward the camera from the eye corners, in hundredths of the eye distance, as the face')
+lines.append('  mesh reconstructs both pictures alike; rows in eye distances below the eye line, columns from his right to his left)')
+lines.append('           ' + ' '.join(f'{x:+6.1f}' for x in xs))
+shape_err = []
+for v in (-0.6, -0.25, 0.25, 0.55, 0.95, 1.3, 1.6):
+    a_ = [float(interR(*F2(x, v))) for x in xs]; b_ = [float(interO(*F2(x, v))) for x in xs]
+    f = lambda vals: ' '.join('     .' if not np.isfinite(q) else f'{q * 100:+6.0f}' for q in vals)
+    lines.append(f'  {v:+5.2f} ref  {f(a_)}')
+    lines.append(f'        ours {f(b_)}')
+    shape_err += [abs(a - b) for a, b in zip(a_, b_) if np.isfinite(a) and np.isfinite(b)]
+lines.append(f'  mean difference {np.mean(shape_err) * 100:.1f} hundredths')
+# (key points: how far each stands out)
+KEY = {'nose tip': [1], 'brow ridge (mid)': [105, 334], 'iris centre': [468, 473], 'cheekbone (under the outer eye)': [116, 345],
+       'cheek below it': [123, 352], 'cheek hollow (beside the mouth)': [207, 427], 'mouth corner': [61, 291], 'chin': [152],
+       'jaw angle': [172, 397], 'temple': [127, 356], 'forehead': [10]}
+lines.append('  points (hundredths of the eye distance toward the camera): ref vs ours')
+for k, ids in KEY.items():
+    lines.append(f'    {k:32s} ref {np.mean(zR[ids]) * 100:+6.0f}   ours {np.mean(zO[ids]) * 100:+6.0f}')
+# the depth maps, coloured, with their contour lines, side by side
+box = crop_box(OVAL, 0.15)
+Zs = 4
+x0, y0, x1, y1 = box
+gx, gy = np.meshgrid(np.arange(x0, x1, 1 / Zs), np.arange(y0, y1, 1 / Zs))
+dR, dO = interR(gx, gy), interO(gx, gy)
+def dimg(d):
+    v = np.nan_to_num(np.clip((d + 0.1) / 0.75, 0, 1), nan=0)
+    im = cv2.applyColorMap(np.uint8(v * 255), cv2.COLORMAP_TURBO)
+    im[~np.isfinite(d)] = 40
+    for lev in np.arange(-0.1, 0.65, 0.05):
+        m = np.uint8(np.nan_to_num(d, nan=-9) > lev)
+        cs, _ = cv2.findContours(m, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+        cv2.drawContours(im, cs, -1, (255, 255, 255), 1, cv2.LINE_AA)
+    return im
+diff = dO - dR
+dv = cv2.applyColorMap(np.uint8(np.nan_to_num(np.clip(diff / 0.2 * 127 + 128, 0, 255), nan=128)), cv2.COLORMAP_COOL)
+dv[~np.isfinite(diff)] = 40
+cv2.imwrite(f'{OUT}/sheet-shape.png', np.concatenate([label(dimg(dR), 'reference: depth (contours every 0.05 eye distances)'), label(dimg(dO), 'ours'),
+                                                      label(dv, 'ours nearer (pink) / further (cyan), +-0.2')], 1))
+
+# --- the eyes' shape: the tilt from the inner corner to the outer, how open for how wide, where the upper lid peaks, the
+# lids' curves (height above and below the line between the corners, at a quarter, half and three quarters of the way out)
+lines.append('')
+lines.append('eye shape (shares of the eye\'s width; tilt in degrees, + the outer corner higher)')
+UP = {'R': [133, 173, 157, 158, 159, 160, 161, 246, 33], 'L': [362, 398, 384, 385, 386, 387, 388, 466, 263]}
+LO_ = {'R': [133, 155, 154, 153, 145, 144, 163, 7, 33], 'L': [362, 382, 381, 380, 374, 373, 390, 249, 263]}
+
+
+def eye_shape(L_, side):
+    inner, outer = (L_[133], L_[33]) if side == 'R' else (L_[362], L_[263])
+    ax_ = outer - inner; wdt = np.linalg.norm(ax_); ux = ax_ / wdt; uy = np.array([-ux[1], ux[0]])
+    if uy[1] > 0: uy = -uy  # up
+    tilt = np.degrees(np.arctan2(-(outer[1] - inner[1]), abs(outer[0] - inner[0])))
+    def curve(ids):
+        P = np.array([[np.dot(L_[i] - inner, ux) / wdt, np.dot(L_[i] - inner, uy) / wdt] for i in ids])
+        P = P[np.argsort(P[:, 0])]
+        return [float(np.interp(t, P[:, 0], P[:, 1])) for t in (0.25, 0.5, 0.75)], float(P[np.argmax(np.abs(P[:, 1])), 0])
+    (up, upk), (lo, lok) = curve(UP[side]), curve(LO_[side])
+    return tilt, up, upk, lo, lok
+
+
+for side in ('R', 'L'):
+    a_, b_ = eye_shape(LR, side), eye_shape(LOa, side)
+    f = lambda e: f"tilt {e[0]:+5.1f}  upper lid {'/'.join(f'{q:+.2f}' for q in e[1])} peak at {e[2]:.2f}  lower lid {'/'.join(f'{q:+.2f}' for q in e[3])} lowest at {e[4]:.2f}"
+    lines.append(f'  {"right" if side == "R" else "left "} ref  {f(a_)}')
+    lines.append(f'        ours {f(b_)}')
+
 # --- the other views (nothing to compare them with: they show what the front hides), side by side
 views = [(n, cv2.imread(f'{OUT}/view-{n}.png')) for n in ('three-quarter', 'side', 'back', 'above')]
 views = [(n, v) for n, v in views if v is not None]
@@ -629,6 +720,23 @@ if views:
     h0 = views[0][1].shape[0]
     tiles = [label(cv2.resize(v[int(h0 * 0.02):int(h0 * 0.82), int(h0 * 0.12):int(h0 * 0.88)], (600, 632)), n) for n, v in views]
     cv2.imwrite(f'{OUT}/sheet-views.png', np.concatenate(tiles, 1))
+
+# --- the shape in clay from all round, the reference's head beside the front view at the same scale
+clays = [(n, cv2.imread(f'{OUT}/clay-{n}.png')) for n in ('front', 'three-quarter-r', 'profile-r', 'three-quarter-l', 'profile-l', 'below', 'above')]
+clays = [(n, v) for n, v in clays if v is not None]
+if clays:
+    h0 = clays[0][1].shape[0]
+    cut = lambda v: v[int(h0 * 0.05):int(h0 * 0.85), int(h0 * 0.1):int(h0 * 0.9)]
+    tiles = [cut(v) for _, v in clays]
+    # (the reference's head in the same frame as ours: ours is aligned onto it by the eye corners, so that maps back)
+    Minv = cv2.invertAffineTransform(M)
+    rc = cv2.warpAffine(ref, Minv, (ours.shape[1], ours.shape[0]), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    tiles = [label(cut(rc), 'reference')] + [label(t, n) for t, (n, _) in zip(tiles, clays)]
+    th = 560
+    tiles = [cv2.resize(t, (int(t.shape[1] * th / t.shape[0]), th), interpolation=cv2.INTER_AREA) for t in tiles]
+    row1, row2 = np.concatenate(tiles[:4], 1), np.concatenate(tiles[4:], 1)
+    if row2.shape[1] < row1.shape[1]: row2 = np.concatenate([row2, np.full((th, row1.shape[1] - row2.shape[1], 3), 255, np.uint8)], 1)
+    cv2.imwrite(f'{OUT}/sheet-clay.png', np.concatenate([row1, row2], 0))
 
 open(f'{OUT}/report.txt', 'w').write('\n'.join(lines))
 json.dump({'measures_ref': mr, 'measures_ours': mo, 'err': err, 'hair_iou': inter / max(1, union), 'tone': stats, 'tone_dE': float(np.mean(dEs)), 'frame': frame_rows}, open(f'{OUT}/report.json', 'w'), indent=1)

@@ -100,6 +100,14 @@ try {
       const az = kaz * Math.PI / 180, el = kel * Math.PI / 180;
       key.color.set(0xfff4ea); key.intensity = 2.6 * exposure; key.target.position.copy(C); key.target.updateMatrixWorld();
       key.position.copy(C).addScaledVector(fw, 7 * Math.cos(el) * Math.cos(az)).addScaledVector(right, -7 * Math.cos(el) * Math.sin(az)).addScaledVector(up, 7 * Math.sin(el));
+      // (the clay views: a light from high to one side and little fill, so the shape's forms throw shadows; it turns with the
+      // camera, so every view is lit alike)
+      const cl = window.__clay;
+      if (cl) {
+        const a = cl.az - 0.8, e = 0.75, side = new THREE.Vector3().crossVectors(up, fw);
+        key.position.copy(C).addScaledVector(fw, 7 * Math.cos(e) * Math.cos(a)).addScaledVector(side, 7 * Math.cos(e) * Math.sin(a)).addScaledVector(up, 7 * Math.sin(e));
+        key.intensity = 3.2; hemi.intensity = 0.55;
+      }
       const ext = head.localToWorld(toGroup(0, 300, 0)).distanceTo(head.localToWorld(toGroup(0, -40, 0)));
       return { C, fw, up, dist: ext / 2 / Math.tan((fov * Math.PI / 180) / 2) };
     };
@@ -136,6 +144,18 @@ try {
     await p.waitForTimeout(400);
     writeFileSync(join(OUT, `view-${name}.png`), await canvas.screenshot());
   }
+  // the shape alone, in grey clay (no hair, no paint) from all round: what the face's shape is, which paint and hair hide
+  await p.evaluate(() => {
+    const { THREE } = __dev, G = __G, clay = new THREE.MeshStandardMaterial({ color: 0xb4aca4, roughness: 0.7 });
+    window.__clayRestore = [];
+    G.scene.traverse((o) => { if (!o.isMesh && !o.isSkinnedMesh) return; window.__clayRestore.push([o, o.material, o.visible]); if (o.name === 'hair') o.visible = false; else o.material = clay; });
+  });
+  for (const [name, az, el] of [['front', 0, 0], ['three-quarter-r', -35, 0], ['profile-r', -90, 0], ['three-quarter-l', 35, 0], ['profile-l', 90, 0], ['below', 0, -30], ['above', 0, 40]]) {
+    await p.evaluate(([a, e]) => { window.__orbit = { az: a * Math.PI / 180, el: e * Math.PI / 180 }; window.__clay = { az: a * Math.PI / 180 }; }, [az, el]);
+    await p.waitForTimeout(400);
+    writeFileSync(join(OUT, `clay-${name}.png`), await canvas.screenshot());
+  }
+  await p.evaluate(() => { for (const [o, m, v] of window.__clayRestore) { o.material = m; o.visible = v; } window.__clay = null; });
   await p.evaluate(() => { window.__orbit = null; });
   await p.waitForTimeout(400);
   // which mesh shows where, each in a flat colour (face red, the neck green, ears yellow, eyes cyan, hair blue, the rest
