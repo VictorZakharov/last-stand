@@ -151,6 +151,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   const M = faceMaps(who);
   const skin = kit.rim({ roughness: 1, map: M.map, normalMap: M.normalMap, roughnessMap: M.roughnessMap, normalScale: new THREE.Vector2(0.5, 0.5) }, 0x6a2a1c, 0.25);
   const face = part(skinGeometry(g), skin, head);
+  face.name = 'face';
 
   // --- eyes: glossy balls in the sockets behind the lids, and lashes along the upper lids
   const eyeMat = kit.std({ map: eyeMap(F.iris), roughness: 0.08 });
@@ -289,6 +290,8 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     for (const x of lockGeo) x.dispose();
     m.castShadow = true;
   }
+  // (named, so a probe or a tool can find them)
+  for (const m of hair) m.name = 'hair';
   const midZ = (y: number) => { let z = 140; while (z > 0 && headSDF(0, y, z, F) > 0) z -= 0.25; return z; };
   return { group: head, face, eyes, surface, midZ, hair };
 }
