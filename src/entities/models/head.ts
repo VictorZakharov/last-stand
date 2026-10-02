@@ -94,21 +94,21 @@ function eyeMap(iris: [number, number, number], shade = 0): THREE.CanvasTexture 
     const mm = r * EYE.r;
     let c: number[];
     // (a deep-set eye's pupil a little smaller: a big one reads as a doll's)
-    const pr = shade ? 1.5 : 1.9;
+    const pr = shade ? 1.6 : 1.9, ir = shade ? 6.4 : 5.9;
     if (mm < pr) c = [0.02, 0.018, 0.02];
-    else if (mm < 5.9) {
-      const k = (mm - pr) / (5.9 - pr), fib = 0.75 + 0.25 * Math.sin(a * 37 + Math.sin(a * 11) * 2) * Math.sin(a * 23 + mm), ring = 1 - 0.45 * Math.exp(-(((mm - 2.2) / 0.5) ** 2));
+    else if (mm < ir) {
+      const k = (mm - pr) / (ir - pr), fib = 0.75 + 0.25 * Math.sin(a * 37 + Math.sin(a * 11) * 2) * Math.sin(a * 23 + mm), ring = 1 - 0.45 * Math.exp(-(((mm - 2.2) / 0.5) ** 2));
       const edge = 1 - 0.6 * clamp((k - 0.8) / 0.2, 0, 1);
       c = iris.map((ch, i) => ch * fib * ring * edge * (0.75 + 0.5 * k) + (i === 0 ? 0.04 : 0.02) * (1 - k));
-    } else if (mm < 6.4) c = [0.08, 0.08, 0.09];
+    } else if (mm < ir + 0.5) c = [0.08, 0.08, 0.09];
     else {
       // the white, greyer towards its edge and a little pink in the corners
-      const k = clamp((mm - 6.4) / 5, 0, 1);
+      const k = clamp((mm - ir - 0.5) / 5, 0, 1);
       c = [0.78 - 0.14 * k + 0.05 * Math.abs(u) * k, 0.74 - 0.18 * k, 0.72 - 0.18 * k].map((ch) => ch * (1 - 0.2 * shade));
     }
     if (shade) {
       // (darkest under the lid's edge, and into the corners)
-      const k = 1 - shade * (0.55 * sm(-2, 3.2, v * EYE.r) + 0.3 * sm(4, 10, Math.abs(u) * EYE.r));
+      const k = 1 - shade * (0.55 * sm(-2, 3.2, v * EYE.r) + 0.5 * sm(5, 10, Math.abs(u) * EYE.r));
       c = c.map((ch) => ch * k);
     }
     const i = (y * S + x) * 4;
@@ -195,7 +195,8 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   const lg = new THREE.BufferGeometry();
   lg.setAttribute('position', new THREE.Float32BufferAttribute(lashes, 3));
   lg.computeVertexNormals();
-  part(lg, lash, head).castShadow = false;
+  // (a deep-set eye's lashes are painted: a strip reads as a line drawn round the eye)
+  if (!shaded) part(lg, lash, head).castShadow = false;
 
   // --- ears
   const earAo = LOOKS[who].ao ?? 0, earMat = plainSkin(kit, who, earAo > 0);

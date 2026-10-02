@@ -57,6 +57,11 @@ export interface FaceShape {
   beardUnder?: number;
   /** how softly the lower lid blends into the cheek (mm; 0 a lid standing out of the socket, its edge a crease) */
   lidSoft?: number;
+  /** the eye's outer corner higher than its inner (mm, 1.1), and how far its upper lid arches over the opening and its lower
+   *  lid sags under it (shares of eyeOpen: 1.08 and 1.22; a higher upper and a straighter lower lid make an almond) */
+  eyeTilt?: number; lidUp?: number; lidLow?: number;
+  /** how far forward the mouth, its muzzle and the chin sit (mm): a lower face set back reads as flat and receding */
+  muzzleFwd?: number;
   /** how far the ears' backs stand out from the head (radians, 0.5 average) */
   earFlare?: number;
   /** how much further out the cheekbones' arches stand (mm each side), the mid-face widening with them: a broad face
@@ -66,7 +71,7 @@ export interface FaceShape {
 
 export const FACES: Record<'warrior' | 'mage', FaceShape> = {
   // broad jaw and chin, a heavy brow over deep-set eyes, high cheekbones, a straight nose
-  warrior: { jaw: 50, chin: 14, chinFwd: 6, brow: 1.4, cheek: 1.1, noseLen: 55, noseW: 13.2, nosePro: 1.14, hump: 0.9, lips: 0.72, long: 0.98, tip: 1.15, eyeOpen: 2.9, iris: [0.37, 0.36, 0.3], beardDepth: 0.8, bridge: 6, beardLine: 22, browDrop: 8, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -16, neckBlend: 9, lidSoft: 4, earFlare: 0.3, zygo: 8, bridgeW: 6.8 },
+  warrior: { jaw: 50, chin: 14, chinFwd: 6, brow: 1.4, cheek: 1.1, noseLen: 55, noseW: 13.2, nosePro: 1.28, hump: 0.9, lips: 0.72, long: 0.98, tip: 1.15, eyeOpen: 2.75, iris: [0.37, 0.36, 0.3], beardDepth: 0.8, bridge: 6, beardLine: 22, browDrop: 8, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -16, neckBlend: 9, lidSoft: 4, earFlare: 0.3, zygo: 8, bridgeW: 6.8, eyeTilt: 0.35, lidUp: 1.25, lidLow: 0.85, muzzleFwd: 7 },
   // longer and leaner, high cheekbones, a long straight nose
   mage: { jaw: 50, chin: 19, chinFwd: 0, brow: 1.05, cheek: 1.25, noseLen: 57, noseW: 16.5, nosePro: 1.1, hump: 0.4, lips: 1, long: 1.04, eyeOpen: 4.3, iris: [0.3, 0.42, 0.34], beardDepth: 6 },
 };
@@ -100,9 +105,9 @@ export const EYE = { x: 32, y: 114, z: 71, r: 12 };
  */
 export function eyeOpening(xe: number, ye: number, F: FaceShape): number {
   const t = (xe + 0.5) / 15, u = clamp(t, -1, 1), w = 1 - u * u;
-  const tilt = 1.1 * u;
-  const top = tilt + F.eyeOpen * 1.08 * Math.pow(w, 0.72) * (1 - 0.22 * u) + 0.2;
-  const bot = tilt - F.eyeOpen * 1.22 * Math.pow(w, 0.95) * (1 + 0.18 * u) - 0.4;
+  const tilt = (F.eyeTilt ?? 1.1) * u;
+  const top = tilt + F.eyeOpen * (F.lidUp ?? 1.08) * Math.pow(w, 0.72) * (1 - 0.22 * u) + 0.2;
+  const bot = tilt - F.eyeOpen * (F.lidLow ?? 1.22) * Math.pow(w, 0.95) * (1 + 0.18 * u) - 0.4;
   return Math.max(ye - top, bot - ye, (Math.abs(t) - 1) * 15);
 }
 
@@ -149,12 +154,13 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
   const zg = F.zygo ?? 0;
   d = smin(d, ell(ax, yl, z, 0, 92, 44, 54 + zg, 38, 48), 16);
   // the lower face's solid core: the cheeks and jaw are one mass, not blobs round a hollow
-  d = smin(d, ell(ax, yl, z, 0, 48, 30, F.lowerW ?? 54, 42, 58), 16);
+  const mf = F.muzzleFwd ?? 0;
+  d = smin(d, ell(ax, yl, z, 0, 48, 30 + mf * 0.5, F.lowerW ?? 54, 42, 58), 16);
   // the base of the skull behind the jaw, down into the neck
   d = smin(d, ell(ax, y, z, 0, 76, -24, 52, 44, 60), 30);
   // the jaw: its body from the chin back to its angle, the ramus from there up towards the ear, the
   // floor between its sides
-  d = smin(d, seg(ax, yl, z, F.chin - 2, 9, 78, F.jaw, 30, 4, 12, 10), 18);
+  d = smin(d, seg(ax, yl, z, F.chin - 2, 9, 78 + mf * 0.8, F.jaw, 30, 4, 12, 10), 18);
   d = smin(d, seg(ax, yl, z, F.jaw - 3, 30, 6, 46, 80, 2, 9, 7.5), 12);
   d = smin(d, ell(ax, yl, z, 0, 28, 24, 44, 18, 44), 12);
   // the side of the face under the cheekbone's arch, in front of the ear (the chewing muscle)
@@ -173,22 +179,23 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
   d = smin(d, seg(ax, y, z, 0, 138 - bd, 86 + 2 * b, 42, 135 - bd, 75 + 1.5 * b, 6 + 1.2 * b, 5.5), 18);
   // cheekbones, the cheeks' fullness below them
   const c = F.cheek;
-  d = smin(d, ell(ax, yl, z, 50, 101, 57, 15 * c, 11, 16), 10);
+  // (over a hollow the cheekbone stands further out, catching the light above it)
+  d = smin(d, ell(ax, yl, z, 50, 101 + (F.hollow ?? 0) * 0.6, 57 + (F.hollow ?? 0) * 0.9, 15 * c, 11, 16), 10);
   d = smin(d, ell(ax, yl, z, 40, 78, 62, 18, 20, 15), 12);
   // (in front of the face's side, so the outline keeps its line)
   if (F.hollow) d = smax(d, -ell(ax, yl, z, 38, 66, 62 + F.hollow * 2.2, 11, 15, 11), 14);
   // the muzzle over the teeth above and below the mouth, the chin
-  d = smin(d, ell(ax, yl, z, 0, 58, 78, 26, 20, 22), 10);
-  d = smin(d, ell(ax, yl, z, 0, 31, 76, 24, 16, 19), 10);
-  d = smin(d, ell(ax, yl, z, 0, 13, 80 + F.chinFwd, F.chin, 15, 15), 8);
+  d = smin(d, ell(ax, yl, z, 0, 58, 78 + mf, 26, 20, 22), 10);
+  d = smin(d, ell(ax, yl, z, 0, 31, 76 + mf, 24, 16, 19), 10);
+  d = smin(d, ell(ax, yl, z, 0, 13, 80 + F.chinFwd + mf * 0.8, F.chin, 15, 15), 8);
   if (ax < 40 && yl > 28 && yl < 62) {
     // lips: rolls along the teeth meeting in a crease, the upper one thinner; the corners tucked in
     const lp = F.lips;
     // joined sharply, so the line between them stays a crease, then blended into the face
     const m0 = mouthY(0);
-    const lips = Math.min(lip(ax, yl, z, m0 + 3.8 * lp + 0.6, 94.8, 22.5, 3.8 * lp, 3), lip(ax, yl, z, m0 - 4.8 * lp - 0.6, 92.5, 20.5, 4.8 * lp, 1.8));
+    const lips = Math.min(lip(ax, yl, z, m0 + 3.8 * lp + 0.6, 94.8 + mf, 22.5, 3.8 * lp, 3), lip(ax, yl, z, m0 - 4.8 * lp - 0.6, 92.5 + mf, 20.5, 4.8 * lp, 1.8));
     d = smin(d, lips, 3.5);
-    d = smax(d, -ell(ax, yl, z, 25, mouthY(ax) - 0.3, 90, 3, 2.4, 3.5), 2);
+    d = smax(d, -ell(ax, yl, z, 25, mouthY(ax) - 0.3, 90 + mf * 0.7, 3, 2.4, 3.5), 2);
   }
   if (Math.abs(ax - EYE.x) < 32 && y > 85 && y < 150) {
     // eye sockets under the brow, then the lids riding on the eyeball round the opening
@@ -387,7 +394,7 @@ export interface FaceLook {
 }
 
 export const LOOKS: Record<keyof typeof FACES, FaceLook> = {
-  warrior: { skin: [0.8, 0.68, 0.65], hair: [0.155, 0.112, 0.07], streak: [0.4, 0.3, 0.18], ao: 0.55, beardHair: [0.38, 0.27, 0.16], eyeShade: 0.55, flush: 1.8, lipGloss: 0.3, grey: 0.02, beard: 1, age: 0.25, brows: 1.05, hairDrop: 20, cheekShade: 1, stubble: 0.8, contour: 0.45, browArch: 0.2, pores: 0.45, lipTint: 1.1, nostrils: 1.5, alar: 1, browTail: 0, browFill: 0.15, browEven: 1, under: 0, browLift: 2.5, templeDrop: 22 },
+  warrior: { skin: [0.8, 0.68, 0.65], hair: [0.155, 0.112, 0.07], streak: [0.4, 0.3, 0.18], ao: 0.55, beardHair: [0.38, 0.27, 0.16], eyeShade: 0.55, flush: 1.8, lipGloss: 0.3, grey: 0.02, beard: 1, age: 0.25, brows: 1.05, hairDrop: 20, cheekShade: 1, stubble: 0.8, contour: 0.45, browArch: 0.4, pores: 0.45, lipTint: 1.1, nostrils: 1.5, alar: 1, browTail: 0, browFill: 0.65, browEven: 1, under: 0.8, browLift: 2.5, templeDrop: 22 },
   mage: { skin: [0.78, 0.57, 0.46], hair: [0.12, 0.08, 0.058], streak: [0.28, 0.19, 0.13], grey: 0.06, beard: 1, age: 1 },
 };
 
@@ -470,7 +477,8 @@ export function beardAt(ax: number, y: number, z: number, F: FaceShape, soft = 1
   let out = b * sm(back - 4, back + 6, z) * sm(F.beardUnder ?? -45, (F.beardUnder ?? -45) + 20, y);
   if (F.neckW !== undefined && y < 40) {
     // (with a jaw standing out over the neck, below its angle the beard grows on the jaw, not down the neck)
-    const yl = y < 114 ? 114 - (114 - y) / F.long : y, dj = Math.min(seg(ax, yl, z, F.chin - 2, 9, 78, F.jaw, 30, 4, 12, 10), ell(ax, yl, z, 0, 13, 80 + F.chinFwd, F.chin + 4, 19, 19));
+    const mf = F.muzzleFwd ?? 0, yl = y < 114 ? 114 - (114 - y) / F.long : y;
+    const dj = Math.min(seg(ax, yl, z, F.chin - 2, 9, 78 + mf * 0.8, F.jaw, 30, 4, 12, 10), ell(ax, yl, z, 0, 13, 80 + F.chinFwd + mf * 0.8, F.chin + 4, 19, 19));
     out *= 1 - (1 - sm(22 + 2 * soft, 4, dj)) * sm(40, 25, y);
   }
   return out;
@@ -563,12 +571,19 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         const op = eyeOpening(ex, ey, F);
         const under = G(ex + 2, ey + 9, 0, 7) * face * (L.under ?? 1);
         c[0] *= 1 - 0.1 * under; c[1] *= 1 - 0.15 * under; c[2] *= 1 - 0.06 * under;
+        if (L.eyeShade) {
+          // (the lid under a heavy brow is in its shadow, between the lashes and the brow)
+          const lid = L.eyeShade * G(ex + 1, ey - 6.5, 0, 6.5) * sm(0, 4, ey) * face;
+          c[0] *= 1 - 0.3 * lid; c[1] *= 1 - 0.36 * lid; c[2] *= 1 - 0.34 * lid;
+        }
         // the crease above the lid, following the opening's arc about 6 mm higher
-        const crease = Math.exp(-(((op + 5.5) / 1.4) ** 2)) * sm(-1, 3, ey) * sm(17, 9, Math.abs(ex + 1));
-        mix(0.45 * crease, c[0] * 0.66, c[1] * 0.58, c[2] * 0.58); hh -= crease * 0.5;
+        // (a hooded lid's fold hangs close over the lashes: its crease lower and darker)
+        const cz = L.eyeShade ? 4 : 5.5, crease = Math.exp(-(((op + cz) / 1.2) ** 2)) * sm(-1, 3, ey) * sm(17, 9, Math.abs(ex + 1));
+        mix((L.eyeShade ? 0.7 : 0.45) * crease, c[0] * 0.6, c[1] * 0.52, c[2] * 0.52); hh -= crease * 0.5;
         // the lash line: dark along the upper edge, softer along the lower
-        const lw = L.eyeShade ? 0.7 : 0.9, lashes = Math.exp(-((op / lw) ** 2)) * (ey > 0 ? 1 : 0.35) * sm(16, 11, Math.abs(ex + 0.5));
-        mix((L.eyeShade ? 0.55 : 0.8) * lashes, 0.1, 0.06, 0.05);
+        // (a deep-set eye has no lash strip: its lashes are this line, softer and wider, darkest along the upper lid)
+        const lw = L.eyeShade ? 1.3 : 0.9, lashes = Math.exp(-((op / lw) ** 2)) * (ey > 0 ? 1 : 0.35) * sm(16, 11, Math.abs(ex + 0.5));
+        mix((L.eyeShade ? 0.7 : 0.8) * lashes, 0.1, 0.06, 0.05);
         mix(0.6 * G(ex + 15, ey + 0.5, 0, 2.6), 0.75, 0.42, 0.42);
       }
       // --- brows: strokes along the brow ridge, thickest at the inner end
@@ -580,7 +595,8 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         const d = (yy - (top - thick / 2)) / (thick / 2);
         const brow = Math.exp(-(d * d) * 1.2) * sm(-2, 3, bx) * sm(48, 38, bx) * face;
         if (brow > 0.01) {
-          const s1 = tnoise(tx * 0.12, ty * 2.2, w * 0.12, 5), s2 = tnoise(tx * 0.3, ty * 3.1, w * 0.3, 6);
+          // (evenly thick brows' hairs coarser and softer: noise finer than the texels reads as a ragged edge)
+          const ev = L.browEven ?? 0, s1 = tnoise(tx * lerp(0.12, 0.3, ev), ty * lerp(2.2, 0.8, ev), w * lerp(0.12, 0.3, ev), 5), s2 = tnoise(tx * 0.3, ty * lerp(3.1, 1.2, ev), w * 0.3, 6);
           // (filled solid in its middle, the hairs showing at its edges)
           const hairs = brow * lerp(sm(0.35 - 0.25 * (bk - 1), 0.65 - 0.2 * (bk - 1), s1 * 0.6 + s2 * 0.4), 1, (L.browFill ?? 0) * sm(0.35, 0.75, brow));
           mix((L.beardHair ? 0.72 : 0.95) * hairs, BROW[0], BROW[1], BROW[2]); hh += hairs * 0.7; rr += hairs * 0.25;
