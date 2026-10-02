@@ -40,13 +40,10 @@ function gridFor(name: keyof typeof FACES): HeadGrid {
 
 /** the skin on its grid: uvs follow the grid, so the paint (painted on the same grid) lines up */
 function skinGeometry(g: HeadGrid): THREE.BufferGeometry {
-  const W = g.nu + 1, n = W * (g.nv + 1), pos = new Float32Array(n * 3), uv = new Float32Array(n * 2), d = { x: 0, y: 0, z: 0 };
-  const p = new THREE.Vector3(), C = { x: 0, y: 0, z: 0 };
+  const W = g.nu + 1, n = W * (g.nv + 1), pos = new Float32Array(n * 3), uv = new Float32Array(n * 2), p = new THREE.Vector3();
   for (let j = 0; j <= g.nv; j++) for (let i = 0; i <= g.nu; i++) {
-    const k = j * W + i, r = g.r[k];
-    gridDir(g.az[i], g.el[j], d);
-    origin(g.el[j], C);
-    toGroup(C.x + d.x * r, C.y + d.y * r, C.z + d.z * r, p);
+    const k = j * W + i;
+    toGroup(g.p[k * 3], g.p[k * 3 + 1], g.p[k * 3 + 2], p);
     pos[k * 3] = p.x; pos[k * 3 + 1] = p.y; pos[k * 3 + 2] = p.z;
     uv[k * 2] = i / g.nu; uv[k * 2 + 1] = j / g.nv;
   }
