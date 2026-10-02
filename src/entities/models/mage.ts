@@ -18,7 +18,7 @@ import { LegIK } from './ik';
 import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, type DrinkHold } from './flask';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
-import type { ActionState, AnimState, Model } from '../../types';
+import type { ActionState, AnimState, Gear, Model } from '../../types';
 
 const ZERO = new THREE.Vector3();
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3();
@@ -281,15 +281,16 @@ export function buildMage(): Model {
   hang(0, 0.19, 0.84, panel, 110, PH, 0.02);
   for (const s of [1, -1]) hang(s * 0.75, 0.15, 0.6, tail, 120, TH2, 0.03);
 
-  // --- the head: face, a full beard, hair, and a wide-brimmed pointed hat, its crown bent back by
-  // its own weight, a gold band with a stone
-  const head = buildHead(j.head, kit, 'mage', { beard: 160, hair: true });
+  // --- the head: face, a full beard, hair, and a wide-brimmed pointed hat (worn with a head item equipped:
+  // setGear), its crown bent back by its own weight, a gold band with a stone
+  const head = buildHead(j.head, kit, 'mage', { beard: 160, hair: 'swept' });
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, 'mage', j.P.neckL, j.head);
+  const hat = new THREE.Group(); hat.name = 'hat'; head.group.add(hat); hat.visible = false;
   {
     // sized to the head (mm, see head.ts): the band round the brow above the ears, over the hair
-    const w = new Sculpt(), hg = head.group, M = HEAD_MM, at = toGroup(0, 168, -9), tilt: [number, number, number] = [-0.12, 0, 0];
+    const w = new Sculpt(), hg = hat, M = HEAD_MM, at = toGroup(0, 168, -9), tilt: [number, number, number] = [-0.12, 0, 0];
     const RX = 86, DZ = 1.2;
     const brim = lathe(([[RX, 4], [120, 0], [160, -9], [194, -24], [205, -30], [202, -34], [180, -21], [140, -10], [100, -5], [RX, -4]] as [number, number][]).map(([r, y]) => [r * M, y * M]), 40);
     const q = brim.attributes.position;
@@ -631,6 +632,7 @@ export function buildMage(): Model {
     root, kit, joints: j, animate, tip, palm, height: 2.0,
     worldObjects: [cape.mesh],
     cloths,
+    setGear: (gear: Gear) => { hat.visible = gear.helm; },
     reset: () => { cape.reset(); legs.reset(); fade.reset(); for (const c of cloths) c.reset(); },
     // through the eyes the bells, seen from behind, would hide the hands: narrow and shorter
     firstPerson: (on) => { fp = on; for (const b of bells) b.scale.set(on ? 0.6 : 1, on ? 0.75 : 1, on ? 0.6 : 1); },

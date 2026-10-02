@@ -42,6 +42,9 @@ const ADAPT_BASE = 0.04;
  */
 let adaptScale = 1;
 export function setAdaptScale(k: number): void { adaptScale = k; }
+/** `?adapt=0` holds the adaptation off (a studio render measured against a picture: its colours mustn't follow how
+ *  much of the frame is dark hair) */
+const NO_ADAPT = typeof location !== 'undefined' && /[?&]adapt=0/.test(location.search);
 /** Bloom's blur levels, tightest to widest: the halo round an effect, and only a trace of the screen-wide veil. */
 const BLOOM_LEVELS = [0.56, 0.5, 0.35, 0.12, 0.03];
 const GradeShader = {
@@ -403,6 +406,7 @@ export function render(): void {
   const e = ease(rig.blend), u = grade.uniforms;
   u.uSmall.value = target(rig.fromView, 0) + (target(rig.view, 0) - target(rig.fromView, 0)) * e;
   u.uLarge.value = target(rig.fromView, 1) + (target(rig.view, 1) - target(rig.fromView, 1)) * e;
+  if (NO_ADAPT) u.uSmall.value = u.uLarge.value = 1e4;
   gl.setRenderTarget(sceneRT);
   gpuMarks.mark('scene');
   gl.render(G.scene, G.camera);

@@ -32,11 +32,142 @@ export interface FaceShape {
   iris: [number, number, number];
   /** how far a short beard stands off the skin, mm */
   beardDepth: number;
+  /** a high nose bridge (mm): the nose rises straight from between the brows instead of from a dip */
+  bridge?: number;
+  /** half the width of the nose's ridge (mm, 5.2): a broader one runs straight down to the tip instead of pinching in */
+  bridgeW?: number;
+  /** the nose's tip, how big and round (1 average) */
+  tip?: number;
+  /** how much lower the beard's edge comes down across the cheek (mm) */
+  beardLine?: number;
+  /** a trimmed moustache: how far it curves down to the mouth's corners (mm), thinning there */
+  stacheCurve?: number;
+  /** how much lower the brows sit (mm), the ridge and the hairs both: close over the eyes */
+  browDrop?: number;
+  /** hollows under the cheekbones (mm deep) */
+  hollow?: number;
+  /** half the lower face's width (mm; 54 average): a narrower one tapers to the chin */
+  lowerW?: number;
+  /** how far out the chewing muscle fills the face's side below the cheekbone (mm, 47) */
+  masseter?: number;
+  /** the top of the neck under the jaw: half its width (mm, 57), its middle's depth (mm, -8) and how softly it
+   *  blends into the jaw (mm, 18); narrower, further back and blended less, the jaw stands out over it in a line */
+  neckW?: number; neckBack?: number; neckBlend?: number;
+  /** how far down under the jaw the beard grows (mm from the chin's underside; -45 down the throat) */
+  beardUnder?: number;
+  /** how softly the lower lid blends into the cheek (mm; 0 a lid standing out of the socket, its edge a crease) */
+  lidSoft?: number;
+  /** the eye's outer corner higher than its inner (mm, 1.1), and how far its upper lid arches over the opening and its lower
+   *  lid sags under it (shares of eyeOpen: 1.08 and 1.22; a higher upper and a straighter lower lid make an almond) */
+  eyeTilt?: number; lidUp?: number; lidLow?: number;
+  /** how far forward the mouth, its muzzle and the chin sit (mm): a lower face set back reads as flat and receding */
+  muzzleFwd?: number;
+  /** how far the ears' backs stand out from the head (radians, 0.5 average) */
+  earFlare?: number;
+  /** how much further out the cheekbones' arches stand (mm each side), the mid-face widening with them: a broad face
+   *  at the cheekbones without a bump on them */
+  zygo?: number;
+  /** how much further forward (mm) the brow ridge stands over the eyes (its outer ends less), the sockets dug under it: deep-set eyes */
+  browFwd?: number;
+  /** how much further forward (mm) the forehead's front comes, lower down too, so it rises nearly upright from the brow */
+  foreheadFwd?: number;
+  /** how much further forward (mm) the nose's root sits, at the dip between the eyes */
+  noseRoot?: number;
+  /** how much further forward (mm) the skull's back comes (its length kept as the face comes forward) */
+  skullFwd?: number;
+  /** how much further forward (mm) the lips and the muzzle over the teeth stand, the chin left where it is */
+  lipFwd?: number;
+  /** how much higher (mm) the mouth sits, the nose's base with it (the eyes and the chin stay): a shorter upper lip and a
+   *  longer chin */
+  mouthUp?: number;
+  /** the face's front as one smooth surface instead of the blobs (the upper face, the lower face's core, the cheeks, the
+   *  muzzle, the chewing muscle, the forehead): its cross-section at each height a superellipse, measured off a reference
+   *  (`front` from its profile, `half` from its front view, `side` where it is widest, `p` how square); the nose, lips,
+   *  brow, eyes, chin and cheekbones stand on it */
+  mask?: FaceMask;
+  /** a fleshy upper lid (mm): the skin over the eye thickens from the lashes up to the brow, filling the socket under it
+   *  (a hooded, deep-set eye, its crease under the brow), not a hollow there */
+  lidFold?: number;
+  /** how much narrower (mm each side) the skull is towards the front, at the temples, than at its widest behind the ears:
+   *  the face's sides then run straight down from the temples to the jaw instead of the cheekbones standing out of them */
+  templeNarrow?: number;
+  /** the mouth's width (1 average): the lips, their corners and their paint drawn in towards the middle */
+  mouthW?: number;
+}
+
+/** knots up the face (heights `y`, mm) and at each: the front's depth at the middle (the face under the nose and lips),
+ *  the half-width, the depth where it is widest and the squareness across (2 an ellipse, more a flatter front turning
+ *  sooner); `pz`, how its sides run back (2 an ellipse; less, straighter sides closing in to the front: a lean jaw and
+ *  cheeks, not full ones; `p` when not given) */
+export interface FaceMask {
+  y: number[]; front: number[]; half: number[]; side: number[]; p: number[]; pz?: number[];
+  /** a soft hollow running down from under the cheekbone towards the mouth's corner (mm deep): the cheekbone then reads by
+   *  the shade under it, not by standing out */
+  hollow?: number;
+}
+
+/** a smooth curve through knots (cubic Hermite, tangents from the neighbours), flat beyond the ends */
+function knots(ys: number[], vs: number[], y: number): number {
+  const n = ys.length;
+  if (y <= ys[0]) return vs[0];
+  if (y >= ys[n - 1]) return vs[n - 1];
+  let k = 0;
+  while (y > ys[k + 1]) k++;
+  const h = ys[k + 1] - ys[k], t = (y - ys[k]) / h;
+  const slope = (i: number) => i <= 0 || i >= n - 1 ? 0 : ((vs[i + 1] - vs[i]) / (ys[i + 1] - ys[i]) + (vs[i] - vs[i - 1]) / (ys[i] - ys[i - 1])) / 2;
+  const t2 = t * t, t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * vs[k] + (t3 - 2 * t2 + t) * h * slope(k) + (-2 * t3 + 3 * t2) * vs[k + 1] + (t3 - t2) * h * slope(k + 1);
+}
+
+/** the mask's distance: its superellipse at this height (a short taper behind the widest point, inside the skull), the
+ *  jaw's underside below it (a plane from the chin's bottom back to the jaw's angles) and its top inside the skull */
+function maskSDF(ax: number, y: number, z: number, M: FaceMask): number {
+  const W = knots(M.y, M.half, y), Zc = knots(M.y, M.side, y), p = knots(M.y, M.p, y), D = z > Zc ? Math.max(4, knots(M.y, M.front, y) - Zc) : 30;
+  // (behind its widest point the taper inside the skull stays round)
+  const q = z > Zc && M.pz ? knots(M.y, M.pz, y) : p;
+  const u = ax / W, v = Math.abs(z - Zc) / D;
+  // (round where the front meets the back: v^q with q under 2 turns infinitely sharply there, a crease down the face's
+  // side; eased into a square near v = 0 it keeps its line further out)
+  const e2 = 0.0144, vv = v * v + e2, vq = Math.pow(vv, q / 2) - Math.pow(e2, q / 2);
+  const up = Math.pow(u, p), f = up + vq - 1;
+  let d: number;
+  if (u + v < 1e-6) d = -Math.min(W, D);
+  else {
+    // (over its gradient: a distance near the surface)
+    const gx = u > 0 ? p * up / u / W : 0, gz = q * v * Math.pow(vv, q / 2 - 1) / D;
+    d = f / Math.max(1e-6, Math.hypot(gx, gz));
+  }
+  if (M.hollow && z > Zc) {
+    // (pressed in along a band from under the cheekbone, out by the face's side, to beside the mouth's corner)
+    const ax0 = 53, ay0 = 88, bx = 33, by = 55, dx = bx - ax0, dy = by - ay0;
+    const t = clamp(((ax - ax0) * dx + (y - ay0) * dy) / (dx * dx + dy * dy), 0, 1);
+    const dist = Math.hypot(ax - ax0 - dx * t, y - ay0 - dy * t);
+    d += M.hollow * Math.exp(-((dist / 13) ** 2)) * sm(0, 0.3, t) * sm(1, 0.65, t) * sm(Zc, Zc + 25, z);
+  }
+  const s = 0.3;
+  const under = (1 + (100 - z) * s - y) / Math.hypot(1, s);
+  return smax(smax(d, under, 6), y - M.y[M.y.length - 1], 10);
+}
+
+/** the face's own height for a point at height `y` (mm): with `mouthUp` the mouth and the nose's base are higher, the
+ *  eyes and the chin where they were (everything about the face is shaped and painted at this height) */
+export function faceY(y: number, F: FaceShape): number {
+  const u = F.mouthUp;
+  return u ? y - u * sm(2, 45, y) * sm(106, 45, y) : y;
 }
 
 export const FACES: Record<'warrior' | 'mage', FaceShape> = {
-  // broad jaw and chin, heavy brow, a nose with a bump on its bridge
-  warrior: { jaw: 55, chin: 22, chinFwd: 3, brow: 1.25, cheek: 1.1, noseLen: 54, noseW: 18, nosePro: 1.05, hump: 1.6, lips: 0.9, long: 1, eyeOpen: 4.1, iris: [0.36, 0.45, 0.52], beardDepth: 5 },
+  // a strong jaw and chin, a brow over deep-set eyes, a straight nose
+  warrior: { jaw: 55.2, chin: 10, chinFwd: -3.4, brow: 1.7, cheek: 0.9, noseLen: 50, noseW: 13.2, nosePro: 1.5, hump: 0, lips: 0.72, long: 0.96, tip: 1.15, eyeOpen: 3.2, iris: [0.31, 0.32, 0.26], beardDepth: 0.8, browFwd: 5.5, foreheadFwd: 10, noseRoot: 11, skullFwd: -3.7, lipFwd: 16.5, mouthUp: 6, beardLine: 22, browDrop: 2.6, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -16, neckBlend: 9, lidSoft: 4, earFlare: 0.3, zygo: 2, bridgeW: 6.8, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, muzzleFwd: -1.5,
+    templeNarrow: -4.4, lidFold: 5, mouthW: 0.88,
+    // (the mask, the skull and the jaw fitted by least squares (tools/facelab/fit.mjs) to the reference rebuilt in 3D from its
+    // turnaround (within 1 mm rms) and to its front view's widths; the nose, lips and eyes to the pictures' landmarks)
+    mask: { y: [-2, 8, 18, 30, 45, 60, 75, 90, 100, 110, 120, 132, 145, 160, 175, 190],
+      front: [95, 96.5, 97.5, 99.3, 101.1, 101.3, 100.2, 98, 95.6, 93.7, 94.4, 98.1, 99.9, 98.6, 94, 80],
+      half: [20, 32.6, 45.1, 56.4, 63.8, 66.8, 68, 69.5, 69, 67.2, 66.2, 65.2, 65.1, 65.1, 63, 58],
+      side: [60, 48.6, 38.1, 29, 21.3, 15.5, 11.8, 10.4, 10.1, 10.7, 11.8, 11.7, 10, 6.3, 0, -10],
+      p: [2, 2.15, 2.22, 2.21, 2.11, 1.98, 1.84, 1.76, 1.8, 2.02, 2.36, 2.5, 2.44, 2.39, 2.4, 2.2],
+      pz: [1.2, 1.2, 1.2, 1.2, 1.22, 1.58, 2.11, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2], hollow: 0 } },
   // longer and leaner, high cheekbones, a long straight nose
   mage: { jaw: 50, chin: 19, chinFwd: 0, brow: 1.05, cheek: 1.25, noseLen: 57, noseW: 16.5, nosePro: 1.1, hump: 0.4, lips: 1, long: 1.04, eyeOpen: 4.3, iris: [0.3, 0.42, 0.34], beardDepth: 6 },
 };
@@ -70,9 +201,9 @@ export const EYE = { x: 32, y: 114, z: 71, r: 12 };
  */
 export function eyeOpening(xe: number, ye: number, F: FaceShape): number {
   const t = (xe + 0.5) / 15, u = clamp(t, -1, 1), w = 1 - u * u;
-  const tilt = 1.1 * u;
-  const top = tilt + F.eyeOpen * 1.08 * Math.pow(w, 0.72) * (1 - 0.22 * u) + 0.2;
-  const bot = tilt - F.eyeOpen * 1.22 * Math.pow(w, 0.95) * (1 + 0.18 * u) - 0.4;
+  const tilt = (F.eyeTilt ?? 1.1) * u;
+  const top = tilt + F.eyeOpen * (F.lidUp ?? 1.08) * Math.pow(w, 0.72) * (1 - 0.22 * u) + 0.2;
+  const bot = tilt - F.eyeOpen * (F.lidLow ?? 1.22) * Math.pow(w, 0.95) * (1 + 0.18 * u) - 0.4;
   return Math.max(ye - top, bot - ye, (Math.abs(t) - 1) * 15);
 }
 
@@ -99,6 +230,7 @@ export const mouthY = (ax: number): number => 45.3 - 0.0045 * ax * ax;
 /** The lips' outer border (`side` +1 the upper lip's, -1 the lower's) at `ax` from the middle: the
  *  upper lip's bow peaks either side of a dip in the middle, both lips thin out into the corners. */
 export function lipBorder(ax: number, side: number, F: FaceShape): number {
+  ax /= F.mouthW ?? 1;
   const my = mouthY(Math.min(ax, 24));
   if (side > 0) {
     const w = Math.max(0, 1 - (ax / 23.5) ** 2);
@@ -111,78 +243,110 @@ export function lipBorder(ax: number, side: number, F: FaceShape): number {
 /** The head's signed distance at (x, y, z) mm, for face F. */
 export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
   const ax = Math.abs(x);
+  y = faceY(y, F);
   // the lower face stretched for a longer face (below the eyes)
   const L = F.long, yl = y < 114 ? 114 - (114 - y) / L : y;
   // the skull: an egg, widest behind the ears; the forehead's broad front; the upper face
-  let d = ell(ax, y, z, 0, 146, -8, 76, 82, 96);
-  d = smin(d, ell(ax, y, z, 0, 163, 34, 63, 46, 58), 20);
-  d = smin(d, ell(ax, yl, z, 0, 92, 44, 54, 38, 48), 16);
-  // the lower face's solid core: the cheeks and jaw are one mass, not blobs round a hollow
-  d = smin(d, ell(ax, yl, z, 0, 48, 30, 54, 42, 58), 16);
+  const ff = F.foreheadFwd ?? 0;
+  const tn = F.templeNarrow ? 1 + F.templeNarrow / 76 * sm(-20, 60, z) : 1;
+  let d = ell(ax * tn, y, z, 0, 146, -8 + (F.skullFwd ?? 0), 76, 82, 96);
+  const zg = F.zygo ?? 0, mf = F.muzzleFwd ?? 0, M = F.mask;
+  if (M) d = smin(d, maskSDF(ax, yl, z, M), 14);
+  else {
+    d = smin(d, ell(ax, y, z, 0, 163 - ff * 1.5, 34 + ff * 1.3, 63, 46, 58), 20);
+    d = smin(d, ell(ax, yl, z, 0, 92, 44, 54 + zg, 38, 48), 16);
+    // the lower face's solid core: the cheeks and jaw are one mass, not blobs round a hollow
+    d = smin(d, ell(ax, yl, z, 0, 48, 30 + mf * 0.5, F.lowerW ?? 54, 42, 58), 16);
+  }
   // the base of the skull behind the jaw, down into the neck
   d = smin(d, ell(ax, y, z, 0, 76, -24, 52, 44, 60), 30);
   // the jaw: its body from the chin back to its angle, the ramus from there up towards the ear, the
   // floor between its sides
-  d = smin(d, seg(ax, yl, z, F.chin - 2, 9, 78, F.jaw, 30, 4, 12, 10), 18);
+  d = smin(d, seg(ax, yl, z, F.chin - 2, 9, 78 + mf * 0.8, F.jaw, 30, 4, 12, 10), 18);
   d = smin(d, seg(ax, yl, z, F.jaw - 3, 30, 6, 46, 80, 2, 9, 7.5), 12);
   d = smin(d, ell(ax, yl, z, 0, 28, 24, 44, 18, 44), 12);
   // the side of the face under the cheekbone's arch, in front of the ear (the chewing muscle)
-  d = smin(d, ell(ax, yl, z, 47, 76, 20, 12, 30, 24), 18);
+  if (!M) d = smin(d, ell(ax, yl, z, (F.masseter ?? 47) + zg * 0.6, 76, 20, 12, 30, 24), 18);
   // the top of the neck under the jaw and the skull (the rig's neck carries on below it)
-  d = smin(d, ell(ax, y, z, 0, 0, -8, 57, 58, 53), 18);
-  // the cheekbones' arches back towards the ears
-  d = smin(d, seg(ax, yl, z, 55, 102, 44, 59, 100, 14, 5, 4.5), 14);
-  // nothing below reaches this far back
-  if (z < 25) return d;
+  d = smin(d, ell(ax, y, z, 0, 0, F.neckBack ?? -8, F.neckW ?? 57, 58, 53), F.neckBlend ?? 18);
+  // the cheekbones' arches back towards the ears (a measured face's mask has its own cheekbones: these stood out of it
+  // with grooves between them)
+  if (!M) d = smin(d, seg(ax, yl, z, 55 + zg, 102, 44, 59 + zg, 100, 14, 5, 4.5), 14);
+  // (and the temples above them, the muscle there filling the side of the head out to the arches)
+  if (zg && !M) d = smin(d, ell(ax, y, z, 56 + zg * 0.6, 120, 28, 9, 22, 24), 14);
+  // nothing below reaches this far back (but a measured face's beard does: cut off here it left a step down the jaw)
+  if (z < 25) return M ? beardOn(d, ax, y, z, F) : d;
   // brow ridge: from the glabella out over each eye, heavier in the middle
   const b = F.brow;
-  d = smin(d, seg(ax, y, z, 0, 138, 86 + 2 * b, 42, 135, 75 + 1.5 * b, 6 + 1.2 * b, 5.5), 18);
+  const bd = F.browDrop ?? 0, bf = F.browFwd ?? 0;
+  d = smin(d, seg(ax, y, z, 0, 138 - bd, 86 + 2 * b + bf, 42, 135 - bd, 75 + 1.5 * b + bf * 0.7, 6 + 1.2 * b, 5.5), 18);
   // cheekbones, the cheeks' fullness below them
   const c = F.cheek;
-  d = smin(d, ell(ax, yl, z, 50, 101, 57, 15 * c, 11, 16), 10);
-  d = smin(d, ell(ax, yl, z, 40, 78, 62, 18, 20, 15), 12);
+  // (over a hollow the cheekbone stands further out, catching the light above it)
+  if (!M) d = smin(d, ell(ax, yl, z, 50, 101 + (F.hollow ?? 0) * 0.6, 57 + (F.hollow ?? 0) * 0.9, 15 * c, 11, 16), 10);
+  if (!M) d = smin(d, ell(ax, yl, z, 40, 78, 62, 18, 20, 15), 12);
+  // (in front of the face's side, so the outline keeps its line)
+  if (F.hollow) d = smax(d, -ell(ax, yl, z, 38, 66, 62 + F.hollow * 2.2, 11, 15, 11), 14);
   // the muzzle over the teeth above and below the mouth, the chin
-  d = smin(d, ell(ax, yl, z, 0, 58, 78, 26, 20, 22), 10);
-  d = smin(d, ell(ax, yl, z, 0, 31, 76, 24, 16, 19), 10);
-  d = smin(d, ell(ax, yl, z, 0, 13, 80 + F.chinFwd, F.chin, 15, 15), 8);
+  const lf = mf + (F.lipFwd ?? 0);
+  if (!M) {
+    d = smin(d, ell(ax, yl, z, 0, 58, 78 + lf, 26, 20, 22), 10);
+    d = smin(d, ell(ax, yl, z, 0, 31, 76 + lf, 24, 16, 19), 10);
+  }
+  d = smin(d, ell(ax, yl, z, 0, 13, 80 + F.chinFwd + mf * 0.8, F.chin, 15, 15), 8);
+  const mw = F.mouthW ?? 1, axm = ax / mw;
   if (ax < 40 && yl > 28 && yl < 62) {
     // lips: rolls along the teeth meeting in a crease, the upper one thinner; the corners tucked in
     const lp = F.lips;
     // joined sharply, so the line between them stays a crease, then blended into the face
     const m0 = mouthY(0);
-    const lips = Math.min(lip(ax, yl, z, m0 + 3.8 * lp + 0.6, 94.8, 22.5, 3.8 * lp, 3), lip(ax, yl, z, m0 - 4.8 * lp - 0.6, 92.5, 20.5, 4.8 * lp, 1.8));
-    d = smin(d, lips, 3.5);
-    d = smax(d, -ell(ax, yl, z, 25, mouthY(ax) - 0.3, 90, 3, 2.4, 3.5), 2);
+    const lips = Math.min(lip(axm, yl, z, m0 + 3.8 * lp + 0.6, 94.8 + lf, 22.5, 3.8 * lp, 3), lip(axm, yl, z, m0 - 4.8 * lp - 0.6, 92.5 + lf, 20.5, 4.8 * lp, 1.8));
+    // (on a measured face, blended more softly: a sharp corner shows the mesh's steps)
+    d = smin(d, lips, M ? 4.5 : 3.5);
+    d = smax(d, -ell(ax, yl, z, 25 * mw, mouthY(axm) - 0.3, 90 + lf * 0.7 - (M ? 2 : 0), 3, 2.4, 3.5), M ? 3 : 2);
   }
   if (Math.abs(ax - EYE.x) < 32 && y > 85 && y < 150) {
     // eye sockets under the brow, then the lids riding on the eyeball round the opening
-    d = smax(d, -ell(ax, y, z, EYE.x, 117, 77, 16, 11.5, 10), 12);
+    // (dug further forward under a brow that stands further out)
+    const sk = (F.browFwd ?? 0) * 0.5;
+    d = smax(d, -ell(ax, y, z, EYE.x, 117, 77 + sk, 16, 11.5, 10 + sk), 12);
     const ex = ax - EYE.x, ey = y - EYE.y, ez = z - EYE.z;
     const ball = Math.sqrt(ex * ex + ey * ey + ez * ez);
-    const lids = smax(ball - (EYE.r + 1.9), -eyeOpening(ex, ey, F), 0.9);
-    d = smin(d, lids, 2.5);
+    // (a soft lower lid is thinner and blends into the cheek: no bag over a crease)
+    const below = F.lidSoft ? sm(-2, -8, ey) : 0;
+    const eo = eyeOpening(ex, ey, F);
+    // (a fold thickening upwards from the lash line, over the eye's width)
+    const fold = F.lidFold && ey > -2 ? F.lidFold * sm(0.4, 7, eo) * sm(-2, 3, ey) * sm(20, 12, Math.abs(ex + 0.5)) : 0;
+    const lids = smax(ball - (EYE.r + 1.9 - 0.8 * below + fold), -eo, 0.9);
+    d = smin(d, lids, 2.5 + (F.lidSoft ?? 0) * below);
     // the eyeball's own surface, just behind the rendered eye
     d = Math.min(d, ball - (EYE.r - 0.35));
   }
-  if (ax < 30 && y > 55 && y < 135) {
+  // (the box holds the bridge's top too: cut off at its edge, the skin and the occlusion sampled out from it step)
+  if (ax < 30 && y > 55 && y < 146) {
     // the nose: a narrow ridge from between the eyes to the tip over a body that widens to the
     // nostrils, a hump on the bridge, the rounded tip, the nostrils' wings with a crease round them
-    const nl = F.noseLen, np = F.nosePro, ty = 124 - nl + 4, tz = 90 + 22 * np;
-    const tilt = Math.atan2(tz - 88, 124 - ty);
-    d = smin(d, tilted(ax, y, z, 0, (124 + ty) / 2 + 2, (88 + tz) / 2 - 1.5, 5.2, nl / 2 + 3, 4.6, tilt), 5);
-    d = smin(d, tilted(ax, y, z, 0, lerp(124, ty, 0.64), lerp(88, tz, 0.64) - 8, 10, nl * 0.42, 7.5, tilt), 7);
-    if (F.hump > 0) d = smin(d, ell(ax, y, z, 0, 124 - nl * 0.42, 90 + 12.5 * np, 5, 7, 3 + F.hump), 4);
-    d = smin(d, ell(ax, y, z, 0, ty, tz - 7, 9, 7.5, 8.5), 4);
+    const nl = F.noseLen, np = F.nosePro, ty = 124 - nl + 4, tz = 90 + 22 * np, r0 = 88 + (F.noseRoot ?? 0);
+    const tilt = Math.atan2(tz - r0, 124 - ty);
+    // (a broad ridge blends in more softly: a narrow valley along its side shows as a line)
+    d = smin(d, tilted(ax, y, z, 0, (124 + ty) / 2 + 2, (r0 + tz) / 2 - 1.5, F.bridgeW ?? 5.2, nl / 2 + 3, 4.6, tilt), F.bridgeW ? 8 : 5);
+    d = smin(d, tilted(ax, y, z, 0, lerp(124, ty, 0.64), lerp(r0, tz, 0.64) - 8, 10, nl * 0.42, 7.5, tilt), 7);
+    if (F.bridge) d = smin(d, ell(ax, y, z, 0, 126, 86 + F.bridge, 7, 10, 5), 5);
+    if (F.hump > 0) d = smin(d, ell(ax, y, z, 0, 124 - nl * 0.42, 90 + 12.5 * np + (r0 - 88) * 0.58, 5, 7, 3 + F.hump), 4);
+    const tp = F.tip ?? 1;
+    d = smin(d, ell(ax, y, z, 0, ty, tz - 7 - 1.5 * (tp - 1), 9 * tp, 7.5 * tp, 8.5 * tp), 4);
     d = smin(d, ell(ax, y, z, F.noseW - 6.5, ty - 3, tz - 18, 6.8, 6, 8), 3.5);
   }
-  // a short beard stands off the skin
-  if (F.beardDepth > 0 && y < 125 && z > -30) {
-    // easing in across its edge, and shorter round the lips
-    const b = beardAt(ax, y, z, F, 2.5), my = mouthY(Math.min(ax, 24));
-    const nearLips = sm(32, 20, ax) * sm(my + 18, my + 8, y) * sm(my - 22, my - 12, y);
-    d -= F.beardDepth * b * b * (3 - 2 * b) * (1 - 0.85 * nearLips);
-  }
-  return d;
+  return beardOn(d, ax, y, z, F);
+}
+
+/** a short beard standing off the skin: easing in across its edge, and shorter round the lips */
+function beardOn(d: number, ax: number, y: number, z: number, F: FaceShape): number {
+  if (!(F.beardDepth > 0 && y < 125 && z > -30)) return d;
+  // (eased out towards the back, where it ends: z > 25 always has all of it, so a face whose beard stops there is as it was)
+  const b = beardAt(ax, y, z, F, 2.5) * sm(-30, -15, z), my = mouthY(Math.min(ax / (F.mouthW ?? 1), 24));
+  const nearLips = sm(32, 20, ax) * sm(my + 18, my + 8, y) * sm(my - 22, my - 12, y);
+  return d - F.beardDepth * b * b * (3 - 2 * b) * (1 - 0.85 * nearLips);
 }
 
 // --- the grid the skin is meshed on (and its uvs) -------------------------------------------------
@@ -221,6 +385,9 @@ export interface HeadGrid {
   az: Float64Array; el: Float64Array;
   /** distance from the ray's origin to the skin along each grid ray, mm, row-major (nv + 1) x (nu + 1) */
   r: Float32Array;
+  /** each grid point on the skin (mm, x y z, row-major): where its ray meets it, moved along the skin past an overhang
+   *  (see `relax`) */
+  p: Float32Array;
 }
 
 /** a direction from the grid's angles */
@@ -266,7 +433,113 @@ export function headGrid(F: FaceShape, nu: number, nv: number): HeadGrid {
     return lerp(lerp(r[j0 * W + i0], r[j0 * W + i1], a), lerp(r[j1 * W + i0], r[j1 * W + i1], a), b);
   };
   for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) if (!done[j * W + i]) r[j * W + i] = cast(i, j, Math.min(162, coarse(i, j) + 14));
-  return { nu, nv, az, el, r };
+  const p = new Float32Array(W * (nv + 1) * 3);
+  for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) {
+    const k = j * W + i;
+    gridDir(az[i], el[j], d); origin(el[j], C);
+    p[k * 3] = C.x + d.x * r[k]; p[k * 3 + 1] = C.y + d.y * r[k]; p[k * 3 + 2] = C.z + d.z * r[k];
+  }
+  const g = { nu, nv, az, el, r, p };
+  relax(g, F);
+  return g;
+}
+
+/**
+ * Past an overhang seen from the rays' start (under the brow, into the lid's crease, round the nose's wings) neighbouring
+ * rays meet the skin far apart, and the triangle between them hangs in the air: a dark streak. Where an edge is much
+ * longer than its rays' spacing, the points round it slide over the skin towards their neighbours' average (weighted by
+ * the grid's own spacing, so a smooth part keeps its layout) and back onto it, until they cover the skin the rays missed.
+ */
+function relax(g: HeadGrid, F: FaceShape): void {
+  const { nu, nv, az, el, r, p } = g, W = nu + 1, n = W * (nv + 1);
+  const d0 = { x: 0, y: 0, z: 0 }, d1 = { x: 0, y: 0, z: 0 }, o0 = { x: 0, y: 0, z: 0 }, o1 = { x: 0, y: 0, z: 0 };
+  // each edge's length on a smooth head at its rays' radius (to the next column, `hi`; to the next row, `hj`), and how
+  // much longer it actually is
+  const hi = new Float32Array(n), hj = new Float32Array(n), st = new Float32Array(n);
+  const dist = (a: number, b: number) => Math.hypot(p[a * 3] - p[b * 3], p[a * 3 + 1] - p[b * 3 + 1], p[a * 3 + 2] - p[b * 3 + 2]);
+  for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) {
+    const k = j * W + i;
+    if (i < nu) {
+      gridDir(az[i], el[j], d0); gridDir(az[i + 1], el[j], d1);
+      hi[k] = Math.max(0.3, r[k] * Math.hypot(d1.x - d0.x, d1.y - d0.y, d1.z - d0.z));
+      const s = dist(k, k + 1) / hi[k];
+      st[k] = Math.max(st[k], s); st[k + 1] = Math.max(st[k + 1], s);
+    }
+    if (j < nv) {
+      gridDir(az[i], el[j], d0); gridDir(az[i], el[j + 1], d1); origin(el[j], o0); origin(el[j + 1], o1);
+      const rr = r[k];
+      hj[k] = Math.max(0.3, Math.hypot(o1.x + d1.x * rr - o0.x - d0.x * rr, o1.y + d1.y * rr - o0.y - d0.y * rr, o1.z + d1.z * rr - o0.z - d0.z * rr));
+      const s = dist(k, k + W) / hj[k];
+      st[k] = Math.max(st[k], s); st[k + W] = Math.max(st[k + W], s);
+    }
+  }
+  // the points that move: round every edge over two and a half times its length, easing off over a few cells
+  const R = 3, m = new Float32Array(n), idx: number[] = [];
+  for (let j = 1; j < nv; j++) for (let i = 0; i < nu; i++) {
+    let w = 0;
+    for (let dj = -R; dj <= R; dj++) {
+      const jj = j + dj;
+      if (jj < 0 || jj > nv) continue;
+      for (let di = -R; di <= R; di++) {
+        const s = st[jj * W + (i + di + nu) % nu];
+        if (s > 2.5) w = Math.max(w, sm(2.5, 4, s) * sm(R + 1, 1, Math.hypot(di, dj)));
+      }
+    }
+    if (w > 0.01) { m[j * W + i] = w; idx.push(j * W + i); }
+  }
+  if (!idx.length) return;
+  const f = (x: number, y: number, z: number) => headSDF(x, y, z, F);
+  const N = new Float32Array(n * 3), q = new Float32Array(n * 3), e = 0.4;
+  /** onto the skin along the distance's gradient, keeping the normal there */
+  const project = (k: number, steps: number) => {
+    for (let s = 0; s < steps; s++) {
+      const x = p[k * 3], y = p[k * 3 + 1], z = p[k * 3 + 2], v = f(x, y, z);
+      const gx = (f(x + e, y, z) - v) / e, gy = (f(x, y + e, z) - v) / e, gz = (f(x, y, z + e) - v) / e, gl = Math.hypot(gx, gy, gz) || 1;
+      N[k * 3] = gx / gl; N[k * 3 + 1] = gy / gl; N[k * 3 + 2] = gz / gl;
+      if (Math.abs(v) < 0.02) break;
+      p[k * 3] -= v * gx / (gl * gl); p[k * 3 + 1] -= v * gy / (gl * gl); p[k * 3 + 2] -= v * gz / (gl * gl);
+    }
+  };
+  for (const k of idx) project(k, 2);
+  // (a point that hardly moves stays on the skin, its normal still good: only the ones moving are put back, a step each,
+  // until none moves)
+  const moved = new Uint8Array(n);
+  for (let it = 0; it < 16; it++) {
+    let most = 0;
+    for (const k of idx) {
+      const i = k % W, j = (k - i) / W;
+      // neighbours round the head wrap across the seam (the last column is the first)
+      const kl = j * W + (i + nu - 1) % nu, kr = j * W + (i + 1) % nu, kd = k - W, ku = k + W;
+      const wl = 1 / hi[kl] ** 2, wr = 1 / hi[k] ** 2, wd = 1 / hj[kd] ** 2, wu = 1 / hj[k] ** 2, ws = wl + wr + wd + wu;
+      for (let c = 0; c < 3; c++) q[k * 3 + c] = (p[kl * 3 + c] * wl + p[kr * 3 + c] * wr + p[kd * 3 + c] * wd + p[ku * 3 + c] * wu) / ws - p[k * 3 + c];
+      // (along the skin only, and a step at a time)
+      const dn = q[k * 3] * N[k * 3] + q[k * 3 + 1] * N[k * 3 + 1] + q[k * 3 + 2] * N[k * 3 + 2];
+      for (let c = 0; c < 3; c++) q[k * 3 + c] -= dn * N[k * 3 + c];
+      const len = Math.hypot(q[k * 3], q[k * 3 + 1], q[k * 3 + 2]), lim = Math.min(1, 3 / (len || 1)) * 0.9 * m[k];
+      for (let c = 0; c < 3; c++) q[k * 3 + c] *= lim;
+      most = Math.max(most, len * lim);
+    }
+    for (const k of idx) {
+      if (Math.abs(q[k * 3]) + Math.abs(q[k * 3 + 1]) + Math.abs(q[k * 3 + 2]) < 0.01) continue;
+      for (let c = 0; c < 3; c++) p[k * 3 + c] += q[k * 3 + c];
+      project(k, 1); moved[k] = 1;
+    }
+    if (most < 0.03) break;
+  }
+  for (const k of idx) if (moved[k]) project(k, 2);
+  // the seam's last column is its first
+  for (let j = 0; j <= nv; j++) for (let c = 0; c < 3; c++) p[(j * W + nu) * 3 + c] = p[j * W * 3 + c];
+}
+
+/** the skin's point at fractional grid coordinates (bilinear between the grid's points), mm */
+export function gridP(g: HeadGrid, fi: number, fj: number, out: { x: number; y: number; z: number }): typeof out {
+  const i0 = clamp(Math.floor(fi), 0, g.nu - 1), j0 = clamp(Math.floor(fj), 0, g.nv - 1);
+  const a = clamp(fi - i0, 0, 1), b = clamp(fj - j0, 0, 1), W = g.nu + 1, p = g.p;
+  const k00 = (j0 * W + i0) * 3, k10 = k00 + 3, k01 = k00 + W * 3, k11 = k01 + 3;
+  out.x = lerp(lerp(p[k00], p[k10], a), lerp(p[k01], p[k11], a), b);
+  out.y = lerp(lerp(p[k00 + 1], p[k10 + 1], a), lerp(p[k01 + 1], p[k11 + 1], a), b);
+  out.z = lerp(lerp(p[k00 + 2], p[k10 + 2], a), lerp(p[k01 + 2], p[k11 + 2], a), b);
+  return out;
 }
 
 /** the skin's radius at fractional grid coordinates (bilinear) */
@@ -278,6 +551,16 @@ export function gridR(g: HeadGrid, fi: number, fj: number): number {
 }
 
 // --- the painted skin ---------------------------------------------------------------------------
+
+/** How much of the light the jaw takes from the neck under it, at height `y` (mm, the face's frame) `ax` from the middle:
+ *  the game's shadows are too coarse to show it (the neck in models/head.ts shades its own top the same way). */
+export function neckShade(ax: number, y: number): number {
+  const jawY = 30 * Math.min(1, ax / 50) ** 1.5;
+  return 0.82 * sm(jawY + 8, jawY - 10, y) * (1 - 0.4 * sm(-50, -110, y));
+}
+
+/** the occlusion's steps out from the skin (mm) and their weights */
+const AO_STEPS: [number, number][] = [[2, 0.5], [5, 0.35], [10, 0.25], [18, 0.15], [30, 0.1]];
 
 /** A face's colouring: skin, hair and beard (sRGB 0..1), and how the hair grows. */
 export interface FaceLook {
@@ -291,10 +574,53 @@ export interface FaceLook {
   beard: number;
   /** age: deeper lines on the brow and round the eyes */
   age: number;
+  /** how heavy the brows are (1 average): thicker and denser */
+  brows?: number;
+  /** how much the brows arch (1 average; 0 straight, their inner ends drawn down towards the nose) */
+  browArch?: number;
+  /** how far the brows' outer tails droop (1 average) and how solidly their middle is filled (0 hairs only) */
+  browTail?: number; browFill?: number;
+  /** how evenly thick the brows are (0 tapering to a thin tail, 1 nearly even: a wedge reads as a scowl) */
+  browEven?: number;
+  /** how far the brows' outer ends are raised (mm): level as the forehead curves away, rather than drooping */
+  browLift?: number;
+  /** how much higher the brows are painted (mm; lower: close over the eyes) */
+  browY?: number;
+  /** how deep the pores and fine bumps of the skin are (1 average) */
+  pores?: number;
+  /** how much lower the hairline comes over the forehead (mm), and lower again at the temples */
+  hairDrop?: number; templeDrop?: number;
+  /** a short-cropped beard (0 a full one): sparser, the skin showing through it */
+  stubble?: number;
+  /** how strongly the lips are coloured (1 average) */
+  lipTint?: number;
+  /** how dark and big the nostrils show from the front (1 average) */
+  nostrils?: number;
+  /** how dark the skin under the eyes is (1 average) */
+  under?: number;
+  /** shading painted into the skin where light falls less (the eye sockets, beside the nose, under the
+   *  cheekbones and the jaw): a lean, sculpted face */
+  contour?: number;
+  /** occlusion baked into the skin (0 none, 1 full): how much of the open air round each point the head itself takes,
+   *  in the eye sockets, under the nose and the lips, under the jaw (the game's shadows are far too coarse for a face's) */
+  ao?: number;
+  /** the beard's hairs (sRGB 0..1; the hair's by default), and the brows' halfway between the two */
+  beardHair?: [number, number, number];
+  /** how much the upper lid shades the eye under it (0 none, 1 deep-set) and how dim the white of the eye is */
+  eyeShade?: number;
+  /** how rosy the cheeks, nose, chin and lips' surround are (1 average) */
+  flush?: number;
+  /** the crease round the wings of the nose and the shine on its tip (0 none, 1 clear) */
+  alar?: number;
+  /** how glossy the lips are (1 average: moist; less, dry and matte, no shine along the lower lip) */
+  lipGloss?: number;
+  /** the face's outer edge darker, the temples and the cheeks' sides, as the hair standing over them shades them, and the
+   *  cheekbones turning away under the eyes (0 none, 1 under thick hair) */
+  cheekShade?: number;
 }
 
 export const LOOKS: Record<keyof typeof FACES, FaceLook> = {
-  warrior: { skin: [0.72, 0.5, 0.39], hair: [0.13, 0.085, 0.06], streak: [0.3, 0.2, 0.13], grey: 0.02, beard: 1, age: 0.8 },
+  warrior: { skin: [0.8, 0.68, 0.65], hair: [0.155, 0.112, 0.07], streak: [0.4, 0.3, 0.18], ao: 0.55, beardHair: [0.38, 0.27, 0.16], eyeShade: 0.55, flush: 1.8, lipGloss: 0.3, grey: 0.02, beard: 1, age: 0.25, brows: 1.05, hairDrop: 20, cheekShade: 0.35, stubble: 0.8, contour: 0.45, browArch: 0.4, pores: 0.45, lipTint: 1.1, nostrils: 1.5, alar: 1, browTail: 0, browFill: 0.65, browEven: 1, under: 0.8, browLift: 2.5, browY: -3, templeDrop: 22 },
   mage: { skin: [0.78, 0.57, 0.46], hair: [0.12, 0.08, 0.058], streak: [0.28, 0.19, 0.13], grey: 0.06, beard: 1, age: 1 },
 };
 
@@ -329,38 +655,61 @@ function tnoise(x: number, y: number, px: number, seed: number): number {
 
 /** 0 on the face, 1 where hair grows on the scalp: the forehead's line with recessions at the temples,
  *  sideburns in front of the ears, above the ears, down to the nape */
-export function scalp(ax: number, y: number, z: number): number {
+export function scalp(ax: number, y: number, z: number, drop = 0, temple = 0): number {
+  const line = hairline(ax, z, drop, temple);
+  return sm(line - 3, line + 5, y);
+}
+
+/** the hairline's height (mm) round the head at (ax, z), `drop` mm lower over the forehead and `temple` mm lower
+ *  again at the temples (hair framing the forehead) */
+export function hairline(ax: number, z: number, drop = 0, temple = 0): number {
   const a = Math.atan2(ax, z + 12);
-  // the hairline's height round the head
-  const line = a < 0.35 ? lerp(188, 194, sm(0, 0.35, a))
+  return -drop * (1 - sm(0.6, 1.1, a)) - temple * sm(0.35, 0.75, a) * (1 - sm(1.0, 1.3, a)) + (a < 0.35 ? lerp(188, 194, sm(0, 0.35, a))
     : a < 0.8 ? lerp(194, 170, sm(0.35, 0.8, a))
     : a < 1.25 ? lerp(170, 104, sm(0.8, 1.2, a))
     : a < 1.7 ? lerp(104, 132, sm(1.3, 1.62, a))
-    : lerp(132, 78, sm(1.75, 2.6, a));
-  return sm(line - 3, line + 5, y);
+    : lerp(132, 78, sm(1.75, 2.6, a)));
 }
 
 /** How much beard grows at a point (0..1): the jaw and chin, the cheeks below a line from the sideburns
  *  to the corners of the mouth, the moustache, under the jaw; never on the lips. `soft` widens its edges
  *  (the beard's volume eases in more gradually than its paint). */
 export function beardAt(ax: number, y: number, z: number, F: FaceShape, soft = 1): number {
-  const my = mouthY(Math.min(ax, 24));
+  const axm = ax / (F.mouthW ?? 1), my = mouthY(Math.min(axm, 24));
   // the cheek line: high at the sideburns, dropping across the cheek to the moustache
   const cheek = lerp(66, 112, sm(26, 58, ax)) - 8 * sm(40, 80, z) * sm(20, 50, ax);
-  let b = sm(cheek + 3 * soft, cheek - 6 * soft, y);
+  const bl = cheek - (F.beardLine ?? 0) * sm(20, 45, ax);
+  let b = sm(bl + 3 * soft, bl - 6 * soft, y);
   // the moustache over the upper lip, clear of the nostrils
   const nb = 124 - F.noseLen + 4 - 5;
-  const stache = sm(nb + 1, nb - 4, y) * sm(28, 20, ax) * sm(80, 90, z);
+  // (a trimmed one follows the upper lip, curving down and thinning to the mouth's corners)
+  const sc = F.stacheCurve ?? 0, nbx = nb - sc * (ax / 24) ** 2;
+  // (a trimmed one thins in the groove under the nose)
+  const stache = sm(nbx + 1, nbx - 4, y) * (sc ? sm(30, 16, ax) : sm(28, 20, ax)) * sm(80, 90, z);
   b = Math.max(b, stache);
+  // (a trimmed one thins in the groove under the nose)
+  if (sc) b *= 1 - 0.6 * sm(9, 3, ax) * sm(nb + 2, nb - 4, y) * sm(mouthY(0) + 4, mouthY(0) + 9, y);
   // the lips stay bare, right up to their border
-  if (ax < 26 && y > 25 && y < 62 && z > 82) {
+  if (axm < 26 && y > 25 && y < 62 && z > 82) {
     const top = lipBorder(ax, 1, F), bot = lipBorder(ax, -1, F);
-    b *= 1 - sm(24 + soft, 22, ax) * sm(top + 0.8 * soft, top, y) * sm(bot - 0.8 * soft, bot, y) * sm(84, 90, z);
+    // (a trimmed one comes right up to them: a margin of bare skin reads as a light line drawn round the lips)
+    // (just inside their border, under the lip colour's own soft edge)
+    const mg = F.stacheCurve ? 0.25 : 0.8, ins = F.stacheCurve ? 0.7 : 0;
+    b *= 1 - sm(24 + soft, 22, axm) * sm(top - ins + mg * soft, top - ins, y) * sm(bot + ins - mg * soft, bot + ins, y) * sm(84, 90, z);
   }
   // its back edge: in front of the ears, then behind the jaw's angle and down and forward along the
   // neck to the throat; nothing below the throat
-  const back = y > 60 ? 4 : lerp(-12, 30, sm(50, -30, y));
-  return b * sm(back - 4, back + 6, z) * sm(-45, -25, y);
+  const lo = lerp(-12, 30, sm(50, -30, y));
+  // (a measured face eases from one to the other: the step showed as a notch in its beard behind the jaw)
+  const back = F.mask ? lerp(lo, 4, sm(54, 66, y)) : y > 60 ? 4 : lo;
+  let out = b * sm(back - 4, back + 6, z) * sm(F.beardUnder ?? -45, (F.beardUnder ?? -45) + 20, y);
+  if (F.neckW !== undefined && y < 40) {
+    // (with a jaw standing out over the neck, below its angle the beard grows on the jaw, not down the neck)
+    const mf = F.muzzleFwd ?? 0, yl = y < 114 ? 114 - (114 - y) / F.long : y;
+    const dj = Math.min(seg(ax, yl, z, F.chin - 2, 9, 78 + mf * 0.8, F.jaw, 30, 4, 12, 10), ell(ax, yl, z, 0, 13, 80 + F.chinFwd + mf * 0.8, F.chin + 4, 19, 19));
+    out *= 1 - (1 - sm(22 + 2 * soft, 4, dj)) * sm(40, 25, y);
+  }
+  return out;
 }
 
 export interface FaceMaps { w: number; h: number; albedo: Uint8ClampedArray<ArrayBuffer>; normal: Uint8ClampedArray<ArrayBuffer>; rough: Uint8ClampedArray<ArrayBuffer> }
@@ -373,82 +722,133 @@ export interface FaceMaps { w: number; h: number; albedo: Uint8ClampedArray<Arra
  */
 export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: number): FaceMaps {
   const n = w * h, albedo = new Uint8ClampedArray(n * 4), rough = new Uint8ClampedArray(n * 4), hgt = new Float32Array(n);
-  // per column and row: the grid's angles at the texel's centre
-  const col = new Float64Array(w * 3), row = new Float64Array(h * 5);
-  const lerpArr = (arr: Float64Array, f: number) => { const i = Math.min(Math.floor(f), arr.length - 2); return lerp(arr[i], arr[i + 1], f - i); };
-  for (let x = 0; x < w; x++) { const fi = (x + 0.5) / w * g.nu, az = lerpArr(g.az, fi); col[x * 3] = fi; col[x * 3 + 1] = Math.sin(az); col[x * 3 + 2] = Math.cos(az); }
   const o = { x: 0, y: 0, z: 0 };
-  for (let y = 0; y < h; y++) {
-    // texture rows run down from the top (v = 1)
-    const fj = (1 - (y + 0.5) / h) * g.nv, el = lerpArr(g.el, fj);
-    origin(el, o);
-    row[y * 5] = fj; row[y * 5 + 1] = Math.sin(el); row[y * 5 + 2] = Math.cos(el); row[y * 5 + 3] = o.y; row[y * 5 + 4] = o.z;
+  // --- occlusion, on a coarse grid (it varies slowly): the head's distance sampled out along the normal, each step
+  // short of its length by how much of the air there the head takes
+  let aoAt: ((tx: number, ty: number) => number) | null = null;
+  if (L.ao) {
+    const aw = w >> 2, ah = h >> 2, A = new Float32Array(aw * ah), f = (x: number, y: number, z: number) => headSDF(x, y, z, F), e = 0.75;
+    for (let j = 0; j < ah; j++) {
+      const fj = (1 - (j + 0.5) / ah) * g.nv;
+      for (let i = 0; i < aw; i++) {
+        const { x, y, z } = gridP(g, (i + 0.5) / aw * g.nu, fj, o);
+        let nx = f(x + e, y, z) - f(x - e, y, z), ny = f(x, y + e, z) - f(x, y - e, z), nz = f(x, y, z + e) - f(x, y, z - e);
+        const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+        let occ = 0;
+        for (const [d, k] of AO_STEPS) occ += k * Math.max(0, d - f(x + nx * d, y + ny * d, z + nz * d)) / d;
+        A[j * aw + i] = clamp(1 - occ, 0, 1);
+      }
+    }
+    aoAt = (tx, ty) => {
+      const u = (tx + 0.5) / w * aw - 0.5, v = clamp((ty + 0.5) / h * ah - 0.5, 0, ah - 1.001), i0 = Math.floor(u), j0 = Math.floor(v), fu = u - i0, fv = v - j0;
+      const i1 = ((i0 + 1) % aw + aw) % aw, ia = (i0 % aw + aw) % aw, at = (i: number, j: number) => A[j * aw + i];
+      return lerp(lerp(at(ia, j0), at(i1, j0), fu), lerp(at(ia, j0 + 1), at(i1, j0 + 1), fu), fv);
+    };
   }
   const nb = 124 - F.noseLen + 4, tz = 90 + 22 * F.nosePro;
-  const S = L.skin, HAIR = L.hair;
+  const S = L.skin, HAIR = L.hair, BH = L.beardHair ?? HAIR, BROW = [lerp(HAIR[0], BH[0], 0.85), lerp(HAIR[1], BH[1], 0.85), lerp(HAIR[2], BH[2], 0.85)];
   const c = [0, 0, 0];
   const mix = (t: number, r: number, gg: number, b: number) => { c[0] += (r - c[0]) * t; c[1] += (gg - c[1]) * t; c[2] += (b - c[2]) * t; };
   const G = (dx: number, dy: number, dz: number, s: number) => Math.exp(-(dx * dx + dy * dy + dz * dz) / (s * s));
   for (let ty = 0; ty < h; ty++) {
-    const fj = row[ty * 5], se = row[ty * 5 + 1], ce = row[ty * 5 + 2], oy = row[ty * 5 + 3], oz = row[ty * 5 + 4];
+    // (texture rows run down from the top, v = 1)
+    const fj = (1 - (ty + 0.5) / h) * g.nv;
     for (let tx = 0; tx < w; tx++) {
-      const i = ty * w + tx, fi = col[tx * 3], r = gridR(g, fi, fj);
-      const x = col[tx * 3 + 1] * ce * r, yy = oy + se * r, z = oz + col[tx * 3 + 2] * ce * r, ax = Math.abs(x);
+      const i = ty * w + tx;
+      gridP(g, (tx + 0.5) / w * g.nu, fj, o);
+      const x = o.x, yy = faceY(o.y, F), z = o.z, ax = Math.abs(x);
       const face = sm(30, 70, z);
       // --- skin: mottled at two scales, warmer on the cheeks, nose, chin, round the mouth and the brow
       const m1 = vnoise(x / 14, yy / 14, z / 14, 1), m2 = tnoise(tx / 15, ty / 15, w / 15, 2);
       const k = 0.93 + 0.1 * m1 + 0.04 * m2;
       c[0] = S[0] * k; c[1] = S[1] * k * (0.98 + 0.04 * m1); c[2] = S[2] * k;
       if (z > 20) {
-        const warm = 0.75 * G(ax - 42, yy - 88, z - 70, 16) + 0.8 * G(x, yy - (nb + 6), z - tz, 12) + 0.35 * G(x, yy - 18, z - 90, 18) + 0.3 * G(x, yy - 58, z - 95, 14) + 0.25 * G(x, yy - 160, z - 88, 30);
-        c[0] *= 1 + 0.08 * warm; c[1] *= 1 - 0.07 * warm; c[2] *= 1 - 0.05 * warm;
+        // (a flushed face's cheeks spread wider, not patches)
+        const warm = 0.75 * G(ax - 42, yy - 88, z - 70, L.flush ? 24 : 16) + 0.8 * G(x, yy - (nb + 6), z - tz, 12) + 0.35 * G(x, yy - 18, z - 90, 18) + 0.3 * G(x, yy - 58, z - 95, 14) + 0.25 * G(x, yy - 160, z - 88, 30);
+        const fl = L.flush ?? 1;
+        c[0] *= 1 + 0.08 * fl * warm; c[1] *= 1 - 0.07 * fl * warm; c[2] *= 1 - 0.05 * fl * warm;
       }
-      let hh = (tnoise(tx * 0.9, ty * 0.9, w * 0.9, 3) - 0.5) * 0.35 + (tnoise(tx * 0.3, ty * 0.3, w * 0.3, 4) - 0.5) * 0.2;
+      if (L.contour && z > 20) {
+        const ex0 = ax - EYE.x, ey0 = yy - EYE.y;
+        const shade = 0.9 * G(ex0 + 12, ey0 - 2, 0, 9) + 0.6 * G(ex0, ey0 - 9, 0, 11) + 0.55 * G(ax - 17, yy - (nb + 12), 0, 7)
+          + 0.45 * G(ax - 48, yy - 66, 0, 14) * sm(40, 65, z) + 0.5 * sm(30, 12, yy) * sm(10, 30, ax);
+        const k2 = 1 - L.contour * 0.22 * Math.min(1.2, shade);
+        c[0] *= k2; c[1] *= k2 * 0.98; c[2] *= k2 * 0.98;
+      }
+      if (L.cheekShade && z > 0) {
+        // (the face's outer edge, the temples and the cheeks' sides, under the hair standing over them)
+        // (and softly over the cheekbone, turning away under the eye: a patch, not a band down the cheek, which looks gaunt)
+        const k3 = 1 - L.cheekShade * (0.3 * sm(44, 60, ax) * sm(70, 88, yy) * sm(155, 135, yy) * (1 - sm(45, 75, z)) + 0.26 * G(ax - 46, yy - 90, 0, 13) * sm(30, 55, z));
+        c[0] *= k3 ** 0.85; c[1] *= k3; c[2] *= k3 ** 1.12;
+      }
+      let hh = ((tnoise(tx * 0.9, ty * 0.9, w * 0.9, 3) - 0.5) * 0.35 + (tnoise(tx * 0.3, ty * 0.3, w * 0.3, 4) - 0.5) * 0.2) * (L.pores ?? 1);
       let rr = 0.55 - 0.12 * face * (sm(150, 175, yy) * sm(200, 180, yy) + G(x, yy - 100, z - 105, 18)) + 0.06 * m2;
       // --- eyes: shadow under them and in the upper lid's crease, the lash line, pink inner corners
       const ex = ax - EYE.x, ey = yy - EYE.y;
       if (Math.abs(ex) < 26 && ey > -22 && ey < 20) {
         const op = eyeOpening(ex, ey, F);
-        const under = G(ex + 2, ey + 9, 0, 7) * face;
+        const under = G(ex + 2, ey + 9, 0, 7) * face * (L.under ?? 1);
         c[0] *= 1 - 0.1 * under; c[1] *= 1 - 0.15 * under; c[2] *= 1 - 0.06 * under;
+        if (L.eyeShade) {
+          // (the lid under a heavy brow is in its shadow, between the lashes and the brow)
+          const lid = L.eyeShade * G(ex + 1, ey - 6.5, 0, 6.5) * sm(0, 4, ey) * face;
+          c[0] *= 1 - 0.3 * lid; c[1] *= 1 - 0.36 * lid; c[2] *= 1 - 0.34 * lid;
+        }
         // the crease above the lid, following the opening's arc about 6 mm higher
-        const crease = Math.exp(-(((op + 5.5) / 1.4) ** 2)) * sm(-1, 3, ey) * sm(17, 9, Math.abs(ex + 1));
-        mix(0.45 * crease, c[0] * 0.66, c[1] * 0.58, c[2] * 0.58); hh -= crease * 0.5;
+        // (a hooded lid's fold hangs close over the lashes: its crease lower and darker)
+        const cz = L.eyeShade ? 4 : 5.5, crease = Math.exp(-(((op + cz) / 1.2) ** 2)) * sm(-1, 3, ey) * sm(17, 9, Math.abs(ex + 1));
+        mix((L.eyeShade ? 0.7 : 0.45) * crease, c[0] * 0.6, c[1] * 0.52, c[2] * 0.52); hh -= crease * 0.5;
         // the lash line: dark along the upper edge, softer along the lower
-        const lashes = Math.exp(-((op / 0.9) ** 2)) * (ey > 0 ? 1 : 0.35) * sm(16, 11, Math.abs(ex + 0.5));
-        mix(0.8 * lashes, 0.1, 0.06, 0.05);
+        // (a deep-set eye has no lash strip: its lashes are this line, softer and wider, darkest along the upper lid)
+        // (along the upper lid it sits on the lid's front, above the edge: the edge itself rolls in towards the eye, facing down,
+        // and a line painted there doesn't show from the front)
+        const lw = L.eyeShade ? 1.4 : 0.9, lo = L.eyeShade && ey > 0 ? 1 : 0;
+        const lashes = Math.exp(-(((op - lo) / lw) ** 2)) * (ey > 0 ? 1 : 0.35) * sm(16, 11, Math.abs(ex + 0.5));
+        mix((L.eyeShade ? 0.85 : 0.8) * lashes, 0.08, 0.05, 0.04);
         mix(0.6 * G(ex + 15, ey + 0.5, 0, 2.6), 0.75, 0.42, 0.42);
       }
       // --- brows: strokes along the brow ridge, thickest at the inner end
       const bx = ax - 6;
       if (bx > -2 && bx < 48 && yy > 118 && yy < 150) {
-        const top = 136 + 5 * Math.sin(Math.min(1, bx / 30) * Math.PI * 0.7) - 0.06 * Math.max(0, bx - 30) ** 1.5;
-        const thick = lerp(8, 3.2, sm(0, 44, bx));
+        const arch = L.browArch ?? 1, lift = (L.browLift ?? 0) * sm(24, 44, bx);
+        const top = 136 - (F.browDrop ?? 0) + (L.browY ?? 0) + 5 * arch * Math.sin(Math.min(1, bx / 30) * Math.PI * 0.7) - 0.06 * (L.browTail ?? 1) * Math.max(0, bx - 30) ** 1.5 - 5.5 * (1 - arch) * sm(16, 0, bx) + lift;
+        const bk = L.brows ?? 1, thick = lerp(8, lerp(3.2, 5.8, L.browEven ?? 0), sm(0, 44, bx)) * bk;
         const d = (yy - (top - thick / 2)) / (thick / 2);
         const brow = Math.exp(-(d * d) * 1.2) * sm(-2, 3, bx) * sm(48, 38, bx) * face;
         if (brow > 0.01) {
-          const s1 = tnoise(tx * 0.12, ty * 2.2, w * 0.12, 5), s2 = tnoise(tx * 0.3, ty * 3.1, w * 0.3, 6);
-          const hairs = brow * sm(0.35, 0.65, s1 * 0.6 + s2 * 0.4);
-          mix(0.95 * hairs, HAIR[0], HAIR[1], HAIR[2]); hh += hairs * 0.7; rr += hairs * 0.25;
+          // (evenly thick brows' hairs coarser and softer: noise finer than the texels reads as a ragged edge)
+          const ev = L.browEven ?? 0, s1 = tnoise(tx * lerp(0.12, 0.3, ev), ty * lerp(2.2, 0.8, ev), w * lerp(0.12, 0.3, ev), 5), s2 = tnoise(tx * 0.3, ty * lerp(3.1, 1.2, ev), w * 0.3, 6);
+          // (filled solid in its middle, the hairs showing at its edges)
+          const hairs = brow * lerp(sm(0.35 - 0.25 * (bk - 1), 0.65 - 0.2 * (bk - 1), s1 * 0.6 + s2 * 0.4), 1, (L.browFill ?? 0) * sm(0.35, 0.75, brow));
+          mix((L.beardHair ? 0.72 : 0.95) * hairs, BROW[0], BROW[1], BROW[2]); hh += hairs * 0.7; rr += hairs * 0.25;
         }
       }
       // --- nostrils
       if (ax < 20 && Math.abs(yy - nb) < 16 && z > 80) {
-        const nos = G(ax - (F.noseW - 10), yy - (nb - 5.5), (z - (tz - 10)) * 0.5, 3.2) * sm(nb - 1, nb - 5, yy);
-        mix(0.9 * nos, 0.12, 0.05, 0.04);
+        // (with a crease round the wings, a little forward and apart: seen from the front, at the base of the tip)
+        const nf = L.alar ? 3 : 0, nk = L.nostrils ?? 1, nos = G(ax - (F.noseW - 10 + nf * 0.6), yy - (nb - 5.5 + (nk - 1) * 1.5), (z - (tz - 10 + (nk - 1) * 6 + nf)) * 0.5, 3.2 * Math.sqrt(nk)) * sm(nb - 1, nb - 5 - (nk - 1) * 2, yy);
+        mix(Math.min(0.95, 0.9 * nk * nos), 0.12, 0.05, 0.04);
+        if (L.alar) {
+          // the crease round each wing of the nose, and the tip catching the light (a column of even skin reads flat)
+          const r = Math.hypot((ax - (F.noseW - 6.5)) / 7.5, (yy - (nb - 3)) / 6.8);
+          // (over the top of the wing and round its outside: below, the nostril is the shadow)
+          const crease = L.alar * Math.exp(-(((r - 1) / 0.2) ** 2)) * sm(F.noseW - 9, F.noseW - 4, ax) * sm(nb - 5, nb - 1, yy);
+          c[0] *= 1 - 0.22 * crease; c[1] *= 1 - 0.27 * crease; c[2] *= 1 - 0.27 * crease;
+          rr -= L.alar * 0.18 * G(x, yy - nb, (z - tz) * 0.6, 6);
+        }
       }
       // --- lips: the vermilion with its fine vertical lines, and the line between them
-      const my = mouthY(Math.min(ax, 24)), mouth = ax < 30 && yy > 25 && yy < 62 && z > 80;
+      const axm = ax / (F.mouthW ?? 1), my = mouthY(Math.min(axm, 24)), mouth = axm < 30 && yy > 25 && yy < 62 && z > 80;
       const lipK = mouth ? sm(lipBorder(ax, 1, F) + 0.5, lipBorder(ax, 1, F) - 0.5, yy) * sm(lipBorder(ax, -1, F) - 0.5, lipBorder(ax, -1, F) + 0.5, yy) * sm(84, 90, z) : 0;
       if (lipK > 0.01) {
         // dusky rose, the lower lip a little lighter and wetter
         const lo = yy < my ? 1 : 0;
-        mix(0.62 * lipK, 0.6 + 0.04 * lo, 0.34 + 0.03 * lo, 0.32 + 0.02 * lo);
-        hh += lipK * 0.25 * Math.sin(x * 9 + Math.sin(yy * 2) * 0.6); rr -= lipK * (0.16 + 0.1 * lo);
+        mix(0.62 * (L.lipTint ?? 1) * lipK, 0.6 + 0.04 * lo, 0.34 + 0.03 * lo, 0.32 + 0.02 * lo);
+        hh += lipK * 0.25 * Math.sin(x * 9 + Math.sin(yy * 2) * 0.6); rr -= lipK * (0.16 + 0.1 * lo) * (L.lipGloss ?? 1);
       }
       // the line between the lips, darker into the corners
       if (mouth) {
-        const line = Math.exp(-(((yy - my) / 0.75) ** 2)) * sm(25.5, 21, ax) * sm(84, 90, z) * (0.75 + 0.25 * sm(12, 22, ax));
+        const line = Math.exp(-(((yy - my) / 0.75) ** 2)) * sm(25.5, 21, axm) * sm(84, 90, z) * (0.75 + 0.25 * sm(12, 22, axm));
         mix(0.85 * line, 0.16, 0.06, 0.05); hh -= line * 0.8;
       }
       // --- age: lines across the brow, crow's feet at the eyes' outer corners
@@ -462,23 +862,37 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         hh -= L.age * cf * rays * 0.6;
       }
       // --- the beard: dense short hairs growing down, lighter strands through it, stubble at its edge
-      const b = yy < 125 && z > -40 ? L.beard * beardAt(ax, yy, z, F, 1.5) : 0;
+      const b = yy < 125 && z > -40 ? L.beard * beardAt(ax, yy, z, F, 1.5 + 2.5 * (L.stubble ?? 0)) : 0;
       if (b > 0.005) {
-        const s1 = tnoise(tx * 0.9, ty * 0.12, w * 0.9, 8), s2 = tnoise(tx * 0.45, ty * 0.07, w * 0.45, 9), s3 = tnoise(tx * 1.7, ty * 1.7, w * 1.7, 10);
+        // (cropped short, the strokes are short too: long ones read as a full beard's strands)
+        const st0 = L.stubble ?? 0, sy = lerp(0.12, 0.7, st0);
+        const s1 = tnoise(tx * 0.9, ty * sy, w * 0.9, 8), s2 = tnoise(tx * 0.45, ty * sy * 0.6, w * 0.45, 9), s3 = tnoise(tx * 1.7, ty * 1.7, w * 1.7, 10);
         const dense = sm(0.15, 0.6, b);
-        const cover = dense * (0.78 + 0.22 * sm(0.3, 0.7, s1)) + (1 - dense) * sm(0.55, 0.8, s3) * b * 2;
+        const st = L.stubble ?? 0, s4 = tnoise(tx * 2.6, ty * 2.6, w * 2.6, 13);
+        // (thickest on the chin and the moustache)
+        const thick = Math.max(sm(22, 10, ax) * sm(40, 20, yy), sm(24, 12, ax) * sm(mouthY(0) + 2, mouthY(0) + 6, yy) * sm(nb, nb - 4, yy));
+        const cover = (dense * (0.78 + 0.22 * sm(0.3, 0.7, s1)) + (1 - dense) * sm(0.55, 0.8, s3) * b * 2) * (1 - st * (0.62 - 0.45 * sm(0.45, 0.72, s4)) * (1 - 0.2 * thick)) * (1 - st * 0.35 * sm(24, 40, ax) * sm(45, 65, yy)) * (1 - st * 0.4 * sm(18, 30, ax) * sm(26, 44, yy) * sm(70, 58, yy));
         const strand = sm(0.55, 0.8, s2);
-        let hr = lerp(HAIR[0], L.streak[0], strand * 0.55), hg = lerp(HAIR[1], L.streak[1], strand * 0.55), hb = lerp(HAIR[2], L.streak[2], strand * 0.55);
+        const sk = 0.55 * (1 - 0.6 * st0), dk = 1 - 0.3 * st0;
+        let hr = lerp(BH[0], L.streak[0], strand * sk) * dk, hg = lerp(BH[1], L.streak[1], strand * sk) * dk, hb = lerp(BH[2], L.streak[2], strand * sk) * dk;
         if (L.grey > 0 && tnoise(tx * 0.5, ty * 0.05, w * 0.5, 11) > 1 - L.grey) { hr = 0.42; hg = 0.4; hb = 0.38; }
         mix(clamp(cover, 0, 0.97), hr, hg, hb);
         hh += b * (s1 * 0.9 + s3 * 0.3); rr = lerp(rr, 0.8, clamp(cover, 0, 1));
       }
       // --- the scalp under the hair
-      const sc = yy > 70 ? scalp(ax, yy, z) : 0;
+      const sc = yy > 70 ? scalp(ax, yy, z, L.hairDrop, L.templeDrop) : 0;
       if (sc > 0) {
         const s1 = tnoise(tx * 0.9, ty * 0.15, w * 0.9, 12);
         mix(sc * 0.97, lerp(HAIR[0], L.streak[0], s1 * 0.4), lerp(HAIR[1], L.streak[1], s1 * 0.4), lerp(HAIR[2], L.streak[2], s1 * 0.4));
         hh += sc * s1 * 0.6; rr = lerp(rr, 0.75, sc);
+      }
+      if (aoAt) {
+        // (light that does reach a crease has gone through skin: it comes out redder; and the neck is in the jaw's shadow)
+        // (the jaw's shadow on the neck is a warm brown, not red)
+        const ns = neckShade(ax, yy), k = 1 - L.ao! * (1 - aoAt(tx, ty)), kn = 1 - ns;
+        c[0] *= k ** 0.75 * kn ** 0.8; c[1] *= k * kn ** 0.95; c[2] *= k ** 1.15 * kn ** 1.2;
+        // (and no shine where it's shaded)
+        rr = lerp(rr, 0.92, ns / 0.82);
       }
       albedo[i * 4] = clamp(c[0], 0, 1) * 255; albedo[i * 4 + 1] = clamp(c[1], 0, 1) * 255; albedo[i * 4 + 2] = clamp(c[2], 0, 1) * 255; albedo[i * 4 + 3] = 255;
       const rv = clamp(rr, 0.2, 0.95) * 255;
