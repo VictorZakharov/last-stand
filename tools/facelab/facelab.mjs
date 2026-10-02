@@ -29,6 +29,8 @@ if (flag('setup')) {
 }
 
 const REF = arg('ref'), CLS = arg('class', 'warrior'), TAG = arg('tag', 'latest'), SIZE = +arg('size', 1200), FOV = +arg('fov', 14);
+// the key light's direction, as the reference is lit: degrees round from the front (+ from the picture's right) and up
+const [KEY_AZ, KEY_EL] = String(arg('key', '30,30')).split(',').map(Number);
 if (!REF || !existsSync(REF)) { console.error('facelab: --ref <reference picture> is required (a front view of a face)'); process.exit(1); }
 if (!existsSync(PY)) { console.error('facelab: run `npm run facelab -- --setup` first'); process.exit(1); }
 const OUT = join(HERE, 'out', TAG);
@@ -67,7 +69,7 @@ try {
     const { makeItem } = await import('/src/loot/items.ts'); const { equipFromStash } = await import('/src/loot/profile.ts'); const { CLASSES } = await import('/src/data/classes/index.ts');
     const pr = __G.profile, it = makeItem({ slot: 'head', rarity: 'rare', ilvl: 5, cls: CLASSES[pr.classId] }); pr.stash.push(it); equipFromStash(pr, it.id); __G.player.recomputeStats(pr.equipped);
   });
-  await p.evaluate(async ({ fov }) => {
+  await p.evaluate(async ({ fov, kaz, kel }) => {
     const { THREE } = __dev, G = __G, pl = G.player, j = pl.model.joints, { toGroup } = await import('/src/entities/models/head.ts');
     // the dummies far ahead (the head turns to the nearest foe), the hero facing +z
     pl.facing = 0; setInterval(() => G.enemies.forEach((e) => e.pos.set(pl.pos.x, 0, pl.pos.z + 60)), 16);
@@ -85,14 +87,19 @@ try {
       const C = head.localToWorld(toGroup(0, 112, 40)), fw = new THREE.Vector3(0, 0, 1).transformDirection(head.matrixWorld), up = new THREE.Vector3(0, 1, 0).transformDirection(head.matrixWorld);
       const right = new THREE.Vector3().crossVectors(fw, up);
       hemi.color.set(0xffffff); hemi.groundColor.set(0x6a6a6a); hemi.intensity = 1.3;
-      key.color.set(0xfff4ea); key.intensity = 2.6; key.position.copy(C).addScaledVector(fw, 6).addScaledVector(up, 4).addScaledVector(right, 2); key.target.position.copy(C); key.target.updateMatrixWorld();
+      // (the picture's right is the hero's left: -right)
+      const az = kaz * Math.PI / 180, el = kel * Math.PI / 180;
+      key.color.set(0xfff4ea); key.intensity = 2.6; key.target.position.copy(C); key.target.updateMatrixWorld();
+      key.position.copy(C).addScaledVector(fw, 7 * Math.cos(el) * Math.cos(az)).addScaledVector(right, -7 * Math.cos(el) * Math.sin(az)).addScaledVector(up, 7 * Math.sin(el));
       const ext = head.localToWorld(toGroup(0, 300, 0)).distanceTo(head.localToWorld(toGroup(0, -40, 0)));
       return { C, fw, up, dist: ext / 2 / Math.tan((fov * Math.PI / 180) / 2) };
     };
     G.scene.onBeforeRender = (r, s, cam) => {
       if (cam !== G.camera) return;
-      const { C, fw, up, dist } = window.__studio();
-      cam.position.copy(C).addScaledVector(fw, dist); cam.up.copy(up); cam.lookAt(C);
+      const { C, fw, up, dist } = window.__studio(), o = window.__orbit ?? { az: 0, el: 0 }, side = new THREE.Vector3().crossVectors(up, fw);
+      // (square to the face, or orbiting round the head for the other views: az round towards his left, el up)
+      cam.position.copy(C).addScaledVector(fw, dist * Math.cos(o.el) * Math.cos(o.az)).addScaledVector(side, dist * Math.cos(o.el) * Math.sin(o.az)).addScaledVector(up, dist * Math.sin(o.el));
+      cam.up.copy(up); cam.lookAt(C);
       cam.fov = fov; cam.near = 0.1; cam.far = 50; cam.aspect = 1; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
       window.__cam = cam;
     };
@@ -108,11 +115,38 @@ try {
       const E = F.EYE;
       return { chin: px(0, yb, zb), pupilR: px(-E.x, E.y, E.z + E.r), pupilL: px(E.x, E.y, E.z + E.r) };
     };
-  }, { fov: FOV });
+  }, { fov: FOV, kaz: KEY_AZ, kel: KEY_EL });
   await p.waitForTimeout(1500);
   const canvas = await p.evaluateHandle(() => __G.renderer.domElement);
   writeFileSync(join(OUT, 'ours.png'), await canvas.screenshot());
   writeFileSync(join(OUT, 'points.json'), JSON.stringify(await p.evaluate(() => window.__points())));
+  // the other views, which the reference doesn't show but the game does (from above and behind most of all): a three-
+  // quarter view, the side, the back, and from above behind as the third-person camera sees it
+  for (const [name, az, el] of [['three-quarter', 40, 5], ['side', 90, 0], ['back', 180, 10], ['above', 160, 50]]) {
+    await p.evaluate(([a, e]) => { window.__orbit = { az: a * Math.PI / 180, el: e * Math.PI / 180 }; }, [az, el]);
+    await p.waitForTimeout(400);
+    writeFileSync(join(OUT, `view-${name}.png`), await canvas.screenshot());
+  }
+  await p.evaluate(() => { window.__orbit = null; });
+  await p.waitForTimeout(400);
+  // which mesh shows where, each in a flat colour (face red, the neck green, ears yellow, eyes cyan, hair blue, the rest
+  // grey): what a surface in the picture actually is
+  await p.evaluate(() => {
+    const { THREE } = __dev, G = __G, j = G.player.model.joints, flat = (c) => new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide });
+    const neck = new Set(j.neck.children.filter((o) => o.isMesh)), head = j.head.children.find((c) => c.isGroup);
+    const ears = new Set(head.children.filter((o) => o.isMesh && o.name !== 'face' && o.name !== 'hair' && o.geometry.attributes.color && !o.material.map));
+    const eyes = new Set(head.children.filter((o) => o.isMesh && o.material.map && o.name !== 'face' && o.name !== 'hair'));
+    window.__restore = [];
+    G.scene.traverse((o) => {
+      if (!o.isMesh && !o.isSkinnedMesh) return;
+      window.__restore.push([o, o.material]);
+      const c = o.name === 'face' ? 0xff0000 : o.name === 'hair' ? 0x0000ff : neck.has(o) ? 0x00ff00 : ears.has(o) ? 0xffff00 : eyes.has(o) ? 0x00ffff : 0x808080;
+      o.material = o.name === 'hair' ? new THREE.MeshBasicMaterial({ color: c, map: o.material.map, alphaTest: o.material.alphaTest, side: THREE.DoubleSide }) : flat(c);
+    });
+  });
+  await p.waitForTimeout(600);
+  writeFileSync(join(OUT, 'ours-parts.png'), await canvas.screenshot());
+  await p.evaluate(() => { for (const [o, m] of window.__restore) o.material = m; });
   // the hair alone: white over black, everything else black (so what hides it still does)
   await p.evaluate(() => {
     const { THREE } = __dev, G = __G, black = new THREE.MeshBasicMaterial({ color: 0x000000 });

@@ -10,6 +10,9 @@ error. Every crop is zoomed to the same scale on both, so they can be compared u
                        the reference's landmarks green, ours red, a line from each to its match)
   sheet-outline.png    the face's outline from the eyes down: the reference's (green) against ours (red)
   sheet-hair.png       the hair's outline: reference only red, ours only blue, both white
+  sheet-tone.png       appearance: ours at the reference's resolution, warped onto its landmarks, the colour
+                       difference and the regions measured; sheet-likeness.png both heads at that resolution
+  sheet-hairflow.png   the direction the hair's strands run, cell by cell; sheet-views.png the other views
   report.txt/.json     proportions as shares of the distance between the eye centres, the reference's beside ours;
                        each feature's mean landmark error; the outline's half-widths by height; the brows (the dark
                        band above each eye, found the same way in both pictures); the hair's overlap
@@ -308,6 +311,241 @@ for side in ('r', 'l'):
     f = lambda b: f"h {b['height']:.3f} thick {b['thick']:.3f} inner {b['inner']:.3f} outer {b['outer']:.3f}" if b else 'not found'
     lines.append(f'  {"right" if side == "r" else "left "}  ref  {f(br)}')
     lines.append(f'         ours {f(bo)}')
+
+# --- appearance: proportions can match while the look doesn't (black brows, a beard like a mask, flat hair). Ours is
+# brought down to the reference's own resolution (a small face in a full-body shot: finer detail than it has would
+# only mislead) and warped feature by feature onto its landmarks, then compared region by region in CIELAB.
+s_ = float(np.sqrt(abs(np.linalg.det(M[:, :2]))))
+small = cv2.resize(ours, None, fx=s_, fy=s_, interpolation=cv2.INTER_AREA)
+Ms = M.copy(); Ms[:, :2] /= s_
+RH, RW = ref.shape[:2]
+ours_r = cv2.warpAffine(small, Ms, (RW, RH), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+hair_r = cv2.warpAffine(cv2.resize(hair, None, fx=s_, fy=s_, interpolation=cv2.INTER_AREA), Ms, (RW, RH), flags=cv2.INTER_LINEAR)
+# the morph works 4x up from the reference's pixels (so the triangles' edges don't step), on interior landmarks only: the
+# detector's jaw points on ours are the ones it misreads under a beard (the chin is the model's own)
+ZM = 4
+up = lambda im: cv2.resize(im, None, fx=ZM, fy=ZM, interpolation=cv2.INTER_CUBIC)
+ref4, ours4 = up(ref), up(ours_r)
+keep = [i for i in range(len(LR)) if i not in GROUPS['jaw'] or i == 152]
+
+
+def delaunay(P, idx):
+    x0_, y0_ = P[idx].min(0) - 10; x1_, y1_ = P[idx].max(0) + 10
+    sd = cv2.Subdiv2D((int(x0_), int(y0_), int(x1_ - x0_) + 1, int(y1_ - y0_) + 1))
+    for i in idx: sd.insert((float(P[i, 0]), float(P[i, 1])))
+    Q, tris = P[idx], []
+    for t in sd.getTriangleList():
+        ids = [idx[int(np.argmin(np.sum((Q - t[2 * k:2 * k + 2]) ** 2, 1)))] for k in range(3)]
+        if len(set(ids)) == 3: tris.append(ids)
+    return tris
+
+
+def morph(img, src, dst, tris):
+    out = img.copy()
+    for a, b, c in tris:
+        S, D = np.float32([src[a], src[b], src[c]]), np.float32([dst[a], dst[b], dst[c]])
+        x, y, w, h = cv2.boundingRect(D)
+        x, y = max(0, x), max(0, y); w, h = min(w, out.shape[1] - x), min(h, out.shape[0] - y)
+        if w <= 0 or h <= 0: continue
+        A = cv2.getAffineTransform(S, D - np.float32([x, y]))
+        patch = cv2.warpAffine(img, A, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+        m = np.zeros((h, w), np.uint8); cv2.fillConvexPoly(m, np.int32(np.round(D - [x, y])), 1)
+        out[y:y + h, x:x + w][m == 1] = patch[m == 1]
+    return out
+
+
+LR4, LO4 = LR * ZM, LOa * ZM
+morphed = morph(ours4, LO4, LR4, delaunay(LR4, keep))
+lab = lambda im: cv2.cvtColor(im.astype(np.float32) / 255, cv2.COLOR_BGR2LAB)
+labR, labO = lab(ref4), lab(morphed)
+# the eye frame: from the right eye's centre to the left's, y down, in eye distances
+ec = (eye_centre(LR4, 'r') + eye_centre(LR4, 'l')) / 2
+ex_ = (eye_centre(LR4, 'l') - eye_centre(LR4, 'r')) / (iod * ZM); ey_ = np.array([-ex_[1], ex_[0]])
+F_ = lambda u, v: ec + (u * ex_ + v * ey_) * iod * ZM
+chin_v = float(np.dot(LR4[152] - ec, ey_) / (iod * ZM))
+
+
+def mask_poly(P):
+    m = np.zeros(labR.shape[:2], np.uint8); cv2.fillPoly(m, [np.int32(np.round(P))], 1); return m
+
+
+def mask_circle(c, r):
+    m = np.zeros(labR.shape[:2], np.uint8); cv2.circle(m, tuple(np.int32(np.round(c))), int(round(r)), 1, -1); return m
+
+
+ring = lambda i0: np.mean([np.linalg.norm(LR4[i] - LR4[i0]) for i in range(i0 + 1, i0 + 5)])
+EYE_R = [33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7]
+EYE_L = [263, 466, 388, 387, 386, 385, 384, 398, 362, 382, 381, 380, 374, 373, 390, 249]
+LOW_R, LOW_L = [33, 7, 163, 144, 145, 153, 154, 155, 133], [263, 249, 390, 373, 374, 380, 381, 382, 362]
+LIPS = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146]
+band = lambda ids, dv: np.r_[LR4[ids], (LR4[ids] + ey_ * dv * iod * ZM)[::-1]]
+iris_m = {s: mask_circle(LR4[i], ring(i) * 0.85) for s, i in (('R', 468), ('L', 473))}
+REG = {
+    'forehead': mask_poly([F_(-0.35, -0.85), F_(0.35, -0.85), F_(0.35, -0.55), F_(-0.35, -0.55)]),
+    'brow R': mask_poly(LR4[[70, 63, 105, 66, 107, 55, 65, 52, 53, 46]]),
+    'brow L': mask_poly(LR4[[300, 293, 334, 296, 336, 285, 295, 282, 283, 276]]),
+    'iris R': iris_m['R'], 'iris L': iris_m['L'],
+    'sclera R': mask_poly(LR4[EYE_R]) * (1 - mask_circle(LR4[468], ring(468) * 1.1)),
+    'sclera L': mask_poly(LR4[EYE_L]) * (1 - mask_circle(LR4[473], ring(473) * 1.1)),
+    'under eye R': mask_poly(band(LOW_R, 0.14)), 'under eye L': mask_poly(band(LOW_L, 0.14)),
+    'cheekbone R': mask_circle(LR4[50], 0.1 * iod * ZM), 'cheekbone L': mask_circle(LR4[280], 0.1 * iod * ZM),
+    'lower cheek R': mask_circle((LR4[50] + LR4[136]) / 2, 0.09 * iod * ZM), 'lower cheek L': mask_circle((LR4[280] + LR4[365]) / 2, 0.09 * iod * ZM),
+    'nose bridge': mask_circle(LR4[197], 0.06 * iod * ZM), 'nose tip': mask_circle(LR4[4], 0.07 * iod * ZM),
+    'moustache': mask_poly(LR4[[61, 40, 37, 0, 267, 270, 291, 327, 2, 98]]),
+    'lips': mask_poly(LR4[LIPS]),
+    'chin': mask_poly(LR4[[91, 181, 84, 17, 314, 405, 321, 400, 377, 152, 148, 176]]),
+    'jaw R': mask_circle(LR4[136] * 0.7 + LR4[61] * 0.3, 0.08 * iod * ZM), 'jaw L': mask_circle(LR4[365] * 0.7 + LR4[291] * 0.3, 0.08 * iod * ZM),
+    'neck': mask_poly([F_(-0.22, chin_v + 0.12), F_(0.22, chin_v + 0.12), F_(0.22, chin_v + 0.35), F_(-0.22, chin_v + 0.35)]),
+}
+stats = {}
+for k, m in REG.items():
+    on = m == 1
+    if on.sum() < 4: continue
+    stats[k] = {'ref': labR[on].mean(0).tolist(), 'ours': labO[on].mean(0).tolist(), 'ref_sd': float(labR[on][:, 0].std()), 'ours_sd': float(labO[on][:, 0].std())}
+fl_r, fl_o = stats['forehead']['ref'][0], stats['forehead']['ours'][0]
+lines.append('')
+lines.append('appearance (CIELAB; ours at the reference\'s resolution, warped onto its landmarks): L lightness 0..100, a green-red, b blue-yellow;')
+lines.append('  "vs forehead" is the region\'s lightness minus the forehead\'s (the lighting cancels out), "sd" the spread of its lightness (texture, shading)')
+lines.append(f'  {"region":14s} {"ref L    a    b":>17s}   {"ours L    a    b":>17s}   {"dE":>5s}   {"vs forehead ref/ours":>21s}   {"sd ref/ours":>11s}')
+dEs = []
+for k, s in stats.items():
+    r, o = s['ref'], s['ours']
+    dE = float(np.linalg.norm(np.subtract(o, r))); dEs.append(dE); s['dE'] = dE
+    lines.append(f'  {k:14s} {r[0]:5.1f} {r[1]:5.1f} {r[2]:5.1f}   {o[0]:5.1f} {o[1]:5.1f} {o[2]:5.1f}   {dE:5.1f}   {r[0] - fl_r:+8.1f} / {o[0] - fl_o:+6.1f}   {s["ref_sd"]:5.1f}/{s["ours_sd"]:4.1f}')
+lines.append(f'  mean dE over the regions {np.mean(dEs):.1f}')
+# a heat map of the colour difference (blurred over about a reference pixel: its noise isn't a difference)
+dmap = np.linalg.norm(cv2.GaussianBlur(labO, (0, 0), ZM) - cv2.GaussianBlur(labR, (0, 0), ZM), axis=2)
+heat = cv2.applyColorMap(np.uint8(np.clip(dmap / 40 * 255, 0, 255)), cv2.COLORMAP_INFERNO)
+box = crop_box(OVAL, 0.45)
+bx0, by0, bx1, by1 = [v * ZM for v in box]
+crop = lambda im: im[max(0, by0):by1, max(0, bx0):bx1]
+regv = crop(ref4).copy()
+for k, m in REG.items():
+    cs, _ = cv2.findContours(crop(m).copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(regv, cs, -1, (0, 255, 255), 1, cv2.LINE_AA)
+zf = max(1, round(600 / regv.shape[1]))
+big = lambda im: cv2.resize(im, None, fx=zf, fy=zf, interpolation=cv2.INTER_CUBIC)
+cv2.imwrite(f'{OUT}/sheet-tone.png', np.concatenate([label(big(crop(ref4)), 'reference'), label(big(crop(ours4)), 'ours at its resolution'), label(big(crop(morphed)), 'ours warped onto it'),
+                                                     label(big(crop(heat)), 'colour difference (dE 0..40)'), label(big(regv), 'regions')], 1))
+# the whole head at the reference's resolution, side by side: how alike they look at the detail the reference has
+box = crop_box(OVAL, 1.1)
+bx0, by0, bx1, by1 = [v * ZM for v in box]
+zf = max(1, round(900 / (bx1 - bx0)))
+cv2.imwrite(f'{OUT}/sheet-likeness.png', np.concatenate([label(big(crop(ref4)), 'reference'), label(big(crop(ours4)), 'ours at the reference\'s resolution')], 1))
+
+# --- the hair's look: where it frames the forehead (the skin's width above the brows, row by row), how high it stands
+# over the head, where it ends at the sides, its tones (dark roots, light crests)
+hsvR, hsvO = cv2.cvtColor(ref4, cv2.COLOR_BGR2HSV), cv2.cvtColor(ours4, cv2.COLOR_BGR2HSV)
+skin = lambda hv: ((hv[..., 1] > 40) & (hv[..., 2] > 105)).astype(np.uint8)
+skR, skO = skin(hsvR), skin(hsvO)
+hmR = (hsvR[..., 2] < 95).astype(np.uint8)
+hmO = (up(hair_r) > 110).astype(np.uint8)
+lines.append('')
+lines.append('forehead framed by the hair: the bare skin\'s half-width left | right of the middle, by height above the eye line (eye distances)')
+
+
+def run_at(m, v):
+    """the run of `m` through the middle on the row `v` eye distances below the eye line: its half-widths each way"""
+    p = F_(0, v); r, c = int(round(p[1])), int(round(p[0]))
+    if r < 0 or r >= m.shape[0] or not m[r, c]: return None
+    row = m[r]; a = c; b = c
+    while a > 0 and row[a - 1]: a -= 1
+    while b < len(row) - 1 and row[b + 1]: b += 1
+    return (c - a) / (iod * ZM), (b - c) / (iod * ZM)
+
+
+frame_rows = []
+for v in np.arange(-0.4, -1.45, -0.1):
+    a_, b_ = run_at(skR, v), run_at(skO, v)
+    f = lambda s: f'{s[0]:4.2f} | {s[1]:4.2f}' if s else ' hair/none '
+    frame_rows.append((float(-v), a_, b_))
+    lines.append(f'  {-v:4.1f}   ref {f(a_)}   ours {f(b_)}')
+
+
+def top_of(m):
+    """the hair's highest point over the middle third (eye distances above the eye line)"""
+    best = None
+    for u in np.linspace(-0.4, 0.4, 17):
+        for v in np.arange(-2.5, -0.3, 0.01):
+            p = F_(u, v); r, c = int(p[1]), int(p[0])
+            if 0 <= r < m.shape[0] and 0 <= c < m.shape[1] and m[r, c]:
+                best = max(best or 0, -v); break
+    return best
+
+
+def side_end(m, sgn):
+    """how far below the eye line the hair reaches beside the face (outside 0.85 eye distances from the middle)"""
+    low = None
+    for u in np.linspace(0.85, 1.4, 12):
+        for v in np.arange(2.6, -0.5, -0.01):
+            p = F_(sgn * u, v); r, c = int(p[1]), int(p[0])
+            if 0 <= r < m.shape[0] and 0 <= c < m.shape[1] and m[r, c]:
+                low = max(low if low is not None else -9, v); break
+    return low
+
+
+lim = np.ones_like(hmR); lim[int(LR4[152][1] + 0.25 * iod * ZM):] = 0
+# (not the brows, eyes or beard: only what's outside the face's outline)
+oval4 = np.zeros_like(hmR); cv2.fillPoly(oval4, [np.int32(np.round(LR4[OVAL]))], 1)
+hmR2 = cv2.morphologyEx(hmR * lim * (1 - oval4), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+hmO = hmO * (1 - oval4)
+lines.append(f'hair top above the eye line: ref {top_of(hmR2):.2f}, ours {top_of(hmO):.2f}')
+for sgn, nm in ((-1, 'right'), (1, 'left')):
+    a_, b_ = side_end(hmR2, sgn), side_end(hmO, sgn)
+    lines.append(f'hair ends below the eye line, {nm:5s} side: ref {a_ if a_ is None else round(a_, 2)}, ours {b_ if b_ is None else round(b_, 2)}')
+hlR, hlO = labR[..., 0][hmR2 == 1], cv2.cvtColor(ours4.astype(np.float32) / 255, cv2.COLOR_BGR2LAB)[..., 0][hmO == 1]
+pc = lambda x: np.percentile(x, [10, 50, 90]) if len(x) else [0, 0, 0]
+lines.append('hair lightness percentiles 10/50/90: ref ' + '/'.join(f'{v:.0f}' for v in pc(hlR)) + '   ours ' + '/'.join(f'{v:.0f}' for v in pc(hlO)))
+hab = lambda L_, m: L_[m == 1][:, 1:].mean(0) if (m == 1).any() else [0, 0]
+lines.append('hair colour a/b: ref ' + '/'.join(f'{v:.1f}' for v in hab(labR, hmR2)) + '   ours ' + '/'.join(f'{v:.1f}' for v in hab(cv2.cvtColor(ours4.astype(np.float32) / 255, cv2.COLOR_BGR2LAB), hmO)))
+
+# --- which way the hair runs (its strands' direction, cell by cell, from the structure tensor of the lightness): swept up
+# and back off the forehead and waving down the sides, or combed flat; the angle between the two in each cell both have
+# hair with a clear direction
+def flow(L_, m):
+    gx, gy = cv2.Sobel(L_, cv2.CV_32F, 1, 0, ksize=3), cv2.Sobel(L_, cv2.CV_32F, 0, 1, ksize=3)
+    sg = 0.6 * ZM
+    jxx, jyy, jxy = (cv2.GaussianBlur(a, (0, 0), sg) for a in (gx * gx, gy * gy, gx * gy))
+    return jxx, jyy, jxy
+
+
+box = crop_box(OVAL, 1.1)
+bx0, by0, bx1, by1 = [v * ZM for v in box]
+LRl = labR[..., 0]; LOl = cv2.cvtColor(ours4.astype(np.float32) / 255, cv2.COLOR_BGR2LAB)[..., 0]
+JR, JO = flow(LRl, hmR2), flow(LOl, hmO)
+cell = int(0.12 * iod * ZM)
+fr, fo = crop(ref4).copy(), crop(ours4).copy()
+angs = []
+for r0 in range(max(0, by0), min(by1, ref4.shape[0]) - cell, cell):
+    for c0 in range(max(0, bx0), min(bx1, ref4.shape[1]) - cell, cell):
+        sl = (slice(r0, r0 + cell), slice(c0, c0 + cell))
+        res = []
+        for (jxx, jyy, jxy), m in ((JR, hmR2), (JO, hmO)):
+            if m[sl].mean() < 0.6: res.append(None); continue
+            a, b, c = jxx[sl].sum(), jyy[sl].sum(), jxy[sl].sum()
+            coh = np.sqrt((a - b) ** 2 + 4 * c * c) / max(1e-6, a + b)
+            # (the strands run across the gradient)
+            res.append((0.5 * np.arctan2(2 * c, a - b) + np.pi / 2, coh))
+        ctr = (c0 + cell // 2 - max(0, bx0), r0 + cell // 2 - max(0, by0))
+        for (img_, rr) in ((fr, res[0]), (fo, res[1])):
+            if rr and rr[1] > 0.25:
+                d = np.array([np.cos(rr[0]), np.sin(rr[0])]) * cell * 0.45
+                cv2.line(img_, tuple(np.int32(ctr - d)), tuple(np.int32(ctr + d)), (0, 255, 255), 2, cv2.LINE_AA)
+        if res[0] and res[1] and res[0][1] > 0.25 and res[1][1] > 0.25:
+            da = abs(res[0][0] - res[1][0]) % np.pi
+            angs.append(min(da, np.pi - da))
+zf = max(1, round(700 / fr.shape[1]))
+cv2.imwrite(f'{OUT}/sheet-hairflow.png', np.concatenate([label(big(fr), 'reference: strand direction'), label(big(fo), 'ours')], 1))
+lines.append(f'hair flow: mean angle between the strands\' directions {np.degrees(np.mean(angs)) if angs else float("nan"):.0f} deg over {len(angs)} cells (0 alike, 45 unrelated)')
+
+# --- the other views (nothing to compare them with: they show what the front hides), side by side
+views = [(n, cv2.imread(f'{OUT}/view-{n}.png')) for n in ('three-quarter', 'side', 'back', 'above')]
+views = [(n, v) for n, v in views if v is not None]
+if views:
+    h0 = views[0][1].shape[0]
+    tiles = [label(cv2.resize(v[int(h0 * 0.02):int(h0 * 0.82), int(h0 * 0.12):int(h0 * 0.88)], (600, 632)), n) for n, v in views]
+    cv2.imwrite(f'{OUT}/sheet-views.png', np.concatenate(tiles, 1))
+
 open(f'{OUT}/report.txt', 'w').write('\n'.join(lines))
-json.dump({'measures_ref': mr, 'measures_ours': mo, 'err': err, 'hair_iou': inter / max(1, union)}, open(f'{OUT}/report.json', 'w'), indent=1)
+json.dump({'measures_ref': mr, 'measures_ours': mo, 'err': err, 'hair_iou': inter / max(1, union), 'tone': stats, 'tone_dE': float(np.mean(dEs)), 'frame': frame_rows}, open(f'{OUT}/report.json', 'w'), indent=1)
 print('\n'.join(lines))
