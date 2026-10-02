@@ -1,9 +1,9 @@
 // The Mage: the same bare-headed man in layered navy and teal robes, the hood down in a cowl round
 // the neck, gold-trimmed and embroidered with arcane signs, long bell sleeves, black-and-gold spiked
 // pauldrons set with green stones, a wide medallion belt with pouches and charms, strapped boots with
-// gold caps, a cape, and a gnarled staff cradling a floating crystal. The pauldrons, the collar's flaps and
-// the brooch are the chest item's, the bracers and gloves the hands item's: without them the plain robe, its
-// sleeves on to the wrists and bare hands. Fully procedural.
+// gold caps, a cape, and a gnarled staff cradling a floating crystal. The robe with its pauldrons, collar flaps and
+// brooch is the chest item's, the bracers and gloves the hands item's: without them a plain linen tunic, its
+// sleeves (or the robe's) on to the wrists, and bare hands. Fully procedural.
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
@@ -39,6 +39,35 @@ const MAGE_CAPE_PALETTE: CapeFabricPalette = Object.freeze({
 // of that: a man's chest (ANSUR II: 29 cm across, 25 deep) with the robe over it, rising to the shoulders
 const TORSO: [number, number][] = [[0.145, -0.12], [0.155, -0.02], [0.165, 0.1], [0.168, 0.18], [0.15, 0.245], [0.1, 0.28], [0.075, 0.29]];
 const DEPTH = 0.86;
+/** the plain linen tunic under the robe (without a chest item): closer to the body than the robe's wool, a crew neck */
+const TUNIC: [number, number][] = TORSO.map(([r, y]) => [r - 0.012 * clamp((0.27 - y) / 0.05, 0, 1), y]);
+/** the cowl's profile (chest joint space): the hood down, bunched round the neck */
+const COWL: [number, number][] = [[0.1, 0.2], [0.155, 0.235], [0.16, 0.27], [0.13, 0.31], [0.095, 0.34], [0.085, 0.36]];
+/** the signed distance (r, y) to a lathe's profile closed along its axis (< 0 inside) */
+function profileSDF(P: [number, number][], r: number, y: number): number {
+  const poly = [[0, P[0][1]], ...P, [0, P[P.length - 1][1]]];
+  let d = Infinity, inside = false;
+  for (let i = 0, k = poly.length - 1; i < poly.length; k = i++) {
+    const [ax, ay] = poly[k], [bx, by] = poly[i], ex = bx - ax, ey = by - ay, wx = r - ax, wy = y - ay;
+    const t = clamp((wx * ex + wy * ey) / (ex * ex + ey * ey || 1), 0, 1);
+    d = Math.min(d, Math.hypot(wx - ex * t, wy - ey * t));
+    if ((ay > y) !== (by > y) && r < ax + ((y - ay) * ex) / ey) inside = !inside;
+  }
+  return inside ? -d : d;
+}
+/** what the beard lies on (chest joint space, m; < 0 inside): the robe's cowl (over its folds' crests: the beard turns
+ *  over it with the head, and rested in a fold's hollow it sank into the next fold) and its front with the collar's flaps
+ *  over it, or the tunic */
+const robeBody = (p: THREE.Vector3): number => {
+  const a = Math.atan2(p.x, p.z);
+  const cowl = profileSDF(COWL, Math.hypot(p.x, p.z / 0.95) / 1.1, p.y + 0.02 * Math.max(0, Math.cos(a)));
+  return Math.min(cowl, profileSDF(TORSO, Math.hypot(p.x, p.z / DEPTH), p.y) - (p.z > 0 && p.y < 0.26 ? 0.016 : 0));
+};
+const tunicBody = (p: THREE.Vector3): number => profileSDF(TUNIC, Math.hypot(p.x, p.z / DEPTH), p.y);
+/** the cape over the robe (pinned under the cowl, kept off the skirts) and over the plain tunic: the neckline's ends on the
+ *  chest, and its colliders' sizes (radius, front/back radius) */
+const CAPE_ROBED = { left: [0.1, 0.3, -0.15], right: [-0.1, 0.3, -0.15], sizes: { gorget: [0.17], hips: [0.26, 0.23], 'robe skirt': [0.34, 0.3] } } as const;
+const CAPE_TUNIC = { left: [0.1, 0.27, -0.1], right: [-0.1, 0.27, -0.1], sizes: { gorget: [0.12], hips: [0.24, 0.21], 'robe skirt': [0.17, 0.12] } } as const;
 /** the pauldrons' size against the shoulder */
 const PAULDRON = 0.72;
 function torsoR(y: number): number {
@@ -92,6 +121,8 @@ export function buildMage(): Model {
   const rng = mulberry(5);
   const tex = (maps: ReturnType<typeof clothMaps>, rep: number, ns = 1) => { const m = pbrMaterialMaps(maps, rep, ns); return { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, normalScale: m.normalScale }; };
   const robe = kit.rim({ color: 0x252d48, roughness: 1, ...tex(clothMaps(), 1, 0.9) }, 0x2a3a60, 0.3);
+  // the plain tunic under the robe: undyed linen
+  const linen = kit.rim({ color: 0x9a8e76, roughness: 1, ...tex(clothMaps(), 1, 0.7) }, 0x6a6050, 0.25);
   const teal = kit.rim({ color: 0x1f5058, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.DoubleSide }, 0x2a6a70, 0.3);
   const lining = kit.rim({ color: 0x184048, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x2a6a70, 0.2);
   const gold = kit.std({ color: 0xc9a14a, metalness: 1, roughness: 1, roughnessMap: pbrMaterialMaps(steelMaps(), 1).roughnessMap });
@@ -119,19 +150,27 @@ export function buildMage(): Model {
   });
   stripRig(j.root);
   const S = new Sculpt();
-  // what comes off (setGear): the chest item's, the hands item's, and what shows without the latter
-  const A = new Sculpt(), H = new Sculpt(), B = new Sculpt();
+  // what comes off (setGear): the chest item's (the robe with its pauldrons, collar flaps and brooch) and the tunic shown
+  // without it, the hands item's, and the bare wrists shown without them (out of the robe's sleeves or the tunic's)
+  const A = new Sculpt(), T = new Sculpt(), H = new Sculpt(), B = new Sculpt(), BR = new Sculpt(), BT = new Sculpt();
   const bareSkin = handSkin(kit, 'mage');
 
   // --- the robe's body, a teal inner layer showing at the collar, the neck
-  S.add(scaleUV(lathe(TORSO, 28), 3, 1.5), robe, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, DEPTH]);
-  S.add(scaleUV(lathe([[0.148, -0.05], [0.15, 0.08], [0.152, 0.2], [0.155, 0.26]], 24), 3, 1), robe, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
+  const WAIST: [number, number][] = [[0.148, -0.05], [0.15, 0.08], [0.152, 0.2], [0.155, 0.26]];
+  A.add(scaleUV(lathe(TORSO, 28), 3, 1.5), robe, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, DEPTH]);
+  A.add(scaleUV(lathe(WAIST, 24), 3, 1), robe, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
   // gold piping down the front of the robe on each side, and a diamond brooch set with a stone
   for (const s of [1, -1]) {
     const pts: THREE.Vector3[] = [];
     for (let k = 0; k <= 8; k++) { const y = lerp(0.24, -0.1, k / 8); pts.push(onChest(s * lerp(0.05, 0.075, k / 8), y, 0.003)); }
-    S.add(taperTube(pts, () => 0.005, 16, 5), gold, j.chest);
+    A.add(taperTube(pts, () => 0.005, 16, 5), gold, j.chest);
   }
+  // without it the tunic: belted at the waist like the robe, a rolled hem round the neck and a short laced slit down the front
+  T.add(scaleUV(lathe(TUNIC, 28), 3, 1.5), linen, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, DEPTH]);
+  T.add(scaleUV(lathe(WAIST, 24), 3, 1), linen, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
+  T.add(belt(0.076, 0.076 * DEPTH, 0.288, 0.012, 0.006, 0, 28), linen, j.chest);
+  for (const s of [1, -1]) T.add(taperTube([0.285, 0.25, 0.215].map((y) => onChest(s * 0.006, y, 0.001)), () => 0.0025, 8, 5), blackLeather, j.chest);
+  for (const y of [0.27, 0.245, 0.222]) T.add(taperTube([onChest(0.011, y + 0.004, 0.002), onChest(0, y, 0.004), onChest(-0.011, y - 0.004, 0.002)], () => 0.0015, 6, 4), leather, j.chest);
   const br = onChest(0, 0.1, 0.012);
   A.add(new THREE.OctahedronGeometry(0.032, 0), gold, j.chest, br.toArray(), [0, 0, 0], [0.75, 1.1, 0.35]);
   A.add(gemGeo(0.014), stone, j.chest, [br.x, br.y, br.z + 0.01], [0, 0, 0], [1, 1.4, 1]);
@@ -139,16 +178,16 @@ export function buildMage(): Model {
   // --- the cowl: the hood down, bunched round the neck in teal folds, its crown lying flat on the upper
   // back, inside the cape's torso collider: any fuller, it pokes out through the cape as two humps
   {
-    const g = lathe([[0.1, 0.2], [0.155, 0.235], [0.16, 0.27], [0.13, 0.31], [0.095, 0.34], [0.085, 0.36]], 36), q = g.attributes.position;
+    const g = lathe(COWL, 36), q = g.attributes.position;
     for (let i = 0; i < q.count; i++) {
       const x = q.getX(i), z = q.getZ(i), a = Math.atan2(x, z), k = 1 + 0.07 * Math.sin(a * 7 + 1) + 0.03 * Math.sin(a * 13);
       q.setXYZ(i, x * k, q.getY(i) - 0.02 * Math.max(0, Math.cos(a)), z * k * 0.95);
     }
     g.computeVertexNormals();
-    S.add(scaleUV(g, 3, 1), teal, j.chest);
+    A.add(scaleUV(g, 3, 1), teal, j.chest);
     const hood: SurfaceFn = (u, v, out) => { const a = Math.PI + (u - 0.5) * 2.2, y = lerp(0.3, 0.1, v), r = 0.105 + 0.01 * Math.sin(v * Math.PI) + 0.005 * Math.sin(u * 17); return out.set(Math.sin(a) * r, y, Math.cos(a) * r * 0.9 - 0.05); };
-    S.add(plate(hood, 16, 8, 0.008, undefined, V(0, 0.2, 0)), teal, j.chest);
-    S.add(edgeTube(hood, 'v1', 0.005, 16), gold, j.chest);
+    A.add(plate(hood, 16, 8, 0.008, undefined, V(0, 0.2, 0)), teal, j.chest);
+    A.add(edgeTube(hood, 'v1', 0.005, 16), gold, j.chest);
   }
   // pointed collar flaps over the chest, teal with a gold border
   for (const s of [1, -1]) {
@@ -202,7 +241,11 @@ export function buildMage(): Model {
   ];
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
     // the sleeve carries on 8cm past the elbow, under the bell, and follows the forearm there
-    S.skin(scaleUV(limb(0.38, 0.075, 0.068, 0.05, 0.24, 14), 2, 1), robe, sh, el, 0.2, 0.33);
+    A.skin(scaleUV(limb(0.38, 0.075, 0.068, 0.05, 0.24, 14), 2, 1), robe, sh, el, 0.2, 0.33);
+    // (the tunic's, narrower, on down the forearm to the wrist: under the bracers, or ending in a cuff)
+    T.skin(scaleUV(limb(0.38, 0.06, 0.056, 0.04, 0.24, 14), 2, 1), linen, sh, el, 0.2, 0.33);
+    T.add(scaleUV(lathe([[0.043, -0.25], [0.046, -0.2], [0.05, -0.12], [0.054, -0.04], [0.055, 0]], 16), 2, 1), linen, el);
+    BT.add(belt(0.045, 0.045, -0.245, 0.012, 0.004, 0, 14), linen, el);
     // the bell: from above the elbow, flaring, longest on the underside of the arm (+z hangs below
     // the forearm when the arm is raised forward)
     const bell = new THREE.CylinderGeometry(0.075, 0.15, 0.3, 28, 6, true).translate(0, -0.15, 0), q = bell.attributes.position;
@@ -223,8 +266,8 @@ export function buildMage(): Model {
     H.add(new THREE.OctahedronGeometry(0.02, 0), gold, el, [s * 0.058, -0.19, 0], [0, 0, 0], [0.4, 1.2, 1]);
     H.add(gemGeo(0.009), stone, el, [s * 0.064, -0.19, 0], [0, s * Math.PI / 2, 0]);
     // bare: the robe's sleeve on down the forearm under the bell, a gold-edged cuff, the wrist into the palm
-    B.add(scaleUV(lathe([[0.044, -0.25], [0.047, -0.2], [0.052, -0.12], [0.056, -0.04], [0.056, 0]], 16), 2, 1), robe, el);
-    B.add(belt(0.046, 0.046, -0.245, 0.01, 0.004, 0, 14), gold, el);
+    BR.add(scaleUV(lathe([[0.044, -0.25], [0.047, -0.2], [0.052, -0.12], [0.056, -0.04], [0.056, 0]], 16), 2, 1), robe, el);
+    BR.add(belt(0.046, 0.046, -0.245, 0.01, 0.004, 0, 14), gold, el);
     B.skin(lathe([[0.033, -0.3], [0.034, -0.28], [0.036, -0.255], [0.04, -0.235]], 16), bareSkin, el, hd, 0.25, 0.29);
   }
   const handL = buildHand(j.handL, 1, leather, skinTip), handR = buildHand(j.handR, -1, leather, skinTip);
@@ -262,9 +305,10 @@ export function buildMage(): Model {
     S.add(new THREE.BoxGeometry(0.08, 0.04, 0.046), blackLeather, j.hips, [x, -0.03, z], [0, ry, 0]);
     S.add(stud(0.008), gold, j.hips, [x + Math.sin(ry) * 0.024, -0.04, z + Math.cos(ry) * 0.024], [0, ry, 0]);
   }
-  S.add(strap([V(-0.16, -0.02, 0.12), V(-0.165, -0.12, 0.135), V(-0.17, -0.24, 0.14)], 0.022, 0.006, false, () => V(-0.5, 0, 0.85).normalize()), leather, j.hips);
-  S.add(new THREE.OctahedronGeometry(0.022, 0), gold, j.hips, [-0.17, -0.27, 0.142], [0, 0, 0], [0.7, 1.3, 0.5]);
-  S.add(buckle(0.022, 0.03, 0.005), gold, j.hips, [-0.163, -0.1, 0.14], [0, -0.5, 0]);
+  // (the robe's: on a plain tunic it read as a letter)
+  A.add(strap([V(-0.16, -0.02, 0.12), V(-0.165, -0.12, 0.135), V(-0.17, -0.24, 0.14)], 0.022, 0.006, false, () => V(-0.5, 0, 0.85).normalize()), leather, j.hips);
+  A.add(new THREE.OctahedronGeometry(0.022, 0), gold, j.hips, [-0.17, -0.27, 0.142], [0, 0, 0], [0.7, 1.3, 0.5]);
+  A.add(buckle(0.022, 0.03, 0.005), gold, j.hips, [-0.163, -0.1, 0.14], [0, -0.5, 0]);
 
   // --- skirts: the navy robe to below the knee with a gold hem, a longer teal underskirt, the
   // embroidered front panel, and teal tails at the front corners
@@ -276,6 +320,11 @@ export function buildMage(): Model {
     m.position.y = 0.03; m.castShadow = m.receiveShadow = true;
     j.hips.add(m); skirts.push(m);
   }
+  // (without the robe the tunic's skirt, to mid-thigh)
+  const short = new Skirt({ r0: 0.19, r1: 0.24, len: 0.34, depth: 0.82, folds: 7, foldAmp: 0.035, rows: 6, hem: (a) => 0.012 * Math.sin(a * 3 + 0.5) });
+  const tunicSkirt = new THREE.Mesh(short.geo, linen);
+  tunicSkirt.position.y = 0.03; tunicSkirt.castShadow = tunicSkirt.receiveShadow = true;
+  j.hips.add(tunicSkirt);
   const flaps: { g: THREE.Group; a: number; len: number }[] = [];
   const hang = (a: number, w: number, len: number, mat: THREE.Material, hemPx: number, texH: number, lift: number) => {
     const g = joint(j.hips, Math.sin(a) * (0.21 + lift), 0.04, Math.cos(a) * (0.175 + lift));
@@ -290,9 +339,9 @@ export function buildMage(): Model {
   hang(0, 0.19, 0.84, panel, 110, PH, 0.02);
   for (const s of [1, -1]) hang(s * 0.75, 0.15, 0.6, tail, 120, TH2, 0.03);
 
-  // --- the head: face, a full beard, hair, and a wide-brimmed pointed hat (worn with a head item equipped:
-  // setGear), its crown bent back by its own weight, a gold band with a stone
-  const head = buildHead(j.head, kit, 'mage', { beard: 160, hair: 'swept' });
+  // --- the head: face, a full beard (lying over the robe's cowl, or the tunic), hair, and a wide-brimmed pointed hat (worn
+  // with a head item equipped: setGear), its crown bent back by its own weight, a gold band with a stone
+  const head = buildHead(j.head, kit, 'mage', { beard: 72, hair: 'swept', rest: { joint: j.chest, bodies: [robeBody, tunicBody] } });
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, 'mage', j.P.neckL, j.head);
@@ -329,7 +378,7 @@ export function buildMage(): Model {
   // Held GRIP further up the haft than its old balance point, so the crystal rides at head height
   // and the bolts it casts fly at the foes, not over them.
   const staff = joint(j.handR, 0, -0.05, 0.02);
-  const STAFF_PITCH = 1.25, STAFF_R = 0.026;
+  const STAFF_PITCH = 1.25, STAFF_R = 0.026, STAFF_OUT = -0.5;
   staff.rotation.x = STAFF_PITCH;
   const GRIP = 0.62;
   {
@@ -355,7 +404,10 @@ export function buildMage(): Model {
   // offhand focus point (left palm)
   const palm = joint(j.handL, 0, -0.08, 0.03);
   S.build();
-  const pauldrons = A.build(), bracers = H.build(), sleeves = B.build();
+  const robeParts = A.build(), tunic = T.build(), bracers = H.build(), wrists = B.build(), robeCuffs = BR.build(), tunicCuffs = BT.build();
+  // (robed until setGear says otherwise)
+  let robed = true;
+  for (const o of [...tunic, ...tunicCuffs, tunicSkirt, head.beards[1]]) o.visible = false;
 
   /** set once a channel's opening completes, for the thrust into the portal */
   let openedAt = -1;
@@ -381,7 +433,7 @@ export function buildMage(): Model {
   // cowl and colliding with a capsule rig that follows the animated skeleton.
   const cape = new SkeletonCape({
     anchor: j.chest, root,
-    left: [0.1, 0.3, -0.15], right: [-0.1, 0.3, -0.15],
+    left: CAPE_ROBED.left, right: CAPE_ROBED.right,
     palette: MAGE_CAPE_PALETTE,
     // narrower than the cape-physics default: the mage holds staff and orb in front,
     // so a wide cape would drape over the arms and stick out forward
@@ -400,6 +452,9 @@ export function buildMage(): Model {
       { name: 'right thigh', a: j.thighR, offA: [0, -0.1, 0], b: j.kneeR, radius: 0.11 },
       { name: 'right shin', a: j.kneeR, b: j.ankleR, radius: 0.085 },
       { name: 'right boot', a: j.ankleR, offA: [0, -0.03, 0.02], offB: [0, -0.03, 0.12], radius: 0.08 },
+      // the staff's haft below the fist (from its ferrule: the solver pushes the cloth behind a capsule's first end): aimed at
+      // a foe it reaches a metre back behind the body
+      { name: 'staff', a: staff, offA: [0, -1.2, 0], offB: [0, -0.1, 0], radius: 0.04, clearance: 0.01, faceSampleSpacing: 0.03 },
     ],
   });
 
@@ -465,7 +520,8 @@ export function buildMage(): Model {
       j.body.position.z += (0.03 * aim - 0.025 * rc) * (1 - move); j.spine.rotation.x += -0.07 * rc; j.shoulderR.rotation.x += -0.12 * rc;
       if (aim > 0.3) feet = AIM_FEET;
     }
-    staff.rotation.x = STAFF_PITCH + 1.75 * aim;
+    // (its haft angled out, the butt passing outside the cape: aimed straight, it reached a metre back through it)
+    staff.rotation.x = STAFF_PITCH + 1.75 * aim; staff.rotation.z = fp ? 0 : STAFF_OUT * aim;
     // (the haft sits in the fist, the hand on its wrist)
     seat(handR, staff, STAFF_R);
     if (a) {
@@ -608,8 +664,8 @@ export function buildMage(): Model {
 
     // the skirts swing with the legs; the panels hanging over them follow the leg on their side
     const fL = -j.thighL.rotation.x, fR = -j.thighR.rotation.x;
-    under.update(fL, fR, move, t, dt);
-    over.update(fL, fR, move, t + 0.4, dt);
+    if (robed) { under.update(fL, fR, move, t, dt); over.update(fL, fR, move, t + 0.4, dt); }
+    else short.update(fL, fR, move, t, dt);
     for (const f of flaps) {
       const wl = clamp(0.5 + Math.sin(f.a) * 0.9, 0, 1);
       f.g.rotation.x = -(Math.max(-0.05, (fL * wl + fR * (1 - wl)) * Math.cos(f.a)) * 0.85 + 0.26 + move * 0.08 + Math.sin(t * 3 + f.a * 3) * 0.015);
@@ -625,8 +681,10 @@ export function buildMage(): Model {
     root.updateMatrixWorld(true);
     hold(handR, _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), STAFF_R);
 
+    // the beard's end turns with the head's turn (now the head is posed, its look-at included)
+    head.settle();
     // cloth runs after the pose so it collides with this frame's skeleton
-    if (dt > 0) { cape.update(dt, st.velocity ?? ZERO); for (const c of cloths) c.update(dt); }
+    if (dt > 0) { cape.update(dt, st.velocity ?? ZERO); if (robed) for (const c of cloths) c.update(dt); }
     cape.setVisible(st.dead < 0.6);
 
     // staff crystal
@@ -644,9 +702,21 @@ export function buildMage(): Model {
     cloths,
     setGear: (gear: Gear) => {
       hat.visible = gear.helm;
-      for (const o of pauldrons) o.visible = gear.chest;
+      // the robe or the tunic: the bell sleeves (cloth, put back on the arms when the robe is), the skirts, the cape's
+      // fit and the beard lying over it
+      if (gear.chest !== robed) {
+        robed = gear.chest;
+        if (robed) for (const c of cloths) c.reset();
+        const fit = robed ? CAPE_ROBED : CAPE_TUNIC;
+        cape.fit(fit.left, fit.right, fit.sizes);
+      }
+      for (const o of [...robeParts, ...skirts, ...flaps.map((f) => f.g), ...cloths.flatMap((c) => c.meshes)]) o.visible = robed;
+      for (const o of [...tunic, tunicSkirt]) o.visible = !robed;
+      head.beards[0].visible = robed; head.beards[1].visible = !robed;
       for (const o of bracers) o.visible = gear.hands;
-      for (const o of sleeves) o.visible = !gear.hands;
+      for (const o of wrists) o.visible = !gear.hands;
+      for (const o of robeCuffs) o.visible = robed && !gear.hands;
+      for (const o of tunicCuffs) o.visible = !robed && !gear.hands;
       bare(handL, gear.hands ? null : bareSkin); bare(handR, gear.hands ? null : bareSkin);
     },
     reset: () => { cape.reset(); legs.reset(); fade.reset(); for (const c of cloths) c.reset(); },

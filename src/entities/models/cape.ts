@@ -64,11 +64,16 @@ export class SkeletonCape {
   private acc = 0;
   private time = 0;
   private needsReset = true;
+  private refit = false;
+  /** the neckline's ends (anchor-local), which `fit` moves */
+  private left: V3;
+  private right: V3;
   /** the neckline's middle last frame, for its own velocity */
   private readonly lastNeck = new THREE.Vector3();
 
   constructor(private readonly o: SkeletonCapeOptions) {
     this.anchors = { left: new THREE.Vector3(), right: new THREE.Vector3(), back: new THREE.Vector3(0, 0, -1) };
+    this.left = o.left; this.right = o.right;
     this.specs = o.capsules;
     this.colliders = o.capsules.map((c) => ({
       start: new THREE.Vector3(), end: new THREE.Vector3(),
@@ -82,7 +87,7 @@ export class SkeletonCape {
   }
 
   private updateAnchors(): CapeAnchors {
-    const { anchor, root, left, right } = this.o;
+    const { anchor, root } = this.o, { left, right } = this;
     root.updateMatrixWorld(true);
     anchor.localToWorld(this.anchors.left.set(...left));
     anchor.localToWorld(this.anchors.right.set(...right));
@@ -101,6 +106,19 @@ export class SkeletonCape {
     return this.colliders;
   }
 
+  /** Fit the cape to what the body wears (a robe or a plain tunic under it): the neckline's ends, and the named
+   *  capsules' sizes (radius, and front/back radius for an elliptical one); it drapes afresh. */
+  fit(left: V3, right: V3, sizes: Record<string, readonly [number, number?]>): void {
+    this.left = left; this.right = right;
+    for (let i = 0; i < this.specs.length; i++) {
+      const z = sizes[this.specs[i].name], c = this.colliders[i];
+      if (z) this.colliders[i] = { ...c, radius: z[0], depthRadius: z[1] ?? c.depthRadius };
+    }
+    // (a worker has the colliders' sizes from when the cape was registered: it is registered again)
+    this.refit = true;
+    this.needsReset = true;
+  }
+
   /** Snap the cape back to a rest drape (teleports, respawn). */
   reset(): void { this.needsReset = true; }
 
@@ -113,7 +131,9 @@ export class SkeletonCape {
     // large jumps (respawn / teleport) re-drape instead of whipping across the arena
     if (this.needsReset || this.sim.getParticlePosition(NECK_COLUMN, 0).distanceTo(neck) > 2) {
       this.sim.reset(anchors);
-      pool?.updateCape(this.id, this.sim, anchors);   // newer revision: in-flight results are dropped
+      if (this.refit) pool?.registerCape(this.id, this.sim, anchors, colliders);
+      else pool?.updateCape(this.id, this.sim, anchors);   // newer revision: in-flight results are dropped
+      this.refit = false;
       this.o.root.getWorldQuaternion(_q).invert();
       this.pinBias.copy(this.sim.getParticlePosition(NECK_COLUMN, 0)).sub(neck).applyQuaternion(_q);
       this.needsReset = false;

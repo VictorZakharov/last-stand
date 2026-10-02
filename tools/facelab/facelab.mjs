@@ -319,6 +319,31 @@ try {
     return c2.toDataURL('image/png').split(',')[1];
   });
   writeFileSync(join(OUT, 'ours-depth.png'), Buffer.from(depth, 'base64'));
+  // a beard of cards: its shape (beard.ts) at rest, over each body it may lie on (the chest item worn or not), and its
+  // cards the body hides as the hero stands
+  const beard = await p.evaluate(async (cls) => {
+    const B = await import('/tools/facelab/beard.ts'), { buildModel } = await import('/src/entities/models/index.ts'), { CLASSES } = await import('/src/data/classes/index.ts');
+    const G = __G, who = CLASSES[cls].model;
+    if (!G.player.model.root.getObjectByName('beard')) return null;
+    const m = buildModel(who), out = [];
+    for (const chest of [true, false]) {
+      m.setGear({ ...G.player.gear, helm: false, chest, hands: true });
+      out.push([chest ? 'chest item' : 'no chest item', B.measureBeard(m.root, who)]);
+    }
+    m.dispose?.();
+    return { rest: out, hidden: B.measureBeard(G.player.model.root, who).hidden };
+  }, CLS);
+  if (beard) {
+    const lines = ['', "beard (beard.ts; mm in the face's frame, at rest; widths against the jaw's)"];
+    for (const [i, [name, b]] of beard.rest.entries()) {
+      for (const [k, d] of [['front', b.front], ['side', b.sideView]]) writeFileSync(join(OUT, `beard-${k}-${i}.png`), Buffer.from(d.split(',')[1], 'base64'));
+      lines.push(`  ${name} (beard-front-${i}.png, beard-side-${i}.png): ${b.len.toFixed(0)} mm below the chin, widest ${b.flare} of the jaw, rows split ${b.split}, full ${b.fill}`,
+        `    tapering ${b.taper.join(' ')} (a quarter, half, three quarters, nine tenths down), cards hidden by the body ${b.hidden}`,
+        `    cheek line at 20 30 40 50 mm out: ${b.cheek.join(' ')}, at the face's outline ${b.cheekOut}; side (back..front) ${b.side.join(', ')}`);
+    }
+    lines.push(`  as the hero stands: cards hidden by the body ${beard.hidden}`);
+    writeFileSync(join(OUT, 'beard.txt'), lines.join('\n') + '\n');
+  }
   if (errs.length) console.error('facelab: page errors:', errs.join(' | '));
 } finally {
   await b.close();
@@ -326,6 +351,7 @@ try {
 }
 const r = spawnSync(PY, [join(HERE, 'compare.py'), REF, OUT, TAG], { stdio: ['ignore', 'inherit', 'pipe'], env: { ...process.env, GLOG_minloglevel: '3', TF_CPP_MIN_LOG_LEVEL: '3', PYTHONWARNINGS: 'ignore' } });
 if (r.status) { console.error(String(r.stderr)); process.exit(r.status); }
+if (existsSync(join(OUT, 'beard.txt'))) { const t = readFileSync(join(OUT, 'beard.txt'), 'utf8'); process.stdout.write(t); writeFileSync(join(OUT, 'report.txt'), readFileSync(join(OUT, 'report.txt'), 'utf8') + t); }
 if (POINTS) {
   const t = spawnSync(PY, [join(HERE, 'points.py'), POINTS, REF, OUT], { stdio: ['ignore', 'inherit', 'pipe'], env: { ...process.env, PYTHONWARNINGS: 'ignore' } });
   if (t.status) { console.error(String(t.stderr)); process.exit(t.status); }

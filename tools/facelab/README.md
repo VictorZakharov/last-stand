@@ -120,6 +120,14 @@ where you like and pass its path. Any front view of a face works, a full-body sh
    dir> nearest <class>` writes that face, fitted to our surface, as the target, and the fit keeps the face's own
    proportions on a surface a real face could have (its lumps and shelves smoothed away). Start it from a mask copied
    from a face that has one.
+8. **A beard of cards** (`beard.ts`, for a hero that has one): its shape in the face's own millimetres, square from the
+   front and the side, the cards and the painted beard z-buffered against each other and the body, on a model built
+   afresh at rest over each body the beard may lie on (the chest item worn or not), and its cards the body hides as
+   the hero stands. Below the chin, row by row: its width against the jaw's (a full beard tapers to a rounded end,
+   never wider than the jaw), the rows it splits into two or more runs (a fork, tails beside the neck), how full it is
+   between its edges; the painted cheek line's height across the cheek and at the face's outline; the side's back and
+   front edges; the share of the cards the body hides (buried in a robe's cowl). None of the face's measures saw the old
+   beard: hung straight down from the jaw, a ruff with its sides as two tails and its middle inside the cowl.
 
 ## Output (`tools/facelab/out/<tag>/`)
 
@@ -142,6 +150,8 @@ where you like and pass its path. Any front view of a face works, a full-body sh
 - `sheet-turn.png` (with `--turn`): the three-quarter and side views and their outlines.
 - `sheet-dense.png` (with `--turn`): ours against the rebuilt reference, against the real face nearest it, and our
   skin's curvature, each from the front and the reference's turns; `fit-target.f32` / `.json`, the fitter's target.
+- `beard-front-N.png`, `beard-side-N.png` (a hero with a beard): its masks over each body (skin, painted beard, cards,
+  the body; the cards it hides red, the chin's underside yellow); `beard.txt`, its numbers, added to the report.
 - `report.txt` (and `.json`): proportions as shares of the distance between the eye centres (eye size and opening,
   brow height, nose length and width, lips, mouth to chin, face and jaw width), the reference's beside ours; each
   feature's mean landmark error; the outline's half-width every 0.2 eye distances down from the eye line; the brows
