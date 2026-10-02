@@ -34,6 +34,8 @@ export interface FaceShape {
   beardDepth: number;
   /** a high nose bridge (mm): the nose rises straight from between the brows instead of from a dip */
   bridge?: number;
+  /** half the width of the nose's ridge (mm, 5.2): a broader one runs straight down to the tip instead of pinching in */
+  bridgeW?: number;
   /** the nose's tip, how big and round (1 average) */
   tip?: number;
   /** how much lower the beard's edge comes down across the cheek (mm) */
@@ -64,7 +66,7 @@ export interface FaceShape {
 
 export const FACES: Record<'warrior' | 'mage', FaceShape> = {
   // broad jaw and chin, a heavy brow over deep-set eyes, high cheekbones, a straight nose
-  warrior: { jaw: 50, chin: 14, chinFwd: 6, brow: 1.4, cheek: 1.1, noseLen: 55, noseW: 13.2, nosePro: 1.14, hump: 0.9, lips: 0.72, long: 0.98, tip: 1.15, eyeOpen: 2.9, iris: [0.37, 0.36, 0.3], beardDepth: 1.8, bridge: 6, beardLine: 22, browDrop: 8, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -16, neckBlend: 9, lidSoft: 4, earFlare: 0.3, zygo: 8 },
+  warrior: { jaw: 50, chin: 14, chinFwd: 6, brow: 1.4, cheek: 1.1, noseLen: 55, noseW: 13.2, nosePro: 1.14, hump: 0.9, lips: 0.72, long: 0.98, tip: 1.15, eyeOpen: 2.9, iris: [0.37, 0.36, 0.3], beardDepth: 0.8, bridge: 6, beardLine: 22, browDrop: 8, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -16, neckBlend: 9, lidSoft: 4, earFlare: 0.3, zygo: 8, bridgeW: 6.8 },
   // longer and leaner, high cheekbones, a long straight nose
   mage: { jaw: 50, chin: 19, chinFwd: 0, brow: 1.05, cheek: 1.25, noseLen: 57, noseW: 16.5, nosePro: 1.1, hump: 0.4, lips: 1, long: 1.04, eyeOpen: 4.3, iris: [0.3, 0.42, 0.34], beardDepth: 6 },
 };
@@ -200,12 +202,14 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
     // the eyeball's own surface, just behind the rendered eye
     d = Math.min(d, ball - (EYE.r - 0.35));
   }
-  if (ax < 30 && y > 55 && y < 135) {
+  // (the box holds the bridge's top too: cut off at its edge, the skin and the occlusion sampled out from it step)
+  if (ax < 30 && y > 55 && y < 146) {
     // the nose: a narrow ridge from between the eyes to the tip over a body that widens to the
     // nostrils, a hump on the bridge, the rounded tip, the nostrils' wings with a crease round them
     const nl = F.noseLen, np = F.nosePro, ty = 124 - nl + 4, tz = 90 + 22 * np;
     const tilt = Math.atan2(tz - 88, 124 - ty);
-    d = smin(d, tilted(ax, y, z, 0, (124 + ty) / 2 + 2, (88 + tz) / 2 - 1.5, 5.2, nl / 2 + 3, 4.6, tilt), 5);
+    // (a broad ridge blends in more softly: a narrow valley along its side shows as a line)
+    d = smin(d, tilted(ax, y, z, 0, (124 + ty) / 2 + 2, (88 + tz) / 2 - 1.5, F.bridgeW ?? 5.2, nl / 2 + 3, 4.6, tilt), F.bridgeW ? 8 : 5);
     d = smin(d, tilted(ax, y, z, 0, lerp(124, ty, 0.64), lerp(88, tz, 0.64) - 8, 10, nl * 0.42, 7.5, tilt), 7);
     if (F.bridge) d = smin(d, ell(ax, y, z, 0, 126, 86 + F.bridge, 7, 10, 5), 5);
     if (F.hump > 0) d = smin(d, ell(ax, y, z, 0, 124 - nl * 0.42, 90 + 12.5 * np, 5, 7, 3 + F.hump), 4);
@@ -373,6 +377,8 @@ export interface FaceLook {
   eyeShade?: number;
   /** how rosy the cheeks, nose, chin and lips' surround are (1 average) */
   flush?: number;
+  /** the crease round the wings of the nose and the shine on its tip (0 none, 1 clear) */
+  alar?: number;
   /** how glossy the lips are (1 average: moist; less, dry and matte, no shine along the lower lip) */
   lipGloss?: number;
   /** the face's outer edge darker, the temples and the cheeks' sides, as the hair standing over them shades them, and the
@@ -381,7 +387,7 @@ export interface FaceLook {
 }
 
 export const LOOKS: Record<keyof typeof FACES, FaceLook> = {
-  warrior: { skin: [0.8, 0.68, 0.65], hair: [0.155, 0.112, 0.07], streak: [0.4, 0.3, 0.18], ao: 0.55, beardHair: [0.38, 0.27, 0.16], eyeShade: 0.55, flush: 1.8, lipGloss: 0.3, grey: 0.02, beard: 1, age: 0.25, brows: 1.05, hairDrop: 20, cheekShade: 1, stubble: 0.8, contour: 0.45, browArch: 0.2, pores: 0.45, lipTint: 1.1, nostrils: 1.1, browTail: 0, browFill: 0.15, browEven: 1, under: 0, browLift: 2.5, templeDrop: 22 },
+  warrior: { skin: [0.8, 0.68, 0.65], hair: [0.155, 0.112, 0.07], streak: [0.4, 0.3, 0.18], ao: 0.55, beardHair: [0.38, 0.27, 0.16], eyeShade: 0.55, flush: 1.8, lipGloss: 0.3, grey: 0.02, beard: 1, age: 0.25, brows: 1.05, hairDrop: 20, cheekShade: 1, stubble: 0.8, contour: 0.45, browArch: 0.2, pores: 0.45, lipTint: 1.1, nostrils: 1.5, alar: 1, browTail: 0, browFill: 0.15, browEven: 1, under: 0, browLift: 2.5, templeDrop: 22 },
   mage: { skin: [0.78, 0.57, 0.46], hair: [0.12, 0.08, 0.058], streak: [0.28, 0.19, 0.13], grey: 0.06, beard: 1, age: 1 },
 };
 
@@ -539,8 +545,7 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
       if (L.contour && z > 20) {
         const ex0 = ax - EYE.x, ey0 = yy - EYE.y;
         const shade = 0.9 * G(ex0 + 12, ey0 - 2, 0, 9) + 0.6 * G(ex0, ey0 - 9, 0, 11) + 0.55 * G(ax - 17, yy - (nb + 12), 0, 7)
-          + 0.45 * G(ax - 48, yy - 66, 0, 14) * sm(40, 65, z) + 0.5 * sm(30, 12, yy) * sm(10, 30, ax)
-          + (L.cheekShade ? 1.6 * G(ax - 13, yy - 99, (z - 88) * 0.5, 6) : 0);
+          + 0.45 * G(ax - 48, yy - 66, 0, 14) * sm(40, 65, z) + 0.5 * sm(30, 12, yy) * sm(10, 30, ax);
         const k2 = 1 - L.contour * 0.22 * Math.min(1.2, shade);
         c[0] *= k2; c[1] *= k2 * 0.98; c[2] *= k2 * 0.98;
       }
@@ -583,8 +588,17 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
       }
       // --- nostrils
       if (ax < 20 && Math.abs(yy - nb) < 16 && z > 80) {
-        const nk = L.nostrils ?? 1, nos = G(ax - (F.noseW - 10), yy - (nb - 5.5 + (nk - 1) * 1.5), (z - (tz - 10 + (nk - 1) * 6)) * 0.5, 3.2 * Math.sqrt(nk)) * sm(nb - 1, nb - 5 - (nk - 1) * 2, yy);
+        // (with a crease round the wings, a little forward and apart: seen from the front, at the base of the tip)
+        const nf = L.alar ? 3 : 0, nk = L.nostrils ?? 1, nos = G(ax - (F.noseW - 10 + nf * 0.6), yy - (nb - 5.5 + (nk - 1) * 1.5), (z - (tz - 10 + (nk - 1) * 6 + nf)) * 0.5, 3.2 * Math.sqrt(nk)) * sm(nb - 1, nb - 5 - (nk - 1) * 2, yy);
         mix(Math.min(0.95, 0.9 * nk * nos), 0.12, 0.05, 0.04);
+        if (L.alar) {
+          // the crease round each wing of the nose, and the tip catching the light (a column of even skin reads flat)
+          const r = Math.hypot((ax - (F.noseW - 6.5)) / 7.5, (yy - (nb - 3)) / 6.8);
+          // (over the top of the wing and round its outside: below, the nostril is the shadow)
+          const crease = L.alar * Math.exp(-(((r - 1) / 0.2) ** 2)) * sm(F.noseW - 9, F.noseW - 4, ax) * sm(nb - 5, nb - 1, yy);
+          c[0] *= 1 - 0.22 * crease; c[1] *= 1 - 0.27 * crease; c[2] *= 1 - 0.27 * crease;
+          rr -= L.alar * 0.18 * G(x, yy - nb, (z - tz) * 0.6, 6);
+        }
       }
       // --- lips: the vermilion with its fine vertical lines, and the line between them
       const my = mouthY(Math.min(ax, 24)), mouth = ax < 30 && yy > 25 && yy < 62 && z > 80;
