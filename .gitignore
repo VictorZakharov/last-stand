@@ -7,3 +7,4 @@ dist/
 tools/facelab/.venv/
 tools/facelab/out/
 tools/facelab/__pycache__/
+tools/facelab/models/

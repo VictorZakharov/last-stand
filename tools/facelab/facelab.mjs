@@ -7,6 +7,9 @@
 //                                                      head_side.png (cropped from one sheet, so at one scale)
 //   ... --points path/to/points.json                   and landmarks placed by hand on the reference (annotate.py),
 //                                                      against the model's own (landmarks.ts; points.py compares them)
+//   With --turn the reference is also rebuilt in 3D (recon.py, kept in head_recon/ beside the views until they change)
+//   and our head compared with it everywhere on its surface (dense.py); `node tools/facelab/fit.mjs <out dir>` then
+//   fits the face's shape to it (see the README).
 //
 // It starts its own Vite dev server (a fresh one each run: a long-running one serves stale modules after edits)
 // and a headless browser (the Playwright Chromium if installed, else Edge or Chrome). Output goes to
@@ -14,7 +17,7 @@
 import { createServer } from 'vite';
 import { chromium } from 'playwright-core';
 import { spawnSync } from 'child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -28,6 +31,17 @@ if (flag('setup')) {
   const run = (cmd, a) => { const r = spawnSync(cmd, a, { stdio: 'inherit' }); if (r.status) process.exit(r.status); };
   if (!existsSync(PY)) run(sys, ['-m', 'venv', VENV]);
   run(PY, ['-m', 'pip', 'install', '-q', '-r', join(HERE, 'requirements.txt')]);
+  // the face model for rebuilding a reference in 3D (recon.py): the Basel Face Model as 3DDFA_V2 uses it, and its
+  // network (the BFM's licence is for research: it stays in tools/facelab/models, never committed or shipped)
+  const MODELS = join(HERE, 'models'), HF = 'https://huggingface.co/Stable-Human/3ddfa_v2/resolve/main/';
+  mkdirSync(MODELS, { recursive: true });
+  for (const f of ['bfm_noneck_v3.pkl', 'tri.pkl', 'param_mean_std_62d_120x120.pkl', 'resnet22.onnx']) {
+    if (existsSync(join(MODELS, f))) continue;
+    const r = await fetch(HF + f);
+    if (!r.ok) { console.error(`facelab: couldn't fetch ${f} (${r.status})`); process.exit(1); }
+    writeFileSync(join(MODELS, f), Buffer.from(await r.arrayBuffer()));
+    console.log(`facelab: ${f}`);
+  }
   console.log('facelab: ready');
   process.exit(0);
 }
@@ -44,6 +58,23 @@ if (!REF || !existsSync(REF)) { console.error('facelab: --ref <reference picture
 if (!existsSync(PY)) { console.error('facelab: run `npm run facelab -- --setup` first'); process.exit(1); }
 const OUT = join(HERE, 'out', TAG);
 mkdirSync(OUT, { recursive: true });
+const QUIET = { ...process.env, GLOG_minloglevel: '3', TF_CPP_MIN_LOG_LEVEL: '3', PYTHONWARNINGS: 'ignore' };
+
+// a turnaround's reference rebuilt in 3D, once per set of views (its side panel's turn decides where ours is shot from)
+let REC = null, SIDE_AZ = 90;
+if (TURN) {
+  const views = ['front', '34', 'side'].map((v) => `${TURN}${v}.png`), rec = `${TURN}recon`, done = join(rec, 'recon.json');
+  const newer = (f) => existsSync(f) && (!existsSync(done) || statSync(f).mtimeMs > statSync(done).mtimeMs);
+  if (!existsSync(join(HERE, 'models', 'resnet22.onnx'))) console.warn('facelab: no face model for the 3D rebuild: run `npm run facelab -- --setup`');
+  else {
+    if (!existsSync(done) || [...views, POINTS, join(HERE, 'recon.py')].some((f) => f && newer(f))) {
+      const r = spawnSync(PY, [join(HERE, 'recon.py'), rec, ...views.map((f, i) => `${['front', '34', 'side'][i]}=${f}`), ...(POINTS ? [`--points=${POINTS}`] : [])], { stdio: ['ignore', 'inherit', 'pipe'], env: QUIET });
+      if (r.status) { console.error(String(r.stderr)); process.exit(r.status); }
+    }
+    REC = rec;
+    SIDE_AZ = Math.min(90, Math.max(60, Math.round(Math.abs(JSON.parse(readFileSync(done, 'utf8')).yaw.side) / 5) * 5));
+  }
+}
 
 // the page must never capture the real pointer (the harness runs beside someone's desktop)
 const NO_CAPTURE = () => {
@@ -186,7 +217,7 @@ try {
   // a turnaround's views: ours at a sweep of three-quarter turns (turn.py picks the one matching the reference's) and the
   // side, as it looks and in clay, and the side's outline (the skin alone, and with the hair)
   if (TURN) {
-    const AZ = [20, 25, 30, 35, 40, 45, 90], pts = {};
+    const AZ = [20, 25, 30, 35, 40, 45, 60, 65, 70, 75, 80, 85, 90], pts = {};
     const shoot = async (name, az) => {
       await p.evaluate((a) => { window.__orbit = { az: a * Math.PI / 180, el: 0 }; }, az);
       await p.waitForTimeout(400);
@@ -207,7 +238,7 @@ try {
     });
     // (rendered straight into a target: the game's bloom and grade would blur the outline)
     const raw = async (name) => {
-      await p.evaluate(() => { window.__orbit = { az: Math.PI / 2, el: 0 }; });
+      await p.evaluate((a) => { window.__orbit = { az: a * Math.PI / 180, el: 0 }; }, SIDE_AZ);
       await p.waitForTimeout(300);
       const png = await p.evaluate(() => {
         const { THREE } = __dev, G = __G, cam = G.camera, cv = G.renderer.domElement, W = cv.width, H = cv.height, r = G.renderer;
@@ -221,12 +252,12 @@ try {
       });
       writeFileSync(join(OUT, name), Buffer.from(png, 'base64'));
     };
-    await raw('turn-sil-90.png');
+    await raw('turn-sil.png');
     await p.evaluate(() => {
       const { THREE } = __dev;
       for (const [o, m, v] of window.__clayRestore) if (o.name === 'hair') { o.visible = v; o.material = new THREE.MeshBasicMaterial({ color: 0xffffff, map: m.map, alphaTest: m.alphaTest, side: THREE.DoubleSide }); }
     });
-    await raw('turn-silhair-90.png');
+    await raw('turn-silhair.png');
     await p.evaluate(() => { for (const [o, m, v] of window.__clayRestore) { o.material = m; o.visible = v; } window.__clay = null; __G.scene.background = window.__bg; });
   }
   await p.evaluate(() => { window.__orbit = null; });
@@ -300,7 +331,11 @@ if (POINTS) {
   if (t.status) { console.error(String(t.stderr)); process.exit(t.status); }
 }
 if (TURN) {
-  const t = spawnSync(PY, [join(HERE, 'turn.py'), TURN, OUT], { stdio: ['ignore', 'inherit', 'pipe'], env: { ...process.env, GLOG_minloglevel: '3', TF_CPP_MIN_LOG_LEVEL: '3', PYTHONWARNINGS: 'ignore' } });
+  const t = spawnSync(PY, [join(HERE, 'turn.py'), TURN, OUT, String(SIDE_AZ)], { stdio: ['ignore', 'inherit', 'pipe'], env: QUIET });
+  if (t.status) { console.error(String(t.stderr)); process.exit(t.status); }
+}
+if (REC) {
+  const t = spawnSync(PY, [join(HERE, 'dense.py'), OUT, REC, CLS, ...(POINTS ? [POINTS] : [])], { stdio: ['ignore', 'inherit', 'pipe'], env: QUIET });
   if (t.status) { console.error(String(t.stderr)); process.exit(t.status); }
 }
 console.log(`facelab: sheets and report in ${OUT}`);

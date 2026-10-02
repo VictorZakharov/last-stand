@@ -4,7 +4,8 @@ Compares a hero's head with a reference picture, feature by feature, so a face i
 close-ups instead of screenshots judged by eye in a biome's changing light.
 
 ```bash
-npm run facelab -- --setup                                  # once: a Python venv in tools/facelab/.venv
+npm run facelab -- --setup                                  # once: a Python venv in tools/facelab/.venv and the face
+                                                            # model (tools/facelab/models, not committed: research licence)
 npm run facelab -- --ref path/to/reference.jpg --tag try1   # render and compare
 # with a turnaround's head views and landmarks placed by hand on the reference (see below)
 npm run facelab -- --ref head_front.png --turn path/to/head_ --points points.json --tag try2
@@ -73,7 +74,40 @@ where you like and pass its path. Any front view of a face works, a full-body sh
    landmarks found alike on both (glabella, nasion, nose tip, subnasale, lips, chin: `sideprofile.py`), the profile
    angles beside the norms for a man's face (facial convexity, nasofrontal, nasolabial, the lips to the E-line), and
    the profile row by row; the head's outline with the hair. `sheet-turn.png` shows each view: reference | ours | ours
-   in clay | both over each other.
+   in clay | both over each other. A turnaround's "side" needn't be a profile: it is compared with ours at the side
+   panel's own turn, which the 3D rebuild fits (this reference's is about 65 degrees); the profile norms are a true
+   profile's.
+7. **The surface** (with `--turn`; `recon.py`, `dense.py`): outlines and a few points leave the surface between them
+   free, and a face sculpted to match them alone came out with flat fronts, puffed cheeks, a shelf of a brow and
+   grooves. So the reference is rebuilt in 3D the way face reconstruction is done: a statistical model of real faces
+   (the Basel Face Model: a mean face and 40 ways faces differ, from laser scans; 10 more for expressions) fitted to
+   all three views at once (3DDFA_V2's network gives each view a start; then one shape and a pose per view by least
+   squares to MediaPipe's landmarks, the side's profile and the hand-placed jaw outline; the views' turns fitted too,
+   from two starts). Whatever the pictures hide comes out as a real face's would. It's kept beside the views
+   (`<prefix>recon/`, `recon-views.png` shows the fit on each view) until they change. Our head is then measured
+   against it everywhere, as reconstructions are scored against scans (the NoW benchmark: each point's distance to the
+   other surface after a rigid alignment), the two laid together by the inner landmarks (brows, eyes, nose, mouth) of
+   the face model fitted to each (they correspond one to one: a Procrustes fit, as geometric morphometrics compares
+   faces), at our eyes' spacing. Three maps, each from the front and the reference's own turns (`sheet-dense.png`):
+   - **ours against the reference**: where ours stands out of it (red) or sinks under it (blue), region by region in mm;
+   - **ours against the real face nearest it** (the same face model fitted straight to our distance field): what it
+     can't follow is where ours is unlike any real face, whatever the reference: a lump, a hollow, a shelf;
+   - **our skin's curvature** on its own mesh (the distance field's Laplacian): a groove or a seam shows as a thin line,
+     however the light falls; the report gives how much of the skin away from the eyes, nose and mouth is sharper than
+     a 7 mm radius.
+   Checked on our own renders, whose shape is known: the rebuild recovers the views' turns within a few degrees where
+   it has landmarks; what the face model can't represent (fine features: the eyes' lids, the nostrils, the lips' rolls)
+   shows in both maps alike, so read the nose, lips and eyes from the landmarks and close-ups instead.
+8. **Fitting the shape** (`node tools/facelab/fit.mjs <out dir> [--apply]`): instead of tuning knots by hand, the face's
+   shape is fitted to the surface by least squares (Levenberg-Marquardt, analysis by synthesis): the mask's knots and
+   the skull's, the brow's, the jaw's and the chin's values against the distance from our skin at 6000 points of the
+   rebuilt reference (`fit-target.*`, written by `dense.py`), plus the front view's widths from the hand-placed points
+   where the rebuilt face doesn't reach (the face's sides), the reference's pose free but its eyes on ours. The mask
+   is kept smooth, every value pulled weakly to where it was, and the knots the reference doesn't reach are held; the
+   nose, lips and eyes are left out (the face model's are coarse: fitted to it, the nose came out twice as wide), and
+   the lips stay where they were when the muzzle moves. Check a fit's clay views and curvature map before keeping it:
+   a value driven to an extreme can leave a needle of a shape between the target's points (a crease), and a shape the
+   mask makes redundant can stand out of it with grooves round it.
 
 ## Output (`tools/facelab/out/<tag>/`)
 
@@ -94,6 +128,8 @@ where you like and pass its path. Any front view of a face works, a full-body sh
 - `sheet-sides.png`: the face's sides as each picture shows them.
 - `sheet-points.png` (with `--points`): the reference's hand-placed points green, ours red.
 - `sheet-turn.png` (with `--turn`): the three-quarter and side views and their outlines.
+- `sheet-dense.png` (with `--turn`): ours against the rebuilt reference, against the real face nearest it, and our
+  skin's curvature, each from the front and the reference's turns; `fit-target.f32` / `.json`, the fitter's target.
 - `report.txt` (and `.json`): proportions as shares of the distance between the eye centres (eye size and opening,
   brow height, nose length and width, lips, mouth to chin, face and jaw width), the reference's beside ours; each
   feature's mean landmark error; the outline's half-width every 0.2 eye distances down from the eye line; the brows

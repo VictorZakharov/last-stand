@@ -28,12 +28,14 @@ export function front(F: FaceShape, x: number, y: number): number {
 }
 
 /** the jaw's lower edge seen from the front at x: going down the face, the last point before its front falls back to the
- *  neck behind it (or away) */
+ *  neck behind it (or away), or turns under so far that it's seen edge on (within about 15 degrees: a jaw rounding
+ *  smoothly into the neck has no jump to find) */
 export function jawEdge(F: FaceShape, x: number, from = 60): P3 | null {
   let last: P3 | null = null;
   for (let y = from; y > -60; y -= 0.5) {
     const z = front(F, x, y);
     if (!Number.isFinite(z) || (last && z < last[2] - 6)) return last;
+    if (last && last[2] - z > 0.5 * 3.7) return last;
     last = [x, y, z];
   }
   return last;

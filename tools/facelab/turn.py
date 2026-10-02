@@ -9,7 +9,10 @@ is laid out in millimetres from the near eye, so a difference reads as one in th
     ours from its silhouette; its landmarks (glabella, nasion, nose tip, subnasale, lips, chin) found the same way on
     both, the profile angles beside the norms for a man's face, and the profile itself row by row.
 Writes sheet-turn.png (reference | ours | ours in clay | both outlines over each other) and appends to report.txt.
-python turn.py <prefix of head_front.png, head_34.png, head_side.png> <out dir>
+The side panel is compared with ours at the panel's own turn (recon.py fits it; this reference's is about 70 degrees, not
+a profile): the outlines compare like for like, but the profile's norms are a true profile's, so read its angles as
+the two outlines' difference, and the true profile in dense.py's surface.
+python turn.py <prefix of head_front.png, head_34.png, head_side.png> <out dir> [the side's turn, degrees]
 """
 import sys, json
 import cv2, numpy as np
@@ -17,6 +20,8 @@ import mediapipe as mp
 import sideprofile
 
 PRE, OUT = sys.argv[1], sys.argv[2]
+# the side panel's turn (recon.py fits it: a turnaround's "side" needn't be a profile), ours rendered at it
+SIDE = int(sys.argv[3]) if len(sys.argv) > 3 else 90
 EYE_MM = 64.0  # our eyes' centres apart (face.ts EYE.x twice)
 S = 3.0        # the sheet's pixels per mm
 # the sheet's frame round the near eye (mm: x to the picture's right, y up), per view
@@ -68,7 +73,7 @@ L34 = landmarks(ref['34'])
 if L34 is None: raise SystemExit('turn: no face found in the three-quarter view')
 NEAR, FAR = 473, 468  # (the reference turns his left side to us, as ours does at +az)
 pick, best = None, 1e9
-for az in sorted(a for a in PTS if a < 80):
+for az in sorted(a for a in PTS if a <= 45):
     im = cv2.imread(f'{OUT}/turn-{az}.png')
     L = landmarks(im)
     if L is None: continue
@@ -105,10 +110,10 @@ X0, X1, Y0, Y1 = FRAMES['side']
 LS = landmarks(ref['side'])
 if LS is None: raise SystemExit('turn: no face found in the side view')
 rs, Mrs = to_frame(ref['side'], LS[NEAR], REF_MM)
-os_, _ = to_frame(cv2.imread(f'{OUT}/turn-90.png'), PTS[90]['eye'], PTS[90]['mm'])
-cs, _ = to_frame(cv2.imread(f'{OUT}/turn-clay-90.png'), PTS[90]['eye'], PTS[90]['mm'])
-sil, _ = to_frame(cv2.imread(f'{OUT}/turn-sil-90.png'), PTS[90]['eye'], PTS[90]['mm'], cv2.INTER_LINEAR)
-silh, _ = to_frame(cv2.imread(f'{OUT}/turn-silhair-90.png'), PTS[90]['eye'], PTS[90]['mm'], cv2.INTER_LINEAR)
+os_, _ = to_frame(cv2.imread(f'{OUT}/turn-{SIDE}.png'), PTS[SIDE]['eye'], PTS[SIDE]['mm'])
+cs, _ = to_frame(cv2.imread(f'{OUT}/turn-clay-{SIDE}.png'), PTS[SIDE]['eye'], PTS[SIDE]['mm'])
+sil, _ = to_frame(cv2.imread(f'{OUT}/turn-sil.png'), PTS[SIDE]['eye'], PTS[SIDE]['mm'], cv2.INTER_LINEAR)
+silh, _ = to_frame(cv2.imread(f'{OUT}/turn-silhair.png'), PTS[SIDE]['eye'], PTS[SIDE]['mm'], cv2.INTER_LINEAR)
 # (the reference's head: skin, hair and beard, warm against the grey background; the hood under it is blue-green)
 hsv = cv2.cvtColor(rs, cv2.COLOR_BGR2HSV).astype(np.float32)
 bg = np.median(rs[:, :12].reshape(-1, 3), 0)
@@ -140,6 +145,7 @@ def front_line(m):
 
 fR, fO = front_line(mR), front_line(mO)
 pl, PR, PO = sideprofile.report(fR, fO, ys)
+if SIDE != 90: lines.append(f'  (the side panel is turned about {SIDE} deg, ours alike: the norms below are for a true profile)')
 lines += pl
 json.dump({'ys': ys.tolist(), 'f': [None if not np.isfinite(v) else float(v) for v in fR]}, open(f'{OUT}/turn-ref-profile.json', 'w'))
 
@@ -158,7 +164,7 @@ cR, _ = cv2.findContours(headR, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 hl = rs.copy()
 cv2.drawContours(hl, [c for c in cR if cv2.contourArea(c) > 2000], -1, (0, 0, 255), 2, cv2.LINE_AA)
 cv2.drawContours(hl, [c for c in cH if cv2.contourArea(c) > 2000], -1, (255, 255, 0), 2, cv2.LINE_AA)
-rows.append([label(rs.copy(), 'reference side'), label(os_, 'ours'), label(cs, 'ours in clay'), label(ov, 'profiles: reference red, ours cyan')])
+rows.append([label(rs.copy(), f'reference side (turned about {SIDE} deg)'), label(os_, f'ours at {SIDE} deg'), label(cs, 'ours in clay'), label(ov, 'profiles: reference red, ours cyan')])
 rows.append([label(hl, 'head outline: reference red, ours (with hair) cyan')])
 grid = [cv2.resize(np.concatenate(r, 1), None, fx=0.6, fy=0.6, interpolation=cv2.INTER_AREA) for r in rows]
 wd = max(g.shape[1] for g in grid)
