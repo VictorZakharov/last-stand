@@ -270,6 +270,78 @@ ours_c = warp_ours(ours, box)
 for q in cnt[0]: cv2.circle(ours_c, tuple(q[0]), 2, (0, 0, 255), -1)
 cv2.imwrite(f'{OUT}/sheet-outline.png', np.concatenate([label(ov, 'face outline: ref green, ours red'), label(ours_c, 'ours')], 1))
 
+# --- the face's sides as the pictures show them: the skin and beard the hair leaves in view, found alike on both (the
+# reference's warm, light region round its cheeks, the hair far darker; ours its skin where no hair covers it, the jaw
+# where it stands in front of the neck). A face whose sides run straight down from the temples to the jaw's angles reads
+# square and lean; one widest at the cheekbones, curving in above and below, reads round and swollen
+hsv_r = cv2.cvtColor(zoom_ref(box), cv2.COLOR_BGR2HSV)
+skin_r = (((hsv_r[..., 0] < 25) | (hsv_r[..., 0] > 165)) & (hsv_r[..., 1] > 50) & (hsv_r[..., 2] > 105)).astype(np.uint8)
+skin_r = cv2.morphologyEx(skin_r, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+_, lab_r = cv2.connectedComponents(skin_r)
+seeds = [lab_r[q[1], q[0]] for q in to_crop(LR[[50, 280, 205, 425, 101, 330]], box) if 0 <= q[1] < lab_r.shape[0] and 0 <= q[0] < lab_r.shape[1]]
+seeds = [k for k in seeds if k]
+vis_r = (lab_r == max(set(seeds), key=seeds.count)).astype(np.uint8) if seeds else np.zeros_like(skin_r)
+hair_o = warp_ours(hair, box, cv2.INTER_LINEAR) > 60
+dep_vis = dep.copy(); dep_vis[hair_o] = 0
+
+
+def vis_span(yref, who):
+    r = int((yref - y0) * Z)
+    if who == 'ours':
+        if r < 0 or r >= dep_vis.shape[0] or not dep_vis[r].any(): return None
+        global dep
+        keep, dep = dep, dep_vis
+        try: return mask_span(yref)
+        finally: dep = keep
+    if r < 0 or r >= vis_r.shape[0]: return None
+    on = np.nonzero(vis_r[r])[0]
+    return (x0 + on.min() / Z, x0 + on.max() / Z) if on.size else None
+
+
+lines.append('')
+lines.append("the face's sides as the pictures show them (skin and beard in view; eye distances from the middle, rows below the eye line)")
+sides = {}
+for who in ('ref', 'ours'):
+    pts = []
+    for k in np.arange(-0.5, 1.95, 0.1):
+        sp = vis_span(eye_y + k * iod, who)
+        if sp: pts.append((k, (mid_x - sp[0]) / iod, (sp[1] - mid_x) / iod))
+    sides[who] = np.array(pts) if pts else np.zeros((0, 3))
+for k in np.arange(-0.5, 1.95, 0.1):
+    f = lambda who: next((f'{a:5.2f} | {b:5.2f}' for kk, a, b in sides[who] if abs(kk - k) < 1e-6), '     --     ')
+    lines.append(f'  {k:+4.1f}   ref {f("ref")}   ours {f("ours")}')
+
+
+def straight(P, lo=-0.4, hi=1.1):
+    """each side from the temple to the jaw's angle: a line fitted to it, its slope (degrees in from upright, going down) and
+    how far it bows out of that line (eye-distance hundredths, the most and the mean)"""
+    out = []
+    for c in (1, 2):
+        Q = P[(P[:, 0] >= lo - 1e-6) & (P[:, 0] <= hi + 1e-6)]
+        if len(Q) < 5: out.append(None); continue
+        b, a = np.polyfit(Q[:, 0], Q[:, c], 1)
+        dev = Q[:, c] - (a + b * Q[:, 0])
+        out.append((float(np.degrees(np.arctan(-b))), float(dev.max() * 100), float(np.abs(dev).mean() * 100)))
+    return out
+
+
+for who in ('ref', 'ours'):
+    st = straight(sides[who])
+    f = lambda t: f'slope {t[0]:+5.1f} deg, bows out {t[1]:4.1f} (mean off {t[2]:3.1f})' if t else '--'
+    lines.append(f"  {who:4s} sides temple to jaw angle (-0.4..1.1): his right {f(st[0])}; his left {f(st[1])}")
+w_at = lambda who, k: next((a + b for kk, a, b in sides[who] if abs(kk - k) < 1e-6), float('nan'))
+for who in ('ref', 'ours'):
+    lines.append(f"  {who:4s} full width at the temples (-0.4) {w_at(who, -0.4):.2f}, cheekbones (+0.3) {w_at(who, 0.3):.2f}, mouth (+1.0) {w_at(who, 1.0):.2f}, "
+                 f"jaw (+1.3) {w_at(who, 1.3):.2f}, chin (+1.6) {w_at(who, 1.6):.2f}; jaw over temples {w_at(who, 1.0) / w_at(who, -0.4):.2f}")
+sv = zoom_ref(box)
+for who, col in (('ref', (0, 220, 0)), ('ours', (0, 0, 255))):
+    for kk, a, b in sides[who]:
+        yy = int((eye_y + kk * iod - y0) * Z)
+        for xx in (mid_x - a * iod, mid_x + b * iod): cv2.circle(sv, (int((xx - x0) * Z), yy), 4, col, -1)
+so = warp_ours(ours, box)
+so[dep_vis > 0] = (so[dep_vis > 0] * 0.6 + np.array([0, 0, 100])).astype(np.uint8)
+cv2.imwrite(f'{OUT}/sheet-sides.png', np.concatenate([label(sv, "face's sides in view: ref green, ours red"), label(so, 'ours, its face in view tinted')], 1))
+
 # --- the brows, found the same way in both: the dark band above each eye, column by column
 box = crop_box(SHEETS['eyes'][0], SHEETS['eyes'][1])
 Z = max(2, round(800 / (box[2] - box[0])))
@@ -422,6 +494,42 @@ for k, s in stats.items():
     dE = float(np.linalg.norm(np.subtract(o, r))); dEs.append(dE); s['dE'] = dE
     lines.append(f'  {k:14s} {r[0]:5.1f} {r[1]:5.1f} {r[2]:5.1f}   {o[0]:5.1f} {o[1]:5.1f} {o[2]:5.1f}   {dE:5.1f}   {r[0] - fl_r:+8.1f} / {o[0] - fl_o:+6.1f}   {s["ref_sd"]:5.1f}/{s["ours_sd"]:4.1f}')
 lines.append(f'  mean dE over the regions {np.mean(dEs):.1f}')
+# --- relief: the light and shade of forms a few mm to a couple of cm across (a cheekbone, a brow ridge, a jaw standing out),
+# the skin's fine texture and the broad fall of the light both filtered off: a face whose bones stand out shades strongly
+# over them, a smooth one gently. Lightness band-passed (Gaussians of 0.035 and 0.22 eye distances), its spread per region
+bp = lambda L: cv2.GaussianBlur(L, (0, 0), 0.035 * iod * ZM) - cv2.GaussianBlur(L, (0, 0), 0.22 * iod * ZM)
+reliefR, reliefO = bp(labR[..., 0]), bp(labO[..., 0])
+# (ours in clay under the same light, warped the same way: the share of the relief that is the shape, not the paint)
+clay_img = cv2.imread(f'{OUT}/ours-clay.png')
+reliefC = None
+if clay_img is not None:
+    clay4 = up(cv2.warpAffine(cv2.resize(clay_img, None, fx=s_, fy=s_, interpolation=cv2.INTER_AREA), Ms, (RW, RH), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE))
+    reliefC = bp(lab(morph(clay4, LO4, LR4, delaunay(LR4, keep)))[..., 0])
+RREG = {
+    'forehead': REG['forehead'], 'temple R': mask_circle(F_(-0.95, -0.35), 0.13 * iod * ZM), 'temple L': mask_circle(F_(0.95, -0.35), 0.13 * iod * ZM),
+    'brow R': REG['brow R'], 'brow L': REG['brow L'], 'upper lid R': REG['upper lid R'], 'upper lid L': REG['upper lid L'],
+    'under eye R': REG['under eye R'], 'under eye L': REG['under eye L'],
+    'cheekbone R': mask_circle(F_(-0.72, 0.35), 0.16 * iod * ZM), 'cheekbone L': mask_circle(F_(0.72, 0.35), 0.16 * iod * ZM),
+    'cheek R': mask_circle(F_(-0.7, 0.85), 0.16 * iod * ZM), 'cheek L': mask_circle(F_(0.7, 0.85), 0.16 * iod * ZM),
+    'beside nose R': mask_circle(F_(-0.3, 0.45), 0.1 * iod * ZM), 'beside nose L': mask_circle(F_(0.3, 0.45), 0.1 * iod * ZM),
+    'jaw R': REG['jaw R'], 'jaw L': REG['jaw L'], 'chin': REG['chin'],
+}
+lines.append('')
+lines.append("relief (lightness of forms 2-14 mm across, the texture and the light's broad fall filtered off): its spread per region,")
+lines.append('  ref / ours painted / ours in clay (the shape alone, same light); more: the forms there stand out more, or the paint is blotchier')
+rel = []
+for k, m in RREG.items():
+    on = m == 1
+    if on.sum() < 4: continue
+    a_, b_ = float(reliefR[on].std()), float(reliefO[on].std()); c_ = float(reliefC[on].std()) if reliefC is not None else float('nan')
+    rel.append((k, a_, b_, c_))
+    lines.append(f'  {k:14s} {a_:5.2f} / {b_:5.2f} / {c_:5.2f}   painted {b_ / max(a_, 1e-3):4.1f}x, clay {c_ / max(a_, 1e-3):4.1f}x')
+lines.append(f'  all regions: ref {np.mean([r[1] for r in rel]):.2f}, ours painted {np.mean([r[2] for r in rel]):.2f}, in clay {np.nanmean([r[3] for r in rel]):.2f}')
+vis = lambda R_: cv2.applyColorMap(np.uint8(np.clip(R_ * 6 + 128, 0, 255)), cv2.COLORMAP_TWILIGHT_SHIFTED)
+cut_ = crop_box(OVAL, 0.35)
+sh_ = lambda R_: cv2.resize(vis(R_)[max(0, cut_[1] * ZM):cut_[3] * ZM, max(0, cut_[0] * ZM):cut_[2] * ZM], (700, int(700 * (cut_[3] - cut_[1]) / (cut_[2] - cut_[0]))), interpolation=cv2.INTER_AREA)
+tiles_ = [label(sh_(reliefR), 'relief: reference'), label(sh_(reliefO), 'ours painted')] + ([label(sh_(reliefC), 'ours in clay')] if reliefC is not None else [])
+cv2.imwrite(f'{OUT}/sheet-relief.png', np.concatenate(tiles_, 1))
 # (the iris's own colour: at a full-body shot's resolution an iris is a few pixels, its mean mixed with the pupil, lashes
 # and the lid's shadow; its lightest quarter is the iris itself)
 for side in ('R', 'L'):

@@ -3,6 +3,10 @@
 //
 //   npm run facelab -- --setup                         once: the Python environment (tools/facelab/.venv)
 //   npm run facelab -- --ref path/to/reference.jpg     render and compare (--class warrior, --tag name, --helm)
+//   ... --turn path/to/head_                           and a turnaround's head views: head_front.png, head_34.png,
+//                                                      head_side.png (cropped from one sheet, so at one scale)
+//   ... --points path/to/points.json                   and landmarks placed by hand on the reference (annotate.py),
+//                                                      against the model's own (landmarks.ts; points.py compares them)
 //
 // It starts its own Vite dev server (a fresh one each run: a long-running one serves stale modules after edits)
 // and a headless browser (the Playwright Chromium if installed, else Edge or Chrome). Output goes to
@@ -28,7 +32,7 @@ if (flag('setup')) {
   process.exit(0);
 }
 
-const REF = arg('ref'), CLS = arg('class', 'warrior'), TAG = arg('tag', 'latest'), SIZE = +arg('size', 1200), FOV = +arg('fov', 14);
+const REF = arg('ref'), TURN = arg('turn'), POINTS = arg('points'), CLS = arg('class', 'warrior'), TAG = arg('tag', 'latest'), SIZE = +arg('size', 1200), FOV = +arg('fov', 14);
 // the key light's direction, as the reference is lit: degrees round from the front (+ from the picture's right) and up
 const [KEY_AZ, KEY_EL] = String(arg('key', '20,30')).split(',').map(Number);
 // how strong the soft fill from all round is against the key (the shading across the face in the report shows it: a
@@ -121,7 +125,8 @@ try {
       window.__cam = cam;
     };
     // where the model's own features are, projected to the image: what a landmark detector misreads on it (the chin under a beard)
-    const F = await import('/src/entities/models/face.ts'), shape = F.FACES[G.profile.classId];
+    const F = await import('/src/entities/models/face.ts'), shape = F.FACES[G.profile.classId], LM = await import('/tools/facelab/landmarks.ts');
+    const frontLm = LM.frontPoints(shape);
     window.__points = () => {
       const cam = window.__cam, W = cv.clientWidth, H = cv.clientHeight;
       const px = (x, y, z) => { const v = head.localToWorld(toGroup(x, y, z)).project(cam); return [(v.x + 1) / 2 * W, (1 - v.y) / 2 * H]; };
@@ -130,13 +135,35 @@ try {
       let zmax = -1e9; for (let y = 30; y >= 0; y -= 0.5) zmax = Math.max(zmax, frontZ(0, y));
       let yb = 0, zb = zmax; for (let y = 20; y >= -40; y -= 0.5) { const z = frontZ(0, y); if (z < zmax - 15) break; yb = y; zb = z; }
       const E = F.EYE;
-      return { chin: px(0, yb, zb), pupilR: px(-E.x, E.y, E.z + E.r), pupilL: px(E.x, E.y, E.z + E.r) };
+      // the anthropometric landmarks (landmarks.ts), his left side and its mirror on his right
+      const lm = {};
+      for (const [k, [x, y, z]] of Object.entries(frontLm)) {
+        if (x > 0.5) { lm[k + '_l'] = px(x, y, z); lm[k + '_r'] = px(-x, y, z); } else lm[k] = px(x, y, z);
+      }
+      return { chin: px(0, yb, zb), pupilR: px(-E.x, E.y, E.z + E.r), pupilL: px(E.x, E.y, E.z + E.r), lm };
+    };
+    // the turnaround's views: pixels per mm in the head's middle plane, the near eye, the ear canal
+    window.__turnPoints = () => {
+      const cam = window.__cam, W = cv.clientWidth, H = cv.clientHeight;
+      const px = (x, y, z) => { const v = head.localToWorld(toGroup(x, y, z)).project(cam); return [(v.x + 1) / 2 * W, (1 - v.y) / 2 * H]; };
+      const a = px(0, 62, 40), b = px(0, 162, 40), E = F.EYE;
+      return { mm: Math.hypot(a[0] - b[0], a[1] - b[1]) / 100, eye: px(E.x, E.y, E.z + E.r), ear: px(75, 97, 0), nasion: px(0, 124, 90) };
     };
   }, { fov: FOV, kaz: KEY_AZ, kel: KEY_EL, fill: FILL, exposure: EXPOSURE });
   await p.waitForTimeout(1500);
   const canvas = await p.evaluateHandle(() => __G.renderer.domElement);
   writeFileSync(join(OUT, 'ours.png'), await canvas.screenshot());
   writeFileSync(join(OUT, 'points.json'), JSON.stringify(await p.evaluate(() => window.__points())));
+  // the same, in grey clay under the same light (no hair, no paint): how much of the face's light and shade is its shape
+  await p.evaluate(() => {
+    const { THREE } = __dev, G = __G, clay = new THREE.MeshStandardMaterial({ color: 0xb4aca4, roughness: 0.7 });
+    window.__clayRestore = [];
+    G.scene.traverse((o) => { if (!o.isMesh && !o.isSkinnedMesh) return; window.__clayRestore.push([o, o.material, o.visible]); if (o.name === 'hair') o.visible = false; else o.material = clay; });
+  });
+  await p.waitForTimeout(400);
+  writeFileSync(join(OUT, 'ours-clay.png'), await canvas.screenshot());
+  await p.evaluate(() => { for (const [o, m, v] of window.__clayRestore) { o.material = m; o.visible = v; } });
+  await p.waitForTimeout(300);
   // the other views, which the reference doesn't show but the game does (from above and behind most of all): a three-
   // quarter view, the side, the back, and from above behind as the third-person camera sees it
   for (const [name, az, el] of [['three-quarter', 40, 5], ['side', 90, 0], ['back', 180, 10], ['above', 160, 50]]) {
@@ -156,6 +183,52 @@ try {
     writeFileSync(join(OUT, `clay-${name}.png`), await canvas.screenshot());
   }
   await p.evaluate(() => { for (const [o, m, v] of window.__clayRestore) { o.material = m; o.visible = v; } window.__clay = null; });
+  // a turnaround's views: ours at a sweep of three-quarter turns (turn.py picks the one matching the reference's) and the
+  // side, as it looks and in clay, and the side's outline (the skin alone, and with the hair)
+  if (TURN) {
+    const AZ = [20, 25, 30, 35, 40, 45, 90], pts = {};
+    const shoot = async (name, az) => {
+      await p.evaluate((a) => { window.__orbit = { az: a * Math.PI / 180, el: 0 }; }, az);
+      await p.waitForTimeout(400);
+      writeFileSync(join(OUT, name), await canvas.screenshot());
+    };
+    for (const az of AZ) { await shoot(`turn-${az}.png`, az); pts[az] = await p.evaluate(() => window.__turnPoints()); }
+    writeFileSync(join(OUT, 'turn-points.json'), JSON.stringify(pts));
+    await p.evaluate(() => {
+      const { THREE } = __dev, G = __G, clay = new THREE.MeshStandardMaterial({ color: 0xb4aca4, roughness: 0.7 });
+      window.__clayRestore = [];
+      G.scene.traverse((o) => { if (!o.isMesh && !o.isSkinnedMesh) return; window.__clayRestore.push([o, o.material, o.visible]); if (o.name === 'hair') o.visible = false; else o.material = clay; });
+    });
+    for (const az of AZ) { await p.evaluate((a) => { window.__clay = { az: a * Math.PI / 180 }; }, az); await shoot(`turn-clay-${az}.png`, az); }
+    await p.evaluate(() => {
+      const { THREE } = __dev, G = __G, white = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      for (const [o] of window.__clayRestore) o.material = white;
+      window.__bg = G.scene.background; G.scene.background = new THREE.Color(0x000000);
+    });
+    // (rendered straight into a target: the game's bloom and grade would blur the outline)
+    const raw = async (name) => {
+      await p.evaluate(() => { window.__orbit = { az: Math.PI / 2, el: 0 }; });
+      await p.waitForTimeout(300);
+      const png = await p.evaluate(() => {
+        const { THREE } = __dev, G = __G, cam = G.camera, cv = G.renderer.domElement, W = cv.width, H = cv.height, r = G.renderer;
+        G.scene.onBeforeRender(r, G.scene, cam);
+        const rt = new THREE.WebGLRenderTarget(W, H), buf = new Uint8Array(W * H * 4), prev = r.getRenderTarget();
+        r.setRenderTarget(rt); r.setClearColor(0x000000, 1); r.clear(); r.render(G.scene, cam); r.readRenderTargetPixels(rt, 0, 0, W, H, buf); r.setRenderTarget(prev);
+        const c2 = document.createElement('canvas'); c2.width = W; c2.height = H; const g2 = c2.getContext('2d'), img = g2.createImageData(W, H);
+        for (let y = 0; y < H; y++) img.data.set(buf.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
+        g2.putImageData(img, 0, 0);
+        return c2.toDataURL('image/png').split(',')[1];
+      });
+      writeFileSync(join(OUT, name), Buffer.from(png, 'base64'));
+    };
+    await raw('turn-sil-90.png');
+    await p.evaluate(() => {
+      const { THREE } = __dev;
+      for (const [o, m, v] of window.__clayRestore) if (o.name === 'hair') { o.visible = v; o.material = new THREE.MeshBasicMaterial({ color: 0xffffff, map: m.map, alphaTest: m.alphaTest, side: THREE.DoubleSide }); }
+    });
+    await raw('turn-silhair-90.png');
+    await p.evaluate(() => { for (const [o, m, v] of window.__clayRestore) { o.material = m; o.visible = v; } window.__clay = null; __G.scene.background = window.__bg; });
+  }
   await p.evaluate(() => { window.__orbit = null; });
   await p.waitForTimeout(400);
   // which mesh shows where, each in a flat colour (face red, the neck green, ears yellow, eyes cyan, hair blue, the rest
@@ -222,4 +295,12 @@ try {
 }
 const r = spawnSync(PY, [join(HERE, 'compare.py'), REF, OUT, TAG], { stdio: ['ignore', 'inherit', 'pipe'], env: { ...process.env, GLOG_minloglevel: '3', TF_CPP_MIN_LOG_LEVEL: '3', PYTHONWARNINGS: 'ignore' } });
 if (r.status) { console.error(String(r.stderr)); process.exit(r.status); }
+if (POINTS) {
+  const t = spawnSync(PY, [join(HERE, 'points.py'), POINTS, REF, OUT], { stdio: ['ignore', 'inherit', 'pipe'], env: { ...process.env, PYTHONWARNINGS: 'ignore' } });
+  if (t.status) { console.error(String(t.stderr)); process.exit(t.status); }
+}
+if (TURN) {
+  const t = spawnSync(PY, [join(HERE, 'turn.py'), TURN, OUT], { stdio: ['ignore', 'inherit', 'pipe'], env: { ...process.env, GLOG_minloglevel: '3', TF_CPP_MIN_LOG_LEVEL: '3', PYTHONWARNINGS: 'ignore' } });
+  if (t.status) { console.error(String(t.stderr)); process.exit(t.status); }
+}
 console.log(`facelab: sheets and report in ${OUT}`);

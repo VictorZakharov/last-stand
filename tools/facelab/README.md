@@ -6,6 +6,8 @@ close-ups instead of screenshots judged by eye in a biome's changing light.
 ```bash
 npm run facelab -- --setup                                  # once: a Python venv in tools/facelab/.venv
 npm run facelab -- --ref path/to/reference.jpg --tag try1   # render and compare
+# with a turnaround's head views and landmarks placed by hand on the reference (see below)
+npm run facelab -- --ref head_front.png --turn path/to/head_ --points points.json --tag try2
 ```
 
 Options: `--class warrior|mage` (the hero), `--tag name` (the output folder, `latest` by default), `--helm` (with a
@@ -46,6 +48,33 @@ where you like and pass its path. Any front view of a face works, a full-body sh
    low it falls, its tones (lightness percentiles: roots and crests) and colour, and which way its strands run (the
    structure tensor cell by cell: swept from a part, or combed flat).
 
+4. **Shape** (the face's form, which paint and hair hide; judge it first, colour after): the head in grey clay from all
+   round (`clay-*.png`, `sheet-clay.png`), lit from high to one side so its forms throw shadows, and in clay under the
+   studio's own light (`ours-clay.png`). **Relief**: the lightness of forms 2 to 14 mm across, region by region
+   (temples, brows, upper lids, cheekbones, cheeks, beside the nose, jaw, chin), on the reference, ours painted and ours
+   in clay: whether bones stand out more than the reference's, and whether that is the shape or the paint.
+   **The face's sides** as the pictures show them (the skin and beard the hair leaves in view): their widths from the
+   temples to the chin and how far each bows out of a straight line.
+5. **Landmarks placed by hand** (`--points`, `points.py`): the detector can't see what a beard and hair hide (the jaw's
+   angles and line, the chin under the beard, the cheekbones' width under the hair), so those are placed once on the
+   reference (`annotate.py grid` draws a zoomed crop with a grid in the picture's pixels to read them off;
+   `annotate.py show` draws them back to check), in a JSON of `{"front": {"name": [x, y]}}`: `pupil_r/l`, `ft_r/l`
+   (the face's side at the brows), `zy_r/l` (its widest at the cheekbones), `cheek_r/l` (its side at the mouth's
+   corners), `go_r/l` (the jaw's angles: the corner between the side and the jaw's line), `jaw_r/l` (the jaw line's
+   middle), `chin_r/l` (where it turns along the chin's bottom), `me` (the chin's bottom). Ours are found on the model
+   with the same definitions (`landmarks.ts`, from its distance field) and projected by the renderer; both are laid out
+   in mm from the pupils: each point, the widths at each height, how far each side bows out of a straight line from
+   the temple to the jaw's angle, the jaw line's slope.
+6. **A turnaround** (`--turn <prefix>`, `turn.py`): the head's front, three-quarter and side views cropped from one
+   sheet (`<prefix>front.png`, `34.png`, `side.png`), so at one scale: the front view's eye spacing gives it in mm.
+   The three-quarter: ours at the turn whose landmarks fit best (a sweep of 20 to 45 degrees), the points' offsets in
+   mm. The side: the profile from the brow to the chin (the reference's skin and beard against the background, the
+   hair over the forehead left out; ours from its silhouette rendered without the post effects), its soft-tissue
+   landmarks found alike on both (glabella, nasion, nose tip, subnasale, lips, chin: `sideprofile.py`), the profile
+   angles beside the norms for a man's face (facial convexity, nasofrontal, nasolabial, the lips to the E-line), and
+   the profile row by row; the head's outline with the hair. `sheet-turn.png` shows each view: reference | ours | ours
+   in clay | both over each other.
+
 ## Output (`tools/facelab/out/<tag>/`)
 
 - `sheet-eyes.png`, `sheet-nose.png`, `sheet-mouth.png`, `sheet-face.png`, `sheet-head.png`: the same crop of both,
@@ -60,6 +89,11 @@ where you like and pass its path. Any front view of a face works, a full-body sh
 - `sheet-hairflow.png`: the direction the strands run, cell by cell, on both.
 - `sheet-views.png`: the three-quarter view, the side, the back and from above (nothing to compare them with: they
   show what the front hides).
+- `sheet-clay.png`: the shape in clay from all round, beside the reference.
+- `sheet-relief.png`: the relief (forms 2 to 14 mm across) of the reference, ours painted and ours in clay.
+- `sheet-sides.png`: the face's sides as each picture shows them.
+- `sheet-points.png` (with `--points`): the reference's hand-placed points green, ours red.
+- `sheet-turn.png` (with `--turn`): the three-quarter and side views and their outlines.
 - `report.txt` (and `.json`): proportions as shares of the distance between the eye centres (eye size and opening,
   brow height, nose length and width, lips, mouth to chin, face and jaw width), the reference's beside ours; each
   feature's mean landmark error; the outline's half-width every 0.2 eye distances down from the eye line; the brows
@@ -70,3 +104,4 @@ where you like and pass its path. Any front view of a face works, a full-body sh
 Work one feature at a time: change the face (`FACES` / `LOOKS` in `src/entities/models/face.ts`, the hair in
 `head.ts`), run it with a new tag, and compare the report and the sheets with the previous tag's. When the face still
 doesn't look like the reference with every number close, the harness is missing a measure: add it here first.
+Shape before colour: when the clay views and the profile, landmarks and relief don't match, painting won't fix it.
