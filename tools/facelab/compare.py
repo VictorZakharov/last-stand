@@ -498,6 +498,22 @@ pc = lambda x: np.percentile(x, [10, 50, 90]) if len(x) else [0, 0, 0]
 lines.append('hair lightness percentiles 10/50/90: ref ' + '/'.join(f'{v:.0f}' for v in pc(hlR)) + '   ours ' + '/'.join(f'{v:.0f}' for v in pc(hlO)))
 hab = lambda L_, m: L_[m == 1][:, 1:].mean(0) if (m == 1).any() else [0, 0]
 lines.append('hair colour a/b: ref ' + '/'.join(f'{v:.1f}' for v in hab(labR, hmR2)) + '   ours ' + '/'.join(f'{v:.1f}' for v in hab(cv2.cvtColor(ours4.astype(np.float32) / 255, cv2.COLOR_BGR2LAB), hmO)))
+# (the average can match while the crests are orange and the hollows grey: its light quarter's and dark quarter's colours)
+labO4 = cv2.cvtColor(ours4.astype(np.float32) / 255, cv2.COLOR_BGR2LAB)
+
+
+def tones(L_, m):
+    px = L_[m == 1]
+    if len(px) < 10: return None
+    lo, hi = np.percentile(px[:, 0], [25, 75])
+    return px[px[:, 0] >= hi].mean(0), px[px[:, 0] <= lo].mean(0)
+
+
+tr, to = tones(labR, hmR2), tones(labO4, hmO)
+if tr and to:
+    f = lambda v: f'L {v[0]:4.1f} a {v[1]:4.1f} b {v[2]:4.1f}'
+    lines.append(f'hair crests (light quarter): ref {f(tr[0])}   ours {f(to[0])}')
+    lines.append(f'hair hollows (dark quarter): ref {f(tr[1])}   ours {f(to[1])}')
 
 # --- which way the hair runs (its strands' direction, cell by cell, from the structure tensor of the lightness): swept up
 # and back off the forehead and waving down the sides, or combed flat; the angle between the two in each cell both have
