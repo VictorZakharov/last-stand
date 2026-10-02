@@ -94,9 +94,12 @@ function eyeMap(iris: [number, number, number], shade = 0): THREE.CanvasTexture 
     const pr = shade ? 1.6 : 1.9, ir = shade ? 6.4 : 5.9;
     if (mm < pr) c = [0.02, 0.018, 0.02];
     else if (mm < ir) {
-      const k = (mm - pr) / (ir - pr), fib = 0.75 + 0.25 * Math.sin(a * 37 + Math.sin(a * 11) * 2) * Math.sin(a * 23 + mm), ring = 1 - 0.45 * Math.exp(-(((mm - 2.2) / 0.5) ** 2));
+      // (a deep-set eye's iris seen in the lid's shade: its fibres soft, a dark ring at its rim, lighter round the pupil)
+      const fa = shade ? 0.12 : 0.25, k = (mm - pr) / (ir - pr), fib = 1 - fa + fa * Math.sin(a * 37 + Math.sin(a * 11) * 2) * Math.sin(a * 23 + mm), ring = 1 - 0.45 * Math.exp(-(((mm - 2.2) / 0.5) ** 2));
       const edge = 1 - 0.6 * clamp((k - 0.8) / 0.2, 0, 1);
-      c = iris.map((ch, i) => ch * fib * ring * edge * (0.75 + 0.5 * k) + (i === 0 ? 0.04 : 0.02) * (1 - k));
+      // (a deep-set eye's lighter round the pupil, darkening to its rim; the other way round otherwise)
+      const rad = shade ? 1.25 - 0.5 * k : 0.75 + 0.5 * k;
+      c = iris.map((ch, i) => ch * fib * ring * edge * rad + (i === 0 ? 0.04 : 0.02) * (1 - k));
     } else if (mm < ir + 0.5) c = [0.08, 0.08, 0.09];
     else {
       // the white, greyer towards its edge and a little pink in the corners
