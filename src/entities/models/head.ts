@@ -652,9 +652,9 @@ export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: keyo
       const scm = 3 * Math.exp(-(((ang - lerp(0.45, 1.3, t)) / 0.28) ** 2));
       const adam = 5 * Math.exp(-((a / 0.3) ** 2)) * Math.exp(-(((t - 0.55) / 0.16) ** 2));
       pos.push(Math.sin(a) * (rx + scm) * HEAD_MM, y, (cz + Math.cos(a) * (rz + scm + adam)) * HEAD_MM);
-      // (its top in the jaw's and the skull's shadow, the front under the jaw most: little of the sky reaches it)
+      // (its top in the jaw's shadow, as the face's own skin under the jaw: a warm brown)
       const k = ao ? 1 - neckShade(Math.abs(Math.sin(a)) * rx, (y - len) / HEAD_MM) : 1;
-      col.push(k ** 0.8, k, k ** 1.05);
+      col.push(k ** 0.9, k ** 0.95, k ** 1.2);
     }
   }
   const W = segs + 1;

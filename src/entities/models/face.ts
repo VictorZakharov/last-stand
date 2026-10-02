@@ -364,7 +364,7 @@ export interface FaceLook {
 }
 
 export const LOOKS: Record<keyof typeof FACES, FaceLook> = {
-  warrior: { skin: [0.8, 0.68, 0.65], hair: [0.17, 0.11, 0.055], streak: [0.42, 0.29, 0.15], ao: 0.55, beardHair: [0.36, 0.26, 0.18], eyeShade: 0.55, grey: 0.02, beard: 1, age: 0.25, brows: 1.4, hairDrop: 20, stubble: 0.8, contour: 0.45, browArch: 0.2, pores: 0.45, lipTint: 0.8, nostrils: 1.6, browTail: 0, browFill: 0.7, under: 0, browLift: 2.5, templeDrop: 22 },
+  warrior: { skin: [0.8, 0.68, 0.65], hair: [0.15, 0.112, 0.078], streak: [0.4, 0.3, 0.19], ao: 0.55, beardHair: [0.36, 0.26, 0.18], eyeShade: 0.55, grey: 0.02, beard: 1, age: 0.25, brows: 1.4, hairDrop: 20, stubble: 0.8, contour: 0.45, browArch: 0.2, pores: 0.45, lipTint: 0.8, nostrils: 1.6, browTail: 0, browFill: 0.3, under: 0, browLift: 2.5, templeDrop: 22 },
   mage: { skin: [0.78, 0.57, 0.46], hair: [0.12, 0.08, 0.058], streak: [0.28, 0.19, 0.13], grey: 0.06, beard: 1, age: 1 },
 };
 
@@ -605,8 +605,9 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
       }
       if (aoAt) {
         // (light that does reach a crease has gone through skin: it comes out redder; and the neck is in the jaw's shadow)
-        const ns = neckShade(ax, yy), k = (1 - L.ao! * (1 - aoAt(tx, ty))) * (1 - ns);
-        c[0] *= k ** 0.8; c[1] *= k; c[2] *= k ** 1.05;
+        // (the jaw's shadow on the neck is a warm brown, not red)
+        const ns = neckShade(ax, yy), k = 1 - L.ao! * (1 - aoAt(tx, ty)), kn = 1 - ns;
+        c[0] *= k ** 0.8 * kn ** 0.9; c[1] *= k * kn ** 0.95; c[2] *= k ** 1.05 * kn ** 1.2;
         // (and no shine where it's shaded)
         rr = lerp(rr, 0.92, ns / 0.82);
       }
