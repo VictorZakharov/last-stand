@@ -101,7 +101,8 @@ where you like and pass its path. Any front view of a face works, a full-body sh
      can't follow is where ours is unlike any real face, whatever the reference: a lump, a hollow, a shelf;
    - **our skin's curvature** on its own mesh (the distance field's Laplacian): a groove or a seam shows as a thin line,
      however the light falls; the report gives how much of the skin away from the eyes, nose and mouth is sharper than
-     a 7 mm radius.
+     a 7 mm radius, and the nose on its own: its profile down the middle against a smooth curve (a hump or a crease
+     between the shapes it is built from leaves it) and how much of its front and sides is hollow.
    Checked on our own renders, whose shape is known: the rebuild recovers the views' turns within a few degrees where
    it has landmarks; what the face model can't represent (fine features: the eyes' lids, the nostrils, the lips' rolls)
    shows in both maps alike, so read the nose, lips and eyes from the landmarks and close-ups instead.
@@ -115,6 +116,10 @@ where you like and pass its path. Any front view of a face works, a full-body sh
    the lips stay where they were when the muzzle moves. Check a fit's clay views and curvature map before keeping it:
    a value driven to an extreme can leave a needle of a shape between the target's points (a crease), and a shape the
    mask makes redundant can stand out of it with grooves round it.
+   A face with no picture of its own (the mage) is fitted to the real face nearest it instead: `python dense.py <out
+   dir> nearest <class>` writes that face, fitted to our surface, as the target, and the fit keeps the face's own
+   proportions on a surface a real face could have (its lumps and shelves smoothed away). Start it from a mask copied
+   from a face that has one.
 
 ## Output (`tools/facelab/out/<tag>/`)
 

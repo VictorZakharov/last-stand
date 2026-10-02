@@ -174,8 +174,23 @@ export const FACES: Record<'warrior' | 'mage', FaceShape> = {
       side: [60, 48.6, 38.1, 29, 21.3, 15.5, 11.8, 10.4, 10.1, 10.7, 11.8, 11.7, 10, 6.3, 0, -10],
       p: [2, 2.15, 2.22, 2.21, 2.11, 1.98, 1.84, 1.76, 1.8, 2.02, 2.36, 2.5, 2.44, 2.39, 2.4, 2.2],
       pz: [1.2, 1.2, 1.2, 1.2, 1.22, 1.58, 2.11, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2], hollow: 0 } },
-  // longer and leaner, high cheekbones, a long straight nose
-  mage: { jaw: 50, chin: 19, chinFwd: 0, brow: 1.05, cheek: 1.25, noseLen: 57, noseW: 16.5, nosePro: 1.1, hump: 0.4, lips: 1, long: 1.04, eyeOpen: 4.3, iris: [0.3, 0.42, 0.34], beardDepth: 6 },
+  // longer and leaner, a long straight nose
+  mage: { jaw: 27, chin: 11.3, chinFwd: 9, brow: 0.7, cheek: 1.25, noseLen: 57, noseW: 16.5, nosePro: 1.1, hump: 0, noseRoot: 6, bridgeW: 6.5, lips: 1, long: 1.04, eyeOpen: 4.3, iris: [0.3, 0.42, 0.34], beardDepth: 6,
+    // (the mask and the broad shape fitted by least squares (tools/facelab/fit.mjs) to the real face nearest his old one,
+    // built of blobs: its cheekbones stood up to 12 mm out of any real face's; the nose straight, its bridge raised to
+    // the mask's front (a hump stood out of a sunken ridge with a cliff at its top))
+    skullFwd: -6.4,
+    templeNarrow: 3,
+    muzzleFwd: -24.4,
+    browFwd: -1,
+    browDrop: 5.8,
+    lipFwd: 24.4,
+    mask: { y: [-2, 8, 18, 30, 45, 60, 75, 90, 100, 110, 120, 132, 145, 160, 175, 190],
+      front: [95, 90.7, 88.4, 88.3, 89.9, 92.2, 93.7, 92, 88.7, 87.6, 89.9, 94.8, 98.7, 98.1, 94, 80],
+      half: [20, 31.1, 41.7, 51.2, 57.3, 60.3, 63.1, 65.6, 66.9, 67.1, 67, 65.9, 65.3, 64.6, 63, 58],
+      side: [60, 50.8, 41.6, 32.4, 23.8, 16.5, 11.1, 8.6, 7.7, 7.9, 8.8, 9.1, 8.3, 5.6, 0, -10],
+      p: [2, 1.77, 1.62, 1.58, 1.69, 1.94, 2.25, 2.45, 2.54, 2.63, 2.7, 2.59, 2.44, 2.35, 2.4, 2.2],
+      pz: [1.2, 1.42, 1.61, 1.79, 2, 2.25, 2.55, 2.85, 2.98, 3.01, 2.97, 2.79, 2.61, 2.47, 2.4, 2.2], hollow: 0 } },
 };
 
 // --- distance primitives (approximate, good near the surface, which is all the meshing needs) ---
@@ -351,10 +366,12 @@ function beardOn(d: number, ax: number, y: number, z: number, F: FaceShape): num
   if (!(F.beardDepth > 0 && y < 125 && z > -30)) return d;
   // (eased out towards the back, where it ends; a thick one thins out over its back edge, behind the jaw: ending within a
   // few mm it stood there as a ledge)
-  const thin = F.beardDepth > 2 ? sm(beardBack(y) - 4, beardBack(y) + 30, z) : 1;
-  const b = beardAt(ax, y, z, F, 2.5) * sm(-30, -15, z) * thin, my = mouthY(Math.min(ax / (F.mouthW ?? 1), 24));
-  const nearLips = sm(32, 20, ax) * sm(my + 18, my + 8, y) * sm(my - 22, my - 12, y);
-  return d - F.beardDepth * b * b * (3 - 2 * b) * (1 - 0.85 * nearLips);
+  // (and it eases in over a wider band, on the cheeks and round the lips: over a few mm, standing 6 mm off the skin, it made
+  // a ridge from the cheekbones down to the mouth's corners)
+  const thick = F.beardDepth > 2, lw = thick ? 4 : 0, thin = thick ? sm(beardBack(y) - 4, beardBack(y) + 30, z) : 1;
+  const b = beardAt(ax, y, z, F, thick ? 7 : 2.5) * sm(-30, -15, z) * thin, my = mouthY(Math.min(ax / (F.mouthW ?? 1), 24));
+  const nearLips = sm(32 + lw, 20 - lw, ax) * sm(my + 18 + lw, my + 8 - lw, y) * sm(my - 22 - lw, my - 12 + lw, y);
+  return d - F.beardDepth * (thick ? b : b * b * (3 - 2 * b)) * (1 - 0.85 * nearLips);
 }
 
 // --- the grid the skin is meshed on (and its uvs) -------------------------------------------------
