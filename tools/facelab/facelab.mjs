@@ -30,7 +30,12 @@ if (flag('setup')) {
 
 const REF = arg('ref'), CLS = arg('class', 'warrior'), TAG = arg('tag', 'latest'), SIZE = +arg('size', 1200), FOV = +arg('fov', 14);
 // the key light's direction, as the reference is lit: degrees round from the front (+ from the picture's right) and up
-const [KEY_AZ, KEY_EL] = String(arg('key', '30,30')).split(',').map(Number);
+const [KEY_AZ, KEY_EL] = String(arg('key', '20,30')).split(',').map(Number);
+// how strong the soft fill from all round is against the key (the shading across the face in the report shows it: a
+// reference whose sides darken more than ours as they turn from the light has less fill)
+const FILL = +arg('fill', 1.3);
+// both lights scaled together, so the forehead's lightness matches the reference's (a camera's exposure)
+const EXPOSURE = +arg('exposure', 1.3);
 if (!REF || !existsSync(REF)) { console.error('facelab: --ref <reference picture> is required (a front view of a face)'); process.exit(1); }
 if (!existsSync(PY)) { console.error('facelab: run `npm run facelab -- --setup` first'); process.exit(1); }
 const OUT = join(HERE, 'out', TAG);
@@ -63,13 +68,14 @@ try {
   await ctx.addInitScript(NO_CAPTURE);
   await ctx.addCookies([['last-stand-class', CLS], ['last-stand-biome', 'forest'], ['last-stand-quality', 'high']].map(([name, value]) => ({ name, value, url })));
   const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(String(e)));
-  await p.goto(url); await p.waitForFunction(() => !document.getElementById('loading'), null, { timeout: 180000 });
+  // (the grade's adaptation held off: the face's colours mustn't follow how much of the frame is dark hair)
+  await p.goto(url + '?adapt=0'); await p.waitForFunction(() => !document.getElementById('loading'), null, { timeout: 180000 });
   await p.waitForTimeout(2500);
   if (flag('helm')) await p.evaluate(async () => {
     const { makeItem } = await import('/src/loot/items.ts'); const { equipFromStash } = await import('/src/loot/profile.ts'); const { CLASSES } = await import('/src/data/classes/index.ts');
     const pr = __G.profile, it = makeItem({ slot: 'head', rarity: 'rare', ilvl: 5, cls: CLASSES[pr.classId] }); pr.stash.push(it); equipFromStash(pr, it.id); __G.player.recomputeStats(pr.equipped);
   });
-  await p.evaluate(async ({ fov, kaz, kel }) => {
+  await p.evaluate(async ({ fov, kaz, kel, fill, exposure }) => {
     const { THREE } = __dev, G = __G, pl = G.player, j = pl.model.joints, { toGroup } = await import('/src/entities/models/head.ts');
     // the dummies far ahead (the head turns to the nearest foe), the hero facing +z
     pl.facing = 0; setInterval(() => G.enemies.forEach((e) => e.pos.set(pl.pos.x, 0, pl.pos.z + 60)), 16);
@@ -86,10 +92,13 @@ try {
       head.updateWorldMatrix(true, false);
       const C = head.localToWorld(toGroup(0, 112, 40)), fw = new THREE.Vector3(0, 0, 1).transformDirection(head.matrixWorld), up = new THREE.Vector3(0, 1, 0).transformDirection(head.matrixWorld);
       const right = new THREE.Vector3().crossVectors(fw, up);
-      hemi.color.set(0xffffff); hemi.groundColor.set(0x6a6a6a); hemi.intensity = 1.3;
+      hemi.color.set(0xffffff); hemi.groundColor.set(0x6a6a6a); hemi.intensity = fill * exposure;
+      // (only the studio's two lights: the biome's and the hero's own point lights flicker, and a run would differ from
+      // the last by its moment; they're dimmed, not removed, so no shader recompiles)
+      G.scene.traverse((o) => { if (o.isLight && o !== hemi && o !== key) o.intensity = 0; });
       // (the picture's right is the hero's left: -right)
       const az = kaz * Math.PI / 180, el = kel * Math.PI / 180;
-      key.color.set(0xfff4ea); key.intensity = 2.6; key.target.position.copy(C); key.target.updateMatrixWorld();
+      key.color.set(0xfff4ea); key.intensity = 2.6 * exposure; key.target.position.copy(C); key.target.updateMatrixWorld();
       key.position.copy(C).addScaledVector(fw, 7 * Math.cos(el) * Math.cos(az)).addScaledVector(right, -7 * Math.cos(el) * Math.sin(az)).addScaledVector(up, 7 * Math.sin(el));
       const ext = head.localToWorld(toGroup(0, 300, 0)).distanceTo(head.localToWorld(toGroup(0, -40, 0)));
       return { C, fw, up, dist: ext / 2 / Math.tan((fov * Math.PI / 180) / 2) };
@@ -115,7 +124,7 @@ try {
       const E = F.EYE;
       return { chin: px(0, yb, zb), pupilR: px(-E.x, E.y, E.z + E.r), pupilL: px(E.x, E.y, E.z + E.r) };
     };
-  }, { fov: FOV, kaz: KEY_AZ, kel: KEY_EL });
+  }, { fov: FOV, kaz: KEY_AZ, kel: KEY_EL, fill: FILL, exposure: EXPOSURE });
   await p.waitForTimeout(1500);
   const canvas = await p.evaluateHandle(() => __G.renderer.domElement);
   writeFileSync(join(OUT, 'ours.png'), await canvas.screenshot());

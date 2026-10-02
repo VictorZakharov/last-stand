@@ -385,6 +385,9 @@ REG = {
     'brow R': mask_poly(LR4[[70, 63, 105, 66, 107, 55, 65, 52, 53, 46]]),
     'brow L': mask_poly(LR4[[300, 293, 334, 296, 336, 285, 295, 282, 283, 276]]),
     'iris R': iris_m['R'], 'iris L': iris_m['L'],
+    # (the iris's own colour, between the pupil and its rim: an iris can read black with the region's mean right)
+    'iris ring R': mask_circle(LR4[468], ring(468) * 0.85) * (1 - mask_circle(LR4[468], ring(468) * 0.45)),
+    'iris ring L': mask_circle(LR4[473], ring(473) * 0.85) * (1 - mask_circle(LR4[473], ring(473) * 0.45)),
     'sclera R': mask_poly(LR4[EYE_R]) * (1 - mask_circle(LR4[468], ring(468) * 1.1)),
     'sclera L': mask_poly(LR4[EYE_L]) * (1 - mask_circle(LR4[473], ring(473) * 1.1)),
     'under eye R': mask_poly(band(LOW_R, 0.14)), 'under eye L': mask_poly(band(LOW_L, 0.14)),
@@ -395,6 +398,8 @@ REG = {
     'lips': mask_poly(LR4[LIPS]),
     'chin': mask_poly(LR4[[91, 181, 84, 17, 314, 405, 321, 400, 377, 152, 148, 176]]),
     'jaw R': mask_circle(LR4[136] * 0.7 + LR4[61] * 0.3, 0.08 * iod * ZM), 'jaw L': mask_circle(LR4[365] * 0.7 + LR4[291] * 0.3, 0.08 * iod * ZM),
+    # (the ears, just outside the face's outline at the tragus: how much they stand out, pale, from the hair round them)
+    'ear R': mask_circle(LR4[234] - ex_ * 0.12 * iod * ZM, 0.07 * iod * ZM), 'ear L': mask_circle(LR4[454] + ex_ * 0.12 * iod * ZM, 0.07 * iod * ZM),
     'neck': mask_poly([F_(-0.22, chin_v + 0.12), F_(0.22, chin_v + 0.12), F_(0.22, chin_v + 0.35), F_(-0.22, chin_v + 0.35)]),
 }
 stats = {}
@@ -531,7 +536,7 @@ LRl = labR[..., 0]; LOl = cv2.cvtColor(ours4.astype(np.float32) / 255, cv2.COLOR
 JR, JO = flow(LRl, hmR2), flow(LOl, hmO)
 cell = int(0.12 * iod * ZM)
 fr, fo = crop(ref4).copy(), crop(ours4).copy()
-angs = []
+angs, cellsR, cellsO = [], {}, {}
 for r0 in range(max(0, by0), min(by1, ref4.shape[0]) - cell, cell):
     for c0 in range(max(0, bx0), min(bx1, ref4.shape[1]) - cell, cell):
         sl = (slice(r0, r0 + cell), slice(c0, c0 + cell))
@@ -542,6 +547,8 @@ for r0 in range(max(0, by0), min(by1, ref4.shape[0]) - cell, cell):
             coh = np.sqrt((a - b) ** 2 + 4 * c * c) / max(1e-6, a + b)
             # (the strands run across the gradient)
             res.append((0.5 * np.arctan2(2 * c, a - b) + np.pi / 2, coh))
+        for cells, rr in ((cellsR, res[0]), (cellsO, res[1])):
+            if rr and rr[1] > 0.25: cells[(r0 // cell, c0 // cell)] = rr[0]
         ctr = (c0 + cell // 2 - max(0, bx0), r0 + cell // 2 - max(0, by0))
         for (img_, rr) in ((fr, res[0]), (fo, res[1])):
             if rr and rr[1] > 0.25:
@@ -553,6 +560,59 @@ for r0 in range(max(0, by0), min(by1, ref4.shape[0]) - cell, cell):
 zf = max(1, round(700 / fr.shape[1]))
 cv2.imwrite(f'{OUT}/sheet-hairflow.png', np.concatenate([label(big(fr), 'reference: strand direction'), label(big(fo), 'ours')], 1))
 lines.append(f'hair flow: mean angle between the strands\' directions {np.degrees(np.mean(angs)) if angs else float("nan"):.0f} deg over {len(angs)} cells (0 alike, 45 unrelated)')
+
+
+def curl(cells):
+    """how much the strands' direction changes from cell to cell (0 all parallel, straight; 1 every way, curly): one
+    minus the length of the mean of the doubled angles over each cell's 3x3 neighbourhood"""
+    out = []
+    for (i, j), a in cells.items():
+        nb = [cells[(i + di, j + dj)] for di in (-1, 0, 1) for dj in (-1, 0, 1) if (i + di, j + dj) in cells]
+        if len(nb) >= 5: out.append(1 - abs(np.mean(np.exp(2j * np.array(nb)))))
+    return float(np.mean(out)) if out else float('nan')
+
+
+def ragged(m):
+    """the hair outline's length against a smoothed outline's (1 smooth; more, curls and wisps standing out of it)"""
+    m = cv2.morphologyEx(m.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    sm_ = (cv2.GaussianBlur(m.astype(np.float32), (0, 0), 0.15 * iod * ZM) > 0.5).astype(np.uint8)
+    per = lambda x: sum(cv2.arcLength(c, True) for c in cv2.findContours(x, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[0] if cv2.contourArea(c) > (0.1 * iod * ZM) ** 2)
+    return per(m) / max(1.0, per(sm_))
+
+
+lines.append(f'hair curl (strand direction changing cell to cell, 0 straight .. 1 every way): ref {curl(cellsR):.3f}, ours {curl(cellsO):.3f}')
+lines.append(f"hair outline raggedness (its length against a smoothed one's): ref {ragged(hmR2):.2f}, ours {ragged(hmO):.2f}")
+
+# --- the face's shading across it: lightness against the forehead's along rows at the cheekbones, under the nose, the
+# mouth and the chin (a lean face darkens to its sides under the cheekbones; a flat-lit one stays light to its edge)
+lines.append('')
+lines.append("shading across the face (lightness minus the forehead's; rows in eye distances below the eye line, columns from his right to his left)")
+xs = np.round(np.arange(-1.0, 1.01, 0.2), 1)
+lines.append('           ' + ' '.join(f'{x:+6.1f}' for x in xs))
+oval4b = np.zeros(labR.shape[:2], np.uint8); cv2.fillPoly(oval4b, [np.int32(np.round(LR4[OVAL]))], 1)
+prof_err, profiles = [], {}
+for v in (0.25, 0.55, 0.95, 1.3, 1.6):
+    rowsR, rowsO = [], []
+    for x in xs:
+        p_ = F_(x, v); r_, c_ = int(round(p_[1])), int(round(p_[0])); h_ = max(1, int(0.03 * iod * ZM))
+        if not (0 <= r_ < labR.shape[0] and 0 <= c_ < labR.shape[1]) or not oval4b[r_, c_]: rowsR.append(None); rowsO.append(None); continue
+        rowsR.append(float(np.median(labR[r_ - h_:r_ + h_ + 1, c_ - h_:c_ + h_ + 1, 0])) - fl_r)
+        rowsO.append(float(np.median(labO[r_ - h_:r_ + h_ + 1, c_ - h_:c_ + h_ + 1, 0])) - fl_o)
+    f = lambda vals: ' '.join('     .' if q is None else f'{q:+6.0f}' for q in vals)
+    lines.append(f'  {v:4.2f} ref  {f(rowsR)}')
+    lines.append(f'       ours {f(rowsO)}')
+    prof_err += [abs(a - b) for a, b in zip(rowsR, rowsO) if a is not None and b is not None]
+    profiles[v] = (rowsR, rowsO)
+lines.append(f'  mean difference {np.mean(prof_err):.1f}')
+
+# --- how hooded the eyes are: the share of the iris the upper lid covers (and the lower lid), from the landmarks
+lines.append('')
+for nm, ci, up_, lo_ in (('right', 468, 159, 145), ('left', 473, 386, 374)):
+    def cover(L_):
+        c_, r_ = L_[ci], np.mean([np.linalg.norm(L_[k] - L_[ci]) for k in range(ci + 1, ci + 5)])
+        return (L_[up_][1] - (c_[1] - r_)) / (2 * r_), ((c_[1] + r_) - L_[lo_][1]) / (2 * r_)
+    a_, b_ = cover(LR), cover(LO)
+    lines.append(f'iris covered by the lids, {nm:5s} eye (top, bottom; shares of its height): ref {a_[0]:.2f}, {a_[1]:.2f}   ours {b_[0]:.2f}, {b_[1]:.2f}')
 
 # --- the other views (nothing to compare them with: they show what the front hides), side by side
 views = [(n, cv2.imread(f'{OUT}/view-{n}.png')) for n in ('three-quarter', 'side', 'back', 'above')]

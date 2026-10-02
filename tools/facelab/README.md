@@ -9,9 +9,13 @@ npm run facelab -- --ref path/to/reference.jpg --tag try1   # render and compare
 ```
 
 Options: `--class warrior|mage` (the hero), `--tag name` (the output folder, `latest` by default), `--helm` (with a
-head item worn), `--size 1200` (pixels), `--fov 14` (degrees: a long lens, as a portrait's), `--key 30,30` (the key
+head item worn), `--size 1200` (pixels), `--fov 14` (degrees: a long lens, as a portrait's), `--key 20,30` (the key
 light's direction as the reference is lit: degrees round from the front, + from the picture's right, and up; the
-cheeks' lightness left and right in the report shows which side it comes from).
+cheeks' lightness left and right in the report shows which side it comes from), `--fill 1.3` (the soft light from all
+round against the key), `--exposure 1.3` (both together, so the forehead's lightness matches the reference's). Only
+these two lights light the studio: the biome's and the hero's own point lights are dimmed (they flicker, and a run
+would differ from the last), and the grade's adaptation is held off (`?adapt=0`: the face's colours would follow how
+much of the frame is dark hair). Two runs of the same model give the same numbers.
 
 The reference picture is not kept in the repository (pictures are only allowed as screenshots in `docs/`): keep it
 where you like and pass its path. Any front view of a face works, a full-body shot too (the face is found in it).
