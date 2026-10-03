@@ -126,8 +126,8 @@ export function walkCycle(j: Joints, phase: number, amt: number, o: WalkOpts = {
   // a walk is highest as the legs pass (the body vaulting over a straight leg); a run is lowest there (the leg compressing under it) and highest in flight
   const run = IK_ON && o.run ? Math.min(1, Math.max(0, (amt - 0.45) / 0.35)) : 0;
   j.body.position.y += (Math.abs(c) - 0.6) * (1 - 2 * run) * (1 - 0.5 * run) * bob * amt;
-  // the body's weight goes over the foot it stands on (left at phase 0, right at π, as `LegIK` times its steps), so the two legs read apart from behind and in front
-  if (IK_ON) j.body.position.x += c * 0.02 * run * amt;
+  // the body's weight goes over the foot it stands on (the right at phase 0, the left at π, as `LegIK` times its steps), so the two legs read apart from behind and in front
+  if (IK_ON) j.body.position.x += -c * 0.02 * run * amt;
   j.hips.rotation.y += s * 0.12 * amt;
   j.chest.rotation.y += -s * 0.16 * amt;
   j.hips.rotation.z += c * 0.04 * amt;

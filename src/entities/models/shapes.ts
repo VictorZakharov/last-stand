@@ -289,6 +289,8 @@ export class Sculpt {
     _m.compose(_v.set(...pos), _q.setFromEuler(_e.set(...rot)), sc);
     const g = (geo.index ? geo.toNonIndexed() : geo.clone()).applyMatrix4(_m);
     if (geo.index) geo.dispose();
+    // (a piece may give its own blend, b's share at each vertex: a `skinK` attribute)
+    const own = g.attributes.skinK as THREE.BufferAttribute | undefined;
     // (vertex colours kept for a material that uses them: they merge only with pieces of that material, which carry them too)
     for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv' && (k !== 'color' || !(mat as THREE.MeshStandardMaterial).vertexColors)) g.deleteAttribute(k);
     if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
@@ -315,12 +317,14 @@ export class Sculpt {
     _m.compose(_v.set(...pos), _q.setFromEuler(_e.set(...rot)), sc);
     const g = (geo.index ? geo.toNonIndexed() : geo.clone()).applyMatrix4(_m);
     if (geo.index) geo.dispose();
+    // (a piece may give its own blend, b's share at each vertex: a `skinK` attribute)
+    const own = g.attributes.skinK as THREE.BufferAttribute | undefined;
     // (vertex colours kept for a material that uses them: they merge only with pieces of that material, which carry them too)
     for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv' && (k !== 'color' || !(mat as THREE.MeshStandardMaterial).vertexColors)) g.deleteAttribute(k);
     if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
     const axis = b.position.clone().normalize(), p = g.attributes.position, idx = new Uint16Array(p.count * 4), w = new Float32Array(p.count * 4);
     for (let i = 0; i < p.count; i++) {
-      const t = Math.min(1, Math.max(0, (_v.fromBufferAttribute(p, i).dot(axis) - from) / (to - from))), k = t * t * (3 - 2 * t);
+      const t = Math.min(1, Math.max(0, (_v.fromBufferAttribute(p, i).dot(axis) - from) / (to - from))), k = own ? own.getX(i) : t * t * (3 - 2 * t);
       idx[i * 4] = ia; idx[i * 4 + 1] = ib; w[i * 4] = 1 - k; w[i * 4 + 1] = k;
     }
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));

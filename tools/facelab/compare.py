@@ -538,6 +538,126 @@ for side in ('R', 'L'):
         q = lambda L_: (lambda px: px[px[:, 0] >= np.percentile(px[:, 0], 75)].mean(0))(L_[on])
         a_, b_ = q(labR), q(labO)
         lines.append(f'  iris {side} lightest quarter: ref L {a_[0]:4.1f} a {a_[1]:4.1f} b {a_[2]:4.1f}   ours L {b_[0]:4.1f} a {b_[1]:4.1f} b {b_[2]:4.1f}')
+# --- the beard: hairs on skin, not a flat block. Its lightness percentiles (the darkest hairs .. the skin showing between
+# them) region by region, then the lightness down each cheek into it: where it starts and how softly (a block's edge is hard)
+lines.append('')
+lines.append('beard: lightness percentiles 10 / 50 / 90 (its dark hairs .. the skin between them), ref | ours')
+for k in ('moustache', 'chin', 'jaw R', 'jaw L', 'lower cheek R', 'lower cheek L'):
+    on = REG[k] == 1
+    if on.sum() < 8: continue
+    pr, po = np.percentile(labR[on][:, 0], [10, 50, 90]), np.percentile(labO[on][:, 0], [10, 50, 90])
+    lines.append(f'  {k:14s} {pr[0]:5.1f} {pr[1]:5.1f} {pr[2]:5.1f}   |   {po[0]:5.1f} {po[1]:5.1f} {po[2]:5.1f}   spread {pr[2] - pr[0]:5.1f} | {po[2] - po[0]:5.1f}')
+blurL = lambda L_: cv2.GaussianBlur(L_, (0, 0), 0.03 * iod * ZM)
+bR_, bO_ = blurL(labR[..., 0]), blurL(labO[..., 0])
+at_ = lambda im, u, v: (lambda p: float(im[int(np.clip(round(p[1]), 0, im.shape[0] - 1)), int(np.clip(round(p[0]), 0, im.shape[1] - 1))]))(F_(u, v))
+cols_, rows_ = (-0.75, -0.55, 0.55, 0.75), np.round(np.arange(0.3, min(chin_v, 2.2) + 1e-6, 0.1), 2)
+lines.append("beard's edge down the cheek: lightness minus the forehead's at u eye distances from the middle (- his right), by v below the eye line")
+lines.append('  v      ' + '   '.join(f'u {u:+.2f} ref / ours' for u in cols_))
+prof = {u: ([at_(bR_, u, v) - fl_r for v in rows_], [at_(bO_, u, v) - fl_o for v in rows_]) for u in cols_}
+for i, v in enumerate(rows_):
+    lines.append(f'  {v:4.1f}   ' + '   '.join(f'     {prof[u][0][i]:+6.1f} / {prof[u][1][i]:+6.1f}' for u in cols_))
+def edge_(p):
+    # (from the cheek's skin, the mean over v 0.3..0.5, down to the beard's darkest: where it's a quarter, half and three quarters down)
+    p = np.asarray(p); top = p[:3].mean(); lo_i = int(np.argmin(p)); bot = p[lo_i]
+    if top - bot < 4: return None
+    cross = lambda f: next((rows_[i] for i in range(lo_i + 1) if p[i] <= top - f * (top - bot)), float('nan'))
+    return cross(0.25), cross(0.5), cross(0.75), top - bot
+for u in cols_:
+    er, eo = edge_(prof[u][0]), edge_(prof[u][1])
+    show = lambda e: 'no edge' if e is None else f'starts {e[0]:.2f}, half {e[1]:.2f}, 3/4 {e[2]:.2f} (width {e[2] - e[0]:.2f}), drop {e[3]:4.1f}'
+    lines.append(f'  u {u:+.2f}: ref {show(er)}   ours {show(eo)}')
+# the mouth's width by the lips' colour (the detector places our mouth's corners by its own idea of a mouth: they barely
+# moved when our lips widened 13%): out along the eye line from the mouth's middle, the redness (a*) of the reddest pixel
+# across the lips, until it falls halfway from the lips' to the skin's beside the mouth
+def lip_width(lab_, P):
+    c = (P[13] + P[14]) / 2; step = 0.01 * iod * ZM
+    S = np.arange(-0.65, 0.651, 0.01)
+    def red(s):
+        vals = []
+        for q in np.linspace(-0.06, 0.06, 7):
+            p = c + (s * ex_ + q * ey_) * iod * ZM
+            x, y = int(round(p[0])), int(round(p[1]))
+            if 0 <= y < lab_.shape[0] and 0 <= x < lab_.shape[1]: vals.append(lab_[y, x, 1])
+        return max(vals) if vals else np.nan
+    A = cv2.GaussianBlur(np.float32([red(s) for s in S])[None], (0, 0), 1.5)[0]
+    lip = np.median(A[np.abs(S) < 0.12]); skin = np.median(A[np.abs(S) > 0.58]); half = (lip + skin) / 2
+    ends = []
+    for sg in (-1, 1):
+        i0 = int(np.argmin(np.abs(S))); i = i0
+        while 0 <= i + sg < len(S) and A[i + sg] > half: i += sg
+        ends.append(abs(S[i]))
+    return sum(ends), lip, skin
+labU = cv2.cvtColor(ours4.astype(np.float32) / 255, cv2.COLOR_BGR2LAB)
+lw_r, lw_o = lip_width(labR, LR4), lip_width(labU, LO4)
+lines.append('')
+lines.append(f"mouth width by the lips' colour (eye distances): ref {lw_r[0]:.3f}  ours {lw_o[0]:.3f}  ({(lw_o[0] / lw_r[0] - 1) * 100:+.0f}%)"
+             f"   lips' redness a* ref {lw_r[1]:.1f} ours {lw_o[1]:.1f}, beside them ref {lw_r[2]:.1f} ours {lw_o[2]:.1f}")
+# the eyes' look: the reference's opening from the detector's lid contour (reliable on a photo), ours from the render's own
+# mask of the eyeball that shows (ours-parts.png: on our render the detector draws its idea of an eye, and missed that ours
+# was a slot): its width and height (eye distances), its height across it from the inner corner to the outer (shares of its
+# tallest: an almond tapers to its corners, a slot stays tall), the iris across against the eye, the white either side of it
+# (its area against the iris's)
+def profile_(xs, ys, a, ax_, n_):
+    t = (xs - a[0]) * ax_[0] + (ys - a[1]) * ax_[1]; h = (xs - a[0]) * n_[0] + (ys - a[1]) * n_[1]
+    t0, t1 = t.min(), t.max(); w_ = t1 - t0
+    hs = []
+    for f in (0.15, 0.3, 0.5, 0.7, 0.85):
+        sel = np.abs(t - (t0 + f * w_)) < 0.02 * w_ + 1
+        hs.append(float(h[sel].max() - h[sel].min()) if sel.sum() else 0.0)
+    return w_, hs
+def eye_ref(side):
+    P = LR4
+    inner, outer, up_, lo_, ic = (133, 33, [173, 157, 158, 159, 160, 161, 246], [155, 154, 153, 145, 144, 163, 7], 468) if side == 'R' else         (362, 263, [398, 384, 385, 386, 387, 388, 466], [382, 381, 380, 374, 373, 390, 249], 473)
+    poly = np.r_[P[[inner]], P[up_], P[[outer]], P[lo_[::-1]]]
+    m = np.zeros(labR.shape[:2], np.uint8); cv2.fillPoly(m, [np.int32(np.round(poly))], 1)
+    ys, xs = np.nonzero(m)
+    r_ = np.mean([np.linalg.norm(P[i] - P[ic]) for i in range(ic + 1, ic + 5)])
+    return xs, ys, P[ic], r_
+parts_ = cv2.imread(f'{OUT}/ours-parts.png')
+eyes_o = None
+if parts_ is not None:
+    pr_ = up(cv2.warpAffine(cv2.resize(parts_, None, fx=s_, fy=s_, interpolation=cv2.INTER_NEAREST), Ms, (RW, RH), flags=cv2.INTER_NEAREST))
+    eyes_o = (pr_[..., 0] > 170) & (pr_[..., 1] > 180) & (pr_[..., 2] < 200) & (pr_[..., 2] > 120)
+def eye_ours(side):
+    if eyes_o is None: return None
+    c_ = eye_centre(LR4 / ZM, 'r' if side == 'R' else 'l') * ZM
+    n_, lab_n = cv2.connectedComponents(np.uint8(eyes_o))
+    best, bd = 0, 1e9
+    for k in range(1, n_):
+        ys, xs = np.nonzero(lab_n == k)
+        if len(xs) < 20: continue
+        d = np.hypot(xs.mean() - c_[0], ys.mean() - c_[1])
+        if d < bd: bd, best = d, k
+    if not best: return None
+    ys, xs = np.nonzero(lab_n == best)
+    # (the iris: the eyeball's darker pixels; its centre and radius from their spread along the eye line)
+    L_ = labU[ys, xs, 0]; dark = L_ < np.percentile(L_, 35) + 0.5 * (np.percentile(L_, 90) - np.percentile(L_, 35)) * 0.4
+    cx, cy = xs[dark].mean(), ys[dark].mean()
+    t = (xs[dark] - cx) * ex_[0] + (ys[dark] - cy) * ex_[1]
+    r_ = (np.percentile(t, 97) - np.percentile(t, 3)) / 2
+    return xs, ys, np.array([cx, cy]), r_
+lines.append('')
+lines.append("eyes' look: the reference's lid contour, ours the eyeball the render shows; width and height (eye distances), height from the inner")
+lines.append('  corner to the outer (shares of its tallest), the iris across against the eye, the white either side of it (area against the iris)')
+for side in ('R', 'L'):
+    row = []
+    for e in (eye_ref(side), eye_ours(side)):
+        if e is None: row.append(None); continue
+        xs, ys, ic_, r_ = e
+        inward = -ex_ if side == 'R' else ex_
+        a = np.array([xs.mean(), ys.mean()])
+        w_, hs = profile_(xs, ys, a, ex_, ey_)
+        hm = max(hs) or 1
+        # (inner corner first)
+        if side == 'L': hs = hs[::-1]
+        t = (xs - ic_[0]) * ex_[0] + (ys - ic_[1]) * ex_[1]; rr = np.hypot(xs - ic_[0], ys - ic_[1]); out_ = rr > r_ * 1.05
+        nasal = t * (1 if side == 'R' else -1) > 0
+        area = np.pi * r_ * r_
+        row.append((w_ / (iod * ZM), hm / (iod * ZM), [h / hm for h in hs], 2 * r_ / w_, (out_ & nasal).sum() / area, (out_ & ~nasal).sum() / area))
+    if row[0] is None or row[1] is None: continue
+    rf, ou = row
+    lines.append(f'  {side} width {rf[0]:.3f} / {ou[0]:.3f}   height {rf[1]:.3f} / {ou[1]:.3f}   height across ref ' + ' '.join(f'{h:.2f}' for h in rf[2]) + '   ours ' + ' '.join(f'{h:.2f}' for h in ou[2]))
+    lines.append(f'  {side} iris / eye width {rf[3]:.2f} / {ou[3]:.2f}   white inner | outer: ref {rf[4]:.2f} | {rf[5]:.2f}   ours {ou[4]:.2f} | {ou[5]:.2f}')
 # a heat map of the colour difference (blurred over about a reference pixel: its noise isn't a difference)
 dmap = np.linalg.norm(cv2.GaussianBlur(labO, (0, 0), ZM) - cv2.GaussianBlur(labR, (0, 0), ZM), axis=2)
 heat = cv2.applyColorMap(np.uint8(np.clip(dmap / 40 * 255, 0, 255)), cv2.COLORMAP_INFERNO)
