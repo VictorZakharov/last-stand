@@ -1,6 +1,8 @@
 // The Warrior: a bare-headed veteran in an engraved breastplate over layered leather, fur at the collar,
 // cuffs and boot tops, crossed straps, a mail skirt between leather tassets, engraved knee cops and tall
-// strapped boots, with a cloth cape. Carries the equipped weapon and shield. Fully procedural.
+// strapped boots, with a cloth cape. Carries the equipped weapon and shield, and wears only the armour
+// equipped: without a chest item the quilted gambeson, trousers and boots under it, without a hands item
+// bare hands below the gambeson's sleeves. Fully procedural.
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, mail as mailMaps, cloth as clothMaps, steel as steelMaps, fur as furMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
@@ -11,9 +13,9 @@ import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
 import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, DRINK_SHEATHED, type DrinkHold } from './flask';
-import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, lod, type SurfaceFn } from './armor';
-import { buildHead, buildNeck, toGroup, HEAD_MM } from './head';
-import { buildHand, poseHand, hold, seat, fistReach } from './hands';
+import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
+import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
+import { buildHand, poseHand, hold, seat, fistReach, bare, handCapsules } from './hands';
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { SkeletonCape } from './cape';
 import { fromEyes, dirFromEyes } from '../viewModel';
@@ -145,6 +147,8 @@ export function buildWarrior(): Model {
   const furM = kit.std({ color: 0x75644f, roughness: 1, map: pbrMaterialMaps(furMaps(), 1).map, normalMap: pbrMaterialMaps(furMaps(), 1).normalMap });
   const wood = kit.std({ color: 0x8a6446, roughness: 1, ...tex(woodMaps(), 1, 1) });
   const skinTip = kit.rim({ color: 0xc9957c, roughness: 0.6 }, 0x6a2a1c, 0.25);
+  // bare hands and wrists
+  const bareSkin = handSkin(kit, 'warrior');
   // the fuller only glows while a skill charges
   const edge = kit.glow(0xffb070, 0, false);
 
@@ -155,6 +159,9 @@ export function buildWarrior(): Model {
   stripRig(j.root);
   // fur casts no shadow: hundreds of thin tufts would add much to the shadow pass for little
   const S = new Sculpt().glow(furM);
+  // the armour, on meshes of its own so it comes off (setGear): the chest item's (breastplate, pauldrons, mail skirt,
+  // tassets, knee cops), the hands item's (bracers, gloves), and what shows without the latter (the forearm's sleeve)
+  const A = new Sculpt().glow(furM), H = new Sculpt().glow(furM), B = new Sculpt();
 
   // --- torso: a quilted gambeson under it all, layered leather at the waist, the breastplate on top
   S.add(scaleUV(lathe([[0.14, -0.12], [0.152, -0.02], [0.165, 0.1], [0.162, 0.18], [0.14, 0.25], [0.08, 0.29]], 24), 3, 1.5), cloth, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, 0.84]);
@@ -176,24 +183,24 @@ export function buildWarrior(): Model {
   // the breastplate, engraved across the front (projected straight on), and a plain back plate
   const bp = plate(breast, 28, 14, 0.008);
   projectUV(bp, steelRegion('chest'), (x, y) => [(x + 0.22) / 0.44, (y + 0.12) / 0.42]);
-  S.add(bp, engraved, j.chest);
-  S.add(plate(back, 20, 10, 0.008), plateM, j.chest);
-  S.add(edgeTube(breast, 'v1', 0.008, 28), plateM, j.chest);
-  S.add(edgeTube(back, 'v1', 0.008, 20), plateM, j.chest);
+  A.add(bp, engraved, j.chest);
+  A.add(plate(back, 20, 10, 0.008), plateM, j.chest);
+  A.add(edgeTube(breast, 'v1', 0.008, 28), plateM, j.chest);
+  A.add(edgeTube(back, 'v1', 0.008, 20), plateM, j.chest);
   for (let k = 0; k <= 16; k++) {
     const a = (k / 16 - 0.5) * 2 * BP_A * 0.96, p = bpPoint(a, -0.05, new THREE.Vector3(), 0.008);
     studAt(p, V(Math.sin(a), 0, Math.cos(a)), 0.006);
   }
-  S.add(merge(studs.splice(0)), plateM, j.chest);
+  A.add(merge(studs.splice(0)), plateM, j.chest);
   // side straps joining front and back plates under the arms
-  for (const s of [1, -1]) for (const y of [0.02, 0.1]) S.add(strap([V(s * 0.155, y, 0.1), V(s * 0.188, y, 0), V(s * 0.155, y, -0.1)], 0.028, 0.006), leather, j.chest);
+  for (const s of [1, -1]) for (const y of [0.02, 0.1]) A.add(strap([V(s * 0.155, y, 0.1), V(s * 0.188, y, 0), V(s * 0.155, y, -0.1)], 0.028, 0.006), leather, j.chest);
   // crossed straps over the chest, each with a buckle; they run on over the shoulders
   for (const s of [1, -1]) {
     const pts: THREE.Vector3[] = [V(s * 0.1, 0.27, -0.1), V(s * 0.115, 0.29, -0.02), V(s * 0.105, 0.25, 0.09)];
     for (let k = 0; k <= 6; k++) { const t = k / 6; pts.push(onPlate(lerp(s * 0.1, -s * 0.16, t), lerp(0.2, -0.04, t), 0.004)); }
-    S.add(strap(pts, 0.04, 0.007), leather, j.chest);
+    A.add(strap(pts, 0.04, 0.007), leather, j.chest);
     const mid = onPlate(s * -0.01, 0.1, 0.012);
-    S.add(buckle(0.05, 0.05), plateM, j.chest, mid.toArray(), [0, 0, s * 0.62]);
+    A.add(buckle(0.05, 0.05), plateM, j.chest, mid.toArray(), [0, 0, s * 0.62]);
   }
 
   // --- fur collar round the neck and over the shoulder tops
@@ -217,32 +224,37 @@ export function buildWarrior(): Model {
     };
     const lames = [lame(0.14, -0.35, 0.0, -0.01), lame(0.135, -0.05, 0.45, 0), lame(0.13, 0.35, 1.45, 0.01)];
     for (const [i, L] of lames.entries()) {
-      S.add(plate(L, 18, 6, 0.007), i === 2 ? plateM : darkSteel, sh);
-      S.add(edgeTube(L, 'v0', 0.006, 18), plateM, sh);
+      A.add(plate(L, 18, 6, 0.007), i === 2 ? plateM : darkSteel, sh);
+      A.add(edgeTube(L, 'v0', 0.006, 18), plateM, sh);
     }
     const md = disc(0.04, 0.014);
     projectUV(md, steelRegion('disc'), (x, y) => [(x / 0.04 + 1) / 2, (y / 0.04 + 1) / 2]);
-    S.add(md, engraved, sh, [s * 0.095, 0.07, 0.07], [-0.5, s * 0.75, 0]);
-    S.add(furTufts(rng, 44, (i, o) => {
+    A.add(md, engraved, sh, [s * 0.095, 0.07, 0.07], [-0.5, s * 0.75, 0]);
+    A.add(furTufts(rng, 44, (i, o) => {
       const a = (rng() - 0.5) * 3; o.p.set(s * (0.1 + Math.cos(a) * 0.04), -0.06, Math.sin(a) * 0.1); o.d.set(s * 0.6, -0.8, Math.sin(a) * 0.5);
     }, 0.045, 0.009), furM, sh);
   }
 
   // --- arms: navy sleeves strapped at the upper arm, fur at the elbow, leather bracers with a steel
-  // plate, fingerless gloves
+  // plate, fingerless gloves (the hands item: without it the sleeves run on to the wrist, the hands bare)
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
     // the sleeve, thigh and shin run on past their joints under the bracer, the knee cop and the boot, and follow the lower limb there
     S.skin(scaleUV(limb(0.38, 0.078, 0.064, 0.12, 0.24, 14), 2, 1), cloth, sh, el, 0.2, 0.32);
     for (const y of [-0.13, -0.21]) S.add(belt(0.078, 0.078, y, 0.024, 0.006, 0, 14), leather, sh);
-    S.add(furTufts(rng, 40, (i, o) => { const a = (i / 40) * Math.PI * 2; o.p.set(Math.sin(a) * 0.06, -0.035, Math.cos(a) * 0.06); o.d.set(Math.sin(a), 0.6, Math.cos(a)); }, 0.035, 0.009), furM, el);
-    S.add(scaleUV(lathe([[0.052, -0.26], [0.06, -0.2], [0.066, -0.1], [0.07, -0.05], [0.068, -0.035]], 16), 2, 1), leather, el);
+    H.add(furTufts(rng, 40, (i, o) => { const a = (i / 40) * Math.PI * 2; o.p.set(Math.sin(a) * 0.06, -0.035, Math.cos(a) * 0.06); o.d.set(Math.sin(a), 0.6, Math.cos(a)); }, 0.035, 0.009), furM, el);
+    H.add(scaleUV(lathe([[0.052, -0.26], [0.06, -0.2], [0.066, -0.1], [0.07, -0.05], [0.068, -0.035]], 16), 2, 1), leather, el);
     // its top closed under the elbow's fur (through the eyes, with the fur hidden, it would show open)
-    S.add(new THREE.CircleGeometry(0.069, 16).rotateX(-Math.PI / 2), leather, el, [0, -0.037, 0]);
+    H.add(new THREE.CircleGeometry(0.069, 16).rotateX(-Math.PI / 2), leather, el, [0, -0.037, 0]);
     const vb: SurfaceFn = (u, v, out) => { const a = (u - 0.5) * 1.8, y = lerp(-0.24, -0.06, v), r = 0.066 + 0.01 * sm(-0.24, -0.08, y) + 0.004; return out.set(s * Math.cos(a) * r, y, Math.sin(a) * r); };
-    S.add(plate(vb, 10, 8, 0.005), plateM, el);
-    for (const y of [-0.09, -0.2]) S.add(belt(0.072, 0.072, y, 0.018, 0.006, 0, 14), leatherDark, el);
+    H.add(plate(vb, 10, 8, 0.005), plateM, el);
+    for (const y of [-0.09, -0.2]) H.add(belt(0.072, 0.072, y, 0.018, 0.006, 0, 14), leatherDark, el);
     // the glove's cuff: from under the bracer down over the wrist into the palm, following the hand, so the hand joins the forearm (the bracer ends above the wrist)
-    S.skin(scaleUV(lathe([[0.041, -0.315], [0.043, -0.29], [0.045, -0.265], [0.048, -0.235], [0.052, -0.2]], 16), 2, 1), leather, el, hd, 0.25, 0.29);
+    H.skin(scaleUV(lathe([[0.041, -0.315], [0.043, -0.29], [0.045, -0.265], [0.048, -0.235], [0.052, -0.2]], 16), 2, 1), leather, el, hd, 0.25, 0.29);
+    // bare: the gambeson's sleeve on down the forearm (its top inside the upper sleeve's end, which follows the
+    // forearm), a turned-back cuff at the wrist, and the wrist into the palm
+    B.add(scaleUV(lathe([[0.05, -0.245], [0.052, -0.2], [0.057, -0.12], [0.061, -0.04], [0.06, 0]], 16), 2, 1), cloth, el);
+    B.add(scaleUV(lathe([[0.049, -0.25], [0.056, -0.245], [0.058, -0.215], [0.055, -0.205]], 16), 2, 0.3), cloth, el);
+    B.skin(lathe([[0.036, -0.315], [0.037, -0.29], [0.039, -0.265], [0.042, -0.235]], 16), bareSkin, el, hd, 0.25, 0.29);
   }
   const handL = buildHand(j.handL, 1, leather, skinTip, 1.08), handR = buildHand(j.handR, -1, leather, skinTip, 1.08);
 
@@ -253,8 +265,8 @@ export function buildWarrior(): Model {
     const cop: SurfaceFn = (u, v, out) => { const lon = (u - 0.5) * 2.5, lat = lerp(-0.95, 1.05, v); return out.set(Math.sin(lon) * Math.cos(lat) * 0.082, Math.sin(lat) * 0.085, Math.cos(lon) * Math.cos(lat) * 0.075 + 0.012); };
     const kg = plate(cop, 14, 12, 0.006);
     projectUV(kg, steelRegion('knee'), (x, y) => [(x / 0.082 + 1) / 2, (y / 0.085 + 1) / 2]);
-    S.add(kg, engraved, kn, [0, -0.01, 0]);
-    for (const y of [0.05, -0.075]) S.add(belt(0.082, 0.07, y, 0.02, 0.006, 0, 14), leather, kn);
+    A.add(kg, engraved, kn, [0, -0.01, 0]);
+    for (const y of [0.05, -0.075]) A.add(belt(0.082, 0.07, y, 0.02, 0.006, 0, 14), leather, kn);
     // the boot's shaft from below the knee to the ankle, and a fur cuff over its top
     S.add(scaleUV(lathe([[0.056, -0.42], [0.062, -0.37], [0.072, -0.27], [0.078, -0.16], [0.082, -0.11], [0.08, -0.1]], 18), 2, 1.5), leather, kn, [0, 0, 0.005], [0, 0, 0], [1, 1, 1.06]);
     S.add(furTufts(rng, 48, (i, o) => { const a = (i / 48) * Math.PI * 2; o.p.set(Math.sin(a) * 0.08, -0.105, Math.cos(a) * 0.085); o.d.set(Math.sin(a), 0.7, Math.cos(a)); }, 0.04, 0.01), furM, kn);
@@ -279,10 +291,36 @@ export function buildWarrior(): Model {
   S.add(strap(Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * Math.PI * 2; return V(Math.sin(a) * 0.2, 0.02 - 0.05 * Math.sin(a + 0.8) - 0.02 * Math.cos(a), Math.cos(a) * 0.17); }), 0.04, 0.01, true), leather, j.hips);
   S.add(new THREE.BoxGeometry(0.08, 0.1, 0.045), leatherDark, j.hips, [-0.18, -0.05, 0.08], [0, -0.8, 0]);
   S.add(new THREE.BoxGeometry(0.086, 0.04, 0.05), leather, j.hips, [-0.18, -0.005, 0.08], [0, -0.8, 0]);
-  const skirt = new Skirt({ r0: 0.19, r1: 0.25, len: 0.36, depth: 0.8, folds: 7, foldAmp: 0.03, flare: 0.7, rows: 6 });
+  // (its top gathered under the waist belt, against the leather there: hung below the belt and wider than it, the ring between
+  // the two was open, and the trousers' tops showed through it at the sides, standing too; the hips' flare is the drape's; seven
+  // rows, as the hand on the shield's grip lay between two of six)
+  const skirt = new Skirt({ r0: 0.145, r1: 0.25, len: 0.39, depth: 0.8, folds: 7, foldAmp: 0.03, flare: 0.7, rows: 7 });
   const skirtMesh = new THREE.Mesh(skirt.geo, mail);
-  skirtMesh.position.y = 0.04; skirtMesh.castShadow = skirtMesh.receiveShadow = true;
+  skirtMesh.position.y = 0.07; skirtMesh.castShadow = skirtMesh.receiveShadow = true;
   j.hips.add(skirtMesh);
+  // what it is draped over, in its own space: the trousers' thighs (they bulge to 11 cm) and the shins over the boots (their
+  // fur cuffs stand 11 cm off the shin, over the knee cops) from inside, the hands and the forearms' lower halves (a bracer's
+  // plate or the sleeve) from outside, with the cloth's gap. Swung by the thighs alone, the mail was narrower than the
+  // trousers at its sides and they came through it in every frame, standing too.
+  const legBodies = new SkirtLimbs(), handBodies = new SkirtLimbs(), GAP = 0.018, HAND_GAP = 0.012, O = () => new THREE.Vector3();
+  for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
+    legBodies.add([th, O()], [kn, O()], 0.112 + GAP, 0.084 + GAP);
+    legBodies.add([kn, O()], [an, O()], 0.115 + GAP, 0.065 + GAP);
+  }
+  const capsL = handCapsules(handL);
+  for (const [a, b, r] of [...capsL, ...handCapsules(handR)]) handBodies.add(a, b, r + HAND_GAP);
+  const cuffR = () => (gloved ? [0.075, 0.055] : [0.058, 0.058]);
+  const fores = ([[j.elbowL, j.handL], [j.elbowR, j.handR]] as const).map(([el, hd]) => handBodies.add([el, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], [hd, O()], 0));
+  // (a left hand with no weapon in it, empty or on the shield's grip, swung out just enough to rest on the mail rather than in it:
+  // armOffThigh)
+  const freePts = [...capsL.flatMap(([a, b, r]) => [[a, r], [b, r]] as [JointPoint, number][]), [[j.elbowL, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], 0], [[j.handL, O()], 0]] as [JointPoint, number][];
+  const placeBodies = (free: boolean) => {
+    const [ra, rb] = cuffR();
+    for (const f of fores) { f.ra = ra + HAND_GAP; f.rb = rb + HAND_GAP; }
+    legBodies.place(skirtMesh);
+    if (free) { freePts[freePts.length - 2][1] = ra; freePts[freePts.length - 1][1] = rb; armOffThigh(skirtMesh, j.shoulderL, 1, legBodies.list[0], HAND_GAP, freePts); }
+    handBodies.place(skirtMesh);
+  };
   const tassets: { g: THREE.Group; s: number }[] = [];
   for (const s of [1, -1]) {
     for (const [k, off] of [[0, 0.55], [1, 1.05]] as const) {
@@ -555,8 +593,12 @@ export function buildWarrior(): Model {
   const legs = new LegIK(j);
   /** smooths every cut between poses: an action starting, restarting or ending */
   const fade = new PoseFade(j);
-  const furs = S.build().filter((m) => m.material === furM).map((m) => { m.userData.fur = true; return new FurSway(m, furM); });
+  const clothes = S.build(), gloves = H.build(), sleeves = B.build(), plates = A.build();
+  const harness: THREE.Object3D[] = [...plates, skirtMesh, ...tassets.map((t) => t.g)];
+  const furs = [...clothes, ...plates, ...gloves].filter((m) => m.material === furM).map((m) => { m.userData.fur = true; return new FurSway(m, furM); });
   const elbowFur = [j.elbowL, j.elbowR].flatMap((e) => e.children.filter((c) => c.userData.fur));
+  /** a hands item worn (the elbows' fur is the bracers') */
+  let gloved = true;
 
   const root = j.root;
   root.scale.setScalar(1.1);
@@ -608,6 +650,12 @@ export function buildWarrior(): Model {
     if (held?.off != null) offGrip.position.y = held.off;
     shield.visible = gear.shield;
     helm.visible = gear.helm; for (const m of head.hair) m.visible = !gear.helm;
+    for (const o of harness) o.visible = gear.chest;
+    gloved = gear.hands;
+    for (const o of gloves) o.visible = gloved;
+    for (const o of sleeves) o.visible = !gloved;
+    for (const f of elbowFur) f.visible = gloved && !fp;
+    bare(handL, gloved ? null : bareSkin); bare(handR, gloved ? null : bareSkin);
     for (const w of offWeapons.values()) { w.group.visible = false; gripL.add(w.group); w.group.position.set(0, 0, 0); }
     sheathed = false;
     offHeld = gear.offWeapon ? offWeapons.get(gear.offWeapon) ?? offWeapons.get('Sword')! : null;
@@ -1181,13 +1229,14 @@ export function buildWarrior(): Model {
       }
     }
 
-    // the mail skirt swings with the legs; the tassets on each side ride their own thigh
+    // the mail skirt swings with the legs, draped over them and the hands; the tassets on each side ride their own thigh
     const fL = -j.thighL.rotation.x, fR = -j.thighR.rotation.x;
-    skirt.update(fL, fR, move, t, dt);
     for (const ta of tassets) ta.g.rotation.x = -(0.12 + Math.max(-0.05, ta.s > 0 ? fL : fR) * 0.75 + move * 0.05);
+    root.updateMatrixWorld(true);
+    placeBodies(!fp && st.dead < 0 && !(offHeld && !sheathed) && !twoHeld);
+    skirt.update(fL, fR, move, t, dt, legBodies.list, handBodies.list);
 
     // fists round whatever they hold; an empty hand hangs loosely curled
-    root.updateMatrixWorld(true);
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
     if (held) hold(handR, along(grip), held.r);
     else poseHand(handR, 0.5 + Math.sin(t * 1.3) * 0.05, 0.1);
@@ -1212,7 +1261,7 @@ export function buildWarrior(): Model {
     worldObjects: [cape.mesh],
     reset: () => { cape.reset(); legs.reset(); fade.reset(); },
     // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
-    firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on; mountAll(); },
+    firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on && gloved; mountAll(); },
     dispose() {
       kit.dispose();
       for (const f of furs) f.dispose();

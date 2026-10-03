@@ -28,6 +28,9 @@ export interface CapsuleSpec {
   offB?: V3;
 }
 
+/** A capsule refitted (`SkeletonCape.fit`). */
+export type CapsuleFit = Partial<Pick<CapsuleSpec, 'radius' | 'depthRadius' | 'offA' | 'offB'>>;
+
 export interface SkeletonCapeOptions {
   /** joint the neckline is pinned to (e.g. chest) */
   anchor: THREE.Object3D;
@@ -64,12 +67,17 @@ export class SkeletonCape {
   private acc = 0;
   private time = 0;
   private needsReset = true;
+  private refit = false;
+  /** the neckline's ends (anchor-local), which `fit` moves */
+  private left: V3;
+  private right: V3;
   /** the neckline's middle last frame, for its own velocity */
   private readonly lastNeck = new THREE.Vector3();
 
   constructor(private readonly o: SkeletonCapeOptions) {
     this.anchors = { left: new THREE.Vector3(), right: new THREE.Vector3(), back: new THREE.Vector3(0, 0, -1) };
-    this.specs = o.capsules;
+    this.left = o.left; this.right = o.right;
+    this.specs = o.capsules.slice();
     this.colliders = o.capsules.map((c) => ({
       start: new THREE.Vector3(), end: new THREE.Vector3(),
       radius: c.radius, depthRadius: c.depthRadius, name: c.name, clearance: c.clearance, faceSampleSpacing: c.faceSampleSpacing,
@@ -82,7 +90,7 @@ export class SkeletonCape {
   }
 
   private updateAnchors(): CapeAnchors {
-    const { anchor, root, left, right } = this.o;
+    const { anchor, root } = this.o, { left, right } = this;
     root.updateMatrixWorld(true);
     anchor.localToWorld(this.anchors.left.set(...left));
     anchor.localToWorld(this.anchors.right.set(...right));
@@ -101,6 +109,22 @@ export class SkeletonCape {
     return this.colliders;
   }
 
+  /** Fit the cape to what the body wears (a robe or a plain tunic under it): the neckline's ends, and the named capsules
+   *  changed from how they were built (their radii and ends); it drapes afresh. The pinned neckline must stay outside
+   *  every capsule: a triangle pinned along one edge and pushed out of a capsule moves only its free corner, by the push
+   *  over that corner's share of the contact, which near the pinned edge throws it metres (the solver then resets the
+   *  cape: it jerks). */
+  fit(left: V3, right: V3, changes: Record<string, CapsuleFit>): void {
+    this.left = left; this.right = right;
+    for (let i = 0; i < this.specs.length; i++) {
+      const base = this.o.capsules[i], s = this.specs[i] = { ...base, ...changes[base.name] };
+      this.colliders[i] = { ...this.colliders[i], radius: s.radius, depthRadius: s.depthRadius };
+    }
+    // (a worker has the colliders' sizes from when the cape was registered: it is registered again)
+    this.refit = true;
+    this.needsReset = true;
+  }
+
   /** Snap the cape back to a rest drape (teleports, respawn). */
   reset(): void { this.needsReset = true; }
 
@@ -113,7 +137,9 @@ export class SkeletonCape {
     // large jumps (respawn / teleport) re-drape instead of whipping across the arena
     if (this.needsReset || this.sim.getParticlePosition(NECK_COLUMN, 0).distanceTo(neck) > 2) {
       this.sim.reset(anchors);
-      pool?.updateCape(this.id, this.sim, anchors);   // newer revision: in-flight results are dropped
+      if (this.refit) pool?.registerCape(this.id, this.sim, anchors, colliders);
+      else pool?.updateCape(this.id, this.sim, anchors);   // newer revision: in-flight results are dropped
+      this.refit = false;
       this.o.root.getWorldQuaternion(_q).invert();
       this.pinBias.copy(this.sim.getParticlePosition(NECK_COLUMN, 0)).sub(neck).applyQuaternion(_q);
       this.needsReset = false;

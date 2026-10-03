@@ -319,6 +319,61 @@ try {
     return c2.toDataURL('image/png').split(',')[1];
   });
   writeFileSync(join(OUT, 'ours-depth.png'), Buffer.from(depth, 'base64'));
+  // a beard of cards: its shape (beard.ts) at rest, over each body it may lie on (the chest item worn or not), and its
+  // cards the body hides as the hero stands
+  const beard = await p.evaluate(async (cls) => {
+    const B = await import('/tools/facelab/beard.ts'), { buildModel } = await import('/src/entities/models/index.ts'), { CLASSES } = await import('/src/data/classes/index.ts');
+    const G = __G, who = CLASSES[cls].model;
+    if (!G.player.model.root.getObjectByName('beard')) return null;
+    const m = buildModel(who), out = [];
+    for (const chest of [true, false]) {
+      m.setGear({ ...G.player.gear, helm: false, chest, hands: true });
+      out.push([chest ? 'chest item' : 'no chest item', B.measureBeard(m.root, who)]);
+    }
+    m.dispose?.();
+    return { rest: out, hidden: B.measureBeard(G.player.model.root, who).hidden };
+  }, CLS);
+  if (beard) {
+    const lines = ['', "beard (beard.ts; mm in the face's frame, at rest; widths against the jaw's)"];
+    for (const [i, [name, b]] of beard.rest.entries()) {
+      for (const [k, d] of [['front', b.front], ['side', b.sideView]]) writeFileSync(join(OUT, `beard-${k}-${i}.png`), Buffer.from(d.split(',')[1], 'base64'));
+      lines.push(`  ${name} (beard-front-${i}.png, beard-side-${i}.png): ${b.len.toFixed(0)} mm below the chin, widest ${b.flare} of the jaw, rows split ${b.split}, full ${b.fill}`,
+        `    tapering ${b.taper.join(' ')} (a quarter, half, three quarters, nine tenths down), cards hidden by the body ${b.hidden}`,
+        `    cheek line at 20 30 40 50 mm out: ${b.cheek.join(' ')}, at the face's outline ${b.cheekOut}; side (back..front) ${b.side.join(', ')}; deepest ${b.depth} mm`);
+    }
+    lines.push(`  as the hero stands: cards hidden by the body ${beard.hidden}`);
+    writeFileSync(join(OUT, 'beard.txt'), lines.join('\n') + '\n');
+  }
+  // the hair (hair.ts: a wig's edge, a bob's hem, the ears covered), the shoulders (shoulders.ts: the slope from the neck,
+  // a coat hanger's bump) and the neck (neck.ts: its girth up from the collar against a man's, the seam into the head's
+  // skin), on a model at rest, without armour and with the chest item
+  const body = await p.evaluate(async (cls) => {
+    const Hm = await import('/tools/facelab/hair.ts'), Sh = await import('/tools/facelab/shoulders.ts'), Nk = await import('/tools/facelab/neck.ts'), { buildModel } = await import('/src/entities/models/index.ts'), { CLASSES } = await import('/src/data/classes/index.ts');
+    const G = __G, who = CLASSES[cls].model, m = buildModel(who), out = { hair: null, shoulders: [], neck: [] };
+    for (const chest of [false, true]) {
+      m.setGear({ ...G.player.gear, helm: false, chest, hands: false });
+      if (!chest) out.hair = Hm.measureHair(m.root, who);
+      out.shoulders.push([chest ? 'chest item' : 'no chest item', Sh.measureShoulders(m)]);
+      out.neck.push([chest ? 'chest item' : 'no chest item', Nk.measureNeck(m)]);
+    }
+    m.dispose?.();
+    return out;
+  }, CLS);
+  {
+    const h = body.hair, lines = ['', "hair (hair.ts; mm in the face's frame, at rest)"];
+    if (h) lines.push(`  off the skin just behind the hairline (90th percentile): forehead ${h.edgeFront}, temples ${h.edgeTemple}`,
+      `  locks' ends' heights (10th 50th 90th percentiles): at the sides ${h.endsSide.join(' ')}, behind ${h.endsBack.join(' ')}; ears covered ${h.ears}`);
+    lines.push('shoulders (shoulders.ts; the front outline from the neck out)');
+    for (const [name, sides] of body.shoulders) lines.push(`  ${name}: ` + sides.map((x) => `${x.side} slope ${x.slope} deg, bump ${x.bump} mm`).join('; '));
+    lines.push("neck (neck.ts; girth as a share of the head's: a man's 0.69, 0.76 at the base; heights above the collar at the back)");
+    for (const [name, n] of body.neck) {
+      if (!n) { lines.push(`  ${name}: not measured`); continue; }
+      lines.push(`  ${name}: head ${n.head} mm round; neck just above the collar ${n.base}, narrowest ${n.min} at ${n.minAt} mm, under the jaw ${n.top}, change ${n.taper} per 10 mm; collar ${n.c7} mm from a man's C7`,
+        `    seam into the head's skin at ${n.seam.y.join(' ')} mm (10th 50th 90th round it): step ${n.seam.step} mm, crease ${n.seam.turn} deg, colour dE ${n.seam.dE}, relief above it ${n.seam.relief} deg, roughness ${n.seam.rough} over the neck's`,
+        `    by sector (height/step/dE/L head/L neck/crease): ${n.seam.sectors}`);
+    }
+    writeFileSync(join(OUT, 'body.txt'), lines.join('\n') + '\n');
+  }
   if (errs.length) console.error('facelab: page errors:', errs.join(' | '));
 } finally {
   await b.close();
@@ -326,6 +381,7 @@ try {
 }
 const r = spawnSync(PY, [join(HERE, 'compare.py'), REF, OUT, TAG], { stdio: ['ignore', 'inherit', 'pipe'], env: { ...process.env, GLOG_minloglevel: '3', TF_CPP_MIN_LOG_LEVEL: '3', PYTHONWARNINGS: 'ignore' } });
 if (r.status) { console.error(String(r.stderr)); process.exit(r.status); }
+for (const f of ['beard.txt', 'body.txt']) if (existsSync(join(OUT, f))) { const t = readFileSync(join(OUT, f), 'utf8'); process.stdout.write(t); writeFileSync(join(OUT, 'report.txt'), readFileSync(join(OUT, 'report.txt'), 'utf8') + t); }
 if (POINTS) {
   const t = spawnSync(PY, [join(HERE, 'points.py'), POINTS, REF, OUT], { stdio: ['ignore', 'inherit', 'pipe'], env: { ...process.env, PYTHONWARNINGS: 'ignore' } });
   if (t.status) { console.error(String(t.stderr)); process.exit(t.status); }

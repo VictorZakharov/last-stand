@@ -87,6 +87,11 @@ const AHEAD = 0.4;
 /** a swing lands with this share of the stance's backward stroke (relative to the hip), so a foot never skids as it takes the ground and paws back a little as it lands, as a runner's does; it leaves with less, or it trails far behind the hip before it comes forward */
 const STROKE_IN = 0.8, STROKE_OUT = 0.5;
 const smooth = (t: number): number => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
+/** where leg `i` (0 the left) is in its own cycle at the walk cycle's `phase`, 0..1 with its swing centred on 0.5: the left foot
+ *  swings through as the walk cycle's own left thigh comes forward past the hip (phase 0, rig.ts `walkCycle`), so the arms, the
+ *  hips' and the chest's turn it swings by the same phase go against the legs, as a person's do (half a cycle the other way,
+ *  every walker swung each arm forward with the leg on its side, and a hand hanging by the thigh met it) */
+const legU = (phase: number, i: number): number => ((phase / TAU + (1 - i) * 0.5) % 1 + 1) % 1;
 
 /** How far a half stride (one foot's step) is at `speed` (m/s) for legs `leg` long (world m): walks take short
  *  steps, runs long ones; the walk cycle's phase then advances π per step (`gaitRate`). */
@@ -346,7 +351,7 @@ export class LegIK {
       const side = Math.sign((_h.x - _c.x) * _sd.x + (_h.z - _c.z) * _sd.z) || (i === 0 ? 1 : -1);
       const lat = (q: THREE.Vector3): number => ((q.x - _c.x) * _sd.x + (q.z - _c.z) * _sd.z) * side;
       const keepSide = (q: THREE.Vector3): void => { const d = GAP * sc - lat(q); if (d > 0) { q.x += _sd.x * side * d; q.z += _sd.z * side * d; } };
-      const u = ((phase / TAU + i * 0.5) % 1 + 1) % 1, inWin = Math.abs(u - 0.5) < w2;
+      const u = legU(phase, i), inWin = Math.abs(u - 0.5) < w2;
 
       if (this.moving && !own) {
         // (a foot re-stepping does not take the other one's swing with it, or both leave the ground at once and the body drops between them; at a walk the other waits)
@@ -549,7 +554,7 @@ export class LegIK {
   /** heel down at the landing, toe pushing off at the end of the stance (the walk cycle's own phase) */
   private stancePitch(f: Foot, i: number, phase: number, duty: number, w2: number): number {
     if (!this.moving) return 0;
-    const u = ((phase / TAU + i * 0.5) % 1 + 1) % 1, sp = (((u - (0.5 + w2)) % 1) + 1) % 1 / Math.max(0.05, 1 - 2 * w2);
+    const u = legU(phase, i), sp = (((u - (0.5 + w2)) % 1) + 1) % 1 / Math.max(0.05, 1 - 2 * w2);
     void f;
     const run = smooth((this.sp - 2) / 3.5), at = 0.75 - 0.15 * run;
     if (sp > at && sp < 1) return (0.35 + 0.25 * run) * smooth((sp - at) / (1 - at));

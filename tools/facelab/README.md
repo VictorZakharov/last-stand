@@ -47,7 +47,14 @@ where you like and pass its path. Any front view of a face works, a full-body sh
    region's lightness also against the forehead's (the lighting cancels out) and its spread (texture, shading). The
    hair: how it frames the forehead (the bare skin's width row by row above the brows), how high it stands and how
    low it falls, its tones (lightness percentiles: roots and crests) and colour, and which way its strands run (the
-   structure tensor cell by cell: swept from a part, or combed flat).
+   structure tensor cell by cell: swept from a part, or combed flat). The beard: its lightness percentiles region by
+   region (its dark hairs against the skin between them: a flat tone reads as a block) and the lightness down each
+   cheek into it (where it starts, how softly). The mouth's width by the lips' colour, and the eyes' look: the
+   reference's opening from its lid contour, ours from the eyeball the render shows (`ours-parts.png`), their width,
+   height and height across them (an almond tapers to its corners, a slot stays tall), the iris against the eye and
+   the white either side of it. On our render the detector's points follow its own idea of a face (they barely moved
+   when our lips widened, and drew an almond round an eye that rendered as a slot): ours is measured from the
+   render's own passes or colours where it matters.
 
 4. **Shape** (the face's form, which paint and hair hide; judge it first, colour after): the head in grey clay from all
    round (`clay-*.png`, `sheet-clay.png`), lit from high to one side so its forms throw shadows, and in clay under the
@@ -94,7 +101,8 @@ where you like and pass its path. Any front view of a face works, a full-body sh
      can't follow is where ours is unlike any real face, whatever the reference: a lump, a hollow, a shelf;
    - **our skin's curvature** on its own mesh (the distance field's Laplacian): a groove or a seam shows as a thin line,
      however the light falls; the report gives how much of the skin away from the eyes, nose and mouth is sharper than
-     a 7 mm radius.
+     a 7 mm radius, and the nose on its own: its profile down the middle against a smooth curve (a hump or a crease
+     between the shapes it is built from leaves it) and how much of its front and sides is hollow.
    Checked on our own renders, whose shape is known: the rebuild recovers the views' turns within a few degrees where
    it has landmarks; what the face model can't represent (fine features: the eyes' lids, the nostrils, the lips' rolls)
    shows in both maps alike, so read the nose, lips and eyes from the landmarks and close-ups instead.
@@ -108,6 +116,31 @@ where you like and pass its path. Any front view of a face works, a full-body sh
    the lips stay where they were when the muzzle moves. Check a fit's clay views and curvature map before keeping it:
    a value driven to an extreme can leave a needle of a shape between the target's points (a crease), and a shape the
    mask makes redundant can stand out of it with grooves round it.
+   A face with no picture of its own (the mage) is fitted to the real face nearest it instead: `python dense.py <out
+   dir> nearest <class>` writes that face, fitted to our surface, as the target, and the fit keeps the face's own
+   proportions on a surface a real face could have (its lumps and shelves smoothed away). Start it from a mask copied
+   from a face that has one.
+8. **A full beard** (`beard.ts`, for a hero that has one): its shape in the face's own millimetres, square from the
+   front and the side, its meshes (its volume and tufts) and the painted beard z-buffered against each other and the body, on a model built
+   afresh at rest over each body the beard may lie on (the chest item worn or not), and its cards the body hides as
+   the hero stands. Below the chin, row by row: its width against the jaw's (a full beard tapers to a rounded end,
+   never wider than the jaw), the rows it splits into two or more runs (a fork, tails beside the neck), how full it is
+   between its edges; the painted cheek line's height across the cheek and at the face's outline; the side's back and
+   front edges and how deep its own meshes are below the chin (a volume, or a sheet lying on the body); the share of it
+   the body hides (buried in a robe's cowl). None of the face's measures saw the old beards: hung straight down from the
+   jaw, a ruff with its sides as two tails and its middle inside the cowl; draped over the cowl, a sheet like a liquid.
+9. **The hair and the shoulders** (`hair.ts`, `shoulders.ts`, on a model at rest): how far the hair stands off the
+   skin just behind the hairline (a wig's edge is a ledge), where its locks end round the head (a level hem all round
+   is a bob), how much of the ears it covers; the body's outline from the neck out over each shoulder, its slope (a
+   man's trapezius, about 20 degrees) and any bump where it rises again (an arm's tube standing over the body: a coat
+   hanger), without armour and with the chest item. `body.txt`, added to the report.
+10. **The neck** (`neck.ts`, in `body.txt` too, per chest item): sliced every 5 mm up the neck joint's frame, each slice's
+   girth against the head's (a man's neck is 0.69 of his head round it at its narrowest, 0.76 at its base: ANSUR II),
+   where it is narrowest and how it tapers (a cone reads as one); where the head's skin meets the rig's neck all round
+   it: the step between them, the crease (the turn of the shading normals across it, skinned as posed), the colour
+   difference (CIE76 dE of the painted albedo either side) and the paint's relief and roughness just above it; how high
+   the collar sits at the back against the seventh vertebra's height, and skin showing through the collar (skin met
+   within 25 mm of a ray before the cloth it is under).
 
 ## Output (`tools/facelab/out/<tag>/`)
 
@@ -130,6 +163,8 @@ where you like and pass its path. Any front view of a face works, a full-body sh
 - `sheet-turn.png` (with `--turn`): the three-quarter and side views and their outlines.
 - `sheet-dense.png` (with `--turn`): ours against the rebuilt reference, against the real face nearest it, and our
   skin's curvature, each from the front and the reference's turns; `fit-target.f32` / `.json`, the fitter's target.
+- `beard-front-N.png`, `beard-side-N.png` (a hero with a beard): its masks over each body (skin, painted beard, cards,
+  the body; the cards it hides red, the chin's underside yellow); `beard.txt`, its numbers, added to the report.
 - `report.txt` (and `.json`): proportions as shares of the distance between the eye centres (eye size and opening,
   brow height, nose length and width, lips, mouth to chin, face and jaw width), the reference's beside ours; each
   feature's mean landmark error; the outline's half-width every 0.2 eye distances down from the eye line; the brows

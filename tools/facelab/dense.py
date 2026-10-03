@@ -133,8 +133,11 @@ def regions(P, lm):
 
 os.makedirs(OUT, exist_ok=True)
 bfm = BFM()
-rec = np.load(os.path.join(REC, 'recon.npz'))
-meta = json.load(open(os.path.join(REC, 'recon.json'))) if os.path.exists(os.path.join(REC, 'recon.json')) else {}
+# (`nearest` for the reference: a face with no picture of its own, fitted to the real face nearest it, its lumps and
+# grooves smoothed away)
+SELF = REC == 'nearest'
+rec = None if SELF else np.load(os.path.join(REC, 'recon.npz'))
+meta = json.load(open(os.path.join(REC, 'recon.json'))) if not SELF and os.path.exists(os.path.join(REC, 'recon.json')) else {}
 YAW34, YAWS = abs(meta.get('yaw', {}).get('34', 25)), abs(meta.get('yaw', {}).get('side', 70))
 sdf = SDF()
 lines = meta.get('report', []) + ['', 'the surface (the reference rebuilt in 3D against our head\'s distance field; mm; + ours stands out, - sunk)']
@@ -147,7 +150,7 @@ lines.append(f'  the real face nearest ours (the face model fitted to our surfac
 
 # --- the reference laid onto it by the inner landmarks, at our eyes' spacing
 eyes = lambda X: (X[lm[36:42]].mean(0), X[lm[42:48]].mean(0))
-V = rec['V'].astype(np.float64)
+V = Po.copy() if SELF else rec['V'].astype(np.float64)
 a, b = eyes(V); c = (a + b) / 2
 V = c + (V - c) * np.linalg.norm(np.subtract(*eyes(Po))) / np.linalg.norm(b - a)
 inner = lm[17:68]
@@ -190,6 +193,29 @@ face = (zg > 0) & (yg > 0) & (yg < 160) & ~feat
 sharp = np.abs(H) > 0.15
 lines.append(f'  our skin\'s curvature away from the eyes, nose and mouth: {100 * (sharp & face).sum() / face.sum():.1f}% of it sharper than a '
              f'7 mm radius (a groove, a seam, a lump); the sharpest {np.percentile(H[face], 0.5):+.2f} / {np.percentile(H[face], 99.5):+.2f} per mm')
+# --- the nose (left out above: it has sharp forms of its own): its profile down the middle, from the nasion to the tip,
+# against a smooth curve (a hump or a crease between the shapes it is built from leaves it), and how much of its front and
+# sides is hollow, a crease (the wings' groove and the nostrils left out)
+ys = np.arange(55.0, 140.0, 0.5)
+Pn = np.stack([np.zeros_like(ys), ys, np.full_like(ys, 170.0)], 1)
+for _ in range(300):
+    dn = sdf(Pn)[0]
+    if np.all(dn < 0.02): break
+    Pn[:, 2] -= np.where(dn < 0.02, 0, np.maximum(0.05, dn * 0.9))
+zn = Pn[:, 2]
+it = int(np.argmax(np.where((ys > 70) & (ys < 115), zn, -1e9)))
+up = (ys > ys[it] + 8) & (ys < 135)
+ina = int(np.flatnonzero(up)[np.argmin(zn[up])])
+dor = (ys > ys[it] + 5) & (ys < ys[ina] - 3)
+cf = np.polyfit(ys[dor], zn[dor], 2)
+res = zn[dor] - np.polyval(cf, ys[dor])
+bend = np.convolve(np.gradient(np.gradient(zn, ys), ys), np.ones(5) / 5, 'same')[dor]
+flips = int(np.sum(np.diff(np.sign(bend[np.abs(bend) > 0.01])) != 0))
+lines.append(f'  the nose\'s profile from the nasion (y {ys[ina]:.0f}) to the tip (y {ys[it]:.0f}): off a smooth curve by {np.abs(res).max():.2f} mm at most '
+             f'({np.sqrt(np.mean(res * res)):.2f} rms), its bend changing way {flips} times (a hump or a crease between its shapes)')
+nose_f = (np.abs(xg) < 13) & (yg > ys[it] - 1) & (yg < ys[ina] - 2) & (zg > np.interp(yg, ys, zn) - 9)
+lines.append(f'  the nose\'s front and sides: {100 * ((H < -0.1) & nose_f).sum() / max(1, nose_f.sum()):.1f}% hollow (a crease, sharper than a 10 mm radius), '
+             f'the hollowest {np.percentile(H[nose_f], 0.5):+.2f} per mm')
 sdf.close()
 
 # --- the sheet
