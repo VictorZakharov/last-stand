@@ -57,8 +57,9 @@ export interface DerivedStats {
 
 export type SkillKey = 'mouse0' | 'mouse2' | '1' | '2' | '3' | '4' | 'q';
 /** pose a model plays while the skill casts; a class's model interprets each name in its own way */
-/** `point`: a shot from the staff or weapon, held level at the target while shots follow each other. */
-export type CastAnim = 'cast' | 'summon' | 'drink' | 'point' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'spin' | 'block' | 'stagger' | 'flurry' | null;
+/** `point`: a shot from the staff or weapon, held level at the target while shots follow each other. `bow`: an
+ *  arrow drawn to the face and loosed (`ActionState.draw`, `loosed`, `pitch`). */
+export type CastAnim = 'cast' | 'summon' | 'drink' | 'point' | 'bow' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'spin' | 'block' | 'stagger' | 'flurry' | null;
 
 /** Skill tuning data. Behavior-specific numbers are optional fields. */
 export interface SkillDef {
@@ -69,8 +70,13 @@ export interface SkillDef {
   tags: string[];
   cost: number;
   cooldown: number;
+  /** the cast's length; for a drawn shot (`draw`) what follows the release: the follow-through and the next arrow */
   castTime: number;
   channel?: boolean;
+  /** a bow drawn while its key is held: the seconds to full draw. Let go, it looses with what it drew (a share of
+   *  the full draw's speed, `power`), never less than `minDraw` */
+  draw?: number;
+  minDraw?: number;
   icon: { glyph: string; color: string };
   /** VFX colors */
   color?: number;
@@ -222,7 +228,14 @@ export interface EnemyDef {
  *  (the data's windup): its model brings the blow down to connect then, which is when the damage comes.
  *  A channel's also has `time` (seconds since it began) and `open` (0..1 through its opening, 1 once open,
  *  or at once without one). */
-export interface ActionState { name: string; t: number; hit?: number; time?: number; open?: number }
+export interface ActionState {
+  name: string; t: number; hit?: number; time?: number; open?: number;
+  /** a bow: how far it is drawn (0..1, of the full draw's time) and, once loosed, the seconds since, and the arrow's
+   *  angle above level for the target */
+  draw?: number; loosed?: number; pitch?: number;
+  /** a bow: the heading the arrows fly (rad, like a body's facing), how many are nocked and how far apart they fan (rad) */
+  yaw?: number; arrows?: number; fan?: number;
+}
 
 /** Per-frame input to a model's procedural animation. */
 export interface AnimState {

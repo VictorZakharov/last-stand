@@ -60,6 +60,8 @@ export interface ProjectileOpts {
   homing?: number;
   /** test the whole flight segment: fast, narrow arrows otherwise skip small targets at low frame rates */
   swept?: boolean;
+  /** it hits only a foe it's level with (an arrow on its arc flies over heads) */
+  level?: boolean;
   ignore?: Set<Enemy>;
   /** a mesh of its own instead of the glowing core (sized by the caller) */
   mesh?: THREE.Mesh;
@@ -80,6 +82,7 @@ export class Projectile {
   readonly hostile: boolean;
   readonly homing: number;
   readonly swept: boolean;
+  readonly level: boolean;
   readonly ignore: Set<Enemy>;
   readonly onHit?: ProjectileOpts['onHit'];
   readonly tick?: ProjectileOpts['tick'];
@@ -104,6 +107,7 @@ export class Projectile {
     this.hostile = !!o.hostile;
     this.homing = o.homing ?? 0;
     this.swept = !!o.swept;
+    this.level = !!o.level;
     this.ignore = o.ignore ?? new Set();
     this.onHit = o.onHit;
     this.tick = o.tick;
@@ -144,6 +148,8 @@ export class Projectile {
     this.mesh.scale.setScalar(this.size * k * k * (3 - 2 * k));
     this.mesh.visible = k > 0;
     this.tick?.(this, dt);
+    // (its own flight may end it: an arrow into the ground)
+    if (!this.alive) return false;
 
     if (this.trail) {
       const tr = this.trail;
@@ -182,6 +188,7 @@ export class Projectile {
     } else {
       for (const e of G.enemies) {
         if (!e.alive || e.invulnerable || this.ignore.has(e)) continue;
+        if (this.level && (this.pos.y < e.obj.position.y - this.radius || this.pos.y > e.obj.position.y + e.height + this.radius)) continue;
         if (this.distanceSq(e.pos.x, e.pos.z, px, pz) < (e.radius + this.radius) ** 2) {
           this.onHit?.(e, this);
           return this.kill();

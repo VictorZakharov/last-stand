@@ -10,16 +10,17 @@ const ranger: ClassDef = {
   skills: [
     {
       key: 'mouse0', impl: 'nockShot', name: 'Nockshot',
-      desc: 'Loose a swift arrow at your target. Costs no Energy.', tags: ['physical'],
-      cost: 0, cooldown: 0, castTime: 0.4, fireAt: 0.55,
-      damage: 62, missiles: 1, spread: 0, speed: 32, range: 24, knock: 0.5,
+      desc: 'Hold to draw an arrow, release to loose it: the further it is drawn, the faster and harder it flies. Costs no Energy.', tags: ['physical'],
+      // (drawn to full in `draw` s, loosed no sooner than `minDraw` of that; then the follow-through and the next arrow, `castTime`)
+      cost: 0, cooldown: 0, castTime: 0.45, draw: 0.7, minDraw: 0.4,
+      damage: 150, missiles: 1, spread: 0, speed: 60, range: 26, knock: 0.8,
       icon: { glyph: '➶', color: '#dfce99' },
     },
     {
       key: 'mouse2', impl: 'fanShot', name: 'Briarflight',
-      desc: 'Loose five arrows in a broad fan. Each arrow can strike a foe.', tags: ['physical'],
-      cost: 32, cooldown: 3, castTime: 0.65, fireAt: 0.55,
-      damage: 85, missiles: 5, spread: 0.15, speed: 30, range: 22, knock: 1,
+      desc: 'Hold to draw five arrows at once, release to loose them in a broad fan. Each arrow can strike a foe.', tags: ['physical'],
+      cost: 32, cooldown: 3, castTime: 0.5, draw: 0.85, minDraw: 0.5,
+      damage: 110, missiles: 5, spread: 0.13, speed: 55, range: 24, knock: 1.2,
       icon: { glyph: '⋔', color: '#c9d993' },
     },
     {

@@ -39,8 +39,10 @@ const AIM_HOLD = 0.45;
 const SHOT_NEAR = 5;
 const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
-/** `replay`: a remote player's cast, shown for its pose and charge; its owner says when it fires */
-interface CastState { skill: KnownSkill; t: number; dur: number; fireAt: number; fired: boolean; target: THREE.Vector3; replay?: boolean }
+/** `replay`: a remote player's cast, shown for its pose and charge; its owner says when it fires. A drawn shot
+ *  (`SkillDef.draw`) has `drawT`, the time to full draw, and no end or firing time until it's loosed (`key` the key
+ *  holding it, `power` how far it was drawn) */
+interface CastState { skill: KnownSkill; t: number; dur: number; fireAt: number; fired: boolean; target: THREE.Vector3; replay?: boolean; key?: SkillKey; drawT?: number; power?: number }
 interface ChannelState { skill: KnownSkill; key: SkillKey; state: unknown; t: number }
 /** A movement skill's dash: a fixed velocity that input can't steer, with a per-frame hook; `lift`
  *  makes it a jump of that peak height, and `anim` is the pose it plays, over the rush and `hold`
@@ -51,8 +53,8 @@ export interface DashOpts { lift?: number; anim?: CastAnim; hold?: number; step?
 
 /** What the local player does that the other players' games replay (see net/session). */
 export type PlayerAction =
-  | { t: 'cast'; s: string; dur: number; x: number; z: number }
-  | { t: 'fire'; s: string; x: number; z: number; px: number; pz: number; f: number }
+  | { t: 'cast'; s: string; dur: number; x: number; z: number; /** a drawn shot: `dur` is its time to full draw */ h?: 1 }
+  | { t: 'fire'; s: string; x: number; z: number; px: number; pz: number; f: number; /** how far a drawn shot was drawn */ k?: number }
   | { t: 'chs'; s: string; k: SkillKey }
   | { t: 'che' };
 let actionSink: ((a: PlayerAction) => void) | null = null;
@@ -348,15 +350,24 @@ export class Player {
       const skill = this.skillAt(key);
       if (!skill) continue;
       if (skill.impl.channel) { if (!this.channel && !this.casting) this.startChannel(skill, key); }
-      else this.tryCast(skill);
+      else this.tryCast(skill, key);
     }
   }
 
-  tryCast(s: KnownSkill): boolean {
+  /** `key`: the key casting it, which holds a drawn shot (`SkillDef.draw`) until it's let go */
+  tryCast(s: KnownSkill, key?: SkillKey): boolean {
     if (this.casting || this.channel || this.dash || this.staggered || this.cooldownLeft(s.def.impl) > 0 || !this.alive) return false;
     if (!this.sandbox && this.energy < s.def.cost) { this.lowEnergy(); return false; }
     const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
     const target = this.aim.clone();
+    if (s.def.draw && key) {
+      // drawn while the key is held, loosed when it's let go (update)
+      const drawT = s.def.draw / (1 + this.stats.castSpeed / 100);
+      this.casting = { skill: s, t: 0, dur: Infinity, fireAt: Infinity, fired: false, target, key, drawT };
+      if (!s.def.freeMove) this.faceTowards(target);
+      actionSink?.({ t: 'cast', s: s.def.impl, dur: drawT, x: target.x, z: target.z, h: 1 });
+      return true;
+    }
     if (dur <= 0) { this.fire(s, target); return true; }
     this.casting = { skill: s, t: 0, dur, fireAt: dur * (s.def.fireAt ?? 0.55), fired: false, target };
     // the hero turns after the live aim, never snapping to each cast's: with fire held while the mouse
@@ -366,15 +377,22 @@ export class Player {
     return true;
   }
 
-  fire(s: KnownSkill, target: THREE.Vector3): void {
+  /** `power`: how far a drawn shot was drawn (1 for any other cast) */
+  fire(s: KnownSkill, target: THREE.Vector3, power = 1): void {
     if (s.impl.channel) return;
     // sandbox (lobby practice): no costs or cooldowns
     if (!this.sandbox) {
       this.energy -= s.def.cost;
       this.cooldowns.set(s.def.impl, this.cooldownOf(s.def));
     }
-    if (this.local) actionSink?.({ t: 'fire', s: s.def.impl, x: target.x, z: target.z, px: this.pos.x, pz: this.pos.z, f: this.facing });
-    s.impl.cast(this, s.def, target);
+    if (this.local) actionSink?.({ t: 'fire', s: s.def.impl, x: target.x, z: target.z, px: this.pos.x, pz: this.pos.z, f: this.facing, ...(s.def.draw ? { k: power } : {}) });
+    s.impl.cast(this, s.def, target, power);
+  }
+
+  /** A drawn shot is loosed: what follows the release (the follow-through, the next arrow) is the cast's time. */
+  private loose(c: CastState, power: number): void {
+    c.fired = true; c.power = power; c.fireAt = c.t;
+    c.dur = c.t + c.skill.def.castTime / (1 + this.stats.castSpeed / 100);
   }
 
   /** A remote player's action, replayed as its owner reported it. */
@@ -383,13 +401,17 @@ export class Player {
     const s = this.known.get(a.s);
     if (!s || !this.alive) return;
     if (a.t === 'cast') {
-      this.casting = { skill: s, t: 0, dur: a.dur, fireAt: a.dur * (s.def.fireAt ?? 0.55), fired: false, target: new THREE.Vector3(a.x, 0, a.z), replay: true };
+      const target = new THREE.Vector3(a.x, 0, a.z);
+      this.casting = a.h
+        ? { skill: s, t: 0, dur: Infinity, fireAt: Infinity, fired: false, target, replay: true, drawT: a.dur }
+        : { skill: s, t: 0, dur: a.dur, fireAt: a.dur * (s.def.fireAt ?? 0.55), fired: false, target, replay: true };
     } else if (a.t === 'fire') {
       // from where it stood and the way it faced as it fired, so reach and aim match what its player saw
       this.pos.x = this.remote.x = a.px; this.pos.z = this.remote.z = a.pz;
       this.facing = a.f;
-      if (this.casting) this.casting.fired = true;
-      this.fire(s, new THREE.Vector3(a.x, 0, a.z));
+      if (this.casting?.drawT && !this.casting.fired) this.loose(this.casting, a.k ?? 1);
+      else if (this.casting) this.casting.fired = true;
+      this.fire(s, new THREE.Vector3(a.x, 0, a.z), a.k ?? 1);
     } else if (!this.channel) {
       this.channel = { skill: s, key: a.k, state: (s.impl as ChannelSkill).start(this, s.def), t: 0 };
     }
@@ -444,8 +466,14 @@ export class Player {
       c.t += dt;
       if (!c.skill.def.freeMove) this.faceTowards(this.aim);
       const impl = c.skill.impl;
-      if (!c.fired && !impl.channel) impl.charging?.(this, c.skill.def, c.t / c.fireAt, dt);
-      if (!c.fired && c.t >= c.fireAt) { c.fired = true; this.fire(c.skill, this.aim.clone()); }
+      if (c.drawT) {
+        // a drawn shot: loosed when its key is let go, once it's drawn at least as far as its least draw
+        const k = Math.min(1, c.t / c.drawT);
+        if (!c.fired && !(c.key && isDown(c.key)) && k >= (c.skill.def.minDraw ?? 0)) { this.loose(c, k); this.fire(c.skill, this.aim.clone(), k); }
+      } else {
+        if (!c.fired && !impl.channel) impl.charging?.(this, c.skill.def, c.t / c.fireAt, dt);
+        if (!c.fired && c.t >= c.fireAt) { c.fired = true; this.fire(c.skill, this.aim.clone()); }
+      }
       if (c.t >= c.dur) this.casting = null;
     }
     if (this.channel) {
@@ -514,8 +542,9 @@ export class Player {
     if (this.casting) {
       const c = this.casting;
       c.t += dt;
-      if (!c.fired && !c.skill.impl.channel) c.skill.impl.charging?.(this, c.skill.def, Math.min(1, c.t / c.fireAt), dt);
-      if (c.t >= c.dur) this.casting = null;
+      if (!c.fired && !c.skill.impl.channel && !c.drawT) c.skill.impl.charging?.(this, c.skill.def, Math.min(1, c.t / c.fireAt), dt);
+      // (a drawn shot whose release never came: its owner left or fell mid-draw)
+      if (c.t >= c.dur || (!c.fired && c.t > 20)) this.casting = null;
     }
     if (this.channel) (this.channel.skill.impl as ChannelSkill).tick(this, this.channel.skill.def, dt, this.channel.state);
     const d = this.dash;
@@ -553,7 +582,20 @@ export class Player {
     let action: ActionState | null = null;
     if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };
     else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / (this.dash.dur + this.dash.hold)) };
-    else if (this.casting) action = { name: this.casting.skill.impl.anim || 'cast', t: this.casting.t / this.casting.dur };
+    else if (this.casting) {
+      const c = this.casting, impl = c.skill.impl;
+      action = { name: impl.anim || 'cast', t: c.t / c.dur };
+      if (impl.anim === 'bow' && !impl.channel) {
+        // how far the bow is drawn (a drawn shot by its time to full draw, any other by its firing time), and since when it's loosed
+        const draw = c.fired ? (c.power ?? 1) : Math.min(1, c.t / (c.drawT ?? c.fireAt));
+        action.draw = draw;
+        if (c.fired) action.loosed = c.t - c.fireAt;
+        action.t = c.fired ? 0.55 + 0.45 * Math.min(1, (c.t - c.fireAt) / Math.max(1e-3, c.dur - c.fireAt)) : 0.55 * draw;
+        action.pitch = impl.pitch?.(this, c.skill.def, draw, this.aim) ?? 0;
+        action.yaw = this.shotHeading(this.castPoint, this.aim);
+        action.arrows = c.skill.def.missiles ?? 1; action.fan = c.skill.def.spread ?? 0;
+      }
+    }
     // a channel's t ramps 0 -> 1 over its first 0.2 s (the pose settling in), then holds
     else if (this.channel) {
       const ch = this.channel, opens = ch.skill.def.opening ?? 0;

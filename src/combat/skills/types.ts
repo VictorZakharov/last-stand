@@ -12,9 +12,12 @@ interface SkillBase {
 /** Fires once when the cast completes. */
 export interface InstantSkill extends SkillBase {
   channel?: false;
-  cast(player: Player, def: SkillDef, target: THREE.Vector3): void;
+  /** `power`: how far a drawn shot (`SkillDef.draw`) was drawn when it was loosed (0..1, 1 for any other cast) */
+  cast(player: Player, def: SkillDef, target: THREE.Vector3, power: number): void;
   /** every frame of the cast before it lands; k: 0..1 of the cast time */
   charging?(player: Player, def: SkillDef, k: number, dt: number): void;
+  /** a shot's angle above level (rad) at `power` for `target`, which the pose aims the arrow along */
+  pitch?(player: Player, def: SkillDef, power: number, target: THREE.Vector3): number;
 }
 
 /** Runs every frame while its key is held. `start` returns per-channel state. */
