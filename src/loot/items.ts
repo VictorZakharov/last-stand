@@ -57,7 +57,8 @@ export function gearOf(cls: ClassDef, equipped: Profile['equipped']): Gear {
 export const basesFor = (slot: Slot, cls?: ClassDef): string[] => cls?.bases?.[slot] ?? SLOT_INFO[slot].bases;
 
 /** Create an item for `cls` (its base names and stats). Everything is plain JSON so it can be saved directly. */
-export function makeItem({ slot = pick(SLOTS), rarity = 'common', ilvl = 1, cls }: { slot?: Slot; rarity?: RarityId; ilvl?: number; cls?: ClassDef } = {}): Item {
+export function makeItem({ slot, rarity = 'common', ilvl = 1, cls }: { slot?: Slot; rarity?: RarityId; ilvl?: number; cls?: ClassDef } = {}): Item {
+  slot ??= pick(SLOTS.filter((s) => !cls?.excludeSlots?.includes(s)));
   const r = rarityOf(rarity);
   const base = pick(basesFor(slot, cls));
   const stats: StatBlock = {};

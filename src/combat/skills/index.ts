@@ -18,10 +18,12 @@ import raiseShield from './raiseShield';
 import powerStrike from './powerStrike';
 import twinFangs from './twinFangs';
 import ironBellow from './ironBellow';
+import { bowShot, briarSnare, thornRepulse, woodlandWard } from './ranger';
 
 import type { SkillImpl } from './types';
 
 export const SKILL_IMPLS: Record<string, SkillImpl> = {
   splinterBolt, starfall, voidLance, glacialNova, maelstrom, aegis, potion,
   cleave, crescent, raiseShield, tempest, bullRush, powerStrike, ironBellow, twinFangs,
+  nockShot: bowShot, fanShot: bowShot, heavyShot: bowShot, briarSnare, thornRepulse, woodlandWard,
 };

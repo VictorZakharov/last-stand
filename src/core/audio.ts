@@ -83,6 +83,8 @@ function hum(freq: number, type: OscillatorType = 'sawtooth'): () => void {
 /** Wrap a sound so it silently does nothing until audio is unlocked. */
 const guard = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R | undefined => (ctx ? fn(...a) : undefined);
 export const sfx = {
+  bow: guard(() => { if (throttle('bow', 60)) return; noise({ dur: 0.12, freq: 2800, sweep: 1200, q: 2, gain: 0.1 }); tone({ freq: 180, to: 80, dur: 0.16, type: 'triangle', gain: 0.08 }); }),
+  snare: guard(() => { noise({ dur: 0.35, freq: 1400, sweep: 350, q: 1.4, gain: 0.18 }); }),
   bolt: guard(() => { if (throttle('bolt', 60)) return; noise({ dur: 0.18, freq: 2400, sweep: 700, q: 2, gain: 0.18 }); tone({ freq: 900, to: 400, dur: 0.15, type: 'triangle', gain: 0.06 }); }),
   boltHit: guard(() => { if (throttle('boltHit', 45)) return; noise({ dur: 0.12, freq: 3000, q: 1.5, gain: 0.12 }); }),
   starfallCall: guard(() => { noise({ dur: 0.5, freq: 400, sweep: 3000, q: 3, gain: 0.12 }); }),

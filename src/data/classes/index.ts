@@ -3,7 +3,8 @@
 import type { ClassDef } from '../../types';
 import mage from './mage';
 import warrior from './warrior';
+import ranger from './ranger';
 
-export const CLASSES: Record<string, ClassDef> = { mage, warrior };
+export const CLASSES: Record<string, ClassDef> = { mage, warrior, ranger };
 export const CLASS_IDS = Object.keys(CLASSES);
 export const DEFAULT_CLASS = 'mage';
