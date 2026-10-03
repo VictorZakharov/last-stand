@@ -13,9 +13,9 @@ import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
 import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, DRINK_SHEATHED, type DrinkHold } from './flask';
-import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, merge, scaleUV, lod, type SurfaceFn } from './armor';
+import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
-import { buildHand, poseHand, hold, seat, fistReach, bare } from './hands';
+import { buildHand, poseHand, hold, seat, fistReach, bare, handCapsules } from './hands';
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { SkeletonCape } from './cape';
 import { fromEyes, dirFromEyes } from '../viewModel';
@@ -295,6 +295,29 @@ export function buildWarrior(): Model {
   const skirtMesh = new THREE.Mesh(skirt.geo, mail);
   skirtMesh.position.y = 0.04; skirtMesh.castShadow = skirtMesh.receiveShadow = true;
   j.hips.add(skirtMesh);
+  // what it is draped over, in its own space: the trousers' thighs (they bulge to 11 cm) and the shins over the boots (their
+  // fur cuffs stand 11 cm off the shin, over the knee cops) from inside, the hands and the forearms' lower halves (a bracer's
+  // plate or the sleeve) from outside, with the cloth's gap. Swung by the thighs alone, the mail was narrower than the
+  // trousers at its sides and they came through it in every frame, standing too.
+  const legBodies = new SkirtLimbs(), handBodies = new SkirtLimbs(), GAP = 0.018, HAND_GAP = 0.012, O = () => new THREE.Vector3();
+  for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
+    legBodies.add([th, O()], [kn, O()], 0.112 + GAP, 0.084 + GAP);
+    legBodies.add([kn, O()], [an, O()], 0.115 + GAP, 0.065 + GAP);
+  }
+  const capsL = handCapsules(handL);
+  for (const [a, b, r] of [...capsL, ...handCapsules(handR)]) handBodies.add(a, b, r + HAND_GAP);
+  const cuffR = () => (gloved ? [0.075, 0.055] : [0.058, 0.058]);
+  const fores = ([[j.elbowL, j.handL], [j.elbowR, j.handR]] as const).map(([el, hd]) => handBodies.add([el, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], [hd, O()], 0));
+  // (a left hand with no weapon in it, empty or on the shield's grip, swung out just enough to rest on the mail rather than in it:
+  // armOffThigh)
+  const freePts = [...capsL.flatMap(([a, b, r]) => [[a, r], [b, r]] as [JointPoint, number][]), [[j.elbowL, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], 0], [[j.handL, O()], 0]] as [JointPoint, number][];
+  const placeBodies = (free: boolean) => {
+    const [ra, rb] = cuffR();
+    for (const f of fores) { f.ra = ra + HAND_GAP; f.rb = rb + HAND_GAP; }
+    legBodies.place(skirtMesh);
+    if (free) { freePts[freePts.length - 2][1] = ra; freePts[freePts.length - 1][1] = rb; armOffThigh(skirtMesh, j.shoulderL, 1, legBodies.list[0], HAND_GAP, freePts); }
+    handBodies.place(skirtMesh);
+  };
   const tassets: { g: THREE.Group; s: number }[] = [];
   for (const s of [1, -1]) {
     for (const [k, off] of [[0, 0.55], [1, 1.05]] as const) {
@@ -1203,13 +1226,14 @@ export function buildWarrior(): Model {
       }
     }
 
-    // the mail skirt swings with the legs; the tassets on each side ride their own thigh
+    // the mail skirt swings with the legs, draped over them and the hands; the tassets on each side ride their own thigh
     const fL = -j.thighL.rotation.x, fR = -j.thighR.rotation.x;
-    skirt.update(fL, fR, move, t, dt);
     for (const ta of tassets) ta.g.rotation.x = -(0.12 + Math.max(-0.05, ta.s > 0 ? fL : fR) * 0.75 + move * 0.05);
+    root.updateMatrixWorld(true);
+    placeBodies(!fp && st.dead < 0 && !(offHeld && !sheathed) && !twoHeld);
+    skirt.update(fL, fR, move, t, dt, legBodies.list, handBodies.list);
 
     // fists round whatever they hold; an empty hand hangs loosely curled
-    root.updateMatrixWorld(true);
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
     if (held) hold(handR, along(grip), held.r);
     else poseHand(handR, 0.5 + Math.sin(t * 1.3) * 0.05, 0.1);

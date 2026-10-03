@@ -10,9 +10,9 @@ import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as
 import { engravedSteel, embroidered, arcaneColumn, projectUV, steelRegion } from '../../core/engraving';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
-import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, gem as gemGeo, Skirt, scaleUV, type SurfaceFn, type SkirtBody } from './armor';
+import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
-import { buildHand, poseHand, hold, seat, bare, type Hand, type Digit } from './hands';
+import { buildHand, poseHand, hold, seat, bare, handCapsules } from './hands';
 import { clamp, lerp, damp, TAU, mulberry } from '../../util';
 import { SkeletonCape, type CapsuleFit } from './cape';
 import { BellCloth } from './sleeve';
@@ -340,55 +340,27 @@ export function buildMage(): Model {
   // the shins over the boots from inside, the hands from outside; the breeches' and the boots' radii (the boot's cuff and its
   // stone stand 10 cm off the shin: sized to the breeches, the shin came through the robe there) and the cloth's gap (with a
   // little over for the flat triangles between its points)
-  const legBodies: SkirtBody[] = [0, 1, 2, 3].map(() => ({ a: new THREE.Vector3(), b: new THREE.Vector3(), ra: 0, rb: 0 }));
-  // (each hand as capsules from its own joints, its palm's two edges, its index and little fingers and its thumb, with a little
-  // over for the cloth's flat triangles between its points: one capsule down the wrist missed the palm and the curled fingers)
-  type End = [THREE.Object3D, THREE.Vector3];
-  const handSegs = (h: Hand): [End, End, number][] => {
-    const end = (o: THREE.Object3D, x = 0, y = 0): End => [o, new THREE.Vector3(x, y, 0)], tip = (d: Digit): End => end(d.j[d.j.length - 1], 0, -d.len[d.len.length - 1]);
-    const [ix, , , lt] = h.f, edge = (d: Digit): [End, End, number] => [end(h.vis, d.j[0].position.x * 0.9, -0.025), end(d.j[0]), 0.02];
-    return [edge(ix), edge(lt), ...[ix, lt, h.thumb].flatMap((d) => [[end(d.j[0]), end(d.j[1]), d.r], [end(d.j[1]), tip(d), d.r]] as [End, End, number][])];
-  };
-  const segsL = handSegs(handL), segs = [...segsL, ...handSegs(handR)], HAND_GAP = 0.012;
-  const handBodies: SkirtBody[] = segs.map(([, , r]) => ({ a: new THREE.Vector3(), b: new THREE.Vector3(), ra: r + HAND_GAP, rb: r + HAND_GAP }));
+  const legBodies = new SkirtLimbs(), handBodies = new SkirtLimbs(), GAP = 0.018, O = () => new THREE.Vector3();
+  for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
+    legBodies.add([th, O()], [kn, O()], 0.09 + GAP, 0.07 + GAP);
+    legBodies.add([kn, O()], [an, O()], 0.1 + GAP, 0.085 + GAP);
+  }
+  // (each hand as capsules from its own joints, with a little over for the cloth's flat triangles between its points)
+  const segsL = handCapsules(handL), HAND_GAP = 0.012;
+  for (const [a, b, r] of [...segsL, ...handCapsules(handR)]) handBodies.add(a, b, r + HAND_GAP);
   // (and the free forearm's lower half, as wide as its bracer's cuff or its sleeve's at the wrist: it hangs by the hip)
-  const fore = { a: new THREE.Vector3(), b: new THREE.Vector3(), ra: 0, rb: 0 }, cuffR = () => (gloved ? 0.074 : 0.05);
-  handBodies.push(fore);
+  const fore = handBodies.add([j.elbowL, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], [j.handL, O()], 0), cuffR = () => (gloved ? 0.074 : 0.05);
+  // (the legs placed first: the free arm is kept off the thigh before the hands are)
   const placeBodies = () => {
-    const sp = tunicSkirt, GAP = 0.018;
-    ([[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const).forEach(([th, kn, an], k) => {
-      const t = legBodies[k * 2], sh = legBodies[k * 2 + 1];
-      sp.worldToLocal(th.getWorldPosition(t.a)); sp.worldToLocal(kn.getWorldPosition(t.b)); t.ra = 0.09 + GAP; t.rb = 0.07 + GAP;
-      sh.a.copy(t.b); sp.worldToLocal(an.getWorldPosition(sh.b)); sh.ra = 0.1 + GAP; sh.rb = 0.085 + GAP;
-    });
-    segs.forEach(([[oa, pa], [ob, pb]], k) => { const b = handBodies[k]; sp.worldToLocal(oa.localToWorld(b.a.copy(pa))); sp.worldToLocal(ob.localToWorld(b.b.copy(pb))); });
-    sp.worldToLocal(j.elbowL.localToWorld(fore.a.set(0, -0.5 * j.P.foreL, 0))); sp.worldToLocal(j.handL.getWorldPosition(fore.b));
     fore.ra = cuffR() - 0.012 + HAND_GAP; fore.rb = cuffR() + HAND_GAP;
+    handBodies.place(tunicSkirt);
   };
-  // The free arm swung out just enough to keep its hand and its cuff off the thigh and the cloth over it (a hand brushing a
-  // moving thigh rests on the skirt, never in it): the ends of the hand's capsules and the cuff's against the thigh's capsule
-  // grown by the skirts' gap and the hand's (the cloth lies between), the shoulder turned out by the deepest's depth over its
-  // distance from the shoulder, a few times over (in the skirt's space, as the drape's bodies are). Pressed in between the hand
-  // and the thigh, the drape had no room to hold the skirt in behind the hand.
-  const _ct = new THREE.Vector3(), _ck = new THREE.Vector3(), _cs = new THREE.Vector3(), _cp = new THREE.Vector3(), _cq = new THREE.Vector3();
-  const handPts = [...segsL.flatMap(([a, b, r]) => [[a, r], [b, r]] as [End, number][]), [[j.elbowL, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], 0], [[j.handL, new THREE.Vector3()], 0]] as [End, number][];
+  // (the free arm swung out just enough to keep its hand and its cuff off the thigh and the cloth over it: armOffThigh)
+  const handPts = [...segsL.flatMap(([a, b, r]) => [[a, r], [b, r]] as [JointPoint, number][]), [[j.elbowL, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], 0], [[j.handL, new THREE.Vector3()], 0]] as [JointPoint, number][];
   const clearThigh = () => {
-    const sp = tunicSkirt, cloth = HAND_GAP + (robed ? 0.015 : 0);
-    sp.worldToLocal(j.thighL.getWorldPosition(_ct)); sp.worldToLocal(j.kneeL.getWorldPosition(_ck)); _ck.sub(_ct);
-    const L2 = _ck.lengthSq(), n = handPts.length;
+    const n = handPts.length;
     handPts[n - 2][1] = cuffR() - 0.012; handPts[n - 1][1] = cuffR();
-    for (let it = 0; it < 3; it++) {
-      let deep = 0, at = 0;
-      for (const [[o, p], r] of handPts) {
-        sp.worldToLocal(o.localToWorld(_cp.copy(p)));
-        const u = clamp(_cq.subVectors(_cp, _ct).dot(_ck) / L2, 0, 1);
-        const d = lerp(0.09, 0.07, u) + 0.018 + cloth + r - _cp.distanceTo(_cq.copy(_ct).addScaledVector(_ck, u));
-        if (d > deep) { deep = d; at = _cp.distanceTo(sp.worldToLocal(j.shoulderL.getWorldPosition(_cs))); }
-      }
-      if (deep <= 0.001) return;
-      j.shoulderL.rotation.z += Math.min(0.12, deep / Math.max(0.2, at));
-      j.shoulderL.updateMatrixWorld(true);
-    }
+    armOffThigh(tunicSkirt, j.shoulderL, 1, legBodies.list[0], HAND_GAP + (robed ? 0.015 : 0), handPts);
   };
   const flaps: { g: THREE.Group; knee: THREE.Group; a: number; len: number; w: number }[] = [];
   const hang = (a: number, w: number, len: number, mat: THREE.Material, hemPx: number, texH: number, lift: number) => {
@@ -754,11 +726,12 @@ export function buildMage(): Model {
     // the skirts swing with the legs; the panels hanging over them follow the leg on their side
     const fL = -j.thighL.rotation.x, fR = -j.thighR.rotation.x;
     root.updateMatrixWorld(true);
+    legBodies.place(tunicSkirt);
     if (!fp && st.dead < 0) clearThigh();
     placeBodies();
     // (the hands only against the outer skirt: pushed in, the inner one would come out over it)
-    if (robed) { under.update(fL, fR, move, t, dt, legBodies); over.update(fL, fR, move, t + 0.4, dt, legBodies, handBodies); }
-    else short.update(fL, fR, move, t, dt, legBodies, handBodies);
+    if (robed) { under.update(fL, fR, move, t, dt, legBodies.list); over.update(fL, fR, move, t + 0.4, dt, legBodies.list, handBodies.list); }
+    else short.update(fL, fR, move, t, dt, legBodies.list, handBodies.list);
     for (const f of flaps) {
       const wl = clamp(0.5 + Math.sin(f.a) * 0.9, 0, 1);
       const out = Math.max(-0.05, (fL * wl + fR * (1 - wl)) * Math.cos(f.a)) * 0.85 + 0.26 + move * 0.08 + Math.sin(t * 3 + f.a * 3) * 0.015;
