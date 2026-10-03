@@ -14,7 +14,7 @@ import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, gem a
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, bare } from './hands';
 import { clamp, lerp, damp, TAU, mulberry } from '../../util';
-import { SkeletonCape } from './cape';
+import { SkeletonCape, type CapsuleFit } from './cape';
 import { BellCloth } from './sleeve';
 import { LegIK } from './ik';
 import { curve, PoseFade, type Keys } from './motion';
@@ -55,10 +55,18 @@ function onTunic(a: number, y: number, lift: number, out = new THREE.Vector3()):
 const tunicFront = (x: number, y: number, lift: number) => onTunic(Math.asin(clamp(Math.sign(x) * Math.abs(x / curve(TUNIC_W, y)) ** (curve(TUNIC_P, y) / 2), -1, 1)), y, lift);
 /** the cowl's profile (chest joint space): the hood down, bunched round the neck */
 const COWL: [number, number][] = [[0.1, 0.2], [0.155, 0.235], [0.16, 0.27], [0.13, 0.31], [0.095, 0.34], [0.085, 0.36]];
-/** the cape over the robe (pinned under the cowl, kept off the skirts) and over the plain tunic: the neckline's ends on the
- *  chest, and its colliders' sizes (radius, front/back radius) */
-const CAPE_ROBED = { left: [0.1, 0.3, -0.15], right: [-0.1, 0.3, -0.15], sizes: { gorget: [0.17], hips: [0.26, 0.23], 'robe skirt': [0.34, 0.3] } } as const;
-const CAPE_TUNIC = { left: [0.1, 0.27, -0.1], right: [-0.1, 0.27, -0.1], sizes: { gorget: [0.12], hips: [0.24, 0.21], 'robe skirt': [0.17, 0.12] } } as const;
+/** the cape over the robe (pinned under the cowl, kept off the skirts: its colliders are built for it) and over the plain
+ *  tunic: the neckline's ends on the chest, and its colliders as the tunic changes them. Over the tunic the upper torso
+ *  ends lower and the shoulders are slimmer: the robe's reached past the neckline, nearer the neck over the tunic, and the
+ *  cape jerked (`SkeletonCape.fit`) */
+const CAPE_ROBED: { left: readonly [number, number, number]; right: readonly [number, number, number]; fit: Record<string, CapsuleFit> } = { left: [0.1, 0.3, -0.15], right: [-0.1, 0.3, -0.15], fit: {} };
+const CAPE_TUNIC: typeof CAPE_ROBED = {
+  left: [0.1, 0.275, -0.115], right: [-0.1, 0.275, -0.115],
+  fit: {
+    gorget: { radius: 0.12 }, shoulders: { offA: [0.01, -0.04, 0], offB: [-0.01, -0.04, 0], radius: 0.085, depthRadius: 0.125 }, 'upper torso': { offA: [0, 0.12, 0], depthRadius: 0.16 },
+    hips: { radius: 0.24, depthRadius: 0.21 }, 'robe skirt': { radius: 0.17, depthRadius: 0.12 },
+  },
+};
 /** the pauldrons' size against the shoulder */
 const PAULDRON = 0.72;
 function torsoR(y: number): number {
@@ -698,7 +706,7 @@ export function buildMage(): Model {
         robed = gear.chest;
         if (robed) for (const c of cloths) c.reset();
         const fit = robed ? CAPE_ROBED : CAPE_TUNIC;
-        cape.fit(fit.left, fit.right, fit.sizes);
+        cape.fit(fit.left, fit.right, fit.fit);
       }
       for (const o of [...robeParts, ...skirts, ...flaps.map((f) => f.g), ...cloths.flatMap((c) => c.meshes)]) o.visible = robed;
       for (const o of [...tunic, tunicSkirt]) o.visible = !robed;

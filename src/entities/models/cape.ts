@@ -28,6 +28,9 @@ export interface CapsuleSpec {
   offB?: V3;
 }
 
+/** A capsule refitted (`SkeletonCape.fit`). */
+export type CapsuleFit = Partial<Pick<CapsuleSpec, 'radius' | 'depthRadius' | 'offA' | 'offB'>>;
+
 export interface SkeletonCapeOptions {
   /** joint the neckline is pinned to (e.g. chest) */
   anchor: THREE.Object3D;
@@ -74,7 +77,7 @@ export class SkeletonCape {
   constructor(private readonly o: SkeletonCapeOptions) {
     this.anchors = { left: new THREE.Vector3(), right: new THREE.Vector3(), back: new THREE.Vector3(0, 0, -1) };
     this.left = o.left; this.right = o.right;
-    this.specs = o.capsules;
+    this.specs = o.capsules.slice();
     this.colliders = o.capsules.map((c) => ({
       start: new THREE.Vector3(), end: new THREE.Vector3(),
       radius: c.radius, depthRadius: c.depthRadius, name: c.name, clearance: c.clearance, faceSampleSpacing: c.faceSampleSpacing,
@@ -106,13 +109,16 @@ export class SkeletonCape {
     return this.colliders;
   }
 
-  /** Fit the cape to what the body wears (a robe or a plain tunic under it): the neckline's ends, and the named
-   *  capsules' sizes (radius, and front/back radius for an elliptical one); it drapes afresh. */
-  fit(left: V3, right: V3, sizes: Record<string, readonly [number, number?]>): void {
+  /** Fit the cape to what the body wears (a robe or a plain tunic under it): the neckline's ends, and the named capsules
+   *  changed from how they were built (their radii and ends); it drapes afresh. The pinned neckline must stay outside
+   *  every capsule: a triangle pinned along one edge and pushed out of a capsule moves only its free corner, by the push
+   *  over that corner's share of the contact, which near the pinned edge throws it metres (the solver then resets the
+   *  cape: it jerks). */
+  fit(left: V3, right: V3, changes: Record<string, CapsuleFit>): void {
     this.left = left; this.right = right;
     for (let i = 0; i < this.specs.length; i++) {
-      const z = sizes[this.specs[i].name], c = this.colliders[i];
-      if (z) this.colliders[i] = { ...c, radius: z[0], depthRadius: z[1] ?? c.depthRadius };
+      const base = this.o.capsules[i], s = this.specs[i] = { ...base, ...changes[base.name] };
+      this.colliders[i] = { ...this.colliders[i], radius: s.radius, depthRadius: s.depthRadius };
     }
     // (a worker has the colliders' sizes from when the cape was registered: it is registered again)
     this.refit = true;
