@@ -16,9 +16,9 @@ function fresh(classId: string): Profile {
   const cls = CLASSES[classId];
   const equipped: Profile['equipped'] = {};
   for (const g of cls.starterGear) {
-    // starter weapons are one-handed, so a starter off-hand fits
+    // Prefer a one-handed starter only when the class also starts with an off-hand.
     let it = makeItem({ ...g, cls });
-    for (let i = 0; i < 20 && isTwoHanded(it, cls); i++) it = makeItem({ ...g, cls });
+    for (let i = 0; i < 20 && cls.starterGear.some((s) => s.slot === 'offhand') && isTwoHanded(it, cls); i++) it = makeItem({ ...g, cls });
     equipped[g.slot] = it;
   }
   return {

@@ -133,6 +133,8 @@ export interface ClassDef {
   bases?: Partial<Record<Slot, string[]>>;
   /** stats that never roll on this class's items (no skill of the class uses them) */
   excludeStats?: StatKey[];
+  /** slots omitted from random loot (e.g. an archer whose bows always occupy both hands) */
+  excludeSlots?: Slot[];
   /** implicit stats per slot, replacing the defaults (data/items SLOT_INFO) */
   implicits?: Partial<Record<Slot, [StatKey, number][]>>;
   /** weapon bases held in both hands: they leave no room for an off-hand */

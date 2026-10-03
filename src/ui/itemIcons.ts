@@ -74,6 +74,20 @@ const band = (x: number, y: number, w: number, h: number, rot: number) =>
 
 // One drawing per base type ---------------------------------------------------
 const DRAW: Record<string, Draw> = {
+  'Hunting Bow': (g) => `<path d="M18 7c30 12 30 38 0 50" fill="none" stroke="url(#leather)" stroke-width="5" stroke-linecap="round"/>` +
+    `<path d="M18 7v50M10 32h44l-7-5m7 5-7 5" fill="none" stroke="url(#steel)" stroke-width="1.5"/>` + gemAt(39, 32, 2.5, g),
+  'Recurve Bow': (g) => `<path d="M15 7c-2 9 20 4 24 25-4 21-26 16-24 25" fill="none" stroke="url(#leather)" stroke-width="5"/>` +
+    `<path d="M15 7v50M8 32h46l-7-5m7 5-7 5" fill="none" stroke="url(#steel)" stroke-width="1.5"/>` + gemAt(39, 32, 2.5, g),
+  Longbow: (g) => `<path d="M17 4c28 16 28 40 0 56" fill="none" stroke="url(#leather)" stroke-width="4"/>` +
+    `<path d="M17 4v56M8 32h46l-7-5m7 5-7 5" fill="none" stroke="url(#steel)" stroke-width="1.5"/>` + gemAt(38, 32, 2.5, g),
+  'Trail Charm': (g) => `<path d="M15 8c0 14 12 12 17 24 5-12 17-10 17-24" fill="none" stroke="url(#leather)" stroke-width="2"/>` +
+    `<path d="M32 28c-16 0-16 22 0 30 16-8 16-30 0-30z" fill="url(#gem-${g})" stroke="url(#gold)" stroke-width="2"/>`,
+  'Scout Cap': (g) => `<path d="M13 37V29c0-26 38-26 38 0v8z" fill="url(#clothUmber)" stroke="url(#gold)" stroke-width="1.5"/>` +
+    `<path d="M10 37c16-7 30-5 46 3-12 8-25 8-46 0z" fill="url(#leather)" stroke="#140c06"/>` + gemAt(43, 28, 3, g),
+  Trailcoat: (g) => `<path d="M22 7l10 6 10-6 12 14-8 8-4-4 7 32H15l7-32-4 4-8-8z" fill="url(#clothUmber)" stroke="#140c06" stroke-width="1.2"/>` +
+    `<path d="M22 16l20 22M19 39h26" stroke="url(#leather)" stroke-width="5"/>` + gemAt(32, 39, 2.8, g),
+  Bowguards: (g) => `<path d="M18 12l12-3 8 43-16 4zM34 9l12 3-4 44-12-4z" fill="url(#leather)" stroke="#140c06" stroke-width="1.2"/>` +
+    `<path d="M19 21l14-3M22 38l13-3M33 18l12 3M32 35l11 3" stroke="url(#gold)" stroke-width="2"/>` + gemAt(32, 47, 3, g),
   // --- weapons (diagonal, head at top-right)
   Staff: (g) => shaft(12, 56, 44, 16, 4.2, 'wood') + band(22, 43.5, 7, 3, -51) + band(36, 26, 7, 3, -51) +
     `<path d="M40 22c-6-4-6-13 2-17c-3 5-1 10 4 12M48 24c4-6 1-14-7-16c5 3 5 9 2 13" fill="none" stroke="url(#gold)" stroke-width="2.6" stroke-linecap="round"/>` +
