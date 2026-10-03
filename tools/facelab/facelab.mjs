@@ -344,15 +344,17 @@ try {
     lines.push(`  as the hero stands: cards hidden by the body ${beard.hidden}`);
     writeFileSync(join(OUT, 'beard.txt'), lines.join('\n') + '\n');
   }
-  // the hair (hair.ts: a wig's edge, a bob's hem, the ears covered) and the shoulders (shoulders.ts: the slope from the neck,
-  // a coat hanger's bump), on a model at rest, without armour and with the chest item
+  // the hair (hair.ts: a wig's edge, a bob's hem, the ears covered), the shoulders (shoulders.ts: the slope from the neck,
+  // a coat hanger's bump) and the neck (neck.ts: its girth up from the collar against a man's, the seam into the head's
+  // skin), on a model at rest, without armour and with the chest item
   const body = await p.evaluate(async (cls) => {
-    const Hm = await import('/tools/facelab/hair.ts'), Sh = await import('/tools/facelab/shoulders.ts'), { buildModel } = await import('/src/entities/models/index.ts'), { CLASSES } = await import('/src/data/classes/index.ts');
-    const G = __G, who = CLASSES[cls].model, m = buildModel(who), out = { hair: null, shoulders: [] };
+    const Hm = await import('/tools/facelab/hair.ts'), Sh = await import('/tools/facelab/shoulders.ts'), Nk = await import('/tools/facelab/neck.ts'), { buildModel } = await import('/src/entities/models/index.ts'), { CLASSES } = await import('/src/data/classes/index.ts');
+    const G = __G, who = CLASSES[cls].model, m = buildModel(who), out = { hair: null, shoulders: [], neck: [] };
     for (const chest of [false, true]) {
       m.setGear({ ...G.player.gear, helm: false, chest, hands: false });
       if (!chest) out.hair = Hm.measureHair(m.root, who);
       out.shoulders.push([chest ? 'chest item' : 'no chest item', Sh.measureShoulders(m)]);
+      out.neck.push([chest ? 'chest item' : 'no chest item', Nk.measureNeck(m)]);
     }
     m.dispose?.();
     return out;
@@ -363,6 +365,13 @@ try {
       `  locks' ends' heights (10th 50th 90th percentiles): at the sides ${h.endsSide.join(' ')}, behind ${h.endsBack.join(' ')}; ears covered ${h.ears}`);
     lines.push('shoulders (shoulders.ts; the front outline from the neck out)');
     for (const [name, sides] of body.shoulders) lines.push(`  ${name}: ` + sides.map((x) => `${x.side} slope ${x.slope} deg, bump ${x.bump} mm`).join('; '));
+    lines.push("neck (neck.ts; girth as a share of the head's: a man's 0.69, 0.76 at the base; heights above the collar at the back)");
+    for (const [name, n] of body.neck) {
+      if (!n) { lines.push(`  ${name}: not measured`); continue; }
+      lines.push(`  ${name}: head ${n.head} mm round; neck just above the collar ${n.base}, narrowest ${n.min} at ${n.minAt} mm, under the jaw ${n.top}, change ${n.taper} per 10 mm; collar ${n.c7} mm from a man's C7`,
+        `    seam into the head's skin at ${n.seam.y.join(' ')} mm (10th 50th 90th round it): step ${n.seam.step} mm, crease ${n.seam.turn} deg, colour dE ${n.seam.dE}, relief above it ${n.seam.relief} deg, roughness ${n.seam.rough} over the neck's`,
+        `    by sector (height/step/dE/L head/L neck/crease): ${n.seam.sectors}`);
+    }
     writeFileSync(join(OUT, 'body.txt'), lines.join('\n') + '\n');
   }
   if (errs.length) console.error('facelab: page errors:', errs.join(' | '));

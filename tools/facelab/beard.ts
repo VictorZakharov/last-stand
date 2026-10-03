@@ -102,9 +102,10 @@ export function measureBeard(root: THREE.Object3D, who: keyof typeof FACES): Bea
     if (lo >= 0) rows.push({ y: y + Y0, w: hi - lo + 1, fill: n / (hi - lo + 1), runs });
   }
   const skinW = (yy: number) => { const y = yy - Y0; let lo = -1, hi = -1; for (let x = 0; x < W; x++) { const c = FV.out[y * W + x]; if (c === 1 || c === 2) { if (lo < 0) lo = x; hi = x; } } return lo < 0 ? 0 : hi - lo + 1; };
-  // the chin's underside, from the distance field
+  // the chin's underside, from the distance field (in front of a column neck, which runs on down under it)
   let chin = 40;
-  for (let y = 40; y > -60; y -= 0.25) { let inside = false; for (let z = 40; z < 140 && !inside; z += 1) inside = headSDF(0, y, z, F) < 0; if (!inside) { chin = y; break; } }
+  const z0 = F.neckCol ? (F.neckBack ?? -8) + F.neckCol[1] + 6 : 40;
+  for (let y = 40; y > -60; y -= 0.25) { let inside = false; for (let z = z0; z < 140 && !inside; z += 1) inside = headSDF(0, y, z, F) < 0; if (!inside) { chin = y; break; } }
   // (the jaw's width from the distance field: a beard's volume over it hides the skin)
   let jawW = 0;
   for (let y = 15; y <= 45; y += 2) for (let z = 30; z < 120; z += 4) { let x = 100; while (x > 0 && headSDF(x, y, z, F) > 0) x -= 0.5; jawW = Math.max(jawW, 2 * x); }

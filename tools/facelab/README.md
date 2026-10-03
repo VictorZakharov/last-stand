@@ -134,6 +134,13 @@ where you like and pass its path. Any front view of a face works, a full-body sh
    is a bob), how much of the ears it covers; the body's outline from the neck out over each shoulder, its slope (a
    man's trapezius, about 20 degrees) and any bump where it rises again (an arm's tube standing over the body: a coat
    hanger), without armour and with the chest item. `body.txt`, added to the report.
+10. **The neck** (`neck.ts`, in `body.txt` too, per chest item): sliced every 5 mm up the neck joint's frame, each slice's
+   girth against the head's (a man's neck is 0.69 of his head round it at its narrowest, 0.76 at its base: ANSUR II),
+   where it is narrowest and how it tapers (a cone reads as one); where the head's skin meets the rig's neck all round
+   it: the step between them, the crease (the turn of the shading normals across it, skinned as posed), the colour
+   difference (CIE76 dE of the painted albedo either side) and the paint's relief and roughness just above it; how high
+   the collar sits at the back against the seventh vertebra's height, and skin showing through the collar (skin met
+   within 25 mm of a ray before the cloth it is under).
 
 ## Output (`tools/facelab/out/<tag>/`)
 

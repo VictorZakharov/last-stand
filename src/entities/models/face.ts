@@ -56,6 +56,11 @@ export interface FaceShape {
   /** the top of the neck under the jaw: half its width (mm, 57), its middle's depth (mm, -8) and how softly it
    *  blends into the jaw (mm, 18); narrower, further back and blended less, the jaw stands out over it in a line */
   neckW?: number; neckBack?: number; neckBlend?: number;
+  /** a column neck: the free neck's half-width and half-depth (mm), the head's own skin carrying straight on down it under the
+   *  jaw and the skull to its seam, where the rig's neck takes over with the same section (`neckSeam`, models/head.ts `buildNeck`). A
+   *  man's neck keeps its girth up to the head (ANSUR II: 0.69 of the head's); an egg-shaped stub over a neck narrowing up
+   *  into it read as a cone, creased where the two met */
+  neckCol?: [number, number];
   /** how far down under the jaw the beard grows (mm from the chin's underside; -45 down the throat) */
   beardUnder?: number;
   /** how softly the lower lid blends into the cheek (mm; 0 a lid standing out of the socket, its edge a crease) */
@@ -178,7 +183,7 @@ export const FACES: Record<'warrior' | 'mage', FaceShape> = {
       p: [2, 2.15, 2.22, 2.21, 2.11, 1.98, 1.84, 1.76, 1.8, 2.02, 2.36, 2.5, 2.44, 2.39, 2.4, 2.2],
       pz: [1.2, 1.2, 1.2, 1.2, 1.22, 1.58, 2.11, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2], hollow: 0 } },
   // longer and leaner, a long straight nose
-  mage: { jaw: 27, chin: 11.3, chinFwd: 9, brow: 0.7, cheek: 1.25, noseLen: 57, noseW: 16.5, nosePro: 1.1, hump: 0, noseRoot: 6, bridgeW: 6.5, lips: 1, long: 1.04, eyeOpen: 4.3, iris: [0.3, 0.42, 0.34], beardDepth: 6, beardFull: 24, beardLine: 12, neckBack: -5,
+  mage: { jaw: 27, chin: 11.3, chinFwd: 9, brow: 0.7, cheek: 1.25, noseLen: 57, noseW: 16.5, nosePro: 1.1, hump: 0, noseRoot: 6, bridgeW: 6.5, lips: 1, long: 1.04, eyeOpen: 4.3, iris: [0.3, 0.42, 0.34], beardDepth: 6, beardFull: 24, beardLine: 12, neckBack: -5, neckCol: [65, 62], beardUnder: -30,
     // (the mask and the broad shape fitted by least squares (tools/facelab/fit.mjs) to the real face nearest his old one,
     // built of blobs: its cheekbones stood up to 12 mm out of any real face's; the nose straight, its bridge raised to
     // the mask's front (a hump stood out of a sunken ridge with a cliff at its top))
@@ -214,6 +219,21 @@ function seg(x: number, y: number, z: number, ax: number, ay: number, az: number
 const smin = (a: number, b: number, k: number): number => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
 const smax = (a: number, b: number, k: number): number => -smin(-a, -b, k);
 const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+/** where a column neck's skin passes from the head's to the rig's neck (mm, the face's frame), round it (`c` the cosine of the
+ *  angle from the front round the column): low in front, under a full beard's neckline, which ends above it (at a seam under
+ *  the chin the beard was cut off there); high behind, so the rig's neck bends above the collar (the head's skin moves with
+ *  the head: down to the collar, the neck swung in it as the head turned) */
+export const neckSeam = (c: number): number => lerp(-36, -12, ((1 - c) / 2) ** 0.7);
+/** the cosine round a column neck from its front, at a point (mm) */
+const neckCos = (ax: number, z: number, F: FaceShape): number => { const dz = z - (F.neckBack ?? -8); return dz / (Math.hypot(ax, dz) || 1); };
+/** A column neck (`neckCol`): the free neck's ellipse from inside the head down through the band round its seam where
+ *  the rig's neck crosses it, then drawn in (below it the rig's neck is the skin, and where that bends the column moving
+ *  with the head would show through; drawn in nearer the seam, its normals tilted there and the seam showed). */
+function neckColumn(ax: number, y: number, z: number, F: FaceShape): number {
+  const [rx, rz] = F.neckCol!, s = neckSeam(neckCos(ax, z, F)), k = 1 - 0.35 * sm(s - 12, s - 32, y), m = Math.min(rx, rz) * k;
+  return Math.max((Math.hypot(ax / (rx * k), (z - (F.neckBack ?? -8)) / (rz * k)) - 1) * m, y - 40, s - 32 - y);
+}
 
 /** eyeball centre (the left one; the right mirrors it) and radius, mm */
 export const EYE = { x: 32, y: 114, z: 71, r: 12 };
@@ -292,7 +312,7 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
   // the side of the face under the cheekbone's arch, in front of the ear (the chewing muscle)
   if (!M) d = smin(d, ell(ax, yl, z, (F.masseter ?? 47) + zg * 0.6, 76, 20, 12, 30, 24), 18);
   // the top of the neck under the jaw and the skull (the rig's neck carries on below it)
-  d = smin(d, ell(ax, y, z, 0, 0, F.neckBack ?? -8, F.neckW ?? 57, 58, 53), F.neckBlend ?? 18);
+  d = smin(d, F.neckCol ? neckColumn(ax, y, z, F) : ell(ax, y, z, 0, 0, F.neckBack ?? -8, F.neckW ?? 57, 58, 53), F.neckBlend ?? 18);
   // the cheekbones' arches back towards the ears (a measured face's mask has its own cheekbones: these stood out of it
   // with grooves between them)
   if (!M) d = smin(d, seg(ax, yl, z, 55 + zg, 102, 44, 59 + zg, 100, 14, 5, 4.5), 14);
@@ -975,6 +995,9 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         // (and no shine where it's shaded)
         rr = lerp(rr, 0.92, ns / 0.82);
       }
+      // (a column neck's skin as plain down to the seam as the rig's neck below it, its relief and sheen easing out: ending at
+      // it, the face's pores, stretched down the neck by the grid's sparse rows there, showed as a crumpled band)
+      if (F.neckCol) { const s = neckSeam(neckCos(ax, z, F)), nk = sm(s, s + 40, yy); hh *= nk; rr = lerp(L.ao ? 0.88 : 0.6, rr, nk); }
       albedo[i * 4] = clamp(c[0], 0, 1) * 255; albedo[i * 4 + 1] = clamp(c[1], 0, 1) * 255; albedo[i * 4 + 2] = clamp(c[2], 0, 1) * 255; albedo[i * 4 + 3] = 255;
       const rv = clamp(rr, 0.2, 0.95) * 255;
       rough[i * 4] = rough[i * 4 + 1] = rough[i * 4 + 2] = rv; rough[i * 4 + 3] = 255;

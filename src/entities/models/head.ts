@@ -9,7 +9,7 @@ import { part } from './rig';
 import { Sculpt } from './shapes';
 import { clamp, lerp, mulberry } from '../../util';
 import { faceCanvases } from '../../core/textures';
-import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, neckShade, beardLift, mouthY, type FaceShape, type HeadGrid } from './face';
+import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, neckShade, beardLift, mouthY, neckSeam, type FaceShape, type HeadGrid } from './face';
 import type { MaterialKit } from '../../types';
 
 /** metres per millimetre of the face's frame: the head is 1/7.5 of the heroes' stature */
@@ -61,7 +61,18 @@ function skinGeometry(g: HeadGrid): THREE.BufferGeometry {
   geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   geo.setIndex(idx);
   geo.computeVertexNormals();
+  weldNormals(geo, W);
   return geo;
+}
+
+/** A grid wrapped round (each row's first and last vertices in one place): one normal there, theirs averaged (each its own
+ *  side's, they showed a line down the back of the head and neck). */
+function weldNormals(geo: THREE.BufferGeometry, W: number): void {
+  const N = geo.attributes.normal as THREE.BufferAttribute, a = new THREE.Vector3(), b = new THREE.Vector3();
+  for (let k = 0; k + W - 1 < N.count; k += W) {
+    a.fromBufferAttribute(N, k).add(b.fromBufferAttribute(N, k + W - 1)).normalize();
+    N.setXYZ(k, a.x, a.y, a.z); N.setXYZ(k + W - 1, a.x, a.y, a.z);
+  }
 }
 
 const maps = new Map<string, { map: THREE.Texture; normalMap: THREE.Texture; roughnessMap: THREE.Texture }>();
@@ -773,18 +784,31 @@ function hairCard(pts: THREE.Vector3[], width: (t: number) => number, centre: TH
  */
 /** With the head's joint, the top of the neck follows the head (skinned; see Sculpt.skin) */
 export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, len: number, headJoint?: THREE.Object3D): void {
-  const rings = 24, segs = lod(28, 14), pos: number[] = [], idx: number[] = [], col: number[] = [], ao = LOOKS[who].ao ?? 0;
+  const F = FACES[who], C = F.neckCol, rings = C ? 32 : 24, segs = C ? lod(64, 24) : lod(28, 14), pos: number[] = [], posN: number[] = [], idx: number[] = [], col: number[] = [], share: number[] = [], ao = LOOKS[who].ao ?? 0;
   for (let k = 0; k <= rings; k++) {
-    const t = k / rings, y = lerp(-0.03, len + 0.012, t);
+    const t = k / rings, y = lerp(-0.03, len + 0.012, t), yf = (y - len) / HEAD_MM;
     // wider at the base, set a little back at the top (under the skull), in mm
     // (a face with a narrower neck under its jaw has the neck's top to match, standing in under the jaw's line)
-    const rx = lerp(66, (FACES[who].neckW ?? 54) + 3, sm(0, 1, t)), rz = lerp(62, 52, sm(0, 1, t)), cz = lerp(-2, -13, t);
+    let rx = lerp(66, (F.neckW ?? 54) + 3, sm(0, 1, t)), rz = lerp(62, 52, sm(0, 1, t)), cz = lerp(-2, -13, t);
+    if (C) {
+      // a column neck: the head's own column's section all the way up, flaring only at its base inside the clothes
+      const fl = 5 * sm(-60, -95, yf);
+      rx = C[0] + fl; rz = C[1] + fl * 0.8; cz = (F.neckBack ?? -8) - ORIGIN.z;
+    }
     for (let i = 0; i <= segs; i++) {
       const a = (i / segs) * Math.PI * 2 - Math.PI, ang = Math.abs(a);
+      // a column neck crosses the head's skin at its seam by a millimetre each way (outside it below, inside above), and is
+      // shaded as the column without the crossing (its slope tilted the normals, and the light from above made a band of it);
+      // the muscles' relief only below it (the head's column has none)
+      const s = C ? neckSeam(Math.cos(a)) : 0, cross = C ? 1 - 2 * sm(s - 4, s + 4, yf) : 0, up = C ? sm(s - 2, s - 12, yf) : 1;
       // the muscles running from the back of the jaw (top) to the breastbone (bottom), the Adam's apple
-      const scm = 3 * Math.exp(-(((ang - lerp(0.45, 1.3, t)) / 0.28) ** 2));
-      const adam = 5 * Math.exp(-((a / 0.3) ** 2)) * Math.exp(-(((t - 0.55) / 0.16) ** 2));
-      pos.push(Math.sin(a) * (rx + scm) * HEAD_MM, y, (cz + Math.cos(a) * (rz + scm + adam)) * HEAD_MM);
+      const scm = 3 * up * Math.exp(-(((ang - lerp(0.45, 1.3, t)) / 0.28) ** 2));
+      // (under a column neck's seam, wholly)
+      const adam = 5 * up * Math.exp(-((a / 0.3) ** 2)) * (C ? Math.exp(-(((yf + 62) / 12) ** 2)) : Math.exp(-(((t - 0.55) / 0.16) ** 2)));
+      pos.push(Math.sin(a) * (rx + scm + cross) * HEAD_MM, y, (cz + Math.cos(a) * (rz + scm + adam + cross)) * HEAD_MM);
+      posN.push(Math.sin(a) * (rx + scm) * HEAD_MM, y, (cz + Math.cos(a) * (rz + scm + adam)) * HEAD_MM);
+      // (moving with the head from a little below the seam, as the head's skin there does; bending under that)
+      share.push(sm(s - 40, s - 12, yf));
       // (its top in the jaw's shadow, as the face's own skin under the jaw: a warm brown)
       const k = ao ? 1 - neckShade(Math.abs(Math.sin(a)) * rx, (y - len) / HEAD_MM) : 1;
       col.push(k ** 0.8, k ** 0.95, k ** 1.2);
@@ -793,10 +817,14 @@ export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   const W = segs + 1;
   for (let k = 0; k < rings; k++) for (let i = 0; i < segs; i++) { const a = k * W + i; idx.push(a, a + 1, a + W, a + 1, a + W + 1, a + W); }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('position', new THREE.Float32BufferAttribute(posN, 3));
   if (ao) g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   g.setIndex(idx);
   g.computeVertexNormals();
+  weldNormals(g, W);
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  // (a column neck's share of the head's motion, round it: the two skins stay matched at the seam as the head turns)
+  if (C) g.setAttribute('skinK', new THREE.Float32BufferAttribute(share, 1));
   const mat = plainSkin(kit, who, ao > 0);
   if (headJoint) new Sculpt().skin(g, mat, neckJoint, headJoint, len * 0.35, len).build();
   else part(g, mat, neckJoint);

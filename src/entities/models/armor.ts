@@ -287,14 +287,25 @@ export interface SkirtOpts {
   radial?: number; rows?: number;
   /** how much it flares with speed, and how far the legs push it */
   flare?: number; push?: number;
+  /** how much further out than the limbs it lies (m): a skirt worn over another */
+  layer?: number;
   /** a band this share of the length deep round the hem, drawn with the mesh's second material (a trim) */
   trim?: number;
 }
+
+/** A limb a skirt keeps clear of, in the skirt's own space: from `a` (radius `ra`) to `b` (radius `rb`), the cloth's gap
+ *  included. */
+export interface SkirtBody { a: THREE.Vector3; b: THREE.Vector3; ra: number; rb: number }
 
 /**
  * A skirt hanging from the hips: one continuous surface whose columns swing out from the waist as the
  * legs push them, flare with speed and lag a little behind (a spring per column). Call `update` after
  * posing the legs; draw `geo` with the outer material, and again with a back-face lining if wanted.
+ * Given the limbs (`update`'s `legs` and `hands`), the posed cloth is then draped over them: each point inside a leg moved
+ * out from the skirt's middle and up until it is clear, each a hand reaches or lies just outside put in behind it (the legs
+ * having the last word), every point held to its length down the cloth and round it, so it lies over a raised knee and hangs
+ * on below it. (Swung by the thighs' angles alone, a knee lifted at a run came out through the front and the flare swept over
+ * a hand at the side; swinging whole columns out past the knee instead stood the cloth out as a stiff cone, in points.)
  */
 export class Skirt {
   readonly geo = new THREE.BufferGeometry();
@@ -302,7 +313,8 @@ export class Skirt {
   private ang: Float32Array;
   private theta: Float32Array;
   private vel: Float32Array;
-  private cols: number;
+  /** points round it in each row (the last a copy of the first, at the seam) */
+  readonly cols: number;
 
   constructor(private o: SkirtOpts) {
     const radial = o.radial ?? 40, body = o.rows ?? 10, depth = o.depth ?? 0.85, trim = o.trim ?? 0;
@@ -337,8 +349,9 @@ export class Skirt {
     this.vel = new Float32Array(this.cols);
   }
 
-  /** `fL`, `fR`: how far forward each thigh swings (radians); `move` 0..1; `t`, `dt` in seconds */
-  update(fL: number, fR: number, move: number, t: number, dt: number): void {
+  /** `fL`, `fR`: how far forward each thigh swings (radians); `move` 0..1; `t`, `dt` in seconds; `legs` and `hands`, the
+   *  limbs it keeps clear of from inside and from outside (the skirt's own space) */
+  update(fL: number, fR: number, move: number, t: number, dt: number, legs?: SkirtBody[], hands?: SkirtBody[]): void {
     const o = this.o, depth = o.depth ?? 0.85, push = o.push ?? 0.8, flare = o.flare ?? 1;
     const p = this.geo.attributes.position as THREE.BufferAttribute, R = this.rest;
     const h = Math.min(dt, 0.05);
@@ -360,7 +373,114 @@ export class Skirt {
         p.setXYZ(j, sx * nr, ny, cz * nr * depth);
       }
     }
+    if (legs?.length || hands?.length) this.drape(legs ?? [], hands ?? []);
     p.needsUpdate = true;
     this.geo.computeVertexNormals();
   }
+
+  /** each point's length to the one above it and to the next round, as cut */
+  private lens?: { down: Float32Array; round: Float32Array };
+  private boxes = new Float32Array(0);
+  /** The posed cloth over the limbs: a few rounds of putting each point the limbs reach out of them and holding the points to
+   *  their lengths (a little give: cloth stretches) down the cloth from the waist and round it, ending off the limbs. */
+  private drape(legs: SkirtBody[], hands: SkirtBody[]): void {
+    const P = (this.geo.attributes.position as THREE.BufferAttribute).array as Float32Array, C = this.cols, n = P.length / 3, R = this.rest;
+    if (!this.lens) {
+      const down = new Float32Array(n), round = new Float32Array(n), d = (a: number, b: number) => Math.hypot(R[a * 3] - R[b * 3], R[a * 3 + 1] - R[b * 3 + 1], R[a * 3 + 2] - R[b * 3 + 2]);
+      for (let j = C; j < n; j++) down[j] = d(j, j - C);
+      for (let j = 0; j < n; j++) if (j % C < C - 1) round[j] = d(j, j + 1);
+      this.lens = { down, round };
+    }
+    const { down, round } = this.lens, layer = this.o.layer ?? 0;
+    // (limb by limb, each point a limb's box doesn't hold skipped, and the limbs in runs whose boxes overlap, a point outside a
+    // run's box skipping all of it: most points are nowhere near most limbs, a hand's dozen capsules among them; each point
+    // still meets the hands before the legs)
+    const nb = hands.length + legs.length, B = this.boxes.length >= (nb * 2 + 1) * 6 ? this.boxes : (this.boxes = new Float32Array((nb * 2 + 1) * 6));
+    const body = (q: number): SkirtBody => (q < hands.length ? hands[q] : legs[q - hands.length]);
+    const runs: number[] = [];
+    for (let q = 0; q < nb; q++) {
+      const b = body(q), r = Math.max(b.ra, b.rb) + (q < hands.length ? HAND_REACH : layer), k = q * 6;
+      B[k] = Math.min(b.a.x, b.b.x) - r; B[k + 1] = Math.max(b.a.x, b.b.x) + r; B[k + 2] = Math.min(b.a.y, b.b.y) - r;
+      B[k + 3] = Math.max(b.a.y, b.b.y) + r; B[k + 4] = Math.min(b.a.z, b.b.z) - r; B[k + 5] = Math.max(b.a.z, b.b.z) + r;
+      const g = (nb + runs.length / 2 - 1) * 6, joins = runs.length > 0 && q !== hands.length
+        && B[k] <= B[g + 1] && B[k + 1] >= B[g] && B[k + 2] <= B[g + 3] && B[k + 3] >= B[g + 2] && B[k + 4] <= B[g + 5] && B[k + 5] >= B[g + 4];
+      if (joins) { runs[runs.length - 1] = q + 1; for (let c = 0; c < 6; c += 2) { B[g + c] = Math.min(B[g + c], B[k + c]); B[g + c + 1] = Math.max(B[g + c + 1], B[k + c + 1]); } }
+      else { runs.push(q, q + 1); const h = (nb + runs.length / 2 - 1) * 6; for (let c = 0; c < 6; c++) B[h + c] = B[k + c]; }
+    }
+    const offAll = () => {
+      for (let g = 0; g < runs.length; g += 2) {
+        const G = (nb + g / 2) * 6, q0 = runs[g], q1 = runs[g + 1];
+        for (let j = C; j < n; j++) {
+          const x = P[j * 3], y = P[j * 3 + 1], z = P[j * 3 + 2];
+          if (x < B[G] || x > B[G + 1] || y < B[G + 2] || y > B[G + 3] || z < B[G + 4] || z > B[G + 5]) continue;
+          for (let q = q0; q < q1; q++) {
+            const k = q * 6;
+            if (x < B[k] || x > B[k + 1] || y < B[k + 2] || y > B[k + 3] || z < B[k + 4] || z > B[k + 5]) continue;
+            const hand = q < hands.length;
+            this.off(P, j, body(q), hand ? 0 : layer, hand);
+          }
+        }
+      }
+    };
+    for (let it = 0; it < 4; it++) {
+      offAll();
+      // (down the cloth from the waist, which stays: each point no further from the one above than its length and a little)
+      for (let j = C; j < n; j++) pull(P, j, j - C, down[j] * 1.04, 1);
+      // (round it: neighbours no further apart than theirs and a little, both moving; across the seam the last column but one
+      // with the first, the last being a copy of the first: tied to that copy, the cloth parted down the front)
+      for (let j = C; j < n; j++) if (j % C < C - 1) pull(P, j, j % C === C - 2 ? j + 2 - C : j + 1, round[j] * 1.15, 0.5);
+      // (the seam where the last column meets the first)
+      for (let j = C - 1; j < n; j += C) for (let k = 0; k < 3; k++) P[j * 3 + k] = P[(j - C + 1) * 3 + k];
+    }
+    // (ending off the limbs: the lengths last pulled points back into a thigh)
+    offAll();
+  }
+
+  /** Point `j` put out of limb `b` (and `extra` further): a leg's moved away from the skirt's middle and up until it is clear
+   *  (the cloth hangs from the waist outside the legs and over a raised thigh, never under it; put out by the nearest side, the
+   *  points round a knee went every way round it and the cloth crumpled), a hand's on its side towards the middle. */
+  private off(P: Float32Array, j: number, b: SkirtBody, extra: number, inward: boolean): void {
+    _sp.set(P[j * 3], P[j * 3 + 1], P[j * 3 + 2]);
+    _sab.subVectors(b.b, b.a);
+    const L2 = _sab.lengthSq(), u = L2 > 1e-9 ? Math.min(1, Math.max(0, _sq.subVectors(_sp, b.a).dot(_sab) / L2)) : 0;
+    _sq.copy(b.a).addScaledVector(_sab, u);
+    const rad = b.ra + (b.rb - b.ra) * u + extra, dn = _sn.subVectors(_sp, _sq), d = dn.length();
+    // (a hand lying on the cloth also holds in what lies just outside it, within the points' spacing: its fingers are thinner
+    // than that, and the cloth's triangles crossed them with no point inside)
+    if (d >= rad + (inward ? HAND_REACH : 0)) return;
+    // (the way out preferred: from the skirt's middle and up for a leg, towards it for a hand; across the limb)
+    _so.set(_sp.x, 0, _sp.z).normalize(); if (inward) _so.negate(); else _so.y += 0.6;
+    if (L2 > 1e-9) _so.addScaledVector(_sab, -_so.dot(_sab) / L2);
+    if (d >= rad && dn.dot(_so) >= 0) return;
+    if (!inward && _so.lengthSq() > 1e-12) {
+      // (along that way to where it leaves the limb: the distance to the axis grows no faster than the step)
+      _so.normalize();
+      for (let it = 0, g = rad - d; it < 8 && g > 0; it++) {
+        _sp.addScaledVector(_so, g + 1e-4);
+        const w = L2 > 1e-9 ? Math.min(1, Math.max(0, _sq.subVectors(_sp, b.a).dot(_sab) / L2)) : 0;
+        g = b.ra + (b.rb - b.ra) * w + extra - _sp.distanceTo(_sq.copy(b.a).addScaledVector(_sab, w));
+      }
+      P[j * 3] = _sp.x; P[j * 3 + 1] = _sp.y; P[j * 3 + 2] = _sp.z;
+      return;
+    }
+    if (d < 1e-6 || dn.dot(_so) < 0) dn.copy(_so);
+    if (dn.lengthSq() < 1e-12) return;
+    _sp.copy(_sq).addScaledVector(dn.normalize(), rad);
+    P[j * 3] = _sp.x; P[j * 3 + 1] = _sp.y; P[j * 3 + 2] = _sp.z;
+  }
 }
+
+/** points `a` and `b` (of a flat array) held no further apart than `max`: `a` moved by `wa` of the excess, `b` by the rest */
+function pull(P: Float32Array, a: number, b: number, max: number, wa: number): void {
+  const dx = P[a * 3] - P[b * 3], dy = P[a * 3 + 1] - P[b * 3 + 1], dz = P[a * 3 + 2] - P[b * 3 + 2], d2 = dx * dx + dy * dy + dz * dz;
+  if (d2 <= max * max || d2 < 1e-18) return;
+  const d = Math.sqrt(d2);
+  const e = (d - max) / d;
+  P[a * 3] -= dx * e * wa; P[a * 3 + 1] -= dy * e * wa; P[a * 3 + 2] -= dz * e * wa;
+  const wb = 1 - wa;
+  P[b * 3] += dx * e * wb; P[b * 3 + 1] += dy * e * wb; P[b * 3 + 2] += dz * e * wb;
+}
+const _sp = new THREE.Vector3(), _sq = new THREE.Vector3(), _sab = new THREE.Vector3(), _sn = new THREE.Vector3(), _so = new THREE.Vector3();
+/** how far outside a hand's capsule the cloth beside it is still held in behind it (m): about the skirts' points' spacing */
+const HAND_REACH = 0.035;
+
