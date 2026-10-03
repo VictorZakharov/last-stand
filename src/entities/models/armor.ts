@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { taperTube as rawTube, twist as rawTwist } from './shapes';
 import { part, joint } from './rig';
-import { clamp } from '../../util';
+import { clamp, lerp } from '../../util';
 
 let detail = 1;
 /** The heroes' geometric detail, 1 = full (the quality preset's `heroDetail`): heroes built from now on
@@ -418,6 +418,29 @@ export class Skirt {
     if (legs?.length || hands?.length) this.drape(legs ?? [], hands ?? []);
     p.needsUpdate = true;
     this.geo.computeVertexNormals();
+  }
+
+  /** Point `p` (in the mesh's own space) put outside the cloth as it lies now, `gap` further out: out from the skirt's middle,
+   *  where it is between the waist and the hem. Whether it moved. (A sleeve hanging beside it: kept off an ellipse the size of
+   *  the hips, it hung into the cloth draped out over the thighs.) */
+  pushOut(p: THREE.Vector3, gap: number): boolean {
+    const P = (this.geo.attributes.position as THREE.BufferAttribute).array as Float32Array, C = this.cols, R = P.length / 3 / C, depth = this.o.depth ?? 0.85;
+    if (p.y >= P[1]) return false;
+    const u = ((Math.atan2(p.x, p.z / depth) / (Math.PI * 2) + 1) % 1) * (C - 1), i0 = Math.min(C - 2, Math.floor(u)), f = u - i0;
+    let r = 0;
+    for (let s = 0; s < 2; s++) {
+      // (down the column to the two rows either side of its height)
+      const i = i0 + s;
+      let k = 0;
+      while (k < R - 1 && P[((k + 1) * C + i) * 3 + 1] > p.y) k++;
+      if (k === R - 1) return false;
+      const a = (k * C + i) * 3, b = a + C * 3, ya = P[a + 1], yb = P[b + 1], t = ya > yb ? clamp((ya - p.y) / (ya - yb), 0, 1) : 0;
+      r += (s ? f : 1 - f) * lerp(Math.hypot(P[a], P[a + 2] / depth), Math.hypot(P[b], P[b + 2] / depth), t);
+    }
+    const rp = Math.hypot(p.x, p.z / depth), want = r + gap;
+    if (rp >= want || rp < 1e-6) return false;
+    p.x *= want / rp; p.z *= want / rp;
+    return true;
   }
 
   /** each point's length to the one above it and to the next round, as cut */

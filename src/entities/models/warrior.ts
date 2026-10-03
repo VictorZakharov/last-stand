@@ -291,9 +291,12 @@ export function buildWarrior(): Model {
   S.add(strap(Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * Math.PI * 2; return V(Math.sin(a) * 0.2, 0.02 - 0.05 * Math.sin(a + 0.8) - 0.02 * Math.cos(a), Math.cos(a) * 0.17); }), 0.04, 0.01, true), leather, j.hips);
   S.add(new THREE.BoxGeometry(0.08, 0.1, 0.045), leatherDark, j.hips, [-0.18, -0.05, 0.08], [0, -0.8, 0]);
   S.add(new THREE.BoxGeometry(0.086, 0.04, 0.05), leather, j.hips, [-0.18, -0.005, 0.08], [0, -0.8, 0]);
-  const skirt = new Skirt({ r0: 0.19, r1: 0.25, len: 0.36, depth: 0.8, folds: 7, foldAmp: 0.03, flare: 0.7, rows: 6 });
+  // (its top gathered under the waist belt, against the leather there: hung below the belt and wider than it, the ring between
+  // the two was open, and the trousers' tops showed through it at the sides, standing too; the hips' flare is the drape's; seven
+  // rows, as the hand on the shield's grip lay between two of six)
+  const skirt = new Skirt({ r0: 0.145, r1: 0.25, len: 0.39, depth: 0.8, folds: 7, foldAmp: 0.03, flare: 0.7, rows: 7 });
   const skirtMesh = new THREE.Mesh(skirt.geo, mail);
-  skirtMesh.position.y = 0.04; skirtMesh.castShadow = skirtMesh.receiveShadow = true;
+  skirtMesh.position.y = 0.07; skirtMesh.castShadow = skirtMesh.receiveShadow = true;
   j.hips.add(skirtMesh);
   // what it is draped over, in its own space: the trousers' thighs (they bulge to 11 cm) and the shins over the boots (their
   // fur cuffs stand 11 cm off the shin, over the knee cops) from inside, the hands and the forearms' lower halves (a bracer's

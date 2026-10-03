@@ -78,11 +78,12 @@ export function bare(h: Hand, skin: THREE.Material | null): void {
 }
 
 /** The hand as capsules from its own joints, each `[from, to, radius]` (what a skirt keeps clear of, `SkirtLimbs`): its palm's
- *  two edges, its index and little fingers and its thumb (one capsule down the wrist missed the palm and the curled fingers) */
+ *  two edges, its index, middle and little fingers and its thumb (one capsule down the wrist missed the palm and the curled
+ *  fingers; without the middle finger, the longest, a relaxed hand's fingertips went into the robe beside it) */
 export function handCapsules(h: Hand): [JointPoint, JointPoint, number][] {
   const end = (o: THREE.Object3D, x = 0, y = 0): JointPoint => [o, new THREE.Vector3(x, y, 0)], tip = (d: Digit): JointPoint => end(d.j[d.j.length - 1], 0, -d.len[d.len.length - 1]);
-  const [ix, , , lt] = h.f, edge = (d: Digit): [JointPoint, JointPoint, number] => [end(h.vis, d.j[0].position.x * 0.9, -0.025), end(d.j[0]), 0.02];
-  return [edge(ix), edge(lt), ...[ix, lt, h.thumb].flatMap((d) => [[end(d.j[0]), end(d.j[1]), d.r], [end(d.j[1]), tip(d), d.r]] as [JointPoint, JointPoint, number][])];
+  const [ix, md, , lt] = h.f, edge = (d: Digit): [JointPoint, JointPoint, number] => [end(h.vis, d.j[0].position.x * 0.9, -0.025), end(d.j[0]), 0.02];
+  return [edge(ix), edge(lt), ...[ix, md, lt, h.thumb].flatMap((d) => [[end(d.j[0]), end(d.j[1]), d.r], [end(d.j[1]), tip(d), d.r]] as [JointPoint, JointPoint, number][])];
 }
 
 /**

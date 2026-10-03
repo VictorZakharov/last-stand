@@ -37,6 +37,8 @@ export interface BellOptions {
   armRadius: number;
   /** the body the cloth must not sink into: vertical capsules on a joint (from `y0` to `y1` in its space), elliptical with radii `rx`, `rz` */
   bodies?: { joint: THREE.Object3D; y0: number; y1: number; rx: number; rz: number }[];
+  /** skirts the cloth hangs outside of, as they lie (draped over the legs, after their update): `mesh` the skirt's, `gap` how far out */
+  skirts?: { mesh: THREE.Object3D; skirt: { pushOut(p: THREE.Vector3, gap: number): boolean }; gap: number }[];
   rimRadius: number;
 }
 
@@ -221,7 +223,7 @@ export class BellCloth {
           if (up < -slip) { const k = (-slip - up) * il; pos[i] += _q.x * k; pos[i + 1] += _q.y * k; pos[i + 2] += _q.z * k; }
         }
       }
-      if (it === ITER - 1) this.collideBody(bodies);
+      if (it === ITER - 1) { this.collideBody(bodies); this.collideSkirts(); }
     }
   }
 
@@ -241,6 +243,28 @@ export class BellCloth {
         pos[i * 3] = _p.x; pos[i * 3 + 1] = _p.y; pos[i * 3 + 2] = _p.z;
       }
     }
+  }
+
+  /** and out of the skirts beside it */
+  private collideSkirts(): void {
+    const pos = this.pos;
+    for (const { mesh, skirt, gap } of this.o.skirts ?? []) {
+      if (!mesh.visible) continue;
+      _inv.copy(mesh.matrixWorld).invert();
+      for (let i = NC; i < N; i++) {
+        _p.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]).applyMatrix4(_inv);
+        if (!skirt.pushOut(_p, gap)) continue;
+        _p.applyMatrix4(mesh.matrixWorld);
+        pos[i * 3] = _p.x; pos[i * 3 + 1] = _p.y; pos[i * 3 + 2] = _p.z;
+      }
+    }
+  }
+
+  /** the middle of the hem as it hangs (world) */
+  hem(out: THREE.Vector3): THREE.Vector3 {
+    out.set(0, 0, 0);
+    for (let c = 0, i = (NR - 1) * NC * 3; c < NC; c++, i += 3) out.set(out.x + this.pos[i], out.y + this.pos[i + 1], out.z + this.pos[i + 2]);
+    return out.multiplyScalar(1 / NC);
   }
 
   /** the particles into the meshes, in the joint's space */
