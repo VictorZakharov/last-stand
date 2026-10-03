@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
+import { GROUND_LEVELS, groundHeight } from '../world/ground';
 
 export const input = {
   down: new Set<string>(),
@@ -13,7 +14,7 @@ export const input = {
   look: { x: 0, y: 0 },          // mouse movement this frame while the pointer is locked, px
   /** the close views aim at the screen centre (the crosshair), not the cursor */
   centerAim: false,
-  ground: new THREE.Vector3(),   // cursor projected onto the arena floor
+  ground: new THREE.Vector3(),   // cursor projected onto the arena floor (y 0, under the dais's top)
   /** touch is the active input: the browser's emulated mouse events are ignored */
   touchMode: false,
   /** touch move stick: screen space, x right / y down, length 0..1 */
@@ -61,6 +62,20 @@ export function onPointerLockLost(fn: () => void): void { onLockLost = fn; }
 const ray = new THREE.Raycaster();
 const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const ndc = new THREE.Vector2();
+const hit = new THREE.Vector3();
+
+/**
+ * Where a ray meets the floor as it's seen: the first of its levels, from the top, standing at least that high where the
+ * ray crosses it (the dais and its step stand above the floor). Met on the plane under them, the cursor over the dais
+ * pointed 35 cm past what it showed: near the feet the hero turned away from it, and zoomed in, round the other way.
+ */
+function floorHit(r: THREE.Ray, out: THREE.Vector3): boolean {
+  for (const y of GROUND_LEVELS) {
+    plane.constant = -y;
+    if (r.intersectPlane(plane, hit) && groundHeight(hit.x, hit.z) >= y) { out.set(hit.x, 0, hit.z); return true; }
+  }
+  return false;
+}
 
 function keyName(e: KeyboardEvent): string {
   if (e.code.startsWith('Key')) return e.code.slice(3).toLowerCase();
@@ -119,7 +134,7 @@ export function updateInputRay(): void {
   if (input.centerAim) { aimAtCenter(); return; }
   ndc.set((input.mouse.x / window.innerWidth) * 2 - 1, -(input.mouse.y / window.innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, G.camera);
-  ray.ray.intersectPlane(plane, input.ground);
+  floorHit(ray.ray, input.ground);
 }
 
 /**
@@ -144,10 +159,7 @@ function aimAtCenter(): void {
   }
   if (best < Infinity) return;
   const range = CAMERA.aimRange;
-  if (d.y < -1e-4) {
-    const t = -o.y / d.y;
-    if (Math.hypot(d.x * t, d.z * t) <= range) { input.ground.set(o.x + d.x * t, 0, o.z + d.z * t); return; }
-  }
+  if (d.y < -1e-4 && floorHit(ray.ray, hit) && Math.hypot(hit.x - o.x, hit.z - o.z) <= range) { input.ground.copy(hit); return; }
   if (h > 1e-4) input.ground.set(o.x + (d.x / h) * range, 0, o.z + (d.z / h) * range);
 }
 

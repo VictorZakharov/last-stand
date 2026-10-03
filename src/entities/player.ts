@@ -33,6 +33,9 @@ export interface Ward { amount: number; t: number; onHit?(absorbed: number): voi
 /** Absolute difference between two headings. */
 /** after an attack or cast, the body stays on its aim this long (s) before turning to face the way it goes */
 const AIM_HOLD = 0.45;
+/** a shot from the weapon's tip heads for its target, but never further off the body's line to it than a point this far
+ *  along that line (m) */
+const SHOT_NEAR = 5;
 const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
 /** `replay`: a remote player's cast, shown for its pose and charge; its owner says when it fires */
@@ -290,6 +293,16 @@ export class Player {
 
   get palmPoint(): THREE.Vector3 {
     return (this.model.palm ?? this.model.root).getWorldPosition(new THREE.Vector3());
+  }
+
+  /** The heading (like `facing`) of a shot leaving `from` (the weapon's tip) for `target`: the way the body aims, closing
+   *  on the target from `SHOT_NEAR` on. Aimed from the tip, out beside and ahead of the body, a target near the feet sent
+   *  the shot sideways or back while the body faced it. */
+  shotHeading(from: THREE.Vector3, target: THREE.Vector3): number {
+    const dx = target.x - this.pos.x, dz = target.z - this.pos.z, d = Math.hypot(dx, dz);
+    if (d < 1e-3) return this.facing;
+    const k = Math.max(d, SHOT_NEAR) / d;
+    return Math.atan2(this.pos.x + dx * k - from.x, this.pos.z + dz * k - from.z);
   }
 
   cooldownOf(def: SkillDef): number { return def.cooldown * (1 - this.stats.cdr / 100); }
