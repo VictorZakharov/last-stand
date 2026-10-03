@@ -16,7 +16,7 @@ import { buildHand, hold, fistReach, type Hand } from './hands';
 import { LegIK } from './ik';
 import { buildFlask, drink } from './flask';
 import { Bow, pullAt, arrowGeometry, ARROW, REST_Y } from './bow';
-import { fromEyes } from '../viewModel';
+import { fromEyes, dirFromEyes } from '../viewModel';
 import { angleDamp, clamp, damp, lerp, smooth } from '../../util';
 import type { AnimState, Model } from '../../types';
 
@@ -50,8 +50,12 @@ const AIM_IN = 0.3, AIM_OUT = 0.5;
 /** how far the arrow's line may lie off the way the body faces (rad: the shot from the bow beside the body closing on a near
  *  target); a new target turns the body, and the line with it */
 const YAW_OFF = 0.15;
-/** first person: the bow's grip ahead in the view, left of and below its middle (the eyes' frame: x right, y up, -z ahead, m) */
-const FP_GRIP = V(-0.3, -0.2, -0.62);
+/** first person (the eyes' frame: x right, y up, -z ahead, m): the bow's grip ahead at full draw, left of and below the
+ *  view's middle; the nock at full draw, under the view's lower right; between shots the bow low on the left, its arrow
+ *  pointing ahead and down; and the hand's way for the next arrow, down out of the view and back (the quiver is behind
+ *  the eyes: reaching for it, the arm swept across the view) */
+const FP_GRIP = V(-0.3, -0.2, -0.62), FP_ANCHOR = V(0.1, -0.2, -0.06), FP_REST = V(-0.3, -0.42, -0.5), FP_REST_DIR = V(0.15, -0.45, -1);
+const FP_LOW = V(0.24, -0.6, -0.05), FP_UP = V(0.16, -0.45, -0.3);
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3();
 const _u = new THREE.Vector3(), _left = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _x = new THREE.Vector3();
@@ -302,7 +306,7 @@ export function buildRanger(): Model {
       root.updateMatrixWorld(true);
     }
     anchor.getWorldPosition(anchorW);
-    if (fp) { fromEyes(root, j.neck, _a.set(0, -0.12, 0), anchorW); }
+    if (fp) fromEyes(root, j.neck, FP_ANCHOR, anchorW);
     // full draw: the bow arm reaching along the line from the anchor, its fist round the grip; how far that is, is the draw length
     const fan = shooting && (a.arrows ?? 1) > 1;
     frame(u, fan ? FLAT : CANT, line.q);
@@ -314,7 +318,7 @@ export function buildRanger(): Model {
     const L = (j.P.upperL + j.P.foreL) * s * REACH, ub = u.dot(_b);
     const D = -ub + Math.sqrt(Math.max(0, ub * ub - _b.lengthSq() + L * L));
     line.p.copy(anchorW).addScaledVector(u, D).addScaledVector(_y, -REST_Y * s);
-    if (fp) { fromEyes(root, j.neck, FP_GRIP, line.p); _a.copy(line.p).sub(anchorW).normalize(); frame(_a, 0.3, line.q); }
+    if (fp) { fromEyes(root, j.neck, FP_GRIP, line.p); _a.copy(line.p).sub(anchorW).normalize(); frame(_a, fan ? FLAT : 0.3, line.q); }
     const pullMax = Math.max(0.05, line.p.distanceTo(anchorW) / s - bow.brace);
     // between shots, the bow arm comes in and down to take the next arrow
     _a.copy(u).applyAxisAngle(_left.crossVectors(UP, u).normalize(), 0.45);
@@ -330,6 +334,12 @@ export function buildRanger(): Model {
     _y.set(0, 1, 0).applyQuaternion(ready.q);
     fistReach(handL, _y, _e.copy(elbowFK).sub(wristFK).normalize(), GRIP_R, _c);
     ready.p.copy(wristFK).add(_c).sub(_b.copy(GRIP).multiplyScalar(s).applyQuaternion(ready.q));
+    // (through the eyes the bow stays in the view, low on the left, and comes in for the next arrow below the line)
+    if (fp) {
+      fromEyes(root, j.neck, FP_REST, ready.p); frame(dirFromEyes(root, _a.copy(FP_REST_DIR).normalize(), _e), 0.7, ready.q);
+      set.p.lerpVectors(anchorW, line.p, 0.8).addScaledVector(UP, -0.1 * s);
+      _a.copy(line.p).sub(anchorW).normalize(); _a.applyAxisAngle(_left.crossVectors(UP, _a).normalize(), 0.3); frame(_a, 0.5, set.q);
+    }
     // the bow where it is: on the line as it draws, in for the next arrow, and at rest between shots
     shown.p.lerpVectors(set.p, line.p, raise); shown.q.slerpQuaternions(set.q, line.q, raise);
     // loosed, the bow tips forward in the loose fist and is caught
@@ -374,6 +384,7 @@ export function buildRanger(): Model {
       const q0 = quiver.localToWorld(_e.set(0, 0.3, 0)).clone(), axis = _x.set(0, 1, 0).transformDirection(quiver.matrixWorld).clone();
       const out = q0.clone().addScaledVector(axis, 0.36 * s).addScaledVector(u, 0.12 * s);
       const over = out.clone().lerp(nockW, 0.5).addScaledVector(UP, 0.1 * s);
+      if (fp) { fromEyes(root, j.neck, FP_LOW, q0); fromEyes(root, j.neck, FP_LOW, out); out.addScaledVector(UP, 0.05 * s); fromEyes(root, j.neck, FP_UP, over); }
       const pts = [from.clone(), follow, q0, out, over, nockW], ts = [0, FOLLOW];
       let total = 0; const lens = [0];
       for (let i = 2; i < pts.length; i++) lens.push(total += pts[i].distanceTo(pts[i - 1]));
