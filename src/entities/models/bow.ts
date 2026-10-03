@@ -173,17 +173,20 @@ export class Bow {
     this.serving.quaternion.copy(this.strings[0].quaternion);
   }
 
-  /** `n` arrows on the string (a fan `spread` apart, rad), lying from the nock over the rest; 0 takes them off */
-  nockArrows(n: number, spread = 0): void {
+  /** `n` arrows on the string, a fan `spread` apart (rad), lying from the nock over the rest; or, with the bow laid over
+   *  flat (`flat`: its +x up), fanned out across its top. 0 takes them off. */
+  nockArrows(n: number, spread = 0, flat = false): void {
     const d = _b.set(0, REST_Y, 0).sub(this.nock).normalize();
     this.arrows.forEach((a, i) => {
       a.visible = i < n;
       if (i >= n) return;
       const yaw = (i - (n - 1) / 2) * spread;
-      _a.copy(d).applyAxisAngle(_up, yaw);
+      _a.copy(d).applyAxisAngle(flat ? SIDE : _up, yaw);
       a.quaternion.setFromUnitVectors(FWD, _a);
       a.position.copy(this.nock).addScaledVector(_a, ARROW / 2 - 0.008);
+      // (on top of the riser and the limbs, which the outer arrows cross)
+      if (flat) a.position.x += 0.024;
     });
   }
 }
-const FWD = new THREE.Vector3(0, 0, 1);
+const FWD = new THREE.Vector3(0, 0, 1), SIDE = new THREE.Vector3(1, 0, 0);

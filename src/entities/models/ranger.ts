@@ -3,7 +3,8 @@
 // string drawn to an anchor at the corner of his mouth, the draw elbow in line behind the arrow, so his draw length is
 // what his own arms reach. Loosed, the draw hand follows through back along the jaw and the bow tips forward in the
 // loose fist; then the hand takes the next arrow from the quiver over his right shoulder and nocks it. Between shots he
-// holds the bow low before him with an arrow nocked and his hand on the string.
+// carries the bow upright at his side, an arrow nocked, his draw hand free; a fan of arrows is shot with the bow laid over
+// flat, the arrows lying across its top.
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { cloth, leather, wood, pbrMaterialMaps } from '../../core/textures';
@@ -16,7 +17,7 @@ import { LegIK } from './ik';
 import { buildFlask, drink } from './flask';
 import { Bow, pullAt, arrowGeometry, ARROW, REST_Y } from './bow';
 import { fromEyes } from '../viewModel';
-import { clamp, damp, lerp, smooth } from '../../util';
+import { angleDamp, clamp, damp, lerp, smooth } from '../../util';
 import type { AnimState, Model } from '../../types';
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -26,18 +27,29 @@ const DRINK = { wrist: V(0.03, -0.08, 0.22), tipped: V(0.03, 0.1, 0.2), pole: V(
 const ANCHOR = toGroup(-36, 28, 88);
 /** how far round the body turns side-on to the target (rad), the share of it the hips take standing, and moving */
 const SIDE = 1.5, HIP_SIDE = 0.68, HIP_SIDE_MOVING = 0.2;
-/** the bow's cant at full draw (rad: its top tipped over to the right) */
-const CANT = 0.14;
-/** the share of the draw over which the bow comes up onto the line */
-const RAISE = 0.35;
-/** after the release (0..1 of what follows it): the follow-through ends, the hand at the quiver, the arrow drawn out of it, nocked */
-const FOLLOW = 0.2, QUIVER = 0.48, OUT = 0.66, NOCKED = 0.9;
+/** the bow's cant at full draw (rad: its top tipped over to the right); a fan is shot with it laid flat */
+const CANT = 0.14, FLAT = Math.PI / 2;
+/** carried at the side: the bow's top tipped forward and out (rad), clear of the arm and the leg */
+const CARRY_TILT = 0.22, CARRY_OUT = 0.17;
+/** how far out to the side the bow swings between the carry and the shot (m) */
+const CARRY_SWING = 0.16;
+/** the share of the draw over which the bow comes up onto the line (by the least a tap draws, about) */
+const RAISE = 0.48;
+/** after the release (0..1 of what follows it): the follow-through ends (a quick recoil), the next arrow is nocked; the
+ *  hand's way between (to the quiver, the arrow drawn out of it and over the shoulder) is timed by its length, so it
+ *  goes at an even pace; and when it takes the arrow and lays it on the string, by that */
+const FOLLOW = 0.12, NOCKED = 0.92;
 /** the riser's grip in the bow's frame, and its radius */
 const GRIP = V(0, -0.012, 0.003), GRIP_R = 0.022;
 /** the bow arm's reach at full draw, of its length: nearly straight (a locked elbow is no archer's) */
 const REACH = 0.99;
+/** where the draw elbow points, besides out towards the archer's back: behind along the arrow, and up */
+const ELBOW_BACK = 0.8, ELBOW_UP = 0.1;
 /** how long the body takes to come round onto a shot and back off it (s) */
-const AIM_IN = 0.18, AIM_OUT = 0.5;
+const AIM_IN = 0.3, AIM_OUT = 0.5;
+/** how far the arrow's line may lie off the way the body faces (rad: the shot from the bow beside the body closing on a near
+ *  target); a new target turns the body, and the line with it */
+const YAW_OFF = 0.15;
 /** first person: the bow's grip ahead in the view, left of and below its middle (the eyes' frame: x right, y up, -z ahead, m) */
 const FP_GRIP = V(-0.3, -0.2, -0.62);
 
@@ -165,6 +177,9 @@ export function buildRanger(): Model {
   // where the string sits in the hooked fingers (the hand's frame): between the index and the middle finger's last joints
   hook(handR, 1, 0); root.updateMatrixWorld(true);
   const stringAt = j.handR.worldToLocal(handR.f[0].j[2].getWorldPosition(new THREE.Vector3()).add(handR.f[1].j[2].getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5));
+  /** when the hand reaches the quiver and has the arrow out of it, this frame (see FOLLOW) */
+  let QUIVER = 0.5, OUT = 0.7;
+  let yawOff = 0;
   let fp = false, hasBow = true, aimT = 0, raise = 0, free = 0, flaskOut = 0, nocked = true, lastLoosed = -1;
   /** where the string was in the fingers last frame, and at the release (the head's frame): the follow-through starts there */
   const lastNock = new THREE.Vector3(), loosedAt = new THREE.Vector3();
@@ -179,18 +194,16 @@ export function buildRanger(): Model {
   };
   /** the hand turned to `q` (world) on its forearm */
   const turnHand = (hand: THREE.Object3D, elbow: THREE.Object3D, q: THREE.Quaternion) => { elbow.updateWorldMatrix(true, false); hand.quaternion.copy(elbow.getWorldQuaternion(_q3).invert().multiply(q)); };
-  /** the bow placed at `bp` (world), in the left hand, its grip in the fist */
-  const placeBow = (bp: BowPose) => {
+  /** the bow placed at `bp` (world), in the left hand, its grip in the fist, the elbow towards `elbowTo` (world) */
+  const placeBow = (bp: BowPose, elbowTo: THREE.Vector3) => {
     const s = sc();
     _y.set(0, 1, 0).applyQuaternion(bp.q);
     // the wrist where the fist round the grip has it, the hand's length running back towards the shoulder
     _c.copy(GRIP).multiplyScalar(s).applyQuaternion(bp.q).add(bp.p);
     j.shoulderL.getWorldPosition(_d);
     fistReach(handL, _y, _e.copy(_d).sub(_c).normalize(), GRIP_R, _a);
-    const wrist = _b.copy(_c).sub(_a), pole = _e.set(0, 0, 0);
-    // the bow arm's elbow turned out and a little down (its crease upright: the string clears the forearm)
-    _x.set(1, 0, 0).applyQuaternion(bp.q); pole.copy(_x).addScaledVector(UP, -0.35);
-    reach(true, wrist.clone(), pole.clone());
+    const wrist = _b.copy(_c).sub(_a);
+    reach(true, wrist.clone(), elbowTo);
     root.updateMatrixWorld(true);
     hold(handL, _y, GRIP_R, _e.copy(_d).sub(_c).normalize());
     // the bow in the hand's frame
@@ -198,23 +211,30 @@ export function buildRanger(): Model {
     _m.compose(bp.p, bp.q, _s.setScalar(s));
     _m2.copy(j.handL.matrixWorld).invert().multiply(_m).decompose(bow.group.position, bow.group.quaternion, bow.group.scale);
   };
-  /** the draw hand's turn on the string at the bow's pose `q`: the fingers along the arrow, the palm to the face, the index on top */
+  /** the draw hand's turn on the string of a bow posed `q`: its fingers on along the forearm (the wrist straight, relaxed) and
+   *  the string across them, the palm to the face, the index finger on top */
   const stringTurn = (q: THREE.Quaternion, out: THREE.Quaternion) => {
-    _x.set(1, 0, 0).applyQuaternion(q); _z.set(0, 0, 1).applyQuaternion(q); _y.set(0, 1, 0).applyQuaternion(q);
-    // (the hand's -y down its fingers, -z out of its palm: x the bow's up)
-    return out.setFromRotationMatrix(_m.makeBasis(_y, _z.negate(), _x.negate()));
+    root.updateMatrixWorld(true);
+    j.elbowR.getWorldPosition(_a); j.handR.getWorldPosition(_b);
+    _z.set(0, 0, 1).applyQuaternion(q);
+    // (the hand's -y down its fingers, -z out of its palm)
+    _y.copy(_a).sub(_b).normalize().lerp(_z.negate(), 0.15).normalize();
+    _z.set(-1, 0, 0).applyQuaternion(q).addScaledVector(_y, -_y.dot(_z.set(-1, 0, 0).applyQuaternion(q))).normalize();
+    _x.crossVectors(_y, _z);
+    return out.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
   };
-  /** the right hand with its string point at `at` (world), turned `q` (world) by `w` (0: straight on its forearm), its elbow towards `pole` */
+  /** the right hand with its string point at `at` (world), on the string of a bow posed `q` by `w` (0: straight on its forearm,
+   *  fetching an arrow), its elbow towards `pole` */
   const drawHand = (at: THREE.Vector3, q: THREE.Quaternion, w: number, pole: THREE.Vector3) => {
     const s = sc();
     // (the hand's turn depends on the forearm's, which the reach for it sets: a few passes settle it)
-    for (let pass = 0; pass < 3; pass++) {
+    for (let pass = 0; pass <= 3; pass++) {
       root.updateMatrixWorld(true);
-      j.elbowR.getWorldQuaternion(_q).slerp(q, w);
+      stringTurn(q, _q2);
+      j.elbowR.getWorldQuaternion(_q).slerp(_q2, w);
+      if (pass === 3) break;
       reach(false, _ra.copy(stringAt).multiplyScalar(s).applyQuaternion(_q).negate().add(at), pole);
     }
-    root.updateMatrixWorld(true);
-    j.elbowR.getWorldQuaternion(_q).slerp(q, w);
     turnHand(j.handR, j.elbowR, _q);
     root.updateMatrixWorld(true);
   };
@@ -249,14 +269,17 @@ export function buildRanger(): Model {
       if (a.name === 'slam') j.body.position.y -= Math.sin(a.t * Math.PI) * 0.12;
     }
     free = damp(free, gesture || drinking ? 1 : 0, 14, dt);
-    hook(handR, 1 - free, 0);
+    // carrying the bow: the arm a little out from the side and the elbow a little bent (the walk swings it)
+    j.shoulderL.rotation.z += 0.2; j.elbowL.rotation.x -= 0.15;
+    hook(handR, 0, 0);
     const drinkOut = drinking ? drink(drinkRig, a.t, mouth, DRINK) : 0;
     flaskOut = damp(flaskOut, drinkOut, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
     if (aim < 0.5) st.look?.();
     if (st.dead >= 0) { deathFall(j, st.dead); legs.reset(); }
     else {
       if (!fp) legs.captureArms();
-      if (aim > 0.4) { legs.stance(0, -0.02, 0.2, -1.1); legs.stance(1, 0.02, -0.22, -1.45); }
+      // (each foot on its own side of the pelvis's middle as the leg IK sees it: across it, it was moved back out and stepped again, over and over)
+      if (aim > 0.4) { legs.stance(0, 0.07, 0.2, -1.1); legs.stance(1, -0.07, -0.22, -1.45); }
       else { legs.stance(0, 0.13, 0.06, 0.2); legs.stance(1, -0.13, -0.04, -0.3); }
       legs.update(dt, st.phase, st.dead, 1, fp ? 0 : 1); groundFeet(j, 0.07);
       if (!fp) legs.holdArms();
@@ -266,7 +289,9 @@ export function buildRanger(): Model {
     if (st.dead >= 0) return;
 
     // the arrow's line: the heading the shot flies and its angle above level
-    const yaw = shooting && a.yaw !== undefined ? a.yaw : Math.atan2(_a.set(0, 0, 1).transformDirection(root.matrixWorld).x, _a.z);
+    const facing = Math.atan2(_a.set(0, 0, 1).transformDirection(root.matrixWorld).x, _a.z);
+    yawOff = angleDamp(yawOff, shooting && a.yaw !== undefined ? clamp(Math.atan2(Math.sin(a.yaw - facing), Math.cos(a.yaw - facing)), -YAW_OFF, YAW_OFF) : 0, 20, dt);
+    const yaw = facing + yawOff;
     _u.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
     const u = _u.clone();
     if (aim > 0.01) {
@@ -279,7 +304,8 @@ export function buildRanger(): Model {
     anchor.getWorldPosition(anchorW);
     if (fp) { fromEyes(root, j.neck, _a.set(0, -0.12, 0), anchorW); }
     // full draw: the bow arm reaching along the line from the anchor, its fist round the grip; how far that is, is the draw length
-    frame(u, CANT, line.q);
+    const fan = shooting && (a.arrows ?? 1) > 1;
+    frame(u, fan ? FLAT : CANT, line.q);
     _y.set(0, 1, 0).applyQuaternion(line.q);
     j.shoulderL.getWorldPosition(_d);
     fistReach(handL, _y, _e.copy(u).negate(), GRIP_R, _c);
@@ -294,37 +320,51 @@ export function buildRanger(): Model {
     _a.copy(u).applyAxisAngle(_left.crossVectors(UP, u).normalize(), 0.45);
     frame(_a, 0.55, set.q);
     set.p.copy(anchorW).addScaledVector(u, D * 0.72).addScaledVector(UP, -0.2 * s).addScaledVector(_left, 0.04 * s);
-    // at rest: low before the body, canted over, the arrow pointing at the ground ahead
-    _a.set(-0.25, -0.55, 0.8).normalize().transformDirection(root.matrixWorld);
-    _q.copy(frame(_a, 1.0, ready.q));
-    ready.p.set(0.1, 0.92, 0.3).applyMatrix4(root.matrixWorld);
+    // carried: upright in the fist at the side, as the arm swings (its top forward and out, an arrow nocked along it)
+    const wristFK = j.handL.getWorldPosition(new THREE.Vector3()), elbowFK = j.elbowL.getWorldPosition(new THREE.Vector3());
+    const elbowPoleFK = elbowFK.clone().sub(j.shoulderL.getWorldPosition(_d));
+    root.getWorldQuaternion(_q3);
+    _a.copy(wristFK).sub(elbowFK).applyQuaternion(_q2.copy(_q3).invert());
+    const swing = Math.atan2(_a.z, -_a.y);
+    ready.q.copy(_q3).multiply(_q.setFromAxisAngle(FWD, -CARRY_OUT)).multiply(_q2.setFromAxisAngle(_x.set(1, 0, 0), CARRY_TILT + swing));
+    _y.set(0, 1, 0).applyQuaternion(ready.q);
+    fistReach(handL, _y, _e.copy(elbowFK).sub(wristFK).normalize(), GRIP_R, _c);
+    ready.p.copy(wristFK).add(_c).sub(_b.copy(GRIP).multiplyScalar(s).applyQuaternion(ready.q));
     // the bow where it is: on the line as it draws, in for the next arrow, and at rest between shots
     shown.p.lerpVectors(set.p, line.p, raise); shown.q.slerpQuaternions(set.q, line.q, raise);
     // loosed, the bow tips forward in the loose fist and is caught
     const drop = loosed ? Math.sin(clamp(after / 0.5, 0, 1) * Math.PI) * 0.5 * (a.draw ?? 1) : 0;
     if (drop) shown.q.multiply(_q2.setFromAxisAngle(_x.set(1, 0, 0), drop));
     shown.p.lerpVectors(ready.p, shown.p, aim); _q.copy(shown.q); shown.q.copy(ready.q).slerp(_q, aim);
+    // (out to the left and up on its way from the side to the shot and back, so the lower limb passes outside the thigh, not through it)
+    shown.p.addScaledVector(_e.crossVectors(UP, u).normalize(), CARRY_SWING * s * Math.sin(aim * Math.PI)).addScaledVector(UP, 0.08 * s * Math.sin(aim * Math.PI));
     // the string: drawn as the bow comes up; loosed, it springs back past rest and rings out
     if (loosed) bow.set(0, -0.35 * (a.draw ?? 1) * Math.exp(-a.loosed! / 0.06) * Math.cos(a.loosed! * Math.PI * 2 * 9));
     else bow.set(pullAt(k) * pullMax * Math.min(1, aim * 1.5));
-    if (hasBow) placeBow(shown);
-    // the arrows on the string, and where the shot leaves (the nocked arrow's middle)
+    // (the bow arm's elbow carried as it hangs, and on the shot turned out and a little down: its crease upright, the string clears the forearm)
+    const elbowTo = _x.set(1, 0, 0).applyQuaternion(shown.q).addScaledVector(UP, -0.35).normalize().lerp(elbowPoleFK.normalize(), 1 - aim).clone();
+    if (hasBow) placeBow(shown, elbowTo);
+    // the arrows on the string (a fan laid across the flat bow's top), and where the shot leaves (the nocked arrow's middle)
     const n = shooting ? a.arrows ?? 1 : 1;
-    bow.nockArrows(hasBow && nocked && free < 0.5 ? n : 0, shooting ? a.fan ?? 0 : 0);
-    tip.position.copy(bow.nock).addScaledVector(_a.set(0, REST_Y, 0).sub(bow.nock).normalize(), ARROW / 2);
+    bow.nockArrows(hasBow && nocked ? n : 0, shooting ? a.fan ?? 0 : 0, n > 1);
+    tip.position.copy(bow.arrows[Math.floor((Math.max(1, n) - 1) / 2)].position);
     root.updateMatrixWorld(true);
     nockW.copy(bow.nock); bow.group.localToWorld(nockW);
 
     // the draw hand: on the string at the nock, or following through and fetching the next arrow (the other skills'
     // gestures and the draught blend back over it, as posed above)
-    const fk = free > 0.001 ? [j.shoulderR.quaternion.clone(), j.elbowR.quaternion.clone(), j.handR.quaternion.clone()] : null;
-    _left.set(1, 0, 0).applyQuaternion(shown.q);
-    // the draw elbow in line behind the arrow: towards the arrow's line carried on back past the nock
-    j.shoulderR.getWorldPosition(_d);
-    const linePole = nockW.clone().addScaledVector(u, -0.35 * s).sub(_d);
-    stringTurn(shown.q, _q2);
-    const onString = _q2.clone();
+    const fk = [j.shoulderR.quaternion.clone(), j.elbowR.quaternion.clone(), j.handR.quaternion.clone()];
+    // (carried, the draw hand hangs free: it takes the string as the bow comes up)
+    const onW = loosed ? 1 : smooth(clamp(aimT * 1.2, 0, 1)), loose = Math.max(free, 1 - onW);
+    // (the archer's left across the shot, level: the bow's own left is up when it's laid flat for a fan)
+    _left.crossVectors(UP, u).normalize();
+    // the draw elbow out to the side at about the shoulder's height, the upper arm near level: out towards the archer's back,
+    // a little behind and up (aimed at the arrow's line behind the nock, the arm's geometry stood the upper arm straight up,
+    // the elbow over the head: the shoulder is well under the line and the wrist close in front of it)
+    const linePole = _left.clone().addScaledVector(u, -ELBOW_BACK).addScaledVector(UP, ELBOW_UP);
+    const onString = shown.q.clone();
     held.visible = false;
+    let e = -1;
     if (!loosed || after >= NOCKED || !hasBow) { drawHand(nockW, onString, 1, linePole); lastNock.copy(nockW); }
     else {
       // back along the jaw from where the string left the fingers; up to the quiver's mouth over the right shoulder; the
@@ -334,23 +374,30 @@ export function buildRanger(): Model {
       const q0 = quiver.localToWorld(_e.set(0, 0.3, 0)).clone(), axis = _x.set(0, 1, 0).transformDirection(quiver.matrixWorld).clone();
       const out = q0.clone().addScaledVector(axis, 0.36 * s).addScaledVector(u, 0.12 * s);
       const over = out.clone().lerp(nockW, 0.5).addScaledVector(UP, 0.1 * s);
-      const at = through([from.clone(), follow, q0, out, over, nockW], [0, FOLLOW, QUIVER, OUT, (OUT + NOCKED) / 2, NOCKED], after, new THREE.Vector3());
+      const pts = [from.clone(), follow, q0, out, over, nockW], ts = [0, FOLLOW];
+      let total = 0; const lens = [0];
+      for (let i = 2; i < pts.length; i++) lens.push(total += pts[i].distanceTo(pts[i - 1]));
+      for (let i = 1; i < lens.length; i++) ts.push(FOLLOW + (NOCKED - FOLLOW) * lens[i] / total);
+      QUIVER = ts[2]; OUT = ts[3];
+      // (one ease over the way from the follow-through to the string: it sets off and arrives at rest, never stopping between)
+      e = after < FOLLOW ? after : FOLLOW + (NOCKED - FOLLOW) * smooth((after - FOLLOW) / (NOCKED - FOLLOW));
+      const at = through(pts, ts, Math.min(e, NOCKED), new THREE.Vector3());
       // (the string's turn eased off as the hand leaves it and back on as it lays the arrow on it; the elbow likewise)
-      const on = Math.max(1 - smooth(clamp((after - 0.08) / 0.17, 0, 1)), smooth(clamp((after - OUT) / (NOCKED - OUT), 0, 1)));
+      const on = Math.max(1 - smooth(clamp((after - 0.06) / 0.3, 0, 1)), smooth(clamp((e - OUT) / (NOCKED - OUT), 0, 1)));
       const reloadPole = _b.copy(UP).multiplyScalar(0.3).addScaledVector(u, -1).addScaledVector(_left, -0.6).normalize();
       drawHand(at, onString, on, linePole.clone().normalize().lerp(reloadPole, 1 - on));
       // the arrow in the fingers from the quiver to the string: point down out of the quiver, coming round onto the line
-      if (after >= QUIVER) {
+      if (e >= QUIVER) {
         held.visible = hasBow;
-        const w = smooth(clamp((after - OUT) / (NOCKED - OUT), 0, 1));
+        const w = smooth(clamp((e - OUT) / (NOCKED - OUT), 0, 1));
         _a.copy(axis).negate().lerp(_b.copy(nockW).sub(bow.group.localToWorld(_e.set(0, REST_Y, 0))).negate().normalize(), w).normalize();
         j.handR.getWorldQuaternion(_q).invert();
         held.quaternion.setFromUnitVectors(FWD, _a.applyQuaternion(_q));
         held.position.copy(stringAt).addScaledVector(_a, ARROW / 2 / j.handR.getWorldScale(_s).x * s);
       }
     }
-    if (fk) { j.shoulderR.quaternion.slerp(fk[0], free); j.elbowR.quaternion.slerp(fk[1], free); j.handR.quaternion.slerp(fk[2], free); }
-    hook(handR, loosed && after < NOCKED ? (after < FOLLOW ? 1 - smooth(after / FOLLOW) : 0.2) : 1 - free, loosed && after >= QUIVER && after < NOCKED ? 1 : 0);
+    if (loose > 0.001) { j.shoulderR.quaternion.slerp(fk[0], loose); j.elbowR.quaternion.slerp(fk[1], loose); j.handR.quaternion.slerp(fk[2], loose); }
+    hook(handR, loosed && after < NOCKED ? (after < FOLLOW ? 1 - smooth(after / FOLLOW) : 0.2) : 1 - loose, loosed && e >= QUIVER && after < NOCKED ? 1 : 0);
   }
   return {
     root, kit, joints: j, animate, tip, palm, height: 2,

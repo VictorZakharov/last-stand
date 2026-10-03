@@ -12,7 +12,7 @@ import { BLOCK, COOP } from '../data/balance';
 import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, type Loadout, type WeaponStyle } from '../loot/loadout';
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
-import { input, isDown } from '../core/input';
+import { input, isDown, wasPressed } from '../core/input';
 import { flashHurt, addShake, cameraYaw, lookFacing, viewMode, viewSettled } from '../core/renderer';
 import { floatText } from '../ui/floaters';
 import { particles, col } from '../fx/particles';
@@ -99,6 +99,9 @@ export class Player {
   facing = Math.PI;
   /** how much longer the body stays on its aim after an attack or cast (s), see AIM_HOLD */
   private aimHold = 0;
+  /** a drawn shot pressed for while busy (a tap during the last one's reload): it's drawn as soon as the hero is free, and
+   *  forgotten when any other skill is pressed or cast */
+  private queued: { skill: KnownSkill; key: SkillKey } | null = null;
   phase = 0;
   /** true in the lobby: free casting, no costs, no cooldowns */
   sandbox = false;
@@ -345,10 +348,16 @@ export class Player {
     // a channel ends when the key that started it is released
     if (this.channel && !isDown(this.channel.key)) this.stopChannel();
     if ((input.mouse.overUI && !input.touchMode) || this.dash || this.staggered) return;
+    // the shot remembered from a press while busy: drawn now, and loosed at once if its key is up again (a tap)
+    if (this.queued && !this.casting && !this.channel) { const q = this.queued; this.queued = null; this.tryCast(q.skill, q.key); }
+    const busy = !!(this.casting || this.channel);
     for (const key of SKILL_KEYS) {
-      if (!isDown(key)) continue;
+      const pressed = wasPressed(key);
+      if (!isDown(key) && !pressed) continue;
       const skill = this.skillAt(key);
       if (!skill) continue;
+      if (pressed && busy) this.queued = skill.def.draw && !skill.impl.channel ? { skill, key } : null;
+      if (!isDown(key)) continue;
       if (skill.impl.channel) { if (!this.channel && !this.casting) this.startChannel(skill, key); }
       else this.tryCast(skill, key);
     }
@@ -360,6 +369,8 @@ export class Player {
     if (!this.sandbox && this.energy < s.def.cost) { this.lowEnergy(); return false; }
     const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
     const target = this.aim.clone();
+    // (casting anything else forgets a queued shot)
+    if (this.queued?.skill !== s) this.queued = null;
     if (s.def.draw && key) {
       // drawn while the key is held, loosed when it's let go (update)
       const drawT = s.def.draw / (1 + this.stats.castSpeed / 100);
@@ -429,6 +440,7 @@ export class Player {
     if (this.staggered) return;
     if (!this.sandbox && this.energy < s.def.cost * 0.2) { this.lowEnergy(); return; }
     this.channel = { skill: s, key, state: s.impl.start(this, s.def), t: 0 };
+    this.queued = null;
     actionSink?.({ t: 'chs', s: s.def.impl, k: key });
   }
 
@@ -591,7 +603,8 @@ export class Player {
         action.draw = draw;
         if (c.fired) action.loosed = c.t - c.fireAt;
         action.t = c.fired ? 0.55 + 0.45 * Math.min(1, (c.t - c.fireAt) / Math.max(1e-3, c.dur - c.fireAt)) : 0.55 * draw;
-        action.pitch = impl.pitch?.(this, c.skill.def, draw, this.aim) ?? 0;
+        // (aimed for the arrow as it would leave: a drawn shot looses no weaker than its least draw, any other at full draw)
+        action.pitch = impl.pitch?.(this, c.skill.def, c.drawT ? Math.max(draw, c.skill.def.minDraw ?? 0) : 1, this.aim) ?? 0;
         action.yaw = this.shotHeading(this.castPoint, this.aim);
         action.arrows = c.skill.def.missiles ?? 1; action.fan = c.skill.def.spread ?? 0;
       }

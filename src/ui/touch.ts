@@ -127,7 +127,8 @@ export function buildTouchSkills(): void {
       // the basic attack, channels and drawn bows act while held; the rest wait for the release
       const release = key !== 'mouse0' && !def.channel && !def.draw;
       press = { id: e.pointerId, key, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, dragged: false, release, ring: release || !!def.draw };
-      if (!release) input.touch.add(key);
+      // (a press while the hero is busy queues a drawn shot, as a click does)
+      if (!release) { input.touch.add(key); input.pressed.add(key); }
       el.classList.add('pressed');
     });
     el.addEventListener('pointermove', (e) => {
