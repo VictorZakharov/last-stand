@@ -43,7 +43,7 @@ const skill: InstantSkill = {
   cast(player, rawDef, target) {
     const def = rawDef as Def;
     const origin = player.castPoint;
-    const base = Math.atan2(target.x - origin.x, target.z - origin.z);
+    const base = player.shotHeading(origin, target);
     const n = def.missiles;
     for (let i = 0; i < n; i++) {
       const a = base + (i - (n - 1) / 2) * def.spread;
