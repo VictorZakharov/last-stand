@@ -25,7 +25,7 @@
 .logo .logo-glow { opacity: .8; }
 .logo-tag { margin-top: 10px; font-size: 16px; color: var(--ink-dim); font-style: italic; }
 .class-card { padding: 16px 18px; background: var(--panel-raised); border: 1px solid rgba($frame, .5); }
-.cc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cc-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
 .cc-name { font-family: var(--font-display); font-size: 28px; color: var(--cc, #9fffd0); text-shadow: 0 0 10px color-mix(in srgb, var(--cc, #9fffd0) 35%, transparent); }
 #opt-class button { font-size: 14px; padding: 5px 12px; }
 .cc-tag { color: var(--ink-dim); font-size: 16px; margin-bottom: 12px; }
