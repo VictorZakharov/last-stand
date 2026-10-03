@@ -4,7 +4,7 @@ import { createKit } from '../../core/materials';
 import { cloth, leather, wood, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, reachArm, groundFeet, ramp } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
-import { taperTube, belt, buckle, strap } from './armor';
+import { taperTube, belt, buckle, strap, Skirt } from './armor';
 import { buildHead, buildNeck, toGroup } from './head';
 import { buildHand, poseHand, hold, seat } from './hands';
 import { LegIK } from './ik';
@@ -15,7 +15,8 @@ import { damp, lerp } from '../../util';
 import type { AnimState, Model } from '../../types';
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-const UP = V(0, 1, 0), _dir = new THREE.Vector3(), _q = new THREE.Quaternion(), _chestQ = new THREE.Quaternion();
+const UP = V(0, 1, 0), FORWARD = V(0, 0, 1), _dir = new THREE.Vector3(), _q = new THREE.Quaternion(), _handQ = new THREE.Quaternion(), _bowQ = new THREE.Quaternion();
+const _basis = new THREE.Matrix4(), _up = new THREE.Vector3(), _forward = new THREE.Vector3(), _across = new THREE.Vector3(), _back = new THREE.Vector3(), _wrist = new THREE.Vector3(), _body = new THREE.Vector3();
 const LEFT_POLE = V(0.7, -0.3, 0.1), DRINK = { wrist: V(0.03, -0.08, 0.22), tipped: V(0.03, 0.1, 0.2), pole: V(-0.8, 0.2, -0.2) };
 const FP_GRIP = V(-0.38, -0.25, -0.65);
 
@@ -33,7 +34,9 @@ export function buildRanger(): Model {
   const S = new Sculpt();
   S.add(lathe([[0.15, -0.12], [0.165, 0.04], [0.17, 0.18], [0.15, 0.245], [0.085, 0.29]], 24), coat, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, 0.84]);
   S.add(lathe([[0.145, -0.04], [0.15, 0.1], [0.16, 0.24]], 20), coat, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
-  S.add(lathe([[0.2, -0.23], [0.19, -0.16], [0.16, 0.03]], 24), coat, j.hips, [0, 0, 0], [0, 0, 0], [1, 1, 0.85]);
+  const tunic = new Skirt({ r0: 0.165, r1: 0.25, len: 0.25, depth: 0.95, folds: 8, foldAmp: 0.025, push: 1.25, flare: 0.5, rows: 6 });
+  const hem = part(tunic.geo, coat, j.hips, 0, 0.03);
+  hem.name = 'tunic hem';
   S.add(belt(0.16, 0.14, 0.015, 0.055, 0.008), hide, j.spine);
   S.add(buckle(0.035, 0.04, 0.007), brass, j.spine, [0, 0.015, 0.15]);
   S.add(strap([V(-0.13, 0.24, 0.13), V(0, 0.09, 0.15), V(0.14, -0.09, 0.12)], 0.035, 0.007), hide, j.chest);
@@ -51,7 +54,11 @@ export function buildRanger(): Model {
     S.add(limb(0.41, 0.067, 0.048, 0.015, 0.3, 12), hide, kn);
     for (const y of [-0.15, -0.3]) S.add(belt(0.066, 0.061, y, 0.022, 0.006), dark, kn);
     S.add(new THREE.SphereGeometry(1, 16, 10).scale(0.058, 0.045, 0.12), hide, an, [0, -0.03, 0.065]);
-    S.add(new THREE.BoxGeometry(0.11, 0.017, 0.23), dark, an, [0, -0.065, 0.06]);
+    const sole = new THREE.Shape();
+    sole.moveTo(-0.04, -0.05); sole.bezierCurveTo(-0.065, -0.05, -0.062, 0.08, -0.05, 0.15);
+    sole.bezierCurveTo(-0.04, 0.19, 0.04, 0.19, 0.05, 0.15);
+    sole.bezierCurveTo(0.062, 0.08, 0.065, -0.05, 0.04, -0.05); sole.closePath();
+    S.add(new THREE.ExtrudeGeometry(sole, { depth: 0.015, bevelEnabled: false, curveSegments: 10 }).rotateX(Math.PI / 2), dark, an, [0, -0.06, 0]);
   }
   // Reuse the shared anatomical head, without the mage's beard or headwear.
   const head = buildHead(j.head, kit, 'mage', { hair: 'swept' });
@@ -108,13 +115,23 @@ export function buildRanger(): Model {
     grip.set(lerp(0.22, fp ? 0.32 : 0.26, aim), lerp(-0.23, fp ? -0.06 : 0.16, aim), lerp(0.17, 0.46, aim));
     if (fp) { root.updateMatrixWorld(true); fromEyes(root, j.neck, FP_GRIP, grip); j.chest.worldToLocal(grip); }
     arm(true, grip, LEFT_POLE);
-    // Keep the bow vertical and facing forward in the chest frame, seated in the carrying fist.
-    j.chest.updateWorldMatrix(true, false); j.handL.updateWorldMatrix(true, false);
-    j.handL.parent!.getWorldQuaternion(_q).invert().multiply(j.chest.getWorldQuaternion(_chestQ));
-    j.handL.quaternion.copy(_q); bow.rotation.set(0, -j.chest.rotation.y, fp ? -0.15 : -0.1);
+    // The wrist continues the forearm; turn the bow inside that neutral fist, not the hand sideways.
+    root.updateMatrixWorld(true);
+    j.handL.getWorldPosition(_wrist); j.elbowL.getWorldPosition(_back).sub(_wrist).normalize();
+    _up.copy(UP).transformDirection(root.matrixWorld).addScaledVector(_back, -_up.dot(_back)).normalize();
+    _across.copy(_up).negate(); _forward.crossVectors(_across, _back).normalize();
+    _handQ.setFromRotationMatrix(_basis.makeBasis(_across, _back, _forward));
+    j.elbowL.getWorldQuaternion(_q).invert(); j.handL.quaternion.copy(_q).multiply(_handQ);
+    _forward.set(0, 0, 1).transformDirection(root.matrixWorld).addScaledVector(_up, -_forward.dot(_up)).normalize();
+    _across.crossVectors(_up, _forward).normalize(); _forward.crossVectors(_across, _up);
+    _bowQ.setFromRotationMatrix(_basis.makeBasis(_across, _up, _forward));
+    bow.quaternion.copy(_handQ).invert().multiply(_bowQ);
     seat(handL, bow, 0.026);
     root.updateMatrixWorld(true);
-    stringPoint.set(0, 0, -0.03 - draw * (fp ? 0.18 : 0.38));
+    // Draw back towards the torso in world space: the bow's local axes turn with the carrying hand.
+    bow.getWorldPosition(_wrist); j.chest.getWorldPosition(_body); _body.y = _wrist.y;
+    _back.copy(_body).sub(_wrist).normalize();
+    stringPoint.copy(_wrist).addScaledVector(_back, (0.03 + draw * (fp ? 0.18 : 0.38)) * root.scale.x); bow.worldToLocal(stringPoint);
     target.copy(stringPoint); bow.localToWorld(target); j.chest.worldToLocal(target);
     if (aim > 0.01) arm(false, target, pole);
     poseHand(handR, 0.55 + draw * 0.5, 0.05);
@@ -134,11 +151,15 @@ export function buildRanger(): Model {
       legs.update(st.dt, st.phase, st.dead, 1, fp ? 0 : 1); groundFeet(j, 0.07);
       if (!fp) legs.holdArms();
     }
+    tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, st.dt);
     strings.forEach((m, i) => {
       const end = curve[i ? 6 : 0], d = segment.copy(end).sub(stringPoint);
       m.position.copy(end).add(stringPoint).multiplyScalar(0.5); m.scale.y = d.length(); m.quaternion.setFromUnitVectors(UP, d.normalize());
     });
-    nocked.visible = hasBow && shooting && a.t < 0.55; nocked.position.copy(stringPoint); nocked.position.z += 0.325;
+    nocked.visible = hasBow && shooting && a.t < 0.55;
+    _dir.copy(stringPoint).negate().normalize();
+    nocked.position.copy(stringPoint).addScaledVector(_dir, 0.325);
+    nocked.quaternion.setFromUnitVectors(FORWARD, _dir);
     root.updateMatrixWorld(true); hold(handL, _dir.copy(UP).transformDirection(bow.matrixWorld), 0.026);
   }
   return {
