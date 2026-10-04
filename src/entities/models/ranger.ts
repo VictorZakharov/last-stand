@@ -548,7 +548,9 @@ export function buildRanger(): Model {
     // (with an arrow taken from the quiver for this shot, the hand laid it on the string: it's there already)
     const onW = loosed || (shooting && a.fetch !== undefined) ? 1 : smooth(clamp((aimT - TAKE[0]) / (TAKE[1] - TAKE[0]), 0, 1));
     if (!shooting) kHook = -1;
-    else if (!loosed && kHook < 0 && onW > 0.999) kHook = Math.min(k, 0.6);
+    // (loosed, the hand lays the next arrow on the string itself: a channel's next volley is drawn from there)
+    else if (loosed) kHook = 0;
+    else if (kHook < 0 && onW > 0.999) kHook = Math.min(k, 0.6);
     const kv = loosed ? k : kHook < 0 ? 0 : clamp((k - kHook) / (1 - kHook), 0, 1);
     // (loosed, from as far up as it had come: from the line, a quick tap's bow jumped up onto it)
     raise = shooting ? (loosed ? raiseLoose * (1 - smooth(clamp((after - FOLLOW) / (QUIVER - FOLLOW), 0, 1))) : smooth(clamp(kv / RAISE, 0, 1))) : damp(raise, 0, 6, dt);

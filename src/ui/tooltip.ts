@@ -150,7 +150,9 @@ export function skillTooltip(def: SkillDef): () => TooltipContent {
     const bits = [];
     if (def.cost) bits.push(def.channel ? `${def.cost} Energy / sec` : `${def.cost} Energy`);
     if (def.gain) bits.push(`+${def.gain} Energy per hit`);
-    if (def.castTime >= 1) bits.push(`${def.castTime}s to charge`);
+    // (a drawn shot's castTime is what follows its release: its charge is the draw)
+    if (def.draw) bits.push(`${def.draw}s to full draw`);
+    else if (def.castTime >= 1) bits.push(`${def.castTime}s to charge`);
     if (def.cooldown) bits.push(`${def.cooldown}s cooldown`);
     if (def.damage) bits.push(`${def.damage}${def.channel || def.impl === 'maelstrom' ? ' dmg / sec' : ' damage'}`);
     html += `<div class="tt-foot">${bits.join(' · ')}</div>`;

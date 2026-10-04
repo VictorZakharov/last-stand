@@ -145,6 +145,7 @@ export class Player {
   hitT = 0;
   flashAt = -1;
   lastLowEnergy = 0;
+  private lastNoTarget = -99;
 
   // co-op
   /** at 0 health (alive false) but waiting for a teammate: seconds left before bleeding out */
@@ -376,8 +377,9 @@ export class Player {
   tryCast(s: KnownSkill, key?: SkillKey): boolean {
     if (this.casting || this.channel || this.dash || this.staggered || this.cooldownLeft(s.def.impl) > 0 || !this.alive) return false;
     if (!this.sandbox && this.energy < s.def.cost) { this.lowEnergy(); return false; }
-    const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
     const target = this.aim.clone();
+    if (!s.impl.channel && s.impl.canCast && !s.impl.canCast(this, s.def, target)) { this.noTarget(); return false; }
+    const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
     // (a bow's shot with no arrow on the string takes one from the quiver first)
     const q = this.cls.quiver, nockT = q && isBowShot(s) && !this.nocked ? q.fetch / (1 + this.stats.castSpeed / 100) : 0, n = nockT ? { n: nockT } : {};
     // (casting anything else forgets a queued shot)
@@ -404,7 +406,9 @@ export class Player {
   private tickQuiver(dt: number): void {
     const q = this.cls.quiver, c = this.casting;
     if (!q) return;
-    if (c && isBowShot(c.skill)) {
+    // (a bow's channel shoots arrow after arrow: it takes them from the quiver and lays them on the string itself)
+    if (this.channel?.skill.impl.anim === 'bow') this.sinceShot = 0;
+    else if (c && isBowShot(c.skill)) {
       this.sinceShot = 0;
       if (!c.fired && c.t >= (c.nockT ?? 0)) this.nocked = true;
     } else if ((this.sinceShot += dt) > q.idle) this.nocked = false;
@@ -482,6 +486,13 @@ export class Player {
     floatText(this.pos.x, 2.6, this.pos.z, 'Not enough energy', 'info', '#62d0ff');
   }
 
+  /** a skill that needs something to cast at (a mark, a foe) found nothing */
+  private noTarget(): void {
+    if (G.time - this.lastNoTarget < 1.2) return;
+    this.lastNoTarget = G.time;
+    floatText(this.pos.x, 2.6, this.pos.z, 'No target', 'info', '#e8d9b0');
+  }
+
   faceTowards(p: THREE.Vector3, instant = false): void {
     const a = Math.atan2(p.x - this.pos.x, p.z - this.pos.z);
     this.facing = instant ? a : angleDamp(this.facing, a, 18, G.dt);
@@ -505,6 +516,7 @@ export class Player {
       if (c.drawT) {
         // a drawn shot: loosed when its key is let go, once it's drawn at least as far as its least draw (and the arrow is on the string)
         const k = Math.min(1, Math.max(0, c.t - (c.nockT ?? 0)) / c.drawT);
+        if (!c.fired && !impl.channel) impl.charging?.(this, c.skill.def, k, dt);
         if (!c.fired && c.t >= (c.nockT ?? 0) && !(c.key && isDown(c.key)) && k >= (c.skill.def.minDraw ?? 0)) { this.loose(c, k); this.fire(c.skill, this.aim.clone(), k); }
       } else {
         if (!c.fired && !impl.channel) impl.charging?.(this, c.skill.def, c.t / c.fireAt, dt);
@@ -579,7 +591,7 @@ export class Player {
     if (this.casting) {
       const c = this.casting;
       c.t += dt;
-      if (!c.fired && !c.skill.impl.channel && !c.drawT) c.skill.impl.charging?.(this, c.skill.def, Math.min(1, c.t / c.fireAt), dt);
+      if (!c.fired && !c.skill.impl.channel) c.skill.impl.charging?.(this, c.skill.def, c.drawT ? Math.min(1, Math.max(0, c.t - (c.nockT ?? 0)) / c.drawT) : Math.min(1, c.t / c.fireAt), dt);
       // (a drawn shot whose release never came: its owner left or fell mid-draw)
       if (c.t >= c.dur && isBowShot(c.skill)) this.nocked = true;
       if (c.t >= c.dur || (!c.fired && c.t > 20)) this.casting = null;
@@ -642,6 +654,7 @@ export class Player {
       const ch = this.channel, opens = ch.skill.def.opening ?? 0;
       ch.t += dt;
       action = { name: ch.skill.impl.anim || 'channel', t: Math.min(1, ch.t / 0.2), time: ch.t, open: opens > 0 ? Math.min(1, ch.t / opens) : 1 };
+      (ch.skill.impl as ChannelSkill).pose?.(this, ch.skill.def, ch.state, action);
     }
     this.pose(dt, t, Math.min(1, speed / this.stats.moveSpeed), 1, side / this.stats.moveSpeed, action);
 

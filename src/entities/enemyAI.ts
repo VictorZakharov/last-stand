@@ -16,6 +16,7 @@ import { addShake } from '../core/renderer';
 import { sfx } from '../core/audio';
 import { rand } from '../util';
 import { navTarget, lineClear, steerClear, MARGIN } from '../world/navigation';
+import { lures, lureAt, type Lure } from '../combat/lures';
 // Circular (spawner -> enemy -> enemyAI -> spawner) but only used at runtime, which is safe.
 import { spawnEnemy } from './spawner';
 import type { Enemy } from './enemy';
@@ -123,6 +124,11 @@ export const FX = {
   tele(id: number, x: number, z: number, radius: number, dur: number, color: number) {
     const tg = telegraph({ x, z }, radius, dur, color);
     G.enemies.find((e) => e.id === id)?.onDeath.push(() => tg.cancel());
+  },
+  /** a blow landing on a lure (combat/lures.ts) */
+  lureHit(x: number, z: number) {
+    lureAt(x, z)?.struck();
+    sfx.thud();
   },
   summon(x: number, z: number, color: number) {
     shockwave({ x, z }, { color, intensity: 3, from: 1, to: 8, life: 0.8 });
@@ -268,6 +274,33 @@ export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
     chase(e);
   },
 };
+
+/**
+ * A lured enemy (combat/lures.ts): it goes for the lure and strikes at it with its own attack, a brute's slam with its
+ * ring (players standing in it are hit as ever), anything else up close, a caster too: walking up to it is what gathers
+ * them round it.
+ */
+export function lured(e: Enemy, l: Lure): void {
+  const dx = l.pos.x - e.pos.x, dz = l.pos.z - e.pos.z, dist = Math.hypot(dx, dz), d = e.def;
+  e.faceTo(l.pos.x, l.pos.z);
+  if (e.action) return;
+  const slams = d.ai === 'slam', reach = l.radius + e.radius + (slams ? d.range * 0.5 : Math.min(d.range, 1.2));
+  if (dist < reach + 0.25) {
+    if (e.cd > 0) return;
+    e.cd = d.cooldown;
+    const hit = d.windup / (d.windup + d.recover), x = l.pos.x, z = l.pos.z;
+    const strike = () => { if (lures.includes(l)) fx('lureHit', x, z); };
+    if (slams) {
+      const r = d.slamRadius ?? 3;
+      slamRing(e, x, z, r, d.windup, 0xff3020);
+      e.startAction('slam', d.windup + d.recover, [[hit, () => { slamAt(e, x, z, r); strike(); }]]);
+    } else e.startAction('attack', d.windup + d.recover, [[hit, strike]]);
+    return;
+  }
+  navTarget(e.pos.x, e.pos.z, e.radius, l.pos.x, l.pos.z, l.slot, _way);
+  const wx = _way.x - e.pos.x, wz = _way.z - e.pos.z, wd = Math.hypot(wx, wz);
+  seek(e, wx, wz, wd, 1, Math.min(wd, e.speed));
+}
 
 function bossSummon(e: Enemy): void {
   for (let i = 0; i < 4; i++) {

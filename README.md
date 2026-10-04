@@ -110,10 +110,10 @@ A bow hunter in a green trailcoat with a quiver, leather bracers and boots. The 
 | --- | --- |
 | Left click | Nockshot — hold to draw, release to loose: the further it is drawn, the faster and harder the arrow; a tap looses a quicker, lighter shot, and taps during a reload queue the next one |
 | Right click | Briarflight — hold to draw five arrows across the bow laid flat, release to loose them in a broad fan |
-| `1` | Heartwood Shot — a slower, heavy shot that knocks its target back |
-| `2` | Briar Bind — wound and briefly root foes in the target area |
-| `3` | Thornwake — push nearby foes away and slow their pursuit |
-| `4` | Woven Guard — a temporary damage-absorbing woodland ward |
+| `1` | Lancewood Shot — hold to draw, release to drive the arrow through every foe in its line, each one after the first taking less (100/80/60/40%); drawn to full it strikes half again as hard |
+| `2` | Hailfletch — hold to stand and loose volley after volley over the target area, raining arrows on every foe in it until you let go; the area follows your aim at a walk |
+| `3` | Quarry Mark — the foe nearest your aim takes 30% more damage from everyone; when it dies your cooldowns are refreshed and the mark leaps to the nearest foe |
+| `4` | Strawman — a scarecrow that draws every nearby foe but elites and bosses off you for 3 seconds, gathering them round it |
 | `Q` | Healing Draught |
 
 ## Tech

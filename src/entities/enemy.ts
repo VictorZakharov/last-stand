@@ -7,7 +7,8 @@ import { ENEMIES, HERO, SCALING, type EnemyId } from '../data/enemies';
 import { buildModel } from './models/index';
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
-import { AI } from './enemyAI';
+import { AI, lured } from './enemyAI';
+import { lures, type Lure } from '../combat/lures';
 import { addAnchored, removeAnchored } from '../ui/floaters';
 import { DamageMeter } from '../ui/damageMeter';
 import { burst, debris, smokePuff, col, particles } from '../fx/particles';
@@ -115,6 +116,10 @@ export class Enemy {
   target: Player | null = null;
   /** the last player to hit it */
   killer: Player | null = null;
+  /** drawn off its target by a lure (combat/lures.ts) until the lure's time is up: it goes for that instead */
+  lure: Lure | null = null;
+  /** the marks on it (a ranger's Quarry Mark): each the extra share of damage it takes from the players' hits, the largest counting */
+  readonly marks: number[] = [];
   /** a co-op guest's copy: driven by the host's reports, not by its own AI */
   net: EnemyNet | null = null;
   /** co-op: the extra life a party's foes get (a boss's summons get it too) */
@@ -250,8 +255,10 @@ export class Enemy {
     this.desired.set(0, 0, 0);
     this.targetFacing = this.facing;
     if (this.net) return this.updateCopy(dt, t, frozen);
+    if (this.lure && (this.lure.until <= t || !lures.includes(this.lure))) this.lure = null;
     if (!frozen && this.pickTarget()) {
-      AI[this.def.ai](this, dt);
+      if (this.lure) lured(this, this.lure);
+      else AI[this.def.ai](this, dt);
       this.tickAction(dt);
       this.cd -= dt;
     }
@@ -343,9 +350,11 @@ export class Enemy {
     const j = this.model.joints;
     if (!j || this.def.dummy) return;
     const look = this.look ??= new LookAt(j);
-    const p = this.deadT >= 0 || this.spawning ? null : this.target ?? nearestPlayer(this.pos.x, this.pos.z);
+    const p = this.deadT >= 0 || this.spawning ? null : this.target ?? nearestPlayer(this.pos.x, this.pos.z), l = this.lure;
     _lookFrom.set(this.pos.x, this.obj.position.y, this.pos.z);
-    look.update(dt, _lookFrom, this.facing, p ? _lookAt.set(p.pos.x, p.obj.position.y + 1.5, p.pos.z) : null);
+    if (l && p) _lookAt.set(l.pos.x, groundHeight(l.pos.x, l.pos.z) + 1.5, l.pos.z);
+    else if (p) _lookAt.set(p.pos.x, p.obj.position.y + 1.5, p.pos.z);
+    look.update(dt, _lookFrom, this.facing, p ? _lookAt : null);
   }
 
   takeDamage(amount: number, info: DamageInfo = {}): number {

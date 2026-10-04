@@ -84,7 +84,18 @@ function hum(freq: number, type: OscillatorType = 'sawtooth'): () => void {
 const guard = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R | undefined => (ctx ? fn(...a) : undefined);
 export const sfx = {
   bow: guard(() => { if (throttle('bow', 60)) return; noise({ dur: 0.12, freq: 2800, sweep: 1200, q: 2, gain: 0.1 }); tone({ freq: 180, to: 80, dur: 0.16, type: 'triangle', gain: 0.08 }); }),
-  snare: guard(() => { noise({ dur: 0.35, freq: 1400, sweep: 350, q: 1.4, gain: 0.18 }); }),
+  /** a bow drawn to full: a glint on the arrowhead */
+  bowReady: guard(() => { tone({ freq: 1560, dur: 0.35, gain: 0.04, type: 'sine' }); tone({ freq: 2340, dur: 0.25, gain: 0.02, type: 'sine', delay: 0.03 }); }),
+  /** an arrow driven through foes: a heavier string and a tearing hiss */
+  pierce: guard(() => { noise({ dur: 0.22, freq: 2000, sweep: 600, q: 1.6, gain: 0.16 }); tone({ freq: 140, to: 60, dur: 0.2, type: 'triangle', gain: 0.1 }); }),
+  /** an arrow into the ground, a blow on wood and straw */
+  thud: guard(() => { if (throttle('thud', 70)) return; noise({ dur: 0.08, freq: 500, type: 'lowpass', gain: 0.22 }); noise({ dur: 0.05, freq: 2600, q: 2, gain: 0.04 }); }),
+  /** a foe marked as quarry */
+  mark: guard(() => { tone({ freq: 660, to: 990, dur: 0.25, gain: 0.05, type: 'triangle' }); noise({ dur: 0.2, freq: 3500, q: 4, gain: 0.05 }); }),
+  /** a marked foe's kill: the cooldowns come back */
+  refresh: guard(() => { [784, 988, 1175].forEach((f, i) => tone({ freq: f, dur: 0.4, gain: 0.045, type: 'triangle', delay: i * 0.05 })); }),
+  /** a straw figure rising out of the ground */
+  straw: guard(() => { noise({ dur: 0.45, freq: 1200, sweep: 500, q: 1.2, gain: 0.16 }); tone({ freq: 110, to: 70, dur: 0.18, type: 'triangle', gain: 0.12 }); }),
   bolt: guard(() => { if (throttle('bolt', 60)) return; noise({ dur: 0.18, freq: 2400, sweep: 700, q: 2, gain: 0.18 }); tone({ freq: 900, to: 400, dur: 0.15, type: 'triangle', gain: 0.06 }); }),
   boltHit: guard(() => { if (throttle('boltHit', 45)) return; noise({ dur: 0.12, freq: 3000, q: 1.5, gain: 0.12 }); }),
   starfallCall: guard(() => { noise({ dur: 0.5, freq: 400, sweep: 3000, q: 3, gain: 0.12 }); }),
