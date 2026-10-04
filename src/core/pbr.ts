@@ -226,6 +226,46 @@ function leather(): PBRData {
   }, 3);
 }
 
+/** Oiled leather (the ranger's boots, belt and straps): smooth under a faint grain, long soft creases and finer wrinkles
+ *  running across v (round a boot's shaft, along u), darker and duller in them, lighter scuffs where it rubs, and a sheen
+ *  elsewhere. (The pebbled hide read as snakeskin at a hero's size.) */
+function oiled(): PBRData {
+  const grain = makeFbm(191, 128, 2), crease = makeFbm(193, 4, 4), wrinkle = makeFbm(197, 12, 3), wear = makeFbm(199, 3, 4), blot = makeFbm(201, 6, 3);
+  return buildPBR(512, (u, v, o) => {
+    const g = grain(u, v), c = crease(u, v * 3), cl = clamp(1 - Math.abs(c - 0.5) * 12, 0, 1) ** 1.5;
+    const wk = wrinkle(u, v * 4), wl = clamp(1 - Math.abs(wk - 0.5) * 9, 0, 1) ** 2;
+    const w = smooth(clamp((wear(u, v) - 0.5) / 0.22, 0, 1)), b = blot(u, v);
+    o.h = 0.5 - cl * 0.22 - wl * 0.12 + (g - 0.5) * 0.08;
+    o.r = o.g = o.b = clamp(0.6 - cl * 0.09 - wl * 0.04 + w * 0.2 + (b - 0.5) * 0.14 + (g - 0.5) * 0.04, 0, 1);
+    o.rough = clamp(0.45 + cl * 0.2 + wl * 0.08 + w * 0.2 + (g - 0.5) * 0.12, 0.25, 1);
+  }, 2);
+}
+
+/** Woollen cloth (the ranger's coat and trousers): a fine plain weave under a heathered surface, flecks of lighter and
+ *  darker fibre in it and a soft mottle of the dye. (The twill's regular diagonal ribs read as synthetic.) */
+function wool(): PBRData {
+  const mottle = makeFbm(211, 5, 4), fleck = makeFbm(213, 128, 2), fuzz = makeFbm(217, 64, 3);
+  const T = 192;
+  return buildPBR(512, (u, v, o) => {
+    const weave = 0.5 + 0.5 * Math.sin(u * T * Math.PI * 2) * Math.sin(v * T * Math.PI * 2), m = mottle(u, v), fz = fuzz(u, v), fl = fleck(u, v);
+    const light = smooth(clamp((fl - 0.64) / 0.08, 0, 1)), dark = smooth(clamp((0.36 - fl) / 0.08, 0, 1));
+    o.h = weave * 0.3 + fz * 0.45 + m * 0.25;
+    o.r = o.g = o.b = clamp(0.7 + (m - 0.5) * 0.2 + light * 0.14 - dark * 0.14 + (fz - 0.5) * 0.08 + weave * 0.03, 0, 1);
+    o.rough = 0.93 + (fz - 0.5) * 0.08;
+  }, 1.4);
+}
+
+/** Felt (the ranger's hat): no weave, matted fibre, a soft mottle and fine fuzz. */
+function felt(): PBRData {
+  const mottle = makeFbm(221, 6, 4), fuzz = makeFbm(223, 96, 3), clump = makeFbm(227, 24, 3);
+  return buildPBR(512, (u, v, o) => {
+    const m = mottle(u, v), fz = fuzz(u, v), c = clump(u, v);
+    o.h = fz * 0.5 + c * 0.35 + m * 0.15;
+    o.r = o.g = o.b = clamp(0.7 + (m - 0.5) * 0.16 + (c - 0.5) * 0.14 + (fz - 0.5) * 0.12, 0, 1);
+    o.rough = 0.97;
+  }, 1.1);
+}
+
 /** Riveted mail: rows of interlocking rings (each row half a ring over), dark between them. */
 function mail(): PBRData {
   const rows = 32, fbm = makeFbm(151, 8, 3);
@@ -288,7 +328,7 @@ function fur(): PBRData {
 }
 
 /** Every recipe, by name; its arguments are part of what it makes. */
-export const RECIPES = { cobblestone, slabs, grunge, wood, burlap, forestFloor, bark, leather, mail, cloth, steel, fur, face: faceData };
+export const RECIPES = { cobblestone, slabs, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, face: faceData };
 export type RecipeName = keyof typeof RECIPES;
 export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
@@ -302,5 +342,5 @@ export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = 
   ['face', ['warrior']], ['face', ['mage']],
   ['forestFloor', []], ['cobblestone', []], ['bark', []], ['slabs', [21, 6, 3]], ['slabs', [33, 5, 5]], ['slabs', [47, 5, 5]],
   ['slabs', [33, 2, 2]], ['grunge', []], ['wood', []], ['burlap', []],
-  ['leather', []], ['mail', []], ['cloth', []], ['steel', []], ['fur', []],
+  ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['steel', []], ['fur', []],
 ];

@@ -54,6 +54,9 @@ export const forestFloor = (): PBRCanvases => pbrCanvases('forestFloor');
 export const bark = (): PBRCanvases => pbrCanvases('bark');
 /** the heroes' materials: neutral albedo, tinted by the material's colour */
 export const leather = (): PBRCanvases => pbrCanvases('leather');
+export const oiled = (): PBRCanvases => pbrCanvases('oiled');
+export const wool = (): PBRCanvases => pbrCanvases('wool');
+export const felt = (): PBRCanvases => pbrCanvases('felt');
 export const mail = (): PBRCanvases => pbrCanvases('mail');
 export const cloth = (): PBRCanvases => pbrCanvases('cloth');
 export const steel = (): PBRCanvases => pbrCanvases('steel');

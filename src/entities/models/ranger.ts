@@ -8,10 +8,10 @@
 // shot with the bow laid over flat, the arrows lying across its top.
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
-import { cloth, leather, wood, pbrMaterialMaps } from '../../core/textures';
+import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
-import { belt, buckle, strap, plate, edgeTube, taperTube, Skirt } from './armor';
+import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt } from './armor';
 import { onTunic, tunicFront, tunicBack, TUNIC_Y, WAIST } from './tunic';
 import { buildHead, buildNeck, toGroup, HEAD_MM, type Head } from './head';
 import { EYE } from './face';
@@ -20,6 +20,7 @@ import { LegIK } from './ik';
 import { fitArm, solveArm } from './armIK';
 import { bodyShape } from './anatomy';
 import { buildFlask, drink } from './flask';
+import { buildBoot } from './boot';
 import { Bow, pullAt, arrowGeometry, ARROW, REST_Y } from './bow';
 import { fromEyes, dirFromEyes } from '../viewModel';
 import { angleDamp, clamp, damp, lerp, smooth, TAU } from '../../util';
@@ -197,12 +198,18 @@ function buildHat(head: Head, cap: THREE.Object3D, felt: THREE.Material, leather
 export function buildRanger(): Model {
   const kit = createKit(0xc9d993);
   // (the colours his reference sheet's, measured in a studio render against it)
-  const coat = kit.rim({ color: 0x5a654c, roughness: 1, ...pbrMaterialMaps(cloth(), 1) }, 0x71835a, 0.25);
-  const felt = kit.rim({ color: 0x4a5a40, roughness: 1, ...pbrMaterialMaps(cloth(), 1) }, 0x71835a, 0.2);
-  const wool = kit.std({ color: 0x656151, roughness: 1, ...pbrMaterialMaps(cloth(), 1) });
-  const dark = kit.std({ color: 0x292d24, roughness: 1, ...pbrMaterialMaps(cloth(), 1) });
+  const coat = kit.rim({ color: 0x5a654c, roughness: 1, ...pbrMaterialMaps(woolMaps(), 1) }, 0x71835a, 0.25);
+  // (the coat's hem turned up inside it, a shade darker)
+  const coatHem = kit.rim({ color: 0x4c5641, roughness: 1, ...pbrMaterialMaps(woolMaps(), 1) }, 0x71835a, 0.25);
+  const felt = kit.rim({ color: 0x4a5a40, roughness: 1, ...pbrMaterialMaps(feltMaps(), 1) }, 0x71835a, 0.2);
+  const wool = kit.std({ color: 0x656151, roughness: 1, ...pbrMaterialMaps(woolMaps(), 1) });
+  const dark = kit.std({ color: 0x292d24, roughness: 1, ...pbrMaterialMaps(woolMaps(), 1) });
+  // (the coat's seams sewn in a lighter thread, as the sheet's are)
+  const thread = kit.std({ color: 0x9a8a5c, roughness: 0.9 });
   const hide = kit.std({ color: 0x936848, roughness: 1, ...pbrMaterialMaps(leather(), 1) });
-  const boot = kit.std({ color: 0x7e543a, roughness: 0.9, ...pbrMaterialMaps(leather(), 1) });
+  const boot = kit.std({ color: 0x93684a, roughness: 1, ...pbrMaterialMaps(oiled(), 1) });
+  const strapLeather = kit.std({ color: 0x6e4a33, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
+  const soleLeather = kit.std({ color: 0x2e2219, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
   const bowWood = kit.std({ color: 0x956f3d, roughness: 0.85, ...pbrMaterialMaps(wood(), 1) });
   const limbWood = kit.std({ color: 0x5a3c22, roughness: 0.7, ...pbrMaterialMaps(wood(), 1) });
   const brass = kit.std({ color: 0xa58a50, metalness: 0.8, roughness: 0.65 });
@@ -218,22 +225,53 @@ export function buildRanger(): Model {
   S.add(lathe([[0.0795, 0.289], [0.0795, 0.31], [0.0785, 0.326], [0.0757, 0.328], [0.0757, 0.3]], 28).scale(1, 1, 0.935).translate(0, 0, -0.0125), coat, j.chest);
   for (const sx of [1, -1]) S.add(taperTube([0.326, 0.27, 0.235].map((y) => y > 0.3 ? V(sx * 0.005, y, 0.0635) : tunicFront(sx * 0.005, y, 0.001)), () => 0.0022, 8, 5), dark, j.chest);
   for (const y of [0.29, 0.258]) S.add(new THREE.SphereGeometry(0.0055, 8, 6), brass, j.chest, tunicFront(0, y, 0.003).toArray());
+  // the seams, stitched in a lighter thread: round the collar's top and foot, down both sides of the slit and on down the
+  // front, over each shoulder from the neck to the sleeve, and down each side
+  const ring = (rx: number, rz: number, y: number) => Array.from({ length: 32 }, (_, i) => { const a = i / 32 * TAU; return V(Math.sin(a) * rx, y, Math.cos(a) * rz * 0.935 - 0.0125); });
+  S.add(stitches(ring(0.0812, 0.0812, 0.32), 0.004, 0.0028, 0.0009, true), thread, j.chest);
+  S.add(stitches(ring(0.0812, 0.0812, 0.295), 0.004, 0.0028, 0.0009, true), thread, j.chest);
+  for (const sx of [1, -1]) S.add(stitches([0.318, 0.29, 0.26, 0.24].map((y) => y > 0.3 ? V(sx * 0.011, y, 0.065) : tunicFront(sx * 0.011, y, 0.0018))), thread, j.chest);
+  S.add(stitches([0.234, 0.2, 0.15, 0.1, 0.05, 0, -0.05, -0.1].map((y) => tunicFront(0, y, 0.0015))), thread, j.chest);
+  for (const sa of [1, -1]) {
+    S.add(stitches([0.294, 0.285, 0.272, 0.258, 0.245, 0.232, 0.22].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), thread, j.chest);
+    S.add(stitches([0.17, 0.12, 0.06, 0, -0.06, -0.11].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), thread, j.chest);
+  }
   // (gathered under the belt a little fuller than the mage's tunic)
-  S.add(lathe(WAIST, 24), coat, j.spine, [0, 0, 0], [0, 0, 0], [1.08, 1, 0.9]);
+  {
+    // (gathered under the belt in soft folds, and bloused a little over it)
+    const g = lathe([[0.148, -0.05], [0.149, 0.0], [0.15, 0.06], [0.151, 0.1], [0.152, 0.14], [0.153, 0.2], [0.155, 0.26]], 48), q = g.attributes.position;
+    for (let i = 0; i < q.count; i++) {
+      const x = q.getX(i), y = q.getY(i), z = q.getZ(i), a = Math.atan2(x, z);
+      const under = clamp((BELT_Y - 0.01 - y) / 0.09, 0, 1) * clamp((y + 0.05) / 0.04, 0, 1), over = Math.exp(-(((y - BELT_Y - 0.035) / 0.025) ** 2));
+      const k = 1 + under * (0.035 * Math.sin(a * 14 + 0.6 * Math.sin(a * 3)) + 0.012 * Math.sin(a * 23)) + over * 0.02 * (1 + Math.sin(a * 9));
+      q.setXYZ(i, x * k, y, z * k);
+    }
+    g.computeVertexNormals();
+    S.add(g, coat, j.spine, [0, 0, 0], [0, 0, 0], [1.08, 1, 0.9]);
+  }
   // (hanging straight from the belt to mid-thigh as the sheet's does: flared like a bell, it stood out half as deep again)
-  const tunic = new Skirt({ r0: 0.175, r1: 0.25, len: 0.25, depth: 0.76, folds: 8, foldAmp: 0.02, push: 1.25, flare: 0.5, rows: 6, hem: (a) => -0.035 * Math.max(0, -Math.cos(a)) });
-  const hem = part(tunic.geo, coat, j.hips, 0, 0.03);
+  // (slit at the sides, as the sheet's: the hem rising to the slit's top there; the back a little shorter)
+  // (from under the belt, falling straight as the sheet's does: hung from the hips it narrowed to a waist under the belt and
+  // flared out below it)
+  const tunic = new Skirt({ r0: 0.16, r1: 0.25, len: 0.375, depth: 0.68, folds: 13, foldAmp: 0.028, push: 1.25, flare: 0.5, rows: 10, radial: 64, trim: 0.035,
+    hem: (a) => -0.12 * Math.max(0, -Math.cos(a)) - 0.4 * Math.exp(-(((Math.abs(Math.sin(a)) - 1) / 0.006) ** 2)) });
+  const hem = new THREE.Mesh(tunic.geo, [coat, coatHem]); hem.castShadow = hem.receiveShadow = true; j.hips.add(hem); hem.position.y = 0.06 + BELT_Y - 0.025;
   hem.name = 'tunic hem';
-  S.add(belt(0.172, 0.145, BELT_Y, 0.04, 0.008), hide, j.spine);
-  S.add(buckle(0.032, 0.036, 0.007), brass, j.spine, [0, BELT_Y, 0.155]);
+  // a broad belt of oiled leather, stitched along both edges, its brass buckle square and its tail through a keeper
+  S.add(belt(0.172, 0.146, BELT_Y, 0.05, 0.009, 0, 40), strapLeather, j.spine);
+  for (const dy of [-0.021, 0.021]) S.add(stitches(Array.from({ length: 40 }, (_, i) => { const a = i / 40 * TAU; return V(Math.sin(a) * 0.1775, BELT_Y + dy, Math.cos(a) * 0.1515); }), 0.004, 0.003, 0.0009, true), thread, j.spine);
+  S.add(buckle(0.05, 0.05, 0.008), brass, j.spine, [0, BELT_Y, 0.16]);
+  S.add(new THREE.BoxGeometry(0.012, 0.056, 0.012), strapLeather, j.spine, [0.06, BELT_Y, 0.152], [0, 0.38, 0]);
   // the baldric the quiver hangs from: over the right shoulder, across the chest and the back to the left hip, buckled on
   // the chest
-  const run = [0, 0.2, 0.4, 0.6, 0.8, 1], across = (t: number) => lerp(-0.13, 0.15, t), down = (t: number) => lerp(0.24, -0.09, t);
-  S.add(strap([...run.map((t) => tunicFront(across(t), down(t), 0.006)), onTunic(Math.PI / 2, -0.12, 0.006), ...[...run].reverse().map((t) => tunicBack(across(t), down(t), 0.006)), V(-0.135, 0.29, -0.012)], 0.035, 0.007, true), hide, j.chest);
-  S.add(buckle(0.03, 0.036, 0.006), brass, j.chest, tunicFront(-0.075, 0.18, 0.012).toArray(), [0, 0, -0.85]);
+  // (its ends under the belt, as the sheet's runs on past it to the hip)
+  const run = [0, 0.2, 0.4, 0.6, 0.8, 1], across = (t: number) => lerp(-0.13, 0.155, t), down = (t: number) => lerp(0.24, -0.11, t);
+  S.add(strap([...run.map((t) => tunicFront(across(t), down(t), 0.006)), onTunic(Math.PI / 2, -0.115, 0.006), ...[...run].reverse().map((t) => tunicBack(across(t), down(t), 0.006)), V(-0.135, 0.29, -0.012)], 0.048, 0.008, true), strapLeather, j.chest);
+  S.add(buckle(0.042, 0.05, 0.007), brass, j.chest, tunicFront(-0.075, 0.18, 0.014).toArray(), [0, 0, -0.85]);
   for (const [sh, el] of [[j.shoulderL, j.elbowL], [j.shoulderR, j.elbowR]]) {
     // (its round top sunk into the deltoid, as the mage's tunic's)
     S.skin(limb(0.38, 0.06, 0.056, 0.04, 0.24, 14), coat, sh, el, 0.2, 0.33, [0, -0.025, 0]);
+    S.add(stitches(Array.from({ length: 24 }, (_, i) => { const a = i / 24 * TAU; return V(Math.sin(a) * 0.0625, -0.035 + 0.012 * Math.cos(a), Math.cos(a) * 0.0625); }), 0.004, 0.0028, 0.0009, true), thread, sh);
     // (the sleeve on down the forearm into a bracer from the wrist, a brass band round the bracer's top)
     S.add(lathe([[0.052, -0.12], [0.055, -0.04], [0.056, 0]], 14), coat, el);
     S.add(lathe([[0.046, -0.27], [0.047, -0.22], [0.052, -0.15], [0.057, -0.1], [0.058, -0.095]], 14), hide, el);
@@ -243,22 +281,8 @@ export function buildRanger(): Model {
     // wool trousers, loose (round in section, as deep as wide), into the boots below the knee
     S.add(limb(0.46, 0.088, 0.084, 0.02, 0.28, 12), wool, th);
     S.add(lathe([[0.068, -0.1], [0.076, -0.03], [0.08, 0.02]], 12), wool, kn);
-    // tall boots to just below the knee, their tops turned down in a cuff, three buckled straps up the shaft
-    // (deeper than wide, as a boot's shaft round the calf is)
-    S.add(lathe([[0.05, -0.43], [0.054, -0.36], [0.058, -0.24], [0.066, -0.13], [0.07, -0.085]], 14), boot, kn, [0, 0, 0], [0, 0, 0], [1, 1, 1.15]);
-    S.add(lathe([[0.071, -0.135], [0.075, -0.11], [0.077, -0.07], [0.073, -0.06]], 14), boot, kn, [0, 0, 0], [0, 0, 0], [1, 1, 1.15]);
-    for (const [y, r] of [[-0.15, 0.068], [-0.27, 0.06], [-0.37, 0.055]] as const) {
-      S.add(belt(r, r * 1.15, y, 0.02, 0.005), hide, kn);
-      S.add(buckle(0.022, 0.026, 0.005), brass, kn, [0, y, r * 1.15 + 0.003]);
-    }
-    // the foot: a boot's, longer than the foot in it, a heel and a thick sole
-    S.add(new THREE.SphereGeometry(1, 16, 10).scale(0.062, 0.05, 0.15), boot, an, [0, -0.03, 0.08]);
-    const sole = new THREE.Shape();
-    sole.moveTo(-0.045, -0.065); sole.bezierCurveTo(-0.07, -0.065, -0.068, 0.1, -0.055, 0.18);
-    sole.bezierCurveTo(-0.045, 0.235, 0.045, 0.235, 0.055, 0.18);
-    sole.bezierCurveTo(0.068, 0.1, 0.07, -0.065, 0.045, -0.065); sole.closePath();
-    S.add(new THREE.ExtrudeGeometry(sole, { depth: 0.02, bevelEnabled: false, curveSegments: 10 }).rotateX(Math.PI / 2), dark, an, [0, -0.06, 0]);
-    S.add(new THREE.BoxGeometry(0.075, 0.025, 0.06), dark, an, [0, -0.0825, -0.03]);
+    // tall riding boots to just below the knee (boot.ts)
+    buildBoot(S, { leather: boot, sole: soleLeather, strap: strapLeather, metal: brass }, kn, an, th === j.thighL ? 1 : -1);
   }
   // Reuse the shared anatomical head, without the mage's headwear.
   const head = buildHead(j.head, kit, 'mage', { hair: 'swept' });
@@ -274,9 +298,9 @@ export function buildRanger(): Model {
   // behind the head, and the arm reaching for it went 113 degrees past its range)
   // (long and narrow as the sheet's, down to the belt, three bands round it and a cap on its foot)
   const quiver = joint(j.chest, -0.13, 0.04, -0.19); quiver.rotation.z = 0.35;
-  S.add(lathe([[0.02, -0.44], [0.05, -0.42], [0.052, 0.14], [0.057, 0.16]], 14), hide, quiver);
-  S.add(lathe([[0.045, -0.445], [0.055, -0.43], [0.056, -0.37]], 14), boot, quiver);
-  for (const y of [-0.3, -0.05, 0.12]) S.add(belt(0.055, 0.055, y, 0.016, 0.004), boot, quiver);
+  S.add(lathe([[0.02, -0.44], [0.05, -0.42], [0.052, 0.14], [0.057, 0.16]], 18), boot, quiver);
+  S.add(lathe([[0.045, -0.445], [0.055, -0.43], [0.056, -0.37]], 18), strapLeather, quiver);
+  for (const y of [-0.3, -0.05, 0.12]) { S.add(belt(0.056, 0.056, y, 0.02, 0.005), strapLeather, quiver); for (const a of [0.6, 1.8, 3, 4.2]) S.add(new THREE.SphereGeometry(0.004, 6, 4), brass, quiver, [Math.sin(a) * 0.061, y, Math.cos(a) * 0.061]); }
   for (let i = 0; i < 6; i++) {
     const x = Math.sin(i * 2.4) * 0.042, z = Math.cos(i * 2.4) * 0.042;
     S.add(new THREE.CylinderGeometry(0.004, 0.004, 0.38, 5), bowWood, quiver, [x, 0.13, z]);
