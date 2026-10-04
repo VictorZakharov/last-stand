@@ -20,6 +20,7 @@ import { LegIK } from './ik';
 import { fitArm } from './armIK';
 import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
+import { onTunic, tunicFront, neckHem, TUNIC_Y, WAIST } from './tunic';
 import { buildFlask, drink, drinkUp, type DrinkHold } from './flask';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
@@ -41,25 +42,6 @@ const MAGE_CAPE_PALETTE: CapeFabricPalette = Object.freeze({
 // of that: a man's chest (ANSUR II: 29 cm across, 25 deep) with the robe over it, rising to the shoulders
 const TORSO: [number, number][] = [[0.145, -0.12], [0.155, -0.02], [0.165, 0.1], [0.168, 0.18], [0.15, 0.245], [0.1, 0.28], [0.075, 0.29]];
 const DEPTH = 0.86;
-/** the plain linen tunic under the robe (without a chest item), chest joint space (m): at each height its half-width and
- *  half-depth, and how square its section is. Over the shoulders it is as broad as the arms' tops and thin front to back,
- *  the trapezius sloping down from the neck and a deltoid rounding over each shoulder joint down into the armpit (the
- *  robe's round barrel of a body, with the arms' tubes stood beside it under their own round tops, read as a coat hanger) */
-const TUNIC_W: Keys = [[-0.12, 0.143], [-0.02, 0.152], [0.1, 0.162], [0.15, 0.18], [0.19, 0.232], [0.215, 0.248], [0.238, 0.24], [0.256, 0.2], [0.274, 0.14], [0.289, 0.098], [0.3, 0.0765]];
-const TUNIC_D: Keys = [[-0.12, 0.125], [-0.02, 0.133], [0.1, 0.142], [0.16, 0.138], [0.21, 0.118], [0.25, 0.094], [0.275, 0.08], [0.3, 0.0715]];
-/** how far back the tunic's neckline sits (m): round the neck, which rises from the back of the chest (its middle a centimetre
- *  behind the chest's: centred on the chest, the collar was tight at the back and a man's neck came through it; a few mm
- *  loose all round, as the neck leans back in it at a run and turns in it) */
-const NECKLINE_BACK = 0.0125;
-const neckBack = (y: number) => { const t = clamp((y - 0.26) / 0.04, 0, 1); return -NECKLINE_BACK * t * t * (3 - 2 * t); };
-const TUNIC_P: Keys = [[-0.12, 2], [0.12, 2], [0.2, 2.6], [0.26, 2.6], [0.3, 2]];
-/** a point on the tunic towards `a` round it (0 the front, +x his left) at height y, `lift` above it */
-function onTunic(a: number, y: number, lift: number, out = new THREE.Vector3()): THREE.Vector3 {
-  const X = curve(TUNIC_W, y) + lift, Z = curve(TUNIC_D, y) + lift, e = 2 / curve(TUNIC_P, y), s = Math.sin(a), c = Math.cos(a);
-  return out.set(Math.sign(s) * Math.abs(s) ** e * X, y, Math.sign(c) * Math.abs(c) ** e * Z + neckBack(y));
-}
-/** the point on the tunic's front `x` across */
-const tunicFront = (x: number, y: number, lift: number) => onTunic(Math.asin(clamp(Math.sign(x) * Math.abs(x / curve(TUNIC_W, y)) ** (curve(TUNIC_P, y) / 2), -1, 1)), y, lift);
 /** the cowl's profile (chest joint space): the hood down, bunched round the neck */
 const COWL: [number, number][] = [[0.1, 0.2], [0.155, 0.235], [0.16, 0.27], [0.13, 0.31], [0.095, 0.34], [0.085, 0.36]];
 /** the shoulder joints on the chest (the rig's shoulderW, and shoulderY of its torso), a hair inside them */
@@ -171,7 +153,6 @@ export function buildMage(): Model {
   const bareSkin = handSkin(kit, 'mage');
 
   // --- the robe's body, a teal inner layer showing at the collar, the neck
-  const WAIST: [number, number][] = [[0.148, -0.05], [0.15, 0.08], [0.152, 0.2], [0.155, 0.26]];
   A.add(scaleUV(lathe(TORSO, 28), 3, 1.5), robe, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, DEPTH]);
   A.add(scaleUV(lathe(WAIST, 24), 3, 1), robe, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
   // gold piping down the front of the robe on each side, and a diamond brooch set with a stone
@@ -182,9 +163,9 @@ export function buildMage(): Model {
   }
   // without it the tunic: belted at the waist like the robe, a rolled hem round the neck and a short laced slit down the front
   // (its rows closer together towards the shoulders)
-  T.add(plate((u, v, out) => onTunic((u - 0.5) * TAU, lerp(-0.12, 0.3, 1 - (1 - v) ** 1.5), 0, out), 40, 30, 0, undefined, V(0, 0.1, 0)), linen, j.chest);
+  T.add(plate((u, v, out) => onTunic((u - 0.5) * TAU, lerp(TUNIC_Y[0], TUNIC_Y[1], 1 - (1 - v) ** 1.5), 0, out), 40, 30, 0, undefined, V(0, 0.1, 0)), linen, j.chest);
   T.add(scaleUV(lathe(WAIST, 24), 3, 1), linen, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
-  T.add(belt(0.0765, 0.0715, 0.297, 0.012, 0.006, 0, 28).translate(0, 0, neckBack(0.297)), linen, j.chest);
+  T.add(neckHem(), linen, j.chest);
   for (const s of [1, -1]) T.add(taperTube([0.292, 0.25, 0.215].map((y) => tunicFront(s * 0.006, y, 0.001)), () => 0.0025, 8, 5), blackLeather, j.chest);
   for (const y of [0.275, 0.245, 0.222]) T.add(taperTube([tunicFront(0.011, y + 0.004, 0.002), tunicFront(0, y, 0.004), tunicFront(-0.011, y - 0.004, 0.002)], () => 0.0015, 6, 4), leather, j.chest);
   const br = onChest(0, 0.1, 0.012);

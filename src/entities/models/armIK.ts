@@ -231,7 +231,9 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
       at(best, true);
     }
   }
+  // (not asked for, the girdle is at rest, and eases from there when it is again: kept as it last was, the shoulder jumped back to it)
   if (g.girdle) (pg ?? lastG.set(sh, [0, 0]).get(sh)!).splice(0, 2, gE, gP);
+  else if (pg) pg.splice(0, 2, 0, 0);
   if (g.slant) lastS.set(sh, slant);
   sh.position.copy(_S);
   (prev ?? last.set(sh, new THREE.Vector3()).get(sh)!).copy(_E);
