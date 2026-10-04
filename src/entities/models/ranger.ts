@@ -11,9 +11,10 @@ import { createKit } from '../../core/materials';
 import { cloth, leather, wood, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
-import { belt, buckle, strap, plate, Skirt } from './armor';
-import { onTunic, tunicFront, neckHem, TUNIC_Y, WAIST } from './tunic';
-import { buildHead, buildNeck, toGroup } from './head';
+import { belt, buckle, strap, plate, edgeTube, taperTube, Skirt } from './armor';
+import { onTunic, tunicFront, tunicBack, TUNIC_Y, WAIST } from './tunic';
+import { buildHead, buildNeck, toGroup, HEAD_MM, type Head } from './head';
+import { EYE } from './face';
 import { buildHand, hold, fistReach, fistTurn, SLANT, type Hand } from './hands';
 import { LegIK } from './ik';
 import { fitArm, solveArm } from './armIK';
@@ -25,8 +26,12 @@ import { angleDamp, clamp, damp, lerp, smooth, TAU } from '../../util';
 import type { AnimState, Model } from '../../types';
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-/** how far below the cap's edge over the ears it comes down at the back (rad of the head's elevation) */
-const CAP_NAPE = 0.55;
+/** the felt hat (the face's mm, from his reference sheet): the band's foot and top over the eyes, the crown's top over
+ *  them, how far the crown stands off the skull at the band (the hair under it), the brim's width and how far its edge is
+ *  turned down, each at the front, the sides and the back, and the leather's thickness */
+const HAT = { band: [24, 51], top: 150, gap: 20, brim: [60, 46, 40], droop: [14, 6, 6], thick: 5 };
+/** the coat's belt on the spine (m): belted high, at the lower ribs */
+const BELT_Y = 0.12;
 const UP = V(0, 1, 0), FWD = V(0, 0, 1);
 const DRINK = { wrist: V(0.03, -0.08, 0.22), tipped: V(0.03, 0.1, 0.2), pole: V(-0.8, 0.2, -0.2) };
 /** where the nock comes to at full draw (the head's mm): at the side of the jaw, below and in front of the ear, the string
@@ -93,8 +98,9 @@ const SET_TIP = [0.25, 0.85];
 /** where the hand brings the next arrow over the right shoulder (the chest's frame, from the shoulder at rest): above it
  *  and in front, on its way down to the string */
 const OVER = V(0.02, 0.14, 0.26);
-/** where the hand passes over the right shoulder on its way back to the quiver (the chest's frame, from the shoulder at rest) */
-const LIFT = V(-0.03, 0.25, -0.02);
+/** where the hand passes over the right shoulder on its way back to the quiver (the chest's frame, from the shoulder at rest):
+ *  out past the hat's brim (by the shoulder, it went through the brim's back) */
+const LIFT = V(-0.07, 0.22, -0.04);
 /** how long the body takes to come round onto a shot and back off it (s) */
 const AIM_IN = 0.3, AIM_OUT = 0.5;
 /** how far the arrow's line may lie off the way the body faces (rad: the shot from the bow beside the body closing on a near
@@ -154,11 +160,49 @@ function through(pts: THREE.Vector3[], ts: number[], t: number, out: THREE.Vecto
     .addScaledVector(p2, -1.5 * f3 + 2 * f2 + 0.5 * f).addScaledVector(p3, 0.5 * f3 - 0.5 * f2);
 }
 
+/** The felt hat on `cap` (the head group's frame): a crown rising from a leather band round the head, its sides near
+ *  upright and its top a dome, and a wide leather brim turned down to a stitched edge. The hair stays on under it and shows
+ *  below the band, as short hair does. */
+function buildHat(head: Head, cap: THREE.Object3D, felt: THREE.Material, leather: THREE.Material, edge: THREE.Material): void {
+  const N = 48, yB = toGroup(0, EYE.y + HAT.band[0], 0).y, mm = HEAD_MM;
+  // the skull's section at the band's foot (each way round, the ray's elevation that meets it found by bisection)
+  let x0 = 1, x1 = -1, z0 = 1, z1 = -1;
+  for (let i = 0; i < N; i++) {
+    let lo = -0.5, hi = 1.4;
+    for (let k = 0; k < 20; k++) { const m = (lo + hi) / 2; if (head.surface(i / N * TAU, m).y < yB) lo = m; else hi = m; }
+    const q = head.surface(i / N * TAU, lo);
+    x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); z0 = Math.min(z0, q.z); z1 = Math.max(z1, q.z);
+  }
+  const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, A = (x1 - x0) / 2 + HAT.gap * mm, B = (z1 - z0) / 2 + HAT.gap * mm, H = (HAT.top - HAT.band[0]) * mm;
+  /** round the crown's foot towards `a` (0 the front, +x the left), `k` its share of the way out (a superellipse, squarer
+   *  than an ellipse, as a felt crown is) */
+  const foot = (a: number, k: number, out: THREE.Vector3) => { const s = Math.sin(a), c = Math.cos(a); return out.set(cx + Math.sign(s) * Math.abs(s) ** 0.85 * A * k, yB, cz + Math.sign(c) * Math.abs(c) ** 0.85 * B * k); };
+  // (a superellipse's quarter up the crown: its sides rise near upright from the band, its top a full dome)
+  const crown = (u: number, v: number, out: THREE.Vector3) => { const f = v * Math.PI / 2; foot(u * TAU, Math.cos(f) ** (2 / 2.6), out); out.y = yB + H * Math.sin(f) ** (2 / 2.6); return out; };
+  const inside = new THREE.Vector3(cx, yB + H * 0.4, cz);
+  part(plate(crown, N, 14, 0, undefined, inside), felt, cap);
+  const band = (u: number, v: number, out: THREE.Vector3) => { foot(u * TAU, 1.03, out); out.y = yB + v * (HAT.band[1] - HAT.band[0]) * mm; return out; };
+  part(plate(band, N, 2, 0.003, undefined, inside), leather, cap);
+  // the brim: out from the band's foot, widest in front, turned down most at the back (the ends blended through the sides)
+  const by3 = (v3: number[], a: number) => { const c = Math.cos(a); return c >= 0 ? lerp(v3[1], v3[0], c) : lerp(v3[1], v3[2], -c); };
+  const _f = new THREE.Vector3();
+  const brim = (u: number, v: number, out: THREE.Vector3) => {
+    const a = u * TAU; foot(a, 1.02, out); _f.set(out.x - cx, 0, out.z - cz).normalize();
+    out.addScaledVector(_f, by3(HAT.brim, a) * mm * v); out.y = yB - by3(HAT.droop, a) * mm * v ** 1.6; return out;
+  };
+  part(plate(brim, N, 5, HAT.thick * mm, undefined, new THREE.Vector3(cx, yB + 0.2, cz)), leather, cap);
+  part(edgeTube(brim, 'v1', 2.6 * mm, N), edge, cap);
+}
+
 export function buildRanger(): Model {
   const kit = createKit(0xc9d993);
-  const coat = kit.rim({ color: 0x35472c, roughness: 1, ...pbrMaterialMaps(cloth(), 1) }, 0x71835a, 0.25);
+  // (the colours his reference sheet's, measured in a studio render against it)
+  const coat = kit.rim({ color: 0x5a654c, roughness: 1, ...pbrMaterialMaps(cloth(), 1) }, 0x71835a, 0.25);
+  const felt = kit.rim({ color: 0x4a5a40, roughness: 1, ...pbrMaterialMaps(cloth(), 1) }, 0x71835a, 0.2);
+  const wool = kit.std({ color: 0x656151, roughness: 1, ...pbrMaterialMaps(cloth(), 1) });
   const dark = kit.std({ color: 0x292d24, roughness: 1, ...pbrMaterialMaps(cloth(), 1) });
-  const hide = kit.std({ color: 0x65452b, roughness: 1, ...pbrMaterialMaps(leather(), 1) });
+  const hide = kit.std({ color: 0x936848, roughness: 1, ...pbrMaterialMaps(leather(), 1) });
+  const boot = kit.std({ color: 0x7e543a, roughness: 0.9, ...pbrMaterialMaps(leather(), 1) });
   const bowWood = kit.std({ color: 0x956f3d, roughness: 0.85, ...pbrMaterialMaps(wood(), 1) });
   const limbWood = kit.std({ color: 0x5a3c22, roughness: 0.7, ...pbrMaterialMaps(wood(), 1) });
   const brass = kit.std({ color: 0xa58a50, metalness: 0.8, roughness: 0.65 });
@@ -168,37 +212,53 @@ export function buildRanger(): Model {
   const j = buildHumanoid({ skin: coat }, { chestW: 0.17, chestD: 0.14, shoulderW: 0.2, shoulderY: 0.45, upperR: 0.06, foreR: 0.05, shinL: 0.41 });
   stripRig(j.root);
   const S = new Sculpt();
-  // the coat cut as the mage's tunic is, over the shoulders as a man's are and meeting the neck at its base, a rolled hem
-  // round it (a round barrel of a body ending in a shelf at the shoulders left a long neck standing out of it)
+  // the coat cut as the mage's tunic is, over the shoulders as a man's are and meeting the neck at its base (a round barrel of a body ending in a shelf at the shoulders left a long neck standing out of it)
   S.add(plate((u, v, out) => onTunic((u - 0.5) * TAU, lerp(TUNIC_Y[0], TUNIC_Y[1], 1 - (1 - v) ** 1.5), 0, out), 40, 30, 0, undefined, V(0, 0.1, 0)), coat, j.chest);
-  S.add(neckHem(), coat, j.chest);
-  S.add(lathe(WAIST, 24), coat, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
-  const tunic = new Skirt({ r0: 0.165, r1: 0.25, len: 0.25, depth: 0.95, folds: 8, foldAmp: 0.025, push: 1.25, flare: 0.5, rows: 6 });
+  // (a standing collar round the neckline, as the sheet's coat has, open down the front in a short slit closed by two buttons)
+  S.add(lathe([[0.0795, 0.289], [0.0795, 0.31], [0.0785, 0.326], [0.0757, 0.328], [0.0757, 0.3]], 28).scale(1, 1, 0.935).translate(0, 0, -0.0125), coat, j.chest);
+  for (const sx of [1, -1]) S.add(taperTube([0.326, 0.27, 0.235].map((y) => y > 0.3 ? V(sx * 0.005, y, 0.0635) : tunicFront(sx * 0.005, y, 0.001)), () => 0.0022, 8, 5), dark, j.chest);
+  for (const y of [0.29, 0.258]) S.add(new THREE.SphereGeometry(0.0055, 8, 6), brass, j.chest, tunicFront(0, y, 0.003).toArray());
+  // (gathered under the belt a little fuller than the mage's tunic)
+  S.add(lathe(WAIST, 24), coat, j.spine, [0, 0, 0], [0, 0, 0], [1.08, 1, 0.9]);
+  // (hanging straight from the belt to mid-thigh as the sheet's does: flared like a bell, it stood out half as deep again)
+  const tunic = new Skirt({ r0: 0.175, r1: 0.25, len: 0.25, depth: 0.76, folds: 8, foldAmp: 0.02, push: 1.25, flare: 0.5, rows: 6, hem: (a) => -0.035 * Math.max(0, -Math.cos(a)) });
   const hem = part(tunic.geo, coat, j.hips, 0, 0.03);
   hem.name = 'tunic hem';
-  S.add(belt(0.16, 0.14, 0.015, 0.055, 0.008), hide, j.spine);
-  S.add(buckle(0.035, 0.04, 0.007), brass, j.spine, [0, 0.015, 0.15]);
-  S.add(strap([0, 0.2, 0.4, 0.6, 0.8, 1].map((t) => tunicFront(lerp(-0.13, 0.14, t), lerp(0.24, -0.09, t), 0.006)), 0.035, 0.007), hide, j.chest);
-  for (const s of [-1, 1]) {
-    S.add(new THREE.BoxGeometry(0.065, 0.08, 0.04), hide, j.hips, [s * 0.19, -0.05, 0.07]);
-    S.add(new THREE.BoxGeometry(0.07, 0.025, 0.045), dark, j.hips, [s * 0.19, -0.01, 0.07]);
-  }
+  S.add(belt(0.172, 0.145, BELT_Y, 0.04, 0.008), hide, j.spine);
+  S.add(buckle(0.032, 0.036, 0.007), brass, j.spine, [0, BELT_Y, 0.155]);
+  // the baldric the quiver hangs from: over the right shoulder, across the chest and the back to the left hip, buckled on
+  // the chest
+  const run = [0, 0.2, 0.4, 0.6, 0.8, 1], across = (t: number) => lerp(-0.13, 0.15, t), down = (t: number) => lerp(0.24, -0.09, t);
+  S.add(strap([...run.map((t) => tunicFront(across(t), down(t), 0.006)), onTunic(Math.PI / 2, -0.12, 0.006), ...[...run].reverse().map((t) => tunicBack(across(t), down(t), 0.006)), V(-0.135, 0.29, -0.012)], 0.035, 0.007, true), hide, j.chest);
+  S.add(buckle(0.03, 0.036, 0.006), brass, j.chest, tunicFront(-0.075, 0.18, 0.012).toArray(), [0, 0, -0.85]);
   for (const [sh, el] of [[j.shoulderL, j.elbowL], [j.shoulderR, j.elbowR]]) {
     // (its round top sunk into the deltoid, as the mage's tunic's)
     S.skin(limb(0.38, 0.06, 0.056, 0.04, 0.24, 14), coat, sh, el, 0.2, 0.33, [0, -0.025, 0]);
-    S.add(limb(0.27, 0.055, 0.043, 0.012, 0.18, 12), hide, el);
-    for (const y of [-0.09, -0.22]) S.add(belt(0.057, 0.053, y, 0.018, 0.004), brass, el);
+    // (the sleeve on down the forearm into a bracer from the wrist, a brass band round the bracer's top)
+    S.add(lathe([[0.052, -0.12], [0.055, -0.04], [0.056, 0]], 14), coat, el);
+    S.add(lathe([[0.046, -0.27], [0.047, -0.22], [0.052, -0.15], [0.057, -0.1], [0.058, -0.095]], 14), hide, el);
+    S.add(belt(0.059, 0.059, -0.1, 0.012, 0.004), brass, el);
   }
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]]) {
-    S.add(limb(0.46, 0.085, 0.07, 0.015, 0.28, 12), dark, th);
-    S.add(limb(0.41, 0.067, 0.048, 0.015, 0.3, 12), hide, kn);
-    for (const y of [-0.15, -0.3]) S.add(belt(0.066, 0.061, y, 0.022, 0.006), dark, kn);
-    S.add(new THREE.SphereGeometry(1, 16, 10).scale(0.058, 0.045, 0.12), hide, an, [0, -0.03, 0.065]);
+    // wool trousers, loose (round in section, as deep as wide), into the boots below the knee
+    S.add(limb(0.46, 0.088, 0.084, 0.02, 0.28, 12), wool, th);
+    S.add(lathe([[0.068, -0.1], [0.076, -0.03], [0.08, 0.02]], 12), wool, kn);
+    // tall boots to just below the knee, their tops turned down in a cuff, three buckled straps up the shaft
+    // (deeper than wide, as a boot's shaft round the calf is)
+    S.add(lathe([[0.05, -0.43], [0.054, -0.36], [0.058, -0.24], [0.066, -0.13], [0.07, -0.085]], 14), boot, kn, [0, 0, 0], [0, 0, 0], [1, 1, 1.15]);
+    S.add(lathe([[0.071, -0.135], [0.075, -0.11], [0.077, -0.07], [0.073, -0.06]], 14), boot, kn, [0, 0, 0], [0, 0, 0], [1, 1, 1.15]);
+    for (const [y, r] of [[-0.15, 0.068], [-0.27, 0.06], [-0.37, 0.055]] as const) {
+      S.add(belt(r, r * 1.15, y, 0.02, 0.005), hide, kn);
+      S.add(buckle(0.022, 0.026, 0.005), brass, kn, [0, y, r * 1.15 + 0.003]);
+    }
+    // the foot: a boot's, longer than the foot in it, a heel and a thick sole
+    S.add(new THREE.SphereGeometry(1, 16, 10).scale(0.062, 0.05, 0.15), boot, an, [0, -0.03, 0.08]);
     const sole = new THREE.Shape();
-    sole.moveTo(-0.04, -0.05); sole.bezierCurveTo(-0.065, -0.05, -0.062, 0.08, -0.05, 0.15);
-    sole.bezierCurveTo(-0.04, 0.19, 0.04, 0.19, 0.05, 0.15);
-    sole.bezierCurveTo(0.062, 0.08, 0.065, -0.05, 0.04, -0.05); sole.closePath();
-    S.add(new THREE.ExtrudeGeometry(sole, { depth: 0.015, bevelEnabled: false, curveSegments: 10 }).rotateX(Math.PI / 2), dark, an, [0, -0.06, 0]);
+    sole.moveTo(-0.045, -0.065); sole.bezierCurveTo(-0.07, -0.065, -0.068, 0.1, -0.055, 0.18);
+    sole.bezierCurveTo(-0.045, 0.235, 0.045, 0.235, 0.055, 0.18);
+    sole.bezierCurveTo(0.068, 0.1, 0.07, -0.065, 0.045, -0.065); sole.closePath();
+    S.add(new THREE.ExtrudeGeometry(sole, { depth: 0.02, bevelEnabled: false, curveSegments: 10 }).rotateX(Math.PI / 2), dark, an, [0, -0.06, 0]);
+    S.add(new THREE.BoxGeometry(0.075, 0.025, 0.06), dark, an, [0, -0.0825, -0.03]);
   }
   // Reuse the shared anatomical head, without the mage's headwear.
   const head = buildHead(j.head, kit, 'mage', { hair: 'swept' });
@@ -206,26 +266,17 @@ export function buildRanger(): Model {
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   const anchor = new THREE.Object3D(); anchor.name = 'anchor'; head.group.add(anchor); anchor.position.copy(ANCHOR);
   const cap = joint(head.group); cap.name = 'cap'; cap.visible = false;
-  const capGeo = new THREE.BufferGeometry(), positions: number[] = [], uvs: number[] = [], indices: number[] = [];
-  // (down the back of the head to the nape as the hair lies: cut level all round, the skull below it showed from behind)
-  for (let y = 0; y <= 8; y++) for (let x = 0; x <= 32; x++) {
-    const az = x / 32 * Math.PI * 2, back = smooth(clamp((Math.abs(Math.PI - az) - 1.3) / -0.9, 0, 1));
-    const p = head.surface(az, lerp(0.15 - CAP_NAPE * back, Math.PI / 2, y / 8), 6);
-    positions.push(p.x, p.y, p.z);
-    uvs.push(x / 32, y / 8);
-    if (y < 8 && x < 32) { const a = y * 33 + x; indices.push(a, a + 1, a + 33, a + 1, a + 34, a + 33); }
-  }
-  capGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); capGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); capGeo.setIndex(indices); capGeo.computeVertexNormals();
-  part(capGeo, coat, cap);
-  const brim = part(new THREE.SphereGeometry(1, 20, 8).scale(0.11, 0.008, 0.075), hide, cap);
-  const brow = head.surface(0, 0.15, 8); brim.position.copy(brow); brim.position.z += 0.035;
+  buildHat(head, cap, felt, hide, dark);
   const handL = buildHand(j.handL, 1, hide, skin), handR = buildHand(j.handR, -1, hide, skin);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
   // A leather quiver over the right shoulder blade, slung from the right shoulder to the left hip, its arrows' nocks and
   // fletching standing out of its mouth above the shoulder, where the hand reaches up over it. (Leaning in, its mouth was
   // behind the head, and the arm reaching for it went 113 degrees past its range)
-  const quiver = joint(j.chest, -0.13, 0.04, -0.18); quiver.rotation.z = 0.35;
-  S.add(lathe([[0.025, -0.27], [0.06, -0.23], [0.065, 0.15], [0.07, 0.16]], 14), hide, quiver);
+  // (long and narrow as the sheet's, down to the belt, three bands round it and a cap on its foot)
+  const quiver = joint(j.chest, -0.13, 0.04, -0.19); quiver.rotation.z = 0.35;
+  S.add(lathe([[0.02, -0.44], [0.05, -0.42], [0.052, 0.14], [0.057, 0.16]], 14), hide, quiver);
+  S.add(lathe([[0.045, -0.445], [0.055, -0.43], [0.056, -0.37]], 14), boot, quiver);
+  for (const y of [-0.3, -0.05, 0.12]) S.add(belt(0.055, 0.055, y, 0.016, 0.004), boot, quiver);
   for (let i = 0; i < 6; i++) {
     const x = Math.sin(i * 2.4) * 0.042, z = Math.cos(i * 2.4) * 0.042;
     S.add(new THREE.CylinderGeometry(0.004, 0.004, 0.38, 5), bowWood, quiver, [x, 0.13, z]);
@@ -550,7 +601,7 @@ export function buildRanger(): Model {
   return {
     root, kit, joints: j, animate, tip, palm, height: 2,
     firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; nocked = true; kHook = -1; },
-    setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; for (const h of head.hair) h.visible = !gear.helm; },
+    setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; },
     dispose() { kit.dispose(); root.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && g !== arrowGeometry()) g.dispose(); }); },
   };
 }

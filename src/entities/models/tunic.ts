@@ -30,5 +30,7 @@ export function onTunic(a: number, y: number, lift: number, out = new THREE.Vect
 }
 /** the point on the tunic's front `x` across */
 export const tunicFront = (x: number, y: number, lift: number) => onTunic(Math.asin(clamp(Math.sign(x) * Math.abs(x / curve(TUNIC_W, y)) ** (curve(TUNIC_P, y) / 2), -1, 1)), y, lift);
+/** the point on the tunic's back `x` across (+x his left) */
+export const tunicBack = (x: number, y: number, lift: number) => onTunic(Math.PI - Math.asin(clamp(Math.sign(x) * Math.abs(x / curve(TUNIC_W, y)) ** (curve(TUNIC_P, y) / 2), -1, 1)), y, lift);
 /** the rolled hem round the neckline */
 export const neckHem = () => belt(0.0765, 0.0715, 0.297, 0.012, 0.006, 0, 28).translate(0, 0, neckBack(0.297));
