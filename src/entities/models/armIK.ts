@@ -75,7 +75,8 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   else { el.getWorldPosition(_pl); par.worldToLocal(_pl).sub(_S); }
   // the turn about a handle: the wrist's offset from the handle's axis at no turn
   if (g.roll) _off.copy(g.wrist).sub(g.roll.at);
-  let a = 0, r = 0, want: THREE.Quaternion | null = null, depthAt = 0, bad = 0;
+  // (`gNow`: the girdle's forward turn being tried: drawn back, the arm reaches further behind)
+  let a = 0, r = 0, want: THREE.Quaternion | null = null, depthAt = 0, bad = 0, gNow = 0;
 
   /** the circle the elbow is on, for the hand turned `roll` about the handle and slanted `slant` on it */
   const setup = (roll: number, slant = 0) => {
@@ -121,7 +122,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     _Qu.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
     const flex = Math.acos(THREE.MathUtils.clamp(_b.dot(_f), -1, 1));
     _Qf.copy(_Qu).multiply(_hx.setFromAxisAngle(X, -flex));
-    let cost = ROM_ON ? 3 * shoulderExcess(_Qu, left) : 0;
+    let cost = ROM_ON ? 3 * shoulderExcess(_Qu, left, gNow) : 0;
     bad = 0;
     if (want && ROM_ON) {
       _rel.copy(_Qf).invert().multiply(want);
@@ -178,7 +179,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     return [roll, slant, bestC];
   };
   /** what the ranges leave over for the elbow found (degrees), the arm as `at` last left it */
-  const over = (): number => ROM_ON ? shoulderExcess(_Qu, left) + (want ? clampWrist(_rel.copy(_Qf).invert().multiply(want), left, _cl) : 0) : 0;
+  const over = (): number => ROM_ON ? shoulderExcess(_Qu, left, gNow) + (want ? clampWrist(_rel.copy(_Qf).invert().multiply(want), left, _cl) : 0) : 0;
 
   let [roll, slant] = turnsFor(false);
   setup(roll);
@@ -198,13 +199,13 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   if (g.girdle && ROM_ON && (over() > 0.5 || depthAt > 0.01 || (pg && (pg[0] || pg[1])))) {
     let bestC = Infinity;
     for (const e of G_ELEV) for (const pr of G_PRO) {
-      girdlePlace(rest, left, e, pr, _S);
+      girdlePlace(rest, left, e, pr, _S); gNow = pr;
       const c = turnsFor(!!slant)[2] + 0.3 * (Math.abs(e) + Math.abs(pr)) + (pg ? 0.3 * (Math.abs(e - pg[0]) + Math.abs(pr - pg[1])) : 0);
       if (c < bestC) { bestC = c; gE = e; gP = pr; }
     }
     // (eased towards it: the girdle is slow next to the arm)
     if (pg) { gE = pg[0] + (gE - pg[0]) * 0.35; gP = pg[1] + (gP - pg[1]) * 0.35; }
-    girdlePlace(rest, left, gE, gP, _S);
+    girdlePlace(rest, left, gE, gP, _S); gNow = gP;
     [roll, slant] = turnsFor(!!g.slant);
     setup(roll, slant);
     [best] = search(N, REFINE);
@@ -218,7 +219,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   sh.quaternion.copy(_Qu);
   const flex = Math.acos(THREE.MathUtils.clamp(_b.dot(_f), -1, 1));
   el.quaternion.setFromAxisAngle(X, -flex);
-  let excess = ROM_ON ? shoulderExcess(_Qu, left) : 0;
+  let excess = ROM_ON ? shoulderExcess(_Qu, left, gP) : 0;
   const vis = g.vis;
   // (the visible hand's turn on the forearm: as wanted, or as it was)
   if (want) _rel.copy(_Qf).invert().multiply(want);

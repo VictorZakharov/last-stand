@@ -78,11 +78,15 @@ export function rotationRange(elevation: number): [number, number] {
   return [rmin, rmax + 45 * Math.max(0, Math.min(1, (elevation - 90) / 90))];
 }
 
-/** how far (degrees) the upper arm turned `q` on the chest is outside a shoulder's range: 0 inside */
-export function shoulderExcess(q: THREE.Quaternion, left: boolean): number {
+/**
+ * How far (degrees) the upper arm turned `q` on the chest is outside a shoulder's range: 0 inside. `protract`: the
+ * girdle's forward turn (anatomy's `GIRDLE`); drawn back, the shoulder blade carries the socket round towards the
+ * spine, and the arm reaches that much further behind the body (an archer's draw elbow, `RETRACT_REACH`).
+ */
+export function shoulderExcess(q: THREE.Quaternion, left: boolean, protract = 0): number {
   const a = shoulderAngles(q, left), [rmin, rmax] = rotationRange(a.elevation);
   // (near straight up the plane is meaningless)
-  const lim = a.elevation > 165 ? 185 : elevationLimit(a.plane);
+  const lim = a.elevation > 165 ? 185 : elevationLimit(a.plane + RETRACT_REACH * Math.max(0, -protract));
   return Math.max(0, a.elevation - lim) + Math.max(0, rmin - a.rotation, a.rotation - rmax);
 }
 
@@ -144,6 +148,8 @@ export function measureBody(j: Joints, hands?: { L?: THREE.Object3D; R?: THREE.O
  * colliders stay put unless an arm needs the girdle.
  */
 export const GIRDLE = { elevation: [-10, 35], protraction: [-25, 30] } as const;
+/** the share of the girdle's backward turn by which the arm reaches further behind the body (degrees per degree) */
+const RETRACT_REACH = 0.6;
 /** the top of the breastbone, from the shoulder joint at rest (the rig's units, the right side's x mirrored) */
 const SC = new THREE.Vector3(0.025, -0.02, 0.05);
 /** where the shoulder joint at rest `rest` (its parent's frame) is with the girdle raised `elev` and brought forward `protract` (degrees), into `out` */
