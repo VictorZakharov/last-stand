@@ -6,28 +6,31 @@ const ranger: ClassDef = {
   tagline: 'A patient hunter with a swift bow and thorn-bound wards.',
   accent: '#c9d993', book: 'Fieldcraft',
   aura: { light: 0xc9d993, intensity: 0.45 },
+  // (an arrow nocked between shots, back in the quiver after 3 s without one; the next shot takes one out first)
+  quiver: { fetch: 0.8, idle: 3 },
   base: { life: 1050, energy: 360, lifeRegen: 5, energyRegen: 20, moveSpeed: 7, crit: 8, critDmg: 60, armor: 6, resist: 0 },
   skills: [
     {
       key: 'mouse0', impl: 'nockShot', name: 'Nockshot',
       desc: 'Hold to draw an arrow, release to loose it: the further it is drawn, the faster and harder it flies. Costs no Energy.', tags: ['physical'],
-      // (drawn to full in `draw` s, loosed no sooner than `minDraw` of that; then the follow-through and the next arrow, `castTime`)
-      cost: 0, cooldown: 0, castTime: 0.55, draw: 0.7, minDraw: 0.5,
-      damage: 150, missiles: 1, spread: 0, speed: 60, range: 26, knock: 0.8,
+      // (drawn to full in `draw` s, loosed no sooner than `minDraw` of that; then the follow-through and the next arrow, `castTime`:
+      // an archer's pace, about a second each; drawn in 0.7 s and reloaded in 0.45, it was a blur)
+      cost: 0, cooldown: 0, castTime: 0.9, draw: 1.1, minDraw: 0.5,
+      damage: 240, missiles: 1, spread: 0, speed: 60, range: 26, knock: 0.8,
       icon: { glyph: '➶', color: '#dfce99' },
     },
     {
       key: 'mouse2', impl: 'fanShot', name: 'Briarflight',
       desc: 'Hold to draw five arrows at once, release to loose them in a broad fan. Each arrow can strike a foe.', tags: ['physical'],
-      cost: 32, cooldown: 3, castTime: 0.6, draw: 0.85, minDraw: 0.5,
-      damage: 110, missiles: 5, spread: 0.13, speed: 55, range: 24, knock: 1.2,
+      cost: 32, cooldown: 3, castTime: 0.95, draw: 1.3, minDraw: 0.5,
+      damage: 123, missiles: 5, spread: 0.13, speed: 55, range: 24, knock: 1.2,
       icon: { glyph: '⋔', color: '#c9d993' },
     },
     {
       key: '1', impl: 'heavyShot', name: 'Heartwood Shot',
       desc: 'Draw the bow slowly and loose a heavy arrow that drives its target back.', tags: ['physical'],
-      cost: 38, cooldown: 5, castTime: 1.1, fireAt: 0.55,
-      damage: 300, missiles: 1, spread: 0, speed: 38, range: 26, knock: 6,
+      cost: 38, cooldown: 5, castTime: 1.9, fireAt: 0.58,
+      damage: 330, missiles: 1, spread: 0, speed: 38, range: 26, knock: 6,
       icon: { glyph: '↟', color: '#f0d58a' },
     },
     {

@@ -15,8 +15,9 @@ const LIMB = 0.5, WORK = 0.72;
 const LEAN = 0.25, CURVE = 1.6, RECURVE = -5;
 /** the arrow's rest above the grip's pivot, on the riser's shelf (the string's nocking point is level with it) */
 export const REST_Y = 0.045;
-/** an arrow (30 in) and its shaft's radius */
-export const ARROW = 0.76;
+/** an arrow (38 in: as long as the hero's draw, which is what his arms reach, and its head out past the riser at full draw;
+ *  at 30 in it stopped short of the riser) and its shaft's radius */
+export const ARROW = 0.96;
 const SHAFT = 0.0055;
 const SEG = 18, RING = 10;
 
@@ -66,6 +67,24 @@ export function arrowGeometry(): THREE.BufferGeometry {
   return arrowGeo;
 }
 
+/** An arrow in pieces from its nock (z 0) forward along +z, for one drawn out of a quiver a part at a time: the nock and
+ *  vanes (`rear`, 14 cm), the shaft a unit long (scaled to what's out), and the head (`head`, its tip at z 0). */
+export function arrowPieces(): { rear: THREE.BufferGeometry; shaft: THREE.BufferGeometry; head: THREE.BufferGeometry } {
+  const paint = (g: THREE.BufferGeometry, c: number) => {
+    const col = new THREE.Color(c), n = g.attributes.position.count, a = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) col.toArray(a, i * 3);
+    g.setAttribute('color', new THREE.BufferAttribute(a, 3));
+    return g.index ? g.toNonIndexed() : g;
+  };
+  const rear = [paint(new THREE.CylinderGeometry(0.0065, 0.0065, 0.016, 6).rotateX(Math.PI / 2).translate(0, 0, 0.008), 0x2a2622)];
+  for (let i = 0; i < 3; i++) rear.push(paint(new THREE.BoxGeometry(0.0015, 0.021, 0.105).translate(0, SHAFT + 0.0105, 0.085).rotateZ(-Math.PI / 2 + i * Math.PI * 2 / 3), i ? 0xd9d2bd : 0x8c2a1f));
+  const r = mergeGeometries(rear)!; r.computeVertexNormals();
+  const shaft = paint(new THREE.CylinderGeometry(SHAFT, SHAFT, 1, 6, 1).rotateX(Math.PI / 2).translate(0, 0, 0.5), 0xa8834f);
+  const head = paint(new THREE.ConeGeometry(0.016, 0.065, 4).rotateX(Math.PI / 2).scale(1, 0.25, 1).translate(0, 0, -0.0325), 0x8f969c);
+  shaft.computeVertexNormals(); head.computeVertexNormals();
+  return { rear: r, shaft, head };
+}
+
 export interface BowMaterials { riser: THREE.Material; limb: THREE.Material; grip: THREE.Material; string: THREE.Material; arrow: THREE.Material }
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
@@ -100,7 +119,7 @@ export class Bow {
       new THREE.Vector3(-0.011, 0.07, 0.006), new THREE.Vector3(-0.012, 0.15, 0.018), new THREE.Vector3(0, RISER + 0.01, POCKET_Z)];
     const rr = (t: number) => (t < 0.18 ? 0.021 : t < 0.5 ? 0.019 : t < 0.8 ? 0.014 : 0.019) - Math.abs(t - 0.4) * 0.006;
     const add = (geo: THREE.BufferGeometry, mat: THREE.Material) => { const mesh = new THREE.Mesh(geo, mat); mesh.castShadow = true; g.add(mesh); return mesh; };
-    add(taperTube(riser, rr, 28, 10), m.riser);
+    add(taperTube(riser, rr, 28, 10), m.riser).name = 'riser';
     add(new THREE.CylinderGeometry(0.022, 0.022, 0.1, 12).translate(0, -0.012, 0.003), m.grip);
     add(new THREE.BoxGeometry(0.014, 0.008, 0.03).translate(-0.004, REST_Y - SHAFT - 0.004, 0), m.grip);
     // the limbs: one shape, the lower its mirror (three flips the faces of a mirrored mesh)

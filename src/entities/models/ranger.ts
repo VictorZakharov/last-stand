@@ -21,7 +21,7 @@ import { fitArm, solveArm } from './armIK';
 import { bodyShape } from './anatomy';
 import { buildFlask, drink } from './flask';
 import { buildBoot } from './boot';
-import { Bow, pullAt, arrowGeometry, ARROW, REST_Y } from './bow';
+import { Bow, pullAt, arrowGeometry, arrowPieces, ARROW, REST_Y } from './bow';
 import { fromEyes, dirFromEyes } from '../viewModel';
 import { angleDamp, clamp, damp, lerp, smooth, TAU } from '../../util';
 import type { AnimState, Model } from '../../types';
@@ -104,9 +104,28 @@ const NOCK_AT = V(0.06, 0.28, 0.42);
  *  (tipped further down, the top limb leant back into the chest; canted 0.85, side-on to the shot as the body is, the
  *  lower limb and the string swung back through the coat's left side at every shot, half the frames of a run of taps) */
 const SET_TIP = [0.25, 0.1];
-/** where the hand brings the next arrow over the right shoulder (the chest's frame, from the shoulder at rest): above it
- *  and in front, on its way down to the string */
-const OVER = V(0.02, 0.14, 0.26);
+/** where the hand draws the next arrow out of the quiver to (the chest's frame, from the shoulder at rest): up and forward
+ *  over the right shoulder, the arm near its full stretch, as far from the quiver's mouth as it reaches, before it comes
+ *  down to the string (an arrow as long as the draw is most of a metre deep in the quiver: drawn out to just above the
+ *  shoulder, it came forward through the shoulder and the neck) */
+const PULL = V(-0.04, 0.4, 0.3);
+/** on its way there, where the hand draws the arrow up out of the quiver first (the chest's frame, from the shoulder at
+ *  rest): above the shoulder and out beside the head (brought forward at once, the arrow between the hand and the quiver's
+ *  mouth cut through the shoulder; behind the shoulder, the arm rose in a plane 57 degrees behind the body, past its range) */
+const RISE = V(-0.13, 0.4, -0.02);
+/** where the hand passes from hanging at the side on its way up to the quiver (the chest's frame, from the shoulder at
+ *  rest): out to the side and forward at the chest's height, the elbow coming up (straight up from the hip to over the
+ *  shoulder, the elbow folded shut and the forearm went through the chest) */
+const SIDE_UP = V(-0.24, -0.08, 0.16);
+/** the quiver (along its axis, from its joint): where the hand takes an arrow by its nock, and its mouth */
+const QUIVER_NOCK = 0.42, QUIVER_MOUTH = 0.16;
+/** how long putting the arrow back in the quiver takes (s); and the share of a fetch at which the arrow is on the string */
+const STOW = 1.5, FETCHED = 0.92;
+/** of putting it back, the share over which the bow comes up before the chest first, the hand waiting (setting off at once,
+ *  it reached for the bow wherever it was, behind the back after a swing or another skill's pose) */
+const STOW_UP = 0.2;
+/** how far along its way the hand is, `k` of the way through putting the arrow back */
+const stowWay = (k: number): number => smooth(clamp((k - STOW_UP) / (1 - STOW_UP), 0, 1));
 /** where the hand passes over the right shoulder on its way back to the quiver (the chest's frame, from the shoulder at rest):
  *  out past the hat's brim (by the shoulder, it went through the brim's back) */
 const LIFT = V(-0.07, 0.22, -0.04);
@@ -160,6 +179,20 @@ function hook(h: Hand, k: number, pinch: number): void {
 }
 
 /** a point on a Catmull-Rom curve through `pts` reached at the times `ts` (0..1, rising), at `t` */
+/** the times (0..`end`) at the points of a way through `pts`, by its length: an even pace */
+function lengthTimes(pts: THREE.Vector3[], end: number): number[] {
+  const ts = [0]; let total = 0;
+  for (let i = 1; i < pts.length; i++) ts.push(total += pts[i].distanceTo(pts[i - 1]));
+  return ts.map((x) => x / (total || 1) * end);
+}
+
+/** the direction `t` of the way round from `a` to `b` (unit vectors), into `out` */
+const _sq = new THREE.Quaternion(), _sq2 = new THREE.Quaternion();
+function slerpDir(a: THREE.Vector3, b: THREE.Vector3, t: number, out: THREE.Vector3): THREE.Vector3 {
+  _sq.setFromUnitVectors(a, b); _sq2.identity().slerp(_sq, t);
+  return out.copy(a).applyQuaternion(_sq2);
+}
+
 function through(pts: THREE.Vector3[], ts: number[], t: number, out: THREE.Vector3): THREE.Vector3 {
   let i = 0;
   while (i < ts.length - 2 && t > ts[i + 1]) i++;
@@ -313,20 +346,25 @@ export function buildRanger(): Model {
   // fletching standing out of its mouth above the shoulder, where the hand reaches up over it. (Leaning in, its mouth was
   // behind the head, and the arm reaching for it went 113 degrees past its range)
   // (long and narrow as the sheet's, down to the belt, three bands round it and a cap on its foot)
-  const quiver = joint(j.chest, -0.13, 0.04, -0.19); quiver.rotation.z = 0.35;
-  S.add(lathe([[0.02, -0.44], [0.05, -0.42], [0.052, 0.14], [0.057, 0.16]], 18), boot, quiver);
-  S.add(lathe([[0.045, -0.445], [0.055, -0.43], [0.056, -0.37]], 18), strapLeather, quiver);
-  for (const y of [-0.3, -0.05, 0.12]) { S.add(belt(0.056, 0.056, y, 0.02, 0.005), strapLeather, quiver); for (const a of [0.6, 1.8, 3, 4.2]) S.add(new THREE.SphereGeometry(0.004, 6, 4), brass, quiver, [Math.sin(a) * 0.061, y, Math.cos(a) * 0.061]); }
+  // (as deep as the arrows are long, less the 28 cm standing out of it)
+  const quiver = joint(j.chest, -0.13, 0.04, -0.19); quiver.rotation.z = 0.35; quiver.name = 'quiver';
+  S.add(lathe([[0.02, -0.52], [0.05, -0.5], [0.052, 0.14], [0.057, 0.16]], 18), boot, quiver);
+  S.add(lathe([[0.045, -0.525], [0.055, -0.51], [0.056, -0.45]], 18), strapLeather, quiver);
+  for (const y of [-0.36, -0.08, 0.12]) { S.add(belt(0.056, 0.056, y, 0.02, 0.005), strapLeather, quiver); for (const a of [0.6, 1.8, 3, 4.2]) S.add(new THREE.SphereGeometry(0.004, 6, 4), brass, quiver, [Math.sin(a) * 0.061, y, Math.cos(a) * 0.061]); }
   for (let i = 0; i < 6; i++) {
     const x = Math.sin(i * 2.4) * 0.042, z = Math.cos(i * 2.4) * 0.042;
-    S.add(new THREE.CylinderGeometry(0.004, 0.004, 0.38, 5), bowWood, quiver, [x, 0.13, z]);
-    S.add(new THREE.BoxGeometry(0.026, 0.055, 0.004), cord, quiver, [x, 0.285, z]);
+    S.add(new THREE.CylinderGeometry(0.004, 0.004, 0.5, 5), bowWood, quiver, [x, 0.19, z]);
+    S.add(new THREE.BoxGeometry(0.026, 0.09, 0.004), cord, quiver, [x, 0.385, z]);
   }
   S.build();
   // the bow, in the left hand; the arrow the right hand carries from the quiver to the string
   const bow = new Bow({ riser: bowWood, limb: limbWood, grip: hide, string: cord, arrow: fletched });
   j.handL.add(bow.group);
-  const held = new THREE.Mesh(arrowGeometry(), fletched); held.castShadow = false; held.visible = false; j.handR.add(held);
+  // (in pieces: only what's out of the quiver shows as it's drawn out, the rest still in it; drawn whole, an arrow as long
+  // as the draw pivoting at the quiver's mouth swung its head out through the quiver's side into the hips)
+  const held = new THREE.Group(); held.visible = false; held.name = 'heldArrow'; j.handR.add(held);
+  const pieces = arrowPieces(), heldRear = new THREE.Mesh(pieces.rear, fletched), heldShaft = new THREE.Mesh(pieces.shaft, fletched), heldHead = new THREE.Mesh(pieces.head, fletched);
+  for (const m of [heldRear, heldShaft, heldHead]) { m.castShadow = false; held.add(m); }
   // (where the shot leaves: the nocked arrow's middle)
   const tip = joint(bow.group), palm = joint(j.handR, 0, -0.07, 0.03);
   const flask = buildFlask(kit, brass, hide); flask.name = 'flask'; j.handR.add(flask); flask.position.set(0, -0.07, 0.03); flask.rotation.x = Math.PI;
@@ -340,6 +378,8 @@ export function buildRanger(): Model {
   let QUIVER = 0.5, OUT = 0.7;
   let yawOff = 0;
   let fp = false, hasBow = true, aimT = 0, raise = 0, free = 0, flaskOut = 0, nocked = true, lastLoosed = -1;
+  /** putting the arrow back in the quiver: the seconds since it began (-1: not), and when on its way the hand has it off the string */
+  let stowT = -1, stowTake = 0.3;
   /** how far the draw had gone (0..1 of its time) when the draw hand took the string, this shot (-1: not yet) */
   let kHook = -1, raiseLoose = 1, lastTilt = 0;
   /** where the string was in the fingers last frame, and at the release (the head's frame, taken while it's posed: here at
@@ -410,6 +450,28 @@ export function buildRanger(): Model {
     root.updateMatrixWorld(true);
   };
 
+  /** the arrow in the draw hand's fingers by its nock: drawn up through the quiver's mouth (pointing back down into it, its
+   *  head still in the quiver) until `w` frees it, then turned over the top, up, onto `toward` (world: the line it's laid on)
+   *  as the hand brings it to the string (turned straight from the one to the other, half a turn, it swept through the head) */
+  const holdArrow = (mouthW: THREE.Vector3, w: number, toward: THREE.Vector3) => {
+    const s = sc();
+    held.visible = hasBow;
+    const nk = j.handR.localToWorld(_e.copy(stringAt));
+    // (what's out of the quiver: the way from the fingers to its mouth, all of it once it's free)
+    const d = nk.distanceTo(mouthW) / s, out = Math.min(ARROW, d + smooth(Math.min(1, w * 5)) * ARROW);
+    _a.copy(mouthW).sub(nk).normalize();
+    const top = _c.copy(UP).addScaledVector(toward, 0.3).normalize().clone();
+    if (w < 0.5) slerpDir(_a, top, smooth(w * 2), _a); else slerpDir(top, toward, smooth(w * 2 - 1), _a);
+    j.handR.getWorldQuaternion(_q).invert();
+    held.quaternion.setFromUnitVectors(FWD, _a.applyQuaternion(_q));
+    held.position.copy(stringAt);
+    const k = s / j.handR.getWorldScale(_s).x;
+    held.scale.setScalar(k);
+    heldShaft.position.z = 0.01; heldShaft.scale.set(1, 1, Math.max(0.001, out - 0.07));
+    heldHead.visible = out >= ARROW - 0.005; heldHead.position.z = ARROW;
+    held.userData.len = out * s;
+  };
+
   function animate(st: AnimState): void {
     const dt = st.dt, a = st.action, s = sc();
     resetPose(j); idle(j, st.t, 1 - st.move * 0.5);
@@ -419,15 +481,25 @@ export function buildRanger(): Model {
     const after = loosed ? clamp((a.t - 0.55) / 0.45, 0, 1) : -1, k = shooting ? a.draw! : 0;
     if (loosed && lastLoosed < 0) { nocked = false; loosedAt.copy(lastNock); raiseLoose = raise; }
     lastLoosed = loosed ? a.loosed! : -1;
-    if (!loosed && !nocked && !shooting) nocked = true;
     if (after >= NOCKED) nocked = true;
+    // (a shot with none on the string: the hand takes one from the quiver first; it's on the string once laid on it)
+    const fetchE = shooting && !loosed && a.fetch !== undefined ? a.fetch : -1;
+    if (fetchE >= 0) nocked = fetchE >= FETCHED;
+    // between shots, as the hero has it (`AnimState.nocked`): stood a while without a shot, he puts it back in the quiver
+    // (only with nothing else on: the other skills' gestures take the draw hand)
+    if (shooting || a) stowT = -1;
+    else if (st.nocked ?? true) { nocked = true; stowT = -1; }
+    else if (stowT < 0 && nocked) stowT = 0;
+    if (stowT >= 0) { stowT += dt; if (stowWay(stowT / STOW) >= stowTake) nocked = false; if (stowT >= STOW) stowT = -1; }
+    const stowE = stowT >= 0 ? stowT / STOW : -1;
     // (eased both ways: the bow comes up and goes down from a standstill)
     aimT = clamp(aimT + (shooting ? dt / AIM_IN : -dt / AIM_OUT), 0, 1);
     const aim = smooth(aimT);
     // (the hand takes the string with the bow brought in before the chest, as the arrow is nocked; only then does the bow come up
     // and the string come back: drawn as the hand came for it, the string met the hand at the throat, the arm folded tight,
     // and the elbow went up over the head to come round)
-    const onW = loosed ? 1 : smooth(clamp((aimT - TAKE[0]) / (TAKE[1] - TAKE[0]), 0, 1));
+    // (with an arrow taken from the quiver for this shot, the hand laid it on the string: it's there already)
+    const onW = loosed || (shooting && a.fetch !== undefined) ? 1 : smooth(clamp((aimT - TAKE[0]) / (TAKE[1] - TAKE[0]), 0, 1));
     if (!shooting) kHook = -1;
     else if (!loosed && kHook < 0 && onW > 0.999) kHook = Math.min(k, 0.6);
     const kv = loosed ? k : kHook < 0 ? 0 : clamp((k - kHook) / (1 - kHook), 0, 1);
@@ -530,7 +602,10 @@ export function buildRanger(): Model {
     const drop = loosed ? Math.sin(clamp(after / 0.5, 0, 1) * Math.PI) * 0.5 * (a.draw ?? 1) * raise * raise : 0;
     if (drop) shown.q.multiply(_q2.setFromAxisAngle(_x.set(1, 0, 0), drop));
     // (it comes in from the side quicker than the body turns, so the hand takes the string on it before it comes up)
-    const bowIn = smooth(clamp(aimT / BOW_IN, 0, 1));
+    // (and putting the arrow back, the bow comes up before the chest for the hand to take it off the string, then goes down
+    // again: reached for at the side, the bow swung back with the walk and the hand went behind the back for it)
+    const stowIn = stowE < 0 ? 0 : smooth(clamp(stowE / STOW_UP, 0, 1)) * (1 - smooth(clamp((stowE - 0.45) / 0.2, 0, 1)));
+    const bowIn = Math.max(smooth(clamp(aimT / BOW_IN, 0, 1)), stowIn);
     shown.p.lerpVectors(ready.p, shown.p, bowIn); _q.copy(shown.q); shown.q.copy(ready.q).slerp(_q, bowIn);
     // (out to the left and up on its way from the side to the shot and back, so the lower limb passes outside the thigh, not through it)
     shown.p.addScaledVector(_e.crossVectors(UP, u).normalize(), CARRY_SWING * s * Math.sin(bowIn * Math.PI)).addScaledVector(UP, 0.08 * s * Math.sin(bowIn * Math.PI));
@@ -575,8 +650,48 @@ export function buildRanger(): Model {
     // degrees down and the wrist rose into the cheek)
     const onString = line.q.clone();
     held.visible = false;
-    let e = -1;
-    if (!loosed || after >= NOCKED || !hasBow) {
+    let e = -1, hk = 1 - loose, pinch = 0;
+    // the quiver: where the hand takes an arrow by its nock and its mouth; how far up and forward over the shoulder the hand
+    // draws it out (the arm at full stretch), and where it passes over the shoulder on its way to it
+    const mouthW = quiver.localToWorld(_e.set(0, QUIVER_MOUTH, 0)).clone(), q0 = quiver.localToWorld(_e.set(0, QUIVER_NOCK, 0)).clone();
+    const shoulderRest = j.shoulderR.userData.rest ?? j.shoulderR.position;
+    const pull = j.chest.localToWorld(_e.copy(shoulderRest).add(PULL)).clone(), rise = j.chest.localToWorld(_e.copy(shoulderRest).add(RISE)).clone();
+    const sideUp = j.chest.localToWorld(_e.copy(shoulderRest).add(SIDE_UP)).clone();
+    // (up over the shoulder on the way to the quiver: across just above it, the arm folded past its range)
+    const lift = j.chest.localToWorld(_e.copy(shoulderRest).add(LIFT)).clone();
+    // (through the eyes the quiver is behind them: the arrow comes up from below)
+    if (fp) { fromEyes(root, j.neck, FP_LOW, q0); fromEyes(root, j.neck, FP_LOW, rise); rise.addScaledVector(UP, 0.05 * s); fromEyes(root, j.neck, FP_UP, pull); mouthW.copy(q0).addScaledVector(UP, -s); }
+    // (reaching up over the shoulder for it, the elbow raised and out to the side)
+    const reloadPole = _b.copy(UP).multiplyScalar(0.7).addScaledVector(u, -0.7).addScaledVector(_left, -0.2).normalize().clone();
+    // (the line the arrow lies on, nocked: from the nock forward through the rest)
+    const lineDir = _a.copy(nockW).sub(bow.group.localToWorld(_e.set(0, REST_Y, 0))).negate().normalize().clone();
+    if (fetchE >= 0 && hasBow && fetchE < 1) {
+      // a shot with none on the string: from the side up over the shoulder to the quiver, the arrow drawn up out of it
+      // to the arm's full stretch, then down in front of the chest to the string where the bow waits, in one sweep
+      const pts = [fkAt.clone(), sideUp, lift, q0, rise, pull, nockW], ts = lengthTimes(pts, FETCHED);
+      e = FETCHED * smooth(clamp(fetchE / FETCHED, 0, 1));
+      const at = through(pts, ts, e, new THREE.Vector3());
+      const on = smooth(clamp((e - ts[5]) / (FETCHED - ts[5]), 0, 1));
+      drawHand(at, onString, on, setPole.clone().lerp(reloadPole, 1 - on), 0, 0);
+      if (e >= ts[3] && fetchE < FETCHED) { holdArrow(mouthW, smooth(clamp((e - ts[5]) / (FETCHED - ts[5]), 0, 1)), lineDir); pinch = 1; hk = 0.2; }
+      else if (fetchE >= FETCHED) hk = 1;
+    }
+    else if (stowE >= 0 && hasBow && !shooting) {
+      // stood a while without a shot: the hand takes the arrow off the string of the bow at his side, lifts it up over the
+      // shoulder and lets it down into the quiver, and comes back down to hang
+      // (letting it down into the quiver from above the quiver's top: it slides in the rest of the way; reaching down to
+      // the top behind the shoulder, the raised arm went 20 degrees past its range)
+      const drop = mouthW.clone().lerp(q0, 1.4);
+      const pts = [fkAt.clone(), nockW, pull, rise, drop, lift, sideUp, fkAt.clone()], ts = lengthTimes(pts, 1);
+      stowTake = ts[1];
+      e = stowWay(stowE);
+      const at = through(pts, ts, e, new THREE.Vector3());
+      const on = e < ts[1] ? smooth(clamp(e / ts[1], 0, 1)) : 1 - smooth(clamp((e - ts[1]) / (ts[2] - ts[1]), 0, 1));
+      drawHand(at, onString, on, setPole.clone().lerp(reloadPole, 1 - on), 0, 0);
+      if (e >= ts[1] && e < ts[4]) { holdArrow(mouthW, 1 - smooth(clamp((e - ts[1]) / (ts[2] - ts[1]), 0, 1)), lineDir); pinch = 1; hk = 0.2; }
+      else hk = e < ts[1] ? smooth(clamp(e / ts[1], 0, 1)) * 0.5 : 0;
+    }
+    else if (!loosed || after >= NOCKED || !hasBow) {
       // (its way up from the side bows out in front of the chest: straight there, it cut through the belly and the chest)
       // (the hand turns onto the string as it nears it)
       // (the elbow out and forward from where it hangs, then up behind: kept down by the side, the forearm crossed the chest
@@ -593,54 +708,40 @@ export function buildRanger(): Model {
     }
     else {
       // back along the jaw and down the neck from where the string left the fingers; up to the quiver's mouth over the
-      // right shoulder; the arrow drawn up out of it and forward over the shoulder, then down in front of the chest to the
-      // string, in one sweep. (The head, turned to the target, is between the quiver and the bow: carried straight from one
-      // to the other, the arrow went over the head and the arm through it)
+      // right shoulder; the arrow drawn up out of it to the arm's full stretch over the shoulder, then down in front of the
+      // chest to the string, in one sweep. (The head, turned to the target, is between the quiver and the bow: carried
+      // straight from one to the other, the arrow went over the head and the arm through it)
       const from = j.head.localToWorld(_d.copy(loosedAt));
       // (a little back and out from the neck, level: the shoulder is under the anchor, and back or down towards it the elbow
       // folded past its range)
       const follow = from.clone().addScaledVector(u, -0.04 * s).addScaledVector(_left, -0.08 * s).addScaledVector(UP, 0.01 * s);
-      const q0 = quiver.localToWorld(_e.set(0, 0.3, 0)).clone(), axis = _x.set(0, 1, 0).transformDirection(quiver.matrixWorld).clone();
-      const out = q0.clone().addScaledVector(axis, 0.22 * s).addScaledVector(_e.set(0, 0, 1).transformDirection(j.chest.matrixWorld), 0.1 * s);
-      const over = j.chest.localToWorld(_e.copy(j.shoulderR.userData.rest ?? j.shoulderR.position).add(OVER)).clone();
-      if (fp) { fromEyes(root, j.neck, FP_LOW, q0); fromEyes(root, j.neck, FP_LOW, out); out.addScaledVector(UP, 0.05 * s); fromEyes(root, j.neck, FP_UP, over); }
-      // (up over the shoulder on the way to the quiver: across just above it, the arm folded past its range)
-      const lift = j.chest.localToWorld(_e.copy(j.shoulderR.userData.rest ?? j.shoulderR.position).add(LIFT)).clone();
-      const pts = [from.clone(), follow, lift, q0, out, over, nockW], ts = [0, FOLLOW];
+      const pts = [from.clone(), follow, lift, q0, rise, pull, nockW], ts = [0, FOLLOW];
       let total = 0; const lens = [0];
       for (let i = 2; i < pts.length; i++) lens.push(total += pts[i].distanceTo(pts[i - 1]));
       for (let i = 1; i < lens.length; i++) ts.push(FOLLOW + (NOCKED - FOLLOW) * lens[i] / total);
-      QUIVER = ts[3]; OUT = ts[4];
+      QUIVER = ts[3]; OUT = ts[5];
       // (one ease over the way from the follow-through to the string: it sets off and arrives at rest, never stopping between)
       e = after < FOLLOW ? after : FOLLOW + (NOCKED - FOLLOW) * smooth((after - FOLLOW) / (NOCKED - FOLLOW));
       const at = through(pts, ts, Math.min(e, NOCKED), new THREE.Vector3());
       // (the string's turn eased off as the hand leaves it and back on as it lays the arrow on it; the elbow likewise)
       const on = Math.max(1 - smooth(clamp((after - 0.06) / 0.3, 0, 1)), smooth(clamp((e - OUT) / (NOCKED - OUT), 0, 1)));
-      // (reaching up over the shoulder for it, the elbow raised and out to the side)
       // (from where the shot left it to there, and from there to before the shoulder, where the next draw starts)
-      const reloadPole = _b.copy(UP).multiplyScalar(0.7).addScaledVector(u, -0.7).addScaledVector(_left, -0.2).normalize();
       const onA = 1 - smooth(clamp((after - 0.06) / 0.3, 0, 1));
       drawHand(at, onString, on, (on === onA ? fullPole : setPole).clone().lerp(reloadPole, 1 - on), 0, on === onA ? lastTilt * onA : 0);
-      // the arrow in the fingers from the quiver to the string: point down out of the quiver, coming round onto the line
-      if (e >= QUIVER) {
-        held.visible = hasBow;
-        const w = smooth(clamp((e - OUT) / (NOCKED - OUT), 0, 1));
-        _a.copy(axis).negate().lerp(_b.copy(nockW).sub(bow.group.localToWorld(_e.set(0, REST_Y, 0))).negate().normalize(), w).normalize();
-        j.handR.getWorldQuaternion(_q).invert();
-        held.quaternion.setFromUnitVectors(FWD, _a.applyQuaternion(_q));
-        held.position.copy(stringAt).addScaledVector(_a, ARROW / 2 / j.handR.getWorldScale(_s).x * s);
-      }
+      // the arrow in the fingers from the quiver to the string
+      if (e >= QUIVER) { holdArrow(mouthW, smooth(clamp((e - OUT) / (NOCKED - OUT), 0, 1)), lineDir); pinch = 1; }
+      hk = after < FOLLOW ? 1 - smooth(after / FOLLOW) : 0.2;
     }
     if (loose > 0.001) {
       j.shoulderR.quaternion.slerp(fk[0], loose); j.elbowR.quaternion.slerp(fk[1], loose); j.handR.quaternion.slerp(fk[2], loose);
       // (the gestures' and the draught's arm brought within its ranges, the hand where they put it)
       if (!fp) { root.updateMatrixWorld(true); fitArm(j, false, undefined, body); }
     }
-    hook(handR, loosed && after < NOCKED ? (after < FOLLOW ? 1 - smooth(after / FOLLOW) : 0.2) : 1 - loose, loosed && e >= QUIVER && after < NOCKED ? 1 : 0);
+    hook(handR, hk, pinch);
   }
   return {
     root, kit, joints: j, animate, tip, palm, height: 2,
-    firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; nocked = true; kHook = -1; },
+    firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; nocked = false; kHook = -1; stowT = -1; },
     setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; for (const h of head.hair.slice(1)) h.visible = !gear.helm; },
     dispose() { kit.dispose(); root.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && g !== arrowGeometry()) g.dispose(); }); },
   };

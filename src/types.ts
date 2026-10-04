@@ -147,6 +147,9 @@ export interface ClassDef {
   twoHanded?: string[];
   /** a one-handed weapon can go in the off-hand too */
   dualWield?: boolean;
+  /** a bow's hero: the seconds to take an arrow from the quiver and nock it, before a shot with none on the string, and how
+   *  long without a shot before the one on it goes back in the quiver */
+  quiver?: { fetch: number; idle: number };
 }
 
 /** What the character holds, derived from the equipped items (drives model and skills). */
@@ -235,6 +238,8 @@ export interface ActionState {
   draw?: number; loosed?: number; pitch?: number;
   /** a bow: the heading the arrows fly (rad, like a body's facing), how many are nocked and how far apart they fan (rad) */
   yaw?: number; arrows?: number; fan?: number;
+  /** a bow's shot with no arrow on the string: how far the hand is through taking one from the quiver first (0..1) */
+  fetch?: number;
 }
 
 /** Per-frame input to a model's procedural animation. */
@@ -254,6 +259,8 @@ export interface AnimState {
   charge?: number;
   /** world-space velocity of the character (drives cloth inertia) */
   velocity?: THREE.Vector3;
+  /** a bow's hero: an arrow on the string between shots (`Player.nocked`) */
+  nocked?: boolean;
   /** turns the chest, neck and head onto what the character looks at: a model with cloth calls it before
    *  the leg IK and the cloth step, so the sleeves and cape follow the arms the turn moves */
   look?: () => void;
