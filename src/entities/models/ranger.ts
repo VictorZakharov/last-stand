@@ -262,7 +262,29 @@ export function buildRanger(): Model {
   stripRig(j.root);
   const S = new Sculpt();
   // the coat cut as the mage's tunic is, over the shoulders as a man's are and meeting the neck at its base (a round barrel of a body ending in a shelf at the shoulders left a long neck standing out of it)
-  S.add(plate((u, v, out) => onTunic((u - 0.5) * TAU, lerp(TUNIC_Y[0], TUNIC_Y[1], 1 - (1 - v) ** 1.5), 0, out), 40, 30, 0, undefined, V(0, 0.1, 0)), coat, j.chest);
+  // (in two halves meeting down the middle, each skinned to its shoulder over the deltoid, `armShare`: the cloth there goes
+  // up with a raised arm; all on the chest, the sleeve of an arm raised for the quiver rose out of it as a tube stuck in)
+  /** how far the coat at `p` (the chest's frame) goes with the arm on side `s` (+1 the left): over the deltoid outside the
+   *  joint wholly, nothing in towards the neck (where the baldric lies) or far down the side */
+  const armShare = (p: THREE.Vector3, s: number, sh: THREE.Object3D) => {
+    const d = p.distanceTo(sh.userData.rest ?? sh.position);
+    return smooth(clamp((s * p.x - 0.12) / 0.08, 0, 1)) * (1 - smooth(clamp((d - 0.06) / 0.1, 0, 1)));
+  };
+  const withArm = (g: THREE.BufferGeometry, s: number, sh: THREE.Object3D) => {
+    const p = g.attributes.position, k = new Float32Array(p.count);
+    for (let i = 0; i < p.count; i++) k[i] = armShare(_a.fromBufferAttribute(p, i), s, sh);
+    g.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
+    return g;
+  };
+  {
+    const half = (s: number) => plate((u, v, out) => onTunic((s > 0 ? u * 0.5 : u * 0.5 - 0.5) * TAU, lerp(TUNIC_Y[0], TUNIC_Y[1], 1 - (1 - v) ** 1.5), 0, out), 20, 30, 0, undefined, V(0, 0.1, 0));
+    // (the right half runs from the back's middle to the front's, the left on from there: its uvs carry on from the right's)
+    const R = half(-1), L = half(1), ur = R.attributes.uv, ul = L.attributes.uv;
+    let top = 0; for (let i = 0; i < ur.count; i++) top = Math.max(top, ur.getX(i));
+    for (let i = 0; i < ul.count; i++) ul.setX(i, ul.getX(i) + top);
+    S.skin(withArm(R, -1, j.shoulderR), coat, j.chest, j.shoulderR, 0, 1);
+    S.skin(withArm(L, 1, j.shoulderL), coat, j.chest, j.shoulderL, 0, 1);
+  }
   // (a standing collar round the neckline, as the sheet's coat has, open down the front in a short slit closed by two buttons;
   // higher behind, up the back of the neck to under the hair: level, it left a long bare neck from behind)
   const collarUp = (x: number, y: number, z: number) => y + COLLAR_RISE * smooth(clamp((-0.1 - z / (Math.hypot(x, z) || 1)) / 0.65, 0, 1)) * clamp((y - 0.289) / 0.039, 0, 1);
@@ -282,8 +304,10 @@ export function buildRanger(): Model {
   for (const sx of [1, -1]) S.add(stitches([0.318, 0.29, 0.26, 0.24].map((y) => y > 0.3 ? V(sx * 0.011, y, 0.065) : tunicFront(sx * 0.011, y, 0.0018))), thread, j.chest);
   S.add(stitches([0.234, 0.2, 0.15, 0.1, 0.05, 0, -0.05, -0.1].map((y) => tunicFront(0, y, 0.0015))), thread, j.chest);
   for (const sa of [1, -1]) {
-    S.add(stitches([0.294, 0.285, 0.272, 0.258, 0.245, 0.232, 0.22].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), thread, j.chest);
-    S.add(stitches([0.17, 0.12, 0.06, 0, -0.06, -0.11].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), thread, j.chest);
+    // (moving with the cloth they're sewn into)
+    const sh = sa > 0 ? j.shoulderL : j.shoulderR;
+    S.skin(withArm(stitches([0.294, 0.285, 0.272, 0.258, 0.245, 0.232, 0.22].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), sa, sh), thread, j.chest, sh, 0, 1);
+    S.skin(withArm(stitches([0.17, 0.12, 0.06, 0, -0.06, -0.11].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), sa, sh), thread, j.chest, sh, 0, 1);
   }
   // (gathered under the belt a little fuller than the mage's tunic)
   {
