@@ -13,6 +13,7 @@ import type { Joints } from './rig';
 import { reachArm } from './rig';
 import { groundHeight } from '../../world/ground';
 import { angleDamp, damp } from '../../util';
+import { ROM, ROM_ON, clampAnkle, twistAngle } from './anatomy';
 
 /** `?ik=0` keeps the walk cycle's own legs and its old gait, for A/B comparison */
 export const IK = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
@@ -62,6 +63,10 @@ const FOOT_V = 4, FOOT_VK = 2.5;
 const YAW_MAX = 0.5;
 /** how far the pelvis may turn from the chest (rad) to face the way the body travels while its chest faces the aim */
 const TWIST = 0.8;
+/** a planted foot's way from its knee's at most (rad, inside the ankle's twist), and how far the knee turns from the hips' way at most (the hip's turn) */
+const KNEE_FOOT = (ROM['ankle.twist'][1] - 6) * Math.PI / 180, HIP_TURN = (ROM['hip.rotation'][1] - 5) * Math.PI / 180;
+/** how far the chest may turn on the pelvis (rad, a little inside the trunk's range) */
+const TRUNK = (ROM['spine.rotation'][1] - 3) * Math.PI / 180;
 /** how long the legs go backwards along the pelvis's line after a reversal before it turns round to the new way (s) */
 const BACK_HOLD = 0.7;
 /** choosing whether the legs walk forwards or backwards along the pelvis: what a radian of the pelvis's turn costs against a radian of the legs going off its line */
@@ -143,6 +148,7 @@ const _s = new THREE.Vector3(), _c = new THREE.Vector3(), _f = new THREE.Vector3
 const _m = new THREE.Matrix4(), _pp = new THREE.Vector3(), _ps = new THREE.Vector3(), _hq = new THREE.Quaternion();
 const _sd = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _pole = new THREE.Vector3(), _e = new THREE.Euler();
+const UP = new THREE.Vector3(0, 1, 0);
 
 export interface LegOpts {
   /** 0 = the walk cycle's own legs, 1 = fully IK; a fixed share, or (state) a per-frame one */
@@ -296,6 +302,12 @@ export class LegIK {
         else if (this.backing) { this.backT += dt; if (cf + HYST < cb || (this.backT > BACK_HOLD && mf <= mb + 0.1)) this.backing = false; }
         want = (this.backing ? wb : wf) * smooth((this.spSlow - 0.6) / 1.2);
       } else this.backing = false;
+      // (within the trunk's turn: the pose's own twist of the chest on the hips and this one together; past it the legs
+      // step more across the way the pelvis faces, as a person's do. The two together twisted the spine 84 degrees)
+      if (ROM_ON) {
+        const pose = twistAngle(_q.copy(j.spine.quaternion).multiply(j.chest.quaternion), UP), w = Math.max(this.w, 1e-3);
+        want = Math.max((pose - TRUNK) / w, Math.min((pose + TRUNK) / w, want));
+      }
       // (no faster than hips really turn: flipped round at once between walking forwards and backpedalling, it twitches)
       const tw1 = damp(this.twist, want * this.w, 9, dt);
       this.twist += Math.max(-TWIST_RATE * dt, Math.min(TWIST_RATE * dt, tw1 - this.twist));
@@ -506,8 +518,12 @@ export class LegIK {
       }
       // the foot lies level, turned to the way it was planted (or, in a swing, towards where the body faces), and the knee bends over it
       const yawNow = f.state === 'plant' ? f.yaw : f.yawA + this.angle(f.yaw, f.yawA, pyaw + (this.moving ? 0 : f.syaw)) * smooth(f.t);
-      // (standing only, and only ever outwards: a running knee pointed off the stride twists the thigh across the body)
-      const ky = this.standK * (i === 0 ? Math.max(-0.1, Math.min(0.9, this.angle(0, hy, yawNow))) : Math.max(-0.9, Math.min(0.1, this.angle(0, hy, yawNow))));
+      // (standing only, and only ever outwards: a running knee pointed off the stride twists the thigh across the body;
+      // but a planted foot's knee turns at least far enough for the foot to be within the ankle's twist on the shin:
+      // left along the hips, the foot was twisted 50 degrees against it)
+      const rel = this.angle(0, hy, yawNow);
+      let ky = this.standK * (i === 0 ? Math.max(-0.1, Math.min(0.9, rel)) : Math.max(-0.9, Math.min(0.1, rel)));
+      if (ROM_ON && f.state === 'plant') ky = Math.max(-HIP_TURN, Math.min(HIP_TURN, Math.max(rel - KNEE_FOOT, Math.min(rel + KNEE_FOOT, ky))));
       _pole.set(Math.sin(ky) + (i === 0 ? 0.12 : -0.12), 0, Math.cos(ky));
       reachArm(thigh, knee, L1, L2, _p, _pole, -1);
       f.shown = f.pitch;
@@ -515,6 +531,11 @@ export class LegIK {
       _q2.setFromEuler(_e);
       _q.copy(_hq).multiply(thigh.quaternion).multiply(knee.quaternion).invert();
       ankle.quaternion.copy(_q.multiply(_q2));
+      // (within the ankle's range: a foot in the air hangs from the shin, as a runner's does, rather than staying level and
+      // turned to the way the body faces whatever the leg does; held level and turned, it bent 85 degrees up at the ankle
+      // under a knee bent back, and twisted 100 degrees against it. A planted foot stays as it lies: turned on the floor
+      // its contact slid)
+      if (f.state !== 'plant') clampAnkle(ankle.quaternion, i === 0, false);
       const wf = this.w * f.lw;
       if (wf < 0.999) {
         thigh.quaternion.copy(f.fk.thigh).slerp(thigh.quaternion, wf);

@@ -1,6 +1,8 @@
 // Procedural humanoid rig: a hierarchy of joint Groups with primitive meshes,
 // plus reusable procedural animation helpers. Forward is +Z, left is +X.
 import * as THREE from 'three';
+import { clampAnkle } from './anatomy';
+import { groundHeight } from '../../world/ground';
 
 export function part(geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D, x = 0, y = 0, z = 0): THREE.Mesh {
   const m = new THREE.Mesh(geo, mat);
@@ -75,6 +77,8 @@ export function buildHumanoid(M: Partial<Record<BodyPart, THREE.Material>> & { s
 
   const arm = (s: number) => {
     const shoulder = joint(chest, s * P.shoulderW, P.torsoL * P.shoulderY, 0);
+    // (where it sits with the shoulder girdle at rest: the girdle slides it, anatomy.ts `girdlePlace`)
+    shoulder.userData.rest = shoulder.position.clone();
     part(new THREE.SphereGeometry(P.upperR * 1.35, 12, 10), mat('arms'), shoulder);
     part(capsule(P.upperR, P.upperL), mat('arms'), shoulder, 0, -P.upperL / 2, 0);
     const elbow = joint(shoulder, 0, -P.upperL, 0);
@@ -102,6 +106,7 @@ export function resetPose(j: Joints): void {
     if (j[k]) j[k].rotation.set(0, 0, 0);
   }
   j.body.position.set(0, 0, 0);
+  for (const sh of [j.shoulderL, j.shoulderR]) if (sh.userData.rest) sh.position.copy(sh.userData.rest);
 }
 
 /**
@@ -190,9 +195,12 @@ export function reachArm(shoulder: THREE.Object3D, elbow: THREE.Object3D, upper:
 }
 
 const _a = new THREE.Vector3(), _hip = new THREE.Vector3(), _k = new THREE.Quaternion(), _r = new THREE.Quaternion(), _eu = new THREE.Euler();
+const _q0 = new THREE.Quaternion(), _fw = new THREE.Quaternion(), _toe = new THREE.Vector3();
+/** how far forward of the ankle the toes are (the rig's units) */
+const TOE = 0.15;
 
 /**
- * Leg IK against the ground (the model root's y = 0): an ankle posed below `footH` (the foot would sink
+ * Leg IK against the ground (`groundHeight` under each foot): an ankle posed below `footH` (the foot would sink
  * into the floor, as when the body crouches for a slam or a block) is lifted back to it by bending the
  * hip and knee, the foot staying where it was over the ground; and a foot at or near the floor turns
  * flat on it. Runs after the pose, before anything reads the joints' world matrices. Not while dying.
@@ -201,11 +209,15 @@ export function groundFeet(j: Joints, footH: number): void {
   const root = j.root;
   root.updateMatrixWorld(true);
   for (const [thigh, knee, ankle] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
+    // the floor under the foot, in the root's frame (the dais's step stands above the floor round it: measured from the
+    // root, a foot planted on it was in the air, neither laid flat nor kept within the ankle's range)
+    ankle.getWorldPosition(_a);
+    const floor = root.worldToLocal(_a.set(_a.x, groundHeight(_a.x, _a.z), _a.z)).y;
     ankle.getWorldPosition(_a); root.worldToLocal(_a);
-    const sink = footH - _a.y;
+    const sink = floor + footH - _a.y;
     if (sink > 0) {
       // the target in the hip's parent (hips) space: the same spot, raised to the floor
-      _a.y = footH;
+      _a.y = floor + footH;
       root.localToWorld(_a); thigh.parent!.worldToLocal(_a);
       _hip.copy(thigh.position);
       const L1 = j.P.thighL, L2 = j.P.shinL;
@@ -220,11 +232,31 @@ export function groundFeet(j: Joints, footH: number): void {
     }
     // a foot within a few cm of the floor lies flat on it: cancel the leg's pitch at the ankle
     ankle.getWorldPosition(_a); root.worldToLocal(_a);
-    const planted = 1 - Math.min(1, Math.max(0, (_a.y - footH) / 0.05));
+    const planted = 1 - Math.min(1, Math.max(0, (_a.y - floor - footH) / 0.05));
     if (planted > 0) {
       knee.getWorldQuaternion(_k); root.getWorldQuaternion(_r);
       _eu.setFromQuaternion(_r.invert().multiply(_k), 'YXZ');
       ankle.rotation.x += (-_eu.x - ankle.rotation.x) * planted;
+    }
+    // (within the ankle's range: where the shin leans further over a foot on the floor than an ankle bends, the heel
+    // lifts and the foot pivots on its toes, which stay where they lay, the leg reaching to the ankle raised round
+    // them; laid flat under a deep knee the ankle bent 70 degrees)
+    _toe.set(0, -footH, TOE).applyQuaternion(ankle.quaternion).add(ankle.position);
+    knee.localToWorld(_toe); root.worldToLocal(_toe);
+    if (_toe.y < floor + 0.03) {
+      const left = thigh === j.thighL;
+      _q0.copy(ankle.quaternion);
+      if (clampAnkle(ankle.quaternion, left, true, true)) {
+        knee.getWorldQuaternion(_k); _fw.copy(_k).multiply(ankle.quaternion);
+        _toe.set(0, -footH, TOE);
+        _a.copy(_toe).applyQuaternion(_q0).sub(_hip.copy(_toe).applyQuaternion(ankle.quaternion)).add(ankle.position);
+        knee.localToWorld(_a); thigh.parent!.worldToLocal(_a);
+        knee.getWorldPosition(_hip); thigh.parent!.worldToLocal(_hip).sub(thigh.position);
+        reachArm(thigh, knee, j.P.thighL, j.P.shinL, _a, _hip, -1);
+        thigh.updateWorldMatrix(false, true);
+        ankle.quaternion.copy(knee.getWorldQuaternion(_k).invert().multiply(_fw));
+        clampAnkle(ankle.quaternion, left, true, true);
+      }
     }
   }
 }
