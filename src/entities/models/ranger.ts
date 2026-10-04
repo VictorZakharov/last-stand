@@ -33,14 +33,17 @@ const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const HAT = { band: [30, 57], top: 155, gap: 20, brim: [60, 46, 40], droop: [14, 6, 6], thick: 5 };
 /** the coat's belt on the spine (m): belted high, at the lower ribs */
 const BELT_Y = 0.12;
+/** how much higher the collar stands at the back than in front (m) */
+const COLLAR_RISE = 0.02;
 const UP = V(0, 1, 0), FWD = V(0, 0, 1);
 const DRINK = { wrist: V(0.03, -0.08, 0.22), tipped: V(0.03, 0.1, 0.2), pole: V(-0.8, 0.2, -0.2) };
 /** where the nock comes to at full draw (the head's mm): at the side of the jaw, below and in front of the ear, the string
- *  just off the face, so the arrow and its fletching lie beside the cheek and the beard (on the jaw's skin, the arrow's
- *  last 9 cm went through them). (Under the corner of the mouth no arm could reach it as an archer's does: the only one
- *  within a body's ranges folded forward across the chest, and reaching it with the elbow behind put the hand through the
- *  head) */
-const ANCHOR = toGroup(-80, 10, 10);
+ *  a finger's width off the face, so the arrow and its fletching lie beside the cheek and the beard (on the jaw's skin, the
+ *  arrow's last 9 cm went through them), and the string's lower half passes in front of the coat over the bow shoulder
+ *  (1.2 cm nearer the face, it ran 6 to 8 cm through it at every full draw). (Under the corner of the mouth no arm could
+ *  reach it as an archer's does: the only one within a body's ranges folded forward across the chest, and reaching it
+ *  with the elbow behind put the hand through the head) */
+const ANCHOR = toGroup(-92, 10, 10);
 /** how far round the body turns side-on to the target (rad), the share of it the hips take standing, and moving */
 const SIDE = 1.35, HIP_SIDE = 0.68, HIP_SIDE_MOVING = 0.2;
 /** when the draw hand sets off for the string and when it has it, of the body's way onto the shot (as the bow comes in
@@ -50,11 +53,14 @@ const TAKE = [0.25, 0.72];
 const BOW_IN = 0.7;
 /** how far the chest is open from side-on as the draw starts (rad), closing as the string comes back */
 const OPEN = 0.5;
-/** the bow's cant at full draw (rad: its top tipped over to the right); a fan is shot with it laid flat, its top to the
- *  left (the forearm turned palm down: tipped to the right it turned palm up, past its range) */
-const CANT = 0.14, FLAT = -Math.PI / 2;
-/** how far out from the face the fan's anchor is (m) */
-const FAN_OUT = 0.015;
+/** the bow's cant at full draw (rad: its top tipped over to the right): a little to the left, its string's lower half
+ *  swung out off the chest and its upper half kept off the face (tipped right, the lower half came back into the coat at
+ *  the bow shoulder; further left, the upper half met the cheek); a fan is shot with it laid flat, its top to the left
+ *  (the forearm turned palm down: tipped to the right it turned palm up, past its range) */
+const CANT = -0.06, FLAT = -Math.PI / 2;
+/** how far out from the face the fan's anchor is (m): its string lies across the face, its near half in front of the jaw
+ *  and the beard (1.5 cm out, it went 5 cm into them) */
+const FAN_OUT = 0.04;
 /** carried at the side, the elbow bent `CARRY_BEND`: the bow's top tipped forward of the line up the forearm, as a hanging
  *  fist holds a grip (across the palm it lies square to the forearm; upright, the wrist bent 64 degrees towards the
  *  thumb, three times its range), and out (rad), clear of the arm and the leg */
@@ -91,11 +97,13 @@ const ELBOW_V = 3;
 const SET_POLE = V(-1, 0.15, 0.2).normalize();
 /** how far in front of the chest the draw hand's way to the string bows out, at its middle (m) */
 const BOW_OUT = 0.22;
-/** where the next arrow is nocked (the chest's frame): before the chest, a little left of its middle */
-const NOCK_AT = V(0.06, 0.28, 0.36);
+/** where the next arrow is nocked (the chest's frame): before the chest, a little left of its middle, out far enough that
+ *  the string behind the bow stays in front of the coat */
+const NOCK_AT = V(0.06, 0.28, 0.42);
 /** the bow there: its arrow tipped down (rad) and its top canted over to the right (rad), so its limbs keep off the body
- *  (tipped further down, the top limb leant back into the chest) */
-const SET_TIP = [0.25, 0.85];
+ *  (tipped further down, the top limb leant back into the chest; canted 0.85, side-on to the shot as the body is, the
+ *  lower limb and the string swung back through the coat's left side at every shot, half the frames of a run of taps) */
+const SET_TIP = [0.25, 0.1];
 /** where the hand brings the next arrow over the right shoulder (the chest's frame, from the shoulder at rest): above it
  *  and in front, on its way down to the string */
 const OVER = V(0.02, 0.14, 0.26);
@@ -222,13 +230,20 @@ export function buildRanger(): Model {
   const S = new Sculpt();
   // the coat cut as the mage's tunic is, over the shoulders as a man's are and meeting the neck at its base (a round barrel of a body ending in a shelf at the shoulders left a long neck standing out of it)
   S.add(plate((u, v, out) => onTunic((u - 0.5) * TAU, lerp(TUNIC_Y[0], TUNIC_Y[1], 1 - (1 - v) ** 1.5), 0, out), 40, 30, 0, undefined, V(0, 0.1, 0)), coat, j.chest);
-  // (a standing collar round the neckline, as the sheet's coat has, open down the front in a short slit closed by two buttons)
-  S.add(lathe([[0.0795, 0.289], [0.0795, 0.31], [0.0785, 0.326], [0.0757, 0.328], [0.0757, 0.3]], 28).scale(1, 1, 0.935).translate(0, 0, -0.0125), coat, j.chest);
+  // (a standing collar round the neckline, as the sheet's coat has, open down the front in a short slit closed by two buttons;
+  // higher behind, up the back of the neck to under the hair: level, it left a long bare neck from behind)
+  const collarUp = (x: number, y: number, z: number) => y + COLLAR_RISE * smooth(clamp((-0.1 - z / (Math.hypot(x, z) || 1)) / 0.65, 0, 1)) * clamp((y - 0.289) / 0.039, 0, 1);
+  {
+    const g = lathe([[0.0795, 0.289], [0.0795, 0.31], [0.0785, 0.326], [0.0757, 0.328], [0.0757, 0.3]], 28).scale(1, 1, 0.935).translate(0, 0, -0.0125), q = g.attributes.position;
+    for (let i = 0; i < q.count; i++) q.setY(i, collarUp(q.getX(i), q.getY(i), q.getZ(i) + 0.0125));
+    g.computeVertexNormals();
+    S.add(g, coat, j.chest);
+  }
   for (const sx of [1, -1]) S.add(taperTube([0.326, 0.27, 0.235].map((y) => y > 0.3 ? V(sx * 0.005, y, 0.0635) : tunicFront(sx * 0.005, y, 0.001)), () => 0.0022, 8, 5), dark, j.chest);
   for (const y of [0.29, 0.258]) S.add(new THREE.SphereGeometry(0.0055, 8, 6), brass, j.chest, tunicFront(0, y, 0.003).toArray());
   // the seams, stitched in a lighter thread: round the collar's top and foot, down both sides of the slit and on down the
   // front, over each shoulder from the neck to the sleeve, and down each side
-  const ring = (rx: number, rz: number, y: number) => Array.from({ length: 32 }, (_, i) => { const a = i / 32 * TAU; return V(Math.sin(a) * rx, y, Math.cos(a) * rz * 0.935 - 0.0125); });
+  const ring = (rx: number, rz: number, y: number) => Array.from({ length: 32 }, (_, i) => { const a = i / 32 * TAU; return V(Math.sin(a) * rx, collarUp(Math.sin(a), y, Math.cos(a)), Math.cos(a) * rz * 0.935 - 0.0125); });
   S.add(stitches(ring(0.0812, 0.0812, 0.32), 0.004, 0.0028, 0.0009, true), thread, j.chest);
   S.add(stitches(ring(0.0812, 0.0812, 0.295), 0.004, 0.0028, 0.0009, true), thread, j.chest);
   for (const sx of [1, -1]) S.add(stitches([0.318, 0.29, 0.26, 0.24].map((y) => y > 0.3 ? V(sx * 0.011, y, 0.065) : tunicFront(sx * 0.011, y, 0.0018))), thread, j.chest);
@@ -286,7 +301,7 @@ export function buildRanger(): Model {
     buildBoot(S, { leather: boot, sole: soleLeather, strap: strapLeather, metal: brass }, kn, an, th === j.thighL ? 1 : -1);
   }
   // the shared anatomical head, with his own face (face.ts FACES.ranger)
-  const head = buildHead(j.head, kit, 'ranger', { hair: 'swept' });
+  const head = buildHead(j.head, kit, 'ranger', { hair: 'swept', crop: true });
   buildNeck(j.neck, kit, 'ranger', j.P.neckL, j.head);
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   const anchor = new THREE.Object3D(); anchor.name = 'anchor'; head.group.add(anchor); anchor.position.copy(ANCHOR);
