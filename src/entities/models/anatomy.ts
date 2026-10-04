@@ -38,7 +38,7 @@ function swingXZ(s: THREE.Quaternion): [number, number] {
  */
 export const ROM = {
   'shoulder.elevation': [0, 180], 'shoulder.rotation': [-80, 90],
-  'elbow.flexion': [-10, 150], 'elbow.varus': [-15, 15],
+  'elbow.flexion': [-10, 155], 'elbow.varus': [-15, 15],
   'forearm.pronation': [-90, 90],
   'wrist.flexion': [-70, 80], 'wrist.radial': [-30, 20],
   'hip.flexion': [-30, 125], 'hip.abduction': [-30, 45], 'hip.rotation': [-45, 45],
