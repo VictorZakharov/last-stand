@@ -734,7 +734,9 @@ lim = np.ones_like(hmR); lim[int(LR4[152][1] + 0.25 * iod * ZM):] = 0
 oval4 = np.zeros_like(hmR); cv2.fillPoly(oval4, [np.int32(np.round(LR4[OVAL]))], 1)
 hmR2 = cv2.morphologyEx(hmR * lim * (1 - oval4), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
 hmO = hmO * (1 - oval4)
-lines.append(f'hair top above the eye line: ref {top_of(hmR2):.2f}, ours {top_of(hmO):.2f}')
+# (none where a hat hides the hair: the reference's under its hat)
+fmt2 = lambda x: '-' if x is None else f'{x:.2f}'
+lines.append(f'hair top above the eye line: ref {fmt2(top_of(hmR2))}, ours {fmt2(top_of(hmO))}')
 for sgn, nm in ((-1, 'right'), (1, 'left')):
     a_, b_ = side_end(hmR2, sgn), side_end(hmO, sgn)
     lines.append(f'hair ends below the eye line, {nm:5s} side: ref {a_ if a_ is None else round(a_, 2)}, ours {b_ if b_ is None else round(b_, 2)}')

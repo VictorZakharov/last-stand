@@ -62,7 +62,7 @@ export const cloth = (): PBRCanvases => pbrCanvases('cloth');
 export const steel = (): PBRCanvases => pbrCanvases('steel');
 export const fur = (): PBRCanvases => pbrCanvases('fur');
 /** a hero's painted face (entities/models/face.ts), on its head's ray grid */
-export const faceCanvases = (who: 'warrior' | 'mage'): PBRCanvases => pbrCanvases('face', who);
+export const faceCanvases = (who: 'warrior' | 'mage' | 'ranger'): PBRCanvases => pbrCanvases('face', who);
 
 /**
  * Make the game's PBR maps in workers, in parallel, while the page stays responsive: done on the

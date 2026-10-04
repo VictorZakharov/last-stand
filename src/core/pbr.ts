@@ -339,7 +339,7 @@ export const recipeKey = (name: RecipeName, args: readonly unknown[]): string =>
  */
 export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = [
   // the longest first, so the workers finish together
-  ['face', ['warrior']], ['face', ['mage']],
+  ['face', ['warrior']], ['face', ['mage']], ['face', ['ranger']],
   ['forestFloor', []], ['cobblestone', []], ['bark', []], ['slabs', [21, 6, 3]], ['slabs', [33, 5, 5]], ['slabs', [47, 5, 5]],
   ['slabs', [33, 2, 2]], ['grunge', []], ['wood', []], ['burlap', []],
   ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['steel', []], ['fur', []],

@@ -108,64 +108,67 @@ rows.append([label(r34.copy(), 'reference 3/4'), label(o34, f'ours at {az} deg')
 # --- the side: the profile from the brow to the chin, found alike on both
 X0, X1, Y0, Y1 = FRAMES['side']
 LS = landmarks(ref['side'])
-if LS is None: raise SystemExit('turn: no face found in the side view')
-rs, Mrs = to_frame(ref['side'], LS[NEAR], REF_MM)
-os_, _ = to_frame(cv2.imread(f'{OUT}/turn-{SIDE}.png'), PTS[SIDE]['eye'], PTS[SIDE]['mm'])
-cs, _ = to_frame(cv2.imread(f'{OUT}/turn-clay-{SIDE}.png'), PTS[SIDE]['eye'], PTS[SIDE]['mm'])
-sil, _ = to_frame(cv2.imread(f'{OUT}/turn-sil.png'), PTS[SIDE]['eye'], PTS[SIDE]['mm'], cv2.INTER_LINEAR)
-silh, _ = to_frame(cv2.imread(f'{OUT}/turn-silhair.png'), PTS[SIDE]['eye'], PTS[SIDE]['mm'], cv2.INTER_LINEAR)
-# (the reference's head: skin, hair and beard, warm against the grey background; the hood under it is blue-green)
-hsv = cv2.cvtColor(rs, cv2.COLOR_BGR2HSV).astype(np.float32)
-bg = np.median(rs[:, :12].reshape(-1, 3), 0)
-far_bg = np.linalg.norm(rs.astype(np.float32) - bg, axis=2) > 28
-warm = (hsv[..., 0] < 25) | (hsv[..., 0] > 165)
-ys = np.arange(Y1, Y0, -1.0 / S)
-# (the hair hanging over the forehead isn't the forehead: above the eyes only skin, far lighter than the hair, counts)
-skin = (hsv[..., 2] > 125) | (ys[:, None] < 5)
-headR = cv2.morphologyEx((far_bg & warm).astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
-mR = cv2.morphologyEx((far_bg & warm & skin).astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
-mO = (cv2.cvtColor(sil, cv2.COLOR_BGR2GRAY) > 128).astype(np.uint8)
+# (a strict profile, under a hat's brim, may have no face the detector finds: the side is then skipped, the 3/4 kept)
+if LS is None:
+    lines.append('  side: no face found in the side view of the reference: its profile is not compared')
+else:
+    rs, Mrs = to_frame(ref['side'], LS[NEAR], REF_MM)
+    os_, _ = to_frame(cv2.imread(f'{OUT}/turn-{SIDE}.png'), PTS[SIDE]['eye'], PTS[SIDE]['mm'])
+    cs, _ = to_frame(cv2.imread(f'{OUT}/turn-clay-{SIDE}.png'), PTS[SIDE]['eye'], PTS[SIDE]['mm'])
+    sil, _ = to_frame(cv2.imread(f'{OUT}/turn-sil.png'), PTS[SIDE]['eye'], PTS[SIDE]['mm'], cv2.INTER_LINEAR)
+    silh, _ = to_frame(cv2.imread(f'{OUT}/turn-silhair.png'), PTS[SIDE]['eye'], PTS[SIDE]['mm'], cv2.INTER_LINEAR)
+    # (the reference's head: skin, hair and beard, warm against the grey background; the hood under it is blue-green)
+    hsv = cv2.cvtColor(rs, cv2.COLOR_BGR2HSV).astype(np.float32)
+    bg = np.median(rs[:, :12].reshape(-1, 3), 0)
+    far_bg = np.linalg.norm(rs.astype(np.float32) - bg, axis=2) > 28
+    warm = (hsv[..., 0] < 25) | (hsv[..., 0] > 165)
+    ys = np.arange(Y1, Y0, -1.0 / S)
+    # (the hair hanging over the forehead isn't the forehead: above the eyes only skin, far lighter than the hair, counts)
+    skin = (hsv[..., 2] > 125) | (ys[:, None] < 5)
+    headR = cv2.morphologyEx((far_bg & warm).astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    mR = cv2.morphologyEx((far_bg & warm & skin).astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    mO = (cv2.cvtColor(sil, cv2.COLOR_BGR2GRAY) > 128).astype(np.uint8)
 
 
-def front_line(m):
-    """how far forward the head reaches in each row (mm forward of the near eye, the picture's left), from above the brow
-    to below the chin; nan where nothing"""
-    out = np.full(m.shape[0], np.nan)
-    for r in range(m.shape[0]):
-        c = np.flatnonzero(m[r])
-        if c.size: out[r] = -(c[0] / S + X0)
-    # (a stray hair or two standing out of the outline: a short median along it)
-    k = int(2 * S)
-    sm_ = out.copy()
-    for r in range(m.shape[0]):
-        w = out[max(0, r - k):r + k + 1]
-        if np.isfinite(w).sum() > k: sm_[r] = np.nanmedian(w)
-    return sm_
+    def front_line(m):
+        """how far forward the head reaches in each row (mm forward of the near eye, the picture's left), from above the brow
+        to below the chin; nan where nothing"""
+        out = np.full(m.shape[0], np.nan)
+        for r in range(m.shape[0]):
+            c = np.flatnonzero(m[r])
+            if c.size: out[r] = -(c[0] / S + X0)
+        # (a stray hair or two standing out of the outline: a short median along it)
+        k = int(2 * S)
+        sm_ = out.copy()
+        for r in range(m.shape[0]):
+            w = out[max(0, r - k):r + k + 1]
+            if np.isfinite(w).sum() > k: sm_[r] = np.nanmedian(w)
+        return sm_
 
 
-fR, fO = front_line(mR), front_line(mO)
-pl, PR, PO = sideprofile.report(fR, fO, ys)
-if SIDE != 90: lines.append(f'  (the side panel is turned about {SIDE} deg, ours alike: the norms below are for a true profile)')
-lines += pl
-json.dump({'ys': ys.tolist(), 'f': [None if not np.isfinite(v) else float(v) for v in fR]}, open(f'{OUT}/turn-ref-profile.json', 'w'))
+    fR, fO = front_line(mR), front_line(mO)
+    pl, PR, PO = sideprofile.report(fR, fO, ys)
+    if SIDE != 90: lines.append(f'  (the side panel is turned about {SIDE} deg, ours alike: the norms below are for a true profile)')
+    lines += pl
+    json.dump({'ys': ys.tolist(), 'f': [None if not np.isfinite(v) else float(v) for v in fR]}, open(f'{OUT}/turn-ref-profile.json', 'w'))
 
-ov = anaglyph(rs, os_)
-for f, col in ((fR, (0, 0, 255)), (fO, (255, 255, 0))):
-    pts = [(int((-v - X0) * S), r) for r, v in enumerate(f) if np.isfinite(v)]
-    for p, q in zip(pts, pts[1:]):
-        if abs(p[0] - q[0]) < 6 * S: cv2.line(ov, p, q, col, 1, cv2.LINE_AA)
-for P, col in ((PR, (0, 0, 255)), (PO, (255, 255, 0))):
-    for k, v in (P or {}).items():
-        p = (int((-v[0] - X0) * S), int((Y1 - v[1]) * S))
-        cv2.circle(ov, p, 4, col, -1); cv2.putText(ov, k, (p[0] - 40, p[1] + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.4, col, 1, cv2.LINE_AA)
-# (the hair's outline too: ours with its hair against the reference's head)
-cH, _ = cv2.findContours((cv2.cvtColor(silh, cv2.COLOR_BGR2GRAY) > 24).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-cR, _ = cv2.findContours(headR, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-hl = rs.copy()
-cv2.drawContours(hl, [c for c in cR if cv2.contourArea(c) > 2000], -1, (0, 0, 255), 2, cv2.LINE_AA)
-cv2.drawContours(hl, [c for c in cH if cv2.contourArea(c) > 2000], -1, (255, 255, 0), 2, cv2.LINE_AA)
-rows.append([label(rs.copy(), f'reference side (turned about {SIDE} deg)'), label(os_, f'ours at {SIDE} deg'), label(cs, 'ours in clay'), label(ov, 'profiles: reference red, ours cyan')])
-rows.append([label(hl, 'head outline: reference red, ours (with hair) cyan')])
+    ov = anaglyph(rs, os_)
+    for f, col in ((fR, (0, 0, 255)), (fO, (255, 255, 0))):
+        pts = [(int((-v - X0) * S), r) for r, v in enumerate(f) if np.isfinite(v)]
+        for p, q in zip(pts, pts[1:]):
+            if abs(p[0] - q[0]) < 6 * S: cv2.line(ov, p, q, col, 1, cv2.LINE_AA)
+    for P, col in ((PR, (0, 0, 255)), (PO, (255, 255, 0))):
+        for k, v in (P or {}).items():
+            p = (int((-v[0] - X0) * S), int((Y1 - v[1]) * S))
+            cv2.circle(ov, p, 4, col, -1); cv2.putText(ov, k, (p[0] - 40, p[1] + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.4, col, 1, cv2.LINE_AA)
+    # (the hair's outline too: ours with its hair against the reference's head)
+    cH, _ = cv2.findContours((cv2.cvtColor(silh, cv2.COLOR_BGR2GRAY) > 24).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    cR, _ = cv2.findContours(headR, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    hl = rs.copy()
+    cv2.drawContours(hl, [c for c in cR if cv2.contourArea(c) > 2000], -1, (0, 0, 255), 2, cv2.LINE_AA)
+    cv2.drawContours(hl, [c for c in cH if cv2.contourArea(c) > 2000], -1, (255, 255, 0), 2, cv2.LINE_AA)
+    rows.append([label(rs.copy(), f'reference side (turned about {SIDE} deg)'), label(os_, f'ours at {SIDE} deg'), label(cs, 'ours in clay'), label(ov, 'profiles: reference red, ours cyan')])
+    rows.append([label(hl, 'head outline: reference red, ours (with hair) cyan')])
 grid = [cv2.resize(np.concatenate(r, 1), None, fx=0.6, fy=0.6, interpolation=cv2.INTER_AREA) for r in rows]
 wd = max(g.shape[1] for g in grid)
 grid = [np.concatenate([g, np.full((g.shape[0], wd - g.shape[1], 3), 255, np.uint8)], 1) for g in grid]

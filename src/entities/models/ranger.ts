@@ -13,7 +13,7 @@ import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, grou
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt } from './armor';
 import { onTunic, tunicFront, tunicBack, TUNIC_Y, WAIST } from './tunic';
-import { buildHead, buildNeck, toGroup, HEAD_MM, type Head } from './head';
+import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM, type Head } from './head';
 import { EYE } from './face';
 import { buildHand, hold, fistReach, fistTurn, SLANT, type Hand } from './hands';
 import { LegIK } from './ik';
@@ -30,7 +30,7 @@ const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 /** the felt hat (the face's mm, from his reference sheet): the band's foot and top over the eyes, the crown's top over
  *  them, how far the crown stands off the skull at the band (the hair under it), the brim's width and how far its edge is
  *  turned down, each at the front, the sides and the back, and the leather's thickness */
-const HAT = { band: [24, 51], top: 150, gap: 20, brim: [60, 46, 40], droop: [14, 6, 6], thick: 5 };
+const HAT = { band: [30, 57], top: 155, gap: 20, brim: [60, 46, 40], droop: [14, 6, 6], thick: 5 };
 /** the coat's belt on the spine (m): belted high, at the lower ribs */
 const BELT_Y = 0.12;
 const UP = V(0, 1, 0), FWD = V(0, 0, 1);
@@ -179,16 +179,17 @@ function buildHat(head: Head, cap: THREE.Object3D, felt: THREE.Material, leather
    *  than an ellipse, as a felt crown is) */
   const foot = (a: number, k: number, out: THREE.Vector3) => { const s = Math.sin(a), c = Math.cos(a); return out.set(cx + Math.sign(s) * Math.abs(s) ** 0.85 * A * k, yB, cz + Math.sign(c) * Math.abs(c) ** 0.85 * B * k); };
   // (a superellipse's quarter up the crown: its sides rise near upright from the band, its top a full dome)
-  const crown = (u: number, v: number, out: THREE.Vector3) => { const f = v * Math.PI / 2; foot(u * TAU, Math.cos(f) ** (2 / 2.6), out); out.y = yB + H * Math.sin(f) ** (2 / 2.6); return out; };
+  const crown = (u: number, v: number, out: THREE.Vector3) => { const f = v * Math.PI / 2; foot(u * TAU + Math.PI, Math.cos(f) ** (2 / 2.6), out); out.y = yB + H * Math.sin(f) ** (2 / 2.6); return out; };
   const inside = new THREE.Vector3(cx, yB + H * 0.4, cz);
   part(plate(crown, N, 14, 0, undefined, inside), felt, cap);
-  const band = (u: number, v: number, out: THREE.Vector3) => { foot(u * TAU, 1.03, out); out.y = yB + v * (HAT.band[1] - HAT.band[0]) * mm; return out; };
+  const band = (u: number, v: number, out: THREE.Vector3) => { foot(u * TAU + Math.PI, 1.03, out); out.y = yB + v * (HAT.band[1] - HAT.band[0]) * mm; return out; };
   part(plate(band, N, 2, 0.003, undefined, inside), leather, cap);
   // the brim: out from the band's foot, widest in front, turned down most at the back (the ends blended through the sides)
   const by3 = (v3: number[], a: number) => { const c = Math.cos(a); return c >= 0 ? lerp(v3[1], v3[0], c) : lerp(v3[1], v3[2], -c); };
   const _f = new THREE.Vector3();
   const brim = (u: number, v: number, out: THREE.Vector3) => {
-    const a = u * TAU; foot(a, 1.02, out); _f.set(out.x - cx, 0, out.z - cz).normalize();
+    // (u from the back: its seam behind)
+    const a = u * TAU + Math.PI; foot(a, 1.02, out); _f.set(out.x - cx, 0, out.z - cz).normalize();
     out.addScaledVector(_f, by3(HAT.brim, a) * mm * v); out.y = yB - by3(HAT.droop, a) * mm * v ** 1.6; return out;
   };
   part(plate(brim, N, 5, HAT.thick * mm, undefined, new THREE.Vector3(cx, yB + 0.2, cz)), leather, cap);
@@ -213,7 +214,7 @@ export function buildRanger(): Model {
   const bowWood = kit.std({ color: 0x956f3d, roughness: 0.85, ...pbrMaterialMaps(wood(), 1) });
   const limbWood = kit.std({ color: 0x5a3c22, roughness: 0.7, ...pbrMaterialMaps(wood(), 1) });
   const brass = kit.std({ color: 0xa58a50, metalness: 0.8, roughness: 0.65 });
-  const skin = kit.rim({ color: 0xc9957c, roughness: 0.9 }, 0x6a2a1c, 0.2);
+  const skin = handSkin(kit, 'ranger');
   const cord = kit.std({ color: 0xc6bb9a, roughness: 1 });
   const fletched = kit.std({ vertexColors: true, roughness: 0.8, metalness: 0.1 });
   const j = buildHumanoid({ skin: coat }, { chestW: 0.17, chestD: 0.14, shoulderW: 0.2, shoulderY: 0.45, upperR: 0.06, foreR: 0.05, shinL: 0.41 });
@@ -284,13 +285,13 @@ export function buildRanger(): Model {
     // tall riding boots to just below the knee (boot.ts)
     buildBoot(S, { leather: boot, sole: soleLeather, strap: strapLeather, metal: brass }, kn, an, th === j.thighL ? 1 : -1);
   }
-  // Reuse the shared anatomical head, without the mage's headwear.
-  const head = buildHead(j.head, kit, 'mage', { hair: 'swept' });
-  buildNeck(j.neck, kit, 'mage', j.P.neckL, j.head);
+  // the shared anatomical head, with his own face (face.ts FACES.ranger)
+  const head = buildHead(j.head, kit, 'ranger', { hair: 'swept' });
+  buildNeck(j.neck, kit, 'ranger', j.P.neckL, j.head);
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   const anchor = new THREE.Object3D(); anchor.name = 'anchor'; head.group.add(anchor); anchor.position.copy(ANCHOR);
   const cap = joint(head.group); cap.name = 'cap'; cap.visible = false;
-  buildHat(head, cap, felt, hide, dark);
+  buildHat(head, cap, felt, boot, strapLeather);
   const handL = buildHand(j.handL, 1, hide, skin), handR = buildHand(j.handR, -1, hide, skin);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
   // A leather quiver over the right shoulder blade, slung from the right shoulder to the left hip, its arrows' nocks and
@@ -625,7 +626,7 @@ export function buildRanger(): Model {
   return {
     root, kit, joints: j, animate, tip, palm, height: 2,
     firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; nocked = true; kHook = -1; },
-    setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; },
+    setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; for (const h of head.hair.slice(1)) h.visible = !gear.helm; },
     dispose() { kit.dispose(); root.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && g !== arrowGeometry()) g.dispose(); }); },
   };
 }
