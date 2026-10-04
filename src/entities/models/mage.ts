@@ -12,18 +12,20 @@ import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, puls
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
-import { buildHand, poseHand, hold, seat, bare, handCapsules } from './hands';
+import { buildHand, poseHand, hold, seat, gripTurn, bare, handCapsules, SLANT } from './hands';
 import { clamp, lerp, damp, TAU, mulberry } from '../../util';
 import { SkeletonCape, type CapsuleFit } from './cape';
 import { BellCloth, type BellOptions } from './sleeve';
 import { LegIK } from './ik';
+import { fitArm } from './armIK';
+import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, type DrinkHold } from './flask';
 import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 
 const ZERO = new THREE.Vector3();
-const _hp = new THREE.Vector3(), _hd = new THREE.Vector3();
+const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _vr = new THREE.Quaternion();
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
 /** Deep navy cape with a gold trim, matching the robes. */
@@ -288,6 +290,7 @@ export function buildMage(): Model {
     B.skin(lathe([[0.033, -0.3], [0.034, -0.28], [0.036, -0.255], [0.04, -0.235]], 16), bareSkin, el, hd, 0.25, 0.29);
   }
   const handL = buildHand(j.handL, 1, leather, skinTip), handR = buildHand(j.handR, -1, leather, skinTip);
+  const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
   // --- legs: dark breeches, boots with strap buckles, a gold cap and a stone at the shin
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
@@ -756,6 +759,11 @@ export function buildMage(): Model {
     root.updateMatrixWorld(true);
     legBodies.place(tunicSkirt);
     if (!fp && st.dead < 0) clearThigh();
+    // every arm within a body's ranges, each hand where the pose put it (armIK.ts)
+    let slant = 0;
+    if (!fp && st.dead < 0) { fitArm(j, true, undefined, body); slant = fitArm(j, false, gripTurn(handR, staff, _vr), body, SLANT).slant; }
+    // (the haft seated in the fist as the hand holds it, diagonal across the palm by the slant the arm took)
+    seat(handR, staff, STAFF_R, slant);
     placeBodies();
     // (the hands only against the outer skirt: pushed in, the inner one would come out over it)
     if (robed) { under.update(fL, fR, move, t, dt, legBodies.list); over.update(fL, fR, move, t + 0.4, dt, legBodies.list, handBodies.list); }
@@ -775,7 +783,7 @@ export function buildMage(): Model {
     if (!fp) { bells[0].position.y = BELL_Y + 0.17 * sleeveUp; bells[0].scale.y = 1 - 0.25 * sleeveUp; }
     // the right hand closes round the staff wherever the arm has taken it
     root.updateMatrixWorld(true);
-    hold(handR, _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), STAFF_R);
+    hold(handR, _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), STAFF_R, undefined, slant);
 
     // cloth runs after the pose so it collides with this frame's skeleton
     if (dt > 0) { if (robed) for (const c of cloths) c.update(dt); placeSleeveEnds(); cape.update(dt, st.velocity ?? ZERO); }

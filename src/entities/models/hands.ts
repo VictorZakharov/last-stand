@@ -109,6 +109,8 @@ export function poseHand(h: Hand, curl: number, spread: number, point = 0, t = 0
 
 const _d = new THREE.Vector3(), _u = new THREE.Vector3(), _s = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
+/** how far a hand may hold a handle diagonally across its palm (rad, either way: `hold`'s slant) */
+export const SLANT = 0.44;
 /** where a held handle's axis runs across the hand (its own space): against the lower palm and the knuckles */
 const GRIP_Y = -0.092, GRIP_GAP = 0.011;
 /** how far a finger joint bends at most */
@@ -145,15 +147,29 @@ function wrap(f: Digit, cy: number, cz: number, rho: number, sense = 1): void {
  * The fist's turn for a handle along `d` (normalized): the handle runs across the palm with the thumb
  * towards +d (the blade, the staff's head), and the hand's length keeps to `up` (towards the wrist) as
  * far as that allows, the wrist bending only as the handle needs. `d` and `up` in one space, the turn in it.
+ * `slant` turns the hand about its palm on the handle (rad): the handle runs diagonally across the palm, as a
+ * real hand can hold it, which spares the wrist that much of its bend.
  */
-function fist(h: Hand, d: THREE.Vector3, up: THREE.Vector3, out: THREE.Quaternion): THREE.Quaternion {
+function fist(h: Hand, d: THREE.Vector3, up: THREE.Vector3, out: THREE.Quaternion, slant = 0): THREE.Quaternion {
   // across the palm: the handle (the thumb is on -s x); up the hand (+y): `up`, square to the handle
   _x.copy(d).multiplyScalar(-h.s);
   _y.copy(up).addScaledVector(_x, -_x.dot(up));
   if (_y.lengthSq() < 1e-6) _y.set(0, 0, 1).addScaledVector(_x, -_x.z);
   _y.normalize();
   _z.crossVectors(_x, _y);
-  return out.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
+  out.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
+  return slant ? out.multiply(_q3.setFromAxisAngle(Z, slant)) : out;
+}
+const Z = new THREE.Vector3(0, 0, 1), _q3 = new THREE.Quaternion();
+
+/** the turn `hold` gives the hand (`vis`, on its joint) round what `grip` holds (a child of the hand's joint, its +Y along the handle) with the hand's length along the forearm: known before the arm is posed */
+export function gripTurn(h: Hand, grip: THREE.Object3D, out: THREE.Quaternion, slant = 0): THREE.Quaternion {
+  return fist(h, _d.set(0, 1, 0).applyQuaternion(grip.quaternion), _u.set(0, 1, 0), out, slant);
+}
+
+/** the fist's turn round a handle along `dir` with the hand's length towards `up` (both world), as `hold` turns it (world) */
+export function fistTurn(h: Hand, dir: THREE.Vector3, up: THREE.Vector3, out: THREE.Quaternion, slant = 0): THREE.Quaternion {
+  return fist(h, _d.copy(dir).normalize(), _u.copy(up).normalize(), out, slant);
 }
 
 /** where the handle's axis runs through that fist, from its wrist (unscaled: the hand joint's own units) */
@@ -167,8 +183,8 @@ function fistAxis(h: Hand, q: THREE.Quaternion, r: number, out: THREE.Vector3): 
  * handle, its origin where the hand holds it) moves so the handle runs through the palm of the hand on
  * the wrist, its length along the forearm. Call whenever the grip's turn changes.
  */
-export function seat(h: Hand, grip: THREE.Object3D, r: number): void {
-  fistAxis(h, fist(h, _d.set(0, 1, 0).applyQuaternion(grip.quaternion), _u.set(0, 1, 0), _q), r, grip.position);
+export function seat(h: Hand, grip: THREE.Object3D, r: number, slant = 0): void {
+  fistAxis(h, fist(h, _d.set(0, 1, 0).applyQuaternion(grip.quaternion), _u.set(0, 1, 0), _q, slant), r, grip.position);
 }
 
 /**
@@ -188,18 +204,20 @@ export function fistReach(h: Hand, dir: THREE.Vector3, up: THREE.Vector3, r: num
  * forearm (or `up`, world), and the fingers and thumb wrap round it. Call after the arm is posed and the
  * model's world matrices are up to date.
  */
-export function hold(h: Hand, dir: THREE.Vector3, r: number, up?: THREE.Vector3): void {
+export function hold(h: Hand, dir: THREE.Vector3, r: number, up?: THREE.Vector3, slant = 0): void {
   const hand = h.vis.parent!;
   hand.updateWorldMatrix(true, false);
   _q2.setFromRotationMatrix(_m.extractRotation(hand.matrixWorld));
   if (up) _u.copy(up).normalize(); else _u.set(0, 1, 0).applyQuaternion(_q2);
-  fist(h, _d.copy(dir).normalize(), _u, _q);
+  fist(h, _d.copy(dir).normalize(), _u, _q, slant);
   h.vis.position.set(0, 0, 0);
   h.vis.quaternion.copy(_q2.invert()).multiply(_q);
   // (the handle's radius in the hand's own units, which its scale `k` scales)
   const rh = r / h.vis.scale.x, cz = -(rh + GRIP_GAP);
   // the fingers close snugly round it
-  for (const f of h.f) wrap(f, GRIP_Y, cz, rh + f.r);
+  // (across a slanted grip each finger meets the handle a little higher or lower)
+  const tan = Math.tan(slant);
+  for (const f of h.f) wrap(f, GRIP_Y - f.j[0].position.x * tan, cz, rh + f.r);
   // the thumb closes over them from the other side
-  wrap(h.thumb, GRIP_Y, cz, rh + h.thumb.r + THUMB_OVER, -1);
+  wrap(h.thumb, GRIP_Y - h.thumb.j[0].position.x * tan, cz, rh + h.thumb.r + THUMB_OVER, -1);
 }

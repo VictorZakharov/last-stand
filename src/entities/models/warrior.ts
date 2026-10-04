@@ -11,11 +11,13 @@ import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ram
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
+import { fitArm, solveArm } from './armIK';
+import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, DRINK_SHEATHED, type DrinkHold } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
-import { buildHand, poseHand, hold, seat, fistReach, bare, handCapsules } from './hands';
+import { buildHand, poseHand, hold, seat, fistReach, fistTurn, gripTurn, bare, handCapsules, SLANT } from './hands';
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { SkeletonCape } from './cape';
 import { fromEyes, dirFromEyes } from '../viewModel';
@@ -34,7 +36,7 @@ const ARM_SWING = 0.4, WRIST = 0.8;
 /** arm length (upper + fore + hand), before the model's 1.1 scale */
 const ARM = 0.63;
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3();
-const _grip = new THREE.Vector3(), _pole = new THREE.Vector3(1, -0.7, -0.6);
+const _grip = new THREE.Vector3(), _pole = new THREE.Vector3(1, -0.7, -0.6), _pw = new THREE.Vector3(), _fq = new THREE.Quaternion(), _cq = new THREE.Quaternion(), _eq = new THREE.Quaternion(), _wq = new THREE.Quaternion(), _vl = new THREE.Quaternion(), _vr = new THREE.Quaternion();
 const _gw = new THREE.Vector3(), _dw = new THREE.Vector3(), _cur = new THREE.Vector3(), _hq = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _sq = new THREE.Quaternion();
 /** the legs' own blend over the pose this frame (left, right), see `legs.update` */
 const _legW: [number, number] = [1, 1];
@@ -257,6 +259,7 @@ export function buildWarrior(): Model {
     B.skin(lathe([[0.036, -0.315], [0.037, -0.29], [0.039, -0.265], [0.042, -0.235]], 16), bareSkin, el, hd, 0.25, 0.29);
   }
   const handL = buildHand(j.handL, 1, leather, skinTip, 1.08), handR = buildHand(j.handR, -1, leather, skinTip, 1.08);
+  const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
   // --- legs: leather trousers, engraved knee cops, tall boots with fur tops, straps and a steel toe
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
@@ -679,6 +682,10 @@ export function buildWarrior(): Model {
   // the healing draught, in the left fist while it is drunk
   const flask = buildFlask(kit, brass, leatherDark); flask.name = 'flask'; j.handL.add(flask); flask.position.set(0, -0.07, 0.03); flask.rotation.x = Math.PI;
   let flaskOut = 0, shieldHang = 0, drinkOn = 0;
+  /** how surely the left hand holds a two-hander's lower grip: it lets go of one no turn of the hand keeps the arm within its ranges for */
+  let twoGood = 1;
+  /** each hand's slant on its handle this frame (rad, armIK.ts) */
+  let slantR = 0, slantL = 0;
   // a weapon in the left hand hangs on the belt while the hand is busy with the flask: in a leather frog at the
   // left hip, worn whenever there is a second weapon. A sword sits in it by its guard, the hilt forward and up
   // and the blade raked back along the outside of the thigh, flat to it; an axe or mace by its haft, head up.
@@ -1203,6 +1210,14 @@ export function buildWarrior(): Model {
       shield.position.lerp(j.handL.worldToLocal(_s1), shieldHang);
     }
 
+    // the weapon arm within a body's ranges, its hand where the pose put it (armIK.ts); first, as a two-hander's lower
+    // grip goes wherever it takes the weapon. A two-hander's upper hand holds it square (slanted, it moved the lower
+    // grip and that wrist bent further)
+    slantR = 0; slantL = 0;
+    if (!fp && st.dead < 0) slantR = fitArm(j, false, held ? gripTurn(handR, grip, _vr) : undefined, body, held && !two ? SLANT : undefined).slant;
+    // (the weapon seated in the fist as it holds it, its handle diagonal across the palm by that slant: before a lower grip is taken)
+    if (held) seat(handR, grip, held.r, slantR);
+
     // a two-hander: the left hand follows the grip wherever the right arm takes the weapon, and lets go
     // where it can't reach (a pose that flings the arms apart), the arm easing back to the pose's own
     let twoHeld = false;
@@ -1212,22 +1227,30 @@ export function buildWarrior(): Model {
       j.chest.worldToLocal(_grip);
       const fore = j.P.foreL + j.P.handR, out = _grip.distanceTo(j.shoulderL.position) - (j.P.upperL + fore);
       // (a few cm short doesn't show: the stances hold it at full stretch; drinking, it lets go for the flask)
-      const k = (1 - ramp(out, 0.07, 0.2)) * (1 - drinkOn);
-      twoHeld = out < 0.07 && drinkOn < 0.5;
+      let k = (1 - ramp(out, 0.07, 0.2)) * (1 - drinkOn);
+      const reach = out < 0.07 && drinkOn < 0.5;
       if (k > 0) {
-        _sq.copy(j.shoulderL.quaternion);
-        const e0 = j.elbowL.rotation.x;
-        reachArm(j.shoulderL, j.elbowL, j.P.upperL, fore, _grip, _pole);
-        // then the wrist where the fist closes round the lower grip (a hand stays on its wrist), the hand's
-        // length along the line to the shoulder, the wrist bending the rest of the way
-        if (twoHeld) {
-          j.shoulderL.getWorldPosition(_up).sub(offGrip.getWorldPosition(_gw));
-          fistReach(handL, _hd.set(0, 1, 0).transformDirection(grip.matrixWorld), _up, held!.r, _cur);
-          reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, j.chest.worldToLocal(_gw.sub(_cur)), _pole);
-        }
-        if (k < 1) { j.shoulderL.quaternion.slerp(_sq, 1 - k); j.elbowL.rotation.x = lerp(e0, j.elbowL.rotation.x, k); }
+        _sq.copy(j.shoulderL.quaternion); _eq.copy(j.elbowL.quaternion); _wq.copy(j.handL.quaternion);
+        // the wrist where the fist closes round the lower grip (a hand stays on its wrist), the hand's length along
+        // the line to the shoulder, turned about the handle as far as the arm needs to stay within a body's ranges
+        // (armIK.ts); a grip no turn makes possible, or one the arm reaches only through the body, it lets go of
+        // (held turned to the shoulder, the wrist bent 130 degrees and the forearm went 17 cm into the chest)
+        j.shoulderL.getWorldPosition(_up).sub(offGrip.getWorldPosition(_gw));
+        _hd.set(0, 1, 0).transformDirection(grip.matrixWorld);
+        fistReach(handL, _hd, _up, held!.r, _cur);
+        fistTurn(handL, _hd, _up, _fq);
+        const fit = solveArm(j, true, { wrist: _cur.negate().add(_gw), hand: _fq, roll: { axis: _hd, range: 1.1, at: _gw }, pole: _pw.copy(_pole).applyQuaternion(j.chest.getWorldQuaternion(_cq)), body });
+        _up.applyAxisAngle(_hd, fit.roll);
+        twoGood = damp(twoGood, reach && fit.excess < 15 && fit.depth < 0.03 ? 1 : 0, 12, dt);
+        twoHeld = reach && twoGood > 0.5;
+        // (the arm eases back to the pose's own only once the hand has let go: easing it back while still holding bent the wrist)
+        if (!twoHeld) k *= Math.min(1, 2 * twoGood);
+        if (k < 1) { j.shoulderL.quaternion.slerp(_sq, 1 - k); j.elbowL.quaternion.slerp(_eq, 1 - k); j.handL.quaternion.slerp(_wq, 1 - k); }
       }
     }
+
+    // the other arm within a body's ranges too, its hand where the pose put it
+    if (!fp && st.dead < 0 && !twoHeld) { slantL = fitArm(j, true, offHeld && !sheathed ? gripTurn(handL, gripL, _vl) : undefined, body, offHeld && !sheathed ? SLANT : undefined).slant; }
 
     // the mail skirt swings with the legs, draped over them and the hands; the tassets on each side ride their own thigh
     const fL = -j.thighL.rotation.x, fR = -j.thighR.rotation.x;
@@ -1238,9 +1261,10 @@ export function buildWarrior(): Model {
 
     // fists round whatever they hold; an empty hand hangs loosely curled
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
-    if (held) hold(handR, along(grip), held.r);
+    // (each handle diagonal across its palm by the slant the arm took, the weapon seated in that fist)
+    if (held) hold(handR, along(grip), held.r, undefined, slantR);
     else poseHand(handR, 0.5 + Math.sin(t * 1.3) * 0.05, 0.1);
-    if (offHeld && !sheathed) hold(handL, along(gripL), offHeld.r);
+    if (offHeld && !sheathed) { seat(handL, gripL, offHeld.r, slantL); hold(handL, along(gripL), offHeld.r, undefined, slantL); }
     else if (twoHeld && held) hold(handL, along(grip), held.r, _up);
     else poseHand(handL, lerp(shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 1.1, flaskOut), 0.08);
     // the flask comes out of the fist and is put away again

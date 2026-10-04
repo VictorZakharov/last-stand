@@ -1,6 +1,7 @@
 // The player character: input -> movement/skills, resources, damage, animation.
 import * as THREE from 'three';
 import { gaitRate, legLength, LookAt } from './models/ik';
+import { watchBody } from './models/anatomy';
 import { G } from '../state';
 import { CLASSES } from '../data/classes/index';
 import { buildModel } from './models/index';
@@ -604,6 +605,8 @@ export class Player {
       velocity: this.vel,
       look: () => this.lookAtFoe(dt, dead),
     });
+    // (dev builds: a joint taken past a body's range is reported; through the eyes the arms keep hand-placed poses)
+    if (import.meta.env.DEV && this.local && dead < 0 && !this.eyes && this.model.joints) watchBody(this.model.joints, action?.name ?? (move > 0.05 ? 'moving' : 'standing'));
     this.model.kit.u.uHit.value = this.hitT * 0.5;
     // the model shows its cape as it animates: a hidden character keeps it hidden
     if (!this.obj.visible) for (const o of this.model.worldObjects ?? []) o.visible = false;
