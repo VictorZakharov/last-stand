@@ -16,7 +16,7 @@ export const heroDetail = (): number => detail;
 export const lod = (n: number, min = 1): number => Math.max(min, Math.round(n * detail));
 
 /** texture tile (m): uvs count metres / TILE, so every piece has the same texel density */
-const TILE = 0.3;
+export const TILE = 0.3;
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
 
 const clean = (g: THREE.BufferGeometry): THREE.BufferGeometry => {

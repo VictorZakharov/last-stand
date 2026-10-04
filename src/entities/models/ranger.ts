@@ -11,8 +11,8 @@ import { createKit } from '../../core/materials';
 import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
-import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt } from './armor';
-import { onTunic, tunicFront, tunicBack, TUNIC_Y, WAIST } from './tunic';
+import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, lod } from './armor';
+import { onTunic, tunicFront, tunicBack, tunicCut, setInSleeve, armholeEdge, ARMHOLE, WAIST } from './tunic';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM, type Head } from './head';
 import { EYE } from './face';
 import { buildHand, hold, fistReach, fistTurn, SLANT, type Hand } from './hands';
@@ -144,6 +144,12 @@ const FP_LOW = V(0.24, -0.6, -0.05), FP_UP = V(0.16, -0.45, -0.3);
  *  slowing into the anchor (the bow's own `pullAt`, quick at first, brought half the string back in a few frames) */
 const drawnAt = (k: number): number => (pullAt(k) + smooth(clamp(k, 0, 1))) / 2;
 
+/** the coat's share of the arm round each armhole (`coatK`, m in the chest's frame): `seam` on the armhole's edge, falling
+ *  off to none `reach` from it (`top` above `topY`, under the baldric), and the sleeve's rising from it to the whole arm's at
+ *  its tube, `join` below the joint (`joinIn` more under the arm); `around` points round the armhole, the coat's and the
+ *  sleeve's the same */
+const ARM_K = { seam: 0.5, reach: 0.09, top: 0.05, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96 };
+const DOWN = new THREE.Vector3(0, -1, 0), _sw = new THREE.Vector3(), _tw = new THREE.Quaternion(), _tq = new THREE.Quaternion();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3();
 const _u = new THREE.Vector3(), _left = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _x = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _m = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _s = new THREE.Vector3();
@@ -262,28 +268,35 @@ export function buildRanger(): Model {
   stripRig(j.root);
   const S = new Sculpt();
   // the coat cut as the mage's tunic is, over the shoulders as a man's are and meeting the neck at its base (a round barrel of a body ending in a shelf at the shoulders left a long neck standing out of it)
-  // (in two halves meeting down the middle, each skinned to its shoulder over the deltoid, `armShare`: the cloth there goes
-  // up with a raised arm; all on the chest, the sleeve of an arm raised for the quiver rose out of it as a tube stuck in)
-  /** how far the coat at `p` (the chest's frame) goes with the arm on side `s` (+1 the left): over the deltoid outside the
-   *  joint wholly, nothing in towards the neck (where the baldric lies) or far down the side */
-  const armShare = (p: THREE.Vector3, s: number, sh: THREE.Object3D) => {
-    const d = p.distanceTo(sh.userData.rest ?? sh.position);
-    return smooth(clamp((s * p.x - 0.12) / 0.08, 0, 1)) * (1 - smooth(clamp((d - 0.06) / 0.1, 0, 1)));
+  // (an armhole cut round each shoulder and the sleeve set into it, `tunicCut`, `setInSleeve`, the cloth round the seam
+  // blended from the chest to the arm through joints turned a quarter, half and three quarters as far as it, `delts`: the
+  // coat round the armhole goes some way up with a raised arm and the sleeve comes out of it. A sleeve's tube stood in a
+  // whole coat: raised, it came out of the cloth over the shoulder as a tube stuck into the body, and with the coat over the
+  // deltoid blended straight from the chest to the arm, the cloth between folded in on the joint in a lip round it)
+  const delts = [j.shoulderL, j.shoulderR].map((sh) => [1, 2, 3].map((q) => { const d = joint(j.chest, ...(sh.position.toArray() as [number, number, number])); d.name = (sh === j.shoulderL ? 'deltL' : 'deltR') + q; return d; }));
+  const restOf = (s: number) => (s > 0 ? j.shoulderL : j.shoulderR).userData.rest as THREE.Vector3;
+  const chainOf = (s: number) => [j.chest, ...delts[s > 0 ? 0 : 1], s > 0 ? j.shoulderL : j.shoulderR];
+  const around = lod(ARM_K.around, 48), holes = [1, -1].map((s) => armholeEdge(s, around));
+  /** how far the coat at `p` (the chest's frame, at rest) goes with the arm on side `s` (+1 his left), 0 to 1: `ARM_K.seam`
+   *  on the armhole's edge (as the sleeve's top there), none from a hand's breadth off it (less up over the shoulder, where
+   *  the baldric lies) */
+  const coatK = (p: THREE.Vector3, s: number) => {
+    let d = Infinity;
+    for (const q of holes[s > 0 ? 0 : 1]) d = Math.min(d, p.distanceToSquared(q));
+    const reach = lerp(ARM_K.reach, ARM_K.top, smooth(clamp((p.y - ARM_K.topY) / 0.03, 0, 1)));
+    return ARM_K.seam * (1 - smooth(clamp(Math.sqrt(d) / reach, 0, 1)));
   };
-  const withArm = (g: THREE.BufferGeometry, s: number, sh: THREE.Object3D) => {
+  /** `g` (the chest's frame) given its vertices' shares of side s's arm as `skinK` */
+  const withArm = (g: THREE.BufferGeometry, s: number) => {
     const p = g.attributes.position, k = new Float32Array(p.count);
-    for (let i = 0; i < p.count; i++) k[i] = armShare(_a.fromBufferAttribute(p, i), s, sh);
+    for (let i = 0; i < p.count; i++) k[i] = coatK(_a.fromBufferAttribute(p, i), s);
     g.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
     return g;
   };
   {
-    const half = (s: number) => plate((u, v, out) => onTunic((s > 0 ? u * 0.5 : u * 0.5 - 0.5) * TAU, lerp(TUNIC_Y[0], TUNIC_Y[1], 1 - (1 - v) ** 1.5), 0, out), 20, 30, 0, undefined, V(0, 0.1, 0));
-    // (the right half runs from the back's middle to the front's, the left on from there: its uvs carry on from the right's)
-    const R = half(-1), L = half(1), ur = R.attributes.uv, ul = L.attributes.uv;
-    let top = 0; for (let i = 0; i < ur.count; i++) top = Math.max(top, ur.getX(i));
-    for (let i = 0; i < ul.count; i++) ul.setX(i, ul.getX(i) + top);
-    S.skin(withArm(R, -1, j.shoulderR), coat, j.chest, j.shoulderR, 0, 1);
-    S.skin(withArm(L, 1, j.shoulderL), coat, j.chest, j.shoulderL, 0, 1);
+    const [L, R] = tunicCut(around, lod(22, 12));
+    S.skinChain(withArm(R, -1), coat, j.chest, chainOf(-1));
+    S.skinChain(withArm(L, 1), coat, j.chest, chainOf(1));
   }
   // (a standing collar round the neckline, as the sheet's coat has, open down the front in a short slit closed by two buttons;
   // higher behind, up the back of the neck to under the hair: level, it left a long bare neck from behind)
@@ -304,10 +317,11 @@ export function buildRanger(): Model {
   for (const sx of [1, -1]) S.add(stitches([0.318, 0.29, 0.26, 0.24].map((y) => y > 0.3 ? V(sx * 0.011, y, 0.065) : tunicFront(sx * 0.011, y, 0.0018))), thread, j.chest);
   S.add(stitches([0.234, 0.2, 0.15, 0.1, 0.05, 0, -0.05, -0.1].map((y) => tunicFront(0, y, 0.0015))), thread, j.chest);
   for (const sa of [1, -1]) {
-    // (moving with the cloth they're sewn into)
-    const sh = sa > 0 ? j.shoulderL : j.shoulderR;
-    S.skin(withArm(stitches([0.294, 0.285, 0.272, 0.258, 0.245, 0.232, 0.22].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), sa, sh), thread, j.chest, sh, 0, 1);
-    S.skin(withArm(stitches([0.17, 0.12, 0.06, 0, -0.06, -0.11].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), sa, sh), thread, j.chest, sh, 0, 1);
+    // (moving with the cloth they're sewn into; round the armhole, the sleeve's seam)
+    const top = ARMHOLE.y + ARMHOLE.B, pit = ARMHOLE.y - ARMHOLE.B;
+    S.skinChain(withArm(stitches([0.294, 0.285, 0.272, 0.262, top].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), sa), thread, j.chest, chainOf(sa));
+    S.skinChain(withArm(stitches([pit, 0.12, 0.06, 0, -0.06, -0.11].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), sa), thread, j.chest, chainOf(sa));
+    S.skinChain(withArm(stitches(armholeEdge(sa, 48, 0.0016), 0.004, 0.0028, 0.0009, true), sa), thread, j.chest, chainOf(sa));
   }
   // (gathered under the belt a little fuller than the mage's tunic)
   {
@@ -342,9 +356,17 @@ export function buildRanger(): Model {
   S.add(strap([...run.map((t) => tunicFront(across(t), down(t), 0.006)), onTunic(Math.PI / 2, -0.115, 0.006), ...[...run].reverse().map((t) => tunicBack(across(t), down(t), 0.006)), V(-0.135, 0.29, -0.012)], 0.048, 0.008, true), strapLeather, j.chest);
   S.add(buckle(0.042, 0.05, 0.007), brass, j.chest, tunicFront(-0.075, 0.18, 0.014).toArray(), [0, 0, -0.85]);
   for (const [sh, el] of [[j.shoulderL, j.elbowL], [j.shoulderR, j.elbowR]]) {
-    // (its round top sunk into the deltoid, as the mage's tunic's)
-    S.skin(limb(0.38, 0.06, 0.056, 0.04, 0.24, 14), coat, sh, el, 0.2, 0.33, [0, -0.025, 0]);
-    S.add(stitches(Array.from({ length: 24 }, (_, i) => { const a = i / 24 * TAU; return V(Math.sin(a) * 0.0625, -0.035 + 0.012 * Math.cos(a), Math.cos(a) * 0.0625); }), 0.004, 0.0028, 0.0009, true), thread, sh);
+    // (set into the armhole: from its edge over the deltoid onto the arm, the arm's wholly from a little way down it, and over
+    // the elbow onto the forearm)
+    const sa = sh === j.shoulderL ? 1 : -1, at = restOf(sa);
+    const g = setInSleeve(sa, at, { len: 0.38, r0: 0.06, r1: 0.056, bulge: 0.04, at: 0.24, join: ARM_K.join, joinIn: ARM_K.joinIn, around, cap: lod(10, 6), tube: lod(14, 8) }).translate(-at.x, -at.y, -at.z);
+    const p = g.attributes.position, c = g.attributes.capT, k = new Float32Array(p.count);
+    for (let i = 0; i < p.count; i++) {
+      const e = smooth(clamp((-p.getY(i) - 0.2) / 0.13, 0, 1));
+      k[i] = (ARM_K.seam + (1 - ARM_K.seam) * smooth(c.getX(i))) * 4 / 5 + e / 5;
+    }
+    g.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
+    S.skinChain(g, coat, sh, [...chainOf(sa), el]);
     // (the sleeve on down the forearm into a bracer from the wrist, a brass band round the bracer's top)
     S.add(lathe([[0.052, -0.12], [0.055, -0.04], [0.056, 0]], 14), coat, el);
     S.add(lathe([[0.046, -0.27], [0.047, -0.22], [0.052, -0.15], [0.057, -0.1], [0.058, -0.095]], 14), hide, el);
@@ -496,6 +518,7 @@ export function buildRanger(): Model {
     held.userData.len = out * s;
   };
 
+  const swings = [new THREE.Quaternion(), new THREE.Quaternion()];
   function animate(st: AnimState): void {
     const dt = st.dt, a = st.action, s = sc();
     resetPose(j); idle(j, st.t, 1 - st.move * 0.5);
@@ -565,7 +588,7 @@ export function buildRanger(): Model {
     }
     tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt);
     root.updateMatrixWorld(true);
-    if (st.dead >= 0) return;
+    if (st.dead >= 0) { bendShoulders(); return; }
 
     // the arrow's line: the heading the shot flies and its angle above level
     const facing = Math.atan2(_a.set(0, 0, 1).transformDirection(root.matrixWorld).x, _a.z);
@@ -762,6 +785,24 @@ export function buildRanger(): Model {
       if (!fp) { root.updateMatrixWorld(true); fitArm(j, false, undefined, body); }
     }
     hook(handR, hk, pinch);
+    bendShoulders();
+  }
+  /** each shoulder's part-turned joints (`delts`): a quarter, half and three quarters of the arm's swing from hanging and of
+   *  the girdle's move, and less of its turn about its own length (the square of that share: the coat round the armhole
+   *  barely turns with it). Near straight up the swing's axis is anyone's, so it's kept as it was */
+  function bendShoulders(): void {
+    for (let i = 0; i < 2; i++) {
+      const sh = i ? j.shoulderR : j.shoulderL;
+      _sw.set(0, -1, 0).applyQuaternion(sh.quaternion);
+      if (_sw.dot(DOWN) > -0.995) swings[i].setFromUnitVectors(DOWN, _sw);
+      // (what's left of its turn once swung: about its own length)
+      _tw.copy(swings[i]).invert().multiply(sh.quaternion); _tw.x = 0; _tw.z = 0; _tw.normalize();
+      delts[i].forEach((d, q) => {
+        const f = (q + 1) / 4;
+        d.quaternion.identity().slerp(swings[i], f).multiply(_tq.identity().slerp(_tw, f * f));
+        d.position.lerpVectors(sh.userData.rest, sh.position, f);
+      });
+    }
   }
   return {
     root, kit, joints: j, animate, tip, palm, height: 2,

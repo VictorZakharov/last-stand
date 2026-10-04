@@ -336,6 +336,37 @@ export class Sculpt {
     this.pushTo(this.skins, space, mat, g);
     return this;
   }
+  /**
+   * A piece hung on joint `a` blended along a chain of joints (a coat over the shoulder: the chest, a joint turned half as
+   * far as the arm, the arm): its `skinK` attribute (0..1) says how far along the chain each vertex is, between each pair of
+   * neighbours a linear blend. (Blended straight from the chest to an arm raised over the head, the cloth halfway took a
+   * chord between the two and folded in on the joint.) `geo` is in `a`'s space; without skinning it is a rigid piece of `a`.
+   */
+  skinChain(geo: THREE.BufferGeometry, mat: THREE.Material, a: THREE.Object3D, chain: THREE.Object3D[]): this {
+    if (!SKINNING) { geo.deleteAttribute('skinK'); return this.add(geo, mat, a); }
+    const ids = chain.map((b) => this.bone(b));
+    let space = a;
+    if (this.kind) while (space.parent) space = space.parent;
+    if (this.cached) { this.pushTo(this.skins, space, mat, NONE); return this; }
+    const g = geo.index ? geo.toNonIndexed() : geo.clone();
+    if (geo.index) geo.dispose();
+    const own = g.attributes.skinK as THREE.BufferAttribute;
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv' && (k !== 'color' || !(mat as THREE.MeshStandardMaterial).vertexColors)) g.deleteAttribute(k);
+    if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    const n = ids.length - 1, p = g.attributes.position, idx = new Uint16Array(p.count * 4), w = new Float32Array(p.count * 4);
+    for (let i = 0; i < p.count; i++) {
+      const t = Math.min(1, Math.max(0, own.getX(i))) * n, at = Math.min(n - 1, Math.floor(t)), f = t - at;
+      idx[i * 4] = ids[at]; idx[i * 4 + 1] = ids[at + 1]; w[i * 4] = 1 - f; w[i * 4 + 1] = f;
+    }
+    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
+    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(w, 4));
+    if (space !== a) {
+      a.updateWorldMatrix(true, false);
+      g.applyMatrix4(_m.copy(space.matrixWorld).invert().multiply(a.matrixWorld));
+    }
+    this.pushTo(this.skins, space, mat, g);
+    return this;
+  }
   /** `skin` on both sides: the piece on the left joints and its mirror image on the right */
   skinPair(geo: THREE.BufferGeometry, mat: THREE.Material, aL: THREE.Object3D, bL: THREE.Object3D, aR: THREE.Object3D, bR: THREE.Object3D, from: number, to: number,
     pos: [number, number, number] = [0, 0, 0]): this {
