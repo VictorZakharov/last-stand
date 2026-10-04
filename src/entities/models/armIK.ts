@@ -30,6 +30,12 @@ export interface ArmGoal {
   girdle?: boolean;
   /** a hand round a handle may turn about its palm on it up to this (rad), the handle diagonal across the palm (`hold`'s slant): the hand joint, and so what it holds, keeps its turn, only the visible hand turns */
   slant?: number;
+  /** the hand's turn on the forearm eased from `rest` (the hand joint's own turn) to the one `hand` asks for, by `w`, for
+   *  whichever elbow is tried: a hand coming onto a grip from riding its forearm */
+  ease?: { rest: THREE.Quaternion; w: number };
+  /** the farthest the elbow may move from where it was last solved (the rig's units): further, it goes that far round its
+   *  circle towards where it would be, so a change of side is a swing, not a jump */
+  maxMove?: number;
 }
 export interface ArmResult {
   /** degrees outside the ranges that no elbow could avoid (the hand then turned less than asked) */
@@ -51,7 +57,9 @@ const _m = new THREE.Matrix4(), _wa = new THREE.Vector3(), _wb = new THREE.Vecto
 const X = new THREE.Vector3(1, 0, 0);
 /** where each arm's elbow was last solved (its shoulder's parent's frame), and its girdle */
 const last = new WeakMap<THREE.Object3D, THREE.Vector3>(), lastG = new WeakMap<THREE.Object3D, [number, number]>(), lastS = new WeakMap<THREE.Object3D, number>();
-const Z = new THREE.Vector3(0, 0, 1), _sz = new THREE.Quaternion(), _seg = new THREE.Vector3(), _cp = new THREE.Vector3();
+const Z = new THREE.Vector3(0, 0, 1), _sz = new THREE.Quaternion(), _seg = new THREE.Vector3(), _cp = new THREE.Vector3(), _ez = new THREE.Quaternion();
+/** the hand's turn on the forearm `rel` eased from `g.ease.rest` as asked */
+const eased = (g: ArmGoal, rel: THREE.Quaternion): THREE.Quaternion => (g.ease ? rel.copy(_ez.copy(g.ease.rest).slerp(rel, g.ease.w)) : rel);
 /** the girdle's raises and forward turns tried (degrees) */
 const G_ELEV = [GIRDLE.elevation[0], 0, 12, 24, GIRDLE.elevation[1]], G_PRO = [GIRDLE.protraction[0], -12, 0, 12, GIRDLE.protraction[1]];
 
@@ -125,7 +133,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     let cost = ROM_ON ? 3 * shoulderExcess(_Qu, left, gNow) : 0;
     bad = 0;
     if (want && ROM_ON) {
-      _rel.copy(_Qf).invert().multiply(want);
+      eased(g, _rel.copy(_Qf).invert().multiply(want));
       cost += 2 * clampWrist(_rel, left, _cl);
     }
     if (solids && ROM_ON) {
@@ -179,7 +187,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     return [roll, slant, bestC];
   };
   /** what the ranges leave over for the elbow found (degrees), the arm as `at` last left it */
-  const over = (): number => ROM_ON ? shoulderExcess(_Qu, left, gNow) + (want ? clampWrist(_rel.copy(_Qf).invert().multiply(want), left, _cl) : 0) : 0;
+  const over = (): number => ROM_ON ? shoulderExcess(_Qu, left, gNow) + (want ? clampWrist(eased(g, _rel.copy(_Qf).invert().multiply(want)), left, _cl) : 0) : 0;
 
   let [roll, slant] = turnsFor(false);
   setup(roll);
@@ -211,7 +219,21 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     [best] = search(N, REFINE);
     at(best, true);
   }
+  // (no further from last frame's elbow than `maxMove`: round the circle from the nearest point to it, towards the best)
+  if (g.maxMove && prev) {
+    _rad.copy(prev).sub(_S).addScaledVector(_n, -a);
+    const phiP = Math.atan2(_rad.dot(_u2), _rad.dot(_u1));
+    if (_E.distanceTo(prev) > g.maxMove) {
+      const d = Math.atan2(Math.sin(best - phiP), Math.cos(best - phiP));
+      let lo = 0, hi = 1;
+      for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; at(phiP + d * mid); if (_E.distanceTo(prev) > g.maxMove) hi = mid; else lo = mid; }
+      best = phiP + d * lo;
+      at(best, true);
+    }
+  }
+  // (not asked for, the girdle is at rest, and eases from there when it is again: kept as it last was, the shoulder jumped back to it)
   if (g.girdle) (pg ?? lastG.set(sh, [0, 0]).get(sh)!).splice(0, 2, gE, gP);
+  else if (pg) pg.splice(0, 2, 0, 0);
   if (g.slant) lastS.set(sh, slant);
   sh.position.copy(_S);
   (prev ?? last.set(sh, new THREE.Vector3()).get(sh)!).copy(_E);
@@ -222,7 +244,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   let excess = ROM_ON ? shoulderExcess(_Qu, left, gP) : 0;
   const vis = g.vis;
   // (the visible hand's turn on the forearm: as wanted, or as it was)
-  if (want) _rel.copy(_Qf).invert().multiply(want);
+  if (want) eased(g, _rel.copy(_Qf).invert().multiply(want));
   else { _rel.copy(hd.quaternion); if (vis) _rel.multiply(vis); }
   if (ROM_ON) excess += clampWrist(_rel, left, _rel);
   hd.quaternion.copy(_rel);

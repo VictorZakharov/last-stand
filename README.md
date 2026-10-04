@@ -102,6 +102,20 @@ Shields **block**: each hit has the shield's Block Chance to be blocked, absorbi
 | `4` | Iron Bellow — war cry that hurls foes back and grants a damage-absorbing ward |
 | `Q` | Healing Draught |
 
+### Ranger
+
+A bow hunter in a green trailcoat with a quiver, leather bracers and boots. The Ranger trades heavy armour for speed and ranged physical damage. Bows occupy both hands, and Ranger loot omits off-hands and unused arcane, elemental and block bonuses. Each class keeps its own equipment, stash, records and skill bindings.
+
+| Key | Skill |
+| --- | --- |
+| Left click | Nockshot — hold to draw, release to loose: the further it is drawn, the faster and harder the arrow; a tap looses a quicker, lighter shot, and taps during a reload queue the next one |
+| Right click | Briarflight — hold to draw five arrows across the bow laid flat, release to loose them in a broad fan |
+| `1` | Heartwood Shot — a slower, heavy shot that knocks its target back |
+| `2` | Briar Bind — wound and briefly root foes in the target area |
+| `3` | Thornwake — push nearby foes away and slow their pursuit |
+| `4` | Woven Guard — a temporary damage-absorbing woodland ward |
+| `Q` | Healing Draught |
+
 ## Tech
 
 - [Three.js](https://threejs.org/) 0.185 with an HDR post-processing chain (bloom, tone mapping, grading)

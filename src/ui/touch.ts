@@ -2,7 +2,7 @@
 // skill buttons in an arc at the bottom right, pinch to zoom and a pause button. It drives
 // core/input like the keyboard and mouse do.
 //
-// Skill buttons: the basic attack and channelled skills act while held, aimed at the nearest foe.
+// Skill buttons: the basic attack, channelled skills and drawn bows act while held, aimed at the nearest foe (a bow looses as it's let go).
 // Other skills cast on release: at the nearest foe after a tap, or where the finger dragged to
 // (an aim ring shows the spot). The mode follows the last input used, so touch laptops work too.
 import * as THREE from 'three';
@@ -28,7 +28,7 @@ const AUTO_RANGE = 22;
 const RELEASE_HOLD = 0.35;
 
 interface Stick { id: number; x0: number; y0: number }
-interface Press { id: number; key: SkillKey; x0: number; y0: number; dx: number; dy: number; dragged: boolean; release: boolean }
+interface Press { id: number; key: SkillKey; x0: number; y0: number; dx: number; dy: number; dragged: boolean; release: boolean; /** a drag shows where it aims */ ring: boolean }
 interface Released { key: SkillKey; aim: THREE.Vector3; t: number }
 
 let stick: Stick | null = null;
@@ -124,10 +124,11 @@ export function buildTouchSkills(): void {
       if (press || !G.player.skillAt(key)) return;
       el.setPointerCapture(e.pointerId);
       const def = G.player.skillAt(key)!.def;
-      // the basic attack and channels act while held; the rest wait for the release
-      const release = key !== 'mouse0' && !def.channel;
-      press = { id: e.pointerId, key, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, dragged: false, release };
-      if (!release) input.touch.add(key);
+      // the basic attack, channels and drawn bows act while held; the rest wait for the release
+      const release = key !== 'mouse0' && !def.channel && !def.draw;
+      press = { id: e.pointerId, key, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, dragged: false, release, ring: release || !!def.draw };
+      // (a press while the hero is busy queues a drawn shot, as a click does)
+      if (!release) { input.touch.add(key); input.pressed.add(key); }
       el.classList.add('pressed');
     });
     el.addEventListener('pointermove', (e) => {
@@ -200,7 +201,7 @@ export function updateTouch(dt: number): void {
   }
   if (press) {
     input.aim = aimFor(press, _aim);
-    if (press.dragged && press.release) {
+    if (press.dragged && press.ring) {
       ring.visible = true;
       ring.position.set(_aim.x, groundHeight(_aim.x, _aim.z) + 0.06, _aim.z);
     }

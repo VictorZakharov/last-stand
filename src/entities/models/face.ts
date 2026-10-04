@@ -170,7 +170,7 @@ export function faceY(y: number, F: FaceShape): number {
   return u ? y - u * sm(2, 45, y) * sm(106, 45, y) : y;
 }
 
-export const FACES: Record<'warrior' | 'mage', FaceShape> = {
+export const FACES: Record<'warrior' | 'mage' | 'ranger', FaceShape> = {
   // a strong jaw and chin, a brow over deep-set eyes, a straight nose
   warrior: { jaw: 55.2, chin: 10, chinFwd: -3.4, brow: 1.7, cheek: 0.9, noseLen: 50, noseW: 13.2, nosePro: 1.5, hump: 0, lips: 0.72, long: 0.96, tip: 1.15, eyeOpen: 3.4, iris: [0.234, 0.237, 0.164], beardDepth: 0.8, browFwd: 5.5, foreheadFwd: 10, noseRoot: 11, skullFwd: -3.7, lipFwd: 16.5, mouthUp: 6, beardLine: 22, browDrop: 2.6, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -16, neckBlend: 9, lidSoft: 4, earFlare: 0.3, zygo: 2, bridgeW: 6.8, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, muzzleFwd: -1.5,
     templeNarrow: -4.4, lidFold: 5, gridEye: 1,
@@ -199,6 +199,24 @@ export const FACES: Record<'warrior' | 'mage', FaceShape> = {
       side: [60, 50.8, 41.6, 32.4, 23.8, 16.5, 11.1, 8.6, 7.7, 7.9, 8.8, 9.1, 8.3, 5.6, 0, -10],
       p: [2, 1.77, 1.62, 1.58, 1.69, 1.94, 2.25, 2.45, 2.54, 2.63, 2.7, 2.59, 2.44, 2.35, 2.4, 2.2],
       pz: [1.2, 1.42, 1.61, 1.79, 2, 2.25, 2.55, 2.85, 2.98, 3.01, 2.97, 2.79, 2.61, 2.47, 2.4, 2.2], hollow: 0 } },
+  // the ranger, after his reference sheet: younger and darker than the mage, his eyes brown and deep-set, his full beard
+  // cut short (about 3 cm under the chin)
+  ranger: { jaw: 25.9, chin: -5.4, chinFwd: 1.1, brow: 1.4, cheek: 1.25, noseLen: 51, noseW: 17.5, nosePro: 1.1, hump: 0, noseRoot: 6, bridgeW: 7.5, lips: 1, long: 1.04, eyeOpen: 3, iris: [0.27, 0.17, 0.1], lidSoft: 4, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, lidFold: 5, gridEye: 1, beardDepth: 6, beardFull: 15, beardLine: 12, neckBack: -5, neckCol: [65, 62], beardUnder: -30,
+    // (the mask and the broad shape fitted by least squares (tools/facelab/fit.mjs) to his reference sheet's head views
+    // rebuilt in 3D (from 4.0 to 1.4 mm rms), started from the mage's; the eyes' lids and the grid over them the warrior's;
+    // the nose shorter and broader, the eyes narrower, to the sheet's landmarks)
+    skullFwd: -8.4,
+    templeNarrow: -2.3,
+    muzzleFwd: -35.2,
+    browFwd: 3,
+    browDrop: 9.3,
+    lipFwd: 35.2,
+    mask: { y: [-2, 8, 18, 30, 45, 60, 75, 90, 100, 110, 120, 132, 145, 160, 175, 190],
+      front: [95, 95.4, 98.6, 101.4, 103.4, 103.3, 101.3, 97.8, 92.9, 91.6, 94.5, 98.8, 99.6, 96.8, 94, 80],
+      half: [20, 23.8, 31.2, 40.2, 48.7, 56, 62.3, 67, 68.6, 68.7, 67.5, 65.5, 64.7, 63.9, 63, 58],
+      side: [60, 54.9, 49.7, 43.2, 34.6, 24, 15.2, 9.8, 7, 6.4, 7.1, 7.7, 7.4, 5.1, 0, -10],
+      p: [2, 1.84, 1.81, 1.8, 1.89, 2.1, 2.34, 2.52, 2.6, 2.76, 2.89, 2.74, 2.5, 2.33, 2.4, 2.2],
+      pz: [1.2, 1.61, 1.97, 2.15, 2.19, 2.16, 2.26, 2.48, 2.6, 2.69, 2.75, 2.66, 2.54, 2.43, 2.4, 2.2], hollow: 0 } },
 };
 
 // --- distance primitives (approximate, good near the surface, which is all the meshing needs) ---
@@ -625,11 +643,13 @@ export function gridR(g: HeadGrid, fi: number, fj: number): number {
 
 // --- the painted skin ---------------------------------------------------------------------------
 
-/** How much of the light the jaw takes from the neck under it, at height `y` (mm, the face's frame) `ax` from the middle:
- *  the game's shadows are too coarse to show it (the neck in models/head.ts shades its own top the same way). */
-export function neckShade(ax: number, y: number): number {
+/** How much of the light the jaw takes from the neck under it, at height `y` (mm, the face's frame) `ax` from the middle
+ *  and `c` round the neck (the cosine from its front): the game's shadows are too coarse to show it (the neck in
+ *  models/head.ts shades its own top the same way). Only under the jaw: nothing overhangs the back of the neck (shaded
+ *  all round, the shadow's edge rising from the nape to the sides showed as a dark V from behind). */
+export function neckShade(ax: number, y: number, c = 1): number {
   const jawY = 30 * Math.min(1, ax / 50) ** 1.5;
-  return 0.82 * sm(jawY + 8, jawY - 10, y) * (1 - 0.4 * sm(-50, -110, y));
+  return 0.82 * sm(jawY + 8, jawY - 10, y) * (1 - 0.4 * sm(-50, -110, y)) * sm(-0.5, 0.2, c);
 }
 
 /** the occlusion's steps out from the skin (mm) and their weights */
@@ -662,8 +682,9 @@ export interface FaceLook {
   browY?: number; browIn?: number;
   /** how deep the pores and fine bumps of the skin are (1 average) */
   pores?: number;
-  /** how much lower the hairline comes over the forehead (mm), and lower again at the temples */
-  hairDrop?: number; templeDrop?: number;
+  /** how much lower the hairline comes over the forehead (mm), and lower again at the temples, and behind the ears and
+   *  down the nape (`nape`: hair cut short there grows down to the neck) */
+  hairDrop?: number; templeDrop?: number; nape?: number;
   /** a short-cropped beard (0 a full one): sparser, the skin showing through it */
   stubble?: number;
   /** the beard's hairs as soft short strands in the head's own mm, the way they grow, in patches, the skin showing between
@@ -700,6 +721,9 @@ export interface FaceLook {
 export const LOOKS: Record<keyof typeof FACES, FaceLook> = {
   warrior: { skin: [0.822, 0.628, 0.572], hair: [0.155, 0.112, 0.07], streak: [0.4, 0.3, 0.18], ao: 0.55, beardHair: [0.42, 0.29, 0.17], eyeShade: 0.55, flush: 1.3, noseWarm: 0.1, lipGloss: 0.3, grey: 0.02, beard: 1, age: 0.5, brows: 0.92, hairDrop: 20, cheekShade: 0.5, stubble: 0.8, beardClump: 1, contour: 0.6, browArch: 0.1, pores: 0.8, lipTint: 1.25, lipColor: [0.69, 0.41, 0.38], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.2, browEven: 1, under: 0.8, browLift: 2.5, browY: -5.5, browIn: 10, templeDrop: 22 },
   mage: { skin: [0.78, 0.57, 0.46], hair: [0.12, 0.08, 0.058], streak: [0.28, 0.19, 0.13], grey: 0.06, beard: 1, age: 1 },
+  // (weathered from the outdoors, his hair and beard a dark brown; shaded and textured as the warrior's, which was tuned
+  // against a photograph: the mage's plain look left his face flat and his eyes staring)
+  ranger: { skin: [0.72, 0.5, 0.38], hair: [0.1, 0.066, 0.045], streak: [0.22, 0.15, 0.1], ao: 0.55, beardHair: [0.16, 0.105, 0.072], eyeShade: 0.55, flush: 1.1, noseWarm: 0.1, lipGloss: 0.3, grey: 0.01, beard: 1, age: 0.45, brows: 1, hairDrop: 20, nape: 55, cheekShade: 0.5, beardClump: 1, contour: 0.7, browArch: 0.1, pores: 0.8, lipTint: 1.1, lipColor: [0.6, 0.38, 0.33], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.3, browEven: 1, under: 0.8, browLift: 2.5, browY: -5.5, browIn: 10, templeDrop: 22 },
 };
 
 /** a smooth 3D value noise in [0, 1] from integer hashing (no tables, so it costs nothing to set up) */
@@ -733,16 +757,16 @@ function tnoise(x: number, y: number, px: number, seed: number): number {
 
 /** 0 on the face, 1 where hair grows on the scalp: the forehead's line with recessions at the temples,
  *  sideburns in front of the ears, above the ears, down to the nape */
-export function scalp(ax: number, y: number, z: number, drop = 0, temple = 0): number {
-  const line = hairline(ax, z, drop, temple);
+export function scalp(ax: number, y: number, z: number, drop = 0, temple = 0, nape = 0): number {
+  const line = hairline(ax, z, drop, temple, nape);
   return sm(line - 3, line + 5, y);
 }
 
 /** the hairline's height (mm) round the head at (ax, z), `drop` mm lower over the forehead and `temple` mm lower
- *  again at the temples (hair framing the forehead) */
-export function hairline(ax: number, z: number, drop = 0, temple = 0): number {
+ *  again at the temples (hair framing the forehead), and `nape` mm lower behind the ears and at the nape */
+export function hairline(ax: number, z: number, drop = 0, temple = 0, nape = 0): number {
   const a = Math.atan2(ax, z + 12);
-  return -drop * (1 - sm(0.6, 1.1, a)) - temple * sm(0.35, 0.75, a) * (1 - sm(1.0, 1.3, a)) + (a < 0.35 ? lerp(188, 194, sm(0, 0.35, a))
+  return -drop * (1 - sm(0.6, 1.1, a)) - temple * sm(0.35, 0.75, a) * (1 - sm(1.0, 1.3, a)) - nape * sm(1.8, 2.5, a) + (a < 0.35 ? lerp(188, 194, sm(0, 0.35, a))
     : a < 0.8 ? lerp(194, 170, sm(0.35, 0.8, a))
     : a < 1.25 ? lerp(170, 104, sm(0.8, 1.2, a))
     : a < 1.7 ? lerp(104, 132, sm(1.3, 1.62, a))
@@ -981,7 +1005,7 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         hh += b * (s1 * 0.9 + s3 * 0.3); rr = lerp(rr, 0.8, clamp(cover, 0, 1));
       }
       // --- the scalp under the hair
-      const sc = yy > 70 ? scalp(ax, yy, z, L.hairDrop, L.templeDrop) : 0;
+      const sc = yy > 70 - (L.nape ?? 0) ? scalp(ax, yy, z, L.hairDrop, L.templeDrop, L.nape) : 0;
       if (sc > 0) {
         const s1 = tnoise(tx * 0.9, ty * 0.15, w * 0.9, 12);
         mix(sc * 0.97, lerp(HAIR[0], L.streak[0], s1 * 0.4), lerp(HAIR[1], L.streak[1], s1 * 0.4), lerp(HAIR[2], L.streak[2], s1 * 0.4));
@@ -990,7 +1014,7 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
       if (aoAt) {
         // (light that does reach a crease has gone through skin: it comes out redder; and the neck is in the jaw's shadow)
         // (the jaw's shadow on the neck is a warm brown, not red)
-        const ns = neckShade(ax, yy), k = 1 - L.ao! * (1 - aoAt(tx, ty)), kn = 1 - ns;
+        const ns = neckShade(ax, yy, neckCos(ax, z, F)), k = 1 - L.ao! * (1 - aoAt(tx, ty)), kn = 1 - ns;
         c[0] *= k ** 0.75 * kn ** 0.8; c[1] *= k * kn ** 0.95; c[2] *= k ** 1.15 * kn ** 1.2;
         // (and no shine where it's shaded)
         rr = lerp(rr, 0.92, ns / 0.82);

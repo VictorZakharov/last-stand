@@ -57,8 +57,9 @@ export interface DerivedStats {
 
 export type SkillKey = 'mouse0' | 'mouse2' | '1' | '2' | '3' | '4' | 'q';
 /** pose a model plays while the skill casts; a class's model interprets each name in its own way */
-/** `point`: a shot from the staff or weapon, held level at the target while shots follow each other. */
-export type CastAnim = 'cast' | 'summon' | 'drink' | 'point' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'spin' | 'block' | 'stagger' | 'flurry' | null;
+/** `point`: a shot from the staff or weapon, held level at the target while shots follow each other. `bow`: an
+ *  arrow drawn to the face and loosed (`ActionState.draw`, `loosed`, `pitch`). */
+export type CastAnim = 'cast' | 'summon' | 'drink' | 'point' | 'bow' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'spin' | 'block' | 'stagger' | 'flurry' | null;
 
 /** Skill tuning data. Behavior-specific numbers are optional fields. */
 export interface SkillDef {
@@ -69,8 +70,13 @@ export interface SkillDef {
   tags: string[];
   cost: number;
   cooldown: number;
+  /** the cast's length; for a drawn shot (`draw`) what follows the release: the follow-through and the next arrow */
   castTime: number;
   channel?: boolean;
+  /** a bow drawn while its key is held: the seconds to full draw. Let go, it looses with what it drew (a share of
+   *  the full draw's speed, `power`), never less than `minDraw` */
+  draw?: number;
+  minDraw?: number;
   icon: { glyph: string; color: string };
   /** VFX colors */
   color?: number;
@@ -133,12 +139,17 @@ export interface ClassDef {
   bases?: Partial<Record<Slot, string[]>>;
   /** stats that never roll on this class's items (no skill of the class uses them) */
   excludeStats?: StatKey[];
+  /** slots omitted from random loot (e.g. an archer whose bows always occupy both hands) */
+  excludeSlots?: Slot[];
   /** implicit stats per slot, replacing the defaults (data/items SLOT_INFO) */
   implicits?: Partial<Record<Slot, [StatKey, number][]>>;
   /** weapon bases held in both hands: they leave no room for an off-hand */
   twoHanded?: string[];
   /** a one-handed weapon can go in the off-hand too */
   dualWield?: boolean;
+  /** a bow's hero: the seconds to take an arrow from the quiver and nock it, before a shot with none on the string, and how
+   *  long without a shot before the one on it goes back in the quiver */
+  quiver?: { fetch: number; idle: number };
 }
 
 /** What the character holds, derived from the equipped items (drives model and skills). */
@@ -220,7 +231,16 @@ export interface EnemyDef {
  *  (the data's windup): its model brings the blow down to connect then, which is when the damage comes.
  *  A channel's also has `time` (seconds since it began) and `open` (0..1 through its opening, 1 once open,
  *  or at once without one). */
-export interface ActionState { name: string; t: number; hit?: number; time?: number; open?: number }
+export interface ActionState {
+  name: string; t: number; hit?: number; time?: number; open?: number;
+  /** a bow: how far it is drawn (0..1, of the full draw's time) and, once loosed, the seconds since, and the arrow's
+   *  angle above level for the target */
+  draw?: number; loosed?: number; pitch?: number;
+  /** a bow: the heading the arrows fly (rad, like a body's facing), how many are nocked and how far apart they fan (rad) */
+  yaw?: number; arrows?: number; fan?: number;
+  /** a bow's shot with no arrow on the string: how far the hand is through taking one from the quiver first (0..1) */
+  fetch?: number;
+}
 
 /** Per-frame input to a model's procedural animation. */
 export interface AnimState {
@@ -239,6 +259,8 @@ export interface AnimState {
   charge?: number;
   /** world-space velocity of the character (drives cloth inertia) */
   velocity?: THREE.Vector3;
+  /** a bow's hero: an arrow on the string between shots (`Player.nocked`) */
+  nocked?: boolean;
   /** turns the chest, neck and head onto what the character looks at: a model with cloth calls it before
    *  the leg IK and the cloth step, so the sleeves and cape follow the arms the turn moves */
   look?: () => void;

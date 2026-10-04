@@ -11,7 +11,7 @@ npm run facelab -- --ref path/to/reference.jpg --tag try1   # render and compare
 npm run facelab -- --ref head_front.png --turn path/to/head_ --points points.json --tag try2
 ```
 
-Options: `--class warrior|mage` (the hero), `--tag name` (the output folder, `latest` by default), `--helm` (with a
+Options: `--class warrior|mage|ranger` (the hero), `--tag name` (the output folder, `latest` by default), `--helm` (with a
 head item worn), `--size 1200` (pixels), `--fov 14` (degrees: a long lens, as a portrait's), `--key 20,30` (the key
 light's direction as the reference is lit: degrees round from the front, + from the picture's right, and up; the
 cheeks' lightness left and right in the report shows which side it comes from), `--fill 1.3` (the soft light from all
@@ -83,7 +83,11 @@ where you like and pass its path. Any front view of a face works, a full-body sh
    the profile row by row; the head's outline with the hair. `sheet-turn.png` shows each view: reference | ours | ours
    in clay | both over each other. A turnaround's "side" needn't be a profile: it is compared with ours at the side
    panel's own turn, which the 3D rebuild fits (this reference's is about 65 degrees); the profile norms are a true
-   profile's.
+   profile's. A strict profile (the ranger's sheet, under a hat's brim) may have no face the detector finds: run the
+   rebuild once by hand with a box round the face (`.venv/Scripts/python recon.py <prefix>recon front=<prefix>front.png
+   34=<prefix>34.png side=<prefix>side.png:x0,y0,x1,y1`; the harness reuses it while it is newer than the pictures),
+   and the turnaround then compares the three-quarter view and skips the side. Under a hat (`--helm`) the reference's
+   hair top isn't measured.
 7. **The surface** (with `--turn`; `recon.py`, `dense.py`): outlines and a few points leave the surface between them
    free, and a face sculpted to match them alone came out with flat fronts, puffed cheeks, a shelf of a brow and
    grooves. So the reference is rebuilt in 3D the way face reconstruction is done: a statistical model of real faces

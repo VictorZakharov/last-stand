@@ -58,6 +58,10 @@ export interface ProjectileOpts {
   trail?: TrailOpts;
   /** steering rate towards the nearest enemy in front (rad/s-ish) */
   homing?: number;
+  /** test the whole flight segment: fast, narrow arrows otherwise skip small targets at low frame rates */
+  swept?: boolean;
+  /** it hits only a foe it's level with (an arrow on its arc flies over heads) */
+  level?: boolean;
   ignore?: Set<Enemy>;
   /** a mesh of its own instead of the glowing core (sized by the caller) */
   mesh?: THREE.Mesh;
@@ -77,6 +81,8 @@ export class Projectile {
   life: number;
   readonly hostile: boolean;
   readonly homing: number;
+  readonly swept: boolean;
+  readonly level: boolean;
   readonly ignore: Set<Enemy>;
   readonly onHit?: ProjectileOpts['onHit'];
   readonly tick?: ProjectileOpts['tick'];
@@ -100,6 +106,8 @@ export class Projectile {
     this.life = o.life ?? 2;
     this.hostile = !!o.hostile;
     this.homing = o.homing ?? 0;
+    this.swept = !!o.swept;
+    this.level = !!o.level;
     this.ignore = o.ignore ?? new Set();
     this.onHit = o.onHit;
     this.tick = o.tick;
@@ -130,6 +138,7 @@ export class Projectile {
         this.vel.setLength(this.speed);
       }
     }
+    const px = this.pos.x, pz = this.pos.z;
     this.pos.addScaledVector(this.vel, dt);
     this.mesh.position.copy(this.pos);
     // in first person a bolt aimed at the player flies at the lens: it shrinks away over its last metres
@@ -139,6 +148,8 @@ export class Projectile {
     this.mesh.scale.setScalar(this.size * k * k * (3 - 2 * k));
     this.mesh.visible = k > 0;
     this.tick?.(this, dt);
+    // (its own flight may end it: an arrow into the ground)
+    if (!this.alive) return false;
 
     if (this.trail) {
       const tr = this.trail;
@@ -160,7 +171,7 @@ export class Projectile {
     // only what reaches up to the bolt: it flies over low cover
     const low = this.pos.y - this.radius * 0.5;
     for (const o of G.arena.obstacles) {
-      if (o.h > low && (this.pos.x - o.x) ** 2 + (this.pos.z - o.z) ** 2 < (o.r + this.radius * 0.5) ** 2) {
+      if (o.h > low && this.distanceSq(o.x, o.z, px, pz) < (o.r + this.radius * 0.5) ** 2) {
         hurtProp(o, this.hostile ? PROP_DAMAGE.hostile : PROP_DAMAGE.bolt);
         return this.expire();
       }
@@ -169,7 +180,7 @@ export class Projectile {
     // target collision
     if (this.hostile) {
       for (const p of G.players) {
-        if (p.active && (p.pos.x - this.pos.x) ** 2 + (p.pos.z - this.pos.z) ** 2 < (p.radius + this.radius) ** 2) {
+        if (p.active && this.distanceSq(p.pos.x, p.pos.z, px, pz) < (p.radius + this.radius) ** 2) {
           this.onHit?.(p, this);
           return this.kill();
         }
@@ -177,7 +188,8 @@ export class Projectile {
     } else {
       for (const e of G.enemies) {
         if (!e.alive || e.invulnerable || this.ignore.has(e)) continue;
-        if ((e.pos.x - this.pos.x) ** 2 + (e.pos.z - this.pos.z) ** 2 < (e.radius + this.radius) ** 2) {
+        if (this.level && (this.pos.y < e.obj.position.y - this.radius || this.pos.y > e.obj.position.y + e.height + this.radius)) continue;
+        if (this.distanceSq(e.pos.x, e.pos.z, px, pz) < (e.radius + this.radius) ** 2) {
           this.onHit?.(e, this);
           return this.kill();
         }
@@ -196,6 +208,13 @@ export class Projectile {
       if (d < bd && dx * fwd.x + dz * fwd.z > 0) { bd = d; best = e; }
     }
     return best;
+  }
+
+  private distanceSq(x: number, z: number, px: number, pz: number): number {
+    if (!this.swept) return (this.pos.x - x) ** 2 + (this.pos.z - z) ** 2;
+    const dx = this.pos.x - px, dz = this.pos.z - pz, lengthSq = dx * dx + dz * dz;
+    const t = lengthSq > 0 ? Math.max(0, Math.min(1, ((x - px) * dx + (z - pz) * dz) / lengthSq)) : 0;
+    return (px + dx * t - x) ** 2 + (pz + dz * t - z) ** 2;
   }
 
   expire(): false {

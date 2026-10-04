@@ -16,7 +16,7 @@ export const heroDetail = (): number => detail;
 export const lod = (n: number, min = 1): number => Math.max(min, Math.round(n * detail));
 
 /** texture tile (m): uvs count metres / TILE, so every piece has the same texel density */
-const TILE = 0.3;
+export const TILE = 0.3;
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
 
 const clean = (g: THREE.BufferGeometry): THREE.BufferGeometry => {
@@ -186,6 +186,19 @@ export function belt(rx: number, rz: number, y: number, w: number, t: number, ti
   const pts: THREE.Vector3[] = [];
   for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2; pts.push(new THREE.Vector3(Math.sin(a) * rx, y + Math.cos(a) * tilt, Math.cos(a) * rz)); }
   return strap(pts, w, t, true, RADIAL, n * 3);
+}
+
+/** Stitches along a seam: short dashes of thread through `pts` (a smooth curve), `len` long with `gap` between, standing
+ *  on the cloth; one merged geometry. */
+export function stitches(pts: THREE.Vector3[], len = 0.0045, gap = 0.003, r = 0.0011, closed = false): THREE.BufferGeometry {
+  const c = new THREE.CatmullRomCurve3(pts, closed), L = c.getLength(), n = Math.max(1, Math.floor(L / (len + gap))), parts: THREE.BufferGeometry[] = [];
+  const up = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion(), t = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    const u = (i + 0.5) / n, p = c.getPointAt(u); c.getTangentAt(u, t);
+    q.setFromUnitVectors(up, t);
+    parts.push(new THREE.CylinderGeometry(r, r, len, 4, 1).applyQuaternion(q).translate(p.x, p.y, p.z));
+  }
+  return merge(parts);
 }
 
 /** A buckle: a flat rectangular frame with a pin, facing +Z. */

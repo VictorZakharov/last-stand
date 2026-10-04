@@ -12,7 +12,7 @@ import { BLOCK, COOP } from '../data/balance';
 import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, type Loadout, type WeaponStyle } from '../loot/loadout';
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
-import { input, isDown } from '../core/input';
+import { input, isDown, wasPressed } from '../core/input';
 import { flashHurt, addShake, cameraYaw, lookFacing, viewMode, viewSettled } from '../core/renderer';
 import { floatText } from '../ui/floaters';
 import { particles, col } from '../fx/particles';
@@ -39,8 +39,15 @@ const AIM_HOLD = 0.45;
 const SHOT_NEAR = 5;
 const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
-/** `replay`: a remote player's cast, shown for its pose and charge; its owner says when it fires */
-interface CastState { skill: KnownSkill; t: number; dur: number; fireAt: number; fired: boolean; target: THREE.Vector3; replay?: boolean }
+/** `replay`: a remote player's cast, shown for its pose and charge; its owner says when it fires. A drawn shot
+ *  (`SkillDef.draw`) has `drawT`, the time to full draw, and no end or firing time until it's loosed (`key` the key
+ *  holding it, `power` how far it was drawn) */
+/** a shot from a bow (posed as one, not channelled): it looses the arrow on the string */
+const isBowShot = (s: KnownSkill): boolean => s.impl.anim === 'bow' && !s.impl.channel;
+
+interface CastState { skill: KnownSkill; t: number; dur: number; fireAt: number; fired: boolean; target: THREE.Vector3; replay?: boolean; key?: SkillKey; drawT?: number; power?: number;
+  /** a bow's shot with no arrow on the string: the seconds taking one from the quiver first (`ClassDef.quiver`), before the draw */
+  nockT?: number }
 interface ChannelState { skill: KnownSkill; key: SkillKey; state: unknown; t: number }
 /** A movement skill's dash: a fixed velocity that input can't steer, with a per-frame hook; `lift`
  *  makes it a jump of that peak height, and `anim` is the pose it plays, over the rush and `hold`
@@ -51,8 +58,8 @@ export interface DashOpts { lift?: number; anim?: CastAnim; hold?: number; step?
 
 /** What the local player does that the other players' games replay (see net/session). */
 export type PlayerAction =
-  | { t: 'cast'; s: string; dur: number; x: number; z: number }
-  | { t: 'fire'; s: string; x: number; z: number; px: number; pz: number; f: number }
+  | { t: 'cast'; s: string; dur: number; x: number; z: number; /** a drawn shot: `dur` is its time to full draw */ h?: 1; /** a bow's arrow taken from the quiver first: its seconds (`CastState.nockT`) */ n?: number }
+  | { t: 'fire'; s: string; x: number; z: number; px: number; pz: number; f: number; /** how far a drawn shot was drawn */ k?: number }
   | { t: 'chs'; s: string; k: SkillKey }
   | { t: 'che' };
 let actionSink: ((a: PlayerAction) => void) | null = null;
@@ -78,6 +85,10 @@ export class Player {
   readonly model: Model;
   /** the head turning to the nearest foe (models/ik.ts) */
   private look: LookAt | null = null;
+  /** a bow's hero (`ClassDef.quiver`): whether an arrow is on the string between shots; put back in the quiver after a while
+   *  without a shot, and taken out again before the next */
+  nocked = false;
+  private sinceShot = Infinity;
   readonly obj = new THREE.Group();
   /** follows the cast point; every class has one, so switching class keeps the light count. A
    *  remote player has none: another light would change the count and recompile every shader */
@@ -97,6 +108,9 @@ export class Player {
   facing = Math.PI;
   /** how much longer the body stays on its aim after an attack or cast (s), see AIM_HOLD */
   private aimHold = 0;
+  /** a drawn shot pressed for while busy (a tap during the last one's reload): it's drawn as soon as the hero is free, and
+   *  forgotten when any other skill is pressed or cast */
+  private queued: { skill: KnownSkill; key: SkillKey } | null = null;
   phase = 0;
   /** true in the lobby: free casting, no costs, no cooldowns */
   sandbox = false;
@@ -343,38 +357,76 @@ export class Player {
     // a channel ends when the key that started it is released
     if (this.channel && !isDown(this.channel.key)) this.stopChannel();
     if ((input.mouse.overUI && !input.touchMode) || this.dash || this.staggered) return;
+    // the shot remembered from a press while busy: drawn now, and loosed at once if its key is up again (a tap)
+    if (this.queued && !this.casting && !this.channel) { const q = this.queued; this.queued = null; this.tryCast(q.skill, q.key); }
+    const busy = !!(this.casting || this.channel);
     for (const key of SKILL_KEYS) {
-      if (!isDown(key)) continue;
+      const pressed = wasPressed(key);
+      if (!isDown(key) && !pressed) continue;
       const skill = this.skillAt(key);
       if (!skill) continue;
+      if (pressed && busy) this.queued = skill.def.draw && !skill.impl.channel ? { skill, key } : null;
+      if (!isDown(key)) continue;
       if (skill.impl.channel) { if (!this.channel && !this.casting) this.startChannel(skill, key); }
-      else this.tryCast(skill);
+      else this.tryCast(skill, key);
     }
   }
 
-  tryCast(s: KnownSkill): boolean {
+  /** `key`: the key casting it, which holds a drawn shot (`SkillDef.draw`) until it's let go */
+  tryCast(s: KnownSkill, key?: SkillKey): boolean {
     if (this.casting || this.channel || this.dash || this.staggered || this.cooldownLeft(s.def.impl) > 0 || !this.alive) return false;
     if (!this.sandbox && this.energy < s.def.cost) { this.lowEnergy(); return false; }
     const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
     const target = this.aim.clone();
+    // (a bow's shot with no arrow on the string takes one from the quiver first)
+    const q = this.cls.quiver, nockT = q && isBowShot(s) && !this.nocked ? q.fetch / (1 + this.stats.castSpeed / 100) : 0, n = nockT ? { n: nockT } : {};
+    // (casting anything else forgets a queued shot)
+    if (this.queued?.skill !== s) this.queued = null;
+    if (s.def.draw && key) {
+      // drawn while the key is held, loosed when it's let go (update)
+      const drawT = s.def.draw / (1 + this.stats.castSpeed / 100);
+      this.casting = { skill: s, t: 0, dur: Infinity, fireAt: Infinity, fired: false, target, key, drawT, nockT };
+      if (!s.def.freeMove) this.faceTowards(target);
+      actionSink?.({ t: 'cast', s: s.def.impl, dur: drawT, x: target.x, z: target.z, h: 1, ...n });
+      return true;
+    }
     if (dur <= 0) { this.fire(s, target); return true; }
-    this.casting = { skill: s, t: 0, dur, fireAt: dur * (s.def.fireAt ?? 0.55), fired: false, target };
+    this.casting = { skill: s, t: 0, dur: nockT + dur, fireAt: nockT + dur * (s.def.fireAt ?? 0.55), fired: false, target, nockT };
     // the hero turns after the live aim, never snapping to each cast's: with fire held while the mouse
     // moves, a snap per cast (and holding that aim through the cast) turns it in steps
     if (!s.def.freeMove) this.faceTowards(target);
-    actionSink?.({ t: 'cast', s: s.def.impl, dur, x: target.x, z: target.z });
+    actionSink?.({ t: 'cast', s: s.def.impl, dur: nockT + dur, x: target.x, z: target.z, ...n });
     return true;
   }
 
-  fire(s: KnownSkill, target: THREE.Vector3): void {
+  /** A bow's hero's arrow on the string: on it once taken from the quiver, gone with the shot (the reload puts the next on as
+   *  the cast ends: cut short, it's taken out again next time), and put back after a while without a shot. */
+  private tickQuiver(dt: number): void {
+    const q = this.cls.quiver, c = this.casting;
+    if (!q) return;
+    if (c && isBowShot(c.skill)) {
+      this.sinceShot = 0;
+      if (!c.fired && c.t >= (c.nockT ?? 0)) this.nocked = true;
+    } else if ((this.sinceShot += dt) > q.idle) this.nocked = false;
+  }
+
+  /** `power`: how far a drawn shot was drawn (1 for any other cast) */
+  fire(s: KnownSkill, target: THREE.Vector3, power = 1): void {
     if (s.impl.channel) return;
+    if (isBowShot(s)) this.nocked = false;
     // sandbox (lobby practice): no costs or cooldowns
     if (!this.sandbox) {
       this.energy -= s.def.cost;
       this.cooldowns.set(s.def.impl, this.cooldownOf(s.def));
     }
-    if (this.local) actionSink?.({ t: 'fire', s: s.def.impl, x: target.x, z: target.z, px: this.pos.x, pz: this.pos.z, f: this.facing });
-    s.impl.cast(this, s.def, target);
+    if (this.local) actionSink?.({ t: 'fire', s: s.def.impl, x: target.x, z: target.z, px: this.pos.x, pz: this.pos.z, f: this.facing, ...(s.def.draw ? { k: power } : {}) });
+    s.impl.cast(this, s.def, target, power);
+  }
+
+  /** A drawn shot is loosed: what follows the release (the follow-through, the next arrow) is the cast's time. */
+  private loose(c: CastState, power: number): void {
+    c.fired = true; c.power = power; c.fireAt = c.t;
+    c.dur = c.t + c.skill.def.castTime / (1 + this.stats.castSpeed / 100);
   }
 
   /** A remote player's action, replayed as its owner reported it. */
@@ -383,13 +435,18 @@ export class Player {
     const s = this.known.get(a.s);
     if (!s || !this.alive) return;
     if (a.t === 'cast') {
-      this.casting = { skill: s, t: 0, dur: a.dur, fireAt: a.dur * (s.def.fireAt ?? 0.55), fired: false, target: new THREE.Vector3(a.x, 0, a.z), replay: true };
+      const target = new THREE.Vector3(a.x, 0, a.z);
+      const nockT = a.n ?? 0;
+      this.casting = a.h
+        ? { skill: s, t: 0, dur: Infinity, fireAt: Infinity, fired: false, target, replay: true, drawT: a.dur, nockT }
+        : { skill: s, t: 0, dur: a.dur, fireAt: nockT + (a.dur - nockT) * (s.def.fireAt ?? 0.55), fired: false, target, replay: true, nockT };
     } else if (a.t === 'fire') {
       // from where it stood and the way it faced as it fired, so reach and aim match what its player saw
       this.pos.x = this.remote.x = a.px; this.pos.z = this.remote.z = a.pz;
       this.facing = a.f;
-      if (this.casting) this.casting.fired = true;
-      this.fire(s, new THREE.Vector3(a.x, 0, a.z));
+      if (this.casting?.drawT && !this.casting.fired) this.loose(this.casting, a.k ?? 1);
+      else if (this.casting) this.casting.fired = true;
+      this.fire(s, new THREE.Vector3(a.x, 0, a.z), a.k ?? 1);
     } else if (!this.channel) {
       this.channel = { skill: s, key: a.k, state: (s.impl as ChannelSkill).start(this, s.def), t: 0 };
     }
@@ -407,6 +464,7 @@ export class Player {
     if (this.staggered) return;
     if (!this.sandbox && this.energy < s.def.cost * 0.2) { this.lowEnergy(); return; }
     this.channel = { skill: s, key, state: s.impl.start(this, s.def), t: 0 };
+    this.queued = null;
     actionSink?.({ t: 'chs', s: s.def.impl, k: key });
   }
 
@@ -444,10 +502,17 @@ export class Player {
       c.t += dt;
       if (!c.skill.def.freeMove) this.faceTowards(this.aim);
       const impl = c.skill.impl;
-      if (!c.fired && !impl.channel) impl.charging?.(this, c.skill.def, c.t / c.fireAt, dt);
-      if (!c.fired && c.t >= c.fireAt) { c.fired = true; this.fire(c.skill, this.aim.clone()); }
-      if (c.t >= c.dur) this.casting = null;
+      if (c.drawT) {
+        // a drawn shot: loosed when its key is let go, once it's drawn at least as far as its least draw (and the arrow is on the string)
+        const k = Math.min(1, Math.max(0, c.t - (c.nockT ?? 0)) / c.drawT);
+        if (!c.fired && c.t >= (c.nockT ?? 0) && !(c.key && isDown(c.key)) && k >= (c.skill.def.minDraw ?? 0)) { this.loose(c, k); this.fire(c.skill, this.aim.clone(), k); }
+      } else {
+        if (!c.fired && !impl.channel) impl.charging?.(this, c.skill.def, c.t / c.fireAt, dt);
+        if (!c.fired && c.t >= c.fireAt) { c.fired = true; this.fire(c.skill, this.aim.clone()); }
+      }
+      if (c.t >= c.dur) { if (isBowShot(c.skill)) this.nocked = true; this.casting = null; }
     }
+    this.tickQuiver(dt);
     if (this.channel) {
       const ch = this.channel;
       const cost = this.sandbox ? 0 : ch.skill.def.cost * dt;
@@ -514,9 +579,12 @@ export class Player {
     if (this.casting) {
       const c = this.casting;
       c.t += dt;
-      if (!c.fired && !c.skill.impl.channel) c.skill.impl.charging?.(this, c.skill.def, Math.min(1, c.t / c.fireAt), dt);
-      if (c.t >= c.dur) this.casting = null;
+      if (!c.fired && !c.skill.impl.channel && !c.drawT) c.skill.impl.charging?.(this, c.skill.def, Math.min(1, c.t / c.fireAt), dt);
+      // (a drawn shot whose release never came: its owner left or fell mid-draw)
+      if (c.t >= c.dur && isBowShot(c.skill)) this.nocked = true;
+      if (c.t >= c.dur || (!c.fired && c.t > 20)) this.casting = null;
     }
+    this.tickQuiver(dt);
     if (this.channel) (this.channel.skill.impl as ChannelSkill).tick(this, this.channel.skill.def, dt, this.channel.state);
     const d = this.dash;
     if (d) {
@@ -553,7 +621,22 @@ export class Player {
     let action: ActionState | null = null;
     if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };
     else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / (this.dash.dur + this.dash.hold)) };
-    else if (this.casting) action = { name: this.casting.skill.impl.anim || 'cast', t: this.casting.t / this.casting.dur };
+    else if (this.casting) {
+      const c = this.casting, impl = c.skill.impl;
+      action = { name: impl.anim || 'cast', t: c.t / c.dur };
+      if (impl.anim === 'bow' && !impl.channel) {
+        // how far the bow is drawn (a drawn shot by its time to full draw, any other by its firing time), and since when it's loosed
+        const nk = c.nockT ?? 0, draw = c.fired ? (c.power ?? 1) : Math.min(1, Math.max(0, c.t - nk) / Math.max(1e-3, c.drawT ?? c.fireAt - nk));
+        action.draw = draw;
+        if (nk) action.fetch = Math.min(1, c.t / nk);
+        if (c.fired) action.loosed = c.t - c.fireAt;
+        action.t = c.fired ? 0.55 + 0.45 * Math.min(1, (c.t - c.fireAt) / Math.max(1e-3, c.dur - c.fireAt)) : 0.55 * draw;
+        // (aimed for the arrow as it would leave: a drawn shot looses no weaker than its least draw, any other at full draw)
+        action.pitch = impl.pitch?.(this, c.skill.def, c.drawT ? Math.max(draw, c.skill.def.minDraw ?? 0) : 1, this.aim) ?? 0;
+        action.yaw = this.shotHeading(this.castPoint, this.aim);
+        action.arrows = c.skill.def.missiles ?? 1; action.fan = c.skill.def.spread ?? 0;
+      }
+    }
     // a channel's t ramps 0 -> 1 over its first 0.2 s (the pose settling in), then holds
     else if (this.channel) {
       const ch = this.channel, opens = ch.skill.def.opening ?? 0;
@@ -602,7 +685,7 @@ export class Player {
       t, dt, phase: this.phase, move, moveDir: dir, lean, action,
       hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,
       charge: this.channel ? 1 : this.casting ? this.casting.t / this.casting.dur : 0,
-      velocity: this.vel,
+      velocity: this.vel, nocked: this.nocked,
       look: () => this.lookAtFoe(dt, dead),
     });
     // (dev builds: a joint taken past a body's range is reported; through the eyes the arms keep hand-placed poses)
