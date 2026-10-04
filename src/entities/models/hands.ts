@@ -190,12 +190,12 @@ export function seat(h: Hand, grip: THREE.Object3D, r: number, slant = 0): void 
 /**
  * For a hand reaching a grip it doesn't carry (a two-hander's lower grip): from its wrist to where a
  * handle of radius `r` along `dir` runs through the fist, the hand's length along `up` (world, towards
- * the wrist; the line from the grip to the shoulder, say). Put the wrist there and `hold` with the same `up`.
+ * the wrist; the line from the grip to the shoulder, say). Put the wrist there and `hold` with the same `up` (and `slant`).
  */
-export function fistReach(h: Hand, dir: THREE.Vector3, up: THREE.Vector3, r: number, out: THREE.Vector3): THREE.Vector3 {
+export function fistReach(h: Hand, dir: THREE.Vector3, up: THREE.Vector3, r: number, out: THREE.Vector3, slant = 0): THREE.Vector3 {
   const hand = h.vis.parent!;
   hand.updateWorldMatrix(true, false);
-  return fistAxis(h, fist(h, _d.copy(dir).normalize(), _u.copy(up).normalize(), _q), r, out).multiplyScalar(_s.setFromMatrixScale(hand.matrixWorld).x);
+  return fistAxis(h, fist(h, _d.copy(dir).normalize(), _u.copy(up).normalize(), _q, slant), r, out).multiplyScalar(_s.setFromMatrixScale(hand.matrixWorld).x);
 }
 
 /**

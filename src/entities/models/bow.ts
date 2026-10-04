@@ -174,7 +174,7 @@ export class Bow {
   }
 
   /** `n` arrows on the string, a fan `spread` apart (rad), lying from the nock over the rest; or, with the bow laid over
-   *  flat (`flat`: its +x up), fanned out across its top. 0 takes them off. */
+   *  flat (`flat`: its +x down), fanned out across its top. 0 takes them off. */
   nockArrows(n: number, spread = 0, flat = false): void {
     const d = _b.set(0, REST_Y, 0).sub(this.nock).normalize();
     this.arrows.forEach((a, i) => {
@@ -185,7 +185,7 @@ export class Bow {
       a.quaternion.setFromUnitVectors(FWD, _a);
       a.position.copy(this.nock).addScaledVector(_a, ARROW / 2 - 0.008);
       // (on top of the riser and the limbs, which the outer arrows cross)
-      if (flat) a.position.x += 0.024;
+      if (flat) a.position.x -= 0.024;
     });
   }
 }
