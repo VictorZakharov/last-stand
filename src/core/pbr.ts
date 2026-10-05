@@ -241,6 +241,21 @@ function oiled(): PBRData {
   }, 2);
 }
 
+/** Polished bow wood (the ranger's limbs and riser): fine straight grain along v, its latewood lines narrow, darker and
+ *  gently wavering, a soft figure through it, under a lacquer; neutral, tinted by the material's (or the vertices') colour.
+ *  (The weathered wood's warped streaks read as bark on a bow, and its brown under a tint went black.) */
+function bowWood(): PBRData {
+  const wave = makeFbm(223, 3, 3), fig = makeFbm(227, 6, 4), fine = makeFbm(229, 96, 2);
+  return buildPBR(512, (u, v, o) => {
+    const x = (u + (wave(u, v) - 0.5) * 0.1) * 48, ring = x - Math.floor(x);
+    const late = smooth(clamp((ring - 0.76) / 0.08, 0, 1)) * (1 - smooth(clamp((ring - 0.93) / 0.06, 0, 1)));
+    const f = fig(u, v), n = fine(u, v);
+    o.h = 0.5 - late * 0.3 + (n - 0.5) * 0.06;
+    o.r = o.g = o.b = clamp(0.8 - late * 0.24 + (f - 0.5) * 0.18 + (n - 0.5) * 0.05, 0, 1);
+    o.rough = clamp(0.38 + late * 0.14 + (n - 0.5) * 0.06, 0, 1);
+  }, 1.2);
+}
+
 /** Woollen cloth (the ranger's coat and trousers): a fine plain weave under a heathered surface, flecks of lighter and
  *  darker fibre in it and a soft mottle of the dye. (The twill's regular diagonal ribs read as synthetic.) */
 function wool(): PBRData {
@@ -328,7 +343,7 @@ function fur(): PBRData {
 }
 
 /** Every recipe, by name; its arguments are part of what it makes. */
-export const RECIPES = { cobblestone, slabs, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, face: faceData };
+export const RECIPES = { cobblestone, slabs, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
 export type RecipeName = keyof typeof RECIPES;
 export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
@@ -342,5 +357,5 @@ export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = 
   ['face', ['warrior']], ['face', ['mage']], ['face', ['ranger']],
   ['forestFloor', []], ['cobblestone', []], ['bark', []], ['slabs', [21, 6, 3]], ['slabs', [33, 5, 5]], ['slabs', [47, 5, 5]],
   ['slabs', [33, 2, 2]], ['grunge', []], ['wood', []], ['burlap', []],
-  ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['steel', []], ['fur', []],
+  ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['steel', []], ['fur', []], ['bowWood', []],
 ];

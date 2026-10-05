@@ -8,7 +8,7 @@
 // shot with the bow laid over flat, the arrows lying across its top.
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
-import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, pbrMaterialMaps } from '../../core/textures';
+import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, bowWood as bowWoodMaps, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, lod } from './armor';
@@ -136,20 +136,19 @@ const AIM_IN = 0.3, AIM_OUT = 0.5;
 const YAW_OFF = 0.15;
 /** first person (the eyes' frame, viewModel.ts: x right, y up, -z ahead, m). At full draw the bow's grip is held still
  *  below the crosshair, a little left, and the arrow lies along the shot's own line from it, so it points where the shot
- *  will fly, its nock and the draw hand below and behind the eyes, out of view (anchored in the view, under its lower
- *  right, the arrow ran across the view 35 degrees left of the shot and the hand filled a third of its middle); the bow's
- *  top tipped to the left (`FP_CANT`, rad), so its upper limb passes clear of the middle. A fan's flat bow is held a
- *  little higher and to the right (`FP_FAN`), so its arrows, lying left of the grip across its top, fan out from under
- *  the eyes (from the grip's own place they leaned all one way, from a nock off to the left). In for the next arrow, lower and
- *  nearer (`FP_SET` from the grip's place, its arrow tipped `FP_SET_TIP` down), the nock in view below it where the hand
- *  lays the arrow on the string and takes it (brought in further, to the view's bottom edge, the hand came in huge at
- *  the left of the bow and the arrow's nock out of view beside it).
- *  Between shots the bow is carried low on the left, nearly upright, the fist round its grip in view and its arrow
- *  pointing ahead (`FP_REST`: its grip off the view's edge and laid across it, it read as a stick). The hand's way for
- *  the next arrow goes down out of the view and back up (the quiver is behind the eyes: reaching for it, the arm swept
- *  across the view) */
-const FP_GRIP = V(-0.06, -0.2, -0.62), FP_CANT = -0.45, FP_FAN = V(0.02, -0.15, -0.62);
-const FP_SET = V(0, -0.06, 0.04), FP_SET_TIP = 0.15;
+ *  will fly (anchored in the view, under its lower right, the arrow ran across the view 35 degrees left of the shot and
+ *  the hand filled a third of its middle); the bow's top tipped to the left (`FP_CANT`, rad), so its upper limb passes
+ *  clear of the middle. A fan's flat bow is held a little to the right (`FP_FAN`), so its arrows, lying left of the grip
+ *  across its top, fan out from under the eyes (from the grip's own place they leaned all one way, from a nock off to the
+ *  left). The line is low enough that the nock, and the draw hand on it, stay below the frame from nocking to the loose, as
+ *  an archer never sees his draw hand (half in view at the nock, it popped in from below and out past the camera at every
+ *  shot, a jerk between two places). In for the next arrow the bow dips a little (`FP_SET` from the grip's place, its
+ *  arrow tipped `FP_SET_TIP` down). Between shots the bow is carried low on the left, nearly upright, the fist round its
+ *  grip in view and its arrow pointing ahead (`FP_REST`: its grip off the view's edge and laid across it, it read as a
+ *  stick). The hand's way for the next arrow goes down out of the view and back up (the quiver is behind the eyes:
+ *  reaching for it, the arm swept across the view) */
+const FP_GRIP = V(-0.06, -0.28, -0.62), FP_CANT = -0.45, FP_FAN = V(0.02, -0.28, -0.62);
+const FP_SET = V(0, -0.02, 0.02), FP_SET_TIP = 0.06;
 const FP_REST = V(-0.29, -0.27, -0.55), FP_REST_DIR = V(0.1, -0.2, -1), FP_REST_CANT = 0.12;
 const FP_LOW = V(0.22, -0.5, 0), FP_UP = V(0.12, -0.38, -0.25), EYE_UP = V(0, 1, 0);
 /** how far above the view's axis the arrow on the string may point through the eyes, least and most (rad): looking down
@@ -157,6 +156,9 @@ const FP_LOW = V(0.22, -0.5, 0), FP_UP = V(0.12, -0.38, -0.25), EYE_UP = V(0, 1,
  *  arrow lay across the view; pointing below the axis, its nock rose to the eyes and the hand drawing it passed just
  *  before them, filling the view's lower left (looking level it's 0.11; Hailfletch's volleys are drawn 20 degrees up) */
 const FP_PITCH = [0.08, 0.4];
+/** how long the last shot's arrows stay on the string after it ends (s), and how fast the bow is laid out for a fan or
+ *  back through the eyes (1/s) */
+const KEEP_SHOT = 0.15, FAN_EASE = 12;
 /** how far the string has come back (0..1) after `k` of the draw from when the hand has it: setting off gently and
  *  slowing into the anchor (the bow's own `pullAt`, quick at first, brought half the string back in a few frames) */
 const drawnAt = (k: number): number => (pullAt(k) + smooth(clamp(k, 0, 1))) / 2;
@@ -276,11 +278,21 @@ export function buildRanger(): Model {
   const strapLeather = kit.std({ color: 0x6e4a33, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
   const soleLeather = kit.std({ color: 0x2e2219, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
   const bowWood = kit.std({ color: 0x956f3d, roughness: 0.85, ...pbrMaterialMaps(wood(), 1) });
-  const limbWood = kit.std({ color: 0x5a3c22, roughness: 0.7, ...pbrMaterialMaps(wood(), 1) });
+  // the bow: lacquered limbs coloured along them (bow.ts), a walnut riser, polished horn tips, a bright brass for its
+  // fittings and a gilt vine inlaid down the limbs, a dark linen serving and silencers of the coat's green wool on the string
+  // (a little light at its edges: seen from the archer's side the belly is mostly in its own shadow, and the curve was lost)
+  const limbWood = kit.rim({ color: 0xffffff, vertexColors: true, roughness: 1, ...pbrMaterialMaps(bowWoodMaps(), 1, 0.5) }, 0x5a3a22, 0.3);
+  const riserWood = kit.std({ color: 0x6a4630, roughness: 1, ...pbrMaterialMaps(bowWoodMaps(), 1, 0.5) });
+  const horn = kit.std({ color: 0xd8c9a8, roughness: 0.32 });
+  const bowBrass = kit.std({ color: 0xc8a25a, metalness: 1, roughness: 0.38 });
+  const inlay = kit.std({ color: 0xe0b866, metalness: 0.55, roughness: 0.32 });
+  const serving = kit.std({ color: 0x2c2620, roughness: 0.9 });
+  const yarn = kit.std({ color: 0x5c7342, roughness: 1, ...pbrMaterialMaps(woolMaps(), 4) });
   const brass = kit.std({ color: 0xa58a50, metalness: 0.8, roughness: 0.65 });
   const skin = handSkin(kit, 'ranger');
-  const cord = kit.std({ color: 0xc6bb9a, roughness: 1 });
-  const fletched = kit.std({ vertexColors: true, roughness: 0.8, metalness: 0.1 });
+  const cord = kit.std({ color: 0xe0d6bc, roughness: 0.85 });
+  // (double-sided: the feathers are single sheets)
+  const fletched = kit.std({ vertexColors: true, roughness: 0.75, metalness: 0.1, side: THREE.DoubleSide });
   const j = buildHumanoid({ skin: coat }, { chestW: 0.17, chestD: 0.14, shoulderW: 0.2, shoulderY: 0.45, upperR: 0.06, foreR: 0.05, shinL: 0.41 });
   stripRig(j.root);
   const S = new Sculpt();
@@ -421,7 +433,7 @@ export function buildRanger(): Model {
   }
   S.build();
   // the bow, in the left hand; the arrow the right hand carries from the quiver to the string
-  const bow = new Bow({ riser: bowWood, limb: limbWood, grip: hide, string: cord, arrow: fletched });
+  const bow = new Bow({ riser: riserWood, limb: limbWood, grip: hide, string: cord, arrow: fletched, horn, brass: bowBrass, serving, yarn, inlay });
   j.handL.add(bow.group);
   // (in pieces: only what's out of the quiver shows as it's drawn out, the rest still in it; drawn whole, an arrow as long
   // as the draw pivoting at the quiver's mouth swung its head out through the quiver's side into the hips)
@@ -440,6 +452,11 @@ export function buildRanger(): Model {
   /** when the hand reaches the quiver and has the arrow out of it, this frame (see FOLLOW) */
   let QUIVER = 0.5, OUT = 0.7;
   let yawOff = 0;
+  /** the last shot's arrows and their spread, kept a moment after it ends (`KEEP_SHOT` s): the next shot queued after a
+   *  fan's starts a frame later, and for the frame between them the bow flicked over to a single arrow's pose and back */
+  let lastArrows = 1, lastSpread = 0, sinceShot = 1;
+  /** through the eyes, how far the bow is laid out for a fan (0..1), eased: from one kind of shot to the other it jumped */
+  let fanK = 0;
   let fp = false, hasBow = true, aimT = 0, raise = 0, free = 0, flaskOut = 0, nocked = true, lastLoosed = -1;
   /** up for the draw hand on the string: the world's, or through the eyes the view's (the world's tilts in the view as the
    *  eyes look up or down, and the hand turned with it) */
@@ -630,7 +647,10 @@ export function buildRanger(): Model {
     }
     anchor.getWorldPosition(anchorW);
     // full draw: the bow arm reaching along the line from the anchor, its fist round the grip; how far that is, is the draw length
-    const fan = shooting && (a.arrows ?? 1) > 1;
+    if (shooting) { lastArrows = a.arrows ?? 1; lastSpread = a.fan ?? 0; sinceShot = 0; } else sinceShot += dt;
+    const arrows = shooting ? a.arrows ?? 1 : sinceShot < KEEP_SHOT ? lastArrows : 1, spread = shooting ? a.fan ?? 0 : sinceShot < KEEP_SHOT ? lastSpread : 0;
+    const fan = arrows > 1;
+    fanK = damp(fanK, fan ? 1 : 0, FAN_EASE, dt);
     // (the fan's string lies across, hooked palm down: the hand's width across the jaw, so it's anchored that much out from the face)
     if (fan && !fp) anchorW.addScaledVector(_e.crossVectors(UP, u).normalize(), -FAN_OUT * s);
     frame(u, fan ? FLAT : CANT, line.q);
@@ -651,8 +671,8 @@ export function buildRanger(): Model {
       const el = Math.atan2(uEye.y, Math.hypot(uEye.x, uEye.z)), cl = clamp(el, FP_PITCH[0], FP_PITCH[1]), h = Math.hypot(uEye.x, uEye.z) || 1;
       if (cl !== el) uEye.set(uEye.x / h * Math.cos(cl), Math.sin(cl), uEye.z / h * Math.cos(cl));
       dirFromEyes(root, uEye, _a);
-      frame(_a, fan ? FLAT : FP_CANT, line.q, eyeUp); _y.set(0, 1, 0).applyQuaternion(line.q);
-      fromEyes(root, j.neck, fan ? FP_FAN : FP_GRIP, line.p);
+      frame(_a, lerp(FP_CANT, FLAT, fanK), line.q, eyeUp); _y.set(0, 1, 0).applyQuaternion(line.q);
+      fromEyes(root, j.neck, _e.lerpVectors(FP_GRIP, FP_FAN, fanK), line.p);
       anchorW.copy(line.p).addScaledVector(_y, REST_Y * s).addScaledVector(_a, -D);
       // (and the rest of the pose, the draw elbow's way round included, along the line as it's posed: along the shot's own,
       // the elbow went round another way as the eyes looked up, and the hand turned up into the view)
@@ -678,9 +698,9 @@ export function buildRanger(): Model {
     // (through the eyes the bow stays in the view, low on the left, and comes in for the next arrow below the line)
     if (fp) {
       fromEyes(root, j.neck, FP_REST, ready.p); frame(dirFromEyes(root, _a.copy(FP_REST_DIR).normalize(), _e), FP_REST_CANT, ready.q, eyeUp);
-      fromEyes(root, j.neck, _a.copy(fan ? FP_FAN : FP_GRIP).add(FP_SET), set.p);
+      fromEyes(root, j.neck, _a.lerpVectors(FP_GRIP, FP_FAN, fanK).add(FP_SET), set.p);
       // (a fan's laid flat already: turned over as it came up, its arrows swung up across the view)
-      frame(dirFromEyes(root, _a.copy(uEye).applyAxisAngle(_b.set(1, 0, 0), -FP_SET_TIP), _e), fan ? FLAT : FP_CANT, set.q, eyeUp);
+      frame(dirFromEyes(root, _a.copy(uEye).applyAxisAngle(_b.set(1, 0, 0), -FP_SET_TIP), _e), lerp(FP_CANT, FLAT, fanK), set.q, eyeUp);
     }
     // the bow where it is: on the line as it draws, in for the next arrow, and at rest between shots
     shown.p.lerpVectors(set.p, line.p, raise); shown.q.slerpQuaternions(set.q, line.q, raise);
@@ -704,8 +724,8 @@ export function buildRanger(): Model {
     const elbowTo = _x.set(1, 0, 0).applyQuaternion(shown.q).addScaledVector(UP, -0.35).normalize().lerp(elbowPoleFK.normalize(), 1 - aim).clone();
     if (hasBow) placeBow(shown, elbowTo);
     // the arrows on the string (a fan laid across the flat bow's top), and where the shot leaves (the nocked arrow's middle)
-    const n = shooting ? a.arrows ?? 1 : 1;
-    bow.nockArrows(hasBow && nocked ? n : 0, shooting ? a.fan ?? 0 : 0, n > 1);
+    const n = arrows;
+    bow.nockArrows(hasBow && nocked ? n : 0, spread, n > 1);
     tip.position.copy(bow.arrows[Math.floor((Math.max(1, n) - 1) / 2)].position);
     root.updateMatrixWorld(true);
     nockW.copy(bow.nock); bow.group.localToWorld(nockW);

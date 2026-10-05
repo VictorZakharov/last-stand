@@ -61,6 +61,7 @@ export const mail = (): PBRCanvases => pbrCanvases('mail');
 export const cloth = (): PBRCanvases => pbrCanvases('cloth');
 export const steel = (): PBRCanvases => pbrCanvases('steel');
 export const fur = (): PBRCanvases => pbrCanvases('fur');
+export const bowWood = (): PBRCanvases => pbrCanvases('bowWood');
 /** a hero's painted face (entities/models/face.ts), on its head's ray grid */
 export const faceCanvases = (who: 'warrior' | 'mage' | 'ranger'): PBRCanvases => pbrCanvases('face', who);
 

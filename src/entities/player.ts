@@ -522,7 +522,13 @@ export class Player {
         if (!c.fired && !impl.channel) impl.charging?.(this, c.skill.def, c.t / c.fireAt, dt);
         if (!c.fired && c.t >= c.fireAt) { c.fired = true; this.fire(c.skill, this.aim.clone()); }
       }
-      if (c.t >= c.dur) { if (isBowShot(c.skill)) this.nocked = true; this.casting = null; }
+      if (c.t >= c.dur) {
+        if (isBowShot(c.skill)) this.nocked = true;
+        this.casting = null;
+        // (a shot queued behind it is drawn at once: started next frame, the pose had a frame with no shot between the
+        // two, and the archer's bow and draw hand stepped out to rest for it and back)
+        if (this.queued && !this.channel) { const q = this.queued; this.queued = null; this.tryCast(q.skill, q.key); }
+      }
     }
     this.tickQuiver(dt);
     if (this.channel) {
