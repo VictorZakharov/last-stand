@@ -3,9 +3,9 @@
 // the network when it can (a plain reload shows a new deploy), the hashed files from the cache.
 // A new deploy's worker takes over at once; the previous build's cache stays, so a page still
 // running the old build can load its remaining chunks.
-const CACHE = 'last-stand-8ae50ad31ebc';
+const CACHE = 'last-stand-8d4a47237ca0';
 const FONTS = 'last-stand-fonts';
-const FILES = ["./","./apple-touch-icon.png","./assets/CapePhysicsWorker-yfe7uDtZ.js","./assets/index-CfGsp_J8.css","./assets/index-DD0g6pXb.js","./assets/nostr-C4hmC5-m.js","./assets/pbr.worker-JGYyg5pj.js","./assets/three-B7xpsGJn.js","./favicon.svg","./icon-192.png","./icon-512.png","./icon.svg","./index.html","./manifest.webmanifest"];
+const FILES = ["./","./apple-touch-icon.png","./assets/CapePhysicsWorker-yfe7uDtZ.js","./assets/aegis-aRWoowjf.webp","./assets/bullRush-DM-StSWp.webp","./assets/cleave-D_nmb5el.webp","./assets/crescent-BmQ7pavk.webp","./assets/glacialNova-BrJO0T66.webp","./assets/index-BXBxvzIa.js","./assets/index-BmEHFzFr.css","./assets/ironBellow-CMXd79pR.webp","./assets/maelstrom-CaJ3JU44.webp","./assets/nostr-C4hmC5-m.js","./assets/pbr.worker-JGYyg5pj.js","./assets/potion-BEa_eMYm.webp","./assets/powerStrike-Bs8m55aK.webp","./assets/raiseShield-DaIZxmbK.webp","./assets/splinterBolt-tJ5fkB8j.webp","./assets/starfall-DG1o3ypa.webp","./assets/tempest-BL5GadRI.webp","./assets/three-B7xpsGJn.js","./assets/twinFangs-D7pUbdJl.webp","./assets/voidLance-J9mI93gh.webp","./favicon.svg","./icon-192.png","./icon-512.png","./icon.svg","./index.html","./manifest.webmanifest"];
 const SCOPE = new URL(self.registration.scope).pathname;
 const PAGE_WAIT = 4000;   // ms before a slow network gives way to the cached page
 
