@@ -12,6 +12,7 @@ import { saveSlot } from '../loot/saveSlots';
 import { openSaves } from './saves';
 import { bindTooltip, hideTooltip, itemTooltip } from './tooltip';
 import { makeSkillSlot, KEY_LABEL, rarityChips } from './hud';
+import { skillIconHTML } from './skillArt';
 import { renderLoadoutEditor, openBook } from './loadoutEditor';
 import { initSkillStrip, syncSkillStrip } from './skillStrip';
 import { itemIconSVG, slotPlaceholderSVG } from './itemIcons';
@@ -69,10 +70,10 @@ export function renderControlsHelp(): void {
   document.querySelectorAll('.controls-help').forEach((el, i) => { el.classList.add('diagrams'); el.innerHTML = keyboardDiagram() + mouseDiagram(`ms${i}`); });
 }
 
-/** What a skill key does, for the diagrams: the skill's icon, name and whether it is held. */
+/** What a skill key does, for the diagrams: the skill's icon (an element), name and whether it is held. */
 function skillOn(k: SkillKey): { icon: string; color: string; name: string; hold: boolean } | null {
   const s = G.player.skillAt(k);
-  return s ? { icon: s.def.icon.glyph, color: s.def.icon.color, name: s.def.name, hold: !!s.def.channel } : null;
+  return s ? { icon: skillIconHTML(s.def), color: s.def.icon.color, name: s.def.name, hold: !!s.def.channel } : null;
 }
 
 /**
@@ -80,7 +81,8 @@ function skillOn(k: SkillKey): { icon: string; color: string; name: string; hold
  * show what they do (a skill's icon in its colour, or a word), the rest are dim.
  */
 function keyboardDiagram(): string {
-  type Cap = { k: string; w?: number; icon?: string; color?: string; cap?: string; tip?: string; hold?: boolean };
+  // (`icon` a glyph, `skill` a skill's icon element)
+  type Cap = { k: string; w?: number; icon?: string; skill?: string; color?: string; cap?: string; tip?: string; hold?: boolean };
   const used: Record<string, Omit<Cap, 'k'>> = {
     esc: { cap: 'Pause', tip: 'Pause' },
     w: { icon: '▲', cap: 'Move', tip: 'Move' }, a: { icon: '◀', cap: 'Move', tip: 'Move' },
@@ -92,7 +94,7 @@ function keyboardDiagram(): string {
   for (const k of SKILL_KEYS) {
     if (k.startsWith('mouse')) continue;
     const sk = skillOn(k);
-    used[k] = sk ? { icon: sk.icon, color: sk.color, cap: sk.name, tip: sk.name, hold: sk.hold } : { cap: '—', tip: 'No skill bound' };
+    used[k] = sk ? { skill: sk.icon, color: sk.color, cap: sk.name, tip: sk.name, hold: sk.hold } : { cap: '—', tip: 'No skill bound' };
   }
   const rows: Cap[][] = [
     [{ k: 'esc' }],
@@ -107,7 +109,7 @@ function keyboardDiagram(): string {
     const style = `--w:${c.w ?? 1}${u?.color ? `;--c:${u.color}` : ''}`;
     if (!u) return `<span class="kb-key" style="${style}"><b>${label}</b></span>`;
     return `<span class="kb-key on" style="${style}" title="${label}: ${u.tip}${u.hold ? ' (hold)' : ''}"><b>${label}</b>` +
-      (u.icon ? `<i>${u.icon}</i>` : '') + `<small>${u.cap}</small>${u.hold ? '<em>hold</em>' : ''}</span>`;
+      (u.skill ?? (u.icon ? `<i>${u.icon}</i>` : '')) + `<small>${u.cap}</small>${u.hold ? '<em>hold</em>' : ''}</span>`;
   };
   return `<div class="kb" aria-label="Keyboard controls">${rows.map((r) => `<div class="kb-row">${r.map(cap).join('')}</div>`).join('')}</div>`;
 }
@@ -117,7 +119,7 @@ function mouseDiagram(id: string): string {
   const btn = (k: SkillKey, side: string): string => {
     const sk = skillOn(k);
     return `<div class="ms-label ${side}" style="--c:${sk?.color ?? 'var(--ink-dim)'}"><span class="ms-what">${side === 'lb' ? 'Left' : 'Right'} click${sk?.hold ? ' <em>hold</em>' : ''}</span>` +
-      `<span class="ms-do">${sk ? `<i>${sk.icon}</i>${sk.name}` : '—'}</span></div>`;
+      `<span class="ms-do">${sk ? `${sk.icon}${sk.name}` : '—'}</span></div>`;
   };
   const l = skillOn('mouse0')?.color ?? '#555', r = skillOn('mouse2')?.color ?? '#555';
   return `<div class="ms" aria-label="Mouse controls">

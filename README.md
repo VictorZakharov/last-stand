@@ -6,7 +6,7 @@ A 3D wave-survival action RPG that runs in your browser. Hold the arena against 
 
 **[▶ Play in your browser](https://victorzakharov.github.io/last-stand/)**
 
-Everything is procedural: models, animation, textures, VFX and sound are generated at runtime. There are no downloaded models, textures or audio files.
+Everything is procedural: models, animation, textures, VFX and sound are generated at runtime. There are no downloaded models, textures or audio files. The one exception is the painted skill icons (`src/ui/skillArt/`).
 
 ![Fighting in the arena](docs/screenshots/combat.png)
 
@@ -146,7 +146,7 @@ npm run build      # type-check + production build into dist/
 | `src/fx/` | Particles, effects, pooled lights |
 | `src/loot/` | Items, persistent profiles (one per class and save slot: stash / equipment / records), save slots, skill loadout |
 | `src/net/` | Co-op: rooms and links between the games, the players' state, the host's reports of the fight |
-| `src/ui/` | HUD, menus, tooltips, loadout editor |
+| `src/ui/` | HUD, menus, tooltips, loadout editor, skill icons |
 | `src/vendor/cape/` | Vendored cape-physics solver and its web worker (see its README and LICENSE) |
 
 **Adding a class:** create a data file in `src/data/classes/`, register it in `src/data/classes/index.ts`, add a model in `src/entities/models/`, and implement any new skills in `src/combat/skills/`.

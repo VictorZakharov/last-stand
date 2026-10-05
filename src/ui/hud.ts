@@ -10,6 +10,7 @@ import { on } from '../events';
 import { buildTouchSkills } from './touch';
 import { partyDecision, waitingForParty } from './coop';
 import { isCoop } from '../net/role';
+import { skillArt } from './skillArt';
 
 import { SKILL_KEYS } from '../loot/loadout';
 import type { Player } from '../entities/player';
@@ -55,9 +56,12 @@ export function makeSkillSlot(def: SkillDef | null, key?: SkillKey): HTMLElement
     el.innerHTML = `<div class="cd"></div><div class="cdt"></div>${label}`;
     return el;
   }
-  const c = def.icon.color;
-  el.style.background = `radial-gradient(circle at 50% 40%, ${c}40, #0b0a0c 75%)`;
-  el.innerHTML = `<span class="icon" style="color:${c}">${def.icon.glyph}</span><div class="cd"></div><div class="cdt"></div>${label}`;
+  const c = def.icon.color, art = skillArt(def);
+  // (a painted icon fills the slot, its frame drawn over it; a glyph glows in its colour)
+  if (art) el.classList.add('art');
+  else el.style.background = `radial-gradient(circle at 50% 40%, ${c}40, #0b0a0c 75%)`;
+  const icon = art ? `<span class="icon art" style="background-image:url('${art}')"></span>` : `<span class="icon" style="color:${c}">${def.icon.glyph}</span>`;
+  el.innerHTML = `${icon}<div class="cd"></div><div class="cdt"></div>${label}`;
   bindTooltip(el, skillTooltip(def));
   return el;
 }
