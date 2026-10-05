@@ -131,6 +131,8 @@ There is no test suite. Verify changes with `npm run build` and by playing the d
   - **A new icon** matches the set, which is simple and bold.
     - **Simple:** one subject, or two or three of the same object at most; clean silhouettes with smooth shading; pure black to the edges, with nothing scattered round it (no sparks, leaves, rings or ground).
     - **Bold:** big, filling about 80% of the square; chunky proportions (thick shafts, big heads); a strong saturated glow in the skill's `icon.color` lighting it.
+    - **Padded:** the touch buttons are round, so 99.5% of an icon's light must lie inside the circle they draw, and its content at least 4% clear of the square's edges. The ranger's arrows ran corner to corner and the circle cut up to 16% of their light. On a black background a picture is padded exactly by shrinking it onto a larger black square.
+    - **Coloured apart:** each skill of a class in a colour of its own, as the warrior's and mage's are, with `icon.color` (the tooltip's name, the key diagram's glow) set to match.
     - **Judged at slot size:** compare it with the others shrunk to 60 px. The ranger's first set was crowded (vines, sparks, a stag behind the reticle), and the next came out as thin, pale arrows that faded beside the others.
     - **Tooling:** the ranger's were made with Codex CLI's image generation, attaching the simplest icons of the set (and the ranger's accepted ones) as style references (`codex exec -i <icon> ...`).
 - **Asset paths:** Vite `base` is `./`. In `index.html` reference assets root-absolute (`/favicon.svg`) so Vite rewrites them; `check:pages` fails on paths that would break under `/last-stand/pr-preview/pr-N/`.

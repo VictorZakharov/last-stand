@@ -31,7 +31,7 @@ const ranger: ClassDef = {
       desc: 'Hold to draw a heavy lancewood arrow, release to drive it through every foe in its line. Each foe it passes through takes less (100%, 80%, 60%, then 40%); drawn to full, it strikes half again as hard.', tags: ['physical'],
       cost: 30, cooldown: 4, castTime: 0.95, draw: 1.5, minDraw: 0.4,
       damage: 300, missiles: 1, spread: 0, speed: 80, range: 30, knock: 1.2, falloff: [1, 0.8, 0.6, 0.4], fullBonus: 0.5,
-      icon: { glyph: '➳', color: '#f0d58a' },
+      icon: { glyph: '➳', color: '#ff6a55' },
     },
     {
       key: '2', impl: 'arrowRain', name: 'Hailfletch',
@@ -39,7 +39,7 @@ const ranger: ClassDef = {
       // (energy a second, and damage an arrow; the volleys are an archer's, drawn, loosed and the next taken from the quiver)
       cost: 24, cooldown: 0, castTime: 0, channel: true, moveMult: 0,
       damage: 95, missiles: 24, radius: 4.2, range: 18,
-      icon: { glyph: '⇊', color: '#a9cf7c' },
+      icon: { glyph: '⇊', color: '#6f9bff' },
     },
     {
       key: '3', impl: 'quarryMark', name: 'Quarry Mark',
