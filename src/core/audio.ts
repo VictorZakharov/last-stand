@@ -88,6 +88,8 @@ export const sfx = {
   bowReady: guard(() => { tone({ freq: 1560, dur: 0.35, gain: 0.04, type: 'sine' }); tone({ freq: 2340, dur: 0.25, gain: 0.02, type: 'sine', delay: 0.03 }); }),
   /** an arrow driven through foes: a heavier string and a tearing hiss */
   pierce: guard(() => { noise({ dur: 0.22, freq: 2000, sweep: 600, q: 1.6, gain: 0.16 }); tone({ freq: 140, to: 60, dur: 0.2, type: 'triangle', gain: 0.1 }); }),
+  /** an arrow bursting into a shower over the area */
+  split: guard(() => { noise({ dur: 0.3, freq: 1800, sweep: 4200, q: 1.2, gain: 0.1 }); noise({ dur: 0.5, freq: 3200, sweep: 900, q: 0.8, gain: 0.05, attack: 0.08 }); }),
   /** an arrow into the ground, a blow on wood and straw */
   thud: guard(() => { if (throttle('thud', 70)) return; noise({ dur: 0.08, freq: 500, type: 'lowpass', gain: 0.22 }); noise({ dur: 0.05, freq: 2600, q: 2, gain: 0.04 }); }),
   /** a foe marked as quarry */

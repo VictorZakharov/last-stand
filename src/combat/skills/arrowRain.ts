@@ -1,44 +1,51 @@
 // Hailfletch: arrows raining on the ground at the aim for as long as the key is held. The ranger stands his ground and
-// shoots volley after volley high over the spot, posed as any shot (drawn, loosed, the next arrow taken from the quiver);
-// each volley's arrow splits at the top of its flight into a sheaf that comes down across the area over the next
-// volley's time, so the rain keeps on. Every foe in it is hit a few times a second while arrows are falling, and the
-// area follows the aim at a walk. The arrows in the air when the key is let go still come down.
+// shoots one arrow after another high over the spot, each posed as any shot (drawn, loosed, the next taken from the
+// quiver); each one splits at the top of its flight into a shower of `missiles` arrows fanning out from there and
+// coming down together on spots anywhere in the area, then the next arrow goes up. (Its sheaf spread over the next
+// shot's time, the rain was a steady drizzle that read as nothing to do with the shots.) Each arrow strikes the foe it
+// falls on, if any, for `damage`: a foe may take several or none (hit as a whole area, it didn't matter where they
+// fell). The area follows the aim at a walk, and what's in the air when the key is let go still comes down.
 import * as THREE from 'three';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
 import { addEffect, shockwave } from '../../fx/effects';
-import { burst, debris, particles, col } from '../../fx/particles';
+import { burst, debris } from '../../fx/particles';
 import { additive } from '../../core/materials';
+import { floorPatch, lay } from '../../fx/floorPatch';
 import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import { arrowGeometry, ARROW } from '../../entities/models/bow';
 import { clamp, rand, smooth } from '../../util';
 import { arrowMat, arrowMesh, stick, FWD, streakGeo, streakMat } from './ranger';
+import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
 import type { ChannelSkill, Needs } from './types';
 
-type Def = Needs<'damage' | 'radius' | 'range'>;
+type Def = Needs<'damage' | 'radius' | 'range' | 'missiles'>;
 
 const LEAF = 0xb4cc7b;
-/** damage ticks while arrows are falling (s) */
-const TICK = 0.25;
+/** a falling arrow strikes a foe its point comes down through within this of its body (m) */
+const STRIKE = 0.3;
 /** a volley: its draw, and what follows the loose (the follow-through, the next arrow from the quiver), s at no cast speed */
 const DRAW = 0.9, AFTER = 0.8;
-/** a volley's angle above level off the bow (rad), how high over the area its arrow splits (m above the ground) and its
- *  flight up there (s) */
-const PITCH = 0.45, SPLIT_H = 8.5, RISE = 0.5;
-/** the arrows of a volley's sheaf, how fast they come down (m/s) and how long they stand in the ground (s) */
-const SHEAF = 28, FALL_V = 24, STAND = 2.5;
-/** the key let go, the sheaves still to come down fall within this (s) */
-const TAIL = 0.35;
+/** a volley's angle above level off the bow (rad), how high over the area its arrow splits (m above the ground: at 8.5 the
+ *  split was off the top of the top-down view, and the shower came out of nowhere) and its flight up there (s) */
+const PITCH = 0.45, SPLIT_H = 5.5, RISE = 0.4;
+/** how far apart a shower's arrows leave the split (s, all of them within it), how they come down (m/s at the split,
+ *  gathering speed at m/s²: slow out of the burst, so the split is seen) and how long they stand in the ground (s) */
+const SPREAD = 0.12, FALL_V0 = 6, FALL_A = 45, STAND = 2.5;
+/** the most arrows in the air at once from one rain (two showers) */
+const MAX_FALLING = 64;
 /** how fast the area follows the aim (m/s) */
 const FOLLOW = 3.5;
 
 /** a volley's arrow on its way up: a curve from the bow (leaving along the shot) to where it splits over the area */
 interface Rising { mesh: THREE.Mesh; p0: THREE.Vector3; c: THREE.Vector3; p1: THREE.Vector3; t: number }
-/** a sheaf's arrow: falling from `from` (its point) to `to` once its time comes */
-interface Falling { from: THREE.Vector3; to: THREE.Vector3; dir: THREE.Vector3; wait: number; t: number; dur: number }
+/** a shower's arrow: from the split (its point at `from`) straight down to `to`, `len` away, once its `wait` is up */
+interface Falling { from: THREE.Vector3; to: THREE.Vector3; dir: THREE.Vector3; len: number; wait: number; t: number }
+/** a volley's shower: its arrows still coming down */
+interface Shower { arrows: Falling[] }
 
 interface RainState {
   player: Player; def: Def;
@@ -47,16 +54,14 @@ interface RainState {
   /** the volley under way: its time, whether it's loosed, and (the first only, with no arrow on the string) the seconds
    *  taking one from the quiver first */
   cyc: number; loosed: boolean; fetch: number;
-  rising: Rising[]; falling: Falling[];
-  tick: number; done: boolean;
+  rising: Rising[]; showers: Shower[];
+  done: boolean;
   /** its effect was cleared (a run starting): nothing more is shown */
   gone: boolean;
 }
 
-const ringGeo = new THREE.RingGeometry(0.95, 1, 64).rotateX(-Math.PI / 2);
 /** a streak's longest (m) */
-const STREAK = 3;
-const fillGeo = new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2);
+const STREAK = 2;
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _one = new THREE.Vector3(1, 1, 1), _sc = new THREE.Vector3();
 
 /** The volley's time at the hero's cast speed. */
@@ -84,43 +89,53 @@ function loose(s: RainState): void {
   sfx.bow();
 }
 
-/** It splits into its sheaf: each arrow comes down at its own moment through the next volley's time. */
+/** It splits into its shower: from the split, each arrow to a spot anywhere in the area as it is now, all of them leaving
+ *  within SPREAD. */
 function split(s: RainState, at: THREE.Vector3): void {
-  burst(at, { count: 18, color: LEAF, speed: 3, up: 0, life: 0.45, size: 0.09, gravity: 2 });
-  // (let go, what's still in the air comes down at once)
-  const span = s.done ? TAIL : (DRAW + AFTER) / pace(s.player);
-  for (let i = 0; i < SHEAF; i++) {
-    s.falling.push({ from: new THREE.Vector3(), to: new THREE.Vector3(), dir: new THREE.Vector3(), wait: rand(0, span) + (i === 0 ? 0 : 0.05), t: -1, dur: 0 });
+  burst(at, { count: 26, color: LEAF, speed: 4, up: 0, life: 0.4, size: 0.1, gravity: 1, drag: 3 });
+  burst(at, { count: 8, color: 0xf3f0d0, speed: 1.5, up: 0, life: 0.25, size: 0.16, gravity: 0, drag: 4 });
+  sfx.split();
+  const R = s.def.radius, arrows: Falling[] = [];
+  for (let i = 0; i < s.def.missiles; i++) {
+    const a = rand(0, Math.PI * 2), d = R * Math.sqrt(Math.random());
+    const to = new THREE.Vector3(s.center.x + Math.cos(a) * d, 0, s.center.z + Math.sin(a) * d);
+    to.y = groundHeight(to.x, to.z);
+    const from = at.clone().add(_b.set(rand(-0.15, 0.15), rand(-0.1, 0.1), rand(-0.15, 0.15)));
+    arrows.push({ from, to, dir: to.clone().sub(from).normalize(), len: from.distanceTo(to), wait: rand(0, SPREAD), t: -1 });
   }
+  s.showers.push({ arrows });
 }
 
-/** A sheaf's arrow starts down: from about the split, over the area as it is now, to a spot anywhere in it. */
-function drop(s: RainState, f: Falling): void {
-  const r = s.def.radius, a = rand(0, Math.PI * 2), d = Math.sqrt(Math.random()) * r;
-  f.to.set(s.center.x + Math.cos(a) * d, 0, s.center.z + Math.sin(a) * d);
-  f.to.y = groundHeight(f.to.x, f.to.z);
-  // (from above the area, a little towards the ranger: they come down steeply, leaning away from him)
-  _b.set(s.center.x - s.player.pos.x, 0, s.center.z - s.player.pos.z).normalize();
-  f.from.set(f.to.x - _b.x * 2.6 + rand(-0.8, 0.8), f.to.y + SPLIT_H + rand(-0.8, 0.8), f.to.z - _b.z * 2.6 + rand(-0.8, 0.8));
-  f.dir.copy(f.to).sub(f.from).normalize();
-  f.dur = f.from.distanceTo(f.to) / FALL_V; f.t = 0;
+/** The foe a falling arrow's point at `p` is coming down through: within STRIKE of its body and between its feet and its top. */
+function struck(p: THREE.Vector3): Enemy | null {
+  for (const e of G.enemies) {
+    if (!e.alive || e.invulnerable) continue;
+    const y0 = e.obj.position.y;
+    if (p.y > y0 + e.height || p.y < y0 - 0.2) continue;
+    if ((e.pos.x - p.x) ** 2 + (e.pos.z - p.z) ** 2 < (e.radius + STRIKE) ** 2) return e;
+  }
+  return null;
 }
 
 const skill: ChannelSkill<RainState> = {
   channel: true, anim: 'bow',
-  warm: () => { const st = new THREE.InstancedMesh(streakGeo, streakMat, 1); st.count = 1; return [new THREE.Mesh(ringGeo, additive(LEAF, 1.2, 0.5)), arrowMesh(), st]; },
+  warm: () => { const st = new THREE.InstancedMesh(streakGeo, streakMat, 1); st.count = 1; return [new THREE.Mesh(floorPatch(0.9, 1, 1, 8), additive(LEAF, 1.2, 0.5)), arrowMesh(), st]; },
   start(player, rawDef) {
     const def = rawDef as Def;
     const q = player.cls.quiver;
     const s: RainState = { player, def, center: aimOf(player, def, new THREE.Vector3()), cyc: 0, loosed: false,
-      fetch: q && !player.nocked ? q.fetch / pace(player) : 0, rising: [], falling: [], tick: 0, done: false, gone: false };
-    // the area on the floor, and the sheaves' arrows as they fall (one instanced mesh)
+      fetch: q && !player.nocked ? q.fetch / pace(player) : 0, rising: [], showers: [], done: false, gone: false };
+    // the area on the floor, and the showers' arrows as they fall (one instanced mesh)
     const ringMat = additive(LEAF, 1.2, 0), fillMat = additive(LEAF, 0.35, 0);
+    // (fine enough round and across that it steps up onto the dais within a hand's width)
+    const ringGeo = floorPatch(def.radius * 0.95, def.radius, 1, 256), fillGeo = floorPatch(0, def.radius, 24, 128);
     const ring = new THREE.Mesh(ringGeo, ringMat), fill = new THREE.Mesh(fillGeo, fillMat);
-    const area = new THREE.Group(); area.add(ring, fill); area.scale.setScalar(def.radius);
-    const rain = new THREE.InstancedMesh(arrowGeometry(), arrowMat, SHEAF * 3);
+    ring.frustumCulled = fill.frustumCulled = false;
+    const area = new THREE.Group(); area.add(ring, fill);
+    const laid = new THREE.Vector2(Infinity, Infinity);
+    const rain = new THREE.InstancedMesh(arrowGeometry(), arrowMat, MAX_FALLING);
     rain.count = 0; rain.frustumCulled = false; rain.name = 'arrow rain';
-    const streaks = new THREE.InstancedMesh(streakGeo, streakMat, SHEAF * 3 + 4);
+    const streaks = new THREE.InstancedMesh(streakGeo, streakMat, MAX_FALLING + 4);
     streaks.count = 0; streaks.frustumCulled = false;
     G.scene.add(area, rain, streaks);
     shockwave(s.center, { color: LEAF, intensity: 1.1, from: def.radius * 0.4, to: def.radius, life: 0.45 });
@@ -129,8 +144,9 @@ const skill: ChannelSkill<RainState> = {
       update(dt) {
         fade = s.done ? Math.max(0, fade - dt * 2.5) : Math.min(1, fade + dt * 4);
         ringMat.opacity = 0.55 * fade; fillMat.opacity = 0.18 * fade;
-        area.position.set(s.center.x, groundHeight(s.center.x, s.center.z) + 0.06, s.center.z);
-        // the volleys' arrows on their way up, each splitting into its sheaf at the top
+        area.position.set(s.center.x, 0, s.center.z);
+        if (Math.hypot(laid.x - s.center.x, laid.y - s.center.z) > 0.01) { lay(ringGeo, s.center.x, s.center.z, 0.07); lay(fillGeo, s.center.x, s.center.z, 0.06); laid.set(s.center.x, s.center.z); }
+        // the volleys' arrows on their way up, each splitting into its shower at the top
         let ns = 0;
         for (let i = s.rising.length - 1; i >= 0; i--) {
           const r = s.rising[i], k = Math.min(1, (r.t += dt) / RISE);
@@ -142,52 +158,51 @@ const skill: ChannelSkill<RainState> = {
           streaks.setMatrixAt(ns++, _m.compose(_d.copy(pt).addScaledVector(_b, ARROW / 2), r.mesh.quaternion, _sc.set(1, 1, Math.min(STREAK, r.t * 20))));
           if (k >= 1) { G.scene.remove(r.mesh); s.rising.splice(i, 1); split(s, r.p1); }
         }
-        // the sheaves coming down, and into the ground
-        let n = 0, falling = 0;
-        for (let i = s.falling.length - 1; i >= 0; i--) {
-          const f = s.falling[i];
-          if (f.t < 0) { if ((f.wait -= dt) > 0) continue; drop(s, f); }
-          f.t += dt; falling++;
-          const k = Math.min(1, f.t / f.dur);
-          if (k >= 1) {
-            stick(f.to, f.dir, STAND);
-            debris(f.to, { count: 3, color: 0x4a3a28, speed: 1.4, size: 0.07, life: 0.5 });
-            if (Math.random() < 0.35) sfx.thud();
-            s.falling.splice(i, 1);
-            continue;
+        // the showers coming down, and into the ground
+        let n = 0;
+        for (let j = s.showers.length - 1; j >= 0; j--) {
+          const sh = s.showers[j];
+          for (let i = sh.arrows.length - 1; i >= 0; i--) {
+            const f = sh.arrows[i];
+            if (f.t < 0) { if ((f.wait -= dt) > 0) continue; f.t = 0; }
+            f.t += dt;
+            const along = Math.min(f.len, FALL_V0 * f.t + FALL_A * f.t * f.t / 2);
+            _a.copy(f.from).addScaledVector(f.dir, along);
+            // into the first foe its point comes down through (the arrow's in it: gone), else into the ground
+            const hit = struck(_a);
+            if (hit) {
+              hitEnemy(hit, def.damage, { by: player, tags: def.tags, type: 'physical', from: { x: f.from.x, z: f.from.z } });
+              burst(_a, { count: 6, color: 0xd3bf8d, speed: 2, life: 0.2, size: 0.07 });
+              sfx.boltHit();
+              sh.arrows.splice(i, 1);
+              continue;
+            }
+            if (along >= f.len) {
+              stick(f.to, f.dir, STAND);
+              debris(f.to, { count: 3, color: 0x4a3a28, speed: 1.4, size: 0.07, life: 0.5 });
+              if (Math.random() < 0.3) sfx.thud();
+              hurtPropsIn(player, f.to.x, f.to.z, 0.3, PROP_DAMAGE.bolt);
+              sh.arrows.splice(i, 1);
+              continue;
+            }
+            if (n >= rain.instanceMatrix.count) continue;
+            // (its streak back up towards the split from its point, and the arrow's middle half an arrow behind its point)
+            _q.setFromUnitVectors(FWD, f.dir);
+            streaks.setMatrixAt(ns++, _m.compose(_a, _q, _sc.set(1, 1, Math.min(STREAK, along))));
+            rain.setMatrixAt(n++, _m.compose(_a.addScaledVector(f.dir, -ARROW / 2), _q, _one));
           }
-          if (n >= rain.instanceMatrix.count) continue;
-          // (the arrow's middle, half an arrow behind its point, and its streak from the point)
-          _a.lerpVectors(f.from, f.to, k); _q.setFromUnitVectors(FWD, f.dir);
-          streaks.setMatrixAt(ns++, _m.compose(_a, _q, _sc.set(1, 1, Math.min(STREAK, f.t * FALL_V))));
-          rain.setMatrixAt(n++, _m.compose(_a.addScaledVector(f.dir, -ARROW / 2), _q, _one));
+          if (!sh.arrows.length) s.showers.splice(j, 1);
         }
         rain.count = n; rain.instanceMatrix.needsUpdate = true;
         streaks.count = ns; streaks.instanceMatrix.needsUpdate = true;
-        // every foe in the area is hit a few times a second while the arrows fall on it
-        if (falling > 0 && (s.tick += dt) >= TICK) {
-          s.tick -= TICK;
-          const c = s.center, R = def.radius;
-          for (const e of G.enemies) {
-            if (!e.alive || Math.hypot(e.pos.x - c.x, e.pos.z - c.z) > R + e.radius) continue;
-            hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'physical', silent: true });
-            if (Math.random() < 0.5) burst({ x: e.pos.x, y: e.obj.position.y + e.height * rand(0.3, 0.8), z: e.pos.z }, { count: 3, color: 0xd3bf8d, speed: 1.5, life: 0.18, size: 0.06 });
-          }
-          hurtPropsIn(player, c.x, c.z, R, PROP_DAMAGE.zone * TICK);
-        }
-        // (motes drifting down through the rain: it reads as an area from the top-down view between the arrows)
-        if (falling > 0 && Math.random() < dt * 10) {
-          const a = rand(0, Math.PI * 2), d = Math.sqrt(Math.random()) * def.radius;
-          particles.glow.spawn({ x: s.center.x + Math.cos(a) * d, y: rand(2, 5), z: s.center.z + Math.sin(a) * d, vy: -3, life: 0.6, size: 0.06, sizeEnd: 0, color: col(LEAF, 1.2), colorEnd: col(0x405020, 0.3) });
-        }
-        return !s.done || fade > 0 || s.rising.length > 0 || s.falling.length > 0;
+        return !s.done || fade > 0 || s.rising.length > 0 || s.showers.length > 0;
       },
       dispose() {
         s.gone = s.done = true;
         G.scene.remove(area, rain, streaks);
         for (const r of s.rising) G.scene.remove(r.mesh);
-        s.rising.length = 0; s.falling.length = 0;
-        ringMat.dispose(); fillMat.dispose(); rain.dispose(); streaks.dispose();
+        s.rising.length = 0; s.showers.length = 0;
+        ringMat.dispose(); fillMat.dispose(); ringGeo.dispose(); fillGeo.dispose(); rain.dispose(); streaks.dispose();
       },
     });
     return s;
@@ -203,7 +218,7 @@ const skill: ChannelSkill<RainState> = {
     if (!s.loosed && s.cyc >= s.fetch + D) { s.loosed = true; player.nocked = false; loose(s); }
     if (s.loosed && s.cyc >= s.fetch + D + A) { s.cyc -= s.fetch + D + A; s.fetch = 0; s.loosed = false; player.nocked = true; }
   },
-  stop(_player, _def, s) { s.done = true; for (const f of s.falling) if (f.t < 0) f.wait = Math.min(f.wait, rand(0, TAIL)); },
+  stop(_player, _def, s) { s.done = true; },
   pose(player, _def, s, action) {
     const sp = pace(player), D = DRAW / sp, A = AFTER / sp, c = s.cyc - s.fetch;
     // (as a shot is posed: the hand at the quiver first, then the draw, then what follows the loose)

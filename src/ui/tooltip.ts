@@ -154,7 +154,8 @@ export function skillTooltip(def: SkillDef): () => TooltipContent {
     if (def.draw) bits.push(`${def.draw}s to full draw`);
     else if (def.castTime >= 1) bits.push(`${def.castTime}s to charge`);
     if (def.cooldown) bits.push(`${def.cooldown}s cooldown`);
-    if (def.damage) bits.push(`${def.damage}${def.channel || def.impl === 'maelstrom' ? ' dmg / sec' : ' damage'}`);
+    // (a channel shooting arrows says what each one does)
+    if (def.damage) bits.push(`${def.damage}${def.channel && def.missiles ? ' dmg per arrow' : def.channel || def.impl === 'maelstrom' ? ' dmg / sec' : ' damage'}`);
     html += `<div class="tt-foot">${bits.join(' · ')}</div>`;
     const alt = (id?: string) => (id ? G.player.known.get(id)?.def.name : undefined);
     if (def.needs === 'shield') {

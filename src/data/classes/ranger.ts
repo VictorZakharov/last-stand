@@ -35,16 +35,16 @@ const ranger: ClassDef = {
     },
     {
       key: '2', impl: 'arrowRain', name: 'Hailfletch',
-      desc: 'Hold to stand and loose volley after volley high over the target area: the arrows rain down on every foe in it while the key is held, and the area follows your aim at a walk. You cannot move while you shoot.', tags: ['physical'],
-      // (energy and damage per second; the volleys are an archer's, drawn, loosed and the next taken from the quiver)
+      desc: 'Hold to stand and shoot arrow after arrow high over the target area, each splitting into a shower of 24 that comes down at random across it: each arrow strikes the foe it falls on. The area follows your aim at a walk. You cannot move while you shoot.', tags: ['physical'],
+      // (energy a second, and damage an arrow; the volleys are an archer's, drawn, loosed and the next taken from the quiver)
       cost: 24, cooldown: 0, castTime: 0, channel: true, moveMult: 0,
-      damage: 110, radius: 4.2, range: 18,
+      damage: 95, missiles: 24, radius: 4.2, range: 18,
       icon: { glyph: '⇊', color: '#a9cf7c' },
     },
     {
       key: '3', impl: 'quarryMark', name: 'Quarry Mark',
-      desc: 'Mark the foe nearest your aim as your quarry: it takes 30% more damage from everyone. When it dies your cooldowns are refreshed and the mark leaps to the nearest foe.', tags: ['physical'],
-      cost: 15, cooldown: 8, castTime: 0.35, amp: 0.3, duration: 12, range: 26,
+      desc: 'Mark the foe nearest your aim as your quarry: it takes 25% more damage from everyone. When it dies your cooldowns are refreshed.', tags: ['physical'],
+      cost: 15, cooldown: 8, castTime: 0.35, amp: 0.25, duration: 12, range: 26,
       icon: { glyph: '⌖', color: '#ff9a6c' },
     },
     {
