@@ -15,11 +15,86 @@ const LIMB = 0.5, WORK = 0.72;
 const LEAN = 0.25, CURVE = 1.6, RECURVE = -5;
 /** the arrow's rest above the grip's pivot, on the riser's shelf (the string's nocking point is level with it) */
 export const REST_Y = 0.045;
+/** the fist's middle on the grip (the bow's frame), below the shelf, and the grip's radius */
+export const GRIP = new THREE.Vector3(0, -0.0185, 0.003), GRIP_R = 0.022;
+/** a fan's arrows over a bow laid flat (its -x up): each lies on what it crosses, its nock on the string, `gap` (m) above
+ *  it: the riser's parts (`TOP_STEP` apart along it, how high each stands), the limbs, or the fist round the grip, which
+ *  stands `fist` above the bow's middle `fistH` either side of the grip's (and eases into the rest over `fistE`): laid
+ *  2.4 cm up all along, the arrow crossing the fist went 5 cm through it, and floated over the window */
+const FAN = { gap: 0.0015, limb: 0.022, fist: 0.05, fistH: 0.04, fistE: 0.015 }, TOP_STEP = 0.005;
 /** an arrow (38 in: as long as the hero's draw, which is what his arms reach, and its head out past the riser at full draw;
  *  at 30 in it stopped short of the riser) and its shaft's radius */
 export const ARROW = 0.96;
 const SHAFT = 0.0055;
 const SEG = 18, RING = 12;
+/** the shelf the arrow lies on, and the sight window above it, cut past the riser's middle on its right (the bow's frame,
+ *  m): the riser no further to the right than `x` from the shelf up to `top`, coming out again in a curve `round` high
+ *  above it, the shelf's edge bevelled `bevel` down; the arrow passes at x 0, beside it, on a leather pad (through a round
+ *  riser, it ran 3 to 5 cm through the riser and the grip's brass collar at every shot). On the right, as the bow is
+ *  canted to the left, so the arrow lies against the riser and the window faces up, to the eyes (on the left it faced
+ *  down, away from them, and the riser leaning over it hid the arrow: through the eyes it went in behind the riser) */
+const SHELF = REST_Y - SHAFT, WINDOW = { x: SHAFT + 0.0013, top: 0.085, round: 0.032, bevel: 0.0025 };
+/** the riser's radius by height: wider under the grip's leather, slimmer up to the limbs' pockets */
+const RISER_R: [number, number][] = [[-0.25, 0.017], [-0.17, 0.019], [-0.075, 0.0205], [0.035, 0.0205], [0.07, 0.0185], [0.13, 0.0163], [0.2, 0.016], [0.25, 0.017]];
+const riserR = (y: number): number => {
+  const k = RISER_R.findIndex(([ky]) => ky >= y);
+  if (k <= 0) return RISER_R[k < 0 ? RISER_R.length - 1 : 0][1];
+  const [y0, r0] = RISER_R[k - 1], [y1, r1] = RISER_R[k];
+  return r0 + (r1 - r0) * THREE.MathUtils.smoothstep(y, y0, y1);
+};
+
+/** The riser: a tube along `pts`, its rings `n` evenly along it and more at the shelf and round the window's top, each
+ *  level with its seam on the bow's back (+z), cut past the middle at the window (each point there no further left than
+ *  the window's face), closed at both ends. (Square to the curve, which leans to the right above the grip, the rings
+ *  tilted and the shelf's edge stood 4 mm up into the arrow) */
+function riserGeometry(pts: THREE.Vector3[], n: number, radial: number): THREE.BufferGeometry {
+  const curve = new THREE.CatmullRomCurve3(pts);
+  const tAt = (y: number): number => { let lo = 0, hi = 1; for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (curve.getPointAt(m).y < y) lo = m; else hi = m; } return (lo + hi) / 2; };
+  const ts = Array.from({ length: n + 1 }, (_, i) => i / n);
+  ts.push(tAt(SHELF - WINDOW.bevel), tAt(SHELF));
+  for (let k = 0; k <= 8; k++) ts.push(tAt(WINDOW.top + WINDOW.round * k / 8));
+  ts.sort((a, b) => a - b);
+  const rings = ts.filter((t, i) => i === 0 || t - ts[i - 1] > 1e-4);
+  // (the most to the right the riser may be at a height)
+  const limit = (y: number): number => (y < SHELF - WINDOW.bevel / 2 ? -Infinity : y <= WINDOW.top ? WINDOW.x
+    : y >= WINDOW.top + WINDOW.round ? -Infinity : WINDOW.x - WINDOW.round * (1 - Math.sqrt(1 - ((y - WINDOW.top) / WINDOW.round) ** 2)));
+  const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+  const c = new THREE.Vector3(), T = new THREE.Vector3(), B = new THREE.Vector3();
+  rings.forEach((t) => {
+    curve.getPointAt(t, c);
+    const r = riserR(c.y), lim = limit(c.y);
+    for (let k = 0; k <= radial; k++) {
+      const a = (k / radial) * Math.PI * 2;
+      pos.push(Math.max(lim, c.x + Math.sin(a) * r), c.y, c.z + Math.cos(a) * r);
+      uv.push((k / radial) * 2, t * 5);
+    }
+  });
+  const R = radial + 1;
+  for (let i = 0; i < rings.length - 1; i++) for (let k = 0; k < radial; k++) {
+    const a = i * R + k, b = a + 1, d = a + R, e = d + 1;
+    idx.push(a, b, d, b, e, d);
+  }
+  // (each end closed with a point a little past it)
+  [0, 1].forEach((end) => {
+    curve.getPointAt(end, c); curve.getTangentAt(end, T);
+    const tip = pos.length / 3, r = riserR(c.y) * (end ? 0.8 : -0.8), ring = end ? (rings.length - 1) * R : 0;
+    pos.push(c.x + T.x * r, c.y + T.y * r, c.z + T.z * r); uv.push(1, end * 5);
+    for (let k = 0; k < radial; k++) { const a = ring + k; if (end) idx.push(a, a + 1, tip); else idx.push(a, tip, a + 1); }
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  // (the seam's two copies of each point shaded alike)
+  const N = g.attributes.normal as THREE.BufferAttribute;
+  for (let i = 0; i < rings.length; i++) {
+    const a = i * R, b = a + radial;
+    B.set(N.getX(a) + N.getX(b), N.getY(a) + N.getY(b), N.getZ(a) + N.getZ(b)).normalize();
+    N.setXYZ(a, B.x, B.y, B.z); N.setXYZ(b, B.x, B.y, B.z);
+  }
+  return g;
+}
 /** the brass vine inlaid down each limb's belly (the face the archer sees, through his eyes all of the bow he does): from
  *  `from` to `to` of the limb, its stem waving `wave` (m) either side `turns` times, a leaf at each turn; `n` points along it */
 const VINE = { from: 0.04, to: 0.64, wave: 0.0052, turns: 6, stem: 0.0012, leaf: [0.0105, 0.0028], n: 48 };
@@ -174,6 +249,8 @@ export class Bow {
   private readonly silencers: THREE.Mesh[];
   /** the nocked arrows (one, or a fan) */
   readonly arrows: THREE.Mesh[] = [];
+  /** how high the riser's parts stand over its face (-x), every `TOP_STEP` up it from its foot, each the highest of it and its neighbours */
+  private readonly top: Float32Array;
 
   constructor(m: BowMaterials) {
     const g = this.group;
@@ -181,38 +258,42 @@ export class Bow {
     limbLine(0, this.line);
     this.brace = -this.line[SEG * 2 + 1];
     this.stringLen = 2 * Math.hypot(this.line[SEG * 2], 0);
-    // the riser: the grip in the hand, the shelf the arrow lies on, the window cut past the middle (the arrow passes at x 0, beside it) and the pockets
-    const riser = [new THREE.Vector3(0, -RISER - 0.01, POCKET_Z), new THREE.Vector3(0, -0.14, 0.022), new THREE.Vector3(0, -0.05, 0.004), new THREE.Vector3(0, 0.02, 0),
-      new THREE.Vector3(-0.011, 0.07, 0.006), new THREE.Vector3(-0.012, 0.15, 0.018), new THREE.Vector3(0, RISER + 0.01, POCKET_Z)];
-    const rr = (t: number) => (t < 0.18 ? 0.021 : t < 0.5 ? 0.019 : t < 0.8 ? 0.014 : 0.019) - Math.abs(t - 0.4) * 0.006;
-    const add = (geo: THREE.BufferGeometry, mat: THREE.Material, shadow = true) => { const mesh = new THREE.Mesh(geo, mat); mesh.castShadow = shadow; g.add(mesh); return mesh; };
-    add(scaleUV(taperTube(riser, rr, 36, 12), 2, 5), m.riser).name = 'riser';
-    // the grip: leather wrapped in a raised spiral of thong between two brass collars; the arrow's shelf a leather pad
-    const GRIP_Y = -0.012, GRIP_L = 0.1;
-    add(merged([
-      scaleUV(new THREE.CylinderGeometry(0.0222, 0.0222, GRIP_L, 16), 2, 2).translate(0, GRIP_Y, 0.003),
-      twist(GRIP_L * 0.94, 0.0226, 0.0021, 7).translate(0, GRIP_Y + GRIP_L * 0.47, 0.003),
-      new THREE.BoxGeometry(0.014, 0.008, 0.03).translate(-0.004, REST_Y - SHAFT - 0.004, 0),
-    ]), m.grip);
-    // where the riser runs at a height: its centre, its radius there (along the tube as `taperTube` lays it) and its lean
+    // the riser: the grip in the hand, the shelf the arrow lies on, the window cut past the middle (the arrow passes at x 0,
+    // beside it; the riser bends away to the left above the grip, so there's wood left beside the window) and the pockets
+    const riser = [new THREE.Vector3(0, -RISER - 0.01, POCKET_Z), new THREE.Vector3(0, -0.14, 0.022), new THREE.Vector3(0, -0.05, 0.004), new THREE.Vector3(0, 0.025, 0),
+      new THREE.Vector3(0.011, 0.075, 0.007), new THREE.Vector3(0.012, 0.15, 0.018), new THREE.Vector3(0, RISER + 0.01, POCKET_Z)];
+    const add = (geo: THREE.BufferGeometry, mat: THREE.Material, shadow = true, name = '') => { const mesh = new THREE.Mesh(geo, mat); mesh.castShadow = shadow; mesh.name = name; g.add(mesh); return mesh; };
+    add(riserGeometry(riser, 72, 16), m.riser, true, 'riser');
+    // where the riser runs at a height: its centre, its radius there and its lean
     const curve = new THREE.CatmullRomCurve3(riser);
     const at = (y: number): { p: THREE.Vector3; r: number; lean: number } => {
       let lo = 0, hi = 1;
       for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; if (curve.getPointAt(mid).y < y) lo = mid; else hi = mid; }
       const t = (lo + hi) / 2, d = curve.getTangentAt(t);
-      return { p: curve.getPointAt(t), r: rr(t), lean: Math.atan2(d.z, d.y) };
+      return { p: curve.getPointAt(t), r: riserR(y), lean: Math.atan2(d.z, d.y) };
     };
+    // the grip: leather wrapped in a raised spiral of thong between two brass collars, below the shelf; the shelf a leather
+    // pad round the riser, its top just under the arrow, and a strip of leather on the window's face beside the arrow
+    const GRIP_L = 0.1, GRIP_Y = GRIP.y;
+    const sh = at(SHELF - 0.002), pad = sh.r + 0.0008;
+    add(merged([
+      scaleUV(new THREE.CylinderGeometry(0.0222, 0.0222, GRIP_L, 16), 2, 2).translate(0, GRIP_Y, GRIP.z),
+      twist(GRIP_L * 0.94, 0.0226, 0.0021, 7).translate(0, GRIP_Y + GRIP_L * 0.47, GRIP.z),
+      new THREE.CylinderGeometry(pad, pad, 0.0036, 18).translate(sh.p.x, SHELF - 0.0002 - 0.0018, sh.p.z),
+      new THREE.BoxGeometry(0.0008, 0.017, 0.022).translate(WINDOW.x - 0.0004, SHELF + 0.0085, at(SHELF + 0.0085).p.z),
+    ]), m.grip, true, 'grip');
     // brass: collars at the grip's ends, rings out towards the limbs, and a leaf inlaid on the riser's face to the archer
     // (-z, which is all he sees of it through his own eyes); dark sinew bound round the riser inside each ring
     const brass: THREE.BufferGeometry[] = [], sinew: THREE.BufferGeometry[] = [];
-    for (const y of [GRIP_Y - GRIP_L / 2 - 0.003, GRIP_Y + GRIP_L / 2 + 0.003]) brass.push(new THREE.CylinderGeometry(0.0236, 0.0236, 0.006, 18).translate(0, y, 0.003));
+    for (const y of [GRIP_Y - GRIP_L / 2 - 0.003, GRIP_Y + GRIP_L / 2 + 0.003]) brass.push(new THREE.CylinderGeometry(0.0236, 0.0236, 0.006, 18).translate(0, y, GRIP.z));
     for (const y of [-0.19, 0.19]) {
       const c = at(y), c2 = at(y - Math.sign(y) * 0.016);
       brass.push(new THREE.CylinderGeometry(c.r + 0.0016, c.r + 0.0016, 0.007, 18).rotateX(c.lean).translate(c.p.x, c.p.y, c.p.z));
       sinew.push(twist(0.024, c2.r + 0.0006, 0.0014, 9).rotateX(c2.lean).translate(c2.p.x, c2.p.y + 0.012, c2.p.z));
     }
     {
-      const c = at(0.095), leaf = new THREE.Shape();
+      // (above the window)
+      const c = at(0.128), leaf = new THREE.Shape();
       leaf.moveTo(0, -0.019); leaf.quadraticCurveTo(0.0085, -0.002, 0, 0.021); leaf.quadraticCurveTo(-0.0085, -0.002, 0, -0.019);
       const lg = new THREE.ExtrudeGeometry(leaf, { depth: 0.0009, bevelEnabled: true, bevelThickness: 0.0003, bevelSize: 0.0004, bevelSegments: 1, curveSegments: 10 });
       // (standing out of the riser's face, laid round it, with a raised midrib down it)
@@ -225,8 +306,15 @@ export class Bow {
         brass.push(piece.rotateX(c.lean).translate(c.p.x, c.p.y, c.p.z));
       }
     }
-    add(merged(brass), m.brass, false);
-    add(merged(sinew), m.serving, false);
+    add(merged(brass), m.brass, false, 'brass');
+    add(merged(sinew), m.serving, false, 'sinew');
+    // (for a fan's arrows: how high the riser and what's on it stand over its face, along it)
+    const nTop = Math.round(2 * RISER / TOP_STEP) + 1, top = new Float32Array(nTop).fill(-1);
+    for (const o of g.children) {
+      const P = (o as THREE.Mesh).geometry.attributes.position;
+      for (let i = 0; i < P.count; i++) { const k = Math.round((P.getY(i) + RISER) / TOP_STEP); if (k >= 0 && k < nTop) top[k] = Math.max(top[k], -P.getX(i)); }
+    }
+    this.top = top.map((_, k) => Math.max(top[Math.max(0, k - 1)], top[k], top[Math.min(nTop - 1, k + 1)]));
     // the limbs: one shape, the lower its mirror (three flips the faces of a mirrored mesh)
     const n = (SEG + 2) * RING, pos = new Float32Array(n * 3), idx: number[] = [];
     for (let i = 0; i <= SEG; i++) for (let k = 0; k < RING; k++) {
@@ -249,9 +337,9 @@ export class Bow {
     this.limbGeo.setIndex(idx);
     // the horn tips: a cap over each limb's end with a groove the string's loop sits in, flat as the limb is
     const cap = new THREE.LatheGeometry([[0.0109, -0.026], [0.0113, -0.005], [0.0101, 0], [0.0083, 0.0035], [0.0097, 0.0085], [0.009, 0.019], [0.0066, 0.029], [0.0026, 0.0355], [0.0001, 0.0365]].map(([x, y]) => new THREE.Vector2(x, y)), 14).scale(1, 1, 0.6);
-    const limbs = [add(this.limbGeo, m.limb), add(this.limbGeo, m.limb)];
+    const limbs = [add(this.limbGeo, m.limb, true, 'limb'), add(this.limbGeo, m.limb, true, 'limb')];
     limbs[1].scale.y = -1;
-    this.caps = limbs.map((l) => { const c = new THREE.Mesh(cap, m.horn); c.castShadow = false; l.add(c); return c; });
+    this.caps = limbs.map((l) => { const c = new THREE.Mesh(cap, m.horn); c.castShadow = false; c.name = 'horn'; l.add(c); return c; });
     // the vine: the stem a ribbon of quads along the limb, then a leaf (a diamond) at each turn
     const leaves = VINE.turns * 2, nv = (VINE.n + 1) * 2 + leaves * 4, vIdx: number[] = [];
     for (let i = 0; i < VINE.n; i++) { const a = i * 2; vIdx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
@@ -260,15 +348,15 @@ export class Bow {
     this.vineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nv * 3), 3).setUsage(THREE.DynamicDrawUsage));
     this.vineGeo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nv * 3), 3).setUsage(THREE.DynamicDrawUsage));
     this.vineGeo.setIndex(vIdx);
-    for (const l of limbs) { const v = new THREE.Mesh(this.vineGeo, m.inlay); v.castShadow = false; l.add(v); }
-    this.strings = [0, 1].map(() => add(new THREE.CylinderGeometry(0.0022, 0.0022, 1, 5, 1).translate(0, 0.5, 0), m.string));
+    for (const l of limbs) { const v = new THREE.Mesh(this.vineGeo, m.inlay); v.castShadow = false; v.name = 'vine'; l.add(v); }
+    this.strings = [0, 1].map(() => add(new THREE.CylinderGeometry(0.0022, 0.0022, 1, 5, 1).translate(0, 0.5, 0), m.string, true, 'string'));
     for (const s of this.strings) s.castShadow = false;
     // the serving round the string where it's nocked, dark, with a brass bead above the nock; and a tuft of wool on each half
-    this.serving = add(new THREE.CylinderGeometry(0.0031, 0.0031, 0.085, 8), m.serving, false);
-    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.0042, 10, 8), m.brass); bead.position.y = 0.009; this.serving.add(bead);
+    this.serving = add(new THREE.CylinderGeometry(0.0031, 0.0031, 0.085, 8), m.serving, false, 'serving');
+    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.0042, 10, 8), m.brass); bead.name = 'bead'; bead.position.y = 0.009; this.serving.add(bead);
     const tuft = merged([0, 1, 2, 3].map((i) => new THREE.IcosahedronGeometry(0.0085 - i * 0.0009, 1).scale(1, 1.5, 1).translate(Math.sin(i * 2.1) * 0.004, (i - 1.5) * 0.007, Math.cos(i * 2.1) * 0.004)));
-    this.silencers = [0, 1].map(() => add(tuft, m.yarn, false));
-    for (let i = 0; i < 5; i++) { const a = add(arrowGeometry(), m.arrow); a.castShadow = false; a.visible = false; this.arrows.push(a); }
+    this.silencers = [0, 1].map(() => add(tuft, m.yarn, false, 'silencer'));
+    for (let i = 0; i < 5; i++) { const a = add(arrowGeometry(), m.arrow, true, 'arrow'); a.castShadow = false; a.visible = false; this.arrows.push(a); }
     this.set(0);
   }
 
@@ -363,8 +451,16 @@ export class Bow {
     this.vineGeo.computeBoundingSphere();
   }
 
+  /** how high a fan's arrow crossing the bow `y` up it lies over its face (m) */
+  private fanLift(y: number): number {
+    const k = (y + RISER) / TOP_STEP, i = Math.floor(k), n = this.top.length;
+    const on = i < 0 || i >= n - 1 ? FAN.limb : this.top[i] + (this.top[i + 1] - this.top[i]) * (k - i);
+    const fist = 1 - THREE.MathUtils.smoothstep(Math.abs(y - GRIP.y), FAN.fistH, FAN.fistH + FAN.fistE);
+    return Math.max(on, FAN.fist * fist) + SHAFT + FAN.gap;
+  }
+
   /** `n` arrows on the string, a fan `spread` apart (rad), lying from the nock over the rest; or, with the bow laid over
-   *  flat (`flat`: its +x down), fanned out across its top. 0 takes them off. */
+   *  flat (`flat`: its +x down), fanned out across its top, each lying on what it crosses. 0 takes them off. */
   nockArrows(n: number, spread = 0, flat = false): void {
     const d = _b.set(0, REST_Y, 0).sub(this.nock).normalize();
     this.arrows.forEach((a, i) => {
@@ -372,10 +468,10 @@ export class Bow {
       if (i >= n) return;
       const yaw = (i - (n - 1) / 2) * spread;
       _a.copy(d).applyAxisAngle(flat ? SIDE : _up, yaw);
+      // (where it crosses the riser's line, raised over what's there, turned about the nock to lie on it)
+      if (flat) { const y = this.nock.y - _a.y / _a.z * this.nock.z; _a.set(-this.fanLift(y), y, 0).sub(this.nock).normalize(); }
       a.quaternion.setFromUnitVectors(FWD, _a);
       a.position.copy(this.nock).addScaledVector(_a, ARROW / 2 - 0.008);
-      // (on top of the riser and the limbs, which the outer arrows cross)
-      if (flat) a.position.x -= 0.024;
     });
   }
 }

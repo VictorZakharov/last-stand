@@ -21,7 +21,7 @@ import { fitArm, solveArm } from './armIK';
 import { bodyShape } from './anatomy';
 import { buildFlask, drink } from './flask';
 import { buildBoot } from './boot';
-import { Bow, pullAt, arrowGeometry, arrowPieces, ARROW, REST_Y } from './bow';
+import { Bow, pullAt, arrowGeometry, arrowPieces, ARROW, REST_Y, GRIP, GRIP_R } from './bow';
 import { fromEyes, dirFromEyes, toEyes } from '../viewModel';
 import { angleDamp, clamp, damp, lerp, smooth, TAU } from '../../util';
 import type { AnimState, Model } from '../../types';
@@ -51,8 +51,9 @@ const SIDE = 1.35, HIP_SIDE = 0.68, HIP_SIDE_MOVING = 0.2;
 const TAKE = [0.25, 0.72];
 /** of the body's way onto the shot, when the bow has come in from the side */
 const BOW_IN = 0.7;
-/** how far the chest is open from side-on as the draw starts (rad), closing as the string comes back */
-const OPEN = 0.5;
+/** how far the chest is open from side-on as the draw starts (rad), closing as the string comes back; and how fast it may
+ *  open or close at most (1/s) */
+const OPEN = 0.5, CLOSE_V = 8;
 /** the bow's cant at full draw (rad: its top tipped over to the right): a little to the left, its string's lower half
  *  swung out off the chest and its upper half kept off the face (tipped right, the lower half came back into the coat at
  *  the bow shoulder; further left, the upper half met the cheek); a fan is shot with it laid flat, its top to the left
@@ -73,8 +74,6 @@ const RAISE = 0.35;
  *  hand's way between (to the quiver, the arrow drawn out of it and over the shoulder) is timed by its length, so it
  *  goes at an even pace; and when it takes the arrow and lays it on the string, by that */
 const FOLLOW = 0.12, NOCKED = 0.92;
-/** the riser's grip in the bow's frame, and its radius */
-const GRIP = V(0, -0.012, 0.003), GRIP_R = 0.022;
 /** the bow arm's reach at full draw, of its length: nearly straight (a locked elbow is no archer's) */
 const REACH = 0.99;
 /** where the draw elbow would rather be: in line behind the hand along the arrow, this far above it (m), so in front of
@@ -134,6 +133,10 @@ const AIM_IN = 0.3, AIM_OUT = 0.5;
 /** how far the arrow's line may lie off the way the body faces (rad: the shot from the bow beside the body closing on a near
  *  target); a new target turns the body, and the line with it */
 const YAW_OFF = 0.15;
+/** how fast the bow fist's turn about the grip and its slant on it follow what the arm finds best (1/s: the solver's
+ *  `glide`): chosen afresh each frame from a few, they stepped between them, and the bow carried in the fist jumped
+ *  between two or three places as the walk moved the elbow */
+const GLIDE = 10;
 /** first person (the eyes' frame, viewModel.ts: x right, y up, -z ahead, m). At full draw the bow's grip is held still
  *  below the crosshair, a little left, and the arrow lies along the shot's own line from it, so it points where the shot
  *  will fly (anchored in the view, under its lower right, the arrow ran across the view 35 degrees left of the shot and
@@ -156,6 +159,10 @@ const FP_LOW = V(0.22, -0.5, 0), FP_UP = V(0.12, -0.38, -0.25), EYE_UP = V(0, 1,
  *  arrow lay across the view; pointing below the axis, its nock rose to the eyes and the hand drawing it passed just
  *  before them, filling the view's lower left (looking level it's 0.11; Hailfletch's volleys are drawn 20 degrees up) */
 const FP_PITCH = [0.08, 0.4];
+/** through the eyes, how far the bow sways with the stride at a run (m across and up the view, rad about it): across once a
+ *  stride, up and down with each step, rolling with it; eased in and out with the pace (`FP_SWAY_EASE`, 1/s), and a
+ *  `FP_SWAY_DRAWN` share of it while it's drawn (held still in the view as he walked, it read as stuck to it) */
+const FP_SWAY = [0.007, 0.005, 0.025], FP_SWAY_EASE = 5, FP_SWAY_DRAWN = 0.3;
 /** how long the last shot's arrows stay on the string after it ends (s), and how fast the bow is laid out for a fan or
  *  back through the eyes (1/s) */
 const KEEP_SHOT = 0.15, FAN_EASE = 12;
@@ -457,6 +464,9 @@ export function buildRanger(): Model {
   let lastArrows = 1, lastSpread = 0, sinceShot = 1;
   /** through the eyes, how far the bow is laid out for a fan (0..1), eased: from one kind of shot to the other it jumped */
   let fanK = 0;
+  /** through the eyes, how much the bow sways with the stride (0..1, eased with the pace), and the stride's phase it sways
+   *  by: on only, at the gait's pace (the gait's own turns back as the way he goes turns round, and the bow hitched) */
+  let swayK = 0, swayPhase = 0, lastPhase = 0;
   let fp = false, hasBow = true, aimT = 0, raise = 0, free = 0, flaskOut = 0, nocked = true, lastLoosed = -1;
   /** up for the draw hand on the string: the world's, or through the eyes the view's (the world's tilts in the view as the
    *  eyes look up or down, and the hand turned with it) */
@@ -465,6 +475,10 @@ export function buildRanger(): Model {
   let stowT = -1, stowTake = 0.3;
   /** how far the draw had gone (0..1 of its time) when the draw hand took the string, this shot (-1: not yet) */
   let kHook = -1, raiseLoose = 1, lastTilt = 0;
+  /** how closed the chest was last frame, and when the string was let go (see OPEN): loosed, it goes on from there, and
+   *  between shots it stays as it was, the opening fading with the body's turn off the shot (from closed, a tap's chest,
+   *  loosed at its least draw, turned 0.2 rad in a frame, and closed as the shot ended, 0.5 rad) */
+  let lastClosed = 1, closeLoose = 1;
   /** where the string was in the fingers last frame, and at the release (the head's frame, taken while it's posed: here at
    *  the top of `animate` the head is back at rest, and worldToLocal brings its matrix up to that): the follow-through starts there */
   const lastNock = new THREE.Vector3(), loosedAt = new THREE.Vector3();
@@ -474,6 +488,7 @@ export function buildRanger(): Model {
   /** the bow placed at `bp` (world), in the left hand, its grip in the fist, the elbow towards `elbowTo` (world): the arm
    *  within a body's ranges (armIK.ts), the fist turning about the grip as far as it needs (the knuckles angled, as an
    *  archer holds a bow) and holding it diagonally if the wrist needs; `bp` becomes where the bow went */
+  let dtNow = 0;
   const placeBow = (bp: BowPose, elbowTo: THREE.Vector3) => {
     const s = sc();
     _y.set(0, 1, 0).applyQuaternion(bp.q);
@@ -483,7 +498,7 @@ export function buildRanger(): Model {
     _e.copy(_d).sub(_c).normalize();
     fistReach(handL, _y, _e, GRIP_R, _a);
     fistTurn(handL, _y, _e, _gq);
-    const fit = solveArm(j, true, { wrist: _b.copy(_c).sub(_a), hand: _gq, pole: elbowTo, keep: 20, body, roll: { axis: _y, range: 0.6, at: _c }, slant: SLANT });
+    const fit = solveArm(j, true, { wrist: _b.copy(_c).sub(_a), hand: _gq, pole: elbowTo, keep: 20, body, roll: { axis: _y, range: 0.6, at: _c }, slant: SLANT, glide: 1 - Math.exp(-GLIDE * dtNow) });
     root.updateMatrixWorld(true);
     // the bow where the fist has it: turned as far as the wrist and the forearm turned the hand (the hand joint against
     // the turn asked of it, its turn about the grip aside), its grip where the fist closes (a slanted fist closes a
@@ -561,12 +576,13 @@ export function buildRanger(): Model {
   const swings = [new THREE.Quaternion(), new THREE.Quaternion()];
   function animate(st: AnimState): void {
     const dt = st.dt, a = st.action, s = sc();
+    dtNow = dt;
     resetPose(j); idle(j, st.t, 1 - st.move * 0.5);
     walkCycle(j, st.phase, st.move, { run: true, arm: 0.25, stride: 0.5, dir: st.moveDir ?? 1 });
     const shooting = a?.name === 'bow' && a.draw !== undefined, loosed = shooting && a.loosed !== undefined;
     // what follows a release (0..1), the draw (0..1 of its time) and how far that pulls the string
     const after = loosed ? clamp((a.t - 0.55) / 0.45, 0, 1) : -1, k = shooting ? a.draw! : 0;
-    if (loosed && lastLoosed < 0) { nocked = false; loosedAt.copy(lastNock); raiseLoose = raise; }
+    if (loosed && lastLoosed < 0) { nocked = false; loosedAt.copy(lastNock); raiseLoose = raise; closeLoose = lastClosed; }
     lastLoosed = loosed ? a.loosed! : -1;
     if (after >= NOCKED) nocked = true;
     // (a shot with none on the string: the hand takes one from the quiver first; it's on the string once laid on it)
@@ -598,7 +614,9 @@ export function buildRanger(): Model {
     // (the chest open towards the target as the draw starts and closing as the string comes back, so the draw elbow goes round
     // behind with the shoulder: side-on from the start, the hand reaching the string out front took the arm across the
     // chest past its range, and the elbow went over the head to come round)
-    const closed = !shooting ? 1 : loosed ? 1 - smooth(clamp((after - FOLLOW) / (NOCKED - FOLLOW), 0, 1)) : drawnAt(kv) * Math.min(1, aimT * 1.5);
+    const closedTo = !shooting ? lastClosed : loosed ? closeLoose * (1 - smooth(clamp((after - FOLLOW) / (NOCKED - FOLLOW), 0, 1))) : drawnAt(kv) * Math.min(1, aimT * 1.5);
+    // (and never quicker than `CLOSE_V`: a shot cut short and another begun)
+    const closed = lastClosed = lastClosed + clamp(closedTo - lastClosed, -CLOSE_V * dt, CLOSE_V * dt);
     const side = aim * SIDE, hip = side * lerp(HIP_SIDE, HIP_SIDE_MOVING, st.move), open = aim * OPEN * (1 - closed);
     j.hips.rotation.y -= hip; j.spine.rotation.y -= (side - hip - open) * 0.45; j.chest.rotation.y -= (side - hip - open) * 0.55;
     j.neck.rotation.y += side * 0.4; j.head.rotation.y += side * 0.6;
@@ -717,6 +735,14 @@ export function buildRanger(): Model {
     // (out to the left and up on its way from the side to the shot and back, so the lower limb passes outside the thigh, not through it)
     // (through the eyes it comes straight in: swung out, it went off the view's edge and back)
     if (!fp) shown.p.addScaledVector(_e.crossVectors(UP, u).normalize(), CARRY_SWING * s * Math.sin(bowIn * Math.PI)).addScaledVector(UP, 0.08 * s * Math.sin(bowIn * Math.PI));
+    // (through the eyes it sways with the stride, about its grip)
+    swayK = damp(swayK, fp ? st.move : 0, FP_SWAY_EASE, dt);
+    swayPhase += Math.min(Math.abs(Math.atan2(Math.sin(st.phase - lastPhase), Math.cos(st.phase - lastPhase))), 20 * dt); lastPhase = st.phase;
+    if (fp && swayK > 1e-3) {
+      const k = swayK * lerp(1, FP_SWAY_DRAWN, aim), sp = Math.sin(swayPhase);
+      shown.p.add(fromEyes(root, j.neck, _e.set(FP_SWAY[0] * sp * k, FP_SWAY[1] * Math.cos(2 * swayPhase) * k, 0), _a).sub(fromEyes(root, j.neck, _e.set(0, 0, 0), _b)));
+      shown.q.premultiply(_q.setFromAxisAngle(dirFromEyes(root, _e.set(0, 0, -1), _a), FP_SWAY[2] * sp * k));
+    }
     // the string: drawn as the bow comes up; loosed, it springs back past rest and rings out
     if (loosed) bow.set(0, -0.35 * (a.draw ?? 1) * Math.exp(-a.loosed! / 0.06) * Math.cos(a.loosed! * Math.PI * 2 * 9));
     else bow.set(drawnAt(kv) * pullMax * Math.min(1, aim * 1.5));
