@@ -105,6 +105,12 @@ export interface SkillDef {
   pull?: number;
   absorbPct?: number;
   healPct?: number;
+  /** a mark: the extra share of damage its target takes from every player's hits */
+  amp?: number;
+  /** a shot through foes: its damage on each foe it passes through in turn, as a share (the last for every one after) */
+  falloff?: number[];
+  /** a drawn shot's extra damage when loosed at full draw, as a share */
+  fullBonus?: number;
   /** melee arc in radians */
   arc?: number;
   knock?: number;

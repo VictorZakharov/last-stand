@@ -51,7 +51,9 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   const type: DamageType = opts.type ?? 'arcane';
   const tags = opts.tags ?? [type];
   const by = opts.by;
-  const { amount, crit } = rollPlayerDamage(by, base, tags);
+  const { amount: rolled, crit } = rollPlayerDamage(by, base, tags);
+  // (a marked foe takes more from everyone: the largest of the marks on it)
+  const amount = enemy.marks.length ? rolled * (1 + Math.max(...enemy.marks)) : rolled;
   const dealt = enemy.takeDamage(amount, { type, crit, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, by });
   // everyone sees their own numbers
   if (!opts.silent || crit) {

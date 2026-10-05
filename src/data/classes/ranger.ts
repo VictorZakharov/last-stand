@@ -1,9 +1,9 @@
-// Ranger: physical bow shots and woodland control, with a separate gear pool.
+// Ranger: physical bow shots, a hunter's tricks (a mark on his quarry, a scarecrow to draw foes off), a separate gear pool.
 import type { ClassDef } from '../../types';
 
 const ranger: ClassDef = {
   id: 'ranger', name: 'Ranger', model: 'ranger',
-  tagline: 'A patient hunter with a swift bow and thorn-bound wards.',
+  tagline: 'A patient hunter who marks his quarry and rains arrows on the pack.',
   accent: '#c9d993', book: 'Fieldcraft',
   aura: { light: 0xc9d993, intensity: 0.45 },
   // (an arrow nocked between shots, back in the quiver after 3 s without one; the next shot takes one out first)
@@ -27,31 +27,31 @@ const ranger: ClassDef = {
       icon: { glyph: '⋔', color: '#c9d993' },
     },
     {
-      key: '1', impl: 'heavyShot', name: 'Heartwood Shot',
-      desc: 'Draw the bow slowly and loose a heavy arrow that drives its target back.', tags: ['physical'],
-      cost: 38, cooldown: 5, castTime: 1.9, fireAt: 0.58,
-      damage: 330, missiles: 1, spread: 0, speed: 38, range: 26, knock: 6,
-      icon: { glyph: '↟', color: '#f0d58a' },
+      key: '1', impl: 'piercingShot', name: 'Lancewood Shot',
+      desc: 'Hold to draw a heavy lancewood arrow, release to drive it through every foe in its line. Each foe it passes through takes less (100%, 80%, 60%, then 40%); drawn to full, it strikes half again as hard.', tags: ['physical'],
+      cost: 30, cooldown: 4, castTime: 0.95, draw: 1.5, minDraw: 0.4,
+      damage: 300, missiles: 1, spread: 0, speed: 80, range: 30, knock: 1.2, falloff: [1, 0.8, 0.6, 0.4], fullBonus: 0.5,
+      icon: { glyph: '➳', color: '#f0d58a' },
     },
     {
-      key: '2', impl: 'briarSnare', name: 'Briar Bind',
-      desc: 'Raise a tangle of thorns at the target area, wounding foes and rooting them briefly.', tags: ['physical'],
-      cost: 45, cooldown: 7, castTime: 0.6,
-      damage: 100, radius: 3.8, range: 16, freeze: 2.2,
-      icon: { glyph: '♧', color: '#a9cf7c' },
+      key: '2', impl: 'arrowRain', name: 'Hailfletch',
+      desc: 'Hold to stand and shoot arrow after arrow high over the target area, each splitting into a shower of 24 that comes down at random across it: each arrow strikes the foe it falls on. The area follows your aim at a walk. You cannot move while you shoot.', tags: ['physical'],
+      // (energy a second, and damage an arrow; the volleys are an archer's, drawn, loosed and the next taken from the quiver)
+      cost: 24, cooldown: 0, castTime: 0, channel: true, moveMult: 0,
+      damage: 95, missiles: 24, radius: 4.2, range: 18,
+      icon: { glyph: '⇊', color: '#a9cf7c' },
     },
     {
-      key: '3', impl: 'thornRepulse', name: 'Thornwake',
-      desc: 'Scatter thorns around yourself, driving nearby foes back and slowing their pursuit.', tags: ['physical'],
-      cost: 40, cooldown: 8, castTime: 0.5,
-      damage: 110, radius: 5, knock: 7, chill: 2.5,
-      icon: { glyph: '✺', color: '#d9b878' },
+      key: '3', impl: 'quarryMark', name: 'Quarry Mark',
+      desc: 'Mark the foe nearest your aim as your quarry: it takes 25% more damage from everyone. When it dies your cooldowns are refreshed.', tags: ['physical'],
+      cost: 15, cooldown: 8, castTime: 0.35, amp: 0.25, duration: 12, range: 26,
+      icon: { glyph: '⌖', color: '#ff9a6c' },
     },
     {
-      key: '4', impl: 'woodlandWard', name: 'Woven Guard',
-      desc: 'Wrap yourself in a woodland ward that absorbs damage for a short time.', tags: ['defense'],
-      cost: 40, cooldown: 16, castTime: 0.5, absorbPct: 0.35, duration: 5,
-      icon: { glyph: '◇', color: '#c9d993' },
+      key: '4', impl: 'strawman', name: 'Strawman',
+      desc: 'Raise a scarecrow at the target spot. For 3 seconds every nearby foe but elites and bosses leaves you for it and gathers round it, striking at it. It takes no harm and does none.', tags: ['physical'],
+      cost: 35, cooldown: 12, castTime: 0.45, duration: 3, radius: 9, range: 14,
+      icon: { glyph: 'ᛉ', color: '#d9b878' },
     },
     {
       key: 'q', impl: 'potion', name: 'Healing Draught',
