@@ -56,6 +56,14 @@ export function fromEyes(root: THREE.Object3D, neck: THREE.Object3D, p: THREE.Ve
 export function dirFromEyes(root: THREE.Object3D, d: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
   return out.copy(d).applyQuaternion(_r).transformDirection(root.matrixWorld);
 }
+/** the camera's turn the last time a model was placed in view, undone */
+const _camInv = new THREE.Quaternion();
+/** A direction of the world as the eyes see it (their frame, as `fromEyes`), from the camera as it was last placed: for
+ *  a pose that lines something up with the world through the eyes (the arrow on the string along the shot's line). The
+ *  crosshair's aim is taken from that camera too. */
+export function toEyes(d: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+  return out.copy(d).applyQuaternion(_camInv);
+}
 
 /** Show `m` through the camera's eyes (`on`), or as a whole body. Call after the camera has moved. */
 export function viewArms(m: Model, on: boolean, cam: THREE.Camera): void {
@@ -72,6 +80,7 @@ export function viewArms(m: Model, on: boolean, cam: THREE.Camera): void {
   p.pos.copy(root.position); p.quat.copy(root.quaternion);
   root.updateWorldMatrix(true, false);
   cam.updateMatrixWorld();
+  cam.getWorldQuaternion(_camInv).invert();
   // the camera sits just above the neck, wherever the pose has taken it: the head rides the spine, so a
   // lean or a crouch doesn't bring the shoulders up under the camera
   const neck = m.joints?.neck;

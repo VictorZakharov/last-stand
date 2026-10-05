@@ -22,7 +22,7 @@ import { bodyShape } from './anatomy';
 import { buildFlask, drink } from './flask';
 import { buildBoot } from './boot';
 import { Bow, pullAt, arrowGeometry, arrowPieces, ARROW, REST_Y } from './bow';
-import { fromEyes, dirFromEyes } from '../viewModel';
+import { fromEyes, dirFromEyes, toEyes } from '../viewModel';
 import { angleDamp, clamp, damp, lerp, smooth, TAU } from '../../util';
 import type { AnimState, Model } from '../../types';
 
@@ -134,12 +134,29 @@ const AIM_IN = 0.3, AIM_OUT = 0.5;
 /** how far the arrow's line may lie off the way the body faces (rad: the shot from the bow beside the body closing on a near
  *  target); a new target turns the body, and the line with it */
 const YAW_OFF = 0.15;
-/** first person (the eyes' frame: x right, y up, -z ahead, m): the bow's grip ahead at full draw, left of and below the
- *  view's middle; the nock at full draw, under the view's lower right; between shots the bow low on the left, its arrow
- *  pointing ahead and down; and the hand's way for the next arrow, down out of the view and back (the quiver is behind
- *  the eyes: reaching for it, the arm swept across the view) */
-const FP_GRIP = V(-0.3, -0.2, -0.62), FP_ANCHOR = V(0.1, -0.2, -0.06), FP_REST = V(-0.3, -0.42, -0.5), FP_REST_DIR = V(0.15, -0.45, -1);
-const FP_LOW = V(0.24, -0.6, -0.05), FP_UP = V(0.16, -0.45, -0.3);
+/** first person (the eyes' frame, viewModel.ts: x right, y up, -z ahead, m). At full draw the bow's grip is held still
+ *  below the crosshair, a little left, and the arrow lies along the shot's own line from it, so it points where the shot
+ *  will fly, its nock and the draw hand below and behind the eyes, out of view (anchored in the view, under its lower
+ *  right, the arrow ran across the view 35 degrees left of the shot and the hand filled a third of its middle); the bow's
+ *  top tipped to the left (`FP_CANT`, rad), so its upper limb passes clear of the middle. A fan's flat bow is held a
+ *  little higher and to the right (`FP_FAN`), so its arrows, lying left of the grip across its top, fan out from under
+ *  the eyes (from the grip's own place they leaned all one way, from a nock off to the left). In for the next arrow, lower and
+ *  nearer (`FP_SET` from the grip's place, its arrow tipped `FP_SET_TIP` down), the nock in view below it where the hand
+ *  lays the arrow on the string and takes it (brought in further, to the view's bottom edge, the hand came in huge at
+ *  the left of the bow and the arrow's nock out of view beside it).
+ *  Between shots the bow is carried low on the left, nearly upright, the fist round its grip in view and its arrow
+ *  pointing ahead (`FP_REST`: its grip off the view's edge and laid across it, it read as a stick). The hand's way for
+ *  the next arrow goes down out of the view and back up (the quiver is behind the eyes: reaching for it, the arm swept
+ *  across the view) */
+const FP_GRIP = V(-0.06, -0.2, -0.62), FP_CANT = -0.45, FP_FAN = V(0.02, -0.15, -0.62);
+const FP_SET = V(0, -0.06, 0.04), FP_SET_TIP = 0.15;
+const FP_REST = V(-0.29, -0.27, -0.55), FP_REST_DIR = V(0.1, -0.2, -1), FP_REST_CANT = 0.12;
+const FP_LOW = V(0.22, -0.5, 0), FP_UP = V(0.12, -0.38, -0.25), EYE_UP = V(0, 1, 0);
+/** how far above the view's axis the arrow on the string may point through the eyes, least and most (rad): looking down
+ *  at the floor or up at the sky the shot still goes level, at chest height, and along it the bow tipped over and the
+ *  arrow lay across the view; pointing below the axis, its nock rose to the eyes and the hand drawing it passed just
+ *  before them, filling the view's lower left (looking level it's 0.11; Hailfletch's volleys are drawn 20 degrees up) */
+const FP_PITCH = [0.08, 0.4];
 /** how far the string has come back (0..1) after `k` of the draw from when the hand has it: setting off gently and
  *  slowing into the anchor (the bow's own `pullAt`, quick at first, brought half the string back in a few frames) */
 const drawnAt = (k: number): number => (pullAt(k) + smooth(clamp(k, 0, 1))) / 2;
@@ -160,9 +177,9 @@ const HANG_R = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0
 /** a pose of the bow in the world: its grip's pivot and its frame */
 interface BowPose { p: THREE.Vector3; q: THREE.Quaternion }
 const pose = (): BowPose => ({ p: new THREE.Vector3(), q: new THREE.Quaternion() });
-/** the bow's frame with its back along `z` and its limbs up, canted `cant` over to the right */
-function frame(z: THREE.Vector3, cant: number, out: THREE.Quaternion): THREE.Quaternion {
-  _left.crossVectors(UP, z).normalize();
+/** the bow's frame with its back along `z` and its limbs `up`, canted `cant` over to the right */
+function frame(z: THREE.Vector3, cant: number, out: THREE.Quaternion, up = UP): THREE.Quaternion {
+  _left.crossVectors(up, z).normalize();
   _y.crossVectors(z, _left).normalize().multiplyScalar(Math.cos(cant)).addScaledVector(_left, -Math.sin(cant)).normalize();
   _x.crossVectors(_y, z).normalize();
   return out.setFromRotationMatrix(_m.makeBasis(_x, _y, _z.copy(z)));
@@ -424,6 +441,9 @@ export function buildRanger(): Model {
   let QUIVER = 0.5, OUT = 0.7;
   let yawOff = 0;
   let fp = false, hasBow = true, aimT = 0, raise = 0, free = 0, flaskOut = 0, nocked = true, lastLoosed = -1;
+  /** up for the draw hand on the string: the world's, or through the eyes the view's (the world's tilts in the view as the
+   *  eyes look up or down, and the hand turned with it) */
+  const handUp = UP.clone();
   /** putting the arrow back in the quiver: the seconds since it began (-1: not), and when on its way the hand has it off the string */
   let stowT = -1, stowTake = 0.3;
   /** how far the draw had gone (0..1 of its time) when the draw hand took the string, this shot (-1: not yet) */
@@ -468,7 +488,7 @@ export function buildRanger(): Model {
    *  the elbow above */
   const stringTurn = (q: THREE.Quaternion, out: THREE.Quaternion) => {
     // (the hand's -y down its fingers, -z out of its palm)
-    _y.set(0, 0, -1).applyQuaternion(q).addScaledVector(UP, 0.3).normalize();
+    _y.set(0, 0, -1).applyQuaternion(q).addScaledVector(handUp, 0.3).normalize();
     _z.set(-1, 0, 0).applyQuaternion(q);
     _z.addScaledVector(_y, -_y.dot(_z)).normalize();
     _x.crossVectors(_y, _z);
@@ -504,10 +524,13 @@ export function buildRanger(): Model {
     held.visible = hasBow;
     const nk = j.handR.localToWorld(_e.copy(stringAt));
     // (what's out of the quiver: the way from the fingers to its mouth, all of it once it's free)
-    const d = nk.distanceTo(mouthW) / s, out = Math.min(ARROW, d + smooth(Math.min(1, w * 5)) * ARROW);
+    const d = nk.distanceTo(mouthW) / s, out = fp ? ARROW : Math.min(ARROW, d + smooth(Math.min(1, w * 5)) * ARROW);
     _a.copy(mouthW).sub(nk).normalize();
     const top = _c.copy(UP).addScaledVector(toward, 0.3).normalize().clone();
     if (w < 0.5) slerpDir(_a, top, smooth(w * 2), _a); else slerpDir(top, toward, smooth(w * 2 - 1), _a);
+    // (through the eyes the quiver is out of view below them: the arrow comes up from there already along the line, its
+    // head into the view first; turned over the top, a metre of it swept up across the whole view)
+    if (fp) _a.copy(toward);
     j.handR.getWorldQuaternion(_q).invert();
     held.quaternion.setFromUnitVectors(FWD, _a.applyQuaternion(_q));
     held.position.copy(stringAt);
@@ -606,7 +629,6 @@ export function buildRanger(): Model {
       root.updateMatrixWorld(true);
     }
     anchor.getWorldPosition(anchorW);
-    if (fp) fromEyes(root, j.neck, FP_ANCHOR, anchorW);
     // full draw: the bow arm reaching along the line from the anchor, its fist round the grip; how far that is, is the draw length
     const fan = shooting && (a.arrows ?? 1) > 1;
     // (the fan's string lies across, hooked palm down: the hand's width across the jaw, so it's anchored that much out from the face)
@@ -620,7 +642,22 @@ export function buildRanger(): Model {
     const L = (j.P.upperL + j.P.foreL) * s * REACH, ub = u.dot(_b);
     const D = -ub + Math.sqrt(Math.max(0, ub * ub - _b.lengthSq() + L * L));
     line.p.copy(anchorW).addScaledVector(u, D).addScaledVector(_y, -REST_Y * s);
-    if (fp) { fromEyes(root, j.neck, FP_GRIP, line.p); _a.copy(line.p).sub(anchorW).normalize(); frame(_a, fan ? FLAT : 0.3, line.q); }
+    // (through the eyes: the grip still in the view and the shot's line through it, upright as the view is, the nock the
+    // draw length back along it; the model is placed in view after the pose, so the line is posed as the eyes see it)
+    const eyeUp = fp ? dirFromEyes(root, EYE_UP, new THREE.Vector3()) : UP;
+    handUp.copy(eyeUp);
+    const uEye = fp ? toEyes(u, new THREE.Vector3()) : _a;
+    if (fp) {
+      const el = Math.atan2(uEye.y, Math.hypot(uEye.x, uEye.z)), cl = clamp(el, FP_PITCH[0], FP_PITCH[1]), h = Math.hypot(uEye.x, uEye.z) || 1;
+      if (cl !== el) uEye.set(uEye.x / h * Math.cos(cl), Math.sin(cl), uEye.z / h * Math.cos(cl));
+      dirFromEyes(root, uEye, _a);
+      frame(_a, fan ? FLAT : FP_CANT, line.q, eyeUp); _y.set(0, 1, 0).applyQuaternion(line.q);
+      fromEyes(root, j.neck, fan ? FP_FAN : FP_GRIP, line.p);
+      anchorW.copy(line.p).addScaledVector(_y, REST_Y * s).addScaledVector(_a, -D);
+      // (and the rest of the pose, the draw elbow's way round included, along the line as it's posed: along the shot's own,
+      // the elbow went round another way as the eyes looked up, and the hand turned up into the view)
+      u.copy(_a);
+    }
     const pullMax = Math.max(0.05, line.p.distanceTo(anchorW) / s - bow.brace);
     // between shots, the bow arm brings the bow in before the chest, the arrow pointing down the shot, its nock where the
     // draw hand lays the next arrow on it with its elbow bent (out along the shot, the nock was 37 cm across the body
@@ -640,9 +677,10 @@ export function buildRanger(): Model {
     ready.p.copy(wristFK).add(_c).sub(_b.copy(GRIP).multiplyScalar(s).applyQuaternion(ready.q));
     // (through the eyes the bow stays in the view, low on the left, and comes in for the next arrow below the line)
     if (fp) {
-      fromEyes(root, j.neck, FP_REST, ready.p); frame(dirFromEyes(root, _a.copy(FP_REST_DIR).normalize(), _e), 0.7, ready.q);
-      set.p.lerpVectors(anchorW, line.p, 0.8).addScaledVector(UP, -0.1 * s);
-      _a.copy(line.p).sub(anchorW).normalize(); _a.applyAxisAngle(_left.crossVectors(UP, _a).normalize(), 0.3); frame(_a, 0.5, set.q);
+      fromEyes(root, j.neck, FP_REST, ready.p); frame(dirFromEyes(root, _a.copy(FP_REST_DIR).normalize(), _e), FP_REST_CANT, ready.q, eyeUp);
+      fromEyes(root, j.neck, _a.copy(fan ? FP_FAN : FP_GRIP).add(FP_SET), set.p);
+      // (a fan's laid flat already: turned over as it came up, its arrows swung up across the view)
+      frame(dirFromEyes(root, _a.copy(uEye).applyAxisAngle(_b.set(1, 0, 0), -FP_SET_TIP), _e), fan ? FLAT : FP_CANT, set.q, eyeUp);
     }
     // the bow where it is: on the line as it draws, in for the next arrow, and at rest between shots
     shown.p.lerpVectors(set.p, line.p, raise); shown.q.slerpQuaternions(set.q, line.q, raise);
@@ -657,7 +695,8 @@ export function buildRanger(): Model {
     const bowIn = Math.max(smooth(clamp(aimT / BOW_IN, 0, 1)), stowIn);
     shown.p.lerpVectors(ready.p, shown.p, bowIn); _q.copy(shown.q); shown.q.copy(ready.q).slerp(_q, bowIn);
     // (out to the left and up on its way from the side to the shot and back, so the lower limb passes outside the thigh, not through it)
-    shown.p.addScaledVector(_e.crossVectors(UP, u).normalize(), CARRY_SWING * s * Math.sin(bowIn * Math.PI)).addScaledVector(UP, 0.08 * s * Math.sin(bowIn * Math.PI));
+    // (through the eyes it comes straight in: swung out, it went off the view's edge and back)
+    if (!fp) shown.p.addScaledVector(_e.crossVectors(UP, u).normalize(), CARRY_SWING * s * Math.sin(bowIn * Math.PI)).addScaledVector(UP, 0.08 * s * Math.sin(bowIn * Math.PI));
     // the string: drawn as the bow comes up; loosed, it springs back past rest and rings out
     if (loosed) bow.set(0, -0.35 * (a.draw ?? 1) * Math.exp(-a.loosed! / 0.06) * Math.cos(a.loosed! * Math.PI * 2 * 9));
     else bow.set(drawnAt(kv) * pullMax * Math.min(1, aim * 1.5));
@@ -709,7 +748,11 @@ export function buildRanger(): Model {
     // (up over the shoulder on the way to the quiver: across just above it, the arm folded past its range)
     const lift = j.chest.localToWorld(_e.copy(shoulderRest).add(LIFT)).clone();
     // (through the eyes the quiver is behind them: the arrow comes up from below)
-    if (fp) { fromEyes(root, j.neck, FP_LOW, q0); fromEyes(root, j.neck, FP_LOW, rise); rise.addScaledVector(UP, 0.05 * s); fromEyes(root, j.neck, FP_UP, pull); mouthW.copy(q0).addScaledVector(UP, -s); }
+    if (fp) {
+      fromEyes(root, j.neck, FP_LOW, q0); fromEyes(root, j.neck, FP_LOW, rise); rise.addScaledVector(eyeUp, 0.05 * s); fromEyes(root, j.neck, FP_UP, pull); mouthW.copy(q0).addScaledVector(eyeUp, -s);
+      // (and the way up to it and back from the shot below the view too: over the shoulder, the arm came up through its edge)
+      fromEyes(root, j.neck, _e.copy(FP_LOW).add(_b.set(0.08, -0.05, 0.08)), sideUp); fromEyes(root, j.neck, _e.copy(FP_LOW).add(_b.set(0.04, -0.02, 0.04)), lift);
+    }
     // (reaching up over the shoulder for it, the elbow raised and out to the side)
     const reloadPole = _b.copy(UP).multiplyScalar(0.7).addScaledVector(u, -0.7).addScaledVector(_left, -0.2).normalize().clone();
     // (the line the arrow lies on, nocked: from the nock forward through the rest)
