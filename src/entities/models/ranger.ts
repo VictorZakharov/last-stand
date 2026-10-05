@@ -21,7 +21,7 @@ import { fitArm, solveArm } from './armIK';
 import { bodyShape } from './anatomy';
 import { buildFlask, drink } from './flask';
 import { buildBoot } from './boot';
-import { Bow, pullAt, arrowGeometry, arrowPieces, ARROW, REST_Y, GRIP, GRIP_R } from './bow';
+import { Bow, pullAt, arrowGeometry, arrowPieces, fanHold, ARROW, REST_Y, GRIP, GRIP_R } from './bow';
 import { fromEyes, dirFromEyes, toEyes } from '../viewModel';
 import { angleDamp, clamp, damp, lerp, smooth, TAU } from '../../util';
 import type { AnimState, Model } from '../../types';
@@ -141,9 +141,9 @@ const GLIDE = 10;
  *  below the crosshair, a little left, and the arrow lies along the shot's own line from it, so it points where the shot
  *  will fly (anchored in the view, under its lower right, the arrow ran across the view 35 degrees left of the shot and
  *  the hand filled a third of its middle); the bow's top tipped to the left (`FP_CANT`, rad), so its upper limb passes
- *  clear of the middle. A fan's flat bow is held a little to the right (`FP_FAN`), so its arrows, lying left of the grip
- *  across its top, fan out from under the eyes (from the grip's own place they leaned all one way, from a nock off to the
- *  left). The line is low enough that the nock, and the draw hand on it, stay below the frame from nocking to the loose, as
+ *  clear of the middle. A fan's flat bow is held a little to the right (`FP_FAN`), so its arrows, side by side up the bow
+ *  from the rest (to the left of the grip), lie along the line under the eyes. The line is low enough that the nock, and
+ *  the draw hand on it, stay below the frame from nocking to the loose, as
  *  an archer never sees his draw hand (half in view at the nock, it popped in from below and out past the camera at every
  *  shot, a jerk between two places). In for the next arrow the bow dips a little (`FP_SET` from the grip's place, its
  *  arrow tipped `FP_SET_TIP` down). Between shots the bow is carried low on the left, nearly upright, the fist round its
@@ -459,11 +459,12 @@ export function buildRanger(): Model {
   /** when the hand reaches the quiver and has the arrow out of it, this frame (see FOLLOW) */
   let QUIVER = 0.5, OUT = 0.7;
   let yawOff = 0;
-  /** the last shot's arrows and their spread, kept a moment after it ends (`KEEP_SHOT` s): the next shot queued after a
-   *  fan's starts a frame later, and for the frame between them the bow flicked over to a single arrow's pose and back */
-  let lastArrows = 1, lastSpread = 0, sinceShot = 1;
-  /** through the eyes, how far the bow is laid out for a fan (0..1), eased: from one kind of shot to the other it jumped */
-  let fanK = 0;
+  /** the last shot's arrows, kept a moment after it ends (`KEEP_SHOT` s): the next shot queued after a fan's starts a
+   *  frame later, and for the frame between them the bow flicked over to a single arrow's pose and back */
+  let lastArrows = 1, sinceShot = 1;
+  /** how far the bow is laid out for a fan (0..1), eased: from one kind of shot to the other it jumped; and the last fan's
+   *  arrows, which the fingers hold side by side on the string (`Bow.hold`) */
+  let fanK = 0, fanN = 5;
   /** through the eyes, how much the bow sways with the stride (0..1, eased with the pace), and the stride's phase it sways
    *  by: on only, at the gait's pace (the gait's own turns back as the way he goes turns round, and the bow hitched) */
   let swayK = 0, swayPhase = 0, lastPhase = 0;
@@ -665,10 +666,14 @@ export function buildRanger(): Model {
     }
     anchor.getWorldPosition(anchorW);
     // full draw: the bow arm reaching along the line from the anchor, its fist round the grip; how far that is, is the draw length
-    if (shooting) { lastArrows = a.arrows ?? 1; lastSpread = a.fan ?? 0; sinceShot = 0; } else sinceShot += dt;
-    const arrows = shooting ? a.arrows ?? 1 : sinceShot < KEEP_SHOT ? lastArrows : 1, spread = shooting ? a.fan ?? 0 : sinceShot < KEEP_SHOT ? lastSpread : 0;
+    if (shooting) { lastArrows = a.arrows ?? 1; sinceShot = 0; } else sinceShot += dt;
+    const arrows = shooting ? a.arrows ?? 1 : sinceShot < KEEP_SHOT ? lastArrows : 1;
     const fan = arrows > 1;
     fanK = damp(fanK, fan ? 1 : 0, FAN_EASE, dt);
+    if (fan) fanN = arrows;
+    // (a fan's arrows side by side up the bow from the rest, the line through their middle)
+    bow.hold = fanHold(fanN) * fanK;
+    const restY = REST_Y + bow.hold;
     // (the fan's string lies across, hooked palm down: the hand's width across the jaw, so it's anchored that much out from the face)
     if (fan && !fp) anchorW.addScaledVector(_e.crossVectors(UP, u).normalize(), -FAN_OUT * s);
     frame(u, fan ? FLAT : CANT, line.q);
@@ -676,10 +681,10 @@ export function buildRanger(): Model {
     j.shoulderL.getWorldPosition(_d);
     fistReach(handL, _y, _e.copy(u).negate(), GRIP_R, _c);
     // (the wrist, as the rest lies on the line at D from the anchor: B + u D)
-    _b.copy(anchorW).addScaledVector(_y, (GRIP.y - REST_Y) * s).addScaledVector(u, GRIP.z * s).sub(_c).sub(_d);
+    _b.copy(anchorW).addScaledVector(_y, (GRIP.y - restY) * s).addScaledVector(u, GRIP.z * s).sub(_c).sub(_d);
     const L = (j.P.upperL + j.P.foreL) * s * REACH, ub = u.dot(_b);
     const D = -ub + Math.sqrt(Math.max(0, ub * ub - _b.lengthSq() + L * L));
-    line.p.copy(anchorW).addScaledVector(u, D).addScaledVector(_y, -REST_Y * s);
+    line.p.copy(anchorW).addScaledVector(u, D).addScaledVector(_y, -restY * s);
     // (through the eyes: the grip still in the view and the shot's line through it, upright as the view is, the nock the
     // draw length back along it; the model is placed in view after the pose, so the line is posed as the eyes see it)
     const eyeUp = fp ? dirFromEyes(root, EYE_UP, new THREE.Vector3()) : UP;
@@ -691,7 +696,7 @@ export function buildRanger(): Model {
       dirFromEyes(root, uEye, _a);
       frame(_a, lerp(FP_CANT, FLAT, fanK), line.q, eyeUp); _y.set(0, 1, 0).applyQuaternion(line.q);
       fromEyes(root, j.neck, _e.lerpVectors(FP_GRIP, FP_FAN, fanK), line.p);
-      anchorW.copy(line.p).addScaledVector(_y, REST_Y * s).addScaledVector(_a, -D);
+      anchorW.copy(line.p).addScaledVector(_y, restY * s).addScaledVector(_a, -D);
       // (and the rest of the pose, the draw elbow's way round included, along the line as it's posed: along the shot's own,
       // the elbow went round another way as the eyes looked up, and the hand turned up into the view)
       u.copy(_a);
@@ -702,7 +707,7 @@ export function buildRanger(): Model {
     // and the arm reached straight out across the face for it)
     _a.copy(u).applyAxisAngle(_left.crossVectors(UP, u).normalize(), SET_TIP[0]);
     frame(_a, SET_TIP[1], set.q);
-    j.chest.localToWorld(set.p.copy(NOCK_AT)).sub(_e.set(0, REST_Y, -bow.brace).multiplyScalar(s).applyQuaternion(set.q));
+    j.chest.localToWorld(set.p.copy(NOCK_AT)).sub(_e.set(0, restY, -bow.brace).multiplyScalar(s).applyQuaternion(set.q));
     // carried: in the fist at the side, held as the hand holds it whichever way the arm swings (its top forward and out, an arrow nocked along it)
     const wristFK = j.handL.getWorldPosition(new THREE.Vector3()), elbowFK = j.elbowL.getWorldPosition(new THREE.Vector3());
     const elbowPoleFK = elbowFK.clone().sub(j.shoulderL.getWorldPosition(_d));
@@ -749,9 +754,9 @@ export function buildRanger(): Model {
     // (the bow arm's elbow carried as it hangs, and on the shot turned out and a little down: its crease upright, the string clears the forearm)
     const elbowTo = _x.set(1, 0, 0).applyQuaternion(shown.q).addScaledVector(UP, -0.35).normalize().lerp(elbowPoleFK.normalize(), 1 - aim).clone();
     if (hasBow) placeBow(shown, elbowTo);
-    // the arrows on the string (a fan laid across the flat bow's top), and where the shot leaves (the nocked arrow's middle)
+    // the arrows on the string (a fan side by side in the flat bow's window), and where the shot leaves (the nocked arrow's middle)
     const n = arrows;
-    bow.nockArrows(hasBow && nocked ? n : 0, spread, n > 1);
+    bow.nockArrows(hasBow && nocked ? n : 0);
     tip.position.copy(bow.arrows[Math.floor((Math.max(1, n) - 1) / 2)].position);
     root.updateMatrixWorld(true);
     nockW.copy(bow.nock); bow.group.localToWorld(nockW);
@@ -802,7 +807,7 @@ export function buildRanger(): Model {
     // (reaching up over the shoulder for it, the elbow raised and out to the side)
     const reloadPole = _b.copy(UP).multiplyScalar(0.7).addScaledVector(u, -0.7).addScaledVector(_left, -0.2).normalize().clone();
     // (the line the arrow lies on, nocked: from the nock forward through the rest)
-    const lineDir = _a.copy(nockW).sub(bow.group.localToWorld(_e.set(0, REST_Y, 0))).negate().normalize().clone();
+    const lineDir = _a.copy(nockW).sub(bow.group.localToWorld(_e.set(0, restY, 0))).negate().normalize().clone();
     if (fetchE >= 0 && hasBow && fetchE < 1) {
       // a shot with none on the string: from the side up over the shoulder to the quiver, the arrow drawn up out of it
       // to the arm's full stretch, then down in front of the chest to the string where the bow waits, in one sweep

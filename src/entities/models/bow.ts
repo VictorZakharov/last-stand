@@ -17,23 +17,28 @@ const LEAN = 0.25, CURVE = 1.6, RECURVE = -5;
 export const REST_Y = 0.045;
 /** the fist's middle on the grip (the bow's frame), below the shelf, and the grip's radius */
 export const GRIP = new THREE.Vector3(0, -0.0185, 0.003), GRIP_R = 0.022;
-/** a fan's arrows over a bow laid flat (its -x up): each lies on what it crosses, its nock on the string, `gap` (m) above
- *  it: the riser's parts (`TOP_STEP` apart along it, how high each stands), the limbs, or the fist round the grip, which
- *  stands `fist` above the bow's middle `fistH` either side of the grip's (and eases into the rest over `fistE`): laid
- *  2.4 cm up all along, the arrow crossing the fist went 5 cm through it, and floated over the window */
-const FAN = { gap: 0.0015, limb: 0.022, fist: 0.05, fistH: 0.04, fistE: 0.015 }, TOP_STEP = 0.005;
+/** a fan's arrows lie side by side in the window, all on its face, `FAN_PITCH` apart up the bow from the rest (m: their
+ *  heads' sockets just apart), nocked as far apart along a stretch of string the fingers hold straight, so they lie
+ *  parallel and fan out only in flight (fanned out from one nock across the flat bow's top, each lay on what it crossed,
+ *  a limb, the riser or the fist, 2 to 5 cm higher or lower than the next) */
+const FAN_PITCH = 2 * 0.0066 + 0.0004;
+/** half the string the fingers hold straight for `n` arrows side by side (m) */
+export const fanHold = (n: number): number => (Math.max(1, n) - 1) / 2 * FAN_PITCH;
 /** an arrow (38 in: as long as the hero's draw, which is what his arms reach, and its head out past the riser at full draw;
  *  at 30 in it stopped short of the riser) and its shaft's radius */
 export const ARROW = 0.96;
 const SHAFT = 0.0055;
 const SEG = 18, RING = 12;
+/** the serving's length up and down the string from where it's nocked (m) */
+const SERVE = 0.0425;
 /** the shelf the arrow lies on, and the sight window above it, cut past the riser's middle on its right (the bow's frame,
  *  m): the riser no further to the right than `x` from the shelf up to `top`, coming out again in a curve `round` high
  *  above it, the shelf's edge bevelled `bevel` down; the arrow passes at x 0, beside it, on a leather pad (through a round
  *  riser, it ran 3 to 5 cm through the riser and the grip's brass collar at every shot). On the right, as the bow is
  *  canted to the left, so the arrow lies against the riser and the window faces up, to the eyes (on the left it faced
- *  down, away from them, and the riser leaning over it hid the arrow: through the eyes it went in behind the riser) */
-const SHELF = REST_Y - SHAFT, WINDOW = { x: SHAFT + 0.0013, top: 0.085, round: 0.032, bevel: 0.0025 };
+ *  down, away from them, and the riser leaning over it hid the arrow: through the eyes it went in behind the riser). Tall
+ *  enough for a fan's five arrows side by side (`FAN_PITCH`) */
+const SHELF = REST_Y - SHAFT, WINDOW = { x: SHAFT + 0.0013, top: 0.108, round: 0.03, bevel: 0.0025 };
 /** the riser's radius by height: wider under the grip's leather, slimmer up to the limbs' pockets */
 const RISER_R: [number, number][] = [[-0.25, 0.017], [-0.17, 0.019], [-0.075, 0.0205], [0.035, 0.0205], [0.07, 0.0185], [0.13, 0.0163], [0.2, 0.016], [0.25, 0.017]];
 const riserR = (y: number): number => {
@@ -232,7 +237,7 @@ export class Bow {
   /** the string's rest from the grip's pivot (its brace height) and its length */
   readonly brace: number;
   private readonly stringLen: number;
-  /** the string's nocking point as last set, and the limbs' tips (the bow's frame) */
+  /** the string's nocking point as last set (the middle of what the fingers hold), and the limbs' tips (the bow's frame) */
   readonly nock = new THREE.Vector3();
   readonly tipU = new THREE.Vector3();
   readonly tipL = new THREE.Vector3();
@@ -241,7 +246,10 @@ export class Bow {
   private readonly line = new Float64Array(SEG * 2 + 2);
   private readonly limbGeo: THREE.BufferGeometry;
   private readonly strings: THREE.Mesh[];
-  private readonly serving: THREE.Mesh;
+  /** the serving on each half from the held stretch, and on that stretch */
+  private readonly servings: THREE.Mesh[];
+  private readonly held: THREE.Mesh;
+  private readonly bead: THREE.Mesh;
   /** the horn tips on the limbs, and the silencers on the string's halves */
   private readonly caps: THREE.Mesh[];
   /** the vine's geometry, shared by both limbs (each a child of its limb, the lower mirrored with it) */
@@ -249,8 +257,9 @@ export class Bow {
   private readonly silencers: THREE.Mesh[];
   /** the nocked arrows (one, or a fan) */
   readonly arrows: THREE.Mesh[] = [];
-  /** how high the riser's parts stand over its face (-x), every `TOP_STEP` up it from its foot, each the highest of it and its neighbours */
-  private readonly top: Float32Array;
+  /** half the string the draw fingers hold straight (m: `fanHold`), its middle the nocking point, a fan's arrows nocked side
+   *  by side along it; the line through the rest is that much higher up the bow (`restY`). Set before `set` */
+  hold = 0;
 
   constructor(m: BowMaterials) {
     const g = this.group;
@@ -293,12 +302,12 @@ export class Bow {
     }
     {
       // (above the window)
-      const c = at(0.128), leaf = new THREE.Shape();
+      const c = at(0.145), leaf = new THREE.Shape();
       leaf.moveTo(0, -0.019); leaf.quadraticCurveTo(0.0085, -0.002, 0, 0.021); leaf.quadraticCurveTo(-0.0085, -0.002, 0, -0.019);
       const lg = new THREE.ExtrudeGeometry(leaf, { depth: 0.0009, bevelEnabled: true, bevelThickness: 0.0003, bevelSize: 0.0004, bevelSegments: 1, curveSegments: 10 });
       // (standing out of the riser's face, laid round it, with a raised midrib down it)
-      lg.scale(1, 1, -1);
-      const rib = new THREE.BoxGeometry(0.001, 0.034, 0.0011).translate(0, 0.001, -0.0012);
+      lg.scale(0.8, 0.8, -1);
+      const rib = new THREE.BoxGeometry(0.001, 0.027, 0.0011).translate(0, 0.0008, -0.0012);
       for (const piece of [lg, rib]) {
         const P = piece.attributes.position;
         // (each point moved onto the riser's round face below it, a fraction of a millimetre proud of it)
@@ -308,13 +317,6 @@ export class Bow {
     }
     add(merged(brass), m.brass, false, 'brass');
     add(merged(sinew), m.serving, false, 'sinew');
-    // (for a fan's arrows: how high the riser and what's on it stand over its face, along it)
-    const nTop = Math.round(2 * RISER / TOP_STEP) + 1, top = new Float32Array(nTop).fill(-1);
-    for (const o of g.children) {
-      const P = (o as THREE.Mesh).geometry.attributes.position;
-      for (let i = 0; i < P.count; i++) { const k = Math.round((P.getY(i) + RISER) / TOP_STEP); if (k >= 0 && k < nTop) top[k] = Math.max(top[k], -P.getX(i)); }
-    }
-    this.top = top.map((_, k) => Math.max(top[Math.max(0, k - 1)], top[k], top[Math.min(nTop - 1, k + 1)]));
     // the limbs: one shape, the lower its mirror (three flips the faces of a mirrored mesh)
     const n = (SEG + 2) * RING, pos = new Float32Array(n * 3), idx: number[] = [];
     for (let i = 0; i <= SEG; i++) for (let k = 0; k < RING; k++) {
@@ -351,9 +353,12 @@ export class Bow {
     for (const l of limbs) { const v = new THREE.Mesh(this.vineGeo, m.inlay); v.castShadow = false; v.name = 'vine'; l.add(v); }
     this.strings = [0, 1].map(() => add(new THREE.CylinderGeometry(0.0022, 0.0022, 1, 5, 1).translate(0, 0.5, 0), m.string, true, 'string'));
     for (const s of this.strings) s.castShadow = false;
-    // the serving round the string where it's nocked, dark, with a brass bead above the nock; and a tuft of wool on each half
-    this.serving = add(new THREE.CylinderGeometry(0.0031, 0.0031, 0.085, 8), m.serving, false, 'serving');
-    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.0042, 10, 8), m.brass); bead.name = 'bead'; bead.position.y = 0.009; this.serving.add(bead);
+    // the serving round the string where it's nocked, dark, from the stretch the fingers hold (`hold`) up and down each half,
+    // with a brass bead above the nock; and a tuft of wool on each half
+    const serve = new THREE.CylinderGeometry(0.0031, 0.0031, SERVE, 8).translate(0, SERVE / 2, 0);
+    this.servings = [0, 1].map(() => add(serve, m.serving, false, 'serving'));
+    this.held = add(new THREE.CylinderGeometry(0.0031, 0.0031, 1, 8, 1, true).translate(0, 0.5, 0), m.serving, false, 'serving');
+    this.bead = add(new THREE.SphereGeometry(0.0042, 10, 8), m.brass, false, 'bead');
     const tuft = merged([0, 1, 2, 3].map((i) => new THREE.IcosahedronGeometry(0.0085 - i * 0.0009, 1).scale(1, 1.5, 1).translate(Math.sin(i * 2.1) * 0.004, (i - 1.5) * 0.007, Math.cos(i * 2.1) * 0.004)));
     this.silencers = [0, 1].map(() => add(tuft, m.yarn, false, 'silencer'));
     for (let i = 0; i < 5; i++) { const a = add(arrowGeometry(), m.arrow, true, 'arrow'); a.castShadow = false; a.visible = false; this.arrows.push(a); }
@@ -374,18 +379,21 @@ export class Bow {
   set(pull: number, ring = 0): void {
     if (pull > 1e-4) {
       // (the string's two halves, tip to nock, against its length: the bend that matches by bisection)
-      this.nock.set(0, REST_Y, -this.brace - pull);
+      this.nock.set(0, REST_Y + this.hold, -this.brace - pull);
+      const h = this.hold, n = this.nock;
       let lo = 0, hi = 4;
       for (let i = 0; i < 22; i++) {
         const mid = (lo + hi) / 2;
         this.tips(mid);
-        if (this.tipU.distanceTo(this.nock) + this.tipL.distanceTo(this.nock) > this.stringLen) lo = mid; else hi = mid;
+        const len = Math.hypot(this.tipU.y - n.y - h, this.tipU.z - n.z) + Math.hypot(this.tipL.y - n.y + h, this.tipL.z - n.z) + 2 * h;
+        if (len > this.stringLen) lo = mid; else hi = mid;
       }
       this.bend = (lo + hi) / 2;
     } else this.bend = ring;
     this.tips(this.bend);
     // a loose string runs straight, tip to tip
-    if (pull <= 1e-4) this.nock.set(0, REST_Y, this.tipU.z + (this.tipL.z - this.tipU.z) * (this.tipU.y - REST_Y) / (this.tipU.y - this.tipL.y));
+    const ny = REST_Y + this.hold;
+    if (pull <= 1e-4) this.nock.set(0, ny, this.tipU.z + (this.tipL.z - this.tipU.z) * (this.tipU.y - ny) / (this.tipU.y - this.tipL.y));
     // the limb's cross-section: wide and flat, tapering to the tip, closed at its end
     const pos = this.limbGeo.attributes.position as THREE.BufferAttribute, P = pos.array as Float32Array, L = this.line;
     for (let i = 0; i <= SEG + 1; i++) {
@@ -402,13 +410,16 @@ export class Bow {
     pos.needsUpdate = true;
     this.limbGeo.computeVertexNormals();
     this.limbGeo.computeBoundingSphere();
-    // the string's two halves, tip to nock
+    // the string's two halves, tip to the held stretch's ends, and that stretch, served
     [this.tipU, this.tipL].forEach((tip, i) => {
-      const s = this.strings[i], d = _a.copy(tip).sub(this.nock);
-      s.position.copy(this.nock); s.scale.set(1, d.length(), 1); s.quaternion.setFromUnitVectors(_up, d.normalize());
+      const s = this.strings[i], end = _b.copy(this.nock).addScaledVector(_up, i ? -this.hold : this.hold), d = _a.copy(tip).sub(end);
+      s.position.copy(end); s.scale.set(1, d.length(), 1); s.quaternion.setFromUnitVectors(_up, d.normalize());
+      this.servings[i].position.copy(end); this.servings[i].quaternion.copy(s.quaternion);
+      this.servings[i].scale.y = Math.max(0.05, 1 - this.hold / SERVE);
+      if (!i) this.bead.position.copy(end).addScaledVector(d, 0.009);
     });
-    this.serving.position.copy(this.nock);
-    this.serving.quaternion.copy(this.strings[0].quaternion);
+    this.held.visible = this.hold > 1e-4;
+    this.held.position.copy(this.nock).addScaledVector(_up, -this.hold); this.held.scale.set(1, Math.max(1e-4, 2 * this.hold), 1);
     // the horn caps on the limbs' ends, along them
     this.layVine();
     const e = SEG * 2, ty = L[e] - L[e - 2], tz = L[e + 1] - L[e - 1];
@@ -451,28 +462,25 @@ export class Bow {
     this.vineGeo.computeBoundingSphere();
   }
 
-  /** how high a fan's arrow crossing the bow `y` up it lies over its face (m) */
-  private fanLift(y: number): number {
-    const k = (y + RISER) / TOP_STEP, i = Math.floor(k), n = this.top.length;
-    const on = i < 0 || i >= n - 1 ? FAN.limb : this.top[i] + (this.top[i + 1] - this.top[i]) * (k - i);
-    const fist = 1 - THREE.MathUtils.smoothstep(Math.abs(y - GRIP.y), FAN.fistH, FAN.fistH + FAN.fistE);
-    return Math.max(on, FAN.fist * fist) + SHAFT + FAN.gap;
+  /** where the string is `y` up the bow, on the stretch the fingers hold or on a half */
+  private stringAt(y: number, o: THREE.Vector3): THREE.Vector3 {
+    const n = this.nock, h = this.hold, up = y > n.y + h, tip = up ? this.tipU : this.tipL, ey = n.y + (up ? h : -h);
+    if (Math.abs(y - n.y) <= h) return o.set(0, y, n.z);
+    return o.set(0, y, n.z + (tip.z - n.z) * (y - ey) / (tip.y - ey));
   }
 
-  /** `n` arrows on the string, a fan `spread` apart (rad), lying from the nock over the rest; or, with the bow laid over
-   *  flat (`flat`: its +x down), fanned out across its top, each lying on what it crosses. 0 takes them off. */
-  nockArrows(n: number, spread = 0, flat = false): void {
-    const d = _b.set(0, REST_Y, 0).sub(this.nock).normalize();
+  /** `n` arrows on the string, lying in the window from the rest up, side by side, each nocked level with where it lies,
+   *  so they're parallel (on the stretch the fingers hold, `fanHold(n)`, or above it up the string's half while it's less:
+   *  nocked about the nocking point as it eased out, the lowest went into the grip). 0 takes them off. */
+  nockArrows(n: number): void {
     this.arrows.forEach((a, i) => {
       a.visible = i < n;
       if (i >= n) return;
-      const yaw = (i - (n - 1) / 2) * spread;
-      _a.copy(d).applyAxisAngle(flat ? SIDE : _up, yaw);
-      // (where it crosses the riser's line, raised over what's there, turned about the nock to lie on it)
-      if (flat) { const y = this.nock.y - _a.y / _a.z * this.nock.z; _a.set(-this.fanLift(y), y, 0).sub(this.nock).normalize(); }
+      const off = n > 1 ? i * FAN_PITCH : 0, nock = this.stringAt(REST_Y + off, _b);
+      _a.set(0, REST_Y + off, 0).sub(nock).normalize();
       a.quaternion.setFromUnitVectors(FWD, _a);
-      a.position.copy(this.nock).addScaledVector(_a, ARROW / 2 - 0.008);
+      a.position.copy(nock).addScaledVector(_a, ARROW / 2 - 0.008);
     });
   }
 }
-const FWD = new THREE.Vector3(0, 0, 1), SIDE = new THREE.Vector3(1, 0, 0);
+const FWD = new THREE.Vector3(0, 0, 1);
