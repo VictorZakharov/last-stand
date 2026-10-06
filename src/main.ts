@@ -31,6 +31,7 @@ import { initTouch, updateTouch } from './ui/touch';
 import { initPwa } from './ui/pwa';
 import { initItemIcons } from './ui/itemIcons';
 import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap } from './ui/perfHud';
+import { initNetHud } from './ui/netHud';
 import { warmShaders } from './game/warmup';
 import { initQuality, sampleQuality } from './core/quality';
 import { pinPrograms, markLoaded, warmUp } from './core/shaders';
@@ -73,6 +74,7 @@ async function boot() {
   initHud();
   initTouch();
   initPerfHud(renderer);
+  initNetHud();
   buildHotbar(G.player);
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
   initMenus({ start, toMenu, resume, abandon, profileChanged, switchClass, summaryDone, lobbyChanged: sendLobbyChoice });

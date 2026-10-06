@@ -2,7 +2,10 @@
 @use 'theme' as *;
 
 /* ---------- performance overlay (optional, pause menu) ---------- */
-#perf { position: fixed; top: 10px; left: 10px; z-index: 30; width: 212px; padding: 9px 11px 8px; scale: var(--ui, 1); transform-origin: left top;
+#diag { position: fixed; top: 10px; left: 10px; z-index: 30; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  scale: var(--ui, 1); transform-origin: left top; pointer-events: none; }
+#diag > * { pointer-events: auto; }
+#perf { width: 212px; padding: 9px 11px 8px;
   font: 11px/1.35 ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; color: #cfe9d8; text-align: left;
   background: rgba(6,6,8,.86); border: 1px solid rgba($frame, .45); border-radius: 4px; box-shadow: 0 6px 18px rgba(0,0,0,.6);
   cursor: copy; user-select: none; --pf: #7affb0; transition: border-color .3s; }
@@ -26,3 +29,18 @@
 #perf dd { margin: 0; text-align: right; white-space: nowrap; }
 .pf-gpu { margin-top: 5px; font-size: 9.5px; color: rgba(230,220,200,.45); overflow-wrap: anywhere; }
 .pf-copy { margin-top: 4px; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: rgba($accent, .5); }
+
+/* ---------- network overlay (optional, pause menu) ---------- */
+#net { width: 212px; max-height: calc(100vh / var(--ui, 1) - 20px); overflow-y: auto; padding: 8px 11px; box-sizing: border-box;
+  font: 11px/1.35 ui-monospace, 'SF Mono', Menlo, Consolas, monospace; color: #cfe9d8; text-align: left;
+  background: rgba(6,6,8,.86); border: 1px solid rgba($frame, .45); border-radius: 4px; box-shadow: 0 6px 18px rgba(0,0,0,.6); }
+#net b { color: #fff; }
+#net ul { margin: 2px 0 0; padding: 0; list-style: none; }
+#net li { position: relative; padding-left: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-dim); }
+#net li::before { content: ''; position: absolute; left: 1px; top: .5em; width: 5px; height: 5px; border-radius: 50%; background: rgba(230,220,200,.35); }
+#net li.ok::before { background: #7affb0; } #net li.wait::before { background: #ffc07a; } #net li.bad::before { background: #ff6a5a; }
+#net li small { display: block; font-size: 9.5px; color: rgba(230,220,200,.45); }
+.nt-sec { margin-top: 6px; padding-top: 5px; border-top: 1px solid rgba($frame, .25); color: var(--ink-dim); }
+.nt-sub { margin-top: 5px; color: var(--ink-dim); }
+.nt-acts { display: flex; gap: 12px; margin-top: 5px; }
+.nt-acts .link { padding: 0; font: inherit; font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: rgba($accent, .75); }

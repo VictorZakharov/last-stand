@@ -9,6 +9,7 @@ import { renderLobbyOptions } from './menus';
 import { openSaves } from './saves';
 import { isTouch } from './touch';
 import { sfx } from '../core/audio';
+import { reportLinks, bindReportLinks } from './netHud';
 import type { Player } from '../entities/player';
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -53,7 +54,9 @@ export function renderCoop(): void {
           <button class="btn primary" id="btn-coop-host">Open a room</button></div>
         <div class="coop-col"><div class="coop-h">Join</div><p>Enter the code your friend sent.</p>
           <form class="coop-join"><input id="coop-code" maxlength="8" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="Room code"><button class="btn" type="submit">Join</button></form></div>
-      </div>`;
+      </div>
+      ${reportLinks()}`;
+    bindReportLinks(body);
     $('#btn-coop-host', body).onclick = () => { sfx.click(); void hostRoom(); };
     $('.coop-saves', body).onclick = () => { sfx.click(); openCoop(false); openSaves(true); };
     $<HTMLFormElement>('.coop-join', body).onsubmit = (e) => {
@@ -66,7 +69,8 @@ export function renderCoop(): void {
   if (s === 'joining') {
     body.innerHTML = `<p class="coop-wait">Joining room <b class="coop-code">${esc(session.code)}</b>…</p>
       <p class="coop-intro">Finding the host through public relays. This can take a few seconds.</p>
-      <button class="btn" id="btn-coop-leave">Cancel</button>`;
+      <button class="btn" id="btn-coop-leave">Cancel</button>
+      ${reportLinks()}`;
   } else {
     const list = others.length
       ? others.map((p) => `<li><span class="coop-dot"></span>${esc(who(p))}</li>`).join('')
@@ -77,13 +81,15 @@ export function renderCoop(): void {
       <ul class="coop-list">${list}</ul>
       <p class="coop-intro">${s === 'hosting' ? 'You pick the battleground and start the run; your friends come along.' : 'The host picks the battleground and starts the run.'}
         After each wave everyone decides: bank and leave, or continue together.</p>
-      <button class="btn danger" id="btn-coop-leave">Leave room</button>`;
+      <button class="btn danger" id="btn-coop-leave">Leave room</button>
+      ${reportLinks()}`;
     const copy = $('#btn-coop-copy', body) as HTMLElement | null;
     if (copy) copy.onclick = () => {
       sfx.click();
       navigator.clipboard?.writeText(inviteLink()).then(() => { copy.textContent = 'Copied'; }, () => $<HTMLInputElement>('.coop-link input', body).select());
     };
   }
+  bindReportLinks(body);
   $('#btn-coop-leave', body).onclick = () => { sfx.click(); leaveRoom(); };
 }
 

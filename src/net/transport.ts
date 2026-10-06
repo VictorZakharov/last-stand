@@ -1,6 +1,7 @@
 // Peer-to-peer links for co-op. Players meet in a room named by a short code: WebRTC data channels,
 // set up over free public Nostr relays (Trystero), so no server of our own is needed. `?net=local`
 // swaps in a BroadcastChannel between tabs of one browser, for testing without the relays.
+import { netLog, watchLink, unwatchLink, watchedConnection, countMsg } from './netlog';
 
 export type Channel = 'hello' | 'look' | 'pl' | 'ev' | 'w' | 'ctl';
 
@@ -17,29 +18,47 @@ export interface Link {
 /** the protocol changes with the game: a room only ever holds one version (the relays keep them apart) */
 const APP = 'last-stand-coop-1';
 const CHANNELS: Channel[] = ['hello', 'look', 'pl', 'ev', 'w', 'ctl'];
+/** The relays every game meets on, each checked to pass Trystero's events end to end (left to Trystero,
+ *  the app id picked 5 of its list, and 3 of those were down: a bad certificate, refusing, or taking
+ *  events and passing none on). Every game uses all of them, so a relay one player can't reach costs
+ *  nothing while any other is shared. `?relays=a.org,b.net` tries others. */
+const RELAYS = [
+  'relay.damus.io', 'relay.primal.net', 'nostr.mom', 'relay.mostro.network', 'nostr-pub.wellorder.net',
+  'bucket.coracle.social', 'relay.nostr.net', 'nostr.islandarea.net', 'nostr.oxtr.dev', 'nostr.bitcoiner.social',
+];
+
+const relayUrls = (): string[] => {
+  const own = new URLSearchParams(location.search).get('relays');
+  return (own ? own.split(',').map((r) => r.trim()).filter(Boolean) : RELAYS).map((r) => (r.includes('://') ? r : 'wss://' + r));
+};
 
 export async function openLink(code: string): Promise<Link> {
   if (new URLSearchParams(location.search).get('net') === 'local') return localLink(code);
   // loaded on first use: solo players never download it
-  const { joinRoom, selfId } = await import('trystero/nostr');
-  const room = joinRoom({ appId: APP }, code);
+  const { joinRoom, selfId, getRelaySockets } = await import('trystero/nostr');
+  const urls = relayUrls();
+  netLog(`opening the link to room ${code} as ${selfId.slice(0, 6)}`);
+  const room = joinRoom({ appId: APP, relayConfig: { urls }, rtcPolyfill: watchedConnection() }, code, {
+    onJoinError: (d) => netLog(`join error with ${d.peerId.slice(0, 6)}: ${d.error}`),
+  });
+  watchLink(urls, getRelaySockets as () => Record<string, WebSocket>, () => room.getPeers());
   let onMsg: (ch: Channel, data: unknown, from: string) => void = () => {};
   const senders = new Map<Channel, (data: never, opts?: { target?: string }) => Promise<void>>();
   for (const ch of CHANNELS) {
     const a = room.makeAction(ch);
-    a.onMessage = (data, ctx) => onMsg(ch, data, ctx.peerId);
+    a.onMessage = (data, ctx) => { countMsg('in'); onMsg(ch, data, ctx.peerId); };
     senders.set(ch, a.send as never);
   }
   let join: (peer: string) => void = () => {}, gone: (peer: string) => void = () => {};
-  room.onPeerJoin = (p) => join(p);
-  room.onPeerLeave = (p) => gone(p);
+  room.onPeerJoin = (p) => { netLog(`peer ${p.slice(0, 6)} joined`); join(p); };
+  room.onPeerLeave = (p) => { netLog(`peer ${p.slice(0, 6)} left`); gone(p); };
   return {
     self: selfId,
-    send(ch, data, to) { senders.get(ch)!(data as never, to ? { target: to } : undefined).catch(() => {}); },
+    send(ch, data, to) { countMsg('out'); senders.get(ch)!(data as never, to ? { target: to } : undefined).catch((e: Error) => netLog(`send ${ch} failed: ${e.message}`)); },
     onMessage(fn) { onMsg = fn; },
     onJoin(fn) { join = fn; },
     onLeave(fn) { gone = fn; },
-    leave() { room.leave().catch(() => {}); },
+    leave() { netLog('left the room'); unwatchLink(); room.leave().catch(() => {}); },
   };
 }
 
