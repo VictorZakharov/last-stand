@@ -233,16 +233,14 @@ function frame(z: THREE.Vector3, cant: number, out: THREE.Quaternion, up = UP): 
 
 /** the draw hand's fingers: index, middle and ring hooked round the string at their last joints, the little finger and the
  *  thumb tucked under (`k` 1), or relaxed open (0); `pinch` closes the thumb on the index, holding an arrow by its nock */
-/** the cuff over the wrist (the forearm joint's space, its bone along -y): from inside the bracer's end, round, to the wrist,
- *  flattened as a wrist is (wider across the back of the hand than through it), and onto the heel of the palm */
-function wristCuff(): THREE.BufferGeometry {
-  // [y, half across, half through]
-  const rings: [number, number, number][] = [[-0.235, 0.045, 0.045], [-0.25, 0.042, 0.038], [-0.262, 0.036, 0.027], [-0.274, 0.037, 0.023], [-0.286, 0.04, 0.021], [-0.296, 0.04, 0.02]];
-  const g = lathe(rings.map(([y, rx]) => [rx, y] as [number, number]).reverse(), 18), p = g.attributes.position;
+/** a tube round the forearm joint's bone (along -y, its space), flattened: rings of [y, half across, half through] from
+ *  the bottom up (the wrist wider across the back of the hand than through it, as the forearm is towards it) */
+function ovalTube(rings: [number, number, number][], segs: number): THREE.BufferGeometry {
+  const g = lathe(rings.map(([y, rx]) => [rx, y] as [number, number]), segs), p = g.attributes.position;
   if (!p) return g;
   for (let i = 0; i < p.count; i++) {
     const y = p.getY(i); let k = 0;
-    while (k < rings.length - 2 && y < rings[k + 1][0]) k++;
+    while (k < rings.length - 2 && y > rings[k + 1][0]) k++;
     const [y0, x0, z0] = rings[k], [y1, x1, z1] = rings[k + 1], t = clamp((y - y0) / (y1 - y0), 0, 1);
     p.setZ(i, p.getZ(i) * (z0 + (z1 - z0) * t) / (x0 + (x1 - x0) * t));
   }
@@ -464,11 +462,13 @@ export function buildRanger(): Model {
     S.skinChain(g, coat, sh, [...chainOf(sa), el]);
     // (the sleeve on down the forearm into a bracer from the wrist, a brass band round the bracer's top)
     S.add(lathe([[0.052, -0.12], [0.055, -0.04], [0.056, 0]], 14), coat, el);
-    S.add(lathe([[0.047, -0.25], [0.047, -0.22], [0.052, -0.15], [0.057, -0.1], [0.058, -0.095]], 14), hide, el);
-    // (and under its end a leather cuff over the wrist onto the heel of the hand, narrowing to the wrist's flattened oval
-    // and bending with it: the bracer a rigid tube to the wrist and the palm a box from it, a bent wrist swung the palm out
-    // of the tube's end, and the hand looked broken off)
-    S.skin(wristCuff(), hide, el, hand, j.P.foreL - 0.02, j.P.foreL + 0.015);
+    // (tapering down the forearm as one does, to the wrist's flattened oval: round and as wide at the wrist as below the
+    // elbow, 30 cm round where a wrist is 17, it stood out from the hand as a pipe)
+    S.add(ovalTube([[-0.25, 0.04, 0.029], [-0.2, 0.043, 0.035], [-0.16, 0.048, 0.043], [-0.13, 0.055, 0.054], [-0.095, 0.058, 0.058]], 18), hide, el);
+    // (and under its end a leather cuff over the wrist onto the heel of the hand, bending with it: the bracer a rigid tube to
+    // the wrist and the palm a box from it, a bent wrist swung the palm out of the tube's end, and the hand looked broken
+    // off; pinched in under the bracer's end, it read as a doll's joint)
+    S.skin(ovalTube([[-0.298, 0.04, 0.02], [-0.286, 0.04, 0.021], [-0.272, 0.038, 0.023], [-0.258, 0.038, 0.026], [-0.24, 0.039, 0.028]], 18), hide, el, hand, j.P.foreL - 0.02, j.P.foreL + 0.015);
     S.add(belt(0.059, 0.059, -0.1, 0.012, 0.004), brass, el);
   }
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]]) {
