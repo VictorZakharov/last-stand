@@ -3,6 +3,7 @@
 // partner can't connect. The co-op dialog offers the report too.
 import { readCookie, writeCookie } from '../core/cookies';
 import { netReport, netSummary, testRelays } from '../net/netlog';
+import { usesRelays } from '../net/transport';
 import { session } from '../net/session';
 import { role } from '../net/role';
 
@@ -23,7 +24,7 @@ export function initNetHud(): void {
   el = document.querySelector<HTMLElement>('#net')!;
   // the buttons stay put while the rest redraws, so what they say after a click is seen
   el.innerHTML = `<div class="nt-body"></div>
-    <div class="nt-acts"><button class="link" data-net="copy">Copy log</button>${canShare() ? '<button class="link" data-net="share">Send log</button>' : ''}<button class="link" data-net="test">Test relays</button></div>`;
+    <div class="nt-acts"><button class="link" data-net="copy">Copy log</button>${canShare() ? '<button class="link" data-net="share">Send log</button>' : ''}${usesRelays() ? '<button class="link" data-net="test">Test relays</button>' : ''}</div>`;
   body = el.querySelector<HTMLElement>('.nt-body')!;
   bindReportLinks(el);
   setNetHud(readCookie(COOKIE) === '1', false);

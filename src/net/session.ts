@@ -7,7 +7,7 @@ import { COOP } from '../data/balance';
 import { CLASSES } from '../data/classes/index';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { Player, setActionSink, type PlayerAction } from '../entities/player';
-import { openLink, type Link } from './transport';
+import { openLink, usesRelays, type Link } from './transport';
 import { netLog, testRelays } from './netlog';
 import { role } from './role';
 import { showBiomeSetting } from '../game/biome';
@@ -73,8 +73,9 @@ export const inviteLink = (): string => {
   const u = new URL(location.href);
   u.search = '';
   u.searchParams.set('room', session.code);
-  const local = new URLSearchParams(location.search).get('net');
-  if (local) u.searchParams.set('net', local);
+  // (how this game links, so the guest's links the same way: the mode, another relay server, other Nostr relays)
+  const own = new URLSearchParams(location.search);
+  for (const k of ['net', 'server', 'relays']) { const v = own.get(k); if (v) u.searchParams.set(k, v); }
   return u.toString();
 };
 
@@ -125,7 +126,7 @@ export async function joinRoom(code: string): Promise<void> {
   joinTimer = setTimeout(() => {
     if (session.status !== 'joining') return;
     // (before the room is left: what the relays do with our events goes into the network log)
-    void testRelays();
+    if (usesRelays()) void testRelays();
     fail('Nobody answered: check the code, or ask the host to open the room again.');
   }, JOIN_TIMEOUT * 1000);
 }
