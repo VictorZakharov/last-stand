@@ -21,7 +21,7 @@ export const GRIP = new THREE.Vector3(0, -0.0185, 0.003), GRIP_R = 0.022;
  *  heads' sockets just apart), nocked as far apart along a stretch of string the fingers hold straight, so they lie
  *  parallel and fan out only in flight (fanned out from one nock across the flat bow's top, each lay on what it crossed,
  *  a limb, the riser or the fist, 2 to 5 cm higher or lower than the next) */
-const FAN_PITCH = 2 * 0.0066 + 0.0004;
+export const FAN_PITCH = 2 * 0.0066 + 0.0004;
 /** half the string the fingers hold straight for `n` arrows side by side (m) */
 export const fanHold = (n: number): number => (Math.max(1, n) - 1) / 2 * FAN_PITCH;
 /** an arrow (38 in: as long as the hero's draw, which is what his arms reach, and its head out past the riser at full draw;

@@ -28,8 +28,9 @@ export interface ArmGoal {
   roll?: { axis: THREE.Vector3; range: number; at: THREE.Vector3 };
   /** the shoulder girdle may move the shoulder (anatomy.ts `GIRDLE`) when no elbow keeps the arm within its ranges with it at rest */
   girdle?: boolean;
-  /** a hand round a handle may turn about its palm on it up to this (rad), the handle diagonal across the palm (`hold`'s slant): the hand joint, and so what it holds, keeps its turn, only the visible hand turns */
-  slant?: number;
+  /** a hand round a handle may turn about its palm on it up to this (rad), the handle diagonal across the palm (`hold`'s slant): the hand joint, and so what it holds, keeps its turn, only the visible hand turns;
+   *  or its least and most (one side of the fist would meet what's beside the handle: a bow's arrow over its shelf) */
+  slant?: number | [number, number];
   /** the hand's turn on the forearm eased from `rest` (the hand joint's own turn) to the one `hand` asks for, by `w`, for
    *  whichever elbow is tried: a hand coming onto a grip from riding its forearm */
   ease?: { rest: THREE.Quaternion; w: number };
@@ -40,6 +41,10 @@ export interface ArmGoal {
    *  found now they go (0..1), the best found between the few tried, not one of them: picked from those, the hand turned
    *  and slanted in steps, and as the walk moved the elbow a bow carried in the fist jumped between two or three places */
   glide?: number;
+  /** the hand turned as asked whatever the forearm's and the wrist's ranges (the elbow still chosen to keep them): through
+   *  the eyes, the bow hand, so the bow stays as it's posed (stopped at the wrist's end, the fist turned the bow with the
+   *  elbow, and a frame's other elbow coming in for a fan turned it 40 px in the view) */
+  free?: boolean;
 }
 export interface ArmResult {
   /** degrees outside the ranges that no elbow could avoid (the hand then turned less than asked) */
@@ -180,11 +185,14 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   };
 
   const ps = lastS.get(sh);
+  /** the slant's least and most */
+  const [slLo, slHi] = typeof g.slant === 'number' ? [-g.slant, g.slant] : g.slant ?? [0, 0];
+  const slantIn = (x: number): number => Math.max(slLo, Math.min(slHi, x));
   /** the hand's turn about its handle and its slant on it for the shoulder where it is (the slant only if `slants`): a few, roughly; and their cost */
   const turnsFor = (slants: boolean): [number, number, number] => {
     const rolls = g.roll && ROM_ON ? Array.from({ length: ROLLS }, (_, i) => g.roll!.range * (2 * i / (ROLLS - 1) - 1)) : [0];
     // (warm: round last frame's slant; all of them when that's nowhere near)
-    const sls = !(slants && g.slant && ROM_ON) ? [0] : ps ? [ps - 0.12, ps, ps + 0.12].map((x) => Math.max(-g.slant!, Math.min(g.slant!, x))) : [0, -0.5, 0.5, -1, 1].map((k) => k * g.slant!);
+    const sls = !(slants && g.slant && ROM_ON) ? [0] : ps ? [ps - 0.12, ps, ps + 0.12].map(slantIn) : [0, -0.5, 0.5, -1, 1].map((k) => k * (k < 0 ? -slLo : slHi));
     let roll = 0, slant = 0, bestC = Infinity, bi = 0, bk = 0;
     const cs = sls.map(() => rolls.map(() => 0));
     sls.forEach((sl, i) => rolls.forEach((ro, k) => {
@@ -196,7 +204,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     // (gliding, between the ones tried: where a parabola through the best and its neighbours is least)
     if (g.glide !== undefined) {
       if (bk > 0 && bk < rolls.length - 1) roll += vertex(cs[bi][bk - 1], cs[bi][bk], cs[bi][bk + 1]) * (rolls[1] - rolls[0]);
-      if (sls.length === 3 && bi === 1) slant += vertex(cs[0][bk], cs[1][bk], cs[2][bk]) * (sls[2] - sls[0]) / 2;
+      if (sls.length === 3 && bi === 1) slant = slantIn(slant + vertex(cs[0][bk], cs[1][bk], cs[2][bk]) * (sls[2] - sls[0]) / 2);
     }
     return [roll, slant, bestC];
   };
@@ -265,7 +273,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   // (the visible hand's turn on the forearm: as wanted, or as it was)
   if (want) eased(g, _rel.copy(_Qf).invert().multiply(want));
   else { _rel.copy(hd.quaternion); if (vis) _rel.multiply(vis); }
-  if (ROM_ON) excess += clampWrist(_rel, left, _rel);
+  if (ROM_ON && !g.free) excess += clampWrist(_rel, left, _rel);
   hd.quaternion.copy(_rel);
   // (the hand joint under the visible hand: its turn on the joint, and the slant)
   if (vis || slant) hd.quaternion.multiply(_hx.copy(vis ?? _sz.identity()).multiply(_sz.setFromAxisAngle(Z, slant)).invert());

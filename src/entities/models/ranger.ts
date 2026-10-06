@@ -21,7 +21,7 @@ import { fitArm, solveArm } from './armIK';
 import { bodyShape } from './anatomy';
 import { buildFlask, drink } from './flask';
 import { buildBoot } from './boot';
-import { Bow, pullAt, arrowGeometry, arrowPieces, fanHold, ARROW, REST_Y, GRIP, GRIP_R } from './bow';
+import { Bow, pullAt, arrowGeometry, arrowPieces, fanHold, ARROW, FAN_PITCH, REST_Y, GRIP, GRIP_R } from './bow';
 import { fromEyes, dirFromEyes, toEyes } from '../viewModel';
 import { angleDamp, clamp, damp, lerp, smooth, TAU } from '../../util';
 import type { AnimState, Model } from '../../types';
@@ -88,6 +88,9 @@ const DRAW_KEEP = 150;
  *  in line behind the arrow at its height, the elbow needs 57 degrees (rolled up to 34, every elbow in line left the
  *  forearm's turn 6 to 10 degrees past its end) */
 const HOOK_TILT = -1, HOOK_ROLL = 0;
+/** how late in the draw the hand rolls on the string (the power of the draw's share it rolls by: rolled as the string
+ *  came back, the forearm was at its turn's end mid-draw and the shoulder rose past its range to keep the elbow in line) */
+const TILT_POW = 3;
 /** how fast the draw elbow may move as the string is drawn (the rig's units a second): round into the anchor it swings,
  *  not jumps (only then: the reload is quicker) */
 const ELBOW_V = 3;
@@ -120,6 +123,9 @@ const SIDE_UP = V(-0.24, -0.08, 0.16);
 const QUIVER_NOCK = 0.42, QUIVER_MOUTH = 0.16;
 /** how long putting the arrow back in the quiver takes (s); and the share of a fetch at which the arrow is on the string */
 const STOW = 1.5, FETCHED = 0.92;
+/** how far out to the right the arrow in the hand swings as it turns over the top, from pointing into the quiver (a share
+ *  of a turn's direction) */
+const TURN_OUT = 0.6;
 /** of putting it back, the share over which the bow comes up before the chest first, the hand waiting (setting off at once,
  *  it reached for the bow wherever it was, behind the back after a swing or another skill's pose) */
 const STOW_UP = 0.2;
@@ -137,6 +143,10 @@ const YAW_OFF = 0.15;
  *  `glide`): chosen afresh each frame from a few, they stepped between them, and the bow carried in the fist jumped
  *  between two or three places as the walk moved the elbow */
 const GLIDE = 10;
+/** how far the bow fist may slant on the grip the way that lifts the back of the fist (rad; `SLANT` the other way): up to
+ *  `SLANT` there, looking down through the eyes as Hailfletch's volleys were drawn, the fist rose 2 cm into the arrow over
+ *  the shelf from 0.27 */
+const BOW_SLANT = 0.2;
 /** first person (the eyes' frame, viewModel.ts: x right, y up, -z ahead, m). At full draw the bow's grip is held still
  *  below the crosshair, a little left, and the arrow lies along the shot's own line from it, so it points where the shot
  *  will fly (anchored in the view, under its lower right, the arrow ran across the view 35 degrees left of the shot and
@@ -166,6 +176,9 @@ const FP_SWAY = [0.007, 0.005, 0.025], FP_SWAY_EASE = 5, FP_SWAY_DRAWN = 0.3;
 /** how long the last shot's arrows stay on the string after it ends (s), and how fast the bow is laid out for a fan or
  *  back through the eyes (1/s) */
 const KEEP_SHOT = 0.15, FAN_EASE = 12;
+/** how long a drawn string takes to be let down when the shot ends without its loose (s), setting off and arriving at rest
+ *  (eased off exponentially, the arrow on it turned from coming back 4 px a frame to going forward 21) */
+const LET_DOWN = 0.35;
 /** how far the string has come back (0..1) after `k` of the draw from when the hand has it: setting off gently and
  *  slowing into the anchor (the bow's own `pullAt`, quick at first, brought half the string back in a few frames) */
 const drawnAt = (k: number): number => (pullAt(k) + smooth(clamp(k, 0, 1))) / 2;
@@ -225,13 +238,18 @@ function slerpDir(a: THREE.Vector3, b: THREE.Vector3, t: number, out: THREE.Vect
   return out.copy(a).applyQuaternion(_sq2);
 }
 
+const _m0 = new THREE.Vector3(), _m1 = new THREE.Vector3();
 function through(pts: THREE.Vector3[], ts: number[], t: number, out: THREE.Vector3): THREE.Vector3 {
   let i = 0;
   while (i < ts.length - 2 && t > ts[i + 1]) i++;
-  const f = clamp((t - ts[i]) / (ts[i + 1] - ts[i]), 0, 1), p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+  // (each point's tangent in time, from its neighbours and their times: with one curve per segment however long it takes,
+  // the speed jumped at every point by the ratio of the times either side, and the elbow with it)
+  const h = Math.max(1e-6, ts[i + 1] - ts[i]), f = clamp((t - ts[i]) / h, 0, 1);
+  const tangent = (k: number, o: THREE.Vector3) => { const a = Math.max(0, k - 1), b = Math.min(pts.length - 1, k + 1); return o.subVectors(pts[b], pts[a]).multiplyScalar(h / Math.max(1e-6, ts[b] - ts[a])); };
+  tangent(i, _m0); tangent(i + 1, _m1);
   const f2 = f * f, f3 = f2 * f;
-  return out.set(0, 0, 0).addScaledVector(p0, -0.5 * f3 + f2 - 0.5 * f).addScaledVector(p1, 1.5 * f3 - 2.5 * f2 + 1)
-    .addScaledVector(p2, -1.5 * f3 + 2 * f2 + 0.5 * f).addScaledVector(p3, 0.5 * f3 - 0.5 * f2);
+  return out.copy(pts[i]).multiplyScalar(2 * f3 - 3 * f2 + 1).addScaledVector(_m0, f3 - 2 * f2 + f)
+    .addScaledVector(pts[i + 1], -2 * f3 + 3 * f2).addScaledVector(_m1, f3 - f2);
 }
 
 /** The felt hat on `cap` (the head group's frame): a crown rising from a leather band round the head, its sides near
@@ -443,10 +461,15 @@ export function buildRanger(): Model {
   const bow = new Bow({ riser: riserWood, limb: limbWood, grip: hide, string: cord, arrow: fletched, horn, brass: bowBrass, serving, yarn, inlay });
   j.handL.add(bow.group);
   // (in pieces: only what's out of the quiver shows as it's drawn out, the rest still in it; drawn whole, an arrow as long
-  // as the draw pivoting at the quiver's mouth swung its head out through the quiver's side into the hips)
+  // as the draw pivoting at the quiver's mouth swung its head out through the quiver's side into the hips). As many as a
+  // fan lacks on the string are taken out together, side by side between the fingers as they'll lie on it
   const held = new THREE.Group(); held.visible = false; held.name = 'heldArrow'; j.handR.add(held);
-  const pieces = arrowPieces(), heldRear = new THREE.Mesh(pieces.rear, fletched), heldShaft = new THREE.Mesh(pieces.shaft, fletched), heldHead = new THREE.Mesh(pieces.head, fletched);
-  for (const m of [heldRear, heldShaft, heldHead]) { m.castShadow = false; held.add(m); }
+  const pieces = arrowPieces(), heldArrows = [0, 1, 2, 3, 4].map(() => {
+    const g = new THREE.Group(), shaft = new THREE.Mesh(pieces.shaft, fletched), head = new THREE.Mesh(pieces.head, fletched);
+    for (const m of [new THREE.Mesh(pieces.rear, fletched), shaft, head]) { m.castShadow = false; g.add(m); }
+    held.add(g);
+    return { g, shaft, head };
+  });
   // (where the shot leaves: the nocked arrow's middle)
   const tip = joint(bow.group), palm = joint(j.handR, 0, -0.07, 0.03);
   const flask = buildFlask(kit, brass, hide); flask.name = 'flask'; j.handR.add(flask); flask.position.set(0, -0.07, 0.03); flask.rotation.x = Math.PI;
@@ -468,7 +491,14 @@ export function buildRanger(): Model {
   /** through the eyes, how much the bow sways with the stride (0..1, eased with the pace), and the stride's phase it sways
    *  by: on only, at the gait's pace (the gait's own turns back as the way he goes turns round, and the bow hitched) */
   let swayK = 0, swayPhase = 0, lastPhase = 0;
-  let fp = false, hasBow = true, aimT = 0, raise = 0, free = 0, flaskOut = 0, nocked = true, lastLoosed = -1;
+  let fp = false, hasBow = true, aimT = 0, raise = 0, free = 0, flaskOut = 0, lastLoosed = -1;
+  /** how many arrows are on the string, as the pose has it, and how many were when the hand went to the quiver for more */
+  let strung = 1, fetchFrom = -1;
+  /** where the draw hand was last frame (the chest's frame) and how far onto the string (`drawHand`'s `w`), and the same
+   *  when it set off for the quiver: a fan queued behind a shot takes the rest of its arrows from there, the hand on the
+   *  string (set off from where the arm hangs, it jumped there from the string, 137 px in a frame) */
+  const lastHandC = new THREE.Vector3(), fetchAtC = new THREE.Vector3();
+  let lastOnW = 0, fetchOn0 = 0;
   /** up for the draw hand on the string: the world's, or through the eyes the view's (the world's tilts in the view as the
    *  eyes look up or down, and the hand turned with it) */
   const handUp = UP.clone();
@@ -480,6 +510,8 @@ export function buildRanger(): Model {
    *  between shots it stays as it was, the opening fading with the body's turn off the shot (from closed, a tap's chest,
    *  loosed at its least draw, turned 0.2 rad in a frame, and closed as the shot ended, 0.5 rad) */
   let lastClosed = 1, closeLoose = 1;
+  /** how far the string is drawn back (m past brace), as last set; and letting it down, from how far and for how long so far */
+  let pullNow = 0, letFrom = -1, letT = 0;
   /** where the string was in the fingers last frame, and at the release (the head's frame, taken while it's posed: here at
    *  the top of `animate` the head is back at rest, and worldToLocal brings its matrix up to that): the follow-through starts there */
   const lastNock = new THREE.Vector3(), loosedAt = new THREE.Vector3();
@@ -499,7 +531,7 @@ export function buildRanger(): Model {
     _e.copy(_d).sub(_c).normalize();
     fistReach(handL, _y, _e, GRIP_R, _a);
     fistTurn(handL, _y, _e, _gq);
-    const fit = solveArm(j, true, { wrist: _b.copy(_c).sub(_a), hand: _gq, pole: elbowTo, keep: 20, body, roll: { axis: _y, range: 0.6, at: _c }, slant: SLANT, glide: 1 - Math.exp(-GLIDE * dtNow) });
+    const fit = solveArm(j, true, { wrist: _b.copy(_c).sub(_a), hand: _gq, pole: elbowTo, keep: 20, body, roll: { axis: _y, range: 0.6, at: _c }, slant: [-SLANT, BOW_SLANT], glide: 1 - Math.exp(-GLIDE * dtNow), free: fp });
     root.updateMatrixWorld(true);
     // the bow where the fist has it: turned as far as the wrist and the forearm turned the hand (the hand joint against
     // the turn asked of it, its turn about the grip aside), its grip where the fist closes (a slanted fist closes a
@@ -536,6 +568,7 @@ export function buildRanger(): Model {
    *  last frame's forearm, the wrist moved with it and the arm shook) */
   const drawHand = (at: THREE.Vector3, q: THREE.Quaternion, w: number, pole: THREE.Vector3, dt = 0, tilt = 0, girdle = true) => {
     const s = sc();
+    lastOnW = w;
     stringTurn(q, _q2);
     // (`girdle`: whether the shoulder may move; drawing an upright bow it stays where it is: the girdle drew it back, and the
     // elbow with it, round behind the neck)
@@ -551,8 +584,13 @@ export function buildRanger(): Model {
 
   /** the arrow in the draw hand's fingers by its nock: drawn up through the quiver's mouth (pointing back down into it, its
    *  head still in the quiver) until `w` frees it, then turned over the top, up, onto `toward` (world: the line it's laid on)
-   *  as the hand brings it to the string (turned straight from the one to the other, half a turn, it swept through the head) */
-  const holdArrow = (mouthW: THREE.Vector3, w: number, toward: THREE.Vector3) => {
+   *  as the hand brings it to the string (turned straight from the one to the other, half a turn, it swept through the head).
+   *  `count` arrows from the string's `from`th up (a fan's): drawn out in a bunch, round the fingers' hold their sockets
+   *  touching, and spread out as `w` brings them to the string, each to where it will lie on it, turned about its length
+   *  as it lies there (in a row across the fingers all the way, the outer ones went through the forearm and the shoulder
+   *  coming out of the quiver; turned any other way, the feathers flipped as they were laid on) */
+  const _hx = new THREE.Vector3(), _hy = new THREE.Vector3(), _hm = new THREE.Matrix4();
+  const holdArrow = (mouthW: THREE.Vector3, w: number, toward: THREE.Vector3, from = 0, count = 1) => {
     const s = sc();
     held.visible = hasBow;
     const nk = j.handR.localToWorld(_e.copy(stringAt));
@@ -560,17 +598,32 @@ export function buildRanger(): Model {
     const d = nk.distanceTo(mouthW) / s, out = fp ? ARROW : Math.min(ARROW, d + smooth(Math.min(1, w * 5)) * ARROW);
     _a.copy(mouthW).sub(nk).normalize();
     const top = _c.copy(UP).addScaledVector(toward, 0.3).normalize().clone();
-    if (w < 0.5) slerpDir(_a, top, smooth(w * 2), _a); else slerpDir(top, toward, smooth(w * 2 - 1), _a);
+    // (from pointing into the quiver up over the top it swings out to the right, away from the head: turned straight up, its
+    // back end swept through the side of the head)
+    if (w < 0.5) { const k = smooth(w * 2); slerpDir(_a, top, k, _a).addScaledVector(_hy.set(-1, 0, 0).transformDirection(j.chest.matrixWorld), TURN_OUT * Math.sin(Math.PI * k)).normalize(); }
+    else slerpDir(top, toward, smooth(w * 2 - 1), _a);
     // (through the eyes the quiver is out of view below them: the arrow comes up from there already along the line, its
     // head into the view first; turned over the top, a metre of it swept up across the whole view)
     if (fp) _a.copy(toward);
     j.handR.getWorldQuaternion(_q).invert();
-    held.quaternion.setFromUnitVectors(FWD, _a.applyQuaternion(_q));
+    _a.applyQuaternion(_q);
+    // (on the string the arrow's x is the bow's, which is out of the hooked hand's palm, and side by side they lie up the
+    // string, across the fingers: the hand's own frame, square to the arrow)
+    _hx.set(0, 0, -1).addScaledVector(_a, _a.z);
+    if (_hx.lengthSq() < 1e-4) _hx.set(1, 0, 0).addScaledVector(_a, -_a.x);
+    _hx.normalize(); _hy.crossVectors(_a, _hx);
+    held.quaternion.setFromRotationMatrix(_hm.makeBasis(_hx, _hy, _a));
     held.position.copy(stringAt);
     const k = s / j.handR.getWorldScale(_s).x;
     held.scale.setScalar(k);
-    heldShaft.position.z = 0.01; heldShaft.scale.set(1, 1, Math.max(0.001, out - 0.07));
-    heldHead.visible = out >= ARROW - 0.005; heldHead.position.z = ARROW;
+    const ring = count > 1 ? FAN_PITCH / (2 * Math.sin(Math.PI / count)) : 0, spread = smooth(w);
+    heldArrows.forEach((h, i) => {
+      h.g.visible = i >= from && i < from + count;
+      const a = (i - from) / count * Math.PI * 2;
+      h.g.position.set(ring * Math.cos(a) * (1 - spread), lerp(ring * Math.sin(a), i * FAN_PITCH - bow.hold, spread), 0);
+      h.shaft.position.z = 0.01; h.shaft.scale.set(1, 1, Math.max(0.001, out - 0.07));
+      h.head.visible = out >= ARROW - 0.005; h.head.position.z = ARROW;
+    });
     held.userData.len = out * s;
   };
 
@@ -583,18 +636,21 @@ export function buildRanger(): Model {
     const shooting = a?.name === 'bow' && a.draw !== undefined, loosed = shooting && a.loosed !== undefined;
     // what follows a release (0..1), the draw (0..1 of its time) and how far that pulls the string
     const after = loosed ? clamp((a.t - 0.55) / 0.45, 0, 1) : -1, k = shooting ? a.draw! : 0;
-    if (loosed && lastLoosed < 0) { nocked = false; loosedAt.copy(lastNock); raiseLoose = raise; closeLoose = lastClosed; }
+    if (loosed && lastLoosed < 0) { strung = 0; loosedAt.copy(lastNock); raiseLoose = raise; closeLoose = lastClosed; }
     lastLoosed = loosed ? a.loosed! : -1;
-    if (after >= NOCKED) nocked = true;
-    // (a shot with none on the string: the hand takes one from the quiver first; it's on the string once laid on it)
+    if (after >= NOCKED) strung = Math.max(strung, 1);
+    // (a shot with fewer on the string than it looses: the hand takes the rest from the quiver first; they're on the string
+    // once laid on it)
     const fetchE = shooting && !loosed && a.fetch !== undefined ? a.fetch : -1;
-    if (fetchE >= 0) nocked = fetchE >= FETCHED;
+    if (fetchE >= 0 && fetchFrom < 0) { fetchFrom = Math.min(strung, (a!.arrows ?? 1) - 1); fetchAtC.copy(lastHandC); fetchOn0 = lastOnW; }
+    if (fetchE < 0) fetchFrom = -1;
+    else strung = fetchE >= FETCHED ? a!.arrows ?? 1 : fetchFrom;
     // between shots, as the hero has it (`AnimState.nocked`): stood a while without a shot, he puts it back in the quiver
     // (only with nothing else on: the other skills' gestures take the draw hand)
     if (shooting || a) stowT = -1;
-    else if (st.nocked ?? true) { nocked = true; stowT = -1; }
-    else if (stowT < 0 && nocked) stowT = 0;
-    if (stowT >= 0) { stowT += dt; if (stowWay(stowT / STOW) >= stowTake) nocked = false; if (stowT >= STOW) stowT = -1; }
+    else if ((st.nocked ?? 1) > 0) { strung = Math.max(strung, 1); stowT = -1; }
+    else if (stowT < 0 && strung > 0) stowT = 0;
+    if (stowT >= 0) { stowT += dt; if (stowWay(stowT / STOW) >= stowTake) strung = 0; if (stowT >= STOW) stowT = -1; }
     const stowE = stowT >= 0 ? stowT / STOW : -1;
     // (eased both ways: the bow comes up and goes down from a standstill)
     aimT = clamp(aimT + (shooting ? dt / AIM_IN : -dt / AIM_OUT), 0, 1);
@@ -749,14 +805,21 @@ export function buildRanger(): Model {
       shown.q.premultiply(_q.setFromAxisAngle(dirFromEyes(root, _e.set(0, 0, -1), _a), FP_SWAY[2] * sp * k));
     }
     // the string: drawn as the bow comes up; loosed, it springs back past rest and rings out
-    if (loosed) bow.set(0, -0.35 * (a.draw ?? 1) * Math.exp(-a.loosed! / 0.06) * Math.cos(a.loosed! * Math.PI * 2 * 9));
-    else bow.set(drawnAt(kv) * pullMax * Math.min(1, aim * 1.5));
+    // (a shot ended without its loose, Hailfletch let go mid-volley, lets the string down: set back at once, the arrow on it
+    // shot forward 45 to 120 px in a frame through the eyes)
+    if (loosed) { pullNow = 0; letFrom = -1; bow.set(0, -0.35 * (a.draw ?? 1) * Math.exp(-a.loosed! / 0.06) * Math.cos(a.loosed! * Math.PI * 2 * 9)); }
+    else {
+      const to = drawnAt(kv) * pullMax * Math.min(1, aim * 1.5);
+      if (to >= pullNow) { pullNow = to; letFrom = -1; }
+      else { if (letFrom < 0) { letFrom = pullNow; letT = 0; } letT += dt; pullNow = Math.max(to, letFrom * (1 - smooth(clamp(letT / LET_DOWN, 0, 1)))); }
+      bow.set(pullNow);
+    }
     // (the bow arm's elbow carried as it hangs, and on the shot turned out and a little down: its crease upright, the string clears the forearm)
     const elbowTo = _x.set(1, 0, 0).applyQuaternion(shown.q).addScaledVector(UP, -0.35).normalize().lerp(elbowPoleFK.normalize(), 1 - aim).clone();
     if (hasBow) placeBow(shown, elbowTo);
     // the arrows on the string (a fan side by side in the flat bow's window), and where the shot leaves (the nocked arrow's middle)
     const n = arrows;
-    bow.nockArrows(hasBow && nocked ? n : 0);
+    bow.nockArrows(hasBow ? Math.min(strung, n) : 0);
     tip.position.copy(bow.arrows[Math.floor((Math.max(1, n) - 1) / 2)].position);
     root.updateMatrixWorld(true);
     nockW.copy(bow.nock); bow.group.localToWorld(nockW);
@@ -781,10 +844,10 @@ export function buildRanger(): Model {
     // up over the head with the arrow pointing down before the chest, and with the hand at the face; sent forward while the
     // string came back, it jumped round behind as the hand reached the anchor)
     const setPole = _b.copy(SET_POLE).transformDirection(j.chest.matrixWorld).clone();
-    const drawn = loosed ? 0 : drawnAt(kv) * Math.min(1, aim * 1.5);
+    const drawn = loosed ? 0 : Math.min(1, pullNow / pullMax);
     const linePole = setPole.clone().lerp(fullPole, drawn).normalize();
-    // (the hand rolled on the string as far as the string has come back; the fan's string lies across, hooked palm down already)
-    const tilt = fan ? 0 : HOOK_TILT * smooth(drawn);
+    // (the hand rolled on the string late in the draw, `TILT_POW`; the fan's string lies across, hooked palm down already)
+    const tilt = fan ? 0 : HOOK_TILT * smooth(drawn) ** TILT_POW;
     // (the hand's turn on the string: as on the line; followed the bow pitched down on its way up, the fingers pointed 40
     // degrees down and the wrist rose into the cheek)
     const onString = line.q.clone();
@@ -804,19 +867,24 @@ export function buildRanger(): Model {
       // (and the way up to it and back from the shot below the view too: over the shoulder, the arm came up through its edge)
       fromEyes(root, j.neck, _e.copy(FP_LOW).add(_b.set(0.08, -0.05, 0.08)), sideUp); fromEyes(root, j.neck, _e.copy(FP_LOW).add(_b.set(0.04, -0.02, 0.04)), lift);
     }
-    // (reaching up over the shoulder for it, the elbow raised and out to the side)
-    const reloadPole = _b.copy(UP).multiplyScalar(0.7).addScaledVector(u, -0.7).addScaledVector(_left, -0.2).normalize().clone();
+    // (reaching up over the shoulder for it, the elbow raised and out to the side: raised and back, the upper arm lay along
+    // the arrow running from the hand down to the quiver's mouth, and the arrow went through it as it came out)
+    const reloadPole = _b.copy(UP).multiplyScalar(0.7).addScaledVector(u, 0.1).addScaledVector(_left, -0.7).normalize().clone();
+    // (and letting it down into the quiver, further out: the arrow from the hand down to the quiver's mouth went through the
+    // upper arm)
+    const stowPole = _b.copy(UP).multiplyScalar(0.5).addScaledVector(u, 0.2).addScaledVector(_left, -0.85).normalize().clone();
     // (the line the arrow lies on, nocked: from the nock forward through the rest)
     const lineDir = _a.copy(nockW).sub(bow.group.localToWorld(_e.set(0, restY, 0))).negate().normalize().clone();
     if (fetchE >= 0 && hasBow && fetchE < 1) {
       // a shot with none on the string: from the side up over the shoulder to the quiver, the arrow drawn up out of it
       // to the arm's full stretch, then down in front of the chest to the string where the bow waits, in one sweep
-      const pts = [fkAt.clone(), sideUp, lift, q0, rise, pull, nockW], ts = lengthTimes(pts, FETCHED);
+      // (from where the hand was as it set off: at the side, or on the string for a fan's other arrows, coming off it)
+      const pts = [j.chest.localToWorld(fetchAtC.clone()), sideUp, lift, q0, rise, pull, nockW], ts = lengthTimes(pts, FETCHED);
       e = FETCHED * smooth(clamp(fetchE / FETCHED, 0, 1));
       const at = through(pts, ts, e, new THREE.Vector3());
-      const on = smooth(clamp((e - ts[5]) / (FETCHED - ts[5]), 0, 1));
+      const on = Math.max(fetchOn0 * (1 - smooth(clamp(e / ts[1], 0, 1))), smooth(clamp((e - ts[5]) / (FETCHED - ts[5]), 0, 1)));
       drawHand(at, onString, on, setPole.clone().lerp(reloadPole, 1 - on), 0, 0);
-      if (e >= ts[3] && fetchE < FETCHED) { holdArrow(mouthW, smooth(clamp((e - ts[5]) / (FETCHED - ts[5]), 0, 1)), lineDir); pinch = 1; hk = 0.2; }
+      if (e >= ts[3] && fetchE < FETCHED) { holdArrow(mouthW, smooth(clamp((e - ts[5]) / (FETCHED - ts[5]), 0, 1)), lineDir, fetchFrom, n - fetchFrom); pinch = 1; hk = 0.2; }
       else if (fetchE >= FETCHED) hk = 1;
     }
     else if (stowE >= 0 && hasBow && !shooting) {
@@ -830,8 +898,11 @@ export function buildRanger(): Model {
       e = stowWay(stowE);
       const at = through(pts, ts, e, new THREE.Vector3());
       const on = e < ts[1] ? smooth(clamp(e / ts[1], 0, 1)) : 1 - smooth(clamp((e - ts[1]) / (ts[2] - ts[1]), 0, 1));
-      drawHand(at, onString, on, setPole.clone().lerp(reloadPole, 1 - on), 0, 0);
-      if (e >= ts[1] && e < ts[4]) { holdArrow(mouthW, 1 - smooth(clamp((e - ts[1]) / (ts[2] - ts[1]), 0, 1)), lineDir); pinch = 1; hk = 0.2; }
+      drawHand(at, onString, on, setPole.clone().lerp(stowPole, 1 - on), 0, 0);
+      // (turned up over the top as the hand goes up and forward with it, and down into the quiver only as the hand comes
+      // back over it: pointed at its mouth from up and forward, the arrow went through the raised upper arm)
+      const wS = e < ts[2] ? 1 - 0.5 * smooth(clamp((e - ts[1]) / (ts[2] - ts[1]), 0, 1)) : 0.5 - 0.5 * smooth(clamp((e - ts[2]) / (ts[3] - ts[2]), 0, 1));
+      if (e >= ts[1] && e < ts[4]) { holdArrow(mouthW, wS, lineDir); pinch = 1; hk = 0.2; }
       else hk = e < ts[1] ? smooth(clamp(e / ts[1], 0, 1)) * 0.5 : 0;
     }
     else if (!loosed || after >= NOCKED || !hasBow) {
@@ -842,8 +913,9 @@ export function buildRanger(): Model {
       if (onW < 1) {
         const pole = fkPole.normalize().lerp(linePole, onW);
         // (the hand rides its forearm until the elbow is up and out, then turns onto the string: turned onto it with the
-        // elbow still low in front, the wrist met both its ends and the elbow jumped up)
-        drawHand(_c.lerpVectors(fkAt, nockW, onW).addScaledVector(_a.set(0, 0, 1).transformDirection(j.chest.matrixWorld), BOW_OUT * s * Math.sin(onW * Math.PI)), onString, smooth(clamp((onW - 0.7) / 0.3, 0, 1)), pole.clone(), shooting && !loosed ? dt : 0, tilt, fan || !shooting || loosed);
+        // elbow still low in front, the wrist met both its ends and the elbow jumped up; its elbow free of the draw's speed
+        // cap, which held it back as a walking shot started and it swung round 40 degrees in a frame to catch up)
+        drawHand(_c.lerpVectors(fkAt, nockW, onW).addScaledVector(_a.set(0, 0, 1).transformDirection(j.chest.matrixWorld), BOW_OUT * s * Math.sin(onW * Math.PI)), onString, smooth(clamp((onW - 0.7) / 0.3, 0, 1)), pole.clone(), 0, tilt, fan || !shooting || loosed);
       }
       else drawHand(nockW, onString, 1, linePole, shooting && !loosed ? dt : 0, tilt, fan || !shooting || loosed);
       lastTilt = tilt;
@@ -881,6 +953,7 @@ export function buildRanger(): Model {
       if (!fp) { root.updateMatrixWorld(true); fitArm(j, false, undefined, body); }
     }
     hook(handR, hk, pinch);
+    j.chest.worldToLocal(j.handR.getWorldPosition(lastHandC));
     bendShoulders();
   }
   /** each shoulder's part-turned joints (`delts`): a quarter, half and three quarters of the arm's swing from hanging and of
@@ -902,7 +975,7 @@ export function buildRanger(): Model {
   }
   return {
     root, kit, joints: j, animate, tip, palm, height: 2,
-    firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; nocked = false; kHook = -1; stowT = -1; },
+    firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; strung = 0; fetchFrom = -1; kHook = -1; stowT = -1; },
     setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; for (const h of head.hair.slice(1)) h.visible = !gear.helm; },
     dispose() { kit.dispose(); root.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && g !== arrowGeometry()) g.dispose(); }); },
   };

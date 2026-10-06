@@ -85,9 +85,10 @@ export class Player {
   readonly model: Model;
   /** the head turning to the nearest foe (models/ik.ts) */
   private look: LookAt | null = null;
-  /** a bow's hero (`ClassDef.quiver`): whether an arrow is on the string between shots; put back in the quiver after a while
-   *  without a shot, and taken out again before the next */
-  nocked = false;
+  /** a bow's hero (`ClassDef.quiver`): how many arrows are on the string (one between shots, a fan's for it); put back in
+   *  the quiver after a while without a shot, and what a shot lacks taken out before it (a fan begun with one on the
+   *  string takes out the other four: taking none, the four appeared on the string) */
+  nocked = 0;
   private sinceShot = Infinity;
   readonly obj = new THREE.Group();
   /** follows the cast point; every class has one, so switching class keeps the light count. A
@@ -380,8 +381,8 @@ export class Player {
     const target = this.aim.clone();
     if (!s.impl.channel && s.impl.canCast && !s.impl.canCast(this, s.def, target)) { this.noTarget(); return false; }
     const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
-    // (a bow's shot with no arrow on the string takes one from the quiver first)
-    const q = this.cls.quiver, nockT = q && isBowShot(s) && !this.nocked ? q.fetch / (1 + this.stats.castSpeed / 100) : 0, n = nockT ? { n: nockT } : {};
+    // (a bow's shot with fewer arrows on the string than it looses takes them from the quiver first)
+    const q = this.cls.quiver, nockT = q && isBowShot(s) && this.nocked < (s.def.missiles ?? 1) ? q.fetch / (1 + this.stats.castSpeed / 100) : 0, n = nockT ? { n: nockT } : {};
     // (casting anything else forgets a queued shot)
     if (this.queued?.skill !== s) this.queued = null;
     if (s.def.draw && key) {
@@ -410,14 +411,14 @@ export class Player {
     if (this.channel?.skill.impl.anim === 'bow') this.sinceShot = 0;
     else if (c && isBowShot(c.skill)) {
       this.sinceShot = 0;
-      if (!c.fired && c.t >= (c.nockT ?? 0)) this.nocked = true;
-    } else if ((this.sinceShot += dt) > q.idle) this.nocked = false;
+      if (!c.fired && c.t >= (c.nockT ?? 0)) this.nocked = Math.max(this.nocked, c.skill.def.missiles ?? 1);
+    } else if ((this.sinceShot += dt) > q.idle) this.nocked = 0;
   }
 
   /** `power`: how far a drawn shot was drawn (1 for any other cast) */
   fire(s: KnownSkill, target: THREE.Vector3, power = 1): void {
     if (s.impl.channel) return;
-    if (isBowShot(s)) this.nocked = false;
+    if (isBowShot(s)) this.nocked = 0;
     // sandbox (lobby practice): no costs or cooldowns
     if (!this.sandbox) {
       this.energy -= s.def.cost;
@@ -523,7 +524,7 @@ export class Player {
         if (!c.fired && c.t >= c.fireAt) { c.fired = true; this.fire(c.skill, this.aim.clone()); }
       }
       if (c.t >= c.dur) {
-        if (isBowShot(c.skill)) this.nocked = true;
+        if (isBowShot(c.skill)) this.nocked = Math.max(this.nocked, 1);
         this.casting = null;
         // (a shot queued behind it is drawn at once: started next frame, the pose had a frame with no shot between the
         // two, and the archer's bow and draw hand stepped out to rest for it and back)
@@ -599,7 +600,7 @@ export class Player {
       c.t += dt;
       if (!c.fired && !c.skill.impl.channel) c.skill.impl.charging?.(this, c.skill.def, c.drawT ? Math.min(1, Math.max(0, c.t - (c.nockT ?? 0)) / c.drawT) : Math.min(1, c.t / c.fireAt), dt);
       // (a drawn shot whose release never came: its owner left or fell mid-draw)
-      if (c.t >= c.dur && isBowShot(c.skill)) this.nocked = true;
+      if (c.t >= c.dur && isBowShot(c.skill)) this.nocked = Math.max(this.nocked, 1);
       if (c.t >= c.dur || (!c.fired && c.t > 20)) this.casting = null;
     }
     this.tickQuiver(dt);
