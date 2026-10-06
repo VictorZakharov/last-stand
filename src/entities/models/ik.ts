@@ -68,6 +68,9 @@ const KNEE_FOOT = (ROM['ankle.twist'][1] - 6) * Math.PI / 180, HIP_TURN = (ROM['
 /** how much sooner than those two together a planted foot pivots after the hips (rad: the knee's pole sits off its line, so
  *  the ankle measured 12 degrees more twisted than they add up to) */
 const PIVOT_EARLY = 0.2;
+/** a planted foot's twist on its shin at most (rad: a little past the ankle's range, within what the body's watch lets by;
+ *  at the range or inside it, a foot pivoted at ordinary turns and the gait broke its rhythm and crossed its legs more) */
+const ANKLE_TWIST = (ROM['ankle.twist'][1] + 3) * Math.PI / 180;
 /** how far the chest may turn on the pelvis (rad, a little inside the trunk's range) */
 const TRUNK = (ROM['spine.rotation'][1] - 3) * Math.PI / 180;
 /** how long the legs go backwards along the pelvis's line after a reversal before it turns round to the new way (s) */
@@ -528,11 +531,11 @@ export class LegIK {
       // (a planted foot the hips have turned further from than the hip's turn and the ankle's twist on the shin together
       // pivots on its ball after them: held, the ankle twisted 37 degrees as the hips swung round over it mid-stride)
       const far = Math.abs(rel) - (HIP_TURN + KNEE_FOOT - PIVOT_EARLY);
-      if (ROM_ON && f.state === 'plant' && far > 0 && this.shape) {
-        const y1 = f.yaw - Math.sign(rel) * far, bl = BALL * this.shape[i].toe * sc;
+      const pivot = (by: number) => {
+        const y1 = f.yaw + by, bl = BALL * this.shape![i].toe * sc;
         f.P.x += bl * (Math.sin(f.yaw) - Math.sin(y1)); f.P.z += bl * (Math.cos(f.yaw) - Math.cos(y1)); f.yaw = yawNow = y1;
-        rel = this.angle(0, hy, yawNow);
-      }
+      };
+      if (ROM_ON && f.state === 'plant' && far > 0 && this.shape) { pivot(-Math.sign(rel) * far); rel = this.angle(0, hy, yawNow); }
       let ky = this.standK * (i === 0 ? Math.max(-0.1, Math.min(0.9, rel)) : Math.max(-0.9, Math.min(0.1, rel)));
       if (ROM_ON && f.state === 'plant') ky = Math.max(-HIP_TURN, Math.min(HIP_TURN, Math.max(rel - KNEE_FOOT, Math.min(rel + KNEE_FOOT, ky))));
       // (a foot in the air turns no further from the hips than the hip and the ankle let it: as the body wheeled round onto a
@@ -550,6 +553,16 @@ export class LegIK {
       _q2.setFromEuler(_e);
       _q.copy(_hq).multiply(thigh.quaternion).multiply(knee.quaternion).invert();
       ankle.quaternion.copy(_q.multiply(_q2));
+      // (and as far again as the ankle's twist on the shin, as measured, is past its range: with the leg stretched out
+      // behind, the hips swinging back round over it at a reversal twisted it 13 degrees past all the same)
+      if (ROM_ON && f.state === 'plant' && this.shape) {
+        const tw = twistAngle(ankle.quaternion, UP), over = Math.abs(tw) - ANKLE_TWIST;
+        if (over > 0) {
+          pivot(-Math.sign(tw) * over);
+          _e.set(f.shown, yawNow, 0, 'YXZ');
+          ankle.quaternion.copy(_q.copy(_hq).multiply(thigh.quaternion).multiply(knee.quaternion).invert().multiply(_q2.setFromEuler(_e)));
+        }
+      }
       // (within the ankle's range: a foot in the air hangs from the shin, as a runner's does, rather than staying level and
       // turned to the way the body faces whatever the leg does; held level and turned, it bent 85 degrees up at the ankle
       // under a knee bent back, and twisted 100 degrees against it. A planted foot stays as it lies: turned on the floor
