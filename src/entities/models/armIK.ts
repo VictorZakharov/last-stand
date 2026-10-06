@@ -28,6 +28,9 @@ export interface ArmGoal {
   roll?: { axis: THREE.Vector3; range: number; at: THREE.Vector3 };
   /** the shoulder girdle may move the shoulder (anatomy.ts `GIRDLE`) when no elbow keeps the arm within its ranges with it at rest */
   girdle?: boolean;
+  /** the girdle set to this raise and forward turn (degrees) whatever the arm needs, as an archer's back draws the shoulder
+   *  blade in at full draw */
+  girdleSet?: [number, number];
   /** a hand round a handle may turn about its palm on it up to this (rad), the handle diagonal across the palm (`hold`'s slant): the hand joint, and so what it holds, keeps its turn, only the visible hand turns;
    *  or its least and most (one side of the fist would meet what's beside the handle: a bow's arrow over its shelf) */
   slant?: number | [number, number];
@@ -68,6 +71,8 @@ const X = new THREE.Vector3(1, 0, 0);
 const last = new WeakMap<THREE.Object3D, THREE.Vector3>(), lastG = new WeakMap<THREE.Object3D, [number, number]>(), lastS = new WeakMap<THREE.Object3D, number>();
 /** and its turn about a handle (`glide` only) */
 const lastR = new WeakMap<THREE.Object3D, number>();
+/** how far past the best's ranges (degrees) an elbow held back by `maxMove` may go before it gives way */
+const REACH_SLACK = 2;
 /** where the least of a parabola through three evenly spaced costs lies, in steps from the middle one (-0.5..0.5) */
 const vertex = (lo: number, mid: number, hi: number): number => { const c = lo - 2 * mid + hi; return c > 1e-9 ? Math.max(-0.5, Math.min(0.5, (lo - hi) / (2 * c))) : 0; };
 const Z = new THREE.Vector3(0, 0, 1), _sz = new THREE.Quaternion(), _seg = new THREE.Vector3(), _cp = new THREE.Vector3(), _ez = new THREE.Quaternion();
@@ -230,7 +235,15 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   // (and near last frame's)
   let gE = 0, gP = 0;
   const pg = lastG.get(sh);
-  if (g.girdle && ROM_ON && (over() > 0.5 || depthAt > 0.01 || (pg && (pg[0] || pg[1])))) {
+  if (g.girdleSet && ROM_ON) {
+    [gE, gP] = g.girdleSet;
+    girdlePlace(rest, left, gE, gP, _S); gNow = gP;
+    [roll, slant] = glided(turnsFor(!!g.slant));
+    setup(roll, slant);
+    [best] = search(N, REFINE);
+    at(best, true);
+  }
+  else if (g.girdle && ROM_ON && (over() > 0.5 || depthAt > 0.01 || (pg && (pg[0] || pg[1])))) {
     let bestC = Infinity;
     for (const e of G_ELEV) for (const pr of G_PRO) {
       girdlePlace(rest, left, e, pr, _S); gNow = pr;
@@ -250,15 +263,23 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     _rad.copy(prev).sub(_S).addScaledVector(_n, -a);
     const phiP = Math.atan2(_rad.dot(_u2), _rad.dot(_u1));
     if (_E.distanceTo(prev) > g.maxMove) {
-      const d = Math.atan2(Math.sin(best - phiP), Math.cos(best - phiP));
+      const d = Math.atan2(Math.sin(best - phiP), Math.cos(best - phiP)), ob = over();
       let lo = 0, hi = 1;
       for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; at(phiP + d * mid); if (_E.distanceTo(prev) > g.maxMove) hi = mid; else lo = mid; }
+      // (further, past the cap, as far as the ranges need: held back, an elbow swinging up over the shoulder for the quiver
+      // took the shoulder 200 degrees past its range)
+      at(phiP + d * lo);
+      if (over() > ob + REACH_SLACK) {
+        let l = lo, h = 1;
+        for (let i = 0; i < 12; i++) { const mid = (l + h) / 2; at(phiP + d * mid); if (over() > ob + REACH_SLACK) l = mid; else h = mid; }
+        lo = h;
+      }
       best = phiP + d * lo;
       at(best, true);
     }
   }
   // (not asked for, the girdle is at rest, and eases from there when it is again: kept as it last was, the shoulder jumped back to it)
-  if (g.girdle) (pg ?? lastG.set(sh, [0, 0]).get(sh)!).splice(0, 2, gE, gP);
+  if (g.girdle || g.girdleSet) (pg ?? lastG.set(sh, [0, 0]).get(sh)!).splice(0, 2, gE, gP);
   else if (pg) pg.splice(0, 2, 0, 0);
   if (g.slant) lastS.set(sh, slant);
   if (g.glide !== undefined) lastR.set(sh, roll);
