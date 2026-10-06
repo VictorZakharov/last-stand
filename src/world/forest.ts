@@ -3,15 +3,15 @@
 // standing stones, glowcap mushroom clusters and two bonfires. Stumps, logs and boulders break up the floor.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { G } from '../state';
 import { seeThrough } from '../core/seeThrough';
 import { ARENA } from '../data/balance';
 import { forestFloor, bark, slabs, grunge, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
 import { buildDaySky, boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
+import { growTree, type Grow } from './ezTrees';
 import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
-import { bend, branches, rag, taperTube, twist } from '../entities/models/shapes';
+import { bend, rag, taperTube, twist } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import type { Obstacle } from '../types';
 
@@ -168,31 +168,42 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   bushes.receiveShadow = bushCards.castShadow = bushCards.receiveShadow = rocks.castShadow = rocks.receiveShadow = true;
   scene.add(bushes, bushCards, rocks);
 
-  // trees: short near the clearing (they'd hide the player at the edge), taller further out
-  const treeN = 120;
-  const trunks = new THREE.InstancedMesh(buildTrunkGeo(rng), barkMat, treeN);
-  const crown = canopyGeo(rng, [[0, 0, 0, 1], [0.8, -0.25, 0.3, 0.72], [-0.75, -0.1, -0.4, 0.78], [0.1, 0.45, -0.25, 0.7], [-0.25, -0.35, 0.8, 0.66], [0.35, -0.2, -0.85, 0.6]], 16, 0.95);
-  // two crown clusters a tree: the top, and a smaller one lower down on a limb
-  const crowns = new THREE.InstancedMesh(crown.core, coreMat, treeN * 2);
-  const crownCards = new THREE.InstancedMesh(crown.cards, canopyMat, treeN * 2);
-  let ti = 0;
-  for (let tries = 0; ti < treeN && tries < treeN * 20; tries++) {
+  // trees: short near the clearing (they'd hide the player at the edge), taller further out; a few kinds grown by
+  // ez-tree, each instanced, and the ancient giants among them
+  const treeN = 120, kinds = TREE_KINDS.map(growTree);
+  const barks = kinds.map((k) => new THREE.InstancedMesh(k.bark, barkMat, treeN));
+  const leaves = kinds.map((k) => new THREE.InstancedMesh(k.leaves, canopyMat, treeN));
+  const used = kinds.map(() => 0);
+  const place = (kind: number, x: number, z: number, h: number, colour: THREE.Color) => {
+    const i = used[kind]++;
+    // narrowed so its crown stops short of the thicket's inner edge: grown as ez-tree grows them, a giant's limbs
+    // reached 17 m out, over the clearing, and hid the hero from above
+    const w = Math.min(h, (Math.hypot(x, z) - WALL_R - 2) / kinds[kind].reach);
+    // (sunk a little: a trunk is an open tube at its foot)
+    setInstance(barks[kind], i, x, -0.25, z, r(-0.04, 0.04), r(0, TAU), r(-0.04, 0.04), w, h, w);
+    barks[kind].getMatrixAt(i, _mx); leaves[kind].setMatrixAt(i, _mx);
+    leaves[kind].setColorAt(i, colour);
+  };
+  for (let ti = 0, tries = 0; ti < treeN && tries < treeN * 20; tries++) {
     const a = r(0, TAU), rr = 34 + Math.pow(r(0, 1), 1.4) * 26;
     if (rr < 42 && gateGap(a) < 0.1) continue;   // keep a path open behind each gate
-    const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
-    const th = Math.min(17, 7 + (rr - 34) * 0.45) * r(0.85, 1.15), tw = r(1.1, 1.7) * (th / 10) ** 0.6;
-    setInstance(trunks, ti, x, 0, z, 0, r(0, TAU), 0, tw, th, tw);
-    const cw = r(3.0, 4.2) * (th / 10) ** 0.7, side = r(0, TAU);
-    plantCol.setRGB(r(0.08, 0.15), r(0.16, 0.26), r(0.06, 0.1));
-    setInstance(crowns, ti * 2, x, th * 0.8, z, r(-0.15, 0.15), r(0, TAU), r(-0.15, 0.15), cw, cw * r(0.75, 0.95), cw);
-    setInstance(crowns, ti * 2 + 1, x + Math.cos(side) * cw * 0.75, th * 0.56, z + Math.sin(side) * cw * 0.75, r(-0.2, 0.2), r(0, TAU), r(-0.2, 0.2), cw * 0.62, cw * 0.5, cw * 0.62);
-    for (const k of [ti * 2, ti * 2 + 1]) { crowns.getMatrixAt(k, _mx); crownCards.setMatrixAt(k, _mx); crowns.setColorAt(k, plantCol); crownCards.setColorAt(k, plantCol); }
+    const th = Math.min(17, 7 + (rr - 34) * 0.45) * r(0.85, 1.15);
+    plantCol.setRGB(r(0.08, 0.15), r(0.16, 0.26), r(0.06, 0.1)).multiplyScalar(2.2);
+    place(Math.floor(r(0, TREE_KINDS.length - 1)), Math.cos(a) * rr, Math.sin(a) * rr, th, plantCol);
     ti++;
   }
-  trunks.count = ti; crowns.count = crownCards.count = ti * 2;
-  trunks.castShadow = crownCards.castShadow = trunks.receiveShadow = crowns.receiveShadow = crownCards.receiveShadow = true;
-  scene.add(trunks, crowns, crownCards);
-  buildGiants(scene, rng, barkMat, crown, coreMat, canopyMat);
+  // a ring of ancient giants beyond the thicket, standing over the forest the way the crypt's towers do, clear of the gates
+  for (let i = 0; i < 12; i++) {
+    const a = ((i + 0.5) / 12) * TAU + r(-0.075, 0.075), rr = 45 + r(0, 8);
+    if (gateGap(a) <= 0.3) continue;
+    plantCol.setRGB(r(0.08, 0.14), r(0.16, 0.25), r(0.05, 0.09)).multiplyScalar(2.2);
+    place(TREE_KINDS.length - 1, Math.cos(a) * rr, Math.sin(a) * rr, r(27, 34), plantCol);
+  }
+  kinds.forEach((_, k) => {
+    barks[k].count = leaves[k].count = used[k];
+    barks[k].castShadow = barks[k].receiveShadow = leaves[k].castShadow = leaves[k].receiveShadow = true;
+    scene.add(barks[k], leaves[k]);
+  });
 
   // --- Gates: arches of twisted roots around a green portal -----------------------
   const portals: Portal[] = GATES.map((a) => buildRootGate(scene, a, barkMat, mossStone, { canopyMat: archCanopy, coreMat: archCore, hangMat, ivyMat }, rng, updaters));
@@ -424,18 +435,6 @@ function buildMenhirGeo(rng: () => number): THREE.BufferGeometry {
   return lumpy(g, 0.04, 3);
 }
 
-/** Unit-height trunk (scaled per instance): a gnarled bole flaring into buttress roots, and two limbs
- * forking up into the crown. */
-function buildTrunkGeo(rng: () => number): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = [lumpy(new THREE.CylinderGeometry(0.17, 0.3, 1, 9, 5).translate(0, 0.5, 0), 0.05, 3)];
-  for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * TAU + rng() * 0.4, c = Math.cos(a), s = Math.sin(a), reach = 0.45 + rng() * 0.25;
-    parts.push(taperTube([V(c * 0.18, 0.09, s * 0.18), V(c * 0.3, 0.035, s * 0.3), V(c * reach, 0.0, s * reach)], (t) => 0.13 * (1 - t * 0.85), 4, 5));
-  }
-  for (const s of [1, -1]) parts.push(taperTube([V(0, 0.7, 0), V(s * 0.12, 0.84, 0.05), V(s * 0.3, 0.98, 0.1)], (t) => 0.1 * (1 - t * 0.6), 4, 5));
-  return mergeAll(parts);
-}
-
 /** Merge geometries that may differ in indexing and attributes: keeps position, normal and uv. */
 function mergeAll(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return mergeGeometries(parts.map((p) => {
@@ -474,71 +473,16 @@ function buildLogGeo(rng: () => number): { bark: THREE.BufferGeometry; inner: TH
   return { bark, inner: inside, moss, fungus: mergeAll(caps) };
 }
 
-/** Stretch a geometry's uvs, so a bark texture keeps its scale along a long trunk or root. */
-function scaleUV<T extends THREE.BufferGeometry>(g: T, su: number, sv: number): T {
-  const uv = g.attributes.uv;
-  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
-  return g;
-}
 
-/**
- * An ancient giant, about 30 m: a broad bole twisting up out of great buttress roots, limbs forking out
- * into the crown. Returns its geometry and the twig ends where its crown clusters sit.
- */
-function buildGiantGeo(rng: () => number): { geo: THREE.BufferGeometry; tips: THREE.Vector3[] } {
-  const H = 30;
-  const bole = new THREE.CylinderGeometry(1.3, 2.1, H, 18, 16).translate(0, H / 2, 0);
-  const p = bole.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    // the base flares into the roots and the grain twists as it rises
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), f = 1 + 1.2 * Math.exp(-y / 2.2), tw = y * 0.035;
-    p.setXYZ(i, (x * Math.cos(tw) - z * Math.sin(tw)) * f, y, (x * Math.sin(tw) + z * Math.cos(tw)) * f);
-  }
-  const parts: THREE.BufferGeometry[] = [lumpy(scaleUV(bole, 4, H / 5), 0.012, 7)];
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * TAU + rng() * 0.3, c = Math.cos(a), s = Math.sin(a), reach = 6.5 + rng() * 2;
-    parts.push(scaleUV(taperTube([V(c * 1.4, 4.5, s * 1.4), V(c * 2.8, 1.6, s * 2.8), V(c * reach * 0.7, 0.2, s * reach * 0.7), V(c * reach, -0.3, s * reach)], (t) => 1.05 * (1 - t * 0.85), 12, 8), 2, 3));
-  }
-  const limbs: THREE.BufferGeometry[] = [], tips: THREE.Vector3[] = [];
-  for (let k = 0; k < 4; k++) {
-    const a = k * 2.2 + rng() * 0.6;
-    branches(rng, V(0, 15 + k * 3.5, 0), V(Math.cos(a), 0.85, Math.sin(a)), 9 + rng() * 2, 0.75, 1, limbs, tips, 0.5, 8);
-  }
-  branches(rng, V(0, H - 1, 0), V(0.1, 1, 0.05), 6, 0.9, 1, limbs, tips, 0.45, 8);
-  for (const l of limbs) parts.push(scaleUV(l, 2, 3));
-  return { geo: mergeAll(parts), tips };
-}
-
-/** A ring of ancient giants beyond the thicket, standing over the forest the way the crypt's towers do,
- * clear of the gates. Their crowns share the trees' canopy geometry and materials. */
-function buildGiants(scene: THREE.Object3D, rng: () => number, bark: THREE.Material, crown: { core: THREE.BufferGeometry; cards: THREE.BufferGeometry }, coreMat: THREE.Material, canopyMat: THREE.Material): void {
-  const { geo, tips } = buildGiantGeo(rng);
-  const spots: [number, number][] = [];
-  for (let i = 0; i < 12; i++) {
-    const a = ((i + 0.5) / 12) * TAU + (rng() - 0.5) * 0.15;
-    if (gateGap(a) > 0.3) spots.push([a, 38 + rng() * 8]);
-  }
-  const trunks = new THREE.InstancedMesh(geo, bark, spots.length);
-  const cores = new THREE.InstancedMesh(crown.core, coreMat, spots.length * tips.length);
-  const cards = new THREE.InstancedMesh(crown.cards, canopyMat, spots.length * tips.length);
-  const m = new THREE.Matrix4(), cm = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), at = new THREE.Vector3(), col = new THREE.Color();
-  let ci = 0;
-  spots.forEach(([a, rr], i) => {
-    const sc = 0.9 + rng() * 0.25, yaw = rng() * TAU;
-    m.compose(V(Math.cos(a) * rr, 0, Math.sin(a) * rr), q.setFromAxisAngle(V(0, 1, 0), yaw), s.setScalar(sc));
-    trunks.setMatrixAt(i, m);
-    for (const tp of tips) {
-      at.copy(tp).applyMatrix4(m);
-      const cs = (4.2 + rng() * 1.6) * sc;
-      setInstance(cores, ci, at.x, at.y + cs * 0.2, at.z, (rng() - 0.5) * 0.3, rng() * TAU, (rng() - 0.5) * 0.3, cs, cs * (0.65 + rng() * 0.2), cs);
-      cores.getMatrixAt(ci, cm); cards.setMatrixAt(ci, cm);
-      col.setRGB(0.08 + rng() * 0.06, 0.16 + rng() * 0.09, 0.05 + rng() * 0.04);
-      cores.setColorAt(ci, col); cards.setColorAt(ci++, col);
-    }
-  });
-  trunks.castShadow = trunks.receiveShadow = cards.castShadow = cards.receiveShadow = cores.receiveShadow = true;
-  scene.add(trunks, cores, cards);
-}
+/** the trees round the clearing, grown by ez-tree (the last: the ancient giants), each capped to a few thousand
+ *  triangles: sections and segments per level from the trunk, and fewer, bigger leaf cards */
+const TREE_KINDS: Grow[] = [
+  { preset: 'Oak Medium', seed: 4021, sections: [7, 4, 3], segments: [7, 4, 3], leaves: 0.4, leafSize: 1.6, levels: 2 },
+  { preset: 'Ash Medium', seed: 717, sections: [7, 4, 3], segments: [7, 4, 3], leaves: 0.4, leafSize: 1.6, levels: 2 },
+  { preset: 'Oak Small', seed: 99, sections: [7, 4, 3], segments: [7, 4, 3], leaves: 0.6, leafSize: 1.5, levels: 2 },
+  { preset: 'Aspen Large', seed: 1312, sections: [7, 4, 3], segments: [6, 4, 3], leaves: 0.25, leafSize: 1.8, levels: 2 },
+  { preset: 'Oak Large', seed: 23399, sections: [10, 6, 4, 2], segments: [8, 4, 3, 3], leaves: 0.3, leafSize: 1.5 },
+];
 
 /** A broken stump: a jagged, splintered top, buttress roots, bark lumps. */
 function buildStumpGeo(rng: () => number): THREE.BufferGeometry {

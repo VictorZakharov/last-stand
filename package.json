@@ -13,6 +13,7 @@
     "facelab": "node tools/facelab/facelab.mjs"
   },
   "dependencies": {
+    "@dgreenheck/ez-tree": "^1.1.0",
     "three": "0.185.1"
   },
   "devDependencies": {
