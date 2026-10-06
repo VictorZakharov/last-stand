@@ -22,6 +22,26 @@ const APP = 'last-stand-coop-1';
 /** the relay server every game meets on (`VITE_COOP_SERVER` at build time, `?server=` to try another) */
 const SERVER: string = import.meta.env.VITE_COOP_SERVER ?? 'wss://ls.wellscoped.dev';
 
+/** The server didn't answer: co-op isn't available (said so plainly, not as an error). */
+export class ServerDown extends Error {}
+/** what a player is told when the co-op server doesn't answer */
+export const SERVER_DOWN = "The co-op server is offline, so playing together isn't available right now. Try again in a while.";
+
+/**
+ * Whether the co-op server answers its health check (`/health`, within `CHECK_TIMEOUT`): the co-op dialog asks as it
+ * opens, so a player is told the server is down before trying (and waiting) to open a room.
+ */
+export async function serverUp(): Promise<boolean> {
+  const q = new URLSearchParams(location.search);
+  if (q.get('net') === 'local') return true;
+  const url = (q.get('server') ?? SERVER).replace(/^ws/, 'http').replace(/\/+$/, '') + '/health';
+  try {
+    const r = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(CHECK_TIMEOUT * 1000) });
+    return r.ok && (await r.text()).trim() === 'ok';
+  } catch { return false; }
+}
+const CHECK_TIMEOUT = 5;
+
 export async function openLink(code: string): Promise<Link> {
   const q = new URLSearchParams(location.search);
   if (q.get('net') === 'local') return localLink(code);
@@ -101,14 +121,14 @@ function serverLink(code: string, server: string): Promise<Link> {
         serverState('closed');
         netLog(`server ${host} closed (${e.code}${e.reason ? ' ' + e.reason : ''})`);
         // (never opened: the server is down or turned us away; open, it has RECONNECT to come back: a deploy restarts it)
-        if (!opened) { reject(new Error(`the co-op server ${host} didn't answer`)); return; }
+        if (!opened) { reject(new ServerDown(`the co-op server ${host} didn't answer`)); return; }
         if (!tries++) lostAt = performance.now();
         if (performance.now() - lostAt > RECONNECT) { clearInterval(pinger); netLog(`server ${host} lost`); for (const p of [...peers]) { peers.delete(p); gone(p); } return; }
         setTimeout(connect, Math.min(4000, 500 * tries));
       };
     };
     connect();
-    setTimeout(() => { if (!opened) { left = true; ws?.close(); serverState('closed'); reject(new Error(`the co-op server ${host} didn't answer`)); } }, OPEN_TIMEOUT * 1000);
+    setTimeout(() => { if (!opened) { left = true; ws?.close(); serverState('closed'); reject(new ServerDown(`the co-op server ${host} didn't answer`)); } }, OPEN_TIMEOUT * 1000);
   });
 }
 

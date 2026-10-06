@@ -12,6 +12,14 @@
 .coop-intro { margin: 0; color: var(--ink-dim); font-size: 15px; line-height: 1.4; }
 .coop-intro .link { padding: 0; font-size: inherit; color: $ally-text; }
 .coop-error { margin: 0; color: var(--danger); }
+.coop-checking { margin: 0; color: var(--ink-dim); }
+.coop-offline {
+  display: flex; align-items: center; gap: 14px; margin: 0; padding: 10px 14px; align-self: stretch; text-align: left;
+  border: 1px solid rgba($danger, .45); background: rgba($danger, .08);
+  p { margin: 0; flex: 1; color: var(--danger); }
+  .btn { flex: none; }
+}
+.coop-choice.off { opacity: .45; }
 .coop-netlog { margin: 0; color: var(--ink-dim); font-size: 13px; }
 .coop-netlog .link { padding: 0; font-size: inherit; color: $ally-text; }
 .coop-choice { display: flex; gap: 14px; align-self: stretch; }

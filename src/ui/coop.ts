@@ -3,6 +3,7 @@
 import { G } from '../state';
 import { COOP } from '../data/balance';
 import { session, hostRoom, joinRoom, leaveRoom, inviteLink, partners } from '../net/session';
+import { serverUp, SERVER_DOWN } from '../net/transport';
 import { isCoop } from '../net/role';
 import { addAnchored, removeAnchored } from './floaters';
 import { renderLobbyOptions } from './menus';
@@ -32,9 +33,24 @@ export function initCoop(): void {
   renderCoop();
 }
 
+/** the co-op server as last checked: asked each time the dialog opens with no room */
+let server: 'checking' | 'up' | 'down' = 'checking';
+let checkNo = 0;
+async function checkServer(): Promise<void> {
+  const n = ++checkNo;
+  server = 'checking';
+  renderCoop();
+  const up = await serverUp();
+  if (n !== checkNo) return;
+  server = up ? 'up' : 'down';
+  renderCoop();
+}
+
 function openCoop(open: boolean): void {
   $('#coop').classList.toggle('hidden', !open);
-  if (open) renderCoop();
+  if (!open) return;
+  if (session.status === 'off' || session.status === 'failed') void checkServer();
+  else renderCoop();
 }
 
 /** The room dialog and the lobby's room bar, for the session as it stands. */
@@ -48,21 +64,25 @@ export function renderCoop(): void {
     body.innerHTML = `
       <p class="coop-intro">Fight side by side over the internet, up to ${COOP.maxPlayers} heroes. Each brings their own hero and gear and keeps their own spoils.</p>
       <p class="coop-intro">Starting over together? <button class="link coop-saves">Pick an empty save slot</button> first: your saved heroes stay as they are.</p>
-      ${s === 'failed' ? `<p class="coop-error">${esc(session.error)}</p>` : ''}
-      <div class="coop-choice">
+      ${server === 'down' ? `<div class="coop-offline" role="status"><p>${esc(SERVER_DOWN)}</p><button class="btn" id="btn-coop-retry">Try again</button></div>`
+        : server === 'checking' ? '<p class="coop-checking" role="status">Checking the co-op server…</p>'
+        : s === 'failed' ? `<p class="coop-error">${esc(session.error)}</p>` : ''}
+      <div class="coop-choice${server === 'up' ? '' : ' off'}">
         <div class="coop-col"><div class="coop-h">Host</div><p>Open a room and send your friend the link.</p>
-          <button class="btn primary" id="btn-coop-host">Open a room</button></div>
+          <button class="btn primary" id="btn-coop-host"${server === 'up' ? '' : ' disabled'}>Open a room</button></div>
         <div class="coop-col"><div class="coop-h">Join</div><p>Enter the code your friend sent.</p>
-          <form class="coop-join"><input id="coop-code" maxlength="8" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="Room code"><button class="btn" type="submit">Join</button></form></div>
+          <form class="coop-join"><input id="coop-code" maxlength="8" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="Room code"${server === 'up' ? '' : ' disabled'}><button class="btn" type="submit"${server === 'up' ? '' : ' disabled'}>Join</button></form></div>
       </div>
       ${reportLinks()}`;
     bindReportLinks(body);
-    $('#btn-coop-host', body).onclick = () => { sfx.click(); void hostRoom(); };
+    $('#btn-coop-host', body).onclick = () => { if (server !== 'up') return; sfx.click(); void hostRoom(); };
+    const retry = $('#btn-coop-retry', body) as HTMLElement | null;
+    if (retry) retry.onclick = () => { sfx.click(); void checkServer(); };
     $('.coop-saves', body).onclick = () => { sfx.click(); openCoop(false); openSaves(true); };
     $<HTMLFormElement>('.coop-join', body).onsubmit = (e) => {
       e.preventDefault();
       const code = $<HTMLInputElement>('#coop-code', body).value.trim();
-      if (code.length >= 4) { sfx.click(); void joinRoom(code); }
+      if (code.length >= 4 && server === 'up') { sfx.click(); void joinRoom(code); }
     };
     return;
   }
