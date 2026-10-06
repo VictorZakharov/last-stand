@@ -7,7 +7,13 @@ import * as THREE from 'three';
 import { Tree, TreePreset } from 'ez-tree';
 
 /** a tree kind: its two geometries, the bark's and the leaves', 1 high, foot at the origin */
-export interface TreeKind { bark: THREE.BufferGeometry; leaves: THREE.BufferGeometry; /** how far its crown reaches from the trunk, over its height */ reach: number }
+export interface TreeKind {
+  bark: THREE.BufferGeometry;
+  leaves: THREE.BufferGeometry;
+  /** how far it reaches from the trunk, over its height, in each of REACH_BANDS bands of height from its foot */
+  reach: number[];
+}
+export const REACH_BANDS = 10;
 
 type Preset = keyof typeof TreePreset;
 export interface Grow {
@@ -22,6 +28,12 @@ export interface Grow {
   leafSize?: number;
   /** fewer levels of branching than the preset's (its finest twigs were most of a tree's triangles) */
   levels?: number;
+  /** a trunk this much longer, its limbs as long as they were, starting `crownStart` of the way up it (0 to 1): a
+   *  giant's tall bare bole under its crown (a later start alone moved its crown only a little: its limbs grow up) */
+  trunk?: number;
+  crownStart?: number;
+  /** a trunk this much thicker (longer, it stood as a pole) */
+  girth?: number;
 }
 
 /** Grows one kind (deterministic: ez-tree's own generator, seeded). */
@@ -35,6 +47,10 @@ export function growTree(g: Grow): TreeKind {
   json.seed = g.seed;
   json.bark.textured = false;
   if (g.levels !== undefined) json.branch.levels = Math.min(json.branch.levels, g.levels);
+  const br = json.branch as unknown as { start: Record<string, number>; length: Record<string, number>; radius: Record<string, number> };
+  if (g.trunk !== undefined) br.length['0'] *= g.trunk;
+  if (g.girth !== undefined) br.radius['0'] *= g.girth;
+  if (g.crownStart !== undefined) br.start['1'] = g.crownStart;
   for (let l = 0; l <= json.branch.levels; l++) {
     const k = String(l);
     json.branch.sections[k] = Math.min(json.branch.sections[k], g.sections[Math.min(l, g.sections.length - 1)]);
@@ -49,10 +65,13 @@ export function growTree(g: Grow): TreeKind {
   const box = new THREE.Box3().setFromBufferAttribute(bark.attributes.position as THREE.BufferAttribute).union(new THREE.Box3().setFromBufferAttribute(leaves.attributes.position as THREE.BufferAttribute));
   const h = box.max.y - box.min.y, s = 1 / h;
   for (const geo of [bark, leaves]) { geo.scale(s, s, s); geo.computeBoundingSphere(); geo.computeBoundingBox(); }
-  let reach = 0;
+  const reach = new Array<number>(REACH_BANDS).fill(0);
   for (const geo of [bark, leaves]) {
     const p = geo.attributes.position;
-    for (let i = 0; i < p.count; i++) reach = Math.max(reach, Math.hypot(p.getX(i), p.getZ(i)));
+    for (let i = 0; i < p.count; i++) {
+      const b = Math.min(REACH_BANDS - 1, Math.max(0, Math.floor(p.getY(i) * REACH_BANDS)));
+      reach[b] = Math.max(reach[b], Math.hypot(p.getX(i), p.getZ(i)));
+    }
   }
   return { bark, leaves, reach };
 }

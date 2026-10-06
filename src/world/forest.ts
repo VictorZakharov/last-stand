@@ -9,7 +9,7 @@ import { forestFloor, bark, slabs, grunge, pbrMaterialMaps, runeCircle } from '.
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
 import { buildDaySky, boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
-import { growTree, type Grow } from './ezTrees';
+import { growTree, REACH_BANDS, type Grow } from './ezTrees';
 import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
 import { bend, rag, taperTube, twist } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
@@ -176,9 +176,15 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   const used = kinds.map(() => 0);
   const place = (kind: number, x: number, z: number, h: number, colour: THREE.Color) => {
     const i = used[kind]++;
-    // narrowed so its crown stops short of the thicket's inner edge: grown as ez-tree grows them, a giant's limbs
-    // reached 17 m out, over the clearing, and hid the hero from above
-    const w = Math.min(h, (Math.hypot(x, z) - WALL_R - 2) / kinds[kind].reach);
+    // narrowed so nothing under CANOPY_Y comes within 2 m of the wall, and nothing over it more than 2 m past it, as
+    // the old giants' crowns did: grown as ez-tree grows them, a giant's low limbs reached 17 m out over the clearing
+    // and hid the hero from above, and kept outside the wall at every height the forest had no roof for the sunrays
+    const rr = Math.hypot(x, z);
+    let w = h;
+    kinds[kind].reach.forEach((k, b) => {
+      const room = rr - WALL_R + ((b + 1) / REACH_BANDS * h > CANOPY_Y ? 2 : -2);
+      if (k > 0) w = Math.min(w, room / k);
+    });
     // (sunk a little: a trunk is an open tube at its foot)
     setInstance(barks[kind], i, x, -0.25, z, r(-0.04, 0.04), r(0, TAU), r(-0.04, 0.04), w, h, w);
     barks[kind].getMatrixAt(i, _mx); leaves[kind].setMatrixAt(i, _mx);
@@ -187,17 +193,19 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   for (let ti = 0, tries = 0; ti < treeN && tries < treeN * 20; tries++) {
     const a = r(0, TAU), rr = 34 + Math.pow(r(0, 1), 1.4) * 26;
     if (rr < 42 && gateGap(a) < 0.1) continue;   // keep a path open behind each gate
-    const th = Math.min(17, 7 + (rr - 34) * 0.45) * r(0.85, 1.15);
+    // (to the top of the crown: the old trunks' heights and their crowns on top)
+    const th = Math.min(22, 9 + (rr - 34) * 0.6) * r(0.85, 1.15);
     plantCol.setRGB(r(0.08, 0.15), r(0.16, 0.26), r(0.06, 0.1)).multiplyScalar(2.2);
     place(Math.floor(r(0, TREE_KINDS.length - 1)), Math.cos(a) * rr, Math.sin(a) * rr, th, plantCol);
     ti++;
   }
-  // a ring of ancient giants beyond the thicket, standing over the forest the way the crypt's towers do, clear of the gates
-  for (let i = 0; i < 12; i++) {
-    const a = ((i + 0.5) / 12) * TAU + r(-0.075, 0.075), rr = 45 + r(0, 8);
-    if (gateGap(a) <= 0.3) continue;
+  // a ring of ancient giants beyond the thicket, standing over the forest the way the crypt's towers do, clear of the
+  // gates: their crowns a roof 35 to 50 m up over the ring, which the sunrays come down through
+  for (let i = 0; i < GIANTS; i++) {
+    const a = ((i + 0.5) / GIANTS) * TAU + r(-0.05, 0.05), rr = 39 + r(0, 7);
+    if (gateGap(a) <= 0.25) continue;
     plantCol.setRGB(r(0.08, 0.14), r(0.16, 0.25), r(0.05, 0.09)).multiplyScalar(2.2);
-    place(TREE_KINDS.length - 1, Math.cos(a) * rr, Math.sin(a) * rr, r(27, 34), plantCol);
+    place(TREE_KINDS.length - 1, Math.cos(a) * rr, Math.sin(a) * rr, r(44, 52), plantCol);
   }
   kinds.forEach((_, k) => {
     barks[k].count = leaves[k].count = used[k];
@@ -476,12 +484,19 @@ function buildLogGeo(rng: () => number): { bark: THREE.BufferGeometry; inner: TH
 
 /** the trees round the clearing, grown by ez-tree (the last: the ancient giants), each capped to a few thousand
  *  triangles: sections and segments per level from the trunk, and fewer, bigger leaf cards */
+/** the ancient giants' places round the ring (those clear of the gates) */
+const GIANTS = 20;
+/** over this height a crown may reach over the wall (the top-down camera sits 26 m over the hero, and the old giants'
+ *  crowns reached over it 40 m up) */
+const CANOPY_Y = 24;
 const TREE_KINDS: Grow[] = [
   { preset: 'Oak Medium', seed: 4021, sections: [7, 4, 3], segments: [7, 4, 3], leaves: 0.4, leafSize: 1.6, levels: 2 },
   { preset: 'Ash Medium', seed: 717, sections: [7, 4, 3], segments: [7, 4, 3], leaves: 0.4, leafSize: 1.6, levels: 2 },
   { preset: 'Oak Small', seed: 99, sections: [7, 4, 3], segments: [7, 4, 3], leaves: 0.6, leafSize: 1.5, levels: 2 },
   { preset: 'Aspen Large', seed: 1312, sections: [7, 4, 3], segments: [6, 4, 3], leaves: 0.25, leafSize: 1.8, levels: 2 },
-  { preset: 'Oak Large', seed: 23399, sections: [10, 6, 4, 2], segments: [8, 4, 3, 3], leaves: 0.3, leafSize: 1.5 },
+  // (its crown high on a tall bare bole, from half its height up: as grown, an oak's limbs start low and spread 0.6 of
+  // its height, and narrowed to keep its low limbs outside the wall it stood as a column with no roof over the wall)
+  { preset: 'Oak Large', seed: 23399, sections: [10, 5, 3], segments: [8, 4, 3], leaves: 0.7, leafSize: 2.2, trunk: 3.2, crownStart: 0.85, girth: 2.4, levels: 2 },
 ];
 
 /** A broken stump: a jagged, splintered top, buttress roots, bark lumps. */
