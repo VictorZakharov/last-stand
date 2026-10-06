@@ -1,6 +1,7 @@
 // Bow shots; damage follows the usual co-op authority checks. An arrow flies as one does: as fast as the draw sent it
 // (a bow's string drives it about in proportion to how far it was drawn), on the lower ballistic arc that crosses its
-// target at a man's chest, turning to follow its path, and where it comes down it sticks in the ground. The ranger's
+// target at a man's chest, turning to follow its path, and where it ends it stays (fx/stuckArrows): in the ground, a
+// wooden prop, the thicket or a foe's body, or off stone onto the floor. The ranger's
 // other skills: arrowRain.ts, quarryMark.ts, strawman.ts.
 import * as THREE from 'three';
 import { G } from '../../state';
@@ -13,23 +14,27 @@ import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import { arrowGeometry, ARROW, pullAt } from '../../entities/models/bow';
 import { showLaser, warmLaser, LASER_POINTS } from '../../fx/aimLaser';
+import { arrowMat, stickAt, stickIn, glance, floorIsStone, propIsStone, propSurface, wallIsStone, warmStuck, SINK } from '../../fx/stuckArrows';
+import { pastWall } from '../../world/edge';
 import { clamp, rand } from '../../util';
+import type { Obstacle } from '../../types';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
 import type { InstantSkill, Needs } from './types';
 
 export const GRAVITY = 9.81;
-/** a shot crosses its target this high off the ground (a man-sized foe's chest), aimed as though it were no nearer than
- *  NEAR, and no steeper than MAX_PITCH (out of the draw's reach it falls short) */
-const AIM_H = 1.1, NEAR = 5;
+/** a shot goes through the point aimed at, as though it were no nearer than NEAR (m), no steeper than MAX_PITCH (rad: out
+ *  of the draw's reach it falls short) and no further down than MIN_PITCH */
+const NEAR = 0.5, MIN_PITCH = -0.6;
 export const MAX_PITCH = 0.6;
-/** how deep an arrow goes into the ground (m), how long it stands there (s, shrinking away over the last half second) and how many can */
-const SINK = 0.16, STUCK_LIFE = 7, STUCK_MAX = 128;
 export const FWD = new THREE.Vector3(0, 0, 1);
-const _v = new THREE.Vector3(), _p = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _s = new THREE.Vector3(), _m = new THREE.Matrix4();
-// (double-sided: an arrow's feathers are single sheets)
-export const arrowMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.1, side: THREE.DoubleSide });
+const _v = new THREE.Vector3(), _p = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _n = new THREE.Vector3();
+export { arrowMat };
 export const arrowMesh = (): THREE.Mesh => new THREE.Mesh(arrowGeometry(), arrowMat);
+/** an arrow out through a gate is gone this far past the wall (m) */
+const GATE_DEPTH = 2;
+/** an arrow's flight ends this far out whatever happens (m): past the wall, out through a gate */
+export const ARROW_EDGE = 40;
 
 /** a streak of light behind an arrow (a shaft is a few pixels from the top-down view, and a fast one is gone in two frames):
  *  two crossed strips along +z from its tail (z = -1, dark: it's added light) to its point (z = 0, bright), seen from any side */
@@ -46,66 +51,93 @@ export const streakGeo = (() => {
 const streakOf = (color: number, k: number, opacity = 1) => nearGlow(new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(k), vertexColors: true, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
 export const streakMat = streakOf(0xe6efc4, 2.2);
 
-/** The angle above level (the lower of the two arcs) that takes an arrow at `v` from `from` across `target` at AIM_H. */
-export function launchPitch(from: THREE.Vector3, target: THREE.Vector3, v: number, range: number): number {
-  const d = clamp(Math.hypot(target.x - from.x, target.z - from.z), NEAR, range), h = groundHeight(target.x, target.z) + AIM_H - from.y;
+/** The angle above level (the lower of the two arcs) that takes an arrow at `v` from `from` through `target`, the point
+ *  aimed at (`y` its height over the floor under it): the floor, a log, a foe's head, whatever was under the aim (aimed at
+ *  a man's chest over the floor, a log was shot over and a shot at the floor flew on). No steeper than MAX_PITCH (out of
+ *  the draw's reach it falls short) and no further down than MIN_PITCH (the pose's reach). */
+export function launchPitch(from: THREE.Vector3, target: THREE.Vector3, v: number): number {
+  const d = Math.max(NEAR, Math.hypot(target.x - from.x, target.z - from.z)), h = groundHeight(target.x, target.z) + target.y - from.y;
   const v2 = v * v, disc = v2 * v2 - GRAVITY * (GRAVITY * d * d + 2 * h * v2);
-  return disc < 0 ? MAX_PITCH : Math.min(MAX_PITCH, Math.atan((v2 - Math.sqrt(disc)) / (GRAVITY * d)));
+  return disc < 0 ? MAX_PITCH : clamp(Math.atan((v2 - Math.sqrt(disc)) / (GRAVITY * d)), MIN_PITCH, MAX_PITCH);
 }
 
-/** the arrows standing in the ground, one instanced mesh: each one's place and turn, its buried point, how long it has stood and may */
-let stuck: THREE.InstancedMesh | null = null;
-const stood: { p: THREE.Vector3; q: THREE.Quaternion; tip: THREE.Vector3; t: number; life: number }[] = [];
-/** An arrow into the ground, its point at `tip` going `dir`, standing there `life` s. */
-export function stick(tip: THREE.Vector3, dir: THREE.Vector3, life = STUCK_LIFE): void {
-  if (!stuck) {
-    const mesh = stuck = new THREE.InstancedMesh(arrowGeometry(), arrowMat, STUCK_MAX);
-    mesh.count = 0; mesh.frustumCulled = false; mesh.name = 'stuck arrows';
-    G.scene.add(mesh);
-    addEffect({
-      update(dt) {
-        for (let i = stood.length - 1; i >= 0; i--) if ((stood[i].t += dt) > stood[i].life) stood.splice(i, 1);
-        stood.forEach((a, i) => {
-          // (shrinking into the ground about its buried point)
-          const k = clamp((a.life - a.t) / 0.5, 0, 1);
-          _p.copy(a.p).sub(a.tip).multiplyScalar(k).add(a.tip);
-          mesh.setMatrixAt(i, _m.compose(_p, a.q, _s.setScalar(k)));
-        });
-        mesh.count = stood.length; mesh.instanceMatrix.needsUpdate = true;
-        return stood.length > 0;
-      },
-      dispose() { G.scene.remove(mesh); mesh.dispose(); stuck = null; stood.length = 0; },
-    });
-  }
-  // (full: the one nearest its end makes way)
-  if (stood.length >= STUCK_MAX) { let o = 0; for (let i = 1; i < stood.length; i++) if (stood[i].life - stood[i].t < stood[o].life - stood[o].t) o = i; stood.splice(o, 1); }
-  const q = new THREE.Quaternion().setFromUnitVectors(FWD, dir), at = tip.clone().addScaledVector(dir, SINK);
-  stood.push({ p: at.clone().addScaledVector(dir, -ARROW / 2), q, tip: at, t: 0, life });
+/** An arrow coming down at `tip` going `dir` at `vel`: into the ground, or off it if it's stone. */
+export function intoGround(tip: THREE.Vector3, vel: THREE.Vector3): void {
+  tip.y = groundHeight(tip.x, tip.z);
+  if (floorIsStone(tip.x, tip.z)) glance(tip, vel, _n.set(0, 1, 0));
+  else stickAt(tip, _d.copy(vel).normalize(), SINK.ground);
+}
+
+/** An arrow into a prop met on its circle at `at`, going `vel`: off it if it's stone, else into it (and down with it when it
+ *  breaks), where it draws its surface. False if the arrow's line misses what it draws (past a log's end, between a
+ *  cluster's caps): it flies on (dropped there, it lay on the floor short of the log). */
+export function intoProp(o: Obstacle, at: THREE.Vector3, vel: THREE.Vector3): boolean {
+  // (where it really meets the prop: met on its circle, an arrow went most of its length into a stump wider than that)
+  const dir = _d.copy(vel).normalize(), hit = propSurface(o, at, dir, _n);
+  if (!hit) return false;
+  if (propIsStone(o)) glance(hit, vel, _n);
+  else stickAt(hit, dir, SINK.prop, o);
+  return true;
+}
+
+/** An arrow into a foe, struck at `at` going `vel`: it lodges in the body where it meets it, riding it until the body
+ *  dissolves; if the line misses the body's surface (the foe's circle is rounder than it), aimed in at its middle. */
+export function intoFoe(e: Enemy, at: THREE.Vector3, vel: THREE.Vector3): void {
+  const dir = _d.copy(vel).normalize(), gone = () => !e.obj.parent || (!e.alive && e.deadT > 0.45);
+  if (stickIn(e.obj, _e.copy(at).addScaledVector(dir, -2), dir, gone)) return;
+  const y = clamp(at.y, e.obj.position.y + e.height * 0.2, e.obj.position.y + e.height * 0.85);
+  _v.set(e.pos.x - at.x, 0, e.pos.z - at.z);
+  if (_v.lengthSq() < 1e-6) _v.set(-dir.x, 0, -dir.z);
+  _v.normalize();
+  stickIn(e.obj, _e.set(e.pos.x - _v.x * (e.radius + 1), y, e.pos.z - _v.z * (e.radius + 1)), _v, gone);
+}
+
+/** Where a flight's step from `a` to `b` meets the wall (0..1), the wall's normal into `n`, or -1 (out through a gate: -2 once gone). */
+function meetsWall(a: THREE.Vector3, b: THREE.Vector3, n: THREE.Vector3): number {
+  const w1 = pastWall(G.arena.biome, b.x, b.z, n);
+  if (w1.by <= 0) return -1;
+  if (w1.gate) return w1.by > GATE_DEPTH ? -2 : -1;
+  const w0 = pastWall(G.arena.biome, a.x, a.z, _n);
+  return w0.by >= 0 ? 0 : w0.by / (w0.by - w1.by);
 }
 
 type BowDef = Needs<'damage' | 'missiles' | 'spread' | 'speed' | 'range'>;
 /** an arrow's speed at a draw `k` (0..1 of its time) */
 const arrowSpeed = (def: BowDef, k: number): number => def.speed * pullAt(k);
 
-/** An arrow's flight each frame: falling, turning to follow its path (its vanes keep it so), and into the ground point first. */
+const _prev = new THREE.Vector3();
+/** An arrow's flight each frame: falling, turning to follow its path (its vanes keep it so), into the ground point first
+ *  (off it on stone), and into the wall (off it if it's stone, into a thicket) or out through a gate. */
 function fly(proj: Projectile, dt: number): void {
+  _prev.copy(proj.pos).addScaledVector(proj.vel, -dt);
   proj.vel.y -= GRAVITY * dt;
   _v.copy(proj.vel).normalize();
   proj.mesh.quaternion.setFromUnitVectors(FWD, _v);
   _p.copy(proj.pos).addScaledVector(_v, ARROW / 2);
-  if (_p.y <= groundHeight(_p.x, _p.z)) { stick(_p, _v); proj.kill(); }
+  if (_p.y <= groundHeight(_p.x, _p.z)) { intoGround(_p, proj.vel); proj.kill(); return; }
+  const t = meetsWall(_prev, _p, _n);
+  if (t === -2) { proj.kill(); return; }
+  if (t < 0) return;
+  _p.lerpVectors(_prev.addScaledVector(_v, ARROW / 2), _p, t);
+  if (wallIsStone()) glance(_p, proj.vel, _n); else stickAt(_p, _v, SINK.prop);
+  proj.kill();
+}
+
+/** An arrow meeting a prop: where its point crossed into the prop's circle on the step from `from`. */
+function arrowProp(o: Obstacle, proj: Projectile, from: THREE.Vector3): boolean {
+  const dx = proj.pos.x - from.x, dz = proj.pos.z - from.z;
+  const t = Math.max(0, entry(from.x, from.z, dx, dz, o.x, o.z, o.r));
+  return intoProp(o, _p.lerpVectors(from, proj.pos, t), proj.vel);
 }
 
 /** An arrow's way off the bow: heading `yaw`, `pitch` above level. */
 const shotDir = (yaw: number, pitch: number): THREE.Vector3 => new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
 
-const warmArrows = (): THREE.Object3D[] => { const s = new THREE.InstancedMesh(arrowGeometry(), arrowMat, 1); s.count = 1; return [arrowMesh(), s, new THREE.Mesh(streakGeo, streakOf(GLINT, 1)), ...warmLaser()]; };
+const warmArrows = (): THREE.Object3D[] => [arrowMesh(), ...warmStuck(), new THREE.Mesh(streakGeo, streakOf(GLINT, 1)), ...warmLaser()];
 
 /** the aim preview's flight is stepped as the arrow's is, a frame at 60 fps (swept, as its collisions are) */
 const PREVIEW_DT = 1 / 60;
-/** the arena's edge, where a shot is gone (as in projectiles.ts) */
-const EDGE = 28;
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _w = new THREE.Vector3();
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _w = new THREE.Vector3(), _c = new THREE.Vector3(), _wn = new THREE.Vector3();
 
 /** Where along the step from (px, pz) by (dx, dz) it first comes within `r` of (cx, cz): 0..1, or -1 if it doesn't. */
 function entry(px: number, pz: number, dx: number, dz: number, cx: number, cz: number, r: number): number {
@@ -124,7 +156,7 @@ function entry(px: number, pz: number, dx: number, dz: number, cx: number, cz: n
  * goes on through them) a foe. Returns its points and where it strikes (null if it only runs out).
  */
 function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius: number, level: boolean, pierce: boolean): { pts: THREE.Vector3[]; end: THREE.Vector3 | null } {
-  const pts = [origin.clone()], pos = _a.copy(origin), vel = _w.copy(dir).multiplyScalar(v);
+  const pts = [origin.clone()], pos = _a.copy(origin), vel = _w.copy(dir).multiplyScalar(v), passed = new Set<Obstacle>();
   while (pts.length < LASER_POINTS) {
     // (in the projectile's order: it moves, then falls, as `fly` follows its move)
     const px = pos.x, py = pos.y, pz = pos.z;
@@ -139,12 +171,19 @@ function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius
       const g0 = py + (_b.y - pos.y) - groundHeight(px, pz), g1 = _b.y - groundHeight(_b.x, _b.z);
       t = g0 > 0 ? g0 / (g0 - g1) : 0;
     }
-    if (Math.hypot(pos.x, pos.z) > EDGE) t = Math.min(t, exitEdge(px, pz, dx, dz));
+    // (the wall, by the arrow's point as `fly` has it: out through a gate the path just ends)
+    const w = meetsWall(_c.set(px, py, pz).addScaledVector(_e.copy(vel).normalize(), ARROW / 2), _b, _wn);
+    if (w === -2) return { pts, end: null };
+    if (w >= 0) t = Math.min(t, w);
     const low = pos.y - radius * 0.5;
     for (const o of G.arena.obstacles) {
-      if (o.h <= low) continue;
+      if (o.h <= low || passed.has(o)) continue;
       const k = entry(px, pz, dx, dz, o.x, o.z, o.r + radius * 0.5);
-      if (k >= 0 && k < t) t = k;
+      if (k < 0 || k >= t) continue;
+      // (as the arrow has it: past a prop whose line misses what it draws, a log's end, between a cluster's caps)
+      const c = Math.max(0, entry(px, pz, dx, dz, o.x, o.z, o.r));
+      if (!propSurface(o, _c.set(px + dx * c, py + (pos.y - py) * c, pz + dz * c), _e.copy(vel).normalize(), _wn)) { passed.add(o); continue; }
+      t = k;
     }
     if (!pierce) for (const en of G.enemies) {
       if (!en.alive || en.invulnerable) continue;
@@ -165,18 +204,12 @@ function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius
   return { pts, end: null };
 }
 
-/** Where a step from inside the arena crosses its edge (0..1). */
-function exitEdge(px: number, pz: number, dx: number, dz: number): number {
-  const a = dx * dx + dz * dz, b = 2 * (px * dx + pz * dz), c = px * px + pz * pz - EDGE * EDGE;
-  return a < 1e-9 ? 0 : Math.max(0, Math.min(1, (-b + Math.sqrt(Math.max(0, b * b - 4 * a * c))) / (2 * a)));
-}
-
 /** The aim preview of a drawn shot on the local hero's own screen: each arrow's path if it were loosed now
  *  (no weaker than the least draw, as it would leave), shown through `fx/aimLaser`. */
 function previewShot(player: Player, def: BowDef, k: number, radius: number, level: boolean, pierce: boolean): void {
   if (!player.local) return;
   const origin = player.castPoint, target = player.aim, v = arrowSpeed(def, Math.max(k, def.minDraw ?? 0));
-  const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v, def.range);
+  const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v);
   const paths = [];
   for (let i = 0; i < def.missiles; i++) paths.push(flightPath(origin, shotDir(yaw + (i - (def.missiles - 1) / 2) * def.spread, pitch), v, radius, level, pierce));
   showLaser(paths);
@@ -188,19 +221,20 @@ const GLINT = 0xf3dc9a;
 
 export const bowShot: InstantSkill = {
   anim: 'bow', warm: warmArrows,
-  pitch: (player, def, k, target) => launchPitch(player.castPoint, target, arrowSpeed(def as BowDef, k), def.range ?? 24),
+  pitch: (player, def, k, target) => launchPitch(player.castPoint, target, arrowSpeed(def as BowDef, k)),
   charging: (player, def, k) => previewShot(player, def as BowDef, k, 0.22, true, false),
   cast(player, rawDef, target, power) {
     const def = rawDef as BowDef, origin = player.castPoint, pull = pullAt(power), v = arrowSpeed(def, power);
     // (the string gives the arrow the energy the bow stored, which goes with the square of the draw: that is its blow)
     const damage = def.damage * pull * pull, knock = (def.knock ?? 0) * pull;
-    const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v, def.range);
+    const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v);
     for (let i = 0; i < def.missiles; i++) {
       const dir = shotDir(yaw + (i - (def.missiles - 1) / 2) * def.spread, pitch);
       const mesh = arrowMesh(); mesh.quaternion.setFromUnitVectors(FWD, dir);
       spawnProjectile({
-        pos: origin, dir, speed: v, radius: 0.22, life: 4, mesh, color: 0xd3bf8d, swept: true, level: true, tick: fly,
+        pos: origin, dir, speed: v, radius: 0.22, life: 4, mesh, color: 0xd3bf8d, swept: true, level: true, tick: fly, edge: ARROW_EDGE, onProp: arrowProp,
         onHit(enemy, proj) {
+          intoFoe(enemy as Enemy, proj.pos, proj.vel);
           hitEnemy(enemy as Enemy, damage, { by: player, tags: def.tags, type: 'physical', knock,
             from: { x: proj.pos.x - proj.vel.x, z: proj.pos.z - proj.vel.z } });
           burst(proj.pos, { count: 6, color: 0xd3bf8d, speed: 2, life: 0.2, size: 0.07 });
@@ -246,12 +280,12 @@ export const piercingShot: InstantSkill = {
     const full = power >= FULL;
     drawnTo.delete(player);
     const damage = def.damage * pull * pull * (full ? 1 + (def.fullBonus ?? 0) : 1), knock = (def.knock ?? 0) * pull;
-    const dir = shotDir(player.shotHeading(origin, target), launchPitch(origin, target, v, def.range));
+    const dir = shotDir(player.shotHeading(origin, target), launchPitch(origin, target, v));
     const mesh = arrowMesh(); mesh.quaternion.setFromUnitVectors(FWD, dir);
     let through = 0;
     const pr = spawnProjectile({
       // (through everything on its line, short foes too: it flies near level, and over the nearest heads a line shot missed them)
-      pos: origin, dir, speed: v, radius: 0.24, life: 3, mesh, color: 0xd3bf8d, swept: true, pierce: true, tick: fly,
+      pos: origin, dir, speed: v, radius: 0.24, life: 3, mesh, color: 0xd3bf8d, swept: true, pierce: true, tick: fly, edge: ARROW_EDGE, onProp: arrowProp,
       trail: { color: GLINT, colorEnd: 0x5a4020, intensity: full ? 1.3 : 0.55, size: full ? 0.13 : 0.08, rate: full ? 90 : 40, life: 0.28 },
       onHit(enemy, proj) {
         const share = def.falloff[Math.min(through++, def.falloff.length - 1)];

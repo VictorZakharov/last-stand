@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { GROUND_LEVELS, groundHeight } from '../world/ground';
+import { castSolid } from '../fx/stuckArrows';
 
 export const input = {
   down: new Set<string>(),
@@ -77,6 +78,63 @@ function floorHit(r: THREE.Ray, out: THREE.Vector3): boolean {
   return false;
 }
 
+/** Where a ray first enters an upright cylinder (round (x, z), radius `r`, from y0 up to y1): the distance along it, 0 if
+ *  it starts inside, Infinity if it never does. A cheap test before what the cylinder stands for is met as it's drawn. */
+function cylinder(r: THREE.Ray, x: number, z: number, rad: number, y0: number, y1: number): number {
+  const o = r.origin, d = r.direction, fx = o.x - x, fz = o.z - z, a = d.x * d.x + d.z * d.z, c = fx * fx + fz * fz - rad * rad;
+  // (the stretch of the ray inside the round, then inside the heights)
+  let t0 = -Infinity, t1 = Infinity;
+  if (a < 1e-12) { if (c > 0) return Infinity; } else {
+    const b = 2 * (fx * d.x + fz * d.z), disc = b * b - 4 * a * c;
+    if (disc < 0) return Infinity;
+    const q = Math.sqrt(disc); t0 = (-b - q) / (2 * a); t1 = (-b + q) / (2 * a);
+  }
+  if (Math.abs(d.y) < 1e-12) { if (o.y < y0 || o.y > y1) return Infinity; } else {
+    const u0 = (y0 - o.y) / d.y, u1 = (y1 - o.y) / d.y;
+    t0 = Math.max(t0, Math.min(u0, u1)); t1 = Math.min(t1, Math.max(u0, u1));
+  }
+  return t1 < Math.max(t0, 0) ? Infinity : Math.max(t0, 0);
+}
+
+const _best = new THREE.Vector3(), _hits: THREE.Intersection[] = [];
+/** a foe's or a prop's cylinder round it, for the cheap test: a little wider than its circle, its arms and its edges out of it */
+const ROUND = 1.3;
+/**
+ * The aim along a ray from the eye: the first thing it meets, as it's drawn, whatever it is: a foe's body, a prop, the
+ * floor (and with nothing within `far`, the point `far` along it). Its point goes into `input.ground`, `y` how high it is
+ * over the floor under it. A shot goes there and nowhere else: aimed at a man's chest over the floor, it flew over a
+ * log, and on a foe the aim snapped to its feet.
+ */
+function aimAlong(far: number): void {
+  const r = ray.ray;
+  let best = far, what = 'none';
+  if (floorHit(r, hit)) {
+    const t = r.origin.distanceTo(hit.setY(groundHeight(hit.x, hit.z)));
+    if (t < best) { best = t; _best.copy(hit); what = 'floor'; }
+  }
+  // the foes and props whose cylinders the ray enters before that, nearest first, met as they're drawn
+  const near: [number, () => void][] = [];
+  for (const e of G.enemies) {
+    if (!e.alive) continue;
+    const y0 = e.obj.position.y, t = cylinder(r, e.pos.x, e.pos.z, e.radius * ROUND, y0, y0 + e.height * 1.1);
+    if (t < best) near.push([t, () => { const h = castSolid(e.obj, ray); if (h) _hits.push(h); }]);
+  }
+  for (const o of G.arena.obstacles) {
+    const base = groundHeight(o.x, o.z), t = cylinder(r, o.x, o.z, o.r * ROUND, base, base + o.h * ROUND);
+    if (t < best) near.push([t, () => o.prop?.raycast(ray, _hits)]);
+  }
+  near.sort((a, b) => a[0] - b[0]);
+  for (const [t, meet] of near) {
+    if (t >= best) break;
+    ray.far = best; _hits.length = 0;
+    meet();
+    for (const h of _hits) if (h.distance < best) { best = h.distance; _best.copy(h.point); what = 'body'; }
+  }
+  ray.far = Infinity;
+  if (what === 'none') { if (far === Infinity) return; _best.copy(r.origin).addScaledVector(r.direction, far); }
+  input.ground.set(_best.x, _best.y - groundHeight(_best.x, _best.z), _best.z);
+}
+
 function keyName(e: KeyboardEvent): string {
   if (e.code.startsWith('Key')) return e.code.slice(3).toLowerCase();
   if (e.code.startsWith('Digit')) return e.code.slice(5);
@@ -134,33 +192,14 @@ export function updateInputRay(): void {
   if (input.centerAim) { aimAtCenter(); return; }
   ndc.set((input.mouse.x / window.innerWidth) * 2 - 1, -(input.mouse.y / window.innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, G.camera);
-  floorHit(ray.ray, input.ground);
+  aimAlong(Infinity);
 }
 
-/**
- * The crosshair's aim: the foe under it (at its feet, where ground-targeted skills land), else the
- * floor it points at, else a point ahead at aim range when it points above the floor.
- */
+/** The crosshair's aim: what's under it (`aimAlong`), or the point aim range along it. */
 function aimAtCenter(): void {
   ndc.set(0, 0);
   ray.setFromCamera(ndc, G.camera);
-  const o = ray.ray.origin, d = ray.ray.direction, h = Math.hypot(d.x, d.z);
-  let best = Infinity;
-  for (const e of G.enemies) {
-    if (!e.alive || h < 1e-4) continue;
-    // the foe as an upright cylinder: where the ray passes closest to its axis, seen from above
-    const ex = e.pos.x - o.x, ez = e.pos.z - o.z;
-    const t = (ex * d.x + ez * d.z) / (h * h);
-    if (t <= 0 || t >= best) continue;
-    const px = d.x * t - ex, pz = d.z * t - ez, y = o.y + d.y * t;
-    if (px * px + pz * pz > e.radius * e.radius || y < 0 || y > e.height) continue;
-    best = t;
-    input.ground.set(e.pos.x, 0, e.pos.z);
-  }
-  if (best < Infinity) return;
-  const range = CAMERA.aimRange;
-  if (d.y < -1e-4 && floorHit(ray.ray, hit) && Math.hypot(hit.x - o.x, hit.z - o.z) <= range) { input.ground.copy(hit); return; }
-  if (h > 1e-4) input.ground.set(o.x + (d.x / h) * range, 0, o.z + (d.z / h) * range);
+  aimAlong(CAMERA.aimRange);
 }
 
 export function endInputFrame(): void {

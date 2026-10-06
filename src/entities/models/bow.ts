@@ -198,6 +198,35 @@ export function arrowGeometry(): THREE.BufferGeometry {
   return arrowGeo;
 }
 
+/** An arrow along +z as `arrowGeometry` has it, in 18 triangles for one seen from a few metres off (a spent arrow standing
+ *  in the ground: a thousand of the whole one were half a million triangles): a four-sided shaft, the head as two crossed
+ *  leaves, the three feathers as flat vanes, in its colours. */
+let liteGeo: THREE.BufferGeometry | null = null;
+export function arrowLite(): THREE.BufferGeometry {
+  if (liteGeo) return liteGeo;
+  const h = ARROW / 2, L = 0.07, parts: THREE.BufferGeometry[] = [];
+  const tri = (pts: number[][], c: number) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pts.flat(), 3));
+    return paint(g, c);
+  };
+  parts.push(paint(new THREE.CylinderGeometry(SHAFT, SHAFT, ARROW - REAR * 0.2 - L, 4, 1, true).rotateX(Math.PI / 2).rotateZ(Math.PI / 4).translate(0, 0, -L / 2 + REAR * 0.1), COL.shaft));
+  // (the head: a leaf across and one up, its point at the front)
+  for (const [ax, ay] of [[1, 0], [0, 1]]) {
+    const w = (k: number) => [0.0135 * ax * k, 0.0135 * ay * k];
+    parts.push(tri([[0, 0, h], [...w(1), h - L * 0.45], [0, 0, h - L], [0, 0, h], [0, 0, h - L], [...w(-1), h - L * 0.45]], COL.steel));
+  }
+  // (the feathers: low at their front, full at their back)
+  for (let i = 0; i < 3; i++) {
+    const a = -Math.PI / 2 + i * Math.PI * 2 / 3, cx = Math.cos(a), cy = Math.sin(a), r0 = SHAFT, r1 = SHAFT + 0.019;
+    const at = (r: number, z: number) => [cx * r, cy * r, -h + z];
+    parts.push(tri([at(r0, 0.027), at(r0, 0.13), at(r1, 0.12), at(r0, 0.027), at(r1, 0.12), at(SHAFT + 0.006, 0.04)], i ? COL.hen : COL.cock));
+  }
+  liteGeo = mergeGeometries(parts)!;
+  liteGeo.computeVertexNormals();
+  return liteGeo;
+}
+
 /** An arrow in pieces from its nock (z 0) forward along +z, for one drawn out of a quiver a part at a time: the nock and
  *  feathers (`rear`, 14 cm), the shaft a unit long (scaled to what's out), and the head (`head`, its point at z 0). */
 export function arrowPieces(): { rear: THREE.BufferGeometry; shaft: THREE.BufferGeometry; head: THREE.BufferGeometry } {

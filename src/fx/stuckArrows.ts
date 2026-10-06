@@ -1,0 +1,327 @@
+// Spent arrows: every arrow that came down stays where it ended until there are too many (STUCK_MAX), and then the
+// oldest fade out, shrinking into where they're buried: standing in the ground or a prop, riding a foe's body (on the
+// joint it struck, until the body dissolves or the prop breaks, when they drop), or loose, glancing off stone and
+// tumbling to lie on the floor. Two instanced meshes hold them: the whole arrow within NEAR of the camera, the plain
+// one (`arrowLite`, 18 triangles to its 301) beyond. Only the moving ones (riding, falling, fading) are written each
+// frame. Purely visual: every game keeps its own, from the arrows it sees.
+import * as THREE from 'three';
+import { G } from '../state';
+import { addEffect } from './effects';
+import { arrowGeometry, arrowLite, ARROW } from '../entities/models/bow';
+import { groundHeight } from '../world/arena';
+import { pastWall } from '../world/edge';
+import { BIOMES } from '../data/biomes';
+import { sfx } from '../core/audio';
+import { clamp, rand } from '../util';
+import type { Obstacle } from '../types';
+
+/** how many spent arrows stay; past that the oldest fade out over FADE s (shrinking into their buried point) */
+export const STUCK_MAX = 1000;
+const FADE = 0.6;
+/** room for the ones fading out (a volley past the cap): beyond it the oldest fading one goes at once */
+const HEADROOM = 200;
+/** the whole arrow is drawn within this of the camera (m; the plain one past it, and back past NEAR + 1) */
+const NEAR = 6;
+/** how deep an arrow goes in: the ground, wood, a body (m) */
+export const SINK = { ground: 0.16, prop: 0.12, body: 0.1 };
+const GRAVITY = 9.81;
+/** an arrow glancing off stone keeps a share of its speed that grows with the speed (a slow one hardly hops, a fast one
+ *  skitters): GLANCE of it at GLANCE_V and over, and of that, along the stone all of it and off it GLANCE_UP of it */
+const GLANCE = 0.12, GLANCE_V = 60, GLANCE_UP = 0.3;
+/** a loose arrow's bounce off the floor, a prop or the wall: of its speed into it, BOUNCE at BOUNCE_V and over (less as it
+ *  slows), and along the floor FRICTION; its spin's loss, and the speed it lies still at */
+const BOUNCE = 0.3, BOUNCE_V = 6, FRICTION = 0.5, SPIN_KEEP = 0.6, SETTLE_V = 0.8;
+/** the share of `speed` a bounce gives back, `k` at `full` and over, less in proportion below */
+const restitution = (k: number, full: number, speed: number): number => k * Math.min(1, speed / full);
+/** a lying arrow's middle above the floor (its shaft's radius and the vanes holding it up a little) */
+const LIE_H = 0.012;
+const FWD = new THREE.Vector3(0, 0, 1);
+
+type Mode = 'fixed' | 'body' | 'loose';
+interface Spent {
+  mode: Mode;
+  /** its middle and turn in the world (riding: its middle as last drawn), and the point it shrinks into */
+  p: THREE.Vector3; q: THREE.Quaternion; tip: THREE.Vector3;
+  /** riding: the object it's in and its place in that object's frame, and when it lets go */
+  on?: THREE.Object3D; local?: THREE.Matrix4; gone?: () => boolean;
+  /** standing in a prop: the prop's circle (it drops when the prop breaks) */
+  prop?: Obstacle;
+  /** loose: velocity and spin (an axis scaled by rad/s) */
+  v?: THREE.Vector3; w?: THREE.Vector3;
+  /** fading out: s since it began (-1: not) */
+  fade: number;
+  /** which mesh draws it (0 the plain one, 1 the whole arrow) and its slot there */
+  lod: 0 | 1;
+  slot: number;
+}
+
+/** the plain arrows' mesh and the whole ones', and what each slot of each draws */
+let meshes: [THREE.InstancedMesh, THREE.InstancedMesh] | null = null;
+const lists: [Spent[], Spent[]] = [[], []];
+/** oldest first, not yet fading */
+const order: Spent[] = [];
+/** the ones written every frame */
+const moving = new Set<Spent>();
+const _m = new THREE.Matrix4(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _d = new THREE.Vector3(), _n = new THREE.Vector3();
+const ONE = new THREE.Vector3(1, 1, 1);
+/** how far either way along an arrow's line a prop's surface is looked for from where it met the prop's circle (m) */
+const PROP_REACH = 1.5;
+const total = (): number => lists[0].length + lists[1].length;
+
+/** every arrow's material, in flight and spent (double-sided: an arrow's feathers are single sheets) */
+export const arrowMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.1, side: THREE.DoubleSide });
+
+export function warmStuck(): THREE.Object3D[] {
+  return [arrowGeometry(), arrowLite()].map((g) => { const m = new THREE.InstancedMesh(g, arrowMat, 1); m.count = 1; return m; });
+}
+
+function start(): void {
+  const ms = meshes = [arrowLite(), arrowGeometry()].map((g, i) => {
+    const m = new THREE.InstancedMesh(g, arrowMat, STUCK_MAX + HEADROOM);
+    m.count = 0; m.frustumCulled = false; m.name = i ? 'spent arrows' : 'spent arrows (plain)';
+    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    G.scene.add(m);
+    return m;
+  }) as unknown as [THREE.InstancedMesh, THREE.InstancedMesh];
+  addEffect({
+    update: step,
+    dispose() { for (const m of ms) { G.scene.remove(m); m.dispose(); } meshes = null; lists[0].length = lists[1].length = 0; order.length = 0; moving.clear(); },
+  });
+}
+
+/** whether it's drawn whole (near the camera, with a metre's give either way so it doesn't flicker between the two) */
+const nearCam = (s: Spent, now: 0 | 1): 0 | 1 => (s.p.distanceToSquared(G.camera.position) < (now ? (NEAR + 1) ** 2 : NEAR ** 2) ? 1 : 0);
+
+function add(a: Omit<Spent, 'slot' | 'fade' | 'lod'>): Spent {
+  if (!meshes) start();
+  const s = a as Spent;
+  s.fade = -1;
+  // past the cap the oldest start to fade; with no room left even for those, the oldest fading one goes now
+  if (order.length >= STUCK_MAX) fadeOut(order[0]);
+  if (total() >= STUCK_MAX + HEADROOM) {
+    let o: Spent | null = null;
+    for (const x of moving) if (x.fade >= 0 && (!o || x.fade > o.fade)) o = x;
+    remove(o ?? order[0]);
+  }
+  place(s, nearCam(s, 0));
+  order.push(s);
+  if (s.mode !== 'fixed') moving.add(s);
+  write(s);
+  return s;
+}
+
+/** Into a mesh's list (its last slot). */
+function place(s: Spent, lod: 0 | 1): void {
+  s.lod = lod; s.slot = lists[lod].length;
+  lists[lod].push(s);
+  meshes![lod].count = lists[lod].length;
+}
+
+/** Out of its mesh's list: the last one there takes its slot. */
+function unplace(s: Spent): void {
+  const l = lists[s.lod], last = l.pop()!;
+  if (last !== s) { l[s.slot] = last; last.slot = s.slot; write(last); }
+  meshes![s.lod].count = l.length;
+}
+
+function fadeOut(s: Spent): void {
+  const i = order.indexOf(s);
+  if (i >= 0) order.splice(i, 1);
+  s.fade = 0;
+  moving.add(s);
+}
+
+function remove(s: Spent): void {
+  unplace(s);
+  moving.delete(s);
+  const i = order.indexOf(s);
+  if (i >= 0) order.splice(i, 1);
+}
+
+function write(s: Spent): void {
+  if (s.mode === 'body') {
+    _m.multiplyMatrices(s.on!.matrixWorld, s.local!);
+    s.p.setFromMatrixPosition(_m);
+    if (s.fade >= 0) { _m.decompose(s.p, s.q, _s); s.tip.copy(s.p).addScaledVector(_d.copy(FWD).applyQuaternion(s.q), ARROW / 2); }
+  }
+  if (s.mode !== 'body' || s.fade >= 0) {
+    const k = s.fade >= 0 ? clamp(1 - s.fade / FADE, 0, 1) : 1;
+    _p.copy(s.p).sub(s.tip).multiplyScalar(k).add(s.tip);
+    _m.compose(_p, s.q, _s.setScalar(k));
+  }
+  const m = meshes![s.lod];
+  m.setMatrixAt(s.slot, _m);
+  m.instanceMatrix.needsUpdate = true;
+}
+
+function step(dt: number): boolean {
+  for (const s of [...moving]) {
+    if (s.fade >= 0 && (s.fade += dt) >= FADE) { remove(s); continue; }
+    if (s.mode === 'body' && s.gone!()) release(s);
+    else if (s.mode === 'loose') fall(s, dt);
+    write(s);
+  }
+  // the whole arrow near the camera, the plain one further off
+  for (const l of lists) for (let i = l.length - 1; i >= 0; i--) {
+    const s = l[i], want = nearCam(s, s.lod);
+    if (want !== s.lod) { unplace(s); place(s, want); write(s); }
+  }
+  // a prop that broke drops what stood in it
+  for (const s of order) if (s.prop && s.mode === 'fixed' && s.prop.prop?.broken) { s.prop = undefined; loosen(s, _d.set(0, 0, 0)); }
+  return total() > 0;
+}
+
+/** An arrow riding a body lets go: it falls from where it was. */
+function release(s: Spent): void {
+  _m.multiplyMatrices(s.on!.matrixWorld, s.local!);
+  _m.decompose(s.p, s.q, _s);
+  s.on = s.local = s.gone = undefined;
+  loosen(s, _d.set(rand(-0.5, 0.5), rand(0, 0.8), rand(-0.5, 0.5)));
+}
+
+function loosen(s: Spent, v: THREE.Vector3): void {
+  s.mode = 'loose';
+  s.v = v.clone();
+  s.w = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize().multiplyScalar(rand(3, 8));
+  moving.add(s);
+}
+
+/** A loose arrow's flight: falling and tumbling, glancing off props and the wall, bouncing on the floor until it lies still. */
+function fall(s: Spent, dt: number): void {
+  const v = s.v!, w = s.w!;
+  v.y -= GRAVITY * dt;
+  s.p.addScaledVector(v, dt);
+  const wl = w.length();
+  if (wl > 1e-4) s.q.premultiply(_q.setFromAxisAngle(_d.copy(w).divideScalar(wl), wl * dt));
+  // (off a prop it falls against: out of its circle, its speed into it turned back)
+  for (const o of G.arena.obstacles) {
+    if (o.h < s.p.y) continue;
+    const dx = s.p.x - o.x, dz = s.p.z - o.z, d = Math.hypot(dx, dz);
+    if (d >= o.r || d < 1e-6) continue;
+    const nx = dx / d, nz = dz / d, vn = v.x * nx + v.z * nz;
+    s.p.x = o.x + nx * o.r; s.p.z = o.z + nz * o.r;
+    if (vn < 0) { const e = restitution(BOUNCE, BOUNCE_V, -vn); v.x -= (1 + e) * vn * nx; v.z -= (1 + e) * vn * nz; }
+  }
+  // (and off the wall, a gate's opening too: what falls stays in the arena)
+  const wall = pastWall(G.arena.biome, s.p.x, s.p.z, _n);
+  if (wall.by > -0.1) {
+    s.p.addScaledVector(_n, wall.by + 0.1);
+    const vn = v.dot(_n);
+    if (vn < 0) v.addScaledVector(_n, -(1 + restitution(BOUNCE, BOUNCE_V, -vn)) * vn);
+  }
+  const g = groundHeight(s.p.x, s.p.z) + LIE_H;
+  if (s.p.y > g) return;
+  s.p.y = g;
+  if (Math.hypot(v.x, v.y, v.z) < SETTLE_V) {
+    // lying along the floor the way it points, rolled a little onto its vanes
+    _d.copy(FWD).applyQuaternion(s.q).setY(0);
+    if (_d.lengthSq() < 1e-6) _d.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+    s.q.setFromUnitVectors(FWD, _d.normalize()).multiply(_q.setFromAxisAngle(FWD, rand(-0.6, 0.6)));
+    s.tip.copy(s.p);
+    s.mode = 'fixed'; s.v = s.w = undefined;
+    moving.delete(s);
+    return;
+  }
+  v.y = -v.y * restitution(BOUNCE, BOUNCE_V, -v.y); v.x *= FRICTION; v.z *= FRICTION;
+  w.multiplyScalar(SPIN_KEEP);
+}
+
+/** An arrow into the ground or a prop: its point at `tip` going `dir` (unit), sunk `sink`; it drops if `prop` breaks. */
+export function stickAt(tip: THREE.Vector3, dir: THREE.Vector3, sink: number, prop?: Obstacle): void {
+  const q = new THREE.Quaternion().setFromUnitVectors(FWD, dir), at = tip.clone().addScaledVector(dir, sink);
+  add({ mode: 'fixed', p: at.clone().addScaledVector(dir, -ARROW / 2), q, tip: at, prop });
+}
+
+/** An arrow glancing off stone at `at`, which faces `normal`: it springs off with what's left of `vel` and tumbles down. */
+export function glance(at: THREE.Vector3, vel: THREE.Vector3, normal: THREE.Vector3): void {
+  const vn = vel.dot(normal), e = restitution(GLANCE, GLANCE_V, vel.length());
+  const v = vel.clone().addScaledVector(normal, -vn).multiplyScalar(e).addScaledVector(normal, Math.abs(vn) * e * GLANCE_UP);
+  // (scattered a little: stone isn't flat)
+  v.x += rand(-1, 1) * 0.15 * v.length(); v.z += rand(-1, 1) * 0.15 * v.length();
+  const dir = vel.clone().normalize();
+  const s = add({ mode: 'loose', p: at.clone().addScaledVector(dir, -ARROW / 2).addScaledVector(normal, 0.03), q: new THREE.Quaternion().setFromUnitVectors(FWD, dir), tip: at.clone() });
+  s.v = v;
+  s.w = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize().multiplyScalar(rand(8, 18));
+  sfx.ricochet();
+}
+
+const ray = new THREE.Raycaster(), _hits: THREE.Intersection[] = [];
+const shown = (o: THREE.Object3D): boolean => { for (let e: THREE.Object3D | null = o; e; e = e.parent) if (!e.visible) return false; return true; };
+/** what an arrow can lodge in: a solid, opaque mesh (not a glow, an aura or a see-through effect) */
+function solid(o: THREE.Object3D): boolean {
+  const m = o as THREE.Mesh;
+  if (!m.isMesh || o.userData.noStick) return false;
+  const mt = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.Material;
+  return mt.blending === THREE.NormalBlending && !(mt.transparent && mt.opacity < 0.9) && shown(o);
+}
+/** The nearest solid surface the ray meets on `root`'s rigid meshes (each on the joint it moves with). The skinned ones,
+ *  which bend across the joints, are left out: a ray costs 1 to 9 ms against them, every vertex moved by its bones first,
+ *  to the rigid ones' tenth of a millisecond. */
+function cast(root: THREE.Object3D, by: THREE.Raycaster = ray): THREE.Intersection | null {
+  _hits.length = 0;
+  root.traverse((o) => { if (!(o as THREE.SkinnedMesh).isSkinnedMesh && solid(o)) (o as THREE.Mesh).raycast(by, _hits); });
+  let best: THREE.Intersection | null = null;
+  for (const h of _hits) if (!best || h.distance < best.distance) best = h;
+  return best;
+}
+
+/** The nearest solid surface `by` meets on a body (`root`, its rigid meshes): the aim as it's drawn. */
+export const castSolid = (root: THREE.Object3D, by: THREE.Raycaster): THREE.Intersection | null => cast(root, by);
+
+/**
+ * An arrow into a body (`root`, a foe's model): cast along `dir` from `from` (a point before it), it lodges where it
+ * meets the first solid surface, riding the piece it struck (on its joint), until `gone` says the body has let go.
+ * Returns whether it found the body.
+ */
+export function stickIn(root: THREE.Object3D, from: THREE.Vector3, dir: THREE.Vector3, gone: () => boolean): boolean {
+  ray.set(from, dir); ray.far = 3;
+  const hit = cast(root);
+  if (!hit) return false;
+  const on = hit.object;
+  const tip = hit.point.clone().addScaledVector(dir, SINK.body);
+  const q = new THREE.Quaternion().setFromUnitVectors(FWD, dir), p = tip.clone().addScaledVector(dir, -ARROW / 2);
+  on.updateWorldMatrix(true, false);
+  const local = new THREE.Matrix4().copy(on.matrixWorld).invert().multiply(_m.compose(p, q, ONE));
+  add({ mode: 'body', p, q, tip, on, local, gone });
+  return true;
+}
+
+/**
+ * Where an arrow meeting a prop at `at` (on its rough circle) going `dir` really meets it: the first surface of what the
+ * prop draws along the arrow's line through `at`, and the face's normal there (into `normal`). Null if the line misses
+ * what it draws (the circle is rounder than the prop): it's met where the circle has it.
+ */
+export function propSurface(o: Obstacle, at: THREE.Vector3, dir: THREE.Vector3, normal: THREE.Vector3): THREE.Vector3 | null {
+  if (!o.prop) return null;
+  ray.set(_p.copy(at).addScaledVector(dir, -PROP_REACH), dir); ray.far = PROP_REACH * 2;
+  _hits.length = 0;
+  o.prop.raycast(ray, _hits);
+  let best: THREE.Intersection | null = null;
+  for (const h of _hits) if (!best || h.distance < best.distance) best = h;
+  if (!best) return null;
+  if (best.face) normal.copy(best.face.normal).transformDirection(best.object.matrixWorld); else normal.copy(dir).negate();
+  // (a face seen from behind, a double-sided card: turned to face the arrow)
+  if (normal.dot(dir) > 0) normal.negate();
+  return best.point.clone();
+}
+
+/** What the floor is made of under a point: the dais is stone, the rest is the biome's. */
+export const floorIsStone = (x: number, z: number): boolean => groundHeight(x, z) > 0 || BIOMES[G.arena.biome].surface.floor === 'stone';
+/** What a prop is made of: stone unless it's wood, a cap or embers (which an arrow goes into). */
+export const propIsStone = (o: Obstacle): boolean => (o.prop?.kind ?? 'stone') === 'stone';
+export const wallIsStone = (): boolean => BIOMES[G.arena.biome].surface.wall === 'stone';
+
+/** The spent arrows by what they're doing (standing in the ground or a prop, riding a body, falling, fading) and how many are drawn whole, for the probes. */
+export function spentStats(): { all: number; fixed: number; inProp: number; body: number; loose: number; fading: number; near: number } {
+  const n = { all: total(), fixed: 0, inProp: 0, body: 0, loose: 0, fading: 0, near: lists[1].length };
+  for (const s of [...lists[0], ...lists[1]]) {
+    if (s.fade >= 0) n.fading++;
+    else if (s.mode === 'fixed') { n.fixed++; if (s.prop) n.inProp++; }
+    else n[s.mode]++;
+  }
+  return n;
+}
+
+/** Every spent arrow's middle and its point (for the probes: where they lie against the floor, the props and the wall). */
+export const spentPoints = (): { p: THREE.Vector3; tip: THREE.Vector3; mode: Mode; fading: boolean; on?: THREE.Object3D }[] =>
+  [...lists[0], ...lists[1]].map((s) => ({ p: s.p, tip: s.tip, mode: s.mode, fading: s.fade >= 0, on: s.on }));

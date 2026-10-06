@@ -29,6 +29,8 @@ export interface Prop {
   list: Obstacle[];
   hide(): void;
   show(): void;
+  /** what it draws, met by a ray (an arrow finds where it goes in: the circles are only rough) */
+  raycast(ray: THREE.Raycaster, hits: THREE.Intersection[]): void;
   chipT: number;
   /** game time of the last damage, and its health bar while it shows */
   hurtT: number;
@@ -55,7 +57,7 @@ export class PropSet {
   constructor(private obstacles: Obstacle[]) {}
   /** The obstacle circles pushed since `from` (an index into the list) become one prop of `hp`. `hide` /
    *  `show` take its look away and bring it back. */
-  add(from: number, hp: number, color: number, look: { hide(): void; show(): void }, kind: RubbleKind = 'stone'): void {
+  add(from: number, hp: number, color: number, look: PropLook, kind: RubbleKind = 'stone'): void {
     const parts = this.obstacles.slice(from);
     const prop: Prop = { id: this.list.length, life: hp, max: hp, broken: false, color, kind, parts, list: this.obstacles, chipT: 0, hurtT: -1e9, bar: null, fill: null, ...look };
     for (const o of parts) o.prop = prop;
@@ -64,18 +66,32 @@ export class PropSet {
 }
 
 const _p = new THREE.Vector3();
+/** how a prop is hidden, shown and met by a ray */
+export type PropLook = { hide(): void; show(): void; raycast(ray: THREE.Raycaster, hits: THREE.Intersection[]): void };
+/** the meshes' surfaces a ray meets (not a glow's points) */
+const castAll = (objs: THREE.Object3D[]) => (ray: THREE.Raycaster, hits: THREE.Intersection[]): void => {
+  for (const o of objs) o.traverse((c) => { if ((c as THREE.Mesh).isMesh && c.visible) (c as THREE.Mesh).raycast(ray, hits); });
+};
 /** hide / show for one instance of an InstancedMesh (call once the instance is placed) */
-export function instanceLook(mesh: THREE.InstancedMesh, i: number): { hide(): void; show(): void } {
+export function instanceLook(mesh: THREE.InstancedMesh, i: number): PropLook {
   const m = new THREE.Matrix4();
   mesh.getMatrixAt(i, m);
   const gone = new THREE.Matrix4().makeScale(1e-4, 1e-4, 1e-4).setPosition(_p.setFromMatrixPosition(m));
   const set = (to: THREE.Matrix4): void => { mesh.setMatrixAt(i, to); mesh.instanceMatrix.needsUpdate = true; };
-  return { hide: () => set(gone), show: () => set(m) };
+  // (a ray against this instance alone: its geometry where the instance stands)
+  const one = new THREE.Mesh(mesh.geometry, mesh.material);
+  one.matrixAutoUpdate = false;
+  const raycast = (ray: THREE.Raycaster, hits: THREE.Intersection[]): void => {
+    mesh.updateWorldMatrix(true, false);
+    one.matrixWorld.multiplyMatrices(mesh.matrixWorld, m);
+    one.raycast(ray, hits);
+  };
+  return { hide: () => set(gone), show: () => set(m), raycast };
 }
 /** hide / show for plain meshes (they're kept out of the shadow bake, so they cast for themselves) */
-export function meshLook(...meshes: THREE.Object3D[]): { hide(): void; show(): void } {
+export function meshLook(...meshes: THREE.Object3D[]): PropLook {
   for (const m of meshes) m.userData.noBake = true;
-  return { hide: () => meshes.forEach((m) => { m.visible = false; }), show: () => meshes.forEach((m) => { m.visible = true; }) };
+  return { hide: () => meshes.forEach((m) => { m.visible = false; }), show: () => meshes.forEach((m) => { m.visible = true; }), raycast: castAll(meshes) };
 }
 
 const centre = (p: Prop, out: THREE.Vector3): THREE.Vector3 => {
@@ -145,7 +161,7 @@ function hideBar(p: Prop): void { removeAnchored(p.bar); p.bar = p.fill = null; 
 /** hide / show for everything a builder put in `group` (built into it instead of the scene): its meshes go
  *  (and stay out of the shadow bake), its animation stops (the `updaters` it added since `from`), and its
  *  lights go dark but stay in the scene, since a different light count would recompile every shader */
-export function groupLook(group: THREE.Object3D, updaters: Updater[], from: number): { hide(): void; show(): void } {
+export function groupLook(group: THREE.Object3D, updaters: Updater[], from: number): PropLook {
   const lights: [THREE.PointLight, number][] = [], shown: THREE.Object3D[] = [];
   group.traverse((o) => {
     if ((o as THREE.PointLight).isPointLight) lights.push([o as THREE.PointLight, (o as THREE.PointLight).intensity]);
@@ -156,6 +172,7 @@ export function groupLook(group: THREE.Object3D, updaters: Updater[], from: numb
   return {
     hide() { gone = true; for (const o of shown) o.visible = false; for (const [l] of lights) l.intensity = 0; },
     show() { gone = false; for (const o of shown) o.visible = true; for (const [l, v] of lights) l.intensity = v; },
+    raycast: castAll(shown.filter((o) => (o as THREE.Mesh).isMesh)),
   };
 }
 
