@@ -8,6 +8,7 @@ import { CLASSES } from '../data/classes/index';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { Player, setActionSink, type PlayerAction } from '../entities/player';
 import { openLink, type Link } from './transport';
+import { netLog } from './netlog';
 import { role } from './role';
 import { showBiomeSetting } from '../game/biome';
 import { hostSync, stopSync, onWorld, onGuestControl, sendWorld } from './sync';
@@ -90,6 +91,7 @@ export async function hostRoom(): Promise<void> {
   if (link) return;
   session.code = newCode();
   session.status = 'hosting';
+  netLog(`hosting room ${session.code}`);
   session.error = '';
   role.current = 'host';
   G.player.slot = 0;
@@ -109,6 +111,7 @@ export async function joinRoom(code: string): Promise<void> {
   if (link) leaveRoom();
   session.code = code.toUpperCase();
   session.status = 'joining';
+  netLog(`joining room ${session.code}`);
   session.error = '';
   hooks.changed();
   try {
@@ -148,6 +151,7 @@ export function leaveRoom(): void {
 }
 
 function fail(why: string): void {
+  netLog(`failed: ${why}`);
   leaveRoom();
   session.status = 'failed';
   session.error = why;
@@ -187,6 +191,7 @@ const hello = () => ({ v: PROTOCOL, look: myLook(), slot: G.player.slot, host: r
 function send(ch: Parameters<Link['send']>[0], data: unknown, to?: string): void { link?.send(ch, data, to); }
 
 function onHello(from: string, m: Record<string, unknown>): void {
+  netLog(`hello from ${from.slice(0, 6)} (protocol ${String(m.v)}${m.host ? ', host' : ''})`);
   if (m.v !== PROTOCOL) {
     if (role.current === 'host') send('ctl', { t: 'refuse', why: 'version' }, from);
     return;
@@ -218,6 +223,7 @@ function onControl(from: string, m: Record<string, unknown>): void {
   if (onGround(from, m)) return;
   if (role.current === 'guest') {
     if (m.t === 'welcome') {
+      netLog(`welcomed into slot ${String(m.slot)}`);
       clearTimeout(joinTimer);
       session.status = 'joined';
       session.hostId = from;
@@ -233,6 +239,7 @@ function onControl(from: string, m: Record<string, unknown>): void {
       for (const d of groundDrops()) send('ctl', { t: 'gdrop', d, still: 1 });
       hooks.changed();
     } else if (m.t === 'refuse') {
+      netLog(`refused: ${String(m.why)}`);
       fail(m.why === 'full' ? 'That room is full.' : 'That game is on another version: both reload the page to play together.');
     } else if (m.t === 'lobby') {
       session.biome = m.biome as BiomeId;

@@ -21,6 +21,7 @@ import { initStashFilter, renderStashFilter, openStashFilter, sortStash, matches
 import { sfx } from '../core/audio';
 import { isTouch } from './touch';
 import { perfHudEnabled, setPerfHud } from './perfHud';
+import { netHudEnabled, setNetHud } from './netHud';
 import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
 import { QUALITY, type QualitySetting } from '../data/quality';
 import { BIOMES, BIOME_IDS, type BiomeSetting } from '../data/biomes';
@@ -155,6 +156,7 @@ export function initMenus(h: MenuHooks): void {
   $('#pause .build-info').textContent = `Build ${__BUILD__.ref} · ${built}${import.meta.env.DEV ? ' (dev server)' : ''}`;
   $('#btn-abandon').onclick = () => { sfx.click(); hooks.abandon(); };
   $<HTMLInputElement>('#opt-perf').onchange = (e) => setPerfHud((e.target as HTMLInputElement).checked);
+  $<HTMLInputElement>('#opt-net').onchange = (e) => setNetHud((e.target as HTMLInputElement).checked);
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => {
     b.onclick = () => { sfx.click(); setQuality(b.dataset.q as QualitySetting); renderQualityOptions(); };
   });
@@ -586,6 +588,7 @@ export function showPause(v: boolean): void {
   if (v) {
     renderControlsHelp();
     $<HTMLInputElement>('#opt-perf').checked = perfHudEnabled();
+    $<HTMLInputElement>('#opt-net').checked = netHudEnabled();
     renderQualityOptions();
     // in the lobby there is no run to abandon; in co-op it leaves the others to it
     $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run');
