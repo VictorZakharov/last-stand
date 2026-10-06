@@ -92,10 +92,14 @@ const DRAW_GIRDLE: [number, number] = [35, -25], GIRDLE_BACK = 6;
 /** how much the draw arm's elbow keeps to where it's sent (armIK.ts `keep`: degrees of the ranges; under the 1 a cm it
  *  costs to move it, it stayed where it was until that went out of range, then jumped round) */
 const DRAW_KEEP = 150;
-/** how far the hand hooked on the string is rolled about the arrow at full draw, and how much more or less it may (rad):
+/** how far the hand hooked on the string is rolled about the arrow at full draw, and how far it may rock about the string,
+ *  across its knuckles, for its wrist (rad; with `DRAW_WRIST`: held as posed, the wrist bent 25 degrees in at full draw,
+ *  where an archer's lies flat behind the hand):
  *  in line behind the arrow at its height, the elbow needs 57 degrees (rolled up to 34, every elbow in line left the
  *  forearm's turn 6 to 10 degrees past its end) */
-const HOOK_TILT = -1, HOOK_ROLL = 0;
+const HOOK_TILT = -1, HOOK_ROLL = 0.4;
+/** what each degree of the draw wrist's bend costs, at full draw (armIK's `wristW`) */
+const DRAW_WRIST = 0.3;
 /** how late in the draw the hand rolls on the string (the power of the draw's share it rolls by: rolled as the string
  *  came back, the forearm was at its turn's end mid-draw and the shoulder rose past its range to keep the elbow in line) */
 const TILT_POW = 3;
@@ -448,6 +452,8 @@ export function buildRanger(): Model {
   const run = [0, 0.2, 0.4, 0.6, 0.8, 1], across = (t: number) => lerp(-0.13, 0.155, t), down = (t: number) => lerp(0.24, -0.11, t);
   S.add(strap([...run.map((t) => tunicFront(across(t), down(t), 0.006)), onTunic(Math.PI / 2, -0.115, 0.006), ...[...run].reverse().map((t) => tunicBack(across(t), down(t), 0.006)), V(-0.135, 0.29, -0.012)], 0.048, 0.008, true), strapLeather, j.chest);
   S.add(buckle(0.042, 0.05, 0.007), brass, j.chest, tunicFront(-0.075, 0.18, 0.014).toArray(), [0, 0, -0.85]);
+  // each wrist's part-turned joints: a quarter, half and three quarters of the hand's turn on the forearm (`bendWrists`)
+  const wrists = [j.handL, j.handR].map((h) => [1, 2, 3].map((q) => { const d = joint(h.parent!, ...(h.position.toArray() as [number, number, number])); d.name = (h === j.handL ? 'wristL' : 'wristR') + q; return d; }));
   for (const [sh, el, hand] of [[j.shoulderL, j.elbowL, j.handL], [j.shoulderR, j.elbowR, j.handR]]) {
     // (set into the armhole: from its edge over the deltoid onto the arm, the arm's wholly from a little way down it, and over
     // the elbow onto the forearm)
@@ -468,7 +474,11 @@ export function buildRanger(): Model {
     // (and under its end a leather cuff over the wrist onto the heel of the hand, bending with it: the bracer a rigid tube to
     // the wrist and the palm a box from it, a bent wrist swung the palm out of the tube's end, and the hand looked broken
     // off; pinched in under the bracer's end, it read as a doll's joint)
-    S.skin(ovalTube([[-0.298, 0.04, 0.02], [-0.286, 0.04, 0.021], [-0.272, 0.038, 0.023], [-0.258, 0.038, 0.026], [-0.24, 0.039, 0.028]], 18), hide, el, hand, j.P.foreL - 0.02, j.P.foreL + 0.015);
+    // (bent through joints turned a quarter, half and three quarters as far as the hand, `wrists`, over 6 cm: blended
+    // straight from the forearm to the hand over 3.5, the cuff kinked at the wrist and its inside collapsed)
+    const cuff = ovalTube([[-0.3, 0.04, 0.02], [-0.288, 0.04, 0.021], [-0.274, 0.038, 0.023], [-0.258, 0.038, 0.026], [-0.235, 0.039, 0.028]], 18), cp = cuff.attributes.position;
+    if (cp) cuff.setAttribute('skinK', new THREE.BufferAttribute(Float32Array.from({ length: cp.count }, (_, i) => smooth(clamp((-cp.getY(i) - (j.P.foreL - 0.03)) / 0.058, 0, 1))), 1));
+    S.skinChain(cuff, hide, el, [el, ...wrists[hand === j.handL ? 0 : 1], hand]);
     S.add(belt(0.059, 0.059, -0.1, 0.012, 0.004), brass, el);
   }
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]]) {
@@ -628,8 +638,8 @@ export function buildRanger(): Model {
     // out with the elbow in line behind the arrow, and the elbow went round behind the neck instead; left to find the roll
     // itself, the solver looked only near where the elbow was)
     if (tilt) _q2.premultiply(_qt.setFromAxisAngle(_rx.set(0, -1, 0).applyQuaternion(_q2), tilt));
-    solveArm(j, false, { wrist: _ra.copy(stringAt).multiplyScalar(s * w).applyQuaternion(_q2).negate().add(at), hand: _q2, ease: w < 1 ? { rest: HANG_R, w } : undefined, pole, keep: DRAW_KEEP, girdle, girdleSet: drawK > 0.01 ? [DRAW_GIRDLE[0] * drawK, DRAW_GIRDLE[1] * drawK] : undefined, body, maxMove: dt && v ? v * dt : undefined,
-      roll: w > 0.5 && HOOK_ROLL ? { axis: _rx.set(0, -1, 0).applyQuaternion(_q2), range: HOOK_ROLL, at } : undefined });
+    solveArm(j, false, { wrist: _ra.copy(stringAt).multiplyScalar(s * w).applyQuaternion(_q2).negate().add(at), hand: _q2, ease: w < 1 ? { rest: HANG_R, w } : undefined, pole, keep: DRAW_KEEP, wristW: DRAW_WRIST * drawK, girdle, girdleSet: drawK > 0.01 ? [DRAW_GIRDLE[0] * drawK, DRAW_GIRDLE[1] * drawK] : undefined, body, maxMove: dt && v ? v * dt : undefined,
+      roll: w > 0.5 && HOOK_ROLL ? { axis: _rx.set(1, 0, 0).applyQuaternion(_q2), range: HOOK_ROLL, at } : undefined, glide: w > 0.5 && HOOK_ROLL ? 1 - Math.exp(-GLIDE * dtNow) : undefined });
     root.updateMatrixWorld(true);
   };
 
@@ -1022,6 +1032,10 @@ export function buildRanger(): Model {
    *  the girdle's move, and less of its turn about its own length (the square of that share: the coat round the armhole
    *  barely turns with it). Near straight up the swing's axis is anyone's, so it's kept as it was */
   function bendShoulders(): void {
+    for (let i = 0; i < 2; i++) {
+      const h = i ? j.handR : j.handL;
+      wrists[i].forEach((d, q) => { d.quaternion.identity().slerp(h.quaternion, (q + 1) / 4); d.position.copy(h.position); });
+    }
     for (let i = 0; i < 2; i++) {
       const sh = i ? j.shoulderR : j.shoulderL;
       _sw.set(0, -1, 0).applyQuaternion(sh.quaternion);
