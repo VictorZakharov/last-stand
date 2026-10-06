@@ -20,6 +20,8 @@ export interface BiomeDef {
   bossBanner: string;
   /** minimap: shape of the boundary and colour of the spawn gates */
   minimap: { wall: 'octagon' | 'circle'; portal: string };
+  /** what the floor (off the dais, which is stone) and the wall are made of: an arrow glances off stone and sticks in the rest */
+  surface: { floor: 'stone' | 'earth'; wall: 'stone' | 'thicket' };
 }
 
 export const BIOMES: Record<BiomeId, BiomeDef> = {
@@ -33,6 +35,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     },
     boss: 'colossus', bossShort: 'Colossus', bossBanner: 'A colossal presence approaches…',
     minimap: { wall: 'octagon', portal: '#b050ff' },
+    surface: { floor: 'stone', wall: 'stone' },
   },
   forest: {
     label: 'Forest', title: 'The Thornwood',
@@ -44,6 +47,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     },
     boss: 'thornheart', bossShort: 'Thornheart', bossBanner: 'The old wood wakes…',
     minimap: { wall: 'circle', portal: '#70ff60' },
+    surface: { floor: 'earth', wall: 'thicket' },
   },
 };
 

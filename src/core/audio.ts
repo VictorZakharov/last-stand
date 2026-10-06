@@ -92,6 +92,8 @@ export const sfx = {
   split: guard(() => { noise({ dur: 0.3, freq: 1800, sweep: 4200, q: 1.2, gain: 0.1 }); noise({ dur: 0.5, freq: 3200, sweep: 900, q: 0.8, gain: 0.05, attack: 0.08 }); }),
   /** an arrow into the ground, a blow on wood and straw */
   thud: guard(() => { if (throttle('thud', 70)) return; noise({ dur: 0.08, freq: 500, type: 'lowpass', gain: 0.22 }); noise({ dur: 0.05, freq: 2600, q: 2, gain: 0.04 }); }),
+  /** an arrow glancing off stone: a short clink and a scrape */
+  ricochet: guard(() => { if (throttle('ricochet', 70)) return; tone({ freq: 2100 + Math.random() * 900, to: 1500, dur: 0.07, type: 'triangle', gain: 0.05 }); noise({ dur: 0.06, freq: 4200, q: 3, gain: 0.07 }); }),
   /** a foe marked as quarry */
   mark: guard(() => { tone({ freq: 660, to: 990, dur: 0.25, gain: 0.05, type: 'triangle' }); noise({ dur: 0.2, freq: 3500, q: 4, gain: 0.05 }); }),
   /** a marked foe's kill: the cooldowns come back */

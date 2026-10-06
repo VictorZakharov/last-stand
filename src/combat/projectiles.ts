@@ -7,6 +7,7 @@ import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
 import { nearGlow } from '../core/materials';
 import { hurtProp, PROP_DAMAGE } from '../world/destructible';
+import type { Obstacle } from '../types';
 
 const coreGeo = new THREE.SphereGeometry(1, 12, 8);
 const matCache = new Map<string, THREE.Material>();
@@ -71,9 +72,13 @@ export interface ProjectileOpts {
   tick?(proj: Projectile, dt: number): void;
   onHit?(target: Enemy | Player, proj: Projectile): void;
   onExpire?(proj: Projectile): void;
+  /** it met a prop (`o`, coming from `from`): instead of fading out where it is (the prop still takes the blow) */
+  onProp?(o: Obstacle, proj: Projectile, from: THREE.Vector3): void;
+  /** how far from the middle it's gone (m, 28 by default): an arrow meets the wall itself */
+  edge?: number;
 }
 
-const _to = new THREE.Vector3(), _hits: Enemy[] = [];
+const _to = new THREE.Vector3(), _from = new THREE.Vector3(), _hits: Enemy[] = [];
 
 export class Projectile {
   readonly pos: THREE.Vector3;
@@ -94,6 +99,8 @@ export class Projectile {
   /** the mesh's full scale */
   readonly size: number;
   readonly onExpire?: ProjectileOpts['onExpire'];
+  readonly onProp?: ProjectileOpts['onProp'];
+  readonly edge: number;
   readonly trail?: TrailOpts;
   readonly color: THREE.ColorRepresentation;
   alive = true;
@@ -117,6 +124,8 @@ export class Projectile {
     this.tick = o.tick;
     this.ownMesh = !!o.mesh;
     this.onExpire = o.onExpire;
+    this.onProp = o.onProp;
+    this.edge = o.edge ?? 28;
     this.trail = o.trail;
     this.color = o.color ?? 0xffffff;
     this.mesh = o.mesh ?? new THREE.Mesh(coreGeo, coreMat(this.color, o.intensity ?? 4, this.hostile));
@@ -142,7 +151,7 @@ export class Projectile {
         this.vel.setLength(this.speed);
       }
     }
-    const px = this.pos.x, pz = this.pos.z;
+    const px = this.pos.x, py = this.pos.y, pz = this.pos.z;
     this.pos.addScaledVector(this.vel, dt);
     this.mesh.position.copy(this.pos);
     // in first person a bolt aimed at the player flies at the lens: it shrinks away over its last metres
@@ -171,12 +180,13 @@ export class Projectile {
     }
 
     // world collision
-    if (Math.hypot(this.pos.x, this.pos.z) > 28) return this.expire();
+    if (Math.hypot(this.pos.x, this.pos.z) > this.edge) return this.expire();
     // only what reaches up to the bolt: it flies over low cover
     const low = this.pos.y - this.radius * 0.5;
     for (const o of G.arena.obstacles) {
       if (o.h > low && this.distanceSq(o.x, o.z, px, pz) < (o.r + this.radius * 0.5) ** 2) {
         hurtProp(o, this.hostile ? PROP_DAMAGE.hostile : PROP_DAMAGE.bolt);
+        if (this.onProp) { this.onProp(o, this, _from.set(px, py, pz)); return this.kill(); }
         return this.expire();
       }
     }

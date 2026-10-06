@@ -4,7 +4,9 @@
 // coming down together on spots anywhere in the area, then the next arrow goes up. (Its sheaf spread over the next
 // shot's time, the rain was a steady drizzle that read as nothing to do with the shots.) Each arrow strikes the foe it
 // falls on, if any, for `damage`: a foe may take several or none (hit as a whole area, it didn't matter where they
-// fell). The area follows the aim at a walk, and what's in the air when the key is let go still comes down.
+// fell), and stays in it; one that comes down on a prop goes into its top (off it, if it's stone), the rest into the
+// floor (off it on stone: fx/stuckArrows). The area follows the aim at a walk, and what's in the air when the key is let
+// go still comes down.
 import * as THREE from 'three';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
@@ -17,7 +19,8 @@ import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import { arrowGeometry, ARROW } from '../../entities/models/bow';
 import { clamp, rand, smooth } from '../../util';
-import { arrowMat, arrowMesh, stick, FWD, streakGeo, streakMat } from './ranger';
+import { arrowMat, arrowMesh, intoGround, intoProp, intoFoe, FWD, streakGeo, streakMat } from './ranger';
+import type { Obstacle } from '../../types';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
 import type { ChannelSkill, Needs } from './types';
@@ -33,8 +36,8 @@ const DRAW = 0.9, AFTER = 0.8;
  *  split was off the top of the top-down view, and the shower came out of nowhere) and its flight up there (s) */
 const PITCH = 0.45, SPLIT_H = 5.5, RISE = 0.4;
 /** how far apart a shower's arrows leave the split (s, all of them within it), how they come down (m/s at the split,
- *  gathering speed at m/s²: slow out of the burst, so the split is seen) and how long they stand in the ground (s) */
-const SPREAD = 0.12, FALL_V0 = 6, FALL_A = 45, STAND = 2.5;
+ *  gathering speed at m/s²: slow out of the burst, so the split is seen) */
+const SPREAD = 0.12, FALL_V0 = 6, FALL_A = 45;
 /** the most arrows in the air at once from one rain (two showers) */
 const MAX_FALLING = 64;
 /** how fast the area follows the aim (m/s) */
@@ -107,6 +110,12 @@ function split(s: RainState, at: THREE.Vector3): void {
 }
 
 /** The foe a falling arrow's point at `p` is coming down through: within STRIKE of its body and between its feet and its top. */
+/** The prop a falling arrow's point has come down into, if any. */
+function propAt(p: THREE.Vector3): Obstacle | null {
+  for (const o of G.arena.obstacles) if (p.y < o.h && (o.x - p.x) ** 2 + (o.z - p.z) ** 2 < o.r * o.r) return o;
+  return null;
+}
+
 function struck(p: THREE.Vector3): Enemy | null {
   for (const e of G.enemies) {
     if (!e.alive || e.invulnerable) continue;
@@ -170,15 +179,26 @@ const skill: ChannelSkill<RainState> = {
             _a.copy(f.from).addScaledVector(f.dir, along);
             // into the first foe its point comes down through (the arrow's in it: gone), else into the ground
             const hit = struck(_a);
+            // (its speed as it comes down)
+            const vel = _d.copy(f.dir).multiplyScalar(FALL_V0 + FALL_A * f.t);
             if (hit) {
               hitEnemy(hit, def.damage, { by: player, tags: def.tags, type: 'physical', from: { x: f.from.x, z: f.from.z } });
+              intoFoe(hit, _a, vel);
               burst(_a, { count: 6, color: 0xd3bf8d, speed: 2, life: 0.2, size: 0.07 });
               sfx.boltHit();
               sh.arrows.splice(i, 1);
               continue;
             }
+            const prop = along < f.len ? propAt(_a) : null;
+            if (prop) {
+              intoProp(prop, _a, vel);
+              hurtPropsIn(player, _a.x, _a.z, 0.3, PROP_DAMAGE.bolt);
+              if (Math.random() < 0.3) sfx.thud();
+              sh.arrows.splice(i, 1);
+              continue;
+            }
             if (along >= f.len) {
-              stick(f.to, f.dir, STAND);
+              intoGround(f.to.clone(), vel);
               debris(f.to, { count: 3, color: 0x4a3a28, speed: 1.4, size: 0.07, life: 0.5 });
               if (Math.random() < 0.3) sfx.thud();
               hurtPropsIn(player, f.to.x, f.to.z, 0.3, PROP_DAMAGE.bolt);
