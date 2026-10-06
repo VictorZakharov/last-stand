@@ -1,0 +1,30 @@
+# Dokci deploys the co-op relay (server/relay) on every push to main; the game itself stays on GitHub Pages.
+apiVersion: compose.control/v1alpha1
+kind: Project
+metadata:
+  name: last-stand-relay
+  displayName: Last Stand co-op relay
+spec:
+  repository:
+    provider: github
+    owner: VictorZakharov
+    name: last-stand
+  defaults:
+    targetRef: local-vps
+    resources:
+      cpuLimit: "0.5"
+      memoryLimit: 128MiB
+  environments:
+    production:
+      source:
+        branch: main
+      stack:
+        composeFiles:
+          - server/relay/compose.yaml
+      routes:
+        - service: relay
+          port: 8080
+          host: ls.wellscoped.dev
+          healthProbePath: /health
+      deploymentPolicy:
+        requireManualApproval: false

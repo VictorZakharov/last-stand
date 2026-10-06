@@ -68,7 +68,7 @@ export function renderCoop(): void {
   }
   if (s === 'joining') {
     body.innerHTML = `<p class="coop-wait">Joining room <b class="coop-code">${esc(session.code)}</b>…</p>
-      <p class="coop-intro">Finding the host through public relays. This can take a few seconds.</p>
+      <p class="coop-intro">Finding the host on the co-op server.</p>
       <button class="btn" id="btn-coop-leave">Cancel</button>
       ${reportLinks()}`;
   } else {

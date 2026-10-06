@@ -1,0 +1,19 @@
+# The co-op relay as Dokci deploys it (.dokci/project.yaml routes the public host to it over Traefik).
+services:
+  relay:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8080"
+      ORIGINS: https://victorzakharov.github.io,http://localhost:5173
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+    restart: unless-stopped
+    cpus: "0.5"
+    mem_limit: 128MiB

@@ -1,0 +1,10 @@
+{
+  "name": "last-stand-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Last Stand co-op relay: the games in a room talk through it over a WebSocket",
+  "type": "module",
+  "main": "relay.mjs",
+  "scripts": { "start": "node relay.mjs" },
+  "dependencies": { "ws": "8.22.0" }
+}

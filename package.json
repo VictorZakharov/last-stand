@@ -13,8 +13,7 @@
     "facelab": "node tools/facelab/facelab.mjs"
   },
   "dependencies": {
-    "three": "0.185.1",
-    "trystero": "0.25.4"
+    "three": "0.185.1"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
