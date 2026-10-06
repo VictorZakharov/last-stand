@@ -8,7 +8,7 @@ import { CLASSES } from '../data/classes/index';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { Player, setActionSink, type PlayerAction } from '../entities/player';
 import { openLink, type Link } from './transport';
-import { netLog } from './netlog';
+import { netLog, testRelays } from './netlog';
 import { role } from './role';
 import { showBiomeSetting } from '../game/biome';
 import { hostSync, stopSync, onWorld, onGuestControl, sendWorld } from './sync';
@@ -122,7 +122,12 @@ export async function joinRoom(code: string): Promise<void> {
   }
   wire(link);
   clearTimeout(joinTimer);
-  joinTimer = setTimeout(() => { if (session.status === 'joining') fail('Nobody answered: check the code, or ask the host to open the room again.'); }, JOIN_TIMEOUT * 1000);
+  joinTimer = setTimeout(() => {
+    if (session.status !== 'joining') return;
+    // (before the room is left: what the relays do with our events goes into the network log)
+    void testRelays();
+    fail('Nobody answered: check the code, or ask the host to open the room again.');
+  }, JOIN_TIMEOUT * 1000);
 }
 
 /** Leave the room (the partners' characters go with it). */

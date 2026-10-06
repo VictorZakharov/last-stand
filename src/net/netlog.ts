@@ -1,7 +1,9 @@
 // Co-op connection diagnostics: what the link did (relays, peers, every WebRTC connection's ICE
 // candidates, states and errors, the path and round trip once connected), kept as a short log and
 // a report a player can copy or share when a partner can't connect. Addresses are left out of the
-// report: a candidate's type and protocol say what's needed.
+// report: a candidate's type and protocol say what's needed. It also widens the relays' subscriptions to take events
+// from a clock that's off (`loosenSince`), counts what each relay takes, refuses and passes on, and tests each relay
+// end to end (`testRelays`).
 
 export interface NetEntry { t: number; msg: string }
 
@@ -37,6 +39,19 @@ const iceErrors = new Map<string, number>();
 let unusedDropped = 0;
 const relays = new Map<string, RelayState>();
 let relayList: string[] = [];
+let watching = false;
+/** what each relay did with our events and what it passed on, by its url without a trailing slash */
+interface RelayCount { sent: number; ok: number; refused: number; got: number; why: string[] }
+const counts = new Map<string, RelayCount>();
+const count = (url: string): RelayCount => counts.get(url) ?? counts.set(url, { sent: 0, ok: 0, refused: 0, got: 0, why: [] }).get(url)!;
+/** this machine's clock against the page's server (s, + ahead), once measured */
+let clockOff: number | null = null;
+/** the relay test's results, by url */
+const tested = new Map<string, string>();
+let testing = false;
+/** makes a signed event on a topic (Trystero's), for the relay test */
+let makeEvent: ((topic: string, content: string) => Promise<string>) | null = null;
+const bare = (url: string): string => url.replace(/\/+$/, '');
 let sockets: () => Record<string, WebSocket> = () => ({});
 let peers: () => Record<string, RTCPeerConnection> = () => ({});
 let pollTimer: ReturnType<typeof setInterval> | undefined;
@@ -144,6 +159,8 @@ export function watchLink(urls: string[], getSockets: () => Record<string, WebSo
   relays.clear();
   for (const url of urls) relays.set(url, { url, state: 'connecting', since: now(), opened: 0, closed: 0, firstOpen: null });
   netLog(`relays: ${urls.map(host).join(', ')}`);
+  watching = true;
+  counts.clear();
   clearInterval(pollTimer);
   polls = 0;
   pollTimer = setInterval(poll, 250);
@@ -153,6 +170,8 @@ export function unwatchLink(): void {
   clearInterval(pollTimer);
   pollTimer = undefined;
   poll();
+  // (what each relay was doing when the room was left stays in the report: polled after, every one read "not opened")
+  watching = false;
   sockets = () => ({});
   peers = () => ({});
 }
@@ -162,7 +181,7 @@ const READY = ['connecting', 'open', 'closing', 'closed'];
 
 function poll(): void {
   const socks = sockets();
-  for (const r of relays.values()) {
+  if (watching) for (const r of relays.values()) {
     const ws = socks[r.url] ?? socks[r.url + '/'];
     const s = ws ? READY[ws.readyState] : 'not opened';
     if (s === r.state) continue;
@@ -189,9 +208,15 @@ function poll(): void {
 export function countMsg(dir: 'in' | 'out'): void { msgs[dir]++; }
 
 /** For the overlay: one line per relay and connection. */
-export function netSummary(): { relays: { name: string; state: string }[]; conns: { name: string; state: string; path: string; rtt: number | null }[]; msgs: typeof msgs } {
+export function netSummary(): { relays: { name: string; state: string; note: string }[]; conns: { name: string; state: string; path: string; rtt: number | null }[]; msgs: typeof msgs; clock: number | null; testing: boolean } {
   return {
-    relays: [...relays.values()].map((r) => ({ name: host(r.url), state: r.state })),
+    clock: clockOff, testing,
+    relays: [...relays.values()].map((r) => {
+      const c = counts.get(bare(r.url)), t = tested.get(bare(r.url));
+      // (a relay that refuses what we send, or passes nothing on, is as good as closed)
+      const state = c && c.refused > 0 && c.ok === 0 ? 'refusing' : t && !t.startsWith('delivered') ? 'failed test' : r.state;
+      return { name: host(r.url), state, note: c ? `sent ${c.sent}, taken ${c.ok}, refused ${c.refused}, got ${c.got}${c.why.length ? ': ' + c.why[0] : ''}${t ? ` | test: ${t}` : ''}` : t ? `test: ${t}` : '' };
+    }),
     conns: conns.filter((c) => c.used && (c.state !== 'closed' || now() - c.born < 60_000)).map((c) => ({
       name: c.peer ? c.peer.slice(0, 6) : `pc${c.n}`, state: c.state === 'new' ? c.ice : c.state, path: c.path, rtt: c.rtt,
     })),
@@ -208,9 +233,14 @@ export function netReport(header: string[]): string {
     `Online ${navigator.onLine} | connection ${(navigator as { connection?: { effectiveType?: string; type?: string } }).connection?.effectiveType ?? '?'} | timezone ${Intl.DateTimeFormat().resolvedOptions().timeZone}`,
     `UA ${navigator.userAgent}`,
     `Messages in ${msgs.in}, out ${msgs.out}`,
-    'Relays:',
-    ...(relayList.length ? [...relays.values()].map((r) =>
-      `  ${host(r.url).padEnd(34)} ${r.state.padEnd(10)} opened ${r.opened}x, dropped ${r.closed}x${r.firstOpen !== null ? `, first open at ${stamp(r.firstOpen)}` : ''}`) : ['  (no room opened)']),
+    `Clock ${clockOff === null ? 'not measured' : `${clockOff >= 0 ? '+' : ''}${clockOff.toFixed(1)} s against the server${corrected ? ' (set right for the page)' : ''}`} | subscriptions widened ${SINCE_SLACK} s back`,
+    'Relays (socket; our events sent, taken, refused; events passed on to us; the end-to-end test):',
+    ...(relayList.length ? [...relays.values()].map((r) => {
+      const c = counts.get(bare(r.url)), t = tested.get(bare(r.url));
+      return `  ${host(r.url).padEnd(30)} ${r.state.padEnd(10)} opened ${r.opened}x, dropped ${r.closed}x${r.firstOpen !== null ? `, first at ${stamp(r.firstOpen)}` : ''}`
+        + (c ? ` | sent ${c.sent}, taken ${c.ok}, refused ${c.refused}, got ${c.got}${c.why.length ? ` (${c.why.join('; ')})` : ''}` : '')
+        + (t ? ` | test: ${t}` : '');
+    }) : ['  (no room opened)']),
     `ICE errors: ${[...iceErrors].map(([e, k]) => `${e} (${k}x)`).join('; ') || 'none'}`,
     `Connections (and ${conns.filter((c) => !c.used).length + unusedDropped} pooled offers never answered):`,
     ...(conns.some((c) => c.used) ? conns.filter((c) => c.used).map((c) => [
@@ -222,4 +252,129 @@ export function netReport(header: string[]): string {
     'Log:',
     ...log.map((e) => `${stamp(e.t)}  ${e.msg}`),
   ].join('\n');
+}
+
+// --- the relays' own side ----------------------------------------------------------------------------------------------
+/** a relay subscription takes events this far back (s): Trystero asks from the moment it subscribes, by this machine's
+ *  clock, and an event is stamped by its sender's: a partner whose clock was behind ours was never heard (its offer
+ *  stamped before our subscription), and the join timed out. Its events are ephemeral (kinds 20000 to 29999, never
+ *  stored), so asking further back replays nothing. */
+export const SINCE_SLACK = 3600;
+let patched = false;
+const testSockets = new WeakSet<WebSocket>();
+
+/** A subscription asked for further back (`SINCE_SLACK`). */
+function loosenSince(req: string): string {
+  try {
+    const m = JSON.parse(req) as unknown[];
+    for (let i = 2; i < m.length; i++) { const f = m[i] as { since?: number }; if (typeof f?.since === 'number') f.since -= SINCE_SLACK; }
+    return JSON.stringify(m);
+  } catch { return req; }
+}
+
+function onRelayMessage(url: string, data: unknown): void {
+  if (typeof data !== 'string') return;
+  const kind = data.slice(2, 8);
+  const c = count(url);
+  if (kind.startsWith('EVENT')) { c.got++; return; }
+  let m: unknown[];
+  try { m = JSON.parse(data) as unknown[]; } catch { return; }
+  const why = (r: unknown) => { const t = String(r ?? '').slice(0, 120); if (t && !c.why.includes(t) && c.why.length < 3) { c.why.push(t); netLog(`relay ${host(url)}: ${t}`); } };
+  if (m[0] === 'OK') { if (m[2]) c.ok++; else { c.refused++; why(m[3]); } }
+  else if (m[0] === 'NOTICE') why(m[1]);
+  else if (m[0] === 'CLOSED') why(m[2]);
+  else if (m[0] === 'AUTH') why('asks to log in (AUTH)');
+}
+
+/**
+ * Watches the relays' sockets from the page's side (once): their subscriptions widened (`loosenSince`), and what each
+ * one takes, refuses and passes on counted. Only sockets to `isRelay` urls, and not the relay test's own.
+ */
+export function watchRelaySockets(isRelay: (url: string) => boolean, maker: (topic: string, content: string) => Promise<string>): void {
+  makeEvent = maker;
+  if (patched) return;
+  patched = true;
+  const send = WebSocket.prototype.send, seen = new WeakSet<WebSocket>();
+  WebSocket.prototype.send = function (this: WebSocket, data: Parameters<WebSocket["send"]>[0]) {
+    if (typeof data === 'string' && isRelay(bare(this.url)) && !testSockets.has(this)) {
+      const url = bare(this.url);
+      if (!seen.has(this)) { seen.add(this); this.addEventListener('message', (e) => onRelayMessage(url, e.data)); }
+      if (data.startsWith('["REQ"')) data = loosenSince(data);
+      else if (data.startsWith('["EVENT"')) count(url).sent++;
+    }
+    return send.call(this, data);
+  };
+}
+
+/** a clock further off than this (s) is set right for the page (`correctClock`) */
+const CLOCK_SLACK = 2;
+let corrected = false;
+/**
+ * Sets this page's clock (`Date.now`) to the server's when this machine's is off, before a room opens (once). The relays
+ * judge an event by the time stamped in it, which Trystero takes from `Date.now` and signs: from a clock two minutes
+ * behind, half of them refused every event as expired. Only differences of `Date.now` are used anywhere else (Trystero's
+ * own timers, an item id's seed, a save's age), which a constant shift leaves as they were.
+ */
+export async function correctClock(): Promise<void> {
+  if (clockOff === null) await Promise.race([measureClock(), new Promise((r) => setTimeout(r, 2000))]);
+  if (corrected || clockOff === null || Math.abs(clockOff) <= CLOCK_SLACK) return;
+  corrected = true;
+  const real = Date.now.bind(Date), off = clockOff * 1000;
+  Date.now = () => real() - off;
+  netLog(`clock set ${clockOff > 0 ? 'back' : 'forward'} ${Math.abs(clockOff).toFixed(1)} s, to the server's`);
+}
+
+/** This machine's clock against the page's server, from its reply's Date header (to about a second). */
+async function measureClock(): Promise<void> {
+  try {
+    const t0 = Date.now(), r = await fetch(location.href, { method: 'HEAD', cache: 'no-store' }), t1 = Date.now();
+    const d = r.headers.get('date');
+    if (!d) return;
+    // (the header is whole seconds: the reply's middle against it, give or take half a second)
+    clockOff = ((t0 + t1) / 2 - Date.parse(d) - 500) / 1000;
+    netLog(`clock ${clockOff >= 0 ? '+' : ''}${clockOff.toFixed(1)} s against the server`);
+  } catch { /* offline, or the server sends no date */ }
+}
+
+const strNum = (s: string): number => s.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+
+/**
+ * Each relay end to end, as Trystero uses it: two sockets of its own, one subscribed to a topic of its own, the other
+ * publishing a signed event on it, and whether the first is sent it (and how soon), the relay refuses it (and why) or
+ * passes nothing on. Run when a join gets no answer, and from the network overlay.
+ */
+export async function testRelays(): Promise<void> {
+  if (testing || !makeEvent || !relayList.length) return;
+  testing = true;
+  tested.clear();
+  netLog('testing the relays');
+  const topic = `last-stand-test-${Math.random().toString(36).slice(2, 10)}`, kind = strNum(topic) % 1e4 + 2e4;
+  const one = (url: string) => new Promise<string>((done) => {
+    const socks: WebSocket[] = [];
+    let end = false;
+    const finish = (r: string) => { if (end) return; end = true; for (const s of socks) { try { s.close(); } catch { /* */ } } done(r); };
+    const open = () => { const s = new WebSocket(url); testSockets.add(s); socks.push(s); return s; };
+    const timer = setTimeout(() => finish(socks.every((s) => s.readyState === 1) ? 'open, nothing passed on in 8 s' : 'could not open'), 8000);
+    const sub = open(), pub = open();
+    let t0 = 0, refused = '';
+    sub.onmessage = (e) => { if (String(e.data).startsWith('["EVENT"')) { clearTimeout(timer); finish(`delivered in ${Math.round(performance.now() - t0)} ms`); } };
+    pub.onmessage = (e) => {
+      try { const m = JSON.parse(String(e.data)) as unknown[]; if (m[0] === 'OK' && !m[2]) { refused = String(m[3] ?? '').slice(0, 100); clearTimeout(timer); finish(`refused: ${refused}`); } } catch { /* */ }
+    };
+    let ready = 0;
+    const go = async () => {
+      if (++ready < 2) return;
+      sub.send(JSON.stringify(['REQ', 't', { kinds: [kind], '#x': [topic], since: Math.floor(Date.now() / 1000) - SINCE_SLACK }]));
+      await new Promise((r) => setTimeout(r, 500));
+      t0 = performance.now();
+      try { pub.send(await makeEvent!(topic, 'test')); } catch { finish('could not sign'); }
+    };
+    sub.onopen = pub.onopen = () => void go();
+    sub.onerror = pub.onerror = () => { clearTimeout(timer); finish('could not open'); };
+  });
+  const res = await Promise.all(relayList.map(async (u) => [u, await one(u)] as const));
+  for (const [u, r] of res) { tested.set(bare(u), r); }
+  const ok = res.filter(([, r]) => r.startsWith('delivered')).length;
+  netLog(`relay test: ${ok} of ${res.length} pass events on (${res.filter(([, r]) => !r.startsWith('delivered')).map(([u, r]) => `${host(u)}: ${r}`).join('; ') || 'all'})`);
+  testing = false;
 }

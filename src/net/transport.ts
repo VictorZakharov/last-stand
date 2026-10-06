@@ -1,7 +1,7 @@
 // Peer-to-peer links for co-op. Players meet in a room named by a short code: WebRTC data channels,
 // set up over free public Nostr relays (Trystero), so no server of our own is needed. `?net=local`
 // swaps in a BroadcastChannel between tabs of one browser, for testing without the relays.
-import { netLog, watchLink, unwatchLink, watchedConnection, countMsg } from './netlog';
+import { netLog, watchLink, unwatchLink, watchedConnection, countMsg, watchRelaySockets, correctClock } from './netlog';
 
 export type Channel = 'hello' | 'look' | 'pl' | 'ev' | 'w' | 'ctl';
 
@@ -24,7 +24,8 @@ const CHANNELS: Channel[] = ['hello', 'look', 'pl', 'ev', 'w', 'ctl'];
  *  nothing while any other is shared. `?relays=a.org,b.net` tries others. */
 const RELAYS = [
   'relay.damus.io', 'relay.primal.net', 'nostr.mom', 'relay.mostro.network', 'nostr-pub.wellorder.net',
-  'bucket.coracle.social', 'relay.nostr.net', 'nostr.islandarea.net', 'nostr.oxtr.dev', 'nostr.bitcoiner.social',
+  'bucket.coracle.social', 'relay.nostr.net', 'nostr.islandarea.net', 'nostr.oxtr.dev', 'nostr-relay.corb.net',
+  'nostr.sathoarder.com', 'relay.snort.social', 'schnorr.me', 'relay02.lnfi.network', 'relay.sigit.io', 'nostr.data.haus',
 ];
 
 const relayUrls = (): string[] => {
@@ -35,8 +36,11 @@ const relayUrls = (): string[] => {
 export async function openLink(code: string): Promise<Link> {
   if (new URLSearchParams(location.search).get('net') === 'local') return localLink(code);
   // loaded on first use: solo players never download it
-  const { joinRoom, selfId, getRelaySockets } = await import('trystero/nostr');
+  const { joinRoom, selfId, getRelaySockets, createEvent } = await import('trystero/nostr');
   const urls = relayUrls();
+  watchRelaySockets((u) => urls.includes(u), createEvent);
+  // (a clock that's off has its events refused by the relays as expired, or stamped before a partner's subscription)
+  await correctClock();
   netLog(`opening the link to room ${code} as ${selfId.slice(0, 6)}`);
   const room = joinRoom({ appId: APP, relayConfig: { urls }, rtcPolyfill: watchedConnection() }, code, {
     onJoinError: (d) => netLog(`join error with ${d.peerId.slice(0, 6)}: ${d.error}`),
