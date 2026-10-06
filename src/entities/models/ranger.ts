@@ -555,10 +555,12 @@ export function buildRanger(): Model {
   let fpLob = 0;
   /** the shot's angle as last posed */
   let lastPitch = 0;
-  /** where the draw hand was last frame (the chest's frame) and how far onto the string (`drawHand`'s `w`), and the same
-   *  when it set off for the quiver: a fan queued behind a shot takes the rest of its arrows from there, the hand on the
-   *  string (set off from where the arm hangs, it jumped there from the string, 137 px in a frame) */
-  const lastHandC = new THREE.Vector3(), fetchAtC = new THREE.Vector3();
+  /** where the draw hand was last frame (the chest's frame: its wrist, and where `drawHand` was asked to put it, its string
+   *  point when on the string) and how far onto the string (`drawHand`'s `w`), and the same when it set off for the quiver:
+   *  a fan queued behind a shot takes the rest of its arrows from there, the hand on the string (set off from where the arm
+   *  hangs, it jumped there from the string, 137 px in a frame; from the wrist with the hand on the string, a fan queued
+   *  behind a fan jumped 15 cm. Off the string, the wrist where it ended up: through the eyes the arm is posed again after) */
+  const lastHandC = new THREE.Vector3(), lastAtC = new THREE.Vector3(), fetchAtC = new THREE.Vector3();
   let lastOnW = 0, fetchOn0 = 0;
   /** up for the draw hand on the string: the world's, or through the eyes the view's (the world's tilts in the view as the
    *  eyes look up or down, and the hand turned with it) */
@@ -629,7 +631,7 @@ export function buildRanger(): Model {
    *  last frame's forearm, the wrist moved with it and the arm shook) */
   const drawHand = (at: THREE.Vector3, q: THREE.Quaternion, w: number, pole: THREE.Vector3, dt = 0, tilt = 0, girdle = true, v = ELBOW_V) => {
     const s = sc();
-    lastOnW = w;
+    lastOnW = w; j.chest.worldToLocal(lastAtC.copy(at));
     stringTurn(q, _q2);
     // (`girdle`: whether the shoulder may move; drawing an upright bow it stays where it is: the girdle drew it back, and the
     // elbow with it, round behind the neck)
@@ -703,7 +705,7 @@ export function buildRanger(): Model {
     // (a shot with fewer on the string than it looses: the hand takes the rest from the quiver first; they're on the string
     // once laid on it)
     const fetchE = shooting && !loosed && a.fetch !== undefined ? a.fetch : -1;
-    if (fetchE >= 0 && fetchFrom < 0) { fetchFrom = Math.min(strung, (a!.arrows ?? 1) - 1); fetchAtC.copy(lastHandC); fetchOn0 = lastOnW; }
+    if (fetchE >= 0 && fetchFrom < 0) { fetchFrom = Math.min(strung, (a!.arrows ?? 1) - 1); fetchAtC.lerpVectors(lastHandC, lastAtC, lastOnW); fetchOn0 = lastOnW; }
     if (fetchE < 0) fetchFrom = -1;
     else strung = fetchE >= FETCHED ? a!.arrows ?? 1 : fetchFrom;
     // between shots, as the hero has it (`AnimState.nocked`): stood a while without a shot, he puts it back in the quiver
