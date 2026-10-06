@@ -12,6 +12,7 @@ import { burst, debris, particles, col } from '../../fx/particles';
 import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import { arrowGeometry, ARROW, pullAt } from '../../entities/models/bow';
+import { showLaser, warmLaser, LASER_POINTS } from '../../fx/aimLaser';
 import { clamp, rand } from '../../util';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
@@ -98,7 +99,88 @@ function fly(proj: Projectile, dt: number): void {
 /** An arrow's way off the bow: heading `yaw`, `pitch` above level. */
 const shotDir = (yaw: number, pitch: number): THREE.Vector3 => new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
 
-const warmArrows = (): THREE.Object3D[] => { const s = new THREE.InstancedMesh(arrowGeometry(), arrowMat, 1); s.count = 1; return [arrowMesh(), s, new THREE.Mesh(streakGeo, streakOf(GLINT, 1))]; };
+const warmArrows = (): THREE.Object3D[] => { const s = new THREE.InstancedMesh(arrowGeometry(), arrowMat, 1); s.count = 1; return [arrowMesh(), s, new THREE.Mesh(streakGeo, streakOf(GLINT, 1)), ...warmLaser()]; };
+
+/** the aim preview's flight is stepped as the arrow's is, a frame at 60 fps (swept, as its collisions are) */
+const PREVIEW_DT = 1 / 60;
+/** the arena's edge, where a shot is gone (as in projectiles.ts) */
+const EDGE = 28;
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _w = new THREE.Vector3();
+
+/** Where along the step from (px, pz) by (dx, dz) it first comes within `r` of (cx, cz): 0..1, or -1 if it doesn't. */
+function entry(px: number, pz: number, dx: number, dz: number, cx: number, cz: number, r: number): number {
+  const fx = px - cx, fz = pz - cz, a = dx * dx + dz * dz, b = 2 * (fx * dx + fz * dz), c = fx * fx + fz * fz - r * r;
+  if (c <= 0) return 0;
+  if (a < 1e-9) return -1;
+  const disc = b * b - 4 * a * c;
+  if (disc < 0) return -1;
+  const t = (-b - Math.sqrt(disc)) / (2 * a);
+  return t >= 0 && t <= 1 ? t : -1;
+}
+
+/**
+ * The path an arrow loosed now would fly (as `fly` and the projectile's own collisions have it): from `origin` along
+ * `dir` at `v`, falling, until it sticks in the ground, meets a prop it doesn't clear or the arena's edge, or (unless it
+ * goes on through them) a foe. Returns its points and where it strikes (null if it only runs out).
+ */
+function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius: number, level: boolean, pierce: boolean): { pts: THREE.Vector3[]; end: THREE.Vector3 | null } {
+  const pts = [origin.clone()], pos = _a.copy(origin), vel = _w.copy(dir).multiplyScalar(v);
+  while (pts.length < LASER_POINTS) {
+    // (in the projectile's order: it moves, then falls, as `fly` follows its move)
+    const px = pos.x, py = pos.y, pz = pos.z;
+    pos.addScaledVector(vel, PREVIEW_DT);
+    vel.y -= GRAVITY * PREVIEW_DT;
+    const dx = pos.x - px, dz = pos.z - pz;
+    // the first thing the step meets: the ground (the point half an arrow ahead), the edge, a prop, a foe
+    let t = 2;
+    _b.copy(vel).normalize().multiplyScalar(ARROW / 2).add(pos);
+    if (_b.y <= groundHeight(_b.x, _b.z)) {
+      // (where between the step's ends the point went under)
+      const g0 = py + (_b.y - pos.y) - groundHeight(px, pz), g1 = _b.y - groundHeight(_b.x, _b.z);
+      t = g0 > 0 ? g0 / (g0 - g1) : 0;
+    }
+    if (Math.hypot(pos.x, pos.z) > EDGE) t = Math.min(t, exitEdge(px, pz, dx, dz));
+    const low = pos.y - radius * 0.5;
+    for (const o of G.arena.obstacles) {
+      if (o.h <= low) continue;
+      const k = entry(px, pz, dx, dz, o.x, o.z, o.r + radius * 0.5);
+      if (k >= 0 && k < t) t = k;
+    }
+    if (!pierce) for (const en of G.enemies) {
+      if (!en.alive || en.invulnerable) continue;
+      const k = entry(px, pz, dx, dz, en.pos.x, en.pos.z, en.radius + radius);
+      if (k < 0 || k >= t) continue;
+      // (over a foe it's above as the projectile has it: by its height at the step's end)
+      const base = en.obj.position.y;
+      if (level && (pos.y < base - radius || pos.y > base + en.height + radius)) continue;
+      t = k;
+    }
+    if (t <= 1) {
+      const end = new THREE.Vector3(px + dx * t, py + (pos.y - py) * t, pz + dz * t);
+      pts.push(end);
+      return { pts, end };
+    }
+    pts.push(pos.clone());
+  }
+  return { pts, end: null };
+}
+
+/** Where a step from inside the arena crosses its edge (0..1). */
+function exitEdge(px: number, pz: number, dx: number, dz: number): number {
+  const a = dx * dx + dz * dz, b = 2 * (px * dx + pz * dz), c = px * px + pz * pz - EDGE * EDGE;
+  return a < 1e-9 ? 0 : Math.max(0, Math.min(1, (-b + Math.sqrt(Math.max(0, b * b - 4 * a * c))) / (2 * a)));
+}
+
+/** The aim preview of a drawn shot on the local hero's own screen: each arrow's path if it were loosed now
+ *  (no weaker than the least draw, as it would leave), shown through `fx/aimLaser`. */
+function previewShot(player: Player, def: BowDef, k: number, radius: number, level: boolean, pierce: boolean): void {
+  if (!player.local) return;
+  const origin = player.castPoint, target = player.aim, v = arrowSpeed(def, Math.max(k, def.minDraw ?? 0));
+  const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v, def.range);
+  const paths = [];
+  for (let i = 0; i < def.missiles; i++) paths.push(flightPath(origin, shotDir(yaw + (i - (def.missiles - 1) / 2) * def.spread, pitch), v, radius, level, pierce));
+  showLaser(paths);
+}
 
 /** a piercing shot's tracer: its longest (m), and how long it fades once the arrow's gone (s) */
 const TRACE = 14, TRACE_FADE = 0.3;
@@ -107,6 +189,7 @@ const GLINT = 0xf3dc9a;
 export const bowShot: InstantSkill = {
   anim: 'bow', warm: warmArrows,
   pitch: (player, def, k, target) => launchPitch(player.castPoint, target, arrowSpeed(def as BowDef, k), def.range ?? 24),
+  charging: (player, def, k) => previewShot(player, def as BowDef, k, 0.22, true, false),
   cast(player, rawDef, target, power) {
     const def = rawDef as BowDef, origin = player.castPoint, pull = pullAt(power), v = arrowSpeed(def, power);
     // (the string gives the arrow the energy the bow stored, which goes with the square of the draw: that is its blow)
@@ -144,7 +227,8 @@ const headOf = (player: Player, out: THREE.Vector3): THREE.Vector3 =>
  */
 export const piercingShot: InstantSkill = {
   anim: 'bow', warm: warmArrows, pitch: bowShot.pitch,
-  charging(player, _def, k, dt) {
+  charging(player, def, k, dt) {
+    previewShot(player, def as BowDef, k, 0.24, false, true);
     const was = drawnTo.get(player) ?? 0;
     drawnTo.set(player, k);
     const head = headOf(player, _p);
