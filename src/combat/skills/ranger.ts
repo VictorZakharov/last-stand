@@ -26,7 +26,8 @@ export const MAX_PITCH = 0.6;
 const SINK = 0.16, STUCK_LIFE = 7, STUCK_MAX = 128;
 export const FWD = new THREE.Vector3(0, 0, 1);
 const _v = new THREE.Vector3(), _p = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _s = new THREE.Vector3(), _m = new THREE.Matrix4();
-export const arrowMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.1 });
+// (double-sided: an arrow's feathers are single sheets)
+export const arrowMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.1, side: THREE.DoubleSide });
 export const arrowMesh = (): THREE.Mesh => new THREE.Mesh(arrowGeometry(), arrowMat);
 
 /** a streak of light behind an arrow (a shaft is a few pixels from the top-down view, and a fast one is gone in two frames):

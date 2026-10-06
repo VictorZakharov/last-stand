@@ -214,9 +214,9 @@ const skill: ChannelSkill<RainState> = {
     // volley after volley: (the first arrow from the quiver,) drawn, loosed, the next one taken and nocked
     const sp = pace(player), D = DRAW / sp, A = AFTER / sp;
     s.cyc += dt;
-    if (s.fetch && !s.loosed && s.cyc >= s.fetch) player.nocked = true;
-    if (!s.loosed && s.cyc >= s.fetch + D) { s.loosed = true; player.nocked = false; loose(s); }
-    if (s.loosed && s.cyc >= s.fetch + D + A) { s.cyc -= s.fetch + D + A; s.fetch = 0; s.loosed = false; player.nocked = true; }
+    if (s.fetch && !s.loosed && s.cyc >= s.fetch) player.nocked = 1;
+    if (!s.loosed && s.cyc >= s.fetch + D) { s.loosed = true; player.nocked = 0; loose(s); }
+    if (s.loosed && s.cyc >= s.fetch + D + A) { s.cyc -= s.fetch + D + A; s.fetch = 0; s.loosed = false; player.nocked = 1; }
   },
   stop(_player, _def, s) { s.done = true; },
   pose(player, _def, s, action) {

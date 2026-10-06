@@ -65,6 +65,9 @@ const YAW_MAX = 0.5;
 const TWIST = 0.8;
 /** a planted foot's way from its knee's at most (rad, inside the ankle's twist), and how far the knee turns from the hips' way at most (the hip's turn) */
 const KNEE_FOOT = (ROM['ankle.twist'][1] - 6) * Math.PI / 180, HIP_TURN = (ROM['hip.rotation'][1] - 5) * Math.PI / 180;
+/** how much sooner than those two together a planted foot pivots after the hips (rad: the knee's pole sits off its line, so
+ *  the ankle measured 12 degrees more twisted than they add up to) */
+const PIVOT_EARLY = 0.2;
 /** how far the chest may turn on the pelvis (rad, a little inside the trunk's range) */
 const TRUNK = (ROM['spine.rotation'][1] - 3) * Math.PI / 180;
 /** how long the legs go backwards along the pelvis's line after a reversal before it turns round to the new way (s) */
@@ -517,13 +520,29 @@ export class LegIK {
         _p.copy(f.pos).applyMatrix4(_m);
       }
       // the foot lies level, turned to the way it was planted (or, in a swing, towards where the body faces), and the knee bends over it
-      const yawNow = f.state === 'plant' ? f.yaw : f.yawA + this.angle(f.yaw, f.yawA, pyaw + (this.moving ? 0 : f.syaw)) * smooth(f.t);
+      let yawNow = f.state === 'plant' ? f.yaw : f.yawA + this.angle(f.yaw, f.yawA, pyaw + (this.moving ? 0 : f.syaw)) * smooth(f.t);
       // (standing only, and only ever outwards: a running knee pointed off the stride twists the thigh across the body;
       // but a planted foot's knee turns at least far enough for the foot to be within the ankle's twist on the shin:
       // left along the hips, the foot was twisted 50 degrees against it)
-      const rel = this.angle(0, hy, yawNow);
+      let rel = this.angle(0, hy, yawNow);
+      // (a planted foot the hips have turned further from than the hip's turn and the ankle's twist on the shin together
+      // pivots on its ball after them: held, the ankle twisted 37 degrees as the hips swung round over it mid-stride)
+      const far = Math.abs(rel) - (HIP_TURN + KNEE_FOOT - PIVOT_EARLY);
+      if (ROM_ON && f.state === 'plant' && far > 0 && this.shape) {
+        const y1 = f.yaw - Math.sign(rel) * far, bl = BALL * this.shape[i].toe * sc;
+        f.P.x += bl * (Math.sin(f.yaw) - Math.sin(y1)); f.P.z += bl * (Math.cos(f.yaw) - Math.cos(y1)); f.yaw = yawNow = y1;
+        rel = this.angle(0, hy, yawNow);
+      }
       let ky = this.standK * (i === 0 ? Math.max(-0.1, Math.min(0.9, rel)) : Math.max(-0.9, Math.min(0.1, rel)));
       if (ROM_ON && f.state === 'plant') ky = Math.max(-HIP_TURN, Math.min(HIP_TURN, Math.max(rel - KNEE_FOOT, Math.min(rel + KNEE_FOOT, ky))));
+      // (a foot in the air turns no further from the hips than the hip and the ankle let it: as the body wheeled round onto a
+      // shot behind it, a stepping foot kept the way it left the ground and the hip turned 56 degrees, 11 past its range)
+      // (and moving, no further from the knee than the ankle lets it: a stride's foot turned onto a strafe's way twisted 37)
+      else if (ROM_ON) {
+        if (!this.moving) ky = Math.max(-HIP_TURN, Math.min(HIP_TURN, ky));
+        const lim = Math.min(ky + KNEE_FOOT, Math.max(ky - KNEE_FOOT, rel)) - rel;
+        if (lim) yawNow += lim;
+      }
       _pole.set(Math.sin(ky) + (i === 0 ? 0.12 : -0.12), 0, Math.cos(ky));
       reachArm(thigh, knee, L1, L2, _p, _pole, -1);
       f.shown = f.pitch;
