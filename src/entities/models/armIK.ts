@@ -31,6 +31,9 @@ export interface ArmGoal {
   /** the girdle set to this raise and forward turn (degrees) whatever the arm needs, as an archer's back draws the shoulder
    *  blade in at full draw */
   girdleSet?: [number, number];
+  /** what each degree of the wrist's bend costs (as `keep`'s): an elbow that lines the forearm up behind the fist (a hand
+   *  turned as asked whatever the ranges, `free`, otherwise took whatever bend the elbow left it, 45 to 66 degrees back) */
+  wristW?: number;
   /** a hand round a handle may turn about its palm on it up to this (rad), the handle diagonal across the palm (`hold`'s slant): the hand joint, and so what it holds, keeps its turn, only the visible hand turns;
    *  or its least and most (one side of the fist would meet what's beside the handle: a bow's arrow over its shelf) */
   slant?: number | [number, number];
@@ -71,6 +74,7 @@ const X = new THREE.Vector3(1, 0, 0);
 const last = new WeakMap<THREE.Object3D, THREE.Vector3>(), lastG = new WeakMap<THREE.Object3D, [number, number]>(), lastS = new WeakMap<THREE.Object3D, number>();
 /** and its turn about a handle (`glide` only) */
 const lastR = new WeakMap<THREE.Object3D, number>();
+const _wy = new THREE.Vector3();
 /** how far past the best's ranges (degrees) an elbow held back by `maxMove` may go before it gives way */
 const REACH_SLACK = 2;
 /** where the least of a parabola through three evenly spaced costs lies, in steps from the middle one (-0.5..0.5) */
@@ -153,6 +157,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     if (want && ROM_ON) {
       eased(g, _rel.copy(_Qf).invert().multiply(want));
       cost += 2 * clampWrist(_rel, left, _cl);
+      if (g.wristW) cost += g.wristW * _wy.set(0, 1, 0).applyQuaternion(_rel).y < 1 ? Math.acos(Math.max(-1, Math.min(1, _wy.y))) * 57.3 : 0;
     }
     if (solids && ROM_ON) {
       // (the upper arm against the head only: at the shoulder it joins the trunk)

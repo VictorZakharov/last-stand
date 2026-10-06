@@ -181,12 +181,18 @@ const FP_LOW = V(0.22, -0.5, 0), FP_UP = V(0.12, -0.38, -0.25), EYE_UP = V(0, 1,
  *  arrow lay across the view; pointing below the axis, its nock rose to the eyes and the hand drawing it passed just
  *  before them, filling the view's lower left (looking level it's 0.11; Hailfletch's volleys are drawn 20 degrees up) */
 const FP_PITCH = [0.08, 0.4];
-/** a volley lofted high (Hailfletch) aims up through the eyes: its arrow this much further up (rad) and the bow raised and
- *  moved left in the view (m) as its angle comes in (at its own 26 degrees, held under the view's limit with the grip
- *  low, it read as a shot straight ahead; raised in the middle, the bow arm's forearm covered the view's middle) */
-const FP_LOB = 0.35, FP_LOB_RISE = V(-0.14, 0.16, 0);
+/** a volley lofted high (Hailfletch) aims up through the eyes: the whole bow pose tipped up about them by this much (rad)
+ *  as its angle comes in (at its own 26 degrees, held under the view's limit, it read as a shot straight ahead; the grip
+ *  raised and moved left in the view instead, the forearm turned half its range off the fist's and the wrist bent 60
+ *  degrees back, and the hand looked broken) */
+const FP_LOB = 0.4;
 /** how fast that comes and goes (1/s: following the volley's angle, the bow dropped 50 px in a frame as the channel ended) */
 const FP_LOB_EASE = 8;
+/** how fast a cut-off shot's angle eases back level (1/s) */
+const PITCH_BACK = 10;
+/** through the eyes, what each degree of the bow wrist's bend costs its elbow (armIK's `wristW`): turned as posed whatever
+ *  its ranges, the fist took whatever bend the elbow left it, 45 to 66 degrees back, and the hand looked broken off */
+const FP_WRIST = 0.3;
 /** through the eyes, how far the bow sways with the stride at a run (m across and up the view, rad about it): across once a
  *  stride, up and down with each step, rolling with it; eased in and out with the pace (`FP_SWAY_EASE`, 1/s), and a
  *  `FP_SWAY_DRAWN` share of it while it's drawn (held still in the view as he walked, it read as stuck to it) */
@@ -227,6 +233,23 @@ function frame(z: THREE.Vector3, cant: number, out: THREE.Quaternion, up = UP): 
 
 /** the draw hand's fingers: index, middle and ring hooked round the string at their last joints, the little finger and the
  *  thumb tucked under (`k` 1), or relaxed open (0); `pinch` closes the thumb on the index, holding an arrow by its nock */
+/** the cuff over the wrist (the forearm joint's space, its bone along -y): from inside the bracer's end, round, to the wrist,
+ *  flattened as a wrist is (wider across the back of the hand than through it), and onto the heel of the palm */
+function wristCuff(): THREE.BufferGeometry {
+  // [y, half across, half through]
+  const rings: [number, number, number][] = [[-0.235, 0.045, 0.045], [-0.25, 0.042, 0.038], [-0.262, 0.036, 0.027], [-0.274, 0.037, 0.023], [-0.286, 0.04, 0.021], [-0.296, 0.04, 0.02]];
+  const g = lathe(rings.map(([y, rx]) => [rx, y] as [number, number]).reverse(), 18), p = g.attributes.position;
+  if (!p) return g;
+  for (let i = 0; i < p.count; i++) {
+    const y = p.getY(i); let k = 0;
+    while (k < rings.length - 2 && y < rings[k + 1][0]) k++;
+    const [y0, x0, z0] = rings[k], [y1, x1, z1] = rings[k + 1], t = clamp((y - y0) / (y1 - y0), 0, 1);
+    p.setZ(i, p.getZ(i) * (z0 + (z1 - z0) * t) / (x0 + (x1 - x0) * t));
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
 function hook(h: Hand, k: number, pinch: number): void {
   h.vis.position.set(0, 0, 0); h.vis.quaternion.identity();
   const s = h.s;
@@ -427,7 +450,7 @@ export function buildRanger(): Model {
   const run = [0, 0.2, 0.4, 0.6, 0.8, 1], across = (t: number) => lerp(-0.13, 0.155, t), down = (t: number) => lerp(0.24, -0.11, t);
   S.add(strap([...run.map((t) => tunicFront(across(t), down(t), 0.006)), onTunic(Math.PI / 2, -0.115, 0.006), ...[...run].reverse().map((t) => tunicBack(across(t), down(t), 0.006)), V(-0.135, 0.29, -0.012)], 0.048, 0.008, true), strapLeather, j.chest);
   S.add(buckle(0.042, 0.05, 0.007), brass, j.chest, tunicFront(-0.075, 0.18, 0.014).toArray(), [0, 0, -0.85]);
-  for (const [sh, el] of [[j.shoulderL, j.elbowL], [j.shoulderR, j.elbowR]]) {
+  for (const [sh, el, hand] of [[j.shoulderL, j.elbowL, j.handL], [j.shoulderR, j.elbowR, j.handR]]) {
     // (set into the armhole: from its edge over the deltoid onto the arm, the arm's wholly from a little way down it, and over
     // the elbow onto the forearm)
     const sa = sh === j.shoulderL ? 1 : -1, at = restOf(sa);
@@ -441,7 +464,11 @@ export function buildRanger(): Model {
     S.skinChain(g, coat, sh, [...chainOf(sa), el]);
     // (the sleeve on down the forearm into a bracer from the wrist, a brass band round the bracer's top)
     S.add(lathe([[0.052, -0.12], [0.055, -0.04], [0.056, 0]], 14), coat, el);
-    S.add(lathe([[0.046, -0.27], [0.047, -0.22], [0.052, -0.15], [0.057, -0.1], [0.058, -0.095]], 14), hide, el);
+    S.add(lathe([[0.047, -0.25], [0.047, -0.22], [0.052, -0.15], [0.057, -0.1], [0.058, -0.095]], 14), hide, el);
+    // (and under its end a leather cuff over the wrist onto the heel of the hand, narrowing to the wrist's flattened oval
+    // and bending with it: the bracer a rigid tube to the wrist and the palm a box from it, a bent wrist swung the palm out
+    // of the tube's end, and the hand looked broken off)
+    S.skin(wristCuff(), hide, el, hand, j.P.foreL - 0.02, j.P.foreL + 0.015);
     S.add(belt(0.059, 0.059, -0.1, 0.012, 0.004), brass, el);
   }
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]]) {
@@ -516,6 +543,8 @@ export function buildRanger(): Model {
   let drawK = 0;
   /** how far the bow is lofted through the eyes (`FP_LOB`, 0..1) */
   let fpLob = 0;
+  /** the shot's angle as last posed */
+  let lastPitch = 0;
   /** where the draw hand was last frame (the chest's frame) and how far onto the string (`drawHand`'s `w`), and the same
    *  when it set off for the quiver: a fan queued behind a shot takes the rest of its arrows from there, the hand on the
    *  string (set off from where the arm hangs, it jumped there from the string, 137 px in a frame) */
@@ -553,7 +582,7 @@ export function buildRanger(): Model {
     _e.copy(_d).sub(_c).normalize();
     fistReach(handL, _y, _e, GRIP_R, _a);
     fistTurn(handL, _y, _e, _gq);
-    const fit = solveArm(j, true, { wrist: _b.copy(_c).sub(_a), hand: _gq, pole: elbowTo, keep: 20, body, roll: { axis: _y, range: 0.6, at: _c }, slant: [-SLANT, BOW_SLANT], glide: 1 - Math.exp(-GLIDE * dtNow), free: fp });
+    const fit = solveArm(j, true, { wrist: _b.copy(_c).sub(_a), hand: _gq, pole: elbowTo, keep: 20, body, roll: { axis: _y, range: 0.6, at: _c }, slant: [-SLANT, BOW_SLANT], glide: 1 - Math.exp(-GLIDE * dtNow), free: fp, wristW: fp ? FP_WRIST : 0 });
     root.updateMatrixWorld(true);
     // the bow where the fist has it: turned as far as the wrist and the forearm turned the hand (the hand joint against
     // the turn asked of it, its turn about the grip aside), its grip where the fist closes (a slanted fist closes a
@@ -700,7 +729,9 @@ export function buildRanger(): Model {
     j.hips.rotation.y -= hip; j.spine.rotation.y -= (side - hip - open) * 0.45; j.chest.rotation.y -= (side - hip - open) * 0.55;
     j.neck.rotation.y += side * 0.4; j.head.rotation.y += side * 0.6;
     // (the shoulders' line tilts with the shot's angle: the trunk bends at the waist, not the arms at the shoulders)
-    const pitch = shooting ? a.pitch ?? 0 : 0;
+    // (eased back level when the shot is cut off, a channel let go mid-volley: dropped at once, the arrow through the eyes
+    // jumped 37 px in a frame)
+    const pitch = lastPitch = shooting ? a.pitch ?? 0 : damp(lastPitch, 0, PITCH_BACK, dt);
     j.chest.rotation.z += pitch * 0.6 * aim; j.spine.rotation.z += pitch * 0.25 * aim;
     j.spine.rotation.x += st.move * 0.1;
     // the other skills' gestures with the draw hand off the string, and the draught
@@ -769,13 +800,17 @@ export function buildRanger(): Model {
     handUp.copy(eyeUp);
     const uEye = fp ? toEyes(u, new THREE.Vector3()) : _a;
     if (fp) {
-      // (a volley lofted over the area aims up through the eyes too: its arrow up the view by its own angle, and more)
-      const lobK = fpLob = damp(fpLob, smooth(clamp((pitch - 0.2) / 0.25, 0, 1)), FP_LOB_EASE, dtNow), lob = lobK * FP_LOB,
-        el0 = Math.atan2(uEye.y, Math.hypot(uEye.x, uEye.z)), el = el0 + lob, cl = clamp(el, FP_PITCH[0], FP_PITCH[1] + lob), h = Math.hypot(uEye.x, uEye.z) || 1;
-      if (cl !== el0) uEye.set(uEye.x / h * Math.cos(cl), Math.sin(cl), uEye.z / h * Math.cos(cl));
+      const el = Math.atan2(uEye.y, Math.hypot(uEye.x, uEye.z)), cl = clamp(el, FP_PITCH[0], FP_PITCH[1]), h = Math.hypot(uEye.x, uEye.z) || 1;
+      if (cl !== el) uEye.set(uEye.x / h * Math.cos(cl), Math.sin(cl), uEye.z / h * Math.cos(cl));
+      // (a volley lofted over the area aims up through the eyes too: the whole bow tipped up about the eyes, as the bow arm
+      // raises it, so the fist keeps its turn on the forearm)
+      fpLob = damp(fpLob, smooth(clamp((pitch - 0.2) / 0.25, 0, 1)), FP_LOB_EASE, dtNow);
+      const lobQ = _qt.setFromAxisAngle(_rx.set(1, 0, 0), fpLob * FP_LOB);
+      uEye.applyQuaternion(lobQ);
       dirFromEyes(root, uEye, _a);
-      frame(_a, lerp(FP_CANT, FLAT, fanK), line.q, eyeUp); _y.set(0, 1, 0).applyQuaternion(line.q);
-      _e.lerpVectors(FP_GRIP, FP_FAN, fanK).addScaledVector(FP_LOB_RISE, lobK);
+      const upL = dirFromEyes(root, _d.copy(EYE_UP).applyQuaternion(lobQ), new THREE.Vector3());
+      frame(_a, lerp(FP_CANT, FLAT, fanK), line.q, upL); _y.set(0, 1, 0).applyQuaternion(line.q);
+      _e.lerpVectors(FP_GRIP, FP_FAN, fanK).applyQuaternion(lobQ);
       fromEyes(root, j.neck, _e, line.p);
       anchorW.copy(line.p).addScaledVector(_y, restY * s).addScaledVector(_a, -D);
       // (and the rest of the pose, the draw elbow's way round included, along the line as it's posed: along the shot's own,
