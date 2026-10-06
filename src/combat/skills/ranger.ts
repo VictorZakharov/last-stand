@@ -23,9 +23,9 @@ import type { Player } from '../../entities/player';
 import type { InstantSkill, Needs } from './types';
 
 export const GRAVITY = 9.81;
-/** a shot crosses its target this high off the ground (a man-sized foe's chest), aimed as though it were no nearer than
- *  NEAR, and no steeper than MAX_PITCH (out of the draw's reach it falls short) */
-const AIM_H = 1.1, NEAR = 5;
+/** a shot goes through the point aimed at, as though it were no nearer than NEAR (m), no steeper than MAX_PITCH (rad: out
+ *  of the draw's reach it falls short) and no further down than MIN_PITCH */
+const NEAR = 0.5, MIN_PITCH = -0.6;
 export const MAX_PITCH = 0.6;
 export const FWD = new THREE.Vector3(0, 0, 1);
 const _v = new THREE.Vector3(), _p = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _n = new THREE.Vector3();
@@ -51,12 +51,14 @@ export const streakGeo = (() => {
 const streakOf = (color: number, k: number, opacity = 1) => nearGlow(new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(k), vertexColors: true, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
 export const streakMat = streakOf(0xe6efc4, 2.2);
 
-/** The angle above level (the lower of the two arcs) that takes an arrow at `v` from `from` across `target` at AIM_H, or as
- *  high as `target.y` says when it's on something above the floor (a log: at a man's chest it flew over it). */
-export function launchPitch(from: THREE.Vector3, target: THREE.Vector3, v: number, range: number): number {
-  const d = clamp(Math.hypot(target.x - from.x, target.z - from.z), NEAR, range), h = groundHeight(target.x, target.z) + (target.y > 0 ? target.y : AIM_H) - from.y;
+/** The angle above level (the lower of the two arcs) that takes an arrow at `v` from `from` through `target`, the point
+ *  aimed at (`y` its height over the floor under it): the floor, a log, a foe's head, whatever was under the aim (aimed at
+ *  a man's chest over the floor, a log was shot over and a shot at the floor flew on). No steeper than MAX_PITCH (out of
+ *  the draw's reach it falls short) and no further down than MIN_PITCH (the pose's reach). */
+export function launchPitch(from: THREE.Vector3, target: THREE.Vector3, v: number): number {
+  const d = Math.max(NEAR, Math.hypot(target.x - from.x, target.z - from.z)), h = groundHeight(target.x, target.z) + target.y - from.y;
   const v2 = v * v, disc = v2 * v2 - GRAVITY * (GRAVITY * d * d + 2 * h * v2);
-  return disc < 0 ? MAX_PITCH : Math.min(MAX_PITCH, Math.atan((v2 - Math.sqrt(disc)) / (GRAVITY * d)));
+  return disc < 0 ? MAX_PITCH : clamp(Math.atan((v2 - Math.sqrt(disc)) / (GRAVITY * d)), MIN_PITCH, MAX_PITCH);
 }
 
 /** An arrow coming down at `tip` going `dir` at `vel`: into the ground, or off it if it's stone. */
@@ -154,7 +156,7 @@ function entry(px: number, pz: number, dx: number, dz: number, cx: number, cz: n
  * goes on through them) a foe. Returns its points and where it strikes (null if it only runs out).
  */
 function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius: number, level: boolean, pierce: boolean): { pts: THREE.Vector3[]; end: THREE.Vector3 | null } {
-  const pts = [origin.clone()], pos = _a.copy(origin), vel = _w.copy(dir).multiplyScalar(v);
+  const pts = [origin.clone()], pos = _a.copy(origin), vel = _w.copy(dir).multiplyScalar(v), passed = new Set<Obstacle>();
   while (pts.length < LASER_POINTS) {
     // (in the projectile's order: it moves, then falls, as `fly` follows its move)
     const px = pos.x, py = pos.y, pz = pos.z;
@@ -175,9 +177,13 @@ function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius
     if (w >= 0) t = Math.min(t, w);
     const low = pos.y - radius * 0.5;
     for (const o of G.arena.obstacles) {
-      if (o.h <= low) continue;
+      if (o.h <= low || passed.has(o)) continue;
       const k = entry(px, pz, dx, dz, o.x, o.z, o.r + radius * 0.5);
-      if (k >= 0 && k < t) t = k;
+      if (k < 0 || k >= t) continue;
+      // (as the arrow has it: past a prop whose line misses what it draws, a log's end, between a cluster's caps)
+      const c = Math.max(0, entry(px, pz, dx, dz, o.x, o.z, o.r));
+      if (!propSurface(o, _c.set(px + dx * c, py + (pos.y - py) * c, pz + dz * c), _e.copy(vel).normalize(), _wn)) { passed.add(o); continue; }
+      t = k;
     }
     if (!pierce) for (const en of G.enemies) {
       if (!en.alive || en.invulnerable) continue;
@@ -203,7 +209,7 @@ function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius
 function previewShot(player: Player, def: BowDef, k: number, radius: number, level: boolean, pierce: boolean): void {
   if (!player.local) return;
   const origin = player.castPoint, target = player.aim, v = arrowSpeed(def, Math.max(k, def.minDraw ?? 0));
-  const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v, def.range);
+  const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v);
   const paths = [];
   for (let i = 0; i < def.missiles; i++) paths.push(flightPath(origin, shotDir(yaw + (i - (def.missiles - 1) / 2) * def.spread, pitch), v, radius, level, pierce));
   showLaser(paths);
@@ -215,13 +221,13 @@ const GLINT = 0xf3dc9a;
 
 export const bowShot: InstantSkill = {
   anim: 'bow', warm: warmArrows,
-  pitch: (player, def, k, target) => launchPitch(player.castPoint, target, arrowSpeed(def as BowDef, k), def.range ?? 24),
+  pitch: (player, def, k, target) => launchPitch(player.castPoint, target, arrowSpeed(def as BowDef, k)),
   charging: (player, def, k) => previewShot(player, def as BowDef, k, 0.22, true, false),
   cast(player, rawDef, target, power) {
     const def = rawDef as BowDef, origin = player.castPoint, pull = pullAt(power), v = arrowSpeed(def, power);
     // (the string gives the arrow the energy the bow stored, which goes with the square of the draw: that is its blow)
     const damage = def.damage * pull * pull, knock = (def.knock ?? 0) * pull;
-    const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v, def.range);
+    const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v);
     for (let i = 0; i < def.missiles; i++) {
       const dir = shotDir(yaw + (i - (def.missiles - 1) / 2) * def.spread, pitch);
       const mesh = arrowMesh(); mesh.quaternion.setFromUnitVectors(FWD, dir);
@@ -274,7 +280,7 @@ export const piercingShot: InstantSkill = {
     const full = power >= FULL;
     drawnTo.delete(player);
     const damage = def.damage * pull * pull * (full ? 1 + (def.fullBonus ?? 0) : 1), knock = (def.knock ?? 0) * pull;
-    const dir = shotDir(player.shotHeading(origin, target), launchPitch(origin, target, v, def.range));
+    const dir = shotDir(player.shotHeading(origin, target), launchPitch(origin, target, v));
     const mesh = arrowMesh(); mesh.quaternion.setFromUnitVectors(FWD, dir);
     let through = 0;
     const pr = spawnProjectile({

@@ -257,13 +257,16 @@ function solid(o: THREE.Object3D): boolean {
 /** The nearest solid surface the ray meets on `root`'s rigid meshes (each on the joint it moves with). The skinned ones,
  *  which bend across the joints, are left out: a ray costs 1 to 9 ms against them, every vertex moved by its bones first,
  *  to the rigid ones' tenth of a millisecond. */
-function cast(root: THREE.Object3D): THREE.Intersection | null {
+function cast(root: THREE.Object3D, by: THREE.Raycaster = ray): THREE.Intersection | null {
   _hits.length = 0;
-  root.traverse((o) => { if (!(o as THREE.SkinnedMesh).isSkinnedMesh && solid(o)) (o as THREE.Mesh).raycast(ray, _hits); });
+  root.traverse((o) => { if (!(o as THREE.SkinnedMesh).isSkinnedMesh && solid(o)) (o as THREE.Mesh).raycast(by, _hits); });
   let best: THREE.Intersection | null = null;
   for (const h of _hits) if (!best || h.distance < best.distance) best = h;
   return best;
 }
+
+/** The nearest solid surface `by` meets on a body (`root`, its rigid meshes): the aim as it's drawn. */
+export const castSolid = (root: THREE.Object3D, by: THREE.Raycaster): THREE.Intersection | null => cast(root, by);
 
 /**
  * An arrow into a body (`root`, a foe's model): cast along `dir` from `from` (a point before it), it lodges where it
