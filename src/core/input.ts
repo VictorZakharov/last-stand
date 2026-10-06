@@ -77,6 +77,45 @@ function floorHit(r: THREE.Ray, out: THREE.Vector3): boolean {
   return false;
 }
 
+/**
+ * Where a ray first meets a prop (a log, a stump, a boulder: each an upright cylinder on the floor, its circle up to its
+ * height, side or top), as the distance along the ray, its point into `out`; Infinity if none. Aimed at over the floor,
+ * a log lower than a man's chest was shot over.
+ */
+function propHit(r: THREE.Ray, out: THREE.Vector3): number {
+  const o = r.origin, d = r.direction, a = d.x * d.x + d.z * d.z;
+  let best = Infinity;
+  for (const p of G.arena.obstacles) {
+    const base = groundHeight(p.x, p.z), top = base + p.h, fx = o.x - p.x, fz = o.z - p.z;
+    // (its side)
+    if (a > 1e-9) {
+      const b = 2 * (fx * d.x + fz * d.z), c = fx * fx + fz * fz - p.r * p.r, disc = b * b - 4 * a * c;
+      if (disc >= 0) {
+        const t = (-b - Math.sqrt(disc)) / (2 * a), y = o.y + d.y * t;
+        // (a little under its top: aimed at its edge, an arrow grazed a round log's top)
+        if (t > 0 && t < best && y >= base && y <= top) { best = t; out.set(o.x + d.x * t, Math.min(y, base + p.h * TOP_K), o.z + d.z * t); }
+      }
+    }
+    // (its top, from above)
+    if (d.y < -1e-6) {
+      const t = (top - o.y) / d.y, x = o.x + d.x * t - p.x, z = o.z + d.z * t - p.z;
+      // (seen from above, its middle: its top's circle is only its outline from above, the log under it round)
+      if (t > 0 && t < best && x * x + z * z <= p.r * p.r) { best = t; out.set(o.x + d.x * t, base + p.h * MID_K, o.z + d.z * t); }
+    }
+  }
+  return best;
+}
+const _prop = new THREE.Vector3();
+/** a prop met from above is aimed at this far up it, from the side no higher than TOP_K of it */
+const MID_K = 0.55, TOP_K = 0.8;
+/** The aim at a prop the ray meets before `t` along it: its point, with how high on it (above the floor) as `y`. */
+function aimProp(r: THREE.Ray, t: number): boolean {
+  const tp = propHit(r, _prop);
+  if (tp >= t) return false;
+  input.ground.set(_prop.x, _prop.y - groundHeight(_prop.x, _prop.z), _prop.z);
+  return true;
+}
+
 function keyName(e: KeyboardEvent): string {
   if (e.code.startsWith('Key')) return e.code.slice(3).toLowerCase();
   if (e.code.startsWith('Digit')) return e.code.slice(5);
@@ -134,12 +173,15 @@ export function updateInputRay(): void {
   if (input.centerAim) { aimAtCenter(); return; }
   ndc.set((input.mouse.x / window.innerWidth) * 2 - 1, -(input.mouse.y / window.innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, G.camera);
-  floorHit(ray.ray, input.ground);
+  const met = floorHit(ray.ray, input.ground);
+  aimProp(ray.ray, met ? ray.ray.origin.distanceTo(_floor.set(input.ground.x, groundHeight(input.ground.x, input.ground.z), input.ground.z)) : Infinity);
 }
+const _floor = new THREE.Vector3();
 
 /**
- * The crosshair's aim: the foe under it (at its feet, where ground-targeted skills land), else the
- * floor it points at, else a point ahead at aim range when it points above the floor.
+ * The crosshair's aim: the foe or the prop under it, whichever is nearer (a foe at its feet, where ground-targeted
+ * skills land; a prop where it's met, `y` how high on it), else the floor it points at, else a point ahead at aim range
+ * when it points above the floor.
  */
 function aimAtCenter(): void {
   ndc.set(0, 0);
@@ -157,6 +199,9 @@ function aimAtCenter(): void {
     best = t;
     input.ground.set(e.pos.x, 0, e.pos.z);
   }
+  // (a prop in front of the foe or the floor is what the crosshair is on; `best` is along the ray's flat length)
+  const len = Math.hypot(d.x, d.y, d.z);
+  if (aimProp(ray.ray, best < Infinity ? best * len : floorHit(ray.ray, hit) ? o.distanceTo(_floor.set(hit.x, groundHeight(hit.x, hit.z), hit.z)) : Infinity)) return;
   if (best < Infinity) return;
   const range = CAMERA.aimRange;
   if (d.y < -1e-4 && floorHit(ray.ray, hit) && Math.hypot(hit.x - o.x, hit.z - o.z) <= range) { input.ground.copy(hit); return; }

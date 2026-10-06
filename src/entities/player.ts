@@ -59,7 +59,7 @@ export interface DashOpts { lift?: number; anim?: CastAnim; hold?: number; step?
 /** What the local player does that the other players' games replay (see net/session). */
 export type PlayerAction =
   | { t: 'cast'; s: string; dur: number; x: number; z: number; /** a drawn shot: `dur` is its time to full draw */ h?: 1; /** a bow's arrow taken from the quiver first: its seconds (`CastState.nockT`) */ n?: number }
-  | { t: 'fire'; s: string; x: number; z: number; px: number; pz: number; f: number; /** how far a drawn shot was drawn */ k?: number }
+  | { t: 'fire'; s: string; x: number; z: number; px: number; pz: number; f: number; /** how far a drawn shot was drawn */ k?: number; /** how high the aim was on a prop */ y?: number }
   | { t: 'chs'; s: string; k: SkillKey }
   | { t: 'che' };
 let actionSink: ((a: PlayerAction) => void) | null = null;
@@ -424,7 +424,7 @@ export class Player {
       this.energy -= s.def.cost;
       this.cooldowns.set(s.def.impl, this.cooldownOf(s.def));
     }
-    if (this.local) actionSink?.({ t: 'fire', s: s.def.impl, x: target.x, z: target.z, px: this.pos.x, pz: this.pos.z, f: this.facing, ...(s.def.draw ? { k: power } : {}) });
+    if (this.local) actionSink?.({ t: 'fire', s: s.def.impl, x: target.x, z: target.z, px: this.pos.x, pz: this.pos.z, f: this.facing, ...(s.def.draw ? { k: power } : {}), ...(target.y > 0 ? { y: Math.round(target.y * 100) / 100 } : {}) });
     s.impl.cast(this, s.def, target, power);
   }
 
@@ -451,7 +451,7 @@ export class Player {
       this.facing = a.f;
       if (this.casting?.drawT && !this.casting.fired) this.loose(this.casting, a.k ?? 1);
       else if (this.casting) this.casting.fired = true;
-      this.fire(s, new THREE.Vector3(a.x, 0, a.z), a.k ?? 1);
+      this.fire(s, new THREE.Vector3(a.x, a.y ?? 0, a.z), a.k ?? 1);
     } else if (!this.channel) {
       this.channel = { skill: s, key: a.k, state: (s.impl as ChannelSkill).start(this, s.def), t: 0 };
     }

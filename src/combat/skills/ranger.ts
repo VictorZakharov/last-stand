@@ -14,7 +14,7 @@ import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import { arrowGeometry, ARROW, pullAt } from '../../entities/models/bow';
 import { showLaser, warmLaser, LASER_POINTS } from '../../fx/aimLaser';
-import { arrowMat, stickAt, stickIn, glance, floorIsStone, propIsStone, propSurface, dropAt, wallIsStone, warmStuck, SINK } from '../../fx/stuckArrows';
+import { arrowMat, stickAt, stickIn, glance, floorIsStone, propIsStone, propSurface, wallIsStone, warmStuck, SINK } from '../../fx/stuckArrows';
 import { pastWall } from '../../world/edge';
 import { clamp, rand } from '../../util';
 import type { Obstacle } from '../../types';
@@ -51,9 +51,10 @@ export const streakGeo = (() => {
 const streakOf = (color: number, k: number, opacity = 1) => nearGlow(new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(k), vertexColors: true, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
 export const streakMat = streakOf(0xe6efc4, 2.2);
 
-/** The angle above level (the lower of the two arcs) that takes an arrow at `v` from `from` across `target` at AIM_H. */
+/** The angle above level (the lower of the two arcs) that takes an arrow at `v` from `from` across `target` at AIM_H, or as
+ *  high as `target.y` says when it's on something above the floor (a log: at a man's chest it flew over it). */
 export function launchPitch(from: THREE.Vector3, target: THREE.Vector3, v: number, range: number): number {
-  const d = clamp(Math.hypot(target.x - from.x, target.z - from.z), NEAR, range), h = groundHeight(target.x, target.z) + AIM_H - from.y;
+  const d = clamp(Math.hypot(target.x - from.x, target.z - from.z), NEAR, range), h = groundHeight(target.x, target.z) + (target.y > 0 ? target.y : AIM_H) - from.y;
   const v2 = v * v, disc = v2 * v2 - GRAVITY * (GRAVITY * d * d + 2 * h * v2);
   return disc < 0 ? MAX_PITCH : Math.min(MAX_PITCH, Math.atan((v2 - Math.sqrt(disc)) / (GRAVITY * d)));
 }
@@ -65,14 +66,16 @@ export function intoGround(tip: THREE.Vector3, vel: THREE.Vector3): void {
   else stickAt(tip, _d.copy(vel).normalize(), SINK.ground);
 }
 
-/** An arrow into a prop at `at`, going `vel`: off it if it's stone, else into it (and down with it when it breaks). */
-export function intoProp(o: Obstacle, at: THREE.Vector3, vel: THREE.Vector3): void {
+/** An arrow into a prop met on its circle at `at`, going `vel`: off it if it's stone, else into it (and down with it when it
+ *  breaks), where it draws its surface. False if the arrow's line misses what it draws (past a log's end, between a
+ *  cluster's caps): it flies on (dropped there, it lay on the floor short of the log). */
+export function intoProp(o: Obstacle, at: THREE.Vector3, vel: THREE.Vector3): boolean {
   // (where it really meets the prop: met on its circle, an arrow went most of its length into a stump wider than that)
   const dir = _d.copy(vel).normalize(), hit = propSurface(o, at, dir, _n);
-  // (between a prop's pieces, where its circle has it but it draws nothing, the arrow drops: on the circle it hung in the air)
-  if (!hit) dropAt(at, dir);
-  else if (propIsStone(o)) glance(hit, vel, _n);
+  if (!hit) return false;
+  if (propIsStone(o)) glance(hit, vel, _n);
   else stickAt(hit, dir, SINK.prop, o);
+  return true;
 }
 
 /** An arrow into a foe, struck at `at` going `vel`: it lodges in the body where it meets it, riding it until the body
@@ -119,10 +122,10 @@ function fly(proj: Projectile, dt: number): void {
 }
 
 /** An arrow meeting a prop: where its point crossed into the prop's circle on the step from `from`. */
-function arrowProp(o: Obstacle, proj: Projectile, from: THREE.Vector3): void {
+function arrowProp(o: Obstacle, proj: Projectile, from: THREE.Vector3): boolean {
   const dx = proj.pos.x - from.x, dz = proj.pos.z - from.z;
   const t = Math.max(0, entry(from.x, from.z, dx, dz, o.x, o.z, o.r));
-  intoProp(o, _p.lerpVectors(from, proj.pos, t), proj.vel);
+  return intoProp(o, _p.lerpVectors(from, proj.pos, t), proj.vel);
 }
 
 /** An arrow's way off the bow: heading `yaw`, `pitch` above level. */

@@ -46,7 +46,7 @@ const FOLLOW = 3.5;
 /** a volley's arrow on its way up: a curve from the bow (leaving along the shot) to where it splits over the area */
 interface Rising { mesh: THREE.Mesh; p0: THREE.Vector3; c: THREE.Vector3; p1: THREE.Vector3; t: number }
 /** a shower's arrow: from the split (its point at `from`) straight down to `to`, `len` away, once its `wait` is up */
-interface Falling { from: THREE.Vector3; to: THREE.Vector3; dir: THREE.Vector3; len: number; wait: number; t: number }
+interface Falling { from: THREE.Vector3; to: THREE.Vector3; dir: THREE.Vector3; len: number; wait: number; t: number; /** props it fell past */ past?: Set<Obstacle> }
 /** a volley's shower: its arrows still coming down */
 interface Shower { arrows: Falling[] }
 
@@ -110,9 +110,9 @@ function split(s: RainState, at: THREE.Vector3): void {
 }
 
 /** The foe a falling arrow's point at `p` is coming down through: within STRIKE of its body and between its feet and its top. */
-/** The prop a falling arrow's point has come down into, if any. */
-function propAt(p: THREE.Vector3): Obstacle | null {
-  for (const o of G.arena.obstacles) if (p.y < o.h && (o.x - p.x) ** 2 + (o.z - p.z) ** 2 < o.r * o.r) return o;
+/** The prop a falling arrow's point has come down into, if any (not one it has fallen past: in its circle, beside what it draws). */
+function propAt(p: THREE.Vector3, past: Set<Obstacle> | undefined): Obstacle | null {
+  for (const o of G.arena.obstacles) if (p.y < o.h && !past?.has(o) && (o.x - p.x) ** 2 + (o.z - p.z) ** 2 < o.r * o.r) return o;
   return null;
 }
 
@@ -189,9 +189,9 @@ const skill: ChannelSkill<RainState> = {
               sh.arrows.splice(i, 1);
               continue;
             }
-            const prop = along < f.len ? propAt(_a) : null;
-            if (prop) {
-              intoProp(prop, _a, vel);
+            const prop = along < f.len ? propAt(_a, f.past) : null;
+            if (prop && !intoProp(prop, _a, vel)) (f.past ??= new Set()).add(prop);
+            else if (prop) {
               hurtPropsIn(player, _a.x, _a.z, 0.3, PROP_DAMAGE.bolt);
               if (Math.random() < 0.3) sfx.thud();
               sh.arrows.splice(i, 1);

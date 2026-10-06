@@ -232,14 +232,6 @@ export function stickAt(tip: THREE.Vector3, dir: THREE.Vector3, sink: number, pr
   add({ mode: 'fixed', p: at.clone().addScaledVector(dir, -ARROW / 2), q, tip: at, prop });
 }
 
-/** An arrow that meets nothing it can go into (between a prop's pieces, where its circle has it but it draws nothing):
- *  it drops where it is, its point at `at` going `dir`. */
-export function dropAt(at: THREE.Vector3, dir: THREE.Vector3): void {
-  const s = add({ mode: 'loose', p: at.clone().addScaledVector(dir, -ARROW / 2), q: new THREE.Quaternion().setFromUnitVectors(FWD, dir), tip: at.clone() });
-  s.v = dir.clone().multiplyScalar(0.5);
-  s.w = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize().multiplyScalar(rand(2, 5));
-}
-
 /** An arrow glancing off stone at `at`, which faces `normal`: it springs off with what's left of `vel` and tumbles down. */
 export function glance(at: THREE.Vector3, vel: THREE.Vector3, normal: THREE.Vector3): void {
   const vn = vel.dot(normal), e = restitution(GLANCE, GLANCE_V, vel.length());

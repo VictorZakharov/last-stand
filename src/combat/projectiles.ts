@@ -72,8 +72,9 @@ export interface ProjectileOpts {
   tick?(proj: Projectile, dt: number): void;
   onHit?(target: Enemy | Player, proj: Projectile): void;
   onExpire?(proj: Projectile): void;
-  /** it met a prop (`o`, coming from `from`): instead of fading out where it is (the prop still takes the blow) */
-  onProp?(o: Obstacle, proj: Projectile, from: THREE.Vector3): void;
+  /** it met a prop's circle (`o`, coming from `from`): instead of fading out where it is, it ends as this has it (true: the
+   *  prop takes the blow) or flies on past that prop (false: its circle is rounder than what it draws, and missed it) */
+  onProp?(o: Obstacle, proj: Projectile, from: THREE.Vector3): boolean;
   /** how far from the middle it's gone (m, 28 by default): an arrow meets the wall itself */
   edge?: number;
 }
@@ -100,6 +101,8 @@ export class Projectile {
   readonly size: number;
   readonly onExpire?: ProjectileOpts['onExpire'];
   readonly onProp?: ProjectileOpts['onProp'];
+  /** the props it has flown past (their circles, not what they draw) */
+  readonly passed = new Set<Obstacle>();
   readonly edge: number;
   readonly trail?: TrailOpts;
   readonly color: THREE.ColorRepresentation;
@@ -184,9 +187,13 @@ export class Projectile {
     // only what reaches up to the bolt: it flies over low cover
     const low = this.pos.y - this.radius * 0.5;
     for (const o of G.arena.obstacles) {
-      if (o.h > low && this.distanceSq(o.x, o.z, px, pz) < (o.r + this.radius * 0.5) ** 2) {
+      if (o.h > low && !this.passed.has(o) && this.distanceSq(o.x, o.z, px, pz) < (o.r + this.radius * 0.5) ** 2) {
+        if (this.onProp) {
+          if (!this.onProp(o, this, _from.set(px, py, pz))) { this.passed.add(o); continue; }
+          hurtProp(o, PROP_DAMAGE.bolt);
+          return this.kill();
+        }
         hurtProp(o, this.hostile ? PROP_DAMAGE.hostile : PROP_DAMAGE.bolt);
-        if (this.onProp) { this.onProp(o, this, _from.set(px, py, pz)); return this.kill(); }
         return this.expire();
       }
     }
