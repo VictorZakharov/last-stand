@@ -14,7 +14,7 @@ import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import { arrowGeometry, ARROW, pullAt } from '../../entities/models/bow';
 import { showLaser, warmLaser, LASER_POINTS } from '../../fx/aimLaser';
-import { arrowMat, stickAt, stickIn, glance, floorIsStone, propIsStone, wallIsStone, warmStuck, SINK } from '../../fx/stuckArrows';
+import { arrowMat, stickAt, stickIn, glance, floorIsStone, propIsStone, propSurface, dropAt, wallIsStone, warmStuck, SINK } from '../../fx/stuckArrows';
 import { pastWall } from '../../world/edge';
 import { clamp, rand } from '../../util';
 import type { Obstacle } from '../../types';
@@ -67,8 +67,12 @@ export function intoGround(tip: THREE.Vector3, vel: THREE.Vector3): void {
 
 /** An arrow into a prop at `at`, going `vel`: off it if it's stone, else into it (and down with it when it breaks). */
 export function intoProp(o: Obstacle, at: THREE.Vector3, vel: THREE.Vector3): void {
-  if (propIsStone(o)) glance(at, vel, _n.set(at.x - o.x, 0, at.z - o.z).normalize());
-  else stickAt(at, _d.copy(vel).normalize(), SINK.prop, o);
+  // (where it really meets the prop: met on its circle, an arrow went most of its length into a stump wider than that)
+  const dir = _d.copy(vel).normalize(), hit = propSurface(o, at, dir, _n);
+  // (between a prop's pieces, where its circle has it but it draws nothing, the arrow drops: on the circle it hung in the air)
+  if (!hit) dropAt(at, dir);
+  else if (propIsStone(o)) glance(hit, vel, _n);
+  else stickAt(hit, dir, SINK.prop, o);
 }
 
 /** An arrow into a foe, struck at `at` going `vel`: it lodges in the body where it meets it, riding it until the body

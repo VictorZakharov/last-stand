@@ -25,8 +25,14 @@ const NEAR = 6;
 /** how deep an arrow goes in: the ground, wood, a body (m) */
 export const SINK = { ground: 0.16, prop: 0.12, body: 0.1 };
 const GRAVITY = 9.81;
-/** a loose arrow's bounce off the floor (of its speed into it, and along it), its spin's loss, and the speed it lies still at */
-const BOUNCE_N = 0.22, BOUNCE_T = 0.55, SPIN_KEEP = 0.6, SETTLE_V = 1.2;
+/** an arrow glancing off stone keeps a share of its speed that grows with the speed (a slow one hardly hops, a fast one
+ *  skitters): GLANCE of it at GLANCE_V and over, and of that, along the stone all of it and off it GLANCE_UP of it */
+const GLANCE = 0.12, GLANCE_V = 60, GLANCE_UP = 0.3;
+/** a loose arrow's bounce off the floor, a prop or the wall: of its speed into it, BOUNCE at BOUNCE_V and over (less as it
+ *  slows), and along the floor FRICTION; its spin's loss, and the speed it lies still at */
+const BOUNCE = 0.3, BOUNCE_V = 6, FRICTION = 0.5, SPIN_KEEP = 0.6, SETTLE_V = 0.8;
+/** the share of `speed` a bounce gives back, `k` at `full` and over, less in proportion below */
+const restitution = (k: number, full: number, speed: number): number => k * Math.min(1, speed / full);
 /** a lying arrow's middle above the floor (its shaft's radius and the vanes holding it up a little) */
 const LIE_H = 0.012;
 const FWD = new THREE.Vector3(0, 0, 1);
@@ -58,6 +64,8 @@ const order: Spent[] = [];
 const moving = new Set<Spent>();
 const _m = new THREE.Matrix4(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _d = new THREE.Vector3(), _n = new THREE.Vector3();
 const ONE = new THREE.Vector3(1, 1, 1);
+/** how far either way along an arrow's line a prop's surface is looked for from where it met the prop's circle (m) */
+const PROP_REACH = 1.5;
 const total = (): number => lists[0].length + lists[1].length;
 
 /** every arrow's material, in flight and spent (double-sided: an arrow's feathers are single sheets) */
@@ -192,14 +200,14 @@ function fall(s: Spent, dt: number): void {
     if (d >= o.r || d < 1e-6) continue;
     const nx = dx / d, nz = dz / d, vn = v.x * nx + v.z * nz;
     s.p.x = o.x + nx * o.r; s.p.z = o.z + nz * o.r;
-    if (vn < 0) { v.x -= (1 + BOUNCE_N) * vn * nx; v.z -= (1 + BOUNCE_N) * vn * nz; }
+    if (vn < 0) { const e = restitution(BOUNCE, BOUNCE_V, -vn); v.x -= (1 + e) * vn * nx; v.z -= (1 + e) * vn * nz; }
   }
   // (and off the wall, a gate's opening too: what falls stays in the arena)
   const wall = pastWall(G.arena.biome, s.p.x, s.p.z, _n);
   if (wall.by > -0.1) {
     s.p.addScaledVector(_n, wall.by + 0.1);
     const vn = v.dot(_n);
-    if (vn < 0) v.addScaledVector(_n, -(1 + BOUNCE_N) * vn);
+    if (vn < 0) v.addScaledVector(_n, -(1 + restitution(BOUNCE, BOUNCE_V, -vn)) * vn);
   }
   const g = groundHeight(s.p.x, s.p.z) + LIE_H;
   if (s.p.y > g) return;
@@ -214,7 +222,7 @@ function fall(s: Spent, dt: number): void {
     moving.delete(s);
     return;
   }
-  v.y = -v.y * BOUNCE_N; v.x *= BOUNCE_T; v.z *= BOUNCE_T;
+  v.y = -v.y * restitution(BOUNCE, BOUNCE_V, -v.y); v.x *= FRICTION; v.z *= FRICTION;
   w.multiplyScalar(SPIN_KEEP);
 }
 
@@ -224,10 +232,18 @@ export function stickAt(tip: THREE.Vector3, dir: THREE.Vector3, sink: number, pr
   add({ mode: 'fixed', p: at.clone().addScaledVector(dir, -ARROW / 2), q, tip: at, prop });
 }
 
+/** An arrow that meets nothing it can go into (between a prop's pieces, where its circle has it but it draws nothing):
+ *  it drops where it is, its point at `at` going `dir`. */
+export function dropAt(at: THREE.Vector3, dir: THREE.Vector3): void {
+  const s = add({ mode: 'loose', p: at.clone().addScaledVector(dir, -ARROW / 2), q: new THREE.Quaternion().setFromUnitVectors(FWD, dir), tip: at.clone() });
+  s.v = dir.clone().multiplyScalar(0.5);
+  s.w = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize().multiplyScalar(rand(2, 5));
+}
+
 /** An arrow glancing off stone at `at`, which faces `normal`: it springs off with what's left of `vel` and tumbles down. */
 export function glance(at: THREE.Vector3, vel: THREE.Vector3, normal: THREE.Vector3): void {
-  const vn = vel.dot(normal);
-  const v = vel.clone().addScaledVector(normal, -vn).multiplyScalar(BOUNCE_T * 0.5).addScaledVector(normal, Math.abs(vn) * BOUNCE_N);
+  const vn = vel.dot(normal), e = restitution(GLANCE, GLANCE_V, vel.length());
+  const v = vel.clone().addScaledVector(normal, -vn).multiplyScalar(e).addScaledVector(normal, Math.abs(vn) * e * GLANCE_UP);
   // (scattered a little: stone isn't flat)
   v.x += rand(-1, 1) * 0.15 * v.length(); v.z += rand(-1, 1) * 0.15 * v.length();
   const dir = vel.clone().normalize();
@@ -273,6 +289,25 @@ export function stickIn(root: THREE.Object3D, from: THREE.Vector3, dir: THREE.Ve
   const local = new THREE.Matrix4().copy(on.matrixWorld).invert().multiply(_m.compose(p, q, ONE));
   add({ mode: 'body', p, q, tip, on, local, gone });
   return true;
+}
+
+/**
+ * Where an arrow meeting a prop at `at` (on its rough circle) going `dir` really meets it: the first surface of what the
+ * prop draws along the arrow's line through `at`, and the face's normal there (into `normal`). Null if the line misses
+ * what it draws (the circle is rounder than the prop): it's met where the circle has it.
+ */
+export function propSurface(o: Obstacle, at: THREE.Vector3, dir: THREE.Vector3, normal: THREE.Vector3): THREE.Vector3 | null {
+  if (!o.prop) return null;
+  ray.set(_p.copy(at).addScaledVector(dir, -PROP_REACH), dir); ray.far = PROP_REACH * 2;
+  _hits.length = 0;
+  o.prop.raycast(ray, _hits);
+  let best: THREE.Intersection | null = null;
+  for (const h of _hits) if (!best || h.distance < best.distance) best = h;
+  if (!best) return null;
+  if (best.face) normal.copy(best.face.normal).transformDirection(best.object.matrixWorld); else normal.copy(dir).negate();
+  // (a face seen from behind, a double-sided card: turned to face the arrow)
+  if (normal.dot(dir) > 0) normal.negate();
+  return best.point.clone();
 }
 
 /** What the floor is made of under a point: the dais is stone, the rest is the biome's. */
