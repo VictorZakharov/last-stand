@@ -3,6 +3,7 @@
 //   ws(s)://host/room/<app>/<code>?id=<peer id>   a game joins a room (the app id keeps protocol versions apart)
 //   game -> relay  { ch, d, to? }                 a message for every other peer, or one
 //   relay -> game  { t: 'hi', self, peers } on joining, { t: 'join', p }, { t: 'leave', p }, { ch, d, from }
+//   game <-> relay { t: 'ping', n } / { t: 'pong', n } the game's round trip
 //   GET /health                                   200 "ok"
 // A peer whose socket drops and comes back with the same id within GRACE is the same peer: the others never see it go.
 import { createServer } from 'node:http';
@@ -64,6 +65,8 @@ function enter(ws, key, id) {
     if (binary || bucket.msgs < 0 || bucket.bytes < 0) return;
     let m;
     try { m = JSON.parse(raw.toString()); } catch { return; }
+    // (the game's own ping, answered straight back for its round trip)
+    if (m?.t === 'ping') { ws.send(JSON.stringify({ t: 'pong', n: m.n })); return; }
     if (typeof m?.ch !== 'string') return;
     const out = JSON.stringify({ ch: m.ch, d: m.d, from: id });
     if (typeof m.to === 'string') { const p = peers.get(m.to); if (p) send(p, out); } else others(key, id, out);

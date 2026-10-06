@@ -1,9 +1,8 @@
-// Optional network overlay (pause menu, persisted in a cookie): the room, each relay and each
-// partner's link as it stands, and the network report (net/netlog) to copy or share when a
-// partner can't connect. The co-op dialog offers the report too.
+// Optional network overlay (pause menu, persisted in a cookie): the room, the link to the relay server and the
+// partners as they stand, and the network report (net/netlog) to copy or share when a partner can't connect. The co-op
+// dialog offers the report too.
 import { readCookie, writeCookie } from '../core/cookies';
-import { netReport, netSummary, testRelays } from '../net/netlog';
-import { usesRelays } from '../net/transport';
+import { netReport, netSummary } from '../net/netlog';
 import { session } from '../net/session';
 import { role } from '../net/role';
 
@@ -24,7 +23,7 @@ export function initNetHud(): void {
   el = document.querySelector<HTMLElement>('#net')!;
   // the buttons stay put while the rest redraws, so what they say after a click is seen
   el.innerHTML = `<div class="nt-body"></div>
-    <div class="nt-acts"><button class="link" data-net="copy">Copy log</button>${canShare() ? '<button class="link" data-net="share">Send log</button>' : ''}${usesRelays() ? '<button class="link" data-net="test">Test relays</button>' : ''}</div>`;
+    <div class="nt-acts"><button class="link" data-net="copy">Copy log</button>${canShare() ? '<button class="link" data-net="share">Send log</button>' : ''}</div>`;
   body = el.querySelector<HTMLElement>('.nt-body')!;
   bindReportLinks(el);
   setNetHud(readCookie(COOKIE) === '1', false);
@@ -40,19 +39,18 @@ export function setNetHud(on: boolean, persist = true): void {
   if (persist) writeCookie(COOKIE, on ? '1' : '0');
 }
 
-const STATE_CLASS: Record<string, string> = { refusing: 'bad', 'failed test': 'bad', open: 'ok', connected: 'ok', connecting: 'wait', checking: 'wait', new: 'wait', closed: 'bad', failed: 'bad', disconnected: 'bad', 'not opened': 'bad' };
+const STATE_CLASS: Record<string, string> = { open: 'ok', connecting: 'wait', closed: 'bad' };
 
 function draw(): void {
   const s = netSummary();
-  const open = s.relays.filter((r) => r.state === 'open').length;
   const room = session.status === 'off' ? 'No room' : `Room <b>${esc(session.code)}</b> · ${esc(session.status)}`;
+  const sv = s.server, peers = [...session.peers.values()];
   body.innerHTML = `
     <div class="nt-head">${room}</div>
-    <div class="nt-sec">Relays ${s.relays.length ? `<b>${open}</b>/${s.relays.length} open` : '–'}</div>
-    <ul class="nt-relays">${s.relays.map((r) => `<li class="${STATE_CLASS[r.state] ?? ''}" title="${esc(r.state + (r.note ? ' | ' + r.note : ''))}">${esc(r.name)}</li>`).join('')}</ul>
-    ${s.clock !== null && Math.abs(s.clock) > 2 ? `<div class="nt-warn">Clock ${s.clock > 0 ? '+' : ''}${s.clock.toFixed(0)} s off</div>` : ''}${s.testing ? '<div class="nt-sub">Testing the relays…</div>' : ''}
-    <div class="nt-sec">Links</div>
-    <ul class="nt-links">${s.conns.length ? s.conns.map((c) => `<li class="${STATE_CLASS[c.state] ?? ''}"><b>${esc(c.name)}</b> ${esc(c.state)}${c.rtt !== null ? ` · ${c.rtt.toFixed(0)} ms` : ''}${c.path ? `<small>${esc(c.path)}</small>` : ''}</li>`).join('') : '<li>none yet</li>'}</ul>
+    <div class="nt-sec">Server</div>
+    <ul class="nt-links">${sv ? `<li class="${STATE_CLASS[sv.state] ?? ''}"><b>${esc(sv.host)}</b> ${esc(sv.state)}${sv.rtt !== null ? ` · ${sv.rtt.toFixed(0)} ms` : ''}${sv.dropped ? `<small>dropped ${sv.dropped}x</small>` : ''}</li>` : '<li>–</li>'}</ul>
+    <div class="nt-sec">Partners</div>
+    <ul class="nt-links">${peers.length ? peers.map((p) => `<li class="ok"><b>${esc(p.id.slice(0, 6))}</b> slot ${p.slot}${p.inRun ? ' · in run' : ''}</li>`).join('') : '<li>none yet</li>'}</ul>
     <div class="nt-sub">Messages in ${s.msgs.in} · out ${s.msgs.out}</div>`;
 }
 
@@ -91,6 +89,6 @@ export const reportLinks = (): string =>
 
 export function bindReportLinks(root: HTMLElement): void {
   root.querySelectorAll<HTMLElement>('[data-net]').forEach((b) => {
-    b.onclick = () => { if (b.dataset.net === 'test') void testRelays(); else void sendReport(b.dataset.net as 'copy' | 'share', b); };
+    b.onclick = () => void sendReport(b.dataset.net as 'copy' | 'share', b);
   });
 }
