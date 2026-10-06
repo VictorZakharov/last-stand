@@ -22,7 +22,9 @@ const rooms = new Map();
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
 const http = createServer((req, res) => {
-  if (req.url === '/health') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('ok'); return; }
+  // (readable by our pages, which check it before opening a room)
+  const origin = req.headers.origin ?? '';
+  if (req.url === '/health') { res.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store', ...(ORIGINS.has(origin) ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {}) }); res.end('ok'); return; }
   res.writeHead(404); res.end();
 });
 const wss = new WebSocketServer({ noServer: true, maxPayload: MSG_MAX });

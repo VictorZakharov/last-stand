@@ -7,7 +7,7 @@ import { COOP } from '../data/balance';
 import { CLASSES } from '../data/classes/index';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { Player, setActionSink, type PlayerAction } from '../entities/player';
-import { openLink, type Link } from './transport';
+import { openLink, ServerDown, SERVER_DOWN, type Link } from './transport';
 import { netLog } from './netlog';
 import { role } from './role';
 import { showBiomeSetting } from '../game/biome';
@@ -101,7 +101,8 @@ export async function hostRoom(): Promise<void> {
   try {
     link = await openLink(session.code);
   } catch (e) {
-    fail(`Couldn't open a room (${(e as Error).message})`);
+    netLog((e as Error).message);
+    fail(e instanceof ServerDown ? SERVER_DOWN : `Couldn't open a room (${(e as Error).message})`);
     return;
   }
   wire(link);
@@ -118,7 +119,8 @@ export async function joinRoom(code: string): Promise<void> {
   try {
     link = await openLink(session.code);
   } catch (e) {
-    fail(`Couldn't reach the room (${(e as Error).message})`);
+    netLog((e as Error).message);
+    fail(e instanceof ServerDown ? SERVER_DOWN : `Couldn't reach the room (${(e as Error).message})`);
     return;
   }
   wire(link);
