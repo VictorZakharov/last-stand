@@ -25,6 +25,8 @@ spec:
         - service: relay
           port: 8080
           host: ls.wellscoped.dev
+          entryPoint: websecure
+          certificateResolver: letsencrypt
           healthProbePath: /health
       deploymentPolicy:
         requireManualApproval: false
