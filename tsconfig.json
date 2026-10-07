@@ -16,5 +16,5 @@
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "vite.config.ts", "scripts/pwa.ts"]
+  "include": ["src", "vite.config.ts", "scripts/pwa.ts", "tools/lab/page", "tools/lab/examples"]
 }

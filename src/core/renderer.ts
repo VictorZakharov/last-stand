@@ -310,6 +310,13 @@ export const viewSettled = (): boolean => rig.blend >= 1;
 /** Camera yaw in radians: screen-up is world (-sin, -cos) on XZ. */
 export const cameraYaw = (): number => rig.yaw;
 
+/** The camera rig as it is, and a function that puts it back: tools/lab pictures the game from its other views and
+ *  leaves the game's own as it found it (the aim follows the camera). */
+export function saveCamera(): () => void {
+  const saved = { ...rig }, focus = rig.focus.clone(), fromPos = rig.fromPos.clone(), fromQuat = rig.fromQuat.clone();
+  return () => { Object.assign(rig, saved); rig.focus.copy(focus); rig.fromPos.copy(fromPos); rig.fromQuat.copy(fromQuat); };
+}
+
 /** Screen px to move the view by, so the character stays in sight beside (x) or below (y) a lobby panel. */
 const shift = { x: 0, y: 0, tx: 0, ty: 0 };
 export function setViewShift(x: number, y: number): void { shift.tx = x; shift.ty = y; }

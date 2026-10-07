@@ -28,6 +28,9 @@ export default defineConfig({
   base: './',              // relative asset paths so dist/ works on any static host (e.g. GitHub Pages)
   plugins: [ezTreeTextures(), pwa()],
   resolve: { alias: { 'ez-tree': EZ_TREE + 'index.js' } },
+  // (served from its source as it is, not pre-bundled: the dev server's pre-bundling is esbuild's and never meets the
+  // stub above, so every dev boot fetched and decoded all of ez-tree's pictures)
+  optimizeDeps: { exclude: ['ez-tree'] },
   define: { __BUILD__: JSON.stringify(buildInfo()) },       // app icons + offline service worker
   build: {
     chunkSizeWarningLimit: 1200,

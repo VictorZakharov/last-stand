@@ -12,10 +12,11 @@
 //   fits the face's shape to it (see the README).
 //
 // It starts its own Vite dev server (a fresh one each run: a long-running one serves stale modules after edits)
-// and a headless browser (the Playwright Chromium if installed, else Edge or Chrome). Output goes to
-// tools/facelab/out/<tag>/: ours.png, the passes the comparison reads, the zoomed sheets and report.txt.
+// and the lab's headless browser (tools/lab/node/browser.mjs: Chromium in its native headless mode, no console
+// window, its profile under tools/facelab/out). Output goes to tools/facelab/out/<tag>/: ours.png, the passes the
+// comparison reads, the zoomed sheets and report.txt.
 import { createServer } from 'vite';
-import { chromium } from 'playwright-core';
+import { launchBrowser, useLocalTemp } from '../lab/node/browser.mjs';
 import { spawnSync } from 'child_process';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync } from 'fs';
 import { dirname, join, resolve } from 'path';
@@ -86,18 +87,11 @@ const NO_CAPTURE = () => {
   if (navigator.keyboard) Object.defineProperty(navigator.keyboard, 'lock', { value: no, configurable: false });
 };
 
-async function browser() {
-  const args = ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'];
-  for (const channel of [undefined, 'msedge', 'chrome']) {
-    try { return await chromium.launch({ headless: true, channel, args }); } catch { /* the next one */ }
-  }
-  throw new Error('facelab: no browser (install one: npx playwright install chromium)');
-}
-
 const server = await createServer({ root: ROOT, logLevel: 'error', server: { port: 5198, strictPort: false } });
 await server.listen();
 const url = server.resolvedUrls.local[0];
-const b = await browser();
+useLocalTemp(join(HERE, 'out'));
+const b = await launchBrowser();
 try {
   const ctx = await b.newContext({ viewport: { width: SIZE, height: SIZE }, deviceScaleFactor: 1 });
   await ctx.addInitScript(NO_CAPTURE);

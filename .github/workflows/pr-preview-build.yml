@@ -43,6 +43,10 @@ jobs:
         if: github.event.action != 'closed'
         run: npm ci
 
+      - name: Test the lab's own code
+        if: github.event.action != 'closed'
+        run: npm run lab:test
+
       - name: Type-check and build preview
         if: github.event.action != 'closed'
         env:

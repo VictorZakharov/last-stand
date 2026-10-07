@@ -8,4 +8,8 @@ tools/facelab/.venv/
 tools/facelab/out/
 tools/facelab/__pycache__/
 tools/facelab/models/
+
+# the lab (tools/lab): what it writes, the exported commits it compares with, its browser profile
+tools/lab/out/
+
 server/relay/node_modules/
