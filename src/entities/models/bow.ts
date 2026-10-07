@@ -270,6 +270,9 @@ export class Bow {
   readonly nock = new THREE.Vector3();
   readonly tipU = new THREE.Vector3();
   readonly tipL = new THREE.Vector3();
+  /** points along the lower limb's middle as last set, from its root to its tip (the bow's frame): what the coat's skirt
+   *  lies behind */
+  readonly lowerLimb = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
   /** the limbs' added bend as last set (rad/m) */
   bend = 0;
   private readonly line = new Float64Array(SEG * 2 + 2);
@@ -293,7 +296,7 @@ export class Bow {
   constructor(m: BowMaterials) {
     const g = this.group;
     g.name = 'bow';
-    limbLine(0, this.line);
+    this.tips(0);
     this.brace = -this.line[SEG * 2 + 1];
     this.stringLen = 2 * Math.hypot(this.line[SEG * 2], 0);
     // the riser: the grip in the hand, the shelf the arrow lies on, the window cut past the middle (the arrow passes at x 0,
@@ -399,6 +402,7 @@ export class Bow {
     limbLine(bend, this.line);
     this.tipU.set(0, this.line[SEG * 2], this.line[SEG * 2 + 1]);
     this.tipL.set(0, -this.tipU.y, this.tipU.z);
+    for (let k = 0; k < 3; k++) { const i = (k * SEG) >> 1; this.lowerLimb[k].set(0, -this.line[i * 2], this.line[i * 2 + 1]); }
   }
 
   /**

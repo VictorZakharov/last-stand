@@ -11,7 +11,7 @@ import { createKit } from '../../core/materials';
 import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, bowWood as bowWoodMaps, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
-import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, lod } from './armor';
+import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, lod } from './armor';
 import { onTunic, tunicFront, tunicBack, tunicCut, setInSleeve, armholeEdge, ARMHOLE, WAIST } from './tunic';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM, type Head } from './head';
 import { EYE } from './face';
@@ -64,12 +64,19 @@ const CANT = -0.06, FLAT = -Math.PI / 2;
 /** how far out from the face the fan's anchor is (m): its string lies across the face, its near half in front of the jaw
  *  and the beard (1.5 cm out, it went 5 cm into them) */
 const FAN_OUT = 0.04;
-/** carried at the side, the elbow bent `CARRY_BEND`: the bow's top tipped forward of the line up the forearm, as a hanging
- *  fist holds a grip (across the palm it lies square to the forearm; upright, the wrist bent 64 degrees towards the
- *  thumb, three times its range), and out (rad), clear of the arm and the leg */
-const CARRY_TILT = 1.1, CARRY_OUT = 0.17, CARRY_BEND = 0.5;
-/** how far out to the side the bow swings between the carry and the shot (m) */
-const CARRY_SWING = 0.16;
+/** carried in a neutral carry: the arm hanging straight down (out from the side `CARRY_RAISE`, the elbow bent `CARRY_BEND`),
+ *  the bow level in the fist, its top limb forward (`CARRY_TOP`, the hero's frame), the grip square to the forearm as a
+ *  hanging fist holds it, and the nocked arrow pointing down at the ground beside the foot, a little out and forward
+ *  (`CARRY_ARROW`): the string inside the forearm, so the bow arm's elbow is on the side of the bow it's on at the shot.
+ *  Its frame is the standing one; it swings with the forearm from `CARRY_REST`, how far that hangs forward at rest, by
+ *  `CARRY_FOLLOW` of its swing, the wrist keeping it near level as the arm swings in a walk (all of it: upright at each step). (Held
+ *  upright beside the leg with the elbow bent, the arm tired as a real one would; with the string outside the forearm, the
+ *  elbow crossed the bow's plane on its way to the shot and the forearm went through the string, 12 cm into the bracer on
+ *  three frames of every draw; and held out from the side with the arrow sticking out sideways it looked nothing like a
+ *  carry) */
+const CARRY_ARROW = V(0.36, -0.9, 0.25).normalize(), CARRY_TOP = V(0, 0, 1), CARRY_REST = 0.22, CARRY_FOLLOW = 0.35, CARRY_RAISE = 0.12, CARRY_BEND = 0.08;
+/** how far out to the side the bow swings between the carry and the shot (m), and how far it turns about its length on the way (rad) */
+const CARRY_SWING = 0.16, CARRY_SWING_TURN = 0.5;
 /** the share of the draw, from when the hand has the string, over which the bow comes up onto the line (so a tap's is on it) */
 const RAISE = 0.35;
 /** after the release (0..1 of what follows it): the follow-through ends (a quick recoil), the next arrow is nocked; the
@@ -514,6 +521,24 @@ export function buildRanger(): Model {
   S.build();
   // the bow, in the left hand; the arrow the right hand carries from the quiver to the string
   const bow = new Bow({ riser: riserWood, limb: limbWood, grip: hide, string: cord, arrow: fletched, horn, brass: bowBrass, serving, yarn, inlay });
+  // (the carried bow's frame in the hero's, standing: its arrow along CARRY_ARROW, its top limb CARRY_TOP made square to it)
+  const carryTop = CARRY_TOP.clone().addScaledVector(CARRY_ARROW, -CARRY_TOP.dot(CARRY_ARROW)).normalize();
+  const carryQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(V(0, 0, 0).crossVectors(carryTop, CARRY_ARROW), carryTop, CARRY_ARROW));
+  // what the coat's skirt is draped over, in its own space: the trousers' thighs and the boots' shafts from inside, the hands,
+  // the forearms' cuffs and the bow's string and lower limb from outside, with the cloth's gap (swung by the thighs alone, it
+  // let the carried bow's string through its front over the stepping thigh at every stride, and the nock into it as the bow
+  // came in before the chest)
+  const legBodies = new SkirtLimbs(), handBodies = new SkirtLimbs(), bowBodies = new SkirtLimbs(), GAP = 0.018, HAND_GAP = 0.012, O = () => new THREE.Vector3();
+  for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
+    legBodies.add([th, O()], [kn, O()], 0.09 + GAP, 0.084 + GAP);
+    legBodies.add([kn, O()], [an, O()], 0.085 + GAP, 0.06 + GAP);
+  }
+  for (const hd of [j.handL, j.handR]) handBodies.add([hd, O()], [hd, new THREE.Vector3(0, -0.09, 0)], 0.045 + HAND_GAP);
+  for (const [el, hd] of [[j.elbowL, j.handL], [j.elbowR, j.handR]] as const) handBodies.add([el, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], [hd, O()], 0.06 + HAND_GAP, 0.05 + HAND_GAP);
+  for (const tip of [bow.tipL, bow.tipU]) bowBodies.add([bow.group, bow.nock], [bow.group, tip], 0.006 + HAND_GAP);
+  bowBodies.add([bow.group, bow.lowerLimb[0]], [bow.group, bow.lowerLimb[1]], 0.02 + HAND_GAP, 0.016 + HAND_GAP);
+  bowBodies.add([bow.group, bow.lowerLimb[1]], [bow.group, bow.lowerLimb[2]], 0.016 + HAND_GAP, 0.01 + HAND_GAP);
+  const outside = [...handBodies.list, ...bowBodies.list];
   j.handL.add(bow.group);
   // (in pieces: only what's out of the quiver shows as it's drawn out, the rest still in it; drawn whole, an arrow as long
   // as the draw pivoting at the quiver's mouth swung its head out through the quiver's side into the hips). As many as a
@@ -754,7 +779,7 @@ export function buildRanger(): Model {
     }
     free = damp(free, gesture || drinking ? 1 : 0, 14, dt);
     // carrying the bow: the arm a little out from the side and the elbow a little bent (the walk swings it)
-    j.shoulderL.rotation.z += 0.2; j.elbowL.rotation.x -= CARRY_BEND;
+    j.shoulderL.rotation.z += CARRY_RAISE; j.elbowL.rotation.x -= CARRY_BEND;
     hook(handR, 0, 0);
     const drinkOut = drinking ? drink(drinkRig, a.t, mouth, DRINK) : 0;
     flaskOut = damp(flaskOut, drinkOut, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
@@ -768,9 +793,8 @@ export function buildRanger(): Model {
       legs.update(dt, st.phase, st.dead, 1, fp ? 0 : 1); groundFeet(j, 0.07);
       if (!fp) legs.holdArms();
     }
-    tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt);
     root.updateMatrixWorld(true);
-    if (st.dead >= 0) { bendShoulders(); return; }
+    if (st.dead >= 0) { tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt); bendShoulders(); return; }
 
     // the arrow's line: the heading the shot flies and its angle above level
     const facing = Math.atan2(_a.set(0, 0, 1).transformDirection(root.matrixWorld).x, _a.z);
@@ -842,7 +866,7 @@ export function buildRanger(): Model {
     root.getWorldQuaternion(_q3);
     _a.copy(wristFK).sub(elbowFK).applyQuaternion(_q2.copy(_q3).invert());
     const swing = Math.atan2(_a.z, -_a.y);
-    ready.q.copy(_q3).multiply(_q.setFromAxisAngle(FWD, -CARRY_OUT)).multiply(_q2.setFromAxisAngle(_x.set(1, 0, 0), CARRY_TILT - swing));
+    ready.q.copy(_q3).multiply(_q2.setFromAxisAngle(_x.set(1, 0, 0), (CARRY_REST - swing) * CARRY_FOLLOW)).multiply(carryQ);
     _y.set(0, 1, 0).applyQuaternion(ready.q);
     fistReach(handL, _y, _e.copy(elbowFK).sub(wristFK).normalize(), GRIP_R, _c);
     ready.p.copy(wristFK).add(_c).sub(_b.copy(GRIP).multiplyScalar(s).applyQuaternion(ready.q));
@@ -865,6 +889,9 @@ export function buildRanger(): Model {
     const stowIn = stowE < 0 ? 0 : smooth(clamp(stowE / STOW_UP, 0, 1)) * (1 - smooth(clamp((stowE - 0.45) / 0.2, 0, 1)));
     const bowIn = Math.max(smooth(clamp(aimT / BOW_IN, 0, 1)), stowIn);
     shown.p.lerpVectors(ready.p, shown.p, bowIn); _q.copy(shown.q); shown.q.copy(ready.q).slerp(_q, bowIn);
+    // (turned about its length on the way, so the bow arm's elbow stays on its side of the bow: turned straight from the level
+    // carry to the upright bow before the chest, the elbow crossed the bow's plane halfway and back, the string through the sleeve)
+    if (!fp) shown.q.multiply(_q.setFromAxisAngle(UP, CARRY_SWING_TURN * Math.sin(bowIn * Math.PI)));
     // (out to the left and up on its way from the side to the shot and back, so the lower limb passes outside the thigh, not through it)
     // (through the eyes it comes straight in: swung out, it went off the view's edge and back)
     if (!fp) shown.p.addScaledVector(_e.crossVectors(UP, u).normalize(), CARRY_SWING * s * Math.sin(bowIn * Math.PI)).addScaledVector(UP, 0.08 * s * Math.sin(bowIn * Math.PI));
@@ -886,8 +913,10 @@ export function buildRanger(): Model {
       else { if (letFrom < 0) { letFrom = pullNow; letT = 0; } letT += dt; pullNow = Math.max(to, letFrom * (1 - smooth(clamp(letT / LET_DOWN, 0, 1)))); }
       bow.set(pullNow);
     }
-    // (the bow arm's elbow carried as it hangs, and on the shot turned out and a little down: its crease upright, the string clears the forearm)
-    const elbowTo = _x.set(1, 0, 0).applyQuaternion(shown.q).addScaledVector(UP, -0.35).normalize().lerp(elbowPoleFK.normalize(), 1 - aim).clone();
+    // (the bow arm's elbow carried as it hangs, and on the shot turned out and a little down: its crease upright, the string
+    // clears the forearm; and so too with the bow brought up before the chest to put the arrow back: by the shot's ease alone,
+    // nothing then, it stayed where it hangs as the bow came up)
+    const elbowTo = _x.set(1, 0, 0).applyQuaternion(shown.q).addScaledVector(UP, -0.35).normalize().lerp(elbowPoleFK.normalize(), 1 - Math.max(aim, stowIn)).clone();
     if (hasBow) placeBow(shown, elbowTo);
     // the arrows on the string (a fan side by side in the flat bow's window), and where the shot leaves (the nocked arrow's middle)
     const n = arrows;
@@ -1028,6 +1057,11 @@ export function buildRanger(): Model {
     }
     hook(handR, hk, pinch);
     j.chest.worldToLocal(j.handR.getWorldPosition(lastHandC));
+    // the coat's skirt last: over the legs, and behind the hands and the bow where they are now (through the eyes neither shows)
+    root.updateMatrixWorld(true);
+    legBodies.place(hem);
+    if (!fp) { handBodies.place(hem); bowBodies.place(hem); }
+    tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt, legBodies.list, fp ? [] : hasBow ? outside : handBodies.list);
     bendShoulders();
   }
   /** each shoulder's part-turned joints (`delts`): a quarter, half and three quarters of the arm's swing from hanging and of
