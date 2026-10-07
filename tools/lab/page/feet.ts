@@ -15,15 +15,17 @@ import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
 import { ARENA } from '../../../src/data/balance';
 import { groundHeight } from '../../../src/world/ground';
-import { footShape, type LegIK } from '../../../src/entities/models/ik';
+// (the module whole: a commit from before `footShape` has none, and a named import of it would stop every command's
+// page loading on an A/B's side on that commit, `main` included)
+import * as legIK from '../../../src/entities/models/ik';
+import type { FootShape, LegIK } from '../../../src/entities/models/ik';
 
 const SIDE_NAMES = ['L', 'R'] as const;
 type SideName = (typeof SIDE_NAMES)[number];
 type LegFoot = LegIK['feet'][number];
-type FootShape = ReturnType<typeof footShape>;
 
 /** the scenarios, by name */
-export const FEET_SCENARIOS = ['edge', 'level', 'strafe', 'cross'] as const;
+export const FEET_SCENARIOS = ['edge', 'level', 'strafe', 'cross', 'run'] as const;
 export type FeetScenario = (typeof FEET_SCENARIOS)[number];
 
 export interface FeetOptions {
@@ -95,6 +97,14 @@ const WALKS: Walk[] = [
     name: 'the steps, walking across',
     scenario: 'cross',
     start: [OUTSIDE, 0.3],
+    legs: IN_AND_OUT,
+    legFrames: 40,
+    aim: null,
+  },
+  {
+    name: 'level ground, running reversals',
+    scenario: 'run',
+    start: [14, 17],
     legs: IN_AND_OUT,
     legFrames: 40,
     aim: null,
@@ -204,6 +214,8 @@ function legsOf(lab: Lab): Legs {
   const ik = lab.model.root.userData.legs as LegIK | undefined;
   if (!ik) throw new Error(`lab: feet: the ${lab.player.cls.id} has no leg IK`);
   const ankles = [lab.joints.ankleL, lab.joints.ankleR];
+  const footShape = (legIK as Partial<typeof legIK>).footShape;
+  if (!footShape) throw new Error('lab: feet: this commit\'s leg IK has no foot shape (`footShape` in models/ik.ts)');
   const shapes = ankles.map((ankle) => footShape(ankle, lab.model.root));
   return { ik, ankles, shapes };
 }
@@ -237,7 +249,10 @@ async function standAtEdge(lab: Lab, inside: number, bearing: number, sink: bool
   const aimZ = EDGE_AIM_OUT * Math.cos(angle);
   await lab.setup(fixtureAt(lab, [x, 0], Math.atan2(aimX - x, aimZ)));
   const aim = new THREE.Vector3(aimX, groundHeight(aimX, aimZ), aimZ);
-  const frame = () => ({ m0: true, aim });
+  // (a drawn shot held at full draw; a hero whose attack isn't drawn stands, aimed: held down, the warrior's swung blow
+  // after blow, each stepping in, and read as a foot moving in 9 cases of 30)
+  const drawn = Boolean(lab.player.skillAt('mouse0')?.def.draw);
+  const frame = () => ({ m0: drawn, aim });
   await lab.step(DRAW_FRAMES, frame);
   const legs = legsOf(lab);
   const last = legs.ankles.map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
@@ -284,7 +299,8 @@ function describeEdge(cases: EdgeCase[], listed: boolean): string[] {
   const riserMost = Math.max(...cases.flatMap((edge) => edge.riser));
   const dipMost = Math.max(...cases.flatMap((edge) => edge.dip));
   const lines = [
-    `edge, standing at full draw (${cases.length} spots and aims round the dais's edge, ${HOLD_FRAMES} frames each):`,
+    `edge, standing at full draw or aimed (${cases.length} spots and aims round the dais's edge, `
+    + `${HOLD_FRAMES} frames each):`,
     `  a foot moving in the hold in ${stepping}; a sole in a riser in ${inRiser} (most ${cm(riserMost)} cm); `
     + `deepest dip under a foot's own level ${cm(dipMost)} cm`,
   ];
@@ -382,6 +398,8 @@ interface WalkResult {
   inGroundFrames: number;
   inGroundMost: number;
   fastest: number;
+  /** where the fastest ankle move was: the frame, the foot and its state */
+  fastestAt: string;
   /** the same foot leaving the ground twice running, and frames with both feet off it */
   breaks: number;
   /** with --frames: where each break was, the frame and the foot */
@@ -404,6 +422,7 @@ async function walkAcross(lab: Lab, walk: Walk, options: FeetOptions, slide: boo
     inGroundFrames: 0,
     inGroundMost: 0,
     fastest: 0,
+    fastestAt: '',
     breaks: 0,
     breakFrames: [],
     bothUp: 0,
@@ -431,7 +450,11 @@ async function walkAcross(lab: Lab, walk: Walk, options: FeetOptions, slide: boo
         return;
       }
       const foot = legs.ik.feet[side];
-      result.fastest = Math.max(result.fastest, now.distanceTo(last[side]));
+      const moved = now.distanceTo(last[side]);
+      if (moved > result.fastest) {
+        result.fastest = moved;
+        result.fastestAt = `frame ${frame} ${SIDE_NAMES[side]}, ${foot.state}`;
+      }
       last[side].copy(now);
       const sole = soleAgainst(ankle, legs.shapes[side], foot.P.y);
       inGround = Math.max(inGround, sole.inGround);
@@ -565,7 +588,7 @@ function describeWalk(result: WalkResult, listed: boolean): string[] {
     + `turning back and forth ${FLAG_TURNS} times or more in ${wobbly.length} (most ${mostTurns}); `
     + `slid at most ${cm(mostSlide)} cm`,
     `  a sole in the ground on ${result.inGroundFrames} frames (most ${cm(result.inGroundMost)} cm); `
-    + `fastest ankle ${cm(result.fastest)} cm a frame`,
+    + `fastest ankle ${cm(result.fastest)} cm a frame (${result.fastestAt})`,
     `  the same foot leaving twice running ${result.breaks} times; both feet off the ground on ${result.bothUp} frames`,
   ];
   if (listed) lines.push(...stances.filter(stanceFlagged).map(describeStance));

@@ -18,7 +18,7 @@ import type { Joints } from './rig';
 import { reachArm } from './rig';
 import { groundHeight } from '../../world/ground';
 import { angleDamp, damp } from '../../util';
-import { ROM, ROM_ON, clampAnkle, twistAngle } from './anatomy';
+import { ROM, ROM_ON, clampAnkle, clampAnkleRoll, twistAngle } from './anatomy';
 
 /** `?ik=0` keeps the walk cycle's own legs and its old gait, for A/B comparison */
 export const IK = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
@@ -131,6 +131,12 @@ const BALL = 0.7;
 /** how far before its window (a share of the window) a stride may start, when the body would otherwise leave the
  *  planted foot behind */
 const EARLY = -1;
+/** the shortest a stride takes (s): about half a sprinter's swing */
+const SWING_LEAST = 0.2;
+/** how long a foot is down before the body leaving it may send it on its stride (s): sooner than a foot out of reach
+ *  re-steps on its own (0.04 s, in `tendPlantedFoot`), or that extra step comes first and the same foot leaves twice
+ *  running (5 times in the warrior's walk across the steps, at each reversal) */
+const STRIDE_AFTER = 0.03;
 /** how far out of the pelvis's middle a foot lands at least, and how far across it a planted foot may be before it
  *  steps back (m at a man's scale) */
 const GAP = 0.05, CROSS = 0.08;
@@ -559,17 +565,21 @@ export class LegIK {
    *  goes, the chest staying on the aim, instead of crossing its feet. */
   private turnPelvis(g: GaitFrame, lean: number): void {
     const j = this.j;
-    const want = this.pelvisTurnWanted(g, lean);
+    const [least, most] = this.trunkTurns();
+    const want = this.pelvisTurnWanted(g, lean, least, most);
     // (no faster than hips really turn: flipped round at once between walking forwards and backpedalling, it twitches)
     const eased = damp(this.twist, want * this.w, 9, g.dt);
     this.twist += Math.max(-TWIST_RATE * g.dt, Math.min(TWIST_RATE * g.dt, eased - this.twist));
+    // (and never past the trunk's turn, however quickly the pose twists the chest: following it at the hips' own rate
+    // alone, the spine turned 9 degrees past its range as a tapped shot's draw closed the chest)
+    this.twist = Math.max(least * this.w, Math.min(most * this.w, this.twist));
     j.hips.rotation.y += this.twist;
     j.spine.rotation.y -= this.twist * 0.5;
     j.chest.rotation.y -= this.twist * 0.5;
   }
 
   /** How far the pelvis would turn towards the way the body goes (rad), within the trunk's turn. */
-  private pelvisTurnWanted(g: GaitFrame, lean: number): number {
+  private pelvisTurnWanted(g: GaitFrame, lean: number, least: number, most: number): number {
     // (a quick reversal, left and right again, doesn't swing the pelvis round through the aim each time: it keeps its
     // line and the legs go backwards along it, turning round only if the body keeps going the new way)
     let want = 0;
@@ -577,7 +587,6 @@ export class LegIK {
     const going = this.spSlow > 0.6 && lean > 0;
     // (mid-reversal the smoothed velocity collapses and swings through every direction: the pelvis holds its turn till
     // it has one again)
-    const [least, most] = this.trunkTurns();
     if (going && this.v.length() < 0.6 * this.sp) want = this.twist / Math.max(this.w, 1e-3);
     else if (going) want = this.pelvisTurnTowardsTravel(g, least, most);
     else this.backing = false;
@@ -735,12 +744,12 @@ export class LegIK {
     // on time, rather than an extra step that would break the rhythm; the other may be in the air, as in a run)
     const toCome = this.toNextWindow(g, where);
     const beforeWindow = !inWindow && toCome > EARLY && toCome < 0;
-    const early = f.state === 'plant' && beforeWindow && other.state !== 'timed' && f.stance > 0.05
+    const early = f.state === 'plant' && beforeWindow && other.state !== 'timed' && f.stance > STRIDE_AFTER
       && this.leftBehind(g, f);
     // (a foot only just down doesn't go again: a reversal can bring its window round at once; unless the body has left
     // it out of reach already, as the first step from standing lands behind a body on its way: held till it settled,
     // it stood on its toes 8 frames, the pelvis sinking 10 cm)
-    const settled = f.stance > 0.5 * g.duty * g.cycle || (f.over && f.stance > 0.05);
+    const settled = f.stance > 0.5 * g.duty * g.cycle || (f.over && f.stance > STRIDE_AFTER);
     const otherStepping = other.state === 'timed' && g.duty > 0.45;
     if (((inWindow && settled) || early) && f.state === 'plant' && !otherStepping) {
       this.beginStride(g, f, early ? toCome : where, early);
@@ -777,6 +786,9 @@ export class LegIK {
     f.rel0 = (f.pos.x - g.hip.x) * travel.x + (f.pos.z - g.hip.z) * travel.z;
     f.t = 0;
     f.span = 2 * g.halfSwing * Math.max(0.15, 1 - (early ? where : Math.min(0.85, progress)));
+    // (and never shorter than a swing can be: begun at its window's very end, a running stride took 3 frames, the foot
+    // rising 29 cm in one and moving 33 cm a frame)
+    f.span = Math.max(f.span, SWING_LEAST / g.cycle);
     f.over = false;
     f.riserSide = 0;
     f.svd.copy(travel);
@@ -1177,9 +1189,10 @@ export class LegIK {
     }
     // (within the ankle's range: a foot in the air hangs from the shin, as a runner's does, rather than staying level
     // and turned to the way the body faces whatever the leg does; held level and turned, it bent 85 degrees up at the
-    // ankle under a knee bent back, and twisted 100 degrees against it. A planted foot stays as it lies: turned on the
-    // floor its contact slid)
+    // ankle under a knee bent back, and twisted 100 degrees against it. A planted foot stays as it lies, but on its
+    // edge under a shin leaning out further than the ankle rolls: turned on the floor its contact slid)
     if (f.state !== 'plant') clampAnkle(ankle.quaternion, i === 0, false);
+    else clampAnkleRoll(ankle.quaternion, i === 0);
     f.tip = this.tipOf(this.legs[i]);
     const blend = this.w * f.lw;
     if (blend < 0.999) {

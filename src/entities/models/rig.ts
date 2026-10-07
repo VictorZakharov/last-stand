@@ -1,7 +1,7 @@
 // Procedural humanoid rig: a hierarchy of joint Groups with primitive meshes,
 // plus reusable procedural animation helpers. Forward is +Z, left is +X.
 import * as THREE from 'three';
-import { clampAnkle } from './anatomy';
+import { clampAnkle, clampAnkleRoll } from './anatomy';
 import { groundHeight } from '../../world/ground';
 
 export function part(geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D, x = 0, y = 0, z = 0): THREE.Mesh {
@@ -206,14 +206,17 @@ const TOE = 0.15;
  * hip and knee, the foot staying where it was over the ground; and a foot at or near the floor turns
  * flat on it. Runs after the pose, before anything reads the joints' world matrices. Not while dying.
  */
-/** Turns `ankle` (by `share`, 0 to 1) so its foot lies level in the world, heading the way it points now. */
-function layFlat(knee: THREE.Object3D, ankle: THREE.Object3D, share: number): void {
+/** Turns `ankle` (by `share`, 0 to 1) so its foot lies level in the world, heading the way it points now, rolled no
+ *  further than the ankle rolls (under a shin leaning out past that, it lies on its edge: laid flat, a running
+ *  reversal's landing read 57 degrees at the ankle). */
+function layFlat(knee: THREE.Object3D, ankle: THREE.Object3D, share: number, left: boolean): void {
   ankle.getWorldQuaternion(_k);
   _ahead.set(0, 0, 1).applyQuaternion(_k);
   _level.setFromAxisAngle(_up, Math.atan2(_ahead.x, _ahead.z));
   knee.getWorldQuaternion(_r);
   _level.premultiply(_r.invert());
   ankle.quaternion.slerp(_level, share);
+  clampAnkleRoll(ankle.quaternion, left);
 }
 
 export function groundFeet(j: Joints, footH: number): void {
@@ -246,7 +249,7 @@ export function groundFeet(j: Joints, footH: number): void {
     // end of a boot 1 to 1.5 cm into the floor, and up to 3.3 cm in the side-on stance's spread)
     ankle.getWorldPosition(_a); root.worldToLocal(_a);
     const planted = 1 - Math.min(1, Math.max(0, (_a.y - floor - footH) / 0.05));
-    if (planted > 0) layFlat(knee, ankle, planted);
+    if (planted > 0) layFlat(knee, ankle, planted, thigh === j.thighL);
     // (within the ankle's range: where the shin leans further over a foot on the floor than an ankle bends, the heel
     // lifts and the foot pivots on its toes, which stay where they lay, the leg reaching to the ankle raised round
     // them; laid flat under a deep knee the ankle bent 70 degrees)

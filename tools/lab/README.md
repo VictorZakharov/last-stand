@@ -45,6 +45,12 @@ terminal's task stops it all.
   in the ground, clearance, landing and its shift off a riser; each walk's feet measured as the IK has them); the worst stance of each walk is pictured whole, as the player sees it and from the
   front and the side (`out/feet/sheet.png`). A walk follows on from the ones before it (the hero, the gait and the
   game's clock carry over), so compare runs of the same `--scenarios`.
+- `range`: every joint of the hero against a body's ranges (`models/anatomy.ts`, as the dev builds' `watchBody`
+  measures them), frame by frame, over standing, walking each way, attacking standing, and walks that change
+  direction while he attacks (held or tapped) or runs (`--scenarios stand,walk,shoot,reverse,taps,run`): each angle
+  past its range, on how many frames, its worst and where (for a leg, whether its foot was planted), each scenario's
+  fastest ankle, and its worst moment pictured. `--canary` turns the head past the neck's range on one frame,
+  `--frames` lists every frame with a joint past its range.
 - `carry`: the ranger's carried bow against his body through a carry's round (standing, walking, a draw and its shot,
   waiting with the next arrow, putting it back). `--canary` plants faults it must catch; `--frames` lists every frame
   with a clip, what crossed what and how deep.

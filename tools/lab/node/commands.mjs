@@ -134,6 +134,22 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  range: {
+    each(side, options) {
+      return side.command('range', {
+        scenarios: options.scenarios,
+        canary: Boolean(options.canary),
+        frames: Boolean(options.frames),
+      });
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, join(OUT, 'range'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   feet: {
     each(side, options) {
       return side.command('feet', {

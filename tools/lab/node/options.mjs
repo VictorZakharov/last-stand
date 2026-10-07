@@ -76,12 +76,27 @@ export const COMMANDS = {
       scenarios: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['edge', 'level', 'strafe', 'cross'],
-        help: 'the scenarios (all by default): edge, level, strafe, cross',
+        choices: ['edge', 'level', 'strafe', 'cross', 'run'],
+        help: 'the scenarios (all by default): edge, level, strafe, cross, run',
       },
       canary: { kind: 'switch', help: 'plant faults the measures must catch: a planted ankle slid, one sunk' },
       frames: { kind: 'switch', help: 'list every stance and standing case flagged, and what was wrong with it' },
       trace: { kind: 'switch', help: 'each frame of each walk, foot by foot (pick one with --scenarios)' },
+      ...COMMON_OPTIONS,
+    },
+  },
+  range: {
+    help: 'every joint of the hero against a body\'s ranges, frame by frame: standing, walking each way, attacking, '
+      + 'and walks that change direction while he attacks or runs',
+    options: {
+      scenarios: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['stand', 'walk', 'shoot', 'reverse', 'taps', 'run'],
+        help: 'the scenarios (all by default): stand, walk, shoot, reverse, taps, run',
+      },
+      canary: { kind: 'switch', help: 'plant a fault the measure must catch: the head turned past the neck\'s range' },
+      frames: { kind: 'switch', help: 'list every frame with a joint past its range' },
       ...COMMON_OPTIONS,
     },
   },

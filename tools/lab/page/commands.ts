@@ -5,6 +5,7 @@ import type { Joints } from '../../../src/entities/models/rig';
 import { sheet as pictureSheet, type Sheet } from './sheet';
 import { carry as carryRound, describeCarry } from './carry';
 import { feet as feetRound, missedCanaries, type FeetOptions } from './feet';
+import { range as rangeRound, missedRangeCanary, type RangeOptions } from './range';
 
 export interface SheetCommand {
   states: string[];
@@ -43,6 +44,15 @@ export async function carry(lab: Lab, command: CarryCommand): Promise<Report> {
 export async function feet(lab: Lab, command: FeetOptions): Promise<Report> {
   const report = await feetRound(lab, command);
   return { text: report.lines.join('\n'), problems: missedCanaries(report), moments: report.moments };
+}
+
+/**
+ * `lab range`: every joint of the hero against a body's ranges, frame by frame, over standing, walking, attacking and
+ * reversals, the worst moments pictured; a canary it missed is a problem.
+ */
+export async function range(lab: Lab, command: RangeOptions): Promise<Report> {
+  const report = await rangeRound(lab, command);
+  return { text: report.lines.join('\n'), problems: missedRangeCanary(report), moments: report.moments };
 }
 
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */
