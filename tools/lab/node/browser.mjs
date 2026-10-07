@@ -14,21 +14,36 @@ export function useLocalTemp(dir) {
   process.env.TMPDIR = tmp;
 }
 
+/** the browsers tried, in order: Playwright's Chromium, then Edge, then Chrome */
+const CHANNELS = ['chromium', 'msedge', 'chrome'];
+
+/**
+ * The GPU's flags: the machine's own graphics through ANGLE (Direct3D 11 on Windows, Metal on macOS; elsewhere the
+ * browser's own choice), and the GPU used even where the browser's blocklist would turn it off.
+ */
+function gpuArgs() {
+  const angle = { win32: 'd3d11', darwin: 'metal' }[process.platform];
+  const args = ['--enable-gpu', '--ignore-gpu-blocklist'];
+  if (angle) args.unshift(`--use-angle=${angle}`);
+  return args;
+}
+
 /**
  * Launches a browser in its native headless mode: Playwright's Chromium (npx playwright install chromium), else Edge
  * or Chrome. (`channel: 'chromium'` is the full browser run headless, not Playwright's separate headless shell, a
  * console program that opened a console window of its own.)
  */
 export async function launchBrowser() {
-  const args = ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'];
-  for (const channel of ['chromium', 'msedge', 'chrome']) {
+  const failures = [];
+  for (const channel of CHANNELS) {
     try {
-      return await chromium.launch({ headless: true, channel, args });
-    } catch {
-      // try the next one
+      return await chromium.launch({ headless: true, channel, args: gpuArgs() });
+    } catch (error) {
+      failures.push(`${channel}: ${String(error?.message ?? error).split('\n')[0]}`);
     }
   }
-  throw new Error('lab: no browser found (install one: npx playwright install chromium)');
+  const tried = failures.map((failure) => `\n  ${failure}`).join('');
+  throw new Error(`lab: no browser would start (install one: npx playwright install chromium)${tried}`);
 }
 
 // ---- scripts run in every page before its own (each is serialized into the page: it can use nothing from here)

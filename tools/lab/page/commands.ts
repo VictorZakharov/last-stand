@@ -1,6 +1,6 @@
 // The lab's commands as the page runs them (tools/lab): what the session calls, by name, with the lab and the
 // command's options. Each sets its fixture up afresh and checks it, so a command's result doesn't depend on the last.
-import type { Lab, Fixture, ViewName } from './lab';
+import type { Lab, Fixture, Report, ViewName } from './lab';
 import type { Joints } from '../../../src/entities/models/rig';
 import { sheet as pictureSheet, type Sheet } from './sheet';
 import { carry as carryRound, describeCarry } from './carry';
@@ -22,11 +22,15 @@ export interface CarryCommand {
   canary?: boolean;
 }
 
-/** `lab carry`: the carried bow against the body, as text. */
-export async function carry(lab: Lab, command: CarryCommand): Promise<string> {
+/** `lab carry`: the carried bow against the body; a canary it missed is a problem. */
+export async function carry(lab: Lab, command: CarryCommand): Promise<Report> {
   const setup = await lab.setup({ ...command.fixture, nocked: true });
   const report = await carryRound(lab, { canary: command.canary });
-  return `${JSON.stringify(setup)}\n${describeCarry(report)}`;
+  const problems: string[] = [];
+  if (report.canary && report.canary[0] < report.canary[1]) {
+    problems.push(`the canary was caught on ${report.canary[0]} of ${report.canary[1]} planted frames`);
+  }
+  return { text: `${JSON.stringify(setup)}\n${describeCarry(report)}`, problems };
 }
 
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */

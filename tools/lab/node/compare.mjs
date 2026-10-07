@@ -3,9 +3,22 @@
 
 /**
  * The edits that turn `before` into `after` (lists of lines): each line `same`, `removed` (only before) or `added`
- * (only after), from their longest common subsequence. The reports are tens of lines, so its table is small.
+ * (only after), from their longest common subsequence. The lines both start and end with are taken as they are, so
+ * the table is only as large as the stretch that differs (a probe's report may be thousands of lines).
  */
 export function lineEdits(before, after) {
+  let head = 0;
+  while (head < before.length && head < after.length && before[head] === after[head]) head++;
+  let tail = 0;
+  const tailFits = () => tail < before.length - head && tail < after.length - head;
+  while (tailFits() && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+  const same = (line) => ({ kind: 'same', line });
+  const middle = differingEdits(before.slice(head, before.length - tail), after.slice(head, after.length - tail));
+  return [...before.slice(0, head).map(same), ...middle, ...before.slice(before.length - tail).map(same)];
+}
+
+/** `lineEdits` by the longest common subsequence's table, for lines that differ at both ends. */
+function differingEdits(before, after) {
   // (common[i][j]: the longest common subsequence of before[i..] and after[j..])
   const common = Array.from({ length: before.length + 1 }, () => new Array(after.length + 1).fill(0));
   for (let i = before.length - 1; i >= 0; i--) {

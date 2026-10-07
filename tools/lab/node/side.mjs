@@ -1,103 +1,44 @@
 // One side of the lab (tools/lab): a tree of the game served by a Vite dev server of the lab's own and booted in a
-// page of the lab's browser. This tree is one side; for an A/B another commit is exported (`exportCommit`) and
-// served as the other, the lab's page modules copied into it so both run the same measures.
+// page of the lab's browser. This tree is one side; for an A/B another commit is exported (commits.mjs) and served
+// as the other, the lab's page modules copied into it so both run the same measures.
 //
 // Every command runs on a page booted for it: a page a command has run on is left as that command left it (the
 // game's clock on, the hero wherever it took him), and a set-up on it started from another moment than a fresh
 // boot's, so the same command gave other numbers depending on what ran before it.
 import { createServer } from 'vite';
-import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { PAGE_SCRIPTS } from './browser.mjs';
+import { exportedTreePaths } from './commits.mjs';
+import { labError } from './errors.mjs';
+import { decodeMappings, sourceOf } from './sourceMaps.mjs';
 
 const VIEWPORT = { width: 1920, height: 1080 };
 const BOOT_TIMEOUT_MS = 180_000;
+/** how often a booting page is asked whether the loading screen is gone, ms */
+const BOOT_POLL_MS = 100;
+/** the ports the two sides' servers try first (another free one is taken if it's in use) */
+const REPO_PORT = 5190;
+const OTHER_PORT = 5191;
 /** a change here boots this tree's page afresh before the next command */
 const WATCHED = /[\\/](src|tools[\\/]lab[\\/]page)[\\/]|[\\/]index\.html$/;
 /** the dev server's own config and what it reads: a change here starts this tree's server afresh, then the page */
 const SERVER_CONFIG = /[\\/](vite\.config\.ts|package(-lock)?\.json|scripts[\\/]pwa\.ts)$/;
 /** what this tree's server never watches: scratch, the lab's own output, the face harness's Python environment */
 const UNWATCHED = ['**/.tmp/**', '**/tools/lab/out/**', '**/tools/facelab/**', '**/dist/**'];
-const EXPORTS_KEPT = 3;
+/** the cookies every boot starts with besides its hero's: the forest, the high quality preset */
+const BOOT_COOKIES = { 'last-stand-biome': 'forest', 'last-stand-quality': 'high' };
 
 const toSlashes = (path) => path.split('\\').join('/');
-
-/** Runs a program and returns what it printed. */
-function run(program, args, cwd) {
-  return execFileSync(program, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
-}
-
-/**
- * An exported tree's Vite config finds its packages in its own node_modules, which it hasn't: they are this tree's.
- * This plugin points its ez-tree alias, and the stub for ez-tree's textures, at them, written exactly as this tree's
- * config writes them: a path cased otherwise opens the same file on Windows but is another module to Vite (its
- * lowercased alias bundled ez-tree with a second copy of three, and the two sides drew random numbers apart).
- */
-function exportedTreePaths(treeRoot, repoRoot) {
-  const ezTree = toSlashes(join(repoRoot, 'node_modules/@dgreenheck/ez-tree/src/lib/'));
-  return {
-    name: 'lab-exported-tree-paths',
-    enforce: 'pre',
-    config(config) {
-      const alias = config.resolve?.alias;
-      if (Array.isArray(alias)) {
-        for (const entry of alias) if (entry.find === 'ez-tree') entry.replacement = ezTree + 'index.js';
-      } else if (alias?.['ez-tree']) {
-        alias['ez-tree'] = ezTree + 'index.js';
-      }
-    },
-    resolveId(source, importer) {
-      const fromEzTree = importer && toSlashes(importer).toLowerCase().startsWith(ezTree.toLowerCase());
-      if (source !== './textures' || !fromEzTree) return null;
-      return join(treeRoot, 'src/world/ezTreeTextures.ts');
-    },
-  };
-}
-
-/**
- * Exports commit `ref` into `outDir`/commits/<sha> (once: kept while it's among the newest few) with git archive: no
- * worktree, no links. Returns its sha and folder.
- */
-export function exportCommit(repoRoot, outDir, ref) {
-  const git = (...args) => run('git', args, repoRoot);
-  if (ref.startsWith('origin/')) {
-    try {
-      git('fetch', '-q', 'origin');
-    } catch {
-      console.log(`lab: git fetch failed; comparing with the last fetched ${ref}`);
-    }
-  }
-  const sha = git('rev-parse', `${ref}^{commit}`);
-  const base = join(outDir, 'commits');
-  const dir = join(base, sha.slice(0, 12));
-  if (!existsSync(join(dir, '.lab-sha'))) {
-    mkdirSync(dir, { recursive: true });
-    const archive = join(base, 'export.tar');
-    git('archive', '-o', archive, sha);
-    // (a relative path: to GNU tar, a C: in one names a remote host)
-    run('tar', ['-xf', '../export.tar'], dir);
-    rmSync(archive);
-    writeFileSync(join(dir, '.lab-sha'), sha);
-  }
-  pruneExports(base, dir);
-  return { sha, dir };
-}
-
-/** keeps the newest few exports besides `keep` */
-function pruneExports(base, keep) {
-  const others = readdirSync(base)
-    .map((name) => join(base, name))
-    .filter((path) => path !== keep && statSync(path).isDirectory())
-    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
-  for (const old of others.slice(EXPORTS_KEPT - 1)) rmSync(old, { recursive: true, force: true });
-}
 
 export class Side {
   /**
    * @param name what reports call it
    * @param root the tree it serves
    * @param repo the lab's own tree: its packages, and its page modules (copied into an exported tree)
+   * @param outDir where the lab writes (this tree's Vite cache)
+   * @param browser the lab's browser
+   * @param sha an exported commit's sha (null for this tree)
    */
   constructor({ name, root, repo, outDir, browser, sha = null }) {
     this.name = name;
@@ -108,8 +49,11 @@ export class Side {
     this.sha = sha;
     this.isRepo = root === repo;
     this.server = null;
+    /** where its server serves the game, once it's up */
+    this.url = null;
     this.context = null;
     this.page = null;
+    /** the hero its page booted, null until one booted whole */
     this.heroClass = null;
     /** the source changed since the page booted */
     this.stale = true;
@@ -117,8 +61,9 @@ export class Side {
     this.serverStale = false;
     /** a command has run on the page since it booted */
     this.used = false;
-    /** called when this tree's source changes (the server boots the next page then) */
+    /** called with the file when this tree's source changes (the server boots the next page then) */
     this.onStale = null;
+    /** what the page raised or logged as an error since they were last read */
     this.errors = [];
   }
 
@@ -145,15 +90,16 @@ export class Side {
     }
     await this.server.listen();
     this.url = this.server.resolvedUrls.local[0];
-    if (this.isRepo) {
-      this.server.watcher.on('all', (_event, file) => {
-        const configChanged = SERVER_CONFIG.test(file);
-        if (!configChanged && !WATCHED.test(file)) return;
-        if (configChanged) this.serverStale = true;
-        this.stale = true;
-        this.onStale?.();
-      });
-    }
+    if (this.isRepo) this.server.watcher.on('all', (_event, file) => this.sourceChanged(file));
+  }
+
+  /** Marks the page stale (and the server, for its config) when `file` is part of what they were made from. */
+  sourceChanged(file) {
+    const configChanged = SERVER_CONFIG.test(file);
+    if (!configChanged && !WATCHED.test(file)) return;
+    if (configChanged) this.serverStale = true;
+    this.stale = true;
+    this.onStale?.(file);
   }
 
   /** This tree watched for changes; an exported one never changes, and finds its packages in this tree. */
@@ -165,7 +111,7 @@ export class Side {
       return {
         ...common,
         cacheDir: join(this.outDir, 'vite'),
-        server: { port: 5190, strictPort: false, hmr: false, watch: { ignored: UNWATCHED } },
+        server: { port: REPO_PORT, strictPort: false, hmr: false, watch: { ignored: UNWATCHED } },
       };
     }
     return {
@@ -176,7 +122,7 @@ export class Side {
       cacheDir: join(this.root, '.lab-vite'),
       plugins: [exportedTreePaths(this.root, this.repo)],
       server: {
-        port: 5191,
+        port: OTHER_PORT,
         strictPort: false,
         hmr: false,
         watch: null,
@@ -199,9 +145,32 @@ export class Side {
     return true;
   }
 
+  /**
+   * Boots a page for `heroClass`: the game loaded with nothing kept from the last boot, the lab installed once the
+   * loading screen is gone, and the hero checked. A boot that fails leaves no page behind (none counts as fresh).
+   */
   async boot(heroClass) {
     if (!this.isRepo) cpSync(join(this.repo, 'tools/lab/page'), join(this.root, 'tools/lab/page'), { recursive: true });
-    await this.page?.close().catch(() => {});
+    await this.closePage();
+    this.heroClass = null;
+    try {
+      await this.openPage(heroClass);
+      const booted = await this.page.evaluate(async () => {
+        const lab = await import('/tools/lab/page/lab.ts');
+        return lab.install().heroes();
+      });
+      if (booted.hero !== heroClass) {
+        throw labError(`--class ${heroClass}: no such hero (the heroes: ${booted.heroes.join(', ')})`);
+      }
+    } catch (error) {
+      await this.closePage();
+      throw error;
+    }
+    this.heroClass = heroClass;
+  }
+
+  /** Opens a page on the game for `heroClass` and waits out its loading screen. */
+  async openPage(heroClass) {
     if (!this.context) {
       this.context = await this.browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1 });
       for (const script of PAGE_SCRIPTS) await this.context.addInitScript(script);
@@ -209,7 +178,7 @@ export class Side {
     // (nothing kept from the last boot: the game writes cookies of its own, the skill loadout's among them, and a boot
     // after them ended its set-up a frame apart from the first; storage is cleared as the page starts, browser.mjs)
     await this.context.clearCookies();
-    const cookies = { 'last-stand-class': heroClass, 'last-stand-biome': 'forest', 'last-stand-quality': 'high' };
+    const cookies = { ...BOOT_COOKIES, 'last-stand-class': heroClass };
     await this.context.addCookies(Object.entries(cookies).map(([name, value]) => ({ name, value, url: this.url })));
     const page = await this.context.newPage();
     this.page = page;
@@ -223,13 +192,8 @@ export class Side {
     this.used = false;
     await page.goto(this.url);
     // (polled on a timer: by default it polls by animation frame, and the lab's clock holds those once the game shows)
-    const polling = { polling: 100, timeout: BOOT_TIMEOUT_MS };
+    const polling = { polling: BOOT_POLL_MS, timeout: BOOT_TIMEOUT_MS };
     await page.waitForFunction(() => !document.getElementById('loading'), null, polling);
-    await page.evaluate(async () => {
-      const lab = await import('/tools/lab/page/lab.ts');
-      lab.install();
-    });
-    this.heroClass = heroClass;
   }
 
   // A command runs in one task of the page, its modules imported first and the lab readied after them (`begin`: the
@@ -255,6 +219,7 @@ export class Side {
     return this.page.evaluate(async ([path, options, fixture]) => {
       const commands = await import('/tools/lab/page/commands.ts');
       const probe = await import(`/${path}?t=${Date.now()}`);
+      if (typeof probe.default !== 'function') throw new Error(`lab: probe: ${path} has no default export to run`);
       window.__lab.begin();
       if (fixture) await commands.setup(window.__lab, fixture);
       return probe.default(window.__lab, options);
@@ -275,6 +240,28 @@ export class Side {
     }
   }
 
+  /**
+   * Where the code this side's server compiled came from, for the scripts at `urls` (`--profile`): a function of a
+   * script's address, line and column (from 0) to `{ file, line }` in the source, or null where it doesn't know.
+   */
+  async sourceLocator(urls) {
+    const origin = new URL(this.url).origin;
+    const maps = new Map();
+    for (const url of urls) {
+      if (!url.startsWith(`${origin}/`)) continue;
+      // (Vite keeps what it compiled, so this compiles nothing again)
+      const compiled = await this.server.transformRequest(url.slice(origin.length)).catch(() => null);
+      const map = compiled?.map;
+      if (map?.mappings) maps.set(url, { sources: map.sources ?? [], lines: decodeMappings(map.mappings) });
+    }
+    return (url, line, column) => {
+      const map = maps.get(url);
+      const found = map && sourceOf(map.lines, line, column);
+      if (!found) return null;
+      return { file: map.sources[found.source] ?? url, line: found.line };
+    };
+  }
+
   /** Evaluates `expression` in the page, with the lab as `lab`, readied first. */
   evaluate(expression) {
     return this.page.evaluate(`(async (lab) => { lab.begin(); return (${expression}); })(window.__lab)`);
@@ -282,18 +269,11 @@ export class Side {
 
   /** The page's errors and the lab's anatomy warnings since the last call. */
   async drainMessages() {
-    const fromPage = this.page
-      ? await this.page.evaluate(() => {
-        const lab = window.__lab;
-        const messages = { errors: [...(lab?.errors ?? [])], warnings: [...(lab?.warnings ?? [])] };
-        lab?.errors.splice(0);
-        lab?.warnings.splice(0);
-        return messages;
-      }).catch(() => ({ errors: [], warnings: [] }))
-      : { errors: [], warnings: [] };
-    const errors = [...new Set([...this.errors, ...fromPage.errors])];
+    const errors = [...new Set(this.errors)];
     this.errors = [];
-    return { errors, warnings: [...new Set(fromPage.warnings)] };
+    const readWarnings = () => window.__lab?.warnings.splice(0) ?? [];
+    const warnings = this.page ? await this.page.evaluate(readWarnings).catch(() => []) : [];
+    return { errors, warnings: [...new Set(warnings)] };
   }
 
   /** Closes its page (the server stays up). */
@@ -304,7 +284,7 @@ export class Side {
   }
 
   async close() {
-    await this.page?.close().catch(() => {});
+    await this.closePage();
     await this.context?.close().catch(() => {});
     await this.server?.close();
   }

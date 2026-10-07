@@ -89,12 +89,15 @@ export const STATES: Record<string, State> = {
 
 /** The moments of each state, pictured from `views`, with the fixture set up afresh before each state. */
 export async function sheet(lab: Lab, options: SheetOptions): Promise<Sheet> {
+  for (const name of options.states) {
+    if (!STATES[name]) throw new Error(`lab: no state ${name} (the states: ${Object.keys(STATES).join(', ')})`);
+  }
+  lab.checkCapture(options.views, options.fixture.view ?? 'top', options.focus);
   const moments: Moment[] = [];
   let setup: Record<string, unknown> = {};
   const fixture = { nocked: !!lab.player.cls.quiver, ...options.fixture };
   for (const name of options.states) {
     const state = STATES[name];
-    if (!state) throw new Error(`lab: no state ${name} (there are ${Object.keys(STATES).join(', ')})`);
     setup = await lab.setup(fixture);
     await state(lab, async (label) => {
       lab.model.root.updateMatrixWorld(true);

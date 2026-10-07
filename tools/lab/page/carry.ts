@@ -102,8 +102,8 @@ const centimetres = (metres: number) => Number((metres * 100).toFixed(1));
 
 /** true when a held arrow (the one in the draw hand) is the object or among its parents */
 function isHeldArrow(object: THREE.Object3D): boolean {
-  for (let o: THREE.Object3D | null = object; o; o = o.parent) {
-    if (o.name === 'heldArrow') return true;
+  for (let node: THREE.Object3D | null = object; node; node = node.parent) {
+    if (node.name === 'heldArrow') return true;
   }
   return false;
 }

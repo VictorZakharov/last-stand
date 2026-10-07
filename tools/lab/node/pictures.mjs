@@ -20,22 +20,22 @@ async function compareInPage({ pairs, tolerance }) {
   };
   const results = [];
   for (const { before, after } of pairs) {
-    const [a, b] = await Promise.all([pixelsOf(before), pixelsOf(after)]);
-    if (a.width !== b.width || a.height !== b.height) {
-      results.push({ sized: `${a.width}×${a.height} against ${b.width}×${b.height}` });
+    const [old, now] = await Promise.all([pixelsOf(before), pixelsOf(after)]);
+    if (old.width !== now.width || old.height !== now.height) {
+      results.push({ sized: `${old.width}×${old.height} against ${now.width}×${now.height}` });
       continue;
     }
     let differing = 0;
     let largest = 0;
-    for (let i = 0; i < a.data.length; i += 4) {
-      const red = Math.abs(a.data[i] - b.data[i]);
-      const green = Math.abs(a.data[i + 1] - b.data[i + 1]);
-      const blue = Math.abs(a.data[i + 2] - b.data[i + 2]);
+    for (let i = 0; i < old.data.length; i += 4) {
+      const red = Math.abs(old.data[i] - now.data[i]);
+      const green = Math.abs(old.data[i + 1] - now.data[i + 1]);
+      const blue = Math.abs(old.data[i + 2] - now.data[i + 2]);
       const most = Math.max(red, green, blue);
       if (most > largest) largest = most;
       if (most > tolerance) differing++;
     }
-    results.push({ differing, pixels: a.data.length / 4, largest });
+    results.push({ differing, pixels: old.data.length / 4, largest });
   }
   return results;
 }

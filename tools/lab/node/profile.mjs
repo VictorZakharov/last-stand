@@ -1,5 +1,6 @@
 // Where a command's time goes in the page (tools/lab, `--profile`): the browser's sampling profiler run round it,
-// and the functions it found busiest, by their own time and by the time spent in them and what they called.
+// and the functions it found busiest, by their own time and by the time spent in them and what they called, each at
+// its line in the source (the page runs the modules as Vite compiled them; sourceMaps.mjs traces them back).
 
 /** the profiler's sampling interval, µs */
 const SAMPLING_US = 200;
@@ -7,8 +8,8 @@ const SAMPLING_US = 200;
 const SHOWN = 14;
 
 /**
- * Runs `work` with the page's sampling profiler on; resolves with what `work` returned and the profile summarized
- * as text.
+ * Runs `work` with the page's sampling profiler on; resolves with what `work` returned and the profile (the
+ * DevTools protocol's `Profiler.Profile`).
  */
 export async function profiled(page, work) {
   const cdp = await page.context().newCDPSession(page);
@@ -16,25 +17,40 @@ export async function profiled(page, work) {
   await cdp.send('Profiler.setSamplingInterval', { interval: SAMPLING_US });
   await cdp.send('Profiler.start');
   let result;
+  let profile;
   try {
     result = await work();
   } finally {
-    const { profile } = await cdp.send('Profiler.stop');
+    ({ profile } = await cdp.send('Profiler.stop'));
     await cdp.detach().catch(() => {});
-    result = { result, summary: summarize(profile) };
   }
-  return result;
+  return { result, profile };
 }
 
-/** a function's name and place, as the lists show it (`bake geometry.ts:212`) */
-function placeOf(callFrame) {
-  const file = callFrame.url.replace(/\?.*$/, '').split('/').pop() || '(native)';
+/** The addresses of the scripts a profile's functions are in. */
+export function scriptsIn(profile) {
+  return [...new Set(profile.nodes.map((node) => node.callFrame.url).filter(Boolean))];
+}
+
+/** a script's file name, from its address or its path */
+const fileName = (address) => address.replace(/[?#].*$/, '').split(/[\\/]/).pop();
+
+/**
+ * A function's name and place, as the lists show it (`bake geometry.ts:212`): its file and line in the source when
+ * `sourceOf(url, line, column)` knows them (`{ file, line }`, lines from 0), else where it ran.
+ */
+function placeOf(callFrame, sourceOf) {
   const name = callFrame.functionName || '(anonymous)';
-  return `${name} ${file}:${callFrame.lineNumber + 1}`;
+  const found = sourceOf(callFrame.url, callFrame.lineNumber, callFrame.columnNumber);
+  const file = fileName(found?.file ?? callFrame.url) || '(native)';
+  return `${name} ${file}:${(found?.line ?? callFrame.lineNumber) + 1}`;
 }
 
-/** The profile's busiest functions: by self time, and by total time (each function once per sample's stack). */
-export function summarize(profile) {
+/**
+ * The profile's busiest functions: by self time, and by total time (each function once per sample's stack), each
+ * placed by `sourceOf` (see `placeOf`; by where it ran when not given).
+ */
+export function summarize(profile, sourceOf = () => null) {
   const nodes = new Map(profile.nodes.map((node) => [node.id, node]));
   const parentOf = new Map();
   for (const node of profile.nodes) {
@@ -46,11 +62,11 @@ export function summarize(profile) {
   profile.samples.forEach((id, index) => {
     const ms = (profile.timeDeltas[index] ?? 0) / 1000;
     sampled += ms;
-    const place = placeOf(nodes.get(id).callFrame);
+    const place = placeOf(nodes.get(id).callFrame, sourceOf);
     self.set(place, (self.get(place) ?? 0) + ms);
     const seen = new Set();
     for (let at = id; at !== undefined; at = parentOf.get(at)) {
-      const stackPlace = placeOf(nodes.get(at).callFrame);
+      const stackPlace = placeOf(nodes.get(at).callFrame, sourceOf);
       if (seen.has(stackPlace)) continue;
       seen.add(stackPlace);
       total.set(stackPlace, (total.get(stackPlace) ?? 0) + ms);

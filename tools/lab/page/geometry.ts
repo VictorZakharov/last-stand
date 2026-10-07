@@ -12,16 +12,16 @@ export interface Crossing {
 
 /** true when the object and every one of its parents are visible */
 export function isShown(object: THREE.Object3D): boolean {
-  for (let o: THREE.Object3D | null = object; o; o = o.parent) {
-    if (!o.visible) return false;
+  for (let node: THREE.Object3D | null = object; node; node = node.parent) {
+    if (!node.visible) return false;
   }
   return true;
 }
 
 /** true when `object` is `ancestor` or lies under it */
 export function isUnder(object: THREE.Object3D, ancestor: THREE.Object3D): boolean {
-  for (let o: THREE.Object3D | null = object; o; o = o.parent) {
-    if (o === ancestor) return true;
+  for (let node: THREE.Object3D | null = object; node; node = node.parent) {
+    if (node === ancestor) return true;
   }
   return false;
 }
@@ -42,7 +42,7 @@ export function meshLabeller(joints: Joints): (mesh: THREE.Mesh) => string {
   }
   return (mesh) => {
     let joint = '';
-    for (let o = mesh.parent; o && !joint; o = o.parent) joint = jointNames.get(o) ?? '';
+    for (let parent = mesh.parent; parent && !joint; parent = parent.parent) joint = jointNames.get(parent) ?? '';
     const material = firstMaterial(mesh) as THREE.Material & { color?: THREE.Color };
     const own = mesh.name || material.name || material.color?.getHexString() || '?';
     return `${joint}/${own}`;
@@ -259,15 +259,15 @@ function placeEachVertex(mesh: THREE.Mesh, out: Float32Array): void {
   }
 }
 
-/** `out` = each point (x, y, z) of `points` through the affine matrix `m` (column-major, as three keeps it) */
-function transformPoints(points: ArrayLike<number>, m: ArrayLike<number>, out: Float32Array): void {
+/** `out` = each point (x, y, z) of `points` through the affine `matrix` (column-major, as three keeps it) */
+function transformPoints(points: ArrayLike<number>, matrix: ArrayLike<number>, out: Float32Array): void {
   for (let i = 0; i < points.length; i += 3) {
     const x = points[i];
     const y = points[i + 1];
     const z = points[i + 2];
-    out[i] = m[0] * x + m[4] * y + m[8] * z + m[12];
-    out[i + 1] = m[1] * x + m[5] * y + m[9] * z + m[13];
-    out[i + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+    out[i] = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12];
+    out[i + 1] = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
+    out[i + 2] = matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14];
   }
 }
 
@@ -296,10 +296,11 @@ function skinPoints(mesh: THREE.SkinnedMesh, points: ArrayLike<number>, out: Flo
     for (let k = 0; k < 4; k++) {
       const weight = weights[v + k];
       if (weight === 0) continue;
-      const e = indices[v + k] * 16;
-      x += weight * (carried[e] * px + carried[e + 4] * py + carried[e + 8] * pz + carried[e + 12]);
-      y += weight * (carried[e + 1] * px + carried[e + 5] * py + carried[e + 9] * pz + carried[e + 13]);
-      z += weight * (carried[e + 2] * px + carried[e + 6] * py + carried[e + 10] * pz + carried[e + 14]);
+      // (the bone's matrix in `carried`, column-major)
+      const at = indices[v + k] * 16;
+      x += weight * (carried[at] * px + carried[at + 4] * py + carried[at + 8] * pz + carried[at + 12]);
+      y += weight * (carried[at + 1] * px + carried[at + 5] * py + carried[at + 9] * pz + carried[at + 13]);
+      z += weight * (carried[at + 2] * px + carried[at + 6] * py + carried[at + 10] * pz + carried[at + 14]);
     }
     out[i] = toWorld[0] * x + toWorld[4] * y + toWorld[8] * z + toWorld[12];
     out[i + 1] = toWorld[1] * x + toWorld[5] * y + toWorld[9] * z + toWorld[13];
@@ -356,10 +357,10 @@ export function crossingsAlong(
 
 /** adds `more` into `total`, label by label */
 export function addCrossings(total: Map<string, Crossing>, more: Map<string, Crossing>): void {
-  for (const [label, c] of more) {
+  for (const [label, crossing] of more) {
     const sum = total.get(label) ?? { crossings: 0, inside: 0 };
-    sum.crossings += c.crossings;
-    sum.inside += c.inside;
+    sum.crossings += crossing.crossings;
+    sum.inside += crossing.inside;
     total.set(label, sum);
   }
 }
@@ -371,7 +372,10 @@ export function pointSegmentDistance(p: THREE.Vector3, a: THREE.Vector3, b: THRE
   return p.distanceTo(a.clone().addScaledVector(ab, t));
 }
 
-/** the least distance between the segments `p0`-`p1` and `q0`-`q1` */
+/**
+ * The least distance between the segments `p0`-`p1` and `q0`-`q1`: the closest points' parameters `s` and `t` along
+ * them, from Ericson's Real-Time Collision Detection (5.1.9), whose names for the dot products it keeps.
+ */
 export function segmentDistance(p0: THREE.Vector3, p1: THREE.Vector3, q0: THREE.Vector3, q1: THREE.Vector3): number {
   const d1 = p1.clone().sub(p0);
   const d2 = q1.clone().sub(q0);

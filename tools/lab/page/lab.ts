@@ -2,7 +2,7 @@
 // the game's own modules. They are imported as the game imports them (one copy of each module, never a stale one)
 // and typechecked with the game, so a renamed joint breaks the build rather than a probe's numbers.
 //
-// The game's frames run on the lab's clock: each is a 60th of a second, run as fast as the page can, with nothing
+// The game's frames run on the lab's clock: each a hair over a 60th of a second, run as fast as the page can, nothing
 // drawn unless asked (measures need no pixels; the scene's matrices are still updated, as a draw would). A set-up is
 // checked once it's made and throws if it didn't take. A measure of a state that never happened reads as clean: a
 // probe that scripted the game before its run began twice reported no clips at full draw, because it never drew.
@@ -13,6 +13,7 @@ import { CAMERA } from '../../../src/data/balance';
 import { clearEnemies } from '../../../src/entities/enemy';
 import * as renderer from '../../../src/core/renderer';
 import { updateSeeThrough } from '../../../src/core/seeThrough';
+import { CLASSES } from '../../../src/data/classes';
 import type { Joints } from '../../../src/entities/models/rig';
 
 /**
@@ -31,14 +32,14 @@ interface LabClock {
 declare global {
   interface Window {
     __labClock: LabClock;
-    /** starts the page's seeded `Math.random` again (`tools/lab/browser.mjs`) */
+    /** starts the page's seeded `Math.random` again (`tools/lab/node/browser.mjs`) */
     __labSeed: (seed: number) => void;
     __lab?: Lab;
   }
 }
 
 /** the seed each set-up starts the page's random numbers from */
-const SEED = 0x2545f491;
+const SETUP_SEED = 0x2545f491;
 /** the seed each command starts them from */
 const COMMAND_SEED = 0x1b873593;
 /** the game's clock at a set-up on a page booted for it, s (the idle's sway runs on it): past any moment the run's
@@ -73,7 +74,17 @@ export interface Fixture {
 }
 
 /** The pictures the lab can take: the game's own views, or a close-up from round the hero. */
-export type ViewName = 'lobby' | 'top' | 'third' | 'eyes' | 'front' | 'left' | 'right' | 'back' | 'above';
+export const VIEW_NAMES = ['lobby', 'top', 'third', 'eyes', 'front', 'left', 'right', 'back', 'above'] as const;
+export type ViewName = (typeof VIEW_NAMES)[number];
+
+/**
+ * What a command or a probe may return to say what it found: its text, and the problems that fail the command (a
+ * canary the measure missed, a state that never came). A probe may return plain text or JSON instead.
+ */
+export interface Report {
+  text: string;
+  problems: string[];
+}
 
 /** A close-up's camera: how far round from the hero's front (rad, positive to his left), and how high (m). */
 interface CloseUp {
@@ -128,8 +139,7 @@ const nextTask = (() => {
 export class Lab {
   /** three.js as the game uses it, for probe modules */
   readonly THREE = THREE;
-  /** errors the page raised and the anatomy warnings it logged, since the session last read them */
-  readonly errors: string[] = [];
+  /** the anatomy warnings the page logged, since the session last read them (its errors the session sees itself) */
   readonly warnings: string[] = [];
   /** draw each frame as the game does (off: only the scene's matrices are updated) */
   drawing = false;
@@ -160,7 +170,12 @@ export class Lab {
     window.__labSeed(COMMAND_SEED);
   }
 
-  /** Takes the game's clock over, makes its draws skippable, and starts keeping its errors and warnings. */
+  /** The hero the page booted, and the heroes the game has: the session checks it booted the one it asked for. */
+  heroes(): { hero: string; heroes: string[] } {
+    return { hero: this.player.cls.id, heroes: Object.keys(CLASSES) };
+  }
+
+  /** Takes the game's clock over, makes its draws skippable, and starts keeping its anatomy warnings. */
   install(): void {
     const gl = G.renderer;
     const draw = gl.render.bind(gl);
@@ -172,8 +187,6 @@ export class Lab {
         camera.updateMatrixWorld();
       }
     };
-    addEventListener('error', (event) => this.errors.push(String(event.message)));
-    addEventListener('unhandledrejection', (event) => this.errors.push(String(event.reason)));
     const warn = console.warn.bind(console);
     console.warn = (...args: unknown[]) => {
       if (String(args[0]).includes('anatomy')) this.warnings.push(String(args[0]));
@@ -280,7 +293,7 @@ export class Lab {
     // (the same moment and the same random numbers from here on, however long the run took to start: the clock is
     // only ever moved forward, so nothing the game stamped with it is left in the future)
     if (G.time < SETUP_TIME) G.time = SETUP_TIME;
-    window.__labSeed(SEED);
+    window.__labSeed(SETUP_SEED);
     // (standing a moment: what was still moving as the run started, the camera gliding in and the hero settling on
     // his spot, comes to rest, so it reaches the measure the same however many frames the start took)
     await this.step(SETTLE_FRAMES);
@@ -326,13 +339,33 @@ export class Lab {
     if (this.player.nocked < 1) throw new Error('lab: nocked: the arrow went back in the quiver at once');
   }
 
-  /** Pictures of the game as it is now, nothing advanced; the game's camera is put back as it was. */
-  capture(views: ViewName[], options: CaptureOptions = {}): Tile[] {
-    const throughEyes = renderer.viewMode() === 'first';
+  /**
+   * Throws, saying why, unless `capture` can take each of `views` (framed on `focus`) in the game's view `mode`: so a
+   * command can check its pictures before it sets anything up.
+   */
+  checkCapture(views: string[], mode: renderer.ViewMode, focus?: string): asserts views is ViewName[] {
+    const throughEyes = mode === 'first';
     for (const view of views) {
+      if (!(VIEW_NAMES as readonly string[]).includes(view)) {
+        throw new Error(`lab: no view ${view} (the views: ${VIEW_NAMES.join(', ')})`);
+      }
       if (throughEyes && view !== 'eyes') throw new Error(`lab: ${view}: through the eyes only the arms are shown`);
       if (!throughEyes && view === 'eyes') throw new Error('lab: eyes: needs the view through the eyes (--view first)');
     }
+    if (focus !== undefined && !this.jointNames().includes(focus)) {
+      throw new Error(`lab: --focus ${focus}: no such joint (the joints: ${this.jointNames().join(', ')})`);
+    }
+  }
+
+  /** The names of the hero's joints (`hips`, `handL`...). */
+  jointNames(): string[] {
+    const joints = this.joints as unknown as Record<string, unknown>;
+    return Object.keys(joints).filter((name) => joints[name] instanceof THREE.Object3D);
+  }
+
+  /** Pictures of the game as it is now, nothing advanced; the game's camera is put back as it was. */
+  capture(views: ViewName[], options: CaptureOptions = {}): Tile[] {
+    this.checkCapture(views, renderer.viewMode(), options.focus);
     const restore = this.saveCamera();
     const drawing = this.drawing;
     this.drawing = true;
