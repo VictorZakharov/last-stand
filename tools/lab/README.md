@@ -20,10 +20,12 @@ npm run lab -- help                        # every command and option
 With `lab:serve` up, the next command's page is booted as soon as a command finishes, and again once the source has
 been left alone for a moment after a change, so a command finds it ready: the sheet takes about 2 s, the carry 5.
 Without it, a command boots a session of its own (about 15 s) and closes it. The server runs under a supervisor of
-the lab's own, which starts it again when the lab's Node code changes, and every command carries a hash of the code
-it was sent from: a server that loaded other code starts again before it runs it (`node --watch` once stopped
-noticing changes, and the server ran old code that dropped an option the command line had just learnt). Its Vite
-server starts again when `vite.config.ts` or the packages change. Stopping the terminal's task stops it all.
+the lab's own, which starts it again when what the lab's Node code says changes (not on every change Windows
+reports: a file read now and then counts as one, and a server started again under a command closed its browser),
+and every command carries a hash of the code it was sent from: a server that loaded other code starts again before it
+runs it (`node --watch` once stopped noticing changes, and the server ran old code that dropped an option the command
+line had just learnt). Its Vite server starts again when `vite.config.ts` or the packages change. Stopping the
+terminal's task stops it all.
 
 ## Commands
 
@@ -82,7 +84,11 @@ copied into the other commit, so the same measure runs on both sides.
 What the lab gives a probe (`page/lab.ts`):
 
 - `lab.player`, `lab.model`, `lab.joints`, and `lab.THREE` (three.js as the game has it);
-- `lab.setup(fixture)`: the run set up afresh (`at`, `facing`, `view`, `nocked`), checked, and its report;
+- `lab.setup(fixture)`: the run set up afresh (`at`, `facing`, `view`, `nocked`), checked, and its report. A probe
+  may set up many cases one after another, but each follows on from the ones before it: the hero is the same one, and
+  the game's clock, which his idle runs on, only goes forward. A scan is the same every time it runs, but one of its
+  cases run alone may come out otherwise, so trace a case by running the cases before it first (an option of the
+  probe's own: `--trace=<case>`, say);
 - `lab.step(count, input?, measure?)`: frames run with each frame's input (`keys`, `m0` / `m2` for the mouse buttons,
   `look` for mouse look, `aim` for the point the mouse is over) and measured after each, a row a frame;
 - `lab.until(done, limit, what, input?)`: frames until `done`, throwing `lab: <what>` if it never is;
@@ -119,8 +125,8 @@ Once a measure is needed again, port it into `page/` as a command of its own (a 
   - `server.mjs`: `lab:serve`. One command at a time, the next page booted between them, and `--watch`'s changes. It
     only answers the lab's own command line: a POST of JSON for 127.0.0.1 or localhost, from no web page (a page in
     your browser could otherwise send it an `eval`). `supervisor.mjs` runs it (`serverProcess.mjs`) in a child
-    process and starts it again on a change to the lab's code (`codeStamp.mjs`, the hash every command is checked
-    against), and stops it when whatever started the supervisor is gone.
+    process and starts it again when the lab's code says something else (`codeStamp.mjs`, the hash every command is
+    checked against), and stops it when whatever started the supervisor is gone.
   - `session.mjs`: a command run on each side it asks for, its report, problems and A/B verdict; `commands.mjs`:
     what each command does on a side and how its results are compared.
   - `side.mjs`: a tree of the game served by a Vite dev server of the lab's own (HMR off, so a measure never meets a

@@ -5,7 +5,7 @@
 import { fork } from 'node:child_process';
 import { watch } from 'node:fs';
 import { join } from 'node:path';
-import { LAB } from './codeStamp.mjs';
+import { LAB, codeStamp } from './codeStamp.mjs';
 
 /** the server's own entry, run in the child */
 const SERVER_ENTRY = join(LAB, 'node', 'serverProcess.mjs');
@@ -39,9 +39,12 @@ export function supervise() {
   /** what to do when the child exits: start it again, stop, or wait for the code to change (it failed) */
   let next = 'wait';
   let settling = null;
+  /** the hash of the code the server was started on */
+  let started = null;
 
   const start = () => {
     next = 'wait';
+    started = codeStamp();
     child = fork(SERVER_ENTRY, [], { stdio: 'inherit', windowsHide: true });
     child.on('message', (message) => {
       if (message?.restart) next = 'start';
@@ -55,11 +58,16 @@ export function supervise() {
     });
   };
 
-  /** the server started again, once the code has settled */
+  /**
+   * The server started again, once the code has settled, if what it says changed: Windows reports a file read as a
+   * change when it updates the file's last access time (about once an hour), and the server restarted under a command
+   * that had just read the lab's code, closing its browser.
+   */
   const codeChanged = () => {
     clearTimeout(settling);
     settling = setTimeout(() => {
       if (next === 'stop') return;
+      if (codeStamp() === started) return;
       if (!child) return start();
       next = 'start';
       tell(child, { restart: 'the lab\'s code changed' });

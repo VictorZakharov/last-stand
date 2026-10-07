@@ -87,6 +87,16 @@ const BALL = 0.7;
 const EARLY = -1;
 /** how far out of the pelvis's middle a foot lands at least, and how far across it a planted foot may be before it steps back (m at a man's scale) */
 const GAP = 0.05, CROSS = 0.08;
+/** standing, a planted foot out of reach steps only to a spot at least this far off (a share of the leg): one landing where it
+ *  already is lands out of reach again (the pelvis rose while it was up), and on a dais step it beat up and down 5 times a second */
+const NEAR_STEP = 0.03;
+/** standing, a foot's spot by an edge moves to the nearest place it fits on the body's level, looked for in rings this far
+ *  apart (m at a man's scale), at most this many, each this many places round */
+const EDGE_RING = 0.01, EDGE_RINGS = 30, EDGE_ROUND = 24;
+/** how far inside its level's edge a standing foot's ball is put at least, along the foot and across it, and its heel and
+ *  toes clear of a higher level (m at a man's scale): put down on the edge itself, the 2 cm it rolls on landing took its
+ *  ball over it, or its toes into the riser */
+const EDGE_MARGIN = 0.03;
 /** how far the pelvis is lifted over the pose (rig units) before the reach limit brings it back: the rest pose stands with bent knees */
 const RISE = 0.03;
 /** the share of the body's speed a planted foot moves at during a run */
@@ -152,7 +162,9 @@ class Foot {
 
 const _s = new THREE.Vector3(), _c = new THREE.Vector3(), _f = new THREE.Vector3(), _h = new THREE.Vector3(), _t = new THREE.Vector3(), _p = new THREE.Vector3();
 const _m = new THREE.Matrix4(), _pp = new THREE.Vector3(), _ps = new THREE.Vector3(), _hq = new THREE.Quaternion();
-const _sd = new THREE.Vector3();
+const _sd = new THREE.Vector3(), _q3 = new THREE.Vector3();
+/** along the foot and across it, both ways: where a standing foot's ball must have its level round it (`EDGE_MARGIN`) */
+const MARGIN_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _pole = new THREE.Vector3(), _e = new THREE.Euler();
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -360,7 +372,7 @@ export class LegIK {
       f.lw = damp(f.lw, lwt, 10, dt);
       if (own || f.own) {
         ankle.updateWorldMatrix(true, false); _p.setFromMatrixPosition(ankle.matrixWorld);
-        f.state = 'plant'; f.P.set(_p.x, groundHeight(_p.x, _p.z), _p.z); f.yaw = pyaw; f.t = 0; f.stance = 0;
+        f.state = 'plant'; f.P.set(_p.x, this.under(i, _p.x, _p.z, pyaw, sc), _p.z); f.yaw = pyaw; f.t = 0; f.stance = 0;
       }
       f.own = own;
       _h.copy(thigh.position).applyMatrix4(j.hips.matrixWorld);   // the hip joint
@@ -380,11 +392,11 @@ export class LegIK {
             && (f.over || lat(f.P) < 0 || Math.hypot(f.P.x - _h.x, f.P.z - _h.z) > 0.9 * Math.max(0.55 * Lw, half + 0.3 * Lw));
           // (a foot only just down doesn't go again: a reversal can bring its window round at once)
           const settled = f.stance > 0.5 * duty * cycleT;
-          if (((inWin && settled) || early) && f.state === 'plant' && !(other.state === 'timed' && duty > 0.45)) { f.state = 'swing'; f.A.set(f.pos.x, groundHeight(f.pos.x, f.pos.z), f.pos.z); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown; f.rel0 = (f.pos.x - _h.x) * vd.x + (f.pos.z - _h.z) * vd.z; f.t = 0; f.span = 2 * w2 * Math.max(0.15, 1 - (early ? twx : Math.min(0.85, tw))); f.over = false; f.svd.copy(vd); f.dirYaw = Math.atan2(vd.x, vd.z); f.dir.copy(vd); }
+          if (((inWin && settled) || early) && f.state === 'plant' && !(other.state === 'timed' && duty > 0.45)) { f.state = 'swing'; f.A.set(f.pos.x, f.P.y, f.pos.z); f.yawA = f.yaw; f.carry = 0; f.pitch0 = f.shown; f.rel0 = (f.pos.x - _h.x) * vd.x + (f.pos.z - _h.z) * vd.z; f.t = 0; f.span = 2 * w2 * Math.max(0.15, 1 - (early ? twx : Math.min(0.85, tw))); f.over = false; f.svd.copy(vd); f.dirYaw = Math.atan2(vd.x, vd.z); f.dir.copy(vd); }
           // the stride goes on by however far the cycle moves, whichever way it runs (a reversal turns the phase back: following it, the foot would swing back the way it came), landing at its end
           else if (f.state === 'swing') {
             // (the way the body goes turned round under a stride: the same stride is aimed afresh from where the foot is, in the time it has left)
-            if (f.svd.dot(vd) < 0.3) { f.carry = Math.max(0, f.pos.y - groundHeight(f.pos.x, f.pos.z) - sole * sc); f.A.set(f.pos.x, groundHeight(f.pos.x, f.pos.z), f.pos.z); f.pitch0 = f.shown; f.span = Math.max(0.7 * w2, f.span * (1 - f.t)); f.t = 0; f.svd.copy(vd); f.rel0 = NaN; }
+            if (f.svd.dot(vd) < 0.3) { const g = this.under(i, f.pos.x, f.pos.z, f.yawA, sc); f.carry = Math.max(0, f.pos.y - g - sole * sc); f.A.set(f.pos.x, g, f.pos.z); f.pitch0 = f.shown; f.span = Math.max(0.7 * w2, f.span * (1 - f.t)); f.t = 0; f.svd.copy(vd); f.rel0 = NaN; }
             f.t = Math.min(1, f.t + this.dU / f.span); if (f.t >= 1) this.land(f, pyaw);
             else {
               f.dirYaw = angleDamp(f.dirYaw, Math.atan2(vd.x, vd.z), 10, dt); f.dir.set(Math.sin(f.dirYaw), 0, Math.cos(f.dirYaw));
@@ -395,8 +407,9 @@ export class LegIK {
       } else if (f.state === 'swing') {
         // it stopped mid-step: finish the step in time from where the foot is now, landing under the hip
         f.yawA += this.angle(f.yaw, f.yawA, pyaw) * smooth(f.t);
-        f.carry = Math.max(0, f.pos.y - groundHeight(f.pos.x, f.pos.z) - sole * sc); f.pitch0 = f.shown;
-        f.A.copy(f.pos); f.A.y = groundHeight(f.A.x, f.A.z);
+        const g = this.under(i, f.pos.x, f.pos.z, f.yawA, sc);
+        f.carry = Math.max(0, f.pos.y - g - sole * sc); f.pitch0 = f.shown;
+        f.A.copy(f.pos); f.A.y = g;
         f.state = 'timed'; f.dur = 0.22; f.t = 0; f.fast = false;
       }
       if (f.state === 'timed') { f.t += dt / f.dur; if (f.t >= 1) this.land(f, pyaw + (this.moving ? 0 : f.syaw)); }
@@ -414,11 +427,13 @@ export class LegIK {
         }
         // (standing, its spot is the stance's; else under the hip)
         const spot = !this.moving && f.stand ? _ps.copy(f.stand).applyMatrix4(rm) : _ps.copy(_h);
+        if (!this.moving) this.onBodyLevel(spot, i, fyaw, sc, rx, rz, keepSide);
         const dev = Math.hypot(f.P.x - spot.x, f.P.z - spot.z) + (!this.moving && f.stand ? 0.15 * Lw * Math.abs(this.angle(0, f.yaw, fyaw)) : 0);
         // (a foot the pelvis has turned past, onto the other leg's side, steps back to its own: the legs never stay crossed)
         const crossed = lat(f.P) < -CROSS * sc;
-        // (one the body has gone out of reach of steps at once, whatever the other foot is doing: dragged along, it would slide)
-        const over = f.over && f.stance > 0.04; f.over = false;
+        // (one the body has gone out of reach of steps at once, whatever the other foot is doing: dragged along, it would slide;
+        // standing, only to somewhere else: on its spot already, the pelvis sinks onto it or the heel lifts)
+        const over = f.over && f.stance > 0.04 && (this.moving || dev > NEAR_STEP * Lw); f.over = false;
         if (this.moving && !own && this.yawRate < 3 && Math.hypot(f.P.x - _h.x, f.P.z - _h.z) < 0.9 * Lw) {
           // (moving, a foot in trouble takes its stride early instead, above: an extra step would break the left, right rhythm; only one left far behind, or a body wheeling round on its feet, steps on its own)
         } else if (!own && (over || ((crossed || dev > (this.moving ? Math.max(0.55 * Lw, half + 0.3 * Lw) : (f.stand ? 0.07 : 0.1) * Lw)) && (this.moving ? other.state !== 'timed' : other.state === 'plant' || (other.state === 'timed' && other.t > 0.2)) && f.stance > (this.moving ? 0.12 : 0.05)))) {
@@ -434,6 +449,9 @@ export class LegIK {
         if (!this.moving && f.stand && f.state === 'timed') f.B.copy(f.stand).applyMatrix4(rm);
         else { const ah = f.state === 'swing' ? half : 0, sv = f.state === 'swing' ? f.dir : vd; f.B.set(_h.x + this.gv.x * remain + sv.x * ah, 0, _h.z + this.gv.z * remain + sv.z * ah); }
         keepSide(f.B);
+        // (standing, the step lands where the spot it is measured against is: off the edge)
+        const landYaw = pyaw + (this.moving ? 0 : f.syaw);
+        if (!this.moving) this.onBodyLevel(f.B, i, landYaw, sc, rx, rz, keepSide);
         const e = f.fast ? 0.6 * f.t * (2 - f.t) + 0.4 * smooth(f.t) : smooth(f.t), run = smooth((speed - 2) / 3.5);
         // (a run lifts the foot higher, and later in the swing: the heel comes up under the seat)
         const lift = (1 + 0.5 * run) * Math.min(0.2, Math.max(0.05, 0.04 + 0.03 * speed)) * sc * Math.sin(Math.PI * Math.pow(Math.min(1, f.t), 1 - 0.2 * run));
@@ -446,7 +464,7 @@ export class LegIK {
           f.pos.x += sv.x * (x - along); f.pos.z += sv.z * (x - along);
         }
         keepSide(f.pos);
-        const gA = groundHeight(f.A.x, f.A.z), gB = groundHeight(f.B.x, f.B.z);
+        const gA = f.A.y, gB = this.under(i, f.B.x, f.B.z, landYaw, sc);
         const tilt = this.tilt(fs, f.pitch) * sc;
         f.pos.y = gA + (gB - gA) * e + sole * sc + lift + f.carry * (1 - e) + tilt;
         // toe down as it leaves, up as it lands
@@ -458,7 +476,7 @@ export class LegIK {
         f.pitch = this.stancePitch(f, i, phase, duty, w2);
         // (the foot rolls over the ground instead of sliding on it: the heel stays put as the foot lands and flattens, the toes as the heel peels up, the ankle moving only round them)
         const roll = this.roll(fs, f.pitch) * sc;
-        f.pos.set(f.P.x + Math.sin(f.yaw) * roll, groundHeight(f.P.x, f.P.z) + sole * sc + this.tilt(fs, f.pitch) * sc, f.P.z + Math.cos(f.yaw) * roll);
+        f.pos.set(f.P.x + Math.sin(f.yaw) * roll, f.P.y + sole * sc + this.tilt(fs, f.pitch) * sc, f.P.z + Math.cos(f.yaw) * roll);
       }
       // (no step moves a foot faster than a running swing does: when the plan jumps, the phase or the way the body goes turning round as an attack turns the body onto its aim while it strafes or backs up, the foot catches up over a few frames instead of teleporting)
       if (f.seen && !own) {
@@ -580,7 +598,7 @@ export class LegIK {
   /** how much a foot pitched by `p` (toe down positive) must be raised so the toe or the heel does not go through the floor */
   /** a planted foot out of the leg's reach `rmax` from the hip (`hip`, the hips' own frame; `_m` their inverse) lifts its heel, pivoting on its toes, as far as it must (up to ~65 deg): its ankle target and pitch are set; false if even that won't do */
   private peel(f: Foot, i: number, hip: THREE.Vector3, rmax: number, sc: number): boolean {
-    const fs = this.shape![i], g = groundHeight(f.P.x, f.P.z);
+    const fs = this.shape![i], g = f.P.y;
     for (let th = Math.max(0, f.pitch); th <= 1.15; th += 0.05) {
       const r = this.roll(fs, th) * sc;
       _pp.set(f.P.x + Math.sin(f.yaw) * r, g + fs.sole * sc + this.tilt(fs, th) * sc, f.P.z + Math.cos(f.yaw) * r).applyMatrix4(_m);
@@ -616,10 +634,66 @@ export class LegIK {
     return 0;
   }
 
+  /**
+   * The ground a foot turned `yaw` with its ankle over (x, z) stands on: the highest level under its heel, its ankle or
+   * the ball of the foot, which bear its weight. Over an edge it rests on the edge, the rest of it out over the lower
+   * level, as on a stair (by the level under the ankle alone, a foot whose ball or heel was over the dais stood on the
+   * step below with its toes or heel up to 25 cm into the riser).
+   */
+  private under(i: number, x: number, z: number, yaw: number, sc: number): number {
+    const fs = this.shape?.[i];
+    if (!fs) return groundHeight(x, z);
+    const sx = Math.sin(yaw) * sc, sz = Math.cos(yaw) * sc, ball = BALL * fs.toe;
+    return Math.max(groundHeight(x, z), groundHeight(x - sx * fs.heel, z - sz * fs.heel), groundHeight(x + sx * ball, z + sz * ball));
+  }
+
+  /**
+   * Moves a standing foot's spot `p` (x, z), turned `yaw`, to the nearest place where its ball is on the level the body
+   * over (bx, bz) stands on and no part of its sole (heel, ankle, toes) is over a higher one, as a person by a ledge keeps
+   * a foot on it rather than reaching down the step with it. Each place but the spot itself is first put where a step
+   * would land on it (`keep`: on its own side of the pelvis's middle), so the foot lands where its spot is. (Stood on the level under its
+   * ankle, a foot was put down the dais's step with its toes or heel up to 25 cm into the riser; slid along itself onto
+   * the level under its ball, its spot jumped 20 cm as the ball crossed the edge, or lay out of the leg's reach down the
+   * step; drawn in towards the body, a step landed it back out on its own side; each time the foot stepped for its spot
+   * again and again.)
+   */
+  private onBodyLevel(p: THREE.Vector3, i: number, yaw: number, sc: number, bx: number, bz: number, keep?: (q: THREE.Vector3) => void): void {
+    const fs = this.shape?.[i];
+    if (!fs) return;
+    const level = groundHeight(bx, bz), sx = Math.sin(yaw), sz = Math.cos(yaw);
+    // (the ball's place: along the foot, and the margin's checks round it)
+    const ball = BALL * fs.toe * sc, margin = EDGE_MARGIN * sc;
+    // (on the body's level: its ball well inside the level's edge, nothing of it over a higher one)
+    const onLevel = (x: number, z: number): boolean => {
+      const bx = x + sx * ball, bz = z + sz * ball;
+      if (groundHeight(bx, bz) !== level) return false;
+      for (const [u, v] of MARGIN_DIRS) if (groundHeight(bx + (sx * u + sz * v) * margin, bz + (sz * u - sx * v) * margin) !== level) return false;
+      for (const along of [-fs.heel - EDGE_MARGIN, 0, fs.toe + EDGE_MARGIN]) if (groundHeight(x + sx * along * sc, z + sz * along * sc) > level + 1e-3) return false;
+      return true;
+    };
+    // (else on whatever it rests on there, its toes over nothing higher: up the step a body stands at, its toes kept to its
+    // own side of the pelvis's middle went into the riser wherever it was put on the body's level)
+    const toes = (fs.toe + EDGE_MARGIN) * sc;
+    const restsThere = (x: number, z: number): boolean => groundHeight(x + sx * toes, z + sz * toes) <= this.under(i, x, z, yaw, sc) + 1e-3;
+    const x0 = p.x, z0 = p.z;
+    for (const fits of [onLevel, restsThere]) {
+      for (let ring = 0; ring <= EDGE_RINGS; ring++) {
+        const round = ring ? EDGE_ROUND : 1, r = ring * EDGE_RING * sc;
+        for (let k = 0; k < round; k++) {
+          const a = k / round * TAU;
+          _q3.set(x0 + Math.sin(a) * r, 0, z0 + Math.cos(a) * r);
+          // (the spot itself as it is: where it fits, nothing changes)
+          if (ring) keep?.(_q3);
+          if (fits(_q3.x, _q3.z)) { p.x = _q3.x; p.z = _q3.z; return; }
+        }
+      }
+    }
+  }
+
   private land(f: Foot, yaw: number): void {
     // (where the ankle came down, which a capped step may have left short of its target: the foot never slides on after it lands; the spot is the flat foot's, under the heel it lands on)
-    const fs = this.shape?.[this.feet.indexOf(f)], r = fs ? this.roll(fs, f.pitch) * this.j.root.scale.x : 0;
-    f.state = 'plant'; f.P.set(f.pos.x - Math.sin(yaw) * r, 0, f.pos.z - Math.cos(yaw) * r); f.P.y = groundHeight(f.P.x, f.P.z); f.yaw = yaw; f.t = 0; f.stance = 0; f.carry = 0;
+    const i = this.feet.indexOf(f), sc = this.j.root.scale.x, fs = this.shape?.[i], r = fs ? this.roll(fs, f.pitch) * sc : 0;
+    f.state = 'plant'; f.P.set(f.pos.x - Math.sin(yaw) * r, 0, f.pos.z - Math.cos(yaw) * r); f.P.y = this.under(i, f.P.x, f.P.z, yaw, sc); f.yaw = yaw; f.t = 0; f.stance = 0; f.carry = 0;
   }
 
   private start(legs: [THREE.Object3D, THREE.Object3D, THREE.Object3D][], yaw: number, phase: number, rx: number, rz: number): void {
@@ -627,7 +701,9 @@ export class LegIK {
       const f = this.feet[i];
       // (where the pose has the foot: a lunge's stance stays put, and the re-steps bring it in)
       legs[i][2].getWorldPosition(_h);
-      f.state = 'plant'; f.P.set(_h.x, groundHeight(_h.x, _h.z), _h.z); f.yaw = f.yawA = yaw; f.t = 0; f.stance = 0; f.seen = false;
+      const sc = this.j.root.scale.x;
+      this.onBodyLevel(_h, i, yaw, sc, rx, rz);
+      f.state = 'plant'; f.P.set(_h.x, this.under(i, _h.x, _h.z, yaw, sc), _h.z); f.yaw = f.yawA = yaw; f.t = 0; f.stance = 0; f.seen = false;
     }
     this.last.set(rx, 0, rz); this.leanX = this.leanZ = 0;
     this.v.set(0, 0, 0); this.gv.set(0, 0, 0); this.sp = 0; this.twist = 0; this.dphase = 0; this.lastPhase = phase; this.moving = false; this.drop = 0;
