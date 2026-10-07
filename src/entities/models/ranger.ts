@@ -521,6 +521,7 @@ export function buildRanger(): Model {
   S.build();
   // the bow, in the left hand; the arrow the right hand carries from the quiver to the string
   const bow = new Bow({ riser: riserWood, limb: limbWood, grip: hide, string: cord, arrow: fletched, horn, brass: bowBrass, serving, yarn, inlay });
+  bow.group.userData.bow = bow;   // (the lab's handle on it: tools/lab carry)
   // (the carried bow's frame in the hero's, standing: its arrow along CARRY_ARROW, its top limb CARRY_TOP made square to it)
   const carryTop = CARRY_TOP.clone().addScaledVector(CARRY_ARROW, -CARRY_TOP.dot(CARRY_ARROW)).normalize();
   const carryQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(V(0, 0, 0).crossVectors(carryTop, CARRY_ARROW), carryTop, CARRY_ARROW));

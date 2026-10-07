@@ -405,6 +405,14 @@ export class Bow {
     for (let k = 0; k < 3; k++) { const i = (k * SEG) >> 1; this.lowerLimb[k].set(0, -this.line[i * 2], this.line[i * 2 + 1]); }
   }
 
+  /** points along a limb's middle as last set, from its root to its tip, every `step` of its segments (the bow's frame; `up`
+   *  the top limb): what a probe measures the limbs by (tools/lab carry) */
+  limbLine(up: boolean, step = 2): THREE.Vector3[] {
+    const out: THREE.Vector3[] = [], s = up ? 1 : -1;
+    for (let i = 0; i <= SEG; i = i < SEG ? Math.min(SEG, i + step) : SEG + 1) out.push(new THREE.Vector3(0, s * this.line[i * 2], this.line[i * 2 + 1]));
+    return out;
+  }
+
   /**
    * Draw the string `pull` back past brace (m): the limbs bend just as far as keeps the string its length. A loosed
    * bow (`pull` 0) rings with `ring`, an added bend (rad/m, negative: forward past rest), the string straight.

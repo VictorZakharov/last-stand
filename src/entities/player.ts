@@ -245,6 +245,8 @@ export class Player {
   /** Stand at a spot facing a direction, as if always there (the cape settles in place). */
   place(pos: THREE.Vector3, facing: number): void {
     this.pos.set(pos.x, 0, pos.z);
+    // (standing: a hero placed while walking glided on from the spot, a third of a metre)
+    this.vel.set(0, 0, 0);
     this.facing = facing;
     this.obj.position.set(pos.x, groundHeight(pos.x, pos.z), pos.z);
     this.model.root.rotation.y = facing;
