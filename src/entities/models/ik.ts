@@ -92,6 +92,14 @@ const LEAN = 0.045;
 /** the fastest a foot's target may move (m/s at the scale of a man: a base and a share of the body's speed; a running
  *  swing peaks near twice it) */
 const FOOT_V = 4, FOOT_VK = 2.5;
+/** a foot in the air clears what is under it by this much, looking this far ahead along its way to its landing, in
+ *  this many steps (m at a man's scale), and rising over what is ahead at this slope (m a metre) */
+const CLEAR = 0.03, CLEAR_AHEAD = 0.35, CLEAR_STEPS = 7, CLEAR_SLOPE = 1;
+/** how quickly a foot in the air settles once past a higher level (1/s) */
+const CLEAR_DOWN = 12;
+/** how far along its stride a moving foot's landing may move to keep its toes off a riser, in steps of (m at a man's
+ *  scale) */
+const RISER_SHIFT = 0.3, RISER_STEP = 0.01;
 /** how far a planted foot may be turned from the body's facing (rad) */
 const YAW_MAX = 0.5;
 /** how far the pelvis may turn from the chest (rad) to face the way the body travels while its chest faces the aim */
@@ -174,8 +182,12 @@ function turnBetween(from: number, to: number): number {
  *  hanging by the thigh met it). */
 const legU = (phase: number, i: number): number => ((phase / TAU + (1 - i) * 0.5) % 1 + 1) % 1;
 
-/** How far the pelvis turns towards a way the legs go `off` its line (rad): none within `SLACK`, at most `TWIST`. */
-const pelvisTurnFor = (off: number): number => Math.sign(off) * Math.min(TWIST, Math.max(0, Math.abs(off) - SLACK));
+/** How far the pelvis turns towards a way the legs go `off` its line (rad): none within `SLACK`, at most `TWIST` (with
+ *  the body's ranges on, as far as the trunk lets it, which the caller holds it to). */
+function pelvisTurnFor(off: number): number {
+  const most = ROM_ON ? Math.PI : TWIST;
+  return Math.sign(off) * Math.min(most, Math.max(0, Math.abs(off) - SLACK));
+}
 
 /** How far a half stride (one foot's step) is at `speed` (m/s) for legs `leg` long (world m): walks take short steps,
  *  runs long ones; the walk cycle's phase then advances π per step (`gaitRate`). */
@@ -222,6 +234,18 @@ class Foot {
   shown = 0;
   pitch0 = 0;
   carry = 0;
+  /** the sole's line under the ankle of a foot in the air, as its swing has it, and how much higher it is held to
+   *  clear what it passes over (m) */
+  swung = 0;
+  clear = 0;
+  /** the way it points as last shown (rad, world), and how far it is tipped toe down (rad: in the air within the
+   *  ankle's range, it hangs from the shin, which tips it further than its pitch) */
+  shownYaw = 0;
+  tip = 0;
+  /** how far along its stride its landing is moved to keep its toes off a riser (m), and which way, kept for the
+   *  stride (0 until it needs one) */
+  landShift = 0;
+  riserSide = 0;
   /** the leg as the pose had it, for the blend */
   fk = { thigh: new THREE.Quaternion(), knee: new THREE.Quaternion(), ankle: new THREE.Quaternion() };
   /** this leg's own blend over the pose (`update`'s `legW`), smoothed, and whether the pose owned it last frame */
@@ -335,6 +359,7 @@ export class LegIK {
   private owned = false;
   /** how far the pelvis is dropped so both feet are in reach (smoothed) */
   private drop = 0;
+  private dropWanted = 0;
   /** the way the body faced last frame, and how fast it keeps turning (rad/s, smoothed) */
   private lastYaw = 0;
   private yawRate = 0;
@@ -369,6 +394,16 @@ export class LegIK {
   /** whether the body is moving as the gait sees it (read by the lab) */
   get walking(): boolean {
     return this.moving;
+  }
+
+  /** the way the gait's pelvis faces, which the feet land turned to (rad, world; read by the lab) */
+  get pelvisYaw(): number {
+    return this.frame.pelvisYaw;
+  }
+
+  /** how far the pelvis is dropped for the feet to reach, and how far they asked for this frame (m, read by the lab) */
+  get pelvisDrop(): { dropped: number; wanted: number } {
+    return { dropped: this.drop, wanted: this.dropWanted };
   }
 
   /** how far the body leans forward this frame (rad): a pose that holds something at an angle in the world eases its
@@ -542,27 +577,37 @@ export class LegIK {
     const going = this.spSlow > 0.6 && lean > 0;
     // (mid-reversal the smoothed velocity collapses and swings through every direction: the pelvis holds its turn till
     // it has one again)
+    const [least, most] = this.trunkTurns();
     if (going && this.v.length() < 0.6 * this.sp) want = this.twist / Math.max(this.w, 1e-3);
-    else if (going) want = this.pelvisTurnTowardsTravel(g);
+    else if (going) want = this.pelvisTurnTowardsTravel(g, least, most);
     else this.backing = false;
-    // (within the trunk's turn: the pose's own twist of the chest on the hips and this one together; past it the legs
-    // step more across the way the pelvis faces, as a person's do. The two together twisted the spine 84 degrees)
-    if (ROM_ON) {
-      const pose = twistAngle(_q.copy(this.j.spine.quaternion).multiply(this.j.chest.quaternion), UP);
-      const w = Math.max(this.w, 1e-3);
-      want = Math.max((pose - TRUNK) / w, Math.min((pose + TRUNK) / w, want));
-    }
-    return want;
+    return Math.max(least, Math.min(most, want));
+  }
+
+  /** The least and most the pelvis may turn (rad, as `pelvisTurnWanted`'s): within the trunk's turn, the pose's own
+   *  twist of the chest on the hips and this one together; past it the legs step more across the way the pelvis faces,
+   *  as a person's do. The two together twisted the spine 84 degrees. (A pose turning the chest side-on, an archer's
+   *  at the shot, lets the hips turn round to his side, as an archer walks along his side-on line: held to `TWIST` of
+   *  the aim, strafing drawn, his legs went 42 degrees off the pelvis's line, each stride cut short and pushed out
+   *  wide at its middle.) */
+  private trunkTurns(): [number, number] {
+    if (!ROM_ON) return [-Infinity, Infinity];
+    const pose = twistAngle(_q.copy(this.j.spine.quaternion).multiply(this.j.chest.quaternion), UP);
+    const w = Math.max(this.w, 1e-3);
+    return [(pose - TRUNK) / w, (pose + TRUNK) / w];
   }
 
   /** The pelvis's turn for the way the body travels: walking forwards or backwards along its line, whichever turns it
    *  less and keeps the legs nearer its line, with a reversal walked backwards a while. */
-  private pelvisTurnTowardsTravel(g: GaitFrame): number {
+  private pelvisTurnTowardsTravel(g: GaitFrame, least: number, most: number): number {
     const rel = turnBetween(g.facing, Math.atan2(this.v.x, this.v.z));
     const back = turnBetween(0, rel + Math.PI);
     // (the legs walk along the pelvis's line, forwards or backwards: going back and to the side it turns the other way
-    // and backpedals, rather than turning towards the way it goes and stepping sideways backwards across it)
-    const forwards = pelvisTurnFor(rel), backwards = pelvisTurnFor(back), now = this.twist / Math.max(this.w, 1e-3);
+    // and backpedals, rather than turning towards the way it goes and stepping sideways backwards across it; each way
+    // as far as the trunk lets it turn)
+    const forwards = Math.max(least, Math.min(most, pelvisTurnFor(rel)));
+    const backwards = Math.max(least, Math.min(most, pelvisTurnFor(back)));
+    const now = this.twist / Math.max(this.w, 1e-3);
     // (each way's cost: how far the legs go off the pelvis's line, and how far the pelvis has to turn to get there)
     const offForwards = Math.abs(rel - forwards), offBackwards = Math.abs(back - backwards);
     const costForwards = offForwards + TURN_COST * Math.abs(forwards - now);
@@ -650,9 +695,13 @@ export class LegIK {
       if (f.t >= 1) this.land(f, g.pelvisYaw + (this.moving ? 0 : f.syaw));
     }
     if (f.state === 'plant') this.tendPlantedFoot(g, f, i, own);
-    if (f.state === 'swing' || f.state === 'timed') this.moveFootInAir(g, f, i);
+    const inAir = f.state === 'swing' || f.state === 'timed';
+    if (inAir) this.moveFootInAir(g, f, i);
     else this.placePlantedFoot(g, f, i);
     this.capFootSpeed(g, f, own);
+    // (cleared where it is once its speed is capped: cleared where its swing would have put it, a foot the cap held
+    // back over a step's edge was left at the height for the level beyond and went 9 to 12 cm into the riser)
+    if (inAir) f.pos.y += this.clearStep(g, f, i, f.shownYaw, f.swung, g.pelvisYaw + (this.moving ? 0 : f.syaw));
   }
 
   /** A leg the pose owns: its foot stays where the pose puts it (and once more as it gives it back), so the gait picks
@@ -729,6 +778,7 @@ export class LegIK {
     f.t = 0;
     f.span = 2 * g.halfSwing * Math.max(0.15, 1 - (early ? where : Math.min(0.85, progress)));
     f.over = false;
+    f.riserSide = 0;
     f.svd.copy(travel);
     f.dirYaw = Math.atan2(travel.x, travel.z);
     f.dir.copy(travel);
@@ -760,6 +810,7 @@ export class LegIK {
     f.t = 0;
     f.svd.copy(g.travel);
     f.rel0 = NaN;
+    f.riserSide = 0;
   }
 
   /** It stopped mid-stride: the step is finished in time from where the foot is now, landing under the hip. */
@@ -846,13 +897,87 @@ export class LegIK {
     if (f.state === 'swing' && speed > 0.5) this.swingInHipFrame(g, f);
     this.keepToSide(f.pos);
     const groundA = f.A.y, groundB = this.under(i, f.B.x, f.B.z, landYaw, sc);
+    // (the sole's line under the ankle, its lowest point on the swing's way)
     const tilt = this.tilt(shape, f.pitch) * sc;
-    f.pos.y = groundA + (groundB - groundA) * e + shape.sole * sc + lift + f.carry * (1 - e) + tilt;
+    f.swung = groundA + (groundB - groundA) * e + lift + f.carry * (1 - e) + tilt;
+    f.pos.y = f.swung + shape.sole * sc;
     // toe down as it leaves, up as it lands
     f.pitch = 0.32 * (1 - smooth(f.t * 2.5)) - 0.2 * smooth((f.t - 0.7) / 0.3);
     // (from the pitch the foot had as it left: a heel already peeled up carries on into the swing)
     f.pitch = f.pitch0 + (f.pitch - f.pitch0) * smooth(f.t * 3);
     f.stance = 0;
+  }
+
+  /** How much higher than its swing has it (`swung`, the sole's line under the ankle) a foot in the air is held to
+   *  clear what is under it and ahead of it on its way, each point of its sole as the foot is tipped: as a person
+   *  lifts a foot over a step, rising as it nears it, and eased down once past (swung between the levels it left and
+   *  lands on alone, a foot went through the dais step's riser, up to 17 cm deep for 9 frames; cleared as if level,
+   *  the toe of a foot hanging from its shin still caught the step's edge 6 cm deep). The margin comes in as it leaves
+   *  and goes as it lands, and as it lands it comes down onto the level it lands on (`landYaw` its way then: held up
+   *  to the last frame over a step its heel had been over, a foot landing on the floor beside it dropped 15 cm). */
+  private clearStep(g: GaitFrame, f: Foot, i: number, yaw: number, swung: number, landYaw: number): number {
+    const shape = this.shape![i], sc = g.scale;
+    const toX = f.B.x - f.pos.x, toZ = f.B.z - f.pos.z, way = Math.hypot(toX, toZ);
+    const looked = Math.min(way, CLEAR_AHEAD * sc);
+    const margin = CLEAR * sc * smooth(f.t / 0.25) * (1 - smooth((f.t - 0.75) / 0.25));
+    const across = Math.cos(f.tip) * sc, down = Math.sin(f.tip) * sc;
+    let lowest = -Infinity;
+    for (let k = 0; k <= CLEAR_STEPS; k++) {
+      const ahead = looked * k / CLEAR_STEPS, s = way > 1e-6 ? ahead / way : 0;
+      const x = f.pos.x + toX * s, z = f.pos.z + toZ * s;
+      for (const along of [-shape.heel, 0, 0.5 * shape.toe, shape.toe]) {
+        const ground = groundHeight(x + Math.sin(yaw) * along * across, z + Math.cos(yaw) * along * across);
+        lowest = Math.max(lowest, ground + margin + along * down - ahead * CLEAR_SLOPE);
+      }
+    }
+    const landing = smooth((f.t - 0.75) / 0.25);
+    if (landing > 0) lowest += (this.under(i, f.pos.x, f.pos.z, landYaw, sc) - lowest) * landing;
+    const need = Math.max(0, lowest - swung);
+    f.clear = need >= f.clear || landing > 0 ? need : damp(f.clear, need, CLEAR_DOWN, g.dt);
+    return f.clear;
+  }
+
+  /** How far a leg's foot is tipped toe down in the world (rad). */
+  private tipOf(leg: LegJoints): number {
+    _q.copy(_hipsTurn).multiply(leg.thigh.quaternion).multiply(leg.knee.quaternion).multiply(leg.ankle.quaternion);
+    const ahead = _toFoot.set(0, 0, 1).applyQuaternion(_q);
+    return Math.asin(Math.max(-1, Math.min(1, -ahead.y)));
+  }
+
+  /** How far along its stride a moving foot's landing (turned `yaw`) moves so its toes are over no higher level than
+   *  the rest of its sole rests on: on up onto that level or back short of it, whichever is nearer, and the same way
+   *  for the rest of the stride, so the landing doesn't flip between the two as the gait's prediction moves (m, along
+   *  the stride; `f.B` is moved with it). Late in a swing it is where the foot is that lands, not the prediction: the
+   *  leg's reach and the pelvis's side keep it off where the gait put it. (Landed where the gait put it, a foot coming
+   *  down the dais's step backwards stood with its toes up to 16 cm inside the dais.) */
+  private offRiser(g: GaitFrame, f: Foot, i: number, yaw: number): number {
+    const sc = g.scale, way = f.state === 'swing' ? f.dir : g.travel, B = f.B;
+    const late = f.state === 'swing' && f.t > 0.6;
+    const atX = late ? f.pos.x - way.x * f.landShift : B.x, atZ = late ? f.pos.z - way.z * f.landShift : B.z;
+    if (!this.straddles(i, atX, atZ, yaw, sc)) return 0;
+    const sides = f.riserSide ? [f.riserSide] : [1, -1];
+    for (let shift = RISER_STEP; shift <= RISER_SHIFT; shift += RISER_STEP) {
+      for (const side of sides) {
+        const along = shift * side * sc;
+        if (this.straddles(i, atX + way.x * along, atZ + way.z * along, yaw, sc)) continue;
+        f.riserSide = side;
+        B.set(B.x + way.x * along, 0, B.z + way.z * along);
+        return along;
+      }
+    }
+    return 0;
+  }
+
+  /** Whether a foot at (x, z), turned `yaw`, has its toes over a higher level than the rest of its sole rests on. */
+  private straddles(i: number, x: number, z: number, yaw: number, sc: number): boolean {
+    return this.soleTop(i, x, z, yaw, sc) > this.under(i, x, z, yaw, sc) + 1e-3;
+  }
+
+  /** The highest level under any of a foot's sole at (x, z), turned `yaw`: its heel, ankle, ball and toes. */
+  private soleTop(i: number, x: number, z: number, yaw: number, sc: number): number {
+    const shape = this.shape![i];
+    const toeX = x + Math.sin(yaw) * shape.toe * sc, toeZ = z + Math.cos(yaw) * shape.toe * sc;
+    return Math.max(this.under(i, x, z, yaw, sc), groundHeight(toeX, toeZ));
   }
 
   /** Where a foot in the air will land: under where its hip will be by then, a half stance ahead (standing, on its
@@ -869,6 +994,7 @@ export class LegIK {
       f.B.set(x, 0, z);
     }
     this.keepToSide(f.B);
+    if (this.moving) f.landShift = damp(f.landShift, this.offRiser(g, f, i, landYaw), 20, g.dt);
     // (standing, the step lands where the spot it is measured against is: off the edge)
     if (!this.moving) this.onBodyLevel(f.B, i, landYaw, g.scale, g.rootX, g.rootZ, true);
   }
@@ -880,7 +1006,7 @@ export class LegIK {
     const s1 = f.t, s2 = s1 * s1, s3 = s2 * s1;
     const leaves = (2 * s3 - 3 * s2 + 1) * f.rel0;
     const outStroke = (s3 - 2 * s2 + s1) * STROKE_OUT * stroke;
-    const lands = (-2 * s3 + 3 * s2) * g.landAhead;
+    const lands = (-2 * s3 + 3 * s2) * (g.landAhead + f.landShift);
     const inStroke = (s3 - s2) * STROKE_IN * stroke;
     const x = leaves + outStroke + lands + inStroke;
     const way = f.dir, along = (f.pos.x - g.hip.x) * way.x + (f.pos.z - g.hip.z) * way.z;
@@ -991,6 +1117,7 @@ export class LegIK {
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz), lmax = 0.98 * (g.thigh + g.shin);
       if (d > lmax) need = Math.max(need, (d - lmax) / Math.max(0.35, -dy / d));
     }
+    this.dropWanted = need;
     this.drop = damp(this.drop, Math.min(need, 0.2 * g.legReach + RISE), need > this.drop ? 30 : 9, g.dt);
     const dip = this.drop * this.w;
     if (dip > 1e-4) {
@@ -1037,6 +1164,7 @@ export class LegIK {
     _pole.set(Math.sin(kneeYaw) + (i === 0 ? 0.12 : -0.12), 0, Math.cos(kneeYaw));
     reachArm(thigh, knee, g.thigh, g.shin, target, _pole, -1);
     f.shown = f.pitch;
+    f.shownYaw = yawNow;
     this.levelAnkle(f, this.legs[i], yawNow);
     // (and as far again as the ankle's twist on the shin, as measured, is past its range: with the leg stretched out
     // behind, the hips swinging back round over it at a reversal twisted it 13 degrees past all the same)
@@ -1052,6 +1180,7 @@ export class LegIK {
     // ankle under a knee bent back, and twisted 100 degrees against it. A planted foot stays as it lies: turned on the
     // floor its contact slid)
     if (f.state !== 'plant') clampAnkle(ankle.quaternion, i === 0, false);
+    f.tip = this.tipOf(this.legs[i]);
     const blend = this.w * f.lw;
     if (blend < 0.999) {
       thigh.quaternion.copy(f.fk.thigh).slerp(thigh.quaternion, blend);
@@ -1221,6 +1350,8 @@ export class LegIK {
     f.t = 0;
     f.stance = 0;
     f.carry = 0;
+    f.clear = 0;
+    f.landShift = 0;
   }
 
   /** The gait started afresh: each foot planted where the pose has it (a lunge's stance stays put, and the re-steps

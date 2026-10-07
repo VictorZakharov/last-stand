@@ -411,6 +411,7 @@ async function walkAcross(lab: Lab, walk: Walk, options: FeetOptions, slide: boo
     trace: [],
   };
   const aim = walk.aim ? new THREE.Vector3(walk.aim[0], 0, walk.aim[1]) : undefined;
+  if (options.trace) result.trace.push(describeShapes(legs));
   let worst = PICTURE_FROM - 1;
   let canary: Canary | undefined;
   let frame = 0;
@@ -477,12 +478,31 @@ function pictureStance(lab: Lab, walk: Walk, frame: number, stance: Stance): Pic
 
 const fixed = (value: number, digits = 2) => value.toFixed(digits);
 
-/** A foot this frame, for a trace: its state, reach flag, pitch and place against its window, its spot and level, and
- *  the ankle. */
-function traceFoot(name: SideName, foot: LegFoot, ankle: THREE.Vector3): string {
+/** A foot this frame, for a trace: its state, reach flag, pitch and place against its window, its spot and level, the
+ *  ankle, the way the foot points (degrees, as the leg IK's yaw) and how far it is tipped toe down (rad), how deep its sole is in the ground, and how far the
+ *  leg IK raises it over a step and moves its landing off a riser (cm). */
+function traceFoot(name: SideName, foot: LegFoot, ankle: THREE.Object3D, shape: FootShape): string {
+  const at = ankle.getWorldPosition(new THREE.Vector3());
+  const ahead = new THREE.Vector3(0, 0, 1).transformDirection(ankle.matrixWorld);
+  const heading = Math.atan2(ahead.x, ahead.z) * 180 / Math.PI;
+  const sunk = soleAgainst(ankle, shape, foot.P.y).deepest;
   const doing = `${foot.state.padEnd(5)} out ${foot.over ? 1 : 0} pitch ${fixed(foot.pitch)} window ${fixed(foot.window)}`;
   const where = `on ${fixed(foot.P.y)} at ${fixed(foot.P.x)},${fixed(foot.P.z)}`;
-  return `${name} ${doing} ${where} ankle ${fixed(ankle.x)},${fixed(ankle.y, 3)},${fixed(ankle.z)}`;
+  const tipped = Math.asin(Math.max(-1, Math.min(1, -ahead.y)));
+  const pointing = `heading ${heading.toFixed(0)} tipped ${fixed(tipped)} sunk ${cm(Math.max(0, sunk))} clear ${cm(foot.clear)} `
+    + `shift ${cm(foot.landShift)} target ${fixed(foot.pos.x)},${fixed(foot.pos.y, 3)},${fixed(foot.pos.z)}`
+    + ` landing ${fixed(foot.B.x)},${fixed(foot.B.z)}`;
+  return `${name} ${doing} ${where} ankle ${fixed(at.x)},${fixed(at.y, 3)},${fixed(at.z)} ${pointing}`;
+}
+
+/** Each foot's sole as the leg IK measured it, for a trace: back to its heel, on to its toes and down to the sole from
+ *  the ankle (cm, at the hero's scale). */
+function describeShapes(legs: Legs): string {
+  const feet = legs.shapes.map((shape, side) => {
+    const scale = legs.ankles[side].getWorldScale(new THREE.Vector3()).x;
+    return `${SIDE_NAMES[side]} heel ${cm(shape.heel * scale)} toe ${cm(shape.toe * scale)} sole ${cm(shape.sole * scale)}`;
+  });
+  return `  feet: ${feet.join(', ')}`;
 }
 
 /** This frame of a walk, for a trace: where the body is, how fast it goes and how high its hips are, and each foot. */
@@ -491,9 +511,12 @@ function traceLine(lab: Lab, frame: number, legs: Legs): string {
   const hips = lab.joints.hips.getWorldPosition(new THREE.Vector3());
   const speed = Math.hypot(lab.player.vel.x, lab.player.vel.z);
   const gait = legs.ik.walking ? 'moving' : 'standing';
-  const bodyAt = `body ${fixed(body.x)},${fixed(body.z)} going ${fixed(speed)} (${gait}) hips ${fixed(hips.y, 3)}`;
+  const drop = legs.ik.pelvisDrop;
+  const pelvis = (legs.ik.pelvisYaw * 180 / Math.PI).toFixed(0);
+  const dropped = `dropped ${cm(drop.dropped)} of ${cm(drop.wanted)} pelvis ${pelvis}`;
+  const bodyAt = `body ${fixed(body.x)},${fixed(body.z)} going ${fixed(speed)} (${gait}) hips ${fixed(hips.y, 3)} ${dropped}`;
   const feet = legs.ik.feet.map((foot, side) => {
-    return traceFoot(SIDE_NAMES[side], foot, legs.ankles[side].getWorldPosition(new THREE.Vector3()));
+    return traceFoot(SIDE_NAMES[side], foot, legs.ankles[side], legs.shapes[side]);
   });
   return `  ${String(frame).padStart(3)} ${bodyAt} | ${feet.join(' | ')}`;
 }

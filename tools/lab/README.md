@@ -41,7 +41,8 @@ terminal's task stops it all.
   keeps one point still); a sole in the ground, the fastest ankle, breaks in the left, right rhythm, frames with both
   feet up). `--canary` plants a slid and a sunk ankle, `--frames` lists what was flagged (the stances, each foot's
   runs of frames with its sole in the ground, and where the rhythm broke), `--trace` prints each frame of each walk
-  with the leg IK's own state; the worst stance of each walk is pictured whole, as the player sees it and from the
+  with the leg IK's own state (the pelvis's drop and turn; each foot's state, window, spot, ankle, heading, tip, depth
+  in the ground, clearance, landing and its shift off a riser; each walk's feet measured as the IK has them); the worst stance of each walk is pictured whole, as the player sees it and from the
   front and the side (`out/feet/sheet.png`). A walk follows on from the ones before it (the hero, the gait and the
   game's clock carry over), so compare runs of the same `--scenarios`.
 - `carry`: the ranger's carried bow against his body through a carry's round (standing, walking, a draw and its shot,

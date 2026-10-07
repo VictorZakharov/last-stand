@@ -194,8 +194,9 @@ export function reachArm(shoulder: THREE.Object3D, elbow: THREE.Object3D, upper:
   shoulder.quaternion.copy(_q);
 }
 
-const _a = new THREE.Vector3(), _hip = new THREE.Vector3(), _k = new THREE.Quaternion(), _r = new THREE.Quaternion(), _eu = new THREE.Euler();
+const _a = new THREE.Vector3(), _hip = new THREE.Vector3(), _k = new THREE.Quaternion(), _r = new THREE.Quaternion();
 const _q0 = new THREE.Quaternion(), _fw = new THREE.Quaternion(), _toe = new THREE.Vector3();
+const _level = new THREE.Quaternion(), _ahead = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
 /** how far forward of the ankle the toes are (the rig's units) */
 const TOE = 0.15;
 
@@ -205,6 +206,16 @@ const TOE = 0.15;
  * hip and knee, the foot staying where it was over the ground; and a foot at or near the floor turns
  * flat on it. Runs after the pose, before anything reads the joints' world matrices. Not while dying.
  */
+/** Turns `ankle` (by `share`, 0 to 1) so its foot lies level in the world, heading the way it points now. */
+function layFlat(knee: THREE.Object3D, ankle: THREE.Object3D, share: number): void {
+  ankle.getWorldQuaternion(_k);
+  _ahead.set(0, 0, 1).applyQuaternion(_k);
+  _level.setFromAxisAngle(_up, Math.atan2(_ahead.x, _ahead.z));
+  knee.getWorldQuaternion(_r);
+  _level.premultiply(_r.invert());
+  ankle.quaternion.slerp(_level, share);
+}
+
 export function groundFeet(j: Joints, footH: number): void {
   const root = j.root;
   root.updateMatrixWorld(true);
@@ -230,14 +241,12 @@ export function groundFeet(j: Joints, footH: number): void {
       knee.rotation.x = bend;
       root.updateMatrixWorld(true);
     }
-    // a foot within a few cm of the floor lies flat on it: cancel the leg's pitch at the ankle
+    // a foot within a few cm of the floor lies flat on it, turned the way it points (levelled by cancelling the knee's
+    // pitch alone, a foot turned against its shin kept part of the shin's roll as a pitch: toe down 3 to 4 degrees, the
+    // end of a boot 1 to 1.5 cm into the floor, and up to 3.3 cm in the side-on stance's spread)
     ankle.getWorldPosition(_a); root.worldToLocal(_a);
     const planted = 1 - Math.min(1, Math.max(0, (_a.y - floor - footH) / 0.05));
-    if (planted > 0) {
-      knee.getWorldQuaternion(_k); root.getWorldQuaternion(_r);
-      _eu.setFromQuaternion(_r.invert().multiply(_k), 'YXZ');
-      ankle.rotation.x += (-_eu.x - ankle.rotation.x) * planted;
-    }
+    if (planted > 0) layFlat(knee, ankle, planted);
     // (within the ankle's range: where the shin leans further over a foot on the floor than an ankle bends, the heel
     // lifts and the foot pivots on its toes, which stay where they lay, the leg reaching to the ankle raised round
     // them; laid flat under a deep knee the ankle bent 70 degrees)
