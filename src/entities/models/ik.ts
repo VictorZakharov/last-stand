@@ -684,17 +684,30 @@ export class LegIK {
     f.window = where;
     // (a planted foot the body is about to leave out of reach before its turn takes its stride early, stretched to land
     // on time, rather than an extra step that would break the rhythm; the other may be in the air, as in a run)
-    const beforeWindow = !inWindow && where > EARLY && where < 0;
+    const toCome = this.toNextWindow(g, where);
+    const beforeWindow = !inWindow && toCome > EARLY && toCome < 0;
     const early = f.state === 'plant' && beforeWindow && other.state !== 'timed' && f.stance > 0.05
       && this.leftBehind(g, f);
-    // (a foot only just down doesn't go again: a reversal can bring its window round at once)
-    const settled = f.stance > 0.5 * g.duty * g.cycle;
+    // (a foot only just down doesn't go again: a reversal can bring its window round at once; unless the body has left
+    // it out of reach already, as the first step from standing lands behind a body on its way: held till it settled,
+    // it stood on its toes 8 frames, the pelvis sinking 10 cm)
+    const settled = f.stance > 0.5 * g.duty * g.cycle || (f.over && f.stance > 0.05);
     const otherStepping = other.state === 'timed' && g.duty > 0.45;
     if (((inWindow && settled) || early) && f.state === 'plant' && !otherStepping) {
-      this.beginStride(g, f, where, early);
+      this.beginStride(g, f, early ? toCome : where, early);
     } else if (f.state === 'swing') {
       this.carryOnStride(g, f, i);
     }
+  }
+
+  /** Where a foot is against its next window, from `where` against its last (in shares of a window: under 0 before
+   *  it). Past a window's end it is counted against the one to come, a cycle on: counted against the one behind it
+   *  until the phase wrapped round, a foot planted just after its window, as at a reversal, couldn't take its next
+   *  stride early however far the body left it, and stood out of reach on its toes, the pelvis sinking onto it, for
+   *  the first half of its stance (9 to 13 frames strafing drawn up and down the dais's steps): as if caught on a
+   *  nail. */
+  private toNextWindow(g: GaitFrame, where: number): number {
+    return where > 1 ? where - 1 / (2 * g.halfSwing) : where;
   }
 
   /** Whether the body is leaving a planted foot behind: out of reach, across the pelvis's middle, or far from its
@@ -916,12 +929,22 @@ export class LegIK {
     }
   }
 
-  /** Turns a planted foot to `yaw` about the ball of the foot, which stays where it is. */
+  /** Turns a planted foot to `yaw` about the ball of the foot, which stays where it is (or about its heel, when the
+   *  ball is out over a lower level). */
   private turnOnBall(f: Foot, i: number, yaw: number, sc: number): void {
-    const ball = BALL * this.shape![i].toe * sc;
-    f.P.x += ball * (Math.sin(f.yaw) - Math.sin(yaw));
-    f.P.z += ball * (Math.cos(f.yaw) - Math.cos(yaw));
+    const pivot = this.pivotAlong(f, i, sc);
+    f.P.x += pivot * (Math.sin(f.yaw) - Math.sin(yaw));
+    f.P.z += pivot * (Math.cos(f.yaw) - Math.cos(yaw));
     f.yaw = yaw;
+  }
+
+  /** Where along a planted foot its turn is about (m from the ankle, forwards): the ball of the foot, or its heel
+   *  when the ball is out over a lower level, as a foot's is with its toes past a step's edge (turned about a ball in
+   *  the air, the rest of the sole skidded 4 to 7 cm over the step). */
+  private pivotAlong(f: Foot, i: number, sc: number): number {
+    const shape = this.shape![i], ball = BALL * shape.toe * sc;
+    const ballX = f.P.x + Math.sin(f.yaw) * ball, ballZ = f.P.z + Math.cos(f.yaw) * ball;
+    return groundHeight(ballX, ballZ) < f.P.y - 1e-3 ? -shape.heel * sc : ball;
   }
 
   // --- the pelvis and the legs -------------------------------------------------------------------------------------

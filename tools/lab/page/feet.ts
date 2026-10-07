@@ -114,6 +114,8 @@ const FLAG_TURNS = 2;
 const FLAG_SLIDE = 0.03;
 /** a planted foot's pitch changing less than this a frame isn't turning (rad) */
 const PITCH_STILL = 0.01;
+/** a sole's points within this much of its lowest over the ground are on it (m) */
+const CONTACT = 0.01;
 
 /** with --canary: the frame of the first walk whose planted ankle is slid, and of the first standing hold whose
  *  planted ankle is sunk, for the measure alone, and how far (m) */
@@ -129,22 +131,53 @@ interface Sole {
   dip: number;
   /** its length more than `IN_GROUND` under the ground where it is, whatever level */
   inGround: number;
+  /** how far its deepest point is under the ground where it is (m) */
+  deepest: number;
 }
 
 /** The sole of `ankle`'s foot (`shape`) on `level` against the ground under each of its points. */
 function soleAgainst(ankle: THREE.Object3D, shape: FootShape, level: number): Sole {
   const scale = ankle.getWorldScale(new THREE.Vector3()).x;
-  const sole: Sole = { riser: 0, dip: 0, inGround: 0 };
+  const sole: Sole = { riser: 0, dip: 0, inGround: 0, deepest: 0 };
   const point = new THREE.Vector3();
   for (let along = -shape.heel; along <= shape.toe; along += SOLE_STEP / scale) {
     ankle.localToWorld(point.set(0, -shape.sole, along));
     const ground = groundHeight(point.x, point.z);
     const under = ground - point.y;
     if (under > IN_GROUND) sole.inGround += SOLE_STEP;
+    sole.deepest = Math.max(sole.deepest, under);
     if (ground > level + 1e-3 && under > 0) sole.riser += SOLE_STEP;
     else sole.dip = Math.max(sole.dip, under);
   }
   return sole;
+}
+
+/** The sole of `ankle`'s foot (`shape`): its points heel to toe in the world, `SOLE_STEP` apart, into `points`. */
+function solePoints(ankle: THREE.Object3D, shape: FootShape, points: THREE.Vector3[] = []): THREE.Vector3[] {
+  const scale = ankle.getWorldScale(new THREE.Vector3()).x;
+  let count = 0;
+  for (let along = -shape.heel; along <= shape.toe; along += SOLE_STEP / scale) {
+    points[count] ??= new THREE.Vector3();
+    ankle.localToWorld(points[count].set(0, -shape.sole, along));
+    count++;
+  }
+  points.length = count;
+  return points;
+}
+
+/** How far a planted sole slipped since `last` (its points a frame before, m): the least any of its points on the
+ *  ground moved. Rolling over its heel or toes, or turning on its ball, one point stays where it is; sliding, none
+ *  does. (By its ankle's move, a foot turning on its ball read as 7 cm of slide.) */
+function slipOf(points: THREE.Vector3[], last: THREE.Vector3[]): number {
+  if (last.length !== points.length) return 0;
+  const heights = points.map((point) => point.y - groundHeight(point.x, point.z));
+  const lowest = Math.min(...heights);
+  let least = Infinity;
+  points.forEach((point, index) => {
+    if (heights[index] > lowest + CONTACT) return;
+    least = Math.min(least, Math.hypot(point.x - last[index].x, point.z - last[index].z));
+  });
+  return least;
 }
 
 /** Moves `joint` by `offset` in the world, its matrices with it; returns the undo. */
@@ -272,7 +305,7 @@ interface Stance {
   longestOut: number;
   /** times its pitch turned the other way */
   turns: number;
-  /** how far its ankle slid from where it was put down, m */
+  /** how far it slid, m: each frame's slip of its sole (`slipOf`) added up */
   slide: number;
 }
 
@@ -282,18 +315,20 @@ class FootWatch {
   private lastPitch = 0;
   private lastTurn = 0;
   private outRun = 0;
-  private readonly planted = new THREE.Vector3();
+  /** the sole's points last frame, while planted */
+  private lastSole: THREE.Vector3[] = [];
 
   constructor(private readonly name: SideName) {}
 
-  /** Takes this frame of the foot in; returns the stance it ended, if it left the ground. */
-  observe(frame: number, foot: LegFoot, ankle: THREE.Vector3): Stance | null {
+  /** Takes this frame of the foot (its `sole`'s points) in; returns the stance it ended, if it left the ground. */
+  observe(frame: number, foot: LegFoot, sole: THREE.Vector3[]): Stance | null {
     if (foot.state !== 'plant') {
       const ended = this.stance;
       this.stance = null;
+      this.lastSole = [];
       return ended;
     }
-    if (!this.stance) this.begin(frame, ankle);
+    if (!this.stance) this.begin(frame);
     const stance = this.stance!;
     stance.frames++;
     this.outRun = foot.over ? this.outRun + 1 : 0;
@@ -305,18 +340,18 @@ class FootWatch {
       this.lastTurn = Math.sign(change);
     }
     this.lastPitch = foot.pitch;
-    stance.slide = Math.max(stance.slide, this.slideOf(ankle));
+    stance.slide += this.slipOf(sole);
+    this.lastSole = sole.map((point) => point.clone());
     return null;
   }
 
-  /** How far `ankle` is from where the running stance put the foot down, m (0 in the air). */
-  slideOf(ankle: THREE.Vector3): number {
-    return this.stance ? Math.hypot(ankle.x - this.planted.x, ankle.z - this.planted.z) : 0;
+  /** How far the planted sole slipped since last frame, m (0 as it lands). */
+  slipOf(sole: THREE.Vector3[]): number {
+    return slipOf(sole, this.lastSole);
   }
 
-  private begin(frame: number, ankle: THREE.Vector3): void {
+  private begin(frame: number): void {
     this.stance = { foot: this.name, start: frame, frames: 0, outOfReach: 0, longestOut: 0, turns: 0, slide: 0 };
-    this.planted.copy(ankle);
     this.lastTurn = 0;
     this.outRun = 0;
   }
@@ -327,15 +362,30 @@ const badness = (stance: Stance) => stance.longestOut + stance.turns * 3;
 /** a stance is pictured once it is at least this bad */
 const PICTURE_FROM = 4;
 
+/** Frames running with one foot's sole in the ground, and the foot's state on the first of them. */
+interface InGroundRun {
+  foot: SideName;
+  state: LegFoot['state'];
+  start: number;
+  frames: number;
+  /** the most of the sole in the ground, and how deep its deepest point went (m) */
+  length: number;
+  deepest: number;
+}
+
 interface WalkResult {
   walk: Walk;
   stances: Stance[];
+  /** with --frames: each foot's runs of frames with its sole in the ground */
+  inGroundRuns: InGroundRun[];
   /** frames a sole was in the ground, the most of it (m), and each ankle's fastest move a frame (m) */
   inGroundFrames: number;
   inGroundMost: number;
   fastest: number;
   /** the same foot leaving the ground twice running, and frames with both feet off it */
   breaks: number;
+  /** with --frames: where each break was, the frame and the foot */
+  breakFrames: string[];
   bothUp: number;
   moment: Pictured | null;
   trace: string[];
@@ -350,10 +400,12 @@ async function walkAcross(lab: Lab, walk: Walk, options: FeetOptions, slide: boo
   const result: WalkResult = {
     walk,
     stances: [],
+    inGroundRuns: [],
     inGroundFrames: 0,
     inGroundMost: 0,
     fastest: 0,
     breaks: 0,
+    breakFrames: [],
     bothUp: 0,
     moment: null,
     trace: [],
@@ -364,6 +416,7 @@ async function walkAcross(lab: Lab, walk: Walk, options: FeetOptions, slide: boo
   let frame = 0;
   const wasPlanted = legs.ik.feet.map((foot) => foot.state === 'plant');
   let lastToLeave = -1;
+  const inGroundNow: (InGroundRun | null)[] = [null, null];
   const measure = () => {
     const plantedSide = legs.ik.feet.findIndex((foot) => foot.state === 'plant');
     const planted = slide && frame === CANARY_FRAME && plantedSide >= 0;
@@ -371,15 +424,18 @@ async function walkAcross(lab: Lab, walk: Walk, options: FeetOptions, slide: boo
     let inGround = 0;
     legs.ankles.forEach((ankle, side) => {
       const now = ankle.getWorldPosition(new THREE.Vector3());
+      const points = solePoints(ankle, legs.shapes[side]);
       if (planted && side === plantedSide) {
-        canary = { planted: CANARY_SLIDE, measured: watches[side].slideOf(now) };
+        canary = { planted: CANARY_SLIDE, measured: watches[side].slipOf(points) };
         return;
       }
       const foot = legs.ik.feet[side];
       result.fastest = Math.max(result.fastest, now.distanceTo(last[side]));
       last[side].copy(now);
-      inGround = Math.max(inGround, soleAgainst(ankle, legs.shapes[side], foot.P.y).inGround);
-      const ended = watches[side].observe(frame, foot, now);
+      const sole = soleAgainst(ankle, legs.shapes[side], foot.P.y);
+      inGround = Math.max(inGround, sole.inGround);
+      inGroundNow[side] = followInGround(inGroundNow[side], sole, SIDE_NAMES[side], foot.state, frame, result);
+      const ended = watches[side].observe(frame, foot, points);
       if (ended) result.stances.push(ended);
       const running = watches[side].stance;
       if (running && badness(running) > worst) {
@@ -391,7 +447,10 @@ async function walkAcross(lab: Lab, walk: Walk, options: FeetOptions, slide: boo
     legs.ik.feet.forEach((foot, side) => {
       const planted = foot.state === 'plant';
       if (wasPlanted[side] && !planted) {
-        if (side === lastToLeave) result.breaks++;
+        if (side === lastToLeave) {
+          result.breaks++;
+          result.breakFrames.push(`  frame ${frame} ${SIDE_NAMES[side]}: left the ground twice running`);
+        }
         lastToLeave = side;
       }
       wasPlanted[side] = planted;
@@ -408,12 +467,12 @@ async function walkAcross(lab: Lab, walk: Walk, options: FeetOptions, slide: boo
   return [result, canary];
 }
 
-/** A stance at this frame pictured from the side and the front, framed on its knee. */
+/** A stance at this frame pictured whole, as the player sees it and from the front and the side (framed on a knee,
+ *  the legs' reach and the stance's width didn't show). */
 function pictureStance(lab: Lab, walk: Walk, frame: number, stance: Stance): Pictured {
   const note = `${stance.foot} foot planted ${stance.frames} frames, ${stance.longestOut} running out of reach, `
     + `${stance.turns} turns`;
-  const knee = stance.foot === 'L' ? 'kneeL' : 'kneeR';
-  return lab.picture(`${walk.name}, worst`, ['left', 'front'], [`frame ${frame}`, note], { focus: knee });
+  return lab.picture(`${walk.name}, worst`, ['third', 'front', 'left'], [`frame ${frame}`, note]);
 }
 
 const fixed = (value: number, digits = 2) => value.toFixed(digits);
@@ -437,6 +496,27 @@ function traceLine(lab: Lab, frame: number, legs: Legs): string {
     return traceFoot(SIDE_NAMES[side], foot, legs.ankles[side].getWorldPosition(new THREE.Vector3()));
   });
   return `  ${String(frame).padStart(3)} ${bodyAt} | ${feet.join(' | ')}`;
+}
+
+/** The run of frames with a foot's sole in the ground carried on into this frame, a new one begun, or ended (kept in
+ *  `result` once it ends). Returns the run going on. */
+function followInGround(
+  run: InGroundRun | null, sole: Sole, foot: SideName, state: LegFoot['state'], frame: number, result: WalkResult,
+): InGroundRun | null {
+  if (sole.inGround < FLAG_LENGTH) return null;
+  if (!run) {
+    run = { foot, state, start: frame, frames: 0, length: 0, deepest: 0 };
+    result.inGroundRuns.push(run);
+  }
+  run.frames++;
+  run.length = Math.max(run.length, sole.inGround);
+  run.deepest = Math.max(run.deepest, sole.deepest);
+  return run;
+}
+
+function describeInGround(run: InGroundRun): string {
+  return `  frame ${run.start} ${run.foot} (${run.state}): a sole in the ground ${run.frames} frames, `
+    + `${cm(run.length)} cm of it, ${cm(run.deepest)} cm deep`;
 }
 
 function describeStance(stance: Stance): string {
@@ -466,6 +546,7 @@ function describeWalk(result: WalkResult, listed: boolean): string[] {
     `  the same foot leaving twice running ${result.breaks} times; both feet off the ground on ${result.bothUp} frames`,
   ];
   if (listed) lines.push(...stances.filter(stanceFlagged).map(describeStance));
+  if (listed) lines.push(...result.inGroundRuns.map(describeInGround), ...result.breakFrames);
   return [...lines, ...result.trace];
 }
 

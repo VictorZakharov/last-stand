@@ -36,10 +36,14 @@ terminal's task stops it all.
 - `feet`: the hero's feet against the ground round the dais's edges and on level ground (`--scenarios edge,level,
   strafe,cross`): standing at full draw by the edges (a foot moving in the hold, a sole in a step's riser, a dip under
   its own level), and walking across them, strafing up and down the steps with a shot drawn and on level ground (per
-  stance: the frames out of the leg's reach, a planted foot's pitch turning back and forth, its slide; a sole in the
-  ground, the fastest ankle, breaks in the left, right rhythm, frames with both feet up). `--canary` plants a slid and
-  a sunk ankle, `--frames` lists what was flagged, `--trace` prints each frame of each walk with the leg IK's own
-  state; the worst stance of each walk is pictured (`out/feet/sheet.png`).
+  stance: the frames out of the leg's reach, a planted foot's pitch turning back and forth, its slide, the slip of
+  the sole's point on the ground that moved least, added up frame by frame (a foot rolling or turning on its ball
+  keeps one point still); a sole in the ground, the fastest ankle, breaks in the left, right rhythm, frames with both
+  feet up). `--canary` plants a slid and a sunk ankle, `--frames` lists what was flagged (the stances, each foot's
+  runs of frames with its sole in the ground, and where the rhythm broke), `--trace` prints each frame of each walk
+  with the leg IK's own state; the worst stance of each walk is pictured whole, as the player sees it and from the
+  front and the side (`out/feet/sheet.png`). A walk follows on from the ones before it (the hero, the gait and the
+  game's clock carry over), so compare runs of the same `--scenarios`.
 - `carry`: the ranger's carried bow against his body through a carry's round (standing, walking, a draw and its shot,
   waiting with the next arrow, putting it back). `--canary` plants faults it must catch; `--frames` lists every frame
   with a clip, what crossed what and how deep.
@@ -161,8 +165,9 @@ Some of what that takes:
 - **The clock.** From the moment the loading screen reveals the game, its frames run on the lab's clock: each a hair
   over a 60th of a second, as fast as the page can, nothing drawn unless asked (the scene's matrices are still
   updated). Every time the page reads is on a grid of 1/1024 ms, so the game's frame time is exact and the same on
-  every boot. Frames run back to back; the page gets a turn between frames only for a hero with a cape (its cloth
-  steps in a worker).
+  every boot. Frames run back to back, with nothing landing between them: a cape steps in the frame, on the main
+  thread (`stepCapesHere`; in the game it steps in a worker, whose results landed a frame or two late, never the same
+  frame twice, and a warrior's or mage's pictures of a commit against itself differed wherever the cloth showed).
 - **Set-ups check themselves** (`Lab.setup`, the `Fixture`): the run held in its countdown (no foes and none coming),
   the hero placed, stopped and settled, an arrow nocked if asked, the view made as the player makes it (V pressed: the
   game sets the camera's view from its own every frame, and set on the camera alone it was top-down again a frame

@@ -11,6 +11,7 @@ import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
 import { CAMERA } from '../../../src/data/balance';
 import { clearEnemies } from '../../../src/entities/enemy';
+import * as cape from '../../../src/entities/models/cape';
 import * as renderer from '../../../src/core/renderer';
 import { updateSeeThrough } from '../../../src/core/seeThrough';
 import { CLASSES } from '../../../src/data/classes';
@@ -137,17 +138,6 @@ const SPOT: [number, number] = [12, 22];
 /** the mouse is put this far ahead of the hero: a shot goes off into the distance, out of the pictures */
 const AIM_AHEAD = 20;
 
-/** A task boundary, so workers' messages and the page's own events get through (a timeout's is 4 ms). */
-const nextTask = (() => {
-  const channel = new MessageChannel();
-  const waiting: (() => void)[] = [];
-  channel.port1.onmessage = () => waiting.shift()?.();
-  return () => new Promise<void>((resolve) => {
-    waiting.push(resolve);
-    channel.port2.postMessage(0);
-  });
-})();
-
 /** The lab's hold on the game in this page. */
 export class Lab {
   /** three.js as the game uses it, for probe modules */
@@ -188,8 +178,11 @@ export class Lab {
     return { hero: this.player.cls.id, heroes: Object.keys(CLASSES) };
   }
 
-  /** Takes the game's clock over, makes its draws skippable, and starts keeping its anatomy warnings. */
+  /** Takes the game's clock over, makes its draws skippable, steps the capes in the frame, and starts keeping its
+   *  anatomy warnings. */
   install(): void {
+    // (an A/B's side on a commit from before it has none: its capes step in the worker, as they did)
+    cape.stepCapesHere?.();
     const gl = G.renderer;
     const draw = gl.render.bind(gl);
     gl.render = (scene, camera) => {
@@ -237,7 +230,6 @@ export class Lab {
       this.applyInput(frame?.(f) ?? {});
       this.runGameFrame();
       if (measure) rows.push(measure(f));
-      if (this.yieldsBetweenFrames) await nextTask();
     }
     return rows;
   }
@@ -252,15 +244,6 @@ export class Lab {
       if (done()) return f + 1;
     }
     throw new Error(`lab: ${what} (not within ${limit} frames)`);
-  }
-
-  /**
-   * Whether the page gets a turn between frames: only for a hero with a cape, which steps in a web worker whose
-   * results arrive between tasks. Without one the frames run back to back and two runs are exactly the same (with a
-   * turn after every frame, whatever landed in it landed between different frames, and runs parted by micrometres).
-   */
-  private get yieldsBetweenFrames(): boolean {
-    return (this.model.worldObjects?.length ?? 0) > 0;
   }
 
   private runGameFrame(): void {
