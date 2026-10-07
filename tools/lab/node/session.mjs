@@ -51,6 +51,7 @@ export class LabSession {
    */
   async run({ command, options = { _: [] } }) {
     if (command === 'status') return { text: this.status(), problems: [] };
+    const relaunched = await this.keepBrowser();
     const handler = COMMANDS[command];
     if (!handler) throw labError(`no command ${command} (there are ${Object.keys(COMMANDS).join(', ')}, status)`);
     handler.check?.(options);
@@ -60,7 +61,7 @@ export class LabSession {
     // (this tree's turn first: its page was booted ahead, as the last command finished)
     const turns = [...shown].reverse();
     const heroClass = options.class ?? this.repoSide.heroClass ?? DEFAULT_CLASS;
-    const notes = [];
+    const notes = relaunched ? [relaunched] : [];
     const problems = [];
     const resultOf = new Map();
     for (const side of turns) {
@@ -127,11 +128,23 @@ export class LabSession {
    * other side's page first: one page alive at a time. Returns what it did, for the server's log.
    */
   async bootNext() {
+    await this.keepBrowser();
     await this.otherSide?.closePage();
     const heroClass = this.repoSide.heroClass ?? DEFAULT_CLASS;
     const started = Date.now();
     if (!(await this.repoSide.ready(heroClass))) return null;
     return `booted the ${heroClass} for the next command (${seconds(started)})`;
+  }
+
+  /**
+   * Launches the browser again if it has closed (it crashed, or was killed): every page, context and command after
+   * it failed on the dead one, and only a restart of the server brought the lab back. Returns a note if it did.
+   */
+  async keepBrowser() {
+    if (this.browser.isConnected()) return null;
+    this.browser = await launchBrowser();
+    for (const side of [this.repoSide, this.otherSide]) side?.useBrowser(this.browser);
+    return 'the browser had closed: launched it again';
   }
 
   async close() {

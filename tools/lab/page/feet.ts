@@ -210,14 +210,21 @@ interface Legs {
   shapes: FootShape[];
 }
 
+/** Each foot's shape as the leg IK measures it: by its exported `footShape`, or on a commit from before that export
+ *  (`main`'s), the shapes the IK keeps once it has run (its `shape`), so an A/B measures both sides alike. */
+function shapesOf(lab: Lab, ik: LegIK, ankles: THREE.Object3D[]): FootShape[] {
+  const footShape = (legIK as Partial<typeof legIK>).footShape;
+  if (footShape) return ankles.map((ankle) => footShape(ankle, lab.model.root));
+  const kept = (ik as unknown as { shape?: FootShape[] | null }).shape;
+  if (kept) return kept;
+  throw new Error('lab: feet: this commit\'s leg IK has no foot shape (`footShape` or `LegIK.shape`)');
+}
+
 function legsOf(lab: Lab): Legs {
   const ik = lab.model.root.userData.legs as LegIK | undefined;
   if (!ik) throw new Error(`lab: feet: the ${lab.player.cls.id} has no leg IK`);
   const ankles = [lab.joints.ankleL, lab.joints.ankleR];
-  const footShape = (legIK as Partial<typeof legIK>).footShape;
-  if (!footShape) throw new Error('lab: feet: this commit\'s leg IK has no foot shape (`footShape` in models/ik.ts)');
-  const shapes = ankles.map((ankle) => footShape(ankle, lab.model.root));
-  return { ik, ankles, shapes };
+  return { ik, ankles, shapes: shapesOf(lab, ik, ankles) };
 }
 
 /** The set-up every case starts from: an arrow on the string for a bow's hero. */

@@ -294,6 +294,14 @@ export class Side {
   }
 
   /** Closes its page (the server stays up). */
+  /** Serves its pages from `browser` from now on (a new one, the last having closed): nothing of the old kept. */
+  useBrowser(browser) {
+    this.browser = browser;
+    this.context = null;
+    this.page = null;
+    this.heroClass = null;
+  }
+
   async closePage() {
     if (!this.page) return;
     await this.page.close().catch(() => {});

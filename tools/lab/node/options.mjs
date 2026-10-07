@@ -100,6 +100,21 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  gait: {
+    help: 'the hero\'s walk judged as a person\'s, over level ground and the dais\'s steps, nothing drawn, drawn and '
+      + 'changing direction: the time on each foot, both and neither, the steps, the hops, the hips\' rise and fall, '
+      + 'the jerks, each filmed from the side',
+    options: {
+      scenarios: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['walk', 'drawn', 'taps', 'zigzag', 'stairs', 'stairsDrawn'],
+        help: 'the scenarios (all by default): walk, drawn, taps, zigzag, stairs, stairsDrawn',
+      },
+      frames: { kind: 'switch', help: 'list every step (its foot, when it left and landed, how far) and the hops' },
+      ...COMMON_OPTIONS,
+    },
+  },
   probe: {
     help: 'a probe module of your own: its default export takes the lab and the options (tools/lab/README.md)',
     argument: 'module',

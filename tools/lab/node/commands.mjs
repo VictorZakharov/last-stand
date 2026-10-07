@@ -64,16 +64,31 @@ function problemsIn(result) {
  * Writes the moments the sides' results pictured (a report's `moments`) as one sheet in `dir`; returns its path, or
  * null when none pictured any.
  */
-async function writeMoments(results, dir, browser) {
+async function writeMoments(results, dir, browser, name = 'sheet.png') {
   const runs = results
     .filter(([, result]) => result?.moments?.length)
     .map(([side, result]) => [side.name, { moments: result.moments }]);
   if (runs.length === 0) return null;
   mkdirSync(dir, { recursive: true });
-  const image = join(dir, 'sheet.png');
+  const image = join(dir, name);
   const views = Math.max(...runs.flatMap(([, { moments }]) => moments.map((moment) => moment.tiles.length)));
   await writeSheet(browser, runs, views, image);
   return image;
+}
+
+/**
+ * Each side's text under its name, and a sheet of each side's moments, written in `dir`: `sheet.png` for this tree's,
+ * `sheet-main.png` for the other side's. For films, whose two sides in one sheet were a page too big for the browser.
+ */
+async function textWithSheetEach(results, dir, browser) {
+  const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
+  const images = [];
+  for (const entry of results) {
+    const name = entry[0].isRepo ? 'sheet.png' : 'sheet-main.png';
+    const image = await writeMoments([entry], dir, browser, name);
+    if (image) images.push(relative(REPO, image));
+  }
+  return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
 }
 
 /** Each side's text under its name, and the sheet of the moments they pictured, written in `dir` (when any did). */
@@ -132,6 +147,18 @@ export const COMMANDS = {
     },
     textOf: asText,
     problemsOf: problemsIn,
+  },
+
+  gait: {
+    each(side, options) {
+      return side.command('gait', { scenarios: options.scenarios, frames: Boolean(options.frames) });
+    },
+    finish(results, options, session) {
+      return textWithSheetEach(results, join(OUT, 'gait'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    // (an A/B compares the reports, not the films: two sides' 48 frames each, loaded to compare, took the browser down)
   },
 
   range: {

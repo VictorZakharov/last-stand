@@ -5,7 +5,9 @@
 // past the neck's range on one frame, which the measure must catch.
 import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
-import { breaches, measureBody, type Breach } from '../../../src/entities/models/anatomy';
+import {
+  breaches, elevationLimit, measureBody, rotationRange, type BodyAngles, type Breach,
+} from '../../../src/entities/models/anatomy';
 import type { Joints } from '../../../src/entities/models/rig';
 import type { LegIK } from '../../../src/entities/models/ik';
 
@@ -15,11 +17,18 @@ function turnedHand(hand: THREE.Object3D): THREE.Object3D {
   return hand.children.find((child) => (child as THREE.Group).isGroup && child.children.some(own)) ?? hand;
 }
 
-/** The joints the body has past their ranges now, the worst first, measured as the game's dev builds measure them
+/** The body's angles now, and the joints past their ranges, the worst first. */
+interface BodyNow {
+  angles: BodyAngles;
+  found: Breach[];
+}
+
+/** The body's angles and the joints past their ranges now, measured as the game's dev builds measure them
  *  (`watchBody`; with the module's own exports alone, so an A/B's side on an older commit measures the same). */
-function bodyBreaches(joints: Joints): Breach[] {
+function bodyBreaches(joints: Joints): BodyNow {
   joints.root.updateMatrixWorld(true);
-  return breaches(measureBody(joints, { L: turnedHand(joints.handL), R: turnedHand(joints.handR) }));
+  const angles = measureBody(joints, { L: turnedHand(joints.handL), R: turnedHand(joints.handR) });
+  return { angles, found: breaches(angles) };
 }
 
 /** One leg of a scenario: the keys held, the attack (held, tapped or not), for how many frames. */
@@ -128,6 +137,25 @@ function footOf(lab: Lab, name: string): string {
   return foot.state === 'plant' ? ', its foot planted' : ', its foot in the air';
 }
 
+/** For a shoulder past its range, its raise, the plane it rises in and its turn, against what each allows (a raise
+ *  or a turn can take it past), else nothing. */
+function armOf(angles: BodyAngles, name: string): string {
+  const shoulder = /^shoulder([LR])\.excess$/.exec(name);
+  if (!shoulder) return '';
+  const side = shoulder[1];
+  const raise = angles[`shoulder${side}.elevation`];
+  const plane = angles[`shoulder${side}.plane`];
+  const turn = angles[`shoulder${side}.rotation`];
+  const [turnLeast, turnMost] = rotationRange(raise);
+  return `, raised ${degrees(raise)}° (at most ${degrees(elevationLimit(plane))} in its plane ${degrees(plane)}°)`
+    + `, turned ${degrees(turn)}° (${degrees(turnLeast)}..${degrees(turnMost)})`;
+}
+
+/** Where a breach is, past its scenario and frame: a leg's foot planted or not, a shoulder's raise and turn. */
+function contextOf(lab: Lab, angles: BodyAngles, name: string): string {
+  return footOf(lab, name) + armOf(angles, name);
+}
+
 /** Counts `breach` in its angle's record, keeping it (and `where`) if it's the worst yet. */
 function keepBreach(records: Map<string, AngleRecord>, breach: Breach, where: string): void {
   const record = records.get(breach.name);
@@ -151,7 +179,7 @@ function describeBreach(breach: Breach): string {
 function measureCanary(lab: Lab): number {
   const neck = lab.joints.neck;
   neck.rotation.y += CANARY_TURN;
-  const found = bodyBreaches(lab.joints).find((breach) => breach.name === 'neck.rotation');
+  const found = bodyBreaches(lab.joints).found.find((breach) => breach.name === 'neck.rotation');
   neck.rotation.y -= CANARY_TURN;
   lab.joints.root.updateMatrixWorld(true);
   return found?.by ?? 0;
@@ -182,17 +210,17 @@ async function runScenario(
       const measured = measureCanary(lab);
       report.canary = { caught: measured >= CANARY_CAUGHT, measured };
     }
-    const found = bodyBreaches(lab.joints);
+    const { angles, found } = bodyBreaches(lab.joints);
     if (found.length) run.framesPast++;
     for (const breach of found) {
-      keepBreach(records, breach, `${scenario.name} frame ${run.frame}${footOf(lab, breach.name)}`);
+      keepBreach(records, breach, `${scenario.name} frame ${run.frame}${contextOf(lab, angles, breach.name)}`);
     }
     if (found.length && options.frames) {
       listed.push(`  ${scenario.name} frame ${run.frame}: ${found.map(describeBreach).join(', ')}`);
     }
     if (found.length && found[0].by > run.worstHere) {
       run.worstHere = found[0].by;
-      const notes = [`frame ${run.frame}`, describeBreach(found[0]) + footOf(lab, found[0].name)];
+      const notes = [`frame ${run.frame}`, describeBreach(found[0]) + contextOf(lab, angles, found[0].name)];
       run.moment = lab.picture(`${scenario.what}, worst`, ['third', 'front', 'left'], notes);
     }
     ankles.forEach((ankle, side) => {

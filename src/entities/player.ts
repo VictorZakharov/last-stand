@@ -34,6 +34,9 @@ export interface Ward { amount: number; t: number; onHit?(absorbed: number): voi
 /** Absolute difference between two headings. */
 /** after an attack or cast, the body stays on its aim this long (s) before turning to face the way it goes */
 const AIM_HOLD = 0.45;
+/** how fast the body turns at most onto the way it goes (rad/s): eased alone, it swung half round in four frames at a
+ *  reversal, 38 degrees in the first, and the pelvis and legs snapped round with it */
+const TURN_MOST = 9;
 /** a shot from the weapon's tip heads for its target, but never further off the body's line to it than a point this far
  *  along that line (m) */
 const SHOT_NEAR = 5;
@@ -569,7 +572,8 @@ export class Player {
     if (look !== null && !d) this.facing = look;
     else if (!fighting && this.aimHold > 0) this.faceTowards(this.aim);
     else if ((!this.casting || this.casting.skill.def.freeMove) && !this.channel && speed > 0.5) {
-      this.facing = angleDamp(this.facing, Math.atan2(this.vel.x, this.vel.z), 14, dt);
+      const eased = angleDamp(this.facing, Math.atan2(this.vel.x, this.vel.z), 14, dt);
+      this.facing += Math.max(-TURN_MOST * dt, Math.min(TURN_MOST * dt, eased - this.facing));
     }
 
     // resources & cooldowns

@@ -22,6 +22,7 @@ been left alone for a moment after a change, so a command finds it ready: the sh
 Without it, a command boots a session of its own (about 15 s) and closes it. The server runs under a supervisor of
 the lab's own, which starts it again when what the lab's Node code says changes (not on every change Windows
 reports: a file read now and then counts as one, and a server started again under a command closed its browser),
+launches its browser again if it has closed (it crashed: every command after it failed until the server restarted),
 and every command carries a hash of the code it was sent from: a server that loaded other code starts again before it
 runs it (`node --watch` once stopped noticing changes, and the server ran old code that dropped an option the command
 line had just learnt). Its Vite server starts again when `vite.config.ts` or the packages change. Stopping the
@@ -45,10 +46,22 @@ terminal's task stops it all.
   in the ground, clearance, landing and its shift off a riser; each walk's feet measured as the IK has them); the worst stance of each walk is pictured whole, as the player sees it and from the
   front and the side (`out/feet/sheet.png`). A walk follows on from the ones before it (the hero, the gait and the
   game's clock carry over), so compare runs of the same `--scenarios`.
+- `gait`: the hero's walk judged as a person's, over level ground and the dais's steps, nothing drawn, strafing
+  drawn, tapping and changing direction every third of a second (`--scenarios walk,drawn,taps,zigzag,stairs,
+  stairsDrawn`): each foot's share of the time on the ground against the share the gait plans, both down and neither
+  (a walk has a foot always down), the steps a second and the ground a step covers, the hops (both feet leaving or
+  landing within a few frames of each other), a foot dance's short steps, the hips' rise and fall a step and their
+  height in the air, on one foot and on both, the jerks (a change of the hips' or an ankle in the air's speed in a
+  frame), and what a person wouldn't do, said as such. `--frames` lists every step: its foot, where in its window it
+  left and why (the IK's `Foot.leftFor`), how long it was down, its swing against the plan, and every jerk. Each
+  scenario is measured, then run again to film it from the side round its first hop (else its middle), a picture
+  every few frames, so the motion is seen as well as measured; an A/B writes a sheet for each side (`sheet.png`,
+  `sheet-main.png`: both in one page took the browser down) and compares the reports.
 - `range`: every joint of the hero against a body's ranges (`models/anatomy.ts`, as the dev builds' `watchBody`
   measures them), frame by frame, over standing, walking each way, attacking standing, and walks that change
   direction while he attacks (held or tapped) or runs (`--scenarios stand,walk,shoot,reverse,taps,run`): each angle
-  past its range, on how many frames, its worst and where (for a leg, whether its foot was planted), each scenario's
+  past its range, on how many frames, its worst and where (for a leg, whether its foot was planted; for a shoulder,
+  its raise, the plane it rises in and its turn against what each allows), each scenario's
   fastest ankle, and its worst moment pictured. `--canary` turns the head past the neck's range on one frame,
   `--frames` lists every frame with a joint past its range.
 - `carry`: the ranger's carried bow against his body through a carry's round (standing, walking, a draw and its shot,
