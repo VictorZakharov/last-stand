@@ -4,6 +4,7 @@ import type { Lab, Fixture, Report, ViewName } from './lab';
 import type { Joints } from '../../../src/entities/models/rig';
 import { sheet as pictureSheet, type Sheet } from './sheet';
 import { carry as carryRound, describeCarry } from './carry';
+import { feet as feetRound, missedCanaries, type FeetOptions } from './feet';
 
 export interface SheetCommand {
   states: string[];
@@ -33,6 +34,15 @@ export async function carry(lab: Lab, command: CarryCommand): Promise<Report> {
     problems.push(`the canary was caught on ${report.canary[0]} of ${report.canary[1]} planted frames`);
   }
   return { text: `${JSON.stringify(setup)}\n${describeCarry(report)}`, problems };
+}
+
+/**
+ * `lab feet`: the hero's feet against the ground round the dais's edges and on level ground, the worst moments
+ * pictured; a canary it missed is a problem.
+ */
+export async function feet(lab: Lab, command: FeetOptions): Promise<Report> {
+  const report = await feetRound(lab, command);
+  return { text: report.lines.join('\n'), problems: missedCanaries(report), moments: report.moments };
 }
 
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */

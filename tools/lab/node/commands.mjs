@@ -76,6 +76,13 @@ async function writeMoments(results, dir, browser) {
   return image;
 }
 
+/** Each side's text under its name, and the sheet of the moments they pictured, written in `dir` (when any did). */
+async function textWithMoments(results, dir, browser) {
+  const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
+  const image = await writeMoments(results, dir, browser);
+  return image ? `${text}\n\npictures: ${relative(REPO, image)}` : text;
+}
+
 /** A probe module's path relative to the repo, with forward slashes; throws unless it's a file under the repo. */
 function probePath(file) {
   const path = relative(REPO, resolve(REPO, file));
@@ -127,6 +134,23 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  feet: {
+    each(side, options) {
+      return side.command('feet', {
+        scenarios: options.scenarios,
+        canary: Boolean(options.canary),
+        frames: Boolean(options.frames),
+        trace: Boolean(options.trace),
+      });
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, join(OUT, 'feet'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   probe: {
     check(options) {
       probePath(options._[0]);
@@ -142,11 +166,9 @@ export const COMMANDS = {
       const fixture = options.setup === false ? null : fixtureFrom(options);
       return side.probe(path, options, fixture);
     },
-    async finish(results, options, session) {
-      const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
+    finish(results, options, session) {
       const name = basename(options._[0]).replace(/\.[^.]+$/, '');
-      const image = await writeMoments(results, join(OUT, 'probes', name), session.browser);
-      return image ? `${text}\n\npictures: ${relative(REPO, image)}` : text;
+      return textWithMoments(results, join(OUT, 'probes', name), session.browser);
     },
     textOf: asText,
     problemsOf: problemsIn,

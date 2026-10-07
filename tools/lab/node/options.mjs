@@ -6,7 +6,7 @@ import { labError } from './errors.mjs';
  * How an option's value is read:
  * - `switch`: `--name` is true, `--name=false` false;
  * - `text`: `--name value` or `--name=value`;
- * - `list`: comma-separated text, as a list;
+ * - `list`: comma-separated text, as a list (each one of `choices`, when it has them);
  * - `number`: a finite number;
  * - `pair`: two numbers, `x,z`;
  * - `choice`: one of `choices`;
@@ -66,6 +66,22 @@ export const COMMANDS = {
       canary: { kind: 'switch', help: 'plant faults the measure must catch' },
       frames: { kind: 'switch', help: 'list every frame with a clip: its phase, what crossed what, how deep' },
       ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  feet: {
+    help: 'the hero\'s feet against the ground round the dais\'s edges and on level ground: standing at full draw by '
+      + 'the edges, walking across them and strafing up and down the steps with a shot drawn',
+    options: {
+      scenarios: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['edge', 'level', 'strafe', 'cross'],
+        help: 'the scenarios (all by default): edge, level, strafe, cross',
+      },
+      canary: { kind: 'switch', help: 'plant faults the measures must catch: a planted ankle slid, one sunk' },
+      frames: { kind: 'switch', help: 'list every stance and standing case flagged, and what was wrong with it' },
+      trace: { kind: 'switch', help: 'each frame of each walk, foot by foot (pick one with --scenarios)' },
       ...COMMON_OPTIONS,
     },
   },
@@ -138,6 +154,8 @@ function readValue(name, spec, text) {
     case 'list': {
       const items = text.split(',').map((item) => item.trim()).filter(Boolean);
       if (items.length === 0) throw wrong('a comma-separated list');
+      const unknown = items.find((item) => spec.choices && !spec.choices.includes(item));
+      if (unknown !== undefined) throw wrong(`some of ${spec.choices.join(', ')}${suggestion(unknown, spec.choices)}`);
       return items;
     }
     case 'number': {

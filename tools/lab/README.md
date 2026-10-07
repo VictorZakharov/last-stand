@@ -33,6 +33,13 @@ terminal's task stops it all.
   close up (`--views lobby,top,third,front,left,right,back,above`; `eyes` with `--view first`; `--focus <joint>`
   frames the close-ups on a joint), with each arm's load and posture beside them. Writes
   `out/sheets/<--tag>/sheet.png` and `notes.txt`.
+- `feet`: the hero's feet against the ground round the dais's edges and on level ground (`--scenarios edge,level,
+  strafe,cross`): standing at full draw by the edges (a foot moving in the hold, a sole in a step's riser, a dip under
+  its own level), and walking across them, strafing up and down the steps with a shot drawn and on level ground (per
+  stance: the frames out of the leg's reach, a planted foot's pitch turning back and forth, its slide; a sole in the
+  ground, the fastest ankle, breaks in the left, right rhythm, frames with both feet up). `--canary` plants a slid and
+  a sunk ankle, `--frames` lists what was flagged, `--trace` prints each frame of each walk with the leg IK's own
+  state; the worst stance of each walk is pictured (`out/feet/sheet.png`).
 - `carry`: the ranger's carried bow against his body through a carry's round (standing, walking, a draw and its shot,
   waiting with the next arrow, putting it back). `--canary` plants faults it must catch; `--frames` lists every frame
   with a clip, what crossed what and how deep.
@@ -43,6 +50,8 @@ terminal's task stops it all.
 
 Options every command run on a page takes:
 
+- a probe or command that doesn't compile says where and why (`.tmp/x.ts:3:10 doesn't compile: Unterminated
+  string`), not the browser's "Failed to fetch dynamically imported module";
 - the set-up (sheet, carry, probe): `--view top|third|first`, `--at x,z`, `--facing rad`, `--nocked[=false]`;
 - `--class ranger|warrior|mage`: the hero (the last one used by default);
 - `--ab[=ref]`: also on another commit (`origin/main` by default), its results beside this tree's, ending with the
