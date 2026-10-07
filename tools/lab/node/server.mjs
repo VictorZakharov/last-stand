@@ -119,9 +119,11 @@ class Changes {
 
 /**
  * Keeps a session up between commands, answering them on 127.0.0.1:`port`, and boots the next command's page
- * between them. Runs until stopped (Ctrl+C, or `lab stop`).
+ * between them. `stamp` is the code it loaded (codeStamp.mjs): a command sent with another is refused, and the server
+ * starts again under its supervisor (supervisor.mjs) to run it. Runs until stopped (Ctrl+C, `lab stop`, or its
+ * supervisor gone).
  */
-export async function serve(port) {
+export async function serve(port, stamp) {
   // (imported here: the rest of this module is the server's plumbing, tested without a browser)
   const { LabSession } = await import('./session.mjs');
   const session = await LabSession.open();
@@ -135,17 +137,36 @@ export async function serve(port) {
   session.repoSide.onStale = (file) => changes.seen(relative(REPO, file).split(sep).join('/'), bootNext);
 
   let stopping = false;
-  /** Stops, closing the browser and the Vite servers; the note stays when `node --watch` is restarting the server. */
-  const stop = async ({ restarting = false } = {}) => {
+  /**
+   * Stops, closing the browser and the Vite servers, and tells the supervisor whether to start it again (`restart`,
+   * the reason) or stop too. The note stays while it restarts, so the command line waits for it.
+   */
+  const stop = async ({ restart = null } = {}) => {
     if (stopping) return;
     stopping = true;
-    log(restarting ? 'restarting' : 'stopping');
-    if (!restarting) rmSync(SERVER_NOTE, { force: true });
+    log(restart ? `restarting: ${restart}` : 'stopping');
+    if (!restart) rmSync(SERVER_NOTE, { force: true });
+    if (process.connected) process.send(restart ? { restart } : { stop: true });
     await session.close();
     process.exit(0);
   };
   process.on('SIGINT', () => stop());
-  process.on('SIGTERM', () => stop({ restarting: true }));
+  process.on('SIGTERM', () => stop());
+  process.on('message', (message) => {
+    if (message?.restart) stop({ restart: message.restart });
+    if (message?.stop) stop();
+  });
+  // (the supervisor gone, killed with whatever started it: nothing would stop this process then)
+  process.on('disconnect', () => stop());
+
+  /** A command from a command line whose code isn't this server's: refused, and the server started again for it. */
+  const otherCode = () => {
+    if (!process.connected) {
+      return { ok: false, text: 'lab: the lab server runs other code than this command line: start it again' };
+    }
+    setTimeout(() => stop({ restart: 'a command came from newer code' }), 50);
+    return { ok: false, restarting: true, text: 'the lab server is restarting: its code changed' };
+  };
 
   /** Runs a command once the ones before it are done; its reply carries the changes seen as it started. */
   const runCommand = (call) => queue.add(async () => {
@@ -156,7 +177,7 @@ export async function serve(port) {
   });
 
   const routes = {
-    '/ping': async () => ({ ok: true }),
+    '/ping': async () => ({ ok: true, stamp }),
     '/stop': async () => {
       setTimeout(() => stop(), 50);
       return { ok: true, text: 'the lab server stopped' };
@@ -166,6 +187,7 @@ export async function serve(port) {
       return { changed, version: changes.count, files: changes.files };
     },
     '/run': async (call) => {
+      if (call.stamp && call.stamp !== stamp) return otherCode();
       const job = runCommand(call);
       job.finally(bootNext).catch(() => {});
       try {

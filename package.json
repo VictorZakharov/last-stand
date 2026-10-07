@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "facelab": "node tools/facelab/facelab.mjs",
     "lab": "node tools/lab/lab.mjs",
-    "lab:serve": "node --watch-path=tools/lab/node --watch-path=tools/lab/lab.mjs tools/lab/lab.mjs serve",
+    "lab:serve": "node tools/lab/lab.mjs serve",
     "lab:test": "node --test \"tools/lab/test/*.test.mjs\""
   },
   "dependencies": {

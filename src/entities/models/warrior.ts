@@ -1257,7 +1257,8 @@ export function buildWarrior(): Model {
     for (const ta of tassets) ta.g.rotation.x = -(0.12 + Math.max(-0.05, ta.s > 0 ? fL : fR) * 0.75 + move * 0.05);
     root.updateMatrixWorld(true);
     placeBodies(!fp && st.dead < 0 && !(offHeld && !sheathed) && !twoHeld);
-    skirt.update(fL, fR, move, t, dt, legBodies.list, handBodies.list);
+    // (through the eyes the body isn't drawn, nor its shadow: the mail swings undraped)
+    skirt.update(fL, fR, move, t, dt, fp ? undefined : legBodies.list, fp ? undefined : handBodies.list);
 
     // fists round whatever they hold; an empty hand hangs loosely curled
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);

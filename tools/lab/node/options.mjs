@@ -64,6 +64,7 @@ export const COMMANDS = {
     help: 'the ranger\'s carried bow against his body through a carry\'s round',
     options: {
       canary: { kind: 'switch', help: 'plant faults the measure must catch' },
+      frames: { kind: 'switch', help: 'list every frame with a clip: its phase, what crossed what, how deep' },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
     },

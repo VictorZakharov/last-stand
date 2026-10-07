@@ -1,7 +1,7 @@
 // The lab's commands as the session runs them (tools/lab): each one's work on a side, how the sides' results are
 // put together and compared, and the problems a result reports. Their options are read and checked by options.mjs.
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { labError } from './errors.mjs';
 import { OUT, REPO } from './paths.mjs';
 import { probeFiles } from './probeFiles.mjs';
@@ -26,11 +26,14 @@ function sheetNotes(sheet) {
   return `set up as ${JSON.stringify(sheet.setup)}\n${moments.join('\n')}`;
 }
 
-/** The pictures two sheets took of the same moment from the same view, paired, each pair named for the verdict. */
+/**
+ * The pictures two sheets (or two reports with moments) took of the same moment from the same view, paired, each
+ * pair named for the verdict.
+ */
 function picturePairs(before, after) {
   const pairs = [];
-  for (const moment of after.moments) {
-    const other = before.moments.find((candidate) => candidate.label === moment.label);
+  for (const moment of after?.moments ?? []) {
+    const other = (before?.moments ?? []).find((candidate) => candidate.label === moment.label);
     if (!other) continue;
     for (const tile of moment.tiles) {
       const match = other.tiles.find((candidate) => candidate.view === tile.view);
@@ -55,6 +58,22 @@ function asText(result) {
 /** The problems a result reports: a report's, none otherwise. */
 function problemsIn(result) {
   return isReport(result) ? result.problems : [];
+}
+
+/**
+ * Writes the moments the sides' results pictured (a report's `moments`) as one sheet in `dir`; returns its path, or
+ * null when none pictured any.
+ */
+async function writeMoments(results, dir, browser) {
+  const runs = results
+    .filter(([, result]) => result?.moments?.length)
+    .map(([side, result]) => [side.name, { moments: result.moments }]);
+  if (runs.length === 0) return null;
+  mkdirSync(dir, { recursive: true });
+  const image = join(dir, 'sheet.png');
+  const views = Math.max(...runs.flatMap(([, { moments }]) => moments.map((moment) => moment.tiles.length)));
+  await writeSheet(browser, runs, views, image);
+  return image;
 }
 
 /** A probe module's path relative to the repo, with forward slashes; throws unless it's a file under the repo. */
@@ -101,7 +120,8 @@ export const COMMANDS = {
 
   carry: {
     each(side, options) {
-      return side.command('carry', { fixture: fixtureFrom(options), canary: Boolean(options.canary) });
+      const canary = Boolean(options.canary);
+      return side.command('carry', { fixture: fixtureFrom(options), canary, frames: Boolean(options.frames) });
     },
     textOf: asText,
     problemsOf: problemsIn,
@@ -122,8 +142,15 @@ export const COMMANDS = {
       const fixture = options.setup === false ? null : fixtureFrom(options);
       return side.probe(path, options, fixture);
     },
+    async finish(results, options, session) {
+      const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
+      const name = basename(options._[0]).replace(/\.[^.]+$/, '');
+      const image = await writeMoments(results, join(OUT, 'probes', name), session.browser);
+      return image ? `${text}\n\npictures: ${relative(REPO, image)}` : text;
+    },
     textOf: asText,
     problemsOf: problemsIn,
+    pictures: picturePairs,
   },
 
   eval: {

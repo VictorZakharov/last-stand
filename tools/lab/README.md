@@ -19,8 +19,11 @@ npm run lab -- help                        # every command and option
 
 With `lab:serve` up, the next command's page is booted as soon as a command finishes, and again once the source has
 been left alone for a moment after a change, so a command finds it ready: the sheet takes about 2 s, the carry 5.
-Without it, a command boots a session of its own (about 15 s) and closes it. The server restarts itself when the
-lab's Node code changes, and its Vite server when `vite.config.ts` or the packages do.
+Without it, a command boots a session of its own (about 15 s) and closes it. The server runs under a supervisor of
+the lab's own, which starts it again when the lab's Node code changes, and every command carries a hash of the code
+it was sent from: a server that loaded other code starts again before it runs it (`node --watch` once stopped
+noticing changes, and the server ran old code that dropped an option the command line had just learnt). Its Vite
+server starts again when `vite.config.ts` or the packages change. Stopping the terminal's task stops it all.
 
 ## Commands
 
@@ -29,7 +32,8 @@ lab's Node code changes, and its Vite server when `vite.config.ts` or the packag
   frames the close-ups on a joint), with each arm's load and posture beside them. Writes
   `out/sheets/<--tag>/sheet.png` and `notes.txt`.
 - `carry`: the ranger's carried bow against his body through a carry's round (standing, walking, a draw and its shot,
-  waiting with the next arrow, putting it back). `--canary` plants faults it must catch.
+  waiting with the next arrow, putting it back). `--canary` plants faults it must catch; `--frames` lists every frame
+  with a clip, what crossed what and how deep.
 - `probe <module>`: a measure of your own (below). Options the lab doesn't know are passed to it (`--frames=30`), and
   `--setup=false` skips the set-up.
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`).
@@ -40,8 +44,9 @@ Options every command run on a page takes:
 - the set-up (sheet, carry, probe): `--view top|third|first`, `--at x,z`, `--facing rad`, `--nocked[=false]`;
 - `--class ranger|warrior|mage`: the hero (the last one used by default);
 - `--ab[=ref]`: also on another commit (`origin/main` by default), its results beside this tree's, ending with the
-  verdict: the lines that differ under the section each is in, and for the sheet, the pictures that differ by more
-  than the GPU's own noise. A commit compared with itself (`--ab=HEAD`) agrees;
+  verdict: the lines that differ under the section each is in, and the pictures that differ by more than the GPU's own
+  noise, with where (the region of each, and a picture of each in `out/ab/<command>/`: this tree's dimmed, its
+  differing pixels magenta). A commit compared with itself (`--ab=HEAD`) agrees;
 - `--profile`: where the command's time went in the page, its busiest functions by their own time and in total,
   each at its line in the source;
 - `--watch`: run it again each time the source changes, on the page booted for the change, until Ctrl+C.
@@ -81,7 +86,14 @@ What the lab gives a probe (`page/lab.ts`):
 - `lab.step(count, input?, measure?)`: frames run with each frame's input (`keys`, `m0` / `m2` for the mouse buttons,
   `look` for mouse look, `aim` for the point the mouse is over) and measured after each, a row a frame;
 - `lab.until(done, limit, what, input?)`: frames until `done`, throwing `lab: <what>` if it never is;
-- `lab.capture(views)`: pictures of this moment as PNGs (`lab.drawing = true` draws every frame instead);
+- `lab.capture(views)`: pictures of this moment as PNGs (`lab.drawing = true` draws every frame instead), and
+  `lab.picture(label, views, notes)` one moment of a report's `moments`: the lab writes them as a sheet
+  (`out/probes/<probe>/sheet.png`) and compares them in an A/B, as the sheet's (to see the frames a measure flagged,
+  run the measure's input to them and picture each);
+- `timeCalls(owner, method)` (`page/timing.ts`): every call of a method timed by the browser's own clock (the page's
+  `performance.now` is the lab's, which stands still within a frame), for a cost: its calls, total, median and 90th
+  percentile. The timer ticks in 0.1 ms, so take a frame's mean over many, and compare sides within one A/B (the
+  machine's load drifts between commands);
 - `lab.aim` and `lab.pointAt(point)`: where the mouse is;
 - in `page/geometry.ts`, the body's meshes skinned into the world as drawn (`BakedBody`), what a line crosses among
   them (`crossingsAlong`), and the distance between segments (`segmentDistance`).
@@ -106,7 +118,9 @@ Once a measure is needed again, port it into `page/` as a command of its own (a 
 - `node/`, the Node side:
   - `server.mjs`: `lab:serve`. One command at a time, the next page booted between them, and `--watch`'s changes. It
     only answers the lab's own command line: a POST of JSON for 127.0.0.1 or localhost, from no web page (a page in
-    your browser could otherwise send it an `eval`).
+    your browser could otherwise send it an `eval`). `supervisor.mjs` runs it (`serverProcess.mjs`) in a child
+    process and starts it again on a change to the lab's code (`codeStamp.mjs`, the hash every command is checked
+    against), and stops it when whatever started the supervisor is gone.
   - `session.mjs`: a command run on each side it asks for, its report, problems and A/B verdict; `commands.mjs`:
     what each command does on a side and how its results are compared.
   - `side.mjs`: a tree of the game served by a Vite dev server of the lab's own (HMR off, so a measure never meets a
@@ -135,8 +149,10 @@ Some of what that takes:
   every boot. Frames run back to back; the page gets a turn between frames only for a hero with a cape (its cloth
   steps in a worker).
 - **Set-ups check themselves** (`Lab.setup`, the `Fixture`): the run held in its countdown (no foes and none coming),
-  the hero placed, stopped and settled, an arrow nocked if asked; each step throws if it didn't take, and so does a
-  boot that didn't boot the hero asked for.
+  the hero placed, stopped and settled, an arrow nocked if asked, the view made as the player makes it (V pressed: the
+  game sets the camera's view from its own every frame, and set on the camera alone it was top-down again a frame
+  later, so `--view first` never took); each step throws if it didn't take, and so does a boot that didn't boot the
+  hero asked for.
 - **A/B** (`--ab[=ref]`): the commit is exported with `git archive` into `out/commits/<sha>` (no worktree, no links),
   served with its own dependency cache, the lab's page modules copied into it, and each side runs alone in the
   browser, this tree's first. The pictures are compared pixel by pixel in the lab's browser.

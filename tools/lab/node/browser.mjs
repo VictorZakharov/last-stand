@@ -78,7 +78,8 @@ function labClock() {
   const onGrid = (ms) => Math.round(ms * GRID) / GRID;
   const browserFrame = window.requestAnimationFrame.bind(window);
   const browserNow = performance.now.bind(performance);
-  const clock = { mode: 'real', t: 0, frame: 17067 / GRID, queue: [] };
+  // (`realNow`: the browser's own clock, off the grid, for timing the page's work: performance.now is the lab's)
+  const clock = { mode: 'real', t: 0, frame: 17067 / GRID, queue: [], realNow: browserNow };
   window.__labClock = clock;
   window.requestAnimationFrame = (callback) => {
     if (clock.mode !== 'real') {

@@ -6,6 +6,7 @@
 // `npm run lab:serve` keeps a session up between commands (server.mjs); without it, a command opens a session for
 // itself and closes it when done.
 import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { launchBrowser, useLocalTemp } from './browser.mjs';
 import { COMMANDS } from './commands.mjs';
 import { exportCommit } from './commits.mjs';
@@ -91,7 +92,7 @@ export class LabSession {
     const text = handler.finish
       ? await handler.finish(results, options, this)
       : results.map(([side, result]) => `${side.name}\n${textOf(result)}`).join('\n\n');
-    const verdict = results.length === 2 ? await this.compareSides(handler, results) : null;
+    const verdict = results.length === 2 ? await this.compareSides(command, handler, results) : null;
     const failed = problems.length ? `FAILED: ${problems.join('; ')}` : null;
     const report = [...notes, text, verdict, failed, `(${seconds(started)})`].filter(Boolean).join('\n');
     return { text: report, problems };
@@ -109,14 +110,14 @@ export class LabSession {
 
   /**
    * The A/B's verdict on its two sides' results (the other commit's first): their reports line by line, and with a
-   * command that takes pictures, the pictures pixel by pixel.
+   * command that takes pictures, the pictures pixel by pixel, where they differ pictured in `out/ab/<command>`.
    */
-  async compareSides(handler, [[before, beforeResult], [after, afterResult]]) {
+  async compareSides(command, handler, [[before, beforeResult], [after, afterResult]]) {
     const textOf = handler.textOf ?? String;
     const lines = [describeDifferences(before.name, textOf(beforeResult), after.name, textOf(afterResult))];
     if (handler.pictures) {
       const pairs = handler.pictures(beforeResult, afterResult);
-      lines.push(await describePictureDifferences(this.browser, pairs));
+      lines.push(await describePictureDifferences(this.browser, pairs, join(OUT, 'ab', command)));
     }
     return lines.join('\n');
   }
