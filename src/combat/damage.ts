@@ -2,13 +2,16 @@
 import type * as THREE from 'three';
 import { DAMAGE_COLORS } from '../data/balance';
 import { floatText } from '../ui/floaters';
-import { dealsDamage, simulates } from '../net/role';
+import { dealsDamage } from '../net/role';
 import { rand } from '../util';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
 import type { DamageType, XZ } from '../types';
 
 const ELEMENTAL = new Set(['cold', 'fire', 'lightning']);
+
+/** Damage types by number, as co-op's messages carry them. */
+export const DAMAGE_TYPES: DamageType[] = ['arcane', 'cold', 'fire', 'lightning', 'physical', 'vitality'];
 
 /** Roll a player's outgoing damage for a skill with the given tags. */
 export function rollPlayerDamage(by: Player, base: number, tags: readonly string[]): { amount: number; crit: boolean } {
@@ -35,9 +38,10 @@ export interface HitOpts {
   silent?: boolean;
 }
 
-/** Co-op: the damage number of a partner's hit, sent to the partner's game (set by net/sync). */
-let numberSink: ((by: Player, enemy: Enemy, amount: number, crit: boolean, type: DamageType) => void) | null = null;
-export function setNumberSink(fn: typeof numberSink): void { numberSink = fn; }
+/** What the local player dealt a foe, with its effects, as co-op reports it to the host (set by net/sync). */
+export interface DealtHit { amount: number; crit: boolean; type: DamageType; knock?: number; from?: XZ; chill?: number; freeze?: number }
+let dealtSink: ((enemy: Enemy, hit: DealtHit) => void) | null = null;
+export function setDealtSink(fn: typeof dealtSink): void { dealtSink = fn; }
 
 /** A damage number over an enemy. */
 export function damageNumber(enemy: Enemy, amount: number, crit: boolean, type: DamageType): void {
@@ -45,7 +49,8 @@ export function damageNumber(enemy: Enemy, amount: number, crit: boolean, type: 
   floatText(p.x, enemy.height * 0.9 + 0.3, p.z, Math.round(amount), crit ? 'crit' : 'dmg', DAMAGE_COLORS[type]);
 }
 
-/** Hit an enemy with a skill. Returns damage dealt (0 where the fight isn't simulated: a co-op guest). */
+/** Hit an enemy with a skill. Returns damage dealt (0 for a partner's skill, which its own game deals). On a co-op
+ *  guest the foe is a copy: the hit shows on it at once (its life, a kill) and goes to the host, which deals it. */
 export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   if (!enemy.alive || enemy.invulnerable || !dealsDamage(opts.by)) return 0;
   const type: DamageType = opts.type ?? 'arcane';
@@ -55,18 +60,17 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   // (a marked foe takes more from everyone: the largest of the marks on it)
   const amount = enemy.marks.length ? rolled * (1 + Math.max(...enemy.marks)) : rolled;
   const dealt = enemy.takeDamage(amount, { type, crit, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, by });
+  dealtSink?.(enemy, { amount: dealt, crit, type, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze });
   // everyone sees their own numbers
-  if (!opts.silent || crit) {
-    if (by.local) damageNumber(enemy, dealt, crit, type);
-    else numberSink?.(by, enemy, dealt, crit, type);
-  }
+  if (!opts.silent || crit) damageNumber(enemy, dealt, crit, type);
   if (by.stats.leech > 0 && by.alive) by.heal(dealt * by.stats.leech / 100, true);
   return dealt;
 }
 
-/** Damage a player (after armor / resistance / ward). Only where the fight is simulated. */
+/** Damage a player (after armor / resistance / ward). Only its own game's: a partner's is judged where its player sees
+ *  the blow (net/role). */
 export function hurtPlayer(p: Player, amount: number, type: DamageType = 'physical', from: THREE.Vector3 | null = null): number {
-  if (!p.active || !simulates()) return 0;
+  if (!p.active || !p.local) return 0;
   const s = p.stats;
   const reduce = type === 'physical' ? s.armor : s.resist;
   return p.takeDamage(amount * (1 - reduce / 100), type, from);

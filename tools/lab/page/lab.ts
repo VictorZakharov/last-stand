@@ -150,6 +150,8 @@ export class Lab {
   aim = new THREE.Vector3();
   /** what every frame of the current set-up needs before its input (the foes kept away, the hero unhurt) */
   private keepUp: (() => void)[] = [];
+  /** what a command runs before every frame, ahead of the set-up's (co-op: the messages that arrived by then) */
+  readonly beforeFrame: (() => void)[] = [];
 
   get player() {
     return G.player;
@@ -226,6 +228,7 @@ export class Lab {
   async step<T = void>(count: number, frame?: (f: number) => Frame, measure?: (f: number) => T): Promise<T[]> {
     const rows: T[] = [];
     for (let f = 0; f < count; f++) {
+      for (const before of this.beforeFrame) before();
       for (const keep of this.keepUp) keep();
       this.applyInput(frame?.(f) ?? {});
       this.runGameFrame();

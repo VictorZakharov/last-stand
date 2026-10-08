@@ -9,7 +9,7 @@ import { rand } from '../../util';
 import { slashArc, slashMaterial, angleBetween } from './slash';
 import type { InstantSkill, Needs } from './types';
 import { hurtProp, PROP_DAMAGE, type Prop } from '../../world/destructible';
-import { dealsDamage } from '../../net/role';
+import { hurtsProps } from '../../net/role';
 import type { Player } from '../../entities/player';
 
 type Def = Needs<'damage' | 'range' | 'arc' | 'knock' | 'color'>;
@@ -49,7 +49,7 @@ export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, fa
     hits++;
   }
   // and the props in reach take the blow too (a log is several circles, but one prop takes one blow)
-  if (dealsDamage(player)) {
+  if (hurtsProps(player)) {
     const struck = new Set<Prop>();
     for (const o of G.arena.obstacles) {
       if (!o.prop || struck.has(o.prop)) continue;

@@ -54,6 +54,8 @@ export class Side {
     this.url = null;
     this.context = null;
     this.page = null;
+    /** a co-op partner's page's context, while one is open (`coop`) */
+    this.partnerContext = null;
     /** the hero its page booted, null until one booted whole */
     this.heroClass = null;
     /** the source changed since the page booted */
@@ -172,29 +174,63 @@ export class Side {
 
   /** Opens a page on the game for `heroClass` and waits out its loading screen. */
   async openPage(heroClass) {
-    if (!this.context) {
-      this.context = await this.browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1 });
-      for (const script of PAGE_SCRIPTS) await this.context.addInitScript(script);
-    }
-    // (nothing kept from the last boot: the game writes cookies of its own, the skill loadout's among them, and a boot
-    // after them ended its set-up a frame apart from the first; storage is cleared as the page starts, browser.mjs)
-    await this.context.clearCookies();
-    const cookies = { ...BOOT_COOKIES, 'last-stand-class': heroClass };
-    await this.context.addCookies(Object.entries(cookies).map(([name, value]) => ({ name, value, url: this.url })));
-    const page = await this.context.newPage();
-    this.page = page;
+    this.context ??= await this.newContext();
     this.errors = [];
-    page.on('pageerror', (error) => this.errors.push(String(error)));
-    page.on('console', (message) => {
-      if (message.type() === 'error') this.errors.push(message.text());
-    });
-    await page.emulateMedia({ reducedMotion: 'reduce' });
     this.stale = false;
     this.used = false;
+    this.page = await this.openPageIn(this.context, heroClass, '');
+  }
+
+  /**
+   * Opens a second page of this side's game in a context of its own, booted for `heroClass` and with the lab installed
+   * as `boot` does: a co-op partner (`coop`). Its errors count as this side's, said to be the partner's. Returns the
+   * page; `closePartner` closes it.
+   */
+  async openPartner(heroClass) {
+    await this.closePartner();
+    this.partnerContext = await this.newContext();
+    const page = await this.openPageIn(this.partnerContext, heroClass, 'partner: ');
+    await page.evaluate(async () => {
+      const lab = await import('/tools/lab/page/lab.ts');
+      lab.install();
+    });
+    return page;
+  }
+
+  /** Closes the co-op partner's page, if one is open. */
+  async closePartner() {
+    await this.partnerContext?.close().catch(() => {});
+    this.partnerContext = null;
+  }
+
+  /** A browser context as every page of the lab's has it: its viewport and the scripts run before the page's own. */
+  async newContext() {
+    const context = await this.browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1 });
+    for (const script of PAGE_SCRIPTS) await context.addInitScript(script);
+    return context;
+  }
+
+  /**
+   * Opens a page on the game for `heroClass` in `context` and waits out its loading screen, its errors kept as this
+   * side's (each after `prefix`).
+   */
+  async openPageIn(context, heroClass, prefix) {
+    // (nothing kept from the last boot: the game writes cookies of its own, the skill loadout's among them, and a boot
+    // after them ended its set-up a frame apart from the first; storage is cleared as the page starts, browser.mjs)
+    await context.clearCookies();
+    const cookies = { ...BOOT_COOKIES, 'last-stand-class': heroClass };
+    await context.addCookies(Object.entries(cookies).map(([name, value]) => ({ name, value, url: this.url })));
+    const page = await context.newPage();
+    page.on('pageerror', (error) => this.errors.push(`${prefix}${String(error)}`));
+    page.on('console', (message) => {
+      if (message.type() === 'error') this.errors.push(`${prefix}${message.text()}`);
+    });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto(this.url);
     // (polled on a timer: by default it polls by animation frame, and the lab's clock holds those once the game shows)
     const polling = { polling: BOOT_POLL_MS, timeout: BOOT_TIMEOUT_MS };
     await page.waitForFunction(() => !document.getElementById('loading'), null, polling);
+    return page;
   }
 
   // A command runs in one task of the page, its modules imported first and the lab readied after them (`begin`: the
@@ -298,6 +334,7 @@ export class Side {
   useBrowser(browser) {
     this.browser = browser;
     this.context = null;
+    this.partnerContext = null;
     this.page = null;
     this.heroClass = null;
   }
@@ -309,6 +346,7 @@ export class Side {
   }
 
   async close() {
+    await this.closePartner();
     await this.closePage();
     await this.context?.close().catch(() => {});
     await this.server?.close();

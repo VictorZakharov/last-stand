@@ -1,5 +1,8 @@
-// Who runs what in co-op. The host's game simulates the fight (enemies, damage, loot, waves) and
-// the guests show it; everyone moves and casts their own character. Solo is a host with no guests.
+// Who runs what in co-op. The host's game simulates the fight (enemies, loot, waves) and the guests
+// show it; everyone moves and casts their own character, and each game judges its own character's
+// hits on the foes and the foes' hits on it, as its own screen shows them (at a high ping, judged on
+// the host, an arrow that struck on the guest's screen missed the foe there, which had moved on, and
+// a blow the guest had dodged on its screen still hurt it). Solo is a host with no guests.
 import { G } from '../state';
 import type { Player } from '../entities/player';
 
@@ -14,9 +17,13 @@ export const isHost = (): boolean => role.current === 'host';
 /** This game runs the world: always in the lobby (each practises on its own dummies), in a run unless a guest. */
 export const simulates = (): boolean => G.mode === 'menu' || role.current !== 'guest';
 
-/** Whether a player's skill deals its damage here: in a run where the fight is simulated, in the
- *  lobby only the local player's (a partner's casts there are just for show). */
-export const dealsDamage = (by: Player): boolean => (G.mode === 'run' ? role.current !== 'guest' : by.local);
+/** Whether a player's skill deals its damage to the foes here: only its own game's (a partner's casts
+ *  are replayed for show; its own game reports what they hit, net/sync). */
+export const dealsDamage = (by: Player): boolean => by.local;
+
+/** Whether a player's skill wears the props down here: in a run where the fight is simulated (the
+ *  props are the host's), in the lobby only the local player's. */
+export const hurtsProps = (by: Player): boolean => (G.mode === 'run' ? role.current !== 'guest' : by.local);
 
 /** The nearest player an enemy can go for from (x, z), or null. */
 export function nearestPlayer(x: number, z: number): Player | null {

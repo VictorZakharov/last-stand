@@ -40,7 +40,7 @@ import { BIOME_IDS } from './data/biomes';
 import { loadingStep, loadingDone, loadingFailed } from './ui/loading';
 import { preloadTextures } from './core/textures';
 import { initSync } from './net/sync';
-import { initSession, joinRoom, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, partnerInRun } from './net/session';
+import { initSession, joinRoom, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
 import { isCoop, isGuest, isHost, simulates } from './net/role';
 import { initCoop, renderCoop, updateCoopHud, touchReviving } from './ui/coop';
 import type { BiomeId } from './data/biomes';
@@ -344,6 +344,8 @@ function update(dt: number): void {
   if (input.orbit) orbitBy(input.orbit);
   if (input.look.x || input.look.y) lookBy(input.look.x, input.look.y);
 
+  // co-op: the partners' reports (and on a guest the host's fight) played out to the moment shown
+  playSession(dt);
   // the player can move and cast in both the arena and the lobby (sandbox); co-op partners as reported
   G.player.reviving = G.mode === 'run' && !G.menuOpen && (isDown('e') || touchReviving());
   for (const p of G.players) p.update(dt);

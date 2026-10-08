@@ -59,29 +59,31 @@ interface DashState { vx: number; vz: number; t: number; dur: number; hold: numb
 /** `pace` (optional) is the share of the way covered by `u` (0..1 of `dur`), rising from 0 to 1: a dash that braces before it goes, or skids at its end, covering the same distance */
 export interface DashOpts { lift?: number; anim?: CastAnim; hold?: number; step?(): void; pace?(u: number): number }
 
+const round2 = (v: number): number => Math.round(v * 100) / 100;
+
 /** What the local player does that the other players' games replay (see net/session). */
 export type PlayerAction =
   | { t: 'cast'; s: string; dur: number; x: number; z: number; /** a drawn shot: `dur` is its time to full draw */ h?: 1; /** a bow's arrow taken from the quiver first: its seconds (`CastState.nockT`) */ n?: number }
   | { t: 'fire'; s: string; x: number; z: number; px: number; pz: number; f: number; /** how far a drawn shot was drawn */ k?: number; /** how high the aim was on a prop */ y?: number }
   | { t: 'chs'; s: string; k: SkillKey }
-  | { t: 'che' };
+  | { t: 'che' }
+  /** a hit it took, as its own game judged it (shown on the others) */
+  | { t: 'hurt'; r: HitResult }
+  /** it fell (the host's run rules take it from there) */
+  | { t: 'died' };
 let actionSink: ((a: PlayerAction) => void) | null = null;
 /** Co-op: where the local player's casts are reported. */
 export function setActionSink(fn: ((a: PlayerAction) => void) | null): void { actionSink = fn; }
 
-/** How a hit on a player turned out. It's worked out where the fight is simulated (solo, or the
- *  co-op host) and shown from this on every screen. */
+/** How a hit on a player turned out. It's worked out by the player's own game and shown from this on
+ *  every screen. */
 export interface HitResult { taken: number; blocked: number; broke: boolean; absorbed: number }
 
-/** A remote player as its owner last reported it (position, velocity, facing, aim), and when. */
-export interface RemoteState { x: number; z: number; vx: number; vz: number; f: number; ax: number; az: number; at: number }
+/** A remote player as its owner's reports have it at the moment shown (position, velocity, facing, aim: net/timeline). */
+export interface RemoteState { x: number; z: number; vx: number; vz: number; f: number; ax: number; az: number }
 
 /** Out of a co-op run for the rest of it: banked, or dead for good. */
 export type PlayerOut = 'banked' | 'dead' | null;
-
-/** Reports each hit on a player to the co-op partners (set by net/sync on the host). */
-let hitSink: ((p: Player, r: HitResult, from: THREE.Vector3 | null) => void) | null = null;
-export function setHitSink(fn: typeof hitSink): void { hitSink = fn; }
 
 export class Player {
   readonly cls: ClassDef;
@@ -103,7 +105,7 @@ export class Player {
   slot = 0;
   readonly spawn = new THREE.Vector3(0, 0, 3);
   /** a remote player: its latest reported state */
-  readonly remote: RemoteState = { x: 0, z: 3, vx: 0, vz: 0, f: Math.PI, ax: 0, az: 0, at: 0 };
+  readonly remote: RemoteState = { x: 0, z: 3, vx: 0, vz: 0, f: Math.PI, ax: 0, az: 0 };
 
   readonly pos = new THREE.Vector3(0, 0, 3);
   readonly vel = new THREE.Vector3();
@@ -451,6 +453,8 @@ export class Player {
   /** A remote player's action, replayed as its owner reported it. */
   replay(a: PlayerAction): void {
     if (a.t === 'che') { this.stopChannel(); return; }
+    if (a.t === 'hurt') { this.applyHit(a.r); return; }
+    if (a.t === 'died') { if (this.alive) this.die(); return; }
     const s = this.known.get(a.s);
     if (!s || !this.alive) return;
     if (a.t === 'cast') {
@@ -460,8 +464,7 @@ export class Player {
         ? { skill: s, t: 0, dur: Infinity, fireAt: Infinity, fired: false, target, replay: true, drawT: a.dur, nockT }
         : { skill: s, t: 0, dur: a.dur, fireAt: nockT + (a.dur - nockT) * (s.def.fireAt ?? 0.55), fired: false, target, replay: true, nockT };
     } else if (a.t === 'fire') {
-      // from where it stood and the way it faced as it fired, so reach and aim match what its player saw
-      this.pos.x = this.remote.x = a.px; this.pos.z = this.remote.z = a.pz;
+      // (the way it faced as it fired; where it stood is where its reports have it now, played in step with them)
       this.facing = a.f;
       if (this.casting?.drawT && !this.casting.fired) this.loose(this.casting, a.k ?? 1);
       else if (this.casting) this.casting.fired = true;
@@ -516,7 +519,7 @@ export class Player {
   // --- update -----------------------------------------------------------------------
   update(dt: number): void {
     const t = G.time;
-    if (!this.local) this.follow(dt);
+    if (!this.local) this.follow();
     if (!this.alive) { this.updateDeath(dt); return; }
     if (!this.local) { this.updateRemote(dt, t); return; }
 
@@ -630,18 +633,15 @@ export class Player {
     this.animateBody(dt, t, Math.hypot(r.vx, r.vz));
   }
 
-  /** A remote player moves (and lies, when down) where its game reports it. */
-  private follow(dt: number): void {
+  /** A remote player moves (and lies, when down) where its game's reports have it at the moment shown (net/timeline:
+   *  read between them, so it moves as smoothly as they do however irregularly they came). */
+  private follow(): void {
     const r = this.remote;
-    const lead = this.alive ? Math.min(0.2, Math.max(0, (performance.now() - r.at) / 1000)) : 0;
-    const tx = r.x + r.vx * lead, tz = r.z + r.vz * lead;
-    // a jump (a respawn, a long stall) is taken at once rather than slid across the arena
-    if (Math.hypot(tx - this.pos.x, tz - this.pos.z) > 4) { this.pos.x = tx; this.pos.z = tz; }
-    this.pos.x = damp(this.pos.x, tx, 14, dt);
-    this.pos.z = damp(this.pos.z, tz, 14, dt);
+    this.pos.x = r.x;
+    this.pos.z = r.z;
     if (!this.alive) return;
     this.vel.set(r.vx, 0, r.vz);
-    this.facing = angleDamp(this.facing, r.f, 16, dt);
+    this.facing = r.f;
     this.aim.set(r.ax, 0, r.az);
   }
 
@@ -779,7 +779,7 @@ export class Player {
     if (!this.alive || G.time < this.guardUntil) return 0;
     const r = this.resolveHit(amount, from);
     this.showHit(r);
-    hitSink?.(this, r, from);
+    if (this.local) actionSink?.({ t: 'hurt', r: { taken: round2(r.taken), blocked: round2(r.blocked), broke: r.broke, absorbed: round2(r.absorbed) } });
     if (this.life <= 0) this.die();
     return r.taken;
   }
@@ -859,6 +859,7 @@ export class Player {
     this.ward?.onEnd?.();
     this.ward = null;
     sfx.death();
+    if (this.local) actionSink?.({ t: 'died' });
     emit('playerDied', this);
   }
 

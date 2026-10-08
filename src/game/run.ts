@@ -323,7 +323,12 @@ export function bankRun(): void {
 
 function onPlayerDied(p: Player): void {
   const r = G.run;
-  if (!r || isGuest() || r.phase === 'over') return;
+  if (!r || r.phase === 'over') return;
+  // a guest's own fall, as the host will rule it (it says so a moment later, and what else follows)
+  if (isGuest()) {
+    if (p.local && G.players.some((q) => q !== p && q.active)) p.goDown();
+    return;
+  }
   // with a teammate still standing, a fall is a chance to be raised
   if (isCoop() && G.players.some((q) => q !== p && q.active)) {
     p.goDown();
