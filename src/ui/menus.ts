@@ -4,7 +4,7 @@ import { SLOTS, SLOT_INFO } from '../data/items';
 import { RUN } from '../data/balance';
 import { WAVES } from '../data/waves';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
-import { rarityOf, rarityIndex, itemPower, byValue, OFFHAND_WEAPON } from '../loot/items';
+import { rarityOf, rarityIndex, itemPower, byValue, isTwoHanded, OFFHAND_WEAPON } from '../loot/items';
 import { SKILL_KEYS } from '../loot/loadout';
 import { equipFromStash, unequip, discard, discardEquipped, resetProfile, slotsFor } from '../loot/profile';
 import { throwItem, floorAt } from '../game/groundItems';
@@ -394,7 +394,16 @@ export function renderMenu(): void {
     d.innerHTML = (it ? itemIconSVG(it) : slotPlaceholderSVG(slot, cls)) + GLOW;
     d.setAttribute('aria-label', `${label}: ${it ? it.name : 'empty'}`);
     bindSlotFocus(d, slot);
-    if (!it) bindTooltip(d, () => ({ html: `<div class="tt-card empty"><div class="tt-name">${label}</div><div class="tt-type">Empty</div></div>`, color: '#666' }));
+    // the off-hand of a two-hander: locked, and the tooltip says why
+    const main = p.equipped.weapon;
+    const locked = slot === 'offhand' && !it && !!main && isTwoHanded(main, cls);
+    if (locked) {
+      d.classList.add('locked');
+      d.innerHTML += LOCK;
+      d.setAttribute('aria-label', `${label}: locked, both hands are on the ${main!.name}`);
+      const swaps = !cls.excludeSlots?.includes('offhand');
+      bindTooltip(d, () => lockedTooltip(main!, swaps));
+    } else if (!it) bindTooltip(d, () => ({ html: `<div class="tt-card empty"><div class="tt-name">${label}</div><div class="tt-type">Empty</div></div>`, color: '#666' }));
     else {
       // a weapon in the off-hand: its damage (the implicit) counts for less
       const how = 'Click or drag to the stash to unequip · drag it onto the floor to throw it there';
@@ -479,6 +488,18 @@ function openItemSheet(it: Item, compare: boolean, label: string, act: (() => vo
 // Hovering an equipment slot lights up every stash item that fits it (and dims the
 // rest); hovering a stash item lights up the slot it goes into.
 const GLOW = '<span class="slot-glow"></span>';
+/** a padlock over the off-hand while a two-handed weapon takes both hands */
+const LOCK = '<svg class="slot-lock" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5" '
+  + 'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'
+  + '<rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor"/>'
+  + '<circle cx="12" cy="15.2" r="1.6" fill="#141214"/><rect x="11.2" y="15.5" width="1.6" height="3" fill="#141214"/></svg>';
+
+/** The off-hand's tooltip while the two-handed `weapon` takes both hands (`swaps`: the class has off-hands to equip). */
+function lockedTooltip(weapon: Item, swaps: boolean): { html: string; color: string; foot?: string } {
+  const html = '<div class="tt-card empty"><div class="tt-name">Off-hand</div><div class="tt-type">Locked</div>'
+    + `<div class="tt-desc">Both hands are on the two-handed ${weapon.name}.</div></div>`;
+  return { html, color: '#666', foot: swaps ? 'Equipping an off-hand puts the two-hander back in the stash' : undefined };
+}
 
 function focusSlot(slot: Slot | null): void {
   const menu = $('#menu');
