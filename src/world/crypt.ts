@@ -10,6 +10,7 @@ import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
 import { seeThrough } from '../core/seeThrough';
+import { floorRelief } from '../core/parallax';
 import { buildSky, boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import type { Obstacle } from '../types';
@@ -88,8 +89,14 @@ function dampMap(size = 512): THREE.DataTexture {
   return t;
 }
 
+/** the cobbles' maps' repeat over the ground (110 m round) */
+const COBBLE_REPEAT = 44;
+/** the cobbles' relief: the grout this far under their tops (m), and gone this far off (m: past the top-down view's 30 to 51) */
+const COBBLE_RELIEF = { depth: 0.06, perMetre: COBBLE_REPEAT / 220, fade: 70 };
+
 /** Damp patches and a slow brightness drift over the cobbles in world space, so the floor doesn't
- * read as one tiled texture; the damp is darker and glossy, catching the moonlight. */
+ * read as one tiled texture; the damp is darker and glossy, catching the moonlight. The cobbles stand
+ * up out of their grout (core/parallax.ts). */
 function dampGround<M extends THREE.MeshStandardMaterial>(m: M): M {
   const damp = { value: dampMap() };
   m.onBeforeCompile = (shader) => {
@@ -114,6 +121,7 @@ function dampGround<M extends THREE.MeshStandardMaterial>(m: M): M {
 
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor = mix(roughnessFactor, 0.42, dampAmt);`);
+    floorRelief(shader, COBBLE_RELIEF);
   };
   m.customProgramCacheKey = () => 'dampground';
   return m;
@@ -130,7 +138,7 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
   // --- Materials ------------------------------------------------------------
   const cob = cobblestone();
   // the ground reaches past the fog's far end, so its edge melts into the sky's horizon
-  const groundMat = dampGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(cob, 44, 1.1), color: 0xd0d4e0 }));
+  const groundMat = dampGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(cob, COBBLE_REPEAT, 1.1), color: 0xd0d4e0 }));
   const wallMaps = slabs(21, 6, 3);
   const wallMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wallMaps, 1, 1.2), color: 0xb4b8c6 });
   const daisMaps = slabs(33, 5, 5);

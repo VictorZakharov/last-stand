@@ -85,6 +85,60 @@ export function buildGrassGeo(rng: () => number, base: RGB, tip: RGB): THREE.Buf
   return g;
 }
 
+/** A tuft's blades' colours: at the root, halfway up and at the tip (linear RGB), and the share of tips yellowed. */
+export interface TuftColours { root: RGB; mid: RGB; tip: RGB; dry: RGB; dryShare: number }
+
+/**
+ * A tuft of grass: `blades` blades, each a strip tapering to its tip in `SEGMENTS` segments, curving out and over as it
+ * rises (its lean growing with the square of its height) and twisting a little, coloured from a dark root to a lighter
+ * tip (some tips yellowed). Its normals lie between the blade's face and straight up, so a tuft is lit round rather
+ * than as flat cards.
+ */
+export function buildGrassTuft(rng: () => number, blades: number, c: TuftColours): THREE.BufferGeometry {
+  const SEGMENTS = 3;
+  const pos: number[] = [], nor: number[] = [], col: number[] = [];
+  const mix = (a: RGB, b: RGB, k: number): RGB => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+  for (let i = 0; i < blades; i++) {
+    // rooted round the tuft's middle, leaning out from it
+    const at = rng() * TAU, d = Math.sqrt(rng()) * 0.09, cx = Math.cos(at) * d, cz = Math.sin(at) * d;
+    const lean = at + (rng() - 0.5) * 1.2, height = 0.25 + rng() * 0.35, width = 0.016 + rng() * 0.016;
+    const over = height * (0.2 + rng() * 0.55), twist = (rng() - 0.5) * 1.4, shade = 0.75 + rng() * 0.45;
+    const tip = rng() < c.dryShare ? c.dry : c.tip;
+    const lx = Math.cos(lean), lz = Math.sin(lean);
+    // a point up the blade (k: 0 at the root, 1 at the tip), `side` of its width
+    const point = (k: number, side: number): [number, number, number] => {
+      const turn = lean + Math.PI / 2 + twist * k, half = width * Math.pow(1 - k, 0.8) * side;
+      const out = over * k * k;
+      return [cx + lx * out + Math.cos(turn) * half, height * (k - 0.35 * (over / height) * k * k * k), cz + lz * out + Math.sin(turn) * half];
+    };
+    // the face's normal blended with up, outward a little
+    const normal = (k: number): [number, number, number] => {
+      const turn = lean + twist * k, nx = Math.cos(turn) * 0.55 + lx * 0.2, nz = Math.sin(turn) * 0.55 + lz * 0.2, ny = 0.8;
+      const len = Math.hypot(nx, ny, nz);
+      return [nx / len, ny / len, nz / len];
+    };
+    const colour = (k: number): RGB => {
+      const base = k < 0.5 ? mix(c.root, c.mid, k * 2) : mix(c.mid, tip, (k - 0.5) * 2);
+      return [base[0] * shade, base[1] * shade, base[2] * shade];
+    };
+    const vertex = (k: number, side: number) => { pos.push(...point(k, side)); nor.push(...normal(k)); col.push(...colour(k)); };
+    for (let s = 0; s < SEGMENTS; s++) {
+      const k0 = s / SEGMENTS, k1 = (s + 1) / SEGMENTS;
+      if (s === SEGMENTS - 1) {
+        vertex(k0, -1); vertex(k0, 1); vertex(k1, 0);
+        continue;
+      }
+      vertex(k0, -1); vertex(k0, 1); vertex(k1, 1);
+      vertex(k0, -1); vertex(k1, 1); vertex(k1, -1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return g;
+}
+
 // Box whose UVs are scaled by world size so textures don't stretch.
 export function boxWithUV(w: number, h: number, d: number, texel = 0.5): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(w, h, d);
