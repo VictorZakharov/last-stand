@@ -570,18 +570,19 @@ export function showSummary({ outcome, wave, score, kills, bag, lost = [], repla
   items.className = 'sm-items';
   items.innerHTML = '';
   clearReveal();
-  // a fall loses them unseen (only their rarities show); banking reveals them one by one, the best last
+  // a fall loses them unseen (only their rarities show); banking reveals them one by one, the best first, each in its
+  // place in the list (revealed from its end, the weakest came first and the best last)
   if (dead) items.innerHTML = rarityChips(bag, 'chip lost');
   else {
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    bag.slice().sort(byValue).reverse().forEach((it, i) => {
+    bag.slice().sort(byValue).forEach((it, i) => {
       const c = document.createElement('span');
       c.className = 'chip reveal' + (gone.has(it.id) ? ' lost' : '');
       c.style.color = rarityOf(it.rarity).color;
       c.style.animationDelay = `${0.3 + i * REVEAL_STEP}s`;
       c.textContent = it.name;
       bindTooltip(c, itemTooltip(it));
-      items.prepend(c);   // the best ends up first in the list
+      items.append(c);
       if (!still) revealTimers.push(setTimeout(() => sfx.loot(rarityIndex(it.rarity)), (0.3 + i * REVEAL_STEP) * 1000));
     });
   }
