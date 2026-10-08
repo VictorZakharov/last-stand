@@ -87,8 +87,27 @@ export function footShape(ankle: THREE.Object3D, root: THREE.Object3D): FootShap
 }
 
 const TAU = Math.PI * 2;
-/** radians of forward lean per m/s of speed */
+/** radians of forward lean per m/s of speed, and the share of a stop's own lean (`atan` of its deceleration over
+ *  gravity's) a body brought to a stop from a run takes: it comes upright and back over the feet braking it */
 const LEAN = 0.045;
+const PUSH_LEAN = 0.5;
+/** a stop's lean back fades out as its speed falls under this (m/s: a jog) */
+const BRAKE_SPEED = 2;
+const GRAVITY = 9.81;
+/** a body easing towards a velocity slower than this is stopping (m/s); a stopping body's landing drawn back onto
+ *  where its foot will stand comes across onto it over this much drawn back, and one short of it by up to this much
+ *  is drawn on towards it (m, at a man's scale) */
+const STOP_GOAL = 0.05;
+const REST_ACROSS = 0.1;
+const REST_PULL = 0.25;
+/** a body that stops with a planted foot up to this far ahead of or behind its stance's spot keeps it there (a share
+ *  of the leg's length) */
+const SPLIT = 0.25;
+/** a stride the body stops under finishes in what its swing had left, but no quicker than this (s) */
+const STOPPED_LEAST = 0.08;
+/** a standing body turning faster than this (rad/s, `yawRate`) is wheeling round on its feet: it steps quicker, and
+ *  a step already in the air comes down this many times as quickly */
+const WHEEL_STEP = 2, WHEEL_HURRY = 2.5;
 /** the fastest a foot's target may move (m/s at the scale of a man: a base and a share of the body's speed; a running
  *  swing peaks near twice it) */
 const FOOT_V = 4, FOOT_VK = 2.5;
@@ -202,6 +221,11 @@ const NEAR_STEP = 0.03;
 /** standing, a foot's spot by an edge moves to the nearest place it fits on the body's level, looked for in rings this
  *  far apart (m at a man's scale), at most this many, each this many places round */
 const EDGE_RING = 0.01, EDGE_RINGS = 30, EDGE_ROUND = 24;
+/** a standing foot put onto the body's level by an edge may come this near the pelvis's middle (m, at a man's
+ *  scale): as a person by a ledge narrows the stance to keep a foot on it (kept `GAP` out, its ball's margin and a
+ *  foot turned out a little left no place on the dais for the outer foot until the body stood 12 cm inside its
+ *  edge, and the foot stood on the step below) */
+const EDGE_GAP = 0.02;
 /** how far inside its level's edge a standing foot's ball is put at least, along the foot and across it, and its heel
  *  and toes clear of a higher level (m at a man's scale): put down on the edge itself, the 2 cm it rolls on landing
  *  took its ball over it, or its toes into the riser */
@@ -353,6 +377,10 @@ class Foot {
    *  stride (0 until it needs one) */
   landShift = 0;
   riserSide = 0;
+  /** how far ahead of its hip a stride lands, along its way, as its landing is aimed (m: half a stance, drawn back
+   *  to where it will stand as the body stops), and its stroke's share of the body's speed (less as it stops) */
+  landOff = 0;
+  strokeK = 1;
   /** the leg as the pose had it, for the blend */
   fk = { thigh: new THREE.Quaternion(), knee: new THREE.Quaternion(), ankle: new THREE.Quaternion() };
   /** this leg's own blend over the pose (`update`'s `legW`), smoothed, and whether the pose owned it last frame */
@@ -362,6 +390,9 @@ class Foot {
    *  under its hip */
   stand: THREE.Vector3 | null = null;
   syaw = 0;
+  /** how far ahead of its spot (rig units, along the way the body faces) a standing foot stays, as the body stopped
+   *  with it there (`keepSplit`) */
+  split = 0;
   /** where the ankle's target was last frame, if it was the gait's */
   last = new THREE.Vector3();
   seen = false;
@@ -447,7 +478,8 @@ const _pole = new THREE.Vector3(), _e = new THREE.Euler(), _thighDown = new THRE
 const _leavesAt = new THREE.Vector3(), _hipAt = new THREE.Vector3();
 const _hipForward = new THREE.Vector3(0, 0, 1), _toes = new THREE.Vector3(), _ankleHeld = new THREE.Quaternion();
 const _heelUp = new THREE.Vector3(), _landWas = new THREE.Vector3(), _drift = new THREE.Vector3();
-const _kneeAt = new THREE.Vector3();
+const _kneeAt = new THREE.Vector3(), _restSpot = new THREE.Vector3(), _braking = new THREE.Vector3();
+const _rest = new THREE.Vector3(), _local = new THREE.Vector3(), _rootInverse = new THREE.Matrix4();
 /** along the foot and across it, both ways: where a standing foot's ball must have its level round it
  *  (`EDGE_MARGIN`) */
 const MARGIN_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
@@ -502,6 +534,17 @@ export class LegIK {
   /** the body's lean into its motion (forward, sideways), damped */
   private leanX = 0;
   private leanZ = 0;
+  /** the body's velocity this frame, from its move (m/s) */
+  private readonly vNow = new THREE.Vector3();
+  /** the velocity the game eases the body towards and how quickly (`intend`), and whether it said so this frame */
+  private readonly goal = new THREE.Vector3();
+  private goalRate = 0;
+  private goalSaid = false;
+  private intended = false;
+  /** the speed a stop began at (m/s; 0 while the body isn't being stopped), and whether the body stopped moving this
+   *  frame */
+  private stopFrom = 0;
+  private justStopped = false;
   /** how far the pelvis is turned from the way the body faces, towards the way it travels (rad), damped */
   private twist = 0;
   /** the speed, smoothed slowly (a reversal's moment at a standstill doesn't count), and whether the pelvis is keeping
@@ -529,6 +572,19 @@ export class LegIK {
     ];
     // (read by probes)
     j.root.userData.legs = this;
+  }
+
+  /**
+   * The velocity the game is easing the body towards and how quickly (`rate`: as `damp` eases, by that share of the
+   * difference a second), told before `update` each frame it is known: as a person who decides to stop shortens the
+   * stride under way and puts it down where the body will stand, the gait knows from the first frame where the body
+   * comes to rest (read from the body's own slowing, a co-op copy's, it is known only a few frames later: the last
+   * stride landed where the body would have been at speed, 40 to 60 cm past where it stopped).
+   */
+  intend(goal: THREE.Vector3, rate: number): void {
+    this.goal.set(goal.x, 0, goal.z);
+    this.goalRate = rate;
+    this.goalSaid = true;
   }
 
   /** whether the body is moving as the gait sees it (read by the lab) */
@@ -584,8 +640,12 @@ export class LegIK {
     if (x === null) {
       f.stand = null;
       f.syaw = 0;
+      f.split = 0;
       return;
     }
+    // (a spot the pose moves is stood on as it says: a split kept from a stop is for the stance it stopped in)
+    const moved = !f.stand || Math.abs(f.stand.x - x) > 0.01 || Math.abs(f.stand.z - z) > 0.01 || f.syaw !== yaw;
+    if (moved) f.split = 0;
     (f.stand ??= new THREE.Vector3()).set(x, 0, z);
     f.syaw = yaw;
   }
@@ -639,6 +699,10 @@ export class LegIK {
    */
   update(dt: number, phase: number, dead: number, weight = 1, lean = 1, legW?: readonly [number, number]): void {
     if (!IK) return;
+    this.intended = this.goalSaid && this.goalRate > 0;
+    this.goalSaid = false;
+    if (!this.restingAt(_rest)) this.stopFrom = 0;
+    else if (this.stopFrom === 0) this.stopFrom = Math.max(this.sp, 1e-3);
     if (dead >= 0 || !this.active) {
       this.fresh = true;
       this.w = 0;
@@ -727,14 +791,31 @@ export class LegIK {
     return g;
   }
 
-  /** Leaning into the motion, like a body falling forward onto its feet: the whole body tips about the ground under
-   *  it, the head stays level. */
+  /** Leaning into the motion, like a body falling forward onto its feet, and back against a stop's braking from a
+   *  run (`PUSH_LEAN`): the whole body tips about the ground under it, the head stays level. (By its speed alone, a
+   *  body stopping from a run stayed leaning forward 10 degrees until it had stopped, over feet braking it ahead of it,
+   *  and only then came upright. Leant into every push, strafing drawn each reversal threw the trunk forward and back
+   *  and dragged a planted foot.) */
   private leanIntoMotion(g: GaitFrame, lean: number): void {
     const j = this.j, v = this.v;
-    const ahead = Math.sin(this.lastYaw) * v.x + Math.cos(this.lastYaw) * v.z;
-    const aside = Math.cos(this.lastYaw) * v.x - Math.sin(this.lastYaw) * v.z;
+    const forwardX = Math.sin(this.lastYaw), forwardZ = Math.cos(this.lastYaw);
+    const ahead = forwardX * v.x + forwardZ * v.z;
+    const aside = forwardZ * v.x - forwardX * v.z;
+    // (by the game's own braking, known from the stop's first frame: by the velocity's change, smoothed, it peaked at
+    // a third of it 7 frames late; as much as the stop was from a run's speed, read as it began: by the speed smoothed
+    // slowly, a short sprint read as a walk)
+    const stopping = this.restingAt(_rest);
+    const braking = stopping ? _braking.copy(this.vNow).multiplyScalar(-this.goalRate) : _braking.set(0, 0, 0);
+    // (and as much as there is momentum left to lean against: by the game's easing a body all but stopped still slows
+    // at several m/s², and it stood leant back 7 degrees as it came to rest)
+    const running = runShare(this.stopFrom, g.legReach) * smooth(this.vNow.length() / BRAKE_SPEED);
+    const pushAhead = Math.atan((forwardX * braking.x + forwardZ * braking.z) / GRAVITY) * PUSH_LEAN * running;
     const k = LEAN * lean * this.w;
-    this.leanX = damp(this.leanX, Math.max(-0.12, Math.min(0.3, ahead * k)), 6, g.dt);
+    const forward = ahead * k + pushAhead * lean * this.w;
+    // (and stood still, upright again quickly, as a body that has stopped stands: eased back at a moving body's rate,
+    // it still leant back 2 degrees half a second after the stop, and a shot drawn then wheeling round to shoot behind
+    // brought the bow arm through the string)
+    this.leanX = damp(this.leanX, Math.max(-0.12, Math.min(0.3, forward)), this.moving ? 6 : 12, g.dt);
     this.leanZ = damp(this.leanZ, Math.max(-0.12, Math.min(0.12, -aside * k)), 6, g.dt);
     j.body.rotation.x += this.leanX;
     j.body.rotation.z += this.leanZ;
@@ -839,6 +920,7 @@ export class LegIK {
     const dt = g.dt;
     _velocity.set(g.rootX - this.last.x, 0, g.rootZ - this.last.z).divideScalar(dt);
     const k14 = 1 - Math.exp(-dt * 14);
+    this.vNow.copy(_velocity);
     this.v.lerp(_velocity, k14);
     const spWas = this.sp;
     this.sp += (_velocity.length() - this.sp) * k14;
@@ -851,7 +933,10 @@ export class LegIK {
     this.lastPhase = g.phase;
     const speed = this.sp;
     g.speed = speed;
+    const wasMoving = this.moving;
     this.moving = speed > (this.moving ? 0.25 : 0.55);
+    this.justStopped = wasMoving && !this.moving;
+    if (this.moving) for (const f of this.feet) f.split = 0;
     this.standK = damp(this.standK, this.moving ? 0 : 1, 6, dt);
     // the way it travels: the smoothed velocity's, or (through a reversal, when that is nearly nothing) the latest
     const lv = this.v.length();
@@ -913,7 +998,10 @@ export class LegIK {
       this.finishStoppedStride(g, f, i);
     }
     if (f.state === 'timed') {
-      f.t += g.dt / f.dur;
+      // (wheeling round on its feet, a step in the air is put down at once, so the foot the turn leaves crossed can
+      // step round: landed at its own pace, it held the other crossed under the turning pelvis for 8 frames)
+      const hurry = !this.moving && this.yawRate > WHEEL_STEP ? WHEEL_HURRY : 1;
+      f.t += (g.dt / f.dur) * hurry;
       if (f.t >= 1) this.land(f, g.pelvisYaw + (this.moving ? 0 : f.syaw));
     }
     if (f.state === 'plant') this.tendPlantedFoot(g, f, i, own);
@@ -972,14 +1060,22 @@ export class LegIK {
     // swinging at once; leaving early for its reach or the pelvis's line, half the time in the air. But not dragged:
     // held, a foot was left a metre behind the body as it set off, and jumped 44 cm in its first frame up)
     const walking = g.duty >= WALK_SUPPORT && other.state !== 'plant' && !f.dragged;
-    const held = otherStepping || otherJustLeft || walking;
+    const held = otherStepping || otherJustLeft || walking || (f.state === 'plant' && this.standsWhereItRests(g, f, i));
     // (a foot past its window, held there by the other's swing or a reversal, goes as soon as it may, late: counted
     // against the window to come alone, strafing drawn the feet ran a quarter of a window behind the cycle and never
     // caught up, every stride early or a re-step landing under the hip)
     const late = !inWindow && where > 1 && where < 1 + LATE_SHARE * (1 / (2 * g.halfSwing) - 1);
-    if ((((inWindow || late) && settled) || early) && f.state === 'plant' && !held) {
-      this.beginStride(g, f, early ? toCome : where, early);
-      f.leftFor = early ? `early: ${behind}` : late ? 'late, past its window' : 'its window';
+    // (stopping, a foot too far from where it will stand to stay brings itself up as the body brakes, as a person's
+    // closing step does: left till the body stood, the rear foot's step was still in the air half a second after the
+    // keys were let go, and a body wheeling round then to shoot behind swept it across in front of the other leg)
+    const bothDown = f.state === 'plant' && other.state === 'plant';
+    const closing = bothDown && f.stance > STRIDE_AFTER && this.closesStop(g, f, i);
+    if ((((inWindow || late) && settled) || early || closing) && f.state === 'plant' && !held) {
+      this.beginStride(g, f, early || closing ? toCome : where, early || closing);
+      // (as quick as a first stride from standing: paced by a cycle winding down with the body, it took half a second)
+      if (closing) f.pace = Math.max(f.pace, 1 / FIRST_STRIDE);
+      const why = early ? `early: ${behind}` : late ? 'late, past its window' : 'its window';
+      f.leftFor = closing ? 'closing the stop' : why;
     } else if (f.state === 'swing') {
       this.carryOnStride(g, f, i);
     }
@@ -1053,7 +1149,7 @@ export class LegIK {
     if (f.t < REAIM_UNTIL && f.dir.dot(g.travel) < 0.3) this.reaimStride(g, f, i);
     f.t = Math.min(1, f.t + Math.max(this.dU / f.span, f.pace * g.dt));
     if (f.t >= 1) {
-      this.land(f, g.pelvisYaw);
+      this.land(f, this.landingYaw(g, f));
       return;
     }
     f.dirYaw = angleDamp(f.dirYaw, Math.atan2(g.travel.x, g.travel.z), 10, g.dt);
@@ -1085,7 +1181,8 @@ export class LegIK {
     f.A.copy(f.pos);
     f.A.y = ground;
     f.state = 'timed';
-    f.dur = 0.22;
+    // (in the time its swing had left: begun afresh, a stride half done as the body stopped landed 12 frames late)
+    f.dur = Math.max(STOPPED_LEAST, Math.min(0.22, (1 - f.t) / Math.max(f.pace, 1e-3)));
     f.t = 0;
     f.fast = false;
   }
@@ -1103,6 +1200,7 @@ export class LegIK {
     }
     // a foot pivots with the body when it turns, rather than staying across the leg (about the ball of the foot, which
     // stays where it is: turned about the ankle, the toes and heel would sweep the ground)
+    if (this.justStopped && f.stand) this.keepSplit(g, f);
     const footYaw = g.pelvisYaw + (this.moving ? 0 : f.syaw), off = turnBetween(f.yaw, footYaw);
     if (Math.abs(off) > YAW_MAX) this.turnOnBall(f, i, footYaw - Math.sign(off) * YAW_MAX, g.scale);
     const spot = this.spotFor(g, f, i, footYaw);
@@ -1116,13 +1214,13 @@ export class LegIK {
     // (standing, not before the other is down: stepped while it was still in the air, both feet were up together
     // for 13 frames as the body stopped)
     const outOfReach = f.over && f.stance > 0.04
-      && (this.moving || (dev > NEAR_STEP * reach && other.state === 'plant'));
+      && (this.moving || (dev > NEAR_STEP * reach && other.state === 'plant')) && !this.standsWhereItRests(g, f, i);
     f.over = false;
     // (moving, a foot in trouble takes its stride early instead, in `walkFoot`: an extra step would break the left,
     // right rhythm; only one left far behind, or a body wheeling round on its feet, steps on its own)
     const nearHip = Math.hypot(f.P.x - g.hip.x, f.P.z - g.hip.z) < 0.9 * reach;
     if ((this.moving && this.yawRate < 3 && nearHip) || own) return;
-    const tooFar = this.moving ? Math.max(0.55 * reach, g.landAhead + 0.3 * reach) : (f.stand ? 0.07 : 0.1) * reach;
+    const tooFar = this.moving ? Math.max(0.55 * reach, g.landAhead + 0.3 * reach) : this.standingSlack(f) * reach;
     const otherDown = this.moving ? other.state !== 'timed' : other.state === 'plant';
     const settled = f.stance > (this.moving ? 0.12 : 0.05);
     // (at a walk, not while the other foot is in the air, unless dragged: both off the ground at once is a hop)
@@ -1133,9 +1231,28 @@ export class LegIK {
   /** Where a planted foot should be: standing, the stance's spot (off any edge, onto the body's level); else under
    *  the hip. */
   private spotFor(g: GaitFrame, f: Foot, i: number, footYaw: number): THREE.Vector3 {
-    const spot = !this.moving && f.stand ? _spot.copy(f.stand).applyMatrix4(g.rootMatrix) : _spot.copy(g.hip);
+    const spot = !this.moving && f.stand ? this.standSpot(g, f, _spot) : _spot.copy(g.hip);
     if (!this.moving) this.onBodyLevel(spot, i, footYaw, g.scale, g.rootX, g.rootZ, true);
     return spot;
+  }
+
+  /** A standing foot's stance spot in the world (`out`), as far ahead of it as the body stopped with it
+   *  (`keepSplit`). */
+  private standSpot(g: GaitFrame, f: Foot, out: THREE.Vector3): THREE.Vector3 {
+    out.copy(f.stand!);
+    out.z += f.split;
+    return out.applyMatrix4(g.rootMatrix);
+  }
+
+  /** A body that stops with a planted foot a little ahead of or behind its stance's spot, along the way it faces, keeps
+   *  it there (`SPLIT`), as a person stopping from a run stands with one foot forward: stepped back to its spot, the
+   *  foot the run had just put down went forward and back, 10 to 20 cm, as the body stopped. Only till the pose moves
+   *  the spot or the body moves on. */
+  private keepSplit(g: GaitFrame, f: Foot): void {
+    _local.copy(f.P).applyMatrix4(_rootInverse.copy(g.rootMatrix).invert());
+    const leg = g.thigh + g.shin, along = _local.z - f.stand!.z, across = _local.x - f.stand!.x;
+    const kept = Math.abs(across) < this.standingSlack(f) * leg && Math.abs(along) < SPLIT * leg;
+    f.split = kept ? along : 0;
   }
 
   /** A timed step to `spot` (`dev` away), a quick one at a run. */
@@ -1143,7 +1260,12 @@ export class LegIK {
     f.state = 'timed';
     f.t = 0;
     f.fast = this.moving;
-    f.dur = this.moving ? Math.min(0.3, Math.max(0.12, (1 - g.duty) * g.cycle)) : Math.min(0.4, 0.16 + dev * 0.3);
+    // (wheeling round on its feet, a standing body steps round quickly, as a person turns on the spot: at a standing
+    // step's own pace, turned half round to shoot behind, a foot stood crossed under the pelvis for half a second and
+    // the bow arm drew through the string)
+    const wheeling = !this.moving && this.yawRate > WHEEL_STEP;
+    const standing = wheeling ? Math.min(0.25, 0.12 + dev * 0.2) : Math.min(0.4, 0.16 + dev * 0.3);
+    f.dur = this.moving ? Math.min(0.3, Math.max(0.12, (1 - g.duty) * g.cycle)) : standing;
     // (from where the ankle is: from where the foot was put down, a foot dragged or up on its toes jumped 34 cm in its
     // first frame up)
     f.A.set(f.pos.x, f.P.y, f.pos.z);
@@ -1157,7 +1279,7 @@ export class LegIK {
   /** A foot in the air: its landing aimed, and the ankle on its arc from where it left to there. */
   private moveFootInAir(g: GaitFrame, f: Foot, i: number): void {
     const shape = this.shape![i], sc = g.scale, speed = g.speed;
-    const landYaw = g.pelvisYaw + (this.moving ? 0 : f.syaw);
+    const landYaw = this.landingYaw(g, f);
     this.aimLanding(g, f, i, landYaw);
     const e = f.fast ? 0.6 * f.t * (2 - f.t) + 0.4 * smooth(f.t) : smooth(f.t), run = smooth((speed - 2) / 3.5);
     // (a run lifts the foot higher, and later in the swing: the heel comes up under the seat; a walk's only just clears
@@ -1260,17 +1382,25 @@ export class LegIK {
     // (a phase that has all but stopped, turning round, would put the landing metres off)
     const left = f.state === 'swing' ? (1 - f.t) * (1 - g.duty) * g.cycle : (1 - f.t) * f.dur;
     const remain = Math.min(0.6, left);
+    // (a stopping body's landing put where the foot will stand, as narrow by an edge as a standing foot's, and the
+    // share of its speed the body will have as it lands)
+    let resting = false;
+    let stopShare = 1;
     if (!this.moving && f.stand && f.state === 'timed') {
-      f.B.copy(f.stand).applyMatrix4(g.rootMatrix);
+      this.standSpot(g, f, f.B);
     } else {
       // (along the curve the body is on: going round in circles, a foot landed straight on from the way the body
       // went, outside the curve, and the body left it out of reach in half its stance)
       // (where the body will be, slowing as it is: aimed by its speed alone, a stopping body's last foot landed 41 cm
       // out ahead of it, and stepped back under it once it had stopped)
-      const slowing = this.slowingOver(remain);
+      const slowing = this.slowingOver(g, remain);
       const ahead = f.state === 'swing' ? g.landAhead * slowing.share : 0;
       _landWas.copy(f.B);
       alongCurve(f.B, g.hip, Math.atan2(g.travel.x, g.travel.z), g.curve, slowing.covered + ahead);
+      const toRest = this.landWhereItRests(g, f, i, landYaw);
+      f.landOff = g.landAhead * (toRest !== 0 ? slowing.share : 1) + toRest;
+      resting = toRest !== 0;
+      stopShare = slowing.share;
       // (and late in a swing it settles sideways where it is, as a foot is put down on a spot: following the body's
       // way to the last frame, going round, it swung sideways 5 cm a frame, and the foot landed moving sideways and
       // stopped dead, its way turned 100 degrees in its last frame. Along the way it goes it keeps on with the body:
@@ -1278,8 +1408,12 @@ export class LegIK {
       const settle = f.state === 'swing' ? smooth((f.t - LAND_SETTLE) / (1 - LAND_SETTLE)) : 0;
       if (settle > 0) this.settleSideways(f.B, g.travel, settle);
     }
-    this.keepToSide(f.B);
+    this.keepToSide(f.B, 1, resting ? EDGE_GAP : GAP);
     if (this.moving) f.landShift = damp(f.landShift, this.offRiser(g, f, i, landYaw), 20, g.dt);
+    // (a stopping body's stride lands on its landing, as far from the hip as that is now, not as far ahead of where
+    // the hip will be: the hips come back over the body as its lean comes off, and the foot aimed by them landed 15 to
+    // 20 cm past its spot)
+    f.strokeK = damp(f.strokeK, resting ? stopShare : 1, 20, g.dt);
     // (standing, the step lands where the spot it is measured against is: off the edge)
     if (!this.moving) this.onBodyLevel(f.B, i, landYaw, g.scale, g.rootX, g.rootZ, true);
   }
@@ -1287,12 +1421,109 @@ export class LegIK {
   /** How far the body goes over the next `time` (s), and its speed then as a share of its speed now: slowing, as the
    *  game slows it, by as much again for each share of its speed it loses (to rest, at most its speed over that
    *  rate); else at its speed now. */
-  private slowingOver(time: number): { covered: number; share: number } {
+  private slowingOver(g: GaitFrame, time: number): { covered: number; share: number } {
+    // (a stop as the game eases it, from its first frame: going on, by the game's goal the landings followed each
+    // turn of the keys at once, and going round in circles the ankles jerked a sixth more often)
+    if (this.restingAt(_rest)) return this.easedOver(g, time);
     const speed = this.sp;
     if (this.spRate >= 0 || speed < 1e-3) return { covered: speed * time, share: 1 };
     const rate = -this.spRate / Math.max(speed, 0.1);
     const share = Math.exp(-rate * time);
     return { covered: (speed / rate) * (1 - share), share };
+  }
+
+  /** How far the body goes over the next `time` (s) along the way it goes, and its speed then as a share of its
+   *  speed now, as the game eases it towards its goal (`intend`): `damp`'s own curve, from the frame it starts. */
+  private easedOver(g: GaitFrame, time: number): { covered: number; share: number } {
+    const now = Math.max(0, this.vNow.x * g.travel.x + this.vNow.z * g.travel.z);
+    const goal = Math.max(0, this.goal.x * g.travel.x + this.goal.z * g.travel.z);
+    if (now < 1e-3) return { covered: goal * time, share: 1 };
+    const left = Math.exp(-this.goalRate * time);
+    const covered = goal * time + ((now - goal) * (1 - left)) / this.goalRate;
+    return { covered, share: Math.min(1, (goal + (now - goal) * left) / now) };
+  }
+
+  /** Whether the game is bringing a moving body to a stop (`intend`), and if so where it comes to rest from where it
+   *  is now (`out`, m over the ground). (Standing still is no stop: held as one, a foot the draw's lean left out of
+   *  reach stayed, and the bow arm drew through the string.) */
+  private restingAt(out: THREE.Vector3): boolean {
+    if (!this.intended || !this.moving || this.goal.lengthSq() > STOP_GOAL * STOP_GOAL) return false;
+    out.set(this.vNow.x / this.goalRate, 0, this.vNow.z / this.goalRate);
+    return true;
+  }
+
+  /** Where foot `i` will stand once a stopping body rests `rest` from where it is now: its stance's spot (else under
+   *  its hip) round there, on the level the body rests on (`out`). */
+  private spotAtRest(g: GaitFrame, f: Foot, i: number, rest: THREE.Vector3, yaw: number, out: THREE.Vector3): void {
+    if (f.stand) {
+      out.copy(f.stand).applyMatrix4(g.rootMatrix);
+    } else {
+      // (under the hip as the body stands: its lean's shift along the way it faces left out)
+      const forwardX = Math.sin(g.facing), forwardZ = Math.cos(g.facing);
+      const along = (g.hip.x - g.rootX) * forwardX + (g.hip.z - g.rootZ) * forwardZ;
+      out.set(g.hip.x - forwardX * along, 0, g.hip.z - forwardZ * along);
+    }
+    out.x += rest.x;
+    out.z += rest.z;
+    this.onBodyLevel(out, i, yaw, g.scale, g.rootX + rest.x, g.rootZ + rest.z, true);
+  }
+
+  /** A stopping body's landing never past where the foot will stand once the body rests (`spotAtRest`): drawn back
+   *  along its way to there, and across onto it as it is drawn back (`REST_ACROSS`); a little short of it, drawn on
+   *  onto it, the nearer the more (`REST_PULL`); further short, the body still goes on over the foot, and it stays.
+   *  Returns how far that moved it along the stride's way (m). (Aimed where the hip would be at speed, the last stride
+   *  landed 40 to 60 cm past where the body stopped and stepped back under it a quarter second later; by the dais's
+   *  edge it landed down the step and stepped up onto the body's level once it stood. Drawn towards the spot by the
+   *  share of the stop still to come before it landed, it let go of it as it landed and came down 25 to 35 cm past it.
+   *  Landed 8 cm short, it stepped again for its spot once the body stood.) */
+  private landWhereItRests(g: GaitFrame, f: Foot, i: number, yaw: number): number {
+    if (!this.restingAt(_rest)) return 0;
+    this.spotAtRest(g, f, i, _rest, yaw, _restSpot);
+    const way = f.state === 'swing' ? f.dir : g.travel;
+    const offX = f.B.x - _restSpot.x, offZ = f.B.z - _restSpot.z;
+    const past = offX * way.x + offZ * way.z;
+    if (past <= 0) {
+      const pull = 1 - smooth(-past / (REST_PULL * g.scale));
+      f.B.x -= offX * pull;
+      f.B.z -= offZ * pull;
+      return -past * pull;
+    }
+    const across = smooth(past / (REST_ACROSS * g.scale));
+    f.B.x -= way.x * past + (offX - way.x * past) * across;
+    f.B.z -= way.z * past + (offZ - way.z * past) * across;
+    return -past;
+  }
+
+  /** Whether a planted foot is already where it will stand once a stopping body rests: it takes no stride, even out
+   *  of the leg's reach for a moment, as the body comes to rest over it (stepped by the walk cycle as the body slowed,
+   *  it lifted and came down where it was; let go out of reach as it landed ahead of a body leaning back to brake, it
+   *  stepped 8 cm). */
+  private standsWhereItRests(g: GaitFrame, f: Foot, i: number): boolean {
+    if (!this.restingAt(_rest)) return false;
+    this.spotAtRest(g, f, i, _rest, g.pelvisYaw, _restSpot);
+    return Math.hypot(f.P.x - _restSpot.x, f.P.z - _restSpot.z) < this.standingSlack(f) * g.legReach;
+  }
+
+  /** Whether a planted foot is too far from where it will stand once a stopping body rests to stay there (`SPLIT`
+   *  along the way the body faces, a standing foot's slack across it). */
+  private closesStop(g: GaitFrame, f: Foot, i: number): boolean {
+    if (!f.stand || !this.restingAt(_rest)) return false;
+    this.spotAtRest(g, f, i, _rest, g.pelvisYaw, _restSpot);
+    const forwardX = Math.sin(g.facing), forwardZ = Math.cos(g.facing);
+    const offX = f.P.x - _restSpot.x, offZ = f.P.z - _restSpot.z;
+    const along = offX * forwardX + offZ * forwardZ, across = offX * forwardZ - offZ * forwardX;
+    return Math.abs(along) > SPLIT * g.legReach || Math.abs(across) > this.standingSlack(f) * g.legReach;
+  }
+
+  /** The way a foot in the air lands turned: along the pelvis moving, as its stance turns it out standing, and as it
+   *  will stand once a stopping body rests (landed along the pelvis, a stop's last foot stepped 3 cm to turn out). */
+  private landingYaw(g: GaitFrame, f: Foot): number {
+    return g.pelvisYaw + (this.moving && !this.restingAt(_rest) ? 0 : f.syaw);
+  }
+
+  /** How far a standing foot may be from its spot before it steps there (a share of the leg's reach). */
+  private standingSlack(f: Foot): number {
+    return f.stand ? 0.07 : 0.1;
   }
 
   /** Moves a landing `B` back towards where it was last frame (`_landWas`) across the way the body goes, by `share`. */
@@ -1323,11 +1554,15 @@ export class LegIK {
   /** The swing in the hip's frame, along the way it travels: it leaves with the stance's backward stroke, passes under
    *  the hip and reaches ahead, then paws back as it lands, so it never skids. */
   private swingInHipFrame(g: GaitFrame, f: Foot): void {
-    const swingTime = (1 - g.duty) * g.cycle, stroke = -(1 - g.slip) * g.speed * swingTime;
+    // (a stopping stride's stroke as slow as the body will be as it lands: at the body's speed now, a stride all but
+    // down swung on 10 cm past where it was aimed)
+    const swingTime = (1 - g.duty) * g.cycle, stroke = -(1 - g.slip) * g.speed * swingTime * f.strokeK;
     const s1 = f.t, s2 = s1 * s1, s3 = s2 * s1;
     const leaves = (2 * s3 - 3 * s2 + 1) * f.rel0;
     const outStroke = (s3 - 2 * s2 + s1) * STROKE_OUT * stroke;
-    const lands = (-2 * s3 + 3 * s2) * (g.landAhead + f.landShift);
+    // (where its landing is aimed: half a stance ahead at speed, as a stopping body will stand; landing half a stance
+    // ahead of the hip whatever the body did, a stopping body's last stride landed 35 to 40 cm past where it rested)
+    const lands = (-2 * s3 + 3 * s2) * (f.landOff + f.landShift);
     const inStroke = (s3 - s2) * STROKE_IN * stroke;
     const x = leaves + outStroke + lands + inStroke;
     const way = f.dir, along = (f.pos.x - g.hip.x) * way.x + (f.pos.z - g.hip.z) * way.z;
@@ -1367,9 +1602,9 @@ export class LegIK {
     return ((q.x - g.pelvisAt.x) * g.pelvisSide.x + (q.z - g.pelvisAt.z) * g.pelvisSide.z) * g.legSide;
   }
 
-  /** Moves `q` out to `GAP` from the pelvis's middle on the side of the leg being stepped, if it is nearer. */
-  private keepToSide(q: THREE.Vector3, share = 1): void {
-    const g = this.frame, short = (GAP * g.scale - this.lateral(q)) * share;
+  /** Moves `q` out to `gap` from the pelvis's middle on the side of the leg being stepped, if it is nearer. */
+  private keepToSide(q: THREE.Vector3, share = 1, gap = GAP): void {
+    const g = this.frame, short = (gap * g.scale - this.lateral(q)) * share;
     if (short > 0) {
       q.x += g.pelvisSide.x * g.legSide * short;
       q.z += g.pelvisSide.z * g.legSide * short;
@@ -1500,7 +1735,7 @@ export class LegIK {
   private solveLeg(g: GaitFrame, i: number, hipsYaw: number): void {
     const f = this.feet[i], { thigh, knee, ankle } = this.legs[i];
     const target = this.reachFor(g, f, i);
-    const landYaw = g.pelvisYaw + (this.moving ? 0 : f.syaw);
+    const landYaw = this.landingYaw(g, f);
     let yawNow = f.state === 'plant' ? f.yaw : f.yawA + turnBetween(f.yawA, landYaw) * smooth(f.t);
     // (standing only, and only ever outwards: a running knee pointed off the stride twists the thigh across the body;
     // but a planted foot's knee turns at least far enough for the foot to be within the ankle's twist on the shin:
@@ -1828,7 +2063,7 @@ export class LegIK {
           const a = k / round * TAU;
           _candidate.set(x0 + Math.sin(a) * r, 0, z0 + Math.cos(a) * r);
           // (the spot itself as it is: where it fits, nothing changes)
-          if (ring && keepSide) this.keepToSide(_candidate);
+          if (ring && keepSide) this.keepToSide(_candidate, 1, EDGE_GAP);
           if (fits(_candidate.x, _candidate.z)) {
             p.x = _candidate.x;
             p.z = _candidate.z;
@@ -1866,6 +2101,7 @@ export class LegIK {
       this.legs[i].ankle.getWorldPosition(_ankleAt);
       this.onBodyLevel(_ankleAt, i, g.pelvisYaw, sc, g.rootX, g.rootZ, false);
       f.state = 'plant';
+      f.split = 0;
       f.P.set(_ankleAt.x, this.under(i, _ankleAt.x, _ankleAt.z, g.pelvisYaw, sc), _ankleAt.z);
       f.yaw = f.yawA = g.pelvisYaw;
       f.t = 0;

@@ -7,6 +7,7 @@ import { carry as carryRound, describeCarry } from './carry';
 import { feet as feetRound, missedCanaries, type FeetOptions } from './feet';
 import { range as rangeRound, missedRangeCanary, type RangeOptions } from './range';
 import { gait as gaitRound, type GaitOptions } from './gait';
+import { stops as stopsRound, type StopsOptions } from './stops';
 
 export interface SheetCommand {
   states: string[];
@@ -64,6 +65,15 @@ export async function range(lab: Lab, command: RangeOptions): Promise<Report> {
 export async function gait(lab: Lab, command: GaitOptions): Promise<Report> {
   const report = await gaitRound(lab, command);
   return { text: report.lines.join('\n'), problems: report.problems, moments: report.moments };
+}
+
+/**
+ * `lab stops`: the hero coming to a stop from a run, judged as a person stops (the steps once still, a foot put out
+ * and drawn back, a foot off the body's level), on level ground and by the dais's edge.
+ */
+export async function stops(lab: Lab, command: StopsOptions): Promise<Report> {
+  const report = await stopsRound(lab, command);
+  return { text: report.lines.join('\n'), problems: [] };
 }
 
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */

@@ -171,6 +171,15 @@ export const COMMANDS = {
     // (an A/B compares the reports, not the films: two sides' 48 frames each, loaded to compare, took the browser down)
   },
 
+  stops: {
+    each(side, options) {
+      const listed = { frames: Boolean(options.frames), trace: Boolean(options.trace) };
+      return side.command('stops', { scenarios: options.scenarios, only: options.only, ...listed });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   range: {
     each(side, options) {
       return side.command('range', {

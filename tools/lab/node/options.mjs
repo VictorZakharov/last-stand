@@ -100,6 +100,22 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  stops: {
+    help: 'the hero coming to a stop from a run, judged as a person stops: the steps once still, a foot put out and '
+      + 'drawn back, a step back, a foot off the body\'s level, on level ground and by the dais\'s edge',
+    options: {
+      scenarios: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['level', 'drawn', 'edgeOut', 'edgeIn', 'edgeSlant', 'edgeAlong', 'edgeShot'],
+        help: 'the scenarios (all by default): level, drawn, edgeOut, edgeIn, edgeSlant, edgeAlong, edgeShot',
+      },
+      frames: { kind: 'switch', help: 'list every stop: where it rested, each step after the keys were let go' },
+      trace: { kind: 'switch', help: 'with --frames, each frame of each stop along the way from where it rested' },
+      only: { kind: 'text', usage: 'name', help: 'only the stops whose names contain this (d 23, 12 cm out)' },
+      ...COMMON_OPTIONS,
+    },
+  },
   gait: {
     help: 'the hero\'s walk judged as a person\'s, over level ground and the dais\'s steps, nothing drawn, drawn and '
       + 'changing direction: the time on each foot, both and neither, the steps, the hops, the hips\' rise and fall, '

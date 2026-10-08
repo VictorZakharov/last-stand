@@ -1,6 +1,6 @@
 // The player character: input -> movement/skills, resources, damage, animation.
 import * as THREE from 'three';
-import { gaitRate, legLength, LookAt } from './models/ik';
+import { gaitRate, legLength, LookAt, type LegIK } from './models/ik';
 import { watchBody } from './models/anatomy';
 import { G } from '../state';
 import { CLASSES } from '../data/classes/index';
@@ -107,6 +107,9 @@ export class Player {
 
   readonly pos = new THREE.Vector3(0, 0, 3);
   readonly vel = new THREE.Vector3();
+  /** the velocity the input eases the body towards and how quickly (`damp`'s rate), told to the legs (`LegIK.intend`) */
+  private readonly goal = new THREE.Vector3();
+  private goalRate = 0;
   readonly aim = new THREE.Vector3();
   readonly radius = 0.45;
   facing = Math.PI;
@@ -338,6 +341,8 @@ export class Player {
       // the co-op pause menu: stand still and let go of any channel
       this.vel.x = damp(this.vel.x, 0, 14, dt);
       this.vel.z = damp(this.vel.z, 0, 14, dt);
+      this.goal.set(0, 0, 0);
+      this.goalRate = 14;
       if (this.channel) this.stopChannel();
       return;
     }
@@ -360,6 +365,8 @@ export class Player {
     const kv = tx * tx + tz * tz > this.vel.x * this.vel.x + this.vel.z * this.vel.z ? 9 : 12;
     this.vel.x = damp(this.vel.x, tx, kv, dt);
     this.vel.z = damp(this.vel.z, tz, kv, dt);
+    this.goal.set(tx, 0, tz);
+    this.goalRate = kv;
 
     this.aim.copy(input.ground);
 
@@ -727,6 +734,9 @@ export class Player {
     this.model.root.position.set(0, d ? d.lift * 4 * k * (1 - k) : 0, 0);
     // a raised player gets up the way it went down, in reverse
     const dead = this.deadT >= 0 ? Math.min(1, this.deadT / 1.0) : this.rising > 0 ? this.rising / RISE : -1;
+    // (the legs told where the body is going, as the game eases it there: a stop's last stride lands where it rests)
+    const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
+    if (this.local && !this.dash && this.goalRate > 0) legs?.intend(this.goal, this.goalRate);
     this.model.animate({
       t, dt, phase: this.phase, move, moveDir: dir, lean, action,
       hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,

@@ -89,6 +89,20 @@ terminal's task stops it all.
   every few frames, so the motion is seen as well as measured; each film is a sheet of its own (`film-1.png` on,
   an A/B's other side `film-main-1.png` on: both sides in one page, or all eight films, took the browser down) and an
   A/B compares the reports.
+- `stops`: the hero coming to a stop from a run, judged as a person stops (a step or two as the body slows, the last
+  foot landing under it or beside the other on the ground it stands on, and once still nothing moving), over runs let
+  go at different points of a stride: on level ground each way, strafing drawn, and out over the dais's edge, in onto
+  it, on a slant, along it astride its step and stopping to shoot along it
+  (`--scenarios level,drawn,edgeOut,edgeIn,edgeSlant,edgeAlong,edgeShot`). From the frame the keys are let go: the
+  steps once the body was still, a foot put out ahead and drawn back (a waste of motion), a step back against the way
+  it went, a foot on another level than the body's once still and whether it ended so, a foot stepped from one level
+  onto another once still (put down a step below and stepped up a second later), both feet up once one had landed,
+  how long the feet took to settle and their travel once still. `--frames` lists each stop: where it was let go and
+  rested along the way, and each step with where it left and landed from there and on which level; `--trace` adds
+  each frame (the body, the hips, each ankle and where each foot in the air is aimed, the lean); `--only 'd 23'` runs
+  the stops whose names contain that. Within one run each stop starts at its own moment of the clock, so a stop run
+  alone can differ from the same one in the whole run: compare the totals. (The gait's steps back counted only steps
+  that left once the body stood, and missed every stop's: the step back began as the body slowed.)
 - `range`: every joint of the hero against a body's ranges (`models/anatomy.ts`, as the dev builds' `watchBody`
   measures them), frame by frame, over standing, walking each way, attacking standing, and walks that change
   direction while he attacks (held or tapped) or runs (`--scenarios stand,walk,shoot,reverse,taps,run`): each angle
