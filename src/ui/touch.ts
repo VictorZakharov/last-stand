@@ -218,5 +218,6 @@ export function updateTouch(dt: number): void {
     b.cdt.textContent = left > 0.05 ? (left < 1 ? left.toFixed(1) : String(Math.ceil(left))) : '';
     b.el.classList.toggle('nomana', !pl.sandbox && pl.energy < (sk.def.channel ? sk.def.cost * 0.2 : sk.def.cost));
     b.el.classList.toggle('active', pl.channel?.key === b.key || pl.casting?.skill === sk);
+    b.el.classList.toggle('busy', pl.heldUp(sk));
   }
 }

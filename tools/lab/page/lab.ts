@@ -38,6 +38,8 @@ declare global {
     /** starts the page's seeded `Math.random` again (`tools/lab/node/browser.mjs`) */
     __labSeed: (seed: number) => void;
     __lab?: Lab;
+    /** the page pictured by the browser as it shows, within `clip` (`tools/lab/node/side.mjs`), as a PNG data URL */
+    __labScreenshot?: (clip?: Clip) => Promise<string>;
   }
 }
 
@@ -120,10 +122,20 @@ const JOINT_DISTANCE = 1.7;
 const CLOSE_UP_FOV = 30;
 /** the top of the hat over the head joint, for the hero's height on screen (m) */
 const ABOVE_HEAD = new THREE.Vector3(0, 0.3, 0);
+/** px: how far round the element a screen picture is clipped round (`Lab.screen`'s `around`) reaches */
+const SCREEN_MARGIN = 24;
 
-/** One picture, as a PNG data URL. */
+/** An area of the page, css px. */
+export interface Clip {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** One picture, as a PNG data URL: of a view of the game, or of the screen with the page's UI (`Lab.screen`). */
 export interface Tile {
-  view: ViewName;
+  view: ViewName | 'screen';
   png: string;
   width: number;
   height: number;
@@ -375,6 +387,26 @@ export class Lab {
     return { label, tiles: this.capture(views, options), notes };
   }
 
+  /**
+   * This moment as the player sees it, under `label` with `notes` beside it: the frame drawn by the game's own camera
+   * with the page's UI over it (the HUD, a menu, a tooltip), pictured by the browser, whole or clipped round the
+   * element `around` names (a CSS selector). For a report's `moments`, as `picture`'s, whose views show the game alone.
+   */
+  async screen(label: string, notes: string[] = [], around?: string): Promise<Pictured> {
+    if (!window.__labScreenshot) throw new Error('lab: screen: this page has no screenshots (opened by an older lab)');
+    const clip = around === undefined ? undefined : clipRound(around);
+    const drawing = this.drawing;
+    this.drawing = true;
+    try {
+      renderer.render();
+    } finally {
+      this.drawing = drawing;
+    }
+    const png = await window.__labScreenshot(clip);
+    const size = clip ?? { width: innerWidth, height: innerHeight };
+    return { label, tiles: [{ view: 'screen', png, width: size.width, height: size.height }], notes };
+  }
+
   /** Pictures of the game as it is now, nothing advanced; the game's camera is put back as it was. */
   capture(views: ViewName[], options: CaptureOptions = {}): Tile[] {
     this.checkCapture(views, renderer.viewMode(), options.focus);
@@ -482,6 +514,19 @@ interface Crop {
   centreY: number;
   width: number;
   height: number;
+}
+
+/** The page round the element `selector` names, `SCREEN_MARGIN` out from it on every side, within the window. */
+function clipRound(selector: string): Clip {
+  const element = document.querySelector(selector);
+  if (!element) throw new Error(`lab: screen: nothing on the page is ${selector}`);
+  const box = element.getBoundingClientRect();
+  if (box.width === 0 || box.height === 0) throw new Error(`lab: screen: ${selector} isn't shown`);
+  const x = Math.max(0, Math.floor(box.left - SCREEN_MARGIN));
+  const y = Math.max(0, Math.floor(box.top - SCREEN_MARGIN));
+  const right = Math.min(innerWidth, Math.ceil(box.right + SCREEN_MARGIN));
+  const bottom = Math.min(innerHeight, Math.ceil(box.bottom + SCREEN_MARGIN));
+  return { x, y, width: right - x, height: bottom - y };
 }
 
 function wholeFrame(): Crop {

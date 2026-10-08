@@ -30,6 +30,12 @@ const UNWATCHED = ['**/.tmp/**', '**/tools/lab/out/**', '**/tools/facelab/**', '
 /** the cookies every boot starts with besides its hero's: the forest, the high quality preset */
 const BOOT_COOKIES = { 'last-stand-biome': 'forest', 'last-stand-quality': 'high' };
 
+/** The page pictured as it shows (within `clip`, css px, when one is given), as a PNG data URL: `lab.screen`'s. */
+async function screenshotOf(page, clip) {
+  const png = await page.screenshot(clip ? { clip } : {});
+  return `data:image/png;base64,${png.toString('base64')}`;
+}
+
 const toSlashes = (path) => path.split('\\').join('/');
 
 export class Side {
@@ -226,6 +232,8 @@ export class Side {
       if (message.type() === 'error') this.errors.push(`${prefix}${message.text()}`);
     });
     await page.emulateMedia({ reducedMotion: 'reduce' });
+    // (a probe's `lab.screen`: the game with the page's UI over it, which the canvas views can't show)
+    await page.exposeFunction('__labScreenshot', (clip) => screenshotOf(page, clip));
     await page.goto(this.url);
     // (polled on a timer: by default it polls by animation frame, and the lab's clock holds those once the game shows)
     const polling = { polling: BOOT_POLL_MS, timeout: BOOT_TIMEOUT_MS };

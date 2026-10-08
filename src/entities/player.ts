@@ -35,6 +35,8 @@ export interface Ward { amount: number; t: number; onHit?(absorbed: number): voi
 /** Absolute difference between two headings. */
 /** after an attack or cast, the body stays on its aim this long (s) before turning to face the way it goes */
 const AIM_HOLD = 0.45;
+/** s: how long the hero must have been free of any action before the hotbar shows a consumable usable again */
+const BUSY_HOLD = 0.15;
 /** how fast the body turns at most onto the way it goes (rad/s): eased alone, it swung half round in four frames at a
  *  reversal, 38 degrees in the first, and the pelvis and legs snapped round with it */
 const TURN_MOST = 9;
@@ -145,6 +147,8 @@ export class Player {
    *  it can move but not attack, cast or raise the shield */
   guardBroken = -1;
   get staggered(): boolean { return this.guardBroken > G.time; }
+  /** game time the hero was last busy with an action: casting, channelling, dashing or staggered */
+  private busyAt = -Infinity;
   lastBlock = -99;
   life = 0;
   energy = 0;
@@ -419,6 +423,20 @@ export class Player {
     return true;
   }
 
+  /**
+   * A skill the hotbar shows held up by another action (it can't be cast now): every other skill while a free-move
+   * cast (the draught) is under way, and a consumable while any other action is, until the hero has been free for
+   * `BUSY_HOLD`. A held attack is free for a frame between its blows, and its key, tried first, takes that frame; shown
+   * free then, the draught's slot flashed with every blow. Not every skill while anything is cast: an attack held down
+   * would dim the whole bar.
+   */
+  heldUp(s: KnownSkill): boolean {
+    const under = this.casting?.skill;
+    if (under === s || this.channel?.skill === s) return false;
+    if (under?.def.freeMove) return true;
+    return s.def.tags.includes('consumable') && G.time - this.busyAt < BUSY_HOLD;
+  }
+
   /** A bow's hero's arrow on the string: on it once taken from the quiver, gone with the shot (the reload puts the next on as
    *  the cast ends: cut short, it's taken out again next time), and put back after a while without a shot. */
   private tickQuiver(dt: number): void {
@@ -549,6 +567,7 @@ export class Player {
         if (this.queued && !this.channel) { const q = this.queued; this.queued = null; this.tryCast(q.skill, q.key); }
       }
     }
+    if (this.casting || this.channel || this.dash || this.staggered) this.busyAt = t;
     this.tickQuiver(dt);
     if (this.channel) {
       const ch = this.channel;
