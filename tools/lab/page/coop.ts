@@ -104,6 +104,8 @@ interface Scenario {
   foes: { type: EnemyId; at: XZ }[];
   /** the guest's life as it starts (unhurt by default) */
   guestLife?: number;
+  /** the frames (after it settled) each game's screen is pictured at, with `--pictures` */
+  pictures?: number[];
   hostInput(frame: number): Frame;
   guestInput(frame: number): Frame;
 }
@@ -275,12 +277,13 @@ const SCENARIOS: Record<string, Scenario> = {
     guestInput: () => dodger.input(),
   },
   down: {
-    about: 'a foe brings the guest down, and the host comes and raises it',
+    about: 'a foe brings the guest down across the arena, and the host comes and raises it',
     frames: 720,
-    host: [4, 22],
+    host: [-10, -12],
     guest: [12, 22],
     foes: [{ type: 'mossback', at: [12, 20.4] }],
     guestLife: 1,
+    pictures: [140, 330, 460, 540],
     hostInput: raiseInput,
     guestInput: () => ({}),
   },
@@ -438,9 +441,14 @@ export async function coopFrames(lab: Lab, turn: CoopTurn): Promise<CoopTurnResu
   return { sent: wire.outbox.splice(0), state: stateNow() };
 }
 
-/** How many frames scenario `name` records. */
-export function coopScenarioFrames(_lab: Lab, { name }: { name: string }): number {
-  return SCENARIOS[name].frames;
+/** How many frames scenario `name` records, and the frames its screens are pictured at. */
+export function coopScenarioFrames(_lab: Lab, { name }: { name: string }): { frames: number; pictures: number[] } {
+  return { frames: SCENARIOS[name].frames, pictures: SCENARIOS[name].pictures ?? [] };
+}
+
+/** Draws the game's frames as it does (on: for a picture) or skips the drawing (off). */
+export function coopDrawing(lab: Lab, { on }: { on: boolean }): void {
+  lab.drawing = on;
 }
 
 /** What this game recorded of the scenario. */

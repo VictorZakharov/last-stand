@@ -899,7 +899,6 @@ export class Player {
 
   updateDeath(dt: number): void {
     this.deadT += dt;
-    if (this.downed) this.bleed = Math.max(0, this.bleed - dt);
     this.hitT = Math.max(0, this.hitT - dt * 4);
     this.pose(dt, G.time, 0, 1, 0, null);
     // a downed player lies there whole; the dead fade

@@ -104,6 +104,8 @@ terminal's task stops it all.
   how often a stall held it, how far its clock strayed), the arrows that struck on the guest's screen and whether the
   host counted them, the blows at the guest against whether it stood in their reach on its own screen, and when the
   guest went down and was raised on each screen. Scenarios run on from each other, so a scenario alone can differ.
+  `--pictures` pictures both screens at a scenario's moments into `out/coop` (`down`'s: the guest downed across the
+  arena, its marker at the edge of the host's screen, then over it, then raised).
 - `stops`: the hero coming to a stop from a run, judged as a person stops (a step or two as the body slows, the last
   foot landing under it or beside the other on the ground it stands on, and once still nothing moving), over runs let
   go at different points of a stride: on level ground each way, strafing drawn, and out over the dais's edge, in onto
