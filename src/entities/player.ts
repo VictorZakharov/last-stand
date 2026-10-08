@@ -20,6 +20,7 @@ import { sfx } from '../core/audio';
 import { emit } from '../events';
 import { angleDamp, damp, hitFlash, rand } from '../util';
 import { applyShadowDetail } from '../core/quality';
+import { countDown, countHealed, countTaken } from '../game/stats';
 import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SkillDef, SkillKey } from '../types';
 import type { Enemy } from './enemy';
 
@@ -771,6 +772,7 @@ export class Player {
     if (!this.alive) return;
     const before = this.life;
     this.life = Math.min(this.stats.maxLife, this.life + amount);
+    if (this.local) countHealed(this.life - before);
     if (!silent && this.life - before >= 1) floatText(this.pos.x, 2.4, this.pos.z, `+${Math.round(this.life - before)}`, 'heal', '#6dff7a');
   }
 
@@ -779,7 +781,10 @@ export class Player {
     if (!this.alive || G.time < this.guardUntil) return 0;
     const r = this.resolveHit(amount, from);
     this.showHit(r);
-    if (this.local) actionSink?.({ t: 'hurt', r: { taken: round2(r.taken), blocked: round2(r.blocked), broke: r.broke, absorbed: round2(r.absorbed) } });
+    if (this.local) {
+      actionSink?.({ t: 'hurt', r: { taken: round2(r.taken), blocked: round2(r.blocked), broke: r.broke, absorbed: round2(r.absorbed) } });
+      countTaken(r.taken, r.blocked + r.absorbed);
+    }
     if (this.life <= 0) this.die();
     return r.taken;
   }
@@ -859,7 +864,10 @@ export class Player {
     this.ward?.onEnd?.();
     this.ward = null;
     sfx.death();
-    if (this.local) actionSink?.({ t: 'died' });
+    if (this.local) {
+      actionSink?.({ t: 'died' });
+      countDown();
+    }
     emit('playerDied', this);
   }
 
@@ -899,7 +907,6 @@ export class Player {
 
   updateDeath(dt: number): void {
     this.deadT += dt;
-    if (this.downed) this.bleed = Math.max(0, this.bleed - dt);
     this.hitT = Math.max(0, this.hitT - dt * 4);
     this.pose(dt, G.time, 0, 1, 0, null);
     // a downed player lies there whole; the dead fade

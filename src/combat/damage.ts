@@ -3,6 +3,7 @@ import type * as THREE from 'three';
 import { DAMAGE_COLORS } from '../data/balance';
 import { floatText } from '../ui/floaters';
 import { dealsDamage } from '../net/role';
+import { countDealt } from '../game/stats';
 import { rand } from '../util';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
@@ -61,6 +62,7 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   const amount = enemy.marks.length ? rolled * (1 + Math.max(...enemy.marks)) : rolled;
   const dealt = enemy.takeDamage(amount, { type, crit, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, by });
   dealtSink?.(enemy, { amount: dealt, crit, type, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze });
+  countDealt(dealt, !enemy.alive);
   // everyone sees their own numbers
   if (!opts.silent || crit) damageNumber(enemy, dealt, crit, type);
   if (by.stats.leech > 0 && by.alive) by.heal(dealt * by.stats.leech / 100, true);

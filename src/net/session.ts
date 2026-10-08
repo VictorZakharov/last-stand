@@ -11,7 +11,8 @@ import { CLASSES } from '../data/classes/index';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { Player, setActionSink, type PlayerAction } from '../entities/player';
 import { openLink, ServerDown, SERVER_DOWN, type Link } from './transport';
-import { netLog } from './netlog';
+import { netLog, serverPings } from './netlog';
+import { mine, freshNumbers, type RunNumbers } from '../game/stats';
 import { role } from './role';
 import { showBiomeSetting } from '../game/biome';
 import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGuestHits, takeHits, type HitReport, type WorldMessage } from './sync';
@@ -21,7 +22,7 @@ import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGroun
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 10;
+const PROTOCOL = 11;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** room codes: no look-alike letters or digits */
@@ -36,6 +37,8 @@ export type SessionStatus = 'off' | 'hosting' | 'joining' | 'joined' | 'failed';
  *  it did). */
 interface Peer {
   id: string; slot: number; player: Player | null; look: Look | null; inRun: boolean;
+  /** its run in numbers and its round trips to the server, as it reports them (the scoreboard) */
+  numbers: RunNumbers; rtt: number | null; pings: number[];
   clock: Timeline; track: Track<StateMsg>; smooth: Smoother; actions: Playout<PlayerAction>;
 }
 
@@ -66,6 +69,8 @@ let link: Link | null = null;
 let hooks: SessionHooks;
 let joinTimer: ReturnType<typeof setTimeout> | undefined;
 let sendT = 0;
+/** when the local player's numbers go out next (s) */
+let numbersT = 0;
 /** the local player's actions since the last send, in order */
 let actions: PlayerAction[] = [];
 
@@ -187,6 +192,7 @@ function wire(l: Link): void {
     else if (ch === 'ev') onActions(from, m as unknown as ActionsMsg);
     else if (ch === 'w') onFight(from, m as unknown as WorldMessage);
     else if (ch === 'dmg') onHits(from, m as unknown as HitReport[]);
+    else if (ch === 'st') onNumbers(from, m as unknown as NumbersMsg);
     else if (ch === 'ctl') onControl(from, m);
   });
   if (session.status === 'joining') role.current = 'guest';
@@ -333,6 +339,36 @@ function onFight(from: string, m: WorldMessage): void {
   onWorld(m);
 }
 
+/** A player's run in numbers ([dealt, taken, mitigated, healed, kills, downs, revives, seconds of the run]) and its
+ *  round trip to the server (ms, -1: none), once a second. */
+interface NumbersMsg { n: number[]; p: number }
+/** how many round trips a partner's graph keeps (one a second) */
+const PINGS_KEPT = 60;
+
+function onNumbers(from: string, m: NumbersMsg): void {
+  const peer = session.peers.get(from);
+  if (!peer) return;
+  const [dealt, taken, mitigated, healed, kills, downs, revives, secs] = m.n;
+  peer.numbers = { dealt, taken, mitigated, healed, kills, downs, revives, since: G.time - secs };
+  peer.rtt = m.p >= 0 ? m.p : null;
+  if (peer.rtt !== null) peer.pings.push(peer.rtt);
+  if (peer.pings.length > PINGS_KEPT) peer.pings.shift();
+}
+
+/** A partner as the scoreboard shows it: its character, its numbers, its round trips to the server, and how far
+ *  behind its own game this one shows it (ms: half of both round trips to the server, and the play-out's wait). */
+export interface PartnerBoard { player: Player; numbers: RunNumbers; rtt: number | null; pings: number[]; behind: number | null }
+
+export function partnerBoards(): PartnerBoard[] {
+  const own = serverPings().rtt;
+  return [...session.peers.values()].flatMap((peer) => {
+    if (!peer.player) return [];
+    const wait = peer.clock.started && !Number.isNaN(peer.clock.behind) ? peer.clock.behind : null;
+    const behind = wait === null ? null : wait + ((own ?? 0) + (peer.rtt ?? 0)) / 2;
+    return [{ player: peer.player, numbers: peer.numbers, rtt: peer.rtt, pings: peer.pings, behind }];
+  });
+}
+
 function onHits(from: string, hits: HitReport[]): void {
   const p = session.peers.get(from)?.player;
   if (p) onGuestHits(p, hits);
@@ -368,7 +404,10 @@ function playState(p: Player, pose: Pose, m: StateMsg): void {
 // --- players -------------------------------------------------------------------------------
 function addPeer(id: string, slot: number, look: Look): void {
   const spacing = 1000 / COOP.sendRate;
-  const peer: Peer = { id, slot, player: null, look, inRun: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout() };
+  const peer: Peer = {
+    id, slot, player: null, look, inRun: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout(),
+    numbers: freshNumbers(), rtt: null, pings: [],
+  };
   session.peers.set(id, peer);
   makePlayer(peer);
 }
@@ -457,6 +496,13 @@ export function updateSession(dt: number, reviving: boolean): void {
   if (actions.length) { send('ev', { t, a: actions } satisfies ActionsMsg); actions = []; }
   const hits = takeHits();
   if (hits && session.hostId) send('dmg', hits, session.hostId);
+  numbersT -= dt;
+  if (numbersT <= 0) {
+    numbersT = 1;
+    const n = mine;
+    const run = [n.dealt, n.taken, n.mitigated, n.healed].map(Math.round);
+    send('st', { n: [...run, n.kills, n.downs, n.revives, Math.round(G.time - n.since)], p: Math.round(serverPings().rtt ?? -1) } satisfies NumbersMsg);
+  }
   sendT -= dt;
   const due = sendT <= 0;
   if (due) {

@@ -17,6 +17,7 @@ import { on, emit } from '../events';
 import { sfx } from '../core/audio';
 
 import { newItemId } from '../loot/items';
+import { creditRaise } from '../game/stats';
 import { role } from './role';
 import { Playout, Smoother, Track, type Pose } from './timeline';
 import type { Enemy } from '../entities/enemy';
@@ -229,7 +230,7 @@ function apply(ev: WorldEvent): void {
       return;
     }
     case 'down': { const p = bySlot(ev.s); if (p) { if (p.alive) p.die(); p.goDown(); } return; }
-    case 'raise': bySlot(ev.s)?.raise(); return;
+    case 'raise': { const p = bySlot(ev.s); if (p) { p.raise(); creditRaise(p); } return; }
     case 'over': endRun(); return;
   }
 }

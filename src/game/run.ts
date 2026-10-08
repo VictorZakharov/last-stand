@@ -25,6 +25,7 @@ import { sfx } from '../core/audio';
 import { schedule, clearTimers } from '../core/timers';
 import { on, emit } from '../events';
 import { isCoop, isGuest } from '../net/role';
+import { creditRaise, resetMine } from './stats';
 import { pick, rand, weighted } from '../util';
 import type { EnemyId } from '../data/enemies';
 import type { Enemy } from '../entities/enemy';
@@ -109,6 +110,7 @@ function cleanupWorld(): void {
  *  A co-op guest starts its side of the host's run the same way, and then follows it. */
 export function startRun(wave = 1): void {
   cleanupWorld();
+  resetMine();
   for (const p of G.players) {
     if (p.local) p.recomputeStats(G.profile.equipped);
     p.reset();
@@ -231,15 +233,18 @@ export function updateRun(dt: number): void {
   }
 }
 
-/** Downed players bleed out, unless a teammate stands by them holding the revive key. */
+/** Downed players bleed out, unless a teammate stands by them holding the revive key: while one does, their clock
+ *  stops. (The guests are told each one's clock and revive in the snapshots.) */
 function updateDowned(dt: number): void {
   for (const p of G.players) {
     if (!p.downed || !p.inRun) continue;
     if (p.bleed <= 0) { playerOut(p, 'dead'); continue; }
     const helper = G.players.some((q) => q.active && q.reviving && Math.hypot(q.pos.x - p.pos.x, q.pos.z - p.pos.z) < COOP.reviveRange);
+    if (!helper) p.bleed = Math.max(0, p.bleed - dt);
     p.revive = helper ? p.revive + dt / COOP.reviveTime : Math.max(0, p.revive - dt / COOP.reviveTime);
     if (p.revive >= 1) {
       p.raise();
+      creditRaise(p);
       floatText(p.pos.x, 2.6, p.pos.z, 'Revived', 'info', '#ffe6a0');
       runHooks.raised(p);
     }

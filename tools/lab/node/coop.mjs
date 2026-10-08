@@ -4,8 +4,14 @@
 // sent (a WebSocket's TCP never reorders, so a late message holds up the ones behind it), and every couple of seconds
 // on average a stall of several times the jitter (a mobile network's). The pages play each scenario (page/coop.ts),
 // and what each showed is judged against the other (coopJudge.mjs).
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { labError } from './errors.mjs';
 import { judgeScenario } from './coopJudge.mjs';
+import { OUT } from './paths.mjs';
+
+/** where `--pictures` puts each scenario's pictures of the two screens */
+const PICTURES = join(OUT, 'coop');
 
 /** the round trip's least and how much later each way may be, ms, unless the command says */
 export const DEFAULT_PING = 300;
@@ -107,6 +113,31 @@ class Pair {
     return [hostTurn.state, guestTurn.state];
   }
 
+  /**
+   * Runs `frames` frames playing `scenario`, picturing both screens at each of `at` (frames from the start, as drawn:
+   * the frame before is drawn as the game draws it) into `PICTURES`. Returns the pictures' files.
+   */
+  async runPicturing(frames, scenario, at) {
+    mkdirSync(PICTURES, { recursive: true });
+    const files = [];
+    let done = 0;
+    for (const frame of [...at].sort((a, b) => a - b)) {
+      if (frame <= done || frame > frames) continue;
+      await this.run(frame - 1 - done, scenario);
+      await Promise.all([this.host, this.guest].map((page) => callPage(page, 'coopDrawing', { on: true })));
+      await this.turn(1, scenario);
+      for (const [role, page] of [['host', this.host], ['guest', this.guest]]) {
+        const file = join(PICTURES, `${scenario}-${frame}-${role}.png`);
+        await page.screenshot({ path: file });
+        files.push(file);
+      }
+      await Promise.all([this.host, this.guest].map((page) => callPage(page, 'coopDrawing', { on: false })));
+      done = frame;
+    }
+    await this.run(frames - done, scenario);
+    return files;
+  }
+
   /** Readies both pages' random numbers again, as a command does. */
   async reseed() {
     await Promise.all([this.host, this.guest].map((page) => page.evaluate(() => window.__lab.begin())));
@@ -114,10 +145,10 @@ class Pair {
 }
 
 /** The room opened on the host, the guest in it, and the run started on both. */
-async function startTogether(pair) {
+async function startTogether(pair, link) {
   await pair.reseed();
-  const code = await callPage(pair.host, 'coopOpen', { role: 'host' });
-  await callPage(pair.guest, 'coopOpen', { role: 'guest', code });
+  const code = await callPage(pair.host, 'coopOpen', { role: 'host', ...link });
+  await callPage(pair.guest, 'coopOpen', { role: 'guest', code, ...link });
   const joined = (host, guest) => guest.status === 'joined' && host.partners > 0 && guest.partners > 0;
   await pair.until(joined, JOIN_FRAMES, 'the guest never joined the room');
   await pair.reseed();
@@ -130,21 +161,24 @@ async function startTogether(pair) {
  * Runs `scenarios` (names of page/coop.ts's) on a side as host, a partner page as guest, over a link of `ping` and
  * `jitter` (ms). Returns the report: each scenario judged, and the problems found.
  */
-export async function runCoop(side, { scenarios, ping = DEFAULT_PING, jitter = DEFAULT_JITTER }) {
+export async function runCoop(side, { scenarios, ping = DEFAULT_PING, jitter = DEFAULT_JITTER, pictures = false }) {
   const guest = await side.openPartner(side.heroClass);
   try {
     const frameMs = await side.page.evaluate(() => window.__labClock.frame);
     const about = await side.page.evaluate(async () => (await import('/tools/lab/page/coop.ts')).COOP_SCENARIOS);
     const settle = await side.page.evaluate(async () => (await import('/tools/lab/page/coop.ts')).SETTLE_FRAMES);
     const pair = new Pair({ host: side.page, guest, ping, jitter, frameMs });
-    await startTogether(pair);
+    await startTogether(pair, { ping, jitter });
     const lines = [`a link of ${ping} ms round trip, each way up to ${jitter} ms later`];
     const problems = [];
     for (const name of scenarios ?? Object.keys(about)) {
       if (!about[name]) throw labError(`coop: no scenario ${name} (there are ${Object.keys(about).join(', ')})`);
       await Promise.all([side.page, guest].map((page) => callPage(page, 'coopScenario', { name })));
-      const frames = await callPage(side.page, 'coopScenarioFrames', { name });
-      await pair.run(settle + frames, name);
+      const { frames, pictures: at } = await callPage(side.page, 'coopScenarioFrames', { name });
+      if (pictures && at.length) {
+        const files = await pair.runPicturing(settle + frames, name, at.map((frame) => settle + frame));
+        lines.push(`${name}: pictured ${files.length} screens in ${PICTURES}`);
+      } else await pair.run(settle + frames, name);
       const samplesOf = (page) => callPage(page, 'coopSamples');
       const [hostSamples, guestSamples] = await Promise.all([side.page, guest].map(samplesOf));
       const judged = judgeScenario({ name, about: about[name], host: hostSamples, guest: guestSamples, frameMs });

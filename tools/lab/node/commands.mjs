@@ -174,7 +174,8 @@ export const COMMANDS = {
 
   coop: {
     each(side, options) {
-      return runCoop(side, { scenarios: options.scenarios, ping: options.ping, jitter: options.jitter });
+      const { scenarios, ping, jitter } = options;
+      return runCoop(side, { scenarios, ping, jitter, pictures: Boolean(options.pictures) });
     },
     textOf: asText,
     problemsOf: problemsIn,
