@@ -224,6 +224,22 @@ const drawnAt = (k: number): number => (pullAt(k) + smooth(clamp(k, 0, 1))) / 2;
  *  sleeve's the same */
 const ARM_K = { seam: 0.5, reach: 0.09, top: 0.05, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96 };
 const DOWN = new THREE.Vector3(0, -1, 0), _sw = new THREE.Vector3(), _tw = new THREE.Quaternion(), _tq = new THREE.Quaternion();
+
+/**
+ * `share` of the turn `q` from rest into `out`, taken the way round that is nearer `middle` (the middle of the turns
+ * it takes). Taken the shorter way (a slerp from rest), a turn near half round went one way and then the other as it
+ * crossed it, and the joints blended through it jumped between two places: the bow hand is turned 90 to 180 degrees
+ * on its forearm (through the eyes 140 to 180, and past it), and its cuff flickered between two shapes with the hand still (#161).
+ * Measured from the middle, the way round flips only half a turn from it, where the hand never goes.
+ */
+function blendTurn(out: THREE.Quaternion, q: THREE.Quaternion, share: number, middle: THREE.Quaternion): THREE.Quaternion {
+  // (q and -q are one turn, each the other way round: the one nearer the middle)
+  const sign = q.dot(middle) < 0 ? -1 : 1;
+  const w = THREE.MathUtils.clamp(q.w * sign, -1, 1), half = Math.acos(w), s = Math.sin(half);
+  if (s < 1e-6) return out.identity();
+  const k = Math.sin(half * share) / s * sign;
+  return out.set(q.x * k, q.y * k, q.z * k, Math.cos(half * share));
+}
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3();
 const _u = new THREE.Vector3(), _left = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _x = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _m = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _s = new THREE.Vector3();
@@ -460,6 +476,12 @@ export function buildRanger(): Model {
   S.add(strap([...run.map((t) => tunicFront(across(t), down(t), 0.006)), onTunic(Math.PI / 2, -0.115, 0.006), ...[...run].reverse().map((t) => tunicBack(across(t), down(t), 0.006)), V(-0.135, 0.29, -0.012)], 0.048, 0.008, true), strapLeather, j.chest);
   S.add(buckle(0.042, 0.05, 0.007), brass, j.chest, tunicFront(-0.075, 0.18, 0.014).toArray(), [0, 0, -0.85]);
   // each wrist's part-turned joints: a quarter, half and three quarters of the hand's turn on the forearm (`bendWrists`)
+  /** the middle of each hand's turns on its forearm, about its length (`blendTurn`: the bow hand's -180 to -90 degrees,
+   *  past -180 through the eyes, the draw hand's 0 to 185, standing, walking, strafing and shooting, in third person and
+   *  through the eyes). A middle is a way round too: given as 225, the bow hand's, the cuff twisted the long way round
+   *  its wrist and pinched in under the bracer */
+  const wristMiddles = [[j.handL, -135], [j.handR, 135]].map(([hand, deg]) =>
+    new THREE.Quaternion().setFromAxisAngle((hand as THREE.Object3D).position.clone().normalize(), (deg as number) * Math.PI / 180));
   const wrists = [j.handL, j.handR].map((h) => [1, 2, 3].map((q) => { const d = joint(h.parent!, ...(h.position.toArray() as [number, number, number])); d.name = (h === j.handL ? 'wristL' : 'wristR') + q; return d; }));
   for (const [sh, el, hand] of [[j.shoulderL, j.elbowL, j.handL], [j.shoulderR, j.elbowR, j.handR]]) {
     // (set into the armhole: from its edge over the deltoid onto the arm, the arm's wholly from a little way down it, and over
@@ -1097,7 +1119,7 @@ export function buildRanger(): Model {
   function bendShoulders(): void {
     for (let i = 0; i < 2; i++) {
       const h = i ? j.handR : j.handL;
-      wrists[i].forEach((d, q) => { d.quaternion.identity().slerp(h.quaternion, (q + 1) / 4); d.position.copy(h.position); });
+      wrists[i].forEach((d, q) => { blendTurn(d.quaternion, h.quaternion, (q + 1) / 4, wristMiddles[i]); d.position.copy(h.position); });
     }
     for (let i = 0; i < 2; i++) {
       const sh = i ? j.shoulderR : j.shoulderL;
