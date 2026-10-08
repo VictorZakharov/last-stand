@@ -105,7 +105,9 @@ terminal's task stops it all.
   host counted them, the blows at the guest against whether it stood in their reach on its own screen, and when the
   guest went down and was raised on each screen. Scenarios run on from each other, so a scenario alone can differ.
   `--pictures` pictures both screens at a scenario's moments into `out/coop` (`down`'s: the guest downed across the
-  arena, its marker at the edge of the host's screen, then over it, then raised).
+  arena, its marker at the edge of the host's screen, then over it, then raised; `shoot`'s last: the host holding Tab,
+  the scores). The lab's link reports each game's round trip to "the server" once a second as the relay's pings would
+  (half the ping, up to the jitter more), so the scores show a ping and its graph.
 - `stops`: the hero coming to a stop from a run, judged as a person stops (a step or two as the body slows, the last
   foot landing under it or beside the other on the ground it stands on, and once still nothing moving), over runs let
   go at different points of a stride: on level ground each way, strafing drawn, and out over the dais's edge, in onto

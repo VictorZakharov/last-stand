@@ -145,10 +145,10 @@ class Pair {
 }
 
 /** The room opened on the host, the guest in it, and the run started on both. */
-async function startTogether(pair) {
+async function startTogether(pair, link) {
   await pair.reseed();
-  const code = await callPage(pair.host, 'coopOpen', { role: 'host' });
-  await callPage(pair.guest, 'coopOpen', { role: 'guest', code });
+  const code = await callPage(pair.host, 'coopOpen', { role: 'host', ...link });
+  await callPage(pair.guest, 'coopOpen', { role: 'guest', code, ...link });
   const joined = (host, guest) => guest.status === 'joined' && host.partners > 0 && guest.partners > 0;
   await pair.until(joined, JOIN_FRAMES, 'the guest never joined the room');
   await pair.reseed();
@@ -168,7 +168,7 @@ export async function runCoop(side, { scenarios, ping = DEFAULT_PING, jitter = D
     const about = await side.page.evaluate(async () => (await import('/tools/lab/page/coop.ts')).COOP_SCENARIOS);
     const settle = await side.page.evaluate(async () => (await import('/tools/lab/page/coop.ts')).SETTLE_FRAMES);
     const pair = new Pair({ host: side.page, guest, ping, jitter, frameMs });
-    await startTogether(pair);
+    await startTogether(pair, { ping, jitter });
     const lines = [`a link of ${ping} ms round trip, each way up to ${jitter} ms later`];
     const problems = [];
     for (const name of scenarios ?? Object.keys(about)) {

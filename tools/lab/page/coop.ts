@@ -9,6 +9,7 @@ import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
 import { cameraYaw } from '../../../src/core/renderer';
 import { hostRoom, joinRoom, session } from '../../../src/net/session';
+import * as netlog from '../../../src/net/netlog';
 import { spawnEnemy } from '../../../src/entities/spawner';
 import { clearEnemies, type Enemy } from '../../../src/entities/enemy';
 import { Projectile } from '../../../src/combat/projectiles';
@@ -164,6 +165,9 @@ function nearestFoe(): Enemy | null {
   return best;
 }
 
+/** the frame of `shoot` from which the host holds Tab (the scores), for its picture */
+const SCORES_FROM = 570;
+
 /** the guest's reaction to a blow it sees coming, s into the foe's attack */
 const REACTION = 0.15;
 /** how long the guest runs from a blow it dodges, frames */
@@ -259,12 +263,13 @@ const SCENARIOS: Record<string, Scenario> = {
     guestInput: () => ({}),
   },
   shoot: {
-    about: 'a foe chases the host round in circles while the guest shoots at it',
+    about: 'a foe chases the host round in circles while the guest shoots at it, the host holding Tab at the end',
     frames: 600,
     host: [6, 16],
     guest: [16, 25],
     foes: [{ type: 'mossback', at: [10, 12] }],
-    hostInput: (frame) => ({ keys: roundAt(frame, 22) }),
+    pictures: [590],
+    hostInput: (frame) => ({ keys: frame >= SCORES_FROM ? [...roundAt(frame, 22), 'tab'] : roundAt(frame, 22) }),
     guestInput: shootInput,
   },
   dodge: {
@@ -278,7 +283,7 @@ const SCENARIOS: Record<string, Scenario> = {
   },
   down: {
     about: 'a foe brings the guest down across the arena, and the host comes and raises it',
-    frames: 720,
+    frames: 900,
     host: [-10, -12],
     guest: [12, 22],
     foes: [{ type: 'mossback', at: [12, 20.4] }],
@@ -333,6 +338,24 @@ function deliver(): void {
   }
 }
 
+/**
+ * The round trip to the co-op server the game shows (the scoreboard's ping), as the relay's pings would measure it:
+ * a ping a second, half the link's least round trip (the server between the two games) and up to the jitter more.
+ */
+const link = { ping: 0, jitter: 0, sinceRtt: 0, random: 0x2f6b1d9 };
+
+function linkRandom(): number {
+  link.random = (Math.imul(link.random, 1664525) + 1013904223) >>> 0;
+  return link.random / 4294967296;
+}
+
+function reportRtt(): void {
+  link.sinceRtt += window.__labClock.frame;
+  if (link.sinceRtt < 1000) return;
+  link.sinceRtt -= 1000;
+  netlog.serverRtt(link.ping / 2 + link.jitter * linkRandom());
+}
+
 /** This page's role, the scenario it plays and what it recorded. */
 const play = {
   role: 'host' as Role,
@@ -360,12 +383,20 @@ function watchArrows(): void {
 }
 
 /** The room opened (the host) or joined (the guest) over the lab's channels. Returns the room's code. */
-export async function coopOpen(lab: Lab, { role, code }: { role: Role; code?: string }): Promise<string> {
+export async function coopOpen(lab: Lab, open: { role: Role; code?: string; ping: number; jitter: number }): Promise<string> {
+  const { role, code } = open;
   history.replaceState(null, '', `${location.pathname}?net=local`);
   (window as unknown as { BroadcastChannel: unknown }).BroadcastChannel = LabChannel;
   wire.start = window.__labClock.t;
   play.role = role;
   lab.beforeFrame.push(deliver);
+  link.ping = open.ping;
+  link.jitter = open.jitter;
+  // (an older tree's network log has no round trips to keep)
+  if (typeof netlog.serverPings === 'function') {
+    netlog.watchServer('the lab\'s link');
+    lab.beforeFrame.push(reportRtt);
+  }
   watchArrows();
   if (role === 'host') await hostRoom();
   else await joinRoom(code!);

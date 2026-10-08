@@ -43,6 +43,7 @@ import { initSync } from './net/sync';
 import { initSession, joinRoom, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
 import { isCoop, isGuest, isHost, simulates } from './net/role';
 import { initCoop, renderCoop, updateCoopHud, touchReviving } from './ui/coop';
+import { updateScoreboard } from './ui/scoreboard';
 import type { BiomeId } from './data/biomes';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
@@ -363,6 +364,7 @@ function update(dt: number): void {
     updateCoopHud();
     perfLap('hud');
   }
+  updateScoreboard(dt);
   const vs = lobbyViewShift();
   setViewShift(vs.x, vs.y);
   const focus = focusPlayer();
