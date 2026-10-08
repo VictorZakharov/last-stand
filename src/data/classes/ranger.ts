@@ -44,13 +44,13 @@ const ranger: ClassDef = {
     {
       key: '3', impl: 'quarryMark', name: 'Quarry Mark',
       desc: 'Mark the foe nearest your aim as your quarry: it takes 25% more damage from everyone. When it dies your cooldowns are refreshed.', tags: ['physical'],
-      cost: 15, cooldown: 8, castTime: 0.35, amp: 0.25, duration: 12, range: 26,
+      cost: 15, cooldown: 8, castTime: 0.35, amp: 0.25, duration: 12, range: 26, aimed: true,
       icon: { glyph: '⌖', color: '#ff9a6c' },
     },
     {
       key: '4', impl: 'strawman', name: 'Strawman',
       desc: 'Raise a scarecrow at the target spot. For 3 seconds every nearby foe but elites and bosses leaves you for it and gathers round it, striking at it. It takes no harm and does none.', tags: ['physical'],
-      cost: 35, cooldown: 12, castTime: 0.45, duration: 3, radius: 9, range: 14,
+      cost: 35, cooldown: 12, castTime: 0.45, duration: 3, radius: 9, range: 14, aimed: true,
       icon: { glyph: 'ᛉ', color: '#d9b878' },
     },
     {

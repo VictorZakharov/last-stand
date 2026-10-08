@@ -123,10 +123,48 @@ function mark(player: Player, def: Def, e: Enemy): void {
   });
 }
 
+/** how bright the preview shows the mark, of the mark's own: dimmer, and still (the mark turns and beats) */
+const PREVIEW = 0.5;
+
+/** While the key is held: the foe the cast would mark ringed, with the reticle over it. */
+interface Preview { reticle: THREE.Mesh; reticleMat: THREE.MeshBasicMaterial; ring: THREE.Mesh; ringG: THREE.BufferGeometry }
+let preview: Preview | null = null;
+
+function previewFor(): Preview {
+  if (preview) return preview;
+  const reticleMaterial = reticleMat(), ringG = ringGeo();
+  const reticleM = new THREE.Mesh(planeGeo, reticleMaterial), ring = new THREE.Mesh(ringG, additive(MARK, 1.3, 0.7 * PREVIEW));
+  reticleMaterial.opacity = 0.85 * PREVIEW;
+  reticleM.frustumCulled = ring.frustumCulled = false;
+  reticleM.scale.setScalar(0.6);
+  reticleM.name = 'quarry-preview'; ring.name = 'quarry-preview-ring';
+  G.scene.add(reticleM, ring);
+  preview = { reticle: reticleM, reticleMat: reticleMaterial, ring, ringG };
+  return preview;
+}
+
+/** Shows the would-be quarry for `target` (none: nothing shown). */
+function showQuarry(player: Player, def: Def, target: THREE.Vector3 | null): void {
+  const e = target && quarry(player, target, def.range);
+  if (!e) {
+    if (preview) preview.reticle.visible = preview.ring.visible = false;
+    return;
+  }
+  const p = previewFor();
+  p.reticle.visible = p.ring.visible = true;
+  p.reticle.position.set(e.pos.x, e.obj.position.y + e.height + 0.45, e.pos.z);
+  p.reticle.quaternion.copy(G.camera.quaternion);
+  const r = e.radius + 0.3;
+  p.ring.position.set(e.pos.x, 0, e.pos.z);
+  p.ring.scale.set(r, 1, r);
+  lay(p.ringG, e.pos.x, e.pos.z, 0.05, r);
+}
+
 const skill: InstantSkill = {
   anim: 'cast',
   warm: () => [new THREE.Mesh(planeGeo, reticleMat()), new THREE.Mesh(ringGeo(), additive(MARK, 1.3, 0.7))],
   canCast: (player, def, target) => !!quarry(player, target, def.range ?? 26),
+  aim: (player, def, target) => showQuarry(player, def as Def, target),
   cast(player, rawDef, target) {
     const def = rawDef as Def, e = quarry(player, target, def.range);
     if (e) mark(player, def, e);

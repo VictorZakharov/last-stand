@@ -20,6 +20,9 @@ export interface InstantSkill extends SkillBase {
   pitch?(player: Player, def: SkillDef, power: number, target: THREE.Vector3): number;
   /** whether there is anything to cast it at (a mark needs a foe): if not, the press does nothing and costs nothing */
   canCast?(player: Player, def: SkillDef, target: THREE.Vector3): boolean;
+  /** `SkillDef.aimed`: every frame its key is held, where it would land for `target`, shown on its own player's screen
+   *  alone (`null`: let go or given up, shown no more) */
+  aim?(player: Player, def: SkillDef, target: THREE.Vector3 | null, dt: number): void;
 }
 
 /** Runs every frame while its key is held. `start` returns per-channel state. */
