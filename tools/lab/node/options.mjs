@@ -108,10 +108,11 @@ export const COMMANDS = {
       scenarios: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['walk', 'drawn', 'taps', 'zigzag', 'stairs', 'stairsDrawn'],
-        help: 'the scenarios (all by default): walk, drawn, taps, zigzag, stairs, stairsDrawn',
+        choices: ['walk', 'drawn', 'taps', 'zigzag', 'circle', 'circleDrawn', 'stairs', 'stairsDrawn'],
+        help: 'the scenarios (all by default): walk, drawn, taps, zigzag, circle, circleDrawn, stairs, stairsDrawn',
       },
       frames: { kind: 'switch', help: 'list every step (its foot, when it left and landed, how far) and the hops' },
+      trace: { kind: 'switch', help: 'list every frame: the way the body faces and goes, the pelvis, the cycle, each foot' },
       ...COMMON_OPTIONS,
     },
   },

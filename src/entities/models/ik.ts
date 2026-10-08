@@ -155,8 +155,17 @@ const PELVIS_TURN_MOST = 10;
 /** how far off the pelvis's line the legs step before it turns towards the way they go (rad): a diagonal is walked
  *  with the hips half turned, as a person does, so going from forwards to backwards along it turns them less */
 const SLACK = 0.35;
+/** the tightest curve a landing is put on (1/m, for legs 0.9 m long), how far the way the body goes may turn in a frame
+ *  and still count as a curve (rad: more is a reversal's flip), and how quickly the curve is followed (1/s) */
+const CURVE_MOST = 1.8, CURVE_FLIP = 0.3, CURVE_RATE = 8;
+/** how far ahead along the curve the pelvis looks for the way the body will go (s: about the lag of the smoothed
+ *  velocity and of the pelvis's own easing together) */
+const CURVE_LEAD = 0.18;
 /** where the ball of the foot is, as a share of the way from the ankle to the toes: a planted foot turns about it */
 const BALL = 0.7;
+/** how far past its window a foot that missed it still goes late (a share of the time on the ground between its
+ *  windows) */
+const LATE_SHARE = 0.5;
 /** how far before its window (a share of the window) a stride may start, when the body would otherwise leave the
  *  planted foot behind */
 const EARLY = -1;
@@ -169,6 +178,10 @@ const SWING_MOST = 0.55;
 /** the first stride from standing (the body stood this much: `standK`) takes at most this long (s) */
 const STOOD = 0.5, FIRST_STRIDE = 0.2;
 /** the shortest a stride re-aimed takes from where the foot is (s) */
+/** how far through a swing its landing starts to settle where it is */
+const LAND_SETTLE = 0.5;
+/** a stride further on than this lands rather than being aimed again */
+const REAIM_UNTIL = 0.85;
 const REAIM_LEAST = 0.1;
 /** how long the other foot is in the air before a planted one may leave the ground too (s): both leaving together
  *  is a hop (a run's feet leave half a cycle apart) */
@@ -232,6 +245,18 @@ function turnBetween(from: number, to: number): number {
  *  hanging by the thigh met it). */
 const legU = (phase: number, i: number): number => ((phase / TAU + (1 - i) * 0.5) % 1 + 1) % 1;
 
+/** Sets `out` (on the ground) to the point `length` along a curve from `from` (x, z) heading `yaw`, turning `curve`
+ *  a metre (+ towards +x from +z). */
+function alongCurve(out: THREE.Vector3, from: THREE.Vector3, yaw: number, curve: number, length: number): void {
+  const turn = curve * length;
+  if (Math.abs(turn) < 1e-4) {
+    out.set(from.x + Math.sin(yaw) * length, 0, from.z + Math.cos(yaw) * length);
+    return;
+  }
+  const x = from.x + (Math.cos(yaw) - Math.cos(yaw + turn)) / curve;
+  out.set(x, 0, from.z + (Math.sin(yaw + turn) - Math.sin(yaw)) / curve);
+}
+
 /** How far the pelvis turns towards a way the legs go `off` its line (rad): none within `SLACK`, at most `TWIST` (with
  *  the body's ranges on, as far as the trunk lets it, which the caller holds it to). */
 function pelvisTurnFor(off: number): number {
@@ -245,9 +270,11 @@ function pelvisTurnFor(off: number): number {
  *  body that glided on, he read as hung from a string: an archer moving with a shot drawn walks, in long steps. */
 const WALK_TOP = 3.4, RUN_FROM = 4.6;
 /** a walk's step at most (leg lengths): its stance must take the body over that ground within the legs' reach */
-const WALK_STEP = 1;
+const WALK_STEP = 0.9;
 /** the share of the cycle a walk's foot is on the ground: a stroll's, and at its fastest (both feet down a while) */
 const STROLL_DUTY = 0.62, FAST_WALK_DUTY = 0.53;
+/** how high a walk lifts a foot in the air at most (m at a man's scale: its toes just clear the ground) */
+const WALK_LIFT = 0.06;
 
 /** How far the gait at `speed` (m/s) has changed from a walk to a run, for legs `leg` long (0..1). */
 function runShare(speed: number, leg: number): number {
@@ -344,8 +371,6 @@ class Foot {
   pace = 2;
   /** how long it has been in the air (s) */
   air = 0;
-  /** the way the body went when the stride began */
-  svd = new THREE.Vector3();
   /** the way the stride is drawn along: turning towards the way the body goes, not snapping to it (the foot would
    *  whip across) */
   dir = new THREE.Vector3();
@@ -395,6 +420,8 @@ class GaitFrame {
   /** the ground speed (smoothed) and the way the body travels (a unit vector, or none) */
   speed = 0;
   readonly travel = new THREE.Vector3();
+  /** how much the way it travels turns a metre (1/m, + towards +x from +z, smoothed): the curve it is on */
+  curve = 0;
   /** the share of the cycle a foot is on the ground, half the share it swings, and the cycle's length (s) */
   duty = 0;
   halfSwing = 0;
@@ -417,6 +444,7 @@ const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _handTurn = new
 const _pole = new THREE.Vector3(), _e = new THREE.Euler(), _thighDown = new THREE.Vector3();
 const _leavesAt = new THREE.Vector3(), _hipAt = new THREE.Vector3();
 const _hipForward = new THREE.Vector3(0, 0, 1), _toes = new THREE.Vector3(), _ankleHeld = new THREE.Quaternion();
+const _heelUp = new THREE.Vector3(), _landWas = new THREE.Vector3();
 /** along the foot and across it, both ways: where a standing foot's ball must have its level round it
  *  (`EDGE_MARGIN`) */
 const MARGIN_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
@@ -459,7 +487,7 @@ export class LegIK {
   /** how far the pelvis is dropped so both feet are in reach (smoothed) */
   private drop = 0;
   private dropWanted = 0;
-  /** the way the body faced last frame, and how fast it keeps turning (rad/s, smoothed) */
+  /** the way the body faced last frame, and how fast it keeps turning on the curve it goes round (rad/s, smoothed) */
   private lastYaw = 0;
   private yawRate = 0;
   /** the body's lean into its motion (forward, sideways), damped */
@@ -474,6 +502,10 @@ export class LegIK {
   private backT = 0;
   /** 1 standing, 0 moving, eased: how far the knees follow the way the feet point */
   private standK = 1;
+  /** the way the body went last frame (rad), and whether there was one, and the curve it is on (`GaitFrame.curve`) */
+  private travelWas = 0;
+  private travelSeen = false;
+  private curve = 0;
   private shape: FootShape[] | null = null;
   /** the hands' world turn as the pose left it (`captureArms`) */
   private readonly hq = [new THREE.Quaternion(), new THREE.Quaternion()];
@@ -498,6 +530,12 @@ export class LegIK {
   /** the way the gait's pelvis faces, which the feet land turned to (rad, world; read by the lab) */
   get pelvisYaw(): number {
     return this.frame.pelvisYaw;
+  }
+
+  /** the walk cycle as the gait reads it: its phase (rad), how fast it moves (rad/s, signed, smoothed) and whether
+   *  the legs walk backwards along the pelvis's line (read by the lab) */
+  get cycleNow(): { phase: number; rate: number; backing: boolean } {
+    return { phase: this.lastPhase, rate: this.dphase, backing: this.backing };
   }
 
   /** how far the pelvis is dropped for the feet to reach, and how far they asked for this frame (m, read by the lab) */
@@ -603,8 +641,11 @@ export class LegIK {
     const g = this.readBody(dt, phase, at);
     this.leanIntoMotion(g, lean);
     // (how fast the body keeps turning, smoothed over a third of a second: an attack's snap onto its aim doesn't
-    // count, wheeling round to face the way it goes does, and lets a foot step out of turn)
-    this.yawRate = damp(this.yawRate, Math.abs(turnBetween(this.lastYaw, g.facing)) / dt, 3, dt);
+    // count, wheeling round to face the way it goes does, and lets a foot step out of turn; but not its turn with the
+    // curve it goes round, last frame's: counted, running round in circles its feet stepped out of turn, and left the
+    // ground and landed together five times in three laps)
+    const turned = turnBetween(this.lastYaw, g.facing) - this.curve * this.sp * dt;
+    this.yawRate = damp(this.yawRate, Math.abs(turned) / dt, 3, dt);
     this.lastYaw = g.facing;
     this.turnPelvis(g, lean);
     this.placePelvis(g);
@@ -708,7 +749,10 @@ export class LegIK {
   /** The pelvis's turn for the way the body travels: walking forwards or backwards along its line, whichever turns it
    *  less and keeps the legs nearer its line, with a reversal walked backwards a while. */
   private pelvisTurnTowardsTravel(g: GaitFrame, least: number, most: number): number {
-    const rel = turnBetween(g.facing, Math.atan2(this.v.x, this.v.z));
+    // (going round, towards where the way it goes will be by the time the pelvis has turned: turned after the way it
+    // went, the pelvis lagged it by 40 to 60 degrees going round in circles drawn, and the feet landed out to the side)
+    const ahead = this.curve * this.sp * CURVE_LEAD;
+    const rel = turnBetween(g.facing, Math.atan2(this.v.x, this.v.z) + ahead);
     const back = turnBetween(0, rel + Math.PI);
     // (the legs walk along the pelvis's line, forwards or backwards: going back and to the side it turns the other way
     // and backpedals, rather than turning towards the way it goes and stepping sideways backwards across it; each way
@@ -765,6 +809,7 @@ export class LegIK {
     if (speed > 0.05) g.travel.copy(lv > 0.35 * speed ? this.v : _velocity).normalize();
     else g.travel.set(0, 0, 0);
     this.gv.copy(g.travel).multiplyScalar(speed);
+    this.followCurve(g);
     // the share of the cycle on the ground: less as the speed rises (a run has both feet in the air a while), so the
     // stance's travel stays within the legs' reach
     const firstCycle = TAU / Math.max(this.rate, 0.5);
@@ -778,6 +823,24 @@ export class LegIK {
     g.slip = SLIP * smooth((speed - 2) / 3.5);
     const ahead = WALK_AHEAD + (AHEAD - WALK_AHEAD) * runShare(speed, g.legReach);
     g.landAhead = Math.min(speed * g.duty * g.cycle * 0.5 * (1 - g.slip), ahead * g.legReach);
+  }
+
+  /** The curve the body is on: how much the way it travels turns for the ground it covers, smoothed (a reversal's
+   *  flip of the way doesn't count). */
+  private followCurve(g: GaitFrame): void {
+    // (mid-reversal the smoothed velocity collapses and swings through every way a little a frame: no curve, or a
+    // running reversal's landing went out along one and the warrior's hip opened 10 degrees past its range)
+    const reversing = this.v.length() < 0.6 * this.sp;
+    const going = g.speed > 0.5 && !reversing && (g.travel.x !== 0 || g.travel.z !== 0);
+    const yaw = Math.atan2(g.travel.x, g.travel.z);
+    const turned = this.travelSeen && going ? turnBetween(this.travelWas, yaw) : 0;
+    const most = CURVE_MOST * 0.9 / g.legReach;
+    const now = Math.abs(turned) < CURVE_FLIP ? turned / (Math.max(0.5, g.speed) * g.dt) : 0;
+    const wanted = going ? Math.max(-most, Math.min(most, now)) : 0;
+    this.curve = damp(this.curve, wanted, CURVE_RATE, g.dt);
+    g.curve = this.curve;
+    this.travelWas = yaw;
+    this.travelSeen = going;
   }
 
   // --- each foot ---------------------------------------------------------------------------------------------------
@@ -861,9 +924,13 @@ export class LegIK {
     // held, a foot was left a metre behind the body as it set off, and jumped 44 cm in its first frame up)
     const walking = g.duty >= WALK_SUPPORT && other.state !== 'plant' && !f.dragged;
     const held = otherStepping || otherJustLeft || walking;
-    if (((inWindow && settled) || early) && f.state === 'plant' && !held) {
+    // (a foot past its window, held there by the other's swing or a reversal, goes as soon as it may, late: counted
+    // against the window to come alone, strafing drawn the feet ran a quarter of a window behind the cycle and never
+    // caught up, every stride early or a re-step landing under the hip)
+    const late = !inWindow && where > 1 && where < 1 + LATE_SHARE * (1 / (2 * g.halfSwing) - 1);
+    if ((((inWindow || late) && settled) || early) && f.state === 'plant' && !held) {
       this.beginStride(g, f, early ? toCome : where, early);
-      f.leftFor = early ? `early: ${behind}` : 'its window';
+      f.leftFor = early ? `early: ${behind}` : late ? 'late, past its window' : 'its window';
     } else if (f.state === 'swing') {
       this.carryOnStride(g, f, i);
     }
@@ -905,7 +972,13 @@ export class LegIK {
     f.pitch0 = f.shown;
     f.rel0 = (f.pos.x - g.hip.x) * travel.x + (f.pos.z - g.hip.z) * travel.z;
     f.t = 0;
-    f.span = 2 * g.halfSwing * (early ? 1 : Math.max(0.15, 1 - Math.min(0.85, progress)));
+    // (a run's stride begun late in its window lands at its end, keeping the rhythm's flight; a walk's takes a whole
+    // swing, landing late by as much, and the walk's time on both feet takes the lateness back over the next steps:
+    // squeezed into what was left of its window by waiting for the other foot to land, it landed short, the body
+    // left it out of reach at once, and it went again early with the other still in the air, a step after step that
+    // had both feet up a third of the time going round in circles drawn)
+    const whole = early || g.duty >= WALK_SUPPORT;
+    f.span = 2 * g.halfSwing * (whole ? 1 : Math.max(0.15, 1 - Math.min(0.85, progress)));
     // (and never shorter than a swing can be: begun at its window's very end, a running stride took 3 frames, the foot
     // rising 29 cm in one and moving 33 cm a frame)
     f.span = Math.max(f.span, SWING_LEAST / g.cycle);
@@ -916,7 +989,6 @@ export class LegIK {
     f.fromStand = false;
     f.over = false;
     f.riserSide = 0;
-    f.svd.copy(travel);
     f.dirYaw = Math.atan2(travel.x, travel.z);
     f.dir.copy(travel);
   }
@@ -924,9 +996,12 @@ export class LegIK {
   /** The stride goes on by however far the cycle moves, whichever way it runs (a reversal turns the phase back:
    *  following it, the foot would swing back the way it came), landing at its end. */
   private carryOnStride(g: GaitFrame, f: Foot, i: number): void {
-    // (the way the body goes turned round under a stride: the same stride is aimed afresh from where the foot is, in
-    // the time it has left)
-    if (f.svd.dot(g.travel) < 0.3) this.reaimStride(g, f, i);
+    // (the way the body goes turned round under a stride, quicker than the stride turns after it: the same stride is
+    // aimed afresh from where the foot is, in the time it has left. Against the way it went as the stride began,
+    // going round in circles turned it that far within a swing, and each swing began again near its end)
+    // (a stride all but down lands where it was going: aimed again a frame from landing, at a reversal, a foot swung
+    // on 5 frames more with the other stretched behind)
+    if (f.t < REAIM_UNTIL && f.dir.dot(g.travel) < 0.3) this.reaimStride(g, f, i);
     f.t = Math.min(1, f.t + Math.max(this.dU / f.span, f.pace * g.dt));
     if (f.t >= 1) {
       this.land(f, g.pelvisYaw);
@@ -946,7 +1021,8 @@ export class LegIK {
     f.span = Math.max(0.7 * g.halfSwing, f.span * (1 - f.t));
     f.pace = 1 / Math.max(REAIM_LEAST, (1 - f.t) / f.pace);
     f.t = 0;
-    f.svd.copy(g.travel);
+    f.dirYaw = Math.atan2(g.travel.x, g.travel.z);
+    f.dir.copy(g.travel);
     f.rel0 = NaN;
     f.riserSide = 0;
   }
@@ -1034,8 +1110,10 @@ export class LegIK {
     const landYaw = g.pelvisYaw + (this.moving ? 0 : f.syaw);
     this.aimLanding(g, f, i, landYaw);
     const e = f.fast ? 0.6 * f.t * (2 - f.t) + 0.4 * smooth(f.t) : smooth(f.t), run = smooth((speed - 2) / 3.5);
-    // (a run lifts the foot higher, and later in the swing: the heel comes up under the seat)
-    const height = (1 + 0.5 * run) * Math.min(0.2, Math.max(0.05, 0.04 + 0.03 * speed)) * sc;
+    // (a run lifts the foot higher, and later in the swing: the heel comes up under the seat; a walk's only just clears
+    // the ground: lifted as a jog's, 15 cm at a walk with a shot drawn, its knee folded up behind and it skipped)
+    const runLift = (1 + 0.5 * run) * Math.min(0.2, Math.max(0.05, 0.04 + 0.03 * speed));
+    const height = (WALK_LIFT + (runLift - WALK_LIFT) * runShare(speed, g.legReach)) * sc;
     const lift = height * Math.sin(Math.PI * Math.pow(Math.min(1, f.t), 1 - 0.2 * run));
     f.pos.set(f.A.x + (f.B.x - f.A.x) * e, 0, f.A.z + (f.B.z - f.A.z) * e);
     if (f.state === 'swing' && speed > 0.5) this.swingInHipFrame(g, f);
@@ -1135,9 +1213,16 @@ export class LegIK {
     if (!this.moving && f.stand && f.state === 'timed') {
       f.B.copy(f.stand).applyMatrix4(g.rootMatrix);
     } else {
-      const ahead = f.state === 'swing' ? g.landAhead : 0, way = f.state === 'swing' ? f.dir : g.travel;
-      const x = g.hip.x + this.gv.x * remain + way.x * ahead, z = g.hip.z + this.gv.z * remain + way.z * ahead;
-      f.B.set(x, 0, z);
+      // (along the curve the body is on: going round in circles, a foot landed straight on from the way the body
+      // went, outside the curve, and the body left it out of reach in half its stance)
+      const ahead = f.state === 'swing' ? g.landAhead : 0;
+      _landWas.copy(f.B);
+      alongCurve(f.B, g.hip, Math.atan2(g.travel.x, g.travel.z), g.curve, g.speed * remain + ahead);
+      // (and late in a swing it settles where it is, as a foot is put down on a spot: following the body's way to
+      // the last frame, going round, it swung sideways 5 cm a frame, and the foot landed moving sideways and stopped
+      // dead, its way turned 100 degrees in its last frame; along the stride the swing lands it, in the hip's frame)
+      const settle = f.state === 'swing' ? smooth((f.t - LAND_SETTLE) / (1 - LAND_SETTLE)) : 0;
+      if (settle > 0) f.B.lerp(_landWas, settle);
     }
     this.keepToSide(f.B);
     if (this.moving) f.landShift = damp(f.landShift, this.offRiser(g, f, i, landYaw), 20, g.dt);
@@ -1258,7 +1343,7 @@ export class LegIK {
       // (the pose's own leg: its foot is where it reaches)
       if (this.feet[i].own) continue;
       const thigh = this.legs[i].thigh;
-      const foot = _point.copy(this.feet[i].pos).applyMatrix4(_hipsInverse);
+      const foot = _point.copy(this.reachedAt(g, i)).applyMatrix4(_hipsInverse);
       const dx = foot.x - thigh.position.x, dy = foot.y - thigh.position.y, dz = foot.z - thigh.position.z;
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz), lmax = 0.98 * (g.thigh + g.shin);
       if (d > lmax) need = Math.max(need, (d - lmax) / Math.max(0.35, -dy / d));
@@ -1275,6 +1360,21 @@ export class LegIK {
       j.hips.updateWorldMatrix(false, false);
       _hipsInverse.copy(j.hips.matrixWorld).invert();
     }
+  }
+
+  /** Where a foot is reached from, for how far the pelvis sinks: its ankle, or for a planted foot behind its hip, its
+   *  ankle with the heel up as far as a push off lifts it (`peel` lifts it as far as the leg needs). Sunk for the foot
+   *  flat, the hips fell 12 cm at the end of each stance of a walk strafing drawn and came back up as it left. */
+  private reachedAt(g: GaitFrame, i: number): THREE.Vector3 {
+    const f = this.feet[i];
+    if (f.state !== 'plant' || !this.moving || !this.shape) return f.pos;
+    _hipAt.copy(this.legs[i].thigh.position).applyMatrix4(this.j.hips.matrixWorld);
+    const behind = (f.P.x - _hipAt.x) * g.travel.x + (f.P.z - _hipAt.z) * g.travel.z < 0;
+    const pitch = Math.max(f.pitch, this.pushPitch());
+    if (!behind || pitch <= f.pitch) return f.pos;
+    const shape = this.shape[i], sc = g.scale, roll = this.roll(shape, pitch) * sc;
+    const y = f.P.y + shape.sole * sc + this.tilt(shape, pitch) * sc;
+    return _heelUp.set(f.P.x + Math.sin(f.yaw) * roll, y, f.P.z + Math.cos(f.yaw) * roll);
   }
 
   /**
@@ -1460,10 +1560,12 @@ export class LegIK {
     return true;
   }
 
-  /** Whether a planted leg is solved past a range a stance would take it: the hip's extension, its crossing in, or
-   *  the ankle's bend either way. */
+  /** Whether a planted leg is solved past a range a stance would take it: the hip's extension, its crossing in or
+   *  opening out (a foot a reversal left out wide as the pelvis turned opened the warrior's hip 8 to 12 degrees past
+   *  its range), or the ankle's bend either way. */
   private pastInStance(i: number): boolean {
-    if (this.hipFlexion(i) < HIP_BACK || this.hipOut(i) < HIP_IN) return true;
+    const out = this.hipOut(i);
+    if (this.hipFlexion(i) < HIP_BACK || out < HIP_IN || out > HIP_OUT) return true;
     _ankleHeld.copy(this.legs[i].ankle.quaternion);
     return clampAnkle(_ankleHeld, i === 0, true, true);
   }
@@ -1689,6 +1791,8 @@ export class LegIK {
     this.facingSeen = false;
     this.dphase = 0;
     this.rate = 0;
+    this.curve = 0;
+    this.travelSeen = false;
     this.lastPhase = g.phase;
     this.moving = false;
     this.drop = 0;

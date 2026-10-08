@@ -47,16 +47,27 @@ terminal's task stops it all.
   front and the side (`out/feet/sheet.png`). A walk follows on from the ones before it (the hero, the gait and the
   game's clock carry over), so compare runs of the same `--scenarios`.
 - `gait`: the hero's walk judged as a person's, over level ground and the dais's steps, nothing drawn, strafing
-  drawn, tapping and changing direction every third of a second (`--scenarios walk,drawn,taps,zigzag,stairs,
-  stairsDrawn`): each foot's share of the time on the ground against the share the gait plans, both down and neither
-  (a walk has a foot always down), the steps a second and the ground a step covers, the hops (both feet leaving or
-  landing within a few frames of each other), a foot dance's short steps, the hips' rise and fall a step and their
-  height in the air, on one foot and on both, the jerks (a change of the hips' or an ankle in the air's speed in a
-  frame), and what a person wouldn't do, said as such. `--frames` lists every step: its foot, where in its window it
-  left and why (the IK's `Foot.leftFor`), how long it was down, its swing against the plan, and every jerk. Each
+  drawn, tapping, changing direction every third of a second and going round in circles, nothing drawn and drawn
+  (`--scenarios walk,drawn,taps,zigzag,circle,circleDrawn,stairs,stairsDrawn`): each foot's share of the time on the
+  ground against the share the gait plans, both down and neither (a walk has a foot always down), the steps a second
+  and the ground a step covers, the hops (both feet leaving or landing within a few frames of each other), a foot
+  dance's short steps, the hips' rise and fall a step and their height in the air, on one foot and on both, a planted
+  foot dragged (its leg short of it even on its toes) and one up on its toes out of a flat foot's reach (a push off),
+  each hand's swing fore and aft against its own side's ankle (a person's is about -1), the jerks (a change of the
+  change of the hips' or an ankle in the air's speed in a frame: a smooth swing's speed changes steadily, by up to 3.5
+  m/s a frame at a run, and counted by that, an ordinary run read as a hundred jerks), and what a person wouldn't do,
+  said as such. A scenario whose body moves well short of its own velocity was held up by something in its way (the
+  nearest obstacle is named) and the command fails: from where the level walks first started, the walk had run into
+  a prop and every walk number measured a body stopping and starting. `--frames` lists every step: its foot, where in
+  its window it left and why (the IK's `Foot.leftFor`), how long it was down, its swing against the plan, and every
+  jerk; `--trace` every frame: the way the body faces and goes and its speed over the ground, the pelvis, the curve
+  it is on, the pelvis's drop, the plan's share on the ground and the speed it plans for, the cycle's phase and rate,
+  backing or not, and each foot (planted, with its distance from its hip and `!` out of reach, or its stride's
+  progress), where it is in its window, its ankle's speed and how far its way turned. Each
   scenario is measured, then run again to film it from the side round its first hop (else its middle), a picture
-  every few frames, so the motion is seen as well as measured; an A/B writes a sheet for each side (`sheet.png`,
-  `sheet-main.png`: both in one page took the browser down) and compares the reports.
+  every few frames, so the motion is seen as well as measured; each film is a sheet of its own (`film-1.png` on,
+  an A/B's other side `film-main-1.png` on: both sides in one page, or all eight films, took the browser down) and an
+  A/B compares the reports.
 - `range`: every joint of the hero against a body's ranges (`models/anatomy.ts`, as the dev builds' `watchBody`
   measures them), frame by frame, over standing, walking each way, attacking standing, and walks that change
   direction while he attacks (held or tapped) or runs (`--scenarios stand,walk,shoot,reverse,taps,run`): each angle

@@ -116,6 +116,8 @@ export class Player {
    *  forgotten when any other skill is pressed or cast */
   private queued: { skill: KnownSkill; key: SkillKey } | null = null;
   phase = 0;
+  /** which way the walk cycle runs: 1, or -1 backpedalling (see `cycleOn`) */
+  private phaseDir = 1;
   /** true in the lobby: free casting, no costs, no cooldowns */
   sandbox = false;
 
@@ -636,13 +638,31 @@ export class Player {
     this.aim.set(r.ax, 0, r.az);
   }
 
+  /** The walk cycle's phase moved on by `step` (rad), the way it runs, turning round to `want` only as it crosses a
+   *  foot's mid-swing, a whole number of half cycles (the leg IK's windows are centred there): the swinging foot's
+   *  window then goes back the way it came as far as it had gone, and the other's is half a cycle off either way, so
+   *  the rhythm holds. Turned round anywhere else, a foot just down was due again at once: going round in circles with
+   *  a shot drawn, the cycle turned round twice a lap as the body went sideways to its aim, and the feet left out of
+   *  turn, both in the air a quarter of the time. */
+  private cycleOn(step: number, want: number): number {
+    const next = this.phase + step * this.phaseDir;
+    if (want === this.phaseDir) return next;
+    const halves = Math.floor(next / Math.PI);
+    const halvesWere = Math.floor(this.phase / Math.PI);
+    if (halves === halvesWere) return next;
+    // (back from the half cycle it crossed by as far as it went past it)
+    const crossed = Math.max(halves, halvesWere) * Math.PI;
+    this.phaseDir = want;
+    return 2 * crossed - next;
+  }
+
   private animateBody(dt: number, t: number, speed: number): void {
 
     const fwd = Math.sin(this.facing) * this.vel.x + Math.cos(this.facing) * this.vel.z;
     const side = Math.cos(this.facing) * this.vel.x - Math.sin(this.facing) * this.vel.z;
     // (a dash's legs step at a sprint's cadence, not at the dash's speed)
     const gs = this.dash ? Math.min(speed, this.stats.moveSpeed) : speed;
-    this.phase += dt * gs * gaitRate(gs, legLength(this.model)) * (fwd < -0.5 ? -1 : 1);
+    this.phase = this.cycleOn(dt * gs * gaitRate(gs, legLength(this.model)), fwd < -0.5 ? -1 : 1);
     let action: ActionState | null = null;
     if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };
     else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / (this.dash.dur + this.dash.hold)) };

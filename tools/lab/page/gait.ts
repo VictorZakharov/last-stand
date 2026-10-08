@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import type { Lab, Pictured, ViewName } from './lab';
 import type { LegIK } from '../../../src/entities/models/ik';
 import { groundHeight } from '../../../src/world/ground';
+import { G } from '../../../src/state';
 
 /** One leg of a scenario: the keys held, the attack (held, tapped or not), for how many frames. */
 interface GaitLeg {
@@ -35,8 +36,9 @@ const legOf = (keys: string[], attack: GaitLeg['attack'], frames: number): GaitL
 const TAP_DOWN = 6;
 const TAP_UP = 12;
 
-/** where the level walks start (open ground), and the point a drawn one aims at (along +z) */
-const LEVEL: [number, number] = [14, 17];
+/** where the level walks start (open ground: from 14, 17 the walk ran into a prop and the circles into another), and
+ *  the point a drawn one aims at (along +z) */
+const LEVEL: [number, number] = [14, 14];
 const LEVEL_AIM: [number, number] = [14, 40];
 /** where the walks over the steps start (on the dais, near its middle), and the point a drawn one aims at */
 const DAIS: [number, number] = [1.5, 0.3];
@@ -44,6 +46,20 @@ const DAIS_AIM: [number, number] = [1.5, 25];
 
 /** the direction changes of a walk that changes it often: left, right, back and forth, and the diagonals */
 const ZIGZAG = [['a'], ['d'], ['w'], ['a'], ['s'], ['d'], ['a', 'w'], ['d', 's'], ['a'], ['d', 'w'], ['s'], ['a', 's']];
+/** the eight ways round a circle, clockwise from ahead, as a player rolls the keys to go round one */
+const ROUND = [['w'], ['w', 'd'], ['d'], ['d', 's'], ['s'], ['s', 'a'], ['a'], ['a', 'w']];
+/** how many frames each way round a circle is held, and how many times it goes round */
+const ROUND_FRAMES = 12;
+const ROUND_LAPS = 2;
+
+/** The legs of a walk going round a circle `ROUND_LAPS` times, attacking as `attack` says. */
+function roundLegs(attack: GaitLeg['attack']): GaitLeg[] {
+  const legs: GaitLeg[] = [];
+  for (let lap = 0; lap < ROUND_LAPS; lap++) {
+    for (const keys of ROUND) legs.push(legOf(keys, attack, ROUND_FRAMES));
+  }
+  return legs;
+}
 
 const SCENARIOS: GaitScenario[] = [
   {
@@ -51,7 +67,7 @@ const SCENARIOS: GaitScenario[] = [
     what: 'level ground, nothing drawn',
     start: LEVEL,
     aim: null,
-    legs: [legOf(['d'], false, 100), legOf(['a'], false, 100)],
+    legs: [legOf(['d'], false, 60), legOf(['a'], false, 60)],
     film: 'left',
   },
   {
@@ -77,6 +93,22 @@ const SCENARIOS: GaitScenario[] = [
     aim: LEVEL_AIM,
     legs: ZIGZAG.map((keys) => legOf(keys, true, 20)),
     film: 'front',
+  },
+  {
+    name: 'circle',
+    what: 'level ground, nothing drawn, going round in circles',
+    start: LEVEL,
+    aim: null,
+    legs: roundLegs(false),
+    film: 'above',
+  },
+  {
+    name: 'circleDrawn',
+    what: 'level ground, drawn, going round in circles',
+    start: LEVEL,
+    aim: LEVEL_AIM,
+    legs: roundLegs(true),
+    film: 'above',
   },
   {
     name: 'stairs',
@@ -105,6 +137,8 @@ export interface GaitOptions {
   scenarios?: string[];
   /** list every step: its foot, when it left and landed, how far it went, and the hops */
   frames?: boolean;
+  /** list every frame: the way the body faces and goes, the pelvis, the cycle, and each foot */
+  trace?: boolean;
 }
 
 /** a body going slower than this is standing (m/s) */
@@ -112,18 +146,23 @@ const MOVING_SPEED = 0.5;
 /** both feet leaving or landing within this many frames of each other is a hop (a run's alternate half a cycle
  *  apart) */
 const HOP_GAP = 4;
+/** a body whose velocity is at least this (m/s) but which moved less than this share of it is held up */
+const HELD_UP_SPEED = 1;
+const HELD_UP_SHARE = 0.5;
+/** a planted foot dragged this many frames running is left behind (a frame's is the leg catching up) */
+const DRAG_RUN = 3;
 /** a step shorter than this is a foot dance's (m) */
 const SHORT_STEP = 0.15;
 /** a person walks up to about this speed, with a foot always on the ground (m/s); above it, a person runs */
 const WALK_MOST = 2.2;
 /** under this much rise and fall of the hips a step (m), the body is carried along rather than walked */
 const BOB_LEAST = 0.015;
-/** the hips changing speed more than this in a frame jerk (m/s: a run's push off the ground and its landing change
- *  them by about 0.3) */
-const HIPS_JERK = 0.6;
-/** an ankle in the air changing speed more than this in a frame jerks (m/s: a swing's take-off and landing, and its
- *  turn forward, change it by up to about 1.5) */
-const ANKLE_JERK = 2.5;
+/** the hips' change of speed in a frame changing by more than this jerks (m/s: a run's push off the ground and its
+ *  landing change their speed by about 0.3 a frame) */
+const HIPS_JERK = 0.4;
+/** an ankle in the air's change of speed in a frame changing by more than this jerks (m/s: a smooth swing's changes by
+ *  a few tenths a frame, from 0.2 at a walk to 0.4 at a run) */
+const ANKLE_JERK = 1.5;
 /** the film: a picture every this many frames, this many of them, this many of them before the first hop */
 const FILM_EVERY = 3;
 const FILM_LENGTH = 8;
@@ -170,6 +209,17 @@ interface GaitRun {
   hopFrames: number[];
   /** each jerk: its frame, the point and the change */
   jerkList: string[];
+  /** each frame, when traced */
+  trace: string[];
+  /** the frames a planted foot was dragged (its leg short of it even on its toes), each foot's run of them going
+   *  on, and the longest; and the frames one was up on its toes, out of a flat foot's reach (a push off) */
+  dragged: number;
+  dragRun: [number, number];
+  longestDrag: number;
+  onToes: number;
+  /** the frames the body moved well short of its own velocity (held up by something in its way), and the first */
+  heldUp: number;
+  heldUpAt: string;
 }
 
 /** The film to take: from which frame, what it is round, and its pictures so far. */
@@ -179,10 +229,11 @@ interface Film {
   shots: { frame: number; tiles: Pictured['tiles']; feet: string }[];
 }
 
-/** What `lab gait` found: its lines and its films. */
+/** What `lab gait` found: its lines, its films, and what went wrong with a scenario itself (the command fails). */
 export interface GaitReport {
   lines: string[];
   moments: Pictured[];
+  problems: string[];
 }
 
 const cm = (metres: number) => (metres * 100).toFixed(1);
@@ -206,6 +257,58 @@ function planOf(legs: LegIK): { duty: number; cycle: number } {
 function plannedSwing(legs: LegIK, seconds: number): number {
   const plan = planOf(legs);
   return ((1 - plan.duty) * plan.cycle) / seconds;
+}
+
+/** The walk cycle as the leg IK reads it, where it says (an A/B's older side may not). */
+function cycleOf(legs: LegIK): { phase: number; rate: number; backing: boolean } | null {
+  return (legs as { cycleNow?: { phase: number; rate: number; backing: boolean } }).cycleNow ?? null;
+}
+
+/** A foot this frame, for a trace: planted (`_`, with how far its spot is from its hip over the ground, cm, and `!`
+ *  out of reach) or in the air (`^`, with its stride's progress), and where it is in its window. */
+function traceFoot(lab: Lab, legs: LegIK, side: number, motion: string): string {
+  const foot = legs.feet[side];
+  const window = (foot as { window?: number }).window;
+  const where = window === undefined ? '' : ` w${window.toFixed(2)}`;
+  const hip = (side === 0 ? lab.joints.thighL : lab.joints.thighR).getWorldPosition(new THREE.Vector3());
+  const fromHip = Math.hypot(foot.P.x - hip.x, foot.P.z - hip.z);
+  const planted = `_${cm(fromHip).padStart(5)}${foot.over ? '!' : ' '}`;
+  const doing = foot.state === 'plant' ? planted : `^${foot.t.toFixed(2)}`;
+  return `${SIDES[side]}${doing.padEnd(8)}${where.padEnd(7)} ${motion}`;
+}
+
+/** How an ankle moved this frame, for a trace: its speed (m/s) and how far its way turned from last frame's
+ *  (degrees), from where it was the two frames before. */
+function ankleMotion(now: THREE.Vector3, last: THREE.Vector3 | undefined, before: THREE.Vector3 | undefined,
+  seconds: number): string {
+  if (!last) return '';
+  const move = now.clone().sub(last);
+  const speed = move.length() / seconds;
+  const was = before ? last.clone().sub(before) : null;
+  const turned = was && was.length() > 1e-4 && move.length() > 1e-4 ? degreesOf(was.angleTo(move)) : '-';
+  return `v ${speed.toFixed(1).padStart(4)} ${turned.padStart(3)}°`;
+}
+
+/** This frame of a walk, for a trace: the way the body faces and goes, the pelvis (degrees), its speed over the
+ *  ground (`speed`, m/s), the cycle's
+ *  phase (a share of a cycle) and rate, backing or not, and each foot. */
+function traceLine(lab: Lab, frame: number, legs: LegIK, speed: number, motions: string[]): string {
+  const velocity = lab.player.vel;
+  const going = speed > 0.05 ? degreesOf(Math.atan2(velocity.x, velocity.z)) : '-';
+  const facing = degreesOf(lab.player.facing);
+  const pelvis = degreesOf(legs.pelvisYaw);
+  const body = `faces ${facing.padStart(4)} goes ${going.padStart(4)} at ${speed.toFixed(2)} pelvis ${pelvis.padStart(4)}`;
+  const cycle = cycleOf(legs);
+  const phase = cycle ? (((cycle.phase / (2 * Math.PI)) % 1) + 1) % 1 : NaN;
+  const cycleNote = cycle ? `phase ${phase.toFixed(2)} rate ${cycle.rate.toFixed(1).padStart(5)}${cycle.backing ? ' back' : ''}` : '';
+  const feet = legs.feet.map((_, side) => traceFoot(lab, legs, side, motions[side])).join(' ');
+  const curve = (legs as unknown as { frame?: { curve?: number } }).frame?.curve;
+  const curveNote = curve === undefined ? '' : `curve ${curve.toFixed(2).padStart(5)}`;
+  const drop = legs.pelvisDrop;
+  const gaitSpeed = (legs as unknown as { frame?: { speed?: number } }).frame?.speed ?? NaN;
+  const plan = `duty ${planOf(legs).duty.toFixed(2)} at ${gaitSpeed.toFixed(2)}`;
+  const dropNote = `drop ${cm(drop.dropped).padStart(4)}/${cm(drop.wanted).padStart(4)} ${plan}`;
+  return `    ${String(frame).padStart(3)} ${body} ${curveNote} ${dropNote} ${cycleNote.padEnd(25)} ${feet}`;
 }
 
 /** Each foot on the ground (planted) or not, as the leg IK has it, for a film's note. */
@@ -280,29 +383,36 @@ interface Watched {
   jerk: number;
 }
 
-/** Follows the hips' and each ankle's speed for the jerks: a change of speed in a frame past the point's `jerk`,
- *  over frames it counted on and the one before. */
+/** A watched point's last place, and its last two velocities (m/s, the latest first; none over a frame it didn't
+ *  count on). */
+interface Followed {
+  at: THREE.Vector3;
+  speeds: THREE.Vector3[];
+}
+
+/** Follows the hips' and each ankle's speed for the jerks: a change of its change of speed in a frame past the point's
+ *  `jerk`, over three frames it counted on running. A smooth swing's speed changes steadily, by up to 2 to 3.5 m/s a
+ *  frame at a run, its change by a few tenths: counted by the change of speed alone, a run's ordinary swing read as a
+ *  hundred jerks a scenario and hid the snaps. */
 class JerkWatch {
-  private last = new Map<string, THREE.Vector3>();
-  private speed = new Map<string, THREE.Vector3 | null>();
+  private followed = new Map<string, Followed>();
 
   observe(frame: number, points: Watched[], seconds: number, run: GaitRun): void {
     for (const point of points) {
-      const last = this.last.get(point.name);
-      this.last.set(point.name, point.at.clone());
-      if (!last || !point.counts) {
-        this.speed.set(point.name, null);
-        continue;
-      }
-      const speed = point.at.clone().sub(last).divideScalar(seconds);
-      const before = this.speed.get(point.name);
-      this.speed.set(point.name, speed);
-      if (!before) continue;
-      const change = speed.distanceTo(before);
+      const was = this.followed.get(point.name);
+      const followed: Followed = { at: point.at.clone(), speeds: [] };
+      this.followed.set(point.name, followed);
+      if (!was || !point.counts) continue;
+      const speed = point.at.clone().sub(was.at).divideScalar(seconds);
+      followed.speeds = [speed, ...was.speeds.slice(0, 1)];
+      if (followed.speeds.length < 2 || was.speeds.length < 2) continue;
+      const [last, before] = was.speeds;
+      const change = speed.clone().sub(last).sub(last.clone().sub(before)).length();
       if (change > point.jerk) {
         run.jerks++;
-        const turned = before.length() > 0.1 && speed.length() > 0.1 ? before.angleTo(speed) : 0;
-        const how = `${before.length().toFixed(1)} to ${speed.length().toFixed(1)} m/s, turned ${degreesOf(turned)}°`;
+        const speeds = [before, last, speed].map((each) => each.length().toFixed(1)).join(', ');
+        const turned = last.length() > 0.1 && speed.length() > 0.1 ? last.angleTo(speed) : 0;
+        const how = `${speeds} m/s, turned ${degreesOf(turned)}°`;
         run.jerkList.push(`frame ${frame}, ${point.name}: ${change.toFixed(1)} m/s (${how})`);
       }
       if (change <= run.worstJerk) continue;
@@ -338,7 +448,7 @@ function bobOfSteps(heights: number[], steps: Step[]): number[] {
 }
 
 /** Runs one scenario, set up afresh, and measures its walk, picturing the frames `film` takes, if any. */
-async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null): Promise<GaitRun> {
+async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null, trace = false): Promise<GaitRun> {
   const facing = scenario.aim ? 0 : Math.PI / 2;
   await lab.setup({ at: scenario.start, facing, nocked: Boolean(lab.player.cls.quiver) });
   const legs = lab.model.root.userData.legs as LegIK | undefined;
@@ -362,10 +472,20 @@ async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null):
     plannedDuty: 0,
     hopFrames: [],
     jerkList: [],
+    trace: [],
+    dragged: 0,
+    dragRun: [0, 0],
+    longestDrag: 0,
+    onToes: 0,
+    heldUp: 0,
+    heldUpAt: '',
   };
   const steps = new StepWatch(legs);
   const jerks = new JerkWatch();
   const heights: number[] = [];
+  // (each ankle where it was last frame and the frame before, for a trace)
+  const anklesWere: THREE.Vector3[] = [];
+  const anklesBefore: THREE.Vector3[] = [];
   const lastAt = new THREE.Vector3(lab.player.pos.x, 0, lab.player.pos.z);
   const aim = scenario.aim ? new THREE.Vector3(scenario.aim[0], 0, scenario.aim[1]) : undefined;
   const measure = () => {
@@ -377,6 +497,13 @@ async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null):
     const hips = lab.joints.hips.getWorldPosition(new THREE.Vector3());
     steps.observe(frame, legs, ankles, seconds, run);
     if (film) filmShot(lab, scenario, film, frame, legs);
+    if (trace) {
+      const motions = ankles.map((ankle, side) => ankleMotion(ankle, anklesWere[side], anklesBefore[side], seconds));
+      run.trace.push(traceLine(lab, frame, legs, moved / seconds, motions));
+      anklesBefore.splice(0, 2, ...anklesWere);
+      anklesWere.splice(0, 2, ...ankles);
+    }
+    followHeldUp(run, lab, frame, moved / seconds);
     const moving = moved / seconds > MOVING_SPEED;
     heights.push(moving ? hips.y - groundHeight(hips.x, hips.z) : NaN);
     if (!moving) return;
@@ -387,6 +514,7 @@ async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null):
     down.forEach((isDown, side) => {
       if (isDown) run.planted[side]++;
     });
+    followReach(run, legs);
     const support = down[0] && down[1] ? 'double' : down[0] || down[1] ? 'single' : 'flight';
     if (support === 'double') run.bothDown++;
     if (support === 'flight') run.bothUp++;
@@ -406,6 +534,40 @@ async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null):
   }
   run.bobs = bobOfSteps(heights, run.steps);
   return run;
+}
+
+/** Counts a frame the body moved well short of its velocity (`speed` its move over the ground, m/s), and names the
+ *  first with the nearest obstacle: a scenario run into a prop measures a body stopping and starting, not a walk. */
+function followHeldUp(run: GaitRun, lab: Lab, frame: number, speed: number): void {
+  const velocity = Math.hypot(lab.player.vel.x, lab.player.vel.z);
+  if (velocity < HELD_UP_SPEED || speed > HELD_UP_SHARE * velocity) return;
+  run.heldUp++;
+  if (run.heldUpAt) return;
+  const at = lab.player.pos;
+  const nearest = G.arena.obstacles.reduce(
+    (best, obstacle) => {
+      const gap = Math.hypot(obstacle.x - at.x, obstacle.z - at.z) - obstacle.r;
+      return gap < best.gap ? { gap, x: obstacle.x, z: obstacle.z } : best;
+    },
+    { gap: Infinity, x: NaN, z: NaN },
+  );
+  const near = Number.isFinite(nearest.gap)
+    ? `, the nearest obstacle ${cm(nearest.gap)} cm off, at ${nearest.x.toFixed(1)}, ${nearest.z.toFixed(1)}`
+    : '';
+  run.heldUpAt = `frame ${frame}, at ${at.x.toFixed(1)}, ${at.z.toFixed(1)}${near}`;
+}
+
+/** Counts the planted feet dragged this frame, and each one's run of such frames, and those on their toes. */
+function followReach(run: GaitRun, legs: LegIK): void {
+  legs.feet.forEach((foot, side) => {
+    const planted = foot.state === 'plant';
+    // (where the IK says: an A/B's older side may not)
+    const dragged = planted && Boolean((foot as { dragged?: boolean }).dragged);
+    run.dragRun[side] = dragged ? run.dragRun[side] + 1 : 0;
+    if (dragged) run.dragged++;
+    if (planted && foot.over) run.onToes++;
+    run.longestDrag = Math.max(run.longestDrag, run.dragRun[side]);
+  });
 }
 
 /** The hips' mean height over the ground with the feet as `support` has them, or nothing if never so. */
@@ -429,7 +591,10 @@ function unlikeAPerson(run: GaitRun, speed: number): string[] {
     found.push('the hips no higher in the air than on one foot: a run hung from a string, not pushed off the ground');
   }
   if (run.shortSteps) found.push(`${run.shortSteps} steps under ${cm(SHORT_STEP)} cm: a foot dance`);
-  if (run.jerks) found.push(`${run.jerks} jerks: a sudden change of speed in a frame`);
+  if (run.longestDrag >= DRAG_RUN) {
+    found.push(`a planted foot dragged for up to ${run.longestDrag} frames: the leg short of it, even on its toes`);
+  }
+  if (run.jerks) found.push(`${run.jerks} jerks: a sudden change of the change of speed in a frame`);
   return found;
 }
 
@@ -461,7 +626,15 @@ function describeRun(scenario: GaitScenario, run: GaitRun, seconds: number, list
     `  the hips rise and fall ${cm(median(run.bobs))} cm a step (the median); over the ground, in the air`
       + ` ${heightOf(flight)} cm, on one foot ${heightOf(single)}, on both ${heightOf(double)}`,
   );
-  lines.push(`  the worst jerk ${run.worstJerk.toFixed(2)} m/s in a frame (${run.worstJerkAt || 'none'})`);
+  const worst = `${run.worstJerk.toFixed(2)} m/s (${run.worstJerkAt || 'none'})`;
+  lines.push(`  the worst jerk, a change of the change of speed in a frame: ${worst}`);
+  lines.push(
+    `  a planted foot dragged ${share(run.dragged, run.moving)} of the time, up to ${run.longestDrag} frames running;`
+      + ` on its toes, out of a flat foot's reach, ${share(run.onToes, run.moving)}`,
+  );
+  if (run.heldUp) {
+    lines.push(`  held up by something in its way ${run.heldUp} frames (${run.heldUpAt}): not a walk to judge`);
+  }
   const unlike = unlikeAPerson(run, speed);
   lines.push(unlike.length ? `  unlike a person: ${unlike.join('; ')}` : '  as a person walks');
   if (listSteps) {
@@ -473,6 +646,7 @@ function describeRun(scenario: GaitScenario, run: GaitRun, seconds: number, list
     lines.push(...run.hops.map((hop) => `    ${hop}`));
     lines.push(...run.jerkList.map((jerk) => `    jerk ${jerk}`));
   }
+  lines.push(...run.trace);
   return lines;
 }
 
@@ -493,11 +667,12 @@ function filmMoment(scenario: GaitScenario, film: Film): Pictured | null {
  */
 export async function gait(lab: Lab, options: GaitOptions): Promise<GaitReport> {
   const asked = options.scenarios?.length ? options.scenarios : GAIT_SCENARIOS;
-  const report: GaitReport = { lines: [], moments: [] };
+  const report: GaitReport = { lines: [], moments: [], problems: [] };
   const seconds = window.__labClock.frame / 1000;
   for (const scenario of SCENARIOS.filter((candidate) => asked.includes(candidate.name))) {
-    const run = await runScenario(lab, scenario, null);
+    const run = await runScenario(lab, scenario, null, Boolean(options.trace));
     report.lines.push(...describeRun(scenario, run, seconds, Boolean(options.frames)));
+    if (run.heldUp) report.problems.push(`gait: ${scenario.name} was held up by something in its way (${run.heldUpAt})`);
     const film = filmFor(run.hopFrames);
     await runScenario(lab, scenario, film);
     const moment = filmMoment(scenario, film);
@@ -505,7 +680,8 @@ export async function gait(lab: Lab, options: GaitOptions): Promise<GaitReport> 
   }
   report.lines.push(
     'a person: walks to about 2 m/s with a foot always down and both down 15 to 25% of the time, the hips highest on'
-      + ' one foot; runs above, 20 to 35% in the air, the hips 5 to 9 cm up and down and highest in the air',
+      + ' one foot; runs above, in the air more the faster (20 to 35% at a jog, about half at 7 m/s), the hips 5 to 9'
+      + ' cm up and down and highest in the air; each hand swings against its own leg',
   );
   return report;
 }

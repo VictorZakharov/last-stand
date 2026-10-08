@@ -77,16 +77,21 @@ async function writeMoments(results, dir, browser, name = 'sheet.png') {
 }
 
 /**
- * Each side's text under its name, and a sheet of each side's moments, written in `dir`: `sheet.png` for this tree's,
- * `sheet-main.png` for the other side's. For films, whose two sides in one sheet were a page too big for the browser.
+ * Each side's text under its name, and a sheet for each of each side's moments, written in `dir`: `film-1.png` on for
+ * this tree's, `film-main-1.png` on for the other side's. For films: two sides' in one sheet, or eight scenarios' of
+ * one side, were a page too big for the browser, which closed.
  */
 async function textWithSheetEach(results, dir, browser) {
   const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
   const images = [];
-  for (const entry of results) {
-    const name = entry[0].isRepo ? 'sheet.png' : 'sheet-main.png';
-    const image = await writeMoments([entry], dir, browser, name);
-    if (image) images.push(relative(REPO, image));
+  for (const [side, result] of results) {
+    const prefix = side.isRepo ? 'film-' : 'film-main-';
+    const moments = result?.moments ?? [];
+    for (const [index, moment] of moments.entries()) {
+      const one = [side, { ...result, moments: [moment] }];
+      const image = await writeMoments([one], dir, browser, `${prefix}${index + 1}.png`);
+      if (image) images.push(relative(REPO, image));
+    }
   }
   return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
 }
@@ -151,7 +156,11 @@ export const COMMANDS = {
 
   gait: {
     each(side, options) {
-      return side.command('gait', { scenarios: options.scenarios, frames: Boolean(options.frames) });
+      return side.command('gait', {
+        scenarios: options.scenarios,
+        frames: Boolean(options.frames),
+        trace: Boolean(options.trace),
+      });
     },
     finish(results, options, session) {
       return textWithSheetEach(results, join(OUT, 'gait'), session.browser);
