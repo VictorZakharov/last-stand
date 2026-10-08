@@ -8,7 +8,7 @@ import { sfx } from '../core/audio';
 import { isCoop } from '../net/role';
 import { partnerBoards, session } from '../net/session';
 import { serverPings } from '../net/netlog';
-import { mine, perSecond, type RunNumbers } from '../game/stats';
+import { mine, type RunNumbers } from '../game/stats';
 import { isTouch } from './touch';
 import type { Player } from '../entities/player';
 
@@ -83,7 +83,7 @@ function rowHtml(r: Row): string {
   return `<tr class="${p.local ? 'me' : ''}${state ? ` st-${state.split(' ')[0]}` : ''}">` +
     `<td class="sb-who"><b>${esc(p.cls.name)}</b><small>${r.who}${state ? ` · ${state}` : ''}</small></td>` +
     `<td class="sb-ping"><div><span class="q-${quality(r.rtt)}">${ping}</span>${graph(r.pings, r.rtt)}</div>${behind}</td>` +
-    `<td>${short(n.dealt)}</td><td class="sb-minor">${short(perSecond(n))}</td>` +
+    `<td>${short(n.dealt)}</td>` +
     `<td>${short(n.taken)}${blocked}</td><td class="sb-minor">${short(n.healed)}</td>` +
     `<td>${n.kills}</td><td>${n.downs}</td><td>${n.revives}</td></tr>`;
 }
@@ -99,7 +99,7 @@ function headline(): string {
 
 function render(el: HTMLElement): void {
   el.innerHTML = `<div class="sb-head">${headline()}</div><table><thead><tr>` +
-    '<th class="sb-who">Player</th><th class="sb-ping">Ping</th><th>Damage</th><th class="sb-minor">DPS</th>' +
+    '<th class="sb-who">Player</th><th class="sb-ping">Ping</th><th>Damage</th>' +
     '<th>Taken</th><th class="sb-minor">Healed</th><th>Kills</th><th>Downs</th><th>Revives</th>' +
     `</tr></thead><tbody>${rows().map(rowHtml).join('')}</tbody></table>` +
     '<div class="sb-foot">Ping: each player\'s round trip to the co-op server. A partner is shown on your screen a little behind its own game.</div>';

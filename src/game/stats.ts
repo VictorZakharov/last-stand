@@ -59,6 +59,3 @@ export function creditRaise(p: Player): void {
   if (!counting() || p.local || !me.active || !me.reviving) return;
   if (Math.hypot(me.pos.x - p.pos.x, me.pos.z - p.pos.z) < COOP.reviveRange) mine.revives++;
 }
-
-/** Damage a second over a run's numbers, up to now. */
-export const perSecond = (n: RunNumbers): number => n.dealt / Math.max(1, G.time - n.since);
