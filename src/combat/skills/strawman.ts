@@ -9,6 +9,8 @@ import { addEffect, shockwave } from '../../fx/effects';
 import { debris } from '../../fx/particles';
 import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
+import { additive } from '../../core/materials';
+import { floorPatch, lay } from '../../fx/floorPatch';
 import { resolveWorld } from '../../world/collision';
 import { lures, lurable, LURE_SLOT, type Lure } from '../lures';
 import { mulberry } from '../../util';
@@ -69,21 +71,73 @@ function scarecrow(): THREE.BufferGeometry {
 }
 const strawMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
 
+/** Where it stands for an aim at `target`: at the aim, within reach, out of the props and inside the arena. */
+function standAt(player: { pos: THREE.Vector3 }, def: Def, target: THREE.Vector3): THREE.Vector3 {
+  const pos = target.clone().sub(player.pos); pos.y = 0;
+  if (pos.length() > def.range) pos.setLength(def.range);
+  pos.add(player.pos); pos.y = 0;
+  const R = G.arena.radius - 1.5, r = Math.hypot(pos.x, pos.z);
+  if (r > R) { pos.x *= R / r; pos.z *= R / r; }
+  resolveWorld(pos, BODY_R + 0.1);
+  return pos;
+}
+
+/** (it faces the one who raised it) */
+const facingFrom = (player: { pos: THREE.Vector3 }, pos: THREE.Vector3): number => Math.atan2(player.pos.x - pos.x, player.pos.z - pos.z);
+
+/** the preview's glow: the scarecrow's outline where it would stand, and the ring it calls foes from */
+const ghostMat = () => additive(STRAW, 0.7, 0.32);
+const reachGeo = () => floorPatch(0.975, 1, 1, 96);
+/** the ring at its foot (m: from above, the scarecrow's outline alone was a small blur of light) */
+const SPOT_R = BODY_R + 0.35;
+const spotGeo = () => floorPatch(0.8, 1, 1, 40);
+
+/**
+ * While the key is held: a glowing outline of the scarecrow where it would stand, a ring at its foot, and how far it
+ * would call foes from.
+ */
+interface Preview { body: THREE.Mesh; spot: THREE.Mesh; spotG: THREE.BufferGeometry; reach: THREE.Mesh; reachG: THREE.BufferGeometry }
+let preview: Preview | null = null;
+
+function previewFor(): Preview {
+  if (preview) return preview;
+  const reachG = reachGeo(), spotG = spotGeo();
+  const body = new THREE.Mesh(scarecrow(), ghostMat()), reach = new THREE.Mesh(reachG, additive(STRAW, 1, 0.45));
+  const spot = new THREE.Mesh(spotG, additive(STRAW, 1.6, 0.8));
+  body.frustumCulled = spot.frustumCulled = reach.frustumCulled = false;
+  body.name = 'strawman-preview'; spot.name = 'strawman-preview-spot'; reach.name = 'strawman-preview-reach';
+  G.scene.add(body, spot, reach);
+  preview = { body, spot, spotG, reach, reachG };
+  return preview;
+}
+
+/** Shows where it would stand for `target` (null: nothing shown). */
+function showStand(player: { pos: THREE.Vector3 }, def: Def, target: THREE.Vector3 | null): void {
+  if (!target) {
+    if (preview) preview.body.visible = preview.spot.visible = preview.reach.visible = false;
+    return;
+  }
+  const p = previewFor(), pos = standAt(player, def, target);
+  p.body.visible = p.spot.visible = p.reach.visible = true;
+  p.spot.position.set(pos.x, 0, pos.z);
+  p.spot.scale.set(SPOT_R, 1, SPOT_R);
+  lay(p.spotG, pos.x, pos.z, 0.05, SPOT_R);
+  p.body.position.set(pos.x, groundHeight(pos.x, pos.z), pos.z);
+  p.body.rotation.set(0, facingFrom(player, pos), 0);
+  p.reach.position.set(pos.x, 0, pos.z);
+  p.reach.scale.set(def.radius, 1, def.radius);
+  lay(p.reachG, pos.x, pos.z, 0.05, def.radius);
+}
+
 const skill: InstantSkill = {
-  anim: 'cast', warm: () => [new THREE.Mesh(scarecrow(), strawMat)],
+  anim: 'cast', warm: () => [new THREE.Mesh(scarecrow(), strawMat), new THREE.Mesh(scarecrow(), ghostMat()), new THREE.Mesh(reachGeo(), additive(STRAW, 1, 0.45))],
+  aim: (player, def, target) => showStand(player, def as Def, target),
   cast(player, rawDef, target) {
     const def = rawDef as Def;
-    // at the aim, within reach, out of the props and inside the arena
-    const pos = target.clone().sub(player.pos); pos.y = 0;
-    if (pos.length() > def.range) pos.setLength(def.range);
-    pos.add(player.pos); pos.y = 0;
-    const R = G.arena.radius - 1.5, r = Math.hypot(pos.x, pos.z);
-    if (r > R) { pos.x *= R / r; pos.z *= R / r; }
-    resolveWorld(pos, BODY_R + 0.1);
+    const pos = standAt(player, def, target);
     const mesh = new THREE.Mesh(scarecrow(), strawMat);
     mesh.castShadow = true; mesh.name = 'strawman';
-    // (it faces the one who raised it)
-    const yaw = Math.atan2(player.pos.x - pos.x, player.pos.z - pos.z);
+    const yaw = facingFrom(player, pos);
     G.scene.add(mesh);
     // rocking under the blows: a spring each way it can tip
     const tip = { x: 0, z: 0, vx: 0, vz: 0 };

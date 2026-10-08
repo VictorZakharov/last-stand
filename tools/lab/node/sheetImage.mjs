@@ -3,6 +3,8 @@
 
 const TILE_WIDTH = 340;
 const TILE_HEIGHT = 560;
+/** a screen picture (`lab.screen`) is as wide as it shows at the row's height, up to this */
+const SCREEN_TILE_WIDTH = 960;
 const NOTES_WIDTH = 300;
 const GAP = 3;
 
@@ -22,11 +24,25 @@ function escapeHtml(text) {
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 }
 
+/** A tile's width on the sheet: a view's crop the common width, a screen picture its own at the row's height. */
+function tileWidth(tile) {
+  if (tile.view !== 'screen') return TILE_WIDTH;
+  return Math.min(SCREEN_TILE_WIDTH, Math.round(tile.width * TILE_HEIGHT / tile.height));
+}
+
+/** A row's width on the sheet: its notes and its tiles. */
+function rowWidth(moment) {
+  return NOTES_WIDTH + moment.tiles.reduce((width, tile) => width + tileWidth(tile) + GAP, 0);
+}
+
 function rowHtml(moment, sideName) {
   const side = sideName ? `<i>${escapeHtml(sideName)}</i>` : '';
   const notes = moment.notes.map((note) => `<p>${escapeHtml(note)}</p>`).join('');
   const tiles = moment.tiles
-    .map((tile) => `<figure><img src="${tile.png}"><figcaption>${tile.view}</figcaption></figure>`)
+    .map((tile) => {
+      const figure = `<figure style="width: ${tileWidth(tile)}px">`;
+      return `${figure}<img src="${tile.png}"><figcaption>${tile.view}</figcaption></figure>`;
+    })
     .join('');
   return `<div class="row"><div class="notes"><b>${escapeHtml(moment.label)}</b>${side}${notes}</div>${tiles}</div>`;
 }
@@ -37,14 +53,16 @@ function rowHtml(moment, sideName) {
  */
 export async function writeSheet(browser, runs, viewCount, file) {
   const rows = [];
+  let width = NOTES_WIDTH + viewCount * (TILE_WIDTH + GAP);
   const moments = Math.max(...runs.map(([, sheet]) => sheet.moments.length));
   for (let i = 0; i < moments; i++) {
     for (const [sideName, sheet] of runs) {
       const moment = sheet.moments[i];
-      if (moment) rows.push(rowHtml(moment, runs.length > 1 ? sideName : ''));
+      if (!moment) continue;
+      rows.push(rowHtml(moment, runs.length > 1 ? sideName : ''));
+      width = Math.max(width, rowWidth(moment));
     }
   }
-  const width = NOTES_WIDTH + viewCount * (TILE_WIDTH + GAP);
   const page = await browser.newPage({ viewport: { width, height: TILE_HEIGHT + GAP } });
   try {
     await page.setContent(`<!doctype html><style>${STYLE}</style>${rows.join('')}`);

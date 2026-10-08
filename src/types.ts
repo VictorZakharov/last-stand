@@ -77,6 +77,9 @@ export interface SkillDef {
    *  the full draw's speed, `power`), never less than `minDraw` */
   draw?: number;
   minDraw?: number;
+  /** aimed while its key is held, where it would land shown (`InstantSkill.aim`), and cast as the key is let go (touch
+   *  casts its buttons' skills on release already) */
+  aimed?: boolean;
   icon: { glyph: string; color: string };
   /** VFX colors */
   color?: number;

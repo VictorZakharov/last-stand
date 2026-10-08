@@ -205,7 +205,7 @@ export function updateHud(): void {
     setStyle(slot.cd, '--p', pct(k));
     setText(slot.cdt, left > 0.05 ? (left < 1 ? left.toFixed(1) : String(Math.ceil(left))) : '');
     slot.el.classList.toggle('nomana', p.energy < (sk.def.channel ? sk.def.cost * 0.2 : sk.def.cost));
-    slot.el.classList.toggle('active', p.channel?.key === slot.key || p.casting?.skill === sk);
+    slot.el.classList.toggle('active', p.channel?.key === slot.key || p.casting?.skill === sk || p.aiming?.key === slot.key);
     slot.el.classList.toggle('busy', p.heldUp(sk));
   }
 

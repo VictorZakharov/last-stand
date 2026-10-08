@@ -10,7 +10,9 @@ import * as THREE from 'three';
 import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
 import { CAMERA } from '../../../src/data/balance';
-import { clearEnemies } from '../../../src/entities/enemy';
+import { spawnEnemy } from '../../../src/entities/spawner';
+import type { Enemy } from '../../../src/entities/enemy';
+import type { EnemyId } from '../../../src/data/enemies';
 import * as cape from '../../../src/entities/models/cape';
 import * as renderer from '../../../src/core/renderer';
 import { updateSeeThrough } from '../../../src/core/seeThrough';
@@ -162,6 +164,8 @@ export class Lab {
   aim = new THREE.Vector3();
   /** what every frame of the current set-up needs before its input (the foes kept away, the hero unhurt) */
   private keepUp: (() => void)[] = [];
+  /** the foes a measure spawned (`spawnFoe`), which the set-up's hold of the wave keeps */
+  private readonly foes = new Set<Enemy>();
   /** what a command runs before every frame, ahead of the set-up's (co-op: the messages that arrived by then) */
   readonly beforeFrame: (() => void)[] = [];
 
@@ -223,6 +227,17 @@ export class Lab {
     // (the game's clock from 0: the idle's sway runs on it, so a boot's first set-up is always at the same moment)
     G.time = 0;
     window.__lab = this;
+  }
+
+  /**
+   * A foe of `type` spawned at `at` for a measure that needs one (a mark, a lure), kept by the set-up while every other
+   * is cleared (no wave comes) until the next set-up. It rises as a spawned foe does first (`Enemy.spawning`), and
+   * thinks as one does: a training dummy (`dummy`) stands still.
+   */
+  spawnFoe(type: EnemyId, at: THREE.Vector3): Enemy {
+    const foe = spawnEnemy(type, at, { wave: 1 });
+    this.foes.add(foe);
+    return foe;
   }
 
   /** Puts the mouse over a point in the world, as the player would. */
@@ -289,7 +304,8 @@ export class Lab {
   /** Sets the run up as `fixture` says and checks that it took (throws if not). Returns what it is, for the report. */
   async setup(fixture: Fixture = {}): Promise<Record<string, unknown>> {
     await this.enterRun();
-    this.keepUp = [holdTheWave, keepHeroWhole];
+    this.foes.clear();
+    this.keepUp = [() => holdTheWave(this.foes), keepHeroWhole];
     await this.until(() => !this.player.casting && !this.player.channel, 400, 'the hero is still busy with a cast');
     await this.useView(fixture.view ?? 'top');
     const [x, z] = fixture.at ?? SPOT;
@@ -390,11 +406,12 @@ export class Lab {
   /**
    * This moment as the player sees it, under `label` with `notes` beside it: the frame drawn by the game's own camera
    * with the page's UI over it (the HUD, a menu, a tooltip), pictured by the browser, whole or clipped round the
-   * element `around` names (a CSS selector). For a report's `moments`, as `picture`'s, whose views show the game alone.
+   * element `around` names (a CSS selector) or to an area of the page (`around` a `Clip`, as `screenArea` makes one
+   * round points of the world). For a report's `moments`, as `picture`'s, whose views show the game alone.
    */
-  async screen(label: string, notes: string[] = [], around?: string): Promise<Pictured> {
+  async screen(label: string, notes: string[] = [], around?: string | Clip): Promise<Pictured> {
     if (!window.__labScreenshot) throw new Error('lab: screen: this page has no screenshots (opened by an older lab)');
-    const clip = around === undefined ? undefined : clipRound(around);
+    const clip = around === undefined ? undefined : typeof around === 'string' ? clipRound(around) : withinWindow(around);
     const drawing = this.drawing;
     this.drawing = true;
     try {
@@ -522,11 +539,34 @@ function clipRound(selector: string): Clip {
   if (!element) throw new Error(`lab: screen: nothing on the page is ${selector}`);
   const box = element.getBoundingClientRect();
   if (box.width === 0 || box.height === 0) throw new Error(`lab: screen: ${selector} isn't shown`);
-  const x = Math.max(0, Math.floor(box.left - SCREEN_MARGIN));
-  const y = Math.max(0, Math.floor(box.top - SCREEN_MARGIN));
-  const right = Math.min(innerWidth, Math.ceil(box.right + SCREEN_MARGIN));
-  const bottom = Math.min(innerHeight, Math.ceil(box.bottom + SCREEN_MARGIN));
+  return withinWindow({ x: box.left, y: box.top, width: box.width, height: box.height }, SCREEN_MARGIN);
+}
+
+/** `area` grown by `margin` on every side, in whole pixels within the window. */
+function withinWindow(area: Clip, margin = 0): Clip {
+  const x = Math.max(0, Math.floor(area.x - margin));
+  const y = Math.max(0, Math.floor(area.y - margin));
+  const right = Math.min(innerWidth, Math.ceil(area.x + area.width + margin));
+  const bottom = Math.min(innerHeight, Math.ceil(area.y + area.height + margin));
+  if (right <= x || bottom <= y) throw new Error('lab: screen: the area is off the window');
   return { x, y, width: right - x, height: bottom - y };
+}
+
+/**
+ * The area of the page the game's camera shows `points` of the world in, `margin` px out from them on every side: a
+ * screen picture (`Lab.screen`) of what's round them, the UI over it included.
+ */
+export function screenArea(points: THREE.Vector3[], margin = SCREEN_MARGIN): Clip {
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const point of points) {
+    const ndc = point.clone().project(G.camera);
+    xs.push((ndc.x + 1) / 2 * innerWidth);
+    ys.push((1 - ndc.y) / 2 * innerHeight);
+  }
+  const x = Math.min(...xs) - margin;
+  const y = Math.min(...ys) - margin;
+  return { x, y, width: Math.max(...xs) + margin - x, height: Math.max(...ys) + margin - y };
 }
 
 function wholeFrame(): Crop {
@@ -550,10 +590,12 @@ function cropCanvas(source: HTMLCanvasElement, crop: Crop, view: ViewName): Tile
  * The run held in its countdown before the first wave: no foes and none coming, so a set-up's state is the hero's
  * alone. (Foes parked far off still thought, drew random numbers and turned the hero's head towards them.)
  */
-function holdTheWave(): void {
+function holdTheWave(kept: Set<Enemy>): void {
   const run = G.run;
   if (!run) return;
-  if (G.enemies.length) clearEnemies();
+  const others = G.enemies.filter((enemy) => !kept.has(enemy));
+  for (const enemy of others) enemy.dispose();
+  if (others.length) G.enemies.splice(0, G.enemies.length, ...G.enemies.filter((enemy) => kept.has(enemy)));
   run.queue = [];
   run.phase = 'countdown';
   run.timer = Infinity;

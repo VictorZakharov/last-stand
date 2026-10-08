@@ -190,13 +190,17 @@ What the lab gives a probe (`page/lab.ts`):
 - `lab.step(count, input?, measure?)`: frames run with each frame's input (`keys`, `m0` / `m2` for the mouse buttons,
   `look` for mouse look, `aim` for the point the mouse is over) and measured after each, a row a frame;
 - `lab.until(done, limit, what, input?)`: frames until `done`, throwing `lab: <what>` if it never is;
+- `lab.spawnFoe(type, at)`: a foe for a measure that needs one (a mark, a lure), which the set-up keeps while it clears
+  every other until the next set-up; it rises first as a spawned foe does (`Enemy.spawning`), and a training dummy
+  (`dummy`) stands still;
 - `lab.capture(views)`: pictures of this moment as PNGs (`lab.drawing = true` draws every frame instead), and
   `lab.picture(label, views, notes)` one moment of a report's `moments`: the lab writes them as a sheet
   (`out/probes/<probe>/sheet.png`) and compares them in an A/B, as the sheet's (to see the frames a measure flagged,
   run the measure's input to them and picture each);
 - `await lab.screen(label, notes, around?)`: this moment as the player sees it, the game drawn by its own camera with the
-  page's UI over it (the HUD, a menu, a tooltip), pictured by the browser, whole or clipped round the element a CSS
-  selector names (`'#hotbar'`), as a moment of the report's `moments` (`picture`'s views show the game's canvas alone);
+  page's UI over it (the HUD, a menu, a tooltip), pictured by the browser, whole, clipped round the element a CSS
+  selector names (`'#hotbar'`) or to an area of the page (`screenArea(points)`: round points of the world as the
+  camera shows them), as a moment of the report's `moments` (`picture`'s views show the game's canvas alone);
 - `timeCalls(owner, method)` (`page/timing.ts`): every call of a method timed by the browser's own clock (the page's
   `performance.now` is the lab's, which stands still within a frame), for a cost: its calls, total, median and 90th
   percentile. The timer ticks in 0.1 ms, so take a frame's mean over many, and compare sides within one A/B (the

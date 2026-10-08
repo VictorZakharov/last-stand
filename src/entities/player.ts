@@ -123,6 +123,9 @@ export class Player {
   /** a drawn shot pressed for while busy (a tap during the last one's reload): it's drawn as soon as the hero is free, and
    *  forgotten when any other skill is pressed or cast */
   private queued: { skill: KnownSkill; key: SkillKey } | null = null;
+  /** an aimed skill (`SkillDef.aimed`) whose key is held: where it would land is shown, and it's cast as the key is
+   *  let go */
+  aiming: { skill: KnownSkill; key: SkillKey } | null = null;
   phase = 0;
   /** which way the walk cycle runs: 1, or -1 backpedalling (see `cycleOn`) */
   private phaseDir = 1;
@@ -269,6 +272,7 @@ export class Player {
   }
 
   reset(): void {
+    this.endAim();
     if (this.channel) this.stopChannel();
     this.ward?.onEnd?.();
     this.life = this.stats.maxLife;
@@ -379,6 +383,7 @@ export class Player {
 
     // a channel ends when the key that started it is released
     if (this.channel && !isDown(this.channel.key)) this.stopChannel();
+    this.holdAim();
     if ((input.mouse.overUI && !input.touchMode) || this.dash || this.staggered) return;
     // the shot remembered from a press while busy: drawn now, and loosed at once if its key is up again (a tap)
     if (this.queued && !this.casting && !this.channel) { const q = this.queued; this.queued = null; this.tryCast(q.skill, q.key); }
@@ -391,8 +396,48 @@ export class Player {
       if (pressed && busy) this.queued = skill.def.draw && !skill.impl.channel ? { skill, key } : null;
       if (!isDown(key)) continue;
       if (skill.impl.channel) { if (!this.channel && !this.casting) this.startChannel(skill, key); }
+      else if (skill.def.aimed && !input.touchMode) { if (this.aiming?.key !== key) this.startAim(skill, key); }
       else this.tryCast(skill, key);
     }
+  }
+
+  /** An aimed skill's key held: aimed from now on (another being aimed is given up). */
+  private startAim(skill: KnownSkill, key: SkillKey): void {
+    this.endAim();
+    this.aiming = { skill, key };
+  }
+
+  /**
+   * The aimed skill let go: cast at the aim (once the hero is free, if an action is under way: as a shot pressed for
+   * meanwhile, it waits for it).
+   */
+  private holdAim(): void {
+    const a = this.aiming;
+    if (!a) return;
+    const held = isDown(a.key);
+    if (held && this.skillAt(a.key) === a.skill) return;
+    this.endAim();
+    // (its key's skill changed under it, a style's loadout: given up)
+    if (held) return;
+    if (this.casting || this.channel || this.dash || this.staggered) this.queued = { skill: a.skill, key: a.key };
+    else this.tryCast(a.skill, a.key);
+  }
+
+  /**
+   * Where the aimed skill would land, shown for this frame: once the foes have moved (`main`'s update), as the cast
+   * would find them. Shown during the hero's own update, a mark's preview trailed its foe by the frame's move.
+   */
+  showAim(dt: number): void {
+    const a = this.aiming;
+    if (a && !a.skill.impl.channel) a.skill.impl.aim?.(this, a.skill.def, this.aim, dt);
+  }
+
+  /** No skill aimed any more: its preview gone. */
+  private endAim(): void {
+    const a = this.aiming;
+    if (!a) return;
+    this.aiming = null;
+    if (!a.skill.impl.channel) a.skill.impl.aim?.(this, a.skill.def, null, 0);
   }
 
   /** `key`: the key casting it, which holds a drawn shot (`SkillDef.draw`) until it's let go */
@@ -874,6 +919,7 @@ export class Player {
   }
 
   die(): void {
+    this.endAim();
     this.life = 0;
     this.alive = false;
     this.deadT = 0;

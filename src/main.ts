@@ -357,6 +357,7 @@ function update(dt: number): void {
   if (G.mode === 'run') { updateRun(dt); checkRunOver(); }
   updateEnemies(dt);
   if (simulates()) separateEnemies();
+  G.player.showAim(dt);
   perfLap('enemies');
   updateSession(dt, G.player.reviving);
   if (G.mode === 'run') {
