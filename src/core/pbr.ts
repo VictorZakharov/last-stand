@@ -10,7 +10,9 @@ type PBRSampler = (u: number, v: number, out: PBRSample) => void;
 /** A material's maps as RGBA pixels, `size` square (or `size` wide and `height` tall). */
 export interface PBRData { size: number; height?: number; albedo: Uint8ClampedArray<ArrayBuffer>; normal: Uint8ClampedArray<ArrayBuffer>; rough: Uint8ClampedArray<ArrayBuffer> }
 
-// Builds albedo / normal / roughness maps from per-pixel callbacks.
+// Builds albedo / normal / roughness maps from per-pixel callbacks. The roughness map's red channel (which no material
+// reads: roughness is green) keeps the height, 0 at the map's lowest point and 1 at its highest, for the floors'
+// relief (core/parallax.ts).
 function buildPBR(size: number, sampler: PBRSampler, normalStrength = 2.5): PBRData {
   const n = size * size;
   const height = new Float32Array(n);
@@ -41,6 +43,10 @@ function buildPBR(size: number, sampler: PBRSampler, normalStrength = 2.5): PBRD
       normal[i + 3] = 255;
     }
   }
+  let low = Infinity, high = -Infinity;
+  for (let i = 0; i < n; i++) { low = Math.min(low, height[i]); high = Math.max(high, height[i]); }
+  const span = high - low || 1;
+  for (let i = 0; i < n; i++) rough[i * 4] = (height[i] - low) / span * 255;
   return { size, albedo, normal, rough };
 }
 
@@ -164,29 +170,129 @@ function burlap(): PBRData {
   return maps;
 }
 
-/** Forest floor: dark soil with leaf litter and a few pebbles (moss is added in world space by the biome, so it doesn't tile). */
+/**
+ * A tileable scatter of things on a jittered grid, at most one a cell (`share` of the cells): each with its centre in its
+ * cell (cell units), a turn (its cos and sin), a size and an id (0..1). `near(u, v)` lists those in the 3x3 cells round the point
+ * (a thing must reach no further than a cell from its centre), as offsets from the point to each centre.
+ */
+function makeScatter(seed: number, cells: number, share: number) {
+  const rng = mulberry(seed), n = cells * cells;
+  const cx = new Float32Array(n), cy = new Float32Array(n), size = new Float32Array(n), id = new Float32Array(n);
+  const cos = new Float32Array(n), sin = new Float32Array(n), on = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const turn = rng() * Math.PI * 2;
+    cx[i] = rng(); cy[i] = rng(); cos[i] = Math.cos(turn); sin[i] = Math.sin(turn); size[i] = rng(); id[i] = rng();
+    on[i] = rng() < share ? 1 : 0;
+  }
+  const found = { count: 0, dx: new Float32Array(9), dy: new Float32Array(9), k: new Int32Array(9) };
+  const near = (u: number, v: number) => {
+    const x = u * cells, y = v * cells, xi = Math.floor(x), yi = Math.floor(y);
+    found.count = 0;
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+      // (wrapped round the tile by a comparison: the point is in it, so a neighbour is at most a cell outside)
+      const gx = xi + ox, gy = yi + oy;
+      const wx = gx < 0 ? gx + cells : gx >= cells ? gx - cells : gx, wy = gy < 0 ? gy + cells : gy >= cells ? gy - cells : gy;
+      const k = wy * cells + wx;
+      if (!on[k]) continue;
+      const j = found.count++;
+      found.dx[j] = gx + cx[k] - x; found.dy[j] = gy + cy[k] - y; found.k[j] = k;
+    }
+    return found;
+  };
+  return { near, cos, sin, size, id, cells };
+}
+
+/** the forest floor's tile (m) and its texels (cm a pixel: 5 m over 1024) */
+const FLOOR_TILE = 5;
+const FLOOR_CM = FLOOR_TILE * 100 / 1024;
+/** a leaf's colours, fresh to rotten (sRGB 0..1): russet, ochre, tan, yellowed green, brown, rotten */
+const LEAF_COLOURS: [number, number, number][] = [
+  [0.46, 0.2, 0.08], [0.52, 0.34, 0.11], [0.4, 0.27, 0.13], [0.4, 0.38, 0.14], [0.3, 0.18, 0.08], [0.19, 0.12, 0.06],
+];
+
+/**
+ * Forest floor (5 m a tile, heights in cm): clumpy dark soil under a litter of fallen leaves in three layers (each leaf
+ * turned its own way, cupped, a raised midrib with veins off it and its edges darker; the lower layers older and
+ * darker), twigs lying across them and pebbles from 2 to 6 cm across. At each point what lies highest is what shows,
+ * so pebbles poke through the leaves and twigs lie over them: the floors' relief (core/parallax.ts) stands each up out
+ * of the soil. Moss is added in world space by the biome, so it doesn't tile.
+ */
 function forestFloor(): PBRData {
-  const fine = makeFbm(29, 48, 3);
-  const leaves = makeVoronoi(17, 44);
-  const pebbles = makeVoronoi(23, 20);
-  const maps = buildPBR(1024, (u, v, o) => {
-    const f = fine(u, v);
-    // the Voronoi result object is reused: read each lookup before the next
-    const lc = leaves(u, v);
-    // scattered leaves: small blobs around some cell centers, not whole cells (that reads as paving)
-    const leafId = lc.id, leaf = leafId < 0.45 ? smooth(clamp((0.26 - lc.f1) / 0.08, 0, 1)) * (0.5 + f) : 0;
-    const pc = pebbles(u, v);
-    const stone = pc.id > 0.86 ? smooth(clamp((0.3 - pc.f1) / 0.12, 0, 1)) : 0;
-    const k = 0.8 + f * 0.4;
-    let r = 0.15 * k, g = 0.11 * k, b = 0.075 * k, h = f * 0.25, rough = 0.95;
-    const mix = (w: number, cr: number, cg: number, cb: number, ch: number, cro: number) => {
-      r += (cr - r) * w; g += (cg - g) * w; b += (cb - b) * w; h += (ch - h) * w; rough += (cro - rough) * w;
+  const soil = makeFbm(29, 24, 4), crumbs = makeFbm(31, 160, 2), rot = makeFbm(37, 96, 2);
+  const leafCells = 64, twigCells = 24, pebbleCells = 32;
+  const layers = [makeScatter(41, leafCells, 0.55), makeScatter(43, leafCells, 0.45), makeScatter(47, leafCells, 0.35)];
+  const twigs = makeScatter(53, twigCells, 0.18), pebbles = makeScatter(59, pebbleCells, 0.22);
+  const cm = (cells: number) => FLOOR_TILE * 100 / cells;   // a cell of a grid, cm
+  return buildPBR(1024, (u, v, o) => {
+    // the soil: clumpy, crumbs over it, darker where it's damp
+    const s = soil(u, v), c = crumbs(u, v), rotten = rot(u, v) - 0.5;
+    let h = s * 0.9 + c * 0.25, r = 0.13, g = 0.09, b = 0.06, rough = 0.95;
+    const damp = smooth(clamp((s - 0.55) / 0.2, 0, 1));
+    const k = (0.75 + c * 0.5) * (1 - damp * 0.3);
+    r *= k; g *= k; b *= k;
+    const lay = (top: number, cr: number, cg: number, cb: number, ro: number) => {
+      if (top <= h) return;
+      h = top; r = cr; g = cg; b = cb; rough = ro;
     };
-    mix(leaf, 0.26 + leafId * 0.3, 0.14 + leafId * 0.14, 0.05, 0.4 + f * 0.1, 0.7);
-    mix(stone, 0.22 * k, 0.22 * k, 0.2 * k, 0.8, 0.6);
-    o.r = clamp(r, 0, 1); o.g = clamp(g, 0, 1); o.b = clamp(b, 0, 1); o.h = h; o.rough = rough;
-  }, 3);
-  return maps;
+    // the leaves, layer by layer up
+    layers.forEach((layer, li) => {
+      const near = layer.near(u, v), size = cm(layer.cells);
+      for (let j = 0; j < near.count; j++) {
+        const key = near.k[j], z = layer.size[key], half = 4 + z * 3.5;
+        const px = -near.dx[j] * size, py = -near.dy[j] * size;
+        if (px * px + py * py >= half * half) continue;
+        // along the leaf and across it (cm), its half length 4 to 7.5 cm, half width a third of that or more
+        const cs = layer.cos[key], sn = layer.sin[key];
+        const a = px * cs + py * sn, w0 = -px * sn + py * cs, wide = half * (0.32 + layer.id[key] * 0.14);
+        const along = a / half;
+        if (Math.abs(along) >= 1) continue;
+        const width = wide * Math.pow(Math.sin((along + 1) * Math.PI / 2), 0.85) * (along < 0 ? 1 : 1 - along * 0.25);
+        const across = w0 / width;
+        if (width <= 0 || Math.abs(across) >= 1) continue;
+        const cup = across * across, rib = Math.max(0, 1 - Math.abs(w0) / 0.25);
+        const vein = Math.max(0, 1 - Math.abs(((along * 3.5 - Math.abs(across) * 1.4) % 1 + 1) % 1 - 0.5) / 0.08);
+        const top = 0.6 + li * 0.45 + layer.size[key] * 0.15 + cup * 0.45 + rib * 0.12 - vein * 0.04;
+        // fresher on top, older below, rotting in spots, darker to its edges
+        const age = clamp(layer.id[key] * 0.7 + (2 - li) * 0.18 + rotten * 0.5, 0, 0.999);
+        const col = LEAF_COLOURS[Math.floor(age * LEAF_COLOURS.length)];
+        const shade = (1 - cup * 0.35) * (1 + rib * 0.25) * (1 - vein * 0.25) * (0.85 + c * 0.3);
+        lay(top, col[0] * shade, col[1] * shade, col[2] * shade, 0.72 + age * 0.2);
+      }
+    });
+    // twigs: capsules lying over the litter, 16 to 38 cm long and 1.2 to 2 cm thick
+    {
+      const near = twigs.near(u, v), size = cm(twigCells);
+      for (let j = 0; j < near.count; j++) {
+        const key = near.k[j], half = (0.4 + twigs.size[key] * 0.5) * size;
+        const px = -near.dx[j] * size, py = -near.dy[j] * size;
+        if (px * px + py * py >= (half + 1) * (half + 1)) continue;
+        const dirX = twigs.cos[key], dirY = twigs.sin[key];
+        const along = clamp(px * dirX + py * dirY, -half, half);
+        const d = Math.hypot(px - along * dirX, py - along * dirY), radius = 0.6 + twigs.id[key] * 0.4;
+        if (d >= radius) continue;
+        const round = Math.sqrt(1 - (d / radius) ** 2);
+        const bark = 0.8 + round * 0.3 + (crumbs(u * 3, v) - 0.5) * 0.25;
+        lay(1.5 + radius * round * 2, 0.22 * bark, 0.16 * bark, 0.1 * bark, 0.85);
+      }
+    }
+    // pebbles: low domes, 2 to 6 cm across, a little flattened and turned
+    {
+      const near = pebbles.near(u, v), size = cm(pebbleCells);
+      for (let j = 0; j < near.count; j++) {
+        const key = near.k[j], radius = 1 + pebbles.size[key] * 2;
+        const px = -near.dx[j] * size, py = -near.dy[j] * size;
+        if (px * px + py * py >= radius * radius * 1.6) continue;
+        const cs = pebbles.cos[key], sn = pebbles.sin[key];
+        const qx = (px * cs + py * sn) / 1.25, qy = -px * sn + py * cs;
+        const d = Math.hypot(qx, qy);
+        if (d >= radius) continue;
+        const dome = Math.sqrt(1 - (d / radius) ** 2);
+        const grey = (0.28 + pebbles.id[key] * 0.12) * (0.85 + dome * 0.25 + (crumbs(u * 2, v * 2) - 0.5) * 0.2);
+        lay(1.2 + dome * radius * 0.75, grey, grey * 0.97, grey * 0.9, 0.6);
+      }
+    }
+    o.h = h; o.r = clamp(r, 0, 1); o.g = clamp(g, 0, 1); o.b = clamp(b, 0, 1); o.rough = rough;
+  }, 1 / (2 * FLOOR_CM));
 }
 
 /** Tree bark: deep vertical furrows between rough plates (v runs along the trunk). */

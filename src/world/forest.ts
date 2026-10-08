@@ -8,11 +8,12 @@ import { ARENA } from '../data/balance';
 import { forestFloor, bark, slabs, grunge, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
-import { buildDaySky, boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
+import { buildDaySky, boxWithUV, buildEnvMap, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type TuftColours, type Updater } from './props';
 import { growTree, REACH_BANDS, type Grow } from './ezTrees';
 import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
 import { bend, rag, taperTube, twist } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
+import { floorRelief } from '../core/parallax';
 import type { Obstacle } from '../types';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
@@ -23,7 +24,42 @@ const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 /** angular distance from `a` to the nearest spawn gate */
 const gateGap = (a: number) => Math.min(...GATES.map((g) => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g)))));
 
-/** Large moss patches tinted over the floor in world space (a texture this big would tile visibly). */
+/** the forest floor's maps' repeat over the ground (110 m round) */
+const FLOOR_REPEAT = 44;
+/** its relief: the soil this far under the pebbles' and leaves' tops (m), and gone this far off (m: past the top-down view's 30 to 51) */
+const FLOOR_RELIEF = { depth: 0.045, perMetre: FLOOR_REPEAT / 220, fade: 70 };
+
+/** grass sways this far at its tips (m), slowly (rad/s), each tuft a little after the one upwind of it */
+const SWAY = 0.05, SWAY_RATE = 1.3;
+
+/**
+ * Wind in the grass: each blade's points swayed by the square of their height (a blade bends from its root), the tufts
+ * along a wave that crosses the clearing, on the game's clock (an updater keeps the time).
+ */
+function windInGrass(m: THREE.MeshStandardMaterial, updaters: Updater[]): THREE.MeshStandardMaterial {
+  const time = { value: 0 };
+  updaters.push((_dt, t) => { time.value = t; });
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uWind = time;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uWind;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec2 tuftAt = instanceMatrix[3].xz;
+        #else
+          vec2 tuftAt = vec2(0.0);
+        #endif
+        float bend = transformed.y * transformed.y * 4.0;
+        float gust = sin(uWind * ${SWAY_RATE.toFixed(2)} + tuftAt.x * 0.35 + tuftAt.y * 0.22) * 0.75
+          + sin(uWind * ${(SWAY_RATE * 2.3).toFixed(2)} + tuftAt.x * 0.9 - tuftAt.y * 0.6) * 0.25;
+        transformed.xz += vec2(0.8, 0.6) * gust * ${SWAY.toFixed(3)} * bend;`);
+  };
+  m.customProgramCacheKey = () => 'windgrass';
+  return m;
+}
+
+/** Large moss patches tinted over the floor in world space (a texture this big would tile visibly). The pebbles and
+ *  leaves stand up out of the soil (core/parallax.ts). */
 function mossyGround<M extends THREE.Material>(m: M): M {
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
@@ -39,6 +75,7 @@ function mossyGround<M extends THREE.Material>(m: M): M {
         float mossV = mossN(vMossXZ * 0.11) * 0.6 + mossN(vMossXZ * 0.37 + 7.0) * 0.3 + mossN(vMossXZ * 1.3) * 0.1;
         float moss = smoothstep(0.4, 0.7, mossV);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045, 0.09, 0.025) * (0.7 + mossN(vMossXZ * 3.1) * 0.6), moss * 0.75);`);
+    floorRelief(shader, FLOOR_RELIEF);
   };
   m.customProgramCacheKey = () => 'mossyground';
   return m;
@@ -53,7 +90,7 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   const h = ARENA.daisHalf;
 
   // --- Materials ------------------------------------------------------------
-  const groundMat = mossyGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(forestFloor(), 22, 1.2), color: 0xffffff }));
+  const groundMat = mossyGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(forestFloor(), FLOOR_REPEAT, 1.2), color: 0xffffff }));
   const daisMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(slabs(47, 5, 5), 1, 1.2), color: 0x94a488 });
   const stoneMaps = pbrMaterialMaps(grunge(), 2, 1.6);
   const stone = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x70746a, roughness: 0.9 });
@@ -74,7 +111,7 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   const mossMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(grunge(), 2, 3), color: 0x44642a, roughness: 1 });
   const hangMat = new THREE.MeshStandardMaterial({ color: 0x2c4424, roughness: 1, side: THREE.DoubleSide });
   const heartwood = new THREE.MeshStandardMaterial({ ...barkMaps, color: 0x7a5a3c, roughness: 0.95 });
-  const grassMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
+  const grassMat = windInGrass(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }), updaters);
   const capMat = new THREE.MeshStandardMaterial({ color: 0x0c2a24, emissive: 0x2affc8, emissiveIntensity: 0.75, roughness: 0.5 });
   const stemMat = new THREE.MeshStandardMaterial({ color: 0xb8b09a, roughness: 0.8 });
   const glyphMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x6aff7a, emissiveIntensity: 2.0 });
@@ -277,18 +314,26 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   // --- Undergrowth: grass tufts, small glowing mushrooms, pebbles ---------------------
   const clump = makeFbm(5, 6, 3);
   const free = (x: number, z: number, pad: number) => Math.max(Math.abs(x), Math.abs(z)) > h + 0.9 && obstacles.every((o) => Math.hypot(x - o.x, z - o.z) > o.r + pad);
-  const grass = new THREE.InstancedMesh(buildGrassGeo(rng, [0.02, 0.035, 0.012], [0.12, 0.2, 0.05]), grassMat, 1600);
-  let gi = 0;
-  for (let tries = 0; gi < grass.count && tries < 20000; tries++) {
+  // tufts of three shapes, so no two neighbours are one tuft turned
+  // (each shape from a stream of its own: drawn from the biome's, every prop placed after them moved)
+  const tuftColours: TuftColours = { root: [0.015, 0.035, 0.01], mid: [0.07, 0.15, 0.03], tip: [0.2, 0.32, 0.07], dry: [0.32, 0.3, 0.1], dryShare: 0.18 };
+  const tufts = [0, 1, 2].map((kind) => new THREE.InstancedMesh(buildGrassTuft(mulberry(71 + kind), 16, tuftColours), grassMat, 534));
+  // (the one tuft there was drew 35 numbers from the biome's stream here: drawn still, so every prop placed after the
+  // grass stands where it stood)
+  for (let i = 0; i < 35; i++) rng();
+  const placed = tufts.map(() => 0);
+  for (let tries = 0, gi = 0; gi < 1600 && tries < 20000; tries++) {
     const a = r(0, TAU), rr = Math.sqrt(r(0.02, 1)) * (WALL_R + 1.5);
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
     if (clump(x / 130 + 0.5, z / 130 + 0.5) < 0.44 || !free(x, z, 0.1)) continue;
-    const s = r(0.7, 1.4);
-    setInstance(grass, gi++, x, 0, z, 0, r(0, TAU), 0, s, s * r(0.8, 1.3), s);
+    const s = r(0.7, 1.4), kind = gi++ % tufts.length;
+    setInstance(tufts[kind], placed[kind]++, x, 0, z, 0, r(0, TAU), 0, s, s * r(0.8, 1.3), s);
   }
-  grass.count = gi;
-  grass.receiveShadow = true;
-  scene.add(grass);
+  tufts.forEach((tuft, kind) => {
+    tuft.count = placed[kind];
+    tuft.receiveShadow = true;
+    scene.add(tuft);
+  });
 
   const shroomN = 70;
   const caps = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 6, 0, TAU, 0, Math.PI / 2).scale(1, 0.55, 1), capMat, shroomN);
