@@ -6,6 +6,7 @@
 // `npm run lab:serve` keeps a session up between commands (server.mjs); without it, a command opens a session for
 // itself and closes it when done.
 import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { launchBrowser, useLocalTemp } from './browser.mjs';
 import { COMMANDS } from './commands.mjs';
 import { exportCommit } from './commits.mjs';
@@ -50,6 +51,7 @@ export class LabSession {
    */
   async run({ command, options = { _: [] } }) {
     if (command === 'status') return { text: this.status(), problems: [] };
+    const relaunched = await this.keepBrowser();
     const handler = COMMANDS[command];
     if (!handler) throw labError(`no command ${command} (there are ${Object.keys(COMMANDS).join(', ')}, status)`);
     handler.check?.(options);
@@ -59,7 +61,7 @@ export class LabSession {
     // (this tree's turn first: its page was booted ahead, as the last command finished)
     const turns = [...shown].reverse();
     const heroClass = options.class ?? this.repoSide.heroClass ?? DEFAULT_CLASS;
-    const notes = [];
+    const notes = relaunched ? [relaunched] : [];
     const problems = [];
     const resultOf = new Map();
     for (const side of turns) {
@@ -91,7 +93,7 @@ export class LabSession {
     const text = handler.finish
       ? await handler.finish(results, options, this)
       : results.map(([side, result]) => `${side.name}\n${textOf(result)}`).join('\n\n');
-    const verdict = results.length === 2 ? await this.compareSides(handler, results) : null;
+    const verdict = results.length === 2 ? await this.compareSides(command, handler, results) : null;
     const failed = problems.length ? `FAILED: ${problems.join('; ')}` : null;
     const report = [...notes, text, verdict, failed, `(${seconds(started)})`].filter(Boolean).join('\n');
     return { text: report, problems };
@@ -109,14 +111,14 @@ export class LabSession {
 
   /**
    * The A/B's verdict on its two sides' results (the other commit's first): their reports line by line, and with a
-   * command that takes pictures, the pictures pixel by pixel.
+   * command that takes pictures, the pictures pixel by pixel, where they differ pictured in `out/ab/<command>`.
    */
-  async compareSides(handler, [[before, beforeResult], [after, afterResult]]) {
+  async compareSides(command, handler, [[before, beforeResult], [after, afterResult]]) {
     const textOf = handler.textOf ?? String;
     const lines = [describeDifferences(before.name, textOf(beforeResult), after.name, textOf(afterResult))];
     if (handler.pictures) {
       const pairs = handler.pictures(beforeResult, afterResult);
-      lines.push(await describePictureDifferences(this.browser, pairs));
+      lines.push(await describePictureDifferences(this.browser, pairs, join(OUT, 'ab', command)));
     }
     return lines.join('\n');
   }
@@ -126,11 +128,23 @@ export class LabSession {
    * other side's page first: one page alive at a time. Returns what it did, for the server's log.
    */
   async bootNext() {
+    await this.keepBrowser();
     await this.otherSide?.closePage();
     const heroClass = this.repoSide.heroClass ?? DEFAULT_CLASS;
     const started = Date.now();
     if (!(await this.repoSide.ready(heroClass))) return null;
     return `booted the ${heroClass} for the next command (${seconds(started)})`;
+  }
+
+  /**
+   * Launches the browser again if it has closed (it crashed, or was killed): every page, context and command after
+   * it failed on the dead one, and only a restart of the server brought the lab back. Returns a note if it did.
+   */
+  async keepBrowser() {
+    if (this.browser.isConnected()) return null;
+    this.browser = await launchBrowser();
+    for (const side of [this.repoSide, this.otherSide]) side?.useBrowser(this.browser);
+    return 'the browser had closed: launched it again';
   }
 
   async close() {
@@ -141,9 +155,14 @@ export class LabSession {
   /** The other side of an A/B: commit `ref` exported and served (the same one kept while it's asked for again). */
   async sideFor(ref) {
     const { sha, dir } = exportCommit(REPO, OUT, ref);
-    if (this.otherSide?.sha === sha) return this.otherSide;
-    await this.otherSide?.close();
     const name = `${ref} (${sha.slice(0, 7)})`;
+    if (this.otherSide?.sha === sha) {
+      // (named as it's asked for this time: the commit asked for as HEAD~1 and, two commits on, as HEAD~3 was still
+      // called HEAD~1)
+      this.otherSide.name = name;
+      return this.otherSide;
+    }
+    await this.otherSide?.close();
     this.otherSide = new Side({ name, root: dir, repo: REPO, outDir: OUT, browser: this.browser, sha });
     return this.otherSide;
   }

@@ -2,6 +2,7 @@
 // server restarting waited for, and a source change waited for (`--watch`).
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
+import { codeStamp } from './codeStamp.mjs';
 import { labError } from './errors.mjs';
 import { LAB_PORT, SERVER_NOTE } from './paths.mjs';
 
@@ -53,8 +54,8 @@ function isAlive(pid) {
 }
 
 /**
- * Whether a server is restarting: none answers, but the last one's watcher (`node --watch` in `lab:serve`) is still
- * alive and will start it again.
+ * Whether a server is restarting: none answers, but the last one's supervisor (supervisor.mjs) is still alive and
+ * will start it again.
  */
 function serverRestarting() {
   try {
@@ -65,32 +66,42 @@ function serverRestarting() {
   }
 }
 
-/** Waits for the server to answer again; resolves with whether it did. */
-async function waitForServer() {
+/** Waits for the server to answer again, running the code `stamp` names when given; resolves with whether it did. */
+async function waitForServer(stamp = null) {
   const deadline = Date.now() + RESTART_WAIT_MS;
   while (Date.now() < deadline) {
-    if (await request('/ping')) return true;
+    const reply = await request('/ping').catch(() => null);
+    if (reply && (!stamp || reply.stamp === stamp)) return true;
     await sleep(RESTART_POLL_MS);
   }
   return false;
 }
 
+/** how many times a command is sent to a server that keeps restarting before it gives up */
+const SEND_ATTEMPTS = 3;
+
 /**
- * Sends a command to the server; resolves with its reply (`{ ok, text, version }`), or null when no server is up. A
- * server restarting (its code changed: `lab:serve` watches it), before the command or under it, is waited for and
- * the command sent again.
+ * Sends a command to the server with the stamp of this command line's code; resolves with its reply (`{ ok, text,
+ * version }`), or null when no server is up. A server restarting, before the command or under it, or for it (its
+ * code isn't this command line's), is waited for and the command sent again.
  */
 export async function sendToServer(call) {
-  try {
-    const reply = await request('/run', call);
-    if (reply || !serverRestarting()) return reply;
-    console.log('(the lab server is restarting: waiting for it)');
-  } catch (error) {
-    if (error.code !== 'ECONNRESET') throw error;
-    console.log('(the lab server restarted while it ran the command: sending it again)');
+  const stamped = { ...call, stamp: codeStamp() };
+  for (let attempt = 0; attempt < SEND_ATTEMPTS; attempt++) {
+    let reply;
+    try {
+      reply = await request('/run', stamped);
+    } catch (error) {
+      if (error.code !== 'ECONNRESET') throw error;
+      console.log('(the lab server restarted while it ran the command: sending it again)');
+    }
+    if (reply && !reply.restarting) return reply;
+    if (reply === null && !serverRestarting()) return null;
+    if (reply) console.log(`(${reply.text}: waiting for it)`);
+    else if (reply === null) console.log('(the lab server is restarting: waiting for it)');
+    if (!(await waitForServer(stamped.stamp))) return null;
   }
-  if (!(await waitForServer())) return null;
-  return request('/run', call);
+  throw labError('the lab server kept restarting');
 }
 
 /**

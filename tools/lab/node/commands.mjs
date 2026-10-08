@@ -1,7 +1,7 @@
 // The lab's commands as the session runs them (tools/lab): each one's work on a side, how the sides' results are
 // put together and compared, and the problems a result reports. Their options are read and checked by options.mjs.
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { labError } from './errors.mjs';
 import { OUT, REPO } from './paths.mjs';
 import { probeFiles } from './probeFiles.mjs';
@@ -26,11 +26,14 @@ function sheetNotes(sheet) {
   return `set up as ${JSON.stringify(sheet.setup)}\n${moments.join('\n')}`;
 }
 
-/** The pictures two sheets took of the same moment from the same view, paired, each pair named for the verdict. */
+/**
+ * The pictures two sheets (or two reports with moments) took of the same moment from the same view, paired, each
+ * pair named for the verdict.
+ */
 function picturePairs(before, after) {
   const pairs = [];
-  for (const moment of after.moments) {
-    const other = before.moments.find((candidate) => candidate.label === moment.label);
+  for (const moment of after?.moments ?? []) {
+    const other = (before?.moments ?? []).find((candidate) => candidate.label === moment.label);
     if (!other) continue;
     for (const tile of moment.tiles) {
       const match = other.tiles.find((candidate) => candidate.view === tile.view);
@@ -55,6 +58,49 @@ function asText(result) {
 /** The problems a result reports: a report's, none otherwise. */
 function problemsIn(result) {
   return isReport(result) ? result.problems : [];
+}
+
+/**
+ * Writes the moments the sides' results pictured (a report's `moments`) as one sheet in `dir`; returns its path, or
+ * null when none pictured any.
+ */
+async function writeMoments(results, dir, browser, name = 'sheet.png') {
+  const runs = results
+    .filter(([, result]) => result?.moments?.length)
+    .map(([side, result]) => [side.name, { moments: result.moments }]);
+  if (runs.length === 0) return null;
+  mkdirSync(dir, { recursive: true });
+  const image = join(dir, name);
+  const views = Math.max(...runs.flatMap(([, { moments }]) => moments.map((moment) => moment.tiles.length)));
+  await writeSheet(browser, runs, views, image);
+  return image;
+}
+
+/**
+ * Each side's text under its name, and a sheet for each of each side's moments, written in `dir`: `film-1.png` on for
+ * this tree's, `film-main-1.png` on for the other side's. For films: two sides' in one sheet, or eight scenarios' of
+ * one side, were a page too big for the browser, which closed.
+ */
+async function textWithSheetEach(results, dir, browser) {
+  const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
+  const images = [];
+  for (const [side, result] of results) {
+    const prefix = side.isRepo ? 'film-' : 'film-main-';
+    const moments = result?.moments ?? [];
+    for (const [index, moment] of moments.entries()) {
+      const one = [side, { ...result, moments: [moment] }];
+      const image = await writeMoments([one], dir, browser, `${prefix}${index + 1}.png`);
+      if (image) images.push(relative(REPO, image));
+    }
+  }
+  return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
+}
+
+/** Each side's text under its name, and the sheet of the moments they pictured, written in `dir` (when any did). */
+async function textWithMoments(results, dir, browser) {
+  const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
+  const image = await writeMoments(results, dir, browser);
+  return image ? `${text}\n\npictures: ${relative(REPO, image)}` : text;
 }
 
 /** A probe module's path relative to the repo, with forward slashes; throws unless it's a file under the repo. */
@@ -101,10 +147,70 @@ export const COMMANDS = {
 
   carry: {
     each(side, options) {
-      return side.command('carry', { fixture: fixtureFrom(options), canary: Boolean(options.canary) });
+      const canary = Boolean(options.canary);
+      return side.command('carry', { fixture: fixtureFrom(options), canary, frames: Boolean(options.frames) });
     },
     textOf: asText,
     problemsOf: problemsIn,
+  },
+
+  gait: {
+    each(side, options) {
+      return side.command('gait', {
+        scenarios: options.scenarios,
+        frames: Boolean(options.frames),
+        trace: Boolean(options.trace),
+        span: options.span,
+      });
+    },
+    finish(results, options, session) {
+      return textWithSheetEach(results, join(OUT, 'gait'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    // (an A/B compares the reports, not the films: two sides' 48 frames each, loaded to compare, took the browser down)
+  },
+
+  stops: {
+    each(side, options) {
+      const listed = { frames: Boolean(options.frames), trace: Boolean(options.trace) };
+      return side.command('stops', { scenarios: options.scenarios, only: options.only, ...listed });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
+  range: {
+    each(side, options) {
+      return side.command('range', {
+        scenarios: options.scenarios,
+        canary: Boolean(options.canary),
+        frames: Boolean(options.frames),
+      });
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, join(OUT, 'range'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
+  feet: {
+    each(side, options) {
+      return side.command('feet', {
+        scenarios: options.scenarios,
+        canary: Boolean(options.canary),
+        frames: Boolean(options.frames),
+        trace: Boolean(options.trace),
+      });
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, join(OUT, 'feet'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
   },
 
   probe: {
@@ -122,8 +228,13 @@ export const COMMANDS = {
       const fixture = options.setup === false ? null : fixtureFrom(options);
       return side.probe(path, options, fixture);
     },
+    finish(results, options, session) {
+      const name = basename(options._[0]).replace(/\.[^.]+$/, '');
+      return textWithMoments(results, join(OUT, 'probes', name), session.browser);
+    },
     textOf: asText,
     problemsOf: problemsIn,
+    pictures: picturePairs,
   },
 
   eval: {

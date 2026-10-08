@@ -11,6 +11,7 @@ import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
 import { CAMERA } from '../../../src/data/balance';
 import { clearEnemies } from '../../../src/entities/enemy';
+import * as cape from '../../../src/entities/models/cape';
 import * as renderer from '../../../src/core/renderer';
 import { updateSeeThrough } from '../../../src/core/seeThrough';
 import { CLASSES } from '../../../src/data/classes';
@@ -27,6 +28,8 @@ interface LabClock {
   /** a frame's length, ms: a hair over a 60th of a second, a whole number of the grid's steps */
   frame: number;
   queue: FrameRequestCallback[];
+  /** the browser's own clock, ms: the page's `performance.now` is the lab's, which stands still within a frame */
+  realNow: () => number;
 }
 
 declare global {
@@ -47,6 +50,8 @@ const COMMAND_SEED = 0x1b873593;
 const SETUP_TIME = 60;
 /** the frames a set-up stands still once the hero is on his spot */
 const SETTLE_FRAMES = 90;
+/** the most presses of V a view takes (it cycles top-down, over the shoulder, through the eyes) */
+const VIEW_PRESSES = 3;
 
 /** One frame's input, as a player would give it. */
 export interface Frame {
@@ -77,13 +82,22 @@ export interface Fixture {
 export const VIEW_NAMES = ['lobby', 'top', 'third', 'eyes', 'front', 'left', 'right', 'back', 'above'] as const;
 export type ViewName = (typeof VIEW_NAMES)[number];
 
+/** A moment pictured (`Lab.picture`): its label, its pictures, and notes to read beside them. */
+export interface Pictured {
+  label: string;
+  tiles: Tile[];
+  notes: string[];
+}
+
 /**
- * What a command or a probe may return to say what it found: its text, and the problems that fail the command (a
- * canary the measure missed, a state that never came). A probe may return plain text or JSON instead.
+ * What a command or a probe may return to say what it found: its text, the problems that fail the command (a canary
+ * the measure missed, a state that never came), and moments pictured, which the lab writes as a sheet
+ * (`tools/lab/out/probes/<probe>/sheet.png`) and compares in an A/B. A probe may return plain text or JSON instead.
  */
 export interface Report {
   text: string;
   problems: string[];
+  moments?: Pictured[];
 }
 
 /** A close-up's camera: how far round from the hero's front (rad, positive to his left), and how high (m). */
@@ -123,17 +137,6 @@ export interface CaptureOptions {
 const SPOT: [number, number] = [12, 22];
 /** the mouse is put this far ahead of the hero: a shot goes off into the distance, out of the pictures */
 const AIM_AHEAD = 20;
-
-/** A task boundary, so workers' messages and the page's own events get through (a timeout's is 4 ms). */
-const nextTask = (() => {
-  const channel = new MessageChannel();
-  const waiting: (() => void)[] = [];
-  channel.port1.onmessage = () => waiting.shift()?.();
-  return () => new Promise<void>((resolve) => {
-    waiting.push(resolve);
-    channel.port2.postMessage(0);
-  });
-})();
 
 /** The lab's hold on the game in this page. */
 export class Lab {
@@ -175,8 +178,11 @@ export class Lab {
     return { hero: this.player.cls.id, heroes: Object.keys(CLASSES) };
   }
 
-  /** Takes the game's clock over, makes its draws skippable, and starts keeping its anatomy warnings. */
+  /** Takes the game's clock over, makes its draws skippable, steps the capes in the frame, and starts keeping its
+   *  anatomy warnings. */
   install(): void {
+    // (an A/B's side on a commit from before it has none: its capes step in the worker, as they did)
+    cape.stepCapesHere?.();
     const gl = G.renderer;
     const draw = gl.render.bind(gl);
     gl.render = (scene, camera) => {
@@ -224,7 +230,6 @@ export class Lab {
       this.applyInput(frame?.(f) ?? {});
       this.runGameFrame();
       if (measure) rows.push(measure(f));
-      if (this.yieldsBetweenFrames) await nextTask();
     }
     return rows;
   }
@@ -239,15 +244,6 @@ export class Lab {
       if (done()) return f + 1;
     }
     throw new Error(`lab: ${what} (not within ${limit} frames)`);
-  }
-
-  /**
-   * Whether the page gets a turn between frames: only for a hero with a cape, which steps in a web worker whose
-   * results arrive between tasks. Without one the frames run back to back and two runs are exactly the same (with a
-   * turn after every frame, whatever landed in it landed between different frames, and runs parted by micrometres).
-   */
-  private get yieldsBetweenFrames(): boolean {
-    return (this.model.worldObjects?.length ?? 0) > 0;
   }
 
   private runGameFrame(): void {
@@ -315,14 +311,21 @@ export class Lab {
     await this.until(() => G.mode === 'run' && !this.player.sandbox, 600, 'the run never started');
   }
 
+  /**
+   * The run's view made `view` as the player makes it, pressing V until it is (the game sets the camera's view from its
+   * own every frame: set on the camera alone, it was back top-down a frame later).
+   */
   private async useView(view: renderer.ViewMode): Promise<void> {
-    if (renderer.viewMode() !== view) {
-      // (the glide between views cut to a frame: it isn't what's measured)
-      const camera = CAMERA as { switchTime: number };
-      const glide = camera.switchTime;
-      camera.switchTime = 1e-4;
-      renderer.setView(view);
-      await this.step(3);
+    // (the glide between views cut to a frame: it isn't what's measured)
+    const camera = CAMERA as { switchTime: number };
+    const glide = camera.switchTime;
+    camera.switchTime = 1e-4;
+    try {
+      for (let press = 0; press < VIEW_PRESSES && renderer.viewMode() !== view; press++) {
+        await this.step(1, () => ({ keys: ['v'] }));
+        await this.step(2);
+      }
+    } finally {
       camera.switchTime = glide;
     }
     if (renderer.viewMode() !== view || !renderer.viewSettled()) {
@@ -361,6 +364,12 @@ export class Lab {
   jointNames(): string[] {
     const joints = this.joints as unknown as Record<string, unknown>;
     return Object.keys(joints).filter((name) => joints[name] instanceof THREE.Object3D);
+  }
+
+  /** This moment pictured from `views`, under `label`, with `notes` beside it: for a report's `moments`. */
+  picture(label: string, views: ViewName[], notes: string[] = [], options: CaptureOptions = {}): Pictured {
+    this.model.root.updateMatrixWorld(true);
+    return { label, tiles: this.capture(views, options), notes };
   }
 
   /** Pictures of the game as it is now, nothing advanced; the game's camera is put back as it was. */

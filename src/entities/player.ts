@@ -1,6 +1,6 @@
 // The player character: input -> movement/skills, resources, damage, animation.
 import * as THREE from 'three';
-import { gaitRate, legLength, LookAt } from './models/ik';
+import { gaitRate, legLength, LookAt, type LegIK } from './models/ik';
 import { watchBody } from './models/anatomy';
 import { G } from '../state';
 import { CLASSES } from '../data/classes/index';
@@ -34,6 +34,9 @@ export interface Ward { amount: number; t: number; onHit?(absorbed: number): voi
 /** Absolute difference between two headings. */
 /** after an attack or cast, the body stays on its aim this long (s) before turning to face the way it goes */
 const AIM_HOLD = 0.45;
+/** how fast the body turns at most onto the way it goes (rad/s): eased alone, it swung half round in four frames at a
+ *  reversal, 38 degrees in the first, and the pelvis and legs snapped round with it */
+const TURN_MOST = 9;
 /** a shot from the weapon's tip heads for its target, but never further off the body's line to it than a point this far
  *  along that line (m) */
 const SHOT_NEAR = 5;
@@ -104,6 +107,9 @@ export class Player {
 
   readonly pos = new THREE.Vector3(0, 0, 3);
   readonly vel = new THREE.Vector3();
+  /** the velocity the input eases the body towards and how quickly (`damp`'s rate), told to the legs (`LegIK.intend`) */
+  private readonly goal = new THREE.Vector3();
+  private goalRate = 0;
   readonly aim = new THREE.Vector3();
   readonly radius = 0.45;
   facing = Math.PI;
@@ -113,6 +119,8 @@ export class Player {
    *  forgotten when any other skill is pressed or cast */
   private queued: { skill: KnownSkill; key: SkillKey } | null = null;
   phase = 0;
+  /** which way the walk cycle runs: 1, or -1 backpedalling (see `cycleOn`) */
+  private phaseDir = 1;
   /** true in the lobby: free casting, no costs, no cooldowns */
   sandbox = false;
 
@@ -333,6 +341,8 @@ export class Player {
       // the co-op pause menu: stand still and let go of any channel
       this.vel.x = damp(this.vel.x, 0, 14, dt);
       this.vel.z = damp(this.vel.z, 0, 14, dt);
+      this.goal.set(0, 0, 0);
+      this.goalRate = 14;
       if (this.channel) this.stopChannel();
       return;
     }
@@ -355,6 +365,8 @@ export class Player {
     const kv = tx * tx + tz * tz > this.vel.x * this.vel.x + this.vel.z * this.vel.z ? 9 : 12;
     this.vel.x = damp(this.vel.x, tx, kv, dt);
     this.vel.z = damp(this.vel.z, tz, kv, dt);
+    this.goal.set(tx, 0, tz);
+    this.goalRate = kv;
 
     this.aim.copy(input.ground);
 
@@ -569,7 +581,8 @@ export class Player {
     if (look !== null && !d) this.facing = look;
     else if (!fighting && this.aimHold > 0) this.faceTowards(this.aim);
     else if ((!this.casting || this.casting.skill.def.freeMove) && !this.channel && speed > 0.5) {
-      this.facing = angleDamp(this.facing, Math.atan2(this.vel.x, this.vel.z), 14, dt);
+      const eased = angleDamp(this.facing, Math.atan2(this.vel.x, this.vel.z), 14, dt);
+      this.facing += Math.max(-TURN_MOST * dt, Math.min(TURN_MOST * dt, eased - this.facing));
     }
 
     // resources & cooldowns
@@ -632,13 +645,31 @@ export class Player {
     this.aim.set(r.ax, 0, r.az);
   }
 
+  /** The walk cycle's phase moved on by `step` (rad), the way it runs, turning round to `want` only as it crosses a
+   *  foot's mid-swing, a whole number of half cycles (the leg IK's windows are centred there): the swinging foot's
+   *  window then goes back the way it came as far as it had gone, and the other's is half a cycle off either way, so
+   *  the rhythm holds. Turned round anywhere else, a foot just down was due again at once: going round in circles with
+   *  a shot drawn, the cycle turned round twice a lap as the body went sideways to its aim, and the feet left out of
+   *  turn, both in the air a quarter of the time. */
+  private cycleOn(step: number, want: number): number {
+    const next = this.phase + step * this.phaseDir;
+    if (want === this.phaseDir) return next;
+    const halves = Math.floor(next / Math.PI);
+    const halvesWere = Math.floor(this.phase / Math.PI);
+    if (halves === halvesWere) return next;
+    // (back from the half cycle it crossed by as far as it went past it)
+    const crossed = Math.max(halves, halvesWere) * Math.PI;
+    this.phaseDir = want;
+    return 2 * crossed - next;
+  }
+
   private animateBody(dt: number, t: number, speed: number): void {
 
     const fwd = Math.sin(this.facing) * this.vel.x + Math.cos(this.facing) * this.vel.z;
     const side = Math.cos(this.facing) * this.vel.x - Math.sin(this.facing) * this.vel.z;
     // (a dash's legs step at a sprint's cadence, not at the dash's speed)
     const gs = this.dash ? Math.min(speed, this.stats.moveSpeed) : speed;
-    this.phase += dt * gs * gaitRate(gs, legLength(this.model)) * (fwd < -0.5 ? -1 : 1);
+    this.phase = this.cycleOn(dt * gs * gaitRate(gs, legLength(this.model)), fwd < -0.5 ? -1 : 1);
     let action: ActionState | null = null;
     if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };
     else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / (this.dash.dur + this.dash.hold)) };
@@ -703,6 +734,9 @@ export class Player {
     this.model.root.position.set(0, d ? d.lift * 4 * k * (1 - k) : 0, 0);
     // a raised player gets up the way it went down, in reverse
     const dead = this.deadT >= 0 ? Math.min(1, this.deadT / 1.0) : this.rising > 0 ? this.rising / RISE : -1;
+    // (the legs told where the body is going, as the game eases it there: a stop's last stride lands where it rests)
+    const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
+    if (this.local && !this.dash && this.goalRate > 0) legs?.intend(this.goal, this.goalRate);
     this.model.animate({
       t, dt, phase: this.phase, move, moveDir: dir, lean, action,
       hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,

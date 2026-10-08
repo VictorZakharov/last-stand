@@ -268,6 +268,23 @@ export function clampAnkle(q: THREE.Quaternion, left: boolean, loaded: boolean, 
   return true;
 }
 
+/** Holds an ankle's roll (its inversion) within its range, its twist and lift as they are: a planted foot under a
+ *  shin leaning out further than an ankle rolls lies on its edge (laid flat, the ankle read 57 degrees as a running
+ *  reversal landed a foot under a leg splayed out). True if it changed. */
+export function clampAnkleRoll(q: THREE.Quaternion, left: boolean): boolean {
+  if (!ROM_ON) return false;
+  const tw = twistAngle(q, Y, _sw), [x, z] = swingXZ(_sw);
+  const inv = (left ? -z : z) * DEG, [i0, i1] = ROM['ankle.inversion'];
+  const inv2 = Math.max(i0, Math.min(i1, inv));
+  if (inv2 === inv) return false;
+  _sv.set(x, 0, (left ? -inv2 : inv2) / DEG);
+  const a = _sv.length();
+  if (a < 1e-9) _sw.identity();
+  else _sw.setFromAxisAngle(_sv.multiplyScalar(1 / a), a);
+  q.copy(_sw).multiply(_tq.setFromAxisAngle(Y, tw));
+  return true;
+}
+
 const _da = new THREE.Vector3(), _db = new THREE.Vector3(), _dc = new THREE.Vector3(), _dm = new THREE.Matrix4();
 /** how deep (the rig's units) a capsule from `a` to `b` (world) of radius `r` passes into `s`; negative clear of it. `inv`: `s`'s joint's inverse world matrix, if already at hand */
 export function capsuleDepth(a: THREE.Vector3, b: THREE.Vector3, r: number, s: Solid, inv?: THREE.Matrix4): number {

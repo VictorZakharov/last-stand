@@ -6,7 +6,7 @@ import { labError } from './errors.mjs';
  * How an option's value is read:
  * - `switch`: `--name` is true, `--name=false` false;
  * - `text`: `--name value` or `--name=value`;
- * - `list`: comma-separated text, as a list;
+ * - `list`: comma-separated text, as a list (each one of `choices`, when it has them);
  * - `number`: a finite number;
  * - `pair`: two numbers, `x,z`;
  * - `choice`: one of `choices`;
@@ -64,7 +64,75 @@ export const COMMANDS = {
     help: 'the ranger\'s carried bow against his body through a carry\'s round',
     options: {
       canary: { kind: 'switch', help: 'plant faults the measure must catch' },
+      frames: { kind: 'switch', help: 'list every frame with a clip: its phase, what crossed what, how deep' },
       ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  feet: {
+    help: 'the hero\'s feet against the ground round the dais\'s edges and on level ground: standing at full draw by '
+      + 'the edges, walking across them and strafing up and down the steps with a shot drawn',
+    options: {
+      scenarios: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['edge', 'level', 'strafe', 'cross', 'run'],
+        help: 'the scenarios (all by default): edge, level, strafe, cross, run',
+      },
+      canary: { kind: 'switch', help: 'plant faults the measures must catch: a planted ankle slid, one sunk' },
+      frames: { kind: 'switch', help: 'list every stance and standing case flagged, and what was wrong with it' },
+      trace: { kind: 'switch', help: 'each frame of each walk, foot by foot (pick one with --scenarios)' },
+      ...COMMON_OPTIONS,
+    },
+  },
+  range: {
+    help: 'every joint of the hero against a body\'s ranges, frame by frame: standing, walking each way, attacking, '
+      + 'and walks that change direction while he attacks or runs',
+    options: {
+      scenarios: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['stand', 'walk', 'shoot', 'reverse', 'taps', 'run'],
+        help: 'the scenarios (all by default): stand, walk, shoot, reverse, taps, run',
+      },
+      canary: { kind: 'switch', help: 'plant a fault the measure must catch: the head turned past the neck\'s range' },
+      frames: { kind: 'switch', help: 'list every frame with a joint past its range' },
+      ...COMMON_OPTIONS,
+    },
+  },
+  stops: {
+    help: 'the hero coming to a stop from a run, judged as a person stops: the steps once still, a foot put out and '
+      + 'drawn back, a step back, a foot off the body\'s level, on level ground and by the dais\'s edge',
+    options: {
+      scenarios: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['level', 'drawn', 'edgeOut', 'edgeIn', 'edgeSlant', 'edgeAlong', 'edgeShot'],
+        help: 'the scenarios (all by default): level, drawn, edgeOut, edgeIn, edgeSlant, edgeAlong, edgeShot',
+      },
+      frames: { kind: 'switch', help: 'list every stop: where it rested, each step after the keys were let go' },
+      trace: { kind: 'switch', help: 'with --frames, each frame of each stop along the way from where it rested' },
+      only: { kind: 'text', usage: 'name', help: 'only the stops whose names contain this (d 23, 12 cm out)' },
+      ...COMMON_OPTIONS,
+    },
+  },
+  gait: {
+    help: 'the hero\'s walk judged as a person\'s, over level ground and the dais\'s steps, nothing drawn, drawn and '
+      + 'changing direction: the time on each foot, both and neither, the steps, the hops, the hips\' rise and fall, '
+      + 'the jerks, each filmed from the side',
+    options: {
+      scenarios: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['walk', 'drawn', 'taps', 'zigzag', 'circle', 'circleDrawn', 'stairs', 'stairsDrawn'],
+        help: 'the scenarios (all by default): walk, drawn, taps, zigzag, circle, circleDrawn, stairs, stairsDrawn',
+      },
+      frames: { kind: 'switch', help: 'list every step (its foot, when it left and landed, how far) and the hops' },
+      trace: {
+        kind: 'switch',
+        help: 'list every frame: the way the body faces and goes, the pelvis, the cycle, each foot',
+      },
+      span: { kind: 'pair', usage: 'from,to', help: 'with --trace, only the frames from the first to the second' },
       ...COMMON_OPTIONS,
     },
   },
@@ -137,6 +205,8 @@ function readValue(name, spec, text) {
     case 'list': {
       const items = text.split(',').map((item) => item.trim()).filter(Boolean);
       if (items.length === 0) throw wrong('a comma-separated list');
+      const unknown = items.find((item) => spec.choices && !spec.choices.includes(item));
+      if (unknown !== undefined) throw wrong(`some of ${spec.choices.join(', ')}${suggestion(unknown, spec.choices)}`);
       return items;
     }
     case 'number': {

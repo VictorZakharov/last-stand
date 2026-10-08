@@ -2,7 +2,8 @@
 // The solver works in world space; this adapter feeds it neckline anchors and
 // a capsule body rig derived from our procedural humanoid's joints, and steps it
 // at the solver's fixed 120 Hz rate: in a web worker (the solver's own WebGL worker
-// pool), or on the main thread within a time budget when workers are unavailable.
+// pool), or on the main thread within a time budget when workers are unavailable (or
+// the lab asks for it, `stepCapesHere`).
 import * as THREE from 'three';
 import { CapeSimulation } from '../../vendor/cape/physics/CapeSimulation';
 import { WebGlCapeWorkerPool } from '../../vendor/cape/physics/WebGlCapeWorkerPool';
@@ -54,6 +55,15 @@ const NECK_COLUMN = 6;   // middle of the pinned top row
 // one worker pool for every cape; the cloth has no world colliders in the arena
 let pool: WebGlCapeWorkerPool | null = null;
 let nextId = 1;
+/** whether the capes step in the worker pool (the lab steps them here, on its own clock) */
+let inWorkers = true;
+
+/** Steps every cape on the main thread from now on, each frame's steps in that frame. A worker's results land
+ *  between tasks, a frame or two late and not always the same frame, so two runs of one scene drew its cape apart:
+ *  the lab's pictures of a commit against itself differed wherever the cloth showed. */
+export function stepCapesHere(): void {
+  inWorkers = false;
+}
 
 export class SkeletonCape {
   readonly sim: CapeSimulation;
@@ -156,7 +166,8 @@ export class SkeletonCape {
     if (neckVel.lengthSq() > velocity.lengthSq()) velocity = neckVel;
     this.acc = Math.min(this.acc + dt, PHYSICS_STEP * MAX_PHYSICS_STEPS);
     // a failed worker stops driving the cape and it carries on here from the last result
-    const synced = pool?.isDrivingCape(this.id) ? this.stepInWorker(anchors, colliders, velocity) : this.stepHere(anchors, colliders, velocity);
+    const inWorker = inWorkers && pool?.isDrivingCape(this.id);
+    const synced = inWorker ? this.stepInWorker(anchors, colliders, velocity) : this.stepHere(anchors, colliders, velocity);
     if (synced || reset) this.sim.syncGeometry();
     // worker results are a frame or two old: shift the cloth onto this frame's neckline
     const pin = neck.add(_p.copy(this.pinBias).applyQuaternion(this.o.root.getWorldQuaternion(_q)));

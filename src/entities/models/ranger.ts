@@ -11,7 +11,7 @@ import { createKit } from '../../core/materials';
 import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, bowWood as bowWoodMaps, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
-import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, lod } from './armor';
+import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, armOffThigh, lod, type JointPoint } from './armor';
 import { onTunic, tunicFront, tunicBack, tunicCut, setInSleeve, armholeEdge, ARMHOLE, WAIST } from './tunic';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM, type Head } from './head';
 import { EYE } from './face';
@@ -540,6 +540,29 @@ export function buildRanger(): Model {
   bowBodies.add([bow.group, bow.lowerLimb[0]], [bow.group, bow.lowerLimb[1]], 0.02 + HAND_GAP, 0.016 + HAND_GAP);
   bowBodies.add([bow.group, bow.lowerLimb[1]], [bow.group, bow.lowerLimb[2]], 0.016 + HAND_GAP, 0.01 + HAND_GAP);
   const outside = [...handBodies.list, ...bowBodies.list];
+  // (and the arrow on the string, pointing down past the hem in the carry: draped behind the string alone, the cloth lay over
+  // the arrow's upper half and it went in under the coat on a third of a walk's frames)
+  const arrowBodies = new SkirtLimbs();
+  arrowBodies.add([bow.arrows[0], new THREE.Vector3(0, 0, -ARROW / 2)], [bow.arrows[0], new THREE.Vector3(0, 0, ARROW / 2)], 0.005 + HAND_GAP);
+  const outsideNocked = [...outside, ...arrowBodies.list];
+  // (the bow arm swung out at the shoulder just enough to keep the string off the thigh and the coat over it, as an archer
+  // holds it off his coat: armOffThigh, by points along the string; the skirt between them was draped in behind the string
+  // and out again by the thigh, which has the last word, and the string ran through the coat's side by up to 15 cm on most
+  // frames of a walk; the points a few cm apart: 13 cm apart, each lay just clear while the string between them didn't)
+  const STRING_PTS = 16, stringPts = Array.from({ length: STRING_PTS * 2 + 1 }, (): [JointPoint, number] => [[bow.group, new THREE.Vector3()], 0.006]);
+  // (and the nocked arrow's, pointing down past the hem: kept off the thigh by the string alone, it went through the thigh
+  // and into the coat's hem once a stride, the arm swinging against its leg)
+  const ARROW_PTS = 8, arrowPts = Array.from({ length: ARROW_PTS + 1 }, (_, i): [JointPoint, number] => [[bow.arrows[0], new THREE.Vector3(0, 0, (i / ARROW_PTS - 0.5) * ARROW)], 0.005]);
+  // (and the lower limb's, as it swings past the thigh setting off)
+  const LIMB_PTS = 6, limbPts = Array.from({ length: LIMB_PTS * 2 + 1 }, (_, i): [JointPoint, number] => {
+    const [a, b] = i <= LIMB_PTS ? [bow.lowerLimb[0], bow.lowerLimb[1]] : [bow.lowerLimb[1], bow.lowerLimb[2]];
+    return [[bow.group, new THREE.Vector3().lerpVectors(a, b, i <= LIMB_PTS ? i / LIMB_PTS : i / LIMB_PTS - 1)], 0.018];
+  });
+  const stringAndArrowPts = [...stringPts, ...arrowPts, ...limbPts], stringAndLimbPts = [...stringPts, ...limbPts];
+  const stringOffThigh = () => {
+    stringPts.forEach(([[, p]], i) => (i <= STRING_PTS ? p.lerpVectors(bow.tipU, bow.nock, i / STRING_PTS) : p.lerpVectors(bow.nock, bow.tipL, i / STRING_PTS - 1)));
+    armOffThigh(hem, j.shoulderL, 1, legBodies.list[0], HAND_GAP, bow.arrows[0].visible ? stringAndArrowPts : stringAndLimbPts);
+  };
   j.handL.add(bow.group);
   // (in pieces: only what's out of the quiver shows as it's drawn out, the rest still in it; drawn whole, an arrow as long
   // as the draw pivoting at the quiver's mouth swung its head out through the quiver's side into the hips). As many as a
@@ -1061,8 +1084,11 @@ export function buildRanger(): Model {
     // the coat's skirt last: over the legs, and behind the hands and the bow where they are now (through the eyes neither shows)
     root.updateMatrixWorld(true);
     legBodies.place(hem);
-    if (!fp) { handBodies.place(hem); bowBodies.place(hem); }
-    tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt, legBodies.list, fp ? [] : hasBow ? outside : handBodies.list);
+    if (!fp) { if (hasBow) stringOffThigh(); handBodies.place(hem); bowBodies.place(hem); arrowBodies.place(hem); }
+    const outer = fp ? [] : !hasBow ? handBodies.list : bow.arrows[0].visible ? outsideNocked : outside;
+    // (through the eyes the body isn't drawn, nor its shadow, a layer the camera and the lights don't see: the coat swings
+    // undraped, a tenth of the cost)
+    tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt, fp ? undefined : legBodies.list, outer);
     bendShoulders();
   }
   /** each shoulder's part-turned joints (`delts`): a quarter, half and three quarters of the arm's swing from hanging and of

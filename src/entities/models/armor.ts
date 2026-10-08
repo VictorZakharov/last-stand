@@ -430,7 +430,7 @@ export class Skirt {
     }
     if (legs?.length || hands?.length) this.drape(legs ?? [], hands ?? []);
     p.needsUpdate = true;
-    this.geo.computeVertexNormals();
+    vertexNormals(this.geo);
   }
 
   /** Point `p` (in the mesh's own space) put outside the cloth as it lies now, `gap` further out: out from the skirt's middle,
@@ -487,17 +487,22 @@ export class Skirt {
     }
     const offAll = (lines: boolean) => {
       for (let g = 0; g < runs.length; g += 2) {
-        const G = (nb + g / 2) * 6, q0 = runs[g], q1 = runs[g + 1], leg = q0 >= hands.length;
-        for (let j = C; j < n; j++) {
+        const G = (nb + g / 2) * 6, q0 = runs[g], q1 = runs[g + 1], leg = q0 >= hands.length, withLines = leg && lines;
+        const gx0 = B[G], gx1 = B[G + 1], gy0 = B[G + 2], gy1 = B[G + 3], gz0 = B[G + 4], gz1 = B[G + 5];
+        // (row by row and round each, as j runs from the first row's first point: no division a point)
+        for (let j = C, c = 0; j < n; j++, c = c === C - 1 ? 0 : c + 1) {
+          const x = P[j * 3], y = P[j * 3 + 1], z = P[j * 3 + 2];
+          // (a point outside the run's box, the cloth to its neighbours aside, skipped before anything else is read)
+          if (!withLines && (x < gx0 || x > gx1 || y < gy0 || y > gy1 || z < gz0 || z > gz1)) continue;
           // (against a leg, the cloth from the point above and to the next round too: their box; the last column is the first's
           // copy, so the one before it goes on to the first, and the copy itself to none)
-          const x = P[j * 3], y = P[j * 3 + 1], z = P[j * 3 + 2], a = (j - C) * 3, c = j % C, nx = c === C - 2 ? j + 2 - C : c === C - 1 ? j : j + 1, e = nx * 3;
+          const a = (j - C) * 3, nx = c === C - 2 ? j + 2 - C : c === C - 1 ? j : j + 1, e = nx * 3;
           let x0 = x, x1 = x, y0 = y, y1 = y, z0 = z, z1 = z;
-          if (leg && lines) {
+          if (withLines) {
             x0 = Math.min(x, P[a], P[e]); x1 = Math.max(x, P[a], P[e]); y0 = Math.min(y, P[a + 1], P[e + 1]);
             y1 = Math.max(y, P[a + 1], P[e + 1]); z0 = Math.min(z, P[a + 2], P[e + 2]); z1 = Math.max(z, P[a + 2], P[e + 2]);
+            if (x1 < gx0 || x0 > gx1 || y1 < gy0 || y0 > gy1 || z1 < gz0 || z0 > gz1) continue;
           }
-          if (x1 < B[G] || x0 > B[G + 1] || y1 < B[G + 2] || y0 > B[G + 3] || z1 < B[G + 4] || z0 > B[G + 5]) continue;
           for (let q = q0; q < q1; q++) {
             const k = q * 6;
             if (x1 < B[k] || x0 > B[k + 1] || y1 < B[k + 2] || y0 > B[k + 3] || z1 < B[k + 4] || z0 > B[k + 5]) continue;
@@ -595,6 +600,32 @@ export class Skirt {
     if (rest > 0 && _sd.lengthSq() > 1e-12) _sp.addScaledVector(_sd.normalize(), rest);
     P[j * 3] = _sp.x; P[j * 3 + 1] = _sp.y; P[j * 3 + 2] = _sp.z;
   }
+}
+
+/** A geometry's vertex normals as three's `computeVertexNormals` makes them, to the bit (each triangle's area-weighted
+ *  normal added to its corners', then each normalized), but over the flat arrays: three's goes through vectors read and
+ *  written a vertex at a time, 0.1 ms a frame for the ranger's coat. Indexed geometry; anything else goes to three's. */
+export function vertexNormals(geo: THREE.BufferGeometry): void {
+  const position = geo.attributes.position as THREE.BufferAttribute, index = geo.index;
+  let normal = geo.attributes.normal as THREE.BufferAttribute | undefined;
+  if (!index || !normal || normal.count !== position.count || normal.normalized || !(normal.array instanceof Float32Array) || position.normalized) { geo.computeVertexNormals(); return; }
+  const P = position.array, N = normal.array, I = index.array;
+  N.fill(0);
+  for (let t = 0; t < I.length; t += 3) {
+    const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3;
+    const bx = P[b], by = P[b + 1], bz = P[b + 2];
+    const cbx = P[c] - bx, cby = P[c + 1] - by, cbz = P[c + 2] - bz, abx = P[a] - bx, aby = P[a + 1] - by, abz = P[a + 2] - bz;
+    const nx = cby * abz - cbz * aby, ny = cbz * abx - cbx * abz, nz = cbx * aby - cby * abx;
+    // (each corner's sum read before any is written, as three's does: a triangle with a corner twice adds once)
+    const ax0 = N[a] + nx, ay0 = N[a + 1] + ny, az0 = N[a + 2] + nz, bx0 = N[b] + nx, by0 = N[b + 1] + ny, bz0 = N[b + 2] + nz;
+    const cx0 = N[c] + nx, cy0 = N[c + 1] + ny, cz0 = N[c + 2] + nz;
+    N[a] = ax0; N[a + 1] = ay0; N[a + 2] = az0; N[b] = bx0; N[b + 1] = by0; N[b + 2] = bz0; N[c] = cx0; N[c + 1] = cy0; N[c + 2] = cz0;
+  }
+  for (let i = 0; i < N.length; i += 3) {
+    const x = N[i], y = N[i + 1], z = N[i + 2], s = 1 / (Math.sqrt(x * x + y * y + z * z) || 1);
+    N[i] = x * s; N[i + 1] = y * s; N[i + 2] = z * s;
+  }
+  normal.needsUpdate = true;
 }
 
 /** points `a` and `b` (of a flat array) held no further apart than `max`: `a` moved by `wa` of the excess, `b` by the rest */

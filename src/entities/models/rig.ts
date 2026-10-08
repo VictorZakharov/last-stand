@@ -1,7 +1,7 @@
 // Procedural humanoid rig: a hierarchy of joint Groups with primitive meshes,
 // plus reusable procedural animation helpers. Forward is +Z, left is +X.
 import * as THREE from 'three';
-import { clampAnkle } from './anatomy';
+import { clampAnkle, clampAnkleRoll } from './anatomy';
 import { groundHeight } from '../../world/ground';
 
 export function part(geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D, x = 0, y = 0, z = 0): THREE.Mesh {
@@ -115,19 +115,37 @@ export function resetPose(j: Joints): void {
  */
 export interface WalkOpts { stride?: number; knee?: number; arm?: number; /** the left arm's swing where it differs from `arm` (a shield arm) */ armL?: number; bob?: number; dir?: number; /** a runner's body (see below), for a model whose full speed is a run */ run?: boolean }
 const IK_ON = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
-export function walkCycle(j: Joints, phase: number, amt: number, o: WalkOpts = {}): void {
+/** What the walk cycle reads from a model's leg IK (`LegIK` in ik.ts): where the feet are in their strides and how
+ *  far each thigh points forward. */
+interface WalkingLegs { bodyPhase?(phase: number, side?: number): number; thighForward?(side: number): number }
+/** A thigh pointing `forward` (rad) as the cycle's swing of it (its `sin`, the left's sign), for the arm on its side
+ *  to swing against: the cycle swings a thigh `stride` either way, and an arm no further than it swings it (a carried
+ *  bow's swing is tuned to that: further, its arrow swept into the coat's hem) */
+const armSwing = (forward: number, stride: number): number => Math.max(-1, Math.min(1, forward / stride));
+export function walkCycle(j: Joints, cyclePhase: number, amt: number, o: WalkOpts = {}): void {
+  // (where the feet are in their strides, as the leg IK has them: the body swings with its legs, each arm and leg by
+  // its own side's, not by the cycle's clock)
+  const legs = IK_ON ? (j.root.userData.legs as WalkingLegs | undefined) : undefined;
+  const phase = legs?.bodyPhase?.(cyclePhase) ?? cyclePhase;
+  const phaseL = legs?.bodyPhase?.(cyclePhase, 0) ?? cyclePhase, phaseR = legs?.bodyPhase?.(cyclePhase, 1) ?? cyclePhase;
   const stride = o.stride ?? 0.55, knee = o.knee ?? 1.0, arm = o.arm ?? 0.45, armL = o.armL ?? arm, bob = o.bob ?? 0.06, dir = o.dir ?? 1;
   const s = Math.sin(phase) * dir, c = Math.cos(phase);
-  j.thighL.rotation.x += -s * stride * amt;
-  j.thighR.rotation.x += s * stride * amt;
-  j.kneeL.rotation.x += (Math.max(0, c * dir) * knee + 0.08) * amt;
-  j.kneeR.rotation.x += (Math.max(0, -c * dir) * knee + 0.08) * amt;
+  const sL = Math.sin(phaseL) * dir, cL = Math.cos(phaseL), sR = Math.sin(phaseR) * dir, cR = Math.cos(phaseR);
+  // (each arm against its own thigh as the legs were last placed, by the thighs' swing apart: crouched, both point
+  // forward, and that held both arms back)
+  const thighL = legs?.thighForward?.(0), thighR = legs?.thighForward?.(1);
+  const apart = thighL === undefined || thighR === undefined ? undefined : armSwing((thighL - thighR) / 2, stride);
+  const armSL = apart ?? sL, armSR = apart ?? sR;
+  j.thighL.rotation.x += -sL * stride * amt;
+  j.thighR.rotation.x += sR * stride * amt;
+  j.kneeL.rotation.x += (Math.max(0, cL * dir) * knee + 0.08) * amt;
+  j.kneeR.rotation.x += (Math.max(0, -cR * dir) * knee + 0.08) * amt;
   j.ankleL.rotation.x += -j.thighL.rotation.x * 0.3 - j.kneeL.rotation.x * 0.4;
   j.ankleR.rotation.x += -j.thighR.rotation.x * 0.3 - j.kneeR.rotation.x * 0.4;
-  j.shoulderL.rotation.x += s * armL * amt;
-  j.shoulderR.rotation.x += -s * arm * amt;
-  j.elbowL.rotation.x += -(0.25 + Math.max(0, -s) * 0.4) * amt;
-  j.elbowR.rotation.x += -(0.25 + Math.max(0, s) * 0.4) * amt;
+  j.shoulderL.rotation.x += armSL * armL * amt;
+  j.shoulderR.rotation.x += -armSR * arm * amt;
+  j.elbowL.rotation.x += -(0.25 + Math.max(0, -armSL) * 0.4) * amt;
+  j.elbowR.rotation.x += -(0.25 + Math.max(0, armSR) * 0.4) * amt;
   // a walk is highest as the legs pass (the body vaulting over a straight leg); a run is lowest there (the leg compressing under it) and highest in flight
   const run = IK_ON && o.run ? Math.min(1, Math.max(0, (amt - 0.45) / 0.35)) : 0;
   j.body.position.y += (Math.abs(c) - 0.6) * (1 - 2 * run) * (1 - 0.5 * run) * bob * amt;
@@ -194,8 +212,9 @@ export function reachArm(shoulder: THREE.Object3D, elbow: THREE.Object3D, upper:
   shoulder.quaternion.copy(_q);
 }
 
-const _a = new THREE.Vector3(), _hip = new THREE.Vector3(), _k = new THREE.Quaternion(), _r = new THREE.Quaternion(), _eu = new THREE.Euler();
+const _a = new THREE.Vector3(), _hip = new THREE.Vector3(), _k = new THREE.Quaternion(), _r = new THREE.Quaternion();
 const _q0 = new THREE.Quaternion(), _fw = new THREE.Quaternion(), _toe = new THREE.Vector3();
+const _level = new THREE.Quaternion(), _ahead = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
 /** how far forward of the ankle the toes are (the rig's units) */
 const TOE = 0.15;
 
@@ -205,6 +224,19 @@ const TOE = 0.15;
  * hip and knee, the foot staying where it was over the ground; and a foot at or near the floor turns
  * flat on it. Runs after the pose, before anything reads the joints' world matrices. Not while dying.
  */
+/** Turns `ankle` (by `share`, 0 to 1) so its foot lies level in the world, heading the way it points now, rolled no
+ *  further than the ankle rolls (under a shin leaning out past that, it lies on its edge: laid flat, a running
+ *  reversal's landing read 57 degrees at the ankle). */
+function layFlat(knee: THREE.Object3D, ankle: THREE.Object3D, share: number, left: boolean): void {
+  ankle.getWorldQuaternion(_k);
+  _ahead.set(0, 0, 1).applyQuaternion(_k);
+  _level.setFromAxisAngle(_up, Math.atan2(_ahead.x, _ahead.z));
+  knee.getWorldQuaternion(_r);
+  _level.premultiply(_r.invert());
+  ankle.quaternion.slerp(_level, share);
+  clampAnkleRoll(ankle.quaternion, left);
+}
+
 export function groundFeet(j: Joints, footH: number): void {
   const root = j.root;
   root.updateMatrixWorld(true);
@@ -230,14 +262,12 @@ export function groundFeet(j: Joints, footH: number): void {
       knee.rotation.x = bend;
       root.updateMatrixWorld(true);
     }
-    // a foot within a few cm of the floor lies flat on it: cancel the leg's pitch at the ankle
+    // a foot within a few cm of the floor lies flat on it, turned the way it points (levelled by cancelling the knee's
+    // pitch alone, a foot turned against its shin kept part of the shin's roll as a pitch: toe down 3 to 4 degrees, the
+    // end of a boot 1 to 1.5 cm into the floor, and up to 3.3 cm in the side-on stance's spread)
     ankle.getWorldPosition(_a); root.worldToLocal(_a);
     const planted = 1 - Math.min(1, Math.max(0, (_a.y - floor - footH) / 0.05));
-    if (planted > 0) {
-      knee.getWorldQuaternion(_k); root.getWorldQuaternion(_r);
-      _eu.setFromQuaternion(_r.invert().multiply(_k), 'YXZ');
-      ankle.rotation.x += (-_eu.x - ankle.rotation.x) * planted;
-    }
+    if (planted > 0) layFlat(knee, ankle, planted, thigh === j.thighL);
     // (within the ankle's range: where the shin leans further over a foot on the floor than an ankle bends, the heel
     // lifts and the foot pivots on its toes, which stay where they lay, the leg reaching to the ankle raised round
     // them; laid flat under a deep knee the ankle bent 70 degrees)

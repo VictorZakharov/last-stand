@@ -31,3 +31,23 @@ export function describeError(error) {
   const frames = stack.filter((line) => STACK_LINE.test(line)).slice(0, FRAMES_KEPT).map(shortFrame);
   return [message, ...frames].join('\n');
 }
+
+/** a terminal colour in a message */
+const ANSI_COLOUR = /\u001b\[[0-9;]*m/g;
+/** the compiler's own line for an error: oxc's `[PARSE_ERROR] <why>`, or esbuild's `<file>:<l>:<c>: ERROR: <why>` */
+const COMPILE_ERROR = /^\s*(?:\[[A-Z_]+\]|.*\bERROR:)\s*(.+)$/m;
+/** where in the file the error is, as the compiler's message has it: `<file>:<line>:<column>` */
+const COMPILE_PLACE = /([^\s[\]]+):(\d+):(\d+)/;
+
+/**
+ * Why a module didn't compile and where (`:line:column`, or nothing), from what Vite threw: the compiler's own words on
+ * one line, or the error's first line.
+ */
+export function compileError(error) {
+  const message = String(error?.message ?? error).replace(ANSI_COLOUR, '');
+  const reason = message.match(COMPILE_ERROR)?.[1] ?? message.split('\n')[0];
+  const place = message.match(COMPILE_PLACE);
+  const line = error?.loc?.line ?? place?.[2];
+  const column = error?.loc?.column ?? place?.[3];
+  return { reason: reason.trim(), where: line ? `:${line}:${column}` : '' };
+}

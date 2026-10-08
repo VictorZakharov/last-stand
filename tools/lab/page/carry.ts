@@ -85,6 +85,8 @@ export interface PhaseSummary {
 
 export interface CarryReport {
   phases: Record<string, PhaseSummary>;
+  /** with `frames`: a line for every frame with a clip, in order */
+  clipLines?: string[];
   /** frames with any clip, the shot's own frames aside */
   clipFrames: number;
   /** what the round did, checked */
@@ -95,6 +97,8 @@ export interface CarryReport {
 
 export interface CarryOptions {
   canary?: boolean;
+  /** list every frame with a clip */
+  frames?: boolean;
 }
 
 /** metres to centimetres, to a millimetre */
@@ -252,6 +256,7 @@ export async function carry(lab: Lab, options: CarryOptions = {}): Promise<Carry
   await lab.step(STOW_FRAMES, undefined, () => measureFrame('stow'));
 
   const report = summarize(rows);
+  if (options.frames) report.clipLines = clipLines(rows);
   report.checks.push(
     `walked ${player.pos.distanceTo(start).toFixed(1)} m, drew and loosed, ` +
     `then stood ${waited.toFixed(1)} s with the next arrow before putting it back`,
@@ -321,6 +326,33 @@ function summarize(rows: FrameMeasure[]): CarryReport {
   return report;
 }
 
+/** what each crossing went through and how deep, `label depth` (a sheet's edge crossed once: `crossing`) */
+function describeCrossings(crossings: Map<string, Crossing>): string[] {
+  return [...crossings].map(([label, crossing]) => {
+    const depth = crossing.inside > 0 ? `${centimetres(crossing.inside).toFixed(1)} cm` : 'crossing';
+    return `${label} ${depth}`;
+  });
+}
+
+/** A line for each frame with a clip: its number in the round, its phase, and what each line crossed. */
+function clipLines(rows: FrameMeasure[]): string[] {
+  const lines: string[] = [];
+  rows.forEach((row, frame) => {
+    if (row.planted || !isClip(row)) return;
+    const parts = [
+      ['string', row.string],
+      ['limbs', row.limbs],
+      ['arrow', row.arrows],
+    ] as const;
+    const crossed = parts
+      .filter(([, crossings]) => crossings.size > 0)
+      .map(([name, crossings]) => `${name} ${describeCrossings(crossings).join(', ')}`);
+    if (row.forearm < 0) crossed.push(`forearm ${row.forearm.toFixed(1)} cm into the string`);
+    lines.push(`  ${String(frame).padStart(3)} ${row.phase}: ${crossed.join('; ')}`);
+  });
+  return lines;
+}
+
 function describeParts(parts: Record<string, PartClips>): string {
   const entries = Object.entries(parts);
   if (entries.length === 0) return 'clear';
@@ -349,5 +381,6 @@ export function describeCarry(report: CarryReport): string {
       `  past a range: ${pastRange}`,
     );
   }
+  if (report.clipLines) lines.push('frames with a clip:', ...report.clipLines);
   return lines.join('\n');
 }

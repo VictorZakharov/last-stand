@@ -4,7 +4,6 @@
 import { request, sendToServer, waitForChange } from './node/client.mjs';
 import { describeError, labError } from './node/errors.mjs';
 import { parseCommandLine, usage } from './node/options.mjs';
-import { LAB_PORT } from './node/paths.mjs';
 
 /** Runs a command in a session of its own, for when no server is up. */
 async function runAlone(call) {
@@ -43,8 +42,8 @@ async function main() {
     return 0;
   }
   if (call.command === 'serve') {
-    const { serve } = await import('./node/server.mjs');
-    await serve(LAB_PORT);
+    const { supervise } = await import('./node/supervisor.mjs');
+    supervise();
     return null;
   }
   if (call.command === 'stop') {

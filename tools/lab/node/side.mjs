@@ -10,7 +10,8 @@ import { cpSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { PAGE_SCRIPTS } from './browser.mjs';
 import { exportedTreePaths } from './commits.mjs';
-import { labError } from './errors.mjs';
+import { compileError, labError } from './errors.mjs';
+import { probeFiles } from './probeFiles.mjs';
 import { decodeMappings, sourceOf } from './sourceMaps.mjs';
 
 const VIEWPORT = { width: 1920, height: 1080 };
@@ -214,8 +215,9 @@ export class Side {
    * Imports a probe module (a path under the tree, read afresh each time) and runs its default export, after setting
    * `fixture` up (none when null).
    */
-  probe(path, options, fixture) {
+  async probe(path, options, fixture) {
     this.forgetModulesUnder(dirname(join(this.root, path)));
+    await this.checkCompiles(probeFiles(this.root, path));
     return this.page.evaluate(async ([path, options, fixture]) => {
       const commands = await import('/tools/lab/page/commands.ts');
       const probe = await import(`/${path}?t=${Date.now()}`);
@@ -224,6 +226,21 @@ export class Side {
       if (fixture) await commands.setup(window.__lab, fixture);
       return probe.default(window.__lab, options);
     }, [path, options, fixture]);
+  }
+
+  /**
+   * Throws, saying where and why, unless each module at `paths` (under the tree) compiles: imported in the page, one
+   * that didn't said only "Failed to fetch dynamically imported module", whatever was wrong with it.
+   */
+  async checkCompiles(paths) {
+    for (const path of paths) {
+      try {
+        await this.server.environments.client.transformRequest(`/${path}`);
+      } catch (error) {
+        const { reason, where } = compileError(error);
+        throw labError(`${path}${where} doesn't compile: ${reason}`);
+      }
+    }
   }
 
   /**
@@ -277,6 +294,14 @@ export class Side {
   }
 
   /** Closes its page (the server stays up). */
+  /** Serves its pages from `browser` from now on (a new one, the last having closed): nothing of the old kept. */
+  useBrowser(browser) {
+    this.browser = browser;
+    this.context = null;
+    this.page = null;
+    this.heroClass = null;
+  }
+
   async closePage() {
     if (!this.page) return;
     await this.page.close().catch(() => {});
