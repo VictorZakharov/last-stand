@@ -194,6 +194,9 @@ What the lab gives a probe (`page/lab.ts`):
   `lab.picture(label, views, notes)` one moment of a report's `moments`: the lab writes them as a sheet
   (`out/probes/<probe>/sheet.png`) and compares them in an A/B, as the sheet's (to see the frames a measure flagged,
   run the measure's input to them and picture each);
+- `await lab.screen(label, notes, around?)`: this moment as the player sees it, the game drawn by its own camera with the
+  page's UI over it (the HUD, a menu, a tooltip), pictured by the browser, whole or clipped round the element a CSS
+  selector names (`'#hotbar'`), as a moment of the report's `moments` (`picture`'s views show the game's canvas alone);
 - `timeCalls(owner, method)` (`page/timing.ts`): every call of a method timed by the browser's own clock (the page's
   `performance.now` is the lab's, which stands still within a frame), for a cost: its calls, total, median and 90th
   percentile. The timer ticks in 0.1 ms, so take a frame's mean over many, and compare sides within one A/B (the
