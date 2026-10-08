@@ -129,6 +129,7 @@ export const COMMANDS = {
       },
       ping: { kind: 'number', usage: 'ms', help: 'the link\'s least round trip (300 by default)' },
       jitter: { kind: 'number', usage: 'ms', help: 'how much later each way a message may come (60 by default)' },
+      pictures: { kind: 'switch', help: 'picture both screens at a scenario\'s moments (into out/coop)' },
       ...COMMON_OPTIONS,
     },
   },

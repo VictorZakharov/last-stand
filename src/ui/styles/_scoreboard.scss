@@ -1,0 +1,43 @@
+// The party's scores (ui/scoreboard.ts): held on Tab, a table over the middle of the screen, each player's ping
+// graphed beside it.
+@use 'theme' as *;
+
+#scoreboard { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 12; pointer-events: none;
+  width: min(96vw, hud(860px)); max-height: 92vh; overflow: hidden; padding: hud(12px) hud(16px) hud(10px);
+  background: $panel; border: 1px solid $frame; outline: 1px solid $frame-dark; box-shadow: 0 hud(8px) hud(30px) rgba(0,0,0,.7);
+  font-family: $font-body; color: $ink; }
+#scoreboard .sb-head { font-family: $font-display; font-size: hud(20px); color: $accent; text-align: center; letter-spacing: 1px; margin-bottom: hud(8px); }
+#scoreboard table { width: 100%; border-collapse: collapse; font-size: hud(16px); font-variant-numeric: tabular-nums; }
+#scoreboard th { font-size: hud(12px); font-weight: 600; color: $ink-dim; text-transform: uppercase; letter-spacing: .6px; text-align: right;
+  padding: 0 hud(8px) hud(6px); border-bottom: 1px solid rgba($frame, .45); white-space: nowrap; }
+#scoreboard td { padding: hud(7px) hud(8px); text-align: right; vertical-align: middle; border-bottom: 1px solid rgba($frame, .18); white-space: nowrap; }
+#scoreboard td small { display: block; font-size: hud(11px); color: $ink-dim; }
+#scoreboard .sb-who { text-align: left; }
+#scoreboard td.sb-who b { font-family: $font-display; font-size: hud(16px); font-weight: 600; color: $ally-text; }
+#scoreboard tr.me td.sb-who b { color: $highlight; }
+#scoreboard tr.st-down td.sb-who small { color: $danger; }
+#scoreboard tr.st-fallen, #scoreboard tr.st-in, #scoreboard tr.st-banked { opacity: .6; }
+#scoreboard .sb-ping { text-align: left; }
+#scoreboard td.sb-ping div { display: flex; align-items: center; gap: hud(8px); }
+#scoreboard td.sb-ping span { min-width: hud(54px); }
+#scoreboard .q-good { color: #7fe08a; }
+#scoreboard .q-fair { color: #f0c860; }
+#scoreboard .q-poor { color: $danger; }
+#scoreboard .q-none { color: $ink-dim; }
+.sb-graph { width: hud(96px); height: hud(26px); flex: none; background: rgba(0,0,0,.35); border-radius: hud(3px); }
+.sb-graph polyline { fill: none; stroke: currentColor; stroke-width: 1.5; }
+.sb-graph polygon { fill: currentColor; opacity: .18; }
+.sb-graph .sb-fair { stroke: rgba($danger, .35); stroke-width: 1; stroke-dasharray: 3 3; }
+#scoreboard .sb-foot { margin-top: hud(8px); font-size: hud(12px); color: $ink-dim; text-align: center; white-space: normal; }
+// short screens (phones held sideways): the lesser columns give way
+@media (max-height: 520px), (max-width: 760px) {
+  #scoreboard .sb-minor, #scoreboard .sb-foot { display: none; }
+  #scoreboard .sb-graph { width: hud(64px); }
+}
+
+// on touch: a button under the pause button
+#btn-scores { position: absolute; top: calc(62px * var(--touch, 1)); left: calc(10px + env(safe-area-inset-left, 0px)); width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center; z-index: 9; border-radius: 50%; border: 1px solid rgba($frame, .6);
+  background: rgba(10,9,11,.75); color: var(--accent); pointer-events: auto; scale: var(--touch, 1); transform-origin: left top; }
+#btn-scores.hidden { display: none; }
+#btn-scores svg { width: 20px; height: 20px; fill: currentColor; }

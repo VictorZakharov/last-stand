@@ -5,7 +5,7 @@ import { COOP } from '../data/balance';
 import { session, hostRoom, joinRoom, leaveRoom, inviteLink, partners } from '../net/session';
 import { serverUp, SERVER_DOWN } from '../net/transport';
 import { isCoop } from '../net/role';
-import { addAnchored, removeAnchored } from './floaters';
+import { addAnchored, removeAnchored, project } from './floaters';
 import { renderLobbyOptions } from './menus';
 import { openSaves } from './saves';
 import { isTouch } from './touch';
@@ -129,8 +129,114 @@ function renderBar(): void {
 /** A partner's nameplate over their head, and their frame in the corner. */
 interface Tag { el: HTMLElement; fill: HTMLElement; frame: HTMLElement; frameFill: HTMLElement; state: HTMLElement }
 const tags = new Map<Player, Tag>();
-let reviveTag: HTMLElement | null = null;
-let reviveFor: Player | null = null;
+/** the marker on a downed partner: over them, or at the screen's edge pointing the way to them; and in reach of
+ *  them, the prompt to raise them */
+let downMark: HTMLElement | null = null;
+let raisePrompt: HTMLElement | null = null;
+/** the whole seconds the marker last showed, so it beats as each one goes */
+let shownSecond = -1;
+/** how high over a downed body its marker floats, m (lower, it hid the body from the top-down view) */
+const MARK_HEIGHT = 2.1;
+/** the seconds left from which the marker beats harder */
+const HURRY = 8;
+
+/** how far in from the screen's edges a downed partner's marker's ring stays (px, at the HUD's scale): its arrow clear
+ *  of the hotbar and the wave's badge */
+const EDGE = { side: 80, top: 120, bottom: 185 };
+/** the ring's radius (px, at the HUD's scale): the marker is placed by its ring's middle */
+const RING = 38;
+
+function markFor(): HTMLElement {
+  if (downMark) return downMark;
+  const el = document.createElement('div');
+  el.className = 'dnmark hidden';
+  el.innerHTML = '<div class="dm-ring"><div class="dm-raise"></div><b></b><div class="dm-arrow"></div></div><span class="dm-what"></span><span class="dm-far"></span>';
+  $('#hud').appendChild(el);
+  downMark = el;
+  return el;
+}
+
+function promptFor(): HTMLElement {
+  if (raisePrompt) return raisePrompt;
+  const el = document.createElement('div');
+  el.className = 'rvprompt hidden';
+  el.innerHTML = '<div class="rp-line"><kbd>E</kbd><span>Hold to revive</span></div><div class="rp-bar"><div></div></div>';
+  $('#hud').appendChild(el);
+  raisePrompt = el;
+  return el;
+}
+
+/** In reach of a downed partner (keyboard and mouse: touch has its button), the prompt to hold E, and the revive. */
+function promptRaise(downed: Player | undefined, near: boolean): void {
+  const el = promptFor();
+  const shown = !!downed && near && !isTouch();
+  el.classList.toggle('hidden', !shown);
+  if (!shown) return;
+  $('span', el).textContent = downed.revive > 0 ? `Reviving the ${downed.cls.name}…` : `Hold to revive the ${downed.cls.name}`;
+  $('.rp-bar div', el).style.width = `${(downed.revive * 100).toFixed(0)}%`;
+}
+
+/** The marker beats once as each second of a downed partner's clock goes, harder near its end (a heartbeat: the
+ *  animation restarted by swapping between two copies of it). */
+function beat(el: HTMLElement, second: number): void {
+  if (second === shownSecond) return;
+  const first = shownSecond < 0;
+  shownSecond = second;
+  if (first) return;
+  el.classList.toggle('beat-b', !el.classList.contains('beat-b'));
+  el.classList.add('beating');
+  el.classList.toggle('hurry', second <= HURRY);
+}
+
+/**
+ * A downed partner's marker, every frame: over them where the view shows them, else at the screen's edge on the way to
+ * them with an arrow pointing there; their clock running out round its ring, the revive filling it, how far they are.
+ * (A small ring over the body alone was lost from sight as soon as the body was off screen.)
+ */
+function markDowned(downed: Player | undefined, near: boolean): void {
+  const el = markFor();
+  el.classList.toggle('hidden', !downed);
+  if (!downed) {
+    shownSecond = -1;
+    return;
+  }
+  const me = G.player;
+  // (the HUD's scale as ui/scale sets it on the root: read from its own style, no style recalc)
+  const ui = parseFloat(document.documentElement.style.getPropertyValue('--hud')) || 1;
+  const w = window.innerWidth, h = window.innerHeight;
+  const p = project(downed.pos.x, downed.obj.position.y + MARK_HEIGHT, downed.pos.z);
+  const left = EDGE.side * ui, right = w - EDGE.side * ui, top = EDGE.top * ui, bottom = h - EDGE.bottom * ui;
+  const inView = !p.behind && p.x >= left && p.x <= right && p.y >= top && p.y <= bottom;
+  let x = p.x, y = p.y;
+  if (!inView) {
+    // along the way from the middle of the screen to them (behind the camera, the projection points the other way)
+    const cx = w / 2, cy = (top + bottom) / 2;
+    let dx = (p.x - cx) * (p.behind ? -1 : 1), dy = (p.y - cy) * (p.behind ? -1 : 1);
+    if (Math.abs(dx) < 1e-3 && Math.abs(dy) < 1e-3) dy = 1;
+    const reach = Math.min(Math.abs(dx) > 1e-3 ? (right - cx) / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-3 ? (bottom - cy) / Math.abs(dy) : Infinity);
+    x = cx + dx * reach;
+    y = cy + dy * reach;
+    el.style.setProperty('--turn', `${Math.atan2(dy, dx)}rad`);
+  }
+  el.classList.toggle('edge', !inView);
+  // (pointing down, its words go above the ring, out of the arrow's way)
+  const above = !inView && Math.abs(y - bottom) < 1;
+  el.classList.toggle('above', above);
+  const ring = RING * ui;
+  el.style.transform = `translate(${x}px, ${y}px) translate(-50%, ${above ? `calc(-100% + ${ring}px)` : `${-ring}px`})`;
+  const bleedLeft = Math.max(0, downed.bleed);
+  $('.dm-ring', el).style.setProperty('--p', `${((bleedLeft / COOP.bleedOut) * 100).toFixed(1)}%`);
+  $('.dm-raise', el).style.setProperty('--r', `${(downed.revive * 100).toFixed(0)}%`);
+  const second = Math.ceil(bleedLeft);
+  $('b', el).textContent = String(second);
+  // (while someone raises them their clock stops, and so does the beat)
+  beat(el, second);
+  el.classList.toggle('raising', downed.revive > 0);
+  el.classList.toggle('near', near);
+  const what = near ? (isTouch() ? 'Hold Revive' : 'Hold E') : downed.revive > 0 ? 'Being raised' : `${downed.cls.name} is down`;
+  $('.dm-what', el).textContent = what;
+  $('.dm-far', el).textContent = `${Math.round(Math.hypot(downed.pos.x - me.pos.x, downed.pos.z - me.pos.z))} m`;
+}
 
 function tagFor(p: Player): Tag {
   let t = tags.get(p);
@@ -185,24 +291,11 @@ export function updateCoopHud(): void {
   spec.classList.toggle('hidden', !watching || !$('#summary').classList.contains('hidden'));
   if (watching) spec.textContent = `Watching the ${watching.cls.name}`;
 
-  // a downed partner: the prompt over them, and on touch the button to hold
+  // a downed partner: the marker on them (or at the screen's edge), and on touch the button to hold
   const downed = me.active ? others.find((p) => p.downed && p.inRun) : undefined;
-  const near = downed && Math.hypot(downed.pos.x - me.pos.x, downed.pos.z - me.pos.z) < COOP.reviveRange;
-  if (downed !== reviveFor) {
-    removeAnchored(reviveTag);
-    reviveTag = null;
-    reviveFor = downed ?? null;
-    if (downed) {
-      const el = document.createElement('div');
-      el.className = 'rvtag';
-      el.innerHTML = '<div class="rv-ring"></div><span></span>';
-      reviveTag = addAnchored(el, () => (G.mode === 'run' && reviveFor?.downed ? { x: downed.pos.x, y: 0.6, z: downed.pos.z } : null));
-    }
-  }
-  if (reviveTag && downed) {
-    $('.rv-ring', reviveTag).style.setProperty('--p', `${(downed.revive * 100).toFixed(0)}%`);
-    $('span', reviveTag).textContent = near ? (isTouch() ? 'Hold Revive' : 'Hold E to revive') : 'Down: go to them';
-  }
+  const near = !!downed && Math.hypot(downed.pos.x - me.pos.x, downed.pos.z - me.pos.z) < COOP.reviveRange;
+  markDowned(downed, near);
+  promptRaise(downed, near);
   const rv = $('#btn-revive');
   rv.classList.toggle('hidden', !(near && isTouch()));
   if (!near) touchRevive = false;
@@ -214,9 +307,9 @@ function hideRunBits(): void {
   $('#down-note').classList.add('hidden');
   $('#spectate').classList.add('hidden');
   $('#btn-revive').classList.add('hidden');
-  removeAnchored(reviveTag);
-  reviveTag = null;
-  reviveFor = null;
+  downMark?.classList.add('hidden');
+  raisePrompt?.classList.add('hidden');
+  shownSecond = -1;
 }
 
 /** The decision panel's line about the partners: who is still deciding, who continues, who left. */

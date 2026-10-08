@@ -5,7 +5,7 @@
 // between tabs of one browser, for testing with no server at all.
 import { netLog, countMsg, watchServer, serverState, serverRtt } from './netlog';
 
-export type Channel = 'hello' | 'look' | 'pl' | 'ev' | 'w' | 'dmg' | 'ctl';
+export type Channel = 'hello' | 'look' | 'pl' | 'ev' | 'w' | 'dmg' | 'st' | 'ctl';
 
 export interface Link {
   /** this peer's id in the room */
@@ -57,8 +57,8 @@ const OPEN_TIMEOUT = 6;
 const GRACE = 8000;
 /** how long a dropped link keeps trying to reach the server again (ms) */
 const RECONNECT = 30_000;
-/** a ping to the server every so often, for the round trip */
-const PING_MS = 2000;
+/** a ping to the server every so often, for the round trip (the scoreboard graphs it) */
+const PING_MS = 1000;
 function serverLink(code: string, server: string): Promise<Link> {
   const self = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => (b % 36).toString(36)).join('');
   const url = `${server.replace(/\/+$/, '')}/room/${APP}/${code}?id=${self}`;

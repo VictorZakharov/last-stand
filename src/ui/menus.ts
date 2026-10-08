@@ -91,6 +91,7 @@ function keyboardDiagram(): string {
     v: { icon: '◎', cap: 'View', tip: 'View: top-down, over the shoulder, first person' },
     b: { icon: '⛁', cap: 'Bank', tip: 'Bank after a wave' }, c: { icon: '➜', cap: 'Continue', tip: 'Continue after a wave' },
     e: { icon: '✚', cap: 'Revive', tip: 'Revive a downed partner (co-op)', hold: true },
+    tab: { icon: '☰', cap: 'Scores', tip: "The party's scores and pings", hold: true },
   };
   for (const k of SKILL_KEYS) {
     if (k.startsWith('mouse')) continue;
