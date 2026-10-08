@@ -25,7 +25,7 @@ interface BodyNow {
 
 /** The body's angles and the joints past their ranges now, measured as the game's dev builds measure them
  *  (`watchBody`; with the module's own exports alone, so an A/B's side on an older commit measures the same). */
-function bodyBreaches(joints: Joints): BodyNow {
+export function bodyBreaches(joints: Joints): BodyNow {
   joints.root.updateMatrixWorld(true);
   const angles = measureBody(joints, { L: turnedHand(joints.handL), R: turnedHand(joints.handR) });
   return { angles, found: breaches(angles) };
@@ -170,7 +170,8 @@ function keepBreach(records: Map<string, AngleRecord>, breach: Breach, where: st
   }
 }
 
-function describeBreach(breach: Breach): string {
+/** A joint past its range, as the report says it: its angle and how far past which range. */
+export function describeBreach(breach: Breach): string {
   const range = breach.name.endsWith('.excess') ? 'the raise its plane allows' : `${breach.min}..${breach.max}`;
   return `${breach.name} ${degrees(breach.value)}° (${degrees(breach.by)} past ${range})`;
 }

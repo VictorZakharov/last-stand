@@ -177,10 +177,12 @@ const SWING_LEAST = 0.2;
 const SWING_MOST = 0.55;
 /** the first stride from standing (the body stood this much: `standK`) takes at most this long (s) */
 const STOOD = 0.5, FIRST_STRIDE = 0.2;
-/** the shortest a stride re-aimed takes from where the foot is (s) */
-/** how far through a swing its landing starts to settle where it is */
+/** how quickly the body's swing follows the feet onto where they are in their swings (1/s: `bodyPhase`) */
+const FEET_FOLLOW = 12;
+/** how far through a swing its landing starts to settle sideways where it is */
 const LAND_SETTLE = 0.5;
-/** a stride further on than this lands rather than being aimed again */
+/** a stride further on than this lands rather than being aimed again, and the shortest a stride re-aimed takes from
+ *  where the foot is (s) */
 const REAIM_UNTIL = 0.85;
 const REAIM_LEAST = 0.1;
 /** how long the other foot is in the air before a planted one may leave the ground too (s): both leaving together
@@ -444,7 +446,8 @@ const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _handTurn = new
 const _pole = new THREE.Vector3(), _e = new THREE.Euler(), _thighDown = new THREE.Vector3();
 const _leavesAt = new THREE.Vector3(), _hipAt = new THREE.Vector3();
 const _hipForward = new THREE.Vector3(0, 0, 1), _toes = new THREE.Vector3(), _ankleHeld = new THREE.Quaternion();
-const _heelUp = new THREE.Vector3(), _landWas = new THREE.Vector3();
+const _heelUp = new THREE.Vector3(), _landWas = new THREE.Vector3(), _drift = new THREE.Vector3();
+const _kneeAt = new THREE.Vector3();
 /** along the foot and across it, both ways: where a standing foot's ball must have its level round it
  *  (`EDGE_MARGIN`) */
 const MARGIN_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
@@ -468,6 +471,12 @@ export class LegIK {
   /** the ground speed, smoothed as a number (the vector's length collapses when the direction flips), and as a vector
    *  along the way it travels */
   private sp = 0;
+  /** how fast that speed changes (m/s², smoothed): a body slowing to a stop covers less ground than its speed says */
+  private spRate = 0;
+  /** how far each foot is ahead of the walk cycle in its strides (rad, smoothed: `bodyPhase`), and how far each
+   *  thigh points forward (`thighForward`) */
+  private readonly feetAhead: [number, number] = [0, 0];
+  private readonly thighsForward: [number, number] = [0, 0];
   private readonly gv = new THREE.Vector3();
   /** the walk cycle's phase last frame, its rate (smoothed), and how far it moved this frame (a share of a cycle) */
   private lastPhase = 0;
@@ -530,6 +539,22 @@ export class LegIK {
   /** the way the gait's pelvis faces, which the feet land turned to (rad, world; read by the lab) */
   get pelvisYaw(): number {
     return this.frame.pelvisYaw;
+  }
+
+  /**
+   * The walk cycle's phase as the feet have it: `phase` moved on to where foot `side` really is in its strides (each
+   * arm swings by its own side's), or with no side, to halfway between the two (the hips' turn and sway, the rise and
+   * fall). The body swings with its legs (`walkCycle`), as a person's does, while the feet keep to the cycle's windows
+   * as best they can: swung by the cycle alone, a foot taken off it (held for the other, early for its reach, late
+   * after a reversal) left the arms swinging with the leg on their own side as often as not, and the hips swayed out
+   * over the foot in the air; by one phase for both, an arm swung with its own leg whenever the feet were not half a
+   * cycle apart.
+   */
+  bodyPhase(phase: number, side?: number): number {
+    const [left, right] = this.feetAhead;
+    if (side === 0) return phase + left;
+    if (side === 1) return phase + right;
+    return phase + left + turnBetween(left, right) / 2;
   }
 
   /** the walk cycle as the gait reads it: its phase (rad), how fast it moves (rad/s, signed, smoothed) and whether
@@ -652,12 +677,34 @@ export class LegIK {
     if (this.fresh || (g.rootX - this.last.x) ** 2 + (g.rootZ - this.last.z) ** 2 > 4) this.start(g);
     this.followMotion(g);
     for (let i = 0; i < 2; i++) this.stepFoot(g, i, legW);
+    this.followFeet(g);
     this.takeAlongFeetInAir(g);
     this.dropPelvis(g);
     this.j.hips.matrixWorld.decompose(_hipsAt, _hipsTurn, _hipsScale);
     _hipsForward.set(0, 0, 1).applyQuaternion(_hipsTurn);
     const hipsYaw = Math.atan2(_hipsForward.x, _hipsForward.z);
     for (let i = 0; i < 2; i++) this.solveLeg(g, i, hipsYaw);
+    this.followThighs();
+  }
+
+  /** How far forward each thigh points from straight down, in the hips' frame, as solved this frame (rad). */
+  private followThighs(): void {
+    const hips = this.j.hips;
+    hips.updateWorldMatrix(true, false);
+    this.legs.forEach((leg, i) => {
+      leg.knee.updateWorldMatrix(true, false);
+      _kneeAt.setFromMatrixPosition(leg.knee.matrixWorld);
+      hips.worldToLocal(_kneeAt).sub(leg.thigh.position);
+      this.thighsForward[i] = Math.atan2(_kneeAt.z, -_kneeAt.y);
+    });
+  }
+
+  /** How far forward thigh `side` pointed from straight down in the hips' frame when last solved (rad): each arm
+   *  swings against it (`walkCycle`), as a person's counters the leg on its side. By the walk cycle's clock, or by
+   *  where in its swing a foot was, the arms swung with the leg on their own side whenever the feet were off the
+   *  cycle, and a phase lagged a running swing of 12 frames by 5. */
+  thighForward(side: number): number {
+    return this.thighsForward[side];
   }
 
   // --- the body ----------------------------------------------------------------------------------------------------
@@ -793,7 +840,9 @@ export class LegIK {
     _velocity.set(g.rootX - this.last.x, 0, g.rootZ - this.last.z).divideScalar(dt);
     const k14 = 1 - Math.exp(-dt * 14);
     this.v.lerp(_velocity, k14);
+    const spWas = this.sp;
     this.sp += (_velocity.length() - this.sp) * k14;
+    this.spRate += ((this.sp - spWas) / dt - this.spRate) * k14;
     this.last.set(g.rootX, 0, g.rootZ);
     // (how far the cycle moved this frame, either way: a stride only ever goes on)
     this.dU = Math.abs(g.phase - this.lastPhase) / TAU;
@@ -1064,16 +1113,17 @@ export class LegIK {
     const crossed = this.lateral(f.P) < -CROSS * g.scale;
     // (one the body has gone out of reach of steps at once, whatever the other foot is doing: dragged along, it would
     // slide; standing, only to somewhere else: on its spot already, the pelvis sinks onto it or the heel lifts)
-    const outOfReach = f.over && f.stance > 0.04 && (this.moving || dev > NEAR_STEP * reach);
+    // (standing, not before the other is down: stepped while it was still in the air, both feet were up together
+    // for 13 frames as the body stopped)
+    const outOfReach = f.over && f.stance > 0.04
+      && (this.moving || (dev > NEAR_STEP * reach && other.state === 'plant'));
     f.over = false;
     // (moving, a foot in trouble takes its stride early instead, in `walkFoot`: an extra step would break the left,
     // right rhythm; only one left far behind, or a body wheeling round on its feet, steps on its own)
     const nearHip = Math.hypot(f.P.x - g.hip.x, f.P.z - g.hip.z) < 0.9 * reach;
     if ((this.moving && this.yawRate < 3 && nearHip) || own) return;
     const tooFar = this.moving ? Math.max(0.55 * reach, g.landAhead + 0.3 * reach) : (f.stand ? 0.07 : 0.1) * reach;
-    const otherDown = this.moving
-      ? other.state !== 'timed'
-      : other.state === 'plant' || (other.state === 'timed' && other.t > 0.2);
+    const otherDown = this.moving ? other.state !== 'timed' : other.state === 'plant';
     const settled = f.stance > (this.moving ? 0.12 : 0.05);
     // (at a walk, not while the other foot is in the air, unless dragged: both off the ground at once is a hop)
     if (this.moving && g.duty >= WALK_SUPPORT && other.state !== 'plant' && !f.dragged) return;
@@ -1215,19 +1265,59 @@ export class LegIK {
     } else {
       // (along the curve the body is on: going round in circles, a foot landed straight on from the way the body
       // went, outside the curve, and the body left it out of reach in half its stance)
-      const ahead = f.state === 'swing' ? g.landAhead : 0;
+      // (where the body will be, slowing as it is: aimed by its speed alone, a stopping body's last foot landed 41 cm
+      // out ahead of it, and stepped back under it once it had stopped)
+      const slowing = this.slowingOver(remain);
+      const ahead = f.state === 'swing' ? g.landAhead * slowing.share : 0;
       _landWas.copy(f.B);
-      alongCurve(f.B, g.hip, Math.atan2(g.travel.x, g.travel.z), g.curve, g.speed * remain + ahead);
-      // (and late in a swing it settles where it is, as a foot is put down on a spot: following the body's way to
-      // the last frame, going round, it swung sideways 5 cm a frame, and the foot landed moving sideways and stopped
-      // dead, its way turned 100 degrees in its last frame; along the stride the swing lands it, in the hip's frame)
+      alongCurve(f.B, g.hip, Math.atan2(g.travel.x, g.travel.z), g.curve, slowing.covered + ahead);
+      // (and late in a swing it settles sideways where it is, as a foot is put down on a spot: following the body's
+      // way to the last frame, going round, it swung sideways 5 cm a frame, and the foot landed moving sideways and
+      // stopped dead, its way turned 100 degrees in its last frame. Along the way it goes it keeps on with the body:
+      // settled there too, a foot set down mid-swing as the body stopped landed where it would have been at speed)
       const settle = f.state === 'swing' ? smooth((f.t - LAND_SETTLE) / (1 - LAND_SETTLE)) : 0;
-      if (settle > 0) f.B.lerp(_landWas, settle);
+      if (settle > 0) this.settleSideways(f.B, g.travel, settle);
     }
     this.keepToSide(f.B);
     if (this.moving) f.landShift = damp(f.landShift, this.offRiser(g, f, i, landYaw), 20, g.dt);
     // (standing, the step lands where the spot it is measured against is: off the edge)
     if (!this.moving) this.onBodyLevel(f.B, i, landYaw, g.scale, g.rootX, g.rootZ, true);
+  }
+
+  /** How far the body goes over the next `time` (s), and its speed then as a share of its speed now: slowing, as the
+   *  game slows it, by as much again for each share of its speed it loses (to rest, at most its speed over that
+   *  rate); else at its speed now. */
+  private slowingOver(time: number): { covered: number; share: number } {
+    const speed = this.sp;
+    if (this.spRate >= 0 || speed < 1e-3) return { covered: speed * time, share: 1 };
+    const rate = -this.spRate / Math.max(speed, 0.1);
+    const share = Math.exp(-rate * time);
+    return { covered: (speed / rate) * (1 - share), share };
+  }
+
+  /** Moves a landing `B` back towards where it was last frame (`_landWas`) across the way the body goes, by `share`. */
+  private settleSideways(B: THREE.Vector3, travel: THREE.Vector3, share: number): void {
+    _drift.subVectors(_landWas, B);
+    const along = _drift.x * travel.x + _drift.z * travel.z;
+    B.x += (_drift.x - travel.x * along) * share;
+    B.z += (_drift.z - travel.z * along) * share;
+  }
+
+  /** How far ahead of the cycle each foot is in its strides: swinging, its window's place for how far through its
+   *  swing it is, against the cycle's (kept while it stands, moving; eased towards none standing still). */
+  private followFeet(g: GaitFrame): void {
+    const backing = this.dphase < 0;
+    const follow = 1 - Math.exp(-g.dt * FEET_FOLLOW);
+    this.feet.forEach((f, i) => {
+      let want = this.moving ? this.feetAhead[i] : 0;
+      if (f.state === 'swing') {
+        const across = f.t * 2 * g.halfSwing;
+        const shouldBe = backing ? 0.5 + g.halfSwing - across : 0.5 - g.halfSwing + across;
+        const off = shouldBe - legU(g.phase, i);
+        want = (off - Math.round(off)) * TAU;
+      }
+      this.feetAhead[i] += turnBetween(this.feetAhead[i], want) * follow;
+    });
   }
 
   /** The swing in the hip's frame, along the way it travels: it leaves with the stance's backward stroke, passes under
@@ -1793,6 +1883,9 @@ export class LegIK {
     this.rate = 0;
     this.curve = 0;
     this.travelSeen = false;
+    this.spRate = 0;
+    this.feetAhead.fill(0);
+    this.thighsForward.fill(0);
     this.lastPhase = g.phase;
     this.moving = false;
     this.drop = 0;

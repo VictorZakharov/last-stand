@@ -160,6 +160,7 @@ export const COMMANDS = {
         scenarios: options.scenarios,
         frames: Boolean(options.frames),
         trace: Boolean(options.trace),
+        span: options.span,
       });
     },
     finish(results, options, session) {

@@ -15,10 +15,8 @@ import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
 import { ARENA } from '../../../src/data/balance';
 import { groundHeight } from '../../../src/world/ground';
-// (the module whole: a commit from before `footShape` has none, and a named import of it would stop every command's
-// page loading on an A/B's side on that commit, `main` included)
-import * as legIK from '../../../src/entities/models/ik';
 import type { FootShape, LegIK } from '../../../src/entities/models/ik';
+import { shapesOf, SOLE_STEP, solePoints } from './soles';
 
 const SIDE_NAMES = ['L', 'R'] as const;
 type SideName = (typeof SIDE_NAMES)[number];
@@ -111,8 +109,6 @@ const WALKS: Walk[] = [
   },
 ];
 
-/** the sole's points along it, this far apart (m) */
-const SOLE_STEP = 0.01;
 /** a sole's point this far under the ground is in it (m: a planted sole's own line dips about a centimetre) */
 const IN_GROUND = 0.015;
 /** what's flagged: a sole this long in a riser or the ground (m), a dip this deep (m), a run out of reach this long
@@ -162,19 +158,6 @@ function soleAgainst(ankle: THREE.Object3D, shape: FootShape, level: number): So
   return sole;
 }
 
-/** The sole of `ankle`'s foot (`shape`): its points heel to toe in the world, `SOLE_STEP` apart, into `points`. */
-function solePoints(ankle: THREE.Object3D, shape: FootShape, points: THREE.Vector3[] = []): THREE.Vector3[] {
-  const scale = ankle.getWorldScale(new THREE.Vector3()).x;
-  let count = 0;
-  for (let along = -shape.heel; along <= shape.toe; along += SOLE_STEP / scale) {
-    points[count] ??= new THREE.Vector3();
-    ankle.localToWorld(points[count].set(0, -shape.sole, along));
-    count++;
-  }
-  points.length = count;
-  return points;
-}
-
 /** How far a planted sole slipped since `last` (its points a frame before, m): the least any of its points on the
  *  ground moved. Rolling over its heel or toes, or turning on its ball, one point stays where it is; sliding, none
  *  does. (By its ankle's move, a foot turning on its ball read as 7 cm of slide.) */
@@ -208,16 +191,6 @@ interface Legs {
   ik: LegIK;
   ankles: THREE.Object3D[];
   shapes: FootShape[];
-}
-
-/** Each foot's shape as the leg IK measures it: by its exported `footShape`, or on a commit from before that export
- *  (`main`'s), the shapes the IK keeps once it has run (its `shape`), so an A/B measures both sides alike. */
-function shapesOf(lab: Lab, ik: LegIK, ankles: THREE.Object3D[]): FootShape[] {
-  const footShape = (legIK as Partial<typeof legIK>).footShape;
-  if (footShape) return ankles.map((ankle) => footShape(ankle, lab.model.root));
-  const kept = (ik as unknown as { shape?: FootShape[] | null }).shape;
-  if (kept) return kept;
-  throw new Error('lab: feet: this commit\'s leg IK has no foot shape (`footShape` or `LegIK.shape`)');
 }
 
 function legsOf(lab: Lab): Legs {

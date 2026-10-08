@@ -115,19 +115,37 @@ export function resetPose(j: Joints): void {
  */
 export interface WalkOpts { stride?: number; knee?: number; arm?: number; /** the left arm's swing where it differs from `arm` (a shield arm) */ armL?: number; bob?: number; dir?: number; /** a runner's body (see below), for a model whose full speed is a run */ run?: boolean }
 const IK_ON = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
-export function walkCycle(j: Joints, phase: number, amt: number, o: WalkOpts = {}): void {
+/** What the walk cycle reads from a model's leg IK (`LegIK` in ik.ts): where the feet are in their strides and how
+ *  far each thigh points forward. */
+interface WalkingLegs { bodyPhase?(phase: number, side?: number): number; thighForward?(side: number): number }
+/** A thigh pointing `forward` (rad) as the cycle's swing of it (its `sin`, the left's sign), for the arm on its side
+ *  to swing against: the cycle swings a thigh `stride` either way, and an arm no further than it swings it (a carried
+ *  bow's swing is tuned to that: further, its arrow swept into the coat's hem) */
+const armSwing = (forward: number, stride: number): number => Math.max(-1, Math.min(1, forward / stride));
+export function walkCycle(j: Joints, cyclePhase: number, amt: number, o: WalkOpts = {}): void {
+  // (where the feet are in their strides, as the leg IK has them: the body swings with its legs, each arm and leg by
+  // its own side's, not by the cycle's clock)
+  const legs = IK_ON ? (j.root.userData.legs as WalkingLegs | undefined) : undefined;
+  const phase = legs?.bodyPhase?.(cyclePhase) ?? cyclePhase;
+  const phaseL = legs?.bodyPhase?.(cyclePhase, 0) ?? cyclePhase, phaseR = legs?.bodyPhase?.(cyclePhase, 1) ?? cyclePhase;
   const stride = o.stride ?? 0.55, knee = o.knee ?? 1.0, arm = o.arm ?? 0.45, armL = o.armL ?? arm, bob = o.bob ?? 0.06, dir = o.dir ?? 1;
   const s = Math.sin(phase) * dir, c = Math.cos(phase);
-  j.thighL.rotation.x += -s * stride * amt;
-  j.thighR.rotation.x += s * stride * amt;
-  j.kneeL.rotation.x += (Math.max(0, c * dir) * knee + 0.08) * amt;
-  j.kneeR.rotation.x += (Math.max(0, -c * dir) * knee + 0.08) * amt;
+  const sL = Math.sin(phaseL) * dir, cL = Math.cos(phaseL), sR = Math.sin(phaseR) * dir, cR = Math.cos(phaseR);
+  // (each arm against its own thigh as the legs were last placed, by the thighs' swing apart: crouched, both point
+  // forward, and that held both arms back)
+  const thighL = legs?.thighForward?.(0), thighR = legs?.thighForward?.(1);
+  const apart = thighL === undefined || thighR === undefined ? undefined : armSwing((thighL - thighR) / 2, stride);
+  const armSL = apart ?? sL, armSR = apart ?? sR;
+  j.thighL.rotation.x += -sL * stride * amt;
+  j.thighR.rotation.x += sR * stride * amt;
+  j.kneeL.rotation.x += (Math.max(0, cL * dir) * knee + 0.08) * amt;
+  j.kneeR.rotation.x += (Math.max(0, -cR * dir) * knee + 0.08) * amt;
   j.ankleL.rotation.x += -j.thighL.rotation.x * 0.3 - j.kneeL.rotation.x * 0.4;
   j.ankleR.rotation.x += -j.thighR.rotation.x * 0.3 - j.kneeR.rotation.x * 0.4;
-  j.shoulderL.rotation.x += s * armL * amt;
-  j.shoulderR.rotation.x += -s * arm * amt;
-  j.elbowL.rotation.x += -(0.25 + Math.max(0, -s) * 0.4) * amt;
-  j.elbowR.rotation.x += -(0.25 + Math.max(0, s) * 0.4) * amt;
+  j.shoulderL.rotation.x += armSL * armL * amt;
+  j.shoulderR.rotation.x += -armSR * arm * amt;
+  j.elbowL.rotation.x += -(0.25 + Math.max(0, -armSL) * 0.4) * amt;
+  j.elbowR.rotation.x += -(0.25 + Math.max(0, armSR) * 0.4) * amt;
   // a walk is highest as the legs pass (the body vaulting over a straight leg); a run is lowest there (the leg compressing under it) and highest in flight
   const run = IK_ON && o.run ? Math.min(1, Math.max(0, (amt - 0.45) / 0.35)) : 0;
   j.body.position.y += (Math.abs(c) - 0.6) * (1 - 2 * run) * (1 - 0.5 * run) * bob * amt;

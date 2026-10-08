@@ -112,7 +112,11 @@ export const COMMANDS = {
         help: 'the scenarios (all by default): walk, drawn, taps, zigzag, circle, circleDrawn, stairs, stairsDrawn',
       },
       frames: { kind: 'switch', help: 'list every step (its foot, when it left and landed, how far) and the hops' },
-      trace: { kind: 'switch', help: 'list every frame: the way the body faces and goes, the pelvis, the cycle, each foot' },
+      trace: {
+        kind: 'switch',
+        help: 'list every frame: the way the body faces and goes, the pelvis, the cycle, each foot',
+      },
+      span: { kind: 'pair', usage: 'from,to', help: 'with --trace, only the frames from the first to the second' },
       ...COMMON_OPTIONS,
     },
   },

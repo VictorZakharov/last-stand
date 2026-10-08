@@ -550,9 +550,18 @@ export function buildRanger(): Model {
   // and out again by the thigh, which has the last word, and the string ran through the coat's side by up to 15 cm on most
   // frames of a walk; the points a few cm apart: 13 cm apart, each lay just clear while the string between them didn't)
   const STRING_PTS = 16, stringPts = Array.from({ length: STRING_PTS * 2 + 1 }, (): [JointPoint, number] => [[bow.group, new THREE.Vector3()], 0.006]);
+  // (and the nocked arrow's, pointing down past the hem: kept off the thigh by the string alone, it went through the thigh
+  // and into the coat's hem once a stride, the arm swinging against its leg)
+  const ARROW_PTS = 8, arrowPts = Array.from({ length: ARROW_PTS + 1 }, (_, i): [JointPoint, number] => [[bow.arrows[0], new THREE.Vector3(0, 0, (i / ARROW_PTS - 0.5) * ARROW)], 0.005]);
+  // (and the lower limb's, as it swings past the thigh setting off)
+  const LIMB_PTS = 6, limbPts = Array.from({ length: LIMB_PTS * 2 + 1 }, (_, i): [JointPoint, number] => {
+    const [a, b] = i <= LIMB_PTS ? [bow.lowerLimb[0], bow.lowerLimb[1]] : [bow.lowerLimb[1], bow.lowerLimb[2]];
+    return [[bow.group, new THREE.Vector3().lerpVectors(a, b, i <= LIMB_PTS ? i / LIMB_PTS : i / LIMB_PTS - 1)], 0.018];
+  });
+  const stringAndArrowPts = [...stringPts, ...arrowPts, ...limbPts], stringAndLimbPts = [...stringPts, ...limbPts];
   const stringOffThigh = () => {
     stringPts.forEach(([[, p]], i) => (i <= STRING_PTS ? p.lerpVectors(bow.tipU, bow.nock, i / STRING_PTS) : p.lerpVectors(bow.nock, bow.tipL, i / STRING_PTS - 1)));
-    armOffThigh(hem, j.shoulderL, 1, legBodies.list[0], HAND_GAP, stringPts);
+    armOffThigh(hem, j.shoulderL, 1, legBodies.list[0], HAND_GAP, bow.arrows[0].visible ? stringAndArrowPts : stringAndLimbPts);
   };
   j.handL.add(bow.group);
   // (in pieces: only what's out of the quiver shows as it's drawn out, the rest still in it; drawn whole, an arrow as long

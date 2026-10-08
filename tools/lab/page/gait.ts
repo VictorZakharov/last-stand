@@ -5,12 +5,18 @@
 // the ankles' sudden changes of speed). Each scenario is filmed from the side round its first hop (else its middle), a
 // picture every few frames, so the motion is seen as well as measured: measured first, then run again to picture
 // only the frames the film takes (a picture every few frames throughout, kept in a ring, took the browser down). What
-// a person wouldn't do is said as such.
+// a person wouldn't do is said as such. Each frame is also judged as a body's: whether it could move so, its centre
+// of mass with its gear against the push from its planted soles (`balance.ts`), and every joint within its range.
 import * as THREE from 'three';
 import type { Lab, Pictured, ViewName } from './lab';
 import type { LegIK } from '../../../src/entities/models/ik';
+import type { Breach } from '../../../src/entities/models/anatomy';
 import { groundHeight } from '../../../src/world/ground';
 import { G } from '../../../src/state';
+import { judgeBalance, sampleOf, type BalanceSample, type Fall, type Unlike } from './balance';
+import { buildOf } from './gearWeight';
+import { shapesOf } from './soles';
+import { bodyBreaches, describeBreach } from './range';
 
 /** One leg of a scenario: the keys held, the attack (held, tapped or not), for how many frames. */
 interface GaitLeg {
@@ -46,6 +52,8 @@ const DAIS_AIM: [number, number] = [1.5, 25];
 
 /** the direction changes of a walk that changes it often: left, right, back and forth, and the diagonals */
 const ZIGZAG = [['a'], ['d'], ['w'], ['a'], ['s'], ['d'], ['a', 'w'], ['d', 's'], ['a'], ['d', 'w'], ['s'], ['a', 's']];
+/** how long a walk that sets off from standing stands first (frames): the set-up's nock leaves the feet stepping */
+const STAND_FRAMES = 30;
 /** the eight ways round a circle, clockwise from ahead, as a player rolls the keys to go round one */
 const ROUND = [['w'], ['w', 'd'], ['d'], ['d', 's'], ['s'], ['s', 'a'], ['a'], ['a', 'w']];
 /** how many frames each way round a circle is held, and how many times it goes round */
@@ -64,10 +72,10 @@ function roundLegs(attack: GaitLeg['attack']): GaitLeg[] {
 const SCENARIOS: GaitScenario[] = [
   {
     name: 'walk',
-    what: 'level ground, nothing drawn',
+    what: 'level ground, nothing drawn: standing, off at a run, turned round, and stopped',
     start: LEVEL,
     aim: null,
-    legs: [legOf(['d'], false, 60), legOf(['a'], false, 60)],
+    legs: [legOf([], false, STAND_FRAMES), legOf(['d'], false, 60), legOf(['a'], false, 60), legOf([], false, 45)],
     film: 'left',
   },
   {
@@ -139,6 +147,17 @@ export interface GaitOptions {
   frames?: boolean;
   /** list every frame: the way the body faces and goes, the pelvis, the cycle, and each foot */
   trace?: boolean;
+  /** with `trace`, only the frames from the first to the second */
+  span?: [number, number];
+}
+
+/** The frames a trace lists, from the first to the last. */
+type TraceSpan = [number, number];
+
+/** The frames to trace as the options ask, or none. */
+function traceSpanOf(options: GaitOptions): TraceSpan | null {
+  if (!options.trace) return null;
+  return options.span ?? [0, Infinity];
 }
 
 /** a body going slower than this is standing (m/s) */
@@ -151,6 +170,13 @@ const HELD_UP_SPEED = 1;
 const HELD_UP_SHARE = 0.5;
 /** a planted foot dragged this many frames running is left behind (a frame's is the leg catching up) */
 const DRAG_RUN = 3;
+/** a body still this many frames has stopped; a step back against its way after that, more than this, is a step
+ *  back under it (m) */
+const STOPPED_FRAMES = 2;
+const STEP_BACK = 0.05;
+/** how far from its window's start a stride may leave and still be in step with the walk cycle (a share of the
+ *  window) */
+const IN_STEP = 0.25;
 /** a step shorter than this is a foot dance's (m) */
 const SHORT_STEP = 0.15;
 /** a person walks up to about this speed, with a foot always on the ground (m/s); above it, a person runs */
@@ -180,6 +206,13 @@ interface Step {
   planned: number;
   /** how it left: in its window, or early (`f.over`, the body leaving it out of reach) */
   how: string;
+  /** where in its window it left (0 its start, 1 its end), where the IK says */
+  window?: number;
+  /** whether it landed already out of the leg's reach (`f.over`) */
+  landedOver: boolean;
+  /** where its ankle left and landed */
+  from: THREE.Vector3;
+  to: THREE.Vector3;
 }
 
 /** The hips' height over the ground, summed by what the feet were doing. */
@@ -209,8 +242,8 @@ interface GaitRun {
   hopFrames: number[];
   /** each jerk: its frame, the point and the change */
   jerkList: string[];
-  /** each frame, when traced */
-  trace: string[];
+  /** the frames traced, each with its line */
+  trace: { frame: number; line: string }[];
   /** the frames a planted foot was dragged (its leg short of it even on its toes), each foot's run of them going
    *  on, and the longest; and the frames one was up on its toes, out of a flat foot's reach (a push off) */
   dragged: number;
@@ -220,6 +253,21 @@ interface GaitRun {
   /** the frames the body moved well short of its own velocity (held up by something in its way), and the first */
   heldUp: number;
   heldUpAt: string;
+  /** each side's hand and knee, how far forward of the hips each frame moving (m, in the hips' frame), and the
+   *  frames they were taken on (`ankle` keeps the knee: the name an older report used) */
+  swings: { hand: number[]; ankle: number[] }[];
+  swingFrames: number[];
+  /** each frame's body for the balance, and the frames it couldn't have moved so (`balance.ts`) */
+  balance: BalanceSample[];
+  falls: Fall[];
+  /** the frames a joint was past its range, and the worst of them */
+  pastRange: number;
+  worstBreach: { breach: Breach; frame: number } | null;
+  /** each frame, the way the body last went (x, z) and how many frames it has been still */
+  lastWay: (THREE.Vector2 | null)[];
+  stillFor: number[];
+  /** each frame's feet, as a film's note has them (`_` down, `^` up) */
+  feetAt: string[];
 }
 
 /** The film to take: from which frame, what it is round, and its pictures so far. */
@@ -297,10 +345,12 @@ function traceLine(lab: Lab, frame: number, legs: LegIK, speed: number, motions:
   const going = speed > 0.05 ? degreesOf(Math.atan2(velocity.x, velocity.z)) : '-';
   const facing = degreesOf(lab.player.facing);
   const pelvis = degreesOf(legs.pelvisYaw);
-  const body = `faces ${facing.padStart(4)} goes ${going.padStart(4)} at ${speed.toFixed(2)} pelvis ${pelvis.padStart(4)}`;
+  const way = `faces ${facing.padStart(4)} goes ${going.padStart(4)} at ${speed.toFixed(2)}`;
+  const body = `${way} pelvis ${pelvis.padStart(4)}`;
   const cycle = cycleOf(legs);
   const phase = cycle ? (((cycle.phase / (2 * Math.PI)) % 1) + 1) % 1 : NaN;
-  const cycleNote = cycle ? `phase ${phase.toFixed(2)} rate ${cycle.rate.toFixed(1).padStart(5)}${cycle.backing ? ' back' : ''}` : '';
+  const backing = cycle?.backing ? ' back' : '';
+  const cycleNote = cycle ? `phase ${phase.toFixed(2)} rate ${cycle.rate.toFixed(1).padStart(5)}${backing}` : '';
   const feet = legs.feet.map((_, side) => traceFoot(lab, legs, side, motions[side])).join(' ');
   const curve = (legs as unknown as { frame?: { curve?: number } }).frame?.curve;
   const curveNote = curve === undefined ? '' : `curve ${curve.toFixed(2).padStart(5)}`;
@@ -324,6 +374,7 @@ class StepWatch {
   private leftFrom = [new THREE.Vector3(), new THREE.Vector3()];
   private planned = [0, 0];
   private how = ['', ''];
+  private window: (number | undefined)[] = [undefined, undefined];
   /** each foot's time down as it was last frame (a swing's first frame clears it) */
   private stanceBefore = [0, 0];
 
@@ -349,6 +400,7 @@ class StepWatch {
         const window = (foot as { window?: number }).window;
         const at = window === undefined ? '' : ` at ${window.toFixed(2)} of its window`;
         this.how[side] = `${foot.state}${at}, ${down}${why ? `, ${why}` : ''}`;
+        this.window[side] = window;
         if (!otherDown && frame - this.leftAt[other] <= HOP_GAP) {
           run.hops.push(`frame ${frame}: both feet left the ground together`);
           run.hopFrames.push(frame);
@@ -358,7 +410,10 @@ class StepWatch {
       if (!this.wasDown[side] && down && this.leftAt[side] >= 0) {
         const length = Math.hypot(ankles[side].x - this.leftFrom[side].x, ankles[side].z - this.leftFrom[side].z);
         const step = { foot: side, left: this.leftAt[side], landed: frame, length };
-        run.steps.push({ ...step, planned: this.planned[side], how: this.how[side] });
+        const landedOver = foot.over;
+        const how = this.how[side];
+        const ends = { from: this.leftFrom[side].clone(), to: ankles[side].clone() };
+        run.steps.push({ ...step, ...ends, planned: this.planned[side], how, window: this.window[side], landedOver });
         if (length < SHORT_STEP) run.shortSteps++;
         if (otherDown && frame - this.landedAt[other] <= HOP_GAP && this.leftAt[other] > this.landedAt[side]) {
           run.hops.push(`frame ${frame}: both feet landed together`);
@@ -448,7 +503,8 @@ function bobOfSteps(heights: number[], steps: Step[]): number[] {
 }
 
 /** Runs one scenario, set up afresh, and measures its walk, picturing the frames `film` takes, if any. */
-async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null, trace = false): Promise<GaitRun> {
+async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null, trace: TraceSpan | null = null):
+  Promise<GaitRun> {
   const facing = scenario.aim ? 0 : Math.PI / 2;
   await lab.setup({ at: scenario.start, facing, nocked: Boolean(lab.player.cls.quiver) });
   const legs = lab.model.root.userData.legs as LegIK | undefined;
@@ -479,7 +535,17 @@ async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null, 
     onToes: 0,
     heldUp: 0,
     heldUpAt: '',
+    swings: [{ hand: [], ankle: [] }, { hand: [], ankle: [] }],
+    swingFrames: [],
+    balance: [],
+    falls: [],
+    pastRange: 0,
+    worstBreach: null,
+    lastWay: [],
+    stillFor: [],
+    feetAt: [],
   };
+  const shapes = shapesOf(lab, legs, [lab.joints.ankleL, lab.joints.ankleR]);
   const steps = new StepWatch(legs);
   const jerks = new JerkWatch();
   const heights: number[] = [];
@@ -499,11 +565,15 @@ async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null, 
     if (film) filmShot(lab, scenario, film, frame, legs);
     if (trace) {
       const motions = ankles.map((ankle, side) => ankleMotion(ankle, anklesWere[side], anklesBefore[side], seconds));
-      run.trace.push(traceLine(lab, frame, legs, moved / seconds, motions));
+      const traced = frame >= trace[0] && frame <= trace[1];
+      if (traced) run.trace.push({ frame, line: traceLine(lab, frame, legs, moved / seconds, motions) });
       anklesBefore.splice(0, 2, ...anklesWere);
       anklesWere.splice(0, 2, ...ankles);
     }
     followHeldUp(run, lab, frame, moved / seconds);
+    followStill(run, lab);
+    followBalance(run, lab, legs, shapes);
+    followRanges(run, lab, frame);
     const moving = moved / seconds > MOVING_SPEED;
     heights.push(moving ? hips.y - groundHeight(hips.x, hips.z) : NaN);
     if (!moving) return;
@@ -515,6 +585,7 @@ async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null, 
       if (isDown) run.planted[side]++;
     });
     followReach(run, legs);
+    followSwings(run, lab, frame);
     const support = down[0] && down[1] ? 'double' : down[0] || down[1] ? 'single' : 'flight';
     if (support === 'double') run.bothDown++;
     if (support === 'flight') run.bothUp++;
@@ -533,7 +604,146 @@ async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null, 
     await lab.step(leg.frames, (f) => ({ keys: leg.keys, m0: attackDown(leg, f), aim }), measure);
   }
   run.bobs = bobOfSteps(heights, run.steps);
+  run.falls = judgeBalance(run.balance, seconds);
+  noteFallsInTrace(run);
   return run;
+}
+
+/** The way the body goes this frame, or the way it last went once it stops, and how long it has been still. */
+function followStill(run: GaitRun, lab: Lab): void {
+  const velocity = lab.player.vel;
+  const speed = Math.hypot(velocity.x, velocity.z);
+  const frame = run.stillFor.length;
+  const moving = speed > MOVING_SPEED;
+  const stillBefore = frame ? run.stillFor[frame - 1] : 0;
+  const wayBefore = frame ? run.lastWay[frame - 1] : null;
+  run.stillFor.push(moving ? 0 : stillBefore + 1);
+  run.lastWay.push(moving ? new THREE.Vector2(velocity.x / speed, velocity.z / speed) : wayBefore);
+}
+
+/** This frame of the body for the balance: its centre of mass with its gear, and the soles planted under it. */
+function followBalance(run: GaitRun, lab: Lab, legs: LegIK, shapes: ReturnType<typeof shapesOf>): void {
+  const frame = run.stillFor.length - 1;
+  const way = run.stillFor[frame] === 0 ? run.lastWay[frame] : null;
+  const ankles = [lab.joints.ankleL, lab.joints.ankleR];
+  const feet = legs.feet.map((foot, side) => {
+    return { planted: foot.state === 'plant', ankle: ankles[side], shape: shapes[side] };
+  });
+  run.balance.push(sampleOf(lab.joints, buildOf(lab), lab.player.pos, feet, way));
+  run.feetAt.push(feetNow(legs));
+}
+
+/** Counts a frame with a joint past its range, and keeps the worst. */
+function followRanges(run: GaitRun, lab: Lab, frame: number): void {
+  const { found } = bodyBreaches(lab.joints);
+  if (!found.length) return;
+  run.pastRange++;
+  if (!run.worstBreach || found[0].by > run.worstBreach.breach.by) run.worstBreach = { breach: found[0], frame };
+}
+
+/** what each way a body couldn't move is called in a report */
+const UNLIKE_NAMES: Record<Unlike, string> = {
+  tips: 'would tip',
+  grip: 'beyond the feet\'s grip',
+  game: 'the game\'s own movement beyond any grip',
+  pulled: 'pulled down with a foot on the ground',
+  pushed: 'pushed along in the air',
+  held: 'in the air, not falling as a body does:',
+};
+
+/** A frame's falls, as a trace notes them. */
+function fallNote(falls: Fall[]): string {
+  const noteOf = (fall: Fall) => [UNLIKE_NAMES[fall.unlike], fall.toward, amountOf(fall)].filter(Boolean).join(' ');
+  return falls.map(noteOf).join(', ');
+}
+
+/** How much a fall is: off the soles (cm) or a push (m/s²). */
+function amountOf(fall: Fall): string {
+  return fall.unlike === 'tips' ? `${cm(fall.by)} cm` : `${fall.by.toFixed(1)} m/s²`;
+}
+
+/** Adds each traced frame's falls to its line. */
+function noteFallsInTrace(run: GaitRun): void {
+  for (const traced of run.trace) {
+    const falls = run.falls.filter((fall) => fall.frame === traced.frame);
+    if (falls.length) traced.line += `  ${fallNote(falls)}`;
+  }
+}
+
+/** The body's balance over the run: each way it couldn't have moved, on how many frames, and the worst. */
+function balanceOf(run: GaitRun): string {
+  const kinds = Object.keys(UNLIKE_NAMES) as Unlike[];
+  const said = kinds.flatMap((unlike) => {
+    const falls = run.falls.filter((fall) => fall.unlike === unlike);
+    if (!falls.length) return [];
+    const worst = falls.reduce((best, fall) => (Math.abs(fall.by) > Math.abs(best.by) ? fall : best));
+    const ways = unlike === 'tips' ? ` (${towardsOf(falls)})` : '';
+    return [`${UNLIKE_NAMES[unlike]} ${falls.length} frames${ways}, the worst ${amountOf(worst)} at ${worst.frame}`];
+  });
+  const what = 'its centre of mass with its gear against the push from its planted soles';
+  return said.length ? `as a body (${what}): ${said.join('; ')}` : `as a body could move (${what})`;
+}
+
+/** How many frames a body would tip each way. */
+function towardsOf(falls: Fall[]): string {
+  const counts = new Map<string, number>();
+  for (const fall of falls) counts.set(fall.toward, (counts.get(fall.toward) ?? 0) + 1);
+  return [...counts].map(([toward, count]) => `${toward} ${count}`).join(', ');
+}
+
+/** The episodes of a run a body couldn't move so (frames a frame or less apart), for `--frames`: each one's frames,
+ *  what the feet did, and each way it couldn't, at its worst. */
+function fallEpisodes(run: GaitRun): string[] {
+  const episodes: Fall[][] = [];
+  for (const fall of run.falls) {
+    const current = episodes[episodes.length - 1];
+    const last = current?.[current.length - 1];
+    if (last && fall.frame - last.frame <= 1) current.push(fall);
+    else episodes.push([fall]);
+  }
+  return episodes.map((falls) => {
+    const first = falls[0].frame;
+    const last = falls[falls.length - 1].frame;
+    const frames = first === last ? `frame ${first}` : `frames ${first}-${last}`;
+    return `    ${frames} (${feetDoing(run, first, last)}): ${episodeWays(falls)}`;
+  });
+}
+
+/** Each way an episode's body couldn't move, at its worst. */
+function episodeWays(falls: Fall[]): string {
+  const worst = new Map<string, Fall>();
+  for (const fall of falls) {
+    const key = `${fall.unlike} ${fall.toward}`;
+    const was = worst.get(key);
+    if (!was || fall.by > was.by) worst.set(key, fall);
+  }
+  const said = (fall: Fall) => `${fallNote([fall])} (at ${fall.frame}${fall.causes ? `: ${fall.causes}` : ''})`;
+  return [...worst.values()].map(said).join('; ');
+}
+
+/** What the feet did over frames `first` to `last`: standing or moving, and each frame's feet (`_` down, `^` up). */
+function feetDoing(run: GaitRun, first: number, last: number): string {
+  const moving = run.stillFor.slice(first, last + 1).some((still) => still === 0);
+  const feet = run.feetAt.slice(first, last + 1).join(' ');
+  return `${moving ? 'moving' : 'standing'}, ${feet}`;
+}
+
+/** The joints past their ranges over the run. */
+function rangesOf(run: GaitRun): string {
+  if (!run.worstBreach) return 'every joint within its range';
+  const worst = `${describeBreach(run.worstBreach.breach)} at frame ${run.worstBreach.frame}`;
+  return `a joint past its range ${run.pastRange} frames, the worst ${worst}`;
+}
+
+/** The steps a foot took back against the way the body had gone, once it had stopped: put out ahead, and stepped back
+ *  under a body that never came over it. */
+function stepsBack(run: GaitRun): Step[] {
+  return run.steps.filter((step) => {
+    const way = run.lastWay[step.left];
+    if (!way || run.stillFor[step.left] < STOPPED_FRAMES) return false;
+    const along = (step.to.x - step.from.x) * way.x + (step.to.z - step.from.z) * way.y;
+    return along < -STEP_BACK;
+  });
 }
 
 /** Counts a frame the body moved well short of its velocity (`speed` its move over the ground, m/s), and names the
@@ -555,6 +765,112 @@ function followHeldUp(run: GaitRun, lab: Lab, frame: number, speed: number): voi
     ? `, the nearest obstacle ${cm(nearest.gap)} cm off, at ${nearest.x.toFixed(1)}, ${nearest.z.toFixed(1)}`
     : '';
   run.heldUpAt = `frame ${frame}, at ${at.x.toFixed(1)}, ${at.z.toFixed(1)}${near}`;
+}
+
+/** Each hand's and ankle's place forward of the hips this frame, in the hips' frame (m). */
+function followSwings(run: GaitRun, lab: Lab, frame: number): void {
+  run.swingFrames.push(frame);
+  const joints = lab.joints;
+  // (against the knee, the thigh's swing, as a person's arm swings against the hip's: the ankle trails the thigh
+  // through a swing as the knee folds, and no arm swung by the thigh could read as -1 against it)
+  const pairs = [[joints.handL, joints.kneeL], [joints.handR, joints.kneeR]];
+  pairs.forEach(([hand, ankle], side) => {
+    run.swings[side].hand.push(forwardOfHips(lab, hand));
+    run.swings[side].ankle.push(forwardOfHips(lab, ankle));
+  });
+}
+
+/** How far forward of the hips a joint is, in the hips' own frame (m). */
+function forwardOfHips(lab: Lab, joint: THREE.Object3D): number {
+  const hips = lab.joints.hips;
+  const scale = hips.getWorldScale(new THREE.Vector3()).x;
+  return hips.worldToLocal(joint.getWorldPosition(new THREE.Vector3())).z * scale;
+}
+
+/** each hand's swing against its ankle is judged over stretches this long, this far apart (frames: a stretch is a
+ *  stride and more at a run, most of one at a walk) */
+const SWING_STRETCH = 30;
+const SWING_EVERY = 15;
+/** a hand moving fore and aft less than this over a stretch is held, not swinging (m) */
+const SWING_LEAST = 0.06;
+
+/** A stretch of the moving frames a hand's swing is judged over: its first and last frames, and the correlation. */
+interface SwingStretch {
+  at: number;
+  until: number;
+  value: number;
+}
+
+/** Each side's hand against its own ankle over each stretch of the moving frames. */
+function swingStretches(run: GaitRun): SwingStretch[][] {
+  return run.swings.map((swing) => {
+    const stretches: SwingStretch[] = [];
+    for (let from = 0; from + SWING_STRETCH <= swing.hand.length; from += SWING_EVERY) {
+      const until = from + SWING_STRETCH;
+      const hand = swing.hand.slice(from, until);
+      // (a hand that hardly moves is held, a bow drawn: not a swing to judge)
+      if (Math.max(...hand) - Math.min(...hand) < SWING_LEAST) continue;
+      const value = correlation(hand, swing.ankle.slice(from, until));
+      stretches.push({ at: run.swingFrames[from], until: run.swingFrames[until - 1], value });
+    }
+    return stretches;
+  });
+}
+
+/** Every stretch's correlation, side by side, for `--frames`. */
+function swingStretchLines(run: GaitRun): string[] {
+  return swingStretches(run).flatMap((stretches, side) => stretches.map((stretch) => {
+    return `    ${SIDES[side]} hand against its knee, frames ${stretch.at}-${stretch.until}: ${stretch.value.toFixed(2)}`;
+  }));
+}
+
+/** Each hand against its own side's ankle over each stretch of the moving frames: the median, and the worst stretch
+ *  and its frames (a hand swinging with its own leg there, as a person's never does). */
+function swingsByStretch(run: GaitRun): string {
+  const said = swingStretches(run).map((stretches, side) => {
+    if (!stretches.length) return `${SIDES[side]} held`;
+    const values = stretches.map((stretch) => stretch.value);
+    const worst = stretches.reduce((best, stretch) => (stretch.value > best.value ? stretch : best));
+    const worstAt = `frames ${worst.at}-${worst.until}`;
+    return `${SIDES[side]} ${median(values).toFixed(2)}, the worst ${worst.value.toFixed(2)} (${worstAt})`;
+  });
+  return `by ${SWING_STRETCH} frames, the median and the worst: ${said.join('; ')}`;
+}
+
+/** The correlation of two series (-1 to 1; 0 when either keeps still). */
+function correlation(first: number[], second: number[]): number {
+  const count = Math.min(first.length, second.length);
+  if (count < 2) return 0;
+  const mean = (values: number[]) => values.slice(0, count).reduce((sum, value) => sum + value, 0) / count;
+  const firstMean = mean(first);
+  const secondMean = mean(second);
+  let both = 0;
+  let firstSquares = 0;
+  let secondSquares = 0;
+  for (let i = 0; i < count; i++) {
+    const a = first[i] - firstMean;
+    const b = second[i] - secondMean;
+    both += a * b;
+    firstSquares += a * a;
+    secondSquares += b * b;
+  }
+  const spread = Math.sqrt(firstSquares * secondSquares);
+  return spread > 1e-9 ? both / spread : 0;
+}
+
+/** The walk's rhythm: how many strides left in step with the walk cycle (near their window's start, as the arms
+ *  swing by it) and how many landed already out of the leg's reach. */
+function rhythmOf(steps: Step[]): string {
+  const timed = steps.filter((step) => step.window !== undefined);
+  const inStep = timed.filter((step) => Math.abs(step.window!) <= IN_STEP).length;
+  const over = steps.filter((step) => step.landedOver).length;
+  const kept = timed.length ? `${inStep} of ${timed.length} strides in step with the cycle` : 'the cycle not known';
+  const outOfStep = timed.filter((step) => Math.abs(step.window!) > IN_STEP);
+  const offFrames = outOfStep.map((step) => `${SIDES[step.foot]} ${step.left}`).join(', ');
+  const overFrames = steps.filter((step) => step.landedOver).map((step) => `${SIDES[step.foot]} ${step.landed}`);
+  const off = offFrames ? `, out of step: ${offFrames}` : '';
+  const landed = over ? ` (${overFrames.join(', ')})` : '';
+  return `${kept} (leaving within ${IN_STEP} of their window's start${off}); ${over} landed out of reach${landed}`;
 }
 
 /** Counts the planted feet dragged this frame, and each one's run of such frames, and those on their toes. */
@@ -595,6 +911,15 @@ function unlikeAPerson(run: GaitRun, speed: number): string[] {
     found.push(`a planted foot dragged for up to ${run.longestDrag} frames: the leg short of it, even on its toes`);
   }
   if (run.jerks) found.push(`${run.jerks} jerks: a sudden change of the change of speed in a frame`);
+  const back = stepsBack(run);
+  if (back.length) {
+    const frames = back.map((step) => `${SIDES[step.foot]} ${step.left}`).join(', ');
+    found.push(`${back.length} steps back under a body that had stopped (${frames}): its feet were out ahead of it`);
+  }
+  const tips = run.falls.filter((fall) => fall.unlike === 'tips').length;
+  if (tips) found.push(`the body would fall over on ${tips} frames: its feet not under its weight`);
+  const hung = run.falls.filter((fall) => fall.unlike === 'held').length;
+  if (hung) found.push(`hung in the air on ${hung} frames, not falling as a body does`);
   return found;
 }
 
@@ -635,6 +960,13 @@ function describeRun(scenario: GaitScenario, run: GaitRun, seconds: number, list
   if (run.heldUp) {
     lines.push(`  held up by something in its way ${run.heldUp} frames (${run.heldUpAt}): not a walk to judge`);
   }
+  lines.push(`  ${rhythmOf(run.steps)}`);
+  lines.push(`  ${balanceOf(run)}`);
+  lines.push(`  ${rangesOf(run)}`);
+  const against = run.swings.map((swing) => correlation(swing.hand, swing.ankle).toFixed(2));
+  const hands = `L ${against[0]}, R ${against[1]}`;
+  lines.push(`  each hand fore and aft against its own side's knee: ${hands} (a person's: -1)`);
+  lines.push(`    ${swingsByStretch(run)}`);
   const unlike = unlikeAPerson(run, speed);
   lines.push(unlike.length ? `  unlike a person: ${unlike.join('; ')}` : '  as a person walks');
   if (listSteps) {
@@ -645,8 +977,10 @@ function describeRun(scenario: GaitScenario, run: GaitRun, seconds: number, list
     }
     lines.push(...run.hops.map((hop) => `    ${hop}`));
     lines.push(...run.jerkList.map((jerk) => `    jerk ${jerk}`));
+    lines.push(...fallEpisodes(run));
+    lines.push(...swingStretchLines(run));
   }
-  lines.push(...run.trace);
+  lines.push(...run.trace.map((traced) => traced.line));
   return lines;
 }
 
@@ -670,9 +1004,11 @@ export async function gait(lab: Lab, options: GaitOptions): Promise<GaitReport> 
   const report: GaitReport = { lines: [], moments: [], problems: [] };
   const seconds = window.__labClock.frame / 1000;
   for (const scenario of SCENARIOS.filter((candidate) => asked.includes(candidate.name))) {
-    const run = await runScenario(lab, scenario, null, Boolean(options.trace));
+    const run = await runScenario(lab, scenario, null, traceSpanOf(options));
     report.lines.push(...describeRun(scenario, run, seconds, Boolean(options.frames)));
-    if (run.heldUp) report.problems.push(`gait: ${scenario.name} was held up by something in its way (${run.heldUpAt})`);
+    if (run.heldUp) {
+      report.problems.push(`gait: ${scenario.name} was held up by something in its way (${run.heldUpAt})`);
+    }
     const film = filmFor(run.hopFrames);
     await runScenario(lab, scenario, film);
     const moment = filmMoment(scenario, film);
