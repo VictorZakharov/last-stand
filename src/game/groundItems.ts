@@ -2,6 +2,7 @@
 // picked up again (click its name) or, in co-op, by a partner. Whatever is left there is lost when a run
 // starts. In co-op every game shows every drop, and the host says who got one first (net/session).
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G } from '../state';
 import { additive } from '../core/materials';
 import { radialDecal } from '../core/textures';
@@ -14,7 +15,7 @@ import { project, floatText } from '../ui/floaters';
 import { bindTooltip, hideTooltip, itemTooltip, itemTooltipHTML } from '../ui/tooltip';
 import { input } from '../core/input';
 import { itemIconSVG } from '../ui/itemIcons';
-import type { Item, RarityId } from '../types';
+import type { Item } from '../types';
 
 /** A drop as the games tell each other about it: the item, where it lies and where it was thrown from. */
 export interface GroundDrop { id: string; item: Item; x: number; z: number; fx: number; fz: number }
@@ -35,9 +36,11 @@ const THROW_MAX = 9;
 const TOSS = 0.55;
 /** a guest's request to the host: tried again after this long without an answer */
 const ASK_AGAIN = 2;
+/** drops the floor's meshes have room for at first (they double when it fills) */
+const ROOM = 32;
 
 interface Drop extends GroundDrop {
-  group: THREE.Group; shard: THREE.Mesh; beam: THREE.Group; glow: THREE.Mesh; label: HTMLElement;
+  label: HTMLElement;
   /** age (s): the toss, then the beam growing */
   t: number;
   /** when a guest last asked the host for it */
@@ -53,36 +56,71 @@ let picked: (item: Item) => boolean = () => false;
 const TAG = Math.random().toString(36).slice(2, 7);
 let seq = 0;
 
-let geo: { beam: THREE.PlaneGeometry; glow: THREE.PlaneGeometry; shard: THREE.BufferGeometry } | null = null;
-let soft: THREE.Texture | null = null;
-const mats = new Map<RarityId, { beam: THREE.MeshBasicMaterial; glow: THREE.MeshBasicMaterial; shard: THREE.MeshBasicMaterial }>();
+/** A drop's pieces: the shard, the glow on the floor under it and the soft shaft of light (two crossed cards). */
+type Part = 'shard' | 'glow' | 'beam';
+const PARTS: Part[] = ['shard', 'glow', 'beam'];
+
+/**
+ * Every drop on the floor is drawn at once, one instanced mesh a piece, each drop coloured by its rarity. As meshes
+ * of its own, each drop cost 8 draw calls (additive and double-sided, each piece was drawn twice), and 120 drops
+ * added 10 to 14 ms to a frame; their light adds up in any order, so one pass a piece draws the same picture.
+ */
+let looks: { geo: Record<Part, THREE.BufferGeometry>; mat: Record<Part, THREE.MeshBasicMaterial> } | null = null;
+let meshes: Record<Part, THREE.InstancedMesh> | null = null;
+/** the drops' colours are written again (one came or went) */
+let recolour = false;
 
 /** `pick` puts a picked-up item in the stash; false when there's no room. */
 export function initGround(pick: (item: Item) => boolean): void { picked = pick; }
 export function setGroundNet(n: GroundNet | null): void { net = n; }
 
-// one set of materials per rarity, in its colour (all additive, the effects' own shader programs)
-function matsFor(r: RarityId) {
-  let m = mats.get(r);
-  if (m) return m;
-  geo ??= {
-    beam: new THREE.PlaneGeometry(1, 1),
-    glow: new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+// the pieces' shapes and materials (white, all additive: the effects' own shader programs, coloured per drop)
+function looksFor() {
+  if (looks) return looks;
+  const card = new THREE.PlaneGeometry(1, 1);
+  const geo = {
     shard: new THREE.OctahedronGeometry(0.09, 0).scale(1, 1.8, 1),
+    glow: new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+    beam: mergeGeometries([card, card.clone().rotateY(Math.PI / 2)])!,
   };
-  soft ??= radialDecal('rgba(255,255,255,1)', 'rgba(255,255,255,0)', false);
-  const c = rarityOf(r).color;
-  const beam = additive(c, 0.9, 0.5), glow = additive(c, 1, 0.55), shard = additive(c, 2.2);
-  beam.map = glow.map = soft;
-  m = { beam, glow, shard };
-  mats.set(r, m);
-  return m;
+  const soft = radialDecal('rgba(255,255,255,1)', 'rgba(255,255,255,0)', false);
+  const mat = { shard: additive(0xffffff, 2.2), glow: additive(0xffffff, 1, 0.55), beam: additive(0xffffff, 0.9, 0.5) };
+  mat.beam.map = mat.glow.map = soft;
+  for (const m of Object.values(mat)) m.forceSinglePass = true;
+  looks = { geo, mat };
+  return looks;
+}
+
+/** A piece's instanced mesh with room for `room` drops, each coloured on its own. */
+function instanced(part: Part, room: number): THREE.InstancedMesh {
+  const { geo, mat } = looksFor();
+  const mesh = new THREE.InstancedMesh(geo[part], mat[part], room);
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  mesh.setColorAt(0, new THREE.Color());
+  // (the drops move every frame: drawn whatever the view rather than bounded afresh each time)
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
+/** The pieces' meshes, with room for `count` drops (made afresh, twice as roomy, when they run out of it). */
+function meshesFor(count: number): Record<Part, THREE.InstancedMesh> {
+  if (meshes && count <= meshes.shard.instanceMatrix.count) return meshes;
+  let room = meshes?.shard.instanceMatrix.count ?? ROOM;
+  while (room < count) room *= 2;
+  for (const part of PARTS) {
+    if (!meshes) break;
+    G.scene.remove(meshes[part]);
+    meshes[part].dispose();
+  }
+  meshes = { shard: instanced('shard', room), glow: instanced('glow', room), beam: instanced('beam', room) };
+  for (const part of PARTS) G.scene.add(meshes[part]);
+  recolour = true;
+  return meshes;
 }
 
 /** Sample meshes for the load-time shader warm-up. */
 export function groundSamples(): THREE.Object3D[] {
-  const m = matsFor('common');
-  return [new THREE.Mesh(geo!.beam, m.beam), new THREE.Mesh(geo!.shard, m.shard)];
+  return PARTS.map((part) => instanced(part, 1));
 }
 
 /** The classes that can use an item (its base is one of theirs). */
@@ -123,30 +161,11 @@ export function floorAt(cx: number, cy: number): { x: number; z: number } | null
 /** A drop appears: thrown from where it was thrown from, or already lying there (`toss` false). */
 export function addDrop(g: GroundDrop, toss = true): void {
   if (drops.has(g.id)) return;
-  const m = matsFor(g.item.rarity);
-  const group = new THREE.Group();
-  const shard = new THREE.Mesh(geo!.shard, m.shard);
-  const glow = new THREE.Mesh(geo!.glow, m.glow);
-  glow.scale.setScalar(0.9);
-  glow.position.y = 0.04;   // clear of the floor: level with it, the two flicker in and out
-  // a soft shaft of light, two crossed cards
-  const beam = new THREE.Group();
-  for (const a of [0, Math.PI / 2]) {
-    const b = new THREE.Mesh(geo!.beam, m.beam);
-    b.rotation.y = a;
-    beam.add(b);
-  }
-  beam.position.y = 1.1;
-  group.add(shard, glow, beam);
-  for (const o of [shard, glow, ...beam.children]) { o.castShadow = false; o.receiveShadow = false; }
-  group.position.set(g.x, groundHeight(g.x, g.z), g.z);
-  G.scene.add(group);
-
   const label = document.createElement('div');
   label.className = 'gdrop';
   label.style.setProperty('--c', rarityOf(g.item.rarity).color);
   label.innerHTML = `${itemIconSVG(g.item)}<span>${g.item.name}</span>`;
-  const d: Drop = { ...g, group, shard, beam, glow, label, t: toss ? 0 : TOSS + 1, asked: -Infinity, w: 0, h: 0 };
+  const d: Drop = { ...g, label, t: toss ? 0 : TOSS + 1, asked: -Infinity, w: 0, h: 0 };
   bindTooltip(label, () => {
     const own = usersOf(d.item).some((c) => c.id === G.player.cls.id);
     const how = own ? (input.touchMode ? 'Tap again to pick it up' : 'Click to pick it up') : `Only a ${usersOf(d.item).map((c) => c.name).join(' or ') || 'nobody'} can use it`;
@@ -161,7 +180,8 @@ export function addDrop(g: GroundDrop, toss = true): void {
   label.style.display = 'none';
   document.getElementById('floaters')?.appendChild(label);
   drops.set(d.id, d);
-  pose(d);
+  recolour = true;
+  drawDrops();
 }
 
 /** Take a drop off the floor (it's gone, or someone took it). Returns it, if it was there. */
@@ -169,7 +189,8 @@ export function removeDrop(id: string): GroundDrop | null {
   const d = drops.get(id);
   if (!d) return null;
   drops.delete(id);
-  G.scene.remove(d.group);
+  recolour = true;
+  drawDrops();
   d.label.remove();
   hideTooltip();
   return { id: d.id, item: d.item, x: d.x, z: d.z, fx: d.fx, fz: d.fz };
@@ -189,26 +210,57 @@ export const groundDrops = (): GroundDrop[] => [...drops.values()].map((d) => ({
 /** Whatever is left on the floor is lost (a run starts, or a guest leaves the host's lobby). */
 export function clearGround(): void { for (const id of [...drops.keys()]) removeDrop(id); }
 
-function pose(d: Drop): void {
-  const t = d.t, g = d.group, y0 = groundHeight(d.x, d.z);
+const at = new THREE.Vector3(), turn = new THREE.Quaternion(), spin = new THREE.Euler(), size = new THREE.Vector3();
+const placed = new THREE.Matrix4(), unturned = new THREE.Quaternion();
+/** a piece not shown yet: drawn as nothing */
+const NONE = new THREE.Matrix4().makeScale(0, 0, 0);
+const tint = new THREE.Color();
+
+/** Puts drop `i`'s piece where it is now (`turn` as `spin`, or not turned without it). */
+function place(mesh: THREE.InstancedMesh, i: number, sx: number, sy: number, sz: number, by?: THREE.Euler): void {
+  mesh.setMatrixAt(i, placed.compose(at, by ? turn.setFromEuler(by) : unturned, size.set(sx, sy, sz)));
+}
+
+/** Drop `i`'s pieces: tossed through the air, then lying with its light growing over it. */
+function pose(d: Drop, i: number, m: Record<Part, THREE.InstancedMesh>): void {
+  const t = d.t, y0 = groundHeight(d.x, d.z);
   if (t < TOSS) {
     // an arc from the thrower's hand to the floor, the shard tumbling
     const k = t / TOSS;
-    g.position.set(d.fx + (d.x - d.fx) * k, 0, d.fz + (d.z - d.fz) * k);
-    d.shard.position.y = (groundHeight(d.fx, d.fz) + 1.2) * (1 - k) + y0 * k + 1.6 * k * (1 - k) - y0 + 0.18;
-    g.position.y = y0;
-    d.shard.rotation.set(t * 11, t * 7, 0);
-    d.beam.visible = d.glow.visible = false;
+    const y = (groundHeight(d.fx, d.fz) + 1.2) * (1 - k) + y0 * k + 1.6 * k * (1 - k) + 0.18;
+    at.set(d.fx + (d.x - d.fx) * k, y, d.fz + (d.z - d.fz) * k);
+    place(m.shard, i, 1, 1, 1, spin.set(t * 11, t * 7, 0));
+    m.glow.setMatrixAt(i, NONE);
+    m.beam.setMatrixAt(i, NONE);
     return;
   }
   const s = Math.min(1, (t - TOSS) / 0.4);   // the light grows once it lands
-  g.position.set(d.x, y0, d.z);
-  d.beam.visible = d.glow.visible = true;
-  d.beam.scale.set(0.45, 2.2 * s, 1);
-  d.beam.position.y = 1.1 * s;
-  d.glow.scale.setScalar(0.9 * s);
-  d.shard.rotation.set(0, t * 1.4, 0);
-  d.shard.position.y = 0.3 + Math.sin(t * 2.2) * 0.04;
+  at.set(d.x, y0 + 1.1 * s, d.z);
+  place(m.beam, i, 0.45, 2.2 * s, 1);
+  at.set(d.x, y0 + 0.04, d.z);   // clear of the floor: level with it, the two flicker in and out
+  place(m.glow, i, 0.9 * s, 0.9 * s, 0.9 * s);
+  at.set(d.x, y0 + 0.3 + Math.sin(t * 2.2) * 0.04, d.z);
+  place(m.shard, i, 1, 1, 1, spin.set(0, t * 1.4, 0));
+}
+
+/** Every drop's pieces where they are now (and in its colour, once one came or went), shown in the lobby only. */
+function drawDrops(): void {
+  if (!meshes && drops.size === 0) return;
+  const m = meshesFor(drops.size);
+  let i = 0;
+  for (const d of drops.values()) {
+    pose(d, i, m);
+    if (recolour) for (const part of PARTS) m[part].setColorAt(i, tint.set(rarityOf(d.item.rarity).color));
+    i++;
+  }
+  for (const part of PARTS) {
+    const mesh = m[part];
+    mesh.count = drops.size;
+    mesh.visible = G.mode === 'menu' && drops.size > 0;
+    mesh.instanceMatrix.needsUpdate = true;
+    if (recolour) mesh.instanceColor!.needsUpdate = true;
+  }
+  recolour = false;
 }
 
 /** The labels over the drops, stacked upwards where they would overlap (the nearest keep their place). */
@@ -218,7 +270,7 @@ function placeLabels(): void {
     const on = d.t >= TOSS && G.mode === 'menu';
     if (!on) d.label.style.display = 'none';
     return on;
-  }).map((d) => ({ d, s: project(d.x, d.group.position.y + 0.5, d.z) })).filter(({ d, s }) => {
+  }).map((d) => ({ d, s: project(d.x, groundHeight(d.x, d.z) + 0.5, d.z) })).filter(({ d, s }) => {
     if (s.behind) d.label.style.display = 'none';
     return !s.behind;
   }).sort((a, b) => b.s.y - a.s.y);
@@ -261,13 +313,11 @@ function pickUp(d: Drop): void {
 
 /** Every frame: the drops' motion and labels. */
 export function updateGround(dt: number): void {
-  const lobby = G.mode === 'menu';
   for (const d of drops.values()) {
     d.t += dt;
-    d.group.visible = lobby;
-    pose(d);
     // the class on show can change (a class or save slot switch in the lobby)
     d.label.classList.toggle('other', !usersOf(d.item).some((c) => c.id === G.player.cls.id));
   }
+  drawDrops();
   placeLabels();
 }
