@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { DAMAGE_COLORS } from '../data/balance';
-import { hurtPlayer } from '../combat/damage';
+import { hurtPlayer, DAMAGE_TYPES } from '../combat/damage';
 import { spawnProjectile, type Projectile } from '../combat/projectiles';
 import { sporeOrb, sporeOrbTick } from '../fx/sporeOrb';
 import { riftBolt, riftBoltTick, riftBoltLaunch, riftBoltImpact, riftBoltFizzle } from '../fx/riftBolts';
@@ -60,14 +60,27 @@ export function setFxSink(fn: typeof fxSink): void { fxSink = fn; }
 
 /**
  * The visible side of enemy attacks, by name with plain numeric arguments, so a co-op guest can
- * replay each one as the host plays it. Only the game simulating the fight deals the damage in them.
+ * replay each one as the host plays it. Each game judges the hits in them on its own player, as
+ * its own screen shows the blow (combat/damage `hurtPlayer`).
  */
 export const FX = {
   strike(x: number, z: number) {
     burst(new THREE.Vector3(x, 1.1, z), { count: 10, color: 0xff3020, speed: 4, life: 0.35, size: 0.2 });
   },
-  slam(x: number, z: number, radius: number, color: number, boss: number) {
+  /** enemy `id`'s blow at the player in `slot`, judged by that player's game where it shows the enemy */
+  melee(id: number, slot: number, damage: number) {
+    const e = G.enemies.find((x) => x.id === id), p = G.player;
+    if (!e || p.slot !== slot || !p.active) return;
+    const dist = Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z);
+    if (dist >= e.def.range + p.radius + 0.3 || !e.inFront(p.pos.x, p.pos.z, 1.3)) return;
+    hurtPlayer(p, damage, e.def.damageType, e.pos);
+    FX.strike(p.pos.x, p.pos.z);
+  },
+  /** a slam; whoever stands in it is hit (`damage` of DAMAGE_TYPES[`type`]) */
+  slam(x: number, z: number, radius: number, color: number, boss: number, damage = 0, type = 4) {
     const pos = new THREE.Vector3(x, 0, z);
+    const p = G.player;
+    if (damage > 0 && p.active && Math.hypot(p.pos.x - x, p.pos.z - z) < radius + p.radius) hurtPlayer(p, damage, DAMAGE_TYPES[type], pos);
     shockwave(pos, { color, intensity: 2.5, from: 0.5, to: radius * 1.15, life: 0.5 });
     shockwave(pos, { color: 0xffffff, intensity: 1, from: 0.2, to: radius * 0.8, life: 0.3 });
     groundFlash(pos, { color, intensity: 2, radius: radius * 1.1, life: 0.4 });
@@ -145,20 +158,14 @@ function fx<K extends FxName>(name: K, ...args: Parameters<(typeof FX)[K]>): voi
 }
 
 // --- attacks ------------------------------------------------------------------------
+/** The blow at the target, judged by the target's own game (a partner's where its player sees it). */
 function meleeStrike(e: Enemy): void {
-  const { dist } = e.toPlayer();
-  const p = e.target!;
-  if (p.active && dist < e.def.range + p.radius + 0.3 && e.inFront(p.pos.x, p.pos.z, 1.3)) {
-    hurtPlayer(p, e.damage, e.def.damageType, e.pos);
-    fx('strike', p.pos.x, p.pos.z);
-  }
+  fx('melee', e.id, e.target!.slot, e.damage);
 }
 
+/** A slam: everyone standing in it is hit, each judged by its own game. */
 function slamAt(e: Enemy, x: number, z: number, radius: number, color = e.def.accent ?? DAMAGE_COLORS[e.def.damageType]): void {
-  fx('slam', x, z, radius, color, e.boss ? 1 : 0);
-  // everyone standing in it is hit
-  const pos = new THREE.Vector3(x, 0, z);
-  for (const p of G.players) if (p.active && Math.hypot(p.pos.x - x, p.pos.z - z) < radius + p.radius) hurtPlayer(p, e.damage, e.def.damageType, pos);
+  fx('slam', x, z, radius, color, e.boss ? 1 : 0, e.damage, DAMAGE_TYPES.indexOf(e.def.damageType));
 }
 
 function fireBolt(e: Enemy, angleOffset = 0, lead = true): void {

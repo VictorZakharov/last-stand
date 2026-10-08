@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import type { Obstacle } from '../types';
 import type { Updater } from './props';
-import { simulates, dealsDamage } from '../net/role';
+import { simulates, hurtsProps } from '../net/role';
 import type { Player } from '../entities/player';
 import { burst, debris, smokePuff } from '../fx/particles';
 import { rubble, type RubbleKind } from '../fx/rubble';
@@ -121,7 +121,7 @@ export function hurtProp(o: Obstacle, amount: number): boolean {
 /** An area attack of `by` (a circle at x, z): every prop it touches takes `amount`, once per call (a `seen`
  *  set makes it once for a moving one, like Crescent's) */
 export function hurtPropsIn(by: Player, x: number, z: number, radius: number, amount: number, seen?: Set<Prop>): void {
-  if (!dealsDamage(by)) return;
+  if (!hurtsProps(by)) return;
   const hit = seen ?? new Set<Prop>();
   for (const o of [...G.arena.obstacles]) {   // (a copy: breaking one takes its circles out)
     const p = o.prop;

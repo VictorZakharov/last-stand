@@ -116,6 +116,22 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  coop: {
+    help: 'two games playing together, the host\'s and the guest\'s, their messages carried as a link of a high ping '
+      + 'carries them: how far behind and how roughly each copies the other\'s heroes and foes, whether an arrow that '
+      + 'struck a foe on the guest\'s screen counted, whether a blow it dodged on its screen hurt it',
+    options: {
+      scenarios: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['walk', 'foes', 'shoot', 'dodge', 'down'],
+        help: 'the scenarios (all by default): walk, foes, shoot, dodge, down',
+      },
+      ping: { kind: 'number', usage: 'ms', help: 'the link\'s least round trip (300 by default)' },
+      jitter: { kind: 'number', usage: 'ms', help: 'how much later each way a message may come (60 by default)' },
+      ...COMMON_OPTIONS,
+    },
+  },
   gait: {
     help: 'the hero\'s walk judged as a person\'s, over level ground and the dais\'s steps, nothing drawn, drawn and '
       + 'changing direction: the time on each foot, both and neither, the steps, the hops, the hips\' rise and fall, '

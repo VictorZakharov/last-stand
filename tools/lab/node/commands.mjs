@@ -2,6 +2,7 @@
 // put together and compared, and the problems a result reports. Their options are read and checked by options.mjs.
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { runCoop } from './coop.mjs';
 import { labError } from './errors.mjs';
 import { OUT, REPO } from './paths.mjs';
 import { probeFiles } from './probeFiles.mjs';
@@ -169,6 +170,14 @@ export const COMMANDS = {
     textOf: asText,
     problemsOf: problemsIn,
     // (an A/B compares the reports, not the films: two sides' 48 frames each, loaded to compare, took the browser down)
+  },
+
+  coop: {
+    each(side, options) {
+      return runCoop(side, { scenarios: options.scenarios, ping: options.ping, jitter: options.jitter });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
   },
 
   stops: {

@@ -1,7 +1,10 @@
 // Co-op sessions: hosting or joining a room, the shared lobby, and the players' own state.
-// Every game reports its own player (position, aim, casts) to the others, in the lobby and in a
-// run; the host's game also reports the fight (net/sync). The host hands out the party slots
-// (0 is the host) and starts the runs. Built for up to COOP.maxPlayers.
+// Every game reports its own player (position, aim, life, casts, the hits it took) to the others,
+// in the lobby and in a run, each message stamped with its clock; the host's game also reports the
+// fight (net/sync). Each partner's reports are played out on its own timeline (net/timeline), a
+// little behind the freshest, so its character moves smoothly and casts in step with its body
+// whatever the link's jitter. The host hands out the party slots (0 is the host) and starts the
+// runs. Built for up to COOP.maxPlayers.
 import { G } from '../state';
 import { COOP } from '../data/balance';
 import { CLASSES } from '../data/classes/index';
@@ -11,13 +14,14 @@ import { openLink, ServerDown, SERVER_DOWN, type Link } from './transport';
 import { netLog } from './netlog';
 import { role } from './role';
 import { showBiomeSetting } from '../game/biome';
-import { hostSync, stopSync, onWorld, onGuestControl, sendWorld } from './sync';
+import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGuestHits, takeHits, type HitReport, type WorldMessage } from './sync';
+import { Playout, Smoother, Timeline, Track, type Pose } from './timeline';
 import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGround, type GroundDrop } from '../game/groundItems';
 
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 9;
+const PROTOCOL = 10;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** room codes: no look-alike letters or digits */
@@ -28,7 +32,12 @@ export interface Look { cls: string; eq: Profile['equipped'] }
 
 export type SessionStatus = 'off' | 'hosting' | 'joining' | 'joined' | 'failed';
 
-interface Peer { id: string; slot: number; player: Player | null; look: Look | null; inRun: boolean }
+/** A partner: its slot and character, and its reports as they're played out (its clock, where its character is, what
+ *  it did). */
+interface Peer {
+  id: string; slot: number; player: Player | null; look: Look | null; inRun: boolean;
+  clock: Timeline; track: Track<StateMsg>; smooth: Smoother; actions: Playout<PlayerAction>;
+}
 
 /** What the rest of the game does when the session changes (set by main). */
 export interface SessionHooks {
@@ -175,8 +184,9 @@ function wire(l: Link): void {
     if (ch === 'hello') onHello(from, m);
     else if (ch === 'look') onLook(from, m as unknown as Look);
     else if (ch === 'pl') onState(from, m as unknown as StateMsg);
-    else if (ch === 'ev') onActions(from, m as unknown as PlayerAction[]);
-    else if (ch === 'w') onWorld(m);
+    else if (ch === 'ev') onActions(from, m as unknown as ActionsMsg);
+    else if (ch === 'w') onFight(from, m as unknown as WorldMessage);
+    else if (ch === 'dmg') onHits(from, m as unknown as HitReport[]);
     else if (ch === 'ctl') onControl(from, m);
   });
   if (session.status === 'joining') role.current = 'guest';
@@ -294,29 +304,71 @@ function onLook(from: string, look: Look): void {
   hooks.changed();
 }
 
-interface StateMsg { x: number; z: number; vx: number; vz: number; f: number; ax: number; az: number; run: 0 | 1; rv: 0 | 1; e: number }
+/** A player's own state: its clock (ms), where it is, the way it goes and faces, its aim, whether it's in the run and
+ *  holding the revive key, its energy's share and its life. */
+interface StateMsg { t: number; x: number; z: number; vx: number; vz: number; f: number; ax: number; az: number; run: 0 | 1; rv: 0 | 1; e: number; l: number }
+/** A player's actions since its last frame, stamped with its clock (ms). */
+interface ActionsMsg { t: number; a: PlayerAction[] }
 
 function onState(from: string, m: StateMsg): void {
   const peer = session.peers.get(from);
-  const p = peer?.player;
-  if (!peer || !p) return;
-  const r = p.remote;
-  r.x = m.x; r.z = m.z; r.vx = m.vx; r.vz = m.vz; r.f = m.f; r.ax = m.ax; r.az = m.az; r.at = performance.now();
-  p.reviving = m.rv === 1;
-  if (role.current === 'guest' || !G.run) p.energy = m.e * p.stats.maxEnergy;
+  if (!peer?.player) return;
+  peer.clock.heard(m.t);
+  peer.track.add(m.t, { x: m.x, z: m.z, vx: m.vx, vz: m.vz, f: m.f }, m);
   const inRun = m.run === 1;
   if (inRun !== peer.inRun) { peer.inRun = inRun; syncAway(); hooks.changed(); }
 }
 
-function onActions(from: string, list: PlayerAction[]): void {
+function onActions(from: string, m: ActionsMsg): void {
+  const peer = session.peers.get(from);
+  if (!peer?.player) return;
+  peer.clock.heard(m.t);
+  for (const a of m.a) peer.actions.push(m.t, a);
+}
+
+function onFight(from: string, m: WorldMessage): void {
+  const peer = session.peers.get(from);
+  if (!peer || from !== session.hostId) return;
+  peer.clock.heard(m.t);
+  onWorld(m);
+}
+
+function onHits(from: string, hits: HitReport[]): void {
   const p = session.peers.get(from)?.player;
-  if (!p || p.away) return;
-  for (const a of list) p.replay(a);
+  if (p) onGuestHits(p, hits);
+}
+
+const _pose: Pose = { x: 0, z: 0, vx: 0, vz: 0, f: 0 };
+const _shown: Pose = { x: 0, z: 0, vx: 0, vz: 0, f: 0 };
+
+/**
+ * Every frame (`dt` s), before anything moves: each partner's reports played out to the moment its timeline shows
+ * (its character where its reports have it then, its actions whose time has come), and on a guest the host's fight.
+ */
+export function playSession(dt: number): void {
+  if (!link) return;
+  for (const peer of session.peers.values()) {
+    const p = peer.player;
+    if (!p || !peer.clock.started) continue;
+    const at = peer.clock.advance();
+    if (peer.id === session.hostId) playWorld(at, dt);
+    if (peer.track.at(at, _pose)) playState(p, peer.smooth.follow(_pose, peer.track, dt, _shown), peer.track.dataAt(at)!);
+    for (const a of peer.actions.due(at)) if (!p.away) p.replay(a);
+  }
+}
+
+function playState(p: Player, pose: Pose, m: StateMsg): void {
+  const r = p.remote;
+  r.x = pose.x; r.z = pose.z; r.vx = pose.vx; r.vz = pose.vz; r.f = pose.f; r.ax = m.ax; r.az = m.az;
+  p.reviving = m.rv === 1;
+  p.energy = m.e * p.stats.maxEnergy;
+  if (p.alive) p.life = m.l;
 }
 
 // --- players -------------------------------------------------------------------------------
 function addPeer(id: string, slot: number, look: Look): void {
-  const peer: Peer = { id, slot, player: null, look, inRun: false };
+  const spacing = 1000 / COOP.sendRate;
+  const peer: Peer = { id, slot, player: null, look, inRun: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout() };
   session.peers.set(id, peer);
   makePlayer(peer);
 }
@@ -401,7 +453,10 @@ export const partnerInRun = (): boolean => [...session.peers.values()].some((p) 
 /** Every frame: report the local player (and the fight, on the host) at the send rate. */
 export function updateSession(dt: number, reviving: boolean): void {
   if (!link) return;
-  if (actions.length) { send('ev', actions); actions = []; }
+  const t = Math.round(performance.now() * 10) / 10;
+  if (actions.length) { send('ev', { t, a: actions } satisfies ActionsMsg); actions = []; }
+  const hits = takeHits();
+  if (hits && session.hostId) send('dmg', hits, session.hostId);
   sendT -= dt;
   const due = sendT <= 0;
   if (due) {
@@ -409,8 +464,8 @@ export function updateSession(dt: number, reviving: boolean): void {
     const p = G.player, s = p.stats;
     const r2 = (v: number) => Math.round(v * 100) / 100;
     send('pl', {
-      x: r2(p.pos.x), z: r2(p.pos.z), vx: r2(p.vel.x), vz: r2(p.vel.z), f: r2(p.facing), ax: r2(p.aim.x), az: r2(p.aim.z),
-      run: G.mode === 'run' ? 1 : 0, rv: reviving ? 1 : 0, e: r2(p.energy / s.maxEnergy),
+      t, x: r2(p.pos.x), z: r2(p.pos.z), vx: r2(p.vel.x), vz: r2(p.vel.z), f: r2(p.facing), ax: r2(p.aim.x), az: r2(p.aim.z),
+      run: G.mode === 'run' ? 1 : 0, rv: reviving ? 1 : 0, e: r2(p.energy / s.maxEnergy), l: r2(p.life),
     } satisfies StateMsg);
   }
   // the fight's events go out every frame, its snapshot at the send rate

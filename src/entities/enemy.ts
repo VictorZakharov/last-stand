@@ -58,8 +58,8 @@ export interface DamageInfo {
   by?: Player;
 }
 
-/** A co-op guest's copy of a host enemy: where the host last had it, which way it faced, and when. */
-export interface EnemyNet { x: number; z: number; f: number; at: number }
+/** A co-op guest's copy: where the host's reports have it at the moment shown (net/timeline), the way it goes and faces. */
+export interface EnemyNet { x: number; z: number; vx: number; vz: number; f: number }
 
 export interface EnemyOpts {
   wave?: number;
@@ -291,16 +291,15 @@ export class Enemy {
   }
 
   /**
-   * A co-op guest's copy: it glides to where the host last had it (carried on at its speed for the
-   * time since), plays the action the host reports, and never thinks for itself.
+   * A co-op guest's copy: it is where the host's reports have it at the moment shown (read between
+   * them, net/timeline), plays the action the host reports, and never thinks for itself.
    */
   private updateCopy(dt: number, t: number, frozen: boolean): boolean {
     const n = this.net!;
-    const lead = Math.min(0.2, (performance.now() - n.at) / 1000);
-    const tx = n.x + this.vel.x * lead, tz = n.z + this.vel.z * lead;
-    this.pos.x = damp(this.pos.x, tx, 12, dt);
-    this.pos.z = damp(this.pos.z, tz, 12, dt);
-    this.facing = angleDamp(this.facing, n.f, 10, dt);
+    this.pos.x = n.x;
+    this.pos.z = n.z;
+    this.vel.set(n.vx, 0, n.vz);
+    this.facing = n.f;
     const a = this.action;
     if (a) { a.t += dt; if (a.t >= a.dur) this.action = null; }
     this.phase += dt * this.gait();

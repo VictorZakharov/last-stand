@@ -5,7 +5,7 @@
 // between tabs of one browser, for testing with no server at all.
 import { netLog, countMsg, watchServer, serverState, serverRtt } from './netlog';
 
-export type Channel = 'hello' | 'look' | 'pl' | 'ev' | 'w' | 'ctl';
+export type Channel = 'hello' | 'look' | 'pl' | 'ev' | 'w' | 'dmg' | 'ctl';
 
 export interface Link {
   /** this peer's id in the room */

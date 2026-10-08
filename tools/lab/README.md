@@ -89,6 +89,21 @@ terminal's task stops it all.
   every few frames, so the motion is seen as well as measured; each film is a sheet of its own (`film-1.png` on,
   an A/B's other side `film-main-1.png` on: both sides in one page, or all eight films, took the browser down) and an
   A/B compares the reports.
+- `coop`: two games playing together, the host's in the side's page and a guest's in a partner page beside it
+  (`Side.openPartner`), stepped together a turn of frames at a time on the lab's clock. Each page's BroadcastChannel
+  (the game's `?net=local` link) is replaced by one the lab carries (`page/coop.ts`), and the messages go from one
+  page to the other as a link of `--ping` (the least round trip, 300 ms by default) and `--jitter` (how much later each
+  way, 60 by default) delivers them: in the order sent, as a WebSocket's TCP does, a late one holding up those behind
+  it, and every couple of seconds a stall of several jitters (`node/coop.mjs`). The heroes play scenarios (`walk`: the
+  host running round in circles, the guest zigzagging; `foes`: foes chasing them; `shoot`: the guest shooting at a foe
+  that chases the host; `dodge`: the guest running from every other blow as it sees it coming; `down`: a foe bringing
+  the guest down and the host raising it), each one's input frame by frame from what its own screen shows. What each
+  game showed is judged against the other's in the same frame (`node/coopJudge.mjs`): each copy's delay (the one that
+  lines its path up best with its own game's), how far off that path and how roughly it moves (its speed against its
+  own, its largest move a frame), how each game's timeline plays its partner out (how far behind the freshest report,
+  how often a stall held it, how far its clock strayed), the arrows that struck on the guest's screen and whether the
+  host counted them, the blows at the guest against whether it stood in their reach on its own screen, and when the
+  guest went down and was raised on each screen. Scenarios run on from each other, so a scenario alone can differ.
 - `stops`: the hero coming to a stop from a run, judged as a person stops (a step or two as the body slows, the last
   foot landing under it or beside the other on the ground it stands on, and once still nothing moving), over runs let
   go at different points of a stride: on level ground each way, strafing drawn, and out over the dais's edge, in onto
