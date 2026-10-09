@@ -48,11 +48,14 @@ terminal's task stops it all.
   front and the side (`out/feet/sheet.png`). A walk follows on from the ones before it (the hero, the gait and the
   game's clock carry over), so compare runs of the same `--scenarios`.
 - `gait`: the hero's walk judged as a person's, over level ground and the dais's steps, nothing drawn (standing,
-  off at a run, turned round and stopped), strafing drawn, tapping, changing direction every third of a second and
-  going round in circles, nothing drawn and drawn
-  (`--scenarios walk,drawn,taps,zigzag,circle,circleDrawn,stairs,stairsDrawn`): each foot's share of the time on the
+  off at a run, turned round and stopped; a long run straight on), strafing drawn, tapping, changing direction every
+  third of a second and going round in circles, nothing drawn and drawn
+  (`--scenarios walk,run,drawn,taps,zigzag,circle,circleDrawn,stairs,stairsDrawn`): each foot's share of the time on the
   ground against the share the gait plans, both down and neither (a walk has a foot always down), the steps a second
-  and the ground a step covers, the hops (both feet leaving or landing within a few frames of each other), a foot
+  and the ground a step covers, the steps' width (footprint to footprint across the way: a runner's 5 to 10 cm, a
+  walker's 10 to 15; over 30 the legs are apart), the hops (both feet leaving or landing within a few frames of each
+  other), the gallops (a foot leaving within 0.3 of a stride of the other's, the legs swinging together: a person's
+  leaves half a stride after it; the hops missed the set-off's, its second foot 6 frames after the first), a foot
   dance's short steps, the hips' rise and fall a step and their height in the air, on one foot and on both, a planted
   foot dragged (its leg short of it even on its toes) and one up on its toes out of a flat foot's reach (a push off),
   each hand's swing fore and aft against its own side's knee (a person's arm swings against the hip's swing, about
@@ -83,13 +86,29 @@ terminal's task stops it all.
   half second by half second; `--trace` every frame (`--span from,to` only those): the way the body faces and goes and
   its speed over the ground, the pelvis, the curve
   it is on, the pelvis's drop, the plan's share on the ground and the speed it plans for, the cycle's phase and rate,
-  backing or not, and each foot (planted, with its distance from its hip and `!` out of reach, or its stride's
-  progress), where it is in its window, its ankle's speed and how far its way turned, and what a body couldn't do
-  that frame. Each
-  scenario is measured, then run again to film it from the side round its first hop (else its middle), a picture
-  every few frames, so the motion is seen as well as measured; each film is a sheet of its own (`film-1.png` on,
+  backing or not, and each foot (planted, with its distance from its hip, `!` out of reach and `d` dragged, or its
+  stride's progress, `~` in a timed step), where it is in its window, its ankle's speed and how far its way turned,
+  and what a body couldn't do that frame (`page/legTrace.ts`, which `range --trace` shares). Each
+  scenario is measured, then run again to film it from the side round its first hop or gallop (else its middle),
+  a picture every few frames, so the motion is seen as well as measured; each film is a sheet of its own (`film-1.png` on,
   an A/B's other side `film-main-1.png` on: both sides in one page, or all eight films, took the browser down) and an
   A/B compares the reports.
+- `form`: the hero's run judged against a runner's (`page/runner.ts`: the cadence and each foot's time on the ground
+  by speed after Dorn, Schache and Pandy (2012), the hips', knees' and ankles' curves over the stride after Novacheck
+  (1998) and Fukuchi (2017), the arms' after Hinrichs (1987), and the trunk's lean and the hips' rise and fall), with
+  each way he holds his weapons (`--gear oneHanded,shield,twoHanded,dual`: the class's own by default). He runs
+  straight across open ground at full speed, judged at a man's size (his speed and lengths scaled by his legs against
+  a man's, `MAN_LEG`); each leg's frames are folded onto its own cycle from its foot's touchdown to the next, the
+  stance and the swing each stretched onto the runner's so the curves line up at the touchdown and the push off. Says
+  the steps a second and their length, a foot's time down and in the air, the hips' rise and fall, each joint at the
+  touchdown, mid-stance, the push off and the swing's most against the runner's (and how far off on average and at
+  its worst), the trunk's lean and the head's tip, the pelvis's and chest's turn, each arm's swing in the chest's
+  frame and its elbow's bend, and what is unlike a runner. Each way is pictured at eight points of the stride
+  (`out/form/<way>.png`, one sheet a way: all four in one took the browser down): stick figures of his run (the left
+  limbs blue, the right orange) over a runner's on his lengths (grey, the hips rising and falling as a body flies),
+  the hero from both sides, the game's own views and his arms close up, measured first and run again to picture the
+  frames chosen. `--frames` lists each leg's cycles (touchdown, push off, the next touchdown) and the curves bin by
+  bin; `--canary` holds the left knee straight through its stances, which the knee's curve must show.
 - `coop`: two games playing together, the host's in the side's page and a guest's in a partner page beside it
   (`Side.openPartner`), stepped together a turn of frames at a time on the lab's clock. Each page's BroadcastChannel
   (the game's `?net=local` link) is replaced by one the lab carries (`page/coop.ts`), and the messages go from one
@@ -116,8 +135,9 @@ terminal's task stops it all.
   (`--scenarios level,drawn,edgeOut,edgeIn,edgeSlant,edgeAlong,edgeShot`). From the frame the keys are let go: the
   steps once the body was still, a foot put out ahead and drawn back (a waste of motion), a step back against the way
   it went, a foot on another level than the body's once still and whether it ended so, a foot stepped from one level
-  onto another once still (put down a step below and stepped up a second later), both feet up once one had landed,
-  how long the feet took to settle and their travel once still. `--frames` lists each stop: where it was let go and
+  onto another once still (put down a step below and stepped up a second later), both feet up once one had landed
+  for more than 6 frames running (up to 6, the run's own flight going on as the braking foot comes down, as a
+  runner's does, are listed apart), how long the feet took to settle and their travel once still. `--frames` lists each stop: where it was let go and
   rested along the way, and each step with where it left and landed from there and on which level; `--trace` adds
   each frame (the body, the hips, each ankle and where each foot in the air is aimed, the lean); `--only 'd 23'` runs
   the stops whose names contain that. Within one run each stop starts at its own moment of the clock, so a stop run
@@ -129,7 +149,9 @@ terminal's task stops it all.
   past its range, on how many frames, its worst and where (for a leg, whether its foot was planted; for a shoulder,
   its raise, the plane it rises in and its turn against what each allows), each scenario's
   fastest ankle, and its worst moment pictured. `--canary` turns the head past the neck's range on one frame,
-  `--frames` lists every frame with a joint past its range.
+  `--frames` lists every frame with a joint past its range, and `--trace` (`--span a,b` for some frames) the leg IK
+  frame by frame as the gait's trace does (`page/legTrace.ts`: each foot down, in the air or in a timed step `~`,
+  dragged `d`), each frame's joints past their ranges after it.
 - `carry`: the ranger's carried bow against his body through a carry's round (standing, walking, a draw and its shot,
   waiting with the next arrow, putting it back). `--canary` plants faults it must catch; `--frames` lists every frame
   with a clip, what crossed what and how deep.
@@ -137,28 +159,39 @@ terminal's task stops it all.
   `--setup=false` skips the set-up.
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`).
 - `status`, `stop`: what the server serves and has booted; stop it.
-- `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films),
-  the stops and the ranges for every hero, and the ranger's feet and carry (`--classes`, `--commands` for fewer), each
-  in a session of its own (`--jobs n`, a core in three by default, at most 8), the longest first as they last took,
-  each report in `out/check/<command>-<hero>.txt` and its pictures in a folder beside it. With `--ab`, the other
-  commit is exported once before the sessions start, and its side read back from the cache once it has run (below).
-  The gait runs a scenario a job, each on a page booted for it, and each hero's scenarios are put back together
-  (`out/check/gait-<hero>.txt`, each under its name): one after another on one page, each was set up from where the
-  last had left the hero and the clock, and main's own gallops were 18, 23 and 17 a hero with films and 13, 14 and
-  16 without. It runs in the command line's own process, not the server's. One command at a time, both sides every
-  time, the mage's cape stepped throughout and each gait scenario run again for its film, the same check took 31 to
-  35 minutes a round; the harness is run hundreds of times, so keep every check that runs often to minutes: profile
-  it (`--profile`), cut what its measures don't read, and run side by side what doesn't depend on each other.
+- `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films), the
+  stops, the ranges and the run's form for every hero, and the ranger's feet and carry (`--classes`, `--commands` for
+  fewer), each in a session of its own (`--jobs n`, a core in three by default, at most 8), the longest first as they
+  last took, each report in `out/check/<command>-<hero>.txt` and its pictures in a folder beside it. With `--ab`, the
+  other commit is exported once before the sessions start, and its side read back from the cache once it has run
+  (below). The gait runs a scenario a job, each on a page booted for it, and each hero's scenarios are put back
+  together (`out/check/gait-<hero>.txt`, each under its name): one after another on one page, each was set up from
+  where the last had left the hero and the clock, and main's own gallops were 18, 23 and 17 a hero with films and 13,
+  14 and 16 without. Each gait scenario runs from three starts (`--starts n`, at most 5): its first move 0, 7 and 13
+  frames longer (`gait --offset`), so every later turn and stop comes at another point of a stride. Run once from one
+  start, a frame's change anywhere sent every later stride elsewhere, and a change's gallops came out 2 or 3 either
+  way over a check's gait scenarios by chance; stood a few frames first instead, nothing changed (the set-off is the
+  same from any moment of the idle). What a command counts (`countsOf`: the gait's gallops, hops and short steps) is
+  added up over a hero's jobs, each side's, in its line of the log and at the head of its report with each scenario's
+  (`hops 2 (048deb5 9)`: this tree's, then the other's), so a check's verdict needs no script of its own to read it.
+  It runs in the command line's own process, not the server's. One command at a time, both sides every time, the
+  mage's cape stepped throughout and each gait scenario run again for its film, the same check took 31 to 35 minutes a
+  round; the harness is run hundreds of times, so keep every check that runs often to minutes: profile it
+  (`--profile`), cut what its measures don't read, and run side by side what doesn't depend on each other.
 
 Options every command run on a page takes:
 
 - a probe or command that doesn't compile says where and why (`.tmp/x.ts:3:10 doesn't compile: Unterminated
   string`), not the browser's "Failed to fetch dynamically imported module";
 - the set-up (sheet, carry, probe): `--view top|third|first`, `--at x,z`, `--facing rad`, `--nocked[=false]`,
+  `--gear oneHanded|shield|twoHanded|dual` (the hero holding his weapons that way, from his class's own bases: as the
+  profile rolled them by default),
   `--capes`: the capes' cloth stepped. Every set-up holds them otherwise (`Fixture.capes`, `cape.holdCapes`), each
   riding its neckline as it last hung and hung afresh from it for a picture: stepped, the cloth was three quarters of
   the mage's time in his stops, which never look at it. A sheet and the gait's films step them;
-- `gait --films=false`: the numbers alone, each scenario run once (a film runs it again);
+- `gait --films=false`, `form --pictures=false`: the numbers alone, each run once (a film or a picture runs it
+  again); `gait --offset n`: each scenario's first move n frames longer, its later turns and stops at other
+  points of a stride (a check's starts);
 - `--class ranger|warrior|mage`: the hero (the last one used by default);
 - `--ab[=ref]`: also on another commit (`origin/main` by default), its results beside this tree's, ending with the
   verdict: the lines that differ under the section each is in, and the pictures that differ by more than the GPU's own

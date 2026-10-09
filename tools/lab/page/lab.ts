@@ -18,6 +18,8 @@ import * as renderer from '../../../src/core/renderer';
 import { updateSeeThrough } from '../../../src/core/seeThrough';
 import { CLASSES } from '../../../src/data/classes';
 import type { Joints } from '../../../src/entities/models/rig';
+import type { ClassDef, Gear } from '../../../src/types';
+import { weaponStyle, type WeaponStyle } from '../../../src/loot/loadout';
 
 /**
  * The clock the session installs before the page's own scripts (`tools/lab/node/browser.mjs`). While its mode is
@@ -86,6 +88,9 @@ export interface Fixture {
    *  cape riding its neckline and hung afresh for a picture (`cape.holdCapes`: stepped, the cloth was three quarters
    *  of the mage's time in a measure of his feet, which never look at it) */
   capes?: boolean;
+  /** the hero holding his weapons this way (his class's first weapons of it, his armour as it is), for a class with
+   *  more than one; as the boot rolled them by default */
+  gear?: WeaponStyle;
 }
 
 /** The pictures the lab can take: the game's own views, or a close-up from round the hero. */
@@ -102,12 +107,14 @@ export interface Pictured {
 /**
  * What a command or a probe may return to say what it found: its text, the problems that fail the command (a canary
  * the measure missed, a state that never came), and moments pictured, which the lab writes as a sheet
- * (`tools/lab/out/probes/<probe>/sheet.png`) and compares in an A/B. A probe may return plain text or JSON instead.
+ * (`tools/lab/out/probes/<probe>/sheet.png`) and compares in an A/B, and what it counted by name (a check adds a
+ * hero's up over its jobs). A probe may return plain text or JSON instead.
  */
 export interface Report {
   text: string;
   problems: string[];
   moments?: Pictured[];
+  counts?: Record<string, number>;
 }
 
 /** A close-up's camera: how far round from the hero's front (rad, positive to his left), and how high (m). */
@@ -319,6 +326,7 @@ export class Lab {
     const [x, z] = fixture.at ?? SPOT;
     const facing = fixture.facing ?? 0;
     const spot = new THREE.Vector3(x, 0, z);
+    if (fixture.gear) this.hold(fixture.gear);
     this.player.place(spot, facing);
     // (standing still: an older tree's `place` kept the velocity, and the hero glided on from his spot)
     this.player.vel.set(0, 0, 0);
@@ -342,6 +350,13 @@ export class Lab {
       nocked: this.player.nocked,
       time: Number(G.time.toFixed(2)),
     };
+  }
+
+  /** The hero holding his weapons `style`'s way, as equipping them from the stash would show it. */
+  private hold(style: WeaponStyle): void {
+    const gear = gearFor(this.player.cls, this.player.gear, style);
+    this.player.gear = gear;
+    this.model.setGear?.(gear);
   }
 
   private async enterRun(): Promise<void> {
@@ -560,6 +575,27 @@ function withinWindow(area: Clip, margin = 0): Clip {
   const bottom = Math.min(innerHeight, Math.ceil(area.y + area.height + margin));
   if (right <= x || bottom <= y) throw new Error('lab: screen: the area is off the window');
   return { x, y, width: right - x, height: bottom - y };
+}
+
+/**
+ * The gear of a hero of `cls` holding his weapons `style`'s way, his armour as `worn` has it: the class's first
+ * one-hander (or two-hander), with a shield or a second one-hander as the style says. Throws for a style the class
+ * can't hold.
+ */
+export function gearFor(cls: ClassDef, worn: Gear, style: WeaponStyle): Gear {
+  const twoHanders = cls.twoHanded ?? [];
+  const oneHander = cls.bases?.weapon?.find((base) => !twoHanders.includes(base)) ?? null;
+  const weapon = style === 'twoHanded' ? twoHanders[0] ?? null : oneHander;
+  const gear: Gear = {
+    ...worn,
+    weapon,
+    twoHanded: style === 'twoHanded',
+    shield: style === 'shield',
+    offWeapon: style === 'dual' ? oneHander : null,
+  };
+  const can = weapon !== null && (style !== 'dual' || cls.dualWield) && (style !== 'shield' || cls.bases?.offhand?.length);
+  if (!can || weaponStyle(cls, gear) !== style) throw new Error(`lab: --gear ${style}: the ${cls.id} can't hold that`);
+  return gear;
 }
 
 /**

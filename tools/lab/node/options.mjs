@@ -14,6 +14,9 @@ import { labError } from './errors.mjs';
  */
 const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'choice', 'ref'];
 
+/** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
+const WEAPON_STYLES = ['oneHanded', 'shield', 'twoHanded', 'dual'];
+
 /** the options that set up the run before a command (page/lab.ts `Fixture`) */
 const SETUP_OPTIONS = {
   view: { kind: 'choice', choices: ['top', 'third', 'first'], usage: 'top|third|first', help: 'the game\'s view' },
@@ -24,6 +27,12 @@ const SETUP_OPTIONS = {
     kind: 'switch',
     help: 'step the capes\' cloth (a sheet does by default; held otherwise, riding the neckline: the cloth was most '
       + 'of a caped hero\'s time)',
+  },
+  gear: {
+    kind: 'choice',
+    choices: WEAPON_STYLES,
+    usage: WEAPON_STYLES.join('|'),
+    help: 'the hero holding his weapons this way (a class with more than one; as rolled by default)',
   },
 };
 
@@ -107,6 +116,11 @@ export const COMMANDS = {
       },
       canary: { kind: 'switch', help: 'plant a fault the measure must catch: the head turned past the neck\'s range' },
       frames: { kind: 'switch', help: 'list every frame with a joint past its range' },
+      trace: {
+        kind: 'switch',
+        help: 'list every frame of the leg IK, as gait --trace does, with the joints past their ranges',
+      },
+      span: { kind: 'pair', usage: 'from,to', help: 'with --trace, only the frames from the first to the second' },
       ...COMMON_OPTIONS,
     },
   },
@@ -151,8 +165,9 @@ export const COMMANDS = {
       scenarios: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['walk', 'drawn', 'taps', 'zigzag', 'circle', 'circleDrawn', 'stairs', 'stairsDrawn'],
-        help: 'the scenarios (all by default): walk, drawn, taps, zigzag, circle, circleDrawn, stairs, stairsDrawn',
+        choices: ['walk', 'run', 'drawn', 'taps', 'zigzag', 'circle', 'circleDrawn', 'stairs', 'stairsDrawn'],
+        help: 'the scenarios (all by default): walk, run, drawn, taps, zigzag, circle, circleDrawn, stairs, '
+          + 'stairsDrawn',
       },
       frames: { kind: 'switch', help: 'list every step (its foot, when it left and landed, how far) and the hops' },
       trace: {
@@ -163,6 +178,34 @@ export const COMMANDS = {
       films: {
         kind: 'switch',
         help: 'film each scenario, run again for it (=false: the numbers alone, in half the time)',
+      },
+      offset: {
+        kind: 'number',
+        usage: 'frames',
+        help: 'each scenario\'s first move this many frames longer (its turns at other points of a stride)',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
+  form: {
+    help: 'the hero\'s run judged against a runner\'s, with each way he holds his weapons: the stride\'s timing, '
+      + 'each joint\'s curve over it, stick figures over a runner\'s and the hero pictured at eight points of it: '
+      + 'tools/lab/out/form/<way>.png',
+    options: {
+      gear: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: WEAPON_STYLES,
+        help: `the ways of holding the weapons (the class's all by default): ${WEAPON_STYLES.join(', ')}`,
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant a fault the measure must catch: the left knee straight through its stance',
+      },
+      frames: { kind: 'switch', help: 'list each leg\'s cycles and the curves bin by bin' },
+      pictures: {
+        kind: 'switch',
+        help: 'picture the run: stick figures, and the hero run again for him (=false: the numbers alone)',
       },
       ...COMMON_OPTIONS,
     },
@@ -179,17 +222,23 @@ export const COMMANDS = {
   },
   check: {
     help: 'the checks of a change to how the heroes move, every hero\'s, side by side in sessions of their own: the '
-      + 'gait (its steps listed, no films), the stops and the ranges for each hero, the ranger\'s feet and carry; each '
-      + 'report in tools/lab/out/check/<command>-<hero>.txt (runs in this process, not the server)',
+      + 'gait (its steps listed, no films), the stops, the ranges and the run\'s form for each hero, the ranger\'s '
+      + 'feet and carry; each report in tools/lab/out/check/<command>-<hero>.txt (runs in this process, not the '
+      + 'server)',
     options: {
       classes: { kind: 'list', usage: 'a,b', help: 'the heroes (warrior, mage, ranger by default)' },
       commands: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['gait', 'stops', 'range', 'feet', 'carry'],
-        help: 'the commands (gait, stops, range, feet, carry by default)',
+        choices: ['gait', 'stops', 'range', 'form', 'feet', 'carry'],
+        help: 'the commands (gait, stops, range, form, feet, carry by default)',
       },
       jobs: { kind: 'number', usage: 'n', help: 'how many sessions side by side (a core in three, at most 8)' },
+      starts: {
+        kind: 'number',
+        usage: 'n',
+        help: 'how many moments each gait scenario starts from, its counts added up (3 by default, at most 5)',
+      },
       ab: COMMON_OPTIONS.ab,
       fresh: COMMON_OPTIONS.fresh,
     },

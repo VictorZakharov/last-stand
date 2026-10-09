@@ -16,6 +16,7 @@ function fixtureFrom(options) {
   if (options.facing !== undefined) fixture.facing = options.facing;
   if (options.nocked !== undefined) fixture.nocked = options.nocked;
   if (options.capes !== undefined) fixture.capes = options.capes;
+  if (options.gear !== undefined) fixture.gear = options.gear;
   return fixture;
 }
 
@@ -98,6 +99,33 @@ async function textWithSheetEach(results, dir, browser) {
   return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
 }
 
+/** A moment's group, for a sheet of its own: its label up to its colon (`holding shield: from his left`). */
+const groupOf = (moment) => moment.label.split(':')[0];
+
+/** A group's name as a file name: lowercase words joined by dashes. */
+const fileNameOf = (group) => group.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+/**
+ * Each side's text under its name, and a sheet for each group of each side's moments (`groupOf`), written in `dir`:
+ * `<group>.png` for this tree's, `main-<group>.png` for the other side's. A run of the warrior's four ways of holding
+ * his weapons in one sheet was a page too big for the browser, which closed.
+ */
+async function textWithSheetsByGroup(results, dir, browser) {
+  const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
+  const images = [];
+  for (const [side, result] of results) {
+    const prefix = side.isRepo ? '' : 'main-';
+    const groups = [...new Set((result?.moments ?? []).map(groupOf))];
+    for (const group of groups) {
+      const moments = result.moments.filter((moment) => groupOf(moment) === group);
+      const name = `${prefix}${fileNameOf(group)}.png`;
+      const image = await writeMoments([[side, { ...result, moments }]], dir, browser, name);
+      if (image) images.push(relative(REPO, image));
+    }
+  }
+  return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
+}
+
 /** Each side's text under its name, and the sheet of the moments they pictured, written in `dir` (when any did). */
 async function textWithMoments(results, dir, browser) {
   const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
@@ -121,6 +149,7 @@ function probePath(file) {
  *   side's text is shown under its name);
  * - `textOf(result)` is the result as text, which an A/B compares line by line;
  * - `problemsOf(result)` the problems it found, which fail the command;
+ * - `countsOf(result)`, when there is one, what it counted by name, which a check adds up over a hero's jobs;
  * - `pictures(before, after)` pairs the pictures an A/B compares, for a command that takes them.
  */
 export const COMMANDS = {
@@ -164,6 +193,7 @@ export const COMMANDS = {
         trace: Boolean(options.trace),
         span: options.span,
         films: options.films !== false,
+        offset: options.offset ?? 0,
       });
     },
     finish(results, options, session) {
@@ -171,6 +201,7 @@ export const COMMANDS = {
     },
     textOf: asText,
     problemsOf: problemsIn,
+    countsOf: (result) => result.counts,
     // (an A/B compares the reports, not the films: two sides' 48 frames each, loaded to compare, took the browser down)
   },
 
@@ -181,6 +212,19 @@ export const COMMANDS = {
     },
     textOf: asText,
     problemsOf: problemsIn,
+  },
+
+  form: {
+    each(side, options) {
+      const listed = { canary: Boolean(options.canary), frames: Boolean(options.frames) };
+      return side.command('form', { gear: options.gear, ...listed, pictures: options.pictures !== false });
+    },
+    finish(results, options, session) {
+      return textWithSheetsByGroup(results, session.outFor('form'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
   },
 
   stops: {
@@ -198,6 +242,8 @@ export const COMMANDS = {
         scenarios: options.scenarios,
         canary: Boolean(options.canary),
         frames: Boolean(options.frames),
+        trace: Boolean(options.trace),
+        span: options.span,
       });
     },
     finish(results, options, session) {
