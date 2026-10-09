@@ -635,6 +635,8 @@ export class LegIK {
   private readonly vNow = new THREE.Vector3();
   /** the velocity the game eases the body towards and how quickly (`intend`), and whether it said so this frame */
   private readonly goal = new THREE.Vector3();
+  /** the body turns to face the way it goes (`intend`): it walks forwards through a turn round, never backpedals */
+  private facesWay = false;
   /** the goal as the landings follow it (`GOAL_FOLLOW`) */
   private readonly goalSeen = new THREE.Vector3();
   private goalRate = 0;
@@ -682,10 +684,11 @@ export class LegIK {
    * comes to rest (read from the body's own slowing, a co-op copy's, it is known only a few frames later: the last
    * stride landed where the body would have been at speed, 40 to 60 cm past where it stopped).
    */
-  intend(goal: THREE.Vector3, rate: number): void {
+  intend(goal: THREE.Vector3, rate: number, facesWay = false): void {
     this.goal.set(goal.x, 0, goal.z);
     this.goalRate = rate;
     this.goalSaid = true;
+    this.facesWay = facesWay;
   }
 
   /** whether the body is moving as the gait sees it (read by the lab) */
@@ -1079,7 +1082,11 @@ export class LegIK {
     const offForwards = Math.abs(rel - forwards), offBackwards = Math.abs(back - backwards);
     const costForwards = offForwards + TURN_COST * Math.abs(forwards - now);
     const costBackwards = offBackwards + TURN_COST * Math.abs(backwards - now);
-    if (!this.backing && costBackwards + HYST < costForwards) {
+    // (a body turning to face the way it goes is only a moment from it: walked backwards as it turned round from a
+    // run, the legs turned round twice in 13 frames, and a foot just down went again, out of turn)
+    if (this.facesWay && this.intended) {
+      this.backing = false;
+    } else if (!this.backing && costBackwards + HYST < costForwards) {
       this.backing = true;
       this.backT = 0;
     } else if (this.backing) {

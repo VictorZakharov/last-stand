@@ -120,6 +120,9 @@ export class Player {
   facing = Math.PI;
   /** how much longer the body stays on its aim after an attack or cast (s), see AIM_HOLD */
   private aimHold = 0;
+  /** the facing follows the way the body goes (nothing aimed, cast or looked through the eyes): moving against it is
+   *  only ever the moment before it has turned round */
+  private facesWay = false;
   /** a drawn shot pressed for while busy (a tap during the last one's reload): it's drawn as soon as the hero is free, and
    *  forgotten when any other skill is pressed or cast */
   private queued: { skill: KnownSkill; key: SkillKey } | null = null;
@@ -646,11 +649,13 @@ export class Player {
     // goes and back: held attacks while backing off or moving sideways would swing the body half round at every blow)
     const fighting = (this.casting && !this.casting.skill.def.freeMove) || this.channel;
     this.aimHold = fighting ? AIM_HOLD : Math.max(0, this.aimHold - dt);
+    this.facesWay = false;
     if (look !== null && !d) this.facing = look;
     else if (!fighting && this.aimHold > 0) this.faceTowards(this.aim);
     else if ((!this.casting || this.casting.skill.def.freeMove) && !this.channel && speed > 0.5) {
       const eased = angleDamp(this.facing, Math.atan2(this.vel.x, this.vel.z), 14, dt);
       this.facing += Math.max(-TURN_MOST * dt, Math.min(TURN_MOST * dt, eased - this.facing));
+      this.facesWay = true;
     }
 
     // resources & cooldowns
@@ -739,7 +744,10 @@ export class Player {
     if (legs) this.phase = legs.setOff(this.phase);
     // (quicker as he goes off the legs' line, his steps shorter across it: `LegIK.cadence`)
     const pace = legs?.cadence ?? 1;
-    this.phase = this.cycleOn(dt * gs * gaitRate(gs, legLength(this.model)) * pace, fwd < -0.5 ? -1 : 1);
+    // (backwards only going back against a facing it keeps: turning round to face the way it goes, the body moved
+    // against its facing for a few frames, and the cycle turned round and back again, a foot just down due again at once)
+    const backwards = fwd < -0.5 && !this.facesWay;
+    this.phase = this.cycleOn(dt * gs * gaitRate(gs, legLength(this.model)) * pace, backwards ? -1 : 1);
     let action: ActionState | null = null;
     if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };
     else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / (this.dash.dur + this.dash.hold)) };
@@ -806,7 +814,7 @@ export class Player {
     const dead = this.deadT >= 0 ? Math.min(1, this.deadT / 1.0) : this.rising > 0 ? this.rising / RISE : -1;
     // (the legs told where the body is going, as the game eases it there: a stop's last stride lands where it rests)
     const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
-    if (this.local && !this.dash && this.goalRate > 0) legs?.intend(this.goal, this.goalRate);
+    if (this.local && !this.dash && this.goalRate > 0) legs?.intend(this.goal, this.goalRate, this.facesWay);
     this.model.animate({
       t, dt, phase: this.phase, move, moveDir: dir, lean, action,
       hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,
