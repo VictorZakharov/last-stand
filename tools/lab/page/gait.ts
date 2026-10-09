@@ -945,6 +945,8 @@ interface Gallop {
   foot: number;
   left: number;
   share: number;
+  /** why it left, as the IK says (`Step.how`) */
+  how: string;
 }
 
 /** The strides that left galloping, each against the other foot's stride round it (`GALLOP_SHARE`); a stop's
@@ -962,15 +964,22 @@ function gallopsOf(steps: Step[], seconds: number): Gallop[] {
     const stride = after.left - before.left;
     if (!alternate || stride > longest || stride <= 0) continue;
     const share = (now.left - before.left) / stride;
-    if (share < GALLOP_SHARE || share > 1 - GALLOP_SHARE) found.push({ foot: now.foot, left: now.left, share });
+    if (share < GALLOP_SHARE || share > 1 - GALLOP_SHARE) {
+      found.push({ foot: now.foot, left: now.left, share, how: now.how });
+    }
   }
   return found;
+}
+
+/** A gallop as the report lists it: the foot, the frame it left, where in the other's stride, and why it left. */
+function gallopText(gallop: Gallop): string {
+  return `${SIDES[gallop.foot]} ${gallop.left} at ${gallop.share.toFixed(2)} (${gallop.how})`;
 }
 
 /** The legs' alternation: how many strides left half a stride after the other foot's, and the gallops. */
 function alternationOf(steps: Step[], seconds: number): string {
   const gallops = gallopsOf(steps, seconds);
-  const where = gallops.map((gallop) => `${SIDES[gallop.foot]} ${gallop.left} at ${gallop.share.toFixed(2)}`);
+  const where = gallops.map(gallopText);
   const galloping = gallops.length ? `: ${where.join(', ')}` : '';
   return `galloping, a foot leaving within ${GALLOP_SHARE} of a stride of the other's (a person's half a stride`
     + ` after it): ${gallops.length}${galloping}`;
