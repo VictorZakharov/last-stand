@@ -105,6 +105,9 @@ const REST_PULL = 0.25;
 /** a body that stops with a planted foot up to this far ahead of or behind its stance's spot keeps it there (a share
  *  of the leg's length) */
 const SPLIT = 0.25;
+/** and across, this far from its stance's spot (a share of the leg): a foot coming down as the keys were let go landed
+ *  8 cm out from its spot, its landing drawn there too late to reach it, and stepped across once the body stood */
+const SPLIT_ACROSS = 0.12;
 /** a stride the body stops under finishes in what its swing had left, but no quicker than this (s) */
 const STOPPED_LEAST = 0.08;
 /** with both feet in the air as the body brakes, the later lands at least this much after the other (s): a braking
@@ -478,9 +481,10 @@ class Foot {
    *  under its hip */
   stand: THREE.Vector3 | null = null;
   syaw = 0;
-  /** how far ahead of its spot (rig units, along the way the body faces) a standing foot stays, as the body stopped
-   *  with it there (`keepSplit`), and how far it stays turned off its stance's turn (rad) */
+  /** how far ahead of its spot (rig units, along the way the body faces) and across it a standing foot stays, as the
+   *  body stopped with it there (`keepSplit`), and how far it stays turned off its stance's turn (rad) */
   split = 0;
+  splitAcross = 0;
   splitTurn = 0;
   /** where the ankle's target was last frame, if it was the gait's */
   last = new THREE.Vector3();
@@ -762,12 +766,12 @@ export class LegIK {
     if (x === null) {
       f.stand = null;
       f.syaw = 0;
-      f.split = f.splitTurn = 0;
+      f.split = f.splitAcross = f.splitTurn = 0;
       return;
     }
     // (a spot the pose moves is stood on as it says: a split kept from a stop is for the stance it stopped in)
     const moved = !f.stand || Math.abs(f.stand.x - x) > 0.01 || Math.abs(f.stand.z - z) > 0.01 || f.syaw !== yaw;
-    if (moved) f.split = f.splitTurn = 0;
+    if (moved) f.split = f.splitAcross = f.splitTurn = 0;
     (f.stand ??= new THREE.Vector3()).set(x, 0, z);
     f.syaw = yaw;
   }
@@ -1132,7 +1136,7 @@ export class LegIK {
     const wasMoving = this.moving;
     this.moving = speed > (this.moving ? STAND_SPEED : 0.55);
     this.justStopped = wasMoving && !this.moving;
-    if (this.moving) for (const f of this.feet) f.split = f.splitTurn = 0;
+    if (this.moving) for (const f of this.feet) f.split = f.splitAcross = f.splitTurn = 0;
     this.standK = damp(this.standK, this.moving ? 0 : 1, 6, dt);
     // the way it travels: the smoothed velocity's, or (through a reversal, when that is nearly nothing) the latest
     const lv = this.v.length();
@@ -1510,6 +1514,7 @@ export class LegIK {
   private standSpot(g: GaitFrame, f: Foot, out: THREE.Vector3): THREE.Vector3 {
     out.copy(f.stand!);
     out.z += f.split;
+    out.x += f.splitAcross;
     return out.applyMatrix4(g.rootMatrix);
   }
 
@@ -1520,8 +1525,9 @@ export class LegIK {
   private keepSplit(g: GaitFrame, f: Foot): void {
     _local.copy(f.P).applyMatrix4(_rootInverse.copy(g.rootMatrix).invert());
     const leg = g.thigh + g.shin, along = _local.z - f.stand!.z, across = _local.x - f.stand!.x;
-    const kept = Math.abs(across) < this.standingSlack(f) * leg && Math.abs(along) < SPLIT * leg;
+    const kept = Math.abs(across) < SPLIT_ACROSS * leg && Math.abs(along) < SPLIT * leg;
     f.split = kept ? along : 0;
+    f.splitAcross = kept ? across : 0;
     // (and turned as it lies: a foot left behind by a stop still pointed down the run, and stepped in place to turn
     // out to its stance a moment after the body stood still)
     const turn = turnBetween(g.pelvisYaw + f.syaw, f.yaw);
@@ -2568,7 +2574,7 @@ export class LegIK {
       this.legs[i].ankle.getWorldPosition(_ankleAt);
       this.onBodyLevel(_ankleAt, i, g.pelvisYaw, sc, g.rootX, g.rootZ, false);
       f.state = 'plant';
-      f.split = f.splitTurn = 0;
+      f.split = f.splitAcross = f.splitTurn = 0;
       f.P.set(_ankleAt.x, this.under(i, _ankleAt.x, _ankleAt.z, g.pelvisYaw, sc), _ankleAt.z);
       f.yaw = f.yawA = g.pelvisYaw;
       f.t = 0;
