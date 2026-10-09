@@ -18,6 +18,7 @@ import { buildOf } from './gearWeight';
 import { shapesOf } from './soles';
 import { bodyBreaches, describeBreach } from './range';
 import { LegTrace, planOf, traceSpanOf, type TracedFrame, type TraceSpan } from './legTrace';
+import { FootfallWatch, footfallLines } from './footfalls';
 import {
   evennessLine, runnerCanary, stepPairsOf, ThighSwings, TogetherWatch, togetherLine, unevenOf, type StepPair,
 } from './alternation';
@@ -252,6 +253,8 @@ interface GaitRun {
   covered: number;
   /** the frames both thighs swung forward at once (`page/alternation.ts`) */
   together: TogetherWatch;
+  /** each foot frame by frame, for the footfall diagram (`page/footfalls.ts`) */
+  footfalls: FootfallWatch;
   planted: [number, number];
   bothDown: number;
   bothUp: number;
@@ -509,6 +512,7 @@ async function runScenario(
     moving: 0,
     covered: 0,
     together: new TogetherWatch(),
+    footfalls: new FootfallWatch(),
     planted: [0, 0],
     bothDown: 0,
     bothUp: 0,
@@ -553,6 +557,7 @@ async function runScenario(
     const moved = at.distanceTo(lastAt);
     lastAt.copy(at);
     run.together.observe(frame, seconds, thighs.read(lab.joints, wayOf(lab, moved / seconds), seconds));
+    run.footfalls.observe(legs, moved / seconds > MOVING_SPEED);
     const ankles = [lab.joints.ankleL, lab.joints.ankleR].map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
     const hips = lab.joints.hips.getWorldPosition(new THREE.Vector3());
     steps.observe(frame, legs, ankles, seconds, run, lab.player.vel);
@@ -1079,6 +1084,12 @@ function describeRun(
   const unlike = unlikeAPerson(run, speed, seconds);
   lines.push(unlike.length ? `  unlike a person: ${unlike.join('; ')}` : '  as a person walks');
   if (listSteps) {
+    const marks = {
+      gallops: gallopsOf(run.steps, seconds).map((gallop) => gallop.left),
+      hops: run.hopFrames,
+      together: run.together.together,
+    };
+    lines.push(...footfallLines(run.footfalls, run.steps, marks).map((line) => `    ${line}`));
     for (const step of run.steps) {
       const swing = `${step.landed - step.left} frames in the air (the plan ${step.planned.toFixed(0)})`;
       const what = `${SIDES[step.foot]} left at ${step.left} (${step.how}), landed at ${step.landed}`;
