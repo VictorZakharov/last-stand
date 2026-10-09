@@ -228,6 +228,9 @@ const LAND_SETTLE = 0.5;
  *  where the foot is (s) */
 const REAIM_UNTIL = 0.85;
 const REAIM_LEAST = 0.1;
+/** a stance across the legs' line covers this share of the ground one along it does (the legs never cross, and a hip
+ *  opens less than it swings), and how quickly the cycle's quickening for it follows the way the body goes (1/s) */
+const ACROSS = 0.7, ACROSS_RATE = 6;
 /** how long the other foot is in the air before a planted one may leave the ground too (s): both leaving together
  *  is a hop (a run's feet leave half a cycle apart) */
 const HOP_GAP = 0.1;
@@ -612,6 +615,8 @@ export class LegIK {
   /** the way the body faced last frame, and how fast it keeps turning on the curve it goes round (rad/s, smoothed) */
   private lastYaw = 0;
   private yawRate = 0;
+  /** how many times its own pace the walk cycle moves on for the way the body goes off the legs' line (`cadence`) */
+  private acrossK = 1;
   /** the body's lean into its motion (forward, sideways), damped */
   private leanX = 0;
   private leanZ = 0;
@@ -850,6 +855,26 @@ export class LegIK {
     this.followThighs();
   }
 
+  /**
+   * How many times its own pace the walk cycle should move on (the hero's and every walker's cycle reads it): quicker
+   * the further the body goes off the legs' line, its steps shorter and quicker, as a person's sidestep is, a stance
+   * across the line covering only `ACROSS` of the ground one along it does. At the speed's own pace, strafing drawn
+   * the body left most feet out of reach or across the pelvis a fifth of a window before their windows came round,
+   * each stride early when its reach ran out, the left, right rhythm set by the reach and not the cycle: the steps 20
+   * to 40% uneven, now and then a gallop.
+   */
+  get cadence(): number {
+    return IK && this.moving ? this.acrossK : 1;
+  }
+
+  /** The cycle's quickening for the way the body goes against the legs' line this frame (`cadence`). */
+  private followAcross(g: GaitFrame): void {
+    const line = g.pelvisYaw + (this.backing ? Math.PI : 0);
+    const off = turnBetween(line, Math.atan2(g.travel.x, g.travel.z));
+    const along = Math.hypot(Math.cos(off), Math.sin(off) / ACROSS);
+    this.acrossK = damp(this.acrossK, this.moving ? along : 1, ACROSS_RATE, g.dt);
+  }
+
   /** How far forward each thigh points from straight down, in the hips' frame, as solved this frame (rad). */
   private followThighs(): void {
     const hips = this.j.hips;
@@ -1054,6 +1079,7 @@ export class LegIK {
     else g.travel.set(0, 0, 0);
     this.gv.copy(g.travel).multiplyScalar(speed);
     this.followCurve(g);
+    this.followAcross(g);
     // the share of the cycle on the ground: less as the speed rises (a run has both feet in the air a while), so the
     // stance's travel stays within the legs' reach
     const firstCycle = TAU / Math.max(this.rate, 0.5);
