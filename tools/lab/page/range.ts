@@ -2,7 +2,8 @@
 // builds watch them (`watchBody`), over standing, walking each way, shooting and walks that change direction while he
 // shoots or runs. Each angle past its range: on how many frames, the worst and where (the scenario, the frame, and for
 // a leg whether its foot was planted), and the worst moment of each scenario pictured. A canary turns the head round
-// past the neck's range on one frame, which the measure must catch.
+// past the neck's range on one frame, which the measure must catch. `--trace` lists the leg IK frame by frame as the
+// gait's does (`legTrace.ts`), each frame's joints past their ranges after it.
 import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
 import {
@@ -10,6 +11,7 @@ import {
 } from '../../../src/entities/models/anatomy';
 import type { Joints } from '../../../src/entities/models/rig';
 import type { LegIK } from '../../../src/entities/models/ik';
+import { LegTrace, traceSpanOf } from './legTrace';
 
 /** A hand as it is turned in its grip: the group of its own meshes under the joint, as `watchBody` measures it. */
 function turnedHand(hand: THREE.Object3D): THREE.Object3D {
@@ -93,6 +95,10 @@ export interface RangeOptions {
   canary?: boolean;
   /** list each frame with a joint past its range */
   frames?: boolean;
+  /** list the leg IK frame by frame (`legTrace.ts`), with each frame's joints past their ranges */
+  trace?: boolean;
+  /** with `trace`, only the frames from the first to the second */
+  span?: [number, number];
 }
 
 /** where every scenario starts: open ground, facing +z */
@@ -206,6 +212,7 @@ async function runScenario(
   const run: ScenarioRun = { frame: 0, framesPast: 0, worstHere: PICTURE_FROM, moment: null, fastest: 0, fastestAt: '' };
   const ankles = [lab.joints.ankleL, lab.joints.ankleR];
   const last = ankles.map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
+  const tracer = traceOf(lab, options);
   const measure = () => {
     if (options.canary && !report.canary && run.frame === CANARY_FRAME) {
       const measured = measureCanary(lab);
@@ -219,6 +226,9 @@ async function runScenario(
     if (found.length && options.frames) {
       listed.push(`  ${scenario.name} frame ${run.frame}: ${found.map(describeBreach).join(', ')}`);
     }
+    tracer?.observe(run.frame);
+    const traced = tracer?.frames.at(-1);
+    if (found.length && traced?.frame === run.frame) traced.line += `  ${found.map(describeBreach).join(', ')}`;
     if (found.length && found[0].by > run.worstHere) {
       run.worstHere = found[0].by;
       const notes = [`frame ${run.frame}`, describeBreach(found[0]) + contextOf(lab, angles, found[0].name)];
@@ -239,7 +249,17 @@ async function runScenario(
   }
   const fastest = `fastest ankle ${(run.fastest * 100).toFixed(1)} cm a frame (${run.fastestAt})`;
   report.lines.push(`${scenario.what}: ${run.frame} frames, ${run.framesPast} with a joint past its range; ${fastest}`);
+  report.lines.push(...(tracer?.frames ?? []).map((traced) => traced.line));
   if (run.moment) report.moments.push(run.moment);
+}
+
+/** The scenario's trace of the leg IK, when the options ask for one. */
+function traceOf(lab: Lab, options: RangeOptions): LegTrace | null {
+  const span = traceSpanOf(options);
+  if (!span) return null;
+  const legs = lab.model.root.userData.legs as LegIK | undefined;
+  if (!legs) throw new Error(`lab: range: the ${lab.player.cls.id} has no leg IK to trace`);
+  return new LegTrace(lab, legs, span);
 }
 
 /**

@@ -1103,8 +1103,13 @@ export class LegIK {
     }
     if (f.state === 'timed') {
       // (wheeling round on its feet, a step in the air is put down at once, so the foot the turn leaves crossed can
-      // step round: landed at its own pace, it held the other crossed under the turning pelvis for 8 frames)
-      const hurry = !this.moving && this.yawRate > WHEEL_STEP ? WHEEL_HURRY : 1;
+      // step round: landed at its own pace, it held the other crossed under the turning pelvis for 8 frames; moving,
+      // likewise when the planted foot is dragged or its leg solved past a range, which waits for it to land: at its
+      // own pace, a re-step on a sharp turn held the ranger's other hip crossed in 12 degrees past its range for 8
+      // frames)
+      const wheeling = !this.moving && this.yawRate > WHEEL_STEP;
+      const otherStuck = this.moving && this.feet[1 - i].state === 'plant' && this.feet[1 - i].dragged;
+      const hurry = wheeling || otherStuck ? WHEEL_HURRY : 1;
       f.t += (g.dt / f.dur) * hurry;
       if (f.t >= 1) this.land(f, g.pelvisYaw + (this.moving ? 0 : f.syaw));
     }

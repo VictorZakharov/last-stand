@@ -242,6 +242,8 @@ export const COMMANDS = {
         scenarios: options.scenarios,
         canary: Boolean(options.canary),
         frames: Boolean(options.frames),
+        trace: Boolean(options.trace),
+        span: options.span,
       });
     },
     finish(results, options, session) {
