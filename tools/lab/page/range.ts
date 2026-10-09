@@ -208,7 +208,7 @@ async function runScenario(
   lab: Lab, scenario: RangeScenario, options: RangeOptions, records: Map<string, AngleRecord>, report: RangeReport,
   listed: string[],
 ): Promise<void> {
-  await lab.setup({ at: START, facing: 0, nocked: Boolean(lab.player.cls.quiver) });
+  await lab.setup({ at: START, facing: 0, nocked: Boolean(lab.player.cls.quiver), fresh: true });
   const run: ScenarioRun = { frame: 0, framesPast: 0, worstHere: PICTURE_FROM, moment: null, fastest: 0, fastestAt: '' };
   const ankles = [lab.joints.ankleL, lab.joints.ankleR];
   const last = ankles.map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));

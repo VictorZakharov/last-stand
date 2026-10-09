@@ -355,7 +355,7 @@ class StopWatch {
 async function runStop(lab: Lab, run: StopRun): Promise<StopResult> {
   const drawnRunning = Boolean(run.aim) && run.drawsFrom === 'run';
   const facing = drawnRunning ? 0 : facingOfKeys(run.keys);
-  await lab.setup({ at: run.start, facing, nocked: Boolean(lab.player.cls.quiver) });
+  await lab.setup({ at: run.start, facing, nocked: Boolean(lab.player.cls.quiver), fresh: true });
   const legs = lab.model.root.userData.legs as LegIK | undefined;
   if (!legs) throw new Error(`lab: stops: the ${lab.player.cls.id} has no leg IK`);
   const aim = run.aim ? new THREE.Vector3(run.aim[0], 0, run.aim[1]) : undefined;
