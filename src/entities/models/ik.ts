@@ -231,6 +231,12 @@ const REAIM_LEAST = 0.1;
 /** a stance across the legs' line covers this share of the ground one along it does (the legs never cross, and a hip
  *  opens less than it swings), and how quickly the cycle's quickening for it follows the way the body goes (1/s) */
 const ACROSS = 0.7, ACROSS_RATE = 6;
+/** the walk cycle moves on at most this many times its own pace, so a planted foot's window comes round before the
+ *  body has it far behind (`cadence`), and how quickly the hurry follows what the feet ask (1/s) */
+const HURRY_MOST = 2.5, HURRY_RATE = 12;
+/** a stride in the air goes on at no less than this share of the pace planned as it left, the cycle stalling under
+ *  it (a reversal's speed passes through nothing): following the cycle alone, a swing hung in the air a second */
+const STALL_PACE = 0.5;
 /** how long the other foot is in the air before a planted one may leave the ground too (s): both leaving together
  *  is a hop (a run's feet leave half a cycle apart) */
 const HOP_GAP = 0.1;
@@ -615,8 +621,10 @@ export class LegIK {
   /** the way the body faced last frame, and how fast it keeps turning on the curve it goes round (rad/s, smoothed) */
   private lastYaw = 0;
   private yawRate = 0;
-  /** how many times its own pace the walk cycle moves on for the way the body goes off the legs' line (`cadence`) */
+  /** how many times its own pace the walk cycle moves on for the way the body goes off the legs' line, and for a
+   *  planted foot's reach (`cadence`) */
   private acrossK = 1;
+  private hurryK = 1;
   /** the body's lean into its motion (forward, sideways), damped */
   private leanX = 0;
   private leanZ = 0;
@@ -845,6 +853,7 @@ export class LegIK {
     if (this.fresh || (g.rootX - this.last.x) ** 2 + (g.rootZ - this.last.z) ** 2 > 4) this.start(g);
     this.followMotion(g);
     for (let i = 0; i < 2; i++) this.stepFoot(g, i, legW);
+    this.hurryForReach(g);
     this.followFeet(g);
     this.takeAlongFeetInAir(g);
     this.dropPelvis(g);
@@ -864,7 +873,44 @@ export class LegIK {
    * to 40% uneven, now and then a gallop.
    */
   get cadence(): number {
-    return IK && this.moving ? this.acrossK : 1;
+    return IK && this.moving ? this.acrossK * this.hurryK : 1;
+  }
+
+  /**
+   * The hurry the planted feet ask of the cycle this frame: each one's window's time to come at the cycle's own pace
+   * over its time till the body has it far behind. The strides go on by the cycle alone, so hurried, the foot in the
+   * air comes down sooner as the planted one's turn comes round: both legs on together, one rhythm, as distance
+   * matching drives a walk cycle by the ground it covers (Johansen 2009). Left to leave early once out of reach,
+   * half the strides went out of turn, the rhythm set by each foot's reach running out, the steps 20 to 50% uneven
+   * and now and then a gallop.
+   */
+  private hurryForReach(g: GaitFrame): void {
+    let wanted = 1;
+    if (this.moving && !this.restingAt(_rest)) {
+      for (let i = 0; i < 2; i++) wanted = Math.max(wanted, this.hurryFor(g, i));
+    }
+    this.hurryK = damp(this.hurryK, Math.min(HURRY_MOST, wanted), HURRY_RATE, g.dt);
+  }
+
+  /** How many times the cycle's own pace planted foot `i` asks for (1 when it isn't planted, is in its window, or the
+   *  body isn't leaving it behind). */
+  private hurryFor(g: GaitFrame, i: number): number {
+    const f = this.feet[i];
+    if (f.state !== 'plant' || f.own || g.speed < STAND_SPEED) return 1;
+    const toCome = this.toNextWindow(g, f.window);
+    if (toCome >= 0 || toCome <= EARLY) return 1;
+    const windowIn = -toCome * 2 * g.halfSwing * g.cycle * this.hurryK;
+    _hipAt.copy(this.legs[i].thigh.position).applyMatrix4(this.j.hips.matrixWorld);
+    const behind = -((f.P.x - _hipAt.x) * g.travel.x + (f.P.z - _hipAt.z) * g.travel.z);
+    const left = this.farBehind(g) - behind;
+    if (left <= 0) return HURRY_MOST;
+    return windowIn / this.timeToCover(left, g.speed, Math.max(0, this.spRate));
+  }
+
+  /** How long the body takes to cover `distance` (m) from `speed` (m/s), speeding up at `accel` (m/s²). */
+  private timeToCover(distance: number, speed: number, accel: number): number {
+    if (accel < 1e-3) return distance / speed;
+    return (Math.sqrt(speed * speed + 2 * accel * distance) - speed) / accel;
   }
 
   /** The cycle's quickening for the way the body goes against the legs' line this frame (`cadence`). */
@@ -1190,8 +1236,11 @@ export class LegIK {
     const toCome = this.toNextWindow(g, where);
     const behind = f.state === 'plant' ? this.leftBehind(g, f) : '';
     const beforeWindow = !inWindow && toCome > EARLY && toCome < 0;
+    // (but only a leg dragged, short of its foot even on its toes or past a range: one the body is leaving behind
+    // waits for its window, which the cycle hurries round for it, `hurryForReach`; let go early, half the strides
+    // left out of turn as each foot's reach ran out)
     const early = f.state === 'plant' && beforeWindow && other.state !== 'timed' && f.stance > STRIDE_AFTER
-      && behind !== '';
+      && f.dragged;
     // (a foot only just down doesn't go again: a reversal can bring its window round at once; unless the body has left
     // it out of reach already, as the first step from standing lands behind a body on its way: held till it settled,
     // it stood on its toes 8 frames, the pelvis sinking 10 cm)
@@ -1322,7 +1371,11 @@ export class LegIK {
       const after = second ? this.landingIn(other, by) + BRAKE_STEP : 0;
       f.pace = Math.max(f.pace, (1 - f.t) / Math.max(by, after));
     }
-    f.t = Math.min(1, f.t + Math.max(this.dU / f.span, f.pace * g.dt));
+    // (by the cycle, so a cycle hurried for the other foot's reach brings this one down sooner, and at no less than
+    // `STALL_PACE` of the pace planned as it left, for a cycle stalling mid-reversal; a stop's at its own pace, the
+    // cycle winding down with the body: by the cycle alone, its last stride hung in the air)
+    const timed = (landIn > 0 ? 1 : STALL_PACE) * f.pace * g.dt;
+    f.t = Math.min(1, f.t + Math.max(this.dU / f.span, timed));
     if (f.t >= 1) {
       this.land(f, this.landingYaw(g, f));
       return;
@@ -1412,8 +1465,9 @@ export class LegIK {
     f.over = false;
     // (moving, a foot in trouble takes its stride early instead, in `walkFoot`: an extra step would break the left,
     // right rhythm; only one left far behind, or a body wheeling round on its feet, steps on its own)
-    const nearHip = Math.hypot(f.P.x - g.hip.x, f.P.z - g.hip.z) < 0.9 * reach;
-    if ((this.moving && this.yawRate < 3 && nearHip) || own) return;
+    // (nor one the body has left behind: it waits for its window, which the cycle hurries round for it; stepped on its
+    // own, it went out of turn)
+    if ((this.moving && this.yawRate < 3) || own) return;
     // (moving, further than the stride's own early start: at a run a foot pushing off stays down till it is well
     // behind, and stepped here first, quickly, it left as a step rather than a stride, out of turn)
     const tooFar = this.moving ? this.farBehind(g) / 0.9 : this.standingSlack(f) * reach;
