@@ -142,7 +142,10 @@ terminal's task stops it all.
   in a session of its own (`--jobs n`, a core in three by default, at most 8), the longest first as they last took,
   each report in `out/check/<command>-<hero>.txt` and its pictures in a folder beside it. With `--ab`, the other
   commit is exported once before the sessions start, and its side read back from the cache once it has run (below).
-  It runs in the command line's own process, not the server's. One command at a time, both sides every time, the
+  The gait runs a scenario a job, each on a page booted for it, and each hero's scenarios are put back together
+  (`out/check/gait-<hero>.txt`, each under its name): one after another on one page, each was set up from where the
+  last had left the hero and the clock, and main's own gallops were 18, 23 and 17 a hero with films and 13, 14 and
+  16 without. It runs in the command line's own process, not the server's. One command at a time, both sides every time, the
   mage's cape stepped throughout and each gait scenario run again for its film, the same check took 31 to 35 minutes
   a round; the harness is run hundreds of times, so keep every check that runs often to minutes: profile it
   (`--profile`), cut what its measures don't read, and run side by side what doesn't depend on each other.
@@ -200,10 +203,12 @@ What the lab gives a probe (`page/lab.ts`):
 
 - `lab.player`, `lab.model`, `lab.joints`, and `lab.THREE` (three.js as the game has it);
 - `lab.setup(fixture)`: the run set up afresh (`at`, `facing`, `view`, `nocked`, `capes`), checked, and its report.
-  A probe may set up many cases one after another, but each follows on from the ones before it: the hero is the same one, and
-  the game's clock, which his idle runs on, only goes forward. A scan is the same every time it runs, but one of its
-  cases run alone may come out otherwise, so trace a case by running the cases before it first (an option of the
-  probe's own: `--trace=<case>`, say);
+  A probe may set up many cases one after another, but each follows on from the ones before it: the hero is the same
+  one, and the game's clock, which his idle runs on, only goes forward (to the next whole minute at each set-up, so
+  the idle is at the same moment whatever ran before; the hero's own state still carries over). A scan is the same
+  every time it runs, but one of its cases run alone may come out otherwise, so trace a case by running the cases
+  before it first (an option of the probe's own: `--trace=<case>`, say), or run each on a page of its own as a check
+  runs the gait's;
 - `lab.step(count, input?, measure?)`: frames run with each frame's input (`keys`, `m0` / `m2` for the mouse buttons,
   `look` for mouse look, `aim` for the point the mouse is over) and measured after each, a row a frame;
 - `lab.until(done, limit, what, input?)`: frames until `done`, throwing `lab: <what>` if it never is;
@@ -302,8 +307,8 @@ out a level apart in a few pixels, the GPU's own rounding). What it takes:
 - `Math.random` seeded, started again as each command starts (after its modules are imported, in the same task:
   each three.js object made draws a random number for its id, and textures land from the workers while a module
   loads) and at each set-up; timers' callbacks draw from a stream of their own, since they fire by the browser's clock;
-- the game's clock moved forward to 60 s at a set-up, storage and cookies cleared at each boot, one page alive at a
-  time, and every command on a page booted for it.
+- the game's clock moved forward to the next whole minute at a set-up, storage and cookies cleared at each boot, one
+  page alive at a time, and every command on a page booted for it.
 
 Each of these was found as a cause of runs that differed:
 

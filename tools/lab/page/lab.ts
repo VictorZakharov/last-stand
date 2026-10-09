@@ -50,7 +50,9 @@ const SETUP_SEED = 0x2545f491;
 /** the seed each command starts them from */
 const COMMAND_SEED = 0x1b873593;
 /** the game's clock at a set-up on a page booted for it, s (the idle's sway runs on it): past any moment the run's
- *  start reaches (at 5 s it never applied: the start had taken the clock past it, by as many frames as it took) */
+ *  start reaches (at 5 s it never applied: the start had taken the clock past it, by as many frames as it took); a
+ *  later set-up takes it on to the next whole multiple of it, so the idle is at the same moment whatever ran before
+ *  (taken to it only once, a gait scenario's numbers moved with the scenarios before it) */
 const SETUP_TIME = 60;
 /** the frames a set-up stands still once the hero is on his spot */
 const SETTLE_FRAMES = 90;
