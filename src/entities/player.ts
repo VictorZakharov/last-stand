@@ -737,9 +737,7 @@ export class Player {
     // (setting off from standing, the cycle starts with the first stride)
     const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
     if (legs) this.phase = legs.setOff(this.phase);
-    // (hurried on by the legs while a planted foot's turn would come round only after the body had left it behind)
-    const pace = legs?.hurry ?? 1;
-    this.phase = this.cycleOn(dt * gs * gaitRate(gs, legLength(this.model)) * pace, fwd < -0.5 ? -1 : 1);
+    this.phase = this.cycleOn(dt * gs * gaitRate(gs, legLength(this.model)), fwd < -0.5 ? -1 : 1);
     let action: ActionState | null = null;
     if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };
     else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / (this.dash.dur + this.dash.hold)) };
