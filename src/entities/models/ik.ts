@@ -124,8 +124,8 @@ const STOP_LAND = 0.2;
 /** a standing body turning faster than this (rad/s, `yawRate`) is wheeling round on its feet: it steps quicker, and
  *  a step already in the air comes down this many times as quickly */
 const WHEEL_STEP = 2, WHEEL_HURRY = 2.5;
-/** moving, a step in the air comes down this many times as quickly while the planted foot is dragged or its leg
- *  solved past a range: it waits for the step to land */
+/** moving, a step in the air comes down this many times as quickly while the planted leg is solved past a range,
+ *  which waits for the step to land */
 const STUCK_HURRY = 5;
 /** the fastest a foot's target may move (m/s at the scale of a man: a base and a share of the body's speed; a running
  *  swing peaks near twice it) */
@@ -492,6 +492,8 @@ class Foot {
   leftFor = '';
   /** planted, but further from its hip than even its toes reach, or its hip past its extension: it must go */
   dragged = false;
+  /** planted, its leg solved past a range a stance would take it (`pastInStance`; dragged too) */
+  pastRange = false;
   /** how far the knee is folded past the solve's to keep the hip within its extension (rad), eased in */
   fold = 0;
   /** down while the body stood: its next stride is the first of a walk */
@@ -1107,11 +1109,12 @@ export class LegIK {
     if (f.state === 'timed') {
       // (wheeling round on its feet, a step in the air is put down at once, so the foot the turn leaves crossed can
       // step round: landed at its own pace, it held the other crossed under the turning pelvis for 8 frames; moving,
-      // likewise when the planted foot is dragged or its leg solved past a range, which waits for it to land: at its
-      // own pace, a re-step on a sharp turn held the ranger's other hip crossed in 12 degrees past its range for 8
-      // frames)
+      // likewise when the planted leg is solved past a range, which waits for it to land: at its own pace, a re-step
+      // on a sharp turn held the ranger's other hip crossed in 12 degrees past its range for 8
+      // frames. Only a step taken on the move: a standing step the body set off under, brought down a frame sooner,
+      // put the ranger's feet a third of a cycle apart for the rest of a run)
       const wheeling = !this.moving && this.yawRate > WHEEL_STEP;
-      const otherStuck = this.moving && this.feet[1 - i].state === 'plant' && this.feet[1 - i].dragged;
+      const otherStuck = this.moving && f.fast && this.feet[1 - i].state === 'plant' && this.feet[1 - i].pastRange;
       const hurry = otherStuck ? STUCK_HURRY : wheeling ? WHEEL_HURRY : 1;
       f.t += (g.dt / f.dur) * hurry;
       if (f.t >= 1) this.land(f, g.pelvisYaw + (this.moving ? 0 : f.syaw));
@@ -2113,7 +2116,8 @@ export class LegIK {
    *  other foot was up, the hips crossed in 15 degrees past, extended 8 past and the ankles bent 10 to 16 past. */
   private noteDragged(f: Foot, i: number, sc: number): void {
     const leg = this.legs[i];
-    if (ROM_ON && this.pastInStance(i)) f.dragged = true;
+    f.pastRange = ROM_ON && this.pastInStance(i);
+    if (f.pastRange) f.dragged = true;
     leg.thigh.updateWorldMatrix(false, true);
     const ankle = leg.ankle.getWorldPosition(_ankleAt);
     if (ankle.distanceTo(f.pos) <= DRAG_SLACK * sc) return;
