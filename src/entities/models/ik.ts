@@ -228,6 +228,9 @@ const LAND_SETTLE = 0.5;
  *  where the foot is (s) */
 const REAIM_UNTIL = 0.85;
 const REAIM_LEAST = 0.1;
+/** the walk cycle moves on at most this many times its own pace, so a planted foot's window comes round before the
+ *  body leaves it far behind (`hurry`), and how quickly the hurry follows what the feet ask (1/s) */
+const HURRY_MOST = 2.5, HURRY_RATE = 12;
 /** how long the other foot is in the air before a planted one may leave the ground too (s): both leaving together
  *  is a hop (a run's feet leave half a cycle apart) */
 const HOP_GAP = 0.1;
@@ -612,6 +615,8 @@ export class LegIK {
   /** the way the body faced last frame, and how fast it keeps turning on the curve it goes round (rad/s, smoothed) */
   private lastYaw = 0;
   private yawRate = 0;
+  /** how many times its own pace the walk cycle should move on (`hurry`), smoothed */
+  private hurryK = 1;
   /** the body's lean into its motion (forward, sideways), damped */
   private leanX = 0;
   private leanZ = 0;
@@ -840,6 +845,7 @@ export class LegIK {
     if (this.fresh || (g.rootX - this.last.x) ** 2 + (g.rootZ - this.last.z) ** 2 > 4) this.start(g);
     this.followMotion(g);
     for (let i = 0; i < 2; i++) this.stepFoot(g, i, legW);
+    this.hurryForReach(g);
     this.followFeet(g);
     this.takeAlongFeetInAir(g);
     this.dropPelvis(g);
@@ -848,6 +854,49 @@ export class LegIK {
     const hipsYaw = Math.atan2(_hipsForward.x, _hipsForward.z);
     for (let i = 0; i < 2; i++) this.solveLeg(g, i, hipsYaw);
     this.followThighs();
+  }
+
+  /**
+   * How many times its own pace the walk cycle should move on next frame (the hero's and every walker's cycle reads
+   * it): over 1 while a planted foot's window would come round only after the body has left it far behind, so the
+   * cycle hurries both legs on, the one in the air coming down sooner and the planted one's turn coming round as the
+   * body leaves it, rather than that foot leaving out of turn; as distance matching drives a walk cycle by the ground
+   * it covers (Johansen 2009). Left to leave early, the foot left with the other only just up: setting off at a run,
+   * the second foot went 11 frames after the first, and the feet ran a third of a cycle apart, a gallop's rhythm.
+   */
+  get hurry(): number {
+    return IK && this.moving ? this.hurryK : 1;
+  }
+
+  /** The hurry the planted feet ask for this frame: each one's time to its window against its time to far behind. */
+  private hurryForReach(g: GaitFrame): void {
+    let wanted = 1;
+    if (this.moving) {
+      for (let i = 0; i < 2; i++) wanted = Math.max(wanted, this.hurryFor(g, i));
+    }
+    this.hurryK = damp(this.hurryK, Math.min(HURRY_MOST, wanted), HURRY_RATE, g.dt);
+  }
+
+  /** How many times the cycle's own pace planted foot `i` asks for: its window's time to come at the cycle's own
+   *  pace over the time till the body has it far behind (1 when it isn't planted, in its window or not behind). */
+  private hurryFor(g: GaitFrame, i: number): number {
+    const f = this.feet[i];
+    if (f.state !== 'plant' || f.own) return 1;
+    const toCome = this.toNextWindow(g, f.window);
+    if (toCome >= 0 || toCome <= EARLY) return 1;
+    const ownPace = g.cycle * this.hurryK;
+    const windowIn = -toCome * 2 * g.halfSwing * ownPace;
+    _hipAt.copy(this.legs[i].thigh.position).applyMatrix4(this.j.hips.matrixWorld);
+    const behind = -((f.P.x - _hipAt.x) * g.travel.x + (f.P.z - _hipAt.z) * g.travel.z);
+    const left = this.farBehind(g) - behind;
+    if (g.speed < STAND_SPEED || left <= 0) return 1;
+    return windowIn / this.timeToCover(left, g.speed, Math.max(0, this.spRate));
+  }
+
+  /** How long the body takes to cover `distance` (m) from `speed` (m/s), speeding up at `accel` (m/s²). */
+  private timeToCover(distance: number, speed: number, accel: number): number {
+    if (accel < 1e-3) return distance / speed;
+    return (Math.sqrt(speed * speed + 2 * accel * distance) - speed) / accel;
   }
 
   /** How far forward each thigh points from straight down, in the hips' frame, as solved this frame (rad). */
