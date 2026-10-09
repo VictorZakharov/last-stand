@@ -228,11 +228,6 @@ const LAND_SETTLE = 0.5;
  *  where the foot is (s) */
 const REAIM_UNTIL = 0.85;
 const REAIM_LEAST = 0.1;
-/** the walk cycle's pace follows the strides, as a phase-locked loop follows its signal (`pace`): each stride leaving
- *  off its window's start moves the pace by this much a cycle it was off (early quicker, late slower), within these
- *  ends of the cycle's own pace; off by less than `PACE_ON_TIME` of a cycle it is on time (a stride is let go on the
- *  frame its window opens, a frame or so into it) */
-const PACE_GAIN = 0.8, PACE_LEAST = 0.75, PACE_MOST = 1.8, PACE_ON_TIME = 0.05;
 /** how long the other foot is in the air before a planted one may leave the ground too (s): both leaving together
  *  is a hop (a run's feet leave half a cycle apart) */
 const HOP_GAP = 0.1;
@@ -617,8 +612,6 @@ export class LegIK {
   /** the way the body faced last frame, and how fast it keeps turning on the curve it goes round (rad/s, smoothed) */
   private lastYaw = 0;
   private yawRate = 0;
-  /** how many times its own pace the walk cycle moves on (`pace`) */
-  private paceK = 1;
   /** the body's lean into its motion (forward, sideways), damped */
   private leanX = 0;
   private leanZ = 0;
@@ -857,25 +850,6 @@ export class LegIK {
     this.followThighs();
   }
 
-  /**
-   * How many times its own pace the walk cycle should move on (the hero's and every walker's cycle reads it), as the
-   * strides have it: each one leaving early moves it quicker and each late slower (`PACE_GAIN`), so the windows come
-   * round when the feet can take their strides, and each foot leaves half a cycle after the other. By the speed alone,
-   * strafing while tapping attacks the body left each foot behind six frames before its window, every stride early,
-   * each when its own reach ran out: the steps 30 to 40% uneven, now and then a gallop. Standing, it eases back to 1.
-   */
-  get pace(): number {
-    return IK && this.moving ? this.paceK : 1;
-  }
-
-  /** The cycle's pace moved by a stride that left `where` against its window (under 0 before it, over 1 after). */
-  private followStride(g: GaitFrame, where: number): void {
-    const off = where * 2 * g.halfSwing;
-    if (Math.abs(off) < PACE_ON_TIME) return;
-    const paced = this.paceK * Math.exp(-PACE_GAIN * off);
-    this.paceK = Math.min(PACE_MOST, Math.max(PACE_LEAST, paced));
-  }
-
   /** How far forward each thigh points from straight down, in the hips' frame, as solved this frame (rad). */
   private followThighs(): void {
     const hips = this.j.hips;
@@ -1074,7 +1048,6 @@ export class LegIK {
     this.justStopped = wasMoving && !this.moving;
     if (this.moving) for (const f of this.feet) f.split = f.splitTurn = 0;
     this.standK = damp(this.standK, this.moving ? 0 : 1, 6, dt);
-    if (!this.moving) this.paceK = damp(this.paceK, 1, 6, dt);
     // the way it travels: the smoothed velocity's, or (through a reversal, when that is nearly nothing) the latest
     const lv = this.v.length();
     if (speed > 0.05) g.travel.copy(lv > 0.35 * speed ? this.v : _velocity).normalize();
@@ -1224,7 +1197,6 @@ export class LegIK {
     const bothDown = f.state === 'plant' && other.state === 'plant';
     const closing = bothDown && f.stance > STRIDE_AFTER && this.closesStop(g, f, i);
     if (((((inWindow && downAll) || late) && settled) || early || closing) && f.state === 'plant' && !held) {
-      if (!closing && !f.fromStand) this.followStride(g, early ? toCome : where);
       this.beginStride(g, f, early || closing ? toCome : where, early || closing);
       // (as quick as a first stride from standing: paced by a cycle winding down with the body, it took half a second)
       if (closing) f.pace = Math.max(f.pace, 1 / FIRST_STRIDE);
