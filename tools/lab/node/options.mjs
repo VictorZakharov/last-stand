@@ -116,6 +116,11 @@ export const COMMANDS = {
       },
       canary: { kind: 'switch', help: 'plant a fault the measure must catch: the head turned past the neck\'s range' },
       frames: { kind: 'switch', help: 'list every frame with a joint past its range' },
+      trace: {
+        kind: 'switch',
+        help: 'list every frame of the leg IK, as gait --trace does, with the joints past their ranges',
+      },
+      span: { kind: 'pair', usage: 'from,to', help: 'with --trace, only the frames from the first to the second' },
       ...COMMON_OPTIONS,
     },
   },

@@ -17,6 +17,7 @@ import { judgeBalance, sampleOf, type BalanceSample, type Fall, type Unlike } fr
 import { buildOf } from './gearWeight';
 import { shapesOf } from './soles';
 import { bodyBreaches, describeBreach } from './range';
+import { LegTrace, planOf, traceSpanOf, type TracedFrame, type TraceSpan } from './legTrace';
 
 /** One leg of a scenario: the keys held, the attack (held, tapped or not), for how many frames. */
 interface GaitLeg {
@@ -166,15 +167,6 @@ export interface GaitOptions {
   offset?: number;
 }
 
-/** The frames a trace lists, from the first to the last. */
-type TraceSpan = [number, number];
-
-/** The frames to trace as the options ask, or none. */
-function traceSpanOf(options: GaitOptions): TraceSpan | null {
-  if (!options.trace) return null;
-  return options.span ?? [0, Infinity];
-}
-
 /** a body going slower than this is standing (m/s) */
 const MOVING_SPEED = 0.5;
 /** both feet leaving or landing within this many frames of each other is a hop (a run's alternate half a cycle
@@ -271,7 +263,7 @@ interface GaitRun {
   /** each jerk: its frame, the point and the change */
   jerkList: string[];
   /** the frames traced, each with its line */
-  trace: { frame: number; line: string }[];
+  trace: TracedFrame[];
   /** the frames a planted foot was dragged (its leg short of it even on its toes), each foot's run of them going
    *  on, and the longest; and the frames one was up on its toes, out of a flat foot's reach (a push off) */
   dragged: number;
@@ -325,70 +317,10 @@ function attackDown(leg: GaitLeg, frame: number): boolean {
   return frame % (TAP_DOWN + TAP_UP) < TAP_DOWN;
 }
 
-/** The leg IK's plan for this frame, as it keeps it: the share of the cycle a foot is down, and the cycle (s). */
-function planOf(legs: LegIK): { duty: number; cycle: number } {
-  const frame = (legs as unknown as { frame?: { duty?: number; cycle?: number } }).frame;
-  return { duty: frame?.duty ?? 0, cycle: frame?.cycle ?? 0 };
-}
-
 /** The frames of a swing the gait plans now. */
 function plannedSwing(legs: LegIK, seconds: number): number {
   const plan = planOf(legs);
   return ((1 - plan.duty) * plan.cycle) / seconds;
-}
-
-/** The walk cycle as the leg IK reads it, where it says (an A/B's older side may not). */
-function cycleOf(legs: LegIK): { phase: number; rate: number; backing: boolean } | null {
-  return (legs as { cycleNow?: { phase: number; rate: number; backing: boolean } }).cycleNow ?? null;
-}
-
-/** A foot this frame, for a trace: planted (`_`, with how far its spot is from its hip over the ground, cm, and `!`
- *  out of reach) or in the air (`^`, with its stride's progress), and where it is in its window. */
-function traceFoot(lab: Lab, legs: LegIK, side: number, motion: string): string {
-  const foot = legs.feet[side];
-  const window = (foot as { window?: number }).window;
-  const where = window === undefined ? '' : ` w${window.toFixed(2)}`;
-  const hip = (side === 0 ? lab.joints.thighL : lab.joints.thighR).getWorldPosition(new THREE.Vector3());
-  const fromHip = Math.hypot(foot.P.x - hip.x, foot.P.z - hip.z);
-  const planted = `_${cm(fromHip).padStart(5)}${foot.over ? '!' : ' '}`;
-  const doing = foot.state === 'plant' ? planted : `^${foot.t.toFixed(2)}`;
-  return `${SIDES[side]}${doing.padEnd(8)}${where.padEnd(7)} ${motion}`;
-}
-
-/** How an ankle moved this frame, for a trace: its speed (m/s) and how far its way turned from last frame's
- *  (degrees), from where it was the two frames before. */
-function ankleMotion(now: THREE.Vector3, last: THREE.Vector3 | undefined, before: THREE.Vector3 | undefined,
-  seconds: number): string {
-  if (!last) return '';
-  const move = now.clone().sub(last);
-  const speed = move.length() / seconds;
-  const was = before ? last.clone().sub(before) : null;
-  const turned = was && was.length() > 1e-4 && move.length() > 1e-4 ? degreesOf(was.angleTo(move)) : '-';
-  return `v ${speed.toFixed(1).padStart(4)} ${turned.padStart(3)}°`;
-}
-
-/** This frame of a walk, for a trace: the way the body faces and goes, the pelvis (degrees), its speed over the
- *  ground (`speed`, m/s), the cycle's
- *  phase (a share of a cycle) and rate, backing or not, and each foot. */
-function traceLine(lab: Lab, frame: number, legs: LegIK, speed: number, motions: string[]): string {
-  const velocity = lab.player.vel;
-  const going = speed > 0.05 ? degreesOf(Math.atan2(velocity.x, velocity.z)) : '-';
-  const facing = degreesOf(lab.player.facing);
-  const pelvis = degreesOf(legs.pelvisYaw);
-  const way = `faces ${facing.padStart(4)} goes ${going.padStart(4)} at ${speed.toFixed(2)}`;
-  const body = `${way} pelvis ${pelvis.padStart(4)}`;
-  const cycle = cycleOf(legs);
-  const phase = cycle ? (((cycle.phase / (2 * Math.PI)) % 1) + 1) % 1 : NaN;
-  const backing = cycle?.backing ? ' back' : '';
-  const cycleNote = cycle ? `phase ${phase.toFixed(2)} rate ${cycle.rate.toFixed(1).padStart(5)}${backing}` : '';
-  const feet = legs.feet.map((_, side) => traceFoot(lab, legs, side, motions[side])).join(' ');
-  const curve = (legs as unknown as { frame?: { curve?: number } }).frame?.curve;
-  const curveNote = curve === undefined ? '' : `curve ${curve.toFixed(2).padStart(5)}`;
-  const drop = legs.pelvisDrop;
-  const gaitSpeed = (legs as unknown as { frame?: { speed?: number } }).frame?.speed ?? NaN;
-  const plan = `duty ${planOf(legs).duty.toFixed(2)} at ${gaitSpeed.toFixed(2)}`;
-  const dropNote = `drop ${cm(drop.dropped).padStart(4)}/${cm(drop.wanted).padStart(4)} ${plan}`;
-  return `    ${String(frame).padStart(3)} ${body} ${curveNote} ${dropNote} ${cycleNote.padEnd(25)} ${feet}`;
 }
 
 /** Each foot on the ground (planted) or not, as the leg IK has it, for a film's note. */
@@ -563,6 +495,7 @@ async function runScenario(
   const legs = lab.model.root.userData.legs as LegIK | undefined;
   if (!legs) throw new Error(`lab: gait: the ${lab.player.cls.id} has no leg IK`);
   const seconds = window.__labClock.frame / 1000;
+  const tracer = trace ? new LegTrace(lab, legs, trace) : null;
   const run: GaitRun = {
     frames: 0,
     moving: 0,
@@ -581,7 +514,7 @@ async function runScenario(
     plannedDuty: 0,
     hopFrames: [],
     jerkList: [],
-    trace: [],
+    trace: tracer?.frames ?? [],
     dragged: 0,
     dragRun: [0, 0],
     longestDrag: 0,
@@ -602,9 +535,6 @@ async function runScenario(
   const steps = new StepWatch(legs);
   const jerks = new JerkWatch();
   const heights: number[] = [];
-  // (each ankle where it was last frame and the frame before, for a trace)
-  const anklesWere: THREE.Vector3[] = [];
-  const anklesBefore: THREE.Vector3[] = [];
   const lastAt = new THREE.Vector3(lab.player.pos.x, 0, lab.player.pos.z);
   const aim = scenario.aim ? new THREE.Vector3(scenario.aim[0], 0, scenario.aim[1]) : undefined;
   const measure = () => {
@@ -616,13 +546,7 @@ async function runScenario(
     const hips = lab.joints.hips.getWorldPosition(new THREE.Vector3());
     steps.observe(frame, legs, ankles, seconds, run, lab.player.vel);
     if (film) filmShot(lab, scenario, film, frame, legs);
-    if (trace) {
-      const motions = ankles.map((ankle, side) => ankleMotion(ankle, anklesWere[side], anklesBefore[side], seconds));
-      const traced = frame >= trace[0] && frame <= trace[1];
-      if (traced) run.trace.push({ frame, line: traceLine(lab, frame, legs, moved / seconds, motions) });
-      anklesBefore.splice(0, 2, ...anklesWere);
-      anklesWere.splice(0, 2, ...ankles);
-    }
+    tracer?.observe(frame);
     followHeldUp(run, lab, frame, moved / seconds);
     followStill(run, lab);
     followBalance(run, lab, legs, shapes);
