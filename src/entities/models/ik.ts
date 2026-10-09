@@ -921,7 +921,11 @@ export class LegIK {
   private turnPelvis(g: GaitFrame, lean: number): void {
     const j = this.j;
     const pose = this.chestTwist();
-    this.poseTwist = damp(this.poseTwist, pose, POSE_TWIST_FOLLOW, g.dt);
+    // (the way is first chosen as the body gets going, with the pose as it is then: followed slowly from standing, a
+    // side-on draw begun with the strafe walked it forwards and turned round to backpedal half a second on, mid-stride,
+    // leaving the planted foot dragged behind and taken up with the other in the air)
+    const going = this.spSlow > 0.6;
+    this.poseTwist = going ? damp(this.poseTwist, pose, POSE_TWIST_FOLLOW, g.dt) : pose;
     const [least, most] = this.trunkTurns(pose);
     const want = this.pelvisTurnWanted(g, lean, least, most, this.trunkTurns(this.poseTwist));
     // (no faster than hips really turn: flipped round at once between walking forwards and backpedalling, it twitches)
