@@ -230,7 +230,7 @@ const REAIM_UNTIL = 0.85;
 const REAIM_LEAST = 0.1;
 /** a stance across the legs' line covers this share of the ground one along it does (the legs never cross, and a hip
  *  opens less than it swings), and how quickly the cycle's quickening for it follows the way the body goes (1/s) */
-const ACROSS = 0.85, ACROSS_RATE = 6;
+const ACROSS = 0.7, ACROSS_RATE = 6;
 /** how long the other foot is in the air before a planted one may leave the ground too (s): both leaving together
  *  is a hop (a run's feet leave half a cycle apart) */
 const HOP_GAP = 0.1;
