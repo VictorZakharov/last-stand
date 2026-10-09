@@ -124,6 +124,9 @@ const STOP_LAND = 0.2;
 /** a standing body turning faster than this (rad/s, `yawRate`) is wheeling round on its feet: it steps quicker, and
  *  a step already in the air comes down this many times as quickly */
 const WHEEL_STEP = 2, WHEEL_HURRY = 2.5;
+/** moving, a step in the air comes down this many times as quickly while the planted foot is dragged or its leg
+ *  solved past a range: it waits for the step to land */
+const STUCK_HURRY = 5;
 /** the fastest a foot's target may move (m/s at the scale of a man: a base and a share of the body's speed; a running
  *  swing peaks near twice it) */
 const FOOT_V = 4, FOOT_VK = 2.5;
@@ -1109,7 +1112,7 @@ export class LegIK {
       // frames)
       const wheeling = !this.moving && this.yawRate > WHEEL_STEP;
       const otherStuck = this.moving && this.feet[1 - i].state === 'plant' && this.feet[1 - i].dragged;
-      const hurry = wheeling || otherStuck ? WHEEL_HURRY : 1;
+      const hurry = otherStuck ? STUCK_HURRY : wheeling ? WHEEL_HURRY : 1;
       f.t += (g.dt / f.dur) * hurry;
       if (f.t >= 1) this.land(f, g.pelvisYaw + (this.moving ? 0 : f.syaw));
     }
