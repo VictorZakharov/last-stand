@@ -239,8 +239,6 @@ const HURRY_MOST = 2.5, HURRY_RATE = 12;
 /** a stride in the air goes on at no less than this share of the pace planned as it left, the cycle stalling under
  *  it (a reversal's speed passes through nothing): following the cycle alone, a swing hung in the air a second */
 const STALL_PACE = 0.5;
-/** the step a planted foot's time till the body leaves it is looked for in (s: `timeToLeave`) */
-const LEAVE_STEP = 1 / 60;
 /** how quickly a moving stride's landing follows the game's goal for the body (1/s, `easedOff`): at once, every turn
  *  of the keys moved the landings, and going round in circles the ankles jerked a sixth more often */
 const GOAL_FOLLOW = 10;
@@ -914,27 +912,16 @@ export class LegIK {
     if (toCome >= 0 || toCome <= EARLY) return 1;
     const windowIn = -toCome * 2 * g.halfSwing * g.cycle * this.hurryK;
     _hipAt.copy(this.legs[i].thigh.position).applyMatrix4(this.j.hips.matrixWorld);
-    const leaves = this.timeToLeave(f, _hipAt, this.farBehind(g), windowIn);
-    return leaves <= 0 ? HURRY_MOST : windowIn / leaves;
+    const behind = -((f.P.x - _hipAt.x) * g.travel.x + (f.P.z - _hipAt.z) * g.travel.z);
+    const left = this.farBehind(g) - behind;
+    if (left <= 0) return HURRY_MOST;
+    return windowIn / this.timeToCover(left, g.speed, Math.max(0, this.spRate));
   }
 
-  /**
-   * How long till the hip is further than `reach` (m, along the ground) from planted foot `f`, the body going on as
-   * the game eases it towards its goal (`intend`), looked at up to `most` (s); `most` when it stays within reach. (By
-   * the reach left behind it along the way it goes alone, zigzagging drawn a foot the body left out of reach across
-   * the way went unseen, and was dragged a few frames after the other foot left.)
-   */
-  private timeToLeave(f: Foot, hip: THREE.Vector3, reach: number, most: number): number {
-    const goal = this.intended ? this.goalSeen : this.vNow;
-    const rate = this.intended ? Math.max(this.goalRate, 1e-3) : 1e3;
-    const reachSq = reach * reach;
-    for (let t = 0; t < most; t += LEAVE_STEP) {
-      const eased = (1 - Math.exp(-rate * t)) / rate;
-      const x = hip.x + goal.x * t + (this.vNow.x - goal.x) * eased - f.P.x;
-      const z = hip.z + goal.z * t + (this.vNow.z - goal.z) * eased - f.P.z;
-      if (x * x + z * z > reachSq) return t;
-    }
-    return most;
+  /** How long the body takes to cover `distance` (m) from `speed` (m/s), speeding up at `accel` (m/s²). */
+  private timeToCover(distance: number, speed: number, accel: number): number {
+    if (accel < 1e-3) return distance / speed;
+    return (Math.sqrt(speed * speed + 2 * accel * distance) - speed) / accel;
   }
 
   /** The cycle's quickening for the way the body goes against the legs' line this frame (`cadence`). */
