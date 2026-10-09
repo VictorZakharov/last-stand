@@ -7,6 +7,7 @@ import { join, relative } from 'node:path';
 import { cpus } from 'node:os';
 import { exportCommit } from './commits.mjs';
 import { describeError } from './errors.mjs';
+import { COMMANDS } from './options.mjs';
 import { OUT, REPO } from './paths.mjs';
 import { LabSession } from './session.mjs';
 import { Side, copyLabPage } from './side.mjs';
@@ -24,13 +25,29 @@ export const CHECK_CLASSES = ['warrior', 'mage', 'ranger'];
 export const CHECK_PLAN = { gait: null, stops: null, range: null, feet: ['ranger'], carry: ['ranger'] };
 /** each command's options in a check: the gait's steps listed, and no films (a check reads the numbers) */
 const CHECK_OPTIONS = { gait: { frames: true, films: false } };
+/**
+ * the commands run a scenario a job, each on a page booted for it: run one after another on one page, each scenario
+ * set up from where the last had left the hero and the game's clock, and the gait's numbers of one scenario (its
+ * gallops above all) moved with what ran before it, by as much as a change being judged moved them
+ */
+export const CHECK_SPLIT = new Set(['gait']);
 /** the most sessions side by side: each is a browser and a Vite server or two, and a page's frames take a core */
 const MOST_WORKERS = 8;
 
-/** One job: a command for a hero, its options, and where its report goes. */
-function jobOf(command, heroClass, base) {
+/** The scenarios a command runs, by name, as its options list them. */
+export function scenariosOf(command) {
+  return COMMANDS[command]?.options.scenarios?.choices ?? [];
+}
+
+/**
+ * One job: a command for a hero (one of its scenarios, `part`), its options, its name (where its report goes) and its
+ * group's (the command and hero, whose parts' reports make one).
+ */
+function jobOf(command, heroClass, base, part = null) {
   const options = { _: [], ...CHECK_OPTIONS[command], ...base, class: heroClass };
-  return { command, heroClass, options, name: `${command}-${heroClass}` };
+  const group = `${command}-${heroClass}`;
+  if (!part) return { command, heroClass, options, name: group, group };
+  return { command, heroClass, options: { ...options, scenarios: [part] }, name: `${group}-${part}`, group, part };
 }
 
 /** The jobs `options` asks for: each command of the plan (or `--commands`) for each of its heroes. */
@@ -42,8 +59,9 @@ export function jobsOf(options, plan = CHECK_PLAN) {
   if (options.fresh) base.fresh = true;
   const jobs = [];
   for (const command of commands) {
-    const heroes = plan[command] ?? classes;
-    for (const heroClass of heroes.filter((hero) => classes.includes(hero))) jobs.push(jobOf(command, heroClass, base));
+    const heroes = (plan[command] ?? classes).filter((hero) => classes.includes(hero));
+    const parts = CHECK_SPLIT.has(command) ? scenariosOf(command) : [null];
+    for (const heroClass of heroes) for (const part of parts) jobs.push(jobOf(command, heroClass, base, part));
   }
   return jobs;
 }
@@ -104,7 +122,7 @@ function verdictOf(job, text, seconds, ok) {
   return `${job.name}: ${state} in ${seconds.toFixed(0)} s${verdict ? `; ${verdict}` : ''}`;
 }
 
-/** Runs `job` on `session`, its pictures in its own folder; writes its report and returns its line. */
+/** Runs `job` on `session`, its pictures in its own folder; writes a whole job's report, logs its line. */
 async function runJob(session, job, started) {
   const jobStarted = Date.now();
   session.outRoot = join(CHECK_DIR, job.name);
@@ -119,10 +137,41 @@ async function runJob(session, job, started) {
     ok = false;
   }
   const seconds = (Date.now() - jobStarted) / 1000;
-  writeFileSync(join(CHECK_DIR, `${job.name}.txt`), text);
-  const line = verdictOf(job, text, seconds, ok);
-  logLine(started, line);
-  return { job, seconds, ok, line };
+  if (!job.part) {
+    writeFileSync(join(CHECK_DIR, `${job.name}.txt`), text);
+    logLine(started, verdictOf(job, text, seconds, ok));
+  }
+  return { job, seconds, ok, text };
+}
+
+/** How many lines an A/B's verdict says differ (0 when the sides agree). */
+function differing(text) {
+  return Number(text.match(/^A\/B: (\d+) lines differ/m)?.[1] ?? 0);
+}
+
+/**
+ * Each split command's parts put back together, a report a group (its parts' reports in the scenarios' order, each
+ * under its scenario), and the group's line logged: its time in all, and the lines its A/Bs found differing.
+ */
+function joinParts(done, started) {
+  const groups = new Map();
+  for (const result of done.filter((each) => each.job.part)) {
+    const parts = groups.get(result.job.group) ?? [];
+    parts.push(result);
+    groups.set(result.job.group, parts);
+  }
+  for (const [group, parts] of groups) {
+    const order = scenariosOf(parts[0].job.command);
+    parts.sort((a, b) => order.indexOf(a.job.part) - order.indexOf(b.job.part));
+    const text = parts.map((part) => `=== ${part.job.part}\n${part.text}`).join('\n\n');
+    writeFileSync(join(CHECK_DIR, `${group}.txt`), text);
+    const seconds = parts.reduce((sum, part) => sum + part.seconds, 0);
+    const failed = parts.filter((part) => !part.ok).map((part) => part.job.part);
+    const state = failed.length ? `FAILED (${failed.join(', ')})` : 'ok';
+    const lines = parts.reduce((sum, part) => sum + differing(part.text), 0);
+    const verdict = `A/B: ${lines} lines differ`;
+    logLine(started, `${group}: ${state}, ${parts.length} scenarios in ${seconds.toFixed(0)} s; ${verdict}`);
+  }
 }
 
 /** A session working through the queue of jobs until it's empty, its pages served by `serving`. */
@@ -155,6 +204,7 @@ export async function runCheck(options) {
   } finally {
     await Promise.allSettled([serving.repo.server?.close(), serving.other?.server?.close()]);
   }
+  joinParts(done, started);
   const durations = { ...lastDurations() };
   for (const { job, seconds } of done) durations[job.name] = Math.round(seconds);
   writeFileSync(DURATIONS, JSON.stringify(durations, null, 2));

@@ -325,7 +325,7 @@ export class Lab {
     this.aim = new THREE.Vector3(x + Math.sin(facing) * AIM_AHEAD, 0, z + Math.cos(facing) * AIM_AHEAD);
     // (the same moment and the same random numbers from here on, however long the run took to start: the clock is
     // only ever moved forward, so nothing the game stamped with it is left in the future)
-    if (G.time < SETUP_TIME) G.time = SETUP_TIME;
+    G.time = Math.max(SETUP_TIME, Math.ceil(G.time / SETUP_TIME) * SETUP_TIME);
     window.__labSeed(SETUP_SEED);
     // (standing a moment: what was still moving as the run started, the camera gliding in and the hero settling on
     // his spot, comes to rest, so it reaches the measure the same however many frames the start took)
