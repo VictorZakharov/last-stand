@@ -179,10 +179,11 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'film each scenario, run again for it (=false: the numbers alone, in half the time)',
       },
-      offset: {
-        kind: 'number',
-        usage: 'frames',
-        help: 'each scenario\'s first move this many frames longer (its turns at other points of a stride)',
+      offsets: {
+        kind: 'list',
+        usage: 'a,b',
+        help: 'each scenario from these starts, a run each on one page: its first move so many frames longer '
+          + '(its turns at other points of a stride; 0 alone by default)',
       },
       ...COMMON_OPTIONS,
     },
@@ -237,7 +238,7 @@ export const COMMANDS = {
       starts: {
         kind: 'number',
         usage: 'n',
-        help: 'how many moments each gait scenario starts from, its counts added up (3 by default, at most 5)',
+        help: 'how many moments each gait scenario starts from, its counts added up (5 by default, at most 8)',
       },
       ab: COMMON_OPTIONS.ab,
       fresh: COMMON_OPTIONS.fresh,

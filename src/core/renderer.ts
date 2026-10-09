@@ -321,6 +321,16 @@ export function saveCamera(): () => void {
 const shift = { x: 0, y: 0, tx: 0, ty: 0 };
 export function setViewShift(x: number, y: number): void { shift.tx = x; shift.ty = y; }
 
+/** The camera's follow, zoom, turn and shake brought to rest at once, on `focus`: tools/lab sets a run up again with
+ *  the camera where it would have come to rest, whatever ran before it (the aim follows the camera: gliding back
+ *  from where the last run ended, it left a run's arms a frame or two elsewhere past a range). */
+export function settleCamera(focus: THREE.Vector3): void {
+  rig.focus.set(focus.x, 0, focus.z);
+  rig.zoom = rig.targetZoom; rig.yaw = rig.targetYaw; rig.boom = rig.targetBoom;
+  rig.shake = rig.kick = rig.kickTo = rig.hurt = 0;
+  shift.x = shift.tx; shift.y = shift.ty;
+}
+
 /** `height`: the character's, for the close views' shoulder and eye level. */
 export function updateCamera(dt: number, focus: THREE.Vector3, height: number): void {
   const cam = G.camera;

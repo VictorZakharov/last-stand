@@ -16,12 +16,12 @@ test('every command of the plan for each of its heroes, the ranger\'s alone for 
   assert.ok(gaitScenarios > 1);
   assert.ok(starts > 1);
   assert.ok(CHECK_SPLIT.has('gait'));
-  assert.equal(jobs.length, (3 + gaitScenarios * starts) * CHECK_CLASSES.length + 2);
+  assert.equal(jobs.length, (3 + gaitScenarios) * CHECK_CLASSES.length + 2);
   assert.ok(names(jobs).includes('carry-ranger'));
   assert.ok(!names(jobs).includes('carry-warrior'));
   assert.ok(names(jobs).includes('stops-mage'));
-  assert.ok(names(jobs).includes(`gait-mage-${scenariosOf('gait')[0]}`));
-  assert.ok(names(jobs).includes(`gait-mage-${scenariosOf('gait')[0]}+${CHECK_OFFSETS[1]}`));
+  const gait = jobs.find((job) => job.name === `gait-mage-${scenariosOf('gait')[0]}`);
+  assert.deepEqual(gait.options.offsets, offsetsOf());
 });
 
 test('the starts asked for, at least one and at most every offset there is', () => {
@@ -29,8 +29,8 @@ test('the starts asked for, at least one and at most every offset there is', () 
   assert.deepEqual(offsetsOf(0), [0]);
   assert.deepEqual(offsetsOf(99), CHECK_OFFSETS);
   const jobs = jobsOf({ commands: ['gait'], classes: ['ranger'], starts: 2 });
-  assert.equal(jobs.length, 2 * scenariosOf('gait').length);
-  assert.deepEqual([...new Set(jobs.map((job) => job.options.offset))], CHECK_OFFSETS.slice(0, 2));
+  assert.equal(jobs.length, scenariosOf('gait').length);
+  for (const job of jobs) assert.deepEqual(job.options.offsets, CHECK_OFFSETS.slice(0, 2));
 });
 
 test('the commands and heroes asked for, and a hero a command is not for left out', () => {
@@ -42,7 +42,7 @@ test('a split command\'s job runs one scenario, in its group; the gait listed wi
   const [gait] = jobsOf({ commands: ['gait'], classes: ['mage'], ab: 'abc1234' });
   const first = scenariosOf('gait')[0];
   assert.deepEqual(gait.options.scenarios, [first]);
-  assert.equal(gait.options.offset, 0);
+  assert.deepEqual(gait.options.offsets, offsetsOf());
   assert.equal(gait.group, 'gait-mage');
   assert.equal(gait.part, first);
   assert.equal(gait.options.frames, true);

@@ -18,6 +18,9 @@ import { buildOf } from './gearWeight';
 import { shapesOf } from './soles';
 import { bodyBreaches, describeBreach } from './range';
 import { LegTrace, planOf, traceSpanOf, type TracedFrame, type TraceSpan } from './legTrace';
+import {
+  evennessLine, runnerCanary, stepPairsOf, ThighSwings, TogetherWatch, togetherLine, unevenOf, type StepPair,
+} from './alternation';
 
 /** One leg of a scenario: the keys held, the attack (held, tapped or not), for how many frames. */
 interface GaitLeg {
@@ -162,9 +165,10 @@ export interface GaitOptions {
   span?: [number, number];
   /** film each scenario (true by default): each is run again for its film, which a check of the numbers never reads */
   films?: boolean;
-  /** how many frames longer each scenario's first move lasts, so every later change of way comes at another point of
-   *  a stride (a check runs each scenario so from a few) */
-  offset?: number;
+  /** the moments each scenario starts from, one run a start: how many frames longer its first move lasts, so every
+   *  later change of way comes at another point of a stride (0 alone by default; a check runs each scenario from a
+   *  few, on one page: each run sets a fresh hero up, so it comes out the same whatever ran before it) */
+  offsets?: number[];
 }
 
 /** a body going slower than this is standing (m/s) */
@@ -246,6 +250,8 @@ interface GaitRun {
   frames: number;
   moving: number;
   covered: number;
+  /** the frames both thighs swung forward at once (`page/alternation.ts`) */
+  together: TogetherWatch;
   planted: [number, number];
   bothDown: number;
   bothUp: number;
@@ -491,7 +497,9 @@ async function runScenario(
 ): Promise<GaitRun> {
   const facing = scenario.aim ? 0 : Math.PI / 2;
   // (a film looks at the hero, cape and all; the measure's run never does: `Fixture.capes`)
-  await lab.setup({ at: scenario.start, facing, nocked: Boolean(lab.player.cls.quiver), capes: film !== null });
+  await lab.setup({
+    at: scenario.start, facing, nocked: Boolean(lab.player.cls.quiver), capes: film !== null, fresh: true,
+  });
   const legs = lab.model.root.userData.legs as LegIK | undefined;
   if (!legs) throw new Error(`lab: gait: the ${lab.player.cls.id} has no leg IK`);
   const seconds = window.__labClock.frame / 1000;
@@ -500,6 +508,7 @@ async function runScenario(
     frames: 0,
     moving: 0,
     covered: 0,
+    together: new TogetherWatch(),
     planted: [0, 0],
     bothDown: 0,
     bothUp: 0,
@@ -537,11 +546,13 @@ async function runScenario(
   const heights: number[] = [];
   const lastAt = new THREE.Vector3(lab.player.pos.x, 0, lab.player.pos.z);
   const aim = scenario.aim ? new THREE.Vector3(scenario.aim[0], 0, scenario.aim[1]) : undefined;
+  const thighs = new ThighSwings();
   const measure = () => {
     const frame = run.frames++;
     const at = new THREE.Vector3(lab.player.pos.x, 0, lab.player.pos.z);
     const moved = at.distanceTo(lastAt);
     lastAt.copy(at);
+    run.together.observe(frame, seconds, thighs.read(lab.joints, wayOf(lab, moved / seconds), seconds));
     const ankles = [lab.joints.ankleL, lab.joints.ankleR].map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
     const hips = lab.joints.hips.getWorldPosition(new THREE.Vector3());
     steps.observe(frame, legs, ankles, seconds, run, lab.player.vel);
@@ -596,6 +607,14 @@ function lengthened(legs: GaitLeg[], offset: number): GaitLeg[] {
   const first = legs.findIndex((leg) => leg.keys.length > 0);
   if (offset <= 0 || first < 0) return legs;
   return legs.map((leg, index) => (index === first ? { ...leg, frames: leg.frames + offset } : leg));
+}
+
+/** The way the body goes (a unit vector along the ground), or none while it moves slower than `MOVING_SPEED`. */
+function wayOf(lab: Lab, speed: number): THREE.Vector2 | null {
+  const velocity = lab.player.vel;
+  const along = Math.hypot(velocity.x, velocity.z);
+  if (speed <= MOVING_SPEED || along <= 0) return null;
+  return new THREE.Vector2(velocity.x / along, velocity.z / along);
 }
 
 /** The way the body goes this frame, or the way it last went once it stops, and how long it has been still. */
@@ -909,9 +928,24 @@ function alternationOf(steps: Step[], seconds: number): string {
     + ` after it): ${gallops.length}${galloping}`;
 }
 
-/** What a walk has that a person's has none of, by name: the strides galloping, the hops, a foot dance's steps. */
+/** What a walk has that a person's has none of, by name: the strides galloping, the frames both legs swung forward
+ *  at once, the uneven steps, the hops, a foot dance's steps. */
 function countsOf(run: GaitRun, seconds: number): Record<string, number> {
-  return { gallops: gallopsOf(run.steps, seconds).length, hops: run.hops.length, 'short steps': run.shortSteps };
+  return {
+    gallops: gallopsOf(run.steps, seconds).length,
+    'legs together': run.together.together.length,
+    'uneven steps': unevenOf(stepPairs(run, seconds)).length,
+    hops: run.hops.length,
+    'short steps': run.shortSteps,
+  };
+}
+
+/** Each step's time against the next's, from the steps' landings (`page/alternation.ts`). */
+function stepPairs(run: GaitRun, seconds: number): StepPair[] {
+  const landings = run.steps.map((step) => {
+    return { foot: step.foot, landed: step.landed, closing: step.how.includes('closing') };
+  });
+  return stepPairsOf(landings, seconds);
 }
 
 /** Adds `counts` into `total`, name by name. */
@@ -944,6 +978,10 @@ function unlikeAPerson(run: GaitRun, speed: number, seconds: number): string[] {
   if (run.hops.length) found.push(`${run.hops.length} hops: both feet leaving or landing together`);
   const gallops = gallopsOf(run.steps, seconds).length;
   if (gallops) found.push(`${gallops} strides galloping: a foot leaving nearly with the other, the legs together`);
+  const together = run.together.together.length;
+  if (together) found.push(`${together} frames both thighs swinging forward at once: the legs together`);
+  const uneven = unevenOf(stepPairs(run, seconds)).length;
+  if (uneven) found.push(`${uneven} steps uneven, one much quicker than the next: a limp's or a gallop's rhythm`);
   if (speed < WALK_MOST && run.bothUp > 0.05 * run.moving) {
     found.push(`both feet in the air ${share(run.bothUp, run.moving)} of the time at a walk's speed`);
   }
@@ -994,11 +1032,14 @@ function median(values: number[]): number {
 }
 
 /** The report's lines for one scenario. */
-function describeRun(scenario: GaitScenario, run: GaitRun, seconds: number, listSteps: boolean): string[] {
+function describeRun(
+  scenario: GaitScenario, run: GaitRun, seconds: number, listSteps: boolean, offset = 0,
+): string[] {
   const time = run.moving * seconds;
   const speed = time ? run.covered / time : 0;
   const steps = run.steps.length;
-  const lines = [`${scenario.what}: ${run.frames} frames, ${run.moving} moving at ${speed.toFixed(2)} m/s`];
+  const start = offset ? `, its first move ${offset} frames longer` : '';
+  const lines = [`${scenario.what}${start}: ${run.frames} frames, ${run.moving} moving at ${speed.toFixed(2)} m/s`];
   lines.push(
     `  on the ground: L ${share(run.planted[0], run.moving)}, R ${share(run.planted[1], run.moving)}`
       + ` (the plan ${(run.moving ? run.plannedDuty / run.moving : 0).toFixed(2)} of a cycle each);`
@@ -1027,6 +1068,8 @@ function describeRun(scenario: GaitScenario, run: GaitRun, seconds: number, list
   }
   lines.push(`  ${rhythmOf(run.steps)}`);
   lines.push(`  ${alternationOf(run.steps, seconds)}`);
+  lines.push(`  ${togetherLine(run.together)}`);
+  lines.push(`  ${evennessLine(stepPairs(run, seconds))}`);
   lines.push(`  ${balanceOf(run)}`);
   lines.push(`  ${rangesOf(run)}`);
   const against = run.swings.map((swing) => correlation(swing.hand, swing.ankle).toFixed(2));
@@ -1052,38 +1095,45 @@ function describeRun(scenario: GaitScenario, run: GaitRun, seconds: number, list
 }
 
 /** The film as one moment: its pictures left to right, each frame's feet beside it (`_` down, `^` in the air). */
-function filmMoment(scenario: GaitScenario, film: Film): Pictured | null {
+function filmMoment(scenario: GaitScenario, film: Film, offset = 0): Pictured | null {
   if (!film.shots.length) return null;
   const feet = film.shots.map((shot) => `${shot.frame} ${shot.feet}`).join(', ');
+  const start = offset ? `, its first move ${offset} frames longer` : '';
   return {
-    label: `${scenario.what}, ${film.about}`,
+    label: `${scenario.what}${start}, ${film.about}`,
     tiles: film.shots.flatMap((shot) => shot.tiles),
     notes: [`every ${FILM_EVERY} frames, left to right: ${feet}`],
   };
 }
 
 /**
- * Runs the scenarios asked for, one after another (each set up afresh where it starts), and judges each walk as a
- * person's, with its film.
+ * Runs the scenarios asked for, one after another, each from each start (set up afresh where it starts, a fresh hero
+ * on his spot), and judges each walk as a person's, with its film.
  */
 export async function gait(lab: Lab, options: GaitOptions): Promise<GaitReport> {
   const asked = options.scenarios?.length ? options.scenarios : GAIT_SCENARIOS;
   const report: GaitReport = { lines: [], moments: [], problems: [], counts: {} };
   const seconds = window.__labClock.frame / 1000;
+  const offsets = options.offsets?.length ? options.offsets : [0];
   for (const scenario of SCENARIOS.filter((candidate) => asked.includes(candidate.name))) {
-    const run = await runScenario(lab, scenario, null, traceSpanOf(options), options.offset ?? 0);
-    report.lines.push(...describeRun(scenario, run, seconds, Boolean(options.frames)));
-    addCounts(report.counts, countsOf(run, seconds));
-    if (run.heldUp) {
-      report.problems.push(`gait: ${scenario.name} was held up by something in its way (${run.heldUpAt})`);
+    for (const offset of offsets) {
+      const run = await runScenario(lab, scenario, null, traceSpanOf(options), offset);
+      report.lines.push(...describeRun(scenario, run, seconds, Boolean(options.frames), offset));
+      addCounts(report.counts, countsOf(run, seconds));
+      if (run.heldUp) {
+        report.problems.push(`gait: ${scenario.name} was held up by something in its way (${run.heldUpAt})`);
+      }
+      if (options.films === false) continue;
+      const gallops = gallopsOf(run.steps, seconds).map((gallop) => gallop.left);
+      const film = filmFor([...run.hopFrames, ...gallops].sort((a, b) => a - b));
+      await runScenario(lab, scenario, film, null, offset);
+      const moment = filmMoment(scenario, film, offset);
+      if (moment) report.moments.push(moment);
     }
-    if (options.films === false) continue;
-    const gallops = gallopsOf(run.steps, seconds).map((gallop) => gallop.left);
-    const film = filmFor([...run.hopFrames, ...gallops].sort((a, b) => a - b));
-    await runScenario(lab, scenario, film, null, options.offset ?? 0);
-    const moment = filmMoment(scenario, film);
-    if (moment) report.moments.push(moment);
   }
+  const canary = runnerCanary();
+  report.problems.push(...canary.missed.map((missed) => `gait: the alternation's canary missed: ${missed}`));
+  report.lines.push(canary.said);
   report.lines.push(
     'a person: walks to about 2 m/s with a foot always down and both down 15 to 25% of the time, the hips highest on'
       + ' one foot; runs above, in the air more the faster (20 to 35% at a jog, about half at 7 m/s), the hips 5 to 9'

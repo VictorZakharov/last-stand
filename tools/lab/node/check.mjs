@@ -27,20 +27,21 @@ export const CHECK_PLAN = { gait: null, stops: null, range: null, form: null, fe
  *  the form's of both sides, to compare, were more than the browser held, which closed) */
 const CHECK_OPTIONS = { gait: { frames: true, films: false }, form: { pictures: false } };
 /**
- * the commands run a scenario a job, each on a page booted for it: run one after another on one page, each scenario
- * set up from where the last had left the hero and the game's clock, and the gait's numbers of one scenario (its
- * gallops above all) moved with what ran before it, by as much as a change being judged moved them
+ * the commands run a scenario a job, side by side, each job running its scenario from every start on one page
+ * (each run sets a fresh hero up, so it comes out the same whatever ran before it; set up again over the same hero,
+ * a scenario's gallops moved with the scenarios run before it, by as much as a change being judged moved them, and a
+ * page booted for each run spent 11 of its 25 s booting)
  */
 export const CHECK_SPLIT = new Set(['gait']);
 /**
- * how many frames longer a split command's scenarios' first moves last (`--offset`), as many of them as `--starts`
+ * how many frames longer a split command's scenarios' first moves last (`--offsets`), as many of them as `--starts`
  * asks for, so every later change of way comes at another point of a stride: run so once alone, a frame's change
  * anywhere sent every later stride of a scenario elsewhere, and a change's gallops came out 2 or 3 either way over
  * a check's gait scenarios by chance; over several, the chance averages out
  */
-export const CHECK_OFFSETS = [0, 7, 13, 19, 29];
+export const CHECK_OFFSETS = [0, 7, 13, 19, 29, 3, 11, 23];
 /** how many of `CHECK_OFFSETS` a check starts each split scenario from, by default */
-const CHECK_STARTS = 3;
+const CHECK_STARTS = 5;
 /** the most sessions side by side: each is a browser and a Vite server or two, and a page's frames take a core */
 const MOST_WORKERS = 8;
 
@@ -50,15 +51,15 @@ export function scenariosOf(command) {
 }
 
 /**
- * One job: a command for a hero (one of its scenarios, `part`, stood `offset` frames first), its options, its name
- * (where its report goes) and its group's (the command and hero, whose parts' reports make one).
+ * One job: a command for a hero (one of its scenarios, `part`, from each of `offsets`), its options, its name (where
+ * its report goes) and its group's (the command and hero, whose parts' reports make one).
  */
-function jobOf(command, heroClass, base, part = null, offset = 0) {
+function jobOf(command, heroClass, base, part = null, offsets = [0]) {
   const options = { _: [], ...CHECK_OPTIONS[command], ...base, class: heroClass };
   const group = `${command}-${heroClass}`;
   if (!part) return { command, heroClass, options, name: group, group };
-  const name = offset ? `${group}-${part}+${offset}` : `${group}-${part}`;
-  return { command, heroClass, options: { ...options, scenarios: [part], offset }, name, group, part, offset };
+  const name = `${group}-${part}`;
+  return { command, heroClass, options: { ...options, scenarios: [part], offsets }, name, group, part };
 }
 
 /** The offsets a split command's scenarios start from, as many as `starts` asks (all there are at most). */
@@ -79,7 +80,7 @@ export function jobsOf(options, plan = CHECK_PLAN) {
     const parts = CHECK_SPLIT.has(command) ? scenariosOf(command) : [null];
     const offsets = CHECK_SPLIT.has(command) ? offsetsOf(options.starts) : [0];
     for (const heroClass of heroes) {
-      for (const part of parts) for (const offset of offsets) jobs.push(jobOf(command, heroClass, base, part, offset));
+      for (const part of parts) jobs.push(jobOf(command, heroClass, base, part, offsets));
     }
   }
   return jobs;
@@ -203,7 +204,7 @@ function countsHead(parts, other) {
   const counts = countsLine(countsOver(parts), other);
   if (!counts) return [];
   const scenarios = [...new Set(parts.map((part) => part.job.part))];
-  const starts = parts.length / scenarios.length;
+  const starts = parts[0].job.options.offsets.length;
   const each = scenarios.map((scenario) => {
     const its = parts.filter((part) => part.job.part === scenario);
     return `  ${scenario}: ${countsLine(countsOver(its), other) || 'nothing'}`;
@@ -211,9 +212,9 @@ function countsHead(parts, other) {
   return [[`over its ${scenarios.length} scenarios from ${starts} starts each: ${counts}`, ...each].join('\n')];
 }
 
-/** A part's heading in a joined report: its scenario, and how much longer its first move lasted if it did. */
+/** A part's heading in a joined report: its scenario (each of its runs says how much longer its first move lasted). */
 function partHeading(job) {
-  return job.offset ? `=== ${job.part}, its first move ${job.offset} frames longer` : `=== ${job.part}`;
+  return `=== ${job.part}`;
 }
 
 /** How many lines an A/B's verdict says differ (0 when the sides agree). */
@@ -235,7 +236,7 @@ function joinParts(done, started) {
   }
   for (const [group, parts] of groups) {
     const order = scenariosOf(parts[0].job.command);
-    parts.sort((a, b) => order.indexOf(a.job.part) - order.indexOf(b.job.part) || a.job.offset - b.job.offset);
+    parts.sort((a, b) => order.indexOf(a.job.part) - order.indexOf(b.job.part));
     const other = otherName(parts[0].job);
     const counts = countsLine(countsOver(parts), other);
     const head = countsHead(parts, other);

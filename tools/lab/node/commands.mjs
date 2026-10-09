@@ -193,8 +193,12 @@ export const COMMANDS = {
         trace: Boolean(options.trace),
         span: options.span,
         films: options.films !== false,
-        offset: options.offset ?? 0,
+        offsets: (options.offsets ?? [0]).map(Number),
       });
+    },
+    check(options) {
+      const wrong = (options.offsets ?? []).find((offset) => !Number.isInteger(Number(offset)) || Number(offset) < 0);
+      if (wrong !== undefined) throw labError(`gait --offsets: ${wrong} is not a whole number of frames`);
     },
     finish(results, options, session) {
       return textWithSheetEach(results, session.outFor('gait'), session.browser);
