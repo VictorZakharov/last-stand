@@ -1402,7 +1402,9 @@ export class LegIK {
     // (by the cycle, so a cycle hurried for the other foot's reach brings this one down sooner, and at no less than
     // `STALL_PACE` of the pace planned as it left, for a cycle stalling mid-reversal; a stop's at its own pace, the
     // cycle winding down with the body: by the cycle alone, its last stride hung in the air)
-    const timed = (landIn > 0 ? 1 : STALL_PACE) * f.pace * g.dt;
+    // (and all of its pace while the body is brought to a stop: at half of it, once slowed past landing in a hurry, the
+    // last strides came down late and the feet settled a tenth of a second later)
+    const timed = (landIn > 0 || this.restingAt(_rest) ? 1 : STALL_PACE) * f.pace * g.dt;
     f.t = Math.min(1, f.t + Math.max(this.dU / f.span, timed));
     if (f.t >= 1) {
       this.land(f, this.landingYaw(g, f));
