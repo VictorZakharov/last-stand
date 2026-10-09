@@ -124,6 +124,8 @@ const STOP_LAND = 0.2;
 /** a standing body turning faster than this (rad/s, `yawRate`) is wheeling round on its feet: it steps quicker, and
  *  a step already in the air comes down this many times as quickly */
 const WHEEL_STEP = 2, WHEEL_HURRY = 2.5;
+/** moving faster than this (m/s), a body turning round turns on its strides, no step of a planted foot's own */
+const WHEEL_SPEED = 1.5;
 /** moving, a step in the air comes down this many times as quickly while the planted leg is solved past a range,
  *  which waits for the step to land */
 const STUCK_HURRY = 5;
@@ -1479,8 +1481,10 @@ export class LegIK {
     // (moving, a foot in trouble takes its stride early instead, in `walkFoot`: an extra step would break the left,
     // right rhythm; only one left far behind, or a body wheeling round on its feet, steps on its own)
     // (nor one the body has left behind: it waits for its window, which the cycle hurries round for it; stepped on its
-    // own, it went out of turn)
-    if ((this.moving && this.yawRate < 3) || own) return;
+    // own, it went out of turn. Wheeling round on its feet, only slowly: turning round from a run, a foot landed out of
+    // reach stepped again seven frames on, the other only just up)
+    const wheels = this.yawRate >= 3 && g.speed < WHEEL_SPEED;
+    if ((this.moving && !wheels) || own) return;
     // (moving, further than the stride's own early start: at a run a foot pushing off stays down till it is well
     // behind, and stepped here first, quickly, it left as a step rather than a stride, out of turn)
     const tooFar = this.moving ? this.farBehind(g) / 0.9 : this.standingSlack(f) * reach;
@@ -1729,10 +1733,23 @@ export class LegIK {
     // turn of the keys at once, and going round in circles the ankles jerked a sixth more often)
     if (this.restingAt(_rest)) return this.easedOver(g, time);
     const speed = this.sp;
+    // (speeding up, at the rate it is, up to the speed it is going for: at its speed now alone, a stride set off from
+    // a turn round as the body sped up from 2 to 6 m/s landed out of reach, and stepped again seven frames on)
+    if (this.spRate > 0 && this.intended) return this.speedingOver(speed, time);
     if (this.spRate >= 0 || speed < 1e-3) return { covered: speed * time, share: 1 };
     const rate = -this.spRate / Math.max(speed, 0.1);
     const share = Math.exp(-rate * time);
     return { covered: (speed / rate) * (1 - share), share };
+  }
+
+  /** How far a body speeding up from `speed` (m/s) at its rate now goes over the next `time` (s), no faster than its
+   *  goal; its speed share stays 1 (the stride's reach ahead is the stance's at speed). */
+  private speedingOver(speed: number, time: number): { covered: number; share: number } {
+    const top = Math.max(speed, Math.hypot(this.goal.x, this.goal.z));
+    const rate = this.spRate;
+    const toTop = Math.min(time, (top - speed) / Math.max(rate, 1e-3));
+    const covered = speed * toTop + 0.5 * rate * toTop * toTop + top * (time - toTop);
+    return { covered, share: 1 };
   }
 
   /** How far the body goes over the next `time` (s) along the way it goes, and its speed then as a share of its
