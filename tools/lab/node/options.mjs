@@ -161,7 +161,8 @@ export const COMMANDS = {
         kind: 'list',
         usage: 'a,b',
         choices: ['walk', 'run', 'drawn', 'taps', 'zigzag', 'circle', 'circleDrawn', 'stairs', 'stairsDrawn'],
-        help: 'the scenarios (all by default): walk, run, drawn, taps, zigzag, circle, circleDrawn, stairs, stairsDrawn',
+        help: 'the scenarios (all by default): walk, run, drawn, taps, zigzag, circle, circleDrawn, stairs, '
+          + 'stairsDrawn',
       },
       frames: { kind: 'switch', help: 'list every step (its foot, when it left and landed, how far) and the hops' },
       trace: {
@@ -192,8 +193,15 @@ export const COMMANDS = {
         choices: WEAPON_STYLES,
         help: `the ways of holding the weapons (the class's all by default): ${WEAPON_STYLES.join(', ')}`,
       },
-      canary: { kind: 'switch', help: 'plant a fault the measure must catch: the left knee straight through its stance' },
+      canary: {
+        kind: 'switch',
+        help: 'plant a fault the measure must catch: the left knee straight through its stance',
+      },
       frames: { kind: 'switch', help: 'list each leg\'s cycles and the curves bin by bin' },
+      pictures: {
+        kind: 'switch',
+        help: 'picture the run: stick figures, and the hero run again for him (=false: the numbers alone)',
+      },
       ...COMMON_OPTIONS,
     },
   },

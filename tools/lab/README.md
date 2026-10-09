@@ -187,8 +187,9 @@ Options every command run on a page takes:
   `--capes`: the capes' cloth stepped. Every set-up holds them otherwise (`Fixture.capes`, `cape.holdCapes`), each
   riding its neckline as it last hung and hung afresh from it for a picture: stepped, the cloth was three quarters of
   the mage's time in his stops, which never look at it. A sheet and the gait's films step them;
-- `gait --films=false`: the numbers alone, each scenario run once (a film runs it again); `gait --offset n`: each
-  scenario's first move n frames longer, its later turns and stops at other points of a stride (a check's starts);
+- `gait --films=false`, `form --pictures=false`: the numbers alone, each run once (a film or a picture runs it
+  again); `gait --offset n`: each scenario's first move n frames longer, its later turns and stops at other
+  points of a stride (a check's starts);
 - `--class ranger|warrior|mage`: the hero (the last one used by default);
 - `--ab[=ref]`: also on another commit (`origin/main` by default), its results beside this tree's, ending with the
   verdict: the lines that differ under the section each is in, and the pictures that differ by more than the GPU's own
