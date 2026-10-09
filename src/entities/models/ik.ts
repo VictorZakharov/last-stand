@@ -237,6 +237,9 @@ const HURRY_MOST = 2.5, HURRY_RATE = 12;
 /** a stride in the air goes on at no less than this share of the pace planned as it left, the cycle stalling under
  *  it (a reversal's speed passes through nothing): following the cycle alone, a swing hung in the air a second */
 const STALL_PACE = 0.5;
+/** how quickly a moving stride's landing follows the game's goal for the body (1/s, `easedOff`): at once, every turn
+ *  of the keys moved the landings, and going round in circles the ankles jerked a sixth more often */
+const GOAL_FOLLOW = 10;
 /** how long the other foot is in the air before a planted one may leave the ground too (s): both leaving together
  *  is a hop (a run's feet leave half a cycle apart) */
 const HOP_GAP = 0.1;
@@ -632,6 +635,8 @@ export class LegIK {
   private readonly vNow = new THREE.Vector3();
   /** the velocity the game eases the body towards and how quickly (`intend`), and whether it said so this frame */
   private readonly goal = new THREE.Vector3();
+  /** the goal as the landings follow it (`GOAL_FOLLOW`) */
+  private readonly goalSeen = new THREE.Vector3();
   private goalRate = 0;
   private goalSaid = false;
   private intended = false;
@@ -813,6 +818,7 @@ export class LegIK {
     if (!IK) return;
     this.intended = this.goalSaid && this.goalRate > 0;
     this.goalSaid = false;
+    this.goalSeen.lerp(this.intended ? this.goal : this.vNow, 1 - Math.exp(-GOAL_FOLLOW * Math.max(dt, 0)));
     if (!this.restingAt(_rest)) this.stopFrom = 0;
     else if (this.stopFrom === 0) this.stopFrom = Math.max(this.sp, 1e-3);
     if (dead >= 0 || !this.active) {
@@ -1672,6 +1678,9 @@ export class LegIK {
       const ahead = f.state === 'swing' ? g.landAhead * slowing.share : 0;
       _landWas.copy(f.B);
       alongCurve(f.B, g.hip, Math.atan2(g.travel.x, g.travel.z), g.curve, slowing.covered + ahead);
+      // (and as the game turns it towards its goal: by its way now alone, zigzagging drawn a foot landed where the body
+      // still turning left it out of reach six frames on, and it went out of turn, a frame or two after the other)
+      if (this.moving && !this.restingAt(_rest)) this.easedOff(f.B, remain);
       const toRest = this.landWhereItRests(g, f, i, landYaw);
       f.landOff = g.landAhead * (toRest !== 0 ? slowing.share : 1) + toRest;
       resting = toRest !== 0;
@@ -1692,6 +1701,17 @@ export class LegIK {
     f.strokeK = damp(f.strokeK, resting ? stopShare : 1, 20, g.dt);
     // (standing, the step lands where the spot it is measured against is: off the edge)
     if (!this.moving) this.onBodyLevel(f.B, i, landYaw, g.scale, g.rootX, g.rootZ, true);
+  }
+
+  /** Moves a moving stride's landing `out` by where the body will be in `time` (s) as the game eases its velocity
+   *  towards its goal (`intend`, the goal followed smoothly: `goalSeen`), beyond where its velocity now would take it. */
+  private easedOff(out: THREE.Vector3, time: number): void {
+    if (!this.intended || this.goalRate <= 0) return;
+    const eased = (1 - Math.exp(-this.goalRate * time)) / this.goalRate;
+    // (eased: goal * time + (now - goal) * eased; at its velocity now alone: now * time)
+    const beyond = time - eased;
+    out.x += (this.goalSeen.x - this.vNow.x) * beyond;
+    out.z += (this.goalSeen.z - this.vNow.z) * beyond;
   }
 
   /** How far the body goes over the next `time` (s), and its speed then as a share of its speed now: slowing, as the
