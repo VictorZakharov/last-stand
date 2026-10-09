@@ -1187,6 +1187,8 @@ export class LegIK {
     // caught up, every stride early or a re-step landing under the hip)
     // (but only one down since before its window began: one that landed in its window, near its end, went again as
     // soon as the window was over, six frames down, and its stride, squeezed into what was left, broke the rhythm)
+    // (and in its window too: a foot that went early for it, landed in it and went again before its end strode twice
+    // a window, the second stride squeezed into what was left, 12 frames at a run, with the other only just down)
     const downAll = f.stance > Math.max(0, where) * 2 * g.halfSwing * g.cycle;
     const late = !inWindow && where > 1 && where < 1 + LATE_SHARE * (1 / (2 * g.halfSwing) - 1) && downAll;
     // (stopping, a foot too far from where it will stand to stay brings itself up as the body brakes, as a person's
@@ -1194,7 +1196,7 @@ export class LegIK {
     // keys were let go, and a body wheeling round then to shoot behind swept it across in front of the other leg)
     const bothDown = f.state === 'plant' && other.state === 'plant';
     const closing = bothDown && f.stance > STRIDE_AFTER && this.closesStop(g, f, i);
-    if ((((inWindow || late) && settled) || early || closing) && f.state === 'plant' && !held) {
+    if (((((inWindow && downAll) || late) && settled) || early || closing) && f.state === 'plant' && !held) {
       this.beginStride(g, f, early || closing ? toCome : where, early || closing);
       // (as quick as a first stride from standing: paced by a cycle winding down with the body, it took half a second)
       if (closing) f.pace = Math.max(f.pace, 1 / FIRST_STRIDE);
