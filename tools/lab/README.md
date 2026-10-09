@@ -86,9 +86,9 @@ terminal's task stops it all.
   half second by half second; `--trace` every frame (`--span from,to` only those): the way the body faces and goes and
   its speed over the ground, the pelvis, the curve
   it is on, the pelvis's drop, the plan's share on the ground and the speed it plans for, the cycle's phase and rate,
-  backing or not, and each foot (planted, with its distance from its hip and `!` out of reach, or its stride's
-  progress), where it is in its window, its ankle's speed and how far its way turned, and what a body couldn't do
-  that frame. Each
+  backing or not, and each foot (planted, with its distance from its hip, `!` out of reach and `d` dragged, or its
+  stride's progress, `~` in a timed step), where it is in its window, its ankle's speed and how far its way turned,
+  and what a body couldn't do that frame (`page/legTrace.ts`, which `range --trace` shares). Each
   scenario is measured, then run again to film it from the side round its first hop or gallop (else its middle),
   a picture every few frames, so the motion is seen as well as measured; each film is a sheet of its own (`film-1.png` on,
   an A/B's other side `film-main-1.png` on: both sides in one page, or all eight films, took the browser down) and an
@@ -149,7 +149,9 @@ terminal's task stops it all.
   past its range, on how many frames, its worst and where (for a leg, whether its foot was planted; for a shoulder,
   its raise, the plane it rises in and its turn against what each allows), each scenario's
   fastest ankle, and its worst moment pictured. `--canary` turns the head past the neck's range on one frame,
-  `--frames` lists every frame with a joint past its range.
+  `--frames` lists every frame with a joint past its range, and `--trace` (`--span a,b` for some frames) the leg IK
+  frame by frame as the gait's trace does (`page/legTrace.ts`: each foot down, in the air or in a timed step `~`,
+  dragged `d`), each frame's joints past their ranges after it.
 - `carry`: the ranger's carried bow against his body through a carry's round (standing, walking, a draw and its shot,
   waiting with the next arrow, putting it back). `--canary` plants faults it must catch; `--frames` lists every frame
   with a clip, what crossed what and how deep.

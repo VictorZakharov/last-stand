@@ -549,7 +549,8 @@ const _runSwing = new THREE.Vector2(), _runLeft = new THREE.Vector2(), _runLands
 const _runNow = new THREE.Vector2();
 const _velocity = new THREE.Vector3(), _spot = new THREE.Vector3(), _ankleAt = new THREE.Vector3();
 const _point = new THREE.Vector3(), _target = new THREE.Vector3(), _toFoot = new THREE.Vector3();
-const _airAt = new THREE.Vector3(), _peelAt = new THREE.Vector3(), _candidate = new THREE.Vector3(), _hipsForward = new THREE.Vector3();
+const _airAt = new THREE.Vector3(), _peelAt = new THREE.Vector3(), _candidate = new THREE.Vector3();
+const _hipsForward = new THREE.Vector3();
 const _hipsAt = new THREE.Vector3(), _hipsScale = new THREE.Vector3(), _hipsTurn = new THREE.Quaternion();
 const _hipsInverse = new THREE.Matrix4();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _handTurn = new THREE.Quaternion();
@@ -1289,7 +1290,8 @@ export class LegIK {
     const landIn = this.stopLandIn(g);
     if (landIn > 0) {
       const by = Math.max(STOPPED_LEAST, landIn), other = this.feet[1 - i];
-      const after = other.state === 'swing' && this.landsSecond(f, other, by) ? this.landingIn(other, by) + BRAKE_STEP : 0;
+      const second = other.state === 'swing' && this.landsSecond(f, other, by);
+      const after = second ? this.landingIn(other, by) + BRAKE_STEP : 0;
       f.pace = Math.max(f.pace, (1 - f.t) / Math.max(by, after));
     }
     f.t = Math.min(1, f.t + Math.max(this.dU / f.span, f.pace * g.dt));
@@ -1941,7 +1943,9 @@ export class LegIK {
    *  `runPush` lifts it, as `reachedAt` reaches it; 0 for a foot not behind its hip or a body not running. Reached
    *  flat, a runner's foot was out of reach 0.4 leg lengths behind the hip and left after two thirds of its stance:
    *  the stance came out short, the feet churned and each left the ground bent under the hips, with no push off. */
-  private pushReach(g: GaitFrame, f: Foot, i: number, hip: THREE.Vector3, dx: number, dz: number, most: number): number {
+  private pushReach(
+    g: GaitFrame, f: Foot, i: number, hip: THREE.Vector3, dx: number, dz: number, most: number,
+  ): number {
     const push = this.runPush(g);
     if (!this.moving || !this.shape || push <= 0 || dx * g.travel.x + dz * g.travel.z >= 0) return 0;
     const shape = this.shape[i], sc = g.scale;
