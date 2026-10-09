@@ -137,21 +137,25 @@ terminal's task stops it all.
   `--setup=false` skips the set-up.
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`).
 - `status`, `stop`: what the server serves and has booted; stop it.
-- `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films),
-  the stops and the ranges for every hero, and the ranger's feet and carry (`--classes`, `--commands` for fewer), each
-  in a session of its own (`--jobs n`, a core in three by default, at most 8), the longest first as they last took,
-  each report in `out/check/<command>-<hero>.txt` and its pictures in a folder beside it. With `--ab`, the other
-  commit is exported once before the sessions start, and its side read back from the cache once it has run (below).
-  The gait runs a scenario a job, each on a page booted for it, and each hero's scenarios are put back together
+- `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films), the
+  stops and the ranges for every hero, and the ranger's feet and carry (`--classes`, `--commands` for fewer), each in
+  a session of its own (`--jobs n`, a core in three by default, at most 8), the longest first as they last took, each
+  report in `out/check/<command>-<hero>.txt` and its pictures in a folder beside it. With `--ab`, the other commit is
+  exported once before the sessions start, and its side read back from the cache once it has run (below). The gait
+  runs a scenario a job, each on a page booted for it, and each hero's scenarios are put back together
   (`out/check/gait-<hero>.txt`, each under its name): one after another on one page, each was set up from where the
-  last had left the hero and the clock, and main's own gallops were 18, 23 and 17 a hero with films and 13, 14 and
-  16 without. What a command counts (`countsOf`: the gait's hops and short steps) is added up over a hero's jobs,
-  each side's, in its line of the log and at the head of its report with each scenario's (`hops 2 (048deb5 9)`: this
-  tree's, then the other's), so a check's verdict needs no script of its own to read it. It runs in the command line's own process,
-  not the server's. One command at a time, both sides every
-  time, the mage's cape stepped throughout and each gait scenario run again for its film, the same check took 31 to
-  35 minutes a round; the harness is run hundreds of times, so keep every check that runs often to minutes: profile
-  it (`--profile`), cut what its measures don't read, and run side by side what doesn't depend on each other.
+  last had left the hero and the clock, and main's own gallops were 18, 23 and 17 a hero with films and 13, 14 and 16
+  without. Each gait scenario runs from three starts (`--starts n`, at most 5): its first move 0, 7 and 13 frames
+  longer (`gait --offset`), so every later turn and stop comes at another point of a stride. Run once from one start,
+  a frame's change anywhere sent every later stride elsewhere, and a change's gallops came out 2 or 3 either way over
+  a check's gait scenarios by chance; stood a few frames first instead, nothing changed (the set-off is the same from
+  any moment of the idle). What a command counts (`countsOf`: the gait's hops and short steps) is added up over a
+  hero's jobs, each side's, in its line of the log and at the head of its report with each scenario's (`hops 2
+  (048deb5 9)`: this tree's, then the other's), so a check's verdict needs no script of its own to read it. It runs in
+  the command line's own process, not the server's. One command at a time, both sides every time, the mage's cape
+  stepped throughout and each gait scenario run again for its film, the same check took 31 to 35 minutes a round; the
+  harness is run hundreds of times, so keep every check that runs often to minutes: profile it (`--profile`), cut what
+  its measures don't read, and run side by side what doesn't depend on each other.
 
 Options every command run on a page takes:
 
@@ -161,7 +165,8 @@ Options every command run on a page takes:
   `--capes`: the capes' cloth stepped. Every set-up holds them otherwise (`Fixture.capes`, `cape.holdCapes`), each
   riding its neckline as it last hung and hung afresh from it for a picture: stepped, the cloth was three quarters of
   the mage's time in his stops, which never look at it. A sheet and the gait's films step them;
-- `gait --films=false`: the numbers alone, each scenario run once (a film runs it again);
+- `gait --films=false`: the numbers alone, each scenario run once (a film runs it again); `gait --offset n`: each
+  scenario's first move n frames longer, its later turns and stops at other points of a stride (a check's starts);
 - `--class ranger|warrior|mage`: the hero (the last one used by default);
 - `--ab[=ref]`: also on another commit (`origin/main` by default), its results beside this tree's, ending with the
   verdict: the lines that differ under the section each is in, and the pictures that differ by more than the GPU's own

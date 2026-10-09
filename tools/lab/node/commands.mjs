@@ -165,6 +165,7 @@ export const COMMANDS = {
         trace: Boolean(options.trace),
         span: options.span,
         films: options.films !== false,
+        offset: options.offset ?? 0,
       });
     },
     finish(results, options, session) {

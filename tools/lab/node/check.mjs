@@ -31,6 +31,15 @@ const CHECK_OPTIONS = { gait: { frames: true, films: false } };
  * gallops above all) moved with what ran before it, by as much as a change being judged moved them
  */
 export const CHECK_SPLIT = new Set(['gait']);
+/**
+ * how many frames longer a split command's scenarios' first moves last (`--offset`), as many of them as `--starts`
+ * asks for, so every later change of way comes at another point of a stride: run so once alone, a frame's change
+ * anywhere sent every later stride of a scenario elsewhere, and a change's gallops came out 2 or 3 either way over
+ * a check's gait scenarios by chance; over several, the chance averages out
+ */
+export const CHECK_OFFSETS = [0, 7, 13, 19, 29];
+/** how many of `CHECK_OFFSETS` a check starts each split scenario from, by default */
+const CHECK_STARTS = 3;
 /** the most sessions side by side: each is a browser and a Vite server or two, and a page's frames take a core */
 const MOST_WORKERS = 8;
 
@@ -40,14 +49,20 @@ export function scenariosOf(command) {
 }
 
 /**
- * One job: a command for a hero (one of its scenarios, `part`), its options, its name (where its report goes) and its
- * group's (the command and hero, whose parts' reports make one).
+ * One job: a command for a hero (one of its scenarios, `part`, stood `offset` frames first), its options, its name
+ * (where its report goes) and its group's (the command and hero, whose parts' reports make one).
  */
-function jobOf(command, heroClass, base, part = null) {
+function jobOf(command, heroClass, base, part = null, offset = 0) {
   const options = { _: [], ...CHECK_OPTIONS[command], ...base, class: heroClass };
   const group = `${command}-${heroClass}`;
   if (!part) return { command, heroClass, options, name: group, group };
-  return { command, heroClass, options: { ...options, scenarios: [part] }, name: `${group}-${part}`, group, part };
+  const name = offset ? `${group}-${part}+${offset}` : `${group}-${part}`;
+  return { command, heroClass, options: { ...options, scenarios: [part], offset }, name, group, part, offset };
+}
+
+/** The offsets a split command's scenarios start from, as many as `starts` asks (all there are at most). */
+export function offsetsOf(starts = CHECK_STARTS) {
+  return CHECK_OFFSETS.slice(0, Math.max(1, Math.min(CHECK_OFFSETS.length, starts)));
 }
 
 /** The jobs `options` asks for: each command of the plan (or `--commands`) for each of its heroes. */
@@ -61,7 +76,10 @@ export function jobsOf(options, plan = CHECK_PLAN) {
   for (const command of commands) {
     const heroes = (plan[command] ?? classes).filter((hero) => classes.includes(hero));
     const parts = CHECK_SPLIT.has(command) ? scenariosOf(command) : [null];
-    for (const heroClass of heroes) for (const part of parts) jobs.push(jobOf(command, heroClass, base, part));
+    const offsets = CHECK_SPLIT.has(command) ? offsetsOf(options.starts) : [0];
+    for (const heroClass of heroes) {
+      for (const part of parts) for (const offset of offsets) jobs.push(jobOf(command, heroClass, base, part, offset));
+    }
   }
   return jobs;
 }
@@ -176,12 +194,25 @@ async function runJob(session, job, started) {
   return result;
 }
 
-/** A joined report's head: its counts over all its parts, then each part's (none when nothing was counted). */
+/**
+ * A joined report's head: its counts over all its parts, then each scenario's over the moments it started from (none
+ * when nothing was counted).
+ */
 function countsHead(parts, other) {
   const counts = countsLine(countsOver(parts), other);
   if (!counts) return [];
-  const each = parts.map((part) => `  ${part.job.part}: ${countsLine(countsOver([part]), other) || 'nothing'}`);
-  return [[`over its ${parts.length} scenarios: ${counts}`, ...each].join('\n')];
+  const scenarios = [...new Set(parts.map((part) => part.job.part))];
+  const starts = parts.length / scenarios.length;
+  const each = scenarios.map((scenario) => {
+    const its = parts.filter((part) => part.job.part === scenario);
+    return `  ${scenario}: ${countsLine(countsOver(its), other) || 'nothing'}`;
+  });
+  return [[`over its ${scenarios.length} scenarios from ${starts} starts each: ${counts}`, ...each].join('\n')];
+}
+
+/** A part's heading in a joined report: its scenario, and how much longer its first move lasted if it did. */
+function partHeading(job) {
+  return job.offset ? `=== ${job.part}, its first move ${job.offset} frames longer` : `=== ${job.part}`;
 }
 
 /** How many lines an A/B's verdict says differ (0 when the sides agree). */
@@ -203,18 +234,18 @@ function joinParts(done, started) {
   }
   for (const [group, parts] of groups) {
     const order = scenariosOf(parts[0].job.command);
-    parts.sort((a, b) => order.indexOf(a.job.part) - order.indexOf(b.job.part));
+    parts.sort((a, b) => order.indexOf(a.job.part) - order.indexOf(b.job.part) || a.job.offset - b.job.offset);
     const other = otherName(parts[0].job);
     const counts = countsLine(countsOver(parts), other);
     const head = countsHead(parts, other);
-    const text = [...head, ...parts.map((part) => `=== ${part.job.part}\n${part.text}`)].join('\n\n');
+    const text = [...head, ...parts.map((part) => `${partHeading(part.job)}\n${part.text}`)].join('\n\n');
     writeFileSync(join(CHECK_DIR, `${group}.txt`), text);
     const seconds = parts.reduce((sum, part) => sum + part.seconds, 0);
-    const failed = parts.filter((part) => !part.ok).map((part) => part.job.part);
+    const failed = parts.filter((part) => !part.ok).map((part) => part.job.name.slice(group.length + 1));
     const state = failed.length ? `FAILED (${failed.join(', ')})` : 'ok';
     const lines = parts.reduce((sum, part) => sum + differing(part.text), 0);
     const tail = [`A/B: ${lines} lines differ`, counts].filter(Boolean).join('; ');
-    logLine(started, `${group}: ${state}, ${parts.length} scenarios in ${seconds.toFixed(0)} s; ${tail}`);
+    logLine(started, `${group}: ${state}, ${parts.length} runs in ${seconds.toFixed(0)} s; ${tail}`);
   }
 }
 
