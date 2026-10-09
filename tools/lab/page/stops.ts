@@ -170,8 +170,10 @@ interface StopResult {
   /** each foot's frames planted on another level than the body's once it was still, and whether it ended so */
   offLevel: [number, number];
   endsOffLevel: [boolean, boolean];
-  /** the frames both feet were in the air once one had landed (a run's flight as it was let go is not a hop) */
+  /** the frames both feet were in the air once one had landed (a run's flight as it was let go is not a hop), and
+   *  the most of them running */
   bothUp: number;
+  bothUpMost: number;
   /** each frame, for `--trace` */
   frames: StopFrame[];
 }
@@ -225,6 +227,8 @@ class StopWatch {
   private anklesWere: THREE.Vector3[];
   private furthest = [-Infinity, -Infinity];
   private landed = false;
+  /** the frames both feet have been up running */
+  private upRun = 0;
   readonly result: StopResult;
 
   constructor(private lab: Lab, private legs: LegIK, run: StopRun) {
@@ -248,6 +252,7 @@ class StopWatch {
       offLevel: [0, 0],
       endsOffLevel: [false, false],
       bothUp: 0,
+      bothUpMost: 0,
       frames: [],
     };
   }
@@ -278,8 +283,14 @@ class StopWatch {
 
   /** Counts a frame with both feet up once one has landed. */
   private followBothUp(): void {
-    if (this.legs.feet.some((foot) => foot.state === 'plant')) this.landed = true;
-    else if (this.landed) this.result.bothUp++;
+    if (this.legs.feet.some((foot) => foot.state === 'plant')) {
+      this.landed = true;
+      this.upRun = 0;
+    } else if (this.landed) {
+      this.result.bothUp++;
+      this.upRun++;
+      this.result.bothUpMost = Math.max(this.result.bothUpMost, this.upRun);
+    }
   }
 
   /** Keeps this frame for `--trace`. */
@@ -436,6 +447,12 @@ function traceLine(frame: StopFrame, at: number, fromRest: (point: THREE.Vector3
   return `        ${String(at).padStart(3)} ${frame.speed.toFixed(2).padStart(5)} m/s ${where} ${frame.feet} ${lean}`;
 }
 
+/** both feet up this many frames running once one had landed (0.1 s at the lab's 60 a second) is a run's flight going
+ *  on as the braking foot comes down: the foot behind ending its push off as the keys are let go, as a runner's does
+ *  (a run's flight at full speed is 0.17 s); longer, a hop: with the foot behind pushing off as the keys were let go
+ *  and the other still coming down, both were up 12 frames as the body braked */
+const FLIGHT_ON = 6;
+
 /** Whether a stop stepped once its body was still, put a foot out and drew it back, stepped back, stood a foot off
  *  the body's level once still or to the end, or had both feet up. */
 const STOP_FAULTS = {
@@ -444,9 +461,17 @@ const STOP_FAULTS = {
   stepsBack: (result: StopResult) => stepsBack(result).length > 0,
   offLevel: (result: StopResult) => result.offLevel[0] + result.offLevel[1] > 0,
   endsOffLevel: (result: StopResult) => result.endsOffLevel[0] || result.endsOffLevel[1],
-  bothUp: (result: StopResult) => result.bothUp > 0,
+  bothUp: (result: StopResult) => result.bothUpMost > FLIGHT_ON,
   relevel: (result: StopResult) => stepsOntoAnotherLevel(result).length > 0,
 };
+
+/** The stops whose feet were both up once one had landed, but only as long as a run's flight going on into the stop
+ *  (`FLIGHT_ON`), as a count and their names with the frames. */
+function flightsOn(results: StopResult[]): string {
+  const found = results.filter((result) => result.bothUpMost > 0 && result.bothUpMost <= FLIGHT_ON);
+  const names = found.map((result) => `${result.run.name}: ${result.bothUpMost}`);
+  return found.length ? `${found.length} (${names.join(', ')})` : '0';
+}
 
 /** The stops of a scenario that did `what`, as a count and their names (keys and frames). */
 function countOf(results: StopResult[], what: (result: StopResult) => boolean): string {
@@ -479,7 +504,9 @@ function describeScenario(scenario: StopScenario, results: StopResult[], seconds
   lines.push(`  once still, a foot on another level than the body's: ${countOf(results, STOP_FAULTS.offLevel)};`
     + ` ending so: ${countOf(results, STOP_FAULTS.endsOffLevel)}`);
   lines.push(`  once still, a foot stepped from one level onto another: ${countOf(results, STOP_FAULTS.relevel)}`);
-  lines.push(`  both feet up once one had landed: ${countOf(results, STOP_FAULTS.bothUp)}`);
+  const hops = countOf(results, STOP_FAULTS.bothUp);
+  lines.push(`  both feet up once one had landed, more than ${FLIGHT_ON} frames running: ${hops};`
+    + ` up to ${FLIGHT_ON}, a run's flight going on: ${flightsOn(results)}`);
   const settleMedian = median(settle).toFixed(2);
   const settleLatest = Math.max(0, ...settle).toFixed(2);
   lines.push(`  the feet settled ${settleMedian} s after letting go (the median), the latest ${settleLatest};`

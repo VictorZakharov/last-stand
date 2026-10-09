@@ -113,7 +113,16 @@ export function resetPose(j: Joints): void {
  * Procedural walk/run cycle. `amt` 0..1 blends from standing to full stride.
  * `dir` is +1 forward / -1 backpedal.
  */
-export interface WalkOpts { stride?: number; knee?: number; arm?: number; /** the left arm's swing where it differs from `arm` (a shield arm) */ armL?: number; bob?: number; dir?: number; /** a runner's body (see below), for a model whose full speed is a run */ run?: boolean }
+export interface WalkOpts { stride?: number; knee?: number; arm?: number; /** the left arm's swing where it differs from `arm` (a shield arm) */ armL?: number; bob?: number; dir?: number; /** a runner's body (see below), for a model whose full speed is a run */ run?: boolean;
+  /** how far each arm pumps as a runner's does at a run (1, a free arm's; 0, held by what it carries, which the model
+   *  poses itself), the right's and the left's */
+  pump?: number; pumpL?: number;
+  /** whether each pumping hand is free to flop on its wrist (1) or holds something steady (0), the left's and the
+   *  right's */
+  looseL?: number; looseR?: number;
+  /** how much of a walk's bend of the elbow as the arm comes forward each arm keeps (1; a staff carried steady, less),
+   *  the right's and the left's */
+  elbowSwing?: number; elbowSwingL?: number }
 const IK_ON = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
 /** What the walk cycle reads from a model's leg IK (`LegIK` in ik.ts): where the feet are in their strides and how
  *  far each thigh points forward. */
@@ -122,7 +131,25 @@ interface WalkingLegs { bodyPhase?(phase: number, side?: number): number; thighF
  *  to swing against: the cycle swings a thigh `stride` either way, and an arm no further than it swings it (a carried
  *  bow's swing is tuned to that: further, its arrow swept into the coat's hem) */
 const armSwing = (forward: number, stride: number): number => Math.max(-1, Math.min(1, forward / stride));
-export function walkCycle(j: Joints, cyclePhase: number, amt: number, o: WalkOpts = {}): void {
+/** A runner's arm (Hinrichs 1987, and the lab's `form`): swung from the shoulder this far either way (rad) about a
+ *  middle this far back, bent at the elbow near a right angle, more as it comes forward (the hand rising to the chest)
+ *  and less as it goes back past the hip; and the thighs' swing apart at a run that swings it all the way (rad: by a
+ *  walk's, the arms stood at their ends a quarter of the stride). Hanging nearly straight and swinging a walk's, a hero
+ *  running at 6 m/s read as stiff-armed. */
+const RUN_ARM = 0.62, RUN_ARM_BACK = 0.14, RUN_ELBOW = 1.5, RUN_ELBOW_SWING = 0.3, RUN_THIGHS = 0.68;
+/** A loose arm whips: its forearm follows the upper arm this late (rad of the cycle), and a pumping arm's relaxed hand
+ *  later still, flopping on its wrist this share of the forearm's swing (bent in step with the shoulder and the hand
+ *  held still on the wrist, the arms pumped as a machine's) */
+const RUN_FOREARM_LAG = 0.35, RUN_HAND_LAG = 0.8, RUN_HAND_LOOSE = 0.35;
+/** a run's rise and fall a step, a share of the model's `bob` */
+const RUN_BOB = 0.75;
+/** Exported for the models posing a loaded arm at a run: how far it is through a runner's, from the walk cycle's
+ *  `amt` (0 at a walk, 1 at a run). */
+export const runShareOf = (amt: number): number => (IK_ON ? Math.min(1, Math.max(0, (amt - 0.45) / 0.35)) : 0);
+/** What the walk cycle swung each arm by this frame: each forearm's turn back from the middle of its swing (rad, the
+ *  shoulder's and the elbow's together), for a model holding what a hand carries steady against it. */
+export interface ArmSwings { forearmL: number; forearmR: number }
+export function walkCycle(j: Joints, cyclePhase: number, amt: number, o: WalkOpts = {}): ArmSwings {
   // (where the feet are in their strides, as the leg IK has them: the body swings with its legs, each arm and leg by
   // its own side's, not by the cycle's clock)
   const legs = IK_ON ? (j.root.userData.legs as WalkingLegs | undefined) : undefined;
@@ -133,8 +160,10 @@ export function walkCycle(j: Joints, cyclePhase: number, amt: number, o: WalkOpt
   const sL = Math.sin(phaseL) * dir, cL = Math.cos(phaseL), sR = Math.sin(phaseR) * dir, cR = Math.cos(phaseR);
   // (each arm against its own thigh as the legs were last placed, by the thighs' swing apart: crouched, both point
   // forward, and that held both arms back)
+  const run = IK_ON && o.run ? runShareOf(amt) : 0;
   const thighL = legs?.thighForward?.(0), thighR = legs?.thighForward?.(1);
-  const apart = thighL === undefined || thighR === undefined ? undefined : armSwing((thighL - thighR) / 2, stride);
+  const thighs = stride + (RUN_THIGHS - stride) * run;
+  const apart = thighL === undefined || thighR === undefined ? undefined : armSwing((thighL - thighR) / 2, thighs);
   const armSL = apart ?? sL, armSR = apart ?? sR;
   j.thighL.rotation.x += -sL * stride * amt;
   j.thighR.rotation.x += sR * stride * amt;
@@ -142,18 +171,46 @@ export function walkCycle(j: Joints, cyclePhase: number, amt: number, o: WalkOpt
   j.kneeR.rotation.x += (Math.max(0, -cR * dir) * knee + 0.08) * amt;
   j.ankleL.rotation.x += -j.thighL.rotation.x * 0.3 - j.kneeL.rotation.x * 0.4;
   j.ankleR.rotation.x += -j.thighR.rotation.x * 0.3 - j.kneeR.rotation.x * 0.4;
-  j.shoulderL.rotation.x += armSL * armL * amt;
-  j.shoulderR.rotation.x += -armSR * arm * amt;
-  j.elbowL.rotation.x += -(0.25 + Math.max(0, -armSL) * 0.4) * amt;
-  j.elbowR.rotation.x += -(0.25 + Math.max(0, armSR) * 0.4) * amt;
-  // a walk is highest as the legs pass (the body vaulting over a straight leg); a run is lowest there (the leg compressing under it) and highest in flight
-  const run = IK_ON && o.run ? Math.min(1, Math.max(0, (amt - 0.45) / 0.35)) : 0;
-  j.body.position.y += (Math.abs(c) - 0.6) * (1 - 2 * run) * (1 - 0.5 * run) * bob * amt;
+  // the arms: a walk's hang nearly straight and swing from the shoulder; a run's pump, bent near a right angle, as far
+  // as what each carries lets it (a loaded arm the model poses itself). +x swings an arm back; armSL is the left's
+  // share of its swing back, -armSR the right's
+  const pumpL = (o.pumpL ?? o.pump ?? 1) * run, pumpR = (o.pump ?? 1) * run;
+  // (what an arm doesn't pump of a runner's it swings as at a walk: a carried bow follows its arm's walking swing)
+  const swingL = armL * (1 - pumpL) + RUN_ARM * pumpL, swingR = arm * (1 - pumpR) + RUN_ARM * pumpR;
+  j.shoulderL.rotation.x += (armSL * swingL + RUN_ARM_BACK * pumpL) * amt;
+  j.shoulderR.rotation.x += (-armSR * swingR + RUN_ARM_BACK * pumpR) * amt;
+  // (and in a little towards the middle as it comes forward, out as it goes back)
+  j.shoulderL.rotation.z += 0.08 * armSL * pumpL * amt;
+  j.shoulderR.rotation.z += 0.08 * armSR * pumpR * amt;
+  const bendL = o.elbowSwingL ?? o.elbowSwing ?? 1, bendR = o.elbowSwing ?? 1;
+  const walkElbowL = 0.25 + Math.max(0, -armSL) * 0.4 * bendL, walkElbowR = 0.25 + Math.max(0, armSR) * 0.4 * bendR;
+  // (the forearm a little late, by the cycle's own phase: the thighs' swing apart has none)
+  const lateL = run ? Math.sin(phaseL - RUN_FOREARM_LAG) * dir : armSL;
+  const lateR = run ? Math.sin(phaseR - RUN_FOREARM_LAG) * dir : armSR;
+  const runElbowL = RUN_ELBOW - RUN_ELBOW_SWING * lateL, runElbowR = RUN_ELBOW + RUN_ELBOW_SWING * lateR;
+  j.elbowL.rotation.x += -(walkElbowL + (runElbowL - walkElbowL) * pumpL) * amt;
+  j.elbowR.rotation.x += -(walkElbowR + (runElbowR - walkElbowR) * pumpR) * amt;
+  // (and a pumping arm's free hand flops on its wrist after it, back as the arm comes forward and forward as it goes
+  // back; a loaded one's the model holds)
+  const forearmSwing = (RUN_ARM + RUN_ELBOW_SWING) * RUN_HAND_LOOSE * amt;
+  const flopL = (Math.sin(phaseL - RUN_HAND_LAG) - Math.sin(phaseL)) * dir;
+  const flopR = (Math.sin(phaseR - RUN_HAND_LAG) - Math.sin(phaseR)) * dir;
+  j.handL.rotation.x += flopL * forearmSwing * pumpL * (o.looseL ?? 1);
+  j.handR.rotation.x += -flopR * forearmSwing * pumpR * (o.looseR ?? 1);
+  // a walk is highest as the legs pass (the body vaulting over a straight leg); a run is lowest there (the leg
+  // compressing under it) and highest in flight, smoothly at both (by |cos| its top came to a point in the air), and
+  // further: a runner's hips rise and fall 6 cm a step (at half a walk's, 4)
+  const walkBob = Math.abs(c) - 0.6, runBob = -0.5 * RUN_BOB * Math.cos(2 * phase);
+  j.body.position.y += (walkBob + (runBob - walkBob) * run) * bob * amt;
   // the body's weight goes over the foot it stands on (the right at phase 0, the left at π, as `LegIK` times its steps), so the two legs read apart from behind and in front
   if (IK_ON) j.body.position.x += -c * 0.02 * run * amt;
   j.hips.rotation.y += s * 0.12 * amt;
   j.chest.rotation.y += -s * 0.16 * amt;
   j.hips.rotation.z += c * 0.04 * amt;
+  return {
+    forearmL: (armSL * swingL + RUN_ELBOW_SWING * lateL * pumpL) * amt,
+    forearmR: (-armSR * swingR - RUN_ELBOW_SWING * lateR * pumpR) * amt,
+  };
 }
 
 /** Breathing + subtle sway while standing. */

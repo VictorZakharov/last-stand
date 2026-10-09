@@ -19,10 +19,10 @@ const DURATIONS = join(CHECK_DIR, 'durations.json');
 export const CHECK_CLASSES = ['warrior', 'mage', 'ranger'];
 /**
  * The commands checked by default and the heroes each is for (all of `classes` when it names none): as AGENTS.md
- * checks a change to the walk or the run (the gait, the stops and every joint's range for every hero, the ranger's
- * feet and carried bow).
+ * checks a change to the walk or the run (the gait, the stops, every joint's range and the run's form for every hero,
+ * the ranger's feet and carried bow).
  */
-export const CHECK_PLAN = { gait: null, stops: null, range: null, feet: ['ranger'], carry: ['ranger'] };
+export const CHECK_PLAN = { gait: null, stops: null, range: null, form: null, feet: ['ranger'], carry: ['ranger'] };
 /** each command's options in a check: the gait's steps listed, and no films (a check reads the numbers) */
 const CHECK_OPTIONS = { gait: { frames: true, films: false } };
 /**

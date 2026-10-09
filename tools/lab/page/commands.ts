@@ -8,6 +8,7 @@ import { feet as feetRound, missedCanaries, type FeetOptions } from './feet';
 import { range as rangeRound, missedRangeCanary, type RangeOptions } from './range';
 import { gait as gaitRound, type GaitOptions } from './gait';
 import { stops as stopsRound, type StopsOptions } from './stops';
+import { form as formRound, type FormOptions } from './form';
 
 export interface SheetCommand {
   states: string[];
@@ -74,6 +75,16 @@ export async function gait(lab: Lab, command: GaitOptions): Promise<Report> {
 export async function stops(lab: Lab, command: StopsOptions): Promise<Report> {
   const report = await stopsRound(lab, command);
   return { text: report.lines.join('\n'), problems: [] };
+}
+
+/**
+ * `lab form`: the hero's run against a runner's, with each way he holds his weapons: the stride's timing, each joint's
+ * curve over the stride, stick figures of it over a runner's and the hero pictured at eight points of it; a canary it
+ * missed, or a run held up, is a problem.
+ */
+export async function form(lab: Lab, command: FormOptions): Promise<Report> {
+  const report = await formRound(lab, command);
+  return { text: report.lines.join('\n'), problems: report.problems, moments: report.moments };
 }
 
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */

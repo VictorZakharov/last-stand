@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
 import { engravedSteel, embroidered, arcaneColumn, projectUV, steelRegion } from '../../core/engraving';
-import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm } from './rig';
+import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm, runShareOf } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
@@ -554,9 +554,19 @@ export function buildMage(): Model {
       j.shoulderL.rotation.x += (-0.15 + 0.05 * Math.sin(t * 0.6)) * amt; j.elbowL.rotation.x += -0.35 * amt;
       j.shoulderL.position.y = j.shoulderR.position.y = shY + 0.006 * br * amt;
     }
-    walkCycle(j, st.phase, move, { stride: 0.5, knee: 0.95, arm: 0.35, bob: 0.07, dir, run: true });
-    j.shoulderR.rotation.x += -0.35; j.shoulderR.rotation.z += -0.12; j.elbowR.rotation.x += -0.55;
-    j.spine.rotation.x += move * 0.12 * dir;
+    // (the free arm pumps at a run as a runner's does; the staff arm carries the staff, swinging less than at a walk: pumped,
+    // the staff swung from upright to level behind him at every stride)
+    // (its elbow held as it comes forward: bent more there, as a walk's is, it cancelled the shoulder's swing and the staff
+    // bobbed 25 cm up and down at each stride)
+    const staffSwing = 0.35 * (1 - 0.45 * runShareOf(move)), staffElbow = 1 - runShareOf(move);
+    walkCycle(j, st.phase, move, { stride: 0.5, knee: 0.95, arm: staffSwing, armL: 0.35, bob: 0.07, dir, run: true, pump: 0, pumpL: 1, elbowSwing: staffElbow, elbowSwingL: 1 });
+    // (and at a run bent further, the staff carried higher: hanging as at a walk, its foot met the ground behind him at
+    // the back of each swing)
+    const staffRun = fp ? 0 : runShareOf(move);
+    j.shoulderR.rotation.x += -0.35 - 0.1 * staffRun; j.shoulderR.rotation.z += -0.12; j.elbowR.rotation.x += -0.55 - 0.45 * staffRun;
+    // (the trunk a little forward over the stride, the head held up against it: the leg IK leans the whole body into the
+    // speed, and at 0.12 more the trunk leant 16 degrees at a run, a runner's 11, the face to the ground)
+    j.spine.rotation.x += move * 0.06 * dir; j.neck.rotation.x -= move * 0.06 * dir;
     j.body.rotation.z += (st.lean || 0) * 0.12;
 
     // hands at rest: the free one loosely curled and breathing, the other gripping the staff
