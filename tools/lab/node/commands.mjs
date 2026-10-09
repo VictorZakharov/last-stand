@@ -121,6 +121,7 @@ function probePath(file) {
  *   side's text is shown under its name);
  * - `textOf(result)` is the result as text, which an A/B compares line by line;
  * - `problemsOf(result)` the problems it found, which fail the command;
+ * - `countsOf(result)`, when there is one, what it counted by name, which a check adds up over a hero's jobs;
  * - `pictures(before, after)` pairs the pictures an A/B compares, for a command that takes them.
  */
 export const COMMANDS = {
@@ -171,6 +172,7 @@ export const COMMANDS = {
     },
     textOf: asText,
     problemsOf: problemsIn,
+    countsOf: (result) => result.counts,
     // (an A/B compares the reports, not the films: two sides' 48 frames each, loaded to compare, took the browser down)
   },
 

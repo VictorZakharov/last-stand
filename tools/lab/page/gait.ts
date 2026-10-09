@@ -284,6 +284,8 @@ export interface GaitReport {
   lines: string[];
   moments: Pictured[];
   problems: string[];
+  /** what a person's walk has none of, counted over the scenarios run (a check adds a hero's up over its jobs) */
+  counts: Record<string, number>;
 }
 
 const cm = (metres: number) => (metres * 100).toFixed(1);
@@ -876,6 +878,16 @@ function rhythmOf(steps: Step[]): string {
   return `${kept} (leaving within ${IN_STEP} of their window's start${off}); ${over} landed out of reach${landed}`;
 }
 
+/** What a walk has that a person's has none of, by name: the hops and a foot dance's steps. */
+function countsOf(run: GaitRun): Record<string, number> {
+  return { hops: run.hops.length, 'short steps': run.shortSteps };
+}
+
+/** Adds `counts` into `total`, name by name. */
+function addCounts(total: Record<string, number>, counts: Record<string, number>): void {
+  for (const [name, count] of Object.entries(counts)) total[name] = (total[name] ?? 0) + count;
+}
+
 /** Counts the planted feet dragged this frame, and each one's run of such frames, and those on their toes. */
 function followReach(run: GaitRun, legs: LegIK): void {
   legs.feet.forEach((foot, side) => {
@@ -1004,11 +1016,12 @@ function filmMoment(scenario: GaitScenario, film: Film): Pictured | null {
  */
 export async function gait(lab: Lab, options: GaitOptions): Promise<GaitReport> {
   const asked = options.scenarios?.length ? options.scenarios : GAIT_SCENARIOS;
-  const report: GaitReport = { lines: [], moments: [], problems: [] };
+  const report: GaitReport = { lines: [], moments: [], problems: [], counts: {} };
   const seconds = window.__labClock.frame / 1000;
   for (const scenario of SCENARIOS.filter((candidate) => asked.includes(candidate.name))) {
     const run = await runScenario(lab, scenario, null, traceSpanOf(options));
     report.lines.push(...describeRun(scenario, run, seconds, Boolean(options.frames)));
+    addCounts(report.counts, countsOf(run));
     if (run.heldUp) {
       report.problems.push(`gait: ${scenario.name} was held up by something in its way (${run.heldUpAt})`);
     }

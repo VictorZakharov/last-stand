@@ -145,7 +145,10 @@ terminal's task stops it all.
   The gait runs a scenario a job, each on a page booted for it, and each hero's scenarios are put back together
   (`out/check/gait-<hero>.txt`, each under its name): one after another on one page, each was set up from where the
   last had left the hero and the clock, and main's own gallops were 18, 23 and 17 a hero with films and 13, 14 and
-  16 without. It runs in the command line's own process, not the server's. One command at a time, both sides every
+  16 without. What a command counts (`countsOf`: the gait's hops and short steps) is added up over a hero's jobs,
+  each side's, in its line of the log and at the head of its report with each scenario's (`hops 2 (048deb5 9)`: this
+  tree's, then the other's), so a check's verdict needs no script of its own to read it. It runs in the command line's own process,
+  not the server's. One command at a time, both sides every
   time, the mage's cape stepped throughout and each gait scenario run again for its film, the same check took 31 to
   35 minutes a round; the harness is run hundreds of times, so keep every check that runs often to minutes: profile
   it (`--profile`), cut what its measures don't read, and run side by side what doesn't depend on each other.

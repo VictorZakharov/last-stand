@@ -1,7 +1,10 @@
-// A check's jobs and their order (node/check.mjs), and the key an A/B's other side is kept under (node/sideCache.mjs).
+// A check's jobs, their order and their counts added up (node/check.mjs), and the key an A/B's other side is kept
+// under (node/sideCache.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CHECK_CLASSES, CHECK_SPLIT, jobsOf, longestFirst, scenariosOf } from '../node/check.mjs';
+import {
+  CHECK_CLASSES, CHECK_SPLIT, countsLine, countsOver, jobsOf, longestFirst, scenariosOf,
+} from '../node/check.mjs';
 import { keyedOptions, sideKey } from '../node/sideCache.mjs';
 
 const names = (jobs) => jobs.map((job) => job.name);
@@ -54,4 +57,13 @@ test('a side kept by its commit, hero, command and options, the A/B itself aside
   assert.notEqual(sideKey({ ...base, heroClass: 'warrior' }), key);
   assert.notEqual(sideKey({ ...base, command: 'gait' }), key);
   assert.notEqual(sideKey({ ...base, options: { ...base.options, frames: true } }), key);
+});
+
+test('each side\'s counts added up over a hero\'s jobs, this tree\'s first and the other\'s after it', () => {
+  const part = (mine, other) => ({ counts: [{ mine: false, counts: other }, { mine: true, counts: mine }] });
+  const sums = countsOver([part({ hops: 1, gallops: 2 }, { hops: 3, gallops: 0 }), part({ hops: 0 }, { hops: 4 })]);
+  assert.deepEqual(sums, { mine: { hops: 1, gallops: 2 }, other: { hops: 7, gallops: 0 } });
+  assert.equal(countsLine(sums, 'abc1234'), 'hops 1 (abc1234 7), gallops 2 (abc1234 0)');
+  assert.equal(countsLine(countsOver([{ counts: [{ mine: true, counts: { hops: 2 } }] }]), 'x'), 'hops 2');
+  assert.equal(countsLine(countsOver([{ text: 'a job that threw' }]), 'x'), '');
 });
