@@ -3,7 +3,8 @@
 // a capsule body rig derived from our procedural humanoid's joints, and steps it
 // at the solver's fixed 120 Hz rate: in a web worker (the solver's own WebGL worker
 // pool), or on the main thread within a time budget when workers are unavailable (or
-// the lab asks for it, `stepCapesHere`).
+// the lab asks for it, `stepCapesHere`). The lab holds the capes still in measures that never look at them
+// (`holdCapes`): stepped there, the cloth was three quarters of a caped hero's time.
 import * as THREE from 'three';
 import { CapeSimulation } from '../../vendor/cape/physics/CapeSimulation';
 import { WebGlCapeWorkerPool } from '../../vendor/cape/physics/WebGlCapeWorkerPool';
@@ -55,14 +56,30 @@ const NECK_COLUMN = 6;   // middle of the pinned top row
 // one worker pool for every cape; the cloth has no world colliders in the arena
 let pool: WebGlCapeWorkerPool | null = null;
 let nextId = 1;
-/** whether the capes step in the worker pool (the lab steps them here, on its own clock) */
-let inWorkers = true;
+/** whether the capes step in the worker pool (the lab steps them here, on its own clock, and starts no pool) */
+let inWorkers = !(globalThis as { __labCapesHere?: boolean }).__labCapesHere;
+/** whether the capes are held (`holdCapes`), and every cape alive, for `drapeHeldCapes` */
+let held = false;
+const capes = new Set<SkeletonCape>();
 
 /** Steps every cape on the main thread from now on, each frame's steps in that frame. A worker's results land
  *  between tasks, a frame or two late and not always the same frame, so two runs of one scene drew its cape apart:
  *  the lab's pictures of a commit against itself differed wherever the cloth showed. */
 export function stepCapesHere(): void {
   inWorkers = false;
+}
+
+/** Holds every cape's cloth still (`true`), each riding its neckline as it last hung, or steps it again (`false`):
+ *  for the lab's measures that never look at a cape, where its steps were three quarters of the mage's time. */
+export function holdCapes(hold: boolean): void {
+  held = hold;
+}
+
+/** Hangs every held cape afresh from its neckline, as it would rest: for a picture of a held cape (ridden along, it
+ *  points wherever the body faced when it was held). */
+export function drapeHeldCapes(): void {
+  if (!held) return;
+  for (const cape of capes) cape.drapeAfresh();
 }
 
 export class SkeletonCape {
@@ -95,8 +112,11 @@ export class SkeletonCape {
     this.updateAnchors();
     this.sim = new CapeSimulation(this.anchors as CapeAnchors, o.settings, o.palette);
     this.mesh = this.sim.mesh;
-    pool ??= new WebGlCapeWorkerPool([]);
-    pool.registerCape(this.id, this.sim, this.anchors as CapeAnchors, this.colliders);
+    if (inWorkers) {
+      pool ??= new WebGlCapeWorkerPool([]);
+      pool.registerCape(this.id, this.sim, this.anchors as CapeAnchors, this.colliders);
+    }
+    capes.add(this);
   }
 
   private updateAnchors(): CapeAnchors {
@@ -140,22 +160,18 @@ export class SkeletonCape {
 
   /** Advance the simulation; call after the skeleton has been posed for this frame. */
   update(dt: number, velocity: THREE.Vector3): void {
+    if (held) {
+      this.rideNeck();
+      return;
+    }
     const anchors = this.updateAnchors();
     const colliders = this.updateColliders();
     const neck = _neck.copy(anchors.left).lerp(anchors.right, 0.5);
     let reset = false;
     // large jumps (respawn / teleport) re-drape instead of whipping across the arena
     if (this.needsReset || this.sim.getParticlePosition(NECK_COLUMN, 0).distanceTo(neck) > 2) {
-      this.sim.reset(anchors);
-      if (this.refit) pool?.registerCape(this.id, this.sim, anchors, colliders);
-      else pool?.updateCape(this.id, this.sim, anchors);   // newer revision: in-flight results are dropped
-      this.refit = false;
-      this.o.root.getWorldQuaternion(_q).invert();
-      this.pinBias.copy(this.sim.getParticlePosition(NECK_COLUMN, 0)).sub(neck).applyQuaternion(_q);
-      this.needsReset = false;
-      this.acc = 0;
+      this.drape(anchors, colliders, neck);
       reset = true;
-      this.lastNeck.copy(neck);
     }
     // The solver sleeps a settled cape until the character moves faster than a crawl, and turning on
     // the spot isn't moving: asleep, the cloth hung still in the world while the body turned under it
@@ -210,5 +226,36 @@ export class SkeletonCape {
 
   setVisible(v: boolean): void { this.mesh.visible = v; }
 
-  dispose(): void { pool?.unregisterCape(this.id); this.sim.dispose(); }
+  /** The cloth hung afresh from the neckline (`neck`, its middle), at rest. */
+  private drape(anchors: CapeAnchors, colliders: CapsuleCollider[], neck: THREE.Vector3): void {
+    this.sim.reset(anchors);
+    if (this.refit) pool?.registerCape(this.id, this.sim, anchors, colliders);
+    else pool?.updateCape(this.id, this.sim, anchors);   // newer revision: in-flight results are dropped
+    this.refit = false;
+    this.o.root.getWorldQuaternion(_q).invert();
+    this.pinBias.copy(this.sim.getParticlePosition(NECK_COLUMN, 0)).sub(neck).applyQuaternion(_q);
+    this.needsReset = false;
+    this.acc = 0;
+    this.lastNeck.copy(neck);
+  }
+
+  /** A held cape carried along on its neckline as it last hung (`holdCapes`). */
+  private rideNeck(): void {
+    const anchors = this.updateAnchors();
+    const neck = _neck.copy(anchors.left).lerp(anchors.right, 0.5);
+    this.lastNeck.copy(neck);
+    const pin = neck.add(_p.copy(this.pinBias).applyQuaternion(this.o.root.getWorldQuaternion(_q)));
+    this.mesh.position.subVectors(pin, this.sim.getParticlePosition(NECK_COLUMN, 0));
+  }
+
+  /** Hangs the cloth afresh from the neckline and shows it so (`drapeHeldCapes`). */
+  drapeAfresh(): void {
+    const anchors = this.updateAnchors();
+    const neck = _neck.copy(anchors.left).lerp(anchors.right, 0.5);
+    this.drape(anchors, this.updateColliders(), neck);
+    this.sim.syncGeometry();
+    this.rideNeck();
+  }
+
+  dispose(): void { capes.delete(this); pool?.unregisterCape(this.id); this.sim.dispose(); }
 }

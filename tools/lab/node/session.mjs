@@ -6,7 +6,7 @@
 // `npm run lab:serve` keeps a session up between commands (server.mjs); without it, a command opens a session for
 // itself and closes it when done.
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { launchBrowser, useLocalTemp } from './browser.mjs';
 import { COMMANDS } from './commands.mjs';
 import { exportCommit } from './commits.mjs';
@@ -14,30 +14,51 @@ import { describeDifferences } from './compare.mjs';
 import { labError } from './errors.mjs';
 import { OUT, REPO } from './paths.mjs';
 import { describePictureDifferences } from './pictures.mjs';
+import { probeFiles } from './probeFiles.mjs';
 import { profiled, scriptsIn, summarize } from './profile.mjs';
 import { Side } from './side.mjs';
+import { cacheShown, keep, readKept, sideKey } from './sideCache.mjs';
 
 /** the hero a session boots until a command names another */
 const DEFAULT_CLASS = 'ranger';
 /** how many of a page's errors and warnings a report shows */
 const MESSAGES_SHOWN = 8;
 
+/** The probe a command names, relative to the repo with forward slashes. */
+function probeOf(options) {
+  return relative(REPO, resolve(REPO, options._[0])).split('\\').join('/');
+}
+
 function seconds(since) {
   return `${((Date.now() - since) / 1000).toFixed(1)} s`;
 }
 
 export class LabSession {
-  /** Opens a session: the browser launched, nothing served or booted until a command needs it. */
-  static async open() {
+  /**
+   * Opens a session: the browser launched, nothing served or booted until a command needs it. A check's sessions run
+   * side by side, each its own `worker` (0 for the one the server keeps), their pages served by the check's servers
+   * (`serving`: a side for this tree, and one for the other commit, which serve and boot nothing themselves).
+   */
+  static async open({ worker = 0, serving = null } = {}) {
     mkdirSync(OUT, { recursive: true });
     useLocalTemp(OUT);
-    return new LabSession(await launchBrowser());
+    return new LabSession(await launchBrowser(), worker, serving);
   }
 
-  constructor(browser) {
+  constructor(browser, worker = 0, serving = null) {
     this.browser = browser;
-    this.repoSide = new Side({ name: 'this tree', root: REPO, repo: REPO, outDir: OUT, browser });
+    this.worker = worker;
+    this.serving = serving;
+    const servedBy = serving?.repo ?? null;
+    this.repoSide = new Side({ name: 'this tree', root: REPO, repo: REPO, outDir: OUT, browser, worker, servedBy });
     this.otherSide = null;
+    /** where the commands write their pictures (`outFor`): tools/lab/out, or a check's job's own folder */
+    this.outRoot = OUT;
+  }
+
+  /** Where a command writes what it pictures, `name` under the session's output (`outRoot`). */
+  outFor(name) {
+    return join(this.outRoot, name);
   }
 
   /**
@@ -65,6 +86,17 @@ export class LabSession {
     const problems = [];
     const resultOf = new Map();
     for (const side of turns) {
+      const key = this.keyOf(side, command, options, heroClass);
+      const kept = key ? readKept(key) : null;
+      if (kept) {
+        resultOf.set(side, kept.result);
+        notes.push(`${side.name}: as it ran ${kept.ranAt} (kept in ${cacheShown()}; --fresh runs it again)`);
+        notes.push(...kept.notes);
+        problems.push(...kept.problems);
+        continue;
+      }
+      const sideNotes = [];
+      const sideProblems = [];
       for (const other of turns) if (other !== side) await other.closePage();
       const bootStarted = Date.now();
       if (await side.ready(heroClass)) notes.push(`${side.name}: booted the ${heroClass} (${seconds(bootStarted)})`);
@@ -80,13 +112,20 @@ export class LabSession {
       }
       const { errors, warnings } = await side.drainMessages();
       if (errors.length) {
-        notes.push(`${side.name}: PAGE ERRORS\n  ${errors.slice(0, MESSAGES_SHOWN).join('\n  ')}`);
-        problems.push(`${side.name}: ${errors.length} errors in the page`);
+        sideNotes.push(`${side.name}: PAGE ERRORS\n  ${errors.slice(0, MESSAGES_SHOWN).join('\n  ')}`);
+        sideProblems.push(`${side.name}: ${errors.length} errors in the page`);
       }
       if (warnings.length) {
-        notes.push(`${side.name}: joints past their ranges: ${warnings.slice(0, MESSAGES_SHOWN).join(' | ')}`);
+        sideNotes.push(`${side.name}: joints past their ranges: ${warnings.slice(0, MESSAGES_SHOWN).join(' | ')}`);
       }
-      for (const problem of handler.problemsOf?.(resultOf.get(side)) ?? []) problems.push(`${side.name}: ${problem}`);
+      const found = handler.problemsOf?.(resultOf.get(side)) ?? [];
+      for (const problem of found) sideProblems.push(`${side.name}: ${problem}`);
+      notes.push(...sideNotes);
+      problems.push(...sideProblems);
+      // (kept only from a page that raised nothing: a browser that fell over would be read back for good)
+      if (key && errors.length === 0) {
+        keep(key, { result: resultOf.get(side), notes: sideNotes, problems: sideProblems });
+      }
     }
     const results = shown.map((side) => [side, resultOf.get(side)]);
     const textOf = handler.textOf ?? String;
@@ -97,6 +136,16 @@ export class LabSession {
     const failed = problems.length ? `FAILED: ${problems.join('; ')}` : null;
     const report = [...notes, text, verdict, failed, `(${seconds(started)})`].filter(Boolean).join('\n');
     return { text: report, problems };
+  }
+
+  /**
+   * The key the other side of an A/B is kept under (sideCache.mjs), or null for one run afresh: this tree's (it
+   * changes as you work), one asked for `--fresh`, and one being profiled.
+   */
+  keyOf(side, command, options, heroClass) {
+    if (side.isRepo || options.fresh || options.profile) return null;
+    const extraFiles = command === 'probe' ? probeFiles(REPO, probeOf(options)) : [];
+    return sideKey({ sha: side.sha, heroClass, command, options, extraFiles });
   }
 
   /** What is served and booted, for `lab status`. */
@@ -118,7 +167,7 @@ export class LabSession {
     const lines = [describeDifferences(before.name, textOf(beforeResult), after.name, textOf(afterResult))];
     if (handler.pictures) {
       const pairs = handler.pictures(beforeResult, afterResult);
-      lines.push(await describePictureDifferences(this.browser, pairs, join(OUT, 'ab', command)));
+      lines.push(await describePictureDifferences(this.browser, pairs, this.outFor(join('ab', command))));
     }
     return lines.join('\n');
   }
@@ -163,7 +212,10 @@ export class LabSession {
       return this.otherSide;
     }
     await this.otherSide?.close();
-    this.otherSide = new Side({ name, root: dir, repo: REPO, outDir: OUT, browser: this.browser, sha });
+    const worker = this.worker;
+    const servedBy = this.serving?.other?.sha === sha ? this.serving.other : null;
+    const browser = this.browser;
+    this.otherSide = new Side({ name, root: dir, repo: REPO, outDir: OUT, browser, sha, worker, servedBy });
     return this.otherSide;
   }
 }

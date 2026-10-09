@@ -80,6 +80,10 @@ export interface Fixture {
   view?: renderer.ViewMode;
   /** a bow's hero with an arrow on the string: he shoots one and waits out its reload, as he walks between shots */
   nocked?: boolean;
+  /** the capes' cloth stepped, for what looks at the hero (a sheet, the run's pictures, a film); held otherwise, each
+   *  cape riding its neckline and hung afresh for a picture (`cape.holdCapes`: stepped, the cloth was three quarters
+   *  of the mage's time in a measure of his feet, which never look at it) */
+  capes?: boolean;
 }
 
 /** The pictures the lab can take: the game's own views, or a close-up from round the hero. */
@@ -303,6 +307,8 @@ export class Lab {
 
   /** Sets the run up as `fixture` says and checks that it took (throws if not). Returns what it is, for the report. */
   async setup(fixture: Fixture = {}): Promise<Record<string, unknown>> {
+    // (an A/B's side on a commit from before it has none: its capes step)
+    cape.holdCapes?.(!fixture.capes);
     await this.enterRun();
     this.foes.clear();
     this.keepUp = [() => holdTheWave(this.foes), keepHeroWhole];
@@ -412,6 +418,7 @@ export class Lab {
   async screen(label: string, notes: string[] = [], around?: string | Clip): Promise<Pictured> {
     if (!window.__labScreenshot) throw new Error('lab: screen: this page has no screenshots (opened by an older lab)');
     const clip = around === undefined ? undefined : typeof around === 'string' ? clipRound(around) : withinWindow(around);
+    cape.drapeHeldCapes?.();
     const drawing = this.drawing;
     this.drawing = true;
     try {
@@ -427,6 +434,7 @@ export class Lab {
   /** Pictures of the game as it is now, nothing advanced; the game's camera is put back as it was. */
   capture(views: ViewName[], options: CaptureOptions = {}): Tile[] {
     this.checkCapture(views, renderer.viewMode(), options.focus);
+    cape.drapeHeldCapes?.();
     const restore = this.saveCamera();
     const drawing = this.drawing;
     this.drawing = true;

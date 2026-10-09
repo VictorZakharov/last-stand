@@ -14,6 +14,7 @@ npm run lab -- sheet                       # pictures + notes: tools/lab/out/she
 npm run lab -- carry --canary              # the ranger's carried bow against his body, with planted faults
 npm run lab -- sheet --ab                  # the same beside origin/main, and what differs
 npm run lab -- probe tools/lab/examples/handSpeed.ts --canary   # a measure of your own
+npm run lab -- check --ab                  # every hero's gait, stops and ranges, the ranger's feet and carry, vs main
 npm run lab -- help                        # every command and option
 ```
 
@@ -136,17 +137,33 @@ terminal's task stops it all.
   `--setup=false` skips the set-up.
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`).
 - `status`, `stop`: what the server serves and has booted; stop it.
+- `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films),
+  the stops and the ranges for every hero, and the ranger's feet and carry (`--classes`, `--commands` for fewer), each
+  in a session of its own (`--jobs n`, a core in three by default, at most 8), the longest first as they last took,
+  each report in `out/check/<command>-<hero>.txt` and its pictures in a folder beside it. With `--ab`, the other
+  commit is exported once before the sessions start, and its side read back from the cache once it has run (below).
+  It runs in the command line's own process, not the server's. One command at a time, both sides every time, the
+  mage's cape stepped throughout and each gait scenario run again for its film, the same check took 31 to 35 minutes
+  a round; the harness is run hundreds of times, so keep every check that runs often to minutes: profile it
+  (`--profile`), cut what its measures don't read, and run side by side what doesn't depend on each other.
 
 Options every command run on a page takes:
 
 - a probe or command that doesn't compile says where and why (`.tmp/x.ts:3:10 doesn't compile: Unterminated
   string`), not the browser's "Failed to fetch dynamically imported module";
-- the set-up (sheet, carry, probe): `--view top|third|first`, `--at x,z`, `--facing rad`, `--nocked[=false]`;
+- the set-up (sheet, carry, probe): `--view top|third|first`, `--at x,z`, `--facing rad`, `--nocked[=false]`,
+  `--capes`: the capes' cloth stepped. Every set-up holds them otherwise (`Fixture.capes`, `cape.holdCapes`), each
+  riding its neckline as it last hung and hung afresh from it for a picture: stepped, the cloth was three quarters of
+  the mage's time in his stops, which never look at it. A sheet and the gait's films step them;
+- `gait --films=false`: the numbers alone, each scenario run once (a film runs it again);
 - `--class ranger|warrior|mage`: the hero (the last one used by default);
 - `--ab[=ref]`: also on another commit (`origin/main` by default), its results beside this tree's, ending with the
   verdict: the lines that differ under the section each is in, and the pictures that differ by more than the GPU's own
   noise, with where (the region of each, and a picture of each in `out/ab/<command>/`: this tree's dimmed, its
-  differing pixels magenta). A commit compared with itself (`--ab=HEAD`) agrees;
+  differing pixels magenta). A commit compared with itself (`--ab=HEAD`) agrees, so the other commit's side is kept
+  once it has run (`out/ab-cache`, by its commit, the hero, the command and its options, and a hash of the lab's code
+  it ran: its page modules, its Node side and a probe's own files) and read back after: run again each time, main's
+  side was half of every A/B. `--fresh` runs it again; a side whose page raised an error isn't kept;
 - `--profile`: where the command's time went in the page, its busiest functions by their own time and in total,
   each at its line in the source;
 - `--watch`: run it again each time the source changes, on the page booted for the change, until Ctrl+C.
@@ -182,8 +199,8 @@ copied into the other commit, so the same measure runs on both sides.
 What the lab gives a probe (`page/lab.ts`):
 
 - `lab.player`, `lab.model`, `lab.joints`, and `lab.THREE` (three.js as the game has it);
-- `lab.setup(fixture)`: the run set up afresh (`at`, `facing`, `view`, `nocked`), checked, and its report. A probe
-  may set up many cases one after another, but each follows on from the ones before it: the hero is the same one, and
+- `lab.setup(fixture)`: the run set up afresh (`at`, `facing`, `view`, `nocked`, `capes`), checked, and its report.
+  A probe may set up many cases one after another, but each follows on from the ones before it: the hero is the same one, and
   the game's clock, which his idle runs on, only goes forward. A scan is the same every time it runs, but one of its
   cases run alone may come out otherwise, so trace a case by running the cases before it first (an option of the
   probe's own: `--trace=<case>`, say);

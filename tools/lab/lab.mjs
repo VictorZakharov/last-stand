@@ -41,6 +41,10 @@ async function main() {
     console.log(usage());
     return 0;
   }
+  if (call.command === 'check') {
+    const { runCheck } = await import('./node/check.mjs');
+    return runCheck(call.options);
+  }
   if (call.command === 'serve') {
     const { supervise } = await import('./node/supervisor.mjs');
     supervise();

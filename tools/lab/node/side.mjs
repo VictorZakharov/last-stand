@@ -6,12 +6,13 @@
 // game's clock on, the hero wherever it took him), and a set-up on it started from another moment than a fresh
 // boot's, so the same command gave other numbers depending on what ran before it.
 import { createServer } from 'vite';
-import { cpSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { PAGE_SCRIPTS } from './browser.mjs';
 import { exportedTreePaths } from './commits.mjs';
 import { compileError, labError } from './errors.mjs';
 import { probeFiles } from './probeFiles.mjs';
+import { stampOf } from './sideCache.mjs';
 import { decodeMappings, sourceOf } from './sourceMaps.mjs';
 
 const VIEWPORT = { width: 1920, height: 1080 };
@@ -38,6 +39,22 @@ async function screenshotOf(page, clip) {
 
 const toSlashes = (path) => path.split('\\').join('/');
 
+/** the note an exported tree keeps of the lab page modules last copied into it */
+const PAGE_STAMP = 'tools/lab/page/.lab-stamp';
+
+/**
+ * Copies the lab's page modules from `repo` into the exported tree `root`, unless the ones there are those already
+ * (`PAGE_STAMP`): a check's sides side by side boot from one exported tree, and a copy under a page being served
+ * could hand it a file half written.
+ */
+export function copyLabPage(repo, root) {
+  const stamp = stampOf(['tools/lab/page']);
+  const note = join(root, PAGE_STAMP);
+  if (existsSync(note) && readFileSync(note, 'utf8') === stamp) return;
+  cpSync(join(repo, 'tools/lab/page'), join(root, 'tools/lab/page'), { recursive: true });
+  writeFileSync(note, stamp);
+}
+
 export class Side {
   /**
    * @param name what reports call it
@@ -46,9 +63,16 @@ export class Side {
    * @param outDir where the lab writes (this tree's Vite cache)
    * @param browser the lab's browser
    * @param sha an exported commit's sha (null for this tree)
+   * @param worker the session's (`LabSession.open`): a Vite cache of its own, for a server side by side with another
+   * @param servedBy another side of the same tree whose Vite server serves this one's pages too (a check's sessions:
+   *   each with a server of its own, eight transformed the whole game at once, and a boot took 45 s, not 10)
    */
-  constructor({ name, root, repo, outDir, browser, sha = null }) {
+  constructor({ name, root, repo, outDir, browser, sha = null, worker = 0, servedBy = null }) {
     this.name = name;
+    this.worker = worker;
+    this.servedBy = servedBy;
+    /** its server starting, while it does: sides served by it ask at once */
+    this.starting = null;
     this.root = root;
     this.repo = repo;
     this.outDir = outDir;
@@ -81,6 +105,20 @@ export class Side {
    * server made with `createServer` keeps the config it started with, and the pre-bundled packages made from it).
    */
   async serve() {
+    if (this.servedBy) {
+      await this.servedBy.serve();
+      this.server = this.servedBy.server;
+      this.url = this.servedBy.url;
+      return;
+    }
+    this.starting ??= this.startServing().finally(() => {
+      this.starting = null;
+    });
+    await this.starting;
+  }
+
+  /** `serve`'s work: the server started, or started again when its config changed. */
+  async startServing() {
     if (this.server && this.serverStale) {
       await this.closePage();
       await this.server.close();
@@ -119,7 +157,7 @@ export class Side {
     if (this.isRepo) {
       return {
         ...common,
-        cacheDir: join(this.outDir, 'vite'),
+        cacheDir: join(this.outDir, this.worker ? `vite-${this.worker}` : 'vite'),
         server: { port: REPO_PORT, strictPort: false, hmr: false, watch: { ignored: UNWATCHED } },
       };
     }
@@ -128,7 +166,7 @@ export class Side {
       configFile: join(this.root, 'vite.config.ts'),
       // (a cache of its own per commit: commits may differ in their packages, and a cache shared between them kept a
       // bundle made before the paths above were right, ez-tree with a second copy of three in it)
-      cacheDir: join(this.root, '.lab-vite'),
+      cacheDir: join(this.root, this.worker ? `.lab-vite-${this.worker}` : '.lab-vite'),
       plugins: [exportedTreePaths(this.root, this.repo)],
       server: {
         port: OTHER_PORT,
@@ -159,7 +197,7 @@ export class Side {
    * loading screen is gone, and the hero checked. A boot that fails leaves no page behind (none counts as fresh).
    */
   async boot(heroClass) {
-    if (!this.isRepo) cpSync(join(this.repo, 'tools/lab/page'), join(this.root, 'tools/lab/page'), { recursive: true });
+    if (!this.isRepo) copyLabPage(this.repo, this.root);
     await this.closePage();
     this.heroClass = null;
     try {
@@ -357,6 +395,6 @@ export class Side {
     await this.closePartner();
     await this.closePage();
     await this.context?.close().catch(() => {});
-    await this.server?.close();
+    if (!this.servedBy) await this.server?.close();
   }
 }
