@@ -1290,7 +1290,10 @@ export class LegIK {
     // keys were let go, and a body wheeling round then to shoot behind swept it across in front of the other leg)
     const bothDown = f.state === 'plant' && other.state === 'plant';
     const closing = bothDown && f.stance > STRIDE_AFTER && this.closesStop(g, f, i);
-    if (((((inWindow && downAll) || late) && settled) || early || closing) && f.state === 'plant' && !held) {
+    // (but a leg dragged goes all the same: held for its next window, the first stride from standing landed in its own
+    // and stayed there as the body set off, dragged two metres behind, and its next stride left in a 33 cm jump)
+    const once = downAll || f.dragged;
+    if (((((inWindow && once) || late) && settled) || early || closing) && f.state === 'plant' && !held) {
       this.beginStride(g, f, early || closing ? toCome : where, early || closing);
       // (as quick as a first stride from standing: paced by a cycle winding down with the body, it took half a second)
       if (closing) f.pace = Math.max(f.pace, 1 / FIRST_STRIDE);
