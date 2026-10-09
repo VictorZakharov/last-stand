@@ -251,7 +251,7 @@ const HOP_GAP = 0.1;
 /** and how much of a cycle, unless it is dragged: a foot leaving a few frames after the other swings with it, both
  *  legs together, a gallop (a run's feet leave half a cycle apart; let go after `HOP_GAP` alone, a foot the body had
  *  left behind or a turn had left across the pelvis went 5 or 6 frames after the other, at every set-off and turn) */
-const GALLOP_GAP = 0.25;
+const GALLOP_GAP = 0.3;
 /** how long a foot is down before the body leaving it may send it on its stride (s): sooner than a foot out of reach
  *  re-steps on its own (0.04 s, in `tendPlantedFoot`), or that extra step comes first and the same foot leaves twice
  *  running (5 times in the warrior's walk across the steps, at each reversal) */
@@ -1306,7 +1306,7 @@ export class LegIK {
 
   /** Whether `other` left the ground too lately for planted foot `f` to go too (`HOP_GAP`, `GALLOP_GAP`). */
   private justLeft(g: GaitFrame, f: Foot, other: Foot): boolean {
-    const gap = f.dragged ? HOP_GAP : Math.max(HOP_GAP, GALLOP_GAP * g.cycle);
+    const gap = Math.max(HOP_GAP, GALLOP_GAP * g.cycle);
     return other.state !== 'plant' && other.air < gap;
   }
 
