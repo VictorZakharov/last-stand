@@ -1467,6 +1467,13 @@ export class LegIK {
       f.P.x += this.gv.x * g.slip * g.dt;
       f.P.z += this.gv.z * g.slip * g.dt;
     }
+    // (a leg dragged while the other has only just left is held from going with it, a gallop, and its foot skids on
+    // with the body meanwhile, as a foot caught behind a sudden turn does: held where it was, the hip went up to 28
+    // degrees past its extension for a third of a second)
+    if (this.moving && f.dragged && this.justLeft(g, f, other)) {
+      f.P.x += this.gv.x * g.dt;
+      f.P.z += this.gv.z * g.dt;
+    }
     // a foot pivots with the body when it turns, rather than staying across the leg (about the ball of the foot, which
     // stays where it is: turned about the ankle, the toes and heel would sweep the ground)
     if (this.justStopped && f.stand) this.keepSplit(g, f);
