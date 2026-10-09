@@ -23,8 +23,9 @@ export const CHECK_CLASSES = ['warrior', 'mage', 'ranger'];
  * the ranger's feet and carried bow).
  */
 export const CHECK_PLAN = { gait: null, stops: null, range: null, form: null, feet: ['ranger'], carry: ['ranger'] };
-/** each command's options in a check: the gait's steps listed, and no films (a check reads the numbers) */
-const CHECK_OPTIONS = { gait: { frames: true, films: false } };
+/** each command's options in a check: the gait's steps listed, and no films nor pictures (a check reads the numbers:
+ *  the form's of both sides, to compare, were more than the browser held, which closed) */
+const CHECK_OPTIONS = { gait: { frames: true, films: false }, form: { pictures: false } };
 /**
  * the commands run a scenario a job, each on a page booted for it: run one after another on one page, each scenario
  * set up from where the last had left the hero and the game's clock, and the gait's numbers of one scenario (its

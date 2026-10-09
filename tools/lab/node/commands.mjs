@@ -118,7 +118,8 @@ async function textWithSheetsByGroup(results, dir, browser) {
     const groups = [...new Set((result?.moments ?? []).map(groupOf))];
     for (const group of groups) {
       const moments = result.moments.filter((moment) => groupOf(moment) === group);
-      const image = await writeMoments([[side, { ...result, moments }]], dir, browser, `${prefix}${fileNameOf(group)}.png`);
+      const name = `${prefix}${fileNameOf(group)}.png`;
+      const image = await writeMoments([[side, { ...result, moments }]], dir, browser, name);
       if (image) images.push(relative(REPO, image));
     }
   }
@@ -216,10 +217,10 @@ export const COMMANDS = {
   form: {
     each(side, options) {
       const listed = { canary: Boolean(options.canary), frames: Boolean(options.frames) };
-      return side.command('form', { gear: options.gear, ...listed });
+      return side.command('form', { gear: options.gear, ...listed, pictures: options.pictures !== false });
     },
     finish(results, options, session) {
-      return textWithSheetsByGroup(results, join(OUT, 'form'), session.browser);
+      return textWithSheetsByGroup(results, session.outFor('form'), session.browser);
     },
     textOf: asText,
     problemsOf: problemsIn,

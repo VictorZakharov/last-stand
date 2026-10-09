@@ -21,6 +21,9 @@ export interface FormOptions {
   canary?: boolean;
   /** list each cycle's touchdowns and push offs, and the curves bin by bin */
   frames?: boolean;
+  /** picture the run (true by default): stick figures, and the hero run again to picture him; a check reads the
+   *  numbers, and both sides' pictures to compare were more than the browser held, which closed */
+  pictures?: boolean;
 }
 
 /** What `lab form` found: its lines, its pictures, and what went wrong with a run itself. */
@@ -228,11 +231,11 @@ function measureFrame(lab: Lab, legs: LegIK, toMan: number): FormFrame {
 
 // --- the run -------------------------------------------------------------------------------------------------------
 
-/** The hero set up at the start holding his weapons `style`'s way (as he is, with none). */
-async function setUp(lab: Lab, style: WeaponStyle | null): Promise<LegIK> {
-  // (the cape's cloth stepped: the run is pictured, `Fixture.capes`)
+/** The hero set up at the start holding his weapons `style`'s way (as he is, with none), the capes' cloth stepped
+ *  for a run that is pictured (`Fixture.capes`: the measured run never looks at it). */
+async function setUp(lab: Lab, style: WeaponStyle | null, capes: boolean): Promise<LegIK> {
   const nocked = Boolean(lab.player.cls.quiver);
-  await lab.setup({ at: START, facing: Math.PI / 2, nocked, gear: style ?? undefined, capes: true });
+  await lab.setup({ at: START, facing: Math.PI / 2, nocked, gear: style ?? undefined, capes });
   const legs = lab.model.root.userData.legs as LegIK | undefined;
   if (!legs) throw new Error(`lab: form: the ${lab.player.cls.id} has no leg IK`);
   return legs;
@@ -268,7 +271,7 @@ interface PictureRow {
 /** Runs the hero across, measuring each frame; with `pictured`, also pictures those frames into its rows' tiles. */
 async function runAcross(lab: Lab, style: WeaponStyle | null, pictured?: Map<number, PictureRow[]>):
   Promise<{ measured: Measured; tiles: Map<string, Tile[]> }> {
-  const legs = await setUp(lab, style);
+  const legs = await setUp(lab, style, pictured !== undefined);
   const toMan = MAN_LEG / legLength(lab.model);
   await lab.step(SETTLE, () => ({ keys: KEYS }));
   const start = lab.player.pos.clone();
@@ -282,7 +285,8 @@ async function runAcross(lab: Lab, style: WeaponStyle | null, pictured?: Map<num
   });
   const speed = lab.player.pos.distanceTo(start) / (MEASURED / 60);
   const frames = rows as FormFrame[];
-  return { measured: { frames, cycles: [cyclesOf(frames, 0), cyclesOf(frames, 1)], speed: speed * toMan, toMan }, tiles };
+  const cycles: Measured['cycles'] = [cyclesOf(frames, 0), cyclesOf(frames, 1)];
+  return { measured: { frames, cycles, speed: speed * toMan, toMan }, tiles };
 }
 
 // --- folding the cycles ------------------------------------------------------------------------------------------
@@ -399,7 +403,8 @@ function compared(what: string, ours: number, runner: number, unit: string, digi
   return `${what} ${ours.toFixed(digits)}${unit} (a runner's ${runner.toFixed(digits)}${unit})`;
 }
 
-/** What the run says of a leg curve: at touchdown, mid-stance, the push off and its most, and how far from a runner's. */
+/** What the run says of a leg curve: at touchdown, mid-stance, the push off and its most, and how far from a
+ *  runner's. */
 function legLine(name: LegCurve, curve: number[], runner: RunnerForm, unlike: string[]): string {
   const of = (u: number) => runner.leg(name, u);
   const duty = runner.duty;
@@ -414,7 +419,8 @@ function legLine(name: LegCurve, curve: number[], runner: RunnerForm, unlike: st
   ] as const;
   const cells = points.map(([label, u]) => `${label} ${deg(near(curve, u))} (${deg(of(u))})`);
   if (fit.rms > UNLIKE_RMS) {
-    unlike.push(`the ${name}: ${deg(fit.rms)} deg off a runner's on average, ${deg(fit.worst)} at ${fit.worstAt.toFixed(2)}`);
+    const worst = `${deg(fit.worst)} at ${fit.worstAt.toFixed(2)}`;
+    unlike.push(`the ${name}: ${deg(fit.rms)} deg off a runner's on average, ${worst}`);
   }
   return `  ${name.padEnd(5)} ${cells.join(', ')}; ${deg(least(curve))}..${deg(most(curve))}, ` +
     `off a runner's by ${deg(fit.rms)} on average (the most ${deg(fit.worst)} at ${fit.worstAt.toFixed(2)})`;
@@ -436,7 +442,9 @@ function armLines(measured: Measured, runner: RunnerForm, unlike: string[]): str
       `${deg(runner.armBack)}..${deg(runner.armForward)}), off by ${deg(shoulderFit.rms)} on average; the elbow bent ` +
       `${deg(least(elbow))}..${deg(most(elbow))} (${deg(runner.elbowBack)}..${deg(runner.elbowFront)}), off by ` +
       `${deg(elbowFit.rms)}`);
-    if (arc < runnerArc / 3) unlike.push(`arm ${SIDES[side]} hardly swings: ${deg(arc)} deg (a runner's ${deg(runnerArc)})`);
+    if (arc < runnerArc / 3) {
+      unlike.push(`arm ${SIDES[side]} hardly swings: ${deg(arc)} deg (a runner's ${deg(runnerArc)})`);
+    }
   }
   return lines;
 }
@@ -448,8 +456,8 @@ function describe(what: string, measured: Measured, unlike: string[]): string[] 
   const frames = measured.frames;
   const lines = [
     `${what}: ${frames.length} frames at ${measured.speed.toFixed(2)} m/s as a man (the hero's legs ` +
-      `${(MAN_LEG / measured.toMan).toFixed(2)} m against a man's ${MAN_LEG}); cycles L ${measured.cycles[0].length}, ` +
-      `R ${measured.cycles[1].length}`,
+      `${(MAN_LEG / measured.toMan).toFixed(2)} m against a man's ${MAN_LEG}); ` +
+      `cycles L ${measured.cycles[0].length}, R ${measured.cycles[1].length}`,
     `  ${compared('steps a second', timing.cadence, runner.cadence, '', 2)}, ` +
       `${compared('a step', timing.step, runner.step, ' m', 2)}`,
     `  ${compared('a foot down', timing.contact, runner.contact, ' s', 3)}, ` +
@@ -461,7 +469,8 @@ function describe(what: string, measured: Measured, unlike: string[]): string[] 
     unlike.push(`${timing.cadence.toFixed(1)} steps a second at this speed, a runner's ${runner.cadence.toFixed(1)}`);
   }
   if (timing.bounce < runner.bounce * 0.5 || timing.bounce > runner.bounce * 2) {
-    unlike.push(`the hips rise and fall ${(timing.bounce * 100).toFixed(1)} cm, a runner's ${(runner.bounce * 100).toFixed(1)}`);
+    const cm = (metres: number): string => (metres * 100).toFixed(1);
+    unlike.push(`the hips rise and fall ${cm(timing.bounce)} cm, a runner's ${cm(runner.bounce)}`);
   }
   for (const name of ['thigh', 'knee', 'ankle'] as const) {
     const curve = fold(measured, runner.duty, [0, 1], (frame, side) => frame.legs[side][name]);
@@ -471,8 +480,10 @@ function describe(what: string, measured: Measured, unlike: string[]): string[] 
   const head = median(frames.map((frame) => frame.head));
   const pelvis = frames.map((frame) => frame.pelvis);
   const chest = frames.map((frame) => frame.chest);
+  const turns = `the pelvis turns ${deg(least(pelvis))}..${deg(most(pelvis))}, ` +
+    `the chest on it ${deg(least(chest))}..${deg(most(chest))}`;
   lines.push(`  the trunk leans ${deg(lean)} (a runner's ${deg(runner.lean)}), the head tipped ${deg(head)} forward; ` +
-    `the pelvis turns ${deg(least(pelvis))}..${deg(most(pelvis))}, the chest on it ${deg(least(chest))}..${deg(most(chest))}`);
+    turns);
   if (Math.abs(lean - runner.lean) > 8) unlike.push(`the trunk leans ${deg(lean)} deg, a runner's ${deg(runner.lean)}`);
   if (Math.abs(head) > 12) unlike.push(`the head tipped ${deg(head)} deg off upright`);
   lines.push(...armLines(measured, runner, unlike));
@@ -622,7 +633,10 @@ const RUNNER_COLOUR = 'rgba(200, 200, 200, 0.55)';
 /** Draws a stick figure: each side's limbs in its colour (or all in one), the trunk and head between. */
 function drawStick(context: CanvasRenderingContext2D, stick: Stick, colours: [string, string, string], width: number):
   void {
-  const toPx = ([ahead, up]: Side): [number, number] => [STICK_W / 2 + ahead * STICK_SCALE, STICK_H - 40 - up * STICK_SCALE];
+  const toPx = ([ahead, up]: Side): [number, number] => [
+    STICK_W / 2 + ahead * STICK_SCALE,
+    STICK_H - 40 - up * STICK_SCALE,
+  ];
   const line = (points: Side[], colour: string): void => {
     context.strokeStyle = colour;
     context.lineWidth = width;
@@ -707,7 +721,8 @@ async function runStyle(lab: Lab, style: WeaponStyle | null, options: FormOption
   const { measured } = await runAcross(lab, style);
   const wanted = lab.player.stats.moveSpeed * measured.toMan;
   if (measured.speed < wanted * HELD_UP) {
-    report.problems.push(`form: ${what}: the run was held up (${measured.speed.toFixed(2)} of ${wanted.toFixed(2)} m/s)`);
+    const speeds = `${measured.speed.toFixed(2)} of ${wanted.toFixed(2)} m/s`;
+    report.problems.push(`form: ${what}: the run was held up (${speeds})`);
   }
   if (measured.cycles[0].length < 3 || measured.cycles[1].length < 3) {
     report.problems.push(`form: ${what}: fewer than three whole cycles a leg`);
@@ -721,12 +736,15 @@ async function runStyle(lab: Lab, style: WeaponStyle | null, options: FormOption
   if (options.canary && !unlike.some((line) => line.startsWith('the knee'))) {
     report.problems.push(`form: ${what}: the canary (the left knee straight through its stance) was not caught`);
   }
+  if (options.pictures === false) return;
   const chosen = framesToPicture(measured, runnerAt(measured.speed).duty);
   report.moments.push(sticksMoment(what, measured, chosen));
   const pictured = new Map<number, PictureRow[]>();
   chosen.forEach((frame, i) => pictured.set(frame, PICTURE_ROWS.filter((row) => row.points.includes(i))));
   const { tiles } = await runAcross(lab, style, pictured);
-  for (const row of PICTURE_ROWS) report.moments.push({ label: `${what}: ${row.name}`, tiles: tiles.get(row.name) ?? [], notes: [] });
+  for (const row of PICTURE_ROWS) {
+    report.moments.push({ label: `${what}: ${row.name}`, tiles: tiles.get(row.name) ?? [], notes: [] });
+  }
 }
 
 /** Runs the ways asked for (the class's all, or the one way a class with one has), judging each against a runner. */
@@ -738,8 +756,8 @@ export async function form(lab: Lab, options: FormOptions): Promise<FormReport> 
     if (!styles.includes(style)) throw new Error(`lab: form: the ${lab.player.cls.id} doesn't hold weapons ${style}`);
   }
   for (const style of asked.length ? asked : [null]) await runStyle(lab, style, options, report);
-  report.lines.push('a runner: about 3 steps a second at 5 to 7 m/s, each foot down 0.15 to 0.2 s, the knee bent about 20 ' +
-    'degrees as it lands and as it pushes off, folded past 110 under the hips in the swing; the trunk leaning 9 to 12, the ' +
-    'arms swinging from the shoulder with the elbows bent near a right angle');
+  report.lines.push('a runner: about 3 steps a second at 5 to 7 m/s, each foot down 0.15 to 0.2 s, the knee bent ' +
+    'about 20 degrees as it lands and as it pushes off, folded past 110 under the hips in the swing; the trunk ' +
+    'leaning 9 to 12, the arms swinging from the shoulder with the elbows bent near a right angle');
   return report;
 }

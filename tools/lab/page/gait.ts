@@ -885,7 +885,8 @@ function swingStretches(run: GaitRun): SwingStretch[][] {
 /** Every stretch's correlation, side by side, for `--frames`. */
 function swingStretchLines(run: GaitRun): string[] {
   return swingStretches(run).flatMap((stretches, side) => stretches.map((stretch) => {
-    return `    ${SIDES[side]} hand against its knee, frames ${stretch.at}-${stretch.until}: ${stretch.value.toFixed(2)}`;
+    const frames = `frames ${stretch.at}-${stretch.until}`;
+    return `    ${SIDES[side]} hand against its knee, ${frames}: ${stretch.value.toFixed(2)}`;
   }));
 }
 
