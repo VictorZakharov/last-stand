@@ -1163,7 +1163,11 @@ export class LegIK {
     // run)
     const toCome = this.toNextWindow(g, where);
     const behind = f.state === 'plant' ? this.leftBehind(g, f) : '';
-    const beforeWindow = !inWindow && toCome > EARLY && toCome < 0;
+    // (a foot whose leg is solved past a range goes whatever its window: past its window by a fifth and more than a
+    // whole window before the next, neither late nor early, the warrior's planted hip at a walk's reversal went 13
+    // degrees past its extension over 3 frames, till the body had left it far enough for a step. Not one merely out
+    // of reach or dragged: let go so, zigzagging, it left just after the other, a gallop)
+    const beforeWindow = !inWindow && ((toCome > EARLY && toCome < 0) || f.pastRange);
     const early = f.state === 'plant' && beforeWindow && other.state !== 'timed' && f.stance > STRIDE_AFTER
       && behind !== '';
     // (a foot only just down doesn't go again: a reversal can bring its window round at once; unless the body has left
