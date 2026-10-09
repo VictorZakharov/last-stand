@@ -320,7 +320,7 @@ export class Enemy {
   /** The walk cycle moved on by the frame (setting off from standing, it starts with the first stride: `LegIK.setOff`). */
   private stepPhase(dt: number): void {
     const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
-    this.phase = (legs?.setOff(this.phase) ?? this.phase) + dt * this.gait();
+    this.phase = (legs?.setOff(this.phase) ?? this.phase) + dt * this.gait() * (legs?.pace ?? 1);
   }
 
   /** how far the walk cycle's phase turns this frame per second: a step per half cycle, its length by the speed and the legs (models/ik.ts), scaled by the enemy's own gait */
