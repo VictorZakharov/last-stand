@@ -1306,7 +1306,10 @@ export class LegIK {
 
   /** Whether `other` left the ground too lately for planted foot `f` to go too (`HOP_GAP`, `GALLOP_GAP`). */
   private justLeft(g: GaitFrame, f: Foot, other: Foot): boolean {
-    const gap = Math.max(HOP_GAP, GALLOP_GAP * g.cycle);
+    // (dragged at a run, only the hop's gap: waiting out the gallop's, a foot left behind by a run's reversal skidded on
+    // with the body up to a metre, or held, its hip went 28 degrees past its extension)
+    const running = runShare(g.speed, g.legReach) > 0.5;
+    const gap = f.dragged && running ? HOP_GAP : Math.max(HOP_GAP, GALLOP_GAP * g.cycle);
     return other.state !== 'plant' && other.air < gap;
   }
 
