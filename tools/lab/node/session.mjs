@@ -64,7 +64,8 @@ export class LabSession {
   /**
    * Runs one command (`{ command, options }`, as options.mjs reads it) on each side it asks for, each on a page
    * booted for it. Resolves with its report (with `--ab` the other commit's first, then how the two sides differ),
-   * and the problems that fail it: errors in a page, and what the command's own result reports (a canary missed).
+   * the problems that fail it (errors in a page, and what the command's own result reports: a canary missed), and
+   * what it counted on each side, for a command that counts (`countsOf`).
    *
    * Each side is the only page open while its turn runs: with two pages alive at once one of them lost the
    * browser's focus (the game lets go of the input on a blur), and a commit compared with itself came out three
@@ -135,7 +136,13 @@ export class LabSession {
     const verdict = results.length === 2 ? await this.compareSides(command, handler, results) : null;
     const failed = problems.length ? `FAILED: ${problems.join('; ')}` : null;
     const report = [...notes, text, verdict, failed, `(${seconds(started)})`].filter(Boolean).join('\n');
-    return { text: report, problems };
+    const counts = handler.countsOf ? results.map(([side, result]) => this.countsOn(side, handler, result)) : [];
+    return { text: report, problems, counts };
+  }
+
+  /** What a command counted on `side` (`countsOf`), and whether that side is this tree's. */
+  countsOn(side, handler, result) {
+    return { side: side.name, mine: side === this.repoSide, counts: handler.countsOf(result) ?? {} };
   }
 
   /**

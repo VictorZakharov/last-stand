@@ -151,6 +151,9 @@ export interface GaitOptions {
   span?: [number, number];
   /** film each scenario (true by default): each is run again for its film, which a check of the numbers never reads */
   films?: boolean;
+  /** how many frames longer each scenario's first move lasts, so every later change of way comes at another point of
+   *  a stride (a check runs each scenario so from a few) */
+  offset?: number;
 }
 
 /** The frames a trace lists, from the first to the last. */
@@ -284,6 +287,8 @@ export interface GaitReport {
   lines: string[];
   moments: Pictured[];
   problems: string[];
+  /** what a person's walk has none of, counted over the scenarios run (a check adds a hero's up over its jobs) */
+  counts: Record<string, number>;
 }
 
 const cm = (metres: number) => (metres * 100).toFixed(1);
@@ -505,8 +510,9 @@ function bobOfSteps(heights: number[], steps: Step[]): number[] {
 }
 
 /** Runs one scenario, set up afresh, and measures its walk, picturing the frames `film` takes, if any. */
-async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null, trace: TraceSpan | null = null):
-  Promise<GaitRun> {
+async function runScenario(
+  lab: Lab, scenario: GaitScenario, film: Film | null, trace: TraceSpan | null = null, offset = 0,
+): Promise<GaitRun> {
   const facing = scenario.aim ? 0 : Math.PI / 2;
   // (a film looks at the hero, cape and all; the measure's run never does: `Fixture.capes`)
   await lab.setup({ at: scenario.start, facing, nocked: Boolean(lab.player.cls.quiver), capes: film !== null });
@@ -603,13 +609,25 @@ async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null, 
     watched.push({ name: 'hips', at: hips, counts: true, jerk: HIPS_JERK });
     jerks.observe(frame, watched, seconds, run);
   };
-  for (const leg of scenario.legs) {
+  for (const leg of lengthened(scenario.legs, offset)) {
     await lab.step(leg.frames, (f) => ({ keys: leg.keys, m0: attackDown(leg, f), aim }), measure);
   }
   run.bobs = bobOfSteps(heights, run.steps);
   run.falls = judgeBalance(run.balance, seconds);
   noteFallsInTrace(run);
   return run;
+}
+
+/**
+ * A scenario's legs with its first move `offset` frames longer, so every later change of way comes at another point
+ * of a stride: run so alone, a frame's change anywhere sent every later stride elsewhere, and a change's gallops came
+ * out 2 or 3 either way over a check's gait scenarios by chance. (Stood first instead, nothing changed: the set-off
+ * is the same from any moment of the idle.)
+ */
+function lengthened(legs: GaitLeg[], offset: number): GaitLeg[] {
+  const first = legs.findIndex((leg) => leg.keys.length > 0);
+  if (offset <= 0 || first < 0) return legs;
+  return legs.map((leg, index) => (index === first ? { ...leg, frames: leg.frames + offset } : leg));
 }
 
 /** The way the body goes this frame, or the way it last went once it stops, and how long it has been still. */
@@ -876,6 +894,16 @@ function rhythmOf(steps: Step[]): string {
   return `${kept} (leaving within ${IN_STEP} of their window's start${off}); ${over} landed out of reach${landed}`;
 }
 
+/** What a walk has that a person's has none of, by name: the hops and a foot dance's steps. */
+function countsOf(run: GaitRun): Record<string, number> {
+  return { hops: run.hops.length, 'short steps': run.shortSteps };
+}
+
+/** Adds `counts` into `total`, name by name. */
+function addCounts(total: Record<string, number>, counts: Record<string, number>): void {
+  for (const [name, count] of Object.entries(counts)) total[name] = (total[name] ?? 0) + count;
+}
+
 /** Counts the planted feet dragged this frame, and each one's run of such frames, and those on their toes. */
 function followReach(run: GaitRun, legs: LegIK): void {
   legs.feet.forEach((foot, side) => {
@@ -1004,17 +1032,18 @@ function filmMoment(scenario: GaitScenario, film: Film): Pictured | null {
  */
 export async function gait(lab: Lab, options: GaitOptions): Promise<GaitReport> {
   const asked = options.scenarios?.length ? options.scenarios : GAIT_SCENARIOS;
-  const report: GaitReport = { lines: [], moments: [], problems: [] };
+  const report: GaitReport = { lines: [], moments: [], problems: [], counts: {} };
   const seconds = window.__labClock.frame / 1000;
   for (const scenario of SCENARIOS.filter((candidate) => asked.includes(candidate.name))) {
-    const run = await runScenario(lab, scenario, null, traceSpanOf(options));
+    const run = await runScenario(lab, scenario, null, traceSpanOf(options), options.offset ?? 0);
     report.lines.push(...describeRun(scenario, run, seconds, Boolean(options.frames)));
+    addCounts(report.counts, countsOf(run));
     if (run.heldUp) {
       report.problems.push(`gait: ${scenario.name} was held up by something in its way (${run.heldUpAt})`);
     }
     if (options.films === false) continue;
     const film = filmFor(run.hopFrames);
-    await runScenario(lab, scenario, film);
+    await runScenario(lab, scenario, film, null, options.offset ?? 0);
     const moment = filmMoment(scenario, film);
     if (moment) report.moments.push(moment);
   }

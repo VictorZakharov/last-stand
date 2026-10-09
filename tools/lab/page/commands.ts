@@ -64,7 +64,7 @@ export async function range(lab: Lab, command: RangeOptions): Promise<Report> {
  */
 export async function gait(lab: Lab, command: GaitOptions): Promise<Report> {
   const report = await gaitRound(lab, command);
-  return { text: report.lines.join('\n'), problems: report.problems, moments: report.moments };
+  return { text: report.lines.join('\n'), problems: report.problems, moments: report.moments, counts: report.counts };
 }
 
 /**
