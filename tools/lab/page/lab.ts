@@ -50,7 +50,9 @@ const SETUP_SEED = 0x2545f491;
 /** the seed each command starts them from */
 const COMMAND_SEED = 0x1b873593;
 /** the game's clock at a set-up on a page booted for it, s (the idle's sway runs on it): past any moment the run's
- *  start reaches (at 5 s it never applied: the start had taken the clock past it, by as many frames as it took) */
+ *  start reaches (at 5 s it never applied: the start had taken the clock past it, by as many frames as it took); a
+ *  later set-up takes it on to the next whole multiple of it, so the idle is at the same moment whatever ran before
+ *  (taken to it only once, a gait scenario's numbers moved with the scenarios before it) */
 const SETUP_TIME = 60;
 /** the frames a set-up stands still once the hero is on his spot */
 const SETTLE_FRAMES = 90;
@@ -80,6 +82,10 @@ export interface Fixture {
   view?: renderer.ViewMode;
   /** a bow's hero with an arrow on the string: he shoots one and waits out its reload, as he walks between shots */
   nocked?: boolean;
+  /** the capes' cloth stepped, for what looks at the hero (a sheet, the run's pictures, a film); held otherwise, each
+   *  cape riding its neckline and hung afresh for a picture (`cape.holdCapes`: stepped, the cloth was three quarters
+   *  of the mage's time in a measure of his feet, which never look at it) */
+  capes?: boolean;
 }
 
 /** The pictures the lab can take: the game's own views, or a close-up from round the hero. */
@@ -303,6 +309,8 @@ export class Lab {
 
   /** Sets the run up as `fixture` says and checks that it took (throws if not). Returns what it is, for the report. */
   async setup(fixture: Fixture = {}): Promise<Record<string, unknown>> {
+    // (an A/B's side on a commit from before it has none: its capes step)
+    cape.holdCapes?.(!fixture.capes);
     await this.enterRun();
     this.foes.clear();
     this.keepUp = [() => holdTheWave(this.foes), keepHeroWhole];
@@ -319,7 +327,7 @@ export class Lab {
     this.aim = new THREE.Vector3(x + Math.sin(facing) * AIM_AHEAD, 0, z + Math.cos(facing) * AIM_AHEAD);
     // (the same moment and the same random numbers from here on, however long the run took to start: the clock is
     // only ever moved forward, so nothing the game stamped with it is left in the future)
-    if (G.time < SETUP_TIME) G.time = SETUP_TIME;
+    G.time = Math.max(SETUP_TIME, Math.ceil(G.time / SETUP_TIME) * SETUP_TIME);
     window.__labSeed(SETUP_SEED);
     // (standing a moment: what was still moving as the run started, the camera gliding in and the hero settling on
     // his spot, comes to rest, so it reaches the measure the same however many frames the start took)
@@ -412,6 +420,7 @@ export class Lab {
   async screen(label: string, notes: string[] = [], around?: string | Clip): Promise<Pictured> {
     if (!window.__labScreenshot) throw new Error('lab: screen: this page has no screenshots (opened by an older lab)');
     const clip = around === undefined ? undefined : typeof around === 'string' ? clipRound(around) : withinWindow(around);
+    cape.drapeHeldCapes?.();
     const drawing = this.drawing;
     this.drawing = true;
     try {
@@ -427,6 +436,7 @@ export class Lab {
   /** Pictures of the game as it is now, nothing advanced; the game's camera is put back as it was. */
   capture(views: ViewName[], options: CaptureOptions = {}): Tile[] {
     this.checkCapture(views, renderer.viewMode(), options.focus);
+    cape.drapeHeldCapes?.();
     const restore = this.saveCamera();
     const drawing = this.drawing;
     this.drawing = true;

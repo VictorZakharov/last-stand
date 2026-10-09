@@ -149,6 +149,8 @@ export interface GaitOptions {
   trace?: boolean;
   /** with `trace`, only the frames from the first to the second */
   span?: [number, number];
+  /** film each scenario (true by default): each is run again for its film, which a check of the numbers never reads */
+  films?: boolean;
 }
 
 /** The frames a trace lists, from the first to the last. */
@@ -506,7 +508,8 @@ function bobOfSteps(heights: number[], steps: Step[]): number[] {
 async function runScenario(lab: Lab, scenario: GaitScenario, film: Film | null, trace: TraceSpan | null = null):
   Promise<GaitRun> {
   const facing = scenario.aim ? 0 : Math.PI / 2;
-  await lab.setup({ at: scenario.start, facing, nocked: Boolean(lab.player.cls.quiver) });
+  // (a film looks at the hero, cape and all; the measure's run never does: `Fixture.capes`)
+  await lab.setup({ at: scenario.start, facing, nocked: Boolean(lab.player.cls.quiver), capes: film !== null });
   const legs = lab.model.root.userData.legs as LegIK | undefined;
   if (!legs) throw new Error(`lab: gait: the ${lab.player.cls.id} has no leg IK`);
   const seconds = window.__labClock.frame / 1000;
@@ -1009,6 +1012,7 @@ export async function gait(lab: Lab, options: GaitOptions): Promise<GaitReport> 
     if (run.heldUp) {
       report.problems.push(`gait: ${scenario.name} was held up by something in its way (${run.heldUpAt})`);
     }
+    if (options.films === false) continue;
     const film = filmFor(run.hopFrames);
     await runScenario(lab, scenario, film);
     const moment = filmMoment(scenario, film);

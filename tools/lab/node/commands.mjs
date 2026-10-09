@@ -4,7 +4,7 @@ import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { runCoop } from './coop.mjs';
 import { labError } from './errors.mjs';
-import { OUT, REPO } from './paths.mjs';
+import { REPO } from './paths.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { writeSheet } from './sheetImage.mjs';
 
@@ -15,6 +15,7 @@ function fixtureFrom(options) {
   if (options.at !== undefined) fixture.at = options.at;
   if (options.facing !== undefined) fixture.facing = options.facing;
   if (options.nocked !== undefined) fixture.nocked = options.nocked;
+  if (options.capes !== undefined) fixture.capes = options.capes;
   return fixture;
 }
 
@@ -134,7 +135,7 @@ export const COMMANDS = {
     },
     async finish(results, options, session) {
       const runs = results.map(([side, sheet]) => [side.name, sheet]);
-      const dir = join(OUT, 'sheets', options.tag);
+      const dir = session.outFor(join('sheets', options.tag));
       mkdirSync(dir, { recursive: true });
       const image = join(dir, 'sheet.png');
       await writeSheet(session.browser, runs, options.views.length, image);
@@ -162,10 +163,11 @@ export const COMMANDS = {
         frames: Boolean(options.frames),
         trace: Boolean(options.trace),
         span: options.span,
+        films: options.films !== false,
       });
     },
     finish(results, options, session) {
-      return textWithSheetEach(results, join(OUT, 'gait'), session.browser);
+      return textWithSheetEach(results, session.outFor('gait'), session.browser);
     },
     textOf: asText,
     problemsOf: problemsIn,
@@ -199,7 +201,7 @@ export const COMMANDS = {
       });
     },
     finish(results, options, session) {
-      return textWithMoments(results, join(OUT, 'range'), session.browser);
+      return textWithMoments(results, session.outFor('range'), session.browser);
     },
     textOf: asText,
     problemsOf: problemsIn,
@@ -216,7 +218,7 @@ export const COMMANDS = {
       });
     },
     finish(results, options, session) {
-      return textWithMoments(results, join(OUT, 'feet'), session.browser);
+      return textWithMoments(results, session.outFor('feet'), session.browser);
     },
     textOf: asText,
     problemsOf: problemsIn,
@@ -240,7 +242,7 @@ export const COMMANDS = {
     },
     finish(results, options, session) {
       const name = basename(options._[0]).replace(/\.[^.]+$/, '');
-      return textWithMoments(results, join(OUT, 'probes', name), session.browser);
+      return textWithMoments(results, session.outFor(join('probes', name)), session.browser);
     },
     textOf: asText,
     problemsOf: problemsIn,

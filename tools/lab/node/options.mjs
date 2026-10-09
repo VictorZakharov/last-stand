@@ -20,6 +20,11 @@ const SETUP_OPTIONS = {
   at: { kind: 'pair', usage: 'x,z', help: 'where the hero stands (12,22: off the dais, clear of props)' },
   facing: { kind: 'number', usage: 'rad', help: 'the way he faces (0 is +z)' },
   nocked: { kind: 'switch', help: 'a bow\'s hero with an arrow on the string (=false: none)' },
+  capes: {
+    kind: 'switch',
+    help: 'step the capes\' cloth (a sheet does by default; held otherwise, riding the neckline: the cloth was most '
+      + 'of a caped hero\'s time)',
+  },
 };
 
 /** the options every command running on a page takes */
@@ -29,6 +34,11 @@ const COMMON_OPTIONS = {
     usage: '[=ref]',
     help: 'also on another commit (origin/main by default): its results beside this tree\'s, and the lines that '
       + 'differ (a commit against itself agrees, line for line)',
+  },
+  fresh: {
+    kind: 'switch',
+    help: 'with --ab, run the other commit again rather than read its kept result (tools/lab/out/ab-cache: kept by '
+      + 'its commit, the lab\'s code, the command and its options)',
   },
   class: { kind: 'text', usage: 'name', help: 'the hero (ranger, warrior, mage; the last one used by default)' },
   profile: { kind: 'switch', help: 'where the command\'s time went in the page: its busiest functions' },
@@ -150,6 +160,10 @@ export const COMMANDS = {
         help: 'list every frame: the way the body faces and goes, the pelvis, the cycle, each foot',
       },
       span: { kind: 'pair', usage: 'from,to', help: 'with --trace, only the frames from the first to the second' },
+      films: {
+        kind: 'switch',
+        help: 'film each scenario, run again for it (=false: the numbers alone, in half the time)',
+      },
       ...COMMON_OPTIONS,
     },
   },
@@ -161,6 +175,23 @@ export const COMMANDS = {
       setup: { kind: 'switch', help: 'set the run up first (=false: the probe sets up itself)' },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
+    },
+  },
+  check: {
+    help: 'the checks of a change to how the heroes move, every hero\'s, side by side in sessions of their own: the '
+      + 'gait (its steps listed, no films), the stops and the ranges for each hero, the ranger\'s feet and carry; each '
+      + 'report in tools/lab/out/check/<command>-<hero>.txt (runs in this process, not the server)',
+    options: {
+      classes: { kind: 'list', usage: 'a,b', help: 'the heroes (warrior, mage, ranger by default)' },
+      commands: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['gait', 'stops', 'range', 'feet', 'carry'],
+        help: 'the commands (gait, stops, range, feet, carry by default)',
+      },
+      jobs: { kind: 'number', usage: 'n', help: 'how many sessions side by side (a core in three, at most 8)' },
+      ab: COMMON_OPTIONS.ab,
+      fresh: COMMON_OPTIONS.fresh,
     },
   },
   eval: {
