@@ -16,7 +16,7 @@ test('every command of the plan for each of its heroes, the ranger\'s alone for 
   assert.ok(gaitScenarios > 1);
   assert.ok(starts > 1);
   assert.ok(CHECK_SPLIT.has('gait'));
-  assert.equal(jobs.length, (2 + gaitScenarios * starts) * CHECK_CLASSES.length + 2);
+  assert.equal(jobs.length, (3 + gaitScenarios * starts) * CHECK_CLASSES.length + 2);
   assert.ok(names(jobs).includes('carry-ranger'));
   assert.ok(!names(jobs).includes('carry-warrior'));
   assert.ok(names(jobs).includes('stops-mage'));

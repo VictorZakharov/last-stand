@@ -275,7 +275,7 @@ export class Enemy {
 
     if (!frozen) this.facing = angleDamp(this.facing, this.targetFacing, this.action ? 6 : 9, dt);
     const speedK = Math.hypot(this.vel.x, this.vel.z) / this.speed;
-    this.phase += dt * this.gait();
+    this.stepPhase(dt);
     // frozen enemies hold their pose: animate with the time they were frozen at
     this.animate(frozen ? 0 : dt, frozen ? this.frozenAt : t, Math.min(1, speedK));
     if (!frozen) this.frozenAt = t;
@@ -302,7 +302,7 @@ export class Enemy {
     this.facing = n.f;
     const a = this.action;
     if (a) { a.t += dt; if (a.t >= a.dur) this.action = null; }
-    this.phase += dt * this.gait();
+    this.stepPhase(dt);
     this.animate(frozen ? 0 : dt, frozen ? this.frozenAt : t, Math.min(1, Math.hypot(this.vel.x, this.vel.z) / this.speed));
     if (!frozen) this.frozenAt = t;
     return this.updateLooks(dt, t, frozen);
@@ -315,6 +315,12 @@ export class Enemy {
     this.meter?.update();
     if (this.aura && this.auraMat) { this.aura.rotation.y += dt; this.auraMat.opacity = 0.5 + Math.sin(t * 4) * 0.2; }
     return true;
+  }
+
+  /** The walk cycle moved on by the frame (setting off from standing, it starts with the first stride: `LegIK.setOff`). */
+  private stepPhase(dt: number): void {
+    const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
+    this.phase = (legs?.setOff(this.phase) ?? this.phase) + dt * this.gait();
   }
 
   /** how far the walk cycle's phase turns this frame per second: a step per half cycle, its length by the speed and the legs (models/ik.ts), scaled by the enemy's own gait */

@@ -734,6 +734,9 @@ export class Player {
     const side = Math.cos(this.facing) * this.vel.x - Math.sin(this.facing) * this.vel.z;
     // (a dash's legs step at a sprint's cadence, not at the dash's speed)
     const gs = this.dash ? Math.min(speed, this.stats.moveSpeed) : speed;
+    // (setting off from standing, the cycle starts with the first stride)
+    const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
+    if (legs) this.phase = legs.setOff(this.phase);
     this.phase = this.cycleOn(dt * gs * gaitRate(gs, legLength(this.model)), fwd < -0.5 ? -1 : 1);
     let action: ActionState | null = null;
     if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };

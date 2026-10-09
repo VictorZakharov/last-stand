@@ -99,6 +99,11 @@ const DRAW_GIRDLE: [number, number] = [35, -25], GIRDLE_BACK = 6;
 /** how much the draw arm's elbow keeps to where it's sent (armIK.ts `keep`: degrees of the ranges; under the 1 a cm it
  *  costs to move it, it stayed where it was until that went out of range, then jumped round) */
 const DRAW_KEEP = 150;
+/** how quickly the draw arm stops pumping at a run as its hand takes up a task, and starts again after (1/s) */
+const DRAW_PUMP_RATE = 12;
+/** an arrow is put back once the draw arm pumps less than this (started with the hand up before the chest, the elbow
+ *  swung up and out level with it for six frames) */
+const STOW_PUMP = 0.05;
 /** how far the hand hooked on the string is rolled about the arrow at full draw, and how far it may rock about the string,
  *  across its knuckles, for its wrist (rad; with `DRAW_WRIST`: held as posed, the wrist bent 25 degrees in at full draw,
  *  where an archer's lies flat behind the hand):
@@ -618,6 +623,8 @@ export function buildRanger(): Model {
    *  by: on only, at the gait's pace (the gait's own turns back as the way he goes turns round, and the bow hitched) */
   let swayK = 0, swayPhase = 0, lastPhase = 0;
   let fp = false, hasBow = true, aimT = 0, raise = 0, free = 0, flaskOut = 0, lastLoosed = -1;
+  /** how far the draw arm pumps at a run: only while its hand is free (eased, from last frame's tasks) */
+  let drawPump = 1;
   /** how many arrows are on the string, as the pose has it, and how many were when the hand went to the quiver for more */
   let strung = 1, fetchFrom = -1;
   /** how far the draw shoulder is set (`DRAW_GIRDLE`, 0..1) */
@@ -766,7 +773,15 @@ export function buildRanger(): Model {
     const dt = st.dt, a = st.action, s = sc();
     dtNow = dt;
     resetPose(j); idle(j, st.t, 1 - st.move * 0.5);
-    walkCycle(j, st.phase, st.move, { run: true, arm: 0.25, stride: 0.5, dir: st.moveDir ?? 1 });
+    // (the draw arm pumps at a run as a runner's does while its hand is free: its ways to the string and the quiver set
+    // off from a hanging arm, and set off from one pumping before the chest, the elbow swung up and out level with the
+    // hand as it turned for the string, the forearm hanging; the bow arm carries the bow at its side, swinging as at a
+    // walk)
+    // (an arrow to put back counts from as soon as the hero has it so: the stow waits for the arm to stop pumping)
+    const stowWanted = !a && (st.nocked ?? 1) <= 0 && strung > 0;
+    const drawBusy = Boolean(a) || stowT >= 0 || stowWanted || free > 0.01;
+    drawPump = damp(drawPump, drawBusy ? 0 : 1, DRAW_PUMP_RATE, dt);
+    walkCycle(j, st.phase, st.move, { run: true, arm: 0.25, stride: 0.5, dir: st.moveDir ?? 1, pump: drawPump, pumpL: 0 });
     const shooting = a?.name === 'bow' && a.draw !== undefined, loosed = shooting && a.loosed !== undefined;
     // what follows a release (0..1), the draw (0..1 of its time) and how far that pulls the string
     const after = loosed ? clamp((a.t - 0.55) / 0.45, 0, 1) : -1, k = shooting ? a.draw! : 0;
@@ -783,7 +798,7 @@ export function buildRanger(): Model {
     // (only with nothing else on: the other skills' gestures take the draw hand)
     if (shooting || a) stowT = -1;
     else if ((st.nocked ?? 1) > 0) { strung = Math.max(strung, 1); stowT = -1; }
-    else if (stowT < 0 && strung > 0) stowT = 0;
+    else if (stowT < 0 && strung > 0 && drawPump < STOW_PUMP) stowT = 0;
     if (stowT >= 0) { stowT += dt; if (stowWay(stowT / STOW) >= stowTake) strung = 0; if (stowT >= STOW) stowT = -1; }
     const stowE = stowT >= 0 ? stowT / STOW : -1;
     // (eased both ways: the bow comes up and goes down from a standstill)
@@ -816,7 +831,9 @@ export function buildRanger(): Model {
     // jumped 37 px in a frame)
     const pitch = lastPitch = shooting ? a.pitch ?? 0 : damp(lastPitch, 0, PITCH_BACK, dt);
     j.chest.rotation.z += pitch * 0.6 * aim; j.spine.rotation.z += pitch * 0.25 * aim;
-    j.spine.rotation.x += st.move * 0.1;
+    // (the trunk a little forward over the stride, the head held up against it: at 0.1, with the whole body leant into the
+    // speed by the leg IK, the trunk leant 16 degrees at a run, a runner's 12)
+    j.spine.rotation.x += st.move * 0.06; j.neck.rotation.x -= st.move * 0.06;
     // the other skills' gestures with the draw hand off the string, and the draught
     const gesture = a?.name === 'cast' || a?.name === 'buff' || a?.name === 'slam', drinking = a?.name === 'drink';
     if (gesture) {
@@ -1059,7 +1076,12 @@ export function buildRanger(): Model {
       // (the hand turns onto the string as it nears it)
       // (the elbow out and forward from where it hangs, then up behind: kept down by the side, the forearm crossed the chest
       // and the elbow swung up over the shoulder in a frame)
-      if (onW < 1) {
+      // (the hand free, no shot under way: the arm fitted as it swings, as any free arm is: held turned as for the string,
+      // a runner's hand before the chest took the shoulder's turn to its end and the elbow flipped up and out level with
+      // it, the forearm hanging)
+      if (onW === 0 && !shooting) {
+        if (!fp) fitArm(j, false, undefined, body);
+      } else if (onW < 1) {
         const pole = fkPole.normalize().lerp(linePole, onW);
         // (the hand rides its forearm until the elbow is up and out, then turns onto the string: turned onto it with the
         // elbow still low in front, the wrist met both its ends and the elbow jumped up; its elbow free of the draw's speed

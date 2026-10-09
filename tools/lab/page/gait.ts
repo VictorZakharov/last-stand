@@ -46,6 +46,8 @@ const TAP_UP = 12;
  *  the point a drawn one aims at (along +z) */
 const LEVEL: [number, number] = [14, 14];
 const LEVEL_AIM: [number, number] = [14, 40];
+/** where a long run starts (open ground: along z 14 to the dais's side, every prop at least 1.5 m off it) */
+const LONG_RUN: [number, number] = [-20, 14];
 /** where the walks over the steps start (on the dais, near its middle), and the point a drawn one aims at */
 const DAIS: [number, number] = [1.5, 0.3];
 const DAIS_AIM: [number, number] = [1.5, 25];
@@ -76,6 +78,14 @@ const SCENARIOS: GaitScenario[] = [
     start: LEVEL,
     aim: null,
     legs: [legOf([], false, STAND_FRAMES), legOf(['d'], false, 60), legOf(['a'], false, 60), legOf([], false, 45)],
+    film: 'left',
+  },
+  {
+    name: 'run',
+    what: 'level ground, nothing drawn: a long run straight on',
+    start: LONG_RUN,
+    aim: null,
+    legs: [legOf(['d'], false, 200)],
     film: 'left',
   },
   {
@@ -184,6 +194,16 @@ const STEP_BACK = 0.05;
 const IN_STEP = 0.25;
 /** a step shorter than this is a foot dance's (m) */
 const SHORT_STEP = 0.15;
+/** a foot leaving within this share of the other's stride of the other's leaving swings with it, a gallop (a person's
+ *  legs alternate, each leaving half a stride after the other's), over a stride no longer than this (s: a slow walk's
+ *  is about a second; longer, the body stopped between) */
+const GALLOP_SHARE = 0.3;
+const STRIDE_MOST = 1.3;
+/** a step wider than this (m, footprint to footprint across the way) has the legs apart: a runner's are 5 to 10 cm,
+ *  the feet nearly in a line, a walker's 10 to 15 */
+const WIDE_STEP = 0.3;
+/** a body slower than this (m/s) has no way it goes to measure the feet's width across */
+const WIDTH_SPEED = 0.5;
 /** a person walks up to about this speed, with a foot always on the ground (m/s); above it, a person runs */
 const WALK_MOST = 2.2;
 /** under this much rise and fall of the hips a step (m), the body is carried along rather than walked */
@@ -218,6 +238,9 @@ interface Step {
   /** where its ankle left and landed */
   from: THREE.Vector3;
   to: THREE.Vector3;
+  /** how far across the way the body went it landed from where the other foot last landed (m: the step's width,
+   *  footprint to footprint; none for the first, or with the body hardly moving) */
+  width?: number;
 }
 
 /** The hips' height over the ground, summed by what the feet were doing. */
@@ -373,12 +396,22 @@ function feetNow(legs: LegIK): string {
   return legs.feet.map((foot, side) => `${SIDES[side]}${foot.state === 'plant' ? '_' : '^'}`).join('');
 }
 
+/** How far apart two ankles are across the way the body goes (m), or nothing when it hardly moves. */
+function widthApart(landed: THREE.Vector3, other: THREE.Vector3, velocity: THREE.Vector3): number | undefined {
+  const speed = Math.hypot(velocity.x, velocity.z);
+  if (speed < WIDTH_SPEED) return undefined;
+  const across = new THREE.Vector3(-velocity.z / speed, 0, velocity.x / speed);
+  return Math.abs((landed.x - other.x) * across.x + (landed.z - other.z) * across.z);
+}
+
 /** Follows each foot's take-offs and landings into the run's steps, hops and short steps. */
 class StepWatch {
   private wasDown: boolean[];
   private leftAt = [-1, -1];
   private landedAt = [-1, -1];
   private leftFrom = [new THREE.Vector3(), new THREE.Vector3()];
+  /** where each foot last landed, if it has */
+  private landedTo: (THREE.Vector3 | null)[] = [null, null];
   private planned = [0, 0];
   private how = ['', ''];
   private window: (number | undefined)[] = [undefined, undefined];
@@ -391,7 +424,14 @@ class StepWatch {
 
   /** This frame's feet: a hop is a take-off or a landing within `HOP_GAP` of the other foot's, both in the air
    *  between. Returns whether one happened. */
-  observe(frame: number, legs: LegIK, ankles: THREE.Vector3[], seconds: number, run: GaitRun): boolean {
+  observe(
+    frame: number,
+    legs: LegIK,
+    ankles: THREE.Vector3[],
+    seconds: number,
+    run: GaitRun,
+    velocity: THREE.Vector3,
+  ): boolean {
     let hopped = false;
     legs.feet.forEach((foot, side) => {
       const down = foot.state === 'plant';
@@ -420,7 +460,11 @@ class StepWatch {
         const landedOver = foot.over;
         const how = this.how[side];
         const ends = { from: this.leftFrom[side].clone(), to: ankles[side].clone() };
-        run.steps.push({ ...step, ...ends, planned: this.planned[side], how, window: this.window[side], landedOver });
+        const otherAt = this.landedTo[other];
+        const width = otherAt ? widthApart(ankles[side], otherAt, velocity) : undefined;
+        this.landedTo[side] = ankles[side].clone();
+        const kept = { planned: this.planned[side], how, window: this.window[side], landedOver, width };
+        run.steps.push({ ...step, ...ends, ...kept });
         if (length < SHORT_STEP) run.shortSteps++;
         if (otherDown && frame - this.landedAt[other] <= HOP_GAP && this.leftAt[other] > this.landedAt[side]) {
           run.hops.push(`frame ${frame}: both feet landed together`);
@@ -484,11 +528,11 @@ class JerkWatch {
   }
 }
 
-/** The film of a scenario its first run found `hops` in: round the first, else from `FILM_FROM`. */
+/** The film of a scenario its first run found `hops` in (or gallops): round the first, else from `FILM_FROM`. */
 function filmFor(hops: number[]): Film {
   if (!hops.length) return { from: FILM_FROM, about: 'steady', shots: [] };
   const from = Math.max(0, hops[0] - FILM_BEFORE * FILM_EVERY);
-  return { from, about: `round the first hop (frame ${hops[0]})`, shots: [] };
+  return { from, about: `round the first hop or gallop (frame ${hops[0]})`, shots: [] };
 }
 
 /** Pictures this frame if the film takes it: every `FILM_EVERY` frames from its start, `FILM_LENGTH` of them. */
@@ -570,7 +614,7 @@ async function runScenario(
     lastAt.copy(at);
     const ankles = [lab.joints.ankleL, lab.joints.ankleR].map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
     const hips = lab.joints.hips.getWorldPosition(new THREE.Vector3());
-    steps.observe(frame, legs, ankles, seconds, run);
+    steps.observe(frame, legs, ankles, seconds, run, lab.player.vel);
     if (film) filmShot(lab, scenario, film, frame, legs);
     if (trace) {
       const motions = ankles.map((ankle, side) => ankleMotion(ankle, anklesWere[side], anklesBefore[side], seconds));
@@ -894,9 +938,46 @@ function rhythmOf(steps: Step[]): string {
   return `${kept} (leaving within ${IN_STEP} of their window's start${off}); ${over} landed out of reach${landed}`;
 }
 
-/** What a walk has that a person's has none of, by name: the hops and a foot dance's steps. */
-function countsOf(run: GaitRun): Record<string, number> {
-  return { hops: run.hops.length, 'short steps': run.shortSteps };
+/** A stride that left nearly with the other foot's, the legs swinging together: its foot, the frame it left and
+ *  where in the other foot's stride round it (0 as the other left, 1 as it left again; a person's 0.5). */
+interface Gallop {
+  foot: number;
+  left: number;
+  share: number;
+}
+
+/** The strides that left galloping, each against the other foot's stride round it (`GALLOP_SHARE`); a stop's
+ *  closing step, and a stride round which the body stopped, left out. (Counted as hops, both feet leaving within a
+ *  few frames, the set-off's gallop went unseen: its second foot left 6 frames after the first, again and again.) */
+function gallopsOf(steps: Step[], seconds: number): Gallop[] {
+  const strides = steps.filter((step) => !step.how.includes('closing')).sort((a, b) => a.left - b.left);
+  const longest = STRIDE_MOST / seconds;
+  const found: Gallop[] = [];
+  for (let k = 1; k + 1 < strides.length; k++) {
+    const before = strides[k - 1];
+    const now = strides[k];
+    const after = strides[k + 1];
+    const alternate = before.foot !== now.foot && after.foot === before.foot;
+    const stride = after.left - before.left;
+    if (!alternate || stride > longest || stride <= 0) continue;
+    const share = (now.left - before.left) / stride;
+    if (share < GALLOP_SHARE || share > 1 - GALLOP_SHARE) found.push({ foot: now.foot, left: now.left, share });
+  }
+  return found;
+}
+
+/** The legs' alternation: how many strides left half a stride after the other foot's, and the gallops. */
+function alternationOf(steps: Step[], seconds: number): string {
+  const gallops = gallopsOf(steps, seconds);
+  const where = gallops.map((gallop) => `${SIDES[gallop.foot]} ${gallop.left} at ${gallop.share.toFixed(2)}`);
+  const galloping = gallops.length ? `: ${where.join(', ')}` : '';
+  return `galloping, a foot leaving within ${GALLOP_SHARE} of a stride of the other's (a person's half a stride`
+    + ` after it): ${gallops.length}${galloping}`;
+}
+
+/** What a walk has that a person's has none of, by name: the strides galloping, the hops, a foot dance's steps. */
+function countsOf(run: GaitRun, seconds: number): Record<string, number> {
+  return { gallops: gallopsOf(run.steps, seconds).length, hops: run.hops.length, 'short steps': run.shortSteps };
 }
 
 /** Adds `counts` into `total`, name by name. */
@@ -924,9 +1005,11 @@ function meanHeight(run: GaitRun, support: keyof GaitRun['heights']): number | n
 }
 
 /** What a person wouldn't do in this walk. */
-function unlikeAPerson(run: GaitRun, speed: number): string[] {
+function unlikeAPerson(run: GaitRun, speed: number, seconds: number): string[] {
   const found: string[] = [];
   if (run.hops.length) found.push(`${run.hops.length} hops: both feet leaving or landing together`);
+  const gallops = gallopsOf(run.steps, seconds).length;
+  if (gallops) found.push(`${gallops} strides galloping: a foot leaving nearly with the other, the legs together`);
   if (speed < WALK_MOST && run.bothUp > 0.05 * run.moving) {
     found.push(`both feet in the air ${share(run.bothUp, run.moving)} of the time at a walk's speed`);
   }
@@ -938,6 +1021,11 @@ function unlikeAPerson(run: GaitRun, speed: number): string[] {
     found.push('the hips no higher in the air than on one foot: a run hung from a string, not pushed off the ground');
   }
   if (run.shortSteps) found.push(`${run.shortSteps} steps under ${cm(SHORT_STEP)} cm: a foot dance`);
+  const wide = run.steps.filter((step) => (step.width ?? 0) > WIDE_STEP);
+  if (wide.length) {
+    const where = wide.map((step) => `${SIDES[step.foot]} ${step.landed} ${cm(step.width!)} cm`).join(', ');
+    found.push(`${wide.length} steps over ${cm(WIDE_STEP)} cm wide (${where}): the legs apart`);
+  }
   if (run.longestDrag >= DRAG_RUN) {
     found.push(`a planted foot dragged for up to ${run.longestDrag} frames: the leg short of it, even on its toes`);
   }
@@ -952,6 +1040,17 @@ function unlikeAPerson(run: GaitRun, speed: number): string[] {
   const hung = run.falls.filter((fall) => fall.unlike === 'held').length;
   if (hung) found.push(`hung in the air on ${hung} frames, not falling as a body does`);
   return found;
+}
+
+/** The feet's width as they land: how far across from the other foot, the median and the widest. */
+function widthsOf(steps: Step[]): string {
+  const measured = steps.filter((step) => step.width !== undefined);
+  if (!measured.length) return "the steps' width, footprint to footprint: none measured";
+  const widest = measured.reduce((most, step) => (step.width! > most.width! ? step : most));
+  const middle = median(measured.map((step) => step.width!));
+  const at = `${SIDES[widest.foot]} ${widest.landed}`;
+  return `the steps' width, footprint to footprint across the way: ${cm(middle)} cm (the median), the widest`
+    + ` ${cm(widest.width!)} (${at})`;
 }
 
 function median(values: number[]): number {
@@ -974,6 +1073,7 @@ function describeRun(scenario: GaitScenario, run: GaitRun, seconds: number, list
   const cadence = time ? steps / time : 0;
   const stepLength = steps ? run.covered / steps : 0;
   lines.push(`  ${cadence.toFixed(2)} steps a second, ${cm(stepLength)} cm of ground a step; ${steps} steps`);
+  lines.push(`  ${widthsOf(run.steps)}`);
   const flight = meanHeight(run, 'flight');
   const single = meanHeight(run, 'single');
   const double = meanHeight(run, 'double');
@@ -992,19 +1092,21 @@ function describeRun(scenario: GaitScenario, run: GaitRun, seconds: number, list
     lines.push(`  held up by something in its way ${run.heldUp} frames (${run.heldUpAt}): not a walk to judge`);
   }
   lines.push(`  ${rhythmOf(run.steps)}`);
+  lines.push(`  ${alternationOf(run.steps, seconds)}`);
   lines.push(`  ${balanceOf(run)}`);
   lines.push(`  ${rangesOf(run)}`);
   const against = run.swings.map((swing) => correlation(swing.hand, swing.ankle).toFixed(2));
   const hands = `L ${against[0]}, R ${against[1]}`;
   lines.push(`  each hand fore and aft against its own side's knee: ${hands} (a person's: -1)`);
   lines.push(`    ${swingsByStretch(run)}`);
-  const unlike = unlikeAPerson(run, speed);
+  const unlike = unlikeAPerson(run, speed, seconds);
   lines.push(unlike.length ? `  unlike a person: ${unlike.join('; ')}` : '  as a person walks');
   if (listSteps) {
     for (const step of run.steps) {
       const swing = `${step.landed - step.left} frames in the air (the plan ${step.planned.toFixed(0)})`;
       const what = `${SIDES[step.foot]} left at ${step.left} (${step.how}), landed at ${step.landed}`;
-      lines.push(`    step ${what}: ${swing}, ${cm(step.length)} cm`);
+      const width = step.width === undefined ? '' : `, ${cm(step.width)} cm wide`;
+      lines.push(`    step ${what}: ${swing}, ${cm(step.length)} cm${width}`);
     }
     lines.push(...run.hops.map((hop) => `    ${hop}`));
     lines.push(...run.jerkList.map((jerk) => `    jerk ${jerk}`));
@@ -1037,12 +1139,13 @@ export async function gait(lab: Lab, options: GaitOptions): Promise<GaitReport> 
   for (const scenario of SCENARIOS.filter((candidate) => asked.includes(candidate.name))) {
     const run = await runScenario(lab, scenario, null, traceSpanOf(options), options.offset ?? 0);
     report.lines.push(...describeRun(scenario, run, seconds, Boolean(options.frames)));
-    addCounts(report.counts, countsOf(run));
+    addCounts(report.counts, countsOf(run, seconds));
     if (run.heldUp) {
       report.problems.push(`gait: ${scenario.name} was held up by something in its way (${run.heldUpAt})`);
     }
     if (options.films === false) continue;
-    const film = filmFor(run.hopFrames);
+    const gallops = gallopsOf(run.steps, seconds).map((gallop) => gallop.left);
+    const film = filmFor([...run.hopFrames, ...gallops].sort((a, b) => a - b));
     await runScenario(lab, scenario, film, null, options.offset ?? 0);
     const moment = filmMoment(scenario, film);
     if (moment) report.moments.push(moment);

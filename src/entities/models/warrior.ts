@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, mail as mailMaps, cloth as clothMaps, steel as steelMaps, fur as furMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
 import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
-import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet } from './rig';
+import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet, runShareOf } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
@@ -33,6 +33,23 @@ const GRIP = Math.PI / 2 + 0.7;
 const ALONG_ARM = Math.PI - GRIP;
 /** how far a weapon arm swings at a run (rad), and the share of it the wrist turns back so the blade stays put */
 const ARM_SWING = 0.4, WRIST = 0.8;
+/** at a run (rig.ts `walkCycle`'s `pump`): how far a weapon arm pumps as a runner's free arm does, and a shield arm
+ *  (the shield's weight and breadth: it is carried bent at the side); how much further each is bent at the elbow
+ *  (rad), and the share of `WRIST` a weapon's wrist holds it against the forearm's swing with. A blade held thumb up
+ *  tilts only as far as the wrist bends sideways: pumped as far as a free arm, low at the back of the swing, it
+ *  pointed ahead at the hip and the arm's solve took the elbow forward to keep the wrist within its range, so the
+ *  weapon hand is held higher, bent past a right angle, and pumps less */
+const RUN_PUMP = 0.5, RUN_SHIELD_PUMP = 0.25, RUN_BEND = 0.85, RUN_SHIELD_BEND = 0.45, RUN_WRIST = 0.5;
+/** and how much of the forearm's swing a weapon arm's elbow takes up at a run, the forearm kept near level so its
+ *  blade stays up: swung with the arm, the blade pointed 45 degrees ahead at the back of the swing, and cocked back at
+ *  the wrist instead, past the wrist's sideways range, the arm's solve held the arm forward */
+const RUN_LEVEL = 0.7;
+/** a two-hander carried at a run at high port, in the chest's own frame (rig units): the right hand's grip before the
+ *  right of the chest, the weapon up past the right shoulder, tipped back and out, the right elbow down and out, the
+ *  left hand on the lower grip below; the arms carried by the trunk's turn, not pumping. Held upright before the face
+ *  in the right hand, as at a walk, the left let go of its grip out of reach and hung at the side */
+const RUN_TWO_AT = new THREE.Vector3(-0.07, 0.14, 0.3), RUN_TWO_DIR = new THREE.Vector3(-0.15, 1, -0.28);
+const RUN_TWO_POLE = new THREE.Vector3(-1, -1, -0.2);
 /** arm length (upper + fore + hand), before the model's 1.1 scale */
 const ARM = 0.63;
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3();
@@ -733,6 +750,24 @@ export function buildWarrior(): Model {
     }
   }
 
+  /** The weapon arm placed by a point and a way in the chest's own frame, by `k` from the pose's own: the grip at `at`,
+   *  the weapon along `dir`, the arm reaching by IK with its elbow towards `pole` (third person's `holdInView`). */
+  function holdInChest(arm: typeof ARM_R, at: THREE.Vector3, dir: THREE.Vector3, pole: THREE.Vector3, k: number): void {
+    const { shoulder, elbow, hand, grip: g } = arm;
+    root.updateMatrixWorld(true);
+    j.chest.localToWorld(_gw.copy(at)).lerp(g.getWorldPosition(_cur), 1 - k);
+    _dw.copy(dir).transformDirection(j.chest.matrixWorld).lerp(_cur.set(0, 1, 0).transformDirection(g.matrixWorld), 1 - k).normalize();
+    for (let i = 0; i < 3; i++) {
+      hand.getWorldPosition(_hp).add(_gw).sub(g.getWorldPosition(_cur));
+      reachArm(shoulder, elbow, j.P.upperL, j.P.foreL, j.chest.worldToLocal(_hp), pole);
+      shoulder.updateMatrixWorld(true);
+      _cur.set(0, 1, 0).transformDirection(g.matrixWorld);
+      _hq.setFromUnitVectors(_cur, _dw).multiply(hand.getWorldQuaternion(_pq));
+      hand.quaternion.copy(elbow.getWorldQuaternion(_pq).invert().multiply(_hq));
+      hand.updateMatrixWorld(true);
+    }
+  }
+
   /** a one-handed move's place in the view between two poses (`u` 0..1), into the right hand's target and
    *  the left's, its mirror image */
   function inView(p: { up: THREE.Vector3[]; down: THREE.Vector3[] }, u: number, right: boolean, left: boolean): void {
@@ -763,8 +798,19 @@ export function buildWarrior(): Model {
     const cy0 = j.chest.rotation.y, hy0 = j.hips.rotation.y, eL0 = j.elbowL.rotation.x, eR0 = j.elbowR.rotation.x;
     // the arms pump against the legs, the hands (and so the blades) held steady by the wrists: a weapon arm swings by 0.4 at a run, a shield arm less, a two-hander's hardly (the left hand is on its grip)
     const armR = fp ? 0.03 : two ? 0.12 : ARM_SWING, armL = fp ? 0.03 : two ? 0.12 : shield.visible ? 0.6 * ARM_SWING : ARM_SWING;
-    walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: armR, armL, bob: 0.08, dir, run: true });
-    if (!fp) { const sw = Math.sin(st.phase) * dir * move; j.handR.rotation.x += sw * armR * WRIST; if (shield.visible || offHeld) j.handL.rotation.x += -sw * armL * WRIST; }
+    // (and at a run a weapon arm pumps as a runner's arm does, a little less than a free one, the shield arm hardly)
+    const pump = fp || two ? 0 : held ? RUN_PUMP : 1, pumpL = fp || two ? 0 : shield.visible ? RUN_SHIELD_PUMP : offHeld ? RUN_PUMP : 1;
+    // (a hand round a grip or a shield's is held steady by its wrist; a free one flops)
+    const looseR = held ? 0 : 1, looseL = shield.visible || offHeld ? 0 : 1;
+    const swung = walkCycle(j, st.phase, move, { stride: 0.55, knee: 1.0, arm: armR, armL, bob: 0.08, dir, run: true, pump, pumpL, looseR, looseL });
+    const runK = fp ? 0 : runShareOf(move);
+    // (the wrists against each forearm's swing, the shoulder's and the elbow's together)
+    const wrist = WRIST * (1 - (1 - RUN_WRIST) * runK), levelR = held && !two ? RUN_LEVEL * runK : 0, levelL = offHeld ? RUN_LEVEL * runK : 0;
+    if (!fp) {
+      j.elbowR.rotation.x += -swung.forearmR * levelR; j.elbowL.rotation.x += -swung.forearmL * levelL;
+      j.handR.rotation.x += -swung.forearmR * (1 - levelR) * wrist;
+      if (shield.visible || offHeld) j.handL.rotation.x += -swung.forearmL * (1 - levelL) * wrist;
+    }
     if (fp) {
       const k = 0.2;
       j.chest.rotation.y = cy0 + (j.chest.rotation.y - cy0) * k; j.hips.rotation.y = hy0 + (j.hips.rotation.y - hy0) * k;
@@ -772,11 +818,12 @@ export function buildWarrior(): Model {
     }
     // (the body leans into its stride, models/ik.ts: the hands are held where this pose puts them through it, `holdArms`, so the weapon and shield keep their angle)
     if (two) { j.shoulderR.rotation.x += -0.5; j.shoulderR.rotation.z += 0.2; j.elbowR.rotation.x += -1.0; }
-    else { j.shoulderR.rotation.x += -0.3; j.shoulderR.rotation.z += -0.1; j.elbowR.rotation.x += -0.8; }
-    // shield carried low at the side, the arm held a little out so it clears the leg; a second
-    // weapon held like the first, mirrored
-    if (shield.visible) { j.shoulderL.rotation.z += 0.2; j.elbowL.rotation.x += -0.35; }
-    else if (offHeld) { j.shoulderL.rotation.x += -0.3; j.shoulderL.rotation.z += 0.1; j.elbowL.rotation.x += -0.8; }
+    // (at a run the arm's own pump bends it: held forward and bent too, it stood out before the body unmoving)
+    else { j.shoulderR.rotation.x += -0.3 * (1 - runK); j.shoulderR.rotation.z += -0.1; j.elbowR.rotation.x += -0.8 * (1 - runK) - RUN_BEND * runK; }
+    // shield carried low at the side, the arm held a little out so it clears the leg, and bent further at a run; a
+    // second weapon held like the first, mirrored
+    if (shield.visible) { j.shoulderL.rotation.z += 0.2; j.elbowL.rotation.x += -0.35 - RUN_SHIELD_BEND * runK; }
+    else if (offHeld) { j.shoulderL.rotation.x += -0.3 * (1 - runK); j.shoulderL.rotation.z += 0.1; j.elbowL.rotation.x += -0.8 * (1 - runK) - RUN_BEND * runK; }
     // through the eyes the weapons are held higher and further out, or the hands sit below the frame
     if (fp) {
       // (a two-hander, held upright in both hands, would split the view: it rests low on the right, blade out)
@@ -794,7 +841,7 @@ export function buildWarrior(): Model {
       else if (offHeld) { j.shoulderL.rotation.x += (REST_ARM[0] - sway) * ia; j.shoulderL.rotation.z += -0.08 * ia; j.elbowL.rotation.x += REST_ARM[1] * ia; j.handL.rotation.x += REST_ARM[2] * ia; }
     }
     // (not through the eyes: the camera stays level, so a lean only tips the weapons into the middle of the view)
-    j.spine.rotation.x += move * (fp ? 0 : IK ? 0.05 : 0.14) * dir;
+    j.spine.rotation.x += move * (fp ? 0 : IK ? 0.05 : 0.14) * dir; if (!fp && IK) j.neck.rotation.x -= move * 0.05 * dir;
     j.body.rotation.z += (st.lean || 0) * 0.12;
     j.kneeL.rotation.x += 0.1 * (1 - move); j.kneeR.rotation.x += 0.1 * (1 - move);
 
@@ -1160,6 +1207,8 @@ export function buildWarrior(): Model {
       }
     }
     if (st.hit > 0) { j.spine.rotation.x += -0.2 * st.hit; j.neck.rotation.x += -0.15 * st.hit; }
+    // a two-hander at a run, carried at high port
+    if (!fp && two && !a && runK > 0 && st.dead < 0) holdInChest(ARM_R, RUN_TWO_AT, RUN_TWO_DIR, RUN_TWO_POLE, runK);
     if (st.dead < 0) fade.apply(dt); else fade.reset();
     st.look?.();
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
