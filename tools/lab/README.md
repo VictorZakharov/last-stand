@@ -169,13 +169,13 @@ terminal's task stops it all.
   frames longer (`gait --offset`), so every later turn and stop comes at another point of a stride. Run once from one
   start, a frame's change anywhere sent every later stride elsewhere, and a change's gallops came out 2 or 3 either
   way over a check's gait scenarios by chance; stood a few frames first instead, nothing changed (the set-off is the
-  same from any moment of the idle). What a command counts (`countsOf`: the gait's hops and short steps) is added up
-  over a hero's jobs, each side's, in its line of the log and at the head of its report with each scenario's (`hops 2
-  (048deb5 9)`: this tree's, then the other's), so a check's verdict needs no script of its own to read it. It runs in
-  the command line's own process, not the server's. One command at a time, both sides every time, the mage's cape
-  stepped throughout and each gait scenario run again for its film, the same check took 31 to 35 minutes a round; the
-  harness is run hundreds of times, so keep every check that runs often to minutes: profile it (`--profile`), cut what
-  its measures don't read, and run side by side what doesn't depend on each other.
+  same from any moment of the idle). What a command counts (`countsOf`: the gait's gallops, hops and short steps) is
+  added up over a hero's jobs, each side's, in its line of the log and at the head of its report with each scenario's
+  (`hops 2 (048deb5 9)`: this tree's, then the other's), so a check's verdict needs no script of its own to read it.
+  It runs in the command line's own process, not the server's. One command at a time, both sides every time, the
+  mage's cape stepped throughout and each gait scenario run again for its film, the same check took 31 to 35 minutes a
+  round; the harness is run hundreds of times, so keep every check that runs often to minutes: profile it
+  (`--profile`), cut what its measures don't read, and run side by side what doesn't depend on each other.
 
 Options every command run on a page takes:
 
