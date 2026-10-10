@@ -23,7 +23,7 @@ import { setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { initFloaters, updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
-import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, selectedWave, lobbyViewShift, renderMenu, markNew } from './ui/menus';
+import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, selectedWave, lobbyViewShift, renderMenu, markNew } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
@@ -87,7 +87,11 @@ async function boot() {
   initSession({ startRun: guestStart, hostGone, changed: () => { renderCoop(); sendLobbyChoice(); } });
   initCoop();
   // losing the pointer mid-wave (Esc, switching windows) pauses, as mouse look can't carry on
-  onPointerLockLost(() => { if (G.mode === 'run' && !G.menuOpen) openPause(true); });
+  // (in the lobby the Esc that lets go of the mouse look brings the panels back instead)
+  onPointerLockLost(() => {
+    if (G.mode === 'run' && !G.menuOpen) openPause(true);
+    else if (G.mode === 'menu') toggleMenuStowed(false);
+  });
   initLoadoutEditor(() => buildHotbar(G.player));
   initPwa();
   $('#decision .bank').onclick = () => chooseBank();
@@ -282,18 +286,21 @@ function profileChanged() {
 const compileContext = () => `(${G.mode}${G.run ? ` wave ${G.run.wave}` : ''}, t=${G.time.toFixed(1)}s, ${G.enemies.length} foes)`;
 
 // --- views ------------------------------------------------------------------------
-/** the run's view, cycled with V (the lobby, and touch play, stay top-down) */
-let runView: ViewMode = 'top';
+/** the view, cycled with V in a run and in the lobby alike (touch play stays top-down) */
+let view: ViewMode = 'top';
 const crosshair = document.getElementById('crosshair')!, lookHint = document.getElementById('look-hint')!;
 
 function syncView(): void {
-  const v = G.mode === 'run' && !input.touchMode ? runView : 'top';
+  const v = input.touchMode ? 'top' : view;
   setView(v);
   input.centerAim = v !== 'top';
   // mouse look holds the pointer through the run, the bank-or-continue choice included (B / C
-  // pick there), and lets go for the pause menu and the run's end
+  // pick there), and lets go for the pause menu and the run's end; in the lobby, while its panels
+  // are stowed (the pointer is free for them otherwise)
   const phase = G.run?.phase;
-  const look = v !== 'top' && !G.menuOpen && G.player.active && (phase === 'countdown' || phase === 'fighting' || phase === 'cleared');
+  const inRun = G.mode === 'run' && G.player.active && (phase === 'countdown' || phase === 'fighting' || phase === 'cleared');
+  const inLobby = G.mode === 'menu' && menuStowed() && !savesOpen();
+  const look = v !== 'top' && !G.menuOpen && (inRun || inLobby);
   wantPointerLock(look);
   crosshair.classList.toggle('hidden', v === 'top');
   lookHint.classList.toggle('hidden', !look || pointerLocked());
@@ -311,12 +318,19 @@ function handleGlobalKeys() {
     if (G.mode === 'run' && G.run && !G.player.inRun) return;
     openPause(!G.menuOpen);
   }
+  if (!G.menuOpen && wasPressed('v')) nextView();
   if (G.mode !== 'run') return;
-  if (!G.menuOpen && wasPressed('v')) runView = VIEWS[(VIEWS.indexOf(runView) + 1) % VIEWS.length];
   if (!G.menuOpen && G.run?.phase === 'cleared') {
     if (wasPressed('b')) chooseBank();
     if (wasPressed('c')) chooseContinue();
   }
+}
+
+/** The next view (V). In the lobby a close view stows the panels, so the mouse looks at once (the key press lets the
+ *  pointer be taken), and the top view brings them back. */
+function nextView() {
+  view = VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length];
+  if (G.mode === 'menu' && !input.touchMode) toggleMenuStowed(view !== 'top');
 }
 
 /** Who the camera follows: the local player, or once out of a co-op run, a partner still in it. */
@@ -367,7 +381,8 @@ function update(dt: number): void {
     perfLap('hud');
   }
   updateScoreboard(dt);
-  const vs = lobbyViewShift();
+  // (top-down only: a close view shifted off its middle would leave the crosshair off the aim)
+  const vs = view === 'top' || input.touchMode ? lobbyViewShift() : { x: 0, y: 0 };
   setViewShift(vs.x, vs.y);
   const focus = focusPlayer();
   updateCamera(dt, focus.pos, focus.model.height);
