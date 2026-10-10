@@ -104,7 +104,8 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   // the same for single meshes, which have no instance colour: the tint is in the material
   const archCanopy = seeThrough(new THREE.MeshStandardMaterial({ map: clusterTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x5e8048 }), 'foliage');
   const archCore = seeThrough(new THREE.MeshStandardMaterial({ color: 0x2c3c22, roughness: 0.95 }), 'foliage');
-  const fernMat = seeThrough(new THREE.MeshStandardMaterial({ map: fernTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), 'foliage');
+  // (low, beside the hero: a hole as narrow as a prop's, or the ferns round him went wherever he stood)
+  const fernMat = seeThrough(new THREE.MeshStandardMaterial({ map: fernTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), 'prop');
   const oneLeaf = leafTexture();
   const litterMat = new THREE.MeshStandardMaterial({ map: oneLeaf, alphaTest: 0.5, roughness: 0.9 });
   const ivyMat = new THREE.MeshStandardMaterial({ map: oneLeaf, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x3e6a2a });
