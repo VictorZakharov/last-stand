@@ -1,4 +1,4 @@
-// Procedural sound effects with WebAudio (no audio files).
+// Procedural sound effects with WebAudio (no audio files; the lobby's music is `music.ts`).
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
@@ -22,6 +22,9 @@ export function initAudio(): void {
 }
 
 export function setVolume(v: number): void { if (master) master.gain.value = v; }
+
+/** The shared context (null before boot or where WebAudio is missing), for the music (`core/music.ts`). */
+export const audioContext = (): AudioContext | null => ctx;
 
 function throttle(name: string, ms: number): boolean {
   const now = performance.now();
