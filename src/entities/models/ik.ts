@@ -754,7 +754,10 @@ export class LegIK {
     // (the foot the body is leaving goes: the one further behind along the way it sets off, as a person steps first
     // with the foot behind. By the nearer half cycle, turned round from a run the foot left behind stayed planted 12
     // frames as the body sped up away from it, and was left 75 cm behind the hips)
-    const first = this.footBehind();
+    // (and a foot already in the air, a standing step, is that first stride: set off from the other's, the cycle sent
+    // the planted foot up two frames after the step left, both in the air, a hop as he set off round a circle)
+    const stepping = this.feet.findIndex((foot) => foot.state === 'timed');
+    const first = stepping >= 0 ? stepping : this.footBehind();
     const half = first === null ? Math.round(phase / Math.PI) : this.nearestHalf(phase, first);
     const off = half * Math.PI - phase;
     // (the cycle read as not having moved for it: its rate would read the jump as a pace, or a backpedal)
