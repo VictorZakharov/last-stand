@@ -1255,11 +1255,12 @@ export class LegIK {
     const toCome = this.toNextWindow(g, where);
     const behind = f.state === 'plant' ? this.leftBehind(g, f) : '';
     const beforeWindow = !inWindow && toCome > EARLY && toCome < 0;
-    // (but only a leg dragged, short of its foot even on its toes or past a range: one the body is leaving behind
-    // waits for its window, which the cycle hurries round for it, `hurryForReach`; let go early, half the strides
-    // left out of turn as each foot's reach ran out)
+    // (but only a leg out of its reach or dragged, short of its foot even on its toes or past a range: one the body is
+    // only leaving behind waits for its window, which the cycle hurries round for it, `hurryForReach`; let go early
+    // for that too, half the strides left out of turn as each foot's reach ran out. Held till it was dragged, the
+    // drawn foot went with the leg for a frame before it left, 14 to 19 cm at a running reversal)
     const early = f.state === 'plant' && beforeWindow && other.state !== 'timed' && f.stance > STRIDE_AFTER
-      && f.dragged;
+      && (f.dragged || f.over);
     // (a foot only just down doesn't go again: a reversal can bring its window round at once; unless the body has left
     // it out of reach already, as the first step from standing lands behind a body on its way: held till it settled,
     // it stood on its toes 8 frames, the pelvis sinking 10 cm)
