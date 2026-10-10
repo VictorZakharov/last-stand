@@ -5,6 +5,7 @@ import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, s
 import { CAMERA, LOBBY } from './data/balance';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt, releaseInput } from './core/input';
 import { initAudio } from './core/audio';
+import { updateMusic } from './core/music';
 import { updateTimers } from './core/timers';
 import { particles } from './fx/particles';
 import { initLights, updateLights, clearLights } from './fx/lights';
@@ -416,6 +417,8 @@ function frame(timestamp: number): void {
   const rawDt = timer.getDelta();
   const dt = Math.min(rawDt, 1 / 20);
   if (revealed) { updateTouch(dt); handleGlobalKeys(); syncView(); }
+  // the lobby has music, a run none
+  updateMusic(dt, revealed && G.mode === 'menu');
   const t0 = performance.now();
   if (!G.paused && revealed) {
     sampleQuality(rawDt);
