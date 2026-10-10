@@ -23,7 +23,7 @@ import { setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { initFloaters, updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
-import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, selectedWave, lobbyViewShift, renderMenu, markNew } from './ui/menus';
+import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
@@ -140,6 +140,7 @@ function enterMenu() {
   syncAway();
   for (const p of G.players) p.reset();
   G.player.sandbox = true;   // lobby: walk around and try skills freely
+  practising = false;
   setZoom(CAMERA.lobbyZoom);
   spawnDummies();
   renderCoop();
@@ -178,6 +179,24 @@ function beginRun(wave: number) {
   G.arena.restoreProps();
   startRun(wave);
   renderSpoils();
+}
+
+/** Whether the lobby is practice this frame (`lobbyPractice`): its panels out of the way, the run's skill bar at the
+ *  bottom and real cooldowns and costs; with them shown, free casting (the lobby's note says so). */
+let practising = false;
+function syncPractice() {
+  const now = G.mode === 'menu' && lobbyPractice();
+  if (now === practising) return;
+  practising = now;
+  const p = G.player;
+  p.sandbox = !now;
+  if (now) buildHotbar(p);
+  // (back to free casting: nothing left cooling down, the energy full again)
+  if (!now) {
+    p.cooldowns.clear();
+    p.energy = p.stats.maxEnergy;
+  }
+  if (G.mode === 'menu') showHud(now, true);
 }
 
 function toMenu() {
@@ -375,10 +394,13 @@ function update(dt: number): void {
   G.player.showAim(dt);
   perfLap('enemies');
   updateSession(dt, G.player.reviving);
+  syncPractice();
   if (G.mode === 'run') {
     updateHud();
     updateCoopHud();
     perfLap('hud');
+  } else if (practising) {
+    updateHud();
   }
   updateScoreboard(dt);
   // (top-down only: a close view shifted off its middle would leave the crosshair off the aim)

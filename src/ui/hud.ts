@@ -31,7 +31,10 @@ export function initHud(): void {
   on('waveStarted', () => renderSpoils());
 }
 
-export function showHud(v: boolean): void { $('#hud').classList.toggle('hidden', !v); }
+export function showHud(v: boolean, lobby = false): void {
+  $('#hud').classList.toggle('hidden', !v);
+  $('#hud').classList.toggle('lobby', lobby);
+}
 
 /** Build the in-run hotbar from the player's current loadout. */
 export function buildHotbar(player: Player): void {
@@ -184,8 +187,9 @@ const pct = (k: number): string => `${(k * 100).toFixed(1)}%`;
 let minimapT = 0, partyT = 0;
 
 export function updateHud(): void {
-  const p = G.player, r = G.run;
-  if (!p || !r) return;
+  // (in the lobby's practice, the bottom bar alone: there is no run)
+  const p = G.player, r = G.mode === 'run' ? G.run : null;
+  if (!p) return;
   const s = p.stats;
   const lifeK = Math.max(0, p.life / s.maxLife);
   setStyle(h('.bar.life .fill'), 'width', pct(lifeK));
@@ -194,7 +198,7 @@ export function updateHud(): void {
   setText(h('.bar.life .txt'), `${Math.ceil(p.life)} / ${Math.round(s.maxLife)}`);
   setStyle(h('.bar.energy .fill'), 'width', pct(p.energy / s.maxEnergy));
   setText(h('.bar.energy .txt'), `${Math.floor(p.energy)} / ${Math.round(s.maxEnergy)}`);
-  setText(h('.gem-num'), String(r.wave));
+  if (r) setText(h('.gem-num'), String(r.wave));
 
   for (const slot of slots) {
     const sk = p.skillAt(slot.key);
@@ -214,6 +218,7 @@ export function updateHud(): void {
   const wardHtml = p.ward ? `<div class="buff" style="color:#c9b8ff">◈<span class="bt">${Math.ceil(p.ward.t)}</span></div>` : '';
   if (lastBuffs !== wardHtml) { buffs.innerHTML = wardHtml; lastBuffs = wardHtml; }
 
+  if (!r) return;
   // objectives
   const ol = h('.obj-line');
   const txt = r.phase === 'countdown' ? `Wave ${r.wave} begins in ${Math.ceil(r.timer)}…`
