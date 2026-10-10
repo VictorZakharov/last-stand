@@ -9,7 +9,7 @@ import { cobblestone, slabs, grunge, bark, pbrMaterialMaps, runeCircle } from '.
 import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
-import { seeThrough } from '../core/seeThrough';
+import { seeThrough, seeThroughFade } from '../core/seeThrough';
 import { floorRelief } from '../core/parallax';
 import { buildSky, boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
@@ -769,9 +769,11 @@ function beaconFlameMat(updaters: Updater[]): THREE.ShaderMaterial {
         float bands = n(vec2(vP.x * 6.0 + vP.z * 4.0, vP.y * 5.0 - uTime * 3.2)) * 0.6 + n(vec2(vP.z * 11.0 - vP.x * 3.0, vP.y * 9.0 - uTime * 5.0)) * 0.4;
         float fade = 1.0 - smoothstep(0.45, 1.05, vP.y + bands * 0.25);
         vec3 c = mix(vec3(0.1, 0.35, 1.0), vec3(0.75, 0.9, 1.0), rim * 0.6 + (1.0 - vP.y) * 0.3);
-        gl_FragColor = vec4(c * (0.25 + rim * 1.2) * (0.55 + bands * 0.9) * fade, 1.0);
+        gl_FragColor = vec4(c * (0.25 + rim * 1.2) * (0.55 + bands * 0.9) * fade * (1.0 - seeFade()), 1.0);
       }`,
   });
+  // (it fades as the beacon under it dissolves, not left burning in the air)
+  seeThroughFade(mat, 'prop');
   updaters.push((_dt, t) => { mat.uniforms.uTime.value = t; });
   return mat;
 }

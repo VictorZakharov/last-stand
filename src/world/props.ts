@@ -1,6 +1,7 @@
 // Building blocks shared by the biome arenas: the biome contract, UV-scaled boxes, instancing
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import * as THREE from 'three';
+import { seeThroughFade } from '../core/seeThrough';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rand, TAU } from '../util';
 import { particles } from '../fx/particles';
@@ -202,9 +203,11 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
         vec2 e = min(vUv, 1.0 - vUv);
         float rim = (exp(-abs(sd) * 30.0) * crackle + exp(-abs(sd) * 8.0) * 0.25) * smoothstep(0.0, 0.06, min(e.x, e.y));
         c = c * inside + mix(uB, uCore, 0.55) * rim;
-        gl_FragColor = vec4(c * uPower * 2.3, clamp(inside * 0.94 + rim, 0.0, 1.0));
+        gl_FragColor = vec4(c * uPower * 2.3, clamp(inside * 0.94 + rim, 0.0, 1.0) * (1.0 - seeFade()));
       }`,
   });
+  // (it hides what's behind the gate, the hero too: it fades as the gate round it dissolves)
+  seeThroughFade(mat, 'prop');
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W, 4.4), mat);
   mesh.position.set(0, 2.2, 0.1);
   parent.add(mesh);

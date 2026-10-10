@@ -534,8 +534,8 @@ export class Lab {
     camera.updateProjectionMatrix();
     camera.lookAt(centre);
     camera.updateMatrixWorld();
-    // (the props stand whole: their dissolve round the hero is the over-the-shoulder view's)
-    updateSeeThrough(centre.x, centre.y, centre.z, 0);
+    // (the props stand whole: their dissolve round the hero is the game views')
+    updateSeeThrough(centre.x, centre.y, centre.z, 0, 0);
     return { centreX: innerWidth / 2, centreY: innerHeight / 2, width: innerHeight * 0.6, height: innerHeight };
   }
 

@@ -390,9 +390,11 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
     fov = rig.fromFov + (fov - rig.fromFov) * e;
     near = 0.5 + (near - 0.5) * e;
   }
-  // props dissolve over the shoulder view, fading in and out with the glide to and from it
+  // props dissolve where they hide the character, from above and over the shoulder (through the eyes nothing is
+  // between), fading in and out with the glide to and from the eyes
   const e = ease(rig.blend);
-  updateSeeThrough(focus.x, height * 0.6, focus.z, (rig.view === 'third' ? e : 0) + (rig.fromView === 'third' ? 1 - e : 0));
+  const share = (view: ViewMode) => (rig.view === view ? e : 0) + (rig.fromView === view ? 1 - e : 0);
+  updateSeeThrough(focus.x, height * 0.6, focus.z, 1 - share('first'), share('top'));
   rig.kick = damp(rig.kick, rig.kickTo, rig.kickTo > rig.kick ? 14 : 6, dt); rig.kickTo = 0;
   if (rig.view !== 'top') fov += rig.kick * e;
   if (cam.fov !== fov || cam.near !== near) { cam.fov = fov; cam.near = near; cam.updateProjectionMatrix(); }
