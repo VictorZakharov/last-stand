@@ -315,16 +315,22 @@ interface Stance {
   worstFlags: string;
 }
 
-/** Why a planted sole slipped in a frame: the leg IK moved its spot (`spot`), the leg fell short of a spot that stood
- *  (`short`: out of reach or dragged), or neither (`other`: a turn, a roll, a level). */
-type SlipCause = 'spot' | 'short' | 'other';
-const SLIP_CAUSES: SlipCause[] = ['spot', 'short', 'other'];
+/** Why a planted sole slipped in a frame: the leg IK moved its spot, turning it on its ball (`turn`) or skidding it on
+ *  with the body (`skid`, a dragged leg held from galloping), the leg fell short of a spot that stood (`short`: out
+ *  of reach or dragged), or none of them (`other`: a roll, a level). */
+type SlipCause = 'turn' | 'skid' | 'short' | 'other';
+const SLIP_CAUSES: SlipCause[] = ['turn', 'skid', 'short', 'other'];
+/** a planted foot turning more than this a frame turned on its ball (rad) */
+const TURN_STILL = 0.003;
 
-/** The cause of a frame's `slip` (m), its spot having moved `spotMove` (m). */
-function causeOf(slip: number, spotMove: number, foot: LegFoot): SlipCause {
-  if (spotMove >= SPOT_SHARE * slip) return 'spot';
+/** The cause of a frame's `slip` (m), its spot having moved `spotMove` (m) and turned `turned` (rad). */
+function causeOf(slip: number, spotMove: number, turned: number, foot: LegFoot): SlipCause {
+  if (spotMove >= SPOT_SHARE * slip) return turned > TURN_STILL ? 'turn' : 'skid';
   return foot.over || foot.dragged ? 'short' : 'other';
 }
+
+/** How far a heading turned from `from` to `to` (rad, the shorter way). */
+const turnFrom = (from: number, to: number) => Math.abs(Math.atan2(Math.sin(to - from), Math.cos(to - from)));
 
 /** A planted foot's flags, for its worst slip. */
 function flagsOf(foot: LegFoot): string {
@@ -341,8 +347,9 @@ class FootWatch {
   private outRun = 0;
   /** the sole's points last frame, while planted */
   private lastSole: THREE.Vector3[] = [];
-  /** its spot last frame, while planted */
+  /** its spot and heading last frame, while planted */
   private lastSpot: THREE.Vector3 | null = null;
+  private lastYaw = 0;
 
   constructor(private readonly name: SideName) {}
 
@@ -370,6 +377,7 @@ class FootWatch {
     this.addSlip(frame, foot, this.slipOf(sole));
     this.lastSole = sole.map((point) => point.clone());
     this.lastSpot = foot.P.clone();
+    this.lastYaw = foot.yaw;
     return null;
   }
 
@@ -383,7 +391,8 @@ class FootWatch {
     const stance = this.stance!;
     const spotMove = this.lastSpot ? Math.hypot(foot.P.x - this.lastSpot.x, foot.P.z - this.lastSpot.z) : 0;
     stance.slide += slip;
-    stance.slideBy[causeOf(slip, spotMove, foot)] += slip;
+    const turned = this.lastSpot ? turnFrom(this.lastYaw, foot.yaw) : 0;
+    stance.slideBy[causeOf(slip, spotMove, turned, foot)] += slip;
     if (slip <= stance.worstSlip) return;
     stance.worstSlip = slip;
     stance.worstAt = frame;
@@ -393,7 +402,7 @@ class FootWatch {
   private begin(frame: number): void {
     this.stance = {
       foot: this.name, start: frame, frames: 0, outOfReach: 0, longestOut: 0, turns: 0, slide: 0,
-      slideBy: { spot: 0, short: 0, other: 0 }, worstSlip: 0, worstAt: frame, worstFlags: '',
+      slideBy: { turn: 0, skid: 0, short: 0, other: 0 }, worstSlip: 0, worstAt: frame, worstFlags: '',
     };
     this.lastTurn = 0;
     this.outRun = 0;
@@ -601,7 +610,9 @@ function describeStance(stance: Stance): string {
 
 /** A slide by its causes, in cm. */
 function slideCauses(by: Record<SlipCause, number>): string {
-  const names: Record<SlipCause, string> = { spot: 'its spot moved', short: 'short of it', other: 'else' };
+  const names: Record<SlipCause, string> = {
+    turn: 'turned on its ball', skid: 'skidded', short: 'short of its spot', other: 'else',
+  };
   return SLIP_CAUSES.map((cause) => `${names[cause]} ${cm(by[cause])}`).join(', ');
 }
 
@@ -619,7 +630,7 @@ function describeWalk(result: WalkResult, listed: boolean): string[] {
   const mostSlide = Math.max(0, ...stances.map((stance) => stance.slide));
   const slid = stances.filter((stance) => stance.slide >= FLAG_SLIDE);
   const slidBad = stances.filter((stance) => stance.slide >= FLAG_SLIDE_BAD);
-  const slideBy: Record<SlipCause, number> = { spot: 0, short: 0, other: 0 };
+  const slideBy: Record<SlipCause, number> = { turn: 0, skid: 0, short: 0, other: 0 };
   for (const stance of stances) {
     for (const cause of SLIP_CAUSES) slideBy[cause] += stance.slideBy[cause];
   }
