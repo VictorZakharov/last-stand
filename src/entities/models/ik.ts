@@ -108,7 +108,6 @@ const SPLIT = 0.25;
 /** and across, this far from its stance's spot (a share of the leg): a foot coming down as the keys were let go landed
  *  8 cm out from its spot, its landing drawn there too late to reach it, and stepped across once the body stood */
 const SPLIT_ACROSS = 0.12;
-const SKID = false;
 /** a stride the body stops under finishes in what its swing had left, but no quicker than this (s) */
 const STOPPED_LEAST = 0.08;
 /** with both feet in the air as the body brakes, the later lands at least this much after the other (s): a braking
@@ -1474,7 +1473,7 @@ export class LegIK {
     // (a leg dragged while the other has only just left is held from going with it, a gallop, and its foot skids on
     // with the body meanwhile, as a foot caught behind a sudden turn does: held where it was, the hip went up to 28
     // degrees past its extension for a third of a second)
-    if (this.moving && f.dragged && this.justLeft(g, f, other) && SKID) {
+    if (this.moving && f.dragged && this.justLeft(g, f, other)) {
       f.P.x += this.gv.x * g.dt;
       f.P.z += this.gv.z * g.dt;
     }
