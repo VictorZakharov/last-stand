@@ -255,6 +255,17 @@ export function showMenu(v: boolean): void {
   syncDiscard();
 }
 
+/** Whether the lobby's panels are stowed (faded out to walk round and practise). */
+export const menuStowed = (): boolean => $('#menu').classList.contains('stowed');
+
+/** Whether the lobby is practice, as a run is: its panels all out of the way, stowed or (laid out side by side)
+ *  each folded away. */
+export function lobbyPractice(): boolean {
+  if ($('#menu').classList.contains('hidden')) return false;
+  if (menuStowed()) return true;
+  return !onePanel.matches && FOLDS.every((f) => f.folded);
+}
+
 /** Fade the lobby panels out (to walk around and practice on the dummies) or back in. */
 export function toggleMenuStowed(stowed?: boolean): void {
   const menu = $('#menu');

@@ -5,6 +5,10 @@
 /* ---------- HUD ---------- */
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
 #hud button { pointer-events: auto; }
+/* the lobby's practice (its panels hidden): the run's skill bar alone, nothing of a run's */
+#hud.lobby :is(#target, #minimap-wrap, #banner, #wavebadge, #decision, #party, #down-note, #spectate, #btn-revive) {
+  display: none;
+}
 
 /* bottom HUD: [health] [abilities] [energy] in a single compact row */
 #bottombar { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 0;
