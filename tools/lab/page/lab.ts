@@ -102,12 +102,14 @@ export interface Pictured {
 /**
  * What a command or a probe may return to say what it found: its text, the problems that fail the command (a canary
  * the measure missed, a state that never came), and moments pictured, which the lab writes as a sheet
- * (`tools/lab/out/probes/<probe>/sheet.png`) and compares in an A/B. A probe may return plain text or JSON instead.
+ * (`tools/lab/out/probes/<probe>/sheet.png`) and compares in an A/B, and what it counted by name (a check adds a
+ * hero's up over its jobs). A probe may return plain text or JSON instead.
  */
 export interface Report {
   text: string;
   problems: string[];
   moments?: Pictured[];
+  counts?: Record<string, number>;
 }
 
 /** A close-up's camera: how far round from the hero's front (rad, positive to his left), and how high (m). */
