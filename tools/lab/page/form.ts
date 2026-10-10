@@ -231,11 +231,10 @@ function measureFrame(lab: Lab, legs: LegIK, toMan: number): FormFrame {
 
 // --- the run -------------------------------------------------------------------------------------------------------
 
-/** The hero set up at the start holding his weapons `style`'s way (as he is, with none), the capes' cloth stepped
- *  for a run that is pictured (`Fixture.capes`: the measured run never looks at it). */
-async function setUp(lab: Lab, style: WeaponStyle | null, capes: boolean): Promise<LegIK> {
+/** The hero set up at the start holding his weapons `style`'s way (as he is, with none). */
+async function setUp(lab: Lab, style: WeaponStyle | null): Promise<LegIK> {
   const nocked = Boolean(lab.player.cls.quiver);
-  await lab.setup({ at: START, facing: Math.PI / 2, nocked, gear: style ?? undefined, capes });
+  await lab.setup({ at: START, facing: Math.PI / 2, nocked, gear: style ?? undefined });
   const legs = lab.model.root.userData.legs as LegIK | undefined;
   if (!legs) throw new Error(`lab: form: the ${lab.player.cls.id} has no leg IK`);
   return legs;
@@ -271,7 +270,7 @@ interface PictureRow {
 /** Runs the hero across, measuring each frame; with `pictured`, also pictures those frames into its rows' tiles. */
 async function runAcross(lab: Lab, style: WeaponStyle | null, pictured?: Map<number, PictureRow[]>):
   Promise<{ measured: Measured; tiles: Map<string, Tile[]> }> {
-  const legs = await setUp(lab, style, pictured !== undefined);
+  const legs = await setUp(lab, style);
   const toMan = MAN_LEG / legLength(lab.model);
   await lab.step(SETTLE, () => ({ keys: KEYS }));
   const start = lab.player.pos.clone();

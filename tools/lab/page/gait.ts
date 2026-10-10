@@ -499,10 +499,7 @@ async function runScenario(
   lab: Lab, scenario: GaitScenario, film: Film | null, trace: TraceSpan | null = null, offset = 0,
 ): Promise<GaitRun> {
   const facing = scenario.aim ? 0 : Math.PI / 2;
-  // (a film looks at the hero, cape and all; the measure's run never does: `Fixture.capes`)
-  await lab.setup({
-    at: scenario.start, facing, nocked: Boolean(lab.player.cls.quiver), capes: film !== null, fresh: true,
-  });
+  await lab.setup({ at: scenario.start, facing, nocked: Boolean(lab.player.cls.quiver), fresh: true });
   const legs = lab.model.root.userData.legs as LegIK | undefined;
   if (!legs) throw new Error(`lab: gait: the ${lab.player.cls.id} has no leg IK`);
   const seconds = window.__labClock.frame / 1000;

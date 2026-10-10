@@ -2,9 +2,7 @@
 // towards where the animation would hold it, so it keeps its flared shape, but has weight and inertia: it
 // lags a swinging arm, sags below a raised forearm, swings on and settles. Position-based dynamics on the
 // main thread (a few hundred particles per sleeve, about a tenth of a millisecond a frame), collided with
-// the forearm so it never sinks into the arm it hangs from. The cape's solver is a rectangular sheet pinned
-// along two anchors, so it can't be this tube; this is the same idea (verlet, distance constraints, capsule
-// colliders) at the size of a sleeve.
+// the forearm so it never sinks into the arm it hangs from (verlet, distance constraints, capsule colliders).
 import * as THREE from 'three';
 
 /** `?cloth=0` holds every sleeve at its animated shape (the old rigid bell), for A/B comparison */

@@ -23,11 +23,6 @@ const SETUP_OPTIONS = {
   at: { kind: 'pair', usage: 'x,z', help: 'where the hero stands (12,22: off the dais, clear of props)' },
   facing: { kind: 'number', usage: 'rad', help: 'the way he faces (0 is +z)' },
   nocked: { kind: 'switch', help: 'a bow\'s hero with an arrow on the string (=false: none)' },
-  capes: {
-    kind: 'switch',
-    help: 'step the capes\' cloth (a sheet does by default; held otherwise, riding the neckline: the cloth was most '
-      + 'of a caped hero\'s time)',
-  },
   gear: {
     kind: 'choice',
     choices: WEAPON_STYLES,

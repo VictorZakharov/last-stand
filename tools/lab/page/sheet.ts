@@ -95,8 +95,7 @@ export async function sheet(lab: Lab, options: SheetOptions): Promise<Sheet> {
   lab.checkCapture(options.views, options.fixture.view ?? 'top', options.focus);
   const moments: Moment[] = [];
   let setup: Record<string, unknown> = {};
-  // (the cape's cloth stepped: a sheet is looked at, `Fixture.capes`)
-  const fixture = { nocked: !!lab.player.cls.quiver, capes: true, ...options.fixture };
+  const fixture = { nocked: !!lab.player.cls.quiver, ...options.fixture };
   for (const name of options.states) {
     const state = STATES[name];
     setup = await lab.setup(fixture);

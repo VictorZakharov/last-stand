@@ -37,7 +37,7 @@ export async function warmShaders(): Promise<void> {
   // compiles nothing), so picking a class or equipping anything in the lobby compiles nothing
   await new Promise((r) => setTimeout(r));
   const heroes = [...new Set(Object.values(CLASSES).map((c) => c.model))].map((m) => buildModel(m));
-  for (const m of heroes) { m.root.traverse((o) => { o.visible = true; }); extra.push(m.root, ...(m.worldObjects ?? [])); }
+  for (const m of heroes) { m.root.traverse((o) => { o.visible = true; }); extra.push(m.root); }
 
   await warmUp(G.renderer, G.scene, G.camera, sceneTarget(), extra);
   for (const m of heroes) m.dispose();

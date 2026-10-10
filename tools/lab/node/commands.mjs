@@ -15,7 +15,6 @@ function fixtureFrom(options) {
   if (options.at !== undefined) fixture.at = options.at;
   if (options.facing !== undefined) fixture.facing = options.facing;
   if (options.nocked !== undefined) fixture.nocked = options.nocked;
-  if (options.capes !== undefined) fixture.capes = options.capes;
   if (options.gear !== undefined) fixture.gear = options.gear;
   return fixture;
 }

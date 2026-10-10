@@ -198,7 +198,7 @@ export class Player {
     this.model = buildModel(this.cls.model);
     this.obj.add(this.model.root);
     applyShadowDetail(this.obj);
-    G.scene.add(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.model.worldObjects ?? []));
+    G.scene.add(this.obj, ...(this.staffLight ? [this.staffLight] : []));
 
     for (const def of this.cls.skills) {
       const impl = SKILL_IMPLS[def.impl];
@@ -213,7 +213,7 @@ export class Player {
   dispose(): void {
     this.stopChannel();
     this.ward?.onEnd?.();
-    G.scene.remove(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.model.worldObjects ?? []));
+    G.scene.remove(this.obj, ...(this.staffLight ? [this.staffLight] : []));
     this.obj.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as THREE.Material).dispose(); } });   // (skinned meshes own a copy of their material)
     this.model.dispose();
     this.staffLight?.dispose();
@@ -265,7 +265,7 @@ export class Player {
     this.life = this.stats.maxLife * prevLifePct;
   }
 
-  /** Stand at a spot facing a direction, as if always there (the cape settles in place). */
+  /** Stand at a spot facing a direction, as if always there. */
   place(pos: THREE.Vector3, facing: number): void {
     this.pos.set(pos.x, 0, pos.z);
     // (standing: a hero placed while walking glided on from the spot, a third of a metre)
@@ -305,10 +305,9 @@ export class Player {
     this.model.reset?.();
   }
 
-  /** Show or hide the character, with what it keeps in the world (its cape). */
+  /** Show or hide the character. */
   show(v: boolean): void {
     this.obj.visible = v;
-    for (const o of this.model.worldObjects ?? []) o.visible = v;
   }
 
   /** In the fight: standing, in the arena and still in the run (what enemies go for). */
@@ -825,14 +824,12 @@ export class Player {
       t, dt, phase: this.phase, move, moveDir: dir, lean, action,
       hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,
       charge: this.channel ? 1 : this.casting ? this.casting.t / this.casting.dur : 0,
-      velocity: this.vel, nocked: this.nocked,
+      nocked: this.nocked,
       look: () => this.lookAtFoe(dt, dead),
     });
     // (dev builds: a joint taken past a body's range is reported; through the eyes the arms keep hand-placed poses)
     if (import.meta.env.DEV && this.local && dead < 0 && !this.eyes && this.model.joints) watchBody(this.model.joints, action?.name ?? (move > 0.05 ? 'moving' : 'standing'));
     this.model.kit.u.uHit.value = this.hitT * 0.5;
-    // the model shows its cape as it animates: a hidden character keeps it hidden
-    if (!this.obj.visible) for (const o of this.model.worldObjects ?? []) o.visible = false;
     if (this.staffLight) {
       // a little above the cast point: right at it, the metal round a staff's crystal (a few cm off,
       // with the light's inverse-square falloff) burns out white-green
