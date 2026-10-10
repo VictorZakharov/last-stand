@@ -1194,7 +1194,8 @@ export class LegIK {
     if (this.moving && !own) {
       // (a foot re-stepping does not take the other one's swing with it, or both leave the ground at once and the body
       // drops between them; at a walk the other waits)
-      if (f.state !== 'timed') this.walkFoot(g, f, i);
+      if (f.state !== 'timed' && this.restingAt(_rest)) this.walkFoot(g, f, i);
+      else if (f.state !== 'timed') this.lockedFoot(g, f, i);
     } else if (f.state === 'swing') {
       this.finishStoppedStride(g, f, i);
     }
@@ -1302,6 +1303,44 @@ export class LegIK {
     } else if (f.state === 'swing') {
       this.carryOnStride(g, f, i);
     }
+  }
+
+  /**
+   * Moving, and not being brought to a stop: the foot's state is the walk cycle's alone. It lifts as its window opens,
+   * its swing is as far on as the phase is through the window, and it comes down as the window closes, each foot's
+   * window half a cycle from the other's (`legU`). A biped's legs alternate because each has to catch the body's fall
+   * in turn: a foot never chooses to go early, late or again, so the two never swing together. (Left to choose, early
+   * for its reach, late past its window, held for the other, dragged, a re-step, every exception let a foot drift
+   * off its half cycle, and the legs galloped: 302 in a check's 135 runs on main, and still 46 with forty of them
+   * tuned.)
+   */
+  private lockedFoot(g: GaitFrame, f: Foot, i: number): void {
+    const u = legU(g.phase, i), inWindow = Math.abs(u - 0.5) < g.halfSwing;
+    const intoWindow = (u - (0.5 - g.halfSwing)) / (2 * g.halfSwing);
+    const where = this.dphase < 0 ? 1 - intoWindow : intoWindow;
+    f.window = where;
+    if (f.state === 'plant') {
+      // (but not the frame it came down: a reversal of the cycle can bring its window back at once)
+      if (!inWindow || f.stance < STRIDE_AFTER) return;
+      this.beginStride(g, f, where, false);
+      f.tw0 = Math.max(0, Math.min(0.9, where));
+      f.leftFor = 'its window';
+      return;
+    }
+    if (f.state !== 'swing') return;
+    if (f.t < REAIM_UNTIL && f.dir.dot(g.travel) < 0.3) {
+      this.reaimStride(g, f, i);
+      f.tw0 = Math.max(0, Math.min(0.9, where));
+    }
+    const through = inWindow ? (where - f.tw0) / Math.max(1e-3, 1 - f.tw0) : 1;
+    f.t = Math.min(1, Math.max(f.t, through));
+    if (f.t >= 1) {
+      this.land(f, this.landingYaw(g, f));
+      return;
+    }
+    f.dirYaw = angleDamp(f.dirYaw, Math.atan2(g.travel.x, g.travel.z), 10, g.dt);
+    f.dir.set(Math.sin(f.dirYaw), 0, Math.cos(f.dirYaw));
+    if (Number.isNaN(f.rel0)) f.rel0 = (f.pos.x - g.hip.x) * f.dir.x + (f.pos.z - g.hip.z) * f.dir.z;
   }
 
   /** Whether `other` left the ground too lately for planted foot `f` to go too (`HOP_GAP`, `GALLOP_GAP`). */
