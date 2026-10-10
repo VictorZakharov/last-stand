@@ -7,9 +7,9 @@
 /** how quickly the velocity eases towards the one asked for (1/s) */
 const EASE = 9;
 /** the most the feet can speed the body up by along the way it goes (m/s²: a sprinter's start is 8 to 10) */
-export const PUSH = 8;
+export const PUSH = 14;
 /** the most they can slow it, or turn it across the way it goes (m/s²: a planted, braking foot's) */
-export const BRAKE = 12;
+export const BRAKE = 20;
 /** the step the prediction moves on by (s: the game's own frame) */
 const PREDICT_STEP = 1 / 60;
 
