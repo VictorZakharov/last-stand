@@ -118,6 +118,10 @@ const FLAG_DIP = 0.015;
 const FLAG_OUT = 3;
 const FLAG_TURNS = 2;
 const FLAG_SLIDE = 0.03;
+/** a stance that slid this far is a bad one (m), counted apart */
+const FLAG_SLIDE_BAD = 0.1;
+/** a frame's slip at least this share of which its spot moved by was the IK's own doing */
+const SPOT_SHARE = 0.5;
 /** a planted foot's pitch changing less than this a frame isn't turning (rad) */
 const PITCH_STILL = 0.01;
 /** a sole's points within this much of its lowest over the ground are on it (m) */
@@ -303,6 +307,30 @@ interface Stance {
   turns: number;
   /** how far it slid, m: each frame's slip of its sole (`slipOf`) added up */
   slide: number;
+  /** that slide by its cause (m): the IK moving the foot's spot, the leg short of it, anything else */
+  slideBy: Record<SlipCause, number>;
+  /** its worst frame's slip (m), the frame, and the foot's flags then */
+  worstSlip: number;
+  worstAt: number;
+  worstFlags: string;
+}
+
+/** Why a planted sole slipped in a frame: the leg IK moved its spot (`spot`), the leg fell short of a spot that stood
+ *  (`short`: out of reach or dragged), or neither (`other`: a turn, a roll, a level). */
+type SlipCause = 'spot' | 'short' | 'other';
+const SLIP_CAUSES: SlipCause[] = ['spot', 'short', 'other'];
+
+/** The cause of a frame's `slip` (m), its spot having moved `spotMove` (m). */
+function causeOf(slip: number, spotMove: number, foot: LegFoot): SlipCause {
+  if (spotMove >= SPOT_SHARE * slip) return 'spot';
+  return foot.over || foot.dragged ? 'short' : 'other';
+}
+
+/** A planted foot's flags, for its worst slip. */
+function flagsOf(foot: LegFoot): string {
+  const flags = [foot.over && 'out of reach', foot.dragged && 'dragged', foot.pastRange && 'past a range',
+    foot.split && 'kept split', foot.own && 'held by the pose'];
+  return flags.filter(Boolean).join(', ') || 'none';
 }
 
 /** A foot followed frame by frame on a walk: its stance as it goes, and what the next frame compares with. */
@@ -313,6 +341,8 @@ class FootWatch {
   private outRun = 0;
   /** the sole's points last frame, while planted */
   private lastSole: THREE.Vector3[] = [];
+  /** its spot last frame, while planted */
+  private lastSpot: THREE.Vector3 | null = null;
 
   constructor(private readonly name: SideName) {}
 
@@ -322,6 +352,7 @@ class FootWatch {
       const ended = this.stance;
       this.stance = null;
       this.lastSole = [];
+      this.lastSpot = null;
       return ended;
     }
     if (!this.stance) this.begin(frame);
@@ -336,8 +367,9 @@ class FootWatch {
       this.lastTurn = Math.sign(change);
     }
     this.lastPitch = foot.pitch;
-    stance.slide += this.slipOf(sole);
+    this.addSlip(frame, foot, this.slipOf(sole));
     this.lastSole = sole.map((point) => point.clone());
+    this.lastSpot = foot.P.clone();
     return null;
   }
 
@@ -346,8 +378,23 @@ class FootWatch {
     return slipOf(sole, this.lastSole);
   }
 
+  /** Adds this frame's `slip` (m) to the stance, by its cause. */
+  private addSlip(frame: number, foot: LegFoot, slip: number): void {
+    const stance = this.stance!;
+    const spotMove = this.lastSpot ? Math.hypot(foot.P.x - this.lastSpot.x, foot.P.z - this.lastSpot.z) : 0;
+    stance.slide += slip;
+    stance.slideBy[causeOf(slip, spotMove, foot)] += slip;
+    if (slip <= stance.worstSlip) return;
+    stance.worstSlip = slip;
+    stance.worstAt = frame;
+    stance.worstFlags = flagsOf(foot);
+  }
+
   private begin(frame: number): void {
-    this.stance = { foot: this.name, start: frame, frames: 0, outOfReach: 0, longestOut: 0, turns: 0, slide: 0 };
+    this.stance = {
+      foot: this.name, start: frame, frames: 0, outOfReach: 0, longestOut: 0, turns: 0, slide: 0,
+      slideBy: { spot: 0, short: 0, other: 0 }, worstSlip: 0, worstAt: frame, worstFlags: '',
+    };
     this.lastTurn = 0;
     this.outRun = 0;
   }
@@ -547,7 +594,15 @@ function describeInGround(run: InGroundRun): string {
 
 function describeStance(stance: Stance): string {
   return `  frame ${stance.start} ${stance.foot}: planted ${stance.frames} frames, out of reach ${stance.outOfReach} `
-    + `(${stance.longestOut} running), ${stance.turns} turns, slid ${cm(stance.slide)} cm`;
+    + `(${stance.longestOut} running), ${stance.turns} turns, slid ${cm(stance.slide)} cm `
+    + `(${slideCauses(stance.slideBy)}; the most a frame ${cm(stance.worstSlip)} cm at ${stance.worstAt}, `
+    + `${stance.worstFlags})`;
+}
+
+/** A slide by its causes, in cm. */
+function slideCauses(by: Record<SlipCause, number>): string {
+  const names: Record<SlipCause, string> = { spot: 'its spot moved', short: 'short of it', other: 'else' };
+  return SLIP_CAUSES.map((cause) => `${names[cause]} ${cm(by[cause])}`).join(', ');
 }
 
 function stanceFlagged(stance: Stance): boolean {
@@ -562,11 +617,19 @@ function describeWalk(result: WalkResult, listed: boolean): string[] {
   const longestOut = Math.max(0, ...stances.map((stance) => stance.longestOut));
   const mostTurns = Math.max(0, ...stances.map((stance) => stance.turns));
   const mostSlide = Math.max(0, ...stances.map((stance) => stance.slide));
+  const slid = stances.filter((stance) => stance.slide >= FLAG_SLIDE);
+  const slidBad = stances.filter((stance) => stance.slide >= FLAG_SLIDE_BAD);
+  const slideBy: Record<SlipCause, number> = { spot: 0, short: 0, other: 0 };
+  for (const stance of stances) {
+    for (const cause of SLIP_CAUSES) slideBy[cause] += stance.slideBy[cause];
+  }
   const lines = [
     `${result.walk.name}: ${stances.length} stances`,
     `  out of reach ${FLAG_OUT} frames running or more in ${stuck.length} (most ${longestOut}); `
     + `turning back and forth ${FLAG_TURNS} times or more in ${wobbly.length} (most ${mostTurns}); `
     + `slid at most ${cm(mostSlide)} cm`,
+    `  slid ${cm(FLAG_SLIDE)} cm or more in ${slid.length} stances (${cm(FLAG_SLIDE_BAD)} cm or more in `
+    + `${slidBad.length}); all its slides: ${slideCauses(slideBy)}`,
     `  a sole in the ground on ${result.inGroundFrames} frames (most ${cm(result.inGroundMost)} cm); `
     + `fastest ankle ${cm(result.fastest)} cm a frame (${result.fastestAt})`,
     `  the same foot leaving twice running ${result.breaks} times; both feet off the ground on ${result.bothUp} frames`,
