@@ -18,6 +18,14 @@ import * as renderer from '../../../src/core/renderer';
 import { updateSeeThrough } from '../../../src/core/seeThrough';
 import { CLASSES } from '../../../src/data/classes';
 import type { Joints } from '../../../src/entities/models/rig';
+import type { ClassDef, Gear } from '../../../src/types';
+import { weaponStyle, type WeaponStyle } from '../../../src/loot/loadout';
+import { Player } from '../../../src/entities/player';
+import { clearProjectiles } from '../../../src/combat/projectiles';
+import { clearEffects } from '../../../src/fx/effects';
+import { clearLights } from '../../../src/fx/lights';
+import { particles } from '../../../src/fx/particles';
+import { buildHotbar } from '../../../src/ui/hud';
 
 /**
  * The clock the session installs before the page's own scripts (`tools/lab/node/browser.mjs`). While its mode is
@@ -86,6 +94,13 @@ export interface Fixture {
    *  cape riding its neckline and hung afresh for a picture (`cape.holdCapes`: stepped, the cloth was three quarters
    *  of the mage's time in a measure of his feet, which never look at it) */
   capes?: boolean;
+  /** the hero holding his weapons this way (his class's first weapons of it, his armour as it is), for a class with
+   *  more than one; as the boot rolled them by default */
+  gear?: WeaponStyle;
+  /** the hero built afresh first, as the lobby's class switch builds him, so the run comes out the same whatever ran
+   *  before it on the page (set up again over the same hero, a gait scenario's every line moved with the scenarios
+   *  run before it: his walk cycle, his leg IK's smoothed speed, turn and twist, his aim's hold all carried over) */
+  fresh?: boolean;
 }
 
 /** The pictures the lab can take: the game's own views, or a close-up from round the hero. */
@@ -317,19 +332,26 @@ export class Lab {
     this.foes.clear();
     this.keepUp = [() => holdTheWave(this.foes), keepHeroWhole];
     await this.until(() => !this.player.casting && !this.player.channel, 400, 'the hero is still busy with a cast');
+    if (fixture.fresh) this.buildHeroAgain();
     await this.useView(fixture.view ?? 'top');
     const [x, z] = fixture.at ?? SPOT;
     const facing = fixture.facing ?? 0;
     const spot = new THREE.Vector3(x, 0, z);
+    if (fixture.gear) this.hold(fixture.gear);
     this.player.place(spot, facing);
+    // (the camera too, for a hero built afresh: a commit from before it has none, and its camera glides)
+    if (fixture.fresh) renderer.settleCamera?.(spot);
     // (standing still: an older tree's `place` kept the velocity, and the hero glided on from his spot)
     this.player.vel.set(0, 0, 0);
     this.player.facing = facing;
     this.model.reset?.();
     this.aim = new THREE.Vector3(x + Math.sin(facing) * AIM_AHEAD, 0, z + Math.cos(facing) * AIM_AHEAD);
     // (the same moment and the same random numbers from here on, however long the run took to start: the clock is
-    // only ever moved forward, so nothing the game stamped with it is left in the future)
-    G.time = Math.max(SETUP_TIME, Math.ceil(G.time / SETUP_TIME) * SETUP_TIME);
+    // only ever moved forward, so nothing the game stamped with it is left in the future; but a hero built afresh
+    // has stamped nothing, and starts at the same moment exactly: at the next multiple, the idle's sway came out a
+    // fraction of a millimetre elsewhere, and a run's every number in its last decimal)
+    const later = Math.max(SETUP_TIME, Math.ceil(G.time / SETUP_TIME) * SETUP_TIME);
+    G.time = fixture.fresh ? SETUP_TIME : later;
     window.__labSeed(SETUP_SEED);
     // (standing a moment: what was still moving as the run started, the camera gliding in and the hero settling on
     // his spot, comes to rest, so it reaches the measure the same however many frames the start took)
@@ -344,6 +366,37 @@ export class Lab {
       nocked: this.player.nocked,
       time: Number(G.time.toFixed(2)),
     };
+  }
+
+  /**
+   * The hero built again in the old one's place, as the lobby's class switch builds him (`swapHero` in main.ts): the
+   * old one taken out of the scene, his skills' visuals with him, and a new one of his class in his gear as the
+   * profile has it.
+   */
+  private buildHeroAgain(): void {
+    const old = G.player;
+    const at = old.pos.clone();
+    const facing = old.facing;
+    old.dispose();
+    clearProjectiles();
+    clearEffects();
+    clearLights();
+    particles.clear();
+    const hero = new Player(old.cls.id, G.profile.equipped);
+    hero.slot = old.slot;
+    hero.spawn.copy(old.spawn);
+    G.players[G.players.indexOf(old)] = hero;
+    G.player = hero;
+    hero.sandbox = false;
+    hero.place(at, facing);
+    buildHotbar(hero);
+  }
+
+  /** The hero holding his weapons `style`'s way, as equipping them from the stash would show it. */
+  private hold(style: WeaponStyle): void {
+    const gear = gearFor(this.player.cls, this.player.gear, style);
+    this.player.gear = gear;
+    this.model.setGear?.(gear);
   }
 
   private async enterRun(): Promise<void> {
@@ -562,6 +615,27 @@ function withinWindow(area: Clip, margin = 0): Clip {
   const bottom = Math.min(innerHeight, Math.ceil(area.y + area.height + margin));
   if (right <= x || bottom <= y) throw new Error('lab: screen: the area is off the window');
   return { x, y, width: right - x, height: bottom - y };
+}
+
+/**
+ * The gear of a hero of `cls` holding his weapons `style`'s way, his armour as `worn` has it: the class's first
+ * one-hander (or two-hander), with a shield or a second one-hander as the style says. Throws for a style the class
+ * can't hold.
+ */
+export function gearFor(cls: ClassDef, worn: Gear, style: WeaponStyle): Gear {
+  const twoHanders = cls.twoHanded ?? [];
+  const oneHander = cls.bases?.weapon?.find((base) => !twoHanders.includes(base)) ?? null;
+  const weapon = style === 'twoHanded' ? twoHanders[0] ?? null : oneHander;
+  const gear: Gear = {
+    ...worn,
+    weapon,
+    twoHanded: style === 'twoHanded',
+    shield: style === 'shield',
+    offWeapon: style === 'dual' ? oneHander : null,
+  };
+  const can = weapon !== null && (style !== 'dual' || cls.dualWield) && (style !== 'shield' || cls.bases?.offhand?.length);
+  if (!can || weaponStyle(cls, gear) !== style) throw new Error(`lab: --gear ${style}: the ${cls.id} can't hold that`);
+  return gear;
 }
 
 /**

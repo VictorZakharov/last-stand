@@ -1,6 +1,7 @@
 // The player character: input -> movement/skills, resources, damage, animation.
 import * as THREE from 'three';
 import { gaitRate, legLength, LookAt, type LegIK } from './models/ik';
+import { stepVelocity } from './movement';
 import { watchBody } from './models/anatomy';
 import { G } from '../state';
 import { CLASSES } from '../data/classes/index';
@@ -112,14 +113,18 @@ export class Player {
 
   readonly pos = new THREE.Vector3(0, 0, 3);
   readonly vel = new THREE.Vector3();
-  /** the velocity the input eases the body towards and how quickly (`damp`'s rate), told to the legs (`LegIK.intend`) */
+  /** the velocity the input steers the body towards (`stepVelocity`), told to the legs (`LegIK.intend`), and whether
+   *  it has been set yet */
   private readonly goal = new THREE.Vector3();
-  private goalRate = 0;
+  private steered = false;
   readonly aim = new THREE.Vector3();
   readonly radius = 0.45;
   facing = Math.PI;
   /** how much longer the body stays on its aim after an attack or cast (s), see AIM_HOLD */
   private aimHold = 0;
+  /** the facing follows the way the body goes (nothing aimed, cast or looked through the eyes): moving against it is
+   *  only ever the moment before it has turned round */
+  private facesWay = false;
   /** a drawn shot pressed for while busy (a tap during the last one's reload): it's drawn as soon as the hero is free, and
    *  forgotten when any other skill is pressed or cast */
   private queued: { skill: KnownSkill; key: SkillKey } | null = null;
@@ -350,10 +355,9 @@ export class Player {
   handleInput(dt: number): void {
     if (this.idle) {
       // the co-op pause menu: stand still and let go of any channel
-      this.vel.x = damp(this.vel.x, 0, 14, dt);
-      this.vel.z = damp(this.vel.z, 0, 14, dt);
       this.goal.set(0, 0, 0);
-      this.goalRate = 14;
+      stepVelocity(this.vel, this.goal, dt);
+      this.steered = true;
       if (this.channel) this.stopChannel();
       return;
     }
@@ -372,12 +376,11 @@ export class Player {
     const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const k = len ? speed * Math.min(1, len) / len : 0;
     const tx = (mx * cy + mz * sy) * k, tz = (mz * cy - mx * sy) * k;
-    // it takes a moment to get going and to stop (the legs and the lean follow it), a little quicker to stop than to start
-    const kv = tx * tx + tz * tz > this.vel.x * this.vel.x + this.vel.z * this.vel.z ? 9 : 12;
-    this.vel.x = damp(this.vel.x, tx, kv, dt);
-    this.vel.z = damp(this.vel.z, tz, kv, dt);
+    // (as a body moves itself, pushing and braking against the ground: turning round from a run takes a braking step
+    // and a push the other way, `entities/movement.ts`)
     this.goal.set(tx, 0, tz);
-    this.goalRate = kv;
+    stepVelocity(this.vel, this.goal, dt);
+    this.steered = true;
 
     this.aim.copy(input.ground);
 
@@ -646,11 +649,13 @@ export class Player {
     // goes and back: held attacks while backing off or moving sideways would swing the body half round at every blow)
     const fighting = (this.casting && !this.casting.skill.def.freeMove) || this.channel;
     this.aimHold = fighting ? AIM_HOLD : Math.max(0, this.aimHold - dt);
+    this.facesWay = false;
     if (look !== null && !d) this.facing = look;
     else if (!fighting && this.aimHold > 0) this.faceTowards(this.aim);
     else if ((!this.casting || this.casting.skill.def.freeMove) && !this.channel && speed > 0.5) {
       const eased = angleDamp(this.facing, Math.atan2(this.vel.x, this.vel.z), 14, dt);
       this.facing += Math.max(-TURN_MOST * dt, Math.min(TURN_MOST * dt, eased - this.facing));
+      this.facesWay = true;
     }
 
     // resources & cooldowns
@@ -734,7 +739,21 @@ export class Player {
     const side = Math.cos(this.facing) * this.vel.x - Math.sin(this.facing) * this.vel.z;
     // (a dash's legs step at a sprint's cadence, not at the dash's speed)
     const gs = this.dash ? Math.min(speed, this.stats.moveSpeed) : speed;
-    this.phase = this.cycleOn(dt * gs * gaitRate(gs, legLength(this.model)), fwd < -0.5 ? -1 : 1);
+    // (setting off from standing, the cycle starts with the first stride)
+    const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
+    if (legs) this.phase = legs.setOff(this.phase);
+    // (quicker as he goes off the legs' line, his steps shorter across it: `LegIK.cadence`)
+    const pace = legs?.cadence ?? 1;
+    // (backwards only going back against a facing it keeps: turning round to face the way it goes, the body moved
+    // against its facing for a few frames, and the cycle turned round and back again, a foot just down due again at once)
+    const backwards = fwd < -0.5 && !this.facesWay;
+    // (and speeding up, at the cadence of the speed it is going for, as a person accelerating takes quick, short steps
+    // from the first: by the speed it had so far, coming out of a turn round from a run the first swing took a walk's
+    // 23 frames, and the foot behind stayed planted as the body sped away from it, 75 cm behind the hips)
+    const leg = legLength(this.model);
+    const goalSpeed = this.dash ? 0 : Math.hypot(this.goal.x, this.goal.z);
+    const cadence = Math.max(gs * gaitRate(gs, leg), goalSpeed * gaitRate(goalSpeed, leg));
+    this.phase = this.cycleOn(dt * cadence * pace, backwards ? -1 : 1);
     let action: ActionState | null = null;
     if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };
     else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / (this.dash.dur + this.dash.hold)) };
@@ -801,7 +820,7 @@ export class Player {
     const dead = this.deadT >= 0 ? Math.min(1, this.deadT / 1.0) : this.rising > 0 ? this.rising / RISE : -1;
     // (the legs told where the body is going, as the game eases it there: a stop's last stride lands where it rests)
     const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
-    if (this.local && !this.dash && this.goalRate > 0) legs?.intend(this.goal, this.goalRate);
+    if (this.local && !this.dash && this.steered) legs?.intend(this.goal, this.facesWay);
     this.model.animate({
       t, dt, phase: this.phase, move, moveDir: dir, lean, action,
       hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,
