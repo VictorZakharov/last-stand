@@ -1,5 +1,4 @@
-// Height of the walkable arena floor (dais tiers). Kept free of scene code so the
-// cape physics worker can import it.
+// Height of the walkable arena floor (dais tiers), free of scene code.
 import { ARENA } from '../data/balance';
 
 const STEP = 0.18;

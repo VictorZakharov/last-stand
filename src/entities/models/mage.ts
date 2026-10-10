@@ -1,7 +1,7 @@
 // The Mage: the same bare-headed man in layered navy and teal robes, the hood down in a cowl round
 // the neck, gold-trimmed and embroidered with arcane signs, long bell sleeves, black-and-gold spiked
 // pauldrons set with green stones, a wide medallion belt with pouches and charms, strapped boots with
-// gold caps, a cape, and a gnarled staff cradling a floating crystal. The robe with its pauldrons, collar flaps and
+// gold caps, and a gnarled staff cradling a floating crystal. The robe with its pauldrons, collar flaps and
 // brooch is the chest item's, the bracers and gloves the hands item's: without them a plain linen tunic, its
 // sleeves (or the robe's) on to the wrists, and bare hands. Fully procedural.
 import * as THREE from 'three';
@@ -14,7 +14,6 @@ import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, gem a
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, gripTurn, bare, handCapsules, SLANT } from './hands';
 import { clamp, lerp, damp, TAU, mulberry } from '../../util';
-import { SkeletonCape, type CapsuleFit } from './cape';
 import { BellCloth, type BellOptions } from './sleeve';
 import { LegIK } from './ik';
 import { fitArm } from './armIK';
@@ -22,21 +21,10 @@ import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { onTunic, tunicFront, neckHem, TUNIC_Y, WAIST } from './tunic';
 import { buildFlask, drink, drinkUp, type DrinkHold } from './flask';
-import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 
-const ZERO = new THREE.Vector3();
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _vr = new THREE.Quaternion();
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-
-/** Deep navy cape with a gold trim, matching the robes. */
-const MAGE_CAPE_PALETTE: CapeFabricPalette = Object.freeze({
-  fabric: [24, 30, 50] as const,
-  trim: [190, 150, 70] as const,
-  sheenColor: 0x1f4d55,
-  attachmentColor: 0x1a2030,
-  materialName: 'Woven navy mage cape',
-});
 
 // the robe's upper body (chest joint space): its half-width (x) at height y, and its depth (z) as a share
 // of that: a man's chest (ANSUR II: 29 cm across, 25 deep) with the robe over it, rising to the shoulders
@@ -44,22 +32,6 @@ const TORSO: [number, number][] = [[0.145, -0.12], [0.155, -0.02], [0.165, 0.1],
 const DEPTH = 0.86;
 /** the cowl's profile (chest joint space): the hood down, bunched round the neck */
 const COWL: [number, number][] = [[0.1, 0.2], [0.155, 0.235], [0.16, 0.27], [0.13, 0.31], [0.095, 0.34], [0.085, 0.36]];
-/** the shoulder joints on the chest (the rig's shoulderW, and shoulderY of its torso), a hair inside them */
-const SH_X = 0.21, SH_Y = 0.225;
-/** the cape over the robe (pinned under the cowl, kept off the skirts: its colliders are built for it) and over the plain
- *  tunic: the neckline's ends on the chest, and its colliders as the tunic changes them. Over the tunic the upper torso
- *  ends lower and the shoulders are slimmer: the robe's reached past the neckline, nearer the neck over the tunic, and the
- *  cape jerked (`SkeletonCape.fit`) */
-const CAPE_ROBED: { left: readonly [number, number, number]; right: readonly [number, number, number]; fit: Record<string, CapsuleFit> } = { left: [0.1, 0.3, -0.15], right: [-0.1, 0.3, -0.15], fit: {} };
-const CAPE_TUNIC: typeof CAPE_ROBED = {
-  left: [0.1, 0.275, -0.115], right: [-0.1, 0.275, -0.115],
-  fit: {
-    gorget: { radius: 0.12 }, shoulders: { offA: [SH_X, SH_Y - 0.04, 0], offB: [-SH_X, SH_Y - 0.04, 0], radius: 0.085, depthRadius: 0.15 }, 'upper torso': { offA: [0, 0.12, 0], depthRadius: 0.16 },
-    hips: { radius: 0.24, depthRadius: 0.21 }, 'robe skirt': { radius: 0.17, depthRadius: 0.12 },
-    'left pauldron': { radius: 0.07 }, 'right pauldron': { radius: 0.07 },
-    'left sleeve': { radius: 0.06 }, 'right sleeve': { radius: 0.06 },
-  },
-};
 /** the pauldrons' size against the shoulder */
 const PAULDRON = 0.72;
 function torsoR(y: number): number {
@@ -173,7 +145,7 @@ export function buildMage(): Model {
   A.add(gemGeo(0.014), stone, j.chest, [br.x, br.y, br.z + 0.01], [0, 0, 0], [1, 1.4, 1]);
 
   // --- the cowl: the hood down, bunched round the neck in teal folds, its crown lying flat on the upper
-  // back, inside the cape's torso collider: any fuller, it pokes out through the cape as two humps
+  // back
   {
     const g = lathe(COWL, 36), q = g.attributes.position;
     for (let i = 0; i < q.count; i++) {
@@ -230,7 +202,7 @@ export function buildMage(): Model {
   let tailName = '', tailT = 0;
   /** a staff shot's kick, 1 as it leaves, dying away */
   let recoil = 0;
-  // what the bells must not sink into (the cape's own body colliders, roughly): the torso, the hips and the robe's skirt
+  // what the bells must not sink into: the torso, the hips and the robe's skirt
   // (and the robe's skirts as they lie, filled in below)
   const sleeveSkirts: NonNullable<BellOptions['skirts']> = [];
   const bodies = [
@@ -429,7 +401,7 @@ export function buildMage(): Model {
   // Held GRIP further up the haft than its old balance point, so the crystal rides at head height
   // and the bolts it casts fly at the foes, not over them.
   const staff = joint(j.handR, 0, -0.05, 0.02);
-  const STAFF_PITCH = 1.25, STAFF_R = 0.026, STAFF_OUT = -0.5;
+  const STAFF_PITCH = 1.25, STAFF_R = 0.026;
   staff.rotation.x = STAFF_PITCH;
   const GRIP = 0.62;
   {
@@ -479,56 +451,6 @@ export function buildMage(): Model {
 
   const root = j.root;
   root.scale.setScalar(1.08);
-
-  // (where each sleeve ends, for the cape: a bell's hem as it hangs, else the wrist; the bells step first)
-  const sleeveEnds = [new THREE.Object3D(), new THREE.Object3D()];
-  root.add(...sleeveEnds);
-  const placeSleeveEnds = () => {
-    for (let k = 0; k < 2; k++) {
-      const e = sleeveEnds[k];
-      if (robed) cloths[k].hem(e.position); else (k ? j.handR : j.handL).getWorldPosition(e.position);
-      root.worldToLocal(e.position); e.updateMatrixWorld();
-    }
-  };
-
-  // --- cape: position-based-dynamics cloth (cape-physics solver), pinned under the
-  // cowl and colliding with a capsule rig that follows the animated skeleton.
-  const cape = new SkeletonCape({
-    anchor: j.chest, root,
-    left: CAPE_ROBED.left, right: CAPE_ROBED.right,
-    palette: MAGE_CAPE_PALETTE,
-    // narrower than the cape-physics default: the mage holds staff and orb in front,
-    // so a wide cape would drape over the arms and stick out forward
-    settings: { length: 1.42, width: 0.64 },
-    capsules: [
-      // (across the shoulders on the chest: on the shoulder joints its ends turned with the arms, a casting arm's 4 cm forward,
-      // and the tunic's shoulder blades came through the cape)
-      { name: 'shoulders', a: j.chest, offA: [SH_X, SH_Y + 0.03, 0], offB: [-SH_X, SH_Y + 0.03, 0], radius: 0.1, clearance: 0.008 },
-      { name: 'gorget', a: j.chest, offA: [0, 0.27, 0], radius: 0.17, clearance: 0.006, faceSampleSpacing: 0.03 },
-      { name: 'upper torso', a: j.chest, offA: [0, 0.22, 0], offB: [0, -0.02, 0], radius: 0.2, depthRadius: 0.17, clearance: 0.006, faceSampleSpacing: 0.07 },
-      { name: 'hips', a: j.hips, offA: [0, 0.02, 0], offB: [0, -0.25, 0], radius: 0.26, depthRadius: 0.23, clearance: 0.008, faceSampleSpacing: 0.08 },
-      { name: 'robe skirt', a: j.hips, offA: [0, -0.3, 0], offB: [0, -0.62, 0], radius: 0.34, depthRadius: 0.3, clearance: 0.008, faceSampleSpacing: 0.08 },
-      { name: 'left arm', a: j.shoulderL, offA: [0, -0.02, 0], b: j.elbowL, radius: 0.08, clearance: 0.006 },
-      { name: 'right arm', a: j.shoulderR, offA: [0, -0.02, 0], b: j.elbowR, radius: 0.08, clearance: 0.006 },
-      // the pauldrons, turning with the arm as they do: they stand 11.7 cm out behind the shoulder, past the shoulders' and the
-      // arm's capsules, and came through the cape as he set off and at the back of each arm's swing
-      { name: 'left pauldron', a: j.shoulderL, offA: [0.03, -0.02, 0], offB: [0.03, -0.06, 0], radius: 0.115, clearance: 0.006 },
-      { name: 'right pauldron', a: j.shoulderR, offA: [-0.03, -0.02, 0], offB: [-0.03, -0.06, 0], radius: 0.115, clearance: 0.006 },
-      // the sleeves, from above the elbow to the bell's hem as it hangs (to the wrist in the tunic): with nothing for the cape
-      // below the elbow, the free arm's bell swung back through it at each step
-      { name: 'left sleeve', a: j.elbowL, offA: [0, 0.03, 0], b: sleeveEnds[0], radius: 0.13, clearance: 0.006 },
-      { name: 'right sleeve', a: j.elbowR, offA: [0, 0.03, 0], b: sleeveEnds[1], radius: 0.13, clearance: 0.006 },
-      { name: 'left thigh', a: j.thighL, offA: [0, -0.1, 0], b: j.kneeL, radius: 0.11 },
-      { name: 'left shin', a: j.kneeL, b: j.ankleL, radius: 0.085 },
-      { name: 'left boot', a: j.ankleL, offA: [0, -0.03, 0.02], offB: [0, -0.03, 0.12], radius: 0.08 },
-      { name: 'right thigh', a: j.thighR, offA: [0, -0.1, 0], b: j.kneeR, radius: 0.11 },
-      { name: 'right shin', a: j.kneeR, b: j.ankleR, radius: 0.085 },
-      { name: 'right boot', a: j.ankleR, offA: [0, -0.03, 0.02], offB: [0, -0.03, 0.12], radius: 0.08 },
-      // the staff's haft below the fist (from its ferrule: the solver pushes the cloth behind a capsule's first end): aimed at
-      // a foe it reaches a metre back behind the body
-      { name: 'staff', a: staff, offA: [0, -1.2, 0], offB: [0, -0.1, 0], radius: 0.04, clearance: 0.01, faceSampleSpacing: 0.03 },
-    ],
-  });
 
   const shY = j.shoulderL.position.y;
   // the healing draught, in the free fist while it is drunk
@@ -602,8 +524,9 @@ export function buildMage(): Model {
       j.body.position.z += (0.03 * aim - 0.025 * rc) * (1 - move); j.spine.rotation.x += -0.07 * rc; j.shoulderR.rotation.x += -0.12 * rc;
       if (aim > 0.3) feet = AIM_FEET;
     }
-    // (its haft angled out, the butt passing outside the cape: aimed straight, it reached a metre back through it)
-    staff.rotation.x = STAFF_PITCH + 1.75 * aim; staff.rotation.z = fp ? 0 : STAFF_OUT * aim;
+    // (aimed straight along the shot: angled out to keep its haft out of the cape the heroes wore, it went 9 cm
+    // through his own sleeve)
+    staff.rotation.x = STAFF_PITCH + 1.75 * aim;
     // (the haft sits in the fist, the hand on its wrist)
     seat(handR, staff, STAFF_R);
     if (a) {
@@ -777,8 +700,7 @@ export function buildMage(): Model {
     hold(handR, _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), STAFF_R, undefined, slant);
 
     // cloth runs after the pose so it collides with this frame's skeleton
-    if (dt > 0) { if (robed) for (const c of cloths) c.update(dt); placeSleeveEnds(); cape.update(dt, st.velocity ?? ZERO); }
-    cape.setVisible(st.dead < 0.6);
+    if (dt > 0 && robed) for (const c of cloths) c.update(dt);
 
     // staff crystal
     crystal.rotation.y = t * 2.2;
@@ -791,16 +713,13 @@ export function buildMage(): Model {
 
   return {
     root, kit, joints: j, animate, tip, palm, height: 2.0,
-    worldObjects: [cape.mesh],
     cloths,
     setGear: (gear: Gear) => {
       hat.visible = gear.helm;
-      // the robe or the tunic: the bell sleeves (cloth, put back on the arms when the robe is), the skirts, the cape's fit
+      // the robe or the tunic: the bell sleeves (cloth, put back on the arms when the robe is), the skirts
       if (gear.chest !== robed) {
         robed = gear.chest;
         if (robed) for (const c of cloths) c.reset();
-        const fit = robed ? CAPE_ROBED : CAPE_TUNIC;
-        cape.fit(fit.left, fit.right, fit.fit);
       }
       for (const o of [...robeParts, ...skirts, ...flaps.map((f) => f.g), ...cloths.flatMap((c) => c.meshes)]) o.visible = robed;
       for (const o of [...tunic, tunicSkirt]) o.visible = !robed;
@@ -811,12 +730,11 @@ export function buildMage(): Model {
       for (const o of tunicCuffs) o.visible = !robed && !gear.hands;
       bare(handL, gear.hands ? null : bareSkin); bare(handR, gear.hands ? null : bareSkin);
     },
-    reset: () => { cape.reset(); legs.reset(); fade.reset(); for (const c of cloths) c.reset(); },
+    reset: () => { legs.reset(); fade.reset(); for (const c of cloths) c.reset(); },
     // through the eyes the bells, seen from behind, would hide the hands: narrow and shorter
     firstPerson: (on) => { fp = on; for (const b of bells) b.scale.set(on ? 0.6 : 1, on ? 0.75 : 1, on ? 0.6 : 1); },
     dispose() {
       kit.dispose();
-      cape.dispose();
       root.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
     },
   };

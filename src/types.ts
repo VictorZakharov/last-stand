@@ -266,12 +266,10 @@ export interface AnimState {
   /** -1 = alive, otherwise 0..1 death progress */
   dead: number;
   charge?: number;
-  /** world-space velocity of the character (drives cloth inertia) */
-  velocity?: THREE.Vector3;
   /** a bow's hero: how many arrows are on the string (`Player.nocked`) */
   nocked?: number;
   /** turns the chest, neck and head onto what the character looks at: a model with cloth calls it before
-   *  the leg IK and the cloth step, so the sleeves and cape follow the arms the turn moves */
+   *  the leg IK and the cloth step, so the sleeves follow the arms the turn moves */
   look?: () => void;
 }
 
@@ -290,8 +288,6 @@ export interface Model {
   palm?: THREE.Object3D;
   /** skeleton, for humanoid models */
   joints?: Joints;
-  /** objects simulated in world space (e.g. a cape) that the owner adds to the scene */
-  worldObjects?: THREE.Object3D[];
   /** seen through its own eyes (only the arms show, entities/viewModel.ts): adjust what reads badly from
    *  there (a sleeve hiding the hand, an arm raised out of the frame) */
   firstPerson?(on: boolean): void;

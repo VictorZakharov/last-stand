@@ -70,7 +70,6 @@ Pick a class in the lobby. Every class keeps its **own profile**: equipment, sta
 
 There are **three save slots** (the lobby's *Save slot* link), each a separate save with its own heroes, skill loadouts and stash filters. The save slots screen shows what each one holds: every hero's best wave and starting waves per battleground, gear with its item levels, skills, attributes, stash, records and time played. From there you play a slot or delete one (typing DELETE to confirm). An empty slot is a fresh start, for instance to play from the beginning with a friend. Progress from before save slots is in slot 1.
 
-Both wear a real position-based-dynamics cloth cape that collides with the animated body, using the solver from [cape-physics](https://github.com/VictorZakharov/cape-physics).
 
 ### The Mage
 
@@ -88,7 +87,7 @@ Robes, skirt panels and a crystal staff; arcane and elemental spells from range.
 
 ### The Warrior
 
-Plate armour, a crested helm and a cape; tougher, and fights up close. Fights with a one-handed weapon and a shield, a one-handed weapon in each hand (the swings alternate hands; the off-hand weapon adds 60% of its damage bonus), or a two-handed weapon, and the model shows what is equipped. Each of these styles remembers its own skill bindings, with a button in the lobby to reset them to the defaults.
+Plate armour and a crested helm; tougher, and fights up close. Fights with a one-handed weapon and a shield, a one-handed weapon in each hand (the swings alternate hands; the off-hand weapon adds 60% of its damage bonus), or a two-handed weapon, and the model shows what is equipped. Each of these styles remembers its own skill bindings, with a button in the lobby to reset them to the defaults.
 
 Shields **block**: each hit has the shield's Block Chance to be blocked, absorbing its Block Amount, after which the shield needs a moment to recover. Holding right click raises the shield to block every hit from the front, for three times the Block Amount; a hit bigger than that breaks the guard and staggers you: for 1.5 seconds you can only move, not block, attack or cast.
 
@@ -148,7 +147,6 @@ npm run build      # type-check + production build into dist/
 | `src/loot/` | Items, persistent profiles (one per class and save slot: stash / equipment / records), save slots, skill loadout |
 | `src/net/` | Co-op: rooms and links between the games, the players' state, the host's reports of the fight |
 | `src/ui/` | HUD, menus, tooltips, loadout editor, skill icons |
-| `src/vendor/cape/` | Vendored cape-physics solver and its web worker (see its README and LICENSE) |
 
 **Adding a class:** create a data file in `src/data/classes/`, register it in `src/data/classes/index.ts`, add a model in `src/entities/models/`, and implement any new skills in `src/combat/skills/`.
 
@@ -158,4 +156,4 @@ This is an early build — feedback, bug reports and ideas are very welcome in [
 
 ## License
 
-[MIT](LICENSE). Includes the cape solver from [cape-physics](https://github.com/VictorZakharov/cape-physics) by Victor Zakharov (MIT, see [src/vendor/cape/LICENSE](src/vendor/cape/LICENSE)).
+[MIT](LICENSE).

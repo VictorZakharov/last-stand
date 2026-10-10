@@ -185,10 +185,7 @@ Options every command run on a page takes:
   string`), not the browser's "Failed to fetch dynamically imported module";
 - the set-up (sheet, carry, probe): `--view top|third|first`, `--at x,z`, `--facing rad`, `--nocked[=false]`,
   `--gear oneHanded|shield|twoHanded|dual` (the hero holding his weapons that way, from his class's own bases: as the
-  profile rolled them by default),
-  `--capes`: the capes' cloth stepped. Every set-up holds them otherwise (`Fixture.capes`, `cape.holdCapes`), each
-  riding its neckline as it last hung and hung afresh from it for a picture: stepped, the cloth was three quarters of
-  the mage's time in his stops, which never look at it. A sheet and the gait's films step them;
+  profile rolled them by default);
 - `gait --films=false`, `form --pictures=false`: the numbers alone, each run once (a film or a picture runs it
   again); `gait --offset n`: each scenario's first move n frames longer, its later turns and stops at other
   points of a stride (a check's starts);
@@ -235,7 +232,7 @@ copied into the other commit, so the same measure runs on both sides.
 What the lab gives a probe (`page/lab.ts`):
 
 - `lab.player`, `lab.model`, `lab.joints`, and `lab.THREE` (three.js as the game has it);
-- `lab.setup(fixture)`: the run set up afresh (`at`, `facing`, `view`, `nocked`, `capes`), checked, and its report.
+- `lab.setup(fixture)`: the run set up afresh (`at`, `facing`, `view`, `nocked`, `gear`, `fresh`), checked, and its report.
   A probe may set up many cases one after another, but each follows on from the ones before it: the hero is the same
   one, and the game's clock, which his idle runs on, only goes forward (to the next whole minute at each set-up, so
   the idle is at the same moment whatever ran before; the hero's own state still carries over). A scan is the same
@@ -312,9 +309,9 @@ Some of what that takes:
 - **The clock.** From the moment the loading screen reveals the game, its frames run on the lab's clock: each a hair
   over a 60th of a second, as fast as the page can, nothing drawn unless asked (the scene's matrices are still
   updated). Every time the page reads is on a grid of 1/1024 ms, so the game's frame time is exact and the same on
-  every boot. Frames run back to back, with nothing landing between them: a cape steps in the frame, on the main
-  thread (`stepCapesHere`; in the game it steps in a worker, whose results landed a frame or two late, never the same
-  frame twice, and a warrior's or mage's pictures of a commit against itself differed wherever the cloth showed).
+  every boot. Frames run back to back, with nothing landing between them (an A/B's side on a commit from before the
+  heroes' capes were taken off steps its capes in the frame, on the main thread, `stepCapesHere`: in the game they
+  stepped in a worker, whose results landed a frame or two late, and a commit's pictures against itself differed).
 - **Set-ups check themselves** (`Lab.setup`, the `Fixture`): the run held in its countdown (no foes and none coming),
   the hero placed, stopped and settled, an arrow nocked if asked, the view made as the player makes it (V pressed: the
   game sets the camera's view from its own every frame, and set on the camera alone it was top-down again a frame

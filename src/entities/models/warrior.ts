@@ -1,6 +1,6 @@
 // The Warrior: a bare-headed veteran in an engraved breastplate over layered leather, fur at the collar,
 // cuffs and boot tops, crossed straps, a mail skirt between leather tassets, engraved knee cops and tall
-// strapped boots, with a cloth cape. Carries the equipped weapon and shield, and wears only the armour
+// strapped boots. Carries the equipped weapon and shield, and wears only the armour
 // equipped: without a chest item the quilted gambeson, trousers and boots under it, without a hands item
 // bare hands below the gambeson's sleeves. Fully procedural.
 import * as THREE from 'three';
@@ -19,9 +19,7 @@ import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, fur
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, fistReach, fistTurn, gripTurn, bare, handCapsules, SLANT } from './hands';
 import { clamp, lerp, mulberry, damp } from '../../util';
-import { SkeletonCape } from './cape';
 import { fromEyes, dirFromEyes } from '../viewModel';
-import type { CapeFabricPalette } from '../../vendor/cape/physics/CapeAppearance';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -114,15 +112,6 @@ const PS_FWD: Keys = [[0, 0], [0.25, -0.05], [0.86, -0.08], [0.95, 0.13], [1, 0.
 const PS_DIP: Keys = [[0, 0], [0.25, 0.01], [0.86, -0.05], [0.9, -0.03], [0.96, -0.19], [0.98, -0.21], [1, -0.2]];
 /** the hips open towards the weapon side as it rises and drive square into the blow */
 const PS_HIPS: Keys = [[0, 0], [0.25, -0.15], [0.86, -0.22], [0.95, 0.1], [1, 0.08]];
-
-/** Navy wool cape with a leather trim, matching the sleeves. */
-const WARRIOR_CAPE_PALETTE: CapeFabricPalette = Object.freeze({
-  fabric: [30, 38, 58] as const,
-  trim: [74, 50, 34] as const,
-  sheenColor: 0x3a4a6a,
-  attachmentColor: 0x3a2a1e,
-  materialName: 'Heavy navy warrior cape',
-});
 
 // --- the breastplate: a torso-shaped shell over the gambeson, as broad as a strong man's chest (ANSUR
 // II: 29 cm across, 25 deep, plus padding and steel), with a gentle keel and pectoral swell, its top
@@ -622,28 +611,6 @@ export function buildWarrior(): Model {
 
   const root = j.root;
   root.scale.setScalar(1.1);
-
-  // --- cape pinned under the pauldrons, colliding with the armoured body
-  const cape = new SkeletonCape({
-    anchor: j.chest, root,
-    left: [0.11, 0.3, -0.165], right: [-0.11, 0.3, -0.165],
-    palette: WARRIOR_CAPE_PALETTE,
-    settings: { length: 1.2, width: 0.62 },
-    capsules: [
-      { name: 'shoulders', a: j.shoulderL, offA: [0.02, 0.04, 0], b: j.shoulderR, offB: [-0.02, 0.04, 0], radius: 0.12, clearance: 0.008 },
-      { name: 'gorget', a: j.chest, offA: [0, 0.27, 0], radius: 0.17, clearance: 0.006, faceSampleSpacing: 0.03 },
-      { name: 'upper torso', a: j.chest, offA: [0, 0.22, 0], offB: [0, -0.02, 0], radius: 0.21, depthRadius: 0.17, clearance: 0.006, faceSampleSpacing: 0.07 },
-      { name: 'hips', a: j.hips, offA: [0, 0.02, 0], offB: [0, -0.2, 0], radius: 0.25, depthRadius: 0.22, clearance: 0.008, faceSampleSpacing: 0.08 },
-      { name: 'left arm', a: j.shoulderL, offA: [0, -0.02, 0], b: j.elbowL, radius: 0.085, clearance: 0.006 },
-      { name: 'right arm', a: j.shoulderR, offA: [0, -0.02, 0], b: j.elbowR, radius: 0.085, clearance: 0.006 },
-      { name: 'left thigh', a: j.thighL, offA: [0, -0.1, 0], b: j.kneeL, radius: 0.13 },
-      { name: 'left shin', a: j.kneeL, b: j.ankleL, radius: 0.1 },
-      { name: 'left boot', a: j.ankleL, offA: [0, -0.03, 0.02], offB: [0, -0.03, 0.14], radius: 0.09 },
-      { name: 'right thigh', a: j.thighR, offA: [0, -0.1, 0], b: j.kneeR, radius: 0.13 },
-      { name: 'right shin', a: j.kneeR, b: j.ankleR, radius: 0.1 },
-      { name: 'right boot', a: j.ankleR, offA: [0, -0.03, 0.02], offB: [0, -0.03, 0.14], radius: 0.09 },
-    ],
-  });
 
   // right-arm swings and chops yaw last, so the straight arm sweeps around the vertical axis
   // (with no yaw this order poses exactly like the default)
@@ -1320,8 +1287,7 @@ export function buildWarrior(): Model {
     // the flask comes out of the fist and is put away again
     flaskOut = damp(flaskOut, flaskWant, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
 
-    if (dt > 0) { cape.update(dt, st.velocity ?? ZERO); for (const f of furs) f.update(dt); }
-    cape.setVisible(st.dead < 0.6);
+    if (dt > 0) for (const f of furs) f.update(dt);
 
     // the blade's fuller glows while a skill charges
     edge.emissiveIntensity = (st.charge || 0) * 1.5;
@@ -1332,14 +1298,12 @@ export function buildWarrior(): Model {
     get swing() { return side; },
     get offTip() { return offHeld ? tipL : null; },
     get reach() { return (ARM + (held?.len ?? 0)) * root.scale.x; },
-    worldObjects: [cape.mesh],
-    reset: () => { cape.reset(); legs.reset(); fade.reset(); },
+    reset: () => { legs.reset(); fade.reset(); },
     // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
     firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on && gloved; mountAll(); },
     dispose() {
       kit.dispose();
       for (const f of furs) f.dispose();
-      cape.dispose();
       root.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
     },
   };

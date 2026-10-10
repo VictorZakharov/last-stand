@@ -48,8 +48,9 @@ export async function launchBrowser() {
 
 // ---- scripts run in every page before its own (each is serialized into the page: it can use nothing from here)
 
-/** The capes step in the page from its boot (`cape.ts`, `__labCapesHere`): the lab never uses the cape's worker pool,
- *  and with eight pages booting side by side, one's failed to start and the page's error failed the command. */
+/** For an A/B's side on a commit from before the heroes' capes were taken off: its capes step in the page from its
+ *  boot (`cape.ts`, `__labCapesHere`), never in the cape's worker pool, which with eight pages booting side by side
+ *  failed to start in one and the page's error failed the command. */
 function capesHere() {
   window.__labCapesHere = true;
 }
