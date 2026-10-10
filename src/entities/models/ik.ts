@@ -288,15 +288,20 @@ const EDGE_MARGIN = 0.03;
 const RISE = 0.03;
 /** the share of the body's speed a planted foot moves at during a run */
 const SLIP = +(typeof location === 'undefined' ? '0' : (new URLSearchParams(location.search).get('slip') ?? '0'));
-/** the most ground a planted foot passes under the body in one contact (leg lengths): faster, the contact is shorter,
- *  as a runner's is, rather than the foot sliding to keep up; a walk's, its legs near straight, takes more */
-const STANCE = 1.1;
-const WALK_STANCE = 1.05;
 /** how far ahead of its hip a foot may land, in leg lengths */
 const AHEAD = 0.34;
 /** a walk's: it lands about half its stance ahead and leaves half behind (held to a run's, a fast walk's stance left
  *  each foot 0.6 m behind its hip, the hip 6 degrees past its extension, and the knee folded at once as it rose) */
 const WALK_AHEAD = 0.55;
+/** how far behind its hip a planted foot may be left as the body passes over it (leg lengths): its leg 25 degrees
+ *  back, within the hip's 30 of extension */
+const BEHIND = Math.sin(25 * Math.PI / 180);
+/** the most ground a planted foot passes under the body in one contact (leg lengths): as far as it lands ahead and
+ *  may be left behind, so faster the contact is shorter, as a runner's is. (At 1.1 leg lengths, locked to the walk
+ *  cycle, a run's foot was left 65 cm behind the hips at the end of every stance, the hip 9 to 22 degrees past its
+ *  extension: the back leg stuck out behind.) */
+const STANCE = AHEAD + BEHIND;
+const WALK_STANCE = WALK_AHEAD + BEHIND;
 /** a swing lands with this share of the stance's backward stroke (relative to the hip), so a foot never skids as it
  *  takes the ground and paws back a little as it lands, as a runner's does; it leaves with less, or it trails far
  *  behind the hip before it comes forward */
@@ -651,6 +656,8 @@ export class LegIK {
   /** the goal as the landings follow it (`GOAL_FOLLOW`) */
   private readonly goalSeen = new THREE.Vector3();
   private goalSaid = false;
+  /** how far ahead of the hip along its way the stride last aimed at its neutral point lands (m, `neutralPoint`) */
+  private neutralAhead = 0;
   /** where a stopping body rests, from where it is (m), for the motion it was worked out from (`restingAt`) */
   private readonly restFound = new THREE.Vector3();
   private readonly restFor = { vx: NaN, vz: NaN, gx: NaN, gz: NaN };
@@ -738,11 +745,50 @@ export class LegIK {
    * enough to set off afresh (`STOOD`), the phase as it is.
    */
   setOff(phase: number): number {
-    if (!IK || this.moving || this.standK < STOOD || this.fresh) return phase;
-    const off = Math.round(phase / Math.PI) * Math.PI - phase;
+    if (!IK || this.moving || this.fresh) return phase;
+    // (with both feet down at once too, as a reversal from a run stands a frame or two: the phase moved with a foot in
+    // the air would move the foot; stood for the cycle to carry on through it, the foot ahead as the body braked stood
+    // planted behind it as it sped up the other way, 85 cm behind the hips, while the other swung first)
+    const bothDown = this.feet[0].state === 'plant' && this.feet[1].state === 'plant';
+    if (this.standK < STOOD && !bothDown) return phase;
+    // (the foot the body is leaving goes: the one further behind along the way it sets off, as a person steps first
+    // with the foot behind. By the nearer half cycle, turned round from a run the foot left behind stayed planted 12
+    // frames as the body sped up away from it, and was left 75 cm behind the hips)
+    const first = this.footBehind();
+    const half = first === null ? Math.round(phase / Math.PI) : this.nearestHalf(phase, first);
+    const off = half * Math.PI - phase;
     // (the cycle read as not having moved for it: its rate would read the jump as a pace, or a backpedal)
     this.lastPhase += off;
     return phase + off;
+  }
+
+  /** The foot further behind its hip along the way the game sends the body (`intend`), or null with no way yet. */
+  private footBehind(): number | null {
+    const way = this.goal;
+    const speed = Math.hypot(way.x, way.z);
+    if (speed < 1e-3) return null;
+    const hips = this.j.hips;
+    hips.updateWorldMatrix(true, false);
+    let first = 0, most = -Infinity;
+    for (let i = 0; i < 2; i++) {
+      _hipAt.copy(this.legs[i].thigh.position).applyMatrix4(hips.matrixWorld);
+      const foot = this.feet[i].P;
+      const behind = -((foot.x - _hipAt.x) * way.x + (foot.z - _hipAt.z) * way.z) / speed;
+      if (behind > most) {
+        most = behind;
+        first = i;
+      }
+    }
+    return first;
+  }
+
+  /** The whole number of half cycles nearest `phase` (in half cycles) at which foot `i` is mid-swing (`legU` 0.5: the
+   *  left at even ones, the right at odd). */
+  private nearestHalf(phase: number, i: number): number {
+    const wanted = i === 0 ? 0 : 1;
+    const near = Math.round(phase / Math.PI);
+    if (((near % 2) + 2) % 2 === wanted) return near;
+    return phase / Math.PI > near ? near + 1 : near - 1;
   }
 
   /** the walk cycle as the gait reads it: its phase (rad), how fast it moves (rad/s, signed, smoothed) and whether
@@ -1754,12 +1800,20 @@ export class LegIK {
       const slowing = this.slowingOver(g, remain);
       const ahead = f.state === 'swing' ? g.landAhead * slowing.share : 0;
       _landWas.copy(f.B);
-      alongCurve(f.B, g.hip, Math.atan2(g.travel.x, g.travel.z), g.curve, slowing.covered + ahead);
-      // (and as the game turns it towards its goal: by its way now alone, zigzagging drawn a foot landed where the body
-      // still turning left it out of reach six frames on, and it went out of turn, a frame or two after the other)
-      if (this.moving && !this.restingAt(_rest)) this.easedOff(f.B, remain);
+      const stopping = this.restingAt(_rest);
+      const neutral = this.intended && this.moving && !stopping && f.state === 'swing';
+      if (neutral) {
+        this.neutralPoint(g, f, remain);
+      } else {
+        alongCurve(f.B, g.hip, Math.atan2(g.travel.x, g.travel.z), g.curve, slowing.covered + ahead);
+        // (and as the game turns it towards its goal: by its way now alone, zigzagging drawn a foot landed where the
+        // body still turning left it out of reach six frames on, and it went out of turn, a frame or two after the other)
+        if (this.moving && !stopping) this.easedOff(f.B, remain);
+      }
       const toRest = this.landWhereItRests(g, f, i, landYaw);
-      f.landOff = g.landAhead * (toRest !== 0 ? slowing.share : 1) + toRest;
+      // (the swing lands this far ahead of the hip along its way, `swingInHipFrame`: the neutral point's own)
+      const landAhead = neutral ? this.neutralAhead : g.landAhead * (toRest !== 0 ? slowing.share : 1);
+      f.landOff = landAhead + toRest;
       resting = toRest !== 0;
       stopShare = slowing.share;
       // (and late in a swing it settles sideways where it is, as a foot is put down on a spot: following the body's
@@ -1778,6 +1832,31 @@ export class LegIK {
     f.strokeK = damp(f.strokeK, resting ? stopShare : 1, 20, g.dt);
     // (standing, the step lands where the spot it is measured against is: off the edge)
     if (!this.moving) this.onBodyLevel(f.B, i, landYaw, g.scale, g.rootX, g.rootZ, true);
+  }
+
+  /**
+   * A moving stride's landing (`f.B`) where the hip will be as it lands, `landIn` from now, and half the ground the
+   * body covers over the stance after it further on (Raibert's neutral point, by the motion the game moves it with):
+   * the hip passes over the foot halfway through its stance, the foot as far ahead as it lands as behind as it
+   * leaves, whatever the body does meanwhile. Speeding up, it lands further ahead; braking, nearer; through a turn
+   * round, the body covering next to nothing over the stance, nearly under the hips, which turn over it, a pivot. (A
+   * half stance ahead by the speed, the braking step of a reversal from a run came down 40 cm ahead of the hips as
+   * the body stopped, 40 cm behind them as it set off the other way, and the body left it 85 cm behind before its
+   * turn came round.) Within the legs' reach ahead (`AHEAD`, a walk's `WALK_AHEAD`).
+   */
+  private neutralPoint(g: GaitFrame, f: Foot, landIn: number): void {
+    predictMotion(this.vNow, this.goalSeen, landIn, _predicted);
+    const landX = _predicted.at.x, landZ = _predicted.at.z;
+    predictMotion(this.vNow, this.goalSeen, landIn + g.duty * g.cycle, _predicted);
+    let halfX = (_predicted.at.x - landX) / 2, halfZ = (_predicted.at.z - landZ) / 2;
+    const half = Math.hypot(halfX, halfZ);
+    const most = (WALK_AHEAD + (AHEAD - WALK_AHEAD) * runShare(g.speed, g.legReach)) * g.legReach;
+    if (half > most) {
+      halfX *= most / half;
+      halfZ *= most / half;
+    }
+    f.B.set(g.hip.x + landX + halfX, 0, g.hip.z + landZ + halfZ);
+    this.neutralAhead = halfX * f.dir.x + halfZ * f.dir.z;
   }
 
   /** Moves a moving stride's landing `out` by where the body will be in `time` (s) as the game eases its velocity

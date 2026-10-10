@@ -747,7 +747,13 @@ export class Player {
     // (backwards only going back against a facing it keeps: turning round to face the way it goes, the body moved
     // against its facing for a few frames, and the cycle turned round and back again, a foot just down due again at once)
     const backwards = fwd < -0.5 && !this.facesWay;
-    this.phase = this.cycleOn(dt * gs * gaitRate(gs, legLength(this.model)) * pace, backwards ? -1 : 1);
+    // (and speeding up, at the cadence of the speed it is going for, as a person accelerating takes quick, short steps
+    // from the first: by the speed it had so far, coming out of a turn round from a run the first swing took a walk's
+    // 23 frames, and the foot behind stayed planted as the body sped away from it, 75 cm behind the hips)
+    const leg = legLength(this.model);
+    const goalSpeed = this.dash ? 0 : Math.hypot(this.goal.x, this.goal.z);
+    const cadence = Math.max(gs * gaitRate(gs, leg), goalSpeed * gaitRate(goalSpeed, leg));
+    this.phase = this.cycleOn(dt * cadence * pace, backwards ? -1 : 1);
     let action: ActionState | null = null;
     if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };
     else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / (this.dash.dur + this.dash.hold)) };
