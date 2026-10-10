@@ -1,6 +1,7 @@
 // The player character: input -> movement/skills, resources, damage, animation.
 import * as THREE from 'three';
 import { gaitRate, legLength, LookAt, type LegIK } from './models/ik';
+import { stepVelocity } from './movement';
 import { watchBody } from './models/anatomy';
 import { G } from '../state';
 import { CLASSES } from '../data/classes/index';
@@ -112,9 +113,10 @@ export class Player {
 
   readonly pos = new THREE.Vector3(0, 0, 3);
   readonly vel = new THREE.Vector3();
-  /** the velocity the input eases the body towards and how quickly (`damp`'s rate), told to the legs (`LegIK.intend`) */
+  /** the velocity the input steers the body towards (`stepVelocity`), told to the legs (`LegIK.intend`), and whether
+   *  it has been set yet */
   private readonly goal = new THREE.Vector3();
-  private goalRate = 0;
+  private steered = false;
   readonly aim = new THREE.Vector3();
   readonly radius = 0.45;
   facing = Math.PI;
@@ -353,10 +355,9 @@ export class Player {
   handleInput(dt: number): void {
     if (this.idle) {
       // the co-op pause menu: stand still and let go of any channel
-      this.vel.x = damp(this.vel.x, 0, 14, dt);
-      this.vel.z = damp(this.vel.z, 0, 14, dt);
       this.goal.set(0, 0, 0);
-      this.goalRate = 14;
+      stepVelocity(this.vel, this.goal, dt);
+      this.steered = true;
       if (this.channel) this.stopChannel();
       return;
     }
@@ -375,12 +376,11 @@ export class Player {
     const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const k = len ? speed * Math.min(1, len) / len : 0;
     const tx = (mx * cy + mz * sy) * k, tz = (mz * cy - mx * sy) * k;
-    // it takes a moment to get going and to stop (the legs and the lean follow it), a little quicker to stop than to start
-    const kv = tx * tx + tz * tz > this.vel.x * this.vel.x + this.vel.z * this.vel.z ? 9 : 12;
-    this.vel.x = damp(this.vel.x, tx, kv, dt);
-    this.vel.z = damp(this.vel.z, tz, kv, dt);
+    // (as a body moves itself, pushing and braking against the ground: turning round from a run takes a braking step
+    // and a push the other way, `entities/movement.ts`)
     this.goal.set(tx, 0, tz);
-    this.goalRate = kv;
+    stepVelocity(this.vel, this.goal, dt);
+    this.steered = true;
 
     this.aim.copy(input.ground);
 
@@ -814,7 +814,7 @@ export class Player {
     const dead = this.deadT >= 0 ? Math.min(1, this.deadT / 1.0) : this.rising > 0 ? this.rising / RISE : -1;
     // (the legs told where the body is going, as the game eases it there: a stop's last stride lands where it rests)
     const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
-    if (this.local && !this.dash && this.goalRate > 0) legs?.intend(this.goal, this.goalRate, this.facesWay);
+    if (this.local && !this.dash && this.steered) legs?.intend(this.goal, this.facesWay);
     this.model.animate({
       t, dt, phase: this.phase, move, moveDir: dir, lean, action,
       hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,

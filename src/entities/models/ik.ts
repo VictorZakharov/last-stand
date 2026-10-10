@@ -20,6 +20,7 @@ import { groundHeight } from '../../world/ground';
 import { angleDamp, damp } from '../../util';
 import { ROM, ROM_ON, clampAnkle, clampAnkleRoll, twistAngle } from './anatomy';
 import { curve, type Keys } from './motion';
+import { predictMotion, stepVelocity, timeToSlow, type Flat } from '../movement';
 
 /** `?ik=0` keeps the walk cycle's own legs and its old gait, for A/B comparison */
 export const IK = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
@@ -579,6 +580,10 @@ const _shinTurn = new THREE.Quaternion(), _shinDown = new THREE.Vector3(), _trac
 const _heelUp = new THREE.Vector3(), _landWas = new THREE.Vector3(), _drift = new THREE.Vector3();
 const _kneeAt = new THREE.Vector3(), _restSpot = new THREE.Vector3(), _braking = new THREE.Vector3();
 const _rest = new THREE.Vector3(), _local = new THREE.Vector3(), _rootInverse = new THREE.Matrix4();
+const _predicted = { at: { x: 0, z: 0 } as Flat, v: { x: 0, z: 0 } as Flat };
+const _stepped: Flat = { x: 0, z: 0 }, _slowedAt: Flat = { x: 0, z: 0 };
+/** the prediction's frame (s), the furthest it looks ahead for a stop (s), and the speed a body has come to rest at */
+const PREDICT_DT = 1 / 60, PREDICT_MOST = 2, RESTED_SPEED = 0.02;
 /** along the foot and across it, both ways: where a standing foot's ball must have its level round it
  *  (`EDGE_MARGIN`) */
 const MARGIN_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
@@ -645,8 +650,10 @@ export class LegIK {
   private facesWay = false;
   /** the goal as the landings follow it (`GOAL_FOLLOW`) */
   private readonly goalSeen = new THREE.Vector3();
-  private goalRate = 0;
   private goalSaid = false;
+  /** where a stopping body rests, from where it is (m), for the motion it was worked out from (`restingAt`) */
+  private readonly restFound = new THREE.Vector3();
+  private readonly restFor = { vx: NaN, vz: NaN, gx: NaN, gz: NaN };
   private intended = false;
   /** the speed a stop began at (m/s; 0 while the body isn't being stopped), and whether the body stopped moving this
    *  frame */
@@ -684,15 +691,14 @@ export class LegIK {
   }
 
   /**
-   * The velocity the game is easing the body towards and how quickly (`rate`: as `damp` eases, by that share of the
-   * difference a second), told before `update` each frame it is known: as a person who decides to stop shortens the
+   * The velocity the game is steering the body towards (it moves as `entities/movement.ts` moves it, pushing and
+   * braking against the ground), told before `update` each frame it is known: as a person who decides to stop shortens the
    * stride under way and puts it down where the body will stand, the gait knows from the first frame where the body
    * comes to rest (read from the body's own slowing, a co-op copy's, it is known only a few frames later: the last
    * stride landed where the body would have been at speed, 40 to 60 cm past where it stopped).
    */
-  intend(goal: THREE.Vector3, rate: number, facesWay = false): void {
+  intend(goal: THREE.Vector3, facesWay = false): void {
     this.goal.set(goal.x, 0, goal.z);
-    this.goalRate = rate;
     this.goalSaid = true;
     this.facesWay = facesWay;
   }
@@ -825,7 +831,7 @@ export class LegIK {
    */
   update(dt: number, phase: number, dead: number, weight = 1, lean = 1, legW?: readonly [number, number]): void {
     if (!IK) return;
-    this.intended = this.goalSaid && this.goalRate > 0;
+    this.intended = this.goalSaid;
     this.goalSaid = false;
     this.goalSeen.lerp(this.intended ? this.goal : this.vNow, 1 - Math.exp(-GOAL_FOLLOW * Math.max(dt, 0)));
     if (!this.restingAt(_rest)) this.stopFrom = 0;
@@ -990,7 +996,7 @@ export class LegIK {
     // a third of it 7 frames late; as much as the stop was from a run's speed, read as it began: by the speed smoothed
     // slowly, a short sprint read as a walk)
     const stopping = this.restingAt(_rest);
-    const braking = stopping ? _braking.copy(this.vNow).multiplyScalar(-this.goalRate) : _braking.set(0, 0, 0);
+    const braking = stopping ? this.brakingNow(_braking) : _braking.set(0, 0, 0);
     // (and as much as there is momentum left to lean against: by the game's easing a body all but stopped still slows
     // at several m/s², and it stood leant back 7 degrees as it came to rest)
     const running = runShare(this.stopFrom, g.legReach) * smooth(this.vNow.length() / BRAKE_SPEED);
@@ -1777,12 +1783,18 @@ export class LegIK {
   /** Moves a moving stride's landing `out` by where the body will be in `time` (s) as the game eases its velocity
    *  towards its goal (`intend`, the goal followed smoothly: `goalSeen`), beyond where its velocity now would take it. */
   private easedOff(out: THREE.Vector3, time: number): void {
-    if (!this.intended || this.goalRate <= 0) return;
-    const eased = (1 - Math.exp(-this.goalRate * time)) / this.goalRate;
-    // (eased: goal * time + (now - goal) * eased; at its velocity now alone: now * time)
-    const beyond = time - eased;
-    out.x += (this.goalSeen.x - this.vNow.x) * beyond;
-    out.z += (this.goalSeen.z - this.vNow.z) * beyond;
+    if (!this.intended) return;
+    predictMotion(this.vNow, this.goalSeen, time, _predicted);
+    out.x += _predicted.at.x - this.vNow.x * time;
+    out.z += _predicted.at.z - this.vNow.z * time;
+  }
+
+  /** The game's braking of the body this frame (m/s², `out`), as it moves it. */
+  private brakingNow(out: THREE.Vector3): THREE.Vector3 {
+    _stepped.x = this.vNow.x;
+    _stepped.z = this.vNow.z;
+    stepVelocity(_stepped, this.goal, PREDICT_DT);
+    return out.set((_stepped.x - this.vNow.x) / PREDICT_DT, 0, (_stepped.z - this.vNow.z) / PREDICT_DT);
   }
 
   /** How far the body goes over the next `time` (s), and its speed then as a share of its speed now: slowing, as the
@@ -1813,14 +1825,14 @@ export class LegIK {
   }
 
   /** How far the body goes over the next `time` (s) along the way it goes, and its speed then as a share of its
-   *  speed now, as the game eases it towards its goal (`intend`): `damp`'s own curve, from the frame it starts. */
+   *  speed now, as the game moves it towards its goal (`intend`), from the frame it starts. */
   private easedOver(g: GaitFrame, time: number): { covered: number; share: number } {
     const now = Math.max(0, this.vNow.x * g.travel.x + this.vNow.z * g.travel.z);
-    const goal = Math.max(0, this.goal.x * g.travel.x + this.goal.z * g.travel.z);
-    if (now < 1e-3) return { covered: goal * time, share: 1 };
-    const left = Math.exp(-this.goalRate * time);
-    const covered = goal * time + ((now - goal) * (1 - left)) / this.goalRate;
-    return { covered, share: Math.min(1, (goal + (now - goal) * left) / now) };
+    predictMotion(this.vNow, this.goal, time, _predicted);
+    const covered = Math.max(0, _predicted.at.x * g.travel.x + _predicted.at.z * g.travel.z);
+    if (now < 1e-3) return { covered, share: 1 };
+    const then = Math.max(0, _predicted.v.x * g.travel.x + _predicted.v.z * g.travel.z);
+    return { covered, share: Math.min(1, then / now) };
   }
 
   /** How long a body the game is bringing to a stop takes to slow to where its strides in the air land (s, as
@@ -1830,7 +1842,8 @@ export class LegIK {
     if (!this.restingAt(_rest)) return 0;
     const speed = Math.hypot(this.vNow.x, this.vNow.z);
     const landBy = Math.max(STAND_SPEED, STOP_LAND * this.stopFrom * runShare(this.stopFrom, g.legReach));
-    return Math.log(Math.max(1, speed / landBy)) / this.goalRate;
+    if (speed <= landBy) return 0;
+    return timeToSlow(this.vNow, this.goal, landBy, PREDICT_MOST, _slowedAt);
   }
 
   /** Whether the game is bringing a moving body to a stop (`intend`), and if so where it comes to rest from where it
@@ -1838,7 +1851,18 @@ export class LegIK {
    *  reach stayed, and the bow arm drew through the string.) */
   private restingAt(out: THREE.Vector3): boolean {
     if (!this.intended || !this.moving || this.goal.lengthSq() > STOP_GOAL * STOP_GOAL) return false;
-    out.set(this.vNow.x / this.goalRate, 0, this.vNow.z / this.goalRate);
+    // (worked out once for the motion it is asked for: it is asked several times a frame)
+    const seen = this.restFor;
+    const same = seen.vx === this.vNow.x && seen.vz === this.vNow.z && seen.gx === this.goal.x && seen.gz === this.goal.z;
+    if (!same) {
+      timeToSlow(this.vNow, this.goal, RESTED_SPEED, PREDICT_MOST, _slowedAt);
+      this.restFound.set(_slowedAt.x, 0, _slowedAt.z);
+      seen.vx = this.vNow.x;
+      seen.vz = this.vNow.z;
+      seen.gx = this.goal.x;
+      seen.gz = this.goal.z;
+    }
+    out.copy(this.restFound);
     return true;
   }
 
