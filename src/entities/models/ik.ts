@@ -888,7 +888,7 @@ export class LegIK {
    * to 40% uneven, now and then a gallop.
    */
   get cadence(): number {
-    return IK && this.moving ? this.acrossK * this.hurryK : 1;
+    return IK && this.moving ? this.acrossK : 1;
   }
 
   /**
