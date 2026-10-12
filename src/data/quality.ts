@@ -5,8 +5,9 @@ export type QualitySetting = 'auto' | QualityLevel;
 
 export interface QualityPreset {
   label: string;
-  /** cap on devicePixelRatio for the render resolution */
-  pixelRatio: number;
+  /** the most pixels the scene renders, counted on the screen (Infinity: all the screen's own); never by the OS's
+   *  scaling, which says nothing of what the hardware draws */
+  pixels: number;
   /** MSAA samples on the scene render target (0 = off) */
   msaa: number;
   /** directional (moon) shadow map resolution */
@@ -22,12 +23,17 @@ export interface QualityPreset {
 }
 
 export const QUALITY: Record<QualityLevel, QualityPreset> = {
-  high:   { label: 'High',   pixelRatio: 1.5,  msaa: 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16 },
-  medium: { label: 'Medium', pixelRatio: 1.25, msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8 },
-  low:    { label: 'Low',    pixelRatio: 1,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0 },
+  high:   { label: 'High',   pixels: Infinity,    msaa: 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16 },
+  medium: { label: 'Medium', pixels: 2560 * 1440, msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8 },
+  low:    { label: 'Low',    pixels: 1920 * 1080, msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0 },
 };
 
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low'];
 
-/** Auto quality: step down a level when the average FPS stays below `minFps` for `window` seconds. */
-export const AUTO_QUALITY = { minFps: 50, window: 4, settle: 2 };
+/**
+ * Auto quality: step down when the average FPS stays below `minFps` for `window` seconds. High first renders fewer
+ * pixels, half as many a step, down to `highFloor`; then the level goes down, keeping the pixels; then Low renders
+ * fewer, down to `fewest` (each the screen's own, if fewer). What the hardware holds is measured, never guessed from
+ * the device or the OS's scaling.
+ */
+export const AUTO_QUALITY = { minFps: 50, window: 4, settle: 2, highFloor: 1920 * 1080, fewest: 960 * 540 };

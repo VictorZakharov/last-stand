@@ -6,7 +6,9 @@
 import * as THREE from 'three';
 import { G } from '../../state';
 import { overFrame } from '../../core/renderer';
-import { ATLAS_SIZE, atlasTexture, freeSlot, paintCanvas, takeSlot, uploadSlot, type Slot } from './atlas';
+import {
+  atlasCrowded, atlasSide, atlasTexture, clearAtlas, fits, freeSlot, paintCanvas, takeSlot, uploadSlot, type Slot,
+} from './atlas';
 
 /** What a label shows: its size (css px) and how to paint it there (its top left at the origin, in css px). */
 export interface LabelArt {
@@ -68,7 +70,7 @@ export class Label {
     const art = this.art;
     if (!art) return;
     const w = Math.ceil(art.w * ratio), h = Math.ceil(art.h * ratio);
-    if (this.slot && (this.slot.w < w || this.slot.h < h || this.slot.w > w * 2 + 16 || this.slot.h > h * 2 + 16)) {
+    if (this.slot && !fits(this.slot, w, h)) {
       freeSlot(this.slot);
       this.slot = null;
     }
@@ -157,9 +159,25 @@ const view = new THREE.Vector2();
 /** the labels drawn last frame, in the order drawn (lowest first) */
 let drawn: Label[] = [];
 
+/** the canvas's ratio the atlas's labels were painted at */
+let atlasRatio = 0;
+/** The atlas emptied for every label to be painted again as it's next shown: at a new ratio (each takes a slot of
+ *  another size, and the old sizes' shelves would stay taken: a move to another monitor changes the canvas's
+ *  ratio), or packed again when it's full of slots given back. */
+function restartAtlas(ratio: number): void {
+  atlasRatio = ratio;
+  clearAtlas(ratio);
+  for (const l of labels) {
+    l.slot = null;
+    l.painted = 0;
+  }
+}
+
 /** Every label where it shows now, painted where it changed, into this frame's draw (after the camera moved). */
 export function layoutLabels(): void {
   const ratio = G.renderer.getPixelRatio();
+  if (ratio !== atlasRatio || atlasCrowded()) restartAtlas(ratio);
+  const side = atlasSide();
   drawn = [...labels].filter((l) => l.shown && l.alpha > 0.002 && l.size.w > 0).sort((a, b) => a.order - b.order);
   if (!mesh || rects.count < drawn.length) makeMesh(Math.max(64, 2 ** Math.ceil(Math.log2(drawn.length + 1))));
   let n = 0;
@@ -181,7 +199,7 @@ export function layoutLabels(): void {
     l.box.w = w * l.scale;
     l.box.h = h * l.scale;
     rects.setXYZW(n, x, y, pw * l.scale, ph * l.scale);
-    uvs.setXYZW(n, slot.x / ATLAS_SIZE, slot.y / ATLAS_SIZE, (slot.x + pw) / ATLAS_SIZE, (slot.y + ph) / ATLAS_SIZE);
+    uvs.setXYZW(n, slot.x / side, slot.y / side, (slot.x + pw) / side, (slot.y + ph) / side);
     alphas.setX(n, l.alpha);
     n++;
   }
@@ -210,6 +228,8 @@ function drawLabels(): void {
   const gl = G.renderer;
   gl.getDrawingBufferSize(view);
   mesh!.material.uniforms.uView.value.copy(view);
+  // (the atlas is made again, larger, past a ratio of 2)
+  mesh!.material.uniforms.uAtlas.value = atlasTexture();
   const auto = gl.autoClear;
   gl.autoClear = false;
   gl.setRenderTarget(null);

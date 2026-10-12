@@ -294,6 +294,20 @@ export class Side {
   }
 
   /**
+   * Puts its page on a screen of `screen`'s size (css px) and pixel ratio (`--screen`), as a window moved onto another
+   * monitor is: no resize may come with it, and the game fits its canvas to it on its next frame.
+   */
+  async showOn(screen) {
+    const devtools = await this.page.context().newCDPSession(this.page);
+    await devtools.send('Emulation.setDeviceMetricsOverride', {
+      width: screen.width,
+      height: screen.height,
+      deviceScaleFactor: screen.ratio,
+      mobile: false,
+    });
+  }
+
+  /**
    * Imports a probe module (a path under the tree, read afresh each time) and runs its default export, after setting
    * `fixture` up (none when null).
    */

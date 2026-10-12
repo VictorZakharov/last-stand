@@ -5,7 +5,8 @@ import { G } from '../state';
 import { particles } from '../fx/particles';
 import { readCookie, writeCookie } from '../core/cookies';
 import { programsCompiledInGame, lateCompiles } from '../core/shaders';
-import { qualitySetting, qualityLevel } from '../core/quality';
+import { qualitySetting, qualityLevel, qualityBudget } from '../core/quality';
+import { atlasUse } from './overlay/atlas';
 import { QUALITY } from '../data/quality';
 import { gpuMarks, viewMode, sceneRatio, sceneSize } from '../core/renderer';
 
@@ -170,6 +171,8 @@ function gpuSplit(): string {
 const percentile = (sorted: number[], q: number): number => sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * q))] : NaN;
 const mean = (a: number[]): number => a.length ? a.reduce((s, v) => s + v, 0) / a.length : NaN;
 const fmt = (v: number, digits = 1): string => Number.isFinite(v) ? v.toFixed(digits) : '--';
+/** Auto's budget of the scene's pixels, when it has one (its steps down on High). */
+const budgetNote = (): string => Number.isFinite(qualityBudget()) ? `, at most ${(qualityBudget() / 1e6).toFixed(2)} Mpx` : '';
 const fmtFps = (v: number): string => Number.isFinite(v) ? (v < 20 ? v.toFixed(1) : String(Math.round(v))) : '--';
 const kilo = (n: number): string => n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : String(n);
 
@@ -289,7 +292,7 @@ function report(): string {
     `Frame p50 ${fmt(s.p50)} ms | p95 ${fmt(s.p95)} ms | CPU ${fmt(s.cpu, 2)} ms | GPU ${timerExt ? fmt(s.gpu, 2) + ' ms' : 'n/a'}`,
     `Draw calls ${frameCalls} | triangles ${frameTris} | programs ${info.programs?.length ?? 0} (compiled after load ${programsCompiledInGame()}) | geometries ${info.memory.geometries} | textures ${info.memory.textures}`,
     `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | scene ${sceneSize(new THREE.Vector2()).toArray().join('x')} at ${sceneRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
-    `Quality ${qualityLevel()} (setting ${qualitySetting()}) | MSAA ${QUALITY[qualityLevel()].msaa} | shadow map ${QUALITY[qualityLevel()].shadowMap}`,
+    `Quality ${qualityLevel()} (setting ${qualitySetting()}${budgetNote()}) | MSAA ${QUALITY[qualityLevel()].msaa} | shadow map ${QUALITY[qualityLevel()].shadowMap} | label atlas ${Math.round(atlasUse() * 100)}% used`,
     ...(gpuParts.length ? [`GPU split: ${gpuSplit()}`] : []),
     `Mode ${G.mode} | biome ${G.arena.biome} | view ${viewMode()} | enemies ${G.enemies.length} | projectiles ${G.projectiles.length} | particles ${particles.glow.count + particles.smoke.count}`,
 

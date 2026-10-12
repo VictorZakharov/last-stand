@@ -190,6 +190,9 @@ Options every command run on a page takes:
   again); `gait --offset n`: each scenario's first move n frames longer, its later turns and stops at other
   points of a stride (a check's starts);
 - `--class ranger|warrior|mage`: the hero (the last one used by default);
+- `--screen WxH[@ratio]`: the page put on a screen of that size in css px and pixel ratio once it has booted (`1280x720@3`:
+  a 4K screen at 300%), as a window moved onto another monitor is: the game fits its canvas to it on the next frame
+  (1920x1080 at 1 by default);
 - `--ab[=ref]`: also on another commit (`origin/main` by default), its results beside this tree's, ending with the
   verdict: the lines that differ under the section each is in, and the pictures that differ by more than the GPU's own
   noise, with where (the region of each, and a picture of each in `out/ab/<command>/`: this tree's dimmed, its
