@@ -21,6 +21,9 @@ const _v = new THREE.Vector3(), _n = new THREE.Vector3(), _b = new THREE.Vector3
 export function taperTube(pts: THREE.Vector3[], radius: (t: number) => number, segs = 12, radial = 7): THREE.BufferGeometry {
   if (replaying) return NONE;
   const curve = new THREE.CatmullRomCurve3(pts);
+  // (its arc lengths over 8 steps a segment: by three's 200 a fur tuft of 3 segments took 200 points of the curve to
+  // place 4 rings, half of a hero's fur; the rings move under 0.2 mm)
+  curve.arcLengthDivisions = Math.max(segs * 8, 32);
   const frames = curve.computeFrenetFrames(segs, false);
   const pos: number[] = [], uv: number[] = [], idx: number[] = [];
   for (let i = 0; i <= segs; i++) {

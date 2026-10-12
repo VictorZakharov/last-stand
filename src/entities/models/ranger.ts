@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, bowWood as bowWoodMaps, pbrMaterialMaps } from '../../core/textures';
-import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet } from './rig';
+import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, armOffThigh, lod, type JointPoint } from './armor';
 import { onTunic, tunicFront, tunicBack, tunicCut, setInSleeve, armholeEdge, ARMHOLE, WAIST } from './tunic';
@@ -1160,6 +1160,6 @@ export function buildRanger(): Model {
     root, kit, joints: j, animate, tip, palm, height: 2,
     firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; strung = 0; fetchFrom = -1; kHook = -1; stowT = -1; },
     setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; for (const h of head.hair.slice(1)) h.visible = !gear.helm; },
-    dispose() { kit.dispose(); root.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && g !== arrowGeometry()) g.dispose(); }); },
+    dispose() { kit.dispose(); disposeGeometries(root, arrowGeometry()); },
   };
 }
