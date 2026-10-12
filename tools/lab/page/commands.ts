@@ -9,6 +9,7 @@ import { range as rangeRound, missedRangeCanary, type RangeOptions } from './ran
 import { gait as gaitRound, type GaitOptions } from './gait';
 import { stops as stopsRound, type StopsOptions } from './stops';
 import { form as formRound, type FormOptions } from './form';
+import { ui as uiRound, type UiOptions } from './ui';
 
 export interface SheetCommand {
   states: string[];
@@ -85,6 +86,14 @@ export async function stops(lab: Lab, command: StopsOptions): Promise<Report> {
 export async function form(lab: Lab, command: FormOptions): Promise<Report> {
   const report = await formRound(lab, command);
   return { text: report.lines.join('\n'), problems: report.problems, moments: report.moments };
+}
+
+/**
+ * `lab ui`: the game's UI in its states (the lobby, a tooltip, the run's HUD with the world's labels, the choice after
+ * a wave, the pause menu), each pictured whole with its boxes as shares of the window.
+ */
+export function ui(lab: Lab, command: UiOptions): Promise<Report> {
+  return uiRound(lab, command);
 }
 
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */

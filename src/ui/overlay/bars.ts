@@ -4,7 +4,7 @@
 import { drawText, measure, OUTLINE, ringAround, vertical, type TextStyle } from './paint';
 import type { LabelArt } from './layer';
 
-/** A bar's look: its track's size inside its border (css px), the ring round it, its fill's gradient. */
+/** A bar's look: its track's size inside its border (px), the ring round it, its fill's gradient. */
 export interface BarLook {
   w: number;
   h: number;
@@ -22,9 +22,9 @@ export const ALLY_BAR: BarLook = { w: 56, h: 5, ring: FRAME, fill: ['#6ab8ff', '
 export const FOE_NAME: TextStyle = { face: 'display', size: 12, color: '#f5c060', shadows: OUTLINE };
 export const ALLY_NAME: TextStyle = { face: 'display', size: 12, color: '#9ccfff', shadows: OUTLINE };
 
-/** room round the bar and its name for the name's shadows (css px) */
+/** room round the bar and its name for the name's shadows (px) */
 const PAD = 7;
-/** between the name and the bar (css px) */
+/** between the name and the bar (px) */
 const GAP = 2;
 
 /** A bar's art showing `share` (0 to 1) of its fill. */
@@ -57,7 +57,7 @@ export function barArt(look: BarLook, share: number): LabelArt {
 /** The share of a bar's fill in whole pixels of its track, so a bar is painted again only when its fill visibly moves. */
 export const barStep = (look: BarLook, share: number): number => Math.round(Math.max(0, Math.min(1, share)) * look.w * 2);
 
-/** a damaged prop's gauge: the diamond's side and the track's size (css px), its gap between them */
+/** a damaged prop's gauge: the diamond's side and the track's size (px), its gap between them */
 const GAUGE = { diamond: 7, gap: 3, w: 44, h: 6 };
 
 /** A damaged prop's gauge (`world/destructible.ts`) showing `share` of its health: not a foe's red bar but a notched

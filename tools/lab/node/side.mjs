@@ -31,10 +31,25 @@ const UNWATCHED = ['**/.tmp/**', '**/tools/lab/out/**', '**/tools/facelab/**', '
 /** the cookies every boot starts with besides its hero's: the forest, the high quality preset */
 const BOOT_COOKIES = { 'last-stand-biome': 'forest', 'last-stand-quality': 'high' };
 
-/** The page pictured as it shows (within `clip`, css px, when one is given), as a PNG data URL: `lab.screen`'s. */
+/** each page's DevTools session, opened as it first needs one */
+const DEVTOOLS = new WeakMap();
+
+/** `page`'s DevTools session (the same one each time). */
+async function devtoolsOf(page) {
+  if (!DEVTOOLS.has(page)) DEVTOOLS.set(page, await page.context().newCDPSession(page));
+  return DEVTOOLS.get(page);
+}
+
+/**
+ * The page pictured as it shows (within `clip`, css px, when one is given), as a PNG data URL at the screen's own
+ * pixels: `lab.screen`'s. Taken through the DevTools protocol: Playwright's screenshot put the page back on the
+ * screen Playwright had given it, and on a `--screen` every picture after the first showed the boot's 1920x1080.
+ */
 async function screenshotOf(page, clip) {
-  const png = await page.screenshot(clip ? { clip } : {});
-  return `data:image/png;base64,${png.toString('base64')}`;
+  const devtools = await devtoolsOf(page);
+  const region = clip ? { clip: { ...clip, scale: 1 } } : {};
+  const { data } = await devtools.send('Page.captureScreenshot', { format: 'png', ...region });
+  return `data:image/png;base64,${data}`;
 }
 
 const toSlashes = (path) => path.split('\\').join('/');
@@ -298,7 +313,7 @@ export class Side {
    * monitor is: no resize may come with it, and the game fits its canvas to it on its next frame.
    */
   async showOn(screen) {
-    const devtools = await this.page.context().newCDPSession(this.page);
+    const devtools = await devtoolsOf(this.page);
     await devtools.send('Emulation.setDeviceMetricsOverride', {
       width: screen.width,
       height: screen.height,

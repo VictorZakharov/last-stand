@@ -2,6 +2,8 @@
 @use 'theme' as *;
 
 #tooltip { position: fixed; z-index: 50; pointer-events: none; font-size: 14px; }
+// (its cards at the lobby's scale; the box itself is placed in css px, off the pointer, which the OS scales)
+#tooltip > * { zoom: var(--ui, 1); }
 .tt-cards { display: flex; gap: 6px; align-items: flex-start; }
 .tt-cards.stack { flex-direction: column; }
 .tt-card { width: 280px; padding: 10px 12px; background: rgba(8,7,8,.97); border: 1px solid #000;

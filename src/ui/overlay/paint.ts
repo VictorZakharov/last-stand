@@ -1,7 +1,8 @@
 // Painting the world's overlays (ui/overlay) with the canvas, as the page's own CSS drew them: its fonts, text
-// shadows and gradients, in css px on a context scaled to the canvas's pixels.
+// shadows and gradients, in px of the labels' art (the UI's reference layout's), on a context scaled to the
+// canvas's pixels.
 
-/** A text shadow as CSS gives one: offset, blur radius (css px) and colour. */
+/** A text shadow as CSS gives one: offset, blur radius (px) and colour. */
 export interface Shadow { x: number; y: number; blur: number; color: string }
 
 /** How a run of text is drawn. */
@@ -12,7 +13,7 @@ export interface TextStyle {
   weight?: number;
   color: string;
   shadows?: Shadow[];
-  /** css px between letters */
+  /** px between letters */
   spacing?: number;
   upper?: boolean;
 }
@@ -41,14 +42,14 @@ function measuring(): CanvasRenderingContext2D {
   return measurer;
 }
 
-/** How far a style's shadows reach past its text (css px), so the label leaves room for them. */
+/** How far a style's shadows reach past its text (px), so the label leaves room for them. */
 export function shadowReach(s: TextStyle): number {
   let reach = 0;
   for (const sh of s.shadows ?? []) reach = Math.max(reach, sh.blur + Math.max(Math.abs(sh.x), Math.abs(sh.y)));
   return Math.ceil(reach);
 }
 
-/** A run of text laid out: its width and the height of its line box (css px), the font's ascent within it. */
+/** A run of text laid out: its width and the height of its line box (px), the font's ascent within it. */
 export interface Measured { text: string; w: number; h: number; ascent: number }
 
 /** Lays `text` out in style `s`: as wide as the page sets it, a line box of the font's size. */
@@ -70,8 +71,8 @@ function setSpacing(c: CanvasRenderingContext2D, px: number): void {
 }
 
 /**
- * Draws laid-out text with its top left at (x, y) (css px) in style `s`: its shadows first, the last CSS lists
- * lowest, as CSS stacks them, then the text. `scale` is the canvas's pixels per css px (a shadow's blur and offset
+ * Draws laid-out text with its top left at (x, y) (px) in style `s`: its shadows first, the last CSS lists
+ * lowest, as CSS stacks them, then the text. `scale` is the canvas's pixels per px (a shadow's blur and offset
  * aren't scaled by the context's transform).
  */
 export function drawText(c: CanvasRenderingContext2D, t: Measured, x: number, y: number, s: TextStyle, scale: number): void {
@@ -100,7 +101,7 @@ export function vertical(c: CanvasRenderingContext2D, y: number, h: number, stop
   return g;
 }
 
-/** A ring of `width` css px drawn round a box, outside it (as CSS's `box-shadow: 0 0 0 width colour`). */
+/** A ring of `width` px drawn round a box, outside it (as CSS's `box-shadow: 0 0 0 width colour`). */
 export function ringAround(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, width: number, color: string): void {
   c.fillStyle = color;
   c.fillRect(x - width, y - width, w + width * 2, width);

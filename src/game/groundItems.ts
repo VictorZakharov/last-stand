@@ -17,6 +17,7 @@ import { input } from '../core/input';
 import { itemIconImage } from '../ui/itemIcons';
 import { Label, ORDER, labelAt, type LabelArt } from '../ui/overlay/layer';
 import { drawText, measure, OUTLINE, roundRect, svgImage, type TextStyle } from '../ui/overlay/paint';
+import { uiScales } from '../ui/scale';
 import type { Item } from '../types';
 
 /** A drop as the games tell each other about it: the item, where it lies and where it was thrown from. */
@@ -48,8 +49,8 @@ interface Drop extends GroundDrop {
   t: number;
   /** when a guest last asked the host for it */
   asked: number;
-  /** the lobby's UI scale its label was painted at */
-  ui: number;
+  /** the canvas's pixels per px of its label its icon was made for (`iconRatio`) */
+  ratio: number;
 }
 
 const drops = new Map<string, Drop>();
@@ -165,22 +166,24 @@ export function floorAt(cx: number, cy: number): { x: number; z: number } | null
   return ray.ray.intersectPlane(floorPlane, hit) ? { x: hit.x, z: hit.z } : null;
 }
 
-/** the lobby's UI scale (`--ui`, set on the root by ui/scale) */
-const uiScale = (): number => parseFloat(document.documentElement.style.getPropertyValue('--ui')) || 1;
+/** The canvas's pixels per px of a drop's label (the labels are drawn at the lobby's UI scale): its icon is made for
+ *  it, so it's drawn at its own size. */
+const iconRatio = (): number => G.renderer.getPixelRatio() * uiScales.ui;
 
-/** A drop's label at UI scale `u`: its icon and name in its rarity's colour on a dark plate edged in it. */
-function dropArt(d: Drop, u: number): LabelArt {
+/** A drop's label, its icon made for `ratio` canvas pixels per px: its icon and name in its rarity's colour on a dark
+ *  plate edged in it. */
+function dropArt(d: Drop, ratio: number): LabelArt {
   const color = rarityOf(d.item.rarity).color;
-  const style: TextStyle = { face: 'display', size: 13 * u, color, shadows: OUTLINE };
-  const name = measure(d.item.name, style), icon = 20 * u, gap = 5 * u;
-  const pad = { top: 2 * u, right: 8 * u, bottom: 2 * u, left: 4 * u };
+  const style: TextStyle = { face: 'display', size: 13, color, shadows: OUTLINE };
+  const name = measure(d.item.name, style), icon = 20, gap = 5;
+  const pad = { top: 2, right: 8, bottom: 2, left: 4 };
   const inner = Math.max(icon, name.h);
   const w = 2 + pad.left + icon + gap + name.w + pad.right, h = 2 + pad.top + inner + pad.bottom;
-  const img = svgImage(itemIconImage(d.item, Math.ceil(icon * 2)), () => d.label.show(dropArt(d, uiScale())));
+  const img = svgImage(itemIconImage(d.item, Math.ceil(icon * ratio)), () => d.label.show(dropArt(d, d.ratio)));
   return {
     w, h,
     paint(c, s) {
-      roundRect(c, 0.5, 0.5, w - 1, h - 1, 3 * u);
+      roundRect(c, 0.5, 0.5, w - 1, h - 1, 3);
       c.fillStyle = 'rgba(12,11,14,.8)';
       c.fill();
       c.globalAlpha = 0.55;
@@ -201,9 +204,10 @@ export function addDrop(g: GroundDrop, toss = true): void {
   const label = new Label(ORDER.floor);
   label.pickable = true;
   label.ax = label.ay = 0;
+  label.sizedBy = 'ui';
   label.shown = false;
-  const d: Drop = { ...g, label, t: toss ? 0 : TOSS + 1, asked: -Infinity, ui: uiScale() };
-  label.show(dropArt(d, d.ui));
+  const d: Drop = { ...g, label, t: toss ? 0 : TOSS + 1, asked: -Infinity, ratio: iconRatio() };
+  label.show(dropArt(d, d.ratio));
   drops.set(d.id, d);
   recolour = true;
   drawDrops();
@@ -363,18 +367,19 @@ function placeLabels(): void {
     if (s.behind) d.label.shown = false;
     return !s.behind;
   }).sort((a, b) => b.s.y - a.s.y);
-  const u = uiScale();
+  const u = uiScales.ui, ratio = iconRatio();
   for (const { d, s } of shown) {
     const el = d.label;
     el.shown = true;
-    // (painted again at the lobby's new scale)
-    if (d.ui !== u) { d.ui = u; el.show(dropArt(d, u)); }
-    const { w, h } = el.size;
+    // (its icon made again for the canvas's new pixels: another screen, or the lobby's new scale)
+    if (d.ratio !== ratio) { d.ratio = ratio; el.show(dropArt(d, ratio)); }
+    // (stacked on the page, css px: the art's px at the lobby's scale)
+    const w = el.size.w * u, h = el.size.h * u;
     const r = { x: s.x - w / 2, y: s.y - h, w, h };
     for (let i = 0; i < 20; i++) {
       const hit = placed.find((o) => r.x < o.x + o.w && o.x < r.x + r.w && r.y < o.y + o.h && o.y < r.y + r.h);
       if (!hit) break;
-      r.y = hit.y - h - 2;
+      r.y = hit.y - h - 2 * u;
     }
     placed.push(r);
     el.x = r.x;

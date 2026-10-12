@@ -10,10 +10,10 @@ import { REPO } from './paths.mjs';
 export const TOLERANCE = 2;
 
 /**
- * Runs in the page (serialized: it can use nothing from here). Each pair compared: how many pixels are more than
+ * Runs in the page (serialized: it can use nothing from here). A pair compared: how many pixels are more than
  * `tolerance` apart, of how many, the largest difference, the box they lie in, and a picture of where they are.
  */
-async function compareInPage({ pairs, tolerance }) {
+async function compareInPage({ pair, tolerance }) {
   const pixelsOf = async (dataUrl) => {
     const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
@@ -30,40 +30,35 @@ async function compareInPage({ pairs, tolerance }) {
     for (const byte of bytes) text += String.fromCharCode(byte);
     return btoa(text);
   };
-  const results = [];
-  for (const { before, after } of pairs) {
-    const [old, now] = await Promise.all([pixelsOf(before), pixelsOf(after)]);
-    const { width, height } = now;
-    if (old.width !== width || old.height !== height) {
-      results.push({ sized: `${old.width}×${old.height} against ${width}×${height}` });
-      continue;
-    }
-    const where = new Uint8ClampedArray(now.data.length);
-    const box = { left: width, right: -1, top: height, bottom: -1 };
-    let differing = 0;
-    let largest = 0;
-    for (let i = 0; i < now.data.length; i += 4) {
-      const red = Math.abs(old.data[i] - now.data[i]);
-      const green = Math.abs(old.data[i + 1] - now.data[i + 1]);
-      const blue = Math.abs(old.data[i + 2] - now.data[i + 2]);
-      const most = Math.max(red, green, blue);
-      if (most > largest) largest = most;
-      const grey = (now.data[i] + now.data[i + 1] + now.data[i + 2]) / 9;
-      where.set(most > tolerance ? [255, 0, 255, 255] : [grey, grey, grey, 255], i);
-      if (most <= tolerance) continue;
-      differing++;
-      const x = (i / 4) % width;
-      const y = Math.floor(i / 4 / width);
-      box.left = Math.min(box.left, x);
-      box.right = Math.max(box.right, x);
-      box.top = Math.min(box.top, y);
-      box.bottom = Math.max(box.bottom, y);
-    }
-    const result = { differing, pixels: width * height, largest, width, height };
-    if (differing > 0) Object.assign(result, { box, where: await pngOf(width, height, where) });
-    results.push(result);
+  const [old, now] = await Promise.all([pixelsOf(pair.before), pixelsOf(pair.after)]);
+  const { width, height } = now;
+  if (old.width !== width || old.height !== height) {
+    return { sized: `${old.width}×${old.height} against ${width}×${height}` };
   }
-  return results;
+  const where = new Uint8ClampedArray(now.data.length);
+  const box = { left: width, right: -1, top: height, bottom: -1 };
+  let differing = 0;
+  let largest = 0;
+  for (let i = 0; i < now.data.length; i += 4) {
+    const red = Math.abs(old.data[i] - now.data[i]);
+    const green = Math.abs(old.data[i + 1] - now.data[i + 1]);
+    const blue = Math.abs(old.data[i + 2] - now.data[i + 2]);
+    const most = Math.max(red, green, blue);
+    if (most > largest) largest = most;
+    const grey = (now.data[i] + now.data[i + 1] + now.data[i + 2]) / 9;
+    where.set(most > tolerance ? [255, 0, 255, 255] : [grey, grey, grey, 255], i);
+    if (most <= tolerance) continue;
+    differing++;
+    const x = (i / 4) % width;
+    const y = Math.floor(i / 4 / width);
+    box.left = Math.min(box.left, x);
+    box.right = Math.max(box.right, x);
+    box.top = Math.min(box.top, y);
+    box.bottom = Math.max(box.bottom, y);
+  }
+  const result = { differing, pixels: width * height, largest, width, height };
+  if (differing > 0) Object.assign(result, { box, where: await pngOf(width, height, where) });
+  return result;
 }
 
 /** A pair's name as a file name: `walking, arm back / left` to `walking-arm-back--left`. */
@@ -85,10 +80,12 @@ function describeBox({ box, width, height }) {
 export async function describePictureDifferences(browser, pairs, diffDir = null) {
   if (pairs.length === 0) return 'pictures: none to compare';
   const page = await browser.newPage();
-  let results;
+  const results = [];
   try {
-    const plain = pairs.map(({ before, after }) => ({ before, after }));
-    results = await page.evaluate(compareInPage, { pairs: plain, tolerance: TOLERANCE });
+    // (a pair at a time: a 4K screen's five pairs sent at once were too much for the page)
+    for (const { before, after } of pairs) {
+      results.push(await page.evaluate(compareInPage, { pair: { before, after }, tolerance: TOLERANCE }));
+    }
   } finally {
     await page.close();
   }

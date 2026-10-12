@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { Label, ORDER, layoutLabels } from './overlay/layer';
 import { drawText, measure, type Shadow, type TextStyle } from './overlay/paint';
+import { uiScales } from './scale';
 
 type WorldPos = { x: number; y: number; z: number };
 export type FloatKind = 'dmg' | 'crit' | 'heal' | 'player' | 'info';
@@ -51,6 +52,9 @@ export function floatText(x: number, y: number, z: number, text: string | number
   floats.push({ label, x: x + (Math.random() - 0.5) * 0.6, y, z: z + (Math.random() - 0.5) * 0.6, t: 0, life: kind === 'crit' ? 1.1 : 0.85, vx: (Math.random() - 0.5) * 40 });
 }
 
+/** how far a clamped label keeps from the screen's edges (px of the UI's reference layout, at the HUD's scale) */
+const CLAMP = { side: 40, top: 40, bottom: 110 };
+
 /** A label over a point of the world (`at` gives it each frame; null hides it): `clamp` keeps it on screen, above the
  *  hotbar and below the top (a tall prop seen from close by reaches past the frame). */
 export function anchorLabel(order: number, at: () => WorldPos | null, clamp = false): Label {
@@ -68,6 +72,8 @@ export function removeLabel(label: Label | null | undefined): void {
 
 /** Every label where it shows now (run after the camera has moved), and the frame's draw of them laid out. */
 export function updateFloaters(dt: number): void {
+  // (a float's rise and drift are px of the UI's reference layout, as its text is)
+  const u = uiScales.hud;
   for (let i = floats.length - 1; i >= 0; i--) {
     const f = floats[i];
     f.t += dt;
@@ -76,8 +82,8 @@ export function updateFloaters(dt: number): void {
     const p = project(f.x, f.y, f.z);
     const rise = 60 * (1 - (1 - k) ** 2);
     f.label.shown = !p.behind;
-    f.label.x = p.x + f.vx * k;
-    f.label.y = p.y - rise;
+    f.label.x = p.x + f.vx * k * u;
+    f.label.y = p.y - rise * u;
     f.label.scale = f.t < 0.12 ? 1 + (0.12 - f.t) * 6 : 1;
     f.label.alpha = k > 0.6 ? 1 - (k - 0.6) / 0.4 : 1;
   }
@@ -86,8 +92,8 @@ export function updateFloaters(dt: number): void {
     const p = w ? project(w.x, w.y, w.z) : null;
     a.label.shown = !!p && !p.behind;
     if (!p || p.behind) continue;
-    a.label.x = a.clamp ? Math.min(window.innerWidth - 40, Math.max(40, p.x)) : p.x;
-    a.label.y = a.clamp ? Math.min(window.innerHeight - 110, Math.max(40, p.y)) : p.y;
+    a.label.x = a.clamp ? Math.min(window.innerWidth - CLAMP.side * u, Math.max(CLAMP.side * u, p.x)) : p.x;
+    a.label.y = a.clamp ? Math.min(window.innerHeight - CLAMP.bottom * u, Math.max(CLAMP.top * u, p.y)) : p.y;
   }
   layoutHooks.forEach((hook) => hook());
   layoutLabels();

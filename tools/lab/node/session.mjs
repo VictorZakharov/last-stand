@@ -33,6 +33,11 @@ function seconds(since) {
   return `${((Date.now() - since) / 1000).toFixed(1)} s`;
 }
 
+/** A screen as the command line writes it: `1280x720@3`. */
+function screenName(screen) {
+  return `${screen.width}x${screen.height}@${screen.ratio}`;
+}
+
 export class LabSession {
   /**
    * Opens a session: the browser launched, nothing served or booted until a command needs it. A check's sessions run
@@ -78,72 +83,95 @@ export class LabSession {
     if (!handler) throw labError(`no command ${command} (there are ${Object.keys(COMMANDS).join(', ')}, status)`);
     handler.check?.(options);
     const started = Date.now();
-    const shown = [this.repoSide];
-    if (options.ab) shown.unshift(await this.sideFor(options.ab === true ? 'origin/main' : options.ab));
+    const shown = await this.turnsFor(options);
     // (this tree's turn first: its page was booted ahead, as the last command finished)
     const turns = [...shown].reverse();
     const heroClass = options.class ?? this.repoSide.heroClass ?? DEFAULT_CLASS;
     const notes = relaunched ? [relaunched] : [];
     const problems = [];
     const resultOf = new Map();
-    for (const side of turns) {
+    for (const turn of turns) {
+      const side = turn.side;
       const key = this.keyOf(side, command, options, heroClass);
       const kept = key ? readKept(key) : null;
       if (kept) {
-        resultOf.set(side, kept.result);
-        notes.push(`${side.name}: as it ran ${kept.ranAt} (kept in ${cacheShown()}; --fresh runs it again)`);
+        resultOf.set(turn, kept.result);
+        notes.push(`${turn.name}: as it ran ${kept.ranAt} (kept in ${cacheShown()}; --fresh runs it again)`);
         notes.push(...kept.notes);
         problems.push(...kept.problems);
         continue;
       }
       const sideNotes = [];
       const sideProblems = [];
-      for (const other of turns) if (other !== side) await other.closePage();
+      for (const other of turns) if (other.side !== side) await other.side.closePage();
       const bootStarted = Date.now();
-      if (await side.ready(heroClass)) notes.push(`${side.name}: booted the ${heroClass} (${seconds(bootStarted)})`);
+      if (await side.ready(heroClass)) notes.push(`${turn.name}: booted the ${heroClass} (${seconds(bootStarted)})`);
       side.used = true;
-      if (options.screen) await side.showOn(options.screen);
+      if (turn.screen) await side.showOn(turn.screen);
       const runCommand = () => handler.each(side, options, this);
       if (options.profile) {
         const { result, profile } = await profiled(side.page, runCommand);
-        resultOf.set(side, result);
+        resultOf.set(turn, result);
         const sourceOf = await side.sourceLocator(scriptsIn(profile));
-        notes.push(`${side.name}: ${summarize(profile, sourceOf)}`);
+        notes.push(`${turn.name}: ${summarize(profile, sourceOf)}`);
       } else {
-        resultOf.set(side, await runCommand());
+        resultOf.set(turn, await runCommand());
       }
       const { errors, warnings } = await side.drainMessages();
       if (errors.length) {
-        sideNotes.push(`${side.name}: PAGE ERRORS\n  ${errors.slice(0, MESSAGES_SHOWN).join('\n  ')}`);
-        sideProblems.push(`${side.name}: ${errors.length} errors in the page`);
+        sideNotes.push(`${turn.name}: PAGE ERRORS\n  ${errors.slice(0, MESSAGES_SHOWN).join('\n  ')}`);
+        sideProblems.push(`${turn.name}: ${errors.length} errors in the page`);
       }
       if (warnings.length) {
-        sideNotes.push(`${side.name}: joints past their ranges: ${warnings.slice(0, MESSAGES_SHOWN).join(' | ')}`);
+        sideNotes.push(`${turn.name}: joints past their ranges: ${warnings.slice(0, MESSAGES_SHOWN).join(' | ')}`);
       }
-      const found = handler.problemsOf?.(resultOf.get(side)) ?? [];
-      for (const problem of found) sideProblems.push(`${side.name}: ${problem}`);
+      const found = handler.problemsOf?.(resultOf.get(turn)) ?? [];
+      for (const problem of found) sideProblems.push(`${turn.name}: ${problem}`);
       notes.push(...sideNotes);
       problems.push(...sideProblems);
       // (kept only from a page that raised nothing: a browser that fell over would be read back for good)
       if (key && errors.length === 0) {
-        keep(key, { result: resultOf.get(side), notes: sideNotes, problems: sideProblems });
+        keep(key, { result: resultOf.get(turn), notes: sideNotes, problems: sideProblems });
       }
     }
-    const results = shown.map((side) => [side, resultOf.get(side)]);
+    const results = shown.map((turn) => [turn, resultOf.get(turn)]);
     const textOf = handler.textOf ?? String;
     const text = handler.finish
       ? await handler.finish(results, options, this)
-      : results.map(([side, result]) => `${side.name}\n${textOf(result)}`).join('\n\n');
+      : results.map(([turn, result]) => `${turn.name}\n${textOf(result)}`).join('\n\n');
     const verdict = results.length === 2 ? await this.compareSides(command, handler, results) : null;
     const failed = problems.length ? `FAILED: ${problems.join('; ')}` : null;
     const report = [...notes, text, verdict, failed, `(${seconds(started)})`].filter(Boolean).join('\n');
-    const counts = handler.countsOf ? results.map(([side, result]) => this.countsOn(side, handler, result)) : [];
+    const counts = handler.countsOf ? results.map(([turn, result]) => this.countsOn(turn, handler, result)) : [];
     return { text: report, problems, counts };
   }
 
-  /** What a command counted on `side` (`countsOf`), and whether that side is this tree's. */
-  countsOn(side, handler, result) {
-    return { side: side.name, mine: side === this.repoSide, counts: handler.countsOf(result) ?? {} };
+  /**
+   * The turns a command runs, in the order they're shown (the one compared against first), each a side, its name, the
+   * screen it's put on (none: the boot's own) and what its files' names start with: this tree alone; with `--ab`, the
+   * other commit and then this tree; with `--screens`, this tree on each screen.
+   */
+  async turnsFor(options) {
+    const mine = this.repoSide;
+    if (options.screens) {
+      return options.screens.map((screen) => ({
+        side: mine,
+        name: `this tree on ${screenName(screen)}`,
+        screen,
+        filePrefix: `${screenName(screen)}-`,
+      }));
+    }
+    const turns = [{ side: mine, name: mine.name, screen: options.screen, filePrefix: '' }];
+    if (options.ab) {
+      const other = await this.sideFor(options.ab === true ? 'origin/main' : options.ab);
+      turns.unshift({ side: other, name: other.name, screen: options.screen, filePrefix: 'main-' });
+    }
+    return turns;
+  }
+
+  /** What a command counted on `turn` (`countsOf`), and whether that turn ran this tree. */
+  countsOn(turn, handler, result) {
+    return { side: turn.name, mine: turn.side === this.repoSide, counts: handler.countsOf(result) ?? {} };
   }
 
   /**

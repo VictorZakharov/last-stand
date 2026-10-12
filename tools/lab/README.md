@@ -157,6 +157,16 @@ terminal's task stops it all.
   with a clip, what crossed what and how deep.
 - `probe <module>`: a measure of your own (below). Options the lab doesn't know are passed to it (`--frames=30`), and
   `--setup=false` skips the set-up.
+- `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,help,saves,run,scores,perf,
+  decision,pause,summary`: the lobby, an item's tooltip, How to play, the save slots, the run's HUD with a hurt foe's
+  bar and damage numbers over it, the scores, the performance overlay, the choice after a wave, the pause menu, the
+  run's summary), each pictured whole as a PNG of its own at the screen's pixels (`out/ui/<state>.png`), with every
+  named element's box and every label's over the world as shares of the window. With `--screens`, whether the UI is
+  the same share of both screens: on `3840x2160@1,1280x720@3` (a 4K screen at 100% and at 300%) the lines agree but
+  the tooltip's place (it keeps off the pointer in css px, as the OS scales the pointer) and the lobby's text, which
+  drifts by up to 1% of the screen down a panel (Blink rounds each line of text to whole css px), and the pictures
+  differ by text's antialiasing, 2 to 5% of their pixels (the lobby's states 12 to 16%, with the drift). The page
+  takes a state at a time: a 4K screen's ten pictures sent back at once were too much for the browser, which closed.
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`).
 - `status`, `stop`: what the server serves and has booted; stop it.
 - `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films), the
@@ -193,6 +203,8 @@ Options every command run on a page takes:
 - `--screen WxH[@ratio]`: the page put on a screen of that size in css px and pixel ratio once it has booted (`1280x720@3`:
   a 4K screen at 300%), as a window moved onto another monitor is: the game fits its canvas to it on the next frame
   (1920x1080 at 1 by default);
+- `--screens WxH[@ratio],WxH[@ratio]`: this tree on two screens, one after the other, compared as `--ab` compares two
+  commits: the lines that differ, and the pictures pixel by pixel (both 3840x2160 for a 4K screen at 100% and 300%);
 - `--ab[=ref]`: also on another commit (`origin/main` by default), its results beside this tree's, ending with the
   verdict: the lines that differ under the section each is in, and the pictures that differ by more than the GPU's own
   noise, with where (the region of each, and a picture of each in `out/ab/<command>/`: this tree's dimmed, its
@@ -255,7 +267,9 @@ What the lab gives a probe (`page/lab.ts`):
 - `await lab.screen(label, notes, around?)`: this moment as the player sees it, the game drawn by its own camera with the
   page's UI over it (the HUD, a menu, a tooltip), pictured by the browser, whole, clipped round the element a CSS
   selector names (`'#hotbar'`) or to an area of the page (`screenArea(points)`: round points of the world as the
-  camera shows them), as a moment of the report's `moments` (`picture`'s views show the game's canvas alone);
+  camera shows them), as a moment of the report's `moments` (`picture`'s views show the game's canvas alone); taken
+  through the DevTools protocol at the screen's own pixels (Playwright's screenshot put the page back on the screen
+  Playwright had given it, and on a `--screen` every picture after the first showed 1920x1080);
 - `timeCalls(owner, method)` (`page/timing.ts`): every call of a method timed by the browser's own clock (the page's
   `performance.now` is the lab's, which stands still within a frame), for a cost: its calls, total, median and 90th
   percentile. The timer ticks in 0.1 ms, so take a frame's mean over many, and compare sides within one A/B (the

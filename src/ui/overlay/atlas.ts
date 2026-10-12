@@ -3,14 +3,15 @@
 import * as THREE from 'three';
 import { G } from '../../state';
 
-/** the atlas's side, px, for each unit of the canvas's ratio (rounded up to a multiple of `SIDE_STEP`, at least
- *  `SIDE_MIN`): a label's pixels go with the ratio's square, and at 2 a heavy fight's 250 floating numbers took more
- *  than the 2048 px square the atlas was at any ratio */
+/** the atlas's side, px, for each canvas pixel a px of a label's art takes (the canvas's ratio times the UI's scale;
+ *  rounded up to a multiple of `SIDE_STEP`, at least `SIDE_MIN`): a label's pixels go with that ratio's square, and
+ *  at 2 a heavy fight's 250 floating numbers took more than the 2048 px square the atlas was at any ratio */
 const SIDE_PER_RATIO = 1536;
 const SIDE_MIN = 2048;
 const SIDE_STEP = 512;
-/** a slot's height rounds up to one of these (px): each shelf of the atlas holds slots of one height */
-const HEIGHTS = [16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768];
+/** a slot's height rounds up to one of these (px): each shelf of the atlas holds slots of one height (a downed
+ *  partner's marker is some 200 px of art, 1000 at an 8K screen's UI scale at 100%) */
+const HEIGHTS = [16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024];
 /** a full atlas is packed again (every label shown painted anew) when this share of it is slots given back */
 const REPACK_SPARE = 0.25;
 /** a slot's width rounds up to a multiple of this (px) */
@@ -119,15 +120,16 @@ const crowded = (): boolean => full && spareArea >= REPACK_SPARE * side * side;
 /** Whether the atlas should be emptied for every label shown to be painted again: full of slots given back. */
 export const atlasCrowded = crowded;
 
-/** The atlas's side for labels painted at the canvas's `ratio`. */
+/** The atlas's side for labels painted at `ratio` canvas pixels per px of their art. */
 function sideFor(ratio: number): number {
   const grown = Math.ceil((SIDE_PER_RATIO * ratio) / SIDE_STEP) * SIDE_STEP;
   return Math.min(G.renderer.capabilities.maxTextureSize, Math.max(SIDE_MIN, grown));
 }
 
 /**
- * Empties the atlas, for labels painted at the canvas's `ratio`: every slot is free again, and the atlas is the size
- * for that ratio (made again on its next use when that changed: the labels' material takes it from `atlasTexture`).
+ * Empties the atlas, for labels painted at up to `ratio` canvas pixels per px of their art: every slot is free again,
+ * and the atlas is the size for that ratio (made again on its next use when that changed: the labels' material takes
+ * it from `atlasTexture`).
  */
 export function clearAtlas(ratio: number): void {
   const wanted = sideFor(ratio);

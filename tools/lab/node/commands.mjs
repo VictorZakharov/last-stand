@@ -1,9 +1,10 @@
 // The lab's commands as the session runs them (tools/lab): each one's work on a side, how the sides' results are
 // put together and compared, and the problems a result reports. Their options are read and checked by options.mjs.
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { runCoop } from './coop.mjs';
 import { labError } from './errors.mjs';
+import { UI_STATES } from './options.mjs';
 import { REPO } from './paths.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { writeSheet } from './sheetImage.mjs';
@@ -80,14 +81,14 @@ async function writeMoments(results, dir, browser, name = 'sheet.png') {
 
 /**
  * Each side's text under its name, and a sheet for each of each side's moments, written in `dir`: `film-1.png` on for
- * this tree's, `film-main-1.png` on for the other side's. For films: two sides' in one sheet, or eight scenarios' of
- * one side, were a page too big for the browser, which closed.
+ * this tree's, `film-main-1.png` on for the other side's (a turn's `filePrefix` after `film-`). For films: two sides'
+ * in one sheet, or eight scenarios' of one side, were a page too big for the browser, which closed.
  */
 async function textWithSheetEach(results, dir, browser) {
   const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
   const images = [];
   for (const [side, result] of results) {
-    const prefix = side.isRepo ? 'film-' : 'film-main-';
+    const prefix = `film-${side.filePrefix}`;
     const moments = result?.moments ?? [];
     for (const [index, moment] of moments.entries()) {
       const one = [side, { ...result, moments: [moment] }];
@@ -106,14 +107,14 @@ const fileNameOf = (group) => group.toLowerCase().replace(/[^a-z0-9]+/g, '-').re
 
 /**
  * Each side's text under its name, and a sheet for each group of each side's moments (`groupOf`), written in `dir`:
- * `<group>.png` for this tree's, `main-<group>.png` for the other side's. A run of the warrior's four ways of holding
- * his weapons in one sheet was a page too big for the browser, which closed.
+ * `<group>.png` for this tree's, `main-<group>.png` for the other side's (a turn's `filePrefix` first). A run of the
+ * warrior's four ways of holding his weapons in one sheet was a page too big for the browser, which closed.
  */
 async function textWithSheetsByGroup(results, dir, browser) {
   const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
   const images = [];
   for (const [side, result] of results) {
-    const prefix = side.isRepo ? '' : 'main-';
+    const prefix = side.filePrefix;
     const groups = [...new Set((result?.moments ?? []).map(groupOf))];
     for (const group of groups) {
       const moments = result.moments.filter((moment) => groupOf(moment) === group);
@@ -123,6 +124,30 @@ async function textWithSheetsByGroup(results, dir, browser) {
     }
   }
   return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
+}
+
+/**
+ * Each side's text under its name, and each picture of its moments as a PNG of its own at its full size, written in
+ * `dir` (emptied first) as `<filePrefix><moment>.png` (`-<view>` after a moment pictured from more than one view):
+ * a 4K screen's pictures put on one sheet were a page too big for the browser, which closed.
+ */
+function textWithPictureFiles(results, dir) {
+  const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  const written = [];
+  for (const [side, result] of results) {
+    for (const moment of result?.moments ?? []) {
+      for (const tile of moment.tiles) {
+        const view = moment.tiles.length > 1 ? `-${tile.view}` : '';
+        const name = `${side.filePrefix}${fileNameOf(moment.label)}${view}.png`;
+        const base64 = tile.png.slice(tile.png.indexOf(',') + 1);
+        writeFileSync(join(dir, name), Buffer.from(base64, 'base64'));
+        written.push(name);
+      }
+    }
+  }
+  return written.length ? `${text}\n\npictures in ${relative(REPO, dir)}: ${written.join(', ')}` : text;
 }
 
 /** Each side's text under its name, and the sheet of the moments they pictured, written in `dir` (when any did). */
@@ -145,7 +170,8 @@ function probePath(file) {
  * - `check(options)`, when there is one, throws at what's wrong with them before anything boots;
  * - `each(side, options, session)` runs it on one side (its page booted) and returns its result;
  * - `finish(results, options, session)`, when there is one, puts the sides' results together as text (else each
- *   side's text is shown under its name);
+ *   side's text is shown under its name): `results` pairs each turn (`session.turnsFor`: its `name`, and the
+ *   `filePrefix` its files' names start with) with its result;
  * - `textOf(result)` is the result as text, which an A/B compares line by line;
  * - `problemsOf(result)` the problems it found, which fail the command;
  * - `countsOf(result)`, when there is one, what it counted by name, which a check adds up over a hero's jobs;
@@ -268,6 +294,26 @@ export const COMMANDS = {
     },
     finish(results, options, session) {
       return textWithMoments(results, session.outFor('feet'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
+  ui: {
+    async each(side, options) {
+      // (a state at a time, in the order they run: a 4K screen's ten pictures sent back at once closed the browser)
+      const states = UI_STATES.filter((state) => options.states.includes(state));
+      const reports = [];
+      for (const state of states) reports.push(await side.command('ui', { state }));
+      return {
+        text: reports.map((report) => report.text).join('\n'),
+        problems: reports.flatMap((report) => report.problems),
+        moments: reports.flatMap((report) => report.moments),
+      };
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('ui'));
     },
     textOf: asText,
     problemsOf: problemsIn,
