@@ -10,6 +10,7 @@ import { gait as gaitRound, type GaitOptions } from './gait';
 import { stops as stopsRound, type StopsOptions } from './stops';
 import { form as formRound, type FormOptions } from './form';
 import { ui as uiRound, type UiOptions } from './ui';
+import { touchStick, type TouchOptions } from './touchStick';
 
 export interface SheetCommand {
   states: string[];
@@ -94,6 +95,14 @@ export async function form(lab: Lab, command: FormOptions): Promise<Report> {
  */
 export function ui(lab: Lab, command: UiOptions): Promise<Report> {
   return uiRound(lab, command);
+}
+
+/**
+ * `lab touch`: the touch controls' move stick pushed by a finger near and far past its edge, and the hero's speed;
+ * a push further out that gives less is a problem, as is a canary it missed.
+ */
+export function touch(lab: Lab, command: TouchOptions): Promise<Report> {
+  return touchStick(lab, command);
 }
 
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */
