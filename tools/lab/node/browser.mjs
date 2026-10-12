@@ -56,7 +56,7 @@ function capesHere() {
 }
 
 /** The page can't take the pointer, the keyboard or the screen; attempts are counted in `window.__lockAttempts`. */
-function noCapture() {
+export function noCapture() {
   window.__lockAttempts = 0;
   const refuse = function () {
     window.__lockAttempts++;
@@ -163,7 +163,7 @@ function seededRandom() {
  * Every boot a first boot: nothing kept from the last (a saved profile loaded where the first boot rolled one made
  * a frame's difference), and no logo wind (the loading screen's watchdog remembers it as switched off).
  */
-function freshStorage() {
+export function freshStorage() {
   try {
     localStorage.clear();
     localStorage.setItem('last-stand.logo-wind-off', '1');

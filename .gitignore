@@ -11,5 +11,6 @@ tools/facelab/models/
 
 # the lab (tools/lab): what it writes, the exported commits it compares with, its browser profile
 tools/lab/out/
+tools/stalls/out/
 
 server/relay/node_modules/
