@@ -16,29 +16,29 @@ const ranger: ClassDef = {
       // (drawn to full in `draw` s, loosed no sooner than `minDraw` of that; then the follow-through and the next arrow, `castTime`:
       // an archer's pace, about a second each; drawn in 0.7 s and reloaded in 0.45, it was a blur)
       cost: 0, cooldown: 0, castTime: 0.9, draw: 1.1, minDraw: 0.5,
-      damage: 240, missiles: 1, spread: 0, speed: 60, range: 26, knock: 0.8,
+      damage: 340, missiles: 1, spread: 0, speed: 60, range: 26, knock: 0.8,
       icon: { glyph: '➶', color: '#dfce99' },
     },
     {
       key: 'mouse2', impl: 'fanShot', name: 'Briarflight',
       desc: 'Hold to draw five arrows at once, release to loose them in a broad fan. Each arrow can strike a foe.', tags: ['physical'],
       cost: 32, cooldown: 3, castTime: 0.95, draw: 1.3, minDraw: 0.5,
-      damage: 123, missiles: 5, spread: 0.13, speed: 55, range: 24, knock: 1.2,
+      damage: 150, missiles: 5, spread: 0.1, speed: 55, range: 24, knock: 1.2,
       icon: { glyph: '⋔', color: '#c9d993' },
     },
     {
       key: '1', impl: 'piercingShot', name: 'Lancewood Shot',
       desc: 'Hold to draw a heavy lancewood arrow, release to drive it through every foe in its line. Each foe it passes through takes less (100%, 80%, 60%, then 40%); drawn to full, it strikes half again as hard.', tags: ['physical'],
       cost: 30, cooldown: 4, castTime: 0.95, draw: 1.5, minDraw: 0.4,
-      damage: 300, missiles: 1, spread: 0, speed: 80, range: 30, knock: 1.2, falloff: [1, 0.8, 0.6, 0.4], fullBonus: 0.5,
+      damage: 410, missiles: 1, spread: 0, speed: 80, range: 30, knock: 1.2, falloff: [1, 0.8, 0.6, 0.4], fullBonus: 0.5,
       icon: { glyph: '➳', color: '#ff6a55' },
     },
     {
       key: '2', impl: 'arrowRain', name: 'Hailfletch',
       desc: 'Hold to stand and shoot arrow after arrow high over the target area, each splitting into a shower of 24 that comes down at random across it: each arrow strikes the foe it falls on. The area follows your aim at a walk. You cannot move while you shoot.', tags: ['physical'],
       // (energy a second, and damage an arrow; the volleys are an archer's, drawn, loosed and the next taken from the quiver)
-      cost: 24, cooldown: 0, castTime: 0, channel: true, moveMult: 0,
-      damage: 95, missiles: 24, radius: 4.2, range: 18,
+      cost: 22, cooldown: 0, castTime: 0, channel: true, moveMult: 0,
+      damage: 170, missiles: 24, radius: 4.2, range: 18,
       icon: { glyph: '⇊', color: '#6f9bff' },
     },
     {
@@ -56,7 +56,7 @@ const ranger: ClassDef = {
     {
       key: 'q', impl: 'potion', name: 'Healing Draught',
       desc: 'Instantly restore a large portion of Health.', tags: ['consumable'],
-      cost: 0, cooldown: 11, castTime: 1.4, fireAt: 0.5, freeMove: true, healPct: 0.45,
+      cost: 0, cooldown: 25, castTime: 1.4, fireAt: 0.5, freeMove: true, healPct: 0.45,
       icon: { glyph: '⚗', color: '#ff5b5b' },
     },
   ],
