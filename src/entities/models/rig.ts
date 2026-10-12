@@ -13,6 +13,15 @@ export function part(geo: THREE.BufferGeometry, mat: THREE.Material, parent: THR
   return m;
 }
 
+/** Frees the geometry of everything under `root` (a model's dispose), but `keep` and what a build shares with the next
+ *  one (`userData.shared`: a hero's head, a creature's sculpt). */
+export function disposeGeometries(root: THREE.Object3D, keep?: THREE.BufferGeometry): void {
+  root.traverse((o) => {
+    const geo = (o as THREE.Mesh).geometry;
+    if (geo && geo !== keep && !geo.userData.shared) geo.dispose();
+  });
+}
+
 export function joint(parent: THREE.Object3D, x = 0, y = 0, z = 0): THREE.Group {
   const g = new THREE.Group();
   g.position.set(x, y, z);

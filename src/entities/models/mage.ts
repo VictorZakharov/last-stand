@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
 import { engravedSteel, embroidered, arcaneColumn, projectUV, steelRegion } from '../../core/engraving';
-import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm, runShareOf } from './rig';
+import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
@@ -735,7 +735,7 @@ export function buildMage(): Model {
     firstPerson: (on) => { fp = on; for (const b of bells) b.scale.set(on ? 0.6 : 1, on ? 0.75 : 1, on ? 0.6 : 1); },
     dispose() {
       kit.dispose();
-      root.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+      disposeGeometries(root);
     },
   };
 }

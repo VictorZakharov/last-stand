@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, mail as mailMaps, cloth as clothMaps, steel as steelMaps, fur as furMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
 import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
-import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet, runShareOf } from './rig';
+import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
@@ -1304,7 +1304,7 @@ export function buildWarrior(): Model {
     dispose() {
       kit.dispose();
       for (const f of furs) f.dispose();
-      root.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+      disposeGeometries(root);
     },
   };
 }
