@@ -240,6 +240,18 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  touch: {
+    help: 'the touch controls\' move stick pushed by a finger, sent as a touch screen\'s: slid out to its edge and '
+      + 'far past it, half the window across, and what each push gave (the stick\'s push, the knob, the hero\'s '
+      + 'speed); a push further out may never give less',
+    options: {
+      canary: {
+        kind: 'switch',
+        help: 'plant a fault the measure must catch: the furthest push\'s finger slid back near the middle',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   probe: {
     help: 'a probe module of your own: its default export takes the lab and the options (tools/lab/README.md)',
     argument: 'module',

@@ -49,7 +49,58 @@ declare global {
     __lab?: Lab;
     /** the page pictured by the browser as it shows, within `clip` (`tools/lab/node/side.mjs`), as a PNG data URL */
     __labScreenshot?: (clip?: Clip) => Promise<string>;
+    /** a finger's touch sent by the browser as a touch screen's (`tools/lab/node/side.mjs`) */
+    __labTouch?: (type: TouchType, points: Finger[]) => Promise<void>;
   }
+}
+
+/** A touch as the browser gets one from a touch screen: a finger put down, moved, or lifted. */
+type TouchType = 'touchStart' | 'touchMove' | 'touchEnd';
+
+/** A finger on the screen as the DevTools protocol takes it: where it is (css px) and which finger. */
+interface Finger {
+  x: number;
+  y: number;
+  id: number;
+}
+
+/** A point on the page, css px. */
+export interface PagePoint {
+  x: number;
+  y: number;
+}
+
+/** the pointer events a touch makes, any of which says the page has handled it */
+const TOUCH_POINTER_EVENTS: Record<TouchType, string[]> = {
+  touchStart: ['pointerdown'],
+  touchMove: ['pointermove'],
+  touchEnd: ['pointerup', 'pointercancel'],
+};
+/** how long a touch's pointer event may take to reach the page, ms of the browser's own clock */
+const TOUCH_WAIT_MS = 2000;
+
+/**
+ * Resolves once the page has handled one of the pointer events `names` from a touch: once the whole dispatch is over
+ * (heard first, on the window as it captures, and resolved in the task after it, so every listener has run, whatever
+ * one stopped). Rejects after `TOUCH_WAIT_MS`.
+ */
+function touchHandled(names: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const heard = (event: Event) => {
+      if ((event as PointerEvent).pointerType !== 'touch') return;
+      done();
+      setTimeout(resolve, 0);
+    };
+    const timeout = setTimeout(() => {
+      done();
+      reject(new Error(`lab: touch: the page never got its ${names.join(' or ')}`));
+    }, TOUCH_WAIT_MS);
+    const done = () => {
+      clearTimeout(timeout);
+      for (const name of names) window.removeEventListener(name, heard, true);
+    };
+    for (const name of names) window.addEventListener(name, heard, true);
+  });
 }
 
 /** the seed each set-up starts the page's random numbers from */
@@ -476,6 +527,38 @@ export class Lab {
     const png = await window.__labScreenshot(clip);
     const size = clip ?? { width: innerWidth, height: innerHeight };
     return { label, tiles: [{ view: 'screen', png, width: size.width, height: size.height }], notes };
+  }
+
+  /**
+   * A finger put down on the page at `at` as a touch screen has it, its pointer events and all, handled by the page as
+   * a player's (no frame runs). The game's first touch puts it in touch mode (`ui/touch.ts`), as a player's does: its
+   * controls show from the next frame, and a touch before then lands on whatever lies under them.
+   */
+  touchDown(at: PagePoint): Promise<void> {
+    return this.sendTouch('touchStart', [{ x: at.x, y: at.y, id: 0 }]);
+  }
+
+  /** The finger down moved to `at` (somewhere new: a touch that doesn't move makes no pointer event). */
+  touchMove(at: PagePoint): Promise<void> {
+    return this.sendTouch('touchMove', [{ x: at.x, y: at.y, id: 0 }]);
+  }
+
+  /** The finger down lifted. */
+  touchUp(): Promise<void> {
+    return this.sendTouch('touchEnd', []);
+  }
+
+  private async sendTouch(type: TouchType, fingers: Finger[]): Promise<void> {
+    if (!window.__labTouch) throw new Error('lab: touch: this page has no touches (opened by an older lab)');
+    const handled = touchHandled(TOUCH_POINTER_EVENTS[type]);
+    try {
+      await window.__labTouch(type, fingers);
+    } catch (error) {
+      // (its wait given up quietly: the touch never went)
+      handled.catch(() => {});
+      throw error;
+    }
+    await handled;
   }
 
   /** Pictures of the game as it is now, nothing advanced; the game's camera is put back as it was. */

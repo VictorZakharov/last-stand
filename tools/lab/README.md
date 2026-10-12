@@ -167,6 +167,15 @@ terminal's task stops it all.
   drifts by up to 1% of the screen down a panel (Blink rounds each line of text to whole css px), and the pictures
   differ by text's antialiasing, 2 to 5% of their pixels (the lobby's states 12 to 16%, with the drift). The page
   takes a state at a time: a 4K screen's ten pictures sent back at once were too much for the browser, which closed.
+- `touch`: the touch controls' move stick pushed by a finger, its touches sent by the browser as a touch screen's
+  (`lab.touchDown`): put down on the move pad and slid right, within the dead zone, through the stick's travel, to its
+  edge and far past it, and half the window across, each push from a fresh set-up. Each push's line says what the
+  game made of it: the stick's push (0 to 1), how far out the knob stood and the hero's speed against his full. It is a
+  problem when the knob isn't under the finger within the travel, when a push further out gives less than a nearer
+  one, or when a push past the edge falls short of full speed. On main, the knob was held to the edge and the push
+  divided by the finger's whole distance, so half a screen out the hero walked at a seventh of his speed. `--canary`
+  slides the furthest push's finger back to 20 px before it's read. Try it on a phone too
+  (`--screen 844x390@3`): the stick is drawn at the touch controls' scale, and so is its travel.
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`).
 - `status`, `stop`: what the server serves and has booted; stop it.
 - `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films), the
@@ -275,6 +284,10 @@ What the lab gives a probe (`page/lab.ts`):
   percentile. The timer ticks in 0.1 ms, so take a frame's mean over many, and compare sides within one A/B (the
   machine's load drifts between commands);
 - `lab.aim` and `lab.pointAt(point)`: where the mouse is;
+- `await lab.touchDown(at)`, `touchMove(at)`, `touchUp()`: a finger on the page (css px) as a touch screen gives it,
+  sent through the DevTools protocol, so the page's own pointer events follow with their pointer ids and its touch
+  controls take it as a player's (no frame runs; each returns once the page has handled it). The game's first touch
+  puts it in touch mode, as a player's does, and its controls show from the next frame;
 - in `page/geometry.ts`, the body's meshes skinned into the world as drawn (`BakedBody`), what a line crosses among
   them (`crossingsAlong`), and the distance between segments (`segmentDistance`).
 
@@ -288,8 +301,9 @@ A measure is only as good as what it can catch:
 - **Measure, don't choose.** A pose is decided as a person would hold it and looked at in the game's views first
   (`sheet`); a measure checks it (AGENTS.md, Workflow).
 
-Once a measure is needed again, port it into `page/` as a command of its own (a module, an entry in
-`page/commands.ts`, one in `node/commands.mjs` and its options in `node/options.mjs`), as the carry's was.
+Every measure is kept: from its first use it is a command of its own in `page/` (a module, an entry in
+`page/commands.ts`, one in `node/commands.mjs` and its options in `node/options.mjs`), as the carry's and the touch
+stick's are, or a part of one that already measures the same thing, never a probe left in `.tmp`.
 
 ## How it works
 

@@ -14,11 +14,13 @@ import { groundHeight } from '../world/ground';
 import { SKILL_KEYS } from '../loot/loadout';
 import { makeSkillSlot } from './hud';
 import { hideTooltip } from './tooltip';
+import { uiScales } from './scale';
 import type { SkillKey } from '../types';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 
-/** stick travel in px, and how far a skill drag must go before it aims by hand */
+/** stick travel in px of the stick as drawn (on the screen, that times the touch controls' scale), and how far a skill
+ *  drag must go before it aims by hand */
 const STICK_R = 56, DRAG_MIN = 16;
 /** px of skill drag per metre of aim distance, and the aim range */
 const DRAG_PX_PER_M = 9, AIM_MIN = 2, AIM_MAX = 14;
@@ -70,15 +72,19 @@ export function initTouch(): void {
   });
   pad.addEventListener('pointermove', (e) => {
     if (stick?.id !== e.pointerId) return;
-    let dx = e.clientX - stick.x0, dy = e.clientY - stick.y0;
+    const dx = e.clientX - stick.x0, dy = e.clientY - stick.y0;
     const d = Math.hypot(dx, dy);
-    if (d > STICK_R) { dx *= STICK_R / d; dy *= STICK_R / d; }
-    knob.style.transform = `translate(${dx}px, ${dy}px)`;
-    const k = Math.min(1, d / STICK_R);
+    // (the way the finger points, before the knob is held to the stick's travel: divided by the finger's distance once
+    // held, a finger far past the edge pushed less the further it went, half a screen out a slow walk)
+    const ux = d ? dx / d : 0, uy = d ? dy / d : 0;
+    // (the stick is drawn at the touch controls' scale, its knob moved in the stick's own px: in the finger's, the knob
+    // ran 20% ahead of the finger on a large screen and fell behind it on a phone)
+    const k = Math.min(1, d / (STICK_R * uiScales.touch));
+    knob.style.transform = `translate(${ux * k * STICK_R}px, ${uy * k * STICK_R}px)`;
     // a small dead zone, then full speed from 0.6 of the travel
     const m = k < 0.15 ? 0 : Math.min(1, (k - 0.15) / 0.45);
-    input.stick.x = d ? (dx / Math.max(d, 1e-3)) * m : 0;
-    input.stick.y = d ? (dy / Math.max(d, 1e-3)) * m : 0;
+    input.stick.x = ux * m;
+    input.stick.y = uy * m;
   });
   const endStick = (e: PointerEvent) => {
     if (stick?.id !== e.pointerId) return;

@@ -52,6 +52,23 @@ async function screenshotOf(page, clip) {
   return `data:image/png;base64,${data}`;
 }
 
+/** the pages whose touch input is on: a touch screen's, as a phone's or a tablet's */
+const TOUCHING = new WeakSet();
+
+/**
+ * A finger's touch sent to the page as the browser gets one from a touch screen (`lab.touch`'s): `type` is
+ * `touchStart`, `touchMove` or `touchEnd`, `points` where the fingers are (css px; none for `touchEnd`). The page's
+ * own pointer events follow from it, with their pointer ids, so the game handles it as a player's.
+ */
+async function touchOf(page, type, points) {
+  const devtools = await devtoolsOf(page);
+  if (!TOUCHING.has(page)) {
+    await devtools.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    TOUCHING.add(page);
+  }
+  await devtools.send('Input.dispatchTouchEvent', { type, touchPoints: points });
+}
+
 const toSlashes = (path) => path.split('\\').join('/');
 
 /** the note an exported tree keeps of the lab page modules last copied into it */
@@ -287,6 +304,8 @@ export class Side {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     // (a probe's `lab.screen`: the game with the page's UI over it, which the canvas views can't show)
     await page.exposeFunction('__labScreenshot', (clip) => screenshotOf(page, clip));
+    // (a probe's `lab.touch`: a finger on the touch controls, which no scripted input reaches)
+    await page.exposeFunction('__labTouch', (type, points) => touchOf(page, type, points));
     await page.goto(this.url);
     // (polled on a timer: by default it polls by animation frame, and the lab's clock holds those once the game shows)
     const polling = { polling: BOOT_POLL_MS, timeout: BOOT_TIMEOUT_MS };

@@ -320,6 +320,14 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  touch: {
+    each(side, options) {
+      return side.command('touch', { fixture: fixtureFrom(options), canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   probe: {
     check(options) {
       probePath(options._[0]);
