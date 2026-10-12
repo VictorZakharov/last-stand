@@ -13,7 +13,7 @@ interface Anchored { label: Label; at: () => WorldPos | null; clamp: boolean }
 
 const floats: Floater[] = [];
 /** the most floating texts shown at once: past it, the oldest goes to make room (each takes a slot of the label
- *  atlas, which holds some 300 to 400 of them at a ratio of 2) */
+ *  atlas, which grows with the canvas's ratio: 250 of a heavy fight's take a third to a half of it at any ratio) */
 const MAX_FLOATS = 250;
 const anchored = new Map<Label, Anchored>();
 const v = new THREE.Vector3();

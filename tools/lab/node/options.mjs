@@ -10,9 +10,10 @@ import { labError } from './errors.mjs';
  * - `number`: a finite number;
  * - `pair`: two numbers, `x,z`;
  * - `choice`: one of `choices`;
- * - `ref`: a switch that may name a commit (`--ab`, `--ab=165246d`).
+ * - `ref`: a switch that may name a commit (`--ab`, `--ab=165246d`);
+ * - `screen`: a window's size in css px and the screen's pixel ratio, `1280x720@3` (`@1` when it's left out).
  */
-const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'choice', 'ref'];
+const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'choice', 'ref', 'screen'];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
 const WEAPON_STYLES = ['oneHanded', 'shield', 'twoHanded', 'dual'];
@@ -45,6 +46,12 @@ const COMMON_OPTIONS = {
       + 'its commit, the lab\'s code, the command and its options)',
   },
   class: { kind: 'text', usage: 'name', help: 'the hero (ranger, warrior, mage; the last one used by default)' },
+  screen: {
+    kind: 'screen',
+    usage: 'WxH[@ratio]',
+    help: 'the page put on a screen of this size (css px) and pixel ratio once it has booted, as a window moved onto '
+      + 'another monitor is (1280x720@3: a 4K screen at 300%; 1920x1080@1 by default)',
+  },
   profile: { kind: 'switch', help: 'where the command\'s time went in the page: its busiest functions' },
   watch: {
     kind: 'switch',
@@ -274,6 +281,14 @@ function suggestion(word, names) {
   return ` (did you mean ${best.name}?)`;
 }
 
+/** A screen written as `WxH@ratio` (the ratio may be left out: 1), or null when it isn't one. */
+function screenFrom(text) {
+  const match = /^(\d+)x(\d+)(?:@(\d+\.?\d*|\.\d+))?$/.exec(text ?? '');
+  if (!match) return null;
+  const screen = { width: Number(match[1]), height: Number(match[2]), ratio: match[3] ? Number(match[3]) : 1 };
+  return screen.width > 0 && screen.height > 0 && screen.ratio > 0 ? screen : null;
+}
+
 /** A number written in full (`12`, `-0.5`), or NaN: Number() also takes '', ' ' and '0x10'. */
 function numberFrom(text) {
   return /^\s*-?(\d+\.?\d*|\.\d+)(e-?\d+)?\s*$/i.test(text) ? Number(text) : NaN;
@@ -315,6 +330,11 @@ function readValue(name, spec, text) {
     case 'choice':
       if (!spec.choices.includes(text)) throw wrong(spec.choices.join(', '));
       return text;
+    case 'screen': {
+      const screen = screenFrom(text);
+      if (!screen) throw wrong('a size and pixel ratio, 1280x720@3');
+      return screen;
+    }
     default:
       throw new Error(`option --${name} has an unknown kind ${spec.kind} (one of ${KINDS.join(', ')})`);
   }

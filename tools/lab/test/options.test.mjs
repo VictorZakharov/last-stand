@@ -28,6 +28,17 @@ test('suggests the option or command meant', () => {
   assert.throws(() => parseCommandLine(['sheet', '--zzz']), /takes no --zzz; it takes --states/);
 });
 
+test('reads a screen, its pixel ratio 1 when left out', () => {
+  assert.deepEqual(parseCommandLine(['sheet', '--screen', '1280x720@3']).options.screen,
+    { width: 1280, height: 720, ratio: 3 });
+  assert.deepEqual(parseCommandLine(['sheet', '--screen=844x390@2.75']).options.screen,
+    { width: 844, height: 390, ratio: 2.75 });
+  assert.deepEqual(parseCommandLine(['sheet', '--screen', '1024x700']).options.screen,
+    { width: 1024, height: 700, ratio: 1 });
+  assert.throws(() => parseCommandLine(['sheet', '--screen', '1280x720@0']), /--screen: a size and pixel ratio/);
+  assert.throws(() => parseCommandLine(['sheet', '--screen', '1280*720']), /--screen: a size and pixel ratio/);
+});
+
 test('refuses bad values', () => {
   assert.throws(() => parseCommandLine(['sheet', '--at', '12']), /--at: two numbers/);
   assert.throws(() => parseCommandLine(['sheet', '--facing', '0x10']), /--facing: a number/);

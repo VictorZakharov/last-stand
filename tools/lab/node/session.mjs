@@ -102,6 +102,7 @@ export class LabSession {
       const bootStarted = Date.now();
       if (await side.ready(heroClass)) notes.push(`${side.name}: booted the ${heroClass} (${seconds(bootStarted)})`);
       side.used = true;
+      if (options.screen) await side.showOn(options.screen);
       const runCommand = () => handler.each(side, options, this);
       if (options.profile) {
         const { result, profile } = await profiled(side.page, runCommand);

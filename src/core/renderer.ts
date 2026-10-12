@@ -177,7 +177,7 @@ export const VIEWS: ViewMode[] = ['top', 'third', 'first'];
 
 export function initRenderer(container: HTMLElement) {
   const renderer = gl = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(screenRatio(window.devicePixelRatio || 1));
+  renderer.setPixelRatio(canvasRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -223,15 +223,35 @@ export function initRenderer(container: HTMLElement) {
   return { scene, camera, renderer };
 }
 
-/** the window size and device pixel ratio the canvas was last fitted to, and the quality's pixel ratio cap */
+/** the window size and device pixel ratio the canvas was last fitted to */
 const fitted = { w: 0, h: 0, dpr: 0 };
-let pixelRatioCap = 1.5;
-/** the canvas's pixels per css px, at most: the world's overlays are drawn into it after the scene (ui/overlay), as
- *  sharp as the page's own text was; the scene renders at the quality's ratio and the last pass scales it up */
-const SCREEN_RATIO_MAX = 2;
-const screenRatio = (dpr: number): number => Math.min(dpr, SCREEN_RATIO_MAX);
-/** the scene's pixels per css px: the quality preset's, never more than the canvas's */
-export const sceneRatio = (): number => Math.min(window.devicePixelRatio || 1, pixelRatioCap, SCREEN_RATIO_MAX);
+/** the most pixels the scene renders: the quality's, and Auto's budget (core/quality.ts) */
+let pixelCap = Infinity;
+let pixelBudget = Infinity;
+/** a scene of fewer pixels than the screen's renders a share of its pixels each way rounded down to a multiple of
+ *  this (a power of two: the share times the screen's pixels comes out the same whatever the OS's scaling) */
+const SHARE_STEP = 1 / 256;
+/**
+ * The canvas's pixels per css px: the screen's own. What is rendered is counted in the screen's pixels, never by the
+ * OS's scaling (a 4K screen at 300% is a window of 1280x720 css px, at 100% of 3840x2160: both render the same).
+ */
+const canvasRatio = (): number => window.devicePixelRatio || 1;
+/** The screen's pixels under the window: the canvas's. */
+export function screenPixels(): number {
+  const ratio = canvasRatio();
+  return Math.floor(window.innerWidth * ratio) * Math.floor(window.innerHeight * ratio);
+}
+/** The most pixels the scene renders now: the screen's, within the quality's and Auto's budget. */
+export const scenePixels = (): number => Math.min(screenPixels(), pixelCap, pixelBudget);
+/** The share of the screen's pixels each way the scene renders: all of them, or as many as `scenePixels` gives. */
+function sceneShare(): number {
+  const most = Math.min(pixelCap, pixelBudget);
+  const screen = screenPixels();
+  if (most >= screen) return 1;
+  return Math.max(SHARE_STEP, Math.floor(Math.sqrt(most / screen) / SHARE_STEP) * SHARE_STEP);
+}
+/** The scene's pixels per css px (the last pass scales it up to the canvas). */
+export const sceneRatio = (): number => canvasRatio() * sceneShare();
 /** The scene's render size in pixels (the canvas's at the scene's own ratio). */
 export function sceneSize(out: THREE.Vector2): THREE.Vector2 {
   const r = sceneRatio();
@@ -249,8 +269,8 @@ function fitViewport(): boolean {
   fitted.w = w; fitted.h = h; fitted.dpr = dpr;
   G.camera.aspect = w / h;
   G.camera.updateProjectionMatrix();
-  const sr = screenRatio(dpr);
-  if (sr !== gl.getPixelRatio()) gl.setPixelRatio(sr);
+  const cr = canvasRatio();
+  if (cr !== gl.getPixelRatio()) gl.setPixelRatio(cr);
   gl.setSize(w, h);
   applySceneRatio();
   composer.setSize(w, h);
@@ -278,10 +298,12 @@ function fitSceneTarget(): void {
   sceneRT.setSize(_size.x, _size.y);
 }
 
-/** Apply the render-cost settings of a quality preset, live. None of them change shader variants. */
-export function setRenderQuality(p: QualityPreset): void {
-  pixelRatioCap = p.pixelRatio;
-  // (the canvas keeps its ratio: the scene alone renders at the quality's)
+/** Apply the render-cost settings of a quality preset, live, the scene rendering `budget` pixels at most (Auto's).
+ *  None of them change shader variants. */
+export function setRenderQuality(p: QualityPreset, budget = Infinity): void {
+  pixelCap = p.pixels;
+  pixelBudget = budget;
+  // (the canvas keeps the screen's pixels: the scene alone renders fewer)
   if (applySceneRatio()) fitSceneTarget();
   // a render target re-initialises with the new sample count on its next use
   if (sceneRT.samples !== p.msaa) { sceneRT.samples = p.msaa; sceneRT.dispose(); }
