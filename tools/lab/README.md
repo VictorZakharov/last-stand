@@ -242,9 +242,9 @@ What the lab gives a probe (`page/lab.ts`):
 - `lab.step(count, input?, measure?)`: frames run with each frame's input (`keys`, `m0` / `m2` for the mouse buttons,
   `look` for mouse look, `aim` for the point the mouse is over) and measured after each, a row a frame;
 - `lab.until(done, limit, what, input?)`: frames until `done`, throwing `lab: <what>` if it never is;
-- `lab.spawnFoe(type, at)`: a foe for a measure that needs one (a mark, a lure), which the set-up keeps while it clears
-  every other until the next set-up; it rises first as a spawned foe does (`Enemy.spawning`), and a training dummy
-  (`dummy`) stands still;
+- `lab.spawnFoe(type, at, options)`: a foe for a measure that needs one (a mark, a lure; `options` as the game's
+  `EnemyOpts`: a hero foe with its name, say), which the set-up keeps while it clears every other until the next
+  set-up; it rises first as a spawned foe does (`Enemy.spawning`), and a training dummy (`dummy`) stands still;
 - `lab.capture(views)`: pictures of this moment as PNGs (`lab.drawing = true` draws every frame instead), and
   `lab.picture(label, views, notes)` one moment of a report's `moments`: the lab writes them as a sheet
   (`out/probes/<probe>/sheet.png`) and compares them in an A/B, as the sheet's (to see the frames a measure flagged,

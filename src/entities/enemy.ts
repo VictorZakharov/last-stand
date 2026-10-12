@@ -9,7 +9,9 @@ import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
 import { AI, lured } from './enemyAI';
 import { lures, type Lure } from '../combat/lures';
-import { addAnchored, removeAnchored } from '../ui/floaters';
+import { anchorLabel, removeLabel } from '../ui/floaters';
+import { ORDER, type Label } from '../ui/overlay/layer';
+import { barArt, barStep, FOE_BAR, FOE_NAME, HERO_FOE_BAR } from '../ui/overlay/bars';
 import { DamageMeter } from '../ui/damageMeter';
 import { burst, debris, smokePuff, col, particles } from '../fx/particles';
 import { flash } from '../fx/lights';
@@ -135,8 +137,9 @@ export class Enemy {
   aura: THREE.Mesh | null = null;
   auraMat: THREE.MeshBasicMaterial | null = null;
   auraColor: number | null = null;
-  bar: HTMLElement | null = null;
-  barFill: HTMLElement | null = null;
+  bar: Label | null = null;
+  /** the fill the bar was last painted with (`barStep`) */
+  private barShown = -1;
   /** training dummies meter damage instead of losing life */
   meter: DamageMeter | null = null;
 
@@ -185,12 +188,19 @@ export class Enemy {
   }
 
   createBar(): void {
-    const el = document.createElement('div');
-    el.className = 'ebar' + (this.hero ? ' hero' : '');
-    el.innerHTML = (this.hero ? `<div class="ename">${this.name}</div>` : '') + '<div class="etrack"><div class="efill"></div></div>';
-    this.barFill = el.querySelector<HTMLElement>('.efill');
-    this.bar = addAnchored(el, () => (this.alive && !this.spawning && (this.hero || this.life < this.maxLife)
+    this.bar = anchorLabel(ORDER.bar, () => (this.alive && !this.spawning && (this.hero || this.life < this.maxLife)
       ? { x: this.pos.x, y: this.obj.position.y + this.height + 0.35, z: this.pos.z } : null));
+    this.barShown = -1;
+  }
+
+  /** The bar painted again when its fill has moved (a hero foe's gold and wider, with its name over it). */
+  private paintBar(): void {
+    if (!this.bar) return;
+    const look = this.hero ? { ...HERO_FOE_BAR, name: this.name, nameStyle: FOE_NAME } : FOE_BAR, share = this.life / this.maxLife;
+    const step = barStep(look, share);
+    if (step === this.barShown) return;
+    this.barShown = step;
+    this.bar.show(barArt(look, share));
   }
 
   // --- actions ---------------------------------------------------------------
@@ -311,7 +321,7 @@ export class Enemy {
   private updateLooks(dt: number, t: number, frozen: boolean): boolean {
     this.model.kit.u.uFrozen.value = damp(this.model.kit.u.uFrozen.value, frozen ? 1 : this.chill > 0 ? 0.35 : 0, 10, dt);
     this.model.kit.u.uHit.value = this.hitT;
-    if (this.barFill) this.barFill.style.width = `${(this.life / this.maxLife) * 100}%`;
+    this.paintBar();
     this.meter?.update();
     if (this.aura && this.auraMat) { this.aura.rotation.y += dt; this.auraMat.opacity = 0.5 + Math.sin(t * 4) * 0.2; }
     return true;
@@ -388,7 +398,8 @@ export class Enemy {
     this.cancelAction();
     for (const fn of this.onDeath.splice(0)) fn();
 
-    removeAnchored(this.bar);
+    removeLabel(this.bar);
+    this.bar = null;
     const c = this.auraColor ?? 0x7dffd0;
     const center = new THREE.Vector3(this.pos.x, this.height * 0.5, this.pos.z);
     burst(center, { count: this.boss ? 120 : 26, color: c, speed: this.boss ? 9 : 5, up: 3, life: 0.9, size: 0.3 });
@@ -416,7 +427,8 @@ export class Enemy {
   }
 
   dispose(): void {
-    removeAnchored(this.bar);
+    removeLabel(this.bar);
+    this.bar = null;
     this.meter?.dispose();
     G.scene.remove(this.obj);
     // model geometry is built per enemy; free it (the aura ring is shared)

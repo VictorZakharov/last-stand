@@ -14,7 +14,9 @@ import { rubble, type RubbleKind } from '../fx/rubble';
 import { addShake } from '../core/renderer';
 import { sfx } from '../core/audio';
 import { G } from '../state';
-import { addAnchored, removeAnchored } from '../ui/floaters';
+import { anchorLabel, removeLabel } from '../ui/floaters';
+import { ORDER, type Label } from '../ui/overlay/layer';
+import { gaugeArt } from '../ui/overlay/bars';
 
 export interface Prop {
   id: number;
@@ -34,8 +36,7 @@ export interface Prop {
   chipT: number;
   /** game time of the last damage, and its health bar while it shows */
   hurtT: number;
-  bar: HTMLElement | null;
-  fill: HTMLElement | null;
+  bar: Label | null;
 }
 
 /** Bumped whenever the set of obstacles changes, so the navigation grid follows */
@@ -59,7 +60,7 @@ export class PropSet {
    *  `show` take its look away and bring it back. */
   add(from: number, hp: number, color: number, look: PropLook, kind: RubbleKind = 'stone'): void {
     const parts = this.obstacles.slice(from);
-    const prop: Prop = { id: this.list.length, life: hp, max: hp, broken: false, color, kind, parts, list: this.obstacles, chipT: 0, hurtT: -1e9, bar: null, fill: null, ...look };
+    const prop: Prop = { id: this.list.length, life: hp, max: hp, broken: false, color, kind, parts, list: this.obstacles, chipT: 0, hurtT: -1e9, bar: null, ...look };
     for (const o of parts) o.prop = prop;
     this.list.push(prop);
   }
@@ -142,21 +143,17 @@ export function setPropLife(p: Prop, life: number): void {
 function showBar(p: Prop): void {
   p.hurtT = G.time;
   if (!p.bar) {
-    const el = document.createElement('div');
-    el.className = 'pbar';
-    el.innerHTML = '<div class="ptrack"><div class="pfill"></div></div>';
-    p.fill = el.querySelector<HTMLElement>('.pfill');
-    p.bar = addAnchored(el, () => {
+    const bar = p.bar = anchorLabel(ORDER.bar, () => {
       const age = G.time - p.hurtT;
       if (p.broken || age > BAR_SHOWN + BAR_FADE) { hideBar(p); return null; }
-      el.style.opacity = String(age <= BAR_SHOWN ? 1 : 1 - (age - BAR_SHOWN) / BAR_FADE);
+      bar.alpha = age <= BAR_SHOWN ? 1 : 1 - (age - BAR_SHOWN) / BAR_FADE;
       // over its top, but no higher than a man: a pillar's own top is off the frame when close to it
       return centre(p, new THREE.Vector3()).setY(Math.min(2.2, Math.max(...p.parts.map((o) => o.h)) + 0.3));
     }, true);
   }
-  p.fill!.style.width = `${Math.max(0, p.life / p.max) * 100}%`;
+  p.bar.show(gaugeArt(p.life / p.max));
 }
-function hideBar(p: Prop): void { removeAnchored(p.bar); p.bar = p.fill = null; }
+function hideBar(p: Prop): void { removeLabel(p.bar); p.bar = null; }
 
 /** hide / show for everything a builder put in `group` (built into it instead of the scene): its meshes go
  *  (and stay out of the shadow bake), its animation stops (the `updaters` it added since `from`), and its

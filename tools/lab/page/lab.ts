@@ -11,7 +11,7 @@ import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
 import { CAMERA } from '../../../src/data/balance';
 import { spawnEnemy } from '../../../src/entities/spawner';
-import type { Enemy } from '../../../src/entities/enemy';
+import type { Enemy, EnemyOpts } from '../../../src/entities/enemy';
 import type { EnemyId } from '../../../src/data/enemies';
 import * as renderer from '../../../src/core/renderer';
 import { updateSeeThrough } from '../../../src/core/seeThrough';
@@ -247,10 +247,11 @@ export class Lab {
   /**
    * A foe of `type` spawned at `at` for a measure that needs one (a mark, a lure), kept by the set-up while every other
    * is cleared (no wave comes) until the next set-up. It rises as a spawned foe does first (`Enemy.spawning`), and
-   * thinks as one does: a training dummy (`dummy`) stands still.
+   * thinks as one does: a training dummy (`dummy`) stands still. `options` as a wave's spawns take them (a hero foe,
+   * its name).
    */
-  spawnFoe(type: EnemyId, at: THREE.Vector3): Enemy {
-    const foe = spawnEnemy(type, at, { wave: 1 });
+  spawnFoe(type: EnemyId, at: THREE.Vector3, options: Omit<EnemyOpts, 'pos'> = {}): Enemy {
+    const foe = spawnEnemy(type, at, { wave: 1, ...options });
     this.foes.add(foe);
     return foe;
   }

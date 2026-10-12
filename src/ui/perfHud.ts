@@ -7,7 +7,7 @@ import { readCookie, writeCookie } from '../core/cookies';
 import { programsCompiledInGame, lateCompiles } from '../core/shaders';
 import { qualitySetting, qualityLevel } from '../core/quality';
 import { QUALITY } from '../data/quality';
-import { gpuMarks, viewMode } from '../core/renderer';
+import { gpuMarks, viewMode, sceneRatio, sceneSize } from '../core/renderer';
 
 const COOKIE = 'last-stand-perf-hud';
 // the hashed bundle name identifies the build a report came from
@@ -234,7 +234,9 @@ function draw(now: number): void {
   set('progs', `${info.programs?.length ?? 0} (+${programsCompiledInGame()})`);
   set('geo', String(info.memory.geometries));
   set('tex', String(info.memory.textures));
-  set('res', `${size.x}×${size.y} @${renderer.getPixelRatio().toFixed(2)}`);
+  // (the scene's resolution: the canvas's own, at the screen's ratio, holds the overlays drawn over it)
+  const scene = sceneSize(new THREE.Vector2());
+  set('res', `${scene.x}×${scene.y} @${sceneRatio().toFixed(2)}`);
   set('quality', `${QUALITY[qualityLevel()].label}${qualitySetting() === 'auto' ? ' (auto)' : ''}`);
   set('ents', `${G.enemies.length} / ${G.projectiles.length} / ${particles.glow.count + particles.smoke.count}`);
   set('gpuname', gpuName);
@@ -286,7 +288,7 @@ function report(): string {
     `FPS now ${fmtFps(s.fps)} | 15s avg ${fmtFps(s.avgFps)} | 1% low ${fmtFps(s.lowFps)}`,
     `Frame p50 ${fmt(s.p50)} ms | p95 ${fmt(s.p95)} ms | CPU ${fmt(s.cpu, 2)} ms | GPU ${timerExt ? fmt(s.gpu, 2) + ' ms' : 'n/a'}`,
     `Draw calls ${frameCalls} | triangles ${frameTris} | programs ${info.programs?.length ?? 0} (compiled after load ${programsCompiledInGame()}) | geometries ${info.memory.geometries} | textures ${info.memory.textures}`,
-    `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
+    `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | scene ${sceneSize(new THREE.Vector2()).toArray().join('x')} at ${sceneRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
     `Quality ${qualityLevel()} (setting ${qualitySetting()}) | MSAA ${QUALITY[qualityLevel()].msaa} | shadow map ${QUALITY[qualityLevel()].shadowMap}`,
     ...(gpuParts.length ? [`GPU split: ${gpuSplit()}`] : []),
     `Mode ${G.mode} | biome ${G.arena.biome} | view ${viewMode()} | enemies ${G.enemies.length} | projectiles ${G.projectiles.length} | particles ${particles.glow.count + particles.smoke.count}`,

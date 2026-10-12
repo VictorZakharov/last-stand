@@ -228,7 +228,7 @@ export function initMenus(h: MenuHooks): void {
     if (drag?.from === 'equip') { unequip(G.profile, drag.slot); sfx.click(); endDrag(); changed(); }
   });
   // an item dragged out of the panels onto the game field is thrown on the floor
-  const field = (t: EventTarget | null): boolean => t === G.renderer.domElement || !!(t as Element | null)?.closest?.('#floaters');
+  const field = (t: EventTarget | null): boolean => t === G.renderer.domElement;
   document.addEventListener('dragover', (e) => { if (drag && field(e.target)) { e.preventDefault(); e.dataTransfer!.dropEffect = 'move'; } });
   document.addEventListener('drop', (e) => {
     if (!drag || !field(e.target)) return;

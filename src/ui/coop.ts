@@ -5,7 +5,10 @@ import { COOP } from '../data/balance';
 import { session, hostRoom, joinRoom, leaveRoom, inviteLink, partners } from '../net/session';
 import { serverUp, SERVER_DOWN } from '../net/transport';
 import { isCoop } from '../net/role';
-import { addAnchored, removeAnchored, project } from './floaters';
+import { anchorLabel, removeLabel, project, onLayout } from './floaters';
+import { Label, ORDER } from './overlay/layer';
+import { ALLY_BAR, ALLY_NAME, barArt, barStep } from './overlay/bars';
+import { drawText, measure, OUTLINE, type TextStyle } from './overlay/paint';
 import { renderLobbyOptions } from './menus';
 import { openSaves } from './saves';
 import { isTouch } from './touch';
@@ -127,12 +130,14 @@ function renderBar(): void {
 
 // --- in a run ------------------------------------------------------------------------------
 /** A partner's nameplate over their head, and their frame in the corner. */
-interface Tag { el: HTMLElement; fill: HTMLElement; frame: HTMLElement; frameFill: HTMLElement; state: HTMLElement }
+interface Tag { label: Label; shown: number; frame: HTMLElement; frameFill: HTMLElement; state: HTMLElement }
 const tags = new Map<Player, Tag>();
-/** the marker on a downed partner: over them, or at the screen's edge pointing the way to them; and in reach of
+/** the marker on a downed partner (over them, or at the screen's edge pointing the way to them), and in reach of
  *  them, the prompt to raise them */
-let downMark: HTMLElement | null = null;
+let downMark: Label | null = null;
 let raisePrompt: HTMLElement | null = null;
+/** the downed partner the marker is placed for this frame, and whether we're in reach of them */
+let marked: { downed: Player; near: boolean } | null = null;
 /** the whole seconds the marker last showed, so it beats as each one goes */
 let shownSecond = -1;
 /** how high over a downed body its marker floats, m (lower, it hid the body from the top-down view) */
@@ -146,14 +151,13 @@ const EDGE = { side: 80, top: 120, bottom: 185 };
 /** the ring's radius (px, at the HUD's scale): the marker is placed by its ring's middle */
 const RING = 38;
 
-function markFor(): HTMLElement {
+function markFor(): Label {
   if (downMark) return downMark;
-  const el = document.createElement('div');
-  el.className = 'dnmark hidden';
-  el.innerHTML = '<div class="dm-ring"><div class="dm-raise"></div><b></b><div class="dm-arrow"></div></div><span class="dm-what"></span><span class="dm-far"></span>';
-  $('#hud').appendChild(el);
-  downMark = el;
-  return el;
+  downMark = new Label(ORDER.marker);
+  downMark.shown = false;
+  // (placed after the camera has moved, with the rest of the labels)
+  onLayout(placeMark);
+  return downMark;
 }
 
 function promptFor(): HTMLElement {
@@ -176,30 +180,57 @@ function promptRaise(downed: Player | undefined, near: boolean): void {
   $('.rp-bar div', el).style.width = `${(downed.revive * 100).toFixed(0)}%`;
 }
 
-/** The marker beats once as each second of a downed partner's clock goes, harder near its end (a heartbeat: the
- *  animation restarted by swapping between two copies of it). */
-function beat(el: HTMLElement, second: number): void {
+/** when the marker last beat (s, the page's clock: CSS's animation ran on it), and whether that beat was a hurried one */
+let beatAt = -Infinity, hurried = false;
+/** a beat's length (s) */
+const BEAT = 0.8;
+const reduceMotion = typeof matchMedia !== 'undefined' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+
+/** The marker beats once as each second of a downed partner's clock goes, harder near its end (a heartbeat). */
+function beat(second: number): void {
   if (second === shownSecond) return;
   const first = shownSecond < 0;
   shownSecond = second;
   if (first) return;
-  el.classList.toggle('beat-b', !el.classList.contains('beat-b'));
-  el.classList.add('beating');
-  el.classList.toggle('hurry', second <= HURRY);
+  beatAt = performance.now() / 1000;
+  hurried = second <= HURRY;
 }
+
+/** A heartbeat's swell at `k` (0 to 1) through it, peaking at `big`: two pulses, the second smaller. */
+function heartbeat(k: number, big: number): number {
+  const keys: [number, number][] = [[0, 1], [0.12, big], [0.26, 1], [0.4, 1 + (big - 1) * 0.6], [0.6, 1], [1, 1]];
+  for (let i = 1; i < keys.length; i++) {
+    const [k0, s0] = keys[i - 1], [k1, s1] = keys[i];
+    if (k <= k1) {
+      const t = (k - k0) / (k1 - k0), eased = 1 - (1 - t) * (1 - t);
+      return s0 + (s1 - s0) * eased;
+    }
+  }
+  return 1;
+}
+
+/** Which partner is down for the marker, and whether we're in reach (its look and place are set with the labels). */
+function markDowned(downed: Player | undefined, near: boolean): void {
+  markFor();
+  marked = downed ? { downed, near } : null;
+  if (!downed) shownSecond = -1;
+}
+
+const DOWN_RED = '#ff2a1e';
+const WHAT: TextStyle = { face: 'display', size: 18, color: '#ff6a5a', spacing: 0.5, shadows: OUTLINE };
+const FAR: TextStyle = { face: 'body', size: 15, color: '#ffd8d0', shadows: OUTLINE };
+const SECONDS: TextStyle = { face: 'display', size: 32, color: '#fff0ec', shadows: OUTLINE };
 
 /**
  * A downed partner's marker, every frame: over them where the view shows them, else at the screen's edge on the way to
  * them with an arrow pointing there; their clock running out round its ring, the revive filling it, how far they are.
  * (A small ring over the body alone was lost from sight as soon as the body was off screen.)
  */
-function markDowned(downed: Player | undefined, near: boolean): void {
-  const el = markFor();
-  el.classList.toggle('hidden', !downed);
-  if (!downed) {
-    shownSecond = -1;
-    return;
-  }
+function placeMark(): void {
+  const mark = downMark!;
+  mark.shown = !!marked;
+  if (!marked) return;
+  const { downed, near } = marked;
   const me = G.player;
   // (the HUD's scale as ui/scale sets it on the root: read from its own style, no style recalc)
   const ui = parseFloat(document.documentElement.style.getPropertyValue('--hud')) || 1;
@@ -207,7 +238,7 @@ function markDowned(downed: Player | undefined, near: boolean): void {
   const p = project(downed.pos.x, downed.obj.position.y + MARK_HEIGHT, downed.pos.z);
   const left = EDGE.side * ui, right = w - EDGE.side * ui, top = EDGE.top * ui, bottom = h - EDGE.bottom * ui;
   const inView = !p.behind && p.x >= left && p.x <= right && p.y >= top && p.y <= bottom;
-  let x = p.x, y = p.y;
+  let x = p.x, y = p.y, turn = 0;
   if (!inView) {
     // along the way from the middle of the screen to them (behind the camera, the projection points the other way)
     const cx = w / 2, cy = (top + bottom) / 2;
@@ -216,42 +247,131 @@ function markDowned(downed: Player | undefined, near: boolean): void {
     const reach = Math.min(Math.abs(dx) > 1e-3 ? (right - cx) / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-3 ? (bottom - cy) / Math.abs(dy) : Infinity);
     x = cx + dx * reach;
     y = cy + dy * reach;
-    el.style.setProperty('--turn', `${Math.atan2(dy, dx)}rad`);
+    turn = Math.atan2(dy, dx);
   }
-  el.classList.toggle('edge', !inView);
   // (pointing down, its words go above the ring, out of the arrow's way)
   const above = !inView && Math.abs(y - bottom) < 1;
-  el.classList.toggle('above', above);
-  const ring = RING * ui;
-  el.style.transform = `translate(${x}px, ${y}px) translate(-50%, ${above ? `calc(-100% + ${ring}px)` : `${-ring}px`})`;
   const bleedLeft = Math.max(0, downed.bleed);
-  $('.dm-ring', el).style.setProperty('--p', `${((bleedLeft / COOP.bleedOut) * 100).toFixed(1)}%`);
-  $('.dm-raise', el).style.setProperty('--r', `${(downed.revive * 100).toFixed(0)}%`);
   const second = Math.ceil(bleedLeft);
-  $('b', el).textContent = String(second);
   // (while someone raises them their clock stops, and so does the beat)
-  beat(el, second);
-  el.classList.toggle('raising', downed.revive > 0);
-  el.classList.toggle('near', near);
+  if (downed.revive <= 0) beat(second);
   const what = near ? (isTouch() ? 'Hold Revive' : 'Hold E') : downed.revive > 0 ? 'Being raised' : `${downed.cls.name} is down`;
-  $('.dm-what', el).textContent = what;
-  $('.dm-far', el).textContent = `${Math.round(Math.hypot(downed.pos.x - me.pos.x, downed.pos.z - me.pos.z))} m`;
+  const far = `${Math.round(Math.hypot(downed.pos.x - me.pos.x, downed.pos.z - me.pos.z))} m`;
+  const since = performance.now() / 1000 - beatAt;
+  const beating = downed.revive <= 0 && since < BEAT;
+  const big = hurried ? 1.3 : 1.16, swell = beating ? heartbeat(since / BEAT, big) : 1;
+  const art = markArt({
+    ui, left: bleedLeft / COOP.bleedOut, raised: downed.revive, second, what, far, above, edge: !inView, turn,
+    // (with reduced motion, the glow alone beats)
+    scale: reduceMotion?.matches ? 1 : swell, glow: (swell - 1) / (big - 1),
+  });
+  mark.show(art);
+  mark.x = x;
+  mark.y = y;
+  mark.ax = 0.5;
+  mark.ay = art.ringY / art.h;
+}
+
+/** What the marker shows: the HUD's scale, the share of the clock left and of the revive done, its words, and how
+ *  it's placed (`above`: its words over the ring; `edge`: the arrow turned `turn` towards them), its beat's swell. */
+interface MarkLook {
+  ui: number; left: number; raised: number; second: number; what: string; far: string;
+  above: boolean; edge: boolean; turn: number; scale: number; glow: number;
+}
+
+/** The marker's art, and where its ring's middle is down it (css px). */
+function markArt(m: MarkLook): { w: number; h: number; ringY: number; paint(c: CanvasRenderingContext2D, s: number): void } {
+  const u = m.ui, R = RING * u, reach = (68 + 8) * u;
+  const what = measure(m.what, { ...WHAT, size: WHAT.size * u }), far = measure(m.far, { ...FAR, size: FAR.size * u });
+  const gap = 2 * u, words = what.h + far.h + gap, pad = 8 * u;
+  const box = reach * 2, w = Math.max(box, what.w + pad * 2, far.w + pad * 2);
+  const h = box + words + pad;
+  const ringY = m.above ? h - box / 2 : box / 2;
+  return {
+    w, h, ringY,
+    paint(c, s) {
+      const cx = w / 2, cy = ringY;
+      if (m.edge) {
+        // the arrow: out past the ring towards them
+        c.save();
+        c.translate(cx, cy);
+        c.rotate(m.turn);
+        c.shadowColor = 'rgba(0,0,0,.85)';
+        c.shadowBlur = 5 * u * s;
+        c.fillStyle = DOWN_RED;
+        c.beginPath();
+        c.moveTo(46 * u, -14 * u);
+        c.lineTo(68 * u, 0);
+        c.lineTo(46 * u, 14 * u);
+        c.closePath();
+        c.fill();
+        c.restore();
+      }
+      c.save();
+      c.translate(cx, cy);
+      c.scale(m.scale, m.scale);
+      // its glow, stronger at the beat's peak, and a dark rim round it
+      c.fillStyle = 'rgba(40,0,0,.6)';
+      c.shadowColor = `rgba(255,42,30,${0.7 + 0.3 * m.glow})`;
+      c.shadowBlur = (18 + 12 * m.glow) * u * s;
+      c.beginPath();
+      c.arc(0, 0, R, 0, Math.PI * 2);
+      c.fill();
+      c.shadowColor = '#000';
+      c.shadowBlur = 4 * u * s;
+      c.fill();
+      c.shadowColor = 'transparent';
+      c.shadowBlur = 0;
+      // the clock: red from the top round as much as is left
+      if (m.left > 0) {
+        c.fillStyle = DOWN_RED;
+        c.beginPath();
+        c.moveTo(0, 0);
+        c.arc(0, 0, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, m.left));
+        c.closePath();
+        c.fill();
+      }
+      // the dark face inside it
+      const r = R - 7 * u, face = c.createRadialGradient(0, 0, 0, 0, 0, r * Math.SQRT2);
+      face.addColorStop(0, '#5a0a06');
+      face.addColorStop(0.75, '#1c0403');
+      c.fillStyle = face;
+      c.beginPath();
+      c.arc(0, 0, r, 0, Math.PI * 2);
+      c.fill();
+      // the revive filling a gold band round the face's edge
+      if (m.raised > 0) {
+        const inner = r * 0.86;
+        c.strokeStyle = '#ffe6a0';
+        c.lineWidth = r - inner;
+        c.beginPath();
+        c.arc(0, 0, (r + inner) / 2, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, m.raised));
+        c.stroke();
+      }
+      c.restore();
+      // the seconds in the middle, and the words under the ring (over it at the bottom edge)
+      const style = { ...SECONDS, size: SECONDS.size * u }, sec = measure(String(m.second), style);
+      drawText(c, sec, cx - sec.w / 2, cy - sec.h / 2, style, s);
+      // (over it, the column turned round as the page's was: the distance on top, the words next to the ring)
+      const top = m.above ? cy - R - gap - words : cy + R + gap;
+      const whatY = m.above ? top + far.h + gap : top, farY = m.above ? top : top + what.h + gap;
+      drawText(c, what, cx - what.w / 2, whatY, { ...WHAT, size: WHAT.size * u }, s);
+      drawText(c, far, cx - far.w / 2, farY, { ...FAR, size: FAR.size * u }, s);
+    },
+  };
 }
 
 function tagFor(p: Player): Tag {
   let t = tags.get(p);
   if (t) return t;
-  const el = document.createElement('div');
-  el.className = 'ptag';
-  el.innerHTML = `<div class="ptag-name">${esc(p.cls.name)}</div><div class="etrack"><div class="efill"></div></div>`;
   const frame = document.createElement('div');
   frame.className = 'pf';
   frame.innerHTML = `<div class="pf-name">${esc(who(p))}</div><div class="pf-bar"><div class="pf-fill"></div></div><div class="pf-state"></div>`;
   $('#party').appendChild(frame);
-  t = { el, fill: $('.efill', el), frame, frameFill: $('.pf-fill', frame), state: $('.pf-state', frame) };
   // over the head (a downed partner has the revive prompt instead)
-  addAnchored(el, () => (G.players.includes(p) && !p.away && p.obj.visible && G.mode === 'run' && p.alive
+  const label = anchorLabel(ORDER.tag, () => (G.players.includes(p) && !p.away && p.obj.visible && G.mode === 'run' && p.alive
     ? { x: p.pos.x, y: p.obj.position.y + p.model.height + 0.45, z: p.pos.z } : null));
+  t = { label, shown: -1, frame, frameFill: $('.pf-fill', frame), state: $('.pf-state', frame) };
   tags.set(p, t);
   return t;
 }
@@ -259,15 +379,17 @@ function tagFor(p: Player): Tag {
 /** Every frame of a co-op run: the party frame, nameplates, the downed note and the revive prompt. */
 export function updateCoopHud(): void {
   // partners gone from the room take their nameplate and frame with them
-  for (const [p, t] of tags) if (!G.players.includes(p)) { removeAnchored(t.el); t.frame.remove(); tags.delete(p); }
+  for (const [p, t] of tags) if (!G.players.includes(p)) { removeLabel(t.label); t.frame.remove(); tags.delete(p); }
   if (!isCoop()) { hideRunBits(); return; }
   // out of the run and watching: our bars, skills and spoils have nothing more to show
   $('#hud').classList.toggle('watching', !!G.player.out);
   const others = G.players.filter((p) => !p.local);
   for (const p of others) {
     const t = tagFor(p);
-    const w = `${(Math.max(0, p.life / p.stats.maxLife) * 100).toFixed(1)}%`;
-    t.fill.style.width = t.frameFill.style.width = w;
+    const share = Math.max(0, p.life / p.stats.maxLife);
+    t.frameFill.style.width = `${(share * 100).toFixed(1)}%`;
+    const look = { ...ALLY_BAR, name: p.cls.name, nameStyle: ALLY_NAME }, step = barStep(look, share);
+    if (step !== t.shown) { t.shown = step; t.label.show(barArt(look, share)); }
     const state = p.away ? 'In the lobby' : p.out === 'banked' ? 'Banked' : p.out === 'dead' ? 'Fallen'
       : p.downed ? (p.revive > 0 ? 'Being revived…' : `Down · ${Math.ceil(p.bleed)}s`) : '';
     if (t.state.textContent !== state) t.state.textContent = state;
@@ -307,7 +429,7 @@ function hideRunBits(): void {
   $('#down-note').classList.add('hidden');
   $('#spectate').classList.add('hidden');
   $('#btn-revive').classList.add('hidden');
-  downMark?.classList.add('hidden');
+  marked = null;
   raisePrompt?.classList.add('hidden');
   shownSecond = -1;
 }

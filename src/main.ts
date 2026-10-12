@@ -21,7 +21,7 @@ import { loadProfile, savedClass, saveClass, addToStash } from './loot/profile';
 import { initGround, updateGround, clearGround } from './game/groundItems';
 import { setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
-import { initFloaters, updateFloaters } from './ui/floaters';
+import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
 import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
@@ -65,7 +65,6 @@ async function boot() {
   await textures;
   G.arena = await buildArena(scene, renderer);
   initQuality();
-  initFloaters($('#floaters'));
 
   await loadingStep('Summoning the hero', 0.35);
   initAudio();   // resumed by the first user gesture
