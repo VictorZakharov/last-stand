@@ -14,6 +14,7 @@ import { hideSummary, showPause, showSummary } from '../../../src/ui/menus';
 import { setPerfHud } from '../../../src/ui/perfHud';
 import { openSaves } from '../../../src/ui/saves';
 import { hideTooltip, itemTooltip, showTooltipAt } from '../../../src/ui/tooltip';
+import { hdrOutput } from './hdrOutput';
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
@@ -21,6 +22,8 @@ export type UiState =
 
 export interface UiOptions {
   state: UiState;
+  /** HDR forced on first, as on a display in HDR mode (the pause menu then shows its levels) */
+  hdr?: boolean;
 }
 
 /** the states pictured in a run (the rest are the lobby's) */
@@ -174,6 +177,7 @@ let runReady = false;
  */
 export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
   const { state } = options;
+  if (options.hdr) await (await hdrOutput())?.forceHdr(true);
   if (RUN_STATES.includes(state) && !runReady) {
     await lab.setup({});
     await showLabels(lab);

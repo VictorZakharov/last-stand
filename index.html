@@ -509,6 +509,14 @@
             <button data-q="auto">Auto<small></small></button><button data-q="high">High</button><button data-q="medium">Medium</button><button data-q="low">Low</button>
           </div>
         </div>
+        <!-- HDR output (core/hdr.ts): its levels shown only while it's on -->
+        <div class="opt-row quality-row hdr-row"><span>HDR</span>
+          <div class="seg" id="opt-hdr"><button data-hdr="auto">Auto<small></small></button><button data-hdr="off">Off</button></div>
+          <div class="hdr-levels">
+            <label class="hdr-level" title="How bright the game's white is, against your screen's white for everything else"><span>Brightness</span><input type="range" id="opt-hdr-paper" min="0.4" max="1.6" step="0.05"><output id="opt-hdr-paper-value"></output></label>
+            <label class="hdr-level" title="How bright the brightest effects and glows may go, against your screen's white"><span>Highlights</span><input type="range" id="opt-hdr-peak" min="1.2" max="8" step="0.1"><output id="opt-hdr-peak-value"></output></label>
+          </div>
+        </div>
         <label class="opt-row"><input type="checkbox" id="opt-perf"> Show performance stats</label>
         <label class="opt-row"><input type="checkbox" id="opt-net"> Show network stats</label>
         <div class="opt-row"><button class="btn" id="btn-fullscreen">Fullscreen</button></div>

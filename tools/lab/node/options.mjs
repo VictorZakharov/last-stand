@@ -237,6 +237,48 @@ export const COMMANDS = {
         help: 'the states: lobby, tooltip, help, saves, run (the HUD with a hurt foe\'s bar and damage numbers), '
           + 'scores, perf, decision, pause, summary',
       },
+      hdr: { kind: 'switch', help: 'HDR on, as on a display in HDR mode (the pause menu shows its levels)' },
+      ...COMMON_OPTIONS,
+    },
+  },
+  light: {
+    help: 'the frame\'s light as the player sees it: the hero standing in each biome, view and facing, the frame '
+      + 'drawn and read back from the canvas, its light as a share of the screen\'s white (mean, by thirds, its '
+      + 'brightest pixels, near white and past it): tools/lab/out/light',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      views: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['top', 'third', 'first'],
+        default: 'top,third,first',
+        help: 'the views: top, third, first',
+      },
+      facings: {
+        kind: 'list',
+        usage: 'a,b',
+        default: '0,90,180,270',
+        help: 'the ways the hero faces in the close views, degrees (0 is +z; the top view is measured at the first)',
+      },
+      pictures: { kind: 'switch', help: 'picture each frame too (=false: the numbers alone)' },
+      hdr: {
+        kind: 'switch',
+        help: 'each frame drawn again in HDR (on any display) and checked against the SDR one: under the knee as an '
+          + 'SDR screen shows it at the paper white, nothing past the peak, the canvas shown the frame drawn',
+      },
+      paper: { kind: 'number', usage: 'n', help: 'with --hdr, the paper white: a share of the screen\'s white (1)' },
+      peak: { kind: 'number', usage: 'n', help: 'with --hdr, the brightest highlight: a share of its white (3)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant faults the measures must catch: the first frame at twice the exposure (and in HDR at 1.2 times '
+          + 'the paper white)',
+      },
       ...COMMON_OPTIONS,
     },
   },

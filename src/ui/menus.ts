@@ -23,6 +23,7 @@ import { isTouch } from './touch';
 import { perfHudEnabled, setPerfHud } from './perfHud';
 import { netHudEnabled, setNetHud } from './netHud';
 import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
+import { hdrSettings, hdrStatus, onHdrChange, setHdrSettings, type HdrMode, type HdrStatus } from '../core/hdr';
 import { QUALITY, type QualitySetting } from '../data/quality';
 import { BIOMES, BIOME_IDS, type BiomeSetting } from '../data/biomes';
 import { biomeSetting, setBiomeSetting } from '../game/biome';
@@ -161,6 +162,13 @@ export function initMenus(h: MenuHooks): void {
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => {
     b.onclick = () => { sfx.click(); setQuality(b.dataset.q as QualitySetting); renderQualityOptions(); };
   });
+  document.querySelectorAll<HTMLElement>('#opt-hdr button').forEach((b) => {
+    b.onclick = () => { sfx.click(); setHdrSettings({ mode: b.dataset.hdr as HdrMode }); renderHdrOptions(); };
+  });
+  $<HTMLInputElement>('#opt-hdr-paper').oninput = (e) => { setHdrSettings({ paper: Number((e.target as HTMLInputElement).value) }); renderHdrOptions(); };
+  $<HTMLInputElement>('#opt-hdr-peak').oninput = (e) => { setHdrSettings({ peak: Number((e.target as HTMLInputElement).value) }); renderHdrOptions(); };
+  // (it starts, stops or fails on its own: a window moved to another monitor, the WebGPU device lost)
+  onHdrChange(renderHdrOptions);
   const classes = $('#opt-class');
   classes.innerHTML = CLASS_IDS.map((id) => `<button data-c="${id}">${CLASSES[id].name}</button>`).join('');
   // every class's name and tagline laid over the others, the one shown picked: the card is as wide and as tall as the
@@ -622,12 +630,29 @@ function renderQualityOptions(): void {
   $('#opt-quality [data-q="auto"] small').textContent = s === 'auto' ? `(${QUALITY[qualityLevel()].label})` : '';
 }
 
+/** what Auto says HDR is doing */
+const HDR_NOTES: Record<HdrStatus, string> = {
+  on: '(on)', off: '', 'sdr-display': '(no HDR display)', unsupported: '(not in this browser)', starting: '(starting)',
+};
+function renderHdrOptions(): void {
+  const s = hdrSettings(), status = hdrStatus();
+  document.querySelectorAll<HTMLElement>('#opt-hdr button').forEach((b) => b.classList.toggle('active', b.dataset.hdr === s.mode));
+  $('#opt-hdr [data-hdr="auto"] small').textContent = s.mode === 'auto' ? HDR_NOTES[status] : '';
+  // the levels only matter while the frame is shown in HDR
+  $('.hdr-levels').classList.toggle('hidden', status !== 'on');
+  $<HTMLInputElement>('#opt-hdr-paper').value = String(s.paper);
+  $<HTMLInputElement>('#opt-hdr-peak').value = String(s.peak);
+  $('#opt-hdr-paper-value').textContent = `${Math.round(s.paper * 100)}%`;
+  $('#opt-hdr-peak-value').textContent = `${Math.max(s.peak, s.paper).toFixed(1)}×`;
+}
+
 export function showPause(v: boolean): void {
   if (v) {
     renderControlsHelp();
     $<HTMLInputElement>('#opt-perf').checked = perfHudEnabled();
     $<HTMLInputElement>('#opt-net').checked = netHudEnabled();
     renderQualityOptions();
+    renderHdrOptions();
     // in the lobby there is no run to abandon; in co-op it leaves the others to it
     $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run');
     $('#btn-abandon').textContent = isCoop() ? 'Leave the run (lose spoils)' : 'Abandon run (lose spoils)';
