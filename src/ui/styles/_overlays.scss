@@ -3,6 +3,10 @@
 
 /* ---------- world overlays ---------- */
 #floaters { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
+/* each on a compositor layer of its own, moved without a repaint: moved every frame as part of the page, a label
+   (the dummies' meters as the camera followed the hero) repainted what lay round it, and in Chrome on Windows each
+   repaint that needed a Skia program not yet built held up the GPU process, the game's canvas with it, 1 to 4 s */
+:where(#floaters) > * { will-change: transform; }
 .float { position: absolute; left: 0; top: 0; font-family: var(--font-display); font-weight: 700; font-size: 17px; white-space: nowrap;
   text-shadow: 0 0 3px #000, 0 2px 3px #000, 0 0 8px rgba(0,0,0,.8); will-change: transform, opacity; }
 .float.crit { font-size: 26px; color: #ffe070 !important; }
