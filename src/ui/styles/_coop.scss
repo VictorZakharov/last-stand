@@ -42,7 +42,7 @@
 @media (max-height: 520px) { .coop-body { gap: 6px; } .coop-intro { font-size: 13px; } #coop .sm-title { font-size: 24px; } .coop-col { padding: 8px; } .coop-code { font-size: 24px; } }
 
 /* the partners' frames, top left (below the bars on touch) */
-#party { position: absolute; top: 14px; left: calc(14px + env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 6px; scale: var(--hud, 1); transform-origin: left top; }
+#party { position: absolute; top: hud(14px); left: calc(#{hud(14px)} + env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 6px; scale: var(--hud, 1); transform-origin: left top; }
 body.touch #party { top: touch(104px); left: calc(64px * var(--touch, 1) + env(safe-area-inset-left, 0px)); scale: var(--touch, 1); }
 .pf { width: 200px; padding: 5px 8px 6px; background: rgba(8,8,12,.72); border: 1px solid rgba($ally, .4); border-radius: 3px; }
 .pf-name { font-family: var(--font-display); font-size: 13px; color: #cfe6ff; }

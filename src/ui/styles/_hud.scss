@@ -11,7 +11,7 @@
 }
 
 /* bottom HUD: [health] [abilities] [energy] in a single compact row */
-#bottombar { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 0;
+#bottombar { position: absolute; left: 50%; bottom: hud(12px); transform: translateX(-50%); display: flex; align-items: center; gap: 0;
   filter: drop-shadow(0 6px 14px rgba(0,0,0,.85)); }
 .bar { position: relative; width: 300px; height: 46px; background: linear-gradient(#0a0808, #1a1414); overflow: hidden;
   @include frame(var(--frame), 0 0 0 1px #000, inset 0 8px 14px rgba(0,0,0,.6)); }
@@ -33,7 +33,7 @@
    box-shadow: 0 0 0 2px #000, inset 0 0 12px #000, 0 0 18px rgba(0,0,0,.9); }
 .gem-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--ink-dim); margin-top: 2px; }
 .gem-num { font-family: var(--font-display); font-size: 24px; font-weight: 900; color: var(--accent); line-height: 1; text-shadow: 0 0 8px rgba($accent-glow, .5); }
-#wavebadge { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 70px; height: 70px; }
+#wavebadge { position: absolute; top: hud(10px); left: 50%; transform: translateX(-50%); width: 70px; height: 70px; }
 #wavebadge .gem-num { font-size: 28px; }
 #hotbar { display: flex; gap: 6px; padding: 7px 12px; position: relative; z-index: 3; background: $tray;
   @include frame(rgba($frame, .6), 0 0 0 1px #000, 0 6px 14px rgba(0,0,0,.8)); border-radius: 4px; }
@@ -70,7 +70,7 @@
 #target.boss .t-bar { width: 520px; height: 16px; box-shadow: 0 0 0 1px #a060ff, 0 0 14px rgba(160,96,255,.5); }
 #target.boss .t-name { font-size: 24px; color: #d8b0ff; }
 
-#minimap-wrap { position: absolute; top: 8px; right: 12px; width: 212px; display: flex; flex-direction: column; align-items: center; }
+#minimap-wrap { position: absolute; top: hud(8px); right: hud(12px); width: 212px; display: flex; flex-direction: column; align-items: center; }
 .mm-title { font-family: var(--font-display); font-size: 16px; color: #f0e2c0; text-shadow: 0 2px 4px #000; margin-bottom: 2px; }
 #minimap { width: 200px; height: 200px; border-radius: 50%; border: 4px solid #6e6a62; box-shadow: 0 0 0 2px #000, inset 0 0 20px #000, 0 6px 14px rgba(0,0,0,.8); background: rgba(10,10,12,.55); }
 .objectives { align-self: stretch; margin-top: 12px; padding-left: 8px; }
@@ -91,9 +91,9 @@
 
 /* the close views (V): a crosshair at the centre, and the click that takes the mouse for looking */
 #crosshair { position: absolute; left: 50%; top: 50%; width: hud(22px); height: hud(22px); transform: translate(-50%, -50%); }
-#crosshair::before, #crosshair::after { content: ''; position: absolute; filter: drop-shadow(0 0 1.5px #000); --c: rgba(255, 240, 210, 0.9); }
-#crosshair::before { left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: linear-gradient(var(--c) 0 35%, transparent 35% 65%, var(--c) 65%); }
-#crosshair::after { top: 50%; left: 0; right: 0; height: 2px; margin-top: -1px; background: linear-gradient(90deg, var(--c) 0 35%, transparent 35% 65%, var(--c) 65%); }
+#crosshair::before, #crosshair::after { content: ''; position: absolute; filter: drop-shadow(0 0 hud(1.5px) #000); --c: rgba(255, 240, 210, 0.9); }
+#crosshair::before { left: 50%; top: 0; bottom: 0; width: hud(2px); margin-left: hud(-1px); background: linear-gradient(var(--c) 0 35%, transparent 35% 65%, var(--c) 65%); }
+#crosshair::after { top: 50%; left: 0; right: 0; height: hud(2px); margin-top: hud(-1px); background: linear-gradient(90deg, var(--c) 0 35%, transparent 35% 65%, var(--c) 65%); }
 #look-hint { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); padding: 0.5em 1em; border-radius: 6px; background: rgba(8, 8, 14, 0.75); color: #f0e6d0; font-size: hud(15px); white-space: nowrap; }
 #banner { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); text-align: center; animation: banner 2.8s ease forwards; }
 .b-title { font-family: var(--font-display); font-size: 54px; font-weight: 900; letter-spacing: 4px; color: #f3e1b0;
@@ -104,7 +104,7 @@
 /* bank or continue: it grows out of the wave badge (same top and centre, so the badge's circle is the
    top middle of the box: --badge), across to a strip and down to the whole box; the details fold away
    after a while (.compact), and once chosen it all folds back into the badge (.closing) */
-#decision { --badge: 70px; position: absolute; left: 50%; top: 10px; transform: translateX(-50%); width: 560px; padding: 18px 22px; text-align: center; pointer-events: auto;
+#decision { --badge: 70px; position: absolute; left: 50%; top: hud(10px); transform: translateX(-50%); width: 560px; padding: 18px 22px; text-align: center; pointer-events: auto;
   background: linear-gradient(rgba(20,17,16,.96), rgba(8,7,8,.96)); @include frame(var(--frame), 0 10px 40px rgba(0,0,0,.9));
   overflow: hidden; transition: padding .5s ease; }
 #decision.opening { animation: dc-open .9s cubic-bezier(.5, 0, .2, 1) both, dc-flare 1.1s .75s ease-out; }
@@ -157,9 +157,10 @@
 }
 
 /* ---------- responsive UI scale ----------
-   --ui is set from JS (ui/scale.js) relative to a 1600x900 reference layout.
+   --hud is set by ui/scale.ts, a share of the screen from a 1500x780 reference layout.
    Uses the individual `scale` property so it composes with existing transforms;
-   elements centred with translateX(-50%) scale from their left edge (= screen centre). */
+   elements centred with translateX(-50%) scale from their left edge (= screen centre).
+   The scale leaves an element's offsets from the screen's edges alone: give those as hud() too. */
 #bottombar { scale: var(--hud, 1); transform-origin: left bottom; }
 #target    { scale: var(--hud, 1); transform-origin: left top; top: hud(88px); }
 #wavebadge { scale: var(--hud, 1); transform-origin: left top; }

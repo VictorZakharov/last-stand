@@ -2,7 +2,7 @@
 @use 'theme' as *;
 
 /* ---------- performance overlay (optional, pause menu) ---------- */
-#diag { position: fixed; top: 10px; left: 10px; z-index: 30; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+#diag { position: fixed; top: ui(10px); left: ui(10px); z-index: 30; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
   scale: var(--ui, 1); transform-origin: left top; pointer-events: none; }
 #diag > * { pointer-events: auto; }
 #perf { width: 212px; padding: 9px 11px 8px;

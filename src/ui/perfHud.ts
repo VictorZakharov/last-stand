@@ -7,6 +7,7 @@ import { readCookie, writeCookie } from '../core/cookies';
 import { programsCompiledInGame, lateCompiles } from '../core/shaders';
 import { qualitySetting, qualityLevel, qualityBudget } from '../core/quality';
 import { atlasUse } from './overlay/atlas';
+import { uiScales } from './scale';
 import { QUALITY } from '../data/quality';
 import { gpuMarks, viewMode, sceneRatio, sceneSize } from '../core/renderer';
 
@@ -255,7 +256,8 @@ function placeBesideLobby(): void {
   const menu = $('#menu');
   const left = menu.querySelector<HTMLElement>('.menu-left');
   const covered = G.mode === 'menu' && !menu.classList.contains('hidden') && !menu.classList.contains('stowed');
-  el.style.left = covered && left ? `${Math.round(left.getBoundingClientRect().right + 12)}px` : '';
+  // (its gap from the panel at the UI's scale, as the panel is)
+  el.style.left = covered && left ? `${Math.round(left.getBoundingClientRect().right + 12 * uiScales.ui)}px` : '';
 }
 
 // --- report -----------------------------------------------------------------------

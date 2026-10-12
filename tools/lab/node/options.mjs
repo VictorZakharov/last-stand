@@ -11,9 +11,13 @@ import { labError } from './errors.mjs';
  * - `pair`: two numbers, `x,z`;
  * - `choice`: one of `choices`;
  * - `ref`: a switch that may name a commit (`--ab`, `--ab=165246d`);
- * - `screen`: a window's size in css px and the screen's pixel ratio, `1280x720@3` (`@1` when it's left out).
+ * - `screen`: a window's size in css px and the screen's pixel ratio, `1280x720@3` (`@1` when it's left out);
+ * - `screens`: two of them, `3840x2160@1,1280x720@3`.
  */
-const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'choice', 'ref', 'screen'];
+const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'choice', 'ref', 'screen', 'screens'];
+
+/** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
+export const UI_STATES = ['lobby', 'tooltip', 'help', 'saves', 'run', 'scores', 'perf', 'decision', 'pause', 'summary'];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
 const WEAPON_STYLES = ['oneHanded', 'shield', 'twoHanded', 'dual'];
@@ -51,6 +55,13 @@ const COMMON_OPTIONS = {
     usage: 'WxH[@ratio]',
     help: 'the page put on a screen of this size (css px) and pixel ratio once it has booted, as a window moved onto '
       + 'another monitor is (1280x720@3: a 4K screen at 300%; 1920x1080@1 by default)',
+  },
+  screens: {
+    kind: 'screens',
+    usage: 'WxH[@ratio],WxH[@ratio]',
+    help: 'this tree on two screens, one after the other, compared as --ab compares two commits: the lines and the '
+      + 'pictures that differ (3840x2160@1,1280x720@3: a 4K screen at 100% and at 300%, pictured at its 3840x2160 '
+      + 'pixels on both)',
   },
   profile: { kind: 'switch', help: 'where the command\'s time went in the page: its busiest functions' },
   watch: {
@@ -213,6 +224,22 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  ui: {
+    help: 'the game\'s UI as the player sees it, each state pictured whole with its named elements\' and the world\'s '
+      + 'labels\' boxes as shares of the window: with --screens, whether the UI is the same share of the screen on '
+      + 'both (tools/lab/out/ui)',
+    options: {
+      states: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: UI_STATES,
+        default: UI_STATES.join(','),
+        help: 'the states: lobby, tooltip, help, saves, run (the HUD with a hurt foe\'s bar and damage numbers), '
+          + 'scores, perf, decision, pause, summary',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   probe: {
     help: 'a probe module of your own: its default export takes the lab and the options (tools/lab/README.md)',
     argument: 'module',
@@ -335,6 +362,13 @@ function readValue(name, spec, text) {
       if (!screen) throw wrong('a size and pixel ratio, 1280x720@3');
       return screen;
     }
+    case 'screens': {
+      const screens = text.split(',').map(screenFrom);
+      if (screens.length !== 2 || screens.includes(null)) {
+        throw wrong('two sizes and pixel ratios, 3840x2160@1,1280x720@3');
+      }
+      return screens;
+    }
     default:
       throw new Error(`option --${name} has an unknown kind ${spec.kind} (one of ${KINDS.join(', ')})`);
   }
@@ -345,6 +379,13 @@ function passedOn(text) {
   if (text === undefined || text === 'true') return true;
   if (text === 'false') return false;
   return text;
+}
+
+/** Throws at options that can't go together: `--screens` names both sides' screens, and runs this tree alone. */
+function checkTogether(options) {
+  if (!options.screens) return;
+  if (options.ab) throw labError('--screens compares this tree on two screens: it takes no --ab');
+  if (options.screen) throw labError('--screens names both screens: it takes no --screen');
 }
 
 /** whether an option of this kind takes the next argument as its value when written without `=` */
@@ -395,6 +436,7 @@ export function parseCommandLine(argv) {
       options[optionName] = readValue(optionName, spec, spec.default);
     }
   }
+  checkTogether(options);
   if (definition.argument && options._.length === 0) throw labError(`${name} needs its ${definition.argument}`);
   if (!definition.argument && options._.length > 0) {
     throw labError(`${name} takes no ${JSON.stringify(options._[0])} (options start with --)`);

@@ -17,7 +17,7 @@ const NAME: TextStyle = { face: 'body', size: 11, spacing: 1.5, upper: true, col
 const DPS_VALUE: TextStyle = { face: 'display', weight: 700, size: 22, color: '#f3e1b0', shadows: SHADOWS };
 const DPS_UNIT: TextStyle = { face: 'display', size: 15, color: INK_DIM, shadows: SHADOWS };
 const SUB: TextStyle = { face: 'body', size: 12, color: INK_DIM, shadows: SHADOWS };
-/** room round the text for its shadows (css px) */
+/** room round the text for its shadows (px) */
 const PAD = 9;
 
 export class DamageMeter {

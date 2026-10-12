@@ -6,18 +6,22 @@
 import * as THREE from 'three';
 import { G } from '../../state';
 import { overFrame } from '../../core/renderer';
+import { uiScales } from '../scale';
 import {
   atlasCrowded, atlasSide, atlasTexture, clearAtlas, fits, freeSlot, paintCanvas, takeSlot, uploadSlot, type Slot,
 } from './atlas';
 
-/** What a label shows: its size (css px) and how to paint it there (its top left at the origin, in css px). */
+/**
+ * What a label shows: its size and how to paint it there (its top left at the origin), in px of the UI's reference
+ * layout, as the page's are: drawn at the UI's scale (ui/scale.ts), so it is the same share of any screen.
+ */
 export interface LabelArt {
   w: number;
   h: number;
-  /** the point of it (css px from its top left) placed on its anchor, where it isn't the label's own `ax`, `ay` share
-   *  of its size: the bottom of a bar, as the page's box hung from its anchor, its shadows' room round it aside */
+  /** the point of it (px from its top left) placed on its anchor, where it isn't the label's own `ax`, `ay` share of
+   *  its size: the bottom of a bar, as the page's box hung from its anchor, its shadows' room round it aside */
   anchor?: { x: number; y: number };
-  /** `scale` is the canvas's pixels per css px, for what the context's transform doesn't scale (shadows) */
+  /** `scale` is the canvas's pixels per px of the art, for what the context's transform doesn't scale (shadows) */
   paint(c: CanvasRenderingContext2D, scale: number): void;
 }
 
@@ -28,9 +32,12 @@ export const ORDER = { floor: 0, bar: 1, tag: 2, float: 3, marker: 4 } as const;
 export class Label {
   private art: LabelArt | null = null;
   slot: Slot | null = null;
-  /** the canvas's ratio it was last painted at (0: to paint), and the fonts' load it was painted with */
+  /** the canvas's pixels per px of its art it was last painted at (0: to paint), and the fonts' load it was painted
+   *  with */
   painted = 0;
   paintedFonts = -1;
+  /** the UI's scale it's drawn at: the HUD's, or the lobby's for what only the lobby shows (ui/scale.ts) */
+  sizedBy: 'hud' | 'ui' = 'hud';
   /** where its anchor shows this frame (css px), and whether it shows at all */
   x = 0;
   y = 0;
@@ -59,13 +66,13 @@ export class Label {
     return { w: this.art?.w ?? 0, h: this.art?.h ?? 0 };
   }
 
-  /** The point of it placed on its anchor (css px from its top left, unscaled). */
+  /** The point of it placed on its anchor (px of its art from its top left, unscaled). */
   get anchorAt(): { x: number; y: number } {
     const { w, h } = this.size;
     return this.art?.anchor ?? { x: this.ax * w, y: this.ay * h };
   }
 
-  /** Paints it into its slot at `ratio` canvas pixels per css px. */
+  /** Paints it into its slot at `ratio` canvas pixels per px of its art. */
   paint(ratio: number): void {
     const art = this.art;
     if (!art) return;
@@ -159,11 +166,11 @@ const view = new THREE.Vector2();
 /** the labels drawn last frame, in the order drawn (lowest first) */
 let drawn: Label[] = [];
 
-/** the canvas's ratio the atlas's labels were painted at */
+/** the most canvas pixels per px of a label's art the atlas was sized for */
 let atlasRatio = 0;
 /** The atlas emptied for every label to be painted again as it's next shown: at a new ratio (each takes a slot of
  *  another size, and the old sizes' shelves would stay taken: a move to another monitor changes the canvas's
- *  ratio), or packed again when it's full of slots given back. */
+ *  ratio, a resize the UI's scale), or packed again when it's full of slots given back. */
 function restartAtlas(ratio: number): void {
   atlasRatio = ratio;
   clearAtlas(ratio);
@@ -176,28 +183,30 @@ function restartAtlas(ratio: number): void {
 /** Every label where it shows now, painted where it changed, into this frame's draw (after the camera moved). */
 export function layoutLabels(): void {
   const ratio = G.renderer.getPixelRatio();
-  if (ratio !== atlasRatio || atlasCrowded()) restartAtlas(ratio);
+  const most = ratio * Math.max(uiScales.hud, uiScales.ui);
+  if (most !== atlasRatio || atlasCrowded()) restartAtlas(most);
   const side = atlasSide();
   drawn = [...labels].filter((l) => l.shown && l.alpha > 0.002 && l.size.w > 0).sort((a, b) => a.order - b.order);
   if (!mesh || rects.count < drawn.length) makeMesh(Math.max(64, 2 ** Math.ceil(Math.log2(drawn.length + 1))));
   let n = 0;
   for (const l of drawn) {
-    if (l.painted !== ratio || l.paintedFonts !== fontLoads) l.paint(ratio);
+    const k = uiScales[l.sizedBy], paint = ratio * k;
+    if (l.painted !== paint || l.paintedFonts !== fontLoads) l.paint(paint);
     const slot = l.slot;
     if (!slot) continue;
     const { w, h } = l.size;
     // (in canvas pixels; on whole pixels when it's drawn at its size, so each texel falls on one)
-    const pw = Math.ceil(w * ratio), ph = Math.ceil(h * ratio);
+    const pw = Math.ceil(w * paint), ph = Math.ceil(h * paint);
     const a = l.anchorAt;
-    let x = (l.x - a.x * l.scale) * ratio, y = (l.y - a.y * l.scale) * ratio;
+    let x = l.x * ratio - a.x * l.scale * paint, y = l.y * ratio - a.y * l.scale * paint;
     if (l.scale === 1) {
       x = Math.round(x);
       y = Math.round(y);
     }
     l.box.x = x / ratio;
     l.box.y = y / ratio;
-    l.box.w = w * l.scale;
-    l.box.h = h * l.scale;
+    l.box.w = w * l.scale * k;
+    l.box.h = h * l.scale * k;
     rects.setXYZW(n, x, y, pw * l.scale, ph * l.scale);
     uvs.setXYZW(n, slot.x / side, slot.y / side, (slot.x + pw) / side, (slot.y + ph) / side);
     alphas.setX(n, l.alpha);
@@ -228,7 +237,7 @@ function drawLabels(): void {
   const gl = G.renderer;
   gl.getDrawingBufferSize(view);
   mesh!.material.uniforms.uView.value.copy(view);
-  // (the atlas is made again, larger, past a ratio of 2)
+  // (the atlas is made again, larger, as labels take more canvas pixels: a higher ratio, a larger UI)
   mesh!.material.uniforms.uAtlas.value = atlasTexture();
   const auto = gl.autoClear;
   gl.autoClear = false;
@@ -238,6 +247,9 @@ function drawLabels(): void {
   if (count === 0) mesh!.geometry.instanceCount = 0;
 }
 overFrame.draw = drawLabels;
+
+/** The labels drawn last frame, lowest first (tools/lab's `ui` measures their boxes). */
+export function drawnLabels(): readonly Label[] { return drawn; }
 
 /** The topmost pickable label under a point of the page (css px), as last drawn. */
 export function labelAt(x: number, y: number): Label | null {

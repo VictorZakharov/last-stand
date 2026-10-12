@@ -39,6 +39,18 @@ test('reads a screen, its pixel ratio 1 when left out', () => {
   assert.throws(() => parseCommandLine(['sheet', '--screen', '1280*720']), /--screen: a size and pixel ratio/);
 });
 
+test('reads two screens, and takes no --ab or --screen with them', () => {
+  assert.deepEqual(parseCommandLine(['probe', 'x.ts', '--screens', '3840x2160@1,1280x720@3']).options.screens,
+    [{ width: 3840, height: 2160, ratio: 1 }, { width: 1280, height: 720, ratio: 3 }]);
+  assert.deepEqual(parseCommandLine(['sheet', '--screens=1920x1080,960x540@2']).options.screens,
+    [{ width: 1920, height: 1080, ratio: 1 }, { width: 960, height: 540, ratio: 2 }]);
+  assert.throws(() => parseCommandLine(['sheet', '--screens', '1920x1080']), /--screens: two sizes/);
+  assert.throws(() => parseCommandLine(['sheet', '--screens', '1920x1080,a']), /--screens: two sizes/);
+  assert.throws(() => parseCommandLine(['sheet', '--screens', '1920x1080,960x540', '--ab']), /takes no --ab/);
+  assert.throws(() => parseCommandLine(['sheet', '--screens', '1920x1080,960x540', '--screen', '800x600']),
+    /takes no --screen/);
+});
+
 test('refuses bad values', () => {
   assert.throws(() => parseCommandLine(['sheet', '--at', '12']), /--at: two numbers/);
   assert.throws(() => parseCommandLine(['sheet', '--facing', '0x10']), /--facing: a number/);

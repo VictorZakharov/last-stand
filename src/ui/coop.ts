@@ -12,6 +12,7 @@ import { drawText, measure, OUTLINE, type TextStyle } from './overlay/paint';
 import { renderLobbyOptions } from './menus';
 import { openSaves } from './saves';
 import { isTouch } from './touch';
+import { uiScales } from './scale';
 import { sfx } from '../core/audio';
 import { reportLinks, bindReportLinks } from './netHud';
 import type { Player } from '../entities/player';
@@ -232,8 +233,8 @@ function placeMark(): void {
   if (!marked) return;
   const { downed, near } = marked;
   const me = G.player;
-  // (the HUD's scale as ui/scale sets it on the root: read from its own style, no style recalc)
-  const ui = parseFloat(document.documentElement.style.getPropertyValue('--hud')) || 1;
+  // (its edges' margins are px of the UI's reference layout, at the HUD's scale)
+  const ui = uiScales.hud;
   const w = window.innerWidth, h = window.innerHeight;
   const p = project(downed.pos.x, downed.obj.position.y + MARK_HEIGHT, downed.pos.z);
   const left = EDGE.side * ui, right = w - EDGE.side * ui, top = EDGE.top * ui, bottom = h - EDGE.bottom * ui;
@@ -261,7 +262,7 @@ function placeMark(): void {
   const beating = downed.revive <= 0 && since < BEAT;
   const big = hurried ? 1.3 : 1.16, swell = beating ? heartbeat(since / BEAT, big) : 1;
   const art = markArt({
-    ui, left: bleedLeft / COOP.bleedOut, raised: downed.revive, second, what, far, above, edge: !inView, turn,
+    left: bleedLeft / COOP.bleedOut, raised: downed.revive, second, what, far, above, edge: !inView, turn,
     // (with reduced motion, the glow alone beats)
     scale: reduceMotion?.matches ? 1 : swell, glow: (swell - 1) / (big - 1),
   });
@@ -272,18 +273,19 @@ function placeMark(): void {
   mark.ay = art.ringY / art.h;
 }
 
-/** What the marker shows: the HUD's scale, the share of the clock left and of the revive done, its words, and how
- *  it's placed (`above`: its words over the ring; `edge`: the arrow turned `turn` towards them), its beat's swell. */
+/** What the marker shows: the share of the clock left and of the revive done, its words, and how it's placed
+ *  (`above`: its words over the ring; `edge`: the arrow turned `turn` towards them), its beat's swell. */
 interface MarkLook {
-  ui: number; left: number; raised: number; second: number; what: string; far: string;
+  left: number; raised: number; second: number; what: string; far: string;
   above: boolean; edge: boolean; turn: number; scale: number; glow: number;
 }
 
-/** The marker's art, and where its ring's middle is down it (css px). */
+/** The marker's art, and where its ring's middle is down it (px of the UI's reference layout: the labels are drawn
+ *  at the HUD's scale). */
 function markArt(m: MarkLook): { w: number; h: number; ringY: number; paint(c: CanvasRenderingContext2D, s: number): void } {
-  const u = m.ui, R = RING * u, reach = (68 + 8) * u;
-  const what = measure(m.what, { ...WHAT, size: WHAT.size * u }), far = measure(m.far, { ...FAR, size: FAR.size * u });
-  const gap = 2 * u, words = what.h + far.h + gap, pad = 8 * u;
+  const R = RING, reach = 68 + 8;
+  const what = measure(m.what, WHAT), far = measure(m.far, FAR);
+  const gap = 2, words = what.h + far.h + gap, pad = 8;
   const box = reach * 2, w = Math.max(box, what.w + pad * 2, far.w + pad * 2);
   const h = box + words + pad;
   const ringY = m.above ? h - box / 2 : box / 2;
@@ -297,12 +299,12 @@ function markArt(m: MarkLook): { w: number; h: number; ringY: number; paint(c: C
         c.translate(cx, cy);
         c.rotate(m.turn);
         c.shadowColor = 'rgba(0,0,0,.85)';
-        c.shadowBlur = 5 * u * s;
+        c.shadowBlur = 5 * s;
         c.fillStyle = DOWN_RED;
         c.beginPath();
-        c.moveTo(46 * u, -14 * u);
-        c.lineTo(68 * u, 0);
-        c.lineTo(46 * u, 14 * u);
+        c.moveTo(46, -14);
+        c.lineTo(68, 0);
+        c.lineTo(46, 14);
         c.closePath();
         c.fill();
         c.restore();
@@ -313,12 +315,12 @@ function markArt(m: MarkLook): { w: number; h: number; ringY: number; paint(c: C
       // its glow, stronger at the beat's peak, and a dark rim round it
       c.fillStyle = 'rgba(40,0,0,.6)';
       c.shadowColor = `rgba(255,42,30,${0.7 + 0.3 * m.glow})`;
-      c.shadowBlur = (18 + 12 * m.glow) * u * s;
+      c.shadowBlur = (18 + 12 * m.glow) * s;
       c.beginPath();
       c.arc(0, 0, R, 0, Math.PI * 2);
       c.fill();
       c.shadowColor = '#000';
-      c.shadowBlur = 4 * u * s;
+      c.shadowBlur = 4 * s;
       c.fill();
       c.shadowColor = 'transparent';
       c.shadowBlur = 0;
@@ -332,7 +334,7 @@ function markArt(m: MarkLook): { w: number; h: number; ringY: number; paint(c: C
         c.fill();
       }
       // the dark face inside it
-      const r = R - 7 * u, face = c.createRadialGradient(0, 0, 0, 0, 0, r * Math.SQRT2);
+      const r = R - 7, face = c.createRadialGradient(0, 0, 0, 0, 0, r * Math.SQRT2);
       face.addColorStop(0, '#5a0a06');
       face.addColorStop(0.75, '#1c0403');
       c.fillStyle = face;
@@ -350,13 +352,13 @@ function markArt(m: MarkLook): { w: number; h: number; ringY: number; paint(c: C
       }
       c.restore();
       // the seconds in the middle, and the words under the ring (over it at the bottom edge)
-      const style = { ...SECONDS, size: SECONDS.size * u }, sec = measure(String(m.second), style);
-      drawText(c, sec, cx - sec.w / 2, cy - sec.h / 2, style, s);
+      const sec = measure(String(m.second), SECONDS);
+      drawText(c, sec, cx - sec.w / 2, cy - sec.h / 2, SECONDS, s);
       // (over it, the column turned round as the page's was: the distance on top, the words next to the ring)
       const top = m.above ? cy - R - gap - words : cy + R + gap;
       const whatY = m.above ? top + far.h + gap : top, farY = m.above ? top : top + what.h + gap;
-      drawText(c, what, cx - what.w / 2, whatY, { ...WHAT, size: WHAT.size * u }, s);
-      drawText(c, far, cx - far.w / 2, farY, { ...FAR, size: FAR.size * u }, s);
+      drawText(c, what, cx - what.w / 2, whatY, WHAT, s);
+      drawText(c, far, cx - far.w / 2, farY, FAR, s);
     },
   };
 }

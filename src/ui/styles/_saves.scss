@@ -6,7 +6,7 @@
 /* ---------- the screen: over the lobby, under the modals (the delete popup) and tooltips ---------- */
 #saves { --z: var(--ui, 1); position: fixed; inset: 0; z-index: 35; display: flex; justify-content: center;
   padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
-  background: radial-gradient(ellipse 70% 45% at 50% 0, rgba(150,40,18,.24), transparent 70%), rgba(5,4,6,.94); backdrop-filter: blur(3px);
+  background: radial-gradient(ellipse 70% 45% at 50% 0, rgba(150,40,18,.24), transparent 70%), rgba(5,4,6,.94); backdrop-filter: blur(ui(3px));
   animation: sv-in .25s ease; }
 @keyframes sv-in { from { opacity: 0; } }
 .sv-box { zoom: var(--z); width: 100%; max-width: 1500px; height: 100%; display: flex; flex-direction: column; gap: 12px; padding: 16px 26px 20px; }
