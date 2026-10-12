@@ -177,7 +177,7 @@ export const VIEWS: ViewMode[] = ['top', 'third', 'first'];
 
 export function initRenderer(container: HTMLElement) {
   const renderer = gl = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+  renderer.setPixelRatio(screenRatio(window.devicePixelRatio || 1));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -190,7 +190,7 @@ export function initRenderer(container: HTMLElement) {
   scene.background = new THREE.Color(0x030307);
   const camera = new THREE.PerspectiveCamera(CAMERA.fov, window.innerWidth / window.innerHeight, 0.5, 300);
 
-  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  const size = sceneSize(new THREE.Vector2());
   sceneRT = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
   composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, depthBuffer: false }));
   // Kill NaN/Inf pixels before bloom: a single bad pixel would otherwise be blurred
@@ -226,6 +226,17 @@ export function initRenderer(container: HTMLElement) {
 /** the window size and device pixel ratio the canvas was last fitted to, and the quality's pixel ratio cap */
 const fitted = { w: 0, h: 0, dpr: 0 };
 let pixelRatioCap = 1.5;
+/** the canvas's pixels per css px, at most: the world's overlays are drawn into it after the scene (ui/overlay), as
+ *  sharp as the page's own text was; the scene renders at the quality's ratio and the last pass scales it up */
+const SCREEN_RATIO_MAX = 2;
+const screenRatio = (dpr: number): number => Math.min(dpr, SCREEN_RATIO_MAX);
+/** the scene's pixels per css px: the quality preset's, never more than the canvas's */
+export const sceneRatio = (): number => Math.min(window.devicePixelRatio || 1, pixelRatioCap, SCREEN_RATIO_MAX);
+/** The scene's render size in pixels (the canvas's at the scene's own ratio). */
+export function sceneSize(out: THREE.Vector2): THREE.Vector2 {
+  const r = sceneRatio();
+  return out.set(Math.floor(window.innerWidth * r), Math.floor(window.innerHeight * r));
+}
 /**
  * Fit the canvas, render targets and camera to the window. Runs on resize and every frame, as
  * moving the window to another monitor can change the pixel ratio without a resize event, and can
@@ -238,9 +249,10 @@ function fitViewport(): boolean {
   fitted.w = w; fitted.h = h; fitted.dpr = dpr;
   G.camera.aspect = w / h;
   G.camera.updateProjectionMatrix();
-  const pr = Math.min(dpr, pixelRatioCap);
-  if (pr !== gl.getPixelRatio()) { gl.setPixelRatio(pr); composer.setPixelRatio(pr); }
+  const sr = screenRatio(dpr);
+  if (sr !== gl.getPixelRatio()) gl.setPixelRatio(sr);
   gl.setSize(w, h);
+  applySceneRatio();
   composer.setSize(w, h);
   fitSceneTarget();
   return true;
@@ -249,17 +261,28 @@ function fitViewport(): boolean {
 /** The offscreen target the scene is rendered into (shaders must be compiled for it). */
 export const sceneTarget = (): THREE.WebGLRenderTarget => sceneRT;
 
+/** the scene's ratio the post chain was last sized at */
+let appliedSceneRatio = 0;
+/** Sizes the post chain at the scene's ratio if it changed (the composer resizes every pass for it); whether it did. */
+function applySceneRatio(): boolean {
+  const r = sceneRatio();
+  if (r === appliedSceneRatio) return false;
+  appliedSceneRatio = r;
+  composer.setPixelRatio(r);
+  return true;
+}
+
 const _size = new THREE.Vector2();
 function fitSceneTarget(): void {
-  gl.getDrawingBufferSize(_size);
+  sceneSize(_size);
   sceneRT.setSize(_size.x, _size.y);
 }
 
 /** Apply the render-cost settings of a quality preset, live. None of them change shader variants. */
 export function setRenderQuality(p: QualityPreset): void {
   pixelRatioCap = p.pixelRatio;
-  const pr = Math.min(window.devicePixelRatio || 1, p.pixelRatio);
-  if (pr !== gl.getPixelRatio()) { gl.setPixelRatio(pr); composer.setPixelRatio(pr); fitSceneTarget(); }
+  // (the canvas keeps its ratio: the scene alone renders at the quality's)
+  if (applySceneRatio()) fitSceneTarget();
   // a render target re-initialises with the new sample count on its next use
   if (sceneRT.samples !== p.msaa) { sceneRT.samples = p.msaa; sceneRT.dispose(); }
 }
@@ -413,6 +436,8 @@ const ease = (t: number): number => t * t * (3 - 2 * t);
 const _fwd = new THREE.Vector3(), _pivot = new THREE.Vector3(), _look = new THREE.Vector3(), _quat = new THREE.Quaternion(), _quat2 = new THREE.Quaternion();
 /** Where the perf overlay's GPU timing moves on to the next part of the frame (a no-op unless it's on). */
 export const gpuMarks = { mark: (_label: string): void => {} };
+/** What is drawn over the finished frame, on the canvas at its own pixel ratio: the world's overlays (ui/overlay). */
+export const overFrame = { draw: (): void => {} };
 
 export function render(): void {
   // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
@@ -430,4 +455,6 @@ export function render(): void {
   gpuMarks.mark('scene');
   gl.render(G.scene, G.camera);
   composer.render();
+  gpuMarks.mark('overlay');
+  overFrame.draw();
 }

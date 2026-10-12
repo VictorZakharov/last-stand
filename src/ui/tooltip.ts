@@ -127,6 +127,19 @@ export function bindTooltip(node: HTMLElement, getContent: () => TooltipContent 
   });
 }
 
+/** Shows `c` at a point of the page (for what isn't an element: a label over the world), pinned there with `pin` (touch),
+ *  else following the mouse as `moveTooltip` moves it. */
+export function showTooltipAt(c: TooltipContent, at: { clientX: number; clientY: number }, pin = false): void {
+  show(c, at);
+  pinned = pin;
+  el().classList.toggle('pinned', pin);
+}
+
+/** Moves a following tooltip to the mouse. */
+export function moveTooltip(at: { clientX: number; clientY: number }): void {
+  if (!pinned) place(at as MouseEvent);
+}
+
 export function hideTooltip(): void {
   el().classList.add('hidden');
   el().classList.remove('pinned');

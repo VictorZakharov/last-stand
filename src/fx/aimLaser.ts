@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { addEffect } from './effects';
+import { sceneRatio, sceneSize } from '../core/renderer';
 
 /** the line's and the dot's width (css px), how bright and opaque, how quickly it eases in and out (s) */
 const WIDTH = 2, DOT = 7, GLOW = 1.6, ALPHA = 0.7, EASE_IN = 0.12, EASE_OUT = 0.18;
@@ -131,9 +132,10 @@ function start(): void {
       const on = G.time - shownAt < 0.05;
       const a = uniforms.uAlpha;
       a.value = on ? Math.min(ALPHA, a.value + dt * ALPHA / EASE_IN) : Math.max(0, a.value - dt * ALPHA / EASE_OUT);
-      G.renderer.getDrawingBufferSize(uniforms.uRes.value);
-      uniforms.uWidth.value = WIDTH * G.renderer.getPixelRatio();
-      dotUniforms.uWidth.value = DOT * G.renderer.getPixelRatio();
+      // (in the scene's pixels: it renders into the scene's target, at the quality's ratio)
+      sceneSize(uniforms.uRes.value);
+      uniforms.uWidth.value = WIDTH * sceneRatio();
+      dotUniforms.uWidth.value = DOT * sceneRatio();
       return on || a.value > 0;
     },
     dispose() {

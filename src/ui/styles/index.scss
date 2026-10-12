@@ -1,6 +1,5 @@
 // Every stylesheet, in cascade order: later files may override earlier ones.
 @use 'base';
-@use 'overlays';
 @use 'hud';
 @use 'controls';
 @use 'lobby';

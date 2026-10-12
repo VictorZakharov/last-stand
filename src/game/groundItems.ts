@@ -11,10 +11,12 @@ import { ARENA, RUN } from '../data/balance';
 import { CLASSES } from '../data/classes/index';
 import { basesFor, newItemId, rarityOf } from '../loot/items';
 import { groundHeight } from '../world/ground';
-import { project, floatText } from '../ui/floaters';
-import { bindTooltip, hideTooltip, itemTooltip, itemTooltipHTML } from '../ui/tooltip';
+import { project, floatText, onLayout } from '../ui/floaters';
+import { hideTooltip, itemTooltip, itemTooltipHTML, moveTooltip, showTooltipAt, type TooltipContent } from '../ui/tooltip';
 import { input } from '../core/input';
-import { itemIconSVG } from '../ui/itemIcons';
+import { itemIconImage } from '../ui/itemIcons';
+import { Label, ORDER, labelAt, type LabelArt } from '../ui/overlay/layer';
+import { drawText, measure, OUTLINE, roundRect, svgImage, type TextStyle } from '../ui/overlay/paint';
 import type { Item } from '../types';
 
 /** A drop as the games tell each other about it: the item, where it lies and where it was thrown from. */
@@ -40,13 +42,14 @@ const ASK_AGAIN = 2;
 const ROOM = 32;
 
 interface Drop extends GroundDrop {
-  label: HTMLElement;
+  /** its name over it, with its icon, in its rarity's colour (pickable: a click, or a tap and another) */
+  label: Label;
   /** age (s): the toss, then the beam growing */
   t: number;
   /** when a guest last asked the host for it */
   asked: number;
-  /** the label's size (px), measured once shown */
-  w: number; h: number;
+  /** the lobby's UI scale its label was painted at */
+  ui: number;
 }
 
 const drops = new Map<string, Drop>();
@@ -71,7 +74,11 @@ let meshes: Record<Part, THREE.InstancedMesh> | null = null;
 let recolour = false;
 
 /** `pick` puts a picked-up item in the stash; false when there's no room. */
-export function initGround(pick: (item: Item) => boolean): void { picked = pick; }
+export function initGround(pick: (item: Item) => boolean): void {
+  picked = pick;
+  bindPicking();
+  onLayout(placeLabels);
+}
 export function setGroundNet(n: GroundNet | null): void { net = n; }
 
 // the pieces' shapes and materials (white, all additive: the effects' own shader programs, coloured per drop)
@@ -158,30 +165,110 @@ export function floorAt(cx: number, cy: number): { x: number; z: number } | null
   return ray.ray.intersectPlane(floorPlane, hit) ? { x: hit.x, z: hit.z } : null;
 }
 
+/** the lobby's UI scale (`--ui`, set on the root by ui/scale) */
+const uiScale = (): number => parseFloat(document.documentElement.style.getPropertyValue('--ui')) || 1;
+
+/** A drop's label at UI scale `u`: its icon and name in its rarity's colour on a dark plate edged in it. */
+function dropArt(d: Drop, u: number): LabelArt {
+  const color = rarityOf(d.item.rarity).color;
+  const style: TextStyle = { face: 'display', size: 13 * u, color, shadows: OUTLINE };
+  const name = measure(d.item.name, style), icon = 20 * u, gap = 5 * u;
+  const pad = { top: 2 * u, right: 8 * u, bottom: 2 * u, left: 4 * u };
+  const inner = Math.max(icon, name.h);
+  const w = 2 + pad.left + icon + gap + name.w + pad.right, h = 2 + pad.top + inner + pad.bottom;
+  const img = svgImage(itemIconImage(d.item, Math.ceil(icon * 2)), () => d.label.show(dropArt(d, uiScale())));
+  return {
+    w, h,
+    paint(c, s) {
+      roundRect(c, 0.5, 0.5, w - 1, h - 1, 3 * u);
+      c.fillStyle = 'rgba(12,11,14,.8)';
+      c.fill();
+      c.globalAlpha = 0.55;
+      c.strokeStyle = color;
+      c.lineWidth = 1;
+      c.stroke();
+      c.globalAlpha = 1;
+      const x = 1 + pad.left, y = 1 + pad.top;
+      if (img) c.drawImage(img, x, y + (inner - icon) / 2, icon, icon);
+      drawText(c, name, x + icon + gap, y + (inner - name.h) / 2, style, s);
+    },
+  };
+}
+
 /** A drop appears: thrown from where it was thrown from, or already lying there (`toss` false). */
 export function addDrop(g: GroundDrop, toss = true): void {
   if (drops.has(g.id)) return;
-  const label = document.createElement('div');
-  label.className = 'gdrop';
-  label.style.setProperty('--c', rarityOf(g.item.rarity).color);
-  label.innerHTML = `${itemIconSVG(g.item)}<span>${g.item.name}</span>`;
-  const d: Drop = { ...g, label, t: toss ? 0 : TOSS + 1, asked: -Infinity, w: 0, h: 0 };
-  bindTooltip(label, () => {
-    const own = usersOf(d.item).some((c) => c.id === G.player.cls.id);
-    const how = own ? (input.touchMode ? 'Tap again to pick it up' : 'Click to pick it up') : `Only a ${usersOf(d.item).map((c) => c.name).join(' or ') || 'nobody'} can use it`;
-    return { ...(own ? itemTooltip(d.item)() : itemTooltipHTML(d.item)), foot: `${how}<br>Left on the floor, it's lost when a run starts` };
-  });
-  // picked up only on purpose: a click (a tap shows the card first, the next tap takes it)
-  label.addEventListener('click', () => {
-    if (input.touchMode && tapped !== d.id) { tapped = d.id; return; }
-    tapped = null;
-    pickUp(d);
-  });
-  label.style.display = 'none';
-  document.getElementById('floaters')?.appendChild(label);
+  const label = new Label(ORDER.floor);
+  label.pickable = true;
+  label.ax = label.ay = 0;
+  label.shown = false;
+  const d: Drop = { ...g, label, t: toss ? 0 : TOSS + 1, asked: -Infinity, ui: uiScale() };
+  label.show(dropArt(d, d.ui));
   drops.set(d.id, d);
   recolour = true;
   drawDrops();
+}
+
+/** A drop's card: the item, and what picking it up does (or who can). */
+function cardOf(d: Drop): TooltipContent {
+  const own = usersOf(d.item).some((c) => c.id === G.player.cls.id);
+  const how = own ? (input.touchMode ? 'Tap again to pick it up' : 'Click to pick it up') : `Only a ${usersOf(d.item).map((c) => c.name).join(' or ') || 'nobody'} can use it`;
+  return { ...(own ? itemTooltip(d.item)() : itemTooltipHTML(d.item)), foot: `${how}<br>Left on the floor, it's lost when a run starts` };
+}
+
+/** The drop whose label is under a point of the page, in the lobby. */
+function dropAt(x: number, y: number): Drop | null {
+  if (G.mode !== 'menu') return null;
+  const l = labelAt(x, y);
+  if (!l) return null;
+  for (const d of drops.values()) if (d.label === l) return d;
+  return null;
+}
+
+/** the drop the mouse is over (its card shows), and the one a press began on */
+let hovered: Drop | null = null, pressed: Drop | null = null;
+
+/** The pointer over the floor's names: the mouse's card and cursor, a click to pick one up, a tap to show its card and
+ *  another to take it. Their labels are drawn on the canvas, so they take the pointer before the game does (a press
+ *  on one doesn't attack). */
+function bindPicking(): void {
+  const canvas = G.renderer.domElement;
+  // (only where the game field itself is under the pointer: a panel or the touch controls over a name keep it)
+  const over = (e: MouseEvent): Drop | null => (e.target === canvas ? dropAt(e.clientX, e.clientY) : null);
+  window.addEventListener('mousemove', (e) => {
+    if (input.touchMode) return;
+    const d = over(e);
+    // (over a name the hero doesn't aim there, as over the page's own)
+    if (d) input.mouse.overUI = true;
+    canvas.style.cursor = d ? 'pointer' : '';
+    if (d !== hovered) {
+      hovered = d;
+      if (d) showTooltipAt(cardOf(d), e);
+      else hideTooltip();
+    } else if (d) moveTooltip(e);
+  });
+  window.addEventListener('pointerdown', (e) => {
+    const d = over(e);
+    pressed = d;
+    if (!d) return;
+    // (the game never sees it: no attack, no move stick, no closing of the card it shows)
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.pointerType === 'mouse') return;
+    if (tapped !== d.id) {
+      tapped = d.id;
+      showTooltipAt(cardOf(d), { clientX: d.label.box.x + d.label.box.w - 6, clientY: d.label.box.y }, true);
+      return;
+    }
+    tapped = null;
+    pickUp(d);
+  }, true);
+  window.addEventListener('pointerup', (e) => {
+    if (e.pointerType !== 'mouse' || !pressed) return;
+    const d = over(e);
+    if (d === pressed) pickUp(d);
+    pressed = null;
+  }, true);
 }
 
 /** Take a drop off the floor (it's gone, or someone took it). Returns it, if it was there. */
@@ -192,6 +279,7 @@ export function removeDrop(id: string): GroundDrop | null {
   recolour = true;
   drawDrops();
   d.label.remove();
+  if (hovered === d) hovered = null;
   hideTooltip();
   return { id: d.id, item: d.item, x: d.x, z: d.z, fx: d.fx, fz: d.fz };
 }
@@ -263,22 +351,25 @@ function drawDrops(): void {
   recolour = false;
 }
 
-/** The labels over the drops, stacked upwards where they would overlap (the nearest keep their place). */
+/** The labels over the drops, stacked upwards where they would overlap (the nearest keep their place); placed with
+ *  the other labels, after the camera has moved. */
 function placeLabels(): void {
   const placed: { x: number; y: number; w: number; h: number }[] = [];
   const shown = [...drops.values()].filter((d) => {
     const on = d.t >= TOSS && G.mode === 'menu';
-    if (!on) d.label.style.display = 'none';
+    if (!on) d.label.shown = false;
     return on;
   }).map((d) => ({ d, s: project(d.x, groundHeight(d.x, d.z) + 0.5, d.z) })).filter(({ d, s }) => {
-    if (s.behind) d.label.style.display = 'none';
+    if (s.behind) d.label.shown = false;
     return !s.behind;
   }).sort((a, b) => b.s.y - a.s.y);
+  const u = uiScale();
   for (const { d, s } of shown) {
     const el = d.label;
-    el.style.display = '';
-    if (!d.w) { d.w = el.offsetWidth; d.h = el.offsetHeight; }
-    const { w, h } = d;
+    el.shown = true;
+    // (painted again at the lobby's new scale)
+    if (d.ui !== u) { d.ui = u; el.show(dropArt(d, u)); }
+    const { w, h } = el.size;
     const r = { x: s.x - w / 2, y: s.y - h, w, h };
     for (let i = 0; i < 20; i++) {
       const hit = placed.find((o) => r.x < o.x + o.w && o.x < r.x + r.w && r.y < o.y + o.h && o.y < r.y + r.h);
@@ -286,7 +377,8 @@ function placeLabels(): void {
       r.y = hit.y - h - 2;
     }
     placed.push(r);
-    el.style.transform = `translate(${r.x}px, ${r.y}px)`;
+    el.x = r.x;
+    el.y = r.y;
   }
 }
 
@@ -315,9 +407,8 @@ function pickUp(d: Drop): void {
 export function updateGround(dt: number): void {
   for (const d of drops.values()) {
     d.t += dt;
-    // the class on show can change (a class or save slot switch in the lobby)
-    d.label.classList.toggle('other', !usersOf(d.item).some((c) => c.id === G.player.cls.id));
+    // the class on show can change (a class or save slot switch in the lobby): another class's drop dimmed
+    d.label.alpha = usersOf(d.item).some((c) => c.id === G.player.cls.id) ? 1 : 0.6;
   }
   drawDrops();
-  placeLabels();
 }

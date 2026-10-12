@@ -11,11 +11,11 @@ const RARITY_IDS: RarityId[] = ['common', 'magic', 'rare', 'epic', 'legendary'];
 const CLOTHS = ['clothIndigo', 'clothCrimson', 'clothTeal', 'clothUmber'] as const;
 
 let defsInjected = false;
+let defs = '';
 
-/** Inject the shared gradient/filter definitions (idempotent). */
-export function initItemIcons(): void {
-  if (defsInjected) return;
-  defsInjected = true;
+/** The icons' shared gradients and filters, as `<defs>` markup (made once). */
+function iconDefs(): string {
+  if (defs) return defs;
   const gem = (r: RarityId) => {
     const c = rarityOf(r).color;
     return `<radialGradient id="gem-${r}" cx="35%" cy="30%" r="75%"><stop offset="0" stop-color="#fff"/><stop offset=".3" stop-color="${c}"/><stop offset="1" stop-color="${c}" stop-opacity=".35"/></radialGradient>
@@ -23,11 +23,7 @@ export function initItemIcons(): void {
   };
   const lin = (id: string, a: string, b: string, c?: string) =>
     `<linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/>${c ? `<stop offset=".5" stop-color="${b}"/><stop offset="1" stop-color="${c}"/>` : `<stop offset="1" stop-color="${b}"/>`}</linearGradient>`;
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', '0'); svg.setAttribute('height', '0');
-  svg.style.position = 'absolute';
-  svg.setAttribute('aria-hidden', 'true');
-  svg.innerHTML = `<defs>
+  defs = `<defs>
     ${lin('gold', '#fff3c4', '#d4a64a', '#6e4a18')}
     ${lin('steel', '#f2f6ff', '#8f99ab', '#343a46')}
     ${lin('darksteel', '#9aa3b4', '#4a505e', '#1c1f26')}
@@ -45,6 +41,18 @@ export function initItemIcons(): void {
     <filter id="icoShadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.2" flood-color="#000" flood-opacity=".75"/></filter>
     <filter id="icoGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter>
   </defs>`;
+  return defs;
+}
+
+/** Inject the shared gradient/filter definitions (idempotent). */
+export function initItemIcons(): void {
+  if (defsInjected) return;
+  defsInjected = true;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', '0'); svg.setAttribute('height', '0');
+  svg.style.position = 'absolute';
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = iconDefs();
   document.body.prepend(svg);
 }
 
@@ -291,6 +299,15 @@ export function itemIconSVG(item: Item): string {
   const draw = DRAW[item.base] ?? DRAW[SLOT_INFO[item.slot].bases[0]];
   const cloth = CLOTHS[hash(item.id) % CLOTHS.length];
   return `<svg class="item-icon" viewBox="0 0 64 64" aria-hidden="true"><g filter="url(#icoShadow)">${draw(item.rarity, cloth)}</g></svg>`;
+}
+
+/** An item's icon as an SVG of its own, `px` square, its gradients and filters inside it: drawn as an image (a label
+ *  over the world, ui/overlay), which can't reach the page's shared ones. */
+export function itemIconImage(item: Item, px: number): string {
+  const draw = DRAW[item.base] ?? DRAW[SLOT_INFO[item.slot].bases[0]];
+  const cloth = CLOTHS[hash(item.id) % CLOTHS.length];
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 64 64">${iconDefs()}`
+    + `<g filter="url(#icoShadow)">${draw(item.rarity, cloth)}</g></svg>`;
 }
 
 /** Faded silhouette for an empty equipment slot (in the class's own gear). */
