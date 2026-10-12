@@ -163,6 +163,11 @@ export function initMenus(h: MenuHooks): void {
   });
   const classes = $('#opt-class');
   classes.innerHTML = CLASS_IDS.map((id) => `<button data-c="${id}">${CLASSES[id].name}</button>`).join('');
+  // every class's name and tagline laid over the others, the one shown picked: the card is as wide and as tall as the
+  // largest, so it never moves as the class changes (the warrior's name pushed the buttons onto a line of their own,
+  // and the ranger's tagline took two lines)
+  $('.cc-name').innerHTML = CLASS_IDS.map((id) => `<span data-c="${id}">${CLASSES[id].name}</span>`).join('');
+  $('.cc-tag').innerHTML = CLASS_IDS.map((id) => `<span data-c="${id}">${CLASSES[id].tagline}</span>`).join('');
   classes.querySelectorAll<HTMLElement>('button').forEach((b) => {
     // the class's records set the starting wave: a co-op host shows its guests
     b.onclick = () => { sfx.click(); hooks.switchClass(b.dataset.c!); renderMenu(); hooks.lobbyChanged(); };
@@ -365,8 +370,7 @@ export function renderMenu(): void {
   $('.class-card').style.setProperty('--cc', cls.accent);
   $('.lo-title').textContent = cls.book;
   document.querySelectorAll<HTMLElement>('#equip .doll').forEach((d) => d.classList.toggle('hidden', d.dataset.class !== cls.id));
-  $('.cc-name').textContent = cls.name;
-  $('.cc-tag').textContent = cls.tagline;
+  document.querySelectorAll<HTMLElement>('.cc-name span, .cc-tag span').forEach((s) => s.classList.toggle('active', s.dataset.c === cls.id));
   const sk = $('.cc-skills');
   if (sk.dataset.cls !== cls.id) { sk.dataset.cls = cls.id; sk.scrollLeft = 0; }   // another class starts at its first skills
   sk.innerHTML = '';
