@@ -20,6 +20,21 @@ function fixtureFrom(options) {
   return fixture;
 }
 
+/**
+ * The frames `light` measures (page/light.ts `LightScenario`): each biome in each view, the close views at each of
+ * the facings, the top view at the first.
+ */
+function lightScenarios(options) {
+  const scenarios = [];
+  for (const biome of options.biomes) {
+    for (const view of options.views) {
+      const facings = view === 'top' ? options.facings.slice(0, 1) : options.facings;
+      for (const facing of facings) scenarios.push({ biome, view, facing: Number(facing) });
+    }
+  }
+  return scenarios;
+}
+
 /** A sheet's notes as text: how it was set up, then each moment's notes. */
 function sheetNotes(sheet) {
   const moments = sheet.moments.map((moment) => {
@@ -305,7 +320,7 @@ export const COMMANDS = {
       // (a state at a time, in the order they run: a 4K screen's ten pictures sent back at once closed the browser)
       const states = UI_STATES.filter((state) => options.states.includes(state));
       const reports = [];
-      for (const state of states) reports.push(await side.command('ui', { state }));
+      for (const state of states) reports.push(await side.command('ui', { state, hdr: Boolean(options.hdr) }));
       return {
         text: reports.map((report) => report.text).join('\n'),
         problems: reports.flatMap((report) => report.problems),
@@ -314,6 +329,34 @@ export const COMMANDS = {
     },
     finish(results, options, session) {
       return textWithPictureFiles(results, session.outFor('ui'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
+  light: {
+    check(options) {
+      const wrong = options.facings.find((facing) => !Number.isFinite(Number(facing)));
+      if (wrong !== undefined) throw labError(`light --facings: ${wrong} is not a number of degrees`);
+    },
+    async each(side, options) {
+      // (a frame at a time, each on its own: its pictures sent back with it)
+      const reports = [];
+      for (const scenario of lightScenarios(options)) {
+        const canary = Boolean(options.canary) && reports.length === 0;
+        const hdr = options.hdr ? { paper: options.paper ?? 1, peak: options.peak ?? 3 } : undefined;
+        const command = { scenario, pictures: options.pictures !== false, canary, hdr };
+        reports.push(await side.command('light', command));
+      }
+      return {
+        text: reports.map((report) => report.text).join('\n'),
+        problems: reports.flatMap((report) => report.problems),
+        moments: reports.flatMap((report) => report.moments),
+      };
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('light'));
     },
     textOf: asText,
     problemsOf: problemsIn,

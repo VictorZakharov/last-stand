@@ -12,9 +12,14 @@ import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
 import { updateSeeThrough } from './seeThrough';
 import type { QualityPreset } from '../data/quality';
+import { hdrLevels, initHdr, presentHdr } from './hdr';
 
-/** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept). */
+/** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept); in HDR towards as much more
+ *  as the peak has room over the paper white (`uCap`), so the highlights it grows aren't all held at SDR's. */
 const HI_KNEE = 1, HI_CAP = 2;
+/** HDR (core/hdr.ts): the share of white (as shown) under which the frame shows as on an SDR screen; above it the
+ *  highlights grow towards the peak */
+export const HDR_KNEE = 0.5;
 /**
  * Tone mapping keeps the colour of a bright pixel (brightest channel over HUE_FROM, fully over HUE_TO)
  * in a large glare (GLARE_FROM..GLARE_TO): a big bright area stays its colour, a small hot core may go white.
@@ -56,11 +61,14 @@ const GradeShader = {
     tGlare: { value: null as THREE.Texture | null },
     tSmall: { value: null as THREE.Texture | null }, tLarge: { value: null as THREE.Texture | null },
     uSmall: { value: ADAPT.top[0] }, uLarge: { value: ADAPT.top[1] },
+    uCap: { value: HI_CAP - HI_KNEE },
+    uHdr: { value: 0 }, uPaper: { value: 1 }, uPeak: { value: 1 },
   },
   vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader: /* glsl */`
     uniform sampler2D tDiffuse; uniform float uTime; uniform float uHurt; uniform float uVignette; uniform sampler2D tGlare;
     uniform sampler2D tSmall; uniform sampler2D tLarge; uniform float uSmall; uniform float uLarge;
+    uniform float uCap; uniform float uHdr; uniform float uPaper; uniform float uPeak;
     varying vec2 vUv;
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
     // the power of the light over the base that brings an area's average down to its target
@@ -78,7 +86,7 @@ const GradeShader = {
       // the scene and its bloom, compressed like the eye: the brightest channel eases towards a
       // ceiling and the others keep their ratio to it, so a stack of lights stops adding up
       float m = max(c.r, max(c.g, c.b));
-      if (m > ${HI_KNEE.toFixed(2)}) c.rgb *= (${HI_KNEE.toFixed(2)} + ${(HI_CAP - HI_KNEE).toFixed(2)} * (1.0 - exp(-(m - ${HI_KNEE.toFixed(2)}) / ${(HI_CAP - HI_KNEE).toFixed(2)}))) / m;
+      if (m > ${HI_KNEE.toFixed(2)}) c.rgb *= (${HI_KNEE.toFixed(2)} + uCap * (1.0 - exp(-(m - ${HI_KNEE.toFixed(2)}) / uCap))) / m;
       // tone mapping + sRGB here instead of a separate OutputPass (renderer settings, drawn to the screen).
       // Per channel it squeezes the brightest channel most, so any bright colour ends up white. The eye
       // adapts to a large bright area and sees its colour, so there pixels are mapped by their brightest
@@ -97,6 +105,19 @@ const GradeShader = {
       c.rgb = mix(c.rgb * vec3(0.93,0.97,1.08), c.rgb * vec3(1.04,1.0,0.94), smoothstep(0.2,0.8,l));
       c.rgb += (h(vUv * 900.0 + uTime) - 0.5) * 0.025;
       c.rgb = mix(c.rgb, vec3(0.6,0.02,0.02), uHurt * smoothstep(0.05, 0.5, r) * 0.8);
+      // HDR: the frame as an SDR screen shows it (gamma 2.2: Windows shows SDR content by the sRGB curve, which lifts
+      // its shadows), the highlights over the knee grown towards the peak by their brightest channel (hue kept, and
+      // with no room over the paper white, nothing grown), and all of it at the paper white, encoded as extended sRGB
+      if (uHdr > 0.5) {
+        const float K = ${HDR_KNEE.toFixed(2)};
+        vec3 v = pow(clamp(c.rgb, 0.0, 1.0), vec3(2.2));
+        float top = max(v.r, max(v.g, v.b));
+        float room = max(uPeak / uPaper, 1.0);
+        float u = clamp((top - K) / (1.0 - K), 0.0, 1.0);
+        float a = (1.0 - K) / (room - K);
+        if (top > K) v *= (K + (1.0 - K) * u / (1.0 - u * (1.0 - a))) / top;
+        c.rgb = sRGBTransferOETF(vec4(v * uPaper, 1.0)).rgb;
+      }
       gl_FragColor = c;
     }`,
 };
@@ -185,6 +206,7 @@ export function initRenderer(container: HTMLElement) {
   renderer.toneMappingExposure = 1.05;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   container.appendChild(renderer.domElement);
+  initHdr(renderer.domElement, renderer.getContext() as WebGL2RenderingContext);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x030307);
@@ -473,10 +495,16 @@ export function render(): void {
   u.uSmall.value = target(rig.fromView, 0) + (target(rig.view, 0) - target(rig.fromView, 0)) * e;
   u.uLarge.value = target(rig.fromView, 1) + (target(rig.view, 1) - target(rig.fromView, 1)) * e;
   if (NO_ADAPT) u.uSmall.value = u.uLarge.value = 1e4;
+  const hdr = hdrLevels();
+  u.uHdr.value = hdr.peak > 1 || hdr.paper !== 1 ? 1 : 0;
+  u.uPaper.value = hdr.paper;
+  u.uPeak.value = hdr.peak;
+  u.uCap.value = (HI_CAP - HI_KNEE) * Math.max(1, hdr.peak / hdr.paper);
   gl.setRenderTarget(sceneRT);
   gpuMarks.mark('scene');
   gl.render(G.scene, G.camera);
   composer.render();
   gpuMarks.mark('overlay');
   overFrame.draw();
+  presentHdr();
 }

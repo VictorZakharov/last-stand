@@ -167,6 +167,19 @@ terminal's task stops it all.
   drifts by up to 1% of the screen down a panel (Blink rounds each line of text to whole css px), and the pictures
   differ by text's antialiasing, 2 to 5% of their pixels (the lobby's states 12 to 16%, with the drift). The page
   takes a state at a time: a 4K screen's ten pictures sent back at once were too much for the browser, which closed.
+  `--hdr` puts HDR on first, as on a display in HDR mode, so the pause menu shows its levels.
+- `light`: the frame's light as the player sees it. The hero stands in each biome (`--biomes crypt,forest`), in each
+  view (`--views top,third,first`), the close views looking each way (`--facings 0,90,180,270`, degrees: the camera
+  turned by mouse look, which the body follows), and the frame is drawn by the game's own camera and read back from
+  the canvas. Its light is a share of the screen's white: the mean, by thirds (through the eyes the sky is the top's),
+  the 50th, 90th and 99th percentiles, the brightest pixel, and the shares near white and past it. An SDR frame is
+  read as an SDR screen shows it (gamma 2.2), an HDR one as the browser shows its extended sRGB. Each frame is
+  pictured (`out/light/`; `--pictures=false` for the numbers alone). With `--hdr` (`--paper`, `--peak`), the same
+  moment is drawn again in HDR, on any display, and checked against the SDR frame: every pixel under the knee as the
+  SDR screen shows it at the paper white, nothing past the peak, and the canvas shown (the WebGPU one, read back) the
+  frame drawn. `--canary` draws the first frame at twice the exposure, which must come out brighter, and in HDR at
+  1.2 times the paper white, which the check under the knee must catch. With `--ab` the SDR frames agree with main,
+  line for line.
 - `touch`: the touch controls' move stick pushed by a finger, its touches sent by the browser as a touch screen's
   (`lab.touchDown`): put down on the move pad and slid right, within the dead zone, through the stick's travel, to its
   edge and far past it, and half the window across, each push from a fresh set-up. Each push's line says what the

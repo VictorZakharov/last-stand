@@ -11,6 +11,7 @@ import { stops as stopsRound, type StopsOptions } from './stops';
 import { form as formRound, type FormOptions } from './form';
 import { ui as uiRound, type UiOptions } from './ui';
 import { touchStick, type TouchOptions } from './touchStick';
+import { light as lightRound, type LightOptions } from './light';
 
 export interface SheetCommand {
   states: string[];
@@ -103,6 +104,14 @@ export function ui(lab: Lab, command: UiOptions): Promise<Report> {
  */
 export function touch(lab: Lab, command: TouchOptions): Promise<Report> {
   return touchStick(lab, command);
+}
+
+/**
+ * `lab light`, one scenario: the frame drawn as the player sees it standing in a biome and a view, and how bright it
+ * is as a share of the screen's white; a canary it missed is a problem.
+ */
+export function light(lab: Lab, command: LightOptions): Promise<Report> {
+  return lightRound(lab, command);
 }
 
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */
