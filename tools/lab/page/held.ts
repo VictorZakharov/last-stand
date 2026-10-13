@@ -3,19 +3,21 @@
 // preview shows in its own look with no countdown, and let go it casts; then held through its cooldown and short of
 // energy (page/heldCooldown.ts): red, its seconds counting down, until a release would cast. Quarry Mark's preview
 // outlines the foe it would mark in red (src/ui/overlay/outline.ts): in each of the game's views the outline must be
-// drawn round that foe, its pixels near it on the screen and none away from it. No shader may compile meanwhile: every
-// program a preview draws with is compiled at load (the outline's, src/game/warmup.ts).
+// drawn round that foe, its pixels near it on the screen and none away from it. Starfall's ring must be where its
+// crystals surely strike, and every mark a preview lays on the floor must lie on it across the dais's step
+// (page/heldArea.ts). No shader may compile meanwhile: every program a preview draws with is compiled at load (the
+// outline's, src/game/warmup.ts).
 import * as THREE from 'three';
 import type { Fixture, Lab, Pictured, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
-import type { SkillKey } from '../../../src/types';
 import type { ViewMode } from '../../../src/core/renderer';
 import { G } from '../../../src/state';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { readinessOf } from '../../../src/combat/skills/readiness';
 import { outline, outlinedLook } from '../../../src/ui/overlay/outline';
-import { lateCompiles } from '../../../src/core/shaders';
+import { lateCompiles, pinPrograms } from '../../../src/core/shaders';
 import { drawFrame, type Canvas } from './light';
+import { acrossTheStep, starfallStrikes, type HeldSkill, type Shown } from './heldArea';
 import {
   canaryCaught, describeHeld, heldProblems, holdingKey, holdThroughCooldown, meshReader, type PreviewReader,
 } from './heldCooldown';
@@ -25,7 +27,8 @@ export interface HeldOptions {
   /** each preview pictured as the player sees it, ready and on its cooldown */
   pictures: boolean;
   /** plant faults the checks must catch: each preview read as ready with no countdown on its cooldown, Quarry Mark's
-   *  outline drawn round the hero instead of the foe, and a shader compiled mid-game */
+   *  outline drawn round the hero instead of the foe, Starfall's ring read as round all its crystals may strike, the
+   *  marks on the floor laid point by point across the step, and a shader compiled mid-game */
   canary: boolean;
 }
 
@@ -60,13 +63,6 @@ const READERS: Record<string, PreviewReader> = {
   strawman: meshReader('strawman-preview-spot'),
   quarryMark: outlineReader,
 };
-
-/** A held skill of the hero's: its key, its `impl` and its name. */
-interface HeldSkill {
-  key: SkillKey;
-  impl: string;
-  name: string;
-}
 
 /** The hero's skills held to aim, in his bar's order. */
 function heldSkills(): HeldSkill[] {
@@ -147,12 +143,6 @@ function outlinePixels(lab: Lab, foe: Enemy): OutlinePixels {
 }
 
 /** What one held skill showed, ready, in one view: its lines and problems, and its picture. */
-interface Shown {
-  lines: string[];
-  problems: string[];
-  moments: Pictured[];
-}
-
 /**
  * `skill` held over the dummy in `view` ready to cast, its preview read, and let go: it must show in its own look
  * with no countdown, and cast. Quarry Mark's outline must be round the dummy, its pixels near it and none away (with
@@ -189,16 +179,22 @@ function describeLook(shown: boolean, red: boolean, countdown: number): string {
 
 /**
  * Quarry Mark's outline checked round `dummy`: what it's drawn round and its pixels, as lines and problems. With
- * `planted`, drawn round the hero instead (the canary): the checks must fail, or that's the problem.
+ * `planted`, drawn round the hero instead (the canary): the checks must fail, or that's the problem. The programs the
+ * canary's outline compiles (its mask over the hero's meshes, which the game never outlines) aren't counted late.
  */
 function outlineChecks(
   lab: Lab, dummy: Enemy, lines: string[], say: (problem: string) => void, planted: boolean,
 ): void {
   const look = outlinedLook();
+  const compiledBefore = lateCompiles.length;
   if (planted && look) outline(lab.model.root, look.color, look.strength);
   const round = outlinedLook()?.root;
   const pixels = outlinePixels(lab, dummy);
   if (planted && look) outline(look.root, look.color, look.strength);
+  // (the game notes a program compiled in its next frame: noted now, so the canary's are told apart)
+  if (planted) pinPrograms(G.renderer);
+  const canaryCompiled = planted ? lateCompiles.splice(compiledBefore).length : 0;
+  if (canaryCompiled) lines.push(`  (the canary's outline round the hero compiled ${canaryCompiled}: not counted)`);
   const faults: string[] = [];
   if (round !== dummy.obj) faults.push('the outline isn\'t round the foe the cast would mark');
   if (pixels.near < FEWEST_LIT) faults.push(`the outline lit ${pixels.near} pixels round the foe`);
@@ -257,6 +253,32 @@ async function compileOneLate(lab: Lab): Promise<void> {
   }
 }
 
+/** Starfall's strikes against its ring (and with `canary` against its ring as it was drawn), and every held skill's
+ *  marks on the floor across the dais's step. */
+async function areaRounds(lab: Lab, skill: HeldSkill, options: HeldOptions): Promise<Shown[]> {
+  const rounds: Shown[] = [];
+  if (skill.impl === 'starfall') {
+    const setUp = (view: ViewMode) => setUpWithDummy(lab, options.fixture, view);
+    rounds.push(await starfallStrikes(lab, skill, setUp, false));
+    if (options.canary) rounds.push(await starfallStrikes(lab, skill, setUp, true));
+  }
+  rounds.push(await acrossTheStep(lab, options.fixture, skill, options.pictures, options.canary));
+  return rounds;
+}
+
+/** Runs some of a skill's rounds. */
+type RoundsRun = () => Promise<Shown[]>;
+
+/** `run`'s rounds, the last of them saying how many shaders compiled while they ran, if any did (which rounds the
+ *  late compiles counted at the end came in). */
+async function countingCompiles(run: RoundsRun): Promise<Shown[]> {
+  const before = lateCompiles.length;
+  const rounds = await run();
+  const compiled = lateCompiles.length - before;
+  if (compiled && rounds.length) rounds[rounds.length - 1].lines.push(`  shaders compiled in these rounds: ${compiled}`);
+  return rounds;
+}
+
 /** The shaders compiled since `before` of them were, as lines, and a problem if any were. */
 function compilesSince(before: number, lines: string[], problems: string[]): void {
   const compiled = lateCompiles.slice(before);
@@ -282,13 +304,17 @@ export async function held(lab: Lab, options: HeldOptions): Promise<Report> {
   for (const skill of skills) {
     lines.push(`${skill.name} (${skill.key})`);
     const views = skill.impl === 'quarryMark' ? OUTLINE_VIEWS : ['top' as ViewMode];
-    const rounds: Shown[] = [];
-    for (const view of views) rounds.push(await heldReady(lab, skill, view, options));
-    rounds.push(await heldOnCooldown(lab, skill, options));
-    for (const round of rounds) {
-      lines.push(...round.lines);
-      problems.push(...round.problems);
-      moments.push(...round.moments);
+    const runs: RoundsRun[] = [
+      ...views.map((view) => async () => [await heldReady(lab, skill, view, options)]),
+      async () => [await heldOnCooldown(lab, skill, options)],
+      () => areaRounds(lab, skill, options),
+    ];
+    for (const run of runs) {
+      for (const round of await countingCompiles(run)) {
+        lines.push(...round.lines);
+        problems.push(...round.problems);
+        moments.push(...round.moments);
+      }
     }
   }
   compilesSince(compiledBefore, lines, problems);

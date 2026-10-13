@@ -75,6 +75,7 @@ function mark(player: Player, def: Def, e: Enemy): void {
   const reticleM = new THREE.Mesh(planeGeo, reticleMat()), ringMat = additive(MARK, 1.3, 0);
   const ringG = ringGeo(), ring = new THREE.Mesh(ringG, ringMat);
   reticleM.frustumCulled = ring.frustumCulled = false;
+  ring.name = 'quarry-mark-ring';
   G.scene.add(reticleM, ring);
   let ended = false, fade = 0, t = 0;
   const me: Mark = { on: null, amp: def.amp, left: def.duration, end() { ended = true; take(); } };

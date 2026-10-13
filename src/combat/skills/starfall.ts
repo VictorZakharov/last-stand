@@ -1,7 +1,7 @@
 // Starfall: arcane crystal meteors plunge from the heavens onto the target area.
 // Visual beats: rune glyph marks the spot -> meteor with comet streak -> impact
 // (light pillar, erupting crystals that later shatter, glowing cracks, debris).
-// Held, the area its crystals may strike is shown on the floor where it would fall (red while letting go would cast
+// Held, the area its first crystal strikes is shown on the floor where it would fall (red while letting go would cast
 // nothing, its cooldown counting down in it), and it's called down as the key is let go.
 import * as THREE from 'three';
 import { additive, nearGlow } from '../../core/materials';
@@ -120,10 +120,11 @@ function inArena(p: { x: number; z: number }, out: THREE.Vector3): THREE.Vector3
   return out;
 }
 
-/** the preview's glow: a ring round all its crystals may strike (one lands up to `scatter` from the aim and strikes
- *  `radius` round it) and a faint disc in it, and how high over the floor its cooldown counts down (m) */
+/** the preview's glow: a ring round what its first crystal strikes, landing on the aim (`radius` round it: the others
+ *  land up to `scatter` from it and may strike further, but shown round all they may strike, `scatter` + `radius`, the
+ *  ring took in foes no crystal struck), and a faint disc in it; and how high over the floor its cooldown counts down (m) */
 const ringGeo = () => floorPatch(0.95, 1, 1, 72);
-const discGeo = () => floorPatch(0, 1, 6, 48);
+const discGeo = () => floorPatch(0, 1, 1, 72);
 const COUNT_Y = 1.1;
 
 /** The preview's meshes, its glows each with its brightness, and its readiness. */
@@ -154,7 +155,7 @@ function showArea(player: Player, def: Def, target: THREE.Vector3 | null, dt: nu
     preview.ready.hide(dt);
     return;
   }
-  const p = previewFor(), at = inArena(target, _at), r = def.scatter + def.radius;
+  const p = previewFor(), at = inArena(target, _at), r = def.radius;
   p.ring.visible = p.disc.visible = true;
   p.ready.show(player, def, { x: at.x, y: groundHeight(at.x, at.z) + COUNT_Y, z: at.z }, dt);
   for (const [glow, bright] of p.glows) p.ready.tint(glow.color, _colour, bright);

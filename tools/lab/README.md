@@ -251,11 +251,18 @@ terminal's task stops it all.
   its cooldown and short of energy (`page/heldCooldown.ts`, as `blink`'s), red and counting 3, 2, 1 until a release
   would cast. Quarry Mark's red outline (`ui/overlay/outline.ts`) is checked in the top-down view, over the shoulder
   and through the eyes: round the foe the cast would mark, the pixels it lit (red risen over the same frame drawn
-  without it) near the foe on the screen and none away from it. Then the shaders compiled meanwhile, which must be
-  none. A preview missing, in the wrong look or off its countdown, a release that cast when it mustn't or didn't when
-  it must, an outline off its foe and a late compile are problems. `--pictures` (on by default) pictures each preview
-  ready and on its cooldown into `out/held`; `--canary` reads each preview ready with no countdown on its cooldown,
-  draws Quarry Mark's outline round the hero and compiles a shader mid-game.
+  without it) near the foe on the screen and none away from it. Starfall is cast ten times over the dummy with more
+  standing round it inside its ring as drawn and outside it (`page/heldArea.ts`): every one inside must be struck on
+  every cast (each one's casts struck by its distance). Each skill is then held across the dais's step from off it
+  and let go: every mark it lays on the floor (`fx/floorPatch.ts`) is read triangle by triangle against the floor
+  under it, and must lie on more than one level with no point under the floor or standing off it. Then the shaders
+  compiled meanwhile, which must be none (the rounds they came in are said). A preview missing, in the wrong look or
+  off its countdown, a release that cast when it mustn't or didn't when it must, an outline off its foe, a foe inside
+  Starfall's ring missed, a mark off the floor and a late compile are problems. `--pictures` (on by default) pictures
+  each preview ready, on its cooldown and across the step into `out/held`; `--canary` reads each preview ready with
+  no countdown on its cooldown, draws Quarry Mark's outline round the hero (the programs it compiles aren't counted:
+  the game never outlines a hero), reads Starfall's ring as drawn round all its crystals may strike, lays the marks
+  across the step point by point on the floor under them, as they were, and compiles a shader mid-game.
 - `gear`: full sets of gear rolled for every class as its loot rolls them (`page/gear.ts`, `--sets` each, 400 by
   default), at each tier (`--tiers`, a rarity at an item level each: `magic@5,rare@15,epic@30,legendary@50`), and
   what a set gives on average: Health (his own and the gear's, and the gear's against the mage's), regeneration a
