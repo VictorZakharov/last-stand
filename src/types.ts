@@ -292,6 +292,8 @@ export interface Model {
   readonly offTip?: THREE.Object3D | null;
   /** offhand focus point */
   palm?: THREE.Object3D;
+  /** a bow's nocked arrow's head, along the arrow as it lies on the string (a full draw glints there) */
+  arrowHead?: THREE.Object3D;
   /** skeleton, for humanoid models */
   joints?: Joints;
   /** seen through its own eyes (only the arms show, entities/viewModel.ts): adjust what reads badly from

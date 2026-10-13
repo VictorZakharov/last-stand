@@ -91,6 +91,11 @@ const MOUSE_BUTTONS = {
  * `key` the key's code (`KeyW`). The browser's own handling follows from it, as a player's key: what it does to the
  * focused element (a focus ring shown, a button pressed).
  */
+/** The page's `prefers-reduced-motion` as the browser emulates it: `reduced`, or no preference. */
+function motionOf(page, reduced) {
+  return page.emulateMedia({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
+}
+
 async function keyOf(page, type, key) {
   const devtools = await devtoolsOf(page);
   await devtools.send('Input.dispatchKeyEvent', { type, ...keyFields(key) });
@@ -356,6 +361,8 @@ export class Side {
     // (a probe's `lab.click` and `lab.press`: the browser's own handling of a click and a key, its focus with them)
     await page.exposeFunction('__labMouse', (type, x, y) => mouseOf(page, type, x, y));
     await page.exposeFunction('__labKey', (type, key) => keyOf(page, type, key));
+    // (a probe's `lab.reduceMotion`: the motion asked for let back on, to measure a decorative animation)
+    await page.exposeFunction('__labMotion', (reduced) => motionOf(page, reduced));
     await page.goto(this.url);
     // (polled on a timer: by default it polls by animation frame, and the lab's clock holds those once the game shows)
     const polling = { polling: BOOT_POLL_MS, timeout: BOOT_TIMEOUT_MS };

@@ -13,10 +13,12 @@ import { burst, debris, particles, col } from '../../fx/particles';
 import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import { arrowGeometry, ARROW, pullAt } from '../../entities/models/bow';
+import { glintMotes, warmGlintMotes } from '../../fx/glintMotes';
 import { showLaser, warmLaser, LASER_POINTS } from '../../fx/aimLaser';
 import { arrowMat, stickAt, stickIn, glance, floorIsStone, propIsStone, propSurface, wallIsStone, warmStuck, SINK } from '../../fx/stuckArrows';
 import { pastWall } from '../../world/edge';
 import { clamp, rand } from '../../util';
+import { FULL_DRAW } from '../../data/balance';
 import type { Obstacle } from '../../types';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
@@ -133,7 +135,7 @@ function arrowProp(o: Obstacle, proj: Projectile, from: THREE.Vector3): boolean 
 /** An arrow's way off the bow: heading `yaw`, `pitch` above level. */
 const shotDir = (yaw: number, pitch: number): THREE.Vector3 => new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
 
-const warmArrows = (): THREE.Object3D[] => [arrowMesh(), ...warmStuck(), new THREE.Mesh(streakGeo, streakOf(GLINT, 1)), ...warmLaser()];
+const warmArrows = (): THREE.Object3D[] => [arrowMesh(), ...warmStuck(), new THREE.Mesh(streakGeo, streakOf(GLINT, 1)), ...warmLaser(), ...warmGlintMotes()];
 
 /** the aim preview's flight is stepped as the arrow's is, a frame at 60 fps (swept, as its collisions are) */
 const PREVIEW_DT = 1 / 60;
@@ -219,12 +221,33 @@ function previewShot(player: Player, def: BowDef, k: number, radius: number, lev
 const TRACE = 14, TRACE_FADE = 0.3;
 const GLINT = 0xf3dc9a;
 
+/** how far each hero's shot was drawn last frame (its ready sound as it reaches full) */
+const drawnTo = new WeakMap<Player, number>();
+/**
+ * Every drawn shot's arrowhead once the bow is drawn to full, the sign the shot strikes hardest (Lancewood Shot
+ * harder still): motes of light drawn in onto it until it's loosed (fx/glintMotes.ts, seen in every view), and the
+ * bow's ready sound as it comes to full. Nothing while it's drawn: shown then too, the light didn't say when it was
+ * full. (Glow particles fade out within 3.5 m of the camera, so through the eyes they showed nothing; a star of light
+ * on the head and bursts of glints as it came to full read as a bright spark.)
+ */
+function drawGlint(player: Player, k: number): void {
+  const was = drawnTo.get(player) ?? 0;
+  drawnTo.set(player, k);
+  if (k < FULL_DRAW) return;
+  glintMotes(player);
+  if (was < FULL_DRAW && player.local) sfx.bowReady();
+}
+
 export const bowShot: InstantSkill = {
   anim: 'bow', warm: warmArrows,
   pitch: (player, def, k, target) => launchPitch(player.castPoint, target, arrowSpeed(def as BowDef, k)),
-  charging: (player, def, k) => previewShot(player, def as BowDef, k, 0.22, true, false),
+  charging(player, def, k) {
+    previewShot(player, def as BowDef, k, 0.22, true, false);
+    drawGlint(player, k);
+  },
   cast(player, rawDef, target, power) {
     const def = rawDef as BowDef, origin = player.castPoint, pull = pullAt(power), v = arrowSpeed(def, power);
+    drawnTo.delete(player);
     // (the string gives the arrow the energy the bow stored, which goes with the square of the draw: that is its blow)
     const damage = def.damage * pull * pull, knock = (def.knock ?? 0) * pull;
     const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v);
@@ -246,38 +269,20 @@ export const bowShot: InstantSkill = {
   },
 };
 
-/** a drawn shot counts as drawn to full from here (of its draw's time) */
-const FULL = 0.98;
-/** how far each hero's piercing shot was drawn last frame (the glint shows as it reaches full) */
-const drawnTo = new WeakMap<Player, number>();
-/** The arrowhead of the arrow on the string, about: half an arrow ahead of its middle along the shot. */
-const headOf = (player: Player, out: THREE.Vector3): THREE.Vector3 =>
-  out.copy(player.castPoint).add(_v.set(Math.sin(player.facing), 0, Math.cos(player.facing)).multiplyScalar(ARROW * 0.45));
-
 /**
  * Lancewood Shot: drawn while held like any shot, and driven through every foe in its line, each one it passes
- * through taking less (`falloff`); loosed at full draw it strikes harder (`fullBonus`), and the arrowhead glints
- * when it's there. Props and walls still stop it.
+ * through taking less (`falloff`); loosed at full draw it strikes harder (`fullBonus`), its arrowhead glinting there
+ * as every drawn shot's does. Props and walls still stop it.
  */
 export const piercingShot: InstantSkill = {
   anim: 'bow', warm: warmArrows, pitch: bowShot.pitch,
-  charging(player, def, k, dt) {
+  charging(player, def, k) {
     previewShot(player, def as BowDef, k, 0.24, false, true);
-    const was = drawnTo.get(player) ?? 0;
-    drawnTo.set(player, k);
-    const head = headOf(player, _p);
-    if (k >= FULL && was < FULL) {
-      burst(head, { count: 12, color: GLINT, speed: 1.6, up: 0.4, life: 0.32, size: 0.06, gravity: 0, drag: 4 });
-      if (player.local) sfx.bowReady();
-    } else if (k < FULL && Math.random() < dt * 14 * k) {
-      // (motes drawn in onto the arrowhead as the bow comes to full)
-      const a = rand(0, Math.PI * 2), r = rand(0.25, 0.45), x = Math.cos(a) * r, y = rand(-0.2, 0.25), z = Math.sin(a) * r;
-      particles.glow.spawn({ x: head.x + x, y: head.y + y, z: head.z + z, vx: -x * 3, vy: -y * 3, vz: -z * 3, life: 0.3, size: 0.05, sizeEnd: 0, color: col(GLINT, 1.6), colorEnd: col(0x806030, 0.4) });
-    }
+    drawGlint(player, k);
   },
   cast(player, rawDef, target, power) {
     const def = rawDef as BowDef & Needs<'falloff'>, origin = player.castPoint, pull = pullAt(power), v = arrowSpeed(def, power);
-    const full = power >= FULL;
+    const full = power >= FULL_DRAW;
     drawnTo.delete(player);
     const damage = def.damage * pull * pull * (full ? 1 + (def.fullBonus ?? 0) : 1), knock = (def.knock ?? 0) * pull;
     const dir = shotDir(player.shotHeading(origin, target), launchPitch(origin, target, v));

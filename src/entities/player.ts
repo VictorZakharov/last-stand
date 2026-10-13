@@ -9,7 +9,7 @@ import { buildModel } from './models/index';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
 import { computeStats, gearOf } from '../loot/items';
-import { BLOCK, COOP } from '../data/balance';
+import { BLOCK, COOP, FULL_DRAW } from '../data/balance';
 import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, type Loadout, type WeaponStyle } from '../loot/loadout';
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
@@ -46,16 +46,18 @@ const TURN_MOST = 9;
 const SHOT_NEAR = 5;
 const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
-/** `replay`: a remote player's cast, shown for its pose and charge; its owner says when it fires. A drawn shot
- *  (`SkillDef.draw`) has `drawT`, the time to full draw, and no end or firing time until it's loosed (`key` the key
- *  holding it, `power` how far it was drawn) */
 /** a shot from a bow (posed as one, not channelled): it looses the arrow on the string */
 const isBowShot = (s: KnownSkill): boolean => s.impl.anim === 'bow' && !s.impl.channel;
 
+/** `replay`: a remote player's cast, shown for its pose and charge; its owner says when it fires. A drawn shot
+ *  (`SkillDef.draw`) has `drawT`, the time to full draw, and no end or firing time until it's loosed (`key` the key
+ *  holding it, `power` how far it was drawn) */
 interface CastState { skill: KnownSkill; t: number; dur: number; fireAt: number; fired: boolean; target: THREE.Vector3; replay?: boolean; key?: SkillKey; drawT?: number; power?: number;
   /** a bow's shot with no arrow on the string: the seconds taking one from the quiver first (`ClassDef.quiver`), before the draw */
   nockT?: number }
 interface ChannelState { skill: KnownSkill; key: SkillKey; state: unknown; t: number }
+/** How far a drawn shot is drawn (0 to 1): its time since its arrow was on the string, of its time to full draw. */
+const drawShare = (c: CastState): number => Math.min(1, Math.max(0, c.t - (c.nockT ?? 0)) / (c.drawT ?? 1));
 /** A movement skill's dash: a fixed velocity that input can't steer, with a per-frame hook; `lift`
  *  makes it a jump of that peak height, and `anim` is the pose it plays, over the rush and `hold`
  *  seconds more standing where it ended (a lunge's strikes follow through). */
@@ -325,6 +327,12 @@ export class Player {
   /** seen through its own eyes (the local player in first person): effects that start at the body show
    *  from the camera, so some place themselves where they're seen instead */
   get eyes(): boolean { return this.local && viewMode() === 'first' && viewSettled(); }
+
+  /** a drawn shot held at full draw and not yet loosed (the crosshair shows it bold: main.ts) */
+  get drawnFull(): boolean {
+    const c = this.casting;
+    return !!c?.drawT && !c.fired && !c.skill.impl.channel && drawShare(c) >= FULL_DRAW;
+  }
 
   /** Where a light for an effect round the body goes when seen through the eyes: ahead in the view, a
    *  little above it. At the body it's at the camera and burns the weapons in view white; straight above,
@@ -600,7 +608,7 @@ export class Player {
       const impl = c.skill.impl;
       if (c.drawT) {
         // a drawn shot: loosed when its key is let go, once it's drawn at least as far as its least draw (and the arrow is on the string)
-        const k = Math.min(1, Math.max(0, c.t - (c.nockT ?? 0)) / c.drawT);
+        const k = drawShare(c);
         if (!c.fired && !impl.channel) impl.charging?.(this, c.skill.def, k, dt);
         if (!c.fired && c.t >= (c.nockT ?? 0) && !(c.key && isDown(c.key)) && k >= (c.skill.def.minDraw ?? 0)) { this.loose(c, k); this.fire(c.skill, this.aim.clone(), k); }
       } else {
@@ -686,7 +694,7 @@ export class Player {
     if (this.casting) {
       const c = this.casting;
       c.t += dt;
-      if (!c.fired && !c.skill.impl.channel) c.skill.impl.charging?.(this, c.skill.def, c.drawT ? Math.min(1, Math.max(0, c.t - (c.nockT ?? 0)) / c.drawT) : Math.min(1, c.t / c.fireAt), dt);
+      if (!c.fired && !c.skill.impl.channel) c.skill.impl.charging?.(this, c.skill.def, c.drawT ? drawShare(c) : Math.min(1, c.t / c.fireAt), dt);
       // (a drawn shot whose release never came: its owner left or fell mid-draw)
       if (c.t >= c.dur && isBowShot(c.skill)) this.nocked = Math.max(this.nocked, 1);
       if (c.t >= c.dur || (!c.fired && c.t > 20)) this.casting = null;

@@ -55,6 +55,8 @@ declare global {
     __labMouse?: (type: MouseType, x: number, y: number) => Promise<void>;
     /** a key sent by the browser as a keyboard's (`tools/lab/node/side.mjs`), by its code */
     __labKey?: (type: KeyType, code: string) => Promise<void>;
+    /** the page's `prefers-reduced-motion` as the browser emulates it (`tools/lab/node/side.mjs`) */
+    __labMotion?: (reduced: boolean) => Promise<void>;
   }
 }
 
@@ -628,6 +630,16 @@ export class Lab {
   async press(code: string): Promise<void> {
     await this.sendKey('keyDown', code);
     await this.sendKey('keyUp', code);
+  }
+
+  /**
+   * The page's `prefers-reduced-motion` as the browser emulates it. The lab opens every page with it reduced (the
+   * page's decorative animation left out, the loading screen's exit with it); a measure of such an animation lets it
+   * run, and puts it back as it ends.
+   */
+  async reduceMotion(reduced: boolean): Promise<void> {
+    if (!window.__labMotion) throw new Error('lab: reduceMotion: this page can\'t change it (opened by an older lab)');
+    await window.__labMotion(reduced);
   }
 
   private async sendMouse(type: MouseType, at: PagePoint): Promise<void> {
