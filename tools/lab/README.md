@@ -293,12 +293,14 @@ terminal's task stops it all.
   enough to bloom merged into blobs of 0.9 to 1.6; the motes' specks are 0.41 at most) and a shader compiled meanwhile
   are problems. In the close views the crosshair is read every frame too (`page/crosshair.ts`: its lines' thickness as
   the page's styles draw them, and its animations): bold held at full draw on 90% of the frames, on none before it or
-  with nothing drawn, and one beat into it, run once and swelling (the page's motion is let run meanwhile,
-  `lab.reduceMotion`); with motion reduced it comes to bold with no beat. `--pictures` (on by default) pictures each
-  shot held at full at its most glaring moment, the screen whole and its arrowhead close, and the crosshair as it's
-  drawn, at its beat's height (held there: the beat runs on the page's clock) and bold, into `out/draw`; `--canary`
-  shows the glint and the crosshair's bold from half the draw, takes them away once the draw is full, and leaves the
-  motion on for the reduced check.
+  with nothing drawn, and one beat into it, run once and swelling about its middle, which moves no more than half a
+  css px from where it was at the beat's height and once bold (centred by `transform`, it swelled about where its box
+  was before that and moved 10 css px up and left; the page's motion is let run meanwhile, `lab.reduceMotion`); with
+  motion reduced it comes to bold with no beat. `--pictures` (on by default) pictures each shot held at full at its
+  most glaring moment, the screen whole and its arrowhead close, and the crosshair as it's drawn, at its beat's height
+  (held there: the beat runs on the page's clock) and bold, into `out/draw`; `--canary` shows the glint and the
+  crosshair's bold from half the draw, takes them away once the draw is full, swells the crosshair about its corner,
+  and leaves the motion on for the reduced check.
 - `gear`: full sets of gear rolled for every class as its loot rolls them (`page/gear.ts`, `--sets` each, 400 by
   default), at each tier (`--tiers`, a rarity at an item level each: `magic@5,rare@15,epic@30,legendary@50`), and
   what a set gives on average: Health (his own and the gear's, and the gear's against the mage's), regeneration a

@@ -20,8 +20,9 @@ import { glintMotes, glintShown } from '../../../src/fx/glintMotes';
 import { lateCompiles } from '../../../src/core/shaders';
 import { FULL_DRAW } from '../../../src/data/balance';
 import {
-  CrosshairWatch, boldWithMotionReduced, crosshairProblems, crosshairShown, describeCrosshair, describeReduced,
-  forceBold, pictureBeat, pictureCrosshair, reducedProblems, type CrosshairFrames, type ShotFrames,
+  CrosshairWatch, boldWithMotionReduced, crosshairProblems, crosshairShown, describeCrosshair, describeDrift,
+  describeReduced, driftProblems, driftThroughBeat, forceBold, pictureBeat, pictureCrosshair, reducedProblems,
+  type CrosshairFrames, type ShotFrames,
 } from './crosshair';
 
 export interface DrawOptions {
@@ -31,7 +32,7 @@ export interface DrawOptions {
    *  beat's height and bold */
   pictures: boolean;
   /** plant the faults the checks must catch: the glint and the crosshair's bold shown as the bow is drawn, taken
-   *  away once it's full, and the crosshair's beat with motion reduced */
+   *  away once it's full, the crosshair swelling off its middle, and its beat with motion reduced */
   canary: boolean;
 }
 
@@ -319,6 +320,19 @@ function canaryCaught(
   return { lines, missed };
 }
 
+/** The crosshair's middle through its beat judged, in a view that shows it: its lines and problems (with `canary`,
+ *  the canary's line and a problem if it went unseen). */
+function judgeDrift(view: string, canary: boolean): { lines: string[]; problems: string[] } {
+  if (!crosshairShown()) return { lines: [], problems: [] };
+  const drift = driftThroughBeat(canary);
+  const found = driftProblems(drift).map((problem) => `${view}: ${problem}`);
+  const lines = [describeDrift(drift)];
+  if (!canary) return { lines, problems: found };
+  const caught = found.length > 0;
+  lines.push(`  canary, the crosshair swelling about its corner: ${caught ? 'caught' : 'missed'}`);
+  return { lines, problems: caught ? [] : [`${view}: the canary's crosshair swelling off its middle went unseen`] };
+}
+
 /** The crosshair with motion reduced judged, in a view that shows it: its lines and problems (with `canary`, the
  *  canary's line and a problem if it went unseen). */
 async function judgeReduced(lab: Lab, view: string, canary: boolean): Promise<{ lines: string[]; problems: string[] }> {
@@ -367,6 +381,9 @@ async function drawEach(lab: Lab, options: DrawOptions): Promise<Report> {
     lines.push(...canary.lines);
     problems.push(...canary.missed);
   }
+  const drift = judgeDrift(view, options.canary);
+  lines.push(...drift.lines);
+  problems.push(...drift.problems);
   const reduced = await judgeReduced(lab, view, options.canary);
   lines.push(...reduced.lines);
   problems.push(...reduced.problems);

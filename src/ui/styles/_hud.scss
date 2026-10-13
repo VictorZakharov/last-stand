@@ -91,8 +91,10 @@
 
 /* the close views (V): a crosshair at the centre, and the click that takes the mouse for looking. Bold while a drawn
    shot is held at full draw (`.full`, main.ts), swelling into it once as a heart knocks, never pulsing on; on a layer
-   of its own, so the swell is the compositor's alone (a page element moved every frame repaints round it) */
-#crosshair { position: absolute; left: 50%; top: 50%; width: hud(22px); height: hud(22px); transform: translate(-50%, -50%);
+   of its own, so the swell is the compositor's alone (a page element moved every frame repaints round it). Centred
+   by `translate`, which applies after `scale`, so it swells about its own middle: centred by `transform`, it swelled
+   about where its box was before that, and shifted up and left */
+#crosshair { position: absolute; left: 50%; top: 50%; width: hud(22px); height: hud(22px); translate: -50% -50%;
   will-change: transform; --w: #{hud(2px)}; --c: rgba(255, 240, 210, 0.9); }
 #crosshair.full { --w: #{hud(3.5px)}; --c: rgb(255, 240, 210); animation: crosshair-beat .3s; }
 #crosshair::before, #crosshair::after { content: ''; position: absolute; filter: drop-shadow(0 0 hud(1.5px) #000); }

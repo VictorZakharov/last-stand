@@ -1,14 +1,17 @@
 // The crosshair of the close views as the player sees it (tools/lab `draw`; `#crosshair`, src/main.ts and
 // src/ui/styles/_hud.scss): its lines' thickness as drawn, read from the page's own styles every frame, and the beats
 // it swelled with (its animations). A drawn shot held at full draw shows it bold, swelling into it once as a heart
-// knocks and never pulsing on; nothing else does. With motion reduced it comes to bold with no beat. The beat runs on
-// the page's clock, not the lab's, and the lab opens a page with its motion reduced: `draw` lets it run.
+// knocks and never pulsing on; nothing else does. It swells about its middle, which stays where it was. With motion
+// reduced it comes to bold with no beat. The beat runs on the page's clock, not the lab's, and the lab opens a page
+// with its motion reduced: `draw` lets it run.
 import type { Clip, Lab, Pictured } from './lab';
 
 /** how much thicker than regular its lines must be to count as bold */
 const BOLD_RATIO = 1.3;
 /** css px round its middle a picture of it takes in (it swells to half as big again at its beat's height) */
 const AROUND = 32;
+/** the most its middle may move through its beat (css px) */
+const DRIFT_MOST = 0.5;
 
 /** What a shot did to the crosshair: the frames it was bold idle, drawn short of full and held at full, and its
  *  beats. */
@@ -153,15 +156,62 @@ export function pictureCrosshair(lab: Lab, label: string): Promise<Pictured> {
 export async function pictureBeat(lab: Lab, label: string): Promise<Pictured[]> {
   const pictures: Pictured[] = [];
   for (const animation of crosshair().getAnimations()) {
-    const effect = animation.effect as KeyframeEffect;
-    const height = swellOffset(effect);
-    animation.pause();
-    animation.currentTime = height * Number(effect.getComputedTiming().duration);
+    holdAtHeight(animation);
     pictures.push(await pictureCrosshair(lab, `${label}, at its beat's height`));
     animation.finish();
   }
   pictures.push(await pictureCrosshair(lab, `${label}, bold`));
   return pictures;
+}
+
+/** A beat held at its height, where it swells most. */
+function holdAtHeight(animation: Animation): void {
+  const effect = animation.effect as KeyframeEffect;
+  animation.pause();
+  animation.currentTime = swellOffset(effect) * Number(effect.getComputedTiming().duration);
+}
+
+/** The middle of the crosshair's box as drawn (css px), its transforms with it. */
+function middle(): { x: number; y: number } {
+  const box = crosshair().getBoundingClientRect();
+  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+}
+
+/**
+ * How far the crosshair's middle moves through its beat (css px): brought to bold, held at its beat's height and at
+ * rest after, against its middle before (scaled about its box before that was centred, it swelled up and left by a
+ * quarter of its size). With `canary`, it swells about its top left corner, a fault the check must catch. Run with
+ * the page's motion on; it's left regular, for the game to set again.
+ */
+export function driftThroughBeat(canary: boolean): number {
+  const element = crosshair();
+  forceBold(false);
+  const before = middle();
+  const away = () => Math.hypot(middle().x - before.x, middle().y - before.y);
+  if (canary) element.style.transformOrigin = '0 0';
+  forceBold(true);
+  let drift = 0;
+  for (const animation of element.getAnimations()) {
+    holdAtHeight(animation);
+    drift = Math.max(drift, away());
+    animation.finish();
+  }
+  drift = Math.max(drift, away());
+  element.style.transformOrigin = '';
+  forceBold(false);
+  return drift;
+}
+
+/** The crosshair's drift through its beat, as words. */
+export function describeDrift(drift: number): string {
+  return `the crosshair's middle through its beat: ${drift.toFixed(2)} css px from where it was`;
+}
+
+/** What's wrong with the crosshair's drift through its beat. */
+export function driftProblems(drift: number): string[] {
+  if (drift <= DRIFT_MOST) return [];
+  return [`the crosshair's middle moves ${drift.toFixed(1)} css px through its beat (${DRIFT_MOST} at most: it `
+    + 'swells about its middle)'];
 }
 
 /** Where through its beat the crosshair swells most (0 to 1). */
