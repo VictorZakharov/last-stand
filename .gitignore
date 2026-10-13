@@ -9,6 +9,10 @@ tools/facelab/out/
 tools/facelab/__pycache__/
 tools/facelab/models/
 
+# the icons tool (tools/icons): its sheets
+tools/icons/out/
+tools/icons/__pycache__/
+
 # the lab (tools/lab): what it writes, the exported commits it compares with, its browser profile
 tools/lab/out/
 tools/stalls/out/
