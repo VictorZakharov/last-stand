@@ -17,7 +17,9 @@ import { labError } from './errors.mjs';
 const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'choice', 'ref', 'screen', 'screens'];
 
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
-export const UI_STATES = ['lobby', 'tooltip', 'help', 'saves', 'run', 'scores', 'perf', 'decision', 'pause', 'summary'];
+export const UI_STATES = [
+  'lobby', 'tooltip', 'help', 'saves', 'views', 'run', 'scores', 'perf', 'decision', 'pause', 'summary',
+];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
 const WEAPON_STYLES = ['oneHanded', 'shield', 'twoHanded', 'dual'];
@@ -235,7 +237,8 @@ export const COMMANDS = {
         usage: 'a,b',
         choices: UI_STATES,
         default: UI_STATES.join(','),
-        help: 'the states: lobby, tooltip, help, saves, run (the HUD with a hurt foe\'s bar and damage numbers), '
+        help: 'the states: lobby, tooltip, help, saves, views (the lobby\'s camera switched through its views: the '
+          + 'labels over the dummies against their anchors), run (the HUD with a hurt foe\'s bar and damage numbers), '
           + 'scores, perf, decision, pause, summary',
       },
       hdr: { kind: 'switch', help: 'HDR on, as on a display in HDR mode (the pause menu shows its levels)' },

@@ -497,6 +497,9 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
   }
   rig.shake = Math.max(0, rig.shake - dt * 2.2);
   rig.hurt = Math.max(0, rig.hurt - dt * 1.6);
+  // (its matrices as the frame will draw it: the world's labels are placed by them before the frame is drawn, and
+  // with the last frame's turn they slid off what they label as a view switch glided round)
+  cam.updateMatrixWorld();
 }
 
 const ease = (t: number): number => t * t * (3 - 2 * t);

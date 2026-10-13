@@ -1,6 +1,8 @@
 // The game's UI as the player sees it on this screen (tools/lab `ui`): the lobby, an item's tooltip, How to play, the
-// save slots, the run's HUD with the world's labels over it (a hurt foe's bar, damage numbers), the scores, the
-// performance overlay, the bank-or-continue choice, the pause menu and the run's summary, each pictured whole, with
+// save slots, the lobby's camera switched through its views (the labels over the dummies against where they stand
+// on the screen, frame by frame through each glide), the run's HUD with the world's labels over it (a hurt foe's
+// bar, damage numbers), the scores, the performance overlay, the bank-or-continue choice, the pause menu and the
+// run's summary, each pictured whole, with
 // the boxes of the page's named elements and of the labels as shares of the window. On two screens (`--screens`), a
 // UI laid out as a share of the screen shows the same lines and the same pictures on both, whatever the screens'
 // pixel ratios: a 4K screen at 300% as at 100%.
@@ -8,7 +10,8 @@ import * as THREE from 'three';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { NUMBER_COLORS } from '../../../src/data/balance';
-import { floatText } from '../../../src/ui/floaters';
+import { anchoredLabels, floatText } from '../../../src/ui/floaters';
+import { viewMode } from '../../../src/core/renderer';
 import * as overlay from '../../../src/ui/overlay/layer';
 import { hideDecision, showDecision } from '../../../src/ui/hud';
 import { hideSummary, showPause, showSummary } from '../../../src/ui/menus';
@@ -19,7 +22,7 @@ import { hdrOutput } from './hdrOutput';
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
-  'lobby' | 'tooltip' | 'help' | 'saves' | 'run' | 'scores' | 'perf' | 'decision' | 'pause' | 'summary';
+  'lobby' | 'tooltip' | 'help' | 'saves' | 'views' | 'run' | 'scores' | 'perf' | 'decision' | 'pause' | 'summary';
 
 export interface UiOptions {
   state: UiState;
@@ -44,6 +47,10 @@ const NUMBERS = [
 ] as const;
 /** frames run after the numbers are shown, so each has risen a little and none is in its first pop */
 const NUMBER_FRAMES = 12;
+/** the frames run after each press of V as the camera glides to the next view (its glide is 0.45 s) */
+const SWITCH_FRAMES = 40;
+/** a label further than this from where its anchor shows on the screen is off (css px) */
+const LABEL_SLACK = 1;
 /** frames Tab is held for the scores */
 const SCORES_FRAMES = 2;
 
@@ -148,11 +155,105 @@ async function showLabels(lab: Lab): Promise<void> {
   }
 }
 
-/** How a state is opened over the lobby or the run and closed again after its picture, and what's held meanwhile. */
+/** What a state found besides its boxes: lines for its report, and its problems. */
+interface Found {
+  lines: string[];
+  problems: string[];
+}
+
+/**
+ * How a state is opened over the lobby or the run and closed again after its picture, what's held meanwhile, and
+ * what it checks once pictured.
+ */
 interface Steps {
   open(lab: Lab): unknown;
   close(lab: Lab): unknown;
   held?: Frame;
+  check?(): Found;
+}
+
+/** One switch of the view: from which to which, the labels measured, and how far the furthest was off and when. */
+interface Switch {
+  from: string;
+  to: string;
+  labels: number;
+  worst: number;
+  worstFrame: number;
+}
+
+/** the view switches the `views` state played, for its check */
+let switches: Switch[] = [];
+
+/**
+ * How far each label anchored to the world is from where its anchor shows by the camera as the frame draws it
+ * (css px): the furthest, and how many were measured (shown, not held on the screen).
+ */
+function labelsOff(): { labels: number; worst: number } {
+  const camera = G.camera.clone();
+  camera.updateMatrixWorld();
+  const point = new THREE.Vector3();
+  let labels = 0;
+  let worst = 0;
+  for (const { label, at, clamp } of anchoredLabels()) {
+    if (!at || clamp || !label.shown) continue;
+    point.set(at.x, at.y, at.z).project(camera);
+    if (point.z > 1) continue;
+    const x = (point.x * 0.5 + 0.5) * innerWidth;
+    const y = (-point.y * 0.5 + 0.5) * innerHeight;
+    labels++;
+    worst = Math.max(worst, Math.hypot(label.x - x, label.y - y));
+  }
+  return { labels, worst };
+}
+
+/**
+ * The lobby's camera switched with V through every view and back to the top-down one, each glide played and drawn:
+ * every frame of it, the labels over the dummies measured against where their anchors show.
+ */
+async function switchViews(lab: Lab): Promise<void> {
+  switches = [];
+  // (every frame drawn, as the game draws them: the drawing refreshed the camera's matrices once a frame)
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    for (let press = 0; press < 3; press++) switches.push(await switchView(lab));
+  } finally {
+    lab.drawing = drawing;
+  }
+  if (viewMode() !== 'top') throw new Error(`lab: ui: the views ended in ${viewMode()}, not the top-down view`);
+}
+
+/** V pressed once and the glide to the next view played, the labels measured every frame of it. */
+async function switchView(lab: Lab): Promise<Switch> {
+  const from = viewMode();
+  await lab.step(1, () => ({ keys: ['v'] }));
+  const switched: Switch = { from, to: viewMode(), labels: 0, worst: 0, worstFrame: 0 };
+  for (let frame = 0; frame < SWITCH_FRAMES; frame++) {
+    await lab.step(1);
+    const off = labelsOff();
+    switched.labels = Math.max(switched.labels, off.labels);
+    if (off.worst > switched.worst) {
+      switched.worst = off.worst;
+      switched.worstFrame = frame;
+    }
+  }
+  return switched;
+}
+
+/** The labels through each switch as lines, and a problem for each switch that left them off their anchors. */
+function labelsThroughSwitches(): Found {
+  const lines: string[] = [];
+  const problems: string[] = [];
+  for (const switched of switches) {
+    const where = `${switched.from} to ${switched.to}`;
+    lines.push(`  ${where}: ${switched.labels} labels, off their anchors by up to ${switched.worst.toFixed(1)} px `
+      + `(frame ${switched.worstFrame})`);
+    if (!switched.labels) problems.push(`views, ${where}: no label over the dummies was measured`);
+    if (switched.worst > LABEL_SLACK) {
+      problems.push(`views, ${where}: the labels were up to ${switched.worst.toFixed(1)} px off their anchors`);
+    }
+  }
+  return { lines, problems };
 }
 
 /** the scores' input: Tab held */
@@ -164,6 +265,7 @@ const STEPS: Record<UiState, Steps> = {
   tooltip: { open: openTooltip, close: hideTooltip },
   help: { open: openHelp, close: closeHelp },
   saves: { open: () => openSaves(true), close: () => openSaves(false) },
+  views: { open: switchViews, close: () => undefined, check: labelsThroughSwitches },
   run: { open: () => undefined, close: () => undefined },
   // (shown while Tab is held: pictured with it down, let go after)
   scores: { open: (lab) => lab.step(SCORES_FRAMES, () => TAB), close: (lab) => lab.step(1), held: TAB },
@@ -192,6 +294,8 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
   const steps = STEPS[state];
   await steps.open(lab);
   const pictured = await pictureState(lab, state, steps.held ?? {});
+  const found = steps.check?.() ?? { lines: [], problems: [] };
   await steps.close(lab);
-  return { text: pictured.lines.join('\n'), problems: [], moments: [pictured.moment] };
+  const lines = [...pictured.lines, ...found.lines];
+  return { text: lines.join('\n'), problems: found.problems, moments: [pictured.moment] };
 }
