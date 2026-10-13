@@ -26,6 +26,9 @@ import { fromEyes, dirFromEyes, toEyes } from '../viewModel';
 import { angleDamp, clamp, damp, lerp, smooth, TAU } from '../../util';
 import type { AnimState, Model } from '../../types';
 
+/** the broadhead's middle, back from the arrow's point (m) */
+const HEAD_MIDDLE = 0.035;
+
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 /** the felt hat (the face's mm, from his reference sheet): the band's foot and top over the eyes, the crown's top over
  *  them, how far the crown stands off the skull at the band (the hair under it), the brim's width and how far its edge is
@@ -601,8 +604,8 @@ export function buildRanger(): Model {
     held.add(g);
     return { g, shaft, head };
   });
-  // (where the shot leaves: the nocked arrow's middle)
-  const tip = joint(bow.group), palm = joint(j.handR, 0, -0.07, 0.03);
+  // (where the shot leaves: the nocked arrow's middle; and its head, where a full draw glints)
+  const tip = joint(bow.group), palm = joint(j.handR, 0, -0.07, 0.03), arrowHead = joint(bow.group);
   const flask = buildFlask(kit, brass, hide); flask.name = 'flask'; j.handR.add(flask); flask.position.set(0, -0.07, 0.03); flask.rotation.x = Math.PI;
   const drinkRig = { ...j, shoulderL: j.shoulderR, elbowL: j.elbowR, handL: j.handR };
   const legs = new LegIK(j), root = j.root;
@@ -984,7 +987,9 @@ export function buildRanger(): Model {
     // the arrows on the string (a fan side by side in the flat bow's window), and where the shot leaves (the nocked arrow's middle)
     const n = arrows;
     bow.nockArrows(hasBow ? Math.min(strung, n) : 0);
-    tip.position.copy(bow.arrows[Math.floor((Math.max(1, n) - 1) / 2)].position);
+    const nocked = bow.arrows[Math.floor((Math.max(1, n) - 1) / 2)];
+    tip.position.copy(nocked.position);
+    arrowHead.position.set(0, 0, ARROW / 2 - HEAD_MIDDLE).applyQuaternion(nocked.quaternion).add(nocked.position);
     root.updateMatrixWorld(true);
     nockW.copy(bow.nock); bow.group.localToWorld(nockW);
 
@@ -1157,7 +1162,7 @@ export function buildRanger(): Model {
     }
   }
   return {
-    root, kit, joints: j, animate, tip, palm, height: 2,
+    root, kit, joints: j, animate, tip, palm, arrowHead, height: 2,
     firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; strung = 0; fetchFrom = -1; kHook = -1; stowT = -1; },
     setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; for (const h of head.hair.slice(1)) h.visible = !gear.helm; },
     dispose() { kit.dispose(); disposeGeometries(root, arrowGeometry()); },

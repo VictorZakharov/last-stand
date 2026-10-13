@@ -280,12 +280,17 @@ terminal's task stops it all.
   the game never outlines a hero), reads Starfall's ring as drawn round all its crystals may strike, lays the marks
   across the step point by point on the floor under them, as they were, and compiles a shader mid-game.
 - `draw`: every drawn shot of the hero's class drawn to full and held there as the player holds it (`page/draw.ts`,
-  `--class ranger`): the key held over an aim ahead, 120 frames at full draw, and let go. Every frame the glow
-  particles within 0.6 m of the arrowhead are counted, with nothing drawn, over the draw's second half and held at
-  full. Motes on fewer than half of the draw's frames, a glint on fewer than 90% of the frames held at full or gone
-  for more than 20 of them, and one with nothing drawn are problems. `--pictures` (on by default) pictures each
-  shot held at full, in the run's view and its arrowhead close up from the side and above, into `out/draw`;
-  `--canary` takes the glow particles away once the draw is full.
+  `--class ranger`), in the top-down view, over the shoulder and through the eyes (`--views`): the key held over an
+  aim ahead, 120 frames at full draw, and let go. Every frame the glow particles within 0.6 m of the arrowhead (the
+  model's `arrowHead`) are counted and its flare (`fx/glintFlare.ts`) seen or not, with nothing drawn, over the
+  draw's second half and held at full. Halfway through the hold the glint is judged as the player sees it
+  (`page/addedLight.ts`: the frame drawn with it and without it, the pixels it lit round the arrowhead). Motes on
+  fewer than half of the draw's frames, a glint on fewer than 90% of the frames held at full or gone for more than 20
+  of them, one with nothing drawn, and a glint lighting less than 2.5 in 10,000 of the frame's pixels in any view are
+  problems (its particles alone lit 0 to 0.5 of them, and none through the eyes), as is a shader compiled meanwhile
+  (the flare's is compiled at load). `--pictures` (on by default)
+  pictures each shot held at full, the screen whole and its arrowhead close, into `out/draw`; `--canary` takes the
+  glint (its particles and its flare) away once the draw is full.
 - `gear`: full sets of gear rolled for every class as its loot rolls them (`page/gear.ts`, `--sets` each, 400 by
   default), at each tier (`--tiers`, a rarity at an item level each: `magic@5,rare@15,epic@30,legendary@50`), and
   what a set gives on average: Health (his own and the gear's, and the gear's against the mage's), regeneration a

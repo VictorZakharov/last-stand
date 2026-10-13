@@ -13,6 +13,7 @@ import { burst, debris, particles, col } from '../../fx/particles';
 import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import { arrowGeometry, ARROW, pullAt } from '../../entities/models/bow';
+import { glintFlare, warmGlintFlare } from '../../fx/glintFlare';
 import { showLaser, warmLaser, LASER_POINTS } from '../../fx/aimLaser';
 import { arrowMat, stickAt, stickIn, glance, floorIsStone, propIsStone, propSurface, wallIsStone, warmStuck, SINK } from '../../fx/stuckArrows';
 import { pastWall } from '../../world/edge';
@@ -133,7 +134,7 @@ function arrowProp(o: Obstacle, proj: Projectile, from: THREE.Vector3): boolean 
 /** An arrow's way off the bow: heading `yaw`, `pitch` above level. */
 const shotDir = (yaw: number, pitch: number): THREE.Vector3 => new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
 
-const warmArrows = (): THREE.Object3D[] => [arrowMesh(), ...warmStuck(), new THREE.Mesh(streakGeo, streakOf(GLINT, 1)), ...warmLaser()];
+const warmArrows = (): THREE.Object3D[] => [arrowMesh(), ...warmStuck(), new THREE.Mesh(streakGeo, streakOf(GLINT, 1)), ...warmLaser(), ...warmGlintFlare()];
 
 /** the aim preview's flight is stepped as the arrow's is, a frame at 60 fps (swept, as its collisions are) */
 const PREVIEW_DT = 1 / 60;
@@ -223,34 +224,40 @@ const GLINT = 0xf3dc9a;
 const FULL = 0.98;
 /** how far each hero's shot was drawn last frame (the glint bursts as it reaches full) */
 const drawnTo = new WeakMap<Player, number>();
-/** The arrowhead of the arrow on the string, about: half an arrow ahead of its middle along the shot. */
-const headOf = (player: Player, out: THREE.Vector3): THREE.Vector3 =>
-  out.copy(player.castPoint).add(_v.set(Math.sin(player.facing), 0, Math.cos(player.facing)).multiplyScalar(ARROW * 0.45));
+/** The arrowhead of the arrow on the string: the model's own (along the arrow as it lies on the string), or about half
+ *  an arrow ahead of its middle along the body's facing (off by the shot's rise or fall). */
+const headOf = (player: Player, out: THREE.Vector3): THREE.Vector3 => {
+  const head = player.model.arrowHead;
+  if (head) return head.getWorldPosition(out);
+  return out.copy(player.castPoint).add(_v.set(Math.sin(player.facing), 0, Math.cos(player.facing)).multiplyScalar(ARROW * 0.45));
+};
 /** the motes drawn in onto the arrowhead a second at full draw (as at the end of the draw), and the glints that
- *  sparkle on it meanwhile (a few small ones a second: well under a flash) */
-const MOTES = 14, HELD_GLINTS = 5;
+ *  sparkle on it meanwhile (a few a second: well under a flash) */
+const MOTES = 30, HELD_GLINTS = 6;
 
 /**
  * Every drawn shot's arrowhead as the bow comes to full and is held there (the shot strikes hardest at full draw,
  * Lancewood Shot harder still): motes drawn in onto it as it's drawn, a burst of glints as it reaches full with the
- * bow's ready sound, and held at full the motes go on drawing in and it glints now and then, until it's loosed.
+ * bow's ready sound, and held at full a star of light on it (fx/glintFlare.ts: the particles fade out up close, and
+ * through the eyes showed nothing) as the motes go on drawing in and it glints now and then, until it's loosed.
  */
 function drawGlint(player: Player, k: number, dt: number): void {
   const was = drawnTo.get(player) ?? 0;
   drawnTo.set(player, k);
   const head = headOf(player, _p);
+  if (k >= FULL) glintFlare(player);
   if (k >= FULL && was < FULL) {
-    burst(head, { count: 12, color: GLINT, speed: 1.6, up: 0.4, life: 0.32, size: 0.06, gravity: 0, drag: 4 });
+    burst(head, { count: 24, color: GLINT, intensity: 4, speed: 2, up: 0.4, life: 0.4, size: 0.09, gravity: 0, drag: 4 });
     if (player.local) sfx.bowReady();
     return;
   }
   if (Math.random() < dt * MOTES * Math.min(1, k)) {
     // (drawn in onto the arrowhead from round it)
-    const a = rand(0, Math.PI * 2), r = rand(0.25, 0.45), x = Math.cos(a) * r, y = rand(-0.2, 0.25), z = Math.sin(a) * r;
-    particles.glow.spawn({ x: head.x + x, y: head.y + y, z: head.z + z, vx: -x * 3, vy: -y * 3, vz: -z * 3, life: 0.3, size: 0.05, sizeEnd: 0, color: col(GLINT, 1.6), colorEnd: col(0x806030, 0.4) });
+    const a = rand(0, Math.PI * 2), r = rand(0.25, 0.5), x = Math.cos(a) * r, y = rand(-0.2, 0.25), z = Math.sin(a) * r;
+    particles.glow.spawn({ x: head.x + x, y: head.y + y, z: head.z + z, vx: -x * 3, vy: -y * 3, vz: -z * 3, life: 0.32, size: 0.08, sizeEnd: 0.01, color: col(GLINT, 2.4), colorEnd: col(0x806030, 0.5) });
   }
   if (k >= FULL && Math.random() < dt * HELD_GLINTS) {
-    burst(head, { count: 3, color: GLINT, speed: 1.1, up: 0.3, life: 0.26, size: 0.05, gravity: 0, drag: 4 });
+    burst(head, { count: 4, color: GLINT, intensity: 3.5, speed: 1.3, up: 0.3, life: 0.3, size: 0.07, gravity: 0, drag: 4 });
   }
 }
 

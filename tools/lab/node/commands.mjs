@@ -453,13 +453,22 @@ export const COMMANDS = {
   },
 
   draw: {
-    each(side, options) {
-      const command = {
-        fixture: fixtureFrom(options),
-        pictures: options.pictures !== false,
-        canary: Boolean(options.canary),
+    async each(side, options) {
+      // (a view at a time, each set up in it: through the eyes the bow is posed for the view)
+      const reports = [];
+      for (const view of options.views) {
+        const command = {
+          fixture: { ...fixtureFrom(options), view },
+          pictures: options.pictures !== false,
+          canary: Boolean(options.canary),
+        };
+        reports.push(await side.command('draw', command));
+      }
+      return {
+        text: reports.map((report) => report.text).join('\n'),
+        problems: reports.flatMap((report) => report.problems),
+        moments: reports.flatMap((report) => report.moments),
       };
-      return side.command('draw', command);
     },
     finish(results, options, session) {
       return textWithPictureFiles(results, session.outFor('draw'));

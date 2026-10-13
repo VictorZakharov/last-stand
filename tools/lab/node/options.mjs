@@ -396,13 +396,25 @@ export const COMMANDS = {
   },
   draw: {
     help: 'every drawn shot of the hero\'s class (the ranger\'s) drawn to full and held there as the player holds it, '
-      + 'the glow particles round its arrowhead counted every frame: motes drawn in onto it as it\'s drawn, and held '
-      + 'at full it glints until it\'s loosed; motes missing, a glint missing or gone at full, and one with nothing '
-      + 'drawn are problems: tools/lab/out/draw (--class ranger)',
+      + 'in each view, the glow particles round its arrowhead counted every frame: motes drawn in onto it as it\'s '
+      + 'drawn, and held at full it glints until it\'s loosed, seen in the view (the frame drawn with the glint and '
+      + 'without it, round the arrowhead); motes missing, a glint missing or gone at full, a glint hardly seen, and '
+      + 'one with nothing drawn are problems: tools/lab/out/draw (--class ranger)',
     options: {
-      pictures: { kind: 'switch', help: 'picture each shot held at full draw (=false: the numbers alone)' },
+      views: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['top', 'third', 'first'],
+        default: 'top,third,first',
+        help: 'the views: top, third, first',
+      },
+      pictures: {
+        kind: 'switch',
+        help: 'picture each shot held at full draw, the screen and its arrowhead close (=false: the numbers alone)',
+      },
       canary: { kind: 'switch', help: 'plant the fault the checks must catch: the glint taken away at full draw' },
-      ...SETUP_OPTIONS,
+      at: SETUP_OPTIONS.at,
+      facing: SETUP_OPTIONS.facing,
       ...COMMON_OPTIONS,
     },
   },
