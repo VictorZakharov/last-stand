@@ -40,6 +40,9 @@ export const DAMAGE_COLORS: Record<DamageType, number> = {
   physical: 0xffffff,
   vitality: 0xd060ff,
 };
+/** A hit's number by its type: arcane is the mage's plain damage, white as the others' physical is (green, his
+ *  numbers read as something other than a hit); the elements keep their colours. */
+export const NUMBER_COLORS: Record<DamageType, number> = { ...DAMAGE_COLORS, arcane: 0xffffff };
 
 export const RUN = {
   countdown: 3.5,             // seconds before each wave starts
