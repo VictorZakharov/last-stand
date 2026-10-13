@@ -63,6 +63,12 @@ export function anchorLabel(order: number, at: () => WorldPos | null, clamp = fa
   return label;
 }
 
+/** The labels anchored to the world, each with where it's anchored now and whether it's held on the screen
+ *  (tools/lab measures them against the camera). */
+export function anchoredLabels(): { label: Label; at: WorldPos | null; clamp: boolean }[] {
+  return [...anchored.values()].map((a) => ({ label: a.label, at: a.at(), clamp: a.clamp }));
+}
+
 /** Takes an anchored label off the screen for good. */
 export function removeLabel(label: Label | null | undefined): void {
   if (!label) return;
