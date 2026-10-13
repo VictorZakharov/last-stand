@@ -1,4 +1,4 @@
-// Procedural sound effects with WebAudio (no audio files; the lobby's music is `music.ts`).
+// Procedural sound effects with WebAudio (no audio files; the music is `music.ts`).
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
