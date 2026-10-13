@@ -2,7 +2,7 @@
 
 Contributions come in as pull requests from a fork: you open an issue, fix it on a branch of your fork, and open a PR into `main` of `VictorZakharov/last-stand`. Two scripts automate the routine parts: `scripts/issue.sh` and `scripts/commit.sh`.
 
-Read [AGENTS.md](AGENTS.md) before changing code: it has the product rules (procedural everything, original names, UI that fits any screen) and the gotchas.
+Read [AGENTS.md](AGENTS.md) before changing code: it has the product rules (procedural everything, original names, UI that fits any screen) and the gotchas, and points to the notes on the heroes' models and legs (`docs/agents/`), read before changing those.
 
 ## 1. One-time setup
 
