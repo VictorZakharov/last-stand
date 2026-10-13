@@ -5,7 +5,8 @@ import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, s
 import { CAMERA, LOBBY } from './data/balance';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt, releaseInput } from './core/input';
 import { initAudio } from './core/audio';
-import { updateMusic } from './core/music';
+import { updateMusic, type MusicWanted } from './core/music';
+import { FADES } from './data/music';
 import { updateTimers } from './core/timers';
 import { particles } from './fx/particles';
 import { initLights, updateLights, clearLights } from './fx/lights';
@@ -39,7 +40,7 @@ import { initQuality, sampleQuality } from './core/quality';
 import { updateLowLife } from './core/lowLife';
 import { pinPrograms, markLoaded, warmUp } from './core/shaders';
 import { initBiome, rollBiome } from './game/biome';
-import { BIOME_IDS } from './data/biomes';
+import { BIOMES, BIOME_IDS } from './data/biomes';
 import { loadingStep, loadingDone, loadingFailed } from './ui/loading';
 import { preloadTextures } from './core/textures';
 import { initSync } from './net/sync';
@@ -449,6 +450,16 @@ function backgroundStep(): void {
 }
 setInterval(backgroundStep, 100);
 
+/** The music now: the biome's lobby track in the lobby, its battle track through each wave's fight in a run (from
+ *  the run's start it's kept decoded), none between waves or behind the loading screen. */
+function musicWanted(): MusicWanted {
+  const music = BIOMES[G.arena.biome].music;
+  if (!revealed) return { track: null, fade: FADES.lobby, ready: [] };
+  if (G.mode === 'menu') return { track: music.lobby, fade: FADES.lobby, ready: [music.lobby] };
+  const fighting = G.mode === 'run' && G.run?.phase === 'fighting';
+  return { track: fighting ? music.battle : null, fade: FADES.battle, ready: [music.battle] };
+}
+
 function frame(timestamp: number): void {
   requestAnimationFrame(frame);
   lastStep = performance.now();
@@ -458,8 +469,7 @@ function frame(timestamp: number): void {
   const rawDt = timer.getDelta();
   const dt = Math.min(rawDt, 1 / 20);
   if (revealed) { updateTouch(dt); handleGlobalKeys(); syncView(); }
-  // the lobby has music, a run none
-  updateMusic(dt, revealed && G.mode === 'menu');
+  updateMusic(dt, musicWanted());
   const t0 = performance.now();
   if (!G.paused && revealed) {
     sampleQuality(rawDt);

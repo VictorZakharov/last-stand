@@ -20,6 +20,7 @@ import type { HeldOptions } from './held';
 import type { CastOptions } from './cast';
 import type { DrawOptions } from './draw';
 import type { GearOptions } from './gear';
+import type { MusicOptions } from './music';
 
 export interface SheetCommand {
   states: string[];
@@ -194,6 +195,16 @@ export async function held(lab: Lab, command: HeldOptions): Promise<Report> {
 export async function gear(_lab: Lab, command: GearOptions): Promise<Report> {
   const { gear: gearRound } = await import('./gear');
   return gearRound(command);
+}
+
+/**
+ * `lab music`: each biome's music played through as the player hears it (its lobby, a run's waves, a hidden tab, the
+ * bank back), every frame judged by what the game sends to WebAudio; a fault the judge finds, or a canary it missed,
+ * is a problem.
+ */
+export async function music(lab: Lab, command: MusicOptions): Promise<Report> {
+  const { music: musicRound } = await import('./music');
+  return musicRound(lab, command);
 }
 
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */

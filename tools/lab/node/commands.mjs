@@ -554,6 +554,14 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  music: {
+    each(side, options) {
+      return side.command('music', { biomes: options.biomes, canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   probe: {
     check(options) {
       probePath(options._[0]);

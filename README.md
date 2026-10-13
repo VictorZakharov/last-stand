@@ -6,7 +6,7 @@ A 3D wave-survival action RPG that runs in your browser. Hold the arena against 
 
 **[▶ Play in your browser](https://victorzakharov.github.io/last-stand/)**
 
-Everything is procedural: models, animation, textures, VFX and sound are generated at runtime. There are no downloaded models, textures or audio files. The exceptions are the painted skill icons (`src/ui/skillArt/`) and the lobby's music (`src/audio/music/`).
+Everything is procedural: models, animation, textures, VFX and sound are generated at runtime. There are no downloaded models, textures or audio files. The exceptions are the painted skill icons (`src/ui/skillArt/`) and the music (`src/audio/music/`).
 
 ![Fighting in the arena](docs/screenshots/combat.png)
 
@@ -122,7 +122,7 @@ A bow hunter in a green trailcoat with a quiver, leather bracers and boots. The 
 - The Thornwood's trees are grown by [ez-tree](https://github.com/dgreenheck/ez-tree) (MIT), its geometry with our own procedural bark and leaves
 - TypeScript (strict) + [Vite](https://vite.dev/)
 - Procedural textures (cobblestone, slabs, runes), procedural humanoid rigs and animation, CPU particles, pooled dynamic lights
-- WebAudio-synthesized sound effects, and music in the lobby
+- WebAudio-synthesized sound effects, and music for each biome's lobby and its waves (looped by `tools/music`)
 - Co-op through our own WebSocket relay server (`server/relay`, Node and [ws](https://github.com/websockets/ws))
 
 
