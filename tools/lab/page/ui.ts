@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
+import { NUMBER_COLORS } from '../../../src/data/balance';
 import { floatText } from '../../../src/ui/floaters';
 import * as overlay from '../../../src/ui/overlay/layer';
 import { hideDecision, showDecision } from '../../../src/ui/hud';
@@ -33,9 +34,11 @@ const TOOLTIP_AT = { x: 0.18, y: 0.3 };
 /** the foe spawned for the run's labels, how far ahead of the hero (m), and the share of its life it has left */
 const FOE_AHEAD = 6;
 const FOE_LIFE = 0.6;
-/** the damage numbers shown over it: their text, kind and height over the floor (m) */
+/** the damage numbers shown over it: their text, kind, height over the floor (m) and, for a hit's, its damage's type
+ *  (coloured as the game colours it: the warrior's and the ranger's physical, the mage's arcane) */
 const NUMBERS = [
-  { text: 128, kind: 'dmg', rise: 1.6 },
+  { text: 128, kind: 'dmg', rise: 1.6, type: 'physical' },
+  { text: 96, kind: 'dmg', rise: 2.4, type: 'arcane' },
   { text: 412, kind: 'crit', rise: 2.0 },
   { text: 37, kind: 'heal', rise: 1.2 },
 ] as const;
@@ -134,7 +137,10 @@ async function showLabels(lab: Lab): Promise<void> {
   const foe = lab.spawnFoe('husk', at);
   await lab.until(() => !foe.spawning, 300, 'the foe never rose');
   foe.life = foe.maxLife * FOE_LIFE;
-  for (const number of NUMBERS) floatText(at.x, number.rise, at.z, number.text, number.kind);
+  for (const number of NUMBERS) {
+    const color = 'type' in number ? NUMBER_COLORS[number.type] : undefined;
+    floatText(at.x, number.rise, at.z, number.text, number.kind, color);
+  }
   await lab.step(NUMBER_FRAMES);
   const listed = typeof overlay.drawnLabels === 'function';
   if (listed && drawnLabels().length < NUMBERS.length + 1) {

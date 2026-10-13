@@ -1,6 +1,6 @@
 // Damage rolls and application for both sides.
 import type * as THREE from 'three';
-import { DAMAGE_COLORS } from '../data/balance';
+import { NUMBER_COLORS } from '../data/balance';
 import { floatText } from '../ui/floaters';
 import { dealsDamage } from '../net/role';
 import { countDealt } from '../game/stats';
@@ -47,7 +47,7 @@ export function setDealtSink(fn: typeof dealtSink): void { dealtSink = fn; }
 /** A damage number over an enemy. */
 export function damageNumber(enemy: Enemy, amount: number, crit: boolean, type: DamageType): void {
   const p = enemy.pos;
-  floatText(p.x, enemy.height * 0.9 + 0.3, p.z, Math.round(amount), crit ? 'crit' : 'dmg', DAMAGE_COLORS[type]);
+  floatText(p.x, enemy.height * 0.9 + 0.3, p.z, Math.round(amount), crit ? 'crit' : 'dmg', NUMBER_COLORS[type]);
 }
 
 /** Hit an enemy with a skill. Returns damage dealt (0 for a partner's skill, which its own game deals). On a co-op
