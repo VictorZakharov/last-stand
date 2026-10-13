@@ -161,11 +161,13 @@ terminal's task stops it all.
   with a clip, what crossed what and how deep.
 - `probe <module>`: a measure of your own (below). Options the lab doesn't know are passed to it (`--frames=30`), and
   `--setup=false` skips the set-up.
-- `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,help,saves,views,run,scores,
-  perf,decision,pause,summary`: the lobby, an item's tooltip, How to play, the save slots, the lobby's camera switched
-  with V through every view and back, each glide played and drawn (every frame, each label over the dummies against
-  where its anchor shows by the camera as the frame draws it: off by more than a pixel is a problem; placed with the
-  camera's turn of the frame before, they were up to 1442 px off as a glide set off), the run's HUD with a hurt foe's
+- `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,help,saves,clicked,views,run,
+  scores,perf,decision,pause,summary`: the lobby, an item's tooltip, How to play, the save slots, the hero's class
+  button clicked with the mouse and a key pressed after it as the browser gets them (where the focus went and whether
+  the browser shows its ring: a problem when the button kept it), the lobby's camera switched with V through every
+  view and back, each glide played and drawn (every frame, each label over the dummies against where its anchor shows
+  by the camera as the frame draws it: off by more than a pixel is a problem; placed with the camera's turn of the
+  frame before, they were up to 1442 px off as a glide set off), the run's HUD with a hurt foe's
   bar and damage numbers over it, the scores, the performance overlay, the choice after a wave, the pause menu, the
   run's summary), each pictured whole as a PNG of its own at the screen's pixels (`out/ui/<state>.png`), with every
   named element's box and every label's over the world as shares of the window. With `--screens`, whether the UI is
@@ -363,6 +365,9 @@ What the lab gives a probe (`page/lab.ts`):
   sent through the DevTools protocol, so the page's own pointer events follow with their pointer ids and its touch
   controls take it as a player's (no frame runs; each returns once the page has handled it). The game's first touch
   puts it in touch mode, as a player's does, and its controls show from the next frame;
+- `await lab.click(at)` and `lab.press(code)`: a click of the mouse's left button on the page (css px) and a key
+  (`KeyW`, `Space`) as a mouse and a keyboard give them, sent through the DevTools protocol, so the browser handles
+  them as a player's, the focus with them (a script's `click()` and events moved none and showed no focus ring);
 - in `page/geometry.ts`, the body's meshes skinned into the world as drawn (`BakedBody`), what a line crosses among
   them (`crossingsAlong`), and the distance between segments (`segmentDistance`).
 

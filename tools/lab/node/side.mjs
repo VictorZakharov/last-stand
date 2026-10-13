@@ -69,6 +69,53 @@ async function touchOf(page, type, points) {
   await devtools.send('Input.dispatchTouchEvent', { type, touchPoints: points });
 }
 
+/**
+ * The mouse sent to the page as the browser gets it from a mouse (`lab.click`'s): `type` is `mouseMoved`, or
+ * `mousePressed` or `mouseReleased` for its left button, at `x`, `y` (css px). The browser's own handling follows from
+ * it, as a player's click: its mouse and pointer events, and the focus it moves.
+ */
+async function mouseOf(page, type, x, y) {
+  const devtools = await devtoolsOf(page);
+  await devtools.send('Input.dispatchMouseEvent', { type, x, y, ...MOUSE_BUTTONS[type] });
+}
+
+/** the left button's fields for each of the mouse's events: none moving, held as it's pressed, up once released */
+const MOUSE_BUTTONS = {
+  mouseMoved: { button: 'none', buttons: 0 },
+  mousePressed: { button: 'left', buttons: 1, clickCount: 1 },
+  mouseReleased: { button: 'left', buttons: 0, clickCount: 1 },
+};
+
+/**
+ * A key sent to the page as the browser gets it from a keyboard (`lab.press`'s): `type` is `keyDown` or `keyUp`,
+ * `key` the key's code (`KeyW`). The browser's own handling follows from it, as a player's key: what it does to the
+ * focused element (a focus ring shown, a button pressed).
+ */
+async function keyOf(page, type, key) {
+  const devtools = await devtoolsOf(page);
+  await devtools.send('Input.dispatchKeyEvent', { type, ...keyFields(key) });
+}
+
+/** The DevTools protocol's fields for the key whose code is `code`: a letter's (`KeyW`), or a named key's. */
+function keyFields(code) {
+  const letter = /^Key([A-Z])$/.exec(code);
+  if (letter) {
+    const upper = letter[1];
+    return { code, key: upper.toLowerCase(), windowsVirtualKeyCode: upper.charCodeAt(0) };
+  }
+  const named = NAMED_KEYS[code];
+  if (!named) throw new Error(`lab: press: no key ${code} (a letter's code, KeyW, or ${Object.keys(NAMED_KEYS)})`);
+  return { code, ...named };
+}
+
+/** the keys besides the letters a measure may press: their key names and Windows key codes */
+const NAMED_KEYS = {
+  Space: { key: ' ', windowsVirtualKeyCode: 32 },
+  Enter: { key: 'Enter', windowsVirtualKeyCode: 13 },
+  Escape: { key: 'Escape', windowsVirtualKeyCode: 27 },
+  Tab: { key: 'Tab', windowsVirtualKeyCode: 9 },
+};
+
 const toSlashes = (path) => path.split('\\').join('/');
 
 /** the note an exported tree keeps of the lab page modules last copied into it */
@@ -306,6 +353,9 @@ export class Side {
     await page.exposeFunction('__labScreenshot', (clip) => screenshotOf(page, clip));
     // (a probe's `lab.touch`: a finger on the touch controls, which no scripted input reaches)
     await page.exposeFunction('__labTouch', (type, points) => touchOf(page, type, points));
+    // (a probe's `lab.click` and `lab.press`: the browser's own handling of a click and a key, its focus with them)
+    await page.exposeFunction('__labMouse', (type, x, y) => mouseOf(page, type, x, y));
+    await page.exposeFunction('__labKey', (type, key) => keyOf(page, type, key));
     await page.goto(this.url);
     // (polled on a timer: by default it polls by animation frame, and the lab's clock holds those once the game shows)
     const polling = { polling: BOOT_POLL_MS, timeout: BOOT_TIMEOUT_MS };

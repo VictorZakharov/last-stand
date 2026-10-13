@@ -27,6 +27,7 @@ import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuSto
 import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
+import { releaseClickedFocus } from './ui/focus';
 import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initTouch, updateTouch } from './ui/touch';
 import { initPwa } from './ui/pwa';
@@ -57,6 +58,7 @@ async function boot() {
   // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second)
   const textures = preloadTextures();
   initUIScale();
+  releaseClickedFocus();
   initItemIcons();
   const { scene, renderer } = initRenderer($('#game'));
   initInput(renderer.domElement);
