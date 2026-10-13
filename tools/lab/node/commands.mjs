@@ -452,6 +452,23 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  draw: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        pictures: options.pictures !== false,
+        canary: Boolean(options.canary),
+      };
+      return side.command('draw', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('draw'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   blink: {
     each(side, options) {
       const command = {

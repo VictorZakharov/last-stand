@@ -18,6 +18,7 @@ import type { HealthOptions } from './health';
 import type { BlinkOptions } from './blink';
 import type { HeldOptions } from './held';
 import type { CastOptions } from './cast';
+import type { DrawOptions } from './draw';
 import type { GearOptions } from './gear';
 
 export interface SheetCommand {
@@ -158,6 +159,15 @@ export async function health(lab: Lab, command: HealthOptions): Promise<Report> 
 export async function cast(lab: Lab, command: CastOptions): Promise<Report> {
   const { cast: castRound } = await import('./cast');
   return castRound(lab, command);
+}
+
+/**
+ * `lab draw`: each of the hero's drawn shots drawn to full and held there, the glint round its arrowhead counted every
+ * frame; motes missing as it's drawn, a glint missing or gone held at full, and one with nothing drawn are problems.
+ */
+export async function draw(lab: Lab, command: DrawOptions): Promise<Report> {
+  const { draw: drawRound } = await import('./draw');
+  return drawRound(lab, command);
 }
 
 /**

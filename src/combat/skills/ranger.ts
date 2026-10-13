@@ -219,12 +219,51 @@ function previewShot(player: Player, def: BowDef, k: number, radius: number, lev
 const TRACE = 14, TRACE_FADE = 0.3;
 const GLINT = 0xf3dc9a;
 
+/** a drawn shot counts as drawn to full from here (of its draw's time) */
+const FULL = 0.98;
+/** how far each hero's shot was drawn last frame (the glint bursts as it reaches full) */
+const drawnTo = new WeakMap<Player, number>();
+/** The arrowhead of the arrow on the string, about: half an arrow ahead of its middle along the shot. */
+const headOf = (player: Player, out: THREE.Vector3): THREE.Vector3 =>
+  out.copy(player.castPoint).add(_v.set(Math.sin(player.facing), 0, Math.cos(player.facing)).multiplyScalar(ARROW * 0.45));
+/** the motes drawn in onto the arrowhead a second at full draw (as at the end of the draw), and the glints that
+ *  sparkle on it meanwhile (a few small ones a second: well under a flash) */
+const MOTES = 14, HELD_GLINTS = 5;
+
+/**
+ * Every drawn shot's arrowhead as the bow comes to full and is held there (the shot strikes hardest at full draw,
+ * Lancewood Shot harder still): motes drawn in onto it as it's drawn, a burst of glints as it reaches full with the
+ * bow's ready sound, and held at full the motes go on drawing in and it glints now and then, until it's loosed.
+ */
+function drawGlint(player: Player, k: number, dt: number): void {
+  const was = drawnTo.get(player) ?? 0;
+  drawnTo.set(player, k);
+  const head = headOf(player, _p);
+  if (k >= FULL && was < FULL) {
+    burst(head, { count: 12, color: GLINT, speed: 1.6, up: 0.4, life: 0.32, size: 0.06, gravity: 0, drag: 4 });
+    if (player.local) sfx.bowReady();
+    return;
+  }
+  if (Math.random() < dt * MOTES * Math.min(1, k)) {
+    // (drawn in onto the arrowhead from round it)
+    const a = rand(0, Math.PI * 2), r = rand(0.25, 0.45), x = Math.cos(a) * r, y = rand(-0.2, 0.25), z = Math.sin(a) * r;
+    particles.glow.spawn({ x: head.x + x, y: head.y + y, z: head.z + z, vx: -x * 3, vy: -y * 3, vz: -z * 3, life: 0.3, size: 0.05, sizeEnd: 0, color: col(GLINT, 1.6), colorEnd: col(0x806030, 0.4) });
+  }
+  if (k >= FULL && Math.random() < dt * HELD_GLINTS) {
+    burst(head, { count: 3, color: GLINT, speed: 1.1, up: 0.3, life: 0.26, size: 0.05, gravity: 0, drag: 4 });
+  }
+}
+
 export const bowShot: InstantSkill = {
   anim: 'bow', warm: warmArrows,
   pitch: (player, def, k, target) => launchPitch(player.castPoint, target, arrowSpeed(def as BowDef, k)),
-  charging: (player, def, k) => previewShot(player, def as BowDef, k, 0.22, true, false),
+  charging(player, def, k, dt) {
+    previewShot(player, def as BowDef, k, 0.22, true, false);
+    drawGlint(player, k, dt);
+  },
   cast(player, rawDef, target, power) {
     const def = rawDef as BowDef, origin = player.castPoint, pull = pullAt(power), v = arrowSpeed(def, power);
+    drawnTo.delete(player);
     // (the string gives the arrow the energy the bow stored, which goes with the square of the draw: that is its blow)
     const damage = def.damage * pull * pull, knock = (def.knock ?? 0) * pull;
     const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v);
@@ -246,34 +285,16 @@ export const bowShot: InstantSkill = {
   },
 };
 
-/** a drawn shot counts as drawn to full from here (of its draw's time) */
-const FULL = 0.98;
-/** how far each hero's piercing shot was drawn last frame (the glint shows as it reaches full) */
-const drawnTo = new WeakMap<Player, number>();
-/** The arrowhead of the arrow on the string, about: half an arrow ahead of its middle along the shot. */
-const headOf = (player: Player, out: THREE.Vector3): THREE.Vector3 =>
-  out.copy(player.castPoint).add(_v.set(Math.sin(player.facing), 0, Math.cos(player.facing)).multiplyScalar(ARROW * 0.45));
-
 /**
  * Lancewood Shot: drawn while held like any shot, and driven through every foe in its line, each one it passes
- * through taking less (`falloff`); loosed at full draw it strikes harder (`fullBonus`), and the arrowhead glints
- * when it's there. Props and walls still stop it.
+ * through taking less (`falloff`); loosed at full draw it strikes harder (`fullBonus`), its arrowhead glinting there
+ * as every drawn shot's does. Props and walls still stop it.
  */
 export const piercingShot: InstantSkill = {
   anim: 'bow', warm: warmArrows, pitch: bowShot.pitch,
   charging(player, def, k, dt) {
     previewShot(player, def as BowDef, k, 0.24, false, true);
-    const was = drawnTo.get(player) ?? 0;
-    drawnTo.set(player, k);
-    const head = headOf(player, _p);
-    if (k >= FULL && was < FULL) {
-      burst(head, { count: 12, color: GLINT, speed: 1.6, up: 0.4, life: 0.32, size: 0.06, gravity: 0, drag: 4 });
-      if (player.local) sfx.bowReady();
-    } else if (k < FULL && Math.random() < dt * 14 * k) {
-      // (motes drawn in onto the arrowhead as the bow comes to full)
-      const a = rand(0, Math.PI * 2), r = rand(0.25, 0.45), x = Math.cos(a) * r, y = rand(-0.2, 0.25), z = Math.sin(a) * r;
-      particles.glow.spawn({ x: head.x + x, y: head.y + y, z: head.z + z, vx: -x * 3, vy: -y * 3, vz: -z * 3, life: 0.3, size: 0.05, sizeEnd: 0, color: col(GLINT, 1.6), colorEnd: col(0x806030, 0.4) });
-    }
+    drawGlint(player, k, dt);
   },
   cast(player, rawDef, target, power) {
     const def = rawDef as BowDef & Needs<'falloff'>, origin = player.castPoint, pull = pullAt(power), v = arrowSpeed(def, power);

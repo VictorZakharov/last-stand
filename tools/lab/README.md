@@ -279,6 +279,13 @@ terminal's task stops it all.
   no countdown on its cooldown, draws Quarry Mark's outline round the hero (the programs it compiles aren't counted:
   the game never outlines a hero), reads Starfall's ring as drawn round all its crystals may strike, lays the marks
   across the step point by point on the floor under them, as they were, and compiles a shader mid-game.
+- `draw`: every drawn shot of the hero's class drawn to full and held there as the player holds it (`page/draw.ts`,
+  `--class ranger`): the key held over an aim ahead, 120 frames at full draw, and let go. Every frame the glow
+  particles within 0.6 m of the arrowhead are counted, with nothing drawn, over the draw's second half and held at
+  full. Motes on fewer than half of the draw's frames, a glint on fewer than 90% of the frames held at full or gone
+  for more than 20 of them, and one with nothing drawn are problems. `--pictures` (on by default) pictures each
+  shot held at full, in the run's view and its arrowhead close up from the side and above, into `out/draw`;
+  `--canary` takes the glow particles away once the draw is full.
 - `gear`: full sets of gear rolled for every class as its loot rolls them (`page/gear.ts`, `--sets` each, 400 by
   default), at each tier (`--tiers`, a rarity at an item level each: `magic@5,rare@15,epic@30,legendary@50`), and
   what a set gives on average: Health (his own and the gear's, and the gear's against the mage's), regeneration a

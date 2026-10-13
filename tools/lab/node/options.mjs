@@ -394,6 +394,18 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  draw: {
+    help: 'every drawn shot of the hero\'s class (the ranger\'s) drawn to full and held there as the player holds it, '
+      + 'the glow particles round its arrowhead counted every frame: motes drawn in onto it as it\'s drawn, and held '
+      + 'at full it glints until it\'s loosed; motes missing, a glint missing or gone at full, and one with nothing '
+      + 'drawn are problems: tools/lab/out/draw (--class ranger)',
+    options: {
+      pictures: { kind: 'switch', help: 'picture each shot held at full draw (=false: the numbers alone)' },
+      canary: { kind: 'switch', help: 'plant the fault the checks must catch: the glint taken away at full draw' },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   blink: {
     help: 'the mage\'s blink cast as the player casts it (the key held over the aim, let go): on open ground, past his '
       + 'reach, at a prop, past one, out at the arena\'s edge, up onto the dais and at his feet, where the preview '
