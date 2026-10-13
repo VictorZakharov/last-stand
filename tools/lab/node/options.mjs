@@ -398,9 +398,10 @@ export const COMMANDS = {
     help: 'every drawn shot of the hero\'s class (the ranger\'s) drawn to full and held there as the player holds it, '
       + 'in each view, the motes on its arrowhead read every frame: none as it\'s drawn, and held at full it glints '
       + 'until it\'s loosed, seen in the view (the frame drawn with the glint and without it, round the arrowhead, '
-      + 'every 4 frames of the hold, pictured at its most glaring); a glint before full draw, missing or gone at '
-      + 'full, hardly seen or glaring in a blob, and one with nothing drawn are problems: tools/lab/out/draw '
-      + '(--class ranger)',
+      + 'every 4 frames of the hold, pictured at its most glaring), and in the close views the crosshair bold held '
+      + 'at full alone, swelling into it once (none with motion reduced); a glint before full draw, missing or gone '
+      + 'at full, hardly seen or glaring in a blob, the crosshair bold before full, regular at full or beating other '
+      + 'than once, and one with nothing drawn are problems: tools/lab/out/draw (--class ranger)',
     options: {
       views: {
         kind: 'list',
@@ -411,12 +412,13 @@ export const COMMANDS = {
       },
       pictures: {
         kind: 'switch',
-        help: 'picture each shot held at full draw, the screen and its arrowhead close (=false: the numbers alone)',
+        help: 'picture each shot held at full draw, the screen and its arrowhead close, and the crosshair as it\'s '
+          + 'drawn, at its beat\'s height and bold (=false: the numbers alone)',
       },
       canary: {
         kind: 'switch',
-        help: 'plant the faults the checks must catch: the glint shown as the bow is drawn, and taken away at full '
-          + 'draw',
+        help: 'plant the faults the checks must catch: the glint and the crosshair\'s bold shown as the bow is '
+          + 'drawn and taken away at full draw, and the crosshair\'s beat with motion reduced',
       },
       at: SETUP_OPTIONS.at,
       facing: SETUP_OPTIONS.facing,

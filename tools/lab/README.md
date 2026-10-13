@@ -291,9 +291,14 @@ terminal's task stops it all.
   10,000 of the frame's pixels in any view (as glow particles it lit none through the eyes), a patch of glare over
   0.55 in 10,000 (a star of light on the arrowhead glared in one of 0.64 to 3.6, and was too bright, and motes bright
   enough to bloom merged into blobs of 0.9 to 1.6; the motes' specks are 0.41 at most) and a shader compiled meanwhile
-  are problems. `--pictures` (on by default) pictures each shot held at full at its most glaring moment, the screen
-  whole and its arrowhead close, into `out/draw`; `--canary` shows the glint from half the draw and takes it away once
-  the draw is full.
+  are problems. In the close views the crosshair is read every frame too (`page/crosshair.ts`: its lines' thickness as
+  the page's styles draw them, and its animations): bold held at full draw on 90% of the frames, on none before it or
+  with nothing drawn, and one beat into it, run once and swelling (the page's motion is let run meanwhile,
+  `lab.reduceMotion`); with motion reduced it comes to bold with no beat. `--pictures` (on by default) pictures each
+  shot held at full at its most glaring moment, the screen whole and its arrowhead close, and the crosshair as it's
+  drawn, at its beat's height (held there: the beat runs on the page's clock) and bold, into `out/draw`; `--canary`
+  shows the glint and the crosshair's bold from half the draw, takes them away once the draw is full, and leaves the
+  motion on for the reduced check.
 - `gear`: full sets of gear rolled for every class as its loot rolls them (`page/gear.ts`, `--sets` each, 400 by
   default), at each tier (`--tiers`, a rarity at an item level each: `magic@5,rare@15,epic@30,legendary@50`), and
   what a set gives on average: Health (his own and the gear's, and the gear's against the mage's), regeneration a
@@ -417,6 +422,10 @@ What the lab gives a probe (`page/lab.ts`):
 - `await lab.click(at)` and `lab.press(code)`: a click of the mouse's left button on the page (css px) and a key
   (`KeyW`, `Space`) as a mouse and a keyboard give them, sent through the DevTools protocol, so the browser handles
   them as a player's, the focus with them (a script's `click()` and events moved none and showed no focus ring);
+- `await lab.reduceMotion(reduced)`: the page's `prefers-reduced-motion` as the browser emulates it. Every page opens
+  with it reduced (the page's decorative animation left out); a measure of such an animation (the crosshair's beat,
+  `draw`) lets it run and puts it back as it ends. CSS's animations run on the page's clock, not the lab's: read them
+  with `getAnimations()`, and hold one at a moment to picture it;
 - in `page/geometry.ts`, the body's meshes skinned into the world as drawn (`BakedBody`), what a line crosses among
   them (`crossingsAlong`), and the distance between segments (`segmentDistance`).
 
@@ -498,7 +507,8 @@ out a level apart in a few pixels, the GPU's own rounding). What it takes:
   counts from a lab frame;
 - `Math.random` seeded, started again as each command starts (after its modules are imported, in the same task:
   each three.js object made draws a random number for its id, and textures land from the workers while a module
-  loads) and at each set-up; timers' callbacks draw from a stream of their own, since they fire by the browser's clock;
+  loads) and at each set-up, and as a hero's profile is found missing, just before a new one rolls its gear; timers'
+  callbacks draw from a stream of their own, since they fire by the browser's clock;
 - the game's clock moved forward to the next whole minute at a set-up, storage and cookies cleared at each boot, one
   page alive at a time, and every command on a page booted for it.
 
@@ -517,7 +527,10 @@ Each of these was found as a cause of runs that differed:
 - the random numbers started again before a command's imports rather than after (one boot in four, the haze and
   pollen spawned before its set-up lay elsewhere in its pictures);
 - the first lab frame measured from the game's last real frame, a browser frame earlier on some boots (every
-  emitter's bursts a frame early or late, one boot in three).
+  emitter's bursts a frame early or late, one boot in three);
+- the default profile rolled from wherever the boot had left the sequence: a commit that made one more three.js
+  object as its modules loaded rolled the ranger another bow and 2 less Health than main, so every A/B of him
+  compared two heroes (`ui --ab` differed in 11 of 12 pictures).
 
 To find where two runs part, record each frame's state and each random draw's caller in a probe and compare boots
 (two fresh boots, `--setup=false`, the probe setting up itself): the first frame or draw that differs names the cause.

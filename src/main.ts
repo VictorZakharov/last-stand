@@ -424,6 +424,8 @@ function update(dt: number): void {
   particles.update(dt); perfLap('particles');
   updateTimers(dt); perfLap('timers');
   updateFloaters(dt); perfLap('floaters');
+  // the crosshair bold while a drawn shot is held at full draw, swelling into it once (its arrowhead glints then too)
+  crosshair.classList.toggle('full', G.player.drawnFull);
 }
 
 /**

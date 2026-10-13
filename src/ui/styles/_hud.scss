@@ -89,11 +89,18 @@
 @keyframes sp-bump { from { transform: scale(1.5); text-shadow: 0 0 10px currentColor; } }
 @media (prefers-reduced-motion: reduce) { .sp-r.bump { animation: none; } }
 
-/* the close views (V): a crosshair at the centre, and the click that takes the mouse for looking */
-#crosshair { position: absolute; left: 50%; top: 50%; width: hud(22px); height: hud(22px); transform: translate(-50%, -50%); }
-#crosshair::before, #crosshair::after { content: ''; position: absolute; filter: drop-shadow(0 0 hud(1.5px) #000); --c: rgba(255, 240, 210, 0.9); }
-#crosshair::before { left: 50%; top: 0; bottom: 0; width: hud(2px); margin-left: hud(-1px); background: linear-gradient(var(--c) 0 35%, transparent 35% 65%, var(--c) 65%); }
-#crosshair::after { top: 50%; left: 0; right: 0; height: hud(2px); margin-top: hud(-1px); background: linear-gradient(90deg, var(--c) 0 35%, transparent 35% 65%, var(--c) 65%); }
+/* the close views (V): a crosshair at the centre, and the click that takes the mouse for looking. Bold while a drawn
+   shot is held at full draw (`.full`, main.ts), swelling into it once as a heart knocks, never pulsing on; on a layer
+   of its own, so the swell is the compositor's alone (a page element moved every frame repaints round it) */
+#crosshair { position: absolute; left: 50%; top: 50%; width: hud(22px); height: hud(22px); transform: translate(-50%, -50%);
+  will-change: transform; --w: #{hud(2px)}; --c: rgba(255, 240, 210, 0.9); }
+#crosshair.full { --w: #{hud(3.5px)}; --c: rgb(255, 240, 210); animation: crosshair-beat .3s; }
+#crosshair::before, #crosshair::after { content: ''; position: absolute; filter: drop-shadow(0 0 hud(1.5px) #000); }
+#crosshair::before { left: 50%; top: 0; bottom: 0; width: var(--w); margin-left: calc(var(--w) / -2); background: linear-gradient(var(--c) 0 35%, transparent 35% 65%, var(--c) 65%); }
+#crosshair::after { top: 50%; left: 0; right: 0; height: var(--w); margin-top: calc(var(--w) / -2); background: linear-gradient(90deg, var(--c) 0 35%, transparent 35% 65%, var(--c) 65%); }
+/* (a heart's knock: a quick swell and a settle, as the downed partner's marker beats, ui/coop.ts) */
+@keyframes crosshair-beat { 0% { scale: 1; animation-timing-function: ease-out; } 35% { scale: 1.5; animation-timing-function: ease-out; } 100% { scale: 1; } }
+@media (prefers-reduced-motion: reduce) { #crosshair.full { animation: none; } }
 #look-hint { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); padding: 0.5em 1em; border-radius: 6px; background: rgba(8, 8, 14, 0.75); color: #f0e6d0; font-size: hud(15px); white-space: nowrap; }
 #banner { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); text-align: center; animation: banner 2.8s ease forwards; }
 .b-title { font-family: var(--font-display); font-size: 54px; font-weight: 900; letter-spacing: 4px; color: #f3e1b0;

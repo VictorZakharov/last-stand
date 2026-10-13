@@ -18,6 +18,7 @@ import { showLaser, warmLaser, LASER_POINTS } from '../../fx/aimLaser';
 import { arrowMat, stickAt, stickIn, glance, floorIsStone, propIsStone, propSurface, wallIsStone, warmStuck, SINK } from '../../fx/stuckArrows';
 import { pastWall } from '../../world/edge';
 import { clamp, rand } from '../../util';
+import { FULL_DRAW } from '../../data/balance';
 import type { Obstacle } from '../../types';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
@@ -220,8 +221,6 @@ function previewShot(player: Player, def: BowDef, k: number, radius: number, lev
 const TRACE = 14, TRACE_FADE = 0.3;
 const GLINT = 0xf3dc9a;
 
-/** a drawn shot counts as drawn to full from here (of its draw's time) */
-const FULL = 0.98;
 /** how far each hero's shot was drawn last frame (its ready sound as it reaches full) */
 const drawnTo = new WeakMap<Player, number>();
 /**
@@ -234,9 +233,9 @@ const drawnTo = new WeakMap<Player, number>();
 function drawGlint(player: Player, k: number): void {
   const was = drawnTo.get(player) ?? 0;
   drawnTo.set(player, k);
-  if (k < FULL) return;
+  if (k < FULL_DRAW) return;
   glintMotes(player);
-  if (was < FULL && player.local) sfx.bowReady();
+  if (was < FULL_DRAW && player.local) sfx.bowReady();
 }
 
 export const bowShot: InstantSkill = {
@@ -283,7 +282,7 @@ export const piercingShot: InstantSkill = {
   },
   cast(player, rawDef, target, power) {
     const def = rawDef as BowDef & Needs<'falloff'>, origin = player.castPoint, pull = pullAt(power), v = arrowSpeed(def, power);
-    const full = power >= FULL;
+    const full = power >= FULL_DRAW;
     drawnTo.delete(player);
     const damage = def.damage * pull * pull * (full ? 1 + (def.fullBonus ?? 0) : 1), knock = (def.knock ?? 0) * pull;
     const dir = shotDir(player.shotHeading(origin, target), launchPitch(origin, target, v));

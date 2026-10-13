@@ -59,6 +59,10 @@ export const RUN = {
  *  Raised, it blocks every hit within `arc` radians of the facing with no recovery, until a hit
  *  bigger than it can hold breaks the guard: the character staggers for `guardBreak` seconds, able
  *  to move but not to block, attack or cast. */
+/** a drawn shot counts as drawn to full from this share of its draw's time: its arrowhead glints, the crosshair is
+ *  bold, and Lancewood Shot strikes harder */
+export const FULL_DRAW = 0.98;
+
 export const BLOCK = { recovery: 0.7, arc: 1.4, guardBreak: 1.5 };
 
 /** Co-op: party size, reviving a downed teammate, and how much more the arena throws at a party. */

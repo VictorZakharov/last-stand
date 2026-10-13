@@ -1,11 +1,12 @@
 // Every drawn shot of the hero's class (tools/lab `draw`; `SkillDef.draw`, src/combat/skills/ranger.ts `drawGlint`)
 // drawn to full and held there as the player holds it, its key down over an aim ahead, in one of the game's views.
-// Every frame its motes on the arrowhead are read (src/fx/glintMotes.ts): they must draw in onto it as it's drawn, and
-// held at full it must keep glinting until it's loosed (a burst as it came to full and nothing after read as the
-// charge gone). With no shot drawn, nothing may glint there. Held at full, the glint is judged as the player sees it
-// in the view (page/addedLight.ts: the frame drawn with it and without it, round the arrowhead): seen, and not bright.
-// As glow particles they fade out within 3.5 m of the camera, and through the eyes nothing of them showed; a star of
-// light on the arrowhead was seen in every view, and was too bright.
+// Every frame its motes on the arrowhead are read (src/fx/glintMotes.ts): none may show as it's drawn (the light says
+// the draw is full), and held at full it must keep glinting until it's loosed (a burst as it came to full and nothing
+// after read as the charge gone). With no shot drawn, nothing may glint there. Held at full, the glint is judged as the
+// player sees it in the view (page/addedLight.ts: the frame drawn with it and without it, round the arrowhead): seen,
+// and not bright. As glow particles they fade out within 3.5 m of the camera, and through the eyes nothing of them
+// showed; a star of light on the arrowhead was seen in every view, and was too bright. In the close views the
+// crosshair is read too (page/crosshair.ts): bold held at full draw alone, swelling into it once.
 import * as THREE from 'three';
 import type { Fixture, Frame, Lab, Pictured, Report } from './lab';
 import { screenArea } from './lab';
@@ -17,13 +18,20 @@ import { ARROW } from '../../../src/entities/models/bow';
 import { addedRound, type Added } from './addedLight';
 import { glintMotes, glintShown } from '../../../src/fx/glintMotes';
 import { lateCompiles } from '../../../src/core/shaders';
+import { FULL_DRAW } from '../../../src/data/balance';
+import {
+  CrosshairWatch, boldWithMotionReduced, crosshairProblems, crosshairShown, describeCrosshair, describeReduced,
+  forceBold, pictureBeat, pictureCrosshair, reducedProblems, type CrosshairFrames, type ShotFrames,
+} from './crosshair';
 
 export interface DrawOptions {
   /** the set-up, its view among it */
   fixture: Fixture;
-  /** each shot pictured held at full draw, at its most glaring moment */
+  /** each shot pictured held at full draw, at its most glaring moment, and the crosshair as it's drawn, at its
+   *  beat's height and bold */
   pictures: boolean;
-  /** plant the faults the checks must catch: the glint shown as the bow is drawn, and taken away once it's full */
+  /** plant the faults the checks must catch: the glint and the crosshair's bold shown as the bow is drawn, taken
+   *  away once it's full, and the crosshair's beat with motion reduced */
   canary: boolean;
 }
 
@@ -34,8 +42,6 @@ const IDLE_FRAMES = 30;
 const FULL_FRAMES = 120;
 /** the most frames a shot may take to come to full draw (its arrow taken from the quiver first) */
 const DRAW_FRAMES = 240;
-/** a drawn shot counts as drawn to full from here (of its draw's time: the game's own) */
-const FULL = 0.98;
 /** how strongly the motes must show for the arrowhead to count as glinting (0 to 1) */
 const SHOWN = 0.05;
 /** the share of the frames at full draw that must glint, and the longest it may go without (frames) */
@@ -132,6 +138,8 @@ interface Drawn {
   /** what the glint added to the frame round the arrowhead held at full, at its least seen and its brightest over the
    *  moments it was judged */
   seen: Added | null;
+  /** what the crosshair did (none in a view without it) */
+  crosshair: CrosshairFrames | null;
 }
 
 /** The glint held at full draw pictured: the screen as the player sees it, and close round the arrowhead. */
@@ -158,29 +166,43 @@ async function drawToFull(
   const aim = hero.pos.clone().addScaledVector(ahead, AIM_AHEAD);
   const drawn: Drawn = {
     idleGlinting: 0, drawingFrames: 0, drawingGlinting: 0, fullFrames: 0, fullGlinting: 0, longestGap: 0, seen: null,
+    crosshair: null,
   };
+  let watch: CrosshairWatch | null | undefined;
   await lab.step(IDLE_FRAMES, () => ({ aim }), () => {
     if (glinting(hero)) drawn.idleGlinting++;
+    if (watch === undefined) watch = crosshairShown() ? new CrosshairWatch() : null;
+    watch?.frame('idle');
   });
+  drawn.crosshair = watch?.frames ?? null;
   let gap = 0;
   const moments: Pictured[] = [];
+  const crosshairMoments: Pictured[] = [];
+  const label = `${shot.name}, ${String(options.fixture.view)}`;
   for (let frame = 0; drawn.fullFrames < FULL_FRAMES; frame++) {
     if (frame > DRAW_FRAMES + FULL_FRAMES) throw new Error(`lab: draw: ${shot.name} never came to full draw`);
     await lab.step(1, () => holding(shot.key, aim));
     const share = drawnShare(hero);
-    if (share < FULL) {
+    if (share < FULL_DRAW) {
       drawn.drawingFrames++;
       if (glinting(hero)) drawn.drawingGlinting++;
-      if (options.canary && share >= CANARY_FROM) glintMotes(hero);
+      const half = share >= CANARY_FROM;
+      if (options.canary && half) plantEarly(hero);
+      watch?.frame('drawing');
+      if (watch && options.pictures && half && !crosshairMoments.length) {
+        crosshairMoments.push(await pictureCrosshair(lab, `${label}: the crosshair as it's drawn`));
+      }
       continue;
     }
-    if (options.canary) {
-      for (const mesh of motes()) mesh.visible = false;
-    }
+    if (options.canary) takeAway();
     drawn.fullFrames++;
     gap = glinting(hero) ? 0 : gap + 1;
     if (!gap) drawn.fullGlinting++;
     drawn.longestGap = Math.max(drawn.longestGap, gap);
+    watch?.frame('full');
+    if (watch && options.pictures && drawn.fullFrames === 1) {
+      crosshairMoments.push(...await pictureBeat(lab, `${label}: the crosshair come to full draw`));
+    }
     if (!SEEN_FRAMES.includes(drawn.fullFrames)) continue;
     const seen = addedRound(lab, arrowHeadOf(hero, head), hideGlint);
     // (pictured again at each moment glaring more than all before it, so its worst is what's seen)
@@ -191,7 +213,19 @@ async function drawToFull(
   }
   await lab.step(1, () => ({ aim }));
   await lab.until(() => !hero.casting, DRAW_FRAMES, `${shot.name}'s shot never ended`);
-  return { drawn, moments };
+  return { drawn, moments: [...moments, ...crosshairMoments] };
+}
+
+/** The canary's early faults: the glint and the crosshair's bold shown as the bow is drawn. */
+function plantEarly(hero: Player): void {
+  glintMotes(hero);
+  forceBold(true);
+}
+
+/** The canary's faults at full draw: the glint and the crosshair's bold taken away. */
+function takeAway(): void {
+  for (const mesh of motes()) mesh.visible = false;
+  forceBold(false);
 }
 
 /** Two moments' glint as one: the least it was seen at either and its brightest at either. */
@@ -216,6 +250,11 @@ function describeSeen(seen: Added | null): string {
     + `${seen.strongest.toFixed(2)} of white at the brightest, ${where}`;
 }
 
+/** The frames a shot drew in each phase. */
+function shotFrames(drawn: Drawn): ShotFrames {
+  return { idle: IDLE_FRAMES, drawing: drawn.drawingFrames, full: drawn.fullFrames };
+}
+
 /** The shot's frames as lines. */
 function describeDrawn(shot: DrawnShot, drawn: Drawn): string[] {
   return [
@@ -224,6 +263,7 @@ function describeDrawn(shot: DrawnShot, drawn: Drawn): string[] {
       + `${drawn.fullGlinting} of ${drawn.fullFrames}, ${drawn.longestGap} frames without at the longest`,
     `  held at full, as the player sees it (the least seen and the brightest of ${SEEN_FRAMES.length} moments): `
       + describeSeen(drawn.seen),
+    describeCrosshair(drawn.crosshair, shotFrames(drawn)),
   ];
 }
 
@@ -251,9 +291,61 @@ function drawnProblems(shot: DrawnShot, drawn: Drawn, view: string): string[] {
   return problems;
 }
 
+/** The canary's lines and its misses: whether each fault it planted was caught by the checks' problems. */
+function canaryCaught(
+  shot: DrawnShot, drawn: Drawn, view: string, glint: string[], crosshair: string[],
+): { lines: string[]; missed: string[] } {
+  const lines: string[] = [];
+  const missed: string[] = [];
+  const caught = (found: string[], phrase: string) => found.some((problem) => problem.includes(phrase));
+  const word = (found: boolean) => (found ? 'caught' : 'missed');
+  const miss = (fault: string) => missed.push(`${shot.name}, ${view}: the canary's ${fault} went unseen`);
+  const takenAway = caught(glint, 'at full draw');
+  const seenAway = caught(glint, 'hardly seen');
+  lines.push(`  canary, the glint taken away at full draw: ${word(takenAway)}, `
+    + `as the player sees it ${word(seenAway)}`);
+  if (!takenAway) miss('glint taken away at full draw');
+  if (!seenAway && drawn.seen?.onScreen) miss('glint taken away, on the screen,');
+  const early = caught(glint, 'before the draw was full');
+  lines.push(`  canary, the glint shown as the bow is drawn: ${word(early)}`);
+  if (!early) miss('glint shown as it\'s drawn');
+  if (!drawn.crosshair) return { lines, missed };
+  const boldEarly = caught(crosshair, 'before the draw was full');
+  const regularAtFull = caught(crosshair, 'at full draw');
+  lines.push(`  canary, the crosshair bold as the bow is drawn: ${word(boldEarly)}; regular at full draw: `
+    + word(regularAtFull));
+  if (!boldEarly) miss('crosshair bold as it\'s drawn');
+  if (!regularAtFull) miss('crosshair regular at full draw');
+  return { lines, missed };
+}
+
+/** The crosshair with motion reduced judged, in a view that shows it: its lines and problems (with `canary`, the
+ *  canary's line and a problem if it went unseen). */
+async function judgeReduced(lab: Lab, view: string, canary: boolean): Promise<{ lines: string[]; problems: string[] }> {
+  if (!crosshairShown()) return { lines: [], problems: [] };
+  const reduced = await boldWithMotionReduced(lab, new CrosshairWatch(), canary);
+  const found = reducedProblems(reduced).map((problem) => `${view}: ${problem}`);
+  const lines = [describeReduced(reduced)];
+  if (!canary) return { lines, problems: found };
+  const caught = found.some((problem) => problem.includes('with motion reduced'));
+  lines.push(`  canary, the crosshair's beat with motion left on: ${caught ? 'caught' : 'missed'}`);
+  return { lines, problems: caught ? [] : [`${view}: the canary's beat with motion left on went unseen`] };
+}
+
 /** `lab draw`, one view: each of the hero's drawn shots drawn to full and held; a problem for each check failed (and
- *  with `canary`, for a glint taken away that went unseen). */
+ *  with `canary`, for a fault planted that went unseen). The page's motion is let run meanwhile: the crosshair's beat
+ *  is decorative, and the lab opens a page with its motion reduced. */
 export async function draw(lab: Lab, options: DrawOptions): Promise<Report> {
+  await lab.reduceMotion(false);
+  try {
+    return await drawEach(lab, options);
+  } finally {
+    await lab.reduceMotion(true);
+  }
+}
+
+/** `draw`'s shots, one after another, and the crosshair with motion reduced. */
+async function drawEach(lab: Lab, options: DrawOptions): Promise<Report> {
   const shots = drawnShots();
   if (!shots.length) throw new Error(`lab: draw: the ${G.player.cls.id} has no shot drawn while held`);
   const view = String(options.fixture.view ?? 'top');
@@ -265,23 +357,19 @@ export async function draw(lab: Lab, options: DrawOptions): Promise<Report> {
     const { drawn, moments: pictured } = await drawToFull(lab, shot, options);
     lines.push(...describeDrawn(shot, drawn));
     moments.push(...pictured);
-    const found = drawnProblems(shot, drawn, view);
+    const glint = drawnProblems(shot, drawn, view);
+    const crosshair = crosshairProblems(drawn.crosshair, shotFrames(drawn));
     if (!options.canary) {
-      problems.push(...found);
+      problems.push(...glint, ...crosshair.map((problem) => `${shot.name}, ${view}: ${problem}`));
       continue;
     }
-    const caught = found.some((problem) => problem.includes('at full draw'));
-    const seenCaught = found.some((problem) => problem.includes('hardly seen'));
-    lines.push(`  canary, the glint taken away at full draw: ${caught ? 'caught' : 'missed'}, `
-      + `as the player sees it ${seenCaught ? 'caught' : 'missed'}`);
-    if (!caught) problems.push(`${shot.name}, ${view}: the canary's glint taken away at full draw went unseen`);
-    if (!seenCaught && drawn.seen?.onScreen) {
-      problems.push(`${shot.name}, ${view}: the canary's glint taken away went unseen on the screen`);
-    }
-    const earlyCaught = found.some((problem) => problem.includes('before the draw was full'));
-    lines.push(`  canary, the glint shown as the bow is drawn: ${earlyCaught ? 'caught' : 'missed'}`);
-    if (!earlyCaught) problems.push(`${shot.name}, ${view}: the canary's glint shown as it's drawn went unseen`);
+    const canary = canaryCaught(shot, drawn, view, glint, crosshair);
+    lines.push(...canary.lines);
+    problems.push(...canary.missed);
   }
+  const reduced = await judgeReduced(lab, view, options.canary);
+  lines.push(...reduced.lines);
+  problems.push(...reduced.problems);
   const compiled = lateCompiles.slice(compiledBefore);
   lines.push(`shaders compiled meanwhile: ${compiled.length}`, ...compiled.map((program) => `  ${program}`));
   if (compiled.length) problems.push(`${view}: ${compiled.length} shaders compiled while drawing (not at load)`);

@@ -118,7 +118,10 @@ function labClock() {
  * both sides of an A/B carry the same gear. `window.__labSeed(n)` starts the sequence again, as each set-up does.
  * What runs in a timer's callback draws from a stream of its own: timers fire by the browser's clock, and the
  * loading screen's tips, picked every 6 s, took numbers from the sequence as many times as the boot was long, so a
- * slower boot rolled other weapons (the two sides of a commit compared with itself had 360 and 392 energy).
+ * slower boot rolled other weapons (the two sides of a commit compared with itself had 360 and 392 energy). And the
+ * sequence starts again as a hero's profile is found missing, just before a new one is rolled (src/loot/profile.ts),
+ * so its gear is the seed's alone: every three.js object made draws numbers for its id, and a commit that made one
+ * more as its modules loaded rolled the ranger another bow and 2 less Health than main, every A/B of him two heroes.
  */
 function seededRandom() {
   // mulberry32
@@ -139,6 +142,16 @@ function seededRandom() {
   const timerStream = generator(0x85ebca6b);
   window.__labSeed = (seed) => sequence.reseed(seed);
   Math.random = sequence;
+  // (a hero's profile by its key: last-stand.profile.ranger.v1, a save slot's last-stand.s2.profile.ranger.v1, the
+  // older last-stand.profile.v1)
+  const profileKey = /^last-stand(\.s\d)?\.profile\./;
+  const profileSeed = 0x27d4eb2f;
+  const readItem = Storage.prototype.getItem;
+  Storage.prototype.getItem = function (key) {
+    const value = readItem.call(this, key);
+    if (value === null && profileKey.test(key)) sequence.reseed(profileSeed);
+    return value;
+  };
 
   const ownStream = (callback) => function (...args) {
     const random = Math.random;
