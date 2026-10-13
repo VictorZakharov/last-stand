@@ -3,6 +3,14 @@ export const TAU = Math.PI * 2;
 export const rand = (a = 0, b = 1): number => a + Math.random() * (b - a);
 export const randInt = (a: number, b: number): number => Math.floor(rand(a, b + 1));
 export const pick = <T>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)];
+/** Shuffles `arr` in place (Fisher-Yates) and returns it. */
+export function shuffle<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 export const clamp = (v: number, a: number, b: number): number => (v < a ? a : v > b ? b : v);
 export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 export const damp = (a: number, b: number, lambda: number, dt: number): number => lerp(a, b, 1 - Math.exp(-lambda * dt));

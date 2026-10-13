@@ -189,6 +189,27 @@ terminal's task stops it all.
   divided by the finger's whole distance, so half a screen out the hero walked at a seventh of his speed. `--canary`
   slides the furthest push's finger back to 20 px before it's read. Try it on a phone too
   (`--screen 844x390@3`): the stick is drawn at the touch controls' scale, and so is its travel.
+- `spawns`: the foes coming in. Boss waves (the 5th, 10th, 15th and 20th in turn, `--waves 32` in each biome,
+  `--biomes`) are set off one after another, each from a seed of its own (every set-up seeds the same numbers, which
+  would roll the same gates), the hero at the arena's middle (`--at`). Every foe is read as it rises: the gate it
+  came by, how far into the arena and to the side of the gate's middle, and its room from the props and the edge. The
+  first group is left standing, each of its foes timed as it comes within its reach of the hero (its range and his
+  body, as the AI strikes within), as the boss's time is reckoned from it; a later group is taken out once its last
+  foe has risen, and the next called at once. The boss's summons are held off (they rise round it, not by a gate).
+  The report says each gate's share of the foes, how many groups came by one, two, three and four gates and the
+  packs' sizes (a number of gates no group came by, though enough had foes for it, is a problem, as is a gate sent
+  under half its share), the waves that left a gate idle though their packs were enough for all four, the spots and
+  the least room, the gates the bosses came by, whether each boss rose after its
+  wave's first group and when against that group reaching the hero, and from each gate the first boss's walk to the
+  hero (how long from its rise it took to come within its slam's reach). Each of those is a problem when it's wrong,
+  as is a foe risen inside a prop or a boss outside its time (`bossJitter` either way, and 1.5 s for the game's
+  estimate, a straight walk at each foe's wave's pace). Then waves 1, 5 and 10 are played at the game's own pace, each
+  foe taken out as it reaches the hero, as a player killing each one as it comes: when each group came, its foes, and
+  when the wave was over (the same seed needn't give main the same foes, as the waves before leave the clock
+  elsewhere). On main each group came by two gates picked at random, often one twice, every boss in the first group
+  by one gate, and by the Thornwood's west gate foes rose in a log. `--canary`, in the first biome: every foe read
+  again moved onto one gate, the first half into a prop, and waves of their own with the boss put first, come late
+  and frozen where it rose.
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`).
 - `status`, `stop`: what the server serves and has booted; stop it.
 - `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films), the
@@ -282,6 +303,8 @@ What the lab gives a probe (`page/lab.ts`):
 - `lab.spawnFoe(type, at, options)`: a foe for a measure that needs one (a mark, a lure; `options` as the game's
   `EnemyOpts`: a hero foe with its name, say), which the set-up keeps while it clears every other until the next
   set-up; it rises first as a spawned foe does (`Enemy.spawning`), and a training dummy (`dummy`) stands still;
+- `lab.letWavesCome()`: the run's waves let come until the next set-up, the hero still kept whole; a measure sets one
+  off itself (`G.run.wave`, its `timer` to 0) and reads its foes as they rise;
 - `lab.capture(views)`: pictures of this moment as PNGs (`lab.drawing = true` draws every frame instead), and
   `lab.picture(label, views, notes)` one moment of a report's `moments`: the lab writes them as a sheet
   (`out/probes/<probe>/sheet.png`) and compares them in an A/B, as the sheet's (to see the frames a measure flagged,

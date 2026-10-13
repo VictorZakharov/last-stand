@@ -12,6 +12,7 @@ import { form as formRound, type FormOptions } from './form';
 import { ui as uiRound, type UiOptions } from './ui';
 import { touchStick, type TouchOptions } from './touchStick';
 import { light as lightRound, type LightOptions } from './light';
+import { spawns as spawnsRound, type SpawnsOptions } from './spawns';
 
 export interface SheetCommand {
   states: string[];
@@ -112,6 +113,15 @@ export function touch(lab: Lab, command: TouchOptions): Promise<Report> {
  */
 export function light(lab: Lab, command: LightOptions): Promise<Report> {
   return lightRound(lab, command);
+}
+
+/**
+ * `lab spawns`: waves in each biome, and how every foe came in: its gate, its group's gates and the spot it rose on,
+ * and the boss's walk to the hero from each gate; a gate left idle, a foe risen in a prop, a boss that never reached
+ * the hero and a canary missed are problems.
+ */
+export function spawns(lab: Lab, command: SpawnsOptions): Promise<Report> {
+  return spawnsRound(lab, command);
 }
 
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */

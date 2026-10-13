@@ -17,6 +17,11 @@ export function resolveWorld(pos: { x: number; z: number }, radius: number): voi
   if (r > R) { pos.x *= R / r; pos.z *= R / r; }
 }
 
+/** Does a body of `radius` at `pos` overlap a static obstacle? */
+export function inObstacle(pos: { x: number; z: number }, radius: number): boolean {
+  return G.arena.obstacles.some((o) => Math.hypot(pos.x - o.x, pos.z - o.z) < o.r + radius);
+}
+
 /** Push overlapping enemies apart (and away from the players). */
 export function separateEnemies(): void {
   const list = G.enemies;

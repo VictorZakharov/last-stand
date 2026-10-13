@@ -9,10 +9,11 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { RUN, COOP } from '../data/balance';
 import { WAVES, LOOT } from '../data/waves';
-import { ENEMIES } from '../data/enemies';
+import { ENEMIES, HERO, SCALING } from '../data/enemies';
 import { BIOMES } from '../data/biomes';
 import { spawnEnemy } from '../entities/spawner';
-import { clearEnemies } from '../entities/enemy';
+import { inObstacle, resolveWorld } from '../world/collision';
+import { clearEnemies, RISE_TIME } from '../entities/enemy';
 import { clearProjectiles } from '../combat/projectiles';
 import { clearEffects } from '../fx/effects';
 import { clearLights } from '../fx/lights';
@@ -24,13 +25,14 @@ import { clearFloaters, floatText } from '../ui/floaters';
 import { sfx } from '../core/audio';
 import { schedule, clearTimers } from '../core/timers';
 import { on, emit } from '../events';
-import { isCoop, isGuest } from '../net/role';
+import { isCoop, isGuest, nearestPlayer } from '../net/role';
 import { creditRaise, resetMine } from './stats';
-import { pick, rand, weighted } from '../util';
+import { rand, randInt, shuffle, weighted } from '../util';
 import type { EnemyId } from '../data/enemies';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
-import type { Item } from '../types';
+import type { EnemyDef, Item } from '../types';
+import type { Portal } from '../world/props';
 
 interface SpawnUnit { type: EnemyId; hero: boolean }
 
@@ -52,6 +54,12 @@ export interface RunState {
   kills: number;
   queue: SpawnUnit[][];
   nextGroupT: number;
+  /** the packs of foes each gate has sent this wave (by the arena's portals), and how many foes have come */
+  packs: number[];
+  dealt: number;
+  /** the wave's boss while it is still to come, and the seconds it comes in once the wave's first group has come */
+  boss: SpawnUnit | null;
+  bossT: number;
   pending: number;
   remaining: number;
   /** players in the run as the wave started (it sizes the wave), and who chose Continue after it */
@@ -118,7 +126,8 @@ export function startRun(wave = 1): void {
   G.run = {
     wave, phase: 'countdown', timer: RUN.countdown, waveTime: 0,
     bag: [], score: 0, multiplier: 1, multKills: 0, multTimer: 0, kills: 0,
-    queue: [], nextGroupT: 0, pending: 0, remaining: 0, party: 1, votes: new Set(), summarized: false,
+    queue: [], nextGroupT: 0, packs: [], dealt: 0, boss: null, bossT: 0,
+    pending: 0, remaining: 0, party: 1, votes: new Set(), summarized: false,
     started: G.time, tallied: false,
   };
   G.profile.records.runs++;
@@ -149,14 +158,14 @@ function tally(r: RunState): void {
 /** The players still in the run (standing or downed). */
 const inRun = (): Player[] => G.players.filter((p) => p.inRun);
 
+/** The wave's foes but its boss (`bossOf`), in groups. */
 function buildWave(w: number): SpawnUnit[][] {
   const r = G.run!;
-  const biome = BIOMES[G.arena.biome];
-  const pool = biome.pool(w);
+  const pool = BIOMES[G.arena.biome].pool(w);
   // a party meets more foes
   let budget = WAVES.budget(w) * (1 + COOP.budgetPerPlayer * (r.party - 1));
   const units: SpawnUnit[] = [];
-  if (w % WAVES.bossEvery === 0) { units.push({ type: biome.boss, hero: false }); budget *= 0.55; }
+  if (w % WAVES.bossEvery === 0) budget *= 0.55;
   while (budget > 0) {
     const type = weighted(pool);
     budget -= ENEMIES[type].cost;
@@ -166,8 +175,13 @@ function buildWave(w: number): SpawnUnit[][] {
   // split into groups
   const groups = WAVES.groups(w);
   const out: SpawnUnit[][] = Array.from({ length: groups }, () => []);
-  units.forEach((u, i) => out[ENEMIES[u.type].boss ? 0 : i % groups].push(u));
+  units.forEach((u, i) => out[i % groups].push(u));
   return out.filter((g) => g.length);
+}
+
+/** The wave's boss, on a boss wave. */
+function bossOf(w: number): SpawnUnit | null {
+  return w % WAVES.bossEvery === 0 ? { type: BIOMES[G.arena.biome].boss, hero: false } : null;
 }
 
 function startWave(): void {
@@ -177,29 +191,108 @@ function startWave(): void {
   r.party = Math.max(1, inRun().length);
   r.queue = buildWave(r.wave);
   r.nextGroupT = 0;
+  r.boss = bossOf(r.wave);
+  r.bossT = 0;
+  r.packs = G.arena.portals.map(() => 0);
+  r.dealt = 0;
   sfx.waveStart();
   emit('waveStarted', r.wave);
 }
 
+/** how many spots a foe's rise is drawn from before it takes the last, pushed out of what it's in */
+const RISE_TRIES = 8;
+
+/**
+ * Where a foe of `radius` rises by `portal`: 0.5 to 3.5 m into the arena and up to 3 m to either side of the gate's
+ * middle, a boss 2 m further in and in the middle (it's nearly as wide as the gate), drawn again while the spot is in
+ * a prop: risen inside one, it was shoved out in a frame as it first moved (by the Thornwood's west gate, out of a
+ * log, and pushed out of one of the log's circles a foe can land in the next).
+ */
+function riseSpot(portal: Portal, radius: number, boss: boolean): THREE.Vector3 {
+  const side = new THREE.Vector3(-portal.dir.z, 0, portal.dir.x);
+  const pos = new THREE.Vector3();
+  for (let i = 0; i < RISE_TRIES; i++) {
+    pos.copy(portal.pos)
+      .addScaledVector(portal.dir, rand(0.5, 3.5) + (boss ? 2 : 0))
+      .addScaledVector(side, boss ? 0 : rand(-3, 3));
+    if (!inObstacle(pos, radius)) break;
+  }
+  resolveWorld(pos, radius);
+  return pos;
+}
+
+/** the seconds between two foes of a group coming */
+const SPAWN_GAP = 0.09;
+
+/**
+ * How long a foe of `def` rising at `pos` in wave `w` takes to come within its reach of the nearest player (s): its
+ * rise, then a straight walk at its wave's pace (each foe's own is a few percent either way, and a prop in the way
+ * makes a walk longer).
+ */
+function reachIn(def: EnemyDef, pos: THREE.Vector3, w: number): number {
+  const p = nearestPlayer(pos.x, pos.z);
+  if (!p) return RISE_TIME;
+  const walk = Math.max(0, Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z) - def.range - p.radius);
+  return RISE_TIME + walk / (def.speed * SCALING.speed(w));
+}
+
+/**
+ * When the boss comes after the wave's first group came (s): as that group's foes would reach the players on
+ * average (`reaches`, each from the group's coming), give or take `bossJitter`, never before the last of them is up
+ * (`risen`).
+ */
+function bossAt(reaches: number[], risen: number): number {
+  const mean = reaches.reduce((sum, t) => sum + t, 0) / reaches.length;
+  return Math.max(risen, mean + rand(-WAVES.bossJitter, WAVES.bossJitter));
+}
+
+/** `count` foes cut at random into `packs` packs of one foe at least: each pack's size. */
+function packSizes(count: number, packs: number): number[] {
+  const cuts = shuffle(Array.from({ length: count - 1 }, (_, i) => i + 1)).slice(0, packs - 1).sort((a, b) => a - b);
+  return [...cuts, count].map((cut, i, all) => cut - (i ? all[i - 1] : 0));
+}
+
+/** `count` gates for a group: those the wave has sent fewest packs by first, at random among equals. */
+function gatesFor(r: RunState, count: number): number[] {
+  const order = shuffle(G.arena.portals.map((_, i) => i));
+  return order.sort((a, b) => r.packs[a] - r.packs[b]).slice(0, count);
+}
+
+/**
+ * A group comes by a gate whole, or split over two, three or four, at random, in packs of random sizes, each pack
+ * rising at its gate as the others do; the gates the wave has used least first, so none stands idle for a wave
+ * (picked at random, two a group, often one twice, two or three were; dealt round all four one foe a gate, every group
+ * came alike). The boss alone comes by any gate.
+ */
 function spawnGroup(group: SpawnUnit[]): void {
   const portals = G.arena.portals;
-  const used = [pick(portals), pick(portals)];
   const r = G.run!;
+  // (the wave's first group sets the boss's time)
+  const first = r.dealt === 0 && r.boss !== null;
+  const lone = group.length === 1 && !!ENEMIES[group[0].type].boss;
+  const sizes = lone ? [1] : packSizes(group.length, randInt(1, Math.min(portals.length, group.length)));
+  const gates = lone ? [randInt(0, portals.length - 1)] : gatesFor(r, sizes.length);
+  const reaches: number[] = [];
   const lifeMult = 1 + COOP.lifePerPlayer * (r.party - 1);
   r.pending += group.length;
-  group.forEach((u, i) => {
-    const boss = !!ENEMIES[u.type].boss;
-    const portal = boss ? portals[1] : used[i % 2];
-    portal.pulse();
-    const side = new THREE.Vector3(-portal.dir.z, 0, portal.dir.x);
-    const pos = portal.pos.clone()
-      .addScaledVector(portal.dir, rand(0.5, 3.5) + (boss ? 2 : 0))
-      .addScaledVector(side, rand(-3, 3));
-    schedule(i * 0.09, () => {
-      r.pending--;
-      if (G.run === r && r.phase === 'fighting') spawnEnemy(u.type, pos, { wave: r.wave, hero: u.hero, lifeMult });
-    });
+  let next = 0;
+  sizes.forEach((size, pack) => {
+    const portal = portals[gates[pack]];
+    r.packs[gates[pack]]++;
+    for (let j = 0; j < size; j++) {
+      const u = group[next++];
+      const def = ENEMIES[u.type];
+      portal.pulse();
+      const pos = riseSpot(portal, def.radius * (u.hero ? HERO.scale : 1), !!def.boss);
+      if (first) reaches.push(j * SPAWN_GAP + reachIn(def, pos, r.wave));
+      schedule(j * SPAWN_GAP, () => {
+        r.pending--;
+        if (G.run === r && r.phase === 'fighting') spawnEnemy(u.type, pos, { wave: r.wave, hero: u.hero, lifeMult });
+      });
+    }
   });
+  r.dealt += group.length;
+  if (first) r.bossT = bossAt(reaches, (Math.max(...sizes) - 1) * SPAWN_GAP + RISE_TIME);
 }
 
 /** The host's (or solo) run: a guest's follows the host's reports instead. */
@@ -224,7 +317,13 @@ export function updateRun(dt: number): void {
       spawnGroup(r.queue.shift()!);
       r.nextGroupT = WAVES.groupInterval;
     }
-    r.remaining = alive + r.pending + r.queue.reduce((n, g) => n + g.length, 0);
+    // the boss once the wave's first group has come, at its time (`bossAt`), or at once when the rest of the wave has
+    // all come and none of it stands
+    if (r.boss && r.dealt > 0) {
+      r.bossT -= dt;
+      if (r.bossT <= 0 || (!r.queue.length && alive + r.pending === 0)) { spawnGroup([r.boss]); r.boss = null; }
+    }
+    r.remaining = alive + r.pending + r.queue.reduce((n, g) => n + g.length, 0) + (r.boss ? 1 : 0);
     if (r.remaining === 0) waveCleared();
   } else if (r.phase === 'cleared') {
     // on to the next wave once everyone still standing chose to (a partner leaving counts too)

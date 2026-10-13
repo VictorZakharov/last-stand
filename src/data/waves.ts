@@ -7,6 +7,9 @@ export const WAVES = {
   groupInterval: 5.5,                                    // seconds between bursts
   maxAlive: (w: number) => Math.min(38, 14 + w * 2),
   bossEvery: 5,
+  // the boss comes after the wave's first group, as that group would reach the players, give or take this (s): first
+  // in, a ranger could bring it down before the rest of the wave came
+  bossJitter: 5,
   heroChance: (w: number) => (w < 3 ? 0 : Math.min(0.45, 0.12 + w * 0.03)),
 };
 
