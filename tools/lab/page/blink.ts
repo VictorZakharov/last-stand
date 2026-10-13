@@ -3,7 +3,7 @@
 // reach, at a prop, past a prop, out at the arena's edge, up onto the dais, at his own feet) it measures where the
 // preview showed he'd come out against where he did, his reach, the props and the arena's edge there, how long it all
 // took, his body coming apart and put together again, and a blow tried every frame: none may land while he crosses,
-// and one must land once he is whole. Then held through its cooldown and short of energy (page/blinkCooldown.ts): its
+// and one must land once he is whole. Then held through its cooldown and short of energy (page/heldCooldown.ts): its
 // preview red, counting the seconds down, until it would cast. Then foes near where he vanishes and foes further off:
 // the near ones must stand dazed for their time, stars over their heads, and come on again after, and the far ones
 // keep coming all along.
@@ -17,7 +17,7 @@ import { hurtPlayer } from '../../../src/combat/damage';
 import { inObstacle } from '../../../src/world/collision';
 import { groundHeight } from '../../../src/world/arena';
 import { particles } from '../../../src/fx/particles';
-import { describeHeld, heldProblems, holdThroughCooldown } from './blinkCooldown';
+import { canaryCaught, describeHeld, heldProblems, holdThroughCooldown, meshReader } from './heldCooldown';
 
 export interface BlinkOptions {
   fixture: Fixture;
@@ -318,13 +318,15 @@ async function cooldownRound(lab: Lab, key: SkillKey, reach: number, options: Bl
   const [first] = scenarios(reach);
   const facing = await setUpFor(lab, options.fixture, first);
   const aim = first.aim(G.player.pos, facing);
-  const { held, moments } = await holdThroughCooldown(lab, key, aim, { pictures: options.pictures, canary: false });
+  const ring = meshReader('blink-preview');
+  const hold = { pictures: options.pictures, canary: false, label: 'blink' };
+  const { held, moments } = await holdThroughCooldown(lab, key, aim, ring, hold);
   lines.push(describeHeld(held));
   problems.push(...heldProblems(held));
   if (!options.canary) return moments;
   await setUpFor(lab, options.fixture, first);
-  const planted = await holdThroughCooldown(lab, key, aim, { pictures: false, canary: true });
-  const caught = heldProblems(planted.held).some((problem) => problem.includes('while it was cooling down'));
+  const planted = await holdThroughCooldown(lab, key, aim, ring, { ...hold, pictures: false, canary: true });
+  const caught = canaryCaught(planted.held);
   lines.push(`  canary, the preview read green with no countdown on its cooldown: ${caught ? 'caught' : 'missed'}`);
   if (!caught) problems.push('the canary\'s green preview on cooldown went unseen');
   return moments;

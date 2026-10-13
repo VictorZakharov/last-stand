@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { G } from '../../state';
 import { overFrame } from '../../core/renderer';
 import { uiScales } from '../scale';
+import { drawOutline } from './outline';
 import {
   atlasCrowded, atlasSide, atlasTexture, clearAtlas, fits, freeSlot, paintCanvas, takeSlot, uploadSlot, type Slot,
 } from './atlas';
@@ -246,7 +247,11 @@ function drawLabels(): void {
   gl.autoClear = auto;
   if (count === 0) mesh!.geometry.instanceCount = 0;
 }
-overFrame.draw = drawLabels;
+// (an outline round what a held skill would take, under the labels: a foe's bar and numbers stay over it)
+overFrame.draw = () => {
+  drawOutline();
+  drawLabels();
+};
 
 /** The labels drawn last frame, lowest first (tools/lab's `ui` measures their boxes). */
 export function drawnLabels(): readonly Label[] { return drawn; }

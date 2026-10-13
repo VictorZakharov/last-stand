@@ -16,6 +16,7 @@ import type { LightOptions } from './light';
 import type { SpawnsOptions } from './spawns';
 import type { HealthOptions } from './health';
 import type { BlinkOptions } from './blink';
+import type { HeldOptions } from './held';
 import type { GearOptions } from './gear';
 
 export interface SheetCommand {
@@ -157,6 +158,16 @@ export async function health(lab: Lab, command: HealthOptions): Promise<Report> 
 export async function blink(lab: Lab, command: BlinkOptions): Promise<Report> {
   const { blink: blinkRound } = await import('./blink');
   return blinkRound(lab, command);
+}
+
+/**
+ * `lab held`: each of the hero's held skills held over a foe ready and through its cooldown, its preview read as it's
+ * drawn (Quarry Mark's outline in every view); a preview missing, in the wrong look or off its countdown, a release
+ * that cast when it mustn't or didn't when it must, and an outline off its foe are problems.
+ */
+export async function held(lab: Lab, command: HeldOptions): Promise<Report> {
+  const { held: heldRound } = await import('./held');
+  return heldRound(lab, command);
 }
 
 /** `lab gear`: full sets rolled for every class at each tier, and what they give; a class out of order is a problem. */

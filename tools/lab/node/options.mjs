@@ -332,6 +332,24 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  held: {
+    help: 'every held skill of the hero\'s class held as the player holds it, over a training dummy ahead: ready, '
+      + 'its preview in its own look with no countdown and a release casting; then held through its cooldown and '
+      + 'short of energy, red and counting down until a release would cast; Quarry Mark\'s red outline round the foe '
+      + 'it would mark, over the shoulder and through the eyes too, its pixels near the foe and none away from it. A '
+      + 'preview missing, in the wrong look or off its countdown, a release casting when it mustn\'t or not when it '
+      + 'must, and an outline off its foe are problems: tools/lab/out/held (--class ranger, mage)',
+    options: {
+      pictures: { kind: 'switch', help: 'picture each preview, ready and on its cooldown (=false: the numbers alone)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant faults the checks must catch: each preview read as ready with no countdown on its cooldown, '
+          + 'Quarry Mark\'s outline drawn round the hero, and a shader compiled mid-game',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   blink: {
     help: 'the mage\'s blink cast as the player casts it (the key held over the aim, let go): on open ground, past his '
       + 'reach, at a prop, past one, out at the arena\'s edge, up onto the dais and at his feet, where the preview '

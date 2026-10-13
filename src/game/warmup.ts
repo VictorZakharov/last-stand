@@ -19,6 +19,7 @@ import { coreSamples } from '../combat/projectiles';
 import { sporeOrbSample } from '../fx/sporeOrb';
 import { riftBoltSamples } from '../fx/riftBolts';
 import { groundSamples } from './groundItems';
+import { warmOutline } from '../ui/overlay/outline';
 
 export async function warmShaders(): Promise<void> {
   const at = new THREE.Vector3(), p = { x: 0, z: 0 };
@@ -41,6 +42,8 @@ export async function warmShaders(): Promise<void> {
 
   await warmUp(G.renderer, G.scene, G.camera, sceneTarget(), extra);
   for (const m of heroes) m.dispose();
+  // (the outline a held skill draws round a foe: every foe's meshes drawn into its mask)
+  warmOutline(G.enemies.map((e) => e.obj));
 
   clearEnemies(); clearEffects(); clearLights(); particles.clear();
 }
