@@ -396,10 +396,10 @@ export const COMMANDS = {
   },
   draw: {
     help: 'every drawn shot of the hero\'s class (the ranger\'s) drawn to full and held there as the player holds it, '
-      + 'in each view, the glow particles round its arrowhead counted every frame: motes drawn in onto it as it\'s '
-      + 'drawn, and held at full it glints until it\'s loosed, seen in the view (the frame drawn with the glint and '
-      + 'without it, round the arrowhead); motes missing, a glint missing or gone at full, a glint hardly seen, and '
-      + 'one with nothing drawn are problems: tools/lab/out/draw (--class ranger)',
+      + 'in each view, the motes on its arrowhead read every frame: drawn in onto it as it\'s drawn, and held at full '
+      + 'it glints until it\'s loosed, seen in the view (the frame drawn with the glint and without it, round the '
+      + 'arrowhead, at four moments); motes missing, a glint missing or gone at full, a glint hardly seen or glaring '
+      + 'in a blob, and one with nothing drawn are problems: tools/lab/out/draw (--class ranger)',
     options: {
       views: {
         kind: 'list',

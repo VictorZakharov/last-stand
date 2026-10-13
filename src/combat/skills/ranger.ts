@@ -13,7 +13,7 @@ import { burst, debris, particles, col } from '../../fx/particles';
 import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import { arrowGeometry, ARROW, pullAt } from '../../entities/models/bow';
-import { glintFlare, warmGlintFlare } from '../../fx/glintFlare';
+import { glintMotes, warmGlintMotes } from '../../fx/glintMotes';
 import { showLaser, warmLaser, LASER_POINTS } from '../../fx/aimLaser';
 import { arrowMat, stickAt, stickIn, glance, floorIsStone, propIsStone, propSurface, wallIsStone, warmStuck, SINK } from '../../fx/stuckArrows';
 import { pastWall } from '../../world/edge';
@@ -134,7 +134,7 @@ function arrowProp(o: Obstacle, proj: Projectile, from: THREE.Vector3): boolean 
 /** An arrow's way off the bow: heading `yaw`, `pitch` above level. */
 const shotDir = (yaw: number, pitch: number): THREE.Vector3 => new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
 
-const warmArrows = (): THREE.Object3D[] => [arrowMesh(), ...warmStuck(), new THREE.Mesh(streakGeo, streakOf(GLINT, 1)), ...warmLaser(), ...warmGlintFlare()];
+const warmArrows = (): THREE.Object3D[] => [arrowMesh(), ...warmStuck(), new THREE.Mesh(streakGeo, streakOf(GLINT, 1)), ...warmLaser(), ...warmGlintMotes()];
 
 /** the aim preview's flight is stepped as the arrow's is, a frame at 60 fps (swept, as its collisions are) */
 const PREVIEW_DT = 1 / 60;
@@ -222,51 +222,31 @@ const GLINT = 0xf3dc9a;
 
 /** a drawn shot counts as drawn to full from here (of its draw's time) */
 const FULL = 0.98;
-/** how far each hero's shot was drawn last frame (the glint bursts as it reaches full) */
+/** how far each hero's shot was drawn last frame (its ready sound as it reaches full) */
 const drawnTo = new WeakMap<Player, number>();
-/** The arrowhead of the arrow on the string: the model's own (along the arrow as it lies on the string), or about half
- *  an arrow ahead of its middle along the body's facing (off by the shot's rise or fall). */
-const headOf = (player: Player, out: THREE.Vector3): THREE.Vector3 => {
-  const head = player.model.arrowHead;
-  if (head) return head.getWorldPosition(out);
-  return out.copy(player.castPoint).add(_v.set(Math.sin(player.facing), 0, Math.cos(player.facing)).multiplyScalar(ARROW * 0.45));
-};
-/** the motes drawn in onto the arrowhead a second at full draw (as at the end of the draw), and the glints that
- *  sparkle on it meanwhile (a few a second: well under a flash) */
-const MOTES = 30, HELD_GLINTS = 6;
+/** how far drawn the motes start coming in onto the arrowhead (of the draw), all of them by full draw */
+const MOTES_FROM = 0.15;
 
 /**
- * Every drawn shot's arrowhead as the bow comes to full and is held there (the shot strikes hardest at full draw,
- * Lancewood Shot harder still): motes drawn in onto it as it's drawn, a burst of glints as it reaches full with the
- * bow's ready sound, and held at full a star of light on it (fx/glintFlare.ts: the particles fade out up close, and
- * through the eyes showed nothing) as the motes go on drawing in and it glints now and then, until it's loosed.
+ * Every drawn shot's arrowhead as the bow is drawn and held at full (the shot strikes hardest at full draw, Lancewood
+ * Shot harder still): motes of light drawn in onto it, more of them as it's drawn and all of them held at full until
+ * it's loosed (fx/glintMotes.ts, seen in every view), and the bow's ready sound as it comes to full. (Glow particles
+ * fade out within 3.5 m of the camera, so through the eyes they showed nothing; a star of light on the head and
+ * bursts of glints as it came to full read as a bright spark.)
  */
-function drawGlint(player: Player, k: number, dt: number): void {
+function drawGlint(player: Player, k: number): void {
   const was = drawnTo.get(player) ?? 0;
   drawnTo.set(player, k);
-  const head = headOf(player, _p);
-  if (k >= FULL) glintFlare(player);
-  if (k >= FULL && was < FULL) {
-    burst(head, { count: 24, color: GLINT, intensity: 4, speed: 2, up: 0.4, life: 0.4, size: 0.09, gravity: 0, drag: 4 });
-    if (player.local) sfx.bowReady();
-    return;
-  }
-  if (Math.random() < dt * MOTES * Math.min(1, k)) {
-    // (drawn in onto the arrowhead from round it)
-    const a = rand(0, Math.PI * 2), r = rand(0.25, 0.5), x = Math.cos(a) * r, y = rand(-0.2, 0.25), z = Math.sin(a) * r;
-    particles.glow.spawn({ x: head.x + x, y: head.y + y, z: head.z + z, vx: -x * 3, vy: -y * 3, vz: -z * 3, life: 0.32, size: 0.08, sizeEnd: 0.01, color: col(GLINT, 2.4), colorEnd: col(0x806030, 0.5) });
-  }
-  if (k >= FULL && Math.random() < dt * HELD_GLINTS) {
-    burst(head, { count: 4, color: GLINT, intensity: 3.5, speed: 1.3, up: 0.3, life: 0.3, size: 0.07, gravity: 0, drag: 4 });
-  }
+  if (k >= MOTES_FROM) glintMotes(player, Math.min(1, (k - MOTES_FROM) / (FULL - MOTES_FROM)));
+  if (k >= FULL && was < FULL && player.local) sfx.bowReady();
 }
 
 export const bowShot: InstantSkill = {
   anim: 'bow', warm: warmArrows,
   pitch: (player, def, k, target) => launchPitch(player.castPoint, target, arrowSpeed(def as BowDef, k)),
-  charging(player, def, k, dt) {
+  charging(player, def, k) {
     previewShot(player, def as BowDef, k, 0.22, true, false);
-    drawGlint(player, k, dt);
+    drawGlint(player, k);
   },
   cast(player, rawDef, target, power) {
     const def = rawDef as BowDef, origin = player.castPoint, pull = pullAt(power), v = arrowSpeed(def, power);
@@ -299,9 +279,9 @@ export const bowShot: InstantSkill = {
  */
 export const piercingShot: InstantSkill = {
   anim: 'bow', warm: warmArrows, pitch: bowShot.pitch,
-  charging(player, def, k, dt) {
+  charging(player, def, k) {
     previewShot(player, def as BowDef, k, 0.24, false, true);
-    drawGlint(player, k, dt);
+    drawGlint(player, k);
   },
   cast(player, rawDef, target, power) {
     const def = rawDef as BowDef & Needs<'falloff'>, origin = player.castPoint, pull = pullAt(power), v = arrowSpeed(def, power);

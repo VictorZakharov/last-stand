@@ -1,10 +1,11 @@
 // Every drawn shot of the hero's class (tools/lab `draw`; `SkillDef.draw`, src/combat/skills/ranger.ts `drawGlint`)
 // drawn to full and held there as the player holds it, its key down over an aim ahead, in one of the game's views.
-// Every frame the glow particles round the arrowhead are counted: motes must draw in onto it as it's drawn, and held
-// at full it must keep glinting until it's loosed (a burst as it came to full and nothing after read as the charge
-// gone). With no shot drawn, nothing may glint there. Held at full, the glint is judged as the player sees it in the
-// view (page/addedLight.ts: the frame drawn with it and without it, round the arrowhead): the particles fade out
-// within 3.5 m of the camera, and through the eyes, the arrowhead under a metre off, nothing of them showed.
+// Every frame its motes on the arrowhead are read (src/fx/glintMotes.ts): they must draw in onto it as it's drawn, and
+// held at full it must keep glinting until it's loosed (a burst as it came to full and nothing after read as the
+// charge gone). With no shot drawn, nothing may glint there. Held at full, the glint is judged as the player sees it
+// in the view (page/addedLight.ts: the frame drawn with it and without it, round the arrowhead): seen, and not bright.
+// As glow particles they fade out within 3.5 m of the camera, and through the eyes nothing of them showed; a star of
+// light on the arrowhead was seen in every view, and was too bright.
 import * as THREE from 'three';
 import type { Fixture, Frame, Lab, Pictured, Report } from './lab';
 import { screenArea } from './lab';
@@ -12,9 +13,9 @@ import type { SkillKey } from '../../../src/types';
 import type { Player } from '../../../src/entities/player';
 import { G } from '../../../src/state';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
-import { particles } from '../../../src/fx/particles';
 import { ARROW } from '../../../src/entities/models/bow';
 import { addedRound, type Added } from './addedLight';
+import { glintShown } from '../../../src/fx/glintMotes';
 import { lateCompiles } from '../../../src/core/shaders';
 
 export interface DrawOptions {
@@ -22,7 +23,7 @@ export interface DrawOptions {
   fixture: Fixture;
   /** each shot pictured held at full draw */
   pictures: boolean;
-  /** plant the fault the checks must catch: the glint (its particles and its flare) taken away once the draw is full */
+  /** plant the fault the checks must catch: the glint taken away once the draw is full */
   canary: boolean;
 }
 
@@ -35,19 +36,26 @@ const FULL_FRAMES = 120;
 const DRAW_FRAMES = 240;
 /** a drawn shot counts as drawn to full from here (of its draw's time: the game's own) */
 const FULL = 0.98;
-/** how far round the arrowhead a particle counts as its glint (m) */
-const NEAR = 0.6;
+/** how strongly the motes must show for the arrowhead to count as glinting (0 to 1) */
+const SHOWN = 0.05;
 /** the share of the frames at full draw that must glint, the longest it may go without (frames), and the share of
  *  the draw's second half with motes drawn in */
 const FULL_SHARE = 0.9;
 const LONGEST_GAP = 20;
 const DRAWING_SHARE = 0.5;
-/** the least share of the frame's pixels the glint must light held at full draw, in every view: about a disc a
- *  fiftieth of the frame's height across (its particles alone lit 0 to 0.5 in 10,000, none through the eyes; with
- *  its flare, 6 to 17) */
-const SEEN_LEAST = 2.5e-4;
-/** the flare's name in the scene (src/fx/glintFlare.ts) */
-const FLARE = 'glintFlare';
+/** the least share of the frame's pixels the glint must light held at full draw, in every view (as glow particles it
+ *  lit 0 to 0.1 in 10,000 from above and none through the eyes: hardly seen; its motes light 0.5 to 3), and the
+ *  largest patch it may glare on, a share of the frame's pixels (a star of light on the arrowhead glared in one blob
+ *  of 0.64 to 3.6 in 10,000 and was too bright, though its glare in all was no more than the motes', whose largest
+ *  patch is 0.44 at most: specks) */
+const SEEN_LEAST = 0.4e-4;
+const BLOB_MOST = 0.55e-4;
+/** the frames into the hold at full draw at which the glint is judged as the player sees it (its motes move: at one
+ *  frame, as many as three times more of them showed for one shot as for another), and the one pictured */
+const SEEN_FRAMES = [30, 60, 90, 118];
+const PICTURE_FRAME = 60;
+/** the motes' name in the scene (src/fx/glintMotes.ts) */
+const MOTES = 'glintMotes';
 /** css px round the arrowhead a close picture of it takes in */
 const CLOSE = 140;
 
@@ -84,19 +92,8 @@ function arrowHeadOf(hero: Player, out = new THREE.Vector3()): THREE.Vector3 {
 
 const head = new THREE.Vector3();
 
-/** The glow particles round `hero`'s arrowhead. */
-function glintNear(hero: Player): number {
-  arrowHeadOf(hero, head);
-  const pool = particles.glow;
-  let near = 0;
-  for (let i = 0; i < pool.count; i++) {
-    const x = pool.pos[i * 3] - head.x;
-    const y = pool.pos[i * 3 + 1] - head.y;
-    const z = pool.pos[i * 3 + 2] - head.z;
-    if (x * x + y * y + z * z < NEAR * NEAR) near++;
-  }
-  return near;
-}
+/** Whether `hero`'s arrowhead glints this frame: its motes showing. */
+const glinting = (hero: Player): boolean => glintShown(hero) > SHOWN;
 
 /** How far `hero`'s shot is drawn (0 to 1; -1 with none drawn), as the game counts it. */
 function drawnShare(hero: Player): number {
@@ -105,23 +102,21 @@ function drawnShare(hero: Player): number {
   return Math.min(1, Math.max(0, cast.t - (cast.nockT ?? 0)) / cast.drawT);
 }
 
-/** The glint's flares in the scene (none in a tree without them). */
-function flares(): THREE.Object3D[] {
+/** The glint's motes in the scene. */
+function motes(): THREE.Object3D[] {
   const found: THREE.Object3D[] = [];
   G.scene.traverse((object) => {
-    if (object.name === FLARE) found.push(object);
+    if (object.name === MOTES) found.push(object);
   });
   return found;
 }
 
-/** The glint hidden from the frame: the glow particles and the flares; returns the showing of them again. */
+/** The glint hidden from the frame; returns the showing of it again. */
 function hideGlint(): () => void {
-  const shown = flares().filter((flare) => flare.visible);
-  particles.glow.points.visible = false;
-  for (const flare of shown) flare.visible = false;
+  const shown = motes().filter((mesh) => mesh.visible);
+  for (const mesh of shown) mesh.visible = false;
   return () => {
-    particles.glow.points.visible = true;
-    for (const flare of shown) flare.visible = true;
+    for (const mesh of shown) mesh.visible = true;
   };
 }
 
@@ -133,7 +128,8 @@ interface Drawn {
   fullFrames: number;
   fullGlinting: number;
   longestGap: number;
-  /** what the glint added to the frame round the arrowhead, held at full */
+  /** what the glint added to the frame round the arrowhead held at full, at its least seen and its brightest over the
+   *  moments it was judged */
   seen: Added | null;
 }
 
@@ -162,7 +158,7 @@ async function drawToFull(
     idleGlinting: 0, drawingFrames: 0, drawingGlinting: 0, fullFrames: 0, fullGlinting: 0, longestGap: 0, seen: null,
   };
   await lab.step(IDLE_FRAMES, () => ({ aim }), () => {
-    if (glintNear(hero)) drawn.idleGlinting++;
+    if (glinting(hero)) drawn.idleGlinting++;
   });
   let gap = 0;
   const moments: Pictured[] = [];
@@ -173,24 +169,38 @@ async function drawToFull(
     if (share < FULL) {
       if (share < 0.5) continue;
       drawn.drawingFrames++;
-      if (glintNear(hero)) drawn.drawingGlinting++;
+      if (glinting(hero)) drawn.drawingGlinting++;
       continue;
     }
     if (options.canary) {
-      particles.glow.count = 0;
-      for (const flare of flares()) flare.visible = false;
+      for (const mesh of motes()) mesh.visible = false;
     }
     drawn.fullFrames++;
-    gap = glintNear(hero) ? 0 : gap + 1;
+    gap = glinting(hero) ? 0 : gap + 1;
     if (!gap) drawn.fullGlinting++;
     drawn.longestGap = Math.max(drawn.longestGap, gap);
-    if (drawn.fullFrames !== FULL_FRAMES / 2) continue;
-    drawn.seen = addedRound(lab, arrowHeadOf(hero, head), hideGlint);
-    if (options.pictures) moments.push(...await pictureHeld(lab, shot, String(options.fixture.view), drawn.seen));
+    if (!SEEN_FRAMES.includes(drawn.fullFrames)) continue;
+    const seen = addedRound(lab, arrowHeadOf(hero, head), hideGlint);
+    drawn.seen = drawn.seen ? worstOf(drawn.seen, seen) : seen;
+    if (options.pictures && drawn.fullFrames === PICTURE_FRAME) {
+      moments.push(...await pictureHeld(lab, shot, String(options.fixture.view), seen));
+    }
   }
   await lab.step(1, () => ({ aim }));
   await lab.until(() => !hero.casting, DRAW_FRAMES, `${shot.name}'s shot never ended`);
   return { drawn, moments };
+}
+
+/** Two moments' glint as one: the least it was seen at either and its brightest at either. */
+function worstOf(one: Added, other: Added): Added {
+  const leastSeen = other.share < one.share ? other : one;
+  return {
+    ...leastSeen,
+    onScreen: one.onScreen && other.onScreen,
+    glare: Math.max(one.glare, other.glare),
+    blob: Math.max(one.blob, other.blob),
+    strongest: Math.max(one.strongest, other.strongest),
+  };
 }
 
 /** What the glint showed held at full draw, as words. */
@@ -199,6 +209,7 @@ function describeSeen(seen: Added | null): string {
   if (!seen.onScreen) return 'its arrowhead off the screen';
   const where = `at ${(seen.x * 100).toFixed(0)}%, ${(seen.y * 100).toFixed(0)}% of the screen`;
   return `${seen.pixels} pixels lit (${(seen.share * 1e4).toFixed(1)} in 10,000 of the frame's), `
+    + `glaring on ${(seen.glare * 1e4).toFixed(1)} (its largest patch ${(seen.blob * 1e4).toFixed(2)}), `
     + `${seen.strongest.toFixed(2)} of white at the brightest, ${where}`;
 }
 
@@ -208,7 +219,8 @@ function describeDrawn(shot: DrawnShot, drawn: Drawn): string[] {
     `${shot.name} (${shot.key}): idle, glinting on ${drawn.idleGlinting} of ${IDLE_FRAMES} frames; drawing `
       + `(its second half), motes on ${drawn.drawingGlinting} of ${drawn.drawingFrames}; held at full, glinting on `
       + `${drawn.fullGlinting} of ${drawn.fullFrames}, ${drawn.longestGap} frames without at the longest`,
-    `  held at full, as the player sees it: ${describeSeen(drawn.seen)}`,
+    `  held at full, as the player sees it (the least seen and the brightest of ${SEEN_FRAMES.length} moments): `
+      + describeSeen(drawn.seen),
   ];
 }
 
@@ -228,6 +240,10 @@ function drawnProblems(shot: DrawnShot, drawn: Drawn, view: string): string[] {
   if (seen?.onScreen && seen.share < SEEN_LEAST) {
     say(`hardly seen held at full draw: ${seen.pixels} pixels lit (${(seen.share * 1e4).toFixed(1)} in 10,000, `
       + `${(SEEN_LEAST * 1e4).toFixed(1)} at least)`);
+  }
+  if (seen?.onScreen && seen.blob > BLOB_MOST) {
+    say(`too bright held at full draw: a patch of glare on ${(seen.blob * 1e4).toFixed(2)} in 10,000 of the frame's `
+      + `pixels (${(BLOB_MOST * 1e4).toFixed(2)} at most)`);
   }
   return problems;
 }
