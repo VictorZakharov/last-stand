@@ -2,7 +2,7 @@
 
 The painted skill icons (`src/ui/skillArt/<impl>.webp`, found by the skill's `impl` name): every class's side by side
 as the player sees them, how each fits the round touch buttons, and a painted original made into one. What a new icon
-must match is in `AGENTS.md` (the skill icons' gotcha).
+must match is in `src/ui/skillArt/AGENTS.md`.
 
 Needs Python with Pillow and numpy (`pip install -r tools/icons/requirements.txt`).
 

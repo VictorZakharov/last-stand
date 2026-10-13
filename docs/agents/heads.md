@@ -1,6 +1,6 @@
 # The heroes' heads
 
-Part of the gotchas in [AGENTS.md](../../AGENTS.md), kept here as only work on a hero's head needs it: how `models/face.ts` and `models/head.ts` build the face, the hair, the beard and the neck, the fields a face is tuned by, and how a face is tuned against its reference with the face harness (`tools/facelab`). Read it before changing any of them, and add what you learn to it.
+Part of [`src/entities/models/AGENTS.md`](../../src/entities/models/AGENTS.md), kept here as only work on a hero's head needs it: how `models/face.ts` and `models/head.ts` build the face, the hair, the beard and the neck, the fields a face is tuned by, and how a face is tuned against its reference with the face harness (`tools/facelab`). Read it before changing any of them, and add what you learn to it.
 
 - `models/face.ts`: each hero's head as a signed distance field in millimetres, sculpted from average measurements, with a face shape (`FACES`) and colouring (`LOOKS`) per hero.
   - It's meshed by casting rays from inside the skull on a grid densest over the face (`headGrid`).
