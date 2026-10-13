@@ -35,11 +35,11 @@ const TOOLTIP_AT = { x: 0.18, y: 0.3 };
 const FOE_AHEAD = 6;
 const FOE_LIFE = 0.6;
 /** the damage numbers shown over it: their text, kind, height over the floor (m) and, for a hit's, its damage's type
- *  (coloured as the game colours it: the warrior's and the ranger's physical, the mage's arcane) */
+ *  (coloured as the game colours it: the warrior's and the ranger's physical, the mage's arcane, a crit by its type) */
 const NUMBERS = [
   { text: 128, kind: 'dmg', rise: 1.6, type: 'physical' },
   { text: 96, kind: 'dmg', rise: 2.4, type: 'arcane' },
-  { text: 412, kind: 'crit', rise: 2.0 },
+  { text: 412, kind: 'crit', rise: 2.0, type: 'cold' },
   { text: 37, kind: 'heal', rise: 1.2 },
 ] as const;
 /** frames run after the numbers are shown, so each has risen a little and none is in its first pop */

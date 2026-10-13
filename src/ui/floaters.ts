@@ -28,7 +28,7 @@ export function project(x: number, y: number, z: number): { x: number; y: number
 const FLOAT_SHADOWS: Shadow[] = [
   { x: 0, y: 0, blur: 3, color: '#000' }, { x: 0, y: 2, blur: 3, color: '#000' }, { x: 0, y: 0, blur: 8, color: 'rgba(0,0,0,.8)' },
 ];
-/** each kind of floating text's look (its colour is the caller's, but a crit's) */
+/** each kind of floating text's look (its colour is the caller's: a crit's its damage's, as a plain hit's) */
 const FLOAT_STYLE: Record<FloatKind, Omit<TextStyle, 'color'>> = {
   dmg: { face: 'display', weight: 700, size: 17, shadows: FLOAT_SHADOWS },
   crit: { face: 'display', weight: 700, size: 26, shadows: FLOAT_SHADOWS },
@@ -44,7 +44,7 @@ export function textArt(text: string, s: TextStyle): { w: number; h: number; pai
 }
 
 export function floatText(x: number, y: number, z: number, text: string | number, kind: FloatKind = 'dmg', color: number | string = 0xffffff): void {
-  const col = kind === 'crit' ? '#ffe070' : typeof color === 'number' ? '#' + new THREE.Color(color).getHexString() : color;
+  const col = typeof color === 'number' ? '#' + new THREE.Color(color).getHexString() : color;
   const label = new Label(ORDER.float);
   label.show(textArt(kind === 'crit' ? `${text}!` : String(text), { ...FLOAT_STYLE[kind], color: col }));
   label.ax = label.ay = 0.5;
