@@ -424,6 +424,23 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  held: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        pictures: options.pictures !== false,
+        canary: Boolean(options.canary),
+      };
+      return side.command('held', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('held'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   gear: {
     check(options) {
       for (const tier of options.tiers) gearTier(tier);

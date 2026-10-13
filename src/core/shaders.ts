@@ -20,7 +20,7 @@ export function pinPrograms(renderer: THREE.WebGLRenderer, context?: () => strin
     p.usedTimes++;
     compiled++;
     const key = p.cacheKey.split(',');
-    if (loaded) lateCompiles.push(`${ownerOf(renderer, p)} ${context?.() ?? ''} | ${describeNew(p.name, key)}`);
+    if (loaded) lateCompiles.push(`${ownerOf(renderer, p)} (${p.name}) ${context?.() ?? ''} | ${describeNew(p.name, key)}`);
     known.push({ name: p.name, key });
   }
 }

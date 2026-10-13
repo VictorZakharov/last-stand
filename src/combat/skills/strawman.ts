@@ -14,7 +14,9 @@ import { floorPatch, lay } from '../../fx/floorPatch';
 import { resolveWorld } from '../../world/collision';
 import { lures, lurable, LURE_SLOT, type Lure } from '../lures';
 import { mulberry } from '../../util';
+import { Readiness } from './readiness';
 import type { InstantSkill, Needs } from './types';
+import type { Player } from '../../entities/player';
 
 type Def = Needs<'duration' | 'radius' | 'range'>;
 
@@ -92,33 +94,47 @@ const reachGeo = () => floorPatch(0.975, 1, 1, 96);
 const SPOT_R = BODY_R + 0.35;
 const spotGeo = () => floorPatch(0.8, 1, 1, 40);
 
+/** how high in the scarecrow's glow the seconds of its cooldown count down (m) */
+const COUNT_Y = 1.1;
+
 /**
  * While the key is held: a glowing outline of the scarecrow where it would stand, a ring at its foot, and how far it
- * would call foes from.
+ * would call foes from; red while letting go would cast nothing, the seconds of its cooldown counting down in it. Its
+ * glows, each with its brightness.
  */
-interface Preview { body: THREE.Mesh; spot: THREE.Mesh; spotG: THREE.BufferGeometry; reach: THREE.Mesh; reachG: THREE.BufferGeometry }
+interface Preview {
+  body: THREE.Mesh; spot: THREE.Mesh; spotG: THREE.BufferGeometry; reach: THREE.Mesh; reachG: THREE.BufferGeometry;
+  glows: [THREE.MeshBasicMaterial, number][]; ready: Readiness;
+}
 let preview: Preview | null = null;
+const _straw = new THREE.Color(STRAW);
 
 function previewFor(): Preview {
   if (preview) return preview;
   const reachG = reachGeo(), spotG = spotGeo();
-  const body = new THREE.Mesh(scarecrow(), ghostMat()), reach = new THREE.Mesh(reachG, additive(STRAW, 1, 0.45));
-  const spot = new THREE.Mesh(spotG, additive(STRAW, 1.6, 0.8));
+  const bodyMat = ghostMat(), reachMat = additive(STRAW, 1, 0.45), spotMat = additive(STRAW, 1.6, 0.8);
+  const body = new THREE.Mesh(scarecrow(), bodyMat), reach = new THREE.Mesh(reachG, reachMat);
+  const spot = new THREE.Mesh(spotG, spotMat);
   body.frustumCulled = spot.frustumCulled = reach.frustumCulled = false;
   body.name = 'strawman-preview'; spot.name = 'strawman-preview-spot'; reach.name = 'strawman-preview-reach';
   G.scene.add(body, spot, reach);
-  preview = { body, spot, spotG, reach, reachG };
+  const glows: [THREE.MeshBasicMaterial, number][] = [[bodyMat, 0.7], [reachMat, 1], [spotMat, 1.6]];
+  preview = { body, spot, spotG, reach, reachG, glows, ready: new Readiness('strawman') };
   return preview;
 }
 
 /** Shows where it would stand for `target` (null: nothing shown). */
-function showStand(player: { pos: THREE.Vector3 }, def: Def, target: THREE.Vector3 | null): void {
+function showStand(player: Player, def: Def, target: THREE.Vector3 | null, dt: number): void {
   if (!target) {
-    if (preview) preview.body.visible = preview.spot.visible = preview.reach.visible = false;
+    if (!preview) return;
+    preview.body.visible = preview.spot.visible = preview.reach.visible = false;
+    preview.ready.hide(dt);
     return;
   }
   const p = previewFor(), pos = standAt(player, def, target);
   p.body.visible = p.spot.visible = p.reach.visible = true;
+  p.ready.show(player, def, { x: pos.x, y: groundHeight(pos.x, pos.z) + COUNT_Y, z: pos.z }, dt);
+  for (const [glow, bright] of p.glows) p.ready.tint(glow.color, _straw, bright);
   p.spot.position.set(pos.x, 0, pos.z);
   p.spot.scale.set(SPOT_R, 1, SPOT_R);
   lay(p.spotG, pos.x, pos.z, 0.05, SPOT_R);
@@ -131,7 +147,7 @@ function showStand(player: { pos: THREE.Vector3 }, def: Def, target: THREE.Vecto
 
 const skill: InstantSkill = {
   anim: 'cast', warm: () => [new THREE.Mesh(scarecrow(), strawMat), new THREE.Mesh(scarecrow(), ghostMat()), new THREE.Mesh(reachGeo(), additive(STRAW, 1, 0.45))],
-  aim: (player, def, target) => showStand(player, def as Def, target),
+  aim: (player, def, target, dt) => showStand(player, def as Def, target, dt),
   cast(player, rawDef, target) {
     const def = rawDef as Def;
     const pos = standAt(player, def, target);

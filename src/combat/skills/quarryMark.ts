@@ -1,5 +1,5 @@
-// Quarry Mark: the foe nearest the aim is marked as the hunt's quarry, and takes more damage from every player's hits
-// (`amp`, combat/damage.ts). Killed, it gives the ranger his cooldowns back (not the draught's) and the mark is spent;
+// Quarry Mark: the foe nearest the aim (outlined in red while the key is held) is marked as the hunt's quarry, and
+// takes more damage from every player's hits (`amp`, combat/damage.ts). Killed, it gives the ranger his cooldowns back (not the draught's) and the mark is spent;
 // with no kill in `duration` it fades. One mark per ranger: marking another moves it. Every game marks its own copy of the foe (a co-op guest's for the look and the cooldowns, the host's
 // for the damage), as each sees the cast land.
 import * as THREE from 'three';
@@ -10,6 +10,8 @@ import { additive, nearGlow } from '../../core/materials';
 import { floorPatch, lay } from '../../fx/floorPatch';
 import { sfx } from '../../core/audio';
 import { floatText } from '../../ui/floaters';
+import { outline } from '../../ui/overlay/outline';
+import { Readiness } from './readiness';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
 import type { InstantSkill, Needs } from './types';
@@ -73,6 +75,7 @@ function mark(player: Player, def: Def, e: Enemy): void {
   const reticleM = new THREE.Mesh(planeGeo, reticleMat()), ringMat = additive(MARK, 1.3, 0);
   const ringG = ringGeo(), ring = new THREE.Mesh(ringG, ringMat);
   reticleM.frustumCulled = ring.frustumCulled = false;
+  ring.name = 'quarry-mark-ring';
   G.scene.add(reticleM, ring);
   let ended = false, fade = 0, t = 0;
   const me: Mark = { on: null, amp: def.amp, left: def.duration, end() { ended = true; take(); } };
@@ -123,48 +126,33 @@ function mark(player: Player, def: Def, e: Enemy): void {
   });
 }
 
-/** how bright the preview shows the mark, of the mark's own: dimmer, and still (the mark turns and beats) */
-const PREVIEW = 0.5;
-
-/** While the key is held: the foe the cast would mark ringed, with the reticle over it. */
-interface Preview { reticle: THREE.Mesh; reticleMat: THREE.MeshBasicMaterial; ring: THREE.Mesh; ringG: THREE.BufferGeometry }
-let preview: Preview | null = null;
-
-function previewFor(): Preview {
-  if (preview) return preview;
-  const reticleMaterial = reticleMat(), ringG = ringGeo();
-  const reticleM = new THREE.Mesh(planeGeo, reticleMaterial), ring = new THREE.Mesh(ringG, additive(MARK, 1.3, 0.7 * PREVIEW));
-  reticleMaterial.opacity = 0.85 * PREVIEW;
-  reticleM.frustumCulled = ring.frustumCulled = false;
-  reticleM.scale.setScalar(0.6);
-  reticleM.name = 'quarry-preview'; ring.name = 'quarry-preview-ring';
-  G.scene.add(reticleM, ring);
-  preview = { reticle: reticleM, reticleMat: reticleMaterial, ring, ringG };
-  return preview;
-}
+/**
+ * While the key is held, the foe the cast would mark outlined in red, in front of everything (the reticle over its
+ * head the preview showed before was at times hard to make out): dimmer while letting go would cast nothing, with
+ * the seconds of its cooldown counting down on it (`DIM`; `COUNT_AT` of its height up: over its head, they lay over
+ * its name).
+ */
+const OUTLINED = 0xff3030, DIM = 0.45, COUNT_AT = 0.5;
+let ready: Readiness | null = null;
 
 /** Shows the would-be quarry for `target` (none: nothing shown). */
-function showQuarry(player: Player, def: Def, target: THREE.Vector3 | null): void {
+function showQuarry(player: Player, def: Def, target: THREE.Vector3 | null, dt: number): void {
+  ready ??= new Readiness('quarryMark');
   const e = target && quarry(player, target, def.range);
   if (!e) {
-    if (preview) preview.reticle.visible = preview.ring.visible = false;
+    outline(null);
+    ready.hide(dt);
     return;
   }
-  const p = previewFor();
-  p.reticle.visible = p.ring.visible = true;
-  p.reticle.position.set(e.pos.x, e.obj.position.y + e.height + 0.45, e.pos.z);
-  p.reticle.quaternion.copy(G.camera.quaternion);
-  const r = e.radius + 0.3;
-  p.ring.position.set(e.pos.x, 0, e.pos.z);
-  p.ring.scale.set(r, 1, r);
-  lay(p.ringG, e.pos.x, e.pos.z, 0.05, r);
+  const red = ready.show(player, def, { x: e.pos.x, y: e.obj.position.y + e.height * COUNT_AT, z: e.pos.z }, dt);
+  outline(e.obj, OUTLINED, 1 - (1 - DIM) * red);
 }
 
 const skill: InstantSkill = {
   anim: 'cast',
   warm: () => [new THREE.Mesh(planeGeo, reticleMat()), new THREE.Mesh(ringGeo(), additive(MARK, 1.3, 0.7))],
   canCast: (player, def, target) => !!quarry(player, target, def.range ?? 26),
-  aim: (player, def, target) => showQuarry(player, def as Def, target),
+  aim: (player, def, target, dt) => showQuarry(player, def as Def, target, dt),
   cast(player, rawDef, target) {
     const def = rawDef as Def, e = quarry(player, target, def.range);
     if (e) mark(player, def, e);

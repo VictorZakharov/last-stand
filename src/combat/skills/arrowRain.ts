@@ -136,8 +136,7 @@ const skill: ChannelSkill<RainState> = {
       fetch: q && !player.nocked ? q.fetch / pace(player) : 0, rising: [], showers: [], done: false, gone: false };
     // the area on the floor, and the showers' arrows as they fall (one instanced mesh)
     const ringMat = additive(LEAF, 1.2, 0), fillMat = additive(LEAF, 0.35, 0);
-    // (fine enough round and across that it steps up onto the dais within a hand's width)
-    const ringGeo = floorPatch(def.radius * 0.95, def.radius, 1, 256), fillGeo = floorPatch(0, def.radius, 24, 128);
+    const ringGeo = floorPatch(def.radius * 0.95, def.radius, 1, 256), fillGeo = floorPatch(0, def.radius, 1, 128);
     const ring = new THREE.Mesh(ringGeo, ringMat), fill = new THREE.Mesh(fillGeo, fillMat);
     ring.frustumCulled = fill.frustumCulled = false;
     const area = new THREE.Group(); area.add(ring, fill);

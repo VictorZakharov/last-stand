@@ -234,7 +234,7 @@ terminal's task stops it all.
   aim and let go, on open ground, past his reach, at a prop's middle, past a prop, out at the arena's edge, up onto
   the dais and at his own feet. Each says where it was aimed, where the preview showed and where he came out, how
   far, in how many frames, how many of them he was hidden and whether a blow tried in each landed (none may, and one
-  just after must). Then held through its cooldown (`page/blinkCooldown.ts`): pressed with 2.5 s of it left, let go
+  just after must). Then held through its cooldown (`page/heldCooldown.ts`): pressed with 2.5 s of it left, let go
   while the preview is red (nothing may be cast), pressed again and held until it's green, and let go (it must cast),
   the preview read every frame as it's drawn: red on every frame of the cooldown, its countdown the seconds left
   rounded up (3, 2, 1), green within a quarter of a second once ready; then held short of energy (red, no countdown,
@@ -245,6 +245,24 @@ terminal's task stops it all.
   again, the preview counting down and the dazed foes into `out/blink`; `--canary` reads the preview a metre off,
   takes the guard off as he comes apart, reads it green with no countdown on its cooldown and clears a near foe's
   daze at once.
+- `held`: every held skill of the hero's class (`SkillDef.aimed`: the ranger's Quarry Mark and Strawman, the mage's
+  Starfall and Veilstep; `page/held.ts`, `--class`) held as the player holds it, over a training dummy the way the
+  camera looks: ready, its preview shown in its own look with no countdown, and let go it casts; then held through
+  its cooldown and short of energy (`page/heldCooldown.ts`, as `blink`'s), red and counting 3, 2, 1 until a release
+  would cast. Quarry Mark's red outline (`ui/overlay/outline.ts`) is checked in the top-down view, over the shoulder
+  and through the eyes: round the foe the cast would mark, the pixels it lit (red risen over the same frame drawn
+  without it) near the foe on the screen and none away from it. Starfall is cast ten times over the dummy with more
+  standing round it inside its ring as drawn and outside it (`page/heldArea.ts`): every one inside must be struck on
+  every cast (each one's casts struck by its distance). Each skill is then held across the dais's step from off it
+  and let go: every mark it lays on the floor (`fx/floorPatch.ts`) is read triangle by triangle against the floor
+  under it, and must lie on more than one level with no point under the floor or standing off it. Then the shaders
+  compiled meanwhile, which must be none (the rounds they came in are said). A preview missing, in the wrong look or
+  off its countdown, a release that cast when it mustn't or didn't when it must, an outline off its foe, a foe inside
+  Starfall's ring missed, a mark off the floor and a late compile are problems. `--pictures` (on by default) pictures
+  each preview ready, on its cooldown and across the step into `out/held`; `--canary` reads each preview ready with
+  no countdown on its cooldown, draws Quarry Mark's outline round the hero (the programs it compiles aren't counted:
+  the game never outlines a hero), reads Starfall's ring as drawn round all its crystals may strike, lays the marks
+  across the step point by point on the floor under them, as they were, and compiles a shader mid-game.
 - `gear`: full sets of gear rolled for every class as its loot rolls them (`page/gear.ts`, `--sets` each, 400 by
   default), at each tier (`--tiers`, a rarity at an item level each: `magic@5,rare@15,epic@30,legendary@50`), and
   what a set gives on average: Health (his own and the gear's, and the gear's against the mage's), regeneration a

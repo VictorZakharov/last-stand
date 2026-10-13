@@ -1,8 +1,10 @@
 // Starfall: arcane crystal meteors plunge from the heavens onto the target area.
 // Visual beats: rune glyph marks the spot -> meteor with comet streak -> impact
 // (light pillar, erupting crystals that later shatter, glowing cracks, debris).
+// Held, the area its first crystal strikes is shown on the floor where it would fall (red while letting go would cast
+// nothing, its cooldown counting down in it), and it's called down as the key is let go.
 import * as THREE from 'three';
-import { nearGlow } from '../../core/materials';
+import { additive, nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { addEffect, shockwave, decal, glyphMarker, lightPillar, crackDecal, crystalBurst } from '../../fx/effects';
@@ -12,6 +14,8 @@ import { addShake } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
+import { floorPatch, lay } from '../../fx/floorPatch';
+import { Readiness } from './readiness';
 import type { InstantSkill, Needs } from './types';
 import type { Player } from '../../entities/player';
 
@@ -108,18 +112,70 @@ function impact(player: Player, def: Def, p: THREE.Vector3): void {
   }
 }
 
+/** The point `p` kept inside the arena as far as its crystals may land (`R` in from its edge), in `out`. */
+function inArena(p: { x: number; z: number }, out: THREE.Vector3): THREE.Vector3 {
+  const R = G.arena.radius - 1, len = Math.hypot(p.x, p.z);
+  out.set(p.x, 0, p.z);
+  if (len > R) out.multiplyScalar(R / len);
+  return out;
+}
+
+/** the preview's glow: a ring round what its first crystal strikes, landing on the aim (`radius` round it: the others
+ *  land up to `scatter` from it and may strike further, but shown round all they may strike, `scatter` + `radius`, the
+ *  ring took in foes no crystal struck), and a faint disc in it; and how high over the floor its cooldown counts down (m) */
+const ringGeo = () => floorPatch(0.95, 1, 1, 72);
+const discGeo = () => floorPatch(0, 1, 1, 72);
+const COUNT_Y = 1.1;
+
+/** The preview's meshes, its glows each with its brightness, and its readiness. */
+interface Preview {
+  ring: THREE.Mesh; ringG: THREE.BufferGeometry; disc: THREE.Mesh; discG: THREE.BufferGeometry;
+  glows: [THREE.MeshBasicMaterial, number][]; ready: Readiness;
+}
+let preview: Preview | null = null;
+const _colour = new THREE.Color(COLOR), _at = new THREE.Vector3();
+
+function previewFor(): Preview {
+  if (preview) return preview;
+  const ringG = ringGeo(), discG = discGeo();
+  const ringMat = additive(COLOR, 1.5, 0.8), discMat = additive(COLOR, 1, 0.12);
+  const ring = new THREE.Mesh(ringG, ringMat), disc = new THREE.Mesh(discG, discMat);
+  ring.frustumCulled = disc.frustumCulled = false;
+  ring.name = 'starfall-preview'; disc.name = 'starfall-preview-disc';
+  G.scene.add(ring, disc);
+  preview = { ring, ringG, disc, discG, glows: [[ringMat, 1.5], [discMat, 1]], ready: new Readiness('starfall') };
+  return preview;
+}
+
+/** Shows the area its crystals would strike for `target` (null: nothing shown). */
+function showArea(player: Player, def: Def, target: THREE.Vector3 | null, dt: number): void {
+  if (!target) {
+    if (!preview) return;
+    preview.ring.visible = preview.disc.visible = false;
+    preview.ready.hide(dt);
+    return;
+  }
+  const p = previewFor(), at = inArena(target, _at), r = def.radius;
+  p.ring.visible = p.disc.visible = true;
+  p.ready.show(player, def, { x: at.x, y: groundHeight(at.x, at.z) + COUNT_Y, z: at.z }, dt);
+  for (const [glow, bright] of p.glows) p.ready.tint(glow.color, _colour, bright);
+  for (const [mesh, g] of [[p.ring, p.ringG], [p.disc, p.discG]] as const) {
+    mesh.position.set(at.x, 0, at.z);
+    mesh.scale.set(r, 1, r);
+    lay(g, at.x, at.z, 0.05, r);
+  }
+}
+
 const skill: InstantSkill = {
   anim: 'summon',
-  warm: () => [new THREE.Mesh(meteorGeo, getMeteorMat()), new THREE.Mesh(streakGeo, streakMaterial())],
+  warm: () => [new THREE.Mesh(meteorGeo, getMeteorMat()), new THREE.Mesh(streakGeo, streakMaterial()), new THREE.Mesh(ringGeo(), additive(COLOR, 1.5, 0.8))],
+  aim: (player, def, target, dt) => showArea(player, def as Def, target, dt),
   cast(player, rawDef, target) {
     const def = rawDef as Def;
     sfx.starfallCall();
-    const R = G.arena.radius - 1;
     for (let i = 0; i < def.shards; i++) {
       const a = Math.random() * Math.PI * 2, r = i === 0 ? 0 : rand(0.6, def.scatter);
-      const land = new THREE.Vector3(target.x + Math.cos(a) * r, 0, target.z + Math.sin(a) * r);
-      const len = Math.hypot(land.x, land.z);
-      if (len > R) land.multiplyScalar(R / len);
+      const land = inArena({ x: target.x + Math.cos(a) * r, z: target.z + Math.sin(a) * r }, new THREE.Vector3());
       land.y = groundHeight(land.x, land.z);
       dropMeteor(player, def, land, i * 0.14);
     }

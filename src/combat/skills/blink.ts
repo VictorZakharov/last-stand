@@ -17,10 +17,8 @@ import { groundHeight } from '../../world/arena';
 import { inObstacle } from '../../world/collision';
 import { dazeEnemy } from '../damage';
 import { floorPatch, lay } from '../../fx/floorPatch';
-import { damp, rand } from '../../util';
-import { anchorLabel, textArt } from '../../ui/floaters';
-import { ORDER, type Label } from '../../ui/overlay/layer';
-import { OUTLINE, type TextStyle } from '../../ui/overlay/paint';
+import { rand } from '../../util';
+import { Readiness } from './readiness';
 import type { InstantSkill, Needs } from './types';
 import type { Player } from '../../entities/player';
 
@@ -38,16 +36,8 @@ const FORM = 0.14;
 const SEARCH_STEP = 0.2;
 /** the ring at his feet where he would come out, and the column of light standing in it (m) */
 const RING_R = 0.62, COLUMN_R = 0.34, COLUMN_H = 1.9;
-/** the preview's colour while letting go would cast nothing (on cooldown, short of energy), and how fast it turns
- *  from that to his green and back (1/s: a turn of a moment, once, never a flash) */
-const NOT_READY = 0xff3a2c, TURN_RATE = 10;
-/** the seconds of its cooldown left, counting down in the column of light: how high (m), its look, and the pop of
- *  each new second (its size at first, and over how long it settles, s: once a second, well under a flash) */
-const COUNT_Y = 1.1, COUNT_POP = 1.3, COUNT_SETTLE = 0.18;
-const COUNT_STYLE: TextStyle = {
-  face: 'display', weight: 700, size: 36, color: '#ff6a58',
-  shadows: [...OUTLINE, { x: 0, y: 0, blur: 12, color: 'rgba(60, 0, 0, .9)' }],
-};
+/** how high in the column of light the seconds of its cooldown count down (m) */
+const COUNT_Y = 1.1;
 
 const _reported = new THREE.Vector3();
 
@@ -93,16 +83,14 @@ function column(): THREE.BufferGeometry {
 }
 const columnMat = () => { const m = additive(GREEN, 0.9, 0.5); m.vertexColors = true; return m; };
 
-/** The preview's meshes; its glows, each with its brightness; how far it has turned red (0 his green, 1 red);
- *  whether it was shown last frame; and its countdown: the label, the second it shows (0: none), where, and how long
- *  since that second came. */
+/** The preview's meshes, its glows each with its brightness, and its readiness (red and counting down while letting
+ *  go would cast nothing). */
 interface Preview {
   ring: THREE.Mesh; ringG: THREE.BufferGeometry; disc: THREE.Mesh; discG: THREE.BufferGeometry; column: THREE.Mesh;
-  mat: THREE.MeshBasicMaterial; glows: [THREE.MeshBasicMaterial, number][]; red: number; shown: boolean; t: number;
-  count: Label; counted: number; countAt: { x: number; y: number; z: number } | null; countT: number;
+  mat: THREE.MeshBasicMaterial; glows: [THREE.MeshBasicMaterial, number][]; ready: Readiness; t: number;
 }
 let preview: Preview | null = null;
-const _green = new THREE.Color(GREEN), _red = new THREE.Color(NOT_READY);
+const _green = new THREE.Color(GREEN);
 
 function previewFor(): Preview {
   if (preview) return preview;
@@ -113,36 +101,29 @@ function previewFor(): Preview {
   ring.name = 'blink-preview'; disc.name = 'blink-preview-disc'; col.name = 'blink-preview-column';
   G.scene.add(ring, disc, col);
   const glows: [THREE.MeshBasicMaterial, number][] = [[ringMat, 1.6], [discMat, 1], [mat, 0.9]];
-  const count = anchorLabel(ORDER.float, () => preview?.countAt ?? null);
-  count.ax = count.ay = 0.5;
-  preview = {
-    ring, ringG, disc, discG, column: col, mat, glows, red: 0, shown: false, t: 0, count, counted: 0, countAt: null, countT: 0,
-  };
+  preview = { ring, ringG, disc, discG, column: col, mat, glows, ready: new Readiness('blink'), t: 0 };
   return preview;
 }
 
-/** Whether letting go now would cast it: its cooldown over and the energy for it (the lobby's free casting has both). */
-const readyToGo = (player: Player, def: Def): boolean =>
-  player.cooldownLeft(def.impl) <= 0 && (player.sandbox || player.energy >= def.cost);
-
 /**
  * Shows where he would come out for `target` (null: nothing shown): red while letting go would cast nothing, turning
- * to his green as it would, so it can be held through the cooldown and let go once green.
+ * to his green as it would, so it can be held through the cooldown and let go once green. The ring keeps the second
+ * its countdown shows (`userData.countdown`, null for none) for what measures it.
  */
 function showLanding(player: Player, def: Def, target: THREE.Vector3 | null, dt: number): void {
   if (!target) {
     if (!preview) return;
-    preview.ring.visible = preview.disc.visible = preview.column.visible = preview.shown = false;
-    showCountdown(preview, 0, null, dt);
+    preview.ring.visible = preview.disc.visible = preview.column.visible = false;
+    preview.ready.hide(dt);
+    preview.ring.userData.countdown = null;
     return;
   }
   const p = previewFor(), at = landAt(player.pos, player.radius, def, target);
   p.ring.visible = p.disc.visible = p.column.visible = true;
-  // (shown afresh in the colour it is: pressed on cooldown, it never starts green)
-  const red = readyToGo(player, def) ? 0 : 1;
-  p.red = p.shown ? damp(p.red, red, TURN_RATE, dt) : red;
-  p.shown = true;
-  for (const [glow, bright] of p.glows) glow.color.copy(_green).lerp(_red, p.red).multiplyScalar(bright);
+  const floor = groundHeight(at.x, at.z);
+  p.ready.show(player, def, { x: at.x, y: floor + COUNT_Y, z: at.z }, dt);
+  p.ring.userData.countdown = p.ready.second || null;
+  for (const [glow, bright] of p.glows) p.ready.tint(glow.color, _green, bright);
   for (const [mesh, g] of [[p.ring, p.ringG], [p.disc, p.discG]] as const) {
     mesh.position.set(at.x, 0, at.z);
     mesh.scale.set(RING_R, 1, RING_R);
@@ -151,24 +132,7 @@ function showLanding(player: Player, def: Def, target: THREE.Vector3 | null, dt:
   // (breathing slowly, well under a flash a second)
   p.t += dt;
   p.mat.opacity = 0.42 + 0.08 * Math.sin(p.t * 3.2);
-  const floor = groundHeight(at.x, at.z);
   p.column.position.set(at.x, floor, at.z);
-  const left = player.cooldownLeft(def.impl);
-  showCountdown(p, left > 0 ? Math.ceil(left) : 0, { x: at.x, y: floor + COUNT_Y, z: at.z }, dt);
-}
-
-/** The countdown in the preview: `second` (0: none) shown `at`, painted only as it changes, popping as each comes; the
- *  ring keeps the second it shows (`userData.countdown`, null for none) for what measures it. */
-function showCountdown(p: Preview, second: number, at: Preview['countAt'], dt: number): void {
-  if (second !== p.counted) {
-    p.counted = second;
-    p.countT = 0;
-    if (second) p.count.show(textArt(String(second), COUNT_STYLE));
-  }
-  p.countAt = second ? at : null;
-  p.ring.userData.countdown = second || null;
-  p.countT += dt;
-  p.count.scale = 1 + (COUNT_POP - 1) * Math.max(0, 1 - p.countT / COUNT_SETTLE);
 }
 
 /** A mote of his light, `size` across, at x, y, z moving at vx, vy, vz (m/s), fading over `life` s. */
