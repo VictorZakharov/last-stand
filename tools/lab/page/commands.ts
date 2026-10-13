@@ -1,18 +1,22 @@
 // The lab's commands as the page runs them (tools/lab): what the session calls, by name, with the lab and the
 // command's options. Each sets its fixture up afresh and checks it, so a command's result doesn't depend on the last.
+// Each loads its module as it runs: an A/B copies these modules into the other commit's tree, and one measuring game
+// code that commit hasn't got (a new skill, a new look) would otherwise stop every command loading there.
 import type { Lab, Fixture, Report, ViewName } from './lab';
 import type { Joints } from '../../../src/entities/models/rig';
-import { sheet as pictureSheet, type Sheet } from './sheet';
-import { carry as carryRound, describeCarry } from './carry';
-import { feet as feetRound, missedCanaries, type FeetOptions } from './feet';
-import { range as rangeRound, missedRangeCanary, type RangeOptions } from './range';
-import { gait as gaitRound, type GaitOptions } from './gait';
-import { stops as stopsRound, type StopsOptions } from './stops';
-import { form as formRound, type FormOptions } from './form';
-import { ui as uiRound, type UiOptions } from './ui';
-import { touchStick, type TouchOptions } from './touchStick';
-import { light as lightRound, type LightOptions } from './light';
-import { spawns as spawnsRound, type SpawnsOptions } from './spawns';
+import type { Sheet } from './sheet';
+import type { FeetOptions } from './feet';
+import type { RangeOptions } from './range';
+import type { GaitOptions } from './gait';
+import type { StopsOptions } from './stops';
+import type { FormOptions } from './form';
+import type { UiOptions } from './ui';
+import type { TouchOptions } from './touchStick';
+import type { LightOptions } from './light';
+import type { SpawnsOptions } from './spawns';
+import type { HealthOptions } from './health';
+import type { BlinkOptions } from './blink';
+import type { GearOptions } from './gear';
 
 export interface SheetCommand {
   states: string[];
@@ -22,7 +26,8 @@ export interface SheetCommand {
 }
 
 /** `lab sheet`: the pictures and their notes. */
-export function sheet(lab: Lab, command: SheetCommand): Promise<Sheet> {
+export async function sheet(lab: Lab, command: SheetCommand): Promise<Sheet> {
+  const { sheet: pictureSheet } = await import('./sheet');
   return pictureSheet(lab, command);
 }
 
@@ -35,6 +40,7 @@ export interface CarryCommand {
 
 /** `lab carry`: the carried bow against the body; a canary it missed is a problem. */
 export async function carry(lab: Lab, command: CarryCommand): Promise<Report> {
+  const { carry: carryRound, describeCarry } = await import('./carry');
   const setup = await lab.setup({ ...command.fixture, nocked: true });
   const report = await carryRound(lab, { canary: command.canary, frames: command.frames });
   const problems: string[] = [];
@@ -49,6 +55,7 @@ export async function carry(lab: Lab, command: CarryCommand): Promise<Report> {
  * pictured; a canary it missed is a problem.
  */
 export async function feet(lab: Lab, command: FeetOptions): Promise<Report> {
+  const { feet: feetRound, missedCanaries } = await import('./feet');
   const report = await feetRound(lab, command);
   return { text: report.lines.join('\n'), problems: missedCanaries(report), moments: report.moments };
 }
@@ -58,6 +65,7 @@ export async function feet(lab: Lab, command: FeetOptions): Promise<Report> {
  * reversals, the worst moments pictured; a canary it missed is a problem.
  */
 export async function range(lab: Lab, command: RangeOptions): Promise<Report> {
+  const { range: rangeRound, missedRangeCanary } = await import('./range');
   const report = await rangeRound(lab, command);
   return { text: report.lines.join('\n'), problems: missedRangeCanary(report), moments: report.moments };
 }
@@ -68,6 +76,7 @@ export async function range(lab: Lab, command: RangeOptions): Promise<Report> {
  * filmed from the side.
  */
 export async function gait(lab: Lab, command: GaitOptions): Promise<Report> {
+  const { gait: gaitRound } = await import('./gait');
   const report = await gaitRound(lab, command);
   return { text: report.lines.join('\n'), problems: report.problems, moments: report.moments, counts: report.counts };
 }
@@ -77,6 +86,7 @@ export async function gait(lab: Lab, command: GaitOptions): Promise<Report> {
  * and drawn back, a foot off the body's level), on level ground and by the dais's edge.
  */
 export async function stops(lab: Lab, command: StopsOptions): Promise<Report> {
+  const { stops: stopsRound } = await import('./stops');
   const report = await stopsRound(lab, command);
   return { text: report.lines.join('\n'), problems: [] };
 }
@@ -87,6 +97,7 @@ export async function stops(lab: Lab, command: StopsOptions): Promise<Report> {
  * missed, or a run held up, is a problem.
  */
 export async function form(lab: Lab, command: FormOptions): Promise<Report> {
+  const { form: formRound } = await import('./form');
   const report = await formRound(lab, command);
   return { text: report.lines.join('\n'), problems: report.problems, moments: report.moments };
 }
@@ -95,7 +106,8 @@ export async function form(lab: Lab, command: FormOptions): Promise<Report> {
  * `lab ui`: the game's UI in its states (the lobby, a tooltip, the run's HUD with the world's labels, the choice after
  * a wave, the pause menu), each pictured whole with its boxes as shares of the window.
  */
-export function ui(lab: Lab, command: UiOptions): Promise<Report> {
+export async function ui(lab: Lab, command: UiOptions): Promise<Report> {
+  const { ui: uiRound } = await import('./ui');
   return uiRound(lab, command);
 }
 
@@ -103,7 +115,8 @@ export function ui(lab: Lab, command: UiOptions): Promise<Report> {
  * `lab touch`: the touch controls' move stick pushed by a finger near and far past its edge, and the hero's speed;
  * a push further out that gives less is a problem, as is a canary it missed.
  */
-export function touch(lab: Lab, command: TouchOptions): Promise<Report> {
+export async function touch(lab: Lab, command: TouchOptions): Promise<Report> {
+  const { touchStick } = await import('./touchStick');
   return touchStick(lab, command);
 }
 
@@ -111,7 +124,8 @@ export function touch(lab: Lab, command: TouchOptions): Promise<Report> {
  * `lab light`, one scenario: the frame drawn as the player sees it standing in a biome and a view, and how bright it
  * is as a share of the screen's white; a canary it missed is a problem.
  */
-export function light(lab: Lab, command: LightOptions): Promise<Report> {
+export async function light(lab: Lab, command: LightOptions): Promise<Report> {
+  const { light: lightRound } = await import('./light');
   return lightRound(lab, command);
 }
 
@@ -120,8 +134,35 @@ export function light(lab: Lab, command: LightOptions): Promise<Report> {
  * and the boss's walk to the hero from each gate; a gate left idle, a foe risen in a prop, a boss that never reached
  * the hero and a canary missed are problems.
  */
-export function spawns(lab: Lab, command: SpawnsOptions): Promise<Report> {
+export async function spawns(lab: Lab, command: SpawnsOptions): Promise<Report> {
+  const { spawns: spawnsRound } = await import('./spawns');
   return spawnsRound(lab, command);
+}
+
+/**
+ * `lab health`, one scenario: the hero's Health held at shares of his most, the frame at each with the low-health look
+ * and without it; blood in the middle of the view, a look above where it starts, one that drains or covers less at a
+ * lower Health, and a canary missed are problems.
+ */
+export async function health(lab: Lab, command: HealthOptions): Promise<Report> {
+  const { health: healthRound } = await import('./health');
+  return healthRound(lab, command);
+}
+
+/**
+ * `lab blink`: the mage's blink cast as the player casts it in each scenario, and the foes it dazes; a landing off its
+ * preview, past his reach or in a prop, a blow landed while he crossed, a near foe that moved while dazed and a far
+ * one that stopped are problems.
+ */
+export async function blink(lab: Lab, command: BlinkOptions): Promise<Report> {
+  const { blink: blinkRound } = await import('./blink');
+  return blinkRound(lab, command);
+}
+
+/** `lab gear`: full sets rolled for every class at each tier, and what they give; a class out of order is a problem. */
+export async function gear(_lab: Lab, command: GearOptions): Promise<Report> {
+  const { gear: gearRound } = await import('./gear');
+  return gearRound(command);
 }
 
 /** `lab probe`'s set-up before a probe module runs (a probe may set up again as it likes). */

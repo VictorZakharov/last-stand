@@ -30,7 +30,7 @@ const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3();
 /** A skill the class knows: its tuning data + behavior. Keyed by `def.impl`. */
 export interface KnownSkill { def: SkillDef; impl: SkillImpl }
 
-/** Damage absorption shield (see the Arcane Aegis skill). */
+/** Damage absorption shield (see the Iron Bellow skill). */
 export interface Ward { amount: number; t: number; onHit?(absorbed: number): void; onEnd?(): void }
 
 /** Absolute difference between two headings. */
@@ -59,9 +59,10 @@ interface ChannelState { skill: KnownSkill; key: SkillKey; state: unknown; t: nu
 /** A movement skill's dash: a fixed velocity that input can't steer, with a per-frame hook; `lift`
  *  makes it a jump of that peak height, and `anim` is the pose it plays, over the rush and `hold`
  *  seconds more standing where it ended (a lunge's strikes follow through). */
-interface DashState { vx: number; vz: number; t: number; dur: number; hold: number; lift: number; anim: CastAnim; step?(): void; pace?(u: number): number }
-/** `pace` (optional) is the share of the way covered by `u` (0..1 of `dur`), rising from 0 to 1: a dash that braces before it goes, or skids at its end, covering the same distance */
-export interface DashOpts { lift?: number; anim?: CastAnim; hold?: number; step?(): void; pace?(u: number): number }
+interface DashState { vx: number; vz: number; t: number; dur: number; hold: number; lift: number; anim: CastAnim; through: boolean; step?(): void; pace?(u: number): number }
+/** `pace` (optional) is the share of the way covered by `u` (0..1 of `dur`), rising from 0 to 1: a dash that braces before it goes, or skids at its end, covering the same distance;
+ *  `through`: it passes through the props on its way (a blink), where it ends clear of them */
+export interface DashOpts { lift?: number; anim?: CastAnim; hold?: number; through?: boolean; step?(): void; pace?(u: number): number }
 
 const round2 = (v: number): number => Math.round(v * 100) / 100;
 
@@ -541,8 +542,8 @@ export class Player {
   }
 
   /** Rush along `dir` (normalized, on the ground) at `speed` for `dur` seconds; `step` runs every frame of it. */
-  startDash(dir: THREE.Vector3, speed: number, dur: number, { lift = 0, anim = 'charge', hold = 0, step, pace }: DashOpts = {}): void {
-    this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, hold, lift, anim, step, pace };
+  startDash(dir: THREE.Vector3, speed: number, dur: number, { lift = 0, anim = 'charge', hold = 0, through = false, step, pace }: DashOpts = {}): void {
+    this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, hold, lift, anim, through, step, pace };
     this.facing = Math.atan2(dir.x, dir.z);
   }
 
@@ -637,7 +638,7 @@ export class Player {
     }
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
-    resolveWorld(this.pos, this.radius);
+    if (!d?.through || d.t >= d.dur) resolveWorld(this.pos, this.radius);
     if (d) {
       d.step?.();
       if (d.t >= d.dur + d.hold) { this.dash = null; this.vel.multiplyScalar(this.stats.moveSpeed / Math.max(1e-3, Math.hypot(d.vx, d.vz))); }

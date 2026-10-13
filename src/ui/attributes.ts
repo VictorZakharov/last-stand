@@ -29,7 +29,8 @@ const perSec = (v: number) => `${v.toFixed(1)} / s`;
 export const ATTRIBUTE_GROUPS: [string, AttributeDef[]][] = [
   ['Vitals', [
     { label: 'Health', value: 'maxLife', stat: 'life', base: 'life', fmt: (v) => String(Math.round(v)) },
-    { label: 'Health regeneration', value: 'lifeRegen', stat: 'lifeRegen', base: 'lifeRegen', fmt: perSec },
+    { label: 'Health regeneration', value: 'lifeRegen', stat: 'lifeRegen', base: 'lifeRegen', percentOfBase: true, fmt: perSec,
+      note: 'Items add a percentage of the base regeneration.' },
     { label: 'Energy', value: 'maxEnergy', stat: 'energy', base: 'energy', fmt: (v) => String(Math.round(v)) },
     { label: 'Energy regeneration', value: 'energyRegen', stat: 'energyRegen', base: 'energyRegen', fmt: perSec },
     { label: 'Movement speed', value: 'moveSpeed', stat: 'moveSpeed', base: 'moveSpeed', percentOfBase: true, cap: 40, fmt: (v) => v.toFixed(1),

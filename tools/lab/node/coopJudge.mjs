@@ -305,6 +305,147 @@ function describeDown(host, guest, frameMs) {
   return { line, problems };
 }
 
+/** The runs of frames of `samples` in which `hidden(sample)` holds: each one's first frame and the first after it. */
+function hiddenRuns(samples, hidden) {
+  const runs = [];
+  let start = -1;
+  samples.forEach((sample, frame) => {
+    const now = hidden(sample);
+    if (now && start < 0) start = frame;
+    if (!now && start >= 0) {
+      runs.push({ frame: start, from: start, to: frame });
+      start = -1;
+    }
+  });
+  if (start >= 0) runs.push({ frame: start, from: start, to: samples.length });
+  return runs;
+}
+
+/** The ids of the foes of `samples` dazed afresh within frames [from, to]. */
+function dazedWithin(samples, from, to) {
+  const ids = new Set();
+  for (let frame = Math.max(1, from); frame <= Math.min(to, samples.length - 1); frame++) {
+    for (const foe of samples[frame].foes) {
+      const before = samples[frame - 1].foes.find((one) => one.id === foe.id);
+      if (foe.dazed && !before?.dazed) ids.add(foe.id);
+    }
+  }
+  return ids;
+}
+
+/** How far foe `id` moved on `samples`' screen over frames [from, to] while it showed dazed, m. */
+function movedDazed(samples, id, from, to) {
+  let moved = 0;
+  for (let frame = from + 1; frame <= Math.min(to, samples.length - 1); frame++) {
+    const now = samples[frame].foes.find((one) => one.id === id);
+    const before = samples[frame - 1].foes.find((one) => one.id === id);
+    if (!now?.dazed || !before) continue;
+    moved += distance([now.x, now.z], [before.x, before.z]);
+  }
+  return moved;
+}
+
+/** how long after a blink hid the guest on its own screen the host may hide its copy, frames */
+const BLINK_AFTER = 60;
+/** how long before the guest vanished its blink may daze a foe (its coming apart), and after it a daze may take to
+ *  show on the host, frames */
+const DAZE_BEFORE = 12;
+const DAZE_AFTER = 60;
+/** the frames after its copy formed again on the host's screen that its slide is measured over */
+const SLIDE_FRAMES = 20;
+/** a copy coming out further than this from where the guest did on its own screen is off, m */
+const CAME_OUT_OFF = 0.5;
+/** the frames before its copy vanished, and from when it formed again, that its moves are looked at over (coming
+ *  apart and put together, its body drawn) */
+const AROUND_FRAMES = 10;
+
+/** The largest move a frame of `points` over frames [from, to]. */
+function largestMoveOver(points, from, to) {
+  return largestMove(points.slice(Math.max(0, from), to + 1));
+}
+
+/**
+ * The guest's blinks: each one that hid it on its own screen, how far it crossed there, when and for how long the host
+ * hid its copy, the copy's largest move a frame there as it came apart and as it formed again, how far from where the
+ * guest came out on its own screen the copy came out and how far it moved after; the foes each blink dazed on the
+ * guest's screen against those dazed on the host's, and how far each went on the guest's screen while shown dazed.
+ */
+export function judgeBlinks(host, guest) {
+  const own = hiddenRuns(guest, (sample) => !sample.shown.self);
+  const there = hiddenRuns(host, (sample) => sample.shown.partner === false);
+  const used = new Set();
+  const partner = host.map((sample) => sample.partner);
+  const blinks = own.map((run) => {
+    const seen = takeWithin(there, used, run.from, run.from + BLINK_AFTER);
+    const dazedHere = dazedWithin(guest, run.from - DAZE_BEFORE, run.from);
+    const dazedThere = dazedWithin(host, run.from - DAZE_BEFORE, run.from + DAZE_AFTER);
+    const moved = [...dazedHere].map((id) => movedDazed(guest, id, run.from - DAZE_BEFORE, run.from + DAZE_AFTER));
+    const blink = { at: run.from, hiddenHere: run.to - run.from, seen: !!seen, dazedHere, dazedThere, moved };
+    if (!seen || seen.to >= host.length || run.to >= guest.length) return blink;
+    const formedThere = host[seen.to].partner;
+    const settled = host[Math.min(seen.to + SLIDE_FRAMES, host.length - 1)].partner;
+    return {
+      ...blink,
+      crossed: distance(guest[Math.max(0, run.from - 1)].self, guest[run.to].self),
+      delay: seen.from - run.from,
+      hiddenThere: seen.to - seen.from,
+      apart: largestMoveOver(partner, seen.from - AROUND_FRAMES, seen.from - 1),
+      forming: largestMoveOver(partner, seen.to, seen.to + AROUND_FRAMES),
+      cameOut: distance(formedThere, guest[run.to].self),
+      slid: distance(formedThere, settled),
+    };
+  });
+  return { blinks, unmatched: there.length - used.size };
+}
+
+function describeBlinks(host, guest, frameMs) {
+  const { blinks, unmatched } = judgeBlinks(host, guest);
+  const seen = blinks.filter((blink) => blink.delay !== undefined);
+  const most = (values) => Math.max(0, ...values);
+  const crossed = seen.map((blink) => blink.crossed);
+  const formed = seen.length
+    ? ` (crossing ${median(crossed).toFixed(2)} m on its own, the least ${Math.min(...crossed).toFixed(2)} m), ` +
+      `${ms(median(seen.map((blink) => blink.delay)), frameMs)} later (median), hidden ` +
+      `${ms(median(seen.map((blink) => blink.hiddenThere)), frameMs)} there against ` +
+      `${ms(median(seen.map((blink) => blink.hiddenHere)), frameMs)} on its own; its copy's largest move a frame ` +
+      `there as it came apart ${cm(most(seen.map((blink) => blink.apart)))} and as it formed ` +
+      `${cm(most(seen.map((blink) => blink.forming)))} (the most); it came out ` +
+      `${cm(median(seen.map((blink) => blink.cameOut)))} from where it did on its own screen (the most ` +
+      `${cm(most(seen.map((blink) => blink.cameOut)))}) and moved ${cm(median(seen.map((blink) => blink.slid)))} ` +
+      `after (the most ${cm(most(seen.map((blink) => blink.slid)))})`
+    : '';
+  const here = blinks.flatMap((blink) => [...blink.dazedHere]).length;
+  const agreed = blinks.flatMap((blink) => [...blink.dazedHere].filter((id) => blink.dazedThere.has(id))).length;
+  const thereAlone = blinks.flatMap((blink) => [...blink.dazedThere].filter((id) => !blink.dazedHere.has(id))).length;
+  const moved = blinks.flatMap((blink) => blink.moved);
+  const went = moved.length
+    ? `; a foe dazed went ${cm(median(moved))} on the guest's screen while shown dazed (median, the most ` +
+      `${cm(most(moved))})`
+    : '';
+  const line = `blinks: ${blinks.length} on the guest's screen, ${seen.length} hid it on the host's${formed}; foes ` +
+    `dazed: ${here} on the guest's screen, ${agreed} of them on the host's, ${thereAlone} on the host's alone${went}`;
+  const problems = [];
+  if (!blinks.length) problems.push('the guest never blinked');
+  const unseen = blinks.length - seen.length;
+  if (unseen) problems.push(`${unseen} blinks never hid the guest on the host's screen`);
+  if (unmatched) problems.push(`the host hid the guest ${unmatched} times with no blink on its own screen`);
+  const off = seen.filter((blink) => blink.cameOut > CAME_OUT_OFF).length;
+  if (off) {
+    problems.push(`${off} blinks came out more than ${cm(CAME_OUT_OFF)} from where they did on the guest's screen`);
+  }
+  if (agreed < here) problems.push(`${here - agreed} foes dazed on the guest's screen were never dazed on the host's`);
+  if (thereAlone) problems.push(`${thereAlone} foes dazed on the host's screen weren't on the guest's`);
+  return { line, problems };
+}
+
+/**
+ * Where a game shows `who` (its own hero, `self`, or its `partner`) a frame, none where its body isn't drawn (a
+ * blink's crossing: no one sees it move there).
+ */
+function drawnAt(samples, who) {
+  return samples.map((sample) => (sample.shown?.[who] === false ? null : sample[who]));
+}
+
 /**
  * A scenario judged: its lines (each copy's following, the arrows, the blows, as the scenario has them) and the
  * problems found. `host` and `guest` are the two games' samples, frame for frame.
@@ -317,9 +458,9 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
     if (problem) problems.push(`${name}: ${problem}`);
     for (const one of more ?? []) problems.push(`${name}: ${one}`);
   };
-  const guestOnHost = follow(host.map((sample) => sample.partner), guest.map((sample) => sample.self));
+  const guestOnHost = follow(drawnAt(host, 'partner'), drawnAt(guest, 'self'));
   add(describeFollow('the guest\'s hero on the host\'s screen', guestOnHost, frameMs));
-  const hostOnGuest = follow(guest.map((sample) => sample.partner), host.map((sample) => sample.self));
+  const hostOnGuest = follow(drawnAt(guest, 'partner'), drawnAt(host, 'self'));
   add(describeFollow('the host\'s hero on the guest\'s screen', hostOnGuest, frameMs));
   for (const [what, samples] of [["the host's play-out", host], ["the guest's play-out", guest]]) {
     const line = describePlayout(what, samples);
@@ -329,5 +470,6 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (name === 'shoot') add(describeShots(host, guest, frameMs));
   if (name === 'dodge') add(describeBlows(guest, frameMs));
   if (name === 'down') add(describeDown(host, guest, frameMs));
+  if (name === 'blink') add(describeBlinks(host, guest, frameMs));
   return { lines, problems };
 }

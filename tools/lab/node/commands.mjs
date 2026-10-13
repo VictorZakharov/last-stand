@@ -11,6 +11,20 @@ import { writeSheet } from './sheetImage.mjs';
 
 /** the waves `spawns` sets off in each biome unless `--waves` says */
 const SPAWN_WAVES = 32;
+/** the sets `gear` rolls for each class at each tier unless `--sets` says */
+const GEAR_SETS = 400;
+/** the rarities loot rolls (src/data/items.ts `RARITIES`) */
+const RARITIES = ['common', 'magic', 'rare', 'epic', 'legendary'];
+
+/** A `gear` tier from its option (`epic@30`: a rarity at an item level), checked. */
+function gearTier(text) {
+  const [rarity, level] = text.split('@');
+  const ilvl = Number(level);
+  if (!RARITIES.includes(rarity) || !(ilvl >= 1)) {
+    throw labError(`gear --tiers: ${text} is not a rarity at an item level (${RARITIES.join(', ')}; epic@30)`);
+  }
+  return { rarity, ilvl: Math.round(ilvl) };
+}
 
 /** The set-up a command asks for (page/lab.ts `Fixture`), from its options. */
 function fixtureFrom(options) {
@@ -364,6 +378,67 @@ export const COMMANDS = {
     textOf: asText,
     problemsOf: problemsIn,
     pictures: picturePairs,
+  },
+
+  health: {
+    check(options) {
+      const wrong = options.shares.find((share) => !(Number(share) >= 0 && Number(share) <= 1));
+      if (wrong !== undefined) throw labError(`health --shares: ${wrong} is not a share from 0 to 1`);
+    },
+    async each(side, options) {
+      // (a frame at a time, each on its own: its pictures sent back with it)
+      const reports = [];
+      for (const scenario of lightScenarios({ ...options, facings: options.facings.slice(0, 1) })) {
+        const canary = Boolean(options.canary) && reports.length === 0;
+        const shares = options.shares.map(Number);
+        reports.push(await side.command('health', { scenario, shares, pictures: options.pictures !== false, canary }));
+      }
+      return {
+        text: reports.map((report) => report.text).join('\n'),
+        problems: reports.flatMap((report) => report.problems),
+        moments: reports.flatMap((report) => report.moments),
+      };
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('health'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
+  blink: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        pictures: options.pictures !== false,
+        canary: Boolean(options.canary),
+      };
+      return side.command('blink', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('blink'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
+  gear: {
+    check(options) {
+      for (const tier of options.tiers) gearTier(tier);
+      if (options.sets !== undefined && !(options.sets >= 1)) throw labError('gear --sets: at least 1');
+    },
+    each(side, options) {
+      const command = {
+        tiers: options.tiers.map(gearTier),
+        sets: Math.round(options.sets ?? GEAR_SETS),
+        canary: Boolean(options.canary),
+      };
+      return side.command('gear', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
   },
 
   touch: {

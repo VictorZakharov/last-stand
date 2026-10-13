@@ -111,7 +111,8 @@ export const sfx = {
   nova: guard(() => { noise({ dur: 0.7, freq: 5000, sweep: 800, q: 1, gain: 0.25 }); [1320, 1760, 2090].forEach((f, i) => tone({ freq: f, dur: 0.8, gain: 0.05, delay: i * 0.04 })); }),
   maelstrom: guard(() => { noise({ dur: 1.2, freq: 300, sweep: 1200, q: 4, gain: 0.25, attack: 0.2 }); }),
   zap: guard(() => { if (throttle('zap', 70)) return; noise({ dur: 0.1, freq: 6000, type: 'highpass', gain: 0.12 }); tone({ freq: 180, to: 60, dur: 0.1, type: 'square', gain: 0.05 }); }),
-  aegis: guard(() => { [523, 659, 784].forEach((f, i) => tone({ freq: f, dur: 0.9, gain: 0.07, type: 'sine', delay: i * 0.05 })); }),
+  /** coming apart into light and crossing: a rush of air rising, and a shimmer rising with it */
+  blink: guard(() => { noise({ dur: 0.32, freq: 900, sweep: 4200, q: 1.4, gain: 0.14 }); tone({ freq: 520, to: 1560, dur: 0.22, gain: 0.06 }); tone({ freq: 784, to: 2350, dur: 0.18, type: 'triangle', gain: 0.04, delay: 0.03 }); }),
   potion: guard(() => { noise({ dur: 0.35, freq: 800, sweep: 2500, q: 5, gain: 0.15 }); tone({ freq: 440, to: 880, dur: 0.4, gain: 0.08 }); }),
   hurt: guard(() => { if (throttle('hurt', 120)) return; noise({ dur: 0.18, freq: 500, type: 'lowpass', gain: 0.35 }); tone({ freq: 160, to: 90, dur: 0.15, type: 'square', gain: 0.05 }); }),
   enemyDie: guard(() => { if (throttle('die', 40)) return; noise({ dur: 0.35, freq: 700, sweep: 200, q: 1, gain: 0.18 }); }),

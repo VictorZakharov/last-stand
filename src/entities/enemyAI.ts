@@ -67,10 +67,11 @@ export const FX = {
   strike(x: number, z: number) {
     burst(new THREE.Vector3(x, 1.1, z), { count: 10, color: 0xff3020, speed: 4, life: 0.35, size: 0.2 });
   },
-  /** enemy `id`'s blow at the player in `slot`, judged by that player's game where it shows the enemy */
+  /** enemy `id`'s blow at the player in `slot`, judged by that player's game where it shows the enemy (dazed there,
+   *  by its own hero's blink on its way to the host, it strikes no one) */
   melee(id: number, slot: number, damage: number) {
     const e = G.enemies.find((x) => x.id === id), p = G.player;
-    if (!e || p.slot !== slot || !p.active) return;
+    if (!e || p.slot !== slot || !p.active || e.dazed > 0) return;
     const dist = Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z);
     if (dist >= e.def.range + p.radius + 0.3 || !e.inFront(p.pos.x, p.pos.z, 1.3)) return;
     hurtPlayer(p, damage, e.def.damageType, e.pos);
@@ -133,10 +134,12 @@ export const FX = {
       onHit,
     });
   },
-  /** the red ring where a slam will land; it goes if the enemy dies before it lands */
+  /** the red ring where a slam will land; it goes if the enemy dies or is dazed before it lands */
   tele(id: number, x: number, z: number, radius: number, dur: number, color: number) {
     const tg = telegraph({ x, z }, radius, dur, color);
-    G.enemies.find((e) => e.id === id)?.onDeath.push(() => tg.cancel());
+    const e = G.enemies.find((foe) => foe.id === id);
+    e?.onDeath.push(() => tg.cancel());
+    e?.onDazed.push(() => tg.cancel());
   },
   /** a blow landing on a lure (combat/lures.ts) */
   lureHit(x: number, z: number) {

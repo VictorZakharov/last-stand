@@ -8,7 +8,7 @@ import starfall from './starfall';
 import voidLance from './voidLance';
 import glacialNova from './glacialNova';
 import maelstrom from './maelstrom';
-import aegis from './aegis';
+import blink from './blink';
 import potion from './potion';
 import cleave from './cleave';
 import crescent from './crescent';
@@ -26,7 +26,7 @@ import strawman from './strawman';
 import type { SkillImpl } from './types';
 
 export const SKILL_IMPLS: Record<string, SkillImpl> = {
-  splinterBolt, starfall, voidLance, glacialNova, maelstrom, aegis, potion,
+  splinterBolt, starfall, voidLance, glacialNova, maelstrom, blink, potion,
   cleave, crescent, raiseShield, tempest, bullRush, powerStrike, ironBellow, twinFangs,
   nockShot: bowShot, fanShot: bowShot, piercingShot, arrowRain, quarryMark, strawman,
 };

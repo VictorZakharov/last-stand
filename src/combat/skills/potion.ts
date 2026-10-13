@@ -12,8 +12,8 @@ const _ahead = new THREE.Vector3();
 const skill: InstantSkill = {
   anim: 'drink',
   cast(player, rawDef) {
-    const def = rawDef as Needs<'healPct'>;
-    player.heal(player.stats.maxLife * def.healPct);
+    const def = rawDef as Needs<'heal' | 'healPct'>;
+    player.heal(def.heal + player.stats.maxLife * def.healPct);
     sfx.potion();
     // through the eyes a swirl round the body starts at the camera, where particles fade out: the motes
     // rise in a wider ring, where they're seen, and the light shines from ahead (Player.lightAhead)

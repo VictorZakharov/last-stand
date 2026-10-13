@@ -173,6 +173,12 @@ export async function runCoop(side, { scenarios, ping = DEFAULT_PING, jitter = D
     const problems = [];
     for (const name of scenarios ?? Object.keys(about)) {
       if (!about[name]) throw labError(`coop: no scenario ${name} (there are ${Object.keys(about).join(', ')})`);
+      const unplayable = await callPage(guest, 'coopUnplayable', { name });
+      if (unplayable && scenarios) throw labError(`coop: ${name}: ${unplayable} (--class picks a hero that has)`);
+      if (unplayable) {
+        lines.push(`${name}: not played (${unplayable})`);
+        continue;
+      }
       await Promise.all([side.page, guest].map((page) => callPage(page, 'coopScenario', { name })));
       const { frames, pictures: at } = await callPage(side.page, 'coopScenarioFrames', { name });
       if (pictures && at.length) {

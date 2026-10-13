@@ -5,6 +5,7 @@
 // lab's clock. What each game shows is recorded frame by frame and judged against what the other one has: how late
 // and how roughly a hero or a foe follows where its own game has it, whether an arrow that struck a foe on the guest's
 // screen counted on the host, and whether a blow the guest dodged on its screen hurt it.
+import * as THREE from 'three';
 import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
 import { cameraYaw } from '../../../src/core/renderer';
@@ -13,8 +14,10 @@ import * as netlog from '../../../src/net/netlog';
 import { spawnEnemy } from '../../../src/entities/spawner';
 import { clearEnemies, type Enemy } from '../../../src/entities/enemy';
 import { Projectile } from '../../../src/combat/projectiles';
+import { SKILL_KEYS } from '../../../src/loot/loadout';
 import type { EnemyId } from '../../../src/data/enemies';
 import type { Player } from '../../../src/entities/player';
+import type { SkillKey } from '../../../src/types';
 import type { Frame, Lab } from './lab';
 
 /** Which game a page plays. */
@@ -50,6 +53,8 @@ export interface FoeSample {
   blow: boolean;
   /** this game's own hero is where that blow would land (in its reach and before it, the game's own rule) */
   inReach: boolean;
+  /** dazed, as this game shows it (stars over it) */
+  dazed: boolean;
 }
 
 /** What one game shows in one frame of a scenario. */
@@ -62,6 +67,8 @@ export interface Sample {
   standing: { self: HeroState; partner: HeroState | null };
   /** its partner's hero as it shows it (none before it has arrived) */
   partner: XZ | null;
+  /** whether its own hero's body and its partner's are drawn (a blink hides one as it crosses) */
+  shown: { self: boolean; partner: boolean | null };
   /** how it plays its partner's reports out (net/timeline, where this tree has one): how far behind the freshest it
    *  plays (ms), its clock's rate this frame, whether a stall held it at the newest report */
   playout: { behind: number; rate: number; held: boolean } | null;
@@ -105,6 +112,8 @@ interface Scenario {
   foes: { type: EnemyId; at: XZ }[];
   /** the guest's life as it starts (unhurt by default) */
   guestLife?: number;
+  /** the skill (its `impl`) the guest's hero must know to play it: a class's own */
+  skill?: string;
   /** the frames (after it settled) each game's screen is pictured at, with `--pictures` */
   pictures?: number[];
   hostInput(frame: number): Frame;
@@ -237,6 +246,35 @@ function shootInput(frame: number): Frame {
   return { aim, m0: frame % 36 < 2 };
 }
 
+/** the guest's two spots in `blink`, 7 m apart in the open (the lab's `blink` lands there), and the frames between its
+ *  blinks from one to the other */
+const BLINK_SPOTS: XZ[] = [[12, 22], [8.65, 15.85]];
+const BLINK_EVERY = 200;
+/** the frames the guest holds the blink's key, aimed at the other spot, before it lets go, and the frames it keeps
+ *  aiming there after, as a player's cursor stays where it was (the lab's own aim is a step ahead of the hero) */
+const BLINK_HOLD = 12;
+const BLINK_AIMED = 40;
+
+/** The key the local hero's skill `impl` is on (none: it hasn't got it). */
+function keyOf(impl: string): SkillKey | null {
+  return SKILL_KEYS.find((key) => G.player.skillAt(key)?.def.impl === impl) ?? null;
+}
+
+/** The guest in `blink`: every so often it holds the blink aimed at its other spot and lets go, its cooldown and
+ *  energy made ready first (a blink every few seconds, where its own cooldown would allow one in seven). */
+function blinkInput(frame: number): Frame {
+  const key = keyOf('blink');
+  const beat = frame % BLINK_EVERY;
+  if (!key || beat >= BLINK_AIMED) return {};
+  if (beat === 0) {
+    G.player.cooldowns.clear();
+    G.player.energy = G.player.stats.maxEnergy;
+  }
+  const [x, z] = BLINK_SPOTS[(Math.floor(frame / BLINK_EVERY) + 1) % BLINK_SPOTS.length];
+  const aim = new THREE.Vector3(x, 0, z);
+  return { keys: beat < BLINK_HOLD - 1 ? [key] : [], aim };
+}
+
 const SCENARIOS: Record<string, Scenario> = {
   walk: {
     about: 'the host runs round in circles and the guest zigzags, stopping now and then',
@@ -291,6 +329,22 @@ const SCENARIOS: Record<string, Scenario> = {
     pictures: [140, 330, 460, 540],
     hostInput: raiseInput,
     guestInput: () => ({}),
+  },
+  blink: {
+    about: 'the guest, a mage, blinks between two spots as foes close on it, the host standing off',
+    frames: 800,
+    host: [-4, 22],
+    guest: BLINK_SPOTS[0],
+    foes: [
+      { type: 'thornling', at: [10, 19] },
+      { type: 'thornling', at: [14, 19] },
+      { type: 'thornling', at: [9, 24] },
+      { type: 'mossback', at: [20, 16] },
+    ],
+    skill: 'blink',
+    pictures: [40, 240],
+    hostInput: () => ({}),
+    guestInput: blinkInput,
   },
 };
 
@@ -472,6 +526,13 @@ export async function coopFrames(lab: Lab, turn: CoopTurn): Promise<CoopTurnResu
   return { sent: wire.outbox.splice(0), state: stateNow() };
 }
 
+/** Why this game's hero can't play scenario `name` (null: it can). */
+export function coopUnplayable(_lab: Lab, { name }: { name: string }): string | null {
+  const skill = SCENARIOS[name].skill;
+  if (!skill || keyOf(skill)) return null;
+  return `the ${G.player.cls.id} has no ${skill} skill`;
+}
+
 /** How many frames scenario `name` records, and the frames its screens are pictured at. */
 export function coopScenarioFrames(_lab: Lab, { name }: { name: string }): { frames: number; pictures: number[] } {
   return { frames: SCENARIOS[name].frames, pictures: SCENARIOS[name].pictures ?? [] };
@@ -496,6 +557,7 @@ function sampleNow(): Sample {
     life: self.life,
     standing: { self: stateOf(self), partner: partner ? stateOf(partner) : null },
     partner: partner ? [partner.pos.x, partner.pos.z] : null,
+    shown: { self: self.obj.visible, partner: partner ? partner.obj.visible : null },
     playout: playoutNow(),
     foes: G.enemies.filter((foe) => foe.alive).map((foe) => foeSample(foe, self)),
     struck: struckFoes(),
@@ -516,7 +578,9 @@ function foeSample(foe: Enemy, hero: Player): FoeSample {
   play.attacks.set(foe.id, { action, share });
   const distance = Math.hypot(hero.pos.x - foe.pos.x, hero.pos.z - foe.pos.z);
   const inReach = distance < def.range + hero.radius + 0.3 && foe.inFront(hero.pos.x, hero.pos.z, 1.3);
-  return { id: foe.id, x: foe.pos.x, z: foe.pos.z, life: foe.life, blow, inReach };
+  // (an older tree's foes are never dazed)
+  const dazed = ((foe as { dazed?: number }).dazed ?? 0) > 0;
+  return { id: foe.id, x: foe.pos.x, z: foe.pos.z, life: foe.life, blow, inReach, dazed };
 }
 
 /** How this game plays its partner's reports out, where this tree's session has a timeline for it. */

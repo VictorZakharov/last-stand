@@ -231,6 +231,8 @@ export class Lab {
   drawing = false;
   /** the point the mouse is over unless a frame says otherwise */
   aim = new THREE.Vector3();
+  /** the share of his most Health the hero is kept at every frame, until the next set-up (whole: 1) */
+  lifeShare = 1;
   /** what every frame of the current set-up needs before its input (the foes kept away, the hero unhurt) */
   private keepUp: (() => void)[] = [];
   /** the foes a measure spawned (`spawnFoe`), which the set-up's hold of the wave keeps */
@@ -312,7 +314,7 @@ export class Lab {
    * plays them, the hero still kept whole. A measure of a wave sets one off itself (the run's wave and its timer).
    */
   letWavesCome(): void {
-    this.keepUp = [keepHeroWhole];
+    this.keepUp = [this.keepHeroUp];
   }
 
   /** Puts the mouse over a point in the world, as the player would. */
@@ -351,6 +353,11 @@ export class Lab {
     throw new Error(`lab: ${what} (not within ${limit} frames)`);
   }
 
+  /** The hero's Health held at `lifeShare` of his most: no blow a measure lets land changes it. */
+  private readonly keepHeroUp = (): void => {
+    G.player.life = G.player.stats.maxLife * this.lifeShare;
+  };
+
   private runGameFrame(): void {
     const clock = window.__labClock;
     const callbacks = clock.queue;
@@ -380,7 +387,8 @@ export class Lab {
   async setup(fixture: Fixture = {}): Promise<Record<string, unknown>> {
     await this.enterRun();
     this.foes.clear();
-    this.keepUp = [() => holdTheWave(this.foes), keepHeroWhole];
+    this.lifeShare = 1;
+    this.keepUp = [() => holdTheWave(this.foes), this.keepHeroUp];
     await this.until(() => !this.player.casting && !this.player.channel, 400, 'the hero is still busy with a cast');
     if (fixture.fresh) this.buildHeroAgain();
     await this.useView(fixture.view ?? 'top');
@@ -765,10 +773,6 @@ function holdTheWave(kept: Set<Enemy>): void {
   run.queue = [];
   run.phase = 'countdown';
   run.timer = Infinity;
-}
-
-function keepHeroWhole(): void {
-  G.player.life = G.player.stats.maxLife;
 }
 
 /** The session's entry: the lab installed on this page. */

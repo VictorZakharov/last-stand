@@ -40,7 +40,7 @@ export interface HitOpts {
 }
 
 /** What the local player dealt a foe, with its effects, as co-op reports it to the host (set by net/sync). */
-export interface DealtHit { amount: number; crit: boolean; type: DamageType; knock?: number; from?: XZ; chill?: number; freeze?: number }
+export interface DealtHit { amount: number; crit: boolean; type: DamageType; knock?: number; from?: XZ; chill?: number; freeze?: number; daze?: number }
 let dealtSink: ((enemy: Enemy, hit: DealtHit) => void) | null = null;
 export function setDealtSink(fn: typeof dealtSink): void { dealtSink = fn; }
 
@@ -67,6 +67,14 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   if (!opts.silent || crit) damageNumber(enemy, dealt, crit, type);
   if (by.stats.leech > 0 && by.alive) by.heal(dealt * by.stats.leech / 100, true);
   return dealt;
+}
+
+/** Daze a foe for `seconds` with a player's skill (`Enemy.daze`), judged as hits are: only by its own game, which on a
+ *  co-op guest shows it on the copy at once and tells the host, whose snapshots show it on every other game. */
+export function dazeEnemy(enemy: Enemy, seconds: number, by: Player): void {
+  if (!enemy.alive || !dealsDamage(by)) return;
+  enemy.daze(seconds);
+  dealtSink?.(enemy, { amount: 0, crit: false, type: 'arcane', daze: seconds });
 }
 
 /** Damage a player (after armor / resistance / ward). Only its own game's: a partner's is judged where its player sees

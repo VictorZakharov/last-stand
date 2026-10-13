@@ -15,6 +15,7 @@ import { barArt, barStep, FOE_BAR, FOE_NAME, HERO_FOE_BAR } from '../ui/overlay/
 import { DamageMeter } from '../ui/damageMeter';
 import { burst, debris, smokePuff, col, particles } from '../fx/particles';
 import { flash } from '../fx/lights';
+import { dazedStars } from '../fx/dazed';
 import { additive } from '../core/materials';
 import { sfx } from '../core/audio';
 import { emit } from '../events';
@@ -109,6 +110,8 @@ export class Enemy {
   frozen = 0;
   frozenAt = 0;
   chill = 0;
+  /** seconds left dazed (`daze`): standing, thinking of nothing, stars circling over its head */
+  dazed = 0;
   hitT = 0;
   flashAt = -1;
   deadT = -1;
@@ -129,6 +132,8 @@ export class Enemy {
   net: EnemyNet | null = null;
   /** co-op: the extra life a party's foes get (a boss's summons get it too) */
   readonly lifeMult: number;
+  /** run when it's dazed (a slam's telegraph going with the slam it drops) */
+  readonly onDazed: (() => void)[] = [];
   /** run when it dies (a slam's telegraph going with it) */
   readonly onDeath: (() => void)[] = [];
 
@@ -217,6 +222,15 @@ export class Enemy {
     this.action = null;
   }
 
+  /** Dazed for `s` seconds (less for a foe that resists freezing, a boss): it drops what it was doing and stands there,
+   *  thinking of nothing, until it comes to. A player's skill dazes through `dazeEnemy` (combat/damage), as it hits. */
+  daze(s: number): void {
+    if (!this.alive || this.spawning > 0 || this.def.dummy) return;
+    this.dazed = Math.max(this.dazed, s * (1 - (this.def.freezeResist || 0)));
+    if (!this.net) this.cancelAction();
+    for (const drop of this.onDazed.splice(0)) drop();
+  }
+
   tickAction(dt: number): void {
     const a = this.action;
     if (!a) return;
@@ -262,14 +276,15 @@ export class Enemy {
 
     this.hitT = Math.max(0, this.hitT - dt * 4);
     this.chill = Math.max(0, this.chill - dt);
-    const frozen = this.frozen > 0;
+    const frozen = this.frozen > 0, dazed = this.dazed > 0;
     if (frozen) this.frozen = Math.max(0, this.frozen - dt);
+    if (dazed) this.dazed = Math.max(0, this.dazed - dt);
 
     this.desired.set(0, 0, 0);
     this.targetFacing = this.facing;
     if (this.net) return this.updateCopy(dt, t, frozen);
     if (this.lure && (this.lure.until <= t || !lures.includes(this.lure))) this.lure = null;
-    if (!frozen && this.pickTarget()) {
+    if (!frozen && !dazed && this.pickTarget()) {
       if (this.lure) lured(this, this.lure);
       else AI[this.def.ai](this, dt);
       this.tickAction(dt);
@@ -324,6 +339,7 @@ export class Enemy {
   private updateLooks(dt: number, t: number, frozen: boolean): boolean {
     this.model.kit.u.uFrozen.value = damp(this.model.kit.u.uFrozen.value, frozen ? 1 : this.chill > 0 ? 0.35 : 0, 10, dt);
     this.model.kit.u.uHit.value = this.hitT;
+    if (this.dazed > 0) dazedStars(this.pos.x, this.obj.position.y + this.height + 0.25, this.pos.z, t, this.dazed);
     this.paintBar();
     this.meter?.update();
     if (this.aura && this.auraMat) { this.aura.rotation.y += dt; this.auraMat.opacity = 0.5 + Math.sin(t * 4) * 0.2; }

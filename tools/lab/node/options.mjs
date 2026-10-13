@@ -156,13 +156,14 @@ export const COMMANDS = {
   coop: {
     help: 'two games playing together, the host\'s and the guest\'s, their messages carried as a link of a high ping '
       + 'carries them: how far behind and how roughly each copies the other\'s heroes and foes, whether an arrow that '
-      + 'struck a foe on the guest\'s screen counted, whether a blow it dodged on its screen hurt it',
+      + 'struck a foe on the guest\'s screen counted, whether a blow it dodged on its screen hurt it, where its blink '
+      + 'came out on the host\'s screen and whether the foes it dazed were dazed on the host\'s',
     options: {
       scenarios: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['walk', 'foes', 'shoot', 'dodge', 'down'],
-        help: 'the scenarios (all by default): walk, foes, shoot, dodge, down',
+        choices: ['walk', 'foes', 'shoot', 'dodge', 'down', 'blink'],
+        help: 'the scenarios (all the hero can play by default): walk, foes, shoot, dodge, down, blink (a mage)',
       },
       ping: { kind: 'number', usage: 'ms', help: 'the link\'s least round trip (300 by default)' },
       jitter: { kind: 'number', usage: 'ms', help: 'how much later each way a message may come (60 by default)' },
@@ -278,6 +279,89 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'plant faults the measures must catch: the first frame at twice the exposure (and in HDR at 1.2 times '
           + 'the paper white)',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
+  health: {
+    help: 'the screen as the hero\'s Health runs low: standing in each biome and view, his Health held at shares of '
+      + 'his most, and at each the frame drawn with the low-health look and without it at the same moment: the colour '
+      + 'it drains, the blood\'s cover of the screen and of its middle, and how far in it reaches; a frame changed '
+      + 'above where the look starts, blood in the middle of the view, a lower Health draining or covering less and '
+      + 'a look too faint with nothing left are problems: tools/lab/out/health',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      views: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['top', 'third', 'first'],
+        default: 'top,third,first',
+        help: 'the views: top, third, first',
+      },
+      facings: {
+        kind: 'list',
+        usage: 'deg',
+        default: '0',
+        help: 'the way the hero faces, degrees (0 is +z; the first alone)',
+      },
+      shares: {
+        kind: 'list',
+        usage: 'a,b',
+        default: '1,0.6,0.5,0.4,0.25,0.1,0',
+        help: 'the shares of his most Health he is held at, in turn',
+      },
+      pictures: {
+        kind: 'switch',
+        help: 'picture the frames under the share the look starts at (=false: numbers alone)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant faults the checks must catch, in the first scenario: the look drawn with Health whole, and its '
+          + 'blood driven into the middle of the view',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
+  blink: {
+    help: 'the mage\'s blink cast as the player casts it (the key held over the aim, let go): on open ground, past his '
+      + 'reach, at a prop, past one, out at the arena\'s edge, up onto the dais and at his feet, where the preview '
+      + 'showed against where he came out, a blow tried every frame, his body coming apart and whole again; then foes '
+      + 'near where he vanished and further off; a landing off its preview, past his reach or in a prop, a blow landed '
+      + 'while he crossed, a near foe moving while dazed or never coming on again and a far one dazed or stopping are '
+      + 'problems: tools/lab/out/blink (--class mage)',
+    options: {
+      pictures: { kind: 'switch', help: 'picture a blink\'s moments and the dazed foes (=false: the numbers alone)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant faults the checks must catch: the preview read a metre off, the guard taken off as he comes '
+          + 'apart, and a near foe\'s daze cleared at once',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  gear: {
+    help: 'full sets rolled for every class as its loot rolls them, at each rarity and item level, and what a set '
+      + 'gives on average: Health (his own and gear\'s), regeneration a second, the draught\'s heal and how much it '
+      + 'multiplies his damage; a class whose Health or regeneration from gear is out of the order of his own Health '
+      + 'is a problem',
+    options: {
+      tiers: {
+        kind: 'list',
+        usage: 'rarity@ilvl,...',
+        default: 'magic@5,rare@15,epic@30,legendary@50',
+        help: 'the tiers: a rarity at an item level each',
+      },
+      sets: { kind: 'number', usage: 'n', help: 'the sets rolled for each class at each tier (400 by default)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant a fault the check must catch: the ranger\'s Health from gear rolled as the mage\'s',
       },
       ...COMMON_OPTIONS,
     },
