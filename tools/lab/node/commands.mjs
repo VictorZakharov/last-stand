@@ -52,6 +52,25 @@ function lightScenarios(options) {
   return scenarios;
 }
 
+/** The casts `cast` measures (page/cast.ts `CastOptions`, its canary aside): the skill in each biome and view. */
+function castScenarios(options) {
+  const scenarios = [];
+  for (const biome of options.biomes) {
+    for (const view of options.views) {
+      scenarios.push({
+        skill: options._[0],
+        biome,
+        view,
+        facing: options.facing ?? 0,
+        foes: options.foes ?? 4,
+        times: options.times.map(Number),
+        pictures: options.pictures !== false,
+      });
+    }
+  }
+  return scenarios;
+}
+
 /** A sheet's notes as text: how it was set up, then each moment's notes. */
 function sheetNotes(sheet) {
   const moments = sheet.moments.map((moment) => {
@@ -374,6 +393,32 @@ export const COMMANDS = {
     },
     finish(results, options, session) {
       return textWithPictureFiles(results, session.outFor('light'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
+  cast: {
+    check(options) {
+      const wrong = options.times.find((time) => !(Number(time) >= 0));
+      if (wrong !== undefined) throw labError(`cast --times: ${wrong} is not a number of seconds`);
+    },
+    async each(side, options) {
+      // (a biome and view at a time, each on its own: its pictures sent back with it)
+      const reports = [];
+      for (const scenario of castScenarios(options)) {
+        const canary = Boolean(options.canary) && reports.length === 0;
+        reports.push(await side.command('cast', { ...scenario, canary }));
+      }
+      return {
+        text: reports.map((report) => report.text).join('\n'),
+        problems: reports.flatMap((report) => report.problems),
+        moments: reports.flatMap((report) => report.moments),
+      };
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor(join('cast', options._[0])));
     },
     textOf: asText,
     problemsOf: problemsIn,

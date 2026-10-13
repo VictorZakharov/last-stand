@@ -219,6 +219,22 @@ terminal's task stops it all.
   by one gate, and by the Thornwood's west gate foes rose in a log. `--canary`, in the first biome: every foe read
   again moved onto one gate, the first half into a prop, and waves of their own with the boss put first, come late
   and frozen where it rose.
+- `cast <skill>`: a skill cast as the player casts it, its effect seen frame by frame (`page/cast.ts`; the skill
+  named by its key, its behaviour or its name, `--class` for whose). The hero stands in each biome and view
+  (`--biomes`, `--views`, `--facing` in degrees) with the biome's commonest foes coming at him from 13 m ahead
+  (`--foes`, 4 by default), and the key is pressed over an aim 8 m ahead: held for a held skill, drawn to full for a
+  drawn shot, held 3 s for a channel. Every frame from the press until the effect is over is drawn as the game draws
+  it and read back from the canvas (`page/screenCells.ts`: as stored, 0 to 255, and as light by sixteenths of the
+  frame). Its light is held to the budget taken from the owner's screenshots: the frame's mean raised by 50 at most
+  over the scene before the press, a sixteenth of it 150 at most and 5% of it bright (200 or more) at most, those two
+  not judged where the scene alone is past them. The flashes are counted as WCAG counts a general flash
+  (`page/flashes.ts`: a pair of opposing changes of a tenth of white in a sixteenth's light, the darker under 0.8),
+  three in any second a problem; the worst cell's light is listed through its worst second, and the frame's mean
+  every tenth of a second through the cast. Shaders compiled after loading, and nothing cast, are problems too. The
+  props a cast broke stand again before the next. `--times` (0.4,1.5,3 by default) are the moments pictured, the
+  screen as the player sees it with the HUD, into `out/cast/<skill>`; `--canary` strobes the exposure in the first
+  biome and view (5 a second), which the flashes must catch. The lab on main has no `cast`: to compare, commit, swap
+  the skill's files in from `origin/main`, run, and swap them back.
 - `health`: the screen as the hero's Health runs low (`page/health.ts`). Standing in each biome, view and facing
   (`--biomes`, `--views`, `--facings`), his Health is held at shares of his most (`--shares`, 1 down to 0) and at
   each the frame is drawn three times at the same moment: without the low-Health look twice (the pixels that differ

@@ -58,10 +58,10 @@ const mage: ClassDef = {
     },
     {
       key: '3', impl: 'maelstrom', name: 'Maelstrom',
-      desc: 'Conjure a roaming storm vortex that drags enemies in and lashes them with lightning.',
+      desc: 'Conjure a roaming firestorm that drags enemies in and lashes them with lightning.',
       tags: ['lightning', 'fire'], cost: 60, cooldown: 5, castTime: 0.75,
       damage: 95, radius: 3.6, duration: 4.5, speed: 3.5, pull: 5,
-      icon: { glyph: '༄', color: '#9fb2ff' },
+      icon: { glyph: '༄', color: '#ff8f3a' },
     },
     {
       key: '4', impl: 'blink', name: 'Veilstep',
