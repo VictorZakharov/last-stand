@@ -76,6 +76,14 @@ export interface Canvas {
   hdr: boolean;
 }
 
+/** A box of the canvas's pixels, from its bottom left (the canvas reads from its bottom row up). */
+export interface CanvasBox {
+  left: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
 /** How bright a frame is, as shares of white. */
 interface FrameLight {
   mean: number;
@@ -114,24 +122,36 @@ function topLight(canvas: Canvas, at: number): number {
   return Math.max(decoded(pixels[at], hdr), decoded(pixels[at + 1], hdr), decoded(pixels[at + 2], hdr));
 }
 
-/** The canvas's pixels as last drawn. */
-function readCanvas(): Canvas {
+/** The canvas's size in its own pixels. */
+export function canvasSize(): { width: number; height: number } {
+  const gl = G.renderer.getContext();
+  return { width: gl.drawingBufferWidth, height: gl.drawingBufferHeight };
+}
+
+/** Bytes as encoded channels (a byte loop: `Float32Array.from` with a mapping took most of a measure's time). */
+function channelsOf(bytes: Uint8Array): Float32Array {
+  const channels = new Float32Array(bytes.length);
+  for (let at = 0; at < bytes.length; at++) channels[at] = bytes[at] / 255;
+  return channels;
+}
+
+/** The canvas's pixels as last drawn: all of them, or those of `box`. */
+function readCanvas(box?: CanvasBox): Canvas {
   const gl = G.renderer.getContext() as WebGL2RenderingContext & { drawingBufferFormat: number };
   G.renderer.setRenderTarget(null);
-  const width = gl.drawingBufferWidth;
-  const height = gl.drawingBufferHeight;
+  const { left, bottom, width, height } = box ?? { left: 0, bottom: 0, ...canvasSize() };
   if (gl.drawingBufferFormat === gl.RGBA16F) {
     const pixels = new Float32Array(width * height * 4);
-    gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, pixels);
+    gl.readPixels(left, bottom, width, height, gl.RGBA, gl.FLOAT, pixels);
     return { pixels, width, height, hdr: true };
   }
   const bytes = new Uint8Array(width * height * 4);
-  gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
-  return { pixels: Float32Array.from(bytes, (byte) => byte / 255), width, height, hdr: false };
+  gl.readPixels(left, bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+  return { pixels: channelsOf(bytes), width, height, hdr: false };
 }
 
-/** The frame drawn now by the game's own camera, as the player sees it; returns its pixels. */
-export function drawFrame(lab: Lab): Canvas {
+/** The frame drawn now by the game's own camera, as the player sees it; returns its pixels, or those of `box`. */
+export function drawFrame(lab: Lab, box?: CanvasBox): Canvas {
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
@@ -139,7 +159,7 @@ export function drawFrame(lab: Lab): Canvas {
   } finally {
     lab.drawing = drawing;
   }
-  return readCanvas();
+  return readCanvas(box);
 }
 
 /** The value `share` of the way up sorted `values`. */

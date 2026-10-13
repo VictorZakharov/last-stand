@@ -1,5 +1,6 @@
-// Motes of light drawn in onto a drawn arrow's head (combat/skills/ranger.ts `drawGlint`): specks spiralling in from
-// round it and fading into the head, more of them as the bow is drawn, held at full until it's loosed. One quad faces
+// Motes of light drawn in onto a drawn arrow's head once the bow is drawn to full (combat/skills/ranger.ts
+// `drawGlint`), the sign the shot is at its strongest: specks spiralling in from round it and fading into the head,
+// until it's loosed (shown as the bow was drawn, they didn't say when it was full). One quad faces
 // the camera from the arrowhead (a child of the model's `arrowHead`, so it rides the arrow in every view) and its
 // fragment shader places the motes, each with a short trail. Its reach is as far as the motes come from in the world,
 // and never more than a share of the view's height: the world's particles fade within 3.5 m of the camera
@@ -12,15 +13,19 @@ import type { Player } from '../entities/player';
 /** (a deep gold: paler, tone mapping washed it to white) */
 const COLOR = 0xffc45a;
 /** how far round the head the motes come from: in the world (m), and at most as a share of the view's height */
-const REACH = 0.8, REACH_SHARE = 0.03;
-/** the motes, how bright each is at its brightest (under the bloom's threshold: brighter, they bloomed into soft white
- *  blobs), how wide (a share of the view's height: the same few pixels in every view), and how long a streak each
- *  leaves behind it (a share of its way in) */
-const MOTES = 18, BRIGHT = 1.4, DOT = 0.002, TRAIL = 0.12;
-/** how fast it comes as the draw nears full and goes as it's loosed (a share a second): eased, never switched */
-const RISE = 6, FALL = 7;
-/** how far towards the camera it's drawn, so the bow's limb and the hand round the arrow don't cut it (m) */
-const LIFT = 0.06;
+const REACH = 0.8, REACH_SHARE = 0.04;
+/** the motes, how bright each is at its brightest (under the bloom's threshold over the ground: at 1.4, they bloomed
+ *  into soft discs, and those near each other into blobs of glare), how wide (a share of the view's height: the same
+ *  few pixels in every view), and how long a streak each leaves behind it (a share of its way in) */
+const MOTES = 24, BRIGHT = 1.2, DOT = 0.0018, TRAIL = 0.12;
+/** how near the head (a share of the reach) the motes are gone, and from how far they dim on their way to it */
+const NEAR = 0.12, DIM_FROM = 0.45;
+/** how fast it comes as the draw reaches full and goes as it's loosed (a share a second): eased, never switched */
+const RISE = 10, FALL = 7;
+/** how far towards the camera it's drawn, so the bow's limb, the hand round the arrow and the arm before it over the
+ *  shoulder don't cut it (m: at 6 cm, the drawing arm hid half of them over the shoulder); it's sized where it's drawn,
+ *  so it's the same on the screen */
+const LIFT = 0.2;
 
 const quad = new THREE.PlaneGeometry(2, 2);
 quad.userData.shared = true;
@@ -28,7 +33,7 @@ quad.userData.shared = true;
 function motesMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: {
-      uStrength: { value: 0 }, uDensity: { value: 0 }, uTime: { value: 0 }, uColor: { value: new THREE.Color(COLOR) },
+      uStrength: { value: 0 }, uTime: { value: 0 }, uColor: { value: new THREE.Color(COLOR) },
     },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: /* glsl */`
@@ -36,8 +41,8 @@ function motesMaterial(): THREE.ShaderMaterial {
       void main(){
         vAt = position.xy;
         vec4 centre = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-        float depth = max(-centre.z, 0.05);
         centre.xyz *= 1.0 - ${LIFT.toFixed(3)} / max(length(centre.xyz), ${(LIFT * 2).toFixed(3)});
+        float depth = max(-centre.z, 0.05);
         // (the view's height at that depth is 2 depth / projectionMatrix[1][1])
         float tall = 2.0 * depth / projectionMatrix[1][1];
         float reach = min(${REACH.toFixed(3)}, ${REACH_SHARE.toFixed(3)} * tall);
@@ -46,7 +51,7 @@ function motesMaterial(): THREE.ShaderMaterial {
         gl_Position = projectionMatrix * centre;
       }`,
     fragmentShader: /* glsl */`
-      varying vec2 vAt; varying float vDot; uniform float uStrength, uDensity, uTime; uniform vec3 uColor;
+      varying vec2 vAt; varying float vDot; uniform float uStrength, uTime; uniform vec3 uColor;
       float moteHash(float n){ return fract(sin(n * 12.9898) * 43758.5453); }
       // (where a mote is, its life of its way in: spiralling in from the edge, faster as it nears the head)
       vec2 moteAt(float life, float start, float turn){
@@ -58,9 +63,6 @@ function motesMaterial(): THREE.ShaderMaterial {
         float light = 0.0;
         for (int i = 0; i < ${MOTES}; i++) {
           float fi = float(i);
-          // (more motes as the bow is drawn: the next one comes in as the draw passes its share)
-          float on = clamp(uDensity * ${MOTES.toFixed(1)} - fi, 0.0, 1.0);
-          if (on <= 0.0) continue;
           float speed = 0.8 + 0.6 * moteHash(fi + 1.0), phase = moteHash(fi + 31.0);
           float start = moteHash(fi + 57.0) * 6.2831853, turn = 1.8 + 1.2 * moteHash(fi + 83.0);
           // the mote and the streak it leaves, brightest at the mote and fading back along its way
@@ -69,9 +71,11 @@ function motesMaterial(): THREE.ShaderMaterial {
           vec2 along = head - tail;
           float u = clamp(dot(vAt - tail, along) / max(dot(along, along), 1e-6), 0.0, 1.0);
           float d = length(vAt - tail - along * u);
-          // (in from nothing at the edge, and gone into the head as it reaches it)
-          float fade = smoothstep(0.0, 0.25, life) * (1.0 - smoothstep(0.6, 0.9, life));
-          light += exp(-d * d / (vDot * vDot)) * (0.15 + 0.85 * u * u) * fade * on;
+          // (in from nothing at the edge, and dimming into the head as it nears it: those near it together merged
+          // into a blob of glare there, a spark)
+          float fade = smoothstep(0.0, 0.25, life)
+            * smoothstep(${NEAR.toFixed(2)}, ${DIM_FROM.toFixed(2)}, length(head));
+          light += exp(-d * d / (vDot * vDot)) * (0.15 + 0.85 * u * u) * fade;
         }
         float k = light * ${BRIGHT.toFixed(2)} * uStrength;
         gl_FragColor = vec4(uColor * k, k);
@@ -88,7 +92,6 @@ export function warmGlintMotes(): THREE.Mesh[] {
 class Motes {
   readonly mesh = new THREE.Mesh(quad, motesMaterial());
   strength = 0;
-  private density = 0;
   private wanted = false;
   private time = 0;
 
@@ -99,10 +102,9 @@ class Motes {
     this.mesh.renderOrder = 10;
   }
 
-  /** Shown this frame on `on` (the arrowhead), `density` of the motes (0 to 1). */
-  want(on: THREE.Object3D, density: number): void {
+  /** Shown this frame on `on` (the arrowhead). */
+  want(on: THREE.Object3D): void {
     if (this.mesh.parent !== on) on.add(this.mesh);
-    this.density = density;
     this.wanted = true;
   }
 
@@ -115,7 +117,6 @@ class Motes {
     this.wanted = false;
     const u = this.mesh.material.uniforms;
     u.uStrength.value = this.strength * this.strength * (3 - 2 * this.strength);
-    u.uDensity.value = this.density;
     u.uTime.value = this.time;
     this.mesh.visible = this.strength > 0;
     return this.strength > 0 || goal > 0;
@@ -129,8 +130,8 @@ class Motes {
 
 const motes = new WeakMap<Player, Motes>();
 
-/** `player`'s motes shown this frame on its arrowhead, `density` of them (none for a model without one). */
-export function glintMotes(player: Player, density: number): void {
+/** `player`'s motes shown this frame on its arrowhead (none for a model without one). */
+export function glintMotes(player: Player): void {
   const head = player.model.arrowHead;
   if (!head) return;
   let shown = motes.get(player);
@@ -146,7 +147,7 @@ export function glintMotes(player: Player, density: number): void {
     });
     shown = made;
   }
-  shown.want(head, density);
+  shown.want(head);
 }
 
 /** How strongly `player`'s motes show this frame (0 to 1, 0 with none): what a measure reads (tools/lab `draw`). */

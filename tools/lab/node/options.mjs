@@ -396,10 +396,11 @@ export const COMMANDS = {
   },
   draw: {
     help: 'every drawn shot of the hero\'s class (the ranger\'s) drawn to full and held there as the player holds it, '
-      + 'in each view, the motes on its arrowhead read every frame: drawn in onto it as it\'s drawn, and held at full '
-      + 'it glints until it\'s loosed, seen in the view (the frame drawn with the glint and without it, round the '
-      + 'arrowhead, at four moments); motes missing, a glint missing or gone at full, a glint hardly seen or glaring '
-      + 'in a blob, and one with nothing drawn are problems: tools/lab/out/draw (--class ranger)',
+      + 'in each view, the motes on its arrowhead read every frame: none as it\'s drawn, and held at full it glints '
+      + 'until it\'s loosed, seen in the view (the frame drawn with the glint and without it, round the arrowhead, '
+      + 'every 4 frames of the hold, pictured at its most glaring); a glint before full draw, missing or gone at '
+      + 'full, hardly seen or glaring in a blob, and one with nothing drawn are problems: tools/lab/out/draw '
+      + '(--class ranger)',
     options: {
       views: {
         kind: 'list',
@@ -412,7 +413,11 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'picture each shot held at full draw, the screen and its arrowhead close (=false: the numbers alone)',
       },
-      canary: { kind: 'switch', help: 'plant the fault the checks must catch: the glint taken away at full draw' },
+      canary: {
+        kind: 'switch',
+        help: 'plant the faults the checks must catch: the glint shown as the bow is drawn, and taken away at full '
+          + 'draw',
+      },
       at: SETUP_OPTIONS.at,
       facing: SETUP_OPTIONS.facing,
       ...COMMON_OPTIONS,

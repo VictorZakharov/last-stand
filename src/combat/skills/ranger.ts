@@ -224,21 +224,19 @@ const GLINT = 0xf3dc9a;
 const FULL = 0.98;
 /** how far each hero's shot was drawn last frame (its ready sound as it reaches full) */
 const drawnTo = new WeakMap<Player, number>();
-/** how far drawn the motes start coming in onto the arrowhead (of the draw), all of them by full draw */
-const MOTES_FROM = 0.15;
-
 /**
- * Every drawn shot's arrowhead as the bow is drawn and held at full (the shot strikes hardest at full draw, Lancewood
- * Shot harder still): motes of light drawn in onto it, more of them as it's drawn and all of them held at full until
- * it's loosed (fx/glintMotes.ts, seen in every view), and the bow's ready sound as it comes to full. (Glow particles
- * fade out within 3.5 m of the camera, so through the eyes they showed nothing; a star of light on the head and
- * bursts of glints as it came to full read as a bright spark.)
+ * Every drawn shot's arrowhead once the bow is drawn to full, the sign the shot strikes hardest (Lancewood Shot
+ * harder still): motes of light drawn in onto it until it's loosed (fx/glintMotes.ts, seen in every view), and the
+ * bow's ready sound as it comes to full. Nothing while it's drawn: shown then too, the light didn't say when it was
+ * full. (Glow particles fade out within 3.5 m of the camera, so through the eyes they showed nothing; a star of light
+ * on the head and bursts of glints as it came to full read as a bright spark.)
  */
 function drawGlint(player: Player, k: number): void {
   const was = drawnTo.get(player) ?? 0;
   drawnTo.set(player, k);
-  if (k >= MOTES_FROM) glintMotes(player, Math.min(1, (k - MOTES_FROM) / (FULL - MOTES_FROM)));
-  if (k >= FULL && was < FULL && player.local) sfx.bowReady();
+  if (k < FULL) return;
+  glintMotes(player);
+  if (was < FULL && player.local) sfx.bowReady();
 }
 
 export const bowShot: InstantSkill = {

@@ -2,11 +2,12 @@
 // drawn by the game's own camera as it is, and drawn again with that thing hidden, compared pixel by pixel in a box
 // round the point's place on the screen. A pixel counts as its when its light rose by a tenth of white or more (the
 // light as an SDR screen shows it, gamma 2.2, Rec. 709's weights), and as its glare by 0.4 or more; its glare's largest
-// patch says whether it glared as one blob. An SDR canvas only, as the lab draws.
+// patch says whether it glared as one blob. An SDR canvas only, as the lab draws; only the box is read back (the
+// whole canvas, twice a moment, was nine tenths of a measure's time).
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
-import { drawFrame, type Canvas } from './light';
+import { canvasSize, drawFrame, type Canvas, type CanvasBox } from './light';
 import { largestPatch } from './patches';
 
 /** the box's half side, a share of the frame's height */
@@ -43,6 +44,20 @@ function lightAt(canvas: Canvas, at: number): number {
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 
+/** The box of the canvas round the point `x`, `y` of the screen (shares of its width and height from its top left). */
+function boxRound(x: number, y: number): CanvasBox {
+  const { width, height } = canvasSize();
+  const half = Math.round(BOX * height);
+  // (the canvas reads from its bottom row up)
+  const column = Math.round(x * width);
+  const row = Math.round((1 - y) * height);
+  const left = Math.max(0, column - half);
+  const bottom = Math.max(0, row - half);
+  const right = Math.min(width, column + half);
+  const top = Math.min(height, row + half);
+  return { left, bottom, width: right - left, height: top - bottom };
+}
+
 /**
  * What `hide` takes away round `point`: the frame drawn as it is, then with `hide()` done (it returns the undoing,
  * which is done after), and the box round the point compared.
@@ -53,40 +68,30 @@ export function addedRound(lab: Lab, point: THREE.Vector3, hide: () => () => voi
   const y = (1 - ndc.y) / 2;
   const nothing: Added = { onScreen: false, pixels: 0, share: 0, glare: 0, blob: 0, strongest: 0, x, y };
   if (ndc.z > 1 || x < 0 || x > 1 || y < 0 || y > 1) return nothing;
-  const shown = drawFrame(lab);
+  const box = boxRound(x, y);
+  const shown = drawFrame(lab, box);
   const show = hide();
   let hidden: Canvas;
   try {
-    hidden = drawFrame(lab);
+    hidden = drawFrame(lab, box);
   } finally {
     show();
   }
-  const { width, height } = shown;
-  const half = Math.round(BOX * height);
-  // (the canvas reads from its bottom row up)
-  const column = Math.round(x * width);
-  const row = Math.round((1 - y) * height);
-  const left = Math.max(0, column - half);
-  const bottom = Math.max(0, row - half);
-  const columns = Math.min(width, column + half) - left;
-  const rows = Math.min(height, row + half) - bottom;
-  const glaring = new Uint8Array(columns * rows);
+  const glaring = new Uint8Array(box.width * box.height);
   let pixels = 0;
   let glare = 0;
   let strongest = 0;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < columns; c++) {
-      const at = ((bottom + r) * width + left + c) * 4;
-      const rise = lightAt(shown, at) - lightAt(hidden, at);
-      if (rise >= SEEN_RISE) pixels++;
-      if (rise >= GLARE_RISE) {
-        glare++;
-        glaring[r * columns + c] = 1;
-      }
-      strongest = Math.max(strongest, rise);
+  for (let at = 0; at < glaring.length; at++) {
+    const rise = lightAt(shown, at * 4) - lightAt(hidden, at * 4);
+    if (rise >= SEEN_RISE) pixels++;
+    if (rise >= GLARE_RISE) {
+      glare++;
+      glaring[at] = 1;
     }
+    strongest = Math.max(strongest, rise);
   }
+  const { width, height } = canvasSize();
   const all = width * height;
-  const blob = largestPatch(glaring, columns, rows) / all;
+  const blob = largestPatch(glaring, box.width, box.height) / all;
   return { onScreen: true, pixels, share: pixels / all, glare: glare / all, blob, strongest, x, y };
 }

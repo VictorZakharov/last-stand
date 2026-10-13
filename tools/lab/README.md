@@ -282,16 +282,18 @@ terminal's task stops it all.
 - `draw`: every drawn shot of the hero's class drawn to full and held there as the player holds it (`page/draw.ts`,
   `--class ranger`), in the top-down view, over the shoulder and through the eyes (`--views`): the key held over an
   aim ahead, 120 frames at full draw, and let go. Every frame its motes on the arrowhead (`fx/glintMotes.ts`, on the
-  model's `arrowHead`) are read, with nothing drawn, over the draw's second half and held at full. At four moments of
-  the hold the glint is judged as the player sees it (`page/addedLight.ts`: the frame drawn with it and without it
-  round the arrowhead, the pixels it lit by a tenth of white and its glare, those it lit by 0.4, in patches,
-  `page/patches.ts`), the least it was seen and the most it glared. Motes on fewer than half of the draw's frames, a
-  glint on fewer than 90% of the frames held at full or gone for more than 20 of them, one with nothing drawn, a glint
-  lighting less than 0.4 in 10,000 of the frame's pixels in any view (as glow particles it lit none through the eyes),
-  a patch of glare over 0.55 in 10,000 (a star of light on the arrowhead glared in one of 0.64 to 3.6, and was too
-  bright; the motes' specks are 0.44 at most) and a shader compiled meanwhile are problems. `--pictures` (on by
-  default) pictures each shot held at full, the screen whole and its arrowhead close, into `out/draw`; `--canary`
-  takes the glint away once the draw is full.
+  model's `arrowHead`) are read, with nothing drawn, drawn short of full and held at full. Every 4 frames of the hold
+  (28 moments: the motes move, and judged at four, their worst went unseen) the glint is judged as the player sees it
+  (`page/addedLight.ts`: the frame drawn with it and without it round the arrowhead, only that box read back, the
+  pixels it lit by a tenth of white and its glare, those it lit by 0.4, in patches, `page/patches.ts`), the least it
+  was seen and the most it glared. A glint before the draw is full (it's the sign that it is), on fewer than 90% of
+  the frames held at full or gone for more than 20 of them, one with nothing drawn, a glint lighting less than 0.4 in
+  10,000 of the frame's pixels in any view (as glow particles it lit none through the eyes), a patch of glare over
+  0.55 in 10,000 (a star of light on the arrowhead glared in one of 0.64 to 3.6, and was too bright, and motes bright
+  enough to bloom merged into blobs of 0.9 to 1.6; the motes' specks are 0.41 at most) and a shader compiled meanwhile
+  are problems. `--pictures` (on by default) pictures each shot held at full at its most glaring moment, the screen
+  whole and its arrowhead close, into `out/draw`; `--canary` shows the glint from half the draw and takes it away once
+  the draw is full.
 - `gear`: full sets of gear rolled for every class as its loot rolls them (`page/gear.ts`, `--sets` each, 400 by
   default), at each tier (`--tiers`, a rarity at an item level each: `magic@5,rare@15,epic@30,legendary@50`), and
   what a set gives on average: Health (his own and the gear's, and the gear's against the mage's), regeneration a

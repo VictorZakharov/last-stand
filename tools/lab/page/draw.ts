@@ -15,15 +15,15 @@ import { G } from '../../../src/state';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { ARROW } from '../../../src/entities/models/bow';
 import { addedRound, type Added } from './addedLight';
-import { glintShown } from '../../../src/fx/glintMotes';
+import { glintMotes, glintShown } from '../../../src/fx/glintMotes';
 import { lateCompiles } from '../../../src/core/shaders';
 
 export interface DrawOptions {
   /** the set-up, its view among it */
   fixture: Fixture;
-  /** each shot pictured held at full draw */
+  /** each shot pictured held at full draw, at its most glaring moment */
   pictures: boolean;
-  /** plant the fault the checks must catch: the glint taken away once the draw is full */
+  /** plant the faults the checks must catch: the glint shown as the bow is drawn, and taken away once it's full */
   canary: boolean;
 }
 
@@ -38,22 +38,23 @@ const DRAW_FRAMES = 240;
 const FULL = 0.98;
 /** how strongly the motes must show for the arrowhead to count as glinting (0 to 1) */
 const SHOWN = 0.05;
-/** the share of the frames at full draw that must glint, the longest it may go without (frames), and the share of
- *  the draw's second half with motes drawn in */
+/** the share of the frames at full draw that must glint, and the longest it may go without (frames) */
 const FULL_SHARE = 0.9;
 const LONGEST_GAP = 20;
-const DRAWING_SHARE = 0.5;
+/** how far drawn the canary's glint shows (of the draw) */
+const CANARY_FROM = 0.5;
 /** the least share of the frame's pixels the glint must light held at full draw, in every view (as glow particles it
- *  lit 0 to 0.1 in 10,000 from above and none through the eyes: hardly seen; its motes light 0.5 to 3), and the
- *  largest patch it may glare on, a share of the frame's pixels (a star of light on the arrowhead glared in one blob
- *  of 0.64 to 3.6 in 10,000 and was too bright, though its glare in all was no more than the motes', whose largest
- *  patch is 0.44 at most: specks) */
+ *  lit 0 to 0.1 in 10,000 from above and none through the eyes: hardly seen; its motes light 0.5 to 0.8 at their
+ *  least), and the largest patch it may glare on, a share of the frame's pixels (a star of light on the arrowhead
+ *  glared in one blob of 0.64 to 3.6 in 10,000 and was too bright, and motes bright enough to bloom merged into blobs
+ *  of 0.9 to 1.6; the motes' specks are 0.41 at most) */
 const SEEN_LEAST = 0.4e-4;
 const BLOB_MOST = 0.55e-4;
-/** the frames into the hold at full draw at which the glint is judged as the player sees it (its motes move: at one
- *  frame, as many as three times more of them showed for one shot as for another), and the one pictured */
-const SEEN_FRAMES = [30, 60, 90, 118];
-const PICTURE_FRAME = 60;
+/** the frames into the hold at full draw at which the glint is judged as the player sees it, every few over a cycle of
+ *  its motes and more (they move: at one frame, as many as three times more of them showed for one shot as for
+ *  another, and judged at four frames, their worst moments went unseen) */
+const SEEN_EVERY = 4;
+const SEEN_FRAMES = Array.from({ length: 28 }, (_, moment) => 12 + moment * SEEN_EVERY);
 /** the motes' name in the scene (src/fx/glintMotes.ts) */
 const MOTES = 'glintMotes';
 /** css px round the arrowhead a close picture of it takes in */
@@ -120,7 +121,7 @@ function hideGlint(): () => void {
   };
 }
 
-/** One shot's frames: idle, the draw's second half and held at full, each frame's glint counted, and what it showed. */
+/** One shot's frames: idle, drawn short of full and held at full, each frame's glint counted, and what it showed. */
 interface Drawn {
   idleGlinting: number;
   drawingFrames: number;
@@ -143,7 +144,8 @@ async function pictureHeld(lab: Lab, shot: DrawnShot, view: string, seen: Added)
 
 /**
  * `shot` drawn to full over an aim ahead and held there `FULL_FRAMES`, then loosed, the glint round the arrowhead
- * counted every frame and what it adds to the frame measured halfway (with `canary`, taken away once the draw is full).
+ * counted every frame and what it adds to the frame measured every few frames of the hold, pictured at its most
+ * glaring (with `canary`, shown as it's drawn and taken away once the draw is full).
  */
 async function drawToFull(
   lab: Lab, shot: DrawnShot, options: DrawOptions,
@@ -167,9 +169,9 @@ async function drawToFull(
     await lab.step(1, () => holding(shot.key, aim));
     const share = drawnShare(hero);
     if (share < FULL) {
-      if (share < 0.5) continue;
       drawn.drawingFrames++;
       if (glinting(hero)) drawn.drawingGlinting++;
+      if (options.canary && share >= CANARY_FROM) glintMotes(hero);
       continue;
     }
     if (options.canary) {
@@ -181,10 +183,11 @@ async function drawToFull(
     drawn.longestGap = Math.max(drawn.longestGap, gap);
     if (!SEEN_FRAMES.includes(drawn.fullFrames)) continue;
     const seen = addedRound(lab, arrowHeadOf(hero, head), hideGlint);
-    drawn.seen = drawn.seen ? worstOf(drawn.seen, seen) : seen;
-    if (options.pictures && drawn.fullFrames === PICTURE_FRAME) {
-      moments.push(...await pictureHeld(lab, shot, String(options.fixture.view), seen));
+    // (pictured again at each moment glaring more than all before it, so its worst is what's seen)
+    if (options.pictures && (!drawn.seen || seen.blob > drawn.seen.blob)) {
+      moments.splice(0, moments.length, ...await pictureHeld(lab, shot, String(options.fixture.view), seen));
     }
+    drawn.seen = drawn.seen ? worstOf(drawn.seen, seen) : seen;
   }
   await lab.step(1, () => ({ aim }));
   await lab.until(() => !hero.casting, DRAW_FRAMES, `${shot.name}'s shot never ended`);
@@ -216,8 +219,8 @@ function describeSeen(seen: Added | null): string {
 /** The shot's frames as lines. */
 function describeDrawn(shot: DrawnShot, drawn: Drawn): string[] {
   return [
-    `${shot.name} (${shot.key}): idle, glinting on ${drawn.idleGlinting} of ${IDLE_FRAMES} frames; drawing `
-      + `(its second half), motes on ${drawn.drawingGlinting} of ${drawn.drawingFrames}; held at full, glinting on `
+    `${shot.name} (${shot.key}): idle, glinting on ${drawn.idleGlinting} of ${IDLE_FRAMES} frames; drawn short of `
+      + `full, glinting on ${drawn.drawingGlinting} of ${drawn.drawingFrames}; held at full, glinting on `
       + `${drawn.fullGlinting} of ${drawn.fullFrames}, ${drawn.longestGap} frames without at the longest`,
     `  held at full, as the player sees it (the least seen and the brightest of ${SEEN_FRAMES.length} moments): `
       + describeSeen(drawn.seen),
@@ -229,8 +232,8 @@ function drawnProblems(shot: DrawnShot, drawn: Drawn, view: string): string[] {
   const problems: string[] = [];
   const say = (problem: string) => problems.push(`${shot.name}, ${view}: ${problem}`);
   if (drawn.idleGlinting) say(`glinting with no shot drawn on ${drawn.idleGlinting} frames`);
-  if (drawn.drawingGlinting < drawn.drawingFrames * DRAWING_SHARE) {
-    say(`motes on only ${drawn.drawingGlinting} of the draw's ${drawn.drawingFrames} last frames`);
+  if (drawn.drawingGlinting) {
+    say(`glinting before the draw was full on ${drawn.drawingGlinting} of its ${drawn.drawingFrames} frames`);
   }
   if (drawn.fullGlinting < drawn.fullFrames * FULL_SHARE) {
     say(`glinting on only ${drawn.fullGlinting} of ${drawn.fullFrames} frames held at full draw`);
@@ -275,6 +278,9 @@ export async function draw(lab: Lab, options: DrawOptions): Promise<Report> {
     if (!seenCaught && drawn.seen?.onScreen) {
       problems.push(`${shot.name}, ${view}: the canary's glint taken away went unseen on the screen`);
     }
+    const earlyCaught = found.some((problem) => problem.includes('before the draw was full'));
+    lines.push(`  canary, the glint shown as the bow is drawn: ${earlyCaught ? 'caught' : 'missed'}`);
+    if (!earlyCaught) problems.push(`${shot.name}, ${view}: the canary's glint shown as it's drawn went unseen`);
   }
   const compiled = lateCompiles.slice(compiledBefore);
   lines.push(`shaders compiled meanwhile: ${compiled.length}`, ...compiled.map((program) => `  ${program}`));
