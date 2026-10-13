@@ -13,6 +13,7 @@ import { clamp, damp } from '../util';
 import { updateSeeThrough } from './seeThrough';
 import type { QualityPreset } from '../data/quality';
 import { hdrLevels, initHdr, presentHdr } from './hdr';
+import { bloodMask, fitBloodMask } from './bloodEdges';
 
 /** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept); in HDR towards as much more
  *  as the peak has room over the paper white (`uCap`), so the highlights it grows aren't all held at SDR's. */
@@ -58,6 +59,7 @@ const GradeShader = {
     uTime: { value: 0 },
     uHurt: { value: 0 },
     uVignette: { value: 1.05 },
+    uLow: { value: 0 }, uBeat: { value: 0 }, tBlood: { value: null as THREE.Texture | null },
     tGlare: { value: null as THREE.Texture | null },
     tSmall: { value: null as THREE.Texture | null }, tLarge: { value: null as THREE.Texture | null },
     uSmall: { value: ADAPT.top[0] }, uLarge: { value: ADAPT.top[1] },
@@ -67,6 +69,7 @@ const GradeShader = {
   vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader: /* glsl */`
     uniform sampler2D tDiffuse; uniform float uTime; uniform float uHurt; uniform float uVignette; uniform sampler2D tGlare;
+    uniform float uLow; uniform float uBeat; uniform sampler2D tBlood;
     uniform sampler2D tSmall; uniform sampler2D tLarge; uniform float uSmall; uniform float uLarge;
     uniform float uCap; uniform float uHdr; uniform float uPaper; uniform float uPeak;
     varying vec2 vUv;
@@ -104,6 +107,22 @@ const GradeShader = {
       float l = dot(c.rgb, vec3(0.299,0.587,0.114));
       c.rgb = mix(c.rgb * vec3(0.93,0.97,1.08), c.rgb * vec3(1.04,1.0,0.94), smoothstep(0.2,0.8,l));
       c.rgb += (h(vUv * 900.0 + uTime) - 0.5) * 0.025;
+      // low health (core/lowLife.ts): the world's colour drains away, and the blood round the screen's edges (its
+      // shapes painted in core/bloodEdges.ts: red its cover, green how near to nothing it shows from, blue its shade)
+      // shows as far as the Health has fallen, a little further at each beat of the heart: fresh, thin and bright at
+      // its front with a wet rim, darker and thicker the longer it has shown
+      if (uLow > 0.0) {
+        float grey = dot(c.rgb, vec3(0.299,0.587,0.114));
+        c.rgb = mix(c.rgb, vec3(grey), 0.9 * pow(uLow, 1.5));
+        vec3 mask = texture2D(tBlood, vUv).rgb;
+        float reach = uLow * (1.0 + 0.06 * uBeat);
+        float shown = mask.r * smoothstep(mask.g - 0.03, mask.g + 0.004, reach);
+        float age = clamp((reach - mask.g) / 0.45, 0.0, 1.0);
+        float rim = 1.0 - smoothstep(0.0, 0.035, reach - mask.g);
+        vec3 blood = mix(vec3(0.42,0.015,0.025), vec3(0.11,0.0,0.006), age) * (0.75 + 0.5 * mask.b);
+        blood += vec3(0.28,0.04,0.04) * rim * mask.b;
+        c.rgb = mix(c.rgb, blood, shown * mix(0.62, 0.94, age));
+      }
       c.rgb = mix(c.rgb, vec3(0.6,0.02,0.02), uHurt * smoothstep(0.05, 0.5, r) * 0.8);
       // HDR: the frame as an SDR screen shows it (gamma 2.2: Windows shows SDR content by the sRGB curve, which lifts
       // its shadows), the highlights over the knee grown towards the peak by their brightest channel (hue kept, and
@@ -230,6 +249,8 @@ export function initRenderer(container: HTMLElement) {
   composer.addPass(area);
   grade = new ShaderPass(GradeShader);
   grade.uniforms.tGlare.value = bloom.renderTargetsVertical[bloom.nMips - 1].texture;
+  // (set on the pass: it copies the uniforms it's made with, a texture's settings too, and the copy never saw the mask painted)
+  grade.uniforms.tBlood.value = bloodMask;
   grade.uniforms.tSmall.value = area.small.texture;
   grade.uniforms.tLarge.value = area.large.texture;
   composer.addPass(grade);
@@ -336,6 +357,8 @@ export function addShake(amount: number): void { rig.shake = Math.min(1.2, rig.s
  *  and back out. */
 export function kickFov(deg: number): void { rig.kickTo = Math.max(rig.kickTo, deg); }
 export function flashHurt(amount: number): void { rig.hurt = Math.min(1, rig.hurt + amount); }
+/** How near to nothing the local hero's Health is shown (0 not at all, 1 nothing left) and the heart's beat (core/lowLife.ts). */
+export function setLowLife(low: number, beat: number): void { grade.uniforms.uLow.value = low; grade.uniforms.uBeat.value = beat; }
 export function setZoom(z: number): void { rig.targetZoom = clamp(z, CAMERA.minZoom, CAMERA.maxZoom); }
 /** 
 otches = mouse-wheel steps (positive = zoom out). */
@@ -488,6 +511,7 @@ export function render(): void {
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
   grade.uniforms.uTime.value = G.time;
   grade.uniforms.uHurt.value = rig.hurt;
+  fitBloodMask(gl.domElement.width, gl.domElement.height);
   // the adaptation targets glide with the view
   const target = (v: ViewMode, i: 0 | 1): number => v !== 'top' ? ADAPT[v][i]
     : (ADAPT.lobby[i] + (ADAPT.top[i] - ADAPT.lobby[i]) * clamp((rig.zoom - CAMERA.lobbyZoom) / (1 - CAMERA.lobbyZoom), 0, 1)) * (i === 1 ? adaptScale : 1);

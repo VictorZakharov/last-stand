@@ -14,7 +14,7 @@ const mage: ClassDef = {
   aura: { light: 0x5dffa8, intensity: 1.8, motes: [0x5dffa8, 0x1060ff] },
 
   base: {
-    life: 950,
+    life: 800,
     energy: 480,
     lifeRegen: 4,        // per second
     energyRegen: 22,     // per second
@@ -64,17 +64,18 @@ const mage: ClassDef = {
       icon: { glyph: '༄', color: '#9fb2ff' },
     },
     {
-      key: '4', impl: 'aegis', name: 'Arcane Aegis',
-      desc: 'A shimmering ward absorbs incoming damage for a short time.',
-      tags: ['defense'], cost: 40, cooldown: 16, castTime: 0.5,
-      absorbPct: 0.45, duration: 5,
-      icon: { glyph: '◈', color: '#c9b8ff' },
+      key: '4', impl: 'blink', name: 'Veilstep',
+      desc: 'Hold to choose where to go, up to 15 metres away; let go to cross there as a streak of arcane light, through whatever stands between. Nothing can strike you on the way, and the foes close by as you vanish are left dazed for a second.',
+      tags: ['movement'], cost: 30, cooldown: 7, castTime: 0, aimed: true,
+      // (radius: the foes it dazes round where he vanishes, for duration s)
+      range: 15, radius: 5, duration: 1,
+      icon: { glyph: '⤳', color: '#c9b8ff' },
     },
     {
       key: 'q', impl: 'potion', name: 'Healing Draught',
-      desc: 'Instantly restore a large portion of Health.',
+      desc: 'Restore 190 Health and 30% of your maximum Health.',
       tags: ['consumable'], cost: 0, cooldown: 25, castTime: 1.4, fireAt: 0.5, freeMove: true,
-      healPct: 0.45,
+      heal: 190, healPct: 0.3,
       icon: { glyph: '⚗', color: '#ff5b5b' },
     },
   ],

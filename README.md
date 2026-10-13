@@ -23,6 +23,7 @@ Everything is procedural: models, animation, textures, VFX and sound are generat
   - **Bank** — leave the arena and move everything you found into your stash, or
   - **Continue** — face a harder wave with better loot (you recover 25% health).
 - Loot goes straight into your bag, **unseen**: you only know how many items of each rarity you carry (1 Legendary, 2 Epic...). Banking reveals what they are.
+- Below half health the screen drains of colour and blood seeps in from its edges, more the closer you are to none.
 - If you die, **all unbanked spoils are lost**, never seen.
 - Equip what you find between runs; items roll random affixes across five rarities.
 
@@ -82,7 +83,7 @@ Robes, skirt panels and a crystal staff; arcane and elemental spells from range.
 | `1` (hold) | Void Lance — channeled piercing beam |
 | `2` | Glacial Nova — freeze everything around you |
 | `3` | Maelstrom — roaming vortex that pulls enemies in and shocks them |
-| `4` | Arcane Aegis — damage-absorbing ward |
+| `4` (hold) | Veilstep — hold to choose a spot up to 15 m away, let go to cross there as a streak of arcane light, through anything in the way; foes close by as you vanish are dazed for a second |
 | `Q` | Healing Draught |
 
 ### The Warrior

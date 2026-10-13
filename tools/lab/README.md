@@ -117,13 +117,17 @@ terminal's task stops it all.
   it, and every couple of seconds a stall of several jitters (`node/coop.mjs`). The heroes play scenarios (`walk`: the
   host running round in circles, the guest zigzagging; `foes`: foes chasing them; `shoot`: the guest shooting at a foe
   that chases the host; `dodge`: the guest running from every other blow as it sees it coming; `down`: a foe bringing
-  the guest down and the host raising it), each one's input frame by frame from what its own screen shows. What each
-  game showed is judged against the other's in the same frame (`node/coopJudge.mjs`): each copy's delay (the one that
-  lines its path up best with its own game's), how far off that path and how roughly it moves (its speed against its
-  own, its largest move a frame), how each game's timeline plays its partner out (how far behind the freshest report,
-  how often a stall held it, how far its clock strayed), the arrows that struck on the guest's screen and whether the
-  host counted them, the blows at the guest against whether it stood in their reach on its own screen, and when the
-  guest went down and was raised on each screen. Scenarios run on from each other, so a scenario alone can differ.
+  the guest down and the host raising it; `blink`, played only by a hero with a blink, `--class mage`: the guest
+  blinking between two spots as foes close on it), each one's input frame by frame from what its own screen shows.
+  What each game showed is judged against the other's in the same frame (`node/coopJudge.mjs`): each copy's delay (the
+  one that lines its path up best with its own game's), how far off that path and how roughly it moves (its speed
+  against its own, its largest move a frame), how each game's timeline plays its partner out (how far behind the
+  freshest report, how often a stall held it, how far its clock strayed), the arrows that struck on the guest's screen
+  and whether the host counted them, the blows at the guest against whether it stood in their reach on its own screen,
+  when the guest went down and was raised on each screen, and each blink: when and how long it hid the guest's copy on
+  the host's screen, how far from where it came out on its own screen the copy came out and how far it moved after,
+  and the foes it dazed on the guest's screen against those dazed on the host's. Scenarios run on from each other, so
+  a scenario alone can differ.
   `--pictures` pictures both screens at a scenario's moments into `out/coop` (`down`'s: the guest downed across the
   arena, its marker at the edge of the host's screen, then over it, then raised; `shoot`'s last: the host holding Tab,
   the scores). The lab's link reports each game's round trip to "the server" once a second as the relay's pings would
@@ -210,6 +214,38 @@ terminal's task stops it all.
   by one gate, and by the Thornwood's west gate foes rose in a log. `--canary`, in the first biome: every foe read
   again moved onto one gate, the first half into a prop, and waves of their own with the boss put first, come late
   and frozen where it rose.
+- `health`: the screen as the hero's Health runs low (`page/health.ts`). Standing in each biome, view and facing
+  (`--biomes`, `--views`, `--facings`), his Health is held at shares of his most (`--shares`, 1 down to 0) and at
+  each the frame is drawn three times at the same moment: without the low-Health look twice (the pixels that differ
+  between those two are unsteady, the forest through the eyes shimmering a level every other frame, and left out),
+  then with it (`light.ts`'s `drawFrame`, read back from the canvas). Reported for each share: the look's strength,
+  the share of the pixels it changed, the colour it drained (off the blood), the blood's cover of the screen and of
+  its middle third, and how far in from the edges it reaches (the furthest blood pixel and where). A frame changed
+  above where the look starts, blood in the view's middle, a lower Health that drains or covers less, and a look
+  too faint with nothing left are problems. `--pictures` (on by default) pictures the frames under the share the
+  look starts at into `out/health`; `--canary` draws the look with the Health whole and drives its blood into the
+  middle.
+- `blink`: the mage's blink cast as the player casts it (`page/blink.ts`, `--class mage`): the key held over the
+  aim and let go, on open ground, past his reach, at a prop's middle, past a prop, out at the arena's edge, up onto
+  the dais and at his own feet. Each says where it was aimed, where the preview showed and where he came out, how
+  far, in how many frames, how many of them he was hidden and whether a blow tried in each landed (none may, and one
+  just after must). Then held through its cooldown (`page/blinkCooldown.ts`): pressed with 2.5 s of it left, let go
+  while the preview is red (nothing may be cast), pressed again and held until it's green, and let go (it must cast),
+  the preview read every frame as it's drawn: red on every frame of the cooldown, its countdown the seconds left
+  rounded up (3, 2, 1), green within a quarter of a second once ready; then held short of energy (red, no countdown,
+  nothing cast). Then foes stood near where he vanished and further off: how long each was dazed, its speed
+  while dazed and after, and the stars over it. A landing off its preview, past his reach or in a prop, a blow
+  landed while he crossed, a near foe moving while dazed or never coming on again and a far one dazed or stopping
+  are problems. `--pictures` (on by default) pictures the held preview, his coming apart, the crossing, his forming
+  again, the preview counting down and the dazed foes into `out/blink`; `--canary` reads the preview a metre off,
+  takes the guard off as he comes apart, reads it green with no countdown on its cooldown and clears a near foe's
+  daze at once.
+- `gear`: full sets of gear rolled for every class as its loot rolls them (`page/gear.ts`, `--sets` each, 400 by
+  default), at each tier (`--tiers`, a rarity at an item level each: `magic@5,rare@15,epic@30,legendary@50`), and
+  what a set gives on average: Health (his own and the gear's, and the gear's against the mage's), regeneration a
+  second, the draught's heal and how much it multiplies his damage (as the game's damage stats add up on his
+  skills). A class whose Health or regeneration from gear is out of the order of his own Health is a problem;
+  `--canary` rolls the ranger's Health from gear as the mage's.
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`).
 - `status`, `stop`: what the server serves and has booted; stop it.
 - `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films), the
@@ -362,7 +398,9 @@ stick's are, or a part of one that already measures the same thing, never a prob
     `sheetImage.mjs` (the sheet as one image), `probeFiles.mjs`, `errors.mjs`, `paths.mjs`.
 - `page/`: the lab inside the game's page, TypeScript typechecked with the game (`tsconfig.json` includes it, and
   `examples/`), imported as the game imports its modules, so there is one copy of each. `lab.ts` (the clock, input,
-  set-ups, pictures), `commands.ts` (what the session calls), `sheet.ts`, `carry.ts`, `comfort.ts`, `geometry.ts`,
+  set-ups, pictures), `commands.ts` (what the session calls: each command's module loaded as it runs, as an A/B copies
+  these modules into the other commit's tree, and one measuring game code that commit hasn't got stopped every command
+  loading there), `sheet.ts`, `carry.ts`, `comfort.ts`, `geometry.ts`,
   `ranger.ts` (the bow's handle, `bow.group.userData.bow`).
 - `test/`: the Node side's tests, `npm run lab:test`.
 - `out/`: everything the lab writes (sheets, exported commits, Vite's cache, the browser's profile), never the user's

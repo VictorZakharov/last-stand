@@ -46,7 +46,8 @@ interface Snapshot { r: number[]; v: number[]; p: number[][]; e: (number | strin
 /** A report of the fight: the host's clock as it was sent (ms), what happened, where everything stands. */
 export interface WorldMessage { t: number; x?: WorldEvent[]; s?: Snapshot }
 
-/** A guest's hit on a foe, for the host: [its number, foe, amount, crit, type, knock, from x, from z, chill, freeze] */
+/** A guest's hit on a foe, for the host: [its number, foe, amount, crit, type, knock, from x, from z, chill, freeze,
+ *  daze] (a daze alone, `dazeEnemy`, deals nothing) */
 export type HitReport = number[];
 
 const PHASES: RunPhase[] = ['countdown', 'fighting', 'cleared', 'over'];
@@ -117,7 +118,8 @@ function snap(): Snapshot {
     p: G.players.filter((p) => !p.away).map((p) => [p.slot, r2(p.bleed), r2(p.revive)]),
     e: G.enemies.filter((e) => e.deadT < 0).map((e) => [
       e.id, r2(e.pos.x), r2(e.pos.z), r2(e.facing), Math.round(e.life),
-      e.action?.name ?? '', r2(e.action?.t ?? 0), r2(e.action?.dur ?? 0), (e.frozen > 0 ? 1 : 0) | (e.chill > 0 ? 2 : 0),
+      e.action?.name ?? '', r2(e.action?.t ?? 0), r2(e.action?.dur ?? 0),
+      (e.frozen > 0 ? 1 : 0) | (e.chill > 0 ? 2 : 0) | (e.dazed > 0 ? 4 : 0),
     ]),
     a: [...dealtUpTo],
   };
@@ -126,10 +128,12 @@ function snap(): Snapshot {
 /** Host: a guest's hits on the foes, as its own game dealt them on its copies: dealt here too, its kill and loot. */
 export function onGuestHits(p: Player, hits: HitReport[]): void {
   if (role.current !== 'host' || G.mode !== 'run') return;
-  for (const [seq, id, amount, crit, type, knock, fx, fz, chill, freeze] of hits) {
+  for (const [seq, id, amount, crit, type, knock, fx, fz, chill, freeze, daze] of hits) {
     dealtUpTo.set(p.slot, Math.max(dealtUpTo.get(p.slot) ?? 0, seq));
     const e = G.enemies.find((q) => q.id === id);
-    if (!e || !e.alive || e.invulnerable) continue;
+    if (!e || !e.alive) continue;
+    if (daze) { e.daze(daze); continue; }
+    if (e.invulnerable) continue;
     e.takeDamage(amount, {
       type: DAMAGE_TYPES[type], crit: crit === 1, by: p, chill: chill || undefined, freeze: freeze || undefined,
       ...(knock ? { knock, from: { x: fx, z: fz } } : {}),
@@ -146,7 +150,7 @@ function onDealt(e: Enemy, hit: DealtHit): void {
   const from = hit.from ?? { x: 0, z: 0 };
   outgoing.push([
     hitSeq, e.id, r2(hit.amount), hit.crit ? 1 : 0, DAMAGE_TYPES.indexOf(hit.type),
-    r2(hit.knock ?? 0), r2(from.x), r2(from.z), r2(hit.chill ?? 0), r2(hit.freeze ?? 0),
+    r2(hit.knock ?? 0), r2(from.x), r2(from.z), r2(hit.chill ?? 0), r2(hit.freeze ?? 0), r2(hit.daze ?? 0),
   ]);
 }
 
@@ -260,9 +264,10 @@ function applySnapshot(s: Snapshot): void {
     const shown = life - pendingOn(id);
     if (shown < e.life - 0.5) e.hitT = 1;
     e.life = shown;
-    // (raised, never cleared: a freeze or chill our own hit put on shows at once and the copy's own clock ends it)
+    // (raised, never cleared: a freeze, chill or daze our own hit put on shows at once and the copy's own clock ends it)
     if (flags & 1) e.frozen = Math.max(e.frozen, 0.3);
     if (flags & 2) e.chill = Math.max(e.chill, 0.3);
+    if (flags & 4) e.dazed = Math.max(e.dazed, 0.3);
     if (!act) e.action = null;
     else if (!e.action || e.action.name !== act || Math.abs(e.action.t - t) > 0.2) e.action = { name: act, dur, t, events: [], cleanup: null };
   }

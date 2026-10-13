@@ -34,7 +34,9 @@ export const STATS: Record<StatKey, StatInfo> = {
   elementalPct:{ base: 10,  grow: 0.10, fmt: '+{v}% Elemental Damage', cap: 250 },
   life:        { base: 60,  grow: 0.12, fmt: '+{v} Health' },
   energy:      { base: 40,  grow: 0.10, fmt: '+{v} Energy' },
-  lifeRegen:   { base: 3,   grow: 0.10, fmt: '+{v} Health Regenerated per Second', dec: 1 },
+  // (a share of the class's own regeneration, so the classes that regenerate most gain most: a roll gives the
+  // warrior what the flat Health a second it replaced did)
+  lifeRegen:   { base: 50,  grow: 0.10, fmt: '+{v}% Health Regeneration' },
   energyRegen: { base: 3,   grow: 0.08, fmt: '+{v} Energy Regenerated per Second', dec: 1 },
   castSpeed:   { base: 5,   grow: 0.04, fmt: '+{v}% Casting Speed', cap: 30 },
   cdr:         { base: 4,   grow: 0.03, fmt: '-{v}% Skill Cooldowns', cap: 25 },

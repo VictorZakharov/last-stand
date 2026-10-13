@@ -53,6 +53,9 @@ export function gearOf(cls: ClassDef, equipped: Profile['equipped']): Gear {
   };
 }
 
+/** How much of `stat` the class's items roll, against the default: its Health (`ClassDef.gearLife`). */
+const classWeight = (stat: StatKey, cls?: ClassDef): number => (stat === 'life' ? cls?.gearLife ?? 1 : 1);
+
 /** Item base names of a slot for a class (its own, or the defaults). */
 export const basesFor = (slot: Slot, cls?: ClassDef): string[] => cls?.bases?.[slot] ?? SLOT_INFO[slot].bases;
 
@@ -64,14 +67,14 @@ export function makeItem({ slot, rarity = 'common', ilvl = 1, cls }: { slot?: Sl
   const stats: StatBlock = {};
   // a two-handed weapon makes up for the missing off-hand with a much bigger implicit
   const hands = cls?.twoHanded?.includes(base) ? 1.8 : 1;
-  for (const [stat, weight] of implicitsFor(slot, cls)) stats[stat] = rollStat(stat, ilvl, r.power, weight * hands);
+  for (const [stat, weight] of implicitsFor(slot, cls)) stats[stat] = rollStat(stat, ilvl, r.power, weight * hands * classWeight(stat, cls));
 
   const pool = STAT_KEYS.filter((s) => !(s in stats) && !STATS[s].implicitOnly && !cls?.excludeStats?.includes(s));
   const count = randInt(r.affixes[0], r.affixes[1]);
   const affixes: StatKey[] = [];
   for (let i = 0; i < count && pool.length; i++) {
     const stat = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
-    stats[stat] = rollStat(stat, ilvl, r.power, 0.8);
+    stats[stat] = rollStat(stat, ilvl, r.power, 0.8 * classWeight(stat, cls));
     affixes.push(stat);
   }
 
@@ -119,7 +122,7 @@ export function computeStats(base: BaseStats, equipped: Profile['equipped']): De
   return {
     maxLife: base.life + add.life,
     maxEnergy: base.energy + add.energy,
-    lifeRegen: base.lifeRegen + add.lifeRegen,
+    lifeRegen: base.lifeRegen * (1 + add.lifeRegen / 100),
     energyRegen: base.energyRegen + add.energyRegen,
     moveSpeed: base.moveSpeed * (1 + capped('moveSpeed', 40) / 100),
     crit: Math.min(75, base.crit + add.crit),

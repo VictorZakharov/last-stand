@@ -69,7 +69,7 @@ const COPY_DST = 0x0008;
 const MAP_MODE_READ = 0x0001;
 
 /** The canvas's pixels as last drawn, each channel as encoded (1 is white), its size and whether it's HDR. */
-interface Canvas {
+export interface Canvas {
   pixels: Float32Array;
   width: number;
   height: number;
@@ -131,7 +131,7 @@ function readCanvas(): Canvas {
 }
 
 /** The frame drawn now by the game's own camera, as the player sees it; returns its pixels. */
-function drawFrame(lab: Lab): Canvas {
+export function drawFrame(lab: Lab): Canvas {
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
@@ -290,7 +290,7 @@ async function lookAlong(lab: Lab, facing: number): Promise<void> {
 }
 
 /** The hero set up standing in `scenario`'s biome and view, looking its way, the frame settled. */
-async function standIn(lab: Lab, scenario: LightScenario): Promise<void> {
+export async function standIn(lab: Lab, scenario: LightScenario): Promise<void> {
   if (G.arena.biome !== scenario.biome) G.arena.setBiome(scenario.biome);
   const facing = scenario.facing * Math.PI / 180;
   await lab.setup({ view: scenario.view, facing });

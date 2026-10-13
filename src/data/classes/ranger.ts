@@ -55,8 +55,8 @@ const ranger: ClassDef = {
     },
     {
       key: 'q', impl: 'potion', name: 'Healing Draught',
-      desc: 'Instantly restore a large portion of Health.', tags: ['consumable'],
-      cost: 0, cooldown: 25, castTime: 1.4, fireAt: 0.5, freeMove: true, healPct: 0.45,
+      desc: 'Restore 190 Health and 30% of your maximum Health.', tags: ['consumable'],
+      cost: 0, cooldown: 25, castTime: 1.4, fireAt: 0.5, freeMove: true, heal: 190, healPct: 0.3,
       icon: { glyph: '⚗', color: '#ff5b5b' },
     },
   ],
@@ -68,6 +68,9 @@ const ranger: ClassDef = {
   excludeStats: ['arcanePct', 'elementalPct', 'block', 'blockAmount'],
   excludeSlots: ['offhand'],
   implicits: { weapon: [['damagePct', 1]], offhand: [['crit', 1]], chest: [['life', 1], ['armor', 1]] },
+  // (Health from gear between the mage's and the warrior's, as his own is: more than his own's share, as he has no off-hand
+  // and his coat is light)
+  gearLife: 1.45,
   starterGear: [{ slot: 'weapon', rarity: 'common', ilvl: 1 }, { slot: 'chest', rarity: 'common', ilvl: 1 }],
 };
 

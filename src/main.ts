@@ -35,6 +35,7 @@ import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap } from '.
 import { initNetHud } from './ui/netHud';
 import { warmShaders } from './game/warmup';
 import { initQuality, sampleQuality } from './core/quality';
+import { updateLowLife } from './core/lowLife';
 import { pinPrograms, markLoaded, warmUp } from './core/shaders';
 import { initBiome, rollBiome } from './game/biome';
 import { BIOME_IDS } from './data/biomes';
@@ -407,6 +408,7 @@ function update(dt: number): void {
   setViewShift(vs.x, vs.y);
   const focus = focusPlayer();
   updateCamera(dt, focus.pos, focus.model.height);
+  updateLowLife(dt);
   // through the eyes the body would fill the view (it still casts, animates and blocks): only the
   // arms and what they hold show
   const eyes = focus === G.player && viewMode() === 'first' && viewSettled();

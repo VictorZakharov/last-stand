@@ -92,9 +92,9 @@ const warrior: ClassDef = {
     },
     {
       key: 'q', impl: 'potion', name: 'Healing Draught',
-      desc: 'Instantly restore a large portion of Health.',
+      desc: 'Restore 190 Health and 30% of your maximum Health.',
       tags: ['consumable'], cost: 0, cooldown: 25, castTime: 1.4, fireAt: 0.5, freeMove: true,
-      healPct: 0.45,
+      heal: 190, healPct: 0.3,
       icon: { glyph: '⚗', color: '#ff5b5b' },
     },
   ],
@@ -117,6 +117,8 @@ const warrior: ClassDef = {
   dualWield: true,   // a one-hander in each hand
   // shields block (see Player.tryBlock) instead of feeding energy
   implicits: { offhand: [['block', 1], ['blockAmount', 1], ['armor', 0.5]] },
+  // (the most Health from gear, as he has the most of his own)
+  gearLife: 1.6,
 };
 
 export default warrior;

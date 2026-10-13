@@ -107,6 +107,9 @@ export interface SkillDef {
   duration?: number;
   pull?: number;
   absorbPct?: number;
+  /** a draught: the Health it restores, a fixed amount and a share of the hero's most on top (the fixed part keeps a
+   *  small Health pool's draught from shrinking with it) */
+  heal?: number;
   healPct?: number;
   /** a mark: the extra share of damage its target takes from every player's hits */
   amp?: number;
@@ -152,6 +155,9 @@ export interface ClassDef {
   excludeSlots?: Slot[];
   /** implicit stats per slot, replacing the defaults (data/items SLOT_INFO) */
   implicits?: Partial<Record<Slot, [StatKey, number][]>>;
+  /** how much Health this class's items roll, against the default (1): each class's Health from gear in about the
+   *  ratio of its own, so the tougher classes stay as far ahead as gear grows */
+  gearLife?: number;
   /** weapon bases held in both hands: they leave no room for an off-hand */
   twoHanded?: string[];
   /** a one-handed weapon can go in the off-hand too */
