@@ -65,10 +65,10 @@ const mage: ClassDef = {
     },
     {
       key: '4', impl: 'blink', name: 'Veilstep',
-      desc: 'Hold to choose where to go, up to 10 metres away; let go to cross there as a streak of arcane light, through whatever stands between. Nothing can strike you on the way, and the foes close by as you vanish are left dazed for a second.',
+      desc: 'Hold to choose where to go, up to 15 metres away; let go to cross there as a streak of arcane light, through whatever stands between. Nothing can strike you on the way, and the foes close by as you vanish are left dazed for a second.',
       tags: ['movement'], cost: 30, cooldown: 7, castTime: 0, aimed: true,
       // (radius: the foes it dazes round where he vanishes, for duration s)
-      range: 10, radius: 5, duration: 1,
+      range: 15, radius: 5, duration: 1,
       icon: { glyph: '⤳', color: '#c9b8ff' },
     },
     {

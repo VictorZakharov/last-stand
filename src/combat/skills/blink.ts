@@ -27,8 +27,8 @@ type Def = Needs<'range' | 'radius' | 'duration'>;
 const CORE = 0xc8ffe8, GREEN = 0x5dffa8, DEEP = 0x1060ff;
 /** coming apart where he stands (s): his body dissolves, not moving yet */
 const VANISH = 0.1;
-/** how fast he crosses (m/s), and the crossing's least and longest time (s) */
-const SPEED = 45, CROSS_MIN = 0.1, CROSS_MAX = 0.24;
+/** how fast he crosses (m/s), and the crossing's least and longest time (s: his whole reach at that speed) */
+const SPEED = 45, CROSS_MIN = 0.1, CROSS_MAX = 0.34;
 /** put together again where he comes out (s): he can't act until he is */
 const FORM = 0.14;
 /** how far along the way the spot is searched back from the aim for one clear of the props (m) */

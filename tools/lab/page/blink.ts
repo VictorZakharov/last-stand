@@ -58,8 +58,8 @@ interface Landing {
 
 /** the frames the key is held before it's let go (the preview shown meanwhile) */
 const HOLD_FRAMES = 12;
-/** the most frames a blink may take, coming apart to whole again (0.1 + 0.24 + 0.14 s, a frame's slack) */
-const MOST_FRAMES = 30;
+/** the most frames a blink may take, coming apart to whole again (0.1 + 0.34 + 0.14 s, a frame's slack) */
+const MOST_FRAMES = 36;
 /** the frames after he's whole before the blow that must land */
 const AFTER_FRAMES = 6;
 /** how far the preview may be off where he came out, and he past his reach (m) */
@@ -121,6 +121,9 @@ const facingOf = (facing: number) => (): number => facing;
 const metres = (value: number): string => `${value.toFixed(2)} m`;
 const flat = (point: THREE.Vector3): string => `(${point.x.toFixed(2)}, ${point.z.toFixed(2)})`;
 
+/** How far ahead the past-reach scenario aims for a blink of `reach` (m): well past it, as a player's cursor might be. */
+const pastReach = (reach: number): number => Math.round(reach * 1.4);
+
 /** The scenarios, from the reach of the hero's blink. */
 function scenarios(reach: number): Scenario[] {
   const edge = G.arena.radius;
@@ -132,9 +135,9 @@ function scenarios(reach: number): Scenario[] {
       expect: (landing) => (landing.to.distanceTo(landing.aim) > LANDING_SLACK ? 'not where it was aimed' : null),
     },
     {
-      name: `past his reach, 14 m ahead`,
+      name: `past his reach, ${pastReach(reach)} m ahead`,
       at: [12, 22], facing: towardMiddle(reach),
-      aim: (hero, facing) => ahead(hero, facing, 14),
+      aim: (hero, facing) => ahead(hero, facing, pastReach(reach)),
       expect: (landing) => (Math.abs(landing.from.distanceTo(landing.to) - reach) > LANDING_SLACK
         ? `came out ${metres(landing.from.distanceTo(landing.to))} away, not at his reach` : null),
     },

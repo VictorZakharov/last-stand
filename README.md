@@ -83,7 +83,7 @@ Robes, skirt panels and a crystal staff; arcane and elemental spells from range.
 | `1` (hold) | Void Lance — channeled piercing beam |
 | `2` | Glacial Nova — freeze everything around you |
 | `3` | Maelstrom — roaming vortex that pulls enemies in and shocks them |
-| `4` (hold) | Veilstep — hold to choose a spot up to 10 m away, let go to cross there as a streak of arcane light, through anything in the way; foes close by as you vanish are dazed for a second |
+| `4` (hold) | Veilstep — hold to choose a spot up to 15 m away, let go to cross there as a streak of arcane light, through anything in the way; foes close by as you vanish are dazed for a second |
 | `Q` | Healing Draught |
 
 ### The Warrior
