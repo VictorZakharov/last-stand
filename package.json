@@ -11,6 +11,7 @@
     "check:pages": "node scripts/check-pages-build.mjs",
     "preview": "vite preview",
     "facelab": "node tools/facelab/facelab.mjs",
+    "icons": "node tools/icons/icons.mjs",
     "lab": "node tools/lab/lab.mjs",
     "lab:serve": "node tools/lab/lab.mjs serve",
     "lab:test": "node --test \"tools/lab/test/*.test.mjs\"",
