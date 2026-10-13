@@ -229,12 +229,17 @@ terminal's task stops it all.
   aim and let go, on open ground, past his reach, at a prop's middle, past a prop, out at the arena's edge, up onto
   the dais and at his own feet. Each says where it was aimed, where the preview showed and where he came out, how
   far, in how many frames, how many of them he was hidden and whether a blow tried in each landed (none may, and one
-  just after must). Then foes stood near where he vanished and further off: how long each was dazed, its speed
+  just after must). Then held through its cooldown (`page/blinkCooldown.ts`): pressed with 2.5 s of it left, let go
+  while the preview is red (nothing may be cast), pressed again and held until it's green, and let go (it must cast),
+  the preview read every frame as it's drawn: red on every frame of the cooldown, its countdown the seconds left
+  rounded up (3, 2, 1), green within a quarter of a second once ready; then held short of energy (red, no countdown,
+  nothing cast). Then foes stood near where he vanished and further off: how long each was dazed, its speed
   while dazed and after, and the stars over it. A landing off its preview, past his reach or in a prop, a blow
   landed while he crossed, a near foe moving while dazed or never coming on again and a far one dazed or stopping
   are problems. `--pictures` (on by default) pictures the held preview, his coming apart, the crossing, his forming
-  again and the dazed foes into `out/blink`; `--canary` reads the preview a metre off, takes the guard off as he
-  comes apart and clears a near foe's daze at once.
+  again, the preview counting down and the dazed foes into `out/blink`; `--canary` reads the preview a metre off,
+  takes the guard off as he comes apart, reads it green with no countdown on its cooldown and clears a near foe's
+  daze at once.
 - `gear`: full sets of gear rolled for every class as its loot rolls them (`page/gear.ts`, `--sets` each, 400 by
   default), at each tier (`--tiers`, a rarity at an item level each: `magic@5,rare@15,epic@30,legendary@50`), and
   what a set gives on average: Health (his own and the gear's, and the gear's against the mage's), regeneration a

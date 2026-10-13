@@ -3,8 +3,10 @@
 // reach, at a prop, past a prop, out at the arena's edge, up onto the dais, at his own feet) it measures where the
 // preview showed he'd come out against where he did, his reach, the props and the arena's edge there, how long it all
 // took, his body coming apart and put together again, and a blow tried every frame: none may land while he crosses,
-// and one must land once he is whole. Then foes near where he vanishes and foes further off: the near ones must stand
-// dazed for their time, stars over their heads, and come on again after, and the far ones keep coming all along.
+// and one must land once he is whole. Then held through its cooldown and short of energy (page/blinkCooldown.ts): its
+// preview red, counting the seconds down, until it would cast. Then foes near where he vanishes and foes further off:
+// the near ones must stand dazed for their time, stars over their heads, and come on again after, and the far ones
+// keep coming all along.
 import * as THREE from 'three';
 import type { Fixture, Lab, Pictured, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
@@ -15,13 +17,14 @@ import { hurtPlayer } from '../../../src/combat/damage';
 import { inObstacle } from '../../../src/world/collision';
 import { groundHeight } from '../../../src/world/arena';
 import { particles } from '../../../src/fx/particles';
+import { describeHeld, heldProblems, holdThroughCooldown } from './blinkCooldown';
 
 export interface BlinkOptions {
   fixture: Fixture;
   /** the moments of the open-ground and daze scenarios pictured as the player sees them */
   pictures: boolean;
-  /** plant faults the checks must catch: the preview read a metre off, the guard taken off as he comes apart, and a
-   *  near foe's daze cleared at once */
+  /** plant faults the checks must catch: the preview read a metre off, the guard taken off as he comes apart, the
+   *  preview read green with no countdown on its cooldown, and a near foe's daze cleared at once */
   canary: boolean;
 }
 
@@ -121,7 +124,7 @@ const facingOf = (facing: number) => (): number => facing;
 const metres = (value: number): string => `${value.toFixed(2)} m`;
 const flat = (point: THREE.Vector3): string => `(${point.x.toFixed(2)}, ${point.z.toFixed(2)})`;
 
-/** How far ahead the past-reach scenario aims for a blink of `reach` (m): well past it, as a player's cursor might be. */
+/** How far ahead the past-reach scenario aims for a blink of `reach` (m): well past it, as a cursor might be. */
 const pastReach = (reach: number): number => Math.round(reach * 1.4);
 
 /** The scenarios, from the reach of the hero's blink. */
@@ -257,7 +260,9 @@ async function blinkTo(lab: Lab, key: SkillKey, aim: THREE.Vector3, canary: bool
   const dissolve = hero.model.kit.u.uDissolve.value;
   const offGround = hero.obj.position.y - groundHeight(to.x, to.z);
   await lab.step(AFTER_FRAMES);
-  return { aim, preview, from, to, frames, hidden, struckHidden, struckAfter: blowLands(), dissolve, shown: hero.obj.visible, offGround };
+  const struckAfter = blowLands();
+  const whole = hero.obj.visible;
+  return { aim, preview, from, to, frames, hidden, struckHidden, struckAfter, dissolve, shown: whole, offGround };
 }
 
 /** What's wrong with a landing, by every scenario's checks and its own. */
@@ -304,6 +309,27 @@ async function pictureBlink(lab: Lab, key: SkillKey, aim: THREE.Vector3): Promis
   return moments;
 }
 
+/**
+ * The blink held through its cooldown and short of energy from the first scenario's spot, as its lines and problems;
+ * with a canary, again with the preview read green and no countdown, which must be caught.
+ */
+async function cooldownRound(lab: Lab, key: SkillKey, reach: number, options: BlinkOptions, lines: string[],
+  problems: string[]): Promise<Pictured[]> {
+  const [first] = scenarios(reach);
+  const facing = await setUpFor(lab, options.fixture, first);
+  const aim = first.aim(G.player.pos, facing);
+  const { held, moments } = await holdThroughCooldown(lab, key, aim, { pictures: options.pictures, canary: false });
+  lines.push(describeHeld(held));
+  problems.push(...heldProblems(held));
+  if (!options.canary) return moments;
+  await setUpFor(lab, options.fixture, first);
+  const planted = await holdThroughCooldown(lab, key, aim, { pictures: false, canary: true });
+  const caught = heldProblems(planted.held).some((problem) => problem.includes('while it was cooling down'));
+  lines.push(`  canary, the preview read green with no countdown on its cooldown: ${caught ? 'caught' : 'missed'}`);
+  if (!caught) problems.push('the canary\'s green preview on cooldown went unseen');
+  return moments;
+}
+
 /** How fast a foe goes (m/s). */
 const speedOf = (foe: Enemy): number => Math.hypot(foe.vel.x, foe.vel.z);
 
@@ -341,7 +367,8 @@ interface FoeTook {
  * its speed while dazed and after, its stars and whether it went on with an action. With a canary, the first near
  * foe's daze cleared at once.
  */
-async function dazeRound(lab: Lab, key: SkillKey, options: BlinkOptions, lines: string[], problems: string[]): Promise<Pictured[]> {
+async function dazeRound(lab: Lab, key: SkillKey, options: BlinkOptions, lines: string[],
+  problems: string[]): Promise<Pictured[]> {
   // (facing the middle from an open spot, the foes ahead of him inside the arena: from (12, 22) facing +z, the far
   // ones' spots lay past its edge and they were pushed in onto it, 3 m from him)
   const at = clearSpot(DAZE_SPOT);
@@ -364,7 +391,10 @@ async function dazeRound(lab: Lab, key: SkillKey, options: BlinkOptions, lines: 
     const planted = foes.find(({ near }) => near)!.foe;
     planted.dazed = 0;
   }
-  const took: FoeTook[] = foes.map(({ near, foe }) => ({ near, away: foe.pos.distanceTo(hero), dazedFor: foe.dazed, fastest: 0, slowest: Infinity, after: 0, stars: false, acting: false }));
+  const took: FoeTook[] = foes.map(({ near, foe }) => ({
+    near, away: foe.pos.distanceTo(hero), dazedFor: foe.dazed, fastest: 0, slowest: Infinity, after: 0,
+    stars: false, acting: false,
+  }));
   const moments: Pictured[] = [];
   const daze = G.player.skillAt(key)!.def.duration ?? 0;
   const dazeFrames = Math.round(daze * 60);
@@ -381,12 +411,15 @@ async function dazeRound(lab: Lab, key: SkillKey, options: BlinkOptions, lines: 
       }
       if (frame > dazeFrames) record.after = Math.max(record.after, speed);
     });
-    if (options.pictures && frame === STOP_FRAMES) moments.push(await lab.screen('daze: the near foes standing, stars over their heads'));
+    if (options.pictures && frame === STOP_FRAMES) {
+      moments.push(await lab.screen('daze: the near foes standing, stars over their heads'));
+    }
   }
   took.forEach((record, index) => {
     const which = `${record.near ? 'a near' : 'a far'} foe (${index + 1})`;
-    lines.push(`  ${which}, ${metres(record.away)} away: dazed for ${record.dazedFor.toFixed(2)} s, while dazed ${record.slowest.toFixed(2)} to `
-      + `${record.fastest.toFixed(2)} m/s, ${record.stars ? 'stars over it' : 'no stars'}, after ${record.after.toFixed(2)} m/s`);
+    const speeds = `while dazed ${record.slowest.toFixed(2)} to ${record.fastest.toFixed(2)} m/s`;
+    lines.push(`  ${which}, ${metres(record.away)} away: dazed for ${record.dazedFor.toFixed(2)} s, ${speeds}, `
+      + `${record.stars ? 'stars over it' : 'no stars'}, after ${record.after.toFixed(2)} m/s`);
     if (record.near) {
       if (record.fastest > STILL) problems.push(`daze: ${which} moved while dazed (${record.fastest.toFixed(2)} m/s)`);
       if (!record.stars) problems.push(`daze: ${which} had no stars over it`);
@@ -398,7 +431,9 @@ async function dazeRound(lab: Lab, key: SkillKey, options: BlinkOptions, lines: 
     }
   });
   if (options.canary) {
-    const caught = problems.some((problem) => problem.includes('(1) moved while dazed') || problem.includes('(1) had no stars'));
+    const plantedCaught = (problem: string) =>
+      problem.includes('(1) moved while dazed') || problem.includes('(1) had no stars');
+    const caught = problems.some(plantedCaught);
     lines.push(`  canary, the first near foe's daze cleared at once: ${caught ? 'caught' : 'missed'}`);
     if (caught) problems.splice(0, problems.length, ...problems.filter((problem) => !problem.includes('foe (1)')));
     else problems.push('daze: the canary\'s cleared daze went unseen');
@@ -417,7 +452,7 @@ export async function blink(lab: Lab, options: BlinkOptions): Promise<Report> {
   const reach = G.player.skillAt(key)!.def.range ?? 0;
   const lines = [`the ${G.player.cls.id}'s blink on ${key}, reach ${metres(reach)}`];
   const problems: string[] = [];
-  let moments: Pictured[] = [];
+  const moments: Pictured[] = [];
   for (const scenario of scenarios(reach)) {
     const facing = await setUpFor(lab, options.fixture, scenario);
     const aim = scenario.aim(G.player.pos, facing);
@@ -437,10 +472,11 @@ export async function blink(lab: Lab, options: BlinkOptions): Promise<Report> {
     if (!offCaught) problems.push('the canary\'s preview a metre off went unseen');
     if (!guardCaught) problems.push('the canary\'s blows while he crossed went unseen');
   }
+  moments.push(...await cooldownRound(lab, key, reach, options, lines, problems));
   if (options.pictures) {
     const [first] = scenarios(reach);
     const facing = await setUpFor(lab, options.fixture, first);
-    moments = await pictureBlink(lab, key, first.aim(G.player.pos, facing));
+    moments.push(...await pictureBlink(lab, key, first.aim(G.player.pos, facing)));
   }
   lines.push('daze');
   moments.push(...await dazeRound(lab, key, options, lines, problems));
