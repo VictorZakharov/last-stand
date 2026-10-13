@@ -287,6 +287,50 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  cast: {
+    help: 'a skill of the hero\'s cast as the player casts it, its effect seen frame by frame: the hero standing in '
+      + 'each biome and view with the biome\'s foes coming at him, the key pressed (held for a held skill or a '
+      + 'channel, a drawn shot drawn to full) over an aim ahead, and every frame until the effect is over drawn and '
+      + 'read back: its light against the budget (the frame\'s mean raised 50 at most, a sixteenth of it 150, 5% '
+      + 'of it bright, as stored), the flashes in a second (WCAG\'s: three are a hazard) and the shaders compiled '
+      + 'after loading; the skill named by its key, its behaviour or its name: tools/lab/out/cast/<skill> '
+      + '(--class mage)',
+    argument: 'skill',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      views: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['top', 'third', 'first'],
+        default: 'top,third,first',
+        help: 'the views: top, third, first',
+      },
+      facing: { kind: 'number', usage: 'degrees', help: 'the way the hero faces and casts (0, +z, by default)' },
+      foes: {
+        kind: 'number',
+        usage: 'n',
+        help: 'how many of the biome\'s commonest foes come at him (4 by default; 0: none)',
+      },
+      times: {
+        kind: 'list',
+        usage: 'a,b',
+        default: '0.4,1.5,3',
+        help: 'the moments pictured, s after the press',
+      },
+      pictures: { kind: 'switch', help: 'picture the moments (=false: the numbers alone)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant the fault the checks must catch, in the first biome and view: a strobe of the exposure',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   health: {
     help: 'the screen as the hero\'s Health runs low: standing in each biome and view, his Health held at shares of '
       + 'his most, and at each the frame drawn with the low-health look and without it at the same moment: the colour '

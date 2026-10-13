@@ -17,6 +17,7 @@ import type { SpawnsOptions } from './spawns';
 import type { HealthOptions } from './health';
 import type { BlinkOptions } from './blink';
 import type { HeldOptions } from './held';
+import type { CastOptions } from './cast';
 import type { GearOptions } from './gear';
 
 export interface SheetCommand {
@@ -148,6 +149,15 @@ export async function spawns(lab: Lab, command: SpawnsOptions): Promise<Report> 
 export async function health(lab: Lab, command: HealthOptions): Promise<Report> {
   const { health: healthRound } = await import('./health');
   return healthRound(lab, command);
+}
+
+/**
+ * `lab cast`: a skill cast as the player casts it in one biome and view, every frame of its effect drawn and read
+ * back: its light against the budget, its flashes and the shaders compiled late.
+ */
+export async function cast(lab: Lab, command: CastOptions): Promise<Report> {
+  const { cast: castRound } = await import('./cast');
+  return castRound(lab, command);
 }
 
 /**

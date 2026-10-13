@@ -1,100 +1,52 @@
-// Maelstrom: a roaming storm vortex that pulls enemies in and strikes them with lightning.
+// Maelstrom: a roaming firestorm that pulls enemies in and lashes them with lightning (its look: fx/firestorm.ts).
 import * as THREE from 'three';
-import { nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
-import { addEffect, lightning, shockwave } from '../../fx/effects';
-import { particles, col } from '../../fx/particles';
+import { addEffect, lightning } from '../../fx/effects';
+import { Firestorm, warmFirestorm } from '../../fx/firestorm';
 import { flash, release } from '../../fx/lights';
 import { sfx } from '../../core/audio';
 import type { InstantSkill, Needs } from './types';
-import type { SkillDef } from '../../types';
 import { rand } from '../../util';
 
-const BLUE = 0x9fb2ff, FIRE = 0xff8a3c;
-const TICK = 0.25;
-
-const funnelGeo = new THREE.CylinderGeometry(1, 0.18, 1, 32, 8, true).translate(0, 0.5, 0);
-
-function funnelMaterial(color: THREE.ColorRepresentation, speed: number, stripes: number): THREE.ShaderMaterial {
-  return nearGlow(new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uColor: { value: new THREE.Color(color) }, uFade: { value: 0 } },
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-    vertexShader: /* glsl */`
-      varying vec2 vUv; uniform float uTime;
-      void main(){
-        vUv = uv;
-        vec3 p = position;
-        float wob = sin(uTime * 3.0 + p.y * 4.0) * 0.08 * p.y;
-        p.x += wob; p.z += cos(uTime * 2.6 + p.y * 3.0) * 0.08 * p.y;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-      }`,
-    fragmentShader: /* glsl */`
-      varying vec2 vUv; uniform float uTime; uniform vec3 uColor; uniform float uFade;
-      void main(){
-        float s = sin((vUv.x * ${stripes.toFixed(1)} + vUv.y * 2.5 - uTime * ${speed.toFixed(2)}) * 6.2831);
-        float band = smoothstep(0.2, 1.0, s);
-        float fade = smoothstep(0.0, 0.25, vUv.y) * (1.0 - smoothstep(0.6, 1.0, vUv.y));
-        // the storm starts right in front of the caster: in first person the camera is inside the
-        // funnel, so its near walls fade out rather than stacking with the far ones
-        float a = band * fade * uFade * 0.7 * smoothstep(0.5, 3.5, 1.0 / gl_FragCoord.w);
-        gl_FragColor = vec4(uColor * 2.2 * a, a);
-      }`,
-  }));
-}
-
-const funnelMaterials = () => [funnelMaterial(BLUE, 1.6, 3), funnelMaterial(0xc8d4ff, 2.4, 5), funnelMaterial(FIRE, 1.1, 2)];
+const FIRE = 0xff8a3c, LASH = 0xffc070;
+/** its light's peak, coming and going with its fade (at full from the first frame, it lit the scene at once), and its
+ *  height over the ground: up in the funnel's wide top, above the head (at 2.5 m, just ahead of the eyes as it rose,
+ *  it lit what stood before them orange) */
+const LIGHT = 16, LIGHT_Y = 3.8;
+/** the damage's ticks (s); the lashes of lightning at the foes in it, at most this often (s) and at most this many at once:
+ *  a lash at every tick flashed 3 to 4 times a second, and 3 a second is a photosensitivity hazard */
+const TICK = 0.25, LASH_EVERY = 0.7, LASHED = 2;
+/** it rises out of the ground and sinks back into it over these (s) */
+const RISE = 0.35, SINK = 0.45;
 
 const skill: InstantSkill = {
   anim: 'cast',
-  warm: () => funnelMaterials().map((m) => new THREE.Mesh(funnelGeo, m)),
+  warm: warmFirestorm,
   cast(player, rawDef, target) {
     const def = rawDef as Needs<'damage' | 'radius' | 'duration' | 'speed' | 'pull'>;
     const dir = new THREE.Vector3(target.x - player.pos.x, 0, target.z - player.pos.z);
     if (dir.lengthSq() < 0.01) dir.set(Math.sin(player.facing), 0, Math.cos(player.facing));
     dir.normalize();
     const pos = player.pos.clone().addScaledVector(dir, 1.8);
-    const group = new THREE.Group();
-    const mats = funnelMaterials();
-    const scales = [[def.radius * 0.9, 4.2], [def.radius * 0.6, 3.6], [def.radius * 0.45, 2.4]];
-    const meshes = mats.map((m, i) => {
-      const mesh = new THREE.Mesh(funnelGeo, m);
-      mesh.scale.set(scales[i][0], scales[i][1], scales[i][0]);
-      mesh.frustumCulled = false;
-      group.add(mesh);
-      return mesh;
-    });
-    group.position.copy(pos);
-    G.scene.add(group);
-    const light = flash({ color: BLUE, intensity: 30, distance: 10, life: 1, hold: def.duration, follow: () => new THREE.Vector3(pos.x, 2, pos.z) });
+    const storm = new Firestorm(def.radius, G.scene);
+    const light = flash({ color: FIRE, intensity: 0, distance: 10, life: 1, hold: def.duration, follow: () => new THREE.Vector3(pos.x, storm.group.position.y + LIGHT_Y, pos.z) });
     sfx.maelstrom();
-    shockwave(pos, { color: BLUE, intensity: 2, from: 0.5, to: def.radius, life: 0.4 });
+    storm.burst(pos.x, pos.z);
 
-    let t = 0, tick = 0;
+    let t = 0, tick = 0, lash = LASH_EVERY;
     addEffect({
       update(dt) {
         t += dt;
-        const fade = Math.min(1, t / 0.3) * Math.min(1, (def.duration - t) / 0.4);
+        const left = def.duration - t;
+        const grow = THREE.MathUtils.smoothstep(Math.min(t / RISE, left / SINK + 0.4), 0, 1);
+        const fade = Math.min(1, t / 0.3) * THREE.MathUtils.clamp(left / SINK, 0, 1);
         pos.addScaledVector(dir, def.speed * dt);
         const R = G.arena.radius - 1, r = Math.hypot(pos.x, pos.z);
         if (r > R) { pos.x *= R / r; pos.z *= R / r; }
-        group.position.copy(pos);
-        meshes.forEach((m, i) => { m.rotation.y = t * (3 + i * 1.5) * (i % 2 ? -1 : 1); m.material.uniforms.uTime.value = t; m.material.uniforms.uFade.value = fade; });
-
-        // swirling debris & embers
-        for (let i = 0; i < 6; i++) {
-          const a = Math.random() * Math.PI * 2, rr = rand(0.3, def.radius), h = rand(0, 3.5);
-          const tang = 7;
-          particles.glow.spawn({
-            x: pos.x + Math.cos(a) * rr, y: h, z: pos.z + Math.sin(a) * rr,
-            vx: -Math.sin(a) * tang - Math.cos(a) * 2, vy: rand(0.5, 2), vz: Math.cos(a) * tang - Math.sin(a) * 2,
-            life: 0.35, size: rand(0.1, 0.3), sizeEnd: 0, color: col(i % 3 ? BLUE : FIRE, 2.5), colorEnd: col(0x3040ff, 0.4), drag: 2,
-          });
-        }
-        if (Math.random() < 0.3) {
-          particles.smoke.spawn({ x: pos.x + rand(-1, 1), y: 0.2, z: pos.z + rand(-1, 1), vy: 1.5, vx: rand(-1, 1), vz: rand(-1, 1), life: 1, size: 1.5, sizeEnd: 3, color: col(0x20242e), alpha: 0.4 });
-        }
+        storm.update(dt, pos.x, pos.z, Math.max(0.15, grow), fade);
+        light.peak = LIGHT * fade;
 
         // pull
         for (const e of G.enemies) {
@@ -106,27 +58,29 @@ const skill: InstantSkill = {
           }
         }
 
-        // damage ticks with lightning
+        // damage ticks, and now and then a lash of lightning from its wall at the foes in it
         tick += dt;
+        lash += dt;
         if (tick >= TICK && t < def.duration - 0.2) {
           tick -= TICK;
           const inside = G.enemies.filter((e) => e.alive && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < def.radius + e.radius);
           hurtPropsIn(player, pos.x, pos.z, def.radius, PROP_DAMAGE.zone * TICK);
           for (const e of inside) hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'lightning', silent: true });
-          const top = new THREE.Vector3(pos.x, 4, pos.z);
-          const targets = inside.sort(() => Math.random() - 0.5).slice(0, 2);
-          if (targets.length) {
-            for (const e of targets) lightning(top, new THREE.Vector3(e.pos.x, e.height * 0.6, e.pos.z), { color: BLUE, intensity: 6 });
+          if (inside.length && lash >= LASH_EVERY) {
+            lash = 0;
+            const ground = storm.group.position.y;
+            for (const e of inside.sort(() => Math.random() - 0.5).slice(0, LASHED)) {
+              const from = storm.pointOn(pos.x, ground, pos.z, rand(1.8, 3), Math.atan2(e.pos.z - pos.z, e.pos.x - pos.x));
+              const to = new THREE.Vector3(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z);
+              lightning(from, to, { color: LASH, intensity: 3.5, width: 0.05, branches: 1 });
+            }
             sfx.zap();
-          } else if (Math.random() < 0.5) {
-            lightning(top, new THREE.Vector3(pos.x + rand(-1.5, 1.5), 0, pos.z + rand(-1.5, 1.5)), { color: BLUE, intensity: 4, branches: 1 });
           }
         }
         return t < def.duration;
       },
       dispose() {
-        G.scene.remove(group);
-        mats.forEach((m) => m.dispose());
+        storm.dispose(G.scene);
         release(light);
       },
     });
