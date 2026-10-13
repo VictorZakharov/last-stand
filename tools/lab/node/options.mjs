@@ -18,7 +18,7 @@ const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'choice', 'ref', 'scr
 
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
-  'lobby', 'tooltip', 'help', 'saves', 'views', 'run', 'scores', 'perf', 'decision', 'pause', 'summary',
+  'lobby', 'tooltip', 'help', 'saves', 'clicked', 'views', 'run', 'scores', 'perf', 'decision', 'pause', 'summary',
 ];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
@@ -237,8 +237,9 @@ export const COMMANDS = {
         usage: 'a,b',
         choices: UI_STATES,
         default: UI_STATES.join(','),
-        help: 'the states: lobby, tooltip, help, saves, views (the lobby\'s camera switched through its views: the '
-          + 'labels over the dummies against their anchors), run (the HUD with a hurt foe\'s bar and damage numbers), '
+        help: 'the states: lobby, tooltip, help, saves, clicked (a class button clicked and a key pressed after it: '
+          + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
+          + 'dummies against their anchors), run (the HUD with a hurt foe\'s bar and damage numbers), '
           + 'scores, perf, decision, pause, summary',
       },
       hdr: { kind: 'switch', help: 'HDR on, as on a display in HDR mode (the pause menu shows its levels)' },

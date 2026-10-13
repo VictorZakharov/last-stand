@@ -1,8 +1,9 @@
 // The game's UI as the player sees it on this screen (tools/lab `ui`): the lobby, an item's tooltip, How to play, the
-// save slots, the lobby's camera switched through its views (the labels over the dummies against where they stand
-// on the screen, frame by frame through each glide), the run's HUD with the world's labels over it (a hurt foe's
-// bar, damage numbers), the scores, the performance overlay, the bank-or-continue choice, the pause menu and the
-// run's summary, each pictured whole, with
+// save slots, a class button clicked with the mouse and a key pressed after it (where the focus went), the lobby's
+// camera switched through its views (the labels over the dummies against where they stand on the screen, frame by
+// frame through each glide), the run's HUD with the world's labels over it (a hurt foe's bar, damage numbers), the
+// scores, the performance overlay, the bank-or-continue choice, the pause menu and the run's summary, each pictured
+// whole, with
 // the boxes of the page's named elements and of the labels as shares of the window. On two screens (`--screens`), a
 // UI laid out as a share of the screen shows the same lines and the same pictures on both, whatever the screens'
 // pixel ratios: a 4K screen at 300% as at 100%.
@@ -22,7 +23,8 @@ import { hdrOutput } from './hdrOutput';
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
-  'lobby' | 'tooltip' | 'help' | 'saves' | 'views' | 'run' | 'scores' | 'perf' | 'decision' | 'pause' | 'summary';
+  | 'lobby' | 'tooltip' | 'help' | 'saves' | 'clicked' | 'views' | 'run' | 'scores' | 'perf' | 'decision'
+  | 'pause' | 'summary';
 
 export interface UiOptions {
   state: UiState;
@@ -47,6 +49,8 @@ const NUMBERS = [
 ] as const;
 /** frames run after the numbers are shown, so each has risen a little and none is in its first pop */
 const NUMBER_FRAMES = 12;
+/** the key pressed after the class button is clicked: one the game takes in the lobby (a step forward) */
+const KEY_AFTER_CLICK = 'KeyW';
 /** the frames run after each press of V as the camera glides to the next view (its glide is 0.45 s) */
 const SWITCH_FRAMES = 40;
 /** a label further than this from where its anchor shows on the screen is off (css px) */
@@ -256,6 +260,49 @@ function labelsThroughSwitches(): Found {
   return { lines, problems };
 }
 
+/**
+ * The hero's own class button clicked with the mouse (nothing changes) and a game key pressed after it, as a player
+ * picks a class and then plays, each as the browser gets it from a mouse and a keyboard. Throws if the click never
+ * reached the button.
+ */
+async function clickClass(lab: Lab): Promise<void> {
+  const button = document.querySelector<HTMLElement>(`#opt-class button[data-c="${G.player.cls.id}"]`);
+  if (!button) throw new Error('lab: ui: the class card has no button for the hero\'s class');
+  let clicked = false;
+  const heard = (event: MouseEvent) => {
+    clicked = event.detail > 0;
+  };
+  button.addEventListener('click', heard, { once: true });
+  const box = button.getBoundingClientRect();
+  await lab.click({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
+  button.removeEventListener('click', heard);
+  if (!clicked) throw new Error('lab: ui: the mouse\'s click never reached the class button');
+  await lab.press(KEY_AFTER_CLICK);
+}
+
+/** `element` named for a report: its tag, its id or its data attributes, and the id of what it's in. */
+function describe(element: Element): string {
+  const data = Object.entries((element as HTMLElement).dataset ?? {}).map(([key, value]) => `[data-${key}=${value}]`);
+  const own = element.id ? `#${element.id}` : data.join('');
+  const within = element.parentElement?.closest('[id]');
+  return `${element.tagName.toLowerCase()}${own}${within ? ` in #${within.id}` : ''}`;
+}
+
+/**
+ * Where the focus is after the click and the key, and whether the browser shows its focus ring. A button keeping it
+ * is a problem: the game's next key shows the ring round it (clipped by its group's frame, a second border down its
+ * side), and Space or Enter presses it again.
+ */
+function focusAfterClick(): Found {
+  const focused = document.activeElement;
+  const holder = focused && focused !== document.body ? describe(focused) : 'nothing';
+  const ring = document.querySelector(':focus-visible');
+  const lines = [`  focus: ${holder}`, `  focus ring: ${ring ? describe(ring) : 'none'}`];
+  const kept = focused?.closest('button');
+  const problems = kept ? [`the class button clicked kept the focus (${describe(kept)})`] : [];
+  return { lines, problems };
+}
+
 /** the scores' input: Tab held */
 const TAB: Frame = { keys: ['tab'] };
 
@@ -265,6 +312,7 @@ const STEPS: Record<UiState, Steps> = {
   tooltip: { open: openTooltip, close: hideTooltip },
   help: { open: openHelp, close: closeHelp },
   saves: { open: () => openSaves(true), close: () => openSaves(false) },
+  clicked: { open: clickClass, close: () => undefined, check: focusAfterClick },
   views: { open: switchViews, close: () => undefined, check: labelsThroughSwitches },
   run: { open: () => undefined, close: () => undefined },
   // (shown while Tab is held: pictured with it down, let go after)

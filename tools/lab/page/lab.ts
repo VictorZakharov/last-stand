@@ -51,11 +51,21 @@ declare global {
     __labScreenshot?: (clip?: Clip) => Promise<string>;
     /** a finger's touch sent by the browser as a touch screen's (`tools/lab/node/side.mjs`) */
     __labTouch?: (type: TouchType, points: Finger[]) => Promise<void>;
+    /** the mouse sent by the browser as a mouse's (`tools/lab/node/side.mjs`), at css px */
+    __labMouse?: (type: MouseType, x: number, y: number) => Promise<void>;
+    /** a key sent by the browser as a keyboard's (`tools/lab/node/side.mjs`), by its code */
+    __labKey?: (type: KeyType, code: string) => Promise<void>;
   }
 }
 
 /** A touch as the browser gets one from a touch screen: a finger put down, moved, or lifted. */
 type TouchType = 'touchStart' | 'touchMove' | 'touchEnd';
+
+/** The mouse as the browser gets it: moved, or its left button pressed or let go. */
+type MouseType = 'mouseMoved' | 'mousePressed' | 'mouseReleased';
+
+/** A key as the browser gets it: pressed or let go. */
+type KeyType = 'keyDown' | 'keyUp';
 
 /** A finger on the screen as the DevTools protocol takes it: where it is (css px) and which finger. */
 interface Finger {
@@ -76,25 +86,60 @@ const TOUCH_POINTER_EVENTS: Record<TouchType, string[]> = {
   touchMove: ['pointermove'],
   touchEnd: ['pointerup', 'pointercancel'],
 };
-/** how long a touch's pointer event may take to reach the page, ms of the browser's own clock */
-const TOUCH_WAIT_MS = 2000;
+/** the pointer events the mouse makes, which say the page has handled it */
+const MOUSE_POINTER_EVENTS: Record<MouseType, string[]> = {
+  mouseMoved: ['pointermove'],
+  mousePressed: ['pointerdown'],
+  mouseReleased: ['pointerup'],
+};
+/** the key events a key makes, which say the page has handled it */
+const KEY_EVENTS: Record<KeyType, string[]> = {
+  keyDown: ['keydown'],
+  keyUp: ['keyup'],
+};
+/** how long an input's event may take to reach the page, ms of the browser's own clock */
+const INPUT_WAIT_MS = 2000;
+
+/** An input's events as the page gets them: their names, which of them are this input's, and what it is (`touch`). */
+interface InputEvents {
+  names: string[];
+  ours(event: Event): boolean;
+  what: string;
+}
+
+/** Waits for `handled` once `sending` has gone (its wait given up quietly if the input never went). */
+async function sent(handled: Promise<void>, sending: Promise<void>): Promise<void> {
+  try {
+    await sending;
+  } catch (error) {
+    handled.catch(() => {});
+    throw error;
+  }
+  await handled;
+}
+
+/** Resolves once the page has handled one of the pointer events `names` from a touch (`inputHandled`). */
+function touchHandled(names: string[]): Promise<void> {
+  const ours = (event: Event) => (event as PointerEvent).pointerType === 'touch';
+  return inputHandled({ names, ours, what: 'touch' });
+}
 
 /**
- * Resolves once the page has handled one of the pointer events `names` from a touch: once the whole dispatch is over
- * (heard first, on the window as it captures, and resolved in the task after it, so every listener has run, whatever
- * one stopped). Rejects after `TOUCH_WAIT_MS`.
+ * Resolves once the page has handled one of an input's events: once the whole dispatch is over (heard first, on the
+ * window as it captures, and resolved in the task after it, so every listener has run, whatever one stopped).
+ * Rejects after `INPUT_WAIT_MS`.
  */
-function touchHandled(names: string[]): Promise<void> {
+function inputHandled({ names, ours, what }: InputEvents): Promise<void> {
   return new Promise((resolve, reject) => {
     const heard = (event: Event) => {
-      if ((event as PointerEvent).pointerType !== 'touch') return;
+      if (!ours(event)) return;
       done();
       setTimeout(resolve, 0);
     };
     const timeout = setTimeout(() => {
       done();
-      reject(new Error(`lab: touch: the page never got its ${names.join(' or ')}`));
-    }, TOUCH_WAIT_MS);
+      reject(new Error(`lab: ${what}: the page never got its ${names.join(' or ')}`));
+    }, INPUT_WAIT_MS);
     const done = () => {
       clearTimeout(timeout);
       for (const name of names) window.removeEventListener(name, heard, true);
@@ -564,17 +609,44 @@ export class Lab {
     return this.sendTouch('touchEnd', []);
   }
 
+  /**
+   * A click of the mouse's left button at `at` (css px) as a mouse gives it: moved there, pressed and let go, sent
+   * through the DevTools protocol, so the browser handles it as a player's click (its mouse and pointer events, the
+   * focus it moves to what was clicked). No frame runs; it returns once the page has handled the release.
+   */
+  async click(at: PagePoint): Promise<void> {
+    await this.sendMouse('mouseMoved', at);
+    await this.sendMouse('mousePressed', at);
+    await this.sendMouse('mouseReleased', at);
+  }
+
+  /**
+   * The key whose code is `code` (`KeyW`, `Space`) pressed and let go as a keyboard gives it, so the browser handles
+   * it as a player's key, what it does to the focused element with it (a focus ring shown, a button pressed). No
+   * frame runs; it returns once the page has handled the key's release.
+   */
+  async press(code: string): Promise<void> {
+    await this.sendKey('keyDown', code);
+    await this.sendKey('keyUp', code);
+  }
+
+  private async sendMouse(type: MouseType, at: PagePoint): Promise<void> {
+    if (!window.__labMouse) throw new Error('lab: click: this page has no mouse (opened by an older lab)');
+    const ours = (event: Event) => (event as PointerEvent).pointerType === 'mouse';
+    const handled = inputHandled({ names: MOUSE_POINTER_EVENTS[type], ours, what: 'click' });
+    await sent(handled, window.__labMouse(type, at.x, at.y));
+  }
+
+  private async sendKey(type: KeyType, code: string): Promise<void> {
+    if (!window.__labKey) throw new Error('lab: press: this page has no keyboard (opened by an older lab)');
+    const ours = (event: Event) => (event as KeyboardEvent).code === code;
+    const handled = inputHandled({ names: KEY_EVENTS[type], ours, what: 'press' });
+    await sent(handled, window.__labKey(type, code));
+  }
+
   private async sendTouch(type: TouchType, fingers: Finger[]): Promise<void> {
     if (!window.__labTouch) throw new Error('lab: touch: this page has no touches (opened by an older lab)');
-    const handled = touchHandled(TOUCH_POINTER_EVENTS[type]);
-    try {
-      await window.__labTouch(type, fingers);
-    } catch (error) {
-      // (its wait given up quietly: the touch never went)
-      handled.catch(() => {});
-      throw error;
-    }
-    await handled;
+    await sent(touchHandled(TOUCH_POINTER_EVENTS[type]), window.__labTouch(type, fingers));
   }
 
   /** Pictures of the game as it is now, nothing advanced; the game's camera is put back as it was. */
