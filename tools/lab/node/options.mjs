@@ -294,6 +294,36 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  spawns: {
+    help: 'waves set off one after another in each biome (boss waves, the 5th to the 20th), a seed each, the hero at '
+      + 'the arena\'s middle: the gate every foe came in by and the spot it rose on against the props and the edge, '
+      + 'how many gates each group came by and its packs, the waves leaving a gate idle, when the boss came against '
+      + 'the first group reaching the hero, and from each gate the first boss\'s walk to him; then waves 1, 5 and 10 '
+      + 'at the game\'s own pace, each foe taken out as it reaches him; a number of gates no group came by, a wave '
+      + 'leaving a gate idle, a gate no boss came by, a foe risen in a prop, a boss early or late and one that never '
+      + 'reached the hero are problems',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      waves: {
+        kind: 'number',
+        usage: 'n',
+        help: 'the waves in each biome (32 by default; the bosses\' gates are judged over 24 at least)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant faults the measures must catch, in the first biome: every foe read again moved onto one gate, '
+          + 'the first half into a prop, and one more wave\'s boss frozen where it rose',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   probe: {
     help: 'a probe module of your own: its default export takes the lab and the options (tools/lab/README.md)',
     argument: 'module',

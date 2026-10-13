@@ -40,6 +40,9 @@ import { LookAt } from './models/ik';
 
 const auraGeo = new THREE.RingGeometry(0.7, 1, 48).rotateX(-Math.PI / 2);
 
+/** how long a spawned foe takes to rise out of the floor (s), invulnerable and still */
+export const RISE_TIME = 0.9;
+
 /** A timed action (attack, slam, ...) with events fired at fractions of its duration. */
 export interface EnemyAction {
   name: string;
@@ -98,7 +101,7 @@ export class Enemy {
   facing: number;
   targetFacing: number;
   alive = true;
-  spawning = 0.9;
+  spawning = RISE_TIME;
   invulnerable = true;
   /** attack cooldown */
   cd = rand(0.3, 1.2);
@@ -246,7 +249,7 @@ export class Enemy {
 
     if (this.spawning > 0) {
       this.spawning = Math.max(0, this.spawning - dt);
-      const k = 1 - this.spawning / 0.9;
+      const k = 1 - this.spawning / RISE_TIME;
       this.obj.position.y = -this.height * (1 - k) ** 2;
       if (Math.random() < 0.6) particles.glow.spawn({
         x: this.pos.x + rand(-0.6, 0.6), y: 0.1, z: this.pos.z + rand(-0.6, 0.6), vy: rand(1, 3),

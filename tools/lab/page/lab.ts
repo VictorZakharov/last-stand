@@ -307,6 +307,14 @@ export class Lab {
     return foe;
   }
 
+  /**
+   * The run's waves let come from here on, until the next set-up: its countdown, its spawns and its foes as the game
+   * plays them, the hero still kept whole. A measure of a wave sets one off itself (the run's wave and its timer).
+   */
+  letWavesCome(): void {
+    this.keepUp = [keepHeroWhole];
+  }
+
   /** Puts the mouse over a point in the world, as the player would. */
   pointAt(point: THREE.Vector3): void {
     const ndc = point.clone().project(G.camera);

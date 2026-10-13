@@ -9,6 +9,9 @@ import { REPO } from './paths.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { writeSheet } from './sheetImage.mjs';
 
+/** the waves `spawns` sets off in each biome unless `--waves` says */
+const SPAWN_WAVES = 32;
+
 /** The set-up a command asks for (page/lab.ts `Fixture`), from its options. */
 function fixtureFrom(options) {
   const fixture = {};
@@ -366,6 +369,23 @@ export const COMMANDS = {
   touch: {
     each(side, options) {
       return side.command('touch', { fixture: fixtureFrom(options), canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
+  spawns: {
+    check(options) {
+      if (options.waves !== undefined && !(options.waves >= 1)) throw labError('spawns --waves: at least 1');
+    },
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        biomes: options.biomes,
+        waves: Math.round(options.waves ?? SPAWN_WAVES),
+        canary: Boolean(options.canary),
+      };
+      return side.command('spawns', command);
     },
     textOf: asText,
     problemsOf: problemsIn,
