@@ -1,9 +1,12 @@
 // Maelstrom's look (combat/skills/maelstrom.ts), after its icon: a tornado of fire, narrow where it touches the ground
-// and flaring wide at the top, its lip curling in over a dark eye. Spiral ribbons of flame wind up it (a bright
-// leading edge and a long tail, frayed into fibres by noise), deep red to orange to yellow-white where they're
-// hottest, round a core of dark smoke; a swirl burns on the floor under it, embers spin up it and are flung from its
-// lip, smoke is kicked up at its foot and lightning crackles over it. Drawn in layers, so the ribbons' far walls show
-// through the smoke and the near walls lie over it: from above, a bright spiral round a black eye.
+// and flaring wide at the top, its lip curling in over a dark eye, snaking as it turns. Streaks of flame wind up it
+// in spiral ribbons (a bright leading edge, a tail breaking up behind it), deep red to orange to yellow-white where
+// they're hottest, torn through by holes drifting up them and frayed at their edges, round a core of dark ash; a swirl
+// burns on the floor under it, embers, wisps of flame, dust and debris spin up it and are flung from its lip, and
+// lightning crackles over it. Drawn in layers, so the far walls show through the ash and the near walls lie over it:
+// from above, a bright spiral round a black eye. Its walls are thin where they face the camera and thicken towards
+// their edges, as a shell of smoke and fire is seen through: with wide ribbons solid up to 0.95 and a grain of fibres
+// across them, it read as painted walls, not a storm.
 import * as THREE from 'three';
 import { NEAR_GLOW } from '../core/materials';
 import { groundHeight } from '../world/ground';
@@ -12,8 +15,10 @@ import { particles, col } from './particles';
 import { lightning } from './effects';
 import { rand } from '../util';
 
-/** the embers' colour as they leave and as they cool, the smoke's and the crackles' (the flames' are in their shader) */
-const EMBER = 0xff8a3c, EMBER_END = 0x401000, SMOKE = 0x0d0705, CRACKLE = 0xffc890;
+/** the embers' colour as they leave and as they cool, the flames' wisps', the smoke's, the dust's, the debris's and
+ *  the crackles' (the walls' are in their shader) */
+const EMBER = 0xff8a3c, EMBER_END = 0x401000, WISP = 0xff5a1a, SMOKE = 0x0d0705, DUST = 0x2a1e16, DEBRIS = 0x140e0b;
+const CRACKLE = 0xffc890;
 /** the funnel's height, and its narrow foot, as shares of its top's radius */
 const HEIGHT = 1.3, FOOT = 0.08;
 /** how it flares from its foot to its top (its radius goes with its height to this power) */
@@ -60,18 +65,27 @@ const NEAR = /* glsl */`
     return clamp(pow(depth / ${NEAR_GLOW.ref.toFixed(1)}, ${NEAR_GLOW.pow.toFixed(2)}), ${NEAR_GLOW.min.toFixed(2)}, 1.0);
   }`;
 
-// (the funnel sways, more the higher it is; its depth from the camera is for the walls up close)
+// (the funnel sways, more the higher it is, and snakes, its walls bulging and pinched by a noise turning with it; its
+// depth from the camera is for the walls up close, and how squarely it faces the camera for its thickness)
 const FUNNEL_VERTEX = /* glsl */`
-  varying vec2 vUv; varying float vDepth; uniform float uTime;
+  varying vec2 vUv; varying float vDepth, vFacing; uniform float uTime;
+  ${NOISE}
   void main(){
     vUv = uv;
     vec3 p = position;
-    p.x += sin(uTime * 2.3 + p.y * 2.0) * 0.06 * p.y;
-    p.z += cos(uTime * 1.9 + p.y * 1.7) * 0.06 * p.y;
+    p.x += (sin(uTime * 2.3 + p.y * 2.0) * 0.06 + sin(uTime * 1.1 + p.y * 4.3) * 0.03) * p.y;
+    p.z += (cos(uTime * 1.9 + p.y * 1.7) * 0.06 + cos(uTime * 1.3 + p.y * 3.7) * 0.03) * p.y;
+    float ang = uv.x * 6.2831853;
+    float bulge = fsNoise(vec3(cos(ang) * 1.5, p.y * 3.0 - uTime * 0.8, sin(ang) * 1.5));
+    p.xz *= 1.0 + (bulge - 0.5) * 0.22;
     vec4 view = modelViewMatrix * vec4(p, 1.0);
     vDepth = -view.z;
+    vFacing = abs(dot(normalize(normalMatrix * normal), normalize(-view.xyz)));
     gl_Position = projectionMatrix * view;
   }`;
+
+/** How thick a wall seen squarely is against one seen edge on (a shell's depth through it grows towards its edges). */
+const FACE_ON = 0.55;
 
 /** The ribbons' look: how many wind round it, how far they twist up it, how fast they run, how hot and which noise. */
 interface Ribbons {
@@ -91,7 +105,7 @@ function ribbonMaterial(side: THREE.Side): THREE.ShaderMaterial {
     transparent: true, depthWrite: false, ...OVER, side,
     vertexShader: FUNNEL_VERTEX,
     fragmentShader: /* glsl */`
-      varying vec2 vUv; varying float vDepth;
+      varying vec2 vUv; varying float vDepth, vFacing;
       uniform float uTime, uFade, uBands, uTwist, uSpeed, uHeat, uSeed;
       ${NOISE}
       ${NEAR}
@@ -99,23 +113,36 @@ function ribbonMaterial(side: THREE.Side): THREE.ShaderMaterial {
         // (the noise is read on a circle round the funnel, so its seam meets itself)
         float ang = vUv.x * 6.2831853, v = vUv.y;
         vec3 round = vec3(cos(ang), 0.0, sin(ang));
+        // turbulence: the ribbons bent by two noises, a slow broad one and a quicker small one
         float warp = fsFbm(round * 1.6 + vec3(0.0, v * 3.0 - uTime * 0.7, 0.0) + uSeed);
+        float churn = fsNoise(round * 3.4 + vec3(0.0, v * 6.0 - uTime * 1.4, 0.0) + uSeed * 2.0);
         // each ribbon winds up and round, its leading edge burning brightest and the rest cooling behind it
-        float f = fract(vUv.x * uBands + v * uTwist - uTime * uSpeed + (warp - 0.5) * 0.9);
-        float band = smoothstep(0.0, 0.05, f) * pow(1.0 - f, 2.4);
-        float edge = smoothstep(0.0, 0.03, f) * (1.0 - smoothstep(0.03, 0.14, f));
-        // frayed into strands along it: the ridges of a noise across it, dark between them
-        // (flowing up along them)
-        float n = fsNoise(round * 2.0 + vec3(f * 24.0, v * 2.0 - uTime * 1.6, f * 24.0) + uSeed * 3.0);
-        float strand = pow(1.0 - abs(2.0 * n - 1.0), 3.0);
-        float heat = band * (0.55 + 0.6 * strand) * (0.75 + 0.5 * warp);
+        float f = fract(vUv.x * uBands + v * uTwist - uTime * uSpeed + (warp - 0.5) * 1.1 + (churn - 0.5) * 0.35);
+        float band = smoothstep(0.0, 0.04, f) * pow(1.0 - f, 2.6);
+        float edge = smoothstep(0.0, 0.02, f) * (1.0 - smoothstep(0.02, 0.09, f));
+        // streaks of flame along it, of every width, streaming up it (a noise drawn out along the ribbon)
+        float streak = fsFbm(round * 0.8 + vec3(f * 9.0, v * 1.6 - uTime * 1.5, f * 9.0) + uSeed * 3.0);
+        streak = smoothstep(0.35, 0.75, streak);
+        // torn through by holes drifting up it, so it's broken into tongues of flame and not a sheet
+        float tear = fsFbm(round * 2.4 + vec3(f * 2.5, v * 3.5 - uTime * 1.1, 0.0) + uSeed * 5.0);
+        float whole = mix(0.25, 1.0, smoothstep(0.28, 0.58, tear));
+        float heat = band * (0.4 + 0.8 * streak) * whole;
+        // (and puffs of hot smoke through the wall, so it's a body of fire and not loose streaks)
+        float puff = fsFbm(round * 2.0 + vec3(0.0, v * 2.5 - uTime * 0.9, 0.0) + uSeed * 7.0);
+        float haze = 0.16 * smoothstep(0.42, 0.8, puff);
         float ends = smoothstep(0.03, 0.2, v) * (1.0 - smoothstep(0.86, 1.0, v));
-        // (its walls fade within 7 m: it rises round the camera through the eyes and just past it over the shoulder,
-        // and up close its walls laid an orange veil over the whole view)
-        float a = clamp(heat * 1.4 + edge * 0.5, 0.0, 0.95) * ends * uFade * smoothstep(1.5, 7.0, vDepth);
-        vec3 c = mix(vec3(0.55, 0.04, 0.0), vec3(0.95, 0.28, 0.02), smoothstep(0.05, 0.4, heat));
-        c = mix(c, vec3(1.0, 0.7, 0.28), smoothstep(0.5, 0.9, heat + edge * 0.6));
-        gl_FragColor = vec4(c * mix(1.0, uHeat, fsNear(vDepth)) * a, a);
+        // (thicker towards the edges it's seen by: a shell of fire seen through. Its walls fade within 7 m: it rises
+        // round the camera through the eyes and just past it over the shoulder, and up close its walls laid an orange
+        // veil over the whole view)
+        float thick = mix(${FACE_ON.toFixed(2)}, 1.0, pow(1.0 - vFacing, 1.5));
+        float a = clamp(heat * 1.5 + edge * 0.7 * whole + haze, 0.0, 0.85) * thick * ends * uFade
+          * smoothstep(1.5, 7.0, vDepth);
+        vec3 c = mix(vec3(0.55, 0.04, 0.0), vec3(0.95, 0.28, 0.02), smoothstep(0.05, 0.35, heat));
+        c = mix(c, vec3(1.0, 0.72, 0.3), smoothstep(0.45, 0.85, heat + edge * 0.6));
+        // (its light added over what's behind it, covering it less where it burns faint: the flames glow, they aren't
+        // a coat of paint over the scene)
+        float cover = a * mix(0.45, 0.9, smoothstep(0.2, 0.7, heat + edge * 0.4));
+        gl_FragColor = vec4(c * mix(1.0, uHeat, fsNear(vDepth)) * a, cover);
       }`,
   });
 }
@@ -126,13 +153,19 @@ function smokeMaterial(): THREE.ShaderMaterial {
     transparent: true, depthWrite: false, side: THREE.DoubleSide,
     vertexShader: FUNNEL_VERTEX,
     fragmentShader: /* glsl */`
-      varying vec2 vUv; varying float vDepth; uniform float uTime, uFade; uniform vec3 uColor;
+      varying vec2 vUv; varying float vDepth, vFacing; uniform float uTime, uFade; uniform vec3 uColor;
       ${NOISE}
       void main(){
         float ang = vUv.x * 6.2831853, v = vUv.y;
-        float n = fsFbm(vec3(cos(ang), 0.0, sin(ang)) * 1.3 + vec3(0.0, v * 2.2 - uTime * 0.5, 0.0) + 11.0);
+        vec3 round = vec3(cos(ang), 0.0, sin(ang));
+        // ash in streaks winding up it, faster than the flames round it
+        float warp = fsFbm(round * 1.3 + vec3(0.0, v * 2.2 - uTime * 0.5, 0.0) + 11.0);
+        float wind = fract(vUv.x * 5.0 + v * 2.4 - uTime * 0.3 + warp * 0.8);
+        float streak = smoothstep(0.0, 0.25, wind) * (1.0 - smoothstep(0.35, 0.9, wind));
+        float n = fsFbm(round * 2.0 + vec3(wind * 3.0, v * 3.0 - uTime * 0.9, 0.0) + 17.0);
         float ends = smoothstep(0.05, 0.3, v) * (1.0 - smoothstep(0.8, 1.0, v));
-        float a = smoothstep(0.2, 0.6, n) * 0.75 * ends * uFade * smoothstep(1.5, 7.0, vDepth);
+        float thick = mix(${FACE_ON.toFixed(2)}, 1.0, pow(1.0 - vFacing, 1.5));
+        float a = smoothstep(0.3, 0.7, n) * (0.35 + 0.65 * streak) * 0.7 * thick * ends * uFade * smoothstep(1.5, 7.0, vDepth);
         gl_FragColor = vec4(uColor, a);
       }`,
   });
@@ -265,22 +298,22 @@ export class Firestorm {
     if (fade > 0.05) this.emit(dt, x, ground, z, grow, fade);
   }
 
-  /** The embers, smoke and crackles of a frame. */
+  /** The embers, wisps, dust, debris and crackles of a frame. */
   private emit(dt: number, x: number, ground: number, z: number, grow: number, fade: number): void {
     const top = this.radius * HEIGHT * grow;
     // embers spinning up its walls, the way the ribbons turn (a turn about +y: from +z towards +x)
-    for (let i = 0; i < Math.round(8 * fade); i++) {
-      const h = rand(0.1, top), a = rand(0, Math.PI * 2), rr = this.surfaceAt(h, grow) * rand(0.8, 1.08);
-      const tang = rand(4, 7), out = rand(0.3, 1.2);
+    for (let i = 0; i < Math.round(12 * fade); i++) {
+      const h = rand(0.1, top), a = rand(0, Math.PI * 2), rr = this.surfaceAt(h, grow) * rand(0.8, 1.12);
+      const tang = rand(4, 8), out = rand(0.3, 1.4);
       particles.glow.spawn({
         x: x + Math.cos(a) * rr, y: ground + h, z: z + Math.sin(a) * rr,
-        vx: Math.sin(a) * tang + Math.cos(a) * out, vy: rand(1, 3), vz: -Math.cos(a) * tang + Math.sin(a) * out,
-        life: rand(0.45, 0.85), size: rand(0.06, 0.15), sizeEnd: 0,
+        vx: Math.sin(a) * tang + Math.cos(a) * out, vy: rand(1, 3.5), vz: -Math.cos(a) * tang + Math.sin(a) * out,
+        life: rand(0.45, 0.9), size: rand(0.05, 0.14), sizeEnd: 0,
         color: col(EMBER, rand(1.6, 2.8)), colorEnd: col(EMBER_END, 0.3), drag: 1.5,
       });
     }
     // and flung off its lip, falling as they cool
-    for (let i = 0; i < Math.round(2 * fade); i++) {
+    for (let i = 0; i < Math.round(3 * fade); i++) {
       const a = rand(0, Math.PI * 2), rr = this.radius * grow * 0.95, out = rand(2.5, 4.5);
       particles.glow.spawn({
         x: x + Math.cos(a) * rr, y: ground + top, z: z + Math.sin(a) * rr,
@@ -289,13 +322,36 @@ export class Firestorm {
         color: col(EMBER, 2.2), colorEnd: col(EMBER_END, 0.2), gravity: 4, drag: 0.8,
       });
     }
-    // smoke kicked up round its foot
-    if (Math.random() < 0.5 * fade) {
-      const a = rand(0, Math.PI * 2), rr = rand(0.4, 1.6);
+    // wisps of flame torn off its walls, soft and short-lived, so its edge is ragged
+    for (let i = 0; i < Math.round(3 * fade); i++) {
+      const h = rand(0.2, top * 0.95), a = rand(0, Math.PI * 2), rr = this.surfaceAt(h, grow) * rand(0.95, 1.15);
+      const tang = rand(3, 5);
+      particles.glow.spawn({
+        x: x + Math.cos(a) * rr, y: ground + h, z: z + Math.sin(a) * rr,
+        vx: Math.sin(a) * tang, vy: rand(1.5, 3), vz: -Math.cos(a) * tang,
+        life: rand(0.3, 0.55), size: rand(0.35, 0.7), sizeEnd: rand(0.9, 1.4),
+        color: col(WISP, rand(0.35, 0.6)), colorEnd: col(EMBER_END, 0.05), drag: 1.2,
+      });
+    }
+    // dust and ash whirled round its foot and up its lower walls
+    for (let i = 0; i < Math.round(2 * fade); i++) {
+      const h = rand(0.1, top * 0.5), a = rand(0, Math.PI * 2), rr = this.surfaceAt(h, grow) * rand(1, 1.6) + 0.3;
+      const tang = rand(3, 6);
       particles.smoke.spawn({
-        x: x + Math.cos(a) * rr, y: ground + 0.2, z: z + Math.sin(a) * rr,
-        vx: Math.sin(a) * 2, vy: rand(1, 2), vz: -Math.cos(a) * 2,
-        life: 1.2, size: 1.2, sizeEnd: 3, color: col(SMOKE), alpha: 0.35, drag: 0.6,
+        x: x + Math.cos(a) * rr, y: ground + h, z: z + Math.sin(a) * rr,
+        vx: Math.sin(a) * tang - Math.cos(a) * 0.8, vy: rand(1, 2.5), vz: -Math.cos(a) * tang - Math.sin(a) * 0.8,
+        life: rand(1, 1.6), size: rand(0.6, 1.1), sizeEnd: rand(1.8, 2.8),
+        color: col(i % 2 ? DUST : SMOKE), alpha: rand(0.2, 0.35), drag: 0.7,
+      });
+    }
+    // debris torn up and spun round it, thrown out as it rises
+    if (Math.random() < 0.6 * fade) {
+      const h = rand(0.1, top * 0.4), a = rand(0, Math.PI * 2), rr = this.surfaceAt(h, grow) * rand(0.9, 1.2);
+      const tang = rand(5, 8), size = rand(0.07, 0.15);
+      particles.smoke.spawn({
+        x: x + Math.cos(a) * rr, y: ground + h, z: z + Math.sin(a) * rr,
+        vx: Math.sin(a) * tang + Math.cos(a), vy: rand(3, 6), vz: -Math.cos(a) * tang + Math.sin(a),
+        life: rand(0.9, 1.4), size, sizeEnd: size, color: col(DEBRIS), alpha: 0.9, gravity: 5, drag: 0.4,
       });
     }
     // lightning crackling over it, short and dim: no flash
