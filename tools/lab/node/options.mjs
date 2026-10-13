@@ -509,6 +509,30 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  music: {
+    help: 'each biome\'s music played through as the player hears it: its lobby, a run\'s countdown, the first '
+      + 'wave\'s fight and its win, the next wave, the tab hidden and shown again mid-fight, and the bank back to the '
+      + 'lobby, every frame judged by what the game sends to WebAudio and what each track\'s output carries: a track '
+      + 'rising where another is wanted, a level cut rather than faded, a rise from silence not from the track\'s '
+      + 'top, a track back elsewhere than where it was left, a loop off its track\'s, a battle track not decoded '
+      + 'within the countdown, a silent track kept decoded and one unheard where it\'s wanted (or heard where it '
+      + 'isn\'t) are problems',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'forest,crypt',
+        help: 'the biomes, in turn: crypt, forest',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant faults the judge must catch, in a round played again: the biome\'s battle track played as '
+          + 'another\'s, the lobby\'s fade in cut to a twentieth of a second, every rise from silence 5 s in',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   probe: {
     help: 'a probe module of your own: its default export takes the lab and the options (tools/lab/README.md)',
     argument: 'module',

@@ -13,6 +13,10 @@ tools/facelab/models/
 tools/icons/out/
 tools/icons/__pycache__/
 
+# the music tool (tools/music): its pictures
+tools/music/out/
+tools/music/__pycache__/
+
 # the lab (tools/lab): what it writes, the exported commits it compares with, its browser profile
 tools/lab/out/
 tools/stalls/out/
