@@ -34,6 +34,7 @@ function fixtureFrom(options) {
   if (options.facing !== undefined) fixture.facing = options.facing;
   if (options.nocked !== undefined) fixture.nocked = options.nocked;
   if (options.gear !== undefined) fixture.gear = options.gear;
+  if (options.weapon !== undefined) fixture.weapon = options.weapon;
   return fixture;
 }
 
@@ -331,6 +332,7 @@ export const COMMANDS = {
         span: options.span,
         skill: options.skill,
         gear: options.gear,
+        weapon: options.weapon,
       });
     },
     finish(results, options, session) {

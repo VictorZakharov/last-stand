@@ -213,6 +213,9 @@ export interface Fixture {
   /** the hero holding his weapons this way (his class's first weapons of it, his armour as it is), for a class with
    *  more than one; as the boot rolled them by default */
   gear?: WeaponStyle;
+  /** with `gear`, the weapon he holds that way, by its base (Maul: a two-hander's grips are its own); the class's first
+   *  of the style by default */
+  weapon?: string;
   /** the hero built afresh first, as the lobby's class switch builds him, so the run comes out the same whatever ran
    *  before it on the page (set up again over the same hero, a gait scenario's every line moved with the scenarios
    *  run before it: his walk cycle, his leg IK's smoothed speed, turn and twist, his aim's hold all carried over) */
@@ -471,7 +474,7 @@ export class Lab {
     const [x, z] = fixture.at ?? SPOT;
     const facing = fixture.facing ?? 0;
     const spot = new THREE.Vector3(x, 0, z);
-    if (fixture.gear) this.hold(fixture.gear);
+    if (fixture.gear) this.hold(fixture.gear, fixture.weapon);
     this.player.place(spot, facing);
     // (the camera too, for a hero built afresh: a commit from before it has none, and its camera glides)
     if (fixture.fresh) renderer.settleCamera?.(spot);
@@ -526,9 +529,10 @@ export class Lab {
     buildHotbar(hero);
   }
 
-  /** The hero holding his weapons `style`'s way, as equipping them from the stash would show it. */
-  private hold(style: WeaponStyle): void {
-    const gear = gearFor(this.player.cls, this.player.gear, style);
+  /** The hero holding his weapons `style`'s way (`weapon` the base in hand), as equipping them from the stash would
+   *  show it. */
+  private hold(style: WeaponStyle, weapon?: string): void {
+    const gear = gearFor(this.player.cls, this.player.gear, style, weapon);
     this.player.gear = gear;
     // (its loadout and its skills tuned to the style too: set by the gear alone, a two-hander swung at a one-hander's
     // pace; an older commit's hero has none of that)
@@ -833,14 +837,19 @@ function withinWindow(area: Clip, margin = 0): Clip {
 }
 
 /**
- * The gear of a hero of `cls` holding his weapons `style`'s way, his armour as `worn` has it: the class's first
- * one-hander (or two-hander), with a shield or a second one-hander as the style says. Throws for a style the class
- * can't hold.
+ * The gear of a hero of `cls` holding his weapons `style`'s way, his armour as `worn` has it: `base` in hand, or the
+ * class's first one-hander (or two-hander), with a shield or a second one-hander as the style says. Throws for a
+ * style the class can't hold, or a base that isn't of it.
  */
-export function gearFor(cls: ClassDef, worn: Gear, style: WeaponStyle): Gear {
+export function gearFor(cls: ClassDef, worn: Gear, style: WeaponStyle, base?: string): Gear {
   const twoHanders = cls.twoHanded ?? [];
-  const oneHander = cls.bases?.weapon?.find((base) => !twoHanders.includes(base)) ?? null;
-  const weapon = style === 'twoHanded' ? twoHanders[0] ?? null : oneHander;
+  const oneHanders = cls.bases?.weapon?.filter((each) => !twoHanders.includes(each)) ?? [];
+  const ofStyle = style === 'twoHanded' ? twoHanders : oneHanders;
+  if (base && !ofStyle.includes(base)) {
+    throw new Error(`lab: --weapon ${base}: not a ${style} weapon of the ${cls.id}'s (${ofStyle.join(', ')})`);
+  }
+  const oneHander = oneHanders[0] ?? null;
+  const weapon = base ?? ofStyle[0] ?? null;
   const gear: Gear = {
     ...worn,
     weapon,
@@ -848,7 +857,8 @@ export function gearFor(cls: ClassDef, worn: Gear, style: WeaponStyle): Gear {
     shield: style === 'shield',
     offWeapon: style === 'dual' ? oneHander : null,
   };
-  const can = weapon !== null && (style !== 'dual' || cls.dualWield) && (style !== 'shield' || cls.bases?.offhand?.length);
+  const holdsOff = style !== 'shield' || Boolean(cls.bases?.offhand?.length);
+  const can = weapon !== null && (style !== 'dual' || cls.dualWield) && holdsOff;
   if (!can || weaponStyle(cls, gear) !== style) throw new Error(`lab: --gear ${style}: the ${cls.id} can't hold that`);
   return gear;
 }

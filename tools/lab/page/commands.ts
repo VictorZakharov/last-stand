@@ -75,9 +75,10 @@ export async function feet(lab: Lab, command: FeetOptions): Promise<Report> {
  * reversals, the worst moments pictured; a canary it missed is a problem.
  */
 export async function range(lab: Lab, command: RangeOptions): Promise<Report> {
-  const { range: rangeRound, missedRangeCanary } = await import('./range');
+  const { range: rangeRound, missedRangeCanary, lettingGo } = await import('./range');
   const report = await rangeRound(lab, command);
-  return { text: report.lines.join('\n'), problems: missedRangeCanary(report), moments: report.moments };
+  const problems = [...missedRangeCanary(report), ...lettingGo(report)];
+  return { text: report.lines.join('\n'), problems, moments: report.moments };
 }
 
 /**

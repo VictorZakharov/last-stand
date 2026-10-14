@@ -1,10 +1,11 @@
 // `lab range`: every joint of the hero against a body's ranges (`models/anatomy.ts`), frame by frame, as the game's dev
 // builds watch them (`watchBody`), over standing, walking each way, shooting and walks that change direction while he
 // shoots or runs. Each angle past its range: on how many frames, the worst and where (the scenario, the frame, and for
-// a leg whether its foot was planted), and the worst moment of each scenario pictured. With `--skill`, a skill cast
-// standing too, the weapons held `--gear`'s way. A canary turns the head round past the neck's range on one frame,
-// which the measure must catch. `--trace` lists the leg IK frame by frame as the gait's does (`legTrace.ts`), each
-// frame's joints past their ranges after it.
+// a leg whether its foot was planted), and the worst moment of each scenario pictured. A two-hander let go of by the
+// other hand is a problem in every scenario (held as it's raised, walked and swung with): the frames, how often and
+// why. With `--skill`, a skill cast standing too, the weapons held `--gear`'s way (`--weapon` the base). A canary
+// turns the head round past the neck's range on one frame, which the measure must catch. `--trace` lists the leg IK
+// frame by frame as the gait's does (`legTrace.ts`), each frame's joints past their ranges after it.
 import * as THREE from 'three';
 import type { Frame, Lab, Pictured } from './lab';
 import {
@@ -13,8 +14,10 @@ import {
 import type { Joints } from '../../../src/entities/models/rig';
 import type { LegIK } from '../../../src/entities/models/ik';
 import type { WeaponStyle } from '../../../src/loot/loadout';
+import type { LowerGrip } from '../../../src/types';
 import { LegTrace, traceSpanOf } from './legTrace';
-import { bindKnown, pressing, skillNamed } from './cast';
+import { bindKnown, holdFor, pressing, skillNamed } from './cast';
+import { TipMoves } from './tipMoves';
 
 /** A hand as it is turned in its grip: the group of its own meshes under the joint, as `watchBody` measures it. */
 function turnedHand(hand: THREE.Object3D): THREE.Object3D {
@@ -41,7 +44,8 @@ interface RangeLeg {
   keys: string[];
   attack: boolean | 'taps';
   frames: number;
-  /** the skill asked for (`--skill`) cast on its first frame */
+  /** the skill asked for (`--skill`) cast on its first frame, its key held as long as the player would (`holdFor`: a
+   *  channel through, a drawn shot to full), the leg's frames after that */
   cast?: boolean;
 }
 
@@ -112,9 +116,11 @@ export interface RangeOptions {
   trace?: boolean;
   /** with `trace`, only the frames from the first to the second */
   span?: [number, number];
-  /** the `cast` scenario's skill (its key, its behaviour or its name), and the way the weapons are held throughout */
+  /** the `cast` scenario's skill (its key, its behaviour or its name), and the way the weapons are held throughout,
+   *  and the weapon held that way by its base */
   skill?: string;
   gear?: WeaponStyle;
+  weapon?: string;
 }
 
 /** where every scenario starts: open ground, facing +z */
@@ -146,6 +152,8 @@ export interface RangeReport {
   lines: string[];
   moments: Pictured[];
   canary?: { caught: boolean; measured: number };
+  /** each scenario in which a two-hander was let go of by the other hand, as words */
+  letGo: string[];
 }
 
 const degrees = (value: number) => value.toFixed(0);
@@ -212,6 +220,9 @@ function measureCanary(lab: Lab): number {
 interface ScenarioRun {
   frame: number;
   framesPast: number;
+  /** a two-hander's lower grip: the frames the other hand let go of it, how many times it did, and the worst frame's
+   *  reason */
+  grip: LetGo;
   worstHere: number;
   moment: Pictured | null;
   /** each ankle's fastest move in a frame (m) and where */
@@ -224,12 +235,14 @@ async function runScenario(
   lab: Lab, scenario: RangeScenario, options: RangeOptions, records: Map<string, AngleRecord>, report: RangeReport,
   listed: string[],
 ): Promise<void> {
-  await lab.setup({ at: START, facing: 0, nocked: Boolean(lab.player.cls.quiver), fresh: true, gear: options.gear });
+  const fixture = { at: START, facing: 0, nocked: Boolean(lab.player.cls.quiver), fresh: true };
+  await lab.setup({ ...fixture, gear: options.gear, weapon: options.weapon });
   const run: ScenarioRun = {
-    frame: 0, framesPast: 0, worstHere: PICTURE_FROM, moment: null, fastest: 0, fastestAt: '',
+    frame: 0, framesPast: 0, grip: freshLetGo(), worstHere: PICTURE_FROM, moment: null, fastest: 0, fastestAt: '',
   };
   const ankles = [lab.joints.ankleL, lab.joints.ankleR];
   const last = ankles.map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
+  const tip = new TipMoves(scenario.name);
   const tracer = traceOf(lab, options);
   const measure = () => {
     if (options.canary && !report.canary && run.frame === CANARY_FRAME) {
@@ -244,6 +257,8 @@ async function runScenario(
     if (found.length && options.frames) {
       listed.push(`  ${scenario.name} frame ${run.frame}: ${found.map(describeBreach).join(', ')}`);
     }
+    noteGrip(run.grip, lab.model.lowerGrip, `${run.frame}${momentIn(lab)}`);
+    tip.observe(lab, `${run.frame}${momentIn(lab)}`);
     tracer?.observe(run.frame);
     const traced = tracer?.frames.at(-1);
     if (found.length && traced?.frame === run.frame) traced.line += `  ${found.map(describeBreach).join(', ')}`;
@@ -264,26 +279,94 @@ async function runScenario(
   };
   const press = scenario.legs.some((leg) => leg.cast) ? castPress(lab, options) : null;
   for (const leg of scenario.legs) {
-    const input = (f: number) => (leg.cast && f === 0 && press ? press : { keys: leg.keys, m0: attackDown(leg, f) });
-    await lab.step(leg.frames, input, measure);
+    const held = leg.cast && press ? press.frames : 0;
+    const input = (f: number) => (press && f < held ? press.frame : { keys: leg.keys, m0: attackDown(leg, f) });
+    await lab.step(leg.frames + Math.max(0, held - 1), input, measure);
   }
-  const fastest = `fastest ankle ${(run.fastest * 100).toFixed(1)} cm a frame (${run.fastestAt})`;
+  if (options.frames) listed.push(...tip.listed);
+  const tipLine = tip.describe();
+  const fastest = `fastest ankle ${(run.fastest * 100).toFixed(1)} cm a frame (${run.fastestAt})`
+    + (tipLine ? `; ${tipLine}` : '');
   report.lines.push(`${scenario.what}: ${run.frame} frames, ${run.framesPast} with a joint past its range; ${fastest}`);
+  if (run.grip.seen) report.lines.push(`  ${describeLetGo(run.grip)}`);
+  if (run.grip.frames > 0) report.letGo.push(`${scenario.what}: ${describeLetGo(run.grip)}`);
   report.lines.push(...(tracer?.frames ?? []).map((traced) => traced.line));
   if (run.moment) report.moments.push(run.moment);
 }
 
 /** The frame that casts the skill asked for (`--skill`) ahead of the hero, as the player would on its key, with its
- *  cooldown over (bound first, if the hero knows it but hasn't it on a key). */
-function castPress(lab: Lab, options: RangeOptions): Frame {
+ *  cooldown over (bound first, if the hero knows it but hasn't it on a key), and how many frames its key is held. */
+function castPress(lab: Lab, options: RangeOptions): { frame: Frame; frames: number } {
   if (!options.skill) throw new Error('lab: range: the cast scenario needs --skill');
   bindKnown(options.skill);
-  const { key } = skillNamed(options.skill);
+  const { key, def } = skillNamed(options.skill);
   lab.player.cooldowns.clear();
   const facing = lab.player.facing;
   const ahead = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
   const aim = lab.player.pos.clone().addScaledVector(ahead, CAST_AIM);
-  return pressing(key, aim, true);
+  const frames = Math.max(1, Math.round(holdFor(def) / (window.__labClock.frame / 1000)));
+  return { frame: pressing(key, aim, true), frames };
+}
+
+/** A two-hander's lower grip through a scenario, as the model held it (`Model.lowerGrip`). */
+interface LetGo {
+  /** whether the hero held a two-hander at all */
+  seen: boolean;
+  frames: number;
+  times: number;
+  held: boolean;
+  /** the frame let go of furthest from holding (and the moment of the move then), and why */
+  worst: { frame: string; grip: LowerGrip } | null;
+  /** the frames it was let go of on (the first few), each with the moment of the move then */
+  starts: string[];
+  /** the frames the other hand let go of it on purpose: the weapon on the shoulder, or the flask in that hand */
+  free: number;
+}
+
+/** how many of the frames a two-hander was let go of on are listed */
+const STARTS_LISTED = 8;
+
+const freshLetGo = (): LetGo => ({ seen: false, frames: 0, times: 0, held: true, worst: null, starts: [], free: 0 });
+
+/** How far a lower grip let go of is from being held: the worst of its reasons, each against what the hold allows
+ *  (models/warrior.ts: 7 cm short, its joints 15 degrees past, the arm 3 cm into the body). */
+const farFromHeld = (grip: LowerGrip) => Math.max(grip.short / 0.07, grip.past / 15, grip.into / 0.03);
+
+/** The moment of the move the hero is in, as words after a frame's number: " (0.70 of Rending Cleave)", or none. */
+function momentIn(lab: Lab): string {
+  const cast = lab.player.casting;
+  if (!cast || !(cast.dur > 0)) return '';
+  return ` (${Math.min(1, cast.t / cast.dur).toFixed(2)} of ${cast.skill.def.name})`;
+}
+
+/** Counts a frame of the lower grip (`frame`, its number and the moment of the move then) into `letGo`. */
+function noteGrip(letGo: LetGo, grip: LowerGrip | null | undefined, frame: string): void {
+  if (!grip) return;
+  letGo.seen = true;
+  // (let go of on purpose: the game before this had no such grip, `free` unset)
+  if (grip.free) {
+    letGo.free++;
+    letGo.held = true;
+    return;
+  }
+  if (!grip.held) letGo.frames++;
+  if (letGo.held && !grip.held && ++letGo.times <= STARTS_LISTED) letGo.starts.push(frame);
+  letGo.held = grip.held;
+  if (!grip.held && (!letGo.worst || farFromHeld(grip) > farFromHeld(letGo.worst.grip))) {
+    letGo.worst = { frame, grip: { ...grip } };
+  }
+}
+
+/** A scenario's lower grip as words: held throughout, or let go of how often, and why at the worst. */
+function describeLetGo(letGo: LetGo): string {
+  const free = letGo.free ? ` but on the ${letGo.free} frames it was on the shoulder or the flask in hand` : '';
+  if (!letGo.worst) return `the two-hander held in both hands throughout${free}`;
+  const { frame, grip } = letGo.worst;
+  const reach = grip.short > 0 ? `${(grip.short * 100).toFixed(0)} cm past the arm's reach` : "within the arm's reach";
+  const why = [`the lower grip ${reach}`, `its joints ${grip.past.toFixed(0)}° past`,
+    `the arm ${(grip.into * 100).toFixed(1)} cm into the body`];
+  return `the two-hander let go of by the other hand on ${letGo.frames} frames, ${letGo.times} times (from frames `
+    + `${letGo.starts.join(', ')}); the worst, frame ${frame}: ${why.join(', ')}${free ? `; held${free}` : ''}`;
 }
 
 /** The scenario's trace of the leg IK, when the options ask for one. */
@@ -303,7 +386,7 @@ export async function range(lab: Lab, options: RangeOptions): Promise<RangeRepor
   const every = RANGE_SCENARIOS.filter((name) => name !== 'cast' || options.skill);
   const asked = options.scenarios?.length ? options.scenarios : every;
   const records = new Map<string, AngleRecord>();
-  const report: RangeReport = { lines: [], moments: [] };
+  const report: RangeReport = { lines: [], moments: [], letGo: [] };
   const listed: string[] = [];
   for (const scenario of SCENARIOS.filter((candidate) => asked.includes(candidate.name))) {
     await runScenario(lab, scenario, options, records, report, listed);
@@ -326,4 +409,9 @@ export async function range(lab: Lab, options: RangeOptions): Promise<RangeRepor
 export function missedRangeCanary(report: RangeReport): string[] {
   const missed = report.canary && !report.canary.caught;
   return missed ? ['range: the canary (the head turned past its range) was missed'] : [];
+}
+
+/** Each scenario in which a two-hander was let go of, as a problem: nothing it runs flings the arms apart. */
+export function lettingGo(report: RangeReport): string[] {
+  return report.letGo.map((line) => `range: ${line}`);
 }
