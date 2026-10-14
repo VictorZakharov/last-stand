@@ -16,7 +16,7 @@ export interface Wanted {
 
 /** the shortest fade heard as one (s): a level changing faster than that in a frame is a cut */
 const SHORTEST_FADE = 0.75;
-/** how far from its top a rise from silence may start (s) */
+/** how far from its top a fresh track may start (s) */
 const TOP = 0.01;
 /** how far from where it was left a track coming back may start (s) */
 const LEFT_AT = 0.05;

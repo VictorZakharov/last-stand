@@ -44,10 +44,10 @@ it unreliably.
 
 | Track | Piece | Plays | Made with | Loop in the track (s) |
 | --- | --- | --- | --- | --- |
-| `quiet-beginnings.mp3` | Quiet Beginnings | the forest's lobby | `--from 0 --to 70` | 3.3156 to 73.318 |
-| `shadowed-dusk.mp3` | Shadowed Forest Dusk | the crypt's lobby | `--from 26 --to 73.27` | 28.3119 to 75.5877 |
-| `sunlit-battle.mp3` | Sunlit Forest Battle | the forest's waves | `--from 9.46 --to 77.34` | 11.9592 to 79.8399 |
-| `crypt-motif.mp3` | Crypt Motif | the crypt's waves | `--from 0 --to 104` | 2.7119 to 106.6937 |
+| `quiet-beginnings.mp3` | Quiet Beginnings | the forest's lobby and between waves | `--from 0 --to 70` | 3.3156 to 73.318 |
+| `shadowed-dusk.mp3` | Shadowed Forest Dusk | the crypt's lobby and between waves | `--from 26 --to 73.27` | 28.3119 to 75.5877 |
+| `sunlit-battle.mp3` | Sunlit Forest Battle | the forest's fights | `--from 9.46 --to 77.34` | 11.9592 to 79.8399 |
+| `crypt-motif.mp3` | Crypt Motif | the crypt's fights | `--from 0 --to 104` | 2.7119 to 106.6937 |
 
 - **Quiet Beginnings:** its harmony repeats every 70.000 s. The track is one period, from the first beat, and the
   original's other 36 s played it again.

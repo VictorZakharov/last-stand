@@ -54,6 +54,7 @@ the server.
 | --- | --- |
 | `spawns` | How the foes come in: by which gates, where, and when the boss comes |
 | `gear` | What full sets of gear give each class |
+| `music` | Which music plays where, and how it fades, as WebAudio plays it |
 | `coop` | Two games playing together over a slow link, each judged against the other |
 
 **Your own**

@@ -529,7 +529,8 @@ export const COMMANDS = {
       canary: {
         kind: 'switch',
         help: 'plant faults the judge must catch, in a round played again: the biome\'s battle track played as '
-          + 'another\'s, the lobby\'s fade in cut to a twentieth of a second, every rise from silence 5 s in',
+          + 'another\'s, the lobby\'s fade in cut to a twentieth of a second, every fresh track started 5 s in, '
+          + 'every track coming back started from its top',
       },
       ...COMMON_OPTIONS,
     },

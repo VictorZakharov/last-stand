@@ -14,6 +14,7 @@ npm run build        # typecheck + production build into dist/
 npm run check:pages  # after build: every asset path must work under the Pages base path
 npm run stalls       # the game in the installed Chrome, traced: the browser's own stalls (tools/stalls/README.md)
 npm run icons -- sheet  # every class's skill icons side by side at a slot's size (check, add: tools/icons/README.md)
+npm run music -- loops piece.wav  # where a piece can loop; make, seam: the game's tracks (tools/music/README.md)
 ```
 
 The game has no test suite. Verify changes with `npm run build` and by playing the dev build in a browser.
@@ -69,7 +70,7 @@ Each directory below has an AGENTS.md saying more.
 
 **Adding a biome:** an entry in `data/biomes.ts` (enemy pool, boss, minimap), a builder in `world/` registered in `arena.ts`, and its enemies in `data/enemies.ts` with models in `entities/models/`. It adds exactly 6 point lights and keeps the dais and the gates where every biome has them (`src/world/AGENTS.md`).
 
-Outside `src/`: `tools/` (the harnesses: the lab, the face harness, the icons, the stalls), `server/relay` (the co-op relay), `scripts/` (the build's and the workflow's), `public/` (served as it is), `docs/` (notes, research, screenshots), `.github/workflows` (PR checks, previews, production) and `.dokci` (the relay's deploy).
+Outside `src/`: `tools/` (the harnesses: the lab, the face harness, the icons, the music, the stalls), `server/relay` (the co-op relay), `scripts/` (the build's and the workflow's), `public/` (served as it is), `docs/` (notes, research, screenshots), `.github/workflows` (PR checks, previews, production) and `.dokci` (the relay's deploy).
 
 ## Across the game
 
