@@ -1,9 +1,10 @@
-// Music: each biome's tracks (data/music.ts, `BiomeDef.music`), one in its lobby and one through each wave's fight in
-// its runs, none between. Every track is fetched and decoded when it's first wanted, looped by a buffer source over its
-// loop (seamless whatever delay a decoder leaves at the file's start: an audio element's own loop left a gap of the
+// Music: each biome's tracks (data/music.ts, `BiomeDef.music`), one in its lobby and between its runs' waves, and one
+// through each wave's fight. Every track is fetched and decoded when it's first wanted, looped by a buffer source over
+// its loop (seamless whatever delay a decoder leaves at the file's start: an audio element's own loop left a gap of the
 // MP3's padding) and faded by a gain node of its own (iOS ignores an audio element's volume), through the sound
 // effects' WebAudio context, so it starts with the first user gesture that resumes it. Two cross as the music changes:
-// the one going fades out as the next fades in from its start.
+// the one going fades out as the next fades in where it was left (a run's battle track on from wave to wave), from its
+// top once it was let go (a new run's first wave, a biome switched to).
 import { audioContext } from './audio';
 import { TRACKS, type Fade, type TrackId } from '../data/music';
 import quietBeginnings from '../audio/music/quiet-beginnings.mp3?url';
@@ -93,11 +94,11 @@ class Track {
   }
 
   /** A frame: faded towards heard while `wanted` (`fade` the way it fades there), out to silence otherwise. It comes
-   *  in from its start each time it rises from silence, and plays on where it was after a hidden tab. */
+   *  back where it was left (silent, or in a hidden tab): from its top only once it was let go (`release`). */
   step(ctx: AudioContext, dt: number, wanted: boolean, fade: Fade): void {
     if (wanted) this.fade = fade;
     if (!this.buffer || !this.fade) return;
-    if (wanted && !this.source && !document.hidden) this.play(ctx, this.level === 0 ? 0 : this.offset);
+    if (wanted && !this.source && !document.hidden) this.play(ctx, this.offset);
     const step = dt / (wanted ? this.fade.in : this.fade.out);
     this.level = Math.max(0, Math.min(1, this.level + (wanted ? step : -step)));
     if (this.gain) this.gain.gain.value = LEVEL * this.level * this.level;
@@ -110,7 +111,8 @@ class Track {
     return { id: this.id, level: this.level, playing: this.playing, at, buffer: this.buffer, output: this.gain };
   }
 
-  /** Its decoded samples let go (a minute of music is 20 MB of them), once it's silent and not wanted soon. */
+  /** Its decoded samples let go (a minute of music is 20 MB of them), once it's silent and not wanted soon: wanted
+   *  again, it starts from its top. */
   release(ctx: AudioContext): void {
     if (this.level > 0 || this.loading) return;
     this.stop(ctx);
@@ -118,6 +120,7 @@ class Track {
     this.gain = null;
     this.buffer = null;
     this.fade = null;
+    this.offset = 0;
   }
 }
 

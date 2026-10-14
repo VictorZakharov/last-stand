@@ -1,9 +1,9 @@
 // The music judged frame by frame (tools/lab `music`): against what the game's state asks for at each frame (the
 // track heard and those kept decoded), every track's level, the buffer sources started for it and what its output
-// carried when listened to. A track rising while another is wanted, a level cut rather than faded, a rise from
-// silence that doesn't start at the track's top, a track coming back elsewhere than where it was left, a source
-// looping off its track's loop, a silent track kept decoded, and one silent when it should be heard (or heard when it
-// should be silent) are problems.
+// carried when listened to. A track rising while another is wanted, a level cut rather than faded, a start anywhere
+// but where the track was left (its top once it was let go, or before it ever played), a source looping off its
+// track's loop, a silent track kept decoded, and one silent when it should be heard (or heard when it should be
+// silent) are problems.
 import type { TrackShown } from '../../../src/core/music';
 import { TRACKS, type TrackId } from '../../../src/data/music';
 import type { SourceStart } from './musicTap';
@@ -54,8 +54,7 @@ interface Course {
 
 /** A start in words (where a track came back is left out: it's where the browser's own time had taken it). */
 function startWords(start: { offset: number; fromSilence: boolean }): string {
-  if (!start.fromSilence) return 'back where it was left';
-  return start.offset <= TOP ? 'in from its top' : `in from ${start.offset.toFixed(2)} s`;
+  return start.offset <= TOP ? 'in from its top' : 'back where it was left';
 }
 
 const newCourse = (): Course => ({
@@ -146,12 +145,13 @@ export class MusicJudge {
     if (!track) return;
     const before = this.last.get(track.id);
     const fromSilence = !before || before.level === 0;
+    // (where it was left: its top once it was let go, or before it ever played)
+    const leftAt = before?.at ?? 0;
     this.course(track.id).starts.push({ offset: start.offset, fromSilence });
-    if (fromSilence && start.offset > TOP) {
-      this.problem(`${track.id} rose from silence ${start.offset.toFixed(2)} s in, not from its top`);
-    }
-    if (!fromSilence && before && Math.abs(start.offset - before.at) > LEFT_AT) {
-      this.problem(`${track.id} came back at ${start.offset.toFixed(2)} s, left at ${before.at.toFixed(2)} s`);
+    if (Math.abs(start.offset - leftAt) > LEFT_AT && leftAt <= TOP) {
+      this.problem(`${track.id} started ${start.offset.toFixed(2)} s in, not from its top`);
+    } else if (Math.abs(start.offset - leftAt) > LEFT_AT) {
+      this.problem(`${track.id} came back at ${start.offset.toFixed(2)} s, left at ${leftAt.toFixed(2)} s`);
     }
     this.judgeLoop(track.id, start);
   }
@@ -211,8 +211,10 @@ export class MusicJudge {
   }
 
   private judgeSettled(shown: TrackShown[]): void {
+    // (against what was wanted a frame before: a stretch ending as a wave starts ends on the frame its update started
+    // it, which the music hears a frame later)
     for (const track of shown) {
-      const wanted = track.id === this.wanted.track;
+      const wanted = track.id === this.wantedBefore.track;
       if (wanted && track.level < 1) this.problem(`${track.id} is wanted but at ${track.level.toFixed(2)} at the end`);
       if (!wanted && track.level > 0) {
         this.problem(`${track.id} is wanted nowhere but at ${track.level.toFixed(2)} at the end`);
@@ -234,6 +236,16 @@ export class MusicJudge {
     if (course.heard !== null && track.level > 0) words.push(course.heard > SILENT_DB ? 'heard' : 'unheard');
     if (track.level > 0 && !track.playing) words.push('stopped');
     return words.length ? `${track.id} ${words.join(', ')}` : '';
+  }
+
+  /** Where each start of `id` in the stretch under way began (s). */
+  startsOf(id: TrackId): number[] {
+    return this.courses.get(id)?.starts.map((start) => start.offset) ?? [];
+  }
+
+  /** Whether a start at `offset` (s) was from the track's top. */
+  static fromTop(offset: number): boolean {
+    return offset <= TOP;
   }
 
   private course(id: TrackId): Course {

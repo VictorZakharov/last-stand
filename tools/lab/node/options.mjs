@@ -513,8 +513,9 @@ export const COMMANDS = {
     help: 'each biome\'s music played through as the player hears it: its lobby, a run\'s countdown, the first '
       + 'wave\'s fight and its win, the next wave, the tab hidden and shown again mid-fight, and the bank back to the '
       + 'lobby, every frame judged by what the game sends to WebAudio and what each track\'s output carries: a track '
-      + 'rising where another is wanted, a level cut rather than faded, a rise from silence not from the track\'s '
-      + 'top, a track back elsewhere than where it was left, a loop off its track\'s, a battle track not decoded '
+      + 'rising where another is wanted, a level cut rather than faded, a fresh track not from its top, a track back '
+      + 'elsewhere than where it was left (the lobby\'s between waves, the battle\'s from wave to wave), a loop off '
+      + 'its track\'s, a battle track not decoded '
       + 'within the countdown, a silent track kept decoded and one unheard where it\'s wanted (or heard where it '
       + 'isn\'t) are problems',
     options: {

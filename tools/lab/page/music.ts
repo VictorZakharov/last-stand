@@ -1,8 +1,9 @@
 // The game's music as the player hears it (tools/lab `music`): in each biome, its lobby, a run's countdown, the first
 // wave's fight and its win, the next wave, the tab hidden and shown again mid-fight, and the bank back to the lobby,
-// every frame judged against what each place must play (`EXPECTED`, the owner's choice) by what the music sends to
-// WebAudio and what its tracks' outputs carry (`musicJudge.ts`). With a canary, a round played again with faults
-// planted that the judge must catch.
+// every frame judged against what each place must play (`EXPECTED`, the owner's choice: the lobby's track between
+// waves, the battle track on from wave to wave where it was left) by what the music sends to WebAudio and what its
+// tracks' outputs carry (`musicJudge.ts`). With a canary, a round played again with faults planted that the judge
+// must catch.
 import type { Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { TrackId } from '../../../src/data/music';
@@ -21,7 +22,7 @@ export interface MusicOptions {
   canary: boolean;
 }
 
-/** what each biome must play (#215): in its lobby, and through each wave's fight in its runs */
+/** what each biome must play (#215): in its lobby and between its runs' waves, and through each wave's fight */
 const EXPECTED: Record<BiomeId, { lobby: TrackId; battle: TrackId }> = {
   forest: { lobby: 'quiet-beginnings', battle: 'sunlit-battle' },
   crypt: { lobby: 'shadowed-dusk', battle: 'crypt-motif' },
@@ -42,7 +43,7 @@ const LISTEN_MS = 250;
 const HEAR_LIMIT_MS = 4000;
 /** the most frames a moment the game moves to on its own (a run's start, a wave's) may take */
 const MOMENT_FRAMES = 900;
-/** the offset a canary's rise from silence starts at instead of its top (s) */
+/** where a canary starts a fresh track instead of its top (s): each comeback it starts at the top instead */
 const CANARY_OFFSET = 5;
 /** the lobby's fade in a canary cuts to (s) */
 const CANARY_FADE = 0.05;
@@ -52,7 +53,7 @@ function wantedNow(): Wanted {
   const music = EXPECTED[G.arena.biome];
   if (G.mode === 'menu') return { track: music.lobby, ready: [music.lobby] };
   const fighting = G.run?.phase === 'fighting';
-  return { track: fighting ? music.battle : null, ready: [music.battle] };
+  return { track: fighting ? music.battle : music.lobby, ready: [music.lobby, music.battle] };
 }
 
 /** The page's tab hidden (or shown again), as the browser tells a page its tab went to the background. */
@@ -67,9 +68,14 @@ function framesOf(seconds: number): number {
   return Math.ceil(seconds * 1000 / window.__labClock.frame);
 }
 
+/** How a track must come in during a stretch: from its top, or where it was left. */
+type Entry = 'top' | 'left';
+
 /** A round of the game played and judged, frame by frame, through stretches named as they're played. */
 class Listening {
   readonly lines: string[] = [];
+  /** how the tracks must come in during the stretch under way */
+  private entries: [TrackId, Entry][] = [];
 
   constructor(
     private readonly lab: Lab,
@@ -82,10 +88,23 @@ class Listening {
 
   begin(name: string): void {
     this.judge.begin(name);
+    this.entries = [];
   }
 
-  /** The stretch's line; `settled`, its fades must all have ended. */
+  /** `id` must come in during the stretch, as `entry` says. */
+  expect(id: TrackId, entry: Entry): void {
+    this.entries.push([id, entry]);
+  }
+
+  /** The stretch's line; `settled`, its fades must all have ended. Each track expected came in as it must. */
   end(settled: boolean, note = ''): void {
+    for (const [id, entry] of this.entries) {
+      const starts = this.judge.startsOf(id);
+      const fromTop = starts.some((offset) => MusicJudge.fromTop(offset));
+      const resumed = starts.some((offset) => !MusicJudge.fromTop(offset));
+      if (entry === 'top' && !fromTop) this.judge.problem(`${id} didn't come in from its top`);
+      if (entry === 'left' && !resumed) this.judge.problem(`${id} didn't come back where it was left`);
+    }
     this.lines.push(this.judge.end(musicShown(), settled) + note);
   }
 
@@ -171,7 +190,7 @@ async function lobby(listening: Listening, biome: BiomeId): Promise<void> {
   listening.end(true);
 }
 
-/** A run started from the lobby, its countdown run out: the battle track decoded meanwhile, the lobby's out. */
+/** A run started from the lobby, its countdown run out: the lobby's track playing on, the battle's decoded. */
 async function countdown(listening: Listening, lab: Lab, biome: BiomeId): Promise<void> {
   listening.begin(`${biome}'s run, its countdown`);
   lab.letWavesCome();
@@ -179,20 +198,22 @@ async function countdown(listening: Listening, lab: Lab, biome: BiomeId): Promis
   await listening.until(() => G.mode === 'run' && !lab.player.sandbox, 'the run never started');
   await listening.decoded(EXPECTED[biome].battle, RUN.countdown * 1000);
   await listening.until(() => G.run?.phase === 'fighting', 'the wave never started');
-  listening.end(false, `; ${EXPECTED[biome].battle} decoded within it`);
+  listening.end(true, `; ${EXPECTED[biome].battle} decoded within it`);
 }
 
-/** A wave's fight from its start, listened to once its track is up. */
-async function fight(listening: Listening, name: string): Promise<void> {
-  listening.begin(name);
+/** A wave's fight from its start, its battle track coming in as `entry` says, listened to once it's up. */
+async function fight(listening: Listening, biome: BiomeId, wave: number, entry: Entry): Promise<void> {
+  listening.begin(`${biome}'s wave ${wave}'s fight`);
+  listening.expect(EXPECTED[biome].battle, entry);
   await listening.frames(framesOf(FIGHT_SECONDS));
   await listening.listen();
   listening.end(true);
 }
 
-/** The wave won, the music faded out over the choice. */
+/** The wave won: the battle track out over the choice, the lobby's back where the fight left it. */
 async function won(listening: Listening, biome: BiomeId): Promise<void> {
   listening.begin(`${biome}'s wave 1 won`);
+  listening.expect(EXPECTED[biome].lobby, 'left');
   await winTheWave(listening);
   await listening.frames(framesOf(WON_SECONDS));
   await listening.listen();
@@ -204,8 +225,8 @@ async function nextWave(listening: Listening, biome: BiomeId): Promise<void> {
   listening.begin(`${biome}'s wave 2, its countdown`);
   await listening.frames(1, ['c']);
   await listening.until(() => G.run?.phase === 'fighting', 'the next wave never started');
-  listening.end(false);
-  await fight(listening, `${biome}'s wave 2's fight`);
+  listening.end(true);
+  await fight(listening, biome, 2, 'left');
 }
 
 /** The tab hidden mid-fight, listened to, and shown again. */
@@ -222,6 +243,7 @@ async function hidden(listening: Listening, biome: BiomeId): Promise<void> {
 /** The wave won and banked, the summary closed: back in the lobby. */
 async function banked(listening: Listening, biome: BiomeId): Promise<void> {
   listening.begin(`${biome}'s wave 2 won and banked, back to the lobby`);
+  listening.expect(EXPECTED[biome].lobby, 'left');
   await winTheWave(listening);
   await listening.frames(1, ['b']);
   await listening.until(() => G.run?.phase === 'over' || !G.player.inRun, 'the bank never took');
@@ -237,7 +259,7 @@ async function banked(listening: Listening, biome: BiomeId): Promise<void> {
 async function round(listening: Listening, lab: Lab, biome: BiomeId): Promise<void> {
   await lobby(listening, biome);
   await countdown(listening, lab, biome);
-  await fight(listening, `${biome}'s wave 1's fight`);
+  await fight(listening, biome, 1, 'top');
   await won(listening, biome);
   await nextWave(listening, biome);
   await hidden(listening, biome);
@@ -248,9 +270,8 @@ async function round(listening: Listening, lab: Lab, biome: BiomeId): Promise<vo
 function checkStretches(): void {
   const waits: [string, number, number][] = [
     ['the lobby', LOBBY_SECONDS, FADES.lobby.in],
-    ['the countdown', RUN.countdown, FADES.lobby.out],
-    ['the fight', FIGHT_SECONDS, FADES.battle.in],
-    ['the win', WON_SECONDS, FADES.battle.out],
+    ['the fight', FIGHT_SECONDS, Math.max(FADES.battle.in, FADES.lobby.out)],
+    ['the win', WON_SECONDS, Math.max(FADES.battle.out, FADES.lobby.in)],
   ];
   for (const [stretch, seconds, fade] of waits) {
     if (seconds < fade) throw new Error(`lab: music: ${stretch} (${seconds} s) is shorter than its fade (${fade} s)`);
@@ -264,8 +285,8 @@ interface Planted {
   undo: () => void;
 }
 
-/** The canary's faults planted in `biome`: its battle track another's, the lobby's fade in cut, rises not from the
- *  top. */
+/** The canary's faults planted in `biome`: its battle track another's, the lobby's fade in cut, a fresh track not
+ *  from its top and a track coming back from its top. */
 function plant(biome: BiomeId, log: SourceLog): Planted[] {
   const music = BIOMES[biome].music;
   const battle = music.battle;
@@ -273,7 +294,7 @@ function plant(biome: BiomeId, log: SourceLog): Planted[] {
   music.battle = other;
   const fadeIn = FADES.lobby.in;
   FADES.lobby.in = CANARY_FADE;
-  log.fault = (offset) => (offset === 0 ? CANARY_OFFSET : offset);
+  log.fault = (offset) => (offset === 0 ? CANARY_OFFSET : 0);
   return [
     {
       what: `${biome}'s battle track played as ${other}`,
@@ -286,9 +307,14 @@ function plant(biome: BiomeId, log: SourceLog): Planted[] {
       undo: () => { FADES.lobby.in = fadeIn; },
     },
     {
-      what: `every rise from silence started ${CANARY_OFFSET} s in`,
-      caught: (problem) => problem.includes(`rose from silence ${CANARY_OFFSET.toFixed(2)} s in`),
+      what: `every fresh track started ${CANARY_OFFSET} s in`,
+      caught: (problem) => problem.includes(`started ${CANARY_OFFSET.toFixed(2)} s in, not from its top`),
       undo: () => { log.fault = null; },
+    },
+    {
+      what: 'every track coming back started from its top',
+      caught: (problem) => problem.includes('came back at 0.00 s'),
+      undo: () => undefined,
     },
   ];
 }

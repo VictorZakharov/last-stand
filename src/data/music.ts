@@ -1,6 +1,6 @@
 // The game's music (src/audio/music/, each made from its piece by tools/music): where each track loops, and how the
-// music fades where it plays. Which track plays where is each biome's (`BiomeDef.music`): one in its lobby, and one
-// through each wave's fight in its runs.
+// music fades where it plays. Which track plays where is each biome's (`BiomeDef.music`): one in its lobby and
+// between its runs' waves, and one through each wave's fight.
 
 export type TrackId = 'quiet-beginnings' | 'shadowed-dusk' | 'sunlit-battle' | 'crypt-motif';
 
@@ -29,8 +29,8 @@ export interface Fade {
 }
 
 export const FADES = {
-  /** a lobby's, faded in as it's entered and out as a run starts */
+  /** a lobby's, faded in as the lobby is entered and as a wave is won, and out as a wave's fight starts */
   lobby: { in: 3, out: 1.2 },
-  /** a run's, in as a wave's fight starts and out once it's won */
+  /** a run's, in as a wave's fight starts and out once it's won (on where it was left at the next wave's) */
   battle: { in: 1, out: 2.5 },
 } satisfies Record<string, Fade>;

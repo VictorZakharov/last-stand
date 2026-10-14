@@ -450,14 +450,16 @@ function backgroundStep(): void {
 }
 setInterval(backgroundStep, 100);
 
-/** The music now: the biome's lobby track in the lobby, its battle track through each wave's fight in a run (from
- *  the run's start it's kept decoded), none between waves or behind the loading screen. */
+/** The music now: the biome's battle track through each wave's fight, its lobby track everywhere else (the lobby,
+ *  a run's countdowns and the choice after a wave, its summary), both kept decoded through a run; none behind the
+ *  loading screen. */
 function musicWanted(): MusicWanted {
   const music = BIOMES[G.arena.biome].music;
   if (!revealed) return { track: null, fade: FADES.lobby, ready: [] };
   if (G.mode === 'menu') return { track: music.lobby, fade: FADES.lobby, ready: [music.lobby] };
-  const fighting = G.mode === 'run' && G.run?.phase === 'fighting';
-  return { track: fighting ? music.battle : null, fade: FADES.battle, ready: [music.battle] };
+  const ready = [music.lobby, music.battle];
+  if (G.run?.phase === 'fighting') return { track: music.battle, fade: FADES.battle, ready };
+  return { track: music.lobby, fade: FADES.lobby, ready };
 }
 
 function frame(timestamp: number): void {

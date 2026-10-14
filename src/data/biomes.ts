@@ -23,7 +23,7 @@ export interface BiomeDef {
   minimap: { wall: 'octagon' | 'circle'; portal: string };
   /** what the floor (off the dais, which is stone) and the wall are made of: an arrow glances off stone and sticks in the rest */
   surface: { floor: 'stone' | 'earth'; wall: 'stone' | 'thicket' };
-  /** its music (data/music.ts): in its lobby, and through each wave's fight in its runs */
+  /** its music (data/music.ts): in its lobby and between its runs' waves, and through each wave's fight */
   music: { lobby: TrackId; battle: TrackId };
 }
 
