@@ -245,7 +245,7 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   and frozen where it rose.
 - `cast <skill>`: a skill cast as the player casts it, its effect seen frame by frame (`page/cast.ts`; the skill
   named by its key, its behaviour or its name, `--class` for whose). The hero stands in each biome and view
-  (`--biomes`, `--views`, `--facing` in degrees) with the biome's commonest foes coming at him from 13 m ahead
+  (`--biomes`, `--views`, `--facing` in degrees, `--at x,z`: off the dais by default; `--at 0,0` its middle) with the biome's commonest foes coming at him from 13 m ahead
   (`--foes`, 4 by default), and the key is pressed over an aim 8 m ahead: held for a held skill, drawn to full for a
   drawn shot, held 3 s for a channel. Every frame from the press until the effect is over is drawn as the game draws
   it and read back from the canvas (`page/screenCells.ts`: as stored, 0 to 255, and as light by sixteenths of the
@@ -254,7 +254,12 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   not judged where the scene alone is past them. The flashes are counted as WCAG counts a general flash
   (`page/flashes.ts`: a pair of opposing changes of a tenth of white in a sixteenth's light, the darker under 0.8),
   three in any second a problem; the worst cell's light is listed through its worst second, and the frame's mean
-  every tenth of a second through the cast. Shaders compiled after loading, and nothing cast, are problems too. The
+  every tenth of a second through the cast, and the blinks, listed and not judged (`page/blinks.ts`: a patch of a
+  64 by 36 grid brightening by 20 or more over the frame before and back within 3 frames, an effect's own crackle
+  among them; a broken prop's rubble piece drawn full size at the world's middle for a frame, beside a hero on the
+  dais, was one). `--what s,x,y` says what the eye's ray meets at that moment and point of the screen (% across and
+  down), nearest first (`page/whatIsAt.ts`): the runs give the same frames, so a blink one finds, the next can look
+  into. Shaders compiled after loading, and nothing cast, are problems too. The
   props a cast broke stand again before the next. `--times` (0.4,1.5,3 by default) are the moments pictured, the
   screen as the player sees it with the HUD, into `out/cast/<skill>`; `--canary` strobes the exposure in the first
   biome and view (5 a second), which the flashes must catch. `--gear` holds the weapons a style's way (Thunder

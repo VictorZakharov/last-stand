@@ -17,6 +17,8 @@ import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { lateCompiles, programsCompiledInGame } from '../../../src/core/shaders';
 import { standIn } from './light';
 import { cellName, frameCells, type FrameCells } from './screenCells';
+import { blinksIn, describeBlinks } from './blinks';
+import { whatIsAt } from './whatIsAt';
 import { worstFlashing, type FlashCount } from './flashes';
 
 export interface CastOptions {
@@ -26,11 +28,15 @@ export interface CastOptions {
   view: ViewMode;
   /** the way the hero faces, degrees (0 is +z) */
   facing: number;
+  /** where he stands (x, z; the set-up's spot off the dais when not given) */
+  at?: [number, number];
   /** how many of the biome's foes come at the hero */
   foes: number;
   /** s from the press: the moments pictured */
   times: number[];
   pictures: boolean;
+  /** a moment (s from the press) and a point of the screen (% across and down from its top left): what is met there */
+  what?: [number, number, number];
   /** plant the fault the checks must catch: a strobe, the exposure raised on every other tenth of a second */
   canary: boolean;
   /** the way the hero holds his weapons (as rolled when not given) */
@@ -254,7 +260,8 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
   // (the props an earlier cast broke stand again: broken, they stay so until a run starts, and the next scenario in
   // the biome saw another scene)
   G.arena.restoreProps();
-  await standIn(lab, { biome: options.biome, view: options.view, facing: options.facing, gear: options.gear });
+  const scenario = { biome: options.biome, view: options.view, facing: options.facing, gear: options.gear };
+  await standIn(lab, { ...scenario, at: options.at });
   const hero = G.player;
   bindKnown(options.skill);
   const { key, def } = skillNamed(options.skill);
@@ -274,6 +281,8 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
   const drawing = lab.drawing;
   const frames: FrameCells[] = [];
   const moments: Pictured[] = [];
+  const met: string[] = [];
+  const whatFrame = options.what ? Math.round(options.what[0] / frameTime) : -1;
   let cast = false;
   lab.drawing = true;
   try {
@@ -283,6 +292,7 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
       if (options.canary) G.renderer.toneMappingExposure = strobed(frame, exposure);
       await lab.step(1, () => pressing(key, aim, frame < holdFrames));
       frames.push(frameCells());
+      if (frame === whatFrame && options.what) met.push(...metAt(options.what));
       cast ||= hero.cooldowns.has(def.impl) || Boolean(hero.casting) || Boolean(hero.channel);
       const time = pictureFrames.get(frame);
       if (options.pictures && time !== undefined) {
@@ -290,7 +300,7 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
         moments.push(await lab.screen(label));
       }
     }
-    return judged(def, options, { before, frames, frameTime, cast, moments, compiledBefore, lateBefore });
+    return judged(def, options, { before, frames, frameTime, cast, moments, met, compiledBefore, lateBefore });
   } finally {
     G.renderer.toneMappingExposure = exposure;
     lab.drawing = drawing;
@@ -321,6 +331,11 @@ function flashTrace(frames: FrameCells[], flashing: FlashCount, frameTime: numbe
   return `    its light through that second, every ${TRACE_STEP} frames: ${lights.join(' ')}`;
 }
 
+/** What `--what` asks for, as lines: the moment and the point, and what the eye's ray met there. */
+function metAt([time, across, down]: [number, number, number]): string[] {
+  return [`  at ${seconds(time)}, ${across}% across and ${down}% down, met:`, ...whatIsAt(across / 100, down / 100)];
+}
+
 /** What a cast's frames came to. */
 interface Seen {
   before: FrameCells;
@@ -328,6 +343,8 @@ interface Seen {
   frameTime: number;
   cast: boolean;
   moments: Pictured[];
+  /** what `--what` found */
+  met: string[];
   compiledBefore: number;
   lateBefore: number;
 }
@@ -346,6 +363,8 @@ function judged(def: SkillDef, options: CastOptions, seen: Seen): Report {
       + (flashing.most ? ` (${cellName(flashing.cell)}, from ${seconds(flashing.at)})` : ''),
     ...(flashing.most ? [flashTrace(seen.frames, flashing, seen.frameTime)] : []),
     `  shaders compiled after loading: ${compiled}`,
+    ...describeBlinks(blinksIn(seen.frames.map((frame) => frame.fineMeans)), seen.frameTime),
+    ...seen.met,
   ];
   for (const late of lateCompiles.slice(seen.lateBefore)) lines.push(`    ${late}`);
   const budget = budgetJudged(seen.frames, seen.frameTime, seen.before);

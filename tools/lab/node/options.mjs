@@ -331,6 +331,7 @@ export const COMMANDS = {
         help: 'the views: top, third, first',
       },
       facing: { kind: 'number', usage: 'degrees', help: 'the way the hero faces and casts (0, +z, by default)' },
+      at: SETUP_OPTIONS.at,
       foes: {
         kind: 'number',
         usage: 'n',
@@ -343,6 +344,11 @@ export const COMMANDS = {
         help: 'the moments pictured, s after the press',
       },
       pictures: { kind: 'switch', help: 'picture the moments (=false: the numbers alone)' },
+      what: {
+        kind: 'list',
+        usage: 's,x,y',
+        help: 'what the eye meets at a moment (s after the press) and a point of the screen (% across and down)',
+      },
       canary: {
         kind: 'switch',
         help: 'plant the fault the checks must catch, in the first biome and view: a strobe of the exposure',
