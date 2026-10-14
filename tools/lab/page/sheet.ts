@@ -1,6 +1,6 @@
 // tools/lab sheet: the hero in the states the player sees him in (standing, both ends of a stride's arm swing, at full
 // draw), each moment pictured from the game's own views and close up, with how hard the pose is to hold beside it.
-// A pose is judged here first, as a person would hold it, and only then measured (AGENTS.md, Workflow).
+// A pose is judged here first, as a person would hold it, and only then measured (src/entities/models/AGENTS.md).
 import * as THREE from 'three';
 import type { Lab, Fixture, ViewName, Tile } from './lab';
 import type { Joints } from '../../../src/entities/models/rig';

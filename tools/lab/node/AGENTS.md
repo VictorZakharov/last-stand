@@ -1,0 +1,10 @@
+# `tools/lab/node`
+
+The lab's Node side: the command line's options (`options.mjs`), what each command does on a side and how its results are compared (`commands.mjs`), the session and its sides (`session.mjs`, `side.mjs`: a tree served by a Vite dev server of the lab's own and booted in a page), the other commit of an A/B and its kept side (`commits.mjs`, `sideCache.mjs`), the browser and the scripts every page runs first (`browser.mjs`), the server and its supervisor (`server.mjs`, `supervisor.mjs`, `serverProcess.mjs`, `client.mjs`, `codeStamp.mjs`), the verdicts (`compare.mjs`, `pictures.mjs`), `--profile` (`profile.mjs`, `sourceMaps.mjs`), co-op's link and judge (`coop.mjs`, `coopJudge.mjs`), `check` (`check.mjs`), and the sheet, a probe's files, errors and paths.
+
+The rules across the game are the [root AGENTS.md](../../../AGENTS.md), the lab's own [`tools/lab/AGENTS.md`](../AGENTS.md).
+
+- A new command's options go in `options.mjs` (each checked as it's read, so a misspelt one stops the command before anything boots), its work in `commands.mjs`, and its page side in `page/`.
+- A script `browser.mjs` serializes into the page can use nothing from its module.
+- What can be tested without a browser is, in `test/` (`npm run lab:test`).
+- A change to this code restarts the server under `lab:serve` (its hash, `codeStamp.mjs`, is sent with every command).
