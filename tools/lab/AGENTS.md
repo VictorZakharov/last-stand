@@ -33,6 +33,7 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `draw`: each drawn shot held at full draw as the player holds it (the glint round its arrowhead every frame in every view: none as it's drawn, held at full until it's loosed, the pixels it lights as the player sees it, and no blob of glare; the crosshair bold at full draw alone, its one beat into it about its middle, none with reduced motion)
 - `cast`: a skill cast as the player casts it, its effect seen frame by frame (each biome and view with the biome's foes coming at him, every frame drawn and read back: its light against the budget, the frame's mean every tenth of a second, the flashes in any second and the worst cell's light through it, the shaders compiled late)
 - `gear`: full sets of gear rolled for every class at each tier (the Health, regeneration and draught they give, and the damage they multiply)
+- `music`: each biome's music as the player hears it (its lobby, a run's countdowns, fights and wins, a hidden tab and the bank back: which track plays, how it fades, where it comes in, what reaches WebAudio)
 
 Options every command takes:
 
@@ -322,6 +323,26 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   second, the draught's heal and how much it multiplies his damage (as the game's damage stats add up on his
   skills). A class whose Health or regeneration from gear is out of the order of his own Health is a problem;
   `--canary` rolls the ranger's Health from gear as the mage's.
+- `music`: each biome's music played through as the player hears it (`page/music.ts`, `--biomes forest,crypt` in
+  turn). Each round goes through the biome's lobby, a run's countdown, the first wave's fight and its win, the next
+  wave's countdown and fight, the tab hidden and shown again mid-fight, and the bank back to the lobby. Every frame
+  is judged by what the game sends to WebAudio (each buffer source it starts, `page/musicTap.ts`) and by what each
+  track's output carries (an analyser on it), not by the music's own bookkeeping (`page/musicJudge.ts`). These are
+  problems:
+  - a track rising where another is wanted (`EXPECTED`, the owner's choice for each place: the lobby's track in the
+    lobby and between waves, the battle track through each fight);
+  - a level that moves faster than a 0.75 s fade;
+  - a fresh track that doesn't start at its top, or a track coming back elsewhere than where it was left (the
+    lobby's after a fight, the battle's in the next wave, either after a hidden tab);
+  - a source looping off its track's loop, or past its samples' end;
+  - a battle track not decoded within the run's countdown;
+  - a track kept decoded while it's silent and wanted nowhere;
+  - a track wanted at full that carries less than -45 dB (listened to for up to 4 s, as a piece may open near
+    silence), or a silent one, or any in a hidden tab, that carries anything.
+
+  `--canary` plays a round again with four faults planted: the biome's battle track played as another's, the
+  lobby's fade in cut to a twentieth of a second, every fresh track started 5 s in, and every track coming back
+  started from its top.
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`).
 - `status`, `stop`: what the server serves and has booted; stop it.
 - `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films), the

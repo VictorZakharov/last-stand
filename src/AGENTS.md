@@ -4,7 +4,7 @@ The game itself, booted by `main.ts`.
 
 The rules across the game are the [root AGENTS.md](../AGENTS.md); each directory under this one has an AGENTS.md of its own.
 
-- `main.ts`: the entry point. Boots every system (behind the loading screen, yielding between steps) and owns the main loop and the flow between the lobby and a run: the lobby's sandbox and practice, starting and leaving a run, the bank and continue choices, a class or save slot switch, the views, and the lobby's music.
+- `main.ts`: the entry point. Boots every system (behind the loading screen, yielding between steps) and owns the main loop and the flow between the lobby and a run: the lobby's sandbox and practice, starting and leaving a run, the bank and continue choices, a class or save slot switch, the views, and the music wanted where the player is.
 - `state.ts`: `G`, the shared mutable state systems read and write instead of passing long parameter lists. Keep it flat and documented.
 - `events.ts`: a typed event bus, so systems react to each other without importing each other.
 - `types.ts`: the shared types, data definitions (`SkillDef`, `ClassDef`, `EnemyDef`, `Item`...) and runtime ones (`Model`, `Effect`...). Type new data against them.
@@ -12,7 +12,7 @@ The rules across the game are the [root AGENTS.md](../AGENTS.md); each directory
 
 | Directory | Contents |
 | --- | --- |
-| `audio/` | The lobby's music |
+| `audio/` | The music's tracks |
 | `combat/` | Damage both ways, projectiles, lures, and the skills' behaviours (`skills/`) |
 | `core/` | The renderer and its post chain, the views, input, sound and music, textures and materials, quality |
 | `data/` | Pure tuning data, typed against `types.ts` |

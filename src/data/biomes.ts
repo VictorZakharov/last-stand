@@ -1,6 +1,7 @@
 // Biomes: each has its own arena (world/), enemy roster and boss. The wave rules
 // (budget, groups, loot) in waves.ts are shared.
 import type { EnemyId } from './enemies';
+import type { TrackId } from './music';
 
 export type BiomeId = 'crypt' | 'forest';
 /** the player's choice in the lobby: a biome, or a random one each run */
@@ -22,6 +23,8 @@ export interface BiomeDef {
   minimap: { wall: 'octagon' | 'circle'; portal: string };
   /** what the floor (off the dais, which is stone) and the wall are made of: an arrow glances off stone and sticks in the rest */
   surface: { floor: 'stone' | 'earth'; wall: 'stone' | 'thicket' };
+  /** its music (data/music.ts): in its lobby and between its runs' waves, and through each wave's fight */
+  music: { lobby: TrackId; battle: TrackId };
 }
 
 export const BIOMES: Record<BiomeId, BiomeDef> = {
@@ -36,6 +39,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     boss: 'colossus', bossShort: 'Colossus', bossBanner: 'A colossal presence approaches…',
     minimap: { wall: 'octagon', portal: '#b050ff' },
     surface: { floor: 'stone', wall: 'stone' },
+    music: { lobby: 'shadowed-dusk', battle: 'crypt-motif' },
   },
   forest: {
     label: 'Forest', title: 'The Thornwood',
@@ -48,6 +52,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     boss: 'thornheart', bossShort: 'Thornheart', bossBanner: 'The old wood wakes…',
     minimap: { wall: 'circle', portal: '#70ff60' },
     surface: { floor: 'earth', wall: 'thicket' },
+    music: { lobby: 'quiet-beginnings', battle: 'sunlit-battle' },
   },
 };
 
