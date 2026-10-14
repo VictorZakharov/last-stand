@@ -17,7 +17,7 @@ import { BIOMES } from '../../../src/data/biomes';
 import { GROUND_EDGES, GROUND_LEVELS, groundHeight } from '../../../src/world/ground';
 import { RAGDOLL_BONES, RAGDOLL_POINTS, type Ragdoll } from '../../../src/entities/ragdoll';
 import { lateCompiles, programsCompiledInGame } from '../../../src/core/shaders';
-import { holdFor, pressing, skillNamed, type BoundSkill } from './cast';
+import { bindKnown, holdFor, pressing, skillNamed, type BoundSkill } from './cast';
 
 export interface DeathOptions {
   fixture: Fixture;
@@ -506,17 +506,6 @@ function fixtureOf(options: DeathOptions): Fixture {
 interface Pass {
   skill: BoundSkill;
   cast: Cast;
-}
-
-/** A skill the hero knows but hasn't on a key (Thunder Crescent, while the two-handed loadout has Steel Tempest on
- *  its key) put on its own key, as the player would bind it in the lobby. */
-export function bindKnown(wanted: string): void {
-  const hero = G.player;
-  const name = wanted.toLowerCase();
-  for (const [id, known] of hero.known) {
-    const names = [known.def.impl, known.def.name].map((each) => each.toLowerCase());
-    if (names.includes(name) && hero.usable(known.def)) hero.bind(known.def.key, id);
-  }
 }
 
 /** The way the swing the player sees goes (+1 from the hero's right to his left): the newest blade trail's, as it's
