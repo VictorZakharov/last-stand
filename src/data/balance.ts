@@ -82,3 +82,9 @@ export const COOP = {
   /** state updates sent per second */
   sendRate: 20,
 };
+
+/** How a kill throws its body (combat/fling.ts): the speed any kill gives it (m/s, enough to topple it) and the most
+ *  the overkill adds, at an overkill of `full` times its life, rising by its share to the power `curve` (the first
+ *  share of a life adds the most); a foe's `knockbackResist` takes `stand` of it away and a boss keeps `boss` of it;
+ *  how much of the drive goes up, and where on the body a blow lands (0 the feet, 1 the top), when a skill doesn't say. */
+export const FLING = { base: 1.6, most: 10, full: 1.5, curve: 0.6, stand: 0.6, boss: 0.35, lift: 0.3, at: 0.6 };

@@ -29,7 +29,8 @@ function strike(player: Player, def: Def, i: number): void {
     color: def.color, sweep: 0.13, fade: 0.25,
   });
   sfx.swing();
-  if (sweep(player, def, facing, { knock: 1.2 })) { sfx.clang(); addShake(0.1 + i * 0.05); }
+  // (each cut drives what it kills along it, and down: it comes from high)
+  if (sweep(player, def, facing, { knock: 1.2, swing: s, lift: 0.12 })) { sfx.clang(); addShake(0.1 + i * 0.05); }
 }
 
 const skill: InstantSkill = {

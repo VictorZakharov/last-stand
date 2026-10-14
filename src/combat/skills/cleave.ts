@@ -11,6 +11,7 @@ import type { InstantSkill, Needs } from './types';
 import { hurtProp, PROP_DAMAGE, type Prop } from '../../world/destructible';
 import { hurtsProps } from '../../net/role';
 import type { Player } from '../../entities/player';
+import { swingWay, type Blow } from '../fling';
 
 type Def = Needs<'damage' | 'range' | 'arc' | 'knock' | 'color'>;
 
@@ -35,8 +36,12 @@ export function swingArc(player: Player, arc: number): { radius: number; y: numb
   };
 }
 
+/** How a sweep hits: its knock and type; the way it sweeps (+1 from the right to the left: what it kills goes along
+ *  it, and out) and how much of that goes up; or a blow of its own for a blow that isn't a sweep (a chop). */
+interface SweepOpts { knock?: number; type?: 'physical' | 'fire' | 'lightning'; swing?: number; lift?: number; blow?: Blow }
+
 /** Hit every enemy within `range` and half of `arc` of `facing` around the player. */
-export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, facing: number, opts: { knock?: number; type?: 'physical' | 'fire' | 'lightning' } = {}): number {
+export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, facing: number, opts: SweepOpts = {}): number {
   let hits = 0;
   const p = player.pos;
   for (const e of G.enemies) {
@@ -44,7 +49,8 @@ export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, fa
     const dx = e.pos.x - p.x, dz = e.pos.z - p.z, d = Math.hypot(dx, dz);
     if (d > def.range + e.radius) continue;
     if (d > e.radius + 0.6 && angleBetween(Math.atan2(dx, dz), facing) > def.arc / 2) continue;
-    hitEnemy(e, def.damage, { by: player, tags: def.tags, type: opts.type ?? 'physical', knock: opts.knock, from: p });
+    const blow = opts.blow ?? { dir: swingWay(p, e.pos, opts.swing ?? 1), lift: opts.lift ?? 0.3 };
+    hitEnemy(e, def.damage, { by: player, tags: def.tags, type: opts.type ?? 'physical', knock: opts.knock, from: p, blow });
     sparks(e.pos.x, e.height * 0.55, e.pos.z, 0xffd9a0, 8);
     hits++;
   }
@@ -72,7 +78,7 @@ const skill: InstantSkill = {
     const facing = player.facing;
     slashArc({ x: player.pos.x, z: player.pos.z, facing, ...swingArc(player, def.arc), color: def.color });
     sfx.swing();
-    const hits = sweep(player, def, facing, { knock: def.knock });
+    const hits = sweep(player, def, facing, { knock: def.knock, swing: player.model.swing ?? 1 });
     if (hits) {
       sfx.clang();
       addShake(0.08);

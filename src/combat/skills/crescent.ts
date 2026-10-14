@@ -12,6 +12,7 @@ import { swingArc } from './cleave';
 import { hurtPropsIn, PROP_DAMAGE, type Prop } from '../../world/destructible';
 import type { InstantSkill, Needs } from './types';
 import type { Enemy } from '../../entities/enemy';
+import { blastCorpses } from '../../entities/corpse';
 
 type Def = Needs<'damage' | 'speed' | 'range' | 'width' | 'color'>;
 const ARC = 1.9;
@@ -43,7 +44,7 @@ const skill: InstantSkill = {
     group.position.set(pos.x, 0.7, pos.z);
     G.scene.add(group);
     const light = flash({ color: def.color, intensity: 6, distance: 7, life: 1, hold: 99, follow: () => new THREE.Vector3(pos.x + dir.x * R, 1.2, pos.z + dir.z * R) });
-    const hit = new Set<Enemy>(), struck = new Set<Prop>();
+    const hit = new Set<Enemy>(), struck = new Set<Prop>(), swept = new Set<object>();
     const life = def.range / def.speed;
     let t = 0, crackle = 0, trail = 0;
 
@@ -82,11 +83,13 @@ const skill: InstantSkill = {
 
         const fx = pos.x + dir.x * R * 0.8, fz = pos.z + dir.z * R * 0.8;
         hurtPropsIn(player, fx, fz, R * 0.85, PROP_DAMAGE.swing, struck);
+        // (the bodies in its way swept on ahead of it, each once)
+        blastCorpses({ x: fx, z: fz }, R * 0.85, 4.5, { dir, lift: 0.35, once: swept });
         for (const e of G.enemies) {
           if (!e.alive || hit.has(e)) continue;
           if (Math.hypot(e.pos.x - fx, e.pos.z - fz) > R * 0.85 + e.radius) continue;
           hit.add(e);
-          hitEnemy(e, def.damage, { by: player, tags: def.tags, type: 'lightning', knock: 1.5, from: pos });
+          hitEnemy(e, def.damage, { by: player, tags: def.tags, type: 'lightning', knock: 1.5, from: pos, blow: { dir, lift: 0.25 } });
           const at = new THREE.Vector3(e.pos.x, e.height * 0.6, e.pos.z);
           lightning(new THREE.Vector3(fx, 1.1, fz), at, { color: def.color, intensity: 3, life: 0.14, branches: 2 });
           burst(at, { count: 12, color: 0xcfe4ff, speed: 5, life: 0.35, size: 0.2 });

@@ -116,6 +116,10 @@ export const sfx = {
   potion: guard(() => { noise({ dur: 0.35, freq: 800, sweep: 2500, q: 5, gain: 0.15 }); tone({ freq: 440, to: 880, dur: 0.4, gain: 0.08 }); }),
   hurt: guard(() => { if (throttle('hurt', 120)) return; noise({ dur: 0.18, freq: 500, type: 'lowpass', gain: 0.35 }); tone({ freq: 160, to: 90, dur: 0.15, type: 'square', gain: 0.05 }); }),
   enemyDie: guard(() => { if (throttle('die', 40)) return; noise({ dur: 0.35, freq: 700, sweep: 200, q: 1, gain: 0.18 }); }),
+  /** a body landing, `k` how hard (0 to 1) */
+  bodyFall: guard((k: number) => { if (throttle('fall', 60)) return; noise({ dur: 0.14 + k * 0.1, freq: 260, type: 'lowpass', gain: 0.12 + k * 0.22 }); tone({ freq: 75, to: 40, dur: 0.12, gain: 0.05 + k * 0.1 }); }),
+  /** a body frozen stiff breaking into shards */
+  shatter: guard(() => { if (throttle('shatter', 50)) return; noise({ dur: 0.35, freq: 5200, sweep: 2400, q: 1.2, gain: 0.16 }); [2350, 3140, 3720].forEach((f, i) => tone({ freq: f, dur: 0.25, gain: 0.025, type: 'triangle', delay: i * 0.03 })); }),
   slam: guard(() => { noise({ dur: 0.8, freq: 120, type: 'lowpass', gain: 0.7 }); tone({ freq: 60, to: 28, dur: 0.6, gain: 0.5 }); }),
   /** a prop breaking: rock and timber giving way */
   crumble: guard(() => { noise({ dur: 0.55, freq: 700, sweep: 140, type: 'lowpass', q: 1.2, gain: 0.5 }); noise({ dur: 0.2, freq: 2400, q: 2, gain: 0.12 }); tone({ freq: 90, to: 40, dur: 0.4, gain: 0.3 }); }),

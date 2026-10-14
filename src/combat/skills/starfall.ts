@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { additive, nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
+import { blastCorpses } from '../../entities/corpse';
 import { addEffect, shockwave, decal, glyphMarker, lightPillar, crackDecal, crystalBurst } from '../../fx/effects';
 import { burst, particles, col, smokePuff, debris } from '../../fx/particles';
 import { flash } from '../../fx/lights';
@@ -107,9 +108,11 @@ function impact(player: Player, def: Def, p: THREE.Vector3): void {
     if (d < def.radius) {
       // a direct hit takes full damage, easing down to the edge's share (smoothstep: no kinks)
       const x = Math.max(0, d) / def.radius, k = 1 - (1 - def.edge) * x * x * (3 - 2 * x);
-      hitEnemy(e, def.damage * k, { by: player, tags: def.tags, type: 'arcane', chill: def.chill, knock: 4 * k, from: p });
+      // (struck from above: what it kills is thrown out and high)
+      hitEnemy(e, def.damage * k, { by: player, tags: def.tags, type: 'arcane', chill: def.chill, knock: 4 * k, from: p, blow: { lift: 0.9, force: 1.15 } });
     }
   }
+  blastCorpses(p, def.radius * 1.2, 7, { lift: 1 });
 }
 
 /** The point `p` kept inside the arena as far as its crystals may land (`R` in from its edge), in `out`. */

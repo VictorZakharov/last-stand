@@ -1,5 +1,5 @@
 // Material kit: every entity builds its materials through a kit so that
-// shared per-entity FX uniforms (dissolve, frozen, hit flash) can be driven
+// shared per-entity FX uniforms (dissolve, frozen, charred, hit flash) can be driven
 // with a single write each frame.
 import * as THREE from 'three';
 
@@ -15,6 +15,7 @@ float nearGlow(){ return clamp(pow((1.0 / gl_FragCoord.w) / ${NEAR_GLOW.ref.toFi
 const FX_CHUNK_COMMON = /* glsl */ `
 uniform float uDissolve;
 uniform float uFrozen;
+uniform float uChar;
 uniform float uHit;
 uniform vec3 uEdge;
 varying vec3 vFxPos;
@@ -31,6 +32,8 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
   const u = {
     uDissolve: { value: 0 },
     uFrozen: { value: 0 },
+    /** burnt: charred black, embers glowing in its cracks (a body the fire killed, entities/corpse.ts) */
+    uChar: { value: 0 },
     uHit: { value: 0 },
     uEdge: { value: new THREE.Color(edgeColor).multiplyScalar(3) },
   };
@@ -50,7 +53,8 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', '#include <common>\n' + FX_CHUNK_COMMON + (rim ? 'uniform vec3 uRim;' : ''))
         .replace('#include <color_fragment>', `#include <color_fragment>
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55,0.8,1.0), uFrozen*0.75);`)
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55,0.8,1.0), uFrozen*0.75);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045,0.035,0.03), uChar*0.9);`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
           ${near ? 'totalEmissiveRadiance *= nearGlow();' : ''}
           ${rim ? 'totalEmissiveRadiance += uRim * pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);' : ''}
@@ -59,6 +63,9 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
           float edge = uDissolve > 0.0 ? (1.0 - smoothstep(uDissolve, uDissolve + 0.09, dn)) : 0.0;
           totalEmissiveRadiance += uEdge * edge * 3.0;
           totalEmissiveRadiance += vec3(0.25,0.55,0.9) * uFrozen * 0.35;
+          // charred: its own glow smothered, embers in the cracks the dissolve's noise draws
+          totalEmissiveRadiance *= 1.0 - uChar * 0.7;
+          totalEmissiveRadiance += vec3(1.0,0.32,0.06) * uChar * smoothstep(0.6, 0.78, dn) * 1.6 * nearGlow();
           // a tint, not white, dimmer near the camera like the effect glows: up close a body fills much of the screen
           totalEmissiveRadiance += vec3(1.0,0.9,0.85) * uHit * 0.45 * nearGlow();`);
     };

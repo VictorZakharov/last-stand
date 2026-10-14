@@ -13,6 +13,8 @@ import { hurtProp, PROP_DAMAGE } from '../../world/destructible';
 import type { Obstacle } from '../../types';
 import type { ChannelSkill, Needs } from './types';
 import type { LightSlot } from '../../fx/lights';
+import { addField } from '../../entities/corpse';
+import { GRAVITY, type Field } from '../../entities/ragdoll';
 
 type Def = Needs<'damage' | 'length' | 'width'>;
 
@@ -25,6 +27,33 @@ interface LanceState {
   /** the beam is out (the portal finished opening) */
   firing: boolean;
   stopHum?: () => void;
+  /** where the beam runs this frame, and what takes its pull on the fallen away */
+  beam: Beam;
+  calm: () => void;
+}
+
+/** The beam as the fallen meet it: from (x, y, z) along (dx, dz), this long and wide (m), while it's out. */
+interface Beam { on: boolean; x: number; y: number; z: number; dx: number; dz: number; len: number; w: number }
+
+/** the fallen in the beam carried along it this fast (m/s), gripped this hard (/s), with this much of their weight
+ *  borne, as far as this beyond its width and above it (m): they drift down it and drop off its end */
+const CARRY = 5, CARRY_GRIP = 3, BEAR = 0.85, BEAM_REACH = 0.4, BEAM_ABOVE = 1.2;
+
+/** The beam's pull on the fallen in it. */
+function carry(beam: Beam): Field {
+  return {
+    accel(p, v, out) {
+      if (!beam.on) return false;
+      const ox = p.x - beam.x, oz = p.z - beam.z, along = ox * beam.dx + oz * beam.dz;
+      if (along < 0 || along > beam.len || p.y > beam.y + BEAM_ABOVE) return false;
+      if (Math.abs(ox * beam.dz - oz * beam.dx) > beam.w * 0.5 + BEAM_REACH) return false;
+      const push = (CARRY - (v.x * beam.dx + v.z * beam.dz)) * CARRY_GRIP;
+      out.x += beam.dx * push;
+      out.z += beam.dz * push;
+      out.y += GRAVITY * BEAR - v.y * CARRY_GRIP * 0.5;
+      return true;
+    },
+  };
 }
 
 const COLOR = new THREE.Color(0x5dffa8);
@@ -150,8 +179,9 @@ const skill: ChannelSkill<LanceState> = {
     G.scene.add(outer, core, portal);
     const opens = rawDef.opening ?? 0;
     if (opens > 0) sfx.charge(opens);
+    const beam: Beam = { on: false, x: 0, y: 0, z: 0, dx: 0, dz: 1, len: 0, w: 0 };
     return {
-      outer, core, portal, outerMat, coreMat, portalMat, tick: 0, t: 0, firing: false,
+      outer, core, portal, outerMat, coreMat, portalMat, tick: 0, t: 0, firing: false, beam, calm: addField(carry(beam)),
       // a glow at the hand and a pool where it hits, a few metres across: green light washed over a wide
       // circle of ground reads as a haze round the whole cast
       lightA: flash({ color: 0x5dffa8, intensity: 2, distance: 4, life: 1, hold: 999 }),
@@ -244,6 +274,7 @@ const skill: ChannelSkill<LanceState> = {
       mat.uniforms.uFade.value = fadeIn;
     }
     _end.copy(origin).addScaledVector(_dir, len);
+    Object.assign(st.beam, { on: true, x: origin.x, y: origin.y, z: origin.z, dx: _dir.x, dz: _dir.z, len, w });
     st.lightB.light.position.copy(_end);
 
     // sparks streaming along the beam: few and small, since a dense stream of soft particles smears
@@ -270,7 +301,7 @@ const skill: ChannelSkill<LanceState> = {
         const proj = ex * _dir.x + ez * _dir.z;
         if (proj < 0 || proj > len + e.radius) continue;
         if (Math.abs(ex * _dir.z - ez * _dir.x) < w * 0.5 + e.radius) {
-          hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'arcane', knock: 0.6, from: origin });
+          hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'arcane', knock: 0.6, from: origin, blow: { dir: { x: _dir.x, z: _dir.z }, lift: 0.15 } });
           burst(new THREE.Vector3(e.pos.x, 1.1, e.pos.z), { count: 4, color: 0x5dffa8, speed: 3, life: 0.3, size: 0.25 });
         }
       }
@@ -278,6 +309,7 @@ const skill: ChannelSkill<LanceState> = {
   },
 
   stop(_player, _def, st) {
+    st.calm();
     G.scene.remove(st.outer, st.core, st.portal);
     st.outerMat.dispose(); st.coreMat.dispose(); st.portalMat.dispose();
     release(st.lightA); release(st.lightB);

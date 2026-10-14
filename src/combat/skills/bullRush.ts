@@ -16,6 +16,7 @@ import { slashMesh, slashArc } from './slash';
 import { hurtPropsIn, PROP_DAMAGE, type Prop } from '../../world/destructible';
 import type { InstantSkill, Needs } from './types';
 import type { Enemy } from '../../entities/enemy';
+import { blastCorpses } from '../../entities/corpse';
 import type { Player } from '../../entities/player';
 
 type Def = Needs<'damage' | 'range' | 'speed' | 'knock'>;
@@ -89,7 +90,7 @@ const skill: InstantSkill = {
     // aiming at your own feet still charges the full distance, the way you face
     if (dir.lengthSq() < 0.01) dir.set(Math.sin(player.facing), 0, Math.cos(player.facing));
     dir.normalize();
-    const hit = new Set<Enemy>(), struck = new Set<Prop>();
+    const hit = new Set<Enemy>(), struck = new Set<Prop>(), ploughed = new Set<object>();
     let dust = 0, scrape = 0, arrived = false, launched = false, steps = 0;
     sfx.rush();
     // (gathering for it: dust stirs round the feet)
@@ -139,10 +140,15 @@ const skill: InstantSkill = {
         });
       }
       hurtPropsIn(player, p.x, p.z, 1.1, PROP_DAMAGE.trample, struck);
+      // (the bodies in its way thrown aside, each once)
+      blastCorpses(p, 1.5, 6, { lift: 0.5, once: ploughed });
       for (const e of G.enemies) {
         if (!e.alive || hit.has(e) || Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > 1.1 + e.radius) continue;
         hit.add(e);
-        hitEnemy(e, def.damage, { by: player, tags: def.tags, type: 'physical', knock: def.knock, from: p });
+        // (thrown ahead of the charge and off to its side, as a plough throws the earth)
+        const side = Math.sign((e.pos.x - p.x) * dir.z - (e.pos.z - p.z) * dir.x) || 1;
+        const blow = { dir: { x: dir.x * 0.85 + dir.z * side * 0.55, z: dir.z * 0.85 - dir.x * side * 0.55 }, lift: 0.55, force: 1.3 };
+        hitEnemy(e, def.damage, { by: player, tags: def.tags, type: 'physical', knock: def.knock, from: p, blow });
         sparks(e.pos.x, e.height * 0.5, e.pos.z, 0xffc080, 16);
         shockwave(e.pos, { color: EMBER, intensity: 1.5, from: 0.2, to: 1.4, life: 0.25 });
         debris(e.pos, { count: 6, speed: 5 });

@@ -9,6 +9,7 @@ import { rand } from '../../util';
 import { slashArc } from './slash';
 import { sweep } from './cleave';
 import type { InstantSkill, Needs } from './types';
+import { blastCorpses } from '../../entities/corpse';
 
 type Def = Needs<'damage' | 'range' | 'arc' | 'knock' | 'color'>;
 
@@ -64,7 +65,10 @@ const skill: InstantSkill = {
     flash({ color: def.color, intensity: 26, distance: 10, life: 0.4, pos: { x: c.x, y: 1.2, z: c.z } });
     addShake(0.75);
     sfx.slam(); sfx.clang();
-    sweep(player, def, facing, { knock: def.knock });
+    // the chop drives what it kills down into the floor ahead, high on the body; the bodies lying round where it
+    // lands are thrown up by the blow through the floor
+    sweep(player, def, facing, { knock: def.knock, blow: { dir: { x: dir.x, z: dir.z }, lift: -0.45, at: 0.95, force: 1.25 } });
+    blastCorpses(c, 3.4, 7, { lift: 1.1 });
   },
 };
 

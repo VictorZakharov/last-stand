@@ -11,6 +11,7 @@ import { G } from '../state';
 import { setSpawnSink, spawnEnemy } from '../entities/spawner';
 import { setFxSink, FX, type FxName } from '../entities/enemyAI';
 import { setDealtSink, DAMAGE_TYPES, type DealtHit } from '../combat/damage';
+import { flingFrom, flingRow } from '../combat/fling';
 import { setPropSink, setPropLife } from '../world/destructible';
 import { runHooks, vote, playerOut, showCleared, startNextWave, gainLoot, localOut, endRun, bankedAway, type RunPhase } from '../game/run';
 import { on, emit } from '../events';
@@ -27,7 +28,7 @@ import type { Item } from '../types';
 
 type WorldEvent =
   | { k: 'spawn'; id: number; ty: EnemyId; h: 0 | 1; n: string; x: number; z: number; f: number; ml: number; w: number }
-  | { k: 'die'; id: number }
+  | { k: 'die'; id: number; f?: number[] }
   | { k: 'fx'; n: FxName; a: number[] }
   | { k: 'prop'; i: number; l: number }
   | { k: 'clear' }
@@ -47,7 +48,7 @@ interface Snapshot { r: number[]; v: number[]; p: number[][]; e: (number | strin
 export interface WorldMessage { t: number; x?: WorldEvent[]; s?: Snapshot }
 
 /** A guest's hit on a foe, for the host: [its number, foe, amount, crit, type, knock, from x, from z, chill, freeze,
- *  daze] (a daze alone, `dazeEnemy`, deals nothing) */
+ *  daze] (a daze alone, `dazeEnemy`, deals nothing), and a kill's throw after them (`flingRow`) */
 export type HitReport = number[];
 
 const PHASES: RunPhase[] = ['countdown', 'fighting', 'cleared', 'over'];
@@ -78,7 +79,7 @@ export function initSync(): void {
   setFxSink((n, a) => push({ k: 'fx', n, a: a.map(r2) }));
   setPropSink((i, l) => push({ k: 'prop', i, l }));
   setDealtSink(onDealt);
-  on('enemyKilled', (e) => push({ k: 'die', id: e.id }));
+  on('enemyKilled', (e) => push({ k: 'die', id: e.id, f: e.fling ? flingRow(e.fling) : undefined }));
   runHooks.cleared = () => push({ k: 'clear' });
   runHooks.nextWave = () => push({ k: 'next', w: G.run!.wave });
   runHooks.loot = (p, item) => push({ k: 'loot', s: p.slot, item });
@@ -128,7 +129,7 @@ function snap(): Snapshot {
 /** Host: a guest's hits on the foes, as its own game dealt them on its copies: dealt here too, its kill and loot. */
 export function onGuestHits(p: Player, hits: HitReport[]): void {
   if (role.current !== 'host' || G.mode !== 'run') return;
-  for (const [seq, id, amount, crit, type, knock, fx, fz, chill, freeze, daze] of hits) {
+  for (const [seq, id, amount, crit, type, knock, fx, fz, chill, freeze, daze, ...thrown] of hits) {
     dealtUpTo.set(p.slot, Math.max(dealtUpTo.get(p.slot) ?? 0, seq));
     const e = G.enemies.find((q) => q.id === id);
     if (!e || !e.alive) continue;
@@ -136,7 +137,7 @@ export function onGuestHits(p: Player, hits: HitReport[]): void {
     if (e.invulnerable) continue;
     e.takeDamage(amount, {
       type: DAMAGE_TYPES[type], crit: crit === 1, by: p, chill: chill || undefined, freeze: freeze || undefined,
-      ...(knock ? { knock, from: { x: fx, z: fz } } : {}),
+      ...(knock ? { knock, from: { x: fx, z: fz } } : {}), fling: flingFrom(thrown),
     });
   }
 }
@@ -151,6 +152,7 @@ function onDealt(e: Enemy, hit: DealtHit): void {
   outgoing.push([
     hitSeq, e.id, r2(hit.amount), hit.crit ? 1 : 0, DAMAGE_TYPES.indexOf(hit.type),
     r2(hit.knock ?? 0), r2(from.x), r2(from.z), r2(hit.chill ?? 0), r2(hit.freeze ?? 0), r2(hit.daze ?? 0),
+    ...(hit.fling ? flingRow(hit.fling) : []),
   ]);
 }
 
@@ -213,7 +215,7 @@ function apply(ev: WorldEvent): void {
     }
     case 'die': {
       const e = G.enemies.find((x) => x.id === ev.id);
-      if (e?.alive) e.die();
+      if (e?.alive) e.die(flingFrom(ev.f));
       tracks.delete(ev.id);
       smoothers.delete(ev.id);
       return;

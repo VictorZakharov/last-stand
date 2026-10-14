@@ -14,6 +14,7 @@ import { rand } from '../../util';
 import { groundHeight } from '../../world/ground';
 import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
 import type { InstantSkill, Needs } from './types';
+import { blastCorpses } from '../../entities/corpse';
 
 type Def = Needs<'damage' | 'radius' | 'knock' | 'absorbPct' | 'duration'>;
 const GOLD = 0xffc85a;
@@ -102,9 +103,11 @@ const skill: InstantSkill = {
     hurtPropsIn(player, c.x, c.z, def.radius, PROP_DAMAGE.burst);
     for (const e of G.enemies) {
       if (e.alive && Math.hypot(e.pos.x - c.x, e.pos.z - c.z) < def.radius + e.radius) {
-        hitEnemy(e, def.damage, { by: player, tags: ['physical'], type: 'physical', knock: def.knock, from: c });
+        hitEnemy(e, def.damage, { by: player, tags: ['physical'], type: 'physical', knock: def.knock, from: c, blow: { lift: 0.25, force: 1.1 } });
       }
     }
+    // (the roar rolls the bodies lying round him away)
+    blastCorpses(c, def.radius, 6, { lift: 0.35 });
 
     // the ward, shown as shields circling the warrior
     player.ward?.onEnd?.();

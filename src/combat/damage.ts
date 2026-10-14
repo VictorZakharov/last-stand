@@ -8,6 +8,7 @@ import { rand } from '../util';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
 import type { DamageType, XZ } from '../types';
+import type { Blow, Fling } from './fling';
 
 const ELEMENTAL = new Set(['cold', 'fire', 'lightning']);
 
@@ -37,10 +38,12 @@ export interface HitOpts {
   freeze?: number;
   /** suppress the damage number (crits are still shown) */
   silent?: boolean;
+  /** how the blow drives what it kills (combat/fling.ts): away from `from` (or the player) when not given */
+  blow?: Blow;
 }
 
 /** What the local player dealt a foe, with its effects, as co-op reports it to the host (set by net/sync). */
-export interface DealtHit { amount: number; crit: boolean; type: DamageType; knock?: number; from?: XZ; chill?: number; freeze?: number; daze?: number }
+export interface DealtHit { amount: number; crit: boolean; type: DamageType; knock?: number; from?: XZ; chill?: number; freeze?: number; daze?: number; /** a kill's throw */ fling?: Fling }
 let dealtSink: ((enemy: Enemy, hit: DealtHit) => void) | null = null;
 export function setDealtSink(fn: typeof dealtSink): void { dealtSink = fn; }
 
@@ -60,8 +63,9 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   const { amount: rolled, crit } = rollPlayerDamage(by, base, tags);
   // (a marked foe takes more from everyone: the largest of the marks on it)
   const amount = enemy.marks.length ? rolled * (1 + Math.max(...enemy.marks)) : rolled;
-  const dealt = enemy.takeDamage(amount, { type, crit, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, by });
-  dealtSink?.(enemy, { amount: dealt, crit, type, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze });
+  const dealt = enemy.takeDamage(amount, { type, crit, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, by, blow: opts.blow });
+  const fling = enemy.alive ? undefined : enemy.fling ?? undefined;
+  dealtSink?.(enemy, { amount: dealt, crit, type, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, fling });
   countDealt(dealt, !enemy.alive);
   // everyone sees their own numbers
   if (!opts.silent || crit) damageNumber(enemy, dealt, crit, type);

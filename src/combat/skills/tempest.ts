@@ -7,6 +7,8 @@ import { slashMesh } from './slash';
 import { sparks } from './cleave';
 import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
 import type { ChannelSkill, Needs } from './types';
+import { swingWay } from '../fling';
+import { blastCorpses } from '../../entities/corpse';
 
 type Def = Needs<'damage' | 'radius'>;
 
@@ -16,6 +18,8 @@ const TICK = 0.2;
 const ARC = 2.6;
 const COLOR = 0xe8eef8;
 const BLADE = 0.68;
+/** what the blades drive round with them, against out */
+const SWIRL = 1.3;
 
 const skill: ChannelSkill<TempestState> = {
   anim: 'spin',
@@ -52,9 +56,12 @@ const skill: ChannelSkill<TempestState> = {
     const p = player.pos;
     let hits = 0;
     hurtPropsIn(player, p.x, p.z, def.radius, PROP_DAMAGE.zone * TICK);
+    // (the blades spin as a heading turns to the left: what they kill goes round with them and out, and the bodies
+    // lying in their reach are batted on round)
+    blastCorpses(p, def.radius, 3.5, { swirl: SWIRL, lift: 0.35 });
     for (const e of G.enemies) {
       if (!e.alive || Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > def.radius + e.radius) continue;
-      hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'physical', knock: 0.8, from: p });
+      hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'physical', knock: 0.8, from: p, blow: { dir: swingWay(p, e.pos, 1, SWIRL, 1), lift: 0.3 } });
       sparks(e.pos.x, e.height * 0.55, e.pos.z, 0xffe0b0, 4);
       hits++;
     }
