@@ -1,17 +1,20 @@
 // `lab range`: every joint of the hero against a body's ranges (`models/anatomy.ts`), frame by frame, as the game's dev
 // builds watch them (`watchBody`), over standing, walking each way, shooting and walks that change direction while he
 // shoots or runs. Each angle past its range: on how many frames, the worst and where (the scenario, the frame, and for
-// a leg whether its foot was planted), and the worst moment of each scenario pictured. A canary turns the head round
-// past the neck's range on one frame, which the measure must catch. `--trace` lists the leg IK frame by frame as the
-// gait's does (`legTrace.ts`), each frame's joints past their ranges after it.
+// a leg whether its foot was planted), and the worst moment of each scenario pictured. With `--skill`, a skill cast
+// standing too, the weapons held `--gear`'s way. A canary turns the head round past the neck's range on one frame,
+// which the measure must catch. `--trace` lists the leg IK frame by frame as the gait's does (`legTrace.ts`), each
+// frame's joints past their ranges after it.
 import * as THREE from 'three';
-import type { Lab, Pictured } from './lab';
+import type { Frame, Lab, Pictured } from './lab';
 import {
   breaches, elevationLimit, measureBody, rotationRange, type BodyAngles, type Breach,
 } from '../../../src/entities/models/anatomy';
 import type { Joints } from '../../../src/entities/models/rig';
 import type { LegIK } from '../../../src/entities/models/ik';
+import type { WeaponStyle } from '../../../src/loot/loadout';
 import { LegTrace, traceSpanOf } from './legTrace';
+import { bindKnown, pressing, skillNamed } from './cast';
 
 /** A hand as it is turned in its grip: the group of its own meshes under the joint, as `watchBody` measures it. */
 function turnedHand(hand: THREE.Object3D): THREE.Object3D {
@@ -38,6 +41,8 @@ interface RangeLeg {
   keys: string[];
   attack: boolean | 'taps';
   frames: number;
+  /** the skill asked for (`--skill`) cast on its first frame */
+  cast?: boolean;
 }
 
 interface RangeScenario {
@@ -82,10 +87,18 @@ const SCENARIOS: RangeScenario[] = [
     what: 'running reversals: left and right again',
     legs: [['a'], ['d'], ['a'], ['d']].map((keys) => legOf(keys, false, 40)),
   },
+  {
+    name: 'cast',
+    what: 'casting the skill asked for, standing, and its end held',
+    legs: [legOf([], false, 20), { ...legOf([], false, 150), cast: true }],
+  },
 ];
 
-/** The scenarios `lab range` can run, by name. */
+/** The scenarios `lab range` can run, by name (`cast` with `--skill` alone). */
 export const RANGE_SCENARIOS = SCENARIOS.map((scenario) => scenario.name);
+
+/** how far ahead of the hero a cast is aimed (m) */
+const CAST_AIM = 6;
 
 /** What `lab range` is asked for. */
 export interface RangeOptions {
@@ -99,6 +112,9 @@ export interface RangeOptions {
   trace?: boolean;
   /** with `trace`, only the frames from the first to the second */
   span?: [number, number];
+  /** the `cast` scenario's skill (its key, its behaviour or its name), and the way the weapons are held throughout */
+  skill?: string;
+  gear?: WeaponStyle;
 }
 
 /** where every scenario starts: open ground, facing +z */
@@ -208,8 +224,10 @@ async function runScenario(
   lab: Lab, scenario: RangeScenario, options: RangeOptions, records: Map<string, AngleRecord>, report: RangeReport,
   listed: string[],
 ): Promise<void> {
-  await lab.setup({ at: START, facing: 0, nocked: Boolean(lab.player.cls.quiver), fresh: true });
-  const run: ScenarioRun = { frame: 0, framesPast: 0, worstHere: PICTURE_FROM, moment: null, fastest: 0, fastestAt: '' };
+  await lab.setup({ at: START, facing: 0, nocked: Boolean(lab.player.cls.quiver), fresh: true, gear: options.gear });
+  const run: ScenarioRun = {
+    frame: 0, framesPast: 0, worstHere: PICTURE_FROM, moment: null, fastest: 0, fastestAt: '',
+  };
   const ankles = [lab.joints.ankleL, lab.joints.ankleR];
   const last = ankles.map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
   const tracer = traceOf(lab, options);
@@ -244,13 +262,28 @@ async function runScenario(
     });
     run.frame++;
   };
+  const press = scenario.legs.some((leg) => leg.cast) ? castPress(lab, options) : null;
   for (const leg of scenario.legs) {
-    await lab.step(leg.frames, (f) => ({ keys: leg.keys, m0: attackDown(leg, f) }), measure);
+    const input = (f: number) => (leg.cast && f === 0 && press ? press : { keys: leg.keys, m0: attackDown(leg, f) });
+    await lab.step(leg.frames, input, measure);
   }
   const fastest = `fastest ankle ${(run.fastest * 100).toFixed(1)} cm a frame (${run.fastestAt})`;
   report.lines.push(`${scenario.what}: ${run.frame} frames, ${run.framesPast} with a joint past its range; ${fastest}`);
   report.lines.push(...(tracer?.frames ?? []).map((traced) => traced.line));
   if (run.moment) report.moments.push(run.moment);
+}
+
+/** The frame that casts the skill asked for (`--skill`) ahead of the hero, as the player would on its key, with its
+ *  cooldown over (bound first, if the hero knows it but hasn't it on a key). */
+function castPress(lab: Lab, options: RangeOptions): Frame {
+  if (!options.skill) throw new Error('lab: range: the cast scenario needs --skill');
+  bindKnown(options.skill);
+  const { key } = skillNamed(options.skill);
+  lab.player.cooldowns.clear();
+  const facing = lab.player.facing;
+  const ahead = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
+  const aim = lab.player.pos.clone().addScaledVector(ahead, CAST_AIM);
+  return pressing(key, aim, true);
 }
 
 /** The scenario's trace of the leg IK, when the options ask for one. */
@@ -267,7 +300,8 @@ function traceOf(lab: Lab, options: RangeOptions): LegTrace | null {
  * body took past its range.
  */
 export async function range(lab: Lab, options: RangeOptions): Promise<RangeReport> {
-  const asked = options.scenarios?.length ? options.scenarios : RANGE_SCENARIOS;
+  const every = RANGE_SCENARIOS.filter((name) => name !== 'cast' || options.skill);
+  const asked = options.scenarios?.length ? options.scenarios : every;
   const records = new Map<string, AngleRecord>();
   const report: RangeReport = { lines: [], moments: [] };
   const listed: string[] = [];
@@ -290,5 +324,6 @@ export async function range(lab: Lab, options: RangeOptions): Promise<RangeRepor
 
 /** The canary, if it ran and was missed, as a problem. */
 export function missedRangeCanary(report: RangeReport): string[] {
-  return report.canary && !report.canary.caught ? ['range: the canary (the head turned past its range) was missed'] : [];
+  const missed = report.canary && !report.canary.caught;
+  return missed ? ['range: the canary (the head turned past its range) was missed'] : [];
 }

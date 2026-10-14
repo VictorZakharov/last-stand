@@ -65,6 +65,7 @@ function castScenarios(options) {
         foes: options.foes ?? 4,
         times: options.times.map(Number),
         pictures: options.pictures !== false,
+        gear: options.gear,
       });
     }
   }
@@ -236,6 +237,8 @@ export const COMMANDS = {
         views: options.views,
         fixture: fixtureFrom(options),
         focus: options.focus,
+        skill: options.skill,
+        shares: options.shares?.map(Number),
       });
     },
     async finish(results, options, session) {
@@ -324,6 +327,8 @@ export const COMMANDS = {
         frames: Boolean(options.frames),
         trace: Boolean(options.trace),
         span: options.span,
+        skill: options.skill,
+        gear: options.gear,
       });
     },
     finish(results, options, session) {

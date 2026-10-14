@@ -49,9 +49,12 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
 
 ## Commands
 
-- `sheet`: the hero in the states the player sees (`--states stand,walk,full`), pictured from the game's views and
-  close up (`--views lobby,top,third,front,left,right,back,above`; `eyes` with `--view first`; `--focus <joint>`
-  frames the close-ups on a joint), with each arm's load and posture beside them. Writes
+- `sheet`: the hero in the states the player sees (`--states stand,walk,full,cast`), pictured from the game's views
+  and close up (`--views lobby,top,third,front,left,right,back,above`; `eyes` with `--view first`; `--focus <joint>`
+  frames the close-ups on a joint), with each arm's load and posture beside them. `cast` casts `--skill` (its key, its
+  behaviour or its name; bound to its own key if the hero knows it but hasn't it on one) ahead of him and pictures
+  it at shares of its cast (`--shares`, 0.3,0.55,0.8 by default), with where its cast point (the weapon's tip) is:
+  how high over the floor, how far ahead. `--gear` holds the weapons a style's way. Writes
   `out/sheets/<--tag>/sheet.png` and `notes.txt`.
 - `feet`: the hero's feet against the ground round the dais's edges and on level ground (`--scenarios edge,level,
   strafe,cross`): standing at full draw by the edges (a foot moving in the hold, a sole in a step's riser, a dip under
@@ -167,7 +170,8 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   that left once the body stood, and missed every stop's: the step back began as the body slowed.)
 - `range`: every joint of the hero against a body's ranges (`models/anatomy.ts`, as the dev builds' `watchBody`
   measures them), frame by frame, over standing, walking each way, attacking standing, and walks that change
-  direction while he attacks (held or tapped) or runs (`--scenarios stand,walk,shoot,reverse,taps,run`): each angle
+  direction while he attacks (held or tapped) or runs (`--scenarios stand,walk,shoot,reverse,taps,run`), and with
+  `--skill` a skill cast standing and its end held (`cast`), the weapons held `--gear`'s way throughout: each angle
   past its range, on how many frames, its worst and where (for a leg, whether its foot was planted; for a shoulder,
   its raise, the plane it rises in and its turn against what each allows), each scenario's
   fastest ankle, and its worst moment pictured. `--canary` turns the head past the neck's range on one frame,
@@ -251,8 +255,8 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   every tenth of a second through the cast. Shaders compiled after loading, and nothing cast, are problems too. The
   props a cast broke stand again before the next. `--times` (0.4,1.5,3 by default) are the moments pictured, the
   screen as the player sees it with the HUD, into `out/cast/<skill>`; `--canary` strobes the exposure in the first
-  biome and view (5 a second), which the flashes must catch. The lab on main has no `cast`: to compare, commit, swap
-  the skill's files in from `origin/main`, run, and swap them back.
+  biome and view (5 a second), which the flashes must catch. `--gear` holds the weapons a style's way (Thunder
+  Crescent takes a two-hander), and a skill the hero knows but hasn't on a key is bound to its own first.
 - `health`: the screen as the hero's Health runs low (`page/health.ts`). Standing in each biome, view and facing
   (`--biomes`, `--views`, `--facings`), his Health is held at shares of his most (`--shares`, 1 down to 0) and at
   each the frame is drawn three times at the same moment: without the low-Health look twice (the pixels that differ
