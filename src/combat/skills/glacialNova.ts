@@ -9,6 +9,7 @@ import { flash } from '../../fx/lights';
 import { addShake } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import type { InstantSkill, Needs } from './types';
+import { blastCorpses } from '../../entities/corpse';
 import type { SkillDef } from '../../types';
 import { rand } from '../../util';
 
@@ -42,9 +43,10 @@ const skill: InstantSkill = {
     for (const e of G.enemies) {
       if (!e.alive) continue;
       if (Math.hypot(e.pos.x - c.x, e.pos.z - c.z) < def.radius + e.radius) {
-        hitEnemy(e, def.damage, { by: player, tags: def.tags, type: 'cold', freeze: def.freeze, knock: 2, from: c });
+        hitEnemy(e, def.damage, { by: player, tags: def.tags, type: 'cold', freeze: def.freeze, knock: 2, from: c, blow: { lift: 0.5 } });
       }
     }
+    blastCorpses(c, def.radius, 6, { lift: 0.6 });
   },
 };
 

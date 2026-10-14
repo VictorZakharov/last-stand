@@ -64,13 +64,13 @@ const STROBE_SPAN = 6;
 const STROBE_GAIN = 6;
 
 /** A skill of the hero's on its key. */
-interface BoundSkill {
+export interface BoundSkill {
   key: SkillKey;
   def: SkillDef;
 }
 
 /** The hero's skill that `wanted` names: its key, its behaviour or its name (any case). */
-function skillNamed(wanted: string): BoundSkill {
+export function skillNamed(wanted: string): BoundSkill {
   const name = wanted.toLowerCase();
   const bound: BoundSkill[] = [];
   for (const key of SKILL_KEYS) {
@@ -86,7 +86,7 @@ function skillNamed(wanted: string): BoundSkill {
 }
 
 /** The frame's input holding `key` over `aim` (nothing held when `held` is false). */
-function pressing(key: SkillKey, aim: THREE.Vector3, held: boolean): Frame {
+export function pressing(key: SkillKey, aim: THREE.Vector3, held: boolean): Frame {
   if (!held) return { aim };
   if (key === 'mouse0') return { m0: true, aim };
   if (key === 'mouse2') return { m2: true, aim };
@@ -94,7 +94,7 @@ function pressing(key: SkillKey, aim: THREE.Vector3, held: boolean): Frame {
 }
 
 /** How long the key is held: a channel through, a drawn shot to full and a held skill a moment; else a frame (s). */
-function holdFor(def: SkillDef): number {
+export function holdFor(def: SkillDef): number {
   if (def.channel) return CHANNEL_HOLD;
   if (def.draw) return def.draw + AIM_HOLD;
   if (def.aimed) return AIM_HOLD;

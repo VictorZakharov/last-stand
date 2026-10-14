@@ -447,6 +447,63 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  death: {
+    help: 'each skill\'s kills as the player sees them fall: foes stood dazed where it strikes and cast at twice, each '
+      + 'a hair from death and then holding just under what the first cast dealt it, every body followed as drawn '
+      + 'until it has dissolved (how hard it was thrown and which way, how far it flew and how high, when it lay '
+      + 'still); a body under the floor, in a prop or past the wall, posed off its points, gone back at the hero or '
+      + 'against a swing, a storm\'s kill not going round it, the bodies killed with little to spare thrown as hard '
+      + 'and a shader compiled meanwhile are problems: tools/lab/out/death (--class warrior)',
+    options: {
+      skills: {
+        kind: 'list',
+        usage: 'a,b',
+        help: 'the skills, by key, behaviour or name (every one of the hero\'s that deals damage by default)',
+      },
+      pictures: {
+        kind: 'switch',
+        help: 'picture each skill\'s bodies as they fall and lie (=false: the numbers alone)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant faults the checks must catch: a body put under the floor for a frame, one thrown back at the '
+          + 'hero, one struck off its middle turned the other way',
+      },
+      trace: {
+        kind: 'switch',
+        help: 'list each frame of each body each skill throws hard: each point\'s height over the floor less its size, '
+          + 'how far its drawn pose is off it and its point\'s own height (cm)',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  crowd: {
+    help: 'a crowd of foes killed at once and what the frame costs as their bodies fall: the crowd timed standing and '
+      + 'then every frame until its bodies are gone, by the browser\'s own clock with the game drawn, the bodies\' '
+      + 'part apart, at each CPU slowdown (as a low-end device\'s) and frame rate; the bodies\' part past its budget '
+      + 'with the CPU slowest at 60 a second, or a canary unseen, are problems (--class warrior)',
+    options: {
+      count: { kind: 'number', usage: 'n', help: 'how many foes (by default the most a wave keeps alive, 38)' },
+      throttles: {
+        kind: 'list',
+        usage: 'a,b',
+        help: 'the CPU\'s slowdowns, a round each (1,4,6 by default: as it is, a mid-range phone\'s, a low-end one\'s)',
+      },
+      rates: { kind: 'list', usage: 'a,b', help: 'the frame rates, a round each at every slowdown (60,30 by default)' },
+      skill: {
+        kind: 'text',
+        usage: 'name',
+        help: 'the crowd killed by a cast of this skill (its key, behaviour or name), not by a blow each',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant a cost the measure must see: the first round again, each body made 0.1 ms slower a frame',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   gear: {
     help: 'full sets rolled for every class as its loot rolls them, at each rarity and item level, and what a set '
       + 'gives on average: Health (his own and gear\'s), regeneration a second, the draught\'s heal and how much it '

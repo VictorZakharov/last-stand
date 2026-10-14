@@ -21,6 +21,8 @@ import { sfx } from '../core/audio';
 import { emit } from '../events';
 import { angleDamp, damp, hitFlash, pick, rand } from '../util';
 import { applyShadowDetail, qualityLevel } from '../core/quality';
+import { Corpse } from './corpse';
+import { flingOf, type Blow, type Fling } from '../combat/fling';
 import { QUALITY } from '../data/quality';
 import type { DamageType, EnemyDef, Model, XZ } from '../types';
 import type { Player } from './player';
@@ -62,6 +64,10 @@ export interface DamageInfo {
   freeze?: number;
   /** the player whose hit it is (the kill, and the loot, go to them) */
   by?: Player;
+  /** how the blow drives what it kills (combat/fling.ts) */
+  blow?: Blow;
+  /** the throw a kill gives, worked out already (a co-op guest's kill, as its game threw the body) */
+  fling?: Fling;
 }
 
 /** A co-op guest's copy: where the host's reports have it at the moment shown (net/timeline), the way it goes and faces. */
@@ -136,6 +142,9 @@ export class Enemy {
   readonly onDazed: (() => void)[] = [];
   /** run when it dies (a slam's telegraph going with it) */
   readonly onDeath: (() => void)[] = [];
+  /** how its kill threw it, and its body from then (entities/corpse.ts) */
+  fling: Fling | null = null;
+  corpse: Corpse | null = null;
 
   readonly model: Model;
   /** the head turning to its target (models/ik.ts) */
@@ -393,12 +402,14 @@ export class Enemy {
 
   takeDamage(amount: number, info: DamageInfo = {}): number {
     if (!this.alive) return 0;
+    const before = this.life;
     if (!this.meter) this.life -= amount;
     hitFlash(this, G.time);
     if (info.by) this.killer = info.by;
     if (info.chill) this.chill = Math.max(this.chill, info.chill);
     if (info.freeze) this.frozen = Math.max(this.frozen, info.freeze * (1 - (this.def.freezeResist || 0)));
-    if (info.knock && info.from) {
+    // (a killing blow throws the body by its fling alone: its knock on top threw a charge's kills twice as far)
+    if (info.knock && info.from && (this.life > 0 || this.meter)) {
       const k = info.knock * (1 - (this.def.knockbackResist || 0));
       const dx = this.pos.x - info.from.x, dz = this.pos.z - info.from.z, d = Math.hypot(dx, dz) || 1;
       this.knock.x += (dx / d) * k; this.knock.z += (dz / d) * k;
@@ -406,11 +417,14 @@ export class Enemy {
     if (this.meter) {
       this.meter.record(amount);
       debris({ x: this.pos.x, y: this.height * 0.6, z: this.pos.z }, { count: 3, color: 0xc9a54e, speed: 3, size: 0.07, life: 0.7 });
-    } else if (this.life <= 0) this.die();
+    } else if (this.life <= 0) {
+      this.die(info.fling ?? flingOf(this, amount - before, info.type ?? 'physical', this.frozen > 0, info.from ?? info.by?.pos, info.blow));
+    }
     return amount;
   }
 
-  die(): void {
+  /** Killed: its body thrown by `fling` (a co-op guest's copy told of a kill elsewhere has none: it drops). */
+  die(fling: Fling = flingOf(this, 0, 'physical', this.frozen > 0)): void {
     this.alive = false;
     this.life = 0;
     this.deadT = 0;
@@ -425,27 +439,19 @@ export class Enemy {
     smokePuff(this.pos, { count: this.boss ? 20 : 5, size: this.radius * 1.5, sizeEnd: this.radius * 3 });
     if (this.boss) flash({ color: this.def.accent ?? 0xb070ff, intensity: 80, distance: 20, life: 1.2, pos: center });
     sfx.enemyDie();
-    this.model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = false; });
+    this.fling = fling;
+    this.corpse = new Corpse(this, fling);
     emit('enemyKilled', this);
   }
 
+  /** Its body falling, lying and dissolving (entities/corpse.ts); false once it's gone. */
   updateDeath(dt: number): boolean {
     this.deadT += dt;
-    this.animate(dt, G.time, 0);
-    const k = Math.max(0, (this.deadT - 0.5) / 1.1);
-    this.model.kit.u.uDissolve.value = Math.min(1, k);
-    this.model.kit.u.uHit.value = 0;
-    if (this.auraMat) this.auraMat.opacity = Math.max(0, 0.6 - this.deadT);
-    if (k > 0 && k < 1 && Math.random() < 0.5) {
-      particles.glow.spawn({
-        x: this.pos.x + rand(-0.4, 0.4) * this.radius * 2, y: rand(0.1, this.height * 0.4), z: this.pos.z + rand(-0.4, 0.4) * this.radius * 2,
-        vy: rand(0.5, 1.5), life: 0.8, size: 0.15, sizeEnd: 0, color: col(this.model.kit.u.uEdge.value.getHex(), 1.2),
-      });
-    }
-    return k < 1;
+    return this.corpse!.update(dt);
   }
 
   dispose(): void {
+    this.corpse?.dispose();
     removeLabel(this.bar);
     this.bar = null;
     this.meter?.dispose();

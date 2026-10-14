@@ -2,6 +2,7 @@
 // misspelt one or a bad value stops it before a build or a browser.
 import { SCENARIOS } from './scenarios.mjs';
 import { VARIANTS } from './variants.mjs';
+import { LISTED_MS, STALL_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
 const SWITCHES = new Set(['headed', 'links', 'help']);
@@ -11,6 +12,7 @@ const HELP = {
   url: ['a,b', 'the game at these URLs (production, a PR preview), each in turn; this tree built and served if none'],
   scenario: ['name', `what the player does: ${Object.keys(SCENARIOS).join(', ')} (fight by default)`],
   seconds: ['n', 'how long the scenario plays (45 by default)'],
+  listed: ['ms', 'each stall this long or longer listed with what was busy through it (300 by default)'],
   variants: ['a,b', `changes tried on the page, each a measure of its own: ${Object.keys(VARIANTS).join(', ')} (base)`],
   headed: ['', 'a Chrome window on the screen, as a player has it (headless by default)'],
   links: ['', 'every Skia program built: when, how long, the tasks it was built in, the page\'s changes just before'],
@@ -55,6 +57,7 @@ export function readOptions(argv) {
     urls: written.url ? written.url.split(',').filter(Boolean) : [],
     scenario: written.scenario ?? 'fight',
     seconds: Number(written.seconds ?? 45),
+    listed: Number(written.listed ?? LISTED_MS),
     variants: (written.variants ?? 'base').split(','),
     headed: written.headed === true,
     links: written.links === true,
@@ -66,5 +69,6 @@ export function readOptions(argv) {
   const unknown = options.variants.find((variant) => !VARIANTS[variant]);
   if (unknown !== undefined) throw new Error(`stalls: no variant ${unknown} (${Object.keys(VARIANTS).join(', ')})`);
   if (!(options.seconds > 0)) throw new Error('stalls: --seconds must be a number over 0');
+  if (!(options.listed >= STALL_MS)) throw new Error(`stalls: --listed must be a number of ms, ${STALL_MS} or more`);
   return options;
 }

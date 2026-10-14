@@ -54,7 +54,7 @@ export function measureText(measure, { links = false } = {}) {
   ];
   if (links) lines.push(...linkLines(findings.built));
   if (!findings.clockFound) lines.push('  (the page\'s mark is missing from the trace: stalls and links not matched)');
-  if (findings.stalls.length === 0) lines.push(`  no stall of ${LISTED_MS} ms or more`);
+  if (findings.stalls.length === 0) lines.push(`  no stall of ${findings.listedMs ?? LISTED_MS} ms or more`);
   for (const stall of findings.stalls) lines.push(...stallLines(stall));
   return lines.join('\n');
 }

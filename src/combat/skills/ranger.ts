@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { G } from '../../state';
 import { spawnProjectile, type Projectile } from '../projectiles';
 import { hitEnemy } from '../damage';
+import type { Blow } from '../fling';
 import { addEffect } from '../../fx/effects';
 import { nearGlow } from '../../core/materials';
 import { burst, debris, particles, col } from '../../fx/particles';
@@ -84,8 +85,19 @@ export function intoProp(o: Obstacle, at: THREE.Vector3, vel: THREE.Vector3): bo
 
 /** An arrow into a foe, struck at `at` going `vel`: it lodges in the body where it meets it, riding it until the body
  *  dissolves; if the line misses the body's surface (the foe's circle is rounder than it), aimed in at its middle. */
+/** An arrow's blow on what it kills: carried on along its flight, rising or falling as it flew (one coming down from
+ *  high hardly throws it at all: it drops where it stood), where it struck. */
+export function arrowBlow(e: Enemy, at: THREE.Vector3, vel: THREE.Vector3, force: number): Blow {
+  const flat = Math.hypot(vel.x, vel.z) || 1e-3;
+  return {
+    dir: { x: vel.x, z: vel.z }, lift: clamp(vel.y / flat, -0.8, 0.4) + 0.12, force: force * Math.max(0.25, flat / (vel.length() || 1)),
+    at: clamp((at.y - e.obj.position.y) / e.height, 0, 1), on: { x: at.x, z: at.z },
+  };
+}
+
 export function intoFoe(e: Enemy, at: THREE.Vector3, vel: THREE.Vector3): void {
-  const dir = _d.copy(vel).normalize(), gone = () => !e.obj.parent || (!e.alive && e.deadT > 0.45);
+  // (it rides the body as it falls, until the body dissolves)
+  const dir = _d.copy(vel).normalize(), gone = () => !e.obj.parent || (!e.alive && e.model.kit.u.uDissolve.value > 0.25);
   if (stickIn(e.obj, _e.copy(at).addScaledVector(dir, -2), dir, gone)) return;
   const y = clamp(at.y, e.obj.position.y + e.height * 0.2, e.obj.position.y + e.height * 0.85);
   _v.set(e.pos.x - at.x, 0, e.pos.z - at.z);
@@ -259,7 +271,7 @@ export const bowShot: InstantSkill = {
         onHit(enemy, proj) {
           intoFoe(enemy as Enemy, proj.pos, proj.vel);
           hitEnemy(enemy as Enemy, damage, { by: player, tags: def.tags, type: 'physical', knock,
-            from: { x: proj.pos.x - proj.vel.x, z: proj.pos.z - proj.vel.z } });
+            from: { x: proj.pos.x - proj.vel.x, z: proj.pos.z - proj.vel.z }, blow: arrowBlow(enemy as Enemy, proj.pos, proj.vel, 0.9) });
           burst(proj.pos, { count: 6, color: 0xd3bf8d, speed: 2, life: 0.2, size: 0.07 });
           sfx.boltHit();
         },
@@ -295,7 +307,7 @@ export const piercingShot: InstantSkill = {
       onHit(enemy, proj) {
         const share = def.falloff[Math.min(through++, def.falloff.length - 1)];
         hitEnemy(enemy as Enemy, damage * share, { by: player, tags: def.tags, type: 'physical', knock: knock * share,
-          from: { x: proj.pos.x - proj.vel.x, z: proj.pos.z - proj.vel.z } });
+          from: { x: proj.pos.x - proj.vel.x, z: proj.pos.z - proj.vel.z }, blow: arrowBlow(enemy as Enemy, proj.pos, proj.vel, full ? 1.3 : 1) });
         burst(proj.pos, { count: 8, color: 0xd3bf8d, speed: 2.4, life: 0.22, size: 0.07 });
         debris(proj.pos, { count: 3, color: 0x6a4a2a, speed: 2, size: 0.05, life: 0.5 });
         sfx.boltHit();

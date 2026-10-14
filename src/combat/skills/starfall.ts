@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { additive, nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
+import { blastCorpses } from '../../entities/corpse';
 import { addEffect, shockwave, decal, glyphMarker, lightPillar, crackDecal, crystalBurst } from '../../fx/effects';
 import { burst, particles, col, smokePuff, debris } from '../../fx/particles';
 import { flash } from '../../fx/lights';
@@ -34,7 +35,7 @@ const _up = new THREE.Vector3(0, 1, 0);
 const getMeteorMat = () => meteorMat ??= new THREE.MeshStandardMaterial({ color: 0x0b2a1c, emissive: new THREE.Color(COLOR), emissiveIntensity: 4, roughness: 0.2, flatShading: true });
 const streakMaterial = () => nearGlow(new THREE.MeshBasicMaterial({ color: new THREE.Color(COLOR).multiplyScalar(2.2), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8 }));
 
-function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: number): void {
+function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: number, blasted: Set<object>): void {
   const streakMat = streakMaterial();
   const meteor = new THREE.Mesh(meteorGeo, getMeteorMat());
   const streak = new THREE.Mesh(streakGeo, streakMat);
@@ -67,14 +68,15 @@ function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: num
         vx: -dir.x * 3 + rand(-0.6, 0.6), vy: -dir.y * 3 + rand(-0.6, 0.6), vz: -dir.z * 3 + rand(-0.6, 0.6),
         life: 0.45, size: rand(0.12, 0.3), sizeEnd: 0.02, color: col(i % 2 ? COLOR : CORE, 2.4), colorEnd: col(0x1040ff, 0.4), drag: 2,
       });
-      if (k >= 1) { landed = true; marker.cancel(); impact(player, def, landing); }
+      if (k >= 1) { landed = true; marker.cancel(); impact(player, def, landing, blasted); }
       return true;
     },
     dispose() { G.scene.remove(group); streakMat.dispose(); },
   });
 }
 
-function impact(player: Player, def: Def, p: THREE.Vector3): void {
+/** A crystal's impact at `p`; `blasted`, the bodies its cast's crystals have thrown already, thrown no more. */
+function impact(player: Player, def: Def, p: THREE.Vector3, blasted: Set<object>): void {
   const at = new THREE.Vector3(p.x, p.y + 0.3, p.z);
   // a slim pillar: a wide pale one blooms into a haze over the whole impact
   lightPillar(p, { color: CORE, intensity: 1.8, radius: 0.25, height: 7, life: 0.3 });
@@ -107,9 +109,14 @@ function impact(player: Player, def: Def, p: THREE.Vector3): void {
     if (d < def.radius) {
       // a direct hit takes full damage, easing down to the edge's share (smoothstep: no kinks)
       const x = Math.max(0, d) / def.radius, k = 1 - (1 - def.edge) * x * x * (3 - 2 * x);
-      hitEnemy(e, def.damage * k, { by: player, tags: def.tags, type: 'arcane', chill: def.chill, knock: 4 * k, from: p });
+      // (struck from above: what it kills is thrown out and high)
+      hitEnemy(e, def.damage * k, { by: player, tags: def.tags, type: 'arcane', chill: def.chill, knock: 4 * k, from: p, blow: { lift: 0.7 } });
+      if (e.corpse) blasted.add(e.corpse);
     }
   }
+  // (the bodies lying round thrown up, each once a cast: its crystals land one after another, and thrown by each, a
+  // body flew 17 m)
+  blastCorpses(p, def.radius * 1.2, 6, { lift: 0.9, once: blasted });
 }
 
 /** The point `p` kept inside the arena as far as its crystals may land (`R` in from its edge), in `out`. */
@@ -173,11 +180,12 @@ const skill: InstantSkill = {
   cast(player, rawDef, target) {
     const def = rawDef as Def;
     sfx.starfallCall();
+    const blasted = new Set<object>();
     for (let i = 0; i < def.shards; i++) {
       const a = Math.random() * Math.PI * 2, r = i === 0 ? 0 : rand(0.6, def.scatter);
       const land = inArena({ x: target.x + Math.cos(a) * r, z: target.z + Math.sin(a) * r }, new THREE.Vector3());
       land.y = groundHeight(land.x, land.z);
-      dropMeteor(player, def, land, i * 0.14);
+      dropMeteor(player, def, land, i * 0.14, blasted);
     }
   },
 };

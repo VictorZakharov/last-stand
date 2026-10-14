@@ -405,7 +405,8 @@ export class Player {
       const skill = this.skillAt(key);
       if (!skill) continue;
       if (pressed && busy) this.queued = skill.def.draw && !skill.impl.channel ? { skill, key } : null;
-      if (!isDown(key)) continue;
+      // (a tap up again within the frame still casts: read only while held, a 60 ms tap was lost at 10 fps)
+      if (!isDown(key) && busy) continue;
       if (skill.impl.channel) { if (!this.channel && !this.casting) this.startChannel(skill, key); }
       else if (skill.def.aimed && !input.touchMode) { if (this.aiming?.key !== key) this.startAim(skill, key); }
       else this.tryCast(skill, key);

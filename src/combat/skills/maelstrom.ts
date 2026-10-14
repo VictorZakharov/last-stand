@@ -9,6 +9,10 @@ import { flash, release } from '../../fx/lights';
 import { sfx } from '../../core/audio';
 import type { InstantSkill, Needs } from './types';
 import { rand } from '../../util';
+import { addField } from '../../entities/corpse';
+import { GRAVITY, type Field } from '../../entities/ragdoll';
+import { groundHeight } from '../../world/ground';
+import { swingWay } from '../fling';
 
 const FIRE = 0xff8a3c, LASH = 0xffc070;
 /** its light's peak, coming and going with its fade (at full from the first frame, it lit the scene at once), and its
@@ -20,6 +24,30 @@ const LIGHT = 16, LIGHT_Y = 3.8;
 const TICK = 0.25, LASH_EVERY = 0.7, LASHED = 2;
 /** it rises out of the ground and sinks back into it over these (s) */
 const RISE = 0.35, SINK = 0.45;
+/** the fallen it whirls round it as its ribbons turn (from +z towards +x): this fast (m/s), drawn in to a ring this
+ *  share of its radius, held up its funnel this high over the floor (m) and higher nearer its middle, gripped this
+ *  hard (/s) with this much of their weight borne, out to this share of its radius. When it sinks they fly off. */
+const WHIRL = 6.5, RING = 0.55, LIFT = 1.1, LIFT_MID = 1.6, GRIP = 3, BEAR = 0.92, REACH = 1.5;
+
+/** The whirl of a storm at `pos` going `vel`, as strong as `strength` says (its fade), on the fallen. */
+function whirl(pos: THREE.Vector3, vel: THREE.Vector3, radius: number, strength: () => number): Field {
+  return {
+    accel(p, v, out) {
+      const k = strength(), dx = p.x - pos.x, dz = p.z - pos.z, d = Math.hypot(dx, dz), reach = radius * REACH;
+      if (k <= 0.01 || d > reach) return false;
+      const ox = d > 1e-3 ? dx / d : 1, oz = d > 1e-3 ? dz / d : 0;
+      // round it (and with it as it goes), drawn to its ring, the turn's own pull inwards given as it goes round
+      const inward = (d - radius * RING) * 2.5, round = v.x * oz - v.z * ox;
+      const wantX = vel.x + oz * WHIRL - ox * inward, wantZ = vel.z - ox * WHIRL - oz * inward;
+      const height = groundHeight(pos.x, pos.z) + LIFT + LIFT_MID * (1 - d / reach);
+      const centre = (round * round) / Math.max(0.5, d);
+      out.x += ((wantX - v.x) * GRIP - ox * centre) * k;
+      out.z += ((wantZ - v.z) * GRIP - oz * centre) * k;
+      out.y += (GRAVITY * BEAR + ((height - p.y) * 2.5 - v.y) * GRIP) * k;
+      return true;
+    },
+  };
+}
 
 const skill: InstantSkill = {
   anim: 'cast',
@@ -35,7 +63,9 @@ const skill: InstantSkill = {
     sfx.maelstrom();
     storm.burst(pos.x, pos.z);
 
-    let t = 0, tick = 0, lash = LASH_EVERY;
+    let t = 0, tick = 0, lash = LASH_EVERY, strength = 0;
+    const vel = dir.clone().multiplyScalar(def.speed);
+    const calm = addField(whirl(pos, vel, def.radius, () => strength));
     addEffect({
       update(dt) {
         t += dt;
@@ -47,6 +77,7 @@ const skill: InstantSkill = {
         if (r > R) { pos.x *= R / r; pos.z *= R / r; }
         storm.update(dt, pos.x, pos.z, Math.max(0.15, grow), fade);
         light.peak = LIGHT * fade;
+        strength = fade;
 
         // pull
         for (const e of G.enemies) {
@@ -65,7 +96,11 @@ const skill: InstantSkill = {
           tick -= TICK;
           const inside = G.enemies.filter((e) => e.alive && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < def.radius + e.radius);
           hurtPropsIn(player, pos.x, pos.z, def.radius, PROP_DAMAGE.zone * TICK);
-          for (const e of inside) hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'lightning', silent: true });
+          // (what it kills burns, and goes round with it)
+          for (const e of inside) {
+            const blow = { dir: swingWay(pos, e.pos, 1, 1, -0.3), lift: 0.6, style: 'burn' as const };
+            hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'lightning', silent: true, blow });
+          }
           if (inside.length && lash >= LASH_EVERY) {
             lash = 0;
             const ground = storm.group.position.y;
@@ -80,6 +115,7 @@ const skill: InstantSkill = {
         return t < def.duration;
       },
       dispose() {
+        calm();
         storm.dispose(G.scene);
         release(light);
       },

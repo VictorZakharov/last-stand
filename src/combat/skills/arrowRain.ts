@@ -19,7 +19,7 @@ import { sfx } from '../../core/audio';
 import { groundHeight } from '../../world/arena';
 import { arrowGeometry, ARROW } from '../../entities/models/bow';
 import { clamp, rand, smooth } from '../../util';
-import { arrowMat, arrowMesh, intoGround, intoProp, intoFoe, FWD, streakGeo, streakMat } from './ranger';
+import { arrowBlow, arrowMat, arrowMesh, intoGround, intoProp, intoFoe, FWD, streakGeo, streakMat } from './ranger';
 import type { Obstacle } from '../../types';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
@@ -181,7 +181,7 @@ const skill: ChannelSkill<RainState> = {
             // (its speed as it comes down)
             const vel = _d.copy(f.dir).multiplyScalar(FALL_V0 + FALL_A * f.t);
             if (hit) {
-              hitEnemy(hit, def.damage, { by: player, tags: def.tags, type: 'physical', from: { x: f.from.x, z: f.from.z } });
+              hitEnemy(hit, def.damage, { by: player, tags: def.tags, type: 'physical', from: { x: f.from.x, z: f.from.z }, blow: arrowBlow(hit, _a, vel, 0.7) });
               intoFoe(hit, _a, vel);
               burst(_a, { count: 6, color: 0xd3bf8d, speed: 2, life: 0.2, size: 0.07 });
               sfx.boltHit();

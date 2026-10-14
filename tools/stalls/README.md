@@ -13,6 +13,7 @@ npm run stalls -- --url https://victorzakharov.github.io/last-stand/pr-preview/p
 npm run stalls -- --headed --links --seconds 30  # a window on the screen, every program built listed
 npm run stalls -- --variants base,cpuCanvas      # the page as it is, then every 2D canvas drawn on the CPU
 npm run stalls -- --scenario lobby               # standing, then walking round the lobby
+npm run stalls -- --scenario storm --listed 120  # the mage's Maelstrom cast into the foes, every stall of 120 ms+
 npm run stalls -- --help
 npm run stalls:test                              # the tool's own unit tests
 ```
@@ -29,11 +30,15 @@ The report is printed and written to `tools/stalls/out/report.txt`.
 - **The page:** the lab's `noCapture` and `freshStorage` (`tools/lab/node/browser.mjs`), so it never takes the pointer
   and starts as a first boot. The forest and the High preset are set by cookie, and a `--variants` change is applied
   before the page's scripts.
-- **The scenario** is played with the page's own controls: real key presses, mouse moves and clicks, as a production
-  build has no dev hooks.
+- **The scenario** is played with the page's own controls: real key presses (each held 90 ms, as a finger does), mouse
+  moves and clicks, as a production build has no dev hooks. Each ends with the hero's kills and damage, read off the
+  scores held up on Tab, and a picture of the screen (`out/end-N.png`): a scenario that fought nothing measured
+  nothing.
   - `fight`: the warrior through a wave and its choice into the next. Steel Tempest is held with the mouse circling
     and the left button down, now and then another skill, and Continue after a few seconds.
   - `lobby`: standing, then walking round the lobby.
+  - `storm`: the mage in a run, walking away from the foes a side of a square at a time and casting Maelstrom back
+    at those following him in a line, every other side: its storm draws them in and whirls what it kills.
 - **Recorded in the page:** every animation frame's interval, and every change to the page's HTML (a
   `MutationObserver`: what changed and on which element). The page marks the trace (`console.timeStamp`) as its
   clock starts, which puts both on one clock.
@@ -47,7 +52,7 @@ For each measure:
 - **Frames:** how many, their median, how many took over 100 ms and how long those took in all, and the worst five.
 - **Programs:** the Skia programs linked, how long in all, and the longest. With `--links`, every one: when, how long,
   the innermost tasks it was built in, and the page's changes in the 150 ms before it.
-- **Each stall of 300 ms or more:**
+- **Each stall of 300 ms or more** (`--listed` sets it, down to 100):
   - the programs built in it, and the tasks each was built inside;
   - the longest tasks on any thread through it;
   - the page's changes in the 400 ms before it, by kind and element, the most frequent first.
@@ -72,6 +77,11 @@ When stalls show in one person's browser alone:
 
 **A 20 s fight** on this tree in headless Chrome 154 (RTX 4070 Ti): 38 programs linked, 455 ms in all, the longest
 27 ms. 2 frames took over 100 ms (243 and 174), and none took 300 ms or more.
+
+**A 60 s storm** (the mage's Maelstrom, after a report of lag with 7 or 8 bodies in it), on #221's tree and on
+production (no ragdolls): 14 and 21 kills, the median frame 16.7 ms on both. Each had one frame over 100 ms (167 and
+183 ms), at 0.8 s into the run: the HUD's first paint in it, 18 Skia programs built for its hotbar. After that the
+worst frame was 50 and 67 ms.
 
 ## The code
 

@@ -2,7 +2,8 @@
 // clock, each stall with the programs built in it, the tasks they were built inside, and what the page changed just
 // before it.
 
-/** a frame this long or longer is a stall (ms), and one this long is listed on its own */
+/** a frame this long or longer is a stall (ms), and one this long is listed on its own unless the command says
+ *  (`--listed`) */
 export const STALL_MS = 100;
 export const LISTED_MS = 300;
 /** the page's changes this long before a stall are listed with it (ms) */
@@ -108,7 +109,7 @@ function frameSummary(frames) {
  * The findings of one measure: `record` is the page's (`page.mjs` `stopRecording`), `events` the trace's kept events
  * and `mark` the page's mark in them.
  */
-export function analyze(record, events, mark) {
+export function analyze(record, events, mark, listedMs = LISTED_MS) {
   const markTs = markTime(events, mark);
   const names = threadNames(events);
   const tasks = events.filter((event) => event.ph === 'X');
@@ -123,7 +124,7 @@ export function analyze(record, events, mark) {
     }));
   const inRecording = links.filter((link) => link.at === null || link.at >= record.start);
   const stalls = record.frames
-    .filter((frame) => frame.ms >= LISTED_MS)
+    .filter((frame) => frame.ms >= listedMs)
     .map((frame) => {
       const from = frame.at - frame.ms;
       const built = inRecording.filter((link) => link.at !== null && link.at + link.ms >= from && link.at <= frame.at);
@@ -150,6 +151,7 @@ export function analyze(record, events, mark) {
       total: inRecording.reduce((sum, link) => sum + link.ms, 0),
       longest: Math.max(0, ...inRecording.map((link) => link.ms)),
     },
+    listedMs,
     stalls,
   };
 }

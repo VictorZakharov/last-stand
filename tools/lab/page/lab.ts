@@ -57,6 +57,8 @@ declare global {
     __labKey?: (type: KeyType, code: string) => Promise<void>;
     /** the page's `prefers-reduced-motion` as the browser emulates it (`tools/lab/node/side.mjs`) */
     __labMotion?: (reduced: boolean) => Promise<void>;
+    /** the page's CPU slowed `rate` times, as the browser emulates a slower device's (`tools/lab/node/side.mjs`) */
+    __labThrottle?: (rate: number) => Promise<void>;
   }
 }
 
@@ -262,6 +264,10 @@ export interface Tile {
 export interface CaptureOptions {
   /** the joint a close-up is framed on (the whole body by default) */
   focus?: keyof Joints;
+  /** a place in the world a close-up is framed on instead of the hero (a foe's body fallen there), from `distance` m
+   *  (its turn still the hero's facing's) */
+  at?: THREE.Vector3;
+  distance?: number;
 }
 
 const SPOT: [number, number] = [12, 22];
@@ -642,6 +648,16 @@ export class Lab {
     await window.__labMotion(reduced);
   }
 
+  /**
+   * The page's CPU slowed `rate` times (1: as it is), as the browser emulates a slower device's: what the page's work
+   * costs a low-end phone's or laptop's (DevTools' presets: 4 a mid-range phone's, 6 a low-end one's). Times read by
+   * the browser's own clock (`__labClock.realNow`) take that much longer; the lab's frames stay as long as ever.
+   */
+  async throttle(rate: number): Promise<void> {
+    if (!window.__labThrottle) throw new Error('lab: throttle: this page can\'t slow its CPU (opened by an older lab)');
+    await window.__labThrottle(rate);
+  }
+
   private async sendMouse(type: MouseType, at: PagePoint): Promise<void> {
     if (!window.__labMouse) throw new Error('lab: click: this page has no mouse (opened by an older lab)');
     const ours = (event: Event) => (event as PointerEvent).pointerType === 'mouse';
@@ -682,7 +698,7 @@ export class Lab {
   private captureOne(view: ViewName, options: CaptureOptions): Tile {
     const closeUp = CLOSE_UPS[view];
     let crop: Crop;
-    if (closeUp) crop = this.aimCloseUp(closeUp, options.focus);
+    if (closeUp) crop = this.aimCloseUp(closeUp, options);
     else if (view === 'eyes') crop = wholeFrame();
     else crop = this.aimGameView(view);
     renderer.render();
@@ -690,11 +706,12 @@ export class Lab {
   }
 
   /** the game's camera set for a close-up; the crop is the frame's middle */
-  private aimCloseUp(closeUp: CloseUp, focus?: keyof Joints): Crop {
+  private aimCloseUp(closeUp: CloseUp, options: CaptureOptions): Crop {
     const camera = G.camera;
+    const focus = options.focus;
     const target = (focus ? this.joints[focus] : this.joints.hips) as THREE.Object3D;
-    const centre = target.getWorldPosition(new THREE.Vector3());
-    const distance = focus ? JOINT_DISTANCE : BODY_DISTANCE;
+    const centre = options.at?.clone() ?? target.getWorldPosition(new THREE.Vector3());
+    const distance = options.distance ?? (focus ? JOINT_DISTANCE : BODY_DISTANCE);
     const angle = this.player.facing + closeUp.turn;
     camera.position.set(
       centre.x + Math.sin(angle) * distance,

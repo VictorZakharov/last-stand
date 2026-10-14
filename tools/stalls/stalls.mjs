@@ -2,7 +2,7 @@
 // browser traced, for the stalls the lab's Chromium never shows (Chrome on Windows holding up its GPU process, and
 // the game's canvas with it, for seconds while Skia builds a program). See tools/stalls/README.md.
 //
-// npm run stalls -- [--url a,b] [--scenario fight|lobby] [--seconds 45] [--variants base,cpuCanvas] [--headed]
+// npm run stalls -- [--url a,b] [--scenario fight|lobby|storm] [--seconds 45] [--listed 300] [--variants base,cpuCanvas] [--headed]
 //   [--links] (--help: what each does)
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -42,8 +42,13 @@ async function openGame(browser, url, variant) {
   return { page, errors };
 }
 
-/** One measure: a fresh Chrome on `url` with `variant`, the scenario played, its frames and trace analyzed. */
-async function measure(url, variant, options) {
+/** The picture of what a measure's scenario left on screen: `out/end-<n>.png`, n its place in the command's
+ *  measures (to see that it played what it meant to). */
+const endPicture = (index) => join(OUT, `end-${index + 1}.png`);
+
+/** One measure: a fresh Chrome on `url` with `variant`, the scenario played, its frames and trace analyzed, and a
+ *  picture of the screen at its end (`picture`). */
+async function measure(url, variant, options, picture) {
   const chrome = await startChrome({ outDir: join(OUT, 'profiles'), headed: options.headed });
   try {
     const { page, errors } = await openGame(chrome.browser, url, variant);
@@ -52,8 +57,10 @@ async function measure(url, variant, options) {
     const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000);
     const record = await page.evaluate(stopRecording);
     const events = await trace.stop();
+    await page.screenshot({ path: picture });
+    notes.push(`its end pictured in ${picture}`);
     if (errors.length) notes.push(`page errors: ${errors.slice(0, 3).join(' | ')}`);
-    return { name: `${url} ${variant}`, notes, findings: analyze(record, events, MARK) };
+    return { name: `${url} ${variant}`, notes, findings: analyze(record, events, MARK, options.listed) };
   } finally {
     await chrome.close();
   }
@@ -73,7 +80,7 @@ async function main() {
     for (const url of urls) {
       for (const variant of options.variants) {
         console.log(`measuring ${url} ${variant}: ${options.scenario} for ${options.seconds} s`);
-        const result = await measure(url, variant, options);
+        const result = await measure(url, variant, options, endPicture(measures.length));
         console.log(measureText(result, { links: options.links }));
         measures.push(result);
       }

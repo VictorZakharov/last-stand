@@ -1,6 +1,6 @@
 // What the page's work costs (tools/lab): every call of a method timed by the browser's own clock (the page's
 // `performance.now` is the lab's, which stands still within a frame), for a measure of a cost: the coat's drape a
-// frame, against main's.
+// frame, against main's; the fallen's bodies a frame (`crowd`).
 
 /** A method's calls timed: how many, and their time (ms) in total, at the median and at the 90th percentile. */
 export interface CallTimes {
@@ -10,8 +10,10 @@ export interface CallTimes {
   p90: number;
 }
 
-/** A timing under way: `stop` puts the method back and says what its calls took. */
+/** A timing under way: `lap` says what its calls took since the last lap (ms; a frame's, read after each frame), and
+ *  `stop` puts the method back and says what its calls took. */
 export interface Timing {
+  lap(): number;
   stop(): CallTimes;
 }
 
@@ -30,6 +32,7 @@ export function timeCalls<T extends object>(owner: T, method: keyof T & string):
   if (typeof original !== 'function') throw new Error(`lab: timing: ${method} is not a method`);
   const now = window.__labClock.realNow;
   const times: number[] = [];
+  let sinceLap = 0;
   let depth = 0;
   const timed = function (this: unknown, ...args: unknown[]): unknown {
     if (depth > 0) return original.apply(this, args);
@@ -38,12 +41,19 @@ export function timeCalls<T extends object>(owner: T, method: keyof T & string):
     try {
       return original.apply(this, args);
     } finally {
-      times.push(now() - start);
+      const took = now() - start;
+      times.push(took);
+      sinceLap += took;
       depth--;
     }
   };
   (owner as Record<string, unknown>)[method] = timed;
   return {
+    lap(): number {
+      const lapped = sinceLap;
+      sinceLap = 0;
+      return lapped;
+    },
     stop(): CallTimes {
       (owner as Record<string, unknown>)[method] = original;
       const sorted = [...times].sort((a, b) => a - b);

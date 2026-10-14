@@ -495,6 +495,25 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  death: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        skills: options.skills ?? [],
+        pictures: options.pictures !== false,
+        canary: Boolean(options.canary),
+        trace: Boolean(options.trace),
+      };
+      return side.command('death', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('death'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   held: {
     each(side, options) {
       const command = {
@@ -524,6 +543,31 @@ export const COMMANDS = {
         canary: Boolean(options.canary),
       };
       return side.command('gear', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
+  crowd: {
+    check(options) {
+      if (options.count !== undefined && !(options.count >= 1)) throw labError('crowd --count: at least 1');
+      for (const rate of options.throttles ?? []) {
+        if (!(Number(rate) >= 1)) throw labError(`crowd --throttles: ${rate} is no slowdown (1 or more)`);
+      }
+      for (const rate of options.rates ?? []) {
+        if (!(Number(rate) > 0)) throw labError(`crowd --rates: ${rate} is no frame rate`);
+      }
+    },
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        count: options.count === undefined ? undefined : Math.round(options.count),
+        throttles: options.throttles?.map(Number),
+        rates: options.rates?.map(Number),
+        skill: options.skill,
+        canary: Boolean(options.canary),
+      };
+      return side.command('crowd', command);
     },
     textOf: asText,
     problemsOf: problemsIn,
