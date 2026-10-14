@@ -3,8 +3,11 @@
 
 const TILE_WIDTH = 340;
 const TILE_HEIGHT = 560;
-/** a screen picture (`lab.screen`) is as wide as it shows at the row's height, up to this */
+/** a picture of the whole frame (`lab.screen`, the view through the eyes) is as wide as it shows at the row's height,
+ *  up to this */
 const SCREEN_TILE_WIDTH = 960;
+/** the views that are the whole frame: put in the common width, the eyes' was a strip a third of the tile high */
+const WHOLE_FRAME_VIEWS = ['screen', 'eyes'];
 const NOTES_WIDTH = 300;
 const GAP = 3;
 
@@ -24,9 +27,9 @@ function escapeHtml(text) {
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 }
 
-/** A tile's width on the sheet: a view's crop the common width, a screen picture its own at the row's height. */
+/** A tile's width on the sheet: a view's crop the common width, the whole frame its own at the row's height. */
 function tileWidth(tile) {
-  if (tile.view !== 'screen') return TILE_WIDTH;
+  if (!WHOLE_FRAME_VIEWS.includes(tile.view)) return TILE_WIDTH;
   return Math.min(SCREEN_TILE_WIDTH, Math.round(tile.width * TILE_HEIGHT / tile.height));
 }
 

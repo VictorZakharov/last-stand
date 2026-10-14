@@ -32,6 +32,7 @@ the server.
 | `form` | The run against a real runner's: cadence, joint curves, lean, arm swing |
 | `feet` | The feet against the ground, on level ground and by the dais's edges |
 | `range` | Every joint against the range a real body's joint has |
+| `eyes` | A skill as the eyes see it: the blade across the view, the blow, both hands on a two-hander |
 | `carry` | The ranger's carried bow against his body |
 | `check` | All of the above that a change to how the heroes move needs, side by side |
 

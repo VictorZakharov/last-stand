@@ -608,6 +608,30 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  eyes: {
+    help: 'a skill of the hero\'s cast through the eyes, frame by frame from the press until the arms are at rest '
+      + 'again: where the weapon\'s tip is on the screen at rest, wound up, through the blow and at its end, how '
+      + 'fast it crosses the view and where it is as the skill fires; a two-hander let go of by the other hand, or '
+      + 'seen in one hand, is a problem; with a film of the frames: tools/lab/out/eyes/<skill> (--class warrior)',
+    argument: 'skill',
+    options: {
+      times: { kind: 'number', usage: 'n', help: 'casts in a row, the key held through them (1 by default)' },
+      every: { kind: 'number', usage: 'n', help: 'a frame pictured into the film every n (2 by default)' },
+      film: { kind: 'switch', help: 'the film of the frames (=false: the numbers alone)' },
+      frames: {
+        kind: 'switch',
+        help: 'list every frame: the grip, the weapon\'s way and the other hand in the eyes\' frame, as the '
+          + 'moves through the eyes are keyed (models/warriorEyes.ts)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'the arms held as they were at the press and the other arm dropped: no blow, and a two-hander seen '
+          + 'in one hand, must be found',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   shots: {
     help: 'the hero\'s basic attack (the ranger\'s bow drawn to full) loosed at points over each biome\'s boss '
       + 'with its summons and the biome\'s foes packed round it, in each view, the crosshair turned onto each point in '

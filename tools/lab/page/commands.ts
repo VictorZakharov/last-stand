@@ -28,6 +28,7 @@ import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
+import type { EyesOptions } from './eyes';
 
 export interface SheetCommand {
   states: string[];
@@ -266,6 +267,13 @@ export async function draws(lab: Lab, command: DrawsOptions): Promise<Report> {
 export async function shots(lab: Lab, command: ShotsOptions): Promise<Report> {
   const { shots: shotsRound } = await import('./shots');
   return shotsRound(lab, command);
+}
+
+/** `lab eyes`: a skill cast through the eyes, frame by frame, with its film; a two-hander seen in one hand, or a canary
+ *  it missed, is a problem. */
+export async function eyes(lab: Lab, command: EyesOptions): Promise<Report> {
+  const { eyes: eyesRound } = await import('./eyes');
+  return eyesRound(lab, command);
 }
 
 /** `lab gear`: full sets rolled for every class at each tier, and what they give; a class out of order is a problem. */

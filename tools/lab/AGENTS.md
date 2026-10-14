@@ -17,6 +17,7 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `carry`: measures the carried bow
 - `feet`: the feet against the ground round the dais's edges and on level ground (standing at full draw, walking across, strafing drawn, running reversals: out of reach, wobbling, sliding, in a riser, the rhythm)
 - `range`: every joint against a body's ranges frame by frame (standing, walking each way, attacking, and walks that change direction while he attacks, held or tapped, or runs: each angle past its range, its worst and where, each scenario's fastest ankle and weapon tip, a two-hander let go of by the other hand, `--trace` the leg IK frame by frame as `gait --trace` lists it, each frame's joints past their ranges beside it)
+- `eyes <skill>`: a skill cast through the eyes, frame by frame (where the blade goes across the view, wound up, through the blow and where it ends, how fast, where it is as the skill fires; a two-hander let go of where it's seen, or seen in one hand; the arms' joints past their ranges; a film of the frames)
 - `coop`: two games playing together, the host's and a guest's beside it, their messages carried as a link of a high ping and jitter carries them (`--ping`, `--jitter`: how far behind and how roughly each shows the other's heroes and foes, how its timeline plays them out, whether an arrow that struck a foe on the guest's screen counted, whether a blow it dodged hurt it, a guest brought down and raised, a guest's blink as the host's screen shows it: when it hid the copy, where the copy came out, the foes it dazed on both screens; `--class mage`)
 - `stops`: the hero coming to a stop from a run as a person stops (runs let go at different points of a stride, on level ground, drawn and by the dais's edges: the steps once still, a foot put out and drawn back, steps back, a foot on another level than the body's or stepped onto one once still, `--trace`, `--only`)
 - `gait`: the walk judged as a person's (level ground and the steps, nothing drawn, drawn, tapping, changing direction often and going round in circles: each foot's time on the ground against the plan, both and neither, the steps a second and their length, hops, a foot dance's short steps, the gallops (a foot leaving within 0.3 of a stride of the other's: counted as hops, both feet within a few frames, a gallop at every set-off went unseen), the steps' width, the hips' rise and fall, a planted foot dragged, each hand's swing against its knee half second by half second, the rhythm against the walk cycle, steps back under a body that stopped, the jerks, each step's swing against its plan and why it left, every frame judged as a body's: its centre of mass with its gear against the push its motion needs from the planted soles, in the air falling as a body does, and every joint within its range, `--trace` each frame (`--span` some), a scenario held up by a prop failing it, and a film of each round its first hop)
@@ -56,7 +57,8 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
 ## Commands
 
 - `sheet`: the hero in the states the player sees (`--states stand,walk,full,cast`), pictured from the game's views
-  and close up (`--views lobby,top,third,front,left,right,back,above`; `eyes` with `--view first`; `--focus <joint>`
+  and close up (`--views lobby,top,third,front,left,right,back,above`; `eyes` with `--view first`, the whole frame
+  at the row's height; `--focus <joint>`
   frames the close-ups on a joint), with each arm's load and posture beside them. `cast` casts `--skill` (its key, its
   behaviour or its name; bound to its own key if the hero knows it but hasn't it on one) ahead of him and pictures
   it at shares of its cast (`--shares`, 0.3,0.55,0.8 by default; a channel at shares of its key's hold, `holdFor`),
@@ -199,6 +201,27 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   turned: an elbow swung round its arm turns the shoulder alone), and `--trace` (`--span a,b` for some frames) the leg IK frame by
   frame as the gait's trace does (`page/legTrace.ts`: each foot down, in the air or in a timed step `~`, dragged `d`),
   each frame's joints past their ranges after it.
+- `eyes <skill>`: a skill cast through the eyes (`page/eyes.ts`, `--class warrior`; `--gear` and `--weapon` hold the
+  weapons as `range` does), its key held as the player would through `--times` casts in a row (a basic attack's
+  chained swings), stepped frame by frame from the press until the arms are at rest again; a cast, a dash (Bull Rush,
+  Twin Fangs' lunge) or a channel (Steel Tempest) all count as what it follows. Each frame it places the weapon's
+  blade (its middle, from the grip to the tip: a long blade's tip is out of the frame's top as often as not), the grip
+  and the other hand's fist on the screen, and says per cast where the blade began, where it was wound up to, the blow
+  (the frames round the fastest that move at least 0.4 of it, measured only while the blade is in or near the frame:
+  passing close beside the eyes out of the view it swept 90 degrees of their view in a frame, and that read as the
+  blow), where the blade was as the skill fired against the blow, and where it ended, how many frames it was out of
+  the frame; the shoulders at rest in the eyes' frame and an arm's reach (where a pose through the eyes can put the
+  hands), and the arms' joints past their ranges, each one's worst and on how many frames (information: through the
+  eyes the arms are placed where they're seen, not fitted to a body's ranges). Problems: a two-hander let go of by the
+  other hand where that hand is in the frame (one let go of below the frame is listed, unseen), and a two-hander seen
+  in one hand, the other out of the frame while the weapon's hand is in it, for longer than 200 ms (the frame is too
+  narrow to hold both fists a quarter of a metre apart up the handle through a wind-up beside the head, where a
+  person's own eyes lose them too). `--film=false` takes no film (it's `tools/lab/out/eyes/<skill>/`, every `--every`
+  frames, 2 by default), `--frames` lists every frame: the grip, the weapon's way and the other hand in the camera's
+  space as the moves through the eyes are keyed (`models/warriorEyes.ts`), held or let go and why, and its joints
+  past their ranges. `--canary` freezes the trunk and the arms as they were at the press and turns the other arm down
+  out of the frame: there must be no blow, and a two-hander must be seen in one hand (frozen alone, the arms swung
+  with the trunk's turn and read as a blow).
 - `carry`: the ranger's carried bow against his body through a carry's round (standing, walking, a draw and its shot,
   waiting with the next arrow, putting it back). `--canary` plants faults it must catch; `--frames` lists every frame
   with a clip, what crossed what and how deep.

@@ -335,7 +335,16 @@ const freshLetGo = (): LetGo => ({ seen: false, frames: 0, times: 0, held: true,
 
 /** How far a lower grip let go of is from being held: the worst of its reasons, each against what the hold allows
  *  (models/warrior.ts: 7 cm short, its joints 15 degrees past, the arm 3 cm into the body). */
-const farFromHeld = (grip: LowerGrip) => Math.max(grip.short / 0.07, grip.past / 15, grip.into / 0.03);
+export const farFromHeld = (grip: LowerGrip) => Math.max(grip.short / 0.07, grip.past / 15, grip.into / 0.03);
+
+/** Why a lower grip was let go of, as words: how far past the arm's reach, its joints past their ranges, the arm into
+ *  the body. */
+export function whyLetGo(grip: LowerGrip): string {
+  const reach = grip.short > 0 ? `${(grip.short * 100).toFixed(0)} cm past the arm's reach` : "within the arm's reach";
+  const why = [`the lower grip ${reach}`, `its joints ${grip.past.toFixed(0)}° past`,
+    `the arm ${(grip.into * 100).toFixed(1)} cm into the body`];
+  return why.join(', ');
+}
 
 /** The moment of the move the hero is in, as words after a frame's number: " (0.70 of Rending Cleave)", or none. */
 function momentIn(lab: Lab): string {
@@ -367,11 +376,8 @@ function describeLetGo(letGo: LetGo): string {
   const free = letGo.free ? ` but on the ${letGo.free} frames it was on the shoulder or the flask in hand` : '';
   if (!letGo.worst) return `the two-hander held in both hands throughout${free}`;
   const { frame, grip } = letGo.worst;
-  const reach = grip.short > 0 ? `${(grip.short * 100).toFixed(0)} cm past the arm's reach` : "within the arm's reach";
-  const why = [`the lower grip ${reach}`, `its joints ${grip.past.toFixed(0)}° past`,
-    `the arm ${(grip.into * 100).toFixed(1)} cm into the body`];
   return `the two-hander let go of by the other hand on ${letGo.frames} frames, ${letGo.times} times (from frames `
-    + `${letGo.starts.join(', ')}); the worst, frame ${frame}: ${why.join(', ')}${free ? `; held${free}` : ''}`;
+    + `${letGo.starts.join(', ')}); the worst, frame ${frame}: ${whyLetGo(grip)}${free ? `; held${free}` : ''}`;
 }
 
 /** The scenario's trace of the leg IK, when the options ask for one. */

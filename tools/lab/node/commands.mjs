@@ -642,6 +642,31 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  eyes: {
+    check(options) {
+      if (options.times !== undefined && !(options.times >= 1)) throw labError('eyes --times: at least 1');
+      if (options.every !== undefined && !(options.every >= 1)) throw labError('eyes --every: at least 1');
+    },
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        skill: options._[0],
+        times: Math.round(options.times ?? 1),
+        every: Math.round(options.every ?? 2),
+        film: options.film !== false,
+        frames: Boolean(options.frames),
+        canary: Boolean(options.canary),
+      };
+      return side.command('eyes', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor(join('eyes', options._[0])));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   shots: {
     check(options) {
       if (options.shots !== undefined && !(options.shots >= 1)) throw labError('shots --shots: at least 1');
