@@ -7,7 +7,7 @@ import { slashMesh } from './slash';
 import { sparks } from './cleave';
 import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
 import type { ChannelSkill, Needs } from './types';
-import { swingWay } from '../fling';
+import { swingOn, swingWay } from '../fling';
 import { blastCorpses } from '../../entities/corpse';
 
 type Def = Needs<'damage' | 'radius'>;
@@ -61,7 +61,7 @@ const skill: ChannelSkill<TempestState> = {
     blastCorpses(p, def.radius, 3.5, { swirl: SWIRL, lift: 0.35 });
     for (const e of G.enemies) {
       if (!e.alive || Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > def.radius + e.radius) continue;
-      hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'physical', knock: 0.8, from: p, blow: { dir: swingWay(p, e.pos, 1, SWIRL, 1), lift: 0.3 } });
+      hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'physical', knock: 0.8, from: p, blow: { dir: swingWay(p, e.pos, 1, SWIRL, 1), lift: 0.3, on: swingOn(p, e.pos, 1, e.radius) } });
       sparks(e.pos.x, e.height * 0.55, e.pos.z, 0xffe0b0, 4);
       hits++;
     }

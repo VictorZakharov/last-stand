@@ -301,7 +301,10 @@ const skill: ChannelSkill<LanceState> = {
         const proj = ex * _dir.x + ez * _dir.z;
         if (proj < 0 || proj > len + e.radius) continue;
         if (Math.abs(ex * _dir.z - ez * _dir.x) < w * 0.5 + e.radius) {
-          hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'arcane', knock: 0.6, from: origin, blow: { dir: { x: _dir.x, z: _dir.z }, lift: 0.15 } });
+          // (the beam through it where it passes: off its middle, the body turns off the beam)
+          const on = { x: origin.x + _dir.x * proj, z: origin.z + _dir.z * proj };
+          const blow = { dir: { x: _dir.x, z: _dir.z }, lift: 0.15, on };
+          hitEnemy(e, def.damage * TICK, { by: player, tags: def.tags, type: 'arcane', knock: 0.6, from: origin, blow });
           burst(new THREE.Vector3(e.pos.x, 1.1, e.pos.z), { count: 4, color: 0x5dffa8, speed: 3, life: 0.3, size: 0.25 });
         }
       }

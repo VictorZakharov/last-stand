@@ -1,7 +1,8 @@
 // What a killing blow does to the body it kills: thrown the way the blow drove it (a sword's swing sweeps it along the
 // swing, an arrow carries it on along its flight, a blast throws it out and up), as hard as the damage past the life
 // it had left (the overkill: a foe killed with a hair to spare drops, one hit for three times its life flies), less
-// for a heavy one; and how it falls by what killed it (frozen stiff, shocked, burnt). The body is entities/corpse.ts.
+// for a heavy one; turned by where across it the blow landed (shot in the shoulder, it spins away from the shot); and
+// how it falls by what killed it (frozen stiff, shocked, burnt). The body is entities/corpse.ts.
 import { FLING } from '../data/balance';
 import type { DamageType, EnemyDef, XZ } from '../types';
 
@@ -23,14 +24,18 @@ export interface Blow {
   at?: number;
   /** how the body falls, when not by what the hit was */
   style?: FallStyle;
+  /** where across the body it struck, seen from above (a world point): off its middle (a shoulder, an arm, a blade
+   *  meeting its near side) it turns the body as it throws it; when not given, through its middle, turning it not */
+  on?: XZ;
 }
 
-/** The throw a kill gives its body: its speed (m/s), where it landed on the body and how the body falls. The killer's
- *  game works it out and co-op sends it, so every game throws the body alike. */
-export interface Fling { vx: number; vy: number; vz: number; at: number; style: FallStyle }
+/** The throw a kill gives its body: its speed (m/s), where it landed on the body (`at` up it, from the feet to the
+ *  top; `ox`, `oz` across it from its middle, m) and how the body falls. The killer's game works it out and co-op sends
+ *  it, so every game throws the body alike. */
+export interface Fling { vx: number; vy: number; vz: number; at: number; style: FallStyle; ox: number; oz: number }
 
 /** What a fling needs of the foe it throws. */
-interface Thrown { pos: XZ; maxLife: number; def: EnemyDef; facing: number }
+interface Thrown { pos: XZ; radius: number; maxLife: number; def: EnemyDef; facing: number }
 
 /**
  * The throw a kill of `foe` gives, `overkill` the damage past the life it had left: along `blow.dir` (or away from
@@ -45,10 +50,15 @@ export function flingOf(foe: Thrown, overkill: number, type: DamageType, frozen:
   const len = Math.hypot(dx, dz);
   if (len > 1e-6) { dx /= len; dz /= len; } else { dx = -Math.sin(foe.facing); dz = -Math.cos(foe.facing); }
   const lift = blow?.lift ?? FLING.lift;
+  // (where across it the blow landed, within the body)
+  let ox = blow?.on ? blow.on.x - foe.pos.x : 0, oz = blow?.on ? blow.on.z - foe.pos.z : 0;
+  const off = Math.hypot(ox, oz);
+  if (off > foe.radius) { ox *= foe.radius / off; oz *= foe.radius / off; }
   return {
     vx: dx * speed, vy: speed * lift, vz: dz * speed,
     at: blow?.at ?? FLING.at,
     style: blow?.style ?? (frozen ? 'frozen' : type === 'lightning' ? 'shock' : type === 'fire' ? 'burn' : 'plain'),
+    ox, oz,
   };
 }
 
@@ -62,12 +72,27 @@ export function swingWay(from: XZ, at: XZ, dir: number, along = 0.75, out = 0.6)
   return { x: oz * dir * along + ox * out, z: -ox * dir * along + oz * out };
 }
 
+/** Where a sweep from `from` meets a foe at `at` of `radius` (`dir` as `swingWay`'s): its near side, a little to the
+ *  side the blade comes from. Pushed there along the swing, the body cut down turns with its front carried on along the
+ *  blade's way. */
+export function swingOn(from: XZ, at: XZ, dir: number, radius: number): XZ {
+  let ox = at.x - from.x, oz = at.z - from.z;
+  const len = Math.hypot(ox, oz) || 1;
+  ox /= len; oz /= len;
+  const tx = oz * dir, tz = -ox * dir;
+  return { x: at.x - (ox * SWING_NEAR + tx * SWING_LEAD) * radius, z: at.z - (oz * SWING_NEAR + tz * SWING_LEAD) * radius };
+}
+/** a sweep meets a body this far to its near side and to the side the blade comes from (shares of its radius) */
+const SWING_NEAR = 0.6, SWING_LEAD = 0.3;
+
 /** A fling as co-op's messages carry it: its speed, where it landed and its style by number. */
-export const flingRow = (f: Fling): number[] => [r2(f.vx), r2(f.vy), r2(f.vz), r2(f.at), FALL_STYLES.indexOf(f.style)];
+export const flingRow = (f: Fling): number[] => [
+  r2(f.vx), r2(f.vy), r2(f.vz), r2(f.at), FALL_STYLES.indexOf(f.style), r2(f.ox), r2(f.oz),
+];
 /** The fling a message carried (none when it carried none). */
 export function flingFrom(row: readonly number[] | undefined): Fling | undefined {
   if (!row || row.length < 5) return undefined;
-  const [vx, vy, vz, at, style] = row;
-  return { vx, vy, vz, at, style: FALL_STYLES[style] ?? 'plain' };
+  const [vx, vy, vz, at, style, ox = 0, oz = 0] = row;
+  return { vx, vy, vz, at, style: FALL_STYLES[style] ?? 'plain', ox, oz };
 }
 const r2 = (v: number): number => Math.round(v * 100) / 100;

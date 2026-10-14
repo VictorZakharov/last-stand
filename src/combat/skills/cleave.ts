@@ -11,7 +11,7 @@ import type { InstantSkill, Needs } from './types';
 import { hurtProp, PROP_DAMAGE, type Prop } from '../../world/destructible';
 import { hurtsProps } from '../../net/role';
 import type { Player } from '../../entities/player';
-import { swingWay, type Blow } from '../fling';
+import { swingOn, swingWay, type Blow } from '../fling';
 
 type Def = Needs<'damage' | 'range' | 'arc' | 'knock' | 'color'>;
 
@@ -49,7 +49,8 @@ export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, fa
     const dx = e.pos.x - p.x, dz = e.pos.z - p.z, d = Math.hypot(dx, dz);
     if (d > def.range + e.radius) continue;
     if (d > e.radius + 0.6 && angleBetween(Math.atan2(dx, dz), facing) > def.arc / 2) continue;
-    const blow = opts.blow ?? { dir: swingWay(p, e.pos, opts.swing ?? 1), lift: opts.lift ?? 0.3 };
+    const swing = opts.swing ?? 1;
+    const blow = opts.blow ?? { dir: swingWay(p, e.pos, swing), lift: opts.lift ?? 0.3, on: swingOn(p, e.pos, swing, e.radius) };
     hitEnemy(e, def.damage, { by: player, tags: def.tags, type: opts.type ?? 'physical', knock: opts.knock, from: p, blow });
     sparks(e.pos.x, e.height * 0.55, e.pos.z, 0xffd9a0, 8);
     hits++;

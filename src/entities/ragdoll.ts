@@ -48,6 +48,10 @@ const DRAG = 0.12;
  *  between each bone's ends a second (a joint's own friction; the air alone left an arm hanging from a shoulder on a
  *  rock swinging for five seconds, and the body never lay still) */
 const LIMP = 5;
+/** a blow off a body's middle turns it about its upright: this share of the turn it would give the body held rigid
+ *  (the rest lost in its give), at most `MOST_TURN` (rad/s); and the part it struck takes this much more of its throw,
+ *  within `KICK_REACH` of where it landed (m at a man's size), so an arm shot is knocked back */
+const TWIST = 0.15, MOST_TURN = 7, KICK = 0.6, KICK_REACH = 0.3;
 /** a body is still once no point has moved faster than this (m/s) from frame to frame for this long (s) (read by the
  *  step, the joins' corrections back and forth within it counted as speed, and a body lying still never was) */
 const STILL = 0.15, STILL_FOR = 0.3;
@@ -133,8 +137,12 @@ export class Ragdoll {
   private readonly framed = new Float64Array(N * 3);
   private readonly w = new Float64Array(N);
   private readonly r = new Float64Array(N);
-  /** each point's height on the body as it fell, the feet 0 and the top 1 (where a blow lands) */
+  /** each point's height on the body as it fell, the feet 0 and the top 1 (where a blow lands), the feet's height and
+   *  the body's then (m), and the rig's size against a man's */
   readonly heights = new Float64Array(N);
+  private low = 0;
+  private tall = 1;
+  private readonly size: number;
   private readonly joins: Join[] = [];
   /** the hinges' least reach, each limb's whole length (FOLDS) */
   private readonly folds: { a: number; mid: number; b: number; min: number }[] = [];
@@ -179,6 +187,7 @@ export class Ragdoll {
   constructor(private readonly j: Joints, opts: RagdollOpts = {}) {
     j.root.updateWorldMatrix(true, true);
     const P = j.P, scale = j.hips.getWorldScale(_p).x;
+    this.size = scale;
     const size: Record<Point, number> = {
       spine: P.hipW * 0.6, thighL: P.thighR, thighR: P.thighR, kneeL: P.shinR * 1.1, kneeR: P.shinR * 1.1,
       ankleL: P.shinR * 1.2, ankleR: P.shinR * 1.2, chest: P.chestD, neck: P.headR * 0.5, head: P.headR,
@@ -222,7 +231,9 @@ export class Ragdoll {
     this.framed.set(this.p);
     let low = Infinity, high = -Infinity;
     for (let i = 0; i < N; i++) { low = Math.min(low, this.p[i * 3 + 1] - this.r[i]); high = Math.max(high, this.p[i * 3 + 1] + this.r[i]); }
-    for (let i = 0; i < N; i++) this.heights[i] = (this.p[i * 3 + 1] - low) / Math.max(0.1, high - low);
+    this.low = low;
+    this.tall = Math.max(0.1, high - low);
+    for (let i = 0; i < N; i++) this.heights[i] = (this.p[i * 3 + 1] - low) / this.tall;
   }
 
   /** The joins: the bones, the braces, the limbs' folds; frozen stiff, every point to every other. */
@@ -281,6 +292,58 @@ export class Ragdoll {
     }
   }
 
+  /**
+   * A blow's throw (`throw`'s), landing `ox`, `oz` across the body from its middle (m; both 0: through it): off its
+   * middle it turns the body about its upright (`twist`) and knocks the part it struck on (`kick`), so a body shot in
+   * the shoulder spins away from the shot.
+   */
+  strike(vx: number, vy: number, vz: number, at: number, ox: number, oz: number): void {
+    this.throw(vx, vy, vz, at);
+    if (ox === 0 && oz === 0) return;
+    this.twist(vx, vz, ox, oz);
+    this.kick(vx, vy, vz, at, ox, oz);
+  }
+
+  /** The body turned about its upright through its middle by a blow driving it at (`vx`, `vz`) m/s, landing `ox`, `oz`
+   *  from its middle: by the turn the blow gives the body held rigid (its lever across the body over the body's own
+   *  inertia about its upright), a share of it. Its momentum is kept. */
+  twist(vx: number, vz: number, ox: number, oz: number): void {
+    const p = this.p, w = this.w;
+    let mass = 0, cx = 0, cz = 0;
+    for (let i = 0; i < N; i++) {
+      mass += 1 / w[i];
+      cx += p[i * 3] / w[i];
+      cz += p[i * 3 + 2] / w[i];
+    }
+    cx /= mass;
+    cz /= mass;
+    let inertia = 0;
+    for (let i = 0; i < N; i++) inertia += ((p[i * 3] - cx) ** 2 + (p[i * 3 + 2] - cz) ** 2) / w[i];
+    // (the blow's momentum about the upright through the middle, over the body's inertia about it: its turn, rad/s)
+    const turn = (TWIST * (oz * vx - ox * vz) * mass) / Math.max(inertia, 1e-4);
+    const spin = Math.max(-MOST_TURN, Math.min(MOST_TURN, turn));
+    for (let i = 0; i < N; i++) this.push(i, spin * (p[i * 3 + 2] - cz), 0, -spin * (p[i * 3] - cx));
+  }
+
+  /** The part of the body a blow landed on (`at` up it, `ox`, `oz` across it from its middle) given `KICK` more of its
+   *  throw, the rest of the body that much less (its momentum kept). */
+  private kick(vx: number, vy: number, vz: number, at: number, ox: number, oz: number): void {
+    const p = this.p, w = this.w, reach = KICK_REACH * this.size;
+    this.middleOfHips(_a);
+    const hit = _b.set(_a.x + ox, this.low + at * this.tall, _a.z + oz);
+    const share = new Float64Array(N);
+    let mass = 0, given = 0;
+    for (let i = 0; i < N; i++) {
+      const d2 = (p[i * 3] - hit.x) ** 2 + (p[i * 3 + 1] - hit.y) ** 2 + (p[i * 3 + 2] - hit.z) ** 2;
+      share[i] = KICK * Math.exp(-d2 / (reach * reach));
+      mass += 1 / w[i];
+      given += share[i] / w[i];
+    }
+    // (what the struck part takes, the whole body gives back: as much less each, by its weight)
+    const back = given / mass;
+    for (let i = 0; i < N; i++) this.push(i, vx * (share[i] - back), vy * (share[i] - back), vz * (share[i] - back));
+  }
+
   /** The body moved on by `dt` s, under gravity and `fields`. */
   step(dt: number, fields: Iterable<Field>): void {
     if (this.asleep) {
@@ -302,7 +365,9 @@ export class Ragdoll {
       }
       if (this.lying) this.limp();
     }
-    this.stillFor = this.fastestSince(dt).speed < STILL ? this.stillFor + dt : 0;
+    // (held up by a field, it isn't lying still however slowly it moves: hovering in a storm's eye, a body slept 0.8 m
+    // up)
+    this.stillFor = this.fastestSince(dt).speed < STILL && !this.held ? this.stillFor + dt : 0;
     if (this.stillFor >= STILL_FOR) this.asleep = true;
   }
 

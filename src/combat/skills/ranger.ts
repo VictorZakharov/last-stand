@@ -91,7 +91,7 @@ export function arrowBlow(e: Enemy, at: THREE.Vector3, vel: THREE.Vector3, force
   const flat = Math.hypot(vel.x, vel.z) || 1e-3;
   return {
     dir: { x: vel.x, z: vel.z }, lift: clamp(vel.y / flat, -0.8, 0.4) + 0.12, force: force * Math.max(0.25, flat / (vel.length() || 1)),
-    at: clamp((at.y - e.obj.position.y) / e.height, 0, 1),
+    at: clamp((at.y - e.obj.position.y) / e.height, 0, 1), on: { x: at.x, z: at.z },
   };
 }
 

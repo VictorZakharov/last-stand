@@ -98,7 +98,7 @@ export class Corpse {
     if (this.ragdoll) {
       // (it keeps the way it was going, and the blow's throw)
       this.ragdoll.throw(v.x + k.x, 0, v.z + k.z, 0.5);
-      this.ragdoll.throw(fling.vx, fling.vy, fling.vz, fling.at);
+      this.ragdoll.strike(fling.vx, fling.vy, fling.vz, fling.at, fling.ox, fling.oz);
       // (its meshes leave the bounds they were measured in standing)
       e.obj.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.frustumCulled = false; });
     }
