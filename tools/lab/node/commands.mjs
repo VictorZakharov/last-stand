@@ -62,9 +62,11 @@ function castScenarios(options) {
         biome,
         view,
         facing: options.facing ?? 0,
+        at: options.at,
         foes: options.foes ?? 4,
         times: options.times.map(Number),
         pictures: options.pictures !== false,
+        what: options.what?.map(Number),
         gear: options.gear,
       });
     }
@@ -408,6 +410,10 @@ export const COMMANDS = {
     check(options) {
       const wrong = options.times.find((time) => !(Number(time) >= 0));
       if (wrong !== undefined) throw labError(`cast --times: ${wrong} is not a number of seconds`);
+      const what = options.what?.map(Number);
+      if (what && (what.length !== 3 || what.some((value) => !(value >= 0)))) {
+        throw labError(`cast --what: ${options.what.join(',')} is not a moment and a point (s,x,y)`);
+      }
     },
     async each(side, options) {
       // (a biome and view at a time, each on its own: its pictures sent back with it)

@@ -11,6 +11,9 @@ export const CELLS = 4;
 const BRIGHT = 200;
 /** the pixels read each way: every this many */
 const SAMPLE_STEP = 2;
+/** a finer grid's cells across and down the frame, about 30 pixels each on a 1920 by 1080 screen: a patch that pops
+ *  for a frame or two shows in it (page/blinks.ts) */
+export const FINE_ACROSS = 64, FINE_DOWN = 36;
 
 /** A frame's light: the whole frame's and each cell's, the cells row by row from the top left. */
 export interface FrameCells {
@@ -22,6 +25,8 @@ export interface FrameCells {
   cellLights: number[];
   /** the share of the pixels at least `BRIGHT` */
   brightShare: number;
+  /** each fine cell's mean brightness as stored (`FINE_ACROSS` by `FINE_DOWN`, row by row from the top left) */
+  fineMeans: Float32Array;
 }
 
 /** an encoded channel's light (gamma 2.2), by its stored value */
@@ -50,10 +55,13 @@ export function frameCells(): FrameCells {
   const sums = new Float64Array(cellCount);
   const lights = new Float64Array(cellCount);
   const counts = new Float64Array(cellCount);
+  const fineSums = new Float32Array(FINE_ACROSS * FINE_DOWN);
+  const fineCounts = new Float32Array(FINE_ACROSS * FINE_DOWN);
   let bright = 0;
   for (let y = 0; y < height; y += SAMPLE_STEP) {
     // (the canvas reads from its bottom row up)
     const row = Math.min(CELLS - 1, Math.floor((height - 1 - y) / height * CELLS));
+    const fineRow = Math.min(FINE_DOWN - 1, Math.floor((height - 1 - y) / height * FINE_DOWN));
     for (let x = 0; x < width; x += SAMPLE_STEP) {
       const at = (y * width + x) * 4;
       const red = pixels[at];
@@ -64,6 +72,9 @@ export function frameCells(): FrameCells {
       sums[cell] += brightness;
       lights[cell] += 0.2126 * LIGHT_OF[red] + 0.7152 * LIGHT_OF[green] + 0.0722 * LIGHT_OF[blue];
       counts[cell]++;
+      const fine = fineRow * FINE_ACROSS + Math.min(FINE_ACROSS - 1, Math.floor(x / width * FINE_ACROSS));
+      fineSums[fine] += brightness;
+      fineCounts[fine]++;
       if (brightness >= BRIGHT) bright++;
     }
   }
@@ -73,6 +84,7 @@ export function frameCells(): FrameCells {
     cellMeans: Array.from(sums, (sum, cell) => sum / counts[cell]),
     cellLights: Array.from(lights, (light, cell) => light / counts[cell]),
     brightShare: bright / sampled,
+    fineMeans: fineSums.map((sum, fine) => sum / fineCounts[fine]),
   };
 }
 
