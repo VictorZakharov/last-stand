@@ -30,14 +30,17 @@ const EMBER = 0xff7a30;
 /** a landing this hard (m/s) is heard and raises dust, at most once in this long (s) */
 const THUD_AT = 2.5, THUD_EVERY = 0.25;
 
-/** the fields moving the fallen, and the fallen */
-const fields = new Set<Field>();
+/** the fields moving the fallen (a list: each body walks it for each of its points, every step), and the fallen */
+const fields: Field[] = [];
 const corpses = new Set<Corpse>();
 
 /** A field moving the fallen while it lasts (a storm's whirl); returns what takes it away. */
 export function addField(field: Field): () => void {
-  fields.add(field);
-  return () => { fields.delete(field); };
+  fields.push(field);
+  return () => {
+    const i = fields.indexOf(field);
+    if (i >= 0) fields.splice(i, 1);
+  };
 }
 
 /** How a blast or a shove drives the fallen (`blastCorpses`). */
@@ -107,6 +110,9 @@ export class Corpse {
     if (fling.style === 'burn') u.uEdge.value.setHex(EMBER).multiplyScalar(3);
     corpses.add(this);
   }
+
+  /** whether it has begun to dissolve */
+  get fading(): boolean { return this.fadeAt >= 0; }
 
   /** The body moved on by `dt` s; false once it has dissolved. */
   update(dt: number): boolean {

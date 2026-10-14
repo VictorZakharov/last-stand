@@ -40,6 +40,7 @@ function inView(x: number, y: number, z: number, r: number): boolean {
 }
 import { nearestPlayer } from '../net/role';
 import { LookAt } from './models/ik';
+import { joinCrowd, leaveCrowd } from './models/crowd';
 
 const auraGeo = new THREE.RingGeometry(0.7, 1, 48).rotateX(-Math.PI / 2);
 
@@ -186,6 +187,7 @@ export class Enemy {
     this.obj.add(this.model.root);
     if (hero) this.model.root.scale.multiplyScalar(HERO.scale);
     applyShadowDetail(this.obj);
+    joinCrowd(this);
     if (hero || this.boss) {
       const c = this.boss ? def.accent ?? 0x9a40ff : pick(HERO.auraColors);
       this.auraMat = additive(c, 1.6, 0.8);
@@ -450,7 +452,11 @@ export class Enemy {
     return this.corpse!.update(dt);
   }
 
+  /** whether its body casts a shadow (models/crowd.ts): not as it dissolves */
+  get castsShadow(): boolean { return !this.corpse?.fading; }
+
   dispose(): void {
+    leaveCrowd(this);
     this.corpse?.dispose();
     removeLabel(this.bar);
     this.bar = null;

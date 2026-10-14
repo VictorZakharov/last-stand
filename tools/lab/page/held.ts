@@ -17,6 +17,7 @@ import { readinessOf } from '../../../src/combat/skills/readiness';
 import { outline, outlinedLook } from '../../../src/ui/overlay/outline';
 import { lateCompiles, pinPrograms } from '../../../src/core/shaders';
 import { drawFrame, type Canvas } from './light';
+import { foesAt } from './death';
 import { acrossTheStep, starfallStrikes, type HeldSkill, type Shown } from './heldArea';
 import {
   canaryCaught, describeHeld, heldProblems, holdingKey, holdThroughCooldown, meshReader, type PreviewReader,
@@ -38,6 +39,8 @@ const HOLD_FRAMES = 12;
 /** the most frames the dummy may take to rise, and a cast to end */
 const RISE_FRAMES = 300;
 const CAST_FRAMES = 120;
+/** the life the foe Quarry Mark is held over has: the cast marks it, and strikes nothing */
+const FOE_LIFE = 1000;
 /** the views Quarry Mark's outline is checked in */
 const OUTLINE_VIEWS: ViewMode[] = ['top', 'third', 'first'];
 /** a pixel the outline lit: its red risen by this much over the frame drawn without it (of white) */
@@ -169,6 +172,28 @@ async function heldReady(lab: Lab, skill: HeldSkill, view: ViewMode, options: He
   if (!cast) say('let go, it didn\'t cast');
   await lab.until(() => !G.player.casting && !G.player.dash, CAST_FRAMES, 'the cast never ended');
   return { lines, problems, moments };
+}
+
+/**
+ * Quarry Mark held over the biome's commonest foe, standing dazed, and let go: its outline must be round it as it is
+ * round the dummy. (A creature is drawn in its kind's crowd, models/crowd.ts, its own meshes on a layer of their own,
+ * which the outline draws; the dummy is drawn on its own.)
+ */
+async function heldOverFoe(lab: Lab, skill: HeldSkill, options: HeldOptions): Promise<Shown> {
+  await lab.setup({ ...options.fixture, view: 'top' });
+  const hero = G.player;
+  hero.cooldowns.clear();
+  hero.energy = hero.stats.maxEnergy;
+  const [foe] = await foesAt(lab, [hero.pos.clone().addScaledVector(cameraAhead(), AHEAD).setY(0)], [FOE_LIFE]);
+  const aim = foe.pos.clone();
+  await lab.step(HOLD_FRAMES, () => holdingKey(skill.key, aim));
+  const lines = [`  held over a ${foe.type} (top)`];
+  const problems: string[] = [];
+  const say = (problem: string) => problems.push(`${skill.name}, held over a ${foe.type}: ${problem}`);
+  outlineChecks(lab, foe, lines, say, false);
+  await lab.step(1, () => ({ aim }));
+  await lab.until(() => !G.player.casting, CAST_FRAMES, 'the cast never ended');
+  return { lines, problems, moments: [] };
 }
 
 /** The preview's look as words. */
@@ -306,6 +331,7 @@ export async function held(lab: Lab, options: HeldOptions): Promise<Report> {
     const views = skill.impl === 'quarryMark' ? OUTLINE_VIEWS : ['top' as ViewMode];
     const runs: RoundsRun[] = [
       ...views.map((view) => async () => [await heldReady(lab, skill, view, options)]),
+      ...(skill.impl === 'quarryMark' ? [async () => [await heldOverFoe(lab, skill, options)]] : []),
       async () => [await heldOnCooldown(lab, skill, options)],
       () => areaRounds(lab, skill, options),
     ];

@@ -454,6 +454,12 @@ export class Sculpt {
       }
     }
     if (this.kind && !this.cached) CACHE.set(this.kind, made);
+    // (its kind, on the model's root: every body of the kind is drawn as one crowd, models/crowd.ts)
+    if (this.kind && out.length) {
+      let top: THREE.Object3D = out[0];
+      while (top.parent) top = top.parent;
+      top.userData.crowdKind = this.kind;
+    }
     this.groups.clear();
     this.skins.clear();
     return out;
