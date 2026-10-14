@@ -29,17 +29,19 @@ const warrior: ClassDef = {
   skills: [
     {
       key: 'mouse0', impl: 'cleave', name: 'Rending Cleave',
-      desc: 'A wide sweep of the weapon that strikes every foe in front of you. Each hit restores Energy.',
+      desc: 'A wide sweep of the weapon that strikes every foe in front of you. Each hit restores Energy. A two-handed weapon swings slower and hits harder, a blade in each hand quicker and lighter.',
       tags: ['physical'], cost: 0, cooldown: 0, castTime: 0.42,
       damage: 62, range: 3.3, arc: 2.2, knock: 2.2, gain: 4,
+      // (each about as much damage and energy a second: a great weapon's weight in each blow, two blades' pace)
+      styles: { twoHanded: { castTime: 0.6, damage: 92, gain: 6 }, dual: { castTime: 0.3, damage: 45, gain: 3 } },
       color: 0xffd9a0,
       icon: { glyph: '⚔', color: '#ffd9a0' },
     },
     {
       key: 'mouse2', impl: 'crescent', name: 'Thunder Crescent',
-      desc: 'Swing a crescent of lightning that tears through every foe in its path.',
-      tags: ['lightning'], cost: 24, cooldown: 0.8, castTime: 0.45,
-      damage: 95, speed: 17, range: 15, width: 2.1,
+      desc: 'Drive your weapon into the ground and loose a crescent of lightning along it, tearing through every foe in its path.',
+      tags: ['lightning'], cost: 24, cooldown: 4, castTime: 0.6, fireAt: 0.55,
+      damage: 280, speed: 17, range: 15, width: 2.1,
       needs: 'twoHanded',   // a swing of a great weapon
       color: 0x5a8cff,   // a deep blue: pale colours bloom to white
       icon: { glyph: '☾', color: '#9fc8ff' },

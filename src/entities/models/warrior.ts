@@ -19,6 +19,7 @@ import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, fur
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, fistReach, fistTurn, gripTurn, bare, handCapsules, SLANT } from './hands';
 import { clamp, lerp, mulberry, damp } from '../../util';
+import { groundHeight } from '../../world/ground';
 import { fromEyes, dirFromEyes } from '../viewModel';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 
@@ -57,6 +58,8 @@ const _gw = new THREE.Vector3(), _dw = new THREE.Vector3(), _cur = new THREE.Vec
 const _legW: [number, number] = [1, 1];
 const IDENT = new THREE.Quaternion(), _va = new THREE.Vector3(), _vd = new THREE.Vector3(), _up = new THREE.Vector3(), _vg = new THREE.Vector3();
 const _ra = new THREE.Vector3(), _rd = new THREE.Vector3(), _la = new THREE.Vector3(), _ld = new THREE.Vector3();
+const _gs1 = new THREE.Vector3(), _gs2 = new THREE.Vector3(), _gs3 = new THREE.Vector3(), _gsq = new THREE.Quaternion();
+const _hw1 = new THREE.Vector3(), _hw2 = new THREE.Vector3();
 const SHIELD_SIDE = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2, 0));
 const SHIELD_FRONT = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
 const SIDE_POS = new THREE.Vector3(0.07, -0.02, 0), FRONT_POS = new THREE.Vector3(0, -0.1, 0);
@@ -69,7 +72,7 @@ const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a
 // the hips turn first, then the spine and chest, the arm and wrist come last.
 /** where the feet stand (left x, z, turn, then right), rig units: at rest, fighting, Power Strike's step in, behind the shield */
 /** a move's end held a moment after its cast is over (seconds), so a short cast's blow or throw is seen, then how long it takes to ease back to the stance */
-const TAIL: Record<string, number> = { chop: 0.3, buff: 0.55, flurry: 0.15 }, TAIL_OUT: Record<string, number> = { chop: 0.55, buff: 0.6, flurry: 0.35 };
+const TAIL: Record<string, number> = { chop: 0.3, smite: 0.3, buff: 0.55, flurry: 0.15 }, TAIL_OUT: Record<string, number> = { chop: 0.55, smite: 0.5, buff: 0.6, flurry: 0.35 };
 /** a blade's turn in the fist about its own length (third person): its flats along the palm, its edge (an axe's bit) out over the knuckles, as a real one is held */
 const MOUNT = -Math.PI / 2;
 /** drinking: the elbow raised out to the side, the wrist out to the left of the chin (as from a horn: the shield on that forearm turns edge on beside the head, not over the face) */
@@ -112,6 +115,34 @@ const PS_FWD: Keys = [[0, 0], [0.25, -0.05], [0.86, -0.08], [0.95, 0.13], [1, 0.
 const PS_DIP: Keys = [[0, 0], [0.25, 0.01], [0.86, -0.05], [0.9, -0.03], [0.96, -0.19], [0.98, -0.21], [1, -0.2]];
 /** the hips open towards the weapon side as it rises and drive square into the blow */
 const PS_HIPS: Keys = [[0, 0], [0.25, -0.15], [0.86, -0.22], [0.95, 0.1], [1, 0.08]];
+
+// --- Thunder Crescent (third person), keyed over its cast, the blow into the ground at 0.55 (the skill's fireAt): the
+// great weapon swung up overhead as the weight goes back, a moment at the top, then driven down before him, the trunk
+// crunching over it and the knees giving under it; the ground stops it (`groundStop`), and it stays there a moment
+const SM_PITCH: Keys = [[0, -1.3], [0.34, -2.65], [0.42, -2.7], [0.5, -2], [0.55, -1.1], [0.62, -1.05], [1, -1.08]];
+const SM_ELBOW: Keys = [[0, -0.55], [0.34, -0.65], [0.42, -0.65], [0.52, -0.3], [0.56, -0.2], [1, -0.25]];
+const SM_BEND: Keys = [[0, 0], [0.34, -0.16], [0.42, -0.18], [0.5, 0.2], [0.56, 0.5], [0.64, 0.56], [1, 0.5]];
+const SM_FWD: Keys = [[0, 0], [0.34, -0.05], [0.42, -0.06], [0.55, 0.12], [1, 0.13]];
+const SM_DIP: Keys = [[0, 0], [0.34, 0.01], [0.42, 0], [0.55, -0.13], [0.62, -0.16], [1, -0.15]];
+const SM_HIPS: Keys = [[0, 0], [0.34, -0.15], [0.42, -0.17], [0.55, 0.1], [1, 0.08]];
+/** the weapon arm's turn in (a two-hander's): over the middle of the head as it's raised, less as it comes down before
+ *  him (turned in as far, the arm swept across the body while still high, past what the shoulder allows there) */
+const SM_YAW: Keys = [[0, 0.7], [0.42, 0.7], [0.5, 0.4], [1, 0.4]];
+/** the blade in the upright plane ahead of him all through it (`aimAtFloor`), taken from the pose's own over the
+ *  first of these shares of the cast: pointing this far up (rad over level ahead), up and back over his head as it's
+ *  raised, then falling from there over these shares, faster as it comes, until it points at the floor */
+const SM_TAKE = [0, 0.12], SM_FALL = [0.45, 0.55];
+const SM_BLADE: Keys = [[0, 1.1], [0.34, 2], [0.42, 2.05]];
+/** where the blow ends: from these shares of the cast the hands come to rest together before the middle of him, this
+ *  far ahead of his feet and this high over the floor (m at a man's size), the elbows out and down (chest's frame) */
+const SM_LAND = [0.47, 0.55], SM_AHEAD = 0.6, SM_HIGH = 0.8;
+const SM_POLE = new THREE.Vector3(-1, -0.6, -0.5);
+/** the overhead blows through the eyes: the weapon raised by `lift` of the cast, coming down from `from` to `to`, and
+ *  how much it trembles as it's held up (Power Strike's charge) */
+const OVERHEAD: Record<string, { lift: number; from: number; to: number; shake: number }> = {
+  chop: { lift: 0.3, from: 0.9, to: 0.97, shake: 0.02 },
+  smite: { lift: 0.34, from: 0.42, to: 0.55, shake: 0 },
+};
 
 // --- the breastplate: a torso-shaped shell over the gambeson, as broad as a strong man's chest (ANSUR
 // II: 29 cm across, 25 deep, plus padding and steel), with a gentle keel and pectoral swell, its top
@@ -655,6 +686,62 @@ export function buildWarrior(): Model {
     tipOn(false);
   }
 
+  /** The weapon arm, `k` of the way, where a blow into the ground ends: the grip before the middle of him (`SM_AHEAD`,
+   *  `SM_HIGH`), the weapon from there to the floor straight ahead as far off as its length reaches. */
+  function holdAtFloor(k: number): void {
+    root.updateMatrixWorld(true);
+    const s = root.scale.x, len = tip.position.y * s;
+    const way = _hw2.set(0, 0, 1).transformDirection(root.matrixWorld), level = Math.hypot(way.x, way.z) || 1;
+    const fx = way.x / level, fz = way.z / level;
+    const feet = root.getWorldPosition(_hw1);
+    const ax = feet.x + fx * SM_AHEAD * s, az = feet.z + fz * SM_AHEAD * s;
+    const ay = groundHeight(ax, az) + SM_HIGH * s;
+    const drop = Math.min(len * 0.98, ay - groundHeight(ax + fx * len * 0.8, az + fz * len * 0.8));
+    const down = -Math.asin(drop / len);
+    _hw1.set(ax, ay, az);
+    _hw2.set(fx * Math.cos(down), Math.sin(down), fz * Math.cos(down));
+    holdInWorld(ARM_R, _hw1, _hw2, SM_POLE, k);
+  }
+
+  /** The weapon turned in the fist, `k` of the way, to point in the upright plane straight ahead, `u` of the way down
+   *  from pointing `up` (rad over level ahead) to the floor as far off as its length reaches: a blow driven into the
+   *  ground ends with its tip on it, whatever the weapon's length (the arm is fitted within its ranges after). */
+  function aimAtFloor(k: number, up: number, u: number): void {
+    const from = grip.getWorldPosition(_gs1), len = tip.position.y * root.scale.x;
+    // (straight ahead of the body, level)
+    const way = _gs2.set(0, 0, 1).transformDirection(root.matrixWorld), level = Math.hypot(way.x, way.z) || 1;
+    const fx = way.x / level, fz = way.z / level;
+    let drop = from.y - groundHeight(from.x + fx * len * 0.8, from.z + fz * len * 0.8);
+    // (a grip held higher than the weapon is long points it down, a little ahead)
+    drop = Math.min(drop, len * 0.98);
+    const down = lerp(up, -Math.asin(drop / len), u);
+    _gs2.set(fx * Math.cos(down), Math.sin(down), fz * Math.cos(down));
+    _gs3.set(0, 1, 0).transformDirection(grip.matrixWorld);
+    // (turned about the line square to both ways; nearly opposite, where that line is lost and a frame turned the
+    // forearm round the other way, about the line across the body, through ahead of him)
+    _gs1.crossVectors(_gs3, _gs2);
+    if (_gs1.lengthSq() < 1e-4) _gs1.set(-fz, 0, fx);
+    _gsq.setFromAxisAngle(_gs1.normalize(), _gs3.angleTo(_gs2) * k).multiply(j.handR.getWorldQuaternion(_pq));
+    j.handR.quaternion.copy(j.elbowR.getWorldQuaternion(_hq).invert().multiply(_gsq));
+  }
+
+  /** The weapon arm turned up about its shoulder, `k` of the way, until the weapon's tip is on the floor under it:
+   *  the floor stops a blow driven into it, and once it has `landed` it rests there (turned down onto it too). It turns in the upright plane through the shoulder and the tip, so the tip
+   *  comes up as it would on the ground, along the line the blow came down. */
+  function groundStop(k: number, landed: boolean): void {
+    const at = tip.getWorldPosition(_gs1), floor = groundHeight(at.x, at.z);
+    // (once the blow has landed, it rests on the floor)
+    if (at.y >= floor && !landed) return;
+    const sh = j.shoulderR.getWorldPosition(_gs2);
+    const dx = at.x - sh.x, dz = at.z - sh.z, out = Math.hypot(dx, dz), r = Math.hypot(out, at.y - sh.y);
+    if (out < 1e-3) return;
+    const now = Math.atan2(at.y - sh.y, out), want = Math.asin(clamp((floor - sh.y) / r, -1, 1));
+    // (about the level line across the way to the tip, turned into the shoulder's parent's space)
+    const parent = j.shoulderR.parent!.getWorldQuaternion(_gsq).invert();
+    _gs3.set(-dz / out, 0, dx / out).applyQuaternion(parent);
+    j.shoulderR.quaternion.premultiply(_gsq.setFromAxisAngle(_gs3, (want - now) * k));
+  }
+
   /** The tip the skills read (trail, cast point): the left weapon's during a left-hand swing. */
   function tipOn(left: boolean): void {
     const at = left && offHeld ? gripL : grip;
@@ -720,10 +807,16 @@ export function buildWarrior(): Model {
   /** The weapon arm placed by a point and a way in the chest's own frame, by `k` from the pose's own: the grip at `at`,
    *  the weapon along `dir`, the arm reaching by IK with its elbow towards `pole` (third person's `holdInView`). */
   function holdInChest(arm: typeof ARM_R, at: THREE.Vector3, dir: THREE.Vector3, pole: THREE.Vector3, k: number): void {
+    root.updateMatrixWorld(true);
+    holdInWorld(arm, j.chest.localToWorld(_hw1.copy(at)), _hw2.copy(dir).transformDirection(j.chest.matrixWorld), pole, k);
+  }
+
+  /** `holdInChest` with the grip's place and the weapon's way in the world (the elbow's `pole` in the chest's frame). */
+  function holdInWorld(arm: typeof ARM_R, at: THREE.Vector3, dir: THREE.Vector3, pole: THREE.Vector3, k: number): void {
     const { shoulder, elbow, hand, grip: g } = arm;
     root.updateMatrixWorld(true);
-    j.chest.localToWorld(_gw.copy(at)).lerp(g.getWorldPosition(_cur), 1 - k);
-    _dw.copy(dir).transformDirection(j.chest.matrixWorld).lerp(_cur.set(0, 1, 0).transformDirection(g.matrixWorld), 1 - k).normalize();
+    _gw.copy(at).lerp(g.getWorldPosition(_cur), 1 - k);
+    _dw.copy(dir).lerp(_cur.set(0, 1, 0).transformDirection(g.matrixWorld), 1 - k).normalize();
     for (let i = 0; i < 3; i++) {
       hand.getWorldPosition(_hp).add(_gw).sub(g.getWorldPosition(_cur));
       reachArm(shoulder, elbow, j.P.upperL, j.P.foreL, j.chest.worldToLocal(_hp), pole);
@@ -826,6 +919,9 @@ export function buildWarrior(): Model {
     let wR = 0, wL = 0;
     // how far the pose owns the legs (a lunge, a charge: the body leaves its feet behind at a dash's speed, so the leg IK would kneel): the pose's own legs show until the dash is over, and the feet start again under the hips
     let legOwn = 0;
+    // how far a blow driven into the ground is stopped by it (groundStop), and its blade turned to the floor ahead
+    // (aimAtFloor)
+    let stop = 0, aimDown = 0, fall = 0, bladeUp = 0;
     // and how far it owns one leg (a step in, a lunge) while the other stands: standing only, moving the IK steps
     let ownL = 0, ownR = 0;
     const still = 1 - Math.min(1, move * 4);
@@ -975,12 +1071,30 @@ export function buildWarrior(): Model {
         j.body.position.z += curve(PS_FWD, k) * ws; j.body.position.y += curve(PS_DIP, k) * ws;
         // (a step in with the left foot as the weapon rises; the right stays back, turned out)
         feet = CHOP_FEET;
-      } else if (a.name === 'chop') {
-        // Power Strike: the weapon rises overhead and trembles while the charge builds, then comes down
-        // in a vertical arc at 0.9 of the cast (the skill's fireAt)
+      } else if (a.name === 'smite' && !fp) {
+        // Thunder Crescent (SM_*): the great weapon raised overhead and driven down into the ground before him (a
+        // two-hander raised over the middle of the head, within the left hand's reach, as Power Strike's is)
+        const w = ramp(k, 0, 0.1);
+        R.x = lerp(R.x, curve(SM_PITCH, k), w); R.z = lerp(R.z, 0, w); R.y = (two ? curve(SM_YAW, k) : 0.25) * w;
+        j.elbowR.rotation.x = lerp(j.elbowR.rotation.x, curve(SM_ELBOW, k), w);
+        j.handR.rotation.x += ALONG_ARM * w;
+        const sb = curve(SM_BEND, k), ws = w * (0.4 + 0.6 * still);
+        j.spine.rotation.x += sb * w; j.neck.rotation.x -= 0.55 * sb * w;
+        j.hips.rotation.y += curve(SM_HIPS, k) * w; j.chest.rotation.y -= 0.6 * curve(SM_HIPS, k) * w;
+        j.body.position.z += curve(SM_FWD, k) * ws; j.body.position.y += curve(SM_DIP, k) * ws;
+        feet = CHOP_FEET;
+        stop = w; aimDown = w * ramp(k, SM_TAKE[0], SM_TAKE[1]); fall = ramp(k, SM_FALL[0], SM_FALL[1]);
+        bladeUp = curve(SM_BLADE, k);
+        // (and from just before it lands, the hands out before him where a blow into the ground ends)
+        const end = w * ramp(k, SM_LAND[0], SM_LAND[1]);
+        if (end > 0 && held) holdAtFloor(end);
+      } else if (a.name === 'chop' || a.name === 'smite') {
+        // the overhead blows through the eyes (OVERHEAD): the weapon rises overhead (trembling while Power Strike's
+        // charge builds), then comes down in a vertical arc to the skill's fireAt
+        const o = OVERHEAD[a.name];
         const w = ramp(k, 0, 0.12) * (1 - ramp(k, 0.97, 1));
-        const lift = ramp(k, 0, 0.3), blow = ramp(k, 0.9, 0.97);
-        const shake = (1 - blow) * lift * Math.sin(t * 45) * 0.02;
+        const lift = ramp(k, 0, o.lift), blow = ramp(k, o.from, o.to);
+        const shake = (1 - blow) * lift * Math.sin(t * 45) * o.shake;
         // through the eyes, a weapon raised overhead leaves the view and the raised upper arms loom past
         // the camera: a high guard instead, upper arms forward and low, forearms up, blades standing up in
         // front of the face, and from there the same blow
@@ -1194,7 +1308,7 @@ export function buildWarrior(): Model {
     // left hand on the lower grip), and the attacks take it from there
     // after Power Strike's blow the blades stay down a moment, then come back to rest (the cast ends right
     // after it)
-    if (fp && chopTail > 0 && a?.name !== 'chop') {
+    if (fp && chopTail > 0 && a?.name !== 'chop' && a?.name !== 'smite') {
       const u = chopTail * chopTail * (3 - 2 * chopTail);
       if (two) { _va.copy(FP_TWO_BLOW[0]); _vd.copy(FP_TWO_BLOW[1]); vw = u; }
       else { inView(FP_CHOP, 1, true, !!offHeld); wR = u; wL = offHeld ? u : 0; }
@@ -1230,9 +1344,11 @@ export function buildWarrior(): Model {
     // grip goes wherever it takes the weapon. A two-hander's upper hand holds it square (slanted, it moved the lower
     // grip and that wrist bent further)
     slantR = 0; slantL = 0;
+    if (aimDown > 0 && held && !fp && st.dead < 0) aimAtFloor(aimDown, bladeUp, fall * fall);
     if (!fp && st.dead < 0) slantR = fitArm(j, false, held ? gripTurn(handR, grip, _vr) : undefined, body, held && !two ? SLANT : undefined).slant;
     // (the weapon seated in the fist as it holds it, its handle diagonal across the palm by that slant: before a lower grip is taken)
     if (held) seat(handR, grip, held.r, slantR);
+    if (stop > 0 && held && st.dead < 0) groundStop(stop, fall >= 1);
 
     // a two-hander: the left hand follows the grip wherever the right arm takes the weapon, and lets go
     // where it can't reach (a pose that flings the arms apart), the arm easing back to the pose's own
