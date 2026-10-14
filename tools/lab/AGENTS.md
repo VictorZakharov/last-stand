@@ -185,9 +185,13 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   131 cm, and a two-handed swing's end turned the hand over, `handR turned 178°`), a two-hander's lower grip let go
   of by the other hand (on how many frames, how often, from which frames and moments of a move, and why at the worst:
   the grip past the arm's reach, its joints past their ranges, the arm into the body; a failure. Its frames on the
-  shoulder or the flask in hand are counted apart, `LowerGrip.free`), and its worst moment pictured. `--canary` turns
-  the head past the neck's range on one frame, `--frames` lists every frame with a joint past its range and every
-  frame between moves the tip moved 10 cm or more, and `--trace` (`--span a,b` for some frames) the leg IK frame by
+  shoulder or the flask in hand are counted apart, `LowerGrip.free`), and its worst moment pictured, and the weapon
+  under the floor (`page/weaponFloor.ts`: every corner of the surface of what the main hand holds, on how many frames,
+  the deepest and how far along the weapon; Thunder Crescent put an axe's or a maul's head into the floor to its
+  middle). `--canary` turns the head past the neck's range on one frame and sinks the hero 2 m for one measure (the
+  weapon must be found under the floor), `--frames` lists every frame with a joint past its range, every frame the
+  weapon was under the floor and every frame between moves the tip moved 10 cm or more (with every joint that
+  turned: an elbow swung round its arm turns the shoulder alone), and `--trace` (`--span a,b` for some frames) the leg IK frame by
   frame as the gait's trace does (`page/legTrace.ts`: each foot down, in the air or in a timed step `~`, dragged `d`),
   each frame's joints past their ranges after it.
 - `carry`: the ranger's carried bow against his body through a carry's round (standing, walking, a draw and its shot,

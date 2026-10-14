@@ -1,0 +1,95 @@
+// The weapon in the hero's hand against the floor through a scenario (tools/lab `range`): the frames any part of it
+// is under the floor, and the deepest. Every corner of its surface is read, so a blade is read within its width
+// and an axe's or a maul's head whole (a part's box would not do: a weapon's pieces are merged into one mesh per
+// material, whose box holds the head's breadth all down the haft). Thunder Crescent's blow, stopped by its tip,
+// put an axe's or a maul's head into the floor to its middle.
+import * as THREE from 'three';
+import type { Lab } from './lab';
+import { groundHeight } from '../../../src/world/ground';
+
+/** under the floor by this much a part counts (m): a blow stopped on it rests its tip there */
+const UNDER_FROM = 0.02;
+/** the canary sinks the hero this far (m): the weapon, its lowest point a metre or so up, must be found under the
+ *  floor by at least `CANARY_CAUGHT` */
+const CANARY_SINK = 2;
+export const CANARY_CAUGHT = 0.5;
+
+/** A frame's deepest point of the weapon: how far under the floor (m), the frame, and how far along the weapon from
+ *  the grip it is (m: less than 0, the pommel's side). */
+interface Under {
+  depth: number;
+  at: string;
+  along: number;
+}
+
+const _corner = new THREE.Vector3();
+const _gripAt = new THREE.Vector3();
+const _gripWay = new THREE.Vector3();
+
+/** The frames the weapon was under the floor, and the deepest. */
+export class WeaponFloor {
+  private frames = 0;
+  private deepest: Under | null = null;
+  /** each frame it was under, as words */
+  readonly listed: string[] = [];
+
+  /** `scenario`: the scenario's name, as its listed frames say it */
+  constructor(private readonly scenario: string) {}
+
+  /** Notes how far under the floor the weapon is this frame (`frame`: the frame as the report names it). */
+  observe(lab: Lab, frame: string): void {
+    const under = deepestUnder(lab, frame);
+    if (!under || under.depth < UNDER_FROM) return;
+    this.frames++;
+    this.listed.push(`  ${this.scenario} frame ${frame}: the weapon ${describeUnder(under)}`);
+    if (!this.deepest || under.depth > this.deepest.depth) this.deepest = under;
+  }
+
+  /** The frames under the floor as words, or none if it never was. */
+  describe(): string {
+    if (!this.deepest) return '';
+    return `the weapon under the floor on ${this.frames} frames, the deepest ${describeUnder(this.deepest)}`;
+  }
+}
+
+/** The canary: the hero sunk `CANARY_SINK` under the floor for one measure, and back. Returns how far under the
+ *  weapon read (m; none held, 0). */
+export function weaponCanary(lab: Lab): number {
+  const root = lab.model.root;
+  root.position.y -= CANARY_SINK;
+  const depth = deepestUnder(lab, 'canary')?.depth ?? 0;
+  root.position.y += CANARY_SINK;
+  root.updateMatrixWorld(true);
+  return depth;
+}
+
+/** A point under the floor as words: how deep, where along the weapon, and in which frame. */
+function describeUnder(under: Under): string {
+  const along = under.along < 0 ? `${cm(-under.along)} behind the grip` : `${cm(under.along)} along it from the grip`;
+  return `${cm(under.depth)} under (frame ${under.at}, ${along})`;
+}
+
+const cm = (metres: number) => `${(metres * 100).toFixed(1)} cm`;
+
+/** The weapon's point deepest under the floor this frame (none if he holds none): every corner of the surface of
+ *  the parts shown in the main hand's grip. */
+function deepestUnder(lab: Lab, at: string): Under | null {
+  const grip = lab.model.tip?.parent;
+  if (!grip) return null;
+  grip.updateWorldMatrix(true, true);
+  grip.getWorldPosition(_gripAt);
+  _gripWay.set(0, 1, 0).transformDirection(grip.matrixWorld);
+  let deepest: Under | null = null;
+  grip.traverseVisible((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const corners = mesh.geometry.attributes.position;
+    for (let i = 0; i < corners.count; i++) {
+      _corner.fromBufferAttribute(corners, i).applyMatrix4(mesh.matrixWorld);
+      const depth = groundHeight(_corner.x, _corner.z) - _corner.y;
+      if (deepest && depth <= deepest.depth) continue;
+      deepest = { depth, at, along: _corner.sub(_gripAt).dot(_gripWay) };
+    }
+  });
+  return deepest;
+}

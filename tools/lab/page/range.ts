@@ -18,6 +18,7 @@ import type { LowerGrip } from '../../../src/types';
 import { LegTrace, traceSpanOf } from './legTrace';
 import { bindKnown, holdFor, pressing, skillNamed } from './cast';
 import { TipMoves } from './tipMoves';
+import { CANARY_CAUGHT as WEAPON_CAUGHT, WeaponFloor, weaponCanary } from './weaponFloor';
 
 /** A hand as it is turned in its grip: the group of its own meshes under the joint, as `watchBody` measures it. */
 function turnedHand(hand: THREE.Object3D): THREE.Object3D {
@@ -151,7 +152,7 @@ function attackDown(leg: RangeLeg, frame: number): boolean {
 export interface RangeReport {
   lines: string[];
   moments: Pictured[];
-  canary?: { caught: boolean; measured: number };
+  canary?: { caught: boolean; measured: number; weapon: number };
   /** each scenario in which a two-hander was let go of by the other hand, as words */
   letGo: string[];
 }
@@ -243,11 +244,12 @@ async function runScenario(
   const ankles = [lab.joints.ankleL, lab.joints.ankleR];
   const last = ankles.map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
   const tip = new TipMoves(scenario.name);
+  const floor = new WeaponFloor(scenario.name);
   const tracer = traceOf(lab, options);
   const measure = () => {
     if (options.canary && !report.canary && run.frame === CANARY_FRAME) {
       const measured = measureCanary(lab);
-      report.canary = { caught: measured >= CANARY_CAUGHT, measured };
+      report.canary = { caught: measured >= CANARY_CAUGHT, measured, weapon: weaponCanary(lab) };
     }
     const { angles, found } = bodyBreaches(lab.joints);
     if (found.length) run.framesPast++;
@@ -259,6 +261,7 @@ async function runScenario(
     }
     noteGrip(run.grip, lab.model.lowerGrip, `${run.frame}${momentIn(lab)}`);
     tip.observe(lab, `${run.frame}${momentIn(lab)}`);
+    floor.observe(lab, `${run.frame}${momentIn(lab)}`);
     tracer?.observe(run.frame);
     const traced = tracer?.frames.at(-1);
     if (found.length && traced?.frame === run.frame) traced.line += `  ${found.map(describeBreach).join(', ')}`;
@@ -283,12 +286,14 @@ async function runScenario(
     const input = (f: number) => (press && f < held ? press.frame : { keys: leg.keys, m0: attackDown(leg, f) });
     await lab.step(leg.frames + Math.max(0, held - 1), input, measure);
   }
-  if (options.frames) listed.push(...tip.listed);
+  if (options.frames) listed.push(...tip.listed, ...floor.listed);
   const tipLine = tip.describe();
   const fastest = `fastest ankle ${(run.fastest * 100).toFixed(1)} cm a frame (${run.fastestAt})`
     + (tipLine ? `; ${tipLine}` : '');
   report.lines.push(`${scenario.what}: ${run.frame} frames, ${run.framesPast} with a joint past its range; ${fastest}`);
   if (run.grip.seen) report.lines.push(`  ${describeLetGo(run.grip)}`);
+  const underFloor = floor.describe();
+  if (underFloor) report.lines.push(`  ${underFloor}`);
   if (run.grip.frames > 0) report.letGo.push(`${scenario.what}: ${describeLetGo(run.grip)}`);
   report.lines.push(...(tracer?.frames ?? []).map((traced) => traced.line));
   if (run.moment) report.moments.push(run.moment);
@@ -401,14 +406,20 @@ export async function range(lab: Lab, options: RangeOptions): Promise<RangeRepor
     const verdict = report.canary.caught ? 'caught' : 'MISSED';
     const past = degrees(report.canary.measured);
     report.lines.push(`canary, the head turned past the neck's range: ${verdict} (${past} past)`);
+    const weapon = report.canary.weapon;
+    const under = `${weapon >= WEAPON_CAUGHT ? 'caught' : 'MISSED'} (${(weapon * 100).toFixed(0)} cm under)`;
+    report.lines.push(`canary, the hero sunk under the floor: the weapon ${under}`);
   }
   return report;
 }
 
 /** The canary, if it ran and was missed, as a problem. */
 export function missedRangeCanary(report: RangeReport): string[] {
-  const missed = report.canary && !report.canary.caught;
-  return missed ? ['range: the canary (the head turned past its range) was missed'] : [];
+  if (!report.canary) return [];
+  const missed = report.canary.caught ? [] : ['range: the canary (the head turned past its range) was missed'];
+  const sunk = report.canary.weapon >= WEAPON_CAUGHT;
+  const weapon = sunk ? [] : ['range: the canary (the weapon under the floor) was missed'];
+  return [...missed, ...weapon];
 }
 
 /** Each scenario in which a two-hander was let go of, as a problem: nothing it runs flings the arms apart. */
