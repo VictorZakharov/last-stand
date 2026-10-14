@@ -507,6 +507,9 @@ export class Lab {
   private hold(style: WeaponStyle): void {
     const gear = gearFor(this.player.cls, this.player.gear, style);
     this.player.gear = gear;
+    // (its loadout and its skills tuned to the style too: set by the gear alone, a two-hander swung at a one-hander's
+    // pace; an older commit's hero has none of that)
+    this.player.fitToGear?.();
     this.model.setGear?.(gear);
   }
 

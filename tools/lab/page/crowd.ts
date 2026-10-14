@@ -13,8 +13,8 @@ import { Corpse } from '../../../src/entities/corpse';
 import { Ragdoll } from '../../../src/entities/ragdoll';
 import { particles } from '../../../src/fx/particles';
 import { hitEnemy } from '../../../src/combat/damage';
-import { holdFor, pressing, skillNamed, type BoundSkill } from './cast';
-import { bindKnown, foeKind, foesAt } from './death';
+import { bindKnown, holdFor, pressing, skillNamed, type BoundSkill } from './cast';
+import { foeKind, foesAt } from './death';
 import { timeCalls, type Timing } from './timing';
 
 export interface CrowdOptions {

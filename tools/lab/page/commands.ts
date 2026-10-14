@@ -29,6 +29,8 @@ export interface SheetCommand {
   views: ViewName[];
   fixture: Fixture;
   focus?: keyof Joints;
+  skill?: string;
+  shares?: number[];
 }
 
 /** `lab sheet`: the pictures and their notes. */

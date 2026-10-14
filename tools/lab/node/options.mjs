@@ -81,7 +81,7 @@ export const COMMANDS = {
     help: 'the hero pictured in the states the player sees, from the game\'s views and close up, with each arm\'s '
       + 'load and posture beside them: tools/lab/out/sheets/<tag>/sheet.png',
     options: {
-      states: { kind: 'list', usage: 'a,b', default: 'stand,walk', help: 'the states: stand, walk, full' },
+      states: { kind: 'list', usage: 'a,b', default: 'stand,walk', help: 'the states: stand, walk, full, cast' },
       views: {
         kind: 'list',
         usage: 'a,b',
@@ -90,6 +90,13 @@ export const COMMANDS = {
       },
       tag: { kind: 'text', usage: 'name', default: 'latest', help: 'the sheet\'s folder' },
       focus: { kind: 'text', usage: 'joint', help: 'close-ups framed on a joint (head, handL...), not the body' },
+      skill: { kind: 'text', usage: 'name', help: 'the cast state\'s skill: its key, its behaviour or its name' },
+      shares: {
+        kind: 'list',
+        usage: 'a,b',
+        default: '0.3,0.55,0.8',
+        help: 'the cast state\'s moments, as shares of its cast',
+      },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
     },
@@ -126,9 +133,11 @@ export const COMMANDS = {
       scenarios: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['stand', 'walk', 'shoot', 'reverse', 'taps', 'run'],
-        help: 'the scenarios (all by default): stand, walk, shoot, reverse, taps, run',
+        choices: ['stand', 'walk', 'shoot', 'reverse', 'taps', 'run', 'cast'],
+        help: 'the scenarios (all by default): stand, walk, shoot, reverse, taps, run, cast (with --skill)',
       },
+      skill: { kind: 'text', usage: 'name', help: 'the cast scenario\'s skill: its key, its behaviour or its name' },
+      gear: SETUP_OPTIONS.gear,
       canary: { kind: 'switch', help: 'plant a fault the measure must catch: the head turned past the neck\'s range' },
       frames: { kind: 'switch', help: 'list every frame with a joint past its range' },
       trace: {
@@ -328,6 +337,7 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'plant the fault the checks must catch, in the first biome and view: a strobe of the exposure',
       },
+      gear: SETUP_OPTIONS.gear,
       ...COMMON_OPTIONS,
     },
   },

@@ -10,7 +10,7 @@ import { SKILL_IMPLS } from '../combat/skills/index';
 import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
 import { computeStats, gearOf } from '../loot/items';
 import { BLOCK, COOP, FULL_DRAW } from '../data/balance';
-import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, type Loadout, type WeaponStyle } from '../loot/loadout';
+import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, forStyle, type Loadout, type WeaponStyle } from '../loot/loadout';
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
 import { input, isDown, wasPressed } from '../core/input';
@@ -257,15 +257,26 @@ export class Player {
     const prevLifePct = this.stats ? this.life / this.stats.maxLife : 1;
     this.stats = computeStats(this.cls.base, equipped);
     this.gear = gearOf(this.cls, equipped);
-    // each weapon style has its own loadout: switching style brings back the one left there
-    const style = weaponStyle(this.cls, this.gear);
-    if (!this.loadout || style !== this.style) {
-      if (this.channel) this.stopChannel();
-      this.style = style;
-      this.loadout = loadLoadout(this.cls, this.gear);
-    }
+    this.fitToGear();
     this.model.setGear?.(this.gear);
     this.life = this.stats.maxLife * prevLifePct;
+  }
+
+  /**
+   * The loadout and the skills as the gear held calls for: each weapon style has its own loadout (switching style
+   * brings back the one left there), and each skill is as it is with the weapons held that way (a two-hander's blows
+   * slower and heavier).
+   */
+  fitToGear(): void {
+    const style = weaponStyle(this.cls, this.gear);
+    if (this.loadout && style === this.style) return;
+    if (this.channel) this.stopChannel();
+    this.style = style;
+    this.loadout = loadLoadout(this.cls, this.gear);
+    for (const def of this.cls.skills) {
+      const known = this.known.get(def.impl);
+      if (known) known.def = forStyle(def, style);
+    }
   }
 
   /** Stand at a spot facing a direction, as if always there. */

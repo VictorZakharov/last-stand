@@ -32,7 +32,7 @@ import { session, partnerInRun } from '../net/session';
 
 import type { RunSummary } from '../game/run';
 
-import type { Item, Slot, SkillKey } from '../types';
+import type { Item, Slot, SkillDef, SkillKey } from '../types';
 
 /** Commit and build time, set by vite.config.ts. */
 declare const __BUILD__: { ref: string; time: string };
@@ -382,7 +382,9 @@ export function renderMenu(): void {
   const sk = $('.cc-skills');
   if (sk.dataset.cls !== cls.id) { sk.dataset.cls = cls.id; sk.scrollLeft = 0; }   // another class starts at its first skills
   sk.innerHTML = '';
-  for (const def of cls.skills) sk.appendChild(makeSkillSlot(def)).classList.toggle('unusable', !G.player.usable(def));
+  // (each as it is with the weapons held: a two-hander's cleave slower and heavier)
+  const shown = (def: SkillDef) => (G.player.cls.id === cls.id ? G.player.known.get(def.impl)?.def : undefined) ?? def;
+  for (const def of cls.skills) sk.appendChild(makeSkillSlot(shown(def))).classList.toggle('unusable', !G.player.usable(def));
   syncSkillStrip();
 
   $('#btn-saves').textContent = `Save slot ${saveSlot()}`;

@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import type { SkillDef, SkillKey } from '../../../src/types';
+import type { WeaponStyle } from '../../../src/loot/loadout';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { EnemyId } from '../../../src/data/enemies';
 import type { ViewMode } from '../../../src/core/renderer';
@@ -32,6 +33,8 @@ export interface CastOptions {
   pictures: boolean;
   /** plant the fault the checks must catch: a strobe, the exposure raised on every other tenth of a second */
   canary: boolean;
+  /** the way the hero holds his weapons (as rolled when not given) */
+  gear?: WeaponStyle;
 }
 
 /** how far ahead of the hero the aim is (m) */
@@ -83,6 +86,17 @@ export function skillNamed(wanted: string): BoundSkill {
   if (found) return found;
   const known = bound.map((skill) => `${skill.def.impl} (${skill.key})`).join(', ');
   throw new Error(`lab: cast: the ${G.player.cls.id} has no skill ${wanted}: ${known}`);
+}
+
+/** A skill the hero knows but hasn't on a key (Thunder Crescent, while the two-handed loadout has Steel Tempest on
+ *  its key) put on its own key, as the player would bind it in the lobby. */
+export function bindKnown(wanted: string): void {
+  const hero = G.player;
+  const name = wanted.toLowerCase();
+  for (const [id, known] of hero.known) {
+    const names = [known.def.impl, known.def.name].map((each) => each.toLowerCase());
+    if (names.includes(name) && hero.usable(known.def)) hero.bind(known.def.key, id);
+  }
 }
 
 /** The frame's input holding `key` over `aim` (nothing held when `held` is false). */
@@ -240,8 +254,9 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
   // (the props an earlier cast broke stand again: broken, they stay so until a run starts, and the next scenario in
   // the biome saw another scene)
   G.arena.restoreProps();
-  await standIn(lab, { biome: options.biome, view: options.view, facing: options.facing });
+  await standIn(lab, { biome: options.biome, view: options.view, facing: options.facing, gear: options.gear });
   const hero = G.player;
+  bindKnown(options.skill);
   const { key, def } = skillNamed(options.skill);
   hero.cooldowns.clear();
   hero.energy = hero.stats.maxEnergy;

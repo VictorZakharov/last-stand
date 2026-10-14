@@ -1,11 +1,14 @@
 // tools/lab sheet: the hero in the states the player sees him in (standing, both ends of a stride's arm swing, at full
-// draw), each moment pictured from the game's own views and close up, with how hard the pose is to hold beside it.
+// draw, through a skill's cast), each moment pictured from the game's own views and close up, with how hard the pose is
+// to hold beside it.
 // A pose is judged here first, as a person would hold it, and only then measured (src/entities/models/AGENTS.md).
 import * as THREE from 'three';
 import type { Lab, Fixture, ViewName, Tile } from './lab';
 import type { Joints } from '../../../src/entities/models/rig';
 import { HELD, armComfort, describeArm } from './comfort';
 import { bowOf, describeBow } from './ranger';
+import { bindKnown, pressing, skillNamed } from './cast';
+import { groundHeight } from '../../../src/world/ground';
 
 /** One pictured moment: its tiles and the notes read beside them. */
 export interface Moment {
@@ -20,6 +23,9 @@ export interface SheetOptions {
   views: ViewName[];
   fixture: Fixture;
   focus?: keyof Joints;
+  /** the `cast` state's skill (its key, its behaviour or its name), and the shares of its cast pictured */
+  skill?: string;
+  shares?: number[];
 }
 
 export interface Sheet {
@@ -27,14 +33,22 @@ export interface Sheet {
   moments: Moment[];
 }
 
+/** Pictures the moment as `label`, with `notes` of its own beside the arms'. */
+type Snap = (label: string, notes?: string[]) => Promise<void>;
+
 /** A state's script: it runs the game into the state and calls `snap` at each moment to picture. */
-type State = (lab: Lab, snap: (label: string) => Promise<void>) => Promise<void>;
+type State = (lab: Lab, snap: Snap, options: SheetOptions) => Promise<void>;
 
 const walking = () => ({ keys: ['w'] });
 const drawing = () => ({ m0: true });
 
 const ARM_FORWARD = 'walking, arm forward';
 const ARM_BACK = 'walking, arm back';
+/** the `cast` state: the shares of the cast pictured unless `--shares` says, how far ahead of the hero it's aimed (m),
+ *  and the most frames it's followed */
+const CAST_SHARES = [0.3, 0.55, 0.8];
+const CAST_AIM = 6;
+const CAST_FRAMES = 600;
 
 /** how far the left hand leads the hips along the way the hero faces (m) */
 function handLead(lab: Lab): number {
@@ -42,6 +56,24 @@ function handLead(lab: Lab): number {
   const hips = lab.joints.hips.getWorldPosition(new THREE.Vector3());
   const facing = lab.player.facing;
   return hand.sub(hips).dot(new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing)));
+}
+
+/** How far through its cast the hero is (0..1, the share the model is given), or null when he isn't casting. */
+function castShare(lab: Lab): number | null {
+  const cast = lab.player.casting;
+  return cast && Number.isFinite(cast.dur) ? cast.t / cast.dur : null;
+}
+
+/** Where the cast point (the weapon's tip, the staff's head) is: how high over the floor under it, how far ahead. */
+function castPointNote(lab: Lab): string {
+  // (the world's matrices are brought up to date by a draw, and a step draws nothing)
+  lab.model.root.updateWorldMatrix(true, true);
+  const tip = lab.player.castPoint;
+  const hero = lab.player.pos;
+  const facing = lab.player.facing;
+  const ahead = (tip.x - hero.x) * Math.sin(facing) + (tip.z - hero.z) * Math.cos(facing);
+  const over = tip.y - groundHeight(tip.x, tip.z);
+  return `the cast point ${(over * 100).toFixed(0)} cm over the floor, ${ahead.toFixed(2)} m ahead of him`;
 }
 
 /** how far the current shot is drawn (0..1), 0 when none is */
@@ -85,6 +117,27 @@ export const STATES: Record<string, State> = {
     await snap('at full draw');
     await lab.step(4);
   },
+
+  /** a skill (`--skill`) cast once ahead of him, pictured at shares of its cast (`--shares`), with its cast point */
+  async cast(lab, snap, options) {
+    if (!options.skill) throw new Error('lab: sheet: the cast state needs --skill');
+    bindKnown(options.skill);
+    const { key, def } = skillNamed(options.skill);
+    const facing = lab.player.facing;
+    const way = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
+    const aim = lab.player.pos.clone().addScaledVector(way, CAST_AIM);
+    const wanted = [...(options.shares ?? CAST_SHARES)].sort((a, b) => a - b);
+    await lab.step(1, () => pressing(key, aim, true));
+    for (let f = 0; f < CAST_FRAMES && wanted.length > 0; f++) {
+      const share = castShare(lab);
+      if (share === null) break;
+      while (wanted.length > 0 && share >= wanted[0]) {
+        await snap(`${def.name}, ${wanted.shift()} of its cast`, [castPointNote(lab)]);
+      }
+      await lab.step(1, () => ({ aim }));
+    }
+    if (wanted.length > 0) throw new Error(`lab: sheet: ${def.name}'s cast ended before ${wanted.join(', ')} of it`);
+  },
 };
 
 /** The moments of each state, pictured from `views`, with the fixture set up afresh before each state. */
@@ -99,11 +152,11 @@ export async function sheet(lab: Lab, options: SheetOptions): Promise<Sheet> {
   for (const name of options.states) {
     const state = STATES[name];
     setup = await lab.setup(fixture);
-    await state(lab, async (label) => {
+    await state(lab, async (label, own = []) => {
       lab.model.root.updateMatrixWorld(true);
       const tiles = lab.capture(options.views, { focus: options.focus });
-      moments.push({ state: name, label, tiles, notes: notesOn(lab) });
-    });
+      moments.push({ state: name, label, tiles, notes: [...own, ...notesOn(lab)] });
+    }, options);
   }
   return { setup, moments };
 }

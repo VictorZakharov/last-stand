@@ -59,7 +59,7 @@ export type SkillKey = 'mouse0' | 'mouse2' | '1' | '2' | '3' | '4' | 'q';
 /** pose a model plays while the skill casts; a class's model interprets each name in its own way */
 /** `point`: a shot from the staff or weapon, held level at the target while shots follow each other. `bow`: an
  *  arrow drawn to the face and loosed (`ActionState.draw`, `loosed`, `pitch`). */
-export type CastAnim = 'cast' | 'summon' | 'drink' | 'point' | 'bow' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'spin' | 'block' | 'stagger' | 'flurry' | null;
+export type CastAnim = 'cast' | 'summon' | 'drink' | 'point' | 'bow' | 'slam' | 'buff' | 'channel' | 'swing' | 'charge' | 'chop' | 'smite' | 'spin' | 'block' | 'stagger' | 'flurry' | null;
 
 /** Skill tuning data. Behavior-specific numbers are optional fields. */
 export interface SkillDef {
@@ -122,16 +122,25 @@ export interface SkillDef {
   knock?: number;
   /** energy restored per enemy hit */
   gain?: number;
-  /** when the cast lands, as a fraction of the cast time (default 0.55) */
   /** a channel opens over this many seconds before it acts (its look and pose show the opening) */
   opening?: number;
+  /** when the cast lands, as a fraction of the cast time (default 0.55) */
   fireAt?: number;
   /** Raise Shield: blocks absorb this many times the block amount */
   block?: number;
   /** only works with a shield, a two-handed weapon or a weapon in each hand; otherwise the key uses the fallback for the gear held */
   needs?: 'shield' | 'twoHanded' | 'dual';
   fallback?: { shield?: string; twoHanded?: string; dual?: string; oneHanded?: string };
+  /** its tuning with the weapons held one way, over its own (a two-hander's slower, heavier blows, two blades' quicker,
+   *  lighter ones): `loot/loadout.ts` `forStyle` */
+  styles?: Partial<Record<WeaponStyle, StyleTuning>>;
 }
+
+/** How the weapons are held: each has its own loadout (for a class with gear-driven skills). */
+export type WeaponStyle = 'shield' | 'twoHanded' | 'dual' | 'oneHanded';
+
+/** What a weapon style may change of a skill. */
+export type StyleTuning = Partial<Pick<SkillDef, 'castTime' | 'damage' | 'gain'>>;
 
 export interface ClassDef {
   id: string;

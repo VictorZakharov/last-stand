@@ -5,20 +5,26 @@
 import { readCookie, writeCookie, removeCookie } from '../core/cookies';
 import { CLASS_IDS } from '../data/classes/index';
 import { saveKey } from './saveSlots';
-import type { ClassDef, Gear, SkillDef, SkillKey } from '../types';
+import type { ClassDef, Gear, SkillDef, SkillKey, WeaponStyle } from '../types';
+
+export type { WeaponStyle };
 
 export const SKILL_KEYS: SkillKey[] = ['mouse0', 'mouse2', '1', '2', '3', '4', 'q'];
 
 /** key -> skill id (the skill's `impl` name), or null for an empty slot */
 export type Loadout = Record<SkillKey, string | null>;
 
-/** How the weapons are held: each has its own loadout (for a class with gear-driven skills). */
-export type WeaponStyle = 'shield' | 'twoHanded' | 'dual' | 'oneHanded';
 const STYLES: WeaponStyle[] = ['shield', 'twoHanded', 'dual', 'oneHanded'];
 
 export function weaponStyle(cls: ClassDef, gear: Gear): WeaponStyle | null {
   if (!cls.skills.some((s) => s.needs)) return null;   // one loadout, whatever is held
   return gear.shield ? 'shield' : gear.twoHanded ? 'twoHanded' : gear.offWeapon ? 'dual' : 'oneHanded';
+}
+
+/** A skill as it is with the weapons held `style`'s way: its own tuning, with that style's over it. */
+export function forStyle(def: SkillDef, style: WeaponStyle | null): SkillDef {
+  const tuned = style ? def.styles?.[style] : undefined;
+  return tuned ? { ...def, ...tuned } : def;
 }
 
 /** Whether the gear held allows a skill (some need a shield, a two-handed weapon or two weapons). */

@@ -15,12 +15,15 @@ import * as renderer from '../../../src/core/renderer';
 import { CAMERA } from '../../../src/data/balance';
 import { hdrOutput } from './hdrOutput';
 import type { BiomeId } from '../../../src/data/biomes';
+import type { WeaponStyle } from '../../../src/loot/loadout';
 
 /** One of the frames measured: the biome, the view and the way the view looks (degrees, 0 is +z). */
 export interface LightScenario {
   biome: BiomeId;
   view: renderer.ViewMode;
   facing: number;
+  /** the way the hero holds his weapons (as rolled when not given) */
+  gear?: WeaponStyle;
 }
 
 /** HDR's levels, as shares of the screen's white for SDR content. */
@@ -313,7 +316,7 @@ async function lookAlong(lab: Lab, facing: number): Promise<void> {
 export async function standIn(lab: Lab, scenario: LightScenario): Promise<void> {
   if (G.arena.biome !== scenario.biome) G.arena.setBiome(scenario.biome);
   const facing = scenario.facing * Math.PI / 180;
-  await lab.setup({ view: scenario.view, facing });
+  await lab.setup({ view: scenario.view, facing, gear: scenario.gear });
   if (scenario.view !== 'top') await lookAlong(lab, facing);
   await lab.step(SETTLE_FRAMES);
 }
