@@ -447,6 +447,28 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  death: {
+    help: 'each skill\'s kills as the player sees them fall: foes stood dazed where it strikes and cast at twice, each '
+      + 'a hair from death and then holding just under what the first cast dealt it, every body followed as drawn '
+      + 'until it has dissolved (how hard it was thrown and which way, how far it flew and how high, when it lay '
+      + 'still); a body under the floor, in a prop or past the wall, posed off its points, gone back at the hero or '
+      + 'against a swing, a storm\'s kill not going round it, the bodies killed with little to spare thrown as hard '
+      + 'and a shader compiled meanwhile are problems: tools/lab/out/death (--class warrior)',
+    options: {
+      skills: {
+        kind: 'list',
+        usage: 'a,b',
+        help: 'the skills, by key, behaviour or name (every one of the hero\'s that deals damage by default)',
+      },
+      pictures: { kind: 'switch', help: 'picture each skill\'s bodies as they fall and lie (=false: the numbers alone)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant faults the checks must catch: a body put under the floor for a frame, one thrown back at the hero',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   gear: {
     help: 'full sets rolled for every class as its loot rolls them, at each rarity and item level, and what a set '
       + 'gives on average: Health (his own and gear\'s), regeneration a second, the draught\'s heal and how much it '

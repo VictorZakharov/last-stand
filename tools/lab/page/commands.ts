@@ -21,6 +21,7 @@ import type { CastOptions } from './cast';
 import type { DrawOptions } from './draw';
 import type { GearOptions } from './gear';
 import type { MusicOptions } from './music';
+import type { DeathOptions } from './death';
 
 export interface SheetCommand {
   states: string[];
@@ -189,6 +190,15 @@ export async function blink(lab: Lab, command: BlinkOptions): Promise<Report> {
 export async function held(lab: Lab, command: HeldOptions): Promise<Report> {
   const { held: heldRound } = await import('./held');
   return heldRound(lab, command);
+}
+
+/**
+ * `lab death`: each skill's kills followed as they fall, thrown hard and with little to spare; a body under the floor,
+ * in a prop or past the wall, posed off its points or going the wrong way, and a late shader, are problems.
+ */
+export async function death(lab: Lab, command: DeathOptions): Promise<Report> {
+  const { death: deathRound } = await import('./death');
+  return deathRound(lab, command);
 }
 
 /** `lab gear`: full sets rolled for every class at each tier, and what they give; a class out of order is a problem. */

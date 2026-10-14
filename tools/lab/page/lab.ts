@@ -262,6 +262,10 @@ export interface Tile {
 export interface CaptureOptions {
   /** the joint a close-up is framed on (the whole body by default) */
   focus?: keyof Joints;
+  /** a place in the world a close-up is framed on instead of the hero (a foe's body fallen there), from `distance` m
+   *  (its turn still the hero's facing's) */
+  at?: THREE.Vector3;
+  distance?: number;
 }
 
 const SPOT: [number, number] = [12, 22];
@@ -682,7 +686,7 @@ export class Lab {
   private captureOne(view: ViewName, options: CaptureOptions): Tile {
     const closeUp = CLOSE_UPS[view];
     let crop: Crop;
-    if (closeUp) crop = this.aimCloseUp(closeUp, options.focus);
+    if (closeUp) crop = this.aimCloseUp(closeUp, options);
     else if (view === 'eyes') crop = wholeFrame();
     else crop = this.aimGameView(view);
     renderer.render();
@@ -690,11 +694,12 @@ export class Lab {
   }
 
   /** the game's camera set for a close-up; the crop is the frame's middle */
-  private aimCloseUp(closeUp: CloseUp, focus?: keyof Joints): Crop {
+  private aimCloseUp(closeUp: CloseUp, options: CaptureOptions): Crop {
     const camera = G.camera;
+    const focus = options.focus;
     const target = (focus ? this.joints[focus] : this.joints.hips) as THREE.Object3D;
-    const centre = target.getWorldPosition(new THREE.Vector3());
-    const distance = focus ? JOINT_DISTANCE : BODY_DISTANCE;
+    const centre = options.at?.clone() ?? target.getWorldPosition(new THREE.Vector3());
+    const distance = options.distance ?? (focus ? JOINT_DISTANCE : BODY_DISTANCE);
     const angle = this.player.facing + closeUp.turn;
     camera.position.set(
       centre.x + Math.sin(angle) * distance,

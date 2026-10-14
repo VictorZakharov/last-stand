@@ -495,6 +495,24 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  death: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        skills: options.skills ?? [],
+        pictures: options.pictures !== false,
+        canary: Boolean(options.canary),
+      };
+      return side.command('death', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('death'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   held: {
     each(side, options) {
       const command = {
