@@ -1,7 +1,9 @@
 // `lab crowd`: a crowd of foes killed at once, and what the frame costs as their bodies fall. Each frame is timed by
-// the browser's own clock with the game drawn as it is, and the bodies' part of it (entities/corpse.ts) apart, against
-// the frames before the kill with the crowd standing: at the CPU's own speed and slowed as a low-end device's
-// (`lab.throttle`), at 60 frames a second and at 30 (a device already slow steps each body twice as far a frame).
+// the browser's own clock with the game drawn as it is and waited out on the GPU (what the GPU draws runs behind the
+// page, and a frame timed without it missed what the bodies' smoke and embers cost it), the bodies' part of it
+// (entities/corpse.ts) apart, against the frames before the kill with the crowd standing: at the CPU's own speed and
+// slowed as a low-end device's (`lab.throttle`), at 60 frames a second and at 30 (a device already slow steps each
+// body twice as far a frame).
 import type * as THREE from 'three';
 import type { Fixture, Frame, Lab, Report } from './lab';
 import { Enemy } from '../../../src/entities/enemy';
@@ -9,6 +11,7 @@ import { G } from '../../../src/state';
 import { WAVES } from '../../../src/data/waves';
 import { Corpse } from '../../../src/entities/corpse';
 import { Ragdoll } from '../../../src/entities/ragdoll';
+import { particles } from '../../../src/fx/particles';
 import { hitEnemy } from '../../../src/combat/damage';
 import { holdFor, pressing, skillNamed, type BoundSkill } from './cast';
 import { bindKnown, foeKind, foesAt } from './death';
@@ -59,8 +62,11 @@ const BODIES_SHARE = 0.2;
  *  their poses, and how many bodies lay and moved in it. */
 interface Timed {
   frame: number;
-  /** the draw calls it made (every pass of the frame's: the shadows, the scene, the post chain) */
+  /** the draw calls it made (every pass of the frame's: the shadows, the scene, the post chain), and the particles
+   *  alive in it (the glowing ones and the smoke) */
   calls: number;
+  glow: number;
+  smoke: number;
   deaths: number;
   bodies: number;
   steps: number;
@@ -185,9 +191,12 @@ async function timedFrame(lab: Lab, foes: Enemy[], timings: BodyTimings, input: 
   info.reset();
   const start = now();
   await lab.step(1, input);
+  // (waited out on the GPU: what it draws runs behind the page, and the page's own time leaves it out)
+  G.renderer.getContext().finish();
   const frame = now() - start;
   info.autoReset = true;
-  return { frame, calls: info.render.calls, ...lapBodies(timings), ...bodiesOf(foes) };
+  const alive = { glow: particles.glow.count, smoke: particles.smoke.count };
+  return { frame, calls: info.render.calls, ...alive, ...lapBodies(timings), ...bodiesOf(foes) };
 }
 
 /** Each body's frame made `CANARY_MS` slower; returns what puts it back. */
@@ -272,11 +281,14 @@ function roundLine(round: Round): string {
   const kill = `the kill's worst frame ${ms(deadliest?.frame ?? 0)}, the deaths in it ${ms(deadliest?.deaths ?? 0)}`;
   const cpu = round.throttle === 1 ? 'the CPU as it is' : `the CPU ${round.throttle} times slower`;
   const calls = spreadOf(round.standing.map((timed) => timed.calls)).median;
+  const mostGlow = Math.max(0, ...round.falling.map((timed) => timed.glow));
+  const mostSmoke = Math.max(0, ...round.falling.map((timed) => timed.smoke));
+  const alive = `the most particles alive ${mostGlow} glowing, ${mostSmoke} smoke`;
   return `  ${round.rate} a second, ${cpu}: standing ${ms(standing.median)} a frame (90th ${ms(standing.p90)}, `
     + `${calls} draw calls); `
     + `as they fell ${ms(frames.median)} (90th ${ms(frames.p90)}, worst ${ms(frames.worst)}), the bodies `
     + `${ms(bodies.median)} (90th ${ms(bodies.p90)}, worst ${ms(bodies.worst)}; ${ms(movingCost)} a body moving; `
-    + `${shares}); ${kill}; `
+    + `${shares}); ${kill}; ${alive}; `
     + `all still after ${seconds(round.stillAt)}, gone after ${seconds(round.goneAt)}`;
 }
 
