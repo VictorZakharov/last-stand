@@ -579,7 +579,7 @@ export function buildWarrior(): Model {
    *  pitch, elbow, wrist pitch, wrist roll, shoulder roll); the swings and the overhead blows are keyed in the view
    *  (models/warriorEyes.ts); the raised shield higher, its rim just under the crosshair (added to shoulder and
    *  elbow) */
-  let fp = false, eyesView = false;
+  let fp = false;
   const FP_STANCE = [-0.6, 0, 0.7, 0, -0.2];
   const FP_STANCE_TWO = [-0.2, -0.2, 1.3, -1.0, -0.3];
   const FP_BLOCK = [-0.25, 0.05], NO_BLOCK = [0, 0];
@@ -680,7 +680,7 @@ export function buildWarrior(): Model {
     gloved = gear.hands;
     for (const o of gloves) o.visible = gloved;
     for (const o of sleeves) o.visible = !gloved;
-    for (const f of elbowFur) f.visible = gloved && !eyesView;
+    for (const f of elbowFur) f.visible = gloved && !fp;
     bare(handL, !gloved); bare(handR, !gloved);
     for (const w of offWeapons.values()) { w.group.visible = false; gripL.add(w.group); w.group.position.set(0, 0, 0); }
     sheathed = false;
@@ -1508,12 +1508,8 @@ export function buildWarrior(): Model {
     get reach() { return (ARM + (held?.len ?? 0)) * root.scale.x; },
     get lowerGrip() { return held?.off != null ? grasp : null; },
     reset: () => { legs.reset(); fade.reset(); },
-    // through the eyes the body stands upright under the camera, and the view is narrower than the rest's: a sword on
-    // the shoulder is out of it (tipped back, its pommel rose ahead of the fist into the view, like a post at its
-    // edge, and the wide view drew it large)
-    eyes: { tilt: 0, fov: 55 },
     // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
-    firstPerson: (on) => { eyesView = on; for (const f of elbowFur) f.visible = !on && gloved; },
+    firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on && gloved; mountAll(); },
     dispose() {
       kit.dispose();
       for (const f of furs) f.dispose();
