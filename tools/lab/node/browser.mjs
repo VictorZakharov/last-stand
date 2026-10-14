@@ -115,7 +115,8 @@ function labClock() {
 
 /**
  * `Math.random` seeded, the same sequence on every boot: a new profile rolls its weapons, and with the same seed
- * both sides of an A/B carry the same gear. `window.__labSeed(n)` starts the sequence again, as each set-up does.
+ * both sides of an A/B carry the same gear. `window.__labSeed(n)` starts the sequence again, as each set-up does, and
+ * `window.__labFrame()` at each lab frame starts it again from that seed and the frames since.
  * What runs in a timer's callback draws from a stream of its own: timers fire by the browser's clock, and the
  * loading screen's tips, picked every 6 s, took numbers from the sequence as many times as the boot was long, so a
  * slower boot rolled other weapons (the two sides of a commit compared with itself had 360 and 392 energy). And the
@@ -140,8 +141,41 @@ function seededRandom() {
   };
   const sequence = generator(0x9e3779b9);
   const timerStream = generator(0x85ebca6b);
-  window.__labSeed = (seed) => sequence.reseed(seed);
-  Math.random = sequence;
+  // (the sequence started again each frame from the last seed and the frames since: a draw one side of an A/B made
+  // and the other didn't, three's id for a skeleton's bone texture made as it's first drawn, moves only the random
+  // things after it in its own frame, not every particle from then on)
+  let seed = 0x9e3779b9;
+  let frames = 0;
+  window.__labSeed = (value) => {
+    seed = value | 0;
+    frames = 0;
+    sequence.reseed(seed);
+  };
+  window.__labFrame = () => {
+    frames++;
+    sequence.reseed((seed + Math.imul(frames, 0x632be5ab)) | 0);
+  };
+  // (while a command runs with --randoms, each draw tallied by the stack it was drawn from: node/randoms.mjs)
+  const CALLERS = 3;
+  let tally = null;
+  const drawn = () => {
+    if (tally) {
+      const callers = new Error().stack.split('\n').slice(2, 2 + CALLERS).join('\n');
+      tally.set(callers, (tally.get(callers) ?? 0) + 1);
+    }
+    return sequence();
+  };
+  window.__labRandoms = {
+    start() {
+      tally = new Map();
+    },
+    stop() {
+      const entries = tally ? [...tally] : [];
+      tally = null;
+      return entries;
+    },
+  };
+  Math.random = drawn;
   // (a hero's profile by its key: last-stand.profile.ranger.v1, a save slot's last-stand.s2.profile.ranger.v1, the
   // older last-stand.profile.v1)
   const profileKey = /^last-stand(\.s\d)?\.profile\./;

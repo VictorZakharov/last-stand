@@ -65,7 +65,17 @@ const COMMON_OPTIONS = {
       + 'pictures that differ (3840x2160@1,1280x720@3: a 4K screen at 100% and at 300%, pictured at its 3840x2160 '
       + 'pixels on both)',
   },
-  profile: { kind: 'switch', help: 'where the command\'s time went in the page: its busiest functions' },
+  profile: {
+    kind: 'switchOrText',
+    usage: '[=function]',
+    help: 'where the command\'s time went in the page: its busiest functions (=animate ranger.ts: those in that '
+      + 'function, by their share of it)',
+  },
+  randoms: {
+    kind: 'switch',
+    help: 'what drew the page\'s random numbers as the command ran: the busiest callers, each at its line (an A/B\'s '
+      + 'pictures of anything random differ after the first draw one side made and the other didn\'t)',
+  },
   watch: {
     kind: 'switch',
     help: 'run it again each time the source changes, until Ctrl+C (needs npm run lab:serve)',
@@ -514,6 +524,21 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  draws: {
+    help: 'one frame\'s draw calls with the crowd of foes standing before the hero, by the geometry each drew, the '
+      + 'most first: its draws in the scene, its shadow map and after it, the triangles, its material and what drew it '
+      + '(a geometry drawn many times a frame is one an instanced mesh or a merge would draw once)',
+    options: {
+      count: { kind: 'number', usage: 'n', help: 'how many foes (by default the most a wave keeps alive, 38; 0: none)' },
+      rows: { kind: 'number', usage: 'n', help: 'how many geometries the list shows (24 by default)' },
+      canary: {
+        kind: 'switch',
+        help: 'stand seven boxes of one geometry before the hero: they must come out as seven draws of it',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   gear: {
     help: 'full sets rolled for every class as its loot rolls them, at each rarity and item level, and what a set '
       + 'gives on average: Health (his own and gear\'s), regeneration a second, the draught\'s heal and how much it '
@@ -699,6 +724,11 @@ function readValue(name, spec, text) {
     case 'text':
       if (!text) throw wrong('a value');
       return text;
+    case 'switchOrText':
+      if (text === undefined || text === 'true') return true;
+      if (text === 'false') return false;
+      if (!text) throw wrong('true, false or a value');
+      return text;
     case 'list': {
       const items = text.split(',').map((item) => item.trim()).filter(Boolean);
       if (items.length === 0) throw wrong('a comma-separated list');
@@ -751,7 +781,8 @@ function checkTogether(options) {
 }
 
 /** whether an option of this kind takes the next argument as its value when written without `=` */
-const takesNext = (spec) => spec.kind !== 'switch' && spec.kind !== 'ref';
+/** whether an option's kind takes the argument after it as its value (`--count 3`; `--ab` and `--profile` don't) */
+const takesNext = (spec) => !['switch', 'ref', 'switchOrText'].includes(spec.kind);
 
 /**
  * Reads a command line (the arguments after `lab`): the command, its options by name (each read as its kind says,
@@ -830,7 +861,7 @@ function helpEntry(head, text) {
 
 /** An option's entry in the help: `--name usage`, then what it does, and its default. */
 function optionEntry(name, spec) {
-  const value = spec.kind === 'ref' ? spec.usage : spec.usage ? ` ${spec.usage}` : '';
+  const value = !takesNext(spec) && spec.usage ? spec.usage : spec.usage ? ` ${spec.usage}` : '';
   const fallback = spec.default ? ` (${spec.default})` : '';
   return helpEntry(`      --${name}${value}`, `${spec.help}${fallback}`);
 }

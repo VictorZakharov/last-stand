@@ -34,6 +34,7 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `cast`: a skill cast as the player casts it, its effect seen frame by frame (each biome and view with the biome's foes coming at him, every frame drawn and read back: its light against the budget, the frame's mean every tenth of a second, the flashes in any second and the worst cell's light through it, the shaders compiled late)
 - `death`: each skill's kills as they fall (foes stood dazed where it strikes, a hair from death and with little to spare: how hard each body was thrown and which way, how far it flew, when it lay still; its drawn pose against the floor, the props, the wall and its points)
 - `crowd`: a crowd of foes killed at once and what the frame costs as they fall (each frame timed by the browser's clock with the game drawn, the bodies' part apart, at each CPU slowdown, as a low-end device's, and frame rate)
+- `draws`: one frame's draw calls with the crowd standing, by what drew them (the geometries drawn most often, those that drew the most triangles, the scene's draws by their material's look; the scene's objects whose matrices are made again each frame)
 - `gear`: full sets of gear rolled for every class at each tier (the Health, regeneration and draught they give, and the damage they multiply)
 - `music`: each biome's music as the player hears it (its lobby, a run's countdowns, fights and wins, a hidden tab and the bank back: which track plays, how it fades, where it comes in, what reaches WebAudio)
 
@@ -322,15 +323,27 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   - the bodies' part over 20% of the standing frame.
 
   `--canary` runs the first round again with each body made 0.1 ms slower a frame, which must show. The machine's load
-  drifts, so compare rounds within one run. With many foes, the frame is mostly drawing them: about 77 draw calls a
-  foe (#222).
+  drifts, so compare rounds within one run. Drawn mesh by mesh, a foe was about 77 draw calls (#222); in its kind's
+  crowd (`src/entities/models/crowd.ts`) the 38 are about 20, and the frame standing went from 20 ms to 6 to 9 on a
+  desktop.
+- `draws`: one frame's draw calls (`page/draws.ts`), the crowd `crowd` times standing before the hero (`--count`, 38
+  by default; 0 for none) in the biome and view the set-up asks for, each of the renderer's draw calls recorded with
+  its pass (the scene's, its shadow map's, the post and overlays after it), its geometry and its material. Three lists
+  (`--rows` each, 16 by default): the geometries drawn most often (one drawn many times a frame is one an instanced
+  mesh would draw once), the geometries that drew the most triangles (the GPU's vertices: 38 mossbacks are about half
+  of a forest frame's 2.5 million), and the scene's draws by their material's look (draws of one look, a merge of what
+  doesn't move would make one). Its head line says the scene's objects whose matrices are made again each frame, and
+  how many of them are off the camera's layer (a crowd's bodies' own meshes). `--canary` stands seven boxes of one
+  geometry before the hero, which must come out as seven draws of it.
 - `held`: every held skill of the hero's class (`SkillDef.aimed`: the ranger's Quarry Mark and Strawman, the mage's
   Starfall and Veilstep; `page/held.ts`, `--class`) held as the player holds it, over a training dummy the way the
   camera looks: ready, its preview shown in its own look with no countdown, and let go it casts; then held through
   its cooldown and short of energy (`page/heldCooldown.ts`, as `blink`'s), red and counting 3, 2, 1 until a release
   would cast. Quarry Mark's red outline (`ui/overlay/outline.ts`) is checked in the top-down view, over the shoulder
   and through the eyes: round the foe the cast would mark, the pixels it lit (red risen over the same frame drawn
-  without it) near the foe on the screen and none away from it. Starfall is cast ten times over the dummy with more
+  without it) near the foe on the screen and none away from it; and in the top-down view over the biome's commonest
+  foe too, standing dazed (a creature, drawn in its kind's crowd: its own meshes are on a layer of their own, which
+  the outline must still draw). Starfall is cast ten times over the dummy with more
   standing round it inside its ring as drawn and outside it (`page/heldArea.ts`): every one inside must be struck on
   every cast (each one's casts struck by its distance). Each skill is then held across the dais's step from off it
   and let go: every mark it lays on the floor (`fx/floorPatch.ts`) is read triangle by triangle against the floor
@@ -436,7 +449,14 @@ Options every command run on a page takes:
   it ran: its page modules, its Node side and a probe's own files) and read back after: run again each time, main's
   side was half of every A/B. `--fresh` runs it again; a side whose page raised an error isn't kept;
 - `--profile`: where the command's time went in the page, its busiest functions by their own time and in total,
-  each at its line in the source;
+  each at its line in the source; `--profile=<function>` (its name, or its name and file: `"--profile=animate
+  ranger.ts"`) lists only the time in that function, by its share of it (the busiest 14 of a whole profile left the
+  ranger's animation, 2.7 ms a frame, unexplained);
+- `--randoms`: what drew the page's random numbers as the command ran (`node/randoms.mjs`): the draws in all and the
+  busiest callers, each at its line, and with `--ab` the callers whose draws differ between the sides, the smallest
+  differences first. An A/B's pictures of anything random (particles, sparks, motes) differ after the first draw one
+  side made and the other didn't: drawn in crowds, the foes' skeletons never made the bone textures three makes as a
+  skinned mesh is first drawn, four numbers each for their ids, and every mote after them lay elsewhere;
 - `--watch`: run it again each time the source changes, on the page booted for the change, until Ctrl+C.
 
 A misspelt option or a bad value stops the command before anything boots (`carry takes no --canry (did you mean
@@ -608,8 +628,11 @@ out a level apart in a few pixels, the GPU's own rounding). What it takes:
   counts from a lab frame;
 - `Math.random` seeded, started again as each command starts (after its modules are imported, in the same task:
   each three.js object made draws a random number for its id, and textures land from the workers while a module
-  loads) and at each set-up, and as a hero's profile is found missing, just before a new one rolls its gear; timers'
-  callbacks draw from a stream of their own, since they fire by the browser's clock;
+  loads) and at each set-up, and as a hero's profile is found missing, just before a new one rolls its gear; and at
+  each lab frame, from the last seed and the frames since (`__labFrame`), so a draw one side made and the other didn't
+  moves only what's random after it in its own frame (it moved every particle from then on: a crowd's pictures differed
+  by 17% of their pixels where its bodies were drawn the same); timers' callbacks draw from a stream of their own,
+  since they fire by the browser's clock;
 - the game's clock moved forward to the next whole minute at a set-up, storage and cookies cleared at each boot, one
   page alive at a time, and every command on a page booted for it.
 

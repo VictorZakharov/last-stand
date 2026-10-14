@@ -23,6 +23,7 @@ import type { GearOptions } from './gear';
 import type { MusicOptions } from './music';
 import type { DeathOptions } from './death';
 import type { CrowdOptions } from './crowd';
+import type { DrawsOptions } from './draws';
 
 export interface SheetCommand {
   states: string[];
@@ -211,6 +212,12 @@ export async function death(lab: Lab, command: DeathOptions): Promise<Report> {
 export async function crowd(lab: Lab, command: CrowdOptions): Promise<Report> {
   const { crowd: crowdRound } = await import('./crowd');
   return crowdRound(lab, command);
+}
+
+/** `lab draws`: one frame's draw calls with the crowd standing, by the geometry each drew, the most first. */
+export async function draws(lab: Lab, command: DrawsOptions): Promise<Report> {
+  const { draws: drawsOf } = await import('./draws');
+  return drawsOf(lab, command);
 }
 
 /** `lab gear`: full sets rolled for every class at each tier, and what they give; a class out of order is a problem. */

@@ -36,3 +36,13 @@ test('places each function by its source when the source maps know it', () => {
   assert.ok(lines.some((line) => line.endsWith('bake geometry.ts:227')));
   assert.ok(lines.some((line) => line.endsWith('raycast three.js:11')));
 });
+
+test('within a function: only its time, by its share of it', () => {
+  const lines = summarize(PROFILE, () => null, 'bake').split('\n');
+  assert.equal(lines[0], 'profile: 3 ms in bake, 60.0 % of 5 ms sampled');
+  const total = lines.slice(lines.indexOf('by total time (with what it called)') + 1);
+  // (the recursive bake once in each of its samples, and nothing outside it: not run, its caller)
+  assert.match(total[0], /100\.0 %\s+3 ms {2}bake geometry\.ts:201$/);
+  assert.equal(total.length, 1);
+  assert.match(summarize(PROFILE, () => null, 'paint'), /no function paint ran$/);
+});

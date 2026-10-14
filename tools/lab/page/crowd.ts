@@ -35,8 +35,9 @@ export interface CrowdOptions {
 const THROTTLES = [1, 4, 6];
 const RATES = [60, 30];
 /** where the hero stands and faces (deg) unless the fixture says: open ground, the arena before him */
-const SPOT: [number, number] = [-11, -12];
-const FACING = 90;
+/** where the hero stands for a crowd (clear of props, the crowd before him on open ground), and the way he faces (°) */
+export const CROWD_SPOT: [number, number] = [-11, -12];
+export const CROWD_FACING = 90;
 /** the crowd stands in rows this wide, this far apart (m), the first this far before the hero */
 const ROW = 7;
 const APART = 1.3;
@@ -139,7 +140,7 @@ function spreadOf(values: number[]): Spread {
 }
 
 /** The crowd's places: rows before the hero at `at` facing `facing` (rad), the middle of each row straight ahead. */
-function crowdPlaces(count: number, at: THREE.Vector3, facing: number): THREE.Vector3[] {
+export function crowdPlaces(count: number, at: THREE.Vector3, facing: number): THREE.Vector3[] {
   const forward = { x: Math.sin(facing), z: Math.cos(facing) };
   const left = { x: Math.cos(facing), z: -Math.sin(facing) };
   const spots: THREE.Vector3[] = [];
@@ -219,8 +220,8 @@ function plantCost(): () => void {
 /** The crowd set up afresh, standing dazed before the hero, and how it's to be killed. */
 async function crowdUp(lab: Lab, options: CrowdOptions, count: number): Promise<{ foes: Enemy[]; killing: Killing }> {
   G.arena.restoreProps();
-  const facing = options.fixture.facing ?? (FACING * Math.PI) / 180;
-  await lab.setup({ ...options.fixture, at: options.fixture.at ?? SPOT, facing });
+  const facing = options.fixture.facing ?? (CROWD_FACING * Math.PI) / 180;
+  await lab.setup({ ...options.fixture, at: options.fixture.at ?? CROWD_SPOT, facing });
   const hero = G.player;
   hero.cooldowns.clear();
   hero.energy = hero.stats.maxEnergy;
