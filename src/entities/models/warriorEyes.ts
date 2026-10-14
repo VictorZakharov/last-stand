@@ -84,6 +84,56 @@ export const ONE_BACK: ViewMove = viewMove([
   [0.85, [0.22, -0.22, -0.42], [0.8, -0.3, -0.5]],
 ]);
 
+/** where an overhead blow ends, the blade driven down ahead of the feet (a two-hander's, a one-hander's): its keys end
+ *  there, and after the cast it's held there a moment (models/warrior.ts `chopTail`), low in the view, the blade
+ *  ahead and down. (Driven steeply down, a two-hander was out of the frame from the blow to the end of the hold, and
+ *  the lower hand's joints went 20 degrees past and let go; with its lower grip by the chest, the left arm ran 15 cm
+ *  into the body) */
+export const TWO_DOWN_AT: [number, number, number] = [0.08, -0.22, -0.33];
+export const TWO_DOWN_DIR: [number, number, number] = [0.05, -0.38, -0.92];
+export const ONE_DOWN_AT: [number, number, number] = [0.1, -0.3, -0.46];
+export const ONE_DOWN_DIR: [number, number, number] = [-0.12, -0.3, -0.95];
+
+/** Power Strike with a two-hander: raised high by 0.3 of its cast, the lower fist seen in the top half of the view and
+ *  the blade back over the head out of the frame (raised straight overhead, the hands left the view and the upper
+ *  arms loomed past the eyes); drawn further back as the charge gathers, to 0.8; then over the top and down through
+ *  the view, the blade driven down by 0.9, where the skill fires (it stood upright on the right for a second and a
+ *  half, then tipped to point ahead after the skill had fired) */
+export const POWER_TWO: ViewMove = viewMove([
+  [0, TWO_REST_AT, TWO_REST_DIR],
+  [0.3, [0.12, -0.06, -0.36], [0.15, 0.8, 0.58]],
+  [0.8, [0.14, -0.03, -0.33], [0.12, 0.72, 0.68]],
+  [0.86, [0.1, -0.2, -0.32], [-0.05, 0.85, -0.52]],
+  [0.9, TWO_DOWN_AT, TWO_DOWN_DIR],
+]);
+
+/** Thunder Crescent: as Power Strike's, quicker, with no charge: raised by 0.3, loaded to 0.4, over the top at 0.48
+ *  and driven down by 0.55, where it fires, and held there */
+export const SMITE_TWO: ViewMove = viewMove([
+  [0, TWO_REST_AT, TWO_REST_DIR],
+  [0.3, [0.12, -0.06, -0.36], [0.15, 0.8, 0.58]],
+  [0.4, [0.14, -0.03, -0.33], [0.12, 0.72, 0.68]],
+  [0.48, [0.1, -0.2, -0.32], [-0.05, 0.85, -0.52]],
+  [0.55, TWO_DOWN_AT, TWO_DOWN_DIR],
+]);
+
+/** a two-hander back to rest from where an overhead blow ended, over the hold after it: the blade raised on the way
+ *  (faded straight back, it pointed ahead out of the lower fist halfway, and the hand let go) */
+export const RECOVER_TWO: ViewMove = viewMove([
+  [0, TWO_DOWN_AT, TWO_DOWN_DIR],
+  [0.5, [0.06, -0.32, -0.42], [-0.2, 0.85, -0.45]],
+  [1, TWO_REST_AT, TWO_REST_DIR],
+]);
+
+/** Power Strike with one hand (the left hand's mirrors it, two blades): as the two-hander's */
+export const POWER_ONE: ViewMove = viewMove([
+  [0, [0.24, -0.26, -0.44], [0.25, 0.9, -0.35]],
+  [0.3, [0.2, -0.04, -0.36], [0.1, 0.8, 0.59]],
+  [0.8, [0.22, -0.01, -0.33], [0.08, 0.72, 0.69]],
+  [0.86, [0.16, -0.14, -0.44], [-0.05, 0.85, -0.52]],
+  [0.9, ONE_DOWN_AT, ONE_DOWN_DIR],
+]);
+
 /** how far the blade's flat is turned to face the eyes through a cut: from the load, through the blow, off as it
  *  follows through (shares of the cast) */
 export const CUT_FLAT = [0.36, 0.48, 0.7, 0.85];

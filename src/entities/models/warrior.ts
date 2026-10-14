@@ -22,7 +22,10 @@ import { axe, greataxe, greatsword, mace, maul, sword, type WeaponMaterials } fr
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { groundHeight } from '../../world/ground';
 import { fromEyes, dirFromEyes, viewAt, ViewFade } from '../viewModel';
-import { TWO_REST_AT, TWO_REST_DIR, TWO_FORE, TWO_BACK, ONE_FORE, ONE_BACK, CUT_FLAT, EYES_TURN } from './warriorEyes';
+import {
+  TWO_REST_AT, TWO_REST_DIR, TWO_FORE, TWO_BACK, ONE_FORE, ONE_BACK, CUT_FLAT, EYES_TURN, POWER_TWO, SMITE_TWO, POWER_ONE,
+  RECOVER_TWO, ONE_DOWN_AT, ONE_DOWN_DIR,
+} from './warriorEyes';
 import type { ActionState, AnimState, Gear, LowerGrip, Model } from '../../types';
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -210,10 +213,11 @@ const SM_BLADE: Keys = [[0, 1.1], [0.34, 2], [0.42, 2.05]];
  *  far ahead of his feet and this high over the floor (m at a man's size), the elbows out and down (chest's frame) */
 const SM_LAND = [0.47, 0.55], SM_AHEAD = 0.6, SM_HIGH = 0.8;
 const SM_POLE = new THREE.Vector3(-1, -0.6, -0.5);
-/** the overhead blows through the eyes: the weapon raised by `lift` of the cast, coming down from `from` to `to`, and
- *  how much it trembles as it's held up (Power Strike's charge) */
+/** the overhead blows through the eyes: the weapon raised by `lift` of the cast, coming down from `from` to `to` (as
+ *  their keys in models/warriorEyes.ts, landing where the skill fires), and how much it trembles as it's held up
+ *  (Power Strike's charge) */
 const OVERHEAD: Record<string, { lift: number; from: number; to: number; shake: number }> = {
-  chop: { lift: 0.3, from: 0.9, to: 0.97, shake: 0.02 },
+  chop: { lift: 0.3, from: 0.8, to: 0.9, shake: 0.02 },
   smite: { lift: 0.34, from: 0.42, to: 0.55, shake: 0 },
 };
 
@@ -572,14 +576,12 @@ export function buildWarrior(): Model {
   /** Seen through its own eyes (entities/viewModel.ts) the weapons are posed to be seen but keep the middle
    *  of the view clear (measured on screen): at rest low in its corners, blades angled in (a two-hander,
    *  under the moves that don't place it in the view, low on the right, blade out) (added to shoulder
-   *  pitch, elbow, wrist pitch, wrist roll, shoulder roll); the swings are keyed in the view
-   *  (models/warriorEyes.ts); Power Strike a high guard, blades spread (shoulder pitch, elbow, blade towards the
-   *  arm, yaw, wrist roll); the raised shield higher, its rim just under the crosshair (added to shoulder and
+   *  pitch, elbow, wrist pitch, wrist roll, shoulder roll); the swings and the overhead blows are keyed in the view
+   *  (models/warriorEyes.ts); the raised shield higher, its rim just under the crosshair (added to shoulder and
    *  elbow) */
   let fp = false;
   const FP_STANCE = [-0.6, 0, 0.7, 0, -0.2];
   const FP_STANCE_TWO = [-0.2, -0.2, 1.3, -1.0, -0.3];
-  const FP_GUARD = [-1.0, -0.8, 0.3, -0.25, 0];
   const FP_BLOCK = [-0.25, 0.05], NO_BLOCK = [0, 0];
   /** a two-hander at rest through the eyes, in both hands and both seen: where the left hand holds it in the
    *  view (camera space, metres; the right hand is further up the grip, however long), the weapon's
@@ -591,12 +593,10 @@ export function buildWarrior(): Model {
   /** a blade's flat turned to the eyes (camera space): a cut seen broadside */
   const FACE_EYES = V(0, 0, 1);
   /** One-handed moves through the eyes, placed in the view (the right hand's grip and its blade's direction,
-   *  camera space; the left hand's mirrors it): Power Strike raises both blades to cross over the top of the
-   *  view, trembling as the charge builds, then drives them down through it; Twin Fangs cuts each blade from
-   *  high on its own side down across the view; Bull Rush draws the blades back, drives them ahead through
-   *  the rush and flings them out to the sides as it lands.
+   *  camera space; the left hand's mirrors it): Twin Fangs cuts each blade from high on its own side down
+   *  across the view; Bull Rush draws the blades back, drives them ahead through the rush and flings them out
+   *  to the sides as it lands.
    *  (Posed by joint angles the raised arms loomed over the camera and the blades went out of the frame.) */
-  const FP_CHOP = { up: [V(0.34, -0.02, -0.5), V(-0.55, 0.62, -0.7)], down: [V(0.24, -0.3, -0.5), V(-0.55, -0.2, -0.8)] };
   const FP_CUT = { up: [V(0.36, -0.06, -0.6), V(-0.6, 0.45, -0.65)], down: [V(-0.14, -0.3, -0.5), V(-0.85, -0.25, -0.45)] };
   const FP_RUSH = { back: [V(0.38, -0.4, -0.4), V(0.35, 0.55, -0.75)], ahead: [V(0.28, -0.34, -0.6), V(-0.12, 0.18, -0.98)], out: [V(0.45, -0.22, -0.5), V(0.75, 0.4, -0.5)] };
   const FP_TWO_RUSH = { ahead: [V(0.12, -0.3, -0.55), V(-0.3, 0.3, -0.9)], out: [V(0.24, -0.22, -0.5), V(0.85, 0.35, -0.4)] };
@@ -604,8 +604,6 @@ export function buildWarrior(): Model {
   const BRACE = 0.16, RUSH = 0.58, STRIDES = 2.5;
   /** where each elbow points while the arm is placed in the view (chest space: out to its side, down) */
   const POLE_VR = V(-0.6, -1, 0), POLE_VL = V(0.6, -1, 0);
-  /** Power Strike there: raised to a high guard on the right, blade up and forward, then the blow ahead */
-  const FP_TWO_GUARD = [V(0.24, -0.2, -0.52), V(0.3, 0.7, -0.6).normalize()], FP_TWO_BLOW = [V(0.1, -0.27, -0.5), V(0.1, -0.1, -1).normalize()];
 
   // --- round shield on the left fist: planks behind a painted navy face, a steel rim with rivets and a
   // domed boss. At rest it hangs at the side facing outwards; raised (or charging) it swings round in
@@ -1162,48 +1160,32 @@ export function buildWarrior(): Model {
         const end = w * ramp(k, SM_LAND[0], SM_LAND[1]);
         if (end > 0 && held) holdAtFloor(end);
       } else if (a.name === 'chop' || a.name === 'smite') {
-        // the overhead blows through the eyes (OVERHEAD): the weapon rises overhead (trembling while Power Strike's
-        // charge builds), then comes down in a vertical arc to the skill's fireAt
+        // the overhead blows through the eyes (OVERHEAD; third person's are above), keyed in the view
+        // (models/warriorEyes.ts): the weapon raised high, the fists seen at the top of the view, trembling while Power
+        // Strike's charge builds, then over the top and down through it to the skill's fireAt, its flat to the eyes;
+        // after the blow the blades stay down a moment (chopTail). (The trunk stays upright: bent into the blow, it
+        // took the shoulders from under the hands the keys place)
         const o = OVERHEAD[a.name];
-        const w = ramp(k, 0, 0.12) * (1 - ramp(k, 0.97, 1));
+        const w = ramp(k, 0, 0.12);
         const lift = ramp(k, 0, o.lift), blow = ramp(k, o.from, o.to);
         const shake = (1 - blow) * lift * Math.sin(t * 45) * o.shake;
-        // through the eyes, a weapon raised overhead leaves the view and the raised upper arms loom past
-        // the camera: a high guard instead, upper arms forward and low, forearms up, blades standing up in
-        // front of the face, and from there the same blow
-        const g = FP_GUARD;
-        const pitch = fp ? lerp(g[0], -0.8, blow) + shake : lerp(lerp(-1.3, -2.95, lift), -0.8, blow) + shake;
-        const bend = fp ? lerp(g[1], -0.1, blow) : two ? -0.55 : -0.1;
-        const along = ALONG_ARM * (fp ? lerp(g[2], 1, blow) : 1) * w;
-        // a two-hander is raised over the middle of the head, within the left hand's reach
-        // (through the eyes the blades stand apart, clear of the middle of the view)
-        R.x = lerp(R.x, pitch, w); R.z = lerp(R.z, 0, w); R.y = (fp ? g[3] : two ? 0.7 : 0.25) * w;
-        j.elbowR.rotation.x = lerp(j.elbowR.rotation.x, bend, w);
-        j.handR.rotation.x += along;
-        if (fp) j.handR.rotation.z += g[4] * w * (1 - blow);
-        // two weapons: both rise and come down together, the left arm the mirror image of the right
-        if (offHeld) {
-          const L = j.shoulderL.rotation;
-          L.x = lerp(L.x, pitch, w); L.z = lerp(L.z, 0, w); L.y = -(fp ? g[3] : 0.25) * w;
-          j.elbowL.rotation.x = lerp(j.elbowL.rotation.x, bend, w);
-          j.handL.rotation.x += along;
-          if (fp) j.handL.rotation.z -= g[4] * w * (1 - blow);
-        }
-        if (fp && !two) {
-          inView(FP_CHOP, blow, true, !!offHeld);
-          _ra.x += shake * 0.5; _ra.y += shake; _la.x -= shake * 0.5; _la.y += shake;
-          // (raised slowly as the charge gathers; after the blow the blades stay down a moment, chopTail)
-          wR = lift; wL = offHeld ? lift : 0;
-          if (blow > 0) chopTail = 1;
-        }
-        if (fp && two) {
-          if (blow > 0) chopTail = 1;
-          _va.copy(FP_TWO_AT).lerp(FP_TWO_GUARD[0], lift).lerp(FP_TWO_BLOW[0], blow);
+        const flat = ramp(k, o.from - 0.05, o.from);
+        if (blow > 0) chopTail = 1;
+        if (two) {
+          viewAt(a.name === 'chop' ? POWER_TWO : SMITE_TWO, k, _va, _vd);
           _va.x += shake * 0.5; _va.y += shake * 0.5;
-          _vd.copy(FP_TWO_DIR).lerp(FP_TWO_GUARD[1], lift).lerp(FP_TWO_BLOW[1], blow);
-          vw = w;
+          vw = 1; viewFlat = flat;
+        } else {
+          // (two weapons: both rise and come down together, the left the mirror image of the right)
+          viewAt(POWER_ONE, k, _ra, _rd);
+          _ra.x += shake * 0.5; _ra.y += shake;
+          wR = w; flatR = flat;
+          if (offHeld) {
+            viewAt(POWER_ONE, k, _la, _ld, true);
+            _la.x -= shake * 0.5; _la.y += shake;
+            wL = w; flatL = flat;
+          }
         }
-        j.spine.rotation.x += ((fp ? 0 : -0.25) * lift * (1 - blow) + 0.45 * blow) * w;
         j.body.position.y += -0.16 * blow * w;
         j.kneeL.rotation.x += 0.55 * blow * w; j.kneeR.rotation.x += 0.4 * blow * w;
         j.thighL.rotation.x += -0.45 * blow * w;
@@ -1391,11 +1373,14 @@ export function buildWarrior(): Model {
     // through the eyes a two-hander rests in both hands where both are seen (held out on the right, the
     // left hand on the lower grip), and the attacks take it from there
     // after Power Strike's blow the blades stay down a moment, then come back to rest (the cast ends right
-    // after it)
+    // after it): one-handed by a blend, a two-hander by a move of its own (RECOVER_TWO)
     if (fp && chopTail > 0 && a?.name !== 'chop' && a?.name !== 'smite') {
       const u = chopTail * chopTail * (3 - 2 * chopTail);
-      if (two) { _va.copy(FP_TWO_BLOW[0]); _vd.copy(FP_TWO_BLOW[1]); vw = u; }
-      else { inView(FP_CHOP, 1, true, !!offHeld); wR = u; wL = offHeld ? u : 0; }
+      if (two) { viewAt(RECOVER_TWO, 1 - chopTail, _va, _vd); vw = 1; }
+      else {
+        _ra.set(...ONE_DOWN_AT); _rd.set(...ONE_DOWN_DIR).normalize(); wR = u;
+        if (offHeld) { _la.set(-ONE_DOWN_AT[0], ONE_DOWN_AT[1], ONE_DOWN_AT[2]); _ld.copy(_rd); _ld.x = -_ld.x; wL = u; }
+      }
     }
     if (fp && two && st.dead < 0) {
       _va.lerpVectors(FP_TWO_AT, _va, vw); _vd.lerpVectors(FP_TWO_DIR, _vd.normalize(), vw);
