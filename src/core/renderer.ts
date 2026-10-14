@@ -422,7 +422,7 @@ export function settleCamera(focus: THREE.Vector3): void {
 }
 
 /** `height`: the character's, for the close views' shoulder and eye level. */
-export function updateCamera(dt: number, focus: THREE.Vector3, height: number): void {
+export function updateCamera(dt: number, focus: THREE.Vector3, height: number, firstFov: number = CAMERA.first.fov): void {
   const cam = G.camera;
   shift.x = damp(shift.x, shift.tx, 6, dt);
   shift.y = damp(shift.y, shift.ty, 6, dt);
@@ -459,7 +459,7 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
       cam.position.copy(_pivot).addScaledVector(_fwd, -rig.boom);
       cam.position.y = Math.max(0.4, cam.position.y);
     } else {
-      fov = CAMERA.first.fov; near = 0.08;
+      fov = firstFov; near = 0.08;
       cam.position.set(focus.x - sy * 0.12, height * 0.9, focus.z - cy * 0.12);
     }
     cam.lookAt(_look.copy(cam.position).add(_fwd));

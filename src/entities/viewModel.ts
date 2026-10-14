@@ -10,7 +10,8 @@ import { curve, type Keys } from './models/motion';
 /** Where the camera sits against the neck, in the hero's space (x left, y up, z forward): just above
  *  it, so the shoulders stay below the view and the hands and weapon come into its lower part. */
 const NECK_CAM = new THREE.Vector3(0, 0.25, 0.1);
-/** tipped back about the camera, so what the hands hold low and ahead rises into the frame */
+/** tipped back about the camera, so what the hands hold low and ahead rises into the frame (a model's own in its
+ *  place, `Model.eyes`) */
 const TILT = -0.4;
 const HIDDEN = 1;
 
@@ -19,7 +20,22 @@ const shown = new WeakSet<Model>();
 /** The pose's own placement of the root, and ours over it: a frame with no new pose (paused) starts again
  *  from the pose's, or the neck would be measured where we put the hero last time */
 const placed = new WeakMap<Model, { pos: THREE.Vector3; quat: THREE.Quaternion; ourPos: THREE.Vector3; ourQuat: THREE.Quaternion }>();
-const _eye = new THREE.Vector3(), _m = new THREE.Matrix4(), _t = new THREE.Matrix4(), _t2 = new THREE.Matrix4(), _s = new THREE.Vector3(), _flip = new THREE.Matrix4().makeRotationY(Math.PI).multiply(new THREE.Matrix4().makeRotationX(TILT));
+const _eye = new THREE.Vector3(), _m = new THREE.Matrix4(), _t = new THREE.Matrix4(), _t2 = new THREE.Matrix4(), _s = new THREE.Vector3();
+
+/** How a model sits under the camera: its frame from the eyes' (half a turn, tipped back by its tilt), and the turn
+ *  back from it */
+interface Seat { flip: THREE.Matrix4; back: THREE.Quaternion }
+const seats = new Map<number, Seat>();
+const seated = new WeakMap<THREE.Object3D, Seat>();
+function seatFor(tilt: number): Seat {
+  let seat = seats.get(tilt);
+  if (!seat) {
+    const flip = new THREE.Matrix4().makeRotationY(Math.PI).multiply(new THREE.Matrix4().makeRotationX(tilt));
+    seats.set(tilt, seat = { flip, back: new THREE.Quaternion().setFromRotationMatrix(flip).invert() });
+  }
+  return seat;
+}
+const seatOf = (root: THREE.Object3D): Seat => seated.get(root) ?? seatFor(TILT);
 
 /** The meshes that aren't the arms (with the hands and what they hold). Of what hangs on a shoulder, only
  *  its own meshes (the upper arm) and the elbow's show: a pauldron, on a joint of its own, would fill the
@@ -41,8 +57,6 @@ function bodyOf(m: Model): THREE.Object3D[] {
   return list;
 }
 
-const _r = new THREE.Quaternion().setFromRotationMatrix(_flip).invert();
-
 /**
  * Where a point of the eyes' view (camera space: x right, y up, looking down -z, in metres) will be once
  * `viewArms` has placed the model (`root`), in its world as posed so far: for a pose that puts the hands
@@ -50,12 +64,12 @@ const _r = new THREE.Quaternion().setFromRotationMatrix(_flip).invert();
  */
 export function fromEyes(root: THREE.Object3D, neck: THREE.Object3D, p: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
   root.worldToLocal(neck.getWorldPosition(_eye)).add(NECK_CAM);
-  out.copy(p).applyQuaternion(_r).divideScalar(root.scale.x).add(_eye);
+  out.copy(p).applyQuaternion(seatOf(root).back).divideScalar(root.scale.x).add(_eye);
   return root.localToWorld(out);
 }
 /** A direction of the eyes' view in the model's world, as `fromEyes` */
 export function dirFromEyes(root: THREE.Object3D, d: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
-  return out.copy(d).applyQuaternion(_r).transformDirection(root.matrixWorld);
+  return out.copy(d).applyQuaternion(seatOf(root).back).transformDirection(root.matrixWorld);
 }
 /** A key of a move through the eyes: its share of the move, the grip's place in the view and the weapon's way there
  *  (camera space, as `fromEyes`). */
@@ -130,6 +144,8 @@ export function toEyes(d: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
 
 /** Show `m` through the camera's eyes (`on`), or as a whole body. Call after the camera has moved. */
 export function viewArms(m: Model, on: boolean, cam: THREE.Camera): void {
+  const seat = seatFor(m.eyes?.tilt ?? TILT);
+  seated.set(m.root, seat);
   if (on !== shown.has(m)) {
     for (const o of bodyOf(m)) { if (on) o.layers.set(HIDDEN); else o.layers.set(0); }
     if (on) shown.add(m); else shown.delete(m);
@@ -149,7 +165,7 @@ export function viewArms(m: Model, on: boolean, cam: THREE.Camera): void {
   const neck = m.joints?.neck;
   if (neck) root.worldToLocal(neck.getWorldPosition(_eye)).add(NECK_CAM);
   else root.worldToLocal(_eye.setFromMatrixPosition(cam.matrixWorld));
-  _m.copy(cam.matrixWorld).multiply(_flip);
+  _m.copy(cam.matrixWorld).multiply(seat.flip);
   // (the model's own scale kept: the heroes are built a little over life size, and reach reads it)
   _m.multiply(_t.makeScale(root.scale.x, root.scale.y, root.scale.z)).multiply(_t2.makeTranslation(-_eye.x, -_eye.y, -_eye.z));
   _m.premultiply(_t.copy(parent.matrixWorld).invert());

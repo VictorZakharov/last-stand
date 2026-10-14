@@ -322,6 +322,9 @@ export interface Model {
   /** seen through its own eyes (only the arms show, entities/viewModel.ts): adjust what reads badly from
    *  there (a sleeve hiding the hand, an arm raised out of the frame) */
   firstPerson?(on: boolean): void;
+  /** how it's seen through its own eyes where that differs from the rest (entities/viewModel.ts): the body tipped back
+   *  under the camera (rad: what's held low rises into the view) and the view's height there (degrees) */
+  readonly eyes?: { readonly tilt: number; readonly fov: number };
   /** cloth simulated on the model's own joints (a sleeve; models/sleeve.ts): stepped in `animate` */
   readonly cloths?: { update(dt: number): void; reset(): void }[];
   /** re-settle simulated parts after a teleport */

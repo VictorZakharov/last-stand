@@ -1508,6 +1508,10 @@ export function buildWarrior(): Model {
     get reach() { return (ARM + (held?.len ?? 0)) * root.scale.x; },
     get lowerGrip() { return held?.off != null ? grasp : null; },
     reset: () => { legs.reset(); fade.reset(); },
+    // through the eyes the body stands upright under the camera, and the view is narrower than the rest's: a sword on
+    // the shoulder is out of it (tipped back, its pommel rose ahead of the fist into the view, like a post at its
+    // edge, and the wide view drew it large)
+    eyes: { tilt: 0, fov: 55 },
     // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
     firstPerson: (on) => { eyesView = on; for (const f of elbowFur) f.visible = !on && gloved; },
     dispose() {
