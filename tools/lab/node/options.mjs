@@ -466,7 +466,8 @@ export const COMMANDS = {
       },
       canary: {
         kind: 'switch',
-        help: 'plant faults the checks must catch: a body put under the floor for a frame, one thrown back at the hero',
+        help: 'plant faults the checks must catch: a body put under the floor for a frame, one thrown back at the '
+          + 'hero, one struck off its middle turned the other way',
       },
       trace: {
         kind: 'switch',

@@ -285,13 +285,15 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   twice, each on a fresh set-up: first at foes a hair from death (1 Health: thrown hard), then at foes holding 80% of
   what the first cast's killing hit dealt them (thrown softly). Every body is followed as drawn until it has
   dissolved: how hard it was thrown, how far it flew and how high, when it lay still (or began to dissolve: a frozen
-  body shatters as it lands). These are problems:
+  body shatters as it lands), and how far one struck off its middle turned its blow's way over its first 0.2 s (its
+  shoulders' heading). These are problems:
   - a drawn part more than 4 cm under the floor (a ball's depth into its own level or a higher one, `depthInFloor`)
     or 6 cm into a prop;
   - the pose more than 10 cm off its points, a bone stretched over 8%, NaN, or a body past the wall;
   - a body lying with its hips over 0.6 of their standing height above what's under it;
   - a body going back at the hero, or against its throw for a skill that strikes from elsewhere (Hailfletch's
     shower, Starfall's crystals); a body going against a sweep's swing;
+  - a body struck off its middle turning more than 5° against its blow;
   - a storm's kill not going round it (its path at least twice its way, its hips up a metre);
   - the bodies killed with little to spare thrown as hard;
   - a shader compiled meanwhile.
@@ -299,8 +301,8 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   `--trace` lists every hard-thrown body frame by frame: each point's clearance as drawn, its pose's error, its
   point's own clearance, a prop touched, and its fastest point (what keeps a body from lying still). `--pictures`
   (on by default) pictures the bodies as the player sees them, and close from the hero's left and from behind, at
-  0.15 s, at 0.5 s and lying still, into `out/death`. `--canary` puts a body a metre under the floor for a frame and
-  throws one back at the hero.
+  0.15 s, at 0.5 s and lying still, into `out/death`. `--canary` puts a body a metre under the floor for a frame,
+  throws one back at the hero, and turns the first struck off its middle the other way.
 - `crowd`: a crowd of foes killed at once (`page/crowd.ts`), and what the frame costs as their bodies fall: the low-end
   device's measure. `--count` sets the crowd (38 by default, the most a wave keeps alive); it's killed by a blow each
   from the hero, or by `--skill` cast at it. Each round sets the crowd up afresh, times 30 frames with it standing,

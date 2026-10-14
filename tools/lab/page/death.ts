@@ -15,7 +15,7 @@ import type { Joints } from '../../../src/entities/models/rig';
 import { G } from '../../../src/state';
 import { BIOMES } from '../../../src/data/biomes';
 import { GROUND_EDGES, GROUND_LEVELS, groundHeight } from '../../../src/world/ground';
-import { RAGDOLL_BONES, RAGDOLL_POINTS } from '../../../src/entities/ragdoll';
+import { RAGDOLL_BONES, RAGDOLL_POINTS, type Ragdoll } from '../../../src/entities/ragdoll';
 import { lateCompiles, programsCompiledInGame } from '../../../src/core/shaders';
 import { holdFor, pressing, skillNamed, type BoundSkill } from './cast';
 
@@ -24,7 +24,8 @@ export interface DeathOptions {
   /** the skills: their keys, behaviours or names (every one of the hero's that deals damage by default) */
   skills: string[];
   pictures: boolean;
-  /** plant the faults the checks must catch: a body put under the floor for a frame, one thrown back at the hero */
+  /** plant the faults the checks must catch: a body put under the floor for a frame, one thrown back at the hero,
+   *  one struck off its middle turned the other way */
   canary: boolean;
   /** list each frame of each body a skill throws hard: each point's height over the floor less its size, how far the
    *  drawn pose is off it and its point's own height over the floor less its size (cm) */
@@ -109,6 +110,12 @@ interface Fallen {
   swing: number;
   /** the way it was going over the first frames after its fall (m/s, along the ground) */
   early: THREE.Vector3;
+  /** the turn its blow gives it about its upright (its lever across the body times its throw, m²/s: + turning as a
+   *  heading turns to the left), and how far it turned over its first `TURN_FRAMES` (rad), from its shoulders'
+   *  heading as it fell */
+  torque: number;
+  headingAt: number;
+  turned: number;
   standingHips: number;
   path: number;
   highest: number;
@@ -277,7 +284,7 @@ interface Cast {
   /** the foes left alive */
   standing: number;
   moments: Pictured[];
-  canary: { under: boolean; back: boolean };
+  canary: { under: boolean; back: boolean; turned: boolean };
   /** with `--trace`, the first body's frames */
   trace: string[];
 }
@@ -290,12 +297,31 @@ function fallen(foe: Enemy, dealt: number, frame: number): Fallen {
     foe, dealt, fellAt: frame, fling: foe.fling!, from: foe.pos.clone(), heroAt: G.player.pos.clone(),
     swing: swingSeen(),
     early: new THREE.Vector3(),
+    torque: foe.fling!.oz * foe.fling!.vx - foe.fling!.ox * foe.fling!.vz, headingAt: NaN, turned: 0,
     standingHips: hips.y - groundHeight(hips.x, hips.z), path: 0, highest: 0, restAt: -1,
     lay: new THREE.Vector3(), ended: false, layHips: 0,
     under: noWorst(), inProp: noWorst(), poseOff: noWorst(), stretch: noWorst(),
     bones: [], outside: false, broken: false,
   };
 }
+
+/** the frames over which a body's turn after its fall is read (before the floor's grip takes it); a blow turning it
+ *  less than `TURN_FROM` (m²/s) struck it through its middle, and one turned more than `TURN_WRONG` (rad) against
+ *  its blow turned the wrong way */
+const TURN_FRAMES = 12;
+const TURN_FROM = 0.3;
+const TURN_WRONG = (5 * Math.PI) / 180;
+
+/** The heading of a body's shoulders, from its right one to its left (rad, as a heading: 0 along +z). */
+function shouldersHeading(ragdoll: Ragdoll): number {
+  const left = ragdoll.point(RAGDOLL_POINTS.indexOf('shoulderL'), new THREE.Vector3());
+  const right = ragdoll.point(RAGDOLL_POINTS.indexOf('shoulderR'), new THREE.Vector3());
+  return Math.atan2(left.x - right.x, left.z - right.z);
+}
+
+/** An angle as the least turn it is (-π to π). */
+const wrapped = (angle: number): number => Math.atan2(Math.sin(angle), Math.cos(angle));
+const degrees = (angle: number): string => `${((angle * 180) / Math.PI).toFixed(0)}°`;
 
 /** the frames over which a body's way after its fall is read */
 const EARLY_FRAMES = 6;
@@ -349,7 +375,7 @@ async function castAt(lab: Lab, skill: BoundSkill, foes: Enemy[], aim: THREE.Vec
   const bodies = new Map<Enemy, Fallen>();
   const last = new Map<Enemy, THREE.Vector3>();
   const moments: Pictured[] = [];
-  const canary = { under: false, back: false };
+  const canary = { under: false, back: false, turned: false };
   const holdFrames = Math.max(1, Math.round(holdFor(skill.def) / frameTime()));
   const pictureFrames = PICTURE_AT.map((at) => Math.round(at / frameTime()));
   let firstFall = -1;
@@ -366,6 +392,12 @@ async function castAt(lab: Lab, skill: BoundSkill, foes: Enemy[], aim: THREE.Vec
         // (planted: the first body thrown back at the hero, twice as hard as the blow threw it away)
         canary.back = true;
         foe.corpse.ragdoll.throw(-3 * body.fling.vx, 0, -3 * body.fling.vz, body.fling.at);
+      }
+      if (plan.canary && !canary.turned && Math.abs(body.torque) >= TURN_FROM && foe.corpse?.ragdoll) {
+        // (planted: the first body struck off its middle turned back the other way, three times as hard)
+        canary.turned = true;
+        const { vx, vz, ox, oz } = body.fling;
+        foe.corpse.ragdoll.twist(-3 * vx, -3 * vz, ox, oz);
       }
     }
     if (firstFall < 0 && bodies.size) firstFall = frame;
@@ -421,6 +453,8 @@ function followBody(body: Fallen, last: Map<Enemy, THREE.Vector3>, frame: number
   if (frame - body.fellAt === EARLY_FRAMES) {
     body.early.set(hips.x - body.from.x, 0, hips.z - body.from.z).divideScalar(EARLY_FRAMES * frameTime());
   }
+  if (Number.isNaN(body.headingAt)) body.headingAt = shouldersHeading(corpse.ragdoll);
+  if (frame - body.fellAt === TURN_FRAMES) body.turned = wrapped(shouldersHeading(corpse.ragdoll) - body.headingAt);
   // (where it lay still, or where it began to dissolve if it never did: a frozen body shatters as it lands)
   const dissolving = body.foe.model.kit.u.uDissolve.value > 0;
   if (body.restAt < 0 && !body.ended && dissolving) {
@@ -539,7 +573,9 @@ export async function death(lab: Lab, options: DeathOptions): Promise<Report> {
   const lines: string[] = [`${G.player.cls.id}, ${foeKind()}s, ${G.arena.biome}`];
   const problems: string[] = [];
   const moments: Pictured[] = [];
-  let canaries: Canaries = { under: false, back: false, underCaught: false, backCaught: false };
+  let canaries: Canaries = {
+    under: false, back: false, turned: false, underCaught: false, backCaught: false, turnCaught: false,
+  };
   for (const name of wanted) {
     const hard = await onePass(lab, options, name, [], true);
     const lives = hard.cast.killedBy.map((dealt) => Math.max(1, dealt * BARE_SHARE));
@@ -564,8 +600,10 @@ export async function death(lab: Lab, options: DeathOptions): Promise<Report> {
 interface Canaries {
   under: boolean;
   back: boolean;
+  turned: boolean;
   underCaught: boolean;
   backCaught: boolean;
+  turnCaught: boolean;
 }
 
 /** The canary's plants so far, with a skill's. */
@@ -573,8 +611,10 @@ function mergeCanary(was: Canaries, cast: Cast, judged: Judged): Canaries {
   return {
     under: was.under || cast.canary.under,
     back: was.back || cast.canary.back,
+    turned: was.turned || cast.canary.turned,
     underCaught: was.underCaught || judged.caughtUnder,
     backCaught: was.backCaught || judged.caughtBack,
+    turnCaught: was.turnCaught || judged.caughtTurn,
   };
 }
 
@@ -585,8 +625,11 @@ function canaryReport(lines: string[], canaries: Canaries, moments: Pictured[]):
   else if (!canaries.underCaught) missed.push('the canary\'s body under the floor went unseen');
   if (!canaries.back) missed.push('the canary never threw a body back');
   else if (!canaries.backCaught) missed.push('the canary\'s body thrown back at the hero went unseen');
-  lines.push(`canary: under the floor ${canaries.underCaught ? 'caught' : 'missed'}, `
-    + `thrown back ${canaries.backCaught ? 'caught' : 'missed'}`);
+  if (!canaries.turned) missed.push('the canary never turned a body against its blow');
+  else if (!canaries.turnCaught) missed.push('the canary\'s body turned against its blow went unseen');
+  const verdict = (caught: boolean) => (caught ? 'caught' : 'missed');
+  lines.push(`canary: under the floor ${verdict(canaries.underCaught)}, thrown back ${verdict(canaries.backCaught)}, `
+    + `turned back ${verdict(canaries.turnCaught)}`);
   return { text: lines.join('\n'), problems: missed, moments };
 }
 
@@ -596,6 +639,7 @@ interface Judged {
   problems: string[];
   caughtUnder: boolean;
   caughtBack: boolean;
+  caughtTurn: boolean;
 }
 
 const speedOf = (fling: Fling): number => Math.hypot(fling.vx, fling.vy, fling.vz);
@@ -613,9 +657,21 @@ function passLine(name: string, cast: Cast): string {
   const high = range(bodies.map((body) => body.highest), metres);
   const rest = bodies.filter((body) => body.restAt >= 0).map((body) => body.restAt);
   const styles = [...new Set(bodies.map((body) => body.fling.style))].join(', ');
+  const offMiddle = bodies.filter((body) => Math.abs(body.torque) >= TURN_FROM);
+  const turns = offMiddle.map((body) => body.turned * Math.sign(body.torque));
+  const turned = offMiddle.length ? `, turned ${range(turns, degrees)} its blow's way (${offMiddle.length} struck off `
+    + 'its middle)' : '';
   return `  ${name}: ${bodies.length} fell (${styles}), ${cast.standing} left standing; `
     + `thrown ${thrown}, flew ${flew}, `
-    + `its hips up to ${high}, still after ${range(rest, seconds)} (${rest.length} of ${bodies.length})`;
+    + `its hips up to ${high}, still after ${range(rest, seconds)} (${rest.length} of ${bodies.length})${turned}`;
+}
+
+/** Whether a body struck off its middle turned the way its blow turns it. */
+function turnProblems(body: Fallen): string[] {
+  if (Math.abs(body.torque) < TURN_FROM) return [];
+  const turned = body.turned * Math.sign(body.torque);
+  if (turned >= -TURN_WRONG) return [];
+  return [`a body struck off its middle turned against its blow (${degrees(-turned)})`];
 }
 
 /** Whether the body went the way its blow drove it: away from the hero (round the storm for a storm's), along the
@@ -686,7 +742,9 @@ function judge(run: SkillRun, canary: boolean): Judged {
   if (!hard.bodies.length) found.add('nothing fell');
   for (const cast of [hard, bare]) {
     for (const body of cast.bodies) {
-      const each = [...bodyProblems(body), ...wayProblems(run, cast, body), ...whirlProblems(run, body)];
+      const each = [
+        ...bodyProblems(body), ...wayProblems(run, cast, body), ...whirlProblems(run, body), ...turnProblems(body),
+      ];
       for (const problem of each) found.add(problem);
     }
   }
@@ -702,5 +760,6 @@ function judge(run: SkillRun, canary: boolean): Judged {
   const wrongWays = ['back towards the hero', 'against its throw'];
   const wrongWay = (problem: string) => wrongWays.some((way) => problem.includes(way));
   const caughtBack = canary && [...found].some(wrongWay);
-  return { lines, problems: canary ? [] : problems, caughtUnder, caughtBack };
+  const caughtTurn = canary && [...found].some((problem) => problem.includes('turned against its blow'));
+  return { lines, problems: canary ? [] : problems, caughtUnder, caughtBack, caughtTurn };
 }
