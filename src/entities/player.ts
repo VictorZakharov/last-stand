@@ -121,6 +121,8 @@ export class Player {
   private readonly goal = new THREE.Vector3();
   private steered = false;
   readonly aim = new THREE.Vector3();
+  /** the foe whose body the aim is on (the local hero's: the eye's ray met it, `input.foe`) */
+  aimFoe: Enemy | null = null;
   readonly radius = 0.45;
   facing = Math.PI;
   /** how much longer the body stays on its aim after an attack or cast (s), see AIM_HOLD */
@@ -129,8 +131,8 @@ export class Player {
    *  only ever the moment before it has turned round */
   private facesWay = false;
   /** a drawn shot pressed for while busy (a tap during the last one's reload): it's drawn as soon as the hero is free, and
-   *  forgotten when any other skill is pressed or cast */
-  private queued: { skill: KnownSkill; key: SkillKey } | null = null;
+   *  forgotten when any other skill is pressed or cast; an aimed skill let go meanwhile, cast `at` where it was let go */
+  private queued: { skill: KnownSkill; key: SkillKey; at?: THREE.Vector3 } | null = null;
   /** an aimed skill (`SkillDef.aimed`) whose key is held: where it would land is shown, and it's cast as the key is
    *  let go */
   aiming: { skill: KnownSkill; key: SkillKey } | null = null;
@@ -402,13 +404,14 @@ export class Player {
     this.steered = true;
 
     this.aim.copy(input.ground);
+    this.aimFoe = input.foe;
 
     // a channel ends when the key that started it is released
     if (this.channel && !isDown(this.channel.key)) this.stopChannel();
     this.holdAim();
     if ((input.mouse.overUI && !input.touchMode) || this.dash || this.staggered) return;
     // the shot remembered from a press while busy: drawn now, and loosed at once if its key is up again (a tap)
-    if (this.queued && !this.casting && !this.channel) { const q = this.queued; this.queued = null; this.tryCast(q.skill, q.key); }
+    if (this.queued && !this.casting && !this.channel) { const q = this.queued; this.queued = null; this.tryCast(q.skill, q.key, q.at); }
     const busy = !!(this.casting || this.channel);
     for (const key of SKILL_KEYS) {
       const pressed = wasPressed(key);
@@ -442,8 +445,11 @@ export class Player {
     this.endAim();
     // (its key's skill changed under it, a style's loadout: given up)
     if (held) return;
-    if (this.casting || this.channel || this.dash || this.staggered) this.queued = { skill: a.skill, key: a.key };
-    else this.tryCast(a.skill, a.key);
+    // (where its preview was as it was let go, however the aim moves while it waits: the outline round one foe, the
+    // mark went on another)
+    const impl = a.skill.impl, at = (!impl.channel && impl.settle?.(this, a.skill.def, this.aim)) || this.aim.clone();
+    if (this.casting || this.channel || this.dash || this.staggered) this.queued = { skill: a.skill, key: a.key, at };
+    else this.tryCast(a.skill, a.key, at);
   }
 
   /**
@@ -463,11 +469,12 @@ export class Player {
     if (!a.skill.impl.channel) a.skill.impl.aim?.(this, a.skill.def, null, 0);
   }
 
-  /** `key`: the key casting it, which holds a drawn shot (`SkillDef.draw`) until it's let go */
-  tryCast(s: KnownSkill, key?: SkillKey): boolean {
+  /** `key`: the key casting it, which holds a drawn shot (`SkillDef.draw`) until it's let go; `at`: where it's cast (the
+   *  aim by default) */
+  tryCast(s: KnownSkill, key?: SkillKey, at: THREE.Vector3 = this.aim): boolean {
     if (this.casting || this.channel || this.dash || this.staggered || this.cooldownLeft(s.def.impl) > 0 || !this.alive) return false;
     if (!this.sandbox && this.energy < s.def.cost) { this.lowEnergy(); return false; }
-    const target = this.aim.clone();
+    const target = at.clone();
     if (!s.impl.channel && s.impl.canCast && !s.impl.canCast(this, s.def, target)) { this.noTarget(); return false; }
     const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
     // (a bow's shot with fewer arrows on the string than it looses takes them from the quiver first)
@@ -625,14 +632,15 @@ export class Player {
         if (!c.fired && c.t >= (c.nockT ?? 0) && !(c.key && isDown(c.key)) && k >= (c.skill.def.minDraw ?? 0)) { this.loose(c, k); this.fire(c.skill, this.aim.clone(), k); }
       } else {
         if (!c.fired && !impl.channel) impl.charging?.(this, c.skill.def, c.t / c.fireAt, dt);
-        if (!c.fired && c.t >= c.fireAt) { c.fired = true; this.fire(c.skill, this.aim.clone()); }
+        // (an aimed skill goes where its preview was as it was let go; anything else after the live aim)
+        if (!c.fired && c.t >= c.fireAt) { c.fired = true; this.fire(c.skill, c.skill.def.aimed ? c.target.clone() : this.aim.clone()); }
       }
       if (c.t >= c.dur) {
         if (isBowShot(c.skill)) this.nocked = Math.max(this.nocked, 1);
         this.casting = null;
         // (a shot queued behind it is drawn at once: started next frame, the pose had a frame with no shot between the
         // two, and the archer's bow and draw hand stepped out to rest for it and back)
-        if (this.queued && !this.channel) { const q = this.queued; this.queued = null; this.tryCast(q.skill, q.key); }
+        if (this.queued && !this.channel) { const q = this.queued; this.queued = null; this.tryCast(q.skill, q.key, q.at); }
       }
     }
     if (this.casting || this.channel || this.dash || this.staggered) this.busyAt = t;

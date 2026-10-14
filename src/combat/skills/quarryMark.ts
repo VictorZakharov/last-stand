@@ -46,15 +46,39 @@ interface Mark { on: Enemy | null; amp: number; left: number; end(): void }
 /** each ranger's mark, while it's up */
 const marks = new WeakMap<Player, Mark>();
 
-/** The foe the cast marks: of those in range of the hero, the nearest the aim. */
+/** How far the aim (`target`, its `y` over the floor) is off `e`'s body, its upright cylinder (m): how deep in it, less
+ *  than 0, when it's within its height. */
+function offBody(e: Enemy, target: THREE.Vector3): number {
+  const out = Math.hypot(e.pos.x - target.x, e.pos.z - target.z) - e.radius, up = Math.max(0, target.y - e.height, -target.y);
+  return up > 0 ? Math.hypot(Math.max(0, out), up) : out;
+}
+
+/**
+ * The foe the cast marks: of those in range of the hero, the one whose body the aim is on or nearest. (By their
+ * middles, a boss lost to a small foe beside it: the aim on its body is a metre or two from its middle.) Judged from
+ * the aim's point alone, which every game is given: each marks the same foe.
+ */
 function quarry(player: Player, target: THREE.Vector3, range: number): Enemy | null {
   let best: Enemy | null = null, bd = Infinity;
   for (const e of G.enemies) {
-    if (!e.alive || e.spawning || Math.hypot(e.pos.x - player.pos.x, e.pos.z - player.pos.z) > range) continue;
-    const d = Math.hypot(e.pos.x - target.x, e.pos.z - target.z);
+    if (!markable(player, e, range)) continue;
+    const d = offBody(e, target);
     if (d < bd) { bd = d; best = e; }
   }
   return best;
+}
+
+const markable = (player: Player, e: Enemy, range: number): boolean =>
+  e.alive && !e.spawning && Math.hypot(e.pos.x - player.pos.x, e.pos.z - player.pos.z) <= range;
+
+/**
+ * The foe the hero's aim would mark: the one whose body it's on (the eye's ray met it, `Player.aimFoe`), or else by
+ * the aim's point (`quarry`). (By the point alone, the aim on a boss's arm marked the thornling under it, whose
+ * cylinder the point was in.) Let go, the cast is aimed at its middle (`settle`), which every game picks it by.
+ */
+function aimedQuarry(player: Player, target: THREE.Vector3, range: number): Enemy | null {
+  const on = player.aimFoe;
+  return on && markable(player, on, range) ? on : quarry(player, target, range);
 }
 
 /** The cooldowns back (the draught's stays): the local hero's own, as only its game keeps them. */
@@ -107,7 +131,7 @@ function mark(player: Player, def: Def, e: Enemy): void {
       (reticleM.material as THREE.MeshBasicMaterial).opacity = fade * (0.85 + 0.15 * Math.sin(t * 4));
       ringMat.opacity = 0.7 * fade;
       if (q) {
-        const top = q.obj.position.y + q.height + 0.45;
+        const top = q.obj.position.y + q.overHead + 0.45;
         reticleM.position.set(q.pos.x, top, q.pos.z);
         reticleM.quaternion.copy(G.camera.quaternion); reticleM.rotateZ(t * 0.8);
         reticleM.scale.setScalar(0.6 + 0.03 * Math.sin(t * 4));
@@ -138,7 +162,7 @@ let ready: Readiness | null = null;
 /** Shows the would-be quarry for `target` (none: nothing shown). */
 function showQuarry(player: Player, def: Def, target: THREE.Vector3 | null, dt: number): void {
   ready ??= new Readiness('quarryMark');
-  const e = target && quarry(player, target, def.range);
+  const e = target && aimedQuarry(player, target, def.range);
   if (!e) {
     outline(null);
     ready.hide(dt);
@@ -153,6 +177,10 @@ const skill: InstantSkill = {
   warm: () => [new THREE.Mesh(planeGeo, reticleMat()), new THREE.Mesh(ringGeo(), additive(MARK, 1.3, 0.7))],
   canCast: (player, def, target) => !!quarry(player, target, def.range ?? 26),
   aim: (player, def, target, dt) => showQuarry(player, def as Def, target, dt),
+  settle(player, def, target) {
+    const e = aimedQuarry(player, target, def.range ?? 26);
+    return e ? new THREE.Vector3(e.pos.x, e.height / 2, e.pos.z) : target.clone();
+  },
   cast(player, rawDef, target) {
     const def = rawDef as Def, e = quarry(player, target, def.range);
     if (e) mark(player, def, e);

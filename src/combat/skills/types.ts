@@ -23,6 +23,9 @@ export interface InstantSkill extends SkillBase {
   /** `SkillDef.aimed`: every frame its key is held, where it would land for `target`, shown on its own player's screen
    *  alone (`null`: let go or given up, shown no more) */
   aim?(player: Player, def: SkillDef, target: THREE.Vector3 | null, dt: number): void;
+  /** `SkillDef.aimed`: where it's cast for `target` as its key is let go, the point every game is given (Quarry
+   *  Mark's: the middle of the foe its preview outlined, so each game marks that one); the aim itself if not given */
+  settle?(player: Player, def: SkillDef, target: THREE.Vector3): THREE.Vector3;
 }
 
 /** Runs every frame while its key is held. `start` returns per-channel state. */

@@ -8,6 +8,7 @@ import type { Player } from '../entities/player';
 import { nearGlow } from '../core/materials';
 import { hurtProp, PROP_DAMAGE } from '../world/destructible';
 import type { Obstacle } from '../types';
+import { entry, strikesBody } from './strikes';
 
 const coreGeo = new THREE.SphereGeometry(1, 12, 8);
 const matCache = new Map<string, THREE.Material>();
@@ -61,8 +62,12 @@ export interface ProjectileOpts {
   homing?: number;
   /** test the whole flight segment: fast, narrow arrows otherwise skip small targets at low frame rates */
   swept?: boolean;
-  /** it hits only a foe it's level with (an arrow on its arc flies over heads) */
+  /** it hits only a foe it's level with (an arrow on its arc flies over heads): one whose body it meets, as drawn,
+   *  before its point goes into the ground in front of it */
   level?: boolean;
+  /** how far ahead of where it is it strikes (m): an arrow's point, half its length on (struck with its middle, an
+   *  arrow aimed low at a foe went into the ground in front of it first) */
+  point?: number;
   /** it goes on through every foe it hits (once each), stopped only by the world */
   pierce?: boolean;
   ignore?: Set<Enemy>;
@@ -79,7 +84,8 @@ export interface ProjectileOpts {
   edge?: number;
 }
 
-const _to = new THREE.Vector3(), _from = new THREE.Vector3(), _hits: Enemy[] = [];
+const _to = new THREE.Vector3(), _from = new THREE.Vector3(), _hits: Enemy[] = [], _along: number[] = [], _order: number[] = [];
+const _ahead = new THREE.Vector3(), _stepFrom = new THREE.Vector3(), _stepTo = new THREE.Vector3();
 
 export class Projectile {
   readonly pos: THREE.Vector3;
@@ -91,6 +97,7 @@ export class Projectile {
   readonly homing: number;
   readonly swept: boolean;
   readonly level: boolean;
+  readonly point: number;
   readonly pierce: boolean;
   readonly ignore: Set<Enemy>;
   readonly onHit?: ProjectileOpts['onHit'];
@@ -121,6 +128,7 @@ export class Projectile {
     this.homing = o.homing ?? 0;
     this.swept = !!o.swept;
     this.level = !!o.level;
+    this.point = o.point ?? 0;
     this.pierce = !!o.pierce;
     this.ignore = o.ignore ?? new Set();
     this.onHit = o.onHit;
@@ -163,6 +171,7 @@ export class Projectile {
     const k = Math.min(1, Math.max(0, (d - d0) / (d1 - d0)));
     this.mesh.scale.setScalar(this.size * k * k * (3 - 2 * k));
     this.mesh.visible = k > 0;
+    if (this.level && !this.hostile && this.strikeFoes(_from.set(px, py, pz))) return false;
     this.tick?.(this, dt);
     // (its own flight may end it: an arrow into the ground)
     if (!this.alive) return false;
@@ -206,21 +215,46 @@ export class Projectile {
           return this.kill();
         }
       }
-    } else {
-      _hits.length = 0;
-      for (const e of G.enemies) {
-        if (!e.alive || e.invulnerable || this.ignore.has(e)) continue;
-        if (this.level && (this.pos.y < e.obj.position.y - this.radius || this.pos.y > e.obj.position.y + e.height + this.radius)) continue;
-        if (this.distanceSq(e.pos.x, e.pos.z, px, pz) < (e.radius + this.radius) ** 2) {
-          if (!this.pierce) { this.onHit?.(e, this); return this.kill(); }
-          _hits.push(e);
-        }
-      }
-      // (going on through them: each foe met this frame, in the order it passes them)
-      if (_hits.length > 1) _hits.sort((a, b) => (a.pos.x - b.pos.x) * this.vel.x + (a.pos.z - b.pos.z) * this.vel.z);
-      for (const e of _hits) { this.ignore.add(e); this.onHit?.(e, this); }
-    }
+    } else if (!this.level && this.strikeFoes(_from.set(px, py, pz))) return false;
     return true;
+  }
+
+  /** The foes this frame's step from `from` strikes, struck: the first alone (true: it's gone), or going on through
+   *  them each, in the order the step meets them. */
+  private strikeFoes(from: THREE.Vector3): boolean {
+    _hits.length = 0; _along.length = 0;
+    for (const e of G.enemies) {
+      if (!e.alive || e.invulnerable || this.ignore.has(e)) continue;
+      const t = this.strikes(e, from);
+      if (t >= 0) { _hits.push(e); _along.push(t); }
+    }
+    if (!_hits.length) return false;
+    _order.length = 0;
+    for (let i = 0; i < _hits.length; i++) _order.push(i);
+    _order.sort((i, j) => _along[i] - _along[j]);
+    if (!this.pierce) {
+      this.pos.lerpVectors(from, this.pos, _along[_order[0]]);
+      this.onHit?.(_hits[_order[0]], this);
+      this.kill();
+      return true;
+    }
+    for (const i of _order) { this.ignore.add(_hits[i]); this.onHit?.(_hits[i], this); }
+    return false;
+  }
+
+  /**
+   * Where along this frame's step from `from` it strikes `e` (0..1), or -1: a level shot (an arrow) where it meets
+   * its body (`strikesBody`: struck within its circle and under its height, it flew through a boss's arms and crown
+   * and struck a small foe it went by); any other there or within its circle, at any height.
+   */
+  private strikes(e: Enemy, from: THREE.Vector3): number {
+    const ahead = _ahead.copy(this.vel).setLength(this.point);
+    const body = strikesBody(e, _stepFrom.copy(from).add(ahead), _stepTo.copy(this.pos).add(ahead));
+    if (this.level) return body;
+    const dx = this.pos.x - from.x, dz = this.pos.z - from.z, r = e.radius + this.radius;
+    const circle = this.swept ? entry(from.x, from.z, dx, dz, e.pos.x, e.pos.z, r) : (this.distanceSq(e.pos.x, e.pos.z, from.x, from.z) < r * r ? 1 : -1);
+    if (circle < 0) return body;
+    return body < 0 ? circle : Math.min(body, circle);
   }
 
   findTarget(): Enemy | null {

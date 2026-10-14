@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { addEffect } from './effects';
 import { arrowGeometry, arrowLite, ARROW } from '../entities/models/bow';
+import { hullHit } from '../entities/models/hulls';
 import { groundHeight } from '../world/arena';
 import { pastWall } from '../world/edge';
 import { BIOMES } from '../data/biomes';
@@ -265,8 +266,20 @@ function cast(root: THREE.Object3D, by: THREE.Raycaster = ray): THREE.Intersecti
   return best;
 }
 
-/** The nearest solid surface `by` meets on a body (`root`, its rigid meshes): the aim as it's drawn. */
-export const castSolid = (root: THREE.Object3D, by: THREE.Raycaster): THREE.Intersection | null => cast(root, by);
+/** The nearest solid surface `by` meets on a body (`root`): its rigid meshes as they're drawn, its skinned ones by a box
+ *  a bone (models/hulls.ts): the aim as it's drawn. */
+export function castSolid(root: THREE.Object3D, by: THREE.Raycaster): THREE.Intersection | null {
+  _hits.length = 0;
+  root.traverse((o) => {
+    if (!solid(o)) return;
+    if (!(o as THREE.SkinnedMesh).isSkinnedMesh) { (o as THREE.Mesh).raycast(by, _hits); return; }
+    const h = hullHit(o as THREE.SkinnedMesh, by);
+    if (h) _hits.push(h);
+  });
+  let best: THREE.Intersection | null = null;
+  for (const h of _hits) if (!best || h.distance < best.distance) best = h;
+  return best;
+}
 
 /**
  * An arrow into a body (`root`, a foe's model): cast along `dir` from `from` (a point before it), it lodges where it

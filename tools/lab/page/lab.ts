@@ -168,6 +168,23 @@ const SETTLE_FRAMES = 90;
 /** the most presses of V a view takes (it cycles top-down, over the shoulder, through the eyes) */
 const VIEW_PRESSES = 3;
 
+/** The way the close views' camera turns (rad) to look along `ahead`: about the upright (0 looks to -z), and down. */
+function turnOf(ahead: THREE.Vector3): { yaw: number; down: number } {
+  return { yaw: Math.atan2(-ahead.x, -ahead.z), down: -Math.asin(THREE.MathUtils.clamp(ahead.y, -1, 1)) };
+}
+
+/**
+ * The mouse-look move that turns the close views' camera to look at `point`, made: the crosshair in the screen's
+ * middle comes over it, in a frame or two (over the shoulder, the camera swings round the hero as it turns, and
+ * through the eyes the hero turns with it). Nothing in the top-down view, which aims with the mouse.
+ */
+function lookToward(point: THREE.Vector3): void {
+  const now = turnOf(G.camera.getWorldDirection(new THREE.Vector3()));
+  const wanted = turnOf(point.clone().sub(G.camera.position).normalize());
+  const yaw = Math.atan2(Math.sin(now.yaw - wanted.yaw), Math.cos(now.yaw - wanted.yaw));
+  renderer.lookBy(yaw / CAMERA.lookSpeed, (wanted.down - now.down) / CAMERA.lookSpeed);
+}
+
 /** One frame's input, as a player would give it. */
 export interface Frame {
   /** keys held down this frame (`w`, `1`...) */
@@ -179,6 +196,8 @@ export interface Frame {
   look?: [number, number];
   /** the point in the world the mouse is over (the lab's `aim` when not given) */
   aim?: THREE.Vector3;
+  /** the point in the world the crosshair of the close views is turned towards, by a mouse-look move (`lookToward`) */
+  sight?: THREE.Vector3;
 }
 
 /** The state a measure or a picture starts from. */
@@ -425,6 +444,7 @@ export class Lab {
   private applyInput(frame: Frame): void {
     this.pointAt(frame.aim ?? this.aim);
     if (frame.look) renderer.lookBy(frame.look[0], frame.look[1]);
+    if (frame.sight) lookToward(frame.sight);
     const keys = frame.keys ?? [];
     for (const key of [...input.down]) {
       if (!keys.includes(key)) input.down.delete(key);

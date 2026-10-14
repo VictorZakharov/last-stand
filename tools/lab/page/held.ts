@@ -19,6 +19,8 @@ import { lateCompiles, pinPrograms } from '../../../src/core/shaders';
 import { drawFrame, type Canvas } from './light';
 import { foesAt } from './death';
 import { acrossTheStep, starfallStrikes, type HeldSkill, type Shown } from './heldArea';
+import { bossRounds } from './heldBoss';
+import { cameraAhead } from './onScreen';
 import {
   canaryCaught, describeHeld, heldProblems, holdingKey, holdThroughCooldown, meshReader, type PreviewReader,
 } from './heldCooldown';
@@ -75,12 +77,6 @@ function heldSkills(): HeldSkill[] {
     if (def?.aimed) skills.push({ key, impl: def.impl, name: def.name });
   }
   return skills;
-}
-
-/** The way the camera looks, along the floor (+z if it looks straight down). */
-function cameraAhead(): THREE.Vector3 {
-  const ahead = G.camera.getWorldDirection(new THREE.Vector3()).setY(0);
-  return ahead.lengthSq() < 1e-4 ? ahead.set(0, 0, 1) : ahead.normalize();
 }
 
 /**
@@ -332,6 +328,7 @@ export async function held(lab: Lab, options: HeldOptions): Promise<Report> {
     const runs: RoundsRun[] = [
       ...views.map((view) => async () => [await heldReady(lab, skill, view, options)]),
       ...(skill.impl === 'quarryMark' ? [async () => [await heldOverFoe(lab, skill, options)]] : []),
+      ...(skill.impl === 'quarryMark' ? bossRounds(lab, skill, views, options) : []),
       async () => [await heldOnCooldown(lab, skill, options)],
       () => areaRounds(lab, skill, options),
     ];

@@ -29,6 +29,7 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `spawns`: the foes coming in (boss waves one after another, a seed each: the gate every foe came by, its spot against the props, the gates each group and wave left idle, when the boss came against the rest of its wave, and its walk to the hero from each gate)
 - `health`: the low-Health look (the hero's Health held at shares of his most in each biome, view and facing: the colour drained, the blood's cover and how far in it reaches, nothing in the view's middle, more of both as the Health falls, none above where it starts)
 - `held`: every held skill's preview as the player holds it (ready, then through its cooldown and short of energy: its own look, red and counting down until a release would cast; Quarry Mark's outline round its foe in every view, its pixels near the foe and none away; Starfall's ring against its strikes, every foe inside it struck on every cast; every mark on the floor held across the dais's step, on each level and down its faces, none of it under the floor or standing off it; no shader compiled meanwhile)
+- `shots`: the bow's shots at a boss with its foes packed round it (each biome and view, the bow drawn to full over points across them and loosed, its flight followed frame by frame: the first foe drawn along it struck, none if none, and one aimed inside a foe reaching it unless another is in the way)
 - `blink`: the mage's blink cast as the player casts it (open ground, past his reach, into a prop, past one, the arena's edge, onto the dais, his own feet: where it came out against its preview and his reach, the frames he was hidden and the blows that landed in them, the foes near and far it dazed and how they stood)
 - `draw`: each drawn shot held at full draw as the player holds it (the glint round its arrowhead every frame in every view: none as it's drawn, held at full until it's loosed, the pixels it lights as the player sees it, and no blob of glare; the crosshair bold at full draw alone, its one beat into it about its middle, none with reduced motion)
 - `cast`: a skill cast as the player casts it, its effect seen frame by frame (each biome and view with the biome's foes coming at him, every frame drawn and read back: its light against the budget, the frame's mean every tenth of a second, the flashes in any second and the worst cell's light through it, the shaders compiled late)
@@ -343,7 +344,21 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   and through the eyes: round the foe the cast would mark, the pixels it lit (red risen over the same frame drawn
   without it) near the foe on the screen and none away from it; and in the top-down view over the biome's commonest
   foe too, standing dazed (a creature, drawn in its kind's crowd: its own meshes are on a layer of their own, which
-  the outline must still draw). Starfall is cast ten times over the dummy with more
+  the outline must still draw). And over each biome's boss with its summons about it (one between it and the hero)
+  and two of the biome's commonest foes beside it, each a hair off its circle (`bossWithSmall`), dazed, in each view (`page/heldBoss.ts`, the screen read by `page/onScreen.ts`): the key held and the aim swept a frame each across a grid over each foe's box on the screen
+  (the crosshair turned onto each point in the close views), the outline must be round the foe drawn there at every
+  point, met by the eye's ray on its meshes as they're drawn, skinned and rigid, a breakable prop in front leaving
+  the point out (a miss says where the game's aim was against the point drawn); let go over the boss where it lies
+  deepest in another foe's circle, with the aim moving on onto a small foe as the cast goes, and again while a shot
+  is drawn (the cast waiting for it), the boss must take the mark (`main`'s aim, met on the rigid meshes alone,
+  outlined the thornheart at 53 of 119 points through the eyes and marked a small foe in every view; and the mark,
+  given to the foe nearest the cast's point on the floor, went to a small foe pressed against the boss, which the
+  outline had never been round). The boss marked, its reticle (`page/markSeen.ts`) must stand over its top as drawn
+  and be seen whole from the camera, its middle and its ring's points round it, none of them met by the eye's ray on
+  a body before it (off the screen, a close view's near a tall boss, they're said but aren't problems); `main`'s,
+  placed by its height, stood inside a boss's crown. With `--pictures`, each round pictures the mark over the dazed
+  boss, its stars with it.
+  Starfall is cast ten times over the dummy with more
   standing round it inside its ring as drawn and outside it (`page/heldArea.ts`): every one inside must be struck on
   every cast (each one's casts struck by its distance). Each skill is then held across the dais's step from off it
   and let go: every mark it lays on the floor (`fx/floorPatch.ts`) is read triangle by triangle against the floor
@@ -353,7 +368,8 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   Starfall's ring missed, a mark off the floor and a late compile are problems. `--pictures` (on by default) pictures
   each preview ready, on its cooldown and across the step into `out/held`; `--canary` reads each preview ready with
   no countdown on its cooldown, draws Quarry Mark's outline round the hero (the programs it compiles aren't counted:
-  the game never outlines a hero), reads Starfall's ring as drawn round all its crystals may strike, lays the marks
+  the game never outlines a hero), moves its outline over the forest's boss onto a thornling and the boss's mark onto
+  it, puts the mark's reticle at the boss's middle (which must be found hidden), reads Starfall's ring as drawn round all its crystals may strike, lays the marks
   across the step point by point on the floor under them, as they were, and compiles a shader mid-game.
 - `draw`: every drawn shot of the hero's class drawn to full and held there as the player holds it (`page/draw.ts`,
   `--class ranger`), in the top-down view, over the shoulder and through the eyes (`--views`): the key held over an
@@ -377,6 +393,23 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   (held there: the beat runs on the page's clock) and bold, into `out/draw`; `--canary` shows the glint and the
   crosshair's bold from half the draw, takes them away once the draw is full, swells the crosshair about its corner,
   and leaves the motion on for the reduced check.
+- `shots`: the hero's basic attack loosed at a boss with its foes packed round it (`page/shots.ts`, `--class
+  ranger`): each biome's boss with its summons and two of its commonest foes beside it (`held`'s `bossWithSmall`),
+  their life raised so none dies, in each view (`--views`). `--shots` points (12 a view) are taken from `held`'s grid
+  over the foes on the screen, half over the boss, none at their feet (an arrow there goes into the floor first);
+  before each shot every foe is put back where it stood (the shots knock them off their places), the point is taken
+  again at its spot on the screen (the foes sway), the crosshair is turned onto it in the close views and the bow
+  drawn to full over it and loosed. Its flight is followed frame by frame, each frame's step (by the arrow's point,
+  half its length ahead) looked along for the first foe drawn on it before the frame runs, as the game meets them:
+  against the bodies as last drawn (looked along after the frame, the foe it struck had flinched off its line). It
+  must strike that foe and it alone, or none if its flight met none; and one aimed inside a foe on the screen as
+  it's loosed (the foe drawn 6 pixels round the aim every way) must meet a foe, the one aimed at unless another is
+  in the way. One aimed at an edge may go past it: a pixel off, or the body swayed a centimetre, the aim is past it.
+  A basic attack that doesn't fly at the point aimed at (the mage's seeking bolt, level at the hand's height and
+  struck within its circle) is said so, as a problem: there's nothing to judge. `main` failed 56 of 72 shots (the
+  bosses' crowns and arms flown through, imps struck in the air beside them, shots at a boss's legs striking the
+  imp whose circle they passed). `--canary` makes the first shot's foe invulnerable: struck, it takes nothing, and
+  the shot must be found missed.
 - `gear`: full sets of gear rolled for every class as its loot rolls them (`page/gear.ts`, `--sets` each, 400 by
   default), at each tier (`--tiers`, a rarity at an item level each: `magic@5,rare@15,epic@30,legendary@50`), and
   what a set gives on average: Health (his own and the gear's, and the gear's against the mage's), regeneration a
@@ -498,7 +531,8 @@ What the lab gives a probe (`page/lab.ts`):
   before it first (an option of the probe's own: `--trace=<case>`, say), or run each on a page of its own as a check
   runs the gait's;
 - `lab.step(count, input?, measure?)`: frames run with each frame's input (`keys`, `m0` / `m2` for the mouse buttons,
-  `look` for mouse look, `aim` for the point the mouse is over) and measured after each, a row a frame;
+  `look` for mouse look, `aim` for the point the mouse is over, `sight` for a point the close views' crosshair is
+  turned onto: a mouse-look move a frame, over it in one or two) and measured after each, a row a frame;
 - `lab.until(done, limit, what, input?)`: frames until `done`, throwing `lab: <what>` if it never is;
 - `lab.spawnFoe(type, at, options)`: a foe for a measure that needs one (a mark, a lure; `options` as the game's
   `EnemyOpts`: a hero foe with its name, say), which the set-up keeps while it clears every other until the next

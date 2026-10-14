@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
+import { dazedField } from './dazed';
 
 const VERT = /* glsl */`
   attribute float aSize;
@@ -150,9 +151,10 @@ export const particles = {
     this.glow = new Pool(9000, THREE.AdditiveBlending, 1.6);
     this.smoke = new Pool(3000, THREE.NormalBlending, 1.2);
     scene.add(this.glow.points, this.smoke.points);
+    dazedField.init(scene);
   },
-  update(dt: number): void { this.glow.update(dt); this.smoke.update(dt); },
-  clear(): void { this.glow.count = 0; this.smoke.count = 0; },
+  update(dt: number): void { this.glow.update(dt); this.smoke.update(dt); dazedField.update(); },
+  clear(): void { this.glow.count = 0; this.smoke.count = 0; dazedField.clear(); },
 };
 
 /** Color helper: hex (or color) scaled into HDR range. */
