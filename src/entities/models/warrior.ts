@@ -77,6 +77,34 @@ const _legW: [number, number] = [1, 1];
 const IDENT = new THREE.Quaternion(), _va = new THREE.Vector3(), _vd = new THREE.Vector3(), _up = new THREE.Vector3(), _vg = new THREE.Vector3();
 const _ra = new THREE.Vector3(), _rd = new THREE.Vector3(), _la = new THREE.Vector3(), _ld = new THREE.Vector3();
 const _gs1 = new THREE.Vector3(), _gs2 = new THREE.Vector3(), _gs3 = new THREE.Vector3(), _gsq = new THREE.Quaternion();
+/** a weapon's points that can be its lowest, in its group's frame: each corner of its surface once */
+const LOW_POINTS = new WeakMap<Weapon, THREE.Vector3[]>();
+
+/** `w`'s points that can be its lowest (worked out the first time they're needed) */
+function lowPoints(w: Weapon): THREE.Vector3[] {
+  let points = LOW_POINTS.get(w);
+  if (points) return points;
+  points = [];
+  const seen = new Set<string>(), into = new THREE.Matrix4(), p = new THREE.Vector3();
+  w.group.updateWorldMatrix(true, true);
+  const from = w.group.matrixWorld.clone().invert();
+  w.group.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    into.multiplyMatrices(from, mesh.matrixWorld);
+    const at = mesh.geometry.attributes.position;
+    for (let i = 0; i < at.count; i++) {
+      p.fromBufferAttribute(at, i).applyMatrix4(into);
+      // (to the millimetre: a surface's triangles share their corners)
+      const key = `${Math.round(p.x * 1e3)},${Math.round(p.y * 1e3)},${Math.round(p.z * 1e3)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      points!.push(p.clone());
+    }
+  });
+  LOW_POINTS.set(w, points);
+  return points;
+}
 const _hw1 = new THREE.Vector3(), _hw2 = new THREE.Vector3(), _hw3 = new THREE.Vector3();
 /** `rollFlat`'s: the flat as it is and as it's wanted, across the weapon, their cross, and the roll between them */
 const _fn = new THREE.Vector3(), _ft = new THREE.Vector3(), _fc = new THREE.Vector3(), _fr = new THREE.Quaternion();
@@ -768,21 +796,43 @@ export function buildWarrior(): Model {
     j.handR.quaternion.copy(j.elbowR.getWorldQuaternion(_hq).invert().multiply(_gsq));
   }
 
-  /** The weapon arm turned up about its shoulder, `k` of the way, until the weapon's tip is on the floor under it:
-   *  the floor stops a blow driven into it, and once it has `landed` it rests there (turned down onto it too). It turns in the upright plane through the shoulder and the tip, so the tip
-   *  comes up as it would on the ground, along the line the blow came down. */
+  /** The weapon arm turned up about its shoulder, `k` of the way, until no point of the weapon is under the floor:
+   *  the floor stops a blow driven into it, and once it has `landed` it rests there (turned down onto it too, until
+   *  a point of it touches). It turns in the upright plane through the shoulder and the tip, so the weapon comes up
+   *  as it would on the ground, along the line the blow came down. (Stopped by its tip alone, an axe's or a maul's
+   *  head went into the floor to its middle; by its lowest point, turned each its own way, the haft's end behind
+   *  the hands was pulled down to the floor as the blow landed, and the lower hand let go.) */
   function groundStop(k: number, landed: boolean): void {
-    const at = tip.getWorldPosition(_gs1), floor = groundHeight(at.x, at.z);
-    // (once the blow has landed, it rests on the floor)
-    if (at.y >= floor && !landed) return;
-    const sh = j.shoulderR.getWorldPosition(_gs2);
-    const dx = at.x - sh.x, dz = at.z - sh.z, out = Math.hypot(dx, dz), r = Math.hypot(out, at.y - sh.y);
+    const at = tip.getWorldPosition(_gs1), sh = j.shoulderR.getWorldPosition(_gs2);
+    const dx = at.x - sh.x, dz = at.z - sh.z, out = Math.hypot(dx, dz);
     if (out < 1e-3) return;
-    const now = Math.atan2(at.y - sh.y, out), want = Math.asin(clamp((floor - sh.y) / r, -1, 1));
-    // (about the level line across the way to the tip, turned into the shoulder's parent's space)
+    const turn = floorTurn(sh, dx / out, dz / out);
+    if (turn === null || (turn <= 0 && !landed)) return;
+    // (about the level line across the way to the tip, turned into the shoulder's parent's space: a positive turn
+    // lifts what's ahead of the shoulder)
     const parent = j.shoulderR.parent!.getWorldQuaternion(_gsq).invert();
     _gs3.set(-dz / out, 0, dx / out).applyQuaternion(parent);
-    j.shoulderR.quaternion.premultiply(_gsq.setFromAxisAngle(_gs3, (want - now) * k));
+    j.shoulderR.quaternion.premultiply(_gsq.setFromAxisAngle(_gs3, turn * k));
+  }
+
+  /** The least turn about the level line through the shoulder `sh` across the way (`wx`, `wz`) that leaves every
+   *  point of the weapon ahead of the shoulder at or over the floor under it (rad, up; less than 0, down until
+   *  the first touches), or none if no point of it can reach the floor. */
+  function floorTurn(sh: THREE.Vector3, wx: number, wz: number): number | null {
+    held!.group.updateWorldMatrix(true, false);
+    let turn: number | null = null;
+    for (const p of lowPoints(held!)) {
+      _gs3.copy(p).applyMatrix4(held!.group.matrixWorld);
+      // (in the upright plane across the line the turn is about: out along the way, and up)
+      const along = (_gs3.x - sh.x) * wx + (_gs3.z - sh.z) * wz, up = _gs3.y - sh.y, r = Math.hypot(along, up);
+      const floor = groundHeight(_gs3.x, _gs3.z) - sh.y;
+      // (a point behind the shoulder goes down as the weapon comes up; one nearer it than the floor never meets it:
+      // counted as turned at most straight down, a maul's butt below the shoulder held the blow off the floor)
+      if (along <= 0 || r < -floor) continue;
+      const need = Math.asin(clamp(floor / r, -1, 1)) - Math.atan2(up, along);
+      if (turn === null || need > turn) turn = need;
+    }
+    return turn;
   }
 
   /** The tip the skills read (trail, cast point): the left weapon's during a left-hand swing. */
@@ -979,8 +1029,11 @@ export function buildWarrior(): Model {
     // (the tail: the last move's end pose held a moment after it, unless the body moves off or another action starts)
     if (!raw && lastName !== '' && (TAIL[lastName] ?? 0) > 0 && !fp) { tailName = lastName; tailT = TAIL[lastName]; }
     if (raw || move > 0.3) { if (tailT > 0 && !raw) fade.cut(0.25); tailT = 0; }
-    const inTail = !raw && tailT > 0;
-    if (inTail) { tailT -= dt; if (tailT <= 0) fade.cut(TAIL_OUT[tailName] ?? 0.4); }
+    let inTail = !raw && tailT > 0;
+    // (over on the frame its cut fades from it: held a frame longer, a blow turned to the floor and stopped by it
+    // after the fade was turned and stopped again over the arms it had drawn, which the cut fades from, and the
+    // arm's solve swung the elbow round 30 degrees in two frames, the greatsword's tip 52 cm)
+    if (inTail) { tailT -= dt; if (tailT <= 0) { fade.cut(TAIL_OUT[tailName] ?? 0.4); inTail = false; } }
     const a: ActionState | null = raw ?? (inTail ? { name: tailName, t: 1 } : null);
     // a two-hander through the eyes: how far a move posed in the hero's own space takes over from holding it
     // in the view, and how far a move placed in the view takes it from rest there (to _va, _vd)
