@@ -5,6 +5,7 @@ import { gaitRate, legLength, type LegIK } from './models/ik';
 import { G } from '../state';
 import { ENEMIES, HERO, SCALING, type EnemyId } from '../data/enemies';
 import { buildModel } from './models/index';
+import { reachOf, type Reach } from './models/hulls';
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
 import { AI, lured } from './enemyAI';
@@ -151,6 +152,8 @@ export class Enemy {
   /** the head turning to its target (models/ik.ts) */
   private look: LookAt | null = null;
   readonly height: number;
+  /** how far its body reaches, drawn (models/hulls.ts): where the aim looks for it */
+  readonly reach: Reach;
   readonly obj = new THREE.Group();
   aura: THREE.Mesh | null = null;
   auraMat: THREE.MeshBasicMaterial | null = null;
@@ -186,6 +189,7 @@ export class Enemy {
     this.obj.name = typeId;   // names show up in the perf report
     this.obj.add(this.model.root);
     if (hero) this.model.root.scale.multiplyScalar(HERO.scale);
+    this.reach = reachOf(this.model.root);
     applyShadowDetail(this.obj);
     joinCrowd(this);
     if (hero || this.boss) {

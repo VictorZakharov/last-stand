@@ -343,7 +343,15 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   and through the eyes: round the foe the cast would mark, the pixels it lit (red risen over the same frame drawn
   without it) near the foe on the screen and none away from it; and in the top-down view over the biome's commonest
   foe too, standing dazed (a creature, drawn in its kind's crowd: its own meshes are on a layer of their own, which
-  the outline must still draw). Starfall is cast ten times over the dummy with more
+  the outline must still draw). And over each biome's boss with its summons about it (one between it and the hero),
+  dazed, in each view (`page/heldBoss.ts`, the screen read by `page/onScreen.ts`): the key held and the aim swept a frame each across a grid over each foe's box on the screen
+  (the crosshair turned onto each point in the close views), the outline must be round the foe drawn there at every
+  point, met by the eye's ray on its meshes as they're drawn, skinned and rigid, a breakable prop in front leaving
+  the point out (a miss says where the game's aim was against the point drawn); let go over the boss with the aim
+  moving on onto a small foe as the cast goes, and again while a shot is drawn (the cast waiting for it), the boss
+  must take the mark (`main`'s aim, met on the rigid meshes
+  alone, outlined the thornheart at 53 of 119 points through the eyes and marked a small foe in every view).
+  Starfall is cast ten times over the dummy with more
   standing round it inside its ring as drawn and outside it (`page/heldArea.ts`): every one inside must be struck on
   every cast (each one's casts struck by its distance). Each skill is then held across the dais's step from off it
   and let go: every mark it lays on the floor (`fx/floorPatch.ts`) is read triangle by triangle against the floor
@@ -353,7 +361,8 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   Starfall's ring missed, a mark off the floor and a late compile are problems. `--pictures` (on by default) pictures
   each preview ready, on its cooldown and across the step into `out/held`; `--canary` reads each preview ready with
   no countdown on its cooldown, draws Quarry Mark's outline round the hero (the programs it compiles aren't counted:
-  the game never outlines a hero), reads Starfall's ring as drawn round all its crystals may strike, lays the marks
+  the game never outlines a hero), moves its outline over the forest's boss onto a thornling and the boss's mark onto
+  it, reads Starfall's ring as drawn round all its crystals may strike, lays the marks
   across the step point by point on the floor under them, as they were, and compiles a shader mid-game.
 - `draw`: every drawn shot of the hero's class drawn to full and held there as the player holds it (`page/draw.ts`,
   `--class ranger`), in the top-down view, over the shoulder and through the eyes (`--views`): the key held over an
@@ -498,7 +507,8 @@ What the lab gives a probe (`page/lab.ts`):
   before it first (an option of the probe's own: `--trace=<case>`, say), or run each on a page of its own as a check
   runs the gait's;
 - `lab.step(count, input?, measure?)`: frames run with each frame's input (`keys`, `m0` / `m2` for the mouse buttons,
-  `look` for mouse look, `aim` for the point the mouse is over) and measured after each, a row a frame;
+  `look` for mouse look, `aim` for the point the mouse is over, `sight` for a point the close views' crosshair is
+  turned onto: a mouse-look move a frame, over it in one or two) and measured after each, a row a frame;
 - `lab.until(done, limit, what, input?)`: frames until `done`, throwing `lab: <what>` if it never is;
 - `lab.spawnFoe(type, at, options)`: a foe for a measure that needs one (a mark, a lure; `options` as the game's
   `EnemyOpts`: a hero foe with its name, say), which the set-up keeps while it clears every other until the next

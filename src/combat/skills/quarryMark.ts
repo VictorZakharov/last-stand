@@ -46,12 +46,23 @@ interface Mark { on: Enemy | null; amp: number; left: number; end(): void }
 /** each ranger's mark, while it's up */
 const marks = new WeakMap<Player, Mark>();
 
-/** The foe the cast marks: of those in range of the hero, the nearest the aim. */
+/** How far the aim (`target`, its `y` over the floor) is off `e`'s body, its upright cylinder (m): how deep in it, less
+ *  than 0, when it's within its height. */
+function offBody(e: Enemy, target: THREE.Vector3): number {
+  const out = Math.hypot(e.pos.x - target.x, e.pos.z - target.z) - e.radius, up = Math.max(0, target.y - e.height, -target.y);
+  return up > 0 ? Math.hypot(Math.max(0, out), up) : out;
+}
+
+/**
+ * The foe the cast marks: of those in range of the hero, the one whose body the aim is on or nearest. (By their
+ * middles, a boss lost to a small foe beside it: the aim on its body is a metre or two from its middle.) Judged from
+ * the aim's point alone, which every game is given: each marks the same foe.
+ */
 function quarry(player: Player, target: THREE.Vector3, range: number): Enemy | null {
   let best: Enemy | null = null, bd = Infinity;
   for (const e of G.enemies) {
     if (!e.alive || e.spawning || Math.hypot(e.pos.x - player.pos.x, e.pos.z - player.pos.z) > range) continue;
-    const d = Math.hypot(e.pos.x - target.x, e.pos.z - target.z);
+    const d = offBody(e, target);
     if (d < bd) { bd = d; best = e; }
   }
   return best;

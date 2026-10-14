@@ -97,7 +97,8 @@ function cylinder(r: THREE.Ray, x: number, z: number, rad: number, y0: number, y
 }
 
 const _best = new THREE.Vector3(), _hits: THREE.Intersection[] = [];
-/** a foe's or a prop's cylinder round it, for the cheap test: a little wider than its circle, its arms and its edges out of it */
+/** a foe's or a prop's cylinder round it, for the cheap test: a little wider than its circle, its arms and its edges out of
+ *  it (a foe's: as far as its body reaches, drawn, if that's further) */
 const ROUND = 1.3;
 /**
  * The aim along a ray from the eye: the first thing it meets, as it's drawn, whatever it is: a foe's body, a prop, the
@@ -116,7 +117,7 @@ function aimAlong(far: number): void {
   const near: [number, () => void][] = [];
   for (const e of G.enemies) {
     if (!e.alive) continue;
-    const y0 = e.obj.position.y, t = cylinder(r, e.pos.x, e.pos.z, e.radius * ROUND, y0, y0 + e.height * 1.1);
+    const y0 = e.obj.position.y, out = Math.max(e.radius * ROUND, e.reach.out), t = cylinder(r, e.pos.x, e.pos.z, out, y0, y0 + Math.max(e.height * 1.1, e.reach.top));
     if (t < best) near.push([t, () => { const h = castSolid(e.obj, ray); if (h) _hits.push(h); }]);
   }
   for (const o of G.arena.obstacles) {
