@@ -578,6 +578,24 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  draws: {
+    check(options) {
+      if (options.count !== undefined && !(options.count >= 0)) throw labError('draws --count: 0 or more');
+      if (options.rows !== undefined && !(options.rows >= 1)) throw labError('draws --rows: at least 1');
+    },
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        count: options.count === undefined ? undefined : Math.round(options.count),
+        rows: options.rows === undefined ? undefined : Math.round(options.rows),
+        canary: Boolean(options.canary),
+      };
+      return side.command('draws', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   touch: {
     each(side, options) {
       return side.command('touch', { fixture: fixtureFrom(options), canary: Boolean(options.canary) });

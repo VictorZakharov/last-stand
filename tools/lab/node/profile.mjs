@@ -46,11 +46,35 @@ function placeOf(callFrame, sourceOf) {
   return `${name} ${file}:${(found?.line ?? callFrame.lineNumber) + 1}`;
 }
 
+/** the frames the profiler stands for no function of the page's */
+const IDLE = new Set(['(idle) (native):0', '(program) (native):0', '(root) (native):0']);
+
+/** Whether a function's place (`animate ranger.ts:775`) is the one `wanted` names: its name, or its name and file. */
+function isNamed(place, wanted) {
+  return place === wanted || place.startsWith(`${wanted} `) || place.startsWith(`${wanted}:`);
+}
+
+/**
+ * A sample's stack as places, from the function it was in out to the root; with `within`, only up to the outermost
+ * function `within` names (null when it isn't in the stack), so a function that calls itself is counted once.
+ */
+function stackOf(id, nodes, parentOf, sourceOf, within) {
+  const places = [];
+  let end = within ? -1 : Infinity;
+  for (let at = id; at !== undefined; at = parentOf.get(at)) {
+    const place = placeOf(nodes.get(at).callFrame, sourceOf);
+    places.push(place);
+    if (within && isNamed(place, within)) end = places.length;
+  }
+  return end < 0 ? null : places.slice(0, end);
+}
+
 /**
  * The profile's busiest functions: by self time, and by total time (each function once per sample's stack), each
- * placed by `sourceOf` (see `placeOf`; by where it ran when not given).
+ * placed by `sourceOf` (see `placeOf`; by where it ran when not given). With `within` (a function's name, or its
+ * name and file: `animate ranger.ts`), only the time in that function, with its shares of it.
  */
-export function summarize(profile, sourceOf = () => null) {
+export function summarize(profile, sourceOf = () => null, within = null) {
   const nodes = new Map(profile.nodes.map((node) => [node.id, node]));
   const parentOf = new Map();
   for (const node of profile.nodes) {
@@ -59,34 +83,29 @@ export function summarize(profile, sourceOf = () => null) {
   const self = new Map();
   const total = new Map();
   let sampled = 0;
+  let counted = 0;
   profile.samples.forEach((id, index) => {
     const ms = (profile.timeDeltas[index] ?? 0) / 1000;
     sampled += ms;
-    const place = placeOf(nodes.get(id).callFrame, sourceOf);
-    self.set(place, (self.get(place) ?? 0) + ms);
-    const seen = new Set();
-    for (let at = id; at !== undefined; at = parentOf.get(at)) {
-      const stackPlace = placeOf(nodes.get(at).callFrame, sourceOf);
-      if (seen.has(stackPlace)) continue;
-      seen.add(stackPlace);
-      total.set(stackPlace, (total.get(stackPlace) ?? 0) + ms);
-    }
+    const stack = stackOf(id, nodes, parentOf, sourceOf, within);
+    if (!stack) return;
+    counted += ms;
+    self.set(stack[0], (self.get(stack[0]) ?? 0) + ms);
+    for (const place of new Set(stack)) total.set(place, (total.get(place) ?? 0) + ms);
   });
-  const idle = new Set(['(idle) (native):0', '(program) (native):0', '(root) (native):0']);
   const row = ([place, ms]) => {
-    const share = (ms / sampled * 100).toFixed(1).padStart(5);
+    const share = (ms / counted * 100).toFixed(1).padStart(5);
     return `  ${share} %  ${ms.toFixed(0).padStart(6)} ms  ${place}`;
   };
   const busiest = (times) => [...times]
-    .filter(([place]) => !idle.has(place))
+    .filter(([place]) => !IDLE.has(place))
     .sort((a, b) => b[1] - a[1])
     .slice(0, SHOWN)
     .map(row);
-  return [
-    `profile: ${sampled.toFixed(0)} ms sampled`,
-    'by own time',
-    ...busiest(self),
-    'by total time (with what it called)',
-    ...busiest(total),
-  ].join('\n');
+  const head = within
+    ? `profile: ${counted.toFixed(0)} ms in ${within}, ${(counted / sampled * 100).toFixed(1)} % of `
+      + `${sampled.toFixed(0)} ms sampled`
+    : `profile: ${sampled.toFixed(0)} ms sampled`;
+  if (within && counted === 0) return `${head}: no function ${within} ran`;
+  return [head, 'by own time', ...busiest(self), 'by total time (with what it called)', ...busiest(total)].join('\n');
 }

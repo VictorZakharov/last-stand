@@ -16,6 +16,7 @@ import { OUT, REPO } from './paths.mjs';
 import { describePictureDifferences } from './pictures.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { profiled, scriptsIn, summarize } from './profile.mjs';
+import { placedTally, randomsDiffer, scriptsOfTally, summarizeRandoms, tallied } from './randoms.mjs';
 import { Side } from './side.mjs';
 import { cacheShown, keep, readKept, sideKey } from './sideCache.mjs';
 
@@ -90,6 +91,7 @@ export class LabSession {
     const notes = relaunched ? [relaunched] : [];
     const problems = [];
     const resultOf = new Map();
+    const randomsOf = new Map();
     for (const turn of turns) {
       const side = turn.side;
       const key = this.keyOf(side, command, options, heroClass);
@@ -108,14 +110,27 @@ export class LabSession {
       if (await side.ready(heroClass)) notes.push(`${turn.name}: booted the ${heroClass} (${seconds(bootStarted)})`);
       side.used = true;
       if (turn.screen) await side.showOn(turn.screen);
-      const runCommand = () => handler.each(side, options, this);
+      let tally = null;
+      const runCommand = options.randoms
+        ? async () => {
+          const { result, entries } = await tallied(side.page, () => handler.each(side, options, this));
+          tally = entries;
+          return result;
+        }
+        : () => handler.each(side, options, this);
       if (options.profile) {
         const { result, profile } = await profiled(side.page, runCommand);
         resultOf.set(turn, result);
         const sourceOf = await side.sourceLocator(scriptsIn(profile));
-        notes.push(`${turn.name}: ${summarize(profile, sourceOf)}`);
+        const within = typeof options.profile === 'string' ? options.profile : null;
+        notes.push(`${turn.name}: ${summarize(profile, sourceOf, within)}`);
       } else {
         resultOf.set(turn, await runCommand());
+      }
+      if (tally) {
+        const placed = placedTally(tally, await side.sourceLocator(scriptsOfTally(tally)));
+        randomsOf.set(turn, placed);
+        notes.push(`${turn.name}: ${summarizeRandoms(placed)}`);
       }
       const { errors, warnings } = await side.drainMessages();
       if (errors.length) {
@@ -135,6 +150,7 @@ export class LabSession {
       }
     }
     const results = shown.map((turn) => [turn, resultOf.get(turn)]);
+    if (randomsOf.size === 2) notes.push(randomsDiffer(randomsOf.get(turns[0]), randomsOf.get(turns[1])));
     const textOf = handler.textOf ?? String;
     const text = handler.finish
       ? await handler.finish(results, options, this)
@@ -176,10 +192,10 @@ export class LabSession {
 
   /**
    * The key the other side of an A/B is kept under (sideCache.mjs), or null for one run afresh: this tree's (it
-   * changes as you work), one asked for `--fresh`, and one being profiled.
+   * changes as you work), one asked for `--fresh`, and one being profiled or its random numbers tallied.
    */
   keyOf(side, command, options, heroClass) {
-    if (side.isRepo || options.fresh || options.profile) return null;
+    if (side.isRepo || options.fresh || options.profile || options.randoms) return null;
     const extraFiles = command === 'probe' ? probeFiles(REPO, probeOf(options)) : [];
     return sideKey({ sha: side.sha, heroClass, command, options, extraFiles });
   }

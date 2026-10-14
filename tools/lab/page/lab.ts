@@ -46,6 +46,8 @@ declare global {
     __labClock: LabClock;
     /** starts the page's seeded `Math.random` again (`tools/lab/node/browser.mjs`) */
     __labSeed: (seed: number) => void;
+    /** starts it again for the next frame, from the last seed and the frames since */
+    __labFrame: () => void;
     __lab?: Lab;
     /** the page pictured by the browser as it shows, within `clip` (`tools/lab/node/side.mjs`), as a PNG data URL */
     __labScreenshot?: (clip?: Clip) => Promise<string>;
@@ -412,6 +414,7 @@ export class Lab {
   };
 
   private runGameFrame(): void {
+    window.__labFrame();
     const clock = window.__labClock;
     const callbacks = clock.queue;
     clock.queue = [];

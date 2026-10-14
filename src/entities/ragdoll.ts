@@ -345,7 +345,7 @@ export class Ragdoll {
   }
 
   /** The body moved on by `dt` s, under gravity and `fields`. */
-  step(dt: number, fields: Iterable<Field>): void {
+  step(dt: number, fields: readonly Field[]): void {
     if (this.asleep) {
       // (woken by a field reaching its hips)
       for (const f of fields) if (f.accel(this.hips(_a), _b.set(0, 0, 0), _c.set(0, 0, 0))) { this.asleep = false; break; }
@@ -419,14 +419,18 @@ export class Ragdoll {
   }
 
   /** Each point moved on by its velocity, gravity and the fields. */
-  private move(fields: Iterable<Field>): void {
+  private move(fields: readonly Field[]): void {
     const p = this.p, q = this.q, keep = 1 - DRAG * STEP;
     for (let i = 0; i < N; i++) {
       const k = i * 3;
-      this.point(i, _p);
-      this.velocity(i, _v);
       _acc.set(0, -GRAVITY, 0);
-      for (const f of fields) if (f.accel(_p, _v, _acc)) this.held = true;
+      if (fields.length) {
+        this.point(i, _p);
+        this.velocity(i, _v);
+        for (const f of fields) if (f.accel(_p, _v, _acc)) this.held = true;
+      } else {
+        _v.set(p[k] - q[k], p[k + 1] - q[k + 1], p[k + 2] - q[k + 2]).divideScalar(STEP);
+      }
       _acc.multiplyScalar(STEP * STEP);
       q[k] = p[k]; q[k + 1] = p[k + 1]; q[k + 2] = p[k + 2];
       p[k] += _v.x * STEP * keep + _acc.x;
@@ -485,11 +489,9 @@ export class Ragdoll {
 
   /** Point `i` moved `by` along `way`, where it was a step ago too (so the move gives it no speed). */
   private shift(i: number, way: THREE.Vector3, by: number): void {
-    const k = i * 3;
-    for (const [c, d] of [[0, way.x], [1, way.y], [2, way.z]] as const) {
-      this.p[k + c] += d * by;
-      this.q[k + c] += d * by;
-    }
+    const p = this.p, q = this.q, k = i * 3, x = way.x * by, y = way.y * by, z = way.z * by;
+    p[k] += x; p[k + 1] += y; p[k + 2] += z;
+    q[k] += x; q[k + 1] += y; q[k + 2] += z;
   }
 
   /** The props near enough to the body to be met this frame. */
@@ -521,8 +523,9 @@ export class Ragdoll {
       const d = Math.sqrt(d2) || 1e-3;
       this.offSide(i, o, dx / d, dz / d, min);
     }
-    const R = G.arena.radius - r, out = length2(p[k], p[k + 2]);
-    if (out > R) { p[k] *= R / out; p[k + 2] *= R / out; }
+    // (the wall: its squared distance first, the root only for a point past it)
+    const R = G.arena.radius - r, out2 = p[k] * p[k] + p[k + 2] * p[k + 2];
+    if (out2 > R * R) { const out = Math.sqrt(out2); p[k] *= R / out; p[k + 2] *= R / out; }
   }
 
   /** Point `i` set on the side of prop `o` (`at` from its middle, out along (`nx`, 0, `nz`)), bouncing off it as off the

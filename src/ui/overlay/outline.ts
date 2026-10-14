@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { G } from '../../state';
 import { uiScales } from '../scale';
+import { CROWD_LAYER } from '../../entities/models/crowd';
 
 /** the outline's width, and its soft glow's past it (px of the UI's reference layout, at the HUD's scale) */
 const WIDTH = 2.5;
@@ -177,6 +178,9 @@ function drawMask(gl: THREE.WebGLRenderer, root: THREE.Object3D): THREE.WebGLRen
   const clear = gl.getClearColor(new THREE.Color());
   const clearAlpha = gl.getClearAlpha();
   const autoClear = gl.autoClear;
+  // (a crowd's bodies are drawn by their crowd, their own meshes on a layer of their own: models/crowd.ts)
+  const crowd = G.camera.layers.isEnabled(CROWD_LAYER);
+  G.camera.layers.enable(CROWD_LAYER);
   try {
     gl.setRenderTarget(target);
     gl.setClearColor(0x000000, 0);
@@ -184,6 +188,7 @@ function drawMask(gl: THREE.WebGLRenderer, root: THREE.Object3D): THREE.WebGLRen
     gl.autoClear = false;
     gl.render(root, G.camera);
   } finally {
+    if (!crowd) G.camera.layers.disable(CROWD_LAYER);
     swapOut(swapped);
     gl.autoClear = autoClear;
     gl.setClearColor(clear, clearAlpha);
