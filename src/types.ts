@@ -94,6 +94,9 @@ export interface SkillDef {
   range?: number;
   shards?: number;
   radius?: number;
+  /** Steel Tempest: how fast the hero spins (rad/s), quickened by cast speed as a cast is; it strikes once each so far
+   *  round, so a slower spin strikes less often and harder */
+  spin?: number;
   scatter?: number;
   /** area damage at `radius`, as a share of a direct hit (eased in between) */
   edge?: number;
@@ -136,11 +139,17 @@ export interface SkillDef {
   styles?: Partial<Record<WeaponStyle, StyleTuning>>;
 }
 
+/** A two-hander's lower grip as the other hand holds it: whether it does, whether it isn't on it on purpose (the
+ *  weapon on the shoulder, the flask in that hand, or the hand coming onto it as the weapon comes off the shoulder),
+ *  and how far it is from it (the grip short of the arm's reach,
+ *  m; the arm's joints past their ranges holding it, degrees; the arm into the body, m). */
+export interface LowerGrip { held: boolean; free: boolean; short: number; past: number; into: number }
+
 /** How the weapons are held: each has its own loadout (for a class with gear-driven skills). */
 export type WeaponStyle = 'shield' | 'twoHanded' | 'dual' | 'oneHanded';
 
 /** What a weapon style may change of a skill. */
-export type StyleTuning = Partial<Pick<SkillDef, 'castTime' | 'damage' | 'gain'>>;
+export type StyleTuning = Partial<Pick<SkillDef, 'castTime' | 'damage' | 'gain' | 'spin'>>;
 
 export interface ClassDef {
   id: string;
@@ -257,6 +266,8 @@ export interface EnemyDef {
  *  or at once without one). */
 export interface ActionState {
   name: string; t: number; hit?: number; time?: number; open?: number;
+  /** a spin: how far round the body has turned since it began (rad, to the left) */
+  turn?: number;
   /** a bow: how far it is drawn (0..1, of the full draw's time) and, once loosed, the seconds since, and the arrow's
    *  angle above level for the target */
   draw?: number; loosed?: number; pitch?: number;
@@ -318,6 +329,8 @@ export interface Model {
   readonly swing?: number;
   /** distance from the body to the weapon's tip */
   readonly reach?: number;
+  /** a two-hander's lower grip as the other hand held it this frame (null without one; the lab's measures read it) */
+  readonly lowerGrip?: LowerGrip | null;
   dispose(): void;
 }
 
