@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- app icon (the favicon's emblem on a full-bleed tile); scripts/pwa.ts renders the PNG sizes -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="70%">
+      <stop offset="0" stop-color="#2a2218"/>
+      <stop offset="1" stop-color="#060404"/>
+    </radialGradient>
+    <radialGradient id="disc" cx="50%" cy="40%" r="60%">
+      <stop offset="0" stop-color="#3a3024"/>
+      <stop offset="1" stop-color="#0c0a0a"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff2c8"/>
+      <stop offset="0.55" stop-color="#d0a050"/>
+      <stop offset="1" stop-color="#7a5420"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#5dffa8" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#5dffa8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- the emblem stays inside the central 80% so maskable crops keep it whole -->
+  <circle cx="256" cy="256" r="178" fill="url(#disc)" stroke="url(#rim)" stroke-width="18"/>
+  <circle cx="256" cy="256" r="150" fill="url(#glow)"/>
+  <path d="M256 124l38 100 100 32-100 32-38 100-38-100-100-32 100-32z" fill="#5dffa8"/>
+  <circle cx="256" cy="256" r="30" fill="#eafff4"/>
+</svg>
