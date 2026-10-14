@@ -32,6 +32,8 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `blink`: the mage's blink cast as the player casts it (open ground, past his reach, into a prop, past one, the arena's edge, onto the dais, his own feet: where it came out against its preview and his reach, the frames he was hidden and the blows that landed in them, the foes near and far it dazed and how they stood)
 - `draw`: each drawn shot held at full draw as the player holds it (the glint round its arrowhead every frame in every view: none as it's drawn, held at full until it's loosed, the pixels it lights as the player sees it, and no blob of glare; the crosshair bold at full draw alone, its one beat into it about its middle, none with reduced motion)
 - `cast`: a skill cast as the player casts it, its effect seen frame by frame (each biome and view with the biome's foes coming at him, every frame drawn and read back: its light against the budget, the frame's mean every tenth of a second, the flashes in any second and the worst cell's light through it, the shaders compiled late)
+- `death`: each skill's kills as they fall (foes stood dazed where it strikes, a hair from death and with little to spare: how hard each body was thrown and which way, how far it flew, when it lay still; its drawn pose against the floor, the props, the wall and its points)
+- `crowd`: a crowd of foes killed at once and what the frame costs as they fall (each frame timed by the browser's clock with the game drawn, the bodies' part apart, at each CPU slowdown, as a low-end device's, and frame rate)
 - `gear`: full sets of gear rolled for every class at each tier (the Health, regeneration and draught they give, and the damage they multiply)
 - `music`: each biome's music as the player hears it (its lobby, a run's countdowns, fights and wins, a hidden tab and the bank back: which track plays, how it fades, where it comes in, what reaches WebAudio)
 
@@ -277,6 +279,43 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   again, the preview counting down and the dazed foes into `out/blink`; `--canary` reads the preview a metre off,
   takes the guard off as he comes apart, reads it green with no countdown on its cooldown and clears a near foe's
   daze at once.
+- `death`: each skill's kills followed as they fall (`page/death.ts`). `--skills` names them by key, behaviour or
+  name; by default every skill of the hero's that deals damage (Thunder Crescent needs `--gear twoHanded`, Twin Fangs
+  `--gear dual`). The biome's commonest foe is stood dazed where each skill strikes (`STANDS`), and the skill is cast
+  twice, each on a fresh set-up: first at foes a hair from death (1 Health: thrown hard), then at foes holding 80% of
+  what the first cast's killing hit dealt them (thrown softly). Every body is followed as drawn until it has
+  dissolved: how hard it was thrown, how far it flew and how high, when it lay still (or began to dissolve: a frozen
+  body shatters as it lands). These are problems:
+  - a drawn part more than 4 cm under the floor (a ball's depth into its own level or a higher one, `depthInFloor`)
+    or 6 cm into a prop;
+  - the pose more than 10 cm off its points, a bone stretched over 8%, NaN, or a body past the wall;
+  - a body lying with its hips over 0.6 of their standing height above what's under it;
+  - a body going back at the hero, or against its throw for a skill that strikes from elsewhere (Hailfletch's
+    shower, Starfall's crystals); a body going against a sweep's swing;
+  - a storm's kill not going round it (its path at least twice its way, its hips up a metre);
+  - the bodies killed with little to spare thrown as hard;
+  - a shader compiled meanwhile.
+
+  `--trace` lists every hard-thrown body frame by frame: each point's clearance as drawn, its pose's error, its
+  point's own clearance, a prop touched, and its fastest point (what keeps a body from lying still). `--pictures`
+  (on by default) pictures the bodies as the player sees them, and close from the hero's left and from behind, at
+  0.15 s, at 0.5 s and lying still, into `out/death`. `--canary` puts a body a metre under the floor for a frame and
+  throws one back at the hero.
+- `crowd`: a crowd of foes killed at once (`page/crowd.ts`), and what the frame costs as their bodies fall: the low-end
+  device's measure. `--count` sets the crowd (38 by default, the most a wave keeps alive); it's killed by a blow each
+  from the hero, or by `--skill` cast at it. Each round sets the crowd up afresh, times 30 frames with it standing,
+  kills it, and times every frame until its bodies are gone, with the game drawn and every time taken by the browser's
+  own clock: the frame, its draw calls, the deaths (`Enemy.die`), the bodies (`Corpse.update`) and, of those, the
+  ragdolls' steps and poses (`timeCalls`' laps). There's a round for each CPU slowdown (`--throttles`, by default
+  1,4,6: as it is, then DevTools' mid-range and low-end phones; `lab.throttle`) at each frame rate (`--rates`, 60,30:
+  a device already slow steps each body twice as far a frame). Two things are problems, each judged against the
+  frame with the crowd standing so it holds on any machine:
+  - the frame as the crowd fell more than 15% slower (its 90th percentile);
+  - the bodies' part over 20% of the standing frame.
+
+  `--canary` runs the first round again with each body made 0.1 ms slower a frame, which must show. The machine's load
+  drifts, so compare rounds within one run. With many foes, the frame is mostly drawing them: about 77 draw calls a
+  foe (#222).
 - `held`: every held skill of the hero's class (`SkillDef.aimed`: the ranger's Quarry Mark and Strawman, the mage's
   Starfall and Veilstep; `page/held.ts`, `--class`) held as the player holds it, over a training dummy the way the
   camera looks: ready, its preview shown in its own look with no countdown, and let go it casts; then held through
@@ -451,7 +490,12 @@ What the lab gives a probe (`page/lab.ts`):
 - `timeCalls(owner, method)` (`page/timing.ts`): every call of a method timed by the browser's own clock (the page's
   `performance.now` is the lab's, which stands still within a frame), for a cost: its calls, total, median and 90th
   percentile. The timer ticks in 0.1 ms, so take a frame's mean over many, and compare sides within one A/B (the
-  machine's load drifts between commands);
+  machine's load drifts between commands). Its `lap()` says what the calls took since the last lap: a frame's, read
+  after each frame (`crowd`);
+- `await lab.throttle(rate)`: the page's CPU slowed `rate` times as the browser emulates a slower device's (DevTools'
+  presets: 4 a mid-range phone, 6 a low-end one), sent through the DevTools protocol: times read by the browser's
+  own clock take that much longer, while the lab's frames stay as long as ever. Set it up at full speed and slow
+  only what's measured (`crowd`);
 - `lab.aim` and `lab.pointAt(point)`: where the mouse is;
 - `await lab.touchDown(at)`, `touchMove(at)`, `touchUp()`: a finger on the page (css px) as a touch screen gives it,
   sent through the DevTools protocol, so the page's own pointer events follow with their pointer ids and its touch

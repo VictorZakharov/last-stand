@@ -460,10 +460,44 @@ export const COMMANDS = {
         usage: 'a,b',
         help: 'the skills, by key, behaviour or name (every one of the hero\'s that deals damage by default)',
       },
-      pictures: { kind: 'switch', help: 'picture each skill\'s bodies as they fall and lie (=false: the numbers alone)' },
+      pictures: {
+        kind: 'switch',
+        help: 'picture each skill\'s bodies as they fall and lie (=false: the numbers alone)',
+      },
       canary: {
         kind: 'switch',
         help: 'plant faults the checks must catch: a body put under the floor for a frame, one thrown back at the hero',
+      },
+      trace: {
+        kind: 'switch',
+        help: 'list each frame of each body each skill throws hard: each point\'s height over the floor less its size, '
+          + 'how far its drawn pose is off it and its point\'s own height (cm)',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  crowd: {
+    help: 'a crowd of foes killed at once and what the frame costs as their bodies fall: the crowd timed standing and '
+      + 'then every frame until its bodies are gone, by the browser\'s own clock with the game drawn, the bodies\' '
+      + 'part apart, at each CPU slowdown (as a low-end device\'s) and frame rate; the bodies\' part past its budget '
+      + 'with the CPU slowest at 60 a second, or a canary unseen, are problems (--class warrior)',
+    options: {
+      count: { kind: 'number', usage: 'n', help: 'how many foes (by default the most a wave keeps alive, 38)' },
+      throttles: {
+        kind: 'list',
+        usage: 'a,b',
+        help: 'the CPU\'s slowdowns, a round each (1,4,6 by default: as it is, a mid-range phone\'s, a low-end one\'s)',
+      },
+      rates: { kind: 'list', usage: 'a,b', help: 'the frame rates, a round each at every slowdown (60,30 by default)' },
+      skill: {
+        kind: 'text',
+        usage: 'name',
+        help: 'the crowd killed by a cast of this skill (its key, behaviour or name), not by a blow each',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant a cost the measure must see: the first round again, each body made 0.1 ms slower a frame',
       },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,

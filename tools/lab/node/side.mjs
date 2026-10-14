@@ -96,6 +96,12 @@ function motionOf(page, reduced) {
   return page.emulateMedia({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
 }
 
+/** The page's CPU slowed `rate` times (1: as it is), as the browser emulates a slower device's. */
+async function throttleOf(page, rate) {
+  const devtools = await devtoolsOf(page);
+  await devtools.send('Emulation.setCPUThrottlingRate', { rate });
+}
+
 async function keyOf(page, type, key) {
   const devtools = await devtoolsOf(page);
   await devtools.send('Input.dispatchKeyEvent', { type, ...keyFields(key) });
@@ -363,6 +369,8 @@ export class Side {
     await page.exposeFunction('__labKey', (type, key) => keyOf(page, type, key));
     // (a probe's `lab.reduceMotion`: the motion asked for let back on, to measure a decorative animation)
     await page.exposeFunction('__labMotion', (reduced) => motionOf(page, reduced));
+    // (a probe's `lab.throttle`: the CPU slowed as a low-end device's, for what the page's work costs one)
+    await page.exposeFunction('__labThrottle', (rate) => throttleOf(page, rate));
     await page.goto(this.url);
     // (polled on a timer: by default it polls by animation frame, and the lab's clock holds those once the game shows)
     const polling = { polling: BOOT_POLL_MS, timeout: BOOT_TIMEOUT_MS };

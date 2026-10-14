@@ -57,6 +57,8 @@ declare global {
     __labKey?: (type: KeyType, code: string) => Promise<void>;
     /** the page's `prefers-reduced-motion` as the browser emulates it (`tools/lab/node/side.mjs`) */
     __labMotion?: (reduced: boolean) => Promise<void>;
+    /** the page's CPU slowed `rate` times, as the browser emulates a slower device's (`tools/lab/node/side.mjs`) */
+    __labThrottle?: (rate: number) => Promise<void>;
   }
 }
 
@@ -644,6 +646,16 @@ export class Lab {
   async reduceMotion(reduced: boolean): Promise<void> {
     if (!window.__labMotion) throw new Error('lab: reduceMotion: this page can\'t change it (opened by an older lab)');
     await window.__labMotion(reduced);
+  }
+
+  /**
+   * The page's CPU slowed `rate` times (1: as it is), as the browser emulates a slower device's: what the page's work
+   * costs a low-end phone's or laptop's (DevTools' presets: 4 a mid-range phone's, 6 a low-end one's). Times read by
+   * the browser's own clock (`__labClock.realNow`) take that much longer; the lab's frames stay as long as ever.
+   */
+  async throttle(rate: number): Promise<void> {
+    if (!window.__labThrottle) throw new Error('lab: throttle: this page can\'t slow its CPU (opened by an older lab)');
+    await window.__labThrottle(rate);
   }
 
   private async sendMouse(type: MouseType, at: PagePoint): Promise<void> {

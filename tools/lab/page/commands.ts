@@ -22,6 +22,7 @@ import type { DrawOptions } from './draw';
 import type { GearOptions } from './gear';
 import type { MusicOptions } from './music';
 import type { DeathOptions } from './death';
+import type { CrowdOptions } from './crowd';
 
 export interface SheetCommand {
   states: string[];
@@ -199,6 +200,15 @@ export async function held(lab: Lab, command: HeldOptions): Promise<Report> {
 export async function death(lab: Lab, command: DeathOptions): Promise<Report> {
   const { death: deathRound } = await import('./death');
   return deathRound(lab, command);
+}
+
+/**
+ * `lab crowd`: a crowd of foes killed at once at each CPU slowdown and frame rate, each frame timed by the browser's
+ * clock and the bodies' part of it; the bodies past their budget at the slowest CPU, or a canary unseen, are problems.
+ */
+export async function crowd(lab: Lab, command: CrowdOptions): Promise<Report> {
+  const { crowd: crowdRound } = await import('./crowd');
+  return crowdRound(lab, command);
 }
 
 /** `lab gear`: full sets rolled for every class at each tier, and what they give; a class out of order is a problem. */

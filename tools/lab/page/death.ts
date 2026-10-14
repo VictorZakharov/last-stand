@@ -14,7 +14,7 @@ import type { Fling } from '../../../src/combat/fling';
 import type { Joints } from '../../../src/entities/models/rig';
 import { G } from '../../../src/state';
 import { BIOMES } from '../../../src/data/biomes';
-import { groundHeight } from '../../../src/world/ground';
+import { GROUND_EDGES, GROUND_LEVELS, groundHeight } from '../../../src/world/ground';
 import { RAGDOLL_BONES, RAGDOLL_POINTS } from '../../../src/entities/ragdoll';
 import { lateCompiles, programsCompiledInGame } from '../../../src/core/shaders';
 import { holdFor, pressing, skillNamed, type BoundSkill } from './cast';
@@ -26,6 +26,9 @@ export interface DeathOptions {
   pictures: boolean;
   /** plant the faults the checks must catch: a body put under the floor for a frame, one thrown back at the hero */
   canary: boolean;
+  /** list each frame of each body a skill throws hard: each point's height over the floor less its size, how far the
+   *  drawn pose is off it and its point's own height over the floor less its size (cm) */
+  trace?: boolean;
 }
 
 /** Where a skill's foes stand: `ahead` m before the hero, `across` m either side of that or `along` m apart down the
@@ -61,6 +64,9 @@ const STANDS: Record<string, Stand> = {
 const SWINGS = new Set(['cleave', 'twinFangs', 'tempest']);
 /** the skills whose kills go round where they struck (a storm's), not away from the hero */
 const WHIRLS = new Set(['maelstrom']);
+/** the skills that strike from elsewhere (a shower bursting over its area, crystals landing), whose kills go the way
+ *  their throw drove them, not away from the hero (one nearer him than the shower's middle is thrown back at him) */
+const ELSEWHERE = new Set(['arrowRain', 'starfall']);
 
 /** where the hero stands and faces (deg) unless the fixture says: open ground, off the dais, the arena before him */
 const SPOT: [number, number] = [-11, -12];
@@ -71,8 +77,9 @@ const MOST_FRAMES = 900;
 const SETTLE = 10;
 /** the foes risen in at most this many frames */
 const RISE_FRAMES = 300;
-/** the bare pass: each foe holds this share of what the first cast's killing hit dealt it */
-const BARE_SHARE = 0.92;
+/** the bare pass: each foe holds this share of what the first cast's killing hit dealt it (a hit's roll is 10% either
+ *  way: at 92%, a low roll left foes standing) */
+const BARE_SHARE = 0.8;
 /** what a body may do (m): a part of it this far under the floor or into a prop, its pose this far off its points,
  *  and a bone stretched or squashed by this share of its length */
 const UNDER_MOST = 0.04;
@@ -96,13 +103,19 @@ interface Fallen {
   fellAt: number;
   fling: Fling;
   from: THREE.Vector3;
+  /** where the hero stood as it fell (a charge carries him on past it), and which way the swing the player saw went
+   *  then (+1 from his right to his left) */
+  heroAt: THREE.Vector3;
+  swing: number;
   /** the way it was going over the first frames after its fall (m/s, along the ground) */
   early: THREE.Vector3;
   standingHips: number;
   path: number;
   highest: number;
   restAt: number;
+  /** where it lay still, or began to dissolve (`ended`) without lying still */
   lay: THREE.Vector3;
+  ended: boolean;
   layHips: number;
   under: Worst;
   inProp: Worst;
@@ -130,7 +143,7 @@ const frameTime = (): number => window.__labClock.frame / 1000;
 const flat = (from: THREE.Vector3, to: THREE.Vector3): number => Math.hypot(to.x - from.x, to.z - from.z);
 
 /** The kind of foe the skills are cast at: the biome's commonest in its third wave. */
-function foeKind(): EnemyId {
+export function foeKind(): EnemyId {
   const pool = BIOMES[G.arena.biome].pool(3).slice().sort((a, b) => b[1] - a[1]);
   return pool[0][0];
 }
@@ -157,7 +170,7 @@ function placesFor(stand: Stand, at: THREE.Vector3, facing: number): { spots: TH
 }
 
 /** The foes risen at `spots`, standing dazed (still, thinking of nothing), each holding `lives[i]` of its life. */
-async function foesAt(lab: Lab, spots: THREE.Vector3[], lives: number[]): Promise<Enemy[]> {
+export async function foesAt(lab: Lab, spots: THREE.Vector3[], lives: number[]): Promise<Enemy[]> {
   const kind = foeKind();
   const foes = spots.map((spot) => lab.spawnFoe(kind, spot));
   await lab.until(() => foes.every((foe) => foe.spawning <= 0), RISE_FRAMES, 'the foes never rose');
@@ -186,7 +199,8 @@ function drawnPoint(joints: Joints, name: (typeof RAGDOLL_POINTS)[number], out: 
   joints[name].getWorldPosition(out);
   if (name !== 'head') return out;
   const scale = joints.head.getWorldScale(new THREE.Vector3()).x;
-  const up = new THREE.Vector3(0, joints.P.headR * scale, 0).applyQuaternion(joints.head.getWorldQuaternion(new THREE.Quaternion()));
+  const turn = joints.head.getWorldQuaternion(new THREE.Quaternion());
+  const up = new THREE.Vector3(0, joints.P.headR * scale, 0).applyQuaternion(turn);
   return out.add(up);
 }
 
@@ -196,6 +210,25 @@ function worse(worst: Worst, amount: number, part: string, at: number): void {
   worst.amount = amount;
   worst.part = part;
   worst.at = at;
+}
+
+/**
+ * How deep a ball of `radius` at `point` is in the floor (m; 0 clear of it): below its own level's, or into a higher
+ * level's square through its top or its side, whichever is less (a ball by the dais's step, its middle off it, is in
+ * the step only as far as it reaches over the edge).
+ */
+function depthInFloor(point: THREE.Vector3, radius: number): number {
+  const own = groundHeight(point.x, point.z);
+  let deepest = own + radius - point.y;
+  GROUND_EDGES.forEach((edge, i) => {
+    const top = GROUND_LEVELS[i];
+    if (top <= own) return;
+    const off = Math.hypot(Math.max(0, Math.abs(point.x) - edge), Math.max(0, Math.abs(point.z) - edge));
+    if (off >= radius) return;
+    const bottom = point.y - Math.sqrt(radius * radius - off * off);
+    if (bottom < top) deepest = Math.max(deepest, Math.min(top - bottom, radius - off));
+  });
+  return deepest;
 }
 
 /** How deep a point of size `radius` at `point` is in a prop (m; 0 out of every one). */
@@ -218,7 +251,8 @@ function measureBody(body: Fallen, since: number): void {
   const at = new THREE.Vector3();
   const point = new THREE.Vector3();
   RAGDOLL_BONES.forEach(([from, to], i) => {
-    const length = ragdoll.point(RAGDOLL_POINTS.indexOf(from), at).distanceTo(ragdoll.point(RAGDOLL_POINTS.indexOf(to), point));
+    ragdoll.point(RAGDOLL_POINTS.indexOf(from), at);
+    const length = at.distanceTo(ragdoll.point(RAGDOLL_POINTS.indexOf(to), point));
     body.bones[i] ??= length;
     worse(body.stretch, Math.abs(length / body.bones[i] - 1), `${from} to ${to}`, since);
   });
@@ -226,7 +260,7 @@ function measureBody(body: Fallen, since: number): void {
     drawnPoint(joints, name, at);
     if (![at.x, at.y, at.z].every(Number.isFinite)) body.broken = true;
     const radius = ragdoll.radius(i);
-    worse(body.under, groundHeight(at.x, at.z) + radius - at.y - UNDER_MOST / 2, name, since);
+    worse(body.under, depthInFloor(at, radius) - UNDER_MOST / 2, name, since);
     worse(body.inProp, depthInProps(at, radius), name, since);
     worse(body.poseOff, at.distanceTo(ragdoll.point(i, point)), name, since);
   });
@@ -244,8 +278,8 @@ interface Cast {
   standing: number;
   moments: Pictured[];
   canary: { under: boolean; back: boolean };
-  /** which way the hero's swing went as the first body fell (+1 from his right to his left) */
-  swing: number;
+  /** with `--trace`, the first body's frames */
+  trace: string[];
 }
 
 /** A body followed from the frame it fell (`frame` from the press). */
@@ -253,9 +287,12 @@ function fallen(foe: Enemy, dealt: number, frame: number): Fallen {
   const joints = foe.model.joints;
   const hips = joints ? joints.hips.getWorldPosition(new THREE.Vector3()) : foe.pos.clone();
   return {
-    foe, dealt, fellAt: frame, fling: foe.fling!, from: foe.pos.clone(), early: new THREE.Vector3(),
+    foe, dealt, fellAt: frame, fling: foe.fling!, from: foe.pos.clone(), heroAt: G.player.pos.clone(),
+    swing: swingSeen(),
+    early: new THREE.Vector3(),
     standingHips: hips.y - groundHeight(hips.x, hips.z), path: 0, highest: 0, restAt: -1,
-    lay: new THREE.Vector3(), layHips: 0, under: noWorst(), inProp: noWorst(), poseOff: noWorst(), stretch: noWorst(),
+    lay: new THREE.Vector3(), ended: false, layHips: 0,
+    under: noWorst(), inProp: noWorst(), poseOff: noWorst(), stretch: noWorst(),
     bones: [], outside: false, broken: false,
   };
 }
@@ -267,7 +304,43 @@ const EARLY_FRAMES = 6;
 interface PassPlan {
   canary: boolean;
   pictures: boolean;
+  trace: boolean;
   label: string;
+}
+
+/** a trace's heading */
+const TRACE_HEAD = '  each body thrown hard by its number, a frame a line: each point\'s clearance drawn, '
+  + 'its pose\'s error and its point\'s clearance (cm), and ^ where its point touches a prop; '
+  + 'still, or its fastest point (m/s)';
+
+/** a point this near a prop touches it (m) */
+const TOUCH = 0.01;
+
+/** short names for the points in a trace */
+const SHORT: Record<(typeof RAGDOLL_POINTS)[number], string> = {
+  spine: 'sp', thighL: 'tL', thighR: 'tR', kneeL: 'kL', kneeR: 'kR', ankleL: 'aL', ankleR: 'aR', chest: 'ch',
+  neck: 'nk', head: 'hd', shoulderL: 'sL', shoulderR: 'sR', elbowL: 'eL', elbowR: 'eR', handL: 'wL', handR: 'wR',
+};
+
+/** A body's frame as a trace's line: when, whether it's still, and each point's clearance and pose error (cm). */
+function traceLine(body: Fallen, since: number): string {
+  const ragdoll = body.foe.corpse?.ragdoll;
+  const joints = body.foe.model.joints;
+  if (!ragdoll || !joints) return '';
+  const at = new THREE.Vector3();
+  const point = new THREE.Vector3();
+  const parts = RAGDOLL_POINTS.map((name, i) => {
+    drawnPoint(joints, name, at);
+    const radius = ragdoll.radius(i);
+    const clear = -depthInFloor(at, radius);
+    const off = at.distanceTo(ragdoll.point(i, point));
+    const own = -depthInFloor(point, radius);
+    const onProp = depthInProps(point, radius + TOUCH) > 0 ? '^' : '';
+    return `${SHORT[name]} ${(clear * 100).toFixed(0)}/${(off * 100).toFixed(0)}/${(own * 100).toFixed(0)}${onProp}`;
+  });
+  const fastest = ragdoll.fastest;
+  const moving = ragdoll.asleep ? 'still' : `${SHORT[RAGDOLL_POINTS[fastest.point]]} ${fastest.speed.toFixed(2)}`;
+  return `    ${seconds(since)} ${moving}: ${parts.join(' ')}`;
 }
 
 /** The skill cast at `foes` and every body followed until it has dissolved. */
@@ -281,7 +354,7 @@ async function castAt(lab: Lab, skill: BoundSkill, foes: Enemy[], aim: THREE.Vec
   const pictureFrames = PICTURE_AT.map((at) => Math.round(at / frameTime()));
   let firstFall = -1;
   let pictured = 0;
-  let swing = 1;
+  const trace: string[] = [];
   await lab.step(SETTLE, () => ({ aim }));
   for (let frame = 0; frame < MOST_FRAMES; frame++) {
     await lab.step(1, () => pressing(skill.key, aim, frame < holdFrames));
@@ -295,19 +368,18 @@ async function castAt(lab: Lab, skill: BoundSkill, foes: Enemy[], aim: THREE.Vec
         foe.corpse.ragdoll.throw(-3 * body.fling.vx, 0, -3 * body.fling.vz, body.fling.at);
       }
     }
-    if (firstFall < 0 && bodies.size) {
-      firstFall = frame;
-      swing = G.player.model.swing ?? 1;
-    }
+    if (firstFall < 0 && bodies.size) firstFall = frame;
     for (const body of bodies.values()) {
       if (!G.enemies.includes(body.foe)) continue;
       const since = (frame - body.fellAt) * frameTime();
       plantUnder(plan.canary, body, canary, since);
       followBody(body, last, frame);
       measureBody(body, since);
+      if (plan.trace) trace.push(`${[...bodies.values()].indexOf(body) + 1} ${traceLine(body, since)}`);
     }
     if (plan.pictures && bodies.size && pictureDue(bodies, firstFall, frame, pictured, pictureFrames)) {
-      const when = pictured < PICTURE_AT.length ? `${seconds(PICTURE_AT[pictured])} after the first fall` : 'lying still';
+      const after = `${seconds(PICTURE_AT[pictured] ?? 0)} after the first fall`;
+      const when = pictured < PICTURE_AT.length ? after : 'lying still';
       moments.push(await pictureBodies(lab, [...bodies.values()], `${plan.label}, ${when}`));
       pictured++;
     }
@@ -317,11 +389,13 @@ async function castAt(lab: Lab, skill: BoundSkill, foes: Enemy[], aim: THREE.Vec
   }
   const killedBy = foes.map((foe, i) => (bodies.has(foe) ? dealt[i] : 0));
   const standing = foes.filter((foe) => foe.alive).length;
-  return { bodies: [...bodies.values()], killedBy, standing, moments, canary, swing };
+  return { bodies: [...bodies.values()], killedBy, standing, moments, canary, trace };
 }
 
 /** Whether a picture is due this frame: at each of `frames` after the first fall, then once every body lies still. */
-function pictureDue(bodies: Map<Enemy, Fallen>, firstFall: number, frame: number, pictured: number, frames: number[]): boolean {
+function pictureDue(
+  bodies: Map<Enemy, Fallen>, firstFall: number, frame: number, pictured: number, frames: number[],
+): boolean {
   if (pictured < frames.length) return frame - firstFall === frames[pictured];
   if (pictured > frames.length) return false;
   return [...bodies.values()].every((body) => body.restAt >= 0 || !G.enemies.includes(body.foe));
@@ -347,10 +421,25 @@ function followBody(body: Fallen, last: Map<Enemy, THREE.Vector3>, frame: number
   if (frame - body.fellAt === EARLY_FRAMES) {
     body.early.set(hips.x - body.from.x, 0, hips.z - body.from.z).divideScalar(EARLY_FRAMES * frameTime());
   }
+  // (where it lay still, or where it began to dissolve if it never did: a frozen body shatters as it lands)
+  const dissolving = body.foe.model.kit.u.uDissolve.value > 0;
+  if (body.restAt < 0 && !body.ended && dissolving) {
+    body.ended = true;
+    body.lay.copy(hips);
+  }
   if (body.restAt >= 0 || !corpse.ragdoll.asleep) return;
   body.restAt = (frame - body.fellAt) * frameTime();
   body.lay.copy(hips);
-  body.layHips = hips.y - groundHeight(hips.x, hips.z);
+  body.layHips = hips.y - surfaceUnder(hips);
+}
+
+/** The height of what lies under `at`: the floor, or the top of a prop it's over. */
+function surfaceUnder(at: THREE.Vector3): number {
+  let top = groundHeight(at.x, at.z);
+  for (const prop of G.arena.obstacles) {
+    if (Math.hypot(at.x - prop.x, at.z - prop.z) < prop.r) top = Math.max(top, groundHeight(prop.x, prop.z) + prop.h);
+  }
+  return top;
 }
 
 /** The bodies pictured: the game's view as the player sees it, clipped round them and the hero, and close from the
@@ -385,11 +474,35 @@ interface Pass {
   cast: Cast;
 }
 
+/** A skill the hero knows but hasn't on a key (Thunder Crescent, while the two-handed loadout has Steel Tempest on
+ *  its key) put on its own key, as the player would bind it in the lobby. */
+export function bindKnown(wanted: string): void {
+  const hero = G.player;
+  const name = wanted.toLowerCase();
+  for (const [id, known] of hero.known) {
+    const names = [known.def.impl, known.def.name].map((each) => each.toLowerCase());
+    if (names.includes(name) && hero.usable(known.def)) hero.bind(known.def.key, id);
+  }
+}
+
+/** The way the swing the player sees goes (+1 from the hero's right to his left): the newest blade trail's, as it's
+ *  drawn (the model's own `swing` for one with no trail). */
+function swingSeen(): number {
+  let way: number | null = null;
+  G.scene.traverse((object) => {
+    const material = (object as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
+    const sweep = material?.uniforms?.uDir;
+    if (sweep && material.uniforms.uStart) way = sweep.value as number;
+  });
+  return way ?? G.player.model.swing ?? 1;
+}
+
 /** The skill cast at foes holding `lives` (1 where it says none), on a fresh set-up. */
 async function onePass(lab: Lab, options: DeathOptions, wanted: string, lives: number[], hard: boolean): Promise<Pass> {
   G.arena.restoreProps();
   await lab.setup(fixtureOf(options));
   const hero = G.player;
+  bindKnown(wanted);
   const skill = skillNamed(wanted);
   const stand = STANDS[skill.def.impl] ?? { count: 3, ahead: 5, across: 1 };
   hero.cooldowns.clear();
@@ -397,7 +510,12 @@ async function onePass(lab: Lab, options: DeathOptions, wanted: string, lives: n
   const { spots, aim } = placesFor(stand, hero.pos, hero.facing);
   const foes = await foesAt(lab, spots, spots.map((_, i) => lives[i] ?? 1));
   const label = `${skill.def.name}, ${hard ? 'a hair from death' : 'with little to spare'}`;
-  const plan = { canary: options.canary && hard, pictures: options.pictures && hard, label };
+  const plan = {
+    canary: options.canary && hard,
+    pictures: options.pictures && hard,
+    trace: Boolean(options.trace) && hard,
+    label,
+  };
   const cast = await castAt(lab, skill, foes, aim, plan);
   return { skill, cast };
 }
@@ -429,6 +547,7 @@ export async function death(lab: Lab, options: DeathOptions): Promise<Report> {
     const run: SkillRun = { skill: hard.skill, hard: hard.cast, bare: bare.cast };
     const judged = judge(run, options.canary);
     lines.push(...judged.lines);
+    if (hard.cast.trace.length) lines.push(TRACE_HEAD, ...hard.cast.trace);
     problems.push(...judged.problems);
     moments.push(...hard.cast.moments);
     if (options.canary) canaries = mergeCanary(canaries, hard.cast, judged);
@@ -480,7 +599,8 @@ interface Judged {
 }
 
 const speedOf = (fling: Fling): number => Math.hypot(fling.vx, fling.vy, fling.vz);
-const mean = (values: number[]): number => (values.length ? values.reduce((sum, each) => sum + each, 0) / values.length : 0);
+const sumOf = (values: number[]): number => values.reduce((total, each) => total + each, 0);
+const mean = (values: number[]): number => (values.length ? sumOf(values) / values.length : 0);
 const range = (values: number[], shown: (value: number) => string): string => (values.length
   ? `${shown(mean(values))} (${shown(Math.min(...values))} to ${shown(Math.max(...values))})` : 'none');
 
@@ -488,11 +608,13 @@ const range = (values: number[], shown: (value: number) => string): string => (v
 function passLine(name: string, cast: Cast): string {
   const bodies = cast.bodies;
   const thrown = range(bodies.map((body) => speedOf(body.fling)), (speed) => `${speed.toFixed(1)} m/s`);
-  const flew = range(bodies.map((body) => flat(body.from, body.restAt >= 0 ? body.lay : body.from)), metres);
+  const lay = (body: Fallen) => (body.restAt >= 0 || body.ended ? body.lay : body.from);
+  const flew = range(bodies.map((body) => flat(body.from, lay(body))), metres);
   const high = range(bodies.map((body) => body.highest), metres);
   const rest = bodies.filter((body) => body.restAt >= 0).map((body) => body.restAt);
   const styles = [...new Set(bodies.map((body) => body.fling.style))].join(', ');
-  return `  ${name}: ${bodies.length} fell (${styles}), ${cast.standing} left standing; thrown ${thrown}, flew ${flew}, `
+  return `  ${name}: ${bodies.length} fell (${styles}), ${cast.standing} left standing; `
+    + `thrown ${thrown}, flew ${flew}, `
     + `its hips up to ${high}, still after ${range(rest, seconds)} (${rest.length} of ${bodies.length})`;
 }
 
@@ -500,15 +622,21 @@ function passLine(name: string, cast: Cast): string {
  *  swing for a sword's. */
 function wayProblems(run: SkillRun, cast: Cast, body: Fallen): string[] {
   const impl = run.skill.def.impl;
-  const hero = G.player.pos;
+  const hero = body.heroAt;
   const out = new THREE.Vector3(body.from.x - hero.x, 0, body.from.z - hero.z).normalize();
   const way = body.early;
   if (way.length() < 0.3 || WHIRLS.has(impl)) return [];
   const problems: string[] = [];
-  if (way.dot(out) <= 0) problems.push(`a body went back towards the hero (${way.length().toFixed(1)} m/s)`);
+  const speed = way.length().toFixed(1);
+  if (ELSEWHERE.has(impl)) {
+    const thrown = new THREE.Vector3(body.fling.vx, 0, body.fling.vz);
+    if (way.dot(thrown) <= 0) problems.push(`a body went against its throw (${speed} m/s)`);
+    return problems;
+  }
+  if (way.dot(out) <= 0) problems.push(`a body went back towards the hero (${speed} m/s)`);
   if (SWINGS.has(impl)) {
     const round = way.x * out.z - way.z * out.x;
-    if (Math.sign(round) !== Math.sign(cast.swing)) problems.push('a body went against the swing');
+    if (Math.sign(round) !== Math.sign(body.swing)) problems.push('a body went against the swing');
   }
   return problems;
 }
@@ -516,7 +644,7 @@ function wayProblems(run: SkillRun, cast: Cast, body: Fallen): string[] {
 /** Whether the storm's body went round it: its path well over its way from where it fell, and up. */
 function whirlProblems(run: SkillRun, body: Fallen): string[] {
   if (!WHIRLS.has(run.skill.def.impl)) return [];
-  const straight = flat(body.from, body.restAt >= 0 ? body.lay : body.foe.obj.position);
+  const straight = flat(body.from, body.restAt >= 0 || body.ended ? body.lay : body.foe.obj.position);
   if (body.path >= WHIRL_PATH * Math.max(1, straight) && body.highest > 1) return [];
   return [`a body the storm killed didn't go round it (its path ${metres(body.path)}, up to ${metres(body.highest)})`];
 }
@@ -551,7 +679,8 @@ function judge(run: SkillRun, canary: boolean): Judged {
   const worstUnder = Math.max(0, ...all.map((body) => body.under.amount + UNDER_MOST / 2));
   const worstPose = Math.max(0, ...all.map((body) => body.poseOff.amount));
   const worstStretch = Math.max(0, ...all.map((body) => body.stretch.amount));
-  lines.push(`  at the worst: under the floor ${centimetres(worstUnder)}, the pose off its points ${centimetres(worstPose)}, `
+  lines.push(`  at the worst: under the floor ${centimetres(worstUnder)}, `
+    + `the pose off its points ${centimetres(worstPose)}, `
     + `a bone stretched ${percentOf(worstStretch)}`);
   const found = new Set<string>();
   if (!hard.bodies.length) found.add('nothing fell');
@@ -570,6 +699,8 @@ function judge(run: SkillRun, canary: boolean): Judged {
   const problems = [...found].map((problem) => `${skill.def.name}: ${problem}`);
   for (const problem of found) lines.push(`  ! ${problem}`);
   const caughtUnder = canary && [...found].some((problem) => problem.includes('under the floor'));
-  const caughtBack = canary && [...found].some((problem) => problem.includes('back towards the hero'));
+  const wrongWays = ['back towards the hero', 'against its throw'];
+  const wrongWay = (problem: string) => wrongWays.some((way) => problem.includes(way));
+  const caughtBack = canary && [...found].some(wrongWay);
   return { lines, problems: canary ? [] : problems, caughtUnder, caughtBack };
 }

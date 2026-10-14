@@ -47,6 +47,7 @@ the server.
 | `draw` | A drawn shot held at full draw: the glint on the arrowhead, the crosshair |
 | `held` | Each held skill's preview, ready and on its cooldown |
 | `blink` | The mage's blink: where he lands, and the foes it dazes |
+| `death` | Each skill's kills as they fall: how hard and which way they're thrown, and nothing through the floor |
 
 **How the game plays**
 
@@ -54,6 +55,7 @@ the server.
 | --- | --- |
 | `spawns` | How the foes come in: by which gates, where, and when the boss comes |
 | `gear` | What full sets of gear give each class |
+| `crowd` | A crowd killed at once: what its bodies cost the frame, as on a low-end device |
 | `music` | Which music plays where, and how it fades, as WebAudio plays it |
 | `coop` | Two games playing together over a slow link, each judged against the other |
 
