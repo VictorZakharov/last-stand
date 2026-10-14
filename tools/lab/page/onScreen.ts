@@ -15,8 +15,9 @@ const GRID = 10;
 const sight = new THREE.Raycaster();
 sight.layers.enableAll();
 
-/** A point on the screen over a foe: the foe drawn there, and where the eye meets it. */
+/** A point on the screen over a foe: where it is on the screen, the foe drawn there, and where the eye meets it. */
 export interface Over {
+  ndc: THREE.Vector2;
   foe: Enemy;
   point: THREE.Vector3;
   /** whether it's met on a skinned mesh (the game's aim meets those part by part, models/hulls.ts) */
@@ -38,18 +39,56 @@ function drawnSolid(object: THREE.Object3D): boolean {
  * meshes, the skinned ones with the rigid (the game's aim meets the skinned part by part, models/hulls.ts). None
  * if a breakable prop is drawn in front of it (the game's aim meets those too).
  */
-export function foeDrawnAt(ndc: THREE.Vector2, foes: Enemy[]): Over | null {
-  sight.setFromCamera(ndc, G.camera);
+export function foeDrawnAt(ndc: THREE.Vector2, foes: Enemy[], camera: THREE.Camera = G.camera): Over | null {
+  sight.setFromCamera(ndc, camera);
   let over: Over | null = null;
   let nearest = Infinity;
   for (const foe of foes) {
     for (const hit of sight.intersectObject(foe.obj, true)) {
       if (hit.distance >= nearest || !drawnSolid(hit.object)) continue;
       nearest = hit.distance;
-      over = { foe, point: hit.point.clone(), skinned: !!(hit.object as THREE.SkinnedMesh).isSkinnedMesh };
+      over = { ndc: ndc.clone(), foe, point: hit.point.clone(), skinned: !!(hit.object as THREE.SkinnedMesh).isSkinnedMesh };
     }
   }
   return propNearer(nearest) ? null : over;
+}
+
+/**
+ * The foe of `foes` first met on the line from `from` to `to` (and `past` on), as drawn, and where: a shot's line
+ * from where it leaves to its aim. None if it meets none.
+ */
+export function foeMetAlong(from: THREE.Vector3, to: THREE.Vector3, past: number, foes: Enemy[]): Over | null {
+  const way = to.clone().sub(from);
+  sight.set(from, way.clone().normalize());
+  sight.far = way.length() + past;
+  let over: Over | null = null;
+  let nearest = Infinity;
+  for (const foe of foes) {
+    for (const hit of sight.intersectObject(foe.obj, true)) {
+      if (hit.distance >= nearest || !drawnSolid(hit.object)) continue;
+      nearest = hit.distance;
+      over = { ndc: new THREE.Vector2(), foe, point: hit.point.clone(), skinned: !!(hit.object as THREE.SkinnedMesh).isSkinnedMesh };
+    }
+  }
+  sight.far = Infinity;
+  return over;
+}
+
+/** how far round a point its foe must be drawn too for it to be inside the foe on the screen (pixels) */
+const EDGE = 6;
+
+/**
+ * Whether `over` is inside its foe on the screen, not at its edge: the foe drawn `EDGE` pixels from it every way (by
+ * `camera`). At an edge, an aim a pixel off or a body swaying a centimetre between frames goes past it, as it should.
+ */
+export function insideFoe(over: Over, foes: Enemy[], camera: THREE.Camera = G.camera): boolean {
+  const x = EDGE * 2 / innerWidth;
+  const y = EDGE * 2 / innerHeight;
+  const round = [[x, 0], [-x, 0], [0, y], [0, -y]];
+  return round.every(([dx, dy]) => {
+    const near = new THREE.Vector2(over.ndc.x + dx, over.ndc.y + dy);
+    return foeDrawnAt(near, foes, camera)?.foe === over.foe;
+  });
 }
 
 /** Whether the eye's ray (`sight`) meets a breakable prop nearer than `distance`. */

@@ -5,6 +5,7 @@ import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { GROUND_LEVELS, groundHeight } from '../world/ground';
 import { castSolid } from '../fx/stuckArrows';
+import type { Enemy } from '../entities/enemy';
 
 export const input = {
   down: new Set<string>(),
@@ -16,6 +17,8 @@ export const input = {
   /** the close views aim at the screen centre (the crosshair), not the cursor */
   centerAim: false,
   ground: new THREE.Vector3(),   // cursor projected onto the arena floor (y 0, under the dais's top)
+  /** the foe whose body the aim is on, the eye's ray met it there (none on the floor or a prop, or aimed by touch) */
+  foe: null as Enemy | null,
   /** touch is the active input: the browser's emulated mouse events are ignored */
   touchMode: false,
   /** touch move stick: screen space, x right / y down, length 0..1 */
@@ -114,24 +117,26 @@ function aimAlong(far: number): void {
     if (t < best) { best = t; _best.copy(hit); what = 'floor'; }
   }
   // the foes and props whose cylinders the ray enters before that, nearest first, met as they're drawn
-  const near: [number, () => void][] = [];
+  const near: [number, () => void, Enemy | null][] = [];
   for (const e of G.enemies) {
     if (!e.alive) continue;
     const y0 = e.obj.position.y, out = Math.max(e.radius * ROUND, e.reach.out), t = cylinder(r, e.pos.x, e.pos.z, out, y0, y0 + Math.max(e.height * 1.1, e.reach.top));
-    if (t < best) near.push([t, () => { const h = castSolid(e.obj, ray); if (h) _hits.push(h); }]);
+    if (t < best) near.push([t, () => { const h = castSolid(e.obj, ray); if (h) _hits.push(h); }, e]);
   }
   for (const o of G.arena.obstacles) {
     const base = groundHeight(o.x, o.z), t = cylinder(r, o.x, o.z, o.r * ROUND, base, base + o.h * ROUND);
-    if (t < best) near.push([t, () => o.prop?.raycast(ray, _hits)]);
+    if (t < best) near.push([t, () => o.prop?.raycast(ray, _hits), null]);
   }
   near.sort((a, b) => a[0] - b[0]);
-  for (const [t, meet] of near) {
+  let on: Enemy | null = null;
+  for (const [t, meet, foe] of near) {
     if (t >= best) break;
     ray.far = best; _hits.length = 0;
     meet();
-    for (const h of _hits) if (h.distance < best) { best = h.distance; _best.copy(h.point); what = 'body'; }
+    for (const h of _hits) if (h.distance < best) { best = h.distance; _best.copy(h.point); what = 'body'; on = foe; }
   }
   ray.far = Infinity;
+  input.foe = what === 'body' ? on : null;
   if (what === 'none') { if (far === Infinity) return; _best.copy(r.origin).addScaledVector(r.direction, far); }
   input.ground.set(_best.x, _best.y - groundHeight(_best.x, _best.z), _best.z);
 }
@@ -188,6 +193,7 @@ export function initInput(canvas: HTMLCanvasElement): void {
 }
 
 export function updateInputRay(): void {
+  if (input.aim || input.touchMode) input.foe = null;
   if (input.aim) { input.ground.copy(input.aim); return; }
   if (input.touchMode) return;
   if (input.centerAim) { aimAtCenter(); return; }

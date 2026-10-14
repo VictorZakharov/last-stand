@@ -61,11 +61,24 @@ function offBody(e: Enemy, target: THREE.Vector3): number {
 function quarry(player: Player, target: THREE.Vector3, range: number): Enemy | null {
   let best: Enemy | null = null, bd = Infinity;
   for (const e of G.enemies) {
-    if (!e.alive || e.spawning || Math.hypot(e.pos.x - player.pos.x, e.pos.z - player.pos.z) > range) continue;
+    if (!markable(player, e, range)) continue;
     const d = offBody(e, target);
     if (d < bd) { bd = d; best = e; }
   }
   return best;
+}
+
+const markable = (player: Player, e: Enemy, range: number): boolean =>
+  e.alive && !e.spawning && Math.hypot(e.pos.x - player.pos.x, e.pos.z - player.pos.z) <= range;
+
+/**
+ * The foe the hero's aim would mark: the one whose body it's on (the eye's ray met it, `Player.aimFoe`), or else by
+ * the aim's point (`quarry`). (By the point alone, the aim on a boss's arm marked the thornling under it, whose
+ * cylinder the point was in.) Let go, the cast is aimed at its middle (`settle`), which every game picks it by.
+ */
+function aimedQuarry(player: Player, target: THREE.Vector3, range: number): Enemy | null {
+  const on = player.aimFoe;
+  return on && markable(player, on, range) ? on : quarry(player, target, range);
 }
 
 /** The cooldowns back (the draught's stays): the local hero's own, as only its game keeps them. */
@@ -149,7 +162,7 @@ let ready: Readiness | null = null;
 /** Shows the would-be quarry for `target` (none: nothing shown). */
 function showQuarry(player: Player, def: Def, target: THREE.Vector3 | null, dt: number): void {
   ready ??= new Readiness('quarryMark');
-  const e = target && quarry(player, target, def.range);
+  const e = target && aimedQuarry(player, target, def.range);
   if (!e) {
     outline(null);
     ready.hide(dt);
@@ -164,6 +177,10 @@ const skill: InstantSkill = {
   warm: () => [new THREE.Mesh(planeGeo, reticleMat()), new THREE.Mesh(ringGeo(), additive(MARK, 1.3, 0.7))],
   canCast: (player, def, target) => !!quarry(player, target, def.range ?? 26),
   aim: (player, def, target, dt) => showQuarry(player, def as Def, target, dt),
+  settle(player, def, target) {
+    const e = aimedQuarry(player, target, def.range ?? 26);
+    return e ? new THREE.Vector3(e.pos.x, e.height / 2, e.pos.z) : target.clone();
+  },
   cast(player, rawDef, target) {
     const def = rawDef as Def, e = quarry(player, target, def.range);
     if (e) mark(player, def, e);

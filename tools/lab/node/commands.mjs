@@ -596,6 +596,23 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  shots: {
+    check(options) {
+      if (options.shots !== undefined && !(options.shots >= 1)) throw labError('shots --shots: at least 1');
+    },
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        views: options.views,
+        shots: Math.round(options.shots ?? 12),
+        canary: Boolean(options.canary),
+      };
+      return side.command('shots', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   touch: {
     each(side, options) {
       return side.command('touch', { fixture: fixtureFrom(options), canary: Boolean(options.canary) });

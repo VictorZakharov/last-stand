@@ -121,6 +121,8 @@ export class Player {
   private readonly goal = new THREE.Vector3();
   private steered = false;
   readonly aim = new THREE.Vector3();
+  /** the foe whose body the aim is on (the local hero's: the eye's ray met it, `input.foe`) */
+  aimFoe: Enemy | null = null;
   readonly radius = 0.45;
   facing = Math.PI;
   /** how much longer the body stays on its aim after an attack or cast (s), see AIM_HOLD */
@@ -402,6 +404,7 @@ export class Player {
     this.steered = true;
 
     this.aim.copy(input.ground);
+    this.aimFoe = input.foe;
 
     // a channel ends when the key that started it is released
     if (this.channel && !isDown(this.channel.key)) this.stopChannel();
@@ -444,8 +447,9 @@ export class Player {
     if (held) return;
     // (where its preview was as it was let go, however the aim moves while it waits: the outline round one foe, the
     // mark went on another)
-    if (this.casting || this.channel || this.dash || this.staggered) this.queued = { skill: a.skill, key: a.key, at: this.aim.clone() };
-    else this.tryCast(a.skill, a.key);
+    const impl = a.skill.impl, at = (!impl.channel && impl.settle?.(this, a.skill.def, this.aim)) || this.aim.clone();
+    if (this.casting || this.channel || this.dash || this.staggered) this.queued = { skill: a.skill, key: a.key, at };
+    else this.tryCast(a.skill, a.key, at);
   }
 
   /**

@@ -16,6 +16,7 @@ import { groundHeight } from '../../world/arena';
 import { arrowGeometry, ARROW, pullAt } from '../../entities/models/bow';
 import { glintMotes, warmGlintMotes } from '../../fx/glintMotes';
 import { showLaser, warmLaser, LASER_POINTS } from '../../fx/aimLaser';
+import { entry, strikesBody } from '../strikes';
 import { arrowMat, stickAt, stickIn, glance, floorIsStone, propIsStone, propSurface, wallIsStone, warmStuck, SINK } from '../../fx/stuckArrows';
 import { pastWall } from '../../world/edge';
 import { clamp, rand } from '../../util';
@@ -152,17 +153,8 @@ const warmArrows = (): THREE.Object3D[] => [arrowMesh(), ...warmStuck(), new THR
 /** the aim preview's flight is stepped as the arrow's is, a frame at 60 fps (swept, as its collisions are) */
 const PREVIEW_DT = 1 / 60;
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _w = new THREE.Vector3(), _c = new THREE.Vector3(), _wn = new THREE.Vector3();
+const _tip = new THREE.Vector3(), _f = new THREE.Vector3();
 
-/** Where along the step from (px, pz) by (dx, dz) it first comes within `r` of (cx, cz): 0..1, or -1 if it doesn't. */
-function entry(px: number, pz: number, dx: number, dz: number, cx: number, cz: number, r: number): number {
-  const fx = px - cx, fz = pz - cz, a = dx * dx + dz * dz, b = 2 * (fx * dx + fz * dz), c = fx * fx + fz * fz - r * r;
-  if (c <= 0) return 0;
-  if (a < 1e-9) return -1;
-  const disc = b * b - 4 * a * c;
-  if (disc < 0) return -1;
-  const t = (-b - Math.sqrt(disc)) / (2 * a);
-  return t >= 0 && t <= 1 ? t : -1;
-}
 
 /**
  * The path an arrow loosed now would fly (as `fly` and the projectile's own collisions have it): from `origin` along
@@ -199,13 +191,11 @@ function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius
       if (!propSurface(o, _c.set(px + dx * c, py + (pos.y - py) * c, pz + dz * c), _e.copy(vel).normalize(), _wn)) { passed.add(o); continue; }
       t = k;
     }
+    // (a foe as the projectile strikes it: an arrow where its point meets its body, `strikesBody`)
     if (!pierce) for (const en of G.enemies) {
       if (!en.alive || en.invulnerable) continue;
-      const k = entry(px, pz, dx, dz, en.pos.x, en.pos.z, en.radius + radius);
+      const k = level ? strikesBody(en, _c.set(px, py, pz).add(_tip.subVectors(_b, pos)), _f.copy(pos).add(_tip)) : entry(px, pz, dx, dz, en.pos.x, en.pos.z, en.radius + radius);
       if (k < 0 || k >= t) continue;
-      // (over a foe it's above as the projectile has it: by its height at the step's end)
-      const base = en.obj.position.y;
-      if (level && (pos.y < base - radius || pos.y > base + en.height + radius)) continue;
       t = k;
     }
     if (t <= 1) {
@@ -267,7 +257,7 @@ export const bowShot: InstantSkill = {
       const dir = shotDir(yaw + (i - (def.missiles - 1) / 2) * def.spread, pitch);
       const mesh = arrowMesh(); mesh.quaternion.setFromUnitVectors(FWD, dir);
       spawnProjectile({
-        pos: origin, dir, speed: v, radius: 0.22, life: 4, mesh, color: 0xd3bf8d, swept: true, level: true, tick: fly, edge: ARROW_EDGE, onProp: arrowProp,
+        pos: origin, dir, speed: v, radius: 0.22, life: 4, mesh, color: 0xd3bf8d, swept: true, level: true, point: ARROW / 2, tick: fly, edge: ARROW_EDGE, onProp: arrowProp,
         onHit(enemy, proj) {
           intoFoe(enemy as Enemy, proj.pos, proj.vel);
           hitEnemy(enemy as Enemy, damage, { by: player, tags: def.tags, type: 'physical', knock,

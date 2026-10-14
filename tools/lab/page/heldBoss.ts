@@ -15,7 +15,8 @@ import { ENEMIES, type EnemyId } from '../../../src/data/enemies';
 import { outline, outlinedLook } from '../../../src/ui/overlay/outline';
 import type { HeldSkill, Shown } from './heldArea';
 import { holdingKey } from './heldCooldown';
-import { aimMiss, aimOnScreen, cameraAhead, foeDrawnAt, pointsOver } from './onScreen';
+import { foeKind } from './death';
+import { aimMiss, aimOnScreen, cameraAhead, foeDrawnAt, pointsOver, type Over } from './onScreen';
 
 /** how far ahead of the hero the boss stands (m), the frames the key is held before the sweep, the most frames the
  *  boss and its summons may take to rise, and a cast to end */
@@ -23,16 +24,22 @@ const AHEAD = 7;
 const HOLD_FRAMES = 12;
 const RISE_FRAMES = 300;
 const CAST_FRAMES = 120;
-/** how far the small foes stand off the boss's side (m), and the ways round it from the hero's side they stand at
- *  (rad: the first in front of it, a little to one side) */
-const SMALL_GAP = 0.3;
+/**
+ * how far the foes about the boss stand off its side (m): packed against it, as its summons swarm round it in a fight
+ * (0.3 m off it, none stood under its arms, and the check passed while a fight's mark went on a thornling there); the
+ * ways round it from the hero's side its summons stand at (rad: the first in front of it, a little to one side), and
+ * the biome's commonest foes
+ */
+const SMALL_GAP = 0.05;
 const SMALL_WAYS = [-0.7, 0, 0.7, Math.PI];
+const COMMON_WAYS = [-1.4, 1.4];
 /** the most frames the crosshair of a close view is turned for to come over a point, and how near it must come (m) */
 const SIGHT_FRAMES = 8;
 const SIGHT_NEAR = 0.02;
 
-/** The biome's boss and the small foes round it (its summons, `SMALL_WAYS`), risen and dazed, in `view`. */
-async function bossWithSmall(lab: Lab, fixture: Fixture, view: ViewMode): Promise<Enemy[]> {
+/** The biome's boss and the foes round it (its summons, `SMALL_WAYS`, then the biome's commonest, `COMMON_WAYS`),
+ *  risen and dazed, in `view`. */
+export async function bossWithSmall(lab: Lab, fixture: Fixture, view: ViewMode): Promise<Enemy[]> {
   await lab.setup({ ...fixture, view });
   const hero = G.player;
   hero.cooldowns.clear();
@@ -41,15 +48,47 @@ async function bossWithSmall(lab: Lab, fixture: Fixture, view: ViewMode): Promis
   const boss = lab.spawnFoe(kind, hero.pos.clone().addScaledVector(cameraAhead(), AHEAD).setY(0));
   const small = (ENEMIES[kind].summon ?? 'thornling') as EnemyId;
   const toHero = hero.pos.clone().sub(boss.pos).setY(0).normalize();
-  const apart = boss.radius + ENEMIES[small].radius + SMALL_GAP;
-  const smalls = SMALL_WAYS.map((way) => {
+  const round = (kind: EnemyId, way: number) => {
     const at = toHero.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), way);
-    return lab.spawnFoe(small, boss.pos.clone().addScaledVector(at, apart));
-  });
-  const foes = [boss, ...smalls];
+    const apart = boss.radius + ENEMIES[kind].radius + SMALL_GAP;
+    return lab.spawnFoe(kind, boss.pos.clone().addScaledVector(at, apart));
+  };
+  const smalls = SMALL_WAYS.map((way) => round(small, way));
+  const common = foeKind();
+  const others = COMMON_WAYS.map((way) => round(common, way));
+  const foes = [boss, ...smalls, ...others];
   await lab.until(() => foes.every((foe) => foe.spawning <= 0), RISE_FRAMES, 'the boss and its summons never rose');
   for (const foe of foes) foe.dazed = 999;
   return foes;
+}
+
+/** the most points over the boss tried for the let-go, the hardest first */
+const LET_GO_TRIES = 8;
+
+/**
+ * The points over the boss (`onBoss`), the hardest to tell it by first: those over another of `foes`, the most inside
+ * its circle (on the boss's arm over a thornling), where the point alone would give the other.
+ */
+function hardestOver(onBoss: Over[], foes: Enemy[]): Over[] {
+  const inside = (over: Over) => Math.min(...foes.slice(1).map((foe) => {
+    const away = Math.hypot(over.point.x - foe.pos.x, over.point.z - foe.pos.z);
+    return away / foe.radius;
+  }));
+  return [...onBoss].sort((a, b) => inside(a) - inside(b));
+}
+
+/**
+ * The aim turned onto the hardest of the points over the boss where it's still drawn as the aim comes onto it (the
+ * close views' eye moves as the crosshair turns: from there a point laid at the round's start lay behind a small
+ * foe, which the aim then marked, as it should). Null if none of the first `LET_GO_TRIES` is.
+ */
+async function overBossForLetGo(lab: Lab, key: SkillKey, onBoss: Over[], foes: Enemy[]): Promise<THREE.Vector3 | null> {
+  const [boss] = foes;
+  for (const over of hardestOver(onBoss, foes).slice(0, LET_GO_TRIES)) {
+    const aimed = await aimedAt(lab, key, over.point, foes);
+    if (aimed?.drawn === boss) return over.point;
+  }
+  return null;
 }
 
 /** One of a kind, as the lines say it: "a thornling", "an imp". */
@@ -115,7 +154,7 @@ function outlineTally(aims: Aimed[], boss: boolean, foes: Enemy[]): string {
   const wrong = over.filter((aim) => aim.outlined !== aim.drawn?.obj);
   const other = wrong.length ? `${foeName(wrong[0].outlined, foes)}${aimAgainstDrawn(wrong[0])}` : '';
   const first = wrong.length ? `; at the first other, ${other}` : '';
-  const what = boss ? `the ${foes[0].type}` : oneOf(foes[1].type);
+  const what = boss ? `the ${foes[0].type}` : 'the foes about it';
   return `aimed over ${what} at ${over.length} points, outlined it at ${over.length - wrong.length}${first}`;
 }
 
@@ -192,9 +231,11 @@ async function overBossIn(lab: Lab, skill: HeldSkill, view: ViewMode, options: H
     lines.push(`  ${view}: ${tally}`);
     if (aims.some((aim) => aim.drawn?.boss === ofBoss && aim.outlined !== aim.drawn.obj)) say(tally);
   }
-  const onBoss = points.filter((over) => over.foe === boss);
-  const target = onBoss[Math.floor(onBoss.length / 2)]?.point ?? boss.pos;
-  await aimedAt(lab, skill.key, target, foes);
+  const target = await overBossForLetGo(lab, skill.key, points.filter((over) => over.foe === boss), foes);
+  if (!target) {
+    say('the boss was never drawn where the aim was turned for the let-go');
+    return { lines, problems, moments: [] };
+  }
   // (let go, the aim moves on onto a small foe as the cast goes: what's marked is what the outline was round)
   const movedOn = small.pos.clone().setY(small.obj.position.y + small.height / 2);
   await lab.step(1, () => ({ aim: target, sight: target }));
