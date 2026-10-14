@@ -41,8 +41,9 @@ const FACING = 90;
 const ROW = 7;
 const APART = 1.3;
 const FIRST_ROW = 3;
-/** frames timed with the crowd standing, before the kill, after these to settle */
-const STANDING_FRAMES = 30;
+/** frames timed with the crowd standing, before the kill, after these to settle (the 90th percentile of 30 rested
+ *  on the 4th-worst frame: one round in nine failed on it, and passed run twice again) */
+const STANDING_FRAMES = 60;
 const SETTLE_FRAMES = 10;
 /** the bodies followed this long at most (s): a storm holds its kills up for its whole time */
 const MOST_SECONDS = 14;

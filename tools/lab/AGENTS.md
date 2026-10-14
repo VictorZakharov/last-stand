@@ -305,13 +305,14 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   throws one back at the hero, and turns the first struck off its middle the other way.
 - `crowd`: a crowd of foes killed at once (`page/crowd.ts`), and what the frame costs as their bodies fall: the low-end
   device's measure. `--count` sets the crowd (38 by default, the most a wave keeps alive); it's killed by a blow each
-  from the hero, or by `--skill` cast at it. Each round sets the crowd up afresh, times 30 frames with it standing,
+  from the hero, or by `--skill` cast at it. Each round sets the crowd up afresh, times 60 frames with it standing,
   kills it, and times every frame until its bodies are gone, with the game drawn and waited out on the GPU (`finish`:
   what the GPU draws runs behind the page, and the page's time alone left out what the bodies' smoke and embers cost
-  it), every time taken by the browser's own clock: the frame, its draw calls, the particles alive, the deaths (`Enemy.die`), the bodies (`Corpse.update`) and, of those, the
-  ragdolls' steps and poses (`timeCalls`' laps). There's a round for each CPU slowdown (`--throttles`, by default
-  1,4,6: as it is, then DevTools' mid-range and low-end phones; `lab.throttle`) at each frame rate (`--rates`, 60,30:
-  a device already slow steps each body twice as far a frame). Two things are problems, each judged against the
+  it), every time taken by the browser's own clock: the frame, its draw calls, the particles alive, the deaths
+  (`Enemy.die`), the bodies (`Corpse.update`) and, of those, the ragdolls' steps and poses (`timeCalls`' laps).
+  There's a round for each CPU slowdown (`--throttles`, by default 1,4,6: as it is, then DevTools' mid-range and
+  low-end phones; `lab.throttle`) at each frame rate (`--rates`, 60,30: a device already slow steps each body twice
+  as far a frame). Two things are problems, each judged against the
   frame with the crowd standing so it holds on any machine:
   - the frame as the crowd fell more than 15% slower (its 90th percentile);
   - the bodies' part over 20% of the standing frame.
