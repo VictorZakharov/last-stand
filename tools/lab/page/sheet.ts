@@ -7,7 +7,8 @@ import type { Lab, Fixture, ViewName, Tile } from './lab';
 import type { Joints } from '../../../src/entities/models/rig';
 import { HELD, armComfort, describeArm } from './comfort';
 import { bowOf, describeBow } from './ranger';
-import { bindKnown, pressing, skillNamed } from './cast';
+import { bindKnown, holdFor, pressing, skillNamed } from './cast';
+import type { SkillDef } from '../../../src/types';
 import { groundHeight } from '../../../src/world/ground';
 
 /** One pictured moment: its tiles and the notes read beside them. */
@@ -64,6 +65,20 @@ function castShare(lab: Lab): number | null {
   return cast && Number.isFinite(cast.dur) ? cast.t / cast.dur : null;
 }
 
+/** A channel's key is held this long (`holdFor`), and pictured at shares of that. */
+async function channelled(lab: Lab, snap: Snap, key: Parameters<typeof pressing>[0], aim: THREE.Vector3,
+  def: SkillDef, wanted: number[]): Promise<void> {
+  const name = def.name;
+  const frames = Math.round(holdFor(def) / (window.__labClock.frame / 1000));
+  for (let f = 0; f < frames && wanted.length > 0; f++) {
+    await lab.step(1, () => pressing(key, aim, true));
+    if (!lab.player.channel) throw new Error(`lab: sheet: ${name}'s channel ended after ${f + 1} frames of ${frames}`);
+    while (wanted.length > 0 && (f + 1) / frames >= wanted[0]) {
+      await snap(`${name}, ${wanted.shift()} of its channel`, [castPointNote(lab)]);
+    }
+  }
+}
+
 /** Where the cast point (the weapon's tip, the staff's head) is: how high over the floor under it, how far ahead. */
 function castPointNote(lab: Lab): string {
   // (the world's matrices are brought up to date by a draw, and a step draws nothing)
@@ -118,7 +133,8 @@ export const STATES: Record<string, State> = {
     await lab.step(4);
   },
 
-  /** a skill (`--skill`) cast once ahead of him, pictured at shares of its cast (`--shares`), with its cast point */
+  /** a skill (`--skill`) cast once ahead of him, pictured at shares of its cast (`--shares`), with its cast point; a
+   *  channel held, at shares of its hold */
   async cast(lab, snap, options) {
     if (!options.skill) throw new Error('lab: sheet: the cast state needs --skill');
     bindKnown(options.skill);
@@ -127,6 +143,7 @@ export const STATES: Record<string, State> = {
     const way = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
     const aim = lab.player.pos.clone().addScaledVector(way, CAST_AIM);
     const wanted = [...(options.shares ?? CAST_SHARES)].sort((a, b) => a - b);
+    if (def.channel) return channelled(lab, snap, key, aim, def, wanted);
     await lab.step(1, () => pressing(key, aim, true));
     for (let f = 0; f < CAST_FRAMES && wanted.length > 0; f++) {
       const share = castShare(lab);
@@ -173,5 +190,27 @@ function notesOn(lab: Lab): string[] {
   }
   const bow = bowOf(lab);
   if (bow) notes.push(describeBow(lab, bow));
+  const weapon = describeWeapon(lab);
+  if (weapon) notes.push(weapon);
   return notes;
+}
+
+const degreesOf = (radians: number) => (radians * 180 / Math.PI).toFixed(0);
+
+/**
+ * The weapon in the right hand, from its grip to its tip (`Model.tip`, a joint on the grip): how far up it points and
+ * which way across the floor from the way he faces (0 ahead, 90 to his left, 180 behind), and its way in the chest's
+ * frame, as the models' carries are written. None for a model whose tip isn't on a grip.
+ */
+function describeWeapon(lab: Lab): string | null {
+  const tip = lab.model.tip;
+  const grip = tip?.parent;
+  if (!tip || !grip || grip === lab.model.root) return null;
+  const way = tip.getWorldPosition(new THREE.Vector3()).sub(grip.getWorldPosition(new THREE.Vector3())).normalize();
+  const inRoot = way.clone().transformDirection(lab.model.root.matrixWorld.clone().invert());
+  const inChest = way.clone().transformDirection(lab.joints.chest.matrixWorld.clone().invert());
+  const up = degreesOf(Math.asin(THREE.MathUtils.clamp(inRoot.y, -1, 1)));
+  const across = degreesOf(Math.atan2(inRoot.x, inRoot.z));
+  const chest = inChest.toArray().map((value) => value.toFixed(2)).join(', ');
+  return `the weapon: ${up}° up, ${across}° from ahead (in the chest's frame ${chest})`;
 }

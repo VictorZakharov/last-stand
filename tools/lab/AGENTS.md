@@ -16,7 +16,7 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `npm run lab -- sheet`: pictures the hero in the player's views with each arm's load beside them
 - `carry`: measures the carried bow
 - `feet`: the feet against the ground round the dais's edges and on level ground (standing at full draw, walking across, strafing drawn, running reversals: out of reach, wobbling, sliding, in a riser, the rhythm)
-- `range`: every joint against a body's ranges frame by frame (standing, walking each way, attacking, and walks that change direction while he attacks, held or tapped, or runs: each angle past its range, its worst and where, each scenario's fastest ankle, `--trace` the leg IK frame by frame as `gait --trace` lists it, each frame's joints past their ranges beside it)
+- `range`: every joint against a body's ranges frame by frame (standing, walking each way, attacking, and walks that change direction while he attacks, held or tapped, or runs: each angle past its range, its worst and where, each scenario's fastest ankle and weapon tip, a two-hander let go of by the other hand, `--trace` the leg IK frame by frame as `gait --trace` lists it, each frame's joints past their ranges beside it)
 - `coop`: two games playing together, the host's and a guest's beside it, their messages carried as a link of a high ping and jitter carries them (`--ping`, `--jitter`: how far behind and how roughly each shows the other's heroes and foes, how its timeline plays them out, whether an arrow that struck a foe on the guest's screen counted, whether a blow it dodged hurt it, a guest brought down and raised, a guest's blink as the host's screen shows it: when it hid the copy, where the copy came out, the foes it dazed on both screens; `--class mage`)
 - `stops`: the hero coming to a stop from a run as a person stops (runs let go at different points of a stride, on level ground, drawn and by the dais's edges: the steps once still, a foot put out and drawn back, steps back, a foot on another level than the body's or stepped onto one once still, `--trace`, `--only`)
 - `gait`: the walk judged as a person's (level ground and the steps, nothing drawn, drawn, tapping, changing direction often and going round in circles: each foot's time on the ground against the plan, both and neither, the steps a second and their length, hops, a foot dance's short steps, the gallops (a foot leaving within 0.3 of a stride of the other's: counted as hops, both feet within a few frames, a gallop at every set-off went unseen), the steps' width, the hips' rise and fall, a planted foot dragged, each hand's swing against its knee half second by half second, the rhythm against the walk cycle, steps back under a body that stopped, the jerks, each step's swing against its plan and why it left, every frame judged as a body's: its centre of mass with its gear against the push its motion needs from the planted soles, in the air falling as a body does, and every joint within its range, `--trace` each frame (`--span` some), a scenario held up by a prop failing it, and a film of each round its first hop)
@@ -55,8 +55,10 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   and close up (`--views lobby,top,third,front,left,right,back,above`; `eyes` with `--view first`; `--focus <joint>`
   frames the close-ups on a joint), with each arm's load and posture beside them. `cast` casts `--skill` (its key, its
   behaviour or its name; bound to its own key if the hero knows it but hasn't it on one) ahead of him and pictures
-  it at shares of its cast (`--shares`, 0.3,0.55,0.8 by default), with where its cast point (the weapon's tip) is:
-  how high over the floor, how far ahead. `--gear` holds the weapons a style's way. Writes
+  it at shares of its cast (`--shares`, 0.3,0.55,0.8 by default; a channel at shares of its key's hold, `holdFor`),
+  with where its cast point (the weapon's tip) is: how high over the floor, how far ahead, and the way the weapon
+  points (up, from ahead, and in the chest's frame, as a two-hander's holds are placed). `--gear` holds the weapons a
+  style's way (`--weapon` the base). Writes
   `out/sheets/<--tag>/sheet.png` and `notes.txt`.
 - `feet`: the hero's feet against the ground round the dais's edges and on level ground (`--scenarios edge,level,
   strafe,cross`): standing at full draw by the edges (a foot moving in the hold, a sole in a step's riser, a dip under
@@ -173,13 +175,25 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
 - `range`: every joint of the hero against a body's ranges (`models/anatomy.ts`, as the dev builds' `watchBody`
   measures them), frame by frame, over standing, walking each way, attacking standing, and walks that change
   direction while he attacks (held or tapped) or runs (`--scenarios stand,walk,shoot,reverse,taps,run`), and with
-  `--skill` a skill cast standing and its end held (`cast`), the weapons held `--gear`'s way throughout: each angle
-  past its range, on how many frames, its worst and where (for a leg, whether its foot was planted; for a shoulder,
-  its raise, the plane it rises in and its turn against what each allows), each scenario's
-  fastest ankle, and its worst moment pictured. `--canary` turns the head past the neck's range on one frame,
-  `--frames` lists every frame with a joint past its range, and `--trace` (`--span a,b` for some frames) the leg IK
-  frame by frame as the gait's trace does (`page/legTrace.ts`: each foot down, in the air or in a timed step `~`,
-  dragged `d`), each frame's joints past their ranges after it.
+  `--skill` a skill cast standing and its end held (`cast`: its key held as long as the player would, `holdFor`, a
+  channel through; pressed for a frame, Steel Tempest stopped at once), the weapons held `--gear`'s way throughout
+  (`--weapon` the base): each angle past its range, on how many frames, its worst and where (for a leg, whether its
+  foot was planted; for a shoulder, its raise, the plane it rises in and its turn against what each allows), each
+  scenario's fastest ankle, its weapon tip's fastest move a frame between moves and through them, each with how far
+  the hand moved then and the joint whose own turn changed most (`page/tipMoves.ts`, in the hero's own frame: between
+  moves, where a pose eases back to the stance, a jump shows; Thunder Crescent's end was back at rest in a frame,
+  131 cm, and a two-handed swing's end turned the hand over, `handR turned 178°`), a two-hander's lower grip let go
+  of by the other hand (on how many frames, how often, from which frames and moments of a move, and why at the worst:
+  the grip past the arm's reach, its joints past their ranges, the arm into the body; a failure. Its frames on the
+  shoulder or the flask in hand are counted apart, `LowerGrip.free`), and its worst moment pictured, and the weapon
+  under the floor (`page/weaponFloor.ts`: every corner of the surface of what the main hand holds, on how many frames,
+  the deepest and how far along the weapon; Thunder Crescent put an axe's or a maul's head into the floor to its
+  middle). `--canary` turns the head past the neck's range on one frame and sinks the hero 2 m for one measure (the
+  weapon must be found under the floor), `--frames` lists every frame with a joint past its range, every frame the
+  weapon was under the floor and every frame between moves the tip moved 10 cm or more (with every joint that
+  turned: an elbow swung round its arm turns the shoulder alone), and `--trace` (`--span a,b` for some frames) the leg IK frame by
+  frame as the gait's trace does (`page/legTrace.ts`: each foot down, in the air or in a timed step `~`, dragged `d`),
+  each frame's joints past their ranges after it.
 - `carry`: the ranger's carried bow against his body through a carry's round (standing, walking, a draw and its shot,
   waiting with the next arrow, putting it back). `--canary` plants faults it must catch; `--frames` lists every frame
   with a clip, what crossed what and how deep.

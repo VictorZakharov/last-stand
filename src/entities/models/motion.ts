@@ -33,6 +33,7 @@ export function curve(keys: Keys, k: number): number {
 }
 
 const JOINTS = ['body', 'hips', 'spine', 'chest', 'neck', 'head', 'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR', 'thighL', 'thighR', 'kneeL', 'kneeR', 'ankleL', 'ankleR'] as const;
+const ARMS = ['shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR'] as const;
 
 /**
  * A crossfade over the cuts between poses: each frame `apply` is given the new pose and whether it cut from
@@ -76,6 +77,13 @@ export class PoseFade {
     for (let i = 0; i < js.length; i++) this.shown[i].copy(js[i].quaternion);
     this.shownP.copy(this.j.body.position);
     this.primed = true;
+  }
+
+  /** the arms as drawn this frame, once what comes after the fade has placed them (the arms fitted, a weapon
+   *  turned or stopped by the floor): a cut fades from these. (Faded from the pose before them, Thunder Crescent's
+   *  weapon, turned to the floor after the fade, was back at rest in a frame, its tip 1.3 m away.) */
+  drawnArms(): void {
+    for (const name of ARMS) this.shown[JOINTS.indexOf(name)].copy(this.j[name].quaternion);
   }
 
   /** forget the last pose (a rebuild, a teleport): the next cut does nothing */

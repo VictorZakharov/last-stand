@@ -36,6 +36,11 @@ const SETUP_OPTIONS = {
     usage: WEAPON_STYLES.join('|'),
     help: 'the hero holding his weapons this way (a class with more than one; as rolled by default)',
   },
+  weapon: {
+    kind: 'text',
+    usage: 'base',
+    help: 'with --gear, the weapon held that way by its base (Maul, Greataxe...; the class\'s first by default)',
+  },
 };
 
 /** the options every command running on a page takes */
@@ -148,6 +153,7 @@ export const COMMANDS = {
       },
       skill: { kind: 'text', usage: 'name', help: 'the cast scenario\'s skill: its key, its behaviour or its name' },
       gear: SETUP_OPTIONS.gear,
+      weapon: SETUP_OPTIONS.weapon,
       canary: { kind: 'switch', help: 'plant a fault the measure must catch: the head turned past the neck\'s range' },
       frames: { kind: 'switch', help: 'list every frame with a joint past its range' },
       trace: {

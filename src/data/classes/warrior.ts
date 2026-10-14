@@ -65,9 +65,11 @@ const warrior: ClassDef = {
     },
     {
       key: '1', impl: 'tempest', name: 'Steel Tempest',
-      desc: 'Spin with your weapon outstretched, shredding everything around you. Drains Energy while held.',
+      desc: 'Spin with your weapon outstretched, shredding everything around you. Drains Energy while held. A two-handed weapon spins slower and hits harder.',
       tags: ['physical'], cost: 30, cooldown: 0, castTime: 0, channel: true,
-      damage: 150, radius: 2.9, moveMult: 0.8,
+      damage: 150, radius: 2.9, moveMult: 0.8, spin: 15,
+      // (as Rending Cleave's swings: a great weapon's weight slows it as much, the same damage a second)
+      styles: { twoHanded: { spin: 10.5 } },
       icon: { glyph: '✺', color: '#e8eef8' },
     },
     {
