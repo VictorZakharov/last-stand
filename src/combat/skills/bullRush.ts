@@ -149,6 +149,8 @@ const skill: InstantSkill = {
         const side = Math.sign((e.pos.x - p.x) * dir.z - (e.pos.z - p.z) * dir.x) || 1;
         const blow = { dir: { x: dir.x * 0.85 + dir.z * side * 0.55, z: dir.z * 0.85 - dir.x * side * 0.55 }, lift: 0.55, force: 1.3 };
         hitEnemy(e, def.damage, { by: player, tags: def.tags, type: 'physical', knock: def.knock, from: p, blow });
+        // (a body it killed is thrown by its blow, not ploughed again)
+        if (e.corpse) ploughed.add(e.corpse);
         sparks(e.pos.x, e.height * 0.5, e.pos.z, 0xffc080, 16);
         shockwave(e.pos, { color: EMBER, intensity: 1.5, from: 0.2, to: 1.4, life: 0.25 });
         debris(e.pos, { count: 6, speed: 5 });

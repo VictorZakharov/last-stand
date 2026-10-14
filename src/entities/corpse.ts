@@ -13,9 +13,10 @@ import type { Fling } from '../combat/fling';
 import type { Enemy } from './enemy';
 import type { XZ } from '../types';
 
-/** a body lies still this long (s) before it dissolves, at most this long after the fall (a body a storm holds up),
- *  and dissolves over this long; one without a rig (falling as its model's animation has it) dissolves from `RIGLESS` */
-const LIE = 0.7, LONGEST = 6, FADE = 1.1, RIGLESS = 0.5;
+/** a body lies still this long (s) before it dissolves, at most this long after the fall or after a storm last held
+ *  it (whirled for the storm's whole time, a body dissolved in the air as it was flung off), and dissolves over this
+ *  long; one without a rig (falling as its model's animation has it) dissolves from `RIGLESS` */
+const LIE = 0.7, LONGEST = 5, FADE = 1.1, RIGLESS = 0.5;
 /** frozen: it shatters landing at this speed (m/s) or lying still this long (s), or at the latest this long after
  *  the fall, and is gone in shards over this long */
 const SHATTER_AT = 3.5, SHATTER_LYING = 0.15, SHATTER_LATEST = 1.6, SHATTER_FADE = 0.3;
@@ -87,6 +88,8 @@ export class Corpse {
   private shattered = false;
   private jolt = 0;
   private thudAt = -1;
+  /** when a field last held it (s after the fall) */
+  private heldAt = 0;
 
   constructor(private readonly e: Enemy, readonly fling: Fling) {
     const joints = e.model.joints;
@@ -118,11 +121,13 @@ export class Corpse {
       e.obj.position.set(_h.x, groundHeight(_h.x, _h.z), _h.z);
       rd.pose();
       this.still = rd.asleep ? this.still + dt : 0;
+      if (rd.held) this.heldAt = this.t;
       this.landing(rd.impact);
       rd.impact = 0;
     } else e.animate(dt, G.time, 0);
     this.styled(dt);
-    if (this.fadeAt < 0 && (this.still >= LIE || this.t >= LONGEST || (!rd && this.t >= RIGLESS))) this.dissolve(FADE);
+    const tooLong = this.t - this.heldAt >= LONGEST;
+    if (this.fadeAt < 0 && (this.still >= LIE || tooLong || (!rd && this.t >= RIGLESS))) this.dissolve(FADE);
     u.uHit.value = 0;
     if (e.auraMat) e.auraMat.opacity = Math.max(0, 0.6 - this.t);
     if (this.fadeAt < 0) return true;

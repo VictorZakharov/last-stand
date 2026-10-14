@@ -408,7 +408,8 @@ export class Enemy {
     if (info.by) this.killer = info.by;
     if (info.chill) this.chill = Math.max(this.chill, info.chill);
     if (info.freeze) this.frozen = Math.max(this.frozen, info.freeze * (1 - (this.def.freezeResist || 0)));
-    if (info.knock && info.from) {
+    // (a killing blow throws the body by its fling alone: its knock on top threw a charge's kills twice as far)
+    if (info.knock && info.from && (this.life > 0 || this.meter)) {
       const k = info.knock * (1 - (this.def.knockbackResist || 0));
       const dx = this.pos.x - info.from.x, dz = this.pos.z - info.from.z, d = Math.hypot(dx, dz) || 1;
       this.knock.x += (dx / d) * k; this.knock.z += (dz / d) * k;
