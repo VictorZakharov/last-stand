@@ -101,10 +101,11 @@ export function buildMage(): Model {
   const leather = kit.std({ color: 0x3e281a, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
   const wood = kit.std({ color: 0x5a3d28, roughness: 1, ...tex(woodMaps(), 1, 1.5) });
   const skinTip = kit.rim({ color: 0xc9957c, roughness: 0.6 }, 0x6a2a1c, 0.25);
-  const glow = kit.glow(0x5dffa8, 1.5);
+  // the staff's crystal and its rings in the colour of the bolts it shoots (Splintering Bolt's `color`, #197)
+  const glow = kit.glow(0xff6fe0, 1.5);
   // the staff's crystal: glowing softly, a little more while casting (animate() sets it each frame)
   const GEM_GLOW = 0.4;
-  const gem = kit.phys({ color: 0x2aff9a, emissive: 0x2aff9a, emissiveIntensity: GEM_GLOW, roughness: 0.05, metalness: 0, clearcoat: 1, flatShading: true });
+  const gem = kit.phys({ color: 0xff4fd8, emissive: 0xff4fd8, emissiveIntensity: GEM_GLOW, roughness: 0.05, metalness: 0, clearcoat: 1, flatShading: true });
   // set stones: green, lit from within a little
   const stone = kit.phys({ color: 0x0f7a4a, emissive: 0x1aff8a, emissiveIntensity: 0.6, roughness: 0.08, metalness: 0, clearcoat: 1, flatShading: true });
   // embroidered panels: the long front panel with its column of arcane signs, the teal tails and collar
