@@ -131,7 +131,7 @@ function mark(player: Player, def: Def, e: Enemy): void {
       (reticleM.material as THREE.MeshBasicMaterial).opacity = fade * (0.85 + 0.15 * Math.sin(t * 4));
       ringMat.opacity = 0.7 * fade;
       if (q) {
-        const top = q.obj.position.y + q.height + 0.45;
+        const top = q.obj.position.y + q.overHead + 0.45;
         reticleM.position.set(q.pos.x, top, q.pos.z);
         reticleM.quaternion.copy(G.camera.quaternion); reticleM.rotateZ(t * 0.8);
         reticleM.scale.setScalar(0.6 + 0.03 * Math.sin(t * 4));

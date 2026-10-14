@@ -5,7 +5,7 @@ What lights up and flies about.
 The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 
 - `particles.ts`: CPU-simulated, GPU-drawn point particles, an additive pool (glows, sparks) and an alpha-blended one (smoke, dust, debris). `lights.ts`: the fixed pool of 8 point lights (the root's rule: never a `PointLight` of your own). `effects.ts`: transient effects (shockwaves, decals, telegraphs, lightning, ice), each `{ update(dt) -> alive, dispose() }`.
-- **Looks of their own:** `firestorm.ts` (Maelstrom), `riftBolts.ts` and `sporeOrb.ts` (the foes' bolts), `glintMotes.ts` (a drawn arrow at full), `aimLaser.ts` (a drawn shot's path), `floorPatch.ts` (a mark lying on the floor across the dais's steps), `dazed.ts` (a dazed foe's stars), `stuckArrows.ts` (spent arrows), `rubble.ts` and `rubbleGeo.ts` (a broken prop's pieces: Breakable props in `src/world/AGENTS.md`).
+- **Looks of their own:** `firestorm.ts` (Maelstrom), `riftBolts.ts` and `sporeOrb.ts` (the foes' bolts), `glintMotes.ts` (a drawn arrow at full), `aimLaser.ts` (a drawn shot's path), `floorPatch.ts` (a mark lying on the floor across the dais's steps), `dazed.ts` (a dazed foe's stars: three plain stars floating round over its head, drawn as they are in one draw for every dazed foe, not as lights: four glows each leaving a trail made a bright ring over every dazed foe), `stuckArrows.ts` (spent arrows), `rubble.ts` and `rubbleGeo.ts` (a broken prop's pieces: Breakable props in `src/world/AGENTS.md`).
 
 An effect's material is wrapped in `nearGlow()` and its light held to the budget (Bright effects in `src/core/AGENTS.md`); one that brings its own materials is warmed at boot (`game/warmup.ts`).
 

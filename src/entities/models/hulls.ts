@@ -72,8 +72,9 @@ function groupsOf(g: THREE.BufferGeometry): Group[] {
   return groups;
 }
 
-/** How far a body reaches (m): over its feet, and out from its middle. */
-export interface Reach { top: number; out: number }
+/** How far a body reaches (m): over its feet, and out from its middle; and how high it stands as built, its opaque
+ *  meshes' top over its feet (its crown: what's shown over its head goes over it). */
+export interface Reach { top: number; out: number; crown: number }
 /** room for the limbs to swing past where they were built */
 const SWING = 1.15;
 
@@ -85,17 +86,25 @@ const SWING = 1.15;
 export function reachOf(root: THREE.Object3D): Reach {
   root.updateWorldMatrix(true, true);
   const box = new THREE.Box3(), part = new THREE.Box3();
+  let crown = -Infinity;
   root.traverse((o) => {
     const g = (o as THREE.Mesh).isMesh ? (o as THREE.Mesh).geometry : null;
     if (!g) return;
     if ((o as THREE.SkinnedMesh).isSkinnedMesh) groupsOf(g);
     if (!g.boundingBox) g.computeBoundingBox();
     box.union(part.copy(g.boundingBox!).applyMatrix4(o.matrixWorld));
+    if (opaque(o as THREE.Mesh)) crown = Math.max(crown, part.max.y);
   });
-  if (box.isEmpty()) return { top: 0, out: 0 };
+  if (box.isEmpty()) return { top: 0, out: 0, crown: 0 };
   const at = root.parent?.getWorldPosition(new THREE.Vector3()) ?? new THREE.Vector3();
   const x = Math.max(Math.abs(box.min.x - at.x), Math.abs(box.max.x - at.x)), z = Math.max(Math.abs(box.min.z - at.z), Math.abs(box.max.z - at.z));
-  return { top: (box.max.y - at.y) * SWING, out: Math.hypot(x, z) * SWING };
+  return { top: (box.max.y - at.y) * SWING, out: Math.hypot(x, z) * SWING, crown: Math.max(0, crown - at.y) };
+}
+
+/** Whether `mesh` is drawn opaque: not a glow, an aura or a see-through effect. */
+function opaque(mesh: THREE.Mesh): boolean {
+  const m = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.Material;
+  return m.blending === THREE.NormalBlending && !(m.transparent && m.opacity < 0.9);
 }
 
 /** One test's posing of a mesh: each bone's matrix from where the mesh was built to the world now, and each vertex

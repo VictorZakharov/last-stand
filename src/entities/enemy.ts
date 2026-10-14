@@ -154,6 +154,9 @@ export class Enemy {
   readonly height: number;
   /** how far its body reaches, drawn (models/hulls.ts): where the aim looks for it */
   readonly reach: Reach;
+  /** how high over its feet what's shown over its head goes (m): over its crown (a boss's stands 1.8 times its
+   *  height, and a mark over its height was inside it, hidden by its body) */
+  get overHead(): number { return Math.max(this.height, this.reach.crown); }
   readonly obj = new THREE.Group();
   aura: THREE.Mesh | null = null;
   auraMat: THREE.MeshBasicMaterial | null = null;
@@ -354,7 +357,7 @@ export class Enemy {
   private updateLooks(dt: number, t: number, frozen: boolean): boolean {
     this.model.kit.u.uFrozen.value = damp(this.model.kit.u.uFrozen.value, frozen ? 1 : this.chill > 0 ? 0.35 : 0, 10, dt);
     this.model.kit.u.uHit.value = this.hitT;
-    if (this.dazed > 0) dazedStars(this.pos.x, this.obj.position.y + this.height + 0.25, this.pos.z, t, this.dazed);
+    if (this.dazed > 0) dazedStars(this.pos.x, this.obj.position.y + this.overHead + 0.25, this.pos.z, t, this.dazed);
     this.paintBar();
     this.meter?.update();
     if (this.aura && this.auraMat) { this.aura.rotation.y += dt; this.auraMat.opacity = 0.5 + Math.sin(t * 4) * 0.2; }

@@ -25,7 +25,7 @@ export interface Over {
 }
 
 /** Whether `object` is drawn solid: shown, and opaque (not a glow, an aura or a see-through effect). */
-function drawnSolid(object: THREE.Object3D): boolean {
+export function drawnSolid(object: THREE.Object3D): boolean {
   for (let up: THREE.Object3D | null = object; up; up = up.parent) {
     if (!up.visible) return false;
   }

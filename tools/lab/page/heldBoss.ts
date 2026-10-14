@@ -4,7 +4,7 @@
 // was the foe whose middle was nearest the aim's point, and the aim met the rigid meshes alone: over a boss's skinned
 // limbs and crown it went on to the floor behind it, nearer a small foe.)
 import * as THREE from 'three';
-import type { Fixture, Lab } from './lab';
+import type { Fixture, Lab, Pictured } from './lab';
 import type { HeldOptions } from './held';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { ViewMode } from '../../../src/core/renderer';
@@ -17,6 +17,7 @@ import type { HeldSkill, Shown } from './heldArea';
 import { holdingKey } from './heldCooldown';
 import { foeKind } from './death';
 import { aimMiss, aimOnScreen, cameraAhead, foeDrawnAt, pointsOver, type Over } from './onScreen';
+import { markSeen } from './markSeen';
 
 /** how far ahead of the hero the boss stands (m), the frames the key is held before the sweep, the most frames the
  *  boss and its summons may take to rise, and a cast to end */
@@ -249,10 +250,23 @@ async function overBossIn(lab: Lab, skill: HeldSkill, view: ViewMode, options: H
     boss.marks.push(...small.marks.splice(0));
   }
   const marked = foeName(foes.find((foe) => foe.marks.length)?.obj, foes);
+  const moments: Pictured[] = [];
   lines.push(`  ${view}: let go over the ${boss.type}, the aim moved on onto ${oneOf(small.type)}: marked ${marked}`);
   if (marked !== `the ${boss.type}`) say(`let go over it, marked ${marked}`);
+  else {
+    const seen = markSeen(boss, foes, false);
+    lines.push(`  ${view}: the mark over the ${boss.type}: ${seen.line}`);
+    if (seen.problem) say(seen.problem);
+    // (the boss dazed, its stars over its head with the mark)
+    if (options.pictures) moments.push(await lab.screen(`${skill.name}: the mark over the ${boss.type} (${view})`));
+    if (planted) {
+      const caught = !!markSeen(boss, foes, true).problem;
+      lines.push(`  canary, the mark's reticle put inside the ${boss.type}: ${caught ? 'caught' : 'missed'}`);
+      if (!caught) say('the canary\'s reticle inside the boss went unseen');
+    }
+  }
   await letGoWhileShooting(lab, skill.key, { target, movedOn, view }, foes, lines, say);
-  return { lines, problems, moments: [] };
+  return { lines, problems, moments };
 }
 
 /**

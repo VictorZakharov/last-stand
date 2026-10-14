@@ -353,7 +353,11 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   is drawn (the cast waiting for it), the boss must take the mark (`main`'s aim, met on the rigid meshes alone,
   outlined the thornheart at 53 of 119 points through the eyes and marked a small foe in every view; and the mark,
   given to the foe nearest the cast's point on the floor, went to a small foe pressed against the boss, which the
-  outline had never been round).
+  outline had never been round). The boss marked, its reticle (`page/markSeen.ts`) must stand over its top as drawn
+  and be seen whole from the camera, its middle and its ring's points round it, none of them met by the eye's ray on
+  a body before it (off the screen, a close view's near a tall boss, they're said but aren't problems); `main`'s,
+  placed by its height, stood inside a boss's crown. With `--pictures`, each round pictures the mark over the dazed
+  boss, its stars with it.
   Starfall is cast ten times over the dummy with more
   standing round it inside its ring as drawn and outside it (`page/heldArea.ts`): every one inside must be struck on
   every cast (each one's casts struck by its distance). Each skill is then held across the dais's step from off it
@@ -365,7 +369,7 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   each preview ready, on its cooldown and across the step into `out/held`; `--canary` reads each preview ready with
   no countdown on its cooldown, draws Quarry Mark's outline round the hero (the programs it compiles aren't counted:
   the game never outlines a hero), moves its outline over the forest's boss onto a thornling and the boss's mark onto
-  it, reads Starfall's ring as drawn round all its crystals may strike, lays the marks
+  it, puts the mark's reticle at the boss's middle (which must be found hidden), reads Starfall's ring as drawn round all its crystals may strike, lays the marks
   across the step point by point on the floor under them, as they were, and compiles a shader mid-game.
 - `draw`: every drawn shot of the hero's class drawn to full and held there as the player holds it (`page/draw.ts`,
   `--class ranger`), in the top-down view, over the shoulder and through the eyes (`--views`): the key held over an

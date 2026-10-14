@@ -16,7 +16,6 @@ import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { hurtPlayer } from '../../../src/combat/damage';
 import { inObstacle } from '../../../src/world/collision';
 import { groundHeight } from '../../../src/world/arena';
-import { particles } from '../../../src/fx/particles';
 import { canaryCaught, describeHeld, heldProblems, holdThroughCooldown, meshReader } from './heldCooldown';
 
 export interface BlinkOptions {
@@ -335,16 +334,23 @@ async function cooldownRound(lab: Lab, key: SkillKey, reach: number, options: Bl
 /** How fast a foe goes (m/s). */
 const speedOf = (foe: Enemy): number => Math.hypot(foe.vel.x, foe.vel.z);
 
-/** Whether stars circle over a foe's head now. */
+/**
+ * Whether stars circle over a foe's head now: points drawn there, of any of the scene's point clouds (they were glow
+ * particles, and are stars drawn on their own, fx/dazed.ts), over its crown where the game has one (`overHead`).
+ */
 function starsOver(foe: Enemy): boolean {
-  const pool = particles.glow;
-  const head = new THREE.Vector3(foe.pos.x, foe.obj.position.y + foe.height + 0.25, foe.pos.z);
-  for (let index = 0; index < pool.count; index++) {
-    const at = index * 3;
-    const dx = pool.pos[at] - head.x;
-    const dy = pool.pos[at + 1] - head.y;
-    const dz = pool.pos[at + 2] - head.z;
-    if (dx * dx + dy * dy + dz * dz < STAR_REACH * STAR_REACH) return true;
+  const top = (foe as { overHead?: number }).overHead ?? foe.height;
+  const head = new THREE.Vector3(foe.pos.x, foe.obj.position.y + top + 0.25, foe.pos.z);
+  return G.scene.children.some((object) => (object as THREE.Points).isPoints && drawsNear(object as THREE.Points, head));
+}
+
+/** Whether `points` draws a point within `STAR_REACH` of `head` now. */
+function drawsNear(points: THREE.Points, head: THREE.Vector3): boolean {
+  const { attributes, drawRange } = points.geometry;
+  const end = Math.min(attributes.position.count, drawRange.start + drawRange.count);
+  const at = new THREE.Vector3();
+  for (let index = drawRange.start; index < end; index++) {
+    if (at.fromBufferAttribute(attributes.position, index).distanceTo(head) < STAR_REACH) return true;
   }
   return false;
 }
