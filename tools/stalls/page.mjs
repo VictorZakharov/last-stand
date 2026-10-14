@@ -67,6 +67,18 @@ export function inRun() {
   return Boolean(hud && !hud.classList.contains('hidden') && !hud.classList.contains('lobby'));
 }
 
+/** The local hero's kills and damage dealt in the scores held up on Tab (`ui/scoreboard.ts`: its row's columns
+ *  headed Kills and Damage, as they read), or null while they aren't shown. */
+export function scoresShown() {
+  const board = document.getElementById('scoreboard');
+  if (!board || board.classList.contains('hidden')) return null;
+  const heads = [...board.querySelectorAll('th')].map((head) => head.textContent);
+  const cells = [...board.querySelectorAll('tr.me td')].map((cell) => cell.textContent);
+  const kills = cells[heads.indexOf('Kills')];
+  const damage = cells[heads.indexOf('Damage')];
+  return kills === undefined ? null : { kills: Number(kills), damage: damage ?? '?' };
+}
+
 /** Whether the run is over (its summary is up). */
 export function runOver() {
   const summary = document.getElementById('summary');

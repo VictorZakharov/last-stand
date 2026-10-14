@@ -9,6 +9,7 @@ test('fills in the defaults', () => {
     urls: [],
     scenario: 'fight',
     seconds: 45,
+    listed: 300,
     variants: ['base'],
     headed: false,
     links: false,
