@@ -224,7 +224,14 @@ export interface Fixture {
   fresh?: boolean;
   /** tunable values set before the run, by their paths (`name.field`: src/core/tuning.ts) */
   tune?: Record<string, number[]>;
+  /** the armour he wears, every piece not named left off (none: bare hands and head, his clothes); as the boot rolled
+   *  it by default */
+  wear?: Armour[];
 }
+
+/** the armour a hero can be seen wearing (`Gear`'s flags) */
+const ARMOUR = ['helm', 'chest', 'hands'] as const;
+type Armour = (typeof ARMOUR)[number];
 
 /** The pictures the lab can take: the game's own views, or a close-up from round the hero. */
 export const VIEW_NAMES = ['lobby', 'top', 'third', 'eyes', 'front', 'left', 'right', 'back', 'above'] as const;
@@ -486,6 +493,7 @@ export class Lab {
     const facing = fixture.facing ?? 0;
     const spot = new THREE.Vector3(x, 0, z);
     if (fixture.gear) this.hold(fixture.gear, fixture.weapon);
+    if (fixture.wear) this.dress(fixture.wear);
     this.player.place(spot, facing);
     // (the camera too, for a hero built afresh: a commit from before it has none, and its camera glides)
     if (fixture.fresh) renderer.settleCamera?.(spot);
@@ -512,6 +520,7 @@ export class Lab {
       at: [x, z],
       facing,
       nocked: this.player.nocked,
+      wears: ARMOUR.filter((piece) => this.player.gear[piece]),
       time: Number(G.time.toFixed(2)),
     };
   }
@@ -548,6 +557,14 @@ export class Lab {
     // (its loadout and its skills tuned to the style too: set by the gear alone, a two-hander swung at a one-hander's
     // pace; an older commit's hero has none of that)
     this.player.fitToGear?.();
+    this.model.setGear?.(gear);
+  }
+
+  /** The hero wearing `armour` and nothing else of it, as the player sees him dressed. */
+  private dress(armour: Armour[]): void {
+    const worn = (piece: Armour) => armour.includes(piece);
+    const gear = { ...this.player.gear, helm: worn('helm'), chest: worn('chest'), hands: worn('hands') };
+    this.player.gear = gear;
     this.model.setGear?.(gear);
   }
 

@@ -35,6 +35,7 @@ export function fixtureFrom(options) {
   if (options.nocked !== undefined) fixture.nocked = options.nocked;
   if (options.gear !== undefined) fixture.gear = options.gear;
   if (options.weapon !== undefined) fixture.weapon = options.weapon;
+  if (options.wear !== undefined) fixture.wear = options.wear.filter((part) => part !== 'none');
   if (options.tune !== undefined) fixture.tune = tunesFrom(options.tune);
   return fixture;
 }

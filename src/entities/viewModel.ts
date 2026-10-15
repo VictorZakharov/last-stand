@@ -121,6 +121,16 @@ export class ViewFade {
 
 /** the camera's turn the last time a model was placed in view, undone */
 const _camInv = new THREE.Quaternion();
+/** and half its frame's height and width a metre ahead (the game's 66 degrees on a wide screen till then) */
+let halfUp = Math.tan((66 * Math.PI) / 360), halfAcross = (halfUp * 16) / 9;
+
+/** A place on the screen in the eyes' view (camera space, as `fromEyes`), from the camera as it was last placed: `on`
+ *  is how far across and up from the middle to the frame's edges (-1..1) and how far ahead (m). A pose held so sits
+ *  at the same place in the frame on any screen, wide or narrow. */
+export function fromScreen(on: readonly number[], out: THREE.Vector3): THREE.Vector3 {
+  const [across, up, ahead] = on;
+  return out.set(across * ahead * halfAcross, up * ahead * halfUp, -ahead);
+}
 /** A direction of the world as the eyes see it (their frame, as `fromEyes`), from the camera as it was last placed: for
  *  a pose that lines something up with the world through the eyes (the arrow on the string along the shot's line). The
  *  crosshair's aim is taken from that camera too. */
@@ -144,6 +154,11 @@ export function viewArms(m: Model, on: boolean, cam: THREE.Camera): void {
   root.updateWorldMatrix(true, false);
   cam.updateMatrixWorld();
   cam.getWorldQuaternion(_camInv).invert();
+  if ((cam as THREE.PerspectiveCamera).isPerspectiveCamera) {
+    const lens = cam as THREE.PerspectiveCamera;
+    halfUp = Math.tan((lens.fov * Math.PI) / 360) / lens.zoom;
+    halfAcross = halfUp * lens.aspect;
+  }
   // the camera sits just above the neck, wherever the pose has taken it: the head rides the spine, so a
   // lean or a crouch doesn't bring the shoulders up under the camera
   const neck = m.joints?.neck;

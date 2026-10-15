@@ -54,10 +54,16 @@ const SETUP_OPTIONS = {
     help: 'with --gear, the weapon held that way by its base (Maul, Greataxe...; dual: one in each hand; the '
       + 'class\'s first by default)',
   },
+  wear: {
+    kind: 'list',
+    usage: 'a,b',
+    choices: ['helm', 'chest', 'hands', 'none'],
+    help: 'the armour he wears, as the player dresses him (hands: gloves and bracers; none: bare; as rolled by default)',
+  },
   tune: {
     kind: 'text',
     usage: 'name.field=v[,v...][;...]',
-    help: 'tunable values set before the run (src/core/tuning.ts: warriorEyes.at=0,0.3,-0.2;warriorEyes.tilt=-0.4)',
+    help: 'tunable values set before the run (src/core/tuning.ts: warriorEyes.oneOn=0.75,-1.1,0.5;warriorEyes.roll=1.2)',
   },
 };
 

@@ -21,7 +21,7 @@ import { buildHand, poseHand, hold, seat, fistReach, fistTurn, fistOn, gripTurn,
 import { axe, greataxe, greatsword, mace, maul, sword, type WeaponMaterials } from './weapons';
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { groundHeight } from '../../world/ground';
-import { fromEyes, dirFromEyes, viewAt, ViewFade } from '../viewModel';
+import { fromEyes, dirFromEyes, fromScreen, viewAt, ViewFade } from '../viewModel';
 import { tunable } from '../../core/tuning';
 import {
   TWO_FORE, TWO_BACK, ONE_FORE, ONE_BACK, CUT_FLAT, EYES_TURN, POWER_TWO, SMITE_TWO, POWER_ONE,
@@ -68,15 +68,18 @@ const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHO
 /** Through the eyes (tuned live in a dev build, `--tune warriorEyes.shoulder=...`): the right arm's shoulder in the
  *  view (camera space, m: x right, y up, -z ahead; the left's mirrors it), low beside the camera, as a game's
  *  first-person arms come up from the screen's bottom corners; a two-hander at rest there, as its moves are keyed
- *  (`restAt`, the lower grip's place; `restDir`, the weapon's way: the whole of it in the frame, diagonal from the
- *  bottom right towards the top, right of the crosshair) and where its right elbow points (`pole`, the chest's frame);
- *  and a one-hander at rest (`oneAt`, its grip's place; `oneDir`, its way; a second blade's mirrors it), held from
+ *  (`restOn`, the lower grip's place on the screen, as `oneOn`'s below, the hands under the frame's bottom right
+ *  corner; `restDir`, the weapon's way: upright at the frame's right edge, its head in the top right, as Vermintide
+ *  2's) and where its right elbow points (`pole`, the chest's frame);
+ *  and a one-hander at rest (`oneOn`, its grip's place on the screen, `fromScreen`: across and up from the middle to
+ *  the edges and metres ahead, its fist at the bottom right corner, mostly below the frame, as Vermintide 2's are;
+ *  `oneDir`, its way, upright at the frame's right edge; a second blade's mirrors it), held from
  *  shoulders of their own (`oneShoulder`); and how far
  *  a fist may turn about its handle (rad, `roll`) for its arm to keep within a body's ranges, and what each degree of
  *  its wrist's bend costs it (armIK's `wristW`, `wrist`) (`fitInView`) */
 const EYES = tunable('warriorEyes', {
-  shoulder: [0.22, -0.46, -0.25], restAt: [0.28, -0.42, -0.48], restDir: [-0.3, 0.7, -0.6], pole: [-1, -0.3, 0.3],
-  oneAt: [0.26, -0.22, -0.62], oneDir: [-0.2, 0.85, -0.5], oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1,
+  shoulder: [0.22, -0.46, -0.25], restOn: [0.72, -1.8, 0.5], restDir: [0.1, 1, -0.45], pole: [-1, -0.3, 0.3],
+  oneOn: [0.75, -1.1, 0.5], oneDir: [0.08, 1, -0.35], oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1,
 });
 const _er = new THREE.Vector3(), _ed = new THREE.Vector3();
 const _fw = [0, 1, 2, 3, 4, 5].map(() => new THREE.Vector3()), _fwq = new THREE.Quaternion();
@@ -1071,7 +1074,7 @@ export function buildWarrior(): Model {
     shouldered = shoulderIt ? damp(shouldered, 1, SHOULDER_RATE, dt) : 0;
     lastName = raw?.name ?? ''; lastK = raw?.t ?? 1;
     armsFromBelow(fp && st.dead < 0, two);
-    if (fp && two) { FP_TWO_AT.fromArray(EYES.restAt); FP_TWO_DIR.fromArray(EYES.restDir).normalize(); FP_TWO_POLE.fromArray(EYES.pole); }
+    if (fp && two) { fromScreen(EYES.restOn, FP_TWO_AT); FP_TWO_DIR.fromArray(EYES.restDir).normalize(); FP_TWO_POLE.fromArray(EYES.pole); }
     // Twin Fangs strikes right, then left (in step with skills/twinFangs STRIKES)
     const left = !!offHeld && ((a?.name === 'swing' && side < 0) || (a?.name === 'flurry' && a.t > 0.5));
     tipOn(left);
@@ -1446,9 +1449,9 @@ export function buildWarrior(): Model {
       holdInView(ARM_R, _vg, _vd, FP_TWO_POLE, 1 - aw, FACE_EYES, viewFlat);
     }
     if (fp && !two && st.dead < 0) {
-      // (at rest each blade is held low on its own side of the view, `EYES.oneAt`, a move's place over it by its weight:
+      // (at rest each blade is held low on its own side of the view, `EYES.oneOn`, a move's place over it by its weight:
       // left to the stance's own angles, the arms' shoulders moved under the camera put the hilts under the frame)
-      _er.fromArray(EYES.oneAt); _ed.fromArray(EYES.oneDir).normalize();
+      fromScreen(EYES.oneOn, _er); _ed.fromArray(EYES.oneDir).normalize();
       if (held) { _ra.lerpVectors(_er, _ra, wR); _rd.lerpVectors(_ed, _rd.normalize(), wR); wR = 1; }
       _er.x = -_er.x; _ed.x = -_ed.x;
       if (offHeld) { _la.lerpVectors(_er, _la, wL); _ld.lerpVectors(_ed, _ld.normalize(), wL); wL = 1; }
@@ -1484,8 +1487,8 @@ export function buildWarrior(): Model {
     slantR = 0; slantL = 0;
     if (aimDown > 0 && held && !fp && st.dead < 0) aimAtFloor(aimDown, bladeUp, fall * fall);
     if (!fp && st.dead < 0) slantR = fitArm(j, false, held ? gripTurn(handR, grip, _vr) : undefined, body, held && !two ? SLANT : undefined).slant;
-    // (a two-hander through the eyes is held as its moves are keyed, `EYES.restAt`: no rest fitted so was both natural
-    // and seen, all stood upright before the face)
+    // (a two-hander through the eyes is held as its moves are keyed, `EYES.restOn`: fitted so, its weapon turned off its
+    // place and the lower grip went out of the left hand's reach)
     else if (fp && st.dead < 0 && held && !two) slantR = fitInView(false, grip, gripTurn(handR, grip, _vr), SLANT).slant;
     // (the weapon seated in the fist as it holds it, its handle diagonal across the palm by that slant: before a lower grip is taken)
     if (held) seat(handR, grip, held.r, slantR);
