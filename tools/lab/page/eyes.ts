@@ -107,8 +107,10 @@ interface Seen {
    *  the tip is on */
   side: number | null;
   hand: 'right' | 'left';
-  /** the share of that weapon in the frame along its length (page/cuts.ts `weaponsInView`; 0 with none held) */
+  /** that weapon in the frame (page/cuts.ts `weaponsInView`: its share along its length, and how long it looks, a share
+   *  of the frame's height; 0 with none held) */
   shown: number;
+  looks: number;
   /** the arm a swing keyed this frame against the arm drawn (page/keyed.ts): null when none keyed one */
   keyed: KeyedFrame | null;
 }
@@ -467,7 +469,7 @@ function seeFrame(lab: Lab, frame: number, casts: CastCount, last: Seen | undefi
     pose: armsAt(lab),
     side: lab.model.swing ?? null,
     hand,
-    shown: weaponsInView(lab).find((view) => view.hand === hand)?.share ?? 0,
+    ...shownOf(weaponsInView(lab).find((view) => view.hand === hand)),
     keyed: keyedNow(lab),
   };
 }
@@ -475,8 +477,11 @@ function seeFrame(lab: Lab, frame: number, casts: CastCount, last: Seen | undefi
 /** A frame as the cut measures read it (page/cuts.ts). */
 const cutOf = (now: Seen): CutFrame => ({
   grip: now.grip.at, tip: now.tip.at, hand: now.hand, side: now.side, inCast: now.share !== null, frame: now.frame,
-  shown: now.shown,
+  shown: now.shown, looks: now.looks,
 });
+
+/** A weapon in the frame as a frame keeps it (`Seen.shown`, `Seen.looks`). */
+const shownOf = (view: InView | undefined) => ({ shown: view?.share ?? 0, looks: view?.length ?? 0 });
 
 /** Each wrist's angles as `measureBody` has them. */
 function wristsOf(angles: Record<string, number>): Wrist[] {

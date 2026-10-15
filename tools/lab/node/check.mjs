@@ -22,10 +22,15 @@ export const CHECK_CLASSES = ['warrior', 'mage', 'ranger'];
  * docs/agents/legs.md checks a change to the walk or the run (the gait, the stops, every joint's range and the run's
  * form for every hero, the ranger's feet and carried bow).
  */
-export const CHECK_PLAN = { gait: null, stops: null, range: null, form: null, feet: ['ranger'], carry: ['ranger'] };
+export const CHECK_PLAN = {
+  gait: null, stops: null, range: null, form: null, feet: ['ranger'], carry: ['ranger'], eyes: ['warrior'],
+};
 /** each command's options in a check: the gait's steps listed, and no films nor pictures (a check reads the numbers:
- *  the form's of both sides, to compare, were more than the browser held, which closed) */
-const CHECK_OPTIONS = { gait: { frames: true, films: false }, form: { pictures: false } };
+ *  the form's of both sides, to compare, were more than the browser held, which closed); the basic attack through
+ *  the eyes */
+const CHECK_OPTIONS = {
+  gait: { frames: true, films: false }, form: { pictures: false }, eyes: { _: ['cleave'], film: false },
+};
 /**
  * the commands run a scenario a job, side by side, each job running its scenario from every start on one page
  * (each run sets a fresh hero up, so it comes out the same whatever ran before it; set up again over the same hero,
@@ -42,6 +47,25 @@ export const CHECK_SPLIT = new Set(['gait']);
 export const CHECK_OFFSETS = [0, 7, 13, 19, 29, 3, 11, 23];
 /** how many of `CHECK_OFFSETS` a check starts each split scenario from, by default */
 const CHECK_STARTS = 5;
+/**
+ * the weapons a check swings through the eyes, by the ways the warrior holds them (src/data/classes/warrior.ts: the
+ * one-handed bases with a shield and in both hands, one of them alone, the two-handed bases), each a job: a cut
+ * chains with the cut before it, so a fault comes where one cut fades into the next, and it came on one weapon
+ * and not another (a mace's shoulder raised past its plane, a greatsword's wrist bent past its range)
+ */
+export const EYES_WEAPONS = {
+  shield: ['Sword', 'Axe', 'Mace'],
+  dual: ['Sword', 'Axe', 'Mace'],
+  oneHanded: ['Sword'],
+  twoHanded: ['Greatsword', 'Greataxe', 'Maul'],
+};
+/** how each weapon is swung through the eyes: four cuts with the key held and the canaries, then three with a short
+ *  and a long pause between them (the next cut from the guard where the last one waits, or from the rest) */
+export const EYES_ROWS = {
+  row: { times: 4, canary: true },
+  pause: { times: 3, apart: 0.3 },
+  rest: { times: 3, apart: 1.2 },
+};
 /** the most sessions side by side: each is a browser and a Vite server or two, and a page's frames take a core */
 const MOST_WORKERS = 8;
 
@@ -50,16 +74,43 @@ export function scenariosOf(command) {
   return COMMANDS[command]?.options.scenarios?.choices ?? [];
 }
 
+/** Each weapon's swings through the eyes, a part each: its name (`dual-Axe-pause`) and its options. */
+export function eyesParts() {
+  const parts = [];
+  for (const [gear, weapons] of Object.entries(EYES_WEAPONS)) {
+    for (const weapon of weapons) {
+      for (const [row, options] of Object.entries(EYES_ROWS)) {
+        parts.push({ part: `${gear}-${weapon}-${row}`, options: { gear, weapon, ...options } });
+      }
+    }
+  }
+  return parts;
+}
+
 /**
- * One job: a command for a hero (one of its scenarios, `part`, from each of `offsets`), its options, its name (where
- * its report goes) and its group's (the command and hero, whose parts' reports make one).
+ * A command's parts in a check, a job each, by name with their options: a split command's scenarios, each from
+ * every start; the swings through the eyes; or the command whole, in one job (`[null]`).
  */
-function jobOf(command, heroClass, base, part = null, offsets = [0]) {
+function partsOf(command, starts) {
+  if (CHECK_SPLIT.has(command)) {
+    const offsets = offsetsOf(starts);
+    return scenariosOf(command).map((part) => ({ part, options: { scenarios: [part], offsets } }));
+  }
+  if (command === 'eyes') return eyesParts();
+  return [null];
+}
+
+/**
+ * One job: a command for a hero (or one of its parts, `of`: a scenario from each start, a weapon swung through the
+ * eyes), its options, its name (where its report goes) and its group's (the command and hero, whose parts' reports
+ * make one).
+ */
+function jobOf(command, heroClass, base, of = null) {
   const options = { _: [], ...CHECK_OPTIONS[command], ...base, class: heroClass };
   const group = `${command}-${heroClass}`;
-  if (!part) return { command, heroClass, options, name: group, group };
-  const name = `${group}-${part}`;
-  return { command, heroClass, options: { ...options, scenarios: [part], offsets }, name, group, part };
+  if (!of) return { command, heroClass, options, name: group, group };
+  const name = `${group}-${of.part}`;
+  return { command, heroClass, options: { ...options, ...of.options }, name, group, part: of.part };
 }
 
 /** The offsets a split command's scenarios start from, as many as `starts` asks (all there are at most). */
@@ -77,10 +128,9 @@ export function jobsOf(options, plan = CHECK_PLAN) {
   const jobs = [];
   for (const command of commands) {
     const heroes = (plan[command] ?? classes).filter((hero) => classes.includes(hero));
-    const parts = CHECK_SPLIT.has(command) ? scenariosOf(command) : [null];
-    const offsets = CHECK_SPLIT.has(command) ? offsetsOf(options.starts) : [0];
+    const parts = partsOf(command, options.starts);
     for (const heroClass of heroes) {
-      for (const part of parts) jobs.push(jobOf(command, heroClass, base, part, offsets));
+      for (const part of parts) jobs.push(jobOf(command, heroClass, base, part));
     }
   }
   return jobs;
@@ -197,24 +247,22 @@ async function runJob(session, job, started) {
 }
 
 /**
- * A joined report's head: its counts over all its parts, then each scenario's over the moments it started from (none
- * when nothing was counted).
+ * A joined report's head: its counts over all its parts, then each part's (a scenario's over the moments it started
+ * from); none when nothing was counted.
  */
 function countsHead(parts, other) {
   const counts = countsLine(countsOver(parts), other);
   if (!counts) return [];
-  const scenarios = [...new Set(parts.map((part) => part.job.part))];
-  const starts = parts[0].job.options.offsets.length;
-  const each = scenarios.map((scenario) => {
-    const its = parts.filter((part) => part.job.part === scenario);
-    return `  ${scenario}: ${countsLine(countsOver(its), other) || 'nothing'}`;
-  });
-  return [[`over its ${scenarios.length} scenarios from ${starts} starts each: ${counts}`, ...each].join('\n')];
+  const each = parts.map((part) => `  ${part.job.part}: ${countsLine(countsOver([part]), other) || 'nothing'}`);
+  const starts = parts[0].job.options.offsets?.length;
+  const from = starts ? ` from ${starts} starts each` : '';
+  return [[`over its ${parts.length} parts${from}: ${counts}`, ...each].join('\n')];
 }
 
-/** A part's heading in a joined report: its scenario (each of its runs says how much longer its first move lasted). */
-function partHeading(job) {
-  return `=== ${job.part}`;
+/** A part's heading in a joined report: its name (each of a scenario's runs says how much longer its first move
+ *  lasted), and whether it failed. */
+function partHeading(part) {
+  return `=== ${part.job.part}${part.ok ? '' : ': FAILED'}`;
 }
 
 /** How many lines an A/B's verdict says differ (0 when the sides agree). */
@@ -227,7 +275,7 @@ function differing(text) {
  * then the parts' reports in the scenarios' order, each under its scenario), and the group's line logged: its time in
  * all, the lines its A/Bs found differing, and its counts.
  */
-function joinParts(done, started) {
+function joinParts(done, order, started) {
   const groups = new Map();
   for (const result of done.filter((each) => each.job.part)) {
     const parts = groups.get(result.job.group) ?? [];
@@ -235,12 +283,11 @@ function joinParts(done, started) {
     groups.set(result.job.group, parts);
   }
   for (const [group, parts] of groups) {
-    const order = scenariosOf(parts[0].job.command);
-    parts.sort((a, b) => order.indexOf(a.job.part) - order.indexOf(b.job.part));
+    parts.sort((a, b) => order.indexOf(a.job.name) - order.indexOf(b.job.name));
     const other = otherName(parts[0].job);
     const counts = countsLine(countsOver(parts), other);
     const head = countsHead(parts, other);
-    const text = [...head, ...parts.map((part) => `${partHeading(part.job)}\n${part.text}`)].join('\n\n');
+    const text = [...head, ...parts.map((part) => `${partHeading(part)}\n${part.text}`)].join('\n\n');
     writeFileSync(join(CHECK_DIR, `${group}.txt`), text);
     const seconds = parts.reduce((sum, part) => sum + part.seconds, 0);
     const failed = parts.filter((part) => !part.ok).map((part) => part.job.name.slice(group.length + 1));
@@ -281,7 +328,7 @@ export async function runCheck(options) {
   } finally {
     await Promise.allSettled([serving.repo.server?.close(), serving.other?.server?.close()]);
   }
-  joinParts(done, started);
+  joinParts(done, jobs.map((job) => job.name), started);
   const durations = { ...lastDurations() };
   for (const { job, seconds } of done) durations[job.name] = Math.round(seconds);
   writeFileSync(DURATIONS, JSON.stringify(durations, null, 2));

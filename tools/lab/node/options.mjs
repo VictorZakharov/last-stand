@@ -885,15 +885,16 @@ export const COMMANDS = {
   check: {
     help: 'the checks of a change to how the heroes move, every hero\'s, side by side in sessions of their own: the '
       + 'gait (its steps listed, no films), the stops, the ranges and the run\'s form for each hero, the ranger\'s '
-      + 'feet and carry; each report in tools/lab/out/check/<command>-<hero>.txt (runs in this process, not the '
-      + 'server)',
+      + 'feet and carry, the warrior\'s basic attack through the eyes with each weapon each way he holds it (a row '
+      + 'with the canaries, a short and a long pause); each report in tools/lab/out/check/<command>-<hero>.txt (runs '
+      + 'in this process, not the server)',
     options: {
       classes: { kind: 'list', usage: 'a,b', help: 'the heroes (warrior, mage, ranger by default)' },
       commands: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['gait', 'stops', 'range', 'form', 'feet', 'carry'],
-        help: 'the commands (gait, stops, range, form, feet, carry by default)',
+        choices: ['gait', 'stops', 'range', 'form', 'feet', 'carry', 'eyes'],
+        help: 'the commands (gait, stops, range, form, feet, carry, eyes by default)',
       },
       jobs: { kind: 'number', usage: 'n', help: 'how many sessions side by side (a core in three, at most 8)' },
       starts: {

@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import type { Lab, Fixture, Report } from './lab';
 import { armsLens } from './inFrame';
 import { triple } from './keyed';
-import { weaponSpan } from './cuts';
+import { seenAlong, weaponSpan } from './cuts';
 import {
   swingKeyAt, swingKeyFor, swingShoulder, type ArmBones, type SwingKey, type SwingKeyFit, type ViewSwing,
 } from '../../../src/entities/viewSwing';
@@ -145,7 +145,7 @@ function fitWords(fit: SwingKeyFit): string {
 function placedWords(lab: Lab, keyed: Keyed, placed: Placed): string {
   const words = [
     `the grip ${triple(placed.grip)}${seen(placed.grip) ? '' : ' (out of the frame)'}`,
-    `the weapon ${triple(placed.dir)}, ${(shownOf(lab, keyed, placed) * 100).toFixed(0)}% of it in the frame`,
+    `the weapon ${triple(placed.dir)}, ${shownWords(shownOf(lab, keyed, placed))}`,
     `the elbow ${triple(placed.elbow)}`,
     `the wrist ${triple(placed.wrist)}`,
   ];
@@ -176,17 +176,23 @@ function upHandleOf(lab: Lab): number | null {
  *  end and the rest are judged by) */
 const ALONG_POINTS = 11;
 
-/** The share of the held weapon a key places in the frame: of `ALONG_POINTS` points along its length, from its butt
- *  to its far end (page/cuts.ts `weaponSpan`: counted from the grip alone, a cut's end read 45% where the eyes' 27%). */
-function shownOf(lab: Lab, { mirror }: Keyed, placed: Placed): number {
+/** The held weapon as a key places it in the frame, as the eyes read a rest and a cut's end (page/cuts.ts
+ *  `seenAlong`): `ALONG_POINTS` points along its length from its butt to its far end (`weaponSpan`: counted from the
+ *  grip alone, a cut's end read 45% in the frame where the eyes' 27%). */
+function shownOf(lab: Lab, { mirror }: Keyed, placed: Placed): { share: number; length: number } {
   const span = weaponSpan(lab, mirror ? 'left' : 'right');
-  if (!span) return 0;
-  let shown = 0;
-  for (let i = 0; i < ALONG_POINTS; i++) {
+  if (!span) return { share: 0, length: 0 };
+  const lens = armsLens();
+  const points = Array.from({ length: ALONG_POINTS }, (_, i) => {
     const along = span.from + ((span.to - span.from) * i) / (ALONG_POINTS - 1);
-    if (seen(placed.grip.clone().addScaledVector(placed.dir, along))) shown++;
-  }
-  return shown / ALONG_POINTS;
+    return lens.localToWorld(placed.grip.clone().addScaledVector(placed.dir, along));
+  });
+  return seenAlong(points);
+}
+
+/** A weapon in the frame as words: its share in it, and how long it looks. */
+function shownWords({ share, length }: { share: number; length: number }): string {
+  return `${(share * 100).toFixed(0)}% of it in the frame, looking ${(length * 100).toFixed(0)}% of its height long`;
 }
 
 /** Whether a point in the eyes' frame is in the frame the arms are drawn in. */

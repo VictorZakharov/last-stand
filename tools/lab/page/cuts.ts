@@ -22,8 +22,10 @@ export interface CutFrame {
   side: number | null;
   inCast: boolean;
   frame: number;
-  /** the share of its weapon in the frame along its length (`weaponsInView`; none at rest, which has its own) */
+  /** its weapon in the frame (`weaponsInView`: its share along its length, and how long it looks; none at rest, which
+   *  has its own) */
   shown?: number;
+  looks?: number;
 }
 
 type Hand = 'right' | 'left';
@@ -54,6 +56,10 @@ const HELD_NEAR = 6;
  *  the left out of the frame, none of it seen for 250 ms of the backhand after it, and the backhand's end held the
  *  handle across the view, its blade out of the frame) */
 const REST_IN_VIEW = 0.3;
+/** and it looks at least this long on the screen, a share of the frame's height (the owner's one-handed rest 58%, the
+ *  two-hander's 86%: a two-hander's forehand held its blade pointing away from the eyes at its end, 45% of it in the
+ *  frame and a sliver 31% of the frame's height) */
+const LOOKS_LEAST = 0.4;
 /** the points along a weapon its share in the frame is counted at */
 const ALONG_POINTS = 11;
 
@@ -184,12 +190,11 @@ export function rowOfCuts(casts: RowCast[], rest: RestBlades, frameMs: number):
     const fromRest = atRest !== undefined && nearRest(begun, atRest);
     const from = fromRest ? 'from the rest' : 'where the last cut left the blade';
     const ended = lastIn(cast);
-    const shown = ended.shown === undefined ? '' : `, ending ${(ended.shown * 100).toFixed(0)}% in the frame`;
+    const looks = ended.looks === undefined ? '' : `, looking ${(ended.looks * 100).toFixed(0)}% of its height long`;
+    const shown = ended.shown === undefined ? '' : `, ending ${(ended.shown * 100).toFixed(0)}% in the frame${looks}`;
     lines.push(`cut ${i + 1}: ${sideWords(begun)}, begun ${from}${shown}`);
-    if (ended.shown !== undefined && ended.shown < REST_IN_VIEW) {
-      problems.push(`cut ${i + 1} ends ${(ended.shown * 100).toFixed(0)}% in the frame along its weapon's length (at `
-        + `least ${REST_IN_VIEW * 100}%: where it waits for the next cut, frame ${ended.frame})`);
-    }
+    const unseen = ended.shown === undefined ? null : unseenBy(ended.shown, ended.looks ?? 0);
+    if (unseen) problems.push(`cut ${i + 1} ends ${unseen} (where it waits for the next cut, frame ${ended.frame})`);
     // (a blade in each hand: the left's cut in a row begins from its own rest, as the right's did, and is its forehand)
     if (fromRest && begun.side !== null && !isForehand(begun)) {
       problems.push(`cut ${i + 1} began from the rest with a backhand, ${sideWords(begun)}: a cut from the rest is `
@@ -256,6 +261,9 @@ export interface InView {
   hand: Hand;
   weapon: string;
   share: number;
+  /** how long its part in the frame looks: from where it comes in to where it ends or leaves, on the screen, a share of
+   *  the frame's height (a blade pointing away from the eyes is a sliver however much of it is in the frame) */
+  length: number;
 }
 
 /** Whether `object` and everything it hangs from is shown. */
@@ -325,27 +333,36 @@ export function restBlades(lab: Lab, eyes: THREE.Camera): RestBlades {
   return blades;
 }
 
-/** Whether a point of the world is in the frame, as the arms are drawn (their own lens, if they have one). */
-function inFrame(world: THREE.Vector3): boolean {
+/** Where a point of the world is in the frame as the arms are drawn (their own lens, if they have one): on the screen,
+ *  in frame heights from its middle, and whether it's in the frame. */
+function onScreen(world: THREE.Vector3): { at: THREE.Vector2; in: boolean } {
   const lens = armsLens();
-  if (lens.worldToLocal(world.clone()).z >= 0) return false;
+  const ahead = lens.worldToLocal(world.clone()).z < 0;
   const ndc = world.clone().project(lens);
-  return Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1;
+  const at = new THREE.Vector2((ndc.x * lens.aspect) / 2, ndc.y / 2);
+  return { at, in: ahead && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1 };
 }
 
-/** Each held weapon's share in the frame now: of `ALONG_POINTS` points along its length (its own +Y, through the
- *  middle of its box), those in it. */
+/** Points along a weapon (the world's, from its butt to its far end) as the frame shows them: the share in it, and how
+ *  long its part in it looks (`InView`). */
+export function seenAlong(points: THREE.Vector3[]): { share: number; length: number } {
+  const shown = points.map(onScreen).filter((point) => point.in);
+  if (!shown.length) return { share: 0, length: 0 };
+  return { share: shown.length / points.length, length: shown[0].at.distanceTo(shown[shown.length - 1].at) };
+}
+
+/** Each held weapon in the frame now: `ALONG_POINTS` points along its length (its own +Y, through the middle of its
+ *  box) as the frame shows them. */
 export function weaponsInView(lab: Lab): InView[] {
   lab.model.root.updateWorldMatrix(true, true);
   return weaponsHeld(lab).map(({ hand, weapon }) => {
     const box = ownBox(weapon);
     const middle = box.getCenter(new THREE.Vector3());
-    let seen = 0;
-    for (let i = 0; i < ALONG_POINTS; i++) {
+    const points = Array.from({ length: ALONG_POINTS }, (_, i) => {
       const y = box.min.y + ((box.max.y - box.min.y) * i) / (ALONG_POINTS - 1);
-      if (inFrame(weapon.localToWorld(new THREE.Vector3(middle.x, y, middle.z)))) seen++;
-    }
-    return { hand, weapon: weapon.name, share: seen / ALONG_POINTS };
+      return weapon.localToWorld(new THREE.Vector3(middle.x, y, middle.z));
+    });
+    return { hand, weapon: weapon.name, ...seenAlong(points) };
   });
 }
 
@@ -369,12 +386,27 @@ export function tipAtEnd(lab: Lab): string[] {
     + `${TIP_OFF_MOST * 100}%): where its blade crosses the aim is measured along a wrong length`];
 }
 
-/** The weapons at rest as words, and each one less than `REST_IN_VIEW` in the frame as a problem. */
+/** How a weapon in the frame is too little seen, as words: less than `REST_IN_VIEW` of it in the frame, or looking
+ *  shorter than `LOOKS_LEAST`; null when it's seen well enough. */
+function unseenBy(share: number, looks: number): string | null {
+  const percent = (value: number) => `${(value * 100).toFixed(0)}%`;
+  if (share < REST_IN_VIEW) {
+    return `${percent(share)} in the frame along its length (at least ${percent(REST_IN_VIEW)})`;
+  }
+  if (looks < LOOKS_LEAST) {
+    return `looking ${percent(looks)} of the frame's height long, pointing away from the eyes (at least `
+      + `${percent(LOOKS_LEAST)})`;
+  }
+  return null;
+}
+
+/** The weapons at rest as words, and each one too little seen (`unseenBy`) as a problem. */
 export function restInView(views: InView[]): { line: string; problems: string[] } {
-  const words = views.map((view) => `the ${view.hand} ${view.weapon} ${(view.share * 100).toFixed(0)}%`);
-  const problems = views
-    .filter((view) => view.share < REST_IN_VIEW)
-    .map((view) => `at rest the ${view.hand} hand's ${view.weapon} is ${(view.share * 100).toFixed(0)}% in the `
-      + `frame (at least ${REST_IN_VIEW * 100}%)`);
+  const words = views.map((view) => `the ${view.hand} ${view.weapon} ${(view.share * 100).toFixed(0)}%, looking `
+    + `${(view.length * 100).toFixed(0)}% of its height long`);
+  const problems = views.flatMap((view) => {
+    const unseen = unseenBy(view.share, view.length);
+    return unseen ? [`at rest the ${view.hand} hand's ${view.weapon} is ${unseen}`] : [];
+  });
   return { line: `at rest, in the frame along their length: ${words.join(', ') || 'no weapon held'}`, problems };
 }
