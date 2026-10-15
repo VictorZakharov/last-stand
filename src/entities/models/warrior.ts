@@ -82,7 +82,7 @@ const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHO
 const EYES = tunable('warriorEyes', {
   shoulder: [0.22, -0.46, -0.25], restOn: [0.72, -1.8, 0.5], restDir: [0.1, 1, -0.45], pole: [-1, -0.3, 0.3],
   oneOn: [0.58, -1.3, 0.6], oneDir: [0.45, 1, -0.3], bladeOn: [0.76, -0.42, 0.5], bladeDir: [0.4, 1, -0.2],
-  bladeFlat: [-0.7, 0, 0.7],
+  bladeFlat: [-0.7, 0, 0.7], oneFlat: [-1, 0, 0.2],
   oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1, fov: 45,
 });
 const _er = new THREE.Vector3(), _ed = new THREE.Vector3(), _ef = new THREE.Vector3();
@@ -91,13 +91,14 @@ const _rf = new THREE.Vector3(), _lf = new THREE.Vector3();
  *  the way that turns it: a sword's (`bladeOn`, `bladeDir`: its hilt and the fist in the corner, the blade up to the
  *  top right, as Vermintide 2's sword; `bladeFlat`, turned on its length so it's seen narrow, as that one is: face on,
  *  it was twice as wide) or a hafted weapon's (`oneOn`, `oneDir`: the fist below the frame, the haft in over its bottom
- *  edge, the head at the right, as its axe; left to the fist's own turn) */
+ *  edge, the head at the right, as its axe; `oneFlat`, its head broadside, the bit towards the middle, as that one's:
+ *  left to the fist's own turn, the axe's head was seen edge on, the haft alone) */
 function oneRest(w: Weapon, on: THREE.Vector3, way: THREE.Vector3, flat: THREE.Vector3): number {
   const blade = !!w.hang?.down;
   fromScreen(blade ? EYES.bladeOn : EYES.oneOn, on);
   way.fromArray(blade ? EYES.bladeDir : EYES.oneDir).normalize();
-  flat.fromArray(EYES.bladeFlat).normalize();
-  return blade ? 1 : 0;
+  flat.fromArray(blade ? EYES.bladeFlat : EYES.oneFlat).normalize();
+  return 1;
 }
 const _fw = [0, 1, 2, 3, 4, 5].map(() => new THREE.Vector3()), _fwq = new THREE.Quaternion();
 /** how long the left hand takes to come onto the lower grip as a two-hander comes off the shoulder (s) */
@@ -850,8 +851,10 @@ export function buildWarrior(): Model {
   frog.visible = false;
   let sheathed = false;
   const _s1 = new THREE.Vector3(), _s2 = new THREE.Vector3(), _s3 = new THREE.Vector3(), _s4 = new THREE.Vector3(), _s5 = new THREE.Vector3(), _sm = new THREE.Matrix4(), _shq = new THREE.Quaternion();
-  /** seat every weapon in its fist the way a real one is held (through the eyes the hand-placed poses keep their own) */
-  function mountAll(): void { for (const w of [...weapons.values(), ...offWeapons.values()]) w.group.rotation.y = fp || (w === offHeld && sheathed) ? 0 : MOUNT; }
+  /** seat every weapon in its fist the way a real one is held, through the eyes too (left as the poses there were
+   *  keyed before, a blade's edge lay in the palm: turned narrow to the eyes at rest, the fist showed its palm and
+   *  its fingers splayed past the hilt) */
+  function mountAll(): void { for (const w of [...weapons.values(), ...offWeapons.values()]) w.group.rotation.y = w === offHeld && sheathed ? 0 : MOUNT; }
   /** turn a hand by `ang` about the length of the weapon in its grip */
   const edgeOn = (hand: THREE.Object3D, g: THREE.Object3D, ang: number): void => {
     _hd.set(0, 1, 0).applyQuaternion(g.quaternion);
@@ -1072,7 +1075,7 @@ export function buildWarrior(): Model {
       sheathed = sheathe;
       const h = offHeld.hang ?? { at: 0.1, down: true };
       (sheathe ? (h.down ? hangDown : hangUp) : gripL).add(offHeld.group);
-      offHeld.group.position.set(0, sheathe ? -h.at : 0, 0); offHeld.group.rotation.y = sheathe || fp ? 0 : MOUNT;
+      offHeld.group.position.set(0, sheathe ? -h.at : 0, 0); offHeld.group.rotation.y = sheathe ? 0 : MOUNT;
     }
     if (chopTail > 0) chopTail = Math.max(0, chopTail - dt / 0.3);
     const began = !!raw && (raw.name !== lastName || raw.t < lastK - 0.2), ended = !raw && lastName !== '';
@@ -1463,7 +1466,7 @@ export function buildWarrior(): Model {
       _va.lerpVectors(FP_TWO_AT, _va, vw); _vd.lerpVectors(FP_TWO_DIR, _vd.normalize(), vw);
       eyesTwo.apply(_va, _vd, dt);
       _vg.copy(_vd).normalize().multiplyScalar(-offGrip.position.y * root.scale.x).add(_va);
-      holdInView(ARM_R, _vg, _vd, FP_TWO_POLE, 1 - aw, FACE_EYES, viewFlat);
+      holdInView(ARM_R, _vg, _vd, FP_TWO_POLE, 1 - aw, FACE_EYES, lerp(1, viewFlat, vw));
     }
     if (fp && !two && st.dead < 0) {
       // (at rest each blade is held low on its own side of the view, `oneRest`, a move's place over it by its weight:
@@ -1614,7 +1617,7 @@ export function buildWarrior(): Model {
     reset: () => { legs.reset(); fade.reset(); },
     // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
     armsFov: () => EYES.fov,
-    firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on && gloved; mountAll(); },
+    firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on && gloved; },
     dispose() {
       kit.dispose();
       for (const f of furs) f.dispose();

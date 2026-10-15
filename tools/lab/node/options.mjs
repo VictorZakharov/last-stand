@@ -646,13 +646,30 @@ export const COMMANDS = {
   match: {
     help: 'the hero standing through the eyes beside a reference\'s screenshot (a game his first-person weapons are '
       + 'posed after), on a screen of its shape: the screenshot, his frame and the two blended, the points marked '
-      + 'on it (<picture>.marks.json: crop, points in and tip, wide) and his own drawn on each, and how far his are '
-      + 'off: tools/lab/out/match/<picture>/match.png',
+      + 'on it (<picture>.marks.json: crop, points in and tip, wide, box, the weapon\'s and fist\'s outline) and '
+      + 'his own drawn on each, how far his are off and how much of the outlines his frame covers: '
+      + 'tools/lab/out/match/<picture>/match.png',
     argument: 'picture',
     options: {
+      fit: {
+        kind: 'list',
+        usage: 'name.field,...',
+        help: 'tunable values searched for the rest that frames his weapon nearest the marks, then pictured, with '
+          + 'the --tune that gives it (warriorEyes.restOn,warriorEyes.restDir)',
+      },
+      near: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['line', 'wide', 'box', 'outline'],
+        default: 'outline',
+        help: 'the marks --fit comes near: the weapon\'s line (in and tip), its width, the part of the frame it '
+          + 'covers, the outlines of the weapon and the fist (by default: each number alone was matched with the '
+          + 'head out of the frame)',
+      },
       canary: {
         kind: 'switch',
-        help: 'his points taken as the reference\'s moved 10% across: the comparison must find them so',
+        help: 'his points taken as the reference\'s moved 10% across: the comparison must find them so; with '
+          + '--fit, fitted to his own frame from values moved off it: the fit must find its way back',
       },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,

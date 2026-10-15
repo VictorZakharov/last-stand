@@ -8,7 +8,7 @@ import { UI_STATES } from './options.mjs';
 import { REPO } from './paths.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { writeSheet } from './sheetImage.mjs';
-import { compare, readReference, screenFor, writeMatch } from './match.mjs';
+import { compare, marksOf, readReference, screenFor, writeMatch } from './match.mjs';
 
 /** the waves `spawns` sets off in each biome unless `--waves` says */
 const SPAWN_WAVES = 32;
@@ -690,9 +690,20 @@ export const COMMANDS = {
       if (options.screen || options.screens) throw labError('match: the screen is the reference\'s shape; no --screen');
     },
     async each(side, options) {
-      await side.showOn(screenFor(readReference(resolve(options._[0]))));
+      const reference = readReference(resolve(options._[0]));
+      await side.showOn(screenFor(reference));
       const fixture = { ...fixtureFrom(options), view: 'first' };
-      return side.command('sheet', { states: ['stand'], views: ['eyes'], fixture });
+      const fit = options.fit
+        ? await side.command('fitRest', {
+          fixture,
+          marks: marksOf(reference, options.near),
+          fields: options.fit,
+          canary: Boolean(options.canary),
+        })
+        : undefined;
+      const pictured = fit ? { ...fixture, tune: { ...fixture.tune, ...fit.tune } } : fixture;
+      const sheet = await side.command('sheet', { states: ['stand'], views: ['eyes'], fixture: pictured });
+      return { ...sheet, fit: fit && { ...fit, to: options.near } };
     },
     async finish(results, options, session) {
       const reference = readReference(resolve(options._[0]));

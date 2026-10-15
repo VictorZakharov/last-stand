@@ -13,13 +13,25 @@ export function tunable<T extends Record<string, Value>>(name: string, values: T
   return values;
 }
 
-/** Sets `path` (`name.field`) to `value`, a number or a list of as many as the field holds. */
-function tune(path: string, value: number[]): void {
+/** The tunable object and field `path` (`name.field`) names, and the field's value now. */
+function fieldOf(path: string): { values: Record<string, Value>; field: string; now: Value } {
   const [name, field] = path.split('.');
   const values = registry.get(name);
   if (!values) throw new Error(`no tunable ${name} (there are: ${[...registry.keys()].join(', ') || 'none'})`);
   const now = values[field];
   if (now === undefined) throw new Error(`${name} has no ${field} (it has: ${Object.keys(values).join(', ')})`);
+  return { values, field, now };
+}
+
+/** The value of `path` (`name.field`) now, as a list (the lab's `match --fit` starts from it). */
+function tuned(path: string): number[] {
+  const { now } = fieldOf(path);
+  return typeof now === 'number' ? [now] : [...now];
+}
+
+/** Sets `path` (`name.field`) to `value`, a number or a list of as many as the field holds. */
+function tune(path: string, value: number[]): void {
+  const { values, field, now } = fieldOf(path);
   if (typeof now === 'number') {
     if (value.length !== 1) throw new Error(`${path} is one number`);
     values[field] = value[0];
@@ -31,9 +43,13 @@ function tune(path: string, value: number[]): void {
 
 declare global {
   interface Window {
-    /** dev builds: sets a tunable value (`tunable`) */
+    /** dev builds: sets a tunable value (`tunable`), and reads one */
     __tune?: (path: string, value: number[]) => void;
+    __tuned?: (path: string) => number[];
   }
 }
 
-if (import.meta.env.DEV) window.__tune = tune;
+if (import.meta.env.DEV) {
+  window.__tune = tune;
+  window.__tuned = tuned;
+}

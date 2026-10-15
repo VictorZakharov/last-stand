@@ -29,6 +29,7 @@ import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
 import type { EyesOptions } from './eyes';
+import type { Fit, FitOptions } from './fitRest';
 
 export interface SheetCommand {
   states: string[];
@@ -73,6 +74,12 @@ export async function weapons(lab: Lab, command: WeaponsOptions): Promise<Report
 export async function hands(lab: Lab, command: HandsOptions): Promise<Report> {
   const { hands: picture } = await import('./hands');
   return picture(lab, command);
+}
+
+/** `lab match --fit`: a rest's tunable values fitted to a reference's marks. */
+export async function fitRest(lab: Lab, command: FitOptions): Promise<Fit> {
+  const { fitRest: fit } = await import('./fitRest');
+  return fit(lab, command);
 }
 
 /** `lab sheet`: the pictures and their notes. */
