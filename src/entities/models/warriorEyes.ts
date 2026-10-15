@@ -72,6 +72,14 @@ const SWINGS = tunable('warriorSwings', {
   // from where the forehand left the blade)
   twoRestPlane: [0.22, -0.3, -0.22, 285],
   twoRest: [0, 30, 0.52, 0, 0, 40],
+  // (and a two-hander with a head, an axe or a maul: its head held lower and leaning out to the right, as Vermintide
+  // 2's hammer is, all of it seen; its plane through the same shoulder, crossing the view at `twoRestHeadTurn`, the
+  // fists where a blade's are. Held as a blade is, its striking part where a blade's is, a shorter weapon stood
+  // upright and its head was out of the frame but for its lower edge, 14% of it; the owner: "two handed maul should be
+  // lowered to see more of its head". Fitted to the hammer's line, the fists came up to the shoulder, the elbow 19
+  // degrees past its range)
+  twoRestHeadTurn: [270],
+  twoRestHead: [0, 15, 0.52, 0, 0, 40],
   // (driven by the trunk, as a body swings a heavy weapon: the arm's own sweep a short one, in a plane the arms hold
   // it in within their ranges, carried round the spine by the trunk's turn (`twoTurn`), from 29 degrees to the right
   // to 40 to the left: drawn back by the right shoulder over a quarter of the cut, its speed built over a ninth of a
@@ -137,14 +145,9 @@ const SWINGS = tunable('warriorSwings', {
     1, -28, 0.56, -30, 0, 0,
   ],
   // (and back from where each left it to the guard, its plane turned from the cut's into the guard's: `twoOutTurn`)
-  twoOutFore: [
-    0, -28, 0.56, -30, 55, 0,
-    1, 30, 0.52, 0, 0, 40,
-  ],
-  twoOutBack: [
-    0, -28, 0.56, -30, 0, 0,
-    1, 30, 0.52, 0, 0, 40,
-  ],
+  // (each begun at the cut's last key, the guard's own last: `backTo`)
+  twoOutFore: [0, -28, 0.56, -30, 55, 0],
+  twoOutBack: [0, -28, 0.56, -30, 0, 0],
   /** how far the fist holds a one-hander's handle diagonally across its palm through a cut (degrees, as a hand holds
    *  a sword: hands.ts `SLANT` at most) */
   cutSlant: 25,
@@ -163,8 +166,8 @@ const SWINGS = tunable('warriorSwings', {
   /** and of its way back to its guard, from the cut's into the guard's */
   twoOutTurn: [0, 1],
 }, {
-  oneFore: SWING_KEY, oneBack: SWING_KEY, twoRest: SWING_KEY, twoFore: SWING_KEY, twoForeRow: SWING_KEY,
-  twoBack: SWING_KEY, twoOutFore: SWING_KEY, twoOutBack: SWING_KEY,
+  oneFore: SWING_KEY, oneBack: SWING_KEY, twoRest: SWING_KEY, twoRestHead: SWING_KEY, twoFore: SWING_KEY,
+  twoForeRow: SWING_KEY, twoBack: SWING_KEY, twoOutFore: SWING_KEY, twoOutBack: SWING_KEY,
 });
 export const CUT_TURN: readonly number[] = SWINGS.cutTurn;
 export const TWO_CUT_TURN: readonly number[] = SWINGS.twoTurn;
@@ -183,6 +186,16 @@ export const TWO_REST: ViewSwing = {
   get slant() { return SWINGS.cutSlant; },
   hit: 0,
 };
+export const TWO_REST_HEAD: ViewSwing = {
+  get plane() { return [...SWINGS.twoRestPlane.slice(0, 3), SWINGS.twoRestHeadTurn[0]]; },
+  keys: SWINGS.twoRestHead,
+  get slant() { return SWINGS.cutSlant; },
+  hit: 0,
+};
+/** the two-handers with a head, which rest as `TWO_REST_HEAD` (models/warrior.ts names them); the others are blades */
+const HEADED = new Set(['Greataxe', 'Maul']);
+/** the guard a two-hander rests in, by its name */
+export const twoRestOf = (weapon: string): ViewSwing => (HEADED.has(weapon) ? TWO_REST_HEAD : TWO_REST);
 export const TWO_FORE_CUT: ViewSwing = {
   plane: SWINGS.twoForePlane, keys: SWINGS.twoFore,
   get slant() { return SWINGS.cutSlant; },
@@ -202,26 +215,28 @@ export const TWO_BACK_CUT: ViewSwing = {
   from: TWO_FORE_CUT,
   turning: SWINGS.twoRowTurn,
 };
-/** a two-hander's way back to its guard from where its forehand left it, or its backhand: its last key the guard's
- *  (`TWO_REST`), its plane turned into the guard's */
-export const TWO_FORE_OUT: ViewSwing = {
-  plane: SWINGS.twoRestPlane, keys: SWINGS.twoOutFore,
-  get slant() { return SWINGS.cutSlant; },
-  hit: 1,
-  from: TWO_FORE_CUT,
-  turning: SWINGS.twoOutTurn,
-};
-export const TWO_BACK_OUT: ViewSwing = {
-  plane: SWINGS.twoRestPlane, keys: SWINGS.twoOutBack,
-  get slant() { return SWINGS.cutSlant; },
-  hit: 1,
-  from: TWO_BACK_CUT,
-  turning: SWINGS.twoOutTurn,
-};
+/** A two-hander's way back to `rest` from where a cut (`from`) left it: `start`, the cut's last key, then the guard's
+ *  at its end, its plane turned from the cut's into the guard's. */
+function backTo(rest: ViewSwing, from: ViewSwing, start: readonly number[]): ViewSwing {
+  return {
+    get plane() { return rest.plane; },
+    get keys() { return [...start, 1, ...rest.keys.slice(1, SWING_KEY)]; },
+    get slant() { return SWINGS.cutSlant; },
+    hit: 1,
+    from,
+    turning: SWINGS.twoOutTurn,
+  };
+}
+/** each guard's ways back to it, from where the forehand left the weapon and where the backhand did */
+export const TWO_OUTS = new Map([TWO_REST, TWO_REST_HEAD].map((rest) => [rest, {
+  fore: backTo(rest, TWO_FORE_CUT, SWINGS.twoOutFore),
+  back: backTo(rest, TWO_BACK_CUT, SWINGS.twoOutBack),
+}]));
 /** the swings by their names in `warriorSwings` (the lab's `swing` keys a pose in one) */
 export const SWINGS_NAMED: Readonly<Record<string, ViewSwing>> = {
-  oneFore: ONE_FORE_CUT, oneBack: ONE_BACK_CUT, twoRest: TWO_REST, twoFore: TWO_FORE_CUT, twoForeRow: TWO_FORE_ROW,
-  twoBack: TWO_BACK_CUT, twoOutFore: TWO_FORE_OUT, twoOutBack: TWO_BACK_OUT,
+  oneFore: ONE_FORE_CUT, oneBack: ONE_BACK_CUT, twoRest: TWO_REST, twoRestHead: TWO_REST_HEAD, twoFore: TWO_FORE_CUT,
+  twoForeRow: TWO_FORE_ROW, twoBack: TWO_BACK_CUT, twoOutFore: TWO_OUTS.get(TWO_REST)!.fore,
+  twoOutBack: TWO_OUTS.get(TWO_REST)!.back,
 };
 
 /** a two-hander at rest through the eyes, in a middle guard: the fists low on the right of the crosshair (the lower

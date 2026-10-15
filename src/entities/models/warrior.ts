@@ -27,7 +27,7 @@ import {
 import { swingAt, swingShoulder, turnWithTrunk, type ArmBones } from '../viewSwing';
 import { tunable } from '../../core/tuning';
 import {
-  TWO_REST, TWO_FORE_CUT, TWO_FORE_ROW, TWO_BACK_CUT, TWO_FORE_OUT, TWO_BACK_OUT, ONE_FORE_CUT, ONE_BACK_CUT,
+  TWO_REST, TWO_FORE_CUT, TWO_FORE_ROW, TWO_BACK_CUT, TWO_OUTS, twoRestOf, ONE_FORE_CUT, ONE_BACK_CUT,
   CUT_TURN, TWO_CUT_TURN,
   POWER_TWO, SMITE_TWO, POWER_ONE,
   RECOVER_TWO, ONE_DOWN_AT, ONE_DOWN_DIR,
@@ -210,7 +210,7 @@ const SWING_HOLD = 0.7, SWING_OUT = 0.4;
  *  shoulder and the elbow folded 9 degrees past its range.) */
 const OUT_VIA = 0.25, OUT_REST = 0.2, OUT_AT = 0.2;
 /** Through the eyes, a two-hander's way back to its guard from where a cut's held end left it (s): keyed as a swing
- *  from there, its plane turned into the guard's (`TWO_FORE_OUT`, `TWO_BACK_OUT`). (Faded straight there, the grip
+ *  from there, its plane turned into the guard's (`TWO_OUTS`). (Faded straight there, the grip
  *  went straight across, the fist turned on its own, and the right wrist bent 11 to 18 degrees past its range and
  *  the left shoulder 22.) */
 const TWO_OUT = 0.45;
@@ -1351,7 +1351,8 @@ export function buildWarrior(): Model {
           wL = fw; flatL = 1; edgeL = fw; swingSlantL = -THREE.MathUtils.degToRad(ONE_FORE_CUT.slant);
         } else {
           const twoFore = inRow && !outing ? TWO_FORE_ROW : TWO_FORE_CUT;
-          const twoCut = outing ? (side > 0 ? TWO_FORE_OUT : TWO_BACK_OUT) : fore ? twoFore : TWO_BACK_CUT;
+          const outs = TWO_OUTS.get(twoRestOf(held?.group.name ?? ''))!;
+          const twoCut = outing ? (side > 0 ? outs.fore : outs.back) : fore ? twoFore : TWO_BACK_CUT;
           const cut = two ? twoCut : fore ? ONE_FORE_CUT : ONE_BACK_CUT;
           swingAt(cut, two && outing ? outP : k, armBones(held), _ra, _rd, _mr, _pr); swingShoulder(cut, _sr);
           // (a two-hander's carried round the spine by the trunk's turn, the shoulder with it)
@@ -1679,10 +1680,12 @@ export function buildWarrior(): Model {
       // move says, the elbow towards `FP_TWO_POLE`, the shoulder where `armsFromBelow` put it. Held from the shoulder
       // under the camera, its forearm rose up the view along the handle and the wrist was bent 126 degrees past its
       // range)
-      swingAt(TWO_REST, 0, armBones(held), _er, _ed, _ef, _pe);
+      // (a weapon with a head held lower, to be seen: `twoRestOf`)
+      const rest = twoRestOf(held.group.name);
+      swingAt(rest, 0, armBones(held), _er, _ed, _ef, _pe);
       if (wR === 0) {
-        keyArm('right', swingShoulder(TWO_REST, _sr), _pe, _er, _ed, 1);
-        swingSlantR = THREE.MathUtils.degToRad(TWO_REST.slant);
+        keyArm('right', swingShoulder(rest, _sr), _pe, _er, _ed, 1);
+        swingSlantR = THREE.MathUtils.degToRad(rest.slant);
       }
       _ra.lerpVectors(_er, _ra, wR); _rd.lerpVectors(_ed, _rd.normalize(), wR); _pr.lerpVectors(_pe, _pr, wR);
       turnTowards(_ef, _mr, wR, _mr);
