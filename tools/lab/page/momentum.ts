@@ -32,6 +32,8 @@ export interface Momentum {
   fastest: number;
   speed: number;
   turn: number;
+  /** the way it turns about at its blow (world, a unit way: its plane's, and which way round) */
+  about: THREE.Vector3;
   /** how long its speed takes to build from `BUILT_FROM` of its fastest to it, and to die away from it to `DIES_TO`
    *  of it (ms; null: not within the frames) */
   rise: number | null;
@@ -93,6 +95,11 @@ const PLANE_FROM = 0.15;
  *  (degrees off level): a cleave sweeps through what's before it */
 const ACROSS_LEAST = 0.6;
 const SLOPE_MOST = 35;
+/** a cut in a row turns in a plane at least this far (degrees) off the last one's run back: a weapon's momentum
+ *  carries it round into the next cut, as a figure of eight swings it, and a cut that only reverses the last one's
+ *  way stops it dead and drives it back the way it came (the owner, of the two-hander's return cut: "you cannot just
+ *  reverse the direction") */
+const RUN_BACK_LEAST = 45;
 /** a cut's fastest frame is looked for this many frames either side of the strike's */
 const NEAR_FASTEST = 3;
 
@@ -249,6 +256,7 @@ export function momentumOf(frames: SwingFrame[], near: number, frameMs: number, 
     fastest,
     speed: speeds[fastest],
     turn: turns[fastest].angle / (frameMs / 1000),
+    about: turns[fastest].about.clone(),
     rise: start < 0 ? null : (fastest - start) * frameMs,
     fall: end < 0 ? null : (end - fastest) * frameMs,
     carried: carriedOf(turns, fastest, to),
@@ -332,6 +340,22 @@ export function momentumProblems(swing: Momentum, at: (i: number) => string): st
   return problems;
 }
 
+/** How far (degrees) the plane `next` turns in is off `last`'s run back: 0 the same way back, 180 the same way on. */
+export function runBackOf(last: Momentum, next: Momentum): number {
+  return next.about.angleTo(last.about.clone().negate()) * DEG;
+}
+
+/** A cut in a row (`next`, the `index`th of it, from 1) against the last one: its line, and its problem if it's that
+ *  one run back. */
+export function rowOfSwings(last: Momentum, next: Momentum, index: number): { line: string; problems: string[] } {
+  const off = runBackOf(last, next);
+  const line = `cut ${index} swung in a plane ${off.toFixed(0)}° off cut ${index - 1}'s run back`;
+  if (off >= RUN_BACK_LEAST) return { line, problems: [] };
+  const problem = `cut ${index} is cut ${index - 1} run back: its plane ${off.toFixed(0)}° off that one's `
+    + `reversed (at least ${RUN_BACK_LEAST}°: a weapon's momentum carries it round into the next cut)`;
+  return { line, problems: [problem] };
+}
+
 /** A fault the canary plants in a swing's frames: its name, and the frames and the fastest's index with it. */
 interface Planted {
   name: string;
@@ -392,6 +416,17 @@ function plantedFaults(frames: SwingFrame[], fastest: number): { planted: Plante
     { planted: { name: 'lifted out of its plane', frames: lifted(frames, fastest), near: fastest },
       finds: /arc kinks|out of its plane|turns back/ },
   ];
+}
+
+/** The row's canary: a cut's swing (`frames`, its fastest frame `fastest`) followed by its own frames run backward,
+ *  the next cut only reversing it, which the row's measure must find. */
+export function rowCanary(frames: SwingFrame[], fastest: number, frameMs: number, heavy: boolean): string {
+  const last = momentumOf(frames, fastest, frameMs, heavy);
+  const back = momentumOf([...frames].reverse(), frames.length - 1 - fastest, frameMs, heavy);
+  if (!last || !back) return 'missed: the cut run backward didn\'t swing';
+  const caught = rowOfSwings(last, back, 2).problems.length > 0;
+  const off = runBackOf(last, back).toFixed(0);
+  return `${caught ? 'caught' : 'missed'}: a cut followed by itself run backward, ${off}°`;
 }
 
 /** The canary: each fault planted in a swing's frames (`frames`, its fastest frame `fastest`), and whether the

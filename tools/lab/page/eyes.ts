@@ -24,7 +24,10 @@ import {
 } from './cuts';
 import type { CutFrame, InView, Landing, RestBlades, RowCast } from './cuts';
 import { swingDiagram } from './swingDiagram';
-import { describeMomentum, momentumCanary, momentumOf, momentumProblems, type SwingFrame } from './momentum';
+import {
+  describeMomentum, momentumCanary, momentumOf, momentumProblems, rowCanary, rowOfSwings,
+} from './momentum';
+import type { Momentum, SwingFrame } from './momentum';
 import { describeKeyed, describeKeyedFrame, keyedNow, triple, type KeyedFrame } from './keyed';
 import type { ArmAt, ArmsAt, Lens, Phase } from './swingDiagram';
 
@@ -650,6 +653,14 @@ function cutsOf(followed: Followed, strikes: (Strike | null)[], skill: BoundSkil
   return rowOfCuts(casts, followed.blades, window.__labClock.frame);
 }
 
+/** Whether a cast follows on from the one before it as the next cut of a row: begun as the same hand's other cut
+ *  (`Model.swing`), not a forehand again from the rest after a pause, nor the other hand's. */
+function chained(frames: Seen[]): boolean {
+  const before = frames[0];
+  const now = frames[frames.length - 1];
+  return before.hand === now.hand && before.side !== null && now.side !== null && before.side !== now.side;
+}
+
 /** A cast's frames as its swing's: each frame's (one without a weapon held as the frame before it, or the first held
  *  after it). */
 function swingFrames(frames: Seen[]): SwingFrame[] | null {
@@ -673,6 +684,9 @@ function swingsOf(seen: Seen[], strikes: (Strike | null)[], skill: BoundSkill):
   const lines: string[] = [];
   const problems: string[] = [];
   const measured: { frames: SwingFrame[]; fastest: number; heavy: boolean }[] = [];
+  // (the last cast's swing, while the next follows on from it: a row's, the key held or let go for less than the
+  // hold of a cut's end)
+  let last: Momentum | null = null;
   for (const [i, frames] of castFrames(seen).entries()) {
     const swing = swingFrames(frames);
     const strike = strikes[i];
@@ -683,11 +697,20 @@ function swingsOf(seen: Seen[], strikes: (Strike | null)[], skill: BoundSkill):
     const at = (index: number) => `frame ${frames[index].frame} (${shareOf(frames[index])})`;
     lines.push(`${skill.def.name} ${i + 1}: ${describeMomentum(whole, at)}`);
     for (const problem of momentumProblems(whole, at)) problems.push(`cast ${i + 1}: ${problem}`);
+    if (last && chained(frames)) {
+      const row = rowOfSwings(last, whole, i + 1);
+      lines.push(`${skill.def.name}: ${row.line}`);
+      problems.push(...row.problems);
+    }
+    last = whole;
     measured.push({ frames: swing, fastest: whole.fastest, heavy });
   }
   const canary = () => {
     const first = measured[0];
-    return first ? momentumCanary(first.frames, first.fastest, window.__labClock.frame, first.heavy) : [];
+    if (!first) return [];
+    const frameMs = window.__labClock.frame;
+    const faults = momentumCanary(first.frames, first.fastest, frameMs, first.heavy);
+    return [...faults, rowCanary(first.frames, first.fastest, frameMs, first.heavy)];
   };
   return { lines, problems, canary };
 }
