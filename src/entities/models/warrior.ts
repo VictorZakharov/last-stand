@@ -79,9 +79,24 @@ const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHO
  *  its wrist's bend costs it (armIK's `wristW`, `wrist`) (`fitInView`) */
 const EYES = tunable('warriorEyes', {
   shoulder: [0.22, -0.46, -0.25], restOn: [0.72, -1.8, 0.5], restDir: [0.1, 1, -0.45], pole: [-1, -0.3, 0.3],
-  oneOn: [0.75, -1.1, 0.5], oneDir: [0.08, 1, -0.35], oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1,
+  oneOn: [0.58, -1.3, 0.6], oneDir: [0.45, 1, -0.3], bladeOn: [0.76, -0.42, 0.5], bladeDir: [0.4, 1, -0.2],
+  bladeFlat: [-0.7, 0, 0.7],
+  oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1,
 });
-const _er = new THREE.Vector3(), _ed = new THREE.Vector3();
+const _er = new THREE.Vector3(), _ed = new THREE.Vector3(), _ef = new THREE.Vector3();
+const _rf = new THREE.Vector3(), _lf = new THREE.Vector3();
+/** a one-hander's rest through the eyes, into `on`, `way` and the way its flat faces (`flat`), and returns how much of
+ *  the way that turns it: a sword's (`bladeOn`, `bladeDir`: its hilt and the fist in the corner, the blade up to the
+ *  top right, as Vermintide 2's sword; `bladeFlat`, turned on its length so it's seen narrow, as that one is: face on,
+ *  it was twice as wide) or a hafted weapon's (`oneOn`, `oneDir`: the fist below the frame, the haft in over its bottom
+ *  edge, the head at the right, as its axe; left to the fist's own turn) */
+function oneRest(w: Weapon, on: THREE.Vector3, way: THREE.Vector3, flat: THREE.Vector3): number {
+  const blade = !!w.hang?.down;
+  fromScreen(blade ? EYES.bladeOn : EYES.oneOn, on);
+  way.fromArray(blade ? EYES.bladeDir : EYES.oneDir).normalize();
+  flat.fromArray(EYES.bladeFlat).normalize();
+  return blade ? 1 : 0;
+}
 const _fw = [0, 1, 2, 3, 4, 5].map(() => new THREE.Vector3()), _fwq = new THREE.Quaternion();
 /** how long the left hand takes to come onto the lower grip as a two-hander comes off the shoulder (s) */
 const TAKE_HOLD = 0.15;
@@ -1449,14 +1464,21 @@ export function buildWarrior(): Model {
       holdInView(ARM_R, _vg, _vd, FP_TWO_POLE, 1 - aw, FACE_EYES, viewFlat);
     }
     if (fp && !two && st.dead < 0) {
-      // (at rest each blade is held low on its own side of the view, `EYES.oneOn`, a move's place over it by its weight:
+      // (at rest each blade is held low on its own side of the view, `oneRest`, a move's place over it by its weight:
       // left to the stance's own angles, the arms' shoulders moved under the camera put the hilts under the frame)
-      fromScreen(EYES.oneOn, _er); _ed.fromArray(EYES.oneDir).normalize();
-      if (held) { _ra.lerpVectors(_er, _ra, wR); _rd.lerpVectors(_ed, _rd.normalize(), wR); wR = 1; }
-      _er.x = -_er.x; _ed.x = -_ed.x;
-      if (offHeld) { _la.lerpVectors(_er, _la, wL); _ld.lerpVectors(_ed, _ld.normalize(), wL); wL = 1; }
-      if (held && wR > 0) { eyesR.apply(_ra, _rd, dt); holdInView(ARM_R, _ra, _rd, POLE_VR, wR, FACE_EYES, flatR); }
-      if (offHeld && wL > 0) { eyesL.apply(_la, _ld, dt); holdInView(ARM_L, _la, _ld, POLE_VL, wL, FACE_EYES, flatL); }
+      // (and its flat turned as the rest has it, a move's to the eyes over it by the move's weight)
+      if (held) {
+        const k = oneRest(held, _er, _ed, _ef);
+        _ra.lerpVectors(_er, _ra, wR); _rd.lerpVectors(_ed, _rd.normalize(), wR);
+        _rf.lerpVectors(_ef, FACE_EYES, wR).normalize(); flatR = lerp(k, flatR, wR); wR = 1;
+      }
+      if (offHeld) {
+        const k = oneRest(offHeld, _er, _ed, _ef); _er.x = -_er.x; _ed.x = -_ed.x; _ef.x = -_ef.x;
+        _la.lerpVectors(_er, _la, wL); _ld.lerpVectors(_ed, _ld.normalize(), wL);
+        _lf.lerpVectors(_ef, FACE_EYES, wL).normalize(); flatL = lerp(k, flatL, wL); wL = 1;
+      }
+      if (held && wR > 0) { eyesR.apply(_ra, _rd, dt); holdInView(ARM_R, _ra, _rd, POLE_VR, wR, _rf, flatR); }
+      if (offHeld && wL > 0) { eyesL.apply(_la, _ld, dt); holdInView(ARM_L, _la, _ld, POLE_VL, wL, _lf, flatL); }
     }
     // (a hand not placed in the view this frame has no place there to fade from)
     if (!fp || two || st.dead >= 0 || !held || wR === 0) eyesR.reset();
