@@ -21,7 +21,7 @@ import { TipMoves } from './tipMoves';
 import { CANARY_CAUGHT as WEAPON_CAUGHT, WeaponFloor, weaponCanary } from './weaponFloor';
 
 /** A hand as it is turned in its grip: the group of its own meshes under the joint, as `watchBody` measures it. */
-function turnedHand(hand: THREE.Object3D): THREE.Object3D {
+export function turnedHand(hand: THREE.Object3D): THREE.Object3D {
   const own = (child: THREE.Object3D) => (child as THREE.Mesh).isMesh && child.userData.own;
   return hand.children.find((child) => (child as THREE.Group).isGroup && child.children.some(own)) ?? hand;
 }

@@ -11,7 +11,7 @@ import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ram
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
-import { fitArm, solveArm } from './armIK';
+import { fitArm, solveArm, type ArmResult } from './armIK';
 import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, DRINK_SHEATHED, type DrinkHold } from './flask';
@@ -70,12 +70,16 @@ const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHO
  *  first-person arms come up from the screen's bottom corners; a two-hander at rest there, as its moves are keyed
  *  (`restAt`, the lower grip's place; `restDir`, the weapon's way: the whole of it in the frame, diagonal from the
  *  bottom right towards the top, right of the crosshair) and where its right elbow points (`pole`, the chest's frame);
- *  and a one-hander at rest (`oneAt`, its grip's place; `oneDir`, its way; a second blade's mirrors it) */
+ *  and a one-hander at rest (`oneAt`, its grip's place; `oneDir`, its way; a second blade's mirrors it), held from
+ *  shoulders of their own (`oneShoulder`); and how far
+ *  a fist may turn about its handle (rad, `roll`) for its arm to keep within a body's ranges, and what each degree of
+ *  its wrist's bend costs it (armIK's `wristW`, `wrist`) (`fitInView`) */
 const EYES = tunable('warriorEyes', {
   shoulder: [0.22, -0.46, -0.25], restAt: [0.28, -0.42, -0.48], restDir: [-0.3, 0.7, -0.6], pole: [-1, -0.3, 0.3],
-  oneAt: [0.26, -0.22, -0.62], oneDir: [-0.2, 0.85, -0.5],
+  oneAt: [0.26, -0.22, -0.62], oneDir: [-0.2, 0.85, -0.5], oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1,
 });
 const _er = new THREE.Vector3(), _ed = new THREE.Vector3();
+const _fw = [0, 1, 2, 3, 4, 5].map(() => new THREE.Vector3()), _fwq = new THREE.Quaternion();
 /** how long the left hand takes to come onto the lower grip as a two-hander comes off the shoulder (s) */
 const TAKE_HOLD = 0.15;
 /** the way a shouldered weapon's flat faces, in the chest's frame: sideways, as a straight fist holds it, palm in and
@@ -858,6 +862,22 @@ export function buildWarrior(): Model {
     }
   }
 
+  /** Through the eyes, an arm holding a weapon where it's seen brought within a body's ranges (armIK.ts), as third
+   *  person's are (`fitArm`): the grip and the weapon's way kept, the fist turned about the handle up to `EYES.roll`
+   *  and the handle slanted across the palm up to `slant`, and the elbow round to where neither the forearm's turn nor
+   *  the wrist goes past its range. `vis`: the hand's turn on its joint (`gripTurn`). (Placed by the reach and the
+   *  least turn of the weapon alone, the wrist bent 126 degrees towards the little finger over a one-hander at rest,
+   *  96 past its range, the hand cocked like a hook) */
+  function fitInView(left: boolean, g: THREE.Object3D, vis: THREE.Quaternion, slant?: number): ArmResult {
+    const hd = left ? j.handL : j.handR, el = left ? j.elbowL : j.elbowR, sh = left ? j.shoulderL : j.shoulderR;
+    root.updateMatrixWorld(true);
+    const wrist = hd.getWorldPosition(_fw[0]), hand = hd.getWorldQuaternion(_fwq).multiply(vis);
+    const axis = _fw[1].set(0, 1, 0).transformDirection(g.matrixWorld), at = g.getWorldPosition(_fw[2]);
+    const pole = el.getWorldPosition(_fw[3]).sub(sh.getWorldPosition(_fw[4]));
+    const shoulder = _fw[5].copy(sh.position);
+    return solveArm(j, left, { wrist, hand, vis, pole, slant, shoulder, roll: { axis, range: EYES.roll, at }, wristW: EYES.wrist });
+  }
+
   /** The shoulders' own places on the chest, and whether the eyes have moved them (`armsFromBelow`). */
   const shoulderRest = [j.shoulderR.position.clone(), j.shoulderL.position.clone()];
   let shouldersMoved = false;
@@ -866,14 +886,14 @@ export function buildWarrior(): Model {
    *  it, and its shoulder is never seen. Out of the eyes, back on the chest. (From the body's own shoulders, a weapon
    *  held to be seen was at arm's length, "physically impossible", and one held as a body holds it was out of the
    *  frame or a slab beside the face) */
-  function armsFromBelow(eyes: boolean): void {
+  function armsFromBelow(eyes: boolean, two: boolean): void {
     if (!eyes) {
       if (shouldersMoved) { j.shoulderR.position.copy(shoulderRest[0]); j.shoulderL.position.copy(shoulderRest[1]); }
       shouldersMoved = false;
       return;
     }
     root.updateMatrixWorld(true);
-    const [x, y, z] = EYES.shoulder;
+    const [x, y, z] = two ? EYES.shoulder : EYES.oneShoulder;
     j.shoulderR.position.copy(j.chest.worldToLocal(fromEyes(root, j.neck, _hw1.set(x, y, z), _hw2)));
     j.shoulderL.position.copy(j.chest.worldToLocal(fromEyes(root, j.neck, _hw1.set(-x, y, z), _hw2)));
     shouldersMoved = true;
@@ -1050,7 +1070,7 @@ export function buildWarrior(): Model {
     else takingHold = Math.max(0, takingHold - dt);
     shouldered = shoulderIt ? damp(shouldered, 1, SHOULDER_RATE, dt) : 0;
     lastName = raw?.name ?? ''; lastK = raw?.t ?? 1;
-    armsFromBelow(fp && st.dead < 0);
+    armsFromBelow(fp && st.dead < 0, two);
     if (fp && two) { FP_TWO_AT.fromArray(EYES.restAt); FP_TWO_DIR.fromArray(EYES.restDir).normalize(); FP_TWO_POLE.fromArray(EYES.pole); }
     // Twin Fangs strikes right, then left (in step with skills/twinFangs STRIKES)
     const left = !!offHeld && ((a?.name === 'swing' && side < 0) || (a?.name === 'flurry' && a.t > 0.5));
@@ -1464,6 +1484,9 @@ export function buildWarrior(): Model {
     slantR = 0; slantL = 0;
     if (aimDown > 0 && held && !fp && st.dead < 0) aimAtFloor(aimDown, bladeUp, fall * fall);
     if (!fp && st.dead < 0) slantR = fitArm(j, false, held ? gripTurn(handR, grip, _vr) : undefined, body, held && !two ? SLANT : undefined).slant;
+    // (a two-hander through the eyes is held as its moves are keyed, `EYES.restAt`: no rest fitted so was both natural
+    // and seen, all stood upright before the face)
+    else if (fp && st.dead < 0 && held && !two) slantR = fitInView(false, grip, gripTurn(handR, grip, _vr), SLANT).slant;
     // (the weapon seated in the fist as it holds it, its handle diagonal across the palm by that slant: before a lower grip is taken)
     if (held) seat(handR, grip, held.r, slantR);
     if (stop > 0 && held && st.dead < 0) groundStop(stop, fall >= 1);
@@ -1494,7 +1517,9 @@ export function buildWarrior(): Model {
         fistTurn(handL, _hd, _up, _fq);
         // (the handle may run diagonally across the lower palm, as a person's lower hand holds one: held square, that
         // wrist bent 73 degrees sideways, 43 past its range, through the two-handed swing)
-        const fit = solveArm(j, true, { wrist: _cur.negate().add(_gw), hand: _fq, roll: { axis: _hd, range: 1.1, at: _gw }, pole: _pw.copy(_pole).applyQuaternion(j.chest.getWorldQuaternion(_cq)), body, slant: SLANT });
+        // (through the eyes, from its shoulder under the camera, `armsFromBelow`)
+        const shoulder = fp ? _fw[5].copy(j.shoulderL.position) : undefined;
+        const fit = solveArm(j, true, { wrist: _cur.negate().add(_gw), hand: _fq, roll: { axis: _hd, range: 1.1, at: _gw }, pole: _pw.copy(_pole).applyQuaternion(j.chest.getWorldQuaternion(_cq)), body, slant: SLANT, shoulder });
         slantL = fit.slant;
         _up.applyAxisAngle(_hd, fit.roll);
         // (a grip out of reach for a frame or two is held through: a hand doesn't let go for 50 ms; and while the hand
@@ -1511,6 +1536,7 @@ export function buildWarrior(): Model {
 
     // the other arm within a body's ranges too, its hand where the pose put it
     if (!fp && st.dead < 0 && !twoHeld) { slantL = fitArm(j, true, offHeld && !sheathed ? gripTurn(handL, gripL, _vl) : undefined, body, offHeld && !sheathed ? SLANT : undefined).slant; }
+    else if (fp && st.dead < 0 && offHeld && !sheathed) slantL = fitInView(true, gripL, gripTurn(handL, gripL, _vl), SLANT).slant;
     // (a cut out of a blow turned to the floor and stopped by it, after the fade, fades from the arms as drawn; every
     // other from the pose's own: from the arms as fitted, the cut into a two-handed swing blended two elbows, and the
     // lower grip went 9 cm out of the left arm's reach)

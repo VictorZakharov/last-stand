@@ -26,6 +26,9 @@ export interface ArmGoal {
   body?: BodyShape;
   /** a hand round a handle along `axis` (world, through `at`) may turn about it up to `range` (rad) either way: the wrist and the hand turn round it together */
   roll?: { axis: THREE.Vector3; range: number; at: THREE.Vector3 };
+  /** where the shoulder is (its parent's frame), instead of its place on the body (the rig's `userData.rest`): through the
+   *  eyes, the arms' shoulders under the camera */
+  shoulder?: THREE.Vector3;
   /** the shoulder girdle may move the shoulder (anatomy.ts `GIRDLE`) when no elbow keeps the arm within its ranges with it at rest */
   girdle?: boolean;
   /** the girdle set to this raise and forward turn (degrees) whatever the arm needs, as an archer's back draws the shoulder
@@ -92,7 +95,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   par.updateWorldMatrix(true, false);
   par.getWorldQuaternion(_pq); _pqi.copy(_pq).invert();
   const L1 = j.P.upperL, L2 = j.P.foreL;
-  const rest = (sh.userData.rest as THREE.Vector3 | undefined) ?? sh.position;
+  const rest = g.shoulder ?? (sh.userData.rest as THREE.Vector3 | undefined) ?? sh.position;
   _S.copy(rest);
   const keep = g.keep ?? 8, prev = last.get(sh);
   const solids = g.body?.solids.filter((s) => s.name === 'head' || s.name === 'chest' || s.name === 'belly' || s.name === 'neck');
@@ -157,7 +160,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     if (want && ROM_ON) {
       eased(g, _rel.copy(_Qf).invert().multiply(want));
       cost += 2 * clampWrist(_rel, left, _cl);
-      if (g.wristW) cost += g.wristW * _wy.set(0, 1, 0).applyQuaternion(_rel).y < 1 ? Math.acos(Math.max(-1, Math.min(1, _wy.y))) * 57.3 : 0;
+      if (g.wristW) cost += g.wristW * Math.acos(Math.max(-1, Math.min(1, _wy.set(0, 1, 0).applyQuaternion(_rel).y))) * 57.3;
     }
     if (solids && ROM_ON) {
       // (the upper arm against the head only: at the shoulder it joins the trunk)

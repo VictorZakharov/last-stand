@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { measureBody } from '../../../src/entities/models/anatomy';
 import type { Joints } from '../../../src/entities/models/rig';
+import { turnedHand } from './range';
 
 /** A body segment: its mass (kg) and where its centre of mass lies along it from its upper joint (0..1). */
 interface Segment {
@@ -95,7 +96,9 @@ export function armComfort(joints: Joints, side: 'L' | 'R', held = 0): ArmComfor
   const shoulderMoment = momentAbout(shoulder, [[upperArmCentre, UPPER_ARM.mass], ...belowElbow]);
   const elbowMoment = momentAbout(elbow, belowElbow);
 
-  const angles = measureBody(joints);
+  // (the wrist as it's seen, the hand turned in its grip, as the range check reads it: the hand's joint alone read
+  // only the bend the joint takes, not the fist's on it)
+  const angles = measureBody(joints, { L: turnedHand(joints.handL), R: turnedHand(joints.handR) });
   return {
     shoulder: shoulderMoment,
     elbow: elbowMoment,
