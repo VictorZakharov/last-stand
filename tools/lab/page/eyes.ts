@@ -9,12 +9,19 @@ import * as THREE from 'three';
 import { G } from '../../../src/state';
 import type { Lab, Fixture, Pictured, Report, ViewName } from './lab';
 import { bindKnown, holdFor, pressing, skillNamed, type BoundSkill } from './cast';
-import { bodyBreaches, describeBreach, farFromHeld, grippingSides, whyLetGo, wristCanary } from './range';
+import {
+  bodyBreaches, describeBreach, drawnHand, farFromHeld, grippingSides, whyLetGo, wristCanary,
+} from './range';
 import type { Fist, LowerGrip } from '../../../src/types';
+import { SKILL_IMPLS } from '../../../src/combat/skills';
 import type { Breach } from '../../../src/entities/models/anatomy';
 import { armsLens } from './inFrame';
-import { describeStrike, plantLead, StrikeTracker, strikeIn, strikeProblems } from './strike';
+import { describeStrike, plantLead, plantSlide, SLID_WHIP, StrikeTracker, strikeIn, strikeProblems } from './strike';
 import type { Strike, StrikeFrame } from './strike';
+import {
+  aimCrossing, describeLanding, landingProblems, restBlades, restInView, rowOfCuts, sweptOver, tipAtEnd, weaponsInView,
+} from './cuts';
+import type { CutFrame, InView, Landing, RestBlades, RowCast } from './cuts';
 import { swingDiagram } from './swingDiagram';
 import type { ArmAt, ArmsAt, Lens, Phase } from './swingDiagram';
 
@@ -24,6 +31,9 @@ export interface EyesOptions {
   skill: string;
   /** how many casts in a row, the key held through them (a basic attack's chain of swings) */
   times: number;
+  /** each cast after the first pressed this long after the last one ended (s), the key let go between them (null:
+   *  held through) */
+  apart: number | null;
   /** a frame pictured into the film every this many, of one cast of the row (its index from 1) or of all */
   every: number;
   cast: number | null;
@@ -87,6 +97,20 @@ interface Seen {
   strike: StrikeFrame | null;
   /** the arms and the weapon in the eyes' space, for the swing diagram */
   pose: ArmsAt;
+  /** which way a swing goes (`Model.swing`: 1 the forehand; null on a game without it), and the hand whose weapon
+   *  the tip is on */
+  side: number | null;
+  hand: 'right' | 'left';
+}
+
+/** What `follow` saw: every frame, the frame before the first press (the arms at rest) and each held weapon's blade
+ *  then, each one's share in the frame then, and whether the hero's tip is at its weapon's end (problems if not). */
+interface Followed {
+  seen: Seen[];
+  rest: Seen;
+  blades: RestBlades;
+  views: InView[];
+  tip: string[];
 }
 
 interface SeenFist extends Fist {
@@ -157,16 +181,22 @@ export async function eyes(lab: Lab, options: EyesOptions): Promise<Report> {
   bindKnown(options.skill);
   const skill = skillNamed(options.skill);
   const film = options.film ? new Film(options.every, options.cast, options.close) : null;
-  const seen = await follow(lab, skill, options.times, film);
+  const followed = await follow(lab, skill, options, film);
+  const { seen } = followed;
   const lines = [`set up as ${JSON.stringify(setup)}`, shouldersSeen(lab), ...describeCasts(seen, skill.def.name)];
   lines.push(describeArmsPast(seen));
   const unseen = seen.filter((frame) => frame.held === false && !frame.other.on);
   if (unseen.length) lines.push(`the two-hander let go of out of the frame, unseen: ${framesOf(unseen)}`);
   if (options.frames) lines.push(...describeFrames(seen));
   lines.push(describeFists(seen));
-  const struck = describeStrikes(seen, skill.def.name);
+  const struck = describeStrikes(seen, skill.def);
   lines.push(...struck.lines);
-  const found = [...oneHanded(seen), ...openFists(seen), ...struck.problems];
+  const atRest = restInView(followed.views);
+  lines.push(atRest.line);
+  const row = cutsOf(followed, struck.strikes, skill);
+  if (row) lines.push(...row.lines);
+  const found = [...oneHanded(seen), ...openFists(seen), ...struck.problems, ...atRest.problems, ...followed.tip];
+  found.push(...(row?.problems ?? []));
   // (listed and not counted, a fist hung flexed 57 degrees off its forearm through a cut was called done)
   if (seen.some((frame) => frame.armsPast.length)) found.push(describeArmsPast(seen));
   const problems = found.map((line) => `${skill.def.name}: ${line}`);
@@ -174,12 +204,18 @@ export async function eyes(lab: Lab, options: EyesOptions): Promise<Report> {
     await lab.setup({ ...options.fixture, view: 'first' });
     const bent = wristCanary(lab);
     lines.push(`canary, the right fist bent on its forearm: ${bent.join('; ')}`);
-    const planted = await follow(lab, skill, options.times, null, plantFaults(lab));
-    const caught = canaryCaught(planted, seen);
+    const planted = await follow(lab, skill, options, null, plantFaults(lab));
+    const caught = canaryCaught(planted, followed, skill);
+    // (a canary missed is read off its own frames)
+    if (options.frames) lines.push('the canary\'s frames, its faults planted:', ...describeFrames(planted.seen));
     lines.push(`canary, the arms held as they were at the press and the other arm dropped: ${caught.join('; ')}`);
     const leads = await strikeCanaries(lab, options, skill);
     lines.push(`canary, the weapon turned about its length each frame: ${leads.join('; ')}`);
-    const verdicts = [...bent, ...caught, ...leads];
+    const slid = await slideCanary(lab, options, skill);
+    lines.push(`canary, the weapon held at its first turn, sliding with the hand: ${slid}`);
+    const lifted = await liftCanary(lab, options, skill, followed);
+    lines.push(`canary, the weapon lifted out of the fists each frame: ${lifted}`);
+    const verdicts = [...bent, ...caught, ...leads, slid, lifted];
     if (verdicts.some((verdict) => verdict.startsWith('missed'))) problems.push('the canary was missed');
   }
   const moments: Pictured[] = film ? [film.moment(`${skill.def.name} through the eyes`), ...film.closeUps] : [];
@@ -244,40 +280,72 @@ function armsAt(lab: Lab): ArmsAt {
 }
 
 /**
- * The frames from the press of `skill`'s key (held through `times` casts, or as long as the player would) until the
- * arms are at rest again, each as the eyes saw it; `plant`, if given, changes each frame before it's read.
+ * The frames from the press of `skill`'s key (held through `times` casts, or as long as the player would; or let go
+ * between casts and pressed again `apart` s after each ended) until the arms are at rest again, each as the eyes saw
+ * it, and the arms at rest before the press; `plant`, if given, changes each frame (and the rest) before it's read.
  */
 async function follow(
-  lab: Lab, skill: BoundSkill, times: number, film: Film | null, plant?: () => void,
-): Promise<Seen[]> {
+  lab: Lab, skill: BoundSkill, row: { times: number; apart: number | null }, film: Film | null, plant?: () => void,
+): Promise<Followed> {
   await lab.step(SETTLE_FRAMES);
   const aim = aheadOf(lab, AIM_AHEAD);
-  const holdFrames = Math.round(holdFor(skill.def) / (window.__labClock.frame / 1000));
-  const seen: Seen[] = [];
   const casts = new CastCount(lab);
   const strikes = new StrikeTracker(lab);
+  plant?.();
+  const rest = seeFrame(lab, -1, casts, undefined, strikes);
+  const blades = restBlades(lab, G.camera);
+  const views = weaponsInView(lab);
+  const tip = tipAtEnd(lab);
+  const presses = new Presses(skill, row);
+  const seen: Seen[] = [];
   let resting = 0;
   let after = 0;
   for (let frame = 0; frame < MOST_FRAMES; frame++) {
-    const held = casts.started < times || frame < holdFrames;
-    await lab.step(1, () => pressing(skill.key, aim, held));
+    const down = presses.down(frame, casts.started, Boolean(actionNow(lab)));
+    await lab.step(1, () => pressing(skill.key, aim, down));
     casts.read();
     plant?.();
-    const now = seeFrame(lab, frame, casts, seen[seen.length - 1], strikes);
+    const now = seeFrame(lab, frame, casts, seen[seen.length - 1] ?? rest, strikes);
     seen.push(now);
     film?.take(lab, now);
     if (casts.started === 0) {
       if (frame > SETTLE_FRAMES) throw new Error(`lab: eyes: ${skill.def.name} was never cast`);
       continue;
     }
-    if (actionNow(lab) || casts.started < times) continue;
+    if (actionNow(lab) || casts.started < row.times) continue;
     resting = now.moved < REST_MOVE ? resting + 1 : 0;
     after++;
     if (resting >= REST_FRAMES || after >= AFTER_FRAMES) break;
   }
   const name = skill.def.name;
-  if (casts.started < times) throw new Error(`lab: eyes: ${name} was cast ${casts.started} times of ${times}`);
-  return seen;
+  if (casts.started < row.times) throw new Error(`lab: eyes: ${name} was cast ${casts.started} times of ${row.times}`);
+  return { seen, rest, blades, views, tip };
+}
+
+/** When the skill's key is down: held through the casts of a row (or as long as the player would hold it), or let go
+ *  as each cast begins and pressed again `apart` s after it ended. */
+class Presses {
+  private readonly holdFrames: number;
+  private readonly apartFrames: number | null;
+  private idle = 0;
+
+  constructor(skill: BoundSkill, private readonly row: { times: number; apart: number | null }) {
+    const frameS = window.__labClock.frame / 1000;
+    this.holdFrames = Math.round(holdFor(skill.def) / frameS);
+    this.apartFrames = row.apart === null ? null : Math.round(row.apart / frameS);
+  }
+
+  /** Whether the key is down on `frame`, `started` casts begun so far and one going on now or not (`acting`). */
+  down(frame: number, started: number, acting: boolean): boolean {
+    if (this.apartFrames === null) return started < this.row.times || frame < this.holdFrames;
+    if (started >= this.row.times || acting) {
+      this.idle = 0;
+      return false;
+    }
+    if (started === 0) return true;
+    this.idle++;
+    return this.idle > this.apartFrames;
+  }
 }
 
 /** Where the shoulders are in the eyes' frame (m: right, up, ahead of the camera), and how far an arm reaches from
@@ -371,8 +439,15 @@ function seeFrame(lab: Lab, frame: number, casts: CastCount, last: Seen | undefi
     fists: fistsSeen(lab),
     strike: strikes.next(window.__labClock.frame / 1000),
     pose: armsAt(lab),
+    side: lab.model.swing ?? null,
+    hand: lab.model.tip?.parent?.parent === lab.joints.handL ? 'left' : 'right',
   };
 }
+
+/** A frame as the cut measures read it (page/cuts.ts). */
+const cutOf = (now: Seen): CutFrame => ({
+  grip: now.grip.at, tip: now.tip.at, hand: now.hand, side: now.side, inCast: now.share !== null, frame: now.frame,
+});
 
 /** Each wrist's angles as `measureBody` has them. */
 function wristsOf(angles: Record<string, number>): Wrist[] {
@@ -419,9 +494,11 @@ function fistsSeen(lab: Lab): SeenFist[] {
   });
 }
 
-/** Where a hand's fist closes (world): along the hand from its wrist (its -y, as the rig hangs the hand). */
+/** Where a hand's fist closes (world): along the hand as it's drawn from its wrist (its -y, as the rig hangs the hand;
+ *  along the joint's, which a fist round a handle is turned off by about 90 degrees, a point beside the fist was
+ *  read, out of the frame while the fist was in it). */
 function fistOf(lab: Lab, hand: THREE.Object3D): THREE.Vector3 {
-  const along = new THREE.Vector3(0, -1, 0).transformDirection(hand.matrixWorld);
+  const along = new THREE.Vector3(0, -1, 0).transformDirection(drawnHand(hand).matrixWorld);
   const wrist = hand.getWorldPosition(new THREE.Vector3());
   return wrist.addScaledVector(along, FIST_ALONG * lab.model.root.scale.x);
 }
@@ -479,7 +556,7 @@ function describeCasts(seen: Seen[], name: string): string[] {
 
 /** Each cast's strike (page/strike.ts) as a line, and its problems (led by its flat, outrun by another motion); with
  *  the strikes. */
-function describeStrikes(seen: Seen[], name: string):
+function describeStrikes(seen: Seen[], skill: { name: string; arc?: number }):
   { lines: string[]; problems: string[]; strikes: (Strike | null)[] } {
   const lines: string[] = [];
   const problems: string[] = [];
@@ -488,15 +565,41 @@ function describeStrikes(seen: Seen[], name: string):
     const at = (index: number) => `frame ${frames[index].frame} (${shareOf(frames[index])})`;
     const holding = strike ? holdingWrists(frames[strike.fastest]) : [];
     const wrists = holding.map((wrist) => `; at its fastest the ${describeWrist(wrist)}`).join('');
-    lines.push(`${name} ${i + 1}: ${strike ? describeStrike(strike, at) : 'no weapon struck'}${wrists}`);
-    for (const problem of strike ? strikeProblems(strike, at) : []) problems.push(`cast ${i + 1}: ${problem}`);
+    const landing = strike ? landingOf(frames, strike, skill.arc) : null;
+    const landed = landing ? `; ${describeLanding(landing)}` : '';
+    lines.push(`${skill.name} ${i + 1}: ${strike ? describeStrike(strike, at) : 'no weapon struck'}${landed}${wrists}`);
+    const found = strike ? [...strikeProblems(strike, at), ...landingProblems(landing!, strike.weapon)] : [];
+    for (const problem of found) problems.push(`cast ${i + 1}: ${problem}`);
     return strike;
   });
   return { lines, problems, strikes };
 }
 
+/** How a cast's strike landed through the eyes (page/cuts.ts): where its blade crossed the aim, nearest the frame it
+ *  fired on, and how wide it swept against the skill's `arc` (rad). */
+function landingOf(frames: Seen[], strike: Strike, arc?: number): Landing {
+  const cut = frames.map(cutOf);
+  const fired = frames.findIndex((frame) => frame.fires);
+  const meets = aimCrossing(cut, strike.from - 1, strike.to + 1, fired >= 0 ? fired : strike.fastest);
+  return { meets, swept: sweptOver(cut, strike.from, strike.to), arc: arc ? THREE.MathUtils.radToDeg(arc) : null };
+}
+
 /** A cast's strike: the blow round the frame it fires on (page/strike.ts `strikeIn`). */
-const strikeOf = (frames: Seen[]) => strikeIn(frames.map((frame) => frame.strike), frames.findIndex((f) => f.fires));
+const strikeOf = (frames: Seen[]) => strikeIn(
+  frames.map((frame) => frame.strike), frames.findIndex((f) => f.fires), window.__labClock.frame,
+);
+
+/** A row of a basic attack's cuts against how a body chains them (page/cuts.ts `rowOfCuts`); none for another
+ *  skill. */
+function cutsOf(followed: Followed, strikes: (Strike | null)[], skill: BoundSkill):
+  { lines: string[]; problems: string[] } | null {
+  if (SKILL_IMPLS[skill.def.impl]?.anim !== 'swing') return null;
+  const casts: RowCast[] = castFrames(followed.seen).map((frames, i) => ({
+    frames: frames.map(cutOf),
+    strikeFrom: strikes[i]?.from ?? frames.length,
+  }));
+  return rowOfCuts(casts, followed.blades, window.__labClock.frame);
+}
 
 /** One cast as words: where the blade began, the wind-up, the blow, where the skill fired and where the blade ended. */
 function describeCast(frames: Seen[]): string {
@@ -623,15 +726,19 @@ function describeFrames(seen: Seen[]): string[] {
     const weapon = now.tip.at.clone().sub(now.grip.at).normalize();
     const held = now.held === null ? '' : `, ${now.held ? 'held' : `let go: ${whyLetGo(now.grasp!)}`}`;
     const past = now.armsPast.length ? `; past: ${now.armsPast.map(describeBreach).join(', ')}` : '';
-    const fists = now.fists.map((fist) => `; the ${fist.hand} fist: ${describeFist(fist)}`).join('');
+    const fists = now.fists
+      .map((fist) => `; the ${fist.hand} fist${fist.on ? '' : ' (out of the frame)'}: ${describeFist(fist)}`)
+      .join('');
     const wrists = holdingWrists(now).map((wrist) => `; the ${describeWrist(wrist)}`).join('');
     const parts = [
       `the grip ${triple(now.grip.at)}`,
       `the weapon ${triple(weapon)}`,
-      `the other hand ${triple(now.other.at)}`,
+      `the other hand ${triple(now.other.at)}${now.other.on ? '' : ' (out of the frame)'}`,
+      ...(now.lower ? [`the lower grip ${now.lower.on ? 'in' : 'out of'} the frame`] : []),
       `the right elbow ${triple(now.pose.arms[0][1])}`,
     ];
-    lines.push(`  ${now.frame}${share}${now.fires ? ' fires' : ''}: ${parts.join(', ')}${held}${fists}${wrists}${past}`);
+    const fires = now.fires ? ' fires' : '';
+    lines.push(`  ${now.frame}${share}${fires}: ${parts.join(', ')}${held}${fists}${wrists}${past}`);
   }
   return lines;
 }
@@ -699,9 +806,29 @@ function plantFaults(lab: Lab): () => void {
     lab.joints.shoulderL.rotateX(CANARY_DROP);
     lab.model.root.updateWorldMatrix(true, true);
     const grip = lab.model.tip?.parent;
-    if (grip?.parent) liftInView(grip, CANARY_LIFT);
+    if (grip?.parent) liftInView(grip, liftFor(lab));
     lab.model.root.updateWorldMatrix(true, true);
   };
+}
+
+/** The lift alone, planted after each frame of a cast played as it is: its fists seen as it swings (frozen at a
+ *  two-hander's rest, both were below the frame, and no fist was seen open). */
+function plantLift(lab: Lab): () => void {
+  return () => {
+    lab.model.root.updateWorldMatrix(true, true);
+    const grip = lab.model.tip?.parent;
+    if (grip?.parent) liftInView(grip, liftFor(lab));
+    lab.model.root.updateWorldMatrix(true, true);
+  };
+}
+
+/** How far the canary lifts the weapon: `CANARY_LIFT`, or as far as brings a two-hander's lower grip up to the middle
+ *  of the view (held at rest below the frame, lifted 15 cm it stayed out of it, and the hand let go of it unseen). */
+function liftFor(lab: Lab): number {
+  const lower = lab.model.offGrip;
+  if (!lower) return CANARY_LIFT;
+  const below = -G.camera.worldToLocal(lower.getWorldPosition(new THREE.Vector3())).y;
+  return Math.max(CANARY_LIFT, below);
 }
 
 /** Moves `object` up the eyes' view by `by` (m). */
@@ -723,7 +850,7 @@ async function strikeCanaries(lab: Lab, options: EyesOptions, skill: BoundSkill)
     const { plant, restore } = plantLead(lab, angle);
     let planted: Seen[];
     try {
-      planted = await follow(lab, skill, options.times, null, plant);
+      planted = (await follow(lab, skill, options, null, plant)).seen;
     } finally {
       restore();
     }
@@ -741,22 +868,67 @@ async function strikeCanaries(lab: Lab, options: EyesOptions, skill: BoundSkill)
   return verdicts;
 }
 
+/** the most a frozen blade may read as sweeping (degrees: the trunk's turn still moves it a little) */
+const FROZEN_SWEEP = 5;
+
 /** Whether the canary's faults were caught, each as words: `caught ...` or `missed ...`. */
-function canaryCaught(planted: Seen[], seen: Seen[]): string[] {
-  const still = castFrames(planted).every((frames) => {
+function canaryCaught(plantedRun: Followed, followed: Followed, skill: BoundSkill): string[] {
+  const planted = plantedRun.seen;
+  const seen = followed.seen;
+  const casts = castFrames(planted);
+  const still = casts.every((frames) => {
     const blow = blowIn(frames);
     return !blow || frames[blow.fastest].seenMoved < NO_BLOW;
   });
   const verdicts = [still ? 'caught: no blow' : 'missed: the frozen arms still read as a blow'];
+  const swept = Math.max(...casts.map((frames) => sweptOver(frames.map(cutOf), 0, frames.length - 1)));
+  const sweep = `${swept.toFixed(0)}°`;
+  verdicts.push(swept <= FROZEN_SWEEP ? `caught: no sweep (${sweep})` : `missed: the frozen arms swept ${sweep}`);
   if (seen.some((frame) => frame.held !== null)) {
     const caught = oneHanded(planted).length > 0;
     verdicts.push(caught ? 'caught: the two-hander seen in one hand' : 'missed: the dropped arm read as holding');
   }
-  if (seen.some((frame) => frame.fists.some((fist) => fist.on))) {
-    const caught = openFists(planted).length > 0;
-    verdicts.push(caught ? 'caught: a fist off its handle' : 'missed: the lifted weapon read as held');
+  if (followed.views.some((view) => view.hand === 'left')) {
+    const caught = restInView(plantedRun.views).problems.some((problem) => problem.includes('left hand'));
+    verdicts.push(caught ? 'caught: the left weapon out of the frame' : 'missed: the dropped left weapon read in view');
+  }
+  // (every cut begun at rest, a chained one turned the other way reads as one from the rest left to right)
+  const row = cutsOf(plantedRun, casts.map(strikeOf), skill);
+  if (row && casts.length > 1) {
+    const caught = row.problems.some((problem) => problem.includes('from the rest left to right'));
+    verdicts.push(caught ? 'caught: a cut from the rest left to right' : 'missed: no cut from the rest left to right');
   }
   return verdicts;
+}
+
+/** The lift canary: the cast again with its weapon lifted out of the fists each frame (`plantLift`), a fist seen off
+ *  its handle; skipped when no fist was seen in the cast as it is. As words, `caught ...`, `missed ...` or
+ *  `skipped`. */
+async function liftCanary(lab: Lab, options: EyesOptions, skill: BoundSkill, followed: Followed): Promise<string> {
+  if (!followed.seen.some((frame) => frame.fists.some((fist) => fist.on))) return 'skipped: no fist seen';
+  await lab.setup({ ...options.fixture, view: 'first' });
+  const lifted = await follow(lab, skill, options, null, plantLift(lab));
+  return openFists(lifted.seen).length > 0 ? 'caught: a fist off its handle' : 'missed: the lifted weapon read as held';
+}
+
+/** The slide canary: the cast again with its weapon held at its first turn each frame (strike.ts `plantSlide`), its
+ *  strikes' whip read under `SLID_WHIP`. As words, `caught ...` or `missed ...`. */
+async function slideCanary(lab: Lab, options: EyesOptions, skill: BoundSkill): Promise<string> {
+  await lab.setup({ ...options.fixture, view: 'first' });
+  const { plant, restore } = plantSlide(lab);
+  let planted: Seen[];
+  try {
+    planted = (await follow(lab, skill, options, null, plant)).seen;
+  } finally {
+    restore();
+  }
+  const whips = castFrames(planted).flatMap((frames) => {
+    const strike = strikeOf(frames);
+    return strike ? [strike.whip] : [];
+  });
+  if (!whips.length) return 'missed: no strike read';
+  const read = whips.map((whip) => whip.toFixed(1)).join(', ');
+  return whips.every((whip) => whip < SLID_WHIP) ? `caught: whip ${read}` : `missed: whip ${read}`;
 }
 
 /** The film: every `every`th frame pictured through the eyes, small, in rows, each with its frame and share. */

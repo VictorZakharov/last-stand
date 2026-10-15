@@ -4,9 +4,10 @@
 // a leg whether its foot was planted), and the worst moment of each scenario pictured. A two-hander let go of by the
 // other hand is a problem in every scenario (held as it's raised, walked and swung with): the frames, how often and
 // why. With `--skill`, a skill cast standing too, the weapons held `--gear`'s way (`--weapon` the base). A hand
-// gripping a handle has its wrist judged against what a gripping wrist does (`GRIPPING`). A canary turns the head round
-// past the neck's range on one frame, and bends the drawn fist on its forearm, which the measure must catch. `--trace` lists the leg IK
-// frame by frame as the gait's does (`legTrace.ts`), each frame's joints past their ranges after it.
+// gripping a handle has its wrist judged against what a gripping wrist does (`GRIPPING`). A canary turns the head
+// round past the neck's range on one frame, and bends the drawn fist on its forearm, which the measure must catch.
+// `--trace` lists the leg IK frame by frame as the gait's does (`legTrace.ts`), each frame's joints past their ranges
+// after it.
 import * as THREE from 'three';
 import type { Frame, Lab, Pictured } from './lab';
 import {
@@ -33,7 +34,9 @@ export function drawnHand(hand: THREE.Object3D): THREE.Object3D {
   if (marked) return marked;
   const drawn = (child: THREE.Object3D) => (child as THREE.SkinnedMesh).isSkinnedMesh || child.userData.own;
   const found = hand.children.find((child) => (child as THREE.Group).isGroup && child.children.some(drawn));
-  if (!found) throw new Error(`lab: no drawn hand on ${hand.name || 'a hand joint'}: its wrist would be read off the joint`);
+  if (!found) {
+    throw new Error(`lab: no drawn hand on ${hand.name || 'a hand joint'}: its wrist would be read off the joint`);
+  }
   return found;
 }
 

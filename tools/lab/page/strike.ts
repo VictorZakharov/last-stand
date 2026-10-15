@@ -1,8 +1,11 @@
 // tools/lab strikes: how a held weapon strikes, frame by frame, as physics has a blow land (lab eyes): how fast its
 // striking part moves, and whether its striking side leads the way it moves (models/weapons.ts `STRIKES_WITH`: a
 // blade's edge, an axe's bit, a maul's face) or its flat does; how much of the motion runs along it (a thrust, a draw);
-// and how flat the plane it's swung in is. (The owner, of the cuts through the eyes: "it should strike according to
-// physics... blade parallel to strike direction"; broadside to the eyes through the blow, the flat led every cut.)
+// how flat the plane it's swung in is; how much faster its striking part moves than its hilt (a cut swung round, its
+// tip arcing, or the whole blade slid across); and how long it takes to slow after the blow (carried through, or
+// stopped dead). (The owner, of the cuts through the eyes: "it should strike according to physics... blade parallel
+// to strike direction"; broadside to the eyes through the blow, the flat led every cut. And: "it strikes with whole
+// blade, but it should strike with tip", "strikes feel fake and having no momentum".)
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import * as weaponsCode from '../../../src/entities/models/weapons';
@@ -26,14 +29,21 @@ const FLAT_FROM = 45;
  *  (the skill's own timing: a hit is dealt then) */
 const LANDS_BEFORE = 6;
 const LANDS_AFTER = 4;
+/** a cut swings its weapon round: its striking part at the blow at least this many times as fast as its hilt (a
+ *  blade slid across, the whole of it moving as one, is 1; swung from the shoulder with a straight arm, about 2.5) */
+const WHIP_LEAST = 2;
+/** a blow carries on through: its striking part slows to `STOP_SHARE` of its fastest no sooner than this (ms) */
+const STOP_SHARE = 0.2;
+const STOP_LEAST = 60;
 
 /** A frame of a held weapon. */
 export interface StrikeFrame {
   /** the held weapon's base (its group's name), and its striking side */
   weapon: string;
   side: StrikingSide;
-  /** how fast its striking part moves (m/s, the world's) */
+  /** how fast its striking part moves (m/s, the world's), and its hilt (its grip's place) */
   speed: number;
+  gripSpeed: number;
   /** how far its striking side is off the way its striking part moves square to its length (degrees: 0 its edge, bit
    *  or face leading, 90 its flat, 180 an axe's poll); null when it moves too little to tell, or strikes all round */
   lead: number | null;
@@ -43,21 +53,28 @@ export interface StrikeFrame {
   axis: THREE.Vector3;
 }
 
-/** The weapon the hero's tip is on: the grip's child seen, named for a base, and where its blow lands (world). */
+/** The weapon the hero's tip is on: the grip's child seen, named for a base, its hilt (the grip's place) and where its
+ *  blow lands (world). */
 interface Held {
   weapon: THREE.Object3D;
+  grip: THREE.Vector3;
   point: THREE.Vector3;
 }
+
+/** Whether this game says its weapons' striking sides (models/weapons.ts `STRIKES_WITH`). */
+export const SIDES_NAMED = Boolean(weaponSides);
+
+/** Whether `object` is a weapon, by its name: a base this game says a striking side for, or any named. */
+export const isWeapon = (object: THREE.Object3D) => (weaponSides ? object.name in weaponSides : object.name !== '');
 
 /** The weapon the hero's tip is on, if any (the world matrices current). */
 function heldNow(lab: Lab): Held | null {
   const tip = lab.model.tip;
   const grip = tip?.parent;
-  const named = (child: THREE.Object3D) => (weaponSides ? child.name in weaponSides : child.name !== '');
-  const weapon = grip?.children.find((child) => child.visible && named(child));
+  const weapon = grip?.children.find((child) => child.visible && isWeapon(child));
   if (!tip || !grip || !weapon) return null;
   const from = grip.getWorldPosition(new THREE.Vector3());
-  return { weapon, point: from.lerp(tip.getWorldPosition(new THREE.Vector3()), PERCUSSION) };
+  return { weapon, grip: from, point: from.clone().lerp(tip.getWorldPosition(new THREE.Vector3()), PERCUSSION) };
 }
 
 /** A weapon's length (its +Y) and its striking side (its +X), the world's ways. */
@@ -68,11 +85,14 @@ const sideOf = (weapon: THREE.Object3D) => new THREE.Vector3(1, 0, 0).transformD
  *  from one hand to the other has no last place: the other's isn't its). */
 class Follower {
   private last: Held | null = null;
+  /** how far the hilt moved, with the blow's point (`moved`) */
+  readonly gripMoved = new THREE.Vector3();
 
   moved(now: Held | null): THREE.Vector3 | null {
     const before = this.last;
     this.last = now;
     if (!now || !before || before.weapon !== now.weapon) return null;
+    this.gripMoved.copy(now.grip).sub(before.grip);
     return now.point.clone().sub(before.point);
   }
 }
@@ -86,16 +106,42 @@ export class StrikeTracker {
   /** This frame's, `dt` s after the last (null when the tip is on no weapon). The world matrices must be current. */
   next(dt: number): StrikeFrame | null {
     const held = heldNow(this.lab);
-    const moved = this.follower.moved(held) ?? new THREE.Vector3();
+    const moved = this.follower.moved(held);
     if (!held) return null;
     const { weapon } = held;
     const axis = axisOf(weapon);
     const side = weaponSides?.[weapon.name] ?? ASSUMED_SIDE;
-    const velocity = moved.divideScalar(dt);
+    const velocity = (moved ?? new THREE.Vector3()).divideScalar(dt);
     const speed = velocity.length();
+    const gripSpeed = moved ? this.follower.gripMoved.length() / dt : 0;
     const along = speed > 0 ? Math.abs(velocity.dot(axis)) / speed : 0;
-    return { weapon: weapon.name, side, speed, lead: leadOf(velocity, axis, sideOf(weapon), side), along, axis };
+    const lead = leadOf(velocity, axis, sideOf(weapon), side);
+    return { weapon: weapon.name, side, speed, gripSpeed, lead, along, axis };
   }
+}
+
+/**
+ * A fault for the canary: each frame, the grip the tip is on (the weapon and its tip with it) held at the turn it had
+ * on the first (the world's), so the weapon only slides with the hand, which the whip must read as about 1; `restore`
+ * puts every grip it held back as it was.
+ */
+export function plantSlide(lab: Lab): { plant: () => void; restore: () => void } {
+  const turned = new Map<THREE.Object3D, { local: THREE.Quaternion; world: THREE.Quaternion }>();
+  const plant = () => {
+    lab.model.root.updateWorldMatrix(true, true);
+    const grip = lab.model.tip?.parent;
+    if (!grip?.parent) return;
+    if (!turned.has(grip)) {
+      turned.set(grip, { local: grip.quaternion.clone(), world: grip.getWorldQuaternion(new THREE.Quaternion()) });
+    }
+    const parent = grip.parent.getWorldQuaternion(new THREE.Quaternion());
+    grip.quaternion.copy(parent.invert().multiply(turned.get(grip)!.world));
+    grip.updateMatrixWorld(true);
+  };
+  const restore = () => {
+    for (const [grip, { local }] of turned) grip.quaternion.copy(local);
+  };
+  return { plant, restore };
 }
 
 /**
@@ -164,6 +210,10 @@ export interface Strike {
   along: number;
   /** how far its length is out of the plane it's swung in, the root mean square over the strike (degrees) */
   plane: number;
+  /** at its fastest, how many times as fast as its hilt its striking part moves (Infinity: the hilt still) */
+  whip: number;
+  /** how long after its fastest it slows to `STOP_SHARE` of it (ms; null: not before the frames end) */
+  stop: number | null;
 }
 
 /** The fastest of `frames` from `from` to `to` (indices, both in), or -1 where none moves. */
@@ -180,9 +230,9 @@ function fastestIn(frames: (StrikeFrame | null)[], from: number, to: number): nu
  * The strike among `frames` (a cast's, null where no weapon was held): the blow that lands as the skill fires (the
  * fastest frame within `LANDS_BEFORE` before the frame `fires` to `LANDS_AFTER` after it), or with no firing the
  * fastest of all, and the frames round it; and the fastest frame outside it, if that's faster (a wind-up outrunning
- * the blow, a weapon jumping between two moves).
+ * the blow, a weapon jumping between two moves). `frameMs`: a frame's length.
  */
-export function strikeIn(frames: (StrikeFrame | null)[], fires = -1): Strike | null {
+export function strikeIn(frames: (StrikeFrame | null)[], fires: number, frameMs: number): Strike | null {
   const fastest = fires < 0
     ? fastestIn(frames, 0, frames.length - 1)
     : fastestIn(frames, fires - LANDS_BEFORE, fires + LANDS_AFTER);
@@ -199,7 +249,20 @@ export function strikeIn(frames: (StrikeFrame | null)[], fires = -1): Strike | n
     .filter((i) => i >= 0 && frames[i]!.speed > top.speed)
     .sort((a, b) => frames[b]!.speed - frames[a]!.speed);
   const outrun = elsewhere.length ? { at: elsewhere[0], speed: frames[elsewhere[0]]!.speed } : null;
-  return { weapon: top.weapon, side: top.side, fastest, speed: top.speed, from, to, outrun, ...leadsOver(strike) };
+  const whip = top.gripSpeed > 0 ? top.speed / top.gripSpeed : Infinity;
+  const stop = stopAfter(frames, fastest, frameMs);
+  const found = { weapon: top.weapon, side: top.side, fastest, speed: top.speed, from, to, outrun, whip, stop };
+  return { ...found, ...leadsOver(strike) };
+}
+
+/** How long after `fastest` the weapon there slows to `STOP_SHARE` of its speed (ms), or null if it never does. */
+function stopAfter(frames: (StrikeFrame | null)[], fastest: number, frameMs: number): number | null {
+  const top = frames[fastest]!;
+  for (let i = fastest + 1; i < frames.length; i++) {
+    const frame = frames[i];
+    if (!frame || frame.weapon !== top.weapon || frame.speed < top.speed * STOP_SHARE) return (i - fastest) * frameMs;
+  }
+  return null;
 }
 
 /** The leads, the motion along it and the plane over a strike's frames. */
@@ -238,23 +301,43 @@ export function describeStrike(strike: Strike, share: (i: number) => string): st
   const assumed = weaponSides ? '' : ` (this game names no striking side: read as ${ASSUMED_SIDE})`;
   return `the strike${assumed} (the ${strike.weapon} moving at least ${STRIKE_SHARE * 100}% of its fastest, `
     + `${strike.speed.toFixed(1)} m/s at ${share(strike.fastest)}; ${strike.to - strike.from + 1} frames): ${lead}; `
-    + `${(strike.along * 100).toFixed(0)}% of its motion along it; swung within ${degrees(strike.plane)} of a plane`
+    + `${(strike.along * 100).toFixed(0)}% of its motion along it; swung within ${degrees(strike.plane)} of a plane; `
+    + `${whipWords(strike.whip)}; ${stopWords(strike.stop)}`
     + (strike.outrun ? `; ${outrunWords(strike.outrun, share)}` : '');
 }
+
+const whipWords = (whip: number) => `its blow's point ${Number.isFinite(whip) ? whip.toFixed(1) : 'endlessly'} `
+  + 'times as fast as its hilt';
+const stopWords = (stop: number | null) => (stop === null
+  ? `not slowed to ${STOP_SHARE * 100}% of it before the frames end`
+  : `slowed to ${STOP_SHARE * 100}% of it ${stop.toFixed(0)} ms after`);
 
 const outrunWords = (outrun: NonNullable<Strike['outrun']>, share: (i: number) => string) =>
   `faster outside it: ${outrun.speed.toFixed(1)} m/s at ${share(outrun.at)}`;
 
 const sideName = (side: StrikingSide) => ({ edges: 'edge', bit: 'bit', faces: 'face', round: 'head' })[side];
 
-/** A strike's problems: led by its flat rather than its striking side, and outrun by another motion of the cast (`share`
- *  says a frame's index as words). */
+/** A strike's problems: led by its flat rather than its striking side, outrun by another motion of the cast, slid
+ *  across rather than swung round, and stopped dead after it (`share` says a frame's index as words). */
 export function strikeProblems(strike: Strike, share: (i: number) => string): string[] {
   const problems: string[] = [];
   if (strike.lead !== null && strike.lead > LEAD_MOST) {
     problems.push(`the ${strike.weapon}'s strike is led by its flat: its ${sideName(strike.side)} is `
       + `${degrees(strike.lead)} off the way it moves (at most ${LEAD_MOST}°)`);
   }
-  if (strike.outrun) problems.push(`the ${strike.weapon} moves faster than its blow, ${outrunWords(strike.outrun, share)}`);
+  if (strike.outrun) {
+    problems.push(`the ${strike.weapon} moves faster than its blow, ${outrunWords(strike.outrun, share)}`);
+  }
+  if (strike.whip < WHIP_LEAST) {
+    problems.push(`the ${strike.weapon} slides across rather than swinging round: ${whipWords(strike.whip)} `
+      + `(at least ${WHIP_LEAST})`);
+  }
+  if (strike.stop !== null && strike.stop < STOP_LEAST) {
+    problems.push(`the ${strike.weapon} stops dead after its blow: ${stopWords(strike.stop)} (no sooner than `
+      + `${STOP_LEAST} ms)`);
+  }
   return problems;
 }
+
+/** The whip the canary's slid weapon must read under (it slides with the hand: about 1). */
+export const SLID_WHIP = 1.3;

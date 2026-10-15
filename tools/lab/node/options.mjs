@@ -628,12 +628,20 @@ export const COMMANDS = {
     help: 'a skill of the hero\'s cast through the eyes, frame by frame from the press until the arms are at rest '
       + 'again: where the weapon\'s tip is on the screen at rest, wound up, through the blow and at its end, how '
       + 'fast it crosses the view and where it is as the skill fires; a two-hander let go of by the other hand, or '
-      + 'seen in one hand, an arm\'s joint past its range (a gripping wrist past a gripping wrist\'s) and a strike '
-      + 'led by its flat are problems; with a film of the frames, each labelled with the gripping wrists\' bends: '
+      + 'seen in one hand, an arm\'s joint past its range (a gripping wrist past a gripping wrist\'s), a strike led '
+      + 'by its flat, slid across rather than swung round, stopped dead, met at the aim by its blade\'s inner part or '
+      + 'sweeping a narrow share of the skill\'s arc, a weapon out of the frame at rest, and a basic attack\'s cuts '
+      + 'chained unlike a body chains them (a backhand from the rest, back to the rest between cuts, the last end '
+      + 'not held) are problems; with a film of the frames, each labelled with the gripping wrists\' bends: '
       + 'tools/lab/out/eyes/<skill> (--class warrior)',
     argument: 'skill',
     options: {
       times: { kind: 'number', usage: 'n', help: 'casts in a row, the key held through them (1 by default)' },
+      apart: {
+        kind: 'number',
+        usage: 's',
+        help: 'the key let go as each cast begins and pressed again s seconds after it ended (a pause in the attacks)',
+      },
       every: { kind: 'number', usage: 'n', help: 'a frame pictured into the film every n (2 by default)' },
       cast: { kind: 'number', usage: 'n', help: 'film the nth cast of the row alone (every cast by default)' },
       close: {
@@ -651,8 +659,9 @@ export const COMMANDS = {
       canary: {
         kind: 'switch',
         help: 'the arms held as they were at the press and the other arm dropped: no blow, and a two-hander seen '
-          + 'in one hand, must be found; the weapon turned its edge, then its flat, into its blow; the right fist '
-          + 'bent on its forearm 60° each way',
+          + 'in one hand, no sweep, the dropped left weapon out of the frame and a chained cut as a backhand from the '
+          + 'rest, must be found; the weapon turned its edge, then its flat, into its blow; held at its first turn, '
+          + 'sliding with the hand; the right fist bent on its forearm 60° each way',
       },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,

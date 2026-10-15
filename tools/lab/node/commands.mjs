@@ -696,12 +696,14 @@ export const COMMANDS = {
       if (options.cast !== undefined && !(options.cast >= 1 && options.cast <= (options.times ?? 1))) {
         throw labError('eyes --cast: one of the casts, 1 to --times');
       }
+      if (options.apart !== undefined && !(options.apart >= 0)) throw labError('eyes --apart: seconds, 0 or more');
     },
     each(side, options) {
       const command = {
         fixture: fixtureFrom(options),
         skill: options._[0],
         times: Math.round(options.times ?? 1),
+        apart: options.apart ?? null,
         every: Math.round(options.every ?? 2),
         cast: options.cast === undefined ? null : Math.round(options.cast),
         close: options.close ?? [],
