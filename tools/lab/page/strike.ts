@@ -43,7 +43,8 @@ export interface StrikeFrame {
   /** the held weapon's base (its group's name), and its striking side */
   weapon: string;
   side: StrikingSide;
-  /** how fast its striking part moves (m/s, the world's), and its hilt (its grip's place) */
+  /** where its blow lands (world), how fast it moves there (m/s, the world's), and its hilt (its grip's place) */
+  point: THREE.Vector3;
   speed: number;
   gripSpeed: number;
   /** how far its striking side is off the way its striking part moves square to its length (degrees: 0 its edge, bit
@@ -141,7 +142,7 @@ export class StrikeTracker {
     const along = speed > 0 ? Math.abs(velocity.dot(between)) / speed : 0;
     const lead = leadOf(velocity, axis, sideOf(weapon), side);
     const rigid = held.point.distanceTo(held.shoulder) / Math.max(1e-6, held.grip.distanceTo(held.shoulder));
-    return { weapon: weapon.name, side, speed, gripSpeed, lead, along, axis, rigid };
+    return { weapon: weapon.name, side, point: held.point, speed, gripSpeed, lead, along, axis, rigid };
   }
 }
 

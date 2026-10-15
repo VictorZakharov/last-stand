@@ -24,6 +24,7 @@ import {
 } from './cuts';
 import type { CutFrame, InView, Landing, RestBlades, RowCast } from './cuts';
 import { swingDiagram } from './swingDiagram';
+import { describeMomentum, momentumCanary, momentumOf, momentumProblems, type SwingFrame } from './momentum';
 import { describeKeyed, describeKeyedFrame, keyedNow, triple, type KeyedFrame } from './keyed';
 import type { ArmAt, ArmsAt, Lens, Phase } from './swingDiagram';
 
@@ -99,8 +100,10 @@ interface Seen {
   wrists: Wrist[];
   /** each hand holding a handle: how it holds it, and whether its fist is in the frame */
   fists: SeenFist[];
-  /** how the weapon the tip is on strikes (page/strike.ts): null when it's on none */
+  /** how the weapon the tip is on strikes (page/strike.ts), and where its blow lands as the eyes see it (page/
+   *  momentum.ts): null when it's on none */
   strike: StrikeFrame | null;
+  swing: SwingFrame | null;
   /** the arms and the weapon in the eyes' space, for the swing diagram */
   pose: ArmsAt;
   /** which way a swing goes (`Model.swing`: 1 the forehand; null on a game without it), and the hand whose weapon
@@ -212,8 +215,10 @@ export async function eyes(lab: Lab, options: EyesOptions): Promise<Report> {
   lines.push(atRest.line);
   const row = cutsOf(followed, struck.strikes, skill);
   if (row) lines.push(...row.lines);
+  const swings = swingsOf(seen, struck.strikes, skill);
+  lines.push(...swings.lines);
   const found = [...oneHanded(seen), ...openFists(seen), ...struck.problems, ...atRest.problems, ...followed.tip];
-  found.push(...(row?.problems ?? []), ...keyed.problems);
+  found.push(...(row?.problems ?? []), ...keyed.problems, ...swings.problems);
   // (listed and not counted, a fist hung flexed 57 degrees off its forearm through a cut was called done)
   if (seen.some((frame) => frame.armsPast.length)) found.push(describeArmsPast(seen));
   const problems = found.map((line) => `${skill.def.name}: ${line}`);
@@ -234,7 +239,9 @@ export async function eyes(lab: Lab, options: EyesOptions): Promise<Report> {
     lines.push(`canary, the weapon held at its first turn, sliding with the hand: ${slid}`);
     const lifted = await liftCanary(lab, options, skill, followed);
     lines.push(`canary, the weapon lifted out of the fists each frame: ${lifted}`);
-    const verdicts = [...bent, ...caught, ...leads, slid, lifted];
+    const swung = swings.canary();
+    if (swung.length) lines.push(`canary, faults planted in the first cut's swing: ${swung.join('; ')}`);
+    const verdicts = [...bent, ...caught, ...leads, slid, lifted, ...swung];
     if (verdicts.some((verdict) => verdict.startsWith('missed'))) problems.push('the canary was missed');
   }
   const moments: Pictured[] = film ? [film.moment(`${skill.def.name} through the eyes`), ...film.closeUps] : [];
@@ -447,6 +454,7 @@ function seeFrame(lab: Lab, frame: number, casts: CastCount, last: Seen | undefi
   const hand = lab.model.tip?.parent?.parent === lab.joints.handL ? 'left' : 'right';
   const body = bodyBreaches(lab.joints, grippingSides(lab));
   const armsPast = body.found.filter((breach) => ARM_RANGE.test(breach.name));
+  const strike = strikes.next(window.__labClock.frame / 1000);
   return {
     frame,
     cast: casts.started - 1,
@@ -465,13 +473,20 @@ function seeFrame(lab: Lab, frame: number, casts: CastCount, last: Seen | undefi
     armsPastWords: armsPast.map((breach) => describeBreach(breach) + armOf(body.angles, breach.name)),
     wrists: wristsOf(body.angles),
     fists: fistsSeen(lab),
-    strike: strikes.next(window.__labClock.frame / 1000),
+    strike,
+    swing: strike ? swingOf(strike) : null,
     pose: armsAt(lab),
     side: lab.model.swing ?? null,
     hand,
     ...shownOf(weaponsInView(lab).find((view) => view.hand === hand)),
     keyed: keyedNow(lab),
   };
+}
+
+/** Where a strike's blow lands as the eyes see it, with the weapon's way (page/momentum.ts). */
+function swingOf(strike: StrikeFrame): SwingFrame {
+  const spot = spotOf(strike.point);
+  return { point: strike.point, axis: strike.axis, x: spot.x, y: spot.y, on: spot.on };
 }
 
 /** A frame as the cut measures read it (page/cuts.ts). */
@@ -633,6 +648,48 @@ function cutsOf(followed: Followed, strikes: (Strike | null)[], skill: BoundSkil
     strikeFrom: strikes[i]?.from ?? frames.length,
   }));
   return rowOfCuts(casts, followed.blades, window.__labClock.frame);
+}
+
+/** A cast's frames as its swing's: each frame's (one without a weapon held as the frame before it, or the first held
+ *  after it). */
+function swingFrames(frames: Seen[]): SwingFrame[] | null {
+  const first = frames.find((frame) => frame.swing)?.swing;
+  if (!first) return null;
+  let last = first;
+  return frames.map((frame) => {
+    last = frame.swing ?? last;
+    return last;
+  });
+}
+
+/**
+ * Each cast's swing measured whole, a basic attack's (page/momentum.ts): its lines and problems, and the canary that
+ * plants faults in the first cast's swing (none for another skill).
+ */
+function swingsOf(seen: Seen[], strikes: (Strike | null)[], skill: BoundSkill):
+  { lines: string[]; problems: string[]; canary: () => string[] } {
+  const none = { lines: [], problems: [], canary: () => [] };
+  if (SKILL_IMPLS[skill.def.impl]?.anim !== 'swing') return none;
+  const lines: string[] = [];
+  const problems: string[] = [];
+  const measured: { frames: SwingFrame[]; fastest: number; heavy: boolean }[] = [];
+  for (const [i, frames] of castFrames(seen).entries()) {
+    const swing = swingFrames(frames);
+    const strike = strikes[i];
+    if (!swing || !strike) continue;
+    const heavy = frames[strike.fastest].lower !== null;
+    const whole = momentumOf(swing, strike.fastest, window.__labClock.frame, heavy);
+    if (!whole) continue;
+    const at = (index: number) => `frame ${frames[index].frame} (${shareOf(frames[index])})`;
+    lines.push(`${skill.def.name} ${i + 1}: ${describeMomentum(whole, at)}`);
+    for (const problem of momentumProblems(whole, at)) problems.push(`cast ${i + 1}: ${problem}`);
+    measured.push({ frames: swing, fastest: whole.fastest, heavy });
+  }
+  const canary = () => {
+    const first = measured[0];
+    return first ? momentumCanary(first.frames, first.fastest, window.__labClock.frame, first.heavy) : [];
+  };
+  return { lines, problems, canary };
 }
 
 /** One cast as words: where the blade began, the wind-up, the blow, where the skill fired and where the blade ended. */
