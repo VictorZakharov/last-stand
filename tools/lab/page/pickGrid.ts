@@ -6,7 +6,12 @@
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
-import { dualQuaternionSkinned, isDualQuaternionSkinned } from '../../../src/entities/models/dualQuaternion';
+import * as skinning from '../../../src/entities/models/dualQuaternion';
+
+/** Whether a material is skinned by dual quaternions, as far as the game says: `--ab` runs this on main's game, which
+ *  may not (read as no: its hands drawn by their skeleton's matrices, as main's draws them). */
+const skinnedByDualQuaternions = (material: THREE.Material) =>
+  (skinning as Partial<typeof skinning>).isDualQuaternionSkinned?.(material) ?? false;
 
 /** the layer the picked meshes are drawn on alone (three's last: nothing of the game's is on it) */
 const PICK_LAYER = 31;
@@ -26,7 +31,7 @@ function flatLike(like: THREE.Material, red: number): THREE.MeshBasicMaterial {
     fog: false,
     toneMapped: false,
   });
-  return isDualQuaternionSkinned(like) ? dualQuaternionSkinned(material) : material;
+  return skinnedByDualQuaternions(like) ? skinning.dualQuaternionSkinned(material) : material;
 }
 
 /** What a picked mesh was drawn as, to put back. */

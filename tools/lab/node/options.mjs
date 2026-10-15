@@ -630,6 +630,13 @@ export const COMMANDS = {
     options: {
       times: { kind: 'number', usage: 'n', help: 'casts in a row, the key held through them (1 by default)' },
       every: { kind: 'number', usage: 'n', help: 'a frame pictured into the film every n (2 by default)' },
+      cast: { kind: 'number', usage: 'n', help: 'film the nth cast of the row alone (every cast by default)' },
+      close: {
+        kind: 'list',
+        usage: 'a,b',
+        help: 'each cast\'s firing frame from these close-ups too (front, left, right, back, above): the arms and '
+          + 'the weapon seen from outside, framed on the weapon\'s hand',
+      },
       film: { kind: 'switch', help: 'the film of the frames (=false: the numbers alone)' },
       frames: {
         kind: 'switch',

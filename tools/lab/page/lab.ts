@@ -299,6 +299,13 @@ export interface Tile {
   parts?: PartOnScreen[];
 }
 
+/** A picture as `Lab.drawn` gives it: its view, drawn on a canvas, and in the `parts` look the hero's parts in it. */
+export interface Drawn {
+  view: ViewName;
+  canvas: HTMLCanvasElement;
+  parts?: PartOnScreen[];
+}
+
 export interface CaptureOptions {
   /** the joint a close-up is framed on (the whole body by default) */
   focus?: keyof Joints;
@@ -615,7 +622,9 @@ export class Lab {
       if (!(VIEW_NAMES as readonly string[]).includes(view)) {
         throw new Error(`lab: no view ${view} (the views: ${VIEW_NAMES.join(', ')})`);
       }
-      if (throughEyes && view !== 'eyes') throw new Error(`lab: ${view}: through the eyes only the arms are shown`);
+      if (throughEyes && view !== 'eyes' && !CLOSE_UPS[view as ViewName]) {
+        throw new Error(`lab: ${view}: through the eyes the eyes' view and the close-ups of the arms alone are shown`);
+      }
       if (!throughEyes && view === 'eyes') throw new Error('lab: eyes: needs the view through the eyes (--view first)');
     }
     if (focus !== undefined && !this.jointNames().includes(focus)) {
@@ -737,15 +746,26 @@ export class Lab {
 
   /** Pictures of the game as it is now, nothing advanced; the game's camera is put back as it was. */
   capture(views: ViewName[], options: CaptureOptions = {}): Tile[] {
+    return this.drawn(views, options).map(({ view, canvas, parts }) => ({
+      ...tileOf(canvas, view),
+      ...(parts ? { parts } : {}),
+    }));
+  }
+
+  /**
+   * `capture`'s pictures as canvases, for page code that draws them on (a film's frames, shown small): encoded as a
+   * tile's picture and decoded again, a frame took a quarter of a second.
+   */
+  drawn(views: ViewName[], options: CaptureOptions = {}): Drawn[] {
     this.checkCapture(views, renderer.viewMode(), options.focus);
     const restore = this.saveCamera();
     const drawing = this.drawing;
     this.drawing = true;
     try {
       return views.map((view) => {
-        const tile = this.captureOne(view, options);
+        const drawn = this.drawOne(view, options);
         restore();
-        return tile;
+        return drawn;
       });
     } finally {
       this.drawing = drawing;
@@ -753,7 +773,7 @@ export class Lab {
     }
   }
 
-  private captureOne(view: ViewName, options: CaptureOptions): Tile {
+  private drawOne(view: ViewName, options: CaptureOptions): Drawn {
     const closeUp = CLOSE_UPS[view];
     let crop: Crop;
     if (closeUp) crop = this.aimCloseUp(closeUp, options);
@@ -762,9 +782,10 @@ export class Lab {
     const area = areaOf(crop);
     const look = options.look ?? 'lit';
     if (look === 'lit' || look === 'bones') {
-      renderer.render();
+      if (closeUp && renderer.viewMode() === 'first') this.renderArmsFromOutside();
+      else renderer.render();
       const canvas = cropOf(G.renderer.domElement, area);
-      return tileOf(look === 'bones' ? withBones(canvas, this.joints, area) : canvas, view);
+      return { view, canvas: look === 'bones' ? withBones(canvas, this.joints, area) : canvas };
     }
     const joints = jointsByObject(this.joints);
     const named = (mesh: THREE.Mesh) => partName(mesh, joints);
@@ -773,7 +794,26 @@ export class Lab {
     canvas.width = image.width;
     canvas.height = image.height;
     canvas.getContext('2d')!.putImageData(image, 0, 0);
-    return { ...tileOf(canvas, view), ...(look === 'parts' ? { parts } : {}) };
+    return { view, canvas, ...(look === 'parts' ? { parts } : {}) };
+  }
+
+  /**
+   * Through the eyes, the frame drawn from the game's camera where a close-up put it, the arms and what they hold drawn
+   * by it too (not by their own camera from the eyes: renderer.ts `drawArms`): the arms as the eyes place them, seen
+   * from outside, their shoulders under the camera and the rest of the body unseen (a wrist seen bent from the eyes
+   * alone was read three ways).
+   */
+  private renderArmsFromOutside(): void {
+    const fov = this.model.armsFov?.() ?? null;
+    const layers = G.camera.layers.mask;
+    renderer.drawArms(null);
+    G.camera.layers.enable(renderer.ARMS_LAYER);
+    try {
+      renderer.render();
+    } finally {
+      G.camera.layers.mask = layers;
+      renderer.drawArms(fov);
+    }
   }
 
   /** the game's camera set for a close-up; the crop is the frame's middle */

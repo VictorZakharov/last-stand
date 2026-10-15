@@ -7,7 +7,7 @@ import { labError } from './errors.mjs';
 import { UI_STATES } from './options.mjs';
 import { REPO } from './paths.mjs';
 import { probeFiles } from './probeFiles.mjs';
-import { writeSheet } from './sheetImage.mjs';
+import { writeSheet, writeStack } from './sheetImage.mjs';
 import { compare, marksOf, readReference, screenFor, writeMatch } from './match.mjs';
 
 /** the waves `spawns` sets off in each biome unless `--waves` says */
@@ -230,6 +230,26 @@ function textWithPictureFiles(results, dir) {
     }
   }
   return written.length ? `${text}\n\npictures in ${relative(REPO, dir)}: ${written.join(', ')}` : text;
+}
+
+/**
+ * In an A/B, each moment both sides pictured whose label passes `wanted`, the other side's above this tree's in one
+ * picture at their own sizes (`writeStack`), written in `dir` as `<label>--ab.png`; the files written.
+ */
+async function writeStacks(results, dir, browser, wanted) {
+  if (results.length < 2) return [];
+  const written = [];
+  const [first, ...others] = results;
+  for (const moment of first[1]?.moments ?? []) {
+    if (!wanted(moment.label)) continue;
+    const sides = [first, ...others].map(([side, result]) => [side, result?.moments?.find((m) => m.label === moment.label)]);
+    if (sides.some(([, found]) => !found || found.tiles.length !== 1)) continue;
+    const pictures = sides.map(([side, found]) => ({ caption: side.name, ...found.tiles[0] }));
+    const name = `${fileNameOf(moment.label)}--ab.png`;
+    await writeStack(browser, pictures, join(dir, name));
+    written.push(name);
+  }
+  return written;
 }
 
 /** Each side's text under its name, and the sheet of the moments they pictured, written in `dir` (when any did). */
@@ -673,6 +693,9 @@ export const COMMANDS = {
     check(options) {
       if (options.times !== undefined && !(options.times >= 1)) throw labError('eyes --times: at least 1');
       if (options.every !== undefined && !(options.every >= 1)) throw labError('eyes --every: at least 1');
+      if (options.cast !== undefined && !(options.cast >= 1 && options.cast <= (options.times ?? 1))) {
+        throw labError('eyes --cast: one of the casts, 1 to --times');
+      }
     },
     each(side, options) {
       const command = {
@@ -680,14 +703,20 @@ export const COMMANDS = {
         skill: options._[0],
         times: Math.round(options.times ?? 1),
         every: Math.round(options.every ?? 2),
+        cast: options.cast === undefined ? null : Math.round(options.cast),
+        close: options.close ?? [],
         film: options.film !== false,
         frames: Boolean(options.frames),
         canary: Boolean(options.canary),
       };
       return side.command('eyes', command);
     },
-    finish(results, options, session) {
-      return textWithPictureFiles(results, session.outFor(join('eyes', options._[0])));
+    async finish(results, options, session) {
+      const dir = session.outFor(join('eyes', options._[0]));
+      const text = textWithPictureFiles(results, dir);
+      // (in an A/B, each strike's strip of frames, the other side's above this tree's)
+      const stacked = await writeStacks(results, dir, session.browser, (label) => label.endsWith(': the strike'));
+      return stacked.length ? `${text}\nside by side: ${stacked.join(', ')}` : text;
     },
     textOf: asText,
     problemsOf: problemsIn,

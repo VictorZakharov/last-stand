@@ -15,7 +15,46 @@
 // (The swing was a wiper's sweep from one side: it wound slowly out to the left, stood there a third of a second,
 // then swept up to the right and stopped upright; #224. Keyed with the hands up by the face and the trunk turning
 // as in third person, the left shoulder came round in front of the eyes and its arm filled half the view.)
-import { viewMove, type ViewMove } from '../viewModel';
+import { viewMove, type ViewMove, type ViewSwing } from '../viewModel';
+import { tunable } from '../../core/tuning';
+
+/**
+ * The cuts through the eyes swung as a body swings them (viewModel.ts `ViewSwing`: each in one plane, its flat that
+ * plane's, so its edge leads; tuned live in a dev build, `--tune warriorSwings.oneFore=...`): a one-hander's forehand,
+ * from high on the right down across to the left, and its backhand, from over the left shoulder down across to the
+ * right, each round the right shoulder (in the eyes' frame (0.30, -0.40, -0.08)). (Keyed as the eyes saw a cut, the
+ * blade held broadside to them, it whipped forward over the top flat first, its edge 40 degrees off the way it moved,
+ * the forearm turned 55 degrees past its range; the owner: "it should strike according to physics... blade parallel
+ * to strike direction")
+ */
+const SWINGS = tunable('warriorSwings', {
+  oneForePlane: [0.22, -0.3, -0.22, -0.45, 0.1, -0.89, 0.6, 0.75, 0.25],
+  oneFore: [
+    0, 0, 0.5, 33,
+    0.28, 60, 0.45, 60,
+    0.36, 63, 0.44, 64,
+    0.44, 48, 0.48, 55,
+    0.5, 25, 0.57, 30,
+    0.56, 0, 0.64, 0,
+    0.62, -15, 0.64, -5,
+    0.72, -22, 0.62, -5,
+    0.85, -22, 0.62, -5,
+  ],
+  oneBackPlane: [0.18, -0.32, -0.18, 0.15, 0.05, -0.99, -0.9, 0.33, -0.25],
+  oneBack: [
+    0, 5, 0.52, 33,
+    0.28, 85, 0.55, 40,
+    0.36, 88, 0.54, 45,
+    0.44, 65, 0.52, 45,
+    0.5, 35, 0.58, 25,
+    0.56, 0, 0.64, 0,
+    0.62, -15, 0.64, -5,
+    0.72, -22, 0.62, -5,
+    0.85, -22, 0.62, -5,
+  ],
+});
+export const ONE_FORE_CUT: ViewSwing = { plane: SWINGS.oneForePlane, keys: SWINGS.oneFore };
+export const ONE_BACK_CUT: ViewSwing = { plane: SWINGS.oneBackPlane, keys: SWINGS.oneBack };
 
 /** a two-hander at rest through the eyes, in a middle guard: the fists low on the right of the crosshair (the lower
  *  one just under the frame, as at a person's belly), the point forward and up, the whole weapon in the frame and its

@@ -93,14 +93,109 @@ export function viewAt(move: ViewMove, k: number, at: THREE.Vector3, dir: THREE.
   }
 }
 
+/**
+ * A blow through the eyes swung as a body swings one: the whole arm and the weapon in one plane through the shoulder,
+ * so the flat is that plane's and the edge over the knuckles leads the way it moves, whatever the keys. A fist bends
+ * its weapon only in its palm's plane, the forearm's line in it (out of it, the wrist bends the flat into the way the
+ * weapon moves), so the forearm is kept in the plane too: the elbow is where the arm's two bones meet in it.
+ * `plane` is nine numbers, camera space as `viewMove`'s keys: where the swing puts the shoulder (a cut turns the trunk
+ * into it and brings that shoulder forward and up: from the shoulders' rest under the camera, a cut swung there passed
+ * below and beside the frame), and the plane's way where the blow lands (0 degrees) and its way back towards the
+ * wind-up (90). `keys` are four numbers a key: its share of the move, the grip's way from the shoulder (degrees in the
+ * plane), how far out it is (m), and the weapon's way off the forearm's line, towards the wind-up (degrees: about 25
+ * with the wrist straight, which bends it in the plane by its flexion, about 70 less to 80 more). Both are read each
+ * frame, so a tunable value (core/tuning.ts) is tuned as it runs. (Keyed by the grip's place and the weapon's way
+ * alone, as `viewMove`'s, the blade whipped over flat first; each axis a curve of its own, it left its plane between
+ * keys and led with its flat.)
+ */
+export interface ViewSwing { plane: readonly number[]; keys: readonly number[] }
+/** an arm's two bones in the view (m): the upper arm, and the forearm on to the grip */
+export interface ArmBones { upper: number; fore: number }
+
+/** a swing's plane: its shoulder, and its ways at 0 and 90 degrees, square to each other */
+const _sp = new THREE.Vector3(), _s0 = new THREE.Vector3(), _s90 = new THREE.Vector3(), _sf = new THREE.Vector3();
+
+/** One of a swing's keys' columns (1: the grip's way, 2: its reach, 3: the weapon's way off the forearm) as a curve. */
+function swingColumn(keys: readonly number[], column: number): Keys {
+  const out: [number, number][] = [];
+  for (let i = 0; i + 3 < keys.length; i += 4) out.push([keys[i], keys[i + column]]);
+  return out;
+}
+
+const DEG = Math.PI / 180;
+
+/** The way at `degrees` in a swing's plane (`_s0`, `_s90`), into `out`. */
+const inPlane = (degrees: number, out: THREE.Vector3) =>
+  out.copy(_s0).multiplyScalar(Math.cos(degrees * DEG)).addScaledVector(_s90, Math.sin(degrees * DEG));
+
+/** The angle of `v` (in a swing's plane) there, degrees. */
+const angleIn = (v: THREE.Vector3) => Math.atan2(v.dot(_s90), v.dot(_s0)) / DEG;
+
+/** Where `swing` puts its arm's shoulder in the view (its plane's centre), into `out`; mirrored for the other hand. */
+export function swingShoulder(swing: ViewSwing, out: THREE.Vector3, mirror = false): THREE.Vector3 {
+  out.set(swing.plane[0], swing.plane[1], swing.plane[2]);
+  if (mirror) out.x = -out.x;
+  return out;
+}
+
+/**
+ * `swing` at `k` for an arm of `bones`, as `viewAt`: the grip's place into `at`, the weapon's way into `dir`, into
+ * `flat` the way the fist's flat side faces (models/warrior.ts `rollFlat`: the edge over the knuckles into the blow,
+ * swung from the wind-up's side, the angles falling), and into `elbow` the way from the shoulder to the elbow (its
+ * reach's pole), each in the view; mirrored across it (`mirror`) for the other hand.
+ */
+export function swingAt(
+  swing: ViewSwing, k: number, bones: ArmBones,
+  at: THREE.Vector3, dir: THREE.Vector3, flat: THREE.Vector3, elbow: THREE.Vector3, mirror = false,
+): void {
+  const p = swing.plane, keys = swing.keys;
+  _sp.set(p[0], p[1], p[2]);
+  _s0.set(p[3], p[4], p[5]).normalize();
+  _s90.set(p[6], p[7], p[8]);
+  _s90.addScaledVector(_s0, -_s90.dot(_s0)).normalize();
+  const way = curve(swingColumn(keys, 1), k), { upper, fore } = bones;
+  const reach = Math.min(Math.max(curve(swingColumn(keys, 2), k), 0.02), upper + fore - 1e-4);
+  inPlane(way, at).multiplyScalar(reach).add(_sp);
+  // (the elbow behind the reach's line, the forearm bending back from it towards the wind-up, as an elbow bends)
+  const off = Math.acos(Math.min(1, Math.max(-1, (upper * upper + reach * reach - fore * fore) / (2 * upper * reach))));
+  inPlane(way - off / DEG, elbow).multiplyScalar(upper);
+  const forearm = angleIn(_sf.copy(at).sub(_sp).sub(elbow));
+  inPlane(forearm + curve(swingColumn(keys, 3), k), dir);
+  // (the weapon's length, the edge leading round to smaller angles, and across them the flat: length × edge)
+  flat.crossVectors(_s90, _s0);
+  if (mirror) {
+    at.x = -at.x;
+    dir.x = -dir.x;
+    elbow.x = -elbow.x;
+    // (a mirrored grip's flat is the mirror image's, turned over: models/warrior.ts `gripL`)
+    flat.set(flat.x, -flat.y, -flat.z);
+  }
+}
+
+const _tx = new THREE.Vector3(), _tf = new THREE.Vector3();
+const Y_UP = new THREE.Vector3(0, 1, 0), X_AXIS = new THREE.Vector3(1, 0, 0);
+
+/** `from` turned towards `to` by `w` of the angle between them, into `out` (unit ways; the short way round, as a fist
+ *  turns its handle: lerped, two flats facing apart passed through nothing halfway) */
+export function turnTowards(from: THREE.Vector3, to: THREE.Vector3, w: number, out: THREE.Vector3): THREE.Vector3 {
+  const angle = from.angleTo(to);
+  _tx.crossVectors(from, to);
+  if (_tx.lengthSq() < 1e-8) _tx.crossVectors(from, Math.abs(from.y) < 0.9 ? Y_UP : X_AXIS);
+  return out.copy(_tf.copy(from).applyAxisAngle(_tx.normalize(), angle * w).normalize());
+}
+
 /** A fade through the eyes from where a weapon was last placed in the view, as `PoseFade` is for the joints: a
  *  placement made after the pose's fade (a two-hander held in the view, a cut keyed there) would leap from the end
  *  of a move to the next in a frame. */
 export class ViewFade {
   private readonly at = new THREE.Vector3();
   private readonly dir = new THREE.Vector3();
+  private readonly flat = new THREE.Vector3();
   private readonly fromAt = new THREE.Vector3();
   private readonly fromDir = new THREE.Vector3();
+  private readonly fromFlat = new THREE.Vector3();
+  private hold = 0;
+  private fromHold = 0;
   private w = 0;
   private dur = 0.2;
   private primed = false;
@@ -110,21 +205,30 @@ export class ViewFade {
     if (!this.primed) return;
     this.fromAt.copy(this.at);
     this.fromDir.copy(this.dir);
+    this.fromFlat.copy(this.flat);
+    this.fromHold = this.hold;
     this.w = 1;
     this.dur = dur;
   }
 
-  /** this frame's place (`at`, the way `dir`), faded from the last cut's */
-  apply(at: THREE.Vector3, dir: THREE.Vector3, dt: number): void {
+  /** this frame's place (`at`, the way `dir`, the way its flat faces `flat`), faded from the last cut's, and how far a
+   *  swing holds its fist (models/warrior.ts `fitInView`'s `hold`), faded so too: the one to use (a swing's fist let
+   *  go of at once as it ended, the weapon turned 60 degrees in a frame) */
+  apply(at: THREE.Vector3, dir: THREE.Vector3, dt: number, flat?: THREE.Vector3, hold = 0): number {
     if (this.w > 0) {
       this.w = Math.max(0, this.w - dt / this.dur);
       const e = this.w * this.w * (3 - 2 * this.w);
       at.lerp(this.fromAt, e);
       dir.normalize().lerp(this.fromDir, e).normalize();
+      if (flat) turnTowards(flat, this.fromFlat, e, flat);
+      hold += (this.fromHold - hold) * e;
     }
     this.at.copy(at);
     this.dir.copy(dir).normalize();
+    if (flat) this.flat.copy(flat);
+    this.hold = hold;
     this.primed = true;
+    return hold;
   }
 
   /** nothing placed this frame: the next cut does nothing */
