@@ -39,6 +39,11 @@ export interface ViewSwing {
   keys: readonly number[];
   slant: number;
   hit: number;
+  /** the swing whose plane this one starts in, turned into its own from `turning[0]` to `turning[1]` of the move
+   *  (eased in and out): a cut in a row taken on from where the last left the arm, its first key that one's last, the
+   *  arm laid out in a plane the whole way (`planeAt`) */
+  from?: ViewSwing;
+  turning?: readonly number[];
 }
 /** an arm's bones in the view (m): the upper arm, the forearm, the fist from its wrist to the handle's axis, and the
  *  weapon from its grip to where its blow lands (its striking part) */
@@ -51,6 +56,9 @@ export interface SwingKey { way: number; reach: number; bend: number; drop: numb
  *  crosses the view */
 const _sp = new THREE.Vector3(), _s0 = new THREE.Vector3(), _s90 = new THREE.Vector3();
 const _aim = new THREE.Vector3(), _across = new THREE.Vector3(), _normal = new THREE.Vector3();
+/** a plane's ways as a turn of the view's (`frameOf`), the swing's own, and its own shoulder */
+const _frame = new THREE.Quaternion(), _frameOwn = new THREE.Quaternion(), _spOwn = new THREE.Vector3();
+const _basis = new THREE.Matrix4(), _square = new THREE.Vector3();
 
 /** the numbers a swing's key has (`ViewSwing`) */
 export const SWING_KEY = 6;
@@ -184,6 +192,35 @@ function planeOf(swing: ViewSwing, bones: ArmBones): void {
   if (_s90.dot(_across) > 0) _s90.negate();
 }
 
+/** The plane set last (`planeOf`) as the turn that takes the view's x and y to its 0 and 90 degrees, into `out`. */
+function frameOf(out: THREE.Quaternion): THREE.Quaternion {
+  _basis.makeBasis(_s0, _s90, _square.crossVectors(_s0, _s90));
+  return out.setFromRotationMatrix(_basis);
+}
+
+/** Sets the plane `swing` has at `k` (`planeOf`): its own, or turned into it from its `from` swing's over its
+ *  `turning`, the shoulder moved with it. (Faded from the last cut's end into this one's wind-up instead, the grip
+ *  went straight between them, the fist turned on its own, and the right wrist bent 26 degrees past its range. Turned
+ *  over the last cut's end into this one's plane, it turned while the follow-through was still fast, 32 degrees in a
+ *  frame, and cut it short: a heavy weapon's dies away over a fifth of a second, most of what's left of its cut.) */
+function planeAt(swing: ViewSwing, k: number, bones: ArmBones): void {
+  planeOf(swing, bones);
+  const { from, turning } = swing;
+  if (!from || !turning) return;
+  const t = smooth(clamp((k - turning[0]) / (turning[1] - turning[0]), 0, 1));
+  if (t >= 1) return;
+  _spOwn.copy(_sp);
+  frameOf(_frameOwn);
+  planeOf(from, bones);
+  frameOf(_frame).slerp(_frameOwn, t);
+  _sp.lerp(_spOwn, t);
+  _s0.set(1, 0, 0).applyQuaternion(_frame);
+  _s90.set(0, 1, 0).applyQuaternion(_frame);
+  _normal.set(0, 0, 1).applyQuaternion(_frame);
+}
+/** Eased in and out (0..1). */
+const smooth = (t: number) => t * t * (3 - 2 * t);
+
 /** The arm `key` lays out in the plane set last (`planeOf`), placed in the view as `swingAt` says. */
 function placeArm(
   key: SwingKey, slant: number, bones: ArmBones,
@@ -219,7 +256,7 @@ export function swingAt(
   swing: ViewSwing, k: number, bones: ArmBones,
   at: THREE.Vector3, dir: THREE.Vector3, flat: THREE.Vector3, elbow: THREE.Vector3, mirror = false,
 ): void {
-  planeOf(swing, bones);
+  planeAt(swing, k, bones);
   placeArm(keyAt(swing, k, _key), swing.slant, bones, at, dir, flat, elbow, mirror);
 }
 
