@@ -279,7 +279,8 @@ export interface Clip {
 
 /** One picture, as a PNG data URL: of a view of the game, or of the screen with the page's UI (`Lab.screen`). */
 export interface Tile {
-  view: ViewName | 'screen';
+  /** the view: the game's, the screen, or a command's own (`lab weapons`' studio) */
+  view: ViewName | 'screen' | (string & {});
   png: string;
   width: number;
   height: number;

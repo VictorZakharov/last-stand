@@ -25,6 +25,7 @@ import type { DeathOptions } from './death';
 import type { CrowdOptions } from './crowd';
 import type { DrawsOptions } from './draws';
 import type { ShotsOptions } from './shots';
+import type { WeaponsOptions } from './weapons';
 
 export interface SheetCommand {
   states: string[];
@@ -33,6 +34,12 @@ export interface SheetCommand {
   focus?: keyof Joints;
   skill?: string;
   shares?: number[];
+}
+
+/** `lab weapons`: each weapon pictured alone; a canary it missed is a problem. */
+export async function weapons(lab: Lab, command: WeaponsOptions): Promise<Report> {
+  const { weapons: picture } = await import('./weapons');
+  return picture(lab, command);
 }
 
 /** `lab sheet`: the pictures and their notes. */

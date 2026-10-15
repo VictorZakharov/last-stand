@@ -37,6 +37,7 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `crowd`: a crowd of foes killed at once and what the frame costs as they fall (each frame timed by the browser's clock with the game drawn, the bodies' part apart, at each CPU slowdown, as a low-end device's, and frame rate)
 - `draws`: one frame's draw calls with the crowd standing, by what drew them (the geometries drawn most often, those that drew the most triangles, the scene's draws by their material's look; the scene's objects whose matrices are made again each frame)
 - `gear`: full sets of gear rolled for every class at each tier (the Health, regeneration and draught they give, and the damage they multiply)
+- `weapons`: each of the hero's weapons alone in a lit studio (face on, edge on, from behind, from three-quarters and its head close up, with its size and its triangles)
 - `music`: each biome's music as the player hears it (its lobby, a run's countdowns, fights and wins, a hidden tab and the bank back: which track plays, how it fades, where it comes in, what reaches WebAudio)
 
 Options every command takes:
@@ -355,6 +356,16 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   doesn't move would make one). Its head line says the scene's objects whose matrices are made again each frame, and
   how many of them are off the camera's layer (a crowd's bodies' own meshes). `--canary` stands seven boxes of one
   geometry before the hero, which must come out as seven draws of it.
+- `weapons`: each of the hero's weapons alone (`page/weapons.ts`; `--weapons Sword,Maul`, the class's bases by
+  default): a copy of the one in his right hand, at its own frame (unturned in the fist), put in a plain, lit
+  studio of its own and pictured face on (a blade's flat, an axe's bit to the side), edge on, from behind (a face
+  wound inside out shows there as a hole), from three-quarters and its head close up, each framed on its own length
+  and width, with its size and how many triangles it's drawn with. A weapon is judged here as it's made, before
+  it's seen in a hand. Its pictures are read from the drawing buffer and taken as opaque: the game draws its frame
+  with an alpha of 0 (`core/hdr.ts` adds it to the page as light), and copied onto a 2D canvas every picture came
+  out black; and the lab draws nothing outside its pictures (`Lab.drawing`). A picture with next to nothing of the
+  weapon in it is a problem, and `--canary` pictures an empty studio, which must read as nothing drawn. Compare a
+  change to a model with `--ab`.
 - `held`: every held skill of the hero's class (`SkillDef.aimed`: the ranger's Quarry Mark and Strawman, the mage's
   Starfall and Veilstep; `page/held.ts`, `--class`) held as the player holds it, over a training dummy the way the
   camera looks: ready, its preview shown in its own look with no countdown, and let go it casts; then held through

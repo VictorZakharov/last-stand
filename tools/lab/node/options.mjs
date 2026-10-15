@@ -551,6 +551,16 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  weapons: {
+    help: 'each of the hero\'s weapons alone in a plain, lit studio: face on, edge on, from behind, from '
+      + 'three-quarters and its head close up, with its size and its triangles: tools/lab/out/weapons/sheet.png',
+    options: {
+      weapons: { kind: 'list', usage: 'a,b', help: 'the bases pictured (the class\'s weapons by default)' },
+      canary: { kind: 'switch', help: 'an empty studio pictured too: the measure of what\'s drawn must find nothing' },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   shots: {
     help: 'the hero\'s basic attack (the ranger\'s bow drawn to full) loosed at points over each biome\'s boss '
       + 'with its summons and the biome\'s foes packed round it, in each view, the crosshair turned onto each point in '
