@@ -54,6 +54,11 @@ const SETUP_OPTIONS = {
     help: 'with --gear, the weapon held that way by its base (Maul, Greataxe...; dual: one in each hand; the '
       + 'class\'s first by default)',
   },
+  tune: {
+    kind: 'text',
+    usage: 'name.field=v[,v...][;...]',
+    help: 'tunable values set before the run (src/core/tuning.ts: warriorEyes.at=0,0.3,-0.2;warriorEyes.tilt=-0.4)',
+  },
 };
 
 /** the options every command running on a page takes */

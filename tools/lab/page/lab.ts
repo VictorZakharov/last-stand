@@ -222,6 +222,8 @@ export interface Fixture {
    *  before it on the page (set up again over the same hero, a gait scenario's every line moved with the scenarios
    *  run before it: his walk cycle, his leg IK's smoothed speed, turn and twist, his aim's hold all carried over) */
   fresh?: boolean;
+  /** tunable values set before the run, by their paths (`name.field`: src/core/tuning.ts) */
+  tune?: Record<string, number[]>;
 }
 
 /** The pictures the lab can take: the game's own views, or a close-up from round the hero. */
@@ -478,6 +480,7 @@ export class Lab {
     this.keepUp = [() => holdTheWave(this.foes), this.keepHeroUp];
     await this.until(() => !this.player.casting && !this.player.channel, 400, 'the hero is still busy with a cast');
     if (fixture.fresh) this.buildHeroAgain();
+    setTunes(fixture.tune ?? {});
     await this.useView(fixture.view ?? 'top');
     const [x, z] = fixture.at ?? SPOT;
     const facing = fixture.facing ?? 0;
@@ -948,6 +951,14 @@ function holdTheWave(kept: Set<Enemy>): void {
   run.queue = [];
   run.phase = 'countdown';
   run.timer = Infinity;
+}
+
+/** Sets the game's tunable values (`Fixture.tune`; src/core/tuning.ts), each by its path. */
+function setTunes(tunes: Record<string, number[]>): void {
+  const paths = Object.keys(tunes);
+  if (!paths.length) return;
+  if (!window.__tune) throw new Error('lab: --tune: this game has no tunable values');
+  for (const path of paths) window.__tune(path, tunes[path]);
 }
 
 /** The session's entry: the lab installed on this page. */

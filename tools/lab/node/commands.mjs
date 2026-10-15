@@ -35,7 +35,22 @@ export function fixtureFrom(options) {
   if (options.nocked !== undefined) fixture.nocked = options.nocked;
   if (options.gear !== undefined) fixture.gear = options.gear;
   if (options.weapon !== undefined) fixture.weapon = options.weapon;
+  if (options.tune !== undefined) fixture.tune = tunesFrom(options.tune);
   return fixture;
+}
+
+/** `--tune`'s text as the values it sets, by their paths: `a.b=1,2;c.d=3` sets a.b to [1, 2] and c.d to [3]. */
+function tunesFrom(text) {
+  const tunes = {};
+  for (const part of text.split(';').filter(Boolean)) {
+    const [path, values] = part.split('=');
+    const numbers = (values ?? '').split(',').map(Number);
+    if (!path.includes('.') || !values || numbers.some((n) => !Number.isFinite(n))) {
+      throw new Error(`lab: --tune: ${part} isn't name.field=numbers`);
+    }
+    tunes[path] = numbers;
+  }
+  return tunes;
 }
 
 /**
