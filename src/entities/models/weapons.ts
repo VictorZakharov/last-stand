@@ -1,8 +1,9 @@
 // The warrior's weapons, each built along its grip's +Y from where the right hand holds it (the head or the blade up),
 // its width (a blade's, an axe's bit) along +X and its flats facing ±Z. Made as a smith makes them, of the parts that
 // make each what it is: a blade with its bevels, flats and fuller, a guard, a wrapped grip and a pommel; an axe's
-// bearded head thinning to a bright edge, its socket, poll, langets and rivets; a maul's banded head with its
-// striking faces. Drawn as boxes and discs, through the eyes a maul was a stick and an axe a haft with a plate on it.
+// bearded head thinning to a bright edge, its socket, poll, langets and rivets; a mace's flanges swept to their
+// points round a socket; a maul's banded head with its striking faces. Drawn as boxes and discs, through the eyes a
+// maul was a stick, an axe a haft with a plate on it and a mace a block.
 import * as THREE from 'three';
 import { lathe, mirrorX, skipping, type Sculpt } from './shapes';
 import { taperTube, twist, scaleUV } from './armor';
@@ -212,9 +213,9 @@ function headFace(): THREE.Vector3[][] {
   return rows;
 }
 
-/** The strips round a face's rim that close it to its back: along its top and its beard (steel), and along its
- *  bit (the edge's polish). */
-function headRims(face: THREE.Vector3[][]): { steel: THREE.BufferGeometry[]; edge: THREE.BufferGeometry } {
+/** The strips round a flat piece's rim that close its face to its back (its rows going down, as an axe head's and a
+ *  mace's flange's): along its first and last rows (steel), and along its rows' outer ends (the edge's polish). */
+function rims(face: THREE.Vector3[][]): { steel: THREE.BufferGeometry[]; edge: THREE.BufferGeometry } {
   const behind = back(face);
   const last = face.length - 1;
   const ends = (rows: THREE.Vector3[][]) => rows.map((row) => row[row.length - 1]);
@@ -239,9 +240,9 @@ function beardedHead(w: Sculpt, g: THREE.Group, M: WeaponMaterials, at: number, 
   piece(() => surface(band(back(face), 0, BEVEL_FROM), true), M.steel);
   piece(() => surface(band(face, BEVEL_FROM, HEAD_ACROSS.length - 1)), M.blade);
   piece(() => surface(band(back(face), BEVEL_FROM, HEAD_ACROSS.length - 1), true), M.blade);
-  const rims = skipping() ? null : headRims(face);
-  for (const rim of [0, 1]) piece(() => rims!.steel[rim], M.steel);
-  piece(() => rims!.edge, M.blade);
+  const closing = skipping() ? null : rims(face);
+  for (const rim of [0, 1]) piece(() => closing!.steel[rim], M.steel);
+  piece(() => closing!.edge, M.blade);
   // the socket round the haft, a rivet on each side above and below the haft's wedge
   w.add(made(() => new THREE.CylinderGeometry(0.031, 0.035, 0.17, 8).scale(1, 1, 0.82)), M.dark, g, place(0, 0), [0, Math.PI / 8, 0], k);
   for (const y of [0.045, -0.045]) {
@@ -283,16 +284,98 @@ export function greataxe(w: Sculpt, g: THREE.Group, M: WeaponMaterials): void {
 
 // --- hafted weapons with heads of their own ---
 
-/** a mace: a flanged steel head on a wooden haft */
-export function mace(w: Sculpt, g: THREE.Group, M: WeaponMaterials): void {
-  w.add(made(() => scaleUV(new THREE.CylinderGeometry(0.024, 0.0264, 0.76, 10), 1, 4)), M.wood, g, [0, 0.24, 0]);
-  w.add(made(() => twist(0.2, 0.0252, 0.006, 5)), M.leatherDark, g, [0, 0.14, 0]);
-  w.add(made(() => new THREE.SphereGeometry(0.075, 14, 10)), M.dark, g, [0, 0.64, 0]);
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * Math.PI * 2;
-    w.add(made(() => new THREE.BoxGeometry(0.018, 0.17, 0.075)), M.steel, g, [Math.cos(a) * 0.07, 0.64, Math.sin(a) * 0.07], [0, -a, 0]);
+/** the mace's head: where its flanges start and end up the haft, the height each comes to its point at and how far
+ *  out, how many there are round it, and each flange's rows along either edge of its point */
+const MACE_FROM = 0.555;
+const MACE_TO = 0.735;
+const MACE_POINT = 0.665;
+const MACE_REACH = 0.085;
+const FLANGES = 7;
+const FLANGE_ROWS = 8;
+/** a flange's columns from its root out to its edge (shares of the way), the last band the bevel polished to it */
+const FLANGE_ACROSS = [0, 0.4, 0.78, 0.9, 1];
+const FLANGE_BEVEL = 2;
+
+/** the mace's turned parts, each a profile up the haft (radius, height): the socket the flanges stand on, the collar
+ *  moulded below it, the finial on top and the pommel at the butt */
+const SOCKET: [number, number][] = [
+  [0.031, 0.552], [0.0315, 0.6], [0.0305, 0.69], [0.027, 0.722], [0.022, 0.738], [0.001, 0.742],
+];
+const COLLAR: [number, number][] = [[0.0215, 0.52], [0.028, 0.522], [0.034, 0.532], [0.036, 0.542], [0.033, 0.552], [0.031, 0.56]];
+const FINIAL: [number, number][] = [
+  [0.019, 0.738], [0.024, 0.744], [0.026, 0.751], [0.022, 0.758], [0.012, 0.762], [0.014, 0.768], [0.012, 0.778],
+  [0.001, 0.79],
+];
+const POMMEL: [number, number][] = [
+  [0.001, -0.168], [0.017, -0.165], [0.027, -0.157], [0.031, -0.145], [0.029, -0.134], [0.025, -0.127], [0.026, -0.115],
+];
+
+/** A profile's radius at height `y` (its points in order up it). */
+function radiusAt(profile: [number, number][], y: number): number {
+  for (let i = 1; i < profile.length; i++) {
+    const [r0, y0] = profile[i - 1];
+    const [r1, y1] = profile[i];
+    if (y <= y1) return lerp(r0, r1, clamp((y - y0) / (y1 - y0), 0, 1));
   }
-  w.add(made(() => new THREE.ConeGeometry(0.025, 0.07, 8)), M.steel, g, [0, 0.74, 0]);
+  return profile[profile.length - 1][0];
+}
+
+/** The front face of a flange (in the XY plane, out along +X): rows from its top down to its foot, each from its
+ *  root in the socket out to its edge, thinning to it. Below its point the edge sweeps back to the socket hollowed,
+ *  above it too, so the two meet in a spur; each end is left a little wide, to be closed by its rims. */
+function flangeFace(): THREE.Vector3[][] {
+  const rows: THREE.Vector3[][] = [];
+  for (let i = 0; i <= FLANGE_ROWS * 2; i++) {
+    const below = i <= FLANGE_ROWS;
+    const u = below ? i / FLANGE_ROWS : (i - FLANGE_ROWS) / FLANGE_ROWS;
+    const y = below ? lerp(MACE_FROM, MACE_POINT, u) : lerp(MACE_POINT, MACE_TO, u);
+    const root = radiusAt(SOCKET, y) - 0.004;
+    const out = below ? Math.pow(u, 1.7) : Math.pow(1 - u, 1.3);
+    const edge = lerp(root + 0.008, MACE_REACH, out);
+    rows.push(FLANGE_ACROSS.map((t) => V(lerp(root, edge, t), y, 0.0055 * Math.pow(1 - t, 1.2) + 0.0008)));
+  }
+  return rows.reverse();
+}
+
+/** A flange of `face` turned `a` round the haft: its flats steel, its bevel and edge polished. */
+function flange(w: Sculpt, g: THREE.Group, M: WeaponMaterials, face: THREE.Vector3[][], a: number): void {
+  const piece = (build: () => THREE.BufferGeometry, material: THREE.Material) => {
+    w.add(made(build), material, g, [0, 0, 0], [0, a, 0]);
+  };
+  const last = FLANGE_ACROSS.length - 1;
+  piece(() => surface(band(face, 0, FLANGE_BEVEL)), M.steel);
+  piece(() => surface(band(back(face), 0, FLANGE_BEVEL), true), M.steel);
+  piece(() => surface(band(face, FLANGE_BEVEL, last)), M.blade);
+  piece(() => surface(band(back(face), FLANGE_BEVEL, last), true), M.blade);
+  const closing = skipping() ? null : rims(face);
+  for (const rim of [0, 1]) piece(() => closing!.steel[rim], M.steel);
+  piece(() => closing!.edge, M.blade);
+}
+
+/** a flanged mace: seven flanges round a socket, each swept up to a point high on the head and polished along its
+ *  edge, a turned finial on top and a moulded collar below, held to the haft by riveted langets; its grip wrapped,
+ *  a steel pommel at its butt */
+export function mace(w: Sculpt, g: THREE.Group, M: WeaponMaterials): void {
+  const haft: [number, number][] = [
+    [0.001, -0.128], [0.0235, -0.126], [0.024, 0.12], [0.0228, 0.35], [0.0215, 0.6], [0.001, 0.61],
+  ];
+  w.add(made(() => scaleUV(lathe(haft, 12), 1, 4)), M.wood, g);
+  wrap(w, g, M, 0.12, -0.11, 0.024, 7);
+  w.add(made(() => lathe(POMMEL, 14)), M.steel, g);
+  // the head: the socket, its flanges, a brass ring under the finial and the collar below
+  w.add(made(() => lathe(SOCKET, 14)), M.dark, g);
+  const face = skipping() ? [] : flangeFace();
+  for (let i = 0; i < FLANGES; i++) flange(w, g, M, face, (i / FLANGES) * Math.PI * 2);
+  w.add(made(() => new THREE.CylinderGeometry(0.0235, 0.0235, 0.006, 14)), M.brass, g, [0, 0.737, 0]);
+  w.add(made(() => lathe(FINIAL, 14)), M.steel, g);
+  w.add(made(() => lathe(COLLAR, 14)), M.steel, g);
+  // langets down the haft from the collar, two rivets through each
+  for (let i = 0; i < 4; i++) {
+    const a = ((i + 0.5) / 4) * Math.PI * 2;
+    const [x, z] = [Math.cos(a) * 0.0225, Math.sin(a) * 0.0225];
+    w.add(made(() => new THREE.BoxGeometry(0.012, 0.13, 0.004)), M.steel, g, [x, 0.455, z], [0, Math.PI / 2 - a, 0]);
+    for (const y of [0.49, 0.42]) w.add(rivet(0.0042), M.brass, g, [x * 1.09, y, z * 1.09], [0, Math.PI / 2 - a, 0]);
+  }
 }
 
 /** the maul's head: its middle at this height on the haft, the half-length of its octagonal body along X, and the

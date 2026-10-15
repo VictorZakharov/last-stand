@@ -39,7 +39,8 @@ const SETUP_OPTIONS = {
   weapon: {
     kind: 'text',
     usage: 'base',
-    help: 'with --gear, the weapon held that way by its base (Maul, Greataxe...; the class\'s first by default)',
+    help: 'with --gear, the weapon held that way by its base (Maul, Greataxe...; dual: one in each hand; the '
+      + 'class\'s first by default)',
   },
 };
 

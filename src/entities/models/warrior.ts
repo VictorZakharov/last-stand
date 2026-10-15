@@ -544,7 +544,7 @@ export function buildWarrior(): Model {
   };
   add('Sword', 1.12, null, 0.024, (w, g) => sword(w, g, M), { at: 0.115, down: true });
   add('Axe', 0.74, null, 0.024, (w, g) => axe(w, g, M), { at: 0.44, down: false });
-  add('Mace', 0.72, null, 0.026, (w, g) => mace(w, g, M), { at: 0.54, down: false });
+  add('Mace', 0.72, null, 0.026, (w, g) => mace(w, g, M), { at: 0.52, down: false });
   add('Greatsword', 1.62, -0.24, 0.026, (w, g) => greatsword(w, g, M));
   add('Greataxe', 1.12, -0.3, 0.028, (w, g) => greataxe(w, g, M));
   add('Maul', 1.1, -0.28, 0.029, (w, g) => maul(w, g, M));

@@ -494,7 +494,7 @@ Options every command run on a page takes:
   string`), not the browser's "Failed to fetch dynamically imported module";
 - the set-up (sheet, carry, probe): `--view top|third|first`, `--at x,z`, `--facing rad`, `--nocked[=false]`,
   `--gear oneHanded|shield|twoHanded|dual` (the hero holding his weapons that way, from his class's own bases: as the
-  profile rolled them by default);
+  profile rolled them by default), `--weapon` the base held so (with `dual` one in each hand);
 - `gait --films=false`, `form --pictures=false`: the numbers alone, each run once (a film or a picture runs it
   again); `gait --offset n`: each scenario's first move n frames longer, its later turns and stops at other
   points of a stride (a check's starts);
