@@ -39,7 +39,8 @@ const SETUP_OPTIONS = {
   weapon: {
     kind: 'text',
     usage: 'base',
-    help: 'with --gear, the weapon held that way by its base (Maul, Greataxe...; the class\'s first by default)',
+    help: 'with --gear, the weapon held that way by its base (Maul, Greataxe...; dual: one in each hand; the '
+      + 'class\'s first by default)',
   },
 };
 
@@ -547,6 +548,16 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'stand seven boxes of one geometry before the hero: they must come out as seven draws of it',
       },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  weapons: {
+    help: 'each of the hero\'s weapons alone in a plain, lit studio: face on, edge on, from behind, from '
+      + 'three-quarters and its head close up, with its size and its triangles: tools/lab/out/weapons/sheet.png',
+    options: {
+      weapons: { kind: 'list', usage: 'a,b', help: 'the bases pictured (the class\'s weapons by default)' },
+      canary: { kind: 'switch', help: 'an empty studio pictured too: the measure of what\'s drawn must find nothing' },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
     },

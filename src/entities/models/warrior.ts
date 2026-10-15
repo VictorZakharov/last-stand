@@ -18,6 +18,7 @@ import { buildFlask, drink, drinkUp, DRINK_SHEATHED, type DrinkHold } from './fl
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, fistReach, fistTurn, gripTurn, bare, handCapsules, SLANT } from './hands';
+import { axe, greataxe, greatsword, mace, maul, sword, type WeaponMaterials } from './weapons';
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { groundHeight } from '../../world/ground';
 import { fromEyes, dirFromEyes } from '../viewModel';
@@ -531,87 +532,22 @@ export function buildWarrior(): Model {
   const add = (name: string, len: number, off: number | null, r: number, build: (w: Sculpt, g: THREE.Group) => void, hang?: Weapon['hang']) => {
     const g = new THREE.Group();
     grip.add(g);
-    const w = new Sculpt();
+    const w = new Sculpt(`warrior-${name}`);
     build(w, g);
     w.glow(edge).build();
     g.visible = false;
     weapons.set(name, { group: g, len, off, r, hang });
   };
-  /** a blade along +Y from `at`: a flattened diamond with a fuller (a groove down its middle) tapering to the point */
-  const blade = (w: Sculpt, g: THREE.Group, bw: number, len: number, at: number) => {
-    const t = bw * 0.2, sec = (k: number, f: number): [number, number][] => [[bw * k, 0], [bw * 0.45 * k, t * k], [bw * 0.18 * k, t * (1 - 0.45 * f) * k], [-bw * 0.18 * k, t * (1 - 0.45 * f) * k], [-bw * 0.45 * k, t * k], [-bw * k, 0], [-bw * 0.45 * k, -t * k], [-bw * 0.18 * k, -t * (1 - 0.45 * f) * k], [bw * 0.18 * k, -t * (1 - 0.45 * f) * k], [bw * 0.45 * k, -t * k]];
-    const rows = 10, pos: number[] = [];
-    const ring = (i: number) => { const y = i / rows, k = y < 0.82 ? 1 - y * 0.18 : (1 - y) / 0.18 * 0.85, f = y < 0.75 ? 1 : Math.max(0, 1 - (y - 0.75) / 0.1); return sec(Math.max(k, 0.001), f).map(([x, z]) => V(x, at + y * len, z)); };
-    for (let i = 0; i < rows; i++) {
-      const A = ring(i), B = ring(i + 1);
-      // wound so the faces (and the normals made from them) point out of the blade: turned inwards, the
-      // inside of the far face was drawn, lit from the wrong side (black against the light)
-      for (let q = 0; q < A.length; q++) { const r = (q + 1) % A.length; pos.push(...A[q].toArray(), ...B[q].toArray(), ...A[r].toArray(), ...B[q].toArray(), ...B[r].toArray(), ...A[r].toArray()); }
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    const uv: number[] = [];
-    for (let i = 0; i < pos.length; i += 3) uv.push(pos[i] * 3, pos[i + 1] * 3);
-    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    geo.computeVertexNormals();
-    w.add(geo, bladeM, g);
-    w.add(new THREE.BoxGeometry(0.004, len * 0.7, bw * 0.3), edge, g, [0, at + len * 0.4, 0]);
+  // (each made as models/weapons.ts makes it, a sculpt of its own kind: a hero built again replays its pieces)
+  const M: WeaponMaterials = {
+    steel: plateM, dark: darkSteel, blade: bladeM, engraved, brass, wood, leather, leatherDark, glow: edge,
   };
-  const haft = (w: Sculpt, g: THREE.Group, from: number, to: number, r = 0.022) => {
-    w.add(scaleUV(new THREE.CylinderGeometry(r, r * 1.1, to - from, 10), 1, 4), wood, g, [0, (from + to) / 2, 0]);
-    w.add(twist(0.2, r * 1.05, 0.006, 5), leatherDark, g, [0, from + 0.28, 0]);
-  };
-  // an axe blade: a wedge of a disc standing in the haft's plane, centred on +X (or -X), with a bearded edge
-  const axeHead = (w: Sculpt, g: THREE.Group, r: number, at: number, side: number) => {
-    w.add(new THREE.CylinderGeometry(r, r, 0.022, 20, 1, false, side * Math.PI / 2 - 0.8, 1.6), plateM, g, [side * 0.02, at, 0], [Math.PI / 2, 0, 0]);
-    w.add(new THREE.CylinderGeometry(r * 1.02, r * 1.02, 0.008, 20, 1, false, side * Math.PI / 2 - 0.78, 1.56), darkSteel, g, [side * 0.02, at, 0], [Math.PI / 2, 0, 0]);
-  };
-  /** a crossguard with quillons curving towards the blade, a wrapped grip and a wheel pommel */
-  const hilt = (w: Sculpt, g: THREE.Group, gripL: number, guard: number) => {
-    w.add(scaleUV(new THREE.CylinderGeometry(0.02, 0.023, gripL, 10), 1, 3), leatherDark, g, [0, 0.1 - gripL / 2, 0]);
-    w.add(twist(gripL * 0.9, 0.023, 0.004, 6), leather, g, [0, 0.1 - gripL * 0.05, 0]);
-    for (const s of [1, -1]) w.add(taperTube([V(0, 0, 0), V(s * guard * 0.5, 0.005, 0), V(s * guard, 0.03, 0)], (t) => 0.016 * (1 - t * 0.4), 8, 6), plateM, g, [0, 0.11, 0]);
-    w.add(new THREE.BoxGeometry(0.06, 0.03, 0.04), plateM, g, [0, 0.11, 0]);
-    w.add(lathe([[0.001, -0.022], [0.034, -0.012], [0.036, 0.012], [0.001, 0.022]], 16), plateM, g, [0, 0.1 - gripL - 0.02, 0], [Math.PI / 2, 0, 0], [1, 1, 0.55]);
-    w.add(new THREE.SphereGeometry(0.012, 8, 6), brass, g, [0, 0.1 - gripL - 0.02, 0.012]);
-  };
-
-  add('Sword', 1.12, null, 0.024, (w, g) => { hilt(w, g, 0.2, 0.14); blade(w, g, 0.045, 0.94, 0.12); }, { at: 0.115, down: true });
-  add('Axe', 0.74, null, 0.024, (w, g) => {
-    haft(w, g, -0.14, 0.72);
-    axeHead(w, g, 0.2, 0.6, 1);
-    w.add(new THREE.BoxGeometry(0.1, 0.05, 0.04), darkSteel, g, [-0.06, 0.6, 0]);
-    w.add(new THREE.CylinderGeometry(0.03, 0.03, 0.08, 8), brass, g, [0, 0.6, 0]);
-  }, { at: 0.44, down: false });
-  add('Mace', 0.72, null, 0.026, (w, g) => {
-    haft(w, g, -0.14, 0.62, 0.024);
-    w.add(new THREE.SphereGeometry(0.075, 14, 10), darkSteel, g, [0, 0.64, 0]);
-    for (let i = 0; i < 7; i++) {
-      const a = (i / 7) * Math.PI * 2;
-      w.add(new THREE.BoxGeometry(0.018, 0.17, 0.075), plateM, g, [Math.cos(a) * 0.07, 0.64, Math.sin(a) * 0.07], [0, -a, 0]);
-    }
-    w.add(new THREE.ConeGeometry(0.025, 0.07, 8), plateM, g, [0, 0.74, 0]);
-  }, { at: 0.54, down: false });
-  add('Greatsword', 1.62, -0.24, 0.026, (w, g) => {
-    hilt(w, g, 0.44, 0.24);
-    for (const s of [1, -1]) w.add(new THREE.SphereGeometry(0.022, 8, 6), brass, g, [s * 0.24, 0.14, 0]);
-    blade(w, g, 0.062, 1.34, 0.13);
-  });
-  add('Greataxe', 1.12, -0.3, 0.028, (w, g) => {
-    haft(w, g, -0.42, 1.1, 0.026);
-    for (const s of [1, -1]) axeHead(w, g, 0.27, 0.9, s);
-    w.add(new THREE.CylinderGeometry(0.036, 0.036, 0.1, 10), brass, g, [0, 0.9, 0]);
-    w.add(new THREE.ConeGeometry(0.03, 0.12, 6), plateM, g, [0, 1.14, 0]);
-  });
-  add('Maul', 1.1, -0.28, 0.029, (w, g) => {
-    haft(w, g, -0.38, 0.92, 0.027);
-    w.add(new THREE.BoxGeometry(0.4, 0.22, 0.22), darkSteel, g, [0, 1.0, 0]);
-    for (const s of [1, -1]) {
-      w.add(new THREE.BoxGeometry(0.03, 0.24, 0.24), plateM, g, [s * 0.14, 1.0, 0]);
-      w.add(new THREE.CylinderGeometry(0.1, 0.11, 0.03, 12), plateM, g, [s * 0.215, 1.0, 0], [0, 0, Math.PI / 2]);
-    }
-    w.add(new THREE.CylinderGeometry(0.035, 0.035, 0.1, 8), brass, g, [0, 0.84, 0]);
-  });
+  add('Sword', 1.12, null, 0.024, (w, g) => sword(w, g, M), { at: 0.115, down: true });
+  add('Axe', 0.74, null, 0.024, (w, g) => axe(w, g, M), { at: 0.44, down: false });
+  add('Mace', 0.72, null, 0.026, (w, g) => mace(w, g, M), { at: 0.52, down: false });
+  add('Greatsword', 1.62, -0.24, 0.026, (w, g) => greatsword(w, g, M));
+  add('Greataxe', 1.12, -0.3, 0.028, (w, g) => greataxe(w, g, M));
+  add('Maul', 1.1, -0.28, 0.029, (w, g) => maul(w, g, M));
   const tip = joint(grip, 0, 1.12, 0);
   // where the left hand holds a two-handed weapon
   const offGrip = joint(grip, 0, -0.24, 0);

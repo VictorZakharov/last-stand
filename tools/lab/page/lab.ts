@@ -279,7 +279,8 @@ export interface Clip {
 
 /** One picture, as a PNG data URL: of a view of the game, or of the screen with the page's UI (`Lab.screen`). */
 export interface Tile {
-  view: ViewName | 'screen';
+  /** the view: the game's, the screen, or a command's own (`lab weapons`' studio) */
+  view: ViewName | 'screen' | (string & {});
   png: string;
   width: number;
   height: number;
@@ -838,8 +839,8 @@ function withinWindow(area: Clip, margin = 0): Clip {
 
 /**
  * The gear of a hero of `cls` holding his weapons `style`'s way, his armour as `worn` has it: `base` in hand, or the
- * class's first one-hander (or two-hander), with a shield or a second one-hander as the style says. Throws for a
- * style the class can't hold, or a base that isn't of it.
+ * class's first one-hander (or two-hander), with a shield or a second one-hander (of the same base) as the style
+ * says. Throws for a style the class can't hold, or a base that isn't of it.
  */
 export function gearFor(cls: ClassDef, worn: Gear, style: WeaponStyle, base?: string): Gear {
   const twoHanders = cls.twoHanded ?? [];
@@ -855,7 +856,7 @@ export function gearFor(cls: ClassDef, worn: Gear, style: WeaponStyle, base?: st
     weapon,
     twoHanded: style === 'twoHanded',
     shield: style === 'shield',
-    offWeapon: style === 'dual' ? oneHander : null,
+    offWeapon: style === 'dual' ? (base ?? oneHander) : null,
   };
   const holdsOff = style !== 'shield' || Boolean(cls.bases?.offhand?.length);
   const can = weapon !== null && (style !== 'dual' || cls.dualWield) && holdsOff;

@@ -604,6 +604,23 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  weapons: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        weapons: options.weapons,
+        canary: Boolean(options.canary),
+      };
+      return side.command('weapons', command);
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('weapons'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   shots: {
     check(options) {
       if (options.shots !== undefined && !(options.shots >= 1)) throw labError('shots --shots: at least 1');
