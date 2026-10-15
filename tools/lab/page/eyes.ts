@@ -750,12 +750,18 @@ function describeFrames(seen: Seen[]): string[] {
       ...(now.lower ? [`the lower grip ${now.lower.on ? 'in' : 'out of'} the frame`] : []),
       `the right shoulder ${triple(now.pose.arms[0][0])}`,
       `the right elbow ${triple(now.pose.arms[0][1])}`,
+      ...(now.strike ? [speedsOf(now.strike)] : []),
     ];
     const fires = now.fires ? ' fires' : '';
     const keyed = now.keyed ? `; ${describeKeyedFrame(now.keyed)}` : '';
     lines.push(`  ${now.frame}${share}${fires}: ${parts.join(', ')}${held}${fists}${wrists}${keyed}${past}`);
   }
   return lines;
+}
+
+/** How fast a frame's weapon moves, as words: its striking part and its hilt (the world's m/s). */
+function speedsOf(strike: StrikeFrame): string {
+  return `its striking part ${strike.speed.toFixed(1)} m/s, the hilt ${strike.gripSpeed.toFixed(1)}`;
 }
 
 /** A joint past its range on one frame, by how much (degrees). */
@@ -938,11 +944,13 @@ function canaryCaught(plantedRun: Followed, followed: Followed, skill: BoundSkil
     const caught = describeKeyed(planted).problems.length > 0;
     verdicts.push(caught ? 'caught: the arm drawn off its keys' : 'missed: the frozen arm read as keyed');
   }
-  // (every cut begun at rest, a chained one turned the other way reads as one from the rest left to right)
+  // (every cut begun at rest, a one-hander's chained one, its backhand, reads as one from the rest with a backhand; a
+  // blade in each hand begins each hand's from its own rest, its forehand, so there's none to read)
   const row = cutsOf(plantedRun, casts.map(strikeOf), skill);
-  if (row && casts.length > 1) {
-    const caught = row.problems.some((problem) => problem.includes('from the rest left to right'));
-    verdicts.push(caught ? 'caught: a cut from the rest left to right' : 'missed: no cut from the rest left to right');
+  const oneHand = planted.every((frame) => frame.hand === 'right');
+  if (row && casts.length > 1 && oneHand) {
+    const caught = row.problems.some((problem) => problem.includes('from the rest with a backhand'));
+    verdicts.push(caught ? 'caught: a backhand from the rest' : 'missed: no backhand from the rest');
   }
   return verdicts;
 }

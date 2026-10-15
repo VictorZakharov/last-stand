@@ -169,9 +169,13 @@ export function rowOfCuts(casts: RowCast[], rest: RestBlades, frameMs: number):
     const fromRest = atRest !== undefined && apart(strikingWay(begun), strikingWay(atRest)) <= REST_NEAR;
     const from = fromRest ? 'from the rest' : 'where the last cut left the blade';
     lines.push(`cut ${i + 1}: ${sideWords(begun)}, begun ${from}`);
-    if (fromRest && begun.side !== null && begun.side <= 0) {
-      problems.push(`cut ${i + 1} began from the rest left to right: a row of cuts from the rest starts with the `
-        + 'right hand\'s forehand, right to left');
+    // (a blade in each hand: the left's cut in a row begins from its own rest, as the right's did, and is its forehand)
+    if (fromRest && begun.side !== null && !isForehand(begun)) {
+      problems.push(`cut ${i + 1} began from the rest with a backhand, ${sideWords(begun)}: a cut from the rest is `
+        + 'its hand\'s forehand');
+    }
+    if (i === 0 && begun.hand !== 'right') {
+      problems.push(`the row began with ${sideWords(begun)}: a row of cuts starts with the right hand's forehand`);
     }
     if (i === 0 || fromRest || !atRest) return;
     const back = backToRest(casts[i - 1], cast, strikingWay(atRest));
@@ -193,12 +197,15 @@ export function atRest(frame: CutFrame, rest: RestBlades): boolean {
   return !blade || apart(strikingWay(frame), strikingWay(blade)) <= REST_NEAR;
 }
 
-/** Which way a cut goes, as words (`Model.swing`: 1 right to left; the left hand's forehand goes left to right). */
+/** Whether a frame's cut is its hand's forehand (`Model.swing`: 1 right to left, the right hand's forehand; the left
+ *  hand's goes left to right). */
+const isForehand = (frame: CutFrame) => frame.side !== null && (frame.side > 0) === (frame.hand === 'right');
+
+/** Which way a cut goes, as words. */
 function sideWords(frame: CutFrame): string {
   if (frame.side === null) return `a cut in the ${frame.hand} hand`;
   const way = frame.side > 0 ? 'right to left' : 'left to right';
-  const forehand = (frame.side > 0) === (frame.hand === 'right');
-  return `the ${frame.hand} hand's ${forehand ? 'forehand' : 'backhand'}, ${way}`;
+  return `the ${frame.hand} hand's ${isForehand(frame) ? 'forehand' : 'backhand'}, ${way}`;
 }
 
 /** The frame the blade came back to rest on between `last`'s end and `cast`'s blow, or null if it didn't. */

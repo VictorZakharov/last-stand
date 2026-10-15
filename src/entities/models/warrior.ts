@@ -1651,7 +1651,9 @@ export function buildWarrior(): Model {
         turnTowards(_ef, edgeR > 0 ? _mr : sameSide(held, _ef, _mr), wR, _rf); flatR = lerp(k, flatR, wR); wR = 1;
       }
       if (offHeld) {
-        const k = oneRest(offHeld, _er, _ed, _ef); _er.x = -_er.x; _ed.x = -_ed.x; _ef.x = -_ef.x;
+        // (mirrored across the view: its place and way flip in x, its flat, a cross of two ways, in y and z, as
+        // `swingAt` mirrors one; flipped in x like a way, the fist turned over on the handle and the blade left the frame)
+        const k = oneRest(offHeld, _er, _ed, _ef); _er.x = -_er.x; _ed.x = -_ed.x; _ef.set(_ef.x, -_ef.y, -_ef.z);
         _la.lerpVectors(_er, _la, wL); _ld.lerpVectors(_ed, _ld.normalize(), wL);
         turnTowards(_ef, edgeL > 0 ? _ml : sameSide(offHeld, _ef, _ml), wL, _lf); flatL = lerp(k, flatL, wL); wL = 1;
       }
