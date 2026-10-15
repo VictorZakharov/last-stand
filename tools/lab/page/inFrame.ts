@@ -29,7 +29,7 @@ const WIDTH_STEP = 0.002;
 const WIDTH_MOST = 0.3;
 /** where a weapon's head starts: the share of its length from its butt end to its tip (a maul's head, an axe's bit,
  *  a blade's point) */
-const HEAD_FROM = 0.8;
+export const HEAD_FROM = 0.8;
 /** how near an edge (a share of the frame) the weapon's way in is said to come in over it */
 const EDGE = 0.02;
 

@@ -16,6 +16,7 @@ import type { Fist, LowerGrip } from '../../../src/types';
 import { SKILL_IMPLS } from '../../../src/combat/skills';
 import type { Breach } from '../../../src/entities/models/anatomy';
 import { armsLens } from './inFrame';
+import { headCanary } from './heads';
 import { describeStrike, plantLead, plantSlide, SLID_WHIP, StrikeTracker, strikeIn, strikeProblems } from './strike';
 import type { Strike, StrikeFrame } from './strike';
 import {
@@ -191,6 +192,10 @@ const CANARY_LEAD = 10;
 
 /** the ranges of the arms' joints, by their names in `breaches` */
 const ARM_RANGE = /^(shoulder|elbow|forearm|wrist)[LR]\./;
+/** and those a run fails on: not the shoulders', which the eyes place by hand under the camera and never see
+ *  (models/warrior.ts `armsFromBelow`; the owner: "in 1st person mode we dont care about shoulder anatomy much, as
+ *  long as overall strike looks plausible"), still described */
+const SEEN_RANGE = /^(elbow|forearm|wrist)[LR]\./;
 
 /** the joints the canary holds as they were at the press: the arms, and the trunk they hang from (frozen alone, the
  *  arms swung with the trunk's turn, and that read as a blow) */
@@ -223,7 +228,8 @@ export async function eyes(lab: Lab, options: EyesOptions): Promise<Report> {
   const found = [...oneHanded(seen), ...openFists(seen), ...struck.problems, ...atRest.problems, ...followed.tip];
   found.push(...(row?.problems ?? []), ...keyed.problems, ...swings.problems);
   // (listed and not counted, a fist hung flexed 57 degrees off its forearm through a cut was called done)
-  if (seen.some((frame) => frame.armsPast.length)) found.push(describeArmsPast(seen));
+  const seenPast = (breach: Breach) => SEEN_RANGE.test(breach.name);
+  if (seen.some((frame) => frame.armsPast.some(seenPast))) found.push(describeArmsPast(seen, seenPast));
   const problems = found.map((line) => `${skill.def.name}: ${line}`);
   if (options.canary) {
     await lab.setup({ ...options.fixture, view: 'first' });
@@ -889,12 +895,14 @@ function speedsOf(strike: StrikeFrame): string {
 /** A joint past its range on one frame, by how much (degrees). */
 interface PastOn { frame: number; by: number }
 
-/** The arms' joints past their ranges over every frame, the worst first: each one's worst, on how many frames, and
- *  the runs of frames it's past on, each with its worst (so a fix's effect on each part of a move reads at once). */
-function describeArmsPast(seen: Seen[]): string {
+/** The arms' joints past their ranges over every frame (those `counted`), the worst first: each one's worst, on how
+ *  many frames, and the runs of frames it's past on, each with its worst (so a fix's effect on each part of a move
+ *  reads at once). */
+function describeArmsPast(seen: Seen[], counted: (breach: Breach) => boolean = () => true): string {
   const worst = new Map<string, { breach: Breach; words: string; frame: number; on: PastOn[] }>();
   for (const now of seen) {
     now.armsPast.forEach((breach, i) => {
+      if (!counted(breach)) return;
       const record = worst.get(breach.name);
       const on = { frame: now.frame, by: breach.by };
       const words = now.armsPastWords[i];
@@ -1062,6 +1070,7 @@ function canaryCaught(plantedRun: Followed, followed: Followed, skill: BoundSkil
     const caught = oneHanded(planted).length > 0;
     verdicts.push(caught ? 'caught: the two-hander seen in one hand' : 'missed: the dropped arm read as holding');
   }
+  for (const view of followed.views) verdicts.push(`the ${view.weapon}'s head: ${headCanary(view.headAt, armsLens())}`);
   if (followed.views.some((view) => view.hand === 'left')) {
     const caught = restInView(plantedRun.views).problems.some((problem) => problem.includes('left hand'));
     verdicts.push(caught ? 'caught: the left weapon out of the frame' : 'missed: the dropped left weapon read in view');

@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { armsLens } from './inFrame';
+import { headOf, shareShown } from './heads';
 import { isWeapon, SIDES_NAMED } from './strike';
 
 /** A frame of a cut as the eyes see it: the weapon's hilt and tip in the camera's space (m: x right, y up, -z ahead),
@@ -60,6 +61,10 @@ const REST_IN_VIEW = 0.3;
  *  two-hander's 86%: a two-hander's forehand held its blade pointing away from the eyes at its end, 45% of it in the
  *  frame and a sliver 31% of the frame's height) */
 const LOOKS_LEAST = 0.4;
+/** and a weapon with a head (page/heads.ts: a maul, an axe, a mace) shows at least this share of it at rest
+ *  (Vermintide 2's hammer about three quarters, cut by the frame's right edge; the owner, of a maul showing 14%:
+ *  "should be lowered to see more of its head") */
+const HEAD_SHOWN_LEAST = 0.6;
 /** the points along a weapon its share in the frame is counted at */
 const ALONG_POINTS = 11;
 
@@ -264,6 +269,11 @@ export interface InView {
   /** how long its part in the frame looks: from where it comes in to where it ends or leaves, on the screen, a share of
    *  the frame's height (a blade pointing away from the eyes is a sliver however much of it is in the frame) */
   length: number;
+  /** how much of its head the frame shows (page/heads.ts), its head's points, the world's, and whether it has one (a
+   *  blade has a point) */
+  head: number;
+  headAt: THREE.Vector3[];
+  headed: boolean;
 }
 
 /** Whether `object` and everything it hangs from is shown. */
@@ -362,7 +372,9 @@ export function weaponsInView(lab: Lab): InView[] {
       const y = box.min.y + ((box.max.y - box.min.y) * i) / (ALONG_POINTS - 1);
       return weapon.localToWorld(new THREE.Vector3(middle.x, y, middle.z));
     });
-    return { hand, weapon: weapon.name, ...seenAlong(points) };
+    const { points: headAt, headed } = headOf(weapon);
+    const head = shareShown(headAt, armsLens());
+    return { hand, weapon: weapon.name, ...seenAlong(points), head, headAt, headed };
   });
 }
 
@@ -403,10 +415,15 @@ function unseenBy(share: number, looks: number): string | null {
 /** The weapons at rest as words, and each one too little seen (`unseenBy`) as a problem. */
 export function restInView(views: InView[]): { line: string; problems: string[] } {
   const words = views.map((view) => `the ${view.hand} ${view.weapon} ${(view.share * 100).toFixed(0)}%, looking `
-    + `${(view.length * 100).toFixed(0)}% of its height long`);
+    + `${(view.length * 100).toFixed(0)}% of its height long, ${(view.head * 100).toFixed(0)}% of its `
+    + `${view.headed ? 'head' : 'point'} shown`);
   const problems = views.flatMap((view) => {
     const unseen = unseenBy(view.share, view.length);
     return unseen ? [`at rest the ${view.hand} hand's ${view.weapon} is ${unseen}`] : [];
   });
+  for (const view of views.filter((one) => one.headed && one.head < HEAD_SHOWN_LEAST)) {
+    problems.push(`at rest the ${view.hand} hand's ${view.weapon} shows ${(view.head * 100).toFixed(0)}% of its head `
+      + `(at least ${HEAD_SHOWN_LEAST * 100}%)`);
+  }
   return { line: `at rest, in the frame along their length: ${words.join(', ') || 'no weapon held'}`, problems };
 }
