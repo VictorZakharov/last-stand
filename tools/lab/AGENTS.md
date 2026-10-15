@@ -22,6 +22,8 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `gait`: the walk judged as a person's (level ground and the steps, nothing drawn, drawn, tapping, changing direction often and going round in circles: each foot's time on the ground against the plan, both and neither, the steps a second and their length, hops, a foot dance's short steps, the gallops (a foot leaving within 0.3 of a stride of the other's: counted as hops, both feet within a few frames, a gallop at every set-off went unseen), the steps' width, the hips' rise and fall, a planted foot dragged, each hand's swing against its knee half second by half second, the rhythm against the walk cycle, steps back under a body that stopped, the jerks, each step's swing against its plan and why it left, every frame judged as a body's: its centre of mass with its gear against the push its motion needs from the planted soles, in the air falling as a body does, and every joint within its range, `--trace` each frame (`--span` some), a scenario held up by a prop failing it, and a film of each round its first hop)
 - `form`: the run judged against a runner's (published runners' cadence, time on the ground, joint curves over the stride, lean, bounce and arm swing, at a man's size, with each way the hero holds his weapons: stick figures of his stride over a runner's, and the hero pictured from both sides, in the game's views and his arms close up, at eight points of it; the set-up's `--gear` holds them any way his class can)
 - `probe <module>`: runs a measure of your own on the lab's clock and set-ups
+- `live <step>`: a page kept between steps for trying by hand (start, picture in any look with a reference over
+  it, inspect, eval, frames): under a second a picture
 - `check`: runs every hero's checks of a change to how they move side by side (`--ab`: against main, its side kept once it has run; each gait scenario from three starts, its turns at other points of a stride, as a frame's change anywhere sends a scenario's later strides elsewhere: judge a change on the counts over all of them, each side's in the log)
 - `ui`: pictures the UI in its states (the lobby, a tooltip, How to play, the save slots, a class button clicked and a key pressed after it, the lobby's views switched with each label against its anchor through every glide, the run's HUD with a hurt foe's bar and damage numbers, the scores, the perf overlay, the choice after a wave, the pause menu, the summary) with each named element's and label's box as a share of the window
 - `touch`: the touch controls' move stick pushed by a finger, its touches sent as a touch screen's (slid out through the stick's travel, to its edge and far past it, half the window across: the stick's push, the knob against the finger and the hero's speed, a push further out never giving less)
@@ -59,8 +61,9 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   it at shares of its cast (`--shares`, 0.3,0.55,0.8 by default; a channel at shares of its key's hold, `holdFor`),
   with where its cast point (the weapon's tip) is: how high over the floor, how far ahead, and the way the weapon
   points (up, from ahead, and in the chest's frame, as a two-hander's holds are placed). `--gear` holds the weapons a
-  style's way (`--weapon` the base). Writes
-  `out/sheets/<--tag>/sheet.png` and `notes.txt`.
+  style's way (`--weapon` the base). `--look` draws the pictures another way (below: the hero's wireframe, his
+  faces' orientation, his parts with where each is, his skeleton). Writes `out/sheets/<--tag>/sheet.png` and
+  `notes.txt`.
 - `feet`: the hero's feet against the ground round the dais's edges and on level ground (`--scenarios edge,level,
   strafe,cross`): standing at full draw by the edges (a foot moving in the hold, a sole in a step's riser, a dip under
   its own level), and walking across them, strafing up and down the steps with a shot drawn and on level ground (per
@@ -467,7 +470,36 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   lobby's fade in cut to a twentieth of a second, every fresh track started 5 s in, and every track coming back
   started from its top.
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`).
+- `live <step>`: a page of the game kept between steps, each on the state the last one left, as a modelling
+  tool's scene is kept between edits (`node/live.mjs`, `page/live.ts`; needs `lab:serve`). `live start` boots the
+  hero (`--class`, the warrior by default) and sets him up (`--view`, `--gear`, `--weapon`, `--at`, `--facing`);
+  then `live picture` pictures him from `--views` (through the eyes `eyes`, else `third`, by default) in any
+  `--look`, with a reference laid over each picture and stretched to it (`--over <picture> --strength 0.5`) and
+  a part of it kept (`--crop 0.5,0,1,0.6`, its edges as shares), each in its own file in `out/live/`; `live
+  inspect [name]` lists the hero (or a joint, or any object by name: the warrior's weapons and shield are named)
+  and what's under it (`--depth`), each with where it is in the world, how it's turned, what it's drawn with and
+  where its posed vertices are on the screen; `live eval <expression>` evaluates on the page (`lab` in scope: a
+  joint turned, a value set); `live frames <count>` runs frames with no input; `live log` lists the steps;
+  `live stop` closes it. A picture takes under a second where a command boots and sets up for each look. The
+  steps are kept (`out/live/steps.json`, `node/liveLog.mjs`): when the source changes, or the server starts again,
+  the next step boots the page again and replays them first (every `eval` is kept, a read too: `live start`
+  begins again). It runs in a browser of its own, as a command's page lost the input to a second page in the same
+  one. It's for trying by hand: what's found there is measured by a command on a page of its own, as the live
+  page is wherever its steps took it. `live picture --canary` hides the hero and pictures him in the `parts` look
+  too, where no part of him may be found.
 - `status`, `stop`: what the server serves and has booted; stop it.
+
+**Looks** (`page/looks.ts`, `--look` on `sheet` and `live picture`, `CaptureOptions.look`): `lit` is the frame as
+the player sees it; `wire` the hero's wireframe; `faces` which way his faces point (front blue, back red, shaded
+by how square each faces the camera: a face wound inside out shows red; a hair card's back does too); `parts` each
+of his meshes in a flat colour of its own, and a note of each in the picture, the most first, with its share of
+it and its box (named by the nearest of it and its parents with a name, a joint's or its own, and its material);
+`bones` his skeleton drawn over the lit frame. The first three draw outside the game's chain and read the
+drawing buffer back as opaque (`page/pixels.ts`), with the world in its own materials but only its depth: what
+the game draws in front of him (a leaf card cut out by its texture, a prop dissolved round him) still hides him.
+(Drawn flat, the forest's leaf cards were whole squares, and one by a close-up's camera filled its frame.) A
+part's cut-out (a hair card's) keeps its texture's alpha. A pixel is found as a part by its colour within 2 levels
+a channel, looked up once (matched against every part's colour, a picture took 10 s).
 - `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films), the
   stops, the ranges and the run's form for every hero, and the ranger's feet and carry (`--classes`, `--commands` for
   fewer), each in a session of its own (`--jobs n`, a core in three by default, at most 8), the longest first as they

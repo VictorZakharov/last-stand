@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import type { Lab, Fixture, Report, Pictured, Tile } from './lab';
 import { G } from '../../../src/state';
+import { opaqueRows } from './pixels';
 import type { WeaponStyle } from '../../../src/types';
 
 export interface WeaponsOptions {
@@ -140,17 +141,6 @@ function readTile(name: string): { tile: Tile; drawn: number } {
   context.putImageData(opaqueRows(pixels, width, height), 0, 0);
   const tile = { view: name, png: canvas.toDataURL('image/png'), width, height };
   return { tile, drawn: drawnShare(context, width, height) };
-}
-
-/** A drawing buffer's pixels (rows from the bottom) as an opaque picture, rows from the top. */
-function opaqueRows(pixels: Uint8Array, width: number, height: number): ImageData {
-  const image = new ImageData(width, height);
-  const row = width * 4;
-  for (let y = 0; y < height; y++) {
-    image.data.set(pixels.subarray((height - 1 - y) * row, (height - y) * row), y * row);
-  }
-  for (let k = 3; k < image.data.length; k += 4) image.data[k] = 255;
-  return image;
 }
 
 /** The share of a picture's pixels that aren't the backdrop. */

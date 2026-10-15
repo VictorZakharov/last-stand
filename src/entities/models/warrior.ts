@@ -531,6 +531,7 @@ export function buildWarrior(): Model {
   const weapons = new Map<string, Weapon>();
   const add = (name: string, len: number, off: number | null, r: number, build: (w: Sculpt, g: THREE.Group) => void, hang?: Weapon['hang']) => {
     const g = new THREE.Group();
+    g.name = name;
     grip.add(g);
     const w = new Sculpt(`warrior-${name}`);
     build(w, g);
@@ -612,6 +613,7 @@ export function buildWarrior(): Model {
   // domed boss. At rest it hangs at the side facing outwards; raised (or charging) it swings round in
   // front of the fist, facing out of the hand. Its face is local +Z.
   const shield = joint(j.handL, 0, -0.1, 0);
+  shield.name = 'shield';
   shield.visible = false;
   {
     const w = new Sculpt();

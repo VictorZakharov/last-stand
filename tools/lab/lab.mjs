@@ -60,6 +60,12 @@ async function main() {
     console.log(reply ? reply.text : 'no lab server is up (npm run lab:serve)');
     return 0;
   }
+  if (call.command === 'live') {
+    const reply = await sendToServer(call);
+    if (!reply) throw labError('lab live keeps its page in the lab server: npm run lab:serve');
+    console.log(reply.text);
+    return reply.ok ? 0 : 1;
+  }
   if (call.options.watch) {
     const reply = await sendToServer(call);
     if (!reply) throw labError('--watch needs the lab server: npm run lab:serve');

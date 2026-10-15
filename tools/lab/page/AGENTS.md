@@ -1,6 +1,6 @@
 # `tools/lab/page`
 
-The lab inside the game's page: TypeScript, typechecked with the game (`tsconfig.json` includes it) and imported as the game imports its modules, so there's one copy of each. `lab.ts` is the lab a measure is given (the clock, input, set-ups, pictures), `commands.ts` what the session calls, and each command has a module of its own (`gait.ts`, `spawns.ts`...), with the pieces measures share (`geometry.ts`, `screenCells.ts`, `flashes.ts`, `legTrace.ts`...).
+The lab inside the game's page: TypeScript, typechecked with the game (`tsconfig.json` includes it) and imported as the game imports its modules, so there's one copy of each. `lab.ts` is the lab a measure is given (the clock, input, set-ups, pictures), `commands.ts` what the session calls, and each command has a module of its own (`gait.ts`, `spawns.ts`...), with the pieces measures share (`geometry.ts`, `screenCells.ts`, `flashes.ts`, `legTrace.ts`...), the pictures' looks (`looks.ts`: wireframe, faces, parts, skeleton) and the drawing buffer read back (`pixels.ts`), and `live`'s steps (`live.ts`).
 
 The rules across the game are the [root AGENTS.md](../../../AGENTS.md), the lab's own [`tools/lab/AGENTS.md`](../AGENTS.md) (what the lab gives a measure, and what keeps it repeatable).
 

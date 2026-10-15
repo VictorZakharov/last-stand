@@ -65,7 +65,24 @@ the server.
 | --- | --- |
 | `probe <module>` | Runs a measure of your own (below) |
 | `eval <expression>` | Evaluates an expression in the page, with `lab` in scope |
+| `live <step>` | A page kept between steps, for trying a pose or a look by hand (below) |
 | `status`, `stop` | Shows what the server has booted; stops it |
+
+## Trying things by hand
+
+`lab live` keeps one page up between steps, each on the state the last one left, so a look takes under a second:
+
+```bash
+npm run lab -- live start --class warrior --view first --gear twoHanded --weapon Maul
+npm run lab -- live picture --over reference.jpg          # a reference laid over the frame
+npm run lab -- live picture --look parts --crop 0.5,0,1,1 # each part a colour, and where each is
+npm run lab -- live eval "lab.joints.elbowR.rotation.x += 0.2"
+npm run lab -- live inspect handR                          # what's in the hand, and where
+npm run lab -- live stop
+```
+
+The pictures go to `tools/lab/out/live/`. When the source changes, the next step boots the page again and replays
+the steps so far. `--look wire|faces|parts|bones` works on `sheet` too.
 
 ## Options
 

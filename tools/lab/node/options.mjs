@@ -24,6 +24,18 @@ export const UI_STATES = [
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
 const WEAPON_STYLES = ['oneHanded', 'shield', 'twoHanded', 'dual'];
 
+/** the ways a picture can be drawn (page/looks.ts `LOOKS`) */
+const LOOKS = ['lit', 'wire', 'faces', 'parts', 'bones'];
+
+/** how a command's pictures are drawn */
+const LOOK_OPTION = {
+  kind: 'choice',
+  choices: LOOKS,
+  usage: LOOKS.join('|'),
+  help: 'as the player sees it (lit, the default), the hero\'s wireframe, his faces\' orientation (front blue, '
+    + 'back red), each of his parts a colour of its own (and where each is in the picture), his skeleton over it',
+};
+
 /** the options that set up the run before a command (page/lab.ts `Fixture`) */
 const SETUP_OPTIONS = {
   view: { kind: 'choice', choices: ['top', 'third', 'first'], usage: 'top|third|first', help: 'the game\'s view' },
@@ -106,6 +118,7 @@ export const COMMANDS = {
       },
       tag: { kind: 'text', usage: 'name', default: 'latest', help: 'the sheet\'s folder' },
       focus: { kind: 'text', usage: 'joint', help: 'close-ups framed on a joint (head, handL...), not the body' },
+      look: LOOK_OPTION,
       skill: { kind: 'text', usage: 'name', help: 'the cast state\'s skill: its key, its behaviour or its name' },
       shares: {
         kind: 'list',
@@ -542,7 +555,11 @@ export const COMMANDS = {
       + 'most first: its draws in the scene, its shadow map and after it, the triangles, its material and what drew it '
       + '(a geometry drawn many times a frame is one an instanced mesh or a merge would draw once)',
     options: {
-      count: { kind: 'number', usage: 'n', help: 'how many foes (by default the most a wave keeps alive, 38; 0: none)' },
+      count: {
+        kind: 'number',
+        usage: 'n',
+        help: 'how many foes (by default the most a wave keeps alive, 38; 0: none)',
+      },
       rows: { kind: 'number', usage: 'n', help: 'how many geometries the list shows (24 by default)' },
       canary: {
         kind: 'switch',
@@ -705,6 +722,39 @@ export const COMMANDS = {
       },
       ab: COMMON_OPTIONS.ab,
       fresh: COMMON_OPTIONS.fresh,
+    },
+  },
+  live: {
+    help: 'a page of the game kept between steps, each on the state the last one left (needs npm run lab:serve): '
+      + 'start (--class, the set-up), picture (--views, --look, --over, --crop), inspect [name] (--depth), eval '
+      + '<expression>, frames <count>, log, stop; its pictures in tools/lab/out/live (tools/lab/AGENTS.md)',
+    argument: 'step',
+    options: {
+      views: {
+        kind: 'list',
+        usage: 'a,b',
+        help: 'picture: the views (through the eyes eyes, else third by default)',
+      },
+      look: LOOK_OPTION,
+      focus: { kind: 'text', usage: 'joint', help: 'picture: close-ups framed on a joint (head, handL...)' },
+      over: {
+        kind: 'text',
+        usage: 'picture',
+        help: 'picture: a reference (PNG, JPEG or WebP, a path) laid over each picture, stretched to it',
+      },
+      strength: { kind: 'number', usage: 'share', help: 'picture: how strongly --over is laid (0.5 by default)' },
+      crop: {
+        kind: 'list',
+        usage: 'l,t,r,b',
+        help: 'picture: the part of each picture kept, its edges as shares of it (0.5,0,1,0.6)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'picture: the hero hidden and pictured in the parts look too, where no part of him may be found',
+      },
+      depth: { kind: 'number', usage: 'n', default: '1', help: 'inspect: the levels under it listed (1)' },
+      class: COMMON_OPTIONS.class,
+      ...SETUP_OPTIONS,
     },
   },
   eval: {
