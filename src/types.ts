@@ -146,9 +146,10 @@ export interface SkillDef {
  *  m; the arm's joints past their ranges holding it, degrees; the arm into the body, m). */
 export interface LowerGrip { held: boolean; free: boolean; short: number; past: number; into: number }
 
-/** How a hand holds a handle (`Model.fists`): how far the handle passes from where the fist closes round it (m), and
- *  how far its fingers are curled (rad, their joints' mean bend: 0 straight) */
-export interface Fist { hand: 'left' | 'right'; off: number; curl: number }
+/** How a hand holds a handle (`Model.fists`): how far the handle passes from where the fist closes round it (m), how
+ *  far along it that is from where the fist holds it (m, up the handle positive), and how far its fingers are curled
+ *  (rad, their joints' mean bend: 0 straight) */
+export interface Fist { hand: 'left' | 'right'; off: number; along?: number; curl: number }
 
 /** How the weapons are held: each has its own loadout (for a class with gear-driven skills). */
 export type WeaponStyle = 'shield' | 'twoHanded' | 'dual' | 'oneHanded';

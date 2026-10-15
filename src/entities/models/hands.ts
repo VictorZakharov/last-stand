@@ -322,16 +322,19 @@ export function fistTurn(h: Hand, dir: THREE.Vector3, up: THREE.Vector3, out: TH
 
 /**
  * How a hand holds a handle (the lab reads it, `Model.fists`): how far the handle's axis passes from where the fist
- * closes round it (m, world: a fist closed on thin air reads as an open hand beside the handle), and how far its
- * fingers are curled (their joints' mean bend, rad: 0 straight). `handle` as `seat`'s grip, its +Y along the handle.
+ * closes round it (m, world: a fist closed on thin air reads as an open hand beside the handle), how far along the
+ * handle that is from where it holds it (m, up the handle positive: a fist slid off its grip, or past the handle's end,
+ * is as far off it as one beside it), and how far its fingers are curled (their joints' mean bend, rad: 0 straight).
+ * `handle` as `seat`'s grip, its +Y along the handle, its origin where the fist holds it.
  */
-export function fistOn(h: Hand, handle: THREE.Object3D, r: number): { off: number; curl: number } {
+export function fistOn(h: Hand, handle: THREE.Object3D, r: number): { off: number; along: number; curl: number } {
   h.vis.updateWorldMatrix(true, false);
   const from = h.vis.localToWorld(_fa.set(0, GRIP_Y, -(r / h.vis.scale.x + GRIP_GAP))).sub(handle.getWorldPosition(_fc));
   const axis = _fb.set(0, 1, 0).transformDirection(handle.matrixWorld);
   let bend = 0, joints = 0;
   for (const f of h.f) for (const j of f.j) { bend += j.rotation.x; joints++; }
-  return { off: from.addScaledVector(axis, -from.dot(axis)).length(), curl: bend / joints };
+  const along = from.dot(axis);
+  return { off: from.addScaledVector(axis, -along).length(), along, curl: bend / joints };
 }
 
 /** where the handle's axis runs through that fist, from its wrist (unscaled: the hand joint's own units) */

@@ -168,6 +168,9 @@ const CANARY_DROP = 1.6;
  *  bend), holds it as an open hand: through the eyes the fingers stood straight out beside the handle */
 const FIST_OFF = 0.012;
 const FIST_OPEN = 0.5;
+/** and one this far along its handle from where it holds it (m) has slid off its grip: measured square to the handle
+ *  alone, a weapon lifted 15 cm along its own length out of both fists read as held */
+const FIST_SLID = 0.02;
 /** the canary lifts the weapon this far up the view (m), out of the fists, its lower grip into the frame */
 const CANARY_LIFT = 0.15;
 
@@ -294,10 +297,12 @@ function armsAt(lab: Lab): ArmsAt {
 /**
  * The frames from the press of `skill`'s key (held through `times` casts, or as long as the player would; or let go
  * between casts and pressed again `apart` s after each ended) until the arms are at rest again, each as the eyes saw
- * it, and the arms at rest before the press; `plant`, if given, changes each frame (and the rest) before it's read.
+ * it, and the arms at rest before the press; `plant`, if given, changes each frame (and the rest) before it's read,
+ * and `unplant` takes the change back once it's read, so the next frame is posed from the game's own.
  */
 async function follow(
   lab: Lab, skill: BoundSkill, row: { times: number; apart: number | null }, film: Film | null, plant?: () => void,
+  unplant?: () => void,
 ): Promise<Followed> {
   await lab.step(SETTLE_FRAMES);
   const aim = aheadOf(lab, AIM_AHEAD);
@@ -305,6 +310,7 @@ async function follow(
   const strikes = new StrikeTracker(lab);
   plant?.();
   const rest = seeFrame(lab, -1, casts, undefined, strikes);
+  unplant?.();
   const blades = restBlades(lab, G.camera);
   const views = weaponsInView(lab);
   const tip = tipAtEnd(lab);
@@ -320,6 +326,7 @@ async function follow(
     const now = seeFrame(lab, frame, casts, seen[seen.length - 1] ?? rest, strikes);
     seen.push(now);
     film?.take(lab, now);
+    unplant?.();
     if (casts.started === 0) {
       if (frame > SETTLE_FRAMES) throw new Error(`lab: eyes: ${skill.def.name} was never cast`);
       continue;
@@ -695,13 +702,17 @@ function oneHanded(seen: Seen[]): string[] {
 
 /** Whether a fist holds its handle as an open hand: off it, or its fingers barely curled. */
 function isOpen(fist: Fist): boolean {
-  return fist.off > FIST_OFF || fist.curl < FIST_OPEN;
+  return fist.off > FIST_OFF || slidOf(fist) > FIST_SLID || fist.curl < FIST_OPEN;
 }
+
+/** How far a fist is along its handle from where it holds it (m; 0 on a game that doesn't say). */
+const slidOf = (fist: Fist) => Math.abs(fist.along ?? 0);
 
 /** A fist on its handle, as words. */
 function describeFist(fist: Fist): string {
   const off = `the handle ${(fist.off * 100).toFixed(1)} cm from where the fist closes`;
-  return `${off}, the fingers curled ${THREE.MathUtils.radToDeg(fist.curl).toFixed(0)}°`;
+  const along = `${(slidOf(fist) * 100).toFixed(1)} cm along it from its grip`;
+  return `${off}, ${along}, the fingers curled ${THREE.MathUtils.radToDeg(fist.curl).toFixed(0)}°`;
 }
 
 /** Each hand's fist on its handle over every frame: the furthest off it and the least curled, seen or not. */
@@ -710,9 +721,11 @@ function describeFists(seen: Seen[]): string {
     const fists = seen.flatMap((frame) => frame.fists.filter((fist) => fist.hand === hand));
     if (!fists.length) return [];
     const off = Math.max(...fists.map((fist) => fist.off));
+    const slid = Math.max(...fists.map(slidOf));
     const curl = Math.min(...fists.map((fist) => fist.curl));
     const curled = THREE.MathUtils.radToDeg(curl).toFixed(0);
-    return [`${hand}, at most ${(off * 100).toFixed(1)} cm off, curled ${curled}° at least`];
+    const along = `${(slid * 100).toFixed(1)} cm along it from its grip`;
+    return [`${hand}, at most ${(off * 100).toFixed(1)} cm off and ${along}, curled ${curled}° at least`];
   });
   return `the fists on their handles: ${hands.join('; ') || 'none'}`;
 }
@@ -727,7 +740,8 @@ function openFists(seen: Seen[]): string[] {
       return fist !== undefined && fist.on && isOpen(fist);
     });
     if (!open.length) continue;
-    const worst = open.reduce((most, frame) => (fistIn(frame)!.off > fistIn(most)!.off ? frame : most));
+    const offOf = (frame: Seen) => Math.max(fistIn(frame)!.off, slidOf(fistIn(frame)!));
+    const worst = open.reduce((most, frame) => (offOf(frame) > offOf(most) ? frame : most));
     const why = `the worst, frame ${worst.frame}: ${describeFist(fistIn(worst)!)}`;
     problems.push(`the ${hand} hand open on its handle, seen: ${framesOf(open)}; ${why}`);
   }
@@ -872,14 +886,24 @@ function plantFaults(lab: Lab): () => void {
 }
 
 /** The lift alone, planted after each frame of a cast played as it is: its fists seen as it swings (frozen at a
- *  two-hander's rest, both were below the frame, and no fist was seen open). */
-function plantLift(lab: Lab): () => void {
-  return () => {
+ *  two-hander's rest, both were below the frame, and no fist was seen open), and taken back once the frame is read
+ *  (kept, the next frame was posed from the lifted grip, and no fist was seen at all). */
+function plantLift(lab: Lab): { plant: () => void; unplant: () => void } {
+  let lifted: { grip: THREE.Object3D; at: THREE.Vector3 } | null = null;
+  const plant = () => {
     lab.model.root.updateWorldMatrix(true, true);
     const grip = lab.model.tip?.parent;
-    if (grip?.parent) liftInView(grip, liftFor(lab));
+    if (!grip?.parent) return;
+    lifted = { grip, at: grip.position.clone() };
+    liftInView(grip, liftFor(lab));
     lab.model.root.updateWorldMatrix(true, true);
   };
+  const unplant = () => {
+    lifted?.grip.position.copy(lifted.at);
+    lifted = null;
+    lab.model.root.updateWorldMatrix(true, true);
+  };
+  return { plant, unplant };
 }
 
 /** How far the canary lifts the weapon: `CANARY_LIFT`, or as far as brings a two-hander's lower grip up to the middle
@@ -974,8 +998,16 @@ function canaryCaught(plantedRun: Followed, followed: Followed, skill: BoundSkil
 async function liftCanary(lab: Lab, options: EyesOptions, skill: BoundSkill, followed: Followed): Promise<string> {
   if (!followed.seen.some((frame) => frame.fists.some((fist) => fist.on))) return 'skipped: no fist seen';
   await lab.setup({ ...options.fixture, view: 'first' });
-  const lifted = await follow(lab, skill, options, null, plantLift(lab));
-  return openFists(lifted.seen).length > 0 ? 'caught: a fist off its handle' : 'missed: the lifted weapon read as held';
+  const { plant, unplant } = plantLift(lab);
+  const lifted = await follow(lab, skill, options, null, plant, unplant);
+  if (openFists(lifted.seen).length > 0) return 'caught: a fist off its handle';
+  const seenFists = lifted.seen.flatMap((frame) => frame.fists.filter((fist) => fist.on));
+  if (!seenFists.length) {
+    const fists = lifted.seen.reduce((count, frame) => count + frame.fists.length, 0);
+    return `missed: no fist seen with the weapon lifted (${fists} on their handles over ${lifted.seen.length} frames)`;
+  }
+  const off = Math.max(...seenFists.map((fist) => Math.max(fist.off, slidOf(fist))));
+  return `missed: the lifted weapon read as held, ${seenFists.length} fists seen, at most ${(off * 100).toFixed(1)} cm off`;
 }
 
 /** The slide canary: the cast again with its weapon held at its first turn each frame (strike.ts `plantSlide`), its
