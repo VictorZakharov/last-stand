@@ -251,6 +251,7 @@ export function poseHand(h: Hand, curl: number, spread: number, point = 0, t = 0
 
 const _d = new THREE.Vector3(), _u = new THREE.Vector3(), _s = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
+const _fa = new THREE.Vector3(), _fb = new THREE.Vector3(), _fc = new THREE.Vector3();
 /** how far a hand may hold a handle diagonally across its palm (rad, either way: `hold`'s slant) */
 export const SLANT = 0.44;
 /** where a held handle's axis runs across the hand (its own space): against the lower palm and the knuckles */
@@ -312,6 +313,20 @@ export function gripTurn(h: Hand, grip: THREE.Object3D, out: THREE.Quaternion, s
 /** the fist's turn round a handle along `dir` with the hand's length towards `up` (both world), as `hold` turns it (world) */
 export function fistTurn(h: Hand, dir: THREE.Vector3, up: THREE.Vector3, out: THREE.Quaternion, slant = 0): THREE.Quaternion {
   return fist(h, _d.copy(dir).normalize(), _u.copy(up).normalize(), out, slant);
+}
+
+/**
+ * How a hand holds a handle (the lab reads it, `Model.fists`): how far the handle's axis passes from where the fist
+ * closes round it (m, world: a fist closed on thin air reads as an open hand beside the handle), and how far its
+ * fingers are curled (their joints' mean bend, rad: 0 straight). `handle` as `seat`'s grip, its +Y along the handle.
+ */
+export function fistOn(h: Hand, handle: THREE.Object3D, r: number): { off: number; curl: number } {
+  h.vis.updateWorldMatrix(true, false);
+  const from = h.vis.localToWorld(_fa.set(0, GRIP_Y, -(r / h.vis.scale.x + GRIP_GAP))).sub(handle.getWorldPosition(_fc));
+  const axis = _fb.set(0, 1, 0).transformDirection(handle.matrixWorld);
+  let bend = 0, joints = 0;
+  for (const f of h.f) for (const j of f.j) { bend += j.rotation.x; joints++; }
+  return { off: from.addScaledVector(axis, -from.dot(axis)).length(), curl: bend / joints };
 }
 
 /** where the handle's axis runs through that fist, from its wrist (unscaled: the hand joint's own units) */

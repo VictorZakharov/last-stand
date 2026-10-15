@@ -10,7 +10,7 @@ import { G } from '../../../src/state';
 import type { Lab, Fixture, Pictured, Report } from './lab';
 import { bindKnown, holdFor, pressing, skillNamed, type BoundSkill } from './cast';
 import { bodyBreaches, describeBreach, farFromHeld, whyLetGo } from './range';
-import type { LowerGrip } from '../../../src/types';
+import type { Fist, LowerGrip } from '../../../src/types';
 import type { Breach } from '../../../src/entities/models/anatomy';
 
 export interface EyesOptions {
@@ -57,6 +57,9 @@ interface Seen {
   /** the hand holding the weapon (its grip), and the other hand (its fist) */
   grip: Spot;
   other: Spot;
+  /** a two-hander's lower grip, where the other hand holds it (`Model.offGrip`: none for any other weapon, nor on a
+   *  game without it) */
+  lower: Spot | null;
   /** a two-hander's lower grip held by the other hand (`Model.lowerGrip`): null for any other weapon; and as it was
    *  when let go of, for why */
   held: boolean | null;
@@ -68,6 +71,12 @@ interface Seen {
   seenMoved: number;
   /** the arms' joints past their ranges, the worst first (what the eyes see of the body) */
   armsPast: Breach[];
+  /** each hand holding a handle: how it holds it, and whether its fist is in the frame */
+  fists: SeenFist[];
+}
+
+interface SeenFist extends Fist {
+  on: boolean;
 }
 
 /** idle frames before the press, so the arms are at rest */
@@ -99,6 +108,12 @@ const FILM_WIDTH = 384;
 const FIST_ALONG = 0.08;
 /** the canary turns the other arm down this far (rad), out of the frame */
 const CANARY_DROP = 1.6;
+/** a fist this far off its handle's axis (m), or with its fingers curled less than this (rad, their joints' mean
+ *  bend), holds it as an open hand: through the eyes the fingers stood straight out beside the handle */
+const FIST_OFF = 0.012;
+const FIST_OPEN = 0.5;
+/** the canary lifts the weapon this far up the view (m), out of the fists, its lower grip into the frame */
+const CANARY_LIFT = 0.15;
 
 /** the ranges of the arms' joints, by their names in `breaches` */
 const ARM_RANGE = /^(shoulder|elbow|forearm|wrist)[LR]\./;
@@ -119,7 +134,8 @@ export async function eyes(lab: Lab, options: EyesOptions): Promise<Report> {
   const unseen = seen.filter((frame) => frame.held === false && !frame.other.on);
   if (unseen.length) lines.push(`the two-hander let go of out of the frame, unseen: ${framesOf(unseen)}`);
   if (options.frames) lines.push(...describeFrames(seen));
-  const problems = oneHanded(seen).map((line) => `${skill.def.name}: ${line}`);
+  lines.push(describeFists(seen));
+  const problems = [...oneHanded(seen), ...openFists(seen)].map((line) => `${skill.def.name}: ${line}`);
   if (options.canary) {
     await lab.setup({ ...options.fixture, view: 'first' });
     const planted = await follow(lab, skill, options.times, null, plantFaults(lab));
@@ -247,12 +263,23 @@ function seeFrame(lab: Lab, frame: number, casts: CastCount, last: Seen | undefi
     blade,
     grip,
     other: spotOf(fistOf(lab, lab.joints.handL)),
+    lower: lab.model.offGrip ? spotOf(lab.model.offGrip) : null,
     held: lower ? lower.held || lower.free : null,
     grasp: lower ? { ...lower } : null,
     moved: last ? THREE.MathUtils.radToDeg(last.blade.way.angleTo(blade.way)) : 0,
     seenMoved: last?.blade.near && blade.near ? THREE.MathUtils.radToDeg(last.blade.way.angleTo(blade.way)) : 0,
     armsPast: bodyBreaches(lab.joints).found.filter((breach) => ARM_RANGE.test(breach.name)),
+    fists: fistsSeen(lab),
   };
+}
+
+/** Each hand holding a handle, how it holds it (`Model.fists`: none on a game without it) and whether its fist is in
+ *  the frame. */
+function fistsSeen(lab: Lab): SeenFist[] {
+  return (lab.model.fists ?? []).map((fist) => {
+    const hand = fist.hand === 'right' ? lab.joints.handR : lab.joints.handL;
+    return { ...fist, on: spotOf(fistOf(lab, hand)).on };
+  });
 }
 
 /** Where a hand's fist closes (world): along the hand from its wrist (its -y, as the rig hangs the hand). */
@@ -369,19 +396,60 @@ function shareOf(frame: Seen): string {
 }
 
 /** The frames a two-hander was seen in one hand: let go of by the other hand in the frame (below it, out of the view,
- *  it isn't seen), or that hand out of the frame while the weapon's was in it for longer than `ONE_HAND_SPELL`; as
- *  problems (none for any other weapon). */
+ *  it isn't seen), or its lower grip in the frame with that hand out of it for longer than `ONE_HAND_SPELL`; as
+ *  problems (none for any other weapon). (A fist below the frame on a handle that runs out of it is lost to a
+ *  person's own eyes too: counted as soon as the weapon's hand was seen, the middle guard read as one-handed.) */
 function oneHanded(seen: Seen[]): string[] {
   const two = seen.filter((frame) => frame.held !== null);
   const letGo = two.filter((frame) => frame.held === false && frame.other.on);
-  const unseen = longSpells(seen, (frame) => Boolean(frame.held) && frame.grip.on && !frame.other.on);
+  const unseen = longSpells(seen, (frame) => !frame.other.on && (frame.lower?.on ?? (Boolean(frame.held) && frame.grip.on)));
   const problems: string[] = [];
   if (letGo.length) {
     const worst = letGo.reduce((most, frame) => (farFromHeld(frame.grasp!) > farFromHeld(most.grasp!) ? frame : most));
     const why = `the worst, frame ${worst.frame}: ${whyLetGo(worst.grasp!)}`;
     problems.push(`the two-hander let go of by the other hand on ${framesOf(letGo)}; ${why}`);
   }
-  if (unseen.length) problems.push(`the two-hander seen in one hand, the other out of the frame: ${framesOf(unseen)}`);
+  if (unseen.length) problems.push(`the two-hander seen in one hand, its lower grip bare: ${framesOf(unseen)}`);
+  return problems;
+}
+
+/** Whether a fist holds its handle as an open hand: off it, or its fingers barely curled. */
+function isOpen(fist: Fist): boolean {
+  return fist.off > FIST_OFF || fist.curl < FIST_OPEN;
+}
+
+/** A fist on its handle, as words. */
+function describeFist(fist: Fist): string {
+  const off = `the handle ${(fist.off * 100).toFixed(1)} cm from where the fist closes`;
+  return `${off}, the fingers curled ${THREE.MathUtils.radToDeg(fist.curl).toFixed(0)}°`;
+}
+
+/** Each hand's fist on its handle over every frame: the furthest off it and the least curled, seen or not. */
+function describeFists(seen: Seen[]): string {
+  const hands = (['right', 'left'] as const).flatMap((hand) => {
+    const fists = seen.flatMap((frame) => frame.fists.filter((fist) => fist.hand === hand));
+    if (!fists.length) return [];
+    const off = Math.max(...fists.map((fist) => fist.off));
+    const curl = Math.min(...fists.map((fist) => fist.curl));
+    return [`${hand}, at most ${(off * 100).toFixed(1)} cm off, curled ${THREE.MathUtils.radToDeg(curl).toFixed(0)}° at least`];
+  });
+  return `the fists on their handles: ${hands.join('; ') || 'none'}`;
+}
+
+/** The frames a hand was seen holding its handle as an open hand, each hand's as a problem. */
+function openFists(seen: Seen[]): string[] {
+  const problems: string[] = [];
+  for (const hand of ['right', 'left'] as const) {
+    const fistIn = (frame: Seen) => frame.fists.find((fist) => fist.hand === hand);
+    const open = seen.filter((frame) => {
+      const fist = fistIn(frame);
+      return fist !== undefined && fist.on && isOpen(fist);
+    });
+    if (!open.length) continue;
+    const worst = open.reduce((most, frame) => (fistIn(frame)!.off > fistIn(most)!.off ? frame : most));
+    const why = `the worst, frame ${worst.frame}: ${describeFist(fistIn(worst)!)}`;
+    problems.push(`the ${hand} hand open on its handle, seen: ${framesOf(open)}; ${why}`);
+  }
   return problems;
 }
 
@@ -394,12 +462,13 @@ function describeFrames(seen: Seen[]): string[] {
     const weapon = now.tip.at.clone().sub(now.grip.at).normalize();
     const held = now.held === null ? '' : `, ${now.held ? 'held' : `let go: ${whyLetGo(now.grasp!)}`}`;
     const past = now.armsPast.length ? `; past: ${now.armsPast.map(describeBreach).join(', ')}` : '';
+    const fists = now.fists.map((fist) => `; the ${fist.hand} fist: ${describeFist(fist)}`).join('');
     const parts = [
       `the grip ${triple(now.grip.at)}`,
       `the weapon ${triple(weapon)}`,
       `the other hand ${triple(now.other.at)}`,
     ];
-    lines.push(`  ${now.frame}${share}${now.fires ? ' fires' : ''}: ${parts.join(', ')}${held}${past}`);
+    lines.push(`  ${now.frame}${share}${now.fires ? ' fires' : ''}: ${parts.join(', ')}${held}${fists}${past}`);
   }
   return lines;
 }
@@ -450,8 +519,9 @@ function framesOf(frames: Seen[]): string {
   return `${frames.length} frames (${first}${frames.length > 6 ? '...' : ''})`;
 }
 
-/** The canary's faults, planted after each frame: the arms held as they were at the press (no blow), and the other
- *  arm turned down out of the frame (a two-hander seen in one hand). */
+/** The canary's faults, planted after each frame: the arms held as they were at the press (no blow), the other arm
+ *  turned down out of the frame, and the weapon lifted up the view out of the fists (open hands; a two-hander's lower
+ *  grip in the frame with no hand on it). */
 function plantFaults(lab: Lab): () => void {
   let held: THREE.Quaternion[] | null = null;
   return () => {
@@ -460,7 +530,17 @@ function plantFaults(lab: Lab): () => void {
     joints.forEach((joint, i) => joint.quaternion.copy(held![i]));
     lab.joints.shoulderL.rotateX(CANARY_DROP);
     lab.model.root.updateWorldMatrix(true, true);
+    const grip = lab.model.tip?.parent;
+    if (grip?.parent) liftInView(grip, CANARY_LIFT);
+    lab.model.root.updateWorldMatrix(true, true);
   };
+}
+
+/** Moves `object` up the eyes' view by `by` (m). */
+function liftInView(object: THREE.Object3D, by: number): void {
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(G.camera.getWorldQuaternion(new THREE.Quaternion()));
+  const lifted = object.getWorldPosition(new THREE.Vector3()).addScaledVector(up, by);
+  object.position.copy(object.parent!.worldToLocal(lifted));
 }
 
 /** Whether the canary's faults were caught, each as words: `caught ...` or `missed ...`. */
@@ -473,6 +553,10 @@ function canaryCaught(planted: Seen[], seen: Seen[]): string[] {
   if (seen.some((frame) => frame.held !== null)) {
     const caught = oneHanded(planted).length > 0;
     verdicts.push(caught ? 'caught: the two-hander seen in one hand' : 'missed: the dropped arm read as holding');
+  }
+  if (seen.some((frame) => frame.fists.some((fist) => fist.on))) {
+    const caught = openFists(planted).length > 0;
+    verdicts.push(caught ? 'caught: a fist off its handle' : 'missed: the lifted weapon read as held');
   }
   return verdicts;
 }

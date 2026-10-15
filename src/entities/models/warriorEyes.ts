@@ -17,9 +17,13 @@
 // as in third person, the left shoulder came round in front of the eyes and its arm filled half the view.)
 import { viewMove, type ViewMove } from '../viewModel';
 
-/** a two-hander at rest through the eyes: the lower hand low and right of the middle, the head up to the right */
-export const TWO_REST_AT: [number, number, number] = [0.06, -0.3, -0.46];
-export const TWO_REST_DIR: [number, number, number] = [0.5, 0.75, -0.42];
+/** a two-hander at rest through the eyes, in a middle guard: the fists low on the right of the crosshair (the lower
+ *  one just under the frame, as at a person's belly), the point forward and up, the whole weapon in the frame and its
+ *  head seen. (Up to the right, the blade ran out of the frame's top and the wrists bent over; on the shoulder, as in
+ *  third person, nothing of it was seen; upright before the hands, the right forearm stood up the view and covered
+ *  the crosshair) */
+export const TWO_REST_AT: [number, number, number] = [0.18, -0.34, -0.37];
+export const TWO_REST_DIR: [number, number, number] = [-0.05, 0.6, -0.8];
 
 /** a two-handed forehand, from the right shoulder down across to the left hip: wound up by 0.3 of the cast to a high
  *  guard on the right (the blade up out of the frame's top, the upper hand seen right of the middle), its blade tipped

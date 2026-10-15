@@ -146,6 +146,10 @@ export interface SkillDef {
  *  m; the arm's joints past their ranges holding it, degrees; the arm into the body, m). */
 export interface LowerGrip { held: boolean; free: boolean; short: number; past: number; into: number }
 
+/** How a hand holds a handle (`Model.fists`): how far the handle passes from where the fist closes round it (m), and
+ *  how far its fingers are curled (rad, their joints' mean bend: 0 straight) */
+export interface Fist { hand: 'left' | 'right'; off: number; curl: number }
+
 /** How the weapons are held: each has its own loadout (for a class with gear-driven skills). */
 export type WeaponStyle = 'shield' | 'twoHanded' | 'dual' | 'oneHanded';
 
@@ -311,6 +315,8 @@ export interface Model {
   tip?: THREE.Object3D;
   /** the other hand's weapon tip, while there's a weapon in each (a charge gathers into both) */
   readonly offTip?: THREE.Object3D | null;
+  /** a two-hander's lower grip, where the other hand holds it (none for any other weapon) */
+  readonly offGrip?: THREE.Object3D | null;
   /** offhand focus point */
   palm?: THREE.Object3D;
   /** a bow's nocked arrow's head, along the arrow as it lies on the string (a full draw glints there) */
@@ -334,6 +340,8 @@ export interface Model {
   readonly reach?: number;
   /** a two-hander's lower grip as the other hand held it this frame (null without one; the lab's measures read it) */
   readonly lowerGrip?: LowerGrip | null;
+  /** each hand holding a handle, and how it holds it (for the lab) */
+  readonly fists?: readonly Fist[];
   dispose(): void;
 }
 

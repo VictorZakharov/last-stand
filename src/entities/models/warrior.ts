@@ -17,7 +17,7 @@ import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, DRINK_SHEATHED, type DrinkHold } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
-import { buildHand, poseHand, hold, seat, fistReach, fistTurn, gripTurn, bare, handCapsules, SLANT } from './hands';
+import { buildHand, poseHand, hold, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT } from './hands';
 import { axe, greataxe, greatsword, mace, maul, sword, type WeaponMaterials } from './weapons';
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { groundHeight } from '../../world/ground';
@@ -26,7 +26,7 @@ import {
   TWO_REST_AT, TWO_REST_DIR, TWO_FORE, TWO_BACK, ONE_FORE, ONE_BACK, CUT_FLAT, EYES_TURN, POWER_TWO, SMITE_TWO, POWER_ONE,
   RECOVER_TWO, ONE_DOWN_AT, ONE_DOWN_DIR,
 } from './warriorEyes';
-import type { ActionState, AnimState, Gear, LowerGrip, Model } from '../../types';
+import type { ActionState, AnimState, Fist, Gear, LowerGrip, Model } from '../../types';
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
 /** a held weapon: its tip along the grip, and where the left hand holds it (two-handers) */
@@ -1507,6 +1507,14 @@ export function buildWarrior(): Model {
     get offTip() { return offHeld ? tipL : null; },
     get reach() { return (ARM + (held?.len ?? 0)) * root.scale.x; },
     get lowerGrip() { return held?.off != null ? grasp : null; },
+    get offGrip() { return held?.off != null ? offGrip : null; },
+    get fists() {
+      const fists: Fist[] = [];
+      if (held) fists.push({ hand: 'right', ...fistOn(handR, grip, held.r) });
+      if (offHeld && !sheathed) fists.push({ hand: 'left', ...fistOn(handL, gripL, offHeld.r) });
+      else if (held?.off != null && grasp.held) fists.push({ hand: 'left', ...fistOn(handL, grip, held.r) });
+      return fists;
+    },
     reset: () => { legs.reset(); fade.reset(); },
     // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
     firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on && gloved; mountAll(); },
