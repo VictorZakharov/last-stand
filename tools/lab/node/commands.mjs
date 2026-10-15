@@ -41,6 +41,16 @@ export function fixtureFrom(options) {
   return fixture;
 }
 
+/** the moment of a strike `match` pictures unless `--share` says (a share of its cast) */
+const MATCH_SHARE = 0.5;
+
+/** The moment `match` pictures the hero in (page/sheet.ts's states): standing at rest, or `--skill` at `--share` of
+ *  its cast. */
+function matchedMoment(options) {
+  if (!options.skill) return { states: ['stand'] };
+  return { states: ['cast'], skill: options.skill, shares: [options.share ?? MATCH_SHARE] };
+}
+
 /** `--tune`'s text as the values it sets, by their paths: `a.b=1,2;c.d=3` sets a.b to [1, 2] and c.d to [3]. */
 function tunesFrom(text) {
   const tunes = {};
@@ -686,11 +696,16 @@ export const COMMANDS = {
 
   match: {
     check(options) {
-      readReference(resolve(options._[0]));
+      readReference(resolve(options._[0]), options.frame);
       if (options.screen || options.screens) throw labError('match: the screen is the reference\'s shape; no --screen');
+      if (options.share !== undefined && !options.skill) throw labError('match --share: a moment of --skill\'s cast');
+      if (options.share !== undefined && !(options.share >= 0 && options.share <= 1)) {
+        throw labError('match --share: a share of the cast, 0 to 1');
+      }
+      if (options.fit && options.skill) throw labError('match --fit fits a rest: not with --skill');
     },
     async each(side, options) {
-      const reference = readReference(resolve(options._[0]));
+      const reference = readReference(resolve(options._[0]), options.frame);
       await side.showOn(screenFor(reference));
       const fixture = { ...fixtureFrom(options), view: 'first' };
       const fit = options.fit
@@ -702,11 +717,11 @@ export const COMMANDS = {
         })
         : undefined;
       const pictured = fit ? { ...fixture, tune: { ...fixture.tune, ...fit.tune } } : fixture;
-      const sheet = await side.command('sheet', { states: ['stand'], views: ['eyes'], fixture: pictured });
+      const sheet = await side.command('sheet', { ...matchedMoment(options), views: ['eyes'], fixture: pictured });
       return { ...sheet, fit: fit && { ...fit, to: options.near } };
     },
     async finish(results, options, session) {
-      const reference = readReference(resolve(options._[0]));
+      const reference = readReference(resolve(options._[0]), options.frame);
       const runs = results.map(([side, sheet]) => [side.name, sheet]);
       const { text, html } = compare(reference, runs, Boolean(options.canary));
       const dir = session.outFor(join('match', reference.name));

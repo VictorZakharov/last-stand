@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { drawnSolid } from './onScreen';
+import { pickGrid } from './pickGrid';
 import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
 
@@ -15,6 +16,8 @@ const GRID_ACROSS = 96;
 const GRID_DOWN = 54;
 /** what a cell of the grid shows (`Framed.cells`): nothing of the hero's, his weapon, his arm or fist */
 const SHOWS = { none: '0', weapon: '1', arm: '2' } as const;
+/** what the pick of a cell finds (page/pickGrid.ts: the index of the group drawn there, of [weapon, arm]) */
+const PICKED = { none: -1, weapon: 0, arm: 1 } as const;
 /** the points along the weapon from its grip to its tip, projected to find its part in the frame */
 const ALONG = 64;
 /** where along its part in the frame the weapon's width is read (shares of it from where it comes in): the middle
@@ -163,9 +166,11 @@ function widened(box: Box, i: number, j: number): void {
   box.bottom = Math.max(box.bottom, (j + 1) / GRID_DOWN);
 }
 
-/** The grid of rays through `weapon` and `arm`; `onHead` says whether a point of the weapon is on its head. */
-function coverOf(weapon: THREE.Mesh[], arm: THREE.Mesh[], onHead: (point: THREE.Vector3) => boolean): Cover {
-  const all = [...weapon, ...arm];
+/** The grid's cells through `weapon` and `arm` (drawn once, page/pickGrid.ts; a ray through each cell the weapon
+ *  shows, for whether it's its head); `onHead` says whether a point of the weapon is on its head. */
+function coverOf(lab: Lab, weapon: THREE.Mesh[], arm: THREE.Mesh[], onHead: (point: THREE.Vector3) => boolean):
+  Cover {
+  const shows = pickGrid(lab, armsLens(), [weapon, arm], GRID_ACROSS, GRID_DOWN);
   let onWeapon = 0;
   let onHeadCount = 0;
   let onArm = 0;
@@ -174,9 +179,9 @@ function coverOf(weapon: THREE.Mesh[], arm: THREE.Mesh[], onHead: (point: THREE.
   const cells: string[] = new Array(GRID_ACROSS * GRID_DOWN).fill(SHOWS.none);
   for (let i = 0; i < GRID_ACROSS; i++) {
     for (let j = 0; j < GRID_DOWN; j++) {
-      const hit = metAt({ x: (i + 0.5) / GRID_ACROSS, y: (j + 0.5) / GRID_DOWN }, all);
-      if (!hit) continue;
-      if (!weapon.includes(hit.object as THREE.Mesh)) {
+      const shown = shows[j * GRID_ACROSS + i];
+      if (shown === PICKED.none) continue;
+      if (shown === PICKED.arm) {
         onArm++;
         cells[j * GRID_ACROSS + i] = SHOWS.arm;
         continue;
@@ -184,7 +189,8 @@ function coverOf(weapon: THREE.Mesh[], arm: THREE.Mesh[], onHead: (point: THREE.
       cells[j * GRID_ACROSS + i] = SHOWS.weapon;
       onWeapon++;
       widened(box, i, j);
-      if (!onHead(hit.point)) continue;
+      const hit = metAt({ x: (i + 0.5) / GRID_ACROSS, y: (j + 0.5) / GRID_DOWN }, weapon);
+      if (!hit || !onHead(hit.point)) continue;
       onHeadCount++;
       widened(headBox, i, j);
     }
@@ -250,7 +256,11 @@ export function framed(lab: Lab): Framed | null {
   const butt = grip.worldToLocal(from.clone()).y;
   const length = grip.worldToLocal(to.clone()).y - butt;
   const onHead = (point: THREE.Vector3) => (grip.worldToLocal(point.clone()).y - butt) / length >= HEAD_FROM;
-  const cover = coverOf(weapon, arm, onHead);
+  const cover = coverOf(lab, weapon, arm, onHead);
+  // (a weapon wider than a cell covers one: none is a pick that drew nothing, as one did while the lab held its draws)
+  if (wide > 1 / GRID_ACROSS && cover.weapon === 0) {
+    throw new Error('lab: the weapon is in the frame, but no cell of the grid shows it: the measure saw nothing');
+  }
   const tipPlace = placeOf(to);
   // (a tip well in the frame has its head round it: no ray meeting it there is a measure that saw nothing)
   const wellIn = tipPlace.x > EDGE && tipPlace.x < 1 - EDGE && tipPlace.y > EDGE && tipPlace.y < 1 - EDGE;

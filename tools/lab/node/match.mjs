@@ -1,11 +1,13 @@
-// tools/lab match: the hero through the eyes beside a reference's screenshot (a game his first-person weapons are
-// posed after): the screenshot, his frame on a screen of its shape, and the two blended, with the points marked on the
-// reference (`<picture>.marks.json`) and his own drawn on each, and the numbers side by side. A rest is matched to a
-// reference here, not by eye: matched to a summary of three screenshots, a rest handed over leaned in where they
-// lean out, twice as wide, its head out of the frame.
+// tools/lab match: the hero through the eyes, at rest or at a moment of a strike (`--skill`, `--share`), beside a
+// reference's screenshot or a frame of its clip (`--frame`: a game his first-person weapons are posed after): the
+// reference, his frame on a screen of its shape, and the two blended, with the points marked on the reference
+// (`<picture>.marks.json`) and his own drawn on each, and the numbers side by side. A rest is matched to a reference
+// here, not by eye: matched to a summary of three screenshots, a rest handed over leaned in where they lean out, twice
+// as wide, its head out of the frame.
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 import { labError } from './errors.mjs';
+import { frameMarksFile, frameName, frameOf, isClip } from './clipFrames.mjs';
 import {
   OUTLINE_GRID,
   PARTS,
@@ -50,18 +52,26 @@ function imageSize(bytes, file) {
  * has the player's bar round it) and what's marked on that frame: the points (`points`, shares of it across and
  * down), the weapon's width (`wide`, a share of the frame's), the part of the frame it covers (`box`, [left, top,
  * right, bottom] shares) and the outlines of the weapon and the fist holding it (`outline`: for each part, shapes
- * of [x, y] shares), read from `<picture>.marks.json` beside it if there is one.
+ * of [x, y] shares), read from `<picture>.marks.json` beside it if there is one. A clip's reference is its frame at
+ * `at` s (clipFrames.mjs), its marks `<clip>@<ms>.marks.json` beside the clip.
  */
-export function readReference(file) {
+export function readReference(file, at) {
+  if (isClip(file)) return pictureReference(frameOf(file, at), frameMarksFile(file, at), frameName(file, at));
+  if (at !== undefined) throw labError(`match: --frame is a moment of a clip; ${basename(file)} is a picture`);
   if (!existsSync(file)) throw labError(`match: no reference picture ${file}`);
+  const name = basename(file).replace(/\.[^.]+$/, '');
+  return pictureReference(file, file.replace(/\.(png|jpe?g)$/i, '.marks.json'), name);
+}
+
+/** The reference of a picture, marked in `marksFile` if there is one, called `name`. */
+function pictureReference(file, marksFile, name) {
   const bytes = readFileSync(file);
   const size = imageSize(bytes, file);
   const type = extname(file).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
-  const marksFile = file.replace(/\.(png|jpe?g)$/i, '.marks.json');
   const marks = existsSync(marksFile) ? JSON.parse(readFileSync(marksFile, 'utf8')) : {};
   const [x, y, width, height] = marks.crop ?? [0, 0, size.width, size.height];
   return {
-    name: basename(file).replace(/\.[^.]+$/, ''),
+    name,
     url: `data:${type};base64,${bytes.toString('base64')}`,
     size,
     crop: { x, y, width, height },

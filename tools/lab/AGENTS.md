@@ -230,18 +230,29 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   other arm down out of the frame and lifts the weapon 15 cm up the view out of the fists: there must be no blow, a
   two-hander must be seen in one hand, and a fist must be off its handle (frozen alone, the arms swung with the trunk's
   turn and read as a blow).
-- `match <picture>`: a first-person rest matched to a reference's screenshot (`node/match.mjs`; another game's, the one
-  the owner names), not by eye: handed over as matching three Vermintide 2 screenshots from a one-line summary of them,
-  a rest leaned in where they lean out, was twice as wide and had its head out of the frame. The hero stands through
-  the eyes on a screen of the screenshot's shape (`--gear`, `--weapon`, `--wear` and `--tune` set him up; it takes no
-  `--screen`), and `out/match/<picture>/match.png` shows the screenshot, his frame and the two blended, with the
-  reference's points (red) and his (blue) on each. The points are marked once in `<picture>.marks.json` beside the
-  picture: `crop` (px: the game's frame within a screenshot of a video), `points` (`in`, where the weapon comes into the
-  frame, and `tip`, its tip or head; shares of the frame across and down) and `wide` (the weapon's width, a share of
-  the frame's); his are the sheet's (`page/inFrame.ts`: read off the frame as drawn, through the camera that draws the
-  arms). It says each frame's numbers (the points, the lean between them, the width) and how far his are off the
-  reference's. Check the marks on the reference's own panel before trusting a comparison. `--canary` takes his points
-  as the reference's moved 10% across: the comparison must find them so.
+- `match <picture>`: the hero through the eyes matched to a reference (`node/match.mjs`; another game's, the one the
+  owner names), not by eye: handed over as matching three Vermintide 2 screenshots from a one-line summary of them, a
+  rest leaned in where they lean out, was twice as wide and had its head out of the frame. He stands at rest, or is
+  caught at a moment of a strike: `--skill` cast ahead, at `--share` of its cast (0.5 by default; `page/sheet.ts`'s
+  cast state). The reference is a screenshot, or a frame of a clip of the other game's swings (`.mp4`, `.webm`, `.mkv`,
+  `.mov`; `--frame <s>`, cut by ffmpeg into `out/match/frames` once, `node/clipFrames.mjs`). He's put on a screen of
+  the reference's shape (`--gear`, `--weapon`, `--wear` and `--tune` set him up; it takes no `--screen`), and
+  `out/match/<picture>/match.png` shows the reference, his frame and the two blended, with the reference's marks (red)
+  and his (blue) on each. The marks are written once beside the picture, `<picture>.marks.json` (a clip's frame's:
+  `<clip>@<ms>.marks.json`): `crop` (px: the game's frame within a screenshot of a video), `points` (`in`, where the
+  weapon comes into the frame, and `tip`, its tip or head; shares of the frame across and down), `wide` (the weapon's
+  width, a share of the frame's: a bar across its line at its middle shows it), `box` (the part of the frame it covers,
+  [left, top, right, bottom]) and `outline` (the weapon's and the fist's, shapes of [x, y] shares). His are the sheet's
+  (`page/inFrame.ts`: read off the frame as drawn, through the camera that draws the arms; which of the weapon or the
+  arm each cell of a 96 by 54 grid shows is the two drawn alone in flat colours, `page/pickGrid.ts`: a ray a cell
+  against the skinned hands took 43 s a frame at a strike, and saw them skinned another way than the game draws
+  them). It says each frame's numbers (the points, the lean between them, the width, the box), how far his are off the
+  reference's, and how much of each outline his frame covers. Check the marks on the reference's own panel before
+  trusting a comparison. `--fit a.b,c.d` searches tunable values (`--tune`'s) for the rest nearest the marks `--near`
+  names (`line`, `wide`, `box`, `outline`, by default; `page/fitRest.ts`; a rest only), then pictures it with the
+  `--tune` that gives it: fitted one number at a time, a rest matched every number with the blade out of the frame and
+  the hand in it. `--canary` takes his points as the reference's moved 10% across, which the comparison must find so,
+  and with `--fit` fits him to his own frame from values moved off it, which must find its way back.
 - `carry`: the ranger's carried bow against his body through a carry's round (standing, walking, a draw and its shot,
   waiting with the next arrow, putting it back). `--canary` plants faults it must catch; `--frames` lists every frame
   with a clip, what crossed what and how deep.

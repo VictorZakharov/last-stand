@@ -58,12 +58,14 @@ const SETUP_OPTIONS = {
     kind: 'list',
     usage: 'a,b',
     choices: ['helm', 'chest', 'hands', 'none'],
-    help: 'the armour he wears, as the player dresses him (hands: gloves and bracers; none: bare; as rolled by default)',
+    help: 'the armour he wears, as the player dresses him (hands: gloves and bracers; none: bare; as rolled by '
+      + 'default)',
   },
   tune: {
     kind: 'text',
     usage: 'name.field=v[,v...][;...]',
-    help: 'tunable values set before the run (src/core/tuning.ts: warriorEyes.oneOn=0.75,-1.1,0.5;warriorEyes.roll=1.2)',
+    help: 'tunable values set before the run (src/core/tuning.ts: '
+      + 'warriorEyes.oneOn=0.75,-1.1,0.5;warriorEyes.roll=1.2)',
   },
 };
 
@@ -644,13 +646,30 @@ export const COMMANDS = {
     },
   },
   match: {
-    help: 'the hero standing through the eyes beside a reference\'s screenshot (a game his first-person weapons are '
-      + 'posed after), on a screen of its shape: the screenshot, his frame and the two blended, the points marked '
-      + 'on it (<picture>.marks.json: crop, points in and tip, wide, box, the weapon\'s and fist\'s outline) and '
-      + 'his own drawn on each, how far his are off and how much of the outlines his frame covers: '
+    help: 'the hero through the eyes, standing or at a moment of a strike, beside a reference\'s screenshot or a '
+      + 'frame of its clip (a game his first-person weapons are posed after), on a screen of its shape: the '
+      + 'reference, his frame and the two blended, the points marked on it (<picture>.marks.json, a clip\'s frame\'s '
+      + '<clip>@<ms>.marks.json: crop, points in and tip, wide, box, the weapon\'s and fist\'s outline) and his own '
+      + 'drawn on each, how far his are off and how much of the outlines his frame covers: '
       + 'tools/lab/out/match/<picture>/match.png',
     argument: 'picture',
     options: {
+      frame: {
+        kind: 'number',
+        usage: 's',
+        help: 'with a clip (.mp4, .webm, .mkv, .mov), the moment of it matched (cut by ffmpeg into '
+          + 'tools/lab/out/match/frames)',
+      },
+      skill: {
+        kind: 'text',
+        usage: 'name',
+        help: 'a strike pictured rather than the rest: the skill (its key, its behaviour or its name) cast ahead',
+      },
+      share: {
+        kind: 'number',
+        usage: '0-1',
+        help: 'with --skill, the moment of its cast pictured, a share of it (0.5 by default)',
+      },
       fit: {
         kind: 'list',
         usage: 'name.field,...',
