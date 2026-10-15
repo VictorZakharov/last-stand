@@ -339,6 +339,9 @@ export interface Model {
   setGear?(gear: Gear): void;
   /** direction of the current melee swing: +1 sweeps right to left, -1 left to right */
   readonly swing?: number;
+  /** through the eyes, the arm a swing keyed this frame (camera space, m; null when none did): what the lab holds the
+   *  drawn arm to */
+  readonly swingKeyed?: KeyedArm | null;
   /** distance from the body to the weapon's tip */
   readonly reach?: number;
   /** a two-hander's lower grip as the other hand held it this frame (null without one; the lab's measures read it) */
@@ -350,6 +353,11 @@ export interface Model {
 
 // ---------------------------------------------------------------------------
 // Misc
+
+/** an arm as a swing through the eyes keys it (camera space, m): its shoulder, its elbow, its grip and the weapon's
+ *  way, and how much of the arm drawn is the swing's (1: all of it; less as it takes over from the place before or
+ *  fades from it) */
+export interface KeyedArm { hand: 'right' | 'left'; shoulder: XYZ; elbow: XYZ; grip: XYZ; dir: XYZ; weight: number }
 
 export interface XZ { x: number; z: number }
 export interface XYZ { x: number; y: number; z: number }

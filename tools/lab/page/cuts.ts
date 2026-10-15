@@ -187,6 +187,12 @@ export function rowOfCuts(casts: RowCast[], rest: RestBlades, frameMs: number):
   return { lines, problems };
 }
 
+/** Whether a frame's blade is back where its hand's was at rest (none known: taken as at rest). */
+export function atRest(frame: CutFrame, rest: RestBlades): boolean {
+  const blade = rest[frame.hand];
+  return !blade || apart(strikingWay(frame), strikingWay(blade)) <= REST_NEAR;
+}
+
 /** Which way a cut goes, as words (`Model.swing`: 1 right to left; the left hand's forehand goes left to right). */
 function sideWords(frame: CutFrame): string {
   if (frame.side === null) return `a cut in the ${frame.hand} hand`;

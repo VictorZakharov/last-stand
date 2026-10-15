@@ -263,7 +263,7 @@ function footOf(lab: Lab, name: string): string {
 
 /** For a shoulder past its range, its raise, the plane it rises in and its turn, against what each allows (a raise
  *  or a turn can take it past), else nothing. */
-function armOf(angles: BodyAngles, name: string): string {
+export function armOf(angles: BodyAngles, name: string): string {
   const shoulder = /^shoulder([LR])\.excess$/.exec(name);
   if (!shoulder) return '';
   const side = shoulder[1];

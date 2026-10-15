@@ -29,9 +29,11 @@ const FLAT_FROM = 45;
  *  (the skill's own timing: a hit is dealt then) */
 const LANDS_BEFORE = 6;
 const LANDS_AFTER = 4;
-/** a cut swings its weapon round: its striking part at the blow at least this many times as fast as its hilt (a
- *  blade slid across, the whole of it moving as one, is 1; swung from the shoulder with a straight arm, about 2.5) */
-const WHIP_LEAST = 2;
+/** a cut swings its weapon round: its striking part at the blow at least this share as many times as fast as its hilt
+ *  as the arm and the weapon swung round the shoulder as one would move it (`StrikeFrame.rigid`; a blade slid across,
+ *  the whole of it moving as one, is 1; a wrist's snap is more). (Held to 2 for every weapon, a sword's whip, a
+ *  mace's head nearer the hand failed by its length alone: swung round the shoulder as one, it is 1.5.) */
+const WHIP_LEAST = 1;
 /** a blow carries on through: its striking part slows to `STOP_SHARE` of its fastest no sooner than this (ms) */
 const STOP_SHARE = 0.2;
 const STOP_LEAST = 60;
@@ -51,14 +53,18 @@ export interface StrikeFrame {
   along: number;
   /** its length's way (the world's), for the plane it's swung in */
   axis: THREE.Vector3;
+  /** how many times as fast as its hilt its striking part would move swung round the holding arm's shoulder with the
+   *  arm as one (their distances from the shoulder's ratio), the whip's measure */
+  rigid: number;
 }
 
-/** The weapon the hero's tip is on: the grip's child seen, named for a base, its hilt (the grip's place) and where its
- *  blow lands (world). */
+/** The weapon the hero's tip is on: the grip's child seen, named for a base, its hilt (the grip's place), where its
+ *  blow lands, and the shoulder of the arm holding it (world). */
 interface Held {
   weapon: THREE.Object3D;
   grip: THREE.Vector3;
   point: THREE.Vector3;
+  shoulder: THREE.Vector3;
 }
 
 /** Whether this game says its weapons' striking sides (models/weapons.ts `STRIKES_WITH`). */
@@ -74,7 +80,18 @@ function heldNow(lab: Lab): Held | null {
   const weapon = grip?.children.find((child) => child.visible && isWeapon(child));
   if (!tip || !grip || !weapon) return null;
   const from = grip.getWorldPosition(new THREE.Vector3());
-  return { weapon, grip: from, point: from.clone().lerp(tip.getWorldPosition(new THREE.Vector3()), PERCUSSION) };
+  const point = from.clone().lerp(tip.getWorldPosition(new THREE.Vector3()), PERCUSSION);
+  const shoulder = lab.joints[`shoulder${heldIn(lab, grip)}`].getWorldPosition(new THREE.Vector3());
+  return { weapon, grip: from, point, shoulder };
+}
+
+/** Which hand holds `grip`: the hand joint it hangs under (the right's when under neither). */
+function heldIn(lab: Lab, grip: THREE.Object3D): 'R' | 'L' {
+  for (let at: THREE.Object3D | null = grip; at; at = at.parent) {
+    if (at === lab.joints.handL) return 'L';
+    if (at === lab.joints.handR) return 'R';
+  }
+  return 'R';
 }
 
 /** A weapon's length (its +Y) and its striking side (its +X), the world's ways. */
@@ -116,7 +133,8 @@ export class StrikeTracker {
     const gripSpeed = moved ? this.follower.gripMoved.length() / dt : 0;
     const along = speed > 0 ? Math.abs(velocity.dot(axis)) / speed : 0;
     const lead = leadOf(velocity, axis, sideOf(weapon), side);
-    return { weapon: weapon.name, side, speed, gripSpeed, lead, along, axis };
+    const rigid = held.point.distanceTo(held.shoulder) / Math.max(1e-6, held.grip.distanceTo(held.shoulder));
+    return { weapon: weapon.name, side, speed, gripSpeed, lead, along, axis, rigid };
   }
 }
 
@@ -210,8 +228,10 @@ export interface Strike {
   along: number;
   /** how far its length is out of the plane it's swung in, the root mean square over the strike (degrees) */
   plane: number;
-  /** at its fastest, how many times as fast as its hilt its striking part moves (Infinity: the hilt still) */
+  /** at its fastest, how many times as fast as its hilt its striking part moves (Infinity: the hilt still), and as
+   *  the arm and the weapon swung round the shoulder as one would move it (`StrikeFrame.rigid`) */
   whip: number;
+  rigid: number;
   /** how long after its fastest it slows to `STOP_SHARE` of it (ms; null: not before the frames end) */
   stop: number | null;
 }
@@ -251,7 +271,8 @@ export function strikeIn(frames: (StrikeFrame | null)[], fires: number, frameMs:
   const outrun = elsewhere.length ? { at: elsewhere[0], speed: frames[elsewhere[0]]!.speed } : null;
   const whip = top.gripSpeed > 0 ? top.speed / top.gripSpeed : Infinity;
   const stop = stopAfter(frames, fastest, frameMs);
-  const found = { weapon: top.weapon, side: top.side, fastest, speed: top.speed, from, to, outrun, whip, stop };
+  const { rigid } = top;
+  const found = { weapon: top.weapon, side: top.side, fastest, speed: top.speed, from, to, outrun, whip, rigid, stop };
   return { ...found, ...leadsOver(strike) };
 }
 
@@ -302,7 +323,8 @@ export function describeStrike(strike: Strike, share: (i: number) => string): st
   return `the strike${assumed} (the ${strike.weapon} moving at least ${STRIKE_SHARE * 100}% of its fastest, `
     + `${strike.speed.toFixed(1)} m/s at ${share(strike.fastest)}; ${strike.to - strike.from + 1} frames): ${lead}; `
     + `${(strike.along * 100).toFixed(0)}% of its motion along it; swung within ${degrees(strike.plane)} of a plane; `
-    + `${whipWords(strike.whip)}; ${stopWords(strike.stop)}`
+    + `${whipWords(strike.whip)} (${strike.rigid.toFixed(1)} swung round the shoulder as one); `
+    + stopWords(strike.stop)
     + (strike.outrun ? `; ${outrunWords(strike.outrun, share)}` : '');
 }
 
@@ -328,9 +350,10 @@ export function strikeProblems(strike: Strike, share: (i: number) => string): st
   if (strike.outrun) {
     problems.push(`the ${strike.weapon} moves faster than its blow, ${outrunWords(strike.outrun, share)}`);
   }
-  if (strike.whip < WHIP_LEAST) {
+  const whipLeast = WHIP_LEAST * strike.rigid;
+  if (strike.whip < whipLeast) {
     problems.push(`the ${strike.weapon} slides across rather than swinging round: ${whipWords(strike.whip)} `
-      + `(at least ${WHIP_LEAST})`);
+      + `(at least ${whipLeast.toFixed(1)}, as swung round the shoulder as one)`);
   }
   if (strike.stop !== null && strike.stop < STOP_LEAST) {
     problems.push(`the ${strike.weapon} stops dead after its blow: ${stopWords(strike.stop)} (no sooner than `
