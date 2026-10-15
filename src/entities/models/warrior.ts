@@ -27,7 +27,7 @@ import {
 import { swingAt, swingShoulder, type ArmBones } from '../viewSwing';
 import { tunable } from '../../core/tuning';
 import {
-  TWO_REST, TWO_FORE_CUT, TWO_FORE_ROW, TWO_BACK_CUT, ONE_FORE_CUT, ONE_BACK_CUT, CUT_TURN,
+  TWO_REST, TWO_FORE_CUT, TWO_FORE_ROW, TWO_BACK_CUT, ONE_FORE_CUT, DUAL_FORE_CUT, ONE_BACK_CUT, CUT_TURN,
   POWER_TWO, SMITE_TWO, POWER_ONE,
   RECOVER_TWO, ONE_DOWN_AT, ONE_DOWN_DIR,
 } from './warriorEyes';
@@ -1318,12 +1318,14 @@ export function buildWarrior(): Model {
         // where its forehand winds up, so it goes on from there: `TWO_FORE_ROW`)
         const fore = outing || side > 0;
         if (left) {
-          swingAt(ONE_FORE_CUT, k, armBones(offHeld), _la, _ld, _ml, _pl, true); swingShoulder(ONE_FORE_CUT, _sl, true);
+          swingAt(DUAL_FORE_CUT, k, armBones(offHeld), _la, _ld, _ml, _pl, true); swingShoulder(DUAL_FORE_CUT, _sl, true);
           keyArm('left', _sl, _pl, _la, _ld, fw);
-          wL = fw; flatL = 1; edgeL = fw; swingSlantL = -THREE.MathUtils.degToRad(ONE_FORE_CUT.slant);
+          wL = fw; flatL = 1; edgeL = fw; swingSlantL = -THREE.MathUtils.degToRad(DUAL_FORE_CUT.slant);
         } else {
           const twoFore = inRow && !outing ? TWO_FORE_ROW : TWO_FORE_CUT;
-          const cut = two ? (fore ? twoFore : TWO_BACK_CUT) : fore ? ONE_FORE_CUT : ONE_BACK_CUT;
+          // (a dual wielder's each a forehand of its own, quicker: `DUAL_FORE_CUT`)
+          const oneFore = offHeld ? DUAL_FORE_CUT : ONE_FORE_CUT;
+          const cut = two ? (fore ? twoFore : TWO_BACK_CUT) : fore ? oneFore : ONE_BACK_CUT;
           swingAt(cut, k, armBones(held), _ra, _rd, _mr, _pr); swingShoulder(cut, _sr);
           keyArm('right', _sr, _pr, _ra, _rd, fw);
           wR = fw; flatR = 1; edgeR = fw; swingSlantR = THREE.MathUtils.degToRad(cut.slant);

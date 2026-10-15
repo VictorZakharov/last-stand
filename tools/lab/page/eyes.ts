@@ -1007,7 +1007,8 @@ async function liftCanary(lab: Lab, options: EyesOptions, skill: BoundSkill, fol
     return `missed: no fist seen with the weapon lifted (${fists} on their handles over ${lifted.seen.length} frames)`;
   }
   const off = Math.max(...seenFists.map((fist) => Math.max(fist.off, slidOf(fist))));
-  return `missed: the lifted weapon read as held, ${seenFists.length} fists seen, at most ${(off * 100).toFixed(1)} cm off`;
+  const read = `${seenFists.length} fists seen, at most ${(off * 100).toFixed(1)} cm off`;
+  return `missed: the lifted weapon read as held, ${read}`;
 }
 
 /** The slide canary: the cast again with its weapon held at its first turn each frame (strike.ts `plantSlide`), its

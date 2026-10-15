@@ -44,15 +44,32 @@ const SWINGS = tunable('warriorSwings', {
     0.74, -48, 0.67, -24, 85, 0,
     0.85, -52, 0.66, -22, 85, 0,
   ],
+  // (a dual wielder's, each hand's, the left's mirrored: its speed spread over the blow and carried on after it, as
+  // its cut is quicker, 18 frames to a sword and shield's 25: by those keys, it stopped dead 50 ms after its blow and
+  // swept 67 degrees of the skill's 126)
+  dualFore: [
+    0, 45, 0.46, 0, 30, 0,
+    0.2, 100, 0.44, -12, 60, 0,
+    0.36, 145, 0.44, -10, 70, 0,
+    0.44, 105, 0.48, -10, 70, 0,
+    0.5, 50, 0.56, -5, 70, 0,
+    0.56, 0, 0.64, -15, 70, 0,
+    0.62, -26, 0.66, -20, 75, 0,
+    0.68, -40, 0.67, -22, 80, 0,
+    0.76, -49, 0.67, -24, 85, 0,
+    0.86, -52, 0.66, -22, 85, 0,
+  ],
   // (the backhand, straight after it: from where the forehand left the blade low on the left, turned over by the
-  // forearm as it winds up there, rising to the right through the aim, on to high on the right)
+  // forearm as it winds up there, rising to the right through the aim, on to high on the right; the elbow let up into
+  // the plane as it comes in to the blow: up in it at once, an axe's and a mace's shoulder turned 15 degrees past its
+  // range)
   oneBackPlane: [0.22, -0.3, -0.22, 20],
   oneBack: [
     0, 140, 0.66, -22, 95, 200,
     0.18, 135, 0.62, -10, 85, 100,
     0.36, 130, 0.56, -5, 20, 0,
-    0.44, 105, 0.56, 0, 0, 0,
-    0.5, 60, 0.56, 0, 0, 0,
+    0.44, 105, 0.56, 0, 20, 0,
+    0.5, 60, 0.56, 0, 8, 0,
     0.56, 0, 0.64, -15, 0, 0,
     0.6, -22, 0.66, -20, 0, 0,
     0.66, -38, 0.67, -22, 0, 0,
@@ -127,12 +144,17 @@ const SWINGS = tunable('warriorSwings', {
    *  (the arm keeps within a shoulder's reach of the chest as it crosses the body: the trunk leads the arm into the blow) */
   cutTurn: [0.35, 0.7, 0.38, 0.6],
 }, {
-  oneFore: SWING_KEY, oneBack: SWING_KEY, twoRest: SWING_KEY, twoFore: SWING_KEY, twoForeRow: SWING_KEY,
+  oneFore: SWING_KEY, dualFore: SWING_KEY, oneBack: SWING_KEY, twoRest: SWING_KEY, twoFore: SWING_KEY, twoForeRow: SWING_KEY,
   twoBack: SWING_KEY,
 });
 export const CUT_TURN: readonly number[] = SWINGS.cutTurn;
 export const ONE_FORE_CUT: ViewSwing = {
   plane: SWINGS.oneForePlane, keys: SWINGS.oneFore,
+  get slant() { return SWINGS.cutSlant; },
+  get hit() { return SWINGS.cutHit; },
+};
+export const DUAL_FORE_CUT: ViewSwing = {
+  plane: SWINGS.oneForePlane, keys: SWINGS.dualFore,
   get slant() { return SWINGS.cutSlant; },
   get hit() { return SWINGS.cutHit; },
 };
@@ -163,7 +185,7 @@ export const TWO_BACK_CUT: ViewSwing = {
 };
 /** the swings by their names in `warriorSwings` (the lab's `swing` keys a pose in one) */
 export const SWINGS_NAMED: Readonly<Record<string, ViewSwing>> = {
-  oneFore: ONE_FORE_CUT, oneBack: ONE_BACK_CUT, twoRest: TWO_REST, twoFore: TWO_FORE_CUT, twoForeRow: TWO_FORE_ROW,
+  oneFore: ONE_FORE_CUT, dualFore: DUAL_FORE_CUT, oneBack: ONE_BACK_CUT, twoRest: TWO_REST, twoFore: TWO_FORE_CUT, twoForeRow: TWO_FORE_ROW,
   twoBack: TWO_BACK_CUT,
 };
 

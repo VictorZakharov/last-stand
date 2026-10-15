@@ -37,8 +37,11 @@ const MEETS_LEAST = 0.6;
 const MEETS_MOST = 1.05;
 /** a cut sweeps at least this share of the skill's arc with its striking part (it strikes every foe in it) */
 const SWEEP_LEAST = 0.6;
-/** the blade is at rest when its striking part is within this of where it was at rest, seen from the eyes (degrees) */
+/** the blade is at rest when its striking part is within this of where it was at rest, seen from the eyes, and its
+ *  length within `REST_TURN` of its way then (degrees: by the striking part alone, a mace held high on the right at a
+ *  backhand's end was read as back at rest, and its hold as over after 167 ms) */
 const REST_NEAR = 12;
+const REST_TURN = 25;
 /** a cut's end is held at least this long (ms) before the arms go back, a while for another attack to follow it; held
  *  so while its striking part keeps within `HELD_NEAR` of where it ended (degrees) */
 const HELD_LEAST = 400;
@@ -54,6 +57,13 @@ const DEG = 180 / Math.PI;
 
 /** The striking part's way from the eyes. */
 const strikingWay = (frame: CutFrame) => frame.grip.clone().lerp(frame.tip, PERCUSSION).normalize();
+
+/** The blade's way along its length, in the eyes' space. */
+const bladeWay = (frame: CutFrame) => frame.tip.clone().sub(frame.grip).normalize();
+
+/** Whether a frame's blade is where `rest` has it: its striking part and its length (`REST_NEAR`, `REST_TURN`). */
+const nearRest = (frame: CutFrame, rest: CutFrame) =>
+  apart(strikingWay(frame), strikingWay(rest)) <= REST_NEAR && apart(bladeWay(frame), bladeWay(rest)) <= REST_TURN;
 
 /** How far apart two ways are (degrees). */
 const apart = (a: THREE.Vector3, b: THREE.Vector3) => a.angleTo(b) * DEG;
@@ -166,7 +176,7 @@ export function rowOfCuts(casts: RowCast[], rest: RestBlades, frameMs: number):
   casts.forEach((cast, i) => {
     const begun = firstIn(cast);
     const atRest = rest[begun.hand];
-    const fromRest = atRest !== undefined && apart(strikingWay(begun), strikingWay(atRest)) <= REST_NEAR;
+    const fromRest = atRest !== undefined && nearRest(begun, atRest);
     const from = fromRest ? 'from the rest' : 'where the last cut left the blade';
     lines.push(`cut ${i + 1}: ${sideWords(begun)}, begun ${from}`);
     // (a blade in each hand: the left's cut in a row begins from its own rest, as the right's did, and is its forehand)
@@ -178,7 +188,7 @@ export function rowOfCuts(casts: RowCast[], rest: RestBlades, frameMs: number):
       problems.push(`the row began with ${sideWords(begun)}: a row of cuts starts with the right hand's forehand`);
     }
     if (i === 0 || fromRest || !atRest) return;
-    const back = backToRest(casts[i - 1], cast, strikingWay(atRest));
+    const back = backToRest(casts[i - 1], cast, atRest);
     if (back) problems.push(`cut ${i + 1} went back to the rest (frame ${back}) before its blow: a cut straight `
       + 'after one starts where that one ended');
   });
@@ -194,7 +204,7 @@ export function rowOfCuts(casts: RowCast[], rest: RestBlades, frameMs: number):
 /** Whether a frame's blade is back where its hand's was at rest (none known: taken as at rest). */
 export function atRest(frame: CutFrame, rest: RestBlades): boolean {
   const blade = rest[frame.hand];
-  return !blade || apart(strikingWay(frame), strikingWay(blade)) <= REST_NEAR;
+  return !blade || nearRest(frame, blade);
 }
 
 /** Whether a frame's cut is its hand's forehand (`Model.swing`: 1 right to left, the right hand's forehand; the left
@@ -209,12 +219,12 @@ function sideWords(frame: CutFrame): string {
 }
 
 /** The frame the blade came back to rest on between `last`'s end and `cast`'s blow, or null if it didn't. */
-function backToRest(last: RowCast, cast: RowCast, restWay: THREE.Vector3): number | null {
+function backToRest(last: RowCast, cast: RowCast, rest: CutFrame): number | null {
   const lastIn = last.frames.filter((frame) => frame.inCast);
   const ended = lastIn[lastIn.length - 1] ?? last.frames[last.frames.length - 1];
   const between = [...last.frames.slice(last.frames.indexOf(ended) + 1), ...cast.frames.slice(0, cast.strikeFrom)];
-  if (apart(strikingWay(ended), restWay) <= 2 * REST_NEAR) return null;
-  return between.find((frame) => apart(strikingWay(frame), restWay) <= REST_NEAR)?.frame ?? null;
+  if (apart(strikingWay(ended), strikingWay(rest)) <= 2 * REST_NEAR) return null;
+  return between.find((frame) => nearRest(frame, rest))?.frame ?? null;
 }
 
 /** How long after a cast's last frame its blade kept within `HELD_NEAR` of where it was then (ms), or null when no
