@@ -24,10 +24,10 @@ import { groundHeight } from '../../world/ground';
 import {
   fromEyes, dirFromEyes, fromScreen, viewAt, turnTowards, ViewFade,
 } from '../viewModel';
-import { swingAt, swingShoulder, type ArmBones } from '../viewSwing';
+import { swingAt, swingShoulder, turnWithTrunk, type ArmBones } from '../viewSwing';
 import { tunable } from '../../core/tuning';
 import {
-  TWO_REST, TWO_FORE_CUT, TWO_FORE_ROW, TWO_BACK_CUT, ONE_FORE_CUT, ONE_BACK_CUT, CUT_TURN,
+  TWO_REST, TWO_FORE_CUT, TWO_FORE_ROW, TWO_BACK_CUT, ONE_FORE_CUT, ONE_BACK_CUT, CUT_TURN, TWO_CUT_TURN,
   POWER_TWO, SMITE_TWO, POWER_ONE,
   RECOVER_TWO, ONE_DOWN_AT, ONE_DOWN_DIR,
 } from './warriorEyes';
@@ -105,6 +105,12 @@ const _bones: ArmBones = { upper: 0, fore: 0, hand: 0, strike: 0 }, _ti = new TH
 const STRIKES_AT = 0.75;
 /** each one's elbow as a reach's pole (`swingPole`), and the arm's joints as placed before a fit (`fitInView`) */
 const _qr = new THREE.Vector3(), _ql = new THREE.Vector3(), _sr = new THREE.Vector3(), _sl = new THREE.Vector3();
+/** where the chest turns under the eyes: the spine, between the shoulders (in the view, as far down and ahead as the
+ *  shoulder `s` is) */
+const _sp = new THREE.Vector3();
+const spineUnder = (s: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 => out.set(0, s.y, s.z);
+/** an ease in and out over 0..1 */
+const smooth = (x: number): number => x * x * (3 - 2 * x);
 const _fitQ = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
 /** `to` turned over, if `w` strikes with either of its sides (a sword's two edges, a maul's two faces), onto the side
  *  of `from` it faces: a move's flat taken from a rest's goes the short way round, never through the handle's line
@@ -746,6 +752,9 @@ export function buildWarrior(): Model {
   let outT = 0;
   /** through the eyes, the arm the swing keyed this frame, if it keyed one (the lab's: `Model.swingKeyed`) */
   let keyed: KeyedArm | null = null;
+  /** through the eyes, the trunk's turn a two-hander's last cut left (rad), faded out as its place is: let go of in a
+   *  frame, the shoulders and the whole swing they carry jumped back under the eyes */
+  let twoTurnHeld = 0;
   const keyedArm = { hand: 'right' as 'right' | 'left', shoulder: new THREE.Vector3(), elbow: new THREE.Vector3(), grip: new THREE.Vector3(), dir: new THREE.Vector3(), weight: 0 };
   const keyArm = (hand: 'right' | 'left', shoulder: THREE.Vector3, elbow: THREE.Vector3, grip: THREE.Vector3, dir: THREE.Vector3, weight: number): void => {
     keyedArm.hand = hand;
@@ -1197,8 +1206,9 @@ export function buildWarrior(): Model {
     let viewFlat = 0, flatR = 0, flatL = 0;
     // a one-handed move placed in the view (through the eyes): how far it takes each arm over (to _ra, _rd / _la, _ld)
     let wR = 0, wL = 0;
-    // and how far the trunk is turned into a swing through the eyes (rad, to its left)
-    let trunkTurn = 0;
+    // and how far the trunk is turned into a swing through the eyes (rad, to its left), and whether a swing turned it
+    // this frame
+    let trunkTurn = 0, swingTurned = false;
     unkey();
     // and the way it turns each one's flat (to the eyes unless it says), and how far it holds each fist's roll on
     // its handle as it has it (`fitInView`)
@@ -1296,11 +1306,16 @@ export function buildWarrior(): Model {
         // (the leg's step and the trunk's turn let go of on the way back after a backhand)
         const w = outing ? 0 : ramp(k, 0, 0.3) * (1 - ramp(k, 0.9, 1));
         // (a cut in a row from where the last one turned it: wound from rest, the trunk jumped 0.35 rad back)
-        const [wound, across, from, to] = CUT_TURN;
+        // (a two-hander's carries the whole swing round the spine, eased in and out as its weight turns a body: turned
+        // at an even rate, it started and stopped in a frame and jolted the weapon a third of its speed)
+        const [wound, across, from, to] = two ? TWO_CUT_TURN : CUT_TURN;
         const start = inRow ? -across : -wound;
-        const into = side * lerp(start, across, ramp(k, from, to)) * (inRow ? 1 : ramp(k, 0, 0.3));
+        const turning = two ? smooth(ramp(k, from, to)) : ramp(k, from, to);
+        const into = side * lerp(start, across, turning) * (inRow ? 1 : two ? smooth(ramp(k, 0, from)) : ramp(k, 0, 0.3));
         const theta = outing ? side * across * (1 - outP) : into;
         trunkTurn = theta;
+        swingTurned = true;
+        if (two) twoTurnHeld = theta;
         j.spine.rotation.y += 0.3 * theta;
         j.chest.rotation.y += 0.7 * theta;
         armsFromBelow(true, two);
@@ -1325,6 +1340,12 @@ export function buildWarrior(): Model {
           const twoFore = inRow && !outing ? TWO_FORE_ROW : TWO_FORE_CUT;
           const cut = two ? (fore ? twoFore : TWO_BACK_CUT) : fore ? ONE_FORE_CUT : ONE_BACK_CUT;
           swingAt(cut, k, armBones(held), _ra, _rd, _mr, _pr); swingShoulder(cut, _sr);
+          // (a two-hander's carried round the spine by the trunk's turn, the shoulder with it)
+          if (two) {
+            spineUnder(_sr, _sp);
+            turnWithTrunk(theta, _sp, _ra, _rd, _mr, _pr);
+            _sr.sub(_sp).applyAxisAngle(Y_AXIS, theta).add(_sp);
+          }
           keyArm('right', _sr, _pr, _ra, _rd, fw);
           wR = fw; flatR = 1; edgeR = fw; swingSlantR = THREE.MathUtils.degToRad(cut.slant);
         }
@@ -1662,11 +1683,18 @@ export function buildWarrior(): Model {
       // (its elbow faded from the last swing's as its grip is: from a cut's end to the guard no hold lets go of it)
       holdR = eyesR.apply(_ra, _rd, dt, _rf, edgeR, _pr);
       if (keyed) keyedArm.weight *= 1 - eyesR.fading;
-      // (the right shoulder where the swing puts it, the left a shoulder's width from it, turned round it by the trunk's
-      // turn as a turned chest carries it. Left where it rested, under the camera 16 cm below the right, the left hand
-      // was 9 cm short of the lower grip on the forehand's wind-up)
+      // (the shoulders where the swing puts them, the left across the spine from the right, both turned round it by the
+      // trunk's turn as a turned chest carries them; out of a cut, the turn it left faded out as its place is. Left
+      // where it rested, under the camera 16 cm below the right, the left hand was 9 cm short of the lower grip on
+      // the forehand's wind-up)
+      if (!swingTurned) {
+        trunkTurn = twoTurnHeld * eyesR.fading;
+        if (eyesR.fading === 0) twoTurnHeld = 0;
+      }
       const driver = swingShoulder(TWO_REST, _sr);
-      _sl.set(-2 * Math.abs(driver.x), 0, 0).applyAxisAngle(Y_AXIS, trunkTurn).add(driver);
+      spineUnder(driver, _sp);
+      _sl.set(-driver.x, driver.y, driver.z).sub(_sp).applyAxisAngle(Y_AXIS, trunkTurn).add(_sp);
+      driver.sub(_sp).applyAxisAngle(Y_AXIS, trunkTurn).add(_sp);
       shoulderTo(j.shoulderR, _sr, 1);
       shoulderTo(j.shoulderL, _sl, 1);
       holdInView(ARM_R, _ra, _rd, swingPole(_pr, FP_TWO_POLE, holdR * (1 - vw), _qr), 1 - aw, _rf, flatR);

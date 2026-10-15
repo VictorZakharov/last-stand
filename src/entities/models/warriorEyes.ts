@@ -72,43 +72,45 @@ const SWINGS = tunable('warriorSwings', {
   // from where the forehand left the blade)
   twoRestPlane: [0.22, -0.3, -0.22, 285],
   twoRest: [0, 30, 0.52, 0, 0, 40],
-  // (steeper than the one-hander's, and wound up close by the right shoulder: wound out to the right as one arm winds
-  // a one-hander, the lower grip was 12 cm past the left arm's reach; then down through the aim, the wrist bent to the
-  // little finger's side as far as it goes, the blade as near the arms' line as a fist holds it, on to the left, the
-  // hands ahead of the hips, and back up a little to wait there, the forearms rolling the blade up into a guard on
-  // the left: swept on round the shoulder, they went behind the left one, and the left fist flexed round its grip 39
-  // degrees past where a fist stays closed; held where the follow-through took it, low on the left, the blade was 9%
-  // in the frame, and waiting ahead of the hands unrolled it pointed away from the eyes, 45% of it in the frame but
-  // looking 31% of the frame's height long)
-  twoForePlane: [0.22, -0.3, -0.22, 235],
+  // (driven by the trunk, as a body swings a heavy weapon: the arm's own sweep a short one, in a plane the arms hold
+  // it in within their ranges, carried round the spine by the trunk's turn (`twoTurn`), from 29 degrees to the right
+  // to 40 to the left: drawn back by the right shoulder over a quarter of the cut, its speed built over a ninth of a
+  // second into the blow at the aim and dying away over a fifth after it, carried on 77 degrees to the left and out
+  // of the frame there, across 79% of the frame's width at 27 degrees off level, its blow's point at 15 m/s. Swung
+  // round the right shoulder alone in the plane its blade crossed the view in, it cut down to the middle of the view,
+  // 67 degrees off level across 17% of its width, turned 2000 degrees a second and stopped dead in 67 ms, and the
+  // forearms then rolled it up into a guard on the left; flattened so, the right shoulder turned 150 to 180 degrees
+  // past its range whatever its elbow did. The owner: "first slice should be wider, its currently down towards the
+  // middle of the screen, then it lifts up to left", "we need to preserve momentum of the weapon", "it should not be
+  // jerky, it should feel heavy")
+  twoForePlane: [0.22, -0.3, -0.22, 208],
   twoFore: [
     0, 50, 0.5, 0, 0, 40,
-    0.2, 110, 0.36, -10, 30, 0,
-    0.36, 150, 0.32, -20, 30, 0,
-    0.44, 125, 0.38, -25, 30, 0,
-    0.5, 70, 0.5, -30, 20, 0,
-    0.56, 0, 0.62, -30, 20, 0,
-    0.6, -16, 0.66, -30, 25, 0,
-    0.66, -26, 0.69, -30, 30, 0,
-    0.74, -24, 0.69, -30, 35, -20,
-    0.84, -17, 0.68, -30, 35, -50,
-    0.92, -15, 0.68, -30, 35, -60,
+    0.12, 55, 0.42, -5, 20, 10,
+    0.25, 60, 0.36, -10, 30, 0,
+    0.36, 50, 0.4, -15, 30, 0,
+    0.46, 28, 0.5, -25, 40, 0,
+    0.56, 0, 0.62, -30, 45, 0,
+    0.64, -14, 0.62, -30, 55, 0,
+    0.72, -22, 0.6, -30, 55, 0,
+    0.8, -26, 0.58, -30, 55, 0,
+    0.9, -28, 0.56, -30, 55, 0,
+    1, -28, 0.56, -30, 55, 0,
   ],
-  // (and in a row after its backhand, from where that left the blade on the right, wound up from there: from its
-  // keys from rest, the hands dropped towards the guard and came back up, and the left elbow folded 4 degrees past
-  // its range; on from the wind-up, the forehand's keys)
+  // (and in a row after its backhand: the forehand's keys, faded from where the backhand left the blade, until the
+  // backhand is keyed to the forehand driven by the trunk)
   twoForeRow: [
-    0, 90, 0.56, -15, 20, 0,
-    0.2, 120, 0.4, -20, 30, 0,
-    0.36, 150, 0.32, -20, 30, 0,
-    0.44, 125, 0.38, -25, 30, 0,
-    0.5, 70, 0.5, -30, 20, 0,
-    0.56, 0, 0.62, -30, 20, 0,
-    0.6, -16, 0.66, -30, 25, 0,
-    0.66, -26, 0.69, -30, 30, 0,
-    0.74, -24, 0.69, -30, 35, -20,
-    0.84, -17, 0.68, -30, 35, -50,
-    0.92, -15, 0.68, -30, 35, -60,
+    0, 50, 0.5, 0, 0, 40,
+    0.12, 55, 0.42, -5, 20, 10,
+    0.25, 60, 0.36, -10, 30, 0,
+    0.36, 50, 0.4, -15, 30, 0,
+    0.46, 28, 0.5, -25, 40, 0,
+    0.56, 0, 0.62, -30, 45, 0,
+    0.64, -14, 0.62, -30, 55, 0,
+    0.72, -22, 0.6, -30, 55, 0,
+    0.8, -26, 0.58, -30, 55, 0,
+    0.9, -28, 0.56, -30, 55, 0,
+    1, -28, 0.56, -30, 55, 0,
   ],
   // (its backhand, straight after it: the forehand's way run back, from the guard where it left the blade on the
   // left, unrolled as it loads low there, rising through the aim, on to high on the right where the forehand winds
@@ -143,11 +145,15 @@ const SWINGS = tunable('warriorSwings', {
    *  (the arm keeps within a shoulder's reach of the chest as it crosses the body: the trunk leads the arm into the
    *  blow) */
   cutTurn: [0.35, 0.7, 0.38, 0.6],
+  /** a two-handed cut's, which carries the whole swing round the spine (rad, as `cutTurn`; eased in and out, as a
+   *  heavy weapon's weight turns a body) */
+  twoTurn: [0.5, 0.7, 0.33, 0.95],
 }, {
   oneFore: SWING_KEY, oneBack: SWING_KEY, twoRest: SWING_KEY, twoFore: SWING_KEY, twoForeRow: SWING_KEY,
   twoBack: SWING_KEY,
 });
 export const CUT_TURN: readonly number[] = SWINGS.cutTurn;
+export const TWO_CUT_TURN: readonly number[] = SWINGS.twoTurn;
 export const ONE_FORE_CUT: ViewSwing = {
   plane: SWINGS.oneForePlane, keys: SWINGS.oneFore,
   get slant() { return SWINGS.cutSlant; },

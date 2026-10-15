@@ -223,6 +223,24 @@ export function swingAt(
   placeArm(keyAt(swing, k, _key), swing.slant, bones, at, dir, flat, elbow, mirror);
 }
 
+/**
+ * A swing's arm turned with the trunk, as a turning chest carries the arms before it: `turn` (rad, to its left)
+ * about the view's up through `spine` (where the chest turns under the eyes), the grip's place `at` about it, and the
+ * weapon's way `dir`, its flat `flat` and the way to the elbow `elbow` turned with it. (A two-hander's cut is driven
+ * by the trunk: swung round the right shoulder alone across the view, the shoulder turned 150 to 180 degrees past its
+ * range whatever its elbow did.)
+ */
+export function turnWithTrunk(
+  turn: number, spine: THREE.Vector3,
+  at: THREE.Vector3, dir: THREE.Vector3, flat: THREE.Vector3, elbow: THREE.Vector3,
+): void {
+  at.sub(spine).applyAxisAngle(UP, turn).add(spine);
+  dir.applyAxisAngle(UP, turn);
+  flat.applyAxisAngle(UP, turn);
+  elbow.applyAxisAngle(UP, turn);
+}
+const UP = new THREE.Vector3(0, 1, 0);
+
 /** `key` in `swing`'s plane, placed as `swingAt` places one of its own (and the wrist's way from the shoulder, into
  *  `wrist`), mirrored for the other hand. */
 export function swingKeyAt(

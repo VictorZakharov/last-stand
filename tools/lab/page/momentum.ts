@@ -44,10 +44,13 @@ export interface Momentum {
   /** the deepest its speed drops while it builds, or comes back while it dies away, a share of its fastest (a stop
    *  and a start mid-swing) */
   dip: number;
-  /** while it moves fast: the most the plane it turns in is off its blow's (degrees), and on which frame; and the
-   *  frame it turned back on, the other way round, before it died away (null: it didn't) */
+  /** while it moves fast: the most the plane it turns in is off its blow's (degrees), and on which frame; the most
+   *  that plane turns from one frame to the next (degrees, a kink in its arc), and on which; and the frame it turned
+   *  back on, the other way round, before it died away (null: it didn't) */
   offPlane: number;
   offAt: number;
+  kink: number;
+  kinkAt: number;
   back: number | null;
   /** its striking part's path on the screen while it moves fast: the share of the frame's width it crosses, and how
    *  steeply, from where it's first seen to where it's last (degrees off level); null: not in the frame */
@@ -78,8 +81,12 @@ const DIES_TO = 0.2;
 const JOLT_MOST = 0.35;
 /** the most its speed may drop as it builds, or come back as it dies away (a share of its fastest) */
 const DIP_MOST = 0.15;
-/** the most the plane it turns in may be off its blow's while it moves fast (degrees) */
-const PLANE_MOST = 30;
+/** the most the plane it turns in may be off its blow's while it moves fast (degrees), and turn in a frame: a swing
+ *  the trunk drives turns about the spine as the arm turns about its shoulder, and their sum's plane shifts as one
+ *  overtakes the other (a two-hander's, 41 degrees over six frames as the arm caught the trunk up), as a golf swing's
+ *  does on the way down; a kink turns it at once (lifted mid-swing by as much as it turns, 45 degrees in a frame) */
+const PLANE_MOST = 45;
+const KINK_MOST = 12;
 /** a frame turning less than this share of its fastest turn doesn't say its plane (a weapon all but still) */
 const PLANE_FROM = 0.15;
 /** its striking part crosses at least this share of the frame's width while it moves fast, at most this steeply
@@ -171,13 +178,16 @@ function joltOf(speeds: number[], start: number, end: number, fastest: number): 
   return { jolt, at };
 }
 
-/** While it moves fast (from `start` to `end`), the most the plane it turns in is off the blow's (degrees), and where;
- *  frames all but still left out. */
+/** While it moves fast (from `start` to `end`), the most the plane it turns in is off the blow's (degrees), and where,
+ *  and the most it turns from one frame to the next, and where; frames all but still left out. */
 function offPlaneOf(turns: Turn[], start: number, end: number, fastest: number):
-  { off: number; at: number } {
+  { off: number; at: number; kink: number; kinkAt: number } {
   const blow = turns[fastest];
   let off = 0;
   let at = fastest;
+  let kink = 0;
+  let kinkAt = fastest;
+  let last: Turn | null = null;
   for (let i = Math.max(1, start); i <= end; i++) {
     if (turns[i].angle < blow.angle * PLANE_FROM) continue;
     const angle = blow.about.angleTo(turns[i].about) * DEG;
@@ -185,8 +195,14 @@ function offPlaneOf(turns: Turn[], start: number, end: number, fastest: number):
       off = angle;
       at = i;
     }
+    const turned = last ? last.about.angleTo(turns[i].about) * DEG : 0;
+    if (turned > kink) {
+      kink = turned;
+      kinkAt = i;
+    }
+    last = turns[i];
   }
-  return { off, at };
+  return { off, at, kink, kinkAt };
 }
 
 /** How far it turns on round the blow's way from `fastest` to `end` (degrees). */
@@ -227,7 +243,7 @@ export function momentumOf(frames: SwingFrame[], near: number, frameMs: number, 
   // (its plane read off the frames within the swing alone: the frames it built from and died away on are the turns
   // round at its ends, a wind-up's, the other way round)
   const inside = { from: start < 0 ? 0 : start + 1, to: end < 0 ? frames.length - 1 : end - 1 };
-  const { off: offPlane, at: offAt } = offPlaneOf(turns, inside.from, inside.to, fastest);
+  const { off: offPlane, at: offAt, kink, kinkAt } = offPlaneOf(turns, inside.from, inside.to, fastest);
   return {
     heavy,
     fastest,
@@ -241,6 +257,8 @@ export function momentumOf(frames: SwingFrame[], near: number, frameMs: number, 
     dip: dipOf(speeds, from, fastest, to),
     offPlane,
     offAt,
+    kink,
+    kinkAt,
     back: back ? end : null,
     ...pathOf(frames, from, to),
   };
@@ -259,7 +277,8 @@ export function describeMomentum(swing: Momentum, at: (i: number) => string): st
     + `${swing.speed.toFixed(1)} m/s, turning ${swing.turn.toFixed(0)}°/s; its speed built over ${ms(swing.rise)} `
     + `and died away over ${ms(swing.fall)}, carried ${swing.carried.toFixed(0)}° on; the most it changed in a frame `
     + `${share(swing.jolt)} of its fastest (${at(swing.joltAt)}), the deepest dip ${share(swing.dip)}; its plane at `
-    + `most ${swing.offPlane.toFixed(0)}° off the blow's while fast (${at(swing.offAt)}); ${path}`;
+    + `most ${swing.offPlane.toFixed(0)}° off the blow's while fast (${at(swing.offAt)}), turning at most `
+    + `${swing.kink.toFixed(0)}° in a frame (${at(swing.kinkAt)}); ${path}`;
 }
 
 /** A swing's problems against its weight's limits (`at` says a frame's index as words). */
@@ -292,6 +311,10 @@ export function momentumProblems(swing: Momentum, at: (i: number) => string): st
   }
   if (swing.back !== null) {
     problems.push(`it turns back while it moves fast, at ${at(swing.back)}: its momentum undone`);
+  }
+  if (swing.kink > KINK_MOST) {
+    problems.push(`its arc kinks while it moves fast: its plane turns ${swing.kink.toFixed(0)}° in a frame at `
+      + `${at(swing.kinkAt)} (at most ${KINK_MOST}°)`);
   }
   if (swing.offPlane > PLANE_MOST) {
     problems.push(`it's turned out of its plane while it moves fast: ${swing.offPlane.toFixed(0)}° off the blow's at `
@@ -367,7 +390,7 @@ function plantedFaults(frames: SwingFrame[], fastest: number): { planted: Plante
     { planted: { name: 'three times as fast', frames: hurried(frames), near: Math.round(fastest / 3) },
       finds: /turns faster/ },
     { planted: { name: 'lifted out of its plane', frames: lifted(frames, fastest), near: fastest },
-      finds: /out of its plane|turns back/ },
+      finds: /arc kinks|out of its plane|turns back/ },
   ];
 }
 
