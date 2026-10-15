@@ -19,6 +19,53 @@ const VIEWPORT = { width: 1920, height: 1080 };
 const BOOT_TIMEOUT_MS = 180_000;
 /** how often a booting page is asked whether the loading screen is gone, ms */
 const BOOT_POLL_MS = 100;
+const BOOTED = 'booted';
+
+/** In the page: whether its boot is over, `BOOTED` or what its loading screen says went wrong (src/ui/loading.ts
+ *  `loadingFailed`); false while it's still loading. */
+function bootOutcome() {
+  const loading = document.getElementById('loading');
+  if (!loading) return 'booted';
+  return loading.classList.contains('failed') ? loading.textContent.trim() : false;
+}
+/** how much of a failed script's answer is said (Vite's message of what wouldn't compile, the start of it) */
+const FAILED_ANSWER_CHARS = 600;
+/** where Vite's answer for a module it couldn't compile says why: a page of its error overlay, the error in it */
+const VITE_ERROR = /const error = (\{.*\})/;
+
+/**
+ * Whether `page` fails to load a script as it boots: `promise` settles with what its server answered for the first
+ * script that failed (a module Vite couldn't compile never runs, so the loading screen never says it failed), until
+ * `stop`.
+ */
+function scriptFailure(page) {
+  let stop;
+  const promise = new Promise((resolve) => {
+    const listener = async (response) => {
+      if (response.request().resourceType() !== 'script' || response.status() < 400) return;
+      resolve(`${response.url()} answered ${response.status()}:\n${await whyFailed(response)}`);
+    };
+    page.on('response', listener);
+    stop = () => page.off('response', listener);
+  });
+  return { promise, stop };
+}
+
+/** What a failed script's answer says went wrong: Vite's message, or the start of the answer. (The page's copy of
+ *  the answer comes back empty, so it's asked for again.) */
+async function whyFailed(response) {
+  const answer = await fetch(response.url())
+    .then((again) => again.text())
+    .catch(() => '');
+  const error = VITE_ERROR.exec(answer);
+  if (!error) return answer.slice(0, FAILED_ANSWER_CHARS);
+  try {
+    return JSON.parse(error[1]).message.slice(0, FAILED_ANSWER_CHARS);
+  } catch {
+    return error[1].slice(0, FAILED_ANSWER_CHARS);
+  }
+}
+
 /** the ports the two sides' servers try first (another free one is taken if it's in use) */
 const REPO_PORT = 5190;
 const OTHER_PORT = 5191;
@@ -371,10 +418,21 @@ export class Side {
     await page.exposeFunction('__labMotion', (reduced) => motionOf(page, reduced));
     // (a probe's `lab.throttle`: the CPU slowed as a low-end device's, for what the page's work costs one)
     await page.exposeFunction('__labThrottle', (rate) => throttleOf(page, rate));
+    const failed = scriptFailure(page);
     await page.goto(this.url);
     // (polled on a timer: by default it polls by animation frame, and the lab's clock holds those once the game shows)
     const polling = { polling: BOOT_POLL_MS, timeout: BOOT_TIMEOUT_MS };
-    await page.waitForFunction(() => !document.getElementById('loading'), null, polling);
+    // (a boot that threw says so on its loading screen, and a script that wouldn't load in its answer: waited for the
+    // screen to go alone, either was waited out to the timeout, three minutes)
+    try {
+      const outcome = await Promise.race([
+        page.waitForFunction(bootOutcome, null, polling).then((booted) => booted.jsonValue()),
+        failed.promise,
+      ]);
+      if (outcome !== BOOTED) throw labError(`${prefix}the game failed to boot: ${outcome}`);
+    } finally {
+      failed.stop();
+    }
     return page;
   }
 

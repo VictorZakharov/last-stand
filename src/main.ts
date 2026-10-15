@@ -43,6 +43,7 @@ import { initBiome, rollBiome } from './game/biome';
 import { BIOMES, BIOME_IDS } from './data/biomes';
 import { loadingStep, loadingDone, loadingFailed } from './ui/loading';
 import { preloadTextures } from './core/textures';
+import { preloadHands } from './entities/models/hands';
 import { initSync } from './net/sync';
 import { initSession, joinRoom, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
 import { isCoop, isGuest, isHost, simulates } from './net/role';
@@ -56,8 +57,10 @@ let revealed = false;   // loading screen gone: the game may advance
 
 async function boot() {
   await loadingStep('Forging the arena', 0.08);
-  // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second)
+  // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second), and the
+  // heroes' hands sculpted
   const textures = preloadTextures();
+  const hands = preloadHands();
   initUIScale();
   releaseClickedFocus();
   initItemIcons();
@@ -71,6 +74,7 @@ async function boot() {
   initQuality();
 
   await loadingStep('Summoning the hero', 0.35);
+  await hands;
   initAudio();   // resumed by the first user gesture
   G.profile = loadProfile(savedClass());
   G.player = new Player(G.profile.classId, G.profile.equipped);

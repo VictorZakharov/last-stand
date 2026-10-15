@@ -5,8 +5,7 @@
 // behind too: a face wound the wrong way shows there as a hole.)
 import * as THREE from 'three';
 import type { Lab, Fixture, Report, Pictured, Tile } from './lab';
-import { G } from '../../../src/state';
-import { opaqueRows } from './pixels';
+import { cameraOn, countsOf, shoot, studio } from './studio';
 import type { WeaponStyle } from '../../../src/types';
 
 export interface WeaponsOptions {
@@ -21,7 +20,7 @@ export interface WeaponsOptions {
  *  an axe's bit +x, its flat facing +z), and what of it it frames (shares of its length from its butt) */
 interface StudioView {
   name: string;
-  from: [number, number, number];
+  from: THREE.Vector3Tuple;
   frames: [number, number];
 }
 
@@ -33,30 +32,8 @@ const VIEWS: StudioView[] = [
   { name: 'head', from: [0.45, 0.25, 1], frames: [0.6, 1] },
 ];
 
-/** the studio's backdrop, and how far a pixel may be from it and still count as backdrop (0-255 a channel) */
-const BACKDROP = new THREE.Color(0x5a5f66);
-const BACKDROP_SLACK = 6;
-/** a picture's shape (width over height, as the sheet's tiles), the camera's field of view (degrees) and the room
- *  left round what it frames */
-const TILE_SHAPE = 340 / 560;
-const STUDIO_FOV = 20;
-const MARGIN = 1.12;
 /** the least share of a picture a weapon must cover to count as drawn (a blade edge on covers under 1%) */
 const LEAST_DRAWN = 0.001;
-
-/** The studio: the backdrop, a sky light and two lamps, a key from above in front and a rim from behind. */
-function studio(): THREE.Scene {
-  const scene = new THREE.Scene();
-  scene.background = BACKDROP;
-  scene.environment = G.scene.environment;
-  scene.add(new THREE.HemisphereLight(0xdfe6ee, 0x3a3530, 1.4));
-  const key = new THREE.DirectionalLight(0xfff2e0, 2.6);
-  key.position.set(1.5, 3, 4);
-  const rim = new THREE.DirectionalLight(0xc8d8ff, 1.6);
-  rim.position.set(-3, 1.5, -3);
-  scene.add(key, rim);
-  return scene;
-}
 
 /** The weapon in the hero's right hand, a copy of it at its own frame (unturned in the fist), or none. */
 function weaponCopy(lab: Lab): THREE.Object3D | null {
@@ -80,20 +57,6 @@ function hasMeshes(object: THREE.Object3D): boolean {
   return found;
 }
 
-/** How many triangles and meshes `object` is drawn with. */
-function countsOf(object: THREE.Object3D): { triangles: number; meshes: number } {
-  let triangles = 0;
-  let meshes = 0;
-  object.traverse((child) => {
-    const mesh = child as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    meshes++;
-    const geometry = mesh.geometry;
-    triangles += (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
-  });
-  return { triangles, meshes };
-}
-
 /** The part of `box` (the weapon's, its own frame) between shares `frames` of its length. */
 function partOf(box: THREE.Box3, frames: [number, number]): THREE.Box3 {
   const length = box.max.y - box.min.y;
@@ -103,89 +66,18 @@ function partOf(box: THREE.Box3, frames: [number, number]): THREE.Box3 {
   return part;
 }
 
-/** The studio's camera looking at `part` from `view`'s side, near enough to frame it in a picture of `TILE_SHAPE`:
- *  its length up the picture, its width or thickness across it. */
-function cameraOn(part: THREE.Box3, view: StudioView): THREE.PerspectiveCamera {
-  const canvas = G.renderer.domElement;
-  const camera = new THREE.PerspectiveCamera(STUDIO_FOV, canvas.width / canvas.height, 0.01, 50);
-  const centre = part.getCenter(new THREE.Vector3());
-  const size = part.getSize(new THREE.Vector3());
-  const tall = Math.tan(THREE.MathUtils.degToRad(STUDIO_FOV / 2));
-  const across = Math.max(size.x, size.z);
-  // (from the nearest of it: half its depth nearer than its middle)
-  const fit = Math.max(size.y / 2 / tall, across / 2 / (tall * TILE_SHAPE));
-  const distance = fit * MARGIN + across / 2;
-  const way = new THREE.Vector3(...view.from).normalize();
-  camera.position.copy(centre).addScaledVector(way, distance);
-  camera.lookAt(centre);
-  camera.updateMatrixWorld();
-  return camera;
-}
-
-/**
- * The middle of the canvas just drawn at the tile's shape, as a tile, and the share of it the weapon covers. Read
- * from the drawing buffer and taken as opaque: the game draws its frame with an alpha of 0 (core/hdr.ts adds it to
- * the page as light), and copied onto a 2D canvas every picture came out black.
- */
-function readTile(name: string): { tile: Tile; drawn: number } {
-  const gl = G.renderer.getContext();
-  const height = gl.drawingBufferHeight;
-  const width = Math.round(height * TILE_SHAPE);
-  const left = Math.round((gl.drawingBufferWidth - width) / 2);
-  const pixels = new Uint8Array(width * height * 4);
-  gl.readPixels(left, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d')!;
-  context.putImageData(opaqueRows(pixels, width, height), 0, 0);
-  const tile = { view: name, png: canvas.toDataURL('image/png'), width, height };
-  return { tile, drawn: drawnShare(context, width, height) };
-}
-
-/** The share of a picture's pixels that aren't the backdrop. */
-function drawnShare(context: CanvasRenderingContext2D, width: number, height: number): number {
-  const pixels = context.getImageData(0, 0, width, height).data;
-  const backdrop = BACKDROP.clone().convertLinearToSRGB();
-  const [r, g, b] = [backdrop.r, backdrop.g, backdrop.b].map((channel) => channel * 255);
-  let drawn = 0;
-  for (let k = 0; k < pixels.length; k += 4) {
-    const off = Math.max(Math.abs(pixels[k] - r), Math.abs(pixels[k + 1] - g), Math.abs(pixels[k + 2] - b));
-    if (off > BACKDROP_SLACK) drawn++;
-  }
-  return drawn / (width * height);
-}
-
 /** `copy` pictured from each of the studio's views (none of it shown with `empty`), and the least and the most of a
  *  picture drawn. */
 function pictureOf(lab: Lab, copy: THREE.Object3D, empty = false): { tiles: Tile[]; least: number; most: number } {
   const scene = studio();
   if (!empty) scene.add(copy);
   const box = new THREE.Box3().setFromObject(copy);
-  const renderer = G.renderer;
-  const toneMapping = renderer.toneMapping;
-  const drawing = lab.drawing;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  // (the lab draws nothing unless it's picturing)
-  lab.drawing = true;
-  const tiles: Tile[] = [];
-  let least = 1;
-  let most = 0;
+  const shots = VIEWS.map((view) => ({ name: view.name, camera: cameraOn(partOf(box, view.frames), view.from) }));
   try {
-    for (const view of VIEWS) {
-      renderer.setRenderTarget(null);
-      renderer.render(scene, cameraOn(partOf(box, view.frames), view));
-      const { tile, drawn } = readTile(view.name);
-      tiles.push(tile);
-      least = Math.min(least, drawn);
-      most = Math.max(most, drawn);
-    }
+    return shoot(lab, scene, shots);
   } finally {
-    renderer.toneMapping = toneMapping;
-    lab.drawing = drawing;
     scene.remove(copy);
   }
-  return { tiles, least, most };
 }
 
 /** A weapon's notes: its size in its own frame (m) and what it's drawn with. */

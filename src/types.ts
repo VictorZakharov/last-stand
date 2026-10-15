@@ -3,6 +3,7 @@
 import type * as THREE from 'three';
 import type { createKit } from './core/materials';
 import type { Joints } from './entities/models/rig';
+import type { Hand } from './entities/models/hands';
 import type { BiomeId } from './data/biomes';
 
 // ---------------------------------------------------------------------------
@@ -316,6 +317,8 @@ export interface Model {
   arrowHead?: THREE.Object3D;
   /** skeleton, for humanoid models */
   joints?: Joints;
+  /** a hero's hands (models/hands.ts: the lab's `hands` builds one alone from them) */
+  readonly hands?: { L: Hand; R: Hand };
   /** seen through its own eyes (only the arms show, entities/viewModel.ts): adjust what reads badly from
    *  there (a sleeve hiding the hand, an arm raised out of the frame) */
   firstPerson?(on: boolean): void;

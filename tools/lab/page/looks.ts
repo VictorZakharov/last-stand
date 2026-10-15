@@ -97,13 +97,13 @@ function isDrawnOther(object: THREE.Object3D): boolean {
 
 /** What a look changed on the scene, put back after its draw. */
 interface Changes {
-  materials: [THREE.Mesh, THREE.Material | THREE.Material[]][];
+  /** puts the subject's meshes back in what they wore */
+  worn: () => void;
   /** the world's materials drawing their depth alone */
   colourless: Set<THREE.Material>;
   hidden: THREE.Object3D[];
   background: THREE.Scene['background'];
   fog: THREE.Scene['fog'];
-  made: THREE.Material[];
 }
 
 /** The meshes of `subject` that would be drawn, in the order they're found. */
@@ -126,35 +126,21 @@ const materialsOf = (mesh: THREE.Mesh) => (Array.isArray(mesh.material) ? mesh.m
 function dress(look: Look, meshes: THREE.Mesh[]): Changes {
   const scene = G.scene;
   const changes: Changes = {
-    materials: [],
+    worn: wearLook(look, meshes),
     colourless: new Set(),
     hidden: [],
     background: scene.background,
     fog: scene.fog,
-    made: [],
   };
-  const faces = facing();
-  changes.made.push(faces);
-  const index = new Map(meshes.map((mesh, i) => [mesh, i]));
+  const subject = new Set(meshes);
   scene.traverseVisible((object) => {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh) {
       if (isDrawnOther(object)) changes.hidden.push(object);
       return;
     }
-    const i = index.get(mesh);
-    if (i === undefined) {
-      for (const material of materialsOf(mesh)) if (material.colorWrite) changes.colourless.add(material);
-      return;
-    }
-    changes.materials.push([mesh, mesh.material]);
-    if (look === 'faces') {
-      mesh.material = faces;
-      return;
-    }
-    const own = flat(partColour(i), look === 'wire', cutOf(materialsOf(mesh)[0]));
-    changes.made.push(own);
-    mesh.material = own;
+    if (subject.has(mesh)) return;
+    for (const material of materialsOf(mesh)) if (material.colorWrite) changes.colourless.add(material);
   });
   for (const material of changes.colourless) material.colorWrite = false;
   for (const object of changes.hidden) object.visible = false;
@@ -164,12 +150,38 @@ function dress(look: Look, meshes: THREE.Mesh[]): Changes {
 }
 
 function undress(changes: Changes): void {
-  for (const [mesh, material] of changes.materials) mesh.material = material;
+  changes.worn();
   for (const material of changes.colourless) material.colorWrite = true;
   for (const object of changes.hidden) object.visible = true;
   G.scene.background = changes.background;
   G.scene.fog = changes.fog;
-  for (const material of changes.made) material.dispose();
+}
+
+/**
+ * `meshes` in `look`'s materials (wire, faces or parts: each part the colour of its index in `meshes`; as they are,
+ * lit), and nothing else changed: what puts them back in what they wore.
+ */
+export function wearLook(look: Look, meshes: THREE.Mesh[]): () => void {
+  if (look === 'lit' || look === 'bones') return () => {};
+  const worn = meshes.map((mesh) => mesh.material);
+  const made: THREE.Material[] = [];
+  const faces = facing();
+  made.push(faces);
+  meshes.forEach((mesh, i) => {
+    if (look === 'faces') {
+      mesh.material = faces;
+      return;
+    }
+    const own = flat(partColour(i), look === 'wire', cutOf(materialsOf(mesh)[0]));
+    made.push(own);
+    mesh.material = own;
+  });
+  return () => {
+    meshes.forEach((mesh, i) => {
+      mesh.material = worn[i];
+    });
+    for (const material of made) material.dispose();
+  };
 }
 
 /**

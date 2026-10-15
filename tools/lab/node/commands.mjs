@@ -622,6 +622,26 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  hands: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        poses: options.poses,
+        views: options.views,
+        look: options.look,
+        glove: options.glove,
+        canary: Boolean(options.canary),
+      };
+      return side.command('hands', command);
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('hands'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   shots: {
     check(options) {
       if (options.shots !== undefined && !(options.shots >= 1)) throw labError('shots --shots: at least 1');

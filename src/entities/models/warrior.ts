@@ -367,7 +367,7 @@ export function buildWarrior(): Model {
     B.add(scaleUV(lathe([[0.049, -0.25], [0.056, -0.245], [0.058, -0.215], [0.055, -0.205]], 16), 2, 0.3), cloth, el);
     B.skin(lathe([[0.036, -0.315], [0.037, -0.29], [0.039, -0.265], [0.042, -0.235]], 16), bareSkin, el, hd, 0.25, 0.29);
   }
-  const handL = buildHand(j.handL, 1, leather, skinTip, 1.08), handR = buildHand(j.handR, -1, leather, skinTip, 1.08);
+  const handL = buildHand(j.handL, 1, leather, skinTip, 1.08, bareSkin), handR = buildHand(j.handR, -1, leather, skinTip, 1.08, bareSkin);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
   // --- legs: leather trousers, engraved knee cops, tall boots with fur tops, straps and a steel toe
@@ -682,7 +682,7 @@ export function buildWarrior(): Model {
     for (const o of gloves) o.visible = gloved;
     for (const o of sleeves) o.visible = !gloved;
     for (const f of elbowFur) f.visible = gloved && !fp;
-    bare(handL, gloved ? null : bareSkin); bare(handR, gloved ? null : bareSkin);
+    bare(handL, !gloved); bare(handR, !gloved);
     for (const w of offWeapons.values()) { w.group.visible = false; gripL.add(w.group); w.group.position.set(0, 0, 0); }
     sheathed = false;
     offHeld = gear.offWeapon ? offWeapons.get(gear.offWeapon) ?? offWeapons.get('Sword')! : null;
@@ -1510,7 +1510,7 @@ export function buildWarrior(): Model {
   }
 
   return {
-    root, kit, joints: j, animate, tip, palm, height: 2.05, setGear,
+    root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, palm, height: 2.05, setGear,
     get swing() { return side; },
     get offTip() { return offHeld ? tipL : null; },
     get reach() { return (ARM + (held?.len ?? 0)) * root.scale.x; },

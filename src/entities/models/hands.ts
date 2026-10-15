@@ -1,80 +1,222 @@
-// The heroes' hands: a sculpted palm with a thumb pad and knuckles, three-jointed fingers and thumb, a
-// glove over the palm and first knuckles (the fingertips bare), or bare (`bare`: no hands item worn). A hand holding something stays on its
-// wrist and turns so the handle runs across the palm, the weapon seated in it (`seat`), whatever angle
+// The heroes' hands: one sculpted surface (models/handShape.ts: the palm with its mounds, knuckles and pads, the webs,
+// three-jointed fingers and thumb with pads at their tips, and nails) skinned to the hand's joints, under a glove over
+// the palm and first knuckles (the fingertips bare), or bare (`bare`: no hands item worn). A hand holding something
+// stays on its wrist and turns so the handle runs across the palm, the weapon seated in it (`seat`), whatever angle
 // it is held at, and wraps its fingers round the handle's actual radius (`hold`).
 import * as THREE from 'three';
-import { limb } from './shapes';
-import { part, joint } from './rig';
+import { joint } from './rig';
+import { dualQuaternionSkinned } from './dualQuaternion';
+import { triplanar } from './triplanar';
+import { sculptHand, unpackHand, type HandGeometries, type PackedHand } from './handShape';
 import { clamp } from '../../util';
 import type { JointPoint } from './armor';
 
-export interface Digit { j: THREE.Group[]; len: number[]; /** its radius */ r: number }
+export interface Digit { j: THREE.Group[]; len: number[]; /** its radius (half its depth, which a grip wraps) */ r: number }
 export interface Hand {
   /** the posed hand, a child of the rig's hand joint (turned into a grip by `hold`) */
   vis: THREE.Group;
   f: Digit[]; thumb: Digit;
   /** +1 the left hand, -1 the right */
   s: number;
-  /** its pieces, each with the material it was built in (`bare` swaps them) */
-  parts: THREE.Mesh[];
+  /** what it was built of (`buildHand`'s), for a copy of it (`handLike`) */
+  made: { glove: THREE.Material; skin: THREE.Material; bareSkin?: THREE.Material; k: number };
+  /** its meshes, each with a copy of its material of its own (skinned): the skin the glove leaves bare (all of it for
+   *  `bare` when the hand was built without a bare skin), the skin bare (shown for `bare`, when the hand was built
+   *  with a bare skin), the glove, the nails */
+  skin: THREE.SkinnedMesh;
+  bareSkin: THREE.SkinnedMesh | null;
+  glove: THREE.SkinnedMesh;
+  nails: THREE.SkinnedMesh;
 }
 
-/** a finger segment: a slightly tapered, rounded tube hanging down its joint */
-const seg = (len: number, r0: number, r1: number) => limb(len - r1 * 0.8, r0, r1, 0.06, 0.45, 8);
+/** A digit's place and size: its root joint's place in the hand (u across towards the thumb, y down the hand, z out of
+ *  its back), its segments' lengths, and its half-width at its root. */
+interface DigitSpec {
+  u: number;
+  y: number;
+  z: number;
+  len: [number, number, number];
+  width: number;
+}
 
-/** the palm: a rounded box (a sphere pushed out towards its corners), thicker at the heel of the hand */
-function palmGeo(): THREE.BufferGeometry {
-  const g = new THREE.SphereGeometry(1, 16, 12), p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const q = (v: number) => Math.sign(v) * Math.abs(v) ** 0.55;
-    const k = y < 0 ? 1 : 1 + 0.25 * y;   // the heel of the hand is thicker
-    p.setXYZ(i, q(x) * 0.041, q(y) * 0.047, q(z) * 0.0155 * k);
-  }
-  g.computeVertexNormals();
-  return g.translate(0, -0.055, 0);
+/** the fingers, index (next to the thumb) to little: their knuckles a little apart across the hand (as close as their
+ *  roots' widths, the hand was a third narrower than a man's for its length), the middle's furthest down */
+const FINGERS: DigitSpec[] = [
+  { u: 0.033, y: -0.1, z: 0.001, len: [0.043, 0.026, 0.021], width: 0.0102 },
+  { u: 0.011, y: -0.103, z: 0.001, len: [0.047, 0.029, 0.022], width: 0.0105 },
+  { u: -0.011, y: -0.1, z: 0.001, len: [0.044, 0.027, 0.021], width: 0.0099 },
+  { u: -0.0315, y: -0.093, z: 0.001, len: [0.035, 0.021, 0.019], width: 0.0089 },
+];
+/** the thumb: rooted low on the inner side of the palm, its first segment its bone in the palm's mound */
+const THUMB: DigitSpec = { u: 0.028, y: -0.022, z: -0.007, len: [0.038, 0.03, 0.025], width: 0.0118 };
+/** a digit's depth over its width at its root (a grip wraps its half-depth) */
+const DEPTH = 0.86;
+/** how far apart the fingers are fanned in the pose the hand is sculpted in (`poseHand`'s spread): apart, so the
+ *  field joins them only in the webs at their roots */
+const SCULPT_SPREAD = 0.6;
+/** the hand's skin, glove and nails, sculpted once for each side (a hero built again shares them) */
+const SCULPTED = new Map<number, HandGeometries>();
+/** the nails: the skin a little lighter and glossier */
+const NAIL_TINT = new THREE.Color(0xf2ddd6);
+
+/** A digit's joints on the hand (`s` its side), as `spec` places and sizes them. */
+function digitOn(vis: THREE.Object3D, s: number, spec: DigitSpec): Digit {
+  const j: THREE.Group[] = [];
+  let at = joint(vis, -s * spec.u, spec.y, spec.z);
+  j.push(at);
+  spec.len.forEach((l, n) => {
+    if (n < 2) {
+      at = joint(at, 0, -l, 0);
+      j.push(at);
+    }
+  });
+  return { j, len: [...spec.len], r: spec.width * DEPTH };
+}
+
+/** A copy of `material` of its own, for a skinned mesh (one shared with rigid meshes makes three rebuild its
+ *  program's parameters at every switch between them; models/shapes.ts `Sculpt.build`), its maps read triplanar
+ *  (the sculpt has no texture places) and skinned by dual quaternions (models/dualQuaternion.ts: the thumb's half
+ *  turn round a handle folded the web). */
+function ownCopy(material: THREE.Material): THREE.Material {
+  const copy = material.clone();
+  copy.onBeforeCompile = material.onBeforeCompile;
+  copy.customProgramCacheKey = material.customProgramCacheKey;
+  return dualQuaternionSkinned(triplanar(copy, GRAIN_TILE));
+}
+
+/** a map's tile across the hand (m): the glove's leather grain at about the size it had on the old palm */
+const GRAIN_TILE = 0.12;
+
+/** the hands' shadows, skinned as they are (a depth material of their own, as models/shapes.ts gives its skinned
+ *  meshes one) */
+const HAND_DEPTH = dualQuaternionSkinned(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }));
+
+/** `geometry` in a copy of `material`, on `vis`, skinned to `skeleton`. */
+function skinnedOn(vis: THREE.Object3D, geometry: THREE.BufferGeometry, material: THREE.Material,
+  skeleton: THREE.Skeleton, shadow: boolean): THREE.SkinnedMesh {
+  const mesh = new THREE.SkinnedMesh(geometry, ownCopy(material));
+  mesh.castShadow = shadow;
+  mesh.receiveShadow = true;
+  // (its bounds are the pose it was sculpted in)
+  mesh.frustumCulled = false;
+  mesh.customDepthMaterial = HAND_DEPTH;
+  vis.add(mesh);
+  mesh.bind(skeleton);
+  return mesh;
+}
+
+/** The hand's shape sculpted afresh on its joints, posed open as it's sculpted (the lab's `hands` times it). */
+export function sculptAfresh(h: Hand): HandGeometries {
+  poseHand(h, 0, SCULPT_SPREAD);
+  const fingers = h.f.map((d, i) => ({ j: d.j, len: d.len, width: FINGERS[i].width }));
+  return sculptHand(h.vis, fingers, { j: h.thumb.j, len: h.thumb.len, width: THUMB.width }, -h.s);
+}
+
+/** A side's hand (`s`) sculpted on joints of its own, as `buildHand` places them: what a worker sculpts. */
+export function sculptSide(s: number): HandGeometries {
+  const vis = new THREE.Group();
+  const f = FINGERS.map((spec) => digitOn(vis, s, spec));
+  const thumb = digitOn(vis, s, THUMB);
+  return sculptAfresh({ vis, f, thumb, s } as Hand);
+}
+
+/** Where each side's hand was sculpted: by a worker as the game loaded, or on the page (its worker failed, or the
+ *  hand was built before it was done). The lab's `hands` reads it. */
+export const SCULPTED_BY = new Map<number, 'worker' | 'page'>();
+
+/** `made` kept as `s`'s shape, shared by every hand of that side (a model's dispose keeps it). */
+function keep(s: number, made: HandGeometries, by: 'worker' | 'page'): HandGeometries {
+  for (const geometry of Object.values(made)) geometry.userData.shared = true;
+  SCULPTED.set(s, made);
+  SCULPTED_BY.set(s, by);
+  return made;
+}
+
+/** The hand's shape, sculpted once for its side (by a worker while the game loads, `preloadHands`; here, if it wasn't)
+ *  and shared by every hand of it after. */
+function sculpted(h: Hand): HandGeometries {
+  return SCULPTED.get(h.s) ?? keep(h.s, sculptAfresh(h), 'page');
+}
+
+/** Both hands sculpted in workers of their own while the game loads (a side took a quarter of a second on the main
+ *  thread); a worker that fails leaves its side to the first hand built. */
+export async function preloadHands(): Promise<void> {
+  if (typeof Worker === 'undefined') return;
+  const side = (s: number) => new Promise<void>((resolve) => {
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL('./hands.worker.ts', import.meta.url), { type: 'module' });
+    } catch {
+      resolve();
+      return;
+    }
+    worker.onmessage = (e: MessageEvent<PackedHand>) => {
+      if (!SCULPTED.has(s)) keep(s, unpackHand(e.data), 'worker');
+      worker.terminate();
+      resolve();
+    };
+    worker.onerror = () => {
+      worker.terminate();
+      resolve();
+    };
+    worker.postMessage(s);
+  });
+  await Promise.all([side(1), side(-1)]);
 }
 
 /**
  * Build a hand on the rig's hand joint (forearm along -Y; the palm faces -Z, so a finger curls with +X
  * rotation; `s` +1 left, -1 right, the thumb on the inner side). `glove` covers the palm and first
- * knuckles, `skin` the rest; `k` scales it.
+ * knuckles, `skin` the rest; `k` scales it. With `bareSkin`, the hand can be bare (`bare`).
  */
-export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material, skin: THREE.Material, k = 1): Hand {
-  const vis = joint(hand), parts: THREE.Mesh[] = [];
+export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material, skin: THREE.Material, k = 1,
+  bareSkin?: THREE.Material): Hand {
+  const vis = joint(hand);
   vis.scale.setScalar(k);
-  const P = (g: THREE.BufferGeometry, m: THREE.Material, at: THREE.Object3D, x = 0, y = 0, z = 0) => { const p = part(g, m, at, x, y, z); p.userData.own = m; parts.push(p); return p; };
-  P(palmGeo(), glove, vis).castShadow = true;
-  // the thumb's pad at the heel of the palm, and knuckles across its top
-  P(new THREE.SphereGeometry(0.02, 10, 8).scale(1, 1.5, 0.9), glove, vis, -s * 0.024, -0.042, -0.009).castShadow = false;
-  P(new THREE.CylinderGeometry(0.009, 0.009, 0.068, 8).rotateZ(Math.PI / 2), glove, vis, 0, -0.1, 0.002).castShadow = false;
-  // index (next to the thumb) to little finger: x across the hand, how far down its knuckle sits, lengths
-  const specs: [number, number, number[]][] = [[-0.028, -0.1, [0.043, 0.026, 0.021]], [-0.0095, -0.103, [0.047, 0.029, 0.022]], [0.0095, -0.1, [0.044, 0.027, 0.021]], [0.027, -0.093, [0.035, 0.021, 0.019]]];
-  const f = specs.map(([x, y, len], i) => {
-    const r = 0.0098 - i * 0.0006, js: THREE.Group[] = [];
-    let at = joint(vis, s * x, y, 0.001);
-    js.push(at);
-    len.forEach((l, n) => {
-      const m = P(seg(l, r * (1 - n * 0.1), r * (0.92 - n * 0.1)), n === 0 ? glove : skin, at);
-      m.castShadow = false;
-      if (n < 2) { at = joint(at, 0, -l, 0); js.push(at); }
-    });
-    return { j: js, len, r };
-  });
-  // the thumb: rooted low on the inner side of the palm, turned out across it
-  const tj: THREE.Group[] = [], tl = [0.032, 0.028, 0.023];
-  let at = joint(vis, -s * 0.034, -0.03, -0.006);
-  tj.push(at);
-  tl.forEach((l, n) => {
-    P(seg(l, 0.0118 - n * 0.0012, 0.0105 - n * 0.0012), n === 0 ? glove : skin, at).castShadow = false;
-    if (n < 2) { at = joint(at, 0, -l, 0); tj.push(at); }
-  });
-  return { vis, f, thumb: { j: tj, len: tl, r: 0.0118 }, s, parts };
+  const f = FINGERS.map((spec) => digitOn(vis, s, spec));
+  const thumb = digitOn(vis, s, THUMB);
+  const h = { vis, f, thumb, s, made: { glove, skin, bareSkin, k } } as Hand;
+  // bound to its joints as it was sculpted, open
+  poseHand(h, 0, SCULPT_SPREAD);
+  const shape = sculpted(h);
+  let top: THREE.Object3D = vis;
+  while (top.parent) top = top.parent;
+  top.updateMatrixWorld(true);
+  const bones = [vis, ...f.flatMap((d) => d.j), ...thumb.j] as unknown as THREE.Bone[];
+  const skeleton = new THREE.Skeleton(bones);
+  h.skin = skinnedOn(vis, shape.tips, skin, skeleton, true);
+  h.bareSkin = bareSkin ? skinnedOn(vis, shape.skin, bareSkin, skeleton, true) : null;
+  h.glove = skinnedOn(vis, shape.glove, glove, skeleton, true);
+  h.nails = skinnedOn(vis, shape.nails, skin, skeleton, false);
+  const nail = h.nails.material as THREE.MeshStandardMaterial;
+  nail.color.lerp(NAIL_TINT, 0.4);
+  nail.roughness = 0.35;
+  bare(h, false);
+  // (unposed, as its joints were before it was sculpted)
+  for (const d of [...f, thumb]) for (const j of d.j) j.rotation.set(0, 0, 0);
+  return h;
 }
 
-/** the hand bare, every piece in `skin` (no glove: no hands item worn), or back in its glove with `null` */
-export function bare(h: Hand, skin: THREE.Material | null): void {
-  for (const p of h.parts) p.material = skin ?? (p.userData.own as THREE.Material);
+/** A hand built as `h` was (its side, its materials and its scale) on `joint`, bare as `h` is: the lab's `hands`
+ *  pictures one alone. */
+export function handLike(h: Hand, on: THREE.Object3D): Hand {
+  const { glove, skin, bareSkin, k } = h.made;
+  const copy = buildHand(on, h.s, glove, skin, k, bareSkin);
+  bare(copy, !h.glove.visible);
+  return copy;
+}
+
+/** the hand bare (no hands item worn: no glove, in its bare skin when it was built with one, else its skin whole), or
+ *  in its glove */
+export function bare(h: Hand, on: boolean): void {
+  h.glove.visible = !on;
+  if (!h.bareSkin) {
+    const shape = SCULPTED.get(h.s)!;
+    h.skin.geometry = on ? shape.skin : shape.tips;
+    return;
+  }
+  h.bareSkin.visible = on;
+  h.skin.visible = !on;
 }
 
 /** The hand as capsules from its own joints, each `[from, to, radius]` (what a skirt keeps clear of, `SkirtLimbs`): its palm's
