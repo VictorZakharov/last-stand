@@ -13,6 +13,7 @@ import type { FormOptions } from './form';
 import type { UiOptions } from './ui';
 import type { TouchOptions } from './touchStick';
 import type { LightOptions } from './light';
+import type { HazeOptions } from './haze';
 import type { SpawnsOptions } from './spawns';
 import type { HealthOptions } from './health';
 import type { BlinkOptions } from './blink';
@@ -186,6 +187,13 @@ export async function touch(lab: Lab, command: TouchOptions): Promise<Report> {
 export async function light(lab: Lab, command: LightOptions): Promise<Report> {
   const { light: lightRound } = await import('./light');
   return lightRound(lab, command);
+}
+
+/** `lab haze`: through the eyes, what the hero's held weapons' light takes from the frame round them; a haze and a
+ *  canary missed are problems. */
+export async function haze(lab: Lab, command: HazeOptions): Promise<Report> {
+  const { haze: hazeRound } = await import('./haze');
+  return hazeRound(lab, command);
 }
 
 /**

@@ -459,6 +459,35 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  haze: {
+    help: 'what the hero\'s held weapons\' light takes from the frame round them through the eyes: the frame drawn '
+      + 'with them and without, each with the grade\'s adaptation and without it, and any pixel outside their own '
+      + 'darkened by their light (the adaptation to a bright area spread round them as a veil); a haze over 0.5% of '
+      + 'the frame is a problem: tools/lab/out/haze (the frame, and its haze in red)',
+    options: {
+      biome: {
+        kind: 'choice',
+        choices: ['crypt', 'forest'],
+        usage: 'crypt|forest',
+        help: 'the biome (the forest by default)',
+      },
+      facings: {
+        kind: 'list',
+        usage: 'a,b',
+        default: '0,90,180,270',
+        help: 'the ways the hero looks, degrees (0 is +z)',
+      },
+      pictures: { kind: 'switch', help: 'picture each frame and its haze (=false: the numbers alone)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant the fault the measure must catch: the frame with the weapons drawn at 0.8 of its exposure',
+      },
+      gear: SETUP_OPTIONS.gear,
+      weapon: SETUP_OPTIONS.weapon,
+      at: SETUP_OPTIONS.at,
+      ...COMMON_OPTIONS,
+    },
+  },
   draw: {
     help: 'every drawn shot of the hero\'s class (the ranger\'s) drawn to full and held there as the player holds it, '
       + 'in each view, the motes on its arrowhead read every frame: none as it\'s drawn, and held at full it glints '

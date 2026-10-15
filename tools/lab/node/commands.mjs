@@ -514,6 +514,31 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  haze: {
+    check(options) {
+      const wrong = options.facings.find((facing) => !Number.isFinite(Number(facing)));
+      if (wrong !== undefined) throw labError(`haze --facings: ${wrong} is not a number of degrees`);
+    },
+    each(side, options) {
+      const command = {
+        biome: options.biome ?? 'forest',
+        facings: options.facings.map(Number),
+        gear: options.gear,
+        weapon: options.weapon,
+        at: options.at,
+        pictures: options.pictures !== false,
+        canary: Boolean(options.canary),
+      };
+      return side.command('haze', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('haze'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   draw: {
     async each(side, options) {
       // (a view at a time, each set up in it: through the eyes the bow is posed for the view)

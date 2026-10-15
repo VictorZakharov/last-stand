@@ -38,6 +38,9 @@ const HUE_FROM = 1, HUE_TO = 1.6, GLARE_FROM = 0.05, GLARE_TO = 0.4;
  */
 const ADAPT = { top: [0.35, 0.11], lobby: [0.45, 0.13], third: [1.2, 0.26], first: [0.5, 0.13] } as const;
 const ADAPT_BASE = 0.04;
+/** a pixel this share of its area's average light or dimmer keeps its light as the area adapts, and one as bright as
+ *  the average adapts with it in full (between, in part) */
+const ADAPT_ALIKE = [0.5, 1.0] as const;
 /**
  * The top view's large target (the lobby's too, which it zooms in to) is for the night crypt; a brighter
  * biome's ordinary scenes sit higher (the daylit forest's 4x3 areas average about 2.3 times the crypt's), so
@@ -51,6 +54,9 @@ export function setAdaptScale(k: number): void { adaptScale = k; }
 /** `?adapt=0` holds the adaptation off (a studio render measured against a picture: its colours mustn't follow how
  *  much of the frame is dark hair) */
 const NO_ADAPT = typeof location !== 'undefined' && /[?&]adapt=0/.test(location.search);
+/** the adaptation held off from now on, or no longer, as `?adapt=0` holds it (the lab's haze draws a frame both ways) */
+let adaptHeld = NO_ADAPT;
+export function holdAdaptation(off: boolean): void { adaptHeld = off || NO_ADAPT; }
 /** Bloom's blur levels, tightest to widest: the halo round an effect, and only a trace of the screen-wide veil. */
 const BLOOM_LEVELS = [0.56, 0.5, 0.35, 0.12, 0.03];
 const GradeShader = {
@@ -76,12 +82,16 @@ const GradeShader = {
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
     // the power of the light over the base that brings an area's average down to its target
     float adapt(float avg, float target){ return avg > target ? log(target / ${ADAPT_BASE.toFixed(3)}) / log(avg / ${ADAPT_BASE.toFixed(3)}) : 1.0; }
+    // and a pixel adapts to it as far as it's as bright as it: from half the area's average light up (a pixel much
+    // dimmer than its area is beside what makes it bright, which the eye adapts to apart; adapted alike, the stone
+    // round a sunlit blade through the eyes darkened into a veil, its edge on the grid's cells)
+    float adaptAt(float avg, float target, float lum){ return mix(1.0, adapt(avg, target), smoothstep(${ADAPT_ALIKE[0].toFixed(2)}, ${ADAPT_ALIKE[1].toFixed(2)}, lum / max(avg, 1e-4))); }
     void main(){
       vec4 c = texture2D(tDiffuse, vUv);
       // the eye adapts to a bright area, so a big effect doesn't wash out the view
       const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
-      float g = min(adapt(dot(texture2D(tSmall, vUv).rgb, LUM), uSmall), adapt(dot(texture2D(tLarge, vUv).rgb, LUM), uLarge));
       float lum = dot(c.rgb, LUM);
+      float g = min(adaptAt(dot(texture2D(tSmall, vUv).rgb, LUM), uSmall, lum), adaptAt(dot(texture2D(tLarge, vUv).rgb, LUM), uLarge, lum));
       if (lum > ${ADAPT_BASE.toFixed(3)}) c.rgb *= ${ADAPT_BASE.toFixed(3)} * pow(lum / ${ADAPT_BASE.toFixed(3)}, g) / lum;
       // glare (bloom's blurriest level): how large a bright spot is
       vec3 gl = texture2D(tGlare, vUv).rgb;
@@ -599,7 +609,7 @@ export function render(): void {
   const e = ease(rig.blend), u = grade.uniforms;
   u.uSmall.value = target(rig.fromView, 0) + (target(rig.view, 0) - target(rig.fromView, 0)) * e;
   u.uLarge.value = target(rig.fromView, 1) + (target(rig.view, 1) - target(rig.fromView, 1)) * e;
-  if (NO_ADAPT) u.uSmall.value = u.uLarge.value = 1e4;
+  if (adaptHeld) u.uSmall.value = u.uLarge.value = 1e4;
   const hdr = hdrLevels();
   u.uHdr.value = hdr.peak > 1 || hdr.paper !== 1 ? 1 : 0;
   u.uPaper.value = hdr.paper;
