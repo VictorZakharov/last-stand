@@ -25,16 +25,17 @@ import { viewMove, type ViewMove } from '../viewModel';
 export const TWO_REST_AT: [number, number, number] = [0.18, -0.34, -0.37];
 export const TWO_REST_DIR: [number, number, number] = [-0.05, 0.6, -0.8];
 
-/** a two-handed forehand, from the right shoulder down across to the left hip: wound up by 0.3 of the cast to a high
- *  guard on the right (the blade up out of the frame's top, the upper hand seen right of the middle), its blade tipped
- *  back over the shoulder by 0.42, coming over at 0.5, across the middle as the cut lands (0.55) and along the bottom
- *  out to the left by 0.68, where it follows through ahead and low, still seen; then raised on the left and back to
- *  rest */
+/** a two-handed forehand, from the right shoulder down across to the left hip: wound up by 0.3 of the cast to the
+ *  right shoulder (the fists at the chest's height by the frame's right edge, the blade back over the shoulder out of
+ *  the frame), tipped further back by 0.42, coming over at 0.5 with the hands still low, across the middle as the cut
+ *  lands (0.55) and along the bottom out to the left by 0.68, where it follows through ahead and low, still seen; then
+ *  raised on the left and back to rest. (Wound up to a high guard, and coming over upright, the upper hand rose to the
+ *  eyes' height and its forearm stood up the view: the elbow seen to rise as the blow began) */
 export const TWO_FORE: ViewMove = viewMove([
   [0, TWO_REST_AT, TWO_REST_DIR],
-  [0.3, [0.2, -0.28, -0.4], [0.15, 0.97, 0.15]],
-  [0.42, [0.22, -0.26, -0.36], [0.25, 0.9, 0.35]],
-  [0.5, [0.18, -0.24, -0.42], [0.2, 0.95, -0.25]],
+  [0.3, [0.2, -0.33, -0.42], [0.15, 0.8, 0.55]],
+  [0.42, [0.22, -0.31, -0.38], [0.25, 0.7, 0.65]],
+  [0.5, [0.16, -0.35, -0.46], [0.15, 0.9, -0.4]],
   [0.55, [0.12, -0.28, -0.38], [-0.6, 0.5, -0.62]],
   [0.6, [0.04, -0.3, -0.34], [-0.88, 0.05, -0.47]],
   [0.68, [0.1, -0.26, -0.32], [-0.7, -0.3, -0.65]],
@@ -51,9 +52,9 @@ export const TWO_FORE: ViewMove = viewMove([
  *  behind the body, the shoulder 45 degrees past its range) */
 export const TWO_BACK: ViewMove = viewMove([
   [0, TWO_REST_AT, TWO_REST_DIR],
-  [0.3, [-0.09, -0.26, -0.44], [-0.35, 0.92, 0.15]],
-  [0.42, [-0.1, -0.26, -0.42], [-0.4, 0.8, 0.45]],
-  [0.5, [-0.06, -0.26, -0.44], [-0.2, 0.95, -0.25]],
+  [0.3, [-0.06, -0.33, -0.44], [-0.3, 0.75, 0.55]],
+  [0.42, [-0.1, -0.32, -0.42], [-0.35, 0.65, 0.68]],
+  [0.5, [-0.06, -0.35, -0.46], [-0.15, 0.9, -0.4]],
   [0.55, [-0.12, -0.3, -0.38], [0.5, 0.7, -0.5]],
   [0.6, [-0.18, -0.32, -0.38], [0.88, 0.1, -0.47]],
   [0.68, [-0.22, -0.36, -0.38], [0.9, 0.05, -0.42]],
