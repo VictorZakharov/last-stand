@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { G } from '../../../src/state';
 import type { Lab, Fixture, Pictured, Report, ViewName } from './lab';
 import { bindKnown, holdFor, pressing, skillNamed, type BoundSkill } from './cast';
-import { bodyBreaches, describeBreach, farFromHeld, whyLetGo } from './range';
+import { bodyBreaches, describeBreach, farFromHeld, grippingSides, whyLetGo, wristCanary } from './range';
 import type { Fist, LowerGrip } from '../../../src/types';
 import type { Breach } from '../../../src/entities/models/anatomy';
 import { armsLens } from './inFrame';
@@ -167,15 +167,20 @@ export async function eyes(lab: Lab, options: EyesOptions): Promise<Report> {
   const struck = describeStrikes(seen, skill.def.name);
   lines.push(...struck.lines);
   const found = [...oneHanded(seen), ...openFists(seen), ...struck.problems];
+  // (listed and not counted, a fist hung flexed 57 degrees off its forearm through a cut was called done)
+  if (seen.some((frame) => frame.armsPast.length)) found.push(describeArmsPast(seen));
   const problems = found.map((line) => `${skill.def.name}: ${line}`);
   if (options.canary) {
     await lab.setup({ ...options.fixture, view: 'first' });
+    const bent = wristCanary(lab);
+    lines.push(`canary, the right fist bent on its forearm: ${bent.join('; ')}`);
     const planted = await follow(lab, skill, options.times, null, plantFaults(lab));
     const caught = canaryCaught(planted, seen);
     lines.push(`canary, the arms held as they were at the press and the other arm dropped: ${caught.join('; ')}`);
     const leads = await strikeCanaries(lab, options, skill);
     lines.push(`canary, the weapon turned about its length each frame: ${leads.join('; ')}`);
-    if ([...caught, ...leads].some((verdict) => verdict.startsWith('missed'))) problems.push('the canary was missed');
+    const verdicts = [...bent, ...caught, ...leads];
+    if (verdicts.some((verdict) => verdict.startsWith('missed'))) problems.push('the canary was missed');
   }
   const moments: Pictured[] = film ? [film.moment(`${skill.def.name} through the eyes`), ...film.closeUps] : [];
   if (film) moments.push(...strips(film, seen, struck.strikes, skill.def.name));
@@ -346,7 +351,7 @@ function seeFrame(lab: Lab, frame: number, casts: CastCount, last: Seen | undefi
   const tipAt = tipObject.getWorldPosition(new THREE.Vector3());
   const blade = spotOf(tipAt.lerp(gripObject.getWorldPosition(new THREE.Vector3()), 0.5));
   const lower = lab.model.lowerGrip;
-  const body = bodyBreaches(lab.joints);
+  const body = bodyBreaches(lab.joints, grippingSides(lab));
   return {
     frame,
     cast: casts.started - 1,
@@ -385,7 +390,25 @@ const holdingWrists = (now: Seen) =>
 
 /** A wrist as words. */
 const describeWrist = (wrist: Wrist) => `${wrist.side === 'R' ? 'right' : 'left'} wrist: the forearm turned `
-  + `${wrist.pronation.toFixed(0)}°, bent ${wrist.flexion.toFixed(0)}° (flexion), ${wrist.radial.toFixed(0)}° (radial)`;
+  + `${wrist.pronation.toFixed(0)}°, ${wristBend(wrist)}`;
+
+/** A wrist's bend as words: towards the palm or its back, and to the thumb's side or the little finger's. */
+function wristBend(wrist: Wrist): string {
+  const back = wrist.flexion < 0;
+  const flexion = `${back ? 'back' : 'towards the palm'} ${Math.abs(wrist.flexion).toFixed(0)}°`;
+  const ulnar = wrist.radial < 0;
+  const side = `to the ${ulnar ? 'little finger' : 'thumb'} ${Math.abs(wrist.radial).toFixed(0)}°`;
+  return `bent ${flexion} (${back ? 'extension' : 'flexion'}), ${side} (${ulnar ? 'ulnar' : 'radial'})`;
+}
+
+/** A frame's gripping wrists as a film frame's label: "R palm 57 ulnar 12" (back, thumb the other ways). */
+function wristLabel(now: Seen): string {
+  return holdingWrists(now).map((wrist) => {
+    const flexion = `${wrist.flexion < 0 ? 'back' : 'palm'} ${Math.abs(wrist.flexion).toFixed(0)}`;
+    const side = `${wrist.radial < 0 ? 'ulnar' : 'thumb'} ${Math.abs(wrist.radial).toFixed(0)}`;
+    return `${wrist.side} ${flexion} ${side} turned ${wrist.pronation.toFixed(0)}`;
+  }).join('  ');
+}
 
 /** Each hand holding a handle, how it holds it (`Model.fists`: none on a game without it) and whether its fist is in
  *  the frame. */
@@ -663,11 +686,16 @@ function framesOf(frames: Seen[]): string {
  *  turned down out of the frame, and the weapon lifted up the view out of the fists (open hands; a two-hander's lower
  *  grip in the frame with no hand on it). */
 function plantFaults(lab: Lab): () => void {
-  let held: THREE.Quaternion[] | null = null;
+  // (each joint's place too: a swing through the eyes brings its shoulder forward, and the arms frozen by their turns
+  // alone still swung)
+  let held: { turn: THREE.Quaternion; at: THREE.Vector3 }[] | null = null;
   return () => {
     const joints = FROZEN_JOINTS.map((name) => lab.joints[name]);
-    held ??= joints.map((joint) => joint.quaternion.clone());
-    joints.forEach((joint, i) => joint.quaternion.copy(held![i]));
+    held ??= joints.map((joint) => ({ turn: joint.quaternion.clone(), at: joint.position.clone() }));
+    joints.forEach((joint, i) => {
+      joint.quaternion.copy(held![i].turn);
+      joint.position.copy(held![i].at);
+    });
     lab.joints.shoulderL.rotateX(CANARY_DROP);
     lab.model.root.updateWorldMatrix(true, true);
     const grip = lab.model.tip?.parent;
@@ -756,7 +784,8 @@ class Film {
     canvas.height = Math.round(FILM_WIDTH * frame.height / frame.width);
     const context = canvas.getContext('2d')!;
     context.drawImage(frame, 0, 0, canvas.width, canvas.height);
-    label(context, `${now.frame}  ${now.share === null ? '' : now.share.toFixed(2)}${now.fires ? '  fires' : ''}`);
+    const share = now.share === null ? '' : now.share.toFixed(2);
+    label(context, [`${now.frame}  ${share}${now.fires ? '  fires' : ''}`, wristLabel(now)]);
     this.frames.set(now.frame, canvas);
   }
 
@@ -798,15 +827,18 @@ function sheetOf(name: string, frames: HTMLCanvasElement[], columns: number): Pi
 function firingFromOutside(lab: Lab, now: Seen, views: ViewName[]): Pictured {
   const left = lab.model.tip?.parent?.parent === lab.joints.handL;
   const label = `cast ${now.cast + 1} as it fires (frame ${now.frame}), from outside`;
-  return lab.picture(label, views, [], { focus: left ? 'handL' : 'handR' });
+  const notes = [...holdingWrists(now).map(describeWrist), ...now.armsPast.map(describeBreach)];
+  return lab.picture(label, views, notes, { focus: left ? 'handL' : 'handR' });
 }
 
-/** `text` written on a film frame's top left. */
-function label(context: CanvasRenderingContext2D, text: string): void {
+/** `lines` written on a film frame's top left, one under another. */
+function label(context: CanvasRenderingContext2D, lines: string[]): void {
   context.font = 'bold 15px system-ui, sans-serif';
   context.lineWidth = 3;
   context.strokeStyle = '#000';
   context.fillStyle = '#fff';
-  context.strokeText(text, 6, 18);
-  context.fillText(text, 6, 18);
+  lines.forEach((text, i) => {
+    context.strokeText(text, 6, 18 + i * 18);
+    context.fillText(text, 6, 18 + i * 18);
+  });
 }

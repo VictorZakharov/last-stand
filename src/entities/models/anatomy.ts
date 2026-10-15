@@ -307,10 +307,18 @@ export function wristAngles(q: THREE.Quaternion, left: boolean): { pronation: nu
   return { pronation: wrap(left ? 90 - tw : 90 + tw), flexion: x * DEG, radial: (left ? -z : z) * DEG, twist: tw };
 }
 
-/** the hand turned on its forearm (twist · swing) with the forearm's turn and the wrist's bend each within range, into `out`; the degrees it was outside them */
-export function clampWrist(q: THREE.Quaternion, left: boolean, out: THREE.Quaternion): number {
+/**
+ * The wrist's flexion with a weapon gripped hard in its fist (degrees): flexed far, the fingers' long flexors go slack
+ * and the fist can't stay closed on its handle (people grip hardest with the wrist about 35 degrees back), so it works
+ * from cocked back to a little flexed. (Only the empty hand's 80 held, a fist hung 96 degrees off its forearm.)
+ */
+export const GRIPPED_FLEXION = [-70, 30] as const;
+
+/** the hand turned on its forearm (twist · swing) with the forearm's turn and the wrist's bend each within range (its
+ *  flexion within `flexion`), into `out`; the degrees it was outside them */
+export function clampWrist(q: THREE.Quaternion, left: boolean, out: THREE.Quaternion, flexion: readonly [number, number] = ROM['wrist.flexion']): number {
   const w = wristAngles(q, left);
-  const [p0, p1] = ROM['forearm.pronation'], [f0, f1] = ROM['wrist.flexion'], [r0, r1] = ROM['wrist.radial'];
+  const [p0, p1] = ROM['forearm.pronation'], [f0, f1] = flexion, [r0, r1] = ROM['wrist.radial'];
   const p = Math.max(p0, Math.min(p1, w.pronation)), f = Math.max(f0, Math.min(f1, w.flexion)), r = Math.max(r0, Math.min(r1, w.radial));
   const by = Math.abs(p - w.pronation) + Math.abs(f - w.flexion) + Math.abs(r - w.radial);
   if (!by) { out.copy(q); return 0; }
@@ -325,13 +333,13 @@ export function clampWrist(q: THREE.Quaternion, left: boolean, out: THREE.Quater
 
 // --- the dev builds' watch ------------------------------------------------------------------------------------
 
-/** a hand joint's turned node (`Hand.vis`: the group holding the hand's own pieces), or the joint */
-const turned = (h: THREE.Object3D) => h.children.find((c) => (c as THREE.Group).isGroup && c.children.some((m) => (m as THREE.Mesh).isMesh && m.userData.own)) ?? h;
+/** a hand joint's hand as it's drawn (`Hand.vis`, which `hold` turns on the joint), or the joint */
+export const drawnHand = (h: THREE.Object3D) => h.children.find((c) => c.userData.drawnHand) ?? h;
 const reported = new Set<string>();
 /** Dev builds: tell the console of each joint the body takes past its range (by more than `tol` degrees), once per angle and action */
 export function watchBody(j: Joints, action: string, tol = 5): void {
   j.root.updateMatrixWorld(true);
-  for (const b of breaches(measureBody(j, { L: turned(j.handL), R: turned(j.handR) }), tol)) {
+  for (const b of breaches(measureBody(j, { L: drawnHand(j.handL), R: drawnHand(j.handR) }), tol)) {
     const key = `${b.name} ${action}`;
     if (reported.has(key)) continue;
     reported.add(key);

@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import type { Model } from '../types';
 import { curve, type Keys } from './models/motion';
+import { ROM } from './models/anatomy';
 import { ARMS_LAYER, drawArms } from '../core/renderer';
 
 /** Where the camera sits against the neck, in the hero's space (x left, y up, z forward): just above
@@ -102,20 +103,22 @@ export function viewAt(move: ViewMove, k: number, at: THREE.Vector3, dir: THREE.
  * into it and brings that shoulder forward and up: from the shoulders' rest under the camera, a cut swung there passed
  * below and beside the frame), and the plane's way where the blow lands (0 degrees) and its way back towards the
  * wind-up (90). `keys` are four numbers a key: its share of the move, the grip's way from the shoulder (degrees in the
- * plane), how far out it is (m), and the weapon's way off the forearm's line, towards the wind-up (degrees: about 25
- * with the wrist straight, which bends it in the plane by its flexion, about 70 less to 80 more). Both are read each
- * frame, so a tunable value (core/tuning.ts) is tuned as it runs. (Keyed by the grip's place and the weapon's way
- * alone, as `viewMove`'s, the blade whipped over flat first; each axis a curve of its own, it left its plane between
- * keys and led with its flat.)
+ * plane), how far out it is (m), and the wrist's bend in the plane, to the thumb's side (radial, towards the wind-up)
+ * or the little finger's (ulnar, negative), within the wrist's range. The fist holds the handle square across it but
+ * for `slant` (degrees: diagonally, as a hand holds a sword), so the weapon's way off the forearm is 90 degrees, less
+ * the slant, plus that bend: it can't run along the forearm. All are read each frame, so a tunable value
+ * (core/tuning.ts) is tuned as it runs. (Keyed by the grip's place and the weapon's way alone, as `viewMove`'s, the
+ * blade whipped over flat first; each axis a curve of its own, it left its plane between keys and led with its flat.
+ * Keyed by the weapon's way off the forearm, the fist drawn round the handle bent 96 degrees off it at the blow.)
  */
-export interface ViewSwing { plane: readonly number[]; keys: readonly number[] }
-/** an arm's two bones in the view (m): the upper arm, and the forearm on to the grip */
-export interface ArmBones { upper: number; fore: number }
+export interface ViewSwing { plane: readonly number[]; keys: readonly number[]; slant: number }
+/** an arm's bones in the view (m): the upper arm, the forearm, and the fist from its wrist to the handle's axis */
+export interface ArmBones { upper: number; fore: number; hand: number }
 
 /** a swing's plane: its shoulder, and its ways at 0 and 90 degrees, square to each other */
 const _sp = new THREE.Vector3(), _s0 = new THREE.Vector3(), _s90 = new THREE.Vector3(), _sf = new THREE.Vector3();
 
-/** One of a swing's keys' columns (1: the grip's way, 2: its reach, 3: the weapon's way off the forearm) as a curve. */
+/** One of a swing's keys' columns (1: the grip's way, 2: its reach, 3: the wrist's bend) as a curve. */
 function swingColumn(keys: readonly number[], column: number): Keys {
   const out: [number, number][] = [];
   for (let i = 0; i + 3 < keys.length; i += 4) out.push([keys[i], keys[i + column]]);
@@ -123,6 +126,7 @@ function swingColumn(keys: readonly number[], column: number): Keys {
 }
 
 const DEG = Math.PI / 180;
+const clamp = THREE.MathUtils.clamp;
 
 /** The way at `degrees` in a swing's plane (`_s0`, `_s90`), into `out`. */
 const inPlane = (degrees: number, out: THREE.Vector3) =>
@@ -153,14 +157,21 @@ export function swingAt(
   _s0.set(p[3], p[4], p[5]).normalize();
   _s90.set(p[6], p[7], p[8]);
   _s90.addScaledVector(_s0, -_s90.dot(_s0)).normalize();
-  const way = curve(swingColumn(keys, 1), k), { upper, fore } = bones;
-  const reach = Math.min(Math.max(curve(swingColumn(keys, 2), k), 0.02), upper + fore - 1e-4);
+  const way = curve(swingColumn(keys, 1), k), { upper, fore, hand } = bones;
+  const [ulnar, radial] = ROM['wrist.radial'];
+  const bend = clamp(curve(swingColumn(keys, 3), k), ulnar, radial) * DEG;
+  // (the forearm and the fist on to the grip as one bone from the elbow, the wrist bent between them: `lean` its way
+  // off the forearm's)
+  const toGrip = Math.sqrt(fore * fore + hand * hand + 2 * fore * hand * Math.cos(bend));
+  const lean = Math.atan2(hand * Math.sin(bend), fore + hand * Math.cos(bend));
+  const reach = clamp(curve(swingColumn(keys, 2), k), 0.02, upper + toGrip - 1e-4);
   inPlane(way, at).multiplyScalar(reach).add(_sp);
   // (the elbow behind the reach's line, the forearm bending back from it towards the wind-up, as an elbow bends)
-  const off = Math.acos(Math.min(1, Math.max(-1, (upper * upper + reach * reach - fore * fore) / (2 * upper * reach))));
+  const off = Math.acos(clamp((upper * upper + reach * reach - toGrip * toGrip) / (2 * upper * reach), -1, 1));
   inPlane(way - off / DEG, elbow).multiplyScalar(upper);
-  const forearm = angleIn(_sf.copy(at).sub(_sp).sub(elbow));
-  inPlane(forearm + curve(swingColumn(keys, 3), k), dir);
+  const forearm = angleIn(_sf.copy(at).sub(_sp).sub(elbow)) - lean / DEG;
+  // (the handle square across the fist, the blade towards the wind-up from the hand's line, but for its slant)
+  inPlane(forearm + bend / DEG + 90 - swing.slant, dir);
   // (the weapon's length, the edge leading round to smaller angles, and across them the flat: length × edge)
   flat.crossVectors(_s90, _s0);
   if (mirror) {

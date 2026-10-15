@@ -181,7 +181,10 @@ export const COMMANDS = {
       skill: { kind: 'text', usage: 'name', help: 'the cast scenario\'s skill: its key, its behaviour or its name' },
       gear: SETUP_OPTIONS.gear,
       weapon: SETUP_OPTIONS.weapon,
-      canary: { kind: 'switch', help: 'plant a fault the measure must catch: the head turned past the neck\'s range' },
+      canary: {
+        kind: 'switch',
+        help: 'plant faults the measure must catch: the head turned past the neck\'s range, the fist bent on its forearm',
+      },
       frames: { kind: 'switch', help: 'list every frame with a joint past its range' },
       trace: {
         kind: 'switch',
@@ -625,7 +628,9 @@ export const COMMANDS = {
     help: 'a skill of the hero\'s cast through the eyes, frame by frame from the press until the arms are at rest '
       + 'again: where the weapon\'s tip is on the screen at rest, wound up, through the blow and at its end, how '
       + 'fast it crosses the view and where it is as the skill fires; a two-hander let go of by the other hand, or '
-      + 'seen in one hand, is a problem; with a film of the frames: tools/lab/out/eyes/<skill> (--class warrior)',
+      + 'seen in one hand, an arm\'s joint past its range (a gripping wrist past a gripping wrist\'s) and a strike '
+      + 'led by its flat are problems; with a film of the frames, each labelled with the gripping wrists\' bends: '
+      + 'tools/lab/out/eyes/<skill> (--class warrior)',
     argument: 'skill',
     options: {
       times: { kind: 'number', usage: 'n', help: 'casts in a row, the key held through them (1 by default)' },
@@ -646,7 +651,8 @@ export const COMMANDS = {
       canary: {
         kind: 'switch',
         help: 'the arms held as they were at the press and the other arm dropped: no blow, and a two-hander seen '
-          + 'in one hand, must be found',
+          + 'in one hand, must be found; the weapon turned its edge, then its flat, into its blow; the right fist '
+          + 'bent on its forearm 60° each way',
       },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,

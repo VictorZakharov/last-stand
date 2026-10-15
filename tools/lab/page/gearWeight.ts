@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import type { Lab } from './lab';
 import type { Build, Load, SegmentName } from './balance';
 import { isShown, isUnder } from './geometry';
+import { drawnHand } from './range';
 
 /** the hero's own weight (kg) */
 const BODY_KG = 80;
@@ -98,16 +99,11 @@ function heldKg(lab: Lab, side: number): number {
   return gear.offWeapon ? HELD_KG.oneHanded : 0;
 }
 
-/** The centre of what a hand holds: its shown meshes but the hand's own (and its fingers'), or nothing. */
+/** The centre of what a hand holds: its shown meshes but the hand's own (and its fingers'), or nothing. (Told apart
+ *  by the hand's meshes' mark, which went with the sculpted hands, the fist was weighed as part of the weapon.) */
 function heldCentre(hand: THREE.Object3D): THREE.Vector3 | null {
-  const own = ownHand(hand);
-  return meshCentre(hand, (mesh) => !mesh.userData.own && (own === hand || !isUnder(mesh, own)));
-}
-
-/** A hand's own meshes, as it is turned in its grip: the group of them under the joint (the hand itself if none). */
-function ownHand(hand: THREE.Object3D): THREE.Object3D {
-  const isOwn = (child: THREE.Object3D) => (child as THREE.Mesh).isMesh && child.userData.own;
-  return hand.children.find((child) => (child as THREE.Group).isGroup && child.children.some(isOwn)) ?? hand;
+  const own = drawnHand(hand);
+  return meshCentre(hand, (mesh) => !isUnder(mesh, own));
 }
 
 /** The centre of the shown meshes under `object` that `keep` keeps, by their boxes in the world, or nothing. */

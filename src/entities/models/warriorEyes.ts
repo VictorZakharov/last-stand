@@ -30,31 +30,38 @@ import { tunable } from '../../core/tuning';
 const SWINGS = tunable('warriorSwings', {
   oneForePlane: [0.22, -0.3, -0.22, -0.45, 0.1, -0.89, 0.6, 0.75, 0.25],
   oneFore: [
-    0, 0, 0.5, 33,
-    0.28, 60, 0.45, 60,
-    0.36, 63, 0.44, 64,
-    0.44, 48, 0.48, 55,
-    0.5, 25, 0.57, 30,
-    0.56, 0, 0.64, 0,
-    0.62, -15, 0.64, -5,
-    0.72, -22, 0.62, -5,
-    0.85, -22, 0.62, -5,
+    0, 0, 0.5, 0,
+    0.2, 38, 0.46, 10,
+    0.36, 63, 0.44, 20,
+    0.44, 48, 0.48, 10,
+    0.5, 25, 0.57, -5,
+    0.56, 0, 0.64, -20,
+    0.62, -15, 0.64, -25,
+    0.72, -22, 0.62, -25,
+    0.85, -22, 0.62, -15,
   ],
   oneBackPlane: [0.18, -0.32, -0.18, 0.15, 0.05, -0.99, -0.9, 0.33, -0.25],
   oneBack: [
-    0, 5, 0.52, 33,
-    0.28, 85, 0.55, 40,
-    0.36, 88, 0.54, 45,
-    0.44, 65, 0.52, 45,
-    0.5, 35, 0.58, 25,
-    0.56, 0, 0.64, 0,
-    0.62, -15, 0.64, -5,
-    0.72, -22, 0.62, -5,
-    0.85, -22, 0.62, -5,
+    0, 5, 0.52, 0,
+    0.2, 50, 0.54, 10,
+    0.36, 88, 0.54, 20,
+    0.44, 65, 0.52, 10,
+    0.5, 35, 0.58, -5,
+    0.56, 0, 0.64, -20,
+    0.62, -15, 0.64, -25,
+    0.72, -22, 0.62, -25,
+    0.85, -22, 0.62, -15,
   ],
+  /** how far the fist holds a one-hander's handle diagonally across its palm through a cut (degrees, as a hand holds
+   *  a sword: hands.ts `SLANT` at most) */
+  cutSlant: 25,
 });
-export const ONE_FORE_CUT: ViewSwing = { plane: SWINGS.oneForePlane, keys: SWINGS.oneFore };
-export const ONE_BACK_CUT: ViewSwing = { plane: SWINGS.oneBackPlane, keys: SWINGS.oneBack };
+export const ONE_FORE_CUT: ViewSwing = {
+  plane: SWINGS.oneForePlane, keys: SWINGS.oneFore, get slant() { return SWINGS.cutSlant; },
+};
+export const ONE_BACK_CUT: ViewSwing = {
+  plane: SWINGS.oneBackPlane, keys: SWINGS.oneBack, get slant() { return SWINGS.cutSlant; },
+};
 
 /** a two-hander at rest through the eyes, in a middle guard: the fists low on the right of the crosshair (the lower
  *  one just under the frame, as at a person's belly), the point forward and up, the whole weapon in the frame and its

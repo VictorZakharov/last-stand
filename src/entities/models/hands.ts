@@ -173,6 +173,9 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
   bareSkin?: THREE.Material): Hand {
   const vis = joint(hand);
   vis.scale.setScalar(k);
+  // (the hand as it's drawn, which the body's measures read: `hold` turns it on the joint, which is only the wrist.
+  // Found by its meshes' mark, the wrist was read off the joint once they were sculpted: anatomy.ts `drawnHand`)
+  vis.userData.drawnHand = true;
   const f = FINGERS.map((spec) => digitOn(vis, s, spec));
   const thumb = digitOn(vis, s, THUMB);
   const h = { vis, f, thumb, s, made: { glove, skin, bareSkin, k } } as Hand;
@@ -256,6 +259,8 @@ const _fa = new THREE.Vector3(), _fb = new THREE.Vector3(), _fc = new THREE.Vect
 export const SLANT = 0.44;
 /** where a held handle's axis runs across the hand (its own space): against the lower palm and the knuckles */
 const GRIP_Y = -0.092, GRIP_GAP = 0.011;
+/** how far down the hand from its wrist a handle it holds runs across it (the hand joint's units) */
+export const fistLength = (h: Hand) => -GRIP_Y * h.vis.scale.x;
 /** how far a finger joint bends at most */
 const BEND = 1.65;
 /** the thumb wraps a little clear of the handle, over the fingers' ends */

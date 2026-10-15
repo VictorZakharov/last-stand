@@ -3,8 +3,9 @@
 // shoots or runs. Each angle past its range: on how many frames, the worst and where (the scenario, the frame, and for
 // a leg whether its foot was planted), and the worst moment of each scenario pictured. A two-hander let go of by the
 // other hand is a problem in every scenario (held as it's raised, walked and swung with): the frames, how often and
-// why. With `--skill`, a skill cast standing too, the weapons held `--gear`'s way (`--weapon` the base). A canary
-// turns the head round past the neck's range on one frame, which the measure must catch. `--trace` lists the leg IK
+// why. With `--skill`, a skill cast standing too, the weapons held `--gear`'s way (`--weapon` the base). A hand
+// gripping a handle has its wrist judged against what a gripping wrist does (`GRIPPING`). A canary turns the head round
+// past the neck's range on one frame, and bends the drawn fist on its forearm, which the measure must catch. `--trace` lists the leg IK
 // frame by frame as the gait's does (`legTrace.ts`), each frame's joints past their ranges after it.
 import * as THREE from 'three';
 import type { Frame, Lab, Pictured } from './lab';
@@ -20,10 +21,20 @@ import { bindKnown, holdFor, pressing, skillNamed } from './cast';
 import { TipMoves } from './tipMoves';
 import { CANARY_CAUGHT as WEAPON_CAUGHT, WeaponFloor, weaponCanary } from './weaponFloor';
 
-/** A hand as it is turned in its grip: the group of its own meshes under the joint, as `watchBody` measures it. */
-export function turnedHand(hand: THREE.Object3D): THREE.Object3D {
-  const own = (child: THREE.Object3D) => (child as THREE.Mesh).isMesh && child.userData.own;
-  return hand.children.find((child) => (child as THREE.Group).isGroup && child.children.some(own)) ?? hand;
+/**
+ * A hand as it's drawn, turned in its grip on the joint (`Hand.vis`), as `watchBody` measures it: marked so (models/
+ * hands.ts), or on a game before the mark the group under the joint holding the hand's sculpted surface (its pieces
+ * marked as its own, before that). Throws when there's none: read off the joint, which is only the wrist, a fist bent
+ * 60 degrees off its forearm read as within its range (the meshes' mark went with the sculpted hands, and every
+ * wrist the lab read after them was the joint's).
+ */
+export function drawnHand(hand: THREE.Object3D): THREE.Object3D {
+  const marked = hand.children.find((child) => child.userData.drawnHand);
+  if (marked) return marked;
+  const drawn = (child: THREE.Object3D) => (child as THREE.SkinnedMesh).isSkinnedMesh || child.userData.own;
+  const found = hand.children.find((child) => (child as THREE.Group).isGroup && child.children.some(drawn));
+  if (!found) throw new Error(`lab: no drawn hand on ${hand.name || 'a hand joint'}: its wrist would be read off the joint`);
+  return found;
 }
 
 /** The body's angles now, and the joints past their ranges, the worst first. */
@@ -32,12 +43,91 @@ interface BodyNow {
   found: Breach[];
 }
 
+type Side = 'L' | 'R';
+
+/**
+ * The wrist's range with a weapon gripped hard in the fist (degrees, as anatomy.ts `ROM`): flexed far, the fingers'
+ * long flexors go slack and the fist can't stay closed on its handle (people grip hardest with the wrist about 35
+ * degrees back and 7 to the little finger's side: O'Driscoll et al. 1992), so a held weapon's wrist works from cocked
+ * back to a little flexed, and to each side as an empty hand's does. (Judged against the empty hand's 80, a fist
+ * hung flexed off its forearm through a cut passed.)
+ */
+const GRIPPING = { 'wrist.flexion': [-70, 30] } as const;
+
+/** The sides whose hands hold a handle now (`Model.fists`: none on a game without it). */
+export function grippingSides(lab: Lab): Side[] {
+  return (lab.model.fists ?? []).map((fist) => (fist.hand === 'right' ? 'R' : 'L'));
+}
+
+/** a joint is past its range once it's this far past (degrees): a joint held at its limit read "0 past" by rounding */
+const PAST_BY = 1;
+
+/** The gripping hands' wrists past `GRIPPING`, named as `breaches` names them with "(gripping)" after. */
+function grippingBreaches(angles: BodyAngles, gripping: readonly Side[]): Breach[] {
+  const found: Breach[] = [];
+  for (const side of gripping) {
+    for (const [range, [min, max]] of Object.entries(GRIPPING)) {
+      const value = angles[range.replace('.', `${side}.`)];
+      const by = Math.max(min - value, value - max);
+      if (by > PAST_BY) found.push({ name: `${range.replace('.', `${side}.`)} (gripping)`, value, min, max, by });
+    }
+  }
+  return found;
+}
+
 /** The body's angles and the joints past their ranges now, measured as the game's dev builds measure them
- *  (`watchBody`; with the module's own exports alone, so an A/B's side on an older commit measures the same). */
-export function bodyBreaches(joints: Joints): BodyNow {
+ *  (`watchBody`; with the module's own exports alone, so an A/B's side on an older commit measures the same), the
+ *  wrists of the hands `gripping` a handle against what a gripping wrist does. */
+export function bodyBreaches(joints: Joints, gripping: readonly Side[] = []): BodyNow {
   joints.root.updateMatrixWorld(true);
-  const angles = measureBody(joints, { L: turnedHand(joints.handL), R: turnedHand(joints.handR) });
-  return { angles, found: breaches(angles) };
+  const angles = measureBody(joints, { L: drawnHand(joints.handL), R: drawnHand(joints.handR) });
+  const held = grippingBreaches(angles, gripping);
+  const judged = new Set(held.map((breach) => breach.name.replace(' (gripping)', '')));
+  const found = [...breaches(angles, PAST_BY).filter((breach) => !judged.has(breach.name)), ...held];
+  return { angles, found: found.sort((a, b) => b.by - a.by) };
+}
+
+/** the wrist canary: how far the drawn fist is bent on its forearm each way (degrees), and how near the measure must
+ *  read it */
+const WRIST_CANARY = [{ axis: new THREE.Vector3(1, 0, 0), angle: 60, reads: 'flexion' },
+  { axis: new THREE.Vector3(0, 0, -1), angle: 60, reads: 'ulnar' }] as const;
+const WRIST_CANARY_NEAR = 3;
+
+/** The node the right hand's sculpted surface hangs on, found from the surface (not as `drawnHand` finds it): what a
+ *  turn must turn to move the hand as it's drawn. */
+function fistDrawn(hand: THREE.Object3D): THREE.Object3D {
+  let surface: THREE.Object3D | null = null;
+  hand.traverse((child) => {
+    if (!surface && (child as THREE.SkinnedMesh).isSkinnedMesh) surface = child;
+  });
+  if (!surface) throw new Error('lab: the wrist canary found no sculpted hand to bend');
+  return (surface as THREE.Object3D).parent!;
+}
+
+/**
+ * The wrist canary: the right fist, as it's drawn, bent on its forearm 60 degrees towards its palm (flexion), then 60
+ * to its little finger's side (ulnar), each read and put back. Each reading as words, `caught ...` or `missed ...`:
+ * caught when the measure reads that bend within `WRIST_CANARY_NEAR` and the other way near none.
+ */
+export function wristCanary(lab: Lab): string[] {
+  const fist = fistDrawn(lab.joints.handR);
+  const was = fist.quaternion.clone();
+  const verdicts = WRIST_CANARY.map(({ axis, angle, reads }) => {
+    const forearm = lab.joints.elbowR.getWorldQuaternion(new THREE.Quaternion());
+    const bent = forearm.multiply(new THREE.Quaternion().setFromAxisAngle(axis, THREE.MathUtils.degToRad(angle)));
+    const parent = fist.parent!.getWorldQuaternion(new THREE.Quaternion());
+    fist.quaternion.copy(parent.invert().multiply(bent));
+    const { angles } = bodyBreaches(lab.joints);
+    const flexion = angles['wristR.flexion'];
+    const ulnar = -angles['wristR.radial'];
+    const [wanted, other] = reads === 'flexion' ? [flexion, ulnar] : [ulnar, flexion];
+    const near = Math.abs(wanted - angle) <= WRIST_CANARY_NEAR && Math.abs(other) <= WRIST_CANARY_NEAR;
+    const read = `bent ${angle}° (${reads}), read flexion ${flexion.toFixed(0)}°, ulnar ${ulnar.toFixed(0)}°`;
+    return `${near ? 'caught' : 'missed'}: ${read}`;
+  });
+  fist.quaternion.copy(was);
+  lab.joints.root.updateMatrixWorld(true);
+  return verdicts;
 }
 
 /** One leg of a scenario: the keys held, the attack (held, tapped or not), for how many frames. */
@@ -152,7 +242,7 @@ function attackDown(leg: RangeLeg, frame: number): boolean {
 export interface RangeReport {
   lines: string[];
   moments: Pictured[];
-  canary?: { caught: boolean; measured: number; weapon: number };
+  canary?: { caught: boolean; measured: number; weapon: number; wrist: string[] };
   /** each scenario in which a two-hander was let go of by the other hand, as words */
   letGo: string[];
 }
@@ -249,9 +339,10 @@ async function runScenario(
   const measure = () => {
     if (options.canary && !report.canary && run.frame === CANARY_FRAME) {
       const measured = measureCanary(lab);
-      report.canary = { caught: measured >= CANARY_CAUGHT, measured, weapon: weaponCanary(lab) };
+      const wrist = wristCanary(lab);
+      report.canary = { caught: measured >= CANARY_CAUGHT, measured, weapon: weaponCanary(lab), wrist };
     }
-    const { angles, found } = bodyBreaches(lab.joints);
+    const { angles, found } = bodyBreaches(lab.joints, grippingSides(lab));
     if (found.length) run.framesPast++;
     for (const breach of found) {
       keepBreach(records, breach, `${scenario.name} frame ${run.frame}${contextOf(lab, angles, breach.name)}`);
@@ -415,6 +506,7 @@ export async function range(lab: Lab, options: RangeOptions): Promise<RangeRepor
     const weapon = report.canary.weapon;
     const under = `${weapon >= WEAPON_CAUGHT ? 'caught' : 'MISSED'} (${(weapon * 100).toFixed(0)} cm under)`;
     report.lines.push(`canary, the hero sunk under the floor: the weapon ${under}`);
+    report.lines.push(`canary, the right fist bent on its forearm: ${report.canary.wrist.join('; ')}`);
   }
   return report;
 }
@@ -425,7 +517,9 @@ export function missedRangeCanary(report: RangeReport): string[] {
   const missed = report.canary.caught ? [] : ['range: the canary (the head turned past its range) was missed'];
   const sunk = report.canary.weapon >= WEAPON_CAUGHT;
   const weapon = sunk ? [] : ['range: the canary (the weapon under the floor) was missed'];
-  return [...missed, ...weapon];
+  const bent = report.canary.wrist.some((verdict) => verdict.startsWith('missed'));
+  const wrist = bent ? ['range: the canary (the fist bent on its forearm) was missed'] : [];
+  return [...missed, ...weapon, ...wrist];
 }
 
 /** Each scenario in which a two-hander was let go of, as a problem: nothing it runs flings the arms apart. */

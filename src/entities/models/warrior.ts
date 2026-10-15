@@ -12,12 +12,12 @@ import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
 import { fitArm, solveArm, type ArmResult } from './armIK';
-import { bodyShape } from './anatomy';
+import { bodyShape, clampWrist, GRIPPED_FLEXION } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, DRINK_SHEATHED, type DrinkHold } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
-import { buildHand, poseHand, hold, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT } from './hands';
+import { buildHand, poseHand, hold, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
 import { axe, greataxe, greatsword, mace, maul, sword, STRIKES_WITH, type WeaponMaterials } from './weapons';
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { groundHeight } from '../../world/ground';
@@ -95,7 +95,7 @@ const _rf = new THREE.Vector3(), _lf = new THREE.Vector3();
 /** the way a move through the eyes turns each one-hander's flat (the right's, the left's), and where a swing puts each
  *  elbow (the view's, from the shoulder: viewModel.ts `swingAt`) */
 const _mr = new THREE.Vector3(), _ml = new THREE.Vector3(), _pr = new THREE.Vector3(), _pl = new THREE.Vector3();
-const _bones: ArmBones = { upper: 0, fore: 0 }, _ti = new THREE.Matrix4();
+const _bones: ArmBones = { upper: 0, fore: 0, hand: 0 }, _ti = new THREE.Matrix4();
 /** each one's elbow as a reach's pole (`swingPole`), and the arm's joints as placed before a fit (`fitInView`) */
 const _qr = new THREE.Vector3(), _ql = new THREE.Vector3(), _sr = new THREE.Vector3(), _sl = new THREE.Vector3();
 const _fitQ = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
@@ -853,6 +853,8 @@ export function buildWarrior(): Model {
   const grasp: LowerGrip = { held: false, free: false, short: 0, past: 0, into: 0 };
   /** each hand's slant on its handle this frame (rad, armIK.ts) */
   let slantR = 0, slantL = 0;
+  /** the slant a swing through the eyes holds each fist's handle at (rad, `ViewSwing.slant`), kept while its hold fades */
+  let swingSlantR = 0, swingSlantL = 0;
   // a weapon in the left hand hangs on the belt while the hand is busy with the flask: in a leather frog at the
   // left hip, worn whenever there is a second weapon. A sword sits in it by its guard, the hilt forward and up
   // and the blade raked back along the outside of the thigh, flat to it; an axe or mace by its haft, head up.
@@ -904,11 +906,13 @@ export function buildWarrior(): Model {
     }
   }
 
-  /** The arm's bones in the view (m), as a swing through the eyes reaches with them: the upper arm, and the forearm
-   *  on to the grip (`grip`, down the hand's line from the wrist). */
+  /** The arm's bones in the view (m), as a swing through the eyes reaches with them: the upper arm, the forearm, and
+   *  the fist from its wrist to the handle (`fistLength`, the hand as drawn; the grip's place on the joint's line
+   *  left the hand out of the arm, and the fist bent round the handle 96 degrees off the forearm). */
   const armBones = (): ArmBones => {
     _bones.upper = j.P.upperL * root.scale.x;
-    _bones.fore = (j.P.foreL - grip.position.y) * root.scale.x;
+    _bones.fore = j.P.foreL * root.scale.x;
+    _bones.hand = fistLength(handR) * root.scale.x;
     return _bones;
   };
   /** Through the eyes, a shoulder moved `w` of the way from where `armsFromBelow` put it to `eyes` (the view's: a
@@ -953,6 +957,19 @@ export function buildWarrior(): Model {
     }
     return fit.slant * (1 - hold);
   }
+
+  /** Through the eyes, the hand joint turned on its wrist so the fist as it's drawn on it (`vis`, its turn on the joint:
+   *  `gripTurn`) lies on the forearm within a gripping wrist's range (anatomy.ts `GRIPPED_FLEXION`), the weapon turning
+   *  with it. A move's place blended into another's bent it past: out of one cut into the next the fist flexed 96
+   *  degrees, and out of the rest into a cut it went 15 past to the thumb's side. */
+  function wristInGrip(left: boolean, vis: THREE.Quaternion): void {
+    const hd = left ? j.handL : j.handR;
+    _wg[0].copy(hd.quaternion).multiply(vis);
+    if (clampWrist(_wg[0], left, _wg[1], GRIPPED_FLEXION) === 0) return;
+    hd.quaternion.copy(_wg[1]).multiply(_wg[2].copy(vis).invert());
+    hd.updateMatrixWorld(true);
+  }
+  const _wg = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
 
   /** The shoulders' own places on the chest, and whether the eyes have moved them (`armsFromBelow`). */
   const shoulderRest = [j.shoulderR.position.clone(), j.shoulderL.position.clone()];
@@ -1213,13 +1230,14 @@ export function buildWarrior(): Model {
         if (two) { viewAt(side > 0 ? TWO_FORE : TWO_BACK, k, _va, _vd); vw = 1; viewFlat = flat; }
         // (a one-hander swung in a plane, its flat that plane's from the wind-up to the end, and the fist's roll on
         // its handle the swing's: turned to fit the arm, the edge came off the way it moved)
+        // (the mirrored fist slants its handle the other way round its palm: hands.ts `fist`)
         else if (left) {
           swingAt(ONE_FORE_CUT, k, armBones(), _la, _ld, _ml, _pl, true); swingShoulder(ONE_FORE_CUT, _sl, true);
-          wL = fw; flatL = 1; edgeL = fw;
+          wL = fw; flatL = 1; edgeL = fw; swingSlantL = -THREE.MathUtils.degToRad(ONE_FORE_CUT.slant);
         } else {
           const cut = side > 0 ? ONE_FORE_CUT : ONE_BACK_CUT;
           swingAt(cut, k, armBones(), _ra, _rd, _mr, _pr); swingShoulder(cut, _sr);
-          wR = fw; flatR = 1; edgeR = fw;
+          wR = fw; flatR = 1; edgeR = fw; swingSlantR = THREE.MathUtils.degToRad(cut.slant);
         }
         // the leg opposite the swinging arm steps in
         (left ? j.thighR : j.thighL).rotation.x += -0.3 * w; (left ? j.kneeL : j.kneeR).rotation.x += 0.3 * w;
@@ -1601,8 +1619,10 @@ export function buildWarrior(): Model {
     // (a two-hander through the eyes is held as its moves are keyed, `EYES.restOn`: fitted so, its weapon turned off its
     // place and the lower grip went out of the left hand's reach)
     // (and a swing that holds its fist on the handle is held as it puts it, `fitInView`'s `hold`)
-    else if (fp && st.dead < 0 && held && !two) slantR = fitInView(false, grip, gripTurn(handR, grip, _vr), SLANT, holdR);
+    // (its handle slanted across the palm as the swing holds it: square, the blade stood 25 degrees further off the forearm)
+    else if (fp && st.dead < 0 && held && !two) slantR = fitInView(false, grip, gripTurn(handR, grip, _vr), SLANT, holdR) + holdR * swingSlantR;
     // (the weapon seated in the fist as it holds it, its handle diagonal across the palm by that slant: before a lower grip is taken)
+    if (fp && st.dead < 0 && held && !two) wristInGrip(false, gripTurn(handR, grip, _vr, slantR));
     if (held) seat(handR, grip, held.r, slantR);
     if (stop > 0 && held && st.dead < 0) groundStop(stop, fall >= 1);
 
@@ -1651,7 +1671,8 @@ export function buildWarrior(): Model {
 
     // the other arm within a body's ranges too, its hand where the pose put it
     if (!fp && st.dead < 0 && !twoHeld) { slantL = fitArm(j, true, offHeld && !sheathed ? gripTurn(handL, gripL, _vl) : undefined, body, offHeld && !sheathed ? SLANT : undefined).slant; }
-    else if (fp && st.dead < 0 && offHeld && !sheathed) slantL = fitInView(true, gripL, gripTurn(handL, gripL, _vl), SLANT, holdL);
+    else if (fp && st.dead < 0 && offHeld && !sheathed) slantL = fitInView(true, gripL, gripTurn(handL, gripL, _vl), SLANT, holdL) + holdL * swingSlantL;
+    if (fp && st.dead < 0 && offHeld && !sheathed) wristInGrip(true, gripTurn(handL, gripL, _vl, slantL));
     // (a cut out of a blow turned to the floor and stopped by it, after the fade, fades from the arms as drawn; every
     // other from the pose's own: from the arms as fitted, the cut into a two-handed swing blended two elbows, and the
     // lower grip went 9 cm out of the left arm's reach)
