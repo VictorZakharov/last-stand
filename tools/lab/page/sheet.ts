@@ -12,7 +12,7 @@ import type { SkillDef } from '../../../src/types';
 import { groundHeight } from '../../../src/world/ground';
 import { describeParts, type Look } from './looks';
 import { viewMode } from '../../../src/core/renderer';
-import { describeFramed, framed } from './inFrame';
+import { describeFramed, framed, type Framed } from './inFrame';
 
 /** One pictured moment: its tiles and the notes read beside them. */
 export interface Moment {
@@ -20,6 +20,8 @@ export interface Moment {
   label: string;
   tiles: Tile[];
   notes: string[];
+  /** through the eyes, the weapon as framed (`lab match` compares it with a reference's) */
+  framed?: Framed;
 }
 
 export interface SheetOptions {
@@ -177,8 +179,9 @@ export async function sheet(lab: Lab, options: SheetOptions): Promise<Sheet> {
     await state(lab, async (label, own = []) => {
       lab.model.root.updateMatrixWorld(true);
       const tiles = lab.capture(options.views, { focus: options.focus, look: options.look });
+      const seen = viewMode() === 'first' ? framed(lab) ?? undefined : undefined;
       const parts = tiles.filter((tile) => tile.parts).map((tile) => `${tile.view}: ${describeParts(tile.parts!)}`);
-      moments.push({ state: name, label, tiles, notes: [...own, ...notesOn(lab), ...parts] });
+      moments.push({ state: name, label, tiles, notes: [...own, ...notesOn(lab, seen), ...parts], framed: seen });
     }, options);
   }
   return { setup, moments };
@@ -186,7 +189,7 @@ export async function sheet(lab: Lab, options: SheetOptions): Promise<Sheet> {
 
 /** What to read beside the pictures: each arm's load and posture, how the bow is carried, and through the eyes how
  *  the weapon is framed. */
-function notesOn(lab: Lab): string[] {
+function notesOn(lab: Lab, seen?: Framed): string[] {
   const held = HELD[lab.player.cls.id] ?? {};
   const notes: string[] = [];
   for (const side of ['L', 'R'] as const) {
@@ -200,7 +203,6 @@ function notesOn(lab: Lab): string[] {
   const weapon = describeWeapon(lab);
   if (weapon) notes.push(weapon);
   // (through the eyes, the weapon as the frame shows it: what a rest is matched to a reference's screenshots by)
-  const seen = viewMode() === 'first' ? framed(lab) : null;
   if (seen) notes.push(describeFramed(seen));
   return notes;
 }

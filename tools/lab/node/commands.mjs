@@ -8,6 +8,7 @@ import { UI_STATES } from './options.mjs';
 import { REPO } from './paths.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { writeSheet } from './sheetImage.mjs';
+import { compare, readReference, screenFor, writeMatch } from './match.mjs';
 
 /** the waves `spawns` sets off in each biome unless `--waves` says */
 const SPAWN_WAVES = 32;
@@ -680,6 +681,30 @@ export const COMMANDS = {
     },
     textOf: asText,
     problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
+  match: {
+    check(options) {
+      readReference(resolve(options._[0]));
+      if (options.screen || options.screens) throw labError('match: the screen is the reference\'s shape; no --screen');
+    },
+    async each(side, options) {
+      await side.showOn(screenFor(readReference(resolve(options._[0]))));
+      const fixture = { ...fixtureFrom(options), view: 'first' };
+      return side.command('sheet', { states: ['stand'], views: ['eyes'], fixture });
+    },
+    async finish(results, options, session) {
+      const reference = readReference(resolve(options._[0]));
+      const runs = results.map(([side, sheet]) => [side.name, sheet]);
+      const { text, html } = compare(reference, runs, Boolean(options.canary));
+      const dir = session.outFor(join('match', reference.name));
+      mkdirSync(dir, { recursive: true });
+      const image = join(dir, 'match.png');
+      await writeMatch(session.browser, html, runs.length, image);
+      return `${text}\n\nmatch: ${relative(REPO, image)}`;
+    },
+    textOf: sheetNotes,
     pictures: picturePairs,
   },
 

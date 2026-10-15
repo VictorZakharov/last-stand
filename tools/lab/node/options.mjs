@@ -643,6 +643,21 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  match: {
+    help: 'the hero standing through the eyes beside a reference\'s screenshot (a game his first-person weapons are '
+      + 'posed after), on a screen of its shape: the screenshot, his frame and the two blended, the points marked '
+      + 'on it (<picture>.marks.json: crop, points in and tip, wide) and his own drawn on each, and how far his are '
+      + 'off: tools/lab/out/match/<picture>/match.png',
+    argument: 'picture',
+    options: {
+      canary: {
+        kind: 'switch',
+        help: 'his points taken as the reference\'s moved 10% across: the comparison must find them so',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   shots: {
     help: 'the hero\'s basic attack (the ranger\'s bow drawn to full) loosed at points over each biome\'s boss '
       + 'with its summons and the biome\'s foes packed round it, in each view, the crosshair turned onto each point in '
