@@ -27,7 +27,7 @@ function gearTier(text) {
 }
 
 /** The set-up a command asks for (page/lab.ts `Fixture`), from its options. */
-function fixtureFrom(options) {
+export function fixtureFrom(options) {
   const fixture = {};
   if (options.view !== undefined) fixture.view = options.view;
   if (options.at !== undefined) fixture.at = options.at;
@@ -240,6 +240,7 @@ export const COMMANDS = {
         views: options.views,
         fixture: fixtureFrom(options),
         focus: options.focus,
+        look: options.look,
         skill: options.skill,
         shares: options.shares?.map(Number),
       });

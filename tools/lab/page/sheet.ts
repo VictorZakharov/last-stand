@@ -10,6 +10,7 @@ import { bowOf, describeBow } from './ranger';
 import { bindKnown, holdFor, pressing, skillNamed } from './cast';
 import type { SkillDef } from '../../../src/types';
 import { groundHeight } from '../../../src/world/ground';
+import { describeParts, type Look } from './looks';
 
 /** One pictured moment: its tiles and the notes read beside them. */
 export interface Moment {
@@ -24,6 +25,8 @@ export interface SheetOptions {
   views: ViewName[];
   fixture: Fixture;
   focus?: keyof Joints;
+  /** how the pictures are drawn (looks.ts; as the player sees them by default) */
+  look?: Look;
   /** the `cast` state's skill (its key, its behaviour or its name), and the shares of its cast pictured */
   skill?: string;
   shares?: number[];
@@ -171,8 +174,9 @@ export async function sheet(lab: Lab, options: SheetOptions): Promise<Sheet> {
     setup = await lab.setup(fixture);
     await state(lab, async (label, own = []) => {
       lab.model.root.updateMatrixWorld(true);
-      const tiles = lab.capture(options.views, { focus: options.focus });
-      moments.push({ state: name, label, tiles, notes: [...own, ...notesOn(lab)] });
+      const tiles = lab.capture(options.views, { focus: options.focus, look: options.look });
+      const parts = tiles.filter((tile) => tile.parts).map((tile) => `${tile.view}: ${describeParts(tile.parts!)}`);
+      moments.push({ state: name, label, tiles, notes: [...own, ...notesOn(lab), ...parts] });
     }, options);
   }
   return { setup, moments };

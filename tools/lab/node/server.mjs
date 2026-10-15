@@ -126,7 +126,9 @@ class Changes {
 export async function serve(port, stamp) {
   // (imported here: the rest of this module is the server's plumbing, tested without a browser)
   const { LabSession } = await import('./session.mjs');
+  const { LiveSession } = await import('./live.mjs');
   const session = await LabSession.open();
+  const live = new LiveSession(session);
   const queue = new Queue();
   const changes = new Changes();
   const bootNext = () => queue.add(() => session.bootNext()).then(
@@ -147,6 +149,7 @@ export async function serve(port, stamp) {
     log(restart ? `restarting: ${restart}` : 'stopping');
     if (!restart) rmSync(SERVER_NOTE, { force: true });
     if (process.connected) process.send(restart ? { restart } : { stop: true });
+    await live.close();
     await session.close();
     process.exit(0);
   };
@@ -176,6 +179,19 @@ export async function serve(port, stamp) {
     return { ok: problems.length === 0, text, version };
   });
 
+  /** A live session's step, once the commands before it are done: on its own page, so no page boots after it. */
+  const runLive = (call) => queue.add(async () => {
+    log(`live ${call.options._.join(' ')}`);
+    const version = changes.count;
+    try {
+      const { text, problems } = await live.run(call.options, version);
+      return { ok: problems.length === 0, text, version };
+    } catch (error) {
+      log(describeError(error));
+      return { ok: false, text: describeError(error), version };
+    }
+  });
+
   const routes = {
     '/ping': async () => ({ ok: true, stamp }),
     '/stop': async () => {
@@ -188,6 +204,7 @@ export async function serve(port, stamp) {
     },
     '/run': async (call) => {
       if (call.stamp && call.stamp !== stamp) return otherCode();
+      if (call.command === 'live') return runLive(call);
       const job = runCommand(call);
       job.finally(bootNext).catch(() => {});
       try {

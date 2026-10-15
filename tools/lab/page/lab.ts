@@ -25,6 +25,8 @@ import { clearEffects } from '../../../src/fx/effects';
 import { clearLights } from '../../../src/fx/lights';
 import { particles } from '../../../src/fx/particles';
 import { buildHotbar } from '../../../src/ui/hud';
+import { drawLook, jointsByObject, partName, withBones, type Look, type PartOnScreen } from './looks';
+import type { Area } from './pixels';
 
 /**
  * The clock the session installs before the page's own scripts (`tools/lab/node/browser.mjs`). While its mode is
@@ -284,6 +286,8 @@ export interface Tile {
   png: string;
   width: number;
   height: number;
+  /** in the `parts` look, the hero's parts in it, the most first */
+  parts?: PartOnScreen[];
 }
 
 export interface CaptureOptions {
@@ -293,6 +297,9 @@ export interface CaptureOptions {
    *  (its turn still the hero's facing's) */
   at?: THREE.Vector3;
   distance?: number;
+  /** how the frame is drawn (looks.ts): as the player sees it (`lit`, the default), or the hero's wireframe, his
+   *  faces' orientation, his parts each a colour, or his skeleton over the frame */
+  look?: Look;
 }
 
 const SPOT: [number, number] = [12, 22];
@@ -616,7 +623,7 @@ export class Lab {
    */
   async screen(label: string, notes: string[] = [], around?: string | Clip): Promise<Pictured> {
     if (!window.__labScreenshot) throw new Error('lab: screen: this page has no screenshots (opened by an older lab)');
-    const clip = around === undefined ? undefined : typeof around === 'string' ? clipRound(around) : withinWindow(around);
+    const clip = around === undefined ? undefined : clipOf(around);
     const drawing = this.drawing;
     this.drawing = true;
     try {
@@ -732,8 +739,21 @@ export class Lab {
     if (closeUp) crop = this.aimCloseUp(closeUp, options);
     else if (view === 'eyes') crop = wholeFrame();
     else crop = this.aimGameView(view);
-    renderer.render();
-    return cropCanvas(G.renderer.domElement, crop, view);
+    const area = areaOf(crop);
+    const look = options.look ?? 'lit';
+    if (look === 'lit' || look === 'bones') {
+      renderer.render();
+      const canvas = cropOf(G.renderer.domElement, area);
+      return tileOf(look === 'bones' ? withBones(canvas, this.joints, area) : canvas, view);
+    }
+    const joints = jointsByObject(this.joints);
+    const named = (mesh: THREE.Mesh) => partName(mesh, joints);
+    const { image, parts } = drawLook(look, this.model.root, area, named);
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    canvas.getContext('2d')!.putImageData(image, 0, 0);
+    return { ...tileOf(canvas, view), ...(look === 'parts' ? { parts } : {}) };
   }
 
   /** the game's camera set for a close-up; the crop is the frame's middle */
@@ -818,6 +838,11 @@ interface Crop {
   height: number;
 }
 
+/** The page `around` names: round the element a CSS selector names, or an area of it. */
+function clipOf(around: string | Clip): Clip {
+  return typeof around === 'string' ? clipRound(around) : withinWindow(around);
+}
+
 /** The page round the element `selector` names, `SCREEN_MARGIN` out from it on every side, within the window. */
 function clipRound(selector: string): Clip {
   const element = document.querySelector(selector);
@@ -886,16 +911,28 @@ function wholeFrame(): Crop {
 }
 
 /** The region of the canvas just drawn, as a PNG (read in the same task as the draw, before the browser shows it). */
-function cropCanvas(source: HTMLCanvasElement, crop: Crop, view: ViewName): Tile {
+/** The area of the window `crop` keeps, in whole px within it. */
+function areaOf(crop: Crop): Area {
   const width = Math.round(Math.min(crop.width, innerWidth));
   const height = Math.round(Math.min(crop.height, innerHeight));
   const left = Math.round(THREE.MathUtils.clamp(crop.centreX - width / 2, 0, innerWidth - width));
   const top = Math.round(THREE.MathUtils.clamp(crop.centreY - height / 2, 0, innerHeight - height));
+  return { left, top, width, height };
+}
+
+/** `area` of the game's canvas (as its own chain drew it) on a canvas of its own. */
+function cropOf(source: HTMLCanvasElement, area: Area): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = area.width;
+  canvas.height = area.height;
+  const { left, top, width, height } = area;
   canvas.getContext('2d')!.drawImage(source, left, top, width, height, 0, 0, width, height);
-  return { view, png: canvas.toDataURL('image/png'), width, height };
+  return canvas;
+}
+
+/** `canvas` as a picture of `view`. */
+function tileOf(canvas: HTMLCanvasElement, view: ViewName): Tile {
+  return { view, png: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height };
 }
 
 /**

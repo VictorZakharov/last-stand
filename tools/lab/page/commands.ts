@@ -26,6 +26,7 @@ import type { CrowdOptions } from './crowd';
 import type { DrawsOptions } from './draws';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
+import type { LiveInspect, LivePicture, LivePictured } from './live';
 
 export interface SheetCommand {
   states: string[];
@@ -34,6 +35,30 @@ export interface SheetCommand {
   focus?: keyof Joints;
   skill?: string;
   shares?: number[];
+}
+
+/** `lab live start`: the live session's page set up (live.ts). */
+export async function liveStart(lab: Lab, fixture: Fixture): Promise<Record<string, unknown>> {
+  const { start } = await import('./live');
+  return start(lab, fixture);
+}
+
+/** `lab live frames`: frames run on the live session's page. */
+export async function liveFrames(lab: Lab, command: { count: number }): Promise<string> {
+  const { frames } = await import('./live');
+  return frames(lab, command.count);
+}
+
+/** `lab live picture`: the live session's page pictured. */
+export async function livePicture(lab: Lab, command: LivePicture): Promise<LivePictured> {
+  const { picture } = await import('./live');
+  return picture(lab, command);
+}
+
+/** `lab live inspect`: the live session's scene listed. */
+export async function liveInspect(lab: Lab, command: LiveInspect): Promise<string> {
+  const { inspect } = await import('./live');
+  return inspect(lab, command);
 }
 
 /** `lab weapons`: each weapon pictured alone; a canary it missed is a problem. */

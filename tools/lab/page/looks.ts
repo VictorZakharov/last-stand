@@ -1,0 +1,334 @@
+// tools/lab looks: the frame drawn other ways than the player sees it, as a modelling tool's viewport can show it:
+// the hero's wireframe, which way his faces point (front blue, back red: a face wound inside out shows red), each of
+// his parts in a flat colour of its own with the share of the frame it covers and where, and his skeleton drawn over
+// the frame as the player sees it. (Each question of where a part was on the screen took a probe of its own.)
+//
+// In the first three the world keeps its own materials but draws only its depth, so what the game draws in front
+// of him (a leaf card cut out by its texture, a prop dissolved round him) still hides him, and nothing more: drawn
+// flat, the forest's leaf cards were whole squares, and one by a close-up's camera filled its frame.
+import * as THREE from 'three';
+import { G } from '../../../src/state';
+import type { Joints } from '../../../src/entities/models/rig';
+import { readOpaque, type Area } from './pixels';
+
+export const LOOKS = ['lit', 'wire', 'faces', 'parts', 'bones'] as const;
+export type Look = (typeof LOOKS)[number];
+
+/** A part of the hero in the frame, in the `parts` look: what it is, its colour there, the share of the picture it
+ *  covers and its box (shares of the picture across and down: left, top, right, bottom). */
+export interface PartOnScreen {
+  name: string;
+  colour: string;
+  share: number;
+  box: [number, number, number, number];
+}
+
+/** behind the hero in the flat looks */
+const SKY = new THREE.Color(0x101114);
+/** the faces' colours: the front of a face, and its back */
+const FRONT = new THREE.Color(0x3d6fe0);
+const BACK = new THREE.Color(0xe0402e);
+/** how far a pixel's channels may be from a part's colour and still count as it (0-255; an edge blends two) */
+const PART_SLACK = 2;
+/** the skeleton's lines and joints over the frame, and the joints it names */
+const BONE_COLOUR = '#ffe14d';
+const JOINT_RADIUS = 4;
+const NAMED_JOINTS = ['head', 'chest', 'hips', 'handL', 'handR', 'elbowL', 'elbowR'];
+
+/** A part's colour in the `parts` look: hues a golden angle apart, at three lightnesses, so neighbours differ. */
+export function partColour(index: number): THREE.Color {
+  const hue = (index * 137.508) % 360 / 360;
+  const lightness = [0.55, 0.7, 0.42][index % 3];
+  return new THREE.Color().setHSL(hue, 0.75, lightness, THREE.SRGBColorSpace);
+}
+
+/** A part's cut-out: the texture whose alpha cuts its shape (a hair card's), and where. */
+interface Cut {
+  map: THREE.Texture;
+  alphaTest: number;
+}
+
+/** The cut-out `material` draws with, if it has one. */
+function cutOf(material: THREE.Material): Cut | null {
+  const { map, alphaTest } = material as THREE.MeshStandardMaterial;
+  return alphaTest > 0 && map ? { map, alphaTest } : null;
+}
+
+/** A flat, unlit material of `colour`, drawn as it is (no tone mapping) on both sides, cut out as `cut` says. */
+function flat(colour: THREE.Color, wireframe = false, cut: Cut | null = null): THREE.MeshBasicMaterial {
+  const material = new THREE.MeshBasicMaterial({ color: colour, wireframe, toneMapped: false, side: THREE.DoubleSide });
+  if (!cut) return material;
+  material.map = cut.map;
+  material.alphaTest = cut.alphaTest;
+  // (the texture's alpha alone: its colours would change the part's, by which it's found in the picture)
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      'diffuseColor.a *= texture2D( map, vMapUv ).a;',
+    );
+  };
+  return material;
+}
+
+/** A face's front blue and its back red, lit by how square it faces the camera (Blender's "face orientation"). */
+function facing(): THREE.MeshNormalMaterial {
+  const material = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
+  // (written out as they are, before the shader's own conversion to the screen's colours: so in those already)
+  const [front, back] = [FRONT, BACK].map((colour) => {
+    const shown = colour.clone().convertLinearToSRGB();
+    return `vec3(${shown.r}, ${shown.g}, ${shown.b})`;
+  });
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <normal_fragment_maps>',
+      `#include <normal_fragment_maps>
+      gl_FragColor = vec4((gl_FrontFacing ? ${front} : ${back}) * (0.45 + 0.55 * abs(normal.z)), 1.0);
+      return;`,
+    );
+  };
+  return material;
+}
+
+/** Whether `object` is drawn but isn't a mesh: particles, a line, a sprite. */
+function isDrawnOther(object: THREE.Object3D): boolean {
+  const drawn = object as THREE.Points & THREE.Line & THREE.Sprite;
+  return Boolean(drawn.isPoints || drawn.isLine || drawn.isSprite);
+}
+
+/** What a look changed on the scene, put back after its draw. */
+interface Changes {
+  materials: [THREE.Mesh, THREE.Material | THREE.Material[]][];
+  /** the world's materials drawing their depth alone */
+  colourless: Set<THREE.Material>;
+  hidden: THREE.Object3D[];
+  background: THREE.Scene['background'];
+  fog: THREE.Scene['fog'];
+  made: THREE.Material[];
+}
+
+/** The meshes of `subject` that would be drawn, in the order they're found. */
+export function meshesOf(subject: THREE.Object3D): THREE.Mesh[] {
+  const meshes: THREE.Mesh[] = [];
+  subject.traverseVisible((object) => {
+    if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh);
+  });
+  return meshes;
+}
+
+/** A mesh's materials, one or more. */
+const materialsOf = (mesh: THREE.Mesh) => (Array.isArray(mesh.material) ? mesh.material : [mesh.material]);
+
+/**
+ * The scene dressed for `look` (wire, faces or parts): `subject`'s meshes in the look's materials (the parts' colour
+ * each its index in `meshes`), every other mesh its depth alone, what isn't a mesh (particles, sprites, lines)
+ * hidden, the sky a flat dark. Returns what to put back.
+ */
+function dress(look: Look, meshes: THREE.Mesh[]): Changes {
+  const scene = G.scene;
+  const changes: Changes = {
+    materials: [],
+    colourless: new Set(),
+    hidden: [],
+    background: scene.background,
+    fog: scene.fog,
+    made: [],
+  };
+  const faces = facing();
+  changes.made.push(faces);
+  const index = new Map(meshes.map((mesh, i) => [mesh, i]));
+  scene.traverseVisible((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) {
+      if (isDrawnOther(object)) changes.hidden.push(object);
+      return;
+    }
+    const i = index.get(mesh);
+    if (i === undefined) {
+      for (const material of materialsOf(mesh)) if (material.colorWrite) changes.colourless.add(material);
+      return;
+    }
+    changes.materials.push([mesh, mesh.material]);
+    if (look === 'faces') {
+      mesh.material = faces;
+      return;
+    }
+    const own = flat(partColour(i), look === 'wire', cutOf(materialsOf(mesh)[0]));
+    changes.made.push(own);
+    mesh.material = own;
+  });
+  for (const material of changes.colourless) material.colorWrite = false;
+  for (const object of changes.hidden) object.visible = false;
+  scene.background = SKY;
+  scene.fog = null;
+  return changes;
+}
+
+function undress(changes: Changes): void {
+  for (const [mesh, material] of changes.materials) mesh.material = material;
+  for (const material of changes.colourless) material.colorWrite = true;
+  for (const object of changes.hidden) object.visible = true;
+  G.scene.background = changes.background;
+  G.scene.fog = changes.fog;
+  for (const material of changes.made) material.dispose();
+}
+
+/**
+ * The frame drawn as `look` (wire, faces or parts) has it with the game's camera as it is now, `subject` the part
+ * of the scene the look is of, read back within `area` as an opaque picture. With `parts`, also each of `subject`'s
+ * meshes in it (`named` names them), the most first.
+ */
+export function drawLook(look: Look, subject: THREE.Object3D, area: Area, named: (mesh: THREE.Mesh) => string):
+  { image: ImageData; parts: PartOnScreen[] } {
+  const meshes = meshesOf(subject);
+  const changes = dress(look, meshes);
+  const renderer = G.renderer;
+  try {
+    renderer.setRenderTarget(null);
+    renderer.render(G.scene, G.camera);
+  } finally {
+    undress(changes);
+  }
+  const image = readOpaque(area);
+  const parts = look === 'parts' ? partsIn(image, meshes, named) : [];
+  return { image, parts };
+}
+
+/** Each of `meshes` found in `image` (drawn in the `parts` look), by the share of it it covers, the most first. */
+function partsIn(image: ImageData, meshes: THREE.Mesh[], named: (mesh: THREE.Mesh) => string): PartOnScreen[] {
+  const colours = meshes.map((_, i) => partColour(i));
+  const partOf = partsByPixel(colours);
+  const tally = meshes.map(() => ({ count: 0, left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity }));
+  const { data, width, height } = image;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const k = (y * width + x) * 4;
+      const i = partOf.get(packed(data[k], data[k + 1], data[k + 2]));
+      if (i === undefined) continue;
+      const part = tally[i];
+      part.count++;
+      part.left = Math.min(part.left, x);
+      part.right = Math.max(part.right, x + 1);
+      part.top = Math.min(part.top, y);
+      part.bottom = Math.max(part.bottom, y + 1);
+    }
+  }
+  const found: PartOnScreen[] = [];
+  tally.forEach((part, i) => {
+    if (part.count === 0) return;
+    found.push({
+      name: named(meshes[i]),
+      colour: `#${colours[i].getHexString()}`,
+      share: part.count / (width * height),
+      box: [part.left / width, part.top / height, part.right / width, part.bottom / height],
+    });
+  });
+  return found.sort((a, b) => b.share - a.share);
+}
+
+/** the parts a picture's notes name, the most first */
+const PARTS_NAMED = 8;
+
+/** `parts` (a picture's, the most first) as a note: each one's share of the picture and its box there. */
+export function describeParts(parts: PartOnScreen[], count = PARTS_NAMED): string {
+  if (parts.length === 0) return 'none of the hero';
+  const percent = (share: number) => `${Math.round(share * 100)}%`;
+  const named = parts.slice(0, count).map((part) => {
+    const [left, top, right, bottom] = part.box.map(percent);
+    const share = (part.share * 100).toFixed(1);
+    return `${part.name} (${part.colour}) ${share}%, across ${left}-${right}, down ${top}-${bottom}`;
+  });
+  const more = parts.length > count ? `; ${parts.length - count} more` : '';
+  return named.join('; ') + more;
+}
+
+/** A pixel's colour as one number. */
+const packed = (r: number, g: number, b: number) => (r << 16) | (g << 8) | b;
+
+/** Each part by the pixels that are its colour (`colours`, by index), each channel within `PART_SLACK` of it: a
+ *  pixel looked up once, where matched against every part's colour a picture took 10 s to read. */
+function partsByPixel(colours: THREE.Color[]): Map<number, number> {
+  const parts = new Map<number, number>();
+  colours.forEach((colour, i) => {
+    const shown = colour.getRGB({ r: 0, g: 0, b: 0 }, THREE.SRGBColorSpace);
+    const [r, g, b] = [shown.r, shown.g, shown.b].map((channel) => Math.round(channel * 255));
+    for (let dr = -PART_SLACK; dr <= PART_SLACK; dr++) {
+      for (let dg = -PART_SLACK; dg <= PART_SLACK; dg++) {
+        for (let db = -PART_SLACK; db <= PART_SLACK; db++) {
+          const channels = [r + dr, g + dg, b + db];
+          if (channels.some((channel) => channel < 0 || channel > 255)) continue;
+          const key = packed(channels[0], channels[1], channels[2]);
+          if (!parts.has(key)) parts.set(key, i);
+        }
+      }
+    }
+  });
+  return parts;
+}
+
+/** What a mesh of the hero is, for the `parts` look: the nearest of it and its parents with a name (its own, or a
+ *  joint's), and its material (its kind and colour). */
+export function partName(mesh: THREE.Mesh, joints: Map<THREE.Object3D, string>): string {
+  let named: THREE.Object3D | null = mesh;
+  while (named && !named.name && !joints.has(named)) named = named.parent;
+  const owner = named ? named.name || joints.get(named)! : 'the scene';
+  const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+  const colour = (material as THREE.MeshStandardMaterial).color;
+  const kind = material.type.replace(/^Mesh/, '').replace(/Material$/, '').toLowerCase();
+  return `${owner}: ${kind}${colour ? ` #${colour.getHexString()}` : ''}`;
+}
+
+/** Each joint of `joints` with the joint it hangs from (the nearest of its parents that is one), the root's none. */
+function bonesOf(joints: Joints): { name: string; joint: THREE.Object3D; parent: THREE.Object3D | null }[] {
+  const named = jointsByObject(joints);
+  return [...named].map(([joint, name]) => {
+    let parent = joint.parent;
+    while (parent && !named.has(parent)) parent = parent.parent;
+    return { name, joint, parent };
+  });
+}
+
+/** The joints of `joints` by their objects. */
+export function jointsByObject(joints: Joints): Map<THREE.Object3D, string> {
+  const named = new Map<THREE.Object3D, string>();
+  for (const [name, value] of Object.entries(joints)) {
+    if (value instanceof THREE.Object3D && !(value as THREE.Mesh).isMesh) named.set(value, name);
+  }
+  return named;
+}
+
+/** Where `point` (the world) is in `area` of the frame through the game's camera, px; null behind the camera. */
+function onFrame(point: THREE.Vector3, area: Area, ratio: number): THREE.Vector2 | null {
+  const ndc = point.clone().project(G.camera);
+  if (ndc.z > 1 || ndc.z < -1) return null;
+  const x = ((ndc.x + 1) / 2 * innerWidth - area.left) * ratio;
+  const y = ((1 - ndc.y) / 2 * innerHeight - area.top) * ratio;
+  return new THREE.Vector2(x, y);
+}
+
+/** `canvas` (a picture of `area` of the frame) with `joints`' skeleton drawn over it: each bone a line, each joint
+ *  a dot, the main ones named. */
+export function withBones(canvas: HTMLCanvasElement, joints: Joints, area: Area): HTMLCanvasElement {
+  const context = canvas.getContext('2d')!;
+  const ratio = canvas.width / area.width;
+  context.strokeStyle = BONE_COLOUR;
+  context.fillStyle = BONE_COLOUR;
+  context.lineWidth = 2;
+  context.font = `${Math.round(12 * ratio)}px sans-serif`;
+  const at = (object: THREE.Object3D) => onFrame(object.getWorldPosition(new THREE.Vector3()), area, ratio);
+  for (const { name, joint, parent } of bonesOf(joints)) {
+    const point = at(joint);
+    if (!point) continue;
+    const from = parent ? at(parent) : null;
+    if (from) {
+      context.beginPath();
+      context.moveTo(from.x, from.y);
+      context.lineTo(point.x, point.y);
+      context.stroke();
+    }
+    context.beginPath();
+    context.arc(point.x, point.y, JOINT_RADIUS * ratio, 0, Math.PI * 2);
+    context.fill();
+    if (NAMED_JOINTS.includes(name)) context.fillText(name, point.x + 6 * ratio, point.y - 6 * ratio);
+  }
+  return canvas;
+}
