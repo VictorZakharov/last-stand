@@ -82,22 +82,26 @@ const SWINGS = tunable('warriorSwings', {
     0.78, -32, 0.72, -30, 40, 0,
     0.9, -33, 0.72, -30, 40, 0,
   ],
-  // (its backhand, driven by the lower hand, the left, on its grip: the forehand's mirror image, keyed as the right
-  // arm's and mirrored onto the left, from the left shoulder down to the right; the right hand follows on the upper
-  // grip. Swung round the right shoulder as a one-hander's backhand, rising or falling, the hands went out past it at
-  // the blow and the lower grip was 85 to 96 cm from the left shoulder)
+  // (its backhand, straight after it: the forehand's way run back, rising from where it left the blade low on the
+  // left, through the aim, to high on the right where the forehand winds up, the fists as they were on the handle, so
+  // the blade's other edge leads, as a person's two hands keep their hold. Swung round the right shoulder as a
+  // one-hander's backhand, the hands went out past it at the blow and the lower grip was 85 to 96 cm from the left
+  // shoulder; driven by the lower hand as the forehand's mirror image, the two fists' turns on the handle were half a
+  // turn apart, the left forearm 90 degrees past its range and the right's turn on the handle rolling the flat 47
+  // degrees into the blow)
   twoBackPlane: [0.22, -0.3, -0.22, 235],
   twoBack: [
-    0, 50, 0.5, 0, 0, 40,
-    0.2, 110, 0.36, -10, 30, 0,
-    0.36, 150, 0.32, -20, 30, 0,
-    0.44, 125, 0.38, -25, 30, 0,
-    0.5, 70, 0.5, -30, 20, 0,
+    0, -33, 0.72, -30, 40, 0,
+    0.2, -34, 0.72, -30, 40, 0,
+    0.36, -40, 0.72, -30, 40, 0,
+    0.44, -37, 0.7, -30, 35, 0,
+    0.5, -30, 0.68, -30, 30, 0,
     0.56, 0, 0.62, -30, 20, 0,
-    0.6, -16, 0.66, -30, 25, 0,
-    0.68, -28, 0.7, -30, 35, 0,
-    0.78, -32, 0.72, -30, 40, 0,
-    0.9, -33, 0.72, -30, 40, 0,
+    0.6, 50, 0.55, -30, 20, 0,
+    0.64, 90, 0.48, -30, 22, 0,
+    0.69, 112, 0.43, -27, 27, 0,
+    0.75, 121, 0.41, -24, 30, 0,
+    0.9, 124, 0.4, -22, 30, 0,
   ],
   /** how far the fist holds a one-hander's handle diagonally across its palm through a cut (degrees, as a hand holds
    *  a sword: hands.ts `SLANT` at most) */
@@ -133,7 +137,6 @@ export const TWO_BACK_CUT: ViewSwing = {
   plane: SWINGS.twoBackPlane, keys: SWINGS.twoBack,
   get slant() { return SWINGS.cutSlant; },
   get hit() { return SWINGS.cutHit; },
-  lower: true,
 };
 /** the swings by their names in `warriorSwings` (the lab's `swing` keys a pose in one) */
 export const SWINGS_NAMED: Readonly<Record<string, ViewSwing>> = {

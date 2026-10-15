@@ -39,9 +39,6 @@ export interface ViewSwing {
   keys: readonly number[];
   slant: number;
   hit: number;
-  /** keyed by a two-hander's lower hand, the left, as the right arm's and mirrored: its grip the lower one, the right
-   *  hand following on the upper (models/warrior.ts) */
-  lower?: boolean;
 }
 /** an arm's bones in the view (m): the upper arm, the forearm, the fist from its wrist to the handle's axis, and the
  *  weapon from its grip to where its blow lands (its striking part) */

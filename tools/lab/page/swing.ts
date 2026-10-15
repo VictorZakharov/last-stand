@@ -27,6 +27,8 @@ export interface SwingOptions {
   /** keys to place: their numbers after their shares (the striking part's way, the reach, the bend, the drop, the
    *  roll), five a key */
   key: number[] | null;
+  /** the left hand's swing, the right's mirrored (`swingAt`'s `mirror`: a dual wielder's off hand) */
+  left: boolean;
   canary: boolean;
 }
 
@@ -41,8 +43,7 @@ export async function swing(lab: Lab, options: SwingOptions): Promise<Report> {
   await lab.setup({ view: 'first', ...options.fixture });
   const swing = SWINGS_NAMED[options.swing];
   if (!swing) throw new Error(`lab: swing: no swing ${options.swing} (${Object.keys(SWINGS_NAMED).join(', ')})`);
-  // (a two-hander's swing keyed by its lower hand: the left arm's, mirrored)
-  const mirror = Boolean(swing.lower);
+  const mirror = options.left;
   const keyed = { swing, bones: bonesOf(lab, mirror), mirror };
   const lines = [planeWords(options.swing, keyed)];
   const problems: string[] = [];
@@ -69,7 +70,8 @@ interface Keyed { swing: ViewSwing; bones: ArmBones; mirror: boolean }
 function bonesOf(lab: Lab, left: boolean): ArmBones {
   const bones = lab.model.swingBones?.(left);
   if (!bones || bones.strike === 0) {
-    throw new Error('lab: swing: the hero holds no weapon a swing keys (--class warrior)');
+    const hand = left ? ' in his left hand (--gear dual)' : '';
+    throw new Error(`lab: swing: the hero holds no weapon a swing keys${hand} (--class warrior)`);
   }
   return bones;
 }
@@ -111,7 +113,7 @@ function eachKey(lab: Lab, keyed: Keyed): string[] {
 function planeWords(name: string, { swing, bones, mirror }: Keyed): string {
   const shoulder = swingShoulder(swing, new THREE.Vector3(), mirror);
   const arm = `the arm ${bones.upper.toFixed(2)} + ${bones.fore.toFixed(2)} + ${bones.hand.toFixed(2)} m`;
-  const hand = mirror ? ', keyed by the lower hand, the left, mirrored: its grip the lower one' : '';
+  const hand = mirror ? ', the left hand\'s, mirrored' : '';
   return `${name}: its shoulder ${triple(shoulder)}, crossing the view at ${swing.plane[3]}°${hand}; ${arm}, `
     + `the striking part ${bones.strike.toFixed(2)} m from the grip; the fist's slant ${swing.slant}°`;
 }
@@ -138,9 +140,8 @@ function fitWords(fit: SwingKeyFit): string {
 }
 
 /** Where a key puts the arm as words: the grip (in the frame or not), the weapon, the elbow, the wrist, and a
- *  two-hander's other grip (the lower, or the upper for a swing its lower hand keys) and its distance from the other
- *  shoulder (the swing's mirrored). */
-function placedWords(lab: Lab, { swing, mirror }: Keyed, placed: Placed): string {
+ *  two-hander's lower grip and its distance from the other shoulder (the swing's mirrored). */
+function placedWords(lab: Lab, { swing }: Keyed, placed: Placed): string {
   const words = [
     `the grip ${triple(placed.grip)}${seen(placed.grip) ? '' : ' (out of the frame)'}`,
     `the weapon ${triple(placed.dir)}`,
@@ -149,9 +150,9 @@ function placedWords(lab: Lab, { swing, mirror }: Keyed, placed: Placed): string
   ];
   const up = upHandleOf(lab);
   if (up !== null) {
-    const other = placed.grip.clone().addScaledVector(placed.dir, mirror ? up : -up);
-    const shoulder = swingShoulder(swing, new THREE.Vector3(), !mirror);
-    words.push(`the ${mirror ? 'upper' : 'lower'} grip ${triple(other)}, ${other.distanceTo(shoulder).toFixed(2)} m `
+    const lower = placed.grip.clone().addScaledVector(placed.dir, -up);
+    const shoulder = swingShoulder(swing, new THREE.Vector3(), true);
+    words.push(`the lower grip ${triple(lower)}, ${lower.distanceTo(shoulder).toFixed(2)} m `
       + `from the other shoulder (an arm reaches ${reachOf(lab).toFixed(2)})`);
   }
   return words.join(', ');

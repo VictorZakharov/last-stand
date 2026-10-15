@@ -40,6 +40,10 @@ export interface ArmGoal {
   /** a hand round a handle may turn about its palm on it up to this (rad), the handle diagonal across the palm (`hold`'s slant): the hand joint, and so what it holds, keeps its turn, only the visible hand turns;
    *  or its least and most (one side of the fist would meet what's beside the handle: a bow's arrow over its shelf) */
   slant?: number | [number, number];
+  /** with `roll` and `slant`: the fist stays round the handle as it slants on it, the wrist going round `roll.at`, as a
+   *  hand on a handle the other hand holds does (a two-hander's lower hand: slanted about its wrist, the fist came 1.4 cm
+   *  off its grip); a hand that holds what it slants carries it with it */
+  slantOnHandle?: boolean;
   /** the hand's turn on the forearm eased from `rest` (the hand joint's own turn) to the one `hand` asks for, by `w`, for
    *  whichever elbow is tried: a hand coming onto a grip from riding its forearm */
   ease?: { rest: THREE.Quaternion; w: number };
@@ -86,7 +90,7 @@ const _wy = new THREE.Vector3();
 const REACH_SLACK = 2;
 /** where the least of a parabola through three evenly spaced costs lies, in steps from the middle one (-0.5..0.5) */
 const vertex = (lo: number, mid: number, hi: number): number => { const c = lo - 2 * mid + hi; return c > 1e-9 ? Math.max(-0.5, Math.min(0.5, (lo - hi) / (2 * c))) : 0; };
-const Z = new THREE.Vector3(0, 0, 1), _sz = new THREE.Quaternion(), _seg = new THREE.Vector3(), _cp = new THREE.Vector3(), _ez = new THREE.Quaternion();
+const Z = new THREE.Vector3(0, 0, 1), _sz = new THREE.Quaternion(), _sa = new THREE.Vector3(), _seg = new THREE.Vector3(), _cp = new THREE.Vector3(), _ez = new THREE.Quaternion();
 /** the hand's turn on the forearm `rel` eased from `g.ease.rest` as asked */
 const eased = (g: ArmGoal, rel: THREE.Quaternion): THREE.Quaternion => (g.ease ? rel.copy(_ez.copy(g.ease.rest).slerp(rel, g.ease.w)) : rel);
 /** the girdle's raises and forward turns tried (degrees) */
@@ -124,6 +128,8 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
       _ww.copy(_off).applyQuaternion(_rq).add(g.roll.at);
       if (g.hand) _hw.premultiply(_rq);
     }
+    // (the slant turns the hand about its palm's normal, through the handle: the wrist goes round it)
+    if (g.slantOnHandle && g.roll && g.hand && slant) _ww.sub(g.roll.at).applyAxisAngle(_sa.copy(Z).applyQuaternion(_hw), slant).add(g.roll.at);
     // everything in the shoulder's parent's frame (the rig's units)
     _W.copy(_ww); par.worldToLocal(_W);
     _n.copy(_W).sub(_S);

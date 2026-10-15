@@ -852,6 +852,7 @@ export const COMMANDS = {
         at: options.grip ?? null,
         dir: options.way ?? null,
         key: options.key ?? null,
+        left: Boolean(options.left),
         canary: Boolean(options.canary),
       };
       return side.command('swing', command);

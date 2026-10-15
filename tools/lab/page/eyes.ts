@@ -741,6 +741,13 @@ function inSpan(seen: Seen[], span: [number, number] | null): Seen[] {
   return seen.filter((now) => now.frame >= from && now.frame <= to);
 }
 
+/** A two-hander's lower grip held, as words: and how far past their ranges the arm's joints would go to hold it as
+ *  it's posed, the fist turned off it by that much (`LowerGrip.past`). */
+function heldWords(grasp: LowerGrip | null): string {
+  if (!grasp || grasp.past <= 0.5) return 'held';
+  return `held, its joints ${grasp.past.toFixed(0)}° past, the fist turned off it`;
+}
+
 /** Every frame as a line: its share of the cast, where the grip and the other hand are and the weapon's way, in the
  *  camera's space as the moves through the eyes are keyed, and whether a two-hander's lower grip is held. */
 function describeFrames(seen: Seen[]): string[] {
@@ -748,7 +755,7 @@ function describeFrames(seen: Seen[]): string[] {
   for (const now of seen) {
     const share = now.share === null ? '' : ` (${now.share.toFixed(2)})`;
     const weapon = now.tip.at.clone().sub(now.grip.at).normalize();
-    const held = now.held === null ? '' : `, ${now.held ? 'held' : `let go: ${whyLetGo(now.grasp!)}`}`;
+    const held = now.held === null ? '' : `, ${now.held ? heldWords(now.grasp) : `let go: ${whyLetGo(now.grasp!)}`}`;
     const past = now.armsPast.length ? `; past: ${now.armsPastWords.join(', ')}` : '';
     const fists = now.fists
       .map((fist) => `; the ${fist.hand} fist${fist.on ? '' : ' (out of the frame)'}: ${describeFist(fist)}`)

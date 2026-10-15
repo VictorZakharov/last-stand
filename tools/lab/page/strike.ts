@@ -59,12 +59,13 @@ export interface StrikeFrame {
 }
 
 /** The weapon the hero's tip is on: the grip's child seen, named for a base, its hilt (the grip's place), where its
- *  blow lands, and the shoulder of the arm holding it (world). */
+ *  blow lands, the shoulder of the arm holding it and the way of its length (world). */
 interface Held {
   weapon: THREE.Object3D;
   grip: THREE.Vector3;
   point: THREE.Vector3;
   shoulder: THREE.Vector3;
+  axis: THREE.Vector3;
 }
 
 /** Whether this game says its weapons' striking sides (models/weapons.ts `STRIKES_WITH`). */
@@ -82,7 +83,7 @@ function heldNow(lab: Lab): Held | null {
   const from = grip.getWorldPosition(new THREE.Vector3());
   const point = from.clone().lerp(tip.getWorldPosition(new THREE.Vector3()), PERCUSSION);
   const shoulder = lab.joints[`shoulder${heldIn(lab, grip)}`].getWorldPosition(new THREE.Vector3());
-  return { weapon, grip: from, point, shoulder };
+  return { weapon, grip: from, point, shoulder, axis: axisOf(weapon) };
 }
 
 /** Which hand holds `grip`: the hand joint it hangs under (the right's when under neither). */
@@ -104,12 +105,16 @@ class Follower {
   private last: Held | null = null;
   /** how far the hilt moved, with the blow's point (`moved`) */
   readonly gripMoved = new THREE.Vector3();
+  /** and the way of the weapon's length between the two frames: square to the point's move as it's turned round the
+   *  hilt, as its way at either end isn't (`moved`) */
+  readonly axisBetween = new THREE.Vector3();
 
   moved(now: Held | null): THREE.Vector3 | null {
     const before = this.last;
     this.last = now;
     if (!now || !before || before.weapon !== now.weapon) return null;
     this.gripMoved.copy(now.grip).sub(before.grip);
+    this.axisBetween.copy(before.axis).add(now.axis).normalize();
     return now.point.clone().sub(before.point);
   }
 }
@@ -125,13 +130,15 @@ export class StrikeTracker {
     const held = heldNow(this.lab);
     const moved = this.follower.moved(held);
     if (!held) return null;
-    const { weapon } = held;
-    const axis = axisOf(weapon);
+    const { weapon, axis } = held;
     const side = weaponSides?.[weapon.name] ?? ASSUMED_SIDE;
     const velocity = (moved ?? new THREE.Vector3()).divideScalar(dt);
     const speed = velocity.length();
     const gripSpeed = moved ? this.follower.gripMoved.length() / dt : 0;
-    const along = speed > 0 ? Math.abs(velocity.dot(axis)) / speed : 0;
+    // (against the weapon's way between the frames: against its way at the frame's end, a blade turned 25 degrees a
+    // frame round its hilt moved 22% along itself, its move a chord, and a two-hander's rising cut read as a draw)
+    const between = moved ? this.follower.axisBetween : axis;
+    const along = speed > 0 ? Math.abs(velocity.dot(between)) / speed : 0;
     const lead = leadOf(velocity, axis, sideOf(weapon), side);
     const rigid = held.point.distanceTo(held.shoulder) / Math.max(1e-6, held.grip.distanceTo(held.shoulder));
     return { weapon: weapon.name, side, speed, gripSpeed, lead, along, axis, rigid };

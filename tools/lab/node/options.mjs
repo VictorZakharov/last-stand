@@ -697,6 +697,11 @@ export const COMMANDS = {
         usage: 'way,reach,bend,drop,roll[,...]',
         help: 'a key to place, or several, its numbers after its share (models/warriorEyes.ts `warriorSwings`)',
       },
+      left: {
+        kind: 'switch',
+        help: 'the left hand\'s swing: the right\'s mirrored across the view, as a dual wielder\'s off hand cuts '
+          + '(--gear dual)',
+      },
       canary: {
         kind: 'switch',
         help: 'the swing\'s blow keyed back from where its own key places it, and a grip moved 10 cm off its plane, '
