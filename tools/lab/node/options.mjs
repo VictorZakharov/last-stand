@@ -579,6 +579,35 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  hands: {
+    help: 'the hero\'s right hand alone in a plain, lit studio, laid flat, open, relaxed, in a fist and closed '
+      + 'round a handle, from the back, the palm, each side, the fingertips and three-quarters, with its size against '
+      + 'a man\'s and its triangles: tools/lab/out/hands/sheet.png',
+    options: {
+      poses: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['flat', 'open', 'relaxed', 'fist', 'handle'],
+        help: 'the poses pictured (all by default)',
+      },
+      views: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['back', 'palm', 'thumb', 'little', 'tips', 'quarter', 'cuffs', 'web'],
+        help: 'the views (all but the close-ups by default: cuffs, the glove\'s cuffs over the fingers; web, the '
+          + 'thumb\'s web)',
+      },
+      look: LOOK_OPTION,
+      glove: { kind: 'switch', help: 'the hand in its glove (=false: bare; as the hero\'s is by default)' },
+      canary: {
+        kind: 'switch',
+        help: 'an empty studio pictured too, where nothing may be found drawn, and the hand built 10% larger, '
+          + 'which must measure so',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   shots: {
     help: 'the hero\'s basic attack (the ranger\'s bow drawn to full) loosed at points over each biome\'s boss '
       + 'with its summons and the biome\'s foes packed round it, in each view, the crosshair turned onto each point in '
@@ -737,6 +766,11 @@ export const COMMANDS = {
       },
       look: LOOK_OPTION,
       focus: { kind: 'text', usage: 'joint', help: 'picture: close-ups framed on a joint (head, handL...)' },
+      distance: {
+        kind: 'number',
+        usage: 'm',
+        help: 'picture: a close-up\'s distance from what it\'s framed on (1.7 from a joint, 4.3 from the body)',
+      },
       over: {
         kind: 'text',
         usage: 'picture',

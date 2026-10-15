@@ -16,6 +16,8 @@ export interface LivePicture {
   views?: ViewName[];
   look?: Look;
   focus?: keyof Joints;
+  /** a close-up's distance from what it's framed on (m: the lab's own by default) */
+  distance?: number;
   /** a reference laid over each picture, stretched to it (a picture's data URL), and how strongly (0-1) */
   over?: string;
   strength?: number;
@@ -60,7 +62,7 @@ export async function picture(lab: Lab, options: LivePicture): Promise<LivePictu
   const views = options.views ?? [renderer.viewMode() === 'first' ? 'eyes' : 'third'];
   lab.checkCapture(views, renderer.viewMode(), options.focus);
   lab.model.root.updateMatrixWorld(true);
-  const tiles = lab.capture(views, { focus: options.focus, look: options.look });
+  const tiles = lab.capture(views, { focus: options.focus, distance: options.distance, look: options.look });
   const notes = tiles.filter((tile) => tile.parts).map((tile) => {
     return `${tile.view}: ${describeParts(tile.parts!, PARTS_LISTED)}`;
   });

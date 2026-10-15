@@ -243,7 +243,7 @@ export function buildMage(): Model {
     BR.add(belt(0.046, 0.046, -0.245, 0.01, 0.004, 0, 14), gold, el);
     B.skin(lathe([[0.033, -0.3], [0.034, -0.28], [0.036, -0.255], [0.04, -0.235]], 16), bareSkin, el, hd, 0.25, 0.29);
   }
-  const handL = buildHand(j.handL, 1, leather, skinTip), handR = buildHand(j.handR, -1, leather, skinTip);
+  const handL = buildHand(j.handL, 1, leather, skinTip, 1, bareSkin), handR = buildHand(j.handR, -1, leather, skinTip, 1, bareSkin);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
   // --- legs: dark breeches, boots with strap buckles, a gold cap and a stone at the shin
@@ -713,7 +713,7 @@ export function buildMage(): Model {
   }
 
   return {
-    root, kit, joints: j, animate, tip, palm, height: 2.0,
+    root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, palm, height: 2.0,
     cloths,
     setGear: (gear: Gear) => {
       hat.visible = gear.helm;
@@ -729,7 +729,7 @@ export function buildMage(): Model {
       for (const o of wrists) o.visible = !gear.hands;
       for (const o of robeCuffs) o.visible = robed && !gear.hands;
       for (const o of tunicCuffs) o.visible = !robed && !gear.hands;
-      bare(handL, gear.hands ? null : bareSkin); bare(handR, gear.hands ? null : bareSkin);
+      bare(handL, !gear.hands); bare(handR, !gear.hands);
     },
     reset: () => { legs.reset(); fade.reset(); for (const c of cloths) c.reset(); },
     // through the eyes the bells, seen from behind, would hide the hands: narrow and shorter

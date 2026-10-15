@@ -40,6 +40,7 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `draws`: one frame's draw calls with the crowd standing, by what drew them (the geometries drawn most often, those that drew the most triangles, the scene's draws by their material's look; the scene's objects whose matrices are made again each frame)
 - `gear`: full sets of gear rolled for every class at each tier (the Health, regeneration and draught they give, and the damage they multiply)
 - `weapons`: each of the hero's weapons alone in a lit studio (face on, edge on, from behind, from three-quarters and its head close up, with its size and its triangles)
+- `hands`: the hero's right hand alone in the studio, flat, open, relaxed, in a fist and round a handle, from each side and close up (its size against a man's, its triangles, where it was sculpted)
 - `music`: each biome's music as the player hears it (its lobby, a run's countdowns, fights and wins, a hidden tab and the bank back: which track plays, how it fades, where it comes in, what reaches WebAudio)
 
 Options every command takes:
@@ -368,7 +369,19 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   with an alpha of 0 (`core/hdr.ts` adds it to the page as light), and copied onto a 2D canvas every picture came
   out black; and the lab draws nothing outside its pictures (`Lab.drawing`). A picture with next to nothing of the
   weapon in it is a problem, and `--canary` pictures an empty studio, which must read as nothing drawn. Compare a
-  change to a model with `--ab`.
+  change to a model with `--ab`. The studio, its camera and its pictures are `page/studio.ts`, which `hands` shares.
+- `hands`: the hero's right hand alone (`page/hands.ts`): a copy of it on a wrist of its own (`handLike` in
+  `models/hands.ts`), in its glove or bare as the hero's is (`--glove`, `=false`: bare), laid flat, open, relaxed, in
+  a fist and closed round a handle of a sword's grip (`--poses`), from the back, the palm, the thumb's side, the
+  little finger's, the fingertips and three-quarters (`--views`), and close up when asked for: `cuffs`, the glove's
+  cuffs over the fingers, and `web`, the thumb's web (where a bent thumb once pressed the glove into the skin). Said
+  beside it: its length, breadth and thickness against a man's (anatomy's tables: 10.9% of his height, 46% of the
+  length, 38% of the breadth) and each finger's length against the middle's, the triangles and meshes it's drawn
+  with, how long a side takes to sculpt on the page, and whether both sides were sculpted by workers as the game
+  loaded (one sculpted on the page is a problem: it held the boot up). `--look` draws it in a look (wire, faces,
+  parts, bones), and `--canary` pictures an empty studio, which must read as nothing drawn, and builds the hand 10%
+  larger, which must measure so. On `--ab` against a game whose hands were pieces, the old hand is built again from
+  the materials its pieces were made in (`userData.own`).
 - `held`: every held skill of the hero's class (`SkillDef.aimed`: the ranger's Quarry Mark and Strawman, the mage's
   Starfall and Veilstep; `page/held.ts`, `--class`) held as the player holds it, over a training dummy the way the
   camera looks: ready, its preview shown in its own look with no countdown, and let go it casts; then held through
@@ -474,7 +487,8 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   tool's scene is kept between edits (`node/live.mjs`, `page/live.ts`; needs `lab:serve`). `live start` boots the
   hero (`--class`, the warrior by default) and sets him up (`--view`, `--gear`, `--weapon`, `--at`, `--facing`);
   then `live picture` pictures him from `--views` (through the eyes `eyes`, else `third`, by default) in any
-  `--look`, with a reference laid over each picture and stretched to it (`--over <picture> --strength 0.5`) and
+  `--look` (a close-up from `--distance` m off what it's framed on: 1.7 from a joint, 4.3 from the body by
+  default), with a reference laid over each picture and stretched to it (`--over <picture> --strength 0.5`) and
   a part of it kept (`--crop 0.5,0,1,0.6`, its edges as shares), each in its own file in `out/live/`; `live
   inspect [name]` lists the hero (or a joint, or any object by name: the warrior's weapons and shield are named)
   and what's under it (`--depth`), each with where it is in the world, how it's turned, what it's drawn with and
@@ -661,6 +675,11 @@ and every command carries a hash of the code it was sent from: a server that loa
 runs it (`node --watch` once stopped noticing changes, and the server ran old code that dropped an option the command
 line had just learnt). Its Vite server starts again when `vite.config.ts` or the packages change. Stopping the
 terminal's task stops it all.
+
+A boot that fails fails at once, with why (`side.mjs` `openPageIn`): a boot that threw says so on the game's loading
+screen, and a module Vite couldn't compile answers its request with an error, which the lab asks for again to say
+Vite's message (where it went wrong in which file). Waited for the loading screen to go alone, either was waited out
+to the timeout, three minutes: a module that wouldn't compile never runs, so its loading screen never says it failed.
 
 - `lab.mjs`: the command line. Reads and checks the command (`node/options.mjs`), and sends it to the server on
   127.0.0.1:5196 (`LAB_PORT`; `node/client.mjs`), or runs it in a session of its own.

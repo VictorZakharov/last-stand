@@ -25,7 +25,7 @@ const DEFAULT_CLASS = 'warrior';
 /** the options each step takes besides what follows it (the set-up's for `start`) */
 const STEP_OPTIONS = {
   start: ['class', 'view', 'at', 'facing', 'nocked', 'gear', 'weapon'],
-  picture: ['views', 'look', 'focus', 'over', 'strength', 'crop', 'canary'],
+  picture: ['views', 'look', 'focus', 'distance', 'over', 'strength', 'crop', 'canary'],
   inspect: ['depth'],
   eval: [],
   frames: [],
@@ -140,6 +140,7 @@ export class LiveSession {
       views: options.views,
       look: options.look,
       focus: options.focus,
+      distance: options.distance,
       over: options.over ? pictureUrl(options.over) : undefined,
       strength: options.strength,
       crop: options.crop?.map(Number),

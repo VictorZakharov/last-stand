@@ -26,6 +26,7 @@ import type { CrowdOptions } from './crowd';
 import type { DrawsOptions } from './draws';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
+import type { HandsOptions } from './hands';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
 
 export interface SheetCommand {
@@ -64,6 +65,12 @@ export async function liveInspect(lab: Lab, command: LiveInspect): Promise<strin
 /** `lab weapons`: each weapon pictured alone; a canary it missed is a problem. */
 export async function weapons(lab: Lab, command: WeaponsOptions): Promise<Report> {
   const { weapons: picture } = await import('./weapons');
+  return picture(lab, command);
+}
+
+/** `lab hands`: the hero's hand pictured alone; a canary it missed is a problem. */
+export async function hands(lab: Lab, command: HandsOptions): Promise<Report> {
+  const { hands: picture } = await import('./hands');
   return picture(lab, command);
 }
 

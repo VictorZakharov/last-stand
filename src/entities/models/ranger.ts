@@ -1162,7 +1162,7 @@ export function buildRanger(): Model {
     }
   }
   return {
-    root, kit, joints: j, animate, tip, palm, arrowHead, height: 2,
+    root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, palm, arrowHead, height: 2,
     firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; strung = 0; fetchFrom = -1; kHook = -1; stowT = -1; },
     setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; for (const h of head.hair.slice(1)) h.visible = !gear.helm; },
     dispose() { kit.dispose(); disposeGeometries(root, arrowGeometry()); },
