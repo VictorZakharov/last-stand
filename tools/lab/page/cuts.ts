@@ -22,6 +22,8 @@ export interface CutFrame {
   side: number | null;
   inCast: boolean;
   frame: number;
+  /** the share of its weapon in the frame along its length (`weaponsInView`; none at rest, which has its own) */
+  shown?: number;
 }
 
 type Hand = 'right' | 'left';
@@ -48,7 +50,9 @@ const HELD_LEAST = 400;
 const HELD_NEAR = 6;
 /** a held weapon at rest is at least this share in the frame, along its length (the one-hander's rest the owner took,
  *  after Vermintide 2's, upright at the frame's right edge, is 36% in it; the left of two was 0%, "mostly off
- *  screen") */
+ *  screen"), and so is one at a cut's end, where it waits for the next cut (a two-hander's forehand ended low on
+ *  the left out of the frame, none of it seen for 250 ms of the backhand after it, and the backhand's end held the
+ *  handle across the view, its blade out of the frame) */
 const REST_IN_VIEW = 0.3;
 /** the points along a weapon its share in the frame is counted at */
 const ALONG_POINTS = 11;
@@ -161,8 +165,9 @@ export interface RowCast {
   strikeFrom: number;
 }
 
-/** The first frame of a cast that's in it. */
+/** The first frame of a cast that's in it, and the last. */
 const firstIn = (cast: RowCast) => cast.frames.find((frame) => frame.inCast) ?? cast.frames[0];
+const lastIn = (cast: RowCast) => cast.frames.filter((frame) => frame.inCast).pop() ?? cast.frames.at(-1)!;
 
 /**
  * A row of cuts against how a body chains them: each that began with its blade at rest (where that hand's was before
@@ -178,7 +183,13 @@ export function rowOfCuts(casts: RowCast[], rest: RestBlades, frameMs: number):
     const atRest = rest[begun.hand];
     const fromRest = atRest !== undefined && nearRest(begun, atRest);
     const from = fromRest ? 'from the rest' : 'where the last cut left the blade';
-    lines.push(`cut ${i + 1}: ${sideWords(begun)}, begun ${from}`);
+    const ended = lastIn(cast);
+    const shown = ended.shown === undefined ? '' : `, ending ${(ended.shown * 100).toFixed(0)}% in the frame`;
+    lines.push(`cut ${i + 1}: ${sideWords(begun)}, begun ${from}${shown}`);
+    if (ended.shown !== undefined && ended.shown < REST_IN_VIEW) {
+      problems.push(`cut ${i + 1} ends ${(ended.shown * 100).toFixed(0)}% in the frame along its weapon's length (at `
+        + `least ${REST_IN_VIEW * 100}%: where it waits for the next cut, frame ${ended.frame})`);
+    }
     // (a blade in each hand: the left's cut in a row begins from its own rest, as the right's did, and is its forehand)
     if (fromRest && begun.side !== null && !isForehand(begun)) {
       problems.push(`cut ${i + 1} began from the rest with a backhand, ${sideWords(begun)}: a cut from the rest is `
@@ -266,6 +277,21 @@ function weaponsHeld(lab: Lab): { hand: Hand; weapon: THREE.Object3D }[] {
     });
   }
   return found;
+}
+
+/** How far along its length a hand's weapon runs from its grip, back to its butt and on to its far end (m, the
+ *  world's: negative behind the grip), as `weaponsInView` counts it; null with none in that hand. */
+export function weaponSpan(lab: Lab, hand: Hand): { from: number; to: number } | null {
+  lab.model.root.updateWorldMatrix(true, true);
+  const held = weaponsHeld(lab).find((one) => one.hand === hand);
+  if (!held) return null;
+  const { weapon } = held;
+  const box = ownBox(weapon);
+  const middle = box.getCenter(new THREE.Vector3());
+  const grip = weapon.parent!.getWorldPosition(new THREE.Vector3());
+  const axis = new THREE.Vector3(0, 1, 0).transformDirection(weapon.matrixWorld);
+  const along = (y: number) => weapon.localToWorld(new THREE.Vector3(middle.x, y, middle.z)).sub(grip).dot(axis);
+  return { from: along(box.min.y), to: along(box.max.y) };
 }
 
 /** A weapon's meshes' box in its own frame. */

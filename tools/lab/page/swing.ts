@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import type { Lab, Fixture, Report } from './lab';
 import { armsLens } from './inFrame';
 import { triple } from './keyed';
+import { weaponSpan } from './cuts';
 import {
   swingKeyAt, swingKeyFor, swingShoulder, type ArmBones, type SwingKey, type SwingKeyFit, type ViewSwing,
 } from '../../../src/entities/viewSwing';
@@ -141,17 +142,17 @@ function fitWords(fit: SwingKeyFit): string {
 
 /** Where a key puts the arm as words: the grip (in the frame or not), the weapon, the elbow, the wrist, and a
  *  two-hander's lower grip and its distance from the other shoulder (the swing's mirrored). */
-function placedWords(lab: Lab, { swing }: Keyed, placed: Placed): string {
+function placedWords(lab: Lab, keyed: Keyed, placed: Placed): string {
   const words = [
     `the grip ${triple(placed.grip)}${seen(placed.grip) ? '' : ' (out of the frame)'}`,
-    `the weapon ${triple(placed.dir)}`,
+    `the weapon ${triple(placed.dir)}, ${(shownOf(lab, keyed, placed) * 100).toFixed(0)}% of it in the frame`,
     `the elbow ${triple(placed.elbow)}`,
     `the wrist ${triple(placed.wrist)}`,
   ];
   const up = upHandleOf(lab);
   if (up !== null) {
     const lower = placed.grip.clone().addScaledVector(placed.dir, -up);
-    const shoulder = swingShoulder(swing, new THREE.Vector3(), true);
+    const shoulder = swingShoulder(keyed.swing, new THREE.Vector3(), true);
     words.push(`the lower grip ${triple(lower)}, ${lower.distanceTo(shoulder).toFixed(2)} m `
       + `from the other shoulder (an arm reaches ${reachOf(lab).toFixed(2)})`);
   }
@@ -169,6 +170,23 @@ function reachOf(lab: Lab): number {
 function upHandleOf(lab: Lab): number | null {
   const lower = lab.model.offGrip;
   return lower ? -lower.position.y * lab.model.root.scale.x : null;
+}
+
+/** the points along a weapon its share in the frame is counted at (as page/cuts.ts `weaponsInView`'s, which a cut's
+ *  end and the rest are judged by) */
+const ALONG_POINTS = 11;
+
+/** The share of the held weapon a key places in the frame: of `ALONG_POINTS` points along its length, from its butt
+ *  to its far end (page/cuts.ts `weaponSpan`: counted from the grip alone, a cut's end read 45% where the eyes' 27%). */
+function shownOf(lab: Lab, { mirror }: Keyed, placed: Placed): number {
+  const span = weaponSpan(lab, mirror ? 'left' : 'right');
+  if (!span) return 0;
+  let shown = 0;
+  for (let i = 0; i < ALONG_POINTS; i++) {
+    const along = span.from + ((span.to - span.from) * i) / (ALONG_POINTS - 1);
+    if (seen(placed.grip.clone().addScaledVector(placed.dir, along))) shown++;
+  }
+  return shown / ALONG_POINTS;
 }
 
 /** Whether a point in the eyes' frame is in the frame the arms are drawn in. */

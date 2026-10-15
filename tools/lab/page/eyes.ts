@@ -107,6 +107,8 @@ interface Seen {
    *  the tip is on */
   side: number | null;
   hand: 'right' | 'left';
+  /** the share of that weapon in the frame along its length (page/cuts.ts `weaponsInView`; 0 with none held) */
+  shown: number;
   /** the arm a swing keyed this frame against the arm drawn (page/keyed.ts): null when none keyed one */
   keyed: KeyedFrame | null;
 }
@@ -440,6 +442,7 @@ function seeFrame(lab: Lab, frame: number, casts: CastCount, last: Seen | undefi
   const tipAt = tipObject.getWorldPosition(new THREE.Vector3());
   const blade = spotOf(tipAt.lerp(gripObject.getWorldPosition(new THREE.Vector3()), 0.5));
   const lower = lab.model.lowerGrip;
+  const hand = lab.model.tip?.parent?.parent === lab.joints.handL ? 'left' : 'right';
   const body = bodyBreaches(lab.joints, grippingSides(lab));
   const armsPast = body.found.filter((breach) => ARM_RANGE.test(breach.name));
   return {
@@ -463,7 +466,8 @@ function seeFrame(lab: Lab, frame: number, casts: CastCount, last: Seen | undefi
     strike: strikes.next(window.__labClock.frame / 1000),
     pose: armsAt(lab),
     side: lab.model.swing ?? null,
-    hand: lab.model.tip?.parent?.parent === lab.joints.handL ? 'left' : 'right',
+    hand,
+    shown: weaponsInView(lab).find((view) => view.hand === hand)?.share ?? 0,
     keyed: keyedNow(lab),
   };
 }
@@ -471,6 +475,7 @@ function seeFrame(lab: Lab, frame: number, casts: CastCount, last: Seen | undefi
 /** A frame as the cut measures read it (page/cuts.ts). */
 const cutOf = (now: Seen): CutFrame => ({
   grip: now.grip.at, tip: now.tip.at, hand: now.hand, side: now.side, inCast: now.share !== null, frame: now.frame,
+  shown: now.shown,
 });
 
 /** Each wrist's angles as `measureBody` has them. */
