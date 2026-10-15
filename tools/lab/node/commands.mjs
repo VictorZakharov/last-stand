@@ -242,7 +242,8 @@ async function writeStacks(results, dir, browser, wanted) {
   const [first, ...others] = results;
   for (const moment of first[1]?.moments ?? []) {
     if (!wanted(moment.label)) continue;
-    const sides = [first, ...others].map(([side, result]) => [side, result?.moments?.find((m) => m.label === moment.label)]);
+    const momentOf = (result) => result?.moments?.find((m) => m.label === moment.label);
+    const sides = [first, ...others].map(([side, result]) => [side, momentOf(result)]);
     if (sides.some(([, found]) => !found || found.tiles.length !== 1)) continue;
     const pictures = sides.map(([side, found]) => ({ caption: side.name, ...found.tiles[0] }));
     const name = `${fileNameOf(moment.label)}--ab.png`;
@@ -709,6 +710,7 @@ export const COMMANDS = {
         close: options.close ?? [],
         film: options.film !== false,
         frames: Boolean(options.frames),
+        span: options.span ?? null,
         canary: Boolean(options.canary),
       };
       return side.command('eyes', command);
@@ -837,6 +839,25 @@ export const COMMANDS = {
     textOf: asText,
     problemsOf: problemsIn,
     pictures: picturePairs,
+  },
+
+  swing: {
+    check(options) {
+      if (options.grip?.length !== options.way?.length) throw labError('swing: --grip with a --way for each');
+    },
+    each(side, options) {
+      const command = {
+        fixture: { view: 'first', ...fixtureFrom(options) },
+        swing: options._[0],
+        at: options.grip ?? null,
+        dir: options.way ?? null,
+        key: options.key ?? null,
+        canary: Boolean(options.canary),
+      };
+      return side.command('swing', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
   },
 
   eval: {

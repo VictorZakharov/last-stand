@@ -342,6 +342,9 @@ export interface Model {
   /** through the eyes, the arm a swing keyed this frame (camera space, m; null when none did): what the lab holds the
    *  drawn arm to */
   readonly swingKeyed?: KeyedArm | null;
+  /** through the eyes, the bones a swing lays out the arm with (viewSwing.ts `ArmBones`, m): the right arm's, or the
+   *  left's with the weapon it holds (a two-hander's on its lower grip, the striking part that much further off) */
+  swingBones?(left: boolean): { upper: number; fore: number; hand: number; strike: number };
   /** distance from the body to the weapon's tip */
   readonly reach?: number;
   /** a two-hander's lower grip as the other hand held it this frame (null without one; the lab's measures read it) */

@@ -9,12 +9,14 @@ import { labError } from './errors.mjs';
  * - `list`: comma-separated text, as a list (each one of `choices`, when it has them);
  * - `number`: a finite number;
  * - `pair`: two numbers, `x,z`;
+ * - `numbers`: comma-separated numbers, as many as `count` says or in `each`s (any count without them),
+ *   `0.2,-0.4,-0.5`;
  * - `choice`: one of `choices`;
  * - `ref`: a switch that may name a commit (`--ab`, `--ab=165246d`);
  * - `screen`: a window's size in css px and the screen's pixel ratio, `1280x720@3` (`@1` when it's left out);
  * - `screens`: two of them, `3840x2160@1,1280x720@3`.
  */
-const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'choice', 'ref', 'screen', 'screens'];
+const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'numbers', 'choice', 'ref', 'screen', 'screens'];
 
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
@@ -183,7 +185,8 @@ export const COMMANDS = {
       weapon: SETUP_OPTIONS.weapon,
       canary: {
         kind: 'switch',
-        help: 'plant faults the measure must catch: the head turned past the neck\'s range, the fist bent on its forearm',
+        help: 'plant faults the measure must catch: the head turned past the neck\'s range, the fist bent on its '
+          + 'forearm',
       },
       frames: { kind: 'switch', help: 'list every frame with a joint past its range' },
       trace: {
@@ -656,12 +659,48 @@ export const COMMANDS = {
         help: 'list every frame: the grip, the weapon\'s way and the other hand in the eyes\' frame, as the '
           + 'moves through the eyes are keyed (models/warriorEyes.ts)',
       },
+      span: { kind: 'pair', usage: 'from,to', help: 'with --frames, only the frames from the first to the second' },
       canary: {
         kind: 'switch',
         help: 'the arms held as they were at the press and the other arm dropped: no blow, and a two-hander seen '
           + 'in one hand, no sweep, the dropped left weapon out of the frame and a chained cut as a backhand from the '
           + 'rest, must be found; the weapon turned its edge, then its flat, into its blow; held at its first turn, '
           + 'sliding with the hand; the right fist bent on its forearm 60° each way',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  swing: {
+    help: 'a swing through the eyes keyed from a pose (src/entities/viewSwing.ts): the key of the swing that puts its '
+      + 'grip at --grip and its weapon along --way (camera space: m, x right, y up, -z ahead), and what of the pose an '
+      + 'arm swung in its plane can\'t hold (the grip or the way off the plane, the wrist past its range, the grip '
+      + 'past the reach); a key given placed (--key), or else every key of the swing: the grip, the weapon, the elbow, '
+      + 'the wrist and a two-hander\'s lower grip, with how far it is from the other shoulder (--class warrior)',
+    argument: 'swing',
+    options: {
+      grip: {
+        kind: 'numbers',
+        each: 3,
+        usage: 'x,y,z[,x,y,z...]',
+        help: 'the grip\'s place in the view to key, or several, a pose each (with --way)',
+      },
+      way: {
+        kind: 'numbers',
+        each: 3,
+        usage: 'x,y,z[,x,y,z...]',
+        help: 'the weapon\'s way in the view to key, or one for each --grip',
+      },
+      key: {
+        kind: 'numbers',
+        each: 5,
+        usage: 'way,reach,bend,drop,roll[,...]',
+        help: 'a key to place, or several, its numbers after its share (models/warriorEyes.ts `warriorSwings`)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'the swing\'s blow keyed back from where its own key places it, and a grip moved 10 cm off its plane, '
+          + 'must come back as that key and read 10 cm off',
       },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
@@ -983,6 +1022,15 @@ function readValue(name, spec, text) {
     case 'pair': {
       const values = text.split(',').map(numberFrom);
       if (values.length !== 2 || !values.every(Number.isFinite)) throw wrong('two numbers, x,z');
+      return values;
+    }
+    case 'numbers': {
+      const values = text.split(',').map(numberFrom);
+      if (!values.every(Number.isFinite)) throw wrong('comma-separated numbers');
+      if (spec.count !== undefined && values.length !== spec.count) throw wrong(`${spec.count} numbers, ${spec.usage}`);
+      if (spec.each !== undefined && values.length % spec.each !== 0) {
+        throw wrong(`numbers in ${spec.each}s, ${spec.usage}`);
+      }
       return values;
     }
     case 'choice':

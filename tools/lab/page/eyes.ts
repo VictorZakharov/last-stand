@@ -24,7 +24,7 @@ import {
 } from './cuts';
 import type { CutFrame, InView, Landing, RestBlades, RowCast } from './cuts';
 import { swingDiagram } from './swingDiagram';
-import { describeKeyed, describeKeyedFrame, keyedNow, type KeyedFrame } from './keyed';
+import { describeKeyed, describeKeyedFrame, keyedNow, triple, type KeyedFrame } from './keyed';
 import type { ArmAt, ArmsAt, Lens, Phase } from './swingDiagram';
 
 export interface EyesOptions {
@@ -45,6 +45,8 @@ export interface EyesOptions {
   film: boolean;
   /** every frame listed: the grip, the weapon's way and the other hand in the eyes' frame */
   frames: boolean;
+  /** and only those from the first to the second, if given (a key tuned is read off a few frames) */
+  span: [number, number] | null;
   canary: boolean;
 }
 
@@ -193,7 +195,7 @@ export async function eyes(lab: Lab, options: EyesOptions): Promise<Report> {
   lines.push(describeArmsPast(seen));
   const unseen = seen.filter((frame) => frame.held === false && !frame.other.on);
   if (unseen.length) lines.push(`the two-hander let go of out of the frame, unseen: ${framesOf(unseen)}`);
-  if (options.frames) lines.push(...describeFrames(seen));
+  if (options.frames) lines.push(...describeFrames(inSpan(seen, options.span)));
   lines.push(describeFists(seen));
   const struck = describeStrikes(seen, skill.def);
   lines.push(...struck.lines);
@@ -215,7 +217,9 @@ export async function eyes(lab: Lab, options: EyesOptions): Promise<Report> {
     const planted = await follow(lab, skill, options, null, plantFaults(lab));
     const caught = canaryCaught(planted, followed, skill);
     // (a canary missed is read off its own frames)
-    if (options.frames) lines.push('the canary\'s frames, its faults planted:', ...describeFrames(planted.seen));
+    if (options.frames) {
+      lines.push('the canary\'s frames, its faults planted:', ...describeFrames(inSpan(planted.seen, options.span)));
+    }
     lines.push(`canary, the arms held as they were at the press and the other arm dropped: ${caught.join('; ')}`);
     const leads = await strikeCanaries(lab, options, skill);
     lines.push(`canary, the weapon turned about its length each frame: ${leads.join('; ')}`);
@@ -730,6 +734,13 @@ function openFists(seen: Seen[]): string[] {
   return problems;
 }
 
+/** The frames from `span`'s first to its second (every one without it). */
+function inSpan(seen: Seen[], span: [number, number] | null): Seen[] {
+  if (!span) return seen;
+  const [from, to] = span;
+  return seen.filter((now) => now.frame >= from && now.frame <= to);
+}
+
 /** Every frame as a line: its share of the cast, where the grip and the other hand are and the weapon's way, in the
  *  camera's space as the moves through the eyes are keyed, and whether a two-hander's lower grip is held. */
 function describeFrames(seen: Seen[]): string[] {
@@ -807,11 +818,6 @@ function runsOf(on: PastOn[]): string[] {
     const frames = first === last ? `${first}` : `${first}-${last}`;
     return `${frames} up to ${most.toFixed(0)}°`;
   });
-}
-
-/** A point or a way as words, to the centimetre. */
-function triple(v: THREE.Vector3): string {
-  return `(${v.toArray().map((value) => value.toFixed(2)).join(', ')})`;
 }
 
 /** The frames of each run of frames in a row that `holds` for longer than `ONE_HAND_SPELL`. */

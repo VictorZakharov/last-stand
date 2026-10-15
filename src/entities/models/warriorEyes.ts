@@ -15,11 +15,12 @@
 // (The swing was a wiper's sweep from one side: it wound slowly out to the left, stood there a third of a second,
 // then swept up to the right and stopped upright; #224. Keyed with the hands up by the face and the trunk turning
 // as in third person, the left shoulder came round in front of the eyes and its arm filled half the view.)
-import { SWING_KEY, viewMove, type ViewMove, type ViewSwing } from '../viewModel';
+import { viewMove, type ViewMove } from '../viewModel';
+import { SWING_KEY, type ViewSwing } from '../viewSwing';
 import { tunable } from '../../core/tuning';
 
 /**
- * The cuts through the eyes swung as a body swings them (viewModel.ts `ViewSwing`: each in one plane, its flat that
+ * The cuts through the eyes swung as a body swings them (viewSwing.ts `ViewSwing`: each in one plane, its flat that
  * plane's, so its edge leads; tuned live in a dev build, `--tune warriorSwings.oneFore=...`): a one-hander's forehand,
  * from high on the right down across to the left, and its backhand, from over the left shoulder down across to the
  * right, each round the right shoulder (in the eyes' frame (0.30, -0.40, -0.08)). (Keyed as the eyes saw a cut, the
@@ -58,6 +59,46 @@ const SWINGS = tunable('warriorSwings', {
     0.74, -48, 0.67, -24, 0, 0,
     0.85, -52, 0.66, -22, 0, 0,
   ],
+  // (a two-hander's, its right hand the upper one on the handle, the left following on the lower grip: its guard at
+  // rest, one key in an upright plane, the blade up before the right shoulder; its forehand from there, its backhand
+  // from where the forehand left the blade)
+  twoRestPlane: [0.22, -0.3, -0.22, 285],
+  twoRest: [0, 30, 0.52, 0, 0, 40],
+  // (steeper than the one-hander's, and wound up close by the right shoulder: wound out to the right as one arm winds
+  // a one-hander, the lower grip was 12 cm past the left arm's reach; then down through the aim, the wrist bent to the
+  // little finger's side as far as it goes, the blade as near the arms' line as a fist holds it, and on into a low
+  // guard on the left, the hands ahead of the hips: swept on round the shoulder, they went behind the left one, and
+  // the left fist flexed round its grip 39 degrees past where a fist stays closed)
+  twoForePlane: [0.22, -0.3, -0.22, 235],
+  twoFore: [
+    0, 50, 0.5, 0, 0, 40,
+    0.2, 110, 0.36, -10, 30, 0,
+    0.36, 150, 0.32, -20, 30, 0,
+    0.44, 125, 0.38, -25, 30, 0,
+    0.5, 70, 0.5, -30, 20, 0,
+    0.56, 0, 0.62, -30, 20, 0,
+    0.6, -16, 0.66, -30, 25, 0,
+    0.68, -28, 0.7, -30, 35, 0,
+    0.78, -32, 0.72, -30, 40, 0,
+    0.9, -33, 0.72, -30, 40, 0,
+  ],
+  // (its backhand, driven by the lower hand, the left, on its grip: the forehand's mirror image, keyed as the right
+  // arm's and mirrored onto the left, from the left shoulder down to the right; the right hand follows on the upper
+  // grip. Swung round the right shoulder as a one-hander's backhand, rising or falling, the hands went out past it at
+  // the blow and the lower grip was 85 to 96 cm from the left shoulder)
+  twoBackPlane: [0.22, -0.3, -0.22, 235],
+  twoBack: [
+    0, 50, 0.5, 0, 0, 40,
+    0.2, 110, 0.36, -10, 30, 0,
+    0.36, 150, 0.32, -20, 30, 0,
+    0.44, 125, 0.38, -25, 30, 0,
+    0.5, 70, 0.5, -30, 20, 0,
+    0.56, 0, 0.62, -30, 20, 0,
+    0.6, -16, 0.66, -30, 25, 0,
+    0.68, -28, 0.7, -30, 35, 0,
+    0.78, -32, 0.72, -30, 40, 0,
+    0.9, -33, 0.72, -30, 40, 0,
+  ],
   /** how far the fist holds a one-hander's handle diagonally across its palm through a cut (degrees, as a hand holds
    *  a sword: hands.ts `SLANT` at most) */
   cutSlant: 25,
@@ -66,7 +107,7 @@ const SWINGS = tunable('warriorSwings', {
   /** a one-handed cut's trunk turn (rad): wound back from it, and turned into it, from and to which shares of the cut
    *  (the arm keeps within a shoulder's reach of the chest as it crosses the body: the trunk leads the arm into the blow) */
   cutTurn: [0.35, 0.7, 0.38, 0.6],
-}, { oneFore: SWING_KEY, oneBack: SWING_KEY });
+}, { oneFore: SWING_KEY, oneBack: SWING_KEY, twoRest: SWING_KEY, twoFore: SWING_KEY, twoBack: SWING_KEY });
 export const CUT_TURN: readonly number[] = SWINGS.cutTurn;
 export const ONE_FORE_CUT: ViewSwing = {
   plane: SWINGS.oneForePlane, keys: SWINGS.oneFore,
@@ -77,6 +118,26 @@ export const ONE_BACK_CUT: ViewSwing = {
   plane: SWINGS.oneBackPlane, keys: SWINGS.oneBack,
   get slant() { return SWINGS.cutSlant; },
   get hit() { return SWINGS.cutHit; },
+};
+export const TWO_REST: ViewSwing = {
+  plane: SWINGS.twoRestPlane, keys: SWINGS.twoRest,
+  get slant() { return SWINGS.cutSlant; },
+  hit: 0,
+};
+export const TWO_FORE_CUT: ViewSwing = {
+  plane: SWINGS.twoForePlane, keys: SWINGS.twoFore,
+  get slant() { return SWINGS.cutSlant; },
+  get hit() { return SWINGS.cutHit; },
+};
+export const TWO_BACK_CUT: ViewSwing = {
+  plane: SWINGS.twoBackPlane, keys: SWINGS.twoBack,
+  get slant() { return SWINGS.cutSlant; },
+  get hit() { return SWINGS.cutHit; },
+  lower: true,
+};
+/** the swings by their names in `warriorSwings` (the lab's `swing` keys a pose in one) */
+export const SWINGS_NAMED: Readonly<Record<string, ViewSwing>> = {
+  oneFore: ONE_FORE_CUT, oneBack: ONE_BACK_CUT, twoRest: TWO_REST, twoFore: TWO_FORE_CUT, twoBack: TWO_BACK_CUT,
 };
 
 /** a two-hander at rest through the eyes, in a middle guard: the fists low on the right of the crosshair (the lower

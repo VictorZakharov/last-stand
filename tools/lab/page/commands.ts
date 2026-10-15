@@ -29,6 +29,7 @@ import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
 import type { EyesOptions } from './eyes';
+import type { SwingOptions } from './swing';
 import type { Fit, FitOptions } from './fitRest';
 
 export interface SheetCommand {
@@ -281,6 +282,13 @@ export async function shots(lab: Lab, command: ShotsOptions): Promise<Report> {
 export async function eyes(lab: Lab, command: EyesOptions): Promise<Report> {
   const { eyes: eyesRound } = await import('./eyes');
   return eyesRound(lab, command);
+}
+
+/** `lab swing`: the key of a swing through the eyes that holds a pose chosen in the view, what of the pose it can't
+ *  hold, and where its keys put the arm; a canary it missed is a problem. */
+export async function swing(lab: Lab, command: SwingOptions): Promise<Report> {
+  const { swing: swingKeyed } = await import('./swing');
+  return swingKeyed(lab, command);
 }
 
 /** `lab gear`: full sets rolled for every class at each tier, and what they give; a class out of order is a problem. */

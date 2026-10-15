@@ -1,5 +1,5 @@
 // tools/lab keyed: the arm a swing through the eyes keys (`Model.swingKeyed`: the shoulder, the elbow, the grip and
-// the weapon's way its plane lays out, viewModel.ts `swingAt`) against the arm as drawn (lab eyes). Whether the arm the
+// the weapon's way its plane lays out, viewSwing.ts `swingAt`) against the arm as drawn (lab eyes). Whether the arm the
 // eyes see is the one the swing was designed as: the reach's pole, the hand's turn, the wrist's clamp and the fades
 // between can each put a joint elsewhere, and a swing tuned by its keys then tunes an arm that isn't drawn. (A wrist
 // keyed at its range's end was clamped, and the grip drawn 7 cm off its keys through a cut's wind-up.)
@@ -83,7 +83,7 @@ export function describeKeyedFrame(frame: KeyedFrame): string {
 }
 
 /** A point or a way as words, to the centimetre. */
-function triple(v: THREE.Vector3): string {
+export function triple(v: THREE.Vector3): string {
   return `(${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)})`;
 }
 

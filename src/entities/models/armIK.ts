@@ -7,7 +7,7 @@
 // the pole said: behind the back, up past the head, the wrist bent double round a handle.
 import * as THREE from 'three';
 import type { Joints } from './rig';
-import { GIRDLE, ROM_ON, capsuleDepth, clampWrist, girdlePlace, shoulderExcess, type BodyShape } from './anatomy';
+import { GIRDLE, GRIPPED_FLEXION, ROM_ON, capsuleDepth, clampWrist, girdlePlace, shoulderExcess, type BodyShape } from './anatomy';
 
 const N = 24, REFINE = 7, ROLLS = 5;
 
@@ -50,6 +50,10 @@ export interface ArmGoal {
    *  found now they go (0..1), the best found between the few tried, not one of them: picked from those, the hand turned
    *  and slanted in steps, and as the walk moved the elbow a bow carried in the fist jumped between two or three places */
   glide?: number;
+  /** the wrist's flexion range (degrees): a hand gripping a handle, a gripping wrist's (anatomy.ts `GRIPPED_FLEXION`);
+   *  the open hand's by default. (Solved within the open hand's, a two-hander's lower fist flexed 50 to 75 degrees
+   *  round its grip, through the eyes and out of them, where a fist can't stay closed) */
+  flexion?: readonly [number, number];
   /** the hand turned as asked whatever the forearm's and the wrist's ranges (the elbow still chosen to keep them): through
    *  the eyes, the bow hand, so the bow stays as it's posed (stopped at the wrist's end, the fist turned the bow with the
    *  elbow, and a frame's other elbow coming in for a fan turned it 40 px in the view) */
@@ -159,7 +163,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     bad = 0;
     if (want && ROM_ON) {
       eased(g, _rel.copy(_Qf).invert().multiply(want));
-      cost += 2 * clampWrist(_rel, left, _cl);
+      cost += 2 * clampWrist(_rel, left, _cl, g.flexion);
       if (g.wristW) cost += g.wristW * Math.acos(Math.max(-1, Math.min(1, _wy.set(0, 1, 0).applyQuaternion(_rel).y))) * 57.3;
     }
     if (solids && ROM_ON) {
@@ -222,7 +226,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     return [roll, slant, bestC];
   };
   /** what the ranges leave over for the elbow found (degrees), the arm as `at` last left it */
-  const over = (): number => ROM_ON ? shoulderExcess(_Qu, left, gNow) + (want ? clampWrist(eased(g, _rel.copy(_Qf).invert().multiply(want)), left, _cl) : 0) : 0;
+  const over = (): number => ROM_ON ? shoulderExcess(_Qu, left, gNow) + (want ? clampWrist(eased(g, _rel.copy(_Qf).invert().multiply(want)), left, _cl, g.flexion) : 0) : 0;
 
   const pr = lastR.get(sh);
   /** the turn and slant found, gliding from the last solve's */
@@ -302,7 +306,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   // (the visible hand's turn on the forearm: as wanted, or as it was)
   if (want) eased(g, _rel.copy(_Qf).invert().multiply(want));
   else { _rel.copy(hd.quaternion); if (vis) _rel.multiply(vis); }
-  if (ROM_ON && !g.free) excess += clampWrist(_rel, left, _rel);
+  if (ROM_ON && !g.free) excess += clampWrist(_rel, left, _rel, g.flexion);
   hd.quaternion.copy(_rel);
   // (the hand joint under the visible hand: its turn on the joint, and the slant)
   if (vis || slant) hd.quaternion.multiply(_hx.copy(vis ?? _sz.identity()).multiply(_sz.setFromAxisAngle(Z, slant)).invert());
@@ -313,7 +317,8 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
  * An arm the pose has placed, brought within the body's ranges: its wrist stays where the pose put it and its hand
  * keeps its turn in the world as far as the ranges let it; the elbow moves round as little as they allow. `vis`: the
  * turn the hand will be given on its joint this frame (`gripTurn` for a held weapon), none for a hand that isn't
- * turned. (It reads the joints' world matrices through their parents, so needs no update of the whole model first.)
+ * turned, and a hand so turned grips what it holds: its wrist within a gripping wrist's range. (It reads the joints'
+ * world matrices through their parents, so needs no update of the whole model first.)
  */
 export function fitArm(j: Joints, left: boolean, vis?: THREE.Quaternion, body?: BodyShape, slant?: number): ArmResult {
   const sh = left ? j.shoulderL : j.shoulderR, el = left ? j.elbowL : j.elbowR, hd = left ? j.handL : j.handR;
@@ -321,5 +326,5 @@ export function fitArm(j: Joints, left: boolean, vis?: THREE.Quaternion, body?: 
   const hand = hd.getWorldQuaternion(new THREE.Quaternion());
   if (vis) hand.multiply(vis);
   const pole = el.getWorldPosition(new THREE.Vector3()).sub(sh.getWorldPosition(new THREE.Vector3()));
-  return solveArm(j, left, { wrist, hand, vis, pole, body, slant });
+  return solveArm(j, left, { wrist, hand, vis, pole, body, slant, flexion: vis ? GRIPPED_FLEXION : undefined });
 }
