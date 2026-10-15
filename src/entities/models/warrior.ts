@@ -78,14 +78,17 @@ const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHO
  *  a fist may turn about its handle (rad, `roll`) for its arm to keep within a body's ranges, and what each degree of
  *  its wrist's bend costs it (armIK's `wristW`, `wrist`) (`fitInView`); and the field of view the arms and weapons
  *  are drawn with (`fov`, vertical degrees: a camera of their own, renderer.ts `drawArms`, narrower than the world's
- *  66 as a game's first-person weapon's) */
+ *  66 as a game's first-person weapon's), and how much larger the hands are drawn there (`hand`, times `HAND_K`: a
+ *  first-person fist is drawn large, as Vermintide 2's are) */
 const EYES = tunable('warriorEyes', {
-  shoulder: [0.22, -0.46, -0.25], restOn: [0.72, -1.8, 0.5], restDir: [0.1, 1, -0.45], pole: [-1, -0.3, 0.3],
-  oneOn: [0.58, -1.3, 0.6], oneDir: [0.45, 1, -0.3], bladeOn: [0.76, -0.42, 0.5], bladeDir: [0.4, 1, -0.2],
-  bladeFlat: [-0.7, 0, 0.7], oneFlat: [-1, 0, 0.2],
-  oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1, fov: 45,
+  shoulder: [0.22, -0.46, -0.25], restOn: [0.64, -2.8, 0.42], restDir: [0.7, 1, -1.2], pole: [-1, -0.3, 0.3],
+  oneOn: [0.58, -1.3, 0.6], oneDir: [0.45, 1, -0.3], bladeOn: [0.6, -0.42, 0.8], bladeDir: [0.62, 1, -0.5],
+  bladeFlat: [-0.45, 0, 0.9], oneFlat: [-1, 0, 0.2], restFlat: [-0.44, 0.77, 0.51],
+  oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1, fov: 45, hand: 1.35,
 });
-const _er = new THREE.Vector3(), _ed = new THREE.Vector3(), _ef = new THREE.Vector3();
+/** the hands' scale (`buildHand`'s `k`) */
+const HAND_K = 1.08;
+const _er = new THREE.Vector3(), _ed = new THREE.Vector3(), _ef = new THREE.Vector3(), _tf = new THREE.Vector3();
 const _rf = new THREE.Vector3(), _lf = new THREE.Vector3();
 /** a one-hander's rest through the eyes, into `on`, `way` and the way its flat faces (`flat`), and returns how much of
  *  the way that turns it: a sword's (`bladeOn`, `bladeDir`: its hilt and the fist in the corner, the blade up to the
@@ -409,7 +412,7 @@ export function buildWarrior(): Model {
     B.add(scaleUV(lathe([[0.049, -0.25], [0.056, -0.245], [0.058, -0.215], [0.055, -0.205]], 16), 2, 0.3), cloth, el);
     B.skin(lathe([[0.036, -0.315], [0.037, -0.29], [0.039, -0.265], [0.042, -0.235]], 16), bareSkin, el, hd, 0.25, 0.29);
   }
-  const handL = buildHand(j.handL, 1, leather, skinTip, 1.08, bareSkin), handR = buildHand(j.handR, -1, leather, skinTip, 1.08, bareSkin);
+  const handL = buildHand(j.handL, 1, leather, skinTip, HAND_K, bareSkin), handR = buildHand(j.handR, -1, leather, skinTip, HAND_K, bareSkin);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
   // --- legs: leather trousers, engraved knee cops, tall boots with fur tops, straps and a steel toe
@@ -978,6 +981,9 @@ export function buildWarrior(): Model {
     const dir = st.moveDir ?? 1;
     const two = held?.off != null;
     twoHold.k = 0;
+    // (through the eyes the hands drawn larger, `EYES.hand`: the fists seat and close round their handles at that scale)
+    const handK = HAND_K * (fp ? EYES.hand : 1);
+    handL.vis.scale.setScalar(handK); handR.vis.scale.setScalar(handK);
 
     // base stance: weapon forward at the hip (a two-hander held across the body), shield up in front
     idle(j, t, 1 - move * 0.6);
@@ -1466,7 +1472,9 @@ export function buildWarrior(): Model {
       _va.lerpVectors(FP_TWO_AT, _va, vw); _vd.lerpVectors(FP_TWO_DIR, _vd.normalize(), vw);
       eyesTwo.apply(_va, _vd, dt);
       _vg.copy(_vd).normalize().multiplyScalar(-offGrip.position.y * root.scale.x).add(_va);
-      holdInView(ARM_R, _vg, _vd, FP_TWO_POLE, 1 - aw, FACE_EYES, lerp(1, viewFlat, vw));
+      // (at rest its flat as `restFlat` turns it, in a move broadside to the eyes)
+      _tf.fromArray(EYES.restFlat).normalize().lerp(FACE_EYES, vw).normalize();
+      holdInView(ARM_R, _vg, _vd, FP_TWO_POLE, 1 - aw, _tf, lerp(1, viewFlat, vw));
     }
     if (fp && !two && st.dead < 0) {
       // (at rest each blade is held low on its own side of the view, `oneRest`, a move's place over it by its weight:

@@ -8,7 +8,8 @@ import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
 import type { Joints } from '../../../src/entities/models/rig';
 import type { Lab, Fixture, Tile, ViewName } from './lab';
-import { describeParts, jointsByObject, meshesOf, type Look } from './looks';
+import { describeParts, jointsByObject, lensOf, meshesOf, type Look } from './looks';
+import { describeFramed, framed } from './inFrame';
 
 /** `lab live picture`'s options. */
 export interface LivePicture {
@@ -66,6 +67,9 @@ export async function picture(lab: Lab, options: LivePicture): Promise<LivePictu
   const notes = tiles.filter((tile) => tile.parts).map((tile) => {
     return `${tile.view}: ${describeParts(tile.parts!, PARTS_LISTED)}`;
   });
+  // (through the eyes, the weapon as they frame it: where it comes in, its tip and head, what it and the arm cover)
+  const seen = renderer.viewMode() === 'first' ? framed(lab) : null;
+  if (seen) notes.unshift(describeFramed(seen));
   const finished: Tile[] = [];
   for (const tile of tiles) finished.push(await finish(tile, options));
   const problems = options.canary ? partsCanary(lab, views, options.focus) : [];
@@ -197,9 +201,10 @@ interface Reach {
 function onScreen(object: THREE.Object3D): string {
   const reach: Reach = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity, seen: 0, behind: 0 };
   for (const mesh of meshesOf(object)) {
-    // (a crowd's instances are each somewhere else; a mesh on a layer the camera doesn't draw isn't seen)
-    if ((mesh as THREE.InstancedMesh).isInstancedMesh || !G.camera.layers.test(mesh.layers)) continue;
-    reachOf(mesh, reach);
+    // (a crowd's instances are each somewhere else; a mesh on a layer no camera draws isn't seen)
+    const lens = lensOf(mesh);
+    if ((mesh as THREE.InstancedMesh).isInstancedMesh || !lens) continue;
+    reachOf(mesh, lens, reach);
   }
   if (reach.seen === 0) return reach.behind ? 'behind the camera' : 'not drawn by the camera';
   const off = reach.left < 0 || reach.top < 0 || reach.right > 1 || reach.bottom > 1;
@@ -211,9 +216,8 @@ function onScreen(object: THREE.Object3D): string {
   return `on the screen ${across}, ${down}${past}${partly}`;
 }
 
-/** `reach` widened to `mesh`'s vertices on the screen, as posed (skinned) and drawn by the game's camera. */
-function reachOf(mesh: THREE.Mesh, reach: Reach): void {
-  const camera = G.camera;
+/** `reach` widened to `mesh`'s vertices on the screen, as posed (skinned) and drawn by `camera`. */
+function reachOf(mesh: THREE.Mesh, camera: THREE.Camera, reach: Reach): void {
   const point = new THREE.Vector3();
   const inView = new THREE.Vector3();
   const count = mesh.geometry.attributes.position.count;
