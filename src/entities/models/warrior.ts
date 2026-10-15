@@ -22,8 +22,9 @@ import { axe, greataxe, greatsword, mace, maul, sword, type WeaponMaterials } fr
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { groundHeight } from '../../world/ground';
 import { fromEyes, dirFromEyes, viewAt, ViewFade } from '../viewModel';
+import { tunable } from '../../core/tuning';
 import {
-  TWO_REST_AT, TWO_REST_DIR, TWO_FORE, TWO_BACK, ONE_FORE, ONE_BACK, CUT_FLAT, EYES_TURN, POWER_TWO, SMITE_TWO, POWER_ONE,
+  TWO_FORE, TWO_BACK, ONE_FORE, ONE_BACK, CUT_FLAT, EYES_TURN, POWER_TWO, SMITE_TWO, POWER_ONE,
   RECOVER_TWO, ONE_DOWN_AT, ONE_DOWN_DIR,
 } from './warriorEyes';
 import type { ActionState, AnimState, Fist, Gear, LowerGrip, Model } from '../../types';
@@ -64,6 +65,17 @@ const RUN_TWO_POLE = new THREE.Vector3(-1, -1, -0.2);
  *  it off at once, the move's own fade bringing it down */
 const SHOULDER_AT = new THREE.Vector3(-0.22, 0.14, 0.3), SHOULDER_DIR = new THREE.Vector3(0.06, 0.62, -0.78).normalize();
 const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHOULDER_RATE = 6;
+/** Through the eyes (tuned live in a dev build, `--tune warriorEyes.shoulder=...`): the right arm's shoulder in the
+ *  view (camera space, m: x right, y up, -z ahead; the left's mirrors it), low beside the camera, as a game's
+ *  first-person arms come up from the screen's bottom corners; a two-hander at rest there, as its moves are keyed
+ *  (`restAt`, the lower grip's place; `restDir`, the weapon's way: the whole of it in the frame, diagonal from the
+ *  bottom right towards the top, right of the crosshair) and where its right elbow points (`pole`, the chest's frame);
+ *  and a one-hander at rest (`oneAt`, its grip's place; `oneDir`, its way; a second blade's mirrors it) */
+const EYES = tunable('warriorEyes', {
+  shoulder: [0.22, -0.46, -0.25], restAt: [0.28, -0.42, -0.48], restDir: [-0.3, 0.7, -0.6], pole: [-1, -0.3, 0.3],
+  oneAt: [0.26, -0.22, -0.62], oneDir: [-0.2, 0.85, -0.5],
+});
+const _er = new THREE.Vector3(), _ed = new THREE.Vector3();
 /** how long the left hand takes to come onto the lower grip as a two-hander comes off the shoulder (s) */
 const TAKE_HOLD = 0.15;
 /** the way a shouldered weapon's flat faces, in the chest's frame: sideways, as a straight fist holds it, palm in and
@@ -589,7 +601,9 @@ export function buildWarrior(): Model {
    *  (down, so the forearm rises from the bottom of the view rather than lying across it). (Up and out at 45
    *  degrees, the handle ran along the left forearm, and a greataxe's and a maul's lower hand let go of it, the
    *  wrist 40 degrees past its range; upright it split the view, the heads out of the frame) */
-  const FP_TWO_AT = V(...TWO_REST_AT), FP_TWO_DIR = V(...TWO_REST_DIR).normalize(), FP_TWO_POLE = V(0, -1, 0);
+  /** where a two-hander rests through the eyes, as the moves there are keyed (the lower grip's place in the view, the
+   *  weapon's way: `EYES`, read each frame) */
+  const FP_TWO_AT = V(0, 0, 0), FP_TWO_DIR = V(0, 1, 0), FP_TWO_POLE = V(0, -1, 0);
   /** a blade's flat turned to the eyes (camera space): a cut seen broadside */
   const FACE_EYES = V(0, 0, 1);
   /** One-handed moves through the eyes, placed in the view (the right hand's grip and its blade's direction,
@@ -844,6 +858,27 @@ export function buildWarrior(): Model {
     }
   }
 
+  /** The shoulders' own places on the chest, and whether the eyes have moved them (`armsFromBelow`). */
+  const shoulderRest = [j.shoulderR.position.clone(), j.shoulderL.position.clone()];
+  let shouldersMoved = false;
+  /** Through the eyes, the arms' shoulders low beside and just behind the camera (`EYES.shoulder`), as a game's
+   *  first-person arms come up from the screen's bottom corners: an arm bends to what it holds wherever the eyes see
+   *  it, and its shoulder is never seen. Out of the eyes, back on the chest. (From the body's own shoulders, a weapon
+   *  held to be seen was at arm's length, "physically impossible", and one held as a body holds it was out of the
+   *  frame or a slab beside the face) */
+  function armsFromBelow(eyes: boolean): void {
+    if (!eyes) {
+      if (shouldersMoved) { j.shoulderR.position.copy(shoulderRest[0]); j.shoulderL.position.copy(shoulderRest[1]); }
+      shouldersMoved = false;
+      return;
+    }
+    root.updateMatrixWorld(true);
+    const [x, y, z] = EYES.shoulder;
+    j.shoulderR.position.copy(j.chest.worldToLocal(fromEyes(root, j.neck, _hw1.set(x, y, z), _hw2)));
+    j.shoulderL.position.copy(j.chest.worldToLocal(fromEyes(root, j.neck, _hw1.set(-x, y, z), _hw2)));
+    shouldersMoved = true;
+  }
+
   /** The weapon arm placed by a point and a way in the chest's own frame, by `k` from the pose's own: the grip at `at`,
    *  the weapon along `dir` (its flat facing `flat`, if given, `flatK` of the way), the arm reaching by IK with its
    *  elbow towards `pole` (third person's `holdInView`). */
@@ -1015,6 +1050,8 @@ export function buildWarrior(): Model {
     else takingHold = Math.max(0, takingHold - dt);
     shouldered = shoulderIt ? damp(shouldered, 1, SHOULDER_RATE, dt) : 0;
     lastName = raw?.name ?? ''; lastK = raw?.t ?? 1;
+    armsFromBelow(fp && st.dead < 0);
+    if (fp && two) { FP_TWO_AT.fromArray(EYES.restAt); FP_TWO_DIR.fromArray(EYES.restDir).normalize(); FP_TWO_POLE.fromArray(EYES.pole); }
     // Twin Fangs strikes right, then left (in step with skills/twinFangs STRIKES)
     const left = !!offHeld && ((a?.name === 'swing' && side < 0) || (a?.name === 'flurry' && a.t > 0.5));
     tipOn(left);
@@ -1389,6 +1426,12 @@ export function buildWarrior(): Model {
       holdInView(ARM_R, _vg, _vd, FP_TWO_POLE, 1 - aw, FACE_EYES, viewFlat);
     }
     if (fp && !two && st.dead < 0) {
+      // (at rest each blade is held low on its own side of the view, `EYES.oneAt`, a move's place over it by its weight:
+      // left to the stance's own angles, the arms' shoulders moved under the camera put the hilts under the frame)
+      _er.fromArray(EYES.oneAt); _ed.fromArray(EYES.oneDir).normalize();
+      if (held) { _ra.lerpVectors(_er, _ra, wR); _rd.lerpVectors(_ed, _rd.normalize(), wR); wR = 1; }
+      _er.x = -_er.x; _ed.x = -_ed.x;
+      if (offHeld) { _la.lerpVectors(_er, _la, wL); _ld.lerpVectors(_ed, _ld.normalize(), wL); wL = 1; }
       if (held && wR > 0) { eyesR.apply(_ra, _rd, dt); holdInView(ARM_R, _ra, _rd, POLE_VR, wR, FACE_EYES, flatR); }
       if (offHeld && wL > 0) { eyesL.apply(_la, _ld, dt); holdInView(ARM_L, _la, _ld, POLE_VL, wL, FACE_EYES, flatL); }
     }
