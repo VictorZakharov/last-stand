@@ -14,7 +14,7 @@ import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resol
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
 import { input, isDown, wasPressed } from '../core/input';
-import { flashHurt, addShake, cameraYaw, lookFacing, viewMode, viewSettled } from '../core/renderer';
+import { flashHurt, addShake, cameraYaw, lookFacing, viewMode, viewSettled, seenFromArms } from '../core/renderer';
 import { floatText } from '../ui/floaters';
 import { particles, col } from '../fx/particles';
 import { sfx } from '../core/audio';
@@ -332,9 +332,11 @@ export class Player {
   /** Still in the run, standing or downed (not banked or dead for good). */
   get inRun(): boolean { return !this.away && !this.out; }
 
-  // through the eyes, the weapon and hand in view: the model stays placed there until the next pose
+  // through the eyes, the weapon and hand in view: the model stays placed there until the next pose (and where arms
+  // drawn by a camera of their own show it, renderer.ts `seenFromArms`)
   get castPoint(): THREE.Vector3 {
-    return (this.model.tip ?? this.model.root).getWorldPosition(new THREE.Vector3());
+    const at = (this.model.tip ?? this.model.root).getWorldPosition(new THREE.Vector3());
+    return this.eyes ? seenFromArms(at, at) : at;
   }
 
   /** seen through its own eyes (the local player in first person): effects that start at the body show

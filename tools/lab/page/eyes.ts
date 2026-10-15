@@ -12,6 +12,7 @@ import { bindKnown, holdFor, pressing, skillNamed, type BoundSkill } from './cas
 import { bodyBreaches, describeBreach, farFromHeld, whyLetGo } from './range';
 import type { Fist, LowerGrip } from '../../../src/types';
 import type { Breach } from '../../../src/entities/models/anatomy';
+import { armsLens } from './inFrame';
 
 export interface EyesOptions {
   fixture: Fixture;
@@ -294,7 +295,8 @@ function spotOf(object: THREE.Object3D | THREE.Vector3): Spot {
   const world = object instanceof THREE.Vector3 ? object.clone() : object.getWorldPosition(new THREE.Vector3());
   const at = G.camera.worldToLocal(world.clone());
   const way = at.clone().normalize();
-  const ndc = world.project(G.camera);
+  // (where it's drawn: through the arms' own camera, if they have one)
+  const ndc = world.project(armsLens());
   const ahead = way.z < 0;
   const on = ahead && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1;
   const near = ahead && Math.abs(ndc.x) <= NEAR_FRAME && Math.abs(ndc.y) <= NEAR_FRAME;

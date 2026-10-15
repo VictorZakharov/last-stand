@@ -76,12 +76,14 @@ const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHO
  *  `oneDir`, its way, upright at the frame's right edge; a second blade's mirrors it), held from
  *  shoulders of their own (`oneShoulder`); and how far
  *  a fist may turn about its handle (rad, `roll`) for its arm to keep within a body's ranges, and what each degree of
- *  its wrist's bend costs it (armIK's `wristW`, `wrist`) (`fitInView`) */
+ *  its wrist's bend costs it (armIK's `wristW`, `wrist`) (`fitInView`); and the field of view the arms and weapons
+ *  are drawn with (`fov`, vertical degrees: a camera of their own, renderer.ts `drawArms`, narrower than the world's
+ *  66 as a game's first-person weapon's) */
 const EYES = tunable('warriorEyes', {
   shoulder: [0.22, -0.46, -0.25], restOn: [0.72, -1.8, 0.5], restDir: [0.1, 1, -0.45], pole: [-1, -0.3, 0.3],
   oneOn: [0.58, -1.3, 0.6], oneDir: [0.45, 1, -0.3], bladeOn: [0.76, -0.42, 0.5], bladeDir: [0.4, 1, -0.2],
   bladeFlat: [-0.7, 0, 0.7],
-  oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1,
+  oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1, fov: 45,
 });
 const _er = new THREE.Vector3(), _ed = new THREE.Vector3(), _ef = new THREE.Vector3();
 const _rf = new THREE.Vector3(), _lf = new THREE.Vector3();
@@ -1611,6 +1613,7 @@ export function buildWarrior(): Model {
     },
     reset: () => { legs.reset(); fade.reset(); },
     // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
+    armsFov: () => EYES.fov,
     firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on && gloved; mountAll(); },
     dispose() {
       kit.dispose();

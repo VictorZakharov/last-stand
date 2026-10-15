@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import type { Model } from '../types';
 import { curve, type Keys } from './models/motion';
+import { ARMS_LAYER, drawArms } from '../core/renderer';
 
 /** Where the camera sits against the neck, in the hero's space (x left, y up, z forward): just above
  *  it, so the shoulders stay below the view and the hands and weapon come into its lower part. */
@@ -14,7 +15,7 @@ const NECK_CAM = new THREE.Vector3(0, 0.25, 0.1);
 const TILT = -0.4;
 const HIDDEN = 1;
 
-const body = new WeakMap<Model, THREE.Object3D[]>();
+const body = new WeakMap<Model, THREE.Object3D[]>(), arms = new WeakMap<Model, THREE.Object3D[]>();
 const shown = new WeakSet<Model>();
 /** The pose's own placement of the root, and ours over it: a frame with no new pose (paused) starts again
  *  from the pose's, or the neck would be measured where we put the hero last time */
@@ -38,6 +39,17 @@ function bodyOf(m: Model): THREE.Object3D[] {
   const hideAll = (o: THREE.Object3D): void => o.traverse((c) => { if ((c as THREE.Mesh).isMesh) list!.push(c); });
   walk(m.root, false);
   body.set(m, list);
+  return list;
+}
+
+/** The meshes that are the arms (with the hands and what they hold): every one of the model's not its body's. */
+function armsOf(m: Model): THREE.Object3D[] {
+  let list = arms.get(m);
+  if (list) return list;
+  const hidden = new Set(bodyOf(m));
+  list = [];
+  m.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && !hidden.has(o)) list!.push(o); });
+  arms.set(m, list);
   return list;
 }
 
@@ -140,11 +152,15 @@ export function toEyes(d: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
 
 /** Show `m` through the camera's eyes (`on`), or as a whole body. Call after the camera has moved. */
 export function viewArms(m: Model, on: boolean, cam: THREE.Camera): void {
+  // (a model that has its arms drawn by their own camera has them on its layer, `armsFov`)
+  const ownCamera = on && !!m.armsFov;
   if (on !== shown.has(m)) {
     for (const o of bodyOf(m)) { if (on) o.layers.set(HIDDEN); else o.layers.set(0); }
+    for (const o of armsOf(m)) o.layers.set(ownCamera ? ARMS_LAYER : 0);
     if (on) shown.add(m); else shown.delete(m);
     m.firstPerson?.(on);
   }
+  drawArms(ownCamera ? m.armsFov!() : null);
   const root = m.root, parent = root.parent;
   let p = placed.get(m);
   if (p && p.ourPos.equals(root.position) && p.ourQuat.equals(root.quaternion)) { root.position.copy(p.pos); root.quaternion.copy(p.quat); }
@@ -156,7 +172,9 @@ export function viewArms(m: Model, on: boolean, cam: THREE.Camera): void {
   cam.getWorldQuaternion(_camInv).invert();
   if ((cam as THREE.PerspectiveCamera).isPerspectiveCamera) {
     const lens = cam as THREE.PerspectiveCamera;
-    halfUp = Math.tan((lens.fov * Math.PI) / 360) / lens.zoom;
+    // (the view the arms are drawn with: their own camera's, or the world's)
+    const fov = ownCamera ? m.armsFov!() : lens.fov;
+    halfUp = Math.tan((fov * Math.PI) / 360) / lens.zoom;
     halfAcross = halfUp * lens.aspect;
   }
   // the camera sits just above the neck, wherever the pose has taken it: the head rides the spine, so a

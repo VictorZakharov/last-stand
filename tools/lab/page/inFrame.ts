@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import type { Lab } from './lab';
 import { drawnSolid } from './onScreen';
 import { G } from '../../../src/state';
+import * as renderer from '../../../src/core/renderer';
 
 /** the grid of the eye's rays the cover is counted on, across and down */
 const GRID_ACROSS = 96;
@@ -49,10 +50,18 @@ export interface Framed {
 
 const sight = new THREE.Raycaster();
 
+/** The camera the hero's arms are drawn with: their own (renderer.ts `drawArms`), or the world's (an older tree's
+ *  has no other). What it shows of them is where they're seen: through the world's, a weapon drawn through a
+ *  narrower view of its own was measured where it isn't. */
+export function armsLens(): THREE.PerspectiveCamera {
+  return renderer.armsCamera?.() ?? (G.camera as THREE.PerspectiveCamera);
+}
+
 /** Where a point of the world is on the screen, and whether it's ahead of the camera. */
 function placeOf(world: THREE.Vector3): Place & { ahead: boolean } {
-  const ahead = G.camera.worldToLocal(world.clone()).z < 0;
-  const ndc = world.clone().project(G.camera);
+  const lens = armsLens();
+  const ahead = lens.worldToLocal(world.clone()).z < 0;
+  const ndc = world.clone().project(lens);
   return { x: (ndc.x + 1) / 2, y: (1 - ndc.y) / 2, ahead };
 }
 
@@ -65,7 +74,7 @@ function drawnUnder(root: THREE.Object3D, besides: THREE.Object3D[] = []): THREE
   const walk = (object: THREE.Object3D): void => {
     if (besides.includes(object)) return;
     const mesh = object as THREE.Mesh;
-    if (mesh.isMesh && mesh.layers.test(G.camera.layers) && drawnSolid(mesh)) meshes.push(mesh);
+    if (mesh.isMesh && mesh.layers.test(armsLens().layers) && drawnSolid(mesh)) meshes.push(mesh);
     for (const child of object.children) walk(child);
   };
   walk(root);
@@ -74,8 +83,9 @@ function drawnUnder(root: THREE.Object3D, besides: THREE.Object3D[] = []): THREE
 
 /** The first of `meshes` the eye's ray through `place` meets, if any. */
 function metAt(place: Place, meshes: THREE.Mesh[]): THREE.Intersection | undefined {
-  sight.layers.mask = G.camera.layers.mask;
-  sight.setFromCamera(new THREE.Vector2(place.x * 2 - 1, 1 - place.y * 2), G.camera);
+  const lens = armsLens();
+  sight.layers.mask = lens.layers.mask;
+  sight.setFromCamera(new THREE.Vector2(place.x * 2 - 1, 1 - place.y * 2), lens);
   return sight.intersectObjects(meshes, false)[0];
 }
 
@@ -90,7 +100,7 @@ function edgeOf(place: Place): Framed['edge'] {
 
 /** How wide `meshes` are drawn across the screen line `way` (aspect-corrected, normalized) at `at`. */
 function widthAt(at: Place, way: THREE.Vector2, meshes: THREE.Mesh[]): number {
-  const aspect = (G.camera as THREE.PerspectiveCamera).aspect;
+  const aspect = armsLens().aspect;
   // (square to the weapon's line on the screen, `n` a share of the frame's width; read in shares of its height, a
   // width came out the aspect times too wide)
   const across = new THREE.Vector2(-way.y, way.x);
@@ -141,7 +151,7 @@ export function framed(lab: Lab): Framed | null {
   if (seen.length < 2) return null;
   const first = seen[0];
   const last = seen[seen.length - 1];
-  const aspect = (G.camera as THREE.PerspectiveCamera).aspect;
+  const aspect = armsLens().aspect;
   const way = new THREE.Vector2((last.x - first.x) * aspect, first.y - last.y).normalize();
   const lean = (Math.atan2(Math.abs(way.x), way.y) * 180) / Math.PI;
   const out = Math.sign(way.x) === Math.sign(first.x - 0.5);

@@ -211,6 +211,84 @@ const rig = {
   fromFov: CAMERA.fov,
 };
 
+/**
+ * Through the eyes, a hero's arms and what they hold can be drawn on a layer of their own by a camera of their own
+ * (`drawArms`), placed as the world's but with a narrower view, over the frame the world drew, as games draw a
+ * first-person weapon: drawn through the world's 66 degrees (98 across on a wide screen), a weapon at the frame's edge
+ * leaned in towards the middle, and a fist near the camera looked huge. The world's lights light them too: every light
+ * is put on their layer as well when they're first drawn so (a light missing from their pass would change the lights'
+ * count, and every material they wear would compile again).
+ */
+export const ARMS_LAYER = 2;
+/** the arms camera's near and far planes (m): they're within reach */
+const ARMS_NEAR = 0.03, ARMS_FAR = 6;
+const armsCam = new THREE.PerspectiveCamera();
+armsCam.layers.set(ARMS_LAYER);
+/** the arms camera's field of view (vertical, degrees) while it draws them, none while the world's camera does */
+let armsFov: number | null = null;
+/** Whether the scene's lights are on the arms' layer yet. */
+let armsLit = false;
+
+/** The arms layer drawn by its own camera at `fov` (vertical, degrees) from this frame on, or no longer (null). */
+export function drawArms(fov: number | null): void {
+  if (fov !== null && !armsLit) {
+    G.scene.traverse((o) => { if ((o as THREE.Light).isLight) o.layers.enable(ARMS_LAYER); });
+    armsLit = true;
+  }
+  armsFov = fov;
+}
+
+/** The camera the arms are seen through this frame: their own while it draws them, else the world's. */
+export function armsCamera(): THREE.PerspectiveCamera {
+  if (armsFov === null) return G.camera as THREE.PerspectiveCamera;
+  placeArmsCamera();
+  return armsCam;
+}
+
+/** Where a point of what the arms hold (world, as posed) is seen in the world's view, into `out`: through their own
+ *  camera it shows where the world's shows a point as far ahead and as far across the view by the views' widths, so
+ *  what leaves from it (a skill cast from the weapon's tip) leaves where the weapon is seen. The point itself while the
+ *  world's camera draws the arms. */
+export function seenFromArms(p: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+  if (armsFov === null) return out.copy(p);
+  placeArmsCamera();
+  const cam = G.camera as THREE.PerspectiveCamera;
+  const k = Math.tan((cam.fov * Math.PI) / 360) / Math.tan((armsCam.fov * Math.PI) / 360);
+  const local = armsCam.worldToLocal(out.copy(p));
+  local.x *= k;
+  local.y *= k;
+  return armsCam.localToWorld(local);
+}
+
+/** The arms camera where the world's is, looking as it looks, its own view. */
+function placeArmsCamera(): void {
+  const cam = G.camera as THREE.PerspectiveCamera;
+  cam.updateMatrixWorld();
+  armsCam.position.copy(cam.position);
+  armsCam.quaternion.copy(cam.quaternion);
+  armsCam.aspect = cam.aspect;
+  armsCam.fov = armsFov ?? cam.fov;
+  armsCam.near = ARMS_NEAR;
+  armsCam.far = ARMS_FAR;
+  armsCam.updateProjectionMatrix();
+  armsCam.updateMatrixWorld();
+}
+
+/** Draws the arms layer over the world's frame in the bound target: its depth cleared first, so nothing of the world
+ *  goes through them; the world's shadows kept, not drawn again; nothing behind them (the scene's background). */
+function drawArmsOver(): void {
+  placeArmsCamera();
+  const autoClear = gl.autoClear, shadows = gl.shadowMap.autoUpdate, background = G.scene.background;
+  gl.autoClear = false;
+  gl.shadowMap.autoUpdate = false;
+  G.scene.background = null;
+  gl.clearDepth();
+  gl.render(G.scene, armsCam);
+  gl.autoClear = autoClear;
+  gl.shadowMap.autoUpdate = shadows;
+  G.scene.background = background;
+}
+
 /** top-down (the default), over the shoulder, or through the character's eyes */
 export type ViewMode = 'top' | 'third' | 'first';
 export const VIEWS: ViewMode[] = ['top', 'third', 'first'];
@@ -530,6 +608,7 @@ export function render(): void {
   gl.setRenderTarget(sceneRT);
   gpuMarks.mark('scene');
   gl.render(G.scene, G.camera);
+  if (armsFov !== null) { gpuMarks.mark('arms'); drawArmsOver(); }
   composer.render();
   gpuMarks.mark('overlay');
   overFrame.draw();
