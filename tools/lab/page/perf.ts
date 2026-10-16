@@ -18,6 +18,7 @@ import * as quality from '../../../src/core/quality';
 import * as renderer from '../../../src/core/renderer';
 import { G } from '../../../src/state';
 import { Player } from '../../../src/entities/player';
+import { heroDetail } from '../../../src/entities/models/armor';
 import { particles } from '../../../src/fx/particles';
 import { programsCompiledInGame } from '../../../src/core/shaders';
 import { bindKnown, foesAhead, holdFor, pressing, skillNamed } from './cast';
@@ -58,9 +59,10 @@ const CANARY_FRAMES = 60;
 /** the canary's costs: the hero's update made this much slower a frame (ms), and the scene drawn twice */
 const CANARY_MS = 2;
 /** the canary is seen when the hero's stage rises by this share of its planted ms at least, and the scene's GPU part
- *  by this many times its own */
+ *  by this many times its own (drawn twice, it read 1.56 times on a desktop: a pass that waits on the page's commands
+ *  grows by less than its draws) */
 const CANARY_SEEN = 0.8;
-const CANARY_GPU = 1.5;
+const CANARY_GPU = 1.3;
 /** the update's stages listed for a phase, the slowest first */
 const STAGES_LISTED = 5;
 
@@ -208,7 +210,8 @@ function frameLines(phase: Phase): string[] {
   });
 }
 
-/** What the screen and the quality draw: the canvas's pixels, the scene's, the level and its budget. */
+/** What the screen and the quality draw: the canvas's pixels, the scene's, the level, its budget and the hero's
+ *  detail. */
 function screenLine(): string {
   const canvas = G.renderer.getDrawingBufferSize(new THREE.Vector2());
   const scene = renderer.sceneSize(new THREE.Vector2());
@@ -216,7 +219,7 @@ function screenLine(): string {
     quality.qualityBudget(), 1))} Mpx` : '';
   return `the canvas ${canvas.x}x${canvas.y} (${megapixels(canvas)} Mpx) at ${G.renderer.getPixelRatio()}, the scene `
     + `${scene.x}x${scene.y} (${megapixels(scene)} Mpx) at ${renderer.sceneRatio().toFixed(2)}; quality `
-    + `${quality.qualityLevel()}${budget}`;
+    + `${quality.qualityLevel()}${budget}, the hero built at ${heroDetail()} of his detail`;
 }
 
 /** Each hero's update made `CANARY_MS` slower and the scene drawn twice; returns what puts them back. */
@@ -291,22 +294,34 @@ async function castPhases(lab: Lab, options: PerfOptions, aim: THREE.Vector3): P
   return { phases, uncast };
 }
 
+/**
+ * The quality `options` asks for put to use before the hero is set up, so he's built at its level's detail
+ * (`heroDetail`) as a device whose Auto settled on it builds him at boot; returns what puts the page's level back,
+ * the hero built again at its detail for the commands after.
+ */
+function atQuality(options: PerfOptions): (lab: Lab) => Promise<void> {
+  const level = quality.qualityLevel();
+  const budget = quality.qualityBudget();
+  if (options.quality) quality.useQuality(options.quality.level, options.quality.pixels ?? Infinity);
+  return async (lab) => {
+    if (!options.quality) return;
+    quality.useQuality(level, budget);
+    await lab.setup({ fresh: true });
+  };
+}
+
 /** Sets the page up as `options` asks for the measure; returns what puts it back. */
 async function measuring(lab: Lab, options: PerfOptions): Promise<() => Promise<void>> {
   const clock = perfHud.perfClock.now;
   const wasOn = perfHud.perfHudEnabled();
-  const level = quality.qualityLevel();
-  const budget = quality.qualityBudget();
   const drawing = lab.drawing;
   perfHud.perfClock.now = window.__labClock.realNow;
   perfHud.setPerfHud(true, false);
-  if (options.quality) quality.useQuality(options.quality.level, options.quality.pixels ?? Infinity);
   lab.drawing = true;
   if (options.throttle !== 1) await lab.throttle(options.throttle);
   return async () => {
     if (options.throttle !== 1) await lab.throttle(1);
     lab.drawing = drawing;
-    if (options.quality) quality.useQuality(level, budget);
     perfHud.setPerfHud(wasOn, false);
     perfHud.perfClock.now = clock;
   };
@@ -314,9 +329,19 @@ async function measuring(lab: Lab, options: PerfOptions): Promise<() => Promise<
 
 export async function perf(lab: Lab, options: PerfOptions): Promise<Report> {
   if (!timeable()) throw new Error('lab: perf: this game\'s perf overlay can\'t be timed by the browser\'s clock');
+  const backToQuality = atQuality(options);
+  try {
+    return await perfAtQuality(lab, options);
+  } finally {
+    await backToQuality(lab);
+  }
+}
+
+/** `perf` at the quality it asks for, put to use. */
+async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
   G.arena.restoreProps();
   const scenario = { biome: options.biome, view: options.view, facing: options.facing, gear: options.gear };
-  await standIn(lab, { ...scenario, at: options.at });
+  await standIn(lab, { ...scenario, at: options.at, fresh: Boolean(options.quality) });
   const hero = G.player;
   for (const wanted of options.casts) bindKnown(wanted);
   hero.cooldowns.clear();

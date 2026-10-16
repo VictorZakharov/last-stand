@@ -130,6 +130,8 @@ class Pool {
       i++;
     }
     this.points.geometry.setDrawRange(0, this.count);
+    // (not drawn while empty, a draw call of nothing; shown through the boot's warm-up, which runs no update)
+    this.points.visible = this.count > 0;
     // upload only the live particles, not the whole pool (a zero-length range would upload all of it)
     if (this.count) for (const a of this.attrs) { a.clearUpdateRanges(); a.addUpdateRange(0, this.count * a.itemSize); a.needsUpdate = true; }
     this.mat.uniforms.uScale.value = G.renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(G.camera.fov) / 2));

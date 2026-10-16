@@ -6,7 +6,8 @@ import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { groundHeight } from './ground';
 import { setAdaptScale } from '../core/renderer';
-import { bakeStaticShadows, type Biome, type BiomeBuilder } from './props';
+import { bakeStaticShadows, type Biome, type BiomeBuilder, type BiomeLook } from './props';
+import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { buildCrypt } from './crypt';
 import { buildForest } from './forest';
 import { restoreProps } from './destructible';
@@ -17,6 +18,15 @@ export type { Portal } from './props';
 const BUILDERS: Record<BiomeId, BiomeBuilder> = { crypt: buildCrypt, forest: buildForest };
 
 export type Arena = Awaited<ReturnType<typeof buildArena>>;
+
+/** The moon's shadow camera as it's placed for a biome's `look` (the box it draws round the middle). */
+function shadowCameraFor(moon: THREE.DirectionalLight, look: BiomeLook): THREE.OrthographicCamera {
+  const camera = moon.shadow.camera.clone();
+  camera.position.set(...look.moon.pos);
+  camera.lookAt(moon.target.position);
+  camera.updateProjectionMatrix();
+  return camera;
+}
 
 export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
   const hemi = new THREE.HemisphereLight();
@@ -29,6 +39,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   moon.shadow.bias = -0.0004;
   moon.shadow.normalBias = 0.03;
   scene.add(hemi, moon, moon.target);
+  cullWhileDrawn(scene, renderer);
   const fog = scene.fog = new THREE.Fog(0);
 
   const biomes = {} as Record<BiomeId, { group: THREE.Group; b: Biome }>;
@@ -40,6 +51,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     group.name = id;
     const b = BUILDERS[id](group, renderer);
     bakeStaticShadows(group);
+    trimShadowCasters(group, shadowCameraFor(moon, b.look));
     group.visible = false;
     scene.add(group);
     biomes[id] = { group, b };

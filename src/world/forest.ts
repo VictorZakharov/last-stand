@@ -9,6 +9,7 @@ import { forestFloor, bark, slabs, grunge, pbrMaterialMaps, runeCircle } from '.
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
 import { buildDaySky, boxWithUV, buildEnvMap, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type TuftColours, type Updater } from './props';
+import { cullInCells, eachInstance, gridCell, ringSector } from './culling';
 import { growTree, REACH_BANDS, type Grow } from './ezTrees';
 import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
 import { bend, rag, taperTube, twist } from '../entities/models/shapes';
@@ -23,6 +24,10 @@ const SUN = new THREE.Vector3(-18, 40, 14);
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 /** angular distance from `a` to the nearest spawn gate */
 const gateGap = (a: number) => Math.min(...GATES.map((g) => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g)))));
+
+/** the cells the instanced meshes are culled by (`world/culling.ts`): the thicket's slices of the ring, and the squares
+ *  the grass and ferns are spread over (each cell a sphere tested a frame; the trees are culled one by one) */
+const THICKET_CELLS = ringSector(48), FLOOR_CELLS = gridCell(8);
 
 /** the forest floor's maps' repeat over the ground (110 m round) */
 const FLOOR_REPEAT = 44;
@@ -204,7 +209,8 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   }
   bushes.count = bushCards.count = bi; rocks.count = ri;
   bushes.receiveShadow = bushCards.castShadow = bushCards.receiveShadow = rocks.castShadow = rocks.receiveShadow = true;
-  scene.add(bushes, bushCards, rocks);
+  bushes.name = 'thicket'; bushCards.name = 'thicket leaves'; rocks.name = 'thicket rocks';
+  for (const mesh of [bushes, bushCards, rocks]) scene.add(...cullInCells(mesh, THICKET_CELLS));
 
   // trees: short near the clearing (they'd hide the player at the edge), taller further out; a few kinds grown by
   // ez-tree, each instanced, and the ancient giants among them
@@ -248,7 +254,9 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   kinds.forEach((_, k) => {
     barks[k].count = leaves[k].count = used[k];
     barks[k].castShadow = barks[k].receiveShadow = leaves[k].castShadow = leaves[k].receiveShadow = true;
-    scene.add(barks[k], leaves[k]);
+    barks[k].name = `trees' bark: ${TREE_KINDS[k].preset}`;
+    leaves[k].name = `trees' leaves: ${TREE_KINDS[k].preset}`;
+    for (const mesh of [barks[k], leaves[k]]) scene.add(...cullInCells(mesh, eachInstance));
   });
 
   // --- Gates: arches of twisted roots around a green portal -----------------------
@@ -333,7 +341,8 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   tufts.forEach((tuft, kind) => {
     tuft.count = placed[kind];
     tuft.receiveShadow = true;
-    scene.add(tuft);
+    tuft.name = `grass ${kind + 1}`;
+    scene.add(...cullInCells(tuft, FLOOR_CELLS));
   });
 
   const shroomN = 70;
@@ -377,7 +386,8 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
   }
   ferns.count = fi;
   ferns.receiveShadow = true;
-  scene.add(ferns);
+  ferns.name = 'ferns';
+  scene.add(...cullInCells(ferns, FLOOR_CELLS));
 
   // roots snaking out of the thicket across the floor, half sunk in it
   const roots: THREE.BufferGeometry[] = [];

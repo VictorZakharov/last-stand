@@ -1,13 +1,15 @@
 // `lab draws`: one frame's draw calls, by what drew them (tools/lab). The crowd of foes `crowd` times stands before the
 // hero in the biome and view the set-up asks for, and one frame is drawn with each of the renderer's draw calls
 // recorded: the pass it was in (the scene's, the shadow map's, the frame's post and overlays), the geometry and the
-// material it drew. Three lists: the geometries drawn most often (one drawn many times a frame, a fern or a rock, is
+// material it drew. Its lists: the geometries drawn most often (one drawn many times a frame, a fern or a rock, is
 // one an instanced mesh would draw once), the geometries that drew the most triangles (what the GPU's vertices cost),
 // and the scene's draws by their material's look (draws of one look, a merge of what doesn't move would make one).
 // And the triangles drawn for nothing: an instanced mesh's instances outside the view of the pass that drew them (the
 // camera's, or the shadow map's box), as three.js culls an instanced mesh only whole, by the sphere round all of it.
-// `--canary` stands seven boxes of one geometry before the hero, which must come out as seven draws of it, and seven
-// instanced boxes, four of them far behind the camera, which must come out as four drawn outside the view.
+// And the draws that drew nothing: an instanced mesh of no instances, a geometry of nothing in its range, each the
+// renderer's work for a draw on the CPU. `--canary` stands seven boxes of one geometry before the hero, which must
+// come out as seven draws of it, seven instanced boxes, four of them far behind the camera, which must come out as
+// four drawn outside the view, and an instanced mesh of none, which must come out as a draw of nothing.
 import * as THREE from 'three';
 import type { Lab, Fixture, Report } from './lab';
 import { G } from '../../../src/state';
@@ -34,10 +36,12 @@ const CANARY_AWAY = 500;
 type Pass = 'scene' | 'shadow' | 'other';
 const PASSES: Pass[] = ['scene', 'shadow', 'other'];
 
-/** What one geometry cost the frame: its draws in each pass, the triangles each drew, those of them outside the view
- *  of the pass that drew them, in each pass, and what drew it. */
+/** What one geometry cost the frame: its draws in each pass, the vertices and triangles each drew, those of them
+ *  outside the view of the pass that drew them, in each pass, and what drew it. */
 interface Drawn {
+  geometry: THREE.BufferGeometry;
   draws: Record<Pass, number>;
+  vertices: number;
   triangles: number;
   off: Record<Pass, number>;
   objects: Set<THREE.Object3D>;
@@ -57,16 +61,21 @@ interface FrameDraws {
   looks: Map<string, Look>;
 }
 
-/** The triangles a draw of `geometry` (by `object`) drew: its range, times its instances. */
-function trianglesOf(geometry: THREE.BufferGeometry, object: THREE.Object3D): number {
-  if (!(object as THREE.Mesh).isMesh) return 0;
+/** The vertices a draw of `geometry` (by `object`) ran: its range, times its instances. */
+function verticesOf(geometry: THREE.BufferGeometry, object: THREE.Object3D): number {
   const vertices = geometry.index ? geometry.index.count : geometry.attributes.position?.count ?? 0;
   const range = Math.min(vertices, geometry.drawRange.count);
   const instanced = object as THREE.InstancedMesh;
   const shared = geometry as THREE.InstancedBufferGeometry;
   const instances = instanced.isInstancedMesh ? instanced.count
     : shared.isInstancedBufferGeometry ? shared.instanceCount : 1;
-  return Math.floor(range / 3) * instances;
+  return range * instances;
+}
+
+/** The triangles a draw of `geometry` (by `object`) drew: none but a mesh's (a point or a line is none). */
+function trianglesOf(geometry: THREE.BufferGeometry, object: THREE.Object3D): number {
+  if (!(object as THREE.Mesh).isMesh) return 0;
+  return Math.floor(verticesOf(geometry, object) / 3);
 }
 
 const _frustum = new THREE.Frustum();
@@ -108,10 +117,12 @@ function recordDraws(): { record: FrameDraws; stop(): void } {
     let drawn = record.geometries.get(geometry);
     if (!drawn) {
       const none = { scene: 0, shadow: 0, other: 0 };
-      drawn = { draws: { ...none }, triangles: 0, off: { ...none }, objects: new Set(), material, object };
+      drawn = { geometry, draws: { ...none }, vertices: 0, triangles: 0, off: { ...none }, objects: new Set(), material,
+        object };
       record.geometries.set(geometry, drawn);
     }
     drawn.draws[pass]++;
+    drawn.vertices = verticesOf(geometry, object);
     drawn.triangles = trianglesOf(geometry, object);
     const instances = (object as THREE.InstancedMesh).count;
     if (instances) drawn.off[pass] += (instancesOff(object, geometry, camera) * drawn.triangles) / instances;
@@ -161,8 +172,39 @@ function offRow(drawn: Drawn): string {
     + `${drawn.object.type} in ${placeOf(drawn.object)}`;
 }
 
+/** Whether a geometry's draws drew nothing in the scene or its shadows (a draw after them, a full-screen pass's, is
+ *  one triangle). */
+const drewNothing = (drawn: Drawn): boolean => drawn.vertices === 0 && drawn.draws.scene + drawn.draws.shadow > 0;
+
+/** Why a draw of `drawn` drew nothing: an instanced mesh holding no instance, or its geometry's range empty. */
+function nothingWhy(drawn: Drawn): string {
+  const instanced = drawn.object as THREE.InstancedMesh;
+  const shared = drawn.geometry as THREE.InstancedBufferGeometry;
+  const empty = instanced.isInstancedMesh ? instanced.count === 0
+    : shared.isInstancedBufferGeometry && shared.instanceCount === 0;
+  return `${drawn.geometry.type}, ${empty ? 'no instances' : 'nothing in its range'}`;
+}
+
+/** The draws that drew nothing, alike ones together: their draws (each pass's), how many geometries, why, the
+ *  material and what drew them. */
+function nothingRows(geometries: Drawn[], rows: number): string[] {
+  const alike = new Map<string, { draws: Record<Pass, number>; geometries: number }>();
+  for (const drawn of geometries.filter(drewNothing)) {
+    const key = `${nothingWhy(drawn)}  ${lookOf(drawn.material)}  ${drawn.object.type} in ${placeOf(drawn.object)}`;
+    const sum = alike.get(key) ?? { draws: { scene: 0, shadow: 0, other: 0 }, geometries: 0 };
+    for (const pass of PASSES) sum.draws[pass] += drawn.draws[pass];
+    sum.geometries++;
+    alike.set(key, sum);
+  }
+  const draws = (sum: { draws: Record<Pass, number> }) => sum.draws.scene + sum.draws.shadow + sum.draws.other;
+  return [...alike].sort((a, b) => draws(b[1]) - draws(a[1])).slice(0, rows).map(([key, sum]) => {
+    const passes = PASSES.filter((pass) => sum.draws[pass]).map((pass) => `${sum.draws[pass]} ${pass}`).join(', ');
+    return `  ${String(draws(sum)).padStart(4)} (${passes}), ${sum.geometries} geometries  ${key}`;
+  });
+}
+
 /** The lists: the geometries drawn most often, those that drew the most triangles, those that drew the most outside
- *  the view, and the scene's looks. */
+ *  the view, the draws that drew nothing, and the scene's looks. */
 function lists(record: FrameDraws, rows: number): string[] {
   const geometries = [...record.geometries.values()];
   const often = [...geometries].sort((a, b) => drawsOf(b) - drawsOf(a)).slice(0, rows).map(geometryRow);
@@ -176,20 +218,25 @@ function lists(record: FrameDraws, rows: number): string[] {
     'the geometries that drew the most triangles:', ...heavy,
     'the geometries that drew the most triangles outside the view (an instanced mesh\'s instances beyond the camera '
       + 'of the pass that drew them, the scene\'s or the shadow map\'s):', ...unseen,
+    'the draws that drew nothing (the renderer\'s work for a draw each, on the CPU: an instanced mesh of none never '
+      + 'reaches the GPU, and the perf overlay counts no draw of it), alike ones together:',
+    ...nothingRows(geometries, rows),
     'the scene\'s draws by their material\'s look:', ...looks,
   ];
 }
 
-/** The frame's draws in each pass, and its triangles in the scene and shadows, and of them outside the view. */
+/** The frame's draws in each pass, those that drew nothing, and its triangles in the scene and shadows, and of them
+ *  outside the view. */
 function totalsOf(record: FrameDraws): string {
-  const sum = { scene: 0, shadow: 0, other: 0, triangles: 0, off: 0 };
+  const sum = { scene: 0, shadow: 0, other: 0, nothing: 0, triangles: 0, off: 0 };
   for (const drawn of record.geometries.values()) {
     for (const pass of PASSES) sum[pass] += drawn.draws[pass];
+    if (drewNothing(drawn)) sum.nothing += drawsOf(drawn);
     sum.triangles += trianglesIn(drawn);
     sum.off += offIn(drawn);
   }
-  return `${sum.scene} draws in the scene, ${sum.shadow} in its shadow map, ${sum.other} after it; `
-    + `${sum.triangles} triangles in the scene and shadows, ${sum.off} of them outside the view; `
+  return `${sum.scene} draws in the scene, ${sum.shadow} in its shadow map, ${sum.other} after it, ${sum.nothing} `
+    + `of them of nothing; ${sum.triangles} triangles in the scene and shadows, ${sum.off} of them outside the view; `
     + `${record.geometries.size} geometries`;
 }
 
@@ -230,11 +277,19 @@ function plantBoxes(): () => void {
     instanced.setMatrixAt(i, new THREE.Matrix4().makeTranslation(at.x, at.y, at.z));
   }
   G.scene.add(instanced);
+  // (drawn though it holds none: three culls an instanced mesh of none by its empty sphere)
+  const emptyGeometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+  const empty = new THREE.InstancedMesh(emptyGeometry, material, 1);
+  empty.name = 'canary of nothing';
+  empty.count = 0;
+  empty.frustumCulled = false;
+  G.scene.add(empty);
   return () => {
     for (const box of boxes) G.scene.remove(box);
-    G.scene.remove(instanced);
+    G.scene.remove(instanced, empty);
     geometry.dispose();
     instancedGeometry.dispose();
+    emptyGeometry.dispose();
     material.dispose();
   };
 }
@@ -252,7 +307,12 @@ function canaryProblems(record: FrameDraws): string[] {
   const perBox = instanced ? instanced.triangles / CANARY_BOXES : 0;
   const offScene = instanced && perBox ? Math.round(instanced.off.scene / perBox) : 0;
   if (offScene !== CANARY_OFF) {
-    problems.push(`the canary's ${CANARY_OFF} instanced boxes behind the camera came out as ${offScene} outside the view`);
+    problems.push(`the canary's ${CANARY_OFF} instanced boxes behind the camera came out as ${offScene} outside `
+      + 'the view');
+  }
+  const empty = geometries.find((drawn) => drawn.object.name === 'canary of nothing');
+  if (!empty || !drewNothing(empty) || !nothingWhy(empty).endsWith('no instances')) {
+    problems.push('the canary\'s instanced mesh of no instances didn\'t come out as a draw of nothing');
   }
   return problems;
 }
@@ -289,8 +349,8 @@ export async function draws(lab: Lab, options: DrawsOptions): Promise<Report> {
     unplant();
   }
   const foes = `${count} ${count === 1 ? 'foe' : 'foes'}`;
-  const head = `${G.player.cls.id}, ${foes}, ${G.arena.biome}, ${options.fixture.view ?? 'top'} view: ${totalsOf(record)}`
-    + `; ${objectsOf()}`;
+  const view = options.fixture.view ?? 'top';
+  const head = `${G.player.cls.id}, ${foes}, ${G.arena.biome}, ${view} view: ${totalsOf(record)}; ${objectsOf()}`;
   const problems = options.canary ? canaryProblems(record) : [];
   return { text: [head, ...lists(record, options.rows ?? ROWS)].join('\n'), problems };
 }

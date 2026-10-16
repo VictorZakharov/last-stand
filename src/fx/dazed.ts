@@ -92,6 +92,8 @@ export const dazedField = {
   /** this frame's stars drawn, the next frame's set afresh */
   update(): void {
     geo.setDrawRange(0, count);
+    // (not drawn while there are none, a draw call of nothing; shown through the boot's warm-up, which runs no update)
+    points.visible = count > 0;
     if (count) for (const a of attrs) { a.clearUpdateRanges(); a.addUpdateRange(0, count * a.itemSize); a.needsUpdate = true; }
     mat.uniforms.uScale.value = G.renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(G.camera.fov) / 2));
     count = 0;

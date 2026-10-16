@@ -39,7 +39,8 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `cast`: a skill cast as the player casts it, its effect seen frame by frame (each biome and view with the biome's foes coming at him, every frame drawn and read back: its light against the budget, the frame's mean every tenth of a second, the flashes in any second and the worst cell's light through it, the shaders compiled late)
 - `death`: each skill's kills as they fall (foes stood dazed where it strikes, a hair from death and with little to spare: how hard each body was thrown and which way, how far it flew, when it lay still; its drawn pose against the floor, the props, the wall and its points)
 - `crowd`: a crowd of foes killed at once and what the frame costs as they fall (each frame timed by the browser's clock with the game drawn, the bodies' part apart, at each CPU slowdown, as a low-end device's, and frame rate)
-- `draws`: one frame's draw calls with the crowd standing, by what drew them (the geometries drawn most often, those that drew the most triangles, the scene's draws by their material's look; the scene's objects whose matrices are made again each frame)
+- `draws`: one frame's draw calls with the crowd standing, by what drew them (the geometries drawn most often, those that drew the most triangles, the triangles drawn outside the view of the pass that drew them, the draws that drew nothing, the scene's draws by their material's look; the scene's objects whose matrices are made again each frame)
+- `perf <skills>`: skills cast in turn with the biome's foes coming, every frame timed as the game's performance report times it (the frame, the update by stage, the render, the GPU by pass, the draws and triangles), on a phone's screen, quality and CPU if asked
 - `gear`: full sets of gear rolled for every class at each tier (the Health, regeneration and draught they give, and the damage they multiply)
 - `weapons`: each of the hero's weapons alone in a lit studio (face on, edge on, from behind, from three-quarters and its head close up, with its size and its triangles)
 - `hands`: the hero's right hand alone in the studio, flat, open, relaxed, in a fist and round a handle, from each side and close up (its size against a man's, its triangles, where it was sculpted)
@@ -407,13 +408,39 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   desktop.
 - `draws`: one frame's draw calls (`page/draws.ts`), the crowd `crowd` times standing before the hero (`--count`, 38
   by default; 0 for none) in the biome and view the set-up asks for, each of the renderer's draw calls recorded with
-  its pass (the scene's, its shadow map's, the post and overlays after it), its geometry and its material. Three lists
+  its pass (the scene's, its shadow map's, the post and overlays after it), its geometry and its material. Its lists
   (`--rows` each, 16 by default): the geometries drawn most often (one drawn many times a frame is one an instanced
   mesh would draw once), the geometries that drew the most triangles (the GPU's vertices: 38 mossbacks are about half
-  of a forest frame's 2.5 million), and the scene's draws by their material's look (draws of one look, a merge of what
-  doesn't move would make one). Its head line says the scene's objects whose matrices are made again each frame, and
-  how many of them are off the camera's layer (a crowd's bodies' own meshes). `--canary` stands seven boxes of one
-  geometry before the hero, which must come out as seven draws of it.
+  of a forest frame's 2.5 million), the triangles drawn outside the view of the pass that drew them (an instanced
+  mesh's instances, each by its own sphere, beyond the scene's camera or the shadow map's box: three culls an
+  instanced mesh only whole, and half the forest's top view was such until `world/culling.ts`), the draws that drew
+  nothing, alike ones together, saying why (an instanced mesh of no instances, a range of nothing: the renderer's work
+  for a draw each on the CPU, though an instanced mesh of none never reaches the GPU, so the perf overlay's count,
+  which counts GL draws, leaves them out; the rubble's empty pools were 46 a frame), and the scene's draws by their
+  material's look (draws of one look, a merge of what doesn't move would make one). Its head line says the draws in
+  each pass and how many drew nothing, the triangles and how many lay outside the view, the scene's objects whose
+  matrices are made again each frame, and how many of them are off the camera's layer (a crowd's bodies' own meshes).
+  `--canary` stands seven boxes of one geometry before the hero, which must come out as seven draws of it, seven
+  instanced boxes, four far behind the camera, which must come out as four outside the view, and an instanced mesh of
+  none, which must come out as a draw of nothing.
+- `perf <skills>`: skills cast in turn as the player casts them (`page/perf.ts`; `maelstrom,glacialNova`), the
+  biome's foes coming at the hero (`--foes`, 10), every frame timed as the game's performance report times it
+  (`ui/perfHud.ts`, on the browser's clock: `perfClock`) and summed by phase: standing (60 frames), then from each
+  press (`--apart` s, 1) to the next, the last to `--after` s (4). Each frame is timed whole by the browser's clock,
+  drawn and waited out on the GPU (`gl.finish`), then a task yielded (the GPU's timer queries come back only then);
+  each phase says the frame, the page's work (the update by stage, the render), the GPU whole and by pass (where the
+  browser times it, `EXT_disjoint_timer_query_webgl2`), the draws (the GL draws, as the overlay counts them) and
+  triangles; `--frames` lists every frame. `--biome` (forest), `--view` (top), `--facing`, `--at`, `--gear`. Run it
+  on a phone's screen, quality and CPU: `--screen 832x384@3.75 --quality low@518400 --throttle 4` (#243's phone; the
+  quality is a level and the most pixels Auto lets the scene render, put to use before the set-up, so the hero is
+  built at the level's detail as a device whose Auto settled on it builds him at boot, and built again at the page's
+  after). Read the GPU at `--throttle 1` alone: a slowed CPU feeds the GPU slowly, and a pass's time runs from its
+  start to its end, its waits for the page's commands with it; on a desktop the scene pass's GPU time often matches
+  the render's CPU time, as the GPU waits on it, so a triangle cut shows smaller there than on a phone whose GPU sets
+  the pace. A cast pressed and never made, a shader compiled while it was timed, and frames all read 0 ms are
+  problems. `--canary` runs a round with the hero's update made 2 ms slower (it must read at least 0.8 of that) and
+  the scene drawn twice (the scene pass's GPU time must read at least 1.3 times more). The machine's load drifts:
+  compare an A/B run `--fresh`, both sides then, not one side from the cache and the other now.
 - `weapons`: each of the hero's weapons alone (`page/weapons.ts`; `--weapons Sword,Maul`, the class's bases by
   default): a copy of the one in his right hand, at its own frame (unturned in the fist), put in a plain, lit
   studio of its own and pictured face on (a blade's flat, an axe's bit to the side), edge on, from behind (a face

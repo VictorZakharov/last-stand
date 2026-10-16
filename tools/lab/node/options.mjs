@@ -426,7 +426,8 @@ export const COMMANDS = {
         kind: 'text',
         usage: 'level[@pixels]',
         help: 'the quality level (high, medium, low) and the most pixels the scene renders, as Auto settles on them '
-          + '(low@518400: a phone\'s, Auto at its lowest; as the page has it by default)',
+          + '(low@518400: a phone\'s, Auto at its lowest; as the page has it by default), put to use before the '
+          + 'set-up, the hero built at its detail',
       },
       throttle: { kind: 'number', usage: 'n', help: 'the CPU this many times slower (1 by default; 4: a phone\'s)' },
       frames: { kind: 'switch', help: 'list every frame: its time, the page\'s work by stage, what it drew' },
