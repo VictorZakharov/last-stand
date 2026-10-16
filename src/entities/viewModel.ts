@@ -69,6 +69,16 @@ export function fromEyes(root: THREE.Object3D, neck: THREE.Object3D, p: THREE.Ve
 export function dirFromEyes(root: THREE.Object3D, d: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
   return out.copy(d).applyQuaternion(_r).transformDirection(root.matrixWorld);
 }
+const _rInv = _r.clone().invert(), _rootInv = new THREE.Matrix4();
+/** Where a point of the model's world (as posed so far) will be in the eyes' view: `fromEyes` undone */
+export function intoEyes(root: THREE.Object3D, neck: THREE.Object3D, p: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+  root.worldToLocal(neck.getWorldPosition(_eye)).add(NECK_CAM);
+  return root.worldToLocal(out.copy(p)).sub(_eye).multiplyScalar(root.scale.x).applyQuaternion(_rInv);
+}
+/** A direction of the model's world in the eyes' view: `dirFromEyes` undone */
+export function dirIntoEyes(root: THREE.Object3D, d: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+  return out.copy(d).transformDirection(_rootInv.copy(root.matrixWorld).invert()).applyQuaternion(_rInv);
+}
 /** A key of a move through the eyes: its share of the move, the grip's place in the view and the weapon's way there
  *  (camera space, as `fromEyes`). */
 export type ViewKey = readonly [k: number, at: readonly number[], dir: readonly number[]];
@@ -178,6 +188,17 @@ export class ViewFade {
     this.hold = hold;
     this.primed = true;
     return hold;
+  }
+
+  /** where the weapon was drawn this frame (`at`, `dir`, `flat`, as `apply` takes them) when the view didn't hold it
+   *  all the way (a move posed in the hero's own space took its arm over: Steel Tempest's spin), for the next cut to
+   *  fade from: faded from where it was asked to be and never reached, as the spin ended a one-hander leapt 53 cm in a
+   *  frame, a two-hander 2.7 m (#249) */
+  shown(at: THREE.Vector3, dir: THREE.Vector3, flat: THREE.Vector3): void {
+    this.at.copy(at);
+    this.dir.copy(dir).normalize();
+    this.flat.copy(flat);
+    this.primed = true;
   }
 
   /** nothing placed this frame: the next cut does nothing */

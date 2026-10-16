@@ -22,7 +22,7 @@ import { axe, greataxe, greatsword, mace, maul, sword, STRIKES_WITH, type Weapon
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { groundHeight } from '../../world/ground';
 import {
-  fromEyes, dirFromEyes, fromScreen, viewAt, turnTowards, ViewFade,
+  fromEyes, dirFromEyes, intoEyes, dirIntoEyes, fromScreen, viewAt, turnTowards, ViewFade,
 } from '../viewModel';
 import { swingAt, swingShoulder, turnWithTrunk, type ArmBones } from '../viewSwing';
 import { tunable } from '../../core/tuning';
@@ -89,11 +89,16 @@ const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHO
  *  its wrist's bend costs it (armIK's `wristW`, `wrist`) (`fitInView`); and the field of view the arms and weapons
  *  are drawn with (`fov`, vertical degrees: a camera of their own, renderer.ts `drawArms`, narrower than the world's
  *  66 as a game's first-person weapon's), and how much larger the hands are drawn there (`hand`, times `HAND_K`: a
- *  first-person fist is drawn large, as Vermintide 2's are) */
+ *  first-person fist is drawn large, as Vermintide 2's are); and a one-hander held out through Steel Tempest's spin
+ *  (`spinOn`, `spinDir`, `spinFlat`, as `oneOn`'s: out to the side at the hip, the blade out and down, its flat up
+ *  so its edge leads the turn), carried round as the body turns (`carryRound`): under the frame as it comes past
+ *  the eyes, its head glimpsed at the bottom edge (come round 2.4 times a second, held across the view, the steel lit
+ *  the crypt's lower right 3 times a second, a flash hazard: lab cast) */
 const EYES = tunable('warriorEyes', {
   shoulder: [0.22, -0.46, -0.25], restOn: [0.64, -2.8, 0.42], restDir: [0.7, 1, -1.2], pole: [-1, -0.3, 0.3],
   oneOn: [0.58, -1.3, 0.6], oneDir: [0.43, 0.5, -0.39], bladeOn: [0.6, -0.42, 0.8], bladeDir: [0.62, 1, -0.5],
   bladeFlat: [-0.45, 0, 0.9], oneFlat: [-1, 0, 0.2], restFlat: [-0.44, 0.77, 0.51],
+  spinOn: [0.75, -3.2, 0.42], spinDir: [0.9, -0.35, -0.3], spinFlat: [-0.35, 0.9, 0],
   oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1, fov: 45, hand: 1.35,
 });
 /** the hands' scale (`buildHand`'s `k`) */
@@ -136,6 +141,14 @@ function oneRest(w: Weapon, on: THREE.Vector3, way: THREE.Vector3, flat: THREE.V
   fromScreen(blade ? EYES.bladeOn : EYES.oneOn, on);
   way.fromArray(blade ? EYES.bladeDir : EYES.oneDir).normalize();
   flat.fromArray(blade ? EYES.bladeFlat : EYES.oneFlat).normalize();
+  return 1;
+}
+/** A one-hander's hold through Steel Tempest's spin, as `oneRest` (its place, way and flat in the view as the body
+ *  faces ahead: carried round from there). */
+function spinRest(_w: Weapon, on: THREE.Vector3, way: THREE.Vector3, flat: THREE.Vector3): number {
+  fromScreen(EYES.spinOn, on);
+  way.fromArray(EYES.spinDir).normalize();
+  flat.fromArray(EYES.spinFlat).normalize();
   return 1;
 }
 const _fw = [0, 1, 2, 3, 4, 5].map(() => new THREE.Vector3()), _fwq = new THREE.Quaternion();
@@ -217,6 +230,10 @@ const TWO_OUT = 0.45, ONE_OUT = 0.3, OUT_REST = 0.2;
 /** Through the eyes, how long a dual wielder's cut takes to come from where its hand was, and its other hand to go
  *  back to rest from where its own cut left it (s) */
 const DUAL_BEGIN = 0.08, DUAL_BACK = 0.22;
+/** Through the eyes, how long a one-hander takes back to its rest out of Steel Tempest's spin (s): a body settling out
+ *  of a second's spin, slower than out of a cut (as fast, 0.3 s, its blade swept up through the view at 15 m/s, as
+ *  fast as a blow and unlit, after the trail) */
+const SPIN_BACK = 0.45;
 /** Through the eyes, how far below its rest a one-handed weapon's hand going back to it from a cut aims as it starts
  *  (m, and how far its weapon is turned down, rad): a fade's straight line taken down under the frame, by as much
  *  less as it's come (a quarter of it halfway). Faded straight from where a dual wielder's cut left it, low on the far
@@ -994,6 +1011,34 @@ export function buildWarrior(): Model {
     }
   }
 
+  const _dv = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  /** Where the weapon in grip `g` is drawn in the view (its grip's place, its way and its flat, as `holdInView` takes
+   *  them), told to `fade` for its next cut to fade from. */
+  function drawnInView(fade: ViewFade, g: THREE.Object3D): void {
+    root.updateMatrixWorld(true);
+    intoEyes(root, j.neck, g.getWorldPosition(_cur), _dv[0]);
+    dirIntoEyes(root, _cur.set(0, 1, 0).transformDirection(g.matrixWorld), _dv[1]);
+    dirIntoEyes(root, _cur.copy(FLAT_IN_GRIP).applyQuaternion(g.getWorldQuaternion(_pq)), _dv[2]);
+    fade.shown(_dv[0], _dv[1], _dv[2]);
+  }
+
+  const _fwd = new THREE.Vector3(), _ax = new THREE.Vector3(), _pv = new THREE.Vector3();
+  /** How far the body is turned about its own up (rad, as drawn: the pose's fade turns it back the short way). Steel
+   *  Tempest's spin alone turns it. */
+  function turnOfBody(): number {
+    _fwd.set(0, 0, 1).applyQuaternion(j.body.quaternion);
+    return Math.atan2(_fwd.x, _fwd.z);
+  }
+  /** Places in the view (`points`: a grip's, a shoulder's) and ways there (`ways`: a weapon's, its flat, an elbow's),
+   *  in place, turned `angle` round the body's own up through it, as the body turned by that carries them. */
+  function carryRound(angle: number, points: THREE.Vector3[], ways: THREE.Vector3[]): void {
+    root.updateMatrixWorld(true);
+    dirIntoEyes(root, _ax.set(0, 1, 0).transformDirection(root.matrixWorld), _ax).normalize();
+    intoEyes(root, j.neck, j.body.getWorldPosition(_pv), _pv);
+    for (const at of points) at.sub(_pv).applyAxisAngle(_ax, angle).add(_pv);
+    for (const way of ways) way.applyAxisAngle(_ax, angle);
+  }
+
   /** The arm's bones in the view (m), as a swing through the eyes reaches with them: the upper arm, the forearm, and
    *  the fist from its wrist to the handle (`fistLength`, the hand as drawn; the grip's place on the joint's line
    *  left the hand out of the arm, and the fist bent round the handle 96 degrees off the forearm). */
@@ -1246,6 +1291,9 @@ export function buildWarrior(): Model {
     // a two-hander through the eyes: how far a move posed in the hero's own space takes over from holding it
     // in the view, and how far a move placed in the view takes it from rest there (to _va, _vd)
     let aw = 0, vw = 0;
+    // and how far the view holds it, then: as far as the move leaves it, but in full through Steel Tempest's spin,
+    // which carries the hold round (`carryRound`)
+    let viewHold = 1;
     // and how far a move placed in the view turns each blade's flat to the eyes (the two-hander's, each hand's)
     let viewFlat = 0, flatR = 0, flatL = 0;
     // a one-handed move placed in the view (through the eyes): how far it takes each arm over (to _ra, _rd / _la, _ld)
@@ -1282,7 +1330,12 @@ export function buildWarrior(): Model {
       if (held) struck.push(bladeR);
       if (offHeld) struck.push(bladeL);
     }
-    if (chopTail > 0) chopTail = Math.max(0, chopTail - dt / 0.3);
+    if (chopTail > 0) {
+      chopTail = Math.max(0, chopTail - dt / 0.3);
+      // (a two-hander's way back, `RECOVER_TWO`, ends where its rest was once keyed, not at the guard it's held in now:
+      // faded from there into the guard, the blade dropped 43 cm in a frame as it ended)
+      if (chopTail === 0) eyesR.cut(OUT_REST);
+    }
     const began = !!raw && (raw.name !== lastName || raw.t < lastK - 0.2), ended = !raw && lastName !== '';
     if ((ended || began) && lastName === 'swing') swingEnd = t;
     if (began && raw.name === 'swing') {
@@ -1305,7 +1358,12 @@ export function buildWarrior(): Model {
       eyesR.cut(dualCut ? (leftCuts ? DUAL_BACK : DUAL_BEGIN) : 0.14);
       eyesL.cut(dualCut ? (leftCuts ? DUAL_BEGIN : DUAL_BACK) : 0.14);
     }
-    else if (ended && !inTail) { eyesR.cut(0.3); eyesL.cut(0.3); }
+    else if (ended && !inTail) {
+      // (out of Steel Tempest's spin a one-hander goes back to rest slower, by way of under the frame as from a cut)
+      const spun = lastName === 'spin' && !two;
+      eyesR.cut(spun ? SPIN_BACK : 0.3); eyesL.cut(spun ? SPIN_BACK : 0.3);
+      if (spun) { backR = true; backL = !!offHeld; }
+    }
     if (a && a.name !== 'buff' && a.name !== 'cast' && a.name !== 'stagger' && a.name !== 'drink') fightT = t;
     // (a two-hander onto the shoulder out of a fight; off it at once for a move, which the move's fade brings down)
     const shoulderIt = two && !fp && (!a || a.name === 'drink') && t - fightT > SHOULDER_AFTER;
@@ -1549,7 +1607,10 @@ export function buildWarrior(): Model {
           twoHold.pole = SW2_POLE; twoHold.k = 1; twoHold.flatK = 1;
         } else {
           R.x += -0.1; R.z += -1.35; R.y += -0.3; j.elbowR.rotation.x += 0.7;
-          j.shoulderL.rotation.x += 0.2; j.shoulderL.rotation.z += 0.9; j.elbowL.rotation.x += 0.5;
+          j.shoulderL.rotation.x += 0.2; j.shoulderL.rotation.z += 0.9;
+          // (the other arm flung out, its elbow soft, never past straight: added to an empty hand's stance, it bent
+          // back 20 degrees, 10 past an elbow's range)
+          j.elbowL.rotation.x = Math.min(j.elbowL.rotation.x + 0.5, -0.1);
         }
         j.spine.rotation.x += 0.15; j.spine.rotation.z += -0.12; j.chest.rotation.y += -0.25; j.neck.rotation.y += 0.25; j.neck.rotation.z += 0.08;
         j.thighL.rotation.set(-0.35, 0, 0.22); j.thighR.rotation.set(-0.35, 0, -0.22);
@@ -1753,6 +1814,11 @@ export function buildWarrior(): Model {
         _ra.lerp(_vg, vw); _rd.normalize().lerp(_vd.normalize(), vw);
         turnTowards(_mr, FACE_EYES, vw, _rf); flatR = lerp(1, viewFlat, vw);
       }
+      // (carried round with the body through Steel Tempest's spin, as a one-hander is, the shoulders with it: let go to
+      // the pose's own arms, the lower hand let go of the grip each turn and its elbow bent 152 degrees past its range)
+      const turned = turnOfBody();
+      if (turned !== 0) carryRound(turned, [_ra], [_rd, _rf, _pr]);
+      viewHold = a?.name === 'spin' ? 1 : 1 - aw;
       // (its elbow faded from the last swing's as its grip is: from a cut's end to the guard no hold lets go of it)
       holdR = eyesR.apply(_ra, _rd, dt, _rf, edgeR, _pr);
       if (keyed) keyedArm.weight *= 1 - eyesR.fading;
@@ -1768,17 +1834,20 @@ export function buildWarrior(): Model {
       spineUnder(driver, _sp);
       _sl.set(-driver.x, driver.y, driver.z).sub(_sp).applyAxisAngle(Y_AXIS, trunkTurn).add(_sp);
       driver.sub(_sp).applyAxisAngle(Y_AXIS, trunkTurn).add(_sp);
+      if (turned !== 0) carryRound(turned, [_sr, _sl], []);
       shoulderTo(j.shoulderR, _sr, 1);
       shoulderTo(j.shoulderL, _sl, 1);
-      holdInView(ARM_R, _ra, _rd, swingPole(_pr, FP_TWO_POLE, holdR * (1 - vw), _qr), 1 - aw, _rf, flatR);
+      holdInView(ARM_R, _ra, _rd, swingPole(_pr, FP_TWO_POLE, holdR * (1 - vw), _qr), viewHold, _rf, flatR);
       wR = 1;
     }
     if (fp && !two && st.dead < 0) {
       // (at rest each blade is held low on its own side of the view, `oneRest`, a move's place over it by its weight:
       // left to the stance's own angles, the arms' shoulders moved under the camera put the hilts under the frame)
       // (and its flat turned as the rest has it, a move's to the eyes over it by the move's weight)
+      // (held out through Steel Tempest's spin instead, `spinRest`)
+      const restOf = a?.name === 'spin' ? spinRest : oneRest;
       if (held) {
-        const k = oneRest(held, _er, _ed, _ef);
+        const k = restOf(held, _er, _ed, _ef);
         if (backR && wR === 0) dipUnder(_er, _ed, _ef, eyesR.fading);
         _ra.lerpVectors(_er, _ra, wR); _rd.lerpVectors(_ed, _rd.normalize(), wR);
         // (a swing's flat as it is: its knuckles lead, its forearm in its plane)
@@ -1787,11 +1856,19 @@ export function buildWarrior(): Model {
       if (offHeld) {
         // (mirrored across the view: its place and way flip in x, its flat, a cross of two ways, in y and z, as
         // `swingAt` mirrors one; flipped in x like a way, the fist turned over on the handle and the blade left the frame)
-        const k = oneRest(offHeld, _er, _ed, _ef); _er.x = -_er.x; _ed.x = -_ed.x; _ef.set(_ef.x, -_ef.y, -_ef.z);
+        const k = restOf(offHeld, _er, _ed, _ef); _er.x = -_er.x; _ed.x = -_ed.x; _ef.set(_ef.x, -_ef.y, -_ef.z);
         if (backL && wL === 0) dipUnder(_er, _ed, _ef, eyesL.fading);
         _la.lerpVectors(_er, _la, wL); _ld.lerpVectors(_ed, _ld.normalize(), wL);
         turnTowards(_ef, edgeL > 0 ? _ml : sameSide(offHeld, _ef, _ml), wL, _lf); flatL = lerp(k, flatL, wL); wL = 1;
       }
+      // (carried round with the body as it turns under the camera, Steel Tempest's spin, as a person spinning holds the
+      // weapon as he held it: held where the view had it as the shoulder came round, it went out of reach and the elbow
+      // flipped over each turn, the blade a metre and more in a frame, #249; let go to the pose's own arm, the upper arm
+      // swept across the eyes and filled a third of the view; the spin over, its way back isn't: carried round as the
+      // pose's fade unwinds the body's last turn, the blade whipped up through the view at 20 m/s)
+      const turned = a?.name === 'spin' ? turnOfBody() : 0;
+      if (turned !== 0 && held) carryRound(turned, [_ra], [_rd, _rf]);
+      if (turned !== 0 && offHeld) carryRound(turned, [_la], [_ld, _lf]);
       // (each faded from the last move's, a swing's hold on its fist too, and a swing's elbow where its arm's bones
       // meet in its plane, `swingAt`, by that hold: the last swing's as it fades)
       // (and its shoulder where the swing puts it, as long as that hold lasts)
@@ -1905,6 +1982,9 @@ export function buildWarrior(): Model {
     // (and through the eyes, where the arms are placed after the fade, from the arms as drawn: a one-handed swing over,
     // the arm was back in the stance in a frame)
     if (fp && st.dead < 0) fade.drawnArms();
+    // (and a two-hander a move posed in the hero's own space took over from the view, where it was drawn, for the fade
+    // back to the view's hold)
+    if (fp && st.dead < 0 && two && held && viewHold < 1) drawnInView(eyesR, grip);
 
     // the mail skirt swings with the legs, draped over them and the hands; the tassets on each side ride their own thigh
     const fL = -j.thighL.rotation.x, fR = -j.thighR.rotation.x;

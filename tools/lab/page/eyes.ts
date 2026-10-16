@@ -15,6 +15,7 @@ import {
 import type { Fist, LowerGrip } from '../../../src/types';
 import { SKILL_IMPLS } from '../../../src/combat/skills';
 import type { Breach } from '../../../src/entities/models/anatomy';
+import { viewArms } from '../../../src/entities/viewModel';
 import { armsLens } from './inFrame';
 import { headCanary } from './heads';
 import { describeStrike, plantLead, plantSlide, SLID_WHIP, StrikeTracker, strikeIn, strikeProblems } from './strike';
@@ -30,8 +31,9 @@ import {
   describeMomentum, momentumCanary, momentumOf, momentumProblems, rowCanary, rowOfSwings,
 } from './momentum';
 import type { Momentum, SwingFrame } from './momentum';
-import { describeKeyed, describeKeyedFrame, keyedNow, triple, type KeyedFrame } from './keyed';
+import { describeKeyed, describeKeyedFrame, keyedAway, keyedNow, triple, type KeyedFrame } from './keyed';
 import type { ArmAt, ArmsAt, Lens, Phase } from './swingDiagram';
+import { JUMP_SIDE, JUMP_TIMES, jumpsOf, stillestFrame, type FrameJump, type JumpFrame } from './jumps';
 
 export interface EyesOptions {
   fixture: Fixture;
@@ -185,6 +187,10 @@ const FIST_OPEN = 0.5;
 const FIST_SLID = 0.02;
 /** the canary lifts the weapon this far up the view (m), out of the fists, its lower grip into the frame */
 const CANARY_LIFT = 0.15;
+/** a jump between frames moves the weapon's tip at least this fast (m/s; page/jumps.ts) */
+const JUMP_SPEED = 6;
+/** the jump canary lifts the weapon this far up the view (m) on one frame alone */
+const CANARY_JUMP = 0.3;
 
 /** the strike's canaries: how far the weapon is turned off the way its blow moves (degrees: its edge leading, then
  *  its flat), and how far off that its strike may be read */
@@ -198,9 +204,12 @@ const ARM_RANGE = /^(shoulder|elbow|forearm|wrist)[LR]\./;
  *  long as overall strike looks plausible"), still described */
 const SEEN_RANGE = /^(elbow|forearm|wrist)[LR]\./;
 
-/** the joints the canary holds as they were at the press: the arms, and the trunk they hang from (frozen alone, the
- *  arms swung with the trunk's turn, and that read as a blow) */
-const FROZEN_JOINTS = ['spine', 'chest', 'shoulderR', 'elbowR', 'handR', 'shoulderL', 'elbowL', 'handL'] as const;
+/** the joints the canary holds as they were at the press: the arms, and the body and trunk they hang from, the hips up
+ *  (frozen alone, the arms swung with the trunk's turn, and with Steel Tempest's spin, which turns the body and the
+ *  hips, and that read as a blow) */
+const FROZEN_JOINTS = [
+  'body', 'hips', 'spine', 'chest', 'shoulderR', 'elbowR', 'handR', 'shoulderL', 'elbowL', 'handL',
+] as const;
 
 /** Casts the skill through the eyes and reports what the eyes saw; with the canary, again with its faults planted. */
 export async function eyes(lab: Lab, options: EyesOptions): Promise<Report> {
@@ -226,8 +235,10 @@ export async function eyes(lab: Lab, options: EyesOptions): Promise<Report> {
   if (row) lines.push(...row.lines);
   const swings = swingsOf(seen, struck.strikes, skill);
   lines.push(...swings.lines);
+  const jumps = describeJumps(followed);
+  lines.push(jumps.line);
   const found = [...oneHanded(seen), ...openFists(seen), ...struck.problems, ...atRest.problems, ...followed.tip];
-  found.push(...(row?.problems ?? []), ...keyed.problems, ...swings.problems);
+  found.push(...(row?.problems ?? []), ...keyed.problems, ...swings.problems, ...jumps.problems);
   // (listed and not counted, a fist hung flexed 57 degrees off its forearm through a cut was called done)
   const seenPast = (breach: Breach) => SEEN_RANGE.test(breach.name);
   if (seen.some((frame) => frame.armsPast.some(seenPast))) found.push(describeArmsPast(seen, seenPast));
@@ -249,9 +260,11 @@ export async function eyes(lab: Lab, options: EyesOptions): Promise<Report> {
     lines.push(`canary, the weapon held at its first turn, sliding with the hand: ${slid}`);
     const lifted = await liftCanary(lab, options, skill, followed);
     lines.push(`canary, the weapon lifted out of the fists each frame: ${lifted}`);
+    const jumped = await jumpCanary(lab, options, skill, followed);
+    lines.push(`canary, the weapon lifted ${CANARY_JUMP * 100} cm on its stillest frame alone: ${jumped}`);
     const swung = swings.canary();
     if (swung.length) lines.push(`canary, faults planted in the first cut's swing: ${swung.join('; ')}`);
-    const verdicts = [...bent, ...caught, ...leads, slid, lifted, ...swung];
+    const verdicts = [...bent, ...caught, ...leads, slid, lifted, jumped, ...swung];
     if (verdicts.some((verdict) => verdict.startsWith('missed'))) problems.push('the canary was missed');
   }
   const moments: Pictured[] = film ? [film.moment(`${skill.def.name} through the eyes`), ...film.closeUps] : [];
@@ -325,6 +338,10 @@ async function follow(
   lab: Lab, skill: BoundSkill, row: { times: number; apart: number | null }, film: Film | null, plant?: () => void,
   unplant?: () => void,
 ): Promise<Followed> {
+  // (every run of the cast from the same state, the canaries' as the first: Steel Tempest drains energy while held,
+  // and the runs after the first ended their spin 11 frames sooner, the jump canary's lift planted past their end)
+  G.player.energy = G.player.stats.maxEnergy;
+  G.player.cooldowns.clear();
   await lab.step(SETTLE_FRAMES);
   const aim = aheadOf(lab, AIM_AHEAD);
   const casts = new CastCount(lab);
@@ -615,7 +632,7 @@ function describeCasts(seen: Seen[], name: string): string[] {
 
 /** Each cast's strike (page/strike.ts) as a line, and its problems (led by its flat, outrun by another motion); with
  *  the strikes. */
-function describeStrikes(seen: Seen[], skill: { name: string; arc?: number }):
+function describeStrikes(seen: Seen[], skill: { name: string; arc?: number; spin?: number }):
   { lines: string[]; problems: string[]; strikes: (Strike | null)[] } {
   const lines: string[] = [];
   const problems: string[] = [];
@@ -624,7 +641,7 @@ function describeStrikes(seen: Seen[], skill: { name: string; arc?: number }):
     const at = (index: number) => `frame ${frames[index].frame} (${shareOf(frames[index])})`;
     const holding = strike ? holdingWrists(frames[strike.fastest]) : [];
     const wrists = holding.map((wrist) => `; at its fastest the ${describeWrist(wrist)}`).join('');
-    const landing = strike ? landingOf(frames, strike, skill.arc) : null;
+    const landing = strike ? landingOf(frames, strike, skill) : null;
     const landed = landing ? `; ${describeLanding(landing)}` : '';
     lines.push(`${skill.name} ${i + 1}: ${strike ? describeStrike(strike, at) : 'no weapon struck'}${landed}${wrists}`);
     const found = strike ? [...strikeProblems(strike, at), ...landingProblems(landing!, strike.weapon)] : [];
@@ -635,12 +652,14 @@ function describeStrikes(seen: Seen[], skill: { name: string; arc?: number }):
 }
 
 /** How a cast's strike landed through the eyes (page/cuts.ts): where its blade crossed the aim, nearest the frame it
- *  fired on, and how wide it swept against the skill's `arc` (rad). */
-function landingOf(frames: Seen[], strike: Strike, arc?: number): Landing {
+ *  fired on, how wide it swept against the skill's `arc` (rad), and how often it comes round, a `spin`'s (rad/s). */
+function landingOf(frames: Seen[], strike: Strike, skill: { arc?: number; spin?: number }): Landing {
   const cut = frames.map(cutOf);
   const fired = frames.findIndex((frame) => frame.fires);
   const meets = aimCrossing(cut, strike.from - 1, strike.to + 1, fired >= 0 ? fired : strike.fastest);
-  return { meets, swept: sweptOver(cut, strike.from, strike.to), arc: arc ? THREE.MathUtils.radToDeg(arc) : null };
+  const arc = skill.arc ? THREE.MathUtils.radToDeg(skill.arc) : null;
+  const turns = skill.spin ? skill.spin / (2 * Math.PI) : null;
+  return { meets, swept: sweptOver(cut, strike.from, strike.to), arc, turns };
 }
 
 /** A cast's strike: the blow round the frame it fires on (page/strike.ts `strikeIn`). */
@@ -977,6 +996,9 @@ function plantFaults(lab: Lab): () => void {
       joint.position.copy(held![i].at);
     });
     lab.joints.shoulderL.rotateX(CANARY_DROP);
+    // (and the hero put under the camera again by his neck as it's held, as the game puts him by the neck it posed:
+    // placed by the neck Steel Tempest's turn had carried round, the frozen arms went round the eyes with each turn)
+    viewArms(lab.model, true, G.camera);
     lab.model.root.updateWorldMatrix(true, true);
     const grip = lab.model.tip?.parent;
     if (grip?.parent) liftInView(grip, liftFor(lab));
@@ -986,15 +1008,19 @@ function plantFaults(lab: Lab): () => void {
 
 /** The lift alone, planted after each frame of a cast played as it is: its fists seen as it swings (frozen at a
  *  two-hander's rest, both were below the frame, and no fist was seen open), and taken back once the frame is read
- *  (kept, the next frame was posed from the lifted grip, and no fist was seen at all). */
-function plantLift(lab: Lab): { plant: () => void; unplant: () => void } {
+ *  (kept, the next frame was posed from the lifted grip, and no fist was seen at all). Lifted `by` that far, on the
+ *  frames `when` says. */
+function plantLift(
+  lab: Lab, by = () => liftFor(lab), when = () => true,
+): { plant: () => void; unplant: () => void } {
   let lifted: { grip: THREE.Object3D; at: THREE.Vector3 } | null = null;
   const plant = () => {
+    if (!when()) return;
     lab.model.root.updateWorldMatrix(true, true);
     const grip = lab.model.tip?.parent;
     if (!grip?.parent) return;
     lifted = { grip, at: grip.position.clone() };
-    liftInView(grip, liftFor(lab));
+    liftInView(grip, by());
     lab.model.root.updateWorldMatrix(true, true);
   };
   const unplant = () => {
@@ -1076,8 +1102,11 @@ function canaryCaught(plantedRun: Followed, followed: Followed, skill: BoundSkil
     const caught = restInView(plantedRun.views).problems.some((problem) => problem.includes('left hand'));
     verdicts.push(caught ? 'caught: the left weapon out of the frame' : 'missed: the dropped left weapon read in view');
   }
-  // (the arms frozen at the press while the swing keys its arm on: the drawn arm off its keys)
-  if (describeKeyed(seen).lines.length) {
+  // (the arms frozen at the press while the swing keys its arm on: the drawn arm off its keys; not where the keys
+  // hold it where it was at the press: a two-hander's guard after Steel Tempest's spin, keyed as its rest)
+  if (describeKeyed(seen).lines.length && !keyedAway(seen, followed.rest.grip.at)) {
+    verdicts.push('skipped: the keys hold the arm where it was at the press');
+  } else if (describeKeyed(seen).lines.length) {
     const caught = describeKeyed(planted).problems.length > 0;
     verdicts.push(caught ? 'caught: the arm drawn off its keys' : 'missed: the frozen arm read as keyed');
   }
@@ -1109,6 +1138,56 @@ async function liftCanary(lab: Lab, options: EyesOptions, skill: BoundSkill, fol
   const off = Math.max(...seenFists.map((fist) => Math.max(fist.off, slidOf(fist))));
   const read = `${seenFists.length} fists seen, at most ${(off * 100).toFixed(1)} cm off`;
   return `missed: the lifted weapon read as held, ${read}`;
+}
+
+/** A frame as its jumps are read (page/jumps.ts): the tip's place in the camera's space, the hand whose weapon it's on,
+ *  and that weapon in or near the frame. */
+function jumpFrame(now: Seen): JumpFrame {
+  return { frame: now.frame, tip: now.tip.at, weapon: now.hand, near: now.tip.near || now.blade.near };
+}
+
+/** How long a frame lasts on the lab's clock (s). */
+const frameSeconds = (): number => window.__labClock.frame / 1000;
+
+/** The weapon's jumps between frames from the rest before the press: those seen, and those out of the frame. */
+function jumpsSeen(followed: Followed): { seen: FrameJump[]; unseen: FrameJump[] } {
+  return jumpsOf(followed.seen.map(jumpFrame), jumpFrame(followed.rest), JUMP_SPEED * frameSeconds());
+}
+
+/** A jump as words: its frame, how far and how fast its tip moved, and the median move round it. */
+function describeJump(jump: FrameJump): string {
+  const speed = (jump.moved / frameSeconds()).toFixed(0);
+  const cm = (m: number) => (m * 100).toFixed(0);
+  return `frame ${jump.frame}: ${cm(jump.moved)} cm (${speed} m/s) against ${cm(jump.round)}`;
+}
+
+/** The weapon's jumps between frames as a line, and those seen as a problem (#249: Steel Tempest's blade leapt a metre
+ *  in a frame each turn of the spin, its elbow flipping over as the shoulder came round under the camera). */
+function describeJumps(followed: Followed): { line: string; problems: string[] } {
+  const { seen, unseen } = jumpsSeen(followed);
+  const words = (jumps: FrameJump[]) => jumps.map(describeJump).join('; ');
+  const parts = [seen.length ? `seen on ${words(seen)}` : 'none seen'];
+  if (unseen.length) parts.push(`out of the frame on ${words(unseen)}`);
+  const head = `the weapon's jumps between frames (its tip moving at least ${JUMP_SPEED} m/s, ${JUMP_TIMES} times `
+    + `the median of the moves round it and ${JUMP_SIDE} times the slower frame either side, in cm)`;
+  const problems = seen.length ? [`the weapon jumps between frames, seen on ${words(seen)}`] : [];
+  return { line: `${head}: ${parts.join('; ')}`, problems };
+}
+
+/** The jump canary: the cast again with its weapon lifted `CANARY_JUMP` up the view on one frame alone, the stillest
+ *  in the frame of the cast as it is, which must read as a jump there. As words, `caught ...`, `missed ...` or
+ *  `skipped ...`. */
+async function jumpCanary(lab: Lab, options: EyesOptions, skill: BoundSkill, followed: Followed): Promise<string> {
+  const at = stillestFrame(followed.seen.map(jumpFrame), jumpFrame(followed.rest));
+  if (at < 0) return 'skipped: the weapon never in the frame';
+  const frame = followed.seen[at].frame;
+  await lab.setup({ ...options.fixture, view: 'first' });
+  // (the first plant is the rest's, read before the press)
+  let planted = -2;
+  const { plant, unplant } = plantLift(lab, () => CANARY_JUMP, () => ++planted === frame);
+  const jumps = jumpsSeen(await follow(lab, skill, options, null, plant, unplant)).seen;
+  const read = jumps.length ? jumps.map(describeJump).join('; ') : 'none';
+  return jumps.some((jump) => jump.frame === frame) ? `caught on frame ${frame}` : `missed on frame ${frame}: ${read}`;
 }
 
 /** The slide canary: the cast again with its weapon held at its first turn each frame (strike.ts `plantSlide`), its
