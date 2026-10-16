@@ -78,12 +78,15 @@ export function initRubble(): void {
         : shape === 'stub' ? tornTubeGeometry(seed, STUB_COLS)
         : flakeGeometry(shape, seed);
       const mesh = new THREE.InstancedMesh(geo, mats[shape], max);
+      mesh.name = `rubble: ${shape} ${v + 1}`;
       // the colour attribute exists from the start (adding it later would change the shader)
       for (let i = 0; i < max; i++) mesh.setColorAt(i, _c.set(0x808080));
       mesh.count = 0;
       mesh.frustumCulled = false;
-      // (shown until the first `clearRubble`, the boot's warm-up's last, so its program compiles; hidden from then on
-      // while it holds no piece: drawn empty, the 23 pools were 23 to 46 draws a frame of nothing)
+      // (shown through the boot's warm-ups, which run no update, so its programs compile in each biome's light, its
+      // shadow's too: three's shadow material takes a caster's map, and a textured pool's is a program of its own in
+      // each biome; hidden by `updateRubble` from then on while it holds no piece: drawn empty, the 23 pools were 23
+      // to 46 draws a frame of nothing. Hidden after the first warm-up, the forest's wood compiled mid-fight, #243)
       mesh.castShadow = POOL[shape].radius >= minCaster;
       mesh.receiveShadow = true;
       G.scene.add(mesh);
@@ -158,7 +161,11 @@ function settle(c: Chunk): void {
 export function updateRubble(dt: number): void {
   // the coals breathe, slowly (about 0.6 Hz)
   if (coalMat) coalMat.emissiveIntensity = 2.2 + 0.5 * Math.sin(G.time * 3.8);
-  for (const k in pools) updatePool(pools[k], dt);
+  for (const k in pools) {
+    const pool = pools[k];
+    updatePool(pool, dt);
+    pool.mesh.visible = pool.mesh.count > 0;
+  }
 }
 
 function updatePool({ mesh, chunks }: Pool, dt: number): void {
@@ -193,11 +200,9 @@ function updatePool({ mesh, chunks }: Pool, dt: number): void {
     mesh.setMatrixAt(i, _m);
   }
   mesh.instanceMatrix.needsUpdate = true;
-  if (live) return;
-  mesh.count = 0;
-  mesh.visible = false;
+  if (!live) mesh.count = 0;
 }
 
 export function clearRubble(): void {
-  for (const k in pools) { const p = pools[k]; p.chunks.length = 0; p.next = 0; p.mesh.count = 0; p.mesh.visible = false; }
+  for (const k in pools) { const p = pools[k]; p.chunks.length = 0; p.next = 0; p.mesh.count = 0; }
 }

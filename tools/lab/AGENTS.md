@@ -40,7 +40,8 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `death`: each skill's kills as they fall (foes stood dazed where it strikes, a hair from death and with little to spare: how hard each body was thrown and which way, how far it flew, when it lay still; its drawn pose against the floor, the props, the wall and its points)
 - `crowd`: a crowd of foes killed at once and what the frame costs as they fall (each frame timed by the browser's clock with the game drawn, the bodies' part apart, at each CPU slowdown, as a low-end device's, and frame rate)
 - `draws`: one frame's draw calls with the crowd standing, by what drew them (the geometries drawn most often, those that drew the most triangles, the triangles drawn outside the view of the pass that drew them, the draws that drew nothing, the scene's draws by their material's look; the scene's objects whose matrices are made again each frame)
-- `perf <skills>`: skills cast in turn with the biome's foes coming, every frame timed as the game's performance report times it (the frame, the update by stage, the render, the GPU by pass, the draws and triangles), on a phone's screen, quality and CPU if asked
+- `perf <skills>`: skills cast in turn with the biome's foes coming, every frame timed as the game's performance report times it (the frame, the update by stage, the render, the GPU by pass, the draws, triangles and the particles' fill), on a phone's screen, boot and CPU if asked
+- `compiles`: whether the boot's warm-up compiled what a fight draws (a prop of every kind broken and the first wave fought in each biome: every program compiled meanwhile, and the draw that first used it)
 - `gear`: full sets of gear rolled for every class at each tier (the Health, regeneration and draught they give, and the damage they multiply)
 - `weapons`: each of the hero's weapons alone in a lit studio (face on, edge on, from behind, from three-quarters and its head close up, with its size and its triangles)
 - `hands`: the hero's right hand alone in the studio, flat, open, relaxed, in a fist and round a handle, from each side and close up (its size against a man's, its triangles, where it was sculpted)
@@ -54,6 +55,7 @@ Options every command takes:
 - `--watch`: runs one again on each change to the source
 - `--profile`: says where a command's time went
 - `--tune name.field=v,...;...`: sets the game's tunable values before a command's set-up (`src/core/tuning.ts`: `warriorEyes.oneOn=0.75,-1.1,0.5`), so a pose or a camera is compared across values in seconds, without editing the source and booting again
+- `--boot level[@pixels]`: the page booted as a device whose Auto settled on that quality (`low@518400`: #243's phone): Auto's cookie set before the boot, so its warm-ups run at that level and the hero is built at its detail; a page booted ahead counts as ready only for the same boot
 - `--wear helm,chest,hands|none` (any command that sets the run up): the armour the hero wears, every piece not named left off (the set-up's report says what he `wears`): with `--screen` at the owner's window, a picture of what they see (the lab's hero is otherwise as the boot rolled him, bare-handed, and his first-person hands looked nothing like the owner's gloved ones)
 
 A command exits with 1 when it failed or found a problem (an error in the page, a canary missed). An A/B's pictures that differ are pictured where they differ (`tools/lab/out/ab/<command>/`), a probe can return moments pictured (`lab.picture`, or `lab.screen` for the screen as the player sees it, the page's UI over the game, whole or round one element; written as a sheet and compared in an A/B), and `page/timing.ts` times a method's calls by the browser's own clock (the page's `performance.now` is the lab's). Write a new measure in the lab (`tools/lab/examples/handSpeed.ts` shows its parts: the state it measures checked to have happened, a canary it must catch), never as a script with a boot and a clock of its own, and keep it: from its first use it is a lab command, or part of one that measures the same thing, never a probe left in `.tmp` (every harness is permanent). The probes and films the AGENTS.md files and their notes name (the bow probe, the range probe, `legdet`, the zigzag and aim probes...) were such scripts and aren't in the repo: each is a measure to port into the lab the first time it's needed again, as the carry's was (`carry`). The lab's own code has unit tests: `npm run lab:test`.
@@ -431,17 +433,32 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   drawn and waited out on the GPU (`gl.finish`), then a task yielded (the GPU's timer queries come back only then);
   each phase says the frame, the page's work (the update by stage, the render), the GPU whole and by pass (where the
   browser times it, `EXT_disjoint_timer_query_webgl2`), the draws (the GL draws, as the overlay counts them) and
-  triangles; `--frames` lists every frame. `--biome` (forest), `--view` (top), `--facing`, `--at`, `--gear`. Run it
-  on a phone's screen, quality and CPU: `--screen 832x384@3.75 --quality low@518400 --throttle 4` (#243's phone; the
-  quality is a level and the most pixels Auto lets the scene render, put to use before the set-up, so the hero is
-  built at the level's detail as a device whose Auto settled on it builds him at boot, and built again at the page's
-  after). Read the GPU at `--throttle 1` alone: a slowed CPU feeds the GPU slowly, and a pass's time runs from its
+  triangles, and the particles' fill (`page/particleFill.ts`: each live particle's disc as its shader sizes it, in
+  the scene's pixels, every layer: the fill a phone's GPU pays, which a desktop's GPU times don't show; Glacial
+  Nova's was 15 times the scene's pixels on #243's phone while the particles were sized by the canvas, 1.4 times
+  since); `--frames` lists every frame. `--biome` (forest), `--view` (top), `--facing`, `--at`, `--gear`. Run it on
+  a phone's screen, boot and CPU: `--screen 832x384@3.75 --boot low@518400 --throttle 4` (#243's phone: booted as Auto
+  settled there, the hero built at Low's detail and the warm-ups run at it), or `--quality low@518400` on the lab's
+  own boot (the level and the most pixels Auto lets the scene render, put to use before the set-up, the hero built
+  again at its detail, and at the page's after). Read the GPU at `--throttle 1` alone: a slowed CPU feeds the GPU slowly, and a pass's time runs from its
   start to its end, its waits for the page's commands with it; on a desktop the scene pass's GPU time often matches
   the render's CPU time, as the GPU waits on it, so a triangle cut shows smaller there than on a phone whose GPU sets
   the pace. A cast pressed and never made, a shader compiled while it was timed, and frames all read 0 ms are
   problems. `--canary` runs a round with the hero's update made 2 ms slower (it must read at least 0.8 of that) and
-  the scene drawn twice (the scene pass's GPU time must read at least 1.3 times more). The machine's load drifts:
-  compare an A/B run `--fresh`, both sides then, not one side from the cache and the other now.
+  the scene drawn twice (the scene pass's GPU time must read at least 1.3 times more), and the particles twice as
+  wide (their fill must read at least 2.5 times more). The machine's load drifts: compare an A/B run `--fresh`, both
+  sides then, not one side from the cache and the other now.
+- `compiles`: whether the boot's warm-up compiled what a fight draws (`page/compiles.ts`). In each biome (`--biomes`,
+  both) the hero stands in the view (`--view`, top) and a prop of every kind the biome has is worn down (its gauge
+  over it, chips knocked off) and broken in turn, its rubble, debris and smoke drawn as they fly and settle; then the
+  run's first wave is set off and fought as the game plays it, the hero (kept whole) casting each skill on his bar
+  in turn at the nearest foe, until it's cleared or 40 s are up, its foes killed as a fight kills them (no other
+  check lets a foe die of a fight). Every program compiled meanwhile is a problem, said as the game's perf report
+  says it and with the draw that first used it, its object, its material and its pass (the game can't name a
+  shadow's: three keeps its shadow materials). Run it as a phone boots, `--boot low@518400`: a Low boot's warm-ups
+  draw other shadows (small parts cast none there). It found #243's mid-fight compile, the forest's wood rubble's
+  shadow (`steadyShadowPrograms` in `src/core/shaders.ts`). `--canary` draws a material nothing else does before the
+  hero, which must come out as compiled.
 - `weapons`: each of the hero's weapons alone (`page/weapons.ts`; `--weapons Sword,Maul`, the class's bases by
   default): a copy of the one in his right hand, at its own frame (unturned in the fist), put in a plain, lit
   studio of its own and pictured face on (a blade's flat, an axe's bit to the side), edge on, from behind (a face

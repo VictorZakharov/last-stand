@@ -26,6 +26,7 @@ import type { DeathOptions } from './death';
 import type { CrowdOptions } from './crowd';
 import type { DrawsOptions } from './draws';
 import type { PerfOptions } from './perf';
+import type { CompilesOptions } from './compiles';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
@@ -271,6 +272,12 @@ export async function death(lab: Lab, command: DeathOptions): Promise<Report> {
 export async function crowd(lab: Lab, command: CrowdOptions): Promise<Report> {
   const { crowd: crowdRound } = await import('./crowd');
   return crowdRound(lab, command);
+}
+
+/** `lab compiles`: a prop of every kind broken in each biome, every program compiled meanwhile a problem. */
+export async function compiles(lab: Lab, command: CompilesOptions): Promise<Report> {
+  const { compiles: compilesOf } = await import('./compiles');
+  return compilesOf(lab, command);
 }
 
 /** `lab draws`: one frame's draw calls with the crowd standing, by the geometry each drew, the most first. */

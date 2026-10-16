@@ -69,11 +69,11 @@ function tunesFrom(text) {
 const QUALITY_LEVELS = ['high', 'medium', 'low'];
 
 /** `--quality`'s text as a level and the most pixels the scene renders: `low@518400`, or `low` (no budget: none). */
-function qualityOf(text) {
+export function qualityOf(text, option = '--quality') {
   const [level, pixels] = text.split('@');
   const most = pixels === undefined ? undefined : Number(pixels);
   if (!QUALITY_LEVELS.includes(level) || (most !== undefined && !(most > 0))) {
-    throw labError(`--quality: ${text} isn't a level (${QUALITY_LEVELS.join(', ')}) and its pixels (low@518400)`);
+    throw labError(`${option}: ${text} isn't a level (${QUALITY_LEVELS.join(', ')}) and its pixels (low@518400)`);
   }
   return { level, pixels: most };
 }
@@ -698,6 +698,15 @@ export const COMMANDS = {
         canary: Boolean(options.canary),
       };
       return side.command('crowd', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
+  compiles: {
+    each(side, options) {
+      const command = { biomes: options.biomes, view: options.view ?? 'top', canary: Boolean(options.canary) };
+      return side.command('compiles', command);
     },
     textOf: asText,
     problemsOf: problemsIn,

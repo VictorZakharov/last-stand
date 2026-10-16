@@ -3,6 +3,7 @@
 // at once was a field of them). Drawn each frame from where they are then, one draw for every dazed foe.
 import * as THREE from 'three';
 import { G } from '../state';
+import { pointScale } from '../core/renderer';
 
 const VERT = /* glsl */`
   attribute float aSize;
@@ -67,6 +68,7 @@ const mat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false,
 });
 const points = new THREE.Points(geo, mat);
+points.name = 'dazed stars';
 points.frustumCulled = false;
 points.renderOrder = 10;
 /** the stars set this frame */
@@ -95,7 +97,7 @@ export const dazedField = {
     // (not drawn while there are none, a draw call of nothing; shown through the boot's warm-up, which runs no update)
     points.visible = count > 0;
     if (count) for (const a of attrs) { a.clearUpdateRanges(); a.addUpdateRange(0, count * a.itemSize); a.needsUpdate = true; }
-    mat.uniforms.uScale.value = G.renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(G.camera.fov) / 2));
+    mat.uniforms.uScale.value = pointScale();
     count = 0;
   },
   clear(): void { count = 0; geo.setDrawRange(0, 0); },

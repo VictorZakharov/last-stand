@@ -24,6 +24,7 @@ import { programsCompiledInGame } from '../../../src/core/shaders';
 import { bindKnown, foesAhead, holdFor, pressing, skillNamed } from './cast';
 import { standIn } from './light';
 import { quantile } from './timing';
+import { particleFill } from './particleFill';
 
 export interface PerfOptions {
   biome: BiomeId;
@@ -63,6 +64,10 @@ const CANARY_MS = 2;
  *  grows by less than its draws) */
 const CANARY_SEEN = 0.8;
 const CANARY_GPU = 1.3;
+/** the canary's particles this many times as wide, and the least their fill must rise by (4 times, less the points
+ *  held at the GPU's largest and those come or gone between the rounds) */
+const CANARY_WIDER = 2;
+const CANARY_FILL = 2.5;
 /** the update's stages listed for a phase, the slowest first */
 const STAGES_LISTED = 5;
 
@@ -77,6 +82,9 @@ interface Timed {
   draws: number;
   triangles: number;
   particles: number;
+  /** the pixels the particles cover, every layer, and the scene's pixels (`particleFill.ts`) */
+  fill: number;
+  pixels: number;
   foes: number;
 }
 
@@ -124,6 +132,7 @@ async function timedFrame(lab: Lab, input: () => Frame): Promise<Timed> {
   await nextTask();
   const timed = perfHud.lastPerfFrame();
   const drawn = G.renderer.info.render;
+  const { fill, pixels } = particleFill();
   return {
     frame,
     cpu: timed?.cpu ?? 0,
@@ -133,6 +142,8 @@ async function timedFrame(lab: Lab, input: () => Frame): Promise<Timed> {
     draws: drawn.calls,
     triangles: drawn.triangles,
     particles: particles.glow.count + particles.smoke.count,
+    fill,
+    pixels,
     foes: G.enemies.filter((foe) => foe.alive).length,
   };
 }
@@ -190,6 +201,11 @@ function phaseLines(phase: Phase): string[] {
     `  draws ${Math.round(of((frame) => frame.draws).median)} (most ${most((frame) => frame.draws)}), triangles `
       + `${millions(of((frame) => frame.triangles).median)} (most ${millions(most((frame) => frame.triangles))})`,
   ];
+  const fill = of((frame) => frame.fill);
+  const pixels = phase.frames[0]?.pixels ?? 1;
+  const times = (value: number) => (value / pixels).toFixed(1);
+  lines.push(`  the particles' fill ${millions(fill.median)} pixels a frame (90th ${millions(fill.p90)}, most `
+    + `${millions(fill.most)}): ${times(fill.median)} times the scene's (most ${times(fill.most)})`);
   if (gpu.parts.length) {
     const parts = gpu.parts.map(([part, took]) => `${part} ${took.toFixed(2)}`);
     lines.push(`  the GPU by part (median ms): ${parts.join(', ')}`);
@@ -222,7 +238,8 @@ function screenLine(): string {
     + `${quality.qualityLevel()}${budget}, the hero built at ${heroDetail()} of his detail`;
 }
 
-/** Each hero's update made `CANARY_MS` slower and the scene drawn twice; returns what puts them back. */
+/** Each hero's update made `CANARY_MS` slower, the scene drawn twice and the particles `CANARY_WIDER` times as wide;
+ *  returns what puts them back. */
 function plantCost(): () => void {
   const update = Player.prototype.update;
   const now = window.__labClock.realNow;
@@ -239,9 +256,21 @@ function plantCost(): () => void {
     if (scene === G.scene) render.call(gl, scene, camera);
     render.call(gl, scene, camera);
   };
+  const pools = [particles.glow, particles.smoke];
+  const updates = pools.map((pool) => pool.update);
+  for (const pool of pools) {
+    const own = pool.update.bind(pool);
+    pool.update = (dt: number) => {
+      own(dt);
+      pool.mat.uniforms.uScale.value *= CANARY_WIDER;
+    };
+  }
   return () => {
     Player.prototype.update = update;
     gl.render = render;
+    pools.forEach((pool, i) => {
+      pool.update = updates[i];
+    });
   };
 }
 
@@ -264,6 +293,12 @@ async function canaryRound(lab: Lab, aim: THREE.Vector3): Promise<{ lines: strin
   const problems: string[] = [];
   if (rose < CANARY_MS * CANARY_SEEN) {
     problems.push(`the canary's ${ms(CANARY_MS)} ms in the hero's update read as ${ms(rose)}`);
+  }
+  const fillOf = (phase: Phase) => spreadOf(phase.frames.map((frame) => frame.fill)).median;
+  const wider = fillOf(plain) > 0 ? fillOf(planted) / fillOf(plain) : 0;
+  lines.push(`the canary: the particles ${CANARY_WIDER} times as wide, their fill ${wider.toFixed(2)} times its own`);
+  if (wider < CANARY_FILL) {
+    problems.push(`the canary's particles ${CANARY_WIDER} times as wide filled ${wider.toFixed(2)} times as much`);
   }
   if (scenePart(plain) > 0) {
     const times = scenePart(planted) / scenePart(plain);

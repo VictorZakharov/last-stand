@@ -85,6 +85,12 @@ const COMMON_OPTIONS = {
       + 'its commit, the lab\'s code, the command and its options)',
   },
   class: { kind: 'text', usage: 'name', help: 'the hero (ranger, warrior, mage; the last one used by default)' },
+  boot: {
+    kind: 'text',
+    usage: 'level[@pixels]',
+    help: 'the page booted as a device whose Auto settled on this quality (low@518400: a phone\'s): the boot\'s '
+      + 'warm-ups run at it, and the hero is built at its detail (High, the lab\'s own, by default)',
+  },
   screen: {
     kind: 'screen',
     usage: 'WxH[@ratio]',
@@ -637,6 +643,26 @@ export const COMMANDS = {
         help: 'plant a cost the measure must see: the first round again, each body made 0.1 ms slower a frame',
       },
       ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  compiles: {
+    help: 'whether the boot\'s warm-up compiled what a fight draws: in each biome a prop of every kind it has broken '
+      + 'in turn, its rubble, debris and smoke drawn as they fly and settle; every program compiled meanwhile is a '
+      + 'problem, said as the game\'s performance report says it',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      view: SETUP_OPTIONS.view,
+      canary: {
+        kind: 'switch',
+        help: 'draw a material of a kind nothing else is before the hero: its program must come out as compiled',
+      },
       ...COMMON_OPTIONS,
     },
   },

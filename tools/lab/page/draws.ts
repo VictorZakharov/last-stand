@@ -104,7 +104,7 @@ function instancesOff(object: THREE.Object3D, geometry: THREE.BufferGeometry, ca
 }
 
 /** A material as the lists show it: its type, and its colour (or its name). */
-function lookOf(material: THREE.Material): string {
+export function lookOf(material: THREE.Material): string {
   const colour = (material as THREE.MeshStandardMaterial).color;
   const look = material.name || (colour ? `#${colour.getHexString()}` : '');
   return `${material.type.replace(/Material$/, '')}${look ? ` ${look}` : ''}`;
@@ -144,7 +144,7 @@ function recordDraws(): { record: FrameDraws; stop(): void } {
 }
 
 /** An object's place in the scene as names (or types), from the scene down: `crowd mossback`, `forest > Group`. */
-function placeOf(object: THREE.Object3D): string {
+export function placeOf(object: THREE.Object3D): string {
   const path: string[] = [];
   for (let at: THREE.Object3D | null = object; at && at !== G.scene; at = at.parent) {
     path.unshift(at.name || at.type);

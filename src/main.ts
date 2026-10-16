@@ -38,7 +38,7 @@ import { initNetHud } from './ui/netHud';
 import { warmShaders } from './game/warmup';
 import { initQuality, sampleQuality } from './core/quality';
 import { updateLowLife } from './core/lowLife';
-import { pinPrograms, markLoaded, warmUp } from './core/shaders';
+import { pinPrograms, markLoaded, steadyShadowPrograms, warmUp } from './core/shaders';
 import { initBiome, rollBiome } from './game/biome';
 import { BIOMES, BIOME_IDS } from './data/biomes';
 import { loadingStep, loadingDone, loadingFailed } from './ui/loading';
@@ -65,6 +65,7 @@ async function boot() {
   releaseClickedFocus();
   initItemIcons();
   const { scene, renderer } = initRenderer($('#game'));
+  steadyShadowPrograms(renderer);
   initInput(renderer.domElement);
   particles.init(scene);
   initLights(scene);

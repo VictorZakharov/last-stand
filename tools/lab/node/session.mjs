@@ -8,7 +8,7 @@
 import { mkdirSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { launchBrowser, useLocalTemp } from './browser.mjs';
-import { COMMANDS } from './commands.mjs';
+import { COMMANDS, qualityOf } from './commands.mjs';
 import { exportCommit } from './commits.mjs';
 import { describeDifferences } from './compare.mjs';
 import { labError } from './errors.mjs';
@@ -83,6 +83,8 @@ export class LabSession {
     const handler = COMMANDS[command];
     if (!handler) throw labError(`no command ${command} (there are ${Object.keys(COMMANDS).join(', ')}, status)`);
     handler.check?.(options);
+    if (options.boot !== undefined) qualityOf(options.boot, '--boot');
+    const bootQuality = options.boot ?? null;
     const started = Date.now();
     const shown = await this.turnsFor(options);
     // (this tree's turn first: its page was booted ahead, as the last command finished)
@@ -107,7 +109,10 @@ export class LabSession {
       const sideProblems = [];
       for (const other of turns) if (other.side !== side) await other.side.closePage();
       const bootStarted = Date.now();
-      if (await side.ready(heroClass)) notes.push(`${turn.name}: booted the ${heroClass} (${seconds(bootStarted)})`);
+      if (await side.ready(heroClass, bootQuality)) {
+        const at = bootQuality ? ` at ${bootQuality}` : '';
+        notes.push(`${turn.name}: booted the ${heroClass}${at} (${seconds(bootStarted)})`);
+      }
       side.used = true;
       if (turn.screen) await side.showOn(turn.screen);
       let tally = null;
@@ -204,8 +209,10 @@ export class LabSession {
   status() {
     const lines = [this.repoSide, this.otherSide].filter(Boolean).map((side) => {
       if (!side.page) return `${side.name}: ${side.url ?? 'not served yet'}`;
-      const state = side.isFresh(side.heroClass) ? 'booted for the next command' : 'used (the next command boots)';
-      return `${side.name}: ${side.url}, the ${side.heroClass} ${state}`;
+      const fresh = side.isFresh(side.heroClass, side.bootQuality);
+      const state = fresh ? 'booted for the next command' : 'used (the next command boots)';
+      const at = side.bootQuality ? ` at ${side.bootQuality}` : '';
+      return `${side.name}: ${side.url}, the ${side.heroClass}${at} ${state}`;
     });
     return lines.join('\n') || 'nothing served yet';
   }
@@ -225,16 +232,18 @@ export class LabSession {
   }
 
   /**
-   * Boots this tree's page for the next command (the hero of the last one), unless a fresh one is up. Closes the
-   * other side's page first: one page alive at a time. Returns what it did, for the server's log.
+   * Boots this tree's page for the next command (the hero of the last one, at its boot's quality), unless a fresh one
+   * is up. Closes the other side's page first: one page alive at a time. Returns what it did, for the server's log.
    */
   async bootNext() {
     await this.keepBrowser();
     await this.otherSide?.closePage();
     const heroClass = this.repoSide.heroClass ?? DEFAULT_CLASS;
+    const quality = this.repoSide.bootQuality;
     const started = Date.now();
-    if (!(await this.repoSide.ready(heroClass))) return null;
-    return `booted the ${heroClass} for the next command (${seconds(started)})`;
+    if (!(await this.repoSide.ready(heroClass, quality))) return null;
+    const at = quality ? ` at ${quality}` : '';
+    return `booted the ${heroClass}${at} for the next command (${seconds(started)})`;
   }
 
   /**
