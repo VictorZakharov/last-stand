@@ -13,6 +13,7 @@ import type { FormOptions } from './form';
 import type { UiOptions } from './ui';
 import type { TouchOptions } from './touchStick';
 import type { TapOptions } from './tap';
+import type { TrailOptions } from './trail';
 import type { LightOptions } from './light';
 import type { HazeOptions } from './haze';
 import type { SpawnsOptions } from './spawns';
@@ -191,6 +192,16 @@ export async function touch(lab: Lab, command: TouchOptions): Promise<Report> {
 export async function tap(lab: Lab, command: TapOptions): Promise<Report> {
   const { tap: tapRounds } = await import('./tap');
   return tapRounds(lab, command);
+}
+
+/**
+ * `lab trail`: each strike cast in each view, its trail's pixels against where the weapons swept; pixels away from
+ * it, a blow with no trail, its newest end off the blade, a trail while they're still and a canary missed are
+ * problems.
+ */
+export async function trail(lab: Lab, command: TrailOptions): Promise<Report> {
+  const { trail: trailRounds } = await import('./trail');
+  return trailRounds(lab, command);
 }
 
 /**

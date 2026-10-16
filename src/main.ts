@@ -15,6 +15,7 @@ import { buildArena } from './world/arena';
 import { separateEnemies } from './world/collision';
 import { Player } from './entities/player';
 import { viewArms } from './entities/viewModel';
+import { updateSwingTrails } from './fx/swingTrail';
 import { updateEnemies, clearEnemies } from './entities/enemy';
 import { spawnEnemy } from './entities/spawner';
 import { updateProjectiles, clearProjectiles } from './combat/projectiles';
@@ -421,6 +422,8 @@ function update(dt: number): void {
   // arms and what they hold show
   const eyes = focus === G.player && viewMode() === 'first' && viewSettled();
   viewArms(G.player.model, eyes, G.camera);
+  // (the weapons' trails in each hero's own space, the arms placed in the view first)
+  updateSwingTrails();
 
 
 

@@ -24,7 +24,7 @@ export const UI_STATES = [
 ];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
-const WEAPON_STYLES = ['oneHanded', 'shield', 'twoHanded', 'dual'];
+export const WEAPON_STYLES = ['oneHanded', 'shield', 'twoHanded', 'dual'];
 
 /** the ways a picture can be drawn (page/looks.ts `LOOKS`) */
 const LOOKS = ['lit', 'wire', 'faces', 'parts', 'bones'];
@@ -918,6 +918,45 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'plant a fault the measure must catch: the furthest push\'s finger slid back near the middle',
       },
+      ...COMMON_OPTIONS,
+    },
+  },
+  trail: {
+    help: 'the trail a swung weapon leaves, as the player sees it: each strike cast in each view, every frame from '
+      + 'the press until the weapons are still drawn with the trail and without, and the pixels it lit told apart; '
+      + 'pixels outside where the weapons swept over the last 0.15 s (each weapon placed from its grip to its far '
+      + 'end by its own meshes, in the hero\'s frame, as the camera drawing his arms sees it), a blow in the frame '
+      + 'with no trail, its newest end off the blade and a trail while the weapons are still are problems; the frame '
+      + 'each strike lit most pictured: tools/lab/out/trail (--class warrior)',
+    options: {
+      strikes: {
+        kind: 'list',
+        usage: 'skill[@style],...',
+        help: 'the strikes: a skill by its key, its behaviour or its name, and the way the weapons are held for it '
+          + `(${WEAPON_STYLES.join(', ')}; as the boot rolled them when not given); the warrior's every strike, and `
+          + 'Rending Cleave with each way, by default',
+      },
+      biome: { kind: 'choice', choices: ['crypt', 'forest'], usage: 'crypt|forest', help: 'the biome (crypt)' },
+      views: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['top', 'third', 'first'],
+        default: 'top,third,first',
+        help: 'the views: top, third, first',
+      },
+      pictures: { kind: 'switch', help: 'picture each strike\'s frame its trail lit most (=false: the numbers alone)' },
+      frames: {
+        kind: 'switch',
+        help: 'list every frame: the weapons\' speed, the trail\'s pixels and those outside, its newest column against '
+          + 'the weapon and its pixels against the blade',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant faults the checks must catch, in the first strike: the trail lasting a second, never lit, and '
+          + 'through the eyes drawn by the world\'s camera instead of the arms\' own',
+      },
+      wear: SETUP_OPTIONS.wear,
+      tune: SETUP_OPTIONS.tune,
       ...COMMON_OPTIONS,
     },
   },
