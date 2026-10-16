@@ -7,7 +7,8 @@ import { labError } from './errors.mjs';
 import { UI_STATES } from './options.mjs';
 import { REPO } from './paths.mjs';
 import { probeFiles } from './probeFiles.mjs';
-import { writeSheet } from './sheetImage.mjs';
+import { writeSheet, writeStack } from './sheetImage.mjs';
+import { compare, marksOf, readReference, screenFor, writeMatch } from './match.mjs';
 
 /** the waves `spawns` sets off in each biome unless `--waves` says */
 const SPAWN_WAVES = 32;
@@ -35,7 +36,33 @@ export function fixtureFrom(options) {
   if (options.nocked !== undefined) fixture.nocked = options.nocked;
   if (options.gear !== undefined) fixture.gear = options.gear;
   if (options.weapon !== undefined) fixture.weapon = options.weapon;
+  if (options.wear !== undefined) fixture.wear = options.wear.filter((part) => part !== 'none');
+  if (options.tune !== undefined) fixture.tune = tunesFrom(options.tune);
   return fixture;
+}
+
+/** the moment of a strike `match` pictures unless `--share` says (a share of its cast) */
+const MATCH_SHARE = 0.5;
+
+/** The moment `match` pictures the hero in (page/sheet.ts's states): standing at rest, or `--skill` at `--share` of
+ *  its cast. */
+function matchedMoment(options) {
+  if (!options.skill) return { states: ['stand'] };
+  return { states: ['cast'], skill: options.skill, shares: [options.share ?? MATCH_SHARE] };
+}
+
+/** `--tune`'s text as the values it sets, by their paths: `a.b=1,2;c.d=3` sets a.b to [1, 2] and c.d to [3]. */
+function tunesFrom(text) {
+  const tunes = {};
+  for (const part of text.split(';').filter(Boolean)) {
+    const [path, values] = part.split('=');
+    const numbers = (values ?? '').split(',').map(Number);
+    if (!path.includes('.') || !values || numbers.some((n) => !Number.isFinite(n))) {
+      throw new Error(`lab: --tune: ${part} isn't name.field=numbers`);
+    }
+    tunes[path] = numbers;
+  }
+  return tunes;
 }
 
 /**
@@ -203,6 +230,27 @@ function textWithPictureFiles(results, dir) {
     }
   }
   return written.length ? `${text}\n\npictures in ${relative(REPO, dir)}: ${written.join(', ')}` : text;
+}
+
+/**
+ * In an A/B, each moment both sides pictured whose label passes `wanted`, the other side's above this tree's in one
+ * picture at their own sizes (`writeStack`), written in `dir` as `<label>--ab.png`; the files written.
+ */
+async function writeStacks(results, dir, browser, wanted) {
+  if (results.length < 2) return [];
+  const written = [];
+  const [first, ...others] = results;
+  for (const moment of first[1]?.moments ?? []) {
+    if (!wanted(moment.label)) continue;
+    const momentOf = (result) => result?.moments?.find((m) => m.label === moment.label);
+    const sides = [first, ...others].map(([side, result]) => [side, momentOf(result)]);
+    if (sides.some(([, found]) => !found || found.tiles.length !== 1)) continue;
+    const pictures = sides.map(([side, found]) => ({ caption: side.name, ...found.tiles[0] }));
+    const name = `${fileNameOf(moment.label)}--ab.png`;
+    await writeStack(browser, pictures, join(dir, name));
+    written.push(name);
+  }
+  return written;
 }
 
 /** Each side's text under its name, and the sheet of the moments they pictured, written in `dir` (when any did). */
@@ -466,6 +514,31 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  haze: {
+    check(options) {
+      const wrong = options.facings.find((facing) => !Number.isFinite(Number(facing)));
+      if (wrong !== undefined) throw labError(`haze --facings: ${wrong} is not a number of degrees`);
+    },
+    each(side, options) {
+      const command = {
+        biome: options.biome ?? 'forest',
+        facings: options.facings.map(Number),
+        gear: options.gear,
+        weapon: options.weapon,
+        at: options.at,
+        pictures: options.pictures !== false,
+        canary: Boolean(options.canary),
+      };
+      return side.command('haze', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('haze'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   draw: {
     async each(side, options) {
       // (a view at a time, each set up in it: through the eyes the bow is posed for the view)
@@ -642,6 +715,83 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  eyes: {
+    check(options) {
+      if (options.times !== undefined && !(options.times >= 1)) throw labError('eyes --times: at least 1');
+      if (options.every !== undefined && !(options.every >= 1)) throw labError('eyes --every: at least 1');
+      if (options.cast !== undefined && !(options.cast >= 1 && options.cast <= (options.times ?? 1))) {
+        throw labError('eyes --cast: one of the casts, 1 to --times');
+      }
+      if (options.apart !== undefined && !(options.apart >= 0)) throw labError('eyes --apart: seconds, 0 or more');
+    },
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        skill: options._[0],
+        times: Math.round(options.times ?? 1),
+        apart: options.apart ?? null,
+        every: Math.round(options.every ?? 2),
+        cast: options.cast === undefined ? null : Math.round(options.cast),
+        close: options.close ?? [],
+        film: options.film !== false,
+        frames: Boolean(options.frames),
+        span: options.span ?? null,
+        canary: Boolean(options.canary),
+      };
+      return side.command('eyes', command);
+    },
+    async finish(results, options, session) {
+      const dir = session.outFor(join('eyes', options._[0]));
+      const text = textWithPictureFiles(results, dir);
+      // (in an A/B, each strike's strip of frames, the other side's above this tree's)
+      const stacked = await writeStacks(results, dir, session.browser, (label) => label.endsWith(': the strike'));
+      return stacked.length ? `${text}\nside by side: ${stacked.join(', ')}` : text;
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
+  match: {
+    check(options) {
+      readReference(resolve(options._[0]), options.frame);
+      if (options.screen || options.screens) throw labError('match: the screen is the reference\'s shape; no --screen');
+      if (options.share !== undefined && !options.skill) throw labError('match --share: a moment of --skill\'s cast');
+      if (options.share !== undefined && !(options.share >= 0 && options.share <= 1)) {
+        throw labError('match --share: a share of the cast, 0 to 1');
+      }
+      if (options.fit && options.skill) throw labError('match --fit fits a rest: not with --skill');
+    },
+    async each(side, options) {
+      const reference = readReference(resolve(options._[0]), options.frame);
+      await side.showOn(screenFor(reference));
+      const fixture = { ...fixtureFrom(options), view: 'first' };
+      const fit = options.fit
+        ? await side.command('fitRest', {
+          fixture,
+          marks: marksOf(reference, options.near),
+          fields: options.fit,
+          canary: Boolean(options.canary),
+        })
+        : undefined;
+      const pictured = fit ? { ...fixture, tune: { ...fixture.tune, ...fit.tune } } : fixture;
+      const sheet = await side.command('sheet', { ...matchedMoment(options), views: ['eyes'], fixture: pictured });
+      return { ...sheet, fit: fit && { ...fit, to: options.near } };
+    },
+    async finish(results, options, session) {
+      const reference = readReference(resolve(options._[0]), options.frame);
+      const runs = results.map(([side, sheet]) => [side.name, sheet]);
+      const { text, html } = compare(reference, runs, Boolean(options.canary));
+      const dir = session.outFor(join('match', reference.name));
+      mkdirSync(dir, { recursive: true });
+      const image = join(dir, 'match.png');
+      await writeMatch(session.browser, html, runs.length, image);
+      return `${text}\n\nmatch: ${relative(REPO, image)}`;
+    },
+    textOf: sheetNotes,
+    pictures: picturePairs,
+  },
+
   shots: {
     check(options) {
       if (options.shots !== undefined && !(options.shots >= 1)) throw labError('shots --shots: at least 1');
@@ -714,6 +864,26 @@ export const COMMANDS = {
     textOf: asText,
     problemsOf: problemsIn,
     pictures: picturePairs,
+  },
+
+  swing: {
+    check(options) {
+      if (options.grip?.length !== options.way?.length) throw labError('swing: --grip with a --way for each');
+    },
+    each(side, options) {
+      const command = {
+        fixture: { view: 'first', ...fixtureFrom(options) },
+        swing: options._[0],
+        at: options.grip ?? null,
+        dir: options.way ?? null,
+        key: options.key ?? null,
+        left: Boolean(options.left),
+        canary: Boolean(options.canary),
+      };
+      return side.command('swing', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
   },
 
   eval: {

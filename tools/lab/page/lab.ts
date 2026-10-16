@@ -222,7 +222,16 @@ export interface Fixture {
    *  before it on the page (set up again over the same hero, a gait scenario's every line moved with the scenarios
    *  run before it: his walk cycle, his leg IK's smoothed speed, turn and twist, his aim's hold all carried over) */
   fresh?: boolean;
+  /** tunable values set before the run, by their paths (`name.field`: src/core/tuning.ts) */
+  tune?: Record<string, number[]>;
+  /** the armour he wears, every piece not named left off (none: bare hands and head, his clothes); as the boot rolled
+   *  it by default */
+  wear?: Armour[];
 }
+
+/** the armour a hero can be seen wearing (`Gear`'s flags) */
+const ARMOUR = ['helm', 'chest', 'hands'] as const;
+type Armour = (typeof ARMOUR)[number];
 
 /** The pictures the lab can take: the game's own views, or a close-up from round the hero. */
 export const VIEW_NAMES = ['lobby', 'top', 'third', 'eyes', 'front', 'left', 'right', 'back', 'above'] as const;
@@ -287,6 +296,13 @@ export interface Tile {
   width: number;
   height: number;
   /** in the `parts` look, the hero's parts in it, the most first */
+  parts?: PartOnScreen[];
+}
+
+/** A picture as `Lab.drawn` gives it: its view, drawn on a canvas, and in the `parts` look the hero's parts in it. */
+export interface Drawn {
+  view: ViewName;
+  canvas: HTMLCanvasElement;
   parts?: PartOnScreen[];
 }
 
@@ -478,11 +494,13 @@ export class Lab {
     this.keepUp = [() => holdTheWave(this.foes), this.keepHeroUp];
     await this.until(() => !this.player.casting && !this.player.channel, 400, 'the hero is still busy with a cast');
     if (fixture.fresh) this.buildHeroAgain();
+    setTunes(fixture.tune ?? {});
     await this.useView(fixture.view ?? 'top');
     const [x, z] = fixture.at ?? SPOT;
     const facing = fixture.facing ?? 0;
     const spot = new THREE.Vector3(x, 0, z);
     if (fixture.gear) this.hold(fixture.gear, fixture.weapon);
+    if (fixture.wear) this.dress(fixture.wear);
     this.player.place(spot, facing);
     // (the camera too, for a hero built afresh: a commit from before it has none, and its camera glides)
     if (fixture.fresh) renderer.settleCamera?.(spot);
@@ -509,6 +527,7 @@ export class Lab {
       at: [x, z],
       facing,
       nocked: this.player.nocked,
+      wears: ARMOUR.filter((piece) => this.player.gear[piece]),
       time: Number(G.time.toFixed(2)),
     };
   }
@@ -545,6 +564,14 @@ export class Lab {
     // (its loadout and its skills tuned to the style too: set by the gear alone, a two-hander swung at a one-hander's
     // pace; an older commit's hero has none of that)
     this.player.fitToGear?.();
+    this.model.setGear?.(gear);
+  }
+
+  /** The hero wearing `armour` and nothing else of it, as the player sees him dressed. */
+  private dress(armour: Armour[]): void {
+    const worn = (piece: Armour) => armour.includes(piece);
+    const gear = { ...this.player.gear, helm: worn('helm'), chest: worn('chest'), hands: worn('hands') };
+    this.player.gear = gear;
     this.model.setGear?.(gear);
   }
 
@@ -595,7 +622,9 @@ export class Lab {
       if (!(VIEW_NAMES as readonly string[]).includes(view)) {
         throw new Error(`lab: no view ${view} (the views: ${VIEW_NAMES.join(', ')})`);
       }
-      if (throughEyes && view !== 'eyes') throw new Error(`lab: ${view}: through the eyes only the arms are shown`);
+      if (throughEyes && view !== 'eyes' && !CLOSE_UPS[view as ViewName]) {
+        throw new Error(`lab: ${view}: through the eyes the eyes' view and the close-ups of the arms alone are shown`);
+      }
       if (!throughEyes && view === 'eyes') throw new Error('lab: eyes: needs the view through the eyes (--view first)');
     }
     if (focus !== undefined && !this.jointNames().includes(focus)) {
@@ -717,15 +746,26 @@ export class Lab {
 
   /** Pictures of the game as it is now, nothing advanced; the game's camera is put back as it was. */
   capture(views: ViewName[], options: CaptureOptions = {}): Tile[] {
+    return this.drawn(views, options).map(({ view, canvas, parts }) => ({
+      ...tileOf(canvas, view),
+      ...(parts ? { parts } : {}),
+    }));
+  }
+
+  /**
+   * `capture`'s pictures as canvases, for page code that draws them on (a film's frames, shown small): encoded as a
+   * tile's picture and decoded again, a frame took a quarter of a second.
+   */
+  drawn(views: ViewName[], options: CaptureOptions = {}): Drawn[] {
     this.checkCapture(views, renderer.viewMode(), options.focus);
     const restore = this.saveCamera();
     const drawing = this.drawing;
     this.drawing = true;
     try {
       return views.map((view) => {
-        const tile = this.captureOne(view, options);
+        const drawn = this.drawOne(view, options);
         restore();
-        return tile;
+        return drawn;
       });
     } finally {
       this.drawing = drawing;
@@ -733,7 +773,7 @@ export class Lab {
     }
   }
 
-  private captureOne(view: ViewName, options: CaptureOptions): Tile {
+  private drawOne(view: ViewName, options: CaptureOptions): Drawn {
     const closeUp = CLOSE_UPS[view];
     let crop: Crop;
     if (closeUp) crop = this.aimCloseUp(closeUp, options);
@@ -742,9 +782,10 @@ export class Lab {
     const area = areaOf(crop);
     const look = options.look ?? 'lit';
     if (look === 'lit' || look === 'bones') {
-      renderer.render();
+      if (closeUp && renderer.viewMode() === 'first') this.renderArmsFromOutside();
+      else renderer.render();
       const canvas = cropOf(G.renderer.domElement, area);
-      return tileOf(look === 'bones' ? withBones(canvas, this.joints, area) : canvas, view);
+      return { view, canvas: look === 'bones' ? withBones(canvas, this.joints, area) : canvas };
     }
     const joints = jointsByObject(this.joints);
     const named = (mesh: THREE.Mesh) => partName(mesh, joints);
@@ -753,7 +794,26 @@ export class Lab {
     canvas.width = image.width;
     canvas.height = image.height;
     canvas.getContext('2d')!.putImageData(image, 0, 0);
-    return { ...tileOf(canvas, view), ...(look === 'parts' ? { parts } : {}) };
+    return { view, canvas, ...(look === 'parts' ? { parts } : {}) };
+  }
+
+  /**
+   * Through the eyes, the frame drawn from the game's camera where a close-up put it, the arms and what they hold drawn
+   * by it too (not by their own camera from the eyes: renderer.ts `drawArms`): the arms as the eyes place them, seen
+   * from outside, their shoulders under the camera and the rest of the body unseen (a wrist seen bent from the eyes
+   * alone was read three ways).
+   */
+  private renderArmsFromOutside(): void {
+    const fov = this.model.armsFov?.() ?? null;
+    const layers = G.camera.layers.mask;
+    renderer.drawArms(null);
+    G.camera.layers.enable(renderer.ARMS_LAYER);
+    try {
+      renderer.render();
+    } finally {
+      G.camera.layers.mask = layers;
+      renderer.drawArms(fov);
+    }
   }
 
   /** the game's camera set for a close-up; the crop is the frame's middle */
@@ -948,6 +1008,14 @@ function holdTheWave(kept: Set<Enemy>): void {
   run.queue = [];
   run.phase = 'countdown';
   run.timer = Infinity;
+}
+
+/** Sets the game's tunable values (`Fixture.tune`; src/core/tuning.ts), each by its path. */
+function setTunes(tunes: Record<string, number[]>): void {
+  const paths = Object.keys(tunes);
+  if (!paths.length) return;
+  if (!window.__tune) throw new Error('lab: --tune: this game has no tunable values');
+  for (const path of paths) window.__tune(path, tunes[path]);
 }
 
 /** The session's entry: the lab installed on this page. */

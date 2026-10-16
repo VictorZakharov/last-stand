@@ -146,6 +146,11 @@ export interface SkillDef {
  *  m; the arm's joints past their ranges holding it, degrees; the arm into the body, m). */
 export interface LowerGrip { held: boolean; free: boolean; short: number; past: number; into: number }
 
+/** How a hand holds a handle (`Model.fists`): how far the handle passes from where the fist closes round it (m), how
+ *  far along it that is from where the fist holds it (m, up the handle positive), and how far its fingers are curled
+ *  (rad, their joints' mean bend: 0 straight) */
+export interface Fist { hand: 'left' | 'right'; off: number; along?: number; curl: number }
+
 /** How the weapons are held: each has its own loadout (for a class with gear-driven skills). */
 export type WeaponStyle = 'shield' | 'twoHanded' | 'dual' | 'oneHanded';
 
@@ -311,6 +316,8 @@ export interface Model {
   tip?: THREE.Object3D;
   /** the other hand's weapon tip, while there's a weapon in each (a charge gathers into both) */
   readonly offTip?: THREE.Object3D | null;
+  /** a two-hander's lower grip, where the other hand holds it (none for any other weapon) */
+  readonly offGrip?: THREE.Object3D | null;
   /** offhand focus point */
   palm?: THREE.Object3D;
   /** a bow's nocked arrow's head, along the arrow as it lies on the string (a full draw glints there) */
@@ -322,6 +329,9 @@ export interface Model {
   /** seen through its own eyes (only the arms show, entities/viewModel.ts): adjust what reads badly from
    *  there (a sleeve hiding the hand, an arm raised out of the frame) */
   firstPerson?(on: boolean): void;
+  /** through its own eyes, the field of view (vertical, degrees) its arms and what they hold are drawn with, by a camera
+   *  of their own over the world's (core/renderer.ts `drawArms`); none: by the world's */
+  armsFov?(): number;
   /** cloth simulated on the model's own joints (a sleeve; models/sleeve.ts): stepped in `animate` */
   readonly cloths?: { update(dt: number): void; reset(): void }[];
   /** re-settle simulated parts after a teleport */
@@ -330,15 +340,28 @@ export interface Model {
   setGear?(gear: Gear): void;
   /** direction of the current melee swing: +1 sweeps right to left, -1 left to right */
   readonly swing?: number;
+  /** through the eyes, the arm a swing keyed this frame (camera space, m; null when none did): what the lab holds the
+   *  drawn arm to */
+  readonly swingKeyed?: KeyedArm | null;
+  /** through the eyes, the bones a swing lays out the arm with (viewSwing.ts `ArmBones`, m): the right arm's, or the
+   *  left's with the weapon it holds (a dual wielder's off hand) */
+  swingBones?(left: boolean): { upper: number; fore: number; hand: number; strike: number };
   /** distance from the body to the weapon's tip */
   readonly reach?: number;
   /** a two-hander's lower grip as the other hand held it this frame (null without one; the lab's measures read it) */
   readonly lowerGrip?: LowerGrip | null;
+  /** each hand holding a handle, and how it holds it (for the lab) */
+  readonly fists?: readonly Fist[];
   dispose(): void;
 }
 
 // ---------------------------------------------------------------------------
 // Misc
+
+/** an arm as a swing through the eyes keys it (camera space, m): its shoulder, its elbow, its grip and the weapon's
+ *  way, and how much of the arm drawn is the swing's (1: all of it; less as it takes over from the place before or
+ *  fades from it) */
+export interface KeyedArm { hand: 'right' | 'left'; shoulder: XYZ; elbow: XYZ; grip: XYZ; dir: XYZ; weight: number }
 
 export interface XZ { x: number; z: number }
 export interface XYZ { x: number; y: number; z: number }

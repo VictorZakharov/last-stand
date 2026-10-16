@@ -3,7 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CHECK_CLASSES, CHECK_OFFSETS, CHECK_SPLIT, countsLine, countsOver, jobsOf, longestFirst, offsetsOf, scenariosOf,
+  CHECK_CLASSES, CHECK_OFFSETS, CHECK_SPLIT, EYES_ROWS, countsLine, countsOver, eyesParts, jobsOf, longestFirst,
+  offsetsOf, scenariosOf,
 } from '../node/check.mjs';
 import { keyedOptions, sideKey } from '../node/sideCache.mjs';
 
@@ -16,8 +17,10 @@ test('every command of the plan for each of its heroes, the ranger\'s alone for 
   assert.ok(gaitScenarios > 1);
   assert.ok(starts > 1);
   assert.ok(CHECK_SPLIT.has('gait'));
-  assert.equal(jobs.length, (3 + gaitScenarios) * CHECK_CLASSES.length + 2);
+  assert.equal(jobs.length, (3 + gaitScenarios) * CHECK_CLASSES.length + 2 + eyesParts().length);
   assert.ok(names(jobs).includes('carry-ranger'));
+  assert.ok(names(jobs).includes('eyes-warrior-twoHanded-Maul-row'));
+  assert.ok(!names(jobs).some((name) => name.startsWith('eyes-mage')));
   assert.ok(!names(jobs).includes('carry-warrior'));
   assert.ok(names(jobs).includes('stops-mage'));
   const gait = jobs.find((job) => job.name === `gait-mage-${scenariosOf('gait')[0]}`);
@@ -49,6 +52,25 @@ test('a split command\'s job runs one scenario, in its group; the gait listed wi
   assert.equal(gait.options.films, false);
   assert.equal(gait.options.ab, 'abc1234');
   assert.equal(gait.options.class, 'mage');
+});
+
+test('each weapon swung through the eyes in each row, the basic attack without a film, in the eyes\' group', () => {
+  const jobs = jobsOf({ commands: ['eyes'], classes: ['warrior'] });
+  assert.equal(jobs.length, eyesParts().length);
+  assert.equal(new Set(names(jobs)).size, jobs.length);
+  const rows = Object.keys(EYES_ROWS).length;
+  assert.equal(jobs.filter((job) => job.options.weapon === 'Greataxe').length, rows);
+  const pause = jobs.find((job) => job.name === 'eyes-warrior-dual-Axe-pause');
+  assert.deepEqual(pause.options._, ['cleave']);
+  assert.equal(pause.options.film, false);
+  assert.equal(pause.options.gear, 'dual');
+  assert.equal(pause.options.weapon, 'Axe');
+  assert.equal(pause.options.apart, EYES_ROWS.pause.apart);
+  assert.equal(pause.group, 'eyes-warrior');
+  assert.equal(pause.part, 'dual-Axe-pause');
+  const row = jobs.find((job) => job.name === 'eyes-warrior-shield-Mace-row');
+  assert.equal(row.options.canary, true);
+  assert.equal(row.options.offsets, undefined);
 });
 
 test('the longest last time first, one never timed before them all', () => {

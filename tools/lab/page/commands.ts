@@ -13,6 +13,7 @@ import type { FormOptions } from './form';
 import type { UiOptions } from './ui';
 import type { TouchOptions } from './touchStick';
 import type { LightOptions } from './light';
+import type { HazeOptions } from './haze';
 import type { SpawnsOptions } from './spawns';
 import type { HealthOptions } from './health';
 import type { BlinkOptions } from './blink';
@@ -28,6 +29,9 @@ import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
+import type { EyesOptions } from './eyes';
+import type { SwingOptions } from './swing';
+import type { Fit, FitOptions } from './fitRest';
 
 export interface SheetCommand {
   states: string[];
@@ -72,6 +76,12 @@ export async function weapons(lab: Lab, command: WeaponsOptions): Promise<Report
 export async function hands(lab: Lab, command: HandsOptions): Promise<Report> {
   const { hands: picture } = await import('./hands');
   return picture(lab, command);
+}
+
+/** `lab match --fit`: a rest's tunable values fitted to a reference's marks. */
+export async function fitRest(lab: Lab, command: FitOptions): Promise<Fit> {
+  const { fitRest: fit } = await import('./fitRest');
+  return fit(lab, command);
 }
 
 /** `lab sheet`: the pictures and their notes. */
@@ -179,6 +189,13 @@ export async function light(lab: Lab, command: LightOptions): Promise<Report> {
   return lightRound(lab, command);
 }
 
+/** `lab haze`: through the eyes, what the hero's held weapons' light takes from the frame round them; a haze and a
+ *  canary missed are problems. */
+export async function haze(lab: Lab, command: HazeOptions): Promise<Report> {
+  const { haze: hazeRound } = await import('./haze');
+  return hazeRound(lab, command);
+}
+
 /**
  * `lab spawns`: waves in each biome, and how every foe came in: its gate, its group's gates and the spot it rose on,
  * and the boss's walk to the hero from each gate; a gate left idle, a foe risen in a prop, a boss that never reached
@@ -266,6 +283,20 @@ export async function draws(lab: Lab, command: DrawsOptions): Promise<Report> {
 export async function shots(lab: Lab, command: ShotsOptions): Promise<Report> {
   const { shots: shotsRound } = await import('./shots');
   return shotsRound(lab, command);
+}
+
+/** `lab eyes`: a skill cast through the eyes, frame by frame, with its film; a two-hander seen in one hand, or a canary
+ *  it missed, is a problem. */
+export async function eyes(lab: Lab, command: EyesOptions): Promise<Report> {
+  const { eyes: eyesRound } = await import('./eyes');
+  return eyesRound(lab, command);
+}
+
+/** `lab swing`: the key of a swing through the eyes that holds a pose chosen in the view, what of the pose it can't
+ *  hold, and where its keys put the arm; a canary it missed is a problem. */
+export async function swing(lab: Lab, command: SwingOptions): Promise<Report> {
+  const { swing: swingKeyed } = await import('./swing');
+  return swingKeyed(lab, command);
 }
 
 /** `lab gear`: full sets rolled for every class at each tier, and what they give; a class out of order is a problem. */

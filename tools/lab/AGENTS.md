@@ -17,6 +17,8 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `carry`: measures the carried bow
 - `feet`: the feet against the ground round the dais's edges and on level ground (standing at full draw, walking across, strafing drawn, running reversals: out of reach, wobbling, sliding, in a riser, the rhythm)
 - `range`: every joint against a body's ranges frame by frame (standing, walking each way, attacking, and walks that change direction while he attacks, held or tapped, or runs: each angle past its range, its worst and where, each scenario's fastest ankle and weapon tip, a two-hander let go of by the other hand, `--trace` the leg IK frame by frame as `gait --trace` lists it, each frame's joints past their ranges beside it)
+- `eyes <skill>`: a skill cast through the eyes, frame by frame (where the blade goes across the view, wound up, through the blow and where it ends, how fast, where it is as the skill fires; a two-hander let go of where it's seen, or seen in one hand; a fist open on its handle; the arms' joints past their ranges; a film of the frames)
+- `match <picture>`: the hero standing through the eyes beside a reference's screenshot, on a screen of its shape (the screenshot, his frame, the two blended, the points marked on it and his drawn on each, and how far his are off)
 - `coop`: two games playing together, the host's and a guest's beside it, their messages carried as a link of a high ping and jitter carries them (`--ping`, `--jitter`: how far behind and how roughly each shows the other's heroes and foes, how its timeline plays them out, whether an arrow that struck a foe on the guest's screen counted, whether a blow it dodged hurt it, a guest brought down and raised, a guest's blink as the host's screen shows it: when it hid the copy, where the copy came out, the foes it dazed on both screens; `--class mage`)
 - `stops`: the hero coming to a stop from a run as a person stops (runs let go at different points of a stride, on level ground, drawn and by the dais's edges: the steps once still, a foot put out and drawn back, steps back, a foot on another level than the body's or stepped onto one once still, `--trace`, `--only`)
 - `gait`: the walk judged as a person's (level ground and the steps, nothing drawn, drawn, tapping, changing direction often and going round in circles: each foot's time on the ground against the plan, both and neither, the steps a second and their length, hops, a foot dance's short steps, the gallops (a foot leaving within 0.3 of a stride of the other's: counted as hops, both feet within a few frames, a gallop at every set-off went unseen), the steps' width, the hips' rise and fall, a planted foot dragged, each hand's swing against its knee half second by half second, the rhythm against the walk cycle, steps back under a body that stopped, the jerks, each step's swing against its plan and why it left, every frame judged as a body's: its centre of mass with its gear against the push its motion needs from the planted soles, in the air falling as a body does, and every joint within its range, `--trace` each frame (`--span` some), a scenario held up by a prop failing it, and a film of each round its first hop)
@@ -50,13 +52,16 @@ Options every command takes:
 - `--ab`: runs any of them on `origin/main` too and says which lines and pictures differ (a commit against itself agrees, line for line)
 - `--watch`: runs one again on each change to the source
 - `--profile`: says where a command's time went
+- `--tune name.field=v,...;...`: sets the game's tunable values before a command's set-up (`src/core/tuning.ts`: `warriorEyes.oneOn=0.75,-1.1,0.5`), so a pose or a camera is compared across values in seconds, without editing the source and booting again
+- `--wear helm,chest,hands|none` (any command that sets the run up): the armour the hero wears, every piece not named left off (the set-up's report says what he `wears`): with `--screen` at the owner's window, a picture of what they see (the lab's hero is otherwise as the boot rolled him, bare-handed, and his first-person hands looked nothing like the owner's gloved ones)
 
 A command exits with 1 when it failed or found a problem (an error in the page, a canary missed). An A/B's pictures that differ are pictured where they differ (`tools/lab/out/ab/<command>/`), a probe can return moments pictured (`lab.picture`, or `lab.screen` for the screen as the player sees it, the page's UI over the game, whole or round one element; written as a sheet and compared in an A/B), and `page/timing.ts` times a method's calls by the browser's own clock (the page's `performance.now` is the lab's). Write a new measure in the lab (`tools/lab/examples/handSpeed.ts` shows its parts: the state it measures checked to have happened, a canary it must catch), never as a script with a boot and a clock of its own, and keep it: from its first use it is a lab command, or part of one that measures the same thing, never a probe left in `.tmp` (every harness is permanent). The probes and films the AGENTS.md files and their notes name (the bow probe, the range probe, `legdet`, the zigzag and aim probes...) were such scripts and aren't in the repo: each is a measure to port into the lab the first time it's needed again, as the carry's was (`carry`). The lab's own code has unit tests: `npm run lab:test`.
 
 ## Commands
 
 - `sheet`: the hero in the states the player sees (`--states stand,walk,full,cast`), pictured from the game's views
-  and close up (`--views lobby,top,third,front,left,right,back,above`; `eyes` with `--view first`; `--focus <joint>`
+  and close up (`--views lobby,top,third,front,left,right,back,above`; `eyes` with `--view first`, the whole frame
+  at the row's height; `--focus <joint>`
   frames the close-ups on a joint), with each arm's load and posture beside them. `cast` casts `--skill` (its key, its
   behaviour or its name; bound to its own key if the hero knows it but hasn't it on one) ahead of him and pictures
   it at shares of its cast (`--shares`, 0.3,0.55,0.8 by default; a channel at shares of its key's hold, `holdFor`),
@@ -199,6 +204,55 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   turned: an elbow swung round its arm turns the shoulder alone), and `--trace` (`--span a,b` for some frames) the leg IK frame by
   frame as the gait's trace does (`page/legTrace.ts`: each foot down, in the air or in a timed step `~`, dragged `d`),
   each frame's joints past their ranges after it.
+- `eyes <skill>`: a skill cast through the eyes (`page/eyes.ts`, `--class warrior`; `--gear` and `--weapon` hold the
+  weapons as `range` does), its key held as the player would through `--times` casts in a row (a basic attack's
+  chained swings), stepped frame by frame from the press until the arms are at rest again; a cast, a dash (Bull Rush,
+  Twin Fangs' lunge) or a channel (Steel Tempest) all count as what it follows. Each frame it places the weapon's
+  blade (its middle, from the grip to the tip: a long blade's tip is out of the frame's top as often as not), the grip
+  and the other hand's fist on the screen, and says per cast where the blade began, where it was wound up to, the blow
+  (the frames round the fastest that move at least 0.4 of it, measured only while the blade is in or near the frame:
+  passing close beside the eyes out of the view it swept 90 degrees of their view in a frame, and that read as the
+  blow), where the blade was as the skill fired against the blow, and where it ended, how many frames it was out of
+  the frame; the shoulders at rest in the eyes' frame and an arm's reach (where a pose through the eyes can put the
+  hands), and the arms' joints past their ranges, each one's worst and on how many frames (information: through the
+  eyes the arms are placed where they're seen, not fitted to a body's ranges), and each hand's fist on its handle
+  (`Model.fists`: how far the handle passes from where the fist closes, how far the fingers are curled). Problems: a
+  two-hander let go of by the other hand where that hand is in the frame (one let go of below the frame is listed,
+  unseen); a two-hander seen in one hand, its lower grip in the frame with the other hand out of it, for longer than
+  200 ms (a fist below the frame on a handle that runs out of it is lost to a person's own eyes too: counted whenever
+  the weapon's hand was seen, the middle guard at rest read as one-handed); and a hand seen holding its handle as an
+  open hand, the handle over 1.2 cm from where its fist closes or its fingers curled under 0.5 rad (through the eyes a
+  hand is drawn large, and the user saw the grip "not gripping the sword"). `--film=false` takes no film (it's
+  `tools/lab/out/eyes/<skill>/`, every `--every`
+  frames, 2 by default), `--frames` lists every frame: the grip, the weapon's way and the other hand in the camera's
+  space as the moves through the eyes are keyed (`models/warriorEyes.ts`), held or let go and why, and its joints
+  past their ranges, and the fists. `--canary` freezes the trunk and the arms as they were at the press, turns the
+  other arm down out of the frame and lifts the weapon 15 cm up the view out of the fists: there must be no blow, a
+  two-hander must be seen in one hand, and a fist must be off its handle (frozen alone, the arms swung with the trunk's
+  turn and read as a blow).
+- `match <picture>`: the hero through the eyes matched to a reference (`node/match.mjs`; another game's, the one the
+  owner names), not by eye: handed over as matching three Vermintide 2 screenshots from a one-line summary of them, a
+  rest leaned in where they lean out, was twice as wide and had its head out of the frame. He stands at rest, or is
+  caught at a moment of a strike: `--skill` cast ahead, at `--share` of its cast (0.5 by default; `page/sheet.ts`'s
+  cast state). The reference is a screenshot, or a frame of a clip of the other game's swings (`.mp4`, `.webm`, `.mkv`,
+  `.mov`; `--frame <s>`, cut by ffmpeg into `out/match/frames` once, `node/clipFrames.mjs`). He's put on a screen of
+  the reference's shape (`--gear`, `--weapon`, `--wear` and `--tune` set him up; it takes no `--screen`), and
+  `out/match/<picture>/match.png` shows the reference, his frame and the two blended, with the reference's marks (red)
+  and his (blue) on each. The marks are written once beside the picture, `<picture>.marks.json` (a clip's frame's:
+  `<clip>@<ms>.marks.json`): `crop` (px: the game's frame within a screenshot of a video), `points` (`in`, where the
+  weapon comes into the frame, and `tip`, its tip or head; shares of the frame across and down), `wide` (the weapon's
+  width, a share of the frame's: a bar across its line at its middle shows it), `box` (the part of the frame it covers,
+  [left, top, right, bottom]) and `outline` (the weapon's and the fist's, shapes of [x, y] shares). His are the sheet's
+  (`page/inFrame.ts`: read off the frame as drawn, through the camera that draws the arms; which of the weapon or the
+  arm each cell of a 96 by 54 grid shows is the two drawn alone in flat colours, `page/pickGrid.ts`: a ray a cell
+  against the skinned hands took 43 s a frame at a strike, and saw them skinned another way than the game draws
+  them). It says each frame's numbers (the points, the lean between them, the width, the box), how far his are off the
+  reference's, and how much of each outline his frame covers. Check the marks on the reference's own panel before
+  trusting a comparison. `--fit a.b,c.d` searches tunable values (`--tune`'s) for the rest nearest the marks `--near`
+  names (`line`, `wide`, `box`, `outline`, by default; `page/fitRest.ts`; a rest only), then pictures it with the
+  `--tune` that gives it: fitted one number at a time, a rest matched every number with the blade out of the frame and
+  the hand in it. `--canary` takes his points as the reference's moved 10% across, which the comparison must find so,
+  and with `--fit` fits him to his own frame from values moved off it, which must find its way back.
 - `carry`: the ranger's carried bow against his body through a carry's round (standing, walking, a draw and its shot,
   waiting with the next arrow, putting it back). `--canary` plants faults it must catch; `--frames` lists every frame
   with a clip, what crossed what and how deep.

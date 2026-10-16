@@ -38,6 +38,9 @@ const HUE_FROM = 1, HUE_TO = 1.6, GLARE_FROM = 0.05, GLARE_TO = 0.4;
  */
 const ADAPT = { top: [0.35, 0.11], lobby: [0.45, 0.13], third: [1.2, 0.26], first: [0.5, 0.13] } as const;
 const ADAPT_BASE = 0.04;
+/** a pixel this share of its area's average light or dimmer keeps its light as the area adapts, and one as bright as
+ *  the average adapts with it in full (between, in part) */
+const ADAPT_ALIKE = [0.5, 1.0] as const;
 /**
  * The top view's large target (the lobby's too, which it zooms in to) is for the night crypt; a brighter
  * biome's ordinary scenes sit higher (the daylit forest's 4x3 areas average about 2.3 times the crypt's), so
@@ -51,6 +54,9 @@ export function setAdaptScale(k: number): void { adaptScale = k; }
 /** `?adapt=0` holds the adaptation off (a studio render measured against a picture: its colours mustn't follow how
  *  much of the frame is dark hair) */
 const NO_ADAPT = typeof location !== 'undefined' && /[?&]adapt=0/.test(location.search);
+/** the adaptation held off from now on, or no longer, as `?adapt=0` holds it (the lab's haze draws a frame both ways) */
+let adaptHeld = NO_ADAPT;
+export function holdAdaptation(off: boolean): void { adaptHeld = off || NO_ADAPT; }
 /** Bloom's blur levels, tightest to widest: the halo round an effect, and only a trace of the screen-wide veil. */
 const BLOOM_LEVELS = [0.56, 0.5, 0.35, 0.12, 0.03];
 const GradeShader = {
@@ -76,12 +82,16 @@ const GradeShader = {
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
     // the power of the light over the base that brings an area's average down to its target
     float adapt(float avg, float target){ return avg > target ? log(target / ${ADAPT_BASE.toFixed(3)}) / log(avg / ${ADAPT_BASE.toFixed(3)}) : 1.0; }
+    // and a pixel adapts to it as far as it's as bright as it: from half the area's average light up (a pixel much
+    // dimmer than its area is beside what makes it bright, which the eye adapts to apart; adapted alike, the stone
+    // round a sunlit blade through the eyes darkened into a veil, its edge on the grid's cells)
+    float adaptAt(float avg, float target, float lum){ return mix(1.0, adapt(avg, target), smoothstep(${ADAPT_ALIKE[0].toFixed(2)}, ${ADAPT_ALIKE[1].toFixed(2)}, lum / max(avg, 1e-4))); }
     void main(){
       vec4 c = texture2D(tDiffuse, vUv);
       // the eye adapts to a bright area, so a big effect doesn't wash out the view
       const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
-      float g = min(adapt(dot(texture2D(tSmall, vUv).rgb, LUM), uSmall), adapt(dot(texture2D(tLarge, vUv).rgb, LUM), uLarge));
       float lum = dot(c.rgb, LUM);
+      float g = min(adaptAt(dot(texture2D(tSmall, vUv).rgb, LUM), uSmall, lum), adaptAt(dot(texture2D(tLarge, vUv).rgb, LUM), uLarge, lum));
       if (lum > ${ADAPT_BASE.toFixed(3)}) c.rgb *= ${ADAPT_BASE.toFixed(3)} * pow(lum / ${ADAPT_BASE.toFixed(3)}, g) / lum;
       // glare (bloom's blurriest level): how large a bright spot is
       vec3 gl = texture2D(tGlare, vUv).rgb;
@@ -210,6 +220,84 @@ const rig = {
   fromQuat: new THREE.Quaternion(),
   fromFov: CAMERA.fov,
 };
+
+/**
+ * Through the eyes, a hero's arms and what they hold can be drawn on a layer of their own by a camera of their own
+ * (`drawArms`), placed as the world's but with a narrower view, over the frame the world drew, as games draw a
+ * first-person weapon: drawn through the world's 66 degrees (98 across on a wide screen), a weapon at the frame's edge
+ * leaned in towards the middle, and a fist near the camera looked huge. The world's lights light them too: every light
+ * is put on their layer as well when they're first drawn so (a light missing from their pass would change the lights'
+ * count, and every material they wear would compile again).
+ */
+export const ARMS_LAYER = 2;
+/** the arms camera's near and far planes (m): they're within reach */
+const ARMS_NEAR = 0.03, ARMS_FAR = 6;
+const armsCam = new THREE.PerspectiveCamera();
+armsCam.layers.set(ARMS_LAYER);
+/** the arms camera's field of view (vertical, degrees) while it draws them, none while the world's camera does */
+let armsFov: number | null = null;
+/** Whether the scene's lights are on the arms' layer yet. */
+let armsLit = false;
+
+/** The arms layer drawn by its own camera at `fov` (vertical, degrees) from this frame on, or no longer (null). */
+export function drawArms(fov: number | null): void {
+  if (fov !== null && !armsLit) {
+    G.scene.traverse((o) => { if ((o as THREE.Light).isLight) o.layers.enable(ARMS_LAYER); });
+    armsLit = true;
+  }
+  armsFov = fov;
+}
+
+/** The camera the arms are seen through this frame: their own while it draws them, else the world's. */
+export function armsCamera(): THREE.PerspectiveCamera {
+  if (armsFov === null) return G.camera as THREE.PerspectiveCamera;
+  placeArmsCamera();
+  return armsCam;
+}
+
+/** Where a point of what the arms hold (world, as posed) is seen in the world's view, into `out`: through their own
+ *  camera it shows where the world's shows a point as far ahead and as far across the view by the views' widths, so
+ *  what leaves from it (a skill cast from the weapon's tip) leaves where the weapon is seen. The point itself while the
+ *  world's camera draws the arms. */
+export function seenFromArms(p: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+  if (armsFov === null) return out.copy(p);
+  placeArmsCamera();
+  const cam = G.camera as THREE.PerspectiveCamera;
+  const k = Math.tan((cam.fov * Math.PI) / 360) / Math.tan((armsCam.fov * Math.PI) / 360);
+  const local = armsCam.worldToLocal(out.copy(p));
+  local.x *= k;
+  local.y *= k;
+  return armsCam.localToWorld(local);
+}
+
+/** The arms camera where the world's is, looking as it looks, its own view. */
+function placeArmsCamera(): void {
+  const cam = G.camera as THREE.PerspectiveCamera;
+  cam.updateMatrixWorld();
+  armsCam.position.copy(cam.position);
+  armsCam.quaternion.copy(cam.quaternion);
+  armsCam.aspect = cam.aspect;
+  armsCam.fov = armsFov ?? cam.fov;
+  armsCam.near = ARMS_NEAR;
+  armsCam.far = ARMS_FAR;
+  armsCam.updateProjectionMatrix();
+  armsCam.updateMatrixWorld();
+}
+
+/** Draws the arms layer over the world's frame in the bound target: its depth cleared first, so nothing of the world
+ *  goes through them; the world's shadows kept, not drawn again; nothing behind them (the scene's background). */
+function drawArmsOver(): void {
+  placeArmsCamera();
+  const autoClear = gl.autoClear, shadows = gl.shadowMap.autoUpdate, background = G.scene.background;
+  gl.autoClear = false;
+  gl.shadowMap.autoUpdate = false;
+  G.scene.background = null;
+  gl.clearDepth();
+  gl.render(G.scene, armsCam);
+  gl.autoClear = autoClear;
+  gl.shadowMap.autoUpdate = shadows;
+  G.scene.background = background;
+}
 
 /** top-down (the default), over the shoulder, or through the character's eyes */
 export type ViewMode = 'top' | 'third' | 'first';
@@ -521,7 +609,7 @@ export function render(): void {
   const e = ease(rig.blend), u = grade.uniforms;
   u.uSmall.value = target(rig.fromView, 0) + (target(rig.view, 0) - target(rig.fromView, 0)) * e;
   u.uLarge.value = target(rig.fromView, 1) + (target(rig.view, 1) - target(rig.fromView, 1)) * e;
-  if (NO_ADAPT) u.uSmall.value = u.uLarge.value = 1e4;
+  if (adaptHeld) u.uSmall.value = u.uLarge.value = 1e4;
   const hdr = hdrLevels();
   u.uHdr.value = hdr.peak > 1 || hdr.paper !== 1 ? 1 : 0;
   u.uPaper.value = hdr.paper;
@@ -530,6 +618,7 @@ export function render(): void {
   gl.setRenderTarget(sceneRT);
   gpuMarks.mark('scene');
   gl.render(G.scene, G.camera);
+  if (armsFov !== null) { gpuMarks.mark('arms'); drawArmsOver(); }
   composer.render();
   gpuMarks.mark('overlay');
   overFrame.draw();

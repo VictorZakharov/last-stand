@@ -113,8 +113,9 @@ const STOW_PUMP = 0.05;
  *  in line behind the arrow at its height, the elbow needs 57 degrees (rolled up to 34, every elbow in line left the
  *  forearm's turn 6 to 10 degrees past its end) */
 const HOOK_TILT = -1, HOOK_ROLL = 0.4;
-/** what each degree of the draw wrist's bend costs, at full draw (armIK's `wristW`) */
-const DRAW_WRIST = 0.3;
+/** what each degree of the draw wrist's bend costs, once the draw has begun (armIK's `wristW`; a misplaced bracket
+ *  there counted it as 1, whatever it was set to, and the draw was tuned so) */
+const DRAW_WRIST = 1;
 /** how late in the draw the hand rolls on the string (the power of the draw's share it rolls by: rolled as the string
  *  came back, the forearm was at its turn's end mid-draw and the shoulder rose past its range to keep the elbow in line) */
 const TILT_POW = 3;
@@ -211,7 +212,7 @@ const FP_LOB_EASE = 8;
 const PITCH_BACK = 10;
 /** through the eyes, what each degree of the bow wrist's bend costs its elbow (armIK's `wristW`): turned as posed whatever
  *  its ranges, the fist took whatever bend the elbow left it, 45 to 66 degrees back, and the hand looked broken off */
-const FP_WRIST = 0.3;
+const FP_WRIST = 1;
 /** through the eyes, how far the bow sways with the stride at a run (m across and up the view, rad about it): across once a
  *  stride, up and down with each step, rolling with it; eased in and out with the pace (`FP_SWAY_EASE`, 1/s), and a
  *  `FP_SWAY_DRAWN` share of it while it's drawn (held still in the view as he walked, it read as stuck to it) */
@@ -721,7 +722,7 @@ export function buildRanger(): Model {
     // out with the elbow in line behind the arrow, and the elbow went round behind the neck instead; left to find the roll
     // itself, the solver looked only near where the elbow was)
     if (tilt) _q2.premultiply(_qt.setFromAxisAngle(_rx.set(0, -1, 0).applyQuaternion(_q2), tilt));
-    solveArm(j, false, { wrist: _ra.copy(stringAt).multiplyScalar(s * w).applyQuaternion(_q2).negate().add(at), hand: _q2, ease: w < 1 ? { rest: HANG_R, w } : undefined, pole, keep: DRAW_KEEP, wristW: DRAW_WRIST * drawK, girdle, girdleSet: drawK > 0.01 ? [DRAW_GIRDLE[0] * drawK, DRAW_GIRDLE[1] * drawK] : undefined, body, maxMove: dt && v ? v * dt : undefined,
+    solveArm(j, false, { wrist: _ra.copy(stringAt).multiplyScalar(s * w).applyQuaternion(_q2).negate().add(at), hand: _q2, ease: w < 1 ? { rest: HANG_R, w } : undefined, pole, keep: DRAW_KEEP, wristW: drawK > 0 ? DRAW_WRIST : 0, girdle, girdleSet: drawK > 0.01 ? [DRAW_GIRDLE[0] * drawK, DRAW_GIRDLE[1] * drawK] : undefined, body, maxMove: dt && v ? v * dt : undefined,
       roll: w > 0.5 && HOOK_ROLL ? { axis: _rx.set(1, 0, 0).applyQuaternion(_q2), range: HOOK_ROLL, at } : undefined, glide: w > 0.5 && HOOK_ROLL ? 1 - Math.exp(-GLIDE * dtNow) : undefined });
     root.updateMatrixWorld(true);
   };

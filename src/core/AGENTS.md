@@ -12,6 +12,7 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 - `pbr.ts`, `pbr.worker.ts`, `textures.ts`: the procedural maps and textures, made in workers while loading. `parallax.ts`: the floors' relief. `engraving.ts`: the heroes' engraved steel and embroidery.
 - `audio.ts`: the sound effects, synthesized. `music.ts`: the music's player.
 - `timers.ts`: the game-time scheduler (it respects pause, unlike `setTimeout`). `cookies.ts`: small preferences.
+- `tuning.ts`: values a dev build changes while it runs (`tunable(name, values)`; the lab's `--tune name.field=...` sets them before a command): a pose or a camera compared across values without editing and booting again. Read a tunable's fields where they're used, each frame; production registers nothing.
 
 ## Gotchas
 

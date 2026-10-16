@@ -96,5 +96,12 @@ export function dualQuaternionSkinned<T extends THREE.Material>(material: T): T 
       .replace('#include <skinbase_vertex>', BLENDED);
   };
   material.customProgramCacheKey = () => key;
+  HOOKED.add(material);
   return material;
 }
+
+/** the materials hooked here */
+const HOOKED = new WeakSet<THREE.Material>();
+
+/** Whether `material` is skinned by dual quaternions (the lab draws a mesh's parts in flat colours skinned as it is). */
+export const isDualQuaternionSkinned = (material: THREE.Material) => HOOKED.has(material);

@@ -9,12 +9,14 @@ import { labError } from './errors.mjs';
  * - `list`: comma-separated text, as a list (each one of `choices`, when it has them);
  * - `number`: a finite number;
  * - `pair`: two numbers, `x,z`;
+ * - `numbers`: comma-separated numbers, as many as `count` says or in `each`s (any count without them),
+ *   `0.2,-0.4,-0.5`;
  * - `choice`: one of `choices`;
  * - `ref`: a switch that may name a commit (`--ab`, `--ab=165246d`);
  * - `screen`: a window's size in css px and the screen's pixel ratio, `1280x720@3` (`@1` when it's left out);
  * - `screens`: two of them, `3840x2160@1,1280x720@3`.
  */
-const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'choice', 'ref', 'screen', 'screens'];
+const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'numbers', 'choice', 'ref', 'screen', 'screens'];
 
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
@@ -53,6 +55,19 @@ const SETUP_OPTIONS = {
     usage: 'base',
     help: 'with --gear, the weapon held that way by its base (Maul, Greataxe...; dual: one in each hand; the '
       + 'class\'s first by default)',
+  },
+  wear: {
+    kind: 'list',
+    usage: 'a,b',
+    choices: ['helm', 'chest', 'hands', 'none'],
+    help: 'the armour he wears, as the player dresses him (hands: gloves and bracers; none: bare; as rolled by '
+      + 'default)',
+  },
+  tune: {
+    kind: 'text',
+    usage: 'name.field=v[,v...][;...]',
+    help: 'tunable values set before the run (src/core/tuning.ts: '
+      + 'warriorEyes.oneOn=0.75,-1.1,0.5;warriorEyes.roll=1.2)',
   },
 };
 
@@ -168,7 +183,11 @@ export const COMMANDS = {
       skill: { kind: 'text', usage: 'name', help: 'the cast scenario\'s skill: its key, its behaviour or its name' },
       gear: SETUP_OPTIONS.gear,
       weapon: SETUP_OPTIONS.weapon,
-      canary: { kind: 'switch', help: 'plant a fault the measure must catch: the head turned past the neck\'s range' },
+      canary: {
+        kind: 'switch',
+        help: 'plant faults the measure must catch: the head turned past the neck\'s range, the fist bent on its '
+          + 'forearm',
+      },
       frames: { kind: 'switch', help: 'list every frame with a joint past its range' },
       trace: {
         kind: 'switch',
@@ -440,6 +459,35 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  haze: {
+    help: 'what the hero\'s held weapons\' light takes from the frame round them through the eyes: the frame drawn '
+      + 'with them and without, each with the grade\'s adaptation and without it, and any pixel outside their own '
+      + 'darkened by their light (the adaptation to a bright area spread round them as a veil); a haze over 0.5% of '
+      + 'the frame is a problem: tools/lab/out/haze (the frame, and its haze in red)',
+    options: {
+      biome: {
+        kind: 'choice',
+        choices: ['crypt', 'forest'],
+        usage: 'crypt|forest',
+        help: 'the biome (the forest by default)',
+      },
+      facings: {
+        kind: 'list',
+        usage: 'a,b',
+        default: '0,90,180,270',
+        help: 'the ways the hero looks, degrees (0 is +z)',
+      },
+      pictures: { kind: 'switch', help: 'picture each frame and its haze (=false: the numbers alone)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant the fault the measure must catch: the frame with the weapons drawn at 0.8 of its exposure',
+      },
+      gear: SETUP_OPTIONS.gear,
+      weapon: SETUP_OPTIONS.weapon,
+      at: SETUP_OPTIONS.at,
+      ...COMMON_OPTIONS,
+    },
+  },
   draw: {
     help: 'every drawn shot of the hero\'s class (the ranger\'s) drawn to full and held there as the player holds it, '
       + 'in each view, the motes on its arrowhead read every frame: none as it\'s drawn, and held at full it glints '
@@ -608,6 +656,139 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  eyes: {
+    help: 'a skill of the hero\'s cast through the eyes, frame by frame from the press until the arms are at rest '
+      + 'again: where the weapon\'s tip is on the screen at rest, wound up, through the blow and at its end, how '
+      + 'fast it crosses the view and where it is as the skill fires; a two-hander let go of by the other hand, or '
+      + 'seen in one hand, an arm\'s joint past its range (a gripping wrist past a gripping wrist\'s), a strike led '
+      + 'by its flat, slid across rather than swung round, stopped dead, met at the aim by its blade\'s inner part or '
+      + 'sweeping a narrow share of the skill\'s arc, a weapon out of the frame at rest, and a basic attack\'s cuts '
+      + 'chained unlike a body chains them (a backhand from the rest, back to the rest between cuts, the last end '
+      + 'not held) are problems; with a film of the frames, each labelled with the gripping wrists\' bends: '
+      + 'tools/lab/out/eyes/<skill> (--class warrior)',
+    argument: 'skill',
+    options: {
+      times: { kind: 'number', usage: 'n', help: 'casts in a row, the key held through them (1 by default)' },
+      apart: {
+        kind: 'number',
+        usage: 's',
+        help: 'the key let go as each cast begins and pressed again s seconds after it ended (a pause in the attacks)',
+      },
+      every: { kind: 'number', usage: 'n', help: 'a frame pictured into the film every n (2 by default)' },
+      cast: { kind: 'number', usage: 'n', help: 'film the nth cast of the row alone (every cast by default)' },
+      close: {
+        kind: 'list',
+        usage: 'a,b',
+        help: 'each cast\'s firing frame from these close-ups too (front, left, right, back, above): the arms and '
+          + 'the weapon seen from outside, framed on the weapon\'s hand',
+      },
+      film: { kind: 'switch', help: 'the film of the frames (=false: the numbers alone)' },
+      frames: {
+        kind: 'switch',
+        help: 'list every frame: the grip, the weapon\'s way and the other hand in the eyes\' frame, as the '
+          + 'moves through the eyes are keyed (models/warriorEyes.ts)',
+      },
+      span: { kind: 'pair', usage: 'from,to', help: 'with --frames, only the frames from the first to the second' },
+      canary: {
+        kind: 'switch',
+        help: 'the arms held as they were at the press and the other arm dropped: no blow, and a two-hander seen '
+          + 'in one hand, no sweep, the dropped left weapon out of the frame and a chained cut as a backhand from the '
+          + 'rest, must be found; the weapon turned its edge, then its flat, into its blow; held at its first turn, '
+          + 'sliding with the hand; the right fist bent on its forearm 60° each way',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  swing: {
+    help: 'a swing through the eyes keyed from a pose (src/entities/viewSwing.ts): the key of the swing that puts its '
+      + 'grip at --grip and its weapon along --way (camera space: m, x right, y up, -z ahead), and what of the pose an '
+      + 'arm swung in its plane can\'t hold (the grip or the way off the plane, the wrist past its range, the grip '
+      + 'past the reach); a key given placed (--key), or else every key of the swing: the grip, the weapon, the elbow, '
+      + 'the wrist and a two-hander\'s lower grip, with how far it is from the other shoulder (--class warrior)',
+    argument: 'swing',
+    options: {
+      grip: {
+        kind: 'numbers',
+        each: 3,
+        usage: 'x,y,z[,x,y,z...]',
+        help: 'the grip\'s place in the view to key, or several, a pose each (with --way)',
+      },
+      way: {
+        kind: 'numbers',
+        each: 3,
+        usage: 'x,y,z[,x,y,z...]',
+        help: 'the weapon\'s way in the view to key, or one for each --grip',
+      },
+      key: {
+        kind: 'numbers',
+        each: 5,
+        usage: 'way,reach,bend,drop,roll[,...]',
+        help: 'a key to place, or several, its numbers after its share (models/warriorEyes.ts `warriorSwings`)',
+      },
+      left: {
+        kind: 'switch',
+        help: 'the left hand\'s swing: the right\'s mirrored across the view, as a dual wielder\'s off hand cuts '
+          + '(--gear dual)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'the swing\'s blow keyed back from where its own key places it, and a grip moved 10 cm off its plane, '
+          + 'must come back as that key and read 10 cm off',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  match: {
+    help: 'the hero through the eyes, standing or at a moment of a strike, beside a reference\'s screenshot or a '
+      + 'frame of its clip (a game his first-person weapons are posed after), on a screen of its shape: the '
+      + 'reference, his frame and the two blended, the points marked on it (<picture>.marks.json, a clip\'s frame\'s '
+      + '<clip>@<ms>.marks.json: crop, points in and tip, wide, box, the weapon\'s and fist\'s outline) and his own '
+      + 'drawn on each, how far his are off and how much of the outlines his frame covers: '
+      + 'tools/lab/out/match/<picture>/match.png',
+    argument: 'picture',
+    options: {
+      frame: {
+        kind: 'number',
+        usage: 's',
+        help: 'with a clip (.mp4, .webm, .mkv, .mov), the moment of it matched (cut by ffmpeg into '
+          + 'tools/lab/out/match/frames)',
+      },
+      skill: {
+        kind: 'text',
+        usage: 'name',
+        help: 'a strike pictured rather than the rest: the skill (its key, its behaviour or its name) cast ahead',
+      },
+      share: {
+        kind: 'number',
+        usage: '0-1',
+        help: 'with --skill, the moment of its cast pictured, a share of it (0.5 by default)',
+      },
+      fit: {
+        kind: 'list',
+        usage: 'name.field,...',
+        help: 'tunable values searched for the rest that frames his weapon nearest the marks, then pictured, with '
+          + 'the --tune that gives it (warriorEyes.restOn,warriorEyes.restDir)',
+      },
+      near: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['line', 'wide', 'box', 'outline'],
+        default: 'outline',
+        help: 'the marks --fit comes near: the weapon\'s line (in and tip), its width, the part of the frame it '
+          + 'covers, the outlines of the weapon and the fist (by default: each number alone was matched with the '
+          + 'head out of the frame)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'his points taken as the reference\'s moved 10% across: the comparison must find them so; with '
+          + '--fit, fitted to his own frame from values moved off it: the fit must find its way back',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   shots: {
     help: 'the hero\'s basic attack (the ranger\'s bow drawn to full) loosed at points over each biome\'s boss '
       + 'with its summons and the biome\'s foes packed round it, in each view, the crosshair turned onto each point in '
@@ -733,15 +914,16 @@ export const COMMANDS = {
   check: {
     help: 'the checks of a change to how the heroes move, every hero\'s, side by side in sessions of their own: the '
       + 'gait (its steps listed, no films), the stops, the ranges and the run\'s form for each hero, the ranger\'s '
-      + 'feet and carry; each report in tools/lab/out/check/<command>-<hero>.txt (runs in this process, not the '
-      + 'server)',
+      + 'feet and carry, the warrior\'s basic attack through the eyes with each weapon each way he holds it (a row '
+      + 'with the canaries, a short and a long pause); each report in tools/lab/out/check/<command>-<hero>.txt (runs '
+      + 'in this process, not the server)',
     options: {
       classes: { kind: 'list', usage: 'a,b', help: 'the heroes (warrior, mage, ranger by default)' },
       commands: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['gait', 'stops', 'range', 'form', 'feet', 'carry'],
-        help: 'the commands (gait, stops, range, form, feet, carry by default)',
+        choices: ['gait', 'stops', 'range', 'form', 'feet', 'carry', 'eyes'],
+        help: 'the commands (gait, stops, range, form, feet, carry, eyes by default)',
       },
       jobs: { kind: 'number', usage: 'n', help: 'how many sessions side by side (a core in three, at most 8)' },
       starts: {
@@ -875,6 +1057,15 @@ function readValue(name, spec, text) {
     case 'pair': {
       const values = text.split(',').map(numberFrom);
       if (values.length !== 2 || !values.every(Number.isFinite)) throw wrong('two numbers, x,z');
+      return values;
+    }
+    case 'numbers': {
+      const values = text.split(',').map(numberFrom);
+      if (!values.every(Number.isFinite)) throw wrong('comma-separated numbers');
+      if (spec.count !== undefined && values.length !== spec.count) throw wrong(`${spec.count} numbers, ${spec.usage}`);
+      if (spec.each !== undefined && values.length % spec.each !== 0) {
+        throw wrong(`numbers in ${spec.each}s, ${spec.usage}`);
+      }
       return values;
     }
     case 'choice':

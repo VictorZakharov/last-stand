@@ -307,7 +307,7 @@ function lightLine(light: FrameLight): string {
 }
 
 /** The camera turned to look along `facing` (rad, 0 is +z): in the close views the body follows the camera's look. */
-async function lookAlong(lab: Lab, facing: number): Promise<void> {
+export async function lookAlong(lab: Lab, facing: number): Promise<void> {
   // (the camera looks along its yaw and a half turn)
   const yaw = facing - Math.PI;
   const turn = Math.atan2(Math.sin(yaw - renderer.cameraYaw()), Math.cos(yaw - renderer.cameraYaw()));

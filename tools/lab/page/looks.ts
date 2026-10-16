@@ -8,6 +8,7 @@
 // flat, the forest's leaf cards were whole squares, and one by a close-up's camera filled its frame.
 import * as THREE from 'three';
 import { G } from '../../../src/state';
+import * as gameRenderer from '../../../src/core/renderer';
 import type { Joints } from '../../../src/entities/models/rig';
 import { readOpaque, type Area } from './pixels';
 
@@ -184,6 +185,38 @@ export function wearLook(look: Look, meshes: THREE.Mesh[]): () => void {
   };
 }
 
+/** The camera that draws `mesh` this frame: the hero's arms' own through the eyes (renderer.ts `armsCamera`, on a
+ *  layer of their own), else the game's; none for a mesh on a layer neither draws. */
+export function lensOf(mesh: THREE.Object3D): THREE.Camera | null {
+  if (G.camera.layers.test(mesh.layers)) return G.camera;
+  const arms = armsLens();
+  return arms.layers.test(mesh.layers) ? arms : null;
+}
+
+/** The camera the hero's arms are drawn with: their own through the eyes, else the game's (a tree whose renderer
+ *  has no `armsCamera` draws them with the game's). */
+export function armsLens(): THREE.Camera {
+  const own = (gameRenderer as { armsCamera?: () => THREE.Camera }).armsCamera;
+  return own?.() ?? G.camera;
+}
+
+/** The arms drawn by their own camera over what's drawn already, as the game draws them: depth cleared first, no
+ *  background. */
+function drawArmsOver(arms: THREE.Camera): void {
+  const renderer = G.renderer;
+  const { autoClear } = renderer;
+  const background = G.scene.background;
+  renderer.autoClear = false;
+  G.scene.background = null;
+  try {
+    renderer.clearDepth();
+    renderer.render(G.scene, arms);
+  } finally {
+    renderer.autoClear = autoClear;
+    G.scene.background = background;
+  }
+}
+
 /**
  * The frame drawn as `look` (wire, faces or parts) has it with the game's camera as it is now, `subject` the part
  * of the scene the look is of, read back within `area` as an opaque picture. With `parts`, also each of `subject`'s
@@ -197,6 +230,8 @@ export function drawLook(look: Look, subject: THREE.Object3D, area: Area, named:
   try {
     renderer.setRenderTarget(null);
     renderer.render(G.scene, G.camera);
+    const arms = armsLens();
+    if (arms !== G.camera) drawArmsOver(arms);
   } finally {
     undress(changes);
   }
@@ -308,9 +343,9 @@ export function jointsByObject(joints: Joints): Map<THREE.Object3D, string> {
   return named;
 }
 
-/** Where `point` (the world) is in `area` of the frame through the game's camera, px; null behind the camera. */
-function onFrame(point: THREE.Vector3, area: Area, ratio: number): THREE.Vector2 | null {
-  const ndc = point.clone().project(G.camera);
+/** Where `point` (the world) is in `area` of the frame through `camera`, px; null behind the camera. */
+function onFrame(point: THREE.Vector3, camera: THREE.Camera, area: Area, ratio: number): THREE.Vector2 | null {
+  const ndc = point.clone().project(camera);
   if (ndc.z > 1 || ndc.z < -1) return null;
   const x = ((ndc.x + 1) / 2 * innerWidth - area.left) * ratio;
   const y = ((1 - ndc.y) / 2 * innerHeight - area.top) * ratio;
@@ -326,7 +361,9 @@ export function withBones(canvas: HTMLCanvasElement, joints: Joints, area: Area)
   context.fillStyle = BONE_COLOUR;
   context.lineWidth = 2;
   context.font = `${Math.round(12 * ratio)}px sans-serif`;
-  const at = (object: THREE.Object3D) => onFrame(object.getWorldPosition(new THREE.Vector3()), area, ratio);
+  // (through the eyes only the arms are drawn, by their own camera)
+  const camera = armsLens();
+  const at = (object: THREE.Object3D) => onFrame(object.getWorldPosition(new THREE.Vector3()), camera, area, ratio);
   for (const { name, joint, parent } of bonesOf(joints)) {
     const point = at(joint);
     if (!point) continue;

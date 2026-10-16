@@ -3,8 +3,11 @@
 
 const TILE_WIDTH = 340;
 const TILE_HEIGHT = 560;
-/** a screen picture (`lab.screen`) is as wide as it shows at the row's height, up to this */
+/** a picture of the whole frame (`lab.screen`, the view through the eyes) is as wide as it shows at the row's height,
+ *  up to this */
 const SCREEN_TILE_WIDTH = 960;
+/** the views that are the whole frame: put in the common width, the eyes' was a strip a third of the tile high */
+const WHOLE_FRAME_VIEWS = ['screen', 'eyes'];
 const NOTES_WIDTH = 300;
 const GAP = 3;
 
@@ -24,9 +27,9 @@ function escapeHtml(text) {
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 }
 
-/** A tile's width on the sheet: a view's crop the common width, a screen picture its own at the row's height. */
+/** A tile's width on the sheet: a view's crop the common width, the whole frame its own at the row's height. */
 function tileWidth(tile) {
-  if (tile.view !== 'screen') return TILE_WIDTH;
+  if (!WHOLE_FRAME_VIEWS.includes(tile.view)) return TILE_WIDTH;
   return Math.min(SCREEN_TILE_WIDTH, Math.round(tile.width * TILE_HEIGHT / tile.height));
 }
 
@@ -45,6 +48,32 @@ function rowHtml(moment, sideName) {
     })
     .join('');
   return `<div class="row"><div class="notes"><b>${escapeHtml(moment.label)}</b>${side}${notes}</div>${tiles}</div>`;
+}
+
+const STACK_STYLE = `
+  body { margin: 0; background: #1b1c1f; color: #fff; font: bold 16px/1.4 system-ui, sans-serif; }
+  figure { margin: 0 0 ${GAP}px; }
+  figcaption { padding: 4px 8px; background: #26282c; }
+  img { display: block; }
+`;
+
+/**
+ * Writes `pictures` to `file` one above another, each at its own size under its caption (an A/B's sides of a picture
+ * that's read whole: a film's strip of frames, scaled to a sheet's row, was too small to read).
+ */
+export async function writeStack(browser, pictures, file) {
+  const width = Math.max(...pictures.map((picture) => picture.width));
+  const figures = pictures.map((picture) => {
+    const caption = `<figcaption>${escapeHtml(picture.caption)}</figcaption>`;
+    return `<figure>${caption}<img src="${picture.png}" width="${picture.width}" height="${picture.height}"></figure>`;
+  });
+  const page = await browser.newPage({ viewport: { width, height: 100 } });
+  try {
+    await page.setContent(`<!doctype html><style>${STACK_STYLE}</style>${figures.join('')}`);
+    await page.screenshot({ path: file, fullPage: true });
+  } finally {
+    await page.close();
+  }
 }
 
 /**

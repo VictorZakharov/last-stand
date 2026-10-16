@@ -25,6 +25,21 @@ export interface WeaponMaterials {
   glow: THREE.Material;
 }
 
+/** The side of a weapon that strikes, along its +X: a blade's two edges, an axe's bit (+X, its poll behind), a
+ *  greataxe's two bits, a maul's two faces; a mace strikes with its flanges all round. A blow lands with it leading,
+ *  as a real one does: swung with its flat ahead, a blade slaps. */
+export type StrikingSide = 'edges' | 'bit' | 'faces' | 'round';
+
+/** Each weapon's striking side, by its base (models/warrior.ts names each weapon's group so). */
+export const STRIKES_WITH: Record<string, StrikingSide> = {
+  Sword: 'edges',
+  Greatsword: 'edges',
+  Axe: 'bit',
+  Greataxe: 'edges',
+  Mace: 'round',
+  Maul: 'faces',
+};
+
 const V = (x: number, y: number, z = 0) => new THREE.Vector3(x, y, z);
 
 /** A geometry made unless the sculpt replays its cache (shapes.ts `skipping`: its pieces are then cached already). */

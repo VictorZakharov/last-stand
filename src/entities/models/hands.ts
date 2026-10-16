@@ -173,6 +173,9 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
   bareSkin?: THREE.Material): Hand {
   const vis = joint(hand);
   vis.scale.setScalar(k);
+  // (the hand as it's drawn, which the body's measures read: `hold` turns it on the joint, which is only the wrist.
+  // Found by its meshes' mark, the wrist was read off the joint once they were sculpted: anatomy.ts `drawnHand`)
+  vis.userData.drawnHand = true;
   const f = FINGERS.map((spec) => digitOn(vis, s, spec));
   const thumb = digitOn(vis, s, THUMB);
   const h = { vis, f, thumb, s, made: { glove, skin, bareSkin, k } } as Hand;
@@ -251,10 +254,13 @@ export function poseHand(h: Hand, curl: number, spread: number, point = 0, t = 0
 
 const _d = new THREE.Vector3(), _u = new THREE.Vector3(), _s = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
+const _fa = new THREE.Vector3(), _fb = new THREE.Vector3(), _fc = new THREE.Vector3();
 /** how far a hand may hold a handle diagonally across its palm (rad, either way: `hold`'s slant) */
 export const SLANT = 0.44;
 /** where a held handle's axis runs across the hand (its own space): against the lower palm and the knuckles */
 const GRIP_Y = -0.092, GRIP_GAP = 0.011;
+/** how far down the hand from its wrist a handle it holds runs across it (the hand joint's units) */
+export const fistLength = (h: Hand) => -GRIP_Y * h.vis.scale.x;
 /** how far a finger joint bends at most */
 const BEND = 1.65;
 /** the thumb wraps a little clear of the handle, over the fingers' ends */
@@ -312,6 +318,23 @@ export function gripTurn(h: Hand, grip: THREE.Object3D, out: THREE.Quaternion, s
 /** the fist's turn round a handle along `dir` with the hand's length towards `up` (both world), as `hold` turns it (world) */
 export function fistTurn(h: Hand, dir: THREE.Vector3, up: THREE.Vector3, out: THREE.Quaternion, slant = 0): THREE.Quaternion {
   return fist(h, _d.copy(dir).normalize(), _u.copy(up).normalize(), out, slant);
+}
+
+/**
+ * How a hand holds a handle (the lab reads it, `Model.fists`): how far the handle's axis passes from where the fist
+ * closes round it (m, world: a fist closed on thin air reads as an open hand beside the handle), how far along the
+ * handle that is from where it holds it (m, up the handle positive: a fist slid off its grip, or past the handle's end,
+ * is as far off it as one beside it), and how far its fingers are curled (their joints' mean bend, rad: 0 straight).
+ * `handle` as `seat`'s grip, its +Y along the handle, its origin where the fist holds it.
+ */
+export function fistOn(h: Hand, handle: THREE.Object3D, r: number): { off: number; along: number; curl: number } {
+  h.vis.updateWorldMatrix(true, false);
+  const from = h.vis.localToWorld(_fa.set(0, GRIP_Y, -(r / h.vis.scale.x + GRIP_GAP))).sub(handle.getWorldPosition(_fc));
+  const axis = _fb.set(0, 1, 0).transformDirection(handle.matrixWorld);
+  let bend = 0, joints = 0;
+  for (const f of h.f) for (const j of f.j) { bend += j.rotation.x; joints++; }
+  const along = from.dot(axis);
+  return { off: from.addScaledVector(axis, -along).length(), along, curl: bend / joints };
 }
 
 /** where the handle's axis runs through that fist, from its wrist (unscaled: the hand joint's own units) */
