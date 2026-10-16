@@ -23,50 +23,71 @@ import { tunable } from '../../core/tuning';
  * The cuts through the eyes swung as a body swings them (viewSwing.ts `ViewSwing`: each in one plane, its flat that
  * plane's, so its edge leads; tuned live in a dev build, `--tune warriorSwings.oneFore=...`): a one-hander's forehand,
  * from high on the right down across to the left, and its backhand, from over the left shoulder down across to the
- * right, each round the right shoulder (in the eyes' frame (0.30, -0.40, -0.08)). (Keyed as the eyes saw a cut, the
+ * right, an X, each in a plane through the right shoulder (in the eyes' frame (0.30, -0.40, -0.08)) carried round the
+ * spine by the trunk's turn. (Keyed as the eyes saw a cut, the
  * blade held broadside to them, it whipped forward over the top flat first, its edge 40 degrees off the way it moved,
  * the forearm turned 55 degrees past its range; the owner: "it should strike according to physics... blade parallel
  * to strike direction")
  */
 const SWINGS = tunable('warriorSwings', {
-  // (the forehand: wound up over the right shoulder, down to the left through the aim, on low to the left, then up
-  // into a guard there, the forearm rolling the blade up ahead, as it waits for the next cut; each key its share, the
-  // striking part's way, the grip's reach, the wrist's bend, the elbow's drop, the forearm's roll. Its speed spread
-  // over the blow and carried on after it: in a share of its own, a dual wielder's quicker cut, 18 frames to a sword
-  // and shield's 25, stopped dead 50 ms after its blow and swept 67 degrees of the skill's 126; ended where the
-  // follow-through took it, none of the blade was in the frame as it waited; waiting ahead of the hand unrolled, it
-  // pointed away from the eyes, a third of it in the frame looking a quarter of the frame's height long)
-  oneForePlane: [0.22, -0.3, -0.22, 210],
+  // (a one-hander's forehand, as a two-hander's and a dual wielder's, driven by the trunk (`cutTurn`): from high on
+  // the right down across to the left, carried on out of the frame there; each key its share, the striking part's
+  // way, the grip's reach, the wrist's bend, the elbow's drop, the forearm's roll. Swung round the right shoulder
+  // alone, it cut down to a guard rolled up on the left, and its backhand ran back the way it came, up from the left
+  // through the aim; the owner, of a two-hander's cut so: "you cannot just reverse the direction")
+  oneForePlane: [0.22, -0.3, -0.22, 208],
   oneFore: [
-    0, 45, 0.46, 0, 30, 0,
-    0.2, 100, 0.44, -12, 60, 0,
-    0.36, 145, 0.44, -10, 70, 0,
-    0.44, 105, 0.48, -10, 70, 0,
-    0.5, 50, 0.56, -5, 70, 0,
-    0.56, 0, 0.64, -15, 70, 0,
-    0.62, -22, 0.66, -20, 75, 0,
-    0.68, -30, 0.65, -15, 75, 0,
-    0.76, -28, 0.62, -8, 70, -15,
-    0.88, -21, 0.58, -15, 70, -40,
+    0, 50, 0.5, 0, 0, 40,
+    0.12, 55, 0.42, -5, 20, 10,
+    0.25, 60, 0.36, -10, 30, 0,
+    0.34, 54, 0.38, -12, 30, 0,
+    0.42, 40, 0.44, -18, 35, 0,
+    0.5, 20, 0.54, -25, 40, 0,
+    0.56, 0, 0.62, -30, 45, 0,
+    0.64, -14, 0.62, -30, 55, 0,
+    0.72, -22, 0.6, -30, 55, 0,
+    0.8, -26, 0.58, -30, 55, 0,
+    0.9, -28, 0.56, -30, 55, 0,
+    1, -28, 0.56, -30, 55, 0,
   ],
-  // (the backhand, straight after it: from where the forehand left the blade low on the left, turned over by the
-  // forearm as it winds up there, rising to the right through the aim, on to the right and up into a guard there;
-  // the elbow let up into the plane as it comes in to the blow: up in it at once, an axe's and a mace's shoulder
-  // turned 15 degrees past its range; wound up from the rolled guard 2 cm further out, a mace's shoulder was raised a
-  // degree past what its plane allows)
-  oneBackPlane: [0.22, -0.3, -0.22, 20],
+  // (and in a row after its backhand: taken on from where the backhand left the blade low on the right, its plane
+  // turned from the backhand's into its own as it comes up into the wind-up (`rowTurn`), then on as from rest)
+  oneForeRow: [
+    0, -28, 0.56, -30, 0, 0,
+    0.17, 15, 0.46, -20, 0, 17,
+    0.34, 50, 0.38, -10, 30, 0,
+    0.4, 44, 0.41, -12, 30, 0,
+    0.46, 32, 0.47, -18, 35, 0,
+    0.51, 17, 0.54, -25, 40, 0,
+    0.56, 0, 0.62, -30, 45, 0,
+    0.64, -14, 0.62, -30, 55, 0,
+    0.72, -22, 0.6, -30, 55, 0,
+    0.8, -26, 0.58, -30, 55, 0,
+    0.9, -28, 0.56, -30, 55, 0,
+    1, -28, 0.56, -30, 55, 0,
+  ],
+  // (its backhand, straight after it: an X with the forehand, as a two-hander's, from where the forehand left the
+  // blade up the left of the frame over the left shoulder, then down across the view to the right and on out of the
+  // frame there)
+  oneBackPlane: [0.22, -0.3, -0.22, 330],
   oneBack: [
-    0, 140, 0.64, -22, 88, 200,
-    0.18, 135, 0.62, -10, 85, 100,
-    0.36, 128, 0.56, -5, 20, 0,
-    0.44, 100, 0.56, 0, 18, 0,
-    0.5, 52, 0.58, 0, 8, 0,
-    0.56, 0, 0.64, -15, 0, 0,
-    0.62, -22, 0.66, -20, 0, 0,
-    0.68, -34, 0.67, -18, 0, 0,
-    0.76, -33, 0.64, -10, 5, 0,
-    0.88, -26, 0.6, -5, 10, 0,
+    0, -28, 0.56, -30, 55, 0,
+    0.15, 10, 0.48, -15, 25, 0,
+    0.3, 45, 0.42, 0, 0, 0,
+    0.37, 41, 0.44, -5, 0, 0,
+    0.44, 30, 0.48, -12, 0, 0,
+    0.5, 17, 0.54, -20, 0, 0,
+    0.56, 0, 0.62, -30, 0, 0,
+    0.64, -14, 0.62, -30, 0, 0,
+    0.72, -22, 0.6, -30, 0, 0,
+    0.8, -26, 0.58, -30, 0, 0,
+    0.9, -28, 0.56, -30, 0, 0,
+    1, -28, 0.56, -30, 0, 0,
   ],
+  // (and back from where it left the blade to where a forehand from rest starts, its plane turned from the backhand's
+  // into the forehand's (`outTurn`), the rest faded in from there. Faded straight to rest, the forearm turned the
+  // other way round and flipped the blade in a frame, 75 m/s)
+  oneOutBack: [0, -28, 0.56, -30, 0, 0],
   // (a two-hander's, its right hand the upper one on the handle, the left following on the lower grip: its guard at
   // rest, one key in an upright plane, the blade up before the right shoulder; its forehand from there, its backhand
   // from where the forehand left the blade)
@@ -107,7 +128,7 @@ const SWINGS = tunable('warriorSwings', {
   ],
   // (and in a row after its backhand: taken on from where the backhand left the blade low on the right, out of the
   // frame, its plane turned from the backhand's into the forehand's as it comes up into the forehand's wind-up there
-  // (`twoRowTurn`), the forearm rolling a little on the way (unrolled, the lower wrist went 16 degrees past its
+  // (`rowTurn`), the forearm rolling a little on the way (unrolled, the lower wrist went 16 degrees past its
   // range), and on as the forehand from rest)
   twoForeRow: [
     0, -28, 0.56, -30, 0, 0,
@@ -124,7 +145,7 @@ const SWINGS = tunable('warriorSwings', {
   ],
   // (its backhand, straight after it: taken on from where the forehand left the blade low on the left, out of the
   // frame, its plane turned from the forehand's into its own as the blade rises up the left of the frame and over
-  // the left shoulder (`twoRowTurn`), then cut down across the view to the right, the forehand's mirror image, and
+  // the left shoulder (`rowTurn`), then cut down across the view to the right, the forehand's mirror image, and
   // carried on out of the frame there: an X, both cuts downwards. Run back along the forehand's way, up from the
   // left through the aim to the right, the owner: "you cannot just reverse the direction"; faded from the forehand's
   // end into its wind-up, the grip went straight, the fist turned on its own and the right wrist bent 26 degrees past
@@ -144,7 +165,7 @@ const SWINGS = tunable('warriorSwings', {
     0.9, -28, 0.56, -30, 0, 0,
     1, -28, 0.56, -30, 0, 0,
   ],
-  // (and back from where each left it to the guard, its plane turned from the cut's into the guard's: `twoOutTurn`)
+  // (and back from where each left it to the guard, its plane turned from the cut's into the guard's: `outTurn`)
   // (each begun at the cut's last key, the guard's own last: `backTo`)
   twoOutFore: [0, -28, 0.56, -30, 55, 0],
   twoOutBack: [0, -28, 0.56, -30, 0, 0],
@@ -175,23 +196,23 @@ const SWINGS = tunable('warriorSwings', {
   cutSlant: 25,
   /** the share of a cut its striking part reaches the aim at (Rending Cleave fires then) */
   cutHit: 0.56,
-  /** a one-handed cut's trunk turn (rad): wound back from it, and turned into it, from and to which shares of the cut
-   *  (the arm keeps within a shoulder's reach of the chest as it crosses the body: the trunk leads the arm into the
-   *  blow) */
-  cutTurn: [0.35, 0.7, 0.38, 0.6],
-  /** a two-handed cut's, which carries the whole swing round the spine (rad, as `cutTurn`; eased in and out, as a
-   *  heavy weapon's weight turns a body), and the share one in a row turns from */
+  /** a one-handed cut's trunk turn, which carries the whole swing round the spine (rad): wound back from it, and
+   *  turned into it, from and to which shares of the cut (eased in and out, as a weapon's weight turns a body), and
+   *  the share one in a row turns from */
+  cutTurn: [0.5, 0.7, 0.33, 0.95, 0.25],
+  /** a two-handed cut's (as `cutTurn`) */
   twoTurn: [0.5, 0.7, 0.33, 0.95, 0.25],
   /** a dual wielder's cut's (as `twoTurn`) */
   dualTurn: [0.5, 0.7, 0.33, 0.95, 0.25],
-  /** the shares of a two-hander's cut in a row its plane turns over, from the last cut's into its own
-   *  (`ViewSwing.from`) */
-  twoRowTurn: [0, 0.34],
-  /** and of its way back to its guard, from the cut's into the guard's */
-  twoOutTurn: [0, 1],
+  /** the shares of a cut in a row its plane turns over, from the last cut's into its own (`ViewSwing.from`; a
+   *  two-hander's, a one-hander's) */
+  rowTurn: [0, 0.34],
+  /** and of a way back to a guard, from the cut's into the guard's */
+  outTurn: [0, 1],
 }, {
-  oneFore: SWING_KEY, oneBack: SWING_KEY, twoRest: SWING_KEY, twoRestHead: SWING_KEY, twoFore: SWING_KEY,
-  twoForeRow: SWING_KEY, twoBack: SWING_KEY, twoOutFore: SWING_KEY, twoOutBack: SWING_KEY, dual: SWING_KEY,
+  oneFore: SWING_KEY, oneForeRow: SWING_KEY, oneBack: SWING_KEY, oneOutBack: SWING_KEY, twoRest: SWING_KEY,
+  twoRestHead: SWING_KEY, twoFore: SWING_KEY, twoForeRow: SWING_KEY, twoBack: SWING_KEY, twoOutFore: SWING_KEY,
+  twoOutBack: SWING_KEY, dual: SWING_KEY,
 });
 export const CUT_TURN: readonly number[] = SWINGS.cutTurn;
 export const TWO_CUT_TURN: readonly number[] = SWINGS.twoTurn;
@@ -201,10 +222,19 @@ export const ONE_FORE_CUT: ViewSwing = {
   get slant() { return SWINGS.cutSlant; },
   get hit() { return SWINGS.cutHit; },
 };
+export const ONE_FORE_ROW: ViewSwing = {
+  plane: SWINGS.oneForePlane, keys: SWINGS.oneForeRow,
+  get slant() { return SWINGS.cutSlant; },
+  get hit() { return SWINGS.cutHit; },
+  get from() { return ONE_BACK_CUT; },
+  turning: SWINGS.rowTurn,
+};
 export const ONE_BACK_CUT: ViewSwing = {
   plane: SWINGS.oneBackPlane, keys: SWINGS.oneBack,
   get slant() { return SWINGS.cutSlant; },
   get hit() { return SWINGS.cutHit; },
+  from: ONE_FORE_CUT,
+  turning: SWINGS.rowTurn,
 };
 export const TWO_REST: ViewSwing = {
   plane: SWINGS.twoRestPlane, keys: SWINGS.twoRest,
@@ -236,17 +266,18 @@ export const TWO_FORE_ROW: ViewSwing = {
   get slant() { return SWINGS.cutSlant; },
   get hit() { return SWINGS.cutHit; },
   get from() { return TWO_BACK_CUT; },
-  turning: SWINGS.twoRowTurn,
+  turning: SWINGS.rowTurn,
 };
 export const TWO_BACK_CUT: ViewSwing = {
   plane: SWINGS.twoBackPlane, keys: SWINGS.twoBack,
   get slant() { return SWINGS.cutSlant; },
   get hit() { return SWINGS.cutHit; },
   from: TWO_FORE_CUT,
-  turning: SWINGS.twoRowTurn,
+  turning: SWINGS.rowTurn,
 };
-/** A two-hander's way back to `rest` from where a cut (`from`) left it: `start`, the cut's last key, then the guard's
- *  at its end, its plane turned from the cut's into the guard's. */
+/** A way back to `rest` (a two-hander's guard, or a forehand whose start a one-hander's rest fades in from) from where
+ *  a cut (`from`) left it: `start`, the cut's last key, then the guard's first at its end, its plane turned from the
+ *  cut's into the guard's. */
 function backTo(rest: ViewSwing, from: ViewSwing, start: readonly number[]): ViewSwing {
   return {
     get plane() { return rest.plane; },
@@ -254,7 +285,7 @@ function backTo(rest: ViewSwing, from: ViewSwing, start: readonly number[]): Vie
     get slant() { return SWINGS.cutSlant; },
     hit: 1,
     from,
-    turning: SWINGS.twoOutTurn,
+    turning: SWINGS.outTurn,
   };
 }
 /** each guard's ways back to it, from where the forehand left the weapon and where the backhand did */
@@ -262,11 +293,13 @@ export const TWO_OUTS = new Map([TWO_REST, TWO_REST_HEAD].map((rest) => [rest, {
   fore: backTo(rest, TWO_FORE_CUT, SWINGS.twoOutFore),
   back: backTo(rest, TWO_BACK_CUT, SWINGS.twoOutBack),
 }]));
+/** a one-hander's way back after its backhand */
+export const ONE_BACK_OUT: ViewSwing = backTo(ONE_FORE_CUT, ONE_BACK_CUT, SWINGS.oneOutBack);
 /** the swings by their names in `warriorSwings` (the lab's `swing` keys a pose in one) */
 export const SWINGS_NAMED: Readonly<Record<string, ViewSwing>> = {
-  oneFore: ONE_FORE_CUT, oneBack: ONE_BACK_CUT, twoRest: TWO_REST, twoRestHead: TWO_REST_HEAD, twoFore: TWO_FORE_CUT,
-  twoForeRow: TWO_FORE_ROW, twoBack: TWO_BACK_CUT, twoOutFore: TWO_OUTS.get(TWO_REST)!.fore,
-  twoOutBack: TWO_OUTS.get(TWO_REST)!.back, dual: DUAL_CUT,
+  oneFore: ONE_FORE_CUT, oneForeRow: ONE_FORE_ROW, oneBack: ONE_BACK_CUT, oneOutBack: ONE_BACK_OUT, twoRest: TWO_REST,
+  twoRestHead: TWO_REST_HEAD, twoFore: TWO_FORE_CUT, twoForeRow: TWO_FORE_ROW, twoBack: TWO_BACK_CUT,
+  twoOutFore: TWO_OUTS.get(TWO_REST)!.fore, twoOutBack: TWO_OUTS.get(TWO_REST)!.back, dual: DUAL_CUT,
 };
 
 /** a two-hander at rest through the eyes, in a middle guard: the fists low on the right of the crosshair (the lower

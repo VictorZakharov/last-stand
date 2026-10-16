@@ -20,10 +20,11 @@ import { headCanary } from './heads';
 import { describeStrike, plantLead, plantSlide, SLID_WHIP, StrikeTracker, strikeIn, strikeProblems } from './strike';
 import type { Strike, StrikeFrame } from './strike';
 import {
-  aimCrossing, atRest, describeLanding, landingProblems, restBlades, restInView, rowOfCuts, sweptOver, tipAtEnd,
-  weaponsInView,
+  aimCrossing, describeLanding, landingProblems, restBlades, restInView, sweptOver, tipAtEnd, weaponsInView,
 } from './cuts';
-import type { CutFrame, InView, Landing, RestBlades, RowCast } from './cuts';
+import type { InView, Landing } from './cuts';
+import { atRest, rowOfCuts } from './cutRows';
+import type { CutFrame, RestBlades, RowCast } from './cutRows';
 import { swingDiagram } from './swingDiagram';
 import {
   describeMomentum, momentumCanary, momentumOf, momentumProblems, rowCanary, rowOfSwings,
