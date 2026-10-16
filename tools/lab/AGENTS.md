@@ -407,7 +407,8 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   crowd (`src/entities/models/crowd.ts`) the 38 are about 20, and the frame standing went from 20 ms to 6 to 9 on a
   desktop.
 - `draws`: one frame's draw calls (`page/draws.ts`), the crowd `crowd` times standing before the hero (`--count`, 38
-  by default; 0 for none) in the biome and view the set-up asks for, each of the renderer's draw calls recorded with
+  by default; 0 for none) in the biome (`--biome`; the crypt's top view is 368k triangles, 13% of them outside the
+  view) and view the set-up asks for, each of the renderer's draw calls recorded with
   its pass (the scene's, its shadow map's, the post and overlays after it), its geometry and its material. Its lists
   (`--rows` each, 16 by default): the geometries drawn most often (one drawn many times a frame is one an instanced
   mesh would draw once), the geometries that drew the most triangles (the GPU's vertices: 38 mossbacks are about half

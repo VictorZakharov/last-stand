@@ -12,6 +12,7 @@
 // four drawn outside the view, and an instanced mesh of none, which must come out as a draw of nothing.
 import * as THREE from 'three';
 import type { Lab, Fixture, Report } from './lab';
+import type { BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
 import { crowdPlaces, CROWD_FACING, CROWD_SPOT } from './crowd';
 import { foesAt } from './death';
@@ -22,6 +23,8 @@ export interface DrawsOptions {
   count?: number;
   /** how many rows each list shows */
   rows?: number;
+  /** the biome (as the page has it when not given) */
+  biome?: BiomeId;
   canary: boolean;
 }
 
@@ -337,6 +340,7 @@ async function recordedFrame(lab: Lab): Promise<FrameDraws> {
 
 export async function draws(lab: Lab, options: DrawsOptions): Promise<Report> {
   const count = options.count ?? 38;
+  if (options.biome && G.arena.biome !== options.biome) G.arena.setBiome(options.biome);
   G.arena.restoreProps();
   const facing = options.fixture.facing ?? (CROWD_FACING * Math.PI) / 180;
   await lab.setup({ ...options.fixture, at: options.fixture.at ?? CROWD_SPOT, facing });

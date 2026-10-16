@@ -713,6 +713,7 @@ export const COMMANDS = {
         fixture: fixtureFrom(options),
         count: options.count === undefined ? undefined : Math.round(options.count),
         rows: options.rows === undefined ? undefined : Math.round(options.rows),
+        biome: options.biome,
         canary: Boolean(options.canary),
       };
       return side.command('draws', command);

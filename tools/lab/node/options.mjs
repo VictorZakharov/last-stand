@@ -650,10 +650,18 @@ export const COMMANDS = {
         usage: 'n',
         help: 'how many foes (by default the most a wave keeps alive, 38; 0: none)',
       },
-      rows: { kind: 'number', usage: 'n', help: 'how many geometries the list shows (24 by default)' },
+      rows: { kind: 'number', usage: 'n', help: 'how many rows each list shows (16 by default)' },
+      biome: {
+        kind: 'choice',
+        choices: ['crypt', 'forest'],
+        usage: 'crypt|forest',
+        help: 'the biome (as the page has it by default)',
+      },
       canary: {
         kind: 'switch',
-        help: 'stand seven boxes of one geometry before the hero: they must come out as seven draws of it',
+        help: 'stand seven boxes of one geometry before the hero, which must come out as seven draws of it, seven '
+          + 'instanced boxes, four far behind the camera, which must come out as four outside the view, and an '
+          + 'instanced mesh of none, which must come out as a draw of nothing',
       },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
