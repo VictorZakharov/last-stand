@@ -148,6 +148,28 @@ const SWINGS = tunable('warriorSwings', {
   // (each begun at the cut's last key, the guard's own last: `backTo`)
   twoOutFore: [0, -28, 0.56, -30, 55, 0],
   twoOutBack: [0, -28, 0.56, -30, 0, 0],
+  // (a dual wielder's cut, each hand's in turn, the left's the right's mirror image: wide across the view, both ways
+  // in a row, as a two-hander's, driven by the trunk the same way (`dualTurn`), from high on its own side down
+  // across to the other and carried on out of the frame there. Each hand chopping its own forehand from its own
+  // rest, a cut crossed 30% of the frame's width, 44 degrees off level, turned 3000 degrees a second and stopped dead
+  // in 67 ms; the owner: "change dual wield attack to do similar swipes from both directions, similar to two handed
+  // weapon". Built more gently than the two-hander's and carried on to the cut's very end: in a third of its time,
+  // its speed jumped 42% in a frame into the blow and died away in 100 ms)
+  dualPlane: [0.22, -0.3, -0.22, 208],
+  dual: [
+    0, 50, 0.5, 0, 0, 40,
+    0.12, 55, 0.42, -5, 20, 10,
+    0.25, 60, 0.36, -10, 30, 0,
+    0.34, 54, 0.38, -12, 30, 0,
+    0.42, 40, 0.44, -18, 35, 0,
+    0.5, 20, 0.54, -25, 40, 0,
+    0.56, 0, 0.62, -30, 45, 0,
+    0.64, -14, 0.62, -30, 55, 0,
+    0.72, -25, 0.6, -30, 55, 0,
+    0.8, -33, 0.58, -30, 55, 0,
+    0.9, -40, 0.56, -30, 55, 0,
+    1, -48, 0.55, -30, 55, 0,
+  ],
   /** how far the fist holds a one-hander's handle diagonally across its palm through a cut (degrees, as a hand holds
    *  a sword: hands.ts `SLANT` at most) */
   cutSlant: 25,
@@ -160,6 +182,8 @@ const SWINGS = tunable('warriorSwings', {
   /** a two-handed cut's, which carries the whole swing round the spine (rad, as `cutTurn`; eased in and out, as a
    *  heavy weapon's weight turns a body), and the share one in a row turns from */
   twoTurn: [0.5, 0.7, 0.33, 0.95, 0.25],
+  /** a dual wielder's cut's (as `twoTurn`) */
+  dualTurn: [0.5, 0.7, 0.33, 0.95, 0.25],
   /** the shares of a two-hander's cut in a row its plane turns over, from the last cut's into its own
    *  (`ViewSwing.from`) */
   twoRowTurn: [0, 0.34],
@@ -167,10 +191,11 @@ const SWINGS = tunable('warriorSwings', {
   twoOutTurn: [0, 1],
 }, {
   oneFore: SWING_KEY, oneBack: SWING_KEY, twoRest: SWING_KEY, twoRestHead: SWING_KEY, twoFore: SWING_KEY,
-  twoForeRow: SWING_KEY, twoBack: SWING_KEY, twoOutFore: SWING_KEY, twoOutBack: SWING_KEY,
+  twoForeRow: SWING_KEY, twoBack: SWING_KEY, twoOutFore: SWING_KEY, twoOutBack: SWING_KEY, dual: SWING_KEY,
 });
 export const CUT_TURN: readonly number[] = SWINGS.cutTurn;
 export const TWO_CUT_TURN: readonly number[] = SWINGS.twoTurn;
+export const DUAL_CUT_TURN: readonly number[] = SWINGS.dualTurn;
 export const ONE_FORE_CUT: ViewSwing = {
   plane: SWINGS.oneForePlane, keys: SWINGS.oneFore,
   get slant() { return SWINGS.cutSlant; },
@@ -191,6 +216,11 @@ export const TWO_REST_HEAD: ViewSwing = {
   keys: SWINGS.twoRestHead,
   get slant() { return SWINGS.cutSlant; },
   hit: 0,
+};
+export const DUAL_CUT: ViewSwing = {
+  plane: SWINGS.dualPlane, keys: SWINGS.dual,
+  get slant() { return SWINGS.cutSlant; },
+  get hit() { return SWINGS.cutHit; },
 };
 /** the two-handers with a head, which rest as `TWO_REST_HEAD` (models/warrior.ts names them); the others are blades */
 const HEADED = new Set(['Greataxe', 'Maul']);
@@ -236,7 +266,7 @@ export const TWO_OUTS = new Map([TWO_REST, TWO_REST_HEAD].map((rest) => [rest, {
 export const SWINGS_NAMED: Readonly<Record<string, ViewSwing>> = {
   oneFore: ONE_FORE_CUT, oneBack: ONE_BACK_CUT, twoRest: TWO_REST, twoRestHead: TWO_REST_HEAD, twoFore: TWO_FORE_CUT,
   twoForeRow: TWO_FORE_ROW, twoBack: TWO_BACK_CUT, twoOutFore: TWO_OUTS.get(TWO_REST)!.fore,
-  twoOutBack: TWO_OUTS.get(TWO_REST)!.back,
+  twoOutBack: TWO_OUTS.get(TWO_REST)!.back, dual: DUAL_CUT,
 };
 
 /** a two-hander at rest through the eyes, in a middle guard: the fists low on the right of the crosshair (the lower

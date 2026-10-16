@@ -28,7 +28,7 @@ import { swingAt, swingShoulder, turnWithTrunk, type ArmBones } from '../viewSwi
 import { tunable } from '../../core/tuning';
 import {
   TWO_REST, TWO_FORE_CUT, TWO_FORE_ROW, TWO_BACK_CUT, TWO_OUTS, twoRestOf, ONE_FORE_CUT, ONE_BACK_CUT,
-  CUT_TURN, TWO_CUT_TURN,
+  CUT_TURN, TWO_CUT_TURN, DUAL_CUT, DUAL_CUT_TURN,
   POWER_TWO, SMITE_TWO, POWER_ONE,
   RECOVER_TWO, ONE_DOWN_AT, ONE_DOWN_DIR,
 } from './warriorEyes';
@@ -214,6 +214,25 @@ const OUT_VIA = 0.25, OUT_REST = 0.2, OUT_AT = 0.2;
  *  went straight across, the fist turned on its own, and the right wrist bent 11 to 18 degrees past its range and
  *  the left shoulder 22.) */
 const TWO_OUT = 0.45;
+/** Through the eyes, how long a dual wielder's cut takes to come from where its hand was, and its other hand to go
+ *  back to rest from where its own cut left it (s) */
+const DUAL_BEGIN = 0.08, DUAL_BACK = 0.22;
+/** and how far below its rest the hand going back to it aims as it starts (m, and how far its weapon is turned down,
+ *  rad): a fade's straight line taken down under the frame, by as much less as it's come (a quarter of it halfway).
+ *  Faded straight from where its cut left it, low on the far side, its blade stood up across the middle of the view
+ *  as the other hand cut; its way alone turned down, off its flat, the fade flipped the blade over in a frame, 51 m/s */
+const DUAL_DIP = [0.6, 1.4] as const;
+const _dipAxis = new THREE.Vector3();
+/** A dual wielder's rest (`at`, the weapon's way `dir`, its flat `flat`) for a hand going back to it with `fading` of
+ *  its last place still held: aimed below it by that much, the weapon turned down with its flat (`DUAL_DIP`). */
+function dipUnder(at: THREE.Vector3, dir: THREE.Vector3, flat: THREE.Vector3, fading: number): void {
+  at.y -= DUAL_DIP[0] * fading;
+  _dipAxis.set(dir.z, 0, -dir.x);
+  if (_dipAxis.lengthSq() < 1e-6) return;
+  _dipAxis.normalize();
+  dir.applyAxisAngle(_dipAxis, DUAL_DIP[1] * fading);
+  flat.applyAxisAngle(_dipAxis, DUAL_DIP[1] * fading);
+}
 /** a blade's turn in the fist about its own length (third person): its flats along the palm, its edge (an axe's bit) out over the knuckles, as a real one is held */
 const MOUNT = -Math.PI / 2;
 /** drinking: the elbow raised out to the side, the wrist out to the left of the chin (as from a horn: the shield on that forearm turns edge on beside the head, not over the face) */
@@ -757,6 +776,9 @@ export function buildWarrior(): Model {
   /** through the eyes, how long the way back to rest after a cut's held end has to go, of how long (`OUT_VIA`,
    *  `TWO_OUT`) */
   let outT = 0, outLong = OUT_VIA;
+  /** through the eyes, whether a dual wielder's right and left hands are going back to rest from their own cut's end
+   *  (`dipUnder`) */
+  let backR = false, backL = false;
   /** through the eyes, the arm the swing keyed this frame, if it keyed one (the lab's: `Model.swingKeyed`) */
   let keyed: KeyedArm | null = null;
   /** through the eyes, the trunk's turn a two-hander's last cut left (rad), faded out as its place is: let go of in a
@@ -1191,6 +1213,8 @@ export function buildWarrior(): Model {
       if (tailT <= 0) {
         const out = fp ? SWING_OUT : TAIL_OUT[tailName] ?? 0.4;
         fade.cut(out); eyesL.cut(out);
+        backR = !!offHeld && tailName === 'swing' && side > 0;
+        backL = !!offHeld && tailName === 'swing' && side < 0;
         // (a one-hander's backhand goes back by a forehand's start: `OUT_VIA`; a two-hander's, carried down out of the
         // frame on the right, straight up into its guard there: by the forehand's start, its right wrist bent 37
         // degrees past its range)
@@ -1252,8 +1276,19 @@ export function buildWarrior(): Model {
     }
     // (a swing straight after a swing starts where that one ended: a short fade; out of an action back to the stance, a slow one)
     if (began) fade.cut(chain && raw.name === 'swing' ? 0.08 : 0.14); else if (ended && !inTail) fade.cut(0.3);
-    // (through the eyes a move goes on from where the last ended, its hands seen the whole way)
-    if (began) { eyesR.cut(0.14); eyesL.cut(0.14); }
+    // (through the eyes a move goes on from where the last ended, its hands seen the whole way; a dual wielder's cut,
+    // a third of a second, from its rest sooner: faded in 0.14 s, it was still fading as the blow came, and an axe's
+    // and a mace's arc kinked 35 degrees in a frame. Its other hand goes back to its rest from where its own cut left
+    // it slower: as fast, its blade whipped across the middle of the view in four frames)
+    if (began) {
+      const dualCut = !!offHeld && raw.name === 'swing';
+      const leftCuts = dualCut && side < 0;
+      // (in a row, the other hand cut last: it goes back from there)
+      backR = dualCut && leftCuts && inRow;
+      backL = dualCut && !leftCuts && inRow;
+      eyesR.cut(dualCut ? (leftCuts ? DUAL_BACK : DUAL_BEGIN) : 0.14);
+      eyesL.cut(dualCut ? (leftCuts ? DUAL_BEGIN : DUAL_BACK) : 0.14);
+    }
     else if (ended && !inTail) { eyesR.cut(0.3); eyesL.cut(0.3); }
     if (a && a.name !== 'buff' && a.name !== 'cast' && a.name !== 'stagger' && a.name !== 'drink') fightT = t;
     // (a two-hander onto the shoulder out of a fight; off it at once for a move, which the move's fade brings down)
@@ -1321,10 +1356,14 @@ export function buildWarrior(): Model {
         // (a two-hander's in a row turned from further round, so begun earlier: as far round at the blow as from rest.
         // Begun as late, it was 15 degrees short of the view's middle there, and a greatsword's tip fell short of the
         // crosshair)
-        const [wound, across, restFrom, to, rowFrom = restFrom] = two ? TWO_CUT_TURN : CUT_TURN;
+        // (a dual wielder's as a two-hander's, each hand's cut carried round by it: `DUAL_CUT`)
+        const dual = !!offHeld;
+        const driven = two || dual;
+        const [wound, across, restFrom, to, rowFrom = restFrom] = two ? TWO_CUT_TURN : dual ? DUAL_CUT_TURN : CUT_TURN;
         const start = inRow ? -across : -wound, from = inRow ? rowFrom : restFrom;
-        const turning = two ? smooth(ramp(k, from, to)) : ramp(k, from, to);
-        const into = side * lerp(start, across, turning) * (inRow ? 1 : two ? smooth(ramp(k, 0, from)) : ramp(k, 0, 0.3));
+        const turning = driven ? smooth(ramp(k, from, to)) : ramp(k, from, to);
+        const eased = driven ? smooth(ramp(k, 0, from)) : ramp(k, 0, 0.3);
+        const into = side * lerp(start, across, turning) * (inRow ? 1 : eased);
         const theta = outing ? side * across * (1 - (two ? smooth(outP) : outP)) : into;
         trunkTurn = theta;
         swingTurned = true;
@@ -1346,17 +1385,20 @@ export function buildWarrior(): Model {
         // where its forehand winds up, so it goes on from there: `TWO_FORE_ROW`)
         const fore = outing || side > 0;
         if (left) {
-          swingAt(ONE_FORE_CUT, k, armBones(offHeld), _la, _ld, _ml, _pl, true); swingShoulder(ONE_FORE_CUT, _sl, true);
+          swingAt(DUAL_CUT, k, armBones(offHeld), _la, _ld, _ml, _pl, true); swingShoulder(DUAL_CUT, _sl, true);
+          spineUnder(_sl, _sp);
+          turnWithTrunk(theta, _sp, _la, _ld, _ml, _pl);
+          _sl.sub(_sp).applyAxisAngle(Y_AXIS, theta).add(_sp);
           keyArm('left', _sl, _pl, _la, _ld, fw);
-          wL = fw; flatL = 1; edgeL = fw; swingSlantL = -THREE.MathUtils.degToRad(ONE_FORE_CUT.slant);
+          wL = fw; flatL = 1; edgeL = fw; swingSlantL = -THREE.MathUtils.degToRad(DUAL_CUT.slant);
         } else {
           const twoFore = inRow && !outing ? TWO_FORE_ROW : TWO_FORE_CUT;
           const outs = TWO_OUTS.get(twoRestOf(held?.group.name ?? ''))!;
           const twoCut = outing ? (side > 0 ? outs.fore : outs.back) : fore ? twoFore : TWO_BACK_CUT;
-          const cut = two ? twoCut : fore ? ONE_FORE_CUT : ONE_BACK_CUT;
+          const cut = two ? twoCut : dual ? DUAL_CUT : fore ? ONE_FORE_CUT : ONE_BACK_CUT;
           swingAt(cut, two && outing ? outP : k, armBones(held), _ra, _rd, _mr, _pr); swingShoulder(cut, _sr);
-          // (a two-hander's carried round the spine by the trunk's turn, the shoulder with it)
-          if (two) {
+          // (a two-hander's and a dual wielder's carried round the spine by the trunk's turn, the shoulder with it)
+          if (driven) {
             spineUnder(_sr, _sp);
             turnWithTrunk(theta, _sp, _ra, _rd, _mr, _pr);
             _sr.sub(_sp).applyAxisAngle(Y_AXIS, theta).add(_sp);
@@ -1723,6 +1765,7 @@ export function buildWarrior(): Model {
       // (and its flat turned as the rest has it, a move's to the eyes over it by the move's weight)
       if (held) {
         const k = oneRest(held, _er, _ed, _ef);
+        if (backR && wR === 0) dipUnder(_er, _ed, _ef, eyesR.fading);
         _ra.lerpVectors(_er, _ra, wR); _rd.lerpVectors(_ed, _rd.normalize(), wR);
         // (a swing's flat as it is: its knuckles lead, its forearm in its plane)
         turnTowards(_ef, edgeR > 0 ? _mr : sameSide(held, _ef, _mr), wR, _rf); flatR = lerp(k, flatR, wR); wR = 1;
@@ -1731,6 +1774,7 @@ export function buildWarrior(): Model {
         // (mirrored across the view: its place and way flip in x, its flat, a cross of two ways, in y and z, as
         // `swingAt` mirrors one; flipped in x like a way, the fist turned over on the handle and the blade left the frame)
         const k = oneRest(offHeld, _er, _ed, _ef); _er.x = -_er.x; _ed.x = -_ed.x; _ef.set(_ef.x, -_ef.y, -_ef.z);
+        if (backL && wL === 0) dipUnder(_er, _ed, _ef, eyesL.fading);
         _la.lerpVectors(_er, _la, wL); _ld.lerpVectors(_ed, _ld.normalize(), wL);
         turnTowards(_ef, edgeL > 0 ? _ml : sameSide(offHeld, _ef, _ml), wL, _lf); flatL = lerp(k, flatL, wL); wL = 1;
       }
