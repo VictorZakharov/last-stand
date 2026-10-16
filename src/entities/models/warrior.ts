@@ -78,7 +78,9 @@ const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHO
  *  2's) and where its right elbow points (`pole`, the chest's frame);
  *  and a one-hander at rest (`oneOn`, its grip's place on the screen, `fromScreen`: across and up from the middle to
  *  the edges and metres ahead, its fist at the bottom right corner, mostly below the frame, as Vermintide 2's are;
- *  `oneDir`, its way, upright at the frame's right edge; a second blade's mirrors it), held from
+ *  `oneDir`, its way, leaning out and away to the frame's right edge, its head a quarter of the way down it, as
+ *  Vermintide 2's axe (`lab match --fit`; upright, its head ran out of the frame's top, 53% of an axe's and 32% of a
+ *  mace's seen); a second blade's mirrors it), held from
  *  shoulders of their own (`oneShoulder`); and how far
  *  a fist may turn about its handle (rad, `roll`) for its arm to keep within a body's ranges, and what each degree of
  *  its wrist's bend costs it (armIK's `wristW`, `wrist`) (`fitInView`); and the field of view the arms and weapons
@@ -87,7 +89,7 @@ const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHO
  *  first-person fist is drawn large, as Vermintide 2's are) */
 const EYES = tunable('warriorEyes', {
   shoulder: [0.22, -0.46, -0.25], restOn: [0.64, -2.8, 0.42], restDir: [0.7, 1, -1.2], pole: [-1, -0.3, 0.3],
-  oneOn: [0.58, -1.3, 0.6], oneDir: [0.45, 1, -0.3], bladeOn: [0.6, -0.42, 0.8], bladeDir: [0.62, 1, -0.5],
+  oneOn: [0.58, -1.3, 0.6], oneDir: [0.43, 0.5, -0.39], bladeOn: [0.6, -0.42, 0.8], bladeDir: [0.62, 1, -0.5],
   bladeFlat: [-0.45, 0, 0.9], oneFlat: [-1, 0, 0.2], restFlat: [-0.44, 0.77, 0.51],
   oneShoulder: [0.3, -0.4, 0.08], roll: 1.2, wrist: 1, fov: 45, hand: 1.35,
 });
