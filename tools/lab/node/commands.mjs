@@ -93,7 +93,6 @@ function lightScenarios(options) {
   return scenarios;
 }
 
-/** The casts `cast` measures (page/cast.ts `CastOptions`, its canary aside): the skill in each biome and view. */
 /** the strikes `trail` casts unless `--strikes` says: every one of the warrior's, Rending Cleave each way he holds his
  *  weapons, each other by a way it's swung (Thunder Crescent's two-hander, Twin Fangs' two blades) */
 const TRAIL_STRIKES = [
@@ -107,6 +106,7 @@ function strikeFrom(written) {
   return style === undefined ? { skill } : { skill, style };
 }
 
+/** The casts `cast` measures (page/cast.ts `CastOptions`, its canary aside): the skill in each biome and view. */
 function castScenarios(options) {
   const scenarios = [];
   for (const biome of options.biomes) {
@@ -122,6 +122,7 @@ function castScenarios(options) {
         pictures: options.pictures !== false,
         what: options.what?.map(Number),
         gear: options.gear,
+        tune: fixtureFrom(options).tune,
       });
     }
   }

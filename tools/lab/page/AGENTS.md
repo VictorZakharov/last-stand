@@ -8,4 +8,4 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md), the lab'
 - **The page runs on the lab's clock.** Its `performance.now` stands still within a frame, and its frames run as fast as the page can; what happens in the browser's own time (a decode, a CSS animation, audio) is waited for with `__labClock.realNow` and real timeouts, and kept out of a report's lines, which must be the same on every run.
 - **Check the state happened, and carry a canary** (Writing a measure in `tools/lab/AGENTS.md`).
 - A measure reads what the game sends out (the frame drawn, the WebAudio nodes, the page's styles), not the game's own bookkeeping, which is what it checks.
-- Pure helpers a measure uses get a unit test in `test/` (`flashes.ts`, `patches.ts`, `sweptArea.ts` have theirs).
+- Pure helpers a measure uses get a unit test in `test/` (`flashes.ts`, `patches.ts`, `sweptArea.ts`, `jumps.ts` have theirs).

@@ -28,6 +28,8 @@ export interface LightScenario {
   at?: [number, number];
   /** the hero built afresh for it (a quality's detail is the hero's from his build) */
   fresh?: boolean;
+  /** tunable values set for it, by their paths (`Fixture.tune`) */
+  tune?: Record<string, number[]>;
 }
 
 /** HDR's levels, as shares of the screen's white for SDR content. */
@@ -320,7 +322,8 @@ export async function lookAlong(lab: Lab, facing: number): Promise<void> {
 export async function standIn(lab: Lab, scenario: LightScenario): Promise<void> {
   if (G.arena.biome !== scenario.biome) G.arena.setBiome(scenario.biome);
   const facing = scenario.facing * Math.PI / 180;
-  await lab.setup({ view: scenario.view, facing, gear: scenario.gear, at: scenario.at, fresh: scenario.fresh });
+  const { view, gear, at, fresh, tune } = scenario;
+  await lab.setup({ view, facing, gear, at, fresh, tune });
   if (scenario.view !== 'top') await lookAlong(lab, facing);
   await lab.step(SETTLE_FRAMES);
 }

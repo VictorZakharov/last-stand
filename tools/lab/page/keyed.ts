@@ -90,6 +90,13 @@ export function triple(v: THREE.Vector3): string {
 /** A frame numbered, with its keyed arm (or none). */
 export interface KeyedSeen { frame: number; keyed: KeyedFrame | null }
 
+/** Whether a frame of `seen` wholly a swing's keys its grip further than `KEYED_NEAR` from `from` (camera space): an
+ *  arm held still where it was there would be drawn off its keys. */
+export function keyedAway(seen: readonly KeyedSeen[], from: THREE.Vector3): boolean {
+  const away = (keyed: KeyedFrame) => keyed.weight >= WHOLLY && keyed.keyed.grip.distanceTo(from) > KEYED_NEAR;
+  return seen.some((now) => now.keyed !== null && away(now.keyed));
+}
+
 /** One miss the measure reads off a keyed frame: its name, its unit, how far it may go, and how far it went. */
 interface Miss { name: string; unit: string; most: number; of: (frame: KeyedFrame) => number }
 

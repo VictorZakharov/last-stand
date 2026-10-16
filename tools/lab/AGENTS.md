@@ -17,7 +17,7 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `carry`: measures the carried bow
 - `feet`: the feet against the ground round the dais's edges and on level ground (standing at full draw, walking across, strafing drawn, running reversals: out of reach, wobbling, sliding, in a riser, the rhythm)
 - `range`: every joint against a body's ranges frame by frame (standing, walking each way, attacking, and walks that change direction while he attacks, held or tapped, or runs: each angle past its range, its worst and where, each scenario's fastest ankle and weapon tip, a two-hander let go of by the other hand, `--trace` the leg IK frame by frame as `gait --trace` lists it, each frame's joints past their ranges beside it)
-- `eyes <skill>`: a skill cast through the eyes, frame by frame (where the blade goes across the view, wound up, through the blow and where it ends, how fast, where it is as the skill fires; a two-hander let go of where it's seen, or seen in one hand; a fist open on its handle; the arms' joints past their ranges; a film of the frames)
+- `eyes <skill>`: a skill cast through the eyes, frame by frame (where the blade goes across the view, wound up, through the blow and where it ends, how fast, where it is as the skill fires; a two-hander let go of where it's seen, or seen in one hand; a fist open on its handle; the arms' joints past their ranges; the weapon jumping between frames; a film of the frames)
 - `match <picture>`: the hero standing through the eyes beside a reference's screenshot, on a screen of its shape (the screenshot, his frame, the two blended, the points marked on it and his drawn on each, and how far his are off)
 - `coop`: two games playing together, the host's and a guest's beside it, their messages carried as a link of a high ping and jitter carries them (`--ping`, `--jitter`: how far behind and how roughly each shows the other's heroes and foes, how its timeline plays them out, whether an arrow that struck a foe on the guest's screen counted, whether a blow it dodged hurt it, a guest brought down and raised, a guest's blink as the host's screen shows it: when it hid the copy, where the copy came out, the foes it dazed on both screens; `--class mage`)
 - `stops`: the hero coming to a stop from a run as a person stops (runs let go at different points of a stride, on level ground, drawn and by the dais's edges: the steps once still, a foot put out and drawn back, steps back, a foot on another level than the body's or stepped onto one once still, `--trace`, `--only`)
@@ -227,14 +227,27 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   200 ms (a fist below the frame on a handle that runs out of it is lost to a person's own eyes too: counted whenever
   the weapon's hand was seen, the middle guard at rest read as one-handed); and a hand seen holding its handle as an
   open hand, the handle over 1.2 cm from where its fist closes or its fingers curled under 0.5 rad (through the eyes a
-  hand is drawn large, and the user saw the grip "not gripping the sword"). `--film=false` takes no film (it's
+  hand is drawn large, and the user saw the grip "not gripping the sword"); and the weapon jumping between frames, seen
+  in or near the frame: a frame its tip moves into at least 6 m/s, 3 times the median of the moves 3 frames each
+  side of it and twice the slower of the frames either side (`page/jumps.ts`; the median, as a blade out and back
+  again in a frame moves as far into the next; the sides, as a dual wielder's cut, fast for three frames, read as a
+  jump against a round mostly still), the
+  tip passed from one hand's weapon to the other's not counted (#249: Steel Tempest's blade leapt a metre and more each
+  turn of the spin, the elbow flipping over as the shoulder came round under the camera; a two-hander's dropped 43 cm
+  as Power Strike's way back ended). `--film=false` takes no film (it's
   `tools/lab/out/eyes/<skill>/`, every `--every`
   frames, 2 by default), `--frames` lists every frame: the grip, the weapon's way and the other hand in the camera's
   space as the moves through the eyes are keyed (`models/warriorEyes.ts`), held or let go and why, and its joints
-  past their ranges, and the fists. `--canary` freezes the trunk and the arms as they were at the press, turns the
-  other arm down out of the frame and lifts the weapon 15 cm up the view out of the fists: there must be no blow, a
-  two-hander must be seen in one hand, and a fist must be off its handle (frozen alone, the arms swung with the trunk's
-  turn and read as a blow).
+  past their ranges, and the fists. `--canary` freezes the body, the trunk and the arms as they were at the press (and
+  puts the hero under the camera again by his neck as held: placed by the neck as posed, Steel Tempest's frozen arms
+  went round the eyes each turn), turns the other arm down out of the frame and lifts the weapon 15 cm up the view out
+  of the fists: there must be no blow, a two-hander must be seen in one hand, and a fist must be off its handle (frozen
+  alone, the arms swung with the trunk's turn and read as a blow); and lifts the weapon 30 cm up the view on its
+  stillest frame in the frame alone, which must read as a jump there. A spin's blow (a skill with a `spin`: Steel
+  Tempest) isn't asked to cross the aim, as it strikes all round; whether its passes may be seen is `cast`'s flashes'
+  to say (held across the view, the one-hander's steel lit the crypt 3 times a second at 2.4 turns a second). Every run
+  of the cast, the canaries' as the first, starts at full energy, its cooldowns cleared (Steel Tempest drains energy
+  while held: the runs after the first spun 11 frames less, and the jump canary's lift fell past their end).
 - `match <picture>`: the hero through the eyes matched to a reference (`node/match.mjs`; another game's, the one the
   owner names), not by eye: handed over as matching three Vermintide 2 screenshots from a one-line summary of them, a
   rest leaned in where they lean out, was twice as wide and had its head out of the frame. He stands at rest, or is

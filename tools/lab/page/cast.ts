@@ -41,6 +41,8 @@ export interface CastOptions {
   canary: boolean;
   /** the way the hero holds his weapons (as rolled when not given) */
   gear?: WeaponStyle;
+  /** tunable values set for the cast, by their paths (`Fixture.tune`) */
+  tune?: Record<string, number[]>;
 }
 
 /** how far ahead of the hero the aim is (m) */
@@ -260,7 +262,8 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
   // (the props an earlier cast broke stand again: broken, they stay so until a run starts, and the next scenario in
   // the biome saw another scene)
   G.arena.restoreProps();
-  const scenario = { biome: options.biome, view: options.view, facing: options.facing, gear: options.gear };
+  const { biome, view, facing, gear, tune } = options;
+  const scenario = { biome, view, facing, gear, tune };
   await standIn(lab, { ...scenario, at: options.at });
   const hero = G.player;
   bindKnown(options.skill);

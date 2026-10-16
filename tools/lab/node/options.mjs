@@ -399,6 +399,7 @@ export const COMMANDS = {
         help: 'plant the fault the checks must catch, in the first biome and view: a strobe of the exposure',
       },
       gear: SETUP_OPTIONS.gear,
+      tune: SETUP_OPTIONS.tune,
       ...COMMON_OPTIONS,
     },
   },

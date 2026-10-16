@@ -81,6 +81,8 @@ export interface Landing {
   swept: number;
   /** the skill's arc (degrees; null: it has none) */
   arc: number | null;
+  /** how often its blow comes round, a spin's (turns a second; null: it isn't one) */
+  turns: number | null;
 }
 
 /** A landing as words. */
@@ -90,26 +92,37 @@ export function describeLanding(landing: Landing): string {
       + `(frame ${landing.meets.frame})`
     : 'its blade never crossed the aim';
   const arc = landing.arc === null ? '' : ` of the skill's ${landing.arc.toFixed(0)}° arc`;
-  return `${meets}; its striking part swept ${landing.swept.toFixed(0)}°${arc}`;
+  const turns = landing.turns === null
+    ? ''
+    : ` (a spin, round ${landing.turns.toFixed(1)} times a second: it strikes all round)`;
+  return `${meets}${turns}; its striking part swept ${landing.swept.toFixed(0)}°${arc}`;
 }
 
-/** A landing's problems: met with its middle or not at all, short of the aim, or a narrow sweep. */
+/** A landing's problems: met with its middle or not at all, short of the aim, or a narrow sweep. A spin's blow isn't
+ *  asked to meet the aim: it strikes all round, and whether its passes may be seen through the eyes is the flashes'
+ *  to say (lab cast: Steel Tempest's one-hander held across the view, 2.4 turns a second, lit the crypt's lower right
+ *  3 times a second; held under the frame, it never crosses the aim). */
 export function landingProblems(landing: Landing, weapon: string): string[] {
-  const problems: string[] = [];
-  const { meets } = landing;
-  if (!meets) problems.push(`the ${weapon}'s blade never crosses the aim through its blow`);
-  else if (meets.share < MEETS_LEAST) {
-    problems.push(`the ${weapon} meets the aim with its blade's inner part, ${(meets.share * 100).toFixed(0)}% of `
-      + `the way to its tip (at least ${MEETS_LEAST * 100}%: a cut lands with its tip's part)`);
-  } else if (meets.share > MEETS_MOST) {
-    problems.push(`the ${weapon}'s tip falls short of the aim: it passed ${(meets.share * 100).toFixed(0)}% of `
-      + 'its length out');
-  }
+  const problems = landing.turns === null ? aimProblems(landing.meets, weapon) : [];
   if (landing.arc !== null && landing.swept < landing.arc * SWEEP_LEAST) {
     problems.push(`the ${weapon}'s blow sweeps ${landing.swept.toFixed(0)}° of the skill's ${landing.arc.toFixed(0)}°`
       + ` arc (at least ${SWEEP_LEAST * 100}%: it strikes every foe in it)`);
   }
   return problems;
+}
+
+/** Where a cut met the aim, as problems: not at all, with its middle, or short of it. */
+function aimProblems(meets: Landing['meets'], weapon: string): string[] {
+  if (!meets) return [`the ${weapon}'s blade never crosses the aim through its blow`];
+  if (meets.share < MEETS_LEAST) {
+    return [`the ${weapon} meets the aim with its blade's inner part, ${(meets.share * 100).toFixed(0)}% of `
+      + `the way to its tip (at least ${MEETS_LEAST * 100}%: a cut lands with its tip's part)`];
+  }
+  if (meets.share > MEETS_MOST) {
+    const out = (meets.share * 100).toFixed(0);
+    return [`the ${weapon}'s tip falls short of the aim: it passed ${out}% of its length out`];
+  }
+  return [];
 }
 
 /** A held weapon's share of the frame at rest. */
