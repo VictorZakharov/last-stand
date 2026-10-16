@@ -104,8 +104,8 @@ const TOUCHING = new WeakSet();
 
 /**
  * A finger's touch sent to the page as the browser gets one from a touch screen (`lab.touch`'s): `type` is
- * `touchStart`, `touchMove` or `touchEnd`, `points` where the fingers are (css px; none for `touchEnd`). The page's
- * own pointer events follow from it, with their pointer ids, so the game handles it as a player's.
+ * `touchStart`, `touchMove` or `touchEnd`, `points` the finger it puts down, moves or lifts, by its id (css px). The
+ * page's own pointer events follow from it, with their pointer ids, so the game handles it as a player's.
  */
 async function touchOf(page, type, points) {
   const devtools = await devtoolsOf(page);

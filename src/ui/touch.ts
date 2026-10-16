@@ -3,8 +3,11 @@
 // core/input like the keyboard and mouse do.
 //
 // Skill buttons: the basic attack, channelled skills and drawn bows act while held, aimed at the nearest foe (a bow looses as it's let go).
-// Other skills cast on release: at the nearest foe after a tap, or where the finger dragged to
-// (an aim ring shows the spot). The mode follows the last input used, so touch laptops work too.
+// A skill aimed by holding (`SkillDef.aimed`) is held as its key is on the desktop, its own preview showing where it
+// would land, and cast as the finger lifts. Other skills cast on release. Either goes where the finger dragged to (a
+// plain ring shows the spot for one with no preview of its own), or after a tap at the nearest foe; a movement skill
+// (Veilstep) tapped goes the way the move stick points, or the way the hero faces. The mode follows the last input
+// used, so touch laptops work too.
 import * as THREE from 'three';
 import { G } from '../state';
 import { input } from '../core/input';
@@ -15,7 +18,7 @@ import { SKILL_KEYS } from '../loot/loadout';
 import { makeSkillSlot } from './hud';
 import { hideTooltip } from './tooltip';
 import { uiScales } from './scale';
-import type { SkillKey } from '../types';
+import type { SkillDef, SkillKey } from '../types';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 
@@ -24,14 +27,23 @@ const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 const STICK_R = 56, DRAG_MIN = 16;
 /** px of skill drag per metre of aim distance, and the aim range */
 const DRAG_PX_PER_M = 9, AIM_MIN = 2, AIM_MAX = 14;
-/** foes this close are aimed at automatically */
-const AUTO_RANGE = 22;
+/** foes this close are aimed at automatically, and how far ahead a tap aims with none (m) */
+const AUTO_RANGE = 22, AHEAD = 6;
 /** a released cast keeps its key down this long, in case the character is still busy */
 const RELEASE_HOLD = 0.35;
 
 interface Stick { id: number; x0: number; y0: number }
-interface Press { id: number; key: SkillKey; x0: number; y0: number; dx: number; dy: number; dragged: boolean; release: boolean; /** a drag shows where it aims */ ring: boolean }
-interface Released { key: SkillKey; aim: THREE.Vector3; t: number }
+interface Press {
+  id: number; key: SkillKey; x0: number; y0: number; dx: number; dy: number; dragged: boolean; release: boolean;
+  /** held as its key is, the hero showing its own preview (`SkillDef.aimed`) */
+  aimed: boolean;
+  /** a drag shows where it aims with the plain ring */
+  ring: boolean;
+  /** the aim the last frame showed, which letting go casts at */
+  shown: THREE.Vector3 | null;
+}
+/** a press let go: its aim, kept until the hero takes the cast up, and whether its key is held down meanwhile (a cast on release) */
+interface Released { key: SkillKey; aim: THREE.Vector3; t: number; held: boolean }
 
 let stick: Stick | null = null;
 let press: Press | null = null;
@@ -112,6 +124,7 @@ export function initTouch(): void {
   $('#btn-pause').addEventListener('click', () => input.pressed.add('escape'));
 
   ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.8, 40).rotateX(-Math.PI / 2), additive(0xffe0a0, 1.6, 0.9));
+  ring.name = 'touch-aim-ring';
   ring.visible = false;
   ring.renderOrder = 5;
   G.scene.add(ring);
@@ -122,7 +135,9 @@ export function buildTouchSkills(): void {
   const box = $('#touch-skills');
   box.innerHTML = '';
   buttons = SKILL_KEYS.map((key) => {
-    const el = makeSkillSlot(G.player.skillAt(key)?.def ?? null, key);
+    // (no tooltip: a tap is a cast, and its click opened the skill's card pinned over the buttons, the next tap there
+    // landing on the card)
+    const el = makeSkillSlot(G.player.skillAt(key)?.def ?? null, key, false);
     el.classList.add(`tk-${key}`);
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -130,9 +145,9 @@ export function buildTouchSkills(): void {
       if (press || !G.player.skillAt(key)) return;
       el.setPointerCapture(e.pointerId);
       const def = G.player.skillAt(key)!.def;
-      // the basic attack, channels and drawn bows act while held; the rest wait for the release
-      const release = key !== 'mouse0' && !def.channel && !def.draw;
-      press = { id: e.pointerId, key, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, dragged: false, release, ring: release || !!def.draw };
+      // the basic attack, channels, drawn bows and skills aimed by holding act while held; the rest wait for the release
+      const aimed = !!def.aimed && !def.channel, release = key !== 'mouse0' && !def.channel && !def.draw && !aimed;
+      press = { id: e.pointerId, key, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, dragged: false, release, aimed, ring: release || !!def.draw, shown: null };
       // (a press while the hero is busy queues a drawn shot, as a click does)
       if (!release) { input.touch.add(key); input.pressed.add(key); }
       el.classList.add('pressed');
@@ -144,15 +159,17 @@ export function buildTouchSkills(): void {
     });
     const end = (e: PointerEvent) => {
       if (press?.id !== e.pointerId) return;
-      const p = press;
+      const p = press, lifted = e.type === 'pointerup';
       press = null;
       el.classList.remove('pressed');
+      // (cancelled, a skill aimed by holding is given up: its key going up alone casts it)
+      if (!lifted) giveUp(p);
       input.touch.delete(p.key);
-      if (p.release && e.type === 'pointerup') {
-        aimFor(p, _aim);
-        released = { key: p.key, aim: _aim.clone(), t: 0 };
-        input.touch.add(p.key);
-      }
+      if (!lifted || !(p.release || p.aimed)) return;
+      // cast where the aim last showed (a tap between two frames: as the press aims now); a cast on release keeps its
+      // key down a moment, in case the hero is busy, and an aimed skill's goes up, which casts it
+      released = { key: p.key, aim: (p.shown ?? aimFor(p, _aim)).clone(), t: 0, held: p.release };
+      if (p.release) input.touch.add(p.key);
     };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
@@ -171,18 +188,42 @@ function autoAim(out: THREE.Vector3): THREE.Vector3 {
     const d = Math.hypot(e.pos.x - p.x, e.pos.z - p.z);
     if (d < best) { best = d; out.set(e.pos.x, 0, e.pos.z); found = true; }
   }
-  if (!found) out.set(p.x + Math.sin(G.player.facing) * 6, 0, p.z + Math.cos(G.player.facing) * 6);
+  if (!found) out.set(p.x + Math.sin(G.player.facing) * AHEAD, 0, p.z + Math.cos(G.player.facing) * AHEAD);
   return out;
 }
 
-/** Where a press aims: dragged by hand (screen direction turned into the camera's frame), or auto. */
-function aimFor(p: Press, out: THREE.Vector3): THREE.Vector3 {
-  if (!p.dragged) return autoAim(out);
-  const d = Math.hypot(p.dx, p.dy), m = Math.min(AIM_MAX, Math.max(AIM_MIN, d / DRAG_PX_PER_M));
+/** The way on the ground a way across the screen points (`x` right, `y` down, of unit length), as the move keys map it. */
+function screenWay(x: number, y: number, out: THREE.Vector3): THREE.Vector3 {
   const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);
-  const x = p.dx / d, z = p.dy / d;   // screen right / down, as the move keys map them
+  return out.set(x * cy + y * sy, 0, y * cy - x * sy);
+}
+
+/**
+ * A movement skill's tap (Veilstep): as far as it reaches the way the move stick points, or the way the hero faces
+ * with the stick let go. (At the nearest foe, a tapped blink landed the mage among the foes.)
+ */
+function moveAim(def: SkillDef, out: THREE.Vector3): THREE.Vector3 {
+  const pl = G.player, reach = def.range ?? AHEAD, s = input.stick, len = Math.hypot(s.x, s.y);
+  if (len) screenWay(s.x / len, s.y / len, out);
+  else out.set(Math.sin(pl.facing), 0, Math.cos(pl.facing));
+  return out.set(pl.pos.x + out.x * reach, 0, pl.pos.z + out.z * reach);
+}
+
+/** Where a press aims: dragged by hand (screen direction turned into the camera's frame), or as a tap aims its skill. */
+function aimFor(p: Press, out: THREE.Vector3): THREE.Vector3 {
+  if (!p.dragged) {
+    const def = G.player.skillAt(p.key)?.def;
+    return def?.tags.includes('movement') ? moveAim(def, out) : autoAim(out);
+  }
+  const d = Math.hypot(p.dx, p.dy), m = Math.min(AIM_MAX, Math.max(AIM_MIN, d / DRAG_PX_PER_M));
+  screenWay(p.dx / d, p.dy / d, out);
   const pl = G.player.pos;
-  return out.set(pl.x + (x * cy + z * sy) * m, 0, pl.z + (z * cy - x * sy) * m);
+  return out.set(pl.x + out.x * m, 0, pl.z + out.z * m);
+}
+
+/** A press of a skill aimed by holding given up (cancelled, the controls hidden): not cast, its preview gone. */
+function giveUp(p: Press): void {
+  if (p.aimed && G.player.aiming?.key === p.key) G.player.endAim();
 }
 
 /** Per frame, before the player updates: the aim point, and whether the controls show at all. */
@@ -193,7 +234,10 @@ export function updateTouch(dt: number): void {
     : menu.classList.contains('stowed'));
 
   $('#touch').classList.toggle('hidden', !show);
-  if (!show && (press || stick)) { press = null; stick = null; input.stick.x = input.stick.y = 0; input.touch.clear(); }
+  if (!show && (press || stick)) {
+    if (press) giveUp(press);
+    press = null; stick = null; input.stick.x = input.stick.y = 0; input.touch.clear();
+  }
 
   input.aim = null;
   ring.visible = false;
@@ -202,11 +246,14 @@ export function updateTouch(dt: number): void {
     const sk = G.player.skillAt(released.key);
     // held until the character takes it up (or gives up)
     const started = !sk || G.player.casting?.skill === sk || G.player.cooldownLeft(sk.def.impl) > 0;
-    if (started || released.t > RELEASE_HOLD) { input.touch.delete(released.key); released = null; }
-    else input.aim = released.aim;
+    if (started || released.t > RELEASE_HOLD) {
+      if (released.held) input.touch.delete(released.key);
+      released = null;
+    } else input.aim = released.aim;
   }
   if (press) {
     input.aim = aimFor(press, _aim);
+    (press.shown ??= new THREE.Vector3()).copy(_aim);
     if (press.dragged && press.ring) {
       ring.visible = true;
       ring.position.set(_aim.x, groundHeight(_aim.x, _aim.z) + 0.06, _aim.z);

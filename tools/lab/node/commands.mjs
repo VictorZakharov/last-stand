@@ -870,6 +870,14 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  tap: {
+    each(side, options) {
+      return side.command('tap', { fixture: fixtureFrom(options), canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   spawns: {
     check(options) {
       if (options.waves !== undefined && !(options.waves >= 1)) throw labError('spawns --waves: at least 1');

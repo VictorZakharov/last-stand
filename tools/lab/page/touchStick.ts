@@ -50,13 +50,13 @@ interface Push {
 }
 
 /** The middle of an element's box (css px). */
-function middleOf(element: Element): PagePoint {
+export function middleOf(element: Element): PagePoint {
   const box = element.getBoundingClientRect();
   return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
 }
 
 /** An element of the page by its selector, or an error naming it. */
-function element(selector: string): HTMLElement {
+export function element(selector: string): HTMLElement {
   const found = document.querySelector<HTMLElement>(selector);
   if (!found) throw new Error(`lab: touch: the page has no ${selector}`);
   return found;
@@ -69,28 +69,33 @@ function pushesFrom(start: PagePoint): number[] {
   return [...new Set(fits)];
 }
 
-/** Slides the finger down from `from` out to `to`, in steps no longer than `SLIDE_STEP`. */
-async function slide(lab: Lab, from: PagePoint, to: PagePoint): Promise<void> {
+/** Slides the finger `finger` (the first down by default) from `from` to `to`, in steps no longer than `SLIDE_STEP`. */
+export async function slide(lab: Lab, from: PagePoint, to: PagePoint, finger = 0): Promise<void> {
   const length = Math.hypot(to.x - from.x, to.y - from.y);
   const steps = Math.max(1, Math.ceil(length / SLIDE_STEP));
   for (let step = 1; step <= steps; step++) {
     const along = step / steps;
-    await lab.touchMove({ x: from.x + (to.x - from.x) * along, y: from.y + (to.y - from.y) * along });
+    await lab.touchMove({ x: from.x + (to.x - from.x) * along, y: from.y + (to.y - from.y) * along }, finger);
   }
 }
 
 /**
- * Where a push starts: on the move pad, `MARGIN` in from its left edge and halfway down. The pad shows once the game
- * is in touch mode, which a first tap puts it in (on the run's canvas, where touch mode leaves it alone).
+ * The touch controls shown: they show once the game is in touch mode, which a first tap puts it in (on the run's
+ * canvas, where touch mode leaves it alone).
  */
-async function padStart(lab: Lab): Promise<PagePoint> {
+export async function showTouchControls(lab: Lab): Promise<void> {
   const pad = element('#touch-pad');
-  if (pad.getBoundingClientRect().width < 1) {
-    const tap = { x: MARGIN, y: innerHeight / 2 };
-    await lab.touchDown(tap);
-    await lab.touchUp();
-    await lab.step(1);
-  }
+  if (pad.getBoundingClientRect().width >= 1) return;
+  const tap = { x: MARGIN, y: innerHeight / 2 };
+  await lab.touchDown(tap);
+  await lab.touchUp();
+  await lab.step(1);
+}
+
+/** Where a push starts: on the move pad, `MARGIN` in from its left edge and halfway down. */
+async function padStart(lab: Lab): Promise<PagePoint> {
+  await showTouchControls(lab);
+  const pad = element('#touch-pad');
   const box = pad.getBoundingClientRect();
   const start = { x: box.left + MARGIN, y: box.top + box.height / 2 };
   if (document.elementFromPoint(start.x, start.y) !== pad) {
