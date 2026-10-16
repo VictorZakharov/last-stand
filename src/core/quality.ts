@@ -61,6 +61,10 @@ export function setQuality(s: QualitySetting): void {
   if (s === 'auto') writeAuto();
 }
 
+/** A level and a budget of pixels put to use for now, the setting and Auto's cookie left as they are: a harness's
+ *  (tools/lab `perf` renders as a device Auto settled on does). Whatever applies the setting next undoes it. */
+export const useQuality = (l: QualityLevel, most = Infinity): void => apply(l, most);
+
 function apply(l: QualityLevel, most = Infinity): void {
   level = l;
   budget = most;

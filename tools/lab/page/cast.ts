@@ -134,7 +134,7 @@ function foeKinds(biome: BiomeId, count: number): EnemyId[] {
 }
 
 /** `count` of the biome's foes risen on an arc ahead of the hero, coming at him. */
-async function foesAhead(lab: Lab, biome: BiomeId, count: number): Promise<Enemy[]> {
+export async function foesAhead(lab: Lab, biome: BiomeId, count: number): Promise<Enemy[]> {
   const hero = G.player;
   const foes = foeKinds(biome, count).map((kind, i) => {
     const across = count > 1 ? (i / (count - 1) - 0.5) * FOES_ARC : 0;

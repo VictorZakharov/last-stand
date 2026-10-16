@@ -65,6 +65,19 @@ function tunesFrom(text) {
   return tunes;
 }
 
+/** the quality levels `--quality` names (src/data/quality.ts) */
+const QUALITY_LEVELS = ['high', 'medium', 'low'];
+
+/** `--quality`'s text as a level and the most pixels the scene renders: `low@518400`, or `low` (no budget: none). */
+function qualityOf(text) {
+  const [level, pixels] = text.split('@');
+  const most = pixels === undefined ? undefined : Number(pixels);
+  if (!QUALITY_LEVELS.includes(level) || (most !== undefined && !(most > 0))) {
+    throw labError(`--quality: ${text} isn't a level (${QUALITY_LEVELS.join(', ')}) and its pixels (low@518400)`);
+  }
+  return { level, pixels: most };
+}
+
 /**
  * The frames `light` measures (page/light.ts `LightScenario`): each biome in each view, the close views at each of
  * the facings, the top view at the first.
@@ -485,6 +498,36 @@ export const COMMANDS = {
     textOf: asText,
     problemsOf: problemsIn,
     pictures: picturePairs,
+  },
+
+  perf: {
+    check(options) {
+      if (options.foes !== undefined && !(options.foes >= 0)) throw labError('perf --foes: 0 or more');
+      if (options.apart !== undefined && !(options.apart > 0)) throw labError('perf --apart: more than 0 s');
+      if (options.after !== undefined && !(options.after > 0)) throw labError('perf --after: more than 0 s');
+      if (options.throttle !== undefined && !(options.throttle >= 1)) throw labError('perf --throttle: 1 or more');
+      if (options.quality !== undefined) qualityOf(options.quality);
+    },
+    each(side, options) {
+      const command = {
+        casts: options._[0].split(','),
+        biome: options.biome ?? 'forest',
+        view: options.view ?? 'top',
+        facing: options.facing ?? 0,
+        at: options.at,
+        gear: options.gear,
+        foes: options.foes === undefined ? 10 : Math.round(options.foes),
+        apart: options.apart ?? 1,
+        after: options.after ?? 4,
+        quality: options.quality === undefined ? undefined : qualityOf(options.quality),
+        throttle: options.throttle ?? 1,
+        frames: Boolean(options.frames),
+        canary: Boolean(options.canary),
+      };
+      return side.command('perf', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
   },
 
   health: {

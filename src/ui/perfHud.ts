@@ -21,6 +21,11 @@ const GRAPH_W = 160, GRAPH_H = 40;
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 
+/** The clock the overlay times the frame's work by (ms): the page's own, or a harness's in its place (tools/lab
+ *  `perf`: the browser's, as the page's stands still within a frame there). The frames' own timestamps keep the
+ *  window and the graph's time. */
+export const perfClock = { now: (): number => performance.now() };
+
 /** One frame: rAF time, interval since the previous one, our total / update / render time,
  *  how late our callback started after the rAF timestamp, the update split by stage, and what was on screen. */
 interface Sample { t: number; frame: number; cpu: number; upd: number; rnd: number; late: number; stages: Stages; ctx: string }
@@ -32,6 +37,8 @@ let renderer: THREE.WebGLRenderer;
 let gpuName = 'unknown';
 const samples: Sample[] = [];   // one per frame inside WINDOW_MS
 let lastFrame = 0, cpuStart = 0, lastDraw = 0;
+/** the latest frame's timestamp */
+let frameNow = 0;
 let frameCalls = 0, frameTris = 0;
 
 // GPU time via EXT_disjoint_timer_query_webgl2 (Chrome/Edge/Firefox; not Safari). Only one query
@@ -47,6 +54,11 @@ let frameNo = 0, splitting = false;
 const pendingFrames: { parts: Part[]; split: boolean }[] = [];
 const gpuTimes: { t: number; ms: number }[] = [];
 const gpuParts: Record<string, number>[] = [];   // the latest split frames
+/** A frame's GPU time as it came back (ms), and its parts' if it was timed in parts. */
+export interface GpuFrame { ms: number; parts: Record<string, number> | null }
+/** the GPU's frames come back since a harness last took them (`takeGpuFrames`), the last `GPU_KEPT` */
+const gpuTaken: GpuFrame[] = [];
+const GPU_KEPT = 240;
 
 export function initPerfHud(r: THREE.WebGLRenderer): void {
   renderer = r;
@@ -88,11 +100,12 @@ export function setPerfHud(on: boolean, persist = true): void {
 export function perfBeginFrame(now: number): void {
   renderer.info.reset();
   if (!enabled) return;
-  cpuStart = performance.now();
-  if (lastFrame) samples.push({ t: now, frame: now - lastFrame, cpu: 0, upd: 0, rnd: 0, late: cpuStart - now, stages: {}, ctx: '' });
+  cpuStart = perfClock.now();
+  frameNow = now;
+  if (lastFrame) samples.push({ t: now, frame: now - lastFrame, cpu: 0, upd: 0, rnd: 0, late: performance.now() - now, stages: {}, ctx: '' });
   lastFrame = now;
   if (gl && timerExt) {
-    pollQueries();
+    pollQueries(now);
     if (pendingFrames.length < 3) { frameParts = []; splitting = ++frameNo % SPLIT_EVERY === 0; }
   }
 }
@@ -115,7 +128,7 @@ let lapT = 0, stages: Stages = {};
 /** Update-stage timer: call with no name to start, then with a stage name after each stage. */
 export function perfLap(stage?: string): void {
   if (!enabled) return;
-  const now = performance.now();
+  const now = perfClock.now();
   if (stage) stages[stage] = (stages[stage] ?? 0) + now - lapT;
   lapT = now;
 }
@@ -124,9 +137,9 @@ const frameContext = (): string => `${G.mode}, ${G.enemies.length} foes, ${parti
 /** Call after the frame has been rendered. */
 export function perfEndFrame(): void {
   if (!enabled) return;
-  const now = performance.now();
+  const end = perfClock.now();
   const last = samples[samples.length - 1];
-  if (last) { last.cpu = now - cpuStart; last.upd = split.upd; last.rnd = split.rnd; last.stages = stages; if (last.frame > 10) last.ctx = frameContext(); }
+  if (last) { last.cpu = end - cpuStart; last.upd = split.upd; last.rnd = split.rnd; last.stages = stages; if (last.frame > 10) last.ctx = frameContext(); }
   stages = {};
   frameCalls = renderer.info.render.calls;
   frameTris = renderer.info.render.triangles;
@@ -134,13 +147,23 @@ export function perfEndFrame(): void {
     if (frameParts.length) { gl.endQuery(timerExt.TIME_ELAPSED_EXT); pendingFrames.push({ parts: frameParts, split: splitting }); }
     frameParts = null;
   }
-  const cutoff = now - WINDOW_MS;
+  const cutoff = frameNow - WINDOW_MS;
   while (samples.length && samples[0].t < cutoff) samples.shift();
   while (gpuTimes.length && gpuTimes[0].t < cutoff) gpuTimes.shift();
-  if (now - lastDraw >= REDRAW_MS) { lastDraw = now; draw(now); }
+  if (frameNow - lastDraw >= REDRAW_MS) { lastDraw = frameNow; draw(frameNow); }
 }
 
-function pollQueries(): void {
+/** What the overlay timed of the last frame (ms): its work, the update's and the render's, and each update stage's
+ *  (none while it's off). */
+export function lastPerfFrame(): Readonly<{ cpu: number; upd: number; rnd: number; stages: Readonly<Stages> }> | null {
+  return samples[samples.length - 1] ?? null;
+}
+
+/** The GPU's frames come back since the last take, oldest first (for a harness: tools/lab `perf`). */
+export const takeGpuFrames = (): GpuFrame[] => gpuTaken.splice(0);
+
+/** The GPU's frames whose times have come back, kept by the frame's timestamp `now`. */
+function pollQueries(now: number): void {
   if (!gl || !timerExt) return;
   while (pendingFrames.length) {
     const f = pendingFrames[0];
@@ -155,8 +178,9 @@ function pollQueries(): void {
       parts[label] = (parts[label] ?? 0) + v; ms += v;
     }
     if (disjoint) continue;
-    if (!f.split) gpuTimes.push({ t: performance.now(), ms });
+    if (!f.split) gpuTimes.push({ t: now, ms });
     else if (gpuParts.push(parts) > 30) gpuParts.shift();
+    if (gpuTaken.push({ ms, parts: f.split ? parts : null }) > GPU_KEPT) gpuTaken.shift();
   }
 }
 
@@ -277,14 +301,14 @@ const topStages = (s: Stages): string => Object.entries(s).sort((a, b) => b[1] -
 /** A fixed CPU workload: how fast this machine runs our kind of JS right now (ms). */
 function jsBench(): number {
   const a = new Float32Array(4096);
-  const t = performance.now();
+  const t = perfClock.now();
   for (let r = 0; r < 120; r++) for (let i = 0; i < a.length; i++) a[i] = a[i] * 0.98 + Math.sin(i * 0.01 + r);
-  const ms = performance.now() - t;
+  const ms = perfClock.now() - t;
   return a[7] > 1e9 ? -1 : ms;   // reads the result so the loop can't be optimised away
 }
 
 function report(): string {
-  const s = computeStats(performance.now());
+  const s = computeStats(frameNow);
   const info = renderer.info;
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   return [
@@ -303,7 +327,7 @@ function report(): string {
     `FPS history (0.5s buckets) ${s.buckets.map((v) => v === null ? '-' : Math.round(v)).join(' ')}`,
     'Worst frames (interval ms: ours = update + render, late = callback start delay):',
     ...[...samples].sort((a, b) => b.frame - a.frame).slice(0, 8).map((f) =>
-      `  ${f.frame.toFixed(1)} ms at -${((performance.now() - f.t) / 1000).toFixed(1)}s: ours ${f.cpu.toFixed(1)} = ${f.upd.toFixed(1)} + ${f.rnd.toFixed(1)}, late ${f.late.toFixed(1)} | ${f.ctx}${topStages(f.stages) ? ` | ${topStages(f.stages)}` : ''}`),
+      `  ${f.frame.toFixed(1)} ms at -${((frameNow - f.t) / 1000).toFixed(1)}s: ours ${f.cpu.toFixed(1)} = ${f.upd.toFixed(1)} + ${f.rnd.toFixed(1)}, late ${f.late.toFixed(1)} | ${f.ctx}${topStages(f.stages) ? ` | ${topStages(f.stages)}` : ''}`),
     `CPU p95 ${fmt(percentile(samples.map((f) => f.cpu).sort((a, b) => a - b), 0.95), 2)} ms max ${fmt(Math.max(...samples.map((f) => f.cpu)), 2)} | GPU p95 ${fmt(percentile(gpuTimes.map((g) => g.ms).sort((a, b) => a - b), 0.95), 2)} ms max ${fmt(Math.max(...gpuTimes.map((g) => g.ms)), 2)}`,
     'Update stages (ms: mean p95 max):',
     ...stageStats(),

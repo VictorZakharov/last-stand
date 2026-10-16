@@ -25,6 +25,7 @@ import type { MusicOptions } from './music';
 import type { DeathOptions } from './death';
 import type { CrowdOptions } from './crowd';
 import type { DrawsOptions } from './draws';
+import type { PerfOptions } from './perf';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
@@ -276,6 +277,16 @@ export async function crowd(lab: Lab, command: CrowdOptions): Promise<Report> {
 export async function draws(lab: Lab, command: DrawsOptions): Promise<Report> {
   const { draws: drawsOf } = await import('./draws');
   return drawsOf(lab, command);
+}
+
+/**
+ * `lab perf`: skills cast in turn with the foes coming, every frame timed as the game's performance report times it
+ * (the frame, the update by stage, the render, the GPU by pass), each phase apart; a cast never made, a shader
+ * compiled as it's timed, or a canary unseen, are problems.
+ */
+export async function perf(lab: Lab, command: PerfOptions): Promise<Report> {
+  const { perf: perfOf } = await import('./perf');
+  return perfOf(lab, command);
 }
 
 /** `lab shots`: the hero's basic attack loosed over each biome's boss and the foes round it, in each view; a shot

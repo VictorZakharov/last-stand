@@ -396,6 +396,47 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  perf: {
+    help: 'skills cast in turn as the player casts them, the biome\'s foes coming at the hero, and every frame timed '
+      + 'as the game\'s performance report times it, by the browser\'s clock with the game drawn and waited out on '
+      + 'the GPU: the frame, the update by stage, the render, the GPU by pass (where the browser times it), the '
+      + 'draws, triangles and particles, standing before the first press and from each press on; a cast never made, '
+      + 'a shader compiled as it\'s timed and a canary unseen are problems (a phone\'s: --screen 832x384@3.75 '
+      + '--quality low@518400 --throttle 4; --class mage)',
+    argument: 'skills',
+    options: {
+      biome: {
+        kind: 'choice',
+        choices: ['crypt', 'forest'],
+        usage: 'crypt|forest',
+        help: 'the biome (forest by default)',
+      },
+      facing: { kind: 'number', usage: 'degrees', help: 'the way the hero faces and casts (0, +z, by default)' },
+      at: SETUP_OPTIONS.at,
+      view: SETUP_OPTIONS.view,
+      gear: SETUP_OPTIONS.gear,
+      foes: {
+        kind: 'number',
+        usage: 'n',
+        help: 'how many of the biome\'s commonest foes come at him (10 by default; 0: none)',
+      },
+      apart: { kind: 'number', usage: 's', help: 'from one press to the next (1 s by default)' },
+      after: { kind: 'number', usage: 's', help: 'from the last press to the end (4 s by default)' },
+      quality: {
+        kind: 'text',
+        usage: 'level[@pixels]',
+        help: 'the quality level (high, medium, low) and the most pixels the scene renders, as Auto settles on them '
+          + '(low@518400: a phone\'s, Auto at its lowest; as the page has it by default)',
+      },
+      throttle: { kind: 'number', usage: 'n', help: 'the CPU this many times slower (1 by default; 4: a phone\'s)' },
+      frames: { kind: 'switch', help: 'list every frame: its time, the page\'s work by stage, what it drew' },
+      canary: {
+        kind: 'switch',
+        help: 'plant costs the measure must see: the hero\'s update 2 ms slower, the scene drawn twice',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   health: {
     help: 'the screen as the hero\'s Health runs low: standing in each biome and view, his Health held at shares of '
       + 'his most, and at each the frame drawn with the low-health look and without it at the same moment: the colour '
