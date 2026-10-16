@@ -5,6 +5,7 @@ The engine under the game.
 The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 
 - `renderer.ts`: the renderer, its post chain (the scene in an MSAA target of its own; sanitize, bloom and the grade on single-sample targets), the canvas's fit, the final grade and the camera rig in each view.
+- `layers.ts`: the scene's layers, every use of one in one list, so no two take the same bit. The crowds' bodies' own meshes once took the arms' layer, so through the eyes the arms' own camera drew every foe within 6 m over the frame, huge at its narrower view. That was 656 draws a frame more with 38 foes before the hero. `lab draws --view first` checks what that camera draws.
 - `hdr.ts`: HDR output on a display in HDR mode. `lowLife.ts` and `bloodEdges.ts`: the low-Health look.
 - `input.ts`: the keyboard and mouse (touch feeds the same state, `ui/touch.ts`), pointer lock, the aim.
 - `seeThrough.ts`: the props and walls between the camera and the hero dissolved.

@@ -7,15 +7,21 @@
 // And the triangles drawn for nothing: an instanced mesh's instances outside the view of the pass that drew them (the
 // camera's, or the shadow map's box), as three.js culls an instanced mesh only whole, by the sphere round all of it.
 // And the draws that drew nothing: an instanced mesh of no instances, a geometry of nothing in its range, each the
-// renderer's work for a draw on the CPU. `--canary` stands seven boxes of one geometry before the hero, which must
-// come out as seven draws of it, seven instanced boxes, four of them far behind the camera, which must come out as
-// four drawn outside the view, and an instanced mesh of none, which must come out as a draw of nothing.
+// renderer's work for a draw on the CPU. And through the eyes, what the arms' own camera drew (renderer.ts
+// `drawArms`): the hero's arms and what they hold alone, anything else drawn over the frame at the arms' narrower view
+// a problem (the crowds' bodies' own meshes were on the arms' layer, and a foe within reach was drawn huge over the
+// frame). `--canary` stands seven boxes of one geometry before the hero, which must come out as seven draws of it,
+// seven instanced boxes, four of them far behind the camera, which must come out as four drawn outside the view, an
+// instanced mesh of none, which must come out as a draw of nothing, and through the eyes a box on the arms' layer
+// before them, which must come out as drawn by the arms' camera though it isn't the hero's.
 import * as THREE from 'three';
 import type { Lab, Fixture, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
 import { crowdPlaces, CROWD_FACING, CROWD_SPOT } from './crowd';
 import { foesAt } from './death';
+import * as swingTrail from '../../../src/fx/swingTrail';
+import { armsLens } from './inFrame';
 
 export interface DrawsOptions {
   fixture: Fixture;
@@ -35,9 +41,16 @@ const CANARY_BOXES = 7;
 /** the canary's instanced boxes put far behind the camera, and how far (m) */
 const CANARY_OFF = 4;
 const CANARY_AWAY = 500;
+/** how far before the eyes (m) the canary's box on the arms' layer stands: within their camera's reach */
+const CANARY_ARMS_AHEAD = 1.5;
 
-type Pass = 'scene' | 'shadow' | 'other';
-const PASSES: Pass[] = ['scene', 'shadow', 'other'];
+/** a frame's passes: the scene's, the arms' own camera's over it (through the eyes), the shadow map's, and after them
+ *  (the post, the overlays) */
+type Pass = 'scene' | 'arms' | 'shadow' | 'other';
+const PASSES: Pass[] = ['scene', 'arms', 'shadow', 'other'];
+/** the passes that draw the world, whose triangles the GPU's vertices cost */
+const WORLD_PASSES: Pass[] = ['scene', 'arms', 'shadow'];
+const noDraws = (): Record<Pass, number> => ({ scene: 0, arms: 0, shadow: 0, other: 0 });
 
 /** What one geometry cost the frame: its draws in each pass, the vertices and triangles each drew, those of them
  *  outside the view of the pass that drew them, in each pass, and what drew it. */
@@ -58,10 +71,11 @@ interface Look {
   geometries: Set<THREE.BufferGeometry>;
 }
 
-/** One frame's draws: by geometry, and the scene's by look. */
+/** One frame's draws: by geometry, the scene's by look, and the objects the arms' own camera drew, with their draws. */
 interface FrameDraws {
   geometries: Map<THREE.BufferGeometry, Drawn>;
   looks: Map<string, Look>;
+  arms: Map<THREE.Object3D, number>;
 }
 
 /** The vertices a draw of `geometry` (by `object`) ran: its range, times its instances. */
@@ -110,21 +124,29 @@ export function lookOf(material: THREE.Material): string {
   return `${material.type.replace(/Material$/, '')}${look ? ` ${look}` : ''}`;
 }
 
+/** The pass a draw by `camera` of `scene` is in: the scene drawn by any camera but the game's is the arms' own over
+ *  it, no scene the shadow map. */
+function passOf(camera: THREE.Camera, scene: THREE.Scene | null): Pass {
+  if (scene === null) return 'shadow';
+  if (scene !== G.scene) return 'other';
+  return camera === G.camera ? 'scene' : 'arms';
+}
+
 /** Records every draw call until `stop()`: what was drawn, and the record. */
 function recordDraws(): { record: FrameDraws; stop(): void } {
   const gl = G.renderer;
   const own = gl.renderBufferDirect.bind(gl);
-  const record: FrameDraws = { geometries: new Map(), looks: new Map() };
+  const record: FrameDraws = { geometries: new Map(), looks: new Map(), arms: new Map() };
   gl.renderBufferDirect = (camera, scene, geometry, material, object, group) => {
-    const pass: Pass = scene === G.scene ? 'scene' : scene === null ? 'shadow' : 'other';
+    const pass = passOf(camera, scene);
     let drawn = record.geometries.get(geometry);
     if (!drawn) {
-      const none = { scene: 0, shadow: 0, other: 0 };
-      drawn = { geometry, draws: { ...none }, vertices: 0, triangles: 0, off: { ...none }, objects: new Set(), material,
+      drawn = { geometry, draws: noDraws(), vertices: 0, triangles: 0, off: noDraws(), objects: new Set(), material,
         object };
       record.geometries.set(geometry, drawn);
     }
     drawn.draws[pass]++;
+    if (pass === 'arms') record.arms.set(object, (record.arms.get(object) ?? 0) + 1);
     drawn.vertices = verticesOf(geometry, object);
     drawn.triangles = trianglesOf(geometry, object);
     const instances = (object as THREE.InstancedMesh).count;
@@ -152,10 +174,13 @@ export function placeOf(object: THREE.Object3D): string {
   return path.slice(0, 2).join(' > ') + (path.length > 2 ? ' > …' : '');
 }
 
+/** A sum over `passes` of a record by pass. */
+const sumOf = (byPass: Record<Pass, number>, passes: Pass[]): number =>
+  passes.reduce((sum, pass) => sum + byPass[pass], 0);
 /** A geometry's draws in all its passes. */
-const drawsOf = (drawn: Drawn): number => drawn.draws.scene + drawn.draws.shadow + drawn.draws.other;
-/** The triangles a geometry drew in the frame, in the scene and its shadows. */
-const trianglesIn = (drawn: Drawn): number => drawn.triangles * (drawn.draws.scene + drawn.draws.shadow);
+const drawsOf = (drawn: Drawn): number => sumOf(drawn.draws, PASSES);
+/** The triangles a geometry drew in the frame, in the scene, the arms' pass and the shadows. */
+const trianglesIn = (drawn: Drawn): number => drawn.triangles * sumOf(drawn.draws, WORLD_PASSES);
 
 /** A geometry's row: its draws (and each pass's), the triangles, its material, and what drew it. */
 function geometryRow(drawn: Drawn): string {
@@ -165,19 +190,21 @@ function geometryRow(drawn: Drawn): string {
     + `each)  ${lookOf(drawn.material)}  ${drawn.object.type} in ${placeOf(drawn.object)}${objects}`;
 }
 
-/** The triangles a geometry drew outside the view of the pass that drew them, in the scene and its shadows. */
-const offIn = (drawn: Drawn): number => Math.round(drawn.off.scene + drawn.off.shadow);
+/** The triangles a geometry drew outside the view of the pass that drew them, in the passes that draw the world. */
+const offIn = (drawn: Drawn): number => Math.round(sumOf(drawn.off, WORLD_PASSES));
 
-/** A geometry's row of what it drew outside the view: in the scene and in the shadow map, of all it drew in each. */
+/** A geometry's row of what it drew outside the view: in the scene and in the shadow map (and the arms' pass if it
+ *  drew there), of all it drew in each. */
 function offRow(drawn: Drawn): string {
   const of = (pass: Pass) => `${Math.round(drawn.off[pass])} of ${drawn.triangles * drawn.draws[pass]} in the ${pass}`;
-  return `  ${String(offIn(drawn)).padStart(7)} (${of('scene')}, ${of('shadow')})  ${lookOf(drawn.material)}  `
+  const passes = WORLD_PASSES.filter((pass) => pass !== 'arms' || drawn.draws.arms).map(of).join(', ');
+  return `  ${String(offIn(drawn)).padStart(7)} (${passes})  ${lookOf(drawn.material)}  `
     + `${drawn.object.type} in ${placeOf(drawn.object)}`;
 }
 
-/** Whether a geometry's draws drew nothing in the scene or its shadows (a draw after them, a full-screen pass's, is
- *  one triangle). */
-const drewNothing = (drawn: Drawn): boolean => drawn.vertices === 0 && drawn.draws.scene + drawn.draws.shadow > 0;
+/** Whether a geometry's draws drew nothing in the passes that draw the world (a draw after them, a full-screen
+ *  pass's, is one triangle). */
+const drewNothing = (drawn: Drawn): boolean => drawn.vertices === 0 && sumOf(drawn.draws, WORLD_PASSES) > 0;
 
 /** Why a draw of `drawn` drew nothing: an instanced mesh holding no instance, or its geometry's range empty. */
 function nothingWhy(drawn: Drawn): string {
@@ -194,20 +221,59 @@ function nothingRows(geometries: Drawn[], rows: number): string[] {
   const alike = new Map<string, { draws: Record<Pass, number>; geometries: number }>();
   for (const drawn of geometries.filter(drewNothing)) {
     const key = `${nothingWhy(drawn)}  ${lookOf(drawn.material)}  ${drawn.object.type} in ${placeOf(drawn.object)}`;
-    const sum = alike.get(key) ?? { draws: { scene: 0, shadow: 0, other: 0 }, geometries: 0 };
+    const sum = alike.get(key) ?? { draws: noDraws(), geometries: 0 };
     for (const pass of PASSES) sum.draws[pass] += drawn.draws[pass];
     sum.geometries++;
     alike.set(key, sum);
   }
-  const draws = (sum: { draws: Record<Pass, number> }) => sum.draws.scene + sum.draws.shadow + sum.draws.other;
+  const draws = (sum: { draws: Record<Pass, number> }) => sumOf(sum.draws, PASSES);
   return [...alike].sort((a, b) => draws(b[1]) - draws(a[1])).slice(0, rows).map(([key, sum]) => {
     const passes = PASSES.filter((pass) => sum.draws[pass]).map((pass) => `${sum.draws[pass]} ${pass}`).join(', ');
     return `  ${String(draws(sum)).padStart(4)} (${passes}), ${sum.geometries} geometries  ${key}`;
   });
 }
 
+/** The local hero's swing trails' meshes, in the scene though they're his (none on a tree without `swingTrailsOf`). */
+function heroTrails(): THREE.Object3D[] {
+  const trails = swingTrail as Partial<typeof swingTrail>;
+  return trails.swingTrailsOf?.(G.player.model) ?? [];
+}
+
+/** Whether `object` is the local hero's: his model's root or under it, or a trail of his weapons. */
+function heros(object: THREE.Object3D): boolean {
+  if (heroTrails().includes(object)) return true;
+  for (let up: THREE.Object3D | null = object; up; up = up.parent) {
+    if (up === G.player.model.root) return true;
+  }
+  return false;
+}
+
+/** What the arms' own camera drew that isn't the hero's, alike places together: each place's draws and objects. */
+function strangers(record: FrameDraws): Map<string, { draws: number; objects: number }> {
+  const alike = new Map<string, { draws: number; objects: number }>();
+  for (const [object, draws] of record.arms) {
+    if (heros(object)) continue;
+    const key = `${object.type} in ${placeOf(object)}`;
+    const sum = alike.get(key) ?? { draws: 0, objects: 0 };
+    sum.draws += draws;
+    sum.objects++;
+    alike.set(key, sum);
+  }
+  return alike;
+}
+
+/** The rows of what the arms' own camera drew: the hero's, then each place of what isn't his, the most draws first. */
+function armsRows(record: FrameDraws, rows: number): string[] {
+  const own = [...record.arms].filter(([object]) => heros(object));
+  const ownDraws = own.reduce((sum, [, draws]) => sum + draws, 0);
+  const strangerRow = ([place, { draws, objects }]: [string, { draws: number; objects: number }]) =>
+    `  ${String(draws).padStart(4)}, ${objects} objects  ${place}, not the hero's`;
+  const others = [...strangers(record)].sort((a, b) => b[1].draws - a[1].draws).slice(0, rows).map(strangerRow);
+  return [`  ${String(ownDraws).padStart(4)}, ${own.length} objects  the hero's`, ...others];
+}
+
 /** The lists: the geometries drawn most often, those that drew the most triangles, those that drew the most outside
- *  the view, the draws that drew nothing, and the scene's looks. */
+ *  the view, the draws that drew nothing, and the scene's looks; through the eyes, what the arms' camera drew. */
 function lists(record: FrameDraws, rows: number): string[] {
   const geometries = [...record.geometries.values()];
   const often = [...geometries].sort((a, b) => drawsOf(b) - drawsOf(a)).slice(0, rows).map(geometryRow);
@@ -225,22 +291,25 @@ function lists(record: FrameDraws, rows: number): string[] {
       + 'reaches the GPU, and the perf overlay counts no draw of it), alike ones together:',
     ...nothingRows(geometries, rows),
     'the scene\'s draws by their material\'s look:', ...looks,
+    ...(record.arms.size ? ['what the arms\' own camera drew over the frame (the hero\'s arms and what they hold '
+      + 'alone):', ...armsRows(record, rows)] : []),
   ];
 }
 
 /** The frame's draws in each pass, those that drew nothing, and its triangles in the scene and shadows, and of them
  *  outside the view. */
 function totalsOf(record: FrameDraws): string {
-  const sum = { scene: 0, shadow: 0, other: 0, nothing: 0, triangles: 0, off: 0 };
+  const sum = { ...noDraws(), nothing: 0, triangles: 0, off: 0 };
   for (const drawn of record.geometries.values()) {
     for (const pass of PASSES) sum[pass] += drawn.draws[pass];
     if (drewNothing(drawn)) sum.nothing += drawsOf(drawn);
     sum.triangles += trianglesIn(drawn);
     sum.off += offIn(drawn);
   }
-  return `${sum.scene} draws in the scene, ${sum.shadow} in its shadow map, ${sum.other} after it, ${sum.nothing} `
-    + `of them of nothing; ${sum.triangles} triangles in the scene and shadows, ${sum.off} of them outside the view; `
-    + `${record.geometries.size} geometries`;
+  const arms = sum.arms ? `, ${sum.arms} by the arms' own camera` : '';
+  return `${sum.scene} draws in the scene${arms}, ${sum.shadow} in its shadow map, ${sum.other} after it, `
+    + `${sum.nothing} of them of nothing; ${sum.triangles} triangles in the scene and shadows, ${sum.off} of them `
+    + `outside the view; ${record.geometries.size} geometries`;
 }
 
 /** The scene's objects as the frame updates their matrices: all of them, those whose own matrix is made again each
@@ -257,8 +326,26 @@ function objectsOf(): string {
   return `${all} objects in the scene, ${auto} made again each frame (${hidden} of them off the camera's layer)`;
 }
 
+/** the canary's box on the arms' layer */
+const ARMS_CANARY = 'canary on the arms\' layer';
+
+/** Whether the arms are drawn by their own camera this frame (through the eyes, renderer.ts `drawArms`). */
+const ownArmsCamera = (): boolean => armsLens() !== G.camera;
+
+/** Through the eyes, a box of its own geometry on the arms' own layer stood within their camera's reach before the
+ *  eyes, not the hero's (the canary's), or none in another view. */
+function armsBox(material: THREE.Material, way: THREE.Vector3): THREE.Mesh | null {
+  if (!ownArmsCamera()) return null;
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), material);
+  box.name = ARMS_CANARY;
+  box.position.copy(G.player.pos).addScaledVector(way, CANARY_ARMS_AHEAD).setY(G.camera.position.y);
+  box.layers.mask = armsLens().layers.mask;
+  G.scene.add(box);
+  return box;
+}
+
 /** Seven boxes of one geometry stood before the hero, and seven instanced boxes of another, `CANARY_OFF` of them far
- *  behind the camera (the canary's); returns what takes them away. */
+ *  behind the camera, and through the eyes a box on the arms' layer (the canary's); returns what takes them away. */
 function plantBoxes(): () => void {
   const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
   const instancedGeometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
@@ -287,9 +374,14 @@ function plantBoxes(): () => void {
   empty.count = 0;
   empty.frustumCulled = false;
   G.scene.add(empty);
+  const onArms = armsBox(material, way);
   return () => {
     for (const box of boxes) G.scene.remove(box);
     G.scene.remove(instanced, empty);
+    if (onArms) {
+      G.scene.remove(onArms);
+      onArms.geometry.dispose();
+    }
     geometry.dispose();
     instancedGeometry.dispose();
     emptyGeometry.dispose();
@@ -317,7 +409,19 @@ function canaryProblems(record: FrameDraws): string[] {
   if (!empty || !drewNothing(empty) || !nothingWhy(empty).endsWith('no instances')) {
     problems.push('the canary\'s instanced mesh of no instances didn\'t come out as a draw of nothing');
   }
+  const armsCanary = [...record.arms.keys()].some((object) => object.name === ARMS_CANARY && !heros(object));
+  if (ownArmsCamera() && !armsCanary) {
+    problems.push('the canary\'s box on the arms\' layer didn\'t come out as drawn by their camera, not the hero\'s');
+  }
   return problems;
+}
+
+/** The problem of what the arms' own camera drew over the frame that isn't the hero's (but the canary's box). */
+function strangerProblems(record: FrameDraws): string[] {
+  const found = [...strangers(record)].filter(([place]) => !place.includes(ARMS_CANARY));
+  if (!found.length) return [];
+  const places = found.map(([place, { draws }]) => `${place} (${draws} draws)`).join(', ');
+  return [`through the eyes, the arms' own camera drew what isn't the hero's over the frame, at their view: ${places}`];
 }
 
 /** One frame drawn with its draw calls recorded, after the set-up's frames have settled. */
@@ -355,6 +459,6 @@ export async function draws(lab: Lab, options: DrawsOptions): Promise<Report> {
   const foes = `${count} ${count === 1 ? 'foe' : 'foes'}`;
   const view = options.fixture.view ?? 'top';
   const head = `${G.player.cls.id}, ${foes}, ${G.arena.biome}, ${view} view: ${totalsOf(record)}; ${objectsOf()}`;
-  const problems = options.canary ? canaryProblems(record) : [];
+  const problems = [...strangerProblems(record), ...(options.canary ? canaryProblems(record) : [])];
   return { text: [head, ...lists(record, options.rows ?? ROWS)].join('\n'), problems };
 }
