@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { G } from '../../state';
 import { uiScales } from '../scale';
-import { CROWD_LAYER } from '../../entities/models/crowd';
+import { CROWD_LAYER } from '../../core/layers';
 
 /** the outline's width, and its soft glow's past it (px of the UI's reference layout, at the HUD's scale) */
 const WIDTH = 2.5;

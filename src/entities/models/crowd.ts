@@ -11,9 +11,8 @@ import { G } from '../../state';
 import { QUALITY } from '../../data/quality';
 import { qualityLevel } from '../../core/quality';
 import type { Model } from '../../types';
+import { CROWD_LAYER } from '../../core/layers';
 
-/** the layer a crowd's bodies' own meshes are on, which the camera doesn't draw (ui/overlay/outline.ts does) */
-export const CROWD_LAYER = 2;
 const ON = typeof location === 'undefined' || !/[?&]crowd=0/.test(location.search);
 
 /** A body drawn in its kind's crowd. */

@@ -14,6 +14,7 @@ import { updateSeeThrough } from './seeThrough';
 import type { QualityPreset } from '../data/quality';
 import { hdrLevels, initHdr, presentHdr } from './hdr';
 import { bloodMask, fitBloodMask } from './bloodEdges';
+import { ARMS_LAYER } from './layers';
 
 /** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept); in HDR towards as much more
  *  as the peak has room over the paper white (`uCap`), so the highlights it grows aren't all held at SDR's. */
@@ -224,17 +225,16 @@ const rig = {
   fromFov: CAMERA.fov,
 };
 
-/**
- * Through the eyes, a hero's arms and what they hold can be drawn on a layer of their own by a camera of their own
- * (`drawArms`), placed as the world's but with a narrower view, over the frame the world drew, as games draw a
- * first-person weapon: drawn through the world's 66 degrees (98 across on a wide screen), a weapon at the frame's edge
- * leaned in towards the middle, and a fist near the camera looked huge. The world's lights light them too: every light
- * is put on their layer as well when they're first drawn so (a light missing from their pass would change the lights'
- * count, and every material they wear would compile again).
- */
-export const ARMS_LAYER = 2;
 /** the arms camera's near and far planes (m): they're within reach */
 const ARMS_NEAR = 0.03, ARMS_FAR = 6;
+/**
+ * Through the eyes, a hero's arms and what they hold can be drawn on a layer of their own (`ARMS_LAYER`) by a camera
+ * of their own (`drawArms`), placed as the world's but with a narrower view, over the frame the world drew, as games
+ * draw a first-person weapon: drawn through the world's 66 degrees (98 across on a wide screen), a weapon at the
+ * frame's edge leaned in towards the middle, and a fist near the camera looked huge. The world's lights light them
+ * too: every light is put on their layer as well when they're first drawn so (a light missing from their pass would
+ * change the lights' count, and every material they wear would compile again).
+ */
 const armsCam = new THREE.PerspectiveCamera();
 armsCam.layers.set(ARMS_LAYER);
 /** the arms camera's field of view (vertical, degrees) while it draws them, none while the world's camera does */

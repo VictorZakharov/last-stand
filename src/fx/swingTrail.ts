@@ -226,6 +226,11 @@ export function updateSwingTrails(): void {
   }
 }
 
+/** The meshes `model`'s trails draw, in the scene though they're his (through the eyes on his arms' layer). */
+export function swingTrailsOf(model: Model): THREE.Object3D[] {
+  return [...(followed.get(model)?.values() ?? [])].map((trail) => trail.mesh);
+}
+
 /** A trail's material on a quad, for the boot's warm-up (game/warmup.ts). */
 export function swingTrailSamples(): THREE.Object3D[] {
   const g = trailGeometry(2);

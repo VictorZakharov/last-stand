@@ -828,8 +828,10 @@ export class Lab {
   private renderArmsFromOutside(): void {
     const fov = this.model.armsFov?.() ?? null;
     const layers = G.camera.layers.mask;
+    // (the arms' layer, as their own camera draws it)
+    const arms = renderer.armsCamera().layers.mask;
     renderer.drawArms(null);
-    G.camera.layers.enable(renderer.ARMS_LAYER);
+    G.camera.layers.mask = layers | arms;
     try {
       renderer.render();
     } finally {

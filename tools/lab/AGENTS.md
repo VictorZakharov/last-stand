@@ -41,7 +41,7 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `trail`: the trail a swung weapon leaves (each strike in each view, every frame drawn with it and without: its light where the weapons swept over the last 0.15 s, lit through every blow, its newest end on the blade, nothing while the weapons are still)
 - `death`: each skill's kills as they fall (foes stood dazed where it strikes, a hair from death and with little to spare: how hard each body was thrown and which way, how far it flew, when it lay still; its drawn pose against the floor, the props, the wall and its points)
 - `crowd`: a crowd of foes killed at once and what the frame costs as they fall (each frame timed by the browser's clock with the game drawn, the bodies' part apart, at each CPU slowdown, as a low-end device's, and frame rate)
-- `draws`: one frame's draw calls with the crowd standing, by what drew them (the geometries drawn most often, those that drew the most triangles, the triangles drawn outside the view of the pass that drew them, the draws that drew nothing, the scene's draws by their material's look; the scene's objects whose matrices are made again each frame)
+- `draws`: one frame's draw calls with the crowd standing, by what drew them (the geometries drawn most often, those that drew the most triangles, the triangles drawn outside the view of the pass that drew them, the draws that drew nothing, the scene's draws by their material's look, through the eyes what the arms' own camera drew, the hero's arms and what they hold alone; the scene's objects whose matrices are made again each frame)
 - `perf <skills>`: skills cast in turn with the biome's foes coming, every frame timed as the game's performance report times it (the frame, the update by stage, the render, the GPU by pass, the draws, triangles and the particles' fill), on a phone's screen, boot and CPU if asked
 - `compiles`: whether the boot's warm-up compiled what a fight draws (a prop of every kind broken and the first wave fought in each biome: every program compiled meanwhile, and the draw that first used it)
 - `gear`: full sets of gear rolled for every class at each tier (the Health, regeneration and draught they give, and the damage they multiply)
@@ -353,7 +353,9 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   among them; a broken prop's rubble piece drawn full size at the world's middle for a frame, beside a hero on the
   dais, was one). `--what s,x,y` says what the eye's ray meets at that moment and point of the screen (% across and
   down), nearest first (`page/whatIsAt.ts`): the runs give the same frames, so a blink one finds, the next can look
-  into. Shaders compiled after loading, and nothing cast, are problems too. The
+  into. It casts through each camera that drew the frame, on the layers it draws: through the eyes, the arms' own
+  first, as it draws over the world's. Cast on every layer from the world's camera, it listed the hero's hidden hair at
+  the eyes and missed the arms, drawn through a narrower view. Shaders compiled after loading, and nothing cast, are problems too. The
   props a cast broke stand again before the next. `--times` (0.4,1.5,3 by default) are the moments pictured, the
   screen as the player sees it with the HUD, into `out/cast/<skill>`; `--canary` strobes the exposure in the first
   biome and view (5 a second), which the flashes must catch. `--gear` holds the weapons a style's way (Thunder
@@ -464,9 +466,15 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   material's look (draws of one look, a merge of what doesn't move would make one). Its head line says the draws in
   each pass and how many drew nothing, the triangles and how many lay outside the view, the scene's objects whose
   matrices are made again each frame, and how many of them are off the camera's layer (a crowd's bodies' own meshes).
-  `--canary` stands seven boxes of one geometry before the hero, which must come out as seven draws of it, seven
-  instanced boxes, four far behind the camera, which must come out as four outside the view, and an instanced mesh of
-  none, which must come out as a draw of nothing.
+  Through the eyes (`--view first --class warrior`), the arms' own camera's draws are a pass of their own
+  (renderer.ts `drawArms`), and what it drew is listed, the hero's and what isn't his. Anything that is neither under the
+  hero's model nor his weapons' trail (`fx/swingTrail.ts` `swingTrailsOf`) is a problem, drawn over the frame at the
+  arms' narrower view. The crowds' bodies' own meshes shared the arms'
+  layer, and 38 mossbacks were 656 draws of it a frame (`core/layers.ts` now). `--canary` stands seven boxes of one
+  geometry before the hero, which must come out as seven draws of it, seven instanced boxes, four far behind the
+  camera, which must come out as four outside the view, and an instanced mesh of none, which must come out as a draw
+  of nothing. Through the eyes it also stands a box on the arms' layer before them, which must come out as drawn by
+  their camera, not the hero's.
 - `perf <skills>`: skills cast in turn as the player casts them (`page/perf.ts`; `maelstrom,glacialNova`), the
   biome's foes coming at the hero (`--foes`, 10), every frame timed as the game's performance report times it
   (`ui/perfHud.ts`, on the browser's clock: `perfClock`) and summed by phase: standing (60 frames), then from each

@@ -6,14 +6,14 @@
 import * as THREE from 'three';
 import type { Model } from '../types';
 import { curve, type Keys } from './models/motion';
-import { ARMS_LAYER, drawArms } from '../core/renderer';
+import { drawArms } from '../core/renderer';
+import { ARMS_LAYER, HIDDEN_LAYER, WORLD_LAYER } from '../core/layers';
 
 /** Where the camera sits against the neck, in the hero's space (x left, y up, z forward): just above
  *  it, so the shoulders stay below the view and the hands and weapon come into its lower part. */
 const NECK_CAM = new THREE.Vector3(0, 0.25, 0.1);
 /** tipped back about the camera, so what the hands hold low and ahead rises into the frame */
 const TILT = -0.4;
-const HIDDEN = 1;
 
 const body = new WeakMap<Model, THREE.Object3D[]>(), arms = new WeakMap<Model, THREE.Object3D[]>();
 const shown = new WeakSet<Model>();
@@ -209,7 +209,7 @@ export function toEyes(d: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
 /** The layer `m`'s arms and what they hold are drawn on: their own through the eyes when their own camera draws
  *  them, else the world's. */
 export function armsLayerOf(m: Model): number {
-  return shown.has(m) && m.armsFov ? ARMS_LAYER : 0;
+  return shown.has(m) && m.armsFov ? ARMS_LAYER : WORLD_LAYER;
 }
 
 /** Show `m` through the camera's eyes (`on`), or as a whole body. Call after the camera has moved. */
@@ -217,8 +217,8 @@ export function viewArms(m: Model, on: boolean, cam: THREE.Camera): void {
   // (a model that has its arms drawn by their own camera has them on its layer, `armsFov`)
   const ownCamera = on && !!m.armsFov;
   if (on !== shown.has(m)) {
-    for (const o of bodyOf(m)) { if (on) o.layers.set(HIDDEN); else o.layers.set(0); }
-    for (const o of armsOf(m)) o.layers.set(ownCamera ? ARMS_LAYER : 0);
+    for (const o of bodyOf(m)) o.layers.set(on ? HIDDEN_LAYER : WORLD_LAYER);
+    for (const o of armsOf(m)) o.layers.set(ownCamera ? ARMS_LAYER : WORLD_LAYER);
     if (on) shown.add(m); else shown.delete(m);
     m.firstPerson?.(on);
   }
