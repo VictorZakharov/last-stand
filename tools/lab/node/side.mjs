@@ -225,6 +225,8 @@ export class Side {
     this.partnerContext = null;
     /** the hero its page booted, null until one booted whole */
     this.heroClass = null;
+    /** the quality its page booted at, as Auto's cookie holds it (`low@518400`), null for the lab's own (High) */
+    this.bootQuality = null;
     /** the source changed since the page booted */
     this.stale = true;
     /** the dev server's config changed since it started */
@@ -315,30 +317,35 @@ export class Side {
     };
   }
 
-  /** Whether its page is booted for `heroClass` from the current source, and no command has run on it yet. */
-  isFresh(heroClass) {
+  /** Whether its page is booted for `heroClass` at `quality` (as `boot` takes it) from the current source, and no
+   *  command has run on it yet. */
+  isFresh(heroClass, quality = null) {
     const alive = this.page && !this.page.isClosed();
-    return Boolean(alive && !this.stale && !this.used && this.heroClass === heroClass);
+    const booted = this.heroClass === heroClass && this.bootQuality === quality;
+    return Boolean(alive && !this.stale && !this.used && booted);
   }
 
-  /** Boots a page for `heroClass` unless a fresh one is up already. Returns whether it booted. */
-  async ready(heroClass) {
+  /** Boots a page for `heroClass` at `quality` unless a fresh one is up already. Returns whether it booted. */
+  async ready(heroClass, quality = null) {
     await this.serve();
-    if (this.isFresh(heroClass)) return false;
-    await this.boot(heroClass);
+    if (this.isFresh(heroClass, quality)) return false;
+    await this.boot(heroClass, quality);
     return true;
   }
 
   /**
    * Boots a page for `heroClass`: the game loaded with nothing kept from the last boot, the lab installed once the
-   * loading screen is gone, and the hero checked. A boot that fails leaves no page behind (none counts as fresh).
+   * loading screen is gone, and the hero checked. At `quality` (Auto's cookie, `low@518400`), it boots as a device
+   * whose Auto settled there: the boot's warm-ups run at that level, the hero built at its detail. A boot that fails
+   * leaves no page behind (none counts as fresh).
    */
-  async boot(heroClass) {
+  async boot(heroClass, quality = null) {
     if (!this.isRepo) copyLabPage(this.repo, this.root);
     await this.closePage();
     this.heroClass = null;
+    this.bootQuality = null;
     try {
-      await this.openPage(heroClass);
+      await this.openPage(heroClass, quality);
       const booted = await this.page.evaluate(async () => {
         const lab = await import('/tools/lab/page/lab.ts');
         return lab.install().heroes();
@@ -351,15 +358,17 @@ export class Side {
       throw error;
     }
     this.heroClass = heroClass;
+    this.bootQuality = quality;
   }
 
-  /** Opens a page on the game for `heroClass` and waits out its loading screen. */
-  async openPage(heroClass) {
+  /** Opens a page on the game for `heroClass` (booted at `quality`, as `boot` takes it) and waits out its loading
+   *  screen. */
+  async openPage(heroClass, quality = null) {
     this.context ??= await this.newContext();
     this.errors = [];
     this.stale = false;
     this.used = false;
-    this.page = await this.openPageIn(this.context, heroClass, '');
+    this.page = await this.openPageIn(this.context, heroClass, '', quality);
   }
 
   /**
@@ -370,7 +379,7 @@ export class Side {
   async openPartner(heroClass) {
     await this.closePartner();
     this.partnerContext = await this.newContext();
-    const page = await this.openPageIn(this.partnerContext, heroClass, 'partner: ');
+    const page = await this.openPageIn(this.partnerContext, heroClass, 'partner: ', this.bootQuality);
     await page.evaluate(async () => {
       const lab = await import('/tools/lab/page/lab.ts');
       lab.install();
@@ -393,13 +402,14 @@ export class Side {
 
   /**
    * Opens a page on the game for `heroClass` in `context` and waits out its loading screen, its errors kept as this
-   * side's (each after `prefix`).
+   * side's (each after `prefix`). At `quality` (Auto's cookie), the game boots on Auto settled there.
    */
-  async openPageIn(context, heroClass, prefix) {
+  async openPageIn(context, heroClass, prefix, quality = null) {
     // (nothing kept from the last boot: the game writes cookies of its own, the skill loadout's among them, and a boot
     // after them ended its set-up a frame apart from the first; storage is cleared as the page starts, browser.mjs)
     await context.clearCookies();
-    const cookies = { ...BOOT_COOKIES, 'last-stand-class': heroClass };
+    const settled = quality ? { 'last-stand-quality': 'auto', 'last-stand-quality-auto': quality } : {};
+    const cookies = { ...BOOT_COOKIES, ...settled, 'last-stand-class': heroClass };
     await context.addCookies(Object.entries(cookies).map(([name, value]) => ({ name, value, url: this.url })));
     const page = await context.newPage();
     page.on('pageerror', (error) => this.errors.push(`${prefix}${String(error)}`));
@@ -554,6 +564,7 @@ export class Side {
     this.partnerContext = null;
     this.page = null;
     this.heroClass = null;
+    this.bootQuality = null;
   }
 
   async closePage() {

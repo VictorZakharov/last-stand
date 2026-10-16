@@ -78,10 +78,15 @@ export function initRubble(): void {
         : shape === 'stub' ? tornTubeGeometry(seed, STUB_COLS)
         : flakeGeometry(shape, seed);
       const mesh = new THREE.InstancedMesh(geo, mats[shape], max);
+      mesh.name = `rubble: ${shape} ${v + 1}`;
       // the colour attribute exists from the start (adding it later would change the shader)
       for (let i = 0; i < max; i++) mesh.setColorAt(i, _c.set(0x808080));
       mesh.count = 0;
       mesh.frustumCulled = false;
+      // (shown through the boot's warm-ups, which run no update, so its programs compile in each biome's light, its
+      // shadow's too: three's shadow material takes a caster's map, and a textured pool's is a program of its own in
+      // each biome; hidden by `updateRubble` from then on while it holds no piece: drawn empty, the 23 pools were 23
+      // to 46 draws a frame of nothing. Hidden after the first warm-up, the forest's wood compiled mid-fight, #243)
       mesh.castShadow = POOL[shape].radius >= minCaster;
       mesh.receiveShadow = true;
       G.scene.add(mesh);
@@ -121,6 +126,7 @@ export function rubble(x: number, z: number, { count, color, kind = 'stone', rad
     // full size at the world's middle, a pale rock on the dais beside the hero for a frame)
     pool.mesh.setMatrixAt(slot, _m.compose(_p.set(c.x, c.y, c.z), _q.setFromEuler(_e.set(c.rx, c.ry, c.rz)), _s.set(c.sx, c.sy, c.sz)));
     pool.mesh.count = Math.min(pool.max, Math.max(pool.mesh.count, pool.chunks.length));
+    pool.mesh.visible = true;
     dirty.add(pool);
   }
   for (const pool of dirty) { pool.mesh.instanceColor!.needsUpdate = true; pool.mesh.instanceMatrix.needsUpdate = true; }
@@ -155,7 +161,11 @@ function settle(c: Chunk): void {
 export function updateRubble(dt: number): void {
   // the coals breathe, slowly (about 0.6 Hz)
   if (coalMat) coalMat.emissiveIntensity = 2.2 + 0.5 * Math.sin(G.time * 3.8);
-  for (const k in pools) updatePool(pools[k], dt);
+  for (const k in pools) {
+    const pool = pools[k];
+    updatePool(pool, dt);
+    pool.mesh.visible = pool.mesh.count > 0;
+  }
 }
 
 function updatePool({ mesh, chunks }: Pool, dt: number): void {

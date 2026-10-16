@@ -25,6 +25,8 @@ import type { MusicOptions } from './music';
 import type { DeathOptions } from './death';
 import type { CrowdOptions } from './crowd';
 import type { DrawsOptions } from './draws';
+import type { PerfOptions } from './perf';
+import type { CompilesOptions } from './compiles';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
@@ -272,10 +274,26 @@ export async function crowd(lab: Lab, command: CrowdOptions): Promise<Report> {
   return crowdRound(lab, command);
 }
 
+/** `lab compiles`: a prop of every kind broken in each biome, every program compiled meanwhile a problem. */
+export async function compiles(lab: Lab, command: CompilesOptions): Promise<Report> {
+  const { compiles: compilesOf } = await import('./compiles');
+  return compilesOf(lab, command);
+}
+
 /** `lab draws`: one frame's draw calls with the crowd standing, by the geometry each drew, the most first. */
 export async function draws(lab: Lab, command: DrawsOptions): Promise<Report> {
   const { draws: drawsOf } = await import('./draws');
   return drawsOf(lab, command);
+}
+
+/**
+ * `lab perf`: skills cast in turn with the foes coming, every frame timed as the game's performance report times it
+ * (the frame, the update by stage, the render, the GPU by pass), each phase apart; a cast never made, a shader
+ * compiled as it's timed, or a canary unseen, are problems.
+ */
+export async function perf(lab: Lab, command: PerfOptions): Promise<Report> {
+  const { perf: perfOf } = await import('./perf');
+  return perfOf(lab, command);
 }
 
 /** `lab shots`: the hero's basic attack loosed over each biome's boss and the foes round it, in each view; a shot

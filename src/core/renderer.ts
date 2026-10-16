@@ -412,6 +412,12 @@ function fitViewport(): boolean {
 /** The offscreen target the scene is rendered into (shaders must be compiled for it). */
 export const sceneTarget = (): THREE.WebGLRenderTarget => sceneRT;
 
+/** What a point's size (m) over its distance is multiplied by for its size in the scene's pixels: the scene's
+ *  target's height over the view's height 1 m out. (Sized by the canvas's height, a point was as many times too
+ *  wide as the canvas has more pixels than the scene, wherever the quality caps the scene's: 3 times as wide on
+ *  #243's phone, 9 times the pixels to fill.) */
+export const pointScale = (): number => sceneRT.height / (2 * Math.tan(THREE.MathUtils.degToRad(G.camera.fov) / 2));
+
 /** the scene's ratio the post chain was last sized at */
 let appliedSceneRatio = 0;
 /** Sizes the post chain at the scene's ratio if it changed (the composer resizes every pass for it); whether it did. */

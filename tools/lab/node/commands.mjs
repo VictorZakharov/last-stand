@@ -65,6 +65,19 @@ function tunesFrom(text) {
   return tunes;
 }
 
+/** the quality levels `--quality` names (src/data/quality.ts) */
+const QUALITY_LEVELS = ['high', 'medium', 'low'];
+
+/** `--quality`'s text as a level and the most pixels the scene renders: `low@518400`, or `low` (no budget: none). */
+export function qualityOf(text, option = '--quality') {
+  const [level, pixels] = text.split('@');
+  const most = pixels === undefined ? undefined : Number(pixels);
+  if (!QUALITY_LEVELS.includes(level) || (most !== undefined && !(most > 0))) {
+    throw labError(`${option}: ${text} isn't a level (${QUALITY_LEVELS.join(', ')}) and its pixels (low@518400)`);
+  }
+  return { level, pixels: most };
+}
+
 /**
  * The frames `light` measures (page/light.ts `LightScenario`): each biome in each view, the close views at each of
  * the facings, the top view at the first.
@@ -487,6 +500,36 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  perf: {
+    check(options) {
+      if (options.foes !== undefined && !(options.foes >= 0)) throw labError('perf --foes: 0 or more');
+      if (options.apart !== undefined && !(options.apart > 0)) throw labError('perf --apart: more than 0 s');
+      if (options.after !== undefined && !(options.after > 0)) throw labError('perf --after: more than 0 s');
+      if (options.throttle !== undefined && !(options.throttle >= 1)) throw labError('perf --throttle: 1 or more');
+      if (options.quality !== undefined) qualityOf(options.quality);
+    },
+    each(side, options) {
+      const command = {
+        casts: options._[0].split(','),
+        biome: options.biome ?? 'forest',
+        view: options.view ?? 'top',
+        facing: options.facing ?? 0,
+        at: options.at,
+        gear: options.gear,
+        foes: options.foes === undefined ? 10 : Math.round(options.foes),
+        apart: options.apart ?? 1,
+        after: options.after ?? 4,
+        quality: options.quality === undefined ? undefined : qualityOf(options.quality),
+        throttle: options.throttle ?? 1,
+        frames: Boolean(options.frames),
+        canary: Boolean(options.canary),
+      };
+      return side.command('perf', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   health: {
     check(options) {
       const wrong = options.shares.find((share) => !(Number(share) >= 0 && Number(share) <= 1));
@@ -660,6 +703,15 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  compiles: {
+    each(side, options) {
+      const command = { biomes: options.biomes, view: options.view ?? 'top', canary: Boolean(options.canary) };
+      return side.command('compiles', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   draws: {
     check(options) {
       if (options.count !== undefined && !(options.count >= 0)) throw labError('draws --count: 0 or more');
@@ -670,6 +722,7 @@ export const COMMANDS = {
         fixture: fixtureFrom(options),
         count: options.count === undefined ? undefined : Math.round(options.count),
         rows: options.rows === undefined ? undefined : Math.round(options.rows),
+        biome: options.biome,
         canary: Boolean(options.canary),
       };
       return side.command('draws', command);

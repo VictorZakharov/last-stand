@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
+import { pointScale } from '../core/renderer';
 import { dazedField } from './dazed';
 
 const VERT = /* glsl */`
@@ -130,9 +131,11 @@ class Pool {
       i++;
     }
     this.points.geometry.setDrawRange(0, this.count);
+    // (not drawn while empty, a draw call of nothing; shown through the boot's warm-up, which runs no update)
+    this.points.visible = this.count > 0;
     // upload only the live particles, not the whole pool (a zero-length range would upload all of it)
     if (this.count) for (const a of this.attrs) { a.clearUpdateRanges(); a.addUpdateRange(0, this.count * a.itemSize); a.needsUpdate = true; }
-    this.mat.uniforms.uScale.value = G.renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(G.camera.fov) / 2));
+    this.mat.uniforms.uScale.value = pointScale();
   }
 
   kill(i: number): void {
@@ -150,6 +153,8 @@ export const particles = {
   init(scene: THREE.Scene): void {
     this.glow = new Pool(9000, THREE.AdditiveBlending, 1.6);
     this.smoke = new Pool(3000, THREE.NormalBlending, 1.2);
+    this.glow.points.name = 'particles: glow';
+    this.smoke.points.name = 'particles: smoke';
     scene.add(this.glow.points, this.smoke.points);
     dazedField.init(scene);
   },

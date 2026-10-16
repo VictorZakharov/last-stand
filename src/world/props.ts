@@ -2,6 +2,7 @@
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import * as THREE from 'three';
 import { seeThroughFade } from '../core/seeThrough';
+import { inShadowsOnly } from './culling';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rand, TAU } from '../util';
 import { particles } from '../fx/particles';
@@ -361,8 +362,8 @@ export function buildEnvMap(renderer: THREE.WebGLRenderer, sky: RGB, panel: RGB)
 
 /**
  * A biome's shadow casters never move, but each one cost a draw call in the shadow pass
- * every frame. Merge them (positions only) into one caster that draws nothing in the
- * main pass, and stop the originals casting. Instanced props are already one call, and a mesh that can
+ * every frame. Merge them (positions only) into one caster drawn by the shadow map alone
+ * (`inShadowsOnly`), and stop the originals casting. Instanced props are already one call, and a mesh that can
  * still go (`userData.noBake`: a breakable prop) keeps casting for itself.
  */
 export function bakeStaticShadows(group: THREE.Group): void {
@@ -379,6 +380,7 @@ export function bakeStaticShadows(group: THREE.Group): void {
   if (!parts.length) return;
   const caster = new THREE.Mesh(mergeGeometries(parts), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));
   caster.castShadow = true;
+  inShadowsOnly(caster);
   caster.name = `${group.name} static shadow caster`;
   group.add(caster);
 }

@@ -18,7 +18,7 @@ export interface Timing {
 }
 
 /** the value at share `share` (0..1) of `sorted` (ascending) */
-function quantile(sorted: number[], share: number): number {
+export function quantile(sorted: number[], share: number): number {
   if (sorted.length === 0) return 0;
   return sorted[Math.min(sorted.length - 1, Math.floor(share * sorted.length))];
 }

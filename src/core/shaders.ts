@@ -20,7 +20,9 @@ export function pinPrograms(renderer: THREE.WebGLRenderer, context?: () => strin
     p.usedTimes++;
     compiled++;
     const key = p.cacheKey.split(',');
-    if (loaded) lateCompiles.push(`${ownerOf(renderer, p)} (${p.name}) ${context?.() ?? ''} | ${describeNew(p.name, key)}`);
+    // (an unnamed material's program by its kind: three's shader for it, `depth` a shadow caster's)
+    const kind = p.name || key[0];
+    if (loaded) lateCompiles.push(`${ownerOf(renderer, p)} (${kind}) ${context?.() ?? ''} | ${describeNew(p.name, key)}`);
     known.push({ name: p.name, key });
   }
 }
@@ -38,6 +40,28 @@ function ownerOf(renderer: THREE.WebGLRenderer, p: THREE.WebGLProgram): string {
     }
   });
   return found;
+}
+
+/**
+ * Shadows' programs made the same whatever order the casters are drawn in. three's shadow pass draws every caster
+ * that tests no alpha with one depth material, and copies the caster's `map` onto it each draw, but builds a new
+ * program for it only when the instancing, the instance colours or the skinning change from one draw to the next: a
+ * textured caster drawn just after such a change made a program with a map, one without it otherwise. Which ones the
+ * boot compiled hung on the order its warm-up drew in, and a new order mid-fight compiled one more (#243: the forest's
+ * wood rubble, after its trees cast from shadow copies of their own). The map does nothing there (a caster that tests
+ * alpha gets a depth material of its own, which keeps it), so it's let go before each such draw.
+ */
+export function steadyShadowPrograms(renderer: THREE.WebGLRenderer): void {
+  const draw = renderer.renderBufferDirect.bind(renderer);
+  renderer.renderBufferDirect = (camera, scene, geometry, material, object, group) => {
+    // (a shadow pass's draw: three gives it no scene)
+    const depth = material as THREE.MeshDepthMaterial;
+    if (scene === null && depth.isMeshDepthMaterial && !(depth.alphaTest > 0)) {
+      depth.map = null;
+      depth.alphaMap = null;
+    }
+    draw(camera, scene, geometry, material, object, group);
+  };
 }
 
 /** Field-level diff against the closest known program of the same kind. */

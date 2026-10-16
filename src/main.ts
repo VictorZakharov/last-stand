@@ -33,12 +33,12 @@ import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initTouch, updateTouch } from './ui/touch';
 import { initPwa } from './ui/pwa';
 import { initItemIcons } from './ui/itemIcons';
-import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap } from './ui/perfHud';
+import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfClock } from './ui/perfHud';
 import { initNetHud } from './ui/netHud';
 import { warmShaders } from './game/warmup';
 import { initQuality, sampleQuality } from './core/quality';
 import { updateLowLife } from './core/lowLife';
-import { pinPrograms, markLoaded, warmUp } from './core/shaders';
+import { pinPrograms, markLoaded, steadyShadowPrograms, warmUp } from './core/shaders';
 import { initBiome, rollBiome } from './game/biome';
 import { BIOMES, BIOME_IDS } from './data/biomes';
 import { loadingStep, loadingDone, loadingFailed } from './ui/loading';
@@ -65,6 +65,7 @@ async function boot() {
   releaseClickedFocus();
   initItemIcons();
   const { scene, renderer } = initRenderer($('#game'));
+  steadyShadowPrograms(renderer);
   initInput(renderer.domElement);
   particles.init(scene);
   initLights(scene);
@@ -476,16 +477,16 @@ function frame(timestamp: number): void {
   const dt = Math.min(rawDt, 1 / 20);
   if (revealed) { updateTouch(dt); handleGlobalKeys(); syncView(); }
   updateMusic(dt, musicWanted());
-  const t0 = performance.now();
+  const t0 = perfClock.now();
   if (!G.paused && revealed) {
     sampleQuality(rawDt);
     G.dt = dt;
     G.time += dt;
     update(dt);
   }
-  const t1 = performance.now();
+  const t1 = perfClock.now();
   render();
-  perfSplit(t1 - t0, performance.now() - t1);
+  perfSplit(t1 - t0, perfClock.now() - t1);
   pinPrograms(G.renderer, compileContext);
   endInputFrame();
   perfEndFrame();
