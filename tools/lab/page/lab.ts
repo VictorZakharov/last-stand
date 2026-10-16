@@ -340,6 +340,8 @@ export class Lab {
   private readonly foes = new Set<Enemy>();
   /** what a command runs before every frame, ahead of the set-up's (co-op: the messages that arrived by then) */
   readonly beforeFrame: (() => void)[] = [];
+  /** the fingers on the page, by their id, where each is (css px): every touch sent says where all of them are */
+  private readonly fingers = new Map<number, PagePoint>();
 
   get player() {
     return G.player;
@@ -668,20 +670,33 @@ export class Lab {
   /**
    * A finger put down on the page at `at` as a touch screen has it, its pointer events and all, handled by the page as
    * a player's (no frame runs). The game's first touch puts it in touch mode (`ui/touch.ts`), as a player's does: its
-   * controls show from the next frame, and a touch before then lands on whatever lies under them.
+   * controls show from the next frame, and a touch before then lands on whatever lies under them. `finger` tells two
+   * fingers down at once apart (a thumb on the move stick, the other on a skill), each moved and lifted by its own.
    */
-  touchDown(at: PagePoint): Promise<void> {
-    return this.sendTouch('touchStart', [{ x: at.x, y: at.y, id: 0 }]);
+  touchDown(at: PagePoint, finger = 0): Promise<void> {
+    if (this.fingers.has(finger)) throw new Error(`lab: touch: finger ${finger} is already down`);
+    this.fingers.set(finger, at);
+    return this.sendTouch('touchStart', finger);
   }
 
-  /** The finger down moved to `at` (somewhere new: a touch that doesn't move makes no pointer event). */
-  touchMove(at: PagePoint): Promise<void> {
-    return this.sendTouch('touchMove', [{ x: at.x, y: at.y, id: 0 }]);
+  /** The finger `finger` moved to `at` (somewhere new: a touch that doesn't move makes no pointer event). */
+  touchMove(at: PagePoint, finger = 0): Promise<void> {
+    this.fingerDown(finger);
+    this.fingers.set(finger, at);
+    return this.sendTouch('touchMove', finger);
   }
 
-  /** The finger down lifted. */
-  touchUp(): Promise<void> {
-    return this.sendTouch('touchEnd', []);
+  /** The finger `finger` lifted, where it was. */
+  touchUp(finger = 0): Promise<void> {
+    this.fingerDown(finger);
+    const done = this.sendTouch('touchEnd', finger);
+    this.fingers.delete(finger);
+    return done;
+  }
+
+  /** An error unless `finger` is down. */
+  private fingerDown(finger: number): void {
+    if (!this.fingers.has(finger)) throw new Error(`lab: touch: finger ${finger} isn't down`);
   }
 
   /**
@@ -739,9 +754,16 @@ export class Lab {
     await sent(handled, window.__labKey(type, code));
   }
 
-  private async sendTouch(type: TouchType, fingers: Finger[]): Promise<void> {
+  /**
+   * A touch of the finger `finger` alone, by its id, as Puppeteer sends one: the browser puts it down, moves it or
+   * lifts it, and leaves the other fingers where they are. (Sent as the protocol's docs say, every finger down in each
+   * touch and the one lifted left out, the finger left out was never lifted.)
+   */
+  private async sendTouch(type: TouchType, finger: number): Promise<void> {
     if (!window.__labTouch) throw new Error('lab: touch: this page has no touches (opened by an older lab)');
-    await sent(touchHandled(TOUCH_POINTER_EVENTS[type]), window.__labTouch(type, fingers));
+    const at = this.fingers.get(finger)!;
+    const touch: Finger = { x: at.x, y: at.y, id: finger };
+    await sent(touchHandled(TOUCH_POINTER_EVENTS[type]), window.__labTouch(type, [touch]));
   }
 
   /** Pictures of the game as it is now, nothing advanced; the game's camera is put back as it was. */

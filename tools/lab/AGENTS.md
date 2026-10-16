@@ -29,6 +29,7 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `check`: runs every hero's checks of a change to how they move side by side (`--ab`: against main, its side kept once it has run; each gait scenario from three starts, its turns at other points of a stride, as a frame's change anywhere sends a scenario's later strides elsewhere: judge a change on the counts over all of them, each side's in the log)
 - `ui`: pictures the UI in its states (the lobby, a tooltip, How to play, the save slots, a class button clicked and a key pressed after it, the lobby's views switched with each label against its anchor through every glide, the run's HUD with a hurt foe's bar and damage numbers, the scores, the perf overlay, the choice after a wave, the pause menu, the summary) with each named element's and label's box as a share of the window
 - `touch`: the touch controls' move stick pushed by a finger, its touches sent as a touch screen's (slid out through the stick's travel, to its edge and far past it, half the window across: the stick's push, the knob against the finger and the hero's speed, a push further out never giving less)
+- `tap`: the touch buttons of every skill aimed by holding, the other thumb on the move stick (tapped standing, at once and walking: a movement skill the way he moves, any other at the nearest foe; dragged while the stick moves: the skill's own preview following the drag, cast where it last showed, the stick still walking him)
 - `light`: the frame's light as the player sees it (the hero standing in each biome, view and facing, the frame drawn and read back from the canvas: its light as a share of the screen's white, by thirds, its brightest pixels, near white and past it; `--hdr` draws each again in HDR and checks it against the SDR frame)
 - `spawns`: the foes coming in (boss waves one after another, a seed each: the gate every foe came by, its spot against the props, the gates each group and wave left idle, when the boss came against the rest of its wave, and its walk to the hero from each gate)
 - `health`: the low-Health look (the hero's Health held at shares of his most in each biome, view and facing: the colour drained, the blood's cover and how far in it reaches, nothing in the view's middle, more of both as the Health falls, none above where it starts)
@@ -298,6 +299,22 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   divided by the finger's whole distance, so half a screen out the hero walked at a seventh of his speed. `--canary`
   slides the furthest push's finger back to 20 px before it's read. Try it on a phone too
   (`--screen 844x390@3`): the stick is drawn at the touch controls' scale, and so is its travel.
+- `tap`: every skill of the hero's class aimed by holding (`SkillDef.aimed`: `--class mage` Starfall and Veilstep,
+  `ranger` Quarry Mark and Strawman), its touch button pressed by a finger, the other thumb on the move stick
+  (`lab.touchDown(at, finger)`), each from a fresh set-up with a training dummy standing clear at the hero's side.
+  Tapped standing, tapped down and up between two frames (a slow phone's quick tap: the release takes the aim as the
+  press would have) and tapped while he walks away from the dummy across the way he faces: a movement skill
+  (Veilstep) must go within 3° of the stick's way, or of his facing standing, and any other be cast at the dummy where
+  it stood as the finger lifted. Each cast is read as the skill is given it (its `cast` wrapped for the round). No
+  tooltip may open after a tap. Then dragged from the button through three stops, the stick slid to a new way at
+  each: the skill's own preview must show within 3° of the drag's way from the hero (Quarry Mark's outline round the
+  dummy standing along it), no plain ring beside it, and let go it must be cast where the preview last showed, the
+  stick still pushed and the hero walking on. On main a tapped Veilstep went at the dummy (87° to 177° off), no held
+  skill showed its own preview on touch, and a tap opened its tooltip over the buttons. `--canary` taps a movement
+  skill with the stick let go and the hero turned to the dummy, another with the dummy carried out of reach, reads
+  each drag's last preview before a frame showed it, holds its cast against the stop before's preview, and reads the
+  plain ring as shown beside a preview: each must be caught. (A dummy risen outside the arena or in a prop is pushed
+  in over its first frames, metres for one off the edge: spots are picked where one stands clear.)
 - `spawns`: the foes coming in. Boss waves (the 5th, 10th, 15th and 20th in turn, `--waves 32` in each biome,
   `--biomes`) are set off one after another, each from a seed of its own (every set-up seeds the same numbers, which
   would roll the same gates), the hero at the arena's middle (`--at`). Every foe is read as it rises: the gate it
@@ -734,10 +751,13 @@ What the lab gives a probe (`page/lab.ts`):
   own clock take that much longer, while the lab's frames stay as long as ever. Set it up at full speed and slow
   only what's measured (`crowd`);
 - `lab.aim` and `lab.pointAt(point)`: where the mouse is;
-- `await lab.touchDown(at)`, `touchMove(at)`, `touchUp()`: a finger on the page (css px) as a touch screen gives it,
-  sent through the DevTools protocol, so the page's own pointer events follow with their pointer ids and its touch
-  controls take it as a player's (no frame runs; each returns once the page has handled it). The game's first touch
-  puts it in touch mode, as a player's does, and its controls show from the next frame;
+- `await lab.touchDown(at, finger)`, `touchMove(at, finger)`, `touchUp(finger)`: a finger on the page (css px) as a
+  touch screen gives it, sent through the DevTools protocol, so the page's own pointer events follow with their
+  pointer ids and its touch controls take it as a player's (no frame runs; each returns once the page has handled
+  it). `finger` (0 by default) tells fingers down at once apart: a thumb on the move stick and the other on a skill
+  (`tap`). Each touch names only the finger it changes, by its id, as Puppeteer sends them: sent as the protocol's
+  docs have it (every finger down in each touch, the one lifted left out), a finger left out was never lifted. The
+  game's first touch puts it in touch mode, as a player's does, and its controls show from the next frame;
 - `await lab.click(at)` and `lab.press(code)`: a click of the mouse's left button on the page (css px) and a key
   (`KeyW`, `Space`) as a mouse and a keyboard give them, sent through the DevTools protocol, so the browser handles
   them as a player's, the focus with them (a script's `click()` and events moved none and showed no focus ring);

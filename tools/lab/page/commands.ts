@@ -12,6 +12,7 @@ import type { StopsOptions } from './stops';
 import type { FormOptions } from './form';
 import type { UiOptions } from './ui';
 import type { TouchOptions } from './touchStick';
+import type { TapOptions } from './tap';
 import type { LightOptions } from './light';
 import type { HazeOptions } from './haze';
 import type { SpawnsOptions } from './spawns';
@@ -180,6 +181,16 @@ export async function ui(lab: Lab, command: UiOptions): Promise<Report> {
 export async function touch(lab: Lab, command: TouchOptions): Promise<Report> {
   const { touchStick } = await import('./touchStick');
   return touchStick(lab, command);
+}
+
+/**
+ * `lab tap`: every skill of the hero's class aimed by holding, its touch button tapped (standing, at once, walking)
+ * and dragged with the other thumb on the move stick; a tap off its way or its foe, a preview that doesn't follow the
+ * drag, a cast away from it and a canary missed are problems.
+ */
+export async function tap(lab: Lab, command: TapOptions): Promise<Report> {
+  const { tap: tapRounds } = await import('./tap');
+  return tapRounds(lab, command);
 }
 
 /**

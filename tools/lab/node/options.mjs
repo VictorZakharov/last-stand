@@ -921,6 +921,21 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  tap: {
+    help: 'every skill of the hero\'s class aimed by holding, its touch button pressed by a finger, the other thumb '
+      + 'on the move stick: tapped standing, at once and walking (a movement skill goes the way he moves, any other '
+      + 'at the nearest foe), and dragged while the stick moves (its own preview follows the drag, and it is cast '
+      + 'where the preview showed) (--class mage, ranger)',
+    options: {
+      canary: {
+        kind: 'switch',
+        help: 'plant faults the checks must catch: a movement skill tapped with the stick let go and the hero turned '
+          + 'to the foe, another tapped with its foe carried off, each drag\'s last preview read a frame early, its '
+          + 'cast held against the stop before\'s, the plain aim ring shown beside a preview',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   spawns: {
     help: 'waves set off one after another in each biome (boss waves, the 5th to the 20th), a seed each, the hero at '
       + 'the arena\'s middle: the gate every foe came in by and the spot it rose on against the props and the edge, '

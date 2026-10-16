@@ -424,7 +424,7 @@ export class Player {
       // (a tap up again within the frame still casts: read only while held, a 60 ms tap was lost at 10 fps)
       if (!isDown(key) && busy) continue;
       if (skill.impl.channel) { if (!this.channel && !this.casting) this.startChannel(skill, key); }
-      else if (skill.def.aimed && !input.touchMode) { if (this.aiming?.key !== key) this.startAim(skill, key); }
+      else if (skill.def.aimed) { if (this.aiming?.key !== key) this.startAim(skill, key); }
       else this.tryCast(skill, key);
     }
   }
@@ -463,8 +463,8 @@ export class Player {
     if (a && !a.skill.impl.channel) a.skill.impl.aim?.(this, a.skill.def, this.aim, dt);
   }
 
-  /** No skill aimed any more: its preview gone. */
-  private endAim(): void {
+  /** No skill aimed any more: its preview gone, and not cast (a touch press cancelled: `ui/touch.ts`). */
+  endAim(): void {
     const a = this.aiming;
     if (!a) return;
     this.aiming = null;
