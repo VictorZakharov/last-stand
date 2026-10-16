@@ -32,11 +32,14 @@ import {
   POWER_TWO, SMITE_TWO, POWER_ONE,
   RECOVER_TWO, ONE_DOWN_AT, ONE_DOWN_DIR,
 } from './warriorEyes';
-import type { ActionState, AnimState, Fist, Gear, KeyedArm, LowerGrip, Model } from '../../types';
+import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Model } from '../../types';
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
+/** the actions that strike with the weapons (Rending Cleave, Power Strike, Thunder Crescent, Steel Tempest, Twin Fangs,
+ *  Bull Rush): their weapons leave a trail as they swing (`swung`) */
+const STRIKES = new Set(['swing', 'chop', 'smite', 'spin', 'flurry', 'charge']);
 /** a held weapon: its tip along the grip, and where the left hand holds it (two-handers) */
-interface Weapon { group: THREE.Group; len: number; off: number | null; /** the grip's radius, for the fingers */ r: number; /** worn on the belt: the point along it that sits in the frog, and whether it hangs blade down (a sword, from its guard) or head up (an axe or mace, its haft through the ring) */ hang?: { at: number; down: boolean } }
+interface Weapon { group: THREE.Group; len: number; off: number | null; /** the grip's radius, for the fingers */ r: number; /** its striking part along the grip, from and to (m: a blade from its lower third to its point, a head's ends), which a swing's trail follows */ edge: readonly [number, number]; /** worn on the belt: the point along it that sits in the frog, and whether it hangs blade down (a sword, from its guard) or head up (an axe or mace, its haft through the ring) */ hang?: { at: number; down: boolean } }
 /** the grip turns the weapon's +Y forward and a little up out of the bent arm */
 const GRIP = Math.PI / 2 + 0.7;
 /** straightens the weapon along the arm, for swings that trace the damage arc */
@@ -639,7 +642,7 @@ export function buildWarrior(): Model {
   const grip = joint(j.handR, 0, -0.06, 0.01);
   grip.rotation.x = GRIP;
   const weapons = new Map<string, Weapon>();
-  const add = (name: string, len: number, off: number | null, r: number, build: (w: Sculpt, g: THREE.Group) => void, hang?: Weapon['hang']) => {
+  const add = (name: string, len: number, off: number | null, r: number, strikes: Weapon['edge'], build: (w: Sculpt, g: THREE.Group) => void, hang?: Weapon['hang']) => {
     const g = new THREE.Group();
     g.name = name;
     grip.add(g);
@@ -647,19 +650,24 @@ export function buildWarrior(): Model {
     build(w, g);
     w.glow(edge).build();
     g.visible = false;
-    weapons.set(name, { group: g, len, off, r, hang });
+    weapons.set(name, { group: g, len, off, r, edge: strikes, hang });
   };
   // (each made as models/weapons.ts makes it, a sculpt of its own kind: a hero built again replays its pieces)
   const M: WeaponMaterials = {
     steel: plateM, dark: darkSteel, blade: bladeM, engraved, brass, wood, leather, leatherDark, glow: edge,
   };
-  add('Sword', 1.12, null, 0.024, (w, g) => sword(w, g, M), { at: 0.115, down: true });
-  add('Axe', 0.74, null, 0.024, (w, g) => axe(w, g, M), { at: 0.44, down: false });
-  add('Mace', 0.72, null, 0.026, (w, g) => mace(w, g, M), { at: 0.52, down: false });
-  add('Greatsword', 1.62, -0.24, 0.026, (w, g) => greatsword(w, g, M));
-  add('Greataxe', 1.12, -0.3, 0.028, (w, g) => greataxe(w, g, M));
-  add('Maul', 1.1, -0.28, 0.029, (w, g) => maul(w, g, M));
+  // (the striking parts as models/weapons.ts builds them: the sword's blade from 0.12 to 1.06, the greatsword's from
+  // 0.13 to 1.47, the axe's bit from its beard's toe at 0.4 to its top at 0.74, the mace's flanges from 0.56 to 0.74,
+  // the greataxe's bits from 0.62 to 1.07 with the spike over them, the maul's head round 0.99)
+  add('Sword', 1.12, null, 0.024, [0.4, 1.06], (w, g) => sword(w, g, M), { at: 0.115, down: true });
+  add('Axe', 0.74, null, 0.024, [0.4, 0.74], (w, g) => axe(w, g, M), { at: 0.44, down: false });
+  add('Mace', 0.72, null, 0.026, [0.55, 0.74], (w, g) => mace(w, g, M), { at: 0.52, down: false });
+  add('Greatsword', 1.62, -0.24, 0.026, [0.6, 1.47], (w, g) => greatsword(w, g, M));
+  add('Greataxe', 1.12, -0.3, 0.028, [0.62, 1.2], (w, g) => greataxe(w, g, M));
+  add('Maul', 1.1, -0.28, 0.029, [0.88, 1.12], (w, g) => maul(w, g, M));
   const tip = joint(grip, 0, 1.12, 0);
+  /** each hand's weapon's striking part, as a swing's trail follows it (`swung`; placed by `setGear`) */
+  const bladeR = { from: joint(grip, 0, 0, 0), to: joint(grip, 0, 0, 0) };
   // where the left hand holds a two-handed weapon
   const offGrip = joint(grip, 0, -0.24, 0);
   let held: Weapon | null = null;
@@ -678,6 +686,9 @@ export function buildWarrior(): Model {
   }
   let offHeld: Weapon | null = null;
   const tipL = joint(gripL, 0, 1, 0);
+  const bladeL = { from: joint(gripL, 0, 0, 0), to: joint(gripL, 0, 0, 0) };
+  /** the weapons a strike swings this frame (`swung`): every one in a hand, none between strikes */
+  const struck: Blade[] = [];
   /** Seen through its own eyes (entities/viewModel.ts) the weapons are posed to be seen but keep the middle
    *  of the view clear (measured on screen): at rest low in its corners, blades angled in (a two-hander,
    *  under the moves that don't place it in the view, low on the right, blade out) (added to shoulder
@@ -825,6 +836,8 @@ export function buildWarrior(): Model {
     if (held) seat(handR, grip, held.r);
     if (offHeld) { seat(handL, gripL, offHeld.r); tipL.position.y = offHeld.len; }
     tipOn(false);
+    if (held) { bladeR.from.position.y = held.edge[0]; bladeR.to.position.y = held.edge[1]; }
+    if (offHeld) { bladeL.from.position.y = offHeld.edge[0]; bladeL.to.position.y = offHeld.edge[1]; }
   }
 
   /** The weapon arm, `k` of the way, where a blow into the ground ends: the grip before the middle of him (`SM_AHEAD`,
@@ -1262,6 +1275,12 @@ export function buildWarrior(): Model {
       const h = offHeld.hang ?? { at: 0.1, down: true };
       (sheathe ? (h.down ? hangDown : hangUp) : gripL).add(offHeld.group);
       offHeld.group.position.set(0, sheathe ? -h.at : 0, 0); offHeld.group.rotation.y = sheathe ? 0 : MOUNT;
+    }
+    // (the weapons in his hands are swung through a strike and its follow-through, for the trail they leave)
+    struck.length = 0;
+    if (a && STRIKES.has(a.name)) {
+      if (held) struck.push(bladeR);
+      if (offHeld) struck.push(bladeL);
     }
     if (chopTail > 0) chopTail = Math.max(0, chopTail - dt / 0.3);
     const began = !!raw && (raw.name !== lastName || raw.t < lastK - 0.2), ended = !raw && lastName !== '';
@@ -1915,6 +1934,7 @@ export function buildWarrior(): Model {
   return {
     root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, palm, height: 2.05, setGear,
     get swing() { return side; },
+    swung: struck,
     get swingKeyed() { return keyed; },
     swingBones: (left: boolean) => ({ ...armBones(left ? offHeld : held) }),
     get offTip() { return offHeld ? tipL : null; },

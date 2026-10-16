@@ -38,6 +38,7 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `blink`: the mage's blink cast as the player casts it (open ground, past his reach, into a prop, past one, the arena's edge, onto the dais, his own feet: where it came out against its preview and his reach, the frames he was hidden and the blows that landed in them, the foes near and far it dazed and how they stood)
 - `draw`: each drawn shot held at full draw as the player holds it (the glint round its arrowhead every frame in every view: none as it's drawn, held at full until it's loosed, the pixels it lights as the player sees it, and no blob of glare; the crosshair bold at full draw alone, its one beat into it about its middle, none with reduced motion)
 - `cast`: a skill cast as the player casts it, its effect seen frame by frame (each biome and view with the biome's foes coming at him, every frame drawn and read back: its light against the budget, the frame's mean every tenth of a second, the flashes in any second and the worst cell's light through it, the shaders compiled late)
+- `trail`: the trail a swung weapon leaves (each strike in each view, every frame drawn with it and without: its light where the weapons swept over the last 0.15 s, lit through every blow, its newest end on the blade, nothing while the weapons are still)
 - `death`: each skill's kills as they fall (foes stood dazed where it strikes, a hair from death and with little to spare: how hard each body was thrown and which way, how far it flew, when it lay still; its drawn pose against the floor, the props, the wall and its points)
 - `crowd`: a crowd of foes killed at once and what the frame costs as they fall (each frame timed by the browser's clock with the game drawn, the bodies' part apart, at each CPU slowdown, as a low-end device's, and frame rate)
 - `draws`: one frame's draw calls with the crowd standing, by what drew them (the geometries drawn most often, those that drew the most triangles, the triangles drawn outside the view of the pass that drew them, the draws that drew nothing, the scene's draws by their material's look; the scene's objects whose matrices are made again each frame)
@@ -357,6 +358,29 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   screen as the player sees it with the HUD, into `out/cast/<skill>`; `--canary` strobes the exposure in the first
   biome and view (5 a second), which the flashes must catch. `--gear` holds the weapons a style's way (Thunder
   Crescent takes a two-hander), and a skill the hero knows but hasn't on a key is bound to its own first.
+- `trail`: the trail a swung weapon leaves (`page/trail.ts`, `fx/swingTrail.ts`; `--class warrior`). Each strike
+  (`--strikes skill@style,...`: every warrior strike and Rending Cleave with every weapon style by default) is cast
+  in each view (`--views`) in the crypt (`--biome`), and every frame from the press until his weapons are still again
+  is drawn twice, with the trail and without it (its meshes hidden), both without bloom (`holdBloom` in
+  `core/renderer.ts`: from the top-down view, where the trail is a few pixels wide, the glow round its newest end was a
+  hundred across, and read as trail off the blade's path), so the pixels it lit are told apart (`page/sweptArea.ts`).
+  Where it may be is where his weapons swept over the last 0.15 s: each frame every weapon in his hands is placed from
+  its grip to its far end, read off its own meshes and not the trail's points, in his own frame (as the trail is
+  kept), and each gap between two frames is cut into steps along the curve through its places round it (joined by
+  straight lines, a blade swung round the eyes 80 degrees a frame was placed half a metre inside its arc), and drawn on
+  the screen as the camera drawing his arms sees them now, with a margin round them. Problems: more than 5% of the
+  trail's light outside that; a blow (frames moving at 12 m/s and 0.4 of the strike's fastest, three or more, a
+  weapon's far end in the frame) lighting less than 0.02% of the screen; the lit pixel nearest a blade swung at a
+  blow's speed in the frame further from it than the margin (the median through the blows); the newest column of the
+  trail's own geometry over 3 cm from the weapon through a blow; and pixels lit before the press or while the weapons
+  have been still (under 3 m/s) for longer than the window. Each strike's frame its trail lit most is pictured into
+  `out/trail`: as the player saw it, its trail's pixels (white where the weapons swept, red outside, where they swept
+  tinted blue) and those close up. `--frames` lists every frame (the weapons' speed, the pixels lit and outside, the
+  newest column against the weapon); through the eyes, Steel Tempest's blade was put back 53 cm in a frame as it ended
+  and the trail drew that as a slash across the top of the view, now a place is as fast as the slower of the moves
+  into it and on from it. `--canary` plants three faults in the first strike: the trail lasting a second (lit away
+  from the last 0.15 s and while still), never lit, and through the eyes drawn by the world's camera instead of the
+  arms' own.
 - `health`: the screen as the hero's Health runs low (`page/health.ts`). Standing in each biome, view and facing
   (`--biomes`, `--views`, `--facings`), his Health is held at shares of his most (`--shares`, 1 down to 0) and at
   each the frame is drawn three times at the same moment: without the low-Health look twice (the pixels that differ

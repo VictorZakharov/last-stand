@@ -57,6 +57,9 @@ const NO_ADAPT = typeof location !== 'undefined' && /[?&]adapt=0/.test(location.
 /** the adaptation held off from now on, or no longer, as `?adapt=0` holds it (the lab's haze draws a frame both ways) */
 let adaptHeld = NO_ADAPT;
 export function holdAdaptation(off: boolean): void { adaptHeld = off || NO_ADAPT; }
+/** bloom left out from now on, or no longer (the lab's trail draws where an effect is, not its glow round it) */
+let bloomPass: UnrealBloomPass | null = null;
+export function holdBloom(off: boolean): void { if (bloomPass) bloomPass.enabled = !off; }
 /** Bloom's blur levels, tightest to widest: the halo round an effect, and only a trace of the screen-wide veil. */
 const BLOOM_LEVELS = [0.56, 0.5, 0.35, 0.12, 0.03];
 const GradeShader = {
@@ -332,6 +335,7 @@ export function initRenderer(container: HTMLElement) {
   // bright effect over half the screen as a pale veil that fogs up the scene, so they only add a trace
   bloom.compositeMaterial.uniforms.bloomFactors.value = BLOOM_LEVELS;
   composer.addPass(bloom);
+  bloomPass = bloom;
   // after bloom: the eye adapts to all the light that reaches it, halos included
   const area = new AreaPass();
   composer.addPass(area);

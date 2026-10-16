@@ -42,9 +42,11 @@ the server.
 | --- | --- |
 | `ui` | The UI in each of its states, pictured, with every element's box |
 | `touch` | The touch controls' move stick pushed by a finger |
+| `tap` | The touch buttons of the skills aimed by holding, tapped and dragged |
 | `light` | How bright the frame is, in each biome and view |
 | `health` | The look of the screen as the hero's Health runs low |
 | `cast <skill>` | A skill's effect frame by frame: its light, its flashes, late shaders |
+| `trail` | The trail a swung weapon leaves: on the weapon's path, through every blow, gone once it's still |
 | `draw` | A drawn shot held at full draw: the glint on the arrowhead, the crosshair |
 | `held` | Each held skill's preview, ready and on its cooldown |
 | `blink` | The mage's blink: where he lands, and the foes it dazes |

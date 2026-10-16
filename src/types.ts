@@ -340,6 +340,9 @@ export interface Model {
   setGear?(gear: Gear): void;
   /** direction of the current melee swing: +1 sweeps right to left, -1 left to right */
   readonly swing?: number;
+  /** the weapons a strike is swinging this frame (none between strikes): what the swing's trail follows
+   *  (fx/swingTrail.ts) */
+  readonly swung?: readonly Blade[];
   /** through the eyes, the arm a swing keyed this frame (camera space, m; null when none did): what the lab holds the
    *  drawn arm to */
   readonly swingKeyed?: KeyedArm | null;
@@ -362,6 +365,10 @@ export interface Model {
  *  way, and how much of the arm drawn is the swing's (1: all of it; less as it takes over from the place before or
  *  fades from it) */
 export interface KeyedArm { hand: 'right' | 'left'; shoulder: XYZ; elbow: XYZ; grip: XYZ; dir: XYZ; weight: number }
+
+/** a held weapon's striking part, by two points on its grip: from near a blade's root to its point, or a head's lower
+ *  end to its top */
+export interface Blade { from: THREE.Object3D; to: THREE.Object3D }
 
 export interface XZ { x: number; z: number }
 export interface XYZ { x: number; y: number; z: number }

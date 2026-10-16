@@ -4,7 +4,7 @@ import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { runCoop } from './coop.mjs';
 import { labError } from './errors.mjs';
-import { UI_STATES } from './options.mjs';
+import { UI_STATES, WEAPON_STYLES } from './options.mjs';
 import { REPO } from './paths.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { writeSheet, writeStack } from './sheetImage.mjs';
@@ -94,6 +94,19 @@ function lightScenarios(options) {
 }
 
 /** The casts `cast` measures (page/cast.ts `CastOptions`, its canary aside): the skill in each biome and view. */
+/** the strikes `trail` casts unless `--strikes` says: every one of the warrior's, Rending Cleave each way he holds his
+ *  weapons, each other by a way it's swung (Thunder Crescent's two-hander, Twin Fangs' two blades) */
+const TRAIL_STRIKES = [
+  'cleave@oneHanded', 'cleave@shield', 'cleave@twoHanded', 'cleave@dual', 'powerStrike@twoHanded',
+  'crescent@twoHanded', 'tempest@shield', 'twinFangs@dual', 'bullRush@dual',
+];
+
+/** A strike as `trail --strikes` writes it (`cleave@twoHanded`): its skill, and the way the weapons are held for it. */
+function strikeFrom(written) {
+  const [skill, style] = written.split('@');
+  return style === undefined ? { skill } : { skill, style };
+}
+
 function castScenarios(options) {
   const scenarios = [];
   for (const biome of options.biomes) {
@@ -876,6 +889,35 @@ export const COMMANDS = {
     },
     textOf: asText,
     problemsOf: problemsIn,
+  },
+
+  trail: {
+    check(options) {
+      for (const strike of options.strikes ?? TRAIL_STRIKES) {
+        const style = strike.split('@')[1];
+        if (style !== undefined && !WEAPON_STYLES.includes(style)) {
+          throw labError(`trail --strikes: ${strike}: the styles are ${WEAPON_STYLES.join(', ')}`);
+        }
+      }
+    },
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        strikes: (options.strikes ?? TRAIL_STRIKES).map(strikeFrom),
+        biome: options.biome ?? 'crypt',
+        views: options.views,
+        pictures: options.pictures !== false,
+        frames: Boolean(options.frames),
+        canary: Boolean(options.canary),
+      };
+      return side.command('trail', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('trail'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
   },
 
   spawns: {

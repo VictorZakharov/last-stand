@@ -206,6 +206,12 @@ export function toEyes(d: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
   return out.copy(d).applyQuaternion(_camInv);
 }
 
+/** The layer `m`'s arms and what they hold are drawn on: their own through the eyes when their own camera draws
+ *  them, else the world's. */
+export function armsLayerOf(m: Model): number {
+  return shown.has(m) && m.armsFov ? ARMS_LAYER : 0;
+}
+
 /** Show `m` through the camera's eyes (`on`), or as a whole body. Call after the camera has moved. */
 export function viewArms(m: Model, on: boolean, cam: THREE.Camera): void {
   // (a model that has its arms drawn by their own camera has them on its layer, `armsFov`)
