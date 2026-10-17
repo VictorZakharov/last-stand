@@ -2,6 +2,16 @@
 // shared per-entity FX uniforms (dissolve, frozen, charred, hit flash) can be driven
 // with a single write each frame.
 import * as THREE from 'three';
+import { tunable } from './tuning';
+
+/**
+ * Through the eyes the hero's own gear is held a hand's breadth from them, and a light's highlight on it fills the
+ * view: the sun on a blade's flat (steel polished to 0.3) blew it out white and bloomed over 7.7% of the frame,
+ * its rougher grime left as dark blots across it. There the highlights on his materials are eased from half of
+ * `eyes` (light, HDR) towards it, as the eye stops down for a glint that near (`kit.u.uShine`, set each frame by his
+ * player; 0 elsewhere, as they are). Measure with `npm run lab -- haze --class warrior --gear dual`.
+ */
+export const SHINE = tunable('shine', { eyes: 0.7 });
 
 /**
  * Effect glows dim with their distance from the camera, the way a light up close dazzles and the eye stops
@@ -18,6 +28,7 @@ uniform float uFrozen;
 uniform float uChar;
 uniform float uHit;
 uniform vec3 uEdge;
+uniform float uShine;
 varying vec3 vFxPos;
 ${NEAR_GLOW_GLSL}
 float fxHash(vec3 p){ p = fract(p*0.3183099+.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
@@ -36,6 +47,8 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
     uChar: { value: 0 },
     uHit: { value: 0 },
     uEdge: { value: new THREE.Color(edgeColor).multiplyScalar(3) },
+    /** the most light a highlight reflects, eased into from half of it (`SHINE`); 0: as it is */
+    uShine: { value: 0 },
   };
   const mats: THREE.Material[] = [];
 
@@ -67,7 +80,13 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
           totalEmissiveRadiance *= 1.0 - uChar * 0.7;
           totalEmissiveRadiance += vec3(1.0,0.32,0.06) * uChar * smoothstep(0.6, 0.78, dn) * 1.6 * nearGlow();
           // a tint, not white, dimmer near the camera like the effect glows: up close a body fills much of the screen
-          totalEmissiveRadiance += vec3(1.0,0.9,0.85) * uHit * 0.45 * nearGlow();`);
+          totalEmissiveRadiance += vec3(1.0,0.9,0.85) * uHit * 0.45 * nearGlow();`)
+        .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+          if (uShine > 0.0) {
+            vec3 shine = reflectedLight.directSpecular;
+            float most = max(max(shine.r, shine.g), shine.b), knee = 0.5 * uShine;
+            if (most > knee) reflectedLight.directSpecular = shine * (knee + (most - knee) / (1.0 + (most - knee) / (uShine - knee))) / most;
+          }`);
     };
     m.customProgramCacheKey = () => (near ? 'entityfx-near' : 'entityfx') + (rim ? '-rim' : '');
     mats.push(m);

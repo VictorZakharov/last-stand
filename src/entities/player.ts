@@ -18,6 +18,7 @@ import { flashHurt, addShake, cameraYaw, lookFacing, viewMode, viewSettled, seen
 import { floatText } from '../ui/floaters';
 import { particles, col } from '../fx/particles';
 import { sfx } from '../core/audio';
+import { SHINE } from '../core/materials';
 import { emit } from '../events';
 import { angleDamp, damp, hitFlash, rand } from '../util';
 import { applyShadowDetail } from '../core/quality';
@@ -861,6 +862,7 @@ export class Player {
     // (dev builds: a joint taken past a body's range is reported; through the eyes the arms keep hand-placed poses)
     if (import.meta.env.DEV && this.local && dead < 0 && !this.eyes && this.model.joints) watchBody(this.model.joints, action?.name ?? (move > 0.05 ? 'moving' : 'standing'));
     this.model.kit.u.uHit.value = this.hitT * 0.5;
+    this.model.kit.u.uShine.value = this.eyes ? SHINE.eyes : 0;
     if (this.staffLight) {
       // a little above the cast point: right at it, the metal round a staff's crystal (a few cm off,
       // with the light's inverse-square falloff) burns out white-green

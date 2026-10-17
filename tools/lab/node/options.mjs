@@ -509,10 +509,11 @@ export const COMMANDS = {
     },
   },
   haze: {
-    help: 'what the hero\'s held weapons\' light takes from the frame round them through the eyes: the frame drawn '
-      + 'with them and without, each with the grade\'s adaptation and without it, and any pixel outside their own '
-      + 'darkened by their light (the adaptation to a bright area spread round them as a veil); a haze over 0.5% of '
-      + 'the frame is a problem: tools/lab/out/haze (the frame, and its haze in red)',
+    help: 'the hero\'s held weapons\' light through the eyes: the frame drawn with them and without, each with the '
+      + 'grade\'s adaptation and without it; their surface near white (glare over 5% of it is a problem), their '
+      + 'bloom past it (over 0.5% of the frame), and any pixel outside their own darkened by their light (the '
+      + 'adaptation to a bright area spread round them as a veil; over 0.5% of the frame): tools/lab/out/haze (the '
+      + 'frame, and its map: glare yellow, bloom pink, haze red)',
     options: {
       biome: {
         kind: 'choice',
@@ -529,7 +530,8 @@ export const COMMANDS = {
       pictures: { kind: 'switch', help: 'picture each frame and its haze (=false: the numbers alone)' },
       canary: {
         kind: 'switch',
-        help: 'plant the fault the measure must catch: the frame with the weapons drawn at 0.8 of its exposure',
+        help: 'plant the faults the measures must catch: the frame with the weapons drawn at 0.8 of its exposure '
+          + '(a haze), and the weapons lit white (a glare and its bloom)',
       },
       gear: SETUP_OPTIONS.gear,
       weapon: SETUP_OPTIONS.weapon,
