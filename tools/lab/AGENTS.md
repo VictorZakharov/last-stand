@@ -5,7 +5,7 @@ The lab as an agent works with it: what every command measures, in a line here a
 ## Rules
 
 - **Every harness is permanent.** A measure is a lab command from its first use (a module in `page/`, an entry in `page/commands.ts`, one in `node/commands.mjs`, its options in `node/options.mjs` and its entry in `COMMANDS.md`), or part of one that measures the same thing, never a probe left in `.tmp`.
-- **A probe never takes the pointer.** Measure through the lab, whose browser stubs pointer lock, keyboard lock and fullscreen; a page of your own grabbed the user's mouse.
+- **A probe never takes the pointer.** Measure through the lab, whose browser stubs pointer lock, keyboard lock and fullscreen (a measure of mouse look has the page play the lock, `lab.pointerLock`); a page of your own grabbed the user's mouse.
 - **A check run often takes minutes**, not half an hour (Don't waste compute in the root's Workflow): `--profile` it, cut what its measures don't read, run side by side what doesn't depend on each other, and while iterating run only the scenarios a change can touch.
 - **Send a long run's output to a file** in `.tmp` (an `--ab` run, a check) and read its parts: read through `head` or `tail`, a run's end was lost.
 - **Stop the server with `npm run lab -- stop`**: its supervisor starts a killed server again.
@@ -27,7 +27,7 @@ The lab as an agent works with it: what every command measures, in a line here a
 - `live <step>`: a page kept between steps for trying by hand (start, picture in any look with a reference over
   it, inspect, eval, frames): under a second a picture
 - `check`: runs every hero's checks of a change to how they move side by side (`--ab`: against main, its side kept once it has run; each gait scenario from three starts, its turns at other points of a stride, as a frame's change anywhere sends a scenario's later strides elsewhere: judge a change on the counts over all of them, each side's in the log)
-- `ui`: pictures the UI in its states (the lobby, a tooltip, How to play, the save slots, a class button clicked and a key pressed after it, the lobby's views switched with each label against its anchor through every glide, the run's HUD with a hurt foe's bar and damage numbers, the scores, the perf overlay, the choice after a wave, the pause menu, the summary, the battle log, and on touch, clear of the touch HUD and letting touches through) with each named element's and label's box as a share of the window
+- `ui`: pictures the UI in its states (the lobby, a tooltip, How to play, the save slots, a class button clicked and a key pressed after it, the lobby's views switched with each label against its anchor through every glide, the run's HUD with a hurt foe's bar and damage numbers, the scores, the perf overlay, the choice after a wave, the pause menu, the summary, the battle log, and on touch, clear of the touch HUD and letting touches through) with each named element's and label's box as a share of the window, and the game's own cursor over every element the mouse can be over
 - `touch`: the touch controls' move stick pushed by a finger, its touches sent as a touch screen's (slid out through the stick's travel, to its edge and far past it, half the window across: the stick's push, the knob against the finger and the hero's speed, a push further out never giving less)
 - `tap`: the touch buttons of every skill aimed by holding, the other thumb on the move stick (tapped standing, at once and walking: a movement skill the way he moves, any other at the nearest foe; dragged while the stick moves: the skill's own preview following the drag, cast where it last showed, the stick still walking him)
 - `light`: the frame's light as the player sees it (the hero standing in each biome, view and facing, the frame drawn and read back from the canvas: its light as a share of the screen's white, by thirds, its brightest pixels, near white and past it; `--hdr` draws each again in HDR and checks it against the SDR frame)
@@ -43,6 +43,7 @@ The lab as an agent works with it: what every command measures, in a line here a
 - `death`: each skill's kills as they fall (foes stood dazed where it strikes, a hair from death and with little to spare: how hard each body was thrown and which way, how far it flew, when it lay still; its drawn pose against the floor, the props, the wall and its points)
 - `hits <skills>`: each skill's blows as they land on foes stood where it strikes (when each landed from the press, the gaps between them, the damage a second; held to `--apart` and to `--than`'s pace)
 - `log`: the battle log held to every hit as it lands (each skill cast at foes, in each way of holding weapons: each hit listed once and in turn, under its skill, on its foe, for what it dealt, of its type, a crit and a kill as they were, the panel showing every line; three foes striking, one shooting and one slamming the hero: each blow under the foe's name and attack, for what it took and what was stopped; each row naming the hero alone on his side; paused, nothing listed)
+- `cursor`: the cursor drawn over mouse look while Alt is held, in each close view (the lab's browser playing the pointer lock: the view held still as the mouse moves, the cursor drawn where it went and lit over a button, the battle log's Pause clicked without an attack, a hotbar slot's tooltip, the wheel scrolling the log's lines and not zooming, the world not attacked; Alt let go, mouse look again; the lock held and the run going on)
 - `rush`: the foes Bull Rush sweeps up (stood dazed on its line and at its sides, killed, an elite and the boss, in a lane clear of props: when each was met, how long it rode before the hero and how near his body, how it was let go and where it ended against his stop), and skills cast with it (a Power Strike charged and the charge cast over it, a cleave and Twin Fangs as it runs, a strike at its stop, the charge cast over a held Steel Tempest: when each was cast and landed, what the charge's own blows struck, what was shown, his strides)
 - `crowd`: a crowd of foes killed at once and what the frame costs as they fall (each frame timed by the browser's clock with the game drawn, the bodies' part apart, at each CPU slowdown, as a low-end device's, and frame rate)
 - `draws`: one frame's draw calls with the crowd standing, by what drew them (the geometries drawn most often, those that drew the most triangles, the triangles drawn outside the view of the pass that drew them, the draws that drew nothing, the scene's draws by their material's look, through the eyes what the arms' own camera drew, the hero's arms and what they hold alone; the scene's objects whose matrices are made again each frame)
@@ -146,6 +147,14 @@ What the lab gives a probe (`page/lab.ts`):
 - `await lab.click(at)` and `lab.press(code)`: a click of the mouse's left button on the page (css px) and a key
   (`KeyW`, `Space`) as a mouse and a keyboard give them, sent through the DevTools protocol, so the browser handles
   them as a player's, the focus with them (a script's `click()` and events moved none and showed no focus ring);
+  `lab.mouseTo(at)` moves the mouse alone, `lab.wheel(at, deltaY)` turns its wheel, and `lab.keyDown(code)` /
+  `keyUp(code)` hold a key and let it go (`AltLeft`, `ControlLeft` too). A frame the lab runs holds a key in the game
+  only if its input does (`Frame.keys`): hold it there too, by the game's name (`altleft`);
+- `lab.pointerLock(on)`: the pointer lock played by the page (`noCapture` in `node/browser.mjs`; the real one is never
+  taken): asked for after a click or a key, it's taken, and while it's held the mouse's every event goes to the
+  locked element, at the point where it was taken, its moves told as movement alone, a cancelled pointer's down
+  holding back the mouse's own as the browser does. Off, it's let go, which the game hears as a lock lost (a run's
+  pauses): put the view top-down first, so the game lets go of it itself (`cursor`);
 - `await lab.reduceMotion(reduced)`: the page's `prefers-reduced-motion` as the browser emulates it. Every page opens
   with it reduced (the page's decorative animation left out); a measure of such an animation (the crosshair's beat,
   `draw`) lets it run and puts it back as it ends. CSS's animations run on the page's clock, not the lab's: read them
@@ -200,7 +209,7 @@ loading screen never says it failed, and the command after it waited behind it.
   - `side.mjs`: a tree of the game served by a Vite dev server of the lab's own (HMR off, so a measure never meets a
     stale copy of a module) and booted in a page; `commits.mjs`: another commit exported for an A/B.
   - `browser.mjs`: Playwright's Chromium in its native headless mode, and the scripts every page runs first (the
-    clock, seeded random numbers, no pointer lock, fresh storage).
+    clock, seeded random numbers, no pointer lock but the page's own when asked, fresh storage).
   - `compare.mjs` (the reports' verdict), `pictures.mjs` (the pictures'), `profile.mjs` and `sourceMaps.mjs`
     (`--profile`, its functions traced back through Vite's source maps to their lines in the source),
     `sheetImage.mjs` (the sheet as one image), `probeFiles.mjs`, `errors.mjs`, `paths.mjs`.

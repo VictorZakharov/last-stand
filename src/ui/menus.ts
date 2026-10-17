@@ -94,6 +94,7 @@ function keyboardDiagram(): string {
     b: { icon: '⛁', cap: 'Bank', tip: 'Bank after a wave' }, c: { icon: '➜', cap: 'Continue', tip: 'Continue after a wave' },
     e: { icon: '✚', cap: 'Revive', tip: 'Revive a downed partner (co-op)', hold: true },
     tab: { icon: '☰', cap: 'Scores', tip: "The party's scores and pings", hold: true },
+    alt: { icon: '⇱', cap: 'Cursor', tip: 'A cursor for the HUD over mouse look, the view held still', hold: true },
   };
   for (const k of SKILL_KEYS) {
     if (k.startsWith('mouse')) continue;
@@ -106,6 +107,7 @@ function keyboardDiagram(): string {
     [{ k: 'tab', w: 1.5 }, ...'qwerty'.split('').map((k) => ({ k }))],
     [{ k: 'caps', w: 1.75 }, ...'asdfgh'.split('').map((k) => ({ k }))],
     [{ k: 'shift', w: 2.25 }, ...'zxcvbn'.split('').map((k) => ({ k }))],
+    [{ k: 'ctrl', w: 1.25 }, { k: 'win', w: 1.25 }, { k: 'alt', w: 1.25 }],
   ];
   const cap = (c: Cap): string => {
     const u = used[c.k];
@@ -516,7 +518,7 @@ export function renderMenu(): void {
   for (let i = sorted.length; i < RUN.bagLimit; i++) {
     const d = document.createElement('div');
     d.className = 'sitem';
-    d.style.cursor = 'default';
+    d.style.cursor = 'var(--cursor)';
     st.appendChild(d);
   }
 

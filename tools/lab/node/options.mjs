@@ -314,6 +314,10 @@ export const COMMANDS = {
           + 'logTouch (the same in touch mode: clear of the touch HUD, touches let through)',
       },
       hdr: { kind: 'switch', help: 'HDR on, as on a display in HDR mode (the pause menu shows its levels)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant the system\'s cursor on the page\'s body in each state: the cursors\' check must find it',
+      },
       ...COMMON_OPTIONS,
     },
   },
@@ -673,8 +677,35 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  cursor: {
+    help: 'the cursor drawn over mouse look while Alt is held: in each close view the pointer locked as the player\'s '
+      + 'click takes it (the lab\'s browser plays the lock, every event of the mouse sent to the game\'s canvas while '
+      + 'it\'s held), then Alt held: the mouse moved onto the battle log\'s Pause must leave the view still and draw '
+      + 'the cursor there, lit; its click must pause the log and not attack; over the hotbar\'s slot its tooltip must '
+      + 'show; the wheel over the log\'s lines must scroll them, not zoom; a click on the world must not attack; Alt '
+      + 'let go, the mouse turns the view again; the lock held and the run going on throughout',
+    options: {
+      views: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['third', 'first'],
+        default: 'third,first',
+        help: 'the close views: third, first',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'hold Ctrl instead, a key that frees nothing: the checks must find the view turning with the mouse and '
+          + 'the click on Pause landing on the world',
+      },
+      at: SETUP_OPTIONS.at,
+      facing: SETUP_OPTIONS.facing,
+      gear: SETUP_OPTIONS.gear,
+      weapon: SETUP_OPTIONS.weapon,
+      ...COMMON_OPTIONS,
+    },
+  },
   rush: {
-    help: 'Bull Rush\'s foes as it sweeps them up: foes stood dazed on its line and at its sides (living, a hair from '
+    help: 'Bull Rush\'s foes as it sweeps them up:foes stood dazed on its line and at its sides (living, a hair from '
       + 'death, an elite and the boss), a set at a time, each followed until it is still (when it was met, how long it '
       + 'rode before the hero and how near his body, how it was let go, where it ended against where he stopped); a '
       + 'foe never met, left standing, carried inside him or ending behind or beside him, a living foe left unthrown '

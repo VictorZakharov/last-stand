@@ -55,8 +55,10 @@ declare global {
     __labScreenshot?: (clip?: Clip) => Promise<string>;
     /** a finger's touch sent by the browser as a touch screen's (`tools/lab/node/side.mjs`) */
     __labTouch?: (type: TouchType, points: Finger[]) => Promise<void>;
-    /** the mouse sent by the browser as a mouse's (`tools/lab/node/side.mjs`), at css px */
-    __labMouse?: (type: MouseType, x: number, y: number) => Promise<void>;
+    /** the mouse sent by the browser as a mouse's (`tools/lab/node/side.mjs`), at css px (its wheel `deltaY` px) */
+    __labMouse?: (type: MouseType, x: number, y: number, deltaY?: number) => Promise<void>;
+    /** the pointer lock the page plays in the lab's browser, while `on` (`tools/lab/node/browser.mjs` `noCapture`) */
+    __labLock?: { on: boolean };
     /** a key sent by the browser as a keyboard's (`tools/lab/node/side.mjs`), by its code */
     __labKey?: (type: KeyType, code: string) => Promise<void>;
     /** the page's `prefers-reduced-motion` as the browser emulates it (`tools/lab/node/side.mjs`) */
@@ -69,8 +71,8 @@ declare global {
 /** A touch as the browser gets one from a touch screen: a finger put down, moved, or lifted. */
 type TouchType = 'touchStart' | 'touchMove' | 'touchEnd';
 
-/** The mouse as the browser gets it: moved, or its left button pressed or let go. */
-type MouseType = 'mouseMoved' | 'mousePressed' | 'mouseReleased';
+/** The mouse as the browser gets it: moved, its left button pressed or let go, or its wheel turned. */
+type MouseType = 'mouseMoved' | 'mousePressed' | 'mouseReleased' | 'mouseWheel';
 
 /** A key as the browser gets it: pressed or let go. */
 type KeyType = 'keyDown' | 'keyUp';
@@ -94,11 +96,12 @@ const TOUCH_POINTER_EVENTS: Record<TouchType, string[]> = {
   touchMove: ['pointermove'],
   touchEnd: ['pointerup', 'pointercancel'],
 };
-/** the pointer events the mouse makes, which say the page has handled it */
-const MOUSE_POINTER_EVENTS: Record<MouseType, string[]> = {
+/** the events the mouse makes, which say the page has handled it: its pointer events, and the wheel's own */
+const MOUSE_EVENTS: Record<MouseType, string[]> = {
   mouseMoved: ['pointermove'],
   mousePressed: ['pointerdown'],
   mouseReleased: ['pointerup'],
+  mouseWheel: ['wheel'],
 };
 /** the key events a key makes, which say the page has handled it */
 const KEY_EVENTS: Record<KeyType, string[]> = {
@@ -725,14 +728,51 @@ export class Lab {
     await this.sendMouse('mouseReleased', at);
   }
 
+  /** The mouse moved to `at` (css px) as a mouse moves, its events and all. No frame runs. */
+  async mouseTo(at: PagePoint): Promise<void> {
+    await this.sendMouse('mouseMoved', at);
+  }
+
+  /** The mouse's wheel turned `deltaY` px down (up when less than 0) with the mouse at `at`. No frame runs. */
+  async wheel(at: PagePoint, deltaY: number): Promise<void> {
+    await this.sendMouse('mouseWheel', at, deltaY);
+  }
+
   /**
    * The key whose code is `code` (`KeyW`, `Space`) pressed and let go as a keyboard gives it, so the browser handles
    * it as a player's key, what it does to the focused element with it (a focus ring shown, a button pressed). No
    * frame runs; it returns once the page has handled the key's release.
    */
   async press(code: string): Promise<void> {
+    await this.keyDown(code);
+    await this.keyUp(code);
+  }
+
+  /**
+   * The key whose code is `code` held down as a keyboard holds it, until `keyUp`. No frame runs. The game holds it
+   * through the frames the lab runs only if their input holds it too (`Frame.keys`, by the game's name for it,
+   * `altleft`): a frame's keys are all the game has down.
+   */
+  async keyDown(code: string): Promise<void> {
     await this.sendKey('keyDown', code);
+  }
+
+  /** The key whose code is `code` let go, as a keyboard lets it go. No frame runs. */
+  async keyUp(code: string): Promise<void> {
     await this.sendKey('keyUp', code);
+  }
+
+  /**
+   * The pointer lock played by the page from here on, while `on`, as the browser takes and holds it (the lab never
+   * takes the real one): asked for after a click or a key it's taken, and while it's held the mouse's every event
+   * goes to the locked element. Off, it's let go; the game hears that as a lock lost, and a run's is paused, so a
+   * measure lets the game let go of it first (the top-down view).
+   */
+  pointerLock(on: boolean): void {
+    const lock = window.__labLock;
+    if (!lock) throw new Error('lab: pointerLock: this page has no lock of its own (opened by an older lab)');
+    lock.on = on;
+    if (!on) document.exitPointerLock();
   }
 
   /**
@@ -755,11 +795,11 @@ export class Lab {
     await window.__labThrottle(rate);
   }
 
-  private async sendMouse(type: MouseType, at: PagePoint): Promise<void> {
+  private async sendMouse(type: MouseType, at: PagePoint, deltaY = 0): Promise<void> {
     if (!window.__labMouse) throw new Error('lab: click: this page has no mouse (opened by an older lab)');
-    const ours = (event: Event) => (event as PointerEvent).pointerType === 'mouse';
-    const handled = inputHandled({ names: MOUSE_POINTER_EVENTS[type], ours, what: 'click' });
-    await sent(handled, window.__labMouse(type, at.x, at.y));
+    const ours = (event: Event) => event instanceof WheelEvent || (event as PointerEvent).pointerType === 'mouse';
+    const handled = inputHandled({ names: MOUSE_EVENTS[type], ours, what: 'click' });
+    await sent(handled, window.__labMouse(type, at.x, at.y, deltaY));
   }
 
   private async sendKey(type: KeyType, code: string): Promise<void> {

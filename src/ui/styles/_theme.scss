@@ -29,6 +29,11 @@ $well-lit: linear-gradient(#2a2218, #120e0a);
 $tray: linear-gradient(#1a1614, #0a0909);
 $gem-face: radial-gradient(circle at 50% 35%, #3a3430, #0c0a0a 70%);
 
+// the game's cursors (their art is inline in index.html, to show from the loading screen): the arrow, and the arrow
+// lit over what takes a click (a drag too)
+$cursor: var(--cursor);
+$cursor-hand: var(--cursor-hand);
+
 // text that must read over the 3D scene
 $outline: 0 1px 2px #000, 0 0 6px #000;
 

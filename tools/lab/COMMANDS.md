@@ -257,7 +257,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   wide as the screen, no row wider than the panel, its head on one line; and the same in touch mode, put in it by a finger's tap, where its lines must
   let a touch through: on a phone the panel first lay over the scores button under the pause button), each pictured
   whole as a PNG of its own at the screen's pixels (`out/ui/<state>.png`), with every
-  named element's box and every label's over the world as shares of the window. With `--screens`, whether the UI is
+  named element's box and every label's over the world as shares of the window. In every state, the cursor over each
+  element the mouse can be over (shown, with an area, taking the pointer) must be the game's own (its art, from
+  `index.html`) or a text field's caret: the system's (`auto`, `pointer`, a UA stylesheet's `default`) is a problem,
+  listed by element; `--canary` gives the page's body the system's, which must be found. With `--screens`, whether
+  the UI is
   the same share of both screens: on `3840x2160@1,1280x720@3` (a 4K screen at 100% and at 300%) the lines agree but
   the tooltip's place (it keeps off the pointer in css px, as the OS scales the pointer) and the lobby's text, which
   drifts by up to 1% of the screen down a panel (Blink rounds each line of text to whole css px), and the pictures
@@ -462,6 +466,22 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   `check`, 4 to 15 s each. (The owner, testing #255: a Bull Rush cast over a charging Power Strike seemed to deal
   the lobby's dummies nothing; it had hit, its number shown a moment after Power Strike's, and was missed.) The game's
   module is found through `page/battleLog.ts` (none on an A/B's older commit: `no battle log in this tree`).
+- `cursor`: the cursor drawn over mouse look while Alt is held (`src/ui/altCursor.ts`, `page/cursor.ts`). In each
+  close view (`--views third,first`) the battle log is filled past its height and the pointer is locked as the
+  player's click takes it: the lab's browser plays the lock (`lab.pointerLock`, `noCapture` in `node/browser.mjs`),
+  so while it's held every event of the mouse goes to the game's canvas, as Chrome sends it, and a click on the HUD
+  lands there. The mouse moved with nothing held must turn the view (else the command stops: no mouse look to
+  measure). Then Alt is held, by the keyboard and in the game's frames: the mouse moved onto the log's Pause must
+  leave the view still and draw the cursor there (within 1.5 px: the mouse's events come in whole px) and lit, as the
+  page's cursor is over a button; its click must pause the log and not attack (the basic attack's key not pressed in
+  the game); over the hotbar's first slot its tooltip must show, and go as the cursor leaves; the wheel over the
+  log's lines must scroll them, and the game must take none of it as a zoom; a click on the world must not attack.
+  Alt let go, the cursor must be gone and the mouse turn the view again, and a click on the world must attack (else
+  the command stops: no attack to see). The lock must be held, and the run going on, through every frame. `--canary`
+  holds Ctrl instead, a key that frees nothing: the view turning and the click on Pause landing on the world must be
+  found. On `origin/main` the view turned 1.62 rad as the mouse went to Pause, no cursor was drawn, the click
+  attacked and the wheel zoomed. (The owner: "in 3rd and 1st person user cannot press on those battle log buttons".)
+  About 2 s.
 - `rush`: the foes Bull Rush sweeps up (`page/rush.ts`, `--class warrior`). The biome's commonest foes stand dazed
   in sets, each on a fresh set-up: on the charge's line, at its sides (1.2 and 1.4 m off it), a hair from death on
   it, and an elite and the biome's boss on it; the charge is cast through each set, aimed its whole range ahead, in a

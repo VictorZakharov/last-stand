@@ -59,6 +59,7 @@ Keyboard and mouse:
 | Mouse wheel | Zoom |
 | Middle mouse (hold and drag) | Rotate the camera |
 | `V` | Change view (in a run or the lobby): top-down, over the shoulder, first person. The close views use mouse look and aim at the crosshair |
+| `Alt` (hold) | In the close views: a cursor for the HUD (the battle log's buttons, the skills' tooltips), the view held still |
 | `B` / `C` | Bank / Continue after a wave |
 | `E` (hold) | Revive a downed partner (co-op) |
 | `Esc` | Pause |

@@ -244,7 +244,7 @@ function bindPicking(): void {
     const d = over(e);
     // (over a name the hero doesn't aim there, as over the page's own)
     if (d) input.mouse.overUI = true;
-    canvas.style.cursor = d ? 'pointer' : '';
+    canvas.style.cursor = d ? 'var(--cursor-hand)' : '';
     if (d !== hovered) {
       hovered = d;
       if (d) showTooltipAt(cardOf(d), e);

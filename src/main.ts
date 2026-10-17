@@ -37,6 +37,7 @@ import { initItemIcons } from './ui/itemIcons';
 import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfClock } from './ui/perfHud';
 import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
+import { initAltCursor, updateAltCursor } from './ui/altCursor';
 import { warmShaders } from './game/warmup';
 import { initQuality, sampleQuality } from './core/quality';
 import { updateLowLife } from './core/lowLife';
@@ -69,6 +70,7 @@ async function boot() {
   const { scene, renderer } = initRenderer($('#game'));
   steadyShadowPrograms(renderer);
   initInput(renderer.domElement);
+  initAltCursor(renderer.domElement);
   particles.init(scene);
   initLights(scene);
   initEffects();
@@ -334,6 +336,7 @@ function syncView(): void {
   wantPointerLock(look);
   crosshair.classList.toggle('hidden', v === 'top');
   lookHint.classList.toggle('hidden', !look || pointerLocked());
+  updateAltCursor();
 }
 
 // --- loop ---------------------------------------------------------------------------

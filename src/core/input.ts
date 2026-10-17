@@ -147,6 +147,9 @@ function keyName(e: KeyboardEvent): string {
   return e.code.toLowerCase(); // space, escape, shiftleft, ...
 }
 
+/** Alt, held in the close views for the cursor drawn over mouse look (ui/altCursor.ts) */
+const alt = (k: string): boolean => k === 'altleft' || k === 'altright';
+
 /** Typing in a text field (a room code, a confirmation) isn't playing: WASD mustn't walk the hero. */
 const typing = (e: KeyboardEvent): boolean => e.target instanceof HTMLElement
   && (e.target.matches('textarea, input:not([type=checkbox], [type=radio], [type=range])') || e.target.isContentEditable);
@@ -163,9 +166,14 @@ export function initInput(canvas: HTMLCanvasElement): void {
     const k = keyName(e);
     if (!input.down.has(k)) input.pressed.add(k);
     input.down.add(k);
-    if (k === 'space' || k === 'tab') e.preventDefault();
+    if (k === 'space' || k === 'tab' || alt(k)) e.preventDefault();
   });
-  window.addEventListener('keyup', (e) => input.down.delete(keyName(e)));
+  window.addEventListener('keyup', (e) => {
+    const k = keyName(e);
+    input.down.delete(k);
+    // (let go alone, Alt would take the keys to the browser's menu)
+    if (alt(k) && !typing(e)) e.preventDefault();
+  });
   window.addEventListener('blur', releaseInput);
   window.addEventListener('mousemove', (e) => {
     if (input.touchMode) return;

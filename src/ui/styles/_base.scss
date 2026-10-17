@@ -27,6 +27,16 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #030307; col
 #game #hdr-canvas[hidden] { display: none; }
 .hidden { display: none !important; }
 button { font-family: inherit; }
+/* the game's cursor over every control, never the system's (the page's is set inline in index.html): a text field
+   keeps its caret */
+button, select, input, label { cursor: inherit; }
+a[href] { cursor: $cursor-hand; }
+input:not([type=checkbox], [type=radio], [type=range]), textarea { cursor: text; }
+/* the cursor drawn while Alt is held over mouse look (ui/altCursor.ts), its tip where it points: over everything, on a
+   layer of its own (it follows the mouse) */
+#alt-cursor { position: fixed; left: 0; top: 0; z-index: 60; width: 32px; height: 32px; margin: -2px 0 0 -3px;
+  background: var(--cursor-art) no-repeat; pointer-events: none; will-change: transform; }
+#alt-cursor.lit { background-image: var(--cursor-hand-art); }
 html, body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; overscroll-behavior: none; }
 #game { touch-action: none; }
 

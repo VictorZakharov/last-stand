@@ -135,26 +135,25 @@ async function touchOf(page, type, points) {
 
 /**
  * The mouse sent to the page as the browser gets it from a mouse (`lab.click`'s): `type` is `mouseMoved`, or
- * `mousePressed` or `mouseReleased` for its left button, at `x`, `y` (css px). The browser's own handling follows from
- * it, as a player's click: its mouse and pointer events, and the focus it moves.
+ * `mousePressed` or `mouseReleased` for its left button, or `mouseWheel` turning its wheel `deltaY` px down, at `x`,
+ * `y` (css px). The browser's own handling follows from it, as a player's click: its mouse and pointer events, and the
+ * focus it moves.
  */
-async function mouseOf(page, type, x, y) {
+async function mouseOf(page, type, x, y, deltaY = 0) {
   const devtools = await devtoolsOf(page);
-  await devtools.send('Input.dispatchMouseEvent', { type, x, y, ...MOUSE_BUTTONS[type] });
+  const wheel = type === 'mouseWheel' ? { deltaX: 0, deltaY } : {};
+  await devtools.send('Input.dispatchMouseEvent', { type, x, y, ...MOUSE_BUTTONS[type], ...wheel });
 }
 
-/** the left button's fields for each of the mouse's events: none moving, held as it's pressed, up once released */
+/** the left button's fields for each of the mouse's events: none moving or turning the wheel, held as it's pressed,
+ *  up once released */
 const MOUSE_BUTTONS = {
   mouseMoved: { button: 'none', buttons: 0 },
   mousePressed: { button: 'left', buttons: 1, clickCount: 1 },
   mouseReleased: { button: 'left', buttons: 0, clickCount: 1 },
+  mouseWheel: { button: 'none', buttons: 0 },
 };
 
-/**
- * A key sent to the page as the browser gets it from a keyboard (`lab.press`'s): `type` is `keyDown` or `keyUp`,
- * `key` the key's code (`KeyW`). The browser's own handling follows from it, as a player's key: what it does to the
- * focused element (a focus ring shown, a button pressed).
- */
 /** The page's `prefers-reduced-motion` as the browser emulates it: `reduced`, or no preference. */
 function motionOf(page, reduced) {
   return page.emulateMedia({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
@@ -166,6 +165,11 @@ async function throttleOf(page, rate) {
   await devtools.send('Emulation.setCPUThrottlingRate', { rate });
 }
 
+/**
+ * A key sent to the page as the browser gets it from a keyboard (`lab.press`'s): `type` is `keyDown` or `keyUp`,
+ * `key` the key's code (`KeyW`). The browser's own handling follows from it, as a player's key: what it does to the
+ * focused element (a focus ring shown, a button pressed).
+ */
 async function keyOf(page, type, key) {
   const devtools = await devtoolsOf(page);
   await devtools.send('Input.dispatchKeyEvent', { type, ...keyFields(key) });
@@ -189,6 +193,8 @@ const NAMED_KEYS = {
   Enter: { key: 'Enter', windowsVirtualKeyCode: 13 },
   Escape: { key: 'Escape', windowsVirtualKeyCode: 27 },
   Tab: { key: 'Tab', windowsVirtualKeyCode: 9 },
+  AltLeft: { key: 'Alt', windowsVirtualKeyCode: 18, location: 1 },
+  ControlLeft: { key: 'Control', windowsVirtualKeyCode: 17, location: 1 },
 };
 
 const toSlashes = (path) => path.split('\\').join('/');
@@ -439,7 +445,7 @@ export class Side {
     // (a probe's `lab.touch`: a finger on the touch controls, which no scripted input reaches)
     await page.exposeFunction('__labTouch', (type, points) => touchOf(page, type, points));
     // (a probe's `lab.click` and `lab.press`: the browser's own handling of a click and a key, its focus with them)
-    await page.exposeFunction('__labMouse', (type, x, y) => mouseOf(page, type, x, y));
+    await page.exposeFunction('__labMouse', (type, x, y, deltaY) => mouseOf(page, type, x, y, deltaY));
     await page.exposeFunction('__labKey', (type, key) => keyOf(page, type, key));
     // (a probe's `lab.reduceMotion`: the motion asked for let back on, to measure a decorative animation)
     await page.exposeFunction('__labMotion', (reduced) => motionOf(page, reduced));
