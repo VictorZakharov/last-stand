@@ -3,9 +3,9 @@
 // the network when it can (a plain reload shows a new deploy), the hashed files from the cache.
 // A new deploy's worker takes over at once; the previous build's cache stays, so a page still
 // running the old build can load its remaining chunks.
-const CACHE = 'last-stand-30ca82889d7a';
+const CACHE = 'last-stand-085e1a0b2a15';
 const FONTS = 'last-stand-fonts';
-const FILES = ["./","./AGENTS.md","./CLAUDE.md","./apple-touch-icon.png","./assets/arrowRain-DPC2HiDG.webp","./assets/blink-CgO5swT0.webp","./assets/bullRush-DM-StSWp.webp","./assets/cleave-D_nmb5el.webp","./assets/crescent-BmQ7pavk.webp","./assets/crypt-motif-DejCbk91.mp3","./assets/fanShot-DVR-d09L.webp","./assets/glacialNova-BrJO0T66.webp","./assets/hands.worker-D7YJoI9O.js","./assets/index-CSZZDDIL.css","./assets/index-cAAuAZuE.js","./assets/ironBellow-CMXd79pR.webp","./assets/maelstrom-CaJ3JU44.webp","./assets/nockShot-DTif6FyF.webp","./assets/pbr.worker-CblYSSpz.js","./assets/piercingShot-CEUXIeYE.webp","./assets/potion-BEa_eMYm.webp","./assets/powerStrike-Bs8m55aK.webp","./assets/quarryMark-CmDkp1y8.webp","./assets/quiet-beginnings-Dh4Q9gvW.mp3","./assets/raiseShield-DaIZxmbK.webp","./assets/shadowed-dusk-_FMhuLNf.mp3","./assets/splinterBolt-tJ5fkB8j.webp","./assets/starfall-DG1o3ypa.webp","./assets/strawman-CVY8b7qX.webp","./assets/sunlit-battle-Dwkjebkb.mp3","./assets/tempest-BL5GadRI.webp","./assets/three-DR1XyUbY.js","./assets/twinFangs-D7pUbdJl.webp","./assets/voidLance-J9mI93gh.webp","./favicon.svg","./icon-192.png","./icon-512.png","./icon.svg","./index.html","./manifest.webmanifest"];
+const FILES = ["./","./AGENTS.md","./CLAUDE.md","./apple-touch-icon.png","./assets/arrowRain-DPC2HiDG.webp","./assets/blink-CgO5swT0.webp","./assets/bullRush-DM-StSWp.webp","./assets/cleave-D_nmb5el.webp","./assets/crescent-BmQ7pavk.webp","./assets/crypt-motif-DejCbk91.mp3","./assets/fanShot-DVR-d09L.webp","./assets/glacialNova-BrJO0T66.webp","./assets/hands.worker-D7YJoI9O.js","./assets/index-CY12r-ro.css","./assets/index-hiNluJeO.js","./assets/ironBellow-CMXd79pR.webp","./assets/maelstrom-CaJ3JU44.webp","./assets/nockShot-DTif6FyF.webp","./assets/pbr.worker-CblYSSpz.js","./assets/piercingShot-CEUXIeYE.webp","./assets/potion-BEa_eMYm.webp","./assets/powerStrike-Bs8m55aK.webp","./assets/quarryMark-CmDkp1y8.webp","./assets/quiet-beginnings-Dh4Q9gvW.mp3","./assets/raiseShield-DaIZxmbK.webp","./assets/shadowed-dusk-_FMhuLNf.mp3","./assets/splinterBolt-tJ5fkB8j.webp","./assets/starfall-DG1o3ypa.webp","./assets/strawman-CVY8b7qX.webp","./assets/sunlit-battle-Dwkjebkb.mp3","./assets/tempest-BL5GadRI.webp","./assets/three-DR1XyUbY.js","./assets/twinFangs-D7pUbdJl.webp","./assets/voidLance-J9mI93gh.webp","./favicon.svg","./icon-192.png","./icon-512.png","./icon.svg","./index.html","./manifest.webmanifest"];
 const SCOPE = new URL(self.registration.scope).pathname;
 const PAGE_WAIT = 4000;   // ms before a slow network gives way to the cached page
 
@@ -61,7 +61,10 @@ async function file(req) {
 // fonts: from the cache when there, refreshed from the network in the background
 async function font(req) {
   const cache = await caches.open(FONTS);
-  const hit = await cache.match(req);
+  // (a copy kept from a request without CORS is opaque, which can't answer one with it: the stylesheet is asked for
+  // with CORS now, so the page can read its rules)
+  const kept = await cache.match(req);
+  const hit = kept && !(kept.type === 'opaque' && req.mode === 'cors') ? kept : undefined;
   const net = fetch(req).then((r) => { if (r.ok || r.type === 'opaque') cache.put(req, r.clone()); return r; });
   if (hit) { net.catch(() => {}); return hit; }
   return net;
