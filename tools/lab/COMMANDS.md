@@ -777,6 +777,23 @@ the game draws in front of him (a leaf card cut out by its texture, a prop disso
 (Drawn flat, the forest's leaf cards were whole squares, and one by a close-up's camera filled its frame.) A
 part's cut-out (a hair card's) keeps its texture's alpha. A pixel is found as a part by its colour within 2 levels
 a channel, looked up once (matched against every part's colour, a picture took 10 s).
+- `pwa`: a deploy as a returning player meets it, the offline worker and all, which the lab's dev server never has
+  (`node/pwa.mjs`; it runs in this process, not the server). Another commit's production build (`--from[=ref]`,
+  origin/main by default, exported as `--ab` exports it) and this tree's are built with Vite into `out/pwa/`, and
+  served in turn on 127.0.0.1 under `/last-stand/` as Pages serves the game (`node/staticHost.mjs`: `max-age=600`,
+  revalidated by ETag, what it serves swapped at once, as a deploy swaps it). A fresh browser loads the old build
+  twice (its worker installed, then the page and its fonts fetched through it); then this tree's build is served in
+  its place and the page reloaded as a player reloads it: under the old worker, again once the new one has taken
+  over, and offline. Each load is known by the worker that served it (asked as the page starts, before a new one
+  takes it over: a load under another than it's for measured nothing, a problem). Every load must show the game's
+  fonts (a face of Cinzel and of Alegreya Sans loaded), every load after the swap this tree's build (its entry
+  script: a plain reload must show a new deploy), and each of this tree's loads the labels' lining twin
+  (`overlay/paint.ts`).
+  `--canary` serves a stale page on the first reload after the swap and the font stylesheet's address broken after
+  it: both must be found. About 35 s (the canary's two minutes: its waits run out). (The owner, of #263's preview:
+  the page's font stylesheet had been asked for with CORS, and the previous deploy's worker answered with the copy
+  it kept from a request without, which can't answer one with; the stylesheet failed, and the lobby showed the
+  system's fonts, wider, its links wrapping: "increasing font size had unintended side effects".)
 - `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films), the
   stops, the ranges and the run's form for every hero, the ranger's feet and carry, and the warrior through the eyes
   (`eyes`: the basic attack's rows on every weapon, and every other skill on every weapon its way of holding them

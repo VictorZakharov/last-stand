@@ -13,11 +13,11 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="apple-mobile-web-app-title" content="Last Stand" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <!-- not render-blocking: the loading screen must paint even while the fonts are slow. Asked with CORS: the world's
-       labels read its rules for the body face's lining twin (ui/overlay/paint.ts) -->
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet" crossorigin media="print" onload="this.media='all'; document.fonts.load('900 1em Cinzel').finally(() => document.documentElement.classList.add('fonts-ready'))" />
+  <!-- not render-blocking: the loading screen must paint even while the fonts are slow. Asked for as it always was:
+       the offline worker players have keeps a copy that answers only a request like it (tools/lab `pwa`) -->
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'; document.fonts.load('900 1em Cinzel').finally(() => document.documentElement.classList.add('fonts-ready'))" />
   <!-- the logo waits for its font (no visible swap from the fallback), but not forever -->
   <script>setTimeout(() => document.documentElement.classList.add('fonts-ready'), 3000);</script>
   <!-- Loading screen styles inline, so it shows before the bundle has loaded. Everything that

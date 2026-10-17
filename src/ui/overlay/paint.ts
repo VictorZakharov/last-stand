@@ -37,43 +37,46 @@ function fontFaces(): Record<TextStyle['face'], string> {
 
 // The page sets its text's digits lining (`font-variant-numeric`), as the body face's own are old-style, rising and
 // dropping along a row of numbers as lower-case letters do; a canvas takes no such setting. So the body face has a
-// twin with its lining digits on (`FontFace.featureSettings`), made from the page's font stylesheet's own rules
-// (asked for with CORS, so they can be read), which the labels paint in.
+// twin with its lining digits on (`FontFace.featureSettings`), made from its web font stylesheet, which the labels
+// paint in.
 const LINING = ' Lining';
 let lining: Promise<void> | null = null;
 
-/** The page's web font stylesheet's rules, once it has loaded; null if there's none, or they can't be read. */
-async function fontRules(): Promise<CSSRuleList | null> {
+/**
+ * `family`'s web font stylesheet alone, read with CORS: from an address of its own, as the page's own stylesheet is
+ * asked for without, and the offline worker players have keeps a copy of it that can't answer a request with CORS
+ * (asked for so, the page's lost its fonts under it: tools/lab `pwa`). Null if the page names no such family.
+ */
+async function fontSheet(family: string): Promise<string | null> {
   const link = document.querySelector<HTMLLinkElement>('link[rel="stylesheet"][href*="fonts.googleapis.com"]');
   if (!link) return null;
-  if (!link.sheet) {
-    await new Promise((settled) => {
-      link.addEventListener('load', settled, { once: true });
-      link.addEventListener('error', settled, { once: true });
-    });
-  }
-  try {
-    return link.sheet?.cssRules ?? null;
-  } catch {
-    return null;
-  }
+  const url = new URL(link.href);
+  const wanted = url.searchParams.getAll('family').find((asked) => asked.split(':')[0] === family);
+  if (!wanted) return null;
+  const response = await fetch(`${url.origin}${url.pathname}?family=${wanted.replace(/ /g, '+')}&display=swap`);
+  return response.ok ? response.text() : null;
+}
+
+/** Each @font-face of a stylesheet's text, its descriptors by name. */
+function fontFaceRules(css: string): Record<string, string>[] {
+  return css.split('@font-face').slice(1).map((block) => {
+    const descriptors: Record<string, string> = {};
+    for (const [, name, value] of block.matchAll(/([a-z-]+)\s*:\s*([^;}]+);/g)) descriptors[name] = value.trim();
+    return descriptors;
+  });
 }
 
 /** `family`'s lining twin: each of its faces (a weight, a range of characters) added again under the twin's name with
  *  its lining digits on, and those of each weight that hold the digits loaded. */
 async function loadLining(family: string): Promise<void> {
-  const rules = await fontRules();
   const weights = new Set<string>();
-  for (const rule of rules ?? []) {
-    if (!(rule instanceof CSSFontFaceRule)) continue;
-    const d = rule.style;
-    if (d.getPropertyValue('font-family').replace(/['"]/g, '').trim() !== family) continue;
-    const weight = d.getPropertyValue('font-weight');
-    const twin = new FontFace(family + LINING, d.getPropertyValue('src'), {
-      style: d.getPropertyValue('font-style') || 'normal', weight: weight || 'normal',
-      unicodeRange: d.getPropertyValue('unicode-range') || 'U+0-10FFFF', featureSettings: '"lnum"',
-    });
-    document.fonts.add(twin);
+  for (const d of fontFaceRules((await fontSheet(family)) ?? '')) {
+    if (d['font-family']?.replace(/['"]/g, '') !== family || !d.src) continue;
+    const weight = d['font-weight'] ?? 'normal';
+    document.fonts.add(new FontFace(family + LINING, d.src, {
+      style: d['font-style'] ?? 'normal', weight,
+      unicodeRange: d['unicode-range'] ?? 'U+0-10FFFF', featureSettings: '"lnum"',
+    }));
     weights.add(weight);
   }
   await Promise.all([...weights].map((w) => document.fonts.load(`${w} 16px '${family}${LINING}'`, '0123456789')));

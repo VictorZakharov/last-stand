@@ -1185,6 +1185,25 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  pwa: {
+    help: 'a deploy as a returning player meets it, the offline worker and all: another commit\'s production build '
+      + 'served as Pages serves the game and loaded in a fresh browser until its worker has the page and its fonts, '
+      + 'then this tree\'s served in its place and the page reloaded under the old worker, under the new one and '
+      + 'offline; every load must show the game\'s fonts, and every one after the swap this tree\'s build (runs in '
+      + 'this process, not the server)',
+    options: {
+      from: {
+        kind: 'ref',
+        usage: '[=ref]',
+        help: 'the commit deployed before (origin/main by default)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'a stale page served on the first reload after the swap, the font stylesheet\'s address broken after '
+          + 'it: both must be found',
+      },
+    },
+  },
   check: {
     help: 'the checks of a change to how the heroes move, every hero\'s, side by side in sessions of their own: the '
       + 'gait (its steps listed, no films), the stops, the ranges and the run\'s form for each hero, the ranger\'s '

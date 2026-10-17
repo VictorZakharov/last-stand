@@ -26,6 +26,7 @@ The lab as an agent works with it: what every command measures, in a line here a
 - `probe <module>`: runs a measure of your own on the lab's clock and set-ups
 - `live <step>`: a page kept between steps for trying by hand (start, picture in any look with a reference over
   it, inspect, eval, frames): under a second a picture
+- `pwa`: a deploy as a returning player meets it (main's production build loaded until its offline worker has the page and the fonts, this tree's served in its place and reloaded under the old worker, the new one and offline: the game's fonts on every load, this tree's build on every one after the swap)
 - `check`: runs every hero's checks of a change to how they move side by side (`--ab`: against main, its side kept once it has run; each gait scenario from three starts, its turns at other points of a stride, as a frame's change anywhere sends a scenario's later strides elsewhere: judge a change on the counts over all of them, each side's in the log)
 - `ui`: pictures the UI in its states (the lobby, a tooltip, How to play, the save slots, a class button clicked and a key pressed after it, the lobby's views switched with each label against its anchor through every glide, the run's HUD with a hurt foe's bar and damage numbers, the scores, the perf overlay, the choice after a wave, the pause menu, the summary, every skill's tooltip within the window, opened by the mouse over the hotbar and by a tap in the lobby, the battle log, and on touch, clear of the touch HUD and letting touches through) with each named element's and label's box as a share of the window, the game's own cursor over every element the mouse can be over, and every digit shown on its line, on the page and over the world
 - `touch`: the touch controls' move stick pushed by a finger, its touches sent as a touch screen's (slid out through the stick's travel, to its edge and far past it, half the window across: the stick's push, the knob against the finger and the hero's speed, a push further out never giving less)
@@ -213,6 +214,8 @@ loading screen never says it failed, and the command after it waited behind it.
     stale copy of a module) and booted in a page; `commits.mjs`: another commit exported for an A/B.
   - `browser.mjs`: Playwright's Chromium in its native headless mode, and the scripts every page runs first (the
     clock, seeded random numbers, no pointer lock but the page's own when asked, fresh storage).
+  - `pwa.mjs`: `lab pwa`, two production builds served in turn by `staticHost.mjs` (as Pages serves the game) to a
+    browser of its own, the offline worker and all.
   - `compare.mjs` (the reports' verdict), `pictures.mjs` (the pictures'), `profile.mjs` and `sourceMaps.mjs`
     (`--profile`, its functions traced back through Vite's source maps to their lines in the source),
     `sheetImage.mjs` (the sheet as one image), `probeFiles.mjs`, `errors.mjs`, `paths.mjs`.

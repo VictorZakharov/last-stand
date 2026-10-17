@@ -98,10 +98,7 @@ async function file(req) {
 // fonts: from the cache when there, refreshed from the network in the background
 async function font(req) {
   const cache = await caches.open(FONTS);
-  // (a copy kept from a request without CORS is opaque, which can't answer one with it: the stylesheet is asked for
-  // with CORS now, so the page can read its rules)
-  const kept = await cache.match(req);
-  const hit = kept && !(kept.type === 'opaque' && req.mode === 'cors') ? kept : undefined;
+  const hit = await cache.match(req);
   const net = fetch(req).then((r) => { if (r.ok || r.type === 'opaque') cache.put(req, r.clone()); return r; });
   if (hit) { net.catch(() => {}); return hit; }
   return net;
