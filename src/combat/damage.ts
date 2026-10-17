@@ -6,8 +6,8 @@ import { dealsDamage } from '../net/role';
 import { countDealt } from '../game/stats';
 import { rand } from '../util';
 import type { Enemy } from '../entities/enemy';
-import type { Player } from '../entities/player';
-import type { DamageType, XZ } from '../types';
+import type { HitResult, Player } from '../entities/player';
+import type { DamageType, SkillDef, XZ } from '../types';
 import type { Blow, Fling } from './fling';
 
 const ELEMENTAL = new Set(['cold', 'fire', 'lightning']);
@@ -30,6 +30,9 @@ export function rollPlayerDamage(by: Player, base: number, tags: readonly string
 export interface HitOpts {
   /** the player whose skill it is (its stats, its kill, its leech) */
   by: Player;
+  /** the skill the hit is from, as the battle log names it (from a dash's step, a timer or a channel's tick too, so
+   *  it can't be told from what is being cast) */
+  skill: SkillDef;
   tags?: readonly string[];
   type?: DamageType;
   knock?: number;
@@ -53,6 +56,20 @@ export interface DealtHit {
 let dealtSink: ((enemy: Enemy, hit: DealtHit) => void) | null = null;
 export function setDealtSink(fn: typeof dealtSink): void { dealtSink = fn; }
 
+/** How a foe's attack came at a player, as the battle log names it. */
+export type EnemyAttack = 'strike' | 'slam' | 'bolt';
+
+/** Who dealt a hit on a player: the foe (none: one gone before its blow landed) and its attack. */
+export interface Attacker { foe: Enemy | null; attack: EnemyAttack }
+
+/** A hit as the battle log lists it (ui/battleLog): one the local hero dealt a foe, or one he took. */
+export type LoggedHit =
+  | { dealt: true; skill: SkillDef; foe: Enemy; amount: number; type: DamageType; crit: boolean; kill: boolean }
+  | { dealt: false; by: Attacker | null; type: DamageType; armor: number; r: HitResult };
+let logSink: ((hit: LoggedHit) => void) | null = null;
+/** Where the hits go for the battle log (null while it's off: nothing is made for it). */
+export function setLogSink(fn: typeof logSink): void { logSink = fn; }
+
 /** A damage number over an enemy. */
 export function damageNumber(enemy: Enemy, amount: number, crit: boolean, type: DamageType): void {
   const p = enemy.pos;
@@ -72,6 +89,7 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   const dealt = enemy.takeDamage(amount, { type, crit, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, by, blow: opts.blow });
   const fling = enemy.alive ? undefined : enemy.fling ?? undefined;
   dealtSink?.(enemy, { amount: dealt, crit, type, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, fling });
+  logSink?.({ dealt: true, skill: opts.skill, foe: enemy, amount: dealt, type, crit, kill: !enemy.alive });
   countDealt(dealt, !enemy.alive);
   // everyone sees their own numbers
   if (!opts.silent || crit) damageNumber(enemy, dealt, crit, type);
@@ -96,11 +114,15 @@ export function carryEnemy(enemy: Enemy, by: Player, way: XZ, seconds: number): 
   dealtSink?.(enemy, { amount: 0, crit: false, type: 'physical', carry: { seconds, way } });
 }
 
-/** Damage a player (after armor / resistance / ward). Only its own game's: a partner's is judged where its player sees
- *  the blow (net/role). */
-export function hurtPlayer(p: Player, amount: number, type: DamageType = 'physical', from: THREE.Vector3 | null = null): number {
+/** Damage a player (after armor / resistance / ward), dealt `by` a foe's attack. Only its own game's: a partner's is
+ *  judged where its player sees the blow (net/role). */
+export function hurtPlayer(
+  p: Player, amount: number, type: DamageType = 'physical', from: THREE.Vector3 | null = null, by: Attacker | null = null,
+): number {
   if (!p.active || !p.local) return 0;
   const s = p.stats;
   const reduce = type === 'physical' ? s.armor : s.resist;
-  return p.takeDamage(amount * (1 - reduce / 100), type, from);
+  const r = p.takeDamage(amount * (1 - reduce / 100), type, from);
+  if (r) logSink?.({ dealt: false, by, type, armor: amount * reduce / 100, r });
+  return r?.taken ?? 0;
 }

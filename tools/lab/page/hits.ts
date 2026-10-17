@@ -1,13 +1,15 @@
 // A skill's blows as they land (tools/lab `hits`): foes stand dazed where it strikes (as `death` stands them), living
 // past every blow, and it is cast at them on a fresh set-up as the player casts it (held through for a channel, drawn
 // to full for a drawn shot), `--than`'s skill held down for a row of its blows. Every hit is caught as it lands: its
-// frame from the press, the foe and how much. A blow is the hits landing within a frame of each other (one cut
+// frame from the press, the foe, how much and how (`log` holds the battle log to them, cast as here). A blow is the
+// hits landing within a frame of each other (one cut
 // striking three foes); each blow's time, the gaps between them, when the hero was free again and the damage a second
 // till then are listed. Striking nothing, a gap past `--apart` and blows no quicker than `--than`'s are problems.
 // (The owner's Twin Fangs, its two cuts 0.36 s apart: "too slow", "both hits in a rapid succession... maybe 0.2sec",
 // "should be faster than regular LMB skill".)
 import type { Fixture, Lab, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
+import type { DamageType } from '../../../src/types';
 import { G } from '../../../src/state';
 import { hitEnemy } from '../../../src/combat/damage';
 import { bindKnown, holdFor, pressing, skillNamed, type BoundSkill } from './cast';
@@ -48,11 +50,15 @@ const LATE = 1;
 const seconds = (value: number): string => `${value.toFixed(2)} s`;
 const frameTime = (): number => window.__labClock.frame / 1000;
 
-/** A hit as it landed: its frame from the press, the foe's number and how much. */
-interface Hit {
+/** A hit as it landed: its frame from the press, the foe's number, how much it dealt and of which type, whether it was
+ *  a crit and whether it killed. */
+export interface Hit {
   frame: number;
   foe: number;
   amount: number;
+  type: DamageType;
+  crit: boolean;
+  kill: boolean;
 }
 
 /** A blow: when it landed (s from the press), how many foes it struck and how much it dealt. */
@@ -62,20 +68,26 @@ interface Blow {
   amount: number;
 }
 
-/** A skill cast at its foes: how long its key was held, its blows, when the hero was free again (s from the press;
- *  -1: never), and whether the canary planted its fault. */
-interface Cast {
+/** A skill cast at its foes: how long its key was held, the foes and the hits on them, its blows, when the hero was
+ *  free again (s from the press; -1: never), and whether the canary planted its fault. */
+export interface Cast {
   skill: BoundSkill;
   held: number;
+  foes: Enemy[];
+  hits: Hit[];
   blows: Blow[];
   free: number;
   planted: boolean;
 }
 
+/** A canary's plant in a cast, tried each frame once the frame has run, given the cast so far: true once planted.
+ *  The cast is followed until it is. */
+export type Planting = (frame: number, cast: Cast) => boolean;
+
 /** The fixture with `death`'s spot and facing where it doesn't say. */
-function fixtureOf(options: HitsOptions): Fixture {
-  const facing = options.fixture.facing ?? (FACING * Math.PI) / 180;
-  return { ...options.fixture, at: options.fixture.at ?? SPOT, facing };
+function fixtureOf(fixture: Fixture): Fixture {
+  const facing = fixture.facing ?? (FACING * Math.PI) / 180;
+  return { ...fixture, at: fixture.at ?? SPOT, facing };
 }
 
 /** The hits landing on `foes` from now on, each at the frame `frameNow` says. */
@@ -84,8 +96,10 @@ function catchHits(foes: Enemy[], frameNow: () => number): Hit[] {
   foes.forEach((foe, i) => {
     const takeDamage = foe.takeDamage.bind(foe);
     foe.takeDamage = (amount, info) => {
-      hits.push({ frame: frameNow(), foe: i, amount });
-      return takeDamage(amount, info);
+      const dealt = takeDamage(amount, info);
+      const type = info?.type ?? 'physical';
+      hits.push({ frame: frameNow(), foe: i, amount: dealt, type, crit: !!info?.crit, kill: !foe.alive });
+      return dealt;
     };
   });
   return hits;
@@ -122,26 +136,31 @@ function median(values: number[]): number {
   return sorted[Math.floor(sorted.length / 2)];
 }
 
-/** The canary's plant in a frame: the foes kept from harm from the press, or a late blow `LATE` after the first. */
-function plantIn(plant: Plant | null, foes: Enemy[], hits: Hit[], frame: number): boolean {
-  if (plant === 'harmless') {
-    for (const foe of foes) foe.invulnerable = true;
-    return true;
-  }
-  if (plant !== 'late' || !hits.length) return false;
-  if (frame !== hits[0].frame + Math.round(LATE / frameTime())) return false;
-  hitEnemy(foes[0], 1, { by: G.player, tags: ['physical'], type: 'physical' });
+/** The canary's 'harmless' plant: the foes kept from harm from the press. */
+function keepFromHarm(_frame: number, cast: Cast): boolean {
+  for (const foe of cast.foes) foe.invulnerable = true;
   return true;
 }
 
-/** `wanted` cast at its foes on a fresh set-up, its key held as long as `holding` says for it (s; a frame at least),
- *  followed until the hero is free again (and the canary's late blow struck). */
-async function castAt(
-  lab: Lab, options: HitsOptions, wanted: string, holding: (skill: BoundSkill) => number, plant: Plant | null,
+/** The canary's 'late' plant: a blow of the skill's own struck `LATE` after its first. */
+function lateBlow(frame: number, cast: Cast): boolean {
+  if (!cast.hits.length) return false;
+  if (frame !== cast.hits[0].frame + Math.round(LATE / frameTime())) return false;
+  hitEnemy(cast.foes[0], 1, { by: G.player, skill: cast.skill.def, tags: ['physical'], type: 'physical' });
+  return true;
+}
+
+const PLANTINGS: Record<Plant, Planting> = { harmless: keepFromHarm, late: lateBlow };
+
+/** `wanted` cast at its foes (each with `lives` of life) on a fresh set-up as `fixture` says, its key held as long as
+ *  `holding` says for it (s; a frame at least), followed until the hero is free again (and `plant` has planted). */
+export async function castAt(
+  lab: Lab, fixture: Fixture, wanted: string, holding: (skill: BoundSkill) => number, plant: Planting | null,
+  lives = LIVING,
 ): Promise<Cast> {
   G.arena.restoreProps();
-  const fixture = fixtureOf(options);
-  await lab.setup(fixture);
+  const set = fixtureOf(fixture);
+  await lab.setup(set);
   bindKnown(wanted);
   const skill = skillNamed(wanted);
   const hold = holding(skill);
@@ -149,22 +168,22 @@ async function castAt(
   hero.cooldowns.clear();
   hero.energy = hero.stats.maxEnergy;
   const stand = STANDS[skill.def.impl] ?? NEAR;
-  const { spots, aim } = placesFor(stand, hero.pos, fixture.facing ?? hero.facing);
-  const foes = await foesAt(lab, spots, spots.map(() => LIVING));
+  const { spots, aim } = placesFor(stand, hero.pos, set.facing ?? hero.facing);
+  const foes = await foesAt(lab, spots, spots.map(() => lives));
   let frame = 0;
   const hits = catchHits(foes, () => frame);
   const holdFrames = Math.max(1, Math.round(hold / frameTime()));
-  const cast: Cast = { skill, held: hold, blows: [], free: -1, planted: false };
+  const cast: Cast = { skill, held: hold, foes, hits, blows: [], free: -1, planted: false };
   await lab.step(SETTLE, () => ({ aim }));
   let freeFor = 0;
   for (; frame < MOST_FRAMES; frame++) {
     await lab.step(1, () => pressing(skill.key, aim, frame < holdFrames));
-    cast.planted ||= plantIn(plant, foes, hits, frame);
+    cast.planted ||= plant?.(frame, cast) ?? false;
     const busy = hero.casting || hero.channel || hero.dash || frame < holdFrames;
     freeFor = busy ? 0 : freeFor + 1;
     if (busy) cast.free = -1;
     else if (cast.free < 0) cast.free = frame * frameTime();
-    const waiting = plant === 'late' && !cast.planted;
+    const waiting = plant !== null && !cast.planted;
     if (freeFor >= AFTER && !waiting) break;
   }
   for (const foe of foes) foe.invulnerable = false;
@@ -210,14 +229,15 @@ export async function hits(lab: Lab, options: HitsOptions): Promise<Report> {
   const canary: string[] = [];
   let row: Cast | null = null;
   if (options.than) {
-    row = await castAt(lab, options, options.than, () => ROW_HOLD, null);
+    row = await castAt(lab, options.fixture, options.than, () => ROW_HOLD, null);
     lines.push(castLine(row, gear()));
     if (!row.blows.length) problems.push(`${row.skill.def.name} struck nothing`);
   }
   const judged = options.apart !== undefined || row !== null;
   const plant: Plant | null = options.canary ? (judged ? 'late' : 'harmless') : null;
   for (const wanted of options.skills) {
-    const cast = await castAt(lab, options, wanted, (skill) => holdFor(skill.def), plant);
+    const planting = plant ? PLANTINGS[plant] : null;
+    const cast = await castAt(lab, options.fixture, wanted, (skill) => holdFor(skill.def), planting);
     const found = problemsOf(cast, options.apart, row);
     lines.push(castLine(cast, gear()), ...found.map((problem) => `  ! ${problem}`));
     if (!options.canary) {

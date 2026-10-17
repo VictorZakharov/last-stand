@@ -22,6 +22,7 @@ import { sfx } from '../core/audio';
 import { isTouch } from './touch';
 import { perfHudEnabled, setPerfHud } from './perfHud';
 import { netHudEnabled, setNetHud } from './netHud';
+import { battleLogEnabled, setBattleLog } from './battleLog';
 import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
 import { hdrSettings, hdrStatus, onHdrChange, setHdrSettings, type HdrMode, type HdrStatus } from '../core/hdr';
 import { QUALITY, type QualitySetting } from '../data/quality';
@@ -159,6 +160,7 @@ export function initMenus(h: MenuHooks): void {
   $('#btn-abandon').onclick = () => { sfx.click(); hooks.abandon(); };
   $<HTMLInputElement>('#opt-perf').onchange = (e) => setPerfHud((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>('#opt-net').onchange = (e) => setNetHud((e.target as HTMLInputElement).checked);
+  $<HTMLInputElement>('#opt-blog').onchange = (e) => setBattleLog((e.target as HTMLInputElement).checked);
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => {
     b.onclick = () => { sfx.click(); setQuality(b.dataset.q as QualitySetting); renderQualityOptions(); };
   });
@@ -326,6 +328,35 @@ export function lobbyViewShift(): { x: number; y: number } {
   if (!panel) return { x: 0, y: 0 };
   const r = panel.getBoundingClientRect();
   return window.innerWidth > window.innerHeight ? { x: r.right / 2, y: 0 } : { x: 0, y: r.bottom / 2 };
+}
+
+/** Where the lobby's panels leave the window's top left corner free (css px; 0, 0 with the lobby out of the way):
+ *  right of the hero panel's fold tab (it rides on the panel's edge, folded or not, through the slide), or of the one
+ *  panel shown on a short screen, or under it on an upright one. As drawn, so it follows a panel as it slides. */
+function lobbyClearance(): { x: number; y: number } {
+  const menu = $('#menu');
+  if (menu.classList.contains('hidden') || menu.classList.contains('stowed')) return { x: 0, y: 0 };
+  if (!onePanel.matches) return { x: $('#hero-fold').getBoundingClientRect().right, y: 0 };
+  const panel = [...menu.querySelectorAll<HTMLElement>('.menu-left, .menu-center, .menu-right')].find((p) => p.offsetParent);
+  if (!panel) return { x: 0, y: 0 };
+  const r = panel.getBoundingClientRect();
+  return window.innerWidth > window.innerHeight ? { x: r.right, y: 0 } : { x: 0, y: r.bottom };
+}
+
+/** where the overlays down the left were last put clear of the lobby (`#diag`'s `--clear-x`, `--clear-y`) */
+let overlaysClear = '';
+
+/** The overlays down the left (performance, network, the battle log) kept clear of the lobby's panels, once a frame
+ *  while any is shown: they lay over the hero panel. */
+export function clearOverlays(): void {
+  const diag = $('#diag');
+  if (![...diag.children].some((overlay) => !overlay.classList.contains('hidden'))) return;
+  const { x, y } = lobbyClearance();
+  const clear = `${Math.round(x)},${Math.round(y)}`;
+  if (clear === overlaysClear) return;
+  overlaysClear = clear;
+  diag.style.setProperty('--clear-x', `${Math.round(x)}px`);
+  diag.style.setProperty('--clear-y', `${Math.round(y)}px`);
 }
 
 export function markNew(items: Item[]): void { for (const it of items) newIds.add(it.id); }
@@ -653,6 +684,7 @@ export function showPause(v: boolean): void {
     renderControlsHelp();
     $<HTMLInputElement>('#opt-perf').checked = perfHudEnabled();
     $<HTMLInputElement>('#opt-net').checked = netHudEnabled();
+    $<HTMLInputElement>('#opt-blog').checked = battleLogEnabled();
     renderQualityOptions();
     renderHdrOptions();
     // in the lobby there is no run to abandon; in co-op it leaves the others to it

@@ -181,7 +181,7 @@ const skill: ChannelSkill<RainState> = {
             // (its speed as it comes down)
             const vel = _d.copy(f.dir).multiplyScalar(FALL_V0 + FALL_A * f.t);
             if (hit) {
-              hitEnemy(hit, def.damage, { by: player, tags: def.tags, type: 'physical', from: { x: f.from.x, z: f.from.z }, blow: arrowBlow(hit, _a, vel, 0.7) });
+              hitEnemy(hit, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical', from: { x: f.from.x, z: f.from.z }, blow: arrowBlow(hit, _a, vel, 0.7) });
               intoFoe(hit, _a, vel);
               burst(_a, { count: 6, color: 0xd3bf8d, speed: 2, life: 0.2, size: 0.07 });
               sfx.boltHit();

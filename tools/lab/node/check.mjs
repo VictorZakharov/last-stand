@@ -21,11 +21,11 @@ export const CHECK_CLASSES = ['warrior', 'mage', 'ranger'];
  * The commands checked by default and the heroes each is for (all of `classes` when it names none): as
  * docs/agents/legs.md checks a change to the walk or the run (the gait, the stops, every joint's range and the run's
  * form for every hero, the ranger's feet and carried bow), the warrior's moves through the eyes and their light
- * there, the foes his charge sweeps up, and the pace of Twin Fangs' blows.
+ * there, the foes his charge sweeps up, the pace of Twin Fangs' blows, and every hero's hits in the battle log.
  */
 export const CHECK_PLAN = {
   gait: null, stops: null, range: null, form: null, feet: ['ranger'], carry: ['ranger'], eyes: ['warrior'],
-  cast: ['warrior'], rush: ['warrior'], hits: ['warrior'],
+  cast: ['warrior'], rush: ['warrior'], hits: ['warrior'], log: null,
 };
 /** each command's options in a check: the gait's steps listed, and no films nor pictures (a check reads the numbers:
  *  the form's of both sides, to compare, were more than the browser held, which closed); the basic attack through

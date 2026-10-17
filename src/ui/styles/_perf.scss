@@ -1,10 +1,15 @@
-// The performance overlay (optional, pause menu).
+// The optional overlays down the left (pause menu): performance, network, the battle log.
 @use 'theme' as *;
 
 /* ---------- performance overlay (optional, pause menu) ---------- */
-#diag { position: fixed; top: ui(10px); left: ui(10px); z-index: 30; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
-  scale: var(--ui, 1); transform-origin: left top; pointer-events: none; }
-#diag > * { pointer-events: auto; }
+// (clear of the lobby's panels, `--clear-x` and `--clear-y` from `clearOverlays` in `ui/menus.ts`; as tall as the
+// screen at most, the battle log giving up its height first; on touch under the touch HUD's corner: the pause and
+// scores buttons, the bars and the buffs beside them, `_touch.scss`)
+#diag { --top: #{ui(10px)}; position: fixed; top: calc(var(--clear-y, 0px) + var(--top)); left: calc(var(--clear-x, 0px) + ui(10px)); z-index: 30;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  max-height: calc((100vh - var(--clear-y, 0px) - var(--top)) / var(--ui, 1) - 10px); scale: var(--ui, 1); transform-origin: left top; pointer-events: none; }
+#diag > * { flex-shrink: 0; pointer-events: auto; }
+body.touch #diag { --top: #{touch(128px)}; }
 #perf { width: 212px; padding: 9px 11px 8px;
   font: 11px/1.35 ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; color: #cfe9d8; text-align: left;
   background: rgba(6,6,8,.86); border: 1px solid rgba($frame, .45); border-radius: 4px; box-shadow: 0 6px 18px rgba(0,0,0,.6);
@@ -44,3 +49,29 @@
 .nt-sub { margin-top: 5px; color: var(--ink-dim); }
 .nt-acts { display: flex; gap: 12px; margin-top: 5px; }
 .nt-acts .link { padding: 0; font: inherit; font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: rgba($accent, .75); }
+
+/* ---------- battle log (optional, pause menu) ---------- */
+// (it changes with every hit: on a layer of its own, so its repaints stay in it, `src/ui/overlay/AGENTS.md`)
+#blog { width: 340px; min-height: 64px; flex-shrink: 1; display: flex; flex-direction: column; padding: 6px 9px 7px; box-sizing: border-box;
+  font: 11px/1.35 ui-monospace, 'SF Mono', Menlo, Consolas, monospace; color: #cfe9d8; text-align: left;
+  background: rgba(6,6,8,.86); border: 1px solid rgba($frame, .45); border-radius: 4px; box-shadow: 0 6px 18px rgba(0,0,0,.6);
+  will-change: transform; contain: content; }
+.bl-head { display: flex; align-items: baseline; gap: 12px; padding-bottom: 4px; border-bottom: 1px solid rgba($frame, .25); }
+.bl-head span { margin-right: auto; font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-dim); }
+#blog.paused .bl-head span { color: var(--accent); }
+.bl-head .link { padding: 0; font: inherit; font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: rgba($accent, .75); }
+// (ten lines at a glance, six on a short screen, the rest scrolled back to)
+.bl-lines { min-height: 0; max-height: calc(11px * 1.35 * 10); margin-top: 4px; overflow-y: auto; overscroll-behavior: contain; }
+@media (max-height: 520px) { .bl-lines { max-height: calc(11px * 1.35 * 6); } }
+.bl-none { color: var(--ink-dim); }
+.bl-line { display: grid; grid-template-columns: 7ch 1fr; gap: 0 4px; }
+.bl-t { color: rgba(230,220,200,.38); }
+.bl-what { min-width: 0; overflow-wrap: anywhere; color: var(--ink-dim); }
+.bl-what b { font-weight: 700; color: #fff; }
+.bl-what b.you { color: var(--accent); }
+.bl-what em { font-style: normal; font-weight: 700; white-space: nowrap; }
+.bl-what small { font-size: 9.5px; color: rgba(230,220,200,.5); white-space: nowrap; }
+.bl-line.taken b.foe { color: #ff9a8a; }
+// (on touch it lets the move stick have what's under it: the stick's pad starts a fifth of the way down)
+body.touch #blog { pointer-events: none; }
+body.touch .bl-head .link { pointer-events: auto; }

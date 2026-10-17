@@ -154,7 +154,7 @@ const skill: InstantSkill = {
         hit.add(e);
         // (struck through its middle along the charge: a kill thrown on ahead, its body carried on by the field, and
         // a foe it leaves standing carried before it to the stop)
-        hitEnemy(e, def.damage, { by: player, tags: def.tags, type: 'physical', from: p, blow: { dir, lift: 0.3 } });
+        hitEnemy(e, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical', from: p, blow: { dir, lift: 0.3 } });
         carryEnemy(e, player, dir, Math.max(0, d.dur - d.t));
         sparks(e.pos.x, e.height * 0.5, e.pos.z, 0xffc080, 16);
         shockwave(e.pos, { color: EMBER, intensity: 1.5, from: 0.2, to: 1.4, life: 0.25 });

@@ -110,7 +110,7 @@ function impact(player: Player, def: Def, p: THREE.Vector3, blasted: Set<object>
       // a direct hit takes full damage, easing down to the edge's share (smoothstep: no kinks)
       const x = Math.max(0, d) / def.radius, k = 1 - (1 - def.edge) * x * x * (3 - 2 * x);
       // (struck from above: what it kills is thrown out and high)
-      hitEnemy(e, def.damage * k, { by: player, tags: def.tags, type: 'arcane', chill: def.chill, knock: 4 * k, from: p, blow: { lift: 0.7 } });
+      hitEnemy(e, def.damage * k, { by: player, skill: def, tags: def.tags, type: 'arcane', chill: def.chill, knock: 4 * k, from: p, blow: { lift: 0.7 } });
       if (e.corpse) blasted.add(e.corpse);
     }
   }

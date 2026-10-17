@@ -74,14 +74,16 @@ export const FX = {
     if (!e || p.slot !== slot || !p.active || e.dazed > 0) return;
     const dist = Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z);
     if (dist >= e.def.range + p.radius + 0.3 || !e.inFront(p.pos.x, p.pos.z, 1.3)) return;
-    hurtPlayer(p, damage, e.def.damageType, e.pos);
+    hurtPlayer(p, damage, e.def.damageType, e.pos, { foe: e, attack: 'strike' });
     FX.strike(p.pos.x, p.pos.z);
   },
-  /** a slam; whoever stands in it is hit (`damage` of DAMAGE_TYPES[`type`]) */
-  slam(x: number, z: number, radius: number, color: number, boss: number, damage = 0, type = 4) {
+  /** enemy `id`'s slam; whoever stands in it is hit (`damage` of DAMAGE_TYPES[`type`]) */
+  slam(x: number, z: number, radius: number, color: number, boss: number, damage = 0, type = 4, id = -1) {
     const pos = new THREE.Vector3(x, 0, z);
     const p = G.player;
-    if (damage > 0 && p.active && Math.hypot(p.pos.x - x, p.pos.z - z) < radius + p.radius) hurtPlayer(p, damage, DAMAGE_TYPES[type], pos);
+    if (damage > 0 && p.active && Math.hypot(p.pos.x - x, p.pos.z - z) < radius + p.radius) {
+      hurtPlayer(p, damage, DAMAGE_TYPES[type], pos, { foe: G.enemies.find((e) => e.id === id) ?? null, attack: 'slam' });
+    }
     shockwave(pos, { color, intensity: 2.5, from: 0.5, to: radius * 1.15, life: 0.5 });
     shockwave(pos, { color: 0xffffff, intensity: 1, from: 0.2, to: radius * 0.8, life: 0.3 });
     groundFlash(pos, { color, intensity: 2, radius: radius * 1.1, life: 0.4 });
@@ -100,8 +102,9 @@ export const FX = {
     _dir.set(Math.sin(angle), 0, Math.cos(angle));
     // the trail's many overlapping particles add up, so it dims with the square of glow
     const glow = pj.glow ?? 1, size = pj.radius * (pj.core ?? 0.7), type: DamageType = e.def.damageType;
+    const by = { foe: e, attack: 'bolt' } as const;
     const onHit = (target: Enemy | Player, proj: Projectile) => {
-      hurtPlayer(target as Player, damage, type, proj.pos);
+      hurtPlayer(target as Player, damage, type, proj.pos, by);
       burst(proj.pos, { count: 16, color: pj.color, speed: 4, life: 0.4, size: 0.3 });
       if (pj.look === 'spore') smokePuff(proj.pos, { count: 6, color: pj.trail, alpha: 0.4, size: 0.6, sizeEnd: 1.8, life: 0.9, rise: 0.4 });
     };
@@ -114,7 +117,7 @@ export const FX = {
       spawnProjectile({
         pos, dir: _dir, speed: pj.speed, radius: pj.radius, life: 3, hostile: true, color: pj.color, mesh: riftBolt(look, pj.color, size),
         tick: (p, dt) => { settle(p); riftBoltTick(look, p.mesh, p.pos, p.vel, pj.color, smoke, dt, acc); },
-        onHit: (target, proj) => { hurtPlayer(target as Player, damage, type, proj.pos); riftBoltImpact(look, proj.pos, pj.color, smoke, size); },
+        onHit: (target, proj) => { hurtPlayer(target as Player, damage, type, proj.pos, by); riftBoltImpact(look, proj.pos, pj.color, smoke, size); },
         onExpire: (proj) => riftBoltFizzle(look, proj.pos, pj.color, smoke, size),
       });
       return;
@@ -173,7 +176,7 @@ function meleeStrike(e: Enemy): void {
 
 /** A slam: everyone standing in it is hit, each judged by its own game. */
 function slamAt(e: Enemy, x: number, z: number, radius: number, color = e.def.accent ?? DAMAGE_COLORS[e.def.damageType]): void {
-  fx('slam', x, z, radius, color, e.boss ? 1 : 0, e.damage, DAMAGE_TYPES.indexOf(e.def.damageType));
+  fx('slam', x, z, radius, color, e.boss ? 1 : 0, e.damage, DAMAGE_TYPES.indexOf(e.def.damageType), e.id);
 }
 
 function fireBolt(e: Enemy, angleOffset = 0, lead = true): void {

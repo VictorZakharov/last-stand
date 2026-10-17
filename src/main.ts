@@ -25,7 +25,7 @@ import { setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
-import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew } from './ui/menus';
+import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
@@ -36,6 +36,7 @@ import { initPwa } from './ui/pwa';
 import { initItemIcons } from './ui/itemIcons';
 import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfClock } from './ui/perfHud';
 import { initNetHud } from './ui/netHud';
+import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { warmShaders } from './game/warmup';
 import { initQuality, sampleQuality } from './core/quality';
 import { updateLowLife } from './core/lowLife';
@@ -86,6 +87,7 @@ async function boot() {
   initTouch();
   initPerfHud(renderer);
   initNetHud();
+  initBattleLog();
   buildHotbar(G.player);
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
   initMenus({ start, toMenu, resume, abandon, profileChanged, switchClass, summaryDone, lobbyChanged: sendLobbyChoice });
@@ -487,6 +489,8 @@ function frame(timestamp: number): void {
     G.time += dt;
     update(dt);
   }
+  drawBattleLog();
+  clearOverlays();
   const t1 = perfClock.now();
   render();
   perfSplit(t1 - t0, perfClock.now() - t1);

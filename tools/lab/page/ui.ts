@@ -2,15 +2,19 @@
 // save slots, a class button clicked with the mouse and a key pressed after it (where the focus went), the lobby's
 // camera switched through its views (the labels over the dummies against where they stand on the screen, frame by
 // frame through each glide), the run's HUD with the world's labels over it (a hurt foe's bar, damage numbers), the
-// scores, the performance overlay, the bank-or-continue choice, the pause menu and the run's summary, each pictured
-// whole, with
+// scores, the performance overlay, the bank-or-continue choice, the pause menu, the run's summary and the battle log
+// (hits dealt and taken listed in it: a row for each line, within the window), each pictured whole, with
 // the boxes of the page's named elements and of the labels as shares of the window. On two screens (`--screens`), a
 // UI laid out as a share of the screen shows the same lines and the same pictures on both, whatever the screens'
 // pixel ratios: a 4K screen at 300% as at 100%.
 import * as THREE from 'three';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
+import type { DamageType, SkillDef } from '../../../src/types';
+import type { Enemy } from '../../../src/entities/enemy';
 import { NUMBER_COLORS } from '../../../src/data/balance';
+import { DAMAGE_TYPES, hitEnemy, hurtPlayer } from '../../../src/combat/damage';
+import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { anchoredLabels, floatText } from '../../../src/ui/floaters';
 import { viewMode } from '../../../src/core/renderer';
 import * as overlay from '../../../src/ui/overlay/layer';
@@ -20,11 +24,12 @@ import { setPerfHud } from '../../../src/ui/perfHud';
 import { openSaves } from '../../../src/ui/saves';
 import { hideTooltip, itemTooltip, showTooltipAt } from '../../../src/ui/tooltip';
 import { hdrOutput } from './hdrOutput';
+import { battleLog } from './battleLog';
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
-  | 'lobby' | 'tooltip' | 'help' | 'saves' | 'clicked' | 'views' | 'run' | 'scores' | 'perf' | 'decision'
-  | 'pause' | 'summary';
+  | 'lobby' | 'tooltip' | 'help' | 'saves' | 'clicked' | 'views' | 'logLobby' | 'run' | 'scores' | 'perf'
+  | 'decision' | 'pause' | 'summary' | 'log' | 'logTouch';
 
 export interface UiOptions {
   state: UiState;
@@ -33,7 +38,7 @@ export interface UiOptions {
 }
 
 /** the states pictured in a run (the rest are the lobby's) */
-const RUN_STATES: UiState[] = ['run', 'scores', 'perf', 'decision', 'pause', 'summary'];
+const RUN_STATES: UiState[] = ['run', 'scores', 'perf', 'decision', 'pause', 'summary', 'log', 'logTouch'];
 /** where the tooltip is opened, as shares of the window (the mouse over the lobby's left panel) */
 const TOOLTIP_AT = { x: 0.18, y: 0.3 };
 /** the foe spawned for the run's labels, how far ahead of the hero (m), and the share of its life it has left */
@@ -57,6 +62,15 @@ const SWITCH_FRAMES = 40;
 const LABEL_SLACK = 1;
 /** frames Tab is held for the scores */
 const SCORES_FRAMES = 2;
+/** the battle log's hits: each skill on a key struck at the run's foe this many times, and its blows on the hero; then
+ *  the frames run for the panel to draw them (it draws every 0.1 s at most) */
+const LOG_STRIKES = 2;
+const LOG_BLOWS = 2;
+const LOG_FRAMES = 12;
+/** the frames a lobby's training dummy has to rise in */
+const DUMMY_FRAMES = 120;
+/** how far apart the tops of the battle log's head's parts may be on one line (css px: a line is ~13) */
+const HEAD_SLACK = 6;
 
 /** `value` (css px) as a share of `whole`, in % to a tenth. */
 function share(value: number, whole: number): string {
@@ -303,6 +317,147 @@ function focusAfterClick(): Found {
   return { lines, problems };
 }
 
+/** the lines the battle log listed for its state (-1: no log in this tree) */
+let logListed = -1;
+
+/** A skill's damage type as its tags say (its behaviour picks it; the physical when they don't say). */
+function typeOf(def: SkillDef): DamageType {
+  return DAMAGE_TYPES.find((type) => def.tags.includes(type)) ?? 'physical';
+}
+
+type BattleLog = NonNullable<Awaited<ReturnType<typeof battleLog>>>;
+
+/** The battle log shown and cleared, and each skill on a key struck at `foe` `LOG_STRIKES` times (the foe kept alive
+ *  through them and given back the life it had). Null in a tree without a log. */
+async function logStrikes(foe: Enemy | undefined): Promise<BattleLog | null> {
+  const game = await battleLog();
+  logListed = -1;
+  if (!game) return null;
+  if (!foe) throw new Error('lab: ui: no foe for the battle log to list hits on');
+  game.setBattleLog(true, false);
+  game.clearBattleLog();
+  const hero = G.player;
+  const life = foe.life;
+  foe.life = foe.maxLife * 100;
+  for (const key of SKILL_KEYS) {
+    const def = hero.skillAt(key)?.def;
+    if (!def?.damage) continue;
+    for (let strike = 0; strike < LOG_STRIKES; strike++) {
+      hitEnemy(foe, def.damage, { by: hero, skill: def, type: typeOf(def), silent: true });
+    }
+  }
+  foe.life = life;
+  return game;
+}
+
+/** The battle log shown over the run, each skill struck at the run's foe and the foe's blows on the hero listed in
+ *  it, the panel drawn after. */
+async function openLog(lab: Lab): Promise<void> {
+  const foe = G.enemies.find((enemy) => enemy.alive);
+  const game = await logStrikes(foe);
+  if (!game || !foe) return;
+  for (let blow = 0; blow < LOG_BLOWS; blow++) {
+    hurtPlayer(G.player, foe.damage, foe.def.damageType, foe.pos, { foe, attack: 'strike' });
+  }
+  logListed = game.battleLogLines().length;
+  // (paused from its panel, its head at its widest)
+  document.querySelector<HTMLElement>('#blog [data-bl="pause"]')?.click();
+  await lab.step(LOG_FRAMES);
+}
+
+/** The battle log shown over the lobby (its panels open, where it must keep clear of them), each skill struck at a
+ *  training dummy once it has risen, the panel drawn after. */
+async function openLogLobby(lab: Lab): Promise<void> {
+  const dummy = G.enemies.find((enemy) => enemy.def.dummy && enemy.alive);
+  if (dummy) await lab.until(() => !dummy.invulnerable, DUMMY_FRAMES, 'the training dummy never rose');
+  const game = await logStrikes(dummy);
+  if (!game) return;
+  logListed = game.battleLogLines().length;
+  await lab.step(LOG_FRAMES);
+}
+
+async function closeLog(): Promise<void> {
+  const game = await battleLog();
+  game?.pauseBattleLog?.(false);
+  game?.setBattleLog(false, false);
+}
+
+/** The page's named elements shown that `panel` lies over, other than the layers as wide as the screen it lies on
+ *  (the HUD, the touch controls' pad: a third of the window or more). */
+function namedUnder(panel: HTMLElement): string[] {
+  const box = panel.getBoundingClientRect();
+  const covered: string[] = [];
+  for (const element of document.querySelectorAll<HTMLElement>('[id]')) {
+    if (element.contains(panel) || panel.contains(element)) continue;
+    const rect = element.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1 || rect.width * rect.height >= innerWidth * innerHeight / 3) continue;
+    if (!element.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+    const across = rect.left < box.right && box.left < rect.right;
+    if (across && rect.top < box.bottom && box.top < rect.bottom) covered.push(`#${element.id}`);
+  }
+  return covered;
+}
+
+/** The battle log's panel: a row for every line it listed, within the window, over nothing of the HUD, and no row
+ *  wider than the panel. */
+function logShown(): Found {
+  if (logListed < 0) return { lines: ['  no battle log in this tree'], problems: [] };
+  const panel = document.getElementById('blog')!;
+  const rows = panel.querySelectorAll('.bl-line').length;
+  const box = panel.getBoundingClientRect();
+  const list = panel.querySelector<HTMLElement>('.bl-lines')!;
+  const lines = [`  battle log: ${logListed} lines listed, ${rows} shown`];
+  const problems: string[] = [];
+  if (rows !== logListed) problems.push(`log: the panel shows ${rows} lines of the ${logListed} listed`);
+  const covered = namedUnder(panel);
+  if (covered.length) problems.push(`log: the panel lies over ${covered.join(', ')}`);
+  if (box.right > innerWidth + 0.5 || box.bottom > innerHeight + 0.5) {
+    const where = boxText({ x: box.x, y: box.y, w: box.width, h: box.height });
+    problems.push(`log: the panel reaches past the window (${where})`);
+  }
+  if (list.scrollWidth > list.clientWidth + 0.5) {
+    problems.push(`log: its lines are ${list.scrollWidth} px wide, in a panel ${list.clientWidth} px wide`);
+  }
+  const head = panel.querySelector<HTMLElement>('.bl-head')!;
+  const tops = [...head.children].map((part) => part.getBoundingClientRect().top);
+  const wrapped = Math.max(...tops) - Math.min(...tops) > HEAD_SLACK;
+  if (head.scrollWidth > head.clientWidth + 0.5 || wrapped) {
+    problems.push(`log: its head (${head.textContent?.trim()}) doesn't fit on a line of the panel`);
+  }
+  return { lines, problems };
+}
+
+/** where a finger taps the world to put the page in touch mode, as shares of the window (clear of every control) */
+const TAP_AT = { x: 0.5, y: 0.4 };
+/** frames run after the tap, for the touch controls to show */
+const TOUCH_FRAMES = 2;
+
+/** The battle log as above, the page put in touch mode first by a finger's tap, as a player's first touch puts it. */
+async function openLogTouch(lab: Lab): Promise<void> {
+  await lab.touchDown({ x: innerWidth * TAP_AT.x, y: innerHeight * TAP_AT.y });
+  await lab.touchUp();
+  await lab.step(TOUCH_FRAMES);
+  await openLog(lab);
+}
+
+/**
+ * The battle log on a touch screen, besides what `logShown` checks (over none of the touch HUD's corner: the pause
+ * and scores buttons, the bars, the buffs): its lines letting a touch through to what lies under them (the move
+ * stick's pad reaches up under it).
+ */
+function logTouchShown(): Found {
+  const found = logShown();
+  if (logListed < 0) return found;
+  if (!document.body.classList.contains('touch')) {
+    found.problems.push('log on touch: the tap left the page out of touch mode');
+  }
+  const row = document.querySelector('#blog .bl-line')?.getBoundingClientRect();
+  const under = row ? document.elementFromPoint(row.left + row.width / 2, row.top + row.height / 2) : null;
+  found.lines.push(`  a touch on a line of it lands on ${under ? describe(under) : 'nothing'}`);
+  if (under?.closest('#blog')) found.problems.push('log on touch: a touch on its lines lands on the panel');
+  return found;
+}
+
 /** the scores' input: Tab held */
 const TAB: Frame = { keys: ['tab'] };
 
@@ -314,6 +469,7 @@ const STEPS: Record<UiState, Steps> = {
   saves: { open: () => openSaves(true), close: () => openSaves(false) },
   clicked: { open: clickClass, close: () => undefined, check: focusAfterClick },
   views: { open: switchViews, close: () => undefined, check: labelsThroughSwitches },
+  logLobby: { open: openLogLobby, close: closeLog, check: logShown },
   run: { open: () => undefined, close: () => undefined },
   // (shown while Tab is held: pictured with it down, let go after)
   scores: { open: (lab) => lab.step(SCORES_FRAMES, () => TAB), close: (lab) => lab.step(1), held: TAB },
@@ -321,6 +477,9 @@ const STEPS: Record<UiState, Steps> = {
   decision: { open: showDecision, close: hideDecision },
   pause: { open: () => showPause(true), close: () => showPause(false) },
   summary: { open: openSummary, close: hideSummary },
+  log: { open: openLog, close: closeLog, check: logShown },
+  // (the last state: the page is left in touch mode)
+  logTouch: { open: openLogTouch, close: closeLog, check: logTouchShown },
 };
 
 /** whether this page's run is set up for the run's states (each command's page is booted for it: false at first) */

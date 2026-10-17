@@ -51,7 +51,7 @@ export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, fa
     if (d > e.radius + 0.6 && angleBetween(Math.atan2(dx, dz), facing) > def.arc / 2) continue;
     const swing = opts.swing ?? 1;
     const blow = opts.blow ?? { dir: swingWay(p, e.pos, swing), lift: opts.lift ?? 0.3, on: swingOn(p, e.pos, swing, e.radius) };
-    hitEnemy(e, def.damage, { by: player, tags: def.tags, type: opts.type ?? 'physical', knock: opts.knock, from: p, blow });
+    hitEnemy(e, def.damage, { by: player, skill: def, tags: def.tags, type: opts.type ?? 'physical', knock: opts.knock, from: p, blow });
     sparks(e.pos.x, e.height * 0.55, e.pos.z, 0xffd9a0, 8);
     hits++;
   }

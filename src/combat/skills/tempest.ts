@@ -79,7 +79,7 @@ const skill: ChannelSkill<TempestState> = {
     blastCorpses(p, def.radius, 3.5, { swirl: SWIRL, lift: 0.35 });
     for (const e of G.enemies) {
       if (!e.alive || Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > def.radius + e.radius) continue;
-      hitEnemy(e, def.damage * share, { by: player, tags: def.tags, type: 'physical', knock: 0.8, from: p, blow: { dir: swingWay(p, e.pos, 1, SWIRL, 1), lift: 0.3, on: swingOn(p, e.pos, 1, e.radius) } });
+      hitEnemy(e, def.damage * share, { by: player, skill: def, tags: def.tags, type: 'physical', knock: 0.8, from: p, blow: { dir: swingWay(p, e.pos, 1, SWIRL, 1), lift: 0.3, on: swingOn(p, e.pos, 1, e.radius) } });
       sparks(e.pos.x, e.height * 0.55, e.pos.z, 0xffe0b0, 4);
       hits++;
     }

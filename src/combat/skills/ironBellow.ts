@@ -103,7 +103,7 @@ const skill: InstantSkill = {
     hurtPropsIn(player, c.x, c.z, def.radius, PROP_DAMAGE.burst);
     for (const e of G.enemies) {
       if (e.alive && Math.hypot(e.pos.x - c.x, e.pos.z - c.z) < def.radius + e.radius) {
-        hitEnemy(e, def.damage, { by: player, tags: ['physical'], type: 'physical', knock: def.knock, from: c, blow: { lift: 0.25, force: 1.1 } });
+        hitEnemy(e, def.damage, { by: player, skill: def, tags: ['physical'], type: 'physical', knock: def.knock, from: c, blow: { lift: 0.25, force: 1.1 } });
       }
     }
     // (the roar rolls the bodies lying round him away)

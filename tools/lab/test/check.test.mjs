@@ -18,9 +18,11 @@ test('every command of the plan for each of its heroes, the ranger\'s alone for 
   assert.ok(starts > 1);
   assert.ok(CHECK_SPLIT.has('gait'));
   const eyes = eyesParts().length + castParts().length;
-  // (the ranger's feet and carry, the warrior's rush in its parts and his hits)
-  assert.equal(jobs.length, (3 + gaitScenarios) * CHECK_CLASSES.length + 3 + RUSH_PARTS.length + eyes);
+  // (the stops, the ranges, the form and the battle log for each; the ranger's feet and carry, the warrior's rush in
+  // its parts and his hits)
+  assert.equal(jobs.length, (4 + gaitScenarios) * CHECK_CLASSES.length + 3 + RUSH_PARTS.length + eyes);
   assert.ok(names(jobs).includes('carry-ranger'));
+  assert.ok(names(jobs).includes('log-mage'));
   assert.ok(names(jobs).includes('eyes-warrior-twoHanded-Maul-row'));
   assert.ok(!names(jobs).some((name) => name.startsWith('eyes-mage')));
   assert.ok(!names(jobs).includes('carry-warrior'));
