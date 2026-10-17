@@ -31,6 +31,7 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `touch`: the touch controls' move stick pushed by a finger, its touches sent as a touch screen's (slid out through the stick's travel, to its edge and far past it, half the window across: the stick's push, the knob against the finger and the hero's speed, a push further out never giving less)
 - `tap`: the touch buttons of every skill aimed by holding, the other thumb on the move stick (tapped standing, at once and walking: a movement skill the way he moves, any other at the nearest foe; dragged while the stick moves: the skill's own preview following the drag, cast where it last showed, the stick still walking him)
 - `light`: the frame's light as the player sees it (the hero standing in each biome, view and facing, the frame drawn and read back from the canvas: its light as a share of the screen's white, by thirds, its brightest pixels, near white and past it; `--hdr` draws each again in HDR and checks it against the SDR frame)
+- `haze`: the hero's held weapons' light through the eyes (each way he looks: their surface blown out near white, their bloom past it, and the frame round them darkened by the adaptation to them)
 - `spawns`: the foes coming in (boss waves one after another, a seed each: the gate every foe came by, its spot against the props, the gates each group and wave left idle, when the boss came against the rest of its wave, and its walk to the hero from each gate)
 - `health`: the low-Health look (the hero's Health held at shares of his most in each biome, view and facing: the colour drained, the blood's cover and how far in it reaches, nothing in the view's middle, more of both as the Health falls, none above where it starts)
 - `held`: every held skill's preview as the player holds it (ready, then through its cooldown and short of energy: its own look, red and counting down until a release would cast; Quarry Mark's outline round its foe in every view, its pixels near the foe and none away; Starfall's ring against its strikes, every foe inside it struck on every cast; every mark on the floor held across the dais's step, on each level and down its faces, none of it under the floor or standing off it; no shader compiled meanwhile)
@@ -304,6 +305,16 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   frame drawn. `--canary` draws the first frame at twice the exposure, which must come out brighter, and in HDR at
   1.2 times the paper white, which the check under the knee must catch. With `--ab` the SDR frames agree with main,
   line for line.
+- `haze`: the hero's held weapons' light through the eyes (`page/haze.ts`), standing in a biome (`--biome`, the
+  forest by default) looking each way (`--facings`), held as `--gear` and `--weapon` say. The frame is drawn with the
+  weapons and without them, each also with the grade's adaptation held off, and their surface found in the `parts`
+  look. Held off, the share of their surface near white is their glare (5% at most), and the share of the frame past
+  them that their light brightens by 0.03 of white is their bloom (0.5% at most): the sun on a dual wielder's blade
+  held up by the eyes blew it out over 16% of its surface and bloomed over 7.7% of the frame. Past their own pixels,
+  a pixel the adaptation darkens more with them than without is hazed (0.5% at most). Each frame is pictured with its
+  map: the weapons blue, their glare yellow, their bloom pink, the haze red (`out/haze/`). `--canary` plants a veil
+  (the frame at 0.8 of its exposure), which must haze, and the weapons lit white, which must glare and bloom. Not
+  yet within its haze: on main as here, a single sword hazes up to 4.9% of the frame looking 135 to 315 degrees.
 - `touch`: the touch controls' move stick pushed by a finger, its touches sent by the browser as a touch screen's
   (`lab.touchDown`): put down on the move pad and slid right, within the dead zone, through the stick's travel, to its
   edge and far past it, and half the window across, each push from a fresh set-up. Each push's line says what the

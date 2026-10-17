@@ -240,17 +240,29 @@ export function drawLook(look: Look, subject: THREE.Object3D, area: Area, named:
   return { image, parts };
 }
 
+/** Each pixel of `image` (drawn in the `parts` look, rows from the top) as the index in `meshes` of the part it
+ *  shows, -1 where none does. */
+export function partAt(image: ImageData, meshes: THREE.Mesh[]): Int32Array {
+  const partOf = partsByPixel(meshes.map((_, i) => partColour(i)));
+  const { data } = image;
+  const parts = new Int32Array(data.length / 4);
+  for (let pixel = 0; pixel < parts.length; pixel++) {
+    const k = pixel * 4;
+    parts[pixel] = partOf.get(packed(data[k], data[k + 1], data[k + 2])) ?? -1;
+  }
+  return parts;
+}
+
 /** Each of `meshes` found in `image` (drawn in the `parts` look), by the share of it it covers, the most first. */
 function partsIn(image: ImageData, meshes: THREE.Mesh[], named: (mesh: THREE.Mesh) => string): PartOnScreen[] {
   const colours = meshes.map((_, i) => partColour(i));
-  const partOf = partsByPixel(colours);
+  const parts = partAt(image, meshes);
   const tally = meshes.map(() => ({ count: 0, left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity }));
-  const { data, width, height } = image;
+  const { width, height } = image;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const k = (y * width + x) * 4;
-      const i = partOf.get(packed(data[k], data[k + 1], data[k + 2]));
-      if (i === undefined) continue;
+      const i = parts[y * width + x];
+      if (i < 0) continue;
       const part = tally[i];
       part.count++;
       part.left = Math.min(part.left, x);

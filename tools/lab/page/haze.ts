@@ -6,12 +6,20 @@
 // edges on the grid of areas it's measured over. (The owner, of the sword through the eyes: "weapons have a haze
 // that darkens the area around them, I think it's a bug", "its pretty big", "when sword moves from left position
 // (idle) back to right, haze moves too, but when its all the way left the haze is not there at all".)
+//
+// Their own pixels are parted into their surface (the `parts` look's) and their bloom. Held off, the share of their
+// surface near white is glare, and the share of the frame past it their light brightens is its halo: the sun's
+// highlight on a blade's flat held up by the eyes, blown out and bloomed round, its rougher grime left as dark blots
+// across it (the owner, of each of a dual wielder's blades in the Thornwood: "this graphical issue seems lame",
+// "right one too"). Seen through the adaptation, that blade was 0.6 of white and paled the hand under it.
+import type * as THREE from 'three';
 import type { Lab, Pictured, Report, Tile } from './lab';
 import { G } from '../../../src/state';
 import * as rendererCode from '../../../src/core/renderer';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { WeaponStyle } from '../../../src/loot/loadout';
-import { drawFrame, lookAlong, type Canvas } from './light';
+import { canvasSize, drawFrame, lookAlong, type Canvas } from './light';
+import { drawLook, meshesOf, partAt } from './looks';
 import { isWeapon } from './strike';
 
 export interface HazeOptions {
@@ -40,6 +48,16 @@ const SETTLE_FRAMES = 30;
 const PICTURE_WIDTH = 640;
 /** the canary draws the frame the player sees at this much of its exposure, a veil over all of it */
 const CANARY_EXPOSURE = 0.8;
+/** a pixel this bright (a share of white) is near white (light.ts's) */
+const NEAR_WHITE = 0.75;
+/** the most of the weapons' surface that may be near white with the adaptation held off */
+const GLARE_MOST = 0.05;
+/** a pixel past the weapons' surface their light brightens by this much (a share of white) is in their halo */
+const HALO = 0.03;
+/** the most of the frame their halo may cover */
+const HALO_MOST = 0.005;
+/** the glare canary lights the weapons' materials white at this strength */
+const CANARY_GLOW = 2;
 
 /** What the weapons' light took from one frame. */
 interface Haze {
@@ -48,11 +66,24 @@ interface Haze {
   own: number;
   ownLight: number;
   ownTaken: number;
+  /** the share of the frame that's their surface, and the share of it near white with the adaptation held off */
+  surface: number;
+  glared: number;
+  /** the share of the frame past their surface their light brightens: their halo */
+  halo: number;
   /** the share of the frame they hazed, the mean light lost there and the most (shares of white) */
   hazed: number;
   loss: number;
   most: number;
 }
+
+/** A fault planted for a canary (what it changes on the page); returns the undoing. */
+type Plant = (lab: Lab) => () => void;
+
+/** the pixels' marks in a frame's losses: the weapons' own, their surface glared, their halo */
+const OWN_MARK = -1;
+const GLARE_MARK = -2;
+const HALO_MARK = -3;
 
 /** A frame drawn as the player sees it, and with the adaptation held off. */
 interface Drawn {
@@ -99,14 +130,78 @@ function hideWeapons(lab: Lab): () => void {
   };
 }
 
-/** What the weapons' light took from the frames `shown` (as they are) and `hidden` (without them), and each pixel's
- *  loss (negative: the weapons' own). */
-function hazeOf(shown: Drawn, hidden: Drawn): { haze: Haze; losses: Float32Array } {
+/** The hero's weapons' materials lit white (the glare canary); returns the undoing. */
+function glowWeapons(lab: Lab): () => void {
+  const was = new Map<THREE.MeshStandardMaterial, { emissive: number; intensity: number }>();
+  lab.model.root.traverse((object) => {
+    if (!isWeapon(object)) return;
+    object.traverse((part) => {
+      const material = (part as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      if (!material?.emissive || was.has(material)) return;
+      was.set(material, { emissive: material.emissive.getHex(), intensity: material.emissiveIntensity });
+    });
+  });
+  for (const material of was.keys()) {
+    material.emissive.setHex(0xffffff);
+    material.emissiveIntensity = CANARY_GLOW;
+  }
+  return () => {
+    for (const [material, { emissive, intensity }] of was) {
+      material.emissive.setHex(emissive);
+      material.emissiveIntensity = intensity;
+    }
+  };
+}
+
+/** Whether `object` is one of the hero's weapons or part of one. */
+function ofWeapon(object: THREE.Object3D): boolean {
+  for (let at: THREE.Object3D | null = object; at; at = at.parent) {
+    if (isWeapon(at)) return true;
+  }
+  return false;
+}
+
+/** Which of the canvas's pixels (rows from the bottom, as a `Canvas` reads them) are the hero's weapons' surface as
+ *  drawn now: their meshes' in the `parts` look. */
+function surfaceOf(lab: Lab): Uint8Array {
+  const { width, height } = canvasSize();
+  const meshes = meshesOf(lab.model.root);
+  const area = { left: 0, top: 0, width: innerWidth, height: innerHeight };
+  // (the lab draws nothing unless it's asked to)
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  let image: ImageData;
+  try {
+    image = drawLook('parts', lab.model.root, area, () => '').image;
+  } finally {
+    lab.drawing = drawing;
+  }
+  if (image.width !== width || image.height !== height) {
+    throw new Error(`the parts look's ${image.width}x${image.height} isn't the canvas's ${width}x${height}`);
+  }
+  const parts = partAt(image, meshes);
+  const weapon = meshes.map(ofWeapon);
+  const surface = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const part = parts[y * width + x];
+      if (part >= 0 && weapon[part]) surface[(height - 1 - y) * width + x] = 1;
+    }
+  }
+  return surface;
+}
+
+/** What the weapons' light took from the frames `shown` (as they are) and `hidden` (without them), their surface's
+ *  pixels `surface`, and each pixel's loss (or its mark: the weapons' own, their surface glared, their halo). */
+function hazeOf(shown: Drawn, hidden: Drawn, surface: Uint8Array): { haze: Haze; losses: Float32Array } {
   const count = shown.seen.width * shown.seen.height;
   const losses = new Float32Array(count);
   let own = 0;
   let ownLight = 0;
   let ownTaken = 0;
+  let surfaced = 0;
+  let glared = 0;
+  let haloed = 0;
   let hazed = 0;
   let lost = 0;
   let most = 0;
@@ -114,11 +209,18 @@ function hazeOf(shown: Drawn, hidden: Drawn): { haze: Haze; losses: Float32Array
     const at = pixel * 4;
     const shownHeld = lightAt(shown.held, at);
     const hiddenHeld = lightAt(hidden.held, at);
+    if (surface[pixel]) {
+      surfaced++;
+      if (shownHeld >= NEAR_WHITE) glared++;
+    }
     if (Math.abs(shownHeld - hiddenHeld) > OWN) {
       own++;
       ownLight += shownHeld;
       ownTaken += shownHeld - lightAt(shown.seen, at);
-      losses[pixel] = -1;
+      const halo = !surface[pixel] && shownHeld - hiddenHeld >= HALO;
+      if (halo) haloed++;
+      const glare = surface[pixel] && shownHeld >= NEAR_WHITE;
+      losses[pixel] = glare ? GLARE_MARK : halo ? HALO_MARK : OWN_MARK;
       continue;
     }
     // (what the adaptation took with the weapons shown, past what it took without them)
@@ -133,6 +235,9 @@ function hazeOf(shown: Drawn, hidden: Drawn): { haze: Haze; losses: Float32Array
     own: own / count,
     ownLight: own ? ownLight / own : 0,
     ownTaken: ownLight > 0 ? ownTaken / ownLight : 0,
+    surface: surfaced / count,
+    glared: surfaced ? glared / surfaced : 0,
+    halo: haloed / count,
     hazed: hazed / count,
     loss: hazed ? lost / hazed : 0,
     most,
@@ -174,15 +279,18 @@ function tileOf(view: string, canvas: Canvas, colour: (pixel: number) => [number
   return { view, png: small.toDataURL('image/png'), width: small.width, height: small.height };
 }
 
-/** The frame as the player sees it, and its haze: the frame greyed, the weapons' own pixels blue, each pixel their
- *  light darkened red by how much (fully red at a fifth of white). */
+/** The frame as the player sees it, and its haze: the frame greyed, the weapons' own pixels blue (their surface
+ *  yellow where it glares, their halo pink), each pixel their light darkened red by how much (fully red at a fifth
+ *  of white). */
 function pictureOf(label: string, shown: Drawn, losses: Float32Array, notes: string[]): Pictured {
   const { seen } = shown;
   const byte = (canvas: Canvas, pixel: number, channel: number) => Math.round(canvas.pixels[pixel * 4 + channel] * 255);
   const frame = tileOf('seen', seen, (pixel) => [byte(seen, pixel, 0), byte(seen, pixel, 1), byte(seen, pixel, 2)]);
   const map = tileOf('haze', seen, (pixel) => {
     const grey = Math.round(byte(seen, pixel, 1) * 0.5);
-    if (losses[pixel] < 0) return [grey * 0.5, grey * 0.5, 160];
+    if (losses[pixel] === GLARE_MARK) return [255, 220, 40];
+    if (losses[pixel] === HALO_MARK) return [240, 120, 220];
+    if (losses[pixel] === OWN_MARK) return [grey * 0.5, grey * 0.5, 160];
     const red = Math.min(1, losses[pixel] / 0.2);
     return [Math.round(grey + (255 - grey) * red), Math.round(grey * (1 - red)), Math.round(grey * (1 - red))];
   });
@@ -194,13 +302,26 @@ const percent = (share: number) => `${(share * 100).toFixed(1)}%`;
 /** A frame's haze as words. */
 function hazeLine(haze: Haze): string {
   return `the weapons ${percent(haze.own)} of the frame, their light ${haze.ownLight.toFixed(2)} of white (the `
-    + `adaptation took ${percent(haze.ownTaken)} of it); round them ${percent(haze.hazed)} of the frame darkened by `
-    + `their light, by ${haze.loss.toFixed(3)} of white on average, ${haze.most.toFixed(3)} at most`;
+    + `adaptation took ${percent(haze.ownTaken)} of it); their surface ${percent(haze.surface)} of the frame, `
+    + `${percent(haze.glared)} of it near white, their halo ${percent(haze.halo)} of the frame; round them `
+    + `${percent(haze.hazed)} of the frame darkened by their light, by ${haze.loss.toFixed(3)} of white on average, `
+    + `${haze.most.toFixed(3)} at most`;
 }
 
-/** The frame as it stands, with the weapons and without, measured; `exposure` the shown frame's (the canary's). */
-function measureNow(lab: Lab, exposure = 1): { haze: Haze; losses: Float32Array; shown: Drawn } {
-  const shown = drawBoth(lab, exposure);
+/** Nothing planted. */
+const asItIs: Plant = () => () => {};
+
+/** The frame as it stands, with the weapons and without, measured; `exposure` the shown frame's and `plant` a fault
+ *  planted in it (the canaries'). */
+function measureNow(lab: Lab, exposure = 1, plant = asItIs): { haze: Haze; losses: Float32Array; shown: Drawn } {
+  const surface = surfaceOf(lab);
+  const unplant = plant(lab);
+  let shown: Drawn;
+  try {
+    shown = drawBoth(lab, exposure);
+  } finally {
+    unplant();
+  }
   const show = hideWeapons(lab);
   let hidden: Drawn;
   try {
@@ -208,7 +329,7 @@ function measureNow(lab: Lab, exposure = 1): { haze: Haze; losses: Float32Array;
   } finally {
     show();
   }
-  return { ...hazeOf(shown, hidden), shown };
+  return { ...hazeOf(shown, hidden, surface), shown };
 }
 
 /** `lab haze`: through the eyes in each facing, what the hero's weapons' light takes from the frame round them. */
@@ -227,14 +348,31 @@ export async function haze(lab: Lab, options: HazeOptions): Promise<Report> {
       problems.push(`${name}: the weapons' light hazes ${percent(found.hazed)} of the frame round them (at most `
         + `${percent(HAZE_MOST)})`);
     }
-    if (options.pictures) moments.push(pictureOf(name, shown, losses, [hazeLine(found)]));
-    if (options.canary && facing === options.facings[0]) {
-      const planted = measureNow(lab, CANARY_EXPOSURE).haze;
-      const caught = planted.hazed > HAZE_MOST;
-      lines.push(`canary, the frame with the weapons drawn at ${CANARY_EXPOSURE} of its exposure: `
-        + `${caught ? 'caught' : 'missed'}: ${percent(planted.hazed)} of it darkened`);
-      if (!caught) problems.push('the canary was missed');
+    if (found.glared > GLARE_MOST) {
+      problems.push(`${name}: the weapons glare: ${percent(found.glared)} of their surface near white (at most `
+        + `${percent(GLARE_MOST)})`);
     }
+    if (found.halo > HALO_MOST) {
+      problems.push(`${name}: the weapons' light blooms over ${percent(found.halo)} of the frame past them (at most `
+        + `${percent(HALO_MOST)})`);
+    }
+    if (options.pictures) moments.push(pictureOf(name, shown, losses, [hazeLine(found)]));
+    if (options.canary && facing === options.facings[0]) canaries(lab, lines, problems);
   }
   return { text: lines.join('\n'), problems, moments };
+}
+
+/** The faults the measures must catch, planted in the frame as it stands: a veil over all of it, which hazes it,
+ *  and the weapons lit white, which glare. */
+function canaries(lab: Lab, lines: string[], problems: string[]): void {
+  const veiled = measureNow(lab, CANARY_EXPOSURE).haze;
+  const veilCaught = veiled.hazed > HAZE_MOST;
+  lines.push(`canary, the frame with the weapons drawn at ${CANARY_EXPOSURE} of its exposure: `
+    + `${veilCaught ? 'caught' : 'missed'}: ${percent(veiled.hazed)} of it darkened`);
+  if (!veilCaught) problems.push('the haze\'s canary was missed');
+  const glowing = measureNow(lab, 1, glowWeapons).haze;
+  const glareCaught = glowing.glared > GLARE_MOST && glowing.halo > HALO_MOST;
+  lines.push(`canary, the weapons lit white: ${glareCaught ? 'caught' : 'missed'}: ${percent(glowing.glared)} of `
+    + `their surface near white, their halo ${percent(glowing.halo)} of the frame`);
+  if (!glareCaught) problems.push('the glare\'s canary was missed');
 }
