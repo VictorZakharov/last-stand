@@ -55,19 +55,101 @@ function capesHere() {
   window.__labCapesHere = true;
 }
 
-/** The page can't take the pointer, the keyboard or the screen; attempts are counted in `window.__lockAttempts`. */
+/**
+ * The page can't take the pointer, the keyboard or the screen; attempts are counted in `window.__lockAttempts`.
+ *
+ * A measure of mouse look (`lab cursor`) has the page play the pointer lock instead (`window.__labLock.on`), as the
+ * browser holds one: taken on a request made while a click or a key still counts as the player's, let go on exit,
+ * each change told to the page (`pointerlockchange`); while it's held, every event of the mouse goes to the locked
+ * element (none of its hover), at the point where the mouse was as it was taken, its moves told only as movement. So
+ * a click on the HUD over mouse look lands on the game's canvas, as the player's does. The real lock is never taken:
+ * a probe once took the owner's mouse.
+ */
 export function noCapture() {
   window.__lockAttempts = 0;
+  const lock = { on: false, element: null, at: { x: 0, y: 0 } };
+  window.__labLock = lock;
+  // (where the mouse was at its last event of each kind, and at its last of any: a move's movement is from its kind's)
+  const seen = {};
+  let mouse = { x: 0, y: 0 };
+  const changed = () => queueMicrotask(() => document.dispatchEvent(new Event('pointerlockchange')));
   const refuse = function () {
     window.__lockAttempts++;
     return Promise.resolve();
   };
+  const take = function () {
+    window.__lockAttempts++;
+    if (!lock.on) return Promise.resolve();
+    if (!navigator.userActivation.isActive) {
+      return Promise.reject(new DOMException('no click or key the player made just now', 'NotAllowedError'));
+    }
+    lock.element = this;
+    lock.at = { ...mouse };
+    changed();
+    return Promise.resolve();
+  };
+  const exit = () => {
+    if (!lock.element) return;
+    lock.element = null;
+    changed();
+  };
   for (const proto of [Element.prototype, HTMLElement.prototype, HTMLCanvasElement.prototype]) {
-    Object.defineProperty(proto, 'requestPointerLock', { value: refuse, configurable: false, writable: false });
+    Object.defineProperty(proto, 'requestPointerLock', { value: take, configurable: false, writable: false });
     Object.defineProperty(proto, 'requestFullscreen', { value: refuse, configurable: false, writable: false });
   }
-  Object.defineProperty(Document.prototype, 'exitPointerLock', { value: () => {}, configurable: false });
+  Object.defineProperty(Document.prototype, 'exitPointerLock', { value: exit, configurable: false });
+  Object.defineProperty(Document.prototype, 'pointerLockElement', { get: () => lock.element, configurable: false });
   if (navigator.keyboard) Object.defineProperty(navigator.keyboard, 'lock', { value: refuse, configurable: false });
+
+  const HOVER = ['mouseover', 'mouseout', 'mouseenter', 'mouseleave'];
+  const POINTER_HOVER = ['pointerover', 'pointerout', 'pointerenter', 'pointerleave'];
+  const SENT = ['mousemove', 'mousedown', 'mouseup', 'click', 'auxclick', 'dblclick', 'contextmenu', 'wheel'];
+  const POINTER_SENT = ['pointermove', 'pointerdown', 'pointerup'];
+  const MOVES = ['mousemove', 'pointermove'];
+  const FIELDS = [
+    'bubbles', 'cancelable', 'composed', 'view', 'detail', 'screenX', 'screenY', 'ctrlKey', 'shiftKey', 'altKey',
+    'metaKey', 'button', 'buttons', 'pointerId', 'pointerType', 'isPrimary', 'width', 'height', 'pressure', 'deltaX',
+    'deltaY', 'deltaZ', 'deltaMode',
+  ];
+  /** The event the locked element gets for the mouse's `event`: at the lock's point, its move as movement alone. */
+  const lockedCopy = (event) => {
+    const init = {};
+    for (const field of FIELDS) {
+      if (field in event) init[field] = event[field];
+    }
+    const from = seen[event.type] ?? mouse;
+    const moves = MOVES.includes(event.type);
+    init.clientX = lock.at.x;
+    init.clientY = lock.at.y;
+    init.movementX = moves ? event.clientX - from.x : 0;
+    init.movementY = moves ? event.clientY - from.y : 0;
+    return new event.constructor(event.type, init);
+  };
+  // (a pointer's down the page cancels holds back the mouse's down, moves and up after it, as the browser does)
+  const HELD_BACK = ['mousedown', 'mousemove', 'mouseup'];
+  let heldBack = false;
+  const toLocked = (event) => {
+    if (!event.isTrusted) return;
+    const copy = lock.element ? lockedCopy(event) : null;
+    seen[event.type] = { x: event.clientX, y: event.clientY };
+    mouse = seen[event.type];
+    if (!copy) return;
+    event.stopImmediatePropagation();
+    // (never a pointer's event cancelled here: that would hold the mouse's back)
+    if (!event.type.startsWith('pointer')) event.preventDefault();
+    const held = heldBack && HELD_BACK.includes(event.type);
+    if (event.type === 'mouseup') heldBack = false;
+    if (held) return;
+    lock.element.dispatchEvent(copy);
+    if (event.type === 'pointerdown') heldBack = copy.defaultPrevented;
+  };
+  const noHover = (event) => {
+    if (event.isTrusted && lock.element) event.stopImmediatePropagation();
+  };
+  for (const type of [...SENT, ...POINTER_SENT]) {
+    window.addEventListener(type, toLocked, { capture: true, passive: false });
+  }
+  for (const type of [...HOVER, ...POINTER_HOVER]) window.addEventListener(type, noHover, true);
 }
 
 /**

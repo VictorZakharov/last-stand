@@ -27,6 +27,7 @@ import type { MusicOptions } from './music';
 import type { DeathOptions } from './death';
 import type { HitsOptions } from './hits';
 import type { LogOptions } from './log';
+import type { CursorOptions } from './cursor';
 import type { RushOptions } from './rush';
 import type { CrowdOptions } from './crowd';
 import type { DrawsOptions } from './draws';
@@ -307,6 +308,16 @@ export async function hits(lab: Lab, command: HitsOptions): Promise<Report> {
 export async function log(lab: Lab, command: LogOptions): Promise<Report> {
   const { log: logOf } = await import('./log');
   return logOf(lab, command);
+}
+
+/**
+ * `lab cursor`: the cursor drawn over mouse look while Alt is held, in each close view: the view held still, the HUD
+ * under it hovered, clicked and scrolled (the battle log's Pause, a hotbar slot's tooltip, the log's lines), the world
+ * under it not attacked; Alt let go, mouse look again.
+ */
+export async function cursor(lab: Lab, command: CursorOptions): Promise<Report> {
+  const { cursor: cursorRound } = await import('./cursor');
+  return cursorRound(lab, command);
 }
 
 /**

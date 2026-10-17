@@ -2,7 +2,7 @@
 @use 'theme' as *;
 
 /* ---------- co-op (ui/coop.ts) ---------- */
-#coop-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 8px; padding: 6px 10px; cursor: pointer; font-size: 15px;
+#coop-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 8px; padding: 6px 10px; cursor: $cursor-hand; font-size: 15px;
   background: linear-gradient(#141a22, #0a0d12); border: 1px solid rgba($ally, .45); border-radius: 3px; color: var(--ink); }
 #coop-bar:hover { filter: brightness(1.25); }
 #coop-bar .cb-room b { font-family: var(--font-display); letter-spacing: 2px; color: $ally-text; }
@@ -75,7 +75,7 @@ body.touch #party { top: touch(104px); left: calc(64px * var(--touch, 1) + env(s
   font-family: var(--font-display); font-size: 16px; color: #ffe6a0; background: radial-gradient(circle at 50% 40%, #5a4a20, #1a140a 75%); border: 2px solid var(--highlight);
   box-shadow: 0 0 16px rgba($highlight, .5); touch-action: none; pointer-events: auto; }
 .dc-party { color: $ally-text; font-size: 15px; margin: -4px 0 10px; }
-.dc-buttons .cont:disabled { cursor: default; filter: grayscale(.5) brightness(.85); }
+.dc-buttons .cont:disabled { cursor: $cursor; filter: grayscale(.5) brightness(.85); }
 .sm-note { color: $ally-text; }
 .sm-note:empty { display: none; }
 #hud.watching #bottombar, #hud.watching #buffs, #hud.watching #spoils, #hud.watching #crosshair { display: none; }

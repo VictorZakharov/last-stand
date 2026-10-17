@@ -443,7 +443,10 @@ export const COMMANDS = {
       // (a state at a time, in the order they run: a 4K screen's ten pictures sent back at once closed the browser)
       const states = UI_STATES.filter((state) => (options.states ?? UI_STATES).includes(state));
       const reports = [];
-      for (const state of states) reports.push(await side.command('ui', { state, hdr: Boolean(options.hdr) }));
+      for (const state of states) {
+        const command = { state, hdr: Boolean(options.hdr), canary: Boolean(options.canary) };
+        reports.push(await side.command('ui', command));
+      }
       return {
         text: reports.map((report) => report.text).join('\n'),
         problems: reports.flatMap((report) => report.problems),
@@ -689,6 +692,23 @@ export const COMMANDS = {
     },
     textOf: asText,
     problemsOf: problemsIn,
+  },
+
+  cursor: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        views: options.views,
+        canary: Boolean(options.canary),
+      };
+      return side.command('cursor', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('cursor'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
   },
 
   rush: {

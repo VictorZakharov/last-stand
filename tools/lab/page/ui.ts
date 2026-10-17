@@ -4,7 +4,8 @@
 // frame through each glide), the run's HUD with the world's labels over it (a hurt foe's bar, damage numbers), the
 // scores, the performance overlay, the bank-or-continue choice, the pause menu, the run's summary and the battle log
 // (hits dealt and taken listed in it: a row for each line, within the window), each pictured whole, with
-// the boxes of the page's named elements and of the labels as shares of the window. On two screens (`--screens`), a
+// the boxes of the page's named elements and of the labels as shares of the window, and the cursor over every element
+// the mouse can be over the game's own, never the system's. On two screens (`--screens`), a
 // UI laid out as a share of the screen shows the same lines and the same pictures on both, whatever the screens'
 // pixel ratios: a 4K screen at 300% as at 100%.
 import * as THREE from 'three';
@@ -35,6 +36,8 @@ export interface UiOptions {
   state: UiState;
   /** HDR forced on first, as on a display in HDR mode (the pause menu then shows its levels) */
   hdr?: boolean;
+  /** the system's cursor planted on the page's body: the cursors' check must find it */
+  canary?: boolean;
 }
 
 /** the states pictured in a run (the rest are the lobby's) */
@@ -458,6 +461,41 @@ function logTouchShown(): Found {
   return found;
 }
 
+/** the system's cursors listed of a state at most */
+const CURSORS_LISTED = 5;
+
+/** Whether `element` is a field typed into, where the caret is the cursor. */
+function typedInto(element: Element): boolean {
+  return element.matches('textarea, input:not([type=checkbox], [type=radio], [type=range])');
+}
+
+/**
+ * The cursor shown over each element the mouse can be over (shown, with an area, taking the pointer): the game's own
+ * (its art, `url(...)`) or a field's caret; the system's (a keyword: `auto`, `pointer`, `default`) is a problem. With
+ * the canary, the page's body shows the system's, which must be found.
+ */
+function cursorsShown(canary: boolean): Found {
+  if (canary) document.body.style.cursor = 'auto';
+  const system: string[] = [];
+  let seen = 0;
+  for (const element of document.querySelectorAll('body, body *')) {
+    const box = element.getBoundingClientRect();
+    if (box.width < 1 || box.height < 1) continue;
+    if (!element.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+    const style = getComputedStyle(element);
+    if (style.pointerEvents === 'none') continue;
+    seen++;
+    const ours = style.cursor.startsWith('url(') || (style.cursor === 'text' && typedInto(element));
+    if (!ours) system.push(`${describe(element)} (${style.cursor})`);
+  }
+  if (canary) document.body.style.cursor = '';
+  const lines = [`  cursors: ${seen} elements under the mouse, ${system.length} showing the system's`];
+  if (!system.length) return { lines, problems: [] };
+  const listed = system.slice(0, CURSORS_LISTED).join(', ');
+  const more = system.length > CURSORS_LISTED ? ` and ${system.length - CURSORS_LISTED} more` : '';
+  return { lines, problems: [`the system's cursor over ${listed}${more}`] };
+}
+
 /** the scores' input: Tab held */
 const TAB: Frame = { keys: ['tab'] };
 
@@ -502,7 +540,13 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
   await steps.open(lab);
   const pictured = await pictureState(lab, state, steps.held ?? {});
   const found = steps.check?.() ?? { lines: [], problems: [] };
+  const cursors = cursorsShown(!!options.canary);
   await steps.close(lab);
-  const lines = [...pictured.lines, ...found.lines];
-  return { text: lines.join('\n'), problems: found.problems, moments: [pictured.moment] };
+  const lines = [...pictured.lines, ...found.lines, ...cursors.lines];
+  const problems = [...found.problems, ...cursors.problems];
+  if (!options.canary) return { text: lines.join('\n'), problems, moments: [pictured.moment] };
+  const caught = cursors.problems.some((problem) => problem.includes('body'));
+  lines.push(`  canary: ${caught ? 'the body\'s system cursor caught' : 'the body\'s system cursor went unseen'}`);
+  const missed = caught ? [] : [`${state}: the canary's system cursor on the body went unseen`];
+  return { text: lines.join('\n'), problems: missed, moments: [pictured.moment] };
 }

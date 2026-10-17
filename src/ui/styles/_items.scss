@@ -14,7 +14,7 @@
 #equip .eslot:not(.empty) { background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--c) 18%, rgba(28,26,28,.55)), rgba(10,9,10,.5)); }
 
 /* ---------- attribute breakdown ---------- */
-#stats .row[data-attr] { cursor: help; }
+#stats .row[data-attr] { cursor: $cursor; }
 #stats .row[data-attr]:hover { background: rgba($highlight, .08); color: var(--ink); }
 .attr-card { width: 300px; }
 .attr-total { font-family: var(--font-display); font-size: 26px; color: #f3e1b0; margin: 2px 0 8px; }

@@ -21,7 +21,7 @@
 #loadout .lo-free { font-size: 13px; color: var(--ink-dim); line-height: 1.3; text-align: center; }
 /* the tiles flow as inline boxes so the rows balance when they must wrap (5 + 4, not 8 + 1) */
 #spellbook { text-align: center; text-wrap: balance; line-height: 0; padding: 3px 7px; border: 1px dashed transparent; border-radius: 4px; transition: border-color .15s, background .15s; }
-#spellbook .slot { display: inline-flex; vertical-align: top; margin: 3px; width: 42px; height: 42px; cursor: grab; }
+#spellbook .slot { display: inline-flex; vertical-align: top; margin: 3px; width: 42px; height: 42px; cursor: $cursor-hand; }
 #spellbook .slot .key { display: none; }
 #spellbook .slot .icon { font-size: 22px; }
 #spellbook .slot.unusable { opacity: .45; filter: grayscale(.75); }
@@ -33,7 +33,7 @@
 /* the key bar, and beside it the chevron that opens the book above it (up) and folds it back down */
 .lo-keys { display: flex; gap: 6px; max-width: 100%; }
 #loadout-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; min-width: 0; }
-#lo-toggle { flex: none; width: 26px; display: flex; align-items: center; justify-content: center; padding: 0; color: var(--accent); cursor: pointer;
+#lo-toggle { flex: none; width: 26px; display: flex; align-items: center; justify-content: center; padding: 0; color: var(--accent); cursor: $cursor-hand;
   background: none; border: none; border-radius: 3px; }
 #lo-toggle svg { width: 14px; height: 9px; transition: transform .2s; }
 #lo-toggle:hover { background: rgba($frame, .15); }
@@ -43,8 +43,8 @@
 #skills-fold svg { width: 14px; height: 9px; flex: none; }
 #loadout.folded #skills-fold { height: 22px; padding: 0 14px; }
 #loadout.folded { translate: 0 100%; }
-#loadout-bar .slot { cursor: pointer; }
-#loadout-bar .slot[draggable="true"] { cursor: grab; }
+#loadout-bar .slot { cursor: $cursor-hand; }
+#loadout-bar .slot[draggable="true"] { cursor: $cursor-hand; }
 /* a key picked to take the next skill clicked (or tapped) in the book */
 #loadout-bar .slot.picking { box-shadow: inset 0 0 0 2px var(--highlight), 0 0 16px rgba($highlight, .7); animation: lowpulse .6s infinite alternate; }
 #loadout.drag-book #loadout-bar .slot, #loadout.drag-slot #loadout-bar .slot { box-shadow: inset 0 0 0 2px rgba($highlight, .55), 0 0 10px rgba($highlight, .25); }
