@@ -265,7 +265,15 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   named element's box and every label's over the world as shares of the window. In every state, the cursor over each
   element the mouse can be over (shown, with an area, taking the pointer) must be the game's own (its art, from
   `index.html`) or a text field's caret: the system's (`auto`, `pointer`, a UA stylesheet's `default`) is a problem,
-  listed by element; `--canary` gives the page's body the system's, which must be found. With `--screens`, whether
+  listed by element; `--canary` gives the page's body the system's, which must be found. In every state too, the
+  digits shown must sit on their line (`page/digits.ts`): each look of the page's text showing digits (its font,
+  weight, style and numeric settings) has the ten set out alone in it at 64 px, white on black over the page, pictured
+  and each one's ink read, and each font the world's labels are painted in (`overlay/paint.ts` `fontOf`) has each
+  digit's ink measured by the canvas; their tops or their bottoms more than 8% of their size apart is a problem,
+  naming the highest and the lowest and where the look shows, with its picture (`out/ui/digits-<n>.png`). Old-style
+  digits are 11% apart; the display face's 3 and 5 dip 6% by design. `--canary` gives the page's body old-style
+  digits and takes the labels' lining twin away: both must be found. (The owner, of the skill tooltips: "digits are
+  all jumping up and down in the same line".) With `--screens`, whether
   the UI is
   the same share of both screens: on `3840x2160@1,1280x720@3` (a 4K screen at 100% and at 300%) the lines agree but
   the tooltip's place (it keeps off the pointer in css px, as the OS scales the pointer) and the lobby's text, which

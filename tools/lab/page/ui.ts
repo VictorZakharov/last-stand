@@ -4,10 +4,10 @@
 // frame through each glide), the run's HUD with the world's labels over it (a hurt foe's bar, damage numbers), the
 // scores, the performance overlay, the bank-or-continue choice, the pause menu, the run's summary, the hotbar's skill
 // tooltips (each opened by the mouse over its slot, within the window; the tallest pictured; the lobby's by a finger's
-// tap) and the battle log
-// (hits dealt and taken listed in it: a row for each line, within the window), each pictured whole, with
-// the boxes of the page's named elements and of the labels as shares of the window, and the cursor over every element
-// the mouse can be over the game's own, never the system's. On two screens (`--screens`), a
+// tap) and the battle log (hits dealt and taken listed in it: a row for each line, within the window), each pictured
+// whole, with the boxes of the page's named elements and of the labels as shares of the window, the cursor over every
+// element the mouse can be over the game's own, never the system's, and every digit shown on its line (`digits.ts`).
+// On two screens (`--screens`), a
 // UI laid out as a share of the screen shows the same lines and the same pictures on both, whatever the screens'
 // pixel ratios: a 4K screen at 300% as at 100%.
 import * as THREE from 'three';
@@ -29,6 +29,7 @@ import { openBook } from '../../../src/ui/loadoutEditor';
 import { hideTooltip, itemTooltip, showTooltipAt } from '../../../src/ui/tooltip';
 import { hdrOutput } from './hdrOutput';
 import { battleLog } from './battleLog';
+import { digitsShown } from './digits';
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
@@ -537,7 +538,7 @@ function tooltipBox(): DOMRect | null {
   return tip.getBoundingClientRect();
 }
 
-/** Whether a player can reach `slot`: what lies at its middle is in it (not scrolled out of its strip, none over it). */
+/** Whether a player can reach `slot`: what lies at its middle is in it (not scrolled out of view, none over it). */
 function reachable(slot: HTMLElement): boolean {
   const middle = middleOf(slot);
   const under = document.elementFromPoint(middle.x, middle.y);
@@ -701,17 +702,24 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
   const pictured = await pictureState(lab, state, steps.held ?? {});
   const found = steps.check?.() ?? { lines: [], problems: [] };
   const cursors = cursorsShown(!!options.canary);
+  const digits = await digitsShown(lab, !!options.canary);
   await steps.close(lab);
-  const lines = [...pictured.lines, ...found.lines, ...cursors.lines];
-  const problems = [...found.problems, ...cursors.problems];
-  if (!options.canary) return { text: lines.join('\n'), problems, moments: [pictured.moment] };
+  const lines = [...pictured.lines, ...found.lines, ...cursors.lines, ...digits.lines];
+  const problems = [...found.problems, ...cursors.problems, ...digits.problems];
+  const moments = [pictured.moment, ...digits.moments];
+  if (!options.canary) return { text: lines.join('\n'), problems, moments };
   const caught = cursors.problems.some((problem) => problem.includes('body'));
   lines.push(`  canary: ${caught ? 'the body\'s system cursor caught' : 'the body\'s system cursor went unseen'}`);
   const missed = caught ? [] : [`${state}: the canary's system cursor on the body went unseen`];
+  for (const where of ['the page\'s text', 'the world\'s labels']) {
+    const jumped = digits.problems.some((problem) => problem.includes(where));
+    lines.push(`  canary: old-style digits in ${where} ${jumped ? 'caught' : 'went unseen'}`);
+    if (!jumped) missed.push(`${state}: the canary's old-style digits in ${where} went unseen`);
+  }
   if (state.startsWith('skillTips')) {
     const past = found.problems.some((problem) => problem.includes('reaches past the window'));
     lines.push(`  canary: ${past ? 'the tooltips as tall as the window caught' : 'the tall tooltips went unseen'}`);
     if (!past) missed.push(`${state}: the canary's tooltips as tall as the window went unseen`);
   }
-  return { text: lines.join('\n'), problems: missed, moments: [pictured.moment] };
+  return { text: lines.join('\n'), problems: missed, moments };
 }

@@ -19,7 +19,10 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: #030307; color: var(--ink); font-family: var(--font-body); user-select: none; }
+// (lining digits: the body face's own are old-style, rising and dropping along a row of numbers as lower-case letters
+// do; the world's labels, painted on a canvas, take its lining twin: ui/overlay/paint.ts)
+html, body { margin: 0; height: 100%; overflow: hidden; background: #030307; color: var(--ink); font-family: var(--font-body); user-select: none;
+  font-variant-numeric: lining-nums; }
 #game { position: fixed; inset: 0; }
 #game canvas { display: block; }
 /* HDR output (core/hdr.ts): the frame shown over the game's canvas, which still takes the pointer under it */
@@ -27,6 +30,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #030307; col
 #game #hdr-canvas[hidden] { display: none; }
 .hidden { display: none !important; }
 button { font-family: inherit; }
+// (the browser's own style of a control sets its font afresh, its digits back to the face's old-style ones)
+button, select, input, textarea { font-variant-numeric: inherit; }
 /* the game's cursor over every control, never the system's (the page's is set inline in index.html): a text field
    keeps its caret */
 button, select, input, label { cursor: inherit; }

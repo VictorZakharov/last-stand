@@ -7,7 +7,7 @@
   background: $panel; border: 1px solid $frame; outline: 1px solid $frame-dark; box-shadow: 0 hud(8px) hud(30px) rgba(0,0,0,.7);
   font-family: $font-body; color: $ink; }
 #scoreboard .sb-head { font-family: $font-display; font-size: hud(20px); color: $accent; text-align: center; letter-spacing: 1px; margin-bottom: hud(8px); }
-#scoreboard table { width: 100%; border-collapse: collapse; font-size: hud(16px); font-variant-numeric: tabular-nums; }
+#scoreboard table { width: 100%; border-collapse: collapse; font-size: hud(16px); font-variant-numeric: lining-nums tabular-nums; }
 #scoreboard th { font-size: hud(12px); font-weight: 600; color: $ink-dim; text-transform: uppercase; letter-spacing: .6px; text-align: right;
   padding: 0 hud(8px) hud(6px); border-bottom: 1px solid rgba($frame, .45); white-space: nowrap; }
 #scoreboard td { padding: hud(7px) hud(8px); text-align: right; vertical-align: middle; border-bottom: 1px solid rgba($frame, .18); white-space: nowrap; }

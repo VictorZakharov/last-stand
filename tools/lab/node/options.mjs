@@ -298,8 +298,8 @@ export const COMMANDS = {
   },
   ui: {
     help: 'the game\'s UI as the player sees it, each state pictured whole with its named elements\' and the world\'s '
-      + 'labels\' boxes as shares of the window: with --screens, whether the UI is the same share of the screen on '
-      + 'both (tools/lab/out/ui)',
+      + 'labels\' boxes as shares of the window, the game\'s cursor over all of it and every digit shown on its line: '
+      + 'with --screens, whether the UI is the same share of the screen on both (tools/lab/out/ui)',
     options: {
       states: {
         kind: 'list',
@@ -319,7 +319,8 @@ export const COMMANDS = {
       hdr: { kind: 'switch', help: 'HDR on, as on a display in HDR mode (the pause menu shows its levels)' },
       canary: {
         kind: 'switch',
-        help: 'plant the system\'s cursor on the page\'s body in each state: the cursors\' check must find it',
+        help: 'plant the system\'s cursor on the page\'s body in each state, old-style digits on it and the labels\' '
+          + 'lining twin taken away (the skill tooltips made as tall as the window): each check must find its own',
       },
       ...COMMON_OPTIONS,
     },
