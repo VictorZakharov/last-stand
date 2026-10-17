@@ -240,9 +240,17 @@ function drawGlint(player: Player, k: number): void {
   if (was < FULL_DRAW && player.local) sfx.bowReady();
 }
 
+/** a drawn shot's damage drawn less than full: the square of the draw (`cast`) */
+const SHORT_DRAW = 'less drawn short';
+
 export const bowShot: InstantSkill = {
   anim: 'bow', warm: warmArrows,
   pitch: (player, def, k, target) => launchPitch(player.castPoint, target, arrowSpeed(def as BowDef, k)),
+  hits(rawDef) {
+    const def = rawDef as BowDef;
+    const arrows = def.missiles > 1 ? `${def.missiles} arrows, ` : '';
+    return [{ per: 'arrow', base: def.damage, least: 0, type: 'physical', note: `${arrows}at full draw, ${SHORT_DRAW}` }];
+  },
   charging(player, def, k) {
     previewShot(player, def as BowDef, k, 0.22, true, false);
     drawGlint(player, k);
@@ -278,6 +286,13 @@ export const bowShot: InstantSkill = {
  */
 export const piercingShot: InstantSkill = {
   anim: 'bow', warm: warmArrows, pitch: bowShot.pitch,
+  hits(rawDef) {
+    const def = rawDef as BowDef & Needs<'falloff'>;
+    const bonus = def.fullBonus ?? 0;
+    const shares = def.falloff.map((share) => `${Math.round(share * 100)}%`).join(', ');
+    const note = `at full draw (+${Math.round(bonus * 100)}%), ${SHORT_DRAW}; each foe it passes through takes less: ${shares}`;
+    return [{ per: 'foe', base: def.damage * (1 + bonus), least: 0, type: 'physical', note }];
+  },
   charging(player, def, k) {
     previewShot(player, def as BowDef, k, 0.24, false, true);
     drawGlint(player, k);

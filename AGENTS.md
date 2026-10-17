@@ -45,7 +45,7 @@ The game has no test suite. Verify changes with `npm run build` and by playing t
 - **Originality:** this is open source. Skill, item, enemy and class names must be original. No Grim Dawn (or other game) names, trademarks or assets.
 - The game is class-agnostic by name ("Last Stand"). More classes are planned, so keep class-specific code in class data, models and skills, not in the shared systems.
 - **The UI must fit any screen size, desktop and mobile.** Anything that overflows or overlaps at some viewport size is a bug. The UI is a share of the screen whatever the OS's scaling; check every change at the sizes `src/ui/AGENTS.md` lists (its scales, its layouts, `npm run lab -- ui --screens`).
-- **Installable, offline (PWA):** a plain reload must show a new deploy. The worker and its caches are `scripts/AGENTS.md`, the page's side `src/ui/AGENTS.md`.
+- **Installable, offline (PWA):** a plain reload must show a new deploy. Players meet a new deploy under the previous one's worker: check a change to the worker, or to what the page asks of another host, with `npm run lab -- pwa`. The worker and its caches are `scripts/AGENTS.md`, the page's side `src/ui/AGENTS.md`.
 - **Touch:** everything hover-only needs a touch path (`src/ui/AGENTS.md`).
 
 ## Architecture

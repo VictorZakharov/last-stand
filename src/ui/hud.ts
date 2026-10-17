@@ -50,8 +50,9 @@ export function buildHotbar(player: Player): void {
   buildTouchSkills();
 }
 
-/** A skill icon slot. `def` null renders an empty slot; `key` adds a key label; `tooltip` false leaves its tooltip off. */
-export function makeSkillSlot(def: SkillDef | null, key?: SkillKey, tooltip = true): HTMLElement {
+/** A skill icon slot. `def` null renders an empty slot; `key` adds a key label; `tooltip`: as the hero has the skill,
+ *  its base figures alone (another save's), or none. */
+export function makeSkillSlot(def: SkillDef | null, key?: SkillKey, tooltip: 'hero' | 'base' | 'none' = 'hero'): HTMLElement {
   const el = document.createElement('div');
   el.className = 'slot' + (def ? '' : ' empty');
   const label = key ? `<span class="key">${KEY_LABEL[key]}</span>` : '';
@@ -65,7 +66,7 @@ export function makeSkillSlot(def: SkillDef | null, key?: SkillKey, tooltip = tr
   else el.style.background = `radial-gradient(circle at 50% 40%, ${c}40, #0b0a0c 75%)`;
   const icon = art ? `<span class="icon art" style="background-image:url('${art}')"></span>` : `<span class="icon" style="color:${c}">${def.icon.glyph}</span>`;
   el.innerHTML = `${icon}<div class="cd"></div><div class="cdt"></div>${label}`;
-  if (tooltip) bindTooltip(el, skillTooltip(def));
+  if (tooltip !== 'none') bindTooltip(el, skillTooltip(def, tooltip === 'hero'));
   return el;
 }
 export function banner(title: string, sub = ''): void {

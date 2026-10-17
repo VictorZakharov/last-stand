@@ -72,6 +72,7 @@ export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, fa
 
 const skill: InstantSkill = {
   anim: 'swing',
+  hits: (def) => [{ per: 'foe', base: (def as Def).damage, type: 'physical' }],
   warm: () => [new THREE.Mesh(new THREE.RingGeometry(0.3, 1, 8), slashMaterial(0xffffff))],
   cast(player, rawDef) {
     const def = rawDef as Def;

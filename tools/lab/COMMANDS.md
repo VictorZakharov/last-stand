@@ -242,25 +242,38 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
 - `probe <module>`: a measure of your own (Writing a measure in `AGENTS.md`). Options the lab doesn't know are passed to it (`--frames=30`), and
   `--setup=false` skips the set-up.
 - `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,help,saves,clicked,views,
-  logLobby,run,scores,perf,decision,pause,summary,log,logTouch`, every one by default: the lobby, an item's tooltip,
+  logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch`, every one by default:
+  the lobby, an item's tooltip,
   How to play, the save slots, the hero's class
   button clicked with the mouse and a key pressed after it as the browser gets them (where the focus went and whether
   the browser shows its ring: a problem when the button kept it), the lobby's camera switched with V through every
   view and back, each glide played and drawn (every frame, each label over the dummies against where its anchor shows
   by the camera as the frame draws it: off by more than a pixel is a problem; placed with the camera's turn of the
   frame before, they were up to 1442 px off as a glide set off), the battle log over the lobby with a training dummy
-  struck (clear of its panels: it first lay over the hero panel, as the performance stats did), the run's HUD with a
-  hurt foe's
+  struck (clear of its panels: it first lay over the hero panel, as the performance stats did), each skill's tooltip
+  in the lobby opened by a finger's tap (the class card's and the skill book's, the book opened by taps: a short
+  screen's rail turned to the skills, the book's toggle; each tooltip pinned and within the window, the tallest
+  pictured; the mouse then puts the page back in mouse mode), the run's HUD with a hurt foe's
   bar and damage numbers over it, the scores, the performance overlay, the choice after a wave, the pause menu, the
-  run's summary, the battle log with each skill on a key struck at the foe twice and its blows on the hero listed,
-  then paused: a row for every line, within the window, over none of the HUD's named elements but the layers as
+  run's summary, each skill's tooltip on the hotbar opened by the mouse moved over its slot (within the window, the
+  tallest pictured; `--canary` makes each as tall as the window, which must be found past it: issue #256's damage
+  lines made them taller), the battle log with each skill on a key struck at the foe twice and its blows on the hero
+  listed, then paused: a row for every line, within the window, over none of the HUD's named elements but the layers as
   wide as the screen, no row wider than the panel, its head on one line; and the same in touch mode, put in it by a finger's tap, where its lines must
   let a touch through: on a phone the panel first lay over the scores button under the pause button), each pictured
   whole as a PNG of its own at the screen's pixels (`out/ui/<state>.png`), with every
   named element's box and every label's over the world as shares of the window. In every state, the cursor over each
   element the mouse can be over (shown, with an area, taking the pointer) must be the game's own (its art, from
   `index.html`) or a text field's caret: the system's (`auto`, `pointer`, a UA stylesheet's `default`) is a problem,
-  listed by element; `--canary` gives the page's body the system's, which must be found. With `--screens`, whether
+  listed by element; `--canary` gives the page's body the system's, which must be found. In every state too, the
+  digits shown must sit on their line (`page/digits.ts`): each look of the page's text showing digits (its font,
+  weight, style and numeric settings) has the ten set out alone in it at 64 px, white on black over the page, pictured
+  and each one's ink read, and each font the world's labels are painted in (`overlay/paint.ts` `fontOf`) has each
+  digit's ink measured by the canvas; their tops or their bottoms more than 8% of their size apart is a problem,
+  naming the highest and the lowest and where the look shows, with its picture (`out/ui/digits-<n>.png`). Old-style
+  digits are 11% apart; the display face's 3 and 5 dip 6% by design. `--canary` gives the page's body old-style
+  digits and takes the labels' lining twin away: both must be found. (The owner, of the skill tooltips: "digits are
+  all jumping up and down in the same line".) With `--screens`, whether
   the UI is
   the same share of both screens: on `3840x2160@1,1280x720@3` (a 4K screen at 100% and at 300%) the lines agree but
   the tooltip's place (it keeps off the pointer in css px, as the OS scales the pointer) and the lobby's text, which
@@ -448,7 +461,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   first (with `--apart` or `--than`), or else keeps the foes from harm. In `check` as `hits twinFangs --than cleave
   --apart 0.2 --gear dual`: Twin Fangs' two cuts came 0.35 s apart, slower than a dual wielder's cleave at 0.30 (the
   owner's "too slow", "both hits in a rapid succession"); they're 0.15 s apart now. Its cast (`castAt`, each hit's
-  type, crit and kill caught too, a canary's plant tried each frame) is `log`'s.
+  type, crit and kill caught too, a canary's plant tried each frame, followed on for `lasting` s from the press for
+  an effect that strikes on after the hero is free: a firestorm's ticks) is `log`'s and `tooltips`'.
 - `log`: the battle log (`src/ui/battleLog.ts`) held to the hits as they land (`page/log.ts`). Each skill the hero can
   use (`--skills` for fewer), in each way of holding weapons for the warrior (`--gear` for one), is cast at foes as
   `hits` casts it, with the log cleared first, and the basic attack once more at foes it kills. Every hit caught as
@@ -465,7 +479,26 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the panel's first row, and lets the pause go at the press. Every hero in
   `check`, 4 to 15 s each. (The owner, testing #255: a Bull Rush cast over a charging Power Strike seemed to deal
   the lobby's dummies nothing; it had hit, its number shown a moment after Power Strike's, and was missed.) The game's
-  module is found through `page/battleLog.ts` (none on an A/B's older commit: `no battle log in this tree`).
+  module is found through `page/battleLog.ts` (none on an A/B's older commit: `no battle log in this tree`). The
+  ways of holding weapons a class has, each as a set-up's gear, are `page/gears.ts`, `tooltips`' too.
+- `tooltips`: each damage skill's tooltip held to the hits it deals (`page/tooltips.ts`, `src/ui/skillDamage.ts`,
+  each skill's `hits` in `src/combat/skills`). The hero is given modifiers of every kind, his stats set (40% all
+  damage, 30% arcane, 25% elemental, a 35% crit for 70% more, 20% casting speed), so a tooltip leaving one out is
+  caught. First the hotbar's tooltip is hovered, the weapon's all damage raised by 30%, the hero's stats made again
+  from his gear (`recomputeStats`) and hovered again: each figure must follow, by the measure's own rule. Then each
+  skill he can use (`--skills` for fewer), in each way of holding weapons his class has (`--gear` for one), has its
+  tooltip read as the player reads it (its text: each kind of hit's range, how often it comes, the least share it
+  says a hit falls to, the crit's chance and share), and is cast at foes stood where it strikes as `hits` casts it
+  (a drawn shot at full draw; a firestorm followed for as long as it lasts). Every hit that lands must be within a
+  figure stated per hit (a crit's raised by the crit's share; down to its least share, and one hit at its full
+  figure), and a hit dealt over time must come as often as it says (on the foe struck most, past its first three
+  hits: a spin comes up to speed). Stating no damage, landing no hit, and a crit's chance not the hero's are
+  problems. Last, each skill whose tooltip states what it gives the hero (the draught's Health, Iron Bellow's ward)
+  is cast: what it gave must be the figure (the amounts asked of `Player.heal`, before his most Health caps them; the
+  ward's). `--canary` raises all damage and his most Health by 50% once each tooltip is read, as a tooltip behind a
+  change would be: its hits must be found above what it states, and what was given off it. On `--ab` against a
+  commit before it, every tooltip states no damage.
+  (Issue #256: the tooltips showed the base damage alone, not what the hero deals with his gear.)
 - `cursor`: the cursor drawn over mouse look while Alt is held (`src/ui/altCursor.ts`, `page/cursor.ts`). In each
   close view (`--views third,first`) the battle log is filled past its height and the pointer is locked as the
   player's click takes it: the lab's browser plays the lock (`lab.pointerLock`, `noCapture` in `node/browser.mjs`),
@@ -744,6 +777,23 @@ the game draws in front of him (a leaf card cut out by its texture, a prop disso
 (Drawn flat, the forest's leaf cards were whole squares, and one by a close-up's camera filled its frame.) A
 part's cut-out (a hair card's) keeps its texture's alpha. A pixel is found as a part by its colour within 2 levels
 a channel, looked up once (matched against every part's colour, a picture took 10 s).
+- `pwa`: a deploy as a returning player meets it, the offline worker and all, which the lab's dev server never has
+  (`node/pwa.mjs`; it runs in this process, not the server). Another commit's production build (`--from[=ref]`,
+  origin/main by default, exported as `--ab` exports it) and this tree's are built with Vite into `out/pwa/`, and
+  served in turn on 127.0.0.1 under `/last-stand/` as Pages serves the game (`node/staticHost.mjs`: `max-age=600`,
+  revalidated by ETag, what it serves swapped at once, as a deploy swaps it). A fresh browser loads the old build
+  twice (its worker installed, then the page and its fonts fetched through it); then this tree's build is served in
+  its place and the page reloaded as a player reloads it: under the old worker, again once the new one has taken
+  over, and offline. Each load is known by the worker that served it (asked as the page starts, before a new one
+  takes it over: a load under another than it's for measured nothing, a problem). Every load must show the game's
+  fonts (a face of Cinzel and of Alegreya Sans loaded), every load after the swap this tree's build (its entry
+  script: a plain reload must show a new deploy), and each of this tree's loads the labels' lining twin
+  (`overlay/paint.ts`).
+  `--canary` serves a stale page on the first reload after the swap and the font stylesheet's address broken after
+  it: both must be found. About 35 s (the canary's two minutes: its waits run out). (The owner, of #263's preview:
+  the page's font stylesheet had been asked for with CORS, and the previous deploy's worker answered with the copy
+  it kept from a request without, which can't answer one with; the stylesheet failed, and the lobby showed the
+  system's fonts, wider, its links wrapping: "increasing font size had unintended side effects".)
 - `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films), the
   stops, the ranges and the run's form for every hero, the ranger's feet and carry, and the warrior through the eyes
   (`eyes`: the basic attack's rows on every weapon, and every other skill on every weapon its way of holding them

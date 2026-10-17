@@ -51,6 +51,7 @@ function whirl(pos: THREE.Vector3, vel: THREE.Vector3, radius: number, strength:
 
 const skill: InstantSkill = {
   anim: 'cast',
+  hits: (def) => [{ per: 'tick', base: (def.damage ?? 0) * TICK, rate: 1 / TICK, type: 'lightning', note: `for ${def.duration} s` }],
   warm: warmFirestorm,
   cast(player, rawDef, target) {
     const def = rawDef as Needs<'damage' | 'radius' | 'duration' | 'speed' | 'pull'>;

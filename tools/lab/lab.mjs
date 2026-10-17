@@ -45,6 +45,10 @@ async function main() {
     const { runCheck } = await import('./node/check.mjs');
     return runCheck(call.options);
   }
+  if (call.command === 'pwa') {
+    const { runPwa } = await import('./node/pwa.mjs');
+    return runPwa(call.options);
+  }
   if (call.command === 'serve') {
     const { supervise } = await import('./node/supervisor.mjs');
     supervise();

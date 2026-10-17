@@ -169,6 +169,7 @@ const easeOutBack = (k: number) => 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2;
 
 const skill: ChannelSkill<LanceState> = {
   anim: 'channel',
+  hits: (def) => [{ per: 'tick', base: (def.damage ?? 0) * TICK, rate: 1 / TICK, type: 'arcane' }],
   channel: true,
   warm: () => [new THREE.Mesh(beamGeo, beamMaterial(false)), new THREE.Mesh(portalGeo, portalMaterial())],
   start(_player, rawDef) {

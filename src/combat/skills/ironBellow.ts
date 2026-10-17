@@ -83,6 +83,8 @@ function buildShield(mats: ReturnType<typeof shieldMaterials>): THREE.Group {
 
 const skill: InstantSkill = {
   anim: 'buff',
+  // (its cry strikes as a blow does, whatever its own tags)
+  hits: (def) => [{ per: 'foe', base: (def as Def).damage, type: 'physical', tags: ['physical'] }],
   warm: () => [buildShield(shieldMaterials()), new THREE.Mesh(haloGeo, nearGlow(new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })))],
   cast(player, rawDef) {
     const def = rawDef as Def;

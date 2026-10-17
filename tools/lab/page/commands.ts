@@ -27,6 +27,7 @@ import type { MusicOptions } from './music';
 import type { DeathOptions } from './death';
 import type { HitsOptions } from './hits';
 import type { LogOptions } from './log';
+import type { TooltipsOptions } from './tooltips';
 import type { CursorOptions } from './cursor';
 import type { RushOptions } from './rush';
 import type { CrowdOptions } from './crowd';
@@ -308,6 +309,16 @@ export async function hits(lab: Lab, command: HitsOptions): Promise<Report> {
 export async function log(lab: Lab, command: LogOptions): Promise<Report> {
   const { log: logOf } = await import('./log');
   return logOf(lab, command);
+}
+
+/**
+ * `lab tooltips`: each damage skill's tooltip held to the hits it deals the hero with modifiers of every kind: each
+ * hit within a figure it states, a crit's chance the hero's, a hit over time as often as it says; and the hotbar's
+ * tooltip following the hero's gear.
+ */
+export async function tooltips(lab: Lab, command: TooltipsOptions): Promise<Report> {
+  const { tooltips: tooltipsOf } = await import('./tooltips');
+  return tooltipsOf(lab, command);
 }
 
 /**

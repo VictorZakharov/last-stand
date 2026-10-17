@@ -137,7 +137,7 @@ export function buildTouchSkills(): void {
   buttons = SKILL_KEYS.map((key) => {
     // (no tooltip: a tap is a cast, and its click opened the skill's card pinned over the buttons, the next tap there
     // landing on the card)
-    const el = makeSkillSlot(G.player.skillAt(key)?.def ?? null, key, false);
+    const el = makeSkillSlot(G.player.skillAt(key)?.def ?? null, key, 'none');
     el.classList.add(`tk-${key}`);
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault();

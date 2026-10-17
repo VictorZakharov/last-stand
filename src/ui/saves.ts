@@ -159,7 +159,8 @@ function heroCard({ cls, p }: Hero, slot: number): HTMLElement {
   // the keys as the hero left them, for the gear held
   const loadout = loadLoadout(cls, gearOf(cls, p.equipped), slot);
   const skills = $('.svh-skills', el);
-  for (const k of SKILL_KEYS) skills.appendChild(makeSkillSlot(cls.skills.find((s) => s.impl === loadout[k]) ?? null, k));
+  // (another save's gear isn't the hero's: its skills' base figures)
+  for (const k of SKILL_KEYS) skills.appendChild(makeSkillSlot(cls.skills.find((s) => s.impl === loadout[k]) ?? null, k, 'base'));
   return el;
 }
 

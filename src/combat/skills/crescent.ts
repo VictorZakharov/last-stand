@@ -29,6 +29,7 @@ const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 
 const skill: InstantSkill = {
   anim: 'smite',
+  hits: (def) => [{ per: 'foe', base: (def as Def).damage, type: 'lightning' }],
   warm: () => [slashMesh(ARC, 0.45, 0xffffff, true).mesh],
   cast(player, rawDef) {
     const def = rawDef as Def;

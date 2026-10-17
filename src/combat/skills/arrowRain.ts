@@ -128,6 +128,7 @@ function struck(p: THREE.Vector3): Enemy | null {
 
 const skill: ChannelSkill<RainState> = {
   channel: true, anim: 'bow',
+  hits: (def) => [{ per: 'arrow', base: (def as Def).damage, type: 'physical', note: `${(def as Def).missiles} arrows a volley` }],
   warm: () => { const st = new THREE.InstancedMesh(streakGeo, streakMat, 1); st.count = 1; return [new THREE.Mesh(floorPatch(0.9, 1, 1, 8), additive(LEAF, 1.2, 0.5)), arrowMesh(), st]; },
   start(player, rawDef) {
     const def = rawDef as Def;

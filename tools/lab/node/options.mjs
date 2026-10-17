@@ -20,8 +20,8 @@ const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'numbers', 'choice', 
 
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
-  'lobby', 'tooltip', 'help', 'saves', 'clicked', 'views', 'logLobby', 'run', 'scores', 'perf', 'decision', 'pause',
-  'summary', 'log', 'logTouch',
+  'lobby', 'tooltip', 'help', 'saves', 'clicked', 'views', 'logLobby', 'skillTipsTouch', 'run', 'scores', 'perf',
+  'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
 ];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
@@ -298,8 +298,8 @@ export const COMMANDS = {
   },
   ui: {
     help: 'the game\'s UI as the player sees it, each state pictured whole with its named elements\' and the world\'s '
-      + 'labels\' boxes as shares of the window: with --screens, whether the UI is the same share of the screen on '
-      + 'both (tools/lab/out/ui)',
+      + 'labels\' boxes as shares of the window, the game\'s cursor over all of it and every digit shown on its line: '
+      + 'with --screens, whether the UI is the same share of the screen on both (tools/lab/out/ui)',
     options: {
       states: {
         kind: 'list',
@@ -309,14 +309,18 @@ export const COMMANDS = {
           + 'key pressed after it: '
           + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
           + 'dummies against their anchors), run (the HUD with a hurt foe\'s bar and damage numbers), '
-          + 'scores, perf, decision, pause, summary, log (the battle log with hits dealt and taken: every line shown, '
-          + 'within the screen, over nothing of the HUD), logLobby (the same over the lobby, clear of its panels), '
+          + 'scores, perf, decision, pause, summary, skillTips (each skill\'s tooltip on the hotbar opened by the '
+          + 'mouse, within the window; the tallest pictured; skillTipsTouch: the lobby\'s by a finger\'s tap), log '
+          + '(the battle log with hits dealt and taken: every '
+          + 'line shown, within the screen, over nothing of the HUD), logLobby (the same over the lobby, clear of its '
+          + 'panels), '
           + 'logTouch (the same in touch mode: clear of the touch HUD, touches let through)',
       },
       hdr: { kind: 'switch', help: 'HDR on, as on a display in HDR mode (the pause menu shows its levels)' },
       canary: {
         kind: 'switch',
-        help: 'plant the system\'s cursor on the page\'s body in each state: the cursors\' check must find it',
+        help: 'plant the system\'s cursor on the page\'s body in each state, old-style digits on it and the labels\' '
+          + 'lining twin taken away (the skill tooltips made as tall as the window): each check must find its own',
       },
       ...COMMON_OPTIONS,
     },
@@ -672,6 +676,24 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'plant the faults the checks must catch: a hit in each cast listed under another skill, and a blow on '
           + 'the hero from no foe',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  tooltips: {
+    help: 'each damage skill\'s tooltip held to the hits it deals: the hero given modifiers of every kind (all, '
+      + 'arcane and elemental damage, a crit\'s chance and share, casting speed), each skill he can use, in each way '
+      + 'of holding weapons his class has (or --gear\'s), cast at foes stood where it strikes as hits casts it; every '
+      + 'hit must be within a figure its tooltip states (a crit raised by its share), a crit\'s chance the hero\'s, '
+      + 'and a hit dealt over time as often as it says; the hotbar\'s tooltip must follow a change of his gear, and '
+      + 'a skill giving him Health or a ward must give what its tooltip states',
+    options: {
+      skills: { kind: 'list', usage: 'a,b', help: 'the skills cast (every one dealing damage he can use by default)' },
+      canary: {
+        kind: 'switch',
+        help: 'raise all damage and the hero\'s most Health once each tooltip is read, as a tooltip behind a change: '
+          + 'the hits must be found above it, and what was given off it',
       },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
@@ -1161,6 +1183,25 @@ export const COMMANDS = {
       setup: { kind: 'switch', help: 'set the run up first (=false: the probe sets up itself)' },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
+    },
+  },
+  pwa: {
+    help: 'a deploy as a returning player meets it, the offline worker and all: another commit\'s production build '
+      + 'served as Pages serves the game and loaded in a fresh browser until its worker has the page and its fonts, '
+      + 'then this tree\'s served in its place and the page reloaded under the old worker, under the new one and '
+      + 'offline; every load must show the game\'s fonts, and every one after the swap this tree\'s build (runs in '
+      + 'this process, not the server)',
+    options: {
+      from: {
+        kind: 'ref',
+        usage: '[=ref]',
+        help: 'the commit deployed before (origin/main by default)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'a stale page served on the first reload after the swap, the font stylesheet\'s address broken after '
+          + 'it: both must be found',
+      },
     },
   },
   check: {

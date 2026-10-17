@@ -1,10 +1,31 @@
 // Contract for skill behaviors. Class data (SkillDef) references an impl by name.
 import type * as THREE from 'three';
 import type { Player } from '../../entities/player';
-import type { ActionState, CastAnim, SkillDef } from '../../types';
+import type { ActionState, CastAnim, DamageType, DerivedStats, SkillDef } from '../../types';
+
+/** A kind of hit a skill deals, as its tooltip tells it (`ui/skillDamage.ts`): one hit's damage before the hero's
+ *  modifiers, kept beside the code that deals it so the two can't drift apart. */
+export interface SkillHit {
+  /** what one hit is: 'foe' (each foe struck once), 'cut', 'arrow', 'tick'... */
+  per: string;
+  /** one hit's damage before the hero's modifiers */
+  base: number;
+  /** the type it lands as */
+  type: DamageType;
+  /** the tags its damage scales by, where they aren't the skill's own */
+  tags?: readonly string[];
+  /** how many it deals a second, for one dealt over time (a channel's ticks, a zone's): its damage a second shown too */
+  rate?: number;
+  /** the least share of `base` a hit of it can deal (an edge's, a falloff's, a draw's cut short): 1 if not given */
+  least?: number;
+  /** how `base` comes about, in a few words (a split's share, a full draw's bonus) */
+  note?: string;
+}
 
 interface SkillBase {
   anim: CastAnim;
+  /** the hits it deals a hero of these stats, for its tooltip: none for a skill that deals no damage */
+  hits?(def: SkillDef, stats: DerivedStats): SkillHit[];
   /** its dash is what it does (a charge, a blink: `Player.startDash`): never cast as another dash runs, even one that
    *  lets skills be cast. Any other skill's dash cast in one that does rides on it (Twin Fangs' lunge in a charge) */
   dashes?: boolean;

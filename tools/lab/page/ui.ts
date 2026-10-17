@@ -2,10 +2,12 @@
 // save slots, a class button clicked with the mouse and a key pressed after it (where the focus went), the lobby's
 // camera switched through its views (the labels over the dummies against where they stand on the screen, frame by
 // frame through each glide), the run's HUD with the world's labels over it (a hurt foe's bar, damage numbers), the
-// scores, the performance overlay, the bank-or-continue choice, the pause menu, the run's summary and the battle log
-// (hits dealt and taken listed in it: a row for each line, within the window), each pictured whole, with
-// the boxes of the page's named elements and of the labels as shares of the window, and the cursor over every element
-// the mouse can be over the game's own, never the system's. On two screens (`--screens`), a
+// scores, the performance overlay, the bank-or-continue choice, the pause menu, the run's summary, the hotbar's skill
+// tooltips (each opened by the mouse over its slot, within the window; the tallest pictured; the lobby's by a finger's
+// tap) and the battle log (hits dealt and taken listed in it: a row for each line, within the window), each pictured
+// whole, with the boxes of the page's named elements and of the labels as shares of the window, the cursor over every
+// element the mouse can be over the game's own, never the system's, and every digit shown on its line (`digits.ts`).
+// On two screens (`--screens`), a
 // UI laid out as a share of the screen shows the same lines and the same pictures on both, whatever the screens'
 // pixel ratios: a 4K screen at 300% as at 100%.
 import * as THREE from 'three';
@@ -23,14 +25,17 @@ import { hideDecision, showDecision } from '../../../src/ui/hud';
 import { hideSummary, showPause, showSummary } from '../../../src/ui/menus';
 import { setPerfHud } from '../../../src/ui/perfHud';
 import { openSaves } from '../../../src/ui/saves';
+import { openBook } from '../../../src/ui/loadoutEditor';
 import { hideTooltip, itemTooltip, showTooltipAt } from '../../../src/ui/tooltip';
 import { hdrOutput } from './hdrOutput';
 import { battleLog } from './battleLog';
+import { digitsShown } from './digits';
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
-  | 'lobby' | 'tooltip' | 'help' | 'saves' | 'clicked' | 'views' | 'logLobby' | 'run' | 'scores' | 'perf'
-  | 'decision' | 'pause' | 'summary' | 'log' | 'logTouch';
+  | 'lobby' | 'tooltip' | 'help' | 'saves' | 'clicked' | 'views' | 'logLobby' | 'skillTipsTouch' | 'run' | 'scores'
+  | 'perf'
+  | 'decision' | 'pause' | 'summary' | 'skillTips' | 'log' | 'logTouch';
 
 export interface UiOptions {
   state: UiState;
@@ -41,7 +46,7 @@ export interface UiOptions {
 }
 
 /** the states pictured in a run (the rest are the lobby's) */
-const RUN_STATES: UiState[] = ['run', 'scores', 'perf', 'decision', 'pause', 'summary', 'log', 'logTouch'];
+const RUN_STATES: UiState[] = ['run', 'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch'];
 /** where the tooltip is opened, as shares of the window (the mouse over the lobby's left panel) */
 const TOOLTIP_AT = { x: 0.18, y: 0.3 };
 /** the foe spawned for the run's labels, how far ahead of the hero (m), and the share of its life it has left */
@@ -496,6 +501,159 @@ function cursorsShown(canary: boolean): Found {
   return { lines, problems: [`the system's cursor over ${listed}${more}`] };
 }
 
+/** A skill's tooltip as it was opened over its slot: the skill's name and the tooltip's box (css px). */
+interface SkillTip {
+  name: string;
+  box: DOMRect;
+  /** pinned where it opened, as a tap pins it */
+  pinned: boolean;
+}
+
+/** the skill tooltips the `skillTips` states opened, and the slot whose tooltip is the tallest */
+let skillTips: SkillTip[] = [];
+let tallestSlot: HTMLElement | null = null;
+/** the slots holding a skill a player could reach when they were opened, and what opened them */
+let skillSlots = 0;
+let openedBy = 'the mouse';
+/** with the canary, each skill's tooltip made as tall as the window: the check must find it past the window */
+let tallTips = false;
+
+/** The middle of `element`'s box (css px). */
+function middleOf(element: HTMLElement): { x: number; y: number } {
+  const box = element.getBoundingClientRect();
+  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+}
+
+/** A block as tall as the window, the canary's. */
+function windowTall(): HTMLElement {
+  const block = document.createElement('div');
+  block.style.height = `${innerHeight}px`;
+  return block;
+}
+
+/** The tooltip's box if it shows, null if not. */
+function tooltipBox(): DOMRect | null {
+  const tip = document.getElementById('tooltip')!;
+  if (!tip.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return null;
+  return tip.getBoundingClientRect();
+}
+
+/** Whether a player can reach `slot`: what lies at its middle is in it (not scrolled out of view, none over it). */
+function reachable(slot: HTMLElement): boolean {
+  const middle = middleOf(slot);
+  const under = document.elementFromPoint(middle.x, middle.y);
+  return !!under && slot.contains(under);
+}
+
+/**
+ * Each skill's tooltip of `slots` a player can reach opened by `open` as a player opens it, its box kept (`closeEach`
+ * closing it after); then the tallest opened again for the picture.
+ */
+async function openEach(
+  slots: HTMLElement[], open: (slot: HTMLElement) => Promise<void>, closeEach: () => unknown,
+): Promise<void> {
+  skillTips = [];
+  tallestSlot = null;
+  const reached = slots.filter(reachable);
+  skillSlots = reached.length;
+  for (const slot of reached) {
+    await open(slot);
+    if (tallTips) document.querySelector('#tooltip .tt-card')?.append(windowTall());
+    const box = tooltipBox();
+    const name = document.querySelector('#tooltip .tt-name')?.textContent ?? '?';
+    const pinned = !!document.querySelector('#tooltip.pinned');
+    await closeEach();
+    if (!box) continue;
+    skillTips.push({ name, box, pinned });
+    if (box.height >= Math.max(...skillTips.map((tip) => tip.box.height))) tallestSlot = slot;
+  }
+  if (tallestSlot) await open(tallestSlot);
+}
+
+/** Each skill's tooltip on the hotbar opened by the mouse moved over its slot. */
+async function openSkillTips(lab: Lab): Promise<void> {
+  openedBy = 'the mouse';
+  const slots = [...document.querySelectorAll<HTMLElement>('#hotbar .slot:not(.empty)')];
+  await openEach(slots, (slot) => lab.mouseTo(middleOf(slot)), () => undefined);
+}
+
+/** The mouse moved off the hotbar to the middle of the window, which closes the tooltip. */
+async function closeSkillTips(lab: Lab): Promise<void> {
+  await lab.mouseTo({ x: innerWidth / 2, y: innerHeight / 2 });
+  hideTooltip();
+}
+
+/**
+ * A finger's tap at `at`, its click and all, and the frames after it for the touch controls to show; what it set
+ * sliding (a panel the rail turned to) brought to rest.
+ */
+async function tap(lab: Lab, at: { x: number; y: number }): Promise<void> {
+  await lab.tap(at);
+  await lab.step(TOUCH_FRAMES);
+  settleAnimations();
+}
+
+/** `element` tapped by a finger if a player can reach it; whether it was. */
+async function tapIfReached(lab: Lab, element: HTMLElement | null): Promise<boolean> {
+  if (!element || !reachable(element)) return false;
+  await tap(lab, middleOf(element));
+  return true;
+}
+
+/**
+ * Each skill's tooltip in the lobby (the class card's, the skill book's) opened by a finger's tap on its slot, as a
+ * touch screen opens it (pinned beside the slot; closed after each, as the next tap elsewhere closes it). The book is
+ * opened first by taps, as a player opens it: a short screen's rail turned to the skills, and the book's toggle.
+ */
+async function openSkillTipsTouch(lab: Lab): Promise<void> {
+  openedBy = 'a tap';
+  // (the first tap puts the page in touch mode, as a phone starts in it: what a finger reaches is judged in it)
+  await tapIfReached(lab, document.querySelector<HTMLElement>('#lobby-rail [data-lt="skills"]'));
+  // (a short screen shows it whole, with no toggle)
+  const book = document.getElementById('lo-book')!;
+  if (!book.checkVisibility()) await tapIfReached(lab, document.getElementById('lo-toggle'));
+  if (!book.checkVisibility()) {
+    const tab = document.getElementById('menu')!.dataset.tab;
+    throw new Error(`lab: ui: the taps never opened the skill book (the lobby's tab: ${tab})`);
+  }
+  const slots = [...document.querySelectorAll<HTMLElement>('.cc-skills .slot:not(.empty), #lo-book .slot')];
+  await openEach(slots, (slot) => tap(lab, middleOf(slot)), hideTooltip);
+}
+
+/**
+ * The tooltip and the book closed, the rail turned back to the hero, and the mouse moved, which puts the page back in
+ * mouse mode for the states after.
+ */
+async function closeSkillTipsTouch(lab: Lab): Promise<void> {
+  hideTooltip();
+  openBook(false);
+  document.querySelector<HTMLElement>('#lobby-rail [data-lt="hero"]')?.click();
+  await lab.mouseTo({ x: innerWidth / 2, y: innerHeight / 2 });
+  await lab.mouseTo({ x: innerWidth / 2 + 1, y: innerHeight / 2 });
+  if (document.body.classList.contains('touch')) throw new Error('lab: ui: the mouse left the page in touch mode');
+}
+
+/** Every skill a player can reach showing its tooltip, each within the window. */
+function skillTipsShown(): Found {
+  const tallest = skillTips.reduce((most, tip) => Math.max(most, tip.box.height), 0);
+  const height = `the tallest ${share(tallest, innerHeight)}% of the window`;
+  const lines = [`  skill tooltips by ${openedBy}: ${skillTips.length} of ${skillSlots} skills, ${height}`];
+  const problems: string[] = [];
+  if (!skillSlots) problems.push('skills: no skill a player can reach');
+  if (skillTips.length < skillSlots) {
+    problems.push(`skills: ${skillSlots - skillTips.length} skills showed no tooltip by ${openedBy}`);
+  }
+  const loose = skillTips.filter((tip) => !tip.pinned).length;
+  if (openedBy === 'a tap' && loose) problems.push(`skills: ${loose} skills' tooltips by a tap weren't pinned`);
+  for (const { name, box } of skillTips) {
+    const inside = box.left >= -0.5 && box.top >= -0.5 && box.right <= innerWidth + 0.5;
+    if (inside && box.bottom <= innerHeight + 0.5) continue;
+    const where = boxText({ x: box.x, y: box.y, w: box.width, h: box.height });
+    problems.push(`skills: ${name}'s tooltip by ${openedBy} reaches past the window (${where})`);
+  }
+  return { lines, problems };
+}
+
 /** the scores' input: Tab held */
 const TAB: Frame = { keys: ['tab'] };
 
@@ -508,6 +666,7 @@ const STEPS: Record<UiState, Steps> = {
   clicked: { open: clickClass, close: () => undefined, check: focusAfterClick },
   views: { open: switchViews, close: () => undefined, check: labelsThroughSwitches },
   logLobby: { open: openLogLobby, close: closeLog, check: logShown },
+  skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
   run: { open: () => undefined, close: () => undefined },
   // (shown while Tab is held: pictured with it down, let go after)
   scores: { open: (lab) => lab.step(SCORES_FRAMES, () => TAB), close: (lab) => lab.step(1), held: TAB },
@@ -515,6 +674,7 @@ const STEPS: Record<UiState, Steps> = {
   decision: { open: showDecision, close: hideDecision },
   pause: { open: () => showPause(true), close: () => showPause(false) },
   summary: { open: openSummary, close: hideSummary },
+  skillTips: { open: openSkillTips, close: closeSkillTips, check: skillTipsShown },
   log: { open: openLog, close: closeLog, check: logShown },
   // (the last state: the page is left in touch mode)
   logTouch: { open: openLogTouch, close: closeLog, check: logTouchShown },
@@ -537,16 +697,29 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     runReady = true;
   }
   const steps = STEPS[state];
+  tallTips = !!options.canary;
   await steps.open(lab);
   const pictured = await pictureState(lab, state, steps.held ?? {});
   const found = steps.check?.() ?? { lines: [], problems: [] };
   const cursors = cursorsShown(!!options.canary);
+  const digits = await digitsShown(lab, !!options.canary);
   await steps.close(lab);
-  const lines = [...pictured.lines, ...found.lines, ...cursors.lines];
-  const problems = [...found.problems, ...cursors.problems];
-  if (!options.canary) return { text: lines.join('\n'), problems, moments: [pictured.moment] };
+  const lines = [...pictured.lines, ...found.lines, ...cursors.lines, ...digits.lines];
+  const problems = [...found.problems, ...cursors.problems, ...digits.problems];
+  const moments = [pictured.moment, ...digits.moments];
+  if (!options.canary) return { text: lines.join('\n'), problems, moments };
   const caught = cursors.problems.some((problem) => problem.includes('body'));
   lines.push(`  canary: ${caught ? 'the body\'s system cursor caught' : 'the body\'s system cursor went unseen'}`);
   const missed = caught ? [] : [`${state}: the canary's system cursor on the body went unseen`];
-  return { text: lines.join('\n'), problems: missed, moments: [pictured.moment] };
+  for (const where of ['the page\'s text', 'the world\'s labels']) {
+    const jumped = digits.problems.some((problem) => problem.includes(where));
+    lines.push(`  canary: old-style digits in ${where} ${jumped ? 'caught' : 'went unseen'}`);
+    if (!jumped) missed.push(`${state}: the canary's old-style digits in ${where} went unseen`);
+  }
+  if (state.startsWith('skillTips')) {
+    const past = found.problems.some((problem) => problem.includes('reaches past the window'));
+    lines.push(`  canary: ${past ? 'the tooltips as tall as the window caught' : 'the tall tooltips went unseen'}`);
+    if (!past) missed.push(`${state}: the canary's tooltips as tall as the window went unseen`);
+  }
+  return { text: lines.join('\n'), problems: missed, moments };
 }

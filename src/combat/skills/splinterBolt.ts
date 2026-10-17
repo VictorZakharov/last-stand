@@ -40,6 +40,13 @@ function launch(player: Player, origin: THREE.Vector3, angle: number, def: Def, 
 
 const skill: InstantSkill = {
   anim: 'point',
+  hits(rawDef) {
+    const def = rawDef as Def;
+    return [
+      { per: 'bolt', base: def.damage, type: 'arcane' },
+      { per: 'split bolt', base: def.damage * def.splitDamage, type: 'arcane', note: `${def.splitCount} split off the foe it strikes` },
+    ];
+  },
   cast(player, rawDef, target) {
     const def = rawDef as Def;
     const origin = player.castPoint;

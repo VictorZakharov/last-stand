@@ -13,12 +13,13 @@ import type { Enemy } from '../../../src/entities/enemy';
 import type { HitResult } from '../../../src/entities/player';
 import type { EnemyId } from '../../../src/data/enemies';
 import type { LogEntry } from '../../../src/ui/battleLog';
-import type { SkillDef, WeaponStyle } from '../../../src/types';
+import type { SkillDef } from '../../../src/types';
 import { G } from '../../../src/state';
 import { hitEnemy, hurtPlayer, type EnemyAttack } from '../../../src/combat/damage';
 import { holdFor } from './cast';
 import { castAt, type Cast, type Hit } from './hits';
 import { battleLog } from './battleLog';
+import { gearsOf } from './gears';
 
 export interface LogOptions {
   fixture: Fixture;
@@ -190,16 +191,6 @@ async function castRound(
   const tally = `${counted(landed.length, 'hit')} landed, ${listed.length} listed`;
   const head = `  ${what}: ${tally}, in ${counted(lines.length, 'line')}`;
   return { lines: [head, ...lines.map((line) => `    ${line}`)], problems };
-}
-
-/** every way of holding weapons, for a class whose skills follow how they're held */
-const STYLES: WeaponStyle[] = ['shield', 'twoHanded', 'dual', 'oneHanded'];
-
-/** The ways of holding weapons cast in: the fixture's, or each one for a class whose skills follow how they're held
- *  (none: as he is). */
-function gearsOf(fixture: Fixture): (WeaponStyle | undefined)[] {
-  if (fixture.gear) return [fixture.gear];
-  return G.player.cls.skills.some((skill) => skill.needs) ? STYLES : [undefined];
 }
 
 /** The skills cast held that way: those asked for, or every one he knows and can use with it. */

@@ -31,6 +31,12 @@ const SWIRL = 1.3;
 
 const skill: ChannelSkill<TempestState> = {
   anim: 'spin',
+  // (each strike its share of the damage a second at the skill's own pace, struck the quicker for cast speed)
+  hits(rawDef, stats) {
+    const def = rawDef as Def;
+    const rate = def.spin * (1 + stats.castSpeed / 100) / TICK_TURN;
+    return [{ per: 'strike', base: def.damage * TICK_TURN / def.spin, rate, type: 'physical', note: 'struck faster at a higher casting speed' }];
+  },
   channel: true,
   warm: () => [slashMesh(ARC, 0.55, COLOR).mesh],
   start() {
