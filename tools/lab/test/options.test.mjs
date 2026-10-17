@@ -73,6 +73,13 @@ test('a probe gets the options it was given that the lab does not know', () => {
   assert.equal(options.slow, false);
 });
 
+test('an option given again: --tune joined, any other refused', () => {
+  const twice = ['eyes', 'tempest', '--tune', 'a.b=1', '--tune=a.c=2,3'];
+  assert.equal(parseCommandLine(twice).options.tune, 'a.b=1;a.c=2,3');
+  assert.throws(() => parseCommandLine(['carry', '--class', 'ranger', '--class', 'mage']),
+    /--class given twice \("ranger", then "mage"\)/);
+});
+
 test('no command is the help', () => {
   assert.equal(parseCommandLine([]).command, 'help');
   assert.equal(parseCommandLine(['--help']).command, 'help');

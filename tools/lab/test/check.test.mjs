@@ -3,8 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CHECK_CLASSES, CHECK_OFFSETS, CHECK_SPLIT, EYES_ROWS, countsLine, countsOver, eyesParts, jobsOf, longestFirst,
-  offsetsOf, scenariosOf,
+  CHECK_CLASSES, CHECK_OFFSETS, CHECK_SPLIT, EYES_ROWS, EYES_SKILLS, RUSH_PARTS, castParts, countsLine, countsOver,
+  eyesParts, jobsOf, longestFirst, offsetsOf, scenariosOf,
 } from '../node/check.mjs';
 import { keyedOptions, sideKey } from '../node/sideCache.mjs';
 
@@ -17,7 +17,9 @@ test('every command of the plan for each of its heroes, the ranger\'s alone for 
   assert.ok(gaitScenarios > 1);
   assert.ok(starts > 1);
   assert.ok(CHECK_SPLIT.has('gait'));
-  assert.equal(jobs.length, (3 + gaitScenarios) * CHECK_CLASSES.length + 2 + eyesParts().length);
+  const eyes = eyesParts().length + castParts().length;
+  // (the ranger's feet and carry, the warrior's rush in its parts and his hits)
+  assert.equal(jobs.length, (3 + gaitScenarios) * CHECK_CLASSES.length + 3 + RUSH_PARTS.length + eyes);
   assert.ok(names(jobs).includes('carry-ranger'));
   assert.ok(names(jobs).includes('eyes-warrior-twoHanded-Maul-row'));
   assert.ok(!names(jobs).some((name) => name.startsWith('eyes-mage')));
@@ -59,7 +61,8 @@ test('each weapon swung through the eyes in each row, the basic attack without a
   assert.equal(jobs.length, eyesParts().length);
   assert.equal(new Set(names(jobs)).size, jobs.length);
   const rows = Object.keys(EYES_ROWS).length;
-  assert.equal(jobs.filter((job) => job.options.weapon === 'Greataxe').length, rows);
+  const twoHanded = Object.values(EYES_SKILLS).filter((gears) => !gears || gears.includes('twoHanded')).length;
+  assert.equal(jobs.filter((job) => job.options.weapon === 'Greataxe').length, rows + twoHanded);
   const pause = jobs.find((job) => job.name === 'eyes-warrior-dual-Axe-pause');
   assert.deepEqual(pause.options._, ['cleave']);
   assert.equal(pause.options.film, false);
@@ -71,6 +74,54 @@ test('each weapon swung through the eyes in each row, the basic attack without a
   const row = jobs.find((job) => job.name === 'eyes-warrior-shield-Mace-row');
   assert.equal(row.options.canary, true);
   assert.equal(row.options.offsets, undefined);
+});
+
+test('each skill through the eyes on each weapon its way of holding them takes, the canaries on the first', () => {
+  const jobs = jobsOf({ commands: ['eyes'], classes: ['warrior'] });
+  const crescent = jobs.filter((job) => job.options._[0] === 'crescent');
+  assert.deepEqual(crescent.map((job) => job.options.weapon), ['Greatsword', 'Greataxe', 'Maul']);
+  assert.deepEqual(crescent.map((job) => job.options.canary), [true, false, false]);
+  const fangs = jobs.filter((job) => job.options._[0] === 'twinFangs');
+  assert.equal(fangs.every((job) => job.options.gear === 'dual'), true);
+  const strike = jobs.find((job) => job.name === 'eyes-warrior-oneHanded-Sword-powerStrike');
+  assert.equal(strike.options.film, false);
+  assert.equal(strike.options.times, undefined);
+});
+
+test('each skill cast through the eyes for its light, on each way\'s first weapon, its options in full', () => {
+  const jobs = jobsOf({ commands: ['cast'], classes: ['warrior', 'mage'] });
+  assert.equal(jobs.length, castParts().length);
+  assert.ok(jobs.every((job) => job.heroClass === 'warrior'));
+  const strike = jobs.find((job) => job.name === 'cast-warrior-dual-powerStrike');
+  assert.deepEqual(strike.options._, ['powerStrike']);
+  assert.equal(strike.options.weapon, 'Sword');
+  assert.deepEqual(strike.options.views, ['first']);
+  assert.deepEqual(strike.options.biomes, ['crypt', 'forest']);
+  assert.deepEqual(strike.options.times, []);
+  assert.ok(names(jobs).includes('cast-warrior-shield-cleave'));
+  assert.ok(names(jobs).includes('cast-warrior-twoHanded-crescent'));
+});
+
+test('the charge\'s sets apart from the skills cast with it, those cast with a shield and with two weapons', () => {
+  const jobs = jobsOf({ commands: ['rush'], classes: ['warrior', 'mage'] });
+  assert.deepEqual(names(jobs), ['rush-warrior-sets', 'rush-warrior-shield-casts', 'rush-warrior-dual-casts']);
+  const [sets, shield, dual] = jobs;
+  assert.deepEqual(sets.options.scenarios, ['sets']);
+  assert.equal(sets.options.gear, undefined);
+  assert.deepEqual(shield.options.scenarios, ['casts']);
+  assert.equal(shield.options.gear, 'shield');
+  assert.equal(dual.options.gear, 'dual');
+  assert.equal(dual.options.pictures, false);
+  assert.ok(jobs.every((job) => job.group === 'rush-warrior'));
+});
+
+test('Twin Fangs\' blows held to the basic attack\'s pace and to 0.2 s apart, with two weapons', () => {
+  const [hits] = jobsOf({ commands: ['hits'], classes: ['warrior', 'mage'] });
+  assert.equal(hits.name, 'hits-warrior');
+  assert.deepEqual(hits.options._, ['twinFangs']);
+  assert.equal(hits.options.than, 'cleave');
+  assert.equal(hits.options.apart, 0.2);
+  assert.equal(hits.options.gear, 'dual');
 });
 
 test('the longest last time first, one never timed before them all', () => {

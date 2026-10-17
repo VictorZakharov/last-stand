@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Way, seededRandom } from '../node/coop.mjs';
-import { drops, follow, judgeBlows, judgeShots } from '../node/coopJudge.mjs';
+import { drops, follow, judgeBlows, judgeRush, judgeShots, judgeStrike } from '../node/coopJudge.mjs';
 
 /** A path along x at `speed` m a frame, `frames` long. */
 const along = (frames, speed, from = 0) => Array.from({ length: frames }, (_, f) => [from + f * speed, 0]);
@@ -70,4 +70,51 @@ test('a blow dodged on the guest\'s screen that hurt it is told apart from one t
   assert.equal(blows.inReachHurt, 1);
   assert.equal(blows.dodgedHurt, 1);
   assert.equal(blows.unexplained, 0);
+});
+
+test('a foe the guest\'s charge carried is judged on both screens, where it ended against its stop', () => {
+  // (the guest charges 9 m along x over 30 frames; foe 1 rides before it and is thrown on, foe 2 is left behind on
+  // the host's screen, foe 3 is never met)
+  const frames = 60;
+  const guestAt = (f) => [Math.min(f, 30) * 0.3, 0];
+  const foe = (id, x, carried, up) => ({ id, x, z: 0, life: 100, blow: false, inReach: false, carried, up });
+  const guest = Array.from({ length: frames }, (_, f) => sample({
+    self: guestAt(f),
+    foes: [foe(1, guestAt(f)[0] + 1 + Math.max(0, f - 30) * 0.1, f >= 10 && f < 30, f > 30 && f < 40 ? 0.5 : 0),
+      foe(2, f < 20 ? 6 : guestAt(f)[0] + 1, f >= 20 && f < 30, f > 30 && f < 40 ? 0.5 : 0), foe(3, 20, false, 0)],
+  }));
+  const host = guest.map((one, f) => sample({
+    partner: one.self,
+    foes: [one.foes[0], foe(2, 6 - f * 0.05, false, 0), one.foes[2]],
+  }));
+  const met = judgeRush(host, guest);
+  assert.deepEqual(met.map((one) => one.id), [1, 2], 'the foes carried on the guest\'s screen');
+  assert.ok(met[0].here.thrown && met[0].there.carried && met[0].there.thrown);
+  assert.ok(met[0].here.ended > 0.45 && met[0].there.ended > 0.45, 'foe 1 ended before the guest on both');
+  assert.equal(met[1].there.carried, false);
+  assert.ok(met[1].there.ended < 0, 'foe 2 ended behind the guest on the host\'s screen');
+});
+
+test('a Power Strike landed in the charge cast over it is judged on each screen, its build-up cut short found', () => {
+  // (the strike is cast from frame 0 and lands at 30, the charge running from 20 to 45; on the host's screen its
+  // copy stopped building as the charge landed, at 20, and was posed as the charge from 40)
+  const act = (f, shownAsCharge, builtTo) => ({
+    shown: f >= 20 && f < 45 && shownAsCharge(f) ? 'charge' : 'chop',
+    under: f >= 20 && f < 45,
+    dashing: f >= 20 && f < 45,
+    casting: f < 36 ? 'powerStrike' : null,
+    charging: f < builtTo,
+    landed: [f === 20 ? 'bullRush' : null, f === 30 ? 'powerStrike' : null].filter(Boolean),
+  });
+  const frames = (acts) => Array.from({ length: 60 }, (_, f) => sample({ acts: acts(f) }));
+  const guest = frames((f) => ({ self: act(f, () => false, 30), partner: null }));
+  const host = frames((f) => ({ self: null, partner: act(f, (g) => g >= 40, 20) }));
+  const own = judgeStrike(guest, 'self');
+  assert.deepEqual(own, { together: 16, asCharge: 0, landed: 30, inCharge: true, builtTo: 30 });
+  const copy = judgeStrike(host, 'partner');
+  assert.equal(copy.builtTo, 20, 'the copy stopped building as the charge landed');
+  assert.ok(copy.builtTo < copy.landed);
+  assert.equal(copy.asCharge, 0, 'posed as the charge only once the strike was over');
+  const unseen = judgeStrike(host.map((one) => ({ ...one, acts: undefined })), 'partner');
+  assert.equal(unseen.landed, -1, 'a tree with no acts recorded never lands it');
 });

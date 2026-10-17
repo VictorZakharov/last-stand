@@ -265,7 +265,9 @@ export class LabSession {
   /** The other side of an A/B: commit `ref` exported and served (the same one kept while it's asked for again). */
   async sideFor(ref) {
     const { sha, dir } = exportCommit(REPO, OUT, ref);
-    const name = `${ref} (${sha.slice(0, 7)})`;
+    // (a check asks for the commit by its hash, resolved once for all its sessions: named by all forty, its reports'
+    // every other line began with it)
+    const name = ref === sha ? sha.slice(0, 7) : `${ref} (${sha.slice(0, 7)})`;
     if (this.otherSide?.sha === sha) {
       // (named as it's asked for this time: the commit asked for as HEAD~1 and, two commits on, as HEAD~3 was still
       // called HEAD~1)

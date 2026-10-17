@@ -283,6 +283,17 @@ export class Ragdoll {
     this.stillFor = 0;
   }
 
+  /** The whole body set going at (`vx`, `vy`, `vz`) m/s, each point keeping its own way about the body's (its turn,
+   *  its limbs' swing), waking it. */
+  drive(vx: number, vy: number, vz: number): void {
+    let mx = 0, my = 0, mz = 0;
+    for (let i = 0; i < N; i++) {
+      this.velocity(i, _a);
+      mx += _a.x / N; my += _a.y / N; mz += _a.z / N;
+    }
+    for (let i = 0; i < N; i++) this.push(i, vx - mx, vy - my, vz - mz);
+  }
+
   /** Speed added to the whole body, each point by its height's nearness to `at` (0 the feet, 1 the top): a blow
    *  lands hardest where it strikes, so a body struck high topples over its feet. */
   throw(vx: number, vy: number, vz: number, at: number): void {

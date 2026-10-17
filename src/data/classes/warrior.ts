@@ -74,9 +74,9 @@ const warrior: ClassDef = {
     },
     {
       key: '2', impl: 'bullRush', name: 'Bull Rush',
-      desc: 'Charge forward, trampling and hurling aside everything in your way.',
-      tags: ['physical'], cost: 28, cooldown: 5, castTime: 0,
-      damage: 120, range: 9, speed: 26, knock: 9,
+      desc: 'Charge forward, sweeping up everything in your way and hurling it on ahead as you stop. Elites and bosses are driven back instead. Your other skills can be used as you charge, and the charge as they wind up or while you hold them.',
+      tags: ['physical'], cost: 28, cooldown: 5, castTime: 0, overCast: true,
+      damage: 120, range: 9, speed: 26,
       icon: { glyph: '➹', color: '#ffb46a' },
     },
     {

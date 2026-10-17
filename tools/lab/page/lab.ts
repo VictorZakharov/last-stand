@@ -187,6 +187,20 @@ function lookToward(point: THREE.Vector3): void {
   renderer.lookBy(yaw / CAMERA.lookSpeed, (wanted.down - now.down) / CAMERA.lookSpeed);
 }
 
+/**
+ * The close views' camera turned about the upright to look along `facing` (rad, as the hero's: 0 along +z), its tilt
+ * kept, as a mouse-look move turns it: through the eyes the hero faces where it looks, so a set-up's facing holds
+ * there too (left as the last view had it, he turned to it as he settled: a charge set up at 120° went at 180°; the
+ * light's, the haze's and the trail's measures each turned it after the set-up, `lookAlong` in `page/light.ts`).
+ * Nothing in the top-down view.
+ */
+function lookAlong(facing: number): void {
+  // (the camera looks along its yaw and a half turn)
+  const yaw = facing - Math.PI;
+  const turn = Math.atan2(Math.sin(yaw - renderer.cameraYaw()), Math.cos(yaw - renderer.cameraYaw()));
+  renderer.lookBy(-turn / CAMERA.lookSpeed, 0);
+}
+
 /** One frame's input, as a player would give it. */
 export interface Frame {
   /** keys held down this frame (`w`, `1`...) */
@@ -509,6 +523,7 @@ export class Lab {
     // (standing still: an older tree's `place` kept the velocity, and the hero glided on from his spot)
     this.player.vel.set(0, 0, 0);
     this.player.facing = facing;
+    lookAlong(facing);
     this.model.reset?.();
     this.aim = new THREE.Vector3(x + Math.sin(facing) * AIM_AHEAD, 0, z + Math.cos(facing) * AIM_AHEAD);
     // (the same moment and the same random numbers from here on, however long the run took to start: the clock is

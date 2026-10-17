@@ -13,26 +13,26 @@ import { ROM } from './models/anatomy';
  * weapon moves), so the arm is laid out in the plane: the elbow is where the arm's two bones meet in it, and may drop
  * out of it about the line from the shoulder to the grip, the grip and the weapon staying put; and the forearm may
  * roll the weapon out of it, from one cut's end to the next's start.
- * The plane is set by what the eyes see of the blow: it runs through the shoulder the swing puts (a cut turns the
- * trunk into it and brings that shoulder forward and up: from the shoulders' rest under the camera, a cut swung there
- * passed below and beside the frame) and through the aim, the crosshair's line where the weapon's striking part
- * reaches it at the blow, and crosses the view there the way the blow goes. So the striking part, a blade's tip's
- * third, lands on the crosshair as the skill fires. `plane` is four numbers, camera space as `viewMove`'s keys: the
- * shoulder, and the way the blow crosses the view (degrees: 0 rightwards, 90 up; a forehand down to the left about
- * 210). In it the aim is at 0 degrees and the wind-up at 90. `keys` are six numbers a key: its share of the move,
- * the striking part's way from the shoulder (degrees in the plane), how far out the grip is (m), the wrist's bend
- * in the plane, to the thumb's side (radial, towards the wind-up) or the little finger's (ulnar, negative), within the
- * wrist's range, how far the elbow drops below the plane (degrees about the line from the shoulder to the grip:
- * `dropElbow`), and how far the forearm rolls the blade out of the plane (degrees about it: `rollForearm`; 0 through
- * a blow). `hit` is the share the striking part reaches the aim at (its way 0 there): the aim's distance is set
- * by how far it reaches then. The fist holds the handle square across it but for `slant` (degrees: diagonally, as a
- * hand holds a sword), so the weapon's way off the forearm is 90 degrees, less the slant, plus that bend: it can't
- * run along the forearm. All are read each frame, so a tunable value (core/tuning.ts) is tuned as it runs. (Keyed by
- * the grip's place and the weapon's way alone, as `viewMove`'s, the blade whipped over flat first; each axis a curve
- * of its own, it left its plane between keys and led with its flat. Keyed by the weapon's way off the forearm, the
- * fist drawn round the handle bent 96 degrees off it at the blow. Keyed by the grip's way in a plane set by hand,
- * the blade stood upright at the blow and crossed the crosshair 29% of the way from its hilt: the owner, "it strikes
- * with whole blade, but it should strike with tip".)
+ * The plane is set by what the eyes see of the blow: it runs through the shoulder the swing puts (a cut turns the trunk
+ * into it and brings that shoulder forward and up: from the shoulders' rest under the camera, a cut swung there passed
+ * below and beside the frame) and through the aim, the crosshair's line where the weapon's striking part reaches it at
+ * the blow, and crosses the view there the way the blow goes. So the striking part, a blade's tip's third, lands on the
+ * crosshair as the skill fires. `plane` is four numbers, camera space (viewModel.ts `fromEyes`): the shoulder, and the
+ * way the blow crosses the view (degrees: 0 rightwards, 90 up; a forehand down to the left about 210). In it the aim is
+ * at 0 degrees and the wind-up at 90. `keys` are six numbers a key: its share of the move, the striking part's way from
+ * the shoulder (degrees in the plane), how far out the grip is (m), the wrist's bend in the plane, to the thumb's side
+ * (radial, towards the wind-up) or the little finger's (ulnar, negative), within the wrist's range, how far the elbow
+ * drops below the plane (degrees about the line from the shoulder to the grip: `dropElbow`), and how far the forearm
+ * rolls the blade out of the plane (degrees about it: `rollForearm`; 0 through a blow). `hit` is the share the striking
+ * part reaches the aim at (its way 0 there): the aim's distance is set by how far it reaches then. The fist holds the
+ * handle square across it but for `slant` (degrees: diagonally, as a hand holds a sword), so the weapon's way off the
+ * forearm is 90 degrees, less the slant, plus that bend: it can't run along the forearm. All are read each frame, so a
+ * tunable value (core/tuning.ts) is tuned as it runs. (Keyed by the grip's place and the weapon's way alone, as the
+ * moves through the eyes once were, the blade whipped over flat first; each axis a curve of its own, it left its plane
+ * between keys and led with its flat. Keyed by the weapon's way off the forearm, the fist drawn round the handle bent
+ * 96 degrees off it at the blow. Keyed by the grip's way in a plane set by hand, the blade stood upright at the blow
+ * and crossed the crosshair 29% of the way from its hilt: the owner, "it strikes with whole blade, but it should strike
+ * with tip".)
  */
 export interface ViewSwing {
   plane: readonly number[];
@@ -98,6 +98,16 @@ export function swingShoulder(swing: ViewSwing, out: THREE.Vector3, mirror = fal
   out.set(swing.plane[0], swing.plane[1], swing.plane[2]);
   if (mirror) out.x = -out.x;
   return out;
+}
+const _shFrom = new THREE.Vector3();
+/** The shoulder `swing` puts at `k`, as `swingShoulder`: moved from its `from` swing's over its `turning`, as its
+ *  plane's is (`planeAt`: a way between two holds whose shoulders differ, Steel Tempest's into its spin). */
+export function swingShoulderAt(swing: ViewSwing, k: number, out: THREE.Vector3, mirror = false): THREE.Vector3 {
+  swingShoulder(swing, out, mirror);
+  const { from, turning } = swing;
+  if (!from || !turning) return out;
+  const t = smooth(clamp((k - turning[0]) / (turning[1] - turning[0]), 0, 1));
+  return out.lerp(swingShoulder(from, _shFrom, mirror), 1 - t);
 }
 
 /** An arm laid out in a swing's plane with the grip's way at 0 (degrees, the wind-up positive): the grip's reach as it
@@ -247,7 +257,7 @@ function placeArm(
 }
 
 /**
- * `swing` at `k` for an arm of `bones`, as `viewAt`: the grip's place into `at`, the weapon's way into `dir`, into
+ * `swing` at `k` for an arm of `bones`: the grip's place into `at`, the weapon's way into `dir`, into
  * `flat` the way the fist's flat side faces (models/warrior.ts `rollFlat`: the edge over the knuckles into the blow,
  * swung from the wind-up's side, the angles falling), and into `elbow` the way from the shoulder to the elbow (its
  * reach's pole), each in the view; mirrored across it (`mirror`) for the other hand.

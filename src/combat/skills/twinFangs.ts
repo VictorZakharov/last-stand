@@ -8,16 +8,15 @@ import { slashArc, slashMaterial } from './slash';
 import { sweep, swingArc } from './cleave';
 import type { InstantSkill, Needs } from './types';
 import type { Player } from '../../entities/player';
+import { FANGS } from '../../data/balance';
+import { tunable } from '../../core/tuning';
 
 type Def = Needs<'damage' | 'range' | 'arc' | 'color'>;
 
-/** the lunge: seconds, how long the strikes follow through standing after it (at full speed the two
- *  cuts were over before the eye caught them), and how far short of the aim it stops (the strikes reach
- *  the rest) */
-const LUNGE = 0.35, HOLD = 0.55, SHORT = 1.3, MAX_LUNGE = 2.2;
-/** when the two blades cross the target, into the lunge (in step with the model's 'flurry': its cuts
- *  start at 0.3 and 0.7 of it) */
-const STRIKES = [0.3 * (LUNGE + HOLD), 0.7 * (LUNGE + HOLD)];
+/** how far short of the aim the lunge stops (the strikes reach the rest), and how far it goes at most (m) */
+const SHORT = 1.3, MAX_LUNGE = 2.2;
+// (its timing, the lunge's and the strikes', which the model's 'flurry' keys its cuts to: `lab --tune twinFangs.apart=0.1`)
+tunable('twinFangs', FANGS);
 
 function strike(player: Player, def: Def, i: number): void {
   if (!player.alive) return;
@@ -35,6 +34,7 @@ function strike(player: Player, def: Def, i: number): void {
 
 const skill: InstantSkill = {
   anim: 'flurry',
+  // (its lunge cast in Bull Rush's charge rides on it: the cuts land as it runs, `Player.startDash`)
   warm: () => [new THREE.Mesh(new THREE.RingGeometry(0.3, 1, 8), slashMaterial(0xffffff))],
   cast(player, rawDef, target) {
     const def = rawDef as Def;
@@ -43,8 +43,8 @@ const skill: InstantSkill = {
     const dir = d > 1e-3 ? new THREE.Vector3(dx / d, 0, dz / d) : new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
     // closes in on the aim, but never runs past it
     const lunge = Math.min(MAX_LUNGE, Math.max(0, d - SHORT));
-    player.startDash(dir, lunge / LUNGE, LUNGE, { anim: 'flurry', hold: HOLD });
-    STRIKES.forEach((at, i) => schedule(at, () => strike(player, def, i)));
+    player.startDash(dir, lunge / FANGS.lunge, FANGS.lunge, { anim: 'flurry', hold: FANGS.hold });
+    [FANGS.first, FANGS.first + FANGS.apart].forEach((at, i) => schedule(at, () => strike(player, def, i)));
   },
 };
 

@@ -399,7 +399,7 @@ function update(dt: number): void {
   // enemies in the arena, training dummies in the lobby
   if (G.mode === 'run') { updateRun(dt); checkRunOver(); }
   updateEnemies(dt);
-  if (simulates()) separateEnemies();
+  separateEnemies(!simulates());
   G.player.showAim(dt);
   perfLap('enemies');
   updateSession(dt, G.player.reviving);

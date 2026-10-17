@@ -94,10 +94,11 @@ function lightScenarios(options) {
 }
 
 /** the strikes `trail` casts unless `--strikes` says: every one of the warrior's, Rending Cleave each way he holds his
- *  weapons, each other by a way it's swung (Thunder Crescent's two-hander, Twin Fangs' two blades) */
+ *  weapons, each other by a way it's swung (Thunder Crescent's two-hander, Twin Fangs' two blades); Bull Rush strikes
+ *  with the body, its weapons unswung */
 const TRAIL_STRIKES = [
   'cleave@oneHanded', 'cleave@shield', 'cleave@twoHanded', 'cleave@dual', 'powerStrike@twoHanded',
-  'crescent@twoHanded', 'tempest@shield', 'twinFangs@dual', 'bullRush@dual',
+  'crescent@twoHanded', 'tempest@shield', 'twinFangs@dual',
 ];
 
 /** A strike as `trail --strikes` writes it (`cleave@twoHanded`): its skill, and the way the weapons are held for it. */
@@ -122,6 +123,7 @@ function castScenarios(options) {
         pictures: options.pictures !== false,
         what: options.what?.map(Number),
         gear: options.gear,
+        weapon: options.weapon,
         tune: fixtureFrom(options).tune,
       });
     }
@@ -652,6 +654,43 @@ export const COMMANDS = {
     },
     finish(results, options, session) {
       return textWithPictureFiles(results, session.outFor('death'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
+  hits: {
+    check(options) {
+      if (options.apart !== undefined && !(options.apart > 0)) throw labError('hits --apart: more than 0 s');
+    },
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        skills: options._[0].split(','),
+        apart: options.apart,
+        than: options.than,
+        canary: Boolean(options.canary),
+      };
+      return side.command('hits', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
+  rush: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        pictures: options.pictures !== false,
+        canary: Boolean(options.canary),
+        scenarios: options.scenarios,
+        dummies: Boolean(options.dummies),
+      };
+      return side.command('rush', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('rush'));
     },
     textOf: asText,
     problemsOf: problemsIn,

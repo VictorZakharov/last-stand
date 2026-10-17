@@ -20,6 +20,10 @@ interface TempestState {
 
 /** how far round it turns between strikes, and between whooshes (rad: a strike each 0.2 s at 15 rad/s) */
 const TICK_TURN = 3, WHOOSH_TURN = 3.15;
+/** how long the spin takes to come up to its speed from standing (s), as a body speeds up into a turn (started at its
+ *  speed, the body's turn faded in from the stance over the pose's fade, and turned 1.7 times as fast as the spin for
+ *  its first tenth of a second: lab eyes) */
+const SPIN_UP = 0.2;
 const ARC = 2.6;
 const COLOR = 0xe8eef8;
 /** what the blades drive round with them, against out */
@@ -48,7 +52,7 @@ const skill: ChannelSkill<TempestState> = {
   tick(player, rawDef, dt, st) {
     const def = rawDef as Def;
     st.t += dt;
-    const turned = def.spin * (1 + player.stats.castSpeed / 100) * dt;
+    const turned = def.spin * (1 + player.stats.castSpeed / 100) * Math.min(1, st.t / SPIN_UP) * dt;
     st.turn += turned;
     st.group.position.set(player.pos.x, player.obj.position.y + 1.0, player.pos.z);
     st.group.scale.setScalar(def.radius * 0.8);   // the blade's reach; hits count the foe's size too

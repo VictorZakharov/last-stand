@@ -19,7 +19,7 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `range`: every joint against a body's ranges frame by frame (standing, walking each way, attacking, and walks that change direction while he attacks, held or tapped, or runs: each angle past its range, its worst and where, each scenario's fastest ankle and weapon tip, a two-hander let go of by the other hand, `--trace` the leg IK frame by frame as `gait --trace` lists it, each frame's joints past their ranges beside it)
 - `eyes <skill>`: a skill cast through the eyes, frame by frame (where the blade goes across the view, wound up, through the blow and where it ends, how fast, where it is as the skill fires; a two-hander let go of where it's seen, or seen in one hand; a fist open on its handle; the arms' joints past their ranges; the weapon jumping between frames; a film of the frames)
 - `match <picture>`: the hero standing through the eyes beside a reference's screenshot, on a screen of its shape (the screenshot, his frame, the two blended, the points marked on it and his drawn on each, and how far his are off)
-- `coop`: two games playing together, the host's and a guest's beside it, their messages carried as a link of a high ping and jitter carries them (`--ping`, `--jitter`: how far behind and how roughly each shows the other's heroes and foes, how its timeline plays them out, whether an arrow that struck a foe on the guest's screen counted, whether a blow it dodged hurt it, a guest brought down and raised, a guest's blink as the host's screen shows it: when it hid the copy, where the copy came out, the foes it dazed on both screens; `--class mage`)
+- `coop`: two games playing together, the host's and a guest's beside it, their messages carried as a link of a high ping and jitter carries them (`--ping`, `--jitter`: how far behind and how roughly each shows the other's heroes and foes, how its timeline plays them out, whether an arrow that struck a foe on the guest's screen counted, whether a blow it dodged hurt it, a guest brought down and raised, a guest's blink as the host's screen shows it: when it hid the copy, where the copy came out, the foes it dazed on both screens, `--class mage`; a guest's charge carrying foes on both screens, and a Power Strike landed in it, `--class warrior`)
 - `stops`: the hero coming to a stop from a run as a person stops (runs let go at different points of a stride, on level ground, drawn and by the dais's edges: the steps once still, a foot put out and drawn back, steps back, a foot on another level than the body's or stepped onto one once still, `--trace`, `--only`)
 - `gait`: the walk judged as a person's (level ground and the steps, nothing drawn, drawn, tapping, changing direction often and going round in circles: each foot's time on the ground against the plan, both and neither, the steps a second and their length, hops, a foot dance's short steps, the gallops (a foot leaving within 0.3 of a stride of the other's: counted as hops, both feet within a few frames, a gallop at every set-off went unseen), the steps' width, the hips' rise and fall, a planted foot dragged, each hand's swing against its knee half second by half second, the rhythm against the walk cycle, steps back under a body that stopped, the jerks, each step's swing against its plan and why it left, every frame judged as a body's: its centre of mass with its gear against the push its motion needs from the planted soles, in the air falling as a body does, and every joint within its range, `--trace` each frame (`--span` some), a scenario held up by a prop failing it, and a film of each round its first hop)
 - `form`: the run judged against a runner's (published runners' cadence, time on the ground, joint curves over the stride, lean, bounce and arm swing, at a man's size, with each way the hero holds his weapons: stick figures of his stride over a runner's, and the hero pictured from both sides, in the game's views and his arms close up, at eight points of it; the set-up's `--gear` holds them any way his class can)
@@ -38,9 +38,11 @@ The lab as an agent works with it: what every command measures and why, how to w
 - `shots`: the bow's shots at a boss with its foes packed round it (each biome and view, the bow drawn to full over points across them and loosed, its flight followed frame by frame: the first foe drawn along it struck, none if none, and one aimed inside a foe reaching it unless another is in the way)
 - `blink`: the mage's blink cast as the player casts it (open ground, past his reach, into a prop, past one, the arena's edge, onto the dais, his own feet: where it came out against its preview and his reach, the frames he was hidden and the blows that landed in them, the foes near and far it dazed and how they stood)
 - `draw`: each drawn shot held at full draw as the player holds it (the glint round its arrowhead every frame in every view: none as it's drawn, held at full until it's loosed, the pixels it lights as the player sees it, and no blob of glare; the crosshair bold at full draw alone, its one beat into it about its middle, none with reduced motion)
-- `cast`: a skill cast as the player casts it, its effect seen frame by frame (each biome and view with the biome's foes coming at him, every frame drawn and read back: its light against the budget, the frame's mean every tenth of a second, the flashes in any second and the worst cell's light through it, the shaders compiled late)
+- `cast`: a skill cast as the player casts it, its effect seen frame by frame (each biome and view with the biome's foes coming at him, every frame drawn and read back: its light against the budget, the frame's mean every tenth of a second, the flashes in any second and the changes counted in the worst cell's, the shaders compiled late)
 - `trail`: the trail a swung weapon leaves (each strike in each view, every frame drawn with it and without: its light where the weapons swept over the last 0.15 s, lit through every blow, its newest end on the blade, nothing while the weapons are still)
 - `death`: each skill's kills as they fall (foes stood dazed where it strikes, a hair from death and with little to spare: how hard each body was thrown and which way, how far it flew, when it lay still; its drawn pose against the floor, the props, the wall and its points)
+- `hits <skills>`: each skill's blows as they land on foes stood where it strikes (when each landed from the press, the gaps between them, the damage a second; held to `--apart` and to `--than`'s pace)
+- `rush`: the foes Bull Rush sweeps up (stood dazed on its line and at its sides, killed, an elite and the boss, in a lane clear of props: when each was met, how long it rode before the hero and how near his body, how it was let go and where it ended against his stop), and skills cast with it (a Power Strike charged and the charge cast over it, a cleave and Twin Fangs as it runs, a strike at its stop, the charge cast over a held Steel Tempest: when each was cast and landed, what the charge's own blows struck, what was shown, his strides)
 - `crowd`: a crowd of foes killed at once and what the frame costs as they fall (each frame timed by the browser's clock with the game drawn, the bodies' part apart, at each CPU slowdown, as a low-end device's, and frame rate)
 - `draws`: one frame's draw calls with the crowd standing, by what drew them (the geometries drawn most often, those that drew the most triangles, the triangles drawn outside the view of the pass that drew them, the draws that drew nothing, the scene's draws by their material's look, through the eyes what the arms' own camera drew, the hero's arms and what they hold alone; the scene's objects whose matrices are made again each frame)
 - `perf <skills>`: skills cast in turn with the biome's foes coming, every frame timed as the game's performance report times it (the frame, the update by stage, the render, the GPU by pass, the draws, triangles and the particles' fill), on a phone's screen, boot and CPU if asked
@@ -57,11 +59,11 @@ Options every command takes:
 - `--ab`: runs any of them on `origin/main` too and says which lines and pictures differ (a commit against itself agrees, line for line)
 - `--watch`: runs one again on each change to the source
 - `--profile`: says where a command's time went
-- `--tune name.field=v,...;...`: sets the game's tunable values before a command's set-up (`src/core/tuning.ts`: `warriorEyes.oneOn=0.75,-1.1,0.5`), so a pose or a camera is compared across values in seconds, without editing the source and booting again
+- `--tune name.field=v,...;...`: sets the game's tunable values before a command's set-up (`src/core/tuning.ts`: `warriorEyes.oneOn=0.75,-1.1,0.5`), so a pose or a camera is compared across values in seconds, without editing the source and booting again; given twice, the two are joined (any other option given twice is refused: a second `--tune` once replaced the first unsaid)
 - `--boot level[@pixels]`: the page booted as a device whose Auto settled on that quality (`low@518400`: #243's phone): Auto's cookie set before the boot, so its warm-ups run at that level and the hero is built at its detail; a page booted ahead counts as ready only for the same boot
 - `--wear helm,chest,hands|none` (any command that sets the run up): the armour the hero wears, every piece not named left off (the set-up's report says what he `wears`): with `--screen` at the owner's window, a picture of what they see (the lab's hero is otherwise as the boot rolled him, bare-handed, and his first-person hands looked nothing like the owner's gloved ones)
 
-A command exits with 1 when it failed or found a problem (an error in the page, a canary missed). An A/B's pictures that differ are pictured where they differ (`tools/lab/out/ab/<command>/`), a probe can return moments pictured (`lab.picture`, or `lab.screen` for the screen as the player sees it, the page's UI over the game, whole or round one element; written as a sheet and compared in an A/B), and `page/timing.ts` times a method's calls by the browser's own clock (the page's `performance.now` is the lab's). Write a new measure in the lab (`tools/lab/examples/handSpeed.ts` shows its parts: the state it measures checked to have happened, a canary it must catch), never as a script with a boot and a clock of its own, and keep it: from its first use it is a lab command, or part of one that measures the same thing, never a probe left in `.tmp` (every harness is permanent). The probes and films the AGENTS.md files and their notes name (the bow probe, the range probe, `legdet`, the zigzag and aim probes...) were such scripts and aren't in the repo: each is a measure to port into the lab the first time it's needed again, as the carry's was (`carry`). The lab's own code has unit tests: `npm run lab:test`.
+A command exits with 1 when it failed or found a problem (an error in the page, a canary missed; not the dev server's own client's, whose socket the lab never uses: on a machine short of sockets it failed to connect, and failed jobs the game had passed, `fromDevClient` in `node/side.mjs`). An A/B's pictures that differ are pictured where they differ (`tools/lab/out/ab/<command>/`), a probe can return moments pictured (`lab.picture`, or `lab.screen` for the screen as the player sees it, the page's UI over the game, whole or round one element; written as a sheet and compared in an A/B), and `page/timing.ts` times a method's calls by the browser's own clock (the page's `performance.now` is the lab's). Write a new measure in the lab (`tools/lab/examples/handSpeed.ts` shows its parts: the state it measures checked to have happened, a canary it must catch), never as a script with a boot and a clock of its own, and keep it: from its first use it is a lab command, or part of one that measures the same thing, never a probe left in `.tmp` (every harness is permanent). The probes and films the AGENTS.md files and their notes name (the bow probe, the range probe, `legdet`, the zigzag and aim probes...) were such scripts and aren't in the repo: each is a measure to port into the lab the first time it's needed again, as the carry's was (`carry`). The lab's own code has unit tests: `npm run lab:test`.
 
 ## Commands
 
@@ -159,7 +161,9 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   host running round in circles, the guest zigzagging; `foes`: foes chasing them; `shoot`: the guest shooting at a foe
   that chases the host; `dodge`: the guest running from every other blow as it sees it coming; `down`: a foe bringing
   the guest down and the host raising it; `blink`, played only by a hero with a blink, `--class mage`: the guest
-  blinking between two spots as foes close on it), each one's input frame by frame from what its own screen shows.
+  blinking between two spots as foes close on it; `rush`, played only by a hero with Bull Rush, `--class warrior`:
+  the guest charging through three dazed foes once; `strike`, the same but for a Power Strike charged first and the
+  charge cast over it 0.35 s from its blow), each one's input frame by frame from what its own screen shows.
   What each game showed is judged against the other's in the same frame (`node/coopJudge.mjs`): each copy's delay (the
   one that lines its path up best with its own game's), how far off that path and how roughly it moves (its speed
   against its own, its largest move a frame), how each game's timeline plays its partner out (how far behind the
@@ -167,8 +171,15 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   and whether the host counted them, the blows at the guest against whether it stood in their reach on its own screen,
   when the guest went down and was raised on each screen, and each blink: when and how long it hid the guest's copy on
   the host's screen, how far from where it came out on its own screen the copy came out and how far it moved after,
-  and the foes it dazed on the guest's screen against those dazed on the host's. Scenarios run on from each other, so
-  a scenario alone can differ.
+  and the foes it dazed on the guest's screen against those dazed on the host's, and each foe the guest's charge met
+  on its screen: whether the host's carried and threw it too, where it was let go, came down and ended on each
+  against where the guest stopped there (one ending behind it or level with it is a problem), and its largest move a
+  frame on the guest's screen and when (eased at once onto the host's late reports as its own carry ended, a copy
+  slid back 1.2 m a frame; carried into a copy not yet met, one was shoved 73 cm off it), and the guest's Power Strike
+  under its charge on each screen (each game's hooks on each hero's pose and `fire`: `Sample.acts`): the frame it
+  landed and whether the charge ran then, the frames the charge was shown in its place, and whether it was still
+  building as it landed (a copy, replayed, was taken as landed as the charge cast over it landed, and its build-up
+  stopped short). Scenarios run on from each other, so a scenario alone can differ.
   `--pictures` pictures both screens at a scenario's moments into `out/coop` (`down`'s: the guest downed across the
   arena, its marker at the edge of the host's screen, then over it, then raised; `shoot`'s last: the host holding Tab,
   the scores). The lab's link reports each game's round trip to "the server" once a second as the relay's pings would
@@ -222,7 +233,20 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   the frame; the shoulders at rest in the eyes' frame and an arm's reach (where a pose through the eyes can put the
   hands), and the arms' joints past their ranges, each one's worst and on how many frames (information: through the
   eyes the arms are placed where they're seen, not fitted to a body's ranges), and each hand's fist on its handle
-  (`Model.fists`: how far the handle passes from where the fist closes, how far the fingers are curled). Problems: a
+  (`Model.fists`: how far the handle passes from where the fist closes, how far the fingers are curled), and the frames
+  each fist is in the frame (Steel Tempest's two-hander held low came round into the view's bottom once a turn, a
+  flash each time, which no line said). Each strike's whip (its blow's point against its hilt) is held to what the
+  arm and the weapon swung round the shoulder as one would give, a spin's to what carried round the body as one would
+  (`page/strike.ts` `Pivot`: held out from the shoulder, a two-hander's spin read as slid across). A strike moves
+  against the eyes, the camera, which carries the arms (in the world's space, Bull Rush's run carried the hilt along
+  at the body's pace, and the cut swung as it ended read as slid across). One slowed to a fifth of its speed within
+  60 ms is stopped dead, unless the floor stopped it: its weapon's lowest point (every corner of what's drawn) within
+  6 cm of the floor by then, Thunder Crescent's driven into the ground; further under it, it has sunk in, a problem of
+  its own. `--canary` judges each blow the floor stopped again with the floor read 30 cm under where it is, which must
+  find it stopped dead in the air. A blow is looked for only over the frames the game swings a weapon in a strike
+  (`Model.swung`, which the swing's trail follows: a war cry's, a drink's and a raised shield's weapons strike nothing,
+  and were failed as led by their flats), and one a hand where a cast's tip passes from one hand's weapon to the
+  other's (Twin Fangs' right blade, then its left: judged as one, the left's blow was never looked at). Problems: a
   two-hander let go of by the other hand where that hand is in the frame (one let go of below the frame is listed,
   unseen); a two-hander seen in one hand, its lower grip in the frame with the other hand out of it, for longer than
   200 ms (a fist below the frame on a handle that runs out of it is lost to a person's own eyes too: counted whenever
@@ -238,13 +262,16 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   as Power Strike's way back ended). `--film=false` takes no film (it's
   `tools/lab/out/eyes/<skill>/`, every `--every`
   frames, 2 by default), `--frames` lists every frame: the grip, the weapon's way and the other hand in the camera's
-  space as the moves through the eyes are keyed (`models/warriorEyes.ts`), held or let go and why, and its joints
+  space (the swings' keys are their own, `models/warriorEyes.ts`: `lab swing` keys a pose), held or let go and why,
+  and its joints
   past their ranges, and the fists. `--canary` freezes the body, the trunk and the arms as they were at the press (and
   puts the hero under the camera again by his neck as held: placed by the neck as posed, Steel Tempest's frozen arms
   went round the eyes each turn), turns the other arm down out of the frame and lifts the weapon 15 cm up the view out
   of the fists: there must be no blow, a two-hander must be seen in one hand, and a fist must be off its handle (frozen
-  alone, the arms swung with the trunk's turn and read as a blow); and lifts the weapon 30 cm up the view on its
-  stillest frame in the frame alone, which must read as a jump there. A spin's blow (a skill with a `spin`: Steel
+  alone, the arms swung with the trunk's turn and read as a blow); lifts it alone each frame of the cast played as it
+  is, which must show a fist off its handle (the right's weapon, or the left's where only the left fist is seen: a
+  dual wielder's Bull Rush holds the right blade under the frame, and lifted, it was never seen); and lifts the weapon
+  30 cm up the view on its stillest frame in the frame alone, which must read as a jump there. A spin's blow (a skill with a `spin`: Steel
   Tempest) isn't asked to cross the aim, as it strikes all round; whether its passes may be seen is `cast`'s flashes'
   to say (held across the view, the one-hander's steel lit the crypt 3 times a second at 2.4 turns a second). Every run
   of the cast, the canaries' as the first, starts at full energy, its cooldowns cleared (Steel Tempest drains energy
@@ -362,7 +389,8 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   again moved onto one gate, the first half into a prop, and waves of their own with the boss put first, come late
   and frozen where it rose.
 - `cast <skill>`: a skill cast as the player casts it, its effect seen frame by frame (`page/cast.ts`; the skill
-  named by its key, its behaviour or its name, `--class` for whose). The hero stands in each biome and view
+  named by its key, its behaviour or its name, `--class` for whose; `--gear` and `--weapon` what he holds). The hero
+  stands in each biome and view
   (`--biomes`, `--views`, `--facing` in degrees, `--at x,z`: off the dais by default; `--at 0,0` its middle) with the biome's commonest foes coming at him from 13 m ahead
   (`--foes`, 4 by default), and the key is pressed over an aim 8 m ahead: held for a held skill, drawn to full for a
   drawn shot, held 3 s for a channel. Every frame from the press until the effect is over is drawn as the game draws
@@ -371,7 +399,9 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   over the scene before the press, a sixteenth of it 150 at most and 5% of it bright (200 or more) at most, those two
   not judged where the scene alone is past them. The flashes are counted as WCAG counts a general flash
   (`page/flashes.ts`: a pair of opposing changes of a tenth of white in a sixteenth's light, the darker under 0.8),
-  three in any second a problem; the worst cell's light is listed through its worst second, and the frame's mean
+  three in any second a problem; the changes the worst cell's worst second counted are listed, each the light it
+  reached and when (its light every third frame was listed: a hand swung through the cell in a frame or two read as a
+  steady fade, and what was counted could not be told), and the frame's mean
   every tenth of a second through the cast, and the blinks, listed and not judged (`page/blinks.ts`: a patch of a
   64 by 36 grid brightening by 20 or more over the frame before and back within 3 frames, an effect's own crackle
   among them; a broken prop's rubble piece drawn full size at the world's middle for a frame, beside a hero on the
@@ -379,7 +409,11 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   down), nearest first (`page/whatIsAt.ts`): the runs give the same frames, so a blink one finds, the next can look
   into. It casts through each camera that drew the frame, on the layers it draws: through the eyes, the arms' own
   first, as it draws over the world's. Cast on every layer from the world's camera, it listed the hero's hidden hair at
-  the eyes and missed the arms, drawn through a narrower view. Shaders compiled after loading, and nothing cast, are problems too. The
+  the eyes and missed the arms, drawn through a narrower view. The world's ray meets the foes too, by their own
+  meshes, on the layer no camera draws, where their crowd draws them (the camera stood inside a husk Bull Rush threw
+  ahead of it, and the ray met only the walls past it); and it says what the hero was doing then: his cast and how
+  far through it, his channel, a dash, a stagger, a fall, his life. Shaders compiled after loading, and nothing cast,
+  are problems too. The
   props a cast broke stand again before the next. `--times` (0.4,1.5,3 by default) are the moments pictured, the
   screen as the player sees it with the HUD, into `out/cast/<skill>`; `--canary` strobes the exposure in the first
   biome and view (5 a second), which the flashes must catch. `--gear` holds the weapons a style's way (Thunder
@@ -457,6 +491,48 @@ A command exits with 1 when it failed or found a problem (an error in the page, 
   (on by default) pictures the bodies as the player sees them, and close from the hero's left and from behind, at
   0.15 s, at 0.5 s and lying still, into `out/death`. `--canary` puts a body a metre under the floor for a frame,
   throws one back at the hero, and turns the first struck off its middle the other way.
+- `hits <skills>`: each skill's blows as they land (`page/hits.ts`): foes stand dazed where it strikes (`death`'s
+  stands), living past every blow, and it's cast at them on a fresh set-up as the player casts it (`cast.ts`
+  `holdFor`). Every hit is caught as it lands, a blow being the hits within a frame of each other (one cut striking
+  three foes): each blow's time from the press, the gaps between them, when the hero was free again and the damage a
+  second till then. Striking nothing, a gap past `--apart s`, and blows no quicker than `--than`'s (held down 1.2 s
+  for a row of its blows: the basic attack, `cleave`) are problems. `--canary` strikes a blow of its own 1 s after the
+  first (with `--apart` or `--than`), or else keeps the foes from harm. In `check` as `hits twinFangs --than cleave
+  --apart 0.2 --gear dual`: Twin Fangs' two cuts came 0.35 s apart, slower than a dual wielder's cleave at 0.30 (the
+  owner's "too slow", "both hits in a rapid succession"); they're 0.15 s apart now.
+- `rush`: the foes Bull Rush sweeps up (`page/rush.ts`, `--class warrior`). The biome's commonest foes stand dazed
+  in sets, each on a fresh set-up: on the charge's line, at its sides (1.2 and 1.4 m off it), a hair from death on
+  it, and an elite and the biome's boss on it; the charge is cast through each set, aimed its whole range ahead, in a
+  lane it finds clear of props and the wall for as far again as a throw goes (the grid's spot nearest the forest's
+  open ground at -11, -12 from which a way round by 15° is clear: from that spot itself a stump a metre off blocked
+  every way, and a log at the stop held two thrown foes at its side). Every foe is followed frame by frame until it
+  has landed and stood still, or its body lain still: when the charge met it (its blow, so a game with no carry,
+  `--ab`'s main, meets it all the same), how long it rode before the hero and its body's least gap to his, how it
+  was let go (thrown, how high and how far, or shoved on) and where it ended against where he stopped. These are
+  problems: a foe never met, one met and left standing, one carried more than 2 cm inside him, one that ended behind
+  his middle or level with his body, a living foe left unthrown, and an elite or a boss thrown. On main every foe
+  it met ended 0.8 to 5.4 m behind him. Then skills are cast with the charge (`page/rushCasts.ts`), each on a fresh
+  set-up, two living foes dazed on its line (`--dummies`: the lobby's training dummies, planted, the first stopping
+  the charge), the aim carried along ahead of the hero as a still mouse is: the charge alone, a Power Strike charged
+  and the charge cast over it 0.35 s from its blow, a cleave and Twin Fangs pressed as the charge runs, a Power Strike
+  pressed as it runs and at its stop, and the charge cast 0.4 s into Steel Tempest and into the shield raised, their
+  keys held on until it's over; a combo the weapons held don't allow is left out (`check` runs the casts with a
+  shield and with two weapons). Each is followed: whether each skill was cast as it was pressed, when the one looked
+  at landed against the charge's run and what it struck, what the charge's own blows struck (the foes struck as its
+  dash steps: every foe on its line, or a problem), the frames of its run a held skill was held in, the frames the
+  skill and the charge ran together and those the charge was shown in instead (a lunge riding on the charge's dash is
+  the skill), each foot where the hips have it against the charge alone's at the same point of it (more than 20 cm
+  off is a problem: under a skill's crouch the knees bend to keep the feet on the floor, up to 12 cm off; a stride
+  frozen by the pose's fade as a skill began or ended left a foot 39 to 45 cm off, the Tempest's wide stance under
+  the charge 27 cm; through the eyes the legs aren't drawn, nor judged), and how far the charge took him. On main
+  every skill pressed with the charge was refused, and #255 refused the charge over a held Tempest and Twin Fangs in
+  it. (A guest's charge on both screens is `coop`'s `rush` and `strike`.) `--scenarios sets,casts` runs a part alone.
+  `--view` third or first pictures what the player sees there; `--pictures` (on by default) pictures each set just
+  before the charge stops, as it stops and once every foe is still, and each skill cast with it as it lands, the hero
+  close from his left too, into `out/rush`. `--canary` puts the first foe thrown 2 m behind the hero as it lands,
+  shows the charge in the strike's place as both run, drops the charge's legs from under the cleave (not through the
+  eyes, where they aren't drawn), keeps the foes from harm as the charge alone steps, lets Steel Tempest go as the
+  charge is pressed, and cuts the charge short as Twin Fangs lands in it.
 - `crowd`: a crowd of foes killed at once (`page/crowd.ts`), and what the frame costs as their bodies fall: the low-end
   device's measure. `--count` sets the crowd (38 by default, the most a wave keeps alive); it's killed by a blow each
   from the hero, or by `--skill` cast at it. Each round sets the crowd up afresh, times 60 frames with it standing,
@@ -687,8 +763,15 @@ the game draws in front of him (a leaf card cut out by its texture, a prop disso
 part's cut-out (a hair card's) keeps its texture's alpha. A pixel is found as a part by its colour within 2 levels
 a channel, looked up once (matched against every part's colour, a picture took 10 s).
 - `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films), the
-  stops, the ranges and the run's form for every hero, and the ranger's feet and carry (`--classes`, `--commands` for
-  fewer), each in a session of its own (`--jobs n`, a core in three by default, at most 8), the longest first as they
+  stops, the ranges and the run's form for every hero, the ranger's feet and carry, and the warrior through the eyes
+  (`eyes`: the basic attack's rows on every weapon, and every other skill on every weapon its way of holding them
+  takes, `check.mjs` `EYES_SKILLS`, its canaries on each way's first; with the cuts alone checked, five skills were
+  broken through the eyes and no check said so, #252) and his skills' light there (`cast`: the basic attack and
+  `EYES_SKILLS` on each way's first weapon, through the eyes in both biomes, `castParts`; a dual wielder's Power
+  Strike flashed three times a second and Bull Rush stood the camera inside a husk, and no check said so, #252)
+  and the foes his charge sweeps up and the skills cast with it, with a shield and with two weapons (`rush`,
+  `check.mjs` `RUSH_PARTS`), and Twin Fangs' blows' pace (`hits`) (`--classes`, `--commands` for fewer), each in a session of its own (`--jobs n`, a core in three by default, at
+  most 8), the longest first as they
   last took, each report in `out/check/<command>-<hero>.txt` and its pictures in a folder beside it. With `--ab`, the
   other commit is exported once before the sessions start, and its side read back from the cache once it has run
   (below). The gait runs a scenario a job, each on a page booted for it, and each hero's scenarios are put back
@@ -710,7 +793,8 @@ Options every command run on a page takes:
 
 - a probe or command that doesn't compile says where and why (`.tmp/x.ts:3:10 doesn't compile: Unterminated
   string`), not the browser's "Failed to fetch dynamically imported module";
-- the set-up (sheet, carry, probe): `--view top|third|first`, `--at x,z`, `--facing rad`, `--nocked[=false]`,
+- the set-up (sheet, carry, probe): `--view top|third|first`, `--at x,z`, `--facing rad` (held in every view: the
+  close views' camera turned to it, as through the eyes the hero faces where it looks), `--nocked[=false]`,
   `--gear oneHanded|shield|twoHanded|dual` (the hero holding his weapons that way, from his class's own bases: as the
   profile rolled them by default), `--weapon` the base held so (with `dual` one in each hand);
 - `gait --films=false`, `form --pictures=false`: the numbers alone, each run once (a film or a picture runs it
@@ -853,8 +937,10 @@ terminal's task stops it all.
 
 A boot that fails fails at once, with why (`side.mjs` `openPageIn`): a boot that threw says so on the game's loading
 screen, and a module Vite couldn't compile answers its request with an error, which the lab asks for again to say
-Vite's message (where it went wrong in which file). Waited for the loading screen to go alone, either was waited out
-to the timeout, three minutes: a module that wouldn't compile never runs, so its loading screen never says it failed.
+Vite's message (where it went wrong in which file), and a module that won't link (importing a name another doesn't
+export: a page booted between two edits) throws a `SyntaxError` on the page. Waited for the loading screen to go
+alone, each was waited out to the timeout, three minutes: a module that wouldn't compile or link never runs, so its
+loading screen never says it failed, and the command after it waited behind it.
 
 - `lab.mjs`: the command line. Reads and checks the command (`node/options.mjs`), and sends it to the server on
   127.0.0.1:5196 (`LAB_PORT`; `node/client.mjs`), or runs it in a session of its own.

@@ -216,7 +216,12 @@ mat4 crowdSkin() {
   return m;
 }`;
 
-/** A slot's material: its kind's own, drawn from the rows, every body's looks its own. */
+/** how far from the camera (m, along its view) a body is drawn whole, and nearer than which none of it is, a screen
+ *  door between: through the eyes a charge runs into the foe it throws ahead of it, and the camera stood inside a
+ *  husk's glowing body, half the frame its glow (lab `cast bullRush --views first --what`); shadows stay whole */
+const EYE_CLEAR = { from: 0.2, to: 0.5 };
+
+/** A slot's material: its kind's own, drawn from the rows, every body's looks its own, dissolved at the camera. */
 function crowdMaterial(base: THREE.MeshStandardMaterial, kind: Kind, slot: number): THREE.MeshStandardMaterial {
   const m = base.clone();
   // (each body's glow is its own material's, from its row)
@@ -245,6 +250,9 @@ flat varying vec4 vCrowdLook;
     f = swap(f, 'uniform float uChar;', '#define uChar vCrowdFx.z');
     f = swap(f, 'uniform float uHit;', '#define uHit vCrowdFx.w');
     f = swap(f, 'uniform vec3 uEdge;', '#define uEdge vCrowdLook.rgb');
+    f = swap(f, '#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+float crowdDoor = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+if (crowdDoor < 1.0 - smoothstep(${EYE_CLEAR.from.toFixed(2)}, ${EYE_CLEAR.to.toFixed(2)}, 1.0 / gl_FragCoord.w)) discard;`);
     shader.fragmentShader = swap(f, 'vec3 totalEmissiveRadiance = emissive;', 'vec3 totalEmissiveRadiance = emissive * vCrowdLook.a;');
   };
   m.customProgramCacheKey = () => `${key}-crowd`;

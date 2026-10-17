@@ -5,7 +5,6 @@
 // frame's pose, so skills cast in between leave from the weapon in view (`Player.castPoint`).
 import * as THREE from 'three';
 import type { Model } from '../types';
-import { curve, type Keys } from './models/motion';
 import { drawArms } from '../core/renderer';
 import { ARMS_LAYER, HIDDEN_LAYER, WORLD_LAYER } from '../core/layers';
 
@@ -78,29 +77,6 @@ export function intoEyes(root: THREE.Object3D, neck: THREE.Object3D, p: THREE.Ve
 /** A direction of the model's world in the eyes' view: `dirFromEyes` undone */
 export function dirIntoEyes(root: THREE.Object3D, d: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
   return out.copy(d).transformDirection(_rootInv.copy(root.matrixWorld).invert()).applyQuaternion(_rInv);
-}
-/** A key of a move through the eyes: its share of the move, the grip's place in the view and the weapon's way there
- *  (camera space, as `fromEyes`). */
-export type ViewKey = readonly [k: number, at: readonly number[], dir: readonly number[]];
-/** a move through the eyes: each axis of the grip's place and of the weapon's way as keys over the move */
-export interface ViewMove { at: Keys[]; dir: Keys[] }
-
-/** A move through the eyes from its keys, each axis a curve of its own (`curve`: it eases into each key, and one where
- *  the move turns back is held a moment, as a wind-up's top is). */
-export function viewMove(keys: readonly ViewKey[]): ViewMove {
-  const axis = (part: 1 | 2, i: number): Keys => keys.map((key) => [key[0], key[part][i]] as const);
-  return { at: [0, 1, 2].map((i) => axis(1, i)), dir: [0, 1, 2].map((i) => axis(2, i)) };
-}
-
-/** `move` at `k`: the grip's place into `at`, the weapon's way into `dir` (mirrored across the view, `mirror`: the
- *  other hand's). */
-export function viewAt(move: ViewMove, k: number, at: THREE.Vector3, dir: THREE.Vector3, mirror = false): void {
-  at.set(curve(move.at[0], k), curve(move.at[1], k), curve(move.at[2], k));
-  dir.set(curve(move.dir[0], k), curve(move.dir[1], k), curve(move.dir[2], k)).normalize();
-  if (mirror) {
-    at.x = -at.x;
-    dir.x = -dir.x;
-  }
 }
 
 const _tx = new THREE.Vector3(), _tf = new THREE.Vector3();

@@ -34,19 +34,36 @@ const FAILED_ANSWER_CHARS = 600;
 const VITE_ERROR = /const error = (\{.*\})/;
 
 /**
+ * Whether a console message is the dev server's own client's: its socket to the server, which the lab never uses (it
+ * serves with `hmr: false`, and boots a page afresh for a change). On a machine short of sockets the client failed to
+ * connect, and its errors failed jobs whose game had passed (3 of `check`'s 155 jobs, on both sides).
+ */
+function fromDevClient(message) {
+  return message.location().url.includes('/@vite/client');
+}
+
+/**
  * Whether `page` fails to load a script as it boots: `promise` settles with what its server answered for the first
- * script that failed (a module Vite couldn't compile never runs, so the loading screen never says it failed), until
- * `stop`.
+ * script that failed (a module Vite couldn't compile never runs, so the loading screen never says it failed), or
+ * with the error of a module that wouldn't link (one importing a name another doesn't export: each was served whole,
+ * and the boot waited out its three minutes on a page that never ran), until `stop`.
  */
 function scriptFailure(page) {
   let stop;
   const promise = new Promise((resolve) => {
-    const listener = async (response) => {
+    const answered = async (response) => {
       if (response.request().resourceType() !== 'script' || response.status() < 400) return;
       resolve(`${response.url()} answered ${response.status()}:\n${await whyFailed(response)}`);
     };
-    page.on('response', listener);
-    stop = () => page.off('response', listener);
+    const thrown = (error) => {
+      if (error.name === 'SyntaxError') resolve(`a module wouldn't load: ${error.message}`);
+    };
+    page.on('response', answered);
+    page.on('pageerror', thrown);
+    stop = () => {
+      page.off('response', answered);
+      page.off('pageerror', thrown);
+    };
   });
   return { promise, stop };
 }
@@ -414,7 +431,7 @@ export class Side {
     const page = await context.newPage();
     page.on('pageerror', (error) => this.errors.push(`${prefix}${String(error)}`));
     page.on('console', (message) => {
-      if (message.type() === 'error') this.errors.push(`${prefix}${message.text()}`);
+      if (message.type() === 'error' && !fromDevClient(message)) this.errors.push(`${prefix}${message.text()}`);
     });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     // (a probe's `lab.screen`: the game with the page's UI over it, which the canvas views can't show)

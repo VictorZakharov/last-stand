@@ -22,8 +22,10 @@ export interface LightScenario {
   biome: BiomeId;
   view: renderer.ViewMode;
   facing: number;
-  /** the way the hero holds his weapons (as rolled when not given) */
+  /** the way the hero holds his weapons (as rolled when not given), and with it the weapon, by its base
+   *  (`Fixture.weapon`) */
   gear?: WeaponStyle;
+  weapon?: string;
   /** where he stands (x, z; the set-up's spot off the dais when not given) */
   at?: [number, number];
   /** the hero built afresh for it (a quality's detail is the hero's from his build) */
@@ -322,8 +324,8 @@ export async function lookAlong(lab: Lab, facing: number): Promise<void> {
 export async function standIn(lab: Lab, scenario: LightScenario): Promise<void> {
   if (G.arena.biome !== scenario.biome) G.arena.setBiome(scenario.biome);
   const facing = scenario.facing * Math.PI / 180;
-  const { view, gear, at, fresh, tune } = scenario;
-  await lab.setup({ view, facing, gear, at, fresh, tune });
+  const { view, gear, weapon, at, fresh, tune } = scenario;
+  await lab.setup({ view, facing, gear, weapon, at, fresh, tune });
   if (scenario.view !== 'top') await lookAlong(lab, facing);
   await lab.step(SETTLE_FRAMES);
 }

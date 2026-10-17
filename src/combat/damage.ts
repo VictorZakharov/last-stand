@@ -43,7 +43,13 @@ export interface HitOpts {
 }
 
 /** What the local player dealt a foe, with its effects, as co-op reports it to the host (set by net/sync). */
-export interface DealtHit { amount: number; crit: boolean; type: DamageType; knock?: number; from?: XZ; chill?: number; freeze?: number; daze?: number; /** a kill's throw */ fling?: Fling }
+export interface DealtHit {
+  amount: number; crit: boolean; type: DamageType; knock?: number; from?: XZ; chill?: number; freeze?: number; daze?: number;
+  /** a charge's carry: how long (s) and its way (`carryEnemy`) */
+  carry?: { seconds: number; way: XZ };
+  /** a kill's throw */
+  fling?: Fling;
+}
 let dealtSink: ((enemy: Enemy, hit: DealtHit) => void) | null = null;
 export function setDealtSink(fn: typeof dealtSink): void { dealtSink = fn; }
 
@@ -79,6 +85,15 @@ export function dazeEnemy(enemy: Enemy, seconds: number, by: Player): void {
   if (!enemy.alive || !dealsDamage(by)) return;
   enemy.daze(seconds);
   dealtSink?.(enemy, { amount: 0, crit: false, type: 'arcane', daze: seconds });
+}
+
+/** Carry a foe before a player's charge along `way` for `seconds` (`Enemy.carry`), judged as hits are: only by its
+ *  own game, which on a co-op guest carries the copy at once and tells the host, whose reports show it on every other
+ *  game. */
+export function carryEnemy(enemy: Enemy, by: Player, way: XZ, seconds: number): void {
+  if (!enemy.alive || !dealsDamage(by)) return;
+  enemy.carry(by, way, seconds);
+  dealtSink?.(enemy, { amount: 0, crit: false, type: 'physical', carry: { seconds, way } });
 }
 
 /** Damage a player (after armor / resistance / ward). Only its own game's: a partner's is judged where its player sees

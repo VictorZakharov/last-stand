@@ -34,6 +34,7 @@ export function curve(keys: Keys, k: number): number {
 
 const JOINTS = ['body', 'hips', 'spine', 'chest', 'neck', 'head', 'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR', 'thighL', 'thighR', 'kneeL', 'kneeR', 'ankleL', 'ankleR'] as const;
 const ARMS = ['shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR'] as const;
+const LEGS: readonly string[] = ['thighL', 'thighR', 'kneeL', 'kneeR', 'ankleL', 'ankleR'];
 
 /**
  * A crossfade over the cuts between poses: each frame `apply` is given the new pose and whether it cut from
@@ -43,6 +44,9 @@ const ARMS = ['shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR'] as
  */
 export class PoseFade {
   private readonly js: THREE.Object3D[];
+  /** which of them are the legs, and whether the fade under way leaves them be */
+  private readonly legs: boolean[];
+  private legsKept = false;
   private readonly shown: THREE.Quaternion[];
   private readonly from: THREE.Quaternion[];
   private readonly shownP = new THREE.Vector3();
@@ -53,16 +57,19 @@ export class PoseFade {
 
   constructor(private readonly j: Joints) {
     this.js = JOINTS.map((k) => j[k]);
+    this.legs = JOINTS.map((k) => LEGS.includes(k));
     this.shown = this.js.map(() => new THREE.Quaternion());
     this.from = this.js.map(() => new THREE.Quaternion());
   }
 
-  /** start a fade from the pose shown last frame (a cut), over `dur` seconds */
-  cut(dur = 0.2): void {
+  /** start a fade from the pose shown last frame (a cut), over `dur` seconds; `legs` false leaves the legs out of it,
+   *  a cut between two moves run on the same legs (Bull Rush's charge, and a skill cast as it runs: faded from the
+   *  stride frozen at the cut, a foot lagged 45 cm behind the charge's own) */
+  cut(dur = 0.2, legs = true): void {
     if (!this.primed) return;
     for (let i = 0; i < this.js.length; i++) this.from[i].copy(this.shown[i]);
     this.fromP.copy(this.shownP);
-    this.w = 1; this.dur = dur;
+    this.w = 1; this.dur = dur; this.legsKept = !legs;
   }
 
   apply(dt: number): void {
@@ -71,7 +78,7 @@ export class PoseFade {
       this.w = Math.max(0, this.w - dt / this.dur);
       // (eased: it leaves the old pose gently and settles into the new one)
       const e = this.w * this.w * (3 - 2 * this.w);
-      for (let i = 0; i < js.length; i++) js[i].quaternion.slerp(this.from[i], e);
+      for (let i = 0; i < js.length; i++) if (!(this.legsKept && this.legs[i])) js[i].quaternion.slerp(this.from[i], e);
       this.j.body.position.lerp(this.fromP, e);
     }
     for (let i = 0; i < js.length; i++) this.shown[i].copy(js[i].quaternion);

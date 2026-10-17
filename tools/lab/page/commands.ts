@@ -25,6 +25,8 @@ import type { DrawOptions } from './draw';
 import type { GearOptions } from './gear';
 import type { MusicOptions } from './music';
 import type { DeathOptions } from './death';
+import type { HitsOptions } from './hits';
+import type { RushOptions } from './rush';
 import type { CrowdOptions } from './crowd';
 import type { DrawsOptions } from './draws';
 import type { PerfOptions } from './perf';
@@ -285,6 +287,25 @@ export async function held(lab: Lab, command: HeldOptions): Promise<Report> {
 export async function death(lab: Lab, command: DeathOptions): Promise<Report> {
   const { death: deathRound } = await import('./death');
   return deathRound(lab, command);
+}
+
+/**
+ * `lab hits`: each skill's blows as they land on foes stood where it strikes, their times and the gaps between them;
+ * striking nothing, a gap past `--apart` and blows no quicker than `--than`'s are problems.
+ */
+export async function hits(lab: Lab, command: HitsOptions): Promise<Report> {
+  const { hits: hitsOf } = await import('./hits');
+  return hitsOf(lab, command);
+}
+
+/**
+ * `lab rush`: Bull Rush cast through sets of foes (on its line, at its sides, killed, an elite and a boss), each
+ * followed until it's still; a foe never met, left standing, carried inside the hero or ending behind or beside him,
+ * a living foe left unthrown and an elite or a boss thrown are problems.
+ */
+export async function rush(lab: Lab, command: RushOptions): Promise<Report> {
+  const { rush: rushRound } = await import('./rush');
+  return rushRound(lab, command);
 }
 
 /**

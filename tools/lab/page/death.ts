@@ -34,7 +34,7 @@ export interface DeathOptions {
 
 /** Where a skill's foes stand: `ahead` m before the hero, `across` m either side of that or `along` m apart down the
  *  way, or in a ring `round` m from him; and how many. */
-interface Stand {
+export interface Stand {
   count: number;
   ahead?: number;
   across?: number;
@@ -43,7 +43,7 @@ interface Stand {
 }
 
 /** each skill's foes, by its behaviour, where it strikes */
-const STANDS: Record<string, Stand> = {
+export const STANDS: Record<string, Stand> = {
   cleave: { count: 3, ahead: 1.6, across: 1 },
   twinFangs: { count: 3, ahead: 3.4, across: 0.8 },
   powerStrike: { count: 3, ahead: 2, across: 0.8 },
@@ -70,8 +70,8 @@ const WHIRLS = new Set(['maelstrom']);
 const ELSEWHERE = new Set(['arrowRain', 'starfall']);
 
 /** where the hero stands and faces (deg) unless the fixture says: open ground, off the dais, the arena before him */
-const SPOT: [number, number] = [-11, -12];
-const FACING = 90;
+export const SPOT: [number, number] = [-11, -12];
+export const FACING = 90;
 /** frames looked at from the press, at most (a storm holds its kills up for its whole time) */
 const MOST_FRAMES = 900;
 /** frames before the press, for the cast's light to clear and the foes to settle */
@@ -156,7 +156,9 @@ export function foeKind(): EnemyId {
 }
 
 /** Where `stand` puts its foes round a hero at `at` facing `facing` (rad), and where the skill is aimed. */
-function placesFor(stand: Stand, at: THREE.Vector3, facing: number): { spots: THREE.Vector3[]; aim: THREE.Vector3 } {
+export function placesFor(
+  stand: Stand, at: THREE.Vector3, facing: number,
+): { spots: THREE.Vector3[]; aim: THREE.Vector3 } {
   const forward = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
   const left = new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing));
   const spots: THREE.Vector3[] = [];

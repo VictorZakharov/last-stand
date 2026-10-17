@@ -17,7 +17,7 @@ import { Projectile } from '../../../src/combat/projectiles';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import type { EnemyId } from '../../../src/data/enemies';
 import type { Player } from '../../../src/entities/player';
-import type { SkillKey } from '../../../src/types';
+import type { ActionState, SkillKey } from '../../../src/types';
 import type { Frame, Lab } from './lab';
 
 /** Which game a page plays. */
@@ -43,6 +43,18 @@ export type XZ = [number, number];
 /** A hero standing, down (to be raised) or dead. */
 export type HeroState = 'up' | 'down' | 'dead';
 
+/** A hero's action as one game shows it in one frame: the one it is posed in (none: standing or moving) and whether
+ *  a charge runs under it, whether it dashes, the skill it is casting (its `impl`) and whether that has yet to land,
+ *  and the skills it landed this frame. */
+export interface Act {
+  shown: string | null;
+  under: boolean;
+  dashing: boolean;
+  casting: string | null;
+  charging: boolean;
+  landed: string[];
+}
+
 /** A foe as one game shows it in one frame. */
 export interface FoeSample {
   id: number;
@@ -55,6 +67,9 @@ export interface FoeSample {
   inReach: boolean;
   /** dazed, as this game shows it (stars over it) */
   dazed: boolean;
+  /** carried before a hero's charge as this game shows it, and how high it flies off it (m: 0 on its feet) */
+  carried: boolean;
+  up: number;
 }
 
 /** What one game shows in one frame of a scenario. */
@@ -77,6 +92,8 @@ export interface Sample {
   struck: number[];
   /** its own hero's arrows loosed this frame */
   loosed: number;
+  /** its own hero's action and its partner's, as it shows them */
+  acts: { self: Act; partner: Act | null };
 }
 
 /** Where a page's co-op stands, for the lab to wait on. */
@@ -108,8 +125,8 @@ interface Scenario {
   frames: number;
   host: XZ;
   guest: XZ;
-  /** the foes the host spawns as it starts */
-  foes: { type: EnemyId; at: XZ }[];
+  /** the foes the host spawns as it starts, each standing dazed where it says (thinking of nothing) */
+  foes: { type: EnemyId; at: XZ; dazed?: boolean }[];
   /** the guest's life as it starts (unhurt by default) */
   guestLife?: number;
   /** the skill (its `impl`) the guest's hero must know to play it: a class's own */
@@ -275,6 +292,52 @@ function blinkInput(frame: number): Frame {
   return { keys: beat < BLINK_HOLD - 1 ? [key] : [], aim };
 }
 
+/** the guest's spot in `rush` and the way it charges (rad: a lane clear of props in the forest, as the lab's `rush`
+ *  finds one), the frame it charges at and how far ahead it aims (its whole range) */
+const RUSH_FROM: XZ = [-10, -12];
+const RUSH_WAY = (120 * Math.PI) / 180;
+const RUSH_AT = 20;
+const RUSH_AHEAD = 9;
+
+/** A point `ahead` m along the guest's charge in `rush`, from its spot. */
+function rushAhead(ahead: number): XZ {
+  return [RUSH_FROM[0] + Math.sin(RUSH_WAY) * ahead, RUSH_FROM[1] + Math.cos(RUSH_WAY) * ahead];
+}
+
+/** how far Power Strike's charge-up is from its blow as the guest in `strike` casts Bull Rush over it (s): about
+ *  the charge's brace and half its run, so the blow lands in the run (as the lab's `rush` casts them) */
+const STRIKE_LEAD = 0.35;
+
+/** The guest in `strike`: it charges a Power Strike on its spot, and as the strike is `STRIKE_LEAD` from its blow
+ *  casts Bull Rush over it along its way, its cooldowns and energy made ready first. */
+function strikeInput(frame: number): Frame {
+  const strike = keyOf('powerStrike');
+  const rush = keyOf('bullRush');
+  const [x, z] = rushAhead(RUSH_AHEAD);
+  const aim = new THREE.Vector3(x, 0, z);
+  if (!strike || !rush) return { aim };
+  const hero = G.player;
+  if (frame === RUSH_AT) {
+    hero.cooldowns.clear();
+    hero.energy = hero.stats.maxEnergy;
+    return { keys: [strike], aim };
+  }
+  const cast = hero.casting;
+  const due = cast?.skill.def.impl === 'powerStrike' && cast.fireAt - cast.t <= STRIKE_LEAD;
+  return due && hero.cooldownLeft('bullRush') <= 0 ? { keys: [rush], aim } : { aim };
+}
+
+/** The guest in `rush`: it charges along its way once, its cooldown and energy made ready first. */
+function rushInput(frame: number): Frame {
+  const key = keyOf('bullRush');
+  const [x, z] = rushAhead(RUSH_AHEAD);
+  const aim = new THREE.Vector3(x, 0, z);
+  if (!key || frame !== RUSH_AT) return { aim };
+  G.player.cooldowns.clear();
+  G.player.energy = G.player.stats.maxEnergy;
+  return { keys: [key], aim };
+}
+
 const SCENARIOS: Record<string, Scenario> = {
   walk: {
     about: 'the host runs round in circles and the guest zigzags, stopping now and then',
@@ -345,6 +408,37 @@ const SCENARIOS: Record<string, Scenario> = {
     pictures: [40, 240],
     hostInput: () => ({}),
     guestInput: blinkInput,
+  },
+  rush: {
+    about: 'the guest, a warrior, charges through three dazed foes, the host standing off',
+    frames: 240,
+    host: [-4, 22],
+    guest: RUSH_FROM,
+    foes: [
+      { type: 'mossback', at: rushAhead(2.5), dazed: true },
+      { type: 'thornling', at: rushAhead(4.5), dazed: true },
+      { type: 'mossback', at: rushAhead(6.5), dazed: true },
+    ],
+    skill: 'bullRush',
+    pictures: [RUSH_AT + 20, RUSH_AT + 40, RUSH_AT + 120],
+    hostInput: () => ({}),
+    guestInput: rushInput,
+  },
+  strike: {
+    about: 'the guest, a warrior, charges a Power Strike and casts Bull Rush over it through three dazed foes, the '
+      + 'strike landing in the charge, the host standing off',
+    frames: 300,
+    host: [-4, 22],
+    guest: RUSH_FROM,
+    foes: [
+      { type: 'mossback', at: rushAhead(2.5), dazed: true },
+      { type: 'thornling', at: rushAhead(4.5), dazed: true },
+      { type: 'mossback', at: rushAhead(6.5), dazed: true },
+    ],
+    skill: 'powerStrike',
+    pictures: [RUSH_AT + 85, RUSH_AT + 100],
+    hostInput: () => ({}),
+    guestInput: strikeInput,
   },
 };
 
@@ -437,7 +531,9 @@ function watchArrows(): void {
 }
 
 /** The room opened (the host) or joined (the guest) over the lab's channels. Returns the room's code. */
-export async function coopOpen(lab: Lab, open: { role: Role; code?: string; ping: number; jitter: number }): Promise<string> {
+export async function coopOpen(
+  lab: Lab, open: { role: Role; code?: string; ping: number; jitter: number },
+): Promise<string> {
   const { role, code } = open;
   history.replaceState(null, '', `${location.pathname}?net=local`);
   (window as unknown as { BroadcastChannel: unknown }).BroadcastChannel = LabChannel;
@@ -503,6 +599,7 @@ export function coopScenario(lab: Lab, { name }: { name: string }): void {
   for (const foe of scenario.foes) {
     const enemy = spawnEnemy(foe.type, new lab.THREE.Vector3(foe.at[0], 0, foe.at[1]), { wave: 1 });
     enemy.life = UNKILLED;
+    if (foe.dazed) enemy.dazed = Infinity;
   }
 }
 
@@ -562,6 +659,7 @@ function sampleNow(): Sample {
     foes: G.enemies.filter((foe) => foe.alive).map((foe) => foeSample(foe, self)),
     struck: struckFoes(),
     loosed: loosedArrows(),
+    acts: { self: actOf(self), partner: partner ? actOf(partner) : null },
   };
   play.ended = [];
   return sample;
@@ -578,14 +676,17 @@ function foeSample(foe: Enemy, hero: Player): FoeSample {
   play.attacks.set(foe.id, { action, share });
   const distance = Math.hypot(hero.pos.x - foe.pos.x, hero.pos.z - foe.pos.z);
   const inReach = distance < def.range + hero.radius + 0.3 && foe.inFront(hero.pos.x, hero.pos.z, 1.3);
-  // (an older tree's foes are never dazed)
+  // (an older tree's foes are never dazed, carried nor thrown)
   const dazed = ((foe as { dazed?: number }).dazed ?? 0) > 0;
-  return { id: foe.id, x: foe.pos.x, z: foe.pos.z, life: foe.life, blow, inReach, dazed };
+  const carried = Boolean(foe.carried);
+  const up = foe.tossed?.y ?? 0;
+  return { id: foe.id, x: foe.pos.x, z: foe.pos.z, life: foe.life, blow, inReach, dazed, carried, up };
 }
 
 /** How this game plays its partner's reports out, where this tree's session has a timeline for it. */
 function playoutNow(): Sample['playout'] {
-  const peer = [...session.peers.values()][0] as { clock?: { behind: number; rate: number; held: boolean } } | undefined;
+  type Peer = { clock?: { behind: number; rate: number; held: boolean } };
+  const peer = [...session.peers.values()][0] as Peer | undefined;
   const clock = peer?.clock;
   return clock ? { behind: clock.behind, rate: clock.rate, held: clock.held } : null;
 }
@@ -598,6 +699,50 @@ function struckFoes(): number[] {
     if (foe) struck.push(foe.id);
   }
   return struck;
+}
+
+/** What a hero's hooks saw of the frame: the action it was posed in, and the skills it landed. */
+interface Watched {
+  shown: ActionState | null;
+  landed: string[];
+}
+
+const watched = new WeakMap<Player, Watched>();
+
+/** A hero's action this frame as this game shows it (its pose and its landings watched from its first sample). */
+function actOf(hero: Player): Act {
+  let seen = watched.get(hero);
+  if (!seen) {
+    seen = { shown: null, landed: [] };
+    watched.set(hero, seen);
+    watch(hero, seen);
+  }
+  const cast = hero.casting;
+  const act: Act = {
+    shown: seen.shown?.name ?? null,
+    // (an older tree poses no charge under another action)
+    under: Boolean((seen.shown as { under?: unknown } | null)?.under),
+    dashing: hero.dash !== null,
+    casting: cast?.skill.def.impl ?? null,
+    charging: Boolean(cast && !cast.fired),
+    landed: seen.landed,
+  };
+  seen.landed = [];
+  return act;
+}
+
+/** `hero`'s pose and landings watched into `seen`: the action each pose is given, and each skill's `fire`. */
+function watch(hero: Player, seen: Watched): void {
+  const pose = hero.pose.bind(hero);
+  hero.pose = (dt, t, move, dir, lean, action) => {
+    seen.shown = action;
+    pose(dt, t, move, dir, lean, action);
+  };
+  const fire = hero.fire.bind(hero);
+  hero.fire = (skill, target, power) => {
+    seen.landed.push(skill.def.impl);
+    fire(skill, target, power);
+  };
 }
 
 /** The local hero's arrows that went up this frame (on the host, its partner's replayed ones too). */
