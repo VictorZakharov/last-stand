@@ -3,7 +3,8 @@
 // how far behind it is (the delay that lines its path up best with its own game's), how far off that path it is, and
 // how roughly it moves (its speed against its own, a frame at a time, and its largest move a frame); an arrow that
 // struck a foe on the guest's screen by whether the host counted it, and how long its blow took to show on the foe; a
-// blow at the guest by whether it hurt it, against whether the guest was where it landed on its own screen.
+// blow at the guest by whether it hurt it, against whether the guest was where it landed on its own screen; a
+// guest's charge by whether every foe it met on its screen was carried and thrown on both, and ended before it.
 
 /** the longest delay looked for, frames (a second and a quarter) */
 const MOST_DELAY = 75;
@@ -39,11 +40,21 @@ function pathLength(points) {
 }
 
 function largestMove(points) {
-  let largest = 0;
+  return largestMoveAt(points).move;
+}
+
+/** The largest move a frame of `points` (m), and the frame it ends on (-1: none). */
+function largestMoveAt(points) {
+  let move = 0;
+  let frame = -1;
   for (let f = 1; f < points.length; f++) {
-    if (points[f] && points[f - 1]) largest = Math.max(largest, distance(points[f], points[f - 1]));
+    if (!points[f] || !points[f - 1]) continue;
+    const step = distance(points[f], points[f - 1]);
+    if (step <= move) continue;
+    move = step;
+    frame = f;
   }
-  return largest;
+  return { move, frame };
 }
 
 /** How far `shown` is from `source` on average, `source` taken `delay` frames earlier (none to compare: Infinity). */
@@ -234,9 +245,13 @@ function describeFoes(host, guest, frameMs) {
   const sourceJump = Math.max(...followed.map((one) => one.sourceJump));
   const rough = Math.sqrt(moving.reduce((total, one) => total + one.rough ** 2, 0) / moving.length);
   const speed = `${(rough / (frameMs / 1000)).toFixed(2)} m/s`;
+  // (which foe made the largest move, and when: a jump is looked for there)
+  const ids = foeIds(host);
+  const worst = ids.map((id) => ({ id, ...largestMoveAt(foePath(guest, id)) })).sort((a, b) => b.move - a.move)[0];
+  const where = worst?.frame >= 0 ? `, foe ${worst.id} at ${ms(worst.frame, frameMs)}` : '';
   const line = `the ${followed.length} foes on the guest's screen: ${ms(median(delays), frameMs)} behind (the most ` +
     `${ms(Math.max(...delays), frameMs)}), ${cm(median(moving.map((one) => one.off)))} off their paths, their speed ` +
-    `off their own by ${speed} (rms), the largest move a frame ${cm(jump)} (their own ${cm(sourceJump)})`;
+    `off their own by ${speed} (rms), the largest move a frame ${cm(jump)}${where} (their own ${cm(sourceJump)})`;
   const problem = jump > sourceJump + JUMP_SLACK ? `a foe on the guest's screen jumped ${cm(jump)} in a frame` : null;
   return { line, problem };
 }
@@ -438,6 +453,141 @@ function describeBlinks(host, guest, frameMs) {
   return { line, problems };
 }
 
+/** a hero's size (m, entities/player.ts `radius`): a foe whose middle ends within it of his along his charge ended
+ *  level with him, beside him */
+const HERO_RADIUS = 0.45;
+/** a foe flying this high off a charge was thrown (m) */
+const THROWN_UP = 0.2;
+
+/** The way the guest's charge went on its own screen (along the ground, its length 1) and where it stopped. */
+function chargeOf(guest) {
+  const from = guest[0].self;
+  const stop = guest[guest.length - 1].self;
+  const length = distance(stop, from) || 1;
+  return { way: [(stop[0] - from[0]) / length, (stop[1] - from[1]) / length], stop };
+}
+
+/** How far before `stop` along `way` a point is (m; less than 0 behind). */
+const alongFrom = (point, stop, way) => (point[0] - stop[0]) * way[0] + (point[1] - stop[1]) * way[1];
+
+/** One foe on one screen: whether it was carried and thrown there, and where it ended along the charge from the
+ *  guest's stop as that screen shows it. */
+function foeOnScreen(samples, id, stopOf, way) {
+  const shown = samples.map((sample) => sample.foes.find((foe) => foe.id === id)).filter(Boolean);
+  if (!shown.length) return null;
+  const last = shown[shown.length - 1];
+  const carried = shown.some((foe) => foe.carried);
+  const thrown = shown.some((foe) => (foe.up ?? 0) > THROWN_UP);
+  const stop = stopOf(samples);
+  const at = (foe) => (foe ? alongFrom([foe.x, foe.z], stop, way) : NaN);
+  // (where it was let go, its last frame carried, and where it came down, its first on its feet after the air)
+  const letGo = shown.findLastIndex((foe) => foe.carried);
+  const rose = shown.findIndex((foe, f) => f > letGo && (foe.up ?? 0) > 0);
+  const landed = rose < 0 ? -1 : shown.findIndex((foe, f) => f > rose && !(foe.up ?? 0));
+  return { carried, thrown, ended: at(last), letGo: at(shown[letGo]), landed: at(shown[landed]) };
+}
+
+/**
+ * The guest's charge: each foe it met on its own screen (carried there), whether the host's screen carried and threw
+ * it too, and where it ended on each against where the guest stopped on it (the guest's own hero on its screen, its
+ * copy on the host's).
+ */
+export function judgeRush(host, guest) {
+  const { way } = chargeOf(guest);
+  const ownStop = (samples) => samples[samples.length - 1].self;
+  const partnerStop = (samples) => samples[samples.length - 1].partner ?? [NaN, NaN];
+  return foeIds(guest).map((id) => ({
+    id,
+    here: foeOnScreen(guest, id, ownStop, way),
+    there: foeOnScreen(host, id, partnerStop, way),
+  })).filter((foe) => foe.here?.carried);
+}
+
+function describeRush(host, guest) {
+  const met = judgeRush(host, guest);
+  const ends = (screen) => met.map((foe) => (foe[screen] ? `${foe[screen].ended.toFixed(2)} m` : 'unshown'));
+  const line = `the guest's charge met ${met.length} foes on its screen, ` +
+    `${met.filter((foe) => foe.there?.carried).length} of them carried on the host's, thrown ` +
+    `${met.filter((foe) => foe.here.thrown).length} on its screen and ` +
+    `${met.filter((foe) => foe.there?.thrown).length} on the host's; they ended before it ` +
+    `${ends('here').join(', ')} on its screen and ${ends('there').join(', ')} on the host's`;
+  // (where each was let go and came down on each screen, along the charge from the guest's stop there)
+  const way = (where) => (where ? `let go ${where.letGo.toFixed(2)}, down ${where.landed.toFixed(2)}` : 'unshown');
+  const flights = met.map((foe) => `foe ${foe.id} ${way(foe.here)} on its screen, ${way(foe.there)} on the host's`);
+  // (each one's largest move a frame on the guest's screen, when, and how far its copy was from the host's then)
+  const moves = met.map((foe) => {
+    const shown = foePath(guest, foe.id);
+    const source = foePath(host, foe.id);
+    const { move, frame } = largestMoveAt(shown);
+    const apart = frame >= 0 && shown[frame] && source[frame] ? distance(shown[frame], source[frame]) : NaN;
+    return `foe ${foe.id} ${cm(move)} at frame ${frame} (${cm(apart)} from the host's then)`;
+  });
+  const lines = [
+    line, `    each before the guest's stop (m): ${flights.join('; ')}`,
+    `    the largest move a frame of each: ${moves.join(', ')}`,
+  ];
+  const problems = [];
+  if (!met.length) problems.push('the guest\'s charge met no foe on its screen');
+  for (const foe of met) {
+    if (!foe.there?.carried) problems.push(`foe ${foe.id}, carried on the guest's screen, wasn't on the host's`);
+    if (!foe.here.thrown) problems.push(`foe ${foe.id} wasn't thrown on the guest's screen`);
+    if (foe.there && !foe.there.thrown) problems.push(`foe ${foe.id} wasn't thrown on the host's screen`);
+    for (const [screen, where] of [['guest', foe.here], ['host', foe.there]]) {
+      if (!where || where.ended >= HERO_RADIUS) continue;
+      problems.push(`foe ${foe.id} ended ${where.ended.toFixed(2)} m before the guest on the ${screen}'s screen`);
+    }
+  }
+  return { line: lines.join('\n'), problems };
+}
+
+/** the skill the guest in `strike` charges before its charge, as each game names it */
+const STRIKE = 'powerStrike';
+
+/**
+ * The guest's Power Strike cast as its charge runs over it, on one screen (`who`: the guest's own hero on its own
+ * screen, `self`, or its copy on the host's, `partner`): the frames the two ran together and those it was shown as
+ * the charge in instead, the frame it landed (-1: never) and whether the charge ran then, and the first frame its
+ * cast went on no longer building (a copy's taken as landed as the charge cast over it landed, its charge-up stopped
+ * short of its blow).
+ */
+export function judgeStrike(samples, who) {
+  const acts = samples.map((sample) => sample.acts?.[who] ?? null);
+  const together = acts.filter((act) => act?.dashing && act.casting === STRIKE);
+  const asCharge = together.filter((act) => act.shown === 'charge').length;
+  const landed = acts.findIndex((act) => act?.landed.includes(STRIKE));
+  const inCharge = landed >= 0 && Boolean(acts[landed].dashing);
+  const builtTo = acts.findIndex((act) => act?.casting === STRIKE && !act.charging);
+  return { together: together.length, asCharge, landed, inCharge, builtTo };
+}
+
+/** What went wrong with the guest's Power Strike under its charge on one screen (`one`: `judgeStrike`'s). */
+function strikeProblems(one, where) {
+  const strike = 'the guest\'s Power Strike';
+  const problems = [];
+  if (one.landed < 0) problems.push(`${strike} never landed ${where}`);
+  else if (!one.inCharge) problems.push(`${strike} landed ${where} with no charge running`);
+  if (!one.together) problems.push(`${strike} and its charge never ran together ${where}`);
+  if (one.asCharge) problems.push(`the guest's charge shown instead of ${strike} ${one.asCharge} frames ${where}`);
+  if (one.builtTo >= 0 && one.builtTo < one.landed) {
+    problems.push(`${strike} stopped building ${one.landed - one.builtTo} frames before it landed ${where}`);
+  }
+  return problems;
+}
+
+function describeStrike(host, guest) {
+  const screens = [['its', judgeStrike(guest, 'self')], ['the host\'s', judgeStrike(host, 'partner')]];
+  const problems = [];
+  const parts = screens.map(([whose, one]) => {
+    const where = `on ${whose} screen`;
+    problems.push(...strikeProblems(one, where));
+    const inCharge = one.inCharge ? ' in the charge' : '';
+    const landed = one.landed < 0 ? 'never landed' : `landed at frame ${one.landed}${inCharge}`;
+    const shown = `shown over the charge ${one.together - one.asCharge} of ${one.together} frames`;
+    return `${landed} ${where}, ${shown}, building to frame ${one.builtTo}`;
+  });
+  return { line: `the guest's Power Strike under its charge: ${parts.join('; ')}`, problems };
+}
+
 /**
  * Where a game shows `who` (its own hero, `self`, or its `partner`) a frame, none where its body isn't drawn (a
  * blink's crossing: no one sees it move there).
@@ -471,5 +621,7 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (name === 'dodge') add(describeBlows(guest, frameMs));
   if (name === 'down') add(describeDown(host, guest, frameMs));
   if (name === 'blink') add(describeBlinks(host, guest, frameMs));
+  if (name === 'rush' || name === 'strike') add(describeRush(host, guest));
+  if (name === 'strike') add(describeStrike(host, guest));
   return { lines, problems };
 }

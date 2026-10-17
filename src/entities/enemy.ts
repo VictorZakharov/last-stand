@@ -8,7 +8,8 @@ import { buildModel } from './models/index';
 import { reachOf, type Reach } from './models/hulls';
 import { groundHeight } from '../world/arena';
 import { resolveWorld } from '../world/collision';
-import { AI, lured } from './enemyAI';
+import { AI, fx, lured } from './enemyAI';
+import { carrying, flown, HAND_OFF, placeBefore, throwOf, tipOf, tossOf, type Carry, type Toss } from './carry';
 import { lures, type Lure } from '../combat/lures';
 import { anchorLabel, removeLabel } from '../ui/floaters';
 import { ORDER, type Label } from '../ui/overlay/layer';
@@ -25,6 +26,7 @@ import { applyShadowDetail, qualityLevel } from '../core/quality';
 import { Corpse } from './corpse';
 import { flingOf, type Blow, type Fling } from '../combat/fling';
 import { QUALITY } from '../data/quality';
+import { CARRY } from '../data/balance';
 import type { DamageType, EnemyDef, Model, XZ } from '../types';
 import type { Player } from './player';
 
@@ -144,6 +146,14 @@ export class Enemy {
   readonly onDazed: (() => void)[] = [];
   /** run when it dies (a slam's telegraph going with it) */
   readonly onDeath: (() => void)[] = [];
+  /** carried before a hero's charge, or thrown through the air off it (entities/carry.ts) */
+  carried: Carry | null = null;
+  tossed: Toss | null = null;
+  /** a co-op guest's copy its own hero's charge swept up: how long its own game has placed it since its carry ended
+   *  (s; -1: it doesn't), and whether it has just let go of it, its shown place eased from there onto the host's
+   *  reports (net/sync) */
+  ownFor = -1;
+  handOff = false;
   /** how its kill threw it, and its body from then (entities/corpse.ts) */
   fling: Fling | null = null;
   corpse: Corpse | null = null;
@@ -249,6 +259,102 @@ export class Enemy {
     for (const drop of this.onDazed.splice(0)) drop();
   }
 
+  /** Carried before `by`'s charge along `way` (its length 1) for `seconds`, dazed meanwhile (combat/damage
+   *  `carryEnemy`), then let go as the charge stops: thrown on ahead, or, an elite or a boss, shoved on. A training
+   *  dummy stands its ground. */
+  carry(by: Player, way: XZ, seconds: number): void {
+    if (!this.alive || this.def.dummy) return;
+    this.carried = { by, way: { x: way.x, z: way.z }, until: G.time + seconds, dash: by.dash };
+    this.tossed = null;
+    this.knock.set(0, 0, 0);
+    this.daze(seconds);
+  }
+
+  /** Thrown through the air at `vx`, `vz` and `vy` (m/s), and dazed where it lands (enemyAI's `toss`, played on every
+   *  game: a co-op guest's copy rises and falls as the host's reports carry it on). */
+  toss(vx: number, vz: number, vy: number): void {
+    // (a copy its own game carried throws itself as the host does: the host's throw of it comes after)
+    if (!this.alive || (this.net && (this.carried || this.ownFor >= 0))) return;
+    this.carried = null;
+    this.tossed = tossOf(vx, vz, vy);
+    this.cancelAction();
+  }
+
+  /** Carried before a charge or flying off it: placed by it alone, thinking of nothing. */
+  private updateCarried(dt: number, t: number, frozen: boolean): boolean {
+    const c = this.carried;
+    if (c && !carrying(c)) this.letGo(c);
+    else if (c) {
+      placeBefore(this.pos, this.radius, c);
+      resolveWorld(this.pos, this.radius);
+      this.facing = Math.atan2(c.by.pos.x - this.pos.x, c.by.pos.z - this.pos.z);
+    }
+    if (this.tossed) this.fly(dt, true);
+    this.vel.set(0, 0, 0);
+    this.stepPhase(dt);
+    this.animate(dt, t, 0);
+    return this.updateLooks(dt, t, frozen);
+  }
+
+  /**
+   * A copy its own hero's charge swept up, placed by its own game as it shows the hit (the host's reports come as
+   * late as they do: by them it rode the charge inside him): carried, thrown on as the host throws it (an elite or a
+   * boss held where it was let go), and held where it landed until the reports have it there too, then eased onto
+   * them (`handOff`, `HAND_OFF`). Whether it placed it this frame.
+   */
+  private placedOwn(dt: number): boolean {
+    const c = this.carried;
+    if (c && carrying(c)) {
+      placeBefore(this.pos, this.radius, c);
+      return true;
+    }
+    if (c) {
+      this.carried = null;
+      this.ownFor = 0;
+      const { vx, vz, vy } = throwOf(this.pos, this.radius, c);
+      if (!this.hero && !this.boss) this.tossed = tossOf(vx, vz, vy);
+    }
+    if (this.ownFor < 0) return false;
+    this.ownFor += dt;
+    if (this.tossed) {
+      this.fly(dt, true);
+      return true;
+    }
+    const n = this.net!;
+    if (Math.hypot(n.x - this.pos.x, n.z - this.pos.z) > HAND_OFF.near && this.ownFor < HAND_OFF.longest) return true;
+    this.ownFor = -1;
+    this.handOff = true;
+    return true;
+  }
+
+  /** Let go of as its charge stops: thrown on ahead (on every game), or, an elite or a boss, shoved on and dazed. */
+  private letGo(c: Carry): void {
+    this.carried = null;
+    if (this.hero || this.boss) {
+      this.knock.set(c.way.x * CARRY.shove, 0, c.way.z * CARRY.shove);
+      this.daze(CARRY.daze);
+      return;
+    }
+    const { vx, vz, vy } = throwOf(this.pos, this.radius, c);
+    fx('toss', this.id, vx, vz, vy);
+  }
+
+  /** On through the air by `dt` (along the ground too where it `moves`: a guest's copy is carried on by the host's
+   *  reports), and as it lands, dazed and skidding on. */
+  private fly(dt: number, moves: boolean): void {
+    const f = this.tossed!;
+    if (moves) {
+      this.pos.x += f.vx * dt;
+      this.pos.z += f.vz * dt;
+      resolveWorld(this.pos, this.radius);
+    }
+    if (!flown(f, dt)) return;
+    this.tossed = null;
+    if (!moves) return;
+    this.knock.set(f.vx * CARRY.skid, 0, f.vz * CARRY.skid);
+    this.daze(CARRY.daze);
+  }
+
   tickAction(dt: number): void {
     const a = this.action;
     if (!a) return;
@@ -301,6 +407,7 @@ export class Enemy {
     this.desired.set(0, 0, 0);
     this.targetFacing = this.facing;
     if (this.net) return this.updateCopy(dt, t, frozen);
+    if (this.carried || this.tossed) return this.updateCarried(dt, t, frozen);
     if (this.lure && (this.lure.until <= t || !lures.includes(this.lure))) this.lure = null;
     if (!frozen && !dazed && this.pickTarget()) {
       if (this.lure) lured(this, this.lure);
@@ -342,8 +449,12 @@ export class Enemy {
    */
   private updateCopy(dt: number, t: number, frozen: boolean): boolean {
     const n = this.net!;
-    this.pos.x = n.x;
-    this.pos.z = n.z;
+    if (!this.placedOwn(dt)) {
+      this.pos.x = n.x;
+      this.pos.z = n.z;
+    }
+    // (thrown by the host, as its `toss` tells every game: risen and fallen here, carried on by its reports)
+    if (this.tossed && this.ownFor < 0) this.fly(dt, false);
     this.vel.set(n.vx, 0, n.vz);
     this.facing = n.f;
     const a = this.action;
@@ -379,8 +490,11 @@ export class Enemy {
   animate(dt: number, t: number, move: number): void {
     this.obj.position.x = this.pos.x;
     this.obj.position.z = this.pos.z;
-    if (!this.spawning) this.obj.position.y = damp(this.obj.position.y, groundHeight(this.pos.x, this.pos.z), 12, G.dt);
-    this.model.root.rotation.y = this.facing;
+    const ground = groundHeight(this.pos.x, this.pos.z);
+    if (this.tossed) this.obj.position.y = ground + this.tossed.y;
+    else if (!this.spawning) this.obj.position.y = damp(this.obj.position.y, ground, 12, G.dt);
+    // (thrown, tipped back about its own side as it flies: turned first, then tipped)
+    this.model.root.rotation.set(this.tossed ? tipOf(this.tossed) : 0, this.facing, 0, 'YXZ');
     // the leg IK only where its feet are seen: in view and (on Low) near the player
     const legs = this.model.joints?.root.userData.legs as LegIK | undefined;
     if (legs) {
@@ -437,6 +551,9 @@ export class Enemy {
     this.alive = false;
     this.life = 0;
     this.deadT = 0;
+    this.carried = null;
+    this.tossed = null;
+    this.ownFor = -1;
     this.cancelAction();
     for (const fn of this.onDeath.splice(0)) fn();
 

@@ -1,21 +1,21 @@
-// The warrior's moves through the eyes (models/warrior.ts), keyed in the view as a person sees his own swing: at each
-// key the grip's place and the weapon's way in the camera's space (m: x right, y up, -z ahead; a two-hander's grip is
-// the lower hand's, the upper further up the handle). Seen from the middle of its own arc a blade swung round the
-// body points away from the eyes, a sliver, so each cut is keyed across the view instead: the hands drawn back to a
-// shoulder, the blade over it out of the frame; a short load; the hands driving down across the view as the blade
-// whips round over the top, broadside, through the middle as the cut lands; the follow-through low on the other side.
-// Every move starts from rest, and one straight after another fades into it from where that one ended.
-// Each hand stays within its arm's reach of its own shoulder (in the eyes' frame about (±0.23, -0.32, 0); an arm
-// reaches 0.69, and the keys keep to 0.64), the upper hand of a two-hander 0.28 up the handle from the lower (0.26
-// at the model's scale: left out, a follow-through was put 14 cm past the right arm's reach, and the lower grip came
-// in against the belly). A
-// two-hander's lower fist holds its handle only across it: about 50 degrees or more off the line from its shoulder
-// (the handle run along the left forearm, that hand let go of it), so a two-handed move comes back to rest by its
-// own keys, the blade raised on the way (faded back, it pointed straight ahead out of the lower fist halfway).
+// The warrior's moves through the eyes (models/warrior.ts), each a swing as a person swings their own (viewSwing.ts):
+// the arm and the weapon laid out in a plane through the shoulder and the aim, keyed by the striking part's way in it,
+// the grip's reach, the wrist's bend, the elbow's drop and the forearm's roll (`warriorSwings`, tuned live with the
+// lab's `--tune warriorSwings.<field>=...`), so the edge over the knuckles leads and the striking part, a blade's tip's
+// third, lands on the crosshair as the skill fires. Seen from the middle of its own arc a blade swung round the body
+// points away from the eyes, a sliver, so each cut crosses the view as a person sees their own: wound up by a
+// shoulder, over and down across the middle through the aim, followed through low on the other side, out of the
+// frame. A two-hander's guard is a swing's key too, its right hand the upper one on the handle and the left following
+// on the lower grip, and every move with it is swung from the guard, its plane turned from the guard's into its own,
+// and keyed back to it from where it ends. Each hand stays within its arm's reach of its own shoulder (in the eyes'
+// frame about (±0.23, -0.32, 0); an arm reaches 0.69), and a two-hander's lower fist holds its handle only across it,
+// about 50 degrees or more off the line from its shoulder (run along the left forearm, that hand let go of it).
 // (The swing was a wiper's sweep from one side: it wound slowly out to the left, stood there a third of a second,
-// then swept up to the right and stopped upright; #224. Keyed with the hands up by the face and the trunk turning
-// as in third person, the left shoulder came round in front of the eyes and its arm filled half the view.)
-import { viewMove, type ViewMove } from '../viewModel';
+// then swept up to the right and stopped upright; #224. Keyed with the hands up by the face and the trunk turning as
+// in third person, the left shoulder came round in front of the eyes and its arm filled half the view. Keyed by the
+// grip's place and the weapon's way in the camera's space, each axis a curve of its own, the blades left their planes
+// between keys and led with their flats, and the forearms flipped at their ranges' ends, the blades jumping a metre
+// and more in a frame; #252.)
 import { SWING_KEY, type ViewSwing } from '../viewSwing';
 import { tunable } from '../../core/tuning';
 
@@ -89,8 +89,10 @@ const SWINGS = tunable('warriorSwings', {
   // other way round and flipped the blade in a frame, 75 m/s)
   oneOutBack: [0, -28, 0.56, -30, 0, 0],
   // (a two-hander's, its right hand the upper one on the handle, the left following on the lower grip: its guard at
-  // rest, one key in an upright plane, the blade up before the right shoulder; its forehand from there, its backhand
-  // from where the forehand left the blade)
+  // rest, one key in an upright plane, the blade up before the right shoulder, the whole weapon in the frame; its
+  // forehand from there, its backhand from where the forehand left the blade. Up to the right, the blade ran out of
+  // the frame's top and the wrists bent over; on the shoulder, as in third person, nothing of it was seen; upright
+  // before the hands, the right forearm stood up the view and covered the crosshair)
   twoRestPlane: [0.22, -0.3, -0.22, 285],
   twoRest: [0, 30, 0.52, 0, 0, 40],
   // (and a two-hander with a head, an axe or a maul: its head held lower and leaning out to the right, as Vermintide
@@ -101,6 +103,19 @@ const SWINGS = tunable('warriorSwings', {
   // degrees past its range)
   twoRestHeadTurn: [270],
   twoRestHead: [0, 15, 0.52, 0, 0, 40],
+  // (and held through Steel Tempest's spin, as the guard is, one key, carried round as the body turns (models/warrior.ts
+  // `carryRound`): about where the backhand leaves the blade, low on the right and out of the frame, in the
+  // backhand's plane, which holds the turn's way, so the edge leads; a little further round (where the backhand
+  // leaves it, a maul's head came round into the view's bottom once a turn, 2 flashes a second in the forest), the
+  // forearm rolled a little into the turn (as the backhand left it, a greataxe's bit and a maul's face led 31 degrees
+  // off), and the elbow raised out of the plane (dropped, the greataxe's lower wrist went 4 degrees past its range on
+  // the way in). Held in its guard, upright at the right, its
+  // flat led the turn, 51 degrees off its edge; placed by the grip's place and the weapon's way, the right wrist was 50
+  // degrees past its range; held out to the right in a plane crossing the view the other way (150 degrees), both
+  // fists came round into the view's bottom once a turn, a flash each time (as the one-hander's held across the view,
+  // `spinOn`); #252)
+  twoSpinPlane: [0.22, -0.3, -0.22, 330],
+  twoSpin: [0, -35, 0.56, -30, -40, -20],
   // (driven by the trunk, as a body swings a heavy weapon: the arm's own sweep a short one, in a plane the arms hold
   // it in within their ranges, carried round the spine by the trunk's turn (`twoTurn`), from 29 degrees to the right
   // to 40 to the left: drawn back by the right shoulder over a quarter of the cut, its speed built over a ninth of a
@@ -191,6 +206,62 @@ const SWINGS = tunable('warriorSwings', {
     0.9, -40, 0.56, -30, 55, 0,
     1, -48, 0.55, -30, 55, 0,
   ],
+  // (Power Strike with one hand, the left's its mirror image (two blades): an overhead blow in a plane through the
+  // right shoulder, near upright across the view, driven down by the arm, the trunk upright: its shoulder further
+  // back than a cut's, which the trunk's turn brings forward (from there, the arm reached only 30 cm to a blow below
+  // the face, and the wrist would have bent 120 degrees). Raised by 0.3 of the cast, the fist in the top right of the
+  // view and the blade back over the head, the elbow out to the side; drawn further back as the charge gathers to
+  // 0.8; over the top and down through the aim at 0.9, where the skill fires, the arm at its full reach, its tip's
+  // third on the crosshair; and on down under the frame, held there after the cast. Raised over the head, nothing of
+  // it was seen through the charge. Keyed by the grip's place and the weapon's way, the hand dropped 30 cm while the
+  // wrist turned the blade 180 degrees: the forearm's turn and the wrist stood at their ranges' ends through the blow,
+  // and the blade jumped 117 and 189 cm in a frame, its flat leading; #252)
+  onePowerPlane: [0.25, -0.35, -0.05, 258],
+  onePower: [
+    0, 60, 0.6, -20, 0, 40,
+    0.3, 111, 0.54, 2, 40, 0,
+    0.8, 116, 0.55, 8, 40, 0,
+    0.86, 70, 0.64, -20, 20, 0,
+    0.9, 0, 0.76, -30, 0, 0,
+    0.95, -22, 0.76, -30, 0, 0,
+    1, -30, 0.76, -30, 0, 0,
+  ],
+  // (Power Strike with a two-hander, its right hand the upper one, the left following on the lower grip: from its
+  // guard, raised to the top right as the one-hander's is by 0.3 of the cast, drawn back as the charge gathers to 0.8,
+  // over and down through the aim at 0.9, where the skill fires, and on down under the frame, its plane turned from the
+  // guard's over the lift (`powerTurn`), the forearm rolled a little while it's held up (unrolled, a greataxe's and a
+  // maul's lower wrist went 11 degrees past its range through the charge). Keyed by the lower grip's place and the
+  // weapon's way, its flat to the eyes, it led the blow 85 degrees off its edge and stopped dead in 33 ms; #252)
+  twoPowerPlane: [0.22, -0.3, -0.22, 262],
+  twoPower: [
+    0.3, 111, 0.5, 2, 40, 10,
+    0.8, 116, 0.52, 8, 40, 10,
+    0.86, 70, 0.6, -20, 20, 0,
+    0.9, 0, 0.7, -30, 0, 0,
+    0.95, -22, 0.7, -30, 0, 0,
+    1, -30, 0.7, -30, 0, 0,
+  ],
+  // (Thunder Crescent's, driven into the ground: raised as Power Strike's is by 0.27 of the cast, a moment at the top,
+  // then over and down through the aim at 0.49 and on into the floor ahead as the skill fires, 0.55 (`smiteLand`),
+  // out of the frame under it, and held there through the rest of the cast; its plane turned from the guard's over
+  // the lift (`smiteTurn`). Brought down from 0.42 as the third person's is, its blow's point moved 85 m/s, twice
+  // Power Strike's. Keyed by the lower grip's place and the weapon's way, the hands filled the view as it was raised,
+  // the blow came down in a frame led by its flat, 81 degrees off its edge, the right wrist went 105 degrees past its
+  // range, and it came back up broadside across the view; #252)
+  twoSmitePlane: [0.22, -0.3, -0.22, 262],
+  twoSmite: [
+    0.27, 111, 0.5, 2, 40, 10,
+    0.33, 116, 0.52, 8, 40, 10,
+    0.42, 70, 0.6, -20, 20, 0,
+    0.49, 0, 0.7, -30, 0, 0,
+  ],
+  /** the share of Thunder Crescent's cast its blow crosses the aim at, on its way down into the floor */
+  smiteHit: 0.49,
+  /** and where it lands, its lowest point at the floor (on the arena's floor, the dais's top under it: unseen, out of
+   *  the frame under it), held there to the end of the cast: a blade's, and a headed weapon's further down (shorter to
+   *  its lowest point: landed as a blade does, a greataxe stopped 12 cm over the floor and a maul 17) */
+  smiteLand: [0.55, -53, 0.75, -30, 0, 0],
+  smiteLandHead: [0.55, -59, 0.75, -30, 0, 0],
   /** how far the fist holds a one-hander's handle diagonally across its palm through a cut (degrees, as a hand holds
    *  a sword: hands.ts `SLANT` at most) */
   cutSlant: 25,
@@ -209,10 +280,20 @@ const SWINGS = tunable('warriorSwings', {
   rowTurn: [0, 0.34],
   /** and of a way back to a guard, from the cut's into the guard's */
   outTurn: [0, 1],
+  /** and of the ways from a guard into Steel Tempest's hold and back to it (`TWO_SPINS`): sooner in, later out, as
+   *  the one way back the other (over the whole of each, a headed guard's lower wrist went 4 to 11 degrees past its
+   *  range midway) */
+  spinTurn: [0, 0.6],
+  spinBackTurn: [0.4, 1],
+  /** and of a two-hander's Power Strike from its guard into its own (`TWO_POWERS`), and Thunder Crescent's
+   *  (`TWO_SMITES`) */
+  powerTurn: [0, 0.25],
+  smiteTurn: [0, 0.3],
 }, {
   oneFore: SWING_KEY, oneForeRow: SWING_KEY, oneBack: SWING_KEY, oneOutBack: SWING_KEY, twoRest: SWING_KEY,
   twoRestHead: SWING_KEY, twoFore: SWING_KEY, twoForeRow: SWING_KEY, twoBack: SWING_KEY, twoOutFore: SWING_KEY,
-  twoOutBack: SWING_KEY, dual: SWING_KEY,
+  twoOutBack: SWING_KEY, dual: SWING_KEY, onePower: SWING_KEY, twoSpin: SWING_KEY,
+  twoPower: SWING_KEY, twoSmite: SWING_KEY, smiteLand: SWING_KEY, smiteLandHead: SWING_KEY,
 });
 export const CUT_TURN: readonly number[] = SWINGS.cutTurn;
 export const TWO_CUT_TURN: readonly number[] = SWINGS.twoTurn;
@@ -247,10 +328,22 @@ export const TWO_REST_HEAD: ViewSwing = {
   get slant() { return SWINGS.cutSlant; },
   hit: 0,
 };
+/** a two-hander held through Steel Tempest's spin (`twoSpin`) */
+export const TWO_SPIN: ViewSwing = {
+  plane: SWINGS.twoSpinPlane, keys: SWINGS.twoSpin,
+  get slant() { return SWINGS.cutSlant; },
+  hit: 0,
+};
 export const DUAL_CUT: ViewSwing = {
   plane: SWINGS.dualPlane, keys: SWINGS.dual,
   get slant() { return SWINGS.cutSlant; },
   get hit() { return SWINGS.cutHit; },
+};
+/** Power Strike with one hand (`onePower`), its blow at the aim as the skill fires, 0.9 of its cast */
+export const ONE_POWER: ViewSwing = {
+  plane: SWINGS.onePowerPlane, keys: SWINGS.onePower,
+  get slant() { return SWINGS.cutSlant; },
+  hit: 0.9,
 };
 /** the two-handers with a head, which rest as `TWO_REST_HEAD` (models/warrior.ts names them); the others are blades */
 const HEADED = new Set(['Greataxe', 'Maul']);
@@ -277,15 +370,18 @@ export const TWO_BACK_CUT: ViewSwing = {
 };
 /** A way back to `rest` (a two-hander's guard, or a forehand whose start a one-hander's rest fades in from) from where
  *  a cut (`from`) left it: `start`, the cut's last key, then the guard's first at its end, its plane turned from the
- *  cut's into the guard's. */
-function backTo(rest: ViewSwing, from: ViewSwing, start: readonly number[]): ViewSwing {
+ *  cut's into the guard's over `turning`'s shares of it. */
+function backTo(
+  rest: ViewSwing, from: ViewSwing, start: readonly number[] | (() => readonly number[]),
+  turning: readonly number[] = SWINGS.outTurn,
+): ViewSwing {
   return {
     get plane() { return rest.plane; },
-    get keys() { return [...start, 1, ...rest.keys.slice(1, SWING_KEY)]; },
+    get keys() { return [...(typeof start === 'function' ? start() : start), 1, ...rest.keys.slice(1, SWING_KEY)]; },
     get slant() { return SWINGS.cutSlant; },
     hit: 1,
     from,
-    turning: SWINGS.outTurn,
+    turning,
   };
 }
 /** each guard's ways back to it, from where the forehand left the weapon and where the backhand did */
@@ -295,139 +391,69 @@ export const TWO_OUTS = new Map([TWO_REST, TWO_REST_HEAD].map((rest) => [rest, {
 }]));
 /** a one-hander's way back after its backhand */
 export const ONE_BACK_OUT: ViewSwing = backTo(ONE_FORE_CUT, ONE_BACK_CUT, SWINGS.oneOutBack);
+/** A two-hander's way from `guard` into its hold through Steel Tempest's spin (`TWO_SPIN`), over the spin's first
+ *  moments (models/warrior.ts `SPIN_INTO`): the guard's key, then the hold's, the guard's plane turned into the hold's,
+ *  as a way back to a guard turns (`backTo`). (Faded between them, the grip and the weapon's way blended apart from
+ *  the arm, the right wrist went 10 to 18 degrees past its range, whatever the hold's key; and out of the spin, 22.) */
+function spinFrom(guard: ViewSwing): ViewSwing {
+  return {
+    get plane() { return TWO_SPIN.plane; },
+    get keys() { return [...guard.keys.slice(0, SWING_KEY), 1, ...TWO_SPIN.keys.slice(1, SWING_KEY)]; },
+    get slant() { return SWINGS.cutSlant; },
+    hit: 0,
+    from: guard,
+    turning: SWINGS.spinTurn,
+  };
+}
+/** each guard's way into the spin's hold, and back to it from there once the spin is over */
+export const TWO_SPINS = new Map([TWO_REST, TWO_REST_HEAD].map((guard) => [guard, {
+  into: spinFrom(guard),
+  out: backTo(guard, TWO_SPIN, SWINGS.twoSpin, SWINGS.spinBackTurn),
+}]));
+/** Power Strike with a two-hander from `guard` (`twoPower`, after the guard's own key), its blow at the aim as the
+ *  skill fires, 0.9 of its cast */
+function powerFrom(guard: ViewSwing): ViewSwing {
+  return {
+    get plane() { return SWINGS.twoPowerPlane; },
+    get keys() { return [...guard.keys.slice(0, SWING_KEY), ...SWINGS.twoPower]; },
+    get slant() { return SWINGS.cutSlant; },
+    hit: 0.9,
+    from: guard,
+    turning: SWINGS.powerTurn,
+  };
+}
+/** each guard's Power Strike, and the way back to it from where the blow left the weapon */
+export const TWO_POWERS = new Map([TWO_REST, TWO_REST_HEAD].map((guard) => {
+  const blow = powerFrom(guard);
+  const ended = () => [0, ...SWINGS.twoPower.slice(1 - SWING_KEY)];
+  return [guard, { blow, back: backTo(guard, blow, ended) }];
+}));
+/** Thunder Crescent with a two-hander from `guard` (`twoSmite`, after the guard's own key), its blow down through the
+ *  aim and into the floor ahead as the skill fires, landing as `land` keys it, and held there */
+function smiteFrom(guard: ViewSwing, land: () => readonly number[]): ViewSwing {
+  return {
+    get plane() { return SWINGS.twoSmitePlane; },
+    get keys() { return [...guard.keys.slice(0, SWING_KEY), ...SWINGS.twoSmite, ...land(), 1, ...land().slice(1)]; },
+    get slant() { return SWINGS.cutSlant; },
+    get hit() { return SWINGS.smiteHit; },
+    from: guard,
+    turning: SWINGS.smiteTurn,
+  };
+}
+/** each guard's Thunder Crescent, and the way back to it from the floor */
+export const TWO_SMITES = new Map([TWO_REST, TWO_REST_HEAD].map((guard) => {
+  const land = () => (guard === TWO_REST_HEAD ? SWINGS.smiteLandHead : SWINGS.smiteLand);
+  const blow = smiteFrom(guard, land);
+  return [guard, { blow, back: backTo(guard, blow, () => [0, ...land().slice(1)]) }];
+}));
 /** the swings by their names in `warriorSwings` (the lab's `swing` keys a pose in one) */
 export const SWINGS_NAMED: Readonly<Record<string, ViewSwing>> = {
   oneFore: ONE_FORE_CUT, oneForeRow: ONE_FORE_ROW, oneBack: ONE_BACK_CUT, oneOutBack: ONE_BACK_OUT, twoRest: TWO_REST,
   twoRestHead: TWO_REST_HEAD, twoFore: TWO_FORE_CUT, twoForeRow: TWO_FORE_ROW, twoBack: TWO_BACK_CUT,
   twoOutFore: TWO_OUTS.get(TWO_REST)!.fore, twoOutBack: TWO_OUTS.get(TWO_REST)!.back, dual: DUAL_CUT,
+  onePower: ONE_POWER, twoSpin: TWO_SPIN, twoSpinIn: TWO_SPINS.get(TWO_REST)!.into,
+  twoSpinOut: TWO_SPINS.get(TWO_REST)!.out,
+  twoPower: TWO_POWERS.get(TWO_REST)!.blow, twoPowerBack: TWO_POWERS.get(TWO_REST)!.back,
+  twoSmite: TWO_SMITES.get(TWO_REST)!.blow, twoSmiteBack: TWO_SMITES.get(TWO_REST)!.back,
 };
 
-/** a two-hander at rest through the eyes, in a middle guard: the fists low on the right of the crosshair (the lower
- *  one just under the frame, as at a person's belly), the point forward and up, the whole weapon in the frame and its
- *  head seen. (Up to the right, the blade ran out of the frame's top and the wrists bent over; on the shoulder, as in
- *  third person, nothing of it was seen; upright before the hands, the right forearm stood up the view and covered
- *  the crosshair) */
-export const TWO_REST_AT: [number, number, number] = [0.18, -0.34, -0.37];
-export const TWO_REST_DIR: [number, number, number] = [-0.05, 0.6, -0.8];
-
-/** a two-handed forehand, from the right shoulder down across to the left hip: wound up by 0.3 of the cast to the
- *  right shoulder (the fists at the chest's height by the frame's right edge, the blade back over the shoulder out of
- *  the frame), tipped further back by 0.42, coming over at 0.5 with the hands still low, across the middle as the cut
- *  lands (0.55) and along the bottom out to the left by 0.68, where it follows through ahead and low, still seen; then
- *  raised on the left and back to rest. (Wound up to a high guard, and coming over upright, the upper hand rose to the
- *  eyes' height and its forearm stood up the view: the elbow seen to rise as the blow began) */
-export const TWO_FORE: ViewMove = viewMove([
-  [0, TWO_REST_AT, TWO_REST_DIR],
-  [0.3, [0.2, -0.33, -0.42], [0.15, 0.8, 0.55]],
-  [0.42, [0.22, -0.31, -0.38], [0.25, 0.7, 0.65]],
-  [0.5, [0.16, -0.35, -0.46], [0.15, 0.9, -0.4]],
-  [0.55, [0.12, -0.28, -0.38], [-0.6, 0.5, -0.62]],
-  [0.6, [0.04, -0.3, -0.34], [-0.88, 0.05, -0.47]],
-  [0.68, [0.1, -0.26, -0.32], [-0.7, -0.3, -0.65]],
-  [0.76, [0.06, -0.26, -0.31], [-0.65, -0.35, -0.67]],
-  [0.88, [0.07, -0.38, -0.39], [-0.25, 0.85, -0.45]],
-  [1, TWO_REST_AT, TWO_REST_DIR],
-]);
-
-/** its backhand, from over the left shoulder down across to the right: the right forearm lies level across the chest
- *  to hold the blade up there, as a body holds it, so the fists are wound up low, that forearm crossing the bottom of
- *  the view (at the eyes' height it crossed the middle); following through with the lower fist before the left
- *  shoulder, its forearm coming straight ahead to the handle across it (left of the middle, the forearm still pointed
- *  the blade's way and the hand let go). (Wound down to the left hip to rise across the view, the right arm reached
- *  behind the body, the shoulder 45 degrees past its range) */
-export const TWO_BACK: ViewMove = viewMove([
-  [0, TWO_REST_AT, TWO_REST_DIR],
-  [0.3, [-0.06, -0.33, -0.44], [-0.3, 0.75, 0.55]],
-  [0.42, [-0.1, -0.32, -0.42], [-0.35, 0.65, 0.68]],
-  [0.5, [-0.06, -0.35, -0.46], [-0.15, 0.9, -0.4]],
-  [0.55, [-0.12, -0.3, -0.38], [0.5, 0.7, -0.5]],
-  [0.6, [-0.18, -0.32, -0.38], [0.88, 0.1, -0.47]],
-  [0.68, [-0.22, -0.36, -0.38], [0.9, 0.05, -0.42]],
-  [0.76, [-0.2, -0.35, -0.4], [0.85, 0.15, -0.48]],
-  [1, TWO_REST_AT, TWO_REST_DIR],
-]);
-
-/** a one-handed forehand, the right hand's: raised high on the right, the blade up, then as the two-hander's, the
- *  follow-through held where it's seen (as low as the two-hander's, the blade was out of the frame for a quarter of a
- *  second; drawn back by the face, it filled the view) */
-export const ONE_FORE: ViewMove = viewMove([
-  [0, [0.24, -0.26, -0.44], [0.25, 0.9, -0.35]],
-  [0.3, [0.26, -0.12, -0.4], [0.1, 0.97, 0.2]],
-  [0.42, [0.28, -0.1, -0.38], [0.2, 0.9, 0.38]],
-  [0.5, [0.24, -0.1, -0.44], [0.2, 0.95, -0.25]],
-  [0.55, [0.14, -0.18, -0.46], [-0.6, 0.5, -0.62]],
-  [0.6, [0.02, -0.22, -0.44], [-0.88, 0.05, -0.47]],
-  [0.68, [-0.06, -0.22, -0.42], [-0.85, -0.2, -0.5]],
-  [0.85, [-0.06, -0.22, -0.42], [-0.8, -0.3, -0.5]],
-]);
-
-/** the right hand's backhand: raised across the body only as far as the left shoulder's front (further was past the
- *  arm's reach), then down across to the right */
-export const ONE_BACK: ViewMove = viewMove([
-  [0, [0.24, -0.26, -0.44], [0.25, 0.9, -0.35]],
-  [0.3, [-0.08, -0.14, -0.42], [-0.1, 0.97, 0.2]],
-  [0.42, [-0.1, -0.12, -0.4], [-0.2, 0.9, 0.38]],
-  [0.5, [-0.06, -0.12, -0.44], [-0.2, 0.95, -0.25]],
-  [0.55, [0.02, -0.2, -0.46], [0.6, 0.5, -0.62]],
-  [0.6, [0.14, -0.22, -0.44], [0.88, 0.05, -0.47]],
-  [0.68, [0.22, -0.22, -0.42], [0.85, -0.2, -0.5]],
-  [0.85, [0.22, -0.22, -0.42], [0.8, -0.3, -0.5]],
-]);
-
-/** where an overhead blow ends, the blade driven down ahead of the feet (a two-hander's, a one-hander's): its keys end
- *  there, and after the cast it's held there a moment (models/warrior.ts `chopTail`), low in the view, the blade
- *  ahead and down. (Driven steeply down, a two-hander was out of the frame from the blow to the end of the hold, and
- *  the lower hand's joints went 20 degrees past and let go; with its lower grip by the chest, the left arm ran 15 cm
- *  into the body) */
-export const TWO_DOWN_AT: [number, number, number] = [0.08, -0.22, -0.33];
-export const TWO_DOWN_DIR: [number, number, number] = [0.05, -0.38, -0.92];
-export const ONE_DOWN_AT: [number, number, number] = [0.1, -0.3, -0.46];
-export const ONE_DOWN_DIR: [number, number, number] = [-0.12, -0.3, -0.95];
-
-/** Power Strike with a two-hander: raised high by 0.3 of its cast, the lower fist seen in the top half of the view and
- *  the blade back over the head out of the frame (raised straight overhead, the hands left the view and the upper
- *  arms loomed past the eyes); drawn further back as the charge gathers, to 0.8; then over the top and down through
- *  the view, the blade driven down by 0.9, where the skill fires (it stood upright on the right for a second and a
- *  half, then tipped to point ahead after the skill had fired) */
-export const POWER_TWO: ViewMove = viewMove([
-  [0, TWO_REST_AT, TWO_REST_DIR],
-  [0.3, [0.12, -0.06, -0.36], [0.15, 0.8, 0.58]],
-  [0.8, [0.14, -0.03, -0.33], [0.12, 0.72, 0.68]],
-  [0.86, [0.1, -0.2, -0.32], [-0.05, 0.85, -0.52]],
-  [0.9, TWO_DOWN_AT, TWO_DOWN_DIR],
-]);
-
-/** Thunder Crescent: as Power Strike's, quicker, with no charge: raised by 0.3, loaded to 0.4, over the top at 0.48
- *  and driven down by 0.55, where it fires, and held there */
-export const SMITE_TWO: ViewMove = viewMove([
-  [0, TWO_REST_AT, TWO_REST_DIR],
-  [0.3, [0.12, -0.06, -0.36], [0.15, 0.8, 0.58]],
-  [0.4, [0.14, -0.03, -0.33], [0.12, 0.72, 0.68]],
-  [0.48, [0.1, -0.2, -0.32], [-0.05, 0.85, -0.52]],
-  [0.55, TWO_DOWN_AT, TWO_DOWN_DIR],
-]);
-
-/** a two-hander back to rest from where an overhead blow ended, over the hold after it: the blade raised on the way
- *  (faded straight back, it pointed ahead out of the lower fist halfway, and the hand let go) */
-export const RECOVER_TWO: ViewMove = viewMove([
-  [0, TWO_DOWN_AT, TWO_DOWN_DIR],
-  [0.5, [0.06, -0.32, -0.42], [-0.2, 0.85, -0.45]],
-  [1, TWO_REST_AT, TWO_REST_DIR],
-]);
-
-/** Power Strike with one hand (the left hand's mirrors it, two blades): as the two-hander's */
-export const POWER_ONE: ViewMove = viewMove([
-  [0, [0.24, -0.26, -0.44], [0.25, 0.9, -0.35]],
-  [0.3, [0.2, -0.04, -0.36], [0.1, 0.8, 0.59]],
-  [0.8, [0.22, -0.01, -0.33], [0.08, 0.72, 0.69]],
-  [0.86, [0.16, -0.14, -0.44], [-0.05, 0.85, -0.52]],
-  [0.9, ONE_DOWN_AT, ONE_DOWN_DIR],
-]);
-
-/** how far the blade's flat is turned to face the eyes through a cut: from the load, through the blow, off as it
- *  follows through (shares of the cast) */
-export const CUT_FLAT = [0.36, 0.48, 0.7, 0.85];
-
-/** how much of the trunk's turn through a swing shows through the eyes, which stay on the aim: in full, the far
- *  shoulder came round in front of them */
-export const EYES_TURN = 0.3;

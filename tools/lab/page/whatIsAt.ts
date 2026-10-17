@@ -4,9 +4,12 @@
 // material. (Cast on every layer from the world's camera, through the eyes it listed the hero's own hair at the
 // camera, on a layer none draws, and missed the arms, drawn through a narrower view.) For a blink (page/blinks.ts),
 // at its frame: what popped there for a frame (a broken prop's rubble piece, drawn full size at the world's middle
-// before it was placed).
+// before it was placed). The world's camera's ray meets the foes too: a crowd draws them, instanced, and their own
+// meshes, on a layer no camera draws, are where they are drawn (the camera rushed into a foe's glowing body and the
+// ray met only the walls past it).
 import * as THREE from 'three';
 import { G } from '../../../src/state';
+import { CROWD_LAYER } from '../../../src/core/layers';
 import { armsLens } from './inFrame';
 
 /** the most meshes listed */
@@ -20,10 +23,12 @@ interface Met {
   arms: boolean;
 }
 
-/** What `camera`'s ray at `at` (the screen's -1 to 1 across and up) meets on the layers it draws, shown. */
+/** What `camera`'s ray at `at` (the screen's -1 to 1 across and up) meets on the layers it draws, shown (the
+ *  world's, a crowd's bodies too). */
 function metThrough(camera: THREE.Camera, at: THREE.Vector2, arms: boolean): Met[] {
   camera.updateMatrixWorld();
   sight.layers.mask = camera.layers.mask;
+  if (!arms) sight.layers.enable(CROWD_LAYER);
   sight.setFromCamera(at, camera);
   const drawn = (hit: THREE.Intersection) => (hit.object as THREE.Mesh).isMesh && shownAll(hit.object);
   return sight.intersectObject(G.scene, true).filter(drawn).map((hit) => ({ hit, arms }));
@@ -39,9 +44,11 @@ export function whatIsAt(across: number, down: number): string[] {
   return met.slice(0, LISTED).map((each) => `    ${describeHit(each)}`);
 }
 
-/** A mesh met as words: how far from the eye, the mesh, and the arms' own camera if it drew it. */
+/** A mesh met as words: how far from the eye, the mesh, and the camera or crowd that drew it if not the world's. */
 function describeHit({ hit, arms }: Met): string {
-  return `${hit.distance.toFixed(2)} m: ${describeMesh(hit.object as THREE.Mesh)}${arms ? ', the arms\' camera' : ''}`;
+  const crowd = hit.object.layers.isEnabled(CROWD_LAYER) ? ', drawn in its crowd' : '';
+  const by = arms ? ', the arms\' camera' : crowd;
+  return `${hit.distance.toFixed(2)} m: ${describeMesh(hit.object as THREE.Mesh)}${by}`;
 }
 
 /** A mesh as words: its place in the scene, its geometry and its material. */

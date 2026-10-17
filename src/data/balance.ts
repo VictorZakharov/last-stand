@@ -88,3 +88,24 @@ export const COOP = {
  *  share of a life adds the most); a foe's `knockbackResist` takes `stand` of it away and a boss keeps `boss` of it;
  *  how much of the drive goes up, and where on the body a blow lands (0 the feet, 1 the top), when a skill doesn't say. */
 export const FLING = { base: 1.6, most: 10, full: 1.5, curve: 0.6, stand: 0.6, boss: 0.35, lift: 0.3, at: 0.6 };
+
+/** What a charge does with the foes it meets (entities/carry.ts): how far clear of the hero's body it carries each
+ *  (m); how fast it throws one on ahead as it stops, along the ground and up (m/s); how far across the charge it
+ *  fans them out (a share of the way on) and how far back each tips in the air (rad); its skid on landing (a share
+ *  of its throw) and its daze then (s); and how fast an elite or a boss is shoved on instead (m/s), dazed as long.
+ *  The fallen in its way (a body it killed among them) are driven on before it: each part of one as far as `reach`
+ *  ahead of the hero's body and `wide` either side of it (m: as wide as what it meets, past the foe's own size), and
+ *  as high as `high`, gripped `grip` hard (/s) to go
+ *  `ahead` faster than he does (m/s), slowed with him as he skids, and thrown on as the living are as he stops.
+ *  A foe rides until the charge stops as its game plays it, or its clock says so, `late` s past that at most. */
+export const CARRY = {
+  gap: 0.1, throw: 6, lift: 5, fan: 0.35, tilt: 1.1, skid: 0.5, daze: 0.7, shove: 4,
+  reach: 1.1, wide: 1.6, high: 2.4, grip: 30, ahead: 1.5, late: 0.5,
+};
+
+/** Twin Fangs' timing (s), the skill's (combat/skills/twinFangs: its lunge and its two strikes) and the warrior's cuts
+ *  keyed to it (entities/models/warrior): the lunge, the follow-through standing after it (with none, the two cuts
+ *  were over before the eye caught them), the right blade's strike from the press and the left's after it. A dual
+ *  wielder's basic attack cuts every 0.3 s; the fangs 0.36 s apart, at 0.27 and 0.63 s of 0.9, were the owner's "too
+ *  slow": "both hits in a rapid succession", "faster than regular LMB" (`lab hits twinFangs --than cleave`). */
+export const FANGS = { lunge: 0.25, hold: 0.35, first: 0.2, apart: 0.15 };

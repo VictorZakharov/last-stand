@@ -65,6 +65,7 @@ const SETUP_OPTIONS = {
   },
   tune: {
     kind: 'text',
+    joins: ';',
     usage: 'name.field=v[,v...][;...]',
     help: 'tunable values set before the run (src/core/tuning.ts: '
       + 'warriorEyes.oneOn=0.75,-1.1,0.5;warriorEyes.roll=1.2)',
@@ -223,13 +224,16 @@ export const COMMANDS = {
     help: 'two games playing together, the host\'s and the guest\'s, their messages carried as a link of a high ping '
       + 'carries them: how far behind and how roughly each copies the other\'s heroes and foes, whether an arrow that '
       + 'struck a foe on the guest\'s screen counted, whether a blow it dodged on its screen hurt it, where its blink '
-      + 'came out on the host\'s screen and whether the foes it dazed were dazed on the host\'s',
+      + 'came out on the host\'s screen and whether the foes it dazed were dazed on the host\'s, and whether every foe '
+      + 'its charge met on its screen was carried and thrown on both and ended before it, and whether a Power '
+      + 'Strike it cast its charge over landed in the charge on both, shown over it and building to its blow',
     options: {
       scenarios: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['walk', 'foes', 'shoot', 'dodge', 'down', 'blink'],
-        help: 'the scenarios (all the hero can play by default): walk, foes, shoot, dodge, down, blink (a mage)',
+        choices: ['walk', 'foes', 'shoot', 'dodge', 'down', 'blink', 'rush', 'strike'],
+        help: 'the scenarios (all the hero can play by default): walk, foes, shoot, dodge, down, blink (a mage), rush '
+          + 'and strike (a warrior)',
       },
       ping: { kind: 'number', usage: 'ms', help: 'the link\'s least round trip (300 by default)' },
       jitter: { kind: 'number', usage: 'ms', help: 'how much later each way a message may come (60 by default)' },
@@ -399,6 +403,7 @@ export const COMMANDS = {
         help: 'plant the fault the checks must catch, in the first biome and view: a strobe of the exposure',
       },
       gear: SETUP_OPTIONS.gear,
+      weapon: SETUP_OPTIONS.weapon,
       tune: SETUP_OPTIONS.tune,
       ...COMMON_OPTIONS,
     },
@@ -618,6 +623,68 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'list each frame of each body each skill throws hard: each point\'s height over the floor less its size, '
           + 'how far its drawn pose is off it and its point\'s own height (cm)',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  hits: {
+    help: 'each skill\'s blows as they land: foes stood dazed where it strikes (as death stands them), living past '
+      + 'every blow, and it cast at them as the player casts it, every hit caught as it lands (a blow: the hits within '
+      + 'a frame of each other); when each blow landed from the press, the gaps between them, when the hero was free '
+      + 'again and the damage a second till then; striking nothing, a gap past --apart and blows no quicker than '
+      + '--than\'s are problems (hits twinFangs --than cleave --apart 0.2 --class warrior --gear dual)',
+    argument: 'skills',
+    options: {
+      apart: { kind: 'number', usage: 's', help: 'the most a skill\'s blows may be apart' },
+      than: {
+        kind: 'text',
+        usage: 'skill',
+        help: 'a skill held down for a row of its blows (the basic attack: cleave), whose pace each skill\'s blows '
+          + 'must be quicker than',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant the fault the checks must catch: a blow struck 1 s after each skill\'s first (with --apart or '
+          + '--than), or else its foes kept from harm',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  rush: {
+    help: 'Bull Rush\'s foes as it sweeps them up: foes stood dazed on its line and at its sides (living, a hair from '
+      + 'death, an elite and the boss), a set at a time, each followed until it is still (when it was met, how long it '
+      + 'rode before the hero and how near his body, how it was let go, where it ended against where he stopped); a '
+      + 'foe never met, left standing, carried inside him or ending behind or beside him, a living foe left unthrown '
+      + 'and an elite or a boss thrown are problems; then skills cast with it (a Power Strike charged and the charge '
+      + 'cast over it, a cleave and Twin Fangs as it runs, a strike at its stop, the charge cast as Steel Tempest '
+      + 'spins and with the shield raised): one not cast as pressed, landed out of the run, striking nothing, shown '
+      + 'as the charge, off its strides or let go as it runs, and the charge striking less than every foe on its '
+      + 'line or falling short, are problems: tools/lab/out/rush (--class warrior)',
+    options: {
+      scenarios: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['sets', 'casts'],
+        help: 'the parts (both by default): sets (the sets of foes the charge is cast through) and casts (the skills '
+          + 'cast with it, those the weapons held allow)',
+      },
+      dummies: {
+        kind: 'switch',
+        help: 'cast the skills with the charge at the lobby\'s training dummies (planted, never carried) in place of '
+          + 'the biome\'s foes',
+      },
+      pictures: {
+        kind: 'switch',
+        help: 'picture each set as the charge stops and once every foe is still, and each skill cast with it as it '
+          + 'lands (=false: the numbers alone)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant the faults the checks must catch: the first foe thrown put behind the hero as it lands, the '
+          + 'charge shown in the strike\'s place as both run, its legs dropped from under the cleave, its blows '
+          + 'made harmless, Steel Tempest let go as it is cast, and the charge cut short as Twin Fangs lands',
       },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
@@ -848,7 +915,7 @@ export const COMMANDS = {
         kind: 'list',
         usage: 'name.field,...',
         help: 'tunable values searched for the rest that frames his weapon nearest the marks, then pictured, with '
-          + 'the --tune that gives it (warriorEyes.restOn,warriorEyes.restDir)',
+          + 'the --tune that gives it (warriorEyes.oneOn,warriorEyes.oneDir)',
       },
       near: {
         kind: 'list',
@@ -1048,15 +1115,17 @@ export const COMMANDS = {
     help: 'the checks of a change to how the heroes move, every hero\'s, side by side in sessions of their own: the '
       + 'gait (its steps listed, no films), the stops, the ranges and the run\'s form for each hero, the ranger\'s '
       + 'feet and carry, the warrior\'s basic attack through the eyes with each weapon each way he holds it (a row '
-      + 'with the canaries, a short and a long pause); each report in tools/lab/out/check/<command>-<hero>.txt (runs '
-      + 'in this process, not the server)',
+      + 'with the canaries, a short and a long pause) and his other skills with each weapon that takes them, and '
+      + 'each of his skills cast through the eyes for its light and flashes, on each way\'s first weapon, and the '
+      + 'foes his charge sweeps up; each report in tools/lab/out/check/<command>-<hero>.txt (runs in this process, '
+      + 'not the server)',
     options: {
       classes: { kind: 'list', usage: 'a,b', help: 'the heroes (warrior, mage, ranger by default)' },
       commands: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['gait', 'stops', 'range', 'form', 'feet', 'carry', 'eyes'],
-        help: 'the commands (gait, stops, range, form, feet, carry, eyes by default)',
+        choices: ['gait', 'stops', 'range', 'form', 'feet', 'carry', 'eyes', 'cast', 'rush', 'hits'],
+        help: 'the commands (gait, stops, range, form, feet, carry, eyes, cast, rush, hits by default)',
       },
       jobs: { kind: 'number', usage: 'n', help: 'how many sessions side by side (a core in three, at most 8)' },
       starts: {
@@ -1235,9 +1304,17 @@ function checkTogether(options) {
   if (options.screen) throw labError('--screens names both screens: it takes no --screen');
 }
 
-/** whether an option of this kind takes the next argument as its value when written without `=` */
 /** whether an option's kind takes the argument after it as its value (`--count 3`; `--ab` and `--profile` don't) */
 const takesNext = (spec) => !['switch', 'ref', 'switchOrText'].includes(spec.kind);
+
+/** An option's value as it's given again: joined to the first by its separator (`joins`: `--tune a --tune b` reads
+ *  as `a;b`), else refused. (A second `--tune` once replaced the first unsaid, and five runs measured a tuning that
+ *  wasn't asked for.) */
+function givenAgain(name, spec, first, value) {
+  if (first === undefined) return value;
+  if (spec.joins) return `${first}${spec.joins}${value}`;
+  throw labError(`--${name} given twice (${JSON.stringify(first)}, then ${JSON.stringify(value)})`);
+}
 
 /**
  * Reads a command line (the arguments after `lab`): the command, its options by name (each read as its kind says,
@@ -1274,9 +1351,9 @@ export function parseCommandLine(argv) {
     }
     if (text === undefined && takesNext(spec)) {
       if (i + 1 >= rest.length) throw labError(`--${optionName} needs a value (${spec.usage ?? spec.kind})`);
-      options[optionName] = readValue(optionName, spec, rest[++i]);
+      options[optionName] = givenAgain(optionName, spec, options[optionName], readValue(optionName, spec, rest[++i]));
     } else {
-      options[optionName] = readValue(optionName, spec, text);
+      options[optionName] = givenAgain(optionName, spec, options[optionName], readValue(optionName, spec, text));
     }
   }
   for (const [optionName, spec] of Object.entries(specs)) {

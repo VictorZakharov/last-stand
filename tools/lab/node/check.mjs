@@ -20,16 +20,23 @@ export const CHECK_CLASSES = ['warrior', 'mage', 'ranger'];
 /**
  * The commands checked by default and the heroes each is for (all of `classes` when it names none): as
  * docs/agents/legs.md checks a change to the walk or the run (the gait, the stops, every joint's range and the run's
- * form for every hero, the ranger's feet and carried bow).
+ * form for every hero, the ranger's feet and carried bow), the warrior's moves through the eyes and their light
+ * there, the foes his charge sweeps up, and the pace of Twin Fangs' blows.
  */
 export const CHECK_PLAN = {
   gait: null, stops: null, range: null, form: null, feet: ['ranger'], carry: ['ranger'], eyes: ['warrior'],
+  cast: ['warrior'], rush: ['warrior'], hits: ['warrior'],
 };
 /** each command's options in a check: the gait's steps listed, and no films nor pictures (a check reads the numbers:
  *  the form's of both sides, to compare, were more than the browser held, which closed); the basic attack through
- *  the eyes */
+ *  the eyes; a cast's light through the eyes in both biomes (its options in full: a check's aren't read from the
+ *  command line, where their defaults are filled in); Twin Fangs' blows quicker than a dual wielder's cleave and at
+ *  most 0.2 s apart */
 const CHECK_OPTIONS = {
   gait: { frames: true, films: false }, form: { pictures: false }, eyes: { _: ['cleave'], film: false },
+  cast: { views: ['first'], biomes: ['crypt', 'forest'], times: [], pictures: false },
+  rush: { pictures: false },
+  hits: { _: ['twinFangs'], than: 'cleave', apart: 0.2, gear: 'dual' },
 };
 /**
  * the commands run a scenario a job, side by side, each job running its scenario from every start on one page
@@ -66,6 +73,27 @@ export const EYES_ROWS = {
   pause: { times: 3, apart: 0.3 },
   rest: { times: 3, apart: 1.2 },
 };
+/**
+ * the warrior's other skills a check casts through the eyes, each on every weapon of the ways of holding them it
+ * takes (src/data/classes/warrior.ts `needs`; null: every way), once, with the canaries on each way's first weapon
+ * (the rows above canary every weapon): with the basic attack's cuts alone checked, Power Strike, Bull Rush and
+ * Thunder Crescent with a two-hander, Twin Fangs and Iron Bellow's two-hander were broken through the eyes and no
+ * check said so (#252)
+ */
+export const EYES_SKILLS = {
+  powerStrike: null, bullRush: null, tempest: null, ironBellow: null, potion: null,
+  crescent: ['twoHanded'], twinFangs: ['dual'], raiseShield: ['shield'],
+};
+/**
+ * Bull Rush's parts in a check, a job each: the sets of foes it sweeps up, and the skills cast with it with a shield
+ * and with a weapon in each hand (each way's own among them: the charge cast with the shield raised, Twin Fangs in the
+ * charge; with the weapons as rolled, a combo the way they were held left out was never checked)
+ */
+export const RUSH_PARTS = [
+  { part: 'sets', options: { scenarios: ['sets'] } },
+  { part: 'shield-casts', options: { scenarios: ['casts'], gear: 'shield' } },
+  { part: 'dual-casts', options: { scenarios: ['casts'], gear: 'dual' } },
+];
 /** the most sessions side by side: each is a browser and a Vite server or two, and a page's frames take a core */
 const MOST_WORKERS = 8;
 
@@ -74,7 +102,8 @@ export function scenariosOf(command) {
   return COMMANDS[command]?.options.scenarios?.choices ?? [];
 }
 
-/** Each weapon's swings through the eyes, a part each: its name (`dual-Axe-pause`) and its options. */
+/** Each weapon's swings through the eyes and its skills cast through them, a part each: its name
+ *  (`dual-Axe-pause`, `twoHanded-Maul-crescent`) and its options. */
 export function eyesParts() {
   const parts = [];
   for (const [gear, weapons] of Object.entries(EYES_WEAPONS)) {
@@ -82,14 +111,41 @@ export function eyesParts() {
       for (const [row, options] of Object.entries(EYES_ROWS)) {
         parts.push({ part: `${gear}-${weapon}-${row}`, options: { gear, weapon, ...options } });
       }
+      for (const skill of skillsHeld(gear)) {
+        const canary = weapon === weapons[0];
+        parts.push({ part: `${gear}-${weapon}-${skill}`, options: { gear, weapon, _: [skill], canary } });
+      }
     }
   }
   return parts;
 }
 
 /**
+ * The warrior's skills cast through the eyes for their light, a part each (`dual-powerStrike`): the basic attack and
+ * `EYES_SKILLS`, by the ways of holding them, each on its way's first weapon, the frame's light and its flashes as
+ * the player sees them. With the swings alone checked, a dual wielder's Power Strike flashed three times a second
+ * where the left hand swept down, the ground glowed and the blade came back glinting, and Bull Rush stood the camera
+ * inside the husk it threw ahead of it, half the frame its glow (#252).
+ */
+export function castParts() {
+  const parts = [];
+  for (const [gear, [weapon]] of Object.entries(EYES_WEAPONS)) {
+    for (const skill of ['cleave', ...skillsHeld(gear)]) {
+      parts.push({ part: `${gear}-${skill}`, options: { gear, weapon, _: [skill] } });
+    }
+  }
+  return parts;
+}
+
+/** The skills of `EYES_SKILLS` cast with the weapons held `gear`'s way. */
+function skillsHeld(gear) {
+  return Object.entries(EYES_SKILLS).filter(([, gears]) => !gears || gears.includes(gear)).map(([skill]) => skill);
+}
+
+/**
  * A command's parts in a check, a job each, by name with their options: a split command's scenarios, each from
- * every start; the swings through the eyes; or the command whole, in one job (`[null]`).
+ * every start; the swings through the eyes, the casts' light, the charge's parts; or the command whole, in one job
+ * (`[null]`).
  */
 function partsOf(command, starts) {
   if (CHECK_SPLIT.has(command)) {
@@ -97,6 +153,8 @@ function partsOf(command, starts) {
     return scenariosOf(command).map((part) => ({ part, options: { scenarios: [part], offsets } }));
   }
   if (command === 'eyes') return eyesParts();
+  if (command === 'cast') return castParts();
+  if (command === 'rush') return RUSH_PARTS;
   return [null];
 }
 

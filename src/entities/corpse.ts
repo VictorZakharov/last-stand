@@ -54,6 +54,11 @@ export interface Shove {
   swirl?: number;
   /** the bodies it has driven already, driven no more (a wave passing over them) */
   once?: Set<object>;
+  /** only the bodies whose hips are where this says (a charge's way, not a ring round it) */
+  where?: (hips: XZ) => boolean;
+  /** each body set going at its full speed, not added to the way it was going (a charge's stop: its bodies thrown on
+   *  as it throws the living, however fast they rode before it) */
+  set?: boolean;
 }
 
 /**
@@ -65,14 +70,15 @@ export function blastCorpses(at: XZ, radius: number, speed: number, shove: Shove
     if (!c.ragdoll || c.t === 0 || shove.once?.has(c)) continue;
     const hips = c.ragdoll.hips(_h);
     const dx = hips.x - at.x, dz = hips.z - at.z, d = Math.hypot(dx, dz);
-    if (d > radius) continue;
+    if (d > radius || (shove.where && !shove.where(hips))) continue;
     shove.once?.add(c);
     const ox = d > 1e-3 ? dx / d : 1, oz = d > 1e-3 ? dz / d : 0, swirl = shove.swirl ?? 0;
     let wx = shove.dir?.x ?? ox + oz * swirl, wz = shove.dir?.z ?? oz - ox * swirl;
     const w = Math.hypot(wx, wz) || 1;
     wx /= w; wz /= w;
-    const k = speed * (1 - 0.6 * (d / radius));
-    c.ragdoll.throw(wx * k, k * (shove.lift ?? 0.5), wz * k, 0.5);
+    const k = shove.set ? speed : speed * (1 - 0.6 * (d / radius));
+    if (shove.set) c.ragdoll.drive(wx * k, k * (shove.lift ?? 0.5), wz * k);
+    else c.ragdoll.throw(wx * k, k * (shove.lift ?? 0.5), wz * k, 0.5);
   }
 }
 

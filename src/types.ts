@@ -107,6 +107,9 @@ export interface SkillDef {
   moveMult?: number;
   /** a cast that leaves the hero free to move (drinking a draught): full speed, facing the way they go, not the aim; it still blocks every other skill */
   freeMove?: boolean;
+  /** cast over another skill being cast or held, which goes on and lands as it would (Bull Rush: a Power Strike
+   *  charged, then the charge, the strike landing as it runs; Steel Tempest held, the charge spinning) */
+  overCast?: boolean;
   freeze?: number;
   duration?: number;
   pull?: number;
@@ -281,6 +284,9 @@ export interface ActionState {
   yaw?: number; arrows?: number; fan?: number;
   /** a bow's shot with no arrow on the string: how far the hand is through taking one from the quiver first (0..1) */
   fetch?: number;
+  /** a dash run under it (a skill cast as Bull Rush's charge runs): its own name and share, for its legs and the
+   *  lean of its body posed under the action's arms */
+  under?: { name: string; t: number };
 }
 
 /** Per-frame input to a model's procedural animation. */

@@ -62,10 +62,14 @@ const drawShare = (c: CastState): number => Math.min(1, Math.max(0, c.t - (c.noc
 /** A movement skill's dash: a fixed velocity that input can't steer, with a per-frame hook; `lift`
  *  makes it a jump of that peak height, and `anim` is the pose it plays, over the rush and `hold`
  *  seconds more standing where it ended (a lunge's strikes follow through). */
-interface DashState { vx: number; vz: number; t: number; dur: number; hold: number; lift: number; anim: CastAnim; through: boolean; step?(): void; pace?(u: number): number }
+/** A dash cast as an open one runs, riding on it (`Player.startDash`): its action, and its time so far and in all (s). */
+interface Ride { anim: CastAnim; t: number; dur: number }
+interface DashState { vx: number; vz: number; t: number; dur: number; hold: number; lift: number; anim: CastAnim; through: boolean; open: boolean; ride?: Ride; step?(): void; pace?(u: number): number }
 /** `pace` (optional) is the share of the way covered by `u` (0..1 of `dur`), rising from 0 to 1: a dash that braces before it goes, or skids at its end, covering the same distance;
- *  `through`: it passes through the props on its way (a blink), where it ends clear of them */
-export interface DashOpts { lift?: number; anim?: CastAnim; hold?: number; through?: boolean; step?(): void; pace?(u: number): number }
+ *  `through`: it passes through the props on its way (a blink), where it ends clear of them; `open`: the hero casts
+ *  his other skills as it runs and holds, all but another charge or blink (`SkillBase.dashes`; Bull Rush's charge: a
+ *  strike landed as it runs, the skill posed over its legs, and a lunge riding on it) */
+export interface DashOpts { lift?: number; anim?: CastAnim; hold?: number; through?: boolean; open?: boolean; step?(): void; pace?(u: number): number }
 
 const round2 = (v: number): number => Math.round(v * 100) / 100;
 
@@ -412,7 +416,7 @@ export class Player {
     // a channel ends when the key that started it is released
     if (this.channel && !isDown(this.channel.key)) this.stopChannel();
     this.holdAim();
-    if ((input.mouse.overUI && !input.touchMode) || this.dash || this.staggered) return;
+    if ((input.mouse.overUI && !input.touchMode) || this.dashShut() || this.staggered) return;
     // the shot remembered from a press while busy: drawn now, and loosed at once if its key is up again (a tap)
     if (this.queued && !this.casting && !this.channel) { const q = this.queued; this.queued = null; this.tryCast(q.skill, q.key, q.at); }
     const busy = !!(this.casting || this.channel);
@@ -451,7 +455,7 @@ export class Player {
     // (where its preview was as it was let go, however the aim moves while it waits: the outline round one foe, the
     // mark went on another)
     const impl = a.skill.impl, at = (!impl.channel && impl.settle?.(this, a.skill.def, this.aim)) || this.aim.clone();
-    if (this.casting || this.channel || this.dash || this.staggered) this.queued = { skill: a.skill, key: a.key, at };
+    if (this.casting || this.channel || this.dashShut() || this.staggered) this.queued = { skill: a.skill, key: a.key, at };
     else this.tryCast(a.skill, a.key, at);
   }
 
@@ -475,7 +479,11 @@ export class Player {
   /** `key`: the key casting it, which holds a drawn shot (`SkillDef.draw`) until it's let go; `at`: where it's cast (the
    *  aim by default) */
   tryCast(s: KnownSkill, key?: SkillKey, at: THREE.Vector3 = this.aim): boolean {
-    if (this.casting || this.channel || this.dash || this.staggered || this.cooldownLeft(s.def.impl) > 0 || !this.alive) return false;
+    if (this.staggered || this.cooldownLeft(s.def.impl) > 0 || !this.alive) return false;
+    // (over a cast or a channel only a skill cast over one, which leaves it going: Bull Rush as Steel Tempest spins; in
+    // a dash only as an open one lets, and no charge or blink)
+    if ((this.casting || this.channel) && !s.def.overCast) return false;
+    if (this.dash && (this.dashShut() || s.impl.dashes)) return false;
     if (!this.sandbox && this.energy < s.def.cost) { this.lowEnergy(); return false; }
     const target = at.clone();
     if (!s.impl.channel && s.impl.canCast && !s.impl.canCast(this, s.def, target)) { this.noTarget(); return false; }
@@ -562,19 +570,48 @@ export class Player {
         : { skill: s, t: 0, dur: a.dur, fireAt: nockT + (a.dur - nockT) * (s.def.fireAt ?? 0.55), fired: false, target, replay: true, nockT };
     } else if (a.t === 'fire') {
       // (the way it faced as it fired; where it stood is where its reports have it now, played in step with them)
+      // (its own cast's: a skill cast over another, Bull Rush over a Power Strike, leaves that one to land as it will)
       this.facing = a.f;
-      if (this.casting?.drawT && !this.casting.fired) this.loose(this.casting, a.k ?? 1);
-      else if (this.casting) this.casting.fired = true;
+      const own = this.casting?.skill === s ? this.casting : null;
+      if (own?.drawT && !own.fired) this.loose(own, a.k ?? 1);
+      else if (own) own.fired = true;
       this.fire(s, new THREE.Vector3(a.x, a.y ?? 0, a.z), a.k ?? 1);
     } else if (!this.channel) {
       this.channel = { skill: s, key: a.k, state: (s.impl as ChannelSkill).start(this, s.def), t: 0 };
     }
   }
 
-  /** Rush along `dir` (normalized, on the ground) at `speed` for `dur` seconds; `step` runs every frame of it. */
-  startDash(dir: THREE.Vector3, speed: number, dur: number, { lift = 0, anim = 'charge', hold = 0, through = false, step, pace }: DashOpts = {}): void {
-    this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, hold, lift, anim, through, step, pace };
+  /** Rush along `dir` (normalized, on the ground) at `speed` for `dur` seconds; `step` runs every frame of it. Cast as
+   *  an open dash runs, it rides on that one instead, its own way given up: posed over its legs for its time (Twin
+   *  Fangs' lunge in Bull Rush's charge, its cuts landing as it runs; put in the charge's place, it cut it short). */
+  startDash(dir: THREE.Vector3, speed: number, dur: number, { lift = 0, anim = 'charge', hold = 0, through = false, open = false, step, pace }: DashOpts = {}): void {
+    if (this.dash?.open && this.dashRunning()) { this.dash.ride = { anim, t: 0, dur: dur + hold }; return; }
+    this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, hold, lift, anim, through, open, step, pace };
     this.facing = Math.atan2(dir.x, dir.z);
+  }
+
+  /** Whether a dash keeps the hero from casting (any but an open one, `DashOpts.open`, and one with a lunge riding
+   *  on it, as its own would). */
+  private dashShut(): boolean {
+    return !!this.dash && (!this.dash.open || !!this.dash.ride);
+  }
+
+  /** A dash's time on, and the time of what rides on it, let go once over. */
+  private dashOn(d: DashState, dt: number): void {
+    d.t += dt;
+    if (d.ride && (d.ride.t += dt) >= d.ride.dur) d.ride = undefined;
+  }
+
+  /** The dash over: what rides on it held on standing for the rest of its time, as its own dash would have held it
+   *  (Twin Fangs cast late in a charge's run, its cuts posed to their end). */
+  private dashOver(d: DashState): void {
+    const r = d.ride;
+    this.dash = r ? { vx: 0, vz: 0, t: r.t, dur: r.t, hold: r.dur - r.t, lift: 0, anim: r.anim, through: false, open: false } : null;
+  }
+
+  /** Whether a dash is running (not yet into its hold): the body kept on its way, not turned to the aim. */
+  private dashRunning(): boolean {
+    return !!this.dash && this.dash.t < this.dash.dur;
   }
 
   startChannel(s: KnownSkill, key: SkillKey): void {
@@ -626,7 +663,9 @@ export class Player {
     if (this.casting) {
       const c = this.casting;
       c.t += dt;
-      if (!c.skill.def.freeMove) this.faceTowards(this.aim);
+      // (cast as a dash runs, it lands the way the dash goes: turned to the aim, the charge ran on with the body
+      // wheeled off its way)
+      if (!c.skill.def.freeMove && !this.dashRunning()) this.faceTowards(this.aim);
       const impl = c.skill.impl;
       if (c.drawT) {
         // a drawn shot: loosed when its key is let go, once it's drawn at least as far as its least draw (and the arrow is on the string)
@@ -654,7 +693,7 @@ export class Player {
       if (this.energy < cost) { this.lowEnergy(); this.stopChannel(); }
       else {
         this.energy -= cost;
-        this.faceTowards(this.aim);
+        if (!this.dashRunning()) this.faceTowards(this.aim);
         (ch.skill.impl as ChannelSkill).tick(this, ch.skill.def, dt, ch.state);
       }
     }
@@ -665,14 +704,14 @@ export class Player {
       if (d.t >= d.dur) this.vel.set(0, 0, 0);
       else if (d.pace && dt > 0) { const k = (d.pace(Math.min(1, (d.t + dt) / d.dur)) - d.pace(d.t / d.dur)) * d.dur / dt; this.vel.set(d.vx * k, 0, d.vz * k); }
       else this.vel.set(d.vx, 0, d.vz);
-      d.t += dt;
+      this.dashOn(d, dt);
     }
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     if (!d?.through || d.t >= d.dur) resolveWorld(this.pos, this.radius);
     if (d) {
       d.step?.();
-      if (d.t >= d.dur + d.hold) { this.dash = null; this.vel.multiplyScalar(this.stats.moveSpeed / Math.max(1e-3, Math.hypot(d.vx, d.vz))); }
+      if (d.t >= d.dur + d.hold) { this.dashOver(d); this.vel.multiplyScalar(this.stats.moveSpeed / Math.max(1e-3, Math.hypot(d.vx, d.vz))); }
     }
     const speed = Math.hypot(this.vel.x, this.vel.z);
     const look = lookFacing();
@@ -726,9 +765,9 @@ export class Player {
     if (this.channel) (this.channel.skill.impl as ChannelSkill).tick(this, this.channel.skill.def, dt, this.channel.state);
     const d = this.dash;
     if (d) {
-      d.t += dt;
+      this.dashOn(d, dt);
       d.step?.();
-      if (d.t >= d.dur + d.hold) this.dash = null;
+      if (d.t >= d.dur + d.hold) this.dashOver(d);
     }
     this.tickVitals(dt);
     this.animateBody(dt, t, Math.hypot(r.vx, r.vz));
@@ -786,8 +825,11 @@ export class Player {
     const cadence = Math.max(gs * gaitRate(gs, leg), goalSpeed * gaitRate(goalSpeed, leg));
     this.phase = this.cycleOn(dt * cadence * pace, backwards ? -1 : 1);
     let action: ActionState | null = null;
+    const d = this.dash, dashed = d ? { name: d.anim ?? 'charge', t: Math.min(1, d.t / (d.dur + d.hold)) } : null;
     if (this.staggered) action = { name: 'stagger', t: 1 - (this.guardBroken - G.time) / BLOCK.guardBreak };
-    else if (this.dash) action = { name: this.dash.anim ?? 'charge', t: Math.min(1, this.dash.t / (this.dash.dur + this.dash.hold)) };
+    // (an open dash shows a skill cast as it runs, its own legs under it, and the action of a dash riding on it)
+    else if (dashed && !(d?.open && (this.casting || this.channel || d.ride))) action = dashed;
+    else if (d?.ride) action = { name: d.ride.anim ?? 'charge', t: Math.min(1, d.ride.t / d.ride.dur) };
     else if (this.casting) {
       const c = this.casting, impl = c.skill.impl;
       action = { name: impl.anim || 'cast', t: c.t / c.dur };
@@ -811,6 +853,7 @@ export class Player {
       action = { name: ch.skill.impl.anim || 'channel', t: Math.min(1, ch.t / 0.2), time: ch.t, open: opens > 0 ? Math.min(1, ch.t / opens) : 1 };
       (ch.skill.impl as ChannelSkill).pose?.(this, ch.skill.def, ch.state, action);
     }
+    if (dashed && action && action !== dashed && !this.staggered) action.under = dashed;
     this.pose(dt, t, Math.min(1, speed / this.stats.moveSpeed), 1, side / this.stats.moveSpeed, action);
 
     // ambient motes around the offhand (the mage's arcana)

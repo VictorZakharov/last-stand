@@ -1,10 +1,13 @@
-// Bull Rush: a charge along the aim that tramples and hurls aside what it meets. A brace and a push-off
+// Bull Rush: a charge along the aim that sweeps up what it meets and hurls it on ahead. A brace and a push-off
 // that cracks the ground, then a few huge driving strides behind the shoulder, a wedge of force leading,
-// dust bursting at each footfall and streaming behind, and the stop lands as a ground-shaking impact,
-// the weapons cutting down across the front, crossing (the model's 'charge': BRACE, then the rush up to RUSH of it).
+// dust bursting at each footfall and streaming behind (the model's 'charge': BRACE, then the rush up to RUSH of
+// it). Each foe it meets is struck once and carried before the hero to the stop (entities/carry.ts), which lands
+// as a ground-shaking impact and throws them on ahead through the air, an elite or a boss driven on instead; the
+// fallen in its way, its kills among them, ride before it too (`ploughOf`) and slide on as it stops. Nothing ends
+// behind him or beside him, and the stop strikes nothing more.
 import * as THREE from 'three';
 import { G } from '../../state';
-import { hitEnemy } from '../damage';
+import { carryEnemy, hitEnemy } from '../damage';
 import { addEffect, shockwave, groundFlash, crackDecal, decal } from '../../fx/effects';
 import { particles, col, smokePuff, debris } from '../../fx/particles';
 import { flash } from '../../fx/lights';
@@ -12,16 +15,19 @@ import { addShake, kickFov } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
 import { sparks } from './cleave';
-import { slashMesh, slashArc } from './slash';
+import { slashMesh } from './slash';
 import { hurtPropsIn, PROP_DAMAGE, type Prop } from '../../world/destructible';
 import type { InstantSkill, Needs } from './types';
 import type { Enemy } from '../../entities/enemy';
-import { blastCorpses } from '../../entities/corpse';
-import type { Player } from '../../entities/player';
+import { addField } from '../../entities/corpse';
+import { ploughOf, throwPloughed, touchesAny } from '../../entities/carry';
 
-type Def = Needs<'damage' | 'range' | 'speed' | 'knock'>;
+type Def = Needs<'damage' | 'range' | 'speed'>;
 const EMBER = 0xffb46a, DUST = 0x2a241c;
 const WEDGE = 1.7;
+/** the charge meets what comes within this of its middle, past the foe's own size, or touches a foe it carries (m),
+ *  a frame's way on ahead too (met as it was overlapped, a foe was shoved its overlap at once, 68 cm in a frame) */
+const REACH = 1.1, TOUCH = 0.1;
 /** seconds: the brace before it goes, the rush (at least: a long charge takes longer) and the follow-through standing after it */
 const BRACE = 0.16, RUN = 0.42, HOLD = 0.42;
 /** footfalls during the rush (in step with the model's 'charge' strides) */
@@ -60,14 +66,6 @@ function footfall(p: THREE.Vector3, dir: THREE.Vector3, side: number): void {
   decal(f, { type: 'scorch', size: 0.6, life: 2.5, opacity: 0.45 });
 }
 
-/** the weapons cut down across the front as the charge lands, crossing in an X (one weapon: one diagonal cut) */
-function hurl(player: Player, dir: THREE.Vector3): void {
-  const f = Math.atan2(dir.x, dir.z), p = player.pos, radius = Math.max(1.4, (player.model.reach ?? 2) * 0.85);
-  // the right weapon from high on the right, and the left from high on the left if there's one
-  const sides = player.model.offTip ? [1, -1] : [1];
-  for (const s of sides) slashArc({ x: p.x, z: p.z, y: 1.1, facing: f, radius, arc: 1.5, dir: s, roll: s * 0.55, pitch: -0.15, color: EMBER, sweep: 0.12, fade: 0.25 });
-}
-
 function arrive(c: THREE.Vector3, dir: THREE.Vector3): void {
   shockwave(c, { color: EMBER, intensity: 2, from: 0.3, to: 3, life: 0.4 });
   shockwave(c, { color: 0xffffff, intensity: 0.9, from: 0.2, to: 1.8, life: 0.25 });
@@ -83,6 +81,7 @@ function arrive(c: THREE.Vector3, dir: THREE.Vector3): void {
 
 const skill: InstantSkill = {
   anim: null,
+  dashes: true,
   warm: () => [slashMesh(WEDGE, 0.55, 0xffffff, true).mesh],
   cast(player, rawDef, target) {
     const def = rawDef as Def;
@@ -90,7 +89,7 @@ const skill: InstantSkill = {
     // aiming at your own feet still charges the full distance, the way you face
     if (dir.lengthSq() < 0.01) dir.set(Math.sin(player.facing), 0, Math.cos(player.facing));
     dir.normalize();
-    const hit = new Set<Enemy>(), struck = new Set<Prop>(), ploughed = new Set<object>();
+    const hit = new Set<Enemy>(), struck = new Set<Prop>();
     let dust = 0, scrape = 0, arrived = false, launched = false, steps = 0;
     sfx.rush();
     // (gathering for it: dust stirs round the feet)
@@ -102,7 +101,12 @@ const skill: InstantSkill = {
     G.scene.add(wedge.mesh);
 
     const run = Math.max(RUN, def.range / def.speed), dur = BRACE + run;
-    player.startDash(dir, def.range / dur, dur, { hold: HOLD, pace: pace(BRACE / dur), step: () => {
+    // (the fallen in its way driven on before it while it runs, from the push-off to the stop)
+    let myDash: typeof player.dash = null;
+    const running = () => player.dash === myDash && myDash !== null && myDash.t >= BRACE && myDash.t < myDash.dur;
+    const calm = addField(ploughOf(player, dir, running));
+    // (open: his other skills cast as it runs and as it holds, a strike charged before it landing in its run)
+    player.startDash(dir, def.range / dur, dur, { hold: HOLD, open: true, pace: pace(BRACE / dur), step: () => {
       const p = player.pos, d = player.dash;
       if (arrived || !d) return;
       if (d.t < BRACE) return;
@@ -139,29 +143,28 @@ const skill: InstantSkill = {
           life: rand(0.08, 0.16), size: rand(0.03, 0.06), sizeEnd: 0, color: col(0xffe0b0, 1.6), colorEnd: col(0x803010, 0.2),
         });
       }
-      hurtPropsIn(player, p.x, p.z, 1.1, PROP_DAMAGE.trample, struck);
-      // (the bodies in its way thrown aside, each once)
-      blastCorpses(p, 1.5, 6, { lift: 0.5, once: ploughed });
+      hurtPropsIn(player, p.x, p.z, REACH, PROP_DAMAGE.trample, struck);
+      // (a foe the ones it carries run into is met too: carried on with them, not shoved aside off them)
+      const riding = G.enemies.filter((e) => e.carried?.by === player);
+      const touch = TOUCH + Math.hypot(player.vel.x, player.vel.z) * G.dt;
       for (const e of G.enemies) {
-        if (!e.alive || hit.has(e) || Math.hypot(e.pos.x - p.x, e.pos.z - p.z) > 1.1 + e.radius) continue;
+        if (!e.alive || hit.has(e)) continue;
+        const near = Math.hypot(e.pos.x - p.x, e.pos.z - p.z) <= REACH + e.radius;
+        if (!near && !touchesAny(e, riding, touch)) continue;
         hit.add(e);
-        // (thrown ahead of the charge and off to its side, as a plough throws the earth)
-        const side = Math.sign((e.pos.x - p.x) * dir.z - (e.pos.z - p.z) * dir.x) || 1;
-        // (struck on its side nearest the charge's line, it spins off it)
-        const on = { x: e.pos.x - dir.z * side * e.radius * 0.6, z: e.pos.z + dir.x * side * e.radius * 0.6 };
-        const blow = { dir: { x: dir.x * 0.85 + dir.z * side * 0.55, z: dir.z * 0.85 - dir.x * side * 0.55 }, lift: 0.55, force: 1.3, on };
-        hitEnemy(e, def.damage, { by: player, tags: def.tags, type: 'physical', knock: def.knock, from: p, blow });
-        // (a body it killed is thrown by its blow, not ploughed again)
-        if (e.corpse) ploughed.add(e.corpse);
+        // (struck through its middle along the charge: a kill thrown on ahead, its body carried on by the field, and
+        // a foe it leaves standing carried before it to the stop)
+        hitEnemy(e, def.damage, { by: player, tags: def.tags, type: 'physical', from: p, blow: { dir, lift: 0.3 } });
+        carryEnemy(e, player, dir, Math.max(0, d.dur - d.t));
         sparks(e.pos.x, e.height * 0.5, e.pos.z, 0xffc080, 16);
         shockwave(e.pos, { color: EMBER, intensity: 1.5, from: 0.2, to: 1.4, life: 0.25 });
         debris(e.pos, { count: 6, speed: 5 });
         addShake(0.2);
         sfx.clang();
       }
-      if (d && d.t >= d.dur) { arrived = true; arrive(p.clone(), dir); hurl(player, dir); }
+      if (d && d.t >= d.dur) { arrived = true; arrive(p.clone(), dir); throwPloughed(player, dir); }
     } });
-    const myDash = player.dash;
+    myDash = player.dash;
     let t = 0;
     addEffect({
       update(dt) {
@@ -173,7 +176,7 @@ const skill: InstantSkill = {
         wedge.mat.uniforms.uFade.value = (on ? Math.min(1, (t - BRACE) / 0.06) : 0) * (0.6 + Math.random() * 0.2);
         return on || (myDash !== null && player.dash === myDash && myDash.t < BRACE);
       },
-      dispose() { G.scene.remove(wedge.mesh); wedge.dispose(); },
+      dispose() { G.scene.remove(wedge.mesh); wedge.dispose(); calm(); },
     });
   },
 };

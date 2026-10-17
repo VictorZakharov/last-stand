@@ -195,6 +195,7 @@ function dissolve(player: Player, k: number): void {
 
 const skill: InstantSkill = {
   anim: null,
+  dashes: true,
   warm: () => [new THREE.Mesh(ringGeo(), additive(GREEN, 1.6, 0.85)), new THREE.Mesh(column(), columnMat())],
   aim: (player, def, target, dt) => showLanding(player, def as Def, target, dt),
   cast(player, rawDef, target) {

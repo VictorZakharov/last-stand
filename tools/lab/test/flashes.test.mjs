@@ -48,4 +48,6 @@ test('the worst cell is the one that flashes, and when its second started', () =
   assert.equal(worst.cell, 1);
   assert.equal(worst.most, 4);
   assert.ok(Math.abs(worst.at - 66 * FRAME) < 1e-9);
+  assert.equal(worst.changes.length, 8);
+  assert.deepEqual(worst.changes.slice(0, 2), [{ frame: 66, rising: true }, { frame: 72, rising: false }]);
 });

@@ -5,6 +5,9 @@ import type { ActionState, CastAnim, SkillDef } from '../../types';
 
 interface SkillBase {
   anim: CastAnim;
+  /** its dash is what it does (a charge, a blink: `Player.startDash`): never cast as another dash runs, even one that
+   *  lets skills be cast. Any other skill's dash cast in one that does rides on it (Twin Fangs' lunge in a charge) */
+  dashes?: boolean;
   /** Meshes using the skill's own materials, compiled at load so the first cast doesn't hitch. */
   warm?(): THREE.Object3D[];
 }

@@ -39,8 +39,9 @@ export interface CastOptions {
   what?: [number, number, number];
   /** plant the fault the checks must catch: a strobe, the exposure raised on every other tenth of a second */
   canary: boolean;
-  /** the way the hero holds his weapons (as rolled when not given) */
+  /** the way the hero holds his weapons (as rolled when not given), and with it the weapon, by its base */
   gear?: WeaponStyle;
+  weapon?: string;
   /** tunable values set for the cast, by their paths (`Fixture.tune`) */
   tune?: Record<string, number[]>;
 }
@@ -113,6 +114,17 @@ export function pressing(key: SkillKey, aim: THREE.Vector3, held: boolean): Fram
   if (key === 'mouse0') return { m0: true, aim };
   if (key === 'mouse2') return { m2: true, aim };
   return { keys: [key], aim };
+}
+
+/** The frame's input holding every one of `keys` at once over `aim` (a channel's key held as another is pressed). */
+export function holdingAll(keys: SkillKey[], aim: THREE.Vector3): Frame {
+  const held = keys.map((key) => pressing(key, aim, true));
+  return {
+    keys: held.flatMap((frame) => frame.keys ?? []),
+    m0: held.some((frame) => frame.m0),
+    m2: held.some((frame) => frame.m2),
+    aim,
+  };
 }
 
 /** How long the key is held: a channel through, a drawn shot to full and a held skill a moment; else a frame (s). */
@@ -262,8 +274,8 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
   // (the props an earlier cast broke stand again: broken, they stay so until a run starts, and the next scenario in
   // the biome saw another scene)
   G.arena.restoreProps();
-  const { biome, view, facing, gear, tune } = options;
-  const scenario = { biome, view, facing, gear, tune };
+  const { biome, view, facing, gear, weapon, tune } = options;
+  const scenario = { biome, view, facing, gear, weapon, tune };
   await standIn(lab, { ...scenario, at: options.at });
   const hero = G.player;
   bindKnown(options.skill);
@@ -321,22 +333,40 @@ function meanTimeline(frames: FrameCells[], frameTime: number): string {
   return `  its mean every ${TIMELINE_STEP} s: ${means.join(' ')}`;
 }
 
-/** the worst flashing cell's light is listed every this many frames through its worst second */
-const TRACE_STEP = 3;
-
-/** The worst flashing cell's light (a share of white) through its worst second, every `TRACE_STEP` frames. */
+/** The changes counted in the worst flashing cell's worst second: the light (a share of white) each reached, its
+ *  way and when. (Its light every third frame was listed: a hand swung in and out of the cell in two frames showed as
+ *  a steady fade, and what was counted could not be told.) */
 function flashTrace(frames: FrameCells[], flashing: FlashCount, frameTime: number): string {
-  const from = Math.round(flashing.at / frameTime);
-  const lights: string[] = [];
-  for (let f = from; f < Math.min(frames.length, from + Math.round(1 / frameTime)); f += TRACE_STEP) {
-    lights.push(frames[f].cellLights[flashing.cell].toFixed(2));
-  }
-  return `    its light through that second, every ${TRACE_STEP} frames: ${lights.join(' ')}`;
+  const changes = flashing.changes.map(({ frame, rising }) => {
+    const light = frames[frame].cellLights[flashing.cell].toFixed(2);
+    return `${rising ? 'up' : 'down'} to ${light} at ${seconds(frame * frameTime)}`;
+  });
+  return `    its changes counted (a tenth of white or more each): ${changes.join(', ')}`;
 }
 
-/** What `--what` asks for, as lines: the moment and the point, and what the eye's ray met there. */
+/** What `--what` asks for, as lines: the moment and the point, what the eye's ray met there, and what the hero was
+ *  doing then (a blade white after Power Strike might have been its fuller glowing as he cast again: he was doing
+ *  nothing, and it was the sky in the steel). */
 function metAt([time, across, down]: [number, number, number]): string[] {
-  return [`  at ${seconds(time)}, ${across}% across and ${down}% down, met:`, ...whatIsAt(across / 100, down / 100)];
+  const met = whatIsAt(across / 100, down / 100);
+  const doing = `  the hero then: ${heroDoing()}`;
+  return [`  at ${seconds(time)}, ${across}% across and ${down}% down, met:`, ...met, doing];
+}
+
+/** What the hero is doing: his cast and how far through it, his channel, a dash, a stagger; or nothing. */
+function heroDoing(): string {
+  const hero = G.player;
+  const doing: string[] = [];
+  if (hero.casting) {
+    const { skill, t, dur } = hero.casting;
+    doing.push(`casting ${skill.def.name} (${Number.isFinite(dur) ? `${(t / dur).toFixed(2)} of it` : 'held'})`);
+  }
+  if (hero.channel) doing.push(`channelling ${hero.channel.skill.def.name}`);
+  if (hero.dash) doing.push('dashing');
+  if (hero.staggered) doing.push('staggered');
+  if (!hero.alive) doing.push('fallen');
+  const life = `, his life ${hero.life.toFixed(0)} of ${hero.stats.maxLife.toFixed(0)}`;
+  return `${doing.length ? doing.join(', ') : 'nothing'}${life}`;
 }
 
 /** What a cast's frames came to. */

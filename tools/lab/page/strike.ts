@@ -1,15 +1,19 @@
 // tools/lab strikes: how a held weapon strikes, frame by frame, as physics has a blow land (lab eyes): how fast its
-// striking part moves, and whether its striking side leads the way it moves (models/weapons.ts `STRIKES_WITH`: a
-// blade's edge, an axe's bit, a maul's face) or its flat does; how much of the motion runs along it (a thrust, a draw);
-// how flat the plane it's swung in is; how much faster its striking part moves than its hilt (a cut swung round, its
-// tip arcing, or the whole blade slid across); and how long it takes to slow after the blow (carried through, or
-// stopped dead). (The owner, of the cuts through the eyes: "it should strike according to physics... blade parallel
-// to strike direction"; broadside to the eyes through the blow, the flat led every cut. And: "it strikes with whole
-// blade, but it should strike with tip", "strikes feel fake and having no momentum".)
+// striking part moves against the eyes, which carry the arms, and whether its striking side leads the way it moves
+// (models/weapons.ts `STRIKES_WITH`: a blade's edge, an axe's bit, a maul's face) or its flat does; how much of the
+// motion runs along it (a thrust, a draw); how flat the plane it's swung in is; how much faster its striking part
+// moves than its hilt (a cut swung round, its tip arcing, or the whole blade slid across); and how long it takes to
+// slow after the blow (carried through, stopped by the floor it was driven into, or stopped dead in the air). (The
+// owner, of the cuts through the eyes: "it should
+// strike according to physics... blade parallel to strike direction"; broadside to the eyes through the blow, the
+// flat led every cut. And: "it strikes with whole blade, but it should strike with tip", "strikes feel fake and having
+// no momentum".)
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import * as weaponsCode from '../../../src/entities/models/weapons';
 import type { StrikingSide } from '../../../src/entities/models/weapons';
+import { groundHeight } from '../../../src/world/ground';
+import { G } from '../../../src/state';
 
 /** The game's weapon code as far as it goes: `--ab` runs this on main's game, which may not say a striking side (its
  *  weapons read as two-edged then, and the report says so). */
@@ -32,11 +36,17 @@ const LANDS_AFTER = 4;
 /** a cut swings its weapon round: its striking part at the blow at least this share as many times as fast as its hilt
  *  as the arm and the weapon swung round the shoulder as one would move it (`StrikeFrame.rigid`; a blade slid across,
  *  the whole of it moving as one, is 1; a wrist's snap is more). (Held to 2 for every weapon, a sword's whip, a
- *  mace's head nearer the hand failed by its length alone: swung round the shoulder as one, it is 1.5.) */
+ *  mace's head nearer the hand failed by its length alone: swung round the shoulder as one, it is 1.5.) A spin's
+ *  is carried round the body's own up through it rather than the shoulder (`StrikeTracker`'s `spins`: held out low,
+ *  its hands at the arm's length from the shoulder, Steel Tempest's two-hander read as slid across, 2.0 to the
+ *  shoulder's 2.7, carried round as one). */
 const WHIP_LEAST = 1;
 /** a blow carries on through: its striking part slows to `STOP_SHARE` of its fastest no sooner than this (ms) */
 const STOP_SHARE = 0.2;
 const STOP_LEAST = 60;
+/** but a blow driven into the ground stops dead there, as it should (Thunder Crescent's): one whose weapon's lowest
+ *  point is within this of the floor as it stops was stopped by it (m), and one further under it has sunk into it */
+const FLOOR_NEAR = 0.06;
 
 /** A frame of a held weapon. */
 export interface StrikeFrame {
@@ -54,19 +64,30 @@ export interface StrikeFrame {
   along: number;
   /** its length's way (the world's), for the plane it's swung in */
   axis: THREE.Vector3;
-  /** how many times as fast as its hilt its striking part would move swung round the holding arm's shoulder with the
-   *  arm as one (their distances from the shoulder's ratio), the whip's measure */
+  /** how many times as fast as its hilt its striking part would move swung round its pivot with the arm as one (the
+   *  ratio of their distances from it), the whip's measure, and that pivot */
   rigid: number;
+  pivot: Pivot;
+  /** how far its lowest point is over the floor under it (m; less than 0, under it) */
+  low: number;
 }
 
+/** What a weapon is swung round as one with the arm: the holding arm's shoulder, or a spin's line up through the
+ *  body (`StrikeTracker`) */
+export type Pivot = 'shoulder' | 'body';
+
 /** The weapon the hero's tip is on: the grip's child seen, named for a base, its hilt (the grip's place), where its
- *  blow lands, the shoulder of the arm holding it and the way of its length (world). */
+ *  blow lands, the shoulder of the arm holding it, the body's place, the way of its length and the eyes' place (world),
+ *  and how far its lowest point is over the floor (`StrikeFrame.low`). */
 interface Held {
   weapon: THREE.Object3D;
   grip: THREE.Vector3;
   point: THREE.Vector3;
   shoulder: THREE.Vector3;
+  body: THREE.Vector3;
   axis: THREE.Vector3;
+  eyes: THREE.Vector3;
+  low: number;
 }
 
 /** Whether this game says its weapons' striking sides (models/weapons.ts `STRIKES_WITH`). */
@@ -84,7 +105,35 @@ function heldNow(lab: Lab): Held | null {
   const from = grip.getWorldPosition(new THREE.Vector3());
   const point = from.clone().lerp(tip.getWorldPosition(new THREE.Vector3()), PERCUSSION);
   const shoulder = lab.joints[`shoulder${heldIn(lab, grip)}`].getWorldPosition(new THREE.Vector3());
-  return { weapon, grip: from, point, shoulder, axis: axisOf(weapon) };
+  const body = lab.joints.body.getWorldPosition(new THREE.Vector3());
+  const eyes = G.camera.getWorldPosition(new THREE.Vector3());
+  return { weapon, grip: from, point, shoulder, body, axis: axisOf(weapon), eyes, low: overFloor(weapon) };
+}
+
+/** How far the lowest point of `weapon` as drawn (its meshes seen, the world matrices current) is over the floor
+ *  under it (m; less than 0, under it). */
+function overFloor(weapon: THREE.Object3D): number {
+  const point = new THREE.Vector3();
+  const lowest = new THREE.Vector3(0, Infinity, 0);
+  weapon.traverseVisible((object) => {
+    const mesh = object as THREE.Mesh;
+    const positions = mesh.isMesh ? mesh.geometry.getAttribute('position') : undefined;
+    if (!positions) return;
+    for (let i = 0; i < positions.count; i++) {
+      point.fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld);
+      if (point.y < lowest.y) lowest.copy(point);
+    }
+  });
+  return lowest.y - groundHeight(lowest.x, lowest.z);
+}
+
+/** How many times as far from `pivot` as its hilt the held weapon's blow lands (`StrikeFrame.rigid`): from the
+ *  shoulder, or from the line up through the body (the world's up: a spin turns the body about it). */
+function rigidRound(held: Held, pivot: Pivot): number {
+  const from = (at: THREE.Vector3) => (pivot === 'shoulder'
+    ? at.distanceTo(held.shoulder)
+    : Math.hypot(at.x - held.body.x, at.z - held.body.z));
+  return from(held.point) / Math.max(1e-6, from(held.grip));
 }
 
 /** Which hand holds `grip`: the hand joint it hangs under (the right's when under neither). */
@@ -100,10 +149,13 @@ function heldIn(lab: Lab, grip: THREE.Object3D): 'R' | 'L' {
 const axisOf = (weapon: THREE.Object3D) => new THREE.Vector3(0, 1, 0).transformDirection(weapon.matrixWorld);
 const sideOf = (weapon: THREE.Object3D) => new THREE.Vector3(1, 0, 0).transformDirection(weapon.matrixWorld);
 
-/** Where the held weapon's blow lands, followed from frame to frame: how far it moved since the last (a weapon changed
- *  from one hand to the other has no last place: the other's isn't its). */
+/** Where the held weapon's blow lands, followed from frame to frame: how far it moved since the last against the eyes,
+ *  which carry the arms (a weapon changed from one hand to the other has no last place: the other's isn't its). (In
+ *  the world's own space, Bull Rush's run carried the hilt along at the body's pace, and a cut swung as it ended read
+ *  as slid across.) */
 class Follower {
   private last: Held | null = null;
+  private readonly carried = new THREE.Vector3();
   /** how far the hilt moved, with the blow's point (`moved`) */
   readonly gripMoved = new THREE.Vector3();
   /** and the way of the weapon's length between the two frames: square to the point's move as it's turned round the
@@ -114,17 +166,22 @@ class Follower {
     const before = this.last;
     this.last = now;
     if (!now || !before || before.weapon !== now.weapon) return null;
-    this.gripMoved.copy(now.grip).sub(before.grip);
+    const carried = this.carried.copy(now.eyes).sub(before.eyes);
+    this.gripMoved.copy(now.grip).sub(before.grip).sub(carried);
     this.axisBetween.copy(before.axis).add(now.axis).normalize();
-    return now.point.clone().sub(before.point);
+    return now.point.clone().sub(before.point).sub(carried);
   }
 }
 
-/** The weapon the hero's tip is on, followed frame by frame. */
+/** The weapon the hero's tip is on, followed frame by frame; swung round the holding arm's shoulder, or carried round
+ *  the body by a spin (`spins`). */
 export class StrikeTracker {
   private readonly follower = new Follower();
+  private readonly pivot: Pivot;
 
-  constructor(private readonly lab: Lab) {}
+  constructor(private readonly lab: Lab, spins = false) {
+    this.pivot = spins ? 'body' : 'shoulder';
+  }
 
   /** This frame's, `dt` s after the last (null when the tip is on no weapon). The world matrices must be current. */
   next(dt: number): StrikeFrame | null {
@@ -141,8 +198,10 @@ export class StrikeTracker {
     const between = moved ? this.follower.axisBetween : axis;
     const along = speed > 0 ? Math.abs(velocity.dot(between)) / speed : 0;
     const lead = leadOf(velocity, axis, sideOf(weapon), side);
-    const rigid = held.point.distanceTo(held.shoulder) / Math.max(1e-6, held.grip.distanceTo(held.shoulder));
-    return { weapon: weapon.name, side, point: held.point, speed, gripSpeed, lead, along, axis, rigid };
+    const rigid = rigidRound(held, this.pivot);
+    const { pivot } = this;
+    const { point, low } = held;
+    return { weapon: weapon.name, side, point, speed, gripSpeed, lead, along, axis, rigid, pivot, low };
   }
 }
 
@@ -237,11 +296,14 @@ export interface Strike {
   /** how far its length is out of the plane it's swung in, the root mean square over the strike (degrees) */
   plane: number;
   /** at its fastest, how many times as fast as its hilt its striking part moves (Infinity: the hilt still), and as
-   *  the arm and the weapon swung round the shoulder as one would move it (`StrikeFrame.rigid`) */
+   *  the arm and the weapon swung round their pivot as one would move it (`StrikeFrame.rigid`, `pivot`) */
   whip: number;
   rigid: number;
-  /** how long after its fastest it slows to `STOP_SHARE` of it (ms; null: not before the frames end) */
+  pivot: Pivot;
+  /** how long after its fastest it slows to `STOP_SHARE` of it (ms; null: not before the frames end), and how far
+   *  its lowest point is over the floor by then (m: the least from its fastest frame to that one; null: not slowed) */
   stop: number | null;
+  grounded: number | null;
 }
 
 /** The fastest of `frames` from `from` to `to` (indices, both in), or -1 where none moves. */
@@ -278,20 +340,39 @@ export function strikeIn(frames: (StrikeFrame | null)[], fires: number, frameMs:
     .sort((a, b) => frames[b]!.speed - frames[a]!.speed);
   const outrun = elsewhere.length ? { at: elsewhere[0], speed: frames[elsewhere[0]]!.speed } : null;
   const whip = top.gripSpeed > 0 ? top.speed / top.gripSpeed : Infinity;
-  const stop = stopAfter(frames, fastest, frameMs);
-  const { rigid } = top;
-  const found = { weapon: top.weapon, side: top.side, fastest, speed: top.speed, from, to, outrun, whip, rigid, stop };
+  const stopped = stopAt(frames, fastest);
+  const stop = stopped < 0 ? null : (stopped - fastest) * frameMs;
+  const grounded = stopped < 0 ? null : lowestOver(frames, fastest, stopped);
+  const { rigid, pivot } = top;
+  const found = {
+    weapon: top.weapon, side: top.side, fastest, speed: top.speed, from, to, outrun, whip, rigid, pivot, stop,
+    grounded,
+  };
   return { ...found, ...leadsOver(strike) };
 }
 
-/** How long after `fastest` the weapon there slows to `STOP_SHARE` of its speed (ms), or null if it never does. */
-function stopAfter(frames: (StrikeFrame | null)[], fastest: number, frameMs: number): number | null {
+/** The frame after `fastest` the weapon there has slowed to `STOP_SHARE` of its speed by (its index), or -1 if it
+ *  never does. */
+function stopAt(frames: (StrikeFrame | null)[], fastest: number): number {
   const top = frames[fastest]!;
   for (let i = fastest + 1; i < frames.length; i++) {
     const frame = frames[i];
-    if (!frame || frame.weapon !== top.weapon || frame.speed < top.speed * STOP_SHARE) return (i - fastest) * frameMs;
+    if (!frame || frame.weapon !== top.weapon || frame.speed < top.speed * STOP_SHARE) return i;
   }
-  return null;
+  return -1;
+}
+
+/** How far over the floor the weapon held on `from` came from there to `to` (indices, both in; m, the least). */
+function lowestOver(frames: (StrikeFrame | null)[], from: number, to: number): number {
+  const weapon = frames[from]!.weapon;
+  const lows = frames.slice(from, to + 1).flatMap((frame) => (frame?.weapon === weapon ? [frame.low] : []));
+  return Math.min(...lows);
+}
+
+/** `frames` as if the floor were `by` under where it is (m): the canary's, a blow stopped by the floor read as one
+ *  stopped in the air. */
+export function floorLowered(frames: (StrikeFrame | null)[], by: number): (StrikeFrame | null)[] {
+  return frames.map((frame) => frame && { ...frame, low: frame.low + by });
 }
 
 /** The leads, the motion along it and the plane over a strike's frames. */
@@ -331,16 +412,32 @@ export function describeStrike(strike: Strike, share: (i: number) => string): st
   return `the strike${assumed} (the ${strike.weapon} moving at least ${STRIKE_SHARE * 100}% of its fastest, `
     + `${strike.speed.toFixed(1)} m/s at ${share(strike.fastest)}; ${strike.to - strike.from + 1} frames): ${lead}; `
     + `${(strike.along * 100).toFixed(0)}% of its motion along it; swung within ${degrees(strike.plane)} of a plane; `
-    + `${whipWords(strike.whip)} (${strike.rigid.toFixed(1)} swung round the shoulder as one); `
-    + stopWords(strike.stop)
+    + `${whipWords(strike.whip)} (${strike.rigid.toFixed(1)} ${pivotWords(strike.pivot)}); `
+    + stopWords(strike)
     + (strike.outrun ? `; ${outrunWords(strike.outrun, share)}` : '');
 }
 
 const whipWords = (whip: number) => `its blow's point ${Number.isFinite(whip) ? whip.toFixed(1) : 'endlessly'} `
   + 'times as fast as its hilt';
-const stopWords = (stop: number | null) => (stop === null
+const pivotWords = (pivot: Pivot) => (pivot === 'shoulder'
+  ? 'swung round the shoulder as one'
+  : 'carried round the body as one');
+const stopWords = ({ stop, grounded }: Strike) => (stop === null || grounded === null
   ? `not slowed to ${STOP_SHARE * 100}% of it before the frames end`
-  : `slowed to ${STOP_SHARE * 100}% of it ${stop.toFixed(0)} ms after`);
+  : `slowed to ${STOP_SHARE * 100}% of it ${stop.toFixed(0)} ms after, its lowest point ${centimetres(grounded)} `
+    + `${grounded < 0 ? 'under' : 'over'} the floor by then`);
+const centimetres = (metres: number) => `${Math.abs(metres * 100).toFixed(0)} cm`;
+
+/** How a strike stopped: carried on (`STOP_LEAST` or later, or not before the frames end), by the floor it was driven
+ *  into, sunk into the floor, or dead in the air. */
+function stoppedBy({ stop, grounded }: Strike): 'carried' | 'floor' | 'sunk' | 'air' {
+  if (stop === null || grounded === null || stop >= STOP_LEAST) return 'carried';
+  if (grounded < -FLOOR_NEAR) return 'sunk';
+  return grounded <= FLOOR_NEAR ? 'floor' : 'air';
+}
+
+/** Whether a strike stopped dead where the floor stopped it (`stoppedBy`), for the floor's canary. */
+export const stoppedByFloor = (strike: Strike) => stoppedBy(strike) === 'floor';
 
 const outrunWords = (outrun: NonNullable<Strike['outrun']>, share: (i: number) => string) =>
   `faster outside it: ${outrun.speed.toFixed(1)} m/s at ${share(outrun.at)}`;
@@ -348,7 +445,8 @@ const outrunWords = (outrun: NonNullable<Strike['outrun']>, share: (i: number) =
 const sideName = (side: StrikingSide) => ({ edges: 'edge', bit: 'bit', faces: 'face', round: 'head' })[side];
 
 /** A strike's problems: led by its flat rather than its striking side, outrun by another motion of the cast, slid
- *  across rather than swung round, and stopped dead after it (`share` says a frame's index as words). */
+ *  across rather than swung round, and stopped dead after it in the air or sunk into the floor (`share` says a
+ *  frame's index as words). */
 export function strikeProblems(strike: Strike, share: (i: number) => string): string[] {
   const problems: string[] = [];
   if (strike.lead !== null && strike.lead > LEAD_MOST) {
@@ -361,11 +459,16 @@ export function strikeProblems(strike: Strike, share: (i: number) => string): st
   const whipLeast = WHIP_LEAST * strike.rigid;
   if (strike.whip < whipLeast) {
     problems.push(`the ${strike.weapon} slides across rather than swinging round: ${whipWords(strike.whip)} `
-      + `(at least ${whipLeast.toFixed(1)}, as swung round the shoulder as one)`);
+      + `(at least ${whipLeast.toFixed(1)}, as ${pivotWords(strike.pivot)})`);
   }
-  if (strike.stop !== null && strike.stop < STOP_LEAST) {
-    problems.push(`the ${strike.weapon} stops dead after its blow: ${stopWords(strike.stop)} (no sooner than `
-      + `${STOP_LEAST} ms)`);
+  const stopped = stoppedBy(strike);
+  if (stopped === 'air') {
+    problems.push(`the ${strike.weapon} stops dead after its blow: ${stopWords(strike)} (no sooner than `
+      + `${STOP_LEAST} ms, unless the floor stops it: within ${centimetres(FLOOR_NEAR)} of it)`);
+  }
+  if (stopped === 'sunk') {
+    problems.push(`the ${strike.weapon} sinks into the floor as its blow stops: ${stopWords(strike)} (at most `
+      + `${centimetres(FLOOR_NEAR)} under it: the floor stops a blow at it)`);
   }
   return problems;
 }

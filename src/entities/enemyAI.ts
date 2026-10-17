@@ -151,11 +151,16 @@ export const FX = {
     addShake(0.4);
   },
   cast() { sfx.witchCast(); },
+  /** foe `id` thrown off a charge as it stops (`Enemy.toss`): it flies as thrown where it's simulated, and a co-op
+   *  guest's copy rises and falls as the host's reports carry it on */
+  toss(id: number, vx: number, vz: number, vy: number) {
+    G.enemies.find((e) => e.id === id)?.toss(vx, vz, vy);
+  },
 };
 export type FxName = keyof typeof FX;
 
 /** Play an attack effect here and on every co-op guest. */
-function fx<K extends FxName>(name: K, ...args: Parameters<(typeof FX)[K]>): void {
+export function fx<K extends FxName>(name: K, ...args: Parameters<(typeof FX)[K]>): void {
   (FX[name] as (...a: number[]) => void)(...(args as number[]));
   fxSink?.(name, args as number[]);
 }

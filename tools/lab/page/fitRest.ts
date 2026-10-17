@@ -22,7 +22,7 @@ export interface Marks {
 export interface FitOptions {
   fixture: Fixture;
   marks: Marks;
-  /** the tunable values searched, each by its path (`warriorEyes.restOn`) */
+  /** the tunable values searched, each by its path (`warriorEyes.oneOn`) */
   fields: string[];
   /** fit to the hero's own frame at the values he starts with, from values moved off them: the fit must find its
    *  way back */

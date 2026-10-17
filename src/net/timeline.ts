@@ -249,6 +249,14 @@ export class Smoother {
   private offZ = 0;
   private last: Pose | null = null;
   private carriedFrom = NaN;
+  /** where the next `follow` eases from, not its track's place (`easeFrom`) */
+  private from: { x: number; z: number } | null = null;
+
+  /** The copy shown at `x`, `z` from the next `follow` on, eased onto its track from there as onto a late report (its
+   *  own game placed it a while: a charge's carry). */
+  easeFrom(x: number, z: number): void {
+    this.from = { x, z };
+  }
 
   /** `pose` (`track`'s, read this frame) as shown, `dt` s after the last, into `out`. */
   follow(pose: Pose, track: Track<unknown>, dt: number, out: Pose): Pose {
@@ -264,6 +272,11 @@ export class Smoother {
       }
     }
     this.carriedFrom = track.carriedFrom;
+    if (this.from) {
+      this.offX = this.from.x - pose.x;
+      this.offZ = this.from.z - pose.z;
+      this.from = null;
+    }
     this.last = { ...pose };
     const keep = Math.exp(-dt / EASE);
     this.offX *= keep;
