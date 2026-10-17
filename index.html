@@ -24,6 +24,16 @@
        loading step blocks the main thread. -->
   <style>
     html, body { background: #050303; }
+    /* the game's cursor, from the loading screen on: a gilded arrow, lit with an ember's glow over what takes a click
+       (`--cursor-hand`); its art alone (`-art`) is the cursor drawn while Alt is held over mouse look (ui/altCursor.ts).
+       32 css px at most: a larger one is swapped for the system's near the window's edge */
+    :root {
+      --cursor-art: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='.8' y2='1'%3E%3Cstop offset='0' stop-color='%23fff0c4'/%3E%3Cstop offset='.5' stop-color='%23d4a65c'/%3E%3Cstop offset='1' stop-color='%236e4519'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M3 2v22.5l5.6-5.2 4 8.5 4-1.8-3.9-8.4H20z' fill='url(%23g)' stroke='%23140c05' stroke-width='1.6' stroke-linejoin='round'/%3E%3Cpath d='M4.7 6v14.2M5 5.8l9.5 8.7' stroke='%23fff7de' stroke-opacity='.5' stroke-width='.9' stroke-linecap='round'/%3E%3C/svg%3E");
+      --cursor-hand-art: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='.8' y2='1'%3E%3Cstop offset='0' stop-color='%23fffaec'/%3E%3Cstop offset='.5' stop-color='%23f2c464'/%3E%3Cstop offset='1' stop-color='%23935a1c'/%3E%3C/linearGradient%3E%3Cfilter id='f' x='-30%25' y='-30%25' width='160%25' height='160%25'%3E%3CfeGaussianBlur stdDeviation='1.3'/%3E%3C/filter%3E%3C/defs%3E%3Cpath d='M3 2v22.5l5.6-5.2 4 8.5 4-1.8-3.9-8.4H20z' fill='%23ff7a20' stroke='%23ff7a20' stroke-width='2' stroke-linejoin='round' filter='url(%23f)'/%3E%3Cpath d='M3 2v22.5l5.6-5.2 4 8.5 4-1.8-3.9-8.4H20z' fill='url(%23g)' stroke='%23140c05' stroke-width='1.6' stroke-linejoin='round'/%3E%3Cpath d='M4.7 6v14.2M5 5.8l9.5 8.7' stroke='%23fffbea' stroke-opacity='.7' stroke-width='.9' stroke-linecap='round'/%3E%3C/svg%3E");
+      --cursor: var(--cursor-art) 3 2, default;
+      --cursor-hand: var(--cursor-hand-art) 3 2, pointer;
+    }
+    html { cursor: var(--cursor); }
     /* --u: a px of the UI's reference layout, a share of the screen as ui/scale.ts fits it (that runs only once the
        bundle has loaded), so the loading screen too looks the same on a 4K screen at 100% as at 300% */
     #loading { --u: max(0.6px, min(100vw / 1500, 100vh / 780)); }
@@ -89,9 +99,9 @@
       #loading .ld-ember { display: none; }
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-DO7F1dXN.js"></script>
+  <script type="module" crossorigin src="./assets/index-BCLcgqH4.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/three-DR1XyUbY.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-BgRctOi4.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-Cc2lv6u3.css">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 </head>
 <body>
@@ -566,6 +576,7 @@
   </div></div>
 
   <div id="tooltip" class="hidden"></div>
+  <div id="alt-cursor" class="hidden" aria-hidden="true"></div>
   <div id="loading" role="status" aria-live="polite">
     <div class="ld-back">
       <svg class="ld-smoke" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><filter id="ld-fog1" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".004 .007" numOctaves="4" seed="7"/><feColorMatrix values="0 0 0 0 .55  0 0 0 0 .1  0 0 0 0 .06  0 0 0 1.7 -.6"/></filter><rect width="1200" height="800" filter="url(#ld-fog1)"/></svg>
