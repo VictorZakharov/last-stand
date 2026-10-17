@@ -89,9 +89,9 @@
       #loading .ld-ember { display: none; }
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-9GooWx4l.js"></script>
+  <script type="module" crossorigin src="./assets/index-DO7F1dXN.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/three-DR1XyUbY.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-C8Q_HU5c.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-BgRctOi4.css">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 </head>
 <body>
@@ -129,7 +129,7 @@
   </svg>
   <div id="game"></div>
 
-  <!-- Optional performance and network overlays (pause menu toggles), stacked down the left -->
+  <!-- Optional performance, network and battle log overlays (pause menu toggles), stacked down the left -->
   <div id="diag">
   <div id="perf" class="hidden" role="button" tabindex="0" title="Click to copy a performance report">
     <div class="pf-head"><b data-p="fps">--</b><i>FPS</i><span class="pf-ms"><b data-p="ms">--</b> ms · p95 <b data-p="p95">--</b></span></div>
@@ -156,6 +156,7 @@
     <div class="pf-copy" data-p="copy">Click to copy a report</div>
   </div>
   <div id="net" class="hidden"></div>
+  <div id="blog" class="hidden"></div>
   </div>
 
   <!-- In-run HUD -->
@@ -522,6 +523,7 @@
         </div>
         <label class="opt-row"><input type="checkbox" id="opt-perf"> Show performance stats</label>
         <label class="opt-row"><input type="checkbox" id="opt-net"> Show network stats</label>
+        <label class="opt-row"><input type="checkbox" id="opt-blog"> Show battle log</label>
         <div class="opt-row"><button class="btn" id="btn-fullscreen">Fullscreen</button></div>
         <div class="pb-actions">
           <button class="btn primary" id="btn-resume">Resume</button>
