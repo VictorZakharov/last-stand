@@ -153,10 +153,11 @@ function lateBlow(frame: number, cast: Cast): boolean {
 const PLANTINGS: Record<Plant, Planting> = { harmless: keepFromHarm, late: lateBlow };
 
 /** `wanted` cast at its foes (each with `lives` of life) on a fresh set-up as `fixture` says, its key held as long as
- *  `holding` says for it (s; a frame at least), followed until the hero is free again (and `plant` has planted). */
+ *  `holding` says for it (s; a frame at least), followed until the hero is free again (and `plant` has planted), and
+ *  for `lasting` s from the press at least (an effect that strikes on after it: a zone's ticks). */
 export async function castAt(
   lab: Lab, fixture: Fixture, wanted: string, holding: (skill: BoundSkill) => number, plant: Planting | null,
-  lives = LIVING,
+  lives = LIVING, lasting = 0,
 ): Promise<Cast> {
   G.arena.restoreProps();
   const set = fixtureOf(fixture);
@@ -173,6 +174,7 @@ export async function castAt(
   let frame = 0;
   const hits = catchHits(foes, () => frame);
   const holdFrames = Math.max(1, Math.round(hold / frameTime()));
+  const lastingFrames = Math.round(lasting / frameTime());
   const cast: Cast = { skill, held: hold, foes, hits, blows: [], free: -1, planted: false };
   await lab.step(SETTLE, () => ({ aim }));
   let freeFor = 0;
@@ -184,7 +186,7 @@ export async function castAt(
     if (busy) cast.free = -1;
     else if (cast.free < 0) cast.free = frame * frameTime();
     const waiting = plant !== null && !cast.planted;
-    if (freeFor >= AFTER && !waiting) break;
+    if (freeFor >= AFTER && !waiting && frame >= lastingFrames) break;
   }
   for (const foe of foes) foe.invulnerable = false;
   cast.blows = blowsOf(hits);

@@ -694,6 +694,19 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  tooltips: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        skills: options.skills ?? [],
+        canary: Boolean(options.canary),
+      };
+      return side.command('tooltips', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   cursor: {
     each(side, options) {
       const command = {

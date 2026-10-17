@@ -712,6 +712,18 @@ export class Lab {
     return done;
   }
 
+  /**
+   * A finger's tap at `at` as a touch screen has it: put down, lifted where it was, and the click the browser makes of
+   * it handled (it comes in a task after the lift, which `touchUp` returns before: a button tapped hadn't heard it
+   * yet). No frame runs.
+   */
+  async tap(at: PagePoint, finger = 0): Promise<void> {
+    const clicked = touchHandled(['click']);
+    await this.touchDown(at, finger);
+    await this.touchUp(finger);
+    await clicked;
+  }
+
   /** An error unless `finger` is down. */
   private fingerDown(finger: number): void {
     if (!this.fingers.has(finger)) throw new Error(`lab: touch: finger ${finger} isn't down`);

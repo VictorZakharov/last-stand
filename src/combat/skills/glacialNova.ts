@@ -17,6 +17,7 @@ const ICE = 0x8fd8ff;
 
 const skill: InstantSkill = {
   anim: 'slam',
+  hits: (def) => [{ per: 'foe', base: def.damage ?? 0, type: 'cold' }],
   cast(player, rawDef) {
     const def = rawDef as Needs<'damage' | 'radius' | 'freeze'>;
     const c = player.pos.clone();

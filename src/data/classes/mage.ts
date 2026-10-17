@@ -30,7 +30,7 @@ const mage: ClassDef = {
   skills: [
     {
       key: 'mouse0', impl: 'splinterBolt', name: 'Splintering Bolt',
-      desc: 'Launch a seeking arcane bolt that shatters into smaller bolts on impact. Costs no Energy.',
+      desc: 'Launch a seeking arcane bolt that shatters on impact into two smaller bolts, which seek out other foes. Costs no Energy.',
       tags: ['arcane'], cost: 0, cooldown: 0, castTime: 0.34,
       damage: 36, missiles: 1, spread: 0.22, speed: 24, splitCount: 2, splitDamage: 0.6, range: 22,
       color: 0xff4fd8, trailEnd: 0x6a1cff,   // VFX colors
@@ -38,28 +38,28 @@ const mage: ClassDef = {
     },
     {
       key: 'mouse2', impl: 'starfall', name: 'Starfall',
-      desc: 'Call down arcane crystals from the heavens on the target area, chilling survivors.',
+      desc: 'Call down three arcane crystals from the heavens on the target area. Each strikes hardest where it lands, and chills the foes it leaves alive.',
       tags: ['arcane', 'cold'], cost: 38, cooldown: 3, castTime: 0.75,
       damage: 150, shards: 3, radius: 2.5, edge: 0.35, scatter: 1.9, chill: 2.0, aimed: true,
       icon: { glyph: '☄', color: '#8fd8ff' },
     },
     {
       key: '1', impl: 'voidLance', name: 'Void Lance',
-      desc: 'Draw a portal in the air, then channel a piercing lance of raw arcana through it. Drains energy while held.',
+      desc: 'Draw a portal in the air, then channel a lance of raw arcana through it, piercing every foe in its line. You move slowly as you hold it, and it drains Energy.',
       tags: ['arcane'], cost: 34, cooldown: 0, castTime: 0, channel: true, opening: 0.75,
       damage: 210, length: 17, width: 0.75, moveMult: 0.35,
       icon: { glyph: '⟿', color: '#5dffa8' },
     },
     {
       key: '2', impl: 'glacialNova', name: 'Glacial Nova',
-      desc: 'A burst of absolute cold freezes all nearby enemies solid.',
+      desc: 'A burst of absolute cold around you freezes every nearby foe solid for 2.4 seconds. Bosses shake it off sooner.',
       tags: ['cold'], cost: 55, cooldown: 7, castTime: 0.6,
       damage: 150, radius: 7, freeze: 2.4,
       icon: { glyph: '❄', color: '#8fd8ff' },
     },
     {
       key: '3', impl: 'maelstrom', name: 'Maelstrom',
-      desc: 'Conjure a roaming firestorm that drags enemies in and lashes them with lightning.',
+      desc: 'Conjure a firestorm that rolls slowly towards your aim for 4.5 seconds, dragging foes into it and lashing them with lightning.',
       tags: ['lightning', 'fire'], cost: 60, cooldown: 5, castTime: 0.75,
       damage: 95, radius: 3.6, duration: 4.5, speed: 3.5, pull: 5,
       icon: { glyph: '༄', color: '#ff8f3a' },

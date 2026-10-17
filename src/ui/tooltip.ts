@@ -6,6 +6,7 @@ import { G } from '../state';
 import { BLOCK } from '../data/balance';
 import { input } from '../core/input';
 import { itemIconSVG } from './itemIcons';
+import { skillDamageHTML, skillHealHTML, skillWardHTML } from './skillDamage';
 import type { ClassDef, Item, SkillDef, StatKey } from '../types';
 
 /** Tooltip content: HTML, accent color and optional footer hint. */
@@ -155,11 +156,17 @@ export function itemTooltip(item: Item, withCompare = true): () => TooltipConten
   };
 }
 
-export function skillTooltip(def: SkillDef): () => TooltipContent {
+/** A skill's tooltip: with `ofHero`, as the hero has it now (his weapons' way of it, the damage his modifiers make
+ *  it: `skillDamage.ts`), else its base figures (another save's skill, whose gear isn't his). */
+export function skillTooltip(raw: SkillDef, ofHero = true): () => TooltipContent {
   return () => {
+    const hero = ofHero ? G.player : null;
+    const def = hero?.known.get(raw.impl)?.def ?? raw;
+    const stats = hero?.stats ?? null;
     let html = `<div class="tt-card" style="--c:${def.icon.color}"><div class="tt-name" style="color:${def.icon.color}">${def.name}</div>`;
     html += `<div class="tt-type">${def.tags.join(' · ')}</div>`;
     html += `<div class="tt-desc">${def.desc}</div>`;
+    html += skillDamageHTML(def, stats) + skillHealHTML(def, stats) + skillWardHTML(def, stats);
     const bits = [];
     if (def.cost) bits.push(def.channel ? `${def.cost} Energy / sec` : `${def.cost} Energy`);
     if (def.gain) bits.push(`+${def.gain} Energy per hit`);
@@ -167,8 +174,6 @@ export function skillTooltip(def: SkillDef): () => TooltipContent {
     if (def.draw) bits.push(`${def.draw}s to full draw`);
     else if (def.castTime >= 1) bits.push(`${def.castTime}s to charge`);
     if (def.cooldown) bits.push(`${def.cooldown}s cooldown`);
-    // (a channel shooting arrows says what each one does)
-    if (def.damage) bits.push(`${def.damage}${def.channel && def.missiles ? ' dmg per arrow' : def.channel || def.impl === 'maelstrom' ? ' dmg / sec' : ' damage'}`);
     html += `<div class="tt-foot">${bits.join(' · ')}</div>`;
     const alt = (id?: string) => (id ? G.player.known.get(id)?.def.name : undefined);
     if (def.needs === 'shield') {

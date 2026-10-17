@@ -7,7 +7,7 @@ import { countDealt } from '../game/stats';
 import { rand } from '../util';
 import type { Enemy } from '../entities/enemy';
 import type { HitResult, Player } from '../entities/player';
-import type { DamageType, SkillDef, XZ } from '../types';
+import type { DamageType, DerivedStats, SkillDef, XZ } from '../types';
 import type { Blow, Fling } from './fling';
 
 const ELEMENTAL = new Set(['cold', 'fire', 'lightning']);
@@ -15,13 +15,29 @@ const ELEMENTAL = new Set(['cold', 'fire', 'lightning']);
 /** Damage types by number, as co-op's messages carry them. */
 export const DAMAGE_TYPES: DamageType[] = ['arcane', 'cold', 'fire', 'lightning', 'physical', 'vitality'];
 
+/** A hit's spread about its damage: rolled between these shares of it. */
+export const DAMAGE_ROLL = { low: 0.9, high: 1.1 };
+
+/** What a player's modifiers add to a hit with these tags (%): all damage, and arcane's or elemental's where its tags
+ *  are (a skill's tooltip spells them out, `ui/skillDamage.ts`). */
+export function damageBonuses(s: DerivedStats, tags: readonly string[]): { all: number; arcane: number; elemental: number } {
+  return {
+    all: s.damagePct,
+    arcane: tags.includes('arcane') ? s.arcanePct : 0,
+    elemental: tags.some((t) => ELEMENTAL.has(t)) ? s.elementalPct : 0,
+  };
+}
+
+/** The share a player's modifiers make a hit with these tags of its base, before its roll and a crit. */
+export function damageScale(s: DerivedStats, tags: readonly string[]): number {
+  const b = damageBonuses(s, tags);
+  return 1 + (b.all + b.arcane + b.elemental) / 100;
+}
+
 /** Roll a player's outgoing damage for a skill with the given tags. */
 export function rollPlayerDamage(by: Player, base: number, tags: readonly string[]): { amount: number; crit: boolean } {
   const s = by.stats;
-  let pct = s.damagePct;
-  if (tags.includes('arcane')) pct += s.arcanePct;
-  if (tags.some((t) => ELEMENTAL.has(t))) pct += s.elementalPct;
-  let amount = base * (1 + pct / 100) * rand(0.9, 1.1);
+  let amount = base * damageScale(s, tags) * rand(DAMAGE_ROLL.low, DAMAGE_ROLL.high);
   const crit = Math.random() * 100 < s.crit;
   if (crit) amount *= 1 + s.critDmg / 100;
   return { amount, crit };

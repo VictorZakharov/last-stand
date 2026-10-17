@@ -82,6 +82,7 @@ function arrive(c: THREE.Vector3, dir: THREE.Vector3): void {
 const skill: InstantSkill = {
   anim: null,
   dashes: true,
+  hits: (def) => [{ per: 'foe', base: (def as Def).damage, type: 'physical', note: 'each foe it meets, once' }],
   warm: () => [slashMesh(WEDGE, 0.55, 0xffffff, true).mesh],
   cast(player, rawDef, target) {
     const def = rawDef as Def;

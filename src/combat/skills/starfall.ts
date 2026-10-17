@@ -175,6 +175,11 @@ function showArea(player: Player, def: Def, target: THREE.Vector3 | null, dt: nu
 
 const skill: InstantSkill = {
   anim: 'summon',
+  hits(rawDef) {
+    const def = rawDef as Def;
+    const edge = `${Math.round(def.edge * 100)}%`;
+    return [{ per: 'crystal', base: def.damage, least: def.edge, type: 'arcane', note: `${def.shards} crystals, each full on the foe it lands on, ${edge} at its edge` }];
+  },
   warm: () => [new THREE.Mesh(meteorGeo, getMeteorMat()), new THREE.Mesh(streakGeo, streakMaterial()), new THREE.Mesh(ringGeo(), additive(COLOR, 1.5, 0.8))],
   aim: (player, def, target, dt) => showArea(player, def as Def, target, dt),
   cast(player, rawDef, target) {

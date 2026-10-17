@@ -20,8 +20,8 @@ const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'numbers', 'choice', 
 
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
-  'lobby', 'tooltip', 'help', 'saves', 'clicked', 'views', 'logLobby', 'run', 'scores', 'perf', 'decision', 'pause',
-  'summary', 'log', 'logTouch',
+  'lobby', 'tooltip', 'help', 'saves', 'clicked', 'views', 'logLobby', 'skillTipsTouch', 'run', 'scores', 'perf',
+  'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
 ];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
@@ -309,8 +309,11 @@ export const COMMANDS = {
           + 'key pressed after it: '
           + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
           + 'dummies against their anchors), run (the HUD with a hurt foe\'s bar and damage numbers), '
-          + 'scores, perf, decision, pause, summary, log (the battle log with hits dealt and taken: every line shown, '
-          + 'within the screen, over nothing of the HUD), logLobby (the same over the lobby, clear of its panels), '
+          + 'scores, perf, decision, pause, summary, skillTips (each skill\'s tooltip on the hotbar opened by the '
+          + 'mouse, within the window; the tallest pictured; skillTipsTouch: the lobby\'s by a finger\'s tap), log '
+          + '(the battle log with hits dealt and taken: every '
+          + 'line shown, within the screen, over nothing of the HUD), logLobby (the same over the lobby, clear of its '
+          + 'panels), '
           + 'logTouch (the same in touch mode: clear of the touch HUD, touches let through)',
       },
       hdr: { kind: 'switch', help: 'HDR on, as on a display in HDR mode (the pause menu shows its levels)' },
@@ -672,6 +675,24 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'plant the faults the checks must catch: a hit in each cast listed under another skill, and a blow on '
           + 'the hero from no foe',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  tooltips: {
+    help: 'each damage skill\'s tooltip held to the hits it deals: the hero given modifiers of every kind (all, '
+      + 'arcane and elemental damage, a crit\'s chance and share, casting speed), each skill he can use, in each way '
+      + 'of holding weapons his class has (or --gear\'s), cast at foes stood where it strikes as hits casts it; every '
+      + 'hit must be within a figure its tooltip states (a crit raised by its share), a crit\'s chance the hero\'s, '
+      + 'and a hit dealt over time as often as it says; the hotbar\'s tooltip must follow a change of his gear, and '
+      + 'a skill giving him Health or a ward must give what its tooltip states',
+    options: {
+      skills: { kind: 'list', usage: 'a,b', help: 'the skills cast (every one dealing damage he can use by default)' },
+      canary: {
+        kind: 'switch',
+        help: 'raise all damage and the hero\'s most Health once each tooltip is read, as a tooltip behind a change: '
+          + 'the hits must be found above it, and what was given off it',
       },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,

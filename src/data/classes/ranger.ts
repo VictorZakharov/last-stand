@@ -43,7 +43,7 @@ const ranger: ClassDef = {
     },
     {
       key: '3', impl: 'quarryMark', name: 'Quarry Mark',
-      desc: 'Mark the foe nearest your aim as your quarry: it takes 25% more damage from everyone. When it dies your cooldowns are refreshed.', tags: ['physical'],
+      desc: 'Mark the foe nearest your aim as your quarry for 12 seconds: it takes 25% more damage from everyone. If it dies marked, your cooldowns are refreshed, all but the draught\'s.', tags: ['physical'],
       cost: 15, cooldown: 8, castTime: 0.35, amp: 0.25, duration: 12, range: 26, aimed: true,
       icon: { glyph: '⌖', color: '#ff9a6c' },
     },

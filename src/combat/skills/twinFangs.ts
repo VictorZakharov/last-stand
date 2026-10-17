@@ -34,6 +34,7 @@ function strike(player: Player, def: Def, i: number): void {
 
 const skill: InstantSkill = {
   anim: 'flurry',
+  hits: (def) => [{ per: 'cut', base: (def as Def).damage, type: 'physical', note: 'two cuts, each on every foe it reaches' }],
   // (its lunge cast in Bull Rush's charge rides on it: the cuts land as it runs, `Player.startDash`)
   warm: () => [new THREE.Mesh(new THREE.RingGeometry(0.3, 1, 8), slashMaterial(0xffffff))],
   cast(player, rawDef, target) {

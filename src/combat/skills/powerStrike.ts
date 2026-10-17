@@ -18,6 +18,7 @@ const charged = new WeakSet<object>();
 
 const skill: InstantSkill = {
   anim: 'chop',
+  hits: (def) => [{ per: 'foe', base: (def as Def).damage, type: 'physical' }],
   charging(player, rawDef, k, dt) {
     const def = rawDef as Def;
     const c = player.casting;
