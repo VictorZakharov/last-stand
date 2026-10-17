@@ -932,9 +932,10 @@ export class Player {
     if (!silent && this.life - before >= 1) floatText(this.pos.x, 2.4, this.pos.z, `+${Math.round(this.life - before)}`, 'heal', '#6dff7a');
   }
 
-  /** Apply already-mitigated damage (see combat/damage hurtPlayer). Returns damage taken. */
-  takeDamage(amount: number, _type: DamageType, from: THREE.Vector3 | null): number {
-    if (!this.alive || G.time < this.guardUntil) return 0;
+  /** Apply already-mitigated damage (see combat/damage hurtPlayer). Returns how it turned out (null: it didn't land,
+   *  the hero down or guarded). */
+  takeDamage(amount: number, _type: DamageType, from: THREE.Vector3 | null): HitResult | null {
+    if (!this.alive || G.time < this.guardUntil) return null;
     const r = this.resolveHit(amount, from);
     this.showHit(r);
     if (this.local) {
@@ -942,7 +943,7 @@ export class Player {
       countTaken(r.taken, r.blocked + r.absorbed);
     }
     if (this.life <= 0) this.die();
-    return r.taken;
+    return r;
   }
 
   /** Work out a hit: the shield's block, then the ward, then health. */

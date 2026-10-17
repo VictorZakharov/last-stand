@@ -4,7 +4,8 @@ The lab plays the game in a headless browser and measures it as the player sees 
 runs the game on a fixed clock with scripted input, and reports numbers and pictures. A command gives the same result
 every time, so a change can be compared with `main` line by line and pixel by pixel.
 
-What each measure checks, how it works and why it was built that way is in [`AGENTS.md`](AGENTS.md).
+What each measure checks, how it works and why it was built that way is in [`COMMANDS.md`](COMMANDS.md) and
+[`AGENTS.md`](AGENTS.md).
 
 ## Quick start
 

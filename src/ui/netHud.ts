@@ -5,6 +5,7 @@ import { readCookie, writeCookie } from '../core/cookies';
 import { netReport, netSummary } from '../net/netlog';
 import { session } from '../net/session';
 import { role } from '../net/role';
+import { copyText } from './clipboard';
 
 declare const __BUILD__: { ref: string; time: string };
 
@@ -65,20 +66,16 @@ const report = (): string => netReport([
 export async function sendReport(how: 'copy' | 'share', btn: HTMLElement): Promise<void> {
   const text = report();
   const label = btn.textContent;
-  let done = 'Copied';
-  try {
-    if (how === 'share' && canShare()) { await navigator.share({ title: 'Last Stand network log', text }); done = 'Sent'; }
-    else await navigator.clipboard.writeText(text);
-  } catch (e) {
-    if ((e as Error).name === 'AbortError') return;
-    // no clipboard (an insecure page, a denied permission): the copy that always works
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.append(ta);
-    ta.select();
-    done = document.execCommand('copy') ? 'Copied' : 'Copy failed';
-    ta.remove();
+  let done: string | null = null;
+  if (how === 'share' && canShare()) {
+    try {
+      await navigator.share({ title: 'Last Stand network log', text });
+      done = 'Sent';
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return;
+    }
   }
+  done ??= await copyText(text) ? 'Copied' : 'Copy failed';
   btn.textContent = done;
   setTimeout(() => { btn.textContent = label; }, 1600);
 }

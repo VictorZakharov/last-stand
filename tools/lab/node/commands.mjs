@@ -441,7 +441,7 @@ export const COMMANDS = {
   ui: {
     async each(side, options) {
       // (a state at a time, in the order they run: a 4K screen's ten pictures sent back at once closed the browser)
-      const states = UI_STATES.filter((state) => options.states.includes(state));
+      const states = UI_STATES.filter((state) => (options.states ?? UI_STATES).includes(state));
       const reports = [];
       for (const state of states) reports.push(await side.command('ui', { state, hdr: Boolean(options.hdr) }));
       return {
@@ -673,6 +673,19 @@ export const COMMANDS = {
         canary: Boolean(options.canary),
       };
       return side.command('hits', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
+  log: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        skills: options.skills ?? [],
+        canary: Boolean(options.canary),
+      };
+      return side.command('log', command);
     },
     textOf: asText,
     problemsOf: problemsIn,

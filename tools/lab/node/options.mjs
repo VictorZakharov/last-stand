@@ -20,7 +20,8 @@ const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'numbers', 'choice', 
 
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
-  'lobby', 'tooltip', 'help', 'saves', 'clicked', 'views', 'run', 'scores', 'perf', 'decision', 'pause', 'summary',
+  'lobby', 'tooltip', 'help', 'saves', 'clicked', 'views', 'logLobby', 'run', 'scores', 'perf', 'decision', 'pause',
+  'summary', 'log', 'logTouch',
 ];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
@@ -304,11 +305,13 @@ export const COMMANDS = {
         kind: 'list',
         usage: 'a,b',
         choices: UI_STATES,
-        default: UI_STATES.join(','),
-        help: 'the states: lobby, tooltip, help, saves, clicked (a class button clicked and a key pressed after it: '
+        help: 'the states (every one by default): lobby, tooltip, help, saves, clicked (a class button clicked and a '
+          + 'key pressed after it: '
           + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
           + 'dummies against their anchors), run (the HUD with a hurt foe\'s bar and damage numbers), '
-          + 'scores, perf, decision, pause, summary',
+          + 'scores, perf, decision, pause, summary, log (the battle log with hits dealt and taken: every line shown, '
+          + 'within the screen, over nothing of the HUD), logLobby (the same over the lobby, clear of its panels), '
+          + 'logTouch (the same in touch mode: clear of the touch HUD, touches let through)',
       },
       hdr: { kind: 'switch', help: 'HDR on, as on a display in HDR mode (the pause menu shows its levels)' },
       ...COMMON_OPTIONS,
@@ -647,6 +650,24 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'plant the fault the checks must catch: a blow struck 1 s after each skill\'s first (with --apart or '
           + '--than), or else its foes kept from harm',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  log: {
+    help: 'the battle log held to the hits as they land: each skill the hero can use, in each way of holding weapons '
+      + 'his class has (or --gear\'s), cast at foes stood where it strikes as hits casts it, and the basic attack at '
+      + 'foes it kills; each hit must be listed once and in turn, under the skill cast, on the foe it struck, for what '
+      + 'it dealt, of its type, a crit and a kill as they were, and the panel must show every line; then a foe of each '
+      + 'way of attacking (a blow, a bolt, a slam) strikes the hero, each blow listed under its name and attack, for '
+      + 'the life it took and what his shield and ward stopped (log --class warrior --gear dual)',
+    options: {
+      skills: { kind: 'list', usage: 'a,b', help: 'the skills cast (every one the hero can use by default)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant the faults the checks must catch: a hit in each cast listed under another skill, and a blow on '
+          + 'the hero from no foe',
       },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
@@ -1124,8 +1145,8 @@ export const COMMANDS = {
       commands: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['gait', 'stops', 'range', 'form', 'feet', 'carry', 'eyes', 'cast', 'rush', 'hits'],
-        help: 'the commands (gait, stops, range, form, feet, carry, eyes, cast, rush, hits by default)',
+        choices: ['gait', 'stops', 'range', 'form', 'feet', 'carry', 'eyes', 'cast', 'rush', 'hits', 'log'],
+        help: 'the commands (gait, stops, range, form, feet, carry, eyes, cast, rush, hits, log by default)',
       },
       jobs: { kind: 'number', usage: 'n', help: 'how many sessions side by side (a core in three, at most 8)' },
       starts: {
@@ -1140,7 +1161,7 @@ export const COMMANDS = {
   live: {
     help: 'a page of the game kept between steps, each on the state the last one left (needs npm run lab:serve): '
       + 'start (--class, the set-up), picture (--views, --look, --over, --crop), inspect [name] (--depth), eval '
-      + '<expression>, frames <count>, log, stop; its pictures in tools/lab/out/live (tools/lab/AGENTS.md)',
+      + '<expression>, frames <count>, log, stop; its pictures in tools/lab/out/live (tools/lab/COMMANDS.md)',
     argument: 'step',
     options: {
       views: {

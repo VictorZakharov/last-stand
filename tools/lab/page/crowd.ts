@@ -166,8 +166,10 @@ function killFrame(killing: Killing, foes: Enemy[], frame: number, rate: number)
     return pressing(killing.skill.key, killing.aim, held);
   }
   if (frame > 0) return {};
+  // (struck as by the basic attack, for the battle log)
+  const skill = G.player.skillAt('mouse0')!.def;
   for (const foe of foes) {
-    hitEnemy(foe, foe.maxLife * OVERKILL, { by: G.player, type: 'physical', from: G.player.pos });
+    hitEnemy(foe, foe.maxLife * OVERKILL, { by: G.player, skill, type: 'physical', from: G.player.pos });
   }
   return {};
 }

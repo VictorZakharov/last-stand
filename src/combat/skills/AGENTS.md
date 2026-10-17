@@ -9,7 +9,7 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 - **The ranger:** `ranger.ts` (the bow's shots and arrows), `arrowRain.ts` (Hailfletch), `quarryMark.ts`, `strawman.ts`.
 - **Shared:** `potion.ts` (the healing draught), `readiness.ts` (a held skill's preview while a release would cast nothing).
 
-A skill runs on every game for its visuals: its damage goes through `hitEnemy` and its hits on players through `hurtPlayer` (the root's Co-op rule). A skill with materials of its own returns sample meshes from its `warm()` hook (the root's shader rule). An area skill calls `hurtPropsIn` next to its `hitEnemy` loop (Breakable props in `src/world/AGENTS.md`). Its effect is held to the light budget: its materials wrapped in `nearGlow()`, and measured with `npm run lab -- cast <skill>` (Bright effects in `src/core/AGENTS.md`). A held skill gives its preview a `Readiness` and a reader in the lab's `held`. Its icon: `src/ui/skillArt/AGENTS.md`.
+A skill runs on every game for its visuals: its damage goes through `hitEnemy` and its hits on players through `hurtPlayer` (the root's Co-op rule). Each of its hits passes its own `def` as `skill`, which the battle log lists it under (`npm run lab -- log` holds every skill's hits to it). A skill with materials of its own returns sample meshes from its `warm()` hook (the root's shader rule). An area skill calls `hurtPropsIn` next to its `hitEnemy` loop (Breakable props in `src/world/AGENTS.md`). Its effect is held to the light budget: its materials wrapped in `nearGlow()`, and measured with `npm run lab -- cast <skill>` (Bright effects in `src/core/AGENTS.md`). A held skill gives its preview a `Readiness` and a reader in the lab's `held`. Its icon: `src/ui/skillArt/AGENTS.md`.
 
 ## Gotchas
 
