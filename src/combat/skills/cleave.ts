@@ -6,14 +6,14 @@ import { particles, col } from '../../fx/particles';
 import { addShake } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
-import { slashArc, slashMaterial, angleBetween } from './slash';
+import { angleBetween } from './slash';
 import type { InstantSkill, Needs } from './types';
 import { hurtProp, PROP_DAMAGE, type Prop } from '../../world/destructible';
 import { hurtsProps } from '../../net/role';
 import type { Player } from '../../entities/player';
 import { swingOn, swingWay, type Blow } from '../fling';
 
-type Def = Needs<'damage' | 'range' | 'arc' | 'knock' | 'color'>;
+type Def = Needs<'damage' | 'range' | 'arc' | 'knock'>;
 
 /** Sparks where the blade bites. */
 export function sparks(x: number, y: number, z: number, color: THREE.ColorRepresentation, n = 10): void {
@@ -24,16 +24,6 @@ export function sparks(x: number, y: number, z: number, color: THREE.ColorRepres
       life: rand(0.2, 0.45), size: rand(0.05, 0.12), sizeEnd: 0, color: col(color, 3), colorEnd: col(0xff5010, 0.4), gravity: 14, drag: 2,
     });
   }
-}
-
-/** The trail of the swing the model is playing, through the weapon's tip: the tip crosses the arc from
- *  the cast's landing (0.55) to 0.85 of the cast time (see models/warrior.ts), at its current height. */
-export function swingArc(player: Player, arc: number): { radius: number; y: number; arc: number; dir: number; sweep: number } {
-  const tip = player.castPoint, p = player.pos;
-  return {
-    radius: Math.max(1.2, Math.hypot(tip.x - p.x, tip.z - p.z) + 0.15), y: tip.y - 0.05,
-    arc, dir: player.model.swing ?? 1, sweep: (player.casting?.dur ?? 0.42) * 0.3,
-  };
 }
 
 /** How a sweep hits: its knock and type; the way it sweeps (+1 from the right to the left: what it kills goes along
@@ -73,12 +63,12 @@ export function sweep(player: Player, def: Needs<'damage' | 'range' | 'arc'>, fa
 const skill: InstantSkill = {
   anim: 'swing',
   hits: (def) => [{ per: 'foe', base: (def as Def).damage, type: 'physical' }],
-  warm: () => [new THREE.Mesh(new THREE.RingGeometry(0.3, 1, 8), slashMaterial(0xffffff))],
   cast(player, rawDef) {
     const def = rawDef as Def;
     // the way the body (and so the swing) faces, which turned to the target during the cast
     const facing = player.facing;
-    slashArc({ x: player.pos.x, z: player.pos.z, facing, ...swingArc(player, def.arc), color: def.color });
+    // (the cut's one mark is the trail its blade leaves, fx/swingTrail.ts: a flat arc laid at the tip's height drew a
+    // second one, level across the view while the cut through the eyes ran down it)
     sfx.swing();
     const hits = sweep(player, def, facing, { knock: def.knock, swing: player.model.swing ?? 1 });
     if (hits) {

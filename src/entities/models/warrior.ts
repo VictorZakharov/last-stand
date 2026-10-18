@@ -159,8 +159,6 @@ const SHOULDER_FLAT = new THREE.Vector3(1, 0, 0);
 /** a weapon's flat, in its grip's frame: every weapon is built with its blade's width along its own x, and mounted a
  *  quarter turn about the grip (`MOUNT`), so its flat lies along the palm */
 const FLAT_IN_GRIP = new THREE.Vector3(1, 0, 0);
-/** arm length (upper + fore + hand), before the model's 1.1 scale */
-const ARM = 0.63;
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3();
 const _grip = new THREE.Vector3(), _pole = new THREE.Vector3(1, -0.7, -0.6), _pw = new THREE.Vector3(), _fq = new THREE.Quaternion(), _cq = new THREE.Quaternion(), _eq = new THREE.Quaternion(), _wq = new THREE.Quaternion(), _vl = new THREE.Quaternion(), _vr = new THREE.Quaternion();
 const _gw = new THREE.Vector3(), _dw = new THREE.Vector3(), _cur = new THREE.Vector3(), _hq = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _sq = new THREE.Quaternion();
@@ -209,7 +207,7 @@ const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a
 
 // --- the basic swing (third person), keyed over the cast. The tip goes round in units of half the arc
 // (-1 wound to the start side, +1 at the far side): it winds, loads a little deeper, crosses the arc from
-// 0.55 to 0.85 in step with the trail (skills/cleave swingArc) and carries on past it. The body leads it:
+// the cast's landing (0.55) to 0.85 and carries on past it. The body leads it:
 // the hips turn first, then the spine and chest, the arm and wrist come last.
 /** where the feet stand (left x, z, turn, then right), rig units: at rest, fighting, Power Strike's step in, behind the shield */
 /** a move's end held a moment after its cast is over (seconds), so a short cast's blow or throw is seen, then how long it takes to ease back to the stance */
@@ -2082,7 +2080,6 @@ export function buildWarrior(): Model {
     get swingKeyed() { return keyed; },
     swingBones: (left: boolean) => ({ ...armBones(left ? offHeld : held) }),
     get offTip() { return offHeld ? tipL : null; },
-    get reach() { return (ARM + (held?.len ?? 0)) * root.scale.x; },
     get lowerGrip() { return held?.off != null ? grasp : null; },
     get offGrip() { return held?.off != null ? offGrip : null; },
     get fists() {

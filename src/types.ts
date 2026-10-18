@@ -355,8 +355,6 @@ export interface Model {
   /** through the eyes, the bones a swing lays out the arm with (viewSwing.ts `ArmBones`, m): the right arm's, or the
    *  left's with the weapon it holds (a dual wielder's off hand) */
   swingBones?(left: boolean): { upper: number; fore: number; hand: number; strike: number };
-  /** distance from the body to the weapon's tip */
-  readonly reach?: number;
   /** a two-hander's lower grip as the other hand held it this frame (null without one; the lab's measures read it) */
   readonly lowerGrip?: LowerGrip | null;
   /** each hand holding a handle, and how it holds it (for the lab) */
