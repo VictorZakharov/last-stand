@@ -176,7 +176,7 @@ export async function serve(port, stamp) {
     log(`${call.command} ${JSON.stringify(call.options ?? {})}`);
     const version = changes.count;
     const { text, problems } = await session.run(call);
-    return { ok: problems.length === 0, text, version };
+    return { ok: problems.length === 0, text, problems, version };
   });
 
   /** A live session's step, once the commands before it are done: on its own page, so no page boots after it. */

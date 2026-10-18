@@ -365,10 +365,20 @@ export interface Model {
 // ---------------------------------------------------------------------------
 // Misc
 
-/** an arm as a swing through the eyes keys it (camera space, m): its shoulder, its elbow, its grip and the weapon's
- *  way, and how much of the arm drawn is the swing's (1: all of it; less as it takes over from the place before or
- *  fades from it) */
-export interface KeyedArm { hand: 'right' | 'left'; shoulder: XYZ; elbow: XYZ; grip: XYZ; dir: XYZ; weight: number }
+/** an arm as a swing through the eyes keys it (camera space, m): its shoulder, its elbow, its grip, the weapon's way
+ *  and the way its flat faces, how much of the arm drawn is the swing's (1: all of it; less as it takes over from the
+ *  place before or fades from it), and how much of the arm's shoulder and elbow is (`armShare`: none where the hands
+ *  place the weapon and the arm reaches it from its own shoulder, fitted, viewSwing.ts `ViewSwing.holds`) */
+export interface KeyedArm {
+  hand: 'right' | 'left';
+  shoulder: XYZ;
+  elbow: XYZ;
+  grip: XYZ;
+  dir: XYZ;
+  flat: XYZ;
+  weight: number;
+  armShare: number;
+}
 
 /** a held weapon's striking part, by two points on its grip: from near a blade's root to its point, or a head's lower
  *  end to its top */

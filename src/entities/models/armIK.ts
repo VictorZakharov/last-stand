@@ -34,6 +34,11 @@ export interface ArmGoal {
   /** the girdle set to this raise and forward turn (degrees) whatever the arm needs, as an archer's back draws the shoulder
    *  blade in at full draw */
   girdleSet?: [number, number];
+  /** what each degree of the shoulder's excess costs (as `keep`'s; 3 by default): none through the eyes for an arm
+   *  whose shoulder is placed under the camera, never seen (the owner: "in 1st person mode we dont care about shoulder
+   *  anatomy much"), so its elbow may rise as a person's does to turn a fist palm down (weighed, a two-hander's right
+   *  elbow hung tucked under its shoulder and the forearm was turned 24 degrees past its range) */
+  shoulderW?: number;
   /** what each degree of the wrist's bend costs (as `keep`'s): an elbow that lines the forearm up behind the fist (a hand
    *  turned as asked whatever the ranges, `free`, otherwise took whatever bend the elbow left it, 45 to 66 degrees back) */
   wristW?: number;
@@ -165,7 +170,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     _Qu.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
     const flex = Math.acos(THREE.MathUtils.clamp(_b.dot(_f), -1, 1));
     _Qf.copy(_Qu).multiply(_hx.setFromAxisAngle(X, -flex));
-    let cost = ROM_ON ? 3 * shoulderExcess(_Qu, left, gNow) : 0;
+    let cost = ROM_ON ? (g.shoulderW ?? 3) * shoulderExcess(_Qu, left, gNow) : 0;
     bad = 0;
     if (want && ROM_ON) {
       eased(g, _rel.copy(_Qf).invert().multiply(want));

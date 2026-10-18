@@ -184,8 +184,12 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   (`Model.swung`, which the swing's trail follows: a war cry's, a drink's and a raised shield's weapons strike nothing,
   and were failed as led by their flats), and one a hand where a cast's tip passes from one hand's weapon to the
   other's (Twin Fangs' right blade, then its left: judged as one, the left's blow was never looked at). Problems: a
-  two-hander let go of by the other hand where that hand is in the frame (one let go of below the frame is listed,
-  unseen); a two-hander seen in one hand, its lower grip in the frame with the other hand out of it, for longer than
+  two-hander let go of by the other hand, in the frame or out of it, its fist as drawn more than 15 cm off the lower
+  grip (held, it reads about 7 cm; let go, 50 cm and more within four frames), but where the game lets that hand go
+  (`LowerGrip.free`: drinking, the weapon on the shoulder, the hand coming back onto the grip), the frames, how many in
+  the frame, and the worst with why it was let go (past the arm's reach, its joints past their ranges, the arm into
+  the body: let go of below the frame, it was only listed, and the owner saw the two-hander "one handed", #198); a
+  two-hander seen in one hand, its lower grip in the frame with the other hand out of it, for longer than
   200 ms (a fist below the frame on a handle that runs out of it is lost to a person's own eyes too: counted whenever
   the weapon's hand was seen, the middle guard at rest read as one-handed); and a hand seen holding its handle as an
   open hand, the handle over 1.2 cm from where its fist closes or its fingers curled under 0.5 rad (through the eyes a
@@ -208,11 +212,65 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   alone, the arms swung with the trunk's turn and read as a blow); lifts it alone each frame of the cast played as it
   is, which must show a fist off its handle (the right's weapon, or the left's where only the left fist is seen: a
   dual wielder's Bull Rush holds the right blade under the frame, and lifted, it was never seen); and lifts the weapon
-  30 cm up the view on its stillest frame in the frame alone, which must read as a jump there. A spin's blow (a skill with a `spin`: Steel
-  Tempest) isn't asked to cross the aim, as it strikes all round; whether its passes may be seen is `cast`'s flashes'
-  to say (held across the view, the one-hander's steel lit the crypt 3 times a second at 2.4 turns a second). Every run
+  30 cm up the view on its stillest frame in the frame alone, which must read as a jump there. A jump is a peak, at
+  least as far as the frames either side of it (a dual wielder's elbow slowing to a stop in a cut, 23 cm, 15, then 6,
+  read as a jump on the 15): a pose out and back again in a frame reads on the further of its two moves, which a
+  canary planted on a frame takes either way. The elbows' jumps are read as the weapon's (each at least 3 m/s), seen
+  where that arm is in or near the frame anywhere from its shoulder to its fist and listed where it isn't (read on
+  the weapon alone, an arm flipped over round a hand held still passed; a two-hander's right elbow flipped out to the
+  shoulder's height under the frame, the arm out of it from the shoulder to the fist, was never seen); the canary
+  moves the right elbow 30 cm on its stillest frame alone, which must read there, seen or out of the frame as that
+  arm was. The arm a swing keys (`Model.swingKeyed`, `page/keyed.ts`) is held to the arm drawn wherever the arm is
+  all the swing's: its shoulder, elbow and grip within 4 cm (a wrist keyed at its range's end was clamped, and the
+  grip drawn 7 cm off its keys through a cut's wind-up), the weapon's way within 5 degrees and its flat within 10,
+  read by the grip's turn alone (the left hand's grip is mirrored: read through its matrix, the left blade's flat was
+  180 degrees off its keys throughout its cut), its shoulder and elbow only as far as the arm is the swing's
+  (`KeyedArm.armShare`: a backhand held by the hands, `ViewSwing.holds`, draws the right arm from its own shoulder,
+  and judged by the arm its plane lays out from the left, every frame read 44 cm off). The arms' joints past their
+  ranges fail a run where that arm is in or near the frame, and are listed everywhere (a two-hander's row of cuts
+  holds the right arm under the frame from the shoulder to the fist throughout, and its forearm was failed for a turn
+  no one sees); the arms in the body the view hides (`page/armsIn.ts`) are said, not failed: through the eyes the
+  shoulders aren't where that body has them, and none of it is drawn (the two-hander's guard read its right forearm
+  17.6 cm into the chest); their canary moves the right elbow into the chest, which must read 10 cm deep or more. A
+  spin's blow (a skill with a `spin`: Steel Tempest) isn't asked to cross the aim, as it strikes all round; whether
+  its passes may be seen is `cast`'s flashes' to say (held across the view, the one-hander's steel lit the crypt 3
+  times a second at 2.4 turns a second). Every run
   of the cast, the canaries' as the first, starts at full energy, its cooldowns cleared (Steel Tempest drains energy
   while held: the runs after the first spun 11 frames less, and the jump canary's lift fell past their end).
+- `swing <name>`: a swing through the eyes keyed from a pose (`page/swing.ts`, `src/entities/viewSwing.ts`;
+  `--class warrior`, a swing by its name in `models/warriorEyes.ts` `SWINGS_NAMED`). A pose is decided as a person
+  holds it, then keyed: `--grip x,y,z --way x,y,z` (camera space, a pose each three numbers, as many as given) says
+  the key of the swing that holds the grip there and the weapon that way, and what of it an arm swung in the swing's
+  plane can't hold (the grip or the way off the plane, the wrist bent past its range, the grip past the arm's reach);
+  `--key way,reach,bend,drop,roll` places keys given; with neither, every key of the swing is placed as the game
+  places it at its share: in the plane it has there (a cut in a row turned in from the one before's, `from`, over
+  `turning`), a two-hander's held swing (`holds`: its hands turned about the left shoulder) with each hand's distance
+  from its own shoulder, and its first key against where the one before leaves the arm, which must be within 1 cm and
+  1 degree (placed in its own plane, a backhand's first key read its lower grip 0.98 m from the left shoulder where
+  the game drew it at the forehand's end, 0.39). Each placed key says the grip (in the frame or not), the weapon's
+  way and its share in the frame (as `eyes` counts a cut's end), the elbow, the wrist, and a two-hander's lower grip
+  with its distance from the other shoulder against an arm's reach (keyed by trying numbers in a cast, a two-handed
+  forehand took an hour and its wind-up still put the lower grip 12 cm past the left arm's reach). `--turn rad` turns
+  it all with the trunk (to the left), as a cut turns it, a pose taken as the eyes see it so turned; `--trunk
+  rest|row|back` turns each key as far as the trunk turns a cut of the
+  hero's weapons at its share (`cutTurnAt`): a forehand from rest, one in a row, or a backhand, the other way (by its
+  keys alone, a two-handed cut's end read 64% in the frame, and 0% as the eyes saw it, turned 40 degrees left);
+  `foreOut|backOut`, the way back to the guard after one, the turn its end left unwound. Placing every key, it also
+  steps the swing in 1% steps as the game lays it out (`page/swingPath.ts`) and fails an elbow turned over round the
+  line to its grip between two (3 cm and 3 times the grip's move: as Power Strike's plane turned through upright from
+  the guard's, the elbow's drop went over to the plane's other side, 20 cm in a step the grip moved 3, each key as
+  placed alone looking right) and a two-hander's lower grip past the other arm's reach as far as the game lets go of
+  it (the backhand's way back, within reach at both its keys, went 13 cm past between them); its canary turns one
+  step's elbow over, which must be read. A guard with a head has its swings named too (`twoPowerHead`,
+  `twoOutBackHead`...). `swing all` steps every swing of every weapon each way the hero holds them (`--gear`'s and
+  `--weapon`'s alone, if given), each turned as the game turns it (`page/swing.ts` `SWINGS_HELD`: the basic
+  attack's cuts by the trunk at their shares, its ways back unwinding it, the skills' unturned), a set-up each on one
+  page: its plane, where it starts against the swing before's end and its path, its canaries on the cut from rest
+  (`check` runs it; a page booted for each weapon, its ten jobs took 547 s for 3 s of stepping). On a game that
+  places every key in its swing's own plane, nothing is stepped (its every step read as its first key, and a cut in
+  a row 97 cm from the last one's end).
+  `--canary`: the swing's blow keyed back from where its own key places it must come back as that key, and a grip
+  moved 10 cm off the plane must read 10 cm off. `--tune warriorSwings.<swing>=...` tries keys and planes unwritten.
 - `match <picture>`: the hero through the eyes matched to a reference (`node/match.mjs`; another game's, the one the
   owner names), not by eye: handed over as matching three Vermintide 2 screenshots from a one-line summary of them, a
   rest leaned in where they lean out, was twice as wide and had its head out of the frame. He stands at rest, or is
@@ -800,27 +858,29 @@ a channel, looked up once (matched against every part's colour, a picture took 1
   takes, `check.mjs` `EYES_SKILLS`, its canaries on each way's first; with the cuts alone checked, five skills were
   broken through the eyes and no check said so, #252) and his skills' light there (`cast`: the basic attack and
   `EYES_SKILLS` on each way's first weapon, through the eyes in both biomes, `castParts`; a dual wielder's Power
-  Strike flashed three times a second and Bull Rush stood the camera inside a husk, and no check said so, #252)
-  and the foes his charge sweeps up and the skills cast with it, with a shield and with two weapons (`rush`,
-  `check.mjs` `RUSH_PARTS`), Twin Fangs' blows' pace (`hits`), and every hero's hits in the battle log (`log`)
-  (`--classes`, `--commands` for fewer), each in a session of its own (`--jobs n`, a core in three by default, at
-  most 8), the longest first as they
-  last took, each report in `out/check/<command>-<hero>.txt` and its pictures in a folder beside it. With `--ab`, the
-  other commit is exported once before the sessions start, and its side read back from the cache once it has run
-  (below). The gait runs a scenario a job, each on a page booted for it, and each hero's scenarios are put back
-  together (`out/check/gait-<hero>.txt`, each under its name): one after another on one page, each was set up from
-  where the last had left the hero and the clock, and main's own gallops were 18, 23 and 17 a hero with films and 13,
-  14 and 16 without. Each gait scenario runs from three starts (`--starts n`, at most 5): its first move 0, 7 and 13
-  frames longer (`gait --offset`), so every later turn and stop comes at another point of a stride. Run once from one
-  start, a frame's change anywhere sent every later stride elsewhere, and a change's gallops came out 2 or 3 either
-  way over a check's gait scenarios by chance; stood a few frames first instead, nothing changed (the set-off is the
-  same from any moment of the idle). What a command counts (`countsOf`: the gait's gallops, hops and short steps) is
-  added up over a hero's jobs, each side's, in its line of the log and at the head of its report with each scenario's
-  (`hops 2 (048deb5 9)`: this tree's, then the other's), so a check's verdict needs no script of its own to read it.
-  It runs in the command line's own process, not the server's. One command at a time, both sides every time, the
-  mage's cape stepped throughout and each gait scenario run again for its film, the same check took 31 to 35 minutes a
-  round; the harness is run hundreds of times, so keep every check that runs often to minutes: profile it
-  (`--profile`), cut what its measures don't read, and run side by side what doesn't depend on each other.
+  Strike flashed three times a second and Bull Rush stood the camera inside a husk, and no check said so, #252), every
+  swing of his weapons stepped between its keys (`swing all`, in one job: Thunder Crescent's way back from the floor
+  took a greatsword's lower grip 7.7 cm past the left arm's reach between its keys, as far as the game holds it before
+  letting go, and its frames through the eyes read it held) and the foes his charge sweeps up and the skills cast with
+  it, with a shield and with two weapons (`rush`, `check.mjs` `RUSH_PARTS`), Twin Fangs' blows' pace (`hits`), and
+  every hero's hits in the battle log (`log`) (`--classes`, `--commands` for fewer), each in a session of its own
+  (`--jobs n`, a core in three by default, at most 8), the longest first as they last took, each report in
+  `out/check/<command>-<hero>.txt` and its pictures in a folder beside it. With `--ab`, the other commit is exported
+  once before the sessions start, and its side read back from the cache once it has run (below). The gait runs a
+  scenario a job, each on a page booted for it, and each hero's scenarios are put back together
+  (`out/check/gait-<hero>.txt`, each under its name): one after another on one page, each was set up from where the
+  last had left the hero and the clock, and main's own gallops were 18, 23 and 17 a hero with films and 13, 14 and 16
+  without. Each gait scenario runs from three starts (`--starts n`, at most 5): its first move 0, 7 and 13 frames
+  longer (`gait --offset`), so every later turn and stop comes at another point of a stride. Run once from one start,
+  a frame's change anywhere sent every later stride elsewhere, and a change's gallops came out 2 or 3 either way over
+  a check's gait scenarios by chance; stood a few frames first instead, nothing changed (the set-off is the same from
+  any moment of the idle). What a command counts (`countsOf`: the gait's gallops, hops and short steps) is added up
+  over a hero's jobs, each side's, in its line of the log and at the head of its report with each scenario's (`hops 2
+  (048deb5 9)`: this tree's, then the other's), so a check's verdict needs no script of its own to read it. It runs in
+  the command line's own process, not the server's. One command at a time, both sides every time, the mage's cape
+  stepped throughout and each gait scenario run again for its film, the same check took 31 to 35 minutes a round; the
+  harness is run hundreds of times, so keep every check that runs often to minutes: profile it (`--profile`), cut what
+  its measures don't read, and run side by side what doesn't depend on each other.
 
 Options every command run on a page takes:
 
@@ -850,6 +910,14 @@ Options every command run on a page takes:
   each at its line in the source; `--profile=<function>` (its name, or its name and file: `"--profile=animate
   ranger.ts"`) lists only the time in that function, by its share of it (the busiest 14 of a whole profile left the
   ranger's animation, 2.7 ms a frame, unexplained);
+- `--tune name.field=v,...;...`: the game's tunable values (`src/core/tuning.ts`) set before the set-up;
+  `name.field[i,j]=v` sets those numbers of a list alone, the rest as they are (a swing's keys, six numbers each:
+  `warriorSwings.twoBack[41,47,53]=40` the roll of its last three keys);
+- `--sweep target=a|b|c[;target=...]` (`node/sweep.mjs`, on the lab's server: `npm run lab:serve`): the command run
+  once for each value of a target, a `--tune` path or some of its numbers, and for every combination of several, each
+  set over the `--tune` given; each run's problems listed in full under it, then the runs with the fewest, exiting 0
+  when one had none (keys tried a dozen ways by hand, each run's output filtered for its problems, missed the speed's
+  three failures on the runs the filter called best);
 - `--randoms`: what drew the page's random numbers as the command ran (`node/randoms.mjs`): the draws in all and the
   busiest callers, each at its line, and with `--ab` the callers whose draws differ between the sides, the smallest
   differences first. An A/B's pictures of anything random (particles, sparks, motes) differ after the first draw one

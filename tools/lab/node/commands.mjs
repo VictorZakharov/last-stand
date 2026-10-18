@@ -51,14 +51,17 @@ function matchedMoment(options) {
   return { states: ['cast'], skill: options.skill, shares: [options.share ?? MATCH_SHARE] };
 }
 
-/** `--tune`'s text as the values it sets, by their paths: `a.b=1,2;c.d=3` sets a.b to [1, 2] and c.d to [3]. */
+/** `--tune`'s text as the values it sets, by their paths: `a.b=1,2;c.d=3` sets a.b to [1, 2] and c.d to [3], and
+ *  `a.b[0,2]=5` the first and third of a.b's numbers to 5 (the page sets those after the whole lists). */
 function tunesFrom(text) {
   const tunes = {};
   for (const part of text.split(';').filter(Boolean)) {
     const [path, values] = part.split('=');
     const numbers = (values ?? '').split(',').map(Number);
-    if (!path.includes('.') || !values || numbers.some((n) => !Number.isFinite(n))) {
-      throw new Error(`lab: --tune: ${part} isn't name.field=numbers`);
+    const some = /^[^[]+\[\d+(,\d+)*\]$/.test(path);
+    const bad = !path.includes('.') || !values || numbers.some((n) => !Number.isFinite(n));
+    if (bad || (path.includes('[') && (!some || numbers.length !== 1))) {
+      throw new Error(`lab: --tune: ${part} isn't name.field=numbers (or name.field[i,j]=number)`);
     }
     tunes[path] = numbers;
   }
@@ -1067,6 +1070,8 @@ export const COMMANDS = {
         dir: options.way ?? null,
         key: options.key ?? null,
         left: Boolean(options.left),
+        turn: options.turn ?? 0,
+        trunk: options.trunk ?? null,
         canary: Boolean(options.canary),
       };
       return side.command('swing', command);

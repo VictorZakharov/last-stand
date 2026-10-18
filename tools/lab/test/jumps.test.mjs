@@ -30,6 +30,12 @@ test('a short, fast blow is no jump, however still round it', () => {
   assert.deepEqual(jumpsIn(moves, LEAST), []);
 });
 
+test('a fast move slowing to a stop is no jump, however still round it', () => {
+  // (a dual wielder's elbow through a cut, as measured: 23 cm into a frame, then 15, then 6)
+  const moves = [0, 0, 0.04, 0.24, 0.46, 0.32, 0.12, 0.08, 0.06];
+  assert.deepEqual(jumpsIn(moves, LEAST), []);
+});
+
 test('a leap to a new place in a frame is a jump', () => {
   // (Steel Tempest's turn through the eyes, as measured: 67 m/s between frames at 6 to 22)
   const moves = [0.36, 0.21, 0.18, 1.12, 0.1, 0.3, 0.25];
@@ -39,9 +45,12 @@ test('a leap to a new place in a frame is a jump', () => {
   assert.equal(jumps[0].moved, 1.12);
 });
 
-test('a blade out and back again in a frame is a jump, both ways', () => {
+test('a blade out and back again in a frame is a jump, on the further of its moves', () => {
   const moves = [0.02, 0.03, 0.02, 0.3, 0.3, 0.02, 0.03, 0.02];
   assert.deepEqual(jumpsIn(moves, LEAST).map((jump) => jump.index), [3, 4]);
+  // (lifted as the swing goes on, it moves further one way than the other)
+  const swung = [0.06, 0.06, 0.06, 0.34, 0.27, 0.06, 0.06, 0.06];
+  assert.deepEqual(jumpsIn(swung, LEAST).map((jump) => jump.index), [3]);
 });
 
 test('a move under the least is no jump, however still round it', () => {
