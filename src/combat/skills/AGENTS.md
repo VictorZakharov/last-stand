@@ -4,7 +4,7 @@ Each skill's behaviour, registered by its `impl` name in `index.ts` (`SKILL_IMPL
 
 The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 
-- **The warrior:** `cleave.ts` (Rending Cleave), `crescent.ts` (Thunder Crescent), `powerStrike.ts`, `twinFangs.ts`, `bullRush.ts`, `raiseShield.ts`, `tempest.ts` (Steel Tempest), `ironBellow.ts`; `slash.ts` draws the swept blade arcs they share.
+- **The warrior:** `cleave.ts` (Rending Cleave), `crescent.ts` (Thunder Crescent), `powerStrike.ts`, `twinFangs.ts`, `bullRush.ts`, `raiseShield.ts`, `tempest.ts` (Steel Tempest), `ironBellow.ts`; `slash.ts` draws the blade arcs Thunder Crescent, Steel Tempest and Bull Rush throw or spin. A cut draws no arc of its own: its mark is the trail its blade leaves (`fx/swingTrail.ts`), and an arc laid flat at its tip's height drew a second one, level across the view while the cut through the eyes ran down it.
 - **The mage:** `splinterBolt.ts`, `voidLance.ts`, `glacialNova.ts`, `starfall.ts`, `maelstrom.ts` (its look is `fx/firestorm.ts`), `blink.ts` (Veilstep).
 - **The ranger:** `ranger.ts` (the bow's shots and arrows), `arrowRain.ts` (Hailfletch), `quarryMark.ts`, `strawman.ts`.
 - **Shared:** `potion.ts` (the healing draught), `readiness.ts` (a held skill's preview while a release would cast nothing).

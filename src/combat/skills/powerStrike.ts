@@ -6,7 +6,6 @@ import { flash } from '../../fx/lights';
 import { addShake } from '../../core/renderer';
 import { sfx } from '../../core/audio';
 import { rand } from '../../util';
-import { slashArc } from './slash';
 import { sweep } from './cleave';
 import type { InstantSkill, Needs } from './types';
 import { blastCorpses } from '../../entities/corpse';
@@ -50,11 +49,7 @@ const skill: InstantSkill = {
     // the way the body (and so the blow) faces
     const facing = player.facing;
     const dir = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
-    // the chop comes down in a vertical plane: from above the head to the ground in front
-    slashArc({
-      x: p.x, z: p.z, y: 1.55, facing, radius: (player.model.reach ?? 2) + 0.2, arc: 2.0, roll: Math.PI / 2, pitch: -0.3, dir: -1,
-      color: def.color, sweep: (player.casting?.dur ?? 1.5) * 0.07, fade: 0.3,
-    });
+    // (the chop's one mark on its way down is the trail its blade leaves, fx/swingTrail.ts)
     const c = new THREE.Vector3(p.x + dir.x * 2.2, 0, p.z + dir.z * 2.2);
     shockwave(c, { color: def.color, intensity: 2.5, from: 0.3, to: 3.2, life: 0.45 });
     shockwave(c, { color: 0xffffff, intensity: 1.2, from: 0.2, to: 2, life: 0.3 });

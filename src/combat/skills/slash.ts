@@ -1,12 +1,11 @@
-// Swept blade arcs for melee skills: a flat ring segment on the ground plane whose
-// glowing head sweeps across it, leaving a fading trail. Shared by the warrior's skills.
+// Blade arcs for the warrior's skills that throw or spin one (Thunder Crescent, Steel Tempest, Bull Rush's wedge): a
+// flat ring segment whose glowing head sweeps across it, leaving a fading trail, or that glows all along. A cut's mark
+// is the trail its blade leaves (fx/swingTrail.ts): an arc of its own, laid flat at its tip's height, drew a second
+// one, level across the view while the cut through the eyes ran down it.
 import * as THREE from 'three';
 import { nearGlow } from '../../core/materials';
-import { G } from '../../state';
-import { addEffect } from '../../fx/effects';
-import type { Effect } from '../../types';
 
-export function slashMaterial(color: THREE.ColorRepresentation): THREE.ShaderMaterial {
+function slashMaterial(color: THREE.ColorRepresentation): THREE.ShaderMaterial {
   return nearGlow(new THREE.ShaderMaterial({
     uniforms: {
       uColor: { value: new THREE.Color(color) }, uProg: { value: 0 }, uFade: { value: 1 }, uDir: { value: 1 },
@@ -42,48 +41,6 @@ export function slashMaterial(color: THREE.ColorRepresentation): THREE.ShaderMat
 function arcGeometry(arc: number, inner: number): THREE.BufferGeometry {
   // flat on the ground: local (x, y) maps to world (x, -z), so +Z is at angle -PI/2
   return new THREE.RingGeometry(inner, 1, 40, 1, -Math.PI / 2 - arc / 2, arc).rotateX(-Math.PI / 2);
-}
-
-export interface SlashOpts {
-  /** centre on the ground and facing (radians, like Player.facing) */
-  x: number; z: number; y?: number; facing: number;
-  radius: number; arc: number; color: THREE.ColorRepresentation;
-  /** +1 sweeps from the right side to the left, -1 the other way */
-  dir?: number;
-  /** seconds for the head to cross the arc, and to fade out afterwards */
-  sweep?: number; fade?: number;
-  inner?: number;
-  /** tilt of the arc's plane: roll about the facing (PI/2 stands it upright, for an overhead chop),
-   *  then pitch (negative raises the arc's middle) */
-  roll?: number; pitch?: number;
-}
-
-/** A single sweep that plays out and removes itself. */
-export function slashArc(o: SlashOpts): Effect {
-  const inner = o.inner ?? 0.35, sweep = o.sweep ?? 0.12, fade = o.fade ?? 0.22;
-  const geo = arcGeometry(o.arc, inner);
-  const mat = slashMaterial(o.color);
-  const u = mat.uniforms;
-  u.uStart.value = -Math.PI / 2 - o.arc / 2; u.uLen.value = o.arc; u.uInner.value = inner; u.uDir.value = o.dir ?? 1;
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.rotation.set(o.pitch ?? 0, 0, o.roll ?? 0);
-  mesh.frustumCulled = false;
-  const group = new THREE.Group();
-  group.add(mesh);
-  group.position.set(o.x, o.y ?? 1.0, o.z);
-  group.rotation.y = o.facing;
-  group.scale.setScalar(o.radius);
-  G.scene.add(group);
-  let t = 0;
-  return addEffect({
-    update(dt) {
-      t += dt;
-      u.uProg.value = Math.min(1.25, t / sweep);
-      u.uFade.value = Math.max(0, 1 - Math.max(0, t - sweep) / fade);
-      return t < sweep + fade;
-    },
-    dispose() { G.scene.remove(group); geo.dispose(); mat.dispose(); },
-  });
 }
 
 /** A persistent arc the caller drives (spins, moves) through the returned mesh and uniforms; its

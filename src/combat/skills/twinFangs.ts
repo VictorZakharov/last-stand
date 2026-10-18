@@ -4,14 +4,13 @@ import * as THREE from 'three';
 import { schedule } from '../../core/timers';
 import { addShake } from '../../core/renderer';
 import { sfx } from '../../core/audio';
-import { slashArc, slashMaterial } from './slash';
-import { sweep, swingArc } from './cleave';
+import { sweep } from './cleave';
 import type { InstantSkill, Needs } from './types';
 import type { Player } from '../../entities/player';
 import { FANGS } from '../../data/balance';
 import { tunable } from '../../core/tuning';
 
-type Def = Needs<'damage' | 'range' | 'arc' | 'color'>;
+type Def = Needs<'damage' | 'range' | 'arc'>;
 
 /** how far short of the aim the lunge stops (the strikes reach the rest), and how far it goes at most (m) */
 const SHORT = 1.3, MAX_LUNGE = 2.2;
@@ -20,13 +19,10 @@ tunable('twinFangs', FANGS);
 
 function strike(player: Player, def: Def, i: number): void {
   if (!player.alive) return;
-  const facing = player.facing, p = player.pos;
-  // the right blade cuts down from high on the right, the left one mirrors it: the trails cross in an X
+  const facing = player.facing;
+  // the right blade cuts down from high on the right, the left one mirrors it, each marked by the trail it leaves
+  // alone (fx/swingTrail.ts)
   const s = i === 0 ? 1 : -1;
-  slashArc({
-    x: p.x, z: p.z, facing, ...swingArc(player, def.arc), y: 1.15, dir: s, roll: s * 0.55, pitch: -0.15,
-    color: def.color, sweep: 0.13, fade: 0.25,
-  });
   sfx.swing();
   // (each cut drives what it kills along it, and down: it comes from high)
   if (sweep(player, def, facing, { knock: 1.2, swing: s, lift: 0.12 })) { sfx.clang(); addShake(0.1 + i * 0.05); }
@@ -36,7 +32,6 @@ const skill: InstantSkill = {
   anim: 'flurry',
   hits: (def) => [{ per: 'cut', base: (def as Def).damage, type: 'physical', note: 'two cuts, each on every foe it reaches' }],
   // (its lunge cast in Bull Rush's charge rides on it: the cuts land as it runs, `Player.startDash`)
-  warm: () => [new THREE.Mesh(new THREE.RingGeometry(0.3, 1, 8), slashMaterial(0xffffff))],
   cast(player, rawDef, target) {
     const def = rawDef as Def;
     const p = player.pos;
