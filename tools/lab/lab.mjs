@@ -70,6 +70,10 @@ async function main() {
     console.log(reply.text);
     return reply.ok ? 0 : 1;
   }
+  if (call.options.sweep) {
+    const { runSweep } = await import('./node/sweep.mjs');
+    return runSweep(call);
+  }
   if (call.options.watch) {
     const reply = await sendToServer(call);
     if (!reply) throw labError('--watch needs the lab server: npm run lab:serve');

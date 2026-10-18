@@ -4,7 +4,9 @@
 // its shoulder came round under the camera.) Measured against the median of the moves round it, not its neighbours: a
 // blade out and back again in a frame moves far into the frame after it too; and against the slower of the frames
 // either side of it, as a short, fast blow's middle frame moves far past the median of a round mostly still, but no
-// further than the frames into it and out of it. Pure, for its tests (test/jumps.test.mjs).
+// further than the frames into it and out of it; and moving at least as far as either of them, a peak (a fast cut's
+// elbow slowing to a stop, 23 cm, 15, then 6, read as a jump on the 15): a pose out and back again in a frame reads on
+// the further of its two moves. Pure, for its tests (test/jumps.test.mjs).
 
 /** the frames each side of one whose moves it's measured against */
 export const JUMP_ROUND = 3;
@@ -45,24 +47,25 @@ function movesRound(moves: readonly Move[], index: number): number[] {
   return round;
 }
 
-/** The slower of the moves into the frames either side of `index` (the one there is at an end, or where the other
- *  isn't measured); null when neither is. */
-function slowerSide(moves: readonly Move[], index: number): number | null {
+/** The moves into the frames either side of `index` that are measured (the one there is at an end, or where the
+ *  other isn't measured). */
+function sidesOf(moves: readonly Move[], index: number): number[] {
   const measured = (move: Move | undefined): move is number => move !== null && move !== undefined;
-  const sides = [moves[index - 1], moves[index + 1]].filter(measured);
-  return sides.length ? Math.min(...sides) : null;
+  return [moves[index - 1], moves[index + 1]].filter(measured);
 }
 
 /** The frames of `moves` (how far the weapon moved into each frame) that jumped: moved at least `least`, `JUMP_TIMES`
- *  the median of the moves round it and `JUMP_SIDE` the slower of the frames either side of it. */
+ *  the median of the moves round it, `JUMP_SIDE` the slower of the frames either side of it and as far as the
+ *  faster. */
 export function jumpsIn(moves: readonly Move[], least: number): Jump[] {
   const jumps: Jump[] = [];
   moves.forEach((moved, index) => {
     if (moved === null || moved < least) return;
     const round = median(movesRound(moves, index));
-    const side = slowerSide(moves, index);
-    const pastSides = side === null || moved >= JUMP_SIDE * side;
-    if (moved >= JUMP_TIMES * round && pastSides) jumps.push({ index, moved, round });
+    const sides = sidesOf(moves, index);
+    const pastSides = sides.length === 0 || moved >= JUMP_SIDE * Math.min(...sides);
+    const peak = sides.every((side) => moved >= side);
+    if (moved >= JUMP_TIMES * round && pastSides && peak) jumps.push({ index, moved, round });
   });
   return jumps;
 }

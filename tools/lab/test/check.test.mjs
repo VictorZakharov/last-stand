@@ -18,9 +18,9 @@ test('every command of the plan for each of its heroes, the ranger\'s alone for 
   assert.ok(starts > 1);
   assert.ok(CHECK_SPLIT.has('gait'));
   const eyes = eyesParts().length + castParts().length;
-  // (the stops, the ranges, the form and the battle log for each; the ranger's feet and carry, the warrior's rush in
-  // its parts and his hits)
-  assert.equal(jobs.length, (4 + gaitScenarios) * CHECK_CLASSES.length + 3 + RUSH_PARTS.length + eyes);
+  // (the stops, the ranges, the form and the battle log for each; the ranger's feet and carry, the warrior's swings,
+  // his rush in its parts and his hits)
+  assert.equal(jobs.length, (4 + gaitScenarios) * CHECK_CLASSES.length + 4 + RUSH_PARTS.length + eyes);
   assert.ok(names(jobs).includes('carry-ranger'));
   assert.ok(names(jobs).includes('log-mage'));
   assert.ok(names(jobs).includes('eyes-warrior-twoHanded-Maul-row'));
@@ -102,6 +102,15 @@ test('each skill cast through the eyes for its light, on each way\'s first weapo
   assert.deepEqual(strike.options.times, []);
   assert.ok(names(jobs).includes('cast-warrior-shield-cleave'));
   assert.ok(names(jobs).includes('cast-warrior-twoHanded-crescent'));
+});
+
+test('every swing of every weapon each way held stepped through the eyes in one job, with the canaries', () => {
+  const jobs = jobsOf({ commands: ['swing'], classes: ['warrior', 'mage'] });
+  assert.deepEqual(names(jobs), ['swing-warrior']);
+  const [swing] = jobs;
+  assert.deepEqual(swing.options._, ['all']);
+  assert.equal(swing.options.gear, undefined);
+  assert.equal(swing.options.canary, true);
 });
 
 test('the charge\'s sets apart from the skills cast with it, those cast with a shield and with two weapons', () => {

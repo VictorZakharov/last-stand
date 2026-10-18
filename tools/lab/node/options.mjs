@@ -67,9 +67,10 @@ const SETUP_OPTIONS = {
   tune: {
     kind: 'text',
     joins: ';',
-    usage: 'name.field=v[,v...][;...]',
+    usage: 'name.field[i,..]=v[,v...][;...]',
     help: 'tunable values set before the run (src/core/tuning.ts: '
-      + 'warriorEyes.oneOn=0.75,-1.1,0.5;warriorEyes.roll=1.2)',
+      + 'warriorEyes.oneOn=0.75,-1.1,0.5;warriorEyes.roll=1.2), or some of a list\'s numbers, each to the one value '
+      + '(warriorSwings.twoBack[46,52]=-6)',
   },
 };
 
@@ -120,6 +121,14 @@ const COMMON_OPTIONS = {
   watch: {
     kind: 'switch',
     help: 'run it again each time the source changes, until Ctrl+C (needs npm run lab:serve)',
+  },
+  sweep: {
+    kind: 'text',
+    joins: ';',
+    usage: 'name.field[i,..]=a|b|c[;...]',
+    help: 'run it once for each value of a tunable (or every combination of several), over --tune, and say each '
+      + 'run\'s problems side by side, the runs with the fewest named (needs npm run lab:serve and a command that '
+      + 'takes --tune): warriorSwings.twoBack[46,52]=-6|-10 sets those two numbers; warriorEyes.roll=1|1.2 the list',
   },
 };
 
@@ -951,6 +960,21 @@ export const COMMANDS = {
         help: 'the left hand\'s swing: the right\'s mirrored across the view, as a dual wielder\'s off hand cuts '
           + '(--gear dual)',
       },
+      turn: {
+        kind: 'number',
+        usage: 'rad',
+        help: 'the trunk turned this far to the left, as a cut turns it (models/warriorEyes.ts `twoTurn`): the keys '
+          + 'placed turned with it round the spine, and a pose (--grip, --way) taken as the eyes see it so turned',
+      },
+      trunk: {
+        kind: 'choice',
+        choices: ['rest', 'row', 'back', 'foreOut', 'backOut'],
+        usage: 'rest|row|back|foreOut|backOut',
+        help: 'each of the swing\'s keys turned as the trunk turns a cut of the hero\'s weapons at its share '
+          + '(viewSwing.ts `cutTurnAt`): a forehand from rest, one in a row, or a backhand (in a row, the other way: '
+          + 'a two-hander\'s backhand, a dual wielder\'s left hand\'s cut); or the way back to the guard after a '
+          + 'forehand or a backhand, the turn its end left unwound (models/warrior.ts)',
+      },
       canary: {
         kind: 'switch',
         help: 'the swing\'s blow keyed back from where its own key places it, and a grip moved 10 cm off its plane, '
@@ -1209,16 +1233,16 @@ export const COMMANDS = {
       + 'gait (its steps listed, no films), the stops, the ranges and the run\'s form for each hero, the ranger\'s '
       + 'feet and carry, the warrior\'s basic attack through the eyes with each weapon each way he holds it (a row '
       + 'with the canaries, a short and a long pause) and his other skills with each weapon that takes them, and '
-      + 'each of his skills cast through the eyes for its light and flashes, on each way\'s first weapon, and the '
-      + 'foes his charge sweeps up; each report in tools/lab/out/check/<command>-<hero>.txt (runs in this process, '
-      + 'not the server)',
+      + 'each of his skills cast through the eyes for its light and flashes, on each way\'s first weapon, every '
+      + 'swing of each weapon stepped between its keys, and the foes his charge sweeps up; each report in '
+      + 'tools/lab/out/check/<command>-<hero>.txt (runs in this process, not the server)',
     options: {
       classes: { kind: 'list', usage: 'a,b', help: 'the heroes (warrior, mage, ranger by default)' },
       commands: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['gait', 'stops', 'range', 'form', 'feet', 'carry', 'eyes', 'cast', 'rush', 'hits', 'log'],
-        help: 'the commands (gait, stops, range, form, feet, carry, eyes, cast, rush, hits, log by default)',
+        choices: ['gait', 'stops', 'range', 'form', 'feet', 'carry', 'eyes', 'cast', 'swing', 'rush', 'hits', 'log'],
+        help: 'the commands (gait, stops, range, form, feet, carry, eyes, cast, swing, rush, hits, log by default)',
       },
       jobs: { kind: 'number', usage: 'n', help: 'how many sessions side by side (a core in three, at most 8)' },
       starts: {

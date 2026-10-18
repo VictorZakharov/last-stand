@@ -1019,8 +1019,7 @@ function withinWindow(area: Clip, margin = 0): Clip {
  * says. Throws for a style the class can't hold, or a base that isn't of it.
  */
 export function gearFor(cls: ClassDef, worn: Gear, style: WeaponStyle, base?: string): Gear {
-  const twoHanders = cls.twoHanded ?? [];
-  const oneHanders = cls.bases?.weapon?.filter((each) => !twoHanders.includes(each)) ?? [];
+  const { twoHanders, oneHanders } = handedBases(cls);
   const ofStyle = style === 'twoHanded' ? twoHanders : oneHanders;
   if (base && !ofStyle.includes(base)) {
     throw new Error(`lab: --weapon ${base}: not a ${style} weapon of the ${cls.id}'s (${ofStyle.join(', ')})`);
@@ -1038,6 +1037,22 @@ export function gearFor(cls: ClassDef, worn: Gear, style: WeaponStyle, base?: st
   const can = weapon !== null && (style !== 'dual' || cls.dualWield) && holdsOff;
   if (!can || weaponStyle(cls, gear) !== style) throw new Error(`lab: --gear ${style}: the ${cls.id} can't hold that`);
   return gear;
+}
+
+/** A class's weapon bases, its two-handers and the rest. */
+function handedBases(cls: ClassDef): { twoHanders: string[]; oneHanders: string[] } {
+  const twoHanders = cls.twoHanded ?? [];
+  const oneHanders = cls.bases?.weapon?.filter((each) => !twoHanders.includes(each)) ?? [];
+  return { twoHanders, oneHanders };
+}
+
+/** The bases a hero of `cls` holds his weapons `style`'s way with (as `gearFor` gives them): none for a way he can't
+ *  hold them. */
+export function basesHeld(cls: ClassDef, style: WeaponStyle): string[] {
+  if (style === 'dual' && !cls.dualWield) return [];
+  if (style === 'shield' && !cls.bases?.offhand?.length) return [];
+  const { twoHanders, oneHanders } = handedBases(cls);
+  return style === 'twoHanded' ? twoHanders : oneHanders;
 }
 
 /**
@@ -1101,12 +1116,27 @@ function holdTheWave(kept: Set<Enemy>): void {
   run.timer = Infinity;
 }
 
-/** Sets the game's tunable values (`Fixture.tune`; src/core/tuning.ts), each by its path. */
+/** Sets the game's tunable values (`Fixture.tune`; src/core/tuning.ts), each by its path: whole lists first, then
+ *  some of a list's numbers (`path[i,j]`, each to its one value) over what's set then. */
 function setTunes(tunes: Record<string, number[]>): void {
   const paths = Object.keys(tunes);
   if (!paths.length) return;
   if (!window.__tune) throw new Error('lab: --tune: this game has no tunable values');
-  for (const path of paths) window.__tune(path, tunes[path]);
+  const some = paths.filter((path) => path.endsWith(']'));
+  for (const path of paths.filter((path) => !path.endsWith(']'))) window.__tune(path, tunes[path]);
+  for (const path of some) setSomeOf(path, tunes[path][0]);
+}
+
+/** Some of a tunable list's numbers set to `value` (`path[i,j]`: the list's path and the numbers' places). */
+function setSomeOf(path: string, value: number): void {
+  const [, list, places] = /^(.+)\[([\d,]+)\]$/.exec(path)!;
+  if (!window.__tuned) throw new Error('lab: --tune: this game reads no tunable value back to set some of one');
+  const numbers = [...window.__tuned(list)];
+  for (const place of places.split(',').map(Number)) {
+    if (place >= numbers.length) throw new Error(`lab: --tune: ${list} has ${numbers.length} numbers, no ${place}`);
+    numbers[place] = value;
+  }
+  window.__tune!(list, numbers);
 }
 
 /** The session's entry: the lab installed on this page. */

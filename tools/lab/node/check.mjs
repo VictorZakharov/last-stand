@@ -20,21 +20,26 @@ export const CHECK_CLASSES = ['warrior', 'mage', 'ranger'];
 /**
  * The commands checked by default and the heroes each is for (all of `classes` when it names none): as
  * docs/agents/legs.md checks a change to the walk or the run (the gait, the stops, every joint's range and the run's
- * form for every hero, the ranger's feet and carried bow), the warrior's moves through the eyes and their light
- * there, the foes his charge sweeps up, the pace of Twin Fangs' blows, and every hero's hits in the battle log.
+ * form for every hero, the ranger's feet and carried bow), the warrior's moves through the eyes, their light there
+ * and the swings they're keyed as, the foes his charge sweeps up, the pace of Twin Fangs' blows, and every hero's hits
+ * in the battle log.
  */
 export const CHECK_PLAN = {
   gait: null, stops: null, range: null, form: null, feet: ['ranger'], carry: ['ranger'], eyes: ['warrior'],
-  cast: ['warrior'], rush: ['warrior'], hits: ['warrior'], log: null,
+  cast: ['warrior'], swing: ['warrior'], rush: ['warrior'], hits: ['warrior'], log: null,
 };
 /** each command's options in a check: the gait's steps listed, and no films nor pictures (a check reads the numbers:
  *  the form's of both sides, to compare, were more than the browser held, which closed); the basic attack through
  *  the eyes; a cast's light through the eyes in both biomes (its options in full: a check's aren't read from the
- *  command line, where their defaults are filled in); Twin Fangs' blows quicker than a dual wielder's cleave and at
- *  most 0.2 s apart */
+ *  command line, where their defaults are filled in); every swing of every weapon each way the hero holds them, the
+ *  arm between the keys as the game lays it out, which the frames through the eyes read only where they see it (the
+ *  backhand's way back, its lower grip within the other arm's reach at both its keys, went 13 cm past between them),
+ *  with the canaries; Twin Fangs' blows quicker than a dual wielder's cleave and at most 0.2 s apart */
 const CHECK_OPTIONS = {
   gait: { frames: true, films: false }, form: { pictures: false }, eyes: { _: ['cleave'], film: false },
   cast: { views: ['first'], biomes: ['crypt', 'forest'], times: [], pictures: false },
+  // (every weapon each way on one page: a page for each, the check's ten jobs spent 547 s booting for 3 of stepping)
+  swing: { _: ['all'], canary: true },
   rush: { pictures: false },
   hits: { _: ['twinFangs'], than: 'cleave', apart: 0.2, gear: 'dual' },
 };
