@@ -15,6 +15,7 @@ import { spawnEnemy } from '../../../src/entities/spawner';
 import { clearEnemies, type Enemy } from '../../../src/entities/enemy';
 import { Projectile } from '../../../src/combat/projectiles';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
+import { menuStowed, toggleMenuStowed } from '../../../src/ui/menus';
 import type { EnemyId } from '../../../src/data/enemies';
 import type { Player } from '../../../src/entities/player';
 import type { ActionState, SkillKey } from '../../../src/types';
@@ -102,6 +103,10 @@ export interface CoopState {
   status: string;
   /** the partners' heroes it has */
   partners: number;
+  /** its lobby stowed, as a player practises in it */
+  stowed: boolean;
+  /** its own hero casting freely, as the lobby has him (no costs or cooldowns) */
+  free: boolean;
 }
 
 /** A turn of frames the lab asks a page for: the messages arrived meanwhile, and what to play. */
@@ -553,13 +558,25 @@ export async function coopOpen(
   return session.code;
 }
 
+/** The guest practising on the lobby's dummies while it waits for its host, as a player does: its lobby stowed, as
+ *  Space and a phone's Practice stow it. */
+export function coopPractise(): void {
+  toggleMenuStowed(true);
+}
+
 /** The host starts the run (its guest comes along). */
 export function coopStart(): void {
   document.getElementById('btn-start')?.click();
 }
 
 function stateNow(): CoopState {
-  return { mode: G.mode, status: session.status, partners: G.players.length - 1 };
+  return {
+    mode: G.mode,
+    status: session.status,
+    partners: G.players.length - 1,
+    stowed: menuStowed(),
+    free: G.player.sandbox,
+  };
 }
 
 /** The run's countdown held (no wave comes) and every hero kept from falling. */

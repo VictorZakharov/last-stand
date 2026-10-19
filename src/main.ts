@@ -187,6 +187,7 @@ function beginRun(wave: number) {
   buildHotbar(G.player);   // the loadout may have changed in the lobby
   G.mode = 'run';
   G.player.sandbox = false;
+  practising = false;
   syncAway();
   setZoom(1);
   G.arena.restoreProps();
@@ -198,7 +199,9 @@ function beginRun(wave: number) {
  *  bottom and real cooldowns and costs; with them shown, free casting (the lobby's note says so). */
 let practising = false;
 function syncPractice() {
-  const now = G.mode === 'menu' && lobbyPractice();
+  // (the lobby's alone: a run begun in practice, a co-op guest's as its host starts, kept free casting through it)
+  if (G.mode !== 'menu') return;
+  const now = lobbyPractice();
   if (now === practising) return;
   practising = now;
   const p = G.player;
@@ -209,7 +212,7 @@ function syncPractice() {
     p.cooldowns.clear();
     p.energy = p.stats.maxEnergy;
   }
-  if (G.mode === 'menu') showHud(now, true);
+  showHud(now, true);
 }
 
 function toMenu() {
@@ -299,7 +302,7 @@ function swapHero(id: string) {
   G.player.spawn.copy(old.spawn);
   G.players[G.players.indexOf(old)] = G.player;
   G.player.place(at, facing);
-  G.player.sandbox = true;
+  G.player.sandbox = !practising;
   buildHotbar(G.player);
   sendLook();
 }

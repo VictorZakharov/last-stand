@@ -371,6 +371,8 @@ export class Lab {
   readonly beforeFrame: (() => void)[] = [];
   /** the fingers on the page, by their id, where each is (css px): every touch sent says where all of them are */
   private readonly fingers = new Map<number, PagePoint>();
+  /** where the mouse is on the page (css px), once the lab has moved it */
+  private mouseAt: PagePoint | null = null;
 
   get player() {
     return G.player;
@@ -747,13 +749,33 @@ export class Lab {
    * focus it moves to what was clicked). No frame runs; it returns once the page has handled the release.
    */
   async click(at: PagePoint): Promise<void> {
-    await this.sendMouse('mouseMoved', at);
+    await this.mouseTo(at);
     await this.sendMouse('mousePressed', at);
     await this.sendMouse('mouseReleased', at);
   }
 
+  /**
+   * `element` clicked at its middle as a mouse clicks it (`click`), scrolled to first as the player scrolls to it (a
+   * phone's pause menu has its Abandon below the screen's edge) and once the page's transitions are over: the lab's
+   * frames outrun the browser's clock, which they run on, and a lobby's panel was still sliding back in from the
+   * stowed lobby, its tab 31 px off. Throws if its middle is off the screen even so. No frame runs.
+   */
+  async clickOn(element: Element): Promise<void> {
+    element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    const sliding = document.getAnimations().filter((animation) => animation instanceof CSSTransition);
+    await Promise.all(sliding.map((animation) => animation.finished.catch(() => undefined)));
+    const at = middleOf(element);
+    if (at.x < 0 || at.y < 0 || at.x > innerWidth || at.y > innerHeight) {
+      const name = element.id ? `#${element.id}` : element.tagName.toLowerCase();
+      throw new Error(`lab: clickOn: ${name} lies off the screen, at ${Math.round(at.x)}, ${Math.round(at.y)}`);
+    }
+    await this.click(at);
+  }
+
   /** The mouse moved to `at` (css px) as a mouse moves, its events and all. No frame runs. */
   async mouseTo(at: PagePoint): Promise<void> {
+    // (the browser makes no pointer move of a move to where the mouse is: a second click there waited for one)
+    if (this.mouseAt?.x === at.x && this.mouseAt.y === at.y) return;
     await this.sendMouse('mouseMoved', at);
   }
 
@@ -824,6 +846,7 @@ export class Lab {
     const ours = (event: Event) => event instanceof WheelEvent || (event as PointerEvent).pointerType === 'mouse';
     const handled = inputHandled({ names: MOUSE_EVENTS[type], ours, what: 'click' });
     await sent(handled, window.__labMouse(type, at.x, at.y, deltaY));
+    this.mouseAt = { x: at.x, y: at.y };
   }
 
   private async sendKey(type: KeyType, code: string): Promise<void> {

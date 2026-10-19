@@ -100,7 +100,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the guest down and the host raising it; `blink`, played only by a hero with a blink, `--class mage`: the guest
   blinking between two spots as foes close on it; `rush`, played only by a hero with Bull Rush, `--class warrior`:
   the guest charging through three dazed foes once; `strike`, the same but for a Power Strike charged first and the
-  charge cast over it 0.35 s from its blow), each one's input frame by frame from what its own screen shows.
+  charge cast over it 0.35 s from its blow), each one's input frame by frame from what its own screen shows. The guest
+  practises in its lobby while it waits (stowed, as Space and a phone's Practice stow it), as a player does, and a
+  game whose hero casts freely in the run the host starts is a problem (on main the guest's did, no costs or
+  cooldowns through the whole run: `practice` measures the casts).
   What each game showed is judged against the other's in the same frame (`node/coopJudge.mjs`): each copy's delay (the
   one that lines its path up best with its own game's), how far off that path and how roughly it moves (its speed
   against its own, its largest move a frame), how each game's timeline plays its partner out (how far behind the
@@ -393,6 +396,19 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   each drag's last preview before a frame showed it, holds its cast against the stop before's preview, and reads the
   plain ring as shown beside a preview: each must be caught. (A dummy risen outside the arena or in a prop is pushed
   in over its first frames, metres for one off the edge: spots are picked where one stands clear.)
+- `practice`: casting in the lobby and in the runs it starts, the hero's every skill on a key with a cooldown of a
+  second or more (its effect's own `fire` counted) cast, then cast again as soon as he is free (no cast, channel, aim
+  or charge under way), from full energy. In the lobby as it shows, and shown again after practice, casting is free:
+  both casts must be made (nothing left cooling from practice). In practice (stowed, by the control the screen shows:
+  a phone's rail's Practice, or the hint over the arena that Space works), with every panel folded on a screen that
+  shows them side by side (not played on one showing one at a time, where folds don't count), in a run started by the
+  lobby's start the screen shows, and in a run begun in practice (a co-op guest's, as its host starts: no button of
+  a stowed lobby starts one, so `#btn-start` is clicked by script), the second must be refused while the first cools,
+  the HUD must count it down on its key, and the cast must spend at least half its energy as the HUD shows it. A run is
+  held in its countdown with a dummy before the hero, and left from the pause menu (`lab.clickOn`: scrolled to, as a
+  phone's has its Abandon below the screen's edge). On main the run begun in practice kept the lobby's free casting
+  through it: every skill cast twice, no countdown, no energy spent. `--canary` plays that run again with free casting
+  planted, which must be caught. Run with `--screen 832x384@3.75` for a phone's (the rail's controls).
 - `spawns`: the foes coming in. Boss waves (the 5th, 10th, 15th and 20th in turn, `--waves 32` in each biome,
   `--biomes`) are set off one after another, each from a seed of its own (every set-up seeds the same numbers, which
   would roll the same gates), the hero at the arena's middle (`--at`). Every foe is read as it rises: the gate it
@@ -813,8 +829,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
 - `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`).
 - `live <step>`: a page of the game kept between steps, each on the state the last one left, as a modelling
   tool's scene is kept between edits (`node/live.mjs`, `page/live.ts`; needs `lab:serve`). `live start` boots the
-  hero (`--class`, the warrior by default) and sets him up (`--view`, `--gear`, `--weapon`, `--at`, `--facing`);
-  then `live picture` pictures him from `--views` (through the eyes `eyes`, else `third`, by default) in any
+  hero (`--class`, the warrior by default), on `--screen`'s screen if it's given (a phone's, `832x384@3.75`: its
+  layout and the touch controls' scale), and sets him up (`--view`, `--gear`, `--weapon`, `--at`, `--facing`);
+  then `live picture` pictures him from `--views` (through the eyes `eyes`, else `third`, by default; `screen`
+  the whole page as the player sees it, the HUD and the touch controls over the frame) in any
   `--look` (a close-up from `--distance` m off what it's framed on: 1.7 from a joint, 4.3 from the body by
   default), with a reference laid over each picture and stretched to it (`--over <picture> --strength 0.5`) and
   a part of it kept (`--crop 0.5,0,1,0.6`, its edges as shares), each in its own file in `out/live/`; `live

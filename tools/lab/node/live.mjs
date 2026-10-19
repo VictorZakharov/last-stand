@@ -24,7 +24,7 @@ const LOG_FILE = join(LIVE_DIR, 'steps.json');
 const DEFAULT_CLASS = 'warrior';
 /** the options each step takes besides what follows it (the set-up's for `start`) */
 const STEP_OPTIONS = {
-  start: ['class', 'view', 'at', 'facing', 'nocked', 'gear', 'weapon'],
+  start: ['class', 'view', 'at', 'facing', 'nocked', 'gear', 'weapon', 'screen'],
   picture: ['views', 'look', 'focus', 'distance', 'over', 'strength', 'crop', 'canary'],
   inspect: ['depth'],
   eval: [],
@@ -36,6 +36,9 @@ const STEP_OPTIONS = {
 const STEP_WORDS = { eval: 'expression', frames: 'count' };
 /** a reference picture's types by its file's extension */
 const PICTURE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
+
+/** A screen as `--screen` writes it: `832x384@3.75`. */
+const screenText = (screen) => `${screen.width}x${screen.height}@${screen.ratio}`;
 
 function seconds(since) {
   return `${((Date.now() - since) / 1000).toFixed(1)} s`;
@@ -115,15 +118,17 @@ export class LiveSession {
     return this.picture(options);
   }
 
-  /** `start`: the page booted for the hero and set up, the steps begun again from it. */
+  /** `start`: the page booted for the hero (on `--screen`'s screen, as a phone's: its layout, the touch controls'
+   *  scale) and set up, the steps begun again from it. */
   async start(options, version) {
     const heroClass = options.class ?? DEFAULT_CLASS;
     const fixture = fixtureFrom(options);
-    this.log.begin({ heroClass, fixture });
+    this.log.begin({ heroClass, fixture, screen: options.screen ?? null });
     const started = Date.now();
     const setup = await this.boot(version);
     const took = seconds(started);
-    return this.reported([`live: the ${heroClass} booted and set up as ${JSON.stringify(setup)} (${took})`]);
+    const on = options.screen ? ` on ${screenText(options.screen)}` : '';
+    return this.reported([`live: the ${heroClass} booted${on} and set up as ${JSON.stringify(setup)} (${took})`]);
   }
 
   /** `eval`: the expression evaluated on the page, kept to replay once it has run. */
@@ -174,7 +179,7 @@ export class LiveSession {
 
   /** Boots the page for the log's hero and sets it up as the log began; resolves with the set-up. */
   async boot(version) {
-    const { heroClass, fixture } = this.log.start;
+    const { heroClass, fixture, screen } = this.log.start;
     if (!this.browser?.isConnected()) {
       this.browser = await launchBrowser();
       this.side = null;
@@ -189,6 +194,8 @@ export class LiveSession {
     });
     await this.side.serve();
     await this.side.boot(heroClass);
+    // (a fresh page each boot: a screen goes with its session)
+    if (screen) await this.side.showOn(screen);
     this.version = version;
     return this.side.command('liveStart', fixture);
   }

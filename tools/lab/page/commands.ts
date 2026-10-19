@@ -13,6 +13,7 @@ import type { FormOptions } from './form';
 import type { UiOptions } from './ui';
 import type { TouchOptions } from './touchStick';
 import type { TapOptions } from './tap';
+import type { PracticeOptions } from './practice';
 import type { TrailOptions } from './trail';
 import type { LightOptions } from './light';
 import type { HazeOptions } from './haze';
@@ -197,6 +198,15 @@ export async function touch(lab: Lab, command: TouchOptions): Promise<Report> {
 export async function tap(lab: Lab, command: TapOptions): Promise<Report> {
   const { tap: tapRounds } = await import('./tap');
   return tapRounds(lab, command);
+}
+
+/**
+ * `lab practice`: each skill with a cooldown cast twice in the lobby's ways (shown, stowed, folded) and in runs
+ * started from them; free casting where the lobby shows and a run's costs and cooldowns elsewhere, or a problem.
+ */
+export async function practice(lab: Lab, command: PracticeOptions): Promise<Report> {
+  const { practice: practiceRound } = await import('./practice');
+  return practiceRound(lab, command);
 }
 
 /**
