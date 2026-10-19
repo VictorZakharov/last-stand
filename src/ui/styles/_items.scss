@@ -31,11 +31,14 @@
 
 /* ---------- slot focus: hovering a slot lights up the stash items that fit it ---------- */
 /* The glow is always rendered but transparent, so it can fade in and out (switching between
-   hovered items cross-fades); its looping animations are paused while it is hidden. Each loop
-   moves only a layer's opacity or transform, which the compositor does without painting anything
-   again: animating the shadow itself, the arc's gradient by a custom property and the sheen's
-   background position, every lit item was painted again every frame, and a full stash lit dropped
-   the lobby from 145 frames a second to 44 (#267; tools/lab `ui --states glow`). */
+   hovered items cross-fades). Each loop moves only a layer's opacity or transform, which the
+   compositor does without painting anything again: animating the shadow itself, the arc's
+   gradient by a custom property and the sheen's background position, every lit item was painted
+   again every frame, and a full stash lit dropped the lobby from 145 frames a second to 44 (#267;
+   tools/lab `ui --states glow`). The loops run on the item hovered and the equipment slots alone,
+   the other stash items that fit lit steady: each loop is a layer the page styles and the
+   compositor draws every frame, and 30 lit items' 90 still halved the frames while the mouse moved
+   (tools/stalls `--scenario sweep`). */
 .slot-glow { position: absolute; inset: -3px; pointer-events: none; z-index: 2; opacity: 0; transform: scale(1.18);
   transition: opacity .3s ease-out, transform .3s ease-out; }
 .match .slot-glow { opacity: 1; transform: none; transition-timing-function: ease-out, cubic-bezier(.2,1.6,.4,1); }
@@ -57,11 +60,19 @@
 .glow-sheen > span { position: absolute; left: 0; top: 0; width: 300%; height: 100%;
   background: linear-gradient(115deg, transparent 38%, rgba(255,236,190,.38) 50%, transparent 62%);
   animation: glow-sheen 2.4s ease-in-out infinite; }
-:not(.match) > .slot-glow span { animation-play-state: paused; }
+.sitem:not(:hover) > .slot-glow span, :not(.match) > .slot-glow span { animation: none; }
+/* lit steady: the pulse held half-way, as bright as it is on average, and the arc and the sheen,
+   which are only motion, hidden (the arc held still was a gold mark on the border's left) */
+.sitem:not(:hover) > .slot-glow .glow-bright { opacity: .5; }
+.sitem:not(:hover) > .slot-glow :is(.glow-arc, .glow-sheen) { visibility: hidden; }
 #menu.slot-focus .sitem.match { z-index: 2; transform: scale(1.06); filter: brightness(1.35); }
 #menu.slot-focus .sitem:not(.match) { opacity: .28; filter: grayscale(.85); }
 #menu.slot-focus .eslot:not(.match) { opacity: .45; }
-.sitem, .eslot { transition: opacity .3s, filter .3s, transform .3s; }
+/* each item a layer of its own all along: its fade into the slot's focus or out of it is then
+   the compositor's alone, where an item made a layer for its fade and taken off after was
+   painted again each time, the 60 that change with the slot hovered held a frame up 100 to
+   250 ms (tools/stalls `--scenario sweep`, variant itemLayers) */
+.sitem, .eslot { transition: opacity .3s, filter .3s, transform .3s; will-change: transform, opacity, filter; }
 @keyframes glow-in { to { opacity: 1; } }
 @keyframes glow-spin { to { transform: rotate(1turn); } }
 @keyframes glow-sheen { 0% { transform: translateX(-66.667%); } 60%, 100% { transform: none; } }

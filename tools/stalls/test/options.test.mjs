@@ -16,6 +16,7 @@ test('fills in the defaults', () => {
     hero: null,
     stash: 0,
     scale: 1,
+    window: { width: 1536, height: 864 },
     headed: false,
     perf: false,
     links: false,
@@ -37,6 +38,8 @@ test('reads values either way, and switches', () => {
   assert.equal(readOptions(['--scale', '1.25']).scale, 1.25);
   assert.equal(readOptions(['--hero', 'warrior']).hero, 'warrior');
   assert.equal(readOptions(['--stash=40']).stash, 40);
+  assert.deepEqual(readOptions(['--window', '1536x695']).window, { width: 1536, height: 695 });
+  assert.equal(readOptions(['--listed', '40']).listed, 40);
 });
 
 test('refuses what it doesn\'t know and bad values', () => {
@@ -51,11 +54,13 @@ test('refuses what it doesn\'t know and bad values', () => {
   assert.throws(() => readOptions(['--scale', '0']), /--scale must be a number over 0/);
   assert.throws(() => readOptions(['--hero', 'bard']), /no hero bard/);
   assert.throws(() => readOptions(['--stash', '61']), /--stash must be a whole number from 0 to 60/);
+  assert.throws(() => readOptions(['--window', '1536']), /--window must be a size in css px/);
+  assert.throws(() => readOptions(['--listed', '10']), /--listed must be a number of ms, 20 or more/);
 });
 
 test('the usage lists every option', () => {
-  const names = ['url', 'scenario', 'seconds', 'variants', 'view', 'biome', 'hero', 'stash', 'scale', 'headed', 'perf'];
-  for (const name of [...names, 'links', 'help']) {
+  const names = ['url', 'scenario', 'seconds', 'variants', 'view', 'biome', 'hero', 'stash', 'scale', 'window'];
+  for (const name of [...names, 'headed', 'perf', 'links', 'help']) {
     assert.match(usage(), new RegExp(`--${name}\\b`));
   }
 });

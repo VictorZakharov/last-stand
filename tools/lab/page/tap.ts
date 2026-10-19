@@ -9,6 +9,7 @@
 // tapped Veilstep went at the nearest foe, landing the mage among the foes, a held skill showed a plain ring where it
 // aimed, not its preview, and a tap's click opened the skill's tooltip pinned over the buttons.
 import * as THREE from 'three';
+import { middleOf } from './lab';
 import type { Fixture, Lab, PagePoint, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { SkillKey } from '../../../src/types';
@@ -19,7 +20,7 @@ import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { outlinedLook } from '../../../src/ui/overlay/outline';
 import { hideTooltip } from '../../../src/ui/tooltip';
 import { inObstacle } from '../../../src/world/collision';
-import { element, middleOf, showTouchControls, slide } from './touchStick';
+import { element, showTouchControls, slide } from './touchStick';
 
 export interface TapOptions {
   fixture: Fixture;

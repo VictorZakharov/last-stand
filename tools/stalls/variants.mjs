@@ -28,6 +28,9 @@ function cpuCanvas() {
   };
 }
 
+/** every part of the stash's glow that loops: main's the glow and its pseudo-elements, #269's spans within it */
+const GLOW_PARTS = '.slot-glow, .slot-glow *, .slot-glow::before, .slot-glow::after';
+
 /** The variants by name: each a script run before the page's own, and its argument. Hovering an item: its tooltip
  *  on a layer of its own (moved every mouse move by its `left` and `top`), none at all, its cards without their
  *  blurred shadow, the slot hovered without its brightening filter, and the stash's items that fit its slot lit
@@ -39,12 +42,32 @@ export const VARIANTS = {
   noTooltip: { script: styled, arg: '#tooltip { display: none !important; }' },
   noCardShadow: { script: styled, arg: '.tt-card { box-shadow: inset 0 0 0 1px var(--c, var(--frame)) !important; }' },
   noHoverFilter: { script: styled, arg: '.sitem:hover, .eslot:hover { filter: none !important; }' },
-  stillGlow: { script: styled, arg: '.slot-glow, .slot-glow::before, .slot-glow::after { animation: none !important; }' },
+  stillGlow: { script: styled, arg: `${GLOW_PARTS} { animation: none !important; }` },
   // (and each of the glow's three animations stopped alone: its pulsing shadow, the arc chasing round its border, the
-  // sheen sweeping across)
-  stillPulse: { script: styled, arg: '.slot-glow { animation: none !important; }' },
-  stillArc: { script: styled, arg: '.slot-glow::before { animation: none !important; }' },
-  stillSheen: { script: styled, arg: '.slot-glow::after { animation: none !important; }' },
+  // sheen sweeping across; main's on the glow and its pseudo-elements, #269's on spans of their own)
+  stillPulse: { script: styled, arg: '.slot-glow, .glow-bright { animation: none !important; }' },
+  stillArc: { script: styled, arg: '.slot-glow::before, .glow-arc > span { animation: none !important; }' },
+  stillSheen: { script: styled, arg: '.slot-glow::after, .glow-sheen > span { animation: none !important; }' },
   // (and the glow, animations and all, on layers of its own)
   glowLayer: { script: styled, arg: '.slot-glow, .slot-glow::before, .slot-glow::after { will-change: transform; }' },
+  // (and moving between items: every item's fade into the slot's focus or out of it cut, the items dimmed and lit
+  // without their filters, and the stash's view without its fading mask)
+  noFocusFade: { script: styled, arg: '.sitem, .eslot { transition: none !important; }' },
+  itemLayers: { script: styled, arg: '.sitem, .eslot { will-change: transform, opacity, filter; }' },
+  itemMoveLayers: { script: styled, arg: '.sitem, .eslot { will-change: transform; }' },
+  noFocusFilter: { script: styled, arg: '#menu.slot-focus .sitem { filter: none !important; }' },
+  noLitFilter: { script: styled, arg: '#menu.slot-focus .sitem.match { filter: none !important; }' },
+  noDimFilter: { script: styled, arg: '#menu.slot-focus .sitem:not(.match) { filter: none !important; }' },
+  noStashMask: { script: styled, arg: '#stash { mask-image: none !important; }' },
+  // (and the glow's loops run on the item hovered and the slots alone, the other stash items that fit lit steady, or
+  // pulsing)
+  focusLoops: {
+    script: styled,
+    arg: '.sitem:not(:hover) > .slot-glow span, :not(.match) > .slot-glow span { animation: none !important; }',
+  },
+  focusLoopsPulse: {
+    script: styled,
+    arg: '.sitem:not(:hover) > .slot-glow :is(.glow-arc, .glow-sheen) > span, :not(.match) > .slot-glow span '
+      + '{ animation: none !important; }',
+  },
 };

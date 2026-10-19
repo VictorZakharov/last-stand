@@ -3,9 +3,10 @@
 // before it.
 
 /** a frame this long or longer is a stall (ms), and one this long is listed on its own unless the command says
- *  (`--listed`) */
+ *  (`--listed`, down to `LISTED_LEAST`: the trace keeps tasks of 20 ms and more, `trace.mjs`) */
 export const STALL_MS = 100;
 export const LISTED_MS = 300;
+export const LISTED_LEAST = 20;
 /** the page's changes this long before a stall are listed with it (ms) */
 const CHANGES_BEFORE_MS = 400;
 /** the most kinds of change listed with a stall */
@@ -15,6 +16,13 @@ const CHANGES_BEFORE_LINK_MS = 150;
 const CHANGES_SHOWN_FOR_LINK = 3;
 /** the most of the longest tasks listed with a stall: what each thread was busy with through it */
 const BUSY_SHOWN = 4;
+/** a task this long or longer is listed as one a stall was busy with (ms: the trace keeps work from 0.5 ms) */
+const BUSY_LEAST_MS = 20;
+/** the most kinds of work listed for each phase, the most of a frame's time first */
+const WORK_SHOWN = 10;
+/** the threads whose tasks are waits, not work, left out of a phase's: the GPU process's waits for the screen's
+ *  vertical blank (a frame's whole time, whatever the frame cost) */
+const WAITING_THREADS = new Set(['GpuVSyncThread']);
 /** Skia's own events, listed as the programs built rather than as tasks */
 const SKIA_EVENTS = new Set(['driver_link_program', 'driver_compile_shader']);
 
@@ -70,7 +78,7 @@ const threadOf = (task, names) => names.get(`${task.pid}:${task.tid}`) ?? `${tas
 /** The longest tasks (on any thread) that overlap the page's `[from, to]`, longest first: how long, where and what. */
 function busyIn(tasks, from, to, toPage, names) {
   return tasks
-    .filter((task) => !SKIA_EVENTS.has(task.name))
+    .filter((task) => !SKIA_EVENTS.has(task.name) && task.dur >= BUSY_LEAST_MS * 1000)
     .map((task) => ({ task, at: toPage(task.ts), ms: task.dur / 1000 }))
     .filter(({ at, ms }) => at !== null && at < to && at + ms > from)
     .sort((a, b) => b.ms - a.ms)
@@ -112,15 +120,69 @@ function frameSummary(frames) {
   };
 }
 
+/**
+ * Each task with its own time (ms): its length less its children's, those on its thread inside it that the trace
+ * kept (work shorter than it keeps counts as its holder's). A thread's run loop holding the work keeps little.
+ */
+export function selfTimes(tasks) {
+  const byThread = new Map();
+  for (const task of tasks) {
+    const key = `${task.pid}:${task.tid}`;
+    if (!byThread.has(key)) byThread.set(key, []);
+    byThread.get(key).push(task);
+  }
+  const owned = [];
+  for (const thread of byThread.values()) {
+    // (the outer of two that start together first: it holds the other)
+    thread.sort((a, b) => a.ts - b.ts || b.dur - a.dur);
+    const open = [];
+    for (const task of thread) {
+      while (open.length && open[open.length - 1].end <= task.ts) open.pop();
+      const entry = { task, end: task.ts + task.dur, children: 0 };
+      if (open.length) open[open.length - 1].children += task.dur;
+      open.push(entry);
+      owned.push(entry);
+    }
+  }
+  return owned.map(({ task, children }) => ({ task, ms: Math.max(0, task.dur - children) / 1000 }));
+}
+
+/** What the threads spent `frames` frames' time on in the page's `[from, to)`: each kind of work on each thread, its
+ *  own time summed (`selfTimes`) and shared out a frame, the most first. */
+function workIn(owned, from, to, frames, toPage, names) {
+  const totals = new Map();
+  for (const { task, ms } of owned) {
+    const at = toPage(task.ts);
+    if (at === null || at < from || at >= to || SKIA_EVENTS.has(task.name)) continue;
+    const thread = threadOf(task, names);
+    if (WAITING_THREADS.has(thread.split(' ').pop())) continue;
+    const key = `${shortName(task.name)}\n${thread}`;
+    totals.set(key, (totals.get(key) ?? 0) + ms);
+  }
+  return [...totals]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, WORK_SHOWN)
+    .map(([key, total]) => {
+      const [name, thread] = key.split('\n');
+      return { name, thread, ms: frames ? total / frames : 0 };
+    });
+}
+
 /** Each phase the scenario marked (`page.mjs` `markPhase`): its frames' summary, from its mark to the next's (the
- *  last's to the end), and the share of them a tooltip was shown in. */
-function phaseSummaries(record) {
+ *  last's to the end), the share of them a tooltip was shown in, and what the threads spent their time on. */
+function phaseSummaries(record, work) {
   const phases = record.phases ?? [];
   return phases.map((phase, index) => {
     const end = phases[index + 1]?.at ?? Infinity;
     const frames = record.frames.filter((frame) => frame.at > phase.at && frame.at <= end);
     const tipped = frames.filter((frame) => frame.tip).length;
-    return { name: phase.name, ...frameSummary(frames), tipShare: frames.length ? tipped / frames.length : 0 };
+    const last = frames.length ? frames[frames.length - 1].at : phase.at;
+    return {
+      name: phase.name,
+      ...frameSummary(frames),
+      tipShare: frames.length ? tipped / frames.length : 0,
+      work: work(phase.at, Math.min(end, last), frames.length),
+    };
   });
 }
 
@@ -133,6 +195,7 @@ export function analyze(record, events, mark, listedMs = LISTED_MS) {
   const names = threadNames(events);
   const tasks = events.filter((event) => event.ph === 'X');
   const toPage = (ts) => (markTs === null ? null : onPageClock(ts, markTs, record.start));
+  const owned = selfTimes(tasks);
   const links = tasks
     .filter((event) => event.name === 'driver_link_program')
     .map((link) => ({
@@ -165,7 +228,7 @@ export function analyze(record, events, mark, listedMs = LISTED_MS) {
     clockFound: markTs !== null,
     built,
     frames: frameSummary(record.frames),
-    phases: phaseSummaries(record),
+    phases: phaseSummaries(record, (from, to, count) => workIn(owned, from, to, count, toPage, names)),
     programs: {
       count: inRecording.length,
       total: inRecording.reduce((sum, link) => sum + link.ms, 0),

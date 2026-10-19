@@ -561,16 +561,25 @@ function lockedTooltip(weapon: Item, swaps: boolean): { html: string; color: str
   return { html, color: '#666', foot: swaps ? 'Equipping an off-hand puts the two-hander back in the stash' : undefined };
 }
 
+/** how long the focus outlasts the pointer leaving an item (ms): crossing the gap to the next one, the items don't
+ *  all fade back and light again (each change of focus restyles every item: tools/stalls `--scenario sweep`) */
+const FOCUS_LINGER_MS = 120;
+let focused: Slot | null = null;
+let unfocus: ReturnType<typeof setTimeout> | undefined;
+
+/** Lights the items that fit `slot` and dims the rest (none: all as they were), changing only the items that differ. */
 function focusSlot(slot: Slot | null): void {
+  clearTimeout(unfocus);
+  if (slot === focused) return;
+  focused = slot;
   const menu = $('#menu');
   menu.classList.toggle('slot-focus', slot !== null);
-  menu.querySelectorAll('.match').forEach((n) => n.classList.remove('match'));
-  if (slot) menu.querySelectorAll(`.sitem[data-slot="${slot}"], .eslot[data-slot="${slot}"]`).forEach((n) => n.classList.add('match'));
+  menu.querySelectorAll<HTMLElement>('.sitem, .eslot').forEach((n) => n.classList.toggle('match', n.dataset.slot === slot));
 }
 
 function bindSlotFocus(el: HTMLElement, slot: Slot): void {
   el.addEventListener('pointerenter', () => { if (!drag) focusSlot(slot); });
-  el.addEventListener('pointerleave', () => focusSlot(null));
+  el.addEventListener('pointerleave', () => { clearTimeout(unfocus); unfocus = setTimeout(() => focusSlot(null), FOCUS_LINGER_MS); });
 }
 
 // --- item drag & drop -------------------------------------------------------------

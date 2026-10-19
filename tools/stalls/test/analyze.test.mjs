@@ -1,7 +1,7 @@
 // The stalls' analysis and report (tools/stalls): a made-up trace and recording, each piece put on the page's clock.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { analyze, shortName } from '../analyze.mjs';
+import { analyze, selfTimes, shortName } from '../analyze.mjs';
 import { measureText, summaryText } from '../report.mjs';
 
 const MARK = 'stalls:start';
@@ -88,6 +88,40 @@ test('reports each stall with what was built and busy in it, and the measures si
   assert.match(text, /the longest tasks through it: 400 ms RasterDecoderImpl::DoRaster on GPU Process CrGpuMain/);
   assert.match(text, /0\.2 s {2}300 ms {2}RasterDecoderImpl::DoRaster/);
   assert.match(summaryText([measure]), /http:\/\/x\/ base {2}\s+1 stalls, 0\.5 s stalled;\s+1 programs, 300 ms/);
+});
+
+test('counts each task\'s own time, less the work the trace kept inside it', () => {
+  const tasks = [
+    { name: 'RunTask', ...PAGE, ts: 0, dur: 10_000 },
+    { name: 'Paint', ...PAGE, ts: 1_000, dur: 4_000 },
+    { name: 'Layerize', ...PAGE, ts: 2_000, dur: 1_000 },
+    { name: 'Commit', ...PAGE, ts: 6_000, dur: 3_000 },
+    { name: 'DrawFrame', ...GPU, ts: 1_000, dur: 5_000 },
+  ];
+  const own = Object.fromEntries(selfTimes(tasks).map(({ task, ms }) => [task.name, ms]));
+  assert.deepEqual(own, { RunTask: 3, Paint: 3, Layerize: 1, Commit: 3, DrawFrame: 5 });
+});
+
+test('lists what each phase\'s threads spent a frame\'s time on', () => {
+  const record = {
+    start: 1000,
+    frames: [{ at: 1010, ms: 10 }, { at: 1020, ms: 10 }],
+    changes: [],
+    phases: [{ name: 'sweeping', at: 1000 }],
+  };
+  // (the mark at 1 s of trace time is the page's 1000 ms: the work at 1.002 s is in the phase)
+  const events = [
+    ...trace().slice(0, 5),
+    { ph: 'X', name: 'RunTask', ...PAGE, ts: 1_002_000, dur: 12_000 },
+    { ph: 'X', name: 'Paint', ...PAGE, ts: 1_003_000, dur: 8_000 },
+  ];
+  const [phase] = analyze(record, events, MARK).phases;
+  assert.deepEqual(phase.work, [
+    { name: 'Paint', thread: 'Renderer CrRendererMain', ms: 4 },
+    { name: 'RunTask', thread: 'Renderer CrRendererMain', ms: 2 },
+  ]);
+  const text = measureText({ name: 'x sweep', notes: [], findings: analyze(record, events, MARK) });
+  assert.match(text, /a frame's work, ms: 4\.0 Paint on Renderer CrRendererMain; 2\.0 RunTask on Renderer/);
 });
 
 test('sums up each phase the scenario marked apart, with the share of its frames a tooltip showed in', () => {

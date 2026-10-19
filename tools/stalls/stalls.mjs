@@ -2,9 +2,9 @@
 // browser traced, for the stalls the lab's Chromium never shows (Chrome on Windows holding up its GPU process, and
 // the game's canvas with it, for seconds while Skia builds a program). See tools/stalls/README.md.
 //
-// npm run stalls -- [--url a,b] [--scenario fight|lobby|storm|hover] [--seconds 45] [--listed 300]
-//   [--variants base,cpuCanvas] [--view top] [--biome forest] [--hero warrior] [--stash 40] [--scale 1.25] [--perf]
-//   [--headed] [--links] (--help: what each does)
+// npm run stalls -- [--url a,b] [--scenario fight|lobby|storm|hover|sweep] [--seconds 45] [--listed 300]
+//   [--variants base,cpuCanvas] [--view top] [--biome forest] [--hero warrior] [--stash 40] [--scale 1.25]
+//   [--window 1536x695] [--perf] [--headed] [--links] (--help: what each does)
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { freshStorage, noCapture } from '../lab/node/browser.mjs';
@@ -102,7 +102,9 @@ const endPicture = (index) => join(OUT, `end-${index + 1}.png`);
 /** One measure: a fresh Chrome on `url` with `variant`, the scenario played, its frames and trace analyzed, and a
  *  picture of the screen at its end (`picture`). */
 async function measure(url, variant, options, picture) {
-  const chrome = await startChrome({ outDir: join(OUT, 'profiles'), headed: options.headed, scale: options.scale });
+  const { width, height } = options.window;
+  const { headed, scale } = options;
+  const chrome = await startChrome({ outDir: join(OUT, 'profiles'), headed, scale, width, height });
   try {
     const { page, errors } = await openGame(chrome.browser, url, variant, options);
     await setUpLobby(page, options);

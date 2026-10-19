@@ -12,6 +12,7 @@
 // UI laid out as a share of the screen shows the same lines and the same pictures on both, whatever the screens'
 // pixel ratios: a 4K screen at 300% as at 100%.
 import * as THREE from 'three';
+import { middleOf } from './lab';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import type { DamageType, SkillDef } from '../../../src/types';
@@ -31,7 +32,7 @@ import { hideTooltip, itemTooltip, showTooltipAt } from '../../../src/ui/tooltip
 import { hdrOutput } from './hdrOutput';
 import { battleLog } from './battleLog';
 import { digitsShown } from './digits';
-import { closeGlow, glowPictures, glowShown, isGlowCanary, openGlow } from './uiGlow';
+import { closeGlow, GLOW_CANARIES, glowPictures, glowShown, openGlow } from './uiGlow';
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
@@ -521,12 +522,6 @@ let openedBy = 'the mouse';
 /** with the canary, each skill's tooltip made as tall as the window: the check must find it past the window */
 let tallTips = false;
 
-/** The middle of `element`'s box (css px). */
-function middleOf(element: HTMLElement): { x: number; y: number } {
-  const box = element.getBoundingClientRect();
-  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-}
-
 /** A block as tall as the window, the canary's. */
 function windowTall(): HTMLElement {
   const block = document.createElement('div');
@@ -721,10 +716,10 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     lines.push(`  canary: old-style digits in ${where} ${jumped ? 'caught' : 'went unseen'}`);
     if (!jumped) missed.push(`${state}: the canary's old-style digits in ${where} went unseen`);
   }
-  if (state === 'glow') {
-    const caught = found.problems.some(isGlowCanary);
-    lines.push(`  canary: a lit item's looping shadow ${caught ? 'caught' : 'went unseen'}`);
-    if (!caught) missed.push(`${state}: the canary's looping shadow on a lit item went unseen`);
+  for (const { name, what } of state === 'glow' ? Object.values(GLOW_CANARIES) : []) {
+    const caught = found.problems.some((problem) => problem.includes(name));
+    lines.push(`  canary: ${what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${what} went unseen`);
   }
   if (state.startsWith('skillTips')) {
     const past = found.problems.some((problem) => problem.includes('reaches past the window'));

@@ -2,7 +2,7 @@
 // misspelt one or a bad value stops it before a build or a browser.
 import { SCENARIOS } from './scenarios.mjs';
 import { VARIANTS } from './variants.mjs';
-import { LISTED_MS, STALL_MS } from './analyze.mjs';
+import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
 const SWITCHES = new Set(['headed', 'perf', 'links', 'help']);
@@ -19,13 +19,15 @@ const HELP = {
   url: ['a,b', 'the game at these URLs (production, a PR preview), each in turn; this tree built and served if none'],
   scenario: ['name', `what the player does: ${Object.keys(SCENARIOS).join(', ')} (fight by default)`],
   seconds: ['n', 'how long the scenario plays (45 by default)'],
-  listed: ['ms', 'each stall this long or longer listed with what was busy through it (300 by default)'],
+  listed: ['ms', `each frame this long or longer listed with what was busy through it (${LISTED_LEAST} or more: `
+    + '300 by default)'],
   variants: ['a,b', `changes tried on the page, each a measure of its own: ${Object.keys(VARIANTS).join(', ')} (base)`],
   view: ['name', `the view it's played in: ${VIEWS.join(', ')} (V pressed in the lobby, its panels shown again; top)`],
   biome: ['name', `the battleground: ${BIOMES.join(', ')} (forest by default)`],
   hero: ['name', `the hero chosen in the lobby: ${HEROES.join(', ')} (a first boot's by default)`],
   stash: ['n', `the hero's stash filled with this many items, copies of his own (0 to ${STASH_MOST}: 0 by default)`],
   scale: ['n', 'the screen\'s scaling, as the OS sets it (a report\'s devicePixelRatio: 1 by default)'],
+  window: ['WxH', 'the page\'s size in css px, as a report\'s `window` (1536x864 by default)'],
   headed: ['', 'a Chrome window on the screen, as a player has it (headless by default)'],
   perf: ['', 'the performance overlay shown, as a player sending its report has it'],
   links: ['', 'every Skia program built: when, how long, the tasks it was built in, the page\'s changes just before'],
@@ -60,6 +62,13 @@ function readWritten(argv) {
   return written;
 }
 
+/** A size written `WxH` (css px), as `{ width, height }`; throws at anything else. */
+function sizeOf(written) {
+  const match = /^(\d+)x(\d+)$/.exec(written);
+  if (!match) throw new Error(`stalls: --window must be a size in css px, WxH (${JSON.stringify(written)})`);
+  return { width: Number(match[1]), height: Number(match[2]) };
+}
+
 /**
  * The command line read and checked: the URLs (none: this tree built and served), the scenario, its length in
  * seconds, the variants, and the switches. Throws, saying what was wrong.
@@ -77,6 +86,7 @@ export function readOptions(argv) {
     hero: written.hero ?? null,
     stash: Number(written.stash ?? 0),
     scale: Number(written.scale ?? 1),
+    window: sizeOf(written.window ?? '1536x864'),
     headed: written.headed === true,
     perf: written.perf === true,
     links: written.links === true,
@@ -97,6 +107,8 @@ export function readOptions(argv) {
   }
   if (!(options.seconds > 0)) throw new Error('stalls: --seconds must be a number over 0');
   if (!(options.scale > 0)) throw new Error('stalls: --scale must be a number over 0');
-  if (!(options.listed >= STALL_MS)) throw new Error(`stalls: --listed must be a number of ms, ${STALL_MS} or more`);
+  if (!(options.listed >= LISTED_LEAST)) {
+    throw new Error(`stalls: --listed must be a number of ms, ${LISTED_LEAST} or more`);
+  }
   return options;
 }

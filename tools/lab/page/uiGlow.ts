@@ -1,15 +1,20 @@
 // tools/lab ui `glow`: the stash's items that fit a hovered item's slot lit up (src/ui/menus.ts `focusSlot`, its glow
 // in styles/_items.scss), pictured round the stash at set moments of the glow's looping animations, each held there,
-// so a picture of this tree and of main's are of the same moment (`--ab`). And what those loops animate: only what
-// the compositor moves without painting anything again (a layer's transform and opacity). Each of the glow's three
-// loops animated what has to be painted again (its blurred shadow, its arc's conic gradient, its sheen's background),
-// and with a full stash lit the lobby fell from 145 frames a second to 44, the frame waiting on the browser's paint
-// (#267, measured by `npm run stalls -- --scenario hover --stash 40`). The canary loops a shadow on a lit item, which
-// must read as painted again.
+// so a picture of this tree and of main's are of the same moment (`--ab`). And its loops checked twice (#267):
+// - what they animate: only what the compositor moves without painting anything again (a layer's transform and
+//   opacity). Each of the glow's three loops animated what has to be painted again (its blurred shadow, its arc's
+//   conic gradient, its sheen's background), and with a full stash lit the lobby fell from 145 frames a second to 44,
+//   the frame waiting on the browser's paint (`npm run stalls -- --scenario hover --stash 40`);
+// - where they run: on the item hovered and the equipment slots alone. Each loop is a layer the page styles and the
+//   compositor draws every frame, and 30 lit items' 90 loops, composited, still halved the frames while the mouse
+//   moved between items (`--scenario sweep`).
+// A canary each: a shadow looped on the hovered item, and a loop on a stash item not hovered.
 import { G } from '../../../src/state';
 import { makeItem } from '../../../src/loot/items';
 import { renderMenu } from '../../../src/ui/menus';
+import { hideTooltip } from '../../../src/ui/tooltip';
 import type { Item, RarityId, Slot } from '../../../src/types';
+import { middleOf } from './lab';
 import type { Lab, Pictured } from './lab';
 
 /** the stash's items while the glow is pictured: so many, in turn of these slots and rarities */
@@ -24,14 +29,18 @@ const MOMENTS = [400, 1000, 1600];
  *  animates alone */
 const KEYFRAME_FIELDS = new Set(['offset', 'computedOffset', 'easing', 'composite']);
 const COMPOSITED = new Set(['transform', 'opacity', 'translate', 'rotate', 'scale']);
-/** the canary's loop, and what its finding names */
-const CANARY_NAME = 'lab-canary';
+/** the canaries: each one's loop's name (which its finding names), and what it is */
+export const GLOW_CANARIES = {
+  shadow: { name: 'lab-canary-shadow', what: 'a looping shadow on the hovered item' },
+  spread: { name: 'lab-canary-spread', what: 'a loop on a stash item not hovered' },
+};
 
 /** the hero's own stash, kept while the glow's is shown */
 let kept: Item[] | null = null;
 
-/** The stash given `STASH_ITEMS` items, and one fitting `HOVERED` hovered: those that fit its slot lit, its loops
- *  let run (the lab opens its pages with the decorative animation left out: `Lab.reduceMotion`). */
+/** The stash given `STASH_ITEMS` items, and one fitting `HOVERED` hovered by the mouse: those that fit its slot lit,
+ *  its loops let run (the lab opens its pages with the decorative animation left out: `Lab.reduceMotion`). Its
+ *  tooltip is put away, which would cover the items pictured. */
 export async function openGlow(lab: Lab): Promise<void> {
   await lab.reduceMotion(false);
   kept = G.profile.stash;
@@ -43,12 +52,14 @@ export async function openGlow(lab: Lab): Promise<void> {
   renderMenu();
   const hovered = document.querySelector(`#stash .sitem[data-slot="${HOVERED}"]`);
   if (!hovered) throw new Error(`lab: ui glow: no stash item for the ${HOVERED} to hover`);
-  hovered.dispatchEvent(new PointerEvent('pointerenter'));
+  // (the mouse itself: a dispatched event lights the items but hovers nothing, and the loops run where it is)
+  await lab.mouseTo(middleOf(hovered));
+  hideTooltip();
 }
 
-/** The hero's own stash back, nothing hovered, the decorative animation left out again. */
+/** The hero's own stash back, nothing hovered (the mouse over the world), the decorative animation left out again. */
 export async function closeGlow(lab: Lab): Promise<void> {
-  document.querySelector('#stash .sitem')?.dispatchEvent(new PointerEvent('pointerleave'));
+  await lab.mouseTo({ x: innerWidth / 2, y: innerHeight / 2 });
   if (kept) G.profile.stash = kept;
   kept = null;
   renderMenu();
@@ -74,26 +85,50 @@ const looping = () => document.getAnimations().filter((animation) => {
 });
 
 /**
- * The glow lit: how many items it lit, the loops they run, and those that animate what has to be painted again (its
- * name, where, the properties, how many such), a problem each. With `canary`, a lit item loops a shadow first.
+ * The glow lit: how many items it lit, the loops they run and on how many items, and a problem each for those that
+ * animate what has to be painted again (its name, where, the properties, how many such) and for those on a stash item
+ * not hovered. With `canary`, the hovered item loops a shadow and one not hovered loops its glow round first.
  */
 export function glowShown(canary: boolean): { lines: string[]; problems: string[] } {
   const lit = document.querySelectorAll('#stash .sitem.match').length;
-  const planted = canary ? plantShadowLoop() : null;
+  const planted = canary ? plantCanaries() : [];
   const running = looping().filter(runsLit);
   const painted = countedWords(running.flatMap(paintedBy));
-  planted?.cancel();
+  const spread = countedWords(running.filter(onItemNotHovered).map(namedWhere));
+  const items = new Set(running.map(itemOf)).size;
+  for (const animation of planted) animation.cancel();
   const painting = painted.reduce((sum, loop) => sum + loop.count, 0);
   const lines = [`  the glow: ${lit} of the stash's ${STASH_ITEMS} items lit, the ${HOVERED}s; ${running.length} `
-    + `loops running, ${painting} of them animating what has to be painted again`];
+    + `loops running on ${items} items, ${painting} of them animating what has to be painted again`];
   const problems = painted.map(({ words, count }) => `glow: ${count} x ${words} (painted again every frame: animate `
     + 'a layer\'s transform or opacity alone)');
+  for (const { words, count } of spread) {
+    problems.push(`glow: ${count} x ${words}, a stash item not hovered (each loop is a layer styled and drawn every `
+      + 'frame: loop the hovered item and the slots alone)');
+  }
   if (lit === 0) problems.push(`glow: hovering a ${HOVERED} lit none of the stash's items`);
   return { lines, problems };
 }
 
-/** Whether a loop runs: a CSS animation its element's style doesn't pause (an item not lit pauses its glow's), or
- *  one played by a script. */
+/** The item (stash item or equipment slot) an animation's element is in, or the element itself outside any. */
+function itemOf(animation: Animation): Element | null {
+  const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
+  return target?.closest('.sitem, .eslot') ?? target;
+}
+
+/** Whether an animation runs on a stash item the mouse isn't over. */
+function onItemNotHovered(animation: Animation): boolean {
+  const item = itemOf(animation);
+  return !!item?.matches('.sitem') && !item.matches(':hover');
+}
+
+/** An animation's name and where it runs, as words. */
+function namedWhere(animation: Animation): string {
+  const effect = animation.effect;
+  return `${nameOf(animation)} on ${effect instanceof KeyframeEffect ? whereOf(effect) : '?'}`;
+}
+
+/** Whether a loop runs: a CSS animation its element's style doesn't pause, or one played by a script. */
 function runsLit(animation: Animation): boolean {
   if (!(animation instanceof CSSAnimation)) return true;
   const effect = animation.effect;
@@ -108,16 +143,19 @@ function countedWords(all: string[]): { words: string; count: number }[] {
   return [...counts].map(([words, count]) => ({ words, count })).sort((a, b) => b.count - a.count);
 }
 
-/** A looping shadow on the first lit item, as a glow that paints every frame has (the canary's). */
-function plantShadowLoop(): Animation | null {
-  const item = document.querySelector('#stash .sitem.match');
-  if (!item) return null;
-  const frames = [{ boxShadow: '0 0 0 rgb(255 0 0)' }, { boxShadow: '0 0 12px rgb(255 0 0)' }];
-  return item.animate(frames, { duration: 1000, iterations: Infinity, id: CANARY_NAME });
+/** The canaries' loops: a shadow on the hovered item, as a glow that paints every frame has, and the glow of a lit
+ *  item not hovered turned round, as every lit item's loops ran. */
+function plantCanaries(): Animation[] {
+  const planted: Animation[] = [];
+  const hovered = document.querySelector('#stash .sitem:hover');
+  const shadow = [{ boxShadow: '0 0 0 rgb(255 0 0)' }, { boxShadow: '0 0 12px rgb(255 0 0)' }];
+  const { shadow: shadowCanary, spread: spreadCanary } = GLOW_CANARIES;
+  if (hovered) planted.push(hovered.animate(shadow, { duration: 1000, iterations: Infinity, id: shadowCanary.name }));
+  const other = document.querySelector('#stash .sitem.match:not(:hover) .slot-glow');
+  const turn = [{ transform: 'none' }, { transform: 'rotate(1turn)' }];
+  if (other) planted.push(other.animate(turn, { duration: 1000, iterations: Infinity, id: spreadCanary.name }));
+  return planted;
 }
-
-/** Whether a finding is the canary's planted loop. */
-export const isGlowCanary = (problem: string) => problem.includes(CANARY_NAME);
 
 /** What `animation` animates that has to be painted again, as words (nothing if it's the compositor's alone). */
 function paintedBy(animation: Animation): string[] {

@@ -51,6 +51,17 @@ function phaseLine(phase) {
     + `${phase.p90.toFixed(1)} ms, the worst ${worst} ms; a tooltip shown in ${percent(phase.tipShare)} of them`;
 }
 
+/** What a phase's threads spent a frame's time on, the most first, as a line under its own. */
+function workLine(phase) {
+  const work = phase.work.map((piece) => `${piece.ms.toFixed(1)} ${piece.name} on ${piece.thread}`);
+  return `    a frame's work, ms: ${work.join('; ')}`;
+}
+
+/** A phase's lines: its frames, and what its threads spent their time on (if the trace kept any). */
+function phaseLines(phase) {
+  return phase.work?.length ? [phaseLine(phase), workLine(phase)] : [phaseLine(phase)];
+}
+
 /** A measure's section: its name, what the scenario did, the frames (each phase's), the programs (each with
  *  `links`) and the long stalls. */
 export function measureText(measure, { links = false } = {}) {
@@ -62,7 +73,7 @@ export function measureText(measure, { links = false } = {}) {
     `  ${frames.count} frames, median ${frames.median.toFixed(1)} ms; ${frames.stalls} over ${STALL_MS} ms, `
       + `${seconds(frames.stalled)} in them; the worst ${frames.worst.map((value) => value.toFixed(0)).join(', ')} ms`,
     `  Skia programs linked: ${programs.count}, ${ms(programs.total)} in all, the longest ${ms(programs.longest)}`,
-    ...(findings.phases ?? []).map(phaseLine),
+    ...(findings.phases ?? []).flatMap(phaseLines),
   ];
   if (links) lines.push(...linkLines(findings.built));
   if (!findings.clockFound) lines.push('  (the page\'s mark is missing from the trace: stalls and links not matched)');

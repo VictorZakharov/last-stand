@@ -4,6 +4,7 @@
 // knob's place and the hero's speed against his full. A finger past the stick's edge is the stick at its fullest, so
 // a push further out may never be a slower one: held to the edge and then divided by the finger's whole distance,
 // half a screen out walked the hero at a seventh of his speed.
+import { middleOf } from './lab';
 import type { Fixture, Lab, PagePoint, Report } from './lab';
 import { input } from '../../../src/core/input';
 
@@ -47,12 +48,6 @@ interface Push {
   speed: number;
   /** the canary's: its finger slid back */
   planted: boolean;
-}
-
-/** The middle of an element's box (css px). */
-export function middleOf(element: Element): PagePoint {
-  const box = element.getBoundingClientRect();
-  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
 }
 
 /** An element of the page by its selector, or an error naming it. */
