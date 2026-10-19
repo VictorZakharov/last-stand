@@ -20,8 +20,10 @@ import type { Item, SkillDef, SkillKey } from '../types';
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 export const KEY_LABEL: Record<SkillKey, string> = { mouse0: 'LMB', mouse2: 'RMB', '1': '1', '2': '2', '3': '3', '4': '4', q: 'Q' };
 
-interface HotbarSlot { key: SkillKey; el: HTMLElement; cd: HTMLElement; cdt: HTMLElement; boundId: string | null }
+interface HotbarSlot { key: SkillKey; el: HTMLElement; cd: HTMLElement; cdt: HTMLElement; def: SkillDef | null }
 let slots: HotbarSlot[] = [];
+/** the hero the hotbar was built for */
+let builtFor: Player | null = null;
 let bannerTimer: ReturnType<typeof setTimeout> | undefined;
 let mmCtx: CanvasRenderingContext2D;
 
@@ -36,15 +38,20 @@ export function showHud(v: boolean, lobby = false): void {
   $('#hud').classList.toggle('lobby', lobby);
 }
 
-/** Build the in-run hotbar from the player's current loadout. */
+/** Build the in-run hotbar from the player's current loadout, unless it shows it already (the lobby's practice
+ *  built it again on every press of Space, every slot laid out and its icon painted afresh). */
 export function buildHotbar(player: Player): void {
+  const shown = (slot: HotbarSlot) => slot.def === (player.skillAt(slot.key)?.def ?? null);
+  if (builtFor === player && slots.every(shown)) return;
+  builtFor = player;
   const bar = $('#hotbar');
   bar.innerHTML = '';
   slots = SKILL_KEYS.map((key) => {
-    const el = makeSkillSlot(player.skillAt(key)?.def ?? null, key);
+    const def = player.skillAt(key)?.def ?? null;
+    const el = makeSkillSlot(def, key);
     if (key === 'q') el.classList.add('sep');
     bar.appendChild(el);
-    return { key, el, cd: $('.cd', el), cdt: $('.cdt', el), boundId: player.loadout[key] };
+    return { key, el, cd: $('.cd', el), cdt: $('.cdt', el), def };
   });
   // Circular (touch -> hud -> touch) but only used at runtime, which is safe.
   buildTouchSkills();

@@ -2,10 +2,10 @@
 // browser traced, for the stalls the lab's Chromium never shows (Chrome on Windows holding up its GPU process, and
 // the game's canvas with it, for seconds while Skia builds a program). See tools/stalls/README.md.
 //
-// npm run stalls -- [--url a,b] [--scenario fight|lobby|storm|hover|sweep] [--seconds 45] [--listed 300]
-//   [--variants base,cpuCanvas] [--rounds 3] [--view top] [--biome forest] [--hero warrior] [--stash 40]
-//   [--item-ms 100] [--scale 1.25] [--window 1536x695] [--perf] [--js] [--headed] [--links] (--help: what each
-//   does)
+// npm run stalls -- [--url a,b] [--scenario fight|lobby|storm|hover|sweep|stow] [--seconds 45]
+//   [--listed 300] [--variants base,cpuCanvas] [--rounds 3] [--view top] [--biome forest] [--hero warrior]
+//   [--stash 40] [--item-ms 100] [--press-ms 200] [--scale 1.25] [--window 1536x695] [--perf] [--js] [--headed]
+//   [--links] (--help: what each does)
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { freshStorage, noCapture } from '../lab/node/browser.mjs';
@@ -19,11 +19,14 @@ import { measureText, roundsText, summaryText } from './report.mjs';
 import { SCENARIOS } from './scenarios.mjs';
 import { serveBuild } from './serve.mjs';
 import { sourcesOf } from './sourceMap.mjs';
-import { startTrace } from './trace.mjs';
+import { startTrace, TraceLost } from './trace.mjs';
+import { within } from './within.mjs';
 import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 
 const REPO = resolve(import.meta.dirname, '../..');
 const OUT = join(REPO, 'tools/stalls/out');
+/** the URL that stands for this tree, built and served (`--url this,https://...`: it beside production) */
+const THIS_TREE = 'this';
 /** the page's mark on the trace, where its clock starts */
 const MARK = 'stalls:start';
 /** the settings every measure starts with, as the game keeps them: the battleground, the high quality preset, and
@@ -40,15 +43,25 @@ const HERO_BUILT_MS = 1500;
 const ITEM_MOVED_MS = 300;
 /** how long a variant's styles put on a running page are given to take before its scenario plays (ms) */
 const STYLE_SETTLE_MS = 500;
+/** how long a page started again after another's turn is given to settle before it plays (ms) */
+const THAW_SETTLE_MS = 1500;
+/** how long a page is given to stop once asked (ms): its next frame's script */
+const PAUSE_MS = 5000;
 
-/** Opens the game at `url` in `browser`'s first context, `variant` (each of its parts) applied before the page's
- *  scripts, and waits out the loading screen. */
-async function openGame(browser, url, variant, options) {
+/** `browser`'s first context made ready for the game's pages: never taking the pointer, its storage fresh, the
+ *  stash's seeded items kept, and `variant` (each of its parts) applied before the page's scripts. */
+async function gameContext(browser, variant) {
   const context = browser.contexts()[0] ?? (await browser.newContext());
   await context.addInitScript(noCapture);
   await context.addInitScript(freshStorage);
   await context.addInitScript(seededProfile);
   for (const part of partsOf(variant)) await context.addInitScript(VARIANTS[part].script, VARIANTS[part].arg);
+  return context;
+}
+
+/** Opens the game at `url` in `context` (`gameContext`), the settings `options` give set by cookie, and waits out
+ *  the loading screen. */
+async function openGame(context, url, options) {
   const cookies = Object.entries(cookiesFor(options)).map(([name, value]) => ({ name, value, url }));
   await context.addCookies(cookies);
   const page = await context.newPage();
@@ -123,15 +136,53 @@ async function playTraced(browser, page, options, picture) {
   return { notes, findings: analyze(record, events, MARK, options.listed, options.sourceOf) };
 }
 
+/** `playTraced`, played once more if Chrome lost its trace (`TraceLost`): a round's page is set up once, and the
+ *  measure kept on it as the others are. */
+async function playTracedOnce(browser, page, options, picture) {
+  try {
+    return await playTraced(browser, page, options, picture);
+  } catch (error) {
+    if (!(error instanceof TraceLost)) throw error;
+    console.log(`stalls: ${error.message}: played again`);
+    const played = await playTraced(browser, page, options, picture);
+    return { ...played, notes: [...played.notes, 'played again: Chrome lost its first trace'] };
+  }
+}
+
 /** The page's errors so far as a note, if it had any. */
 const errorNotes = (errors) => (errors.length ? [`page errors: ${errors.slice(0, 3).join(' | ')}`] : []);
+
+/**
+ * Holds a game's page still while another plays: paused in the debugger at its next script, so it draws no frame
+ * and its renderer does nothing in the other's measure (the report says what other renderers did). The page
+ * lifecycle's frozen state (`Page.setWebLifecycleState`) kept drawing: 300 to 450 ms of the frozen page's work a
+ * second, its game's frames, in the other's measure.
+ */
+async function freeze(game) {
+  const paused = new Promise((resolve) => game.cdp.once('Debugger.paused', resolve));
+  await game.cdp.send('Debugger.enable');
+  await game.cdp.send('Debugger.pause');
+  if (!(await within(paused, PAUSE_MS))) throw new Error(`stalls: ${game.url} never paused (in ${PAUSE_MS} ms)`);
+}
+
+/** Starts a paused game's page again, in front, its debugger off (nothing of it left in the measure), and gives it
+ *  time to settle. Throws if it isn't shown. */
+async function thaw(game) {
+  await game.page.bringToFront();
+  await game.cdp.send('Debugger.resume');
+  await game.cdp.send('Debugger.disable');
+  await game.page.waitForTimeout(THAW_SETTLE_MS);
+  const shown = await game.page.evaluate(() => document.visibilityState);
+  if (shown !== 'visible') throw new Error(`stalls: ${game.url} is ${shown} once started again, not visible`);
+}
 
 /** One measure: a fresh Chrome on `url` with `variant`, the scenario played, its frames and trace analyzed, and a
  *  picture of the screen at its end (`picture`). */
 async function measure(url, variant, options, picture) {
   const chrome = await chromeFor(options);
   try {
-    const { page, errors } = await openGame(chrome.browser, url, variant, options);
+    const context = await gameContext(chrome.browser, variant);
+    const { page, errors } = await openGame(context, url, options);
     await setUpLobby(page, options);
     const { notes, findings } = await playTraced(chrome.browser, page, options, picture);
     return { name: `${url} ${variant}`, notes: [...notes, ...errorNotes(errors)], findings };
@@ -140,29 +191,59 @@ async function measure(url, variant, options, picture) {
   }
 }
 
+/** Opens the game at `url` in `context` for rounds and sets its lobby up, then holds it still till its turn. */
+async function openForRounds(context, url, options) {
+  const { page, errors } = await openGame(context, url, options);
+  await setUpLobby(page, options);
+  const game = { url, page, errors, cdp: await context.newCDPSession(page) };
+  await freeze(game);
+  return game;
+}
+
 /**
- * The variants measured in turn `options.rounds` times over in one Chrome on `url`, the page set up once and each
- * variant's styles put on it as it runs (`useStyle`): measures side by side in time, so what slows the machine
- * meanwhile (another agent's browser on its GPU) slows each alike, and a boot once in all where `measure` boots for
- * each. Gives each measure to `measured` as it's made, with `pictureAt()` the picture of its end.
+ * The variants measured in turn on each of `urls`, `options.rounds` times over, in one Chrome: each URL's page set
+ * up once and held still while the others play (`freeze`), each variant's styles put on it as it runs
+ * (`useStyle`). Measures side by side in time, so what slows the machine meanwhile (another agent's browser on its
+ * GPU) slows each URL and variant alike (one URL measured after another, minutes apart, this tree's frames to beat
+ * read 121 a second and production's 135), and a boot a URL where `measure` boots for each. `sourcesFor(url)`
+ * names a URL's functions; each measure goes to `measured` as it's made, with `pictureAt()` the picture of its end.
  */
-async function measureRounds(url, options, pictureAt, measured) {
+async function measureRounds(urls, options, sourcesFor, pictureAt, measured) {
   const chrome = await chromeFor(options);
   try {
-    const { page, errors } = await openGame(chrome.browser, url, 'base', options);
-    await setUpLobby(page, options);
+    const context = await gameContext(chrome.browser, 'base');
+    const games = [];
+    for (const url of urls) games.push(await openForRounds(context, url, options));
     for (let round = 1; round <= options.rounds; round++) {
-      for (const variant of options.variants) {
-        console.log(`measuring ${url} ${variant}, round ${round}: ${options.scenario} for ${options.seconds} s`);
-        await page.evaluate(useStyle, liveCss(variant));
-        await page.waitForTimeout(STYLE_SETTLE_MS);
-        const { notes, findings } = await playTraced(chrome.browser, page, options, pictureAt());
-        const group = `${url} ${variant}`;
-        measured({ name: `${group} (round ${round})`, group, notes: [...notes, ...errorNotes(errors)], findings });
+      for (const game of games) {
+        await thaw(game);
+        options.sourceOf = sourcesFor(game.url);
+        for (const variant of options.variants) {
+          console.log(`measuring ${game.url} ${variant}, round ${round}: ${options.scenario} for ${options.seconds} s`);
+          await game.page.evaluate(useStyle, liveCss(variant));
+          await game.page.waitForTimeout(STYLE_SETTLE_MS);
+          const { notes, findings } = await playTracedOnce(chrome.browser, game.page, options, pictureAt());
+          const group = `${game.url} ${variant}`;
+          const name = `${group} (round ${round})`;
+          measured({ name, group, notes: [...notes, ...errorNotes(game.errors)], findings });
+        }
+        await freeze(game);
       }
     }
   } finally {
     await chrome.close();
+  }
+}
+
+/** Each variant on each of `urls` measured once, in a Chrome of its own (`measure`): a first visit's stalls.
+ *  `sourcesFor(url)` names a URL's functions; each measure goes to `measured` as it's made. */
+async function measureEach(urls, options, sourcesFor, pictureAt, measured) {
+  for (const url of urls) {
+    options.sourceOf = sourcesFor(url);
+    for (const variant of options.variants) {
+      console.log(`measuring ${url} ${variant}: ${options.scenario} for ${options.seconds} s`);
+      measured(await measure(url, variant, options, pictureAt()));
+    }
   }
 }
 
@@ -173,26 +254,21 @@ async function main() {
     return;
   }
   mkdirSync(OUT, { recursive: true });
-  const served = options.urls.length ? null : await serveBuild(REPO, OUT, { named: options.js });
+  const servesTree = !options.urls.length || options.urls.includes(THIS_TREE);
+  const served = servesTree ? await serveBuild(REPO, OUT, { named: options.js }) : null;
+  const urls = options.urls.length ? options.urls.map((url) => (url === THIS_TREE ? served.url : url)) : [served.url];
   // (the page's functions named from this tree's build; another URL's by its scripts' lines)
-  options.sourceOf = served ? sourcesOf(served.distDir) : () => null;
-  const urls = served ? [served.url] : options.urls;
+  const treeSources = served ? sourcesOf(served.distDir) : null;
+  const sourcesFor = (url) => (url === served?.url ? treeSources : () => null);
   const measures = [];
   const measured = (result) => {
     console.log(measureText(result, { links: options.links }));
     measures.push(result);
   };
   try {
-    for (const url of urls) {
-      if (options.rounds > 1) {
-        await measureRounds(url, options, () => endPicture(measures.length), measured);
-        continue;
-      }
-      for (const variant of options.variants) {
-        console.log(`measuring ${url} ${variant}: ${options.scenario} for ${options.seconds} s`);
-        measured(await measure(url, variant, options, endPicture(measures.length)));
-      }
-    }
+    const pictureAt = () => endPicture(measures.length);
+    if (options.rounds > 1) await measureRounds(urls, options, sourcesFor, pictureAt, measured);
+    else await measureEach(urls, options, sourcesFor, pictureAt, measured);
   } finally {
     await served?.close();
   }

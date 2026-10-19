@@ -10,6 +10,7 @@ stalls are the real browser's, at its own pace.
 npm run stalls                                   # this tree built and served, a 45 s fight in headless Chrome
 npm run stalls -- --url https://victorzakharov.github.io/last-stand/      # production
 npm run stalls -- --url https://victorzakharov.github.io/last-stand/pr-preview/pr-194/,https://victorzakharov.github.io/last-stand/
+npm run stalls -- --url this,https://victorzakharov.github.io/last-stand/  # this tree, then production
 npm run stalls -- --headed --links --seconds 30  # a window on the screen, every program built listed
 npm run stalls -- --variants base,cpuCanvas      # the page as it is, then every 2D canvas drawn on the CPU
 npm run stalls -- --scenario lobby               # standing, then walking round the lobby
@@ -19,6 +20,7 @@ npm run stalls -- --scenario hover --stash 40 --variants base,stillGlow  # hover
 npm run stalls -- --scenario sweep --stash 60 --view top --window 1536x695 --seconds 12  # moving between items
 npm run stalls -- --scenario sweep --stash 60 --item-ms 100 --seconds 8 --rounds 3  # the owner's pace, fast
 npm run stalls -- --scenario hover --stash 60 --listed 40   # every frame of 40 ms+ listed with what was busy
+npm run stalls -- --scenario stow --view top --perf --press-ms 100 --rounds 4  # Space pressed 10 times a second
 npm run stalls -- --scenario sweep --stash 60 --seconds 8 --rounds 3 --variants base,iconFilter,stillGlow+noTooltip
                                                  # one page, the variants in turn three times over, by their medians
 npm run stalls -- --scenario sweep --stash 60 --seconds 6 --js   # and the page's JS, a frame's by function
@@ -41,9 +43,11 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   overlay (`--perf`) are set by cookie, and a `--variants` change is applied before the page's scripts (`a+b`: both).
   The window is `--window` css px (1536x864 by default; a report's `window`), scaled `--scale` times (its
   `devicePixelRatio`).
-- **Rounds** (`--rounds N`): the page booted and set up once, then the variants played in turn N times over, each
-  one's stylesheet put on the running page (`page.mjs` `useStyle`: variants that only add styles). A boot is most of a
-  measure's time, and measures side by side in time are slowed alike by whatever else uses the GPU meanwhile.
+- **Rounds** (`--rounds N`): each URL's page booted and set up once in one Chrome, then the URLs and their variants
+  played in turn N times over, each variant's stylesheet put on the running page (`page.mjs` `useStyle`: variants
+  that only add styles). A boot is most of a measure's time, and measures side by side in time are slowed alike by
+  whatever else uses the GPU meanwhile. The pages not playing are paused in the debugger, so they draw nothing; the
+  report says what other pages' renderers did through a measure if it was anything (20 ms or more).
 - **The lobby set up as a player's is:** the hero chosen (`--hero`); his stash filled with `--stash` items (copies of
   his own in each rarity: an item moved off him so his profile is saved, the copies kept in the session and put back
   over the next load's fresh storage, `page.mjs` `seededProfile`); the view stepped to with V (`--view`), the panels
@@ -63,6 +67,9 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     nothing lights.
   - `sweep`: `hover`'s sweep alone, three quarters of the time, after a quarter over the world: the same run's
     frames to beat, as a machine busy with something else slows both.
+  - `stow`: the lobby's panels stowed and shown again with Space, as the owner pressed it "rapidly": a quarter of
+    the time with them shown (the frames to beat), a quarter stowed (practice: the run's bar at the bottom), then
+    Space pressed every 200 ms for the rest (`--press-ms`), the mouse over the world throughout.
   - `storm`: the mage in a run, walking away from the foes a side of a square at a time and casting Maelstrom back
     at those following him in a line, every other side: its storm draws them in and whirls what it kills.
 - **Recorded in the page:** every animation frame's interval and whether the item tooltip showed in it, every change
@@ -72,7 +79,8 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   `driver_compile_shader` and `driver_link_program`, the page's mark, and work of 0.5 ms or more on any thread (by its
   name, thread and times alone) are kept, as they stream in: a 20 s trace with Skia's draws in it was 250 MB.
   With `--js`, V8's sampler too (a sample every 0.1 ms), this tree then built unminified with its source maps, so
-  each function is named where it's written (`render core/renderer.ts:610`).
+  each function is named where it's written (`render core/renderer.ts:610`). A trace Chrome never ends (no
+  `tracingComplete` in a minute) is lost: in rounds its measure is played again.
 
 ## The report
 
@@ -187,6 +195,17 @@ glow and size alone and the rest dimmed by opacity, at once, the item under the 
 (`snapOut`), no better than all the fades. `--js` showed why so little is left to the page: the game's lobby frame is
 4.7 to 4.9 ms of JS of the 6.9 a frame has at 144 Hz.
 
+**Stowing the lobby with Space** (the owner: pressed rapidly, 144 frames a second fell to about 70 in the perf
+overlay): the warrior in the top view, 1536x695 at 1.25, 60 items, the overlay shown, Space pressed 10 times a second
+(`--scenario stow --press-ms 100`). Headless, production held 118 a second pressing (6% missed) against 143
+standing. A press cost a refresh: about 2 ms more of the game's JS, 1.5 to 2.4 of style and 1 of paint over a
+frame's 5. By kind, two changes paid for nothing: the hotbar built again each time the lobby's practice started (22
+to 55 ms of work after each), and the overlays down the left moved by `left` on every frame the panels slid (300 to
+326 moves a measure, each laid out and painted again, the fold tab's box read every frame). Neither is left
+(`src/ui/AGENTS.md`): this tree read 128 a second (10% missed), and over 4 rounds in turns the browser's work was
+no different (407 ms a second against 383): the rest is the panels' own fade and slide. The owner's 70 isn't seen
+headless.
+
 **A 60 s storm** (the mage's Maelstrom, after a report of lag with 7 or 8 bodies in it), on #221's tree and on
 production (no ragdolls): 14 and 21 kills, the median frame 16.7 ms on both. Each had one frame over 100 ms (167 and
 183 ms), at 0.8 s into the run: the HUD's first paint in it, 18 Skia programs built for its hotbar. After that the
@@ -204,6 +223,7 @@ worst frame was 50 and 67 ms.
 | `variants.mjs` | Changes tried on the page before its scripts |
 | `page.mjs` | What runs in the page: the recording, and the states the scenarios wait for |
 | `trace.mjs` | The browser's trace, its events filtered as they stream in |
+| `within.mjs` | Waiting on the browser with a limit |
 | `analyze.mjs` | The page's frames and the trace on one clock: the programs, the stalls, what was busy, what each change cost |
 | `profile.mjs` | The page's JS as V8 sampled it (`--js`), summed by function |
 | `sourceMap.mjs` | The build's source maps read, to name the page's functions where they're written |

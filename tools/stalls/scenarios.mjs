@@ -1,6 +1,8 @@
 // What the player does while the stalls are measured (tools/stalls), with the page's own controls alone (real key
 // presses and mouse moves sent to the page, its buttons clicked): a production build has no dev hooks to drive it.
-import { choiceClosed, deciding, inRun, itemBoxes, markPhase, runOver, scoresShown } from './page.mjs';
+import {
+  choiceClosed, deciding, inRun, itemBoxes, markPhase, menuStowed, runOver, scoresShown, stowsRecorded,
+} from './page.mjs';
 
 /** the keys held in turn while walking round the lobby, and how long each */
 const WALK_KEYS = ['w', 'd', 's', 'a', 'w', 'a', 's', 'd'];
@@ -38,6 +40,9 @@ export const SWEEP_ITEM_MS = 250;
 /** how long a key is held for a tap, as a person's finger holds it (ms): a press down and up again at once is
  *  shorter than a frame */
 const TAP_MS = 90;
+/** how often Space is pressed while the lobby is stowed and shown again unless the command says (`--press-ms`; ms,
+ *  a press every this long: the owner's "pressing space rapidly") */
+export const STOW_PRESS_MS = 200;
 
 /** Taps `key` as a person does. */
 const tap = (page, key) => page.keyboard.press(key, { delay: TAP_MS });
@@ -258,6 +263,36 @@ async function sweep(page, ms, { itemMs }) {
     + `(the ${slots.length} slots left alone)`];
 }
 
+/**
+ * The lobby's panels stowed and shown again with Space (pressed rapidly, the owner's 144 frames a second fell to
+ * 70): a quarter of `ms` standing with them shown (the frames to beat), a quarter stowed (practice: the run's
+ * bar at the bottom), then Space pressed every `pressMs` for the rest, the mouse over the world throughout. Its
+ * notes say how often the lobby followed: a press it missed measured nothing.
+ */
+async function stow(page, ms, { pressMs }) {
+  const world = await worldBox(page);
+  await page.mouse.move(world.x + world.width / 2, world.y + world.height / 2);
+  // (shown to start with, whatever a round before left)
+  if (await page.evaluate(menuStowed)) await tap(page, 'Space');
+  await page.evaluate(markPhase, 'away');
+  await page.waitForTimeout(ms / 4);
+  await tap(page, 'Space');
+  await page.evaluate(markPhase, 'stowed');
+  await page.waitForTimeout(ms / 4);
+  await page.evaluate(markPhase, 'pressing');
+  const started = Date.now();
+  let presses = 0;
+  while (Date.now() - started < ms / 2) {
+    const due = started + (presses + 1) * pressMs;
+    await tap(page, 'Space');
+    presses++;
+    await page.waitForTimeout(Math.max(0, due - Date.now()));
+  }
+  const followed = await page.evaluate(stowsRecorded);
+  return [`the lobby shown, then stowed, then Space pressed ${presses} times, one every ${pressMs} ms; `
+    + `stowed or shown again ${followed} times of ${presses + 1}`];
+}
+
 /** Stands in the lobby, then walks round it, for `ms` in all. */
 async function lobby(page, ms) {
   await page.waitForTimeout(ms / 4);
@@ -267,4 +302,4 @@ async function lobby(page, ms) {
 
 /** The scenarios by name: each plays the page for `ms` (as `options` say, those it reads) and returns notes of what
  *  happened. */
-export const SCENARIOS = { fight, lobby, storm, hover, sweep };
+export const SCENARIOS = { fight, lobby, storm, hover, sweep, stow };

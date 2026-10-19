@@ -136,6 +136,29 @@ export const VARIANTS = {
   noLitFilter: { script: styled, arg: '#menu.slot-focus .sitem.match { filter: none !important; }' },
   noDimFilter: { script: styled, arg: '#menu.slot-focus .sitem:not(.match) { filter: none !important; }' },
   noStashMask: { script: styled, arg: '#stash { mask-image: none !important; }' },
+  // (and the lobby's panels stowed and shown again with Space: at once, with no fade or slide; faded without the
+  // slide; on layers of their own for good, so a fade starting makes none)
+  noStowFade: { script: styled, arg: '#menu .panel { transition: none !important; }' },
+  stowFadeOnly: { script: styled, arg: '#menu .panel { transition-property: opacity !important; }' },
+  stowLayers: { script: styled, arg: '#menu .panel { will-change: opacity, transform; }' },
+  // (and the HUD's bar, shown in practice, hidden by opacity on a layer of its own rather than taken off the page,
+  // so it's painted once; and the hints' words swapped by opacity)
+  hudKept: {
+    script: styled,
+    arg: '#hud { will-change: opacity; } #hud.hidden { display: block !important; opacity: 0; }'
+      + ' #hud.hidden, #hud.hidden * { pointer-events: none !important; }',
+  },
+  noLookHint: { script: styled, arg: '#look-hint { display: none !important; }' },
+  noHudToggle: { script: styled, arg: '#hud.hidden { display: block !important; }' },
+  stowHintKept: { script: styled, arg: '#menu .sh-show, #menu .sh-hide { display: inline !important; }' },
+  // (and the overlays down the left, kept clear of the hero panel as it slides, moved by the compositor on a layer of
+  // their own rather than laid out again at each move; or never moved)
+  diagMoved: {
+    script: styled,
+    arg: '#diag { left: calc(10px * var(--ui, 1)) !important; translate: var(--clear-x, 0px) 0;'
+      + ' will-change: translate; }',
+  },
+  diagStill: { script: styled, arg: '#diag { left: calc(10px * var(--ui, 1)) !important; }' },
   // (and the glow's loops run on the item hovered and the slots alone, the other stash items that fit lit steady, or
   // pulsing)
   focusLoops: {

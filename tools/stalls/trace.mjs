@@ -2,6 +2,7 @@
 // on the GPU process, every piece of work on every thread but the shortest, and the mark the page puts on its clock.
 // Its events stream back as they come (a trace read back at the end was too large for Chrome's stream), and only
 // those are kept, each work's slimmed to its name, thread and times: a 20 s trace with Skia's draws in it was 250 MB.
+import { within } from './within.mjs';
 
 /** what the trace records: each thread's tasks, the GPU process, Skia's shaders and the page's timeline marks */
 const CATEGORIES = [
@@ -22,6 +23,12 @@ const KEPT_NAMES = new Set(['driver_link_program', 'driver_compile_shader', 'Tim
 /** a piece of work this long or longer is kept (µs): what each thread spent a frame's time on (`analyze.mjs`
  *  `workIn`), long tasks among them (one may hold a program's link, and anything 20 ms long stalls a frame) */
 const WORK_US = 500;
+/** how long Chrome is given to end a trace and send what's left of it (ms): a 16 s trace's end comes in a second
+ *  or two, and once it never came (Chrome's tracing off, no `tracingComplete`: a run waited 14 minutes) */
+const TRACE_END_MS = 60_000;
+
+/** A trace Chrome never ended: its measure is lost, and the browser can be traced again. */
+export class TraceLost extends Error {}
 
 /** Whether `event` is one the measure reads. */
 function kept(event) {
@@ -39,7 +46,7 @@ function slim(event) {
 
 /**
  * Starts tracing `browser` (connected over CDP), with `js` the page's JS sampled too. Returns `stop`, which ends the
- * trace and gives its kept events.
+ * trace and gives its kept events, or throws `TraceLost` if Chrome never ends it.
  */
 export async function startTrace(browser, { js = false } = {}) {
   const session = await browser.newBrowserCDPSession();
@@ -55,8 +62,9 @@ export async function startTrace(browser, { js = false } = {}) {
   return {
     async stop() {
       const complete = new Promise((resolve) => session.once('Tracing.tracingComplete', resolve));
-      await session.send('Tracing.end');
-      await complete;
+      const ended = await within(session.send('Tracing.end').then(() => complete), TRACE_END_MS);
+      await session.detach().catch(() => {});
+      if (!ended) throw new TraceLost(`Chrome never ended the trace (no tracingComplete in ${TRACE_END_MS} ms)`);
       return events;
     },
   };

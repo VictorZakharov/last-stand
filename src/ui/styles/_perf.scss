@@ -2,10 +2,12 @@
 @use 'theme' as *;
 
 /* ---------- performance overlay (optional, pause menu) ---------- */
-// (clear of the lobby's panels, `--clear-x` and `--clear-y` from `clearOverlays` in `ui/menus.ts`; as tall as the
-// screen at most, the battle log giving up its height first; on touch under the touch HUD's corner: the pause and
-// scores buttons, the bars and the buffs beside them, `_touch.scss`)
-#diag { --top: #{ui(10px)}; position: fixed; top: calc(var(--clear-y, 0px) + var(--top)); left: calc(var(--clear-x, 0px) + ui(10px)); z-index: 30;
+// (clear of the lobby's panels, `--clear-x` and `--clear-y` from `clearOverlays` in `ui/menus.ts`, moved by the
+// compositor on a layer of their own: placed by `left` and `top`, every move laid them out and painted them again;
+// as tall as the screen at most, the battle log giving up its height first; on touch under the touch HUD's corner:
+// the pause and scores buttons, the bars and the buffs beside them, `_touch.scss`)
+#diag { --top: #{ui(10px)}; position: fixed; top: var(--top); left: ui(10px); translate: var(--clear-x, 0px) var(--clear-y, 0px);
+  will-change: translate; z-index: 30;
   display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
   max-height: calc((100vh - var(--clear-y, 0px) - var(--top)) / var(--ui, 1) - 10px); scale: var(--ui, 1); transform-origin: left top; pointer-events: none; }
 #diag > * { flex-shrink: 0; pointer-events: auto; }

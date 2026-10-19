@@ -6,6 +6,9 @@ const ms = (value) => `${value.toFixed(0)} ms`;
 const seconds = (value) => `${(value / 1000).toFixed(1)} s`;
 /** the innermost tasks a program's link is listed in (outside them, the GPU process's run loop) */
 const CHAIN_SHOWN = 4;
+/** the least work (ms) other pages' renderers did through a measure that the report says: a page held still does
+ *  a millisecond's (its messages), one left drawing 2 s and more in 6 */
+const OTHERS_SHOWN_MS = 20;
 
 /** The tasks a link was built in, the innermost `CHAIN_SHOWN` of them: `… > GPUTask > ... > cache_miss`. */
 function chainText(heldIn) {
@@ -106,6 +109,11 @@ export function measureText(measure, { links = false } = {}) {
   ];
   if (links) lines.push(...linkLines(findings.built));
   if (!findings.clockFound) lines.push('  (the page\'s mark is missing from the trace: stalls and links not matched)');
+  if (findings.others.ms >= OTHERS_SHOWN_MS) {
+    const most = findings.others.most.map(({ what, ms: spent }) => `${spent.toFixed(0)} ${what}`).join('; ');
+    lines.push(`  (other pages' renderers did ${ms(findings.others.ms)} of work through it, in its frames' time: `
+      + `${most})`);
+  }
   if (findings.stalls.length === 0) lines.push(`  no stall of ${findings.listedMs ?? LISTED_MS} ms or more`);
   for (const stall of findings.stalls) lines.push(...stallLines(stall));
   for (const look of findings.looks ?? []) lines.push(...lookLines(look));
