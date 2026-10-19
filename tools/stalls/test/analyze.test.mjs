@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { analyze, selfTimes, shortName } from '../analyze.mjs';
-import { measureText, summaryText } from '../report.mjs';
+import { measureText, roundsText, summaryText } from '../report.mjs';
 
 const MARK = 'stalls:start';
 /** the GPU process's main thread, and the page's renderer */
@@ -90,6 +90,19 @@ test('reports each stall with what was built and busy in it, and the measures si
   assert.match(summaryText([measure]), /http:\/\/x\/ base {2}\s+1 stalls, 0\.5 s stalled;\s+1 programs, 300 ms/);
 });
 
+test('sums up the rounds by variant: each phase\'s median frames a second and their range', () => {
+  const round = (group, rate, missedShare) => ({
+    group,
+    findings: { phases: [{ name: 'away', rate: 144, missedShare: 0 }, { name: 'sweeping', rate, missedShare }] },
+  });
+  const measures = [round('x base', 110, 0.2), round('x still', 130, 0.05), round('x base', 122, 0.1),
+    round('x still', 128, 0.06), round('x base', 104, 0.3)];
+  const text = roundsText(measures);
+  assert.match(text, /x base\s+3 rounds; away 144 \(144–144\) a second, 0% missed, /);
+  assert.match(text, /x base .* sweeping 110 \(104–122\) a second, 20% missed, the browser's work /);
+  assert.match(text, /x still\s+2 rounds; .*sweeping 128 \(128–130\) a second, 5% missed/);
+});
+
 test('counts each task\'s own time, less the work the trace kept inside it', () => {
   const tasks = [
     { name: 'RunTask', ...PAGE, ts: 0, dur: 10_000 },
@@ -120,8 +133,30 @@ test('lists what each phase\'s threads spent a frame\'s time on', () => {
     { name: 'Paint', thread: 'Renderer CrRendererMain', ms: 4 },
     { name: 'RunTask', thread: 'Renderer CrRendererMain', ms: 2 },
   ]);
+  // (all of it the browser's: 12 ms of work in the frames' 20 ms, 600 ms a second)
+  assert.equal(phase.browserWork, 600);
   const text = measureText({ name: 'x sweep', notes: [], findings: analyze(record, events, MARK) });
   assert.match(text, /a frame's work, ms: 4\.0 Paint on Renderer CrRendererMain; 2\.0 RunTask on Renderer/);
+});
+
+test('lists what the threads did in the frames that missed the screen\'s refresh apart', () => {
+  // (frames of 7 ms, one of 21 ending at 1035 that a long paint started in: the screen's refresh is 7 ms)
+  const record = {
+    start: 1000,
+    frames: [{ at: 1007, ms: 7 }, { at: 1014, ms: 7 }, { at: 1035, ms: 21 }, { at: 1042, ms: 7 }],
+    changes: [],
+    phases: [{ name: 'sweeping', at: 1000 }],
+  };
+  const events = [
+    ...trace().slice(0, 5),
+    { ph: 'X', name: 'Paint', ...PAGE, ts: 1_002_000, dur: 1_000 },
+    { ph: 'X', name: 'Paint', ...PAGE, ts: 1_016_000, dur: 12_000 },
+  ];
+  const [phase] = analyze(record, events, MARK).phases;
+  assert.equal(phase.missedShare, 1 / 4);
+  assert.deepEqual(phase.missedWork, [{ name: 'Paint', thread: 'Renderer CrRendererMain', ms: 12 }]);
+  const text = measureText({ name: 'x sweep', notes: [], findings: analyze(record, events, MARK) });
+  assert.match(text, /a missed frame's, ms: 12\.0 Paint on Renderer CrRendererMain/);
 });
 
 test('sums up each phase the scenario marked apart, with the share of its frames a tooltip showed in', () => {
@@ -143,8 +178,15 @@ test('sums up each phase the scenario marked apart, with the share of its frames
     ['over items', 3, 23],
   ]);
   assert.equal(phases[1].tipShare, 2 / 3);
+  // (the screen's refresh is the fastest phase's median, 7 ms: two of the three frames over items missed it, and a
+  // median of 23 hides nothing here, but a phase of 7 ms frames and a 23 now and then would read 7 alone)
+  assert.equal(phases[0].missedShare, 0);
+  assert.equal(phases[1].missedShare, 2 / 3);
+  assert.equal(Math.round(phases[1].rate), 57);
   const measure = { name: 'x hover', notes: [], findings: analyze(record, trace(), MARK) };
-  assert.match(measureText(measure), /over items: 3 frames, median 23\.0 ms \(43 a second\), 90% within 23\.0 ms/);
-  assert.match(measureText(measure), /a tooltip shown in 67% of them/);
-  assert.match(summaryText([measure]), /median frames away 7\.0, over items 23\.0 ms/);
+  const text = measureText(measure);
+  assert.match(text, /over items: 3 frames, 57 a second \(67% missed the screen's refresh\), median 23\.0 ms/);
+  assert.match(text, /90% within 23\.0 ms/);
+  assert.match(text, /a tooltip shown in 67% of them/);
+  assert.match(summaryText([measure]), /frames a second \(missed\) away 143 \(0%\), over items 57 \(67%\)/);
 });

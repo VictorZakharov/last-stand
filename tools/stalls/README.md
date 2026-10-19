@@ -18,6 +18,8 @@ npm run stalls -- --scenario hover --hero warrior --stash 40 --view first --scal
 npm run stalls -- --scenario hover --stash 40 --variants base,stillGlow  # hovering with the stash's glow held still
 npm run stalls -- --scenario sweep --stash 60 --view top --window 1536x695 --seconds 12  # moving between items
 npm run stalls -- --scenario hover --stash 60 --listed 40   # every frame of 40 ms+ listed with what was busy
+npm run stalls -- --scenario sweep --stash 60 --seconds 8 --rounds 3 --variants base,iconFilter,stillGlow+noTooltip
+                                                 # one page, the variants in turn three times over, by their medians
 npm run stalls -- --help
 npm run stalls:test                              # the tool's own unit tests
 ```
@@ -34,8 +36,12 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   delete files Chrome wrote is told which profile was left.
 - **The page:** the lab's `noCapture` and `freshStorage` (`tools/lab/node/browser.mjs`), so it never takes the pointer
   and starts as a first boot. The battleground (`--biome`, the forest by default), the High preset and the performance
-  overlay (`--perf`) are set by cookie, and a `--variants` change is applied before the page's scripts. The window is
-  `--window` css px (1536x864 by default; a report's `window`), scaled `--scale` times (its `devicePixelRatio`).
+  overlay (`--perf`) are set by cookie, and a `--variants` change is applied before the page's scripts (`a+b`: both).
+  The window is `--window` css px (1536x864 by default; a report's `window`), scaled `--scale` times (its
+  `devicePixelRatio`).
+- **Rounds** (`--rounds N`): the page booted and set up once, then the variants played in turn N times over, each
+  one's stylesheet put on the running page (`page.mjs` `useStyle`: variants that only add styles). A boot is most of a
+  measure's time, and measures side by side in time are slowed alike by whatever else uses the GPU meanwhile.
 - **The lobby set up as a player's is:** the hero chosen (`--hero`); his stash filled with `--stash` items (copies of
   his own in each rarity: an item moved off him so his profile is saved, the copies kept in the session and put back
   over the next load's fresh storage, `page.mjs` `seededProfile`); the view stepped to with V (`--view`), the panels
@@ -67,18 +73,23 @@ The report is printed and written to `tools/stalls/out/report.txt`.
 
 For each measure:
 - **Frames:** how many, their median, how many took over 100 ms and how long those took in all, and the worst five;
-  and each phase's: its median (and as frames a second), 90% of them within what, the worst, and the share of them the
-  tooltip showed in (a phase meant to show it that reads 0% hovered nothing). Under each phase, **a frame's work**:
-  what each thread spent its time on, shared out a frame, the most first (each piece's own time, less the work the
-  trace kept inside it; the GPU's waits for the screen left out).
+  and each phase's: frames a second over its time and the share that **missed the screen's refresh** (1.5 times the
+  fastest phase's median or longer), its median, 90% of them within what, the worst, the share the tooltip showed in
+  (a phase meant to show it that reads 0% hovered nothing), and **the browser's work for the page**, ms a second (its
+  style, layout, paint, layers, raster and compositor frames; not the page's scripts nor the GPU running its commands).
+  Under each phase, **a frame's work**: what each thread spent its time on, shared out a frame, the most first (each
+  piece's own time, less the work the trace kept inside it; the GPU's waits for the screen left out), and **a missed
+  frame's**, the same over the frames that missed.
 - **Programs:** the Skia programs linked, how long in all, and the longest. With `--links`, every one: when, how long,
   the innermost tasks it was built in, and the page's changes in the 150 ms before it.
 - **Each stall of 300 ms or more** (`--listed` sets it, down to 20):
   - the programs built in it, and the tasks each was built inside;
-  - the longest tasks (20 ms or more) on any thread through it;
+  - the longest tasks (20 ms or more) on any thread through it, and the work in it as a frame's work is given;
   - the page's changes in the 400 ms before it, by kind and element, the most frequent first.
 
-With more than one measure, they are listed side by side at the end, each phase's median frame with them.
+With more than one measure, they are listed side by side at the end, each phase's frames a second and share missed
+with them; with `--rounds`, then by variant: each phase's frames a second and the browser's work, the median over the
+rounds and the range.
 
 ## Reading it
 
@@ -94,6 +105,15 @@ With more than one measure, they are listed side by side at the end, each phase'
   the GPU process, `DirectRenderer::DrawFrame` draws every layer, filter and mask again each frame something in them
   moves; `DoEndRasterCHROMIUM::Flush` is a layer painted again. `FunctionCall` on the main thread is the game's own
   frame (about 5 ms here).
+- **The GPU is the game's first.** The owner's scene takes 6 ms of the GPU a frame (its report's GPU split), and at
+  144 Hz a frame is 6.9 ms: whatever the page adds there in a frame (a filter's pass drawn again, a layer painted)
+  costs that frame. In a missed frame's work, `CommandBufferService:PutChanged` of 14 to 30 ms is the GPU process
+  held up running what it was sent.
+- **Frames a second move with whatever else is on the GPU; the browser's work doesn't.** With another game open in
+  a browser beside it (the owner's), one variant read 102 to 124 a second measure to measure, base 98 to 123 run to
+  run, and the away phase fell to 127, while the browser's work held within a tenth. Compare variants by the
+  browser's work, over `--rounds`, and trust frames a second only from runs whose away phase holds the screen's rate.
+  With the screen off or locked, Windows paces frames at 60: every phase reads 60, and only the work compares.
 
 **Look at the machine first.** In October 2026, 1.4–1.9 s stalls in the owner's Chrome (RTX 4070 Ti, driver 610.88) went
 away with a reinstall of the NVIDIA driver. This tool, run in a fresh profile on the same machine, never showed them.
@@ -125,6 +145,15 @@ compositor's draw 1.7 ms a frame against 0.3). What was left were frames of 100 
 the 60 items whose focus changed made layers for their fades and painted again, the worst 167 ms; every item a layer
 all along, 49 (`itemLayers`; `will-change: transform` alone, `itemMoveLayers`, 195). The focus kept across the gap to
 the next item (`src/ui/menus.ts` `focusSlot`) took the glide's and the held item's frames to 90% within 7.1 ms.
+
+That preview still dropped for the owner (105 a second, its 1% low 36), and the sweep's median of 7.0 had hidden it:
+its frames came at 99 a second, a third of them a refresh late (hence frames a second and the share missed, above).
+A missed frame held three times an average frame's style, layers, painting and compositor's draw: a change of slot,
+the 60 items' fades into and out of the focus and the glow's, the tooltip's new card. Over rounds, the glow's fade cut
+read 7 to 19 a second more in frames but no less work; the items' filters moved onto their icons (`iconFilter`) did
+a fifth less every run (538 to 559 ms a second against 616 to 747): each filter on an item, itself a layer, was a pass
+of the compositor's own, drawn again every frame its glow moved. Its look kept by colours painted once
+(`src/ui/styles/_items.scss`). This tree against that preview, 3 rounds each: 422 ms a second against 556 sweeping.
 
 **A 60 s storm** (the mage's Maelstrom, after a report of lag with 7 or 8 bodies in it), on #221's tree and on
 production (no ragdolls): 14 and 21 kills, the median frame 16.7 ms on both. Each had one frame over 100 ms (167 and

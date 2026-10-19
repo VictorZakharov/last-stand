@@ -38,6 +38,19 @@ export function startRecording(mark) {
   record.observer.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
 }
 
+/** Puts `css` on the page in a stylesheet of its own, in place of the one put there before (a variant's, while the
+ *  page runs: `--rounds`). */
+export function useStyle(css) {
+  const id = 'stalls-variant';
+  let style = document.getElementById(id);
+  if (!style) {
+    style = document.createElement('style');
+    style.id = id;
+    document.head.append(style);
+  }
+  style.textContent = css;
+}
+
 /** Marks the start of a scenario's phase `name` on the recording (its frames are summed up apart). */
 export function markPhase(name) {
   window.__stalls.phases.push({ name, at: performance.now() });

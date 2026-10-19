@@ -1,7 +1,7 @@
 // The stalls harness's command line (tools/stalls): its options, read and checked before anything starts, so a
 // misspelt one or a bad value stops it before a build or a browser.
 import { SCENARIOS } from './scenarios.mjs';
-import { VARIANTS } from './variants.mjs';
+import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
@@ -21,7 +21,10 @@ const HELP = {
   seconds: ['n', 'how long the scenario plays (45 by default)'],
   listed: ['ms', `each frame this long or longer listed with what was busy through it (${LISTED_LEAST} or more: `
     + '300 by default)'],
-  variants: ['a,b', `changes tried on the page, each a measure of its own: ${Object.keys(VARIANTS).join(', ')} (base)`],
+  variants: ['a,b', 'changes tried on the page, each a measure of its own (a+b: both together): '
+    + `${Object.keys(VARIANTS).join(', ')} (base)`],
+  rounds: ['n', 'the variants measured in turn this many times over in one page, each one\'s styles put on as it runs '
+    + '(variants that only add styles), and compared by their medians (1 by default: a fresh Chrome for each)'],
   view: ['name', `the view it's played in: ${VIEWS.join(', ')} (V pressed in the lobby, its panels shown again; top)`],
   biome: ['name', `the battleground: ${BIOMES.join(', ')} (forest by default)`],
   hero: ['name', `the hero chosen in the lobby: ${HEROES.join(', ')} (a first boot's by default)`],
@@ -81,6 +84,7 @@ export function readOptions(argv) {
     seconds: Number(written.seconds ?? 45),
     listed: Number(written.listed ?? LISTED_MS),
     variants: (written.variants ?? 'base').split(','),
+    rounds: Number(written.rounds ?? 1),
     view: written.view ?? 'top',
     biome: written.biome ?? 'forest',
     hero: written.hero ?? null,
@@ -95,7 +99,7 @@ export function readOptions(argv) {
   if (!SCENARIOS[options.scenario]) {
     throw new Error(`stalls: no scenario ${options.scenario} (${Object.keys(SCENARIOS).join(', ')})`);
   }
-  const unknown = options.variants.find((variant) => !VARIANTS[variant]);
+  const unknown = options.variants.flatMap(partsOf).find((part) => !VARIANTS[part]);
   if (unknown !== undefined) throw new Error(`stalls: no variant ${unknown} (${Object.keys(VARIANTS).join(', ')})`);
   if (!VIEWS.includes(options.view)) throw new Error(`stalls: no view ${options.view} (${VIEWS.join(', ')})`);
   if (!BIOMES.includes(options.biome)) throw new Error(`stalls: no biome ${options.biome} (${BIOMES.join(', ')})`);
@@ -109,6 +113,13 @@ export function readOptions(argv) {
   if (!(options.scale > 0)) throw new Error('stalls: --scale must be a number over 0');
   if (!(options.listed >= LISTED_LEAST)) {
     throw new Error(`stalls: --listed must be a number of ms, ${LISTED_LEAST} or more`);
+  }
+  if (!(Number.isInteger(options.rounds) && options.rounds >= 1)) {
+    throw new Error('stalls: --rounds must be a whole number, 1 or more');
+  }
+  const scripted = options.variants.find((variant) => liveCss(variant) === null);
+  if (options.rounds > 1 && scripted !== undefined) {
+    throw new Error(`stalls: --rounds takes variants that only add styles (${scripted} runs a script of its own)`);
   }
   return options;
 }

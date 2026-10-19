@@ -1,7 +1,8 @@
 // How the pictures of an A/B's two sides differ (tools/lab): each pair decoded in a page of the lab's browser and
 // compared pixel by pixel. The same view drawn twice with nothing changed came out a level apart in a few pixels (the
 // GPU's own rounding), so a picture differs only where some pixel is more than `TOLERANCE` levels apart. Where a pair
-// differs, a picture of where is written: the newer side dimmed, its differing pixels in magenta.
+// differs, a picture of where is written: the newer side dimmed, its differing pixels in magenta; and how bright the
+// newer side is there against the older (a look kept or lost: #269's stash items lost their filter's ×1.35).
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { REPO } from './paths.mjs';
@@ -11,7 +12,8 @@ export const TOLERANCE = 2;
 
 /**
  * Runs in the page (serialized: it can use nothing from here). A pair compared: how many pixels are more than
- * `tolerance` apart, of how many, the largest difference, the box they lie in, and a picture of where they are.
+ * `tolerance` apart, of how many, the largest difference, the box they lie in, a picture of where they are, and the
+ * newer side's light in them against the older's (their luminance summed, Rec. 709's weights).
  */
 async function compareInPage({ pair, tolerance }) {
   const pixelsOf = async (dataUrl) => {
@@ -39,6 +41,8 @@ async function compareInPage({ pair, tolerance }) {
   const box = { left: width, right: -1, top: height, bottom: -1 };
   let differing = 0;
   let largest = 0;
+  const light = { old: 0, now: 0 };
+  const lumaAt = (data, i) => 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
   for (let i = 0; i < now.data.length; i += 4) {
     const red = Math.abs(old.data[i] - now.data[i]);
     const green = Math.abs(old.data[i + 1] - now.data[i + 1]);
@@ -49,6 +53,8 @@ async function compareInPage({ pair, tolerance }) {
     where.set(most > tolerance ? [255, 0, 255, 255] : [grey, grey, grey, 255], i);
     if (most <= tolerance) continue;
     differing++;
+    light.old += lumaAt(old.data, i);
+    light.now += lumaAt(now.data, i);
     const x = (i / 4) % width;
     const y = Math.floor(i / 4 / width);
     box.left = Math.min(box.left, x);
@@ -56,7 +62,8 @@ async function compareInPage({ pair, tolerance }) {
     box.top = Math.min(box.top, y);
     box.bottom = Math.max(box.bottom, y);
   }
-  const result = { differing, pixels: width * height, largest, width, height };
+  const brightness = light.old > 0 ? light.now / light.old : null;
+  const result = { differing, pixels: width * height, largest, width, height, brightness };
   if (differing > 0) Object.assign(result, { box, where: await pngOf(width, height, where) });
   return result;
 }
@@ -72,10 +79,15 @@ function describeBox({ box, width, height }) {
   return `x ${share(box.left, box.right, width)}, y ${share(box.top, box.bottom, height)}`;
 }
 
+/** How bright the newer side is where a pair differs, against the older: `×0.92 as bright there`. */
+function brightnessText({ brightness }) {
+  return brightness === null ? 'black before' : `×${brightness.toFixed(2)} as bright there`;
+}
+
 /**
  * Compares each pair (`{ name, before, after }`, PNG data URLs) and says which differ: their share of pixels more
- * than `TOLERANCE` levels apart, by how much at most, and where; with `diffDir`, a picture of where for each pair
- * that differs is written there (the folder emptied first).
+ * than `TOLERANCE` levels apart, by how much at most, where, and how bright the newer side is there; with `diffDir`, a
+ * picture of where for each pair that differs is written there (the folder emptied first).
  */
 export async function describePictureDifferences(browser, pairs, diffDir = null) {
   if (pairs.length === 0) return 'pictures: none to compare';
@@ -99,7 +111,9 @@ export async function describePictureDifferences(browser, pairs, diffDir = null)
     }
     if (result.differing === 0) return;
     const share = (result.differing / result.pixels * 100).toFixed(2);
-    lines.push(`  ${name}: ${share} % of its pixels, by up to ${result.largest} levels, in ${describeBox(result)}`);
+    const where = describeBox(result);
+    lines.push(`  ${name}: ${share} % of its pixels, by up to ${result.largest} levels, in ${where}, `
+      + brightnessText(result));
     if (!diffDir) return;
     mkdirSync(diffDir, { recursive: true });
     writeFileSync(join(diffDir, `${fileNameOf(name)}.png`), Buffer.from(result.where, 'base64'));

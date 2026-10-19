@@ -61,7 +61,7 @@ Options every command takes:
 
 - `--screen WxH@ratio`: puts a command's page on a screen of that size and pixel ratio
 - `--screens a,b`: runs it on two screens and compares them as `--ab` compares two commits (`ui --screens 3840x2160@1,1280x720@3`: a 4K screen at 100% and 300%)
-- `--ab`: runs any of them on `origin/main` too and says which lines and pictures differ (a commit against itself agrees, line for line)
+- `--ab`: runs any of them on `origin/main` too and says which lines and pictures differ (a commit against itself agrees, line for line), and for each picture that differs, where and how bright this side is there against main's (`×0.72 as bright there`: a look kept or lost, `node/pictures.mjs`)
 - `--watch`: runs one again on each change to the source
 - `--profile`: says where a command's time went
 - `--tune name.field=v,...;...`: sets the game's tunable values before a command's set-up (`src/core/tuning.ts`: `warriorEyes.oneOn=0.75,-1.1,0.5`), so a pose or a camera is compared across values in seconds, without editing the source and booting again; `name.field[i,j]=v` sets some of a list's numbers alone (a swing's keys); given twice, the two are joined (any other option given twice is refused: a second `--tune` once replaced the first unsaid)

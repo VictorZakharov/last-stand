@@ -3,7 +3,7 @@
 // the game's canvas with it, for seconds while Skia builds a program). See tools/stalls/README.md.
 //
 // npm run stalls -- [--url a,b] [--scenario fight|lobby|storm|hover|sweep] [--seconds 45] [--listed 300]
-//   [--variants base,cpuCanvas] [--view top] [--biome forest] [--hero warrior] [--stash 40] [--scale 1.25]
+//   [--variants base,cpuCanvas] [--rounds 3] [--view top] [--biome forest] [--hero warrior] [--stash 40] [--scale 1.25]
 //   [--window 1536x695] [--perf] [--headed] [--links] (--help: what each does)
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -12,13 +12,13 @@ import { analyze } from './analyze.mjs';
 import { startChrome } from './chrome.mjs';
 import { readOptions, usage, VIEWS } from './options.mjs';
 import {
-  equipmentShown, loaded, menuStowed, seededProfile, seedStash, startRecording, stopRecording,
+  equipmentShown, loaded, menuStowed, seededProfile, seedStash, startRecording, stopRecording, useStyle,
 } from './page.mjs';
-import { measureText, summaryText } from './report.mjs';
+import { measureText, roundsText, summaryText } from './report.mjs';
 import { SCENARIOS } from './scenarios.mjs';
 import { serveBuild } from './serve.mjs';
 import { startTrace } from './trace.mjs';
-import { VARIANTS } from './variants.mjs';
+import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 
 const REPO = resolve(import.meta.dirname, '../..');
 const OUT = join(REPO, 'tools/stalls/out');
@@ -36,15 +36,17 @@ const VIEW_SETTLE_MS = 1500;
 /** how long a hero chosen in the lobby is given to be built, and an item moved to be saved (ms) */
 const HERO_BUILT_MS = 1500;
 const ITEM_MOVED_MS = 300;
+/** how long a variant's styles put on a running page are given to take before its scenario plays (ms) */
+const STYLE_SETTLE_MS = 500;
 
-/** Opens the game at `url` in `browser`'s first context, `variant` applied before the page's scripts, and waits out
- *  the loading screen. */
+/** Opens the game at `url` in `browser`'s first context, `variant` (each of its parts) applied before the page's
+ *  scripts, and waits out the loading screen. */
 async function openGame(browser, url, variant, options) {
   const context = browser.contexts()[0] ?? (await browser.newContext());
   await context.addInitScript(noCapture);
   await context.addInitScript(freshStorage);
   await context.addInitScript(seededProfile);
-  await context.addInitScript(VARIANTS[variant].script, VARIANTS[variant].arg);
+  for (const part of partsOf(variant)) await context.addInitScript(VARIANTS[part].script, VARIANTS[part].arg);
   const cookies = Object.entries(cookiesFor(options)).map(([name, value]) => ({ name, value, url }));
   await context.addCookies(cookies);
   const page = await context.newPage();
@@ -99,24 +101,64 @@ async function chooseView(page, view) {
  *  measures (to see that it played what it meant to). */
 const endPicture = (index) => join(OUT, `end-${index + 1}.png`);
 
+/** A Chrome of its own for a measure, as `options` have its window. */
+function chromeFor(options) {
+  const { width, height } = options.window;
+  const { headed, scale } = options;
+  return startChrome({ outDir: join(OUT, 'profiles'), headed, scale, width, height });
+}
+
+/** The scenario played once on `page` (in `browser`) while traced: what it did, what the frames and the trace
+ *  showed, and a picture of the screen at its end (`picture`). */
+async function playTraced(browser, page, options, picture) {
+  const trace = await startTrace(browser);
+  await page.evaluate(startRecording, MARK);
+  const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000);
+  const record = await page.evaluate(stopRecording);
+  const events = await trace.stop();
+  await page.screenshot({ path: picture });
+  notes.push(`its end pictured in ${picture}`);
+  return { notes, findings: analyze(record, events, MARK, options.listed) };
+}
+
+/** The page's errors so far as a note, if it had any. */
+const errorNotes = (errors) => (errors.length ? [`page errors: ${errors.slice(0, 3).join(' | ')}`] : []);
+
 /** One measure: a fresh Chrome on `url` with `variant`, the scenario played, its frames and trace analyzed, and a
  *  picture of the screen at its end (`picture`). */
 async function measure(url, variant, options, picture) {
-  const { width, height } = options.window;
-  const { headed, scale } = options;
-  const chrome = await startChrome({ outDir: join(OUT, 'profiles'), headed, scale, width, height });
+  const chrome = await chromeFor(options);
   try {
     const { page, errors } = await openGame(chrome.browser, url, variant, options);
     await setUpLobby(page, options);
-    const trace = await startTrace(chrome.browser);
-    await page.evaluate(startRecording, MARK);
-    const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000);
-    const record = await page.evaluate(stopRecording);
-    const events = await trace.stop();
-    await page.screenshot({ path: picture });
-    notes.push(`its end pictured in ${picture}`);
-    if (errors.length) notes.push(`page errors: ${errors.slice(0, 3).join(' | ')}`);
-    return { name: `${url} ${variant}`, notes, findings: analyze(record, events, MARK, options.listed) };
+    const { notes, findings } = await playTraced(chrome.browser, page, options, picture);
+    return { name: `${url} ${variant}`, notes: [...notes, ...errorNotes(errors)], findings };
+  } finally {
+    await chrome.close();
+  }
+}
+
+/**
+ * The variants measured in turn `options.rounds` times over in one Chrome on `url`, the page set up once and each
+ * variant's styles put on it as it runs (`useStyle`): measures side by side in time, so what slows the machine
+ * meanwhile (another agent's browser on its GPU) slows each alike, and a boot once in all where `measure` boots for
+ * each. Gives each measure to `measured` as it's made, with `pictureAt()` the picture of its end.
+ */
+async function measureRounds(url, options, pictureAt, measured) {
+  const chrome = await chromeFor(options);
+  try {
+    const { page, errors } = await openGame(chrome.browser, url, 'base', options);
+    await setUpLobby(page, options);
+    for (let round = 1; round <= options.rounds; round++) {
+      for (const variant of options.variants) {
+        console.log(`measuring ${url} ${variant}, round ${round}: ${options.scenario} for ${options.seconds} s`);
+        await page.evaluate(useStyle, liveCss(variant));
+        await page.waitForTimeout(STYLE_SETTLE_MS);
+        const { notes, findings } = await playTraced(chrome.browser, page, options, pictureAt());
+        const group = `${url} ${variant}`;
+        measured({ name: `${group} (round ${round})`, group, notes: [...notes, ...errorNotes(errors)], findings });
+      }
+    }
   } finally {
     await chrome.close();
   }
@@ -132,22 +174,29 @@ async function main() {
   const served = options.urls.length ? null : await serveBuild(REPO, OUT);
   const urls = served ? [served.url] : options.urls;
   const measures = [];
+  const measured = (result) => {
+    console.log(measureText(result, { links: options.links }));
+    measures.push(result);
+  };
   try {
     for (const url of urls) {
+      if (options.rounds > 1) {
+        await measureRounds(url, options, () => endPicture(measures.length), measured);
+        continue;
+      }
       for (const variant of options.variants) {
         console.log(`measuring ${url} ${variant}: ${options.scenario} for ${options.seconds} s`);
-        const result = await measure(url, variant, options, endPicture(measures.length));
-        console.log(measureText(result, { links: options.links }));
-        measures.push(result);
+        measured(await measure(url, variant, options, endPicture(measures.length)));
       }
     }
   } finally {
     await served?.close();
   }
   const sections = measures.map((result) => measureText(result, { links: options.links }));
-  const text = [...sections, summaryText(measures)].join('\n\n');
+  const summaries = [summaryText(measures), ...(options.rounds > 1 ? [roundsText(measures)] : [])];
+  const text = [...sections, ...summaries].join('\n\n');
   writeFileSync(join(OUT, 'report.txt'), `${text}\n`);
-  if (measures.length > 1) console.log(`\n${summaryText(measures)}`);
+  if (measures.length > 1) console.log(`\n${summaries.join('\n\n')}`);
   console.log(`\n(written to ${join(OUT, 'report.txt')})`);
 }
 

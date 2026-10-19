@@ -18,11 +18,16 @@ const CHANGES_SHOWN_FOR_LINK = 3;
 const BUSY_SHOWN = 4;
 /** a task this long or longer is listed as one a stall was busy with (ms: the trace keeps work from 0.5 ms) */
 const BUSY_LEAST_MS = 20;
-/** the most kinds of work listed for each phase, the most of a frame's time first */
+/** the most kinds of work listed for each phase, the most of a frame's time first, and for each stall */
 const WORK_SHOWN = 10;
+const STALL_WORK_SHOWN = 6;
 /** the threads whose tasks are waits, not work, left out of a phase's: the GPU process's waits for the screen's
  *  vertical blank (a frame's whole time, whatever the frame cost) */
 const WAITING_THREADS = new Set(['GpuVSyncThread']);
+/** the work that is the page's own rather than the browser's for it: its scripts (the game's frame among them), and
+ *  the GPU process running the commands it's sent (the game's WebGL with the rest, slowed by whatever else is on the
+ *  GPU). What's left (style, layout, paint, layers, raster, the compositor's frames) is a phase's `browserWork`. */
+const PAGE_OWN_WORK = new Set(['FunctionCall', 'EvaluateScript', 'CommandBufferService:PutChanged']);
 /** Skia's own events, listed as the programs built rather than as tasks */
 const SKIA_EVENTS = new Set(['driver_link_program', 'driver_compile_shader']);
 
@@ -106,12 +111,18 @@ function atShare(sorted, share) {
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * share))];
 }
 
-/** The frames' summary: how many, their median and 90th percentile, the stalls and the worst. */
+/** a frame this many times the screen's refresh or longer missed one (the refresh: the fastest phase's median) */
+const MISSED_SHARE = 1.5;
+
+/** The frames' summary: how many, how many a second over their time, their median and 90th percentile, the stalls
+ *  and the worst. */
 function frameSummary(frames) {
   const intervals = frames.map((frame) => frame.ms).sort((a, b) => a - b);
   const stalls = frames.filter((frame) => frame.ms >= STALL_MS);
+  const total = intervals.reduce((sum, ms) => sum + ms, 0);
   return {
     count: frames.length,
+    rate: total > 0 ? (frames.length * 1000) / total : 0,
     median: atShare(intervals, 0.5),
     p90: atShare(intervals, 0.9),
     stalls: stalls.length,
@@ -147,17 +158,40 @@ export function selfTimes(tasks) {
   return owned.map(({ task, children }) => ({ task, ms: Math.max(0, task.dur - children) / 1000 }));
 }
 
-/** What the threads spent `frames` frames' time on in the page's `[from, to)`: each kind of work on each thread, its
- *  own time summed (`selfTimes`) and shared out a frame, the most first. */
-function workIn(owned, from, to, frames, toPage, names) {
+/** Whether a piece of work counts as a thread's: not Skia's builds (listed apart) nor a thread's waits. */
+const isWork = ({ task, thread }) => !SKIA_EVENTS.has(task.name) && !WAITING_THREADS.has(thread.split(' ').pop());
+
+/** Each piece of work (`selfTimes`) with its thread and its start on the page's clock, the earliest first (none the
+ *  trace couldn't put on it). */
+function placedWork(owned, toPage, names) {
+  return owned
+    .map(({ task, ms }) => ({ task, ms, at: toPage(task.ts), thread: threadOf(task, names) }))
+    .filter((placed) => placed.at !== null && isWork(placed))
+    .sort((a, b) => a.at - b.at);
+}
+
+/** The index of the first of `placed` (the earliest first) that starts at `at` or later. */
+function firstFrom(placed, at) {
+  let low = 0;
+  let high = placed.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (placed[middle].at < at) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+/** What the threads spent `frames` frames' time on in the page's `spans` (`[from, to)` each): each kind of work on
+ *  each thread that started in them, its own time summed and shared out a frame, the most first. */
+function workIn(placed, spans, frames) {
   const totals = new Map();
-  for (const { task, ms } of owned) {
-    const at = toPage(task.ts);
-    if (at === null || at < from || at >= to || SKIA_EVENTS.has(task.name)) continue;
-    const thread = threadOf(task, names);
-    if (WAITING_THREADS.has(thread.split(' ').pop())) continue;
-    const key = `${shortName(task.name)}\n${thread}`;
-    totals.set(key, (totals.get(key) ?? 0) + ms);
+  for (const [from, to] of spans) {
+    for (let index = firstFrom(placed, from); index < placed.length && placed[index].at < to; index++) {
+      const { task, ms, thread } = placed[index];
+      const key = `${shortName(task.name)}\n${thread}`;
+      totals.set(key, (totals.get(key) ?? 0) + ms);
+    }
   }
   return [...totals]
     .sort((a, b) => b[1] - a[1])
@@ -168,22 +202,66 @@ function workIn(owned, from, to, frames, toPage, names) {
     });
 }
 
-/** Each phase the scenario marked (`page.mjs` `markPhase`): its frames' summary, from its mark to the next's (the
- *  last's to the end), the share of them a tooltip was shown in, and what the threads spent their time on. */
+/** The browser's own work for the page (ms) that started in the page's `[from, to)`: all but `PAGE_OWN_WORK`. */
+function browserWorkIn(placed, from, to) {
+  let total = 0;
+  for (let index = firstFrom(placed, from); index < placed.length && placed[index].at < to; index++) {
+    const { task, ms } = placed[index];
+    if (!PAGE_OWN_WORK.has(shortName(task.name))) total += ms;
+  }
+  return total;
+}
+
+/**
+ * Each phase the scenario marked (`page.mjs` `markPhase`): its frames' summary, from its mark to the next's (the
+ * last's to the end), the share of them that missed the screen's refresh (`missedShare`), the share a tooltip was
+ * shown in, what the threads spent their time on, a frame of the phase's and a frame of those that missed, and the
+ * browser's own work for the page a second (`browserWork`, ms). A median alone hides the misses: #269's sweep read
+ * 7.0 ms, a frame every refresh, at 99 frames a second where the screen gave 145. And frames a second hang on the
+ * whole GPU: with another game in a browser beside it, one variant read 102 to 124 measure to measure, where the
+ * browser's work for it held within a tenth. `work` is `workIn` and `browserWorkIn` on the trace's work.
+ */
 function phaseSummaries(record, work) {
   const phases = record.phases ?? [];
-  return phases.map((phase, index) => {
+  const framed = phases.map((phase, index) => {
     const end = phases[index + 1]?.at ?? Infinity;
-    const frames = record.frames.filter((frame) => frame.at > phase.at && frame.at <= end);
+    return { phase, end, frames: record.frames.filter((frame) => frame.at > phase.at && frame.at <= end) };
+  });
+  const refresh = refreshOf(framed.map(({ frames }) => frames), record.frames);
+  return framed.map(({ phase, end, frames }) => {
     const tipped = frames.filter((frame) => frame.tip).length;
     const last = frames.length ? frames[frames.length - 1].at : phase.at;
+    const missed = missedOf(frames, refresh);
     return {
       name: phase.name,
       ...frameSummary(frames),
+      missedShare: frames.length ? missed.length / frames.length : 0,
       tipShare: frames.length ? tipped / frames.length : 0,
-      work: work(phase.at, Math.min(end, last), frames.length),
+      work: work.kinds([[phase.at, Math.min(end, last)]], frames.length),
+      missedWork: work.kinds(missed.map((frame) => [frame.at - frame.ms, frame.at]), missed.length),
+      browserWork: perSecond(work.browser(phase.at, Math.min(end, last)), frames),
     };
   });
+}
+
+/** `total` ms of work as ms a second of `frames`' time. */
+function perSecond(total, frames) {
+  const seconds = frames.reduce((sum, frame) => sum + frame.ms, 0) / 1000;
+  return seconds > 0 ? total / seconds : 0;
+}
+
+/** The screen's refresh (ms): the fastest phase's median frame, or all the frames' without phases. */
+function refreshOf(phaseFrames, all) {
+  const medians = phaseFrames
+    .filter((frames) => frames.length > 0)
+    .map((frames) => frameSummary(frames).median);
+  return medians.length ? Math.min(...medians) : frameSummary(all).median;
+}
+
+/** Those of `frames` that took `MISSED_SHARE` times the screen's refresh or longer. */
+function missedOf(frames, refresh) {
+  if (refresh <= 0) return [];
+  return frames.filter((frame) => frame.ms >= refresh * MISSED_SHARE);
 }
 
 /**
@@ -195,7 +273,7 @@ export function analyze(record, events, mark, listedMs = LISTED_MS) {
   const names = threadNames(events);
   const tasks = events.filter((event) => event.ph === 'X');
   const toPage = (ts) => (markTs === null ? null : onPageClock(ts, markTs, record.start));
-  const owned = selfTimes(tasks);
+  const placed = placedWork(selfTimes(tasks), toPage, names);
   const links = tasks
     .filter((event) => event.name === 'driver_link_program')
     .map((link) => ({
@@ -215,6 +293,7 @@ export function analyze(record, events, mark, listedMs = LISTED_MS) {
         ms: frame.ms,
         built,
         busy: busyIn(tasks, from, frame.at, toPage, names),
+        work: workIn(placed, [[from, frame.at]], 1).slice(0, STALL_WORK_SHOWN),
         changes: changesBetween(record.changes, from - CHANGES_BEFORE_MS, from + 20),
       };
     });
@@ -228,7 +307,10 @@ export function analyze(record, events, mark, listedMs = LISTED_MS) {
     clockFound: markTs !== null,
     built,
     frames: frameSummary(record.frames),
-    phases: phaseSummaries(record, (from, to, count) => workIn(owned, from, to, count, toPage, names)),
+    phases: phaseSummaries(record, {
+      kinds: (spans, count) => workIn(placed, spans, count),
+      browser: (from, to) => browserWorkIn(placed, from, to),
+    }),
     programs: {
       count: inRecording.length,
       total: inRecording.reduce((sum, link) => sum + link.ms, 0),

@@ -11,6 +11,7 @@ test('fills in the defaults', () => {
     seconds: 45,
     listed: 300,
     variants: ['base'],
+    rounds: 1,
     view: 'top',
     biome: 'forest',
     hero: null,
@@ -47,6 +48,11 @@ test('refuses what it doesn\'t know and bad values', () => {
   assert.throws(() => readOptions(['fight']), /"fight" is no option/);
   assert.throws(() => readOptions(['--scenario', 'boss']), /no scenario boss/);
   assert.throws(() => readOptions(['--variants', 'base,gpu']), /no variant gpu/);
+  assert.throws(() => readOptions(['--variants', 'stillGlow+gpu']), /no variant gpu/);
+  assert.throws(() => readOptions(['--rounds', '0']), /--rounds must be a whole number, 1 or more/);
+  assert.throws(() => readOptions(['--rounds', '3', '--variants', 'base,cpuCanvas']), /cpuCanvas runs a script/);
+  assert.equal(readOptions(['--rounds', '3', '--variants', 'base,stillGlow+noTooltip']).rounds, 3);
+  assert.deepEqual(readOptions(['--variants', 'base,stillGlow+noTooltip']).variants, ['base', 'stillGlow+noTooltip']);
   assert.throws(() => readOptions(['--seconds', '0']), /--seconds must be a number over 0/);
   assert.throws(() => readOptions(['--seconds']), /--seconds needs a value/);
   assert.throws(() => readOptions(['--view', 'eyes']), /no view eyes/);
@@ -59,8 +65,8 @@ test('refuses what it doesn\'t know and bad values', () => {
 });
 
 test('the usage lists every option', () => {
-  const names = ['url', 'scenario', 'seconds', 'variants', 'view', 'biome', 'hero', 'stash', 'scale', 'window'];
-  for (const name of [...names, 'headed', 'perf', 'links', 'help']) {
+  const names = ['url', 'scenario', 'seconds', 'variants', 'rounds', 'view', 'biome', 'hero', 'stash', 'scale'];
+  for (const name of [...names, 'window', 'headed', 'perf', 'links', 'help']) {
     assert.match(usage(), new RegExp(`--${name}\\b`));
   }
 });

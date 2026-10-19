@@ -31,6 +31,22 @@ function cpuCanvas() {
 /** every part of the stash's glow that loops: main's the glow and its pseudo-elements, #269's spans within it */
 const GLOW_PARTS = '.slot-glow, .slot-glow *, .slot-glow::before, .slot-glow::after';
 
+/** The parts of a variant as the command line names it: `a+b` is `a` and `b` applied together, in turn. */
+export const partsOf = (name) => name.split('+');
+
+/**
+ * The stylesheet a variant adds, its parts' together, or null if a part does more than add one. A variant that only
+ * adds styles can be put on a page and taken off again as it runs (`--rounds`, `page.mjs` `useStyle`).
+ */
+export function liveCss(name) {
+  const parts = partsOf(name).map((part) => VARIANTS[part]);
+  if (parts.some((variant) => variant.script !== styled && variant.script !== base)) return null;
+  return parts
+    .filter((variant) => variant.script === styled)
+    .map((variant) => variant.arg)
+    .join('\n');
+}
+
 /** The variants by name: each a script run before the page's own, and its argument. Hovering an item: its tooltip
  *  on a layer of its own (moved every mouse move by its `left` and `top`), none at all, its cards without their
  *  blurred shadow, the slot hovered without its brightening filter, and the stash's items that fit its slot lit
@@ -55,6 +71,21 @@ export const VARIANTS = {
   noFocusFade: { script: styled, arg: '.sitem, .eslot { transition: none !important; }' },
   itemLayers: { script: styled, arg: '.sitem, .eslot { will-change: transform, opacity, filter; }' },
   itemMoveLayers: { script: styled, arg: '.sitem, .eslot { will-change: transform; }' },
+  // (and the glow's own fade in and out cut, and the loops' layers made for good on every item that fits)
+  noGlowFade: { script: styled, arg: '.slot-glow { transition: none !important; }' },
+  glowOpacityFade: { script: styled, arg: '.slot-glow { transition-property: opacity !important; }' },
+  // (and the items' filters switched at once while their opacity and size fade, and every fade half as long)
+  filterSnap: { script: styled, arg: '.sitem, .eslot { transition-property: opacity, transform !important; }' },
+  shortFades: { script: styled, arg: '.sitem, .eslot, .slot-glow { transition-duration: .15s !important; }' },
+  // (and the items' filters on their icons, painted into the item's layer, where on the item each was a pass of the
+  // compositor's own)
+  iconFilter: {
+    script: styled,
+    arg: '#menu.slot-focus .sitem { filter: none !important; transition-property: opacity, transform !important; }'
+      + ' #menu.slot-focus .sitem.match > .item-icon { filter: brightness(1.35); }'
+      + ' #menu.slot-focus .sitem:not(.match) > .item-icon { filter: grayscale(.85); }',
+  },
+  glowSpanLayers: { script: styled, arg: '.match > .slot-glow span { will-change: transform; }' },
   noFocusFilter: { script: styled, arg: '#menu.slot-focus .sitem { filter: none !important; }' },
   noLitFilter: { script: styled, arg: '#menu.slot-focus .sitem.match { filter: none !important; }' },
   noDimFilter: { script: styled, arg: '#menu.slot-focus .sitem:not(.match) { filter: none !important; }' },
