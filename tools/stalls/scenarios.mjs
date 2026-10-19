@@ -31,10 +31,10 @@ const GLIDE_MOVES = 40;
 const GLIDE_WANDER = 0.3;
 /** the box the mouse glides round over the world, at the screen's middle (css px a side) */
 const WORLD_BOX = 80;
-/** a sweep over the stash: this long over each item (ms), as a person running down a row for one item, the mouse
- *  moved this often (ms: about a frame) */
-const SWEEP_ITEM_MS = 250;
+/** a sweep over the stash: the mouse moved this often (ms: about a frame), and this long over each item unless the
+ *  command says (`--item-ms`; ms, as a person running down a row for one item: the owner's hand is faster) */
 const SWEEP_MOVE_MS = 16;
+export const SWEEP_ITEM_MS = 250;
 /** how long a key is held for a tap, as a person's finger holds it (ms): a press down and up again at once is
  *  shorter than a frame */
 const TAP_MS = 90;
@@ -194,12 +194,12 @@ async function glideFor(page, boxAt, ms) {
 const STASH_HOVERED = 10;
 
 /**
- * Sweeps the mouse along the stash's items in view for `ms`, row after row and back to the first, `SWEEP_ITEM_MS`
- * over each, as a person runs a row down looking for an item: a new item hovered several times a second.
+ * Sweeps the mouse along the stash's items in view for `ms`, row after row and back to the first, `itemMs` over
+ * each, as a person runs a row down looking for an item: a new item hovered several times a second.
  */
-async function sweepFor(page, items, ms) {
+async function sweepFor(page, items, ms, itemMs) {
   const started = Date.now();
-  const steps = Math.max(1, Math.round(SWEEP_ITEM_MS / SWEEP_MOVE_MS));
+  const steps = Math.max(1, Math.round(itemMs / SWEEP_MOVE_MS));
   for (let index = 0; Date.now() - started < ms; index++) {
     const from = items[index % items.length];
     const to = items[(index + 1) % items.length];
@@ -216,11 +216,11 @@ async function sweepFor(page, items, ms) {
 /**
  * Hovers the items in the lobby, a quarter of `ms` each phase: the mouse gliding over the world first (no tooltip: the
  * frames to beat), then over each of the hero's equipment slots and the stash's first items in turn, its tooltip
- * following; then swept along the stash's items, a new one every `SWEEP_ITEM_MS`; then held still on one, its tooltip
- * up (a stash item's, if it has any: `--stash`). (Hovering the items dropped the owner's Chrome from 140 frames a
- * second to 44, #267, and moving between them to 34 once the glow was composited.)
+ * following; then swept along the stash's items, a new one every `itemMs`; then held still on one, its tooltip up (a
+ * stash item's, if it has any: `--stash`). (Hovering the items dropped the owner's Chrome from 140 frames a second to
+ * 44, #267, and moving between them to 34 once the glow was composited.)
  */
-async function hover(page, ms) {
+async function hover(page, ms, { itemMs }) {
   const { slots, items } = await page.evaluate(itemBoxes);
   const boxes = [...slots, ...items.slice(0, STASH_HOVERED)];
   if (boxes.length === 0) return ['no items shown in the lobby: hovered nothing'];
@@ -230,13 +230,14 @@ async function hover(page, ms) {
   await page.evaluate(markPhase, 'over items');
   await glideFor(page, (beat) => boxes[beat % boxes.length], ms / 4);
   await page.evaluate(markPhase, 'sweeping');
-  await sweepFor(page, items.length ? items : slots, ms / 4);
+  await sweepFor(page, items.length ? items : slots, ms / 4, itemMs);
   await page.evaluate(markPhase, 'held still');
   const held = items[0] ?? slots[0];
   await page.mouse.move(held.x + held.width / 2, held.y + held.height / 2);
   await page.waitForTimeout(ms / 4);
   const stash = items.length ? `${Math.min(items.length, STASH_HOVERED)} of the stash's items` : 'no stash items';
-  const swept = items.length ? `the stash's ${items.length} items in view` : 'the equipment slots';
+  const sweptOver = items.length ? `the stash's ${items.length} items in view` : 'the equipment slots';
+  const swept = `${sweptOver}, ${itemMs} ms each`;
   const on = items.length ? 'a stash item' : 'an equipment slot';
   return [`the mouse over the world, then over the ${slots.length} equipment slots and ${stash} in turn, swept along `
     + `${swept}, then held on ${on}`];
@@ -245,16 +246,16 @@ async function hover(page, ms) {
 /** Sweeps the mouse along the stash's items in view, `hover`'s sweeping, for three quarters of `ms`: the moves
  *  between items that cost the most, measured three times as long. The first quarter the mouse glides over the world:
  *  the same run's frames to beat (a machine busy with something else slows both). */
-async function sweep(page, ms) {
+async function sweep(page, ms, { itemMs }) {
   const { slots, items } = await page.evaluate(itemBoxes);
   if (items.length === 0) return ['no stash items shown (--stash): swept nothing'];
   const world = await worldBox(page);
   await page.evaluate(markPhase, 'away');
   await glideFor(page, () => world, ms / 4);
   await page.evaluate(markPhase, 'sweeping');
-  await sweepFor(page, items, (ms * 3) / 4);
-  return [`the mouse over the world, then swept along the stash's ${items.length} items in view (the ${slots.length} `
-    + 'slots left alone)'];
+  await sweepFor(page, items, (ms * 3) / 4, itemMs);
+  return [`the mouse over the world, then swept along the stash's ${items.length} items in view, ${itemMs} ms each `
+    + `(the ${slots.length} slots left alone)`];
 }
 
 /** Stands in the lobby, then walks round it, for `ms` in all. */
@@ -264,5 +265,6 @@ async function lobby(page, ms) {
   return ['stood in the lobby, then walked round it'];
 }
 
-/** The scenarios by name: each plays the page for `ms` and returns notes of what happened. */
+/** The scenarios by name: each plays the page for `ms` (as `options` say, those it reads) and returns notes of what
+ *  happened. */
 export const SCENARIOS = { fight, lobby, storm, hover, sweep };

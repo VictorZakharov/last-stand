@@ -561,15 +561,23 @@ function lockedTooltip(weapon: Item, swaps: boolean): { html: string; color: str
   return { html, color: '#666', foot: swaps ? 'Equipping an off-hand puts the two-hander back in the stash' : undefined };
 }
 
-/** how long the focus outlasts the pointer leaving an item (ms): crossing the gap to the next one, the items don't
- *  all fade back and light again (each change of focus restyles every item: tools/stalls `--scenario sweep`) */
-const FOCUS_LINGER_MS = 120;
+/** how long the pointer rests on an item, or off them all, before the focus follows it (ms): run across the stash,
+ *  nothing lights or dims until it stops on one. Each change of focus restyles and repaints the items whose look
+ *  changes, and moving between items fast halved the frames (tools/stalls `--scenario sweep --item-ms 100`). */
+export const FOCUS_DELAY_MS = 200;
 let focused: Slot | null = null;
-let unfocus: ReturnType<typeof setTimeout> | undefined;
+let focal: HTMLElement | null = null;
+let pending: ReturnType<typeof setTimeout> | undefined;
 
-/** Lights the items that fit `slot` and dims the rest (none: all as they were), changing only the items that differ. */
-function focusSlot(slot: Slot | null): void {
-  clearTimeout(unfocus);
+/** Lights the items that fit `slot` and dims the rest (none: all as they were), changing only the items that differ;
+ *  `from`, the item the pointer rests on, runs the glow's loops (`.focal`). Now, whatever was waiting. */
+function focusSlot(slot: Slot | null, from: HTMLElement | null = null): void {
+  clearTimeout(pending);
+  if (focal !== from) {
+    focal?.classList.remove('focal');
+    from?.classList.add('focal');
+    focal = from;
+  }
   if (slot === focused) return;
   focused = slot;
   const menu = $('#menu');
@@ -577,9 +585,16 @@ function focusSlot(slot: Slot | null): void {
   menu.querySelectorAll<HTMLElement>('.sitem, .eslot').forEach((n) => n.classList.toggle('match', n.dataset.slot === slot));
 }
 
+/** The focus moved to `slot` (from `from`) once the pointer has rested `FOCUS_DELAY_MS`, a move before then waited
+ *  for in its place. */
+function focusSoon(slot: Slot | null, from: HTMLElement | null = null): void {
+  clearTimeout(pending);
+  pending = setTimeout(() => focusSlot(slot, from), FOCUS_DELAY_MS);
+}
+
 function bindSlotFocus(el: HTMLElement, slot: Slot): void {
-  el.addEventListener('pointerenter', () => { if (!drag) focusSlot(slot); });
-  el.addEventListener('pointerleave', () => { clearTimeout(unfocus); unfocus = setTimeout(() => focusSlot(null), FOCUS_LINGER_MS); });
+  el.addEventListener('pointerenter', () => { if (!drag) focusSoon(slot, el); });
+  el.addEventListener('pointerleave', () => focusSoon(null));
 }
 
 // --- item drag & drop -------------------------------------------------------------

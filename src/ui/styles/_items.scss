@@ -35,10 +35,10 @@
    compositor does without painting anything again: animating the shadow itself, the arc's
    gradient by a custom property and the sheen's background position, every lit item was painted
    again every frame, and a full stash lit dropped the lobby from 145 frames a second to 44 (#267;
-   tools/lab `ui --states glow`). The loops run on the item hovered and the equipment slots alone,
-   the other stash items that fit lit steady: each loop is a layer the page styles and the
-   compositor draws every frame, and 30 lit items' 90 still halved the frames while the mouse moved
-   (tools/stalls `--scenario sweep`). */
+   tools/lab `ui --states glow`). The loops run on the item the pointer rests on (`.focal`,
+   ui/menus.ts `focusSlot`) and the equipment slots alone, the other stash items that fit lit
+   steady: each loop is a layer the page styles and the compositor draws every frame, and 30 lit
+   items' 90 still halved the frames while the mouse moved (tools/stalls `--scenario sweep`). */
 .slot-glow { position: absolute; inset: -3px; pointer-events: none; z-index: 2; opacity: 0; transform: scale(1.18);
   transition: opacity .3s ease-out, transform .3s ease-out; }
 .match .slot-glow { opacity: 1; transform: none; transition-timing-function: ease-out, cubic-bezier(.2,1.6,.4,1); }
@@ -60,11 +60,11 @@
 .glow-sheen > span { position: absolute; left: 0; top: 0; width: 300%; height: 100%;
   background: linear-gradient(115deg, transparent 38%, rgba(255,236,190,.38) 50%, transparent 62%);
   animation: glow-sheen 2.4s ease-in-out infinite; }
-.sitem:not(:hover) > .slot-glow span, :not(.match) > .slot-glow span { animation: none; }
+.sitem:not(.focal) > .slot-glow span, :not(.match) > .slot-glow span { animation: none; }
 /* lit steady: the pulse held half-way, as bright as it is on average, and the arc and the sheen,
    which are only motion, hidden (the arc held still was a gold mark on the border's left) */
-.sitem:not(:hover) > .slot-glow .glow-bright { opacity: .5; }
-.sitem:not(:hover) > .slot-glow :is(.glow-arc, .glow-sheen) { visibility: hidden; }
+.sitem:not(.focal) > .slot-glow .glow-bright { opacity: .5; }
+.sitem:not(.focal) > .slot-glow :is(.glow-arc, .glow-sheen) { visibility: hidden; }
 /* lit and dimmed by their icons' filters, painted into the item's layer as it changes, and
    switched at once: a filter on the item (a layer) is a pass of the compositor's own, drawn
    again every frame anything in it moves, and the stash's 60 a fifth of the page's work while

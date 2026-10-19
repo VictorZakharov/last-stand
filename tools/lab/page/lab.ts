@@ -90,6 +90,12 @@ export interface PagePoint {
   y: number;
 }
 
+/** Resolves after `ms` of the browser's own time (the lab's clock stands still meanwhile: no frame runs). The page's
+ *  timers run on it, a debounce's among them. */
+export function realWait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** The middle of `element`'s box, css px: where a measure puts the mouse or a finger to point at it. */
 export function middleOf(element: Element): PagePoint {
   const box = element.getBoundingClientRect();

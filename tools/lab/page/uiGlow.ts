@@ -11,10 +11,10 @@
 // A canary each: a shadow looped on the hovered item, and a loop on a stash item not hovered.
 import { G } from '../../../src/state';
 import { makeItem } from '../../../src/loot/items';
-import { renderMenu } from '../../../src/ui/menus';
+import * as menus from '../../../src/ui/menus';
 import { hideTooltip } from '../../../src/ui/tooltip';
 import type { Item, RarityId, Slot } from '../../../src/types';
-import { middleOf } from './lab';
+import { middleOf, realWait } from './lab';
 import type { Lab, Pictured } from './lab';
 
 /** the stash's items while the glow is pictured: so many, in turn of these slots and rarities */
@@ -29,6 +29,11 @@ const MOMENTS = [400, 1000, 1600];
  *  animates alone */
 const KEYFRAME_FIELDS = new Set(['offset', 'computedOffset', 'easing', 'composite']);
 const COMPOSITED = new Set(['transform', 'opacity', 'translate', 'rotate', 'scale']);
+/** how much longer than the focus's delay the hovered item is given to light the others (ms of the browser's time) */
+const FOCUS_SPARE_MS = 100;
+/** how long the pointer rests before the focus follows it (ms): the menus' own, none before they had one (main's side
+ *  of an A/B before #269, which a named import of it would fail on) */
+const focusDelay = () => (menus as { FOCUS_DELAY_MS?: number }).FOCUS_DELAY_MS ?? 0;
 /** the canaries: each one's loop's name (which its finding names), and what it is */
 export const GLOW_CANARIES = {
   shadow: { name: 'lab-canary-shadow', what: 'a looping shadow on the hovered item' },
@@ -38,9 +43,9 @@ export const GLOW_CANARIES = {
 /** the hero's own stash, kept while the glow's is shown */
 let kept: Item[] | null = null;
 
-/** The stash given `STASH_ITEMS` items, and one fitting `HOVERED` hovered by the mouse: those that fit its slot lit,
- *  its loops let run (the lab opens its pages with the decorative animation left out: `Lab.reduceMotion`). Its
- *  tooltip is put away, which would cover the items pictured. */
+/** The stash given `STASH_ITEMS` items, and one fitting `HOVERED` hovered by the mouse: those that fit its slot lit
+ *  once it has rested there (`FOCUS_DELAY_MS`), its loops let run (the lab opens its pages with the decorative
+ *  animation left out: `Lab.reduceMotion`). Its tooltip is put away, which would cover the items pictured. */
 export async function openGlow(lab: Lab): Promise<void> {
   await lab.reduceMotion(false);
   kept = G.profile.stash;
@@ -49,20 +54,22 @@ export async function openGlow(lab: Lab): Promise<void> {
     rarity: RARITIES[index % RARITIES.length],
     cls: G.player.cls,
   }));
-  renderMenu();
+  menus.renderMenu();
   const hovered = document.querySelector(`#stash .sitem[data-slot="${HOVERED}"]`);
   if (!hovered) throw new Error(`lab: ui glow: no stash item for the ${HOVERED} to hover`);
   // (the mouse itself: a dispatched event lights the items but hovers nothing, and the loops run where it is)
   await lab.mouseTo(middleOf(hovered));
+  await realWait(focusDelay() + FOCUS_SPARE_MS);
   hideTooltip();
 }
 
 /** The hero's own stash back, nothing hovered (the mouse over the world), the decorative animation left out again. */
 export async function closeGlow(lab: Lab): Promise<void> {
   await lab.mouseTo({ x: innerWidth / 2, y: innerHeight / 2 });
+  await realWait(focusDelay() + FOCUS_SPARE_MS);
   if (kept) G.profile.stash = kept;
   kept = null;
-  renderMenu();
+  menus.renderMenu();
   await lab.reduceMotion(true);
 }
 
@@ -116,7 +123,8 @@ function itemOf(animation: Animation): Element | null {
   return target?.closest('.sitem, .eslot') ?? target;
 }
 
-/** Whether an animation runs on a stash item the mouse isn't over. */
+/** Whether an animation runs on a stash item the mouse isn't over (the focus's own item, `.focal`, is the one it
+ *  rested on). */
 function onItemNotHovered(animation: Animation): boolean {
   const item = itemOf(animation);
   return !!item?.matches('.sitem') && !item.matches(':hover');

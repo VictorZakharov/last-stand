@@ -12,6 +12,7 @@ test('fills in the defaults', () => {
     listed: 300,
     variants: ['base'],
     rounds: 1,
+    itemMs: 250,
     view: 'top',
     biome: 'forest',
     hero: null,
@@ -50,6 +51,8 @@ test('refuses what it doesn\'t know and bad values', () => {
   assert.throws(() => readOptions(['--variants', 'base,gpu']), /no variant gpu/);
   assert.throws(() => readOptions(['--variants', 'stillGlow+gpu']), /no variant gpu/);
   assert.throws(() => readOptions(['--rounds', '0']), /--rounds must be a whole number, 1 or more/);
+  assert.throws(() => readOptions(['--item-ms', '5']), /--item-ms must be a number of ms, 16 or more/);
+  assert.equal(readOptions(['--item-ms', '100']).itemMs, 100);
   assert.throws(() => readOptions(['--rounds', '3', '--variants', 'base,cpuCanvas']), /cpuCanvas runs a script/);
   assert.equal(readOptions(['--rounds', '3', '--variants', 'base,stillGlow+noTooltip']).rounds, 3);
   assert.deepEqual(readOptions(['--variants', 'base,stillGlow+noTooltip']).variants, ['base', 'stillGlow+noTooltip']);
@@ -66,7 +69,7 @@ test('refuses what it doesn\'t know and bad values', () => {
 
 test('the usage lists every option', () => {
   const names = ['url', 'scenario', 'seconds', 'variants', 'rounds', 'view', 'biome', 'hero', 'stash', 'scale'];
-  for (const name of [...names, 'window', 'headed', 'perf', 'links', 'help']) {
+  for (const name of [...names, 'window', 'item-ms', 'headed', 'perf', 'links', 'help']) {
     assert.match(usage(), new RegExp(`--${name}\\b`));
   }
 });

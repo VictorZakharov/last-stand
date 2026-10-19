@@ -1,6 +1,6 @@
 // The stalls harness's command line (tools/stalls): its options, read and checked before anything starts, so a
 // misspelt one or a bad value stops it before a build or a browser.
-import { SCENARIOS } from './scenarios.mjs';
+import { SCENARIOS, SWEEP_ITEM_MS } from './scenarios.mjs';
 import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
@@ -29,6 +29,7 @@ const HELP = {
   biome: ['name', `the battleground: ${BIOMES.join(', ')} (forest by default)`],
   hero: ['name', `the hero chosen in the lobby: ${HEROES.join(', ')} (a first boot's by default)`],
   stash: ['n', `the hero's stash filled with this many items, copies of his own (0 to ${STASH_MOST}: 0 by default)`],
+  'item-ms': ['ms', `how long a sweep over the stash stays over each item (${SWEEP_ITEM_MS} by default)`],
   scale: ['n', 'the screen\'s scaling, as the OS sets it (a report\'s devicePixelRatio: 1 by default)'],
   window: ['WxH', 'the page\'s size in css px, as a report\'s `window` (1536x864 by default)'],
   headed: ['', 'a Chrome window on the screen, as a player has it (headless by default)'],
@@ -89,6 +90,7 @@ export function readOptions(argv) {
     biome: written.biome ?? 'forest',
     hero: written.hero ?? null,
     stash: Number(written.stash ?? 0),
+    itemMs: Number(written['item-ms'] ?? SWEEP_ITEM_MS),
     scale: Number(written.scale ?? 1),
     window: sizeOf(written.window ?? '1536x864'),
     headed: written.headed === true,
@@ -110,6 +112,7 @@ export function readOptions(argv) {
     throw new Error(`stalls: --stash must be a whole number from 0 to ${STASH_MOST}`);
   }
   if (!(options.seconds > 0)) throw new Error('stalls: --seconds must be a number over 0');
+  if (!(options.itemMs >= 16)) throw new Error('stalls: --item-ms must be a number of ms, 16 or more (a frame)');
   if (!(options.scale > 0)) throw new Error('stalls: --scale must be a number over 0');
   if (!(options.listed >= LISTED_LEAST)) {
     throw new Error(`stalls: --listed must be a number of ms, ${LISTED_LEAST} or more`);

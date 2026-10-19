@@ -17,6 +17,7 @@ npm run stalls -- --scenario storm --listed 120  # the mage's Maelstrom cast int
 npm run stalls -- --scenario hover --hero warrior --stash 40 --view first --scale 1.25 --perf  # a report's lobby
 npm run stalls -- --scenario hover --stash 40 --variants base,stillGlow  # hovering with the stash's glow held still
 npm run stalls -- --scenario sweep --stash 60 --view top --window 1536x695 --seconds 12  # moving between items
+npm run stalls -- --scenario sweep --stash 60 --item-ms 100 --seconds 8 --rounds 3  # the owner's pace, fast
 npm run stalls -- --scenario hover --stash 60 --listed 40   # every frame of 40 ms+ listed with what was busy
 npm run stalls -- --scenario sweep --stash 60 --seconds 8 --rounds 3 --variants base,iconFilter,stillGlow+noTooltip
                                                  # one page, the variants in turn three times over, by their medians
@@ -55,7 +56,8 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   - `lobby`: standing, then walking round the lobby.
   - `hover`: the lobby's items hovered, a quarter of the time each: the mouse gliding over the world (the frames to
     beat); over each equipment slot and the stash's first ten items in turn, its tooltip following; swept along the
-    stash's items in view, a new one every 250 ms, as a player runs a row down looking for one; then held still on a
+    stash's items in view, a new one every 250 ms (`--item-ms`), as a player runs a row down looking for one; then
+    held still on a
     stash item, those that fit its slot lit. Its notes say what it hovered: with nothing in the stash (`--stash 0`),
     nothing lights.
   - `sweep`: `hover`'s sweep alone, three quarters of the time, after a quarter over the world: the same run's
@@ -154,6 +156,16 @@ read 7 to 19 a second more in frames but no less work; the items' filters moved 
 a fifth less every run (538 to 559 ms a second against 616 to 747): each filter on an item, itself a layer, was a pass
 of the compositor's own, drawn again every frame its glow moved. Its look kept by colours painted once
 (`src/ui/styles/_items.scss`). This tree against that preview, 3 rounds each: 422 ms a second against 556 sweeping.
+
+That still dipped for the owner, hovering "pretty quickly": at 100 ms an item (`--item-ms 100`) the sweep read 95 a
+second. Split by variants over rounds, the tooltip's new card was a small part (`noTooltip` 105) and the focus's look
+nearly all of it (`noFocusLook`: nothing lit or dimmed, 143; the browser's work 282 ms a second against 703). Hence
+the focus moved only once the pointer rests on an item for 200 ms (the owner's own idea, `src/ui/menus.ts`
+`FOCUS_DELAY_MS`), the glow's loops on that item (`.focal`) rather than the one under the pointer: at 100 ms an item,
+144 a second, none missed. Resting on each item in turn (300 ms an item), each change of focus still cost about
+70 ms of the browser's work, 133 to 136 a second (4% missed): no one part of it (the fades, `snapFocus`; the items'
+colours painted again, `keepColours`; the glows painted at load, `glowLayers`, twice the work) but all of them, fades
+cut and colours kept together 142.
 
 **A 60 s storm** (the mage's Maelstrom, after a report of lag with 7 or 8 bodies in it), on #221's tree and on
 production (no ragdolls): 14 and 21 kills, the median frame 16.7 ms on both. Each had one frame over 100 ms (167 and

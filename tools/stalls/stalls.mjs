@@ -3,8 +3,8 @@
 // the game's canvas with it, for seconds while Skia builds a program). See tools/stalls/README.md.
 //
 // npm run stalls -- [--url a,b] [--scenario fight|lobby|storm|hover|sweep] [--seconds 45] [--listed 300]
-//   [--variants base,cpuCanvas] [--rounds 3] [--view top] [--biome forest] [--hero warrior] [--stash 40] [--scale 1.25]
-//   [--window 1536x695] [--perf] [--headed] [--links] (--help: what each does)
+//   [--variants base,cpuCanvas] [--rounds 3] [--view top] [--biome forest] [--hero warrior] [--stash 40]
+//   [--item-ms 100] [--scale 1.25] [--window 1536x695] [--perf] [--headed] [--links] (--help: what each does)
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { freshStorage, noCapture } from '../lab/node/browser.mjs';
@@ -113,7 +113,7 @@ function chromeFor(options) {
 async function playTraced(browser, page, options, picture) {
   const trace = await startTrace(browser);
   await page.evaluate(startRecording, MARK);
-  const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000);
+  const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000, options);
   const record = await page.evaluate(stopRecording);
   const events = await trace.stop();
   await page.screenshot({ path: picture });

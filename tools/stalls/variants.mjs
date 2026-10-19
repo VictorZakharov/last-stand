@@ -56,6 +56,28 @@ export const VARIANTS = {
   cpuCanvas: { script: cpuCanvas },
   tooltipLayer: { script: styled, arg: '#tooltip { will-change: transform; }' },
   noTooltip: { script: styled, arg: '#tooltip { display: none !important; }' },
+  // (and the slot's focus with no look at all: its classes still change, but nothing they style shows)
+  noFocusLook: {
+    script: styled,
+    arg: '.slot-glow { display: none !important; }'
+      + ' #menu.slot-focus :is(.sitem, .eslot) { opacity: 1 !important; transform: none !important;'
+      + ' filter: none !important; transition: none !important; }'
+      + ' #menu.slot-focus .sitem { box-shadow: inset 0 0 0 1px var(--c, #555) !important; background:'
+      + ' radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--c, #555) 22%, #151315), #080708 78%)'
+      + ' !important; }'
+      + ' #menu.slot-focus .sitem > .item-icon { filter: none !important; }',
+  },
+  // (and a change of focus split: every fade cut, the items' own colours kept (nothing to paint again), the glows
+  // made layers at load (painted once))
+  snapFocus: { script: styled, arg: '.sitem, .eslot, .slot-glow { transition: none !important; }' },
+  keepColours: {
+    script: styled,
+    arg: '#menu.slot-focus .sitem > .item-icon { filter: none !important; }'
+      + ' #menu.slot-focus .sitem { box-shadow: inset 0 0 0 1px var(--c, #555) !important; background:'
+      + ' radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--c, #555) 22%, #151315), #080708 78%)'
+      + ' !important; } #menu.slot-focus .sitem.up::before { color: #4cff6a !important; }',
+  },
+  glowLayers: { script: styled, arg: '.sitem > .slot-glow { will-change: opacity, transform; }' },
   noCardShadow: { script: styled, arg: '.tt-card { box-shadow: inset 0 0 0 1px var(--c, var(--frame)) !important; }' },
   noHoverFilter: { script: styled, arg: '.sitem:hover, .eslot:hover { filter: none !important; }' },
   stillGlow: { script: styled, arg: `${GLOW_PARTS} { animation: none !important; }` },
