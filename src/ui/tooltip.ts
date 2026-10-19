@@ -14,23 +14,40 @@ export interface TooltipContent { html: string; color: string; foot?: string }
 
 const el = (): HTMLElement => document.getElementById('tooltip')!;
 
-// Keep the tooltip fully on screen: flip left/up when needed, stack comparison
-// cards vertically when side-by-side is too wide, and clamp as a last resort.
-function place(e: MouseEvent): void {
-  const t = el();
-  const maxW = window.innerWidth - 16, maxH = window.innerHeight - 16;
+/** The tooltip's size as laid out for what it shows and the window (comparison cards side by side, or stacked when
+ *  that is too wide), measured when it's shown or the window's size changes, so a move only places it: laid out on
+ *  every move, stacked cards were taken apart and stacked again each time, two layouts of them (tools/stalls
+ *  `--scenario sweep`: 10 to 16 ms of the browser's work after each move). null: to be measured. */
+let laidOut: { width: number; height: number; w: number; h: number } | null = null;
+
+function sizeOf(t: HTMLElement): { w: number; h: number } {
+  const width = window.innerWidth, height = window.innerHeight;
+  if (laidOut && laidOut.width === width && laidOut.height === height) return laidOut;
   const cards = t.querySelector<HTMLElement>('.tt-cards');
   if (cards) {
     cards.classList.remove('stack');
-    if (t.offsetWidth > maxW) cards.classList.add('stack');
+    if (t.offsetWidth > width - 16) cards.classList.add('stack');
   }
-  const w = t.offsetWidth, h = t.offsetHeight;
+  laidOut = { width, height, w: t.offsetWidth, h: t.offsetHeight };
+  return laidOut;
+}
+
+// Keep the tooltip fully on screen: flip left/up when needed, stack comparison
+// cards vertically when side-by-side is too wide, and clamp as a last resort.
+// Moved by its transform alone, on a layer of its own (_tooltip.scss): placed by
+// left/top, each move laid it out and painted it again, with what lay under it.
+function place(e: MouseEvent): void {
+  const t = el();
+  const maxW = window.innerWidth - 16, maxH = window.innerHeight - 16;
+  const { w, h } = sizeOf(t);
   let x = e.clientX + 18, y = e.clientY + 14;
   if (x + w > maxW + 8) x = e.clientX - w - 18;
   if (y + h > maxH + 8) y = e.clientY - h - 14;
   x = Math.max(8, Math.min(x, maxW + 8 - w));
   y = Math.max(8, Math.min(y, maxH + 8 - h));
-  t.style.left = x + 'px'; t.style.top = y + 'px';
+  // (on the screen's pixels, its text crisp: a css px is 1.25 of them at 125%)
+  const px = (v: number): number => Math.round(v * devicePixelRatio) / devicePixelRatio;
+  t.style.transform = `translate(${px(x)}px, ${px(y)}px)`;
 }
 
 const round = (k: StatKey, v: number): number => { const f = 10 ** (STATS[k].dec || 0); return Math.round(v * f) / f; };
@@ -99,6 +116,7 @@ function show(c: TooltipContent, at: { clientX: number; clientY: number }): void
   const t = el();
   t.innerHTML = c.html + (c.foot ? `<div class="tt-footbar">${c.foot}</div>` : '');
   t.classList.remove('hidden');
+  laidOut = null;
   place(at as MouseEvent);
 }
 
