@@ -48,7 +48,8 @@ function freePort() {
 
 /**
  * The flags: the GPU through ANGLE (Direct3D 11 on Windows, as the reports' browsers draw), nothing asked of the
- * user, the window `width` by `height` (css px) on a screen scaled `scale`.
+ * user, the window `width` by `height` (css px) on a screen scaled `scale`, and its sound muted: the game's music and
+ * sounds still play (their cost is the page's), but out of no speaker (headless, the owner heard them).
  */
 function chromeArgs({ headed, profile, port, width, height, scale }) {
   const size = [`--window-size=${width},${height}`, `--force-device-scale-factor=${scale}`];
@@ -62,6 +63,7 @@ function chromeArgs({ headed, profile, port, width, height, scale }) {
     '--no-first-run',
     '--no-default-browser-check',
     '--autoplay-policy=no-user-gesture-required',
+    '--mute-audio',
     `--user-data-dir=${profile}`,
     `--remote-debugging-port=${port}`,
     'about:blank',
