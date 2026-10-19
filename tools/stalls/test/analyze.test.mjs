@@ -89,3 +89,28 @@ test('reports each stall with what was built and busy in it, and the measures si
   assert.match(text, /0\.2 s {2}300 ms {2}RasterDecoderImpl::DoRaster/);
   assert.match(summaryText([measure]), /http:\/\/x\/ base {2}\s+1 stalls, 0\.5 s stalled;\s+1 programs, 300 ms/);
 });
+
+test('sums up each phase the scenario marked apart, with the share of its frames a tooltip showed in', () => {
+  const record = {
+    start: 0,
+    frames: [
+      { at: 10, ms: 7, tip: false },
+      { at: 17, ms: 7, tip: false },
+      { at: 40, ms: 23, tip: true },
+      { at: 63, ms: 23, tip: true },
+      { at: 70, ms: 7, tip: false },
+    ],
+    changes: [],
+    phases: [{ name: 'away', at: 0 }, { name: 'over items', at: 17 }],
+  };
+  const { phases } = analyze(record, trace(), MARK);
+  assert.deepEqual(phases.map((phase) => [phase.name, phase.count, phase.median]), [
+    ['away', 2, 7],
+    ['over items', 3, 23],
+  ]);
+  assert.equal(phases[1].tipShare, 2 / 3);
+  const measure = { name: 'x hover', notes: [], findings: analyze(record, trace(), MARK) };
+  assert.match(measureText(measure), /over items: 3 frames, median 23\.0 ms \(43 a second\), 90% within 23\.0 ms/);
+  assert.match(measureText(measure), /a tooltip shown in 67% of them/);
+  assert.match(summaryText([measure]), /median frames away 7\.0, over items 23\.0 ms/);
+});

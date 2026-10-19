@@ -1,5 +1,6 @@
-// The game's UI as the player sees it on this screen (tools/lab `ui`): the lobby, an item's tooltip, How to play, the
-// save slots, a class button clicked with the mouse and a key pressed after it (where the focus went), the lobby's
+// The game's UI as the player sees it on this screen (tools/lab `ui`): the lobby, an item's tooltip, the stash's items
+// lit for a hovered item's slot (`uiGlow.ts`: pictured at set moments of its loops, which mustn't paint), How to play,
+// the save slots, a class button clicked with the mouse and a key pressed after it (where the focus went), the lobby's
 // camera switched through its views (the labels over the dummies against where they stand on the screen, frame by
 // frame through each glide), the run's HUD with the world's labels over it (a hurt foe's bar, damage numbers), the
 // scores, the performance overlay, the bank-or-continue choice, the pause menu, the run's summary, the hotbar's skill
@@ -30,11 +31,12 @@ import { hideTooltip, itemTooltip, showTooltipAt } from '../../../src/ui/tooltip
 import { hdrOutput } from './hdrOutput';
 import { battleLog } from './battleLog';
 import { digitsShown } from './digits';
+import { closeGlow, glowPictures, glowShown, isGlowCanary, openGlow } from './uiGlow';
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
-  | 'lobby' | 'tooltip' | 'help' | 'saves' | 'clicked' | 'views' | 'logLobby' | 'skillTipsTouch' | 'run' | 'scores'
-  | 'perf'
+  | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'clicked' | 'views' | 'logLobby' | 'skillTipsTouch' | 'run'
+  | 'scores' | 'perf'
   | 'decision' | 'pause' | 'summary' | 'skillTips' | 'log' | 'logTouch';
 
 export interface UiOptions {
@@ -188,14 +190,15 @@ interface Found {
 }
 
 /**
- * How a state is opened over the lobby or the run and closed again after its picture, what's held meanwhile, and
- * what it checks once pictured.
+ * How a state is opened over the lobby or the run and closed again after its picture, what's held meanwhile, what it
+ * checks once pictured (`canary`: with a problem planted, which it must find), and the pictures it takes besides.
  */
 interface Steps {
   open(lab: Lab): unknown;
   close(lab: Lab): unknown;
   held?: Frame;
-  check?(): Found;
+  check?(canary: boolean): Found;
+  pictures?(lab: Lab): Promise<Pictured[]>;
 }
 
 /** One switch of the view: from which to which, the labels measured, and how far the furthest was off and when. */
@@ -661,6 +664,7 @@ const TAB: Frame = { keys: ['tab'] };
 const STEPS: Record<UiState, Steps> = {
   lobby: { open: () => undefined, close: () => undefined },
   tooltip: { open: openTooltip, close: hideTooltip },
+  glow: { open: openGlow, close: closeGlow, check: glowShown, pictures: glowPictures },
   help: { open: openHelp, close: closeHelp },
   saves: { open: () => openSaves(true), close: () => openSaves(false) },
   clicked: { open: clickClass, close: () => undefined, check: focusAfterClick },
@@ -700,13 +704,14 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
   tallTips = !!options.canary;
   await steps.open(lab);
   const pictured = await pictureState(lab, state, steps.held ?? {});
-  const found = steps.check?.() ?? { lines: [], problems: [] };
+  const found = steps.check?.(!!options.canary) ?? { lines: [], problems: [] };
+  const extra = (await steps.pictures?.(lab)) ?? [];
   const cursors = cursorsShown(!!options.canary);
   const digits = await digitsShown(lab, !!options.canary);
   await steps.close(lab);
   const lines = [...pictured.lines, ...found.lines, ...cursors.lines, ...digits.lines];
   const problems = [...found.problems, ...cursors.problems, ...digits.problems];
-  const moments = [pictured.moment, ...digits.moments];
+  const moments = [pictured.moment, ...extra, ...digits.moments];
   if (!options.canary) return { text: lines.join('\n'), problems, moments };
   const caught = cursors.problems.some((problem) => problem.includes('body'));
   lines.push(`  canary: ${caught ? 'the body\'s system cursor caught' : 'the body\'s system cursor went unseen'}`);
@@ -715,6 +720,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const jumped = digits.problems.some((problem) => problem.includes(where));
     lines.push(`  canary: old-style digits in ${where} ${jumped ? 'caught' : 'went unseen'}`);
     if (!jumped) missed.push(`${state}: the canary's old-style digits in ${where} went unseen`);
+  }
+  if (state === 'glow') {
+    const caught = found.problems.some(isGlowCanary);
+    lines.push(`  canary: a lit item's looping shadow ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's looping shadow on a lit item went unseen`);
   }
   if (state.startsWith('skillTips')) {
     const past = found.problems.some((problem) => problem.includes('reaches past the window'));

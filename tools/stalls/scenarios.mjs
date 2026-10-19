@@ -1,6 +1,6 @@
 // What the player does while the stalls are measured (tools/stalls), with the page's own controls alone (real key
 // presses and mouse moves sent to the page, its buttons clicked): a production build has no dev hooks to drive it.
-import { choiceClosed, deciding, inRun, runOver, scoresShown } from './page.mjs';
+import { choiceClosed, deciding, inRun, itemBoxes, markPhase, runOver, scoresShown } from './page.mjs';
 
 /** the keys held in turn while walking round the lobby, and how long each */
 const WALK_KEYS = ['w', 'd', 's', 'a', 'w', 'a', 's', 'd'];
@@ -24,6 +24,13 @@ const KITE = [['w', Math.PI / 2], ['d', Math.PI], ['s', -Math.PI / 2], ['a', 0]]
 const KITE_MS = 2200;
 const TURN_MS = 250;
 const CAST_MS = 900;
+/** a hover's beats: the mouse glides round the middle of a box (an item's slot) this long (ms), in this many moves
+ *  (a hand's mouse sends one a frame or so), as far round as this share of the box's size */
+const GLIDE_MS = 800;
+const GLIDE_MOVES = 40;
+const GLIDE_WANDER = 0.3;
+/** the box the mouse glides round over the world, at the screen's middle (css px a side) */
+const WORLD_BOX = 80;
 /** how long a key is held for a tap, as a person's finger holds it (ms): a press down and up again at once is
  *  shorter than a frame */
 const TAP_MS = 90;
@@ -155,6 +162,53 @@ async function storm(page, ms) {
   return [...notes, ...played, await scoresNote(page)];
 }
 
+/** Glides the mouse round the middle of `box` for `GLIDE_MS`, as a hand does over an item it reads. */
+async function glideRound(page, box) {
+  const middle = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  for (let move = 0; move < GLIDE_MOVES; move++) {
+    const angle = (move / GLIDE_MOVES) * 2 * Math.PI;
+    const x = middle.x + Math.cos(angle) * box.width * GLIDE_WANDER / 2;
+    const y = middle.y + Math.sin(angle) * box.height * GLIDE_WANDER / 2;
+    await page.mouse.move(x, y);
+    await page.waitForTimeout(GLIDE_MS / GLIDE_MOVES);
+  }
+}
+
+/** Glides the mouse round one box after another for `ms`: `boxAt(beat)` the beat's. */
+async function glideFor(page, boxAt, ms) {
+  const started = Date.now();
+  for (let beat = 0; Date.now() - started < ms; beat++) await glideRound(page, boxAt(beat));
+}
+
+/** the most stash items glided over in turn (the first in its view) */
+const STASH_HOVERED = 10;
+
+/**
+ * Hovers the items in the lobby, a third of `ms` each phase: the mouse gliding over the world first (no tooltip: the
+ * frames to beat), then over each of the hero's equipment slots and the stash's first items in turn, its tooltip
+ * following, then held still on one, its tooltip up (a stash item's, if it has any: `--stash`). (Hovering the items
+ * dropped the owner's Chrome from 140 frames a second to 44, #267.)
+ */
+async function hover(page, ms) {
+  const { slots, items } = await page.evaluate(itemBoxes);
+  const boxes = [...slots, ...items.slice(0, STASH_HOVERED)];
+  if (boxes.length === 0) return ['no items shown in the lobby: hovered nothing'];
+  const { width, height } = await windowSize(page);
+  const world = { x: (width - WORLD_BOX) / 2, y: (height - WORLD_BOX) / 2, width: WORLD_BOX, height: WORLD_BOX };
+  await page.evaluate(markPhase, 'away');
+  await glideFor(page, () => world, ms / 3);
+  await page.evaluate(markPhase, 'over items');
+  await glideFor(page, (beat) => boxes[beat % boxes.length], ms / 3);
+  await page.evaluate(markPhase, 'held still');
+  const held = items[0] ?? slots[0];
+  await page.mouse.move(held.x + held.width / 2, held.y + held.height / 2);
+  await page.waitForTimeout(ms / 3);
+  const stash = items.length ? `${Math.min(items.length, STASH_HOVERED)} of the stash's items` : 'no stash items';
+  const on = items.length ? 'a stash item' : 'an equipment slot';
+  return [`the mouse over the world, then over the ${slots.length} equipment slots and ${stash} in turn, then held `
+    + `on ${on}`];
+}
+
 /** Stands in the lobby, then walks round it, for `ms` in all. */
 async function lobby(page, ms) {
   await page.waitForTimeout(ms / 4);
@@ -163,4 +217,4 @@ async function lobby(page, ms) {
 }
 
 /** The scenarios by name: each plays the page for `ms` and returns notes of what happened. */
-export const SCENARIOS = { fight, lobby, storm };
+export const SCENARIOS = { fight, lobby, storm, hover };

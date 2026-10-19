@@ -92,17 +92,36 @@ function changesBetween(changes, from, to, shown = CHANGES_SHOWN) {
     .map(([key, count]) => `${count} x ${key}`);
 }
 
-/** The frames' summary: how many, their median, the stalls and the worst. */
+/** The interval at share `share` (0..1) of `sorted` intervals, or 0 without any. */
+function atShare(sorted, share) {
+  if (sorted.length === 0) return 0;
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * share))];
+}
+
+/** The frames' summary: how many, their median and 90th percentile, the stalls and the worst. */
 function frameSummary(frames) {
   const intervals = frames.map((frame) => frame.ms).sort((a, b) => a - b);
   const stalls = frames.filter((frame) => frame.ms >= STALL_MS);
   return {
     count: frames.length,
-    median: intervals.length ? intervals[Math.floor(intervals.length / 2)] : 0,
+    median: atShare(intervals, 0.5),
+    p90: atShare(intervals, 0.9),
     stalls: stalls.length,
     stalled: stalls.reduce((sum, frame) => sum + frame.ms, 0),
     worst: intervals.slice(-5).reverse(),
   };
+}
+
+/** Each phase the scenario marked (`page.mjs` `markPhase`): its frames' summary, from its mark to the next's (the
+ *  last's to the end), and the share of them a tooltip was shown in. */
+function phaseSummaries(record) {
+  const phases = record.phases ?? [];
+  return phases.map((phase, index) => {
+    const end = phases[index + 1]?.at ?? Infinity;
+    const frames = record.frames.filter((frame) => frame.at > phase.at && frame.at <= end);
+    const tipped = frames.filter((frame) => frame.tip).length;
+    return { name: phase.name, ...frameSummary(frames), tipShare: frames.length ? tipped / frames.length : 0 };
+  });
 }
 
 /**
@@ -146,6 +165,7 @@ export function analyze(record, events, mark, listedMs = LISTED_MS) {
     clockFound: markTs !== null,
     built,
     frames: frameSummary(record.frames),
+    phases: phaseSummaries(record),
     programs: {
       count: inRecording.length,
       total: inRecording.reduce((sum, link) => sum + link.ms, 0),

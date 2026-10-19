@@ -14,6 +14,8 @@ npm run stalls -- --headed --links --seconds 30  # a window on the screen, every
 npm run stalls -- --variants base,cpuCanvas      # the page as it is, then every 2D canvas drawn on the CPU
 npm run stalls -- --scenario lobby               # standing, then walking round the lobby
 npm run stalls -- --scenario storm --listed 120  # the mage's Maelstrom cast into the foes, every stall of 120 ms+
+npm run stalls -- --scenario hover --hero warrior --stash 40 --view first --scale 1.25 --perf  # a report's lobby
+npm run stalls -- --scenario hover --stash 40 --variants base,stillGlow  # hovering with the stash's glow held still
 npm run stalls -- --help
 npm run stalls:test                              # the tool's own unit tests
 ```
@@ -28,8 +30,13 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   browser connected over CDP outlives `browser.close()`), and its profile is deleted. A shell whose sandbox can't
   delete files Chrome wrote is told which profile was left.
 - **The page:** the lab's `noCapture` and `freshStorage` (`tools/lab/node/browser.mjs`), so it never takes the pointer
-  and starts as a first boot. The forest and the High preset are set by cookie, and a `--variants` change is applied
-  before the page's scripts.
+  and starts as a first boot. The battleground (`--biome`, the forest by default), the High preset and the performance
+  overlay (`--perf`) are set by cookie, and a `--variants` change is applied before the page's scripts. The screen is
+  1536 by 864 css px, scaled `--scale` times (a report's `devicePixelRatio`).
+- **The lobby set up as a player's is:** the hero chosen (`--hero`); his stash filled with `--stash` items (copies of
+  his own in each rarity: an item moved off him so his profile is saved, the copies kept in the session and put back
+  over the next load's fresh storage, `page.mjs` `seededProfile`); the view stepped to with V (`--view`), the panels
+  shown again with Space. A report says which: its `Mode`, `view`, `devicePixelRatio`, and the weapon in its shaders.
 - **The scenario** is played with the page's own controls: real key presses (each held 90 ms, as a finger does), mouse
   moves and clicks, as a production build has no dev hooks. Each ends with the hero's kills and damage, read off the
   scores held up on Tab, and a picture of the screen (`out/end-N.png`): a scenario that fought nothing measured
@@ -37,11 +44,15 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   - `fight`: the warrior through a wave and its choice into the next. Steel Tempest is held with the mouse circling
     and the left button down, now and then another skill, and Continue after a few seconds.
   - `lobby`: standing, then walking round the lobby.
+  - `hover`: the lobby's items hovered, a third of the time each: the mouse gliding over the world (the frames to
+    beat), then over each equipment slot and the stash's first ten items in turn, its tooltip following, then held
+    still on a stash item, those that fit its slot lit. Its notes say what it hovered: with nothing in the stash
+    (`--stash 0`), nothing lights.
   - `storm`: the mage in a run, walking away from the foes a side of a square at a time and casting Maelstrom back
     at those following him in a line, every other side: its storm draws them in and whirls what it kills.
-- **Recorded in the page:** every animation frame's interval, and every change to the page's HTML (a
-  `MutationObserver`: what changed and on which element). The page marks the trace (`console.timeStamp`) as its
-  clock starts, which puts both on one clock.
+- **Recorded in the page:** every animation frame's interval and whether the item tooltip showed in it, every change
+  to the page's HTML (a `MutationObserver`: what changed and on which element), and the scenario's phases
+  (`markPhase`). The page marks the trace (`console.timeStamp`) as its clock starts, which puts them all on one clock.
 - **Traced in the browser:** `toplevel`, `gpu`, `viz`, Skia's shaders and the timeline. Only Skia's
   `driver_compile_shader` and `driver_link_program`, the page's mark, and tasks of 20 ms or more on any thread are
   kept, as they stream in: a 20 s trace with Skia's draws in it was 250 MB.
@@ -49,7 +60,9 @@ The report is printed and written to `tools/stalls/out/report.txt`.
 ## The report
 
 For each measure:
-- **Frames:** how many, their median, how many took over 100 ms and how long those took in all, and the worst five.
+- **Frames:** how many, their median, how many took over 100 ms and how long those took in all, and the worst five;
+  and each phase's: its median (and as frames a second), 90% of them within what, the worst, and the share of them the
+  tooltip showed in (a phase meant to show it that reads 0% hovered nothing).
 - **Programs:** the Skia programs linked, how long in all, and the longest. With `--links`, every one: when, how long,
   the innermost tasks it was built in, and the page's changes in the 150 ms before it.
 - **Each stall of 300 ms or more** (`--listed` sets it, down to 100):
@@ -57,7 +70,7 @@ For each measure:
   - the longest tasks on any thread through it;
   - the page's changes in the 400 ms before it, by kind and element, the most frequent first.
 
-With more than one measure, they are listed side by side at the end.
+With more than one measure, they are listed side by side at the end, each phase's median frame with them.
 
 ## Reading it
 
@@ -77,6 +90,14 @@ When stalls show in one person's browser alone:
 
 **A 20 s fight** on this tree in headless Chrome 154 (RTX 4070 Ti): 38 programs linked, 455 ms in all, the longest
 27 ms. 2 frames took over 100 ms (243 and 174), and none took 300 ms or more.
+
+**Hovering the stash** (issue #267: the owner's lobby fell from 140 frames a second to 44 while hovering items):
+production as the report had it, the warrior with 40 items in his stash, in first person at 1.25, his weapon held on
+for 10 s, ran its median frame at 20.9 ms (48 a second) against 6.9 away from the items; with the glow's loops held
+still (`stillGlow`), 6.9. Each of its three loops alone cost as much (`stillPulse`, `stillArc`, `stillSheen`: 20.8
+to 20.9), and on layers of their own, 13.9 (`glowLayer`): each painted its glow again every frame. Moved by the
+compositor alone, 6.9 (`src/ui/styles/AGENTS.md`). With the stash empty (every measure before it), nothing lit and
+nothing showed: 145 a second, headless or in a window, the tooltip shown or not.
 
 **A 60 s storm** (the mage's Maelstrom, after a report of lag with 7 or 8 bodies in it), on #221's tree and on
 production (no ragdolls): 14 and 21 kills, the median frame 16.7 ms on both. Each had one frame over 100 ms (167 and

@@ -40,8 +40,19 @@ function linkLines(built) {
   });
 }
 
-/** A measure's section: its name, what the scenario did, the frames, the programs (each with `links`) and the long
- *  stalls. */
+const percent = (share) => `${(share * 100).toFixed(0)}%`;
+
+/** A phase's line: its frames, their median (and as frames a second), 90% of them within what, the worst, and how
+ *  much of it a tooltip was shown. */
+function phaseLine(phase) {
+  const rate = phase.median > 0 ? ` (${(1000 / phase.median).toFixed(0)} a second)` : '';
+  const worst = phase.worst.map((value) => value.toFixed(0)).join(', ');
+  return `  ${phase.name}: ${phase.count} frames, median ${phase.median.toFixed(1)} ms${rate}, 90% within `
+    + `${phase.p90.toFixed(1)} ms, the worst ${worst} ms; a tooltip shown in ${percent(phase.tipShare)} of them`;
+}
+
+/** A measure's section: its name, what the scenario did, the frames (each phase's), the programs (each with
+ *  `links`) and the long stalls. */
 export function measureText(measure, { links = false } = {}) {
   const { name, notes, findings } = measure;
   const frames = findings.frames;
@@ -51,6 +62,7 @@ export function measureText(measure, { links = false } = {}) {
     `  ${frames.count} frames, median ${frames.median.toFixed(1)} ms; ${frames.stalls} over ${STALL_MS} ms, `
       + `${seconds(frames.stalled)} in them; the worst ${frames.worst.map((value) => value.toFixed(0)).join(', ')} ms`,
     `  Skia programs linked: ${programs.count}, ${ms(programs.total)} in all, the longest ${ms(programs.longest)}`,
+    ...(findings.phases ?? []).map(phaseLine),
   ];
   if (links) lines.push(...linkLines(findings.built));
   if (!findings.clockFound) lines.push('  (the page\'s mark is missing from the trace: stalls and links not matched)');
@@ -59,13 +71,15 @@ export function measureText(measure, { links = false } = {}) {
   return lines.join('\n');
 }
 
-/** The measures side by side: one line each. */
+/** The measures side by side: one line each, with each phase's median frame. */
 export function summaryText(measures) {
   const width = Math.max(...measures.map((measure) => measure.name.length));
   const rows = measures.map((measure) => {
-    const { frames, programs } = measure.findings;
+    const { frames, programs, phases = [] } = measure.findings;
+    const medians = phases.map((phase) => `${phase.name} ${phase.median.toFixed(1)}`);
+    const phased = medians.length ? `; median frames ${medians.join(', ')} ms` : '';
     return `  ${measure.name.padEnd(width)}  ${String(frames.stalls).padStart(3)} stalls, ${seconds(frames.stalled)} `
-      + `stalled; ${String(programs.count).padStart(3)} programs, ${ms(programs.total)}`;
+      + `stalled; ${String(programs.count).padStart(3)} programs, ${ms(programs.total)}${phased}`;
   });
   return ['side by side:', ...rows].join('\n');
 }

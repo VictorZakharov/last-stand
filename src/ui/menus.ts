@@ -545,7 +545,9 @@ function openItemSheet(it: Item, compare: boolean, label: string, act: (() => vo
 // --- slot focus -------------------------------------------------------------------
 // Hovering an equipment slot lights up every stash item that fits it (and dims the
 // rest); hovering a stash item lights up the slot it goes into.
-const GLOW = '<span class="slot-glow"></span>';
+// (its pulse, arc and sheen each a layer the compositor moves: styles/_items.scss)
+const GLOW = '<span class="slot-glow"><span class="glow-steady"></span><span class="glow-bright"></span>'
+  + '<span class="glow-arc"><span></span></span><span class="glow-sheen"><span></span></span></span>';
 /** a padlock over the off-hand while a two-handed weapon takes both hands */
 const LOCK = '<svg class="slot-lock" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5" '
   + 'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'
