@@ -807,7 +807,13 @@ export const COMMANDS = {
 
   compiles: {
     each(side, options) {
-      const command = { biomes: options.biomes, view: options.view ?? 'top', canary: Boolean(options.canary) };
+      const command = {
+        biomes: options.biomes,
+        view: options.view ?? 'top',
+        gear: options.gear,
+        weapon: options.weapon,
+        canary: Boolean(options.canary),
+      };
       return side.command('compiles', command);
     },
     textOf: asText,

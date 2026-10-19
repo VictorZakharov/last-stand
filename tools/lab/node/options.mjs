@@ -803,8 +803,10 @@ export const COMMANDS = {
   },
   compiles: {
     help: 'whether the boot\'s warm-up compiled what a fight draws: in each biome a prop of every kind it has broken '
-      + 'in turn, its rubble, debris and smoke drawn as they fly and settle; every program compiled meanwhile is a '
-      + 'problem, said as the game\'s performance report says it',
+      + 'in turn, its rubble, debris and smoke drawn as they fly and settle, then its first wave fought, and the '
+      + 'first biome\'s again by a hero built afresh (a class switch\'s); every program compiled meanwhile is a '
+      + 'problem, said as the game\'s performance report says it, and so is a pass lit by another count of point '
+      + 'lights than the boot\'s (the scene\'s, and through the eyes the arms\')',
     options: {
       biomes: {
         kind: 'list',
@@ -814,9 +816,12 @@ export const COMMANDS = {
         help: 'the biomes: crypt, forest',
       },
       view: SETUP_OPTIONS.view,
+      gear: SETUP_OPTIONS.gear,
+      weapon: SETUP_OPTIONS.weapon,
       canary: {
         kind: 'switch',
-        help: 'draw a material of a kind nothing else is before the hero: its program must come out as compiled',
+        help: 'draw a material of a kind nothing else is before the hero: its program must come out as compiled; '
+          + 'and put a point light in the scene: the count must find it',
       },
       ...COMMON_OPTIONS,
     },

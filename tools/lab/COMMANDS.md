@@ -698,12 +698,22 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   over it, chips knocked off) and broken in turn, its rubble, debris and smoke drawn as they fly and settle; then the
   run's first wave is set off and fought as the game plays it, the hero (kept whole) casting each skill on his bar
   in turn at the nearest foe, until it's cleared or 40 s are up, its foes killed as a fight kills them (no other
-  check lets a foe die of a fight). Every program compiled meanwhile is a problem, said as the game's perf report
-  says it and with the draw that first used it, its object, its material and its pass (the game can't name a
-  shadow's: three keeps its shadow materials). Run it as a phone boots, `--boot low@518400`: a Low boot's warm-ups
-  draw other shadows (small parts cast none there). It found #243's mid-fight compile, the forest's wood rubble's
-  shadow (`steadyShadowPrograms` in `src/core/shaders.ts`). `--canary` draws a material nothing else does before the
-  hero, which must come out as compiled.
+  check lets a foe die of a fight); then the first biome's wave is fought again by a hero built afresh, as the
+  lobby's class switch builds him. Each round counts from before its set-up, whose frames are the game's (the
+  view entered, the hero rebuilt: counted from after it, the rebuilt hero's arms compiled unseen). Every program
+  compiled meanwhile is a problem, said as the game's perf report says it and with the draw that first used it, its
+  object, its material and its pass (the game can't name a shadow's: three keeps its shadow materials). Run it as a
+  phone boots, `--boot low@518400`: a Low boot's warm-ups draw other shadows (small parts cast none there). Each
+  fight's line counts the point lights each pass is lit by, as three counts them (shown, and on a layer its camera
+  sees): the scene's, and through the eyes the arms', drawn by a camera of their own (the warrior's); a pass lit by
+  another count than the boot's is a problem, as its programs were compiled for that count and all it draws
+  compiles again. `--gear` and `--weapon` hold the hero's weapons
+  (`--class warrior --view first --gear twoHanded --weapon Greataxe`: #268's report). It found #243's mid-fight
+  compile, the forest's wood rubble's shadow (`steadyShadowPrograms` in `src/core/shaders.ts`), and #268's: the
+  hero built afresh brought his own light in after the arms' pass had put the scene's lights on its layer, which it
+  did once, and through the eyes 11 programs of his arms and the shadows compiled at the run's start (15 lights to
+  14). `--canary` draws a material nothing else does before the hero, which must come out as compiled, and puts a
+  point light in the scene, which the count must find.
 - `weapons`: each of the hero's weapons alone (`page/weapons.ts`; `--weapons Sword,Maul`, the class's bases by
   default): a copy of the one in his right hand, at its own frame (unturned in the fist), put in a plain, lit
   studio of its own and pictured face on (a blade's flat, an axe's bit to the side), edge on, from behind (a face
