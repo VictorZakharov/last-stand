@@ -30,18 +30,24 @@
 .tt-foot.capped { color: var(--highlight); }
 
 /* ---------- slot focus: hovering a slot lights up the stash items that fit it ---------- */
-/* The glow is always rendered but transparent, so it can fade in and out (switching between
-   hovered items cross-fades). Each loop moves only a layer's opacity or transform, which the
+/* The glow is always rendered but transparent, a layer of its own painted once, so it's lit and
+   put out by the compositor alone. Each loop moves only a layer's opacity or transform, which the
    compositor does without painting anything again: animating the shadow itself, the arc's
    gradient by a custom property and the sheen's background position, every lit item was painted
    again every frame, and a full stash lit dropped the lobby from 145 frames a second to 44 (#267;
-   tools/lab `ui --states glow`). The loops run on the item the pointer rests on (`.focal`,
-   ui/menus.ts `focusSlot`) and the equipment slots alone, the other stash items that fit lit
+   tools/lab `ui --states glow`). The item under the pointer (`.focal`, ui/menus.ts) is lit at
+   once and runs the loops; the others that fit its slot light up once it has rested there, lit
    steady: each loop is a layer the page styles and the compositor draws every frame, and 30 lit
    items' 90 still halved the frames while the mouse moved (tools/stalls `--scenario sweep`). */
 .slot-glow { position: absolute; inset: -3px; pointer-events: none; z-index: 2; opacity: 0; transform: scale(1.18);
-  transition: opacity .3s ease-out, transform .3s ease-out; }
-.match .slot-glow { opacity: 1; transform: none; transition-timing-function: ease-out, cubic-bezier(.2,1.6,.4,1); }
+  will-change: opacity, transform; }
+:is(.match, .focal) > .slot-glow { opacity: 1; transform: none; }
+/* the item under the pointer's glow fades in, overshooting; every other light goes on and out at
+   once: each fade is the page's to step every frame, and the 30 to 60 items of a change of focus
+   fading in together held the owner's 144 Hz at 80 to 90 frames a second, where fading in alone
+   the item under the pointer cost nothing (tools/stalls `--scenario sweep --item-ms 300`,
+   variants snapFocus, snapOut, focalFade) */
+.focal > .slot-glow { transition: opacity .3s ease-out, transform .3s cubic-bezier(.2,1.6,.4,1); }
 /* its light, pulsing: a brighter glow faded in and out over the steady one, the two together as
    bright at its height as the pulse's own was (a ring of .95, a glow of .7 and .45 within); the
    two cross-faded were a sixth dimmer half-way */
@@ -60,49 +66,45 @@
 .glow-sheen > span { position: absolute; left: 0; top: 0; width: 300%; height: 100%;
   background: linear-gradient(115deg, transparent 38%, rgba(255,236,190,.38) 50%, transparent 62%);
   animation: glow-sheen 2.4s ease-in-out infinite; }
-.sitem:not(.focal) > .slot-glow span, :not(.match) > .slot-glow span { animation: none; }
+.sitem:not(.focal) > .slot-glow span, .eslot:not(.match, .focal) > .slot-glow span { animation: none; }
 /* lit steady: the pulse held half-way, as bright as it is on average, and the arc and the sheen,
    which are only motion, hidden (the arc held still was a gold mark on the border's left) */
 .sitem:not(.focal) > .slot-glow .glow-bright { opacity: .5; }
 .sitem:not(.focal) > .slot-glow :is(.glow-arc, .glow-sheen) { visibility: hidden; }
-/* lit and dimmed by their icons' filters, painted into the item's layer as it changes, and
-   switched at once: a filter on the item (a layer) is a pass of the compositor's own, drawn
-   again every frame anything in it moves, and the stash's 60 a fifth of the page's work while
-   the mouse moved between items (tools/stalls `--scenario sweep`, variant iconFilter). In
-   focus they stand in for the item's own filters (its hover's, the stash filter's grey). */
-#menu.slot-focus .sitem { filter: none; }
-#menu.slot-focus .sitem.match { z-index: 2; transform: scale(1.06); }
-#menu.slot-focus .sitem.match > .item-icon { filter: brightness(1.35); }
+/* the item under the pointer lit by its icon's filter and its colours, painted into its layer
+   as it changes (one item); the others that fit its slot lit by their glow and size alone, and
+   the rest dimmed by their opacity alone, so a change of focus paints nothing. Lit and dimmed by
+   their filters and colours too, each change painted the 60 items again, 20 to 30 ms of the
+   browser's work after it, and moving from item to item the frames missed went from 5% to 30%
+   (tools/stalls `--scenario sweep --item-ms 300`, variants compositorFocus, keepColours). A filter
+   on the item itself (a layer) is a pass of the compositor's own, drawn again every frame
+   anything in it moves (the stash's 60 a fifth of the page's work, variant iconFilter). Lit or
+   in focus they stand in for the item's own filters (its hover's, the stash filter's grey). */
+.sitem.focal, #menu.slot-focus .sitem { filter: none; }
+.sitem.focal, #menu.slot-focus .sitem.match { z-index: 2; transform: scale(1.06); }
+.sitem.focal { transition: transform .3s; }
+.sitem.focal > .item-icon { filter: brightness(1.35); }
 #menu.slot-focus .sitem:not(.match) { opacity: .28; }
-#menu.slot-focus .sitem:not(.match) > .item-icon { filter: grayscale(.85); }
-/* what the item's filters did to the rest of it, given back as colours painted once: its
-   background, rarity border, ▲ and glow lit each channel ×1.35 (brightness(1.35)), dimmed
-   through grayscale(.85)'s own matrix; the item's colour by CSS relative colour, the theme's
-   worked out (#f0c860 lit #ffff82 and dimmed #cfc9b9, #fff6d8 and #ffecbe lit white, #4cff6a lit #67ff8f and
-   dimmed #bbd6bf). The slots' glows never had a filter. */
-.sitem {
-  --c-lit: rgb(from var(--c, #555) calc(r * 1.35) calc(g * 1.35) calc(b * 1.35));
-  --c-dim: rgb(from var(--c, #555) calc(.3307 * r + .6079 * g + .0614 * b) calc(.1807 * r + .7579 * g + .0614 * b)
-    calc(.1807 * r + .6079 * g + .2114 * b));
-}
-#menu.slot-focus .sitem.match { box-shadow: inset 0 0 0 1px var(--c-lit);
+/* what the item's filter did to the rest of it, given back as colours: its background, rarity
+   border, ▲ and glow lit each channel ×1.35 (brightness(1.35)); the item's colour by CSS
+   relative colour, the theme's worked out (#f0c860 lit #ffff82, #fff6d8 and #ffecbe lit white,
+   #4cff6a lit #67ff8f). The glows are lit so on every item, painted once. The slots' glows never
+   had a filter. */
+.sitem { --c-lit: rgb(from var(--c, #555) calc(r * 1.35) calc(g * 1.35) calc(b * 1.35)); }
+.sitem.focal { box-shadow: inset 0 0 0 1px var(--c-lit);
   background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--c-lit) 22%, #1c1a1c), #0b090b 78%); }
-#menu.slot-focus .sitem:not(.match) { box-shadow: inset 0 0 0 1px var(--c-dim);
-  background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--c-dim) 22%, #151315), #080708 78%); }
-#menu.slot-focus .sitem.match.up::before { color: #67ff8f; }
-#menu.slot-focus .sitem:not(.match).up::before { color: #bbd6bf; }
-#menu.slot-focus .sitem.match.new::after { background: #ffff82; box-shadow: 0 0 6px #ffff82; }
-#menu.slot-focus .sitem:not(.match).new::after { background: #cfc9b9; box-shadow: 0 0 6px #cfc9b9; }
+.sitem.focal.up::before { color: #67ff8f; }
+.sitem.focal.new::after { background: #ffff82; box-shadow: 0 0 6px #ffff82; }
 .sitem .glow-steady { box-shadow: inset 0 0 0 1px rgba(#ffff82, .75), 0 0 14px 2px rgba(#ffff82, .5), inset 0 0 16px rgba(#ffff82, .3); }
 .sitem .glow-bright { box-shadow: inset 0 0 0 1px rgba(#fff, .8), 0 0 22px 5px rgba(#ffff82, .5), inset 0 0 22px rgba(#ffff82, .25); }
 .sitem .glow-arc > span { background: conic-gradient(transparent 0 55%, #ffff82 70%, #fff 78%, #ffff82 86%, transparent); }
 .sitem .glow-sheen > span { background: linear-gradient(115deg, transparent 38%, rgba(#fff, .38) 50%, transparent 62%); }
 #menu.slot-focus .eslot:not(.match) { opacity: .45; }
-/* each item a layer of its own all along: its fade into the slot's focus or out of it is then
-   the compositor's alone, where an item made a layer for its fade and taken off after was
-   painted again each time, the 60 that change with the slot hovered held a frame up 100 to
-   250 ms (tools/stalls `--scenario sweep`, variant itemLayers) */
-.sitem, .eslot { transition: opacity .3s, transform .3s; will-change: transform, opacity; }
+/* each item a layer of its own all along: lit, dimmed and put back by the compositor alone,
+   where an item made a layer for its fade and taken off after was painted again each time, the
+   60 that change with the slot hovered held a frame up 100 to 250 ms (tools/stalls `--scenario
+   sweep`, variant itemLayers) */
+.sitem, .eslot { will-change: transform, opacity; }
 @keyframes glow-in { to { opacity: 1; } }
 @keyframes glow-spin { to { transform: rotate(1turn); } }
 @keyframes glow-sheen { 0% { transform: translateX(-66.667%); } 60%, 100% { transform: none; } }
