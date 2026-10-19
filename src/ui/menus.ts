@@ -347,13 +347,49 @@ function lobbyClearance(): { x: number; y: number } {
 
 /** where the overlays down the left were last put clear of the lobby (`#diag`'s `--clear-x`, `--clear-y`) */
 let overlaysClear = '';
+/** The lobby's clearance as it rests, by the way it's laid out (`restKey`), and the last one read as it was drawn:
+ *  its way, and the frames it has read the same (`STILL_FRAMES` of them, it's resting: a slide's first frames may
+ *  read where it starts). Forgotten whenever a panel's size changes (its content, the UI's scale, the fonts loaded:
+ *  a tall screen's panel puts the overlays under its bottom). */
+const restingClearance = new Map<string, { x: number; y: number }>();
+let lastRead: { key: string; x: number; y: number; still: number } | null = null;
+const STILL_FRAMES = 12;
+const panelsResized = new ResizeObserver(() => restingClearance.clear());
+let panelsWatched = false;
+
+/** What places the lobby's panels where they rest: the window, a short screen's panel shown, and the hero panel
+ *  folded or not. */
+function restKey(): string {
+  const shown = onePanel.matches ? $('#menu').dataset.tab : 'side by side';
+  return `${innerWidth}x${innerHeight} ${shown} ${FOLDS[0].folded}`;
+}
+
+/** The lobby's clearance (`lobbyClearance`) read from the page as drawn until it rests in a way it's laid out, and
+ *  from then on remembered: read every frame, it forced a layout every frame the panels slid, and pressing Space
+ *  rapidly kept them sliding. */
+function clearance(): { x: number; y: number } {
+  const menu = $('#menu');
+  if (menu.classList.contains('hidden') || menu.classList.contains('stowed')) return { x: 0, y: 0 };
+  if (!panelsWatched) {
+    panelsWatched = true;
+    menu.querySelectorAll('.menu-left, .menu-center, .menu-right, #hero-fold').forEach((el) => panelsResized.observe(el));
+  }
+  const key = restKey();
+  const rested = restingClearance.get(key);
+  if (rested) return rested;
+  const drawn = lobbyClearance();
+  const same = lastRead?.key === key && lastRead.x === drawn.x && lastRead.y === drawn.y;
+  lastRead = { key, ...drawn, still: same ? lastRead!.still + 1 : 0 };
+  if (lastRead.still >= STILL_FRAMES) restingClearance.set(key, drawn);
+  return drawn;
+}
 
 /** The overlays down the left (performance, network, the battle log) kept clear of the lobby's panels, once a frame
  *  while any is shown: they lay over the hero panel. */
 export function clearOverlays(): void {
   const diag = $('#diag');
   if (![...diag.children].some((overlay) => !overlay.classList.contains('hidden'))) return;
-  const { x, y } = lobbyClearance();
+  const { x, y } = clearance();
   const clear = `${Math.round(x)},${Math.round(y)}`;
   if (clear === overlaysClear) return;
   overlaysClear = clear;
