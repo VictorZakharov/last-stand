@@ -5,7 +5,7 @@ import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
-const SWITCHES = new Set(['headed', 'perf', 'links', 'help']);
+const SWITCHES = new Set(['headed', 'perf', 'js', 'links', 'help']);
 /** the views the game is played in (core/renderer.ts `VIEWS`, in the order V steps through them), and the
  *  battlegrounds (data/biomes.ts) */
 export const VIEWS = ['top', 'third', 'first'];
@@ -34,6 +34,8 @@ const HELP = {
   window: ['WxH', 'the page\'s size in css px, as a report\'s `window` (1536x864 by default)'],
   headed: ['', 'a Chrome window on the screen, as a player has it (headless by default)'],
   perf: ['', 'the performance overlay shown, as a player sending its report has it'],
+  js: ['', 'the page\'s JS sampled (V8\'s profiler): a frame\'s by function, each phase (this tree built unminified, '
+    + 'its functions named from its source maps)'],
   links: ['', 'every Skia program built: when, how long, the tasks it was built in, the page\'s changes just before'],
   help: ['', 'this'],
 };
@@ -95,6 +97,7 @@ export function readOptions(argv) {
     window: sizeOf(written.window ?? '1536x864'),
     headed: written.headed === true,
     perf: written.perf === true,
+    js: written.js === true,
     links: written.links === true,
     help: written.help === true,
   };

@@ -70,6 +70,18 @@ export const VARIANTS = {
   // (and a change of focus split: every fade cut, the items' own colours kept (nothing to paint again), the glows
   // made layers at load (painted once))
   snapFocus: { script: styled, arg: '.sitem, .eslot, .slot-glow { transition: none !important; }' },
+  // (and the fades on the way in alone: lit and dimmed by a fade, put out at once; and the item under the pointer's
+  // glow alone fading in, over every other fade cut)
+  snapOut: {
+    script: styled,
+    arg: '#menu:not(.slot-focus) :is(.sitem, .eslot), :not(.match, .focal) > .slot-glow'
+      + ' { transition: none !important; }',
+  },
+  focalFade: {
+    script: styled,
+    arg: '.focal > .slot-glow { transition: opacity .3s ease-out, transform .3s cubic-bezier(.2,1.6,.4,1)'
+      + ' !important; }',
+  },
   keepColours: {
     script: styled,
     arg: '#menu.slot-focus .sitem > .item-icon { filter: none !important; }'
@@ -78,6 +90,18 @@ export const VARIANTS = {
       + ' !important; } #menu.slot-focus .sitem.up::before { color: #4cff6a !important; }',
   },
   glowLayers: { script: styled, arg: '.sitem > .slot-glow { will-change: opacity, transform; }' },
+  // (and a change of focus that paints nothing: the others that fit lit by their glow (a layer painted once) and
+  // their size alone, the rest dimmed by their opacity alone; the item under the pointer lit in full)
+  compositorFocus: {
+    script: styled,
+    arg: '.sitem > .slot-glow { will-change: opacity, transform; }'
+      + ' #menu.slot-focus .sitem:not(.focal) > .item-icon { filter: none !important; }'
+      + ' #menu.slot-focus .sitem:not(.focal) { box-shadow: inset 0 0 0 1px var(--c, #555) !important; background:'
+      + ' radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--c, #555) 22%, #151315), #080708 78%)'
+      + ' !important; } #menu.slot-focus .sitem:not(.focal).up::before { color: #4cff6a !important; }'
+      + ' #menu.slot-focus .sitem:not(.focal).new::after { background: #f0c860 !important;'
+      + ' box-shadow: 0 0 6px #f0c860 !important; }',
+  },
   noCardShadow: { script: styled, arg: '.tt-card { box-shadow: inset 0 0 0 1px var(--c, var(--frame)) !important; }' },
   noHoverFilter: { script: styled, arg: '.sitem:hover, .eslot:hover { filter: none !important; }' },
   stillGlow: { script: styled, arg: `${GLOW_PARTS} { animation: none !important; }` },

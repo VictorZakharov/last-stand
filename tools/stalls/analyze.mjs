@@ -1,6 +1,7 @@
 // What a measure of the stalls found (tools/stalls): the page's frames and the trace's Skia program links put on one
 // clock, each stall with the programs built in it, the tasks they were built inside, and what the page changed just
 // before it.
+import { jsIn, jsSamples } from './profile.mjs';
 
 /** a frame this long or longer is a stall (ms), and one this long is listed on its own unless the command says
  *  (`--listed`, down to `LISTED_LEAST`: the trace keeps tasks of 20 ms and more, `trace.mjs`) */
@@ -21,6 +22,10 @@ const BUSY_LEAST_MS = 20;
 /** the most kinds of work listed for each phase, the most of a frame's time first, and for each stall */
 const WORK_SHOWN = 10;
 const STALL_WORK_SHOWN = 6;
+/** the work after a change of the page's look counted as its own up to the next change or for this long at most (ms:
+ *  its paint, and the fades it starts, .3 s in the stash); the most kinds of change listed, the costliest first */
+const LOOK_SPAN_MS = 300;
+const LOOKS_SHOWN = 4;
 /** the threads whose tasks are waits, not work, left out of a phase's: the GPU process's waits for the screen's
  *  vertical blank (a frame's whole time, whatever the frame cost) */
 const WAITING_THREADS = new Set(['GpuVSyncThread']);
@@ -170,21 +175,21 @@ function placedWork(owned, toPage, names) {
     .sort((a, b) => a.at - b.at);
 }
 
-/** The index of the first of `placed` (the earliest first) that starts at `at` or later. */
-function firstFrom(placed, at) {
+/** The index of the first of `timed` (the earliest first: work placed, or frames) that is `at` or later. */
+function firstFrom(timed, at) {
   let low = 0;
-  let high = placed.length;
+  let high = timed.length;
   while (low < high) {
     const middle = (low + high) >> 1;
-    if (placed[middle].at < at) low = middle + 1;
+    if (timed[middle].at < at) low = middle + 1;
     else high = middle;
   }
   return low;
 }
 
-/** What the threads spent `frames` frames' time on in the page's `spans` (`[from, to)` each): each kind of work on
- *  each thread that started in them, its own time summed and shared out a frame, the most first. */
-function workIn(placed, spans, frames) {
+/** The work that started in the page's `spans` (`[from, to)` each): each kind of work on each thread, its own time
+ *  summed (ms), by `name\nthread`. */
+function workTotals(placed, spans) {
   const totals = new Map();
   for (const [from, to] of spans) {
     for (let index = firstFrom(placed, from); index < placed.length && placed[index].at < to; index++) {
@@ -193,14 +198,23 @@ function workIn(placed, spans, frames) {
       totals.set(key, (totals.get(key) ?? 0) + ms);
     }
   }
+  return totals;
+}
+
+/** `totals` (`workTotals`) shared out `count` ways, the most first, `WORK_SHOWN` kinds of it. */
+function sharedWork(totals, count) {
   return [...totals]
     .sort((a, b) => b[1] - a[1])
     .slice(0, WORK_SHOWN)
     .map(([key, total]) => {
       const [name, thread] = key.split('\n');
-      return { name, thread, ms: frames ? total / frames : 0 };
+      return { name, thread, ms: count ? total / count : 0 };
     });
 }
+
+/** What the threads spent `frames` frames' time on in the page's `spans` (`[from, to)` each): each kind of work on
+ *  each thread that started in them, its own time summed and shared out a frame, the most first. */
+const workIn = (placed, spans, frames) => sharedWork(workTotals(placed, spans), frames);
 
 /** The browser's own work for the page (ms) that started in the page's `[from, to)`: all but `PAGE_OWN_WORK`. */
 function browserWorkIn(placed, from, to) {
@@ -221,27 +235,47 @@ function browserWorkIn(placed, from, to) {
  * whole GPU: with another game in a browser beside it, one variant read 102 to 124 measure to measure, where the
  * browser's work for it held within a tenth. `work` is `workIn` and `browserWorkIn` on the trace's work.
  */
-function phaseSummaries(record, work) {
-  const phases = record.phases ?? [];
-  const framed = phases.map((phase, index) => {
-    const end = phases[index + 1]?.at ?? Infinity;
-    return { phase, end, frames: record.frames.filter((frame) => frame.at > phase.at && frame.at <= end) };
-  });
-  const refresh = refreshOf(framed.map(({ frames }) => frames), record.frames);
-  return framed.map(({ phase, end, frames }) => {
+function phaseSummaries(spans, refresh, work) {
+  return spans.map(({ phase, frames, from, to }) => {
     const tipped = frames.filter((frame) => frame.tip).length;
-    const last = frames.length ? frames[frames.length - 1].at : phase.at;
     const missed = missedOf(frames, refresh);
     return {
       name: phase.name,
       ...frameSummary(frames),
       missedShare: frames.length ? missed.length / frames.length : 0,
       tipShare: frames.length ? tipped / frames.length : 0,
-      work: work.kinds([[phase.at, Math.min(end, last)]], frames.length),
+      work: work.kinds([[from, to]], frames.length),
       missedWork: work.kinds(missed.map((frame) => [frame.at - frame.ms, frame.at]), missed.length),
-      browserWork: perSecond(work.browser(phase.at, Math.min(end, last)), frames),
+      browserWork: perSecond(work.browser(from, to), frames),
+      js: work.js(from, to, frames.length),
     };
   });
+}
+
+/** Each phase the scenario marked, with its frames and the time it covers: from its mark to its last frame, the next
+ *  phase's mark or the recording's end at the latest. */
+function phaseSpans(record) {
+  const phases = record.phases ?? [];
+  return phases.map((phase, index) => {
+    const end = phases[index + 1]?.at ?? Infinity;
+    const frames = record.frames.filter((frame) => frame.at > phase.at && frame.at <= end);
+    const last = frames.length ? frames[frames.length - 1].at : phase.at;
+    return { phase, frames, from: phase.at, to: Math.min(end, last) };
+  });
+}
+
+/** The quietest phase (the least of the browser's work for its length): its name, and its work a ms of its time,
+ *  each kind's (`workTotals`) and the browser's in all. What a change of the page's look brought is counted over it;
+ *  without phases, over nothing. */
+function quietOf(spans, placed) {
+  const timed = spans.filter((span) => span.to > span.from);
+  if (timed.length === 0) return { name: null, kinds: new Map(), browser: 0 };
+  const rate = (span) => browserWorkIn(placed, span.from, span.to) / (span.to - span.from);
+  const quiet = timed.reduce((least, span) => (rate(span) < rate(least) ? span : least));
+  const length = quiet.to - quiet.from;
+  const totals = workTotals(placed, [[quiet.from, quiet.to]]);
+  const kinds = new Map([...totals].map(([key, ms]) => [key, ms / length]));
+  return { name: quiet.phase.name, kinds, browser: rate(quiet) };
 }
 
 /** `total` ms of work as ms a second of `frames`' time. */
@@ -266,14 +300,16 @@ function missedOf(frames, refresh) {
 
 /**
  * The findings of one measure: `record` is the page's (`page.mjs` `stopRecording`), `events` the trace's kept events
- * and `mark` the page's mark in them.
+ * and `mark` the page's mark in them; `sourceOf` names the page's functions where its JS was sampled
+ * (`sourceMap.mjs` `sourcesOf`).
  */
-export function analyze(record, events, mark, listedMs = LISTED_MS) {
+export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = () => null) {
   const markTs = markTime(events, mark);
   const names = threadNames(events);
   const tasks = events.filter((event) => event.ph === 'X');
   const toPage = (ts) => (markTs === null ? null : onPageClock(ts, markTs, record.start));
   const placed = placedWork(selfTimes(tasks), toPage, names);
+  const samples = jsSamples(events, toPage, names, sourceOf);
   const links = tasks
     .filter((event) => event.name === 'driver_link_program')
     .map((link) => ({
@@ -297,6 +333,8 @@ export function analyze(record, events, mark, listedMs = LISTED_MS) {
         changes: changesBetween(record.changes, from - CHANGES_BEFORE_MS, from + 20),
       };
     });
+  const spans = phaseSpans(record);
+  const refresh = refreshOf(spans.map(({ frames }) => frames), record.frames);
   const built = inRecording.map((link) => ({
     ...link,
     at: link.at === null ? null : (link.at - record.start) / 1000,
@@ -307,9 +345,10 @@ export function analyze(record, events, mark, listedMs = LISTED_MS) {
     clockFound: markTs !== null,
     built,
     frames: frameSummary(record.frames),
-    phases: phaseSummaries(record, {
-      kinds: (spans, count) => workIn(placed, spans, count),
+    phases: phaseSummaries(spans, refresh, {
+      kinds: (kept, count) => workIn(placed, kept, count),
       browser: (from, to) => browserWorkIn(placed, from, to),
+      js: (from, to, count) => (samples.length ? jsIn(samples, from, to, count) : null),
     }),
     programs: {
       count: inRecording.length,
@@ -318,5 +357,87 @@ export function analyze(record, events, mark, listedMs = LISTED_MS) {
     },
     listedMs,
     stalls,
+    looks: looksChanged(record, placed, quietOf(spans, placed), refresh),
   };
+}
+
+/**
+ * The changes of the page's look: the changes to its HTML made at once (the observer's one call: a script's in one
+ * task), the earliest first, each with when, how many and which, its kind (the change it made most, as the page was
+ * after it: `div.sitem.match` the stash's items lit) and the time after it that is its own (to the next, `LOOK_SPAN_MS`
+ * at most). One change of a class can be the costliest: #269's `slot-focus` on the menu dimmed every item at once.
+ */
+function looksOf(changes) {
+  const byMoment = new Map();
+  for (const change of changes) {
+    if (!byMoment.has(change.at)) byMoment.set(change.at, []);
+    byMoment.get(change.at).push(change);
+  }
+  const moments = [...byMoment].sort((a, b) => a[0] - b[0]);
+  return moments.map(([at, made], index) => ({
+    at,
+    count: made.length,
+    changes: made,
+    kind: changesBetween(made, -Infinity, Infinity, 1)[0].replace(/^\d+ x /, ''),
+    span: [at, Math.min(at + LOOK_SPAN_MS, moments[index + 1]?.[0] ?? Infinity)],
+  }));
+}
+
+/**
+ * The changes of the page's look by kind (`looksOf`), the costliest in all first: what one change of each brought,
+ * the work in the time after it less the quiet phase's (`quietOf`) in as long, and the share of the frames in that
+ * time that missed the screen's `refresh`. The time after a change holds a phase's frames too (the game's, the
+ * tooltip's, a loop's); what the quiet phase spends on those, it takes out. #269's sweep across the stash read 140 to
+ * 200 ms of work after each change of its focus, most of it the game's own frames, and 40 to 90 ms over them.
+ */
+function looksChanged(record, placed, quiet, refresh) {
+  const kinds = new Map();
+  for (const look of looksOf(record.changes)) {
+    if (!kinds.has(look.kind)) kinds.set(look.kind, []);
+    kinds.get(look.kind).push(look);
+  }
+  return [...kinds.values()]
+    .map((made) => lookChanged(made, placed, quiet))
+    .map((look) => ({ ...look, missedShare: missedShareIn(record.frames, look.spans, refresh) }))
+    .sort((a, b) => b.browserWork * b.count - a.browserWork * a.count)
+    .slice(0, LOOKS_SHOWN)
+    .map(({ spans, ...look }) => look);
+}
+
+/** What the changes `made` (one kind's, `looksOf`) brought: how many, of how many changes to the page's HTML each and
+ *  which, the time after each (ms), the browser's work in it over the quiet phase's and each kind of work's, and the
+ *  times (`spans`). */
+function lookChanged(made, placed, quiet) {
+  const spans = made.map((look) => look.span);
+  const time = spans.reduce((sum, [from, to]) => sum + to - from, 0);
+  const browser = spans.reduce((sum, [from, to]) => sum + browserWorkIn(placed, from, to), 0);
+  const over = new Map();
+  for (const [key, ms] of workTotals(placed, spans)) {
+    const extra = ms - (quiet.kinds.get(key) ?? 0) * time;
+    if (extra > 0) over.set(key, extra);
+  }
+  return {
+    kind: made[0].kind,
+    count: made.length,
+    changes: made.reduce((sum, look) => sum + look.count, 0) / made.length,
+    what: changesBetween(made.flatMap((look) => look.changes), -Infinity, Infinity, CHANGES_SHOWN_FOR_LINK),
+    ms: time / made.length,
+    over: quiet.name,
+    browserWork: (browser - quiet.browser * time) / made.length,
+    work: sharedWork(over, made.length),
+    spans,
+  };
+}
+
+/** The share of `frames` (the earliest first) ending in `spans` that missed the screen's `refresh`. */
+function missedShareIn(frames, spans, refresh) {
+  let count = 0;
+  let missed = 0;
+  for (const [from, to] of spans) {
+    for (let index = firstFrom(frames, from); index < frames.length && frames[index].at < to; index++) {
+      count += 1;
+      if (refresh > 0 && frames[index].ms >= refresh * MISSED_SHARE) missed += 1;
+    }
+  }
+  return count ? missed / count : 0;
 }

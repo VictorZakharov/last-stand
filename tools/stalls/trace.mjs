@@ -13,8 +13,12 @@ const CATEGORIES = [
   'devtools.timeline',
 ];
 
-/** the events kept whatever their length: Skia building a program, and the page's mark */
-const KEPT_NAMES = new Set(['driver_link_program', 'driver_compile_shader', 'TimeStamp']);
+/** with `--js`, V8's sampling profiler too, a sample every 0.1 ms (`profile.mjs`) */
+const JS_CATEGORIES = ['disabled-by-default-v8.cpu_profiler', 'disabled-by-default-v8.cpu_profiler.hires'];
+
+/** the events kept whatever their length: Skia building a program, the page's mark, and the profiler's (each whole:
+ *  its samples are its arguments) */
+const KEPT_NAMES = new Set(['driver_link_program', 'driver_compile_shader', 'TimeStamp', 'Profile', 'ProfileChunk']);
 /** a piece of work this long or longer is kept (µs): what each thread spent a frame's time on (`analyze.mjs`
  *  `workIn`), long tasks among them (one may hold a program's link, and anything 20 ms long stalls a frame) */
 const WORK_US = 500;
@@ -34,9 +38,10 @@ function slim(event) {
 }
 
 /**
- * Starts tracing `browser` (connected over CDP). Returns `stop`, which ends the trace and gives its kept events.
+ * Starts tracing `browser` (connected over CDP), with `js` the page's JS sampled too. Returns `stop`, which ends the
+ * trace and gives its kept events.
  */
-export async function startTrace(browser) {
+export async function startTrace(browser, { js = false } = {}) {
   const session = await browser.newBrowserCDPSession();
   const events = [];
   session.on('Tracing.dataCollected', ({ value }) => {
@@ -44,7 +49,8 @@ export async function startTrace(browser) {
       if (kept(event)) events.push(slim(event));
     }
   });
-  const traceConfig = { includedCategories: CATEGORIES, recordMode: 'recordContinuously' };
+  const categories = js ? [...CATEGORIES, ...JS_CATEGORIES] : CATEGORIES;
+  const traceConfig = { includedCategories: categories, recordMode: 'recordContinuously' };
   await session.send('Tracing.start', { transferMode: 'ReportEvents', traceConfig });
   return {
     async stop() {

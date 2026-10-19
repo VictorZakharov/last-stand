@@ -49,7 +49,9 @@ function freePort() {
 /**
  * The flags: the GPU through ANGLE (Direct3D 11 on Windows, as the reports' browsers draw), nothing asked of the
  * user, the window `width` by `height` (css px) on a screen scaled `scale`, and its sound muted: the game's music and
- * sounds still play (their cost is the page's), but out of no speaker (headless, the owner heard them).
+ * sounds still play (their cost is the page's), but out of no speaker (headless, the owner heard them). Nothing is
+ * fetched in the background: the models, Safe Browsing's lists and the components Chrome fetches into a new profile
+ * were 85 MB of its 120, each measure's, left behind where a sandboxed shell can't delete Chrome's files.
  */
 function chromeArgs({ headed, profile, port, width, height, scale }) {
   const size = [`--window-size=${width},${height}`, `--force-device-scale-factor=${scale}`];
@@ -64,6 +66,8 @@ function chromeArgs({ headed, profile, port, width, height, scale }) {
     '--no-default-browser-check',
     '--autoplay-policy=no-user-gesture-required',
     '--mute-audio',
+    '--disable-background-networking',
+    '--disable-component-update',
     `--user-data-dir=${profile}`,
     `--remote-debugging-port=${port}`,
     'about:blank',

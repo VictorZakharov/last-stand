@@ -21,6 +21,7 @@ npm run stalls -- --scenario sweep --stash 60 --item-ms 100 --seconds 8 --rounds
 npm run stalls -- --scenario hover --stash 60 --listed 40   # every frame of 40 ms+ listed with what was busy
 npm run stalls -- --scenario sweep --stash 60 --seconds 8 --rounds 3 --variants base,iconFilter,stillGlow+noTooltip
                                                  # one page, the variants in turn three times over, by their medians
+npm run stalls -- --scenario sweep --stash 60 --seconds 6 --js   # and the page's JS, a frame's by function
 npm run stalls -- --help
 npm run stalls:test                              # the tool's own unit tests
 ```
@@ -32,9 +33,9 @@ The report is printed and written to `tools/stalls/out/report.txt`.
 - **A fresh Chrome:** the installed one (`CHROME_EXE`, or Chrome's usual places) with a profile made fresh for each
   measure, so its shader caches are empty, as on a first visit after an update (the worst case). It runs headless
   unless `--headed`, with `--use-angle=d3d11` on Windows, and muted (the game's sound still plays, out of no
-  speaker: the owner heard its music from a headless one). Its whole process tree is killed when the measure ends (a
-  browser connected over CDP outlives `browser.close()`), and its profile is deleted. A shell whose sandbox can't
-  delete files Chrome wrote is told which profile was left.
+  speaker: the owner heard its music from a headless one), fetching nothing in the background. Its whole process
+  tree is killed when the measure ends (a browser connected over CDP outlives `browser.close()`), and its profile is
+  deleted. A shell whose sandbox can't delete files Chrome wrote is told which profile was left.
 - **The page:** the lab's `noCapture` and `freshStorage` (`tools/lab/node/browser.mjs`), so it never takes the pointer
   and starts as a first boot. The battleground (`--biome`, the forest by default), the High preset and the performance
   overlay (`--perf`) are set by cookie, and a `--variants` change is applied before the page's scripts (`a+b`: both).
@@ -70,6 +71,8 @@ The report is printed and written to `tools/stalls/out/report.txt`.
 - **Traced in the browser:** `toplevel`, `gpu`, `viz`, Skia's shaders and the timeline. Only Skia's
   `driver_compile_shader` and `driver_link_program`, the page's mark, and work of 0.5 ms or more on any thread (by its
   name, thread and times alone) are kept, as they stream in: a 20 s trace with Skia's draws in it was 250 MB.
+  With `--js`, V8's sampler too (a sample every 0.1 ms), this tree then built unminified with its source maps, so
+  each function is named where it's written (`render core/renderer.ts:610`).
 
 ## The report
 
@@ -82,6 +85,13 @@ For each measure:
   Under each phase, **a frame's work**: what each thread spent its time on, shared out a frame, the most first (each
   piece's own time, less the work the trace kept inside it; the GPU's waits for the screen left out), and **a missed
   frame's**, the same over the frames that missed.
+  With `--js`, **a frame's JS** too: each function's own time, and its time with what it calls.
+- **The changes of the page's look:** every change its scripts made at once (one call of the page's observer), by
+  kind (the change it made most, the element named by its classes after it: `div.sitem.match` the stash's items
+  lit), the costliest kinds in all first: how many, of how many changes each, the browser's work in the time after
+  each (to the next change, 300 ms at most) over the quiet phase's in as long (the phase of the least work), and the
+  share of the frames in it that missed. A change's time runs to the next one, so a fade's cost lands on the small
+  changes after it: confirm with a variant.
 - **Programs:** the Skia programs linked, how long in all, and the longest. With `--links`, every one: when, how long,
   the innermost tasks it was built in, and the page's changes in the 150 ms before it.
 - **Each stall of 300 ms or more** (`--listed` sets it, down to 20):
@@ -167,6 +177,16 @@ the focus moved only once the pointer rests on an item for 200 ms (the owner's o
 colours painted again, `keepColours`; the glows painted at load, `glowLayers`, twice the work) but all of them, fades
 cut and colours kept together 142.
 
+The owner found the whole focus waiting laggy: the item under the pointer is lit at once now, the others once it
+rests. Each kind of change's own cost (the changes of the page's look) found two things. The tooltip's comparison was
+taken apart and stacked again on every mouse move (`attr class on div.tt-cards`, 150 a sweep, 10 to 16 ms of work
+after each), now measured once a card (`src/ui/tooltip.ts`). And a change of focus cost 40 to 90 ms of work over the
+away phase's, half of it the 30 to 60 items fading at once and the rest painting them again: the others lit by their
+glow and size alone and the rest dimmed by opacity, at once, the item under the pointer alone fading in
+(`compositorFocus+snapFocus+focalFade`), 125 to 138 a second resting on each item against 78 to 90; fading in alone
+(`snapOut`), no better than all the fades. `--js` showed why so little is left to the page: the game's lobby frame is
+4.7 to 4.9 ms of JS of the 6.9 a frame has at 144 Hz.
+
 **A 60 s storm** (the mage's Maelstrom, after a report of lag with 7 or 8 bodies in it), on #221's tree and on
 production (no ragdolls): 14 and 21 kills, the median frame 16.7 ms on both. Each had one frame over 100 ms (167 and
 183 ms), at 0.8 s into the run: the HUD's first paint in it, 18 Skia programs built for its hotbar. After that the
@@ -184,6 +204,8 @@ worst frame was 50 and 67 ms.
 | `variants.mjs` | Changes tried on the page before its scripts |
 | `page.mjs` | What runs in the page: the recording, and the states the scenarios wait for |
 | `trace.mjs` | The browser's trace, its events filtered as they stream in |
-| `analyze.mjs` | The page's frames and the trace on one clock: the programs, the stalls, what was busy |
+| `analyze.mjs` | The page's frames and the trace on one clock: the programs, the stalls, what was busy, what each change cost |
+| `profile.mjs` | The page's JS as V8 sampled it (`--js`), summed by function |
+| `sourceMap.mjs` | The build's source maps read, to name the page's functions where they're written |
 | `report.mjs` | The findings as text |
-| `test/` | Unit tests of the command line, the analysis and the report on made-up traces |
+| `test/` | Unit tests of the command line, the analysis, the JS profile and the report on made-up traces |

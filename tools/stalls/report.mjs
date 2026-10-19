@@ -61,13 +61,34 @@ function workLine(what, work) {
   return `    ${what}, ms: ${pieces.join('; ')}`;
 }
 
-/** A phase's lines: its frames, and what its threads spent a frame's time on and a missed frame's (those the trace
- *  kept any work in). */
+/** The page's JS a frame by function (`what`: which way it's counted), the most first, as a line under a phase's. */
+function jsLine(what, functions) {
+  const pieces = functions.map((entry) => `${entry.ms.toFixed(2)} ${entry.name}`);
+  return `    ${what}, ms: ${pieces.join('; ')}`;
+}
+
+/** A phase's lines: its frames, what its threads spent a frame's time on and a missed frame's (those the trace kept
+ *  any work in), and where its JS was sampled (`--js`), a frame's by function. */
 function phaseLines(phase) {
   const lines = [phaseLine(phase)];
   if (phase.work?.length) lines.push(workLine('a frame\'s work', phase.work));
   if (phase.missedWork?.length) lines.push(workLine('a missed frame\'s', phase.missedWork));
+  if (phase.js?.own.length) lines.push(jsLine('a frame\'s JS, each function\'s own time', phase.js.own));
+  if (phase.js?.within.length) lines.push(jsLine('and with what it calls', phase.js.within));
   return lines;
+}
+
+/** One kind of change of the page's look (`analyze.mjs` `looksChanged`): how many, of how many changes each and
+ *  which, what one brought, over the quiet phase's work, and the share of the frames after it that missed. */
+function lookLines(look) {
+  const over = look.over === null ? '' : `, over the ${look.over} phase's`;
+  const what = look.what.join(', ');
+  return [
+    `  ${look.count} changes of the page's look as ${look.kind} (${look.changes.toFixed(0)} changes to its HTML at `
+      + `once: ${what}); the browser's work in the ${look.ms.toFixed(0)} ms after each${over}: `
+      + `${look.browserWork.toFixed(1)} ms; ${percent(look.missedShare)} of the frames in it missed`,
+    workLine(`a change's work${over}`, look.work),
+  ];
 }
 
 /** A measure's section: its name, what the scenario did, the frames (each phase's), the programs (each with
@@ -87,6 +108,7 @@ export function measureText(measure, { links = false } = {}) {
   if (!findings.clockFound) lines.push('  (the page\'s mark is missing from the trace: stalls and links not matched)');
   if (findings.stalls.length === 0) lines.push(`  no stall of ${findings.listedMs ?? LISTED_MS} ms or more`);
   for (const stall of findings.stalls) lines.push(...stallLines(stall));
+  for (const look of findings.looks ?? []) lines.push(...lookLines(look));
   return lines.join('\n');
 }
 

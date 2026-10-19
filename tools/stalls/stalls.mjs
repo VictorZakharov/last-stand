@@ -4,7 +4,8 @@
 //
 // npm run stalls -- [--url a,b] [--scenario fight|lobby|storm|hover|sweep] [--seconds 45] [--listed 300]
 //   [--variants base,cpuCanvas] [--rounds 3] [--view top] [--biome forest] [--hero warrior] [--stash 40]
-//   [--item-ms 100] [--scale 1.25] [--window 1536x695] [--perf] [--headed] [--links] (--help: what each does)
+//   [--item-ms 100] [--scale 1.25] [--window 1536x695] [--perf] [--js] [--headed] [--links] (--help: what each
+//   does)
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { freshStorage, noCapture } from '../lab/node/browser.mjs';
@@ -17,6 +18,7 @@ import {
 import { measureText, roundsText, summaryText } from './report.mjs';
 import { SCENARIOS } from './scenarios.mjs';
 import { serveBuild } from './serve.mjs';
+import { sourcesOf } from './sourceMap.mjs';
 import { startTrace } from './trace.mjs';
 import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 
@@ -111,14 +113,14 @@ function chromeFor(options) {
 /** The scenario played once on `page` (in `browser`) while traced: what it did, what the frames and the trace
  *  showed, and a picture of the screen at its end (`picture`). */
 async function playTraced(browser, page, options, picture) {
-  const trace = await startTrace(browser);
+  const trace = await startTrace(browser, { js: options.js });
   await page.evaluate(startRecording, MARK);
   const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000, options);
   const record = await page.evaluate(stopRecording);
   const events = await trace.stop();
   await page.screenshot({ path: picture });
   notes.push(`its end pictured in ${picture}`);
-  return { notes, findings: analyze(record, events, MARK, options.listed) };
+  return { notes, findings: analyze(record, events, MARK, options.listed, options.sourceOf) };
 }
 
 /** The page's errors so far as a note, if it had any. */
@@ -171,7 +173,9 @@ async function main() {
     return;
   }
   mkdirSync(OUT, { recursive: true });
-  const served = options.urls.length ? null : await serveBuild(REPO, OUT);
+  const served = options.urls.length ? null : await serveBuild(REPO, OUT, { named: options.js });
+  // (the page's functions named from this tree's build; another URL's by its scripts' lines)
+  options.sourceOf = served ? sourcesOf(served.distDir) : () => null;
   const urls = served ? [served.url] : options.urls;
   const measures = [];
   const measured = (result) => {

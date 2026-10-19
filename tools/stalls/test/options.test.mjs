@@ -21,6 +21,7 @@ test('fills in the defaults', () => {
     window: { width: 1536, height: 864 },
     headed: false,
     perf: false,
+    js: false,
     links: false,
     help: false,
   });

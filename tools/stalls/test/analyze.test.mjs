@@ -103,6 +103,39 @@ test('sums up the rounds by variant: each phase\'s median frames a second and th
   assert.match(text, /x still\s+2 rounds; .*sweeping 128 \(128–130\) a second, 5% missed/);
 });
 
+/** `count` changes made at once at `at` (page ms), each `what` on `where`. */
+const madeAt = (at, count, what, where) => Array.from({ length: count }, () => ({ at, what, where }));
+
+/** A paint on the page's main thread at `at` (page ms, the recording starting at 1000 with the mark) for `ms`. */
+const paintAt = (at, ms) => ({ ph: 'X', name: 'Paint', ...PAGE, ts: at * 1000, dur: ms * 1000 });
+
+test('finds the changes of the page\'s look by kind and the work after each over the quiet phase\'s', () => {
+  // (a quiet phase painting 2 ms in its 100, then two changes: the stash's, 50 ms before the tooltip's, and the
+  // tooltip's with the 300 ms after it)
+  const record = {
+    start: 1000,
+    frames: Array.from({ length: 30 }, (_, index) => ({ at: 1010 + index * 10, ms: 10 })),
+    changes: [...madeAt(1110, 12, 'attr class', 'div.sitem'), ...madeAt(1160, 11, 'childList', 'b'),
+      ...madeAt(1160, 2, 'attr class', 'div.sitem')],
+    phases: [{ name: 'away', at: 1000 }, { name: 'sweeping', at: 1100 }],
+  };
+  const events = [...trace().slice(0, 5), paintAt(1050, 2), paintAt(1120, 6), paintAt(1200, 10)];
+  const [stash, tooltip] = analyze(record, events, MARK).looks;
+  assert.deepEqual({ ...stash, what: undefined, work: undefined },
+    { kind: 'attr class on div.sitem', count: 1, changes: 12, ms: 50, over: 'away', browserWork: 5, missedShare: 0,
+      what: undefined, work: undefined });
+  assert.deepEqual(stash.work, [{ name: 'Paint', thread: 'Renderer CrRendererMain', ms: 5 }]);
+  assert.equal(tooltip.kind, 'childList on b');
+  assert.equal(tooltip.ms, 300);
+  assert.equal(tooltip.browserWork, 4);
+  const text = measureText({ name: 'x', notes: [], findings: analyze(record, events, MARK) });
+  assert.match(text, /1 changes of the page's look as attr class on div\.sitem \(12 changes to its HTML at once: /);
+  assert.match(text, /once: 12 x attr class on div\.sitem\); the browser's work in the 50 ms after each, over the /);
+  assert.match(text, /over the away phase's: 5\.0 ms; 0% of the frames in it missed\n {4}a change's work, over /);
+  assert.match(text, /a change's work, over the away phase's, ms: 5\.0 Paint/);
+  assert.match(text, /as childList on b \(13 changes to its HTML at once: 11 x childList on b, 2 x attr class/);
+});
+
 test('counts each task\'s own time, less the work the trace kept inside it', () => {
   const tasks = [
     { name: 'RunTask', ...PAGE, ts: 0, dur: 10_000 },
