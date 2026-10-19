@@ -63,8 +63,9 @@ export class LiveLog {
   /** The session as lines: what it started with, then each step. */
   describe() {
     if (!this.started) return ['no live session (lab live start)'];
-    const { heroClass, fixture } = this.start;
-    const lines = [`started: the ${heroClass}, set up as ${JSON.stringify(fixture)}`];
+    const { heroClass, fixture, screen } = this.start;
+    const on = screen ? ` on ${screen.width}x${screen.height}@${screen.ratio}` : '';
+    const lines = [`started: the ${heroClass}${on}, set up as ${JSON.stringify(fixture)}`];
     this.steps.forEach((step, i) => lines.push(`${i + 1}. ${describeStep(step)}`));
     return lines;
   }

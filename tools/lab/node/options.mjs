@@ -1145,6 +1145,21 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  practice: {
+    help: 'each skill on a key with a cooldown cast, then cast again as soon as the hero is free, in the lobby as it '
+      + 'shows, in practice (stowed, as Space and a phone\'s Practice stow it), shown again after it, with every '
+      + 'panel folded (a screen that shows them side by side) and in runs started from the lobby and begun in '
+      + 'practice (a co-op guest\'s, as its host starts): where the lobby shows, a cast not made again at once, and '
+      + 'elsewhere one made again within its cooldown, a key showing no countdown and a cast spending no energy, '
+      + 'are problems',
+    options: {
+      canary: {
+        kind: 'switch',
+        help: 'the run begun in practice played again with the lobby\'s free casting planted, which must be caught',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   spawns: {
     help: 'waves set off one after another in each biome (boss waves, the 5th to the 20th), a seed each, the hero at '
       + 'the arena\'s middle: the gate every foe came in by and the spot it rose on against the props and the edge, '
@@ -1265,7 +1280,7 @@ export const COMMANDS = {
       views: {
         kind: 'list',
         usage: 'a,b',
-        help: 'picture: the views (through the eyes eyes, else third by default)',
+        help: 'picture: the views (through the eyes eyes, else third by default; screen: the page with its UI)',
       },
       look: LOOK_OPTION,
       focus: { kind: 'text', usage: 'joint', help: 'picture: close-ups framed on a joint (head, handL...)' },
@@ -1291,6 +1306,11 @@ export const COMMANDS = {
       },
       depth: { kind: 'number', usage: 'n', default: '1', help: 'inspect: the levels under it listed (1)' },
       class: COMMON_OPTIONS.class,
+      screen: {
+        ...COMMON_OPTIONS.screen,
+        help: 'start: the page put on a screen of this size (css px) and pixel ratio once it has booted (a phone\'s: '
+          + '832x384@3.75)',
+      },
       ...SETUP_OPTIONS,
     },
   },

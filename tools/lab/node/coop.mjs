@@ -24,6 +24,8 @@ const STALL_JITTERS = 3;
 const MOST_TURN = 8;
 /** the frames the guest has to join, and the run to start on both, before the command gives up */
 const JOIN_FRAMES = 1800;
+/** the frames the guest's lobby has to become practice */
+const PRACTICE_FRAMES = 60;
 const START_FRAMES = 900;
 /** the seed the link's delays are drawn from */
 const LINK_SEED = 0x9e3779b9;
@@ -94,11 +96,14 @@ class Pair {
     return states;
   }
 
-  /** Runs frames until `done(hostState, guestState)`, at most `limit`; throws, saying `what` failed, if it never is. */
+  /**
+   * Runs frames until `done(hostState, guestState)`, at most `limit`, and returns the two states; throws, saying
+   * `what` failed, if it never is.
+   */
   async until(done, limit, what) {
     for (let frames = 0; frames < limit; frames += this.turnFrames) {
       const [hostState, guestState] = await this.turn(this.turnFrames);
-      if (done(hostState, guestState)) return;
+      if (done(hostState, guestState)) return [hostState, guestState];
     }
     throw labError(`coop: ${what} (not within ${limit} frames)`);
   }
@@ -144,17 +149,27 @@ class Pair {
   }
 }
 
-/** The room opened on the host, the guest in it, and the run started on both. */
+/**
+ * The room opened on the host, the guest in it practising in its lobby while it waits (as a player does), and the
+ * run started on both. Returns the problems of the start: a game whose hero casts freely in the run, as the guest's
+ * did, begun in practice.
+ */
 async function startTogether(pair, link) {
   await pair.reseed();
   const code = await callPage(pair.host, 'coopOpen', { role: 'host', ...link });
   await callPage(pair.guest, 'coopOpen', { role: 'guest', code, ...link });
   const joined = (host, guest) => guest.status === 'joined' && host.partners > 0 && guest.partners > 0;
   await pair.until(joined, JOIN_FRAMES, 'the guest never joined the room');
+  await callPage(pair.guest, 'coopPractise');
+  const practising = (host, guest) => guest.stowed && !guest.free;
+  await pair.until(practising, PRACTICE_FRAMES, 'the guest\'s lobby never became practice');
   await pair.reseed();
   await callPage(pair.host, 'coopStart');
   const inRun = (host, guest) => host.mode === 'run' && guest.mode === 'run';
-  await pair.until(inRun, START_FRAMES, 'the run never started on both games');
+  const states = await pair.until(inRun, START_FRAMES, 'the run never started on both games');
+  const roles = ['host', 'guest'];
+  const free = roles.filter((role, index) => states[index].free);
+  return free.map((role) => `the ${role}'s run kept the lobby's free casting (no costs or cooldowns)`);
 }
 
 /**
@@ -168,9 +183,10 @@ export async function runCoop(side, { scenarios, ping = DEFAULT_PING, jitter = D
     const about = await side.page.evaluate(async () => (await import('/tools/lab/page/coop.ts')).COOP_SCENARIOS);
     const settle = await side.page.evaluate(async () => (await import('/tools/lab/page/coop.ts')).SETTLE_FRAMES);
     const pair = new Pair({ host: side.page, guest, ping, jitter, frameMs });
-    await startTogether(pair, { ping, jitter });
+    const problems = await startTogether(pair, { ping, jitter });
     const lines = [`a link of ${ping} ms round trip, each way up to ${jitter} ms later`];
-    const problems = [];
+    const casting = problems.length ? 'free casting' : 'a run\'s costs and cooldowns';
+    lines.push(`the guest practising in its lobby as the host started; in the run: ${casting}`);
     for (const name of scenarios ?? Object.keys(about)) {
       if (!about[name]) throw labError(`coop: no scenario ${name} (there are ${Object.keys(about).join(', ')})`);
       const unplayable = await callPage(guest, 'coopUnplayable', { name });

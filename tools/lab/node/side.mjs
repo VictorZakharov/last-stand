@@ -452,7 +452,9 @@ export class Side {
     // (a probe's `lab.throttle`: the CPU slowed as a low-end device's, for what the page's work costs one)
     await page.exposeFunction('__labThrottle', (rate) => throttleOf(page, rate));
     const failed = scriptFailure(page);
-    await page.goto(this.url);
+    // (the boot's time for the page's load too: Playwright's own 30 s ran out on the first page after the server
+    // started, a cold dev server sending every module on a machine busy with other agents)
+    await page.goto(this.url, { timeout: BOOT_TIMEOUT_MS });
     // (polled on a timer: by default it polls by animation frame, and the lab's clock holds those once the game shows)
     const polling = { polling: BOOT_POLL_MS, timeout: BOOT_TIMEOUT_MS };
     // (a boot that threw says so on its loading screen, and a script that wouldn't load in its answer: waited for the

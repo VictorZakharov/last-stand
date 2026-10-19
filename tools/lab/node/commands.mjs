@@ -980,6 +980,14 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  practice: {
+    each(side, options) {
+      return side.command('practice', { canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   trail: {
     check(options) {
       for (const strike of options.strikes ?? TRAIL_STRIKES) {

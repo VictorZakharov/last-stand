@@ -13,8 +13,9 @@ import { describeFramed, framed } from './inFrame';
 
 /** `lab live picture`'s options. */
 export interface LivePicture {
-  /** the views (through the eyes the eyes' own, else over the shoulder, by default) */
-  views?: ViewName[];
+  /** the views (through the eyes the eyes' own, else over the shoulder, by default); `screen` the whole page as the
+   *  player sees it, the game's frame with its UI over it (the HUD, the touch controls, a menu) */
+  views?: (ViewName | typeof SCREEN)[];
   look?: Look;
   focus?: keyof Joints;
   /** a close-up's distance from what it's framed on (m: the lab's own by default) */
@@ -34,6 +35,8 @@ export interface LiveInspect {
   depth: number;
 }
 
+/** the view that pictures the page as it shows, its UI with it (`lab.screen`) */
+const SCREEN = 'screen';
 /** how strongly a reference is laid over a picture unless asked */
 const OVER_STRENGTH = 0.5;
 /** how many parts a picture's notes name, and how many children of one object an inspection lists */
@@ -60,10 +63,14 @@ export interface LivePictured {
 
 /** `lab live picture`: the hero pictured as `options` say, each picture finished (laid over, cropped). */
 export async function picture(lab: Lab, options: LivePicture): Promise<LivePictured> {
-  const views = options.views ?? [renderer.viewMode() === 'first' ? 'eyes' : 'third'];
-  lab.checkCapture(views, renderer.viewMode(), options.focus);
+  const asked = options.views ?? [renderer.viewMode() === 'first' ? 'eyes' : 'third'];
+  const views = asked.filter((view): view is ViewName => view !== SCREEN);
+  if (views.length) lab.checkCapture(views, renderer.viewMode(), options.focus);
   lab.model.root.updateMatrixWorld(true);
-  const tiles = lab.capture(views, { focus: options.focus, distance: options.distance, look: options.look });
+  const tiles = views.length
+    ? lab.capture(views, { focus: options.focus, distance: options.distance, look: options.look })
+    : [];
+  if (asked.includes(SCREEN)) tiles.push(...(await lab.screen(SCREEN)).tiles);
   const notes = tiles.filter((tile) => tile.parts).map((tile) => {
     return `${tile.view}: ${describeParts(tile.parts!, PARTS_LISTED)}`;
   });
