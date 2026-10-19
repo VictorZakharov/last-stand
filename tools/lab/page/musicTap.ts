@@ -123,7 +123,3 @@ export class Ears {
   }
 }
 
-/** Resolves after `ms` of the browser's own time (the lab's clock stands still meanwhile: no frame runs). */
-export function realWait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}

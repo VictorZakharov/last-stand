@@ -20,8 +20,8 @@ const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'numbers', 'choice', 
 
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
-  'lobby', 'tooltip', 'help', 'saves', 'clicked', 'views', 'logLobby', 'skillTipsTouch', 'run', 'scores', 'perf',
-  'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
+  'lobby', 'tooltip', 'glow', 'help', 'saves', 'clicked', 'views', 'logLobby', 'skillTipsTouch', 'run', 'scores',
+  'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
 ];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
@@ -314,7 +314,9 @@ export const COMMANDS = {
         kind: 'list',
         usage: 'a,b',
         choices: UI_STATES,
-        help: 'the states (every one by default): lobby, tooltip, help, saves, clicked (a class button clicked and a '
+        help: 'the states (every one by default): lobby, tooltip, glow (the stash\'s items lit for a hovered item\'s '
+          + 'slot, pictured at set moments of its loops, each of which must animate only what the compositor moves), '
+          + 'help, saves, clicked (a class button clicked and a '
           + 'key pressed after it: '
           + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
           + 'dummies against their anchors), run (the HUD with a hurt foe\'s bar and damage numbers), '

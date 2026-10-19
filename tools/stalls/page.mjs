@@ -2,16 +2,19 @@
 // so it can use nothing from here.
 
 /**
- * Records every animation frame's interval and every change to the page's HTML from now on, into `window.__stalls`,
- * and marks the trace (`console.timeStamp`) at the moment its clock starts, so the trace's times can be put on it.
+ * Records every animation frame's interval (and whether a tooltip was shown in it) and every change to the page's
+ * HTML from now on, into `window.__stalls`, and marks the trace (`console.timeStamp`) at the moment its clock starts,
+ * so the trace's times can be put on it. A scenario marks its phases on it (`markPhase`).
  */
 export function startRecording(mark) {
-  const record = { start: performance.now(), frames: [], changes: [] };
+  const record = { start: performance.now(), frames: [], changes: [], phases: [] };
   window.__stalls = record;
   console.timeStamp(mark);
   let last = record.start;
+  const tooltip = document.getElementById('tooltip');
   const tick = (now) => {
-    record.frames.push({ at: now, ms: now - last });
+    const tip = Boolean(tooltip && !tooltip.classList.contains('hidden'));
+    record.frames.push({ at: now, ms: now - last, tip });
     last = now;
     if (!record.stopped) requestAnimationFrame(tick);
   };
@@ -35,18 +38,95 @@ export function startRecording(mark) {
   record.observer.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
 }
 
+/** Puts `css` on the page in a stylesheet of its own, in place of the one put there before (a variant's, while the
+ *  page runs: `--rounds`). */
+export function useStyle(css) {
+  const id = 'stalls-variant';
+  let style = document.getElementById(id);
+  if (!style) {
+    style = document.createElement('style');
+    style.id = id;
+    document.head.append(style);
+  }
+  style.textContent = css;
+}
+
+/** Marks the start of a scenario's phase `name` on the recording (its frames are summed up apart). */
+export function markPhase(name) {
+  window.__stalls.phases.push({ name, at: performance.now() });
+}
+
 /** Stops the recording and returns it (the times are the page's, ms). */
 export function stopRecording() {
   const record = window.__stalls;
   record.stopped = true;
   record.observer.disconnect();
-  return { start: record.start, frames: record.frames, changes: record.changes };
+  return { start: record.start, frames: record.frames, changes: record.changes, phases: record.phases };
+}
+
+/** The boxes (css px) of the items shown in the lobby, each hovered for its tooltip: the hero's equipment slots,
+ *  and the stash's items in its view (hovering one lights up those that fit its slot). */
+export function itemBoxes() {
+  const stash = document.getElementById('stash')?.getBoundingClientRect();
+  const boxOf = (element) => {
+    const box = element.getBoundingClientRect();
+    return { x: box.x, y: box.y, width: box.width, height: box.height };
+  };
+  const shown = (box) => box.width > 0 && box.height > 0;
+  const inStash = (box) => stash && box.y >= stash.y && box.y + box.height <= stash.y + stash.height;
+  const slots = [...document.querySelectorAll('#equip .eslot')].map(boxOf).filter(shown);
+  const items = [...document.querySelectorAll('#stash .sitem')].map(boxOf).filter((box) => shown(box) && inStash(box));
+  return { slots, items };
+}
+
+/** Whether the lobby has the hero's equipment shown (its panels loaded). */
+export function equipmentShown() {
+  return document.querySelectorAll('#equip .eslot').length > 0;
+}
+
+/**
+ * Fills the stash of the hero's saved profile with `count` items, copies of those he has, in each rarity in turn (a
+ * copy of his own has a base the game draws an icon for), and keeps it in the session for `seededProfile` to put back
+ * after the next load's fresh storage. Returns how many it put there: 0 if no profile is saved (one is, once an item
+ * is moved).
+ */
+export function seedStash(count) {
+  const key = Object.keys(localStorage).find((name) => /^last-stand\.profile\.[a-z]+\.v1$/.test(name));
+  if (!key) return 0;
+  const profile = JSON.parse(localStorage.getItem(key));
+  const own = [...profile.stash, ...Object.values(profile.equipped)];
+  const rarities = ['common', 'magic', 'rare', 'epic', 'legendary'];
+  profile.stash = Array.from({ length: count }, (_, index) => ({
+    ...own[index % own.length],
+    id: `stalls-${index}`,
+    rarity: rarities[index % rarities.length],
+  }));
+  sessionStorage.setItem('stalls.seed', JSON.stringify({ key, value: JSON.stringify(profile) }));
+  return profile.stash.length;
+}
+
+/** Puts back the profile `seedStash` kept, before the page's scripts and after its storage was made fresh (an init
+ *  script, run on every load). */
+export function seededProfile() {
+  try {
+    const seed = sessionStorage.getItem('stalls.seed');
+    if (!seed) return;
+    const { key, value } = JSON.parse(seed);
+    localStorage.setItem(key, value);
+  } catch {
+    // storage blocked: the stash stays empty, as the scenario's notes say
+  }
 }
 
 /** Whether the loading screen is gone. */
 export function loaded() {
   const loading = document.getElementById('loading');
   return !loading || loading.classList.contains('done');
+}
+
+/** Whether the lobby's panels are stowed (`ui/menus.ts` `toggleMenuStowed`). */
+export function menuStowed() {
+  return Boolean(document.getElementById('menu')?.classList.contains('stowed'));
 }
 
 /** Whether the bank-or-continue choice is up. */

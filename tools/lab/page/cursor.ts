@@ -8,6 +8,7 @@
 // shows the measure sees an attack. The lock is held and the run goes on throughout. With the canary, Ctrl is held
 // instead, a key that frees nothing: the checks must find the view turned, no cursor and the click on Pause attacking.
 // (The owner, through the eyes: "in 3rd and 1st person user cannot press on those battle log buttons".)
+import { middleOf } from './lab';
 import type { Clip, Fixture, Lab, PagePoint, Pictured, Report } from './lab';
 import type { ViewMode } from '../../../src/core/renderer';
 import { G } from '../../../src/state';
@@ -102,12 +103,6 @@ function clipAround(point: PagePoint): Clip {
 /** The middle of the window, where the crosshair is and the drawn cursor starts. */
 function centre(): PagePoint {
   return { x: innerWidth / 2, y: innerHeight / 2 };
-}
-
-/** The middle of `element`'s box, css px. */
-function middleOf(element: Element): PagePoint {
-  const box = element.getBoundingClientRect();
-  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
 }
 
 /** The element `selector` names, shown; throws, naming it, if there's none. */

@@ -545,7 +545,9 @@ function openItemSheet(it: Item, compare: boolean, label: string, act: (() => vo
 // --- slot focus -------------------------------------------------------------------
 // Hovering an equipment slot lights up every stash item that fits it (and dims the
 // rest); hovering a stash item lights up the slot it goes into.
-const GLOW = '<span class="slot-glow"></span>';
+// (its pulse, arc and sheen each a layer the compositor moves: styles/_items.scss)
+const GLOW = '<span class="slot-glow"><span class="glow-steady"></span><span class="glow-bright"></span>'
+  + '<span class="glow-arc"><span></span></span><span class="glow-sheen"><span></span></span></span>';
 /** a padlock over the off-hand while a two-handed weapon takes both hands */
 const LOCK = '<svg class="slot-lock" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5" '
   + 'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'
@@ -559,15 +561,44 @@ function lockedTooltip(weapon: Item, swaps: boolean): { html: string; color: str
   return { html, color: '#666', foot: swaps ? 'Equipping an off-hand puts the two-hander back in the stash' : undefined };
 }
 
+/** how long the pointer rests on an item before the others that fit its slot light up (ms; the item itself is lit at
+ *  once, and they all go out the moment it leaves): run across the stash, only the item under it lights. Each change
+ *  of focus restyles the items whose look changes, and with every change at once moving between items fast halved
+ *  the frames (tools/stalls `--scenario sweep --item-ms 100`). */
+export const FOCUS_DELAY_MS = 200;
+let focused: Slot | null = null;
+let focal: HTMLElement | null = null;
+let pending: ReturnType<typeof setTimeout> | undefined;
+
+/** Lights `el`, the item under the pointer, and runs the glow's loops on it (`.focal`); null puts it out. */
+function markFocal(el: HTMLElement | null): void {
+  if (focal === el) return;
+  focal?.classList.remove('focal');
+  el?.classList.add('focal');
+  focal = el;
+}
+
+/** Lights the items that fit `slot` and dims the rest, changing only the items that differ; null puts them all back as
+ *  they were, the item under the pointer too. Now, whatever was waiting. */
 function focusSlot(slot: Slot | null): void {
+  clearTimeout(pending);
+  if (slot === null) markFocal(null);
+  if (slot === focused) return;
+  focused = slot;
   const menu = $('#menu');
   menu.classList.toggle('slot-focus', slot !== null);
-  menu.querySelectorAll('.match').forEach((n) => n.classList.remove('match'));
-  if (slot) menu.querySelectorAll(`.sitem[data-slot="${slot}"], .eslot[data-slot="${slot}"]`).forEach((n) => n.classList.add('match'));
+  menu.querySelectorAll<HTMLElement>('.sitem, .eslot').forEach((n) => n.classList.toggle('match', n.dataset.slot === slot));
+}
+
+/** The pointer on `el`: it lit at once, the others that fit `slot` once it has rested `FOCUS_DELAY_MS`. */
+function pointAt(el: HTMLElement, slot: Slot): void {
+  markFocal(el);
+  clearTimeout(pending);
+  pending = setTimeout(() => focusSlot(slot), FOCUS_DELAY_MS);
 }
 
 function bindSlotFocus(el: HTMLElement, slot: Slot): void {
-  el.addEventListener('pointerenter', () => { if (!drag) focusSlot(slot); });
+  el.addEventListener('pointerenter', () => { if (!drag) pointAt(el, slot); });
   el.addEventListener('pointerleave', () => focusSlot(null));
 }
 

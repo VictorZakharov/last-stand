@@ -90,6 +90,18 @@ export interface PagePoint {
   y: number;
 }
 
+/** Resolves after `ms` of the browser's own time (the lab's clock stands still meanwhile: no frame runs). The page's
+ *  timers run on it, a debounce's among them. */
+export function realWait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** The middle of `element`'s box, css px: where a measure puts the mouse or a finger to point at it. */
+export function middleOf(element: Element): PagePoint {
+  const box = element.getBoundingClientRect();
+  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+}
+
 /** the pointer events a touch makes, any of which says the page has handled it */
 const TOUCH_POINTER_EVENTS: Record<TouchType, string[]> = {
   touchStart: ['pointerdown'],

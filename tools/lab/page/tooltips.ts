@@ -10,7 +10,8 @@
 // canary, all damage and the hero's most Health are raised once the tooltip is read, as a tooltip behind a change
 // would be: the hits must be found above it, and what was given off it. (Issue #256: the tooltips showed the base
 // damage alone, not what the hero deals.)
-import type { Fixture, Lab, PagePoint, Report } from './lab';
+import { middleOf } from './lab';
+import type { Fixture, Lab, Report } from './lab';
 import type { DerivedStats, SkillDef, WeaponStyle } from '../../../src/types';
 import { G } from '../../../src/state';
 import { skillTooltip } from '../../../src/ui/tooltip';
@@ -282,12 +283,6 @@ function scaleOf(def: SkillDef, stats: DerivedStats): number {
   if (def.tags.includes('arcane')) pct += stats.arcanePct;
   if (def.tags.some((tag) => ELEMENTAL.includes(tag))) pct += stats.elementalPct;
   return 1 + pct / 100;
-}
-
-/** The middle of `element`'s box. */
-function middleOf(element: Element): PagePoint {
-  const box = element.getBoundingClientRect();
-  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
 }
 
 /** The hotbar's first slot hovered afresh (the mouse off it and back), and its tooltip's first figure per hit. */

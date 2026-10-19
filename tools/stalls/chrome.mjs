@@ -48,11 +48,14 @@ function freePort() {
 
 /**
  * The flags: the GPU through ANGLE (Direct3D 11 on Windows, as the reports' browsers draw), nothing asked of the
- * user, the window `width` by `height`.
+ * user, the window `width` by `height` (css px) on a screen scaled `scale`, and its sound muted: the game's music and
+ * sounds still play (their cost is the page's), but out of no speaker (headless, the owner heard them). Nothing is
+ * fetched in the background: the models, Safe Browsing's lists and the components Chrome fetches into a new profile
+ * were 85 MB of its 120, each measure's, left behind where a sandboxed shell can't delete Chrome's files.
  */
-function chromeArgs({ headed, profile, port, width, height }) {
-  const size = `--window-size=${width},${height}`;
-  const visible = headed ? [size] : ['--headless', size];
+function chromeArgs({ headed, profile, port, width, height, scale }) {
+  const size = [`--window-size=${width},${height}`, `--force-device-scale-factor=${scale}`];
+  const visible = headed ? size : ['--headless', ...size];
   const angle = process.platform === 'win32' ? ['--use-angle=d3d11'] : [];
   return [
     ...visible,
@@ -62,6 +65,9 @@ function chromeArgs({ headed, profile, port, width, height }) {
     '--no-first-run',
     '--no-default-browser-check',
     '--autoplay-policy=no-user-gesture-required',
+    '--mute-audio',
+    '--disable-background-networking',
+    '--disable-component-update',
     `--user-data-dir=${profile}`,
     `--remote-debugging-port=${port}`,
     'about:blank',
@@ -113,14 +119,15 @@ async function removeOrWarn(profile) {
 }
 
 /**
- * Starts the installed Chrome with a fresh profile under `outDir` (headless unless `headed`) and connects to it.
+ * Starts the installed Chrome with a fresh profile under `outDir` (headless unless `headed`, its screen scaled
+ * `scale`) and connects to it.
  * Returns the browser and `close`, which kills its process tree and deletes its profile.
  */
-export async function startChrome({ outDir, headed = false, width = 1536, height = 864 }) {
+export async function startChrome({ outDir, headed = false, width = 1536, height = 864, scale = 1 }) {
   const profile = join(outDir, `profile-${Date.now()}`);
   mkdirSync(profile, { recursive: true });
   const port = await freePort();
-  const child = spawn(chromePath(), chromeArgs({ headed, profile, port, width, height }), { stdio: 'ignore' });
+  const child = spawn(chromePath(), chromeArgs({ headed, profile, port, width, height, scale }), { stdio: 'ignore' });
   const kill = () => killTree(child);
   process.once('exit', kill);
   try {

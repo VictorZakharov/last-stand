@@ -14,7 +14,8 @@ import { RUN } from '../../../src/data/balance';
 import { musicShown } from '../../../src/core/music';
 import { setBiomeSetting } from '../../../src/game/biome';
 import { MusicJudge, type Wanted } from './musicJudge';
-import { Ears, SourceLog, realWait } from './musicTap';
+import { realWait } from './lab';
+import { Ears, SourceLog } from './musicTap';
 
 export interface MusicOptions {
   biomes: BiomeId[];

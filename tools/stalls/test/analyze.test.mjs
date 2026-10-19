@@ -1,8 +1,8 @@
 // The stalls' analysis and report (tools/stalls): a made-up trace and recording, each piece put on the page's clock.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { analyze, shortName } from '../analyze.mjs';
-import { measureText, summaryText } from '../report.mjs';
+import { analyze, selfTimes, shortName } from '../analyze.mjs';
+import { measureText, roundsText, summaryText } from '../report.mjs';
 
 const MARK = 'stalls:start';
 /** the GPU process's main thread, and the page's renderer */
@@ -88,4 +88,138 @@ test('reports each stall with what was built and busy in it, and the measures si
   assert.match(text, /the longest tasks through it: 400 ms RasterDecoderImpl::DoRaster on GPU Process CrGpuMain/);
   assert.match(text, /0\.2 s {2}300 ms {2}RasterDecoderImpl::DoRaster/);
   assert.match(summaryText([measure]), /http:\/\/x\/ base {2}\s+1 stalls, 0\.5 s stalled;\s+1 programs, 300 ms/);
+});
+
+test('sums up the rounds by variant: each phase\'s median frames a second and their range', () => {
+  const round = (group, rate, missedShare) => ({
+    group,
+    findings: { phases: [{ name: 'away', rate: 144, missedShare: 0 }, { name: 'sweeping', rate, missedShare }] },
+  });
+  const measures = [round('x base', 110, 0.2), round('x still', 130, 0.05), round('x base', 122, 0.1),
+    round('x still', 128, 0.06), round('x base', 104, 0.3)];
+  const text = roundsText(measures);
+  assert.match(text, /x base\s+3 rounds; away 144 \(144–144\) a second, 0% missed, /);
+  assert.match(text, /x base .* sweeping 110 \(104–122\) a second, 20% missed, the browser's work /);
+  assert.match(text, /x still\s+2 rounds; .*sweeping 128 \(128–130\) a second, 5% missed/);
+});
+
+/** `count` changes made at once at `at` (page ms), each `what` on `where`. */
+const madeAt = (at, count, what, where) => Array.from({ length: count }, () => ({ at, what, where }));
+
+/** A paint on the page's main thread at `at` (page ms, the recording starting at 1000 with the mark) for `ms`. */
+const paintAt = (at, ms) => ({ ph: 'X', name: 'Paint', ...PAGE, ts: at * 1000, dur: ms * 1000 });
+
+test('finds the changes of the page\'s look by kind and the work after each over the quiet phase\'s', () => {
+  // (a quiet phase painting 2 ms in its 100, then two changes: the stash's, 50 ms before the tooltip's, and the
+  // tooltip's with the 300 ms after it)
+  const record = {
+    start: 1000,
+    frames: Array.from({ length: 30 }, (_, index) => ({ at: 1010 + index * 10, ms: 10 })),
+    changes: [...madeAt(1110, 12, 'attr class', 'div.sitem'), ...madeAt(1160, 11, 'childList', 'b'),
+      ...madeAt(1160, 2, 'attr class', 'div.sitem')],
+    phases: [{ name: 'away', at: 1000 }, { name: 'sweeping', at: 1100 }],
+  };
+  const events = [...trace().slice(0, 5), paintAt(1050, 2), paintAt(1120, 6), paintAt(1200, 10)];
+  const [stash, tooltip] = analyze(record, events, MARK).looks;
+  assert.deepEqual({ ...stash, what: undefined, work: undefined },
+    { kind: 'attr class on div.sitem', count: 1, changes: 12, ms: 50, over: 'away', browserWork: 5, missedShare: 0,
+      what: undefined, work: undefined });
+  assert.deepEqual(stash.work, [{ name: 'Paint', thread: 'Renderer CrRendererMain', ms: 5 }]);
+  assert.equal(tooltip.kind, 'childList on b');
+  assert.equal(tooltip.ms, 300);
+  assert.equal(tooltip.browserWork, 4);
+  const text = measureText({ name: 'x', notes: [], findings: analyze(record, events, MARK) });
+  assert.match(text, /1 changes of the page's look as attr class on div\.sitem \(12 changes to its HTML at once: /);
+  assert.match(text, /once: 12 x attr class on div\.sitem\); the browser's work in the 50 ms after each, over the /);
+  assert.match(text, /over the away phase's: 5\.0 ms; 0% of the frames in it missed\n {4}a change's work, over /);
+  assert.match(text, /a change's work, over the away phase's, ms: 5\.0 Paint/);
+  assert.match(text, /as childList on b \(13 changes to its HTML at once: 11 x childList on b, 2 x attr class/);
+});
+
+test('counts each task\'s own time, less the work the trace kept inside it', () => {
+  const tasks = [
+    { name: 'RunTask', ...PAGE, ts: 0, dur: 10_000 },
+    { name: 'Paint', ...PAGE, ts: 1_000, dur: 4_000 },
+    { name: 'Layerize', ...PAGE, ts: 2_000, dur: 1_000 },
+    { name: 'Commit', ...PAGE, ts: 6_000, dur: 3_000 },
+    { name: 'DrawFrame', ...GPU, ts: 1_000, dur: 5_000 },
+  ];
+  const own = Object.fromEntries(selfTimes(tasks).map(({ task, ms }) => [task.name, ms]));
+  assert.deepEqual(own, { RunTask: 3, Paint: 3, Layerize: 1, Commit: 3, DrawFrame: 5 });
+});
+
+test('lists what each phase\'s threads spent a frame\'s time on', () => {
+  const record = {
+    start: 1000,
+    frames: [{ at: 1010, ms: 10 }, { at: 1020, ms: 10 }],
+    changes: [],
+    phases: [{ name: 'sweeping', at: 1000 }],
+  };
+  // (the mark at 1 s of trace time is the page's 1000 ms: the work at 1.002 s is in the phase)
+  const events = [
+    ...trace().slice(0, 5),
+    { ph: 'X', name: 'RunTask', ...PAGE, ts: 1_002_000, dur: 12_000 },
+    { ph: 'X', name: 'Paint', ...PAGE, ts: 1_003_000, dur: 8_000 },
+  ];
+  const [phase] = analyze(record, events, MARK).phases;
+  assert.deepEqual(phase.work, [
+    { name: 'Paint', thread: 'Renderer CrRendererMain', ms: 4 },
+    { name: 'RunTask', thread: 'Renderer CrRendererMain', ms: 2 },
+  ]);
+  // (all of it the browser's: 12 ms of work in the frames' 20 ms, 600 ms a second)
+  assert.equal(phase.browserWork, 600);
+  const text = measureText({ name: 'x sweep', notes: [], findings: analyze(record, events, MARK) });
+  assert.match(text, /a frame's work, ms: 4\.0 Paint on Renderer CrRendererMain; 2\.0 RunTask on Renderer/);
+});
+
+test('lists what the threads did in the frames that missed the screen\'s refresh apart', () => {
+  // (frames of 7 ms, one of 21 ending at 1035 that a long paint started in: the screen's refresh is 7 ms)
+  const record = {
+    start: 1000,
+    frames: [{ at: 1007, ms: 7 }, { at: 1014, ms: 7 }, { at: 1035, ms: 21 }, { at: 1042, ms: 7 }],
+    changes: [],
+    phases: [{ name: 'sweeping', at: 1000 }],
+  };
+  const events = [
+    ...trace().slice(0, 5),
+    { ph: 'X', name: 'Paint', ...PAGE, ts: 1_002_000, dur: 1_000 },
+    { ph: 'X', name: 'Paint', ...PAGE, ts: 1_016_000, dur: 12_000 },
+  ];
+  const [phase] = analyze(record, events, MARK).phases;
+  assert.equal(phase.missedShare, 1 / 4);
+  assert.deepEqual(phase.missedWork, [{ name: 'Paint', thread: 'Renderer CrRendererMain', ms: 12 }]);
+  const text = measureText({ name: 'x sweep', notes: [], findings: analyze(record, events, MARK) });
+  assert.match(text, /a missed frame's, ms: 12\.0 Paint on Renderer CrRendererMain/);
+});
+
+test('sums up each phase the scenario marked apart, with the share of its frames a tooltip showed in', () => {
+  const record = {
+    start: 0,
+    frames: [
+      { at: 10, ms: 7, tip: false },
+      { at: 17, ms: 7, tip: false },
+      { at: 40, ms: 23, tip: true },
+      { at: 63, ms: 23, tip: true },
+      { at: 70, ms: 7, tip: false },
+    ],
+    changes: [],
+    phases: [{ name: 'away', at: 0 }, { name: 'over items', at: 17 }],
+  };
+  const { phases } = analyze(record, trace(), MARK);
+  assert.deepEqual(phases.map((phase) => [phase.name, phase.count, phase.median]), [
+    ['away', 2, 7],
+    ['over items', 3, 23],
+  ]);
+  assert.equal(phases[1].tipShare, 2 / 3);
+  // (the screen's refresh is the fastest phase's median, 7 ms: two of the three frames over items missed it, and a
+  // median of 23 hides nothing here, but a phase of 7 ms frames and a 23 now and then would read 7 alone)
+  assert.equal(phases[0].missedShare, 0);
+  assert.equal(phases[1].missedShare, 2 / 3);
+  assert.equal(Math.round(phases[1].rate), 57);
+  const measure = { name: 'x hover', notes: [], findings: analyze(record, trace(), MARK) };
+  const text = measureText(measure);
+  assert.match(text, /over items: 3 frames, 57 a second \(67% missed the screen's refresh\), median 23\.0 ms/);
+  assert.match(text, /90% within 23\.0 ms/);
+  assert.match(text, /a tooltip shown in 67% of them/);
+  assert.match(summaryText([measure]), /frames a second \(missed\) away 143 \(0%\), over items 57 \(67%\)/);
 });
