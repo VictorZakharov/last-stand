@@ -129,6 +129,12 @@ export function menuStowed() {
   return Boolean(document.getElementById('menu')?.classList.contains('stowed'));
 }
 
+/** How many times the recording saw the lobby's panels stowed or shown again (a change of the menu's class). */
+export function stowsRecorded() {
+  const onMenu = (change) => change.what === 'attr class' && /^div#menu(\.|$)/.test(change.where);
+  return window.__stalls.changes.filter(onMenu).length;
+}
+
 /** Whether the bank-or-continue choice is up. */
 export function deciding() {
   const box = document.getElementById('decision');

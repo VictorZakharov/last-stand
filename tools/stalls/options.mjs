@@ -1,6 +1,6 @@
 // The stalls harness's command line (tools/stalls): its options, read and checked before anything starts, so a
 // misspelt one or a bad value stops it before a build or a browser.
-import { SCENARIOS, SWEEP_ITEM_MS } from './scenarios.mjs';
+import { SCENARIOS, STOW_PRESS_MS, SWEEP_ITEM_MS } from './scenarios.mjs';
 import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
@@ -13,10 +13,13 @@ const BIOMES = ['forest', 'crypt'];
 /** the heroes (data/classes), and the most items a stash holds (data/balance.ts `RUN.bagLimit`) */
 const HEROES = ['mage', 'warrior', 'ranger'];
 const STASH_MOST = 60;
+/** a key's tap (ms: `scenarios.mjs`'s): presses can't come closer together */
+const TAP_LEAST = 90;
 
 /** each option's value and what it does, for the usage */
 const HELP = {
-  url: ['a,b', 'the game at these URLs (production, a PR preview), each in turn; this tree built and served if none'],
+  url: ['a,b', 'the game at these URLs (production, a PR preview), each in turn; `this` this tree, built and served '
+    + '(as it is with none)'],
   scenario: ['name', `what the player does: ${Object.keys(SCENARIOS).join(', ')} (fight by default)`],
   seconds: ['n', 'how long the scenario plays (45 by default)'],
   listed: ['ms', `each frame this long or longer listed with what was busy through it (${LISTED_LEAST} or more: `
@@ -30,6 +33,7 @@ const HELP = {
   hero: ['name', `the hero chosen in the lobby: ${HEROES.join(', ')} (a first boot's by default)`],
   stash: ['n', `the hero's stash filled with this many items, copies of his own (0 to ${STASH_MOST}: 0 by default)`],
   'item-ms': ['ms', `how long a sweep over the stash stays over each item (${SWEEP_ITEM_MS} by default)`],
+  'press-ms': ['ms', `how often stow presses Space (${STOW_PRESS_MS} by default)`],
   scale: ['n', 'the screen\'s scaling, as the OS sets it (a report\'s devicePixelRatio: 1 by default)'],
   window: ['WxH', 'the page\'s size in css px, as a report\'s `window` (1536x864 by default)'],
   headed: ['', 'a Chrome window on the screen, as a player has it (headless by default)'],
@@ -93,6 +97,7 @@ export function readOptions(argv) {
     hero: written.hero ?? null,
     stash: Number(written.stash ?? 0),
     itemMs: Number(written['item-ms'] ?? SWEEP_ITEM_MS),
+    pressMs: Number(written['press-ms'] ?? STOW_PRESS_MS),
     scale: Number(written.scale ?? 1),
     window: sizeOf(written.window ?? '1536x864'),
     headed: written.headed === true,
@@ -116,6 +121,9 @@ export function readOptions(argv) {
   }
   if (!(options.seconds > 0)) throw new Error('stalls: --seconds must be a number over 0');
   if (!(options.itemMs >= 16)) throw new Error('stalls: --item-ms must be a number of ms, 16 or more (a frame)');
+  if (!(options.pressMs > TAP_LEAST)) {
+    throw new Error(`stalls: --press-ms must be a number of ms, over ${TAP_LEAST} (a key's tap)`);
+  }
   if (!(options.scale > 0)) throw new Error('stalls: --scale must be a number over 0');
   if (!(options.listed >= LISTED_LEAST)) {
     throw new Error(`stalls: --listed must be a number of ms, ${LISTED_LEAST} or more`);

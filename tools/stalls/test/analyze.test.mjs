@@ -63,6 +63,23 @@ test('puts the trace on the page\'s clock and finds the program built in the sta
   assert.equal(findings.built[0].at, 0.2);
 });
 
+test('says what other pages\' renderers did while the page played: none when they were frozen', () => {
+  const other = { pid: 11, tid: 110 };
+  const events = [
+    ...trace(),
+    { ph: 'M', name: 'process_name', pid: other.pid, args: { name: 'Renderer' } },
+    { ph: 'M', name: 'thread_name', ...other, args: { name: 'CrRendererMain' } },
+    { ph: 'X', name: 'FunctionCall', ...other, ts: 1_050_000, dur: 40_000 },
+    { ph: 'X', name: 'FunctionCall', ...PAGE, ts: 1_060_000, dur: 30_000 },
+  ];
+  const findings = analyze(recording(), events, MARK);
+  assert.deepEqual(findings.others, { ms: 40, most: [{ what: 'Renderer CrRendererMain (11) FunctionCall', ms: 40 }] });
+  assert.match(measureText({ name: 'a', notes: [], findings }), /other pages' renderers did 40 ms of work/);
+  const alone = analyze(recording(), trace(), MARK);
+  assert.equal(alone.others.ms, 0);
+  assert.doesNotMatch(measureText({ name: 'a', notes: [], findings: alone }), /other pages/);
+});
+
 test('says when the trace never saw the page\'s mark', () => {
   const findings = analyze(recording(), trace(), 'another mark');
   assert.equal(findings.clockFound, false);

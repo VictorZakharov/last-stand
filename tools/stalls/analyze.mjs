@@ -22,6 +22,8 @@ const BUSY_LEAST_MS = 20;
 /** the most kinds of work listed for each phase, the most of a frame's time first, and for each stall */
 const WORK_SHOWN = 10;
 const STALL_WORK_SHOWN = 6;
+/** the most kinds of work other pages' renderers did that are listed (`othersWork`) */
+const OTHERS_LISTED = 4;
 /** the work after a change of the page's look counted as its own up to the next change or for this long at most (ms:
  *  its paint, and the fades it starts, .3 s in the stash); the most kinds of change listed, the costliest first */
 const LOOK_SPAN_MS = 300;
@@ -67,10 +69,25 @@ function threadNames(events) {
   return named;
 }
 
-/** The trace time of the page's mark, or null when the trace never saw it. */
-function markTime(events, mark) {
-  const stamp = events.find((event) => event.name === 'TimeStamp' && event.args?.data?.message === mark);
-  return stamp ? stamp.ts : null;
+/** The trace's event of the page's mark (its time, its renderer), or null when the trace never saw it. */
+function markOf(events, mark) {
+  return events.find((event) => event.name === 'TimeStamp' && event.args?.data?.message === mark) ?? null;
+}
+
+/** The work other pages' renderers did over the recording, which ran in its frames' time (none when they're
+ *  held still while it plays: `--rounds` on more than one URL): in all (ms), and on each thread and task, the most
+ *  first (`thread (pid) task`). */
+function othersWork(placed, pagePid, start) {
+  const theirs = placed.filter(({ task, thread, at }) => {
+    return at >= start && task.pid !== pagePid && thread.startsWith('Renderer ');
+  });
+  const byWork = new Map();
+  for (const { task, thread, ms } of theirs) {
+    const key = `${thread} (${task.pid}) ${shortName(task.name)}`;
+    byWork.set(key, (byWork.get(key) ?? 0) + ms);
+  }
+  const most = [...byWork].sort((a, b) => b[1] - a[1]).slice(0, OTHERS_LISTED);
+  return { ms: theirs.reduce((sum, { ms }) => sum + ms, 0), most: most.map(([what, ms]) => ({ what, ms })) };
 }
 
 /** The tasks on the same thread that hold `link` (outermost first), by their readable names. */
@@ -304,7 +321,8 @@ function missedOf(frames, refresh) {
  * (`sourceMap.mjs` `sourcesOf`).
  */
 export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = () => null) {
-  const markTs = markTime(events, mark);
+  const stamp = markOf(events, mark);
+  const markTs = stamp?.ts ?? null;
   const names = threadNames(events);
   const tasks = events.filter((event) => event.ph === 'X');
   const toPage = (ts) => (markTs === null ? null : onPageClock(ts, markTs, record.start));
@@ -343,6 +361,7 @@ export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = (
   }));
   return {
     clockFound: markTs !== null,
+    others: stamp ? othersWork(placed, stamp.pid, record.start) : { ms: 0, most: [] },
     built,
     frames: frameSummary(record.frames),
     phases: phaseSummaries(spans, refresh, {
