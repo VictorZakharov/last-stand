@@ -36,8 +36,8 @@ import { closeGlow, GLOW_CANARIES, glowPictures, glowShown, openGlow } from './u
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
-  | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'clicked' | 'views' | 'logLobby' | 'skillTipsTouch' | 'run'
-  | 'scores' | 'perf'
+  | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'readying' | 'clicked' | 'views' | 'logLobby' | 'skillTipsTouch'
+  | 'run' | 'scores' | 'perf'
   | 'decision' | 'pause' | 'summary' | 'skillTips' | 'log' | 'logTouch';
 
 export interface UiOptions {
@@ -159,6 +159,67 @@ function openHelp(): void {
 
 function closeHelp(): void {
   document.getElementById('help')!.classList.add('hidden');
+}
+
+/** how far along the fight's loading bar is pictured, a share of its length */
+const READYING_SHARE = 0.4;
+/** how far the bar's fill may be off that, a share of its length */
+const READYING_SLACK = 0.02;
+
+/** The fight's loading bar, or null in a tree from before it. */
+const readyingBar = (): HTMLElement | null => document.getElementById('readying');
+
+/**
+ * The fight's loading bar over the lobby, as `ui/readying.ts` paints it while a press waits for the fight's programs
+ * (the lab's boot warms them at once, so it never shows by itself), `READYING_SHARE` along.
+ */
+function openReadying(): void {
+  const bar = readyingBar();
+  if (!bar) return;
+  bar.classList.add('on');
+  bar.style.setProperty('--p', String(READYING_SHARE));
+}
+
+function closeReadying(): void {
+  const bar = readyingBar();
+  bar?.classList.remove('on');
+  bar?.style.removeProperty('--p');
+}
+
+/** How many lines `element`'s text is laid out on. */
+function linesOf(element: HTMLElement): number {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+}
+
+/**
+ * The fight's loading bar within the window, its label on one line and its fill as far along as painted.
+ * `canary`: the label given the width of a letter, so it wraps, which must be found.
+ */
+function readyingShown(canary: boolean): Found {
+  const bar = readyingBar();
+  if (!bar) return { lines: ['  no fight\'s loading bar in this tree'], problems: [] };
+  const label = bar.querySelector<HTMLElement>('.rd-sub')!;
+  if (canary) label.style.width = '1ch';
+  const box = bar.querySelector('.rd-box')!.getBoundingClientRect();
+  const track = bar.querySelector('.rd-bar')!.getBoundingClientRect();
+  const fill = bar.querySelector('.rd-fill')!.getBoundingClientRect();
+  const rows = linesOf(label);
+  label.style.width = '';
+  const along = track.width > 0 ? fill.width / track.width : 0;
+  const lines = [`  the fight's loading bar: its label on ${rows} line${rows === 1 ? '' : 's'}, ${share(along, 1)}% along`];
+  const problems: string[] = [];
+  const inside = box.left >= -0.5 && box.top >= -0.5 && box.right <= innerWidth + 0.5;
+  if (!inside || box.bottom > innerHeight + 0.5) {
+    const where = boxText({ x: box.x, y: box.y, w: box.width, h: box.height });
+    problems.push(`readying: the bar reaches past the window (${where})`);
+  }
+  if (rows !== 1) problems.push(`readying: its label (${label.textContent?.trim()}) runs onto ${rows} lines`);
+  if (Math.abs(along - READYING_SHARE) > READYING_SLACK) {
+    problems.push(`readying: its fill is ${share(along, 1)}% along, painted ${share(READYING_SHARE, 1)}%`);
+  }
+  return { lines, problems };
 }
 
 /** The run's summary: banked, nothing in the bag. */
@@ -662,6 +723,7 @@ const STEPS: Record<UiState, Steps> = {
   glow: { open: openGlow, close: closeGlow, check: glowShown, pictures: glowPictures },
   help: { open: openHelp, close: closeHelp },
   saves: { open: () => openSaves(true), close: () => openSaves(false) },
+  readying: { open: openReadying, close: closeReadying, check: readyingShown },
   clicked: { open: clickClass, close: () => undefined, check: focusAfterClick },
   views: { open: switchViews, close: () => undefined, check: labelsThroughSwitches },
   logLobby: { open: openLogLobby, close: closeLog, check: logShown },
@@ -720,6 +782,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const caught = found.problems.some((problem) => problem.includes(name));
     lines.push(`  canary: ${what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${what} went unseen`);
+  }
+  if (state === 'readying' && readyingBar()) {
+    const wrapped = found.problems.some((problem) => problem.includes('runs onto'));
+    lines.push(`  canary: ${wrapped ? 'the label a letter wide caught' : 'the label a letter wide went unseen'}`);
+    if (!wrapped) missed.push(`${state}: the canary's label a letter wide went unseen`);
   }
   if (state.startsWith('skillTips')) {
     const past = found.problems.some((problem) => problem.includes('reaches past the window'));

@@ -302,8 +302,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   with a clip, what crossed what and how deep.
 - `probe <module>`: a measure of your own (Writing a measure in `AGENTS.md`). Options the lab doesn't know are passed to it (`--frames=30`), and
   `--setup=false` skips the set-up.
-- `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,clicked,views,
-  logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch`, every one by default:
+- `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,readying,clicked,
+  views,logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch`, every one by default:
   the lobby, an item's tooltip, the stash given 20 items and a weapon among them hovered by the mouse, those that fit
   its slot lit (`page/uiGlow.ts`: pictured round the stash, its tooltip put away, at 400, 1000 and 1600 ms into the
   glow's loops, each held there, so `--ab` pictures the same moment on both sides; every loop a lit item runs must
@@ -312,7 +312,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   from 145 frames a second to 44, #267; and each loop on a stash item not hovered is a problem: 30 lit items' 90
   loops, composited, still halved the frames while the mouse moved between them; `--canary` loops a shadow on the
   hovered item and turns a lit one's glow not hovered, each of which must be found),
-  How to play, the save slots, the hero's class
+  How to play, the save slots, the fight's loading bar over the lobby as a press waiting for the fight's programs
+  shows it (`ui/readying.ts`, 40% along: within the window, its label on one line, its fill as far as painted;
+  `--canary` gives the label a letter's width, whose wrap must be found), the hero's class
   button clicked with the mouse and a key pressed after it as the browser gets them (where the focus went and whether
   the browser shows its ring: a problem when the button kept it), the lobby's camera switched with V through every
   view and back, each glide played and drawn (every frame, each label over the dummies against where its anchor shows
