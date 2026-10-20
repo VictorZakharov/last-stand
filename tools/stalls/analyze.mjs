@@ -663,6 +663,7 @@ function bootStep(name, from, to, record, traced) {
       longest: Math.max(0, ...tasks.map((task) => task.ms)),
     },
     programs: { count: links.length, ms: links.reduce((sum, link) => sum + link.ms, 0) },
+    links: links.map(({ ms, thread, heldIn }) => ({ ms, thread, heldIn })),
     work: sharedWork(totals, 1).slice(0, BOOT_WORK_SHOWN),
     gpuMain: sharedWork(onGpuMain, 1).slice(0, BOOT_WORK_SHOWN),
     gpuCompiles: gpuCompilesIn(traced.placed, from, to),

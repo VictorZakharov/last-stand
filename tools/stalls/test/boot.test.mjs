@@ -188,7 +188,28 @@ test('counts the threads a step\'s GPU compiles ran on, on average and at most a
   const findings = analyzeBoot(record(), events, MARK);
   const text = bootText({ name: 'http://x/ base, a first visit', notes: [], findings });
   const lines = text.match(/the GPU process's compiles: .*/g);
-  assert.deepEqual(lines, ['the GPU process\'s compiles: on 3 threads, 0.8 at once on average, 2 at most; each 0.25 s: 2 0 0']);
+  const expected = 'the GPU process\'s compiles: on 3 threads, 0.8 at once on average, 2 at most; each 0.25 s: 2 0 0';
+  assert.deepEqual(lines, [expected]);
+});
+
+test('counts a step\'s Skia programs by where they were built, with links asked for', () => {
+  const gpu = { pid: 7, tid: 70 };
+  const events = [
+    ...trace(),
+    { ph: 'M', name: 'process_name', pid: 7, args: { name: 'GPU Process' } },
+    { ph: 'M', name: 'thread_name', ...gpu, args: { name: 'CrGpuMain' } },
+    workAt('RasterTask', gpu, 400, 100),
+    workAt('driver_link_program', gpu, 410, 20),
+    workAt('driver_link_program', gpu, 440, 30),
+    workAt('FinishPaintRenderPass', gpu, 600, 50),
+    workAt('driver_link_program', gpu, 610, 10),
+  ];
+  const findings = analyzeBoot(record(), events, MARK);
+  const measure = { name: 'http://x/ base, a first visit', notes: [], findings };
+  const text = bootText(measure, { links: true });
+  assert.match(text, /its Skia programs, where they were built: 2 \(50 ms\) in RasterTask; /);
+  assert.match(text, /; 1 \(10 ms\) in FinishPaintRenderPass\n/);
+  assert.doesNotMatch(bootText(measure), /where they were built/);
 });
 
 test('reports a boot step by step, and the boots by visit over the rounds', () => {

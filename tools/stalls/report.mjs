@@ -180,18 +180,38 @@ export function summaryText(measures) {
   return ['side by side:', ...rows].join('\n');
 }
 
+/** the most places a boot step's Skia programs were built in that `--links` lists, the most first */
+const BUILT_IN_SHOWN = 6;
+
+/** A boot step's Skia programs by where they were built (the innermost tasks, `chainText`): how many and how long
+ *  each place's took, the most first, as a line of its own. */
+function builtInLine(links) {
+  const places = new Map();
+  for (const link of links) {
+    const where = link.heldIn.length ? chainText(link.heldIn) : link.thread;
+    const place = places.get(where) ?? { count: 0, ms: 0 };
+    place.count++;
+    place.ms += link.ms;
+    places.set(where, place);
+  }
+  const most = [...places].sort((a, b) => b[1].count - a[1].count).slice(0, BUILT_IN_SHOWN);
+  const pieces = most.map(([where, place]) => `${place.count} (${ms(place.ms)}) in ${where}`);
+  return `    its Skia programs, where they were built: ${pieces.join('; ')}`;
+}
+
 /** The threads a boot step's GPU compiles ran on (`analyze.mjs` `gpuCompilesIn`), as a line of its own, how many
  *  at once in each `GPU_STEP_MS` of it at the end. */
 function gpuCompilesLine({ threads, mean, most, steps }) {
   const each = steps.map((busy) => busy.toFixed(0)).join(' ');
-  return `    the GPU process's compiles: on ${threads} threads, ${mean.toFixed(1)} at once on average, ${most} at most; `
-    + `each ${(GPU_STEP_MS / 1000).toFixed(2)} s: ${each}`;
+  const step = (GPU_STEP_MS / 1000).toFixed(2);
+  return `    the GPU process's compiles: on ${threads} threads, ${mean.toFixed(1)} at once on average, `
+    + `${most} at most; each ${step} s: ${each}`;
 }
 
 /** A boot's step (`analyze.mjs` `analyzeBoot`): when it started, how long it took, its frames and the longest the
  *  page was held up in it, its long tasks and Skia programs, what the threads spent its time on in all, and the
  *  threads its GPU compiles ran on. */
-function bootStepLines(step) {
+function bootStepLines(step, { links = false } = {}) {
   const { frames, longTasks, programs } = step;
   const tasks = longTasks.count
     ? `, ${longTasks.count} long tasks (${ms(longTasks.ms)}, the longest ${ms(longTasks.longest)})`
@@ -205,6 +225,7 @@ function bootStepLines(step) {
   if (step.work.length) lines.push(workLine('its work', step.work));
   if (step.gpuMain?.length) lines.push(workLine('the GPU process\'s main thread\'s', step.gpuMain));
   if (step.gpuCompiles) lines.push(gpuCompilesLine(step.gpuCompiles));
+  if (links && step.links?.length) lines.push(builtInLine(step.links));
   if (step.js?.own.length) lines.push(jsLine('its JS, each function\'s own time', step.js.own));
   if (step.js?.within.length) lines.push(jsLine('and with what it calls', step.js.within));
   return lines;
@@ -312,8 +333,8 @@ function goneText(findings) {
 
 /** A boot's section: what it was, when the lobby was revealed and the page first painted, the files fetched, the
  *  maps the workers made, how the loading screen left and its film, the lobby's frames a second, and each step from
- *  the navigation's start (`bootStepLines`). */
-export function bootText(measure) {
+ *  the navigation's start (`bootStepLines`; with `links`, where its Skia programs were built). */
+export function bootText(measure, { links = false } = {}) {
   const { name, notes, findings } = measure;
   const { files } = findings;
   const revealed = findings.revealedAt === null
@@ -333,7 +354,7 @@ export function bootText(measure) {
     ...(findings.exit ? [`  the loading screen left: ${exitText(findings.exit)}${goneText(findings)}`] : []),
     ...(findings.film ? filmLines(findings.film) : []),
     ...(findings.lobby ? lobbyLines(findings.lobby) : []),
-    ...findings.steps.flatMap(bootStepLines),
+    ...findings.steps.flatMap((step) => bootStepLines(step, { links })),
   ];
   if (!findings.clockFound) lines.push('  (the page\'s mark is missing from the trace: no step\'s work)');
   return lines.join('\n');

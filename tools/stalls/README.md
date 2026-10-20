@@ -153,7 +153,8 @@ long it took, its frames and the longest the page was held up in it, its long ta
 thread spent its time on in all and the GPU process's main thread apart (it runs every page's GL and the compositor:
 anything long on it holds every frame up), the threads its GPU compiles ran on (ANGLE's tasks: how many, how many at
 once on average and at most, which says whether a wait for links is bound by the threads or by the work handed to
-them), with `--js` its JS by function, its own time and with what it calls; at
+them), with `--links` its Skia programs counted by where they were built (the innermost tasks: a tile's raster,
+the compositor's frame), with `--js` its JS by function, its own time and with what it calls; at
 the end, each URL's boots by visit over the rounds, each step's median and range, and the lobby's fewest frames a
 second.
 
