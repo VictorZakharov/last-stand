@@ -334,8 +334,11 @@ function makeContext(): Context | null {
   const prog = gl.createProgram()!;
   gl.attachShader(prog, shader(gl.VERTEX_SHADER, VERT));
   gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FRAG));
-  // (its status asked only as the field is made: by then it has long linked)
+  // (its status asked only as the field is made: by then it has long linked. Sent to the GPU's process now: a
+  // context never drawn to the page holds its commands till something waits on them, and on a first visit the
+  // field's ask for its status then waited 0.85 s, the link queued behind the lobby's compiles)
   gl.linkProgram(prog);
+  gl.flush();
   return { canvas, gl, prog };
 }
 
