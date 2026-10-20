@@ -100,9 +100,9 @@
       #loading .ld-ember { display: none; }
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-DgyUZpwH.js"></script>
+  <script type="module" crossorigin src="./assets/index-CTxa8pye.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/three-CadwVQlu.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-BxNS3mmt.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-BSO4G2kV.css">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 </head>
 <body>
@@ -140,8 +140,9 @@
   </svg>
   <div id="game"></div>
 
-  <!-- Optional performance, network and battle log overlays (pause menu toggles), stacked down the left -->
-  <div id="diag">
+  <!-- Optional performance, network and battle log overlays (pause menu toggles), stacked down the left; shown
+       once the loading screen has left (main.ts) -->
+  <div id="diag" class="booting">
   <div id="perf" class="hidden" role="button" tabindex="0" title="Click to copy a performance report">
     <div class="pf-head"><b data-p="fps">--</b><i>FPS</i><span class="pf-ms"><b data-p="ms">--</b> ms · p95 <b data-p="p95">--</b></span></div>
     <div class="pf-graph">
