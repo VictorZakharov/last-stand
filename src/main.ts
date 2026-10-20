@@ -11,7 +11,7 @@ import { updateTimers } from './core/timers';
 import { particles } from './fx/particles';
 import { initLights, updateLights, clearLights } from './fx/lights';
 import { initEffects, updateEffects, clearEffects } from './fx/effects';
-import { buildArena, prepareEnvMaps } from './world/arena';
+import { buildArena, compileEnvMaps } from './world/arena';
 import { separateEnemies } from './world/collision';
 import { Player } from './entities/player';
 import { viewArms } from './entities/viewModel';
@@ -75,14 +75,14 @@ async function boot() {
   const { scene, renderer } = initRenderer($('#game'));
   steadyShadowPrograms(renderer);
   watchPrograms(renderer);
+  // (the environments' programs linked as the arena is built, each made as its biome is first shown)
+  compileEnvMaps(renderer);
   initInput(renderer.domElement);
   initAltCursor(renderer.domElement);
   particles.init(scene);
   initLights(scene);
   initEffects();
-  // (needing no map, made while the workers make them)
   initAudio();   // resumed by the first user gesture
-  await prepareEnvMaps(renderer);
   // (built on the maps' canvases as the workers paint them: nothing is drawn till all have come)
   G.arena = await buildArena(scene, renderer);
   initQuality();

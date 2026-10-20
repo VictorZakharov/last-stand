@@ -6,7 +6,7 @@ import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { groundHeight } from './ground';
 import { setAdaptScale } from '../core/renderer';
-import { bakeStaticShadows, prepareEnvMaps as prepareEach, type Biome, type BiomeBuilder, type BiomeLook } from './props';
+import { bakeStaticShadows, compileEnvMaps as compileEach, envMap, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
@@ -19,8 +19,8 @@ const BUILDERS: Record<BiomeId, BiomeBuilder> = { crypt: buildCrypt, forest: bui
 
 export type Arena = Awaited<ReturnType<typeof buildArena>>;
 
-/** Every biome's environment made ahead of the biomes (they need none of the workers' maps). */
-export const prepareEnvMaps = (renderer: THREE.WebGLRenderer): Promise<void> => prepareEach(renderer, [CRYPT_ENV, FOREST_ENV]);
+/** Every biome's environment's programs compiled ahead of the biomes, linked as they're built (`compileEnvMaps`). */
+export const compileEnvMaps = (renderer: THREE.WebGLRenderer): void => compileEach(renderer, [CRYPT_ENV, FOREST_ENV]);
 
 /** The moon's shadow camera as it's placed for a biome's `look` (the box it draws round the middle). */
 function shadowCameraFor(moon: THREE.DirectionalLight, look: BiomeLook): THREE.OrthographicCamera {
@@ -52,7 +52,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     await new Promise((r) => setTimeout(r));
     const group = new THREE.Group();
     group.name = id;
-    const b = BUILDERS[id](group, renderer);
+    const b = BUILDERS[id](group);
     bakeStaticShadows(group);
     trimShadowCasters(group, shadowCameraFor(moon, b.look));
     group.visible = false;
@@ -76,7 +76,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     fog.color.set(L.fog.color); fog.near = L.fog.near; fog.far = L.fog.far;
     hemi.color.set(L.hemi.sky); hemi.groundColor.set(L.hemi.ground); hemi.intensity = L.hemi.intensity;
     moon.color.set(L.moon.color); moon.intensity = L.moon.intensity; moon.position.set(...L.moon.pos);
-    scene.environment = L.env;
+    scene.environment = envMap(renderer, L.env);
     scene.environmentIntensity = L.envIntensity;
     setAdaptScale(L.adapt ?? 1);
   }

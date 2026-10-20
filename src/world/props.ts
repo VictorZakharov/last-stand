@@ -22,7 +22,8 @@ export interface BiomeLook {
   fog: { color: number; near: number; far: number };
   hemi: { sky: number; ground: number; intensity: number };
   moon: { color: number; intensity: number; pos: [number, number, number] };
-  env: THREE.Texture;
+  /** its environment's colours: the map made as the biome is first shown (`envMap`) */
+  env: EnvColours;
   envIntensity: number;
   /** how much brighter the biome's ordinary scenes are than the crypt's: scales the top view's large adaptation target (default 1) */
   adapt?: number;
@@ -44,7 +45,7 @@ export interface Biome {
   update(dt: number, t: number): void;
 }
 
-export type BiomeBuilder = (group: THREE.Group, renderer: THREE.WebGLRenderer) => Biome;
+export type BiomeBuilder = (group: THREE.Group) => Biome;
 
 export const WALL_R = 28.5;   // radius of the arena's boundary (inner face)
 export const GATE_W = 4.2;    // spawn gate width
@@ -341,29 +342,121 @@ export function placeGate(g: THREE.Object3D, angle: number): void {
 
 /** A biome's environment's colours: its sky's, and its one soft panel's. */
 export interface EnvColours { sky: RGB; panel: RGB }
-/** the environments made, by their colours (`prepareEnvMaps` makes them ahead) */
+/** the environments made, by their colours (`envMap`) */
 const envMaps = new Map<string, THREE.Texture>();
+const envKey = ({ sky, panel }: EnvColours): string => `${sky} ${panel}`;
+/** an environment's size, a cube face's side (three's default) */
+const ENV_SIZE = 256;
+
+/** What the environments compiled ahead are made with (`compileEnvMaps`): one generator, the scene it captures for
+ *  each one's colours, and a stand-in for the generator's backdrop, whose program it would make as it first drew. */
+let ahead: { pm: THREE.PMREMGenerator; scenes: Map<string, THREE.Scene>; backdrop: THREE.Mesh } | undefined;
 
 /**
- * Every biome's environment made ahead (`colours`), with one generator: the boot makes them while the workers make
- * its maps, which they need none of (made as each biome was built, after the maps, each of them compiled the
- * generator's blur and convolution again and held the page up). The page painted between them.
+ * Every biome's environment's programs compiled now (`colours`), for the targets they're drawn into: the scene the
+ * generator captures and its backdrop, its blur and its convolution. The GPU's threads link them while the arena is
+ * built; each map is made as its biome is first shown (`envMap`). Made before the arena, the first waited 0.43 s on
+ * the convolution's link, compiled as it was first drawn: three compiles none of its own programs ahead but those
+ * it converts a cube or a panorama with, so its private parts are reached for (`compileGenerator`).
  */
-export async function prepareEnvMaps(renderer: THREE.WebGLRenderer, colours: EnvColours[]): Promise<void> {
+export function compileEnvMaps(renderer: THREE.WebGLRenderer, colours: EnvColours[]): void {
   const pm = new THREE.PMREMGenerator(renderer);
-  for (const { sky, panel } of colours) {
-    buildEnvMap(renderer, sky, panel, pm);
-    await new Promise((r) => setTimeout(r));
-  }
-  pm.dispose();
+  const scenes = new Map(colours.map((c) => [envKey(c), envScene(c)]));
+  // (as the generator makes its backdrop: a box round the capture, the clear colour, as no background is set)
+  const backdrop = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial({
+    name: 'PMREM.Background', side: THREE.BackSide, depthWrite: false, depthTest: false,
+  }));
+  ahead = { pm, scenes, backdrop };
+  const target = compileGenerator(renderer, pm);
+  if (!target) return;
+  const prev = renderer.getRenderTarget();
+  renderer.setRenderTarget(target);
+  const capture = new THREE.PerspectiveCamera(90, 1, 0.1, 100);
+  for (const scene of scenes.values()) renderer.compile(scene, capture);
+  renderer.compile(backdrop, capture);
+  renderer.setRenderTarget(prev);
+  target.dispose();
 }
 
-// Dim environment for subtle reflections on metal / wet surfaces: a sky gradient and one soft panel (made once for
-// its colours, with `pm` if given).
-export function buildEnvMap(renderer: THREE.WebGLRenderer, sky: RGB, panel: RGB, pm?: THREE.PMREMGenerator): THREE.Texture {
-  const key = `${sky} ${panel}`;
-  const made = envMaps.get(key);
+/** three's generator's private parts: what `compileGenerator` reaches for, each checked to be there */
+interface GeneratorInside {
+  _setSize?: (cubeSize: number) => void;
+  _allocateTargets?: () => THREE.WebGLRenderTarget;
+  _blurMaterial?: THREE.Material | null;
+  _ggxMaterial?: THREE.Material | null;
+}
+
+/**
+ * `pm`'s blur and convolution compiled for the maps it makes, sized as `fromScene` sizes them (it keeps both for
+ * the size): a target of that kind, to compile the capture's programs for, the caller's to dispose. None where
+ * three's private parts have changed: nothing compiled ahead then, the maps made as before.
+ */
+function compileGenerator(renderer: THREE.WebGLRenderer, pm: THREE.PMREMGenerator): THREE.WebGLRenderTarget | null {
+  const inside = pm as unknown as GeneratorInside;
+  if (typeof inside._setSize !== 'function' || typeof inside._allocateTargets !== 'function') return null;
+  inside._setSize(ENV_SIZE);
+  const target = inside._allocateTargets();
+  const own = [inside._blurMaterial, inside._ggxMaterial];
+  if (!own.every((m) => m instanceof THREE.Material)) {
+    target.dispose();
+    return null;
+  }
+  // (drawn as three draws them: a flat camera, planes of positions and uvs alone; a bare geometry, as three compiles
+  // its own with, is another program, keyed by having no positions, and so are normals)
+  const planes = new THREE.BufferGeometry();
+  planes.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 1, -1, 0, 1, 1, 0], 3));
+  planes.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1], 2));
+  const prev = renderer.getRenderTarget();
+  renderer.setRenderTarget(target);
+  const flat = new THREE.OrthographicCamera();
+  for (const material of own) renderer.compile(new THREE.Mesh(planes, material!), flat);
+  renderer.setRenderTarget(prev);
+  planes.dispose();
+  return target;
+}
+
+/**
+ * The environment of `colours`, made once: every one compiled ahead made with it, their generator and scenes let go
+ * after (the maps are needed together, as the arena shows its first biome), else made alone with a generator of its
+ * own.
+ */
+export function envMap(renderer: THREE.WebGLRenderer, colours: EnvColours): THREE.Texture {
+  const made = envMaps.get(envKey(colours));
   if (made) return made;
+  if (!ahead) return makeEnvMap(renderer, colours);
+  const { pm, scenes, backdrop } = ahead;
+  ahead = undefined;
+  for (const [key, scene] of scenes) {
+    envMaps.set(key, pm.fromScene(scene, 0.04, 0.1, 100, { size: ENV_SIZE }).texture);
+    disposeScene(scene);
+  }
+  pm.dispose();
+  disposeScene(backdrop);
+  return envMaps.get(envKey(colours)) ?? makeEnvMap(renderer, colours);
+}
+
+/** `colours`' environment made with a generator of its own */
+function makeEnvMap(renderer: THREE.WebGLRenderer, colours: EnvColours): THREE.Texture {
+  const pm = new THREE.PMREMGenerator(renderer);
+  const scene = envScene(colours);
+  const texture = pm.fromScene(scene, 0.04, 0.1, 100, { size: ENV_SIZE }).texture;
+  pm.dispose();
+  disposeScene(scene);
+  envMaps.set(envKey(colours), texture);
+  return texture;
+}
+
+function disposeScene(root: THREE.Object3D): void {
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.geometry.dispose();
+    (mesh.material as THREE.Material).dispose();
+  });
+}
+
+// Dim environment for subtle reflections on metal / wet surfaces: a sky gradient and one soft panel.
+function envScene({ sky, panel }: EnvColours): THREE.Scene {
   const envScene = new THREE.Scene();
   const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.ShaderMaterial({
     side: THREE.BackSide,
@@ -377,11 +470,7 @@ export function buildEnvMap(renderer: THREE.WebGLRenderer, sky: RGB, panel: RGB,
   const panelMesh = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ color: new THREE.Color(...panel).multiplyScalar(2), side: THREE.DoubleSide }));
   panelMesh.position.set(-5, 7, 3); panelMesh.lookAt(0, 0, 0);
   envScene.add(panelMesh);
-  const generator = pm ?? new THREE.PMREMGenerator(renderer);
-  const rt = generator.fromScene(envScene, 0.04);
-  if (!pm) generator.dispose();
-  envMaps.set(key, rt.texture);
-  return rt.texture;
+  return envScene;
 }
 
 /**
