@@ -5,6 +5,7 @@
 import { noCapture } from '../lab/node/browser.mjs';
 import { analyzeBoot } from './analyze.mjs';
 import { slowCpu } from './chrome.mjs';
+import { BLINK_FRAMES, filmFrames, filmOf, startFilm } from './film.mjs';
 import { bootRecording, fightWarm, loaded, startIfCold, stopBootRecording } from './page.mjs';
 import { startTrace } from './trace.mjs';
 import { partsOf, VARIANTS } from './variants.mjs';
@@ -30,15 +31,20 @@ const VISITS = [
 ];
 
 /** `browser`'s first context made ready for a boot: never taking the pointer, the boot recorded from each document's
- *  start, `variant` (each of its parts) applied before the page's scripts, and the performance overlay shown if
- *  `perf` (its cookie, set for `url`). */
+ *  start, `variant` (each of its parts) applied before the page's scripts, the performance overlay shown if `perf`
+ *  and Auto's quality where `auto` says a device settled it (their cookies, set for `url`). */
 async function bootContext(browser, url, variant, options) {
   const context = browser.contexts()[0] ?? (await browser.newContext());
   await context.addInitScript(noCapture);
   const stalls = { stallBlow: options.stallBlow, stallLobby: options.stallLobby };
-  await context.addInitScript(bootRecording, { mark: MARK, ...stalls });
+  const blinks = { blinkExit: options.blinkExit, blinkFrames: BLINK_FRAMES };
+  await context.addInitScript(bootRecording, { mark: MARK, ...stalls, ...blinks });
   for (const part of partsOf(variant)) await context.addInitScript(VARIANTS[part].script, VARIANTS[part].arg);
-  if (options.perf) await context.addCookies([{ name: 'last-stand-perf-hud', value: '1', url }]);
+  const cookies = [
+    ...(options.perf ? [{ name: 'last-stand-perf-hud', value: '1', url }] : []),
+    ...(options.auto ? [{ name: 'last-stand-quality-auto', value: options.auto, url }] : []),
+  ];
+  if (cookies.length) await context.addCookies(cookies);
   return context;
 }
 
@@ -56,11 +62,13 @@ const LEFT_NOTES = {
 
 /** One visit of `page` traced: loaded as `visit` loads it, the lobby revealed and watched `options.seconds` more,
  *  then, unless it's left cold (`leftCold`), Start pressed if the fight's programs aren't warm yet (`startIfCold`)
- *  and watched till they are (`fightWarm`); then its findings (`analyzeBoot`), how it was left (`LEFT_NOTES`'s
- *  key, null where Start could be pressed) and a picture of the screen (`picture`), taken at the CPU's full speed
- *  (`setRate`: slowed ten times, the page painted none within Playwright's 30 s) and slowed again after. */
+ *  and watched till they are (`fightWarm`); then its findings (`analyzeBoot`, and its exit's film with `--film`),
+ *  how it was left (`LEFT_NOTES`'s key, null where Start could be pressed) and a picture of the screen
+ *  (`picture.end`, the film's sheets beside it), taken at the CPU's full speed (`setRate`: slowed ten times, the page
+ *  painted none within Playwright's 30 s) and slowed again after. */
 async function bootTraced(browser, page, url, visit, options, picture, setRate) {
   const trace = await startTrace(browser, { js: options.js, angle: options.angle });
+  const film = options.film ? await startFilm(page) : null;
   await visit.load(page, url);
   await page.waitForFunction(loaded, null, { timeout: BOOT_TIMEOUT_MS, polling: 250 });
   await page.waitForTimeout(options.seconds * 1000);
@@ -72,28 +80,39 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   }
   const record = await page.evaluate(stopBootRecording);
   const events = await trace.stop();
+  const shots = film ? await film.stop() : [];
   await setRate(1);
-  await page.screenshot({ path: picture });
+  await page.screenshot({ path: picture.end });
+  const findings = analyzeBoot(record, events, MARK, options.sourceOf);
+  if (options.film) {
+    const files = { sheet: picture.film, close: picture.flickers };
+    findings.film = await filmOf(browser, page, filmFrames(record, shots), findings.revealedAt, files, record.blinks);
+  }
   await setRate(options.cpuSlowdown);
-  return { findings: analyzeBoot(record, events, MARK, options.sourceOf), left };
+  return { findings, left };
 }
 
-/** The notes of a boot: the visit, the CPU's slowing, the blow's and the lobby's stalls, how it was left where
- *  Start wasn't pressed (`left`), the page's errors and where its end was pictured. */
+/** The notes of a boot: the visit, Auto's quality where it was set, the CPU's slowing, the blow's and the lobby's
+ *  stalls and the exit's blinks, how it was left where Start wasn't pressed (`left`), the page's errors and where its
+ *  end was pictured. */
 function bootNotes(visit, options, left, errors, picture) {
+  const auto = options.auto ? [`Auto's quality settled at ${options.auto}`] : [];
   const slowed = options.cpuSlowdown > 1 ? [`the CPU slowed ${options.cpuSlowdown} times`] : [];
   const stalled = options.stallBlow ? [`held up ${options.stallBlow} ms in the logo blow's first frames`] : [];
   const held = options.stallLobby ? [`each of the lobby's frames held up ${options.stallLobby} ms for a second`] : [];
+  const blinks = `the loading screen hidden for a frame ${options.blinkExit} times as it left`;
+  const blinked = options.blinkExit ? [blinks] : [];
   const leftNote = left ? [LEFT_NOTES[left]] : [];
   const failed = errors.length ? [`page errors: ${errors.slice(0, 3).join(' | ')}`] : [];
-  return [visit.note, ...slowed, ...stalled, ...held, ...leftNote, ...failed, `its end pictured in ${picture}`];
+  const notes = [visit.note, ...auto, ...slowed, ...stalled, ...held, ...blinked, ...leftNote, ...failed];
+  return [...notes, `its end pictured in ${picture.end}`];
 }
 
 /**
  * Each URL's boots in turn with each variant, `options.rounds` times over: in a fresh Chrome (`chromeFor`), a first
  * visit, then a return (`VISITS`). Rounds side by side in time are slowed alike by whatever else uses the machine.
  * `sourcesFor(url)` names a URL's functions; each measure goes to `measured` as it's made, with `pictureAt()` the
- * picture of its end.
+ * pictures of its end and its film (`{ end, film, flickers }`).
  */
 export async function measureBoots(urls, options, { chromeFor, sourcesFor, pictureAt, measured }) {
   for (let round = 1; round <= options.rounds; round++) {

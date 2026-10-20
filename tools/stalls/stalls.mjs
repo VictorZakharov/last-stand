@@ -28,10 +28,13 @@ const REPO = resolve(import.meta.dirname, '../..');
 const OUT = join(REPO, 'tools/stalls/out');
 /** the page's mark on the trace, where its clock starts */
 const MARK = 'stalls:start';
-/** the settings every measure starts with, as the game keeps them: the battleground, the high quality preset, and
- *  the performance overlay shown or not */
-function cookiesFor({ biome, perf }) {
-  return { 'last-stand-biome': biome, 'last-stand-quality': 'high', 'last-stand-perf-hud': perf ? '1' : '0' };
+/** the settings every measure starts with, as the game keeps them: the battleground, the High preset (or Auto, settled
+ *  where `auto` says a device's did), and the performance overlay shown or not */
+function cookiesFor({ biome, perf, auto }) {
+  const quality = auto
+    ? { 'last-stand-quality': 'auto', 'last-stand-quality-auto': auto }
+    : { 'last-stand-quality': 'high' };
+  return { 'last-stand-biome': biome, ...quality, 'last-stand-perf-hud': perf ? '1' : '0' };
 }
 const LOAD_TIMEOUT_MS = 180_000;
 /** how long a key is held, and the view given to settle after each press (ms) */
@@ -115,6 +118,13 @@ async function chooseView(page, view) {
 /** The picture of what a measure's scenario left on screen: `out/end-<n>.png`, n its place in the command's
  *  measures (to see that it played what it meant to). */
 const endPicture = (index) => join(OUT, `end-${index + 1}.png`);
+/** A boot's pictures: its end (`endPicture`), and its exit's film and the film's flickers (`--film`: `out/film-<n>.png`
+ *  and `out/flickers-<n>.png`). */
+const bootPictures = (index) => ({
+  end: endPicture(index),
+  film: join(OUT, `film-${index + 1}.png`),
+  flickers: join(OUT, `flickers-${index + 1}.png`),
+});
 
 /** A Chrome of its own for a measure, as `options` have its window. */
 function chromeFor(options) {
@@ -270,7 +280,7 @@ async function main() {
     measures.push(result);
   };
   try {
-    const pictureAt = () => endPicture(measures.length);
+    const pictureAt = () => (booting ? bootPictures : endPicture)(measures.length);
     if (booting) await measureBoots(urls, options, { chromeFor, sourcesFor, pictureAt, measured });
     else if (options.rounds > 1) await measureRounds(urls, options, sourcesFor, pictureAt, measured);
     else await measureEach(urls, options, sourcesFor, pictureAt, measured);

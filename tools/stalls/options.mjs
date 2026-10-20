@@ -5,7 +5,7 @@ import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
-const SWITCHES = new Set(['headed', 'perf', 'js', 'angle', 'links', 'cold-return', 'help']);
+const SWITCHES = new Set(['headed', 'perf', 'js', 'angle', 'links', 'film', 'cold-return', 'help']);
 /** the views the game is played in (core/renderer.ts `VIEWS`, in the order V steps through them), and the
  *  battlegrounds (data/biomes.ts) */
 export const VIEWS = ['top', 'third', 'first'];
@@ -17,6 +17,10 @@ const HEROES = ['mage', 'warrior', 'ranger'];
 export const BOOT = 'boot';
 const BOOT_SECONDS = 3;
 const STASH_MOST = 60;
+/** the quality levels (data/quality.ts `QUALITY_ORDER`), and Auto's as its cookie keeps it (`core/quality.ts`:
+ *  `low@518400`) */
+const QUALITIES = ['high', 'medium', 'low'];
+const AUTO = new RegExp(`^(${QUALITIES.join('|')})@\\d+$`);
 /** a key's tap (ms: `scenarios.mjs`'s): presses can't come closer together */
 const TAP_LEAST = 90;
 
@@ -48,6 +52,12 @@ const HELP = {
     + 'canary of its frames a second (0 by default)'],
   'cold-return': ['', 'boot: the first visit leaves without pressing Start, so the return finds its maps kept and the '
     + 'fight\'s programs not in the GPU\'s cache (a visit that never fought, a deploy that changed a shader)'],
+  film: ['', 'boot: the loading screen\'s exit filmed, the screen\'s frames as the trace caught them, and any frame '
+    + 'unlike those either side of it found (a flicker)'],
+  'blink-exit': ['n', 'boot: the loading screen hidden for a frame this many times as it leaves, the canary of the '
+    + 'film\'s flickers (0 by default)'],
+  auto: ['level@px', 'Auto\'s quality as a device settled it, a report\'s Quality line (`low@518400`: Low, at most '
+    + '0.52 Mpx; by default a boot\'s own and a scenario\'s the High preset)'],
   window: ['WxH', 'the page\'s size in css px, as a report\'s `window` (1536x864 by default)'],
   headed: ['', 'a Chrome window on the screen, as a player has it (headless by default)'],
   perf: ['', 'the performance overlay shown, as a player sending its report has it'],
@@ -117,6 +127,8 @@ export function readOptions(argv) {
     cpuSlowdown: Number(written['cpu-slowdown'] ?? 1),
     stallBlow: Number(written['stall-blow'] ?? 0),
     stallLobby: Number(written['stall-lobby'] ?? 0),
+    blinkExit: Number(written['blink-exit'] ?? 0),
+    auto: written.auto ?? null,
     window: sizeOf(written.window ?? '1536x864'),
     headed: written.headed === true,
     perf: written.perf === true,
@@ -124,6 +136,7 @@ export function readOptions(argv) {
     angle: written.angle === true,
     links: written.links === true,
     coldReturn: written['cold-return'] === true,
+    film: written.film === true,
     help: written.help === true,
   };
   if (!SCENARIOS[options.scenario] && options.scenario !== BOOT) {
@@ -148,6 +161,13 @@ export function readOptions(argv) {
   if (!(options.cpuSlowdown >= 1)) throw new Error('stalls: --cpu-slowdown must be a number, 1 or more');
   if (!(options.stallBlow >= 0)) throw new Error('stalls: --stall-blow must be a number of ms, 0 or more');
   if (!(options.stallLobby >= 0)) throw new Error('stalls: --stall-lobby must be a number of ms, 0 or more');
+  if (!(Number.isInteger(options.blinkExit) && options.blinkExit >= 0)) {
+    throw new Error('stalls: --blink-exit must be a whole number, 0 or more');
+  }
+  if (options.auto !== null && !AUTO.test(options.auto)) {
+    const levels = QUALITIES.join(', ');
+    throw new Error(`stalls: --auto must be a level and the most pixels, level@px (${levels}: low@518400)`);
+  }
   if (!(options.listed >= LISTED_LEAST)) {
     throw new Error(`stalls: --listed must be a number of ms, ${LISTED_LEAST} or more`);
   }

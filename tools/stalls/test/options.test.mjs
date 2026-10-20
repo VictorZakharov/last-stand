@@ -22,6 +22,8 @@ test('fills in the defaults', () => {
     cpuSlowdown: 1,
     stallBlow: 0,
     stallLobby: 0,
+    blinkExit: 0,
+    auto: null,
     window: { width: 1536, height: 864 },
     headed: false,
     perf: false,
@@ -29,6 +31,7 @@ test('fills in the defaults', () => {
     angle: false,
     links: false,
     coldReturn: false,
+    film: false,
     help: false,
   });
 });
