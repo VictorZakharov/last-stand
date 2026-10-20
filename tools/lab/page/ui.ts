@@ -15,6 +15,10 @@ import * as THREE from 'three';
 import { middleOf } from './lab';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
+import { CLASSES, CLASS_IDS } from '../../../src/data/classes/index';
+import * as warm from '../../../src/game/warm';
+import * as readying from '../../../src/ui/readying';
+import type { Need } from '../../../src/game/warm';
 import type { DamageType, SkillDef } from '../../../src/types';
 import type { Enemy } from '../../../src/entities/enemy';
 import { NUMBER_COLORS } from '../../../src/data/balance';
@@ -36,8 +40,8 @@ import { closeGlow, GLOW_CANARIES, glowPictures, glowShown, openGlow } from './u
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
-  | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'readying' | 'clicked' | 'views' | 'logLobby' | 'skillTipsTouch'
-  | 'run' | 'scores' | 'perf'
+  | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'readying' | 'readyingClass' | 'clicked' | 'views' | 'logLobby'
+  | 'skillTipsTouch' | 'run' | 'scores' | 'perf'
   | 'decision' | 'pause' | 'summary' | 'skillTips' | 'log' | 'logTouch';
 
 export interface UiOptions {
@@ -193,6 +197,21 @@ function linesOf(element: HTMLElement): number {
   return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
 }
 
+/** How the fight's loading bar lies: how many lines its `label` is on, and `state`'s problems if the bar reaches past
+ *  the window or the label runs onto more than one line. */
+function barPlaced(bar: HTMLElement, label: HTMLElement, state: UiState): { rows: number; problems: string[] } {
+  const box = bar.querySelector('.rd-box')!.getBoundingClientRect();
+  const rows = linesOf(label);
+  const problems: string[] = [];
+  const inside = box.left >= -0.5 && box.top >= -0.5 && box.right <= innerWidth + 0.5;
+  if (!inside || box.bottom > innerHeight + 0.5) {
+    const where = boxText({ x: box.x, y: box.y, w: box.width, h: box.height });
+    problems.push(`${state}: the bar reaches past the window (${where})`);
+  }
+  if (rows !== 1) problems.push(`${state}: its label (${label.textContent?.trim()}) runs onto ${rows} lines`);
+  return { rows, problems };
+}
+
 /**
  * The fight's loading bar within the window, its label on one line and its fill as far along as painted.
  * `canary`: the label given the width of a letter, so it wraps, which must be found.
@@ -202,23 +221,107 @@ function readyingShown(canary: boolean): Found {
   if (!bar) return { lines: ['  no fight\'s loading bar in this tree'], problems: [] };
   const label = bar.querySelector<HTMLElement>('.rd-sub')!;
   if (canary) label.style.width = '1ch';
-  const box = bar.querySelector('.rd-box')!.getBoundingClientRect();
+  const placed = barPlaced(bar, label, 'readying');
   const track = bar.querySelector('.rd-bar')!.getBoundingClientRect();
   const fill = bar.querySelector('.rd-fill')!.getBoundingClientRect();
-  const rows = linesOf(label);
   label.style.width = '';
   const along = track.width > 0 ? fill.width / track.width : 0;
-  const lines = [`  the fight's loading bar: its label on ${rows} line${rows === 1 ? '' : 's'}, ${share(along, 1)}% along`];
-  const problems: string[] = [];
-  const inside = box.left >= -0.5 && box.top >= -0.5 && box.right <= innerWidth + 0.5;
-  if (!inside || box.bottom > innerHeight + 0.5) {
-    const where = boxText({ x: box.x, y: box.y, w: box.width, h: box.height });
-    problems.push(`readying: the bar reaches past the window (${where})`);
-  }
-  if (rows !== 1) problems.push(`readying: its label (${label.textContent?.trim()}) runs onto ${rows} lines`);
+  const rows = `${placed.rows} line${placed.rows === 1 ? '' : 's'}`;
+  const lines = [`  the fight's loading bar: its label on ${rows}, ${share(along, 1)}% along`];
+  const problems = [...placed.problems];
   if (Math.abs(along - READYING_SHARE) > READYING_SLACK) {
     problems.push(`readying: its fill is ${share(along, 1)}% along, painted ${share(READYING_SHARE, 1)}%`);
   }
+  return { lines, problems };
+}
+
+/** The lab's way to keep a need cold (game/warm.ts `chill`), or undefined in a tree from before it. */
+const chillOf = (): ((need: Need) => void) | undefined => (warm as { chill?: (need: Need) => void }).chill;
+
+/** Every label the fight's loading bar can show (ui/readying.ts `readyingLabels`), none in a tree from before it. */
+const labelsOf = (): string[] => (readying as { readyingLabels?: () => string[] }).readyingLabels?.() ?? [];
+
+/** Each label the bar can show laid out in its `label` on this screen: those that run onto more than one line. */
+function labelsWrapped(label: HTMLElement): { text: string; rows: number }[] {
+  const said = label.textContent;
+  const laidOut = labelsOf().map((text) => {
+    label.textContent = text;
+    return { text, rows: linesOf(label) };
+  });
+  label.textContent = said;
+  return laidOut.filter(({ rows }) => rows !== 1);
+}
+
+/** The class card's button for the class `id`. */
+function classButton(id: string): HTMLElement {
+  const button = document.querySelector<HTMLElement>(`#opt-class button[data-c="${id}"]`);
+  if (!button) throw new Error(`lab: ui: the class card has no button for the ${id}`);
+  return button;
+}
+
+/** the class `readyingClass` picked and the hero's before it, while its pick waits (null: none, or no `chill`) */
+let picked: { id: string; before: string } | null = null;
+
+/**
+ * Another class picked with the mouse while the heroes' programs are cold (`chill`: the lab's boot warms every need at
+ * once), as a first visit's pick waits for them: under the fight's loading bar, which says what it readies. No frame
+ * runs, here or as it closes: the states after it are pictured at the moment they'd be without it (three frames moved
+ * the lobby's opening zoom, and every label after it with it).
+ */
+async function openReadyingClass(lab: Lab): Promise<void> {
+  const chill = chillOf();
+  const before = G.player.cls.id;
+  const id = CLASS_IDS.find((other) => other !== before);
+  if (!chill || !id) return;
+  chill('heroes');
+  picked = { id, before };
+  await lab.clickOn(classButton(id));
+}
+
+/**
+ * The hero before it picked back while the pick still waits (the waiting press now asks for the hero on show, which
+ * does nothing), and the heroes warm again: the hero is never rebuilt (rebuilt twice, he stood in another phase of his
+ * idle in every picture after it). The bar's cover takes the mouse's clicks, so the page presses the button itself.
+ */
+async function closeReadyingClass(): Promise<void> {
+  if (!picked) return;
+  const { before } = picked;
+  picked = null;
+  classButton(before).click();
+  warm.markWarm('heroes');
+  // (the press goes ahead as its wait resolves)
+  await new Promise((resolve) => setTimeout(resolve));
+}
+
+/**
+ * The fight's loading bar shown for the class picked (`openReadyingClass`), within the window, its label on one line,
+ * saying it readies that hero (a class pick said "Readying the fight", the page's own text, whatever was waiting).
+ * `canary`: that text put back, which must be found.
+ */
+function readyingClassShown(canary: boolean): Found {
+  const bar = readyingBar();
+  if (!bar || !picked) {
+    return { lines: ['  no way to keep the heroes cold in this tree (game/warm.ts chill)'], problems: [] };
+  }
+  const label = bar.querySelector<HTMLElement>('.rd-sub')!;
+  const said = label.textContent ?? '';
+  if (canary) label.textContent = 'Readying the fight';
+  const text = label.textContent?.trim() ?? '';
+  const placed = barPlaced(bar, label, 'readyingClass');
+  label.textContent = said;
+  const name = CLASSES[picked.id].name;
+  const shown = bar.classList.contains('on');
+  const rows = `${placed.rows} line${placed.rows === 1 ? '' : 's'}`;
+  const wrapped = labelsWrapped(label);
+  const lines = [
+    `  the ${name} picked, the heroes cold: the fight's loading bar ${shown ? 'shown' : 'not shown'}, `
+      + `saying "${text}" on ${rows}`,
+    `  every label it can show (${labelsOf().length}) on one line: ${wrapped.length ? 'no' : 'yes'}`,
+  ];
+  const problems = [...placed.problems];
+  for (const { text: wraps, rows: on } of wrapped) problems.push(`readyingClass: "${wraps}" runs onto ${on} lines`);
+  if (!shown) problems.push(`readyingClass: the ${name} picked with the heroes cold showed no loading bar`);
+  if (!text.includes(name)) problems.push(`readyingClass: the ${name} picked, the loading bar says "${text}"`);
   return { lines, problems };
 }
 
@@ -724,6 +827,7 @@ const STEPS: Record<UiState, Steps> = {
   help: { open: openHelp, close: closeHelp },
   saves: { open: () => openSaves(true), close: () => openSaves(false) },
   readying: { open: openReadying, close: closeReadying, check: readyingShown },
+  readyingClass: { open: openReadyingClass, close: closeReadyingClass, check: readyingClassShown },
   clicked: { open: clickClass, close: () => undefined, check: focusAfterClick },
   views: { open: switchViews, close: () => undefined, check: labelsThroughSwitches },
   logLobby: { open: openLogLobby, close: closeLog, check: logShown },
@@ -787,6 +891,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const wrapped = found.problems.some((problem) => problem.includes('runs onto'));
     lines.push(`  canary: ${wrapped ? 'the label a letter wide caught' : 'the label a letter wide went unseen'}`);
     if (!wrapped) missed.push(`${state}: the canary's label a letter wide went unseen`);
+  }
+  if (state === 'readyingClass' && readyingBar() && chillOf()) {
+    const said = found.problems.some((problem) => problem.includes('the loading bar says'));
+    lines.push(`  canary: "Readying the fight" for a class picked ${said ? 'caught' : 'went unseen'}`);
+    if (!said) missed.push(`${state}: the canary's "Readying the fight" for a class picked went unseen`);
   }
   if (state.startsWith('skillTips')) {
     const past = found.problems.some((problem) => problem.includes('reaches past the window'));

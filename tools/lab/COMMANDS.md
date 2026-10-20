@@ -302,8 +302,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   with a clip, what crossed what and how deep.
 - `probe <module>`: a measure of your own (Writing a measure in `AGENTS.md`). Options the lab doesn't know are passed to it (`--frames=30`), and
   `--setup=false` skips the set-up.
-- `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,readying,clicked,
-  views,logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch`, every one by default:
+- `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,readying,
+  readyingClass,clicked,views,logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch`, every one by default:
   the lobby, an item's tooltip, the stash given 20 items and a weapon among them hovered by the mouse, those that fit
   its slot lit (`page/uiGlow.ts`: pictured round the stash, its tooltip put away, at 400, 1000 and 1600 ms into the
   glow's loops, each held there, so `--ab` pictures the same moment on both sides; every loop a lit item runs must
@@ -314,8 +314,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   hovered item and turns a lit one's glow not hovered, each of which must be found),
   How to play, the save slots, the fight's loading bar over the lobby as a press waiting for the fight's programs
   shows it (`ui/readying.ts`, 40% along: within the window, its label on one line, its fill as far as painted;
-  `--canary` gives the label a letter's width, whose wrap must be found), the hero's class
-  button clicked with the mouse and a key pressed after it as the browser gets them (where the focus went and whether
+  `--canary` gives the label a letter's width, whose wrap must be found), another class picked with the mouse while
+  the heroes' programs are kept cold (`game/warm.ts` `chill`), its bar saying it readies that hero and every label the
+  bar can show (`readyingLabels`) on one line on this screen (`--canary` puts back the page's own "Readying the fight",
+  which a class pick said, and it must be found; a tree from before it can't keep them cold, and says so), the hero's
+  class button clicked with the mouse and a key pressed after it as the browser gets them (where the focus went and whether
   the browser shows its ring: a problem when the button kept it), the lobby's camera switched with V through every
   view and back, each glide played and drawn (every frame, each label over the dummies against where its anchor shows
   by the camera as the frame draws it: off by more than a pixel is a problem; placed with the camera's turn of the
@@ -337,7 +340,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   `index.html`) or a text field's caret: the system's (`auto`, `pointer`, a UA stylesheet's `default`) is a problem,
   listed by element; `--canary` gives the page's body the system's, which must be found. In every state too, the
   digits shown must sit on their line (`page/digits.ts`): each look of the page's text showing digits (its font,
-  weight, style and numeric settings) has the ten set out alone in it at 64 px, white on black over the page, pictured
+  weight, style and numeric settings) has the ten set out alone in it at 64 px (as large as fits across a narrower
+  window: past its edge the picture was cut short, "no ink of the 1"), white on black over the page, pictured
   and each one's ink read, and each font the world's labels are painted in (`overlay/paint.ts` `fontOf`) has each
   digit's ink measured by the canvas; their tops or their bottoms more than 8% of their size apart is a problem,
   naming the highest and the lowest and where the look shows, with its picture (`out/ui/digits-<n>.png`). Old-style

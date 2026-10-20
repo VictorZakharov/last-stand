@@ -66,6 +66,10 @@ export function markWarm(need: Need): void {
   needs[need].resolveWarm();
 }
 
+/** The lab's: `need` cold again till `markWarm` (tools/lab `ui --states readyingClass`), so a press that needs it waits
+ *  under the fight's loading bar as a first visit's does (the lab's boot warms every need at once). */
+export function chill(need: Need): void { needs[need] = needState(); }
+
 /**
  * `act`, done at once if what it needs (`of`) is warm, else as soon as it is: pressed again meanwhile, its last
  * asking alone.

@@ -10,12 +10,15 @@ import * as paint from '../../../src/ui/overlay/paint';
 
 /** what the digits are read from */
 const DIGITS = '0123456789';
-/** the size they're set out at (css px): large, so a pixel is a small share of them */
+/** the size they're set out at (css px): large, so a pixel is a small share of them (smaller where the window is too
+ *  narrow for the row, `setOut`) */
 const SIZE = 64;
+/** the probe's padding (css px) */
+const PAD = 8;
 /** how far apart their tops or bottoms may be, as a share of their size: a round digit's overshoot, and the display
  *  face's 3 and 5 dipping 6% under its line by design (old-style ones are 11% apart) */
 const LEVEL_SLACK = 0.08;
-/** how far inside the probe's box it's pictured (css px; its padding is 8) */
+/** how far inside the probe's box it's pictured (css px; within its padding, `PAD`) */
 const INSET = 2;
 /** a pixel's red at or over this is ink (the digits set out white on black) */
 const INK = 96;
@@ -109,11 +112,11 @@ function looksShown(): Map<string, { look: Look; elements: Element[] }> {
 }
 
 /** The ten digits set out in `look`, white on black on top of the page, each in a box of its own. */
-function setOut(look: Look): HTMLElement {
+function setOut(look: Look): { probe: HTMLElement; size: number } {
   const probe = document.createElement('div');
   probe.id = PROBE_ID;
   Object.assign(probe.style, {
-    position: 'fixed', left: '0', top: '0', zIndex: '2147483647', padding: '8px', pointerEvents: 'none',
+    position: 'fixed', left: '0', top: '0', zIndex: '2147483647', padding: `${PAD}px`, pointerEvents: 'none',
     background: '#000', color: '#fff', textShadow: 'none', letterSpacing: '0', whiteSpace: 'nowrap',
     fontFamily: look.family, fontWeight: look.weight, fontStyle: look.style, fontSize: `${SIZE}px`,
     lineHeight: '1.6', fontVariantNumeric: look.numeric, fontFeatureSettings: look.features,
@@ -125,7 +128,12 @@ function setOut(look: Look): HTMLElement {
     probe.append(box);
   }
   document.body.append(probe);
-  return probe;
+  // (as large as fits across the window: an upright phone's is narrower than the row at `SIZE`, its picture was cut
+  // short at the window's edge, and the digits were read in the wrong columns, "no ink of the 1")
+  const row = probe.getBoundingClientRect().width - 2 * PAD;
+  const size = row > innerWidth - 2 * PAD ? Math.floor((SIZE * (innerWidth - 2 * PAD)) / row) - 1 : SIZE;
+  probe.style.fontSize = `${size}px`;
+  return { probe, size };
 }
 
 /** The area of the page a probe is pictured in (css px): inside its edges, as the picture's last row took in a
@@ -185,7 +193,7 @@ function extremeOf(values: number[], extreme: (...values: number[]) => number): 
 
 /** The digits of `look` read from the page's picture of them set out alone. */
 async function readLook(lab: Lab, look: Look): Promise<Level> {
-  const probe = setOut(look);
+  const { probe, size } = setOut(look);
   try {
     const clip = insideOf(probe.getBoundingClientRect());
     const { pixels, scale, picture } = await pixelsIn(lab, clip, `digits ${read.size + 1}`);
@@ -198,7 +206,7 @@ async function readLook(lab: Lab, look: Look): Promise<Level> {
       if (!rows) throw new Error(`lab: digits: no ink of the ${digit.textContent} set out in ${lookName(look)}`);
       inks.push(rows);
     }
-    return { ...levelOf(inks, SIZE * scale), picture };
+    return { ...levelOf(inks, size * scale), picture };
   } finally {
     probe.remove();
   }
