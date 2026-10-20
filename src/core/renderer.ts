@@ -371,6 +371,10 @@ export function initRenderer(container: HTMLElement) {
   // three's checks of a program as it's first used are round trips to the GPU's process, one after another for
   // each of the boot's programs: a production build checks them all once after the reveal (`checkPrograms`)
   renderer.debug.checkShaderErrors = import.meta.env.DEV;
+  // asked now, while the GPU's process is idle: three asks it as the first texture is uploaded and keeps it, and a
+  // round trip waits for everything sent before it (a first visit's lobby warm-up waited 0.45 s there, behind its
+  // programs)
+  renderer.capabilities.getMaxAnisotropy();
   firstVertexProvokes(renderer.getContext());
   container.appendChild(renderer.domElement);
   initHdr(renderer.domElement, renderer.getContext() as WebGL2RenderingContext);
