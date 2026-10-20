@@ -3,9 +3,10 @@
 // cast or wave recompiled its shaders: a 10-30 ms hitch, worse on ANGLE / Metal.
 // The set of distinct programs is small and bounded, so we keep all of them for the
 // whole session, and compile the known ones up front (warmUp) before the first frame.
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import { G } from '../state';
 import { CROWD_LAYER, WARM_LAYER } from './layers';
+import { drawnInShadowsOnly } from '../world/culling';
 
 const pinned = new WeakSet<object>();
 const known: { name: string; key: string[] }[] = [];
@@ -65,6 +66,77 @@ export function steadyShadowPrograms(renderer: THREE.WebGLRenderer): void {
     }
     draw(camera, scene, geometry, material, object, group);
   };
+}
+
+/** the side three's shadow pass draws a caster's material from, where the material sets none (`shadowSide`) */
+const SHADOW_SIDE: Record<THREE.Side, THREE.Side> = {
+  [THREE.FrontSide]: THREE.BackSide, [THREE.BackSide]: THREE.FrontSide, [THREE.DoubleSide]: THREE.DoubleSide,
+};
+
+/** a caster's material, as the shadow pass reads it */
+type Casting = THREE.Material & Partial<Pick<THREE.MeshStandardMaterial,
+  'map' | 'alphaMap' | 'displacementMap' | 'displacementScale' | 'displacementBias' | 'wireframe'>>;
+
+/**
+ * A stand-in for the depth material three's shadow pass draws `caster` with, `material` its own (r185's
+ * `getDepthMaterial`, for the moon's light, a directional one): its custom one, else three's own, set as the pass
+ * sets it, the map let go where `steadyShadowPrograms` lets it go. The pass's own are private, and one serves every
+ * caster: a stand-in a caster, as a material has one program to wait for.
+ */
+function shadowStandIn(caster: THREE.Mesh, material: Casting): THREE.MeshDepthMaterial {
+  const custom = caster.customDepthMaterial as THREE.MeshDepthMaterial | undefined;
+  const depth = custom ? custom.clone() : new THREE.MeshDepthMaterial();
+  if (custom) {
+    depth.onBeforeCompile = custom.onBeforeCompile;
+    depth.customProgramCacheKey = custom.customProgramCacheKey;
+  }
+  depth.visible = material.visible;
+  depth.wireframe = material.wireframe ?? false;
+  depth.side = material.shadowSide ?? SHADOW_SIDE[material.side];
+  depth.alphaTest = material.alphaToCoverage ? 0.5 : material.alphaTest;
+  const tested = depth.alphaTest > 0;
+  depth.map = tested ? material.map ?? null : null;
+  depth.alphaMap = tested ? material.alphaMap ?? null : null;
+  depth.clipShadows = material.clipShadows;
+  depth.clippingPlanes = material.clippingPlanes;
+  depth.clipIntersection = material.clipIntersection;
+  depth.displacementMap = material.displacementMap ?? null;
+  depth.displacementScale = material.displacementScale ?? 1;
+  depth.displacementBias = material.displacementBias ?? 0;
+  return depth;
+}
+
+/**
+ * The programs three's shadow pass will make for `root`'s casters (those `camera` sees, as the pass draws them),
+ * compiled now as `scene` lights them: the pass made each as it first drew with it, linked there, the page held up
+ * (a first visit's lobby, 10 of them inside its warm-up's draw). Compiled without the scene's fog and environment,
+ * as the pass draws with neither (three's empty scene in place of the scene). Gives back the stand-ins
+ * (`shadowStandIn`), whose programs a warm-up waits for; the pass's own find them made. The stand-ins are left
+ * undisposed: their programs are pinned whatever happens to them.
+ */
+export function compileShadows(renderer: THREE.WebGLRenderer, root: THREE.Object3D, camera: THREE.Camera, scene: THREE.Scene): Compiled {
+  const own = new Map<THREE.Mesh, THREE.Mesh['material']>();
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    const drawable = mesh.isMesh || (o as THREE.Line).isLine || (o as THREE.Points).isPoints;
+    if (!drawable || !mesh.material) return;
+    own.set(mesh, mesh.material);
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const casts = mesh.castShadow && mesh.layers.test(camera.layers);
+    const standIns = casts ? materials.filter((m) => m.visible).map((m) => shadowStandIn(mesh, m)) : [];
+    // (what casts nothing is left out: a compile passes over a mesh with no material)
+    mesh.material = (Array.isArray(mesh.material) ? standIns : standIns[0]) as THREE.Mesh['material'];
+  });
+  const { fog, environment } = scene;
+  scene.fog = null;
+  scene.environment = null;
+  try {
+    return renderer.compile(root, camera, scene);
+  } finally {
+    scene.fog = fog;
+    scene.environment = environment;
+    for (const [mesh, material] of own) mesh.material = material;
+  }
 }
 
 /** A program as three made it, for the lab (`lab programs`): the loading step showing as it was made, whether
@@ -213,13 +285,18 @@ type Program = THREE.WebGLProgram & { isReady(): boolean; getAttributes(): unkno
 const UPLOAD_SLICE_MS = 25, UPLOAD_SLICE_BEHIND_MS = 2;
 
 /**
- * `compile` run with the crowds' bodies' own meshes left out (put back after, where they were): their crowd draws
- * them (models/crowd.ts), their own materials never are, and three's compile makes a program for every mesh of
- * the scene whatever its layer (17 lit programs compiled for nothing, `lab programs`).
+ * `compile` run with what no pass draws with its own material left out (put back after, where it was): the crowds'
+ * bodies' own meshes, which their crowd draws (models/crowd.ts), and the casters the shadow map alone draws
+ * (world/culling.ts: their shadows' programs are `compileShadows`'). three's compile makes a program for every mesh
+ * of the scene whatever its layer or whether it's shown (17 lit programs compiled for nothing, `lab programs`; and
+ * the biomes' baked casters', one).
  */
-function withoutCrowdBodies(root: THREE.Object3D, compile: () => Compiled): Compiled {
+function withoutUndrawn(root: THREE.Object3D, compile: () => Compiled): Compiled {
   const out: THREE.Object3D[] = [];
-  root.traverse((o) => { if (o.layers.mask === 1 << CROWD_LAYER && o.parent) out.push(o); });
+  root.traverse((o) => {
+    const undrawn = o.layers.mask === 1 << CROWD_LAYER || drawnInShadowsOnly(o as THREE.Mesh);
+    if (undrawn && o.parent) out.push(o);
+  });
   return without(out, compile);
 }
 
@@ -313,6 +390,9 @@ export interface WarmUp {
   compile?: THREE.Object3D[];
   /** left out of it: what the lobby doesn't show (the other biomes), warmed behind it */
   leaveOut?: THREE.Object3D[];
+  /** compiled with it, besides the scene's: what passes of their own draw (the outline's), its materials' links
+   *  waited for with the rest */
+  also?: () => Compiled;
   /** drawn alone, whatever the camera sees, on the warm-ups' layer (every light is on it too: their counts are the
    *  scene's, `lightThePasses` in renderer.ts), into a pixel of the target: the programs the draws make are the
    *  scene's, and its fragments none (a whole lobby drawn again for each part held its frames up); left out, the
@@ -399,16 +479,23 @@ function drawnAlone(scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebG
 export function compileAhead(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, leaveOut: THREE.Object3D[], objects: THREE.Object3D[] = []): void {
   const prev = renderer.getRenderTarget();
   renderer.setRenderTarget(target);
-  without(leaveOut, () => withoutCrowdBodies(scene, () => renderer.compile(scene, camera)));
-  for (const root of objects) withoutCrowdBodies(root, () => renderer.compile(root, camera, scene));
+  without(leaveOut, () => {
+    withoutUndrawn(scene, () => renderer.compile(scene, camera));
+    compileShadows(renderer, scene, camera, scene);
+  });
+  for (const root of objects) {
+    withoutUndrawn(root, () => renderer.compile(root, camera, scene));
+    compileShadows(renderer, root, camera, scene);
+  }
   renderer.setRenderTarget(prev);
 }
 
 /**
  * Compile every shader the scene (plus `objects`) needs, and keep them.
- * This is a real render, not renderer.compile(): programs differ between the screen and
- * a render target (tone mapping, output colour space), the game always draws into the
- * post-processing `target`, and compile() skips the shadow-map depth shaders. The render
+ * This is a real render, not renderer.compile() alone: programs differ between the screen
+ * and a render target (tone mapping, output colour space), the game always draws into the
+ * post-processing `target`, and compile() skips the shadow-map depth shaders (compiled as
+ * the shadow pass makes them, `compileShadows`, linked before the render). The render
  * waits for `before` too (the maps it uploads: compiling reads none of their pixels); the
  * maps are uploaded and the programs' links waited for first (`uploaded`, `linked`).
  */
@@ -423,9 +510,10 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
   const materials = new Set<THREE.Material>();
   for (const root of compiled) {
     const at = performance.now();
-    const made = without(leaveOut, () => withoutCrowdBodies(root, () => renderer.compile(root, camera, scene)));
+    const made = without(leaveOut, () => withoutUndrawn(root, () => renderer.compile(root, camera, scene)));
+    const shadows = without(leaveOut, () => compileShadows(renderer, root, camera, scene));
     compileMs += performance.now() - at;
-    for (const material of made) materials.add(material);
+    for (const material of [...made, ...shadows]) materials.add(material);
     // (behind the lobby a root's programs a frame: each is brought in from the GPU's cache on its process's main
     // thread, which draws the lobby's frames too)
     if (step) {
@@ -435,6 +523,7 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
     }
   }
   renderer.setRenderTarget(prev);
+  for (const material of how.also?.() ?? []) materials.add(material);
   const textures = texturesOf(materials);
   let at = performance.now();
   await before?.(textures);

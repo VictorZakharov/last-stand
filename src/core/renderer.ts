@@ -212,24 +212,31 @@ let passMaterials: { intoTargets: THREE.ShaderMaterial[]; toScreen: THREE.Shader
  * first drew it, one after another (0.33 s on a first visit).
  */
 export function compilePasses(onScreen: THREE.Scene[]): void {
-  // (a pass's full-screen triangle: positions and uvs alone, as normals would make another program)
-  const quad = new THREE.BufferGeometry();
-  quad.setAttribute('position', new THREE.Float32BufferAttribute([-1, 3, 0, -1, -1, 0, 3, -1, 0], 3));
-  quad.setAttribute('uv', new THREE.Float32BufferAttribute([0, 2, 0, 0, 2, 0], 2));
-  const flat = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const quad = passTriangle();
   const compiled = (materials: THREE.Material[], target: THREE.WebGLRenderTarget | null): void => {
     const holder = new THREE.Scene();
     holder.add(...materials.map((material) => new THREE.Mesh(quad, material)));
     gl.setRenderTarget(target);
-    gl.compile(holder, flat);
+    gl.compile(holder, passCamera);
   };
   const prev = gl.getRenderTarget();
   compiled(passMaterials.intoTargets, sceneRT);
   compiled(passMaterials.toScreen, null);
-  for (const scene of onScreen) gl.compile(scene, flat);
+  for (const scene of onScreen) gl.compile(scene, passCamera);
   gl.setRenderTarget(prev);
   quad.dispose();
 }
+
+/** A pass's full-screen triangle as three's full-screen quad has it, to compile a pass's material on: positions and
+ *  uvs alone, as normals would make another program. Seen through `passCamera`. */
+export function passTriangle(): THREE.BufferGeometry {
+  const quad = new THREE.BufferGeometry();
+  quad.setAttribute('position', new THREE.Float32BufferAttribute([-1, 3, 0, -1, -1, 0, 3, -1, 0], 3));
+  quad.setAttribute('uv', new THREE.Float32BufferAttribute([0, 2, 0, 0, 2, 0], 2));
+  return quad;
+}
+/** what a pass's triangle is seen through, as three's full-screen quad's */
+export const passCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
 const rig = {
   zoom: 1,

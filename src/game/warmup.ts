@@ -30,7 +30,7 @@ import { sporeOrbSample } from '../fx/sporeOrb';
 import { riftBoltSamples } from '../fx/riftBolts';
 import { swingTrailSamples } from '../fx/swingTrail';
 import { groundSamples } from './groundItems';
-import { warmOutline } from '../ui/overlay/outline';
+import { compileOutline, warmOutline } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
 import { markWarm, wanted, warming, warmingRuns, type Need } from './warm';
 import type { Model } from '../types';
@@ -164,7 +164,12 @@ export function compileTheLobby(): void {
   ];
   lobbyExtras = extra;
   compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)), extra);
+  // (the outline's edge: the dummies' masks are the lobby's warm-up's, as they spawn when the lobby is entered)
+  compileOutline([]);
 }
+
+/** the lobby's dummies' bodies, which its warm-up outlines */
+const dummies = (): THREE.Object3D[] => G.enemies.map((e) => e.obj);
 
 /** What the lobby shows and can do, warmed before it shows (the lobby's dummies already stand in it, its effects,
  *  loot and skills made with its hero: `compileTheLobby`); the fight's foes built meanwhile (`buildAhead`). */
@@ -176,14 +181,16 @@ export async function warmLobby(): Promise<void> {
   lobbyExtras = [];
   const leaveOut = otherBiomes().map((id) => G.arena.groupOf(id));
   const start = performance.now();
-  const warming = warmUp(G.renderer, G.scene, G.camera, sceneTarget(), { objects: extra, leaveOut, before: mapsArrived });
+  const warming = warmUp(G.renderer, G.scene, G.camera, sceneTarget(), {
+    objects: extra, leaveOut, before: mapsArrived, also: () => compileOutline(dummies()),
+  });
   // (its compile is made as it's called, the scene walked before the foes are built)
   const ahead = buildAhead(theFight());
   const took = await warming;
   performance.measure('warm the lobby', { start, duration: performance.now() - start, detail: took });
   hero.dispose();
   // (the outline a held skill draws round a foe: the dummies' meshes drawn into its mask)
-  warmOutline(G.enemies.map((e) => e.obj));
+  warmOutline(dummies());
   clearEffects(); clearLights(); particles.clear();
   await ahead;
 }
@@ -310,6 +317,7 @@ async function warmBuilt(built: Built[], { step, progress }: Warming = {}): Prom
     swap: swaps[0]?.swap,
     show: () => { for (const b of built) b.show?.(); },
     before: mapsArrived,
+    also: () => compileOutline(built.flatMap((b) => b.outlined), { edge: !step }),
     progress,
     step,
     giveUpMs: step ? COLD_LINK_MS : undefined,

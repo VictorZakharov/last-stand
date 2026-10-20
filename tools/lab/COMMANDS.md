@@ -704,7 +704,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   three's default left out), a kind of one with what it was made for; what uses them (the scene's top-level object
   of each object compiled or drawn with one, every foe's kind as `foes`: a program the foes alone use is one a lobby
   shown before them could compile later); the programs no draw ever used (compiled for
-  nothing); those made after the reveal (the lab's set-up). It found 177 programs at boot, 92 of them lit (each for
+  nothing) and those a draw made, each with its step and what it was made for; those made after the reveal (the
+  lab's set-up). #275's boot made 32 by a draw, each a first visit's wait inside it: the post chain's and the
+  environment maps' (now compiled with the biome), the shadows' (`compileShadows`) and the outline's
+  (`compileOutline`). Now none. It found 177 programs at boot, 92 of them lit (each for
   15 point lights), 17 of those never drawn: the crowd bodies' own materials, on a layer no pass draws (now left out
   of the warm-ups' compile; the kit's variants made uniforms, 146 were left). The lobby shows before the fight's
   programs are warm (`src/game/warm.ts`): the lab's boot asks for them at once and waits for them, listed as made
