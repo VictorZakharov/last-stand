@@ -1,6 +1,6 @@
 // The stalls' report (tools/stalls): each measure's frames, the Skia programs built and every long stall with what
 // was built in it and what the page changed just before, then the measures side by side.
-import { LISTED_MS, STALL_MS } from './analyze.mjs';
+import { GPU_STEP_MS, LISTED_MS, STALL_MS } from './analyze.mjs';
 
 const ms = (value) => `${value.toFixed(0)} ms`;
 const seconds = (value) => `${(value / 1000).toFixed(1)} s`;
@@ -180,8 +180,17 @@ export function summaryText(measures) {
   return ['side by side:', ...rows].join('\n');
 }
 
+/** The threads a boot step's GPU compiles ran on (`analyze.mjs` `gpuCompilesIn`), as a line of its own, how many
+ *  at once in each `GPU_STEP_MS` of it at the end. */
+function gpuCompilesLine({ threads, mean, most, steps }) {
+  const each = steps.map((busy) => busy.toFixed(0)).join(' ');
+  return `    the GPU process's compiles: on ${threads} threads, ${mean.toFixed(1)} at once on average, ${most} at most; `
+    + `each ${(GPU_STEP_MS / 1000).toFixed(2)} s: ${each}`;
+}
+
 /** A boot's step (`analyze.mjs` `analyzeBoot`): when it started, how long it took, its frames and the longest the
- *  page was held up in it, its long tasks and Skia programs, and what the threads spent its time on in all. */
+ *  page was held up in it, its long tasks and Skia programs, what the threads spent its time on in all, and the
+ *  threads its GPU compiles ran on. */
 function bootStepLines(step) {
   const { frames, longTasks, programs } = step;
   const tasks = longTasks.count
@@ -195,6 +204,7 @@ function bootStepLines(step) {
   ];
   if (step.work.length) lines.push(workLine('its work', step.work));
   if (step.gpuMain?.length) lines.push(workLine('the GPU process\'s main thread\'s', step.gpuMain));
+  if (step.gpuCompiles) lines.push(gpuCompilesLine(step.gpuCompiles));
   if (step.js?.own.length) lines.push(jsLine('its JS, each function\'s own time', step.js.own));
   if (step.js?.within.length) lines.push(jsLine('and with what it calls', step.js.within));
   return lines;

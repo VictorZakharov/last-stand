@@ -151,7 +151,9 @@ quarter second from a second after the reveal: the fewest and when, till when th
 rate, and what the threads and the page's JS spent the fewest's second on) and, for each step, when it began, how
 long it took, its frames and the longest the page was held up in it, its long tasks and Skia programs, what each
 thread spent its time on in all and the GPU process's main thread apart (it runs every page's GL and the compositor:
-anything long on it holds every frame up), with `--js` its JS by function, its own time and with what it calls; at
+anything long on it holds every frame up), the threads its GPU compiles ran on (ANGLE's tasks: how many, how many at
+once on average and at most, which says whether a wait for links is bound by the threads or by the work handed to
+them), with `--js` its JS by function, its own time and with what it calls; at
 the end, each URL's boots by visit over the rounds, each step's median and range, and the lobby's fewest frames a
 second.
 

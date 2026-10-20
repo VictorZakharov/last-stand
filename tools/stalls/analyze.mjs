@@ -27,6 +27,10 @@ const BOOT_WORK_SHOWN = 6;
 /** the GPU process's main thread, listed apart in a boot's steps: it runs every page's GL and the compositor, and
  *  anything long on it holds every frame up (ANGLE's waits for a link, a shader compiled at a draw: `--angle`) */
 const GPU_MAIN = 'GPU Process CrGpuMain';
+/** ANGLE's tasks on the GPU process's pool of threads: where a first visit's shaders are compiled and linked */
+const GPU_COMPILE = 'ANGLEPlatformImpl::RunWorkerTask';
+/** the span the GPU process's compiles are counted over in turn through a step (ms) */
+export const GPU_STEP_MS = 250;
 const FILES_SHOWN = 3;
 /** the most of the workers' maps listed, the longest first */
 const MAPS_SHOWN = 3;
@@ -591,9 +595,57 @@ function bootRefresh(steps) {
   return medians.length ? Math.min(...medians) : null;
 }
 
+/** The most of `runs` (each `at` to `end`) under way at once. */
+function mostAtOnce(runs) {
+  const edges = runs.flatMap((run) => [{ at: run.at, change: 1 }, { at: run.end, change: -1 }]);
+  // (one ending as another starts isn't both at once)
+  edges.sort((a, b) => a.at - b.at || a.change - b.change);
+  let open = 0;
+  let most = 0;
+  for (const { change } of edges) {
+    open += change;
+    most = Math.max(most, open);
+  }
+  return most;
+}
+
+/** How many of `runs` (each `at` to `end`) were under way on average in each `GPU_STEP_MS` from `from` to `to`. */
+function atOnceBySteps(runs, from, to) {
+  const steps = [];
+  for (let start = from; start < to; start += GPU_STEP_MS) {
+    const end = Math.min(start + GPU_STEP_MS, to);
+    const busy = runs.reduce((sum, run) => sum + Math.max(0, Math.min(run.end, end) - Math.max(run.at, start)), 0);
+    steps.push(busy / (end - start));
+  }
+  return steps;
+}
+
+/**
+ * The GPU process's compiles that started in `[from, to)` (the page's ms; ANGLE's tasks on its pool): how many of
+ * the pool's threads ran them, how many on average over the span (their time over its length), the most at once,
+ * and how many on average in each `GPU_STEP_MS` of it. Whether a wait for links is bound by the threads (as many
+ * busy as ran any, all the while) or by the work handed to them (a burst, then a few). Null where none ran.
+ */
+function gpuCompilesIn(placed, from, to) {
+  const runs = [];
+  for (let index = firstFrom(placed, from); index < placed.length && placed[index].at < to; index++) {
+    const { task, at } = placed[index];
+    if (shortName(task.name) !== GPU_COMPILE) continue;
+    runs.push({ at, end: at + task.dur / 1000, thread: `${task.pid}:${task.tid}` });
+  }
+  if (!runs.length) return null;
+  const busy = runs.reduce((sum, run) => sum + (run.end - run.at), 0);
+  return {
+    threads: new Set(runs.map((run) => run.thread)).size,
+    mean: busy / (to - from),
+    most: mostAtOnce(runs),
+    steps: atOnceBySteps(runs, from, to),
+  };
+}
+
 /** A boot's step from `from` to `to` (the page's ms): its frames' summary (the longest the page was held up in it,
- *  `worst`), its long tasks and Skia program links, and what the threads spent its time on in all, and the GPU
- *  process's main thread apart. */
+ *  `worst`), its long tasks and Skia program links, and what the threads spent its time on in all, the GPU
+ *  process's main thread apart, and the threads its compiles ran on (`gpuCompilesIn`). */
 function bootStep(name, from, to, record, traced) {
   const frames = record.frames.filter((frame) => frame.at > from && frame.at <= to);
   const tasks = record.longTasks.filter((task) => task.at >= from && task.at < to);
@@ -613,6 +665,7 @@ function bootStep(name, from, to, record, traced) {
     programs: { count: links.length, ms: links.reduce((sum, link) => sum + link.ms, 0) },
     work: sharedWork(totals, 1).slice(0, BOOT_WORK_SHOWN),
     gpuMain: sharedWork(onGpuMain, 1).slice(0, BOOT_WORK_SHOWN),
+    gpuCompiles: gpuCompilesIn(traced.placed, from, to),
     js: traced.samples.length ? jsIn(traced.samples, from, to, 1) : null,
   };
 }

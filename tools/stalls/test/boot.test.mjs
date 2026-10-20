@@ -175,6 +175,22 @@ test('lists each warm-up\'s steps, its waits for its maps and their uploads wher
   assert.match(text, /the fight at once \(compile 58, links 656, draw 82\)/);
 });
 
+test('counts the threads a step\'s GPU compiles ran on, on average and at most at once', () => {
+  const pool = (tid) => ({ pid: 7, tid });
+  const events = [
+    ...trace(),
+    { ph: 'M', name: 'process_name', pid: 7, args: { name: 'GPU Process' } },
+    workAt('ANGLEPlatformImpl::RunWorkerTask', pool(1), 300, 200),
+    workAt('ANGLEPlatformImpl::RunWorkerTask', pool(2), 350, 100),
+    // (starting as the second ends: two at once, not three)
+    workAt('ANGLEPlatformImpl::RunWorkerTask', pool(3), 450, 200),
+  ];
+  const findings = analyzeBoot(record(), events, MARK);
+  const text = bootText({ name: 'http://x/ base, a first visit', notes: [], findings });
+  const lines = text.match(/the GPU process's compiles: .*/g);
+  assert.deepEqual(lines, ['the GPU process\'s compiles: on 3 threads, 0.8 at once on average, 2 at most; each 0.25 s: 2 0 0']);
+});
+
 test('reports a boot step by step, and the boots by visit over the rounds', () => {
   const findings = analyzeBoot(record(), trace(), MARK);
   const text = bootText({ name: 'http://x/ base, a first visit', notes: ['a fresh profile'], findings });
