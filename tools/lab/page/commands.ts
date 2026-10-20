@@ -35,6 +35,7 @@ import type { CrowdOptions } from './crowd';
 import type { DrawsOptions } from './draws';
 import type { PerfOptions } from './perf';
 import type { CompilesOptions } from './compiles';
+import type { ProgramsOptions } from './programs';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
@@ -364,6 +365,12 @@ export async function crowd(lab: Lab, command: CrowdOptions): Promise<Report> {
 export async function compiles(lab: Lab, command: CompilesOptions): Promise<Report> {
   const { compiles: compilesOf } = await import('./compiles');
   return compilesOf(lab, command);
+}
+
+/** `lab programs`: the programs the boot compiled, by step, by kind and what sets them apart, those never drawn. */
+export async function programs(lab: Lab, command: ProgramsOptions): Promise<Report> {
+  const { programs: programsOf } = await import('./programs');
+  return programsOf(lab, command);
 }
 
 /** `lab draws`: one frame's draw calls with the crowd standing, by the geometry each drew, the most first. */

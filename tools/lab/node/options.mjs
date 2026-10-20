@@ -826,6 +826,24 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  programs: {
+    help: 'the programs the boot compiled (the game\'s ledger of them, dev builds alone): how many each loading '
+      + 'step made, by the warm-ups\' compile or by a draw; each kind with the fields of its key that set its '
+      + 'programs apart; those never drawn; those made after the reveal',
+    options: {
+      canary: {
+        kind: 'switch',
+        help: 'warm a box of a kind nothing else is (it must be listed compiled and drawn) and one on a layer no '
+          + 'camera sees (it must be listed never drawn)',
+      },
+      cost: {
+        kind: 'switch',
+        help: 'compile each program again alone, salted so no cache answers, and time it: by kind, by what uses '
+          + 'them, by the point lights they\'re lit by, the longest (a minute or more; its canary: the cache)',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   draws: {
     help: 'one frame\'s draw calls with the crowd of foes standing before the hero, by the geometry each drew, the '
       + 'most first: its draws in the scene, its shadow map and after it, the triangles, its material and what drew it '

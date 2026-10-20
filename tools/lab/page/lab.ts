@@ -682,7 +682,8 @@ export class Lab {
    * This moment as the player sees it, under `label` with `notes` beside it: the frame drawn by the game's own camera
    * with the page's UI over it (the HUD, a menu, a tooltip), pictured by the browser, whole or clipped round the
    * element `around` names (a CSS selector) or to an area of the page (`around` a `Clip`, as `screenArea` makes one
-   * round points of the world). For a report's `moments`, as `picture`'s, whose views show the game alone.
+   * round points of the world). For a report's `moments`, as `picture`'s, whose views show the game alone. The
+   * page's running animations are settled first (`settleRunning`).
    */
   async screen(label: string, notes: string[] = [], around?: string | Clip): Promise<Pictured> {
     if (!window.__labScreenshot) throw new Error('lab: screen: this page has no screenshots (opened by an older lab)');
@@ -694,6 +695,8 @@ export class Lab {
     } finally {
       this.drawing = drawing;
     }
+    // (after the frame: it may start one)
+    settleRunning();
     const png = await window.__labScreenshot(clip);
     const size = clip ?? { width: innerWidth, height: innerHeight };
     return { label, tiles: [{ view: 'screen', png, width: size.width, height: size.height }], notes };
@@ -1025,6 +1028,23 @@ interface Crop {
 }
 
 /** The page `around` names: round the element a CSS selector names, or an area of it. */
+/**
+ * The page's running animations brought to their end (an endless one held at its start): they run on the browser's
+ * clock, not the lab's, so a picture caught each at another moment (the wave's banner fading, in one side of an A/B
+ * and not the other). One a command holds paused, at the moment it pictures, is left as it is.
+ */
+function settleRunning(): void {
+  for (const animation of document.getAnimations()) {
+    if (animation.playState !== 'running') continue;
+    if (animation.effect?.getComputedTiming().iterations !== Infinity) {
+      animation.finish();
+      continue;
+    }
+    animation.pause();
+    animation.currentTime = 0;
+  }
+}
+
 function clipOf(around: string | Clip): Clip {
   return typeof around === 'string' ? clipRound(around) : withinWindow(around);
 }

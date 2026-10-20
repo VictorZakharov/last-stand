@@ -8,7 +8,7 @@ import { lod, heroDetail } from './armor';
 import { part } from './rig';
 import { Sculpt } from './shapes';
 import { clamp, lerp, mulberry } from '../../util';
-import { faceCanvases } from '../../core/textures';
+import { faceCanvases, faceGrid } from '../../core/textures';
 import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, neckShade, beardLift, mouthY, neckSeam, type FaceShape, type HeadGrid } from './face';
 import type { MaterialKit } from '../../types';
 
@@ -50,11 +50,13 @@ function once<T extends object>(key: string, make: () => T): T {
 }
 
 const grids = new Map<string, HeadGrid>();
-/** the skin's ray grid for a face at the current detail, cast once */
+/** the skin's ray grid for a face at the current detail, cast once: the one its paint was cast on, where that's come
+ *  (the workers paint the faces on the full detail's grid) */
 function gridFor(name: keyof typeof FACES): HeadGrid {
   const [nu, nv] = gridSize(FACES[name], lod(112, 40), lod(88, 32)), key = `${name}:${nu}x${nv}`;
   let g = grids.get(key);
-  if (!g) grids.set(key, (g = headGrid(FACES[name], nu, nv)));
+  const painted = faceGrid(name);
+  if (!g) grids.set(key, (g = painted && painted.nu === nu && painted.nv === nv ? painted : headGrid(FACES[name], nu, nv)));
   return g;
 }
 

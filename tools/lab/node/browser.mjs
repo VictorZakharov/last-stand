@@ -290,12 +290,13 @@ function seededRandom() {
 
 /**
  * Every boot a first boot: nothing kept from the last (a saved profile loaded where the first boot rolled one made
- * a frame's difference), and no logo wind (the loading screen's watchdog remembers it as switched off).
+ * a frame's difference), and no logo wind (the loading screen's watchdog counted as having cut it short on the
+ * launches in a row it takes to switch it off).
  */
 export function freshStorage() {
   try {
     localStorage.clear();
-    localStorage.setItem('last-stand.logo-wind-off', '1');
+    localStorage.setItem('last-stand.logo-wind-slow', '2');
   } catch {
     // storage blocked: the intro plays, slower but harmless
   }

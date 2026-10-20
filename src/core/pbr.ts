@@ -2,13 +2,14 @@
 // worker can make them (core/pbr.worker.ts) while the loading screen stays live. `core/textures.ts`
 // turns them into canvases and textures.
 import { makeFbm, mulberry, clamp, smooth } from '../util';
-import { faceData } from '../entities/models/face';
+import { faceData, type HeadGrid } from '../entities/models/face';
 
 /** Per-pixel output of a PBR sampler: height, albedo rgb (0..1), roughness. */
 interface PBRSample { h: number; r: number; g: number; b: number; rough: number }
 type PBRSampler = (u: number, v: number, out: PBRSample) => void;
-/** A material's maps as RGBA pixels, `size` square (or `size` wide and `height` tall). */
-export interface PBRData { size: number; height?: number; albedo: Uint8ClampedArray<ArrayBuffer>; normal: Uint8ClampedArray<ArrayBuffer>; rough: Uint8ClampedArray<ArrayBuffer> }
+/** A material's maps as RGBA pixels, `size` square (or `size` wide and `height` tall); a face's with the ray grid it
+ *  was painted on, which its head is built on (cast once, by the worker painting it). */
+export interface PBRData { size: number; height?: number; albedo: Uint8ClampedArray<ArrayBuffer>; normal: Uint8ClampedArray<ArrayBuffer>; rough: Uint8ClampedArray<ArrayBuffer>; grid?: HeadGrid }
 
 // Builds albedo / normal / roughness maps from per-pixel callbacks. The roughness map's red channel (which no material
 // reads: roughness is green) keeps the height, 0 at the map's lowest point and 1 at its highest, for the floors'
@@ -459,9 +460,11 @@ export const recipeKey = (name: RecipeName, args: readonly unknown[]): string =>
  * the main thread when first asked for, so keep this in step with the calls (a miss is only slower).
  */
 export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = [
-  // the longest first, so the workers finish together
+  // steel first, as the heroes' engraving is painted over it as they're built (the others are only drawn); then the
+  // longest first, so the workers finish together
+  ['steel', []],
   ['face', ['warrior']], ['face', ['mage']], ['face', ['ranger']],
   ['forestFloor', []], ['cobblestone', []], ['bark', []], ['slabs', [21, 6, 3]], ['slabs', [33, 5, 5]], ['slabs', [47, 5, 5]],
   ['slabs', [33, 2, 2]], ['grunge', []], ['wood', []], ['burlap', []],
-  ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['steel', []], ['fur', []], ['bowWood', []],
+  ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['fur', []], ['bowWood', []],
 ];

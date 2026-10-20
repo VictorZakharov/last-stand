@@ -339,8 +339,31 @@ export function placeGate(g: THREE.Object3D, angle: number): void {
   g.lookAt(0, 0, 0);
 }
 
-// Dim environment for subtle reflections on metal / wet surfaces: a sky gradient and one soft panel.
-export function buildEnvMap(renderer: THREE.WebGLRenderer, sky: RGB, panel: RGB): THREE.Texture {
+/** A biome's environment's colours: its sky's, and its one soft panel's. */
+export interface EnvColours { sky: RGB; panel: RGB }
+/** the environments made, by their colours (`prepareEnvMaps` makes them ahead) */
+const envMaps = new Map<string, THREE.Texture>();
+
+/**
+ * Every biome's environment made ahead (`colours`), with one generator: the boot makes them while the workers make
+ * its maps, which they need none of (made as each biome was built, after the maps, each of them compiled the
+ * generator's blur and convolution again and held the page up). The page painted between them.
+ */
+export async function prepareEnvMaps(renderer: THREE.WebGLRenderer, colours: EnvColours[]): Promise<void> {
+  const pm = new THREE.PMREMGenerator(renderer);
+  for (const { sky, panel } of colours) {
+    buildEnvMap(renderer, sky, panel, pm);
+    await new Promise((r) => setTimeout(r));
+  }
+  pm.dispose();
+}
+
+// Dim environment for subtle reflections on metal / wet surfaces: a sky gradient and one soft panel (made once for
+// its colours, with `pm` if given).
+export function buildEnvMap(renderer: THREE.WebGLRenderer, sky: RGB, panel: RGB, pm?: THREE.PMREMGenerator): THREE.Texture {
+  const key = `${sky} ${panel}`;
+  const made = envMaps.get(key);
+  if (made) return made;
   const envScene = new THREE.Scene();
   const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.ShaderMaterial({
     side: THREE.BackSide,
@@ -354,9 +377,10 @@ export function buildEnvMap(renderer: THREE.WebGLRenderer, sky: RGB, panel: RGB)
   const panelMesh = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ color: new THREE.Color(...panel).multiplyScalar(2), side: THREE.DoubleSide }));
   panelMesh.position.set(-5, 7, 3); panelMesh.lookAt(0, 0, 0);
   envScene.add(panelMesh);
-  const pm = new THREE.PMREMGenerator(renderer);
-  const rt = pm.fromScene(envScene, 0.04);
-  pm.dispose();
+  const generator = pm ?? new THREE.PMREMGenerator(renderer);
+  const rt = generator.fromScene(envScene, 0.04);
+  if (!pm) generator.dispose();
+  envMaps.set(key, rt.texture);
   return rt.texture;
 }
 

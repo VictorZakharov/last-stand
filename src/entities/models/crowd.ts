@@ -309,6 +309,12 @@ export function joinCrowd(body: CrowdBody): boolean {
   return true;
 }
 
+/** The meshes `model`'s kind's crowd is drawn with (none before a body of its kind has joined it): what a warm-up of
+ *  the kind compiles (game/warmup.ts). */
+export function crowdSlots(model: Model): THREE.Object3D[] {
+  return kinds.get(model.root.userData.crowdKind as string)?.slots ?? [];
+}
+
 /** `body` out of its crowd (disposed). */
 export function leaveCrowd(body: CrowdBody): void {
   const seat = seats.get(body);

@@ -55,22 +55,25 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
   /**
    * near: an enemy's glow dims near the camera like the effect glows (its eyes up close would dazzle).
    * rim: light added at glancing angles, the cheap stand-in for a physical material's sheen.
+   * Both are the material's uniforms, not variants of its shader: every kit's material of a kind shares one program
+   * (a variant each made 26 more programs at boot, each compiled for half a second on a first visit's ANGLE).
    */
   function patch<M extends THREE.Material>(m: M, near = false, rim?: THREE.Color): M {
     m.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, u);
-      if (rim) shader.uniforms.uRim = { value: rim };
+      shader.uniforms.uNear = { value: near ? 1 : 0 };
+      shader.uniforms.uRim = { value: rim ?? new THREE.Color(0) };
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vFxPos;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFxPos = position;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\n' + FX_CHUNK_COMMON + (rim ? 'uniform vec3 uRim;' : ''))
+        .replace('#include <common>', '#include <common>\n' + FX_CHUNK_COMMON + 'uniform float uNear;\nuniform vec3 uRim;')
         .replace('#include <color_fragment>', `#include <color_fragment>
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55,0.8,1.0), uFrozen*0.75);
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045,0.035,0.03), uChar*0.9);`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-          ${near ? 'totalEmissiveRadiance *= nearGlow();' : ''}
-          ${rim ? 'totalEmissiveRadiance += uRim * pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);' : ''}
+          totalEmissiveRadiance *= mix(1.0, nearGlow(), uNear);
+          totalEmissiveRadiance += uRim * pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
           float dn = fxNoise(vFxPos*7.0)*0.65 + fxNoise(vFxPos*19.0)*0.35;
           if (uDissolve > 0.0 && dn < uDissolve) discard;
           float edge = uDissolve > 0.0 ? (1.0 - smoothstep(uDissolve, uDissolve + 0.09, dn)) : 0.0;
@@ -88,7 +91,7 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
             if (most > knee) reflectedLight.directSpecular = shine * (knee + (most - knee) / (1.0 + (most - knee) / (uShine - knee))) / most;
           }`);
     };
-    m.customProgramCacheKey = () => (near ? 'entityfx-near' : 'entityfx') + (rim ? '-rim' : '');
+    m.customProgramCacheKey = () => 'entityfx';
     mats.push(m);
     return m;
   }

@@ -820,6 +820,14 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  programs: {
+    each(side, options) {
+      return side.command('programs', { canary: Boolean(options.canary), cost: Boolean(options.cost) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   draws: {
     check(options) {
       if (options.count !== undefined && !(options.count >= 0)) throw labError('draws --count: 0 or more');

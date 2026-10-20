@@ -310,7 +310,37 @@ function drawArmsOver(): void {
 export type ViewMode = 'top' | 'third' | 'first';
 export const VIEWS: ViewMode[] = ['top', 'third', 'first'];
 
+/** three's point lights, as its lit shaders begin them: the block `loopPointLights` lights in a loop */
+const POINT_LIGHTS_IF = '#if ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )';
+const POINT_LIGHTS_LOOPED = [
+  `${POINT_LIGHTS_IF} && !( defined( USE_SHADOWMAP ) && NUM_POINT_LIGHT_SHADOWS > 0 )`,
+  '\tPointLight pointLight;',
+  '\tfor ( int i = 0; i < NUM_POINT_LIGHTS; i ++ ) {',
+  '\t\tpointLight = pointLights[ i ];',
+  '\t\tgetPointLightInfo( pointLight, geometryPosition, directLight );',
+  '\t\tRE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );',
+  '\t}',
+  '#elif ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )',
+].join('\n');
+
+/**
+ * The point lights lit in a loop, not written out once a light as three writes them (`#pragma unroll_loop_start`,
+ * which a light's shadow map needs: no point light here casts one, and with one the written-out block is kept). With
+ * 16 point lights a lit shader was 85 kB, and on a first visit ANGLE's D3D compiler spent half a second on each: 36 of
+ * the 40 s the boot's programs cost (`lab programs --cost`).
+ */
+function loopPointLights(): void {
+  const chunk = THREE.ShaderChunk.lights_fragment_begin;
+  const at = chunk.indexOf(POINT_LIGHTS_IF);
+  if (at < 0) {
+    console.error('loopPointLights: three\'s lights_fragment_begin has changed: its point lights stay written out');
+    return;
+  }
+  THREE.ShaderChunk.lights_fragment_begin = chunk.slice(0, at) + POINT_LIGHTS_LOOPED + chunk.slice(at + POINT_LIGHTS_IF.length);
+}
+
 export function initRenderer(container: HTMLElement) {
+  loopPointLights();
   const renderer = gl = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(canvasRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -319,6 +349,9 @@ export function initRenderer(container: HTMLElement) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  // three's checks of a program as it's first used are round trips to the GPU's process, one after another for
+  // each of the boot's programs: a production build checks them all once after the reveal (`checkPrograms`)
+  renderer.debug.checkShaderErrors = import.meta.env.DEV;
   container.appendChild(renderer.domElement);
   initHdr(renderer.domElement, renderer.getContext() as WebGL2RenderingContext);
 

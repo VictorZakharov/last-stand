@@ -693,6 +693,28 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the scene drawn twice (the scene pass's GPU time must read at least 1.3 times more), and the particles twice as
   wide (their fill must read at least 2.5 times more). The machine's load drifts: compare an A/B run `--fresh`, both
   sides then, not one side from the cache and the other now.
+- `programs`: the programs the boot compiled (`page/programs.ts`), read from the game's ledger of them
+  (`watchPrograms` in `src/core/shaders.ts`, dev builds alone: the boot's programs are made before any command can
+  watch). How many each loading step made, and how many of those a draw made rather than the warm-ups' `compile()`
+  (a draw's program is linked as it's drawn, the page held up meanwhile); each kind (the material's type and its
+  shader), with the fields of its key that set its programs apart (`page/programKeys.ts`: three r185's key read by
+  field, the names held to three's own code by `test/programKeys.test.mjs`; `custom` is the material's own key,
+  three's default left out), a kind of one with what it was made for; what uses them (the scene's top-level object
+  of each object compiled or drawn with one, every foe's kind as `foes`: a program the foes alone use is one a lobby
+  shown before them could compile later); the programs no draw ever used (compiled for
+  nothing); those made after the reveal (the lab's set-up). It found 177 programs at boot, 92 of them lit (each for
+  15 point lights), 17 of those never drawn: the crowd bodies' own materials, on a layer no pass draws (now left out
+  of the warm-ups' compile; the kit's variants made uniforms, 146 were left). The lobby shows before the fight's
+  programs are warm (`src/game/warm.ts`): the lab's boot asks for them at once and waits for them, listed as made
+  `behind the lobby` (40 of the 146). `--cost` compiles each program again from the GLSL three gave it, alone, salted
+  so no cache can answer (`page/programCost.ts`), and times it from its source to its link: the CPU a first visit's
+  ANGLE spends on it; summed by kind, by what uses them and by the point lights they're lit by, the longest listed
+  with their fragment shader's size, and a plain lit material's compile as the scene lights it and with its point
+  lights, environment map, shadows and fog each taken away. Its canary is the cache: the longest compiled again
+  with its salt must come back in under a quarter of its time, and with a new salt in over half. It found the lit
+  programs 36 of the 40 s (0.56 s each, 16 point lights written out), 23 s once lit in a loop. A minute or more.
+  `--canary` warms a box of a kind nothing else is (it must be listed compiled and drawn) and one on a layer no
+  camera sees (it must be listed never drawn).
 - `compiles`: whether the boot's warm-up compiled what a fight draws (`page/compiles.ts`). In each biome (`--biomes`,
   both) the hero stands in the view (`--view`, top) and a prop of every kind the biome has is worn down (its gauge
   over it, chips knocked off) and broken in turn, its rubble, debris and smoke drawn as they fly and settle; then the

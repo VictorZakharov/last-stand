@@ -11,7 +11,10 @@ import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
 import { floorRelief } from '../core/parallax';
-import { buildSky, boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type Portal, type Updater } from './props';
+import { buildSky, boxWithUV, buildEnvMap, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type Updater } from './props';
+
+/** the crypt's environment (made ahead: `prepareEnvMaps`) */
+export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import type { Obstacle } from '../types';
 
@@ -429,7 +432,7 @@ export const buildCrypt: BiomeBuilder = (scene, renderer) => {
       fog: { color: FOG, near: 42, far: 90 },
       hemi: { sky: 0x8090c8, ground: 0x1c1826, intensity: 1.05 },
       moon: { color: 0xc4d0ff, intensity: 2.7, pos: [-16, 34, 12] },
-      env: buildEnvMap(renderer, [0.3, 0.36, 0.56], [1.0, 1.05, 1.3]),
+      env: buildEnvMap(renderer, CRYPT_ENV.sky, CRYPT_ENV.panel),
       envIntensity: 0.55,
     },
     obstacles,

@@ -22,11 +22,13 @@ const BOOT_POLL_MS = 100;
 const BOOTED = 'booted';
 
 /** In the page: whether its boot is over, `BOOTED` or what its loading screen says went wrong (src/ui/loading.ts
- *  `loadingFailed`); false while it's still loading. */
+ *  `loadingFailed`); false while it's still loading, or while the fight's programs are still warmed behind the
+ *  lobby, asked for at once (src/game/warm.ts: a page from before it has no `allWarm`). */
 function bootOutcome() {
   const loading = document.getElementById('loading');
-  if (!loading) return 'booted';
-  return loading.classList.contains('failed') ? loading.textContent.trim() : false;
+  if (loading) return loading.classList.contains('failed') ? loading.textContent.trim() : false;
+  window.__dev?.hurry?.();
+  return window.__dev?.allWarm?.() === false ? false : 'booted';
 }
 /** how much of a failed script's answer is said (Vite's message of what wouldn't compile, the start of it) */
 const FAILED_ANSWER_CHARS = 600;

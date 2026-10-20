@@ -443,6 +443,8 @@ export class Sculpt {
         let sm = twins.get(mat);
         if (!sm) { twins.set(mat, sm = mat.clone()); sm.onBeforeCompile = mat.onBeforeCompile; sm.customProgramCacheKey = mat.customProgramCacheKey; }
         const mesh = new THREE.SkinnedMesh(g, sm);
+        // (its sphere the bind pose's: three would pose every vertex for it at its first draw)
+        mesh.boundingSphere = g.boundingSphere!.clone();
         mesh.castShadow = !this.noShadow.has(mat) && g.boundingSphere!.radius > SHADOW_MIN;
         mesh.receiveShadow = true;
         mesh.frustumCulled = false;   // the bounds are the bind pose's

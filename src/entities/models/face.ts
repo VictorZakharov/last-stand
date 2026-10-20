@@ -1041,8 +1041,9 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
 /** the face maps' size, and the grid they are painted on (any grid of the head shares its uvs) */
 const MAP_W = 1024, MAP_H = 512;
 
-/** A hero's face maps, as the loading workers make them (core/pbr.ts). */
+/** A hero's face maps, as the loading workers make them (core/pbr.ts), with the grid they're painted on: the head's at
+ *  full detail (models/head.ts), so it's cast once. */
 export function faceData(who: keyof typeof FACES): PBRData {
-  const F = FACES[who], P = paintFace(F, LOOKS[who], headGrid(F, ...gridSize(F, 112, 88)), MAP_W, MAP_H);
-  return { size: P.w, height: P.h, albedo: P.albedo, normal: P.normal, rough: P.rough };
+  const F = FACES[who], grid = headGrid(F, ...gridSize(F, 112, 88)), P = paintFace(F, LOOKS[who], grid, MAP_W, MAP_H);
+  return { size: P.w, height: P.h, albedo: P.albedo, normal: P.normal, rough: P.rough, grid };
 }
