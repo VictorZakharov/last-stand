@@ -16,6 +16,9 @@ const CATEGORIES = [
 
 /** with `--js`, V8's sampling profiler too, a sample every 0.1 ms (`profile.mjs`) */
 const JS_CATEGORIES = ['disabled-by-default-v8.cpu_profiler', 'disabled-by-default-v8.cpu_profiler.hires'];
+/** with `--angle`, ANGLE's own work on the GPU process: a shader compiled at a draw (`D3DCompile`), a program
+ *  linked, read back from the cache or waited for */
+const ANGLE_CATEGORIES = ['gpu.angle'];
 
 /** the events kept whatever their length: Skia building a program, the page's mark, and the profiler's (each whole:
  *  its samples are its arguments) */
@@ -48,7 +51,7 @@ function slim(event) {
  * Starts tracing `browser` (connected over CDP), with `js` the page's JS sampled too. Returns `stop`, which ends the
  * trace and gives its kept events, or throws `TraceLost` if Chrome never ends it.
  */
-export async function startTrace(browser, { js = false } = {}) {
+export async function startTrace(browser, { js = false, angle = false } = {}) {
   const session = await browser.newBrowserCDPSession();
   const events = [];
   session.on('Tracing.dataCollected', ({ value }) => {
@@ -56,7 +59,7 @@ export async function startTrace(browser, { js = false } = {}) {
       if (kept(event)) events.push(slim(event));
     }
   });
-  const categories = js ? [...CATEGORIES, ...JS_CATEGORIES] : CATEGORIES;
+  const categories = [...CATEGORIES, ...(js ? JS_CATEGORIES : []), ...(angle ? ANGLE_CATEGORIES : [])];
   const traceConfig = { includedCategories: categories, recordMode: 'recordContinuously' };
   await session.send('Tracing.start', { transferMode: 'ReportEvents', traceConfig });
   return {

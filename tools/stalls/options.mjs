@@ -5,7 +5,7 @@ import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
-const SWITCHES = new Set(['headed', 'perf', 'js', 'links', 'help']);
+const SWITCHES = new Set(['headed', 'perf', 'js', 'angle', 'links', 'cold-return', 'help']);
 /** the views the game is played in (core/renderer.ts `VIEWS`, in the order V steps through them), and the
  *  battlegrounds (data/biomes.ts) */
 export const VIEWS = ['top', 'third', 'first'];
@@ -44,11 +44,17 @@ const HELP = {
   'cpu-slowdown': ['n', 'the page\'s CPU slowed this many times, as a phone\'s (CDP\'s throttling: 1 by default)'],
   'stall-blow': ['ms', 'boot: the page held up this long once in the logo blow\'s first frames, as a fast machine '
     + 'stalled by the GPU busy elsewhere (0 by default)'],
+  'stall-lobby': ['ms', 'boot: each of the lobby\'s frames held up this long for a second after its reveal, the '
+    + 'canary of its frames a second (0 by default)'],
+  'cold-return': ['', 'boot: the first visit leaves without pressing Start, so the return finds its maps kept and the '
+    + 'fight\'s programs not in the GPU\'s cache (a visit that never fought, a deploy that changed a shader)'],
   window: ['WxH', 'the page\'s size in css px, as a report\'s `window` (1536x864 by default)'],
   headed: ['', 'a Chrome window on the screen, as a player has it (headless by default)'],
   perf: ['', 'the performance overlay shown, as a player sending its report has it'],
   js: ['', 'the page\'s JS sampled (V8\'s profiler): a frame\'s by function, each phase (this tree built unminified, '
     + 'its functions named from its source maps)'],
+  angle: ['', 'ANGLE\'s own work on the GPU process traced too: a shader compiled at a draw (D3DCompile), a program '
+    + 'linked or read back from the cache'],
   links: ['', 'every Skia program built: when, how long, the tasks it was built in, the page\'s changes just before'],
   help: ['', 'this'],
 };
@@ -110,11 +116,14 @@ export function readOptions(argv) {
     scale: Number(written.scale ?? 1),
     cpuSlowdown: Number(written['cpu-slowdown'] ?? 1),
     stallBlow: Number(written['stall-blow'] ?? 0),
+    stallLobby: Number(written['stall-lobby'] ?? 0),
     window: sizeOf(written.window ?? '1536x864'),
     headed: written.headed === true,
     perf: written.perf === true,
     js: written.js === true,
+    angle: written.angle === true,
     links: written.links === true,
+    coldReturn: written['cold-return'] === true,
     help: written.help === true,
   };
   if (!SCENARIOS[options.scenario] && options.scenario !== BOOT) {
@@ -138,6 +147,7 @@ export function readOptions(argv) {
   if (!(options.scale > 0)) throw new Error('stalls: --scale must be a number over 0');
   if (!(options.cpuSlowdown >= 1)) throw new Error('stalls: --cpu-slowdown must be a number, 1 or more');
   if (!(options.stallBlow >= 0)) throw new Error('stalls: --stall-blow must be a number of ms, 0 or more');
+  if (!(options.stallLobby >= 0)) throw new Error('stalls: --stall-lobby must be a number of ms, 0 or more');
   if (!(options.listed >= LISTED_LEAST)) {
     throw new Error(`stalls: --listed must be a number of ms, ${LISTED_LEAST} or more`);
   }

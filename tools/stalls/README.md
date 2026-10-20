@@ -87,7 +87,12 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     busy elsewhere: the blow's watchdog must not take it for a slow device (`src/ui/logoWind.ts`). A build that
     warms the fight's programs after the lobby shows (one with the fight's loading bar, `#readying`) is watched till
     they're warm (the game's `fight warm` mark), Start pressed first where they aren't by then, as a first visit
-    leaves them for it (`page.mjs` `startIfCold`).
+    leaves them for it (`page.mjs` `startIfCold`). `--cold-return`: the first visit leaves without pressing Start,
+    so the return finds its maps kept and the fight's programs never compiled (a visit that never fought, a deploy
+    that changed a shader); a build that warms its fight before the lobby is said to have left it warm all the
+    same, its return no cold one. `--stall-lobby ms` holds up each of the lobby's frames for a second after its reveal, the
+    canary of its frames a second (50 ms: 16 to 17). `--angle` traces ANGLE's own work too (any scenario): a shader
+    compiled at a draw (`D3DCompile`), a program linked or waited for.
 - **Recorded in the page:** every animation frame's interval and whether the item tooltip showed in it, every change
   to the page's HTML (a `MutationObserver`: what changed and on which element), and the scenario's phases
   (`markPhase`). The page marks the trace (`console.timeStamp`) as its clock starts, which puts them all on one clock.
@@ -128,9 +133,14 @@ network: a cache's are none), the maps the game's workers made (how many, from w
 the longest: the game times each, `src/core/textures.ts`; a build before that lists none), how the loading screen
 left (the logo blown away, its blow cut short by its watchdog, or a plain fade and why), when the fight was warm (and
 when Start was pressed for it), the game's warm-ups with their steps, the longest first (`warm <part>` measures:
-its build, compile, wait for its links and draw, each but the links one task the lobby waits on) and, for each step, when it began, how long it took, its frames and the longest the
-page was held up in it, its long tasks and Skia programs, and what each thread spent its time on in all (with
-`--js`, its JS by function); at the end, each URL's boots by visit over the rounds, each step's median and range.
+its build, compile, wait for its links and draw, each but the links one task the lobby waits on), the lobby's
+frames a second till Start was pressed (counted as the perf overlay counts them, the frames of the second up to each
+quarter second from a second after the reveal: the fewest and when, till when they fell short of 90% of the screen's
+rate, and what the threads and the page's JS spent the fewest's second on) and, for each step, when it began, how
+long it took, its frames and the longest the page was held up in it, its long tasks and Skia programs, what each
+thread spent its time on in all and the GPU process's main thread apart (it runs every page's GL and the compositor:
+anything long on it holds every frame up), with `--js` its JS by function; at the end, each URL's boots by visit over
+the rounds, each step's median and range, and the lobby's fewest frames a second.
 
 With more than one measure, they are listed side by side at the end, each phase's frames a second and share missed
 with them; with `--rounds`, then by variant: each phase's frames a second and the browser's work, the median over the

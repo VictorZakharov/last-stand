@@ -43,7 +43,13 @@ export function lobbyLaidOut(): void {
   if (!exit && !plainExit()) exit = blowFor(el());
 }
 
-/** Call when the game loop starts; once the lobby renders smoothly, calls `onReveal` and leaves. */
+/** the most the loading screen takes to leave after the reveal (ms): its logo's exit, or a fade whose end never came */
+const LEFT_MOST_MS = 4000;
+let resolveLeft = (): void => undefined;
+/** resolved once the loading screen has left the page: the logo's exit done, and its particles' frames with it */
+export const loadingLeft = new Promise<void>((resolve) => { resolveLeft = resolve; });
+
+/** Call when the game loop starts; once the lobby renders smoothly, calls `onReveal` and leaves (`loadingLeft`). */
 export function loadingDone(onReveal: () => void): void {
   const l = el();
   l.style.setProperty('--p', '1');
@@ -56,7 +62,8 @@ export function loadingDone(onReveal: () => void): void {
   }
   const start = performance.now();
   let last = start, smooth = 0;
-  const reveal = (): void => { l.classList.add('done'); onReveal(); };
+  const reveal = (): void => { l.classList.add('done'); onReveal(); setTimeout(resolveLeft, LEFT_MOST_MS); };
+  const leave = (): void => { l.remove(); resolveLeft(); };
   const tick = (now: number): void => {
     smooth = now - last < SMOOTH_MS ? smooth + 1 : 0;
     last = now;
@@ -68,11 +75,11 @@ export function loadingDone(onReveal: () => void): void {
     if (blow) {
       // the logo blows away over the loading backdrop first; the lobby shows a moment later
       l.classList.add('blowing');
-      blow.start(reveal, () => l.remove());
+      blow.start(reveal, leave);
     } else {
       l.classList.add('plain');
       reveal();
-      l.addEventListener('transitionend', () => l.remove(), { once: true });
+      l.addEventListener('transitionend', leave, { once: true });
     }
   };
   requestAnimationFrame(tick);

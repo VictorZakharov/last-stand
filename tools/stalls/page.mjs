@@ -74,8 +74,10 @@ export function stopRecording() {
  * and the device's marks of a slow exit before the boot (`ui/logoWind.ts`: the slow launches in a row it counts,
  * and the switch a build before it set on one). `stallBlow` (ms) holds the page up once in the blow's first frames,
  * as a stall in them on a fast machine (the GPU busy elsewhere): its watchdog must not take it for a slow device.
+ * `stallLobby` (ms) holds up each of the lobby's frames in the second after its reveal, the canary of its frames a
+ * second (`analyze.mjs` `lobbyRateOf`).
  */
-export function bootRecording({ mark, stallBlow }) {
+export function bootRecording({ mark, stallBlow, stallLobby }) {
   const record = { start: performance.now(), frames: [], phases: [{ name: 'the document fetched', at: 0 }] };
   record.longTasks = [];
   record.marks = () => {
@@ -87,11 +89,20 @@ export function bootRecording({ mark, stallBlow }) {
     }
   };
   record.marksBefore = record.marks();
-  const stall = () => {
-    const until = performance.now() + stallBlow;
+  const holdUp = (ms) => {
+    const until = performance.now() + ms;
     while (performance.now() < until) {
       // (held up)
     }
+  };
+  const stall = () => holdUp(stallBlow);
+  // (each frame of the lobby's first second held up: the second, 1000 ms, as `analyze.mjs` counts the lobby's)
+  const holdLobby = (from) => {
+    const frame = (now) => {
+      holdUp(stallLobby);
+      if (now - from < 1000) requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
   };
   window.__stalls = record;
   console.timeStamp(mark);
@@ -114,6 +125,8 @@ export function bootRecording({ mark, stallBlow }) {
     if (!loading) return;
     if (loading.classList.contains('done')) {
       record.exit ??= loading.classList.contains('blowing') ? 'blown' : 'plain';
+      if (stallLobby && !record.lobbyHeld) holdLobby(performance.now());
+      record.lobbyHeld = true;
       phase('the lobby revealed');
     } else if (loading.classList.contains('blowing')) {
       if (stallBlow && !record.stalled) requestAnimationFrame(() => requestAnimationFrame(stall));

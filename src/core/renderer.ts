@@ -14,7 +14,7 @@ import { updateSeeThrough } from './seeThrough';
 import type { QualityPreset } from '../data/quality';
 import { hdrLevels, initHdr, presentHdr } from './hdr';
 import { bloodMask, fitBloodMask } from './bloodEdges';
-import { ARMS_LAYER } from './layers';
+import { ARMS_LAYER, WARM_LAYER } from './layers';
 
 /** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept); in HDR towards as much more
  *  as the peak has room over the paper white (`uCap`), so the highlights it grows aren't all held at SDR's. */
@@ -232,7 +232,7 @@ const ARMS_NEAR = 0.03, ARMS_FAR = 6;
  * of their own (`drawArms`), placed as the world's but with a narrower view, over the frame the world drew, as games
  * draw a first-person weapon: drawn through the world's 66 degrees (98 across on a wide screen), a weapon at the
  * frame's edge leaned in towards the middle, and a fist near the camera looked huge. The world's lights light them
- * too: every light is on their layer as well (`lightTheArms`).
+ * too: every light is on their layer as well (`lightThePasses`).
  */
 const armsCam = new THREE.PerspectiveCamera();
 armsCam.layers.set(ARMS_LAYER);
@@ -240,14 +240,19 @@ armsCam.layers.set(ARMS_LAYER);
 let armsFov: number | null = null;
 
 /**
- * Every light of `scene` on the arms' layer as well, from the moment it's added: a light missing from their pass
- * changes its lights' count, and every material they wear compiles again. (Put on it once, as the arms were first
- * drawn, a hero built afresh by a class switch brought his own light in after, and his arms compiled mid-run: #268.)
+ * Every light of `scene` on the arms' layer and the warm-ups' as well, from the moment it's added: a light missing
+ * from a pass changes its lights' count, and every material it draws compiles again. (Put on it once, as the arms
+ * were first drawn, a hero built afresh by a class switch brought his own light in after, and his arms compiled
+ * mid-run: #268.)
  */
-function lightTheArms(scene: THREE.Scene): void {
-  const onArms = (o: THREE.Object3D) => { if ((o as THREE.Light).isLight) o.layers.enable(ARMS_LAYER); };
-  scene.traverse(onArms);
-  scene.addEventListener('childadded', ({ child }) => child.traverse(onArms));
+function lightThePasses(scene: THREE.Scene): void {
+  const onPasses = (o: THREE.Object3D) => {
+    if (!(o as THREE.Light).isLight) return;
+    o.layers.enable(ARMS_LAYER);
+    o.layers.enable(WARM_LAYER);
+  };
+  scene.traverse(onPasses);
+  scene.addEventListener('childadded', ({ child }) => child.traverse(onPasses));
 }
 
 /** The arms layer drawn by its own camera at `fov` (vertical, degrees) from this frame on, or no longer (null). */
@@ -339,6 +344,20 @@ function loopPointLights(): void {
   THREE.ShaderChunk.lights_fragment_begin = chunk.slice(0, at) + POINT_LIGHTS_LOOPED + chunk.slice(at + POINT_LIGHTS_IF.length);
 }
 
+/** WEBGL_provoking_vertex, as its spec names it (lib.dom has no type for it) */
+interface ProvokingVertex { FIRST_VERTEX_CONVENTION_WEBGL: number; provokingVertexWEBGL(mode: number): void }
+
+/**
+ * A `flat` varying taken from a triangle's first vertex, where the browser can (WEBGL_provoking_vertex): D3D11 takes
+ * it from the first, and for GL's last ANGLE added a geometry shader to every program with one, compiled at its first
+ * draw on the GPU process's main thread and run on every draw after (the crowds' rows: models/crowd.ts, whose flat
+ * values are the same at each of a triangle's vertices).
+ */
+function firstVertexProvokes(context: WebGLRenderingContext | WebGL2RenderingContext): void {
+  const provoking = context.getExtension('WEBGL_provoking_vertex') as ProvokingVertex | null;
+  provoking?.provokingVertexWEBGL(provoking.FIRST_VERTEX_CONVENTION_WEBGL);
+}
+
 export function initRenderer(container: HTMLElement) {
   loopPointLights();
   const renderer = gl = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -352,12 +371,13 @@ export function initRenderer(container: HTMLElement) {
   // three's checks of a program as it's first used are round trips to the GPU's process, one after another for
   // each of the boot's programs: a production build checks them all once after the reveal (`checkPrograms`)
   renderer.debug.checkShaderErrors = import.meta.env.DEV;
+  firstVertexProvokes(renderer.getContext());
   container.appendChild(renderer.domElement);
   initHdr(renderer.domElement, renderer.getContext() as WebGL2RenderingContext);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x030307);
-  lightTheArms(scene);
+  lightThePasses(scene);
   const camera = new THREE.PerspectiveCamera(CAMERA.fov, window.innerWidth / window.innerHeight, 0.5, 300);
 
   const size = sceneSize(new THREE.Vector2());

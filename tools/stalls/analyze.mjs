@@ -24,6 +24,9 @@ const WORK_SHOWN = 10;
 const STALL_WORK_SHOWN = 6;
 /** the most kinds of work listed for each step of a boot, the most first, and the largest files listed */
 const BOOT_WORK_SHOWN = 6;
+/** the GPU process's main thread, listed apart in a boot's steps: it runs every page's GL and the compositor, and
+ *  anything long on it holds every frame up (ANGLE's waits for a link, a shader compiled at a draw: `--angle`) */
+const GPU_MAIN = 'GPU Process CrGpuMain';
 const FILES_SHOWN = 3;
 /** the most of the workers' maps listed, the longest first */
 const MAPS_SHOWN = 3;
@@ -402,8 +405,9 @@ export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = (
 /**
  * The changes of the page's look: the changes to its HTML made at once (the observer's one call: a script's in one
  * task), the earliest first, each with when, how many and which, its kind (the change it made most, as the page was
- * after it: `div.sitem.match` the stash's items lit) and the time after it that is its own (to the next, `LOOK_SPAN_MS`
- * at most). One change of a class can be the costliest: #269's `slot-focus` on the menu dimmed every item at once.
+ * after it: `div.sitem.match` the stash's items lit) and the time after it that is its own (to the next,
+ * `LOOK_SPAN_MS` at most). One change of a class can be the costliest: #269's `slot-focus` on the menu dimmed
+ * every item at once.
  */
 function looksOf(changes) {
   const byMoment = new Map();
@@ -532,12 +536,58 @@ function exitOf(exit) {
   return { kind: cut ? 'cut' : exit.kind, markedSlow: markedSlow(before), slowAfter: after.slow, forGood };
 }
 
+/** the lobby's frames are counted as the performance overlay counts them (`ui/perfHud.ts`): those of the second up
+ *  to a moment, every `LOBBY_STEP_MS` from a second after the reveal; a second with this share of the screen's
+ *  refresh or more is smooth. The screen's refresh is the fastest median frame of a step of `REFRESH_FRAMES` or
+ *  more (a step of a frame or two, its median one interval, would say anything). */
+const LOBBY_SECOND_MS = 1000;
+const LOBBY_STEP_MS = 250;
+const SMOOTH_SHARE = 0.9;
+const REFRESH_FRAMES = 30;
+
+/**
+ * The lobby's frames a second from its reveal to `end` (Start pressed, or the recording's end), as the performance
+ * overlay counts them, each second's up to every `LOBBY_STEP_MS` (`at`: ms after the reveal); the fewest of them, the
+ * screen's rate (`refresh`, ms a frame) and how long after the reveal its last second short of `SMOOTH_SHARE` of that
+ * rate ended (0: none was; null: the last was), and what the threads and the page's JS (where sampled) spent the
+ * fewest's second on (`traced`'s). Null where the lobby never revealed or was watched under a second. The owner read
+ * 17 off the overlay as a return's lobby warmed the fight's programs behind it.
+ */
+function lobbyRateOf(frames, revealed, end, refresh, traced) {
+  if (revealed === null || end - revealed < LOBBY_SECOND_MS) return null;
+  const seconds = [];
+  for (let to = revealed + LOBBY_SECOND_MS; to <= end; to += LOBBY_STEP_MS) {
+    const count = frames.filter((frame) => frame.at > to - LOBBY_SECOND_MS && frame.at <= to).length;
+    seconds.push({ at: to - revealed, count });
+  }
+  const fewest = seconds.reduce((low, second) => (second.count < low.count ? second : low));
+  const screenRate = 1000 / refresh;
+  const rough = seconds.filter((second) => second.count < screenRate * SMOOTH_SHARE);
+  const lastRough = rough[rough.length - 1];
+  const roughTill = lastRough === undefined ? 0 : lastRough === seconds[seconds.length - 1] ? null : lastRough.at;
+  const to = revealed + fewest.at;
+  const from = to - LOBBY_SECOND_MS;
+  const work = sharedWork(workTotals(traced.placed, [[from, to]]), 1).slice(0, BOOT_WORK_SHOWN);
+  const js = traced.samples.length ? jsIn(traced.samples, from, to, 1) : null;
+  return { seconds, fewest, screenRate, roughTill, work, js };
+}
+
+/** The screen's refresh (ms) in a boot's `steps`: the fastest median frame of those with `REFRESH_FRAMES` or more
+ *  (null: none has). */
+function bootRefresh(steps) {
+  const medians = steps.filter((step) => step.frames.count >= REFRESH_FRAMES).map((step) => step.frames.median);
+  return medians.length ? Math.min(...medians) : null;
+}
+
 /** A boot's step from `from` to `to` (the page's ms): its frames' summary (the longest the page was held up in it,
- *  `worst`), its long tasks and Skia program links, and what the threads spent its time on in all. */
+ *  `worst`), its long tasks and Skia program links, and what the threads spent its time on in all, and the GPU
+ *  process's main thread apart. */
 function bootStep(name, from, to, record, traced) {
   const frames = record.frames.filter((frame) => frame.at > from && frame.at <= to);
   const tasks = record.longTasks.filter((task) => task.at >= from && task.at < to);
   const links = traced.links.filter((link) => link.at !== null && link.at >= from && link.at < to);
+  const totals = workTotals(traced.placed, [[from, to]]);
+  const onGpuMain = new Map([...totals].filter(([key]) => key.endsWith(`\n${GPU_MAIN}`)));
   return {
     name,
     from,
@@ -549,7 +599,8 @@ function bootStep(name, from, to, record, traced) {
       longest: Math.max(0, ...tasks.map((task) => task.ms)),
     },
     programs: { count: links.length, ms: links.reduce((sum, link) => sum + link.ms, 0) },
-    work: sharedWork(workTotals(traced.placed, [[from, to]]), 1).slice(0, BOOT_WORK_SHOWN),
+    work: sharedWork(totals, 1).slice(0, BOOT_WORK_SHOWN),
+    gpuMain: sharedWork(onGpuMain, 1).slice(0, BOOT_WORK_SHOWN),
     js: traced.samples.length ? jsIn(traced.samples, from, to, 1) : null,
   };
 }
@@ -558,8 +609,8 @@ function bootStep(name, from, to, record, traced) {
  * The findings of a boot: `record` is the page's (`page.mjs` `stopBootRecording`), `events` the trace's and `mark`
  * the page's mark in them. Each step (a phase of the record) from its start to the next's, the last's to the
  * recording's end (`bootStep`); when the lobby was revealed (`revealedAt`, ms from the navigation's start; null if
- * never) and the page first painted with content (`painted`); the files fetched (`filesOf`). `sourceOf` names the
- * page's functions where its JS was sampled.
+ * never) and the page first painted with content (`painted`); the files fetched (`filesOf`); the lobby's frames a
+ * second till Start was pressed (`lobbyRateOf`). `sourceOf` names the page's functions where its JS was sampled.
  */
 export function analyzeBoot(record, events, mark, sourceOf = () => null) {
   const traced = onPage(record, events, mark, sourceOf);
@@ -569,7 +620,10 @@ export function analyzeBoot(record, events, mark, sourceOf = () => null) {
     return bootStep(phase.name, phase.at, to, record, traced);
   });
   const revealedAt = record.phases.find((phase) => phase.name === REVEALED)?.at ?? null;
+  const refresh = bootRefresh(steps);
+  const lobbyEnd = record.pressed ?? end;
   return {
+    lobby: refresh === null ? null : lobbyRateOf(record.frames, revealedAt, lobbyEnd, refresh, traced),
     clockFound: traced.stamp !== null,
     steps,
     revealedAt,

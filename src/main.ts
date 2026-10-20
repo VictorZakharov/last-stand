@@ -39,14 +39,14 @@ import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
 import { warmLobby, warmTheRest } from './game/warmup';
-import { hurry, isAllWarm, whenWarm } from './game/warm';
+import { hurry, isAllWarm, isWarming, whenWarm } from './game/warm';
 import { initReadying } from './ui/readying';
-import { initQuality, sampleQuality } from './core/quality';
+import { holdQuality, initQuality, sampleQuality } from './core/quality';
 import { updateLowLife } from './core/lowLife';
 import { checkPrograms, pinPrograms, steadyShadowPrograms, watchPrograms } from './core/shaders';
 import { initBiome, rollBiome } from './game/biome';
 import { BIOMES, BIOME_IDS } from './data/biomes';
-import { loadingStep, loadingDone, loadingFailed, lobbyLaidOut } from './ui/loading';
+import { loadingStep, loadingDone, loadingFailed, loadingLeft, lobbyLaidOut } from './ui/loading';
 import { prepareWind } from './ui/logoWind';
 import { preloadTextures } from './core/textures';
 import { preloadHands } from './entities/models/hands';
@@ -143,7 +143,7 @@ async function boot() {
   loadingDone(() => {
     revealed = true;
     setTimeout(() => checkPrograms(renderer));
-    void warmTheRest().then(() => checkPrograms(renderer));
+    void warmTheRest(loadingLeft).then(() => checkPrograms(renderer));
     // an invite link: straight into the friend's room
     const room = invitedRoom();
     if (room) whenWarm(['fight', 'heroes'], (code: string) => void joinRoom(code))(room);
@@ -502,7 +502,8 @@ function frame(timestamp: number): void {
   updateMusic(dt, musicWanted());
   const t0 = perfClock.now();
   if (!G.paused && revealed) {
-    sampleQuality(rawDt);
+    if (isWarming()) holdQuality();
+    else sampleQuality(rawDt);
     G.dt = dt;
     G.time += dt;
     update(dt);

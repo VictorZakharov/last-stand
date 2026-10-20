@@ -262,9 +262,10 @@ export function drawOutline(): void {
 
 /**
  * Compiles the outline's programs at load: `roots` (one of every foe) each drawn into the mask, its meshes unculled,
- * and the edge drawn once, at no strength.
+ * and the edge drawn once, at no strength, unless `edge` is false (its program is the lobby's: behind it, a part's
+ * outline draws its masks alone, as the edge's pass is the whole canvas's).
  */
-export function warmOutline(roots: THREE.Object3D[]): void {
+export function warmOutline(roots: THREE.Object3D[], { edge = true } = {}): void {
   const gl = G.renderer;
   let target: THREE.WebGLRenderTarget | null = null;
   for (const root of roots) {
@@ -277,5 +278,5 @@ export function warmOutline(roots: THREE.Object3D[]): void {
     target = drawMask(gl, root);
     for (const object of culled) object.frustumCulled = true;
   }
-  if (target && roots[0]) drawEdge(gl, target, { root: roots[0], color: new THREE.Color(), strength: 0 });
+  if (edge && target && roots[0]) drawEdge(gl, target, { root: roots[0], color: new THREE.Color(), strength: 0 });
 }

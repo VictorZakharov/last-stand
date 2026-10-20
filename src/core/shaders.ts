@@ -5,7 +5,7 @@
 // whole session, and compile the known ones up front (warmUp) before the first frame.
 import type * as THREE from 'three';
 import { G } from '../state';
-import { CROWD_LAYER } from './layers';
+import { CROWD_LAYER, WARM_LAYER } from './layers';
 
 const pinned = new WeakSet<object>();
 const known: { name: string; key: string[] }[] = [];
@@ -208,8 +208,9 @@ type Compiled = Set<THREE.Material>;
 /** a program as three keeps it, with what its type leaves out */
 type Program = THREE.WebGLProgram & { isReady(): boolean; getAttributes(): unknown };
 
-/** the most of a frame the textures' uploads take before the page is let paint (ms) */
-const UPLOAD_SLICE_MS = 25;
+/** the most of a frame the textures' uploads take before the page is let paint (ms): under the loading screen, and
+ *  behind the lobby (a frame at 144 Hz is 7 ms, the lobby's own 5 of it) */
+const UPLOAD_SLICE_MS = 25, UPLOAD_SLICE_BEHIND_MS = 2;
 
 /**
  * `compile` run with the crowds' bodies' own meshes left out (put back after, where they were): their crowd draws
@@ -236,42 +237,52 @@ function texturesOf(materials: Compiled): Set<THREE.Texture> {
   return textures;
 }
 
+/** a step of a warm-up waited for: the next task, or behind the lobby the frame after the next (`WarmUp.step`) */
+type Step = () => Promise<void>;
+const nextTask: Step = () => new Promise((r) => setTimeout(r));
+
 /**
- * Every one of `textures` uploaded, the page let paint between: the render after a warm-up's compile uploaded them
- * as it drew, queued on the GPU's process ahead of what the render then waited on.
+ * Every one of `textures` uploaded, the page let paint between (`step`, after `sliceMs` of them): the render after
+ * a warm-up's compile uploaded them as it drew, queued on the GPU's process ahead of what the render then waited on.
  */
-async function uploaded(renderer: THREE.WebGLRenderer, textures: Set<THREE.Texture>): Promise<void> {
+async function uploaded(renderer: THREE.WebGLRenderer, textures: Set<THREE.Texture>, sliceMs: number, step: Step): Promise<void> {
   let slice = performance.now();
   for (const texture of textures) {
     renderer.initTexture(texture);
-    if (performance.now() - slice < UPLOAD_SLICE_MS) continue;
-    await new Promise((r) => setTimeout(r));
+    if (performance.now() - slice < sliceMs) continue;
+    await step();
     slice = performance.now();
   }
 }
 
 /**
- * Waits for `materials`' programs to link (on the GPU's process meanwhile, KHR_parallel_shader_compile), each asked
- * once it's the oldest left, every 10 ms, and a linked one's uniforms and attributes read at once. three's
- * compileAsync asked every material's program each time, and their first draws read them: each a round trip to the
- * GPU's process, waiting behind its work.
- */
-/**
  * Resolves once the GPU's process has done every command sent before: a fence, whose status WebGL reads between
  * tasks without a round trip, so a program asked whether it's linked after it doesn't wait behind them (a return's
  * fight warmed behind the lobby held it up 250 ms at a time asking, its programs read back from the cache meanwhile).
+ * Asked every `poll`.
  */
-async function commandsDone(renderer: THREE.WebGLRenderer): Promise<void> {
+async function commandsDone(renderer: THREE.WebGLRenderer, poll: Step): Promise<void> {
   const gl = renderer.getContext() as WebGL2RenderingContext;
   const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
   if (!fence) return;
   gl.flush();
-  while (gl.getSyncParameter(fence, gl.SYNC_STATUS) !== gl.SIGNALED) await new Promise((r) => setTimeout(r, 4));
+  while (gl.getSyncParameter(fence, gl.SYNC_STATUS) !== gl.SIGNALED) await poll();
   gl.deleteSync(fence);
 }
 
-async function linked(renderer: THREE.WebGLRenderer, materials: Compiled, done?: (share: number) => void): Promise<void> {
-  await commandsDone(renderer);
+/** How `linked` waits: told how far along, asking every `poll`, a frame between each program's uniforms read
+ *  (`step`, behind the lobby), and given up on after `giveUpMs` for one program. */
+interface Linking { done?: (share: number) => void; poll: Step; step?: Step; giveUpMs?: number }
+
+/**
+ * Waits for `materials`' programs to link (on the GPU's process meanwhile, KHR_parallel_shader_compile), each asked
+ * once it's the oldest left (a read of a query's result, no round trip), and a linked one's uniforms and attributes
+ * read at once (one round trip, behind the lobby one a frame). three's compileAsync asked every material's program
+ * each time, and their first draws read them: each a round trip to the GPU's process, waiting behind its work.
+ * Whether they all linked: false where one wasn't `giveUpMs` after the commands were done (not from the GPU's cache).
+ */
+async function linked(renderer: THREE.WebGLRenderer, materials: Compiled, how: Linking): Promise<boolean> {
+  await commandsDone(renderer, how.poll);
   const programs = new Set<Program>();
   for (const material of materials) {
     const program = (renderer.properties.get(material) as { currentProgram?: Program }).currentProgram;
@@ -279,40 +290,59 @@ async function linked(renderer: THREE.WebGLRenderer, materials: Compiled, done?:
   }
   let linkedSoFar = 0;
   for (const program of programs) {
-    while (!program.isReady()) await new Promise((r) => setTimeout(r, 10));
+    const asked = performance.now();
+    while (!program.isReady()) {
+      if (how.giveUpMs !== undefined && performance.now() - asked > how.giveUpMs) return false;
+      await how.poll();
+    }
     program.getUniforms();
     program.getAttributes();
-    done?.(++linkedSoFar / programs.size);
+    how.done?.(++linkedSoFar / programs.size);
+    await how.step?.();
   }
+  return true;
 }
 
 /** How a warm-up goes (`warmUp`). */
 export interface WarmUp {
-  /** added to the scene for the warm-up, and taken away after */
+  /** added to the scene for the draw alone, and taken away after (compiled with the scene where `compile` is left
+   *  out): the lobby's frames mustn't draw what isn't linked yet, as three would link it there, the frame waiting */
   objects?: THREE.Object3D[];
   /** what's compiled, as the scene lights it (a part of the fight, behind the lobby: the lobby's own are warm);
-   *  left out, the whole scene */
+   *  left out, the whole scene and `objects` */
   compile?: THREE.Object3D[];
   /** left out of it: what the lobby doesn't show (the other biomes), warmed behind it */
   leaveOut?: THREE.Object3D[];
-  /** the lobby showing: only `unculled` (and `objects`) drawn whatever the camera sees, as the lobby's own frames go
-   *  on between the warm-up's steps; left out, everything in the scene */
-  unculled?: THREE.Object3D[];
+  /** drawn alone, whatever the camera sees, on the warm-ups' layer (every light is on it too: their counts are the
+   *  scene's, `lightThePasses` in renderer.ts), into a pixel of the target: the programs the draws make are the
+   *  scene's, and its fragments none (a whole lobby drawn again for each part held its frames up); left out, the
+   *  whole scene unculled */
+  drawn?: THREE.Object3D[];
   /** shown in place of `hide` for the draw alone (a biome the lobby doesn't show, for its shadows' programs, made as
    *  they're drawn: one in place of the other, so the lights counted are as many) */
   swap?: { show: THREE.Object3D; hide: THREE.Object3D };
+  /** called just before the draw: what the lobby's frames mustn't draw before its programs are linked brought in (a
+   *  foe seated in its crowd, which draws it whatever the camera sees) */
+  show?: () => void;
   /** awaited before the uploads, given the textures the compiled materials draw with (their maps, still coming) */
   before?: (textures: Set<THREE.Texture>) => Promise<void>;
   /** told how much of the warm-up is done, 0 to 1 (the share each step takes is a guess: the links, most) */
   progress?: (share: number) => void;
+  /** awaited between its steps (each root's compile, a slice of uploads, each program's uniforms read, the draw):
+   *  behind the lobby, a frame each; left out, they run back to back, the loading screen's way */
+  step?: Step;
+  /** given up on, nothing drawn (`cold`), where a program isn't linked this long after its commands were done (ms):
+   *  one not from the GPU's cache, behind the lobby (compiled cold behind it, a return's lobby drew 3 frames a second) */
+  giveUpMs?: number;
 }
 
 /** of a warm-up (`progress`), the share done once its maps have come, its textures uploaded, its programs linked */
 const MAPS_DONE = 0.2, UPLOADS_DONE = 0.3, LINKS_DONE = 0.95;
 
-/** What a warm-up took (ms): its compile and its draw (each one task), and the wait for its programs' links (the
- *  GPU's process's work: long where no program came from a cache, a first visit's). */
-export interface WarmedUp { compileMs: number; linksMs: number; drawMs: number }
+/** What a warm-up took (ms): its compile and its draw (each one task, the compile a task a root with `step`), and
+ *  the wait for its programs' links (the GPU's process's work: long where no program came from a cache, a first
+ *  visit's); and whether it was given up on as cold (`WarmUp.giveUpMs`: nothing drawn). */
+export interface WarmedUp { compileMs: number; linksMs: number; drawMs: number; cold: boolean }
 
 /** `run` with `out` taken out of their parents' lists (put back after, where they were): nothing else sees them go. */
 function without<T>(out: THREE.Object3D[], run: () => T): T {
@@ -326,7 +356,41 @@ function without<T>(out: THREE.Object3D[], run: () => T): T {
 }
 
 /**
- * Compile every shader the scene (plus `objects`, added temporarily) needs, and keep them.
+ * `draw` with `drawn` alone drawn, whatever the camera sees: what of it the camera draws put on the warm-ups' layer
+ * too (not a crowd's bodies' own meshes, which their crowd draws: on the warm-ups' layer, 14 lit programs were made
+ * for them, cold inside the draw on a first visit, 4.5 s), unculled, the camera on that layer alone, into a pixel of
+ * `target` (its scissor); with no `drawn`, the whole scene unculled.
+ */
+function drawnAlone(scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, drawn: THREE.Object3D[] | undefined, draw: () => void): void {
+  const unculled: THREE.Object3D[] = [], layered: THREE.Object3D[] = [];
+  const uncull = (o: THREE.Object3D): void => {
+    if (o.frustumCulled) { o.frustumCulled = false; unculled.push(o); }
+    if (drawn && o.layers.test(camera.layers) && !o.layers.isEnabled(WARM_LAYER)) {
+      o.layers.enable(WARM_LAYER);
+      layered.push(o);
+    }
+  };
+  for (const root of drawn ?? [scene]) root.traverse(uncull);
+  const mask = camera.layers.mask;
+  const scissor = target.scissor.clone(), scissorTest = target.scissorTest;
+  if (drawn) {
+    camera.layers.set(WARM_LAYER);
+    target.scissor.set(0, 0, 1, 1);
+    target.scissorTest = true;
+  }
+  try {
+    draw();
+  } finally {
+    camera.layers.mask = mask;
+    target.scissor.copy(scissor);
+    target.scissorTest = scissorTest;
+    for (const o of unculled) o.frustumCulled = true;
+    for (const o of layered) o.layers.disable(WARM_LAYER);
+  }
+}
+
+/**
+ * Compile every shader the scene (plus `objects`) needs, and keep them.
  * This is a real render, not renderer.compile(): programs differ between the screen and
  * a render target (tone mapping, output colour space), the game always draws into the
  * post-processing `target`, and compile() skips the shadow-map depth shaders. The render
@@ -334,43 +398,55 @@ function without<T>(out: THREE.Object3D[], run: () => T): T {
  * maps are uploaded and the programs' links waited for first (`uploaded`, `linked`).
  */
 export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, how: WarmUp = {}): Promise<WarmedUp> {
-  const { objects = [], leaveOut = [], swap, before, progress } = how;
-  const compiled = how.compile ?? [scene];
-  for (const o of objects) scene.add(o);
-  const unculled: THREE.Object3D[] = [];
-  const uncull = (o: THREE.Object3D): void => { if (o.frustumCulled) { o.frustumCulled = false; unculled.push(o); } };
-  for (const root of how.unculled ? [...how.unculled, ...objects, ...(swap ? [swap.show] : [])] : [scene]) root.traverse(uncull);
+  const { objects = [], leaveOut = [], swap, before, progress, step } = how;
+  const compiled = how.compile ?? [scene, ...objects];
   const prev = renderer.getRenderTarget();
-  renderer.setRenderTarget(target);
   // compile in the background first where the browser can (KHR_parallel_shader_compile), so the
   // loading screen stays live; the target is set because program variants depend on it
-  let at = performance.now();
+  renderer.setRenderTarget(target);
+  let compileMs = 0;
   const materials = new Set<THREE.Material>();
   for (const root of compiled) {
+    const at = performance.now();
     const made = without(leaveOut, () => withoutCrowdBodies(root, () => renderer.compile(root, camera, scene)));
+    compileMs += performance.now() - at;
     for (const material of made) materials.add(material);
+    // (behind the lobby a root's programs a frame: each is brought in from the GPU's cache on its process's main
+    // thread, which draws the lobby's frames too)
+    if (step) {
+      renderer.setRenderTarget(prev);
+      await step();
+      renderer.setRenderTarget(target);
+    }
   }
-  const compileMs = performance.now() - at;
+  renderer.setRenderTarget(prev);
   const textures = texturesOf(materials);
   await before?.(textures);
   progress?.(MAPS_DONE);
-  await uploaded(renderer, textures);
+  await uploaded(renderer, textures, step ? UPLOAD_SLICE_BEHIND_MS : UPLOAD_SLICE_MS, step ?? nextTask);
   progress?.(UPLOADS_DONE);
-  at = performance.now();
-  await linked(renderer, materials, (share) => progress?.(UPLOADS_DONE + share * (LINKS_DONE - UPLOADS_DONE)));
+  let at = performance.now();
+  const links = (share: number): void => progress?.(UPLOADS_DONE + share * (LINKS_DONE - UPLOADS_DONE));
+  const poll = step ?? ((): Promise<void> => new Promise((r) => setTimeout(r, 4)));
+  const ready = await linked(renderer, materials, { done: links, poll, step, giveUpMs: how.giveUpMs });
   const linksMs = performance.now() - at;
+  pinPrograms(renderer);
+  if (!ready) return { compileMs, linksMs, drawMs: 0, cold: true };
+  await step?.();
   renderer.setRenderTarget(target);
   at = performance.now();
+  for (const o of objects) scene.add(o);
+  how.show?.();
   // once: the shadow pass of a render sees the light setup of the one before, and shadow depth
   // programs are keyed by light counts, but the compile above set the scene's lights up
   if (swap) { swap.show.visible = true; swap.hide.visible = false; }
-  without(leaveOut, () => renderer.render(scene, camera));
+  const drawn = how.drawn && [...how.drawn, ...objects, ...(swap ? [swap.show] : [])];
+  drawnAlone(scene, camera, target, drawn, () => without(leaveOut, () => renderer.render(scene, camera)));
   if (swap) { swap.show.visible = false; swap.hide.visible = true; }
   const drawMs = performance.now() - at;
   renderer.setRenderTarget(prev);
-  for (const o of unculled) o.frustumCulled = true;
   pinPrograms(renderer);
   for (const o of objects) scene.remove(o);
   progress?.(1);
-  return { compileMs, linksMs, drawMs };
+  return { compileMs, linksMs, drawMs, cold: false };
 }

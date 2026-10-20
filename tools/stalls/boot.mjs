@@ -35,38 +35,58 @@ const VISITS = [
 async function bootContext(browser, url, variant, options) {
   const context = browser.contexts()[0] ?? (await browser.newContext());
   await context.addInitScript(noCapture);
-  await context.addInitScript(bootRecording, { mark: MARK, stallBlow: options.stallBlow });
+  const stalls = { stallBlow: options.stallBlow, stallLobby: options.stallLobby };
+  await context.addInitScript(bootRecording, { mark: MARK, ...stalls });
   for (const part of partsOf(variant)) await context.addInitScript(VARIANTS[part].script, VARIANTS[part].arg);
   if (options.perf) await context.addCookies([{ name: 'last-stand-perf-hud', value: '1', url }]);
   return context;
 }
 
+/** Whether `visit` leaves without pressing Start (`--cold-return`: the first visit, so the return finds its maps
+ *  kept and the fight's programs never compiled, as after a visit that never fought). */
+const leftCold = (visit, options) => options.coldReturn && visit === VISITS[0];
+
+/** What a visit left without pressing Start says of the fight, read off the page as it's left (`fightWarm`): a
+ *  build that warms the fight before its lobby (production before the fight's loading bar) left it warm all the
+ *  same, and its return is no cold one. */
+const LEFT_NOTES = {
+  cold: 'left without pressing Start, the fight never compiled',
+  warm: 'left without pressing Start, its fight warm all the same (warmed before the lobby): not a cold return',
+};
+
 /** One visit of `page` traced: loaded as `visit` loads it, the lobby revealed and watched `options.seconds` more,
- *  then Start pressed if the fight's programs aren't warm yet (`startIfCold`) and watched till they are
- *  (`fightWarm`); then its findings (`analyzeBoot`) and a picture of the screen (`picture`), taken at the CPU's
- *  full speed (`setRate`: slowed ten times, the page painted none within Playwright's 30 s) and slowed again after. */
+ *  then, unless it's left cold (`leftCold`), Start pressed if the fight's programs aren't warm yet (`startIfCold`)
+ *  and watched till they are (`fightWarm`); then its findings (`analyzeBoot`), how it was left (`LEFT_NOTES`'s
+ *  key, null where Start could be pressed) and a picture of the screen (`picture`), taken at the CPU's full speed
+ *  (`setRate`: slowed ten times, the page painted none within Playwright's 30 s) and slowed again after. */
 async function bootTraced(browser, page, url, visit, options, picture, setRate) {
-  const trace = await startTrace(browser, { js: options.js });
+  const trace = await startTrace(browser, { js: options.js, angle: options.angle });
   await visit.load(page, url);
   await page.waitForFunction(loaded, null, { timeout: BOOT_TIMEOUT_MS, polling: 250 });
   await page.waitForTimeout(options.seconds * 1000);
-  await page.evaluate(startIfCold);
-  await page.waitForFunction(fightWarm, null, { timeout: WARM_TIMEOUT_MS, polling: 250 });
+  let left = null;
+  if (leftCold(visit, options)) left = (await page.evaluate(fightWarm)) ? 'warm' : 'cold';
+  else {
+    await page.evaluate(startIfCold);
+    await page.waitForFunction(fightWarm, null, { timeout: WARM_TIMEOUT_MS, polling: 250 });
+  }
   const record = await page.evaluate(stopBootRecording);
   const events = await trace.stop();
   await setRate(1);
   await page.screenshot({ path: picture });
   await setRate(options.cpuSlowdown);
-  return analyzeBoot(record, events, MARK, options.sourceOf);
+  return { findings: analyzeBoot(record, events, MARK, options.sourceOf), left };
 }
 
-/** The notes of a boot: the visit, the CPU's slowing, the blow's stall, the page's errors and where its end was
- *  pictured. */
-function bootNotes(visit, options, errors, picture) {
+/** The notes of a boot: the visit, the CPU's slowing, the blow's and the lobby's stalls, how it was left where
+ *  Start wasn't pressed (`left`), the page's errors and where its end was pictured. */
+function bootNotes(visit, options, left, errors, picture) {
   const slowed = options.cpuSlowdown > 1 ? [`the CPU slowed ${options.cpuSlowdown} times`] : [];
   const stalled = options.stallBlow ? [`held up ${options.stallBlow} ms in the logo blow's first frames`] : [];
+  const held = options.stallLobby ? [`each of the lobby's frames held up ${options.stallLobby} ms for a second`] : [];
+  const leftNote = left ? [LEFT_NOTES[left]] : [];
   const failed = errors.length ? [`page errors: ${errors.slice(0, 3).join(' | ')}`] : [];
-  return [visit.note, ...slowed, ...stalled, ...failed, `its end pictured in ${picture}`];
+  return [visit.note, ...slowed, ...stalled, ...held, ...leftNote, ...failed, `its end pictured in ${picture}`];
 }
 
 /**
@@ -90,9 +110,9 @@ export async function measureBoots(urls, options, { chromeFor, sourcesFor, pictu
           for (const visit of VISITS) {
             console.log(`booting ${options.nameOf(url)} ${variant}, ${visit.name}, round ${round}`);
             const picture = pictureAt();
-            const findings = await bootTraced(chrome.browser, page, url, visit, options, picture, setRate);
+            const { findings, left } = await bootTraced(chrome.browser, page, url, visit, options, picture, setRate);
             const group = `${options.nameOf(url)} ${variant}, ${visit.name}`;
-            const notes = bootNotes(visit, options, errors, picture);
+            const notes = bootNotes(visit, options, left, errors, picture);
             measured({ name: `${group} (round ${round})`, group, notes, findings });
           }
         } finally {

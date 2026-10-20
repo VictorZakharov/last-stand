@@ -208,6 +208,77 @@ test('says how the loading screen left: blown away, cut short by its watchdog, o
   assert.match(bootRoundsText(boots), /\(slow launches in a row: 1\) 1, the logo blown away 2\n/);
 });
 
+/** A boot whose lobby revealed at 900 ms: the logo's 40 frames before it at 7 ms, then `seconds` seconds of the
+ *  lobby's frames, each second's frames as many as `rates` says in turn, evenly spread (the last repeated). */
+function lobbyBoot(rates, seconds) {
+  const boot = record();
+  const frames = Array.from({ length: 40 }, (_, index) => ({ at: 620 + index * 7, ms: 7 }));
+  let at = 900;
+  for (let second = 0; second < seconds; second++) {
+    const rate = rates[Math.min(second, rates.length - 1)];
+    // (each frame's time from its second's start, the multiply first: the last falls on the second's end exactly)
+    for (let index = 0; index < rate; index++) frames.push({ at: at + ((index + 1) * 1000) / rate, ms: 1000 / rate });
+    at += 1000;
+  }
+  boot.phases = [{ name: 'the document fetched', at: 0 }, { name: 'the logo blown away', at: 600 }];
+  boot.phases.push({ name: REVEALED, at: 900 });
+  boot.frames = frames;
+  return boot;
+}
+
+test('counts the lobby\'s frames a second as the overlay does, the fewest, till when short of the screen\'s', () => {
+  // (a second at 17 frames, as the owner read off the overlay, then the screen's 143)
+  const findings = analyzeBoot(lobbyBoot([17, 143], 3), trace(), MARK);
+  const { lobby } = findings;
+  assert.equal(Math.round(lobby.screenRate), 143);
+  assert.deepEqual(lobby.fewest, { at: 1000, count: 17 });
+  assert.equal(lobby.seconds.length, 9);
+  assert.equal(lobby.roughTill, 1750);
+  const text = bootText({ name: 'x', notes: [], findings });
+  assert.match(text, /\n {2}the lobby's frames a second \(the overlay's count, the screen's 143\): the fewest 17, /);
+  assert.match(text, /1\.00 s in; short of the screen's rate till 1\.75 s in; each 0\.25 s from 1 s in: 17 48 /);
+  const smooth = analyzeBoot(lobbyBoot([143], 2), trace(), MARK);
+  assert.equal(smooth.lobby.roughTill, 0);
+  const endless = analyzeBoot(lobbyBoot([60], 2), trace(), MARK);
+  assert.equal(endless.lobby.roughTill, null);
+  const rounds = bootRoundsText([findings, smooth, endless].map((boot) => ({ group: 'x', findings: boot })));
+  assert.match(rounds, /\n {4}the lobby's fewest frames a second 60 \(17–143\); 2 of 3 short of the screen's /);
+  assert.match(rounds, /rate, till 1\.75 \(1\.75–1\.75 s\) in \(1 to the end\)\n/);
+});
+
+test('counts the lobby\'s frames till Start was pressed, and none for a lobby watched under a second', () => {
+  const pressed = lobbyBoot([143, 17], 3);
+  pressed.pressed = 1900;
+  assert.equal(analyzeBoot(pressed, trace(), MARK).lobby.fewest.count, 143);
+  const short = lobbyBoot([143], 3);
+  short.pressed = 1500;
+  const findings = analyzeBoot(short, trace(), MARK);
+  assert.equal(findings.lobby, null);
+  assert.doesNotMatch(bootText({ name: 'x', notes: [], findings }), /the lobby's frames/);
+});
+
+test('the lobby\'s canary holds up each of its frames for the second that is counted', () => {
+  const page = String(bootRecording);
+  assert.match(page, /if \(now - from < 1000\) requestAnimationFrame\(frame\)/);
+  assert.ok(page.includes('holdLobby(performance.now())'));
+});
+
+test('lists the GPU process\'s main thread\'s work in each step apart', () => {
+  const gpu = { pid: 7, tid: 70 };
+  const events = [
+    ...trace(),
+    { ph: 'M', name: 'process_name', pid: gpu.pid, args: { name: 'GPU Process' } },
+    { ph: 'M', name: 'thread_name', ...gpu, args: { name: 'CrGpuMain' } },
+    workAt('MainLinkLoadEvent::wait', gpu, 350, 120),
+  ];
+  const findings = analyzeBoot(record(), events, MARK);
+  const arena = findings.steps[2];
+  assert.deepEqual(arena.gpuMain, [{ name: 'MainLinkLoadEvent::wait', thread: 'GPU Process CrGpuMain', ms: 120 }]);
+  assert.deepEqual(findings.steps[1].gpuMain, []);
+  const text = bootText({ name: 'x', notes: [], findings });
+  assert.match(text, /\n {4}the GPU process's main thread's, ms: 120\.0 MainLinkLoadEvent::wait on GPU Process /);
+});
+
 test('lists no maps for a build that times none', () => {
   const untimed = record();
   delete untimed.maps;

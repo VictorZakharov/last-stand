@@ -46,6 +46,12 @@ export function readyingShare(): number {
 /** `fn` called as something starts or stops waiting, and as a warm-up waited for gets further */
 export function onReadying(fn: () => void): void { listeners.push(fn); }
 
+/** the warm-ups running after the lobby shows (game/warmup.ts `inTurn`) */
+let running = 0;
+/** whether a warm-up is running: its frames aren't the device's measure (core/quality.ts's Auto leaves them out) */
+export const isWarming = (): boolean => running > 0;
+export function warmingRuns(on: boolean): void { running += on ? 1 : -1; }
+
 /** Every need wanted now (the lab's boot, which then waits for them). */
 export function hurry(): void { for (const need of NEEDS) needs[need].resolveWanted(); }
 

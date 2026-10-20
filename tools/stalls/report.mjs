@@ -194,6 +194,7 @@ function bootStepLines(step) {
       + `${tasks}${built}`,
   ];
   if (step.work.length) lines.push(workLine('its work', step.work));
+  if (step.gpuMain?.length) lines.push(workLine('the GPU process\'s main thread\'s', step.gpuMain));
   if (step.js?.own.length) lines.push(jsLine('its JS, each function\'s own time', step.js.own));
   return lines;
 }
@@ -235,9 +236,32 @@ function warmUpsLine(warmUps) {
   return `  ${warmUps.length} warm-ups, ms, the longest steps first: ${shown.join('; ')}`;
 }
 
+/** How long after the lobby's reveal its frames a second last fell short of the screen's (`analyze.mjs`
+ *  `lobbyRateOf`'s `roughTill`), as a few words. */
+function roughText(roughTill) {
+  if (roughTill === 0) return 'every second at the screen\'s rate';
+  if (roughTill === null) return 'short of the screen\'s rate to the end';
+  return `short of the screen's rate till ${bootSeconds(roughTill)} in`;
+}
+
+/** The lobby's frames a second from its reveal till Start was pressed (`analyze.mjs` `lobbyRateOf`), as the
+ *  performance overlay counts them: the fewest and when, how long they fell short of the screen's, and each; then
+ *  what the threads and the page's JS (where sampled) spent the fewest's second on. */
+function lobbyLines({ seconds: counted, fewest, screenRate, roughTill, work, js }) {
+  const each = counted.map((second) => second.count).join(' ');
+  const lines = [
+    `  the lobby's frames a second (the overlay's count, the screen's ${screenRate.toFixed(0)}): the fewest `
+      + `${fewest.count}, ${bootSeconds(fewest.at)} in; ${roughText(roughTill)}; each 0.25 s from 1 s in: ${each}`,
+  ];
+  if (work.length) lines.push(workLine('the fewest\'s second\'s work', work));
+  if (js?.own.length) lines.push(jsLine('its JS, each function\'s own time', js.own));
+  if (js?.within.length) lines.push(jsLine('its JS, each function with what it calls', js.within));
+  return lines;
+}
+
 /** A boot's section: what it was, when the lobby was revealed and the page first painted, the files fetched, the
- *  maps the workers made, how the loading screen left, and each step from the navigation's start
- *  (`bootStepLines`). */
+ *  maps the workers made, how the loading screen left, the lobby's frames a second, and each step from the
+ *  navigation's start (`bootStepLines`). */
 export function bootText(measure) {
   const { name, notes, findings } = measure;
   const { files } = findings;
@@ -256,6 +280,7 @@ export function bootText(measure) {
     ...(findings.maps ? [mapsLine(findings.maps)] : []),
     ...(findings.warmUps?.length ? [warmUpsLine(findings.warmUps)] : []),
     ...(findings.exit ? [`  the loading screen left: ${exitText(findings.exit)}`] : []),
+    ...(findings.lobby ? lobbyLines(findings.lobby) : []),
     ...findings.steps.flatMap(bootStepLines),
   ];
   if (!findings.clockFound) lines.push('  (the page\'s mark is missing from the trace: no step\'s work)');
@@ -275,9 +300,21 @@ function exitsText(exits) {
   return [...counts].map(([text, count]) => `${text} ${count}`).join(', ');
 }
 
+/** A group's lobbies over the rounds (`analyze.mjs` `lobbyRateOf`): their fewest frames a second, and how many of
+ *  them fell short of the screen's rate and till when, the median and the range. */
+function lobbyRoundsLine(lobbies) {
+  const rough = lobbies.filter((lobby) => lobby.roughTill !== 0);
+  const till = rough.map((lobby) => lobby.roughTill).filter((at) => at !== null);
+  const tillText = till.length ? `, till ${secondsText(till)} in` : '';
+  const endless = rough.length - till.length;
+  const toEnd = endless ? ` (${endless} to the end)` : '';
+  return `    the lobby's fewest frames a second ${medianText(lobbies.map((lobby) => lobby.fewest.count))}; `
+    + `${rough.length} of ${lobbies.length} short of the screen's rate${tillText}${toEnd}`;
+}
+
 /** The boots by URL, variant and visit (`group`), over the rounds: when the lobby was revealed, when the fight's
- *  programs were warm behind it, when the workers' maps were done, and how long each step took, each the median and
- *  the range. */
+ *  programs were warm behind it, when the workers' maps were done, the lobby's frames a second, and how long each
+ *  step took, each the median and the range. */
 export function bootRoundsText(measures) {
   const groups = new Map();
   for (const measure of measures) {
@@ -304,7 +341,10 @@ export function bootRoundsText(measures) {
     const warmRow = warm.length ? [`    the fight warm at ${secondsText(warm)}${barText}`] : [];
     const exits = boots.map((boot) => boot.findings.exit).filter(Boolean);
     const exitRow = exits.length ? [`    the loading screen left: ${exitsText(exits)}`] : [];
-    return [`  ${group}: ${boots.length} boots; ${head}`, ...warmRow, ...mapsRow, ...exitRow, ...stepRows];
+    const lobbies = boots.map((boot) => boot.findings.lobby).filter(Boolean);
+    const lobbyRow = lobbies.length ? [lobbyRoundsLine(lobbies)] : [];
+    const title = `  ${group}: ${boots.length} boots; ${head}`;
+    return [title, ...warmRow, ...mapsRow, ...exitRow, ...lobbyRow, ...stepRows];
   });
   return ['boots by URL and visit, over the rounds:', ...rows].join('\n');
 }
