@@ -272,6 +272,14 @@ export function initMenus(h: MenuHooks): void {
   window.addEventListener('blur', () => setShift(false));
 }
 
+/**
+ * The lobby's panels laid out under the loading screen before their content (`showMenu`'s render, which needs the
+ * hero), at the boot's start: their first raster builds Skia's programs on the GPU process's main thread one after
+ * another (a first visit's 86, 1.2 s), and shown with the hero, the lobby's warm-up waited behind it. Rastered while
+ * he is built, it's done by then.
+ */
+export function layOutMenuAhead(): void { $('#menu').classList.remove('hidden'); }
+
 export function showMenu(v: boolean): void {
   $('#menu').classList.toggle('hidden', !v);
   if (v) { toggleMenuStowed(false); openBook(false); renderMenu(); }

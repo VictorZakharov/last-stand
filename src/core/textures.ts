@@ -15,6 +15,16 @@ export function ctx2d(c: HTMLCanvasElement): CanvasRenderingContext2D {
   return c.getContext('2d')!;
 }
 
+/**
+ * The 2D context of a canvas whose pixels are read back (`getImageData`), drawn and read on the CPU. On the GPU each
+ * read was a round trip to the GPU's process, waiting behind its work (on a first visit, the lobby's panels' raster:
+ * the hero's build waited 0.8 s for the engraving's). Not for a canvas that's only drawn and made a texture: from
+ * the CPU, its upload is a copy of all its pixels (the lobby's maps' took 0.58 s, against 4 ms from the GPU).
+ */
+export function readCtx2d(c: HTMLCanvasElement): CanvasRenderingContext2D {
+  return c.getContext('2d', { willReadFrequently: true })!;
+}
+
 function toTexture(canvas: HTMLCanvasElement, srgb: boolean, repeat = 1): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(canvas);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -45,13 +55,26 @@ export type Job = (typeof PRELOAD)[number];
 
 const make = ([name, args]: Job): PBRData => (RECIPES[name] as (...a: unknown[]) => PBRData)(...args);
 
-/** `maps` painted with `d` (sized to it: a map asked for before it was made is handed out blank) */
-function paint(maps: PBRCanvases, d: PBRData): void {
+/** the maps whose albedo the page paints from (the engraving's steel): their pixels kept as they came
+ *  (`albedoPixels`) */
+const PAINTED_FROM = new Set([recipeKey('steel', [])]);
+const albedos = new Map<string, ImageData>();
+
+/** `maps` (`key`'s) painted with `d` (sized to it: a map asked for before it was made is handed out blank) */
+function paint(maps: PBRCanvases, d: PBRData, key: string): void {
   const h = d.height ?? d.size;
   for (const [c, data] of [[maps.albedo, d.albedo], [maps.normal, d.normal], [maps.rough, d.rough]] as const) {
     c.width = d.size; c.height = h;
     ctx2d(c).putImageData(new ImageData(data, d.size, h), 0, 0);
   }
+  if (PAINTED_FROM.has(key)) albedos.set(key, new ImageData(d.albedo, d.size, h));
+}
+
+/** `maps`' albedo's pixels: as its map came where the page paints from it (`PAINTED_FROM`), not read back from
+ *  its canvas (a round trip to the GPU's process); else read back. */
+export function albedoPixels(maps: PBRCanvases): ImageData {
+  const kept = albedos.get(keyOfCanvas.get(maps.albedo) ?? '');
+  return kept ?? ctx2d(maps.albedo).getImageData(0, 0, maps.albedo.width, maps.albedo.height);
 }
 
 /** the ray grids the faces were painted on, by the face's key (`faceGrid`) */
@@ -61,7 +84,7 @@ const grids = new Map<string, NonNullable<PBRData['grid']>>();
 function arrived(key: string, d: PBRData): void {
   if (d.grid) grids.set(key, d.grid);
   const maps = cache.get(key);
-  if (maps) paint(maps, d); else made.set(key, d);
+  if (maps) paint(maps, d, key); else made.set(key, d);
   coming.get(key)?.arrive();
   coming.delete(key);
 }
@@ -80,7 +103,7 @@ function pbrCanvases<N extends RecipeName>(name: N, ...args: RecipeArgs<N>): PBR
   if (coming.has(key)) return maps;
   const d = made.get(key) ?? make([name, args] as Job);
   if (d.grid) grids.set(key, d.grid);
-  paint(maps, d);
+  paint(maps, d, key);
   made.delete(key);
   return maps;
 }
@@ -272,7 +295,7 @@ export function runeCircle(seed = 1, size = 1024): THREE.CanvasTexture {
 export function radialDecal(inner = 'rgba(0,0,0,0.9)', outer = 'rgba(0,0,0,0)', noisy = true, seed = 3) {
   const size = 256;
   const c = canvasOf(size);
-  const g = ctx2d(c);
+  const g = noisy ? readCtx2d(c) : ctx2d(c);
   const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
   grad.addColorStop(0, inner);
   grad.addColorStop(0.55, inner);

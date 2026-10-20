@@ -3,7 +3,7 @@
 // height field drawn with strokes; albedo, normal and roughness maps are derived from it, so an
 // engraved band catches the light like the real thing. Made once, shared by every hero.
 import * as THREE from 'three';
-import { ctx2d, steel } from './textures';
+import { albedoPixels, ctx2d, readCtx2d, steel } from './textures';
 import { clamp, mulberry } from '../util';
 
 type Ctx = CanvasRenderingContext2D;
@@ -134,9 +134,9 @@ function drawKnee(c: Ctx, size: number): void {
   }
 }
 
-/** a height canvas → the three maps, with `base` (a neutral albedo canvas) under the ornament */
-function derive(hc: HTMLCanvasElement, base: HTMLCanvasElement | null, tint: (h: number, groove: number, i: number) => [number, number, number, number]) {
-  const w = hc.width, h = hc.height, src = ctx2d(hc).getImageData(0, 0, w, h).data;
+/** a height canvas (`readCtx2d`'s) → the three maps, with `base` (a neutral albedo's pixels) under the ornament */
+function derive(hc: HTMLCanvasElement, base: ImageData | null, tint: (h: number, groove: number, i: number) => [number, number, number, number]) {
+  const w = hc.width, h = hc.height, src = readCtx2d(hc).getImageData(0, 0, w, h).data;
   // a light blur, so the grooves have sloped walls (the normal needs a gradient to catch light)
   const H = new Float32Array(w * h), B = new Float32Array(w * h);
   for (let i = 0; i < w * h; i++) H[i] = src[i * 4] / 255;
@@ -152,7 +152,7 @@ function derive(hc: HTMLCanvasElement, base: HTMLCanvasElement | null, tint: (h:
       H[y * w + x] = s / 3;
     }
   }
-  const bd = base ? ctx2d(base).getImageData(0, 0, base.width, base.height).data : null, bs = base?.width ?? 1;
+  const bd = base?.data ?? null, bs = base?.width ?? 1;
   const alb = new ImageData(w, h), nor = new ImageData(w, h), rou = new ImageData(w, h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const i = y * w + x, hv = H[i];
@@ -179,7 +179,7 @@ let steelMaps: ReturnType<typeof derive> | null = null;
 export function engravedSteel(): ReturnType<typeof derive> {
   if (steelMaps) return steelMaps;
   const hc = document.createElement('canvas'); hc.width = hc.height = ATLAS;
-  const c = ctx2d(hc);
+  const c = readCtx2d(hc);
   c.fillStyle = '#808080'; c.fillRect(0, 0, ATLAS, ATLAS);
   const at = (r: SteelRegion, draw: (c: Ctx, w: number, h: number) => void) => {
     const [x, y, w, h] = REGIONS[r];
@@ -189,7 +189,7 @@ export function engravedSteel(): ReturnType<typeof derive> {
   at('disc', (c, w) => drawDisc(c, w, 3));
   at('knee', (c, w) => drawKnee(c, w));
   // grime settles in the grooves, the raised bands are polished bright
-  steelMaps = derive(hc, steel().albedo, (hv, g, b) => {
+  steelMaps = derive(hc, albedoPixels(steel()), (hv, g, b) => {
     const k = clamp(b * (1 - g * 0.75) + Math.max(0, hv - 0.5) * 0.35, 0, 1);
     return [k, k, k, clamp(0.34 + g * 0.5 - Math.max(0, hv - 0.5) * 0.3 + (1 - b) * 0.3, 0.1, 1)];
   });
@@ -211,7 +211,7 @@ export function embroidered(w: number, h: number, outline: Pt[], field: [number,
 }
 function drawPanel(w: number, h: number, outline: Pt[], field: [number, number, number], thread: [number, number, number], motif?: (c: Ctx, w: number, h: number) => void) {
   const hc = document.createElement('canvas'); hc.width = w; hc.height = h;
-  const c = ctx2d(hc);
+  const c = readCtx2d(hc);
   c.fillStyle = '#808080'; c.fillRect(0, 0, w, h);
   // weave: fine diagonal ribs
   c.strokeStyle = 'rgba(0,0,0,0.25)'; c.lineWidth = 1;
@@ -229,7 +229,7 @@ function drawPanel(w: number, h: number, outline: Pt[], field: [number, number, 
   };
   // the border: two raised cords with a running interlace between them
   const mask = document.createElement('canvas'); mask.width = w; mask.height = h;
-  const mc = ctx2d(mask);
+  const mc = readCtx2d(mask);
   for (const [inset, lw] of [[10, 5], [30, 5]] as const) { path(inset); c.strokeStyle = '#fff'; c.lineWidth = lw; c.stroke(); }
   path(20); c.setLineDash([7, 5]); c.strokeStyle = '#e8e8e8'; c.lineWidth = 9; c.stroke(); c.setLineDash([]);
   path(20); c.strokeStyle = '#000'; c.lineWidth = 1.5; c.stroke();
@@ -237,7 +237,7 @@ function drawPanel(w: number, h: number, outline: Pt[], field: [number, number, 
   mc.drawImage(hc, 0, 0);
   // anything else stitched on, in thread (white)
   if (motif) { c.strokeStyle = '#fff'; c.fillStyle = '#fff'; c.lineCap = 'round'; c.lineJoin = 'round'; motif(c, w, h); }
-  const md = ctx2d(hc).getImageData(0, 0, w, h).data;
+  const md = readCtx2d(hc).getImageData(0, 0, w, h).data;
   let i = 0;
   return derive(hc, null, (hv) => {
     const th = md[i++ * 4] > 150 ? 1 : 0;

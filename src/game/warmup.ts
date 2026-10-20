@@ -1,5 +1,6 @@
-// Load-time shader warm-up. The lobby's, before it shows (`warmLobby`): every effect, loot and skill visual (the
-// lobby lets the hero try his skills on its dummies), the hero with all he can wear, the lobby's biome; the fight's
+// Load-time shader warm-up. The lobby's, before it shows: its biome compiled as it's built (`compileTheBiome`),
+// every effect, loot and skill visual (the lobby lets the hero try his skills on its dummies) compiled with the hero
+// as he's built (`compileTheLobby`), then all drawn with the hero wearing all he can (`warmLobby`); the fight's
 // foes are built meanwhile, as it waits on the GPU (`buildAhead`). The rest after it (`warmTheRest`), as two needs
 // (game/warm.ts): the fight's (every foe, the other biomes), a part at a time behind the lobby, a step a frame, once
 // the loading screen has left and where this build warmed them on this machine before (they come from the GPU's

@@ -25,7 +25,7 @@ import { setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
-import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
+import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
@@ -89,6 +89,8 @@ async function boot() {
   // the lobby's biome shown, and its programs compiled while the hero is built (game/warmup.ts)
   initBiome();
   const heroLit = compileTheBiome();
+  // (the lobby's panels rastered under the loading screen while the hero is built: ui/menus.ts)
+  layOutMenuAhead();
 
   await loadingStep('Summoning the hero', 0.35);
   await hands;
