@@ -118,6 +118,16 @@ async function removeOrWarn(profile) {
   console.warn(`stalls: couldn't delete the profile ${profile} (no permission, or still in use): delete it by hand`);
 }
 
+/** Slows `page`'s CPU `rate` times (CDP's throttling, kept across its loads: a phone's slower cores), unless
+ *  `rate` is 1. Returns the way to set it again (1: at full speed), on the session that set it. */
+export async function slowCpu(page, rate) {
+  if (rate <= 1) return async () => {};
+  const session = await page.context().newCDPSession(page);
+  const setRate = (to) => session.send('Emulation.setCPUThrottlingRate', { rate: to });
+  await setRate(rate);
+  return setRate;
+}
+
 /**
  * Starts the installed Chrome with a fresh profile under `outDir` (headless unless `headed`, its screen scaled
  * `scale`) and connects to it.

@@ -21,6 +21,9 @@ npm run stalls -- --scenario sweep --stash 60 --view top --window 1536x695 --sec
 npm run stalls -- --scenario sweep --stash 60 --item-ms 100 --seconds 8 --rounds 3  # the owner's pace, fast
 npm run stalls -- --scenario hover --stash 60 --listed 40   # every frame of 40 ms+ listed with what was busy
 npm run stalls -- --scenario stow --view top --perf --press-ms 100 --rounds 4  # Space pressed 10 times a second
+npm run stalls -- --scenario boot --url this,https://victorzakharov.github.io/last-stand/ --rounds 3  # the boot
+npm run stalls -- --scenario boot --cpu-slowdown 4 --js   # on a phone's CPU, its JS by function
+npm run stalls -- --scenario boot --url this,ref:HEAD~2 --rounds 3  # this tree beside a commit of its own
 npm run stalls -- --scenario sweep --stash 60 --seconds 8 --rounds 3 --variants base,iconFilter,stillGlow+noTooltip
                                                  # one page, the variants in turn three times over, by their medians
 npm run stalls -- --scenario sweep --stash 60 --seconds 6 --js   # and the page's JS, a frame's by function
@@ -72,6 +75,19 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     Space pressed every 200 ms for the rest (`--press-ms`), the mouse over the world throughout.
   - `storm`: the mage in a run, walking away from the foes a side of a square at a time and casting Maelstrom back
     at those following him in a line, every other side: its storm draws them in and whirls what it kills.
+  - `boot` (`boot.mjs`): no set-up and nothing played. In a fresh Chrome the game is loaded as a first visit has it
+    (every cache empty, no saved game, its own settings: Auto's quality, its battleground; the perf overlay with
+    `--perf`), then loaded again as a return (its caches, the offline worker and the saved game kept), each
+    recorded from the document's start and traced from the navigation to `--seconds` after the lobby's reveal (3
+    by default). Its steps are the loading screen's, read off it as it's drawn (`page.mjs` `bootRecording`), so
+    a build without marks of its own is timed alike: the document fetched, `Loading…` (the scripts fetched and
+    run), each label `loadingStep` shows, the loop started (the bar full, waiting for smooth frames), the logo
+    blown away, the lobby revealed. `--cpu-slowdown N` slows the page's CPU as a phone's (any scenario).
+    `--stall-blow ms` holds the page up once in the logo blow's first frames, as a fast machine stalled by the GPU
+    busy elsewhere: the blow's watchdog must not take it for a slow device (`src/ui/logoWind.ts`). A build that
+    warms the fight's programs after the lobby shows (one with the fight's loading bar, `#readying`) is watched till
+    they're warm (the game's `fight warm` mark), Start pressed first where they aren't by then, as a first visit
+    leaves them for it (`page.mjs` `startIfCold`).
 - **Recorded in the page:** every animation frame's interval and whether the item tooltip showed in it, every change
   to the page's HTML (a `MutationObserver`: what changed and on which element), and the scenario's phases
   (`markPhase`). The page marks the trace (`console.timeStamp`) as its clock starts, which puts them all on one clock.
@@ -106,6 +122,15 @@ For each measure:
   - the programs built in it, and the tasks each was built inside;
   - the longest tasks (20 ms or more) on any thread through it, and the work in it as a frame's work is given;
   - the page's changes in the 400 ms before it, by kind and element, the most frequent first.
+
+A boot's report says when the lobby was revealed and the page first painted, the files fetched (bytes over the
+network: a cache's are none), the maps the game's workers made (how many, from when to when, their work in all and
+the longest: the game times each, `src/core/textures.ts`; a build before that lists none), how the loading screen
+left (the logo blown away, its blow cut short by its watchdog, or a plain fade and why), when the fight was warm (and
+when Start was pressed for it), the game's warm-ups with their steps, the longest first (`warm <part>` measures:
+its build, compile, wait for its links and draw, each but the links one task the lobby waits on) and, for each step, when it began, how long it took, its frames and the longest the
+page was held up in it, its long tasks and Skia programs, and what each thread spent its time on in all (with
+`--js`, its JS by function); at the end, each URL's boots by visit over the rounds, each step's median and range.
 
 With more than one measure, they are listed side by side at the end, each phase's frames a second and share missed
 with them; with `--rounds`, then by variant: each phase's frames a second and the browser's work, the median over the
@@ -220,6 +245,7 @@ worst frame was 50 and 67 ms.
 | `chrome.mjs` | The installed Chrome started on a fresh profile, connected over CDP, its tree killed |
 | `serve.mjs` | This tree's production build (into `out/dist`), served by Vite's preview server |
 | `scenarios.mjs` | What the player does |
+| `boot.mjs` | The boot: a first visit and a return in a fresh Chrome, each traced |
 | `variants.mjs` | Changes tried on the page before its scripts |
 | `page.mjs` | What runs in the page: the recording, and the states the scenarios wait for |
 | `trace.mjs` | The browser's trace, its events filtered as they stream in |

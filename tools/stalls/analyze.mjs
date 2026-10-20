@@ -22,6 +22,15 @@ const BUSY_LEAST_MS = 20;
 /** the most kinds of work listed for each phase, the most of a frame's time first, and for each stall */
 const WORK_SHOWN = 10;
 const STALL_WORK_SHOWN = 6;
+/** the most kinds of work listed for each step of a boot, the most first, and the largest files listed */
+const BOOT_WORK_SHOWN = 6;
+const FILES_SHOWN = 3;
+/** the most of the workers' maps listed, the longest first */
+const MAPS_SHOWN = 3;
+/** the slow launches in a row (`ui/logoWind.ts`'s watchdog counts them) at which the exit is a plain fade */
+export const SLOW_LAUNCHES = 2;
+/** the step a boot ends on (`page.mjs` `bootRecording` names it, in the page where nothing can be imported) */
+export const REVEALED = 'the lobby revealed';
 /** the most kinds of work other pages' renderers did that are listed (`othersWork`) */
 const OTHERS_LISTED = 4;
 /** the work after a change of the page's look counted as its own up to the next change or for this long at most (ms:
@@ -316,18 +325,16 @@ function missedOf(frames, refresh) {
 }
 
 /**
- * The findings of one measure: `record` is the page's (`page.mjs` `stopRecording`), `events` the trace's kept events
- * and `mark` the page's mark in them; `sourceOf` names the page's functions where its JS was sampled
- * (`sourceMap.mjs` `sourcesOf`).
+ * The trace put on the page's clock (`record`'s, at `mark`): the mark's event, its tasks, the work placed
+ * (`placedWork`), the JS sampled (`sourceOf` naming the page's functions) and Skia's program links, each with the
+ * tasks it was built in.
  */
-export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = () => null) {
+function onPage(record, events, mark, sourceOf) {
   const stamp = markOf(events, mark);
   const markTs = stamp?.ts ?? null;
   const names = threadNames(events);
   const tasks = events.filter((event) => event.ph === 'X');
   const toPage = (ts) => (markTs === null ? null : onPageClock(ts, markTs, record.start));
-  const placed = placedWork(selfTimes(tasks), toPage, names);
-  const samples = jsSamples(events, toPage, names, sourceOf);
   const links = tasks
     .filter((event) => event.name === 'driver_link_program')
     .map((link) => ({
@@ -336,6 +343,18 @@ export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = (
       thread: threadOf(link, names),
       heldIn: heldIn(link, tasks),
     }));
+  const placed = placedWork(selfTimes(tasks), toPage, names);
+  return { stamp, tasks, names, toPage, placed, samples: jsSamples(events, toPage, names, sourceOf), links };
+}
+
+/**
+ * The findings of one measure: `record` is the page's (`page.mjs` `stopRecording`), `events` the trace's kept events
+ * and `mark` the page's mark in them; `sourceOf` names the page's functions where its JS was sampled
+ * (`sourceMap.mjs` `sourcesOf`).
+ */
+export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = () => null) {
+  const { stamp, tasks, names, toPage, placed, samples, links } = onPage(record, events, mark, sourceOf);
+  const markTs = stamp?.ts ?? null;
   const inRecording = links.filter((link) => link.at === null || link.at >= record.start);
   const stalls = record.frames
     .filter((frame) => frame.ms >= listedMs)
@@ -459,4 +478,107 @@ function missedShareIn(frames, spans, refresh) {
     }
   }
   return count ? missed / count : 0;
+}
+
+/** The files a boot fetched (`page.mjs` `stopBootRecording`): how many, their bytes over the network (a cache's
+ *  are none), those fetched after `revealed` (the lobby revealed, ms; null: never), and the largest, each with how
+ *  long it took (null where its timing ends before it starts: a worker's script). */
+function filesOf(files, revealed) {
+  const later = revealed === null ? [] : files.filter((file) => file.at > revealed);
+  const largest = [...files]
+    .sort((a, b) => b.bytes - a.bytes)
+    .slice(0, FILES_SHOWN)
+    .map((file) => ({ name: file.name, bytes: file.bytes, ms: file.end >= file.at ? file.end - file.at : null }));
+  return {
+    count: files.length,
+    bytes: files.reduce((sum, file) => sum + file.bytes, 0),
+    later: later.length,
+    largest,
+  };
+}
+
+/** The maps the game's workers made (null where none were timed: a build before they were): how many, and how many
+ *  of them were read back from a visit before, from the first one's start to the last one's end (the page's ms),
+ *  their work in all and the longest. */
+function mapsOf(maps) {
+  if (!maps.length) return null;
+  const longest = [...maps]
+    .sort((a, b) => b.ms - a.ms)
+    .slice(0, MAPS_SHOWN)
+    .map(({ name, ms }) => ({ name, ms }));
+  return {
+    count: maps.length,
+    kept: maps.filter((map) => map.kept).length,
+    from: Math.min(...maps.map((map) => map.at)),
+    to: Math.max(...maps.map((map) => map.at + map.ms)),
+    ms: maps.reduce((sum, map) => sum + map.ms, 0),
+    longest,
+  };
+}
+
+/** The device's marks of a slow exit (`page.mjs` `bootRecording`): the slow launches in a row, and a build before's
+ *  switch, which turned the blow off for good on one. */
+const markedSlow = (marks) => marks.slow >= SLOW_LAUNCHES || marks.off;
+
+/** How the loading screen left (null where the record has none): `blown` (the logo blown away in full), `cut` (the
+ *  watchdog cut it short and marked the launch slow, or switched the blow off for good: `forGood`, a build before's)
+ *  or `plain` (a plain fade), and whether the device was marked slow before (the plain fade's reason: else reduced
+ *  motion, low graphics or the exit not ready in time). */
+function exitOf(exit) {
+  if (!exit?.kind) return null;
+  const { before, after } = exit;
+  const forGood = after.off && !before.off;
+  const cut = exit.kind === 'blown' && (after.slow > before.slow || forGood);
+  return { kind: cut ? 'cut' : exit.kind, markedSlow: markedSlow(before), slowAfter: after.slow, forGood };
+}
+
+/** A boot's step from `from` to `to` (the page's ms): its frames' summary (the longest the page was held up in it,
+ *  `worst`), its long tasks and Skia program links, and what the threads spent its time on in all. */
+function bootStep(name, from, to, record, traced) {
+  const frames = record.frames.filter((frame) => frame.at > from && frame.at <= to);
+  const tasks = record.longTasks.filter((task) => task.at >= from && task.at < to);
+  const links = traced.links.filter((link) => link.at !== null && link.at >= from && link.at < to);
+  return {
+    name,
+    from,
+    ms: to - from,
+    frames: frameSummary(frames),
+    longTasks: {
+      count: tasks.length,
+      ms: tasks.reduce((sum, task) => sum + task.ms, 0),
+      longest: Math.max(0, ...tasks.map((task) => task.ms)),
+    },
+    programs: { count: links.length, ms: links.reduce((sum, link) => sum + link.ms, 0) },
+    work: sharedWork(workTotals(traced.placed, [[from, to]]), 1).slice(0, BOOT_WORK_SHOWN),
+    js: traced.samples.length ? jsIn(traced.samples, from, to, 1) : null,
+  };
+}
+
+/**
+ * The findings of a boot: `record` is the page's (`page.mjs` `stopBootRecording`), `events` the trace's and `mark`
+ * the page's mark in them. Each step (a phase of the record) from its start to the next's, the last's to the
+ * recording's end (`bootStep`); when the lobby was revealed (`revealedAt`, ms from the navigation's start; null if
+ * never) and the page first painted with content (`painted`); the files fetched (`filesOf`). `sourceOf` names the
+ * page's functions where its JS was sampled.
+ */
+export function analyzeBoot(record, events, mark, sourceOf = () => null) {
+  const traced = onPage(record, events, mark, sourceOf);
+  const end = record.frames.length ? record.frames[record.frames.length - 1].at : record.start;
+  const steps = record.phases.map((phase, index) => {
+    const to = record.phases[index + 1]?.at ?? end;
+    return bootStep(phase.name, phase.at, to, record, traced);
+  });
+  const revealedAt = record.phases.find((phase) => phase.name === REVEALED)?.at ?? null;
+  return {
+    clockFound: traced.stamp !== null,
+    steps,
+    revealedAt,
+    painted: record.paint['first-contentful-paint'] ?? null,
+    files: filesOf(record.files, revealedAt),
+    maps: mapsOf(record.maps ?? []),
+    exit: exitOf(record.exit),
+    warmAt: record.warm ?? null,
+    pressedAt: record.pressed ?? null,
+    warmUps: record.warmUps ?? [],
+  };
 }

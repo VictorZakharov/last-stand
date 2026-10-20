@@ -4,6 +4,9 @@ import { LISTED_MS, STALL_MS } from './analyze.mjs';
 
 const ms = (value) => `${value.toFixed(0)} ms`;
 const seconds = (value) => `${(value / 1000).toFixed(1)} s`;
+/** a boot's times (ms) in seconds, to the hundredth, and its bytes */
+const bootSeconds = (value) => `${(value / 1000).toFixed(2)} s`;
+const megabytes = (bytes) => `${(bytes / 1e6).toFixed(2)} MB`;
 /** the innermost tasks a program's link is listed in (outside them, the GPU process's run loop) */
 const CHAIN_SHOWN = 4;
 /** the least work (ms) other pages' renderers did through a measure that the report says: a page held still does
@@ -175,4 +178,133 @@ export function summaryText(measures) {
       + `stalled; ${String(programs.count).padStart(3)} programs, ${ms(programs.total)}${phased}`;
   });
   return ['side by side:', ...rows].join('\n');
+}
+
+/** A boot's step (`analyze.mjs` `analyzeBoot`): when it started, how long it took, its frames and the longest the
+ *  page was held up in it, its long tasks and Skia programs, and what the threads spent its time on in all. */
+function bootStepLines(step) {
+  const { frames, longTasks, programs } = step;
+  const tasks = longTasks.count
+    ? `, ${longTasks.count} long tasks (${ms(longTasks.ms)}, the longest ${ms(longTasks.longest)})`
+    : '';
+  const built = programs.count ? `, ${programs.count} Skia programs (${ms(programs.ms)})` : '';
+  const held = frames.count ? `, the page held up ${ms(frames.worst[0])} at most` : '';
+  const lines = [
+    `  ${bootSeconds(step.from).padStart(7)}  ${step.name}: ${bootSeconds(step.ms)}; ${frames.count} frames${held}`
+      + `${tasks}${built}`,
+  ];
+  if (step.work.length) lines.push(workLine('its work', step.work));
+  if (step.js?.own.length) lines.push(jsLine('its JS, each function\'s own time', step.js.own));
+  return lines;
+}
+
+/** The maps the game's workers made in a boot: how many (and how many read back from a visit before), when, their
+ *  work in all and the longest. */
+function mapsLine({ count, kept, from, to, ms: work, longest }) {
+  const shown = longest.map((map) => `${map.name} ${bootSeconds(map.ms)}`).join(', ');
+  const read = kept ? ` (${kept} of them read back from a visit before)` : '';
+  return `  ${count} maps made in the workers${read} from ${bootSeconds(from)} to ${bootSeconds(to)}, `
+    + `${bootSeconds(work)} of work (the longest ${shown})`;
+}
+
+/** How the loading screen left a boot (`analyze.mjs` `exitOf`), as a few words. */
+function exitText({ kind, markedSlow, slowAfter, forGood }) {
+  if (kind === 'blown') return 'the logo blown away';
+  if (kind === 'cut' && forGood) return 'the logo\'s blow cut short by its watchdog, which switched it off for good';
+  if (kind === 'cut') return `the logo's blow cut short by its watchdog (slow launches in a row: ${slowAfter})`;
+  return markedSlow
+    ? 'a plain fade (the device marked slow by the watchdog)'
+    : 'a plain fade (reduced motion, low graphics, or the blow not ready in time)';
+}
+
+/** the warm-ups listed by their longest step */
+const WARM_UPS_SHOWN = 6;
+
+/** A warm-up's longest one-task step (its build, its compile or its draw, ms): what holds the lobby's frames up
+ *  behind it. */
+const longestStep = (warmUp) => Math.max(warmUp.buildMs ?? 0, warmUp.compileMs ?? 0, warmUp.drawMs ?? 0);
+
+/** The game's warm-ups (`src/game/warmup.ts`): how many, and those whose one-task steps took longest, each with
+ *  its compile, its wait for its links and its draw. */
+function warmUpsLine(warmUps) {
+  const ms = (value) => `${Math.round(value ?? 0)}`;
+  const longest = [...warmUps].sort((a, b) => longestStep(b) - longestStep(a)).slice(0, WARM_UPS_SHOWN);
+  const built = (w) => (w.buildMs === undefined ? '' : `build ${ms(w.buildMs)}, `);
+  const steps = (w) => `${built(w)}compile ${ms(w.compileMs)}, links ${ms(w.linksMs)}, draw ${ms(w.drawMs)}`;
+  const shown = longest.map((w) => `${w.name} (${steps(w)})`);
+  return `  ${warmUps.length} warm-ups, ms, the longest steps first: ${shown.join('; ')}`;
+}
+
+/** A boot's section: what it was, when the lobby was revealed and the page first painted, the files fetched, the
+ *  maps the workers made, how the loading screen left, and each step from the navigation's start
+ *  (`bootStepLines`). */
+export function bootText(measure) {
+  const { name, notes, findings } = measure;
+  const { files } = findings;
+  const revealed = findings.revealedAt === null
+    ? 'the lobby never revealed'
+    : `the lobby revealed at ${bootSeconds(findings.revealedAt)}`;
+  const painted = findings.painted === null ? '' : `, first painted at ${bootSeconds(findings.painted)}`;
+  const pressed = findings.pressedAt ? `Start pressed at ${bootSeconds(findings.pressedAt)}, ` : '';
+  const warm = findings.warmAt ? `, ${pressed}the fight warm at ${bootSeconds(findings.warmAt)}` : '';
+  const took = (file) => (file.ms === null ? '' : ` in ${bootSeconds(file.ms)}`);
+  const largest = files.largest.map((file) => `${file.name} ${megabytes(file.bytes)}${took(file)}`).join(', ');
+  const lines = [
+    `${name}: ${notes.join('; ')}`,
+    `  ${revealed}${warm}${painted}; ${files.count} files, ${megabytes(files.bytes)} over the network `
+      + `(${files.later} after the reveal; the largest ${largest})`,
+    ...(findings.maps ? [mapsLine(findings.maps)] : []),
+    ...(findings.warmUps?.length ? [warmUpsLine(findings.warmUps)] : []),
+    ...(findings.exit ? [`  the loading screen left: ${exitText(findings.exit)}`] : []),
+    ...findings.steps.flatMap(bootStepLines),
+  ];
+  if (!findings.clockFound) lines.push('  (the page\'s mark is missing from the trace: no step\'s work)');
+  return lines.join('\n');
+}
+
+/** `values` (ms) as seconds: their median and range, `5.42 (5.21–5.90) s`. */
+function secondsText(values) {
+  const range = `${bootSeconds(Math.min(...values)).slice(0, -2)}–${bootSeconds(Math.max(...values))}`;
+  return `${bootSeconds(medianOf(values)).slice(0, -2)} (${range})`;
+}
+
+/** How the loading screen left a group's boots: each way, how many times (`the logo blown away 2, a plain fade 1`). */
+function exitsText(exits) {
+  const counts = new Map();
+  for (const exit of exits) counts.set(exitText(exit), (counts.get(exitText(exit)) ?? 0) + 1);
+  return [...counts].map(([text, count]) => `${text} ${count}`).join(', ');
+}
+
+/** The boots by URL, variant and visit (`group`), over the rounds: when the lobby was revealed, when the fight's
+ *  programs were warm behind it, when the workers' maps were done, and how long each step took, each the median and
+ *  the range. */
+export function bootRoundsText(measures) {
+  const groups = new Map();
+  for (const measure of measures) {
+    if (!groups.has(measure.group)) groups.set(measure.group, []);
+    groups.get(measure.group).push(measure);
+  }
+  const rows = [...groups].flatMap(([group, boots]) => {
+    const revealed = boots.map((boot) => boot.findings.revealedAt).filter((at) => at !== null);
+    const names = [...new Set(boots.flatMap((boot) => boot.findings.steps.map((step) => step.name)))];
+    const stepRows = names.map((name) => {
+      const lengths = boots.flatMap((boot) => boot.findings.steps.filter((step) => step.name === name))
+        .map((step) => step.ms);
+      return `    ${name}: ${secondsText(lengths)}`;
+    });
+    const head = revealed.length ? `the lobby revealed at ${secondsText(revealed)}` : 'the lobby never revealed';
+    const mapsDone = boots.map((boot) => boot.findings.maps?.to).filter((at) => at !== undefined);
+    const mapsRow = mapsDone.length ? [`    the workers' maps done at ${secondsText(mapsDone)}`] : [];
+    const warm = boots.map((boot) => boot.findings.warmAt).filter((at) => at);
+    const pressed = boots.filter((boot) => boot.findings.pressedAt && boot.findings.warmAt);
+    const barShown = pressed.map(({ findings }) => findings.warmAt - findings.pressedAt);
+    const barText = pressed.length
+      ? ` (${pressed.length} cold: Start pressed, its bar shown ${secondsText(barShown)})`
+      : '';
+    const warmRow = warm.length ? [`    the fight warm at ${secondsText(warm)}${barText}`] : [];
+    const exits = boots.map((boot) => boot.findings.exit).filter(Boolean);
+    const exitRow = exits.length ? [`    the loading screen left: ${exitsText(exits)}`] : [];
+    return [`  ${group}: ${boots.length} boots; ${head}`, ...warmRow, ...mapsRow, ...exitRow, ...stepRows];
+  });
+  return ['boots by URL and visit, over the rounds:', ...rows].join('\n');
 }

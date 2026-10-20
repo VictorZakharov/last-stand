@@ -19,6 +19,8 @@ test('fills in the defaults', () => {
     hero: null,
     stash: 0,
     scale: 1,
+    cpuSlowdown: 1,
+    stallBlow: 0,
     window: { width: 1536, height: 864 },
     headed: false,
     perf: false,

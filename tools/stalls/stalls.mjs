@@ -10,14 +10,15 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { freshStorage, noCapture } from '../lab/node/browser.mjs';
 import { analyze } from './analyze.mjs';
-import { startChrome } from './chrome.mjs';
-import { readOptions, usage, VIEWS } from './options.mjs';
+import { slowCpu, startChrome } from './chrome.mjs';
+import { measureBoots } from './boot.mjs';
+import { BOOT, readOptions, usage, VIEWS } from './options.mjs';
 import {
   equipmentShown, loaded, menuStowed, seededProfile, seedStash, startRecording, stopRecording, useStyle,
 } from './page.mjs';
-import { measureText, roundsText, summaryText } from './report.mjs';
+import { bootRoundsText, bootText, measureText, roundsText, summaryText } from './report.mjs';
 import { SCENARIOS } from './scenarios.mjs';
-import { serveBuild } from './serve.mjs';
+import { serveTrees, THIS_TREE } from './serve.mjs';
 import { sourcesOf } from './sourceMap.mjs';
 import { startTrace, TraceLost } from './trace.mjs';
 import { within } from './within.mjs';
@@ -25,8 +26,6 @@ import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 
 const REPO = resolve(import.meta.dirname, '../..');
 const OUT = join(REPO, 'tools/stalls/out');
-/** the URL that stands for this tree, built and served (`--url this,https://...`: it beside production) */
-const THIS_TREE = 'this';
 /** the page's mark on the trace, where its clock starts */
 const MARK = 'stalls:start';
 /** the settings every measure starts with, as the game keeps them: the battleground, the high quality preset, and
@@ -67,6 +66,7 @@ async function openGame(context, url, options) {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (error) => errors.push(String(error)));
+  await slowCpu(page, options.cpuSlowdown);
   await page.goto(url, { waitUntil: 'load' });
   await waitLoaded(page);
   return { page, errors };
@@ -185,7 +185,7 @@ async function measure(url, variant, options, picture) {
     const { page, errors } = await openGame(context, url, options);
     await setUpLobby(page, options);
     const { notes, findings } = await playTraced(chrome.browser, page, options, picture);
-    return { name: `${url} ${variant}`, notes: [...notes, ...errorNotes(errors)], findings };
+    return { name: `${options.nameOf(url)} ${variant}`, notes: [...notes, ...errorNotes(errors)], findings };
   } finally {
     await chrome.close();
   }
@@ -219,11 +219,12 @@ async function measureRounds(urls, options, sourcesFor, pictureAt, measured) {
         await thaw(game);
         options.sourceOf = sourcesFor(game.url);
         for (const variant of options.variants) {
-          console.log(`measuring ${game.url} ${variant}, round ${round}: ${options.scenario} for ${options.seconds} s`);
+          const playing = `${options.nameOf(game.url)} ${variant}, round ${round}`;
+          console.log(`measuring ${playing}: ${options.scenario} for ${options.seconds} s`);
           await game.page.evaluate(useStyle, liveCss(variant));
           await game.page.waitForTimeout(STYLE_SETTLE_MS);
           const { notes, findings } = await playTracedOnce(chrome.browser, game.page, options, pictureAt());
-          const group = `${game.url} ${variant}`;
+          const group = `${options.nameOf(game.url)} ${variant}`;
           const name = `${group} (round ${round})`;
           measured({ name, group, notes: [...notes, ...errorNotes(game.errors)], findings });
         }
@@ -241,7 +242,7 @@ async function measureEach(urls, options, sourcesFor, pictureAt, measured) {
   for (const url of urls) {
     options.sourceOf = sourcesFor(url);
     for (const variant of options.variants) {
-      console.log(`measuring ${url} ${variant}: ${options.scenario} for ${options.seconds} s`);
+      console.log(`measuring ${options.nameOf(url)} ${variant}: ${options.scenario} for ${options.seconds} s`);
       measured(await measure(url, variant, options, pictureAt()));
     }
   }
@@ -254,26 +255,32 @@ async function main() {
     return;
   }
   mkdirSync(OUT, { recursive: true });
-  const servesTree = !options.urls.length || options.urls.includes(THIS_TREE);
-  const served = servesTree ? await serveBuild(REPO, OUT, { named: options.js }) : null;
-  const urls = options.urls.length ? options.urls.map((url) => (url === THIS_TREE ? served.url : url)) : [served.url];
-  // (the page's functions named from this tree's build; another URL's by its scripts' lines)
-  const treeSources = served ? sourcesOf(served.distDir) : null;
-  const sourcesFor = (url) => (url === served?.url ? treeSources : () => null);
+  const asked = options.urls.length ? options.urls : [THIS_TREE];
+  const served = await serveTrees(asked, REPO, OUT, { named: options.js });
+  const urls = asked.map(served.urlOf);
+  options.nameOf = served.nameOf;
+  // (the page's functions named from a served tree's build; another URL's by its scripts' lines)
+  const sources = new Map([...served.builds].map(([url, distDir]) => [url, sourcesOf(distDir)]));
+  const sourcesFor = (url) => sources.get(url) ?? (() => null);
   const measures = [];
+  const booting = options.scenario === BOOT;
+  const textOf = (result) => (booting ? bootText(result) : measureText(result, { links: options.links }));
   const measured = (result) => {
-    console.log(measureText(result, { links: options.links }));
+    console.log(textOf(result));
     measures.push(result);
   };
   try {
     const pictureAt = () => endPicture(measures.length);
-    if (options.rounds > 1) await measureRounds(urls, options, sourcesFor, pictureAt, measured);
+    if (booting) await measureBoots(urls, options, { chromeFor, sourcesFor, pictureAt, measured });
+    else if (options.rounds > 1) await measureRounds(urls, options, sourcesFor, pictureAt, measured);
     else await measureEach(urls, options, sourcesFor, pictureAt, measured);
   } finally {
-    await served?.close();
+    await served.close();
   }
-  const sections = measures.map((result) => measureText(result, { links: options.links }));
-  const summaries = [summaryText(measures), ...(options.rounds > 1 ? [roundsText(measures)] : [])];
+  const sections = measures.map(textOf);
+  const summaries = booting
+    ? [bootRoundsText(measures)]
+    : [summaryText(measures), ...(options.rounds > 1 ? [roundsText(measures)] : [])];
   const text = [...sections, ...summaries].join('\n\n');
   writeFileSync(join(OUT, 'report.txt'), `${text}\n`);
   if (measures.length > 1) console.log(`\n${summaries.join('\n\n')}`);
