@@ -2,8 +2,8 @@
 // warmLobby); the rest in two needs (warmTheRest): the fight's (the foes, the other biomes), compiled behind the lobby
 // where they come from a cache, and the heroes' (the other classes'), compiled when something needs them. Until then
 // what needs them waits, pressed early, and goes ahead once they're warm, the fight's loading bar shown meanwhile
-// (ui/readying.ts): Start and a biome pick need the fight's; a class or save slot pick and a co-op room, both (a
-// partner's hero is any class, and a guest's run starts with the host's).
+// (ui/readying.ts), saying what it readies: Start and a biome pick need the fight's; a class pick the heroes'; a save
+// slot pick and a co-op room, both (a partner's hero is any class, and a guest's run starts with the host's).
 
 /** what's warmed after the lobby shows: the fight's programs, the other heroes' */
 export type Need = 'fight' | 'heroes';
@@ -29,6 +29,12 @@ function needState(): NeedState {
 
 const needs: Record<Need, NeedState> = { fight: needState(), heroes: needState() };
 const listeners: (() => void)[] = [];
+
+/** What a press waiting for its needs readies, as the fight's loading bar says it (`Readying the Mage`, ui/readying.ts
+ *  `READYING`): a text, or one made from what was pressed. */
+export type ReadyingLabel<A extends unknown[]> = string | ((...args: A) => string);
+/** the presses waiting, each its label, the latest asked last */
+const waitingFor: { press: object; label: string }[] = [];
 const changed = (): void => { for (const fn of listeners) fn(); };
 
 /** resolved once `need` is warm */
@@ -43,6 +49,8 @@ export function readyingShare(): number {
   const waited = NEEDS.filter((need) => needs[need].waiting > 0);
   return waited.length ? waited.reduce((sum, need) => sum + needs[need].share, 0) / waited.length : 0;
 }
+/** what the latest press still waiting readies (its `whenWarm` label), '' with none */
+export const readyingLabel = (): string => waitingFor[waitingFor.length - 1]?.label ?? '';
 /** `fn` called as something starts or stops waiting, and as a warm-up waited for gets further */
 export function onReadying(fn: () => void): void { listeners.push(fn); }
 
@@ -66,18 +74,29 @@ export function markWarm(need: Need): void {
   needs[need].resolveWarm();
 }
 
+/** The lab's: `need` cold again till `markWarm` (tools/lab `ui --states readyingClass`), so a press that needs it waits
+ *  under the fight's loading bar as a first visit's does (the lab's boot warms every need at once). */
+export function chill(need: Need): void { needs[need] = needState(); }
+
 /**
  * `act`, done at once if what it needs (`of`) is warm, else as soon as it is: pressed again meanwhile, its last
- * asking alone.
+ * asking alone. Meanwhile the fight's loading bar says what it readies (`label`, of what was asked last).
  */
-export function whenWarm<A extends unknown[]>(of: Need[], act: (...args: A) => void): (...args: A) => void {
+export function whenWarm<A extends unknown[]>(
+  of: Need[], act: (...args: A) => void, label: ReadyingLabel<A>,
+): (...args: A) => void {
   let asked: A | null = null;
+  const press = {};
   return (...args: A) => {
     const cold = of.filter((need) => !needs[need].warm);
     if (!cold.length) { act(...args); return; }
     const first = asked === null;
     asked = args;
-    if (!first) return;
+    // (pressed again meanwhile: the latest press, saying what this asking readies)
+    const at = waitingFor.findIndex((waiting) => waiting.press === press);
+    if (at >= 0) waitingFor.splice(at, 1);
+    waitingFor.push({ press, label: typeof label === 'string' ? label : label(...args) });
+    if (!first) { changed(); return; }
     for (const need of cold) {
       needs[need].waiting++;
       needs[need].resolveWanted();
@@ -86,6 +105,7 @@ export function whenWarm<A extends unknown[]>(of: Need[], act: (...args: A) => v
     void Promise.all(cold.map((need) => needs[need].warmed)).then(() => {
       const last = asked!;
       asked = null;
+      waitingFor.splice(waitingFor.findIndex((waiting) => waiting.press === press), 1);
       for (const need of cold) needs[need].waiting--;
       act(...last);
       changed();

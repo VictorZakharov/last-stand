@@ -20,8 +20,8 @@ const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'numbers', 'choice', 
 
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
-  'lobby', 'tooltip', 'glow', 'help', 'saves', 'readying', 'clicked', 'views', 'logLobby', 'skillTipsTouch', 'run',
-  'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
+  'lobby', 'tooltip', 'glow', 'help', 'saves', 'readying', 'readyingClass', 'clicked', 'views', 'logLobby',
+  'skillTipsTouch', 'run', 'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
 ];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
@@ -323,6 +323,7 @@ export const COMMANDS = {
         help: 'the states (every one by default): lobby, tooltip, glow (the stash\'s items lit for a hovered item\'s '
           + 'slot, pictured at set moments of its loops, each of which must animate only what the compositor moves), '
           + 'help, saves, readying (the fight\'s loading bar over the lobby: within the window, its label on a line), '
+          + 'readyingClass (another class picked with the heroes\' programs cold: the bar says it readies that hero), '
           + 'clicked (a class button clicked and a '
           + 'key pressed after it: '
           + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '

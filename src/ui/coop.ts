@@ -4,6 +4,7 @@ import { G } from '../state';
 import { COOP } from '../data/balance';
 import { session, hostRoom, joinRoom, leaveRoom, inviteLink, partners } from '../net/session';
 import { whenWarm } from '../game/warm';
+import { READYING } from './readying';
 import { serverUp, SERVER_DOWN } from '../net/transport';
 import { isCoop } from '../net/role';
 import { anchorLabel, removeLabel, project, onLayout } from './floaters';
@@ -25,8 +26,8 @@ const who = (p: Player): string => `${p.slot === 0 ? 'Host' : 'Partner'} · ${p.
 
 let touchRevive = false;
 /** a room hosted or joined: before the programs are warm, once they are (a partner's hero is any class) */
-const host = whenWarm(['fight', 'heroes'], () => void hostRoom());
-const join = whenWarm(['fight', 'heroes'], (code: string) => void joinRoom(code));
+const host = whenWarm(['fight', 'heroes'], () => void hostRoom(), READYING.coop);
+const join = whenWarm(['fight', 'heroes'], (code: string) => void joinRoom(code), READYING.coop);
 /** Whether the touch revive button is held. */
 export const touchReviving = (): boolean => touchRevive;
 
