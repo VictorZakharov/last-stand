@@ -118,6 +118,12 @@ const COMMON_OPTIONS = {
     help: 'what drew the page\'s random numbers as the command ran: the busiest callers, each at its line (an A/B\'s '
       + 'pictures of anything random differ after the first draw one side made and the other didn\'t)',
   },
+  layers: {
+    kind: 'switch',
+    help: 'the page\'s composited layers at each screen picture, each element\'s box and why it\'s a layer, and with '
+      + '--ab where the sides\' differ (a picture whose UI lines are drawn brighter or dimmer, nothing else changed, '
+      + 'was rastered another way)',
+  },
   watch: {
     kind: 'switch',
     help: 'run it again each time the source changes, until Ctrl+C (needs npm run lab:serve)',

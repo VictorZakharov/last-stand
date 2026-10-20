@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import { PAGE_SCRIPTS } from './browser.mjs';
 import { exportedTreePaths } from './commits.mjs';
 import { compileError, labError } from './errors.mjs';
+import { watchLayers } from './layers.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { stampOf } from './sideCache.mjs';
 import { decodeMappings, sourceOf } from './sourceMaps.mjs';
@@ -106,16 +107,39 @@ async function devtoolsOf(page) {
   return DEVTOOLS.get(page);
 }
 
+/** the layers watched on a page while a command runs with `--layers` (layers.mjs), kept at each screen picture */
+const LAYER_WATCHES = new WeakMap();
+
 /**
  * The page pictured as it shows (within `clip`, css px, when one is given), as a PNG data URL at the screen's own
- * pixels: `lab.screen`'s. Taken through the DevTools protocol: Playwright's screenshot put the page back on the
- * screen Playwright had given it, and on a `--screen` every picture after the first showed the boot's 1920x1080.
+ * pixels: `lab.screen`'s, its layers kept as it's taken where they're watched (`layered`). Taken through the
+ * DevTools protocol: Playwright's screenshot put the page back on the screen Playwright had given it, and on a
+ * `--screen` every picture after the first showed the boot's 1920x1080.
  */
 async function screenshotOf(page, clip) {
   const devtools = await devtoolsOf(page);
   const region = clip ? { clip: { ...clip, scale: 1 } } : {};
   const { data } = await devtools.send('Page.captureScreenshot', { format: 'png', ...region });
+  await LAYER_WATCHES.get(page)?.pictured();
   return `data:image/png;base64,${data}`;
+}
+
+/**
+ * Runs `work` with `page`'s layers kept at each of its screen pictures; resolves with what `work` returned and the
+ * layers, a list of lines for each picture (layers.mjs `watchLayers`).
+ */
+export async function layered(page, work) {
+  const watch = await watchLayers(await devtoolsOf(page));
+  LAYER_WATCHES.set(page, watch);
+  let result;
+  let pictures = [];
+  try {
+    result = await work();
+  } finally {
+    LAYER_WATCHES.delete(page);
+    pictures = await watch.stop();
+  }
+  return { result, pictures };
 }
 
 /** the pages whose touch input is on: a touch screen's, as a phone's or a tablet's */

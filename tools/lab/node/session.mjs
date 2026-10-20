@@ -16,8 +16,9 @@ import { OUT, REPO } from './paths.mjs';
 import { describePictureDifferences } from './pictures.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { profiled, scriptsIn, summarize } from './profile.mjs';
+import { layersDiffer, summarizeLayers } from './layers.mjs';
 import { placedTally, randomsDiffer, scriptsOfTally, summarizeRandoms, tallied } from './randoms.mjs';
-import { Side } from './side.mjs';
+import { layered, Side } from './side.mjs';
 import { cacheShown, keep, readKept, sideKey } from './sideCache.mjs';
 
 /** the hero a session boots until a command names another */
@@ -94,6 +95,7 @@ export class LabSession {
     const problems = [];
     const resultOf = new Map();
     const randomsOf = new Map();
+    const layersOf = new Map();
     for (const turn of turns) {
       const side = turn.side;
       const key = this.keyOf(side, command, options, heroClass);
@@ -116,13 +118,22 @@ export class LabSession {
       side.used = true;
       if (turn.screen) await side.showOn(turn.screen);
       let tally = null;
+      let layers = null;
+      const commandOnce = () => handler.each(side, options, this);
+      const withLayers = options.layers
+        ? async () => {
+          const { result, pictures } = await layered(side.page, commandOnce);
+          layers = pictures;
+          return result;
+        }
+        : commandOnce;
       const runCommand = options.randoms
         ? async () => {
-          const { result, entries } = await tallied(side.page, () => handler.each(side, options, this));
+          const { result, entries } = await tallied(side.page, withLayers);
           tally = entries;
           return result;
         }
-        : () => handler.each(side, options, this);
+        : withLayers;
       if (options.profile) {
         const { result, profile } = await profiled(side.page, runCommand);
         resultOf.set(turn, result);
@@ -136,6 +147,10 @@ export class LabSession {
         const placed = placedTally(tally, await side.sourceLocator(scriptsOfTally(tally)));
         randomsOf.set(turn, placed);
         notes.push(`${turn.name}: ${summarizeRandoms(placed)}`);
+      }
+      if (layers) {
+        layersOf.set(turn, layers);
+        notes.push(`${turn.name}: ${summarizeLayers(layers)}`);
       }
       const { errors, warnings } = await side.drainMessages();
       if (errors.length) {
@@ -156,6 +171,7 @@ export class LabSession {
     }
     const results = shown.map((turn) => [turn, resultOf.get(turn)]);
     if (randomsOf.size === 2) notes.push(randomsDiffer(randomsOf.get(turns[0]), randomsOf.get(turns[1])));
+    if (layersOf.size === 2) notes.push(layersDiffer(layersOf.get(turns[0]), layersOf.get(turns[1])));
     const textOf = handler.textOf ?? String;
     const text = handler.finish
       ? await handler.finish(results, options, this)
@@ -197,10 +213,11 @@ export class LabSession {
 
   /**
    * The key the other side of an A/B is kept under (sideCache.mjs), or null for one run afresh: this tree's (it
-   * changes as you work), one asked for `--fresh`, and one being profiled or its random numbers tallied.
+   * changes as you work), one asked for `--fresh`, and one being profiled, its random numbers tallied or its layers
+   * listed.
    */
   keyOf(side, command, options, heroClass) {
-    if (side.isRepo || options.fresh || options.profile || options.randoms) return null;
+    if (side.isRepo || options.fresh || options.profile || options.randoms || options.layers) return null;
     const extraFiles = command === 'probe' ? probeFiles(REPO, probeOf(options)) : [];
     return sideKey({ sha: side.sha, heroClass, command, options, extraFiles });
   }

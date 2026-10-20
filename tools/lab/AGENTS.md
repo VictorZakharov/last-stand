@@ -299,10 +299,17 @@ Each of these was found as a cause of runs that differed:
   emitter's bursts a frame early or late, one boot in three);
 - the default profile rolled from wherever the boot had left the sequence: a commit that made one more three.js
   object as its modules loaded rolled the ranger another bow and 2 less Health than main, so every A/B of him
-  compared two heroes (`ui --ab` differed in 11 of 12 pictures).
+  compared two heroes (`ui --ab` differed in 11 of 12 pictures);
+- the wave's banner taken off the page by a timer on the browser's clock: one boot in two it was still there at a
+  picture, the HUD's layers laid out another way and the hotbar's thin frame lines rastered 20% brighter or dimmer
+  (`light --ab` differed in one picture of 18, one run in two). It goes now as its fade ends (`ui/hud.ts`), which
+  follows the lab ending it (`settleRunning`), and `screen` lets the browser draw a frame after each round it ends,
+  for their ends to reach the page and its layers to fall without them.
 
 To find where two runs part, record each frame's state and each random draw's caller in a probe and compare boots
 (two fresh boots, `--setup=false`, the probe setting up itself): the first frame or draw that differs names the cause.
+A page picture whose UI differs in how bright its thin lines are, nothing moved, was rastered two ways: `--layers`
+lists Chrome's layers at each picture, and where the sides' differ.
 
 ## Testing the lab
 

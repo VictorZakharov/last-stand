@@ -167,8 +167,10 @@ function labClock() {
   const onGrid = (ms) => Math.round(ms * GRID) / GRID;
   const browserFrame = window.requestAnimationFrame.bind(window);
   const browserNow = performance.now.bind(performance);
-  // (`realNow`: the browser's own clock, off the grid, for timing the page's work: performance.now is the lab's)
-  const clock = { mode: 'real', t: 0, frame: 17067 / GRID, queue: [], realNow: browserNow };
+  // (`realNow`: the browser's own clock, off the grid, for timing the page's work: performance.now is the lab's;
+  // `realFrame`: a frame the browser draws, the game's own left queued, for a page change to reach the screen)
+  const realFrame = () => new Promise((resolve) => browserFrame(() => resolve()));
+  const clock = { mode: 'real', t: 0, frame: 17067 / GRID, queue: [], realNow: browserNow, realFrame };
   window.__labClock = clock;
   window.requestAnimationFrame = (callback) => {
     if (clock.mode !== 'real') {

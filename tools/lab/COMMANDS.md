@@ -980,6 +980,10 @@ Options every command run on a page takes:
   differences first. An A/B's pictures of anything random (particles, sparks, motes) differ after the first draw one
   side made and the other didn't: drawn in crowds, the foes' skeletons never made the bone textures three makes as a
   skinned mesh is first drawn, four numbers each for their ids, and every mote after them lay elsewhere;
+- `--layers`: the page's composited layers at each screen picture, as Chrome drew them (`node/layers.mjs`): each
+  layer's element, its box and why Chrome made it a layer, and with `--ab` the layers the sides didn't share, picture
+  by picture. Two sides whose pictures differ only in how bright the UI's thin lines are, nothing moved, were
+  rastered two ways;
 - `--watch`: run it again each time the source changes, on the page booted for the change, until Ctrl+C.
 
 A misspelt option or a bad value stops the command before anything boots (`carry takes no --canry (did you mean
