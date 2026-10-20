@@ -94,6 +94,12 @@ const COMMON_OPTIONS = {
     help: 'the page booted as a device whose Auto settled on this quality (low@518400: a phone\'s): the boot\'s '
       + 'warm-ups run at it, and the hero is built at its detail (High, the lab\'s own, by default)',
   },
+  cold: {
+    kind: 'switch',
+    help: 'the page booted as a player\'s first visit leaves it: nothing the game warms after the lobby shows asked '
+      + 'for, the fight\'s and the other heroes\' programs cold until something needs them (the lab\'s own boot asks '
+      + 'for them at once and waits)',
+  },
   screen: {
     kind: 'screen',
     usage: 'WxH[@ratio]',

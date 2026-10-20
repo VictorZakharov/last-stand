@@ -6,13 +6,14 @@
 // each named; and those made after the reveal (the lab's set-up). On a first visit the boot spends 94 s of ANGLE's
 // threads compiling (the stalls' boot measure), so which programs there are, and why, decides what can go; `--cost`
 // times each one's compile alone (`programCost.ts`). `--canary` warms a box of a kind nothing else is, which must
-// be listed as compiled and drawn, and one on a layer no camera sees, which must be listed as never drawn.
+// be listed as compiled and drawn, and one on a layer no camera sees, which must be listed as never drawn. The
+// performance report's count of the programs compiled after loading must be the ledger's (`lateCounted`).
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
 import { ENEMIES } from '../../../src/data/enemies';
 import { sceneTarget } from '../../../src/core/renderer';
-import { programsMade, warmUp, type ProgramMade } from '../../../src/core/shaders';
+import { markLoaded, programsCompiledInGame, programsMade, warmUp, type ProgramMade } from '../../../src/core/shaders';
 import { apartText, fieldsOf, kindOf, kindsApart, type KindApart } from './programKeys';
 import { cacheCanary, costs, lightsText, longestText, partsText, summedText, type ProgramCost } from './programCost';
 
@@ -145,6 +146,49 @@ async function canary(lab: Lab): Promise<Report> {
   return { text, problems };
 }
 
+/**
+ * The performance report's count of the programs compiled after loading (`programsCompiledInGame`: each a hitch, as
+ * it says) against the ledger's made after the reveal, both leaving out the warm-ups': they must agree. (A new
+ * build's lobby, its fight's programs not yet warm, counted every program the boot made: the load was marked only once
+ * the fight's were warm, `markLoaded`. `--cold` boots as that lobby shows.)
+ */
+function lateCounted(later: ProgramMade[]): Report {
+  const counted = programsCompiledInGame();
+  const text = `the performance report's programs compiled after load: ${counted}; the ledger's made after the `
+    + `reveal: ${later.length}`;
+  const problems = counted === later.length
+    ? []
+    : [`the performance report counts ${counted} programs compiled after load, the ledger ${later.length}`];
+  return { text, problems };
+}
+
+/** The late count's canary: a box of a kind nothing else is (matcap) drawn before the hero, a program made by a
+ *  draw, and the load marked again after it, as #275 marked it late: the report then misses the box's program, which
+ *  must be found. */
+async function lateCanary(lab: Lab): Promise<Report> {
+  const box = boxOf(new THREE.MeshMatcapMaterial({ color: 0xffff00 }), 0);
+  G.scene.add(box);
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    await lab.step(1);
+  } finally {
+    lab.drawing = drawing;
+    box.removeFromParent();
+    box.geometry.dispose();
+    (box.material as THREE.Material).dispose();
+  }
+  markLoaded();
+  const report = lateCounted(programsMade.filter((entry) => entry.step === AFTER));
+  const caught = report.problems.length > 0;
+  const text = `the late count's canary: a box drawn, the load marked after it: ${report.text} `
+    + `(${caught ? 'caught' : 'missed'})`;
+  return {
+    text,
+    problems: caught ? [] : ['the late count\'s canary: a program drawn before the load was marked again went unseen'],
+  };
+}
+
 /** Each step's programs' compile, summed by what uses them: what the step's warm-up waits for its links on. */
 function stepsCostText(measured: ProgramCost[]): string[] {
   const steps = [...new Set(measured.map(({ entry }) => entry.step))];
@@ -185,7 +229,9 @@ export async function programs(lab: Lab, options: ProgramsOptions): Promise<Repo
   if (boot.length === 0) problems.push('no program in the ledger: the game\'s watchPrograms recorded nothing');
   if (unwatched > 0) problems.push(`${unwatched} programs made before watchPrograms: the ledger missed them`);
   const laterText = later.length ? `: ${countedText(later, groupOf)}` : '';
-  const lines = [...listing(boot), `made after the reveal (the lab's set-up): ${later.length}${laterText}`];
+  const late = lateCounted(later);
+  problems.push(...late.problems);
+  const lines = [...listing(boot), `made after the reveal (the lab's set-up): ${later.length}${laterText}`, late.text];
   const counts: Record<string, number> = { programs: boot.length };
   if (options.cost) {
     const report = await costReport(boot);
@@ -194,9 +240,10 @@ export async function programs(lab: Lab, options: ProgramsOptions): Promise<Repo
     Object.assign(counts, report.counts);
   }
   if (options.canary) {
-    const report = await canary(lab);
-    lines.push(report.text);
-    problems.push(...report.problems);
+    for (const report of [await lateCanary(lab), await canary(lab)]) {
+      lines.push(report.text);
+      problems.push(...report.problems);
+    }
   }
   return { text: lines.join('\n'), problems, counts };
 }

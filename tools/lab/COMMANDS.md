@@ -725,7 +725,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   s each, 16 point lights written out), 23 s once lit in a loop; and the spells' 91 programs 14.4 s, the hero's 6 s,
   the effects' samples 3.9 s, the lobby's biome 3.5 s (now compiled as the arena is built). A minute or more.
   `--canary` warms a box of a kind nothing else is (it must be listed compiled and drawn) and one on a layer no
-  camera sees (it must be listed never drawn).
+  camera sees (it must be listed never drawn). The performance report's count of programs compiled after load (each
+  a hitch, as it says) must be the ledger's made after the reveal: a new build's lobby, its fight not yet warm,
+  counted every program the boot made (83, 106 in the owner's), the load marked only once the fight's were warm; run
+  it `--cold` to boot as that lobby shows. Its canary draws a box of a new kind in the lobby and marks the load again
+  after it, as that did: the report then misses the box's program, which must be found.
 - `compiles`: whether the boot's warm-up compiled what a fight draws (`page/compiles.ts`). In each biome (`--biomes`,
   both) the hero stands in the view (`--view`, top) and a prop of every kind the biome has is worn down (its gauge
   over it, chips knocked off) and broken in turn, its rubble, debris and smoke drawn as they fly and settle; then the
