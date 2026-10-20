@@ -24,6 +24,8 @@ npm run stalls -- --scenario stow --view top --perf --press-ms 100 --rounds 4  #
 npm run stalls -- --scenario boot --url this,https://victorzakharov.github.io/last-stand/ --rounds 3  # the boot
 npm run stalls -- --scenario boot --cpu-slowdown 4 --js   # on a phone's CPU, its JS by function
 npm run stalls -- --scenario boot --url this,ref:HEAD~2 --rounds 3  # this tree beside a commit of its own
+npm run stalls -- --scenario boot --film --perf --window 799x384 --scale 3.75 --auto low@518400  # a phone's exit
+npm run stalls -- --scenario boot --film --blink-exit 2   # the film's canary: two blinks to find
 npm run stalls -- --scenario sweep --stash 60 --seconds 8 --rounds 3 --variants base,iconFilter,stillGlow+noTooltip
                                                  # one page, the variants in turn three times over, by their medians
 npm run stalls -- --scenario sweep --stash 60 --seconds 6 --js   # and the page's JS, a frame's by function
@@ -92,7 +94,15 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     that changed a shader); a build that warms its fight before the lobby is said to have left it warm all the
     same, its return no cold one. `--stall-lobby ms` holds up each of the lobby's frames for a second after its reveal, the
     canary of its frames a second (50 ms: 16 to 17). `--angle` traces ANGLE's own work too (any scenario): a shader
-    compiled at a draw (`D3DCompile`), a program linked or waited for.
+    compiled at a draw (`D3DCompile`), a program linked or waited for. Each boot says how long after the reveal the
+    loading screen was gone (its plain fade is 0.9 s). `--film` films the loading screen's exit (`film.mjs`): the
+    frames Chrome's compositor drew, from half a second before it begins to leave till half a second after it's gone,
+    written as a sheet (`out/film-N.png`, each frame with its time from the reveal), and any frame (or run of up to
+    three) unlike the frames either side of it, where those are like each other, listed as a flicker, with a sheet of
+    their own (`out/flickers-N.png`). `--blink-exit n` is its canary: the loading screen hidden for a frame n times,
+    every 4th frame from the reveal, each of which the film must find. `--auto level@px` boots as a device whose Auto
+    settled there (a report's Quality line: `low (setting auto, at most 0.52 Mpx)` is `low@518400`): on Low the exit
+    is the plain fade, as on the owner's phone.
 - **Recorded in the page:** every animation frame's interval and whether the item tooltip showed in it, every change
   to the page's HTML (a `MutationObserver`: what changed and on which element), and the scenario's phases
   (`markPhase`). The page marks the trace (`console.timeStamp`) as its clock starts, which puts them all on one clock.

@@ -609,8 +609,9 @@ function bootStep(name, from, to, record, traced) {
  * The findings of a boot: `record` is the page's (`page.mjs` `stopBootRecording`), `events` the trace's and `mark`
  * the page's mark in them. Each step (a phase of the record) from its start to the next's, the last's to the
  * recording's end (`bootStep`); when the lobby was revealed (`revealedAt`, ms from the navigation's start; null if
- * never) and the page first painted with content (`painted`); the files fetched (`filesOf`); the lobby's frames a
- * second till Start was pressed (`lobbyRateOf`). `sourceOf` names the page's functions where its JS was sampled.
+ * never) and the page first painted with content (`painted`); the files fetched (`filesOf`); how the loading screen
+ * left (`exitOf`) and when it was gone (`goneAt`); the lobby's frames a second till Start was pressed
+ * (`lobbyRateOf`). `sourceOf` names the page's functions where its JS was sampled.
  */
 export function analyzeBoot(record, events, mark, sourceOf = () => null) {
   const traced = onPage(record, events, mark, sourceOf);
@@ -631,6 +632,7 @@ export function analyzeBoot(record, events, mark, sourceOf = () => null) {
     files: filesOf(record.files, revealedAt),
     maps: mapsOf(record.maps ?? []),
     exit: exitOf(record.exit),
+    goneAt: record.goneAt ?? null,
     warmAt: record.warm ?? null,
     pressedAt: record.pressed ?? null,
     warmUps: record.warmUps ?? [],

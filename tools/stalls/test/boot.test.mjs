@@ -208,6 +208,18 @@ test('says how the loading screen left: blown away, cut short by its watchdog, o
   assert.match(bootRoundsText(boots), /\(slow launches in a row: 1\) 1, the logo blown away 2\n/);
 });
 
+test('says when the loading screen was gone after the reveal: a plain fade cut short by its parts\' ends', () => {
+  const goneAt = (at) => {
+    const boot = record();
+    boot.exit = { kind: 'plain', before: { slow: 0, off: false }, after: { slow: 0, off: false } };
+    boot.goneAt = at;
+    return { group: 'x', name: 'x', notes: [], findings: analyzeBoot(boot, trace(), MARK) };
+  };
+  assert.match(bootText(goneAt(1800)), /left: a plain fade \(.*\), gone 0\.90 s after the reveal\n/);
+  const rounds = bootRoundsText([goneAt(1050), goneAt(1500), goneAt(1800)]);
+  assert.match(rounds, /\n {4}the loading screen gone 0\.60 \(0\.15–0\.90 s\) after the reveal\n/);
+});
+
 /** A boot whose lobby revealed at 900 ms: the logo's 40 frames before it at 7 ms, then `seconds` seconds of the
  *  lobby's frames, each second's frames as many as `rates` says in turn, evenly spread (the last repeated). */
 function lobbyBoot(rates, seconds) {

@@ -75,11 +75,16 @@ export function stopRecording() {
  * and the switch a build before it set on one). `stallBlow` (ms) holds the page up once in the blow's first frames,
  * as a stall in them on a fast machine (the GPU busy elsewhere): its watchdog must not take it for a slow device.
  * `stallLobby` (ms) holds up each of the lobby's frames in the second after its reveal, the canary of its frames a
- * second (`analyze.mjs` `lobbyRateOf`).
+ * second (`analyze.mjs` `lobbyRateOf`). When the loading screen was gone (`goneAt`: the film's end, `film.mjs`), and
+ * `blinkExit` times the loading screen hidden for a frame as it leaves, every `blinkFrames` frames from the reveal
+ * while it's on the page, each blink's time kept (`blinks`): the canary of the film's flickers.
  */
-export function bootRecording({ mark, stallBlow, stallLobby }) {
+export function bootRecording({ mark, stallBlow, stallLobby, blinkExit, blinkFrames }) {
   const record = { start: performance.now(), frames: [], phases: [{ name: 'the document fetched', at: 0 }] };
+  // (the page's clock on the wall's, ms: the film's frames are timed by the wall's, `film.mjs`)
+  record.origin = performance.timeOrigin;
   record.longTasks = [];
+  record.blinks = [];
   record.marks = () => {
     try {
       const slow = Number(localStorage.getItem('last-stand.logo-wind-slow')) || 0;
@@ -96,6 +101,18 @@ export function bootRecording({ mark, stallBlow, stallLobby }) {
     }
   };
   const stall = () => holdUp(stallBlow);
+  const blink = (loading) => {
+    let frames = 0;
+    const tick = () => {
+      if (!loading.isConnected) return;
+      frames++;
+      const hidden = frames % blinkFrames === 0 && record.blinks.length < blinkExit;
+      loading.style.visibility = hidden ? 'hidden' : '';
+      if (hidden) record.blinks.push(performance.now());
+      if (hidden || record.blinks.length < blinkExit) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
   // (each frame of the lobby's first second held up: the second, 1000 ms, as `analyze.mjs` counts the lobby's)
   const holdLobby = (from) => {
     const frame = (now) => {
@@ -122,11 +139,16 @@ export function bootRecording({ mark, stallBlow, stallLobby }) {
   longTasks.observe({ type: 'longtask', buffered: true });
   const step = () => {
     const loading = document.getElementById('loading');
-    if (!loading) return;
+    if (!loading) {
+      if (record.exit) record.goneAt ??= performance.now();
+      return;
+    }
     if (loading.classList.contains('done')) {
       record.exit ??= loading.classList.contains('blowing') ? 'blown' : 'plain';
       if (stallLobby && !record.lobbyHeld) holdLobby(performance.now());
       record.lobbyHeld = true;
+      if (blinkExit && !record.blinked) blink(loading);
+      record.blinked = true;
       phase('the lobby revealed');
     } else if (loading.classList.contains('blowing')) {
       if (stallBlow && !record.stalled) requestAnimationFrame(() => requestAnimationFrame(stall));
@@ -196,7 +218,9 @@ export function stopBootRecording() {
     .filter((entry) => entry.name.startsWith('warm '))
     .map((entry) => ({ name: entry.name.slice('warm '.length), at: entry.startTime, ...entry.detail }));
   const paint = Object.fromEntries(paints);
-  return { start, frames, changes: [], phases, longTasks, paint, files, maps, exit, warm, pressed, warmUps };
+  const { goneAt = null, origin, blinks } = record;
+  const ends = { exit, goneAt, origin, blinks, warm, pressed };
+  return { start, frames, changes: [], phases, longTasks, paint, files, maps, ...ends, warmUps };
 }
 
 /** The boxes (css px) of the items shown in the lobby, each hovered for its tooltip: the hero's equipment slots,

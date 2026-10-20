@@ -79,7 +79,14 @@ export function loadingDone(onReveal: () => void): void {
     } else {
       l.classList.add('plain');
       reveal();
-      l.addEventListener('transitionend', leave, { once: true });
+      // (its own fade's end: its parts' transitions end too and bubble up to it, the bar's fill or the tip's fade,
+      // and the first of them cut its 0.9 s short at 0.15 to 0.6 s)
+      const faded = (event: TransitionEvent): void => {
+        if (event.target !== l) return;
+        l.removeEventListener('transitionend', faded);
+        leave();
+      };
+      l.addEventListener('transitionend', faded);
     }
   };
   requestAnimationFrame(tick);

@@ -259,9 +259,43 @@ function lobbyLines({ seconds: counted, fewest, screenRate, roughTill, work, js 
   return lines;
 }
 
+/** How long after the reveal the loading screen was gone (ms), where it was. */
+const goneAfter = ({ goneAt, revealedAt }) => (goneAt && revealedAt !== null ? goneAt - revealedAt : null);
+
+/** A time from the reveal (ms) in seconds, signed: `+0.25 s`. */
+const fromReveal = (ms) => `${ms >= 0 ? '+' : ''}${bootSeconds(ms)}`;
+
+/** A flicker of the exit's film (`film.mjs` `flickersOf`): when, how many frames and how far it stood out. */
+function flickerText({ at, length, out, sides }) {
+  const frames = length === 1 ? 'a frame' : `${length} frames`;
+  const off = `${out.toFixed(1)} grey levels off those either side, ${sides.toFixed(1)} apart`;
+  return `${fromReveal(at)} (${frames}, ${off})`;
+}
+
+/** A boot's exit filmed (`film.mjs` `filmOf`): its frames and their span from the reveal, its flickers, the canary's
+ *  blinks found, and where its sheets are. */
+function filmLines(film) {
+  if (!film.frames) return [`  the exit filmed: no frame of it caught (${film.caught} filmed in all)`];
+  const size = `${film.size.width}x${film.size.height}`;
+  const span = `${film.frames} frames of ${size}, ${fromReveal(film.from)} to ${fromReveal(film.to)} from the reveal`;
+  const flickers = film.flickers.length
+    ? `${film.flickers.length} flickers: ${film.flickers.map(flickerText).join('; ')}`
+    : 'no flicker';
+  const missed = film.found < film.planted ? 'missed' : 'caught';
+  const canary = film.planted ? `; the canary's ${film.planted} blinks: ${film.found} found (${missed})` : '';
+  const close = film.flickers.length ? `, the flickers' frames in ${film.files.close}` : '';
+  return [`  the exit filmed: ${span}; ${flickers}${canary}`, `    the film in ${film.files.sheet}${close}`];
+}
+
+/** When the loading screen was gone, after the reveal: `, gone 0.90 s after the reveal` (nothing where it wasn't). */
+function goneText(findings) {
+  const after = goneAfter(findings);
+  return after === null ? '' : `, gone ${bootSeconds(after)} after the reveal`;
+}
+
 /** A boot's section: what it was, when the lobby was revealed and the page first painted, the files fetched, the
- *  maps the workers made, how the loading screen left, the lobby's frames a second, and each step from the
- *  navigation's start (`bootStepLines`). */
+ *  maps the workers made, how the loading screen left and its film, the lobby's frames a second, and each step from
+ *  the navigation's start (`bootStepLines`). */
 export function bootText(measure) {
   const { name, notes, findings } = measure;
   const { files } = findings;
@@ -279,7 +313,8 @@ export function bootText(measure) {
       + `(${files.later} after the reveal; the largest ${largest})`,
     ...(findings.maps ? [mapsLine(findings.maps)] : []),
     ...(findings.warmUps?.length ? [warmUpsLine(findings.warmUps)] : []),
-    ...(findings.exit ? [`  the loading screen left: ${exitText(findings.exit)}`] : []),
+    ...(findings.exit ? [`  the loading screen left: ${exitText(findings.exit)}${goneText(findings)}`] : []),
+    ...(findings.film ? filmLines(findings.film) : []),
     ...(findings.lobby ? lobbyLines(findings.lobby) : []),
     ...findings.steps.flatMap(bootStepLines),
   ];
@@ -341,10 +376,15 @@ export function bootRoundsText(measures) {
     const warmRow = warm.length ? [`    the fight warm at ${secondsText(warm)}${barText}`] : [];
     const exits = boots.map((boot) => boot.findings.exit).filter(Boolean);
     const exitRow = exits.length ? [`    the loading screen left: ${exitsText(exits)}`] : [];
+    const gone = boots.map((boot) => goneAfter(boot.findings)).filter((after) => after !== null);
+    const goneRow = gone.length ? [`    the loading screen gone ${secondsText(gone)} after the reveal`] : [];
+    const films = boots.map((boot) => boot.findings.film).filter(Boolean);
+    const flickers = films.map((film) => film.flickers.length).join(', ');
+    const filmRow = films.length ? [`    the exit's flickers, boot by boot: ${flickers}`] : [];
     const lobbies = boots.map((boot) => boot.findings.lobby).filter(Boolean);
     const lobbyRow = lobbies.length ? [lobbyRoundsLine(lobbies)] : [];
     const title = `  ${group}: ${boots.length} boots; ${head}`;
-    return [title, ...warmRow, ...mapsRow, ...exitRow, ...lobbyRow, ...stepRows];
+    return [title, ...warmRow, ...mapsRow, ...exitRow, ...goneRow, ...filmRow, ...lobbyRow, ...stepRows];
   });
   return ['boots by URL and visit, over the rounds:', ...rows].join('\n');
 }
