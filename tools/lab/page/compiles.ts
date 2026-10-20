@@ -35,7 +35,12 @@ export interface CompilesOptions {
   gear?: WeaponStyle;
   weapon?: string;
   canary: boolean;
+  /** the class the hero is switched to in the lobby first, as a player picks it there */
+  switchTo?: string;
 }
+
+/** the most real time a class switch is waited for, ms: the heroes' warm-up behind the lobby, on a cold GPU cache */
+const SWITCH_MOST_MS = 60_000;
 
 /** the frames drawn after a prop is worn down (its gauge over it), and after it breaks (the rubble flying, landing
  *  and lying) */
@@ -283,11 +288,35 @@ async function canaryRound(lab: Lab): Promise<Report> {
   return { text, problems: count > 0 ? [] : ['the canary\'s material of its own came out as compiling nothing'] };
 }
 
+/**
+ * The hero switched to `id` as a player picks a class in the lobby: its button clicked with the mouse, and the
+ * switch waited for as the lobby's waits for the heroes' warm-up (`pickClass` in src/ui/menus.ts), the frames drawn
+ * meanwhile. Its line, or an error where it never came.
+ */
+async function switchClass(lab: Lab, id: string): Promise<Report> {
+  const button = document.querySelector<HTMLElement>(`#opt-class button[data-c="${id}"]`);
+  if (!button) throw new Error(`lab: compiles: the class card has no button for ${id}`);
+  if (G.player.cls.id === id) throw new Error(`lab: compiles: the hero is a ${id} already (--class picks the boot's)`);
+  const from = G.player.cls.id;
+  const box = button.getBoundingClientRect();
+  await lab.click({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
+  const start = window.__labClock.realNow();
+  while (G.player.cls.id !== id) {
+    if (window.__labClock.realNow() - start > SWITCH_MOST_MS) {
+      throw new Error(`lab: compiles: the switch to ${id} never came in ${SWITCH_MOST_MS / 1000} s`);
+    }
+    await lab.step(1);
+  }
+  const waited = (window.__labClock.realNow() - start) / 1000;
+  return { text: `switched from the ${from} to the ${id} in the lobby (${waited.toFixed(1)} s)`, problems: [] };
+}
+
 export async function compiles(lab: Lab, options: CompilesOptions): Promise<Report> {
   const drawing = lab.drawing;
   // (drawn: a program compiles as it's first drawn)
   lab.drawing = true;
   const reports: Report[] = [];
+  if (options.switchTo) reports.push(await switchClass(lab, options.switchTo));
   // (the lights the boot's warm-ups were drawn with, its programs compiled for: the lobby's, as the page booted)
   const booted = pointLightsSeen(G.camera);
   const { view, gear, weapon } = options;

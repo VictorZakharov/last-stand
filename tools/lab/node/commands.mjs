@@ -813,6 +813,7 @@ export const COMMANDS = {
         gear: options.gear,
         weapon: options.weapon,
         canary: Boolean(options.canary),
+        switchTo: options.switch,
       };
       return side.command('compiles', command);
     },

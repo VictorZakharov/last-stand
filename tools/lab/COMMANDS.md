@@ -738,8 +738,12 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   compile, the forest's wood rubble's shadow (`steadyShadowPrograms` in `src/core/shaders.ts`), and #268's: the
   hero built afresh brought his own light in after the arms' pass had put the scene's lights on its layer, which it
   did once, and through the eyes 11 programs of his arms and the shadows compiled at the run's start (15 lights to
-  14). `--canary` draws a material nothing else does before the hero, which must come out as compiled, and puts a
-  point light in the scene, which the count must find.
+  14). `--switch ranger` first picks the ranger on the lobby's class card, as a player does, and waits for him (the
+  lab's boot waits for every warm-up, so it says 0.0 s); the boot's class (`--class`) is another. A class's skills
+  are warmed with the heroes, not the lobby, so only a switch tells whether they were: with the ranger's left out of
+  `heroParts` (`src/game/warmup.ts`), `--class mage --switch ranger` found 9 programs compiled in his first wave.
+  `--canary` draws a material nothing else does before the hero, which must come out as compiled, and puts a point
+  light in the scene, which the count must find.
 - `maps`: the game's procedural maps (`page/maps.ts`; `--maps forestFloor,steel`, every one `PRELOAD` lists in
   `src/core/pbr.ts` by default), each made on the page as a loading worker makes it, `--runs` times (its time the
   fastest, by the browser's own clock), with a digest of its pixels and of a face's grid (its head is built on it).

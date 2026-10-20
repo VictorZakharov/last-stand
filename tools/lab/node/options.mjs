@@ -830,6 +830,13 @@ export const COMMANDS = {
         help: 'draw a material of a kind nothing else is before the hero: its program must come out as compiled; '
           + 'and put a point light in the scene: the count must find it',
       },
+      switch: {
+        kind: 'choice',
+        usage: 'ranger|warrior|mage',
+        choices: ['ranger', 'warrior', 'mage'],
+        help: 'switch the hero to this class in the lobby first, as a player picks it (its button clicked, the '
+          + 'switch waiting for the heroes\' warm-up), then fight as him: what a class switch compiles',
+      },
       ...COMMON_OPTIONS,
     },
   },
