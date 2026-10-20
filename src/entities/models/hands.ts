@@ -142,13 +142,14 @@ function sculpted(h: Hand): HandGeometries {
 }
 
 /** Both hands sculpted in workers of their own while the game loads (a side took a quarter of a second on the main
- *  thread); a worker that fails leaves its side to the first hand built. */
+ *  thread); a worker that fails leaves its side to the first hand built. Its side is its name, read as it starts: a
+ *  message waits for the page's main thread to pass it on (core/textures.ts `preloadTextures`). */
 export async function preloadHands(): Promise<void> {
   if (typeof Worker === 'undefined') return;
   const side = (s: number) => new Promise<void>((resolve) => {
     let worker: Worker;
     try {
-      worker = new Worker(new URL('./hands.worker.ts', import.meta.url), { type: 'module' });
+      worker = new Worker(new URL('./hands.worker.ts', import.meta.url), { type: 'module', name: String(s) });
     } catch {
       resolve();
       return;
@@ -162,7 +163,6 @@ export async function preloadHands(): Promise<void> {
       worker.terminate();
       resolve();
     };
-    worker.postMessage(s);
   });
   await Promise.all([side(1), side(-1)]);
 }

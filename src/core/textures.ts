@@ -40,9 +40,8 @@ export const mapsMadeAfresh = (): boolean => madeAfresh;
 const keyOfCanvas = new WeakMap<HTMLCanvasElement, string>();
 /** the maps the loading workers are still making, by key: what to make, and its arrival */
 const coming = new Map<string, { job: Job; arrive: () => void; arrived: Promise<void> }>();
-type Job = (typeof PRELOAD)[number];
-/** the maps no worker has taken yet, in the order they're handed out (`preloadTextures`, `mapsArrived`) */
-let queue: Job[] = [];
+/** a map to make: its recipe and what it's made with */
+export type Job = (typeof PRELOAD)[number];
 
 const make = ([name, args]: Job): PBRData => (RECIPES[name] as (...a: unknown[]) => PBRData)(...args);
 
@@ -111,19 +110,15 @@ export const faceGrid = (who: 'warrior' | 'mage' | 'ranger'): PBRData['grid'] =>
 
 /**
  * Resolved once every map `textures` are painted with has come: what a warm-up draws waits for its own maps alone
- * (the lobby's, not the fight's: those come while it shows). Those no worker has taken yet go first.
+ * (the lobby's, not the fight's: those come while it shows).
  */
 export function mapsArrived(textures: Iterable<THREE.Texture>): Promise<void> {
   const waits: Promise<void>[] = [];
-  const waited = new Set<Job>();
   for (const texture of textures) {
     const key = keyOfCanvas.get(texture.image as HTMLCanvasElement);
     const map = key === undefined ? undefined : coming.get(key);
-    if (!map) continue;
-    waits.push(map.arrived);
-    waited.add(map.job);
+    if (map) waits.push(map.arrived);
   }
-  queue = [...queue.filter((job) => waited.has(job)), ...queue.filter((job) => !waited.has(job))];
   return Promise.all(waits).then(() => undefined);
 }
 
@@ -149,19 +144,25 @@ export interface MapsComing {
  *  the worker's script ran (`up`, in that clock too). */
 export interface MapMade { key: string; data: PBRData; start: number; ms: number; kept: boolean; readMs: number; up: number }
 
+/** What a maps worker is given as it's made, in its name: the maps in the order they're needed, its place among
+ *  the workers and how many there are, and this boot's mark (the locks the workers share the maps out by are this
+ *  boot's alone, `pbr.worker.ts`). */
+export interface MapOrders { jobs: Job[]; worker: number; workers: number; boot: string }
+
 /**
  * Make the game's PBR maps in workers, in parallel, while the page stays responsive: done on the
  * main thread they block it for over a second, and a window moved to another monitor meanwhile
  * shows black until the main thread can paint it. Without workers, the maps are made on first use;
  * those a failed worker leaves are made on the page once the others are done. A production build's are
- * kept for the next visit (core/kept.ts). The lobby's come first: `hero` is the hero it shows (his model). Each
- * is timed as a user timing measure, `map <key>`, from the worker's start on it to its end, its detail whether it
- * was kept, how long the store took to answer, when its worker was asked for and when its script ran (the stalls'
- * boot lists them).
+ * kept for the next visit (core/kept.ts). The lobby's come first: `hero` is the hero it shows (his model). The
+ * workers share the maps out among themselves: handed out by the page, a worker waited for the page's long tasks
+ * between them, and its first for the arena's (its messages are the page's to pass on: 0.8 s on a first visit).
+ * Each is timed as a user timing measure, `map <key>`, from the worker's start on it to its end, its detail
+ * whether it was kept, how long the store took to answer, when its worker was asked for and when its script ran
+ * (the stalls' boot lists them).
  */
 export function preloadTextures(hero: string): MapsComing {
   const jobs = typeof Worker === 'undefined' ? [] : inTheLobbysOrder(hero);
-  queue = jobs.slice();
   for (const job of jobs) {
     let arrive = (): void => undefined;
     const at = new Promise<void>((resolve) => { arrive = resolve; });
@@ -173,28 +174,31 @@ export function preloadTextures(hero: string): MapsComing {
   if (!jobs.length) return { ready, all: Promise.resolve() };
   // (more than 4 made a first visit's maps no sooner: they vie with the GPU's compiles, as the maps' times showed)
   const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1, jobs.length));
-  const run = (): Promise<void> => new Promise((resolve) => {
+  // (this boot's alone: another tab's workers share out maps of their own)
+  const boot = `${performance.timeOrigin} ${Math.random()}`;
+  const workers: Worker[] = [];
+  const run = (worker: number): Promise<void> => new Promise((resolve) => {
+    const orders: MapOrders = { jobs, worker, workers: n, boot };
     let w: Worker;
     const asked = performance.now();
-    try { w = new Worker(new URL('./pbr.worker.ts', import.meta.url), { type: 'module' }); } catch { resolve(); return; }
-    const next = (): void => {
-      const job = queue.shift();
-      // (the worker closes itself once it has kept what it made)
-      if (!job) { w.postMessage('done'); resolve(); return; }
-      w.postMessage(job);
-    };
-    w.onmessage = ({ data: { key, data, start, ms, kept, readMs, up } }: MessageEvent<MapMade>) => {
+    try {
+      w = new Worker(new URL('./pbr.worker.ts', import.meta.url), { type: 'module', name: JSON.stringify(orders) });
+    } catch { resolve(); return; }
+    workers.push(w);
+    w.onmessage = ({ data: made }: MessageEvent<MapMade | 'finished'>) => {
+      if (made === 'finished') { resolve(); return; }
+      const { key, data, start, ms, kept, readMs, up } = made;
       const detail = { kept, readMs, asked, up: up - performance.timeOrigin };
       performance.measure(`map ${key}`, { start: start - performance.timeOrigin, duration: ms, detail });
       if (!kept) madeAfresh = true;
       arrived(key, data);
-      next();
     };
-    // a worker that fails leaves its jobs to the others, and the one it was on to the page
+    // a worker that fails leaves what it took on to the page
     w.onerror = () => { w.terminate(); resolve(); };
-    next();
   });
-  const all = Promise.all(Array.from({ length: n }, run)).then(() => {
+  const all = Promise.all(Array.from({ length: n }, (_, worker) => run(worker))).then(() => {
+    // (every map asked of the store by now: each worker keeps what it made, and closes)
+    for (const w of workers) w.postMessage('keep');
     for (const [key, { job }] of [...coming]) arrived(key, make(job));
   });
   return { ready, all };

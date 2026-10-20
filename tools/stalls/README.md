@@ -139,18 +139,21 @@ For each measure:
   - the page's changes in the 400 ms before it, by kind and element, the most frequent first.
 
 A boot's report says when the lobby was revealed and the page first painted, the files fetched (bytes over the
-network: a cache's are none), the maps the game's workers made (how many, from when to when, their work in all and
-the longest: the game times each, `src/core/textures.ts`; a build before that lists none), how the loading screen
+network: a cache's are none), the maps the game's workers made (how many, from when to when, their work in all, how
+much of it asked the store for them, the longest, and when the workers were asked for and came up: the game times
+each, `src/core/textures.ts`; a build before that lists none, or not all), how the loading screen
 left (the logo blown away, its blow cut short by its watchdog, or a plain fade and why), when the fight was warm (and
 when Start was pressed for it), the game's warm-ups with their steps, the longest first (`warm <part>` measures:
-its build, compile, wait for its links and draw, each but the links one task the lobby waits on), the lobby's
+its build, compile, waits for its maps, their uploads and its links, and draw, each but the waits one task the
+lobby waits on), the lobby's
 frames a second till Start was pressed (counted as the perf overlay counts them, the frames of the second up to each
 quarter second from a second after the reveal: the fewest and when, till when they fell short of 90% of the screen's
 rate, and what the threads and the page's JS spent the fewest's second on) and, for each step, when it began, how
 long it took, its frames and the longest the page was held up in it, its long tasks and Skia programs, what each
 thread spent its time on in all and the GPU process's main thread apart (it runs every page's GL and the compositor:
-anything long on it holds every frame up), with `--js` its JS by function; at the end, each URL's boots by visit over
-the rounds, each step's median and range, and the lobby's fewest frames a second.
+anything long on it holds every frame up), with `--js` its JS by function, its own time and with what it calls; at
+the end, each URL's boots by visit over the rounds, each step's median and range, and the lobby's fewest frames a
+second.
 
 With more than one measure, they are listed side by side at the end, each phase's frames a second and share missed
 with them; with `--rounds`, then by variant: each phase's frames a second and the browser's work, the median over the
