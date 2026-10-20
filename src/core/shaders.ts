@@ -391,14 +391,16 @@ function drawnAlone(scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebG
 }
 
 /**
- * `scene`'s programs (`leaveOut` left out) compiled now for `target`, ahead of the warm-up that will draw them: the
- * GPU's threads link them meanwhile, and the warm-up's compile finds them made. The whole scene, as three counts a
- * light twice that is both in the scene and in what's compiled with it.
+ * `scene`'s programs (`leaveOut` left out) compiled now for `target`, ahead of the warm-up that will draw them, and
+ * those of `objects` (out of the scene) as the scene lights them: the GPU's threads link them meanwhile, and the
+ * warm-up's compile finds them made. The whole scene, as three counts a light twice that is both in the scene and in
+ * what's compiled with it.
  */
-export function compileAhead(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, leaveOut: THREE.Object3D[]): void {
+export function compileAhead(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, leaveOut: THREE.Object3D[], objects: THREE.Object3D[] = []): void {
   const prev = renderer.getRenderTarget();
   renderer.setRenderTarget(target);
   without(leaveOut, () => withoutCrowdBodies(scene, () => renderer.compile(scene, camera)));
+  for (const root of objects) withoutCrowdBodies(root, () => renderer.compile(root, camera, scene));
   renderer.setRenderTarget(prev);
 }
 

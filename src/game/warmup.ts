@@ -134,11 +134,18 @@ function skillSamples(model: string): THREE.Object3D[] {
   return [...impls].flatMap((impl) => named(`skill: ${impl}`, SKILL_IMPLS[impl]?.warm?.() ?? []));
 }
 
-/** What the lobby shows and can do, warmed before it shows (the lobby's dummies already stand in it); the fight's
- *  foes built meanwhile (`buildAhead`). Its hero's skills alone: another class's are warmed with its hero, as a class
- *  switch or a partner's needs them (`heroParts`; the lobby's warm-up compiled every class's, 14 programs, before it
- *  showed). */
-export async function warmLobby(): Promise<void> {
+/** what the lobby's warm-up draws besides its hero with all he can wear: made and compiled with the hero
+ *  (`compileTheLobby`) */
+let lobbyExtras: THREE.Object3D[] = [];
+
+/**
+ * What the lobby can do made (every effect, loot and its hero's skills: another class's are warmed with its hero, as
+ * a class switch or a partner's needs them, `heroParts`; the lobby's warm-up compiled every class's, 14 programs,
+ * before it showed) and compiled with the hero as soon as he's built, before the lobby's page is laid out: its first
+ * paint builds Skia's programs on the GPU process's main thread one after another (a first visit's 88, 1.1 s), and
+ * the lobby's warm-up, compiled after it, had its links begin 0.6 s after it asked.
+ */
+export function compileTheLobby(): void {
   const at = new THREE.Vector3(), p = { x: 0, z: 0 };
   const effects: [string, () => unknown][] = [
     ['shockwave', () => shockwave(p)], ['ground flash', () => groundFlash(p)], ['scorch', () => decal(p)],
@@ -154,10 +161,18 @@ export async function warmLobby(): Promise<void> {
     ...named('cores', coreSamples()), ...named('drops', groundSamples()), ...named('swing trail', swingTrailSamples()),
     ...skillSamples(G.player.cls.model),
   ];
+  lobbyExtras = extra;
+  compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)), extra);
+}
+
+/** What the lobby shows and can do, warmed before it shows (the lobby's dummies already stand in it, its effects,
+ *  loot and skills made with its hero: `compileTheLobby`); the fight's foes built meanwhile (`buildAhead`). */
+export async function warmLobby(): Promise<void> {
   // (the hero's class with all it can wear: equipping anything in the lobby compiles nothing)
   await nextTask();
   const hero = heroAllWorn(G.player.cls.model);
-  extra.push(hero.root);
+  const extra = [...lobbyExtras, hero.root];
+  lobbyExtras = [];
   const leaveOut = otherBiomes().map((id) => G.arena.groupOf(id));
   const start = performance.now();
   const warming = warmUp(G.renderer, G.scene, G.camera, sceneTarget(), { objects: extra, leaveOut, before: mapsArrived });

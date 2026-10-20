@@ -38,7 +38,7 @@ import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfCloc
 import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
-import { compileTheBiome, warmLobby, warmTheRest } from './game/warmup';
+import { compileTheBiome, compileTheLobby, warmLobby, warmTheRest } from './game/warmup';
 import { hurry, isAllWarm, isWarming, whenWarm } from './game/warm';
 import { initReadying } from './ui/readying';
 import { holdQuality, initQuality, sampleQuality } from './core/quality';
@@ -98,6 +98,8 @@ async function boot() {
   G.player = new Player(G.profile.classId, G.profile.equipped);
   G.players = [G.player];
   heroLit();
+  // (what the lobby can do compiled with him, before its page is laid out: game/warmup.ts)
+  compileTheLobby();
 
   initHud();
   initTouch();
