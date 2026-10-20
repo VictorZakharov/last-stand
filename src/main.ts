@@ -144,6 +144,8 @@ async function boot() {
     revealed = true;
     setTimeout(() => checkPrograms(renderer));
     void warmTheRest(loadingLeft).then(() => checkPrograms(renderer));
+    // the overlays down the left (performance, network, the battle log) once the loading screen is gone (_perf.scss)
+    void loadingLeft.then(() => $('#diag').classList.remove('booting'));
     // an invite link: straight into the friend's room
     const room = invitedRoom();
     if (room) whenWarm(['fight', 'heroes'], (code: string) => void joinRoom(code))(room);

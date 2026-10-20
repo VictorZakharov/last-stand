@@ -7,7 +7,6 @@ import { readCookie, writeCookie } from '../core/cookies';
 import { programsCompiledInGame, lateCompiles } from '../core/shaders';
 import { qualitySetting, qualityLevel, qualityBudget } from '../core/quality';
 import { atlasUse } from './overlay/atlas';
-import { uiScales } from './scale';
 import { QUALITY } from '../data/quality';
 import { gpuMarks, viewMode, sceneRatio, sceneSize } from '../core/renderer';
 
@@ -272,16 +271,6 @@ function draw(now: number): void {
   // amber when the last seconds dropped well below the 15s average, red below 30
   el.classList.toggle('warn', s.fps < s.avgFps * 0.75);
   el.classList.toggle('bad', s.fps < 30);
-  placeBesideLobby();
-}
-
-/** In the lobby, sit just right of the left panel instead of on top of it. */
-function placeBesideLobby(): void {
-  const menu = $('#menu');
-  const left = menu.querySelector<HTMLElement>('.menu-left');
-  const covered = G.mode === 'menu' && !menu.classList.contains('hidden') && !menu.classList.contains('stowed');
-  // (its gap from the panel at the UI's scale, as the panel is)
-  el.style.left = covered && left ? `${Math.round(left.getBoundingClientRect().right + 12 * uiScales.ui)}px` : '';
 }
 
 // --- report -----------------------------------------------------------------------
