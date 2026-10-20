@@ -36,6 +36,7 @@ import type { DrawsOptions } from './draws';
 import type { PerfOptions } from './perf';
 import type { CompilesOptions } from './compiles';
 import type { ProgramsOptions } from './programs';
+import type { MapsOptions } from './maps';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
@@ -371,6 +372,12 @@ export async function compiles(lab: Lab, command: CompilesOptions): Promise<Repo
 export async function programs(lab: Lab, command: ProgramsOptions): Promise<Report> {
   const { programs: programsOf } = await import('./programs');
   return programsOf(lab, command);
+}
+
+/** `lab maps`: each procedural map made, timed, and its pixels' digest. */
+export async function maps(lab: Lab, command: MapsOptions): Promise<Report> {
+  const { maps: mapsOf } = await import('./maps');
+  return mapsOf(lab, command);
 }
 
 /** `lab draws`: one frame's draw calls with the crowd standing, by the geometry each drew, the most first. */

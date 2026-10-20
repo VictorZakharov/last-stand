@@ -828,6 +828,18 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  maps: {
+    check(options) {
+      if (options.runs !== undefined && !(options.runs >= 1)) throw labError('maps --runs: at least 1');
+    },
+    each(side, options) {
+      const command = { maps: options.maps, runs: options.runs ?? 1, canary: Boolean(options.canary) };
+      return side.command('maps', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   draws: {
     check(options) {
       if (options.count !== undefined && !(options.count >= 0)) throw labError('draws --count: 0 or more');

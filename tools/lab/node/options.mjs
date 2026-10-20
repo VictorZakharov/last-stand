@@ -851,6 +851,20 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  maps: {
+    help: 'the procedural maps a first visit makes in its workers (src/core/pbr.ts PRELOAD), each made on the page '
+      + 'and timed, and a digest of its pixels: a map made faster keeps every pixel (with --ab, each digest as '
+      + 'main\'s, the times side by side)',
+    options: {
+      maps: { kind: 'list', usage: 'a,b', help: 'the recipes made, by name (every one by default)' },
+      runs: { kind: 'number', usage: 'n', help: 'how many times each is made, its time the fastest (1 by default)' },
+      canary: {
+        kind: 'switch',
+        help: 'a byte of the first map\'s pixels changed once it\'s made: its digest must change',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   draws: {
     help: 'one frame\'s draw calls with the crowd of foes standing before the hero, by the geometry each drew, the '
       + 'most first: its draws in the scene, its shadow map and after it, the triangles, its material and what drew it '
