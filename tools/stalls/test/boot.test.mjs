@@ -87,10 +87,13 @@ test('the page names the step a boot ends on as the analysis looks for it', () =
 
 test('the page reads the maps\' measures by the name and detail the game gives them', () => {
   const game = readFileSync(new URL('../../../src/core/textures.ts', import.meta.url), 'utf8');
-  assert.match(game, /performance\.measure\(`map \$\{key\}`, \{ [^}]*detail: \{ kept, readMs \} \}\)/);
+  assert.match(game, /const detail = \{ kept, readMs, asked, up: up - performance\.timeOrigin \};/);
+  assert.match(game, /performance\.measure\(`map \$\{key\}`, \{ [^}]*detail \}\)/);
   assert.ok(String(stopBootRecording).includes("startsWith('map ')"));
-  assert.ok(String(stopBootRecording).includes('entry.detail?.kept === true'));
-  assert.ok(String(stopBootRecording).includes('entry.detail?.readMs ?? null'));
+  for (const read of ['entry.detail?.kept === true', 'entry.detail?.readMs ?? null', 'entry.detail?.asked ?? null']) {
+    assert.ok(String(stopBootRecording).includes(read));
+  }
+  assert.ok(String(stopBootRecording).includes('entry.detail?.up ?? null'));
 });
 
 test('times each step of a boot, with what held the page up and what each thread did in it', () => {
@@ -127,6 +130,7 @@ test('times each step of a boot, with what held the page up and what each thread
     ms: 750,
     readMs: null,
     longest: [{ name: 'face(warrior)', ms: 400 }, { name: 'slabs(21,6,3)', ms: 200 }, { name: 'steel()', ms: 100 }],
+    workers: null,
   });
 });
 
@@ -137,6 +141,38 @@ test('says how much of the maps\' work waited for the store, where the build tel
   assert.equal(findings.maps.readMs, 600);
   const text = bootText({ name: 'http://x/ base, a first visit', notes: [], findings });
   assert.match(text, /, 0\.75 s of work, 0\.60 s of it asking the store for them \(the longest /);
+});
+
+test('says when the maps\' workers were asked for and when their scripts ran, where the build tells', () => {
+  const told = record();
+  told.maps = told.maps.map((map, at) => ({ ...map, asked: 160 + at, up: 1050 + at * 10 }));
+  const findings = analyzeBoot(told, trace(), MARK);
+  assert.deepEqual(findings.maps.workers, { asked: 160, upFrom: 1050, upTo: 1080 });
+  const text = bootText({ name: 'http://x/ base, a first visit', notes: [], findings });
+  assert.match(text, /\); the workers asked for at 0\.16 s, up from 1\.05 s to 1\.08 s\n/);
+});
+
+test('lists a step\'s JS by each function\'s own time and with what it calls, where it was sampled', () => {
+  const findings = analyzeBoot(record(), trace(), MARK);
+  const arena = findings.steps.find((step) => step.name === 'Forging the arena');
+  arena.js = {
+    own: [{ name: 'derive core/engraving.ts:138', ms: 236 }],
+    within: [{ name: 'boot main.ts:64', ms: 800 }, { name: 'derive core/engraving.ts:138', ms: 300 }],
+  };
+  const text = bootText({ name: 'http://x/ base, a first visit', notes: [], findings });
+  assert.match(text, /its JS, each function's own time, ms: 236\.00 derive core\/engraving\.ts:138\n/);
+  assert.match(text, /and with what it calls, ms: 800\.00 boot main\.ts:64; 300\.00 derive core\/engraving\.ts:138/);
+});
+
+test('lists each warm-up\'s steps, its waits for its maps and their uploads where the build times them', () => {
+  const timed = record();
+  const lobby = { name: 'the lobby', compileMs: 98, mapsMs: 1200, uploadsMs: 40, linksMs: 294, drawMs: 265 };
+  const older = { name: 'the fight at once', compileMs: 58, linksMs: 656, drawMs: 82 };
+  timed.warmUps = [lobby, older];
+  const findings = analyzeBoot(timed, trace(), MARK);
+  const text = bootText({ name: 'http://x/ base, a first visit', notes: [], findings });
+  assert.match(text, /\(compile 98, maps 1200, uploads 40, links 294, draw 265\)/);
+  assert.match(text, /the fight at once \(compile 58, links 656, draw 82\)/);
 });
 
 test('reports a boot step by step, and the boots by visit over the rounds', () => {

@@ -461,7 +461,8 @@ export const recipeKey = (name: RecipeName, args: readonly unknown[]): string =>
  */
 export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = [
   // steel first, as the heroes' engraving is painted over it as they're built (the others are only drawn); then the
-  // longest first, so the workers finish together
+  // longest first, so the workers finish together (handed out in the lobby's order: core/textures.ts
+  // `inTheLobbysOrder`, the hero it shows his face first)
   ['steel', []],
   ['face', ['warrior']], ['face', ['mage']], ['face', ['ranger']],
   ['forestFloor', []], ['cobblestone', []], ['bark', []], ['slabs', [21, 6, 3]], ['slabs', [33, 5, 5]], ['slabs', [47, 5, 5]],

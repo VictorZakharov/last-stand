@@ -503,8 +503,9 @@ function filesOf(files, revealed) {
 
 /** The maps the game's workers made (null where none were timed: a build before they were): how many, and how many
  *  of them were read back from a visit before, from the first one's start to the last one's end (the page's ms),
- *  their work in all, how much of it was waiting for the store's answer (null where the build didn't say) and the
- *  longest. */
+ *  their work in all, how much of it was waiting for the store's answer (null where the build didn't say), the
+ *  longest, and when the workers were asked for and their scripts ran (`workers`: the first asked, the first and
+ *  last up; null where the build didn't say). */
 function mapsOf(maps) {
   if (!maps.length) return null;
   const longest = [...maps]
@@ -520,7 +521,15 @@ function mapsOf(maps) {
     ms: maps.reduce((sum, map) => sum + map.ms, 0),
     readMs: answered ? maps.reduce((sum, map) => sum + map.readMs, 0) : null,
     longest,
+    workers: workersOf(maps),
   };
+}
+
+/** When the maps' workers were asked for and when their scripts ran (the page's ms), where every map says. */
+function workersOf(maps) {
+  if (!maps.every((map) => typeof map.asked === 'number' && typeof map.up === 'number')) return null;
+  const ups = maps.map((map) => map.up);
+  return { asked: Math.min(...maps.map((map) => map.asked)), upFrom: Math.min(...ups), upTo: Math.max(...ups) };
 }
 
 /** The device's marks of a slow exit (`page.mjs` `bootRecording`): the slow launches in a row, and a build before's

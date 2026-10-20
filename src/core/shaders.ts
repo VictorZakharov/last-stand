@@ -339,10 +339,11 @@ export interface WarmUp {
 /** of a warm-up (`progress`), the share done once its maps have come, its textures uploaded, its programs linked */
 const MAPS_DONE = 0.2, UPLOADS_DONE = 0.3, LINKS_DONE = 0.95;
 
-/** What a warm-up took (ms): its compile and its draw (each one task, the compile a task a root with `step`), and
- *  the wait for its programs' links (the GPU's process's work: long where no program came from a cache, a first
- *  visit's); and whether it was given up on as cold (`WarmUp.giveUpMs`: nothing drawn). */
-export interface WarmedUp { compileMs: number; linksMs: number; drawMs: number; cold: boolean }
+/** What a warm-up took (ms): its compile and its draw (each one task, the compile a task a root with `step`), its
+ *  wait for the maps it draws with (`WarmUp.before`) and their uploads, and the wait for its programs' links (the
+ *  GPU's process's work: long where no program came from a cache, a first visit's); and whether it was given up on
+ *  as cold (`WarmUp.giveUpMs`: nothing drawn). */
+export interface WarmedUp { compileMs: number; mapsMs: number; uploadsMs: number; linksMs: number; drawMs: number; cold: boolean }
 
 /** `run` with `out` taken out of their parents' lists (put back after, where they were): nothing else sees them go. */
 function without<T>(out: THREE.Object3D[], run: () => T): T {
@@ -421,17 +422,21 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
   }
   renderer.setRenderTarget(prev);
   const textures = texturesOf(materials);
-  await before?.(textures);
-  progress?.(MAPS_DONE);
-  await uploaded(renderer, textures, step ? UPLOAD_SLICE_BEHIND_MS : UPLOAD_SLICE_MS, step ?? nextTask);
-  progress?.(UPLOADS_DONE);
   let at = performance.now();
+  await before?.(textures);
+  const mapsMs = performance.now() - at;
+  progress?.(MAPS_DONE);
+  at = performance.now();
+  await uploaded(renderer, textures, step ? UPLOAD_SLICE_BEHIND_MS : UPLOAD_SLICE_MS, step ?? nextTask);
+  const uploadsMs = performance.now() - at;
+  progress?.(UPLOADS_DONE);
+  at = performance.now();
   const links = (share: number): void => progress?.(UPLOADS_DONE + share * (LINKS_DONE - UPLOADS_DONE));
   const poll = step ?? ((): Promise<void> => new Promise((r) => setTimeout(r, 4)));
   const ready = await linked(renderer, materials, { done: links, poll, step, giveUpMs: how.giveUpMs });
   const linksMs = performance.now() - at;
   pinPrograms(renderer);
-  if (!ready) return { compileMs, linksMs, drawMs: 0, cold: true };
+  if (!ready) return { compileMs, mapsMs, uploadsMs, linksMs, drawMs: 0, cold: true };
   await step?.();
   renderer.setRenderTarget(target);
   at = performance.now();
@@ -448,5 +453,5 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
   pinPrograms(renderer);
   for (const o of objects) scene.remove(o);
   progress?.(1);
-  return { compileMs, linksMs, drawMs, cold: false };
+  return { compileMs, mapsMs, uploadsMs, linksMs, drawMs, cold: false };
 }

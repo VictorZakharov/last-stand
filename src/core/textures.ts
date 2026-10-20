@@ -41,6 +41,8 @@ const keyOfCanvas = new WeakMap<HTMLCanvasElement, string>();
 /** the maps the loading workers are still making, by key: what to make, and its arrival */
 const coming = new Map<string, { job: Job; arrive: () => void; arrived: Promise<void> }>();
 type Job = (typeof PRELOAD)[number];
+/** the maps no worker has taken yet, in the order they're handed out (`preloadTextures`, `mapsArrived`) */
+let queue: Job[] = [];
 
 const make = ([name, args]: Job): PBRData => (RECIPES[name] as (...a: unknown[]) => PBRData)(...args);
 
@@ -109,16 +111,31 @@ export const faceGrid = (who: 'warrior' | 'mage' | 'ranger'): PBRData['grid'] =>
 
 /**
  * Resolved once every map `textures` are painted with has come: what a warm-up draws waits for its own maps alone
- * (the lobby's, not the fight's: those come while it shows).
+ * (the lobby's, not the fight's: those come while it shows). Those no worker has taken yet go first.
  */
 export function mapsArrived(textures: Iterable<THREE.Texture>): Promise<void> {
   const waits: Promise<void>[] = [];
+  const waited = new Set<Job>();
   for (const texture of textures) {
     const key = keyOfCanvas.get(texture.image as HTMLCanvasElement);
     const map = key === undefined ? undefined : coming.get(key);
-    if (map) waits.push(map.arrived);
+    if (!map) continue;
+    waits.push(map.arrived);
+    waited.add(map.job);
   }
+  queue = [...queue.filter((job) => waited.has(job)), ...queue.filter((job) => !waited.has(job))];
   return Promise.all(waits).then(() => undefined);
+}
+
+/** `PRELOAD` in the order the lobby needs its maps: the steel and `hero`'s face (the one it shows), the other maps,
+ *  then the other heroes' faces (1.5 s each in a worker: on a first visit, made before the heroes' materials, the
+ *  lobby waited 1.7 s for its maps). */
+function inTheLobbysOrder(hero: string): Job[] {
+  const face = (job: Job): boolean => job[0] === 'face';
+  const own = (job: Job): boolean => face(job) && job[1][0] === hero;
+  const steel = PRELOAD.filter((job) => job[0] === 'steel');
+  const rest = PRELOAD.filter((job) => job[0] !== 'steel' && !face(job));
+  return [...steel, ...PRELOAD.filter(own), ...rest, ...PRELOAD.filter((job) => face(job) && !own(job))];
 }
 
 /** The maps the workers are making: `ready` when one has come, `all` when every one has. */
@@ -128,20 +145,23 @@ export interface MapsComing {
 }
 
 /** What a worker sends back: the map, when it was made (in the worker's clock from its time origin), whether it
- *  was read back from a visit before (core/kept.ts), and how long asking the store for it took (`readMs`). */
-export interface MapMade { key: string; data: PBRData; start: number; ms: number; kept: boolean; readMs: number }
+ *  was read back from a visit before (core/kept.ts), how long asking the store for it took (`readMs`), and when
+ *  the worker's script ran (`up`, in that clock too). */
+export interface MapMade { key: string; data: PBRData; start: number; ms: number; kept: boolean; readMs: number; up: number }
 
 /**
  * Make the game's PBR maps in workers, in parallel, while the page stays responsive: done on the
  * main thread they block it for over a second, and a window moved to another monitor meanwhile
  * shows black until the main thread can paint it. Without workers, the maps are made on first use;
  * those a failed worker leaves are made on the page once the others are done. A production build's are
- * kept for the next visit (core/kept.ts). Each is timed as a user timing measure, `map <key>`, from the
- * worker's start on it to its end, its detail whether it was kept and how long the store took to answer (the
- * stalls' boot lists them).
+ * kept for the next visit (core/kept.ts). The lobby's come first: `hero` is the hero it shows (his model). Each
+ * is timed as a user timing measure, `map <key>`, from the worker's start on it to its end, its detail whether it
+ * was kept, how long the store took to answer, when its worker was asked for and when its script ran (the stalls'
+ * boot lists them).
  */
-export function preloadTextures(): MapsComing {
-  const jobs = typeof Worker === 'undefined' ? [] : PRELOAD.slice();
+export function preloadTextures(hero: string): MapsComing {
+  const jobs = typeof Worker === 'undefined' ? [] : inTheLobbysOrder(hero);
+  queue = jobs.slice();
   for (const job of jobs) {
     let arrive = (): void => undefined;
     const at = new Promise<void>((resolve) => { arrive = resolve; });
@@ -155,15 +175,17 @@ export function preloadTextures(): MapsComing {
   const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1, jobs.length));
   const run = (): Promise<void> => new Promise((resolve) => {
     let w: Worker;
+    const asked = performance.now();
     try { w = new Worker(new URL('./pbr.worker.ts', import.meta.url), { type: 'module' }); } catch { resolve(); return; }
     const next = (): void => {
-      const job = jobs.shift();
+      const job = queue.shift();
       // (the worker closes itself once it has kept what it made)
       if (!job) { w.postMessage('done'); resolve(); return; }
       w.postMessage(job);
     };
-    w.onmessage = ({ data: { key, data, start, ms, kept, readMs } }: MessageEvent<MapMade>) => {
-      performance.measure(`map ${key}`, { start: start - performance.timeOrigin, duration: ms, detail: { kept, readMs } });
+    w.onmessage = ({ data: { key, data, start, ms, kept, readMs, up } }: MessageEvent<MapMade>) => {
+      const detail = { kept, readMs, asked, up: up - performance.timeOrigin };
+      performance.measure(`map ${key}`, { start: start - performance.timeOrigin, duration: ms, detail });
       if (!kept) madeAfresh = true;
       arrived(key, data);
       next();

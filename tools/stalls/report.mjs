@@ -196,17 +196,20 @@ function bootStepLines(step) {
   if (step.work.length) lines.push(workLine('its work', step.work));
   if (step.gpuMain?.length) lines.push(workLine('the GPU process\'s main thread\'s', step.gpuMain));
   if (step.js?.own.length) lines.push(jsLine('its JS, each function\'s own time', step.js.own));
+  if (step.js?.within.length) lines.push(jsLine('and with what it calls', step.js.within));
   return lines;
 }
 
 /** The maps the game's workers made in a boot: how many (and how many read back from a visit before), when, their
- *  work in all (and how much of it waited for the store's answer) and the longest. */
-function mapsLine({ count, kept, from, to, ms: work, readMs, longest }) {
+ *  work in all (and how much of it waited for the store's answer), the longest, and when the workers came up. */
+function mapsLine({ count, kept, from, to, ms: work, readMs, longest, workers }) {
   const shown = longest.map((map) => `${map.name} ${bootSeconds(map.ms)}`).join(', ');
   const read = kept ? ` (${kept} of them read back from a visit before)` : '';
   const waited = readMs === null ? '' : `, ${bootSeconds(readMs)} of it asking the store for them`;
+  const up = workers ? `; the workers asked for at ${bootSeconds(workers.asked)}, up from `
+    + `${bootSeconds(workers.upFrom)} to ${bootSeconds(workers.upTo)}` : '';
   return `  ${count} maps made in the workers${read} from ${bootSeconds(from)} to ${bootSeconds(to)}, `
-    + `${bootSeconds(work)} of work${waited} (the longest ${shown})`;
+    + `${bootSeconds(work)} of work${waited} (the longest ${shown})${up}`;
 }
 
 /** How the loading screen left a boot (`analyze.mjs` `exitOf`), as a few words. */
@@ -227,12 +230,15 @@ const WARM_UPS_SHOWN = 6;
 const longestStep = (warmUp) => Math.max(warmUp.buildMs ?? 0, warmUp.compileMs ?? 0, warmUp.drawMs ?? 0);
 
 /** The game's warm-ups (`src/game/warmup.ts`): how many, and those whose one-task steps took longest, each with
- *  its compile, its wait for its links and its draw. */
+ *  its compile, its waits for its maps, their uploads and its links, and its draw (the maps and uploads where the
+ *  build times them). */
 function warmUpsLine(warmUps) {
   const ms = (value) => `${Math.round(value ?? 0)}`;
   const longest = [...warmUps].sort((a, b) => longestStep(b) - longestStep(a)).slice(0, WARM_UPS_SHOWN);
-  const built = (w) => (w.buildMs === undefined ? '' : `build ${ms(w.buildMs)}, `);
-  const steps = (w) => `${built(w)}compile ${ms(w.compileMs)}, links ${ms(w.linksMs)}, draw ${ms(w.drawMs)}`;
+  const timed = (name, value) => (value === undefined ? '' : `${name} ${ms(value)}, `);
+  const before = (w) => `${timed('maps', w.mapsMs)}${timed('uploads', w.uploadsMs)}`;
+  const compiled = (w) => `${timed('build', w.buildMs)}compile ${ms(w.compileMs)}, ${before(w)}`;
+  const steps = (w) => `${compiled(w)}links ${ms(w.linksMs)}, draw ${ms(w.drawMs)}`;
   const shown = longest.map((w) => `${w.name} (${steps(w)})`);
   return `  ${warmUps.length} warm-ups, ms, the longest steps first: ${shown.join('; ')}`;
 }

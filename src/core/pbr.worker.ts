@@ -4,6 +4,9 @@ import { RECIPES, recipeKey, type PBRData, type RecipeName } from './pbr';
 import { keepAll, kept } from './kept';
 import type { MapMade } from './textures';
 
+/** when this script ran, in this worker's clock (`MapMade.up`) */
+const up = performance.timeOrigin + performance.now();
+
 /** the maps made here, kept once no job is left to hand out (`done`): a read of the store waits for every write
  *  asked before it (core/kept.ts `keepAll`); the worker closes once they're written */
 const toKeep: [string, PBRData][] = [];
@@ -28,6 +31,6 @@ self.onmessage = async (e: MessageEvent<[RecipeName, unknown[]] | 'done'>) => {
   if (!read) toKeep.push([key, copyOf(data)]);
   // (when, from the worker's time origin: the page's differs)
   const start = performance.timeOrigin + begun;
-  const made: MapMade = { key, data, start, ms: performance.now() - begun, kept: !!read, readMs };
+  const made: MapMade = { key, data, start, ms: performance.now() - begun, kept: !!read, readMs, up };
   self.postMessage(made, { transfer: [data.albedo.buffer, data.normal.buffer, data.rough.buffer] });
 };

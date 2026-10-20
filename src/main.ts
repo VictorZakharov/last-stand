@@ -46,6 +46,7 @@ import { updateLowLife } from './core/lowLife';
 import { checkPrograms, pinPrograms, steadyShadowPrograms, watchPrograms } from './core/shaders';
 import { initBiome, rollBiome } from './game/biome';
 import { BIOMES, BIOME_IDS } from './data/biomes';
+import { CLASSES } from './data/classes/index';
 import { loadingStep, loadingDone, loadingFailed, loadingLeft, lobbyLaidOut } from './ui/loading';
 import { prepareWind } from './ui/logoWind';
 import { preloadTextures } from './core/textures';
@@ -62,9 +63,9 @@ const timer = new THREE.Timer();
 let revealed = false;   // loading screen gone: the game may advance
 
 async function boot() {
-  // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second), and the
-  // heroes' hands sculpted: started before anything waits, as nothing they make waits on the page
-  const textures = preloadTextures();
+  // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second), the lobby's
+  // first, and the heroes' hands sculpted: started before anything waits, as nothing they make waits on the page
+  const textures = preloadTextures(CLASSES[savedClass()].model);
   const hands = preloadHands();
   prepareWind();
   await loadingStep('Forging the arena', 0.08);
