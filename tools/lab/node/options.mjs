@@ -20,8 +20,8 @@ const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'numbers', 'choice', 
 
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
-  'lobby', 'tooltip', 'glow', 'help', 'saves', 'clicked', 'views', 'logLobby', 'skillTipsTouch', 'run', 'scores',
-  'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
+  'lobby', 'tooltip', 'glow', 'help', 'saves', 'readying', 'clicked', 'views', 'logLobby', 'skillTipsTouch', 'run',
+  'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
 ];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
@@ -117,6 +117,12 @@ const COMMON_OPTIONS = {
     kind: 'switch',
     help: 'what drew the page\'s random numbers as the command ran: the busiest callers, each at its line (an A/B\'s '
       + 'pictures of anything random differ after the first draw one side made and the other didn\'t)',
+  },
+  layers: {
+    kind: 'switch',
+    help: 'the page\'s composited layers at each screen picture, each element\'s box and why it\'s a layer, and with '
+      + '--ab where the sides\' differ (a picture whose UI lines are drawn brighter or dimmer, nothing else changed, '
+      + 'was rastered another way)',
   },
   watch: {
     kind: 'switch',
@@ -316,7 +322,8 @@ export const COMMANDS = {
         choices: UI_STATES,
         help: 'the states (every one by default): lobby, tooltip, glow (the stash\'s items lit for a hovered item\'s '
           + 'slot, pictured at set moments of its loops, each of which must animate only what the compositor moves), '
-          + 'help, saves, clicked (a class button clicked and a '
+          + 'help, saves, readying (the fight\'s loading bar over the lobby: within the window, its label on a line), '
+          + 'clicked (a class button clicked and a '
           + 'key pressed after it: '
           + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
           + 'dummies against their anchors), run (the HUD with a hurt foe\'s bar and damage numbers), '
@@ -822,6 +829,24 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'draw a material of a kind nothing else is before the hero: its program must come out as compiled; '
           + 'and put a point light in the scene: the count must find it',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
+  programs: {
+    help: 'the programs the boot compiled (the game\'s ledger of them, dev builds alone): how many each loading '
+      + 'step made, by the warm-ups\' compile or by a draw; each kind with the fields of its key that set its '
+      + 'programs apart; those never drawn; those made after the reveal',
+    options: {
+      canary: {
+        kind: 'switch',
+        help: 'warm a box of a kind nothing else is (it must be listed compiled and drawn) and one on a layer no '
+          + 'camera sees (it must be listed never drawn)',
+      },
+      cost: {
+        kind: 'switch',
+        help: 'compile each program again alone, salted so no cache answers, and time it: by kind, by what uses '
+          + 'them, by the point lights they\'re lit by, the longest (a minute or more; its canary: the cache)',
       },
       ...COMMON_OPTIONS,
     },

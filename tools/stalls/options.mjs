@@ -5,13 +5,17 @@ import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
-const SWITCHES = new Set(['headed', 'perf', 'js', 'links', 'help']);
+const SWITCHES = new Set(['headed', 'perf', 'js', 'angle', 'links', 'cold-return', 'help']);
 /** the views the game is played in (core/renderer.ts `VIEWS`, in the order V steps through them), and the
  *  battlegrounds (data/biomes.ts) */
 export const VIEWS = ['top', 'third', 'first'];
 const BIOMES = ['forest', 'crypt'];
 /** the heroes (data/classes), and the most items a stash holds (data/balance.ts `RUN.bagLimit`) */
 const HEROES = ['mage', 'warrior', 'ranger'];
+/** the scenario that boots the game rather than playing it (`boot.mjs`), and how long it watches the lobby once
+ *  revealed unless the command says (s) */
+export const BOOT = 'boot';
+const BOOT_SECONDS = 3;
 const STASH_MOST = 60;
 /** a key's tap (ms: `scenarios.mjs`'s): presses can't come closer together */
 const TAP_LEAST = 90;
@@ -19,9 +23,11 @@ const TAP_LEAST = 90;
 /** each option's value and what it does, for the usage */
 const HELP = {
   url: ['a,b', 'the game at these URLs (production, a PR preview), each in turn; `this` this tree, built and served '
-    + '(as it is with none)'],
-  scenario: ['name', `what the player does: ${Object.keys(SCENARIOS).join(', ')} (fight by default)`],
-  seconds: ['n', 'how long the scenario plays (45 by default)'],
+    + '(as it is with none); `ref:<git ref>` a commit, exported, built and served alike (`ref:HEAD~2`)'],
+  scenario: ['name', `what the player does: ${Object.keys(SCENARIOS).join(', ')} (fight by default); ${BOOT}: the `
+    + 'game loaded as a first visit, then a return, each step of its loading timed'],
+  seconds: ['n', `how long the scenario plays (45 by default; ${BOOT}: the lobby watched once revealed, `
+    + `${BOOT_SECONDS})`],
   listed: ['ms', `each frame this long or longer listed with what was busy through it (${LISTED_LEAST} or more: `
     + '300 by default)'],
   variants: ['a,b', 'changes tried on the page, each a measure of its own (a+b: both together): '
@@ -35,11 +41,20 @@ const HELP = {
   'item-ms': ['ms', `how long a sweep over the stash stays over each item (${SWEEP_ITEM_MS} by default)`],
   'press-ms': ['ms', `how often stow presses Space (${STOW_PRESS_MS} by default)`],
   scale: ['n', 'the screen\'s scaling, as the OS sets it (a report\'s devicePixelRatio: 1 by default)'],
+  'cpu-slowdown': ['n', 'the page\'s CPU slowed this many times, as a phone\'s (CDP\'s throttling: 1 by default)'],
+  'stall-blow': ['ms', 'boot: the page held up this long once in the logo blow\'s first frames, as a fast machine '
+    + 'stalled by the GPU busy elsewhere (0 by default)'],
+  'stall-lobby': ['ms', 'boot: each of the lobby\'s frames held up this long for a second after its reveal, the '
+    + 'canary of its frames a second (0 by default)'],
+  'cold-return': ['', 'boot: the first visit leaves without pressing Start, so the return finds its maps kept and the '
+    + 'fight\'s programs not in the GPU\'s cache (a visit that never fought, a deploy that changed a shader)'],
   window: ['WxH', 'the page\'s size in css px, as a report\'s `window` (1536x864 by default)'],
   headed: ['', 'a Chrome window on the screen, as a player has it (headless by default)'],
   perf: ['', 'the performance overlay shown, as a player sending its report has it'],
   js: ['', 'the page\'s JS sampled (V8\'s profiler): a frame\'s by function, each phase (this tree built unminified, '
     + 'its functions named from its source maps)'],
+  angle: ['', 'ANGLE\'s own work on the GPU process traced too: a shader compiled at a draw (D3DCompile), a program '
+    + 'linked or read back from the cache'],
   links: ['', 'every Skia program built: when, how long, the tasks it was built in, the page\'s changes just before'],
   help: ['', 'this'],
 };
@@ -88,7 +103,7 @@ export function readOptions(argv) {
   const options = {
     urls: written.url ? written.url.split(',').filter(Boolean) : [],
     scenario: written.scenario ?? 'fight',
-    seconds: Number(written.seconds ?? 45),
+    seconds: Number(written.seconds ?? (written.scenario === BOOT ? BOOT_SECONDS : 45)),
     listed: Number(written.listed ?? LISTED_MS),
     variants: (written.variants ?? 'base').split(','),
     rounds: Number(written.rounds ?? 1),
@@ -99,15 +114,20 @@ export function readOptions(argv) {
     itemMs: Number(written['item-ms'] ?? SWEEP_ITEM_MS),
     pressMs: Number(written['press-ms'] ?? STOW_PRESS_MS),
     scale: Number(written.scale ?? 1),
+    cpuSlowdown: Number(written['cpu-slowdown'] ?? 1),
+    stallBlow: Number(written['stall-blow'] ?? 0),
+    stallLobby: Number(written['stall-lobby'] ?? 0),
     window: sizeOf(written.window ?? '1536x864'),
     headed: written.headed === true,
     perf: written.perf === true,
     js: written.js === true,
+    angle: written.angle === true,
     links: written.links === true,
+    coldReturn: written['cold-return'] === true,
     help: written.help === true,
   };
-  if (!SCENARIOS[options.scenario]) {
-    throw new Error(`stalls: no scenario ${options.scenario} (${Object.keys(SCENARIOS).join(', ')})`);
+  if (!SCENARIOS[options.scenario] && options.scenario !== BOOT) {
+    throw new Error(`stalls: no scenario ${options.scenario} (${[...Object.keys(SCENARIOS), BOOT].join(', ')})`);
   }
   const unknown = options.variants.flatMap(partsOf).find((part) => !VARIANTS[part]);
   if (unknown !== undefined) throw new Error(`stalls: no variant ${unknown} (${Object.keys(VARIANTS).join(', ')})`);
@@ -125,6 +145,9 @@ export function readOptions(argv) {
     throw new Error(`stalls: --press-ms must be a number of ms, over ${TAP_LEAST} (a key's tap)`);
   }
   if (!(options.scale > 0)) throw new Error('stalls: --scale must be a number over 0');
+  if (!(options.cpuSlowdown >= 1)) throw new Error('stalls: --cpu-slowdown must be a number, 1 or more');
+  if (!(options.stallBlow >= 0)) throw new Error('stalls: --stall-blow must be a number of ms, 0 or more');
+  if (!(options.stallLobby >= 0)) throw new Error('stalls: --stall-lobby must be a number of ms, 0 or more');
   if (!(options.listed >= LISTED_LEAST)) {
     throw new Error(`stalls: --listed must be a number of ms, ${LISTED_LEAST} or more`);
   }

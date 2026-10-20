@@ -1,7 +1,7 @@
 // Loading screen. The markup and styles are inline in index.html so it paints before the
 // bundle has loaded; boot() reports its steps here and yields so each one gets painted.
 import { TIPS } from '../data/tips';
-import { prepareBlow, logoWindOff, type LogoBlow } from './logoWind';
+import { dropWind, prepareBlow, logoWindOff, type LogoBlow } from './logoWind';
 import { qualityLevel } from '../core/quality';
 
 const el = (): HTMLElement => document.getElementById('loading')!;
@@ -27,23 +27,43 @@ export async function loadingStep(label: string, progress: number): Promise<void
 // use (on a first visit its shader cache is cold), and that should not be seen as a stutter
 const SMOOTH_FRAMES = 8, SMOOTH_MS = 70, MAX_WAIT_MS = 4000;
 
-/** Call when the game loop starts; once the lobby renders smoothly, calls `onReveal` and leaves. */
+// the logo's particle field gathers into the lobby's logo. A plain fade instead with reduced motion, on low
+// graphics quality (picked, or where Auto settled last time), and on a device where the particles were too slow
+// before
+const plainExit = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches || qualityLevel() === 'low' || logoWindOff();
+/** the logo's exit, made ready from when the lobby is laid out (`lobbyLaidOut`) */
+let exit: Promise<LogoBlow | null> | null = null;
+const blowFor = (l: HTMLElement): Promise<LogoBlow | null> => {
+  return prepareBlow(l.querySelector<HTMLElement>('.ld-logo')!, document.querySelector<HTMLElement>('#menu .logo-art'));
+};
+
+/** Call once the lobby is laid out (its logo is where the particles gather): the logo's exit is made ready while
+ *  the lobby's warm-up compiles (made as the loop started, it held the reveal up for 0.3 to 1.2 s). */
+export function lobbyLaidOut(): void {
+  if (!exit && !plainExit()) exit = blowFor(el());
+}
+
+/** the most the loading screen takes to leave after the reveal (ms): its logo's exit, or a fade whose end never came */
+const LEFT_MOST_MS = 4000;
+let resolveLeft = (): void => undefined;
+/** resolved once the loading screen has left the page: the logo's exit done, and its particles' frames with it */
+export const loadingLeft = new Promise<void>((resolve) => { resolveLeft = resolve; });
+
+/** Call when the game loop starts; once the lobby renders smoothly, calls `onReveal` and leaves (`loadingLeft`). */
 export function loadingDone(onReveal: () => void): void {
   const l = el();
   l.style.setProperty('--p', '1');
-  // the logo's particle field is built meanwhile; it gathers into the lobby's logo. A plain fade
-  // instead with reduced motion, on low graphics quality (picked, or where Auto settled last time),
-  // and on a device where the particles were too slow before
-  const plain = matchMedia('(prefers-reduced-motion: reduce)').matches || qualityLevel() === 'low' || logoWindOff();
+  const plain = plainExit();
+  if (plain) dropWind();
   let blow: LogoBlow | null | undefined = plain ? null : undefined;
   let left = false;
   if (blow === undefined) {
-    prepareBlow(l.querySelector<HTMLElement>('.ld-logo')!, document.querySelector<HTMLElement>('#menu .logo-art'))
-      .then((b) => { if (left) b?.cancel(); else blow = b; }, () => { blow = null; });
+    (exit ?? blowFor(l)).then((b) => { if (left) b?.cancel(); else blow = b; }, () => { blow = null; });
   }
   const start = performance.now();
   let last = start, smooth = 0;
-  const reveal = (): void => { l.classList.add('done'); onReveal(); };
+  const reveal = (): void => { l.classList.add('done'); onReveal(); setTimeout(resolveLeft, LEFT_MOST_MS); };
+  const leave = (): void => { l.remove(); resolveLeft(); };
   const tick = (now: number): void => {
     smooth = now - last < SMOOTH_MS ? smooth + 1 : 0;
     last = now;
@@ -55,11 +75,11 @@ export function loadingDone(onReveal: () => void): void {
     if (blow) {
       // the logo blows away over the loading backdrop first; the lobby shows a moment later
       l.classList.add('blowing');
-      blow.start(reveal, () => l.remove());
+      blow.start(reveal, leave);
     } else {
       l.classList.add('plain');
       reveal();
-      l.addEventListener('transitionend', () => l.remove(), { once: true });
+      l.addEventListener('transitionend', leave, { once: true });
     }
   };
   requestAnimationFrame(tick);

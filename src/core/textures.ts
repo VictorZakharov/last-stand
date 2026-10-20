@@ -31,16 +31,56 @@ const cache = new Map<string, PBRCanvases>();
 const texCache: Record<string, THREE.CanvasTexture> = {};
 /** maps made by the loading workers, waiting to be asked for */
 const made = new Map<string, PBRData>();
+/** whether a map was made afresh, not read back from a visit before (`mapsMadeAfresh`) */
+let madeAfresh = false;
+/** Whether a map has come made afresh: a first visit, or a new build's (whose programs are new to the GPU's cache
+ *  too, likely as not). */
+export const mapsMadeAfresh = (): boolean => madeAfresh;
+/** the map each canvas handed out is painted with, by key (`mapsArrived`) */
+const keyOfCanvas = new WeakMap<HTMLCanvasElement, string>();
+/** the maps the loading workers are still making, by key: what to make, and its arrival */
+const coming = new Map<string, { job: Job; arrive: () => void; arrived: Promise<void> }>();
+type Job = (typeof PRELOAD)[number];
 
+const make = ([name, args]: Job): PBRData => (RECIPES[name] as (...a: unknown[]) => PBRData)(...args);
+
+/** `maps` painted with `d` (sized to it: a map asked for before it was made is handed out blank) */
+function paint(maps: PBRCanvases, d: PBRData): void {
+  const h = d.height ?? d.size;
+  for (const [c, data] of [[maps.albedo, d.albedo], [maps.normal, d.normal], [maps.rough, d.rough]] as const) {
+    c.width = d.size; c.height = h;
+    ctx2d(c).putImageData(new ImageData(data, d.size, h), 0, 0);
+  }
+}
+
+/** the ray grids the faces were painted on, by the face's key (`faceGrid`) */
+const grids = new Map<string, NonNullable<PBRData['grid']>>();
+
+/** A map made (by a worker, or on the page for one a worker failed): painted on its canvases if they were asked for. */
+function arrived(key: string, d: PBRData): void {
+  if (d.grid) grids.set(key, d.grid);
+  const maps = cache.get(key);
+  if (maps) paint(maps, d); else made.set(key, d);
+  coming.get(key)?.arrive();
+  coming.delete(key);
+}
+
+/**
+ * A map's canvases. One the workers are still making is handed out blank and painted as it arrives: three reads a
+ * canvas as it first draws it, and nothing is drawn before every map has come (`MapsComing.all`, awaited by the
+ * first warm-up's render), so the arena and the heroes are built while the workers paint.
+ */
 function pbrCanvases<N extends RecipeName>(name: N, ...args: RecipeArgs<N>): PBRCanvases {
   const key = recipeKey(name, args);
   let maps = cache.get(key);
   if (maps) return maps;
-  const d = made.get(key) ?? (RECIPES[name] as (...a: RecipeArgs<N>) => PBRData)(...args);
+  cache.set(key, maps = { albedo: canvasOf(1), normal: canvasOf(1), rough: canvasOf(1) });
+  for (const canvas of [maps.albedo, maps.normal, maps.rough]) keyOfCanvas.set(canvas, key);
+  if (coming.has(key)) return maps;
+  const d = made.get(key) ?? make([name, args] as Job);
+  if (d.grid) grids.set(key, d.grid);
+  paint(maps, d);
   made.delete(key);
-  const h = d.height ?? d.size;
-  const mk = (data: Uint8ClampedArray<ArrayBuffer>) => { const c = canvasOf(d.size, h); ctx2d(c).putImageData(new ImageData(data, d.size, h), 0, 0); return c; };
-  cache.set(key, maps = { albedo: mk(d.albedo), normal: mk(d.normal), rough: mk(d.rough) });
   return maps;
 }
 
@@ -64,30 +104,77 @@ export const fur = (): PBRCanvases => pbrCanvases('fur');
 export const bowWood = (): PBRCanvases => pbrCanvases('bowWood');
 /** a hero's painted face (entities/models/face.ts), on its head's ray grid */
 export const faceCanvases = (who: 'warrior' | 'mage' | 'ranger'): PBRCanvases => pbrCanvases('face', who);
+/** the ray grid a hero's face was painted on, once it has been (models/head.ts builds the head on it) */
+export const faceGrid = (who: 'warrior' | 'mage' | 'ranger'): PBRData['grid'] => grids.get(recipeKey('face', [who]));
+
+/**
+ * Resolved once every map `textures` are painted with has come: what a warm-up draws waits for its own maps alone
+ * (the lobby's, not the fight's: those come while it shows).
+ */
+export function mapsArrived(textures: Iterable<THREE.Texture>): Promise<void> {
+  const waits: Promise<void>[] = [];
+  for (const texture of textures) {
+    const key = keyOfCanvas.get(texture.image as HTMLCanvasElement);
+    const map = key === undefined ? undefined : coming.get(key);
+    if (map) waits.push(map.arrived);
+  }
+  return Promise.all(waits).then(() => undefined);
+}
+
+/** The maps the workers are making: `ready` when one has come, `all` when every one has. */
+export interface MapsComing {
+  ready<N extends RecipeName>(name: N, ...args: RecipeArgs<N>): Promise<void>;
+  all: Promise<void>;
+}
+
+/** What a worker sends back: the map, when it was made (in the worker's clock from its time origin), and whether it
+ *  was read back from a visit before (core/kept.ts). */
+export interface MapMade { key: string; data: PBRData; start: number; ms: number; kept: boolean }
 
 /**
  * Make the game's PBR maps in workers, in parallel, while the page stays responsive: done on the
  * main thread they block it for over a second, and a window moved to another monitor meanwhile
- * shows black until the main thread can paint it. Without workers, the maps are made on first use.
+ * shows black until the main thread can paint it. Without workers, the maps are made on first use;
+ * those a failed worker leaves are made on the page once the others are done. A production build's are
+ * kept for the next visit (core/kept.ts). Each is timed as a user timing measure, `map <key>`, from the
+ * worker's start on it to its end, its detail whether it was kept (the stalls' boot lists them).
  */
-export async function preloadTextures(): Promise<void> {
-  if (typeof Worker === 'undefined') return;
-  const jobs = PRELOAD.slice();
+export function preloadTextures(): MapsComing {
+  const jobs = typeof Worker === 'undefined' ? [] : PRELOAD.slice();
+  for (const job of jobs) {
+    let arrive = (): void => undefined;
+    const at = new Promise<void>((resolve) => { arrive = resolve; });
+    coming.set(recipeKey(job[0], job[1]), { job, arrive, arrived: at });
+  }
+  const ready = <N extends RecipeName>(name: N, ...args: RecipeArgs<N>): Promise<void> => {
+    return coming.get(recipeKey(name, args))?.arrived ?? Promise.resolve();
+  };
+  if (!jobs.length) return { ready, all: Promise.resolve() };
+  // (more than 4 made a first visit's maps no sooner: they vie with the GPU's compiles, as the maps' times showed)
   const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1, jobs.length));
   const run = (): Promise<void> => new Promise((resolve) => {
     let w: Worker;
     try { w = new Worker(new URL('./pbr.worker.ts', import.meta.url), { type: 'module' }); } catch { resolve(); return; }
     const next = (): void => {
       const job = jobs.shift();
-      if (!job) { w.terminate(); resolve(); return; }
+      // (the worker closes itself once it has kept what it made)
+      if (!job) { w.postMessage('done'); resolve(); return; }
       w.postMessage(job);
     };
-    w.onmessage = (e: MessageEvent<{ key: string; data: PBRData }>) => { made.set(e.data.key, e.data.data); next(); };
-    // a worker that fails leaves its jobs to the main thread (on first use)
+    w.onmessage = ({ data: { key, data, start, ms, kept } }: MessageEvent<MapMade>) => {
+      performance.measure(`map ${key}`, { start: start - performance.timeOrigin, duration: ms, detail: { kept } });
+      if (!kept) madeAfresh = true;
+      arrived(key, data);
+      next();
+    };
+    // a worker that fails leaves its jobs to the others, and the one it was on to the page
     w.onerror = () => { w.terminate(); resolve(); };
     next();
   });
-  await Promise.all(Array.from({ length: n }, run));
+  const all = Promise.all(Array.from({ length: n }, run)).then(() => {
+    for (const [key, { job }] of [...coming]) arrived(key, make(job));
+  });
+  return { ready, all };
 }
 
 // Textures are shared per (maps, repeat): every enemy of a kind reuses one GPU upload

@@ -52,6 +52,7 @@ The lab as an agent works with it: what every command measures, in a line here a
 - `crowd`: a crowd of foes killed at once and what the frame costs as they fall (each frame timed by the browser's clock with the game drawn, the bodies' part apart, at each CPU slowdown, as a low-end device's, and frame rate)
 - `draws`: one frame's draw calls with the crowd standing, by what drew them (the geometries drawn most often, those that drew the most triangles, the triangles drawn outside the view of the pass that drew them, the draws that drew nothing, the scene's draws by their material's look, through the eyes what the arms' own camera drew, the hero's arms and what they hold alone; the scene's objects whose matrices are made again each frame)
 - `perf <skills>`: skills cast in turn with the biome's foes coming, every frame timed as the game's performance report times it (the frame, the update by stage, the render, the GPU by pass, the draws, triangles and the particles' fill), on a phone's screen, boot and CPU if asked
+- `programs`: the programs the boot compiled, from the game's dev-only ledger (how many each loading step made, behind the lobby too, by the warm-ups' compile or by a draw; each kind with the fields of its key that set its programs apart; those never drawn; those made after the reveal); `--cost`: each compiled again alone, salted so no cache answers, and timed (by kind, by what uses them, by its point lights, the longest, a plain lit material by part)
 - `compiles`: whether the boot's warm-up compiled what a fight draws (a prop of every kind broken and the first wave fought in each biome, and again by a hero built afresh: every program compiled meanwhile, and the draw that first used it; the point lights each pass is lit by, against the boot's)
 - `gear`: full sets of gear rolled for every class at each tier (the Health, regeneration and draught they give, and the damage they multiply)
 - `weapons`: each of the hero's weapons alone in a lit studio (face on, edge on, from behind, from three-quarters and its head close up, with its size and its triangles)
@@ -129,7 +130,9 @@ What the lab gives a probe (`page/lab.ts`):
 - `await lab.screen(label, notes, around?)`: this moment as the player sees it, the game drawn by its own camera with the
   page's UI over it (the HUD, a menu, a tooltip), pictured by the browser, whole, clipped round the element a CSS
   selector names (`'#hotbar'`) or to an area of the page (`screenArea(points)`: round points of the world as the
-  camera shows them), as a moment of the report's `moments` (`picture`'s views show the game's canvas alone); taken
+  camera shows them), as a moment of the report's `moments` (`picture`'s views show the game's canvas alone), the
+  page's running animations settled first (they run on the browser's clock: an A/B's two sides caught the wave's
+  banner at other moments of its fade; one a command holds paused is left as it is); taken
   through the DevTools protocol at the screen's own pixels (Playwright's screenshot put the page back on the screen
   Playwright had given it, and on a `--screen` every picture after the first showed 1920x1080);
 - `timeCalls(owner, method)` (`page/timing.ts`): every call of a method timed by the browser's own clock (the page's
@@ -296,10 +299,17 @@ Each of these was found as a cause of runs that differed:
   emitter's bursts a frame early or late, one boot in three);
 - the default profile rolled from wherever the boot had left the sequence: a commit that made one more three.js
   object as its modules loaded rolled the ranger another bow and 2 less Health than main, so every A/B of him
-  compared two heroes (`ui --ab` differed in 11 of 12 pictures).
+  compared two heroes (`ui --ab` differed in 11 of 12 pictures);
+- the wave's banner taken off the page by a timer on the browser's clock: one boot in two it was still there at a
+  picture, the HUD's layers laid out another way and the hotbar's thin frame lines rastered 20% brighter or dimmer
+  (`light --ab` differed in one picture of 18, one run in two). It goes now as its fade ends (`ui/hud.ts`), which
+  follows the lab ending it (`settleRunning`), and `screen` lets the browser draw a frame after each round it ends,
+  for their ends to reach the page and its layers to fall without them.
 
 To find where two runs part, record each frame's state and each random draw's caller in a probe and compare boots
 (two fresh boots, `--setup=false`, the probe setting up itself): the first frame or draw that differs names the cause.
+A page picture whose UI differs in how bright its thin lines are, nothing moved, was rastered two ways: `--layers`
+lists Chrome's layers at each picture, and where the sides' differ.
 
 ## Testing the lab
 

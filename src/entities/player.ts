@@ -207,6 +207,7 @@ export class Player {
     this.staffLight = local ? new THREE.PointLight(this.cls.aura.light, this.cls.aura.intensity, 6, 2) : null;
     this.model = buildModel(this.cls.model);
     this.obj.add(this.model.root);
+    this.obj.name = `hero ${classId}`;   // names show up in the perf report
     applyShadowDetail(this.obj);
     G.scene.add(this.obj, ...(this.staffLight ? [this.staffLight] : []));
 

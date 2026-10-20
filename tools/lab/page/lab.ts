@@ -41,6 +41,8 @@ interface LabClock {
   queue: FrameRequestCallback[];
   /** the browser's own clock, ms: the page's `performance.now` is the lab's, which stands still within a frame */
   realNow: () => number;
+  /** resolves after a frame the browser draws, the game's own frames left queued */
+  realFrame: () => Promise<void>;
 }
 
 declare global {
@@ -682,7 +684,9 @@ export class Lab {
    * This moment as the player sees it, under `label` with `notes` beside it: the frame drawn by the game's own camera
    * with the page's UI over it (the HUD, a menu, a tooltip), pictured by the browser, whole or clipped round the
    * element `around` names (a CSS selector) or to an area of the page (`around` a `Clip`, as `screenArea` makes one
-   * round points of the world). For a report's `moments`, as `picture`'s, whose views show the game alone.
+   * round points of the world). For a report's `moments`, as `picture`'s, whose views show the game alone. The
+   * page's running animations are settled first (`settleRunning`), the browser drawing a frame after, for their
+   * ends to reach the page and its layers to fall as they do with none running.
    */
   async screen(label: string, notes: string[] = [], around?: string | Clip): Promise<Pictured> {
     if (!window.__labScreenshot) throw new Error('lab: screen: this page has no screenshots (opened by an older lab)');
@@ -693,6 +697,15 @@ export class Lab {
       renderer.render();
     } finally {
       this.drawing = drawing;
+    }
+    // (after the frame: it may start one; and after each round of them ended, a frame of the browser's own, which
+    // sends their ends to the page and lays its layers out without them: the wave's banner, taken off the page by a
+    // timer of its own then, was on it one boot in two, the HUD's layers laid out another way and the hotbar's frame
+    // lines rastered 20% brighter or dimmer)
+    for (let round = 0; round < SETTLE_ROUNDS; round++) {
+      const ran = settleRunning();
+      await window.__labClock.realFrame();
+      if (!ran) break;
     }
     const png = await window.__labScreenshot(clip);
     const size = clip ?? { width: innerWidth, height: innerHeight };
@@ -1025,6 +1038,29 @@ interface Crop {
 }
 
 /** The page `around` names: round the element a CSS selector names, or an area of it. */
+/** the most rounds a picture ends the page's animations in, a frame of the browser's after each (`screen`) */
+const SETTLE_ROUNDS = 4;
+
+/**
+ * The page's running animations brought to their end (an endless one held at its start): they run on the browser's
+ * clock, not the lab's, so a picture caught each at another moment (the wave's banner fading, in one side of an A/B
+ * and not the other). One a command holds paused, at the moment it pictures, is left as it is. Whether any ran.
+ */
+function settleRunning(): boolean {
+  let settled = false;
+  for (const animation of document.getAnimations()) {
+    if (animation.playState !== 'running') continue;
+    settled = true;
+    if (animation.effect?.getComputedTiming().iterations !== Infinity) {
+      animation.finish();
+      continue;
+    }
+    animation.pause();
+    animation.currentTime = 0;
+  }
+  return settled;
+}
+
 function clipOf(around: string | Clip): Clip {
   return typeof around === 'string' ? clipRound(around) : withinWindow(around);
 }

@@ -6,10 +6,10 @@ import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { groundHeight } from './ground';
 import { setAdaptScale } from '../core/renderer';
-import { bakeStaticShadows, type Biome, type BiomeBuilder, type BiomeLook } from './props';
+import { bakeStaticShadows, prepareEnvMaps as prepareEach, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
-import { buildCrypt } from './crypt';
-import { buildForest } from './forest';
+import { buildCrypt, CRYPT_ENV } from './crypt';
+import { buildForest, FOREST_ENV } from './forest';
 import { restoreProps } from './destructible';
 
 export { groundHeight };
@@ -18,6 +18,9 @@ export type { Portal } from './props';
 const BUILDERS: Record<BiomeId, BiomeBuilder> = { crypt: buildCrypt, forest: buildForest };
 
 export type Arena = Awaited<ReturnType<typeof buildArena>>;
+
+/** Every biome's environment made ahead of the biomes (they need none of the workers' maps). */
+export const prepareEnvMaps = (renderer: THREE.WebGLRenderer): Promise<void> => prepareEach(renderer, [CRYPT_ENV, FOREST_ENV]);
 
 /** The moon's shadow camera as it's placed for a biome's `look` (the box it draws round the middle). */
 function shadowCameraFor(moon: THREE.DirectionalLight, look: BiomeLook): THREE.OrthographicCamera {
@@ -92,6 +95,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     radius: ARENA.radius,
     groundHeight,
     setBiome,
+    /** a biome's own pieces (hidden while another is shown): what the warm-up leaves out or shows */
+    groupOf(id: BiomeId): THREE.Group { return biomes[id].group; },
     setCalm(v: number) { for (const id of BIOME_IDS) biomes[id].b.setCalm(v); },
     update(dt: number, t: number) { active.update(dt, t); },
   };

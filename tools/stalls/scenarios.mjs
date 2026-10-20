@@ -77,7 +77,8 @@ async function aimRound(page, angle) {
   await page.mouse.move(width / 2 + Math.cos(angle) * MOUSE_RADIUS, height / 2 + Math.sin(angle) * MOUSE_RADIUS);
 }
 
-/** One beat of a fight: Steel Tempest held, the mouse swinging round and the left button down, now and then a skill. */
+/** One beat of a fight: Steel Tempest held, the mouse swinging round and the left button down, now and then a
+ *  skill. */
 async function fightBeat(page, beat) {
   await aimRound(page, beat * MOUSE_TURN);
   await page.mouse.down();

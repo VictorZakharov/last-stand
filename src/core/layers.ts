@@ -10,3 +10,5 @@ export const HIDDEN_LAYER = 1;
 export const ARMS_LAYER = 2;
 /** a crowd's bodies' own meshes, drawn by their crowd instead, kept for what reads them (entities/models/crowd.ts) */
 export const CROWD_LAYER = 3;
+/** what a warm-up behind the lobby draws, alone, for its programs (core/shaders.ts `warmUp`) */
+export const WARM_LAYER = 4;

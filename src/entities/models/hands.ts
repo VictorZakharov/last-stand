@@ -95,6 +95,9 @@ const HAND_DEPTH = dualQuaternionSkinned(new THREE.MeshDepthMaterial({ depthPack
 function skinnedOn(vis: THREE.Object3D, geometry: THREE.BufferGeometry, material: THREE.Material,
   skeleton: THREE.Skeleton, shadow: boolean): THREE.SkinnedMesh {
   const mesh = new THREE.SkinnedMesh(geometry, ownCopy(material));
+  // (its sphere the sculpt's: three would pose every vertex for it at its first draw)
+  if (!geometry.boundingSphere) geometry.computeBoundingSphere();
+  mesh.boundingSphere = geometry.boundingSphere!.clone();
   mesh.castShadow = shadow;
   mesh.receiveShadow = true;
   // (its bounds are the pose it was sculpted in)

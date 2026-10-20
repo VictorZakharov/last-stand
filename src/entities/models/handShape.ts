@@ -201,7 +201,9 @@ function weightsAt(parts: Part[], x: number, y: number, z: number, out: { bones:
 function skinnedNet(field: Field, box: THREE.Box3, parts: Part[]): THREE.BufferGeometry {
   const net = surfaceNets(field, box, CELL);
   const count = net.positions.length / 3;
-  const bones = new Uint16Array(count * 4);
+  // (the bones' indices as floats, as models/shapes.ts's: Uint16 ones made ANGLE compile a vertex shader at the
+  // first draw, on the GPU process's main thread)
+  const bones = new Float32Array(count * 4);
   const shares = new Float32Array(count * 4);
   const found = { bones: [] as number[], shares: [] as number[] };
   for (let i = 0; i < count; i++) {
@@ -216,7 +218,7 @@ function skinnedNet(field: Field, box: THREE.Box3, parts: Part[]): THREE.BufferG
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(net.positions, 3));
   geometry.setAttribute('normal', new THREE.BufferAttribute(net.normals, 3));
-  geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(bones, 4));
+  geometry.setAttribute('skinIndex', new THREE.BufferAttribute(bones, 4));
   geometry.setAttribute('skinWeight', new THREE.BufferAttribute(shares, 4));
   geometry.setIndex(new THREE.BufferAttribute(net.index, 1));
   return geometry;
@@ -387,7 +389,8 @@ class NailMesh {
 
   geometry(): THREE.BufferGeometry {
     const count = this.positions.length / 3;
-    const bones = new Uint16Array(count * 4);
+    // (the bones' indices as floats, as `skinnedNet`'s)
+    const bones = new Float32Array(count * 4);
     const shares = new Float32Array(count * 4);
     this.bones.forEach((bone, i) => {
       bones[i * 4] = bone;
@@ -397,7 +400,7 @@ class NailMesh {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(this.positions, 3));
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(this.normals, 3));
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(count * 2), 2));
-    geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(bones, 4));
+    geometry.setAttribute('skinIndex', new THREE.BufferAttribute(bones, 4));
     geometry.setAttribute('skinWeight', new THREE.BufferAttribute(shares, 4));
     geometry.setIndex(this.index);
     return geometry;

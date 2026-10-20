@@ -325,12 +325,14 @@ export class Sculpt {
     // (vertex colours kept for a material that uses them: they merge only with pieces of that material, which carry them too)
     for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv' && (k !== 'color' || !(mat as THREE.MeshStandardMaterial).vertexColors)) g.deleteAttribute(k);
     if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
-    const axis = b.position.clone().normalize(), p = g.attributes.position, idx = new Uint16Array(p.count * 4), w = new Float32Array(p.count * 4);
+    // (the bones' indices as floats: Uint16 ones read by a float attribute are a format D3D11 converts, and ANGLE
+    // compiled a vertex shader for it at each skinned program's first draw, on the GPU process's main thread)
+    const axis = b.position.clone().normalize(), p = g.attributes.position, idx = new Float32Array(p.count * 4), w = new Float32Array(p.count * 4);
     for (let i = 0; i < p.count; i++) {
       const t = Math.min(1, Math.max(0, (_v.fromBufferAttribute(p, i).dot(axis) - from) / (to - from))), k = own ? own.getX(i) : t * t * (3 - 2 * t);
       idx[i * 4] = ia; idx[i * 4 + 1] = ib; w[i * 4] = 1 - k; w[i * 4 + 1] = k;
     }
-    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
+    g.setAttribute('skinIndex', new THREE.Float32BufferAttribute(idx, 4));
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(w, 4));
     if (space !== a) {   // into the root's space, as the joints stand now (at rest)
       a.updateWorldMatrix(true, false);
@@ -356,12 +358,13 @@ export class Sculpt {
     const own = g.attributes.skinK as THREE.BufferAttribute;
     for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv' && (k !== 'color' || !(mat as THREE.MeshStandardMaterial).vertexColors)) g.deleteAttribute(k);
     if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
-    const n = ids.length - 1, p = g.attributes.position, idx = new Uint16Array(p.count * 4), w = new Float32Array(p.count * 4);
+    // (the bones' indices as floats, as `skin`'s)
+    const n = ids.length - 1, p = g.attributes.position, idx = new Float32Array(p.count * 4), w = new Float32Array(p.count * 4);
     for (let i = 0; i < p.count; i++) {
       const t = Math.min(1, Math.max(0, own.getX(i))) * n, at = Math.min(n - 1, Math.floor(t)), f = t - at;
       idx[i * 4] = ids[at]; idx[i * 4 + 1] = ids[at + 1]; w[i * 4] = 1 - f; w[i * 4 + 1] = f;
     }
-    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
+    g.setAttribute('skinIndex', new THREE.Float32BufferAttribute(idx, 4));
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(w, 4));
     if (space !== a) {
       a.updateWorldMatrix(true, false);
@@ -443,6 +446,8 @@ export class Sculpt {
         let sm = twins.get(mat);
         if (!sm) { twins.set(mat, sm = mat.clone()); sm.onBeforeCompile = mat.onBeforeCompile; sm.customProgramCacheKey = mat.customProgramCacheKey; }
         const mesh = new THREE.SkinnedMesh(g, sm);
+        // (its sphere the bind pose's: three would pose every vertex for it at its first draw)
+        mesh.boundingSphere = g.boundingSphere!.clone();
         mesh.castShadow = !this.noShadow.has(mat) && g.boundingSphere!.radius > SHADOW_MIN;
         mesh.receiveShadow = true;
         mesh.frustumCulled = false;   // the bounds are the bind pose's

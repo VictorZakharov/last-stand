@@ -83,8 +83,13 @@ export function banner(title: string, sub = ''): void {
   $('.b-title', b).textContent = title;
   $('.b-sub', b).textContent = sub;
   b.classList.remove('hidden');
+  // gone as its fade ends (its end follows the animation wherever it's taken: the lab ends it before a picture, and
+  // left to a timer of its own it hid by the browser's clock, so a picture had it on the page or not, the HUD's
+  // layers laid out another way); the timer only where no fade runs
+  const hide = (): void => { clearTimeout(bannerTimer); b.classList.add('hidden'); };
+  b.onanimationend = (event) => { if (event.target === b) hide(); };
   clearTimeout(bannerTimer);
-  bannerTimer = setTimeout(() => b.classList.add('hidden'), 2800);
+  bannerTimer = setTimeout(hide, 2800);
 }
 
 /** The unbanked spoils as counts per rarity ("2 Epic"): what the items are shows only once banked. */

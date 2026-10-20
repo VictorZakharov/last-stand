@@ -99,6 +99,16 @@ export function applyShadowDetail(root: THREE.Object3D): void {
   });
 }
 
+/**
+ * Each frame a warm-up runs behind the lobby or under the fight's loading bar (game/warm.ts `isWarming`), in place of
+ * `sampleQuality`: its frames are the warm-up's, not the device's (compiled cold behind the lobby, a return drew 3
+ * frames a second, and Auto would have halved the pixels for good). Sampling starts again a settle after.
+ */
+export function holdQuality(): void {
+  frames = time = 0;
+  settle = AUTO_QUALITY.settle;
+}
+
 /** Feed the real (unclamped) frame delta each frame while the game is running. */
 export function sampleQuality(dt: number): void {
   if (setting !== 'auto' || atBottom()) return;

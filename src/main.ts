@@ -11,7 +11,7 @@ import { updateTimers } from './core/timers';
 import { particles } from './fx/particles';
 import { initLights, updateLights, clearLights } from './fx/lights';
 import { initEffects, updateEffects, clearEffects } from './fx/effects';
-import { buildArena } from './world/arena';
+import { buildArena, prepareEnvMaps } from './world/arena';
 import { separateEnemies } from './world/collision';
 import { Player } from './entities/player';
 import { viewArms } from './entities/viewModel';
@@ -38,13 +38,16 @@ import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfCloc
 import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
-import { warmShaders } from './game/warmup';
-import { initQuality, sampleQuality } from './core/quality';
+import { warmLobby, warmTheRest } from './game/warmup';
+import { hurry, isAllWarm, isWarming, whenWarm } from './game/warm';
+import { initReadying } from './ui/readying';
+import { holdQuality, initQuality, sampleQuality } from './core/quality';
 import { updateLowLife } from './core/lowLife';
-import { pinPrograms, markLoaded, steadyShadowPrograms, warmUp } from './core/shaders';
+import { checkPrograms, pinPrograms, steadyShadowPrograms, watchPrograms } from './core/shaders';
 import { initBiome, rollBiome } from './game/biome';
 import { BIOMES, BIOME_IDS } from './data/biomes';
-import { loadingStep, loadingDone, loadingFailed } from './ui/loading';
+import { loadingStep, loadingDone, loadingFailed, loadingLeft, lobbyLaidOut } from './ui/loading';
+import { prepareWind } from './ui/logoWind';
 import { preloadTextures } from './core/textures';
 import { preloadHands } from './entities/models/hands';
 import { initSync } from './net/sync';
@@ -59,28 +62,34 @@ const timer = new THREE.Timer();
 let revealed = false;   // loading screen gone: the game may advance
 
 async function boot() {
-  await loadingStep('Forging the arena', 0.08);
   // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second), and the
-  // heroes' hands sculpted
+  // heroes' hands sculpted: started before anything waits, as nothing they make waits on the page
   const textures = preloadTextures();
   const hands = preloadHands();
+  prepareWind();
+  await loadingStep('Forging the arena', 0.08);
   initUIScale();
   releaseClickedFocus();
   initItemIcons();
   const { scene, renderer } = initRenderer($('#game'));
   steadyShadowPrograms(renderer);
+  watchPrograms(renderer);
   initInput(renderer.domElement);
   initAltCursor(renderer.domElement);
   particles.init(scene);
   initLights(scene);
   initEffects();
-  await textures;
+  // (needing no map, made while the workers make them)
+  initAudio();   // resumed by the first user gesture
+  await prepareEnvMaps(renderer);
+  // (built on the maps' canvases as the workers paint them: nothing is drawn till all have come)
   G.arena = await buildArena(scene, renderer);
   initQuality();
 
   await loadingStep('Summoning the hero', 0.35);
   await hands;
-  initAudio();   // resumed by the first user gesture
+  // (the heroes' engraving is painted over the steel's map as they're built)
+  await textures.ready('steel');
   G.profile = loadProfile(savedClass());
   G.player = new Player(G.profile.classId, G.profile.equipped);
   G.players = [G.player];
@@ -92,12 +101,14 @@ async function boot() {
   initBattleLog();
   buildHotbar(G.player);
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
-  initMenus({ start, toMenu, resume, abandon, profileChanged, switchClass, summaryDone, lobbyChanged: sendLobbyChoice });
-  initSaves({ use: switchSaveSlot });
+  // (the lobby shows before the fight's programs are warm: pressed early, what needs them goes ahead once they are)
+  initMenus({ start: whenWarm(['fight'], start), toMenu, resume, abandon, profileChanged, switchClass, summaryDone, lobbyChanged: sendLobbyChoice });
+  initSaves({ use: whenWarm(['fight', 'heroes'], switchSaveSlot) });
+  initReadying();
   // an item picked up off the lobby floor goes back in the stash, marked new
   initGround((it) => { if (!addToStash(G.profile, it)) return false; markNew([it]); renderMenu(); return true; });
   initSync();
-  initSession({ startRun: guestStart, hostGone, changed: () => { renderCoop(); sendLobbyChoice(); } });
+  initSession({ startRun: whenWarm(['fight'], guestStart), hostGone, changed: () => { renderCoop(); sendLobbyChoice(); } });
   initCoop();
   // losing the pointer mid-wave (Esc, switching windows) pauses, as mouse look can't carry on
   // (in the lobby the Esc that lets go of the mouse look brings the panels back instead)
@@ -115,26 +126,27 @@ async function boot() {
   window.addEventListener('keydown', unlockAudio);
 
   // dev-only handle for debugging and automated screenshots (stripped from production builds)
-  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE } });
+  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: isAllWarm, hurry } });
 
-  await loadingStep('Conjuring foes and spells', 0.55);
-  await warmShaders();
-  await loadingStep('Lighting the lobby', 0.85);
+  await loadingStep('Conjuring spells', 0.55);
   enterMenu();
-  // compile the lobby's shaders (every biome's) before revealing the scene to avoid hitches
-  for (const id of BIOME_IDS) { G.arena.setBiome(id); await warmUp(renderer, scene, G.camera, sceneTarget()); }
+  lobbyLaidOut();
   initBiome();
+  // the lobby's shaders compiled before it shows, the fight's behind it (game/warmup.ts)
+  await warmLobby();
+  await loadingStep('Lighting the lobby', 0.85);
   render();   // one full frame compiles the post-processing passes (bloom, grade...)
   pinPrograms(renderer);
-  markLoaded();
   // the lobby renders behind the loading screen (to settle) but only starts moving at the
   // reveal, so its opening camera zoom is seen
   updateCamera(0, G.player.pos, G.player.model.height);
   loadingDone(() => {
     revealed = true;
+    setTimeout(() => checkPrograms(renderer));
+    void warmTheRest(loadingLeft).then(() => checkPrograms(renderer));
     // an invite link: straight into the friend's room
     const room = invitedRoom();
-    if (room) void joinRoom(room);
+    if (room) whenWarm(['fight', 'heroes'], (code: string) => void joinRoom(code))(room);
   });
   requestAnimationFrame(frame);
 }
@@ -490,7 +502,8 @@ function frame(timestamp: number): void {
   updateMusic(dt, musicWanted());
   const t0 = perfClock.now();
   if (!G.paused && revealed) {
-    sampleQuality(rawDt);
+    if (isWarming()) holdQuality();
+    else sampleQuality(rawDt);
     G.dt = dt;
     G.time += dt;
     update(dt);

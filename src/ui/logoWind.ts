@@ -30,17 +30,31 @@ const TEAR = 0.07, OVER = 1.07;
 const WIPE_LAG = TEAR + 0.02;
 const MAX_POINTS = 1_500_000;      // point budget of a capable desktop
 const LOW_POINTS = 120_000;        // ...and of a phone, tablet or low-end machine
-/** the watchdog: below this frame rate over the first frames of the wind, the exit is cut short */
+/** the watchdog: below this frame rate over the first frames of the wind (their median: a stall among them, the
+ *  GPU busy elsewhere a moment, is no slow device), the exit is cut short */
 const SLOW_FRAME_MS = 50, SLOW_SAMPLES = 10;
-const OFF_KEY = 'last-stand.logo-wind-off';
+/** the launches in a row whose exit the watchdog cut short; at SLOW_LAUNCHES, the device gets the plain fade */
+const SLOW_KEY = 'last-stand.logo-wind-slow';
+const SLOW_LAUNCHES = 2;
+/** the switch it replaced: one launch cut short turned the blow off for good (a stall did it on a fast machine) */
+const OLD_OFF_KEY = 'last-stand.logo-wind-off';
 /** s: the loading backdrop's fade (#loading.done in index.html) */
 const BACKDROP_FADE = 0.9;
 
-/** Whether this device showed it can't run the exit smoothly (cut short on an earlier launch). */
+/** Whether this device showed it can't run the exit smoothly (cut short on the last SLOW_LAUNCHES launches). */
 export function logoWindOff(): boolean {
-  try { return localStorage.getItem(OFF_KEY) === '1'; } catch { return false; }
+  try {
+    localStorage.removeItem(OLD_OFF_KEY);
+    return Number(localStorage.getItem(SLOW_KEY)) >= SLOW_LAUNCHES;
+  } catch { return false; }
 }
-function turnOff(): void { try { localStorage.setItem(OFF_KEY, '1'); } catch { /* ignore */ } }
+/** The watchdog's judgement of this launch: a slow one counted, one that kept up clearing the count. */
+function judged(slow: boolean): void {
+  try {
+    if (slow) localStorage.setItem(SLOW_KEY, String((Number(localStorage.getItem(SLOW_KEY)) || 0) + 1));
+    else localStorage.removeItem(SLOW_KEY);
+  } catch { /* ignore */ }
+}
 
 /** How many points the device can move smoothly: touch devices and small or low-memory machines get far fewer. */
 function pointBudget(): number {
@@ -159,8 +173,8 @@ export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null)
           target!.style.willChange = '';
         }
       }, () => { field.dispose(); done(); }, () => {
-        // too slow for this device: the lobby (and its logo) take over now, and later launches use the plain fade
-        turnOff();
+        // too slow for this device: the lobby (and its logo) take over now (and after SLOW_LAUNCHES launches like
+        // this, later ones use the plain fade)
         if (!revealed) { revealed = true; reveal(); }
         if (gather && !handed) {
           handed = true;
@@ -303,16 +317,13 @@ void main() {
   o = vCol * mix(1.0, 1.0 - smoothstep(0.2, 0.5, d), vRound);
 }`;
 
-/** A snapshot of the lobby logo: RGBA on the canvas's pixel grid, its top left in CSS px. */
-interface HomeTex { data: Uint8ClampedArray; x: number; y: number; w: number; h: number }
-interface FieldOpts { box: DOMRect; dpr: number; pointPx: number; gather: { x: number; y: number; scale: number } | null; home: HomeTex | null }
+/** The field's canvas, its context and its program. */
+interface Context { canvas: HTMLCanvasElement; gl: WebGL2RenderingContext; prog: WebGLProgram }
+/** the context made ahead (`prepareWind`) */
+let ahead: Context | null = null;
 
-function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count: number, o: FieldOpts) {
+function makeContext(): Context | null {
   const canvas = document.createElement('canvas');
-  // a whole number of device pixels, shown unscaled: any resampling would soften the letters
-  canvas.width = Math.floor(innerWidth * o.dpr); canvas.height = Math.floor(innerHeight * o.dpr);
-  const cssW = canvas.width / o.dpr, cssH = canvas.height / o.dpr;
-  Object.assign(canvas.style, { position: 'fixed', left: '0', top: '0', width: `${cssW}px`, height: `${cssH}px`, zIndex: '101', pointerEvents: 'none', visibility: 'hidden' });
   const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, antialias: false });
   if (!gl) return null;
   const shader = (type: number, src: string): WebGLShader => {
@@ -323,7 +334,36 @@ function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count:
   const prog = gl.createProgram()!;
   gl.attachShader(prog, shader(gl.VERTEX_SHADER, VERT));
   gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FRAG));
+  // (its status asked only as the field is made: by then it has long linked)
   gl.linkProgram(prog);
+  return { canvas, gl, prog };
+}
+
+/**
+ * Makes the field's context and program at the boot's start, while the GPU's process is idle: made as the game's
+ * loop started, on a first visit, the context waited a second on it (busy with the game's first draws).
+ */
+export function prepareWind(): void { ahead ??= makeContext(); }
+
+/** The context made ahead let go, where the exit is a plain fade. */
+export function dropWind(): void {
+  ahead?.gl.getExtension('WEBGL_lose_context')?.loseContext();
+  ahead = null;
+}
+
+/** A snapshot of the lobby logo: RGBA on the canvas's pixel grid, its top left in CSS px. */
+interface HomeTex { data: Uint8ClampedArray; x: number; y: number; w: number; h: number }
+interface FieldOpts { box: DOMRect; dpr: number; pointPx: number; gather: { x: number; y: number; scale: number } | null; home: HomeTex | null }
+
+function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count: number, o: FieldOpts) {
+  const made = ahead ?? makeContext();
+  ahead = null;
+  if (!made) return null;
+  const { canvas, gl, prog } = made;
+  // a whole number of device pixels, shown unscaled: any resampling would soften the letters
+  canvas.width = Math.floor(innerWidth * o.dpr); canvas.height = Math.floor(innerHeight * o.dpr);
+  const cssW = canvas.width / o.dpr, cssH = canvas.height / o.dpr;
+  Object.assign(canvas.style, { position: 'fixed', left: '0', top: '0', width: `${cssW}px`, height: `${cssH}px`, zIndex: '101', pointerEvents: 'none', visibility: 'hidden' });
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
   gl.useProgram(prog);
   const attr = (name: string, data: ArrayBufferView, size: number, type: number, norm: boolean): void => {
@@ -374,14 +414,19 @@ function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count:
     /** `slow` fires if the watchdog cuts the exit short; `done` still follows once the backdrop has faded. */
     run(tick: (t: number) => void, done: () => void, slow: () => void): void {
       const t0 = performance.now();
-      let last = t0, samples = 0, spent = 0;
+      let last = t0, judging = true;
+      const samples: number[] = [];
       const frame = (now: number): void => {
         if (disposed) return;
         const t = (now - t0) / 1000;
         // the watchdog: the first frames of the wind show whether the device keeps up
-        if (t > 0 && samples < SLOW_SAMPLES) {
-          spent += now - last;
-          if (++samples === SLOW_SAMPLES && spent / samples > SLOW_FRAME_MS) {
+        if (judging && t > 0) samples.push(now - last);
+        if (judging && samples.length === SLOW_SAMPLES) {
+          judging = false;
+          const sorted = samples.sort((a, b) => a - b);
+          const isSlow = (sorted[SLOW_SAMPLES / 2 - 1] + sorted[SLOW_SAMPLES / 2]) / 2 > SLOW_FRAME_MS;
+          judged(isSlow);
+          if (isSlow) {
             slow();
             canvas.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 250, fill: 'forwards' });
             setTimeout(done, BACKDROP_FADE * 1000);

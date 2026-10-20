@@ -3,6 +3,7 @@
 import { G } from '../state';
 import { COOP } from '../data/balance';
 import { session, hostRoom, joinRoom, leaveRoom, inviteLink, partners } from '../net/session';
+import { whenWarm } from '../game/warm';
 import { serverUp, SERVER_DOWN } from '../net/transport';
 import { isCoop } from '../net/role';
 import { anchorLabel, removeLabel, project, onLayout } from './floaters';
@@ -23,6 +24,9 @@ const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt
 const who = (p: Player): string => `${p.slot === 0 ? 'Host' : 'Partner'} · ${p.cls.name}`;
 
 let touchRevive = false;
+/** a room hosted or joined: before the programs are warm, once they are (a partner's hero is any class) */
+const host = whenWarm(['fight', 'heroes'], () => void hostRoom());
+const join = whenWarm(['fight', 'heroes'], (code: string) => void joinRoom(code));
 /** Whether the touch revive button is held. */
 export const touchReviving = (): boolean => touchRevive;
 
@@ -79,14 +83,14 @@ export function renderCoop(): void {
       </div>
       ${reportLinks()}`;
     bindReportLinks(body);
-    $('#btn-coop-host', body).onclick = () => { if (server !== 'up') return; sfx.click(); void hostRoom(); };
+    $('#btn-coop-host', body).onclick = () => { if (server !== 'up') return; sfx.click(); host(); };
     const retry = $('#btn-coop-retry', body) as HTMLElement | null;
     if (retry) retry.onclick = () => { sfx.click(); void checkServer(); };
     $('.coop-saves', body).onclick = () => { sfx.click(); openCoop(false); openSaves(true); };
     $<HTMLFormElement>('.coop-join', body).onsubmit = (e) => {
       e.preventDefault();
       const code = $<HTMLInputElement>('#coop-code', body).value.trim();
-      if (code.length >= 4 && server === 'up') { sfx.click(); void joinRoom(code); }
+      if (code.length >= 4 && server === 'up') { sfx.click(); join(code); }
     };
     return;
   }

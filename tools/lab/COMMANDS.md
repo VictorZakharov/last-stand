@@ -302,8 +302,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   with a clip, what crossed what and how deep.
 - `probe <module>`: a measure of your own (Writing a measure in `AGENTS.md`). Options the lab doesn't know are passed to it (`--frames=30`), and
   `--setup=false` skips the set-up.
-- `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,clicked,views,
-  logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch`, every one by default:
+- `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,readying,clicked,
+  views,logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch`, every one by default:
   the lobby, an item's tooltip, the stash given 20 items and a weapon among them hovered by the mouse, those that fit
   its slot lit (`page/uiGlow.ts`: pictured round the stash, its tooltip put away, at 400, 1000 and 1600 ms into the
   glow's loops, each held there, so `--ab` pictures the same moment on both sides; every loop a lit item runs must
@@ -312,7 +312,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   from 145 frames a second to 44, #267; and each loop on a stash item not hovered is a problem: 30 lit items' 90
   loops, composited, still halved the frames while the mouse moved between them; `--canary` loops a shadow on the
   hovered item and turns a lit one's glow not hovered, each of which must be found),
-  How to play, the save slots, the hero's class
+  How to play, the save slots, the fight's loading bar over the lobby as a press waiting for the fight's programs
+  shows it (`ui/readying.ts`, 40% along: within the window, its label on one line, its fill as far as painted;
+  `--canary` gives the label a letter's width, whose wrap must be found), the hero's class
   button clicked with the mouse and a key pressed after it as the browser gets them (where the focus went and whether
   the browser shows its ring: a problem when the button kept it), the lobby's camera switched with V through every
   view and back, each glide played and drawn (every frame, each label over the dummies against where its anchor shows
@@ -693,6 +695,28 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the scene drawn twice (the scene pass's GPU time must read at least 1.3 times more), and the particles twice as
   wide (their fill must read at least 2.5 times more). The machine's load drifts: compare an A/B run `--fresh`, both
   sides then, not one side from the cache and the other now.
+- `programs`: the programs the boot compiled (`page/programs.ts`), read from the game's ledger of them
+  (`watchPrograms` in `src/core/shaders.ts`, dev builds alone: the boot's programs are made before any command can
+  watch). How many each loading step made, and how many of those a draw made rather than the warm-ups' `compile()`
+  (a draw's program is linked as it's drawn, the page held up meanwhile); each kind (the material's type and its
+  shader), with the fields of its key that set its programs apart (`page/programKeys.ts`: three r185's key read by
+  field, the names held to three's own code by `test/programKeys.test.mjs`; `custom` is the material's own key,
+  three's default left out), a kind of one with what it was made for; what uses them (the scene's top-level object
+  of each object compiled or drawn with one, every foe's kind as `foes`: a program the foes alone use is one a lobby
+  shown before them could compile later); the programs no draw ever used (compiled for
+  nothing); those made after the reveal (the lab's set-up). It found 177 programs at boot, 92 of them lit (each for
+  15 point lights), 17 of those never drawn: the crowd bodies' own materials, on a layer no pass draws (now left out
+  of the warm-ups' compile; the kit's variants made uniforms, 146 were left). The lobby shows before the fight's
+  programs are warm (`src/game/warm.ts`): the lab's boot asks for them at once and waits for them, listed as made
+  `behind the lobby` (40 of the 146). `--cost` compiles each program again from the GLSL three gave it, alone, salted
+  so no cache can answer (`page/programCost.ts`), and times it from its source to its link: the CPU a first visit's
+  ANGLE spends on it; summed by kind, by what uses them and by the point lights they're lit by, the longest listed
+  with their fragment shader's size, and a plain lit material's compile as the scene lights it and with its point
+  lights, environment map, shadows and fog each taken away. Its canary is the cache: the longest compiled again
+  with its salt must come back in under a quarter of its time, and with a new salt in over half. It found the lit
+  programs 36 of the 40 s (0.56 s each, 16 point lights written out), 23 s once lit in a loop. A minute or more.
+  `--canary` warms a box of a kind nothing else is (it must be listed compiled and drawn) and one on a layer no
+  camera sees (it must be listed never drawn).
 - `compiles`: whether the boot's warm-up compiled what a fight draws (`page/compiles.ts`). In each biome (`--biomes`,
   both) the hero stands in the view (`--view`, top) and a prop of every kind the biome has is worn down (its gauge
   over it, chips knocked off) and broken in turn, its rubble, debris and smoke drawn as they fly and settle; then the
@@ -958,6 +982,10 @@ Options every command run on a page takes:
   differences first. An A/B's pictures of anything random (particles, sparks, motes) differ after the first draw one
   side made and the other didn't: drawn in crowds, the foes' skeletons never made the bone textures three makes as a
   skinned mesh is first drawn, four numbers each for their ids, and every mote after them lay elsewhere;
+- `--layers`: the page's composited layers at each screen picture, as Chrome drew them (`node/layers.mjs`): each
+  layer's element, its box and why Chrome made it a layer, and with `--ab` the layers the sides didn't share, picture
+  by picture. Two sides whose pictures differ only in how bright the UI's thin lines are, nothing moved, were
+  rastered two ways;
 - `--watch`: run it again each time the source changes, on the page booted for the change, until Ctrl+C.
 
 A misspelt option or a bad value stops the command before anything boots (`carry takes no --canry (did you mean

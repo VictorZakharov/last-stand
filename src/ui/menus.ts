@@ -28,6 +28,7 @@ import { hdrSettings, hdrStatus, onHdrChange, setHdrSettings, type HdrMode, type
 import { QUALITY, type QualitySetting } from '../data/quality';
 import { BIOMES, BIOME_IDS, type BiomeSetting } from '../data/biomes';
 import { biomeSetting, setBiomeSetting } from '../game/biome';
+import { whenWarm } from '../game/warm';
 import { isCoop, isGuest, isHost } from '../net/role';
 import { session, partnerInRun } from '../net/session';
 
@@ -152,6 +153,12 @@ function mouseDiagram(id: string): string {
   </div>`;
 }
 
+/** A class or a battleground picked in the lobby: picked before the fight's programs are warm, done once they are. */
+const pickClass = whenWarm(['heroes'], (id: string) => { hooks.switchClass(id); renderMenu(); hooks.lobbyChanged(); });
+const pickBiome = whenWarm(['fight'], (setting: BiomeSetting) => {
+  setBiomeSetting(setting); renderBiomeOptions(); renderWaveOptions(); hooks.lobbyChanged();
+});
+
 export function initMenus(h: MenuHooks): void {
   hooks = h;
   $('#btn-start').onclick = () => { sfx.click(); hooks.start(); };
@@ -182,14 +189,14 @@ export function initMenus(h: MenuHooks): void {
   $('.cc-tag').innerHTML = CLASS_IDS.map((id) => `<span data-c="${id}">${CLASSES[id].tagline}</span>`).join('');
   classes.querySelectorAll<HTMLElement>('button').forEach((b) => {
     // the class's records set the starting wave: a co-op host shows its guests
-    b.onclick = () => { sfx.click(); hooks.switchClass(b.dataset.c!); renderMenu(); hooks.lobbyChanged(); };
+    b.onclick = () => { sfx.click(); pickClass(b.dataset.c!); };
   });
   const biomes = $('#opt-biome');
   biomes.insertAdjacentHTML('afterbegin', BIOME_IDS.map((id) => `<button data-b="${id}">${BIOMES[id].label}</button>`).join(''));
   biomes.querySelectorAll<HTMLElement>('button').forEach((b) => {
     b.onclick = () => {
       if (isGuest()) return;   // the host picks
-      sfx.click(); setBiomeSetting(b.dataset.b as BiomeSetting); renderBiomeOptions(); renderWaveOptions(); hooks.lobbyChanged();
+      sfx.click(); pickBiome(b.dataset.b as BiomeSetting);
     };
   });
   const waves = $('#opt-wave');
