@@ -175,6 +175,8 @@ class AreaPass extends Pass {
     depthTest: false, depthWrite: false,
   });
   private quad = new FullScreenQuad(this.mat);
+  /** what it draws with (`compilePasses`) */
+  get material(): THREE.ShaderMaterial { return this.mat; }
   constructor() { super(); this.needsSwap = false; }
   override render(r: THREE.WebGLRenderer, _w: THREE.WebGLRenderTarget, read: THREE.WebGLRenderTarget): void {
     let src = read;
@@ -201,6 +203,34 @@ const SanitizeShader = {
 };
 
 let composer: EffectComposer, grade: ShaderPass, gl: THREE.WebGLRenderer, sceneRT: THREE.WebGLRenderTarget;
+/** the post chain's materials: those its passes draw into its targets with, and the grade's, drawn to the screen */
+let passMaterials: { intoTargets: THREE.ShaderMaterial[]; toScreen: THREE.ShaderMaterial[] } = { intoTargets: [], toScreen: [] };
+
+/**
+ * The post chain's programs compiled now, each for what it draws into (a target, or the screen: the grade's, and
+ * `onScreen`'s, the overlay's), so the GPU's threads link them side by side: the first full frame linked each as it
+ * first drew it, one after another (0.33 s on a first visit).
+ */
+export function compilePasses(onScreen: THREE.Scene[]): void {
+  // (a pass's full-screen triangle: positions and uvs alone, as normals would make another program)
+  const quad = new THREE.BufferGeometry();
+  quad.setAttribute('position', new THREE.Float32BufferAttribute([-1, 3, 0, -1, -1, 0, 3, -1, 0], 3));
+  quad.setAttribute('uv', new THREE.Float32BufferAttribute([0, 2, 0, 0, 2, 0], 2));
+  const flat = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const compiled = (materials: THREE.Material[], target: THREE.WebGLRenderTarget | null): void => {
+    const holder = new THREE.Scene();
+    holder.add(...materials.map((material) => new THREE.Mesh(quad, material)));
+    gl.setRenderTarget(target);
+    gl.compile(holder, flat);
+  };
+  const prev = gl.getRenderTarget();
+  compiled(passMaterials.intoTargets, sceneRT);
+  compiled(passMaterials.toScreen, null);
+  for (const scene of onScreen) gl.compile(scene, flat);
+  gl.setRenderTarget(prev);
+  quad.dispose();
+}
+
 const rig = {
   zoom: 1,
   targetZoom: 1,
@@ -408,6 +438,13 @@ export function initRenderer(container: HTMLElement) {
   grade.uniforms.tSmall.value = area.small.texture;
   grade.uniforms.tLarge.value = area.large.texture;
   composer.addPass(grade);
+  passMaterials = {
+    intoTargets: [
+      sanitize.material, bloom.materialHighPassFilter, ...bloom.separableBlurMaterials, bloom.compositeMaterial,
+      bloom.blendMaterial, area.material,
+    ],
+    toScreen: [grade.material],
+  };
   // the perf overlay times each pass on the GPU
   for (const [label, pass] of [['sanitize', sanitize], ['area', area], ['bloom', bloom], ['grade', grade]] as [string, Pass][]) {
     const run = pass.render.bind(pass);

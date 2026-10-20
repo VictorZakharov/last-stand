@@ -253,6 +253,13 @@ overFrame.draw = () => {
   drawLabels();
 };
 
+/** The labels' scene, its mesh made: compiled with the post chain, as the frame's last draws (core/renderer.ts
+ *  `compilePasses`). */
+export function labelsScene(): THREE.Scene {
+  if (!mesh) makeMesh(64);
+  return scene;
+}
+
 /** The labels drawn last frame, lowest first (tools/lab's `ui` measures their boxes). */
 export function drawnLabels(): readonly Label[] { return drawn; }
 

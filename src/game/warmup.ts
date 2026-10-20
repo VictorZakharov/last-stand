@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { behindTheLobby, compileAhead, markLoaded, warmUp, type WarmedUp } from '../core/shaders';
-import { sceneTarget } from '../core/renderer';
+import { compilePasses, sceneTarget } from '../core/renderer';
 import { mapsArrived, mapsMadeAfresh } from '../core/textures';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { BIOME_IDS } from '../data/biomes';
@@ -30,6 +30,7 @@ import { riftBoltSamples } from '../fx/riftBolts';
 import { swingTrailSamples } from '../fx/swingTrail';
 import { groundSamples } from './groundItems';
 import { warmOutline } from '../ui/overlay/outline';
+import { labelsScene } from '../ui/overlay/layer';
 import { markWarm, wanted, warming, warmingRuns, type Need } from './warm';
 import type { Model } from '../types';
 
@@ -101,24 +102,58 @@ const otherBiomes = () => BIOME_IDS.filter((id) => id !== G.arena.biome);
 /**
  * The lobby's biome compiled as soon as it's built, a light standing in for the hero's (built next: a program is
  * made for the scene's count of lights), so the GPU's threads link its programs while the hero is built; the
- * lobby's warm-up waited for them after (a first visit's: 3.5 s of the 14 s of compiles it waited 2.3 s on).
+ * lobby's warm-up waited for them after (a first visit's: 3.5 s of the 14 s of compiles it waited 2.3 s on). The
+ * post chain's and the overlay's too, which the lobby's first full frame linked one after another.
  * Returns the stand-in's removal, for once the hero's own light is in.
  */
 export function compileTheBiome(): () => void {
   const standIn = new THREE.PointLight(0xffffff, 0);
   G.scene.add(standIn);
   compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)));
+  compilePasses([labelsScene()]);
   return () => G.scene.remove(standIn);
 }
 
+/** `objects` named `name` where they have none of their own: what uses a program, as `lab programs` lists them. */
+function named<T extends THREE.Object3D>(name: string, objects: T[]): T[] {
+  for (const o of objects) o.name ||= name;
+  return objects;
+}
+
+/** What `spawn` adds to the scene, named `name` where it has no name of its own. */
+function spawned(name: string, spawn: () => unknown): void {
+  const before = new Set(G.scene.children);
+  spawn();
+  named(name, G.scene.children.filter((o) => !before.has(o)));
+}
+
+/** The samples of the skills `model`'s classes cast (each skill once), named for what uses them. */
+function skillSamples(model: string): THREE.Object3D[] {
+  const classes = Object.values(CLASSES).filter((c) => c.model === model);
+  const impls = new Set(classes.flatMap((c) => c.skills.map((s) => s.impl)));
+  return [...impls].flatMap((impl) => named(`skill: ${impl}`, SKILL_IMPLS[impl]?.warm?.() ?? []));
+}
+
 /** What the lobby shows and can do, warmed before it shows (the lobby's dummies already stand in it); the fight's
- *  foes built meanwhile (`buildAhead`). */
+ *  foes built meanwhile (`buildAhead`). Its hero's skills alone: another class's are warmed with its hero, as a class
+ *  switch or a partner's needs them (`heroParts`; the lobby's warm-up compiled every class's, 14 programs, before it
+ *  showed). */
 export async function warmLobby(): Promise<void> {
   const at = new THREE.Vector3(), p = { x: 0, z: 0 };
-  shockwave(p); groundFlash(p); decal(p); decal(p, { type: 'frost' }); telegraph(p, 2, 1);
-  lightning(at, new THREE.Vector3(1, 1, 1)); iceSpikes(p, 2); glyphMarker(p); lightPillar(p); crackDecal(p); crystalBurst(p);
+  const effects: [string, () => unknown][] = [
+    ['shockwave', () => shockwave(p)], ['ground flash', () => groundFlash(p)], ['scorch', () => decal(p)],
+    ['frost', () => decal(p, { type: 'frost' })], ['telegraph', () => telegraph(p, 2, 1)],
+    ['lightning', () => lightning(at, new THREE.Vector3(1, 1, 1))], ['ice spikes', () => iceSpikes(p, 2)],
+    ['glyph', () => glyphMarker(p)], ['light pillar', () => lightPillar(p)], ['crack', () => crackDecal(p)],
+    ['crystals', () => crystalBurst(p)],
+  ];
+  for (const [name, spawn] of effects) spawned(`effect: ${name}`, spawn);
   for (const kind of ['stone', 'wood', 'shroom', 'ember'] as const) rubble(0, 0, { count: 24, color: 0x808080, kind, radius: 0.1, height: 0.1, size: 0.2, speed: 1 });
-  const extra: THREE.Object3D[] = [...coreSamples(), sporeOrbSample(), ...riftBoltSamples(), ...groundSamples(), ...swingTrailSamples(), ...Object.values(SKILL_IMPLS).flatMap((s) => s.warm?.() ?? [])];
+  // (the other heroes' skills are theirs to warm, the foes' shots the fight's)
+  const extra: THREE.Object3D[] = [
+    ...named('cores', coreSamples()), ...named('drops', groundSamples()), ...named('swing trail', swingTrailSamples()),
+    ...skillSamples(G.player.cls.model),
+  ];
   // (the hero's class with all it can wear: equipping anything in the lobby compiles nothing)
   await nextTask();
   const hero = heroAllWorn(G.player.cls.model);
@@ -161,7 +196,7 @@ interface Built {
  * The fight's parts: each foe (a plain one and a hero one of its kind, built away from the arena, where the lobby's
  * camera never looks, never let act, and kept out of the scene and their crowd till drawn: a crowd draws its kind
  * whatever the camera sees, and the lobby's frames linked its programs as they drew it, each waiting for its link),
- * each other biome. The training dummy is the lobby's own.
+ * the foes' shots, each other biome. The training dummy is the lobby's own.
  */
 function fightParts(): Part[] {
   const ids = (Object.keys(ENEMIES) as EnemyId[]).filter((id) => !ENEMIES[id].dummy);
@@ -177,6 +212,13 @@ function fightParts(): Part[] {
       return { compile: [...roots, ...slots], objects: roots, drawn: slots, outlined: roots, show, done };
     },
   }));
+  const shots: Part = {
+    name: 'shots',
+    build() {
+      const samples = [...named('spore orb', [sporeOrbSample()]), ...named('rift bolts', riftBoltSamples())];
+      return { compile: samples, objects: samples, drawn: [], outlined: [], done: () => undefined };
+    },
+  };
   const biomes = otherBiomes().map((id): Part => ({
     name: id,
     build() {
@@ -184,7 +226,7 @@ function fightParts(): Part[] {
       return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
     },
   }));
-  return [...foes, ...biomes];
+  return [...foes, shots, ...biomes];
 }
 
 /** the fight's parts, made once: built ahead before the lobby shows, warmed after */
@@ -210,7 +252,8 @@ function heroParts(): Part[] {
     name: model,
     build() {
       const hero = heroAllWorn(model, AWAY);
-      return { compile: [hero.root], objects: [hero.root], drawn: [], outlined: [], done: () => hero.dispose() };
+      const parts = [hero.root, ...skillSamples(model)];
+      return { compile: parts, objects: parts, drawn: [], outlined: [], done: () => hero.dispose() };
     },
   }));
 }
