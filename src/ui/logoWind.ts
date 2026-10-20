@@ -317,10 +317,44 @@ void main() {
   o = vCol * mix(1.0, 1.0 - smoothstep(0.2, 0.5, d), vRound);
 }`;
 
-/** The field's canvas, its context and its program. */
-interface Context { canvas: HTMLCanvasElement; gl: WebGL2RenderingContext; prog: WebGLProgram }
+/** The field's canvas, its context and its program, and what the program is read for once linked (`readLinked`;
+ *  null: its link failed). */
+interface Context { canvas: HTMLCanvasElement; gl: WebGL2RenderingContext; prog: WebGLProgram; linked?: Linked | null }
 /** the context made ahead (`prepareWind`) */
 let ahead: Context | null = null;
+
+/** The field's program's attribute and uniform locations. */
+interface Linked { attributes: Record<string, number>; uniforms: Record<string, WebGLUniformLocation | null> }
+const ATTRIBUTES = ['aPos', 'aCol', 'aRnd'];
+const UNIFORMS = ['uView', 'uBox', 'uDst', 'uPx', 'uDpr', 'uHomeAt', 'uHome', 'uT'];
+/** KHR_parallel_shader_compile's query: whether the link is done (read from a result the browser keeps, no wait) */
+const COMPLETION_STATUS_KHR = 0x91b1;
+/** how often the link is asked after, ms */
+const LINK_POLL_MS = 20;
+
+/** `prog`'s link status and locations: each a round trip to the GPU's process, waiting behind its work. */
+function readLinked(gl: WebGL2RenderingContext, prog: WebGLProgram): Linked | null {
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+  const attributes = Object.fromEntries(ATTRIBUTES.map((name) => [name, gl.getAttribLocation(prog, name)]));
+  const uniforms = Object.fromEntries(UNIFORMS.map((name) => [name, gl.getUniformLocation(prog, name)]));
+  return { attributes, uniforms };
+}
+
+/**
+ * `made`'s program read as soon as its link is done, early in the boot (asked every `LINK_POLL_MS` where the browser
+ * says when, else as the field is made). Read as the field was made, its round trips waited behind the GPU
+ * process's main thread building Skia's programs for the lobby's first paint, one after another: 0.57 s on a first
+ * visit, the page held up.
+ */
+function readWhenLinked(made: Context): void {
+  if (!made.gl.getExtension('KHR_parallel_shader_compile')) return;
+  const ask = (): void => {
+    if (made.linked !== undefined || made.gl.isContextLost()) return;
+    if (made.gl.getProgramParameter(made.prog, COMPLETION_STATUS_KHR)) made.linked = readLinked(made.gl, made.prog);
+    else setTimeout(ask, LINK_POLL_MS);
+  };
+  setTimeout(ask, LINK_POLL_MS);
+}
 
 function makeContext(): Context | null {
   const canvas = document.createElement('canvas');
@@ -334,9 +368,14 @@ function makeContext(): Context | null {
   const prog = gl.createProgram()!;
   gl.attachShader(prog, shader(gl.VERTEX_SHADER, VERT));
   gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FRAG));
-  // (its status asked only as the field is made: by then it has long linked)
+  // (its status and locations read once it has linked: `readWhenLinked`. Sent to the GPU's process now: a context
+  // never drawn to the page holds its commands till something waits on them, and on a first visit the field's ask
+  // for its status then waited 0.85 s, the link queued behind the lobby's compiles)
   gl.linkProgram(prog);
-  return { canvas, gl, prog };
+  gl.flush();
+  const made: Context = { canvas, gl, prog };
+  readWhenLinked(made);
+  return made;
 }
 
 /**
@@ -364,10 +403,12 @@ function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count:
   canvas.width = Math.floor(innerWidth * o.dpr); canvas.height = Math.floor(innerHeight * o.dpr);
   const cssW = canvas.width / o.dpr, cssH = canvas.height / o.dpr;
   Object.assign(canvas.style, { position: 'fixed', left: '0', top: '0', width: `${cssW}px`, height: `${cssH}px`, zIndex: '101', pointerEvents: 'none', visibility: 'hidden' });
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+  if (made.linked === undefined) made.linked = readLinked(gl, prog);
+  const linked = made.linked;
+  if (!linked) return null;
   gl.useProgram(prog);
   const attr = (name: string, data: ArrayBufferView, size: number, type: number, norm: boolean): void => {
-    const loc = gl.getAttribLocation(prog, name);
+    const loc = linked.attributes[name];
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
     gl.enableVertexAttribArray(loc);
@@ -377,7 +418,7 @@ function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count:
   attr('aPos', pos, 2, gl.FLOAT, false);
   attr('aCol', col, 4, gl.UNSIGNED_BYTE, true);
   attr('aRnd', rnd, 4, gl.UNSIGNED_BYTE, true);
-  const u = (name: string): WebGLUniformLocation | null => gl.getUniformLocation(prog, name);
+  const u = (name: string): WebGLUniformLocation | null => linked.uniforms[name];
   gl.uniform2f(u('uView'), cssW, cssH);
   gl.uniform4f(u('uBox'), o.box.left, o.box.top, o.box.width, o.box.height);
   const g = o.gather;

@@ -33,7 +33,10 @@ export function initSkillStrip(root: HTMLElement): void {
   prev.onclick = () => go(-SHOWN);
   next.onclick = () => go(SHOWN);
   row.addEventListener('scroll', syncSkillStrip, { passive: true });
-  new ResizeObserver(syncSkillStrip).observe(row);
+  // (its arrows shown or hidden in the next frame: shown, the row narrows, and changed in the notification's own
+  // frame that's another, a loop the browser reports as an error, as the lobby's panels are laid out before
+  // their skills are in)
+  new ResizeObserver(() => requestAnimationFrame(syncSkillStrip)).observe(row);
   // the wheel scrolls it sideways, a tile per notch
   row.addEventListener('wheel', (e) => {
     const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;

@@ -2,11 +2,11 @@
 // `src/core/shaders.ts`, dev builds alone: the boot's programs are made before any command can watch). How many each
 // loading step made, and how (the warm-ups' `compile()`, or a draw: a program a draw makes is linked as it's drawn, the
 // page held up meanwhile); each kind, with the fields of its key that set its programs apart (`programKeys.ts`); the
-// programs no draw ever used (compiled for nothing: the boot's time spent on them is lost); and those made after the
-// reveal (the lab's set-up). On a first visit the boot spends 94 s of ANGLE's threads compiling (the stalls' boot
-// measure), so which programs there are, and why, decides what can go; `--cost` times each one's compile alone
-// (`programCost.ts`). `--canary` warms a box of a kind nothing else is, which must be listed as compiled and drawn,
-// and one on a layer no camera sees, which must be listed as never drawn.
+// programs no draw ever used (compiled for nothing: the boot's time spent on them is lost) and those a draw made,
+// each named; and those made after the reveal (the lab's set-up). On a first visit the boot spends 94 s of ANGLE's
+// threads compiling (the stalls' boot measure), so which programs there are, and why, decides what can go; `--cost`
+// times each one's compile alone (`programCost.ts`). `--canary` warms a box of a kind nothing else is, which must
+// be listed as compiled and drawn, and one on a layer no camera sees, which must be listed as never drawn.
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
@@ -14,7 +14,7 @@ import { ENEMIES } from '../../../src/data/enemies';
 import { sceneTarget } from '../../../src/core/renderer';
 import { programsMade, warmUp, type ProgramMade } from '../../../src/core/shaders';
 import { apartText, fieldsOf, kindOf, kindsApart, type KindApart } from './programKeys';
-import { cacheCanary, costs, lightsText, longestText, partsText, summedText } from './programCost';
+import { cacheCanary, costs, lightsText, longestText, partsText, summedText, type ProgramCost } from './programCost';
 
 export interface ProgramsOptions {
   canary: boolean;
@@ -76,6 +76,13 @@ function kindText({ kind, count, apart }: KindApart, made: ProgramMade[]): strin
   return `    ${kind}: ${count}${shown.length ? `, set apart by ${shown.join('; ')}${more}` : ''}`;
 }
 
+/** `made`, `LISTED` of them, each with its step and what it was made for, one a line under `title`. */
+function eachText(title: string, made: ProgramMade[]): string[] {
+  const shown = made.slice(0, LISTED).map((entry) => `      ${entry.step}: ${groupOf(entry)}, for ${entry.owner}`);
+  const left = made.length - shown.length;
+  return made.length ? [`    ${title}:`, ...shown, ...(left > 0 ? [`      and ${left} more`] : [])] : [];
+}
+
 /** The listing of `made`, the boot's programs. */
 function listing(made: ProgramMade[]): string[] {
   const kinds = kindsApart(made.map(({ program, type }) => ({
@@ -90,7 +97,9 @@ function listing(made: ProgramMade[]): string[] {
     ...kinds.map((kind) => kindText(kind, made)),
     `  by what uses them (the scene's top-level objects): ${countedText(made, usersOf)}`,
     `  never drawn: ${unused.length}${unused.length ? `: ${countedText(unused, groupOf)}` : ''}`,
+    ...eachText('each', unused),
     `  made by a draw: ${byDraw.length}${byDraw.length ? `: ${countedText(byDraw, groupOf)}` : ''}`,
+    ...eachText('each', byDraw),
   ];
 }
 
@@ -136,6 +145,16 @@ async function canary(lab: Lab): Promise<Report> {
   return { text, problems };
 }
 
+/** Each step's programs' compile, summed by what uses them: what the step's warm-up waits for its links on. */
+function stepsCostText(measured: ProgramCost[]): string[] {
+  const steps = [...new Set(measured.map(({ entry }) => entry.step))];
+  return steps.map((step) => {
+    const ofStep = measured.filter(({ entry }) => entry.step === step);
+    const total = ofStep.reduce((sum, { ms }) => sum + ms, 0);
+    return `    ${step} ${ofStep.length}: ${(total / 1000).toFixed(1)} s: ${summedText(ofStep, usersOf, LISTED)}`;
+  });
+}
+
 /** What compiling each of `made` costs, alone (`programCost.ts`), and the cache's canary. */
 async function costReport(made: ProgramMade[]): Promise<Report> {
   const gl = G.renderer.getContext() as WebGL2RenderingContext;
@@ -147,6 +166,8 @@ async function costReport(made: ProgramMade[]): Promise<Report> {
       + 'in all (the CPU a first visit spends on them, several at once)',
     `  by kind: ${summedText(measured, groupOf, LISTED)}`,
     `  by what uses them: ${summedText(measured, usersOf, LISTED)}`,
+    '  each step\'s, by what uses them:',
+    ...stepsCostText(measured),
     `  by the point lights they're lit by: ${lightsText(measured)}`,
     '  the longest:',
     ...longestText(measured, groupOf),

@@ -207,6 +207,11 @@ export function stopBootRecording() {
       at: entry.startTime,
       ms: entry.duration,
       kept: entry.detail?.kept === true,
+      // (how long the store took to answer whether it was kept, when its worker was asked for and when its script
+      // ran: a build before didn't say)
+      readMs: entry.detail?.readMs ?? null,
+      asked: entry.detail?.asked ?? null,
+      up: entry.detail?.up ?? null,
     }));
   const { start, frames, phases, longTasks } = record;
   const exit = { kind: record.exit ?? null, before: record.marksBefore, after: record.marks() };

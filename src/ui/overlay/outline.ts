@@ -9,6 +9,7 @@ import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { G } from '../../state';
 import { uiScales } from '../scale';
 import { CROWD_LAYER } from '../../core/layers';
+import { passCamera, passTriangle } from '../../core/renderer';
 
 /** the outline's width, and its soft glow's past it (px of the UI's reference layout, at the HUD's scale) */
 const WIDTH = 2.5;
@@ -44,8 +45,9 @@ export function outlinedLook(): { root: THREE.Object3D; color: number; strength:
   return { root: current.root, color: current.color.getHex(THREE.LinearSRGBColorSpace), strength: current.strength };
 }
 
-/** the mask's material for each of the meshes' own */
+/** the mask's material for each of the meshes' own, and every one of them */
 const masks = new WeakMap<THREE.Material, THREE.MeshBasicMaterial>();
+const isMask = new WeakSet<THREE.Material>();
 
 /** The mask's material for a mesh drawn with `own`: white where it's solid (as its own alpha test has it). */
 function maskFor(own: THREE.Material): THREE.MeshBasicMaterial {
@@ -64,6 +66,7 @@ function maskFor(own: THREE.Material): THREE.MeshBasicMaterial {
     depthWrite: false,
   });
   masks.set(own, mask);
+  isMask.add(mask);
   return mask;
 }
 
@@ -169,6 +172,8 @@ const edgeMaterial = new THREE.ShaderMaterial({
   toneMapped: false,
 });
 const edgeQuad = new FullScreenQuad(edgeMaterial);
+/** the edge's pass compiled on a triangle of its own, as its quad's is three's */
+const edgeStandIn = new THREE.Mesh(passTriangle(), edgeMaterial);
 
 /** Draws `root`'s mask into the mask's target, at the canvas's size. */
 function drawMask(gl: THREE.WebGLRenderer, root: THREE.Object3D): THREE.WebGLRenderTarget {
@@ -279,4 +284,43 @@ export function warmOutline(roots: THREE.Object3D[], { edge = true } = {}): void
     for (const object of culled) object.frustumCulled = true;
   }
   if (edge && target && roots[0]) drawEdge(gl, target, { root: roots[0], color: new THREE.Color(), strength: 0 });
+}
+
+/** `root`'s masks compiled into the mask's target, alone (no lights, no fog, as `drawMask` draws it), what draws no
+ *  mask left out (a compile passes over a mesh with no material), into `compiled`. */
+function compileMasks(gl: THREE.WebGLRenderer, root: THREE.Object3D, compiled: Set<THREE.Material>): void {
+  const swapped = swapIn(root);
+  const unmasked = new Map<THREE.Mesh, THREE.Mesh['material']>();
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.material || isMask.has(mesh.material as THREE.Material)) return;
+    unmasked.set(mesh, mesh.material);
+    mesh.material = undefined as unknown as THREE.Material;
+  });
+  try {
+    for (const material of gl.compile(root, G.camera)) compiled.add(material);
+  } finally {
+    for (const [mesh, material] of unmasked) mesh.material = material;
+    swapOut(swapped);
+  }
+}
+
+/**
+ * The programs `warmOutline` draws compiled now, as they're drawn: `roots`' masks, and unless `edge` is false the
+ * edge's pass, over the canvas. Gives back their materials, for a warm-up to wait for their links: drawn with none
+ * linked, each was linked inside its draw, the page held up (a first visit's lobby, the dummies' mask and the edge).
+ */
+export function compileOutline(roots: THREE.Object3D[], { edge = true } = {}): Set<THREE.Material> {
+  const gl = G.renderer;
+  const prev = gl.getRenderTarget();
+  const compiled = new Set<THREE.Material>();
+  gl.getDrawingBufferSize(canvasSize);
+  gl.setRenderTarget(maskOfSize(canvasSize.x, canvasSize.y));
+  for (const root of roots) compileMasks(gl, root, compiled);
+  if (edge) {
+    gl.setRenderTarget(null);
+    for (const material of gl.compile(edgeStandIn, passCamera)) compiled.add(material);
+  }
+  gl.setRenderTarget(prev);
+  return compiled;
 }

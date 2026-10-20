@@ -30,6 +30,9 @@ export function inShadowsOnly(mesh: THREE.Mesh): void {
   shadowOnly.add(mesh);
 }
 
+/** Whether the shadow map alone draws `mesh` (`inShadowsOnly`). */
+export const drawnInShadowsOnly = (mesh: THREE.Mesh): boolean => shadowOnly.has(mesh);
+
 const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _c = new THREE.Color(), _sphere = new THREE.Sphere();
 
 /** A mesh of `mesh`'s geometry and material casting its shadow, every instance of it, drawn by the shadow map alone. */

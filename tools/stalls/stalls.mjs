@@ -274,7 +274,7 @@ async function main() {
   const sourcesFor = (url) => sources.get(url) ?? (() => null);
   const measures = [];
   const booting = options.scenario === BOOT;
-  const textOf = (result) => (booting ? bootText(result) : measureText(result, { links: options.links }));
+  const textOf = (result) => (booting ? bootText : measureText)(result, { links: options.links });
   const measured = (result) => {
     console.log(textOf(result));
     measures.push(result);

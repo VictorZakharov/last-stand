@@ -8,9 +8,9 @@ import { ARENA } from '../data/balance';
 import { forestFloor, bark, slabs, grunge, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
-import { buildDaySky, boxWithUV, buildEnvMap, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
+import { buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
 
-/** the forest's environment (made ahead: `prepareEnvMaps`) */
+/** the forest's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25, 1.1] };
 import { cullInCells, eachInstance, gridCell, ringSector } from './culling';
 import { growTree, REACH_BANDS, type Grow } from './ezTrees';
@@ -89,7 +89,7 @@ function mossyGround<M extends THREE.Material>(m: M): M {
   return m;
 }
 
-export const buildForest: BiomeBuilder = (scene, renderer) => {
+export const buildForest: BiomeBuilder = (scene) => {
   const rng = mulberry(4242);
   const r = (a: number, b: number) => a + rng() * (b - a);
   const obstacles: Obstacle[] = [];
@@ -472,7 +472,7 @@ export const buildForest: BiomeBuilder = (scene, renderer) => {
       hemi: { sky: 0xcfe4ff, ground: 0x4a5a2c, intensity: 1.4 },
       // the sun: the shared key light
       moon: { color: 0xfff0d6, intensity: 4.0, pos: [SUN.x, SUN.y, SUN.z] },
-      env: buildEnvMap(renderer, FOREST_ENV.sky, FOREST_ENV.panel),
+      env: FOREST_ENV,
       envIntensity: 0.6,
     },
     obstacles,

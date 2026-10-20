@@ -11,7 +11,7 @@ import { updateTimers } from './core/timers';
 import { particles } from './fx/particles';
 import { initLights, updateLights, clearLights } from './fx/lights';
 import { initEffects, updateEffects, clearEffects } from './fx/effects';
-import { buildArena, prepareEnvMaps } from './world/arena';
+import { buildArena, compileEnvMaps } from './world/arena';
 import { separateEnemies } from './world/collision';
 import { Player } from './entities/player';
 import { viewArms } from './entities/viewModel';
@@ -25,7 +25,7 @@ import { setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
-import { initMenus, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
+import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
@@ -38,7 +38,7 @@ import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfCloc
 import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
-import { warmLobby, warmTheRest } from './game/warmup';
+import { compileTheBiome, compileTheLobby, warmLobby, warmTheRest } from './game/warmup';
 import { hurry, isAllWarm, isWarming, whenWarm } from './game/warm';
 import { initReadying } from './ui/readying';
 import { holdQuality, initQuality, sampleQuality } from './core/quality';
@@ -46,6 +46,7 @@ import { updateLowLife } from './core/lowLife';
 import { checkPrograms, pinPrograms, steadyShadowPrograms, watchPrograms } from './core/shaders';
 import { initBiome, rollBiome } from './game/biome';
 import { BIOMES, BIOME_IDS } from './data/biomes';
+import { CLASSES } from './data/classes/index';
 import { loadingStep, loadingDone, loadingFailed, loadingLeft, lobbyLaidOut } from './ui/loading';
 import { prepareWind } from './ui/logoWind';
 import { preloadTextures } from './core/textures';
@@ -62,9 +63,9 @@ const timer = new THREE.Timer();
 let revealed = false;   // loading screen gone: the game may advance
 
 async function boot() {
-  // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second), and the
-  // heroes' hands sculpted: started before anything waits, as nothing they make waits on the page
-  const textures = preloadTextures();
+  // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second), the lobby's
+  // first, and the heroes' hands sculpted: started before anything waits, as nothing they make waits on the page
+  const textures = preloadTextures(CLASSES[savedClass()].model);
   const hands = preloadHands();
   prepareWind();
   await loadingStep('Forging the arena', 0.08);
@@ -74,17 +75,22 @@ async function boot() {
   const { scene, renderer } = initRenderer($('#game'));
   steadyShadowPrograms(renderer);
   watchPrograms(renderer);
+  // (the environments' programs linked as the arena is built, each made as its biome is first shown)
+  compileEnvMaps(renderer);
   initInput(renderer.domElement);
   initAltCursor(renderer.domElement);
   particles.init(scene);
   initLights(scene);
   initEffects();
-  // (needing no map, made while the workers make them)
   initAudio();   // resumed by the first user gesture
-  await prepareEnvMaps(renderer);
   // (built on the maps' canvases as the workers paint them: nothing is drawn till all have come)
   G.arena = await buildArena(scene, renderer);
   initQuality();
+  // the lobby's biome shown, and its programs compiled while the hero is built (game/warmup.ts)
+  initBiome();
+  const heroLit = compileTheBiome();
+  // (the lobby's panels rastered under the loading screen while the hero is built: ui/menus.ts)
+  layOutMenuAhead();
 
   await loadingStep('Summoning the hero', 0.35);
   await hands;
@@ -93,6 +99,9 @@ async function boot() {
   G.profile = loadProfile(savedClass());
   G.player = new Player(G.profile.classId, G.profile.equipped);
   G.players = [G.player];
+  heroLit();
+  // (what the lobby can do compiled with him, before its page is laid out: game/warmup.ts)
+  compileTheLobby();
 
   initHud();
   initTouch();
@@ -131,7 +140,6 @@ async function boot() {
   await loadingStep('Conjuring spells', 0.55);
   enterMenu();
   lobbyLaidOut();
-  initBiome();
   // the lobby's shaders compiled before it shows, the fight's behind it (game/warmup.ts)
   await warmLobby();
   await loadingStep('Lighting the lobby', 0.85);

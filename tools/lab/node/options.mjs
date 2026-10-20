@@ -830,6 +830,13 @@ export const COMMANDS = {
         help: 'draw a material of a kind nothing else is before the hero: its program must come out as compiled; '
           + 'and put a point light in the scene: the count must find it',
       },
+      switch: {
+        kind: 'choice',
+        usage: 'ranger|warrior|mage',
+        choices: ['ranger', 'warrior', 'mage'],
+        help: 'switch the hero to this class in the lobby first, as a player picks it (its button clicked, the '
+          + 'switch waiting for the heroes\' warm-up), then fight as him: what a class switch compiles',
+      },
       ...COMMON_OPTIONS,
     },
   },
@@ -847,6 +854,20 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'compile each program again alone, salted so no cache answers, and time it: by kind, by what uses '
           + 'them, by the point lights they\'re lit by, the longest (a minute or more; its canary: the cache)',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
+  maps: {
+    help: 'the procedural maps a first visit makes in its workers (src/core/pbr.ts PRELOAD), each made on the page '
+      + 'and timed, and a digest of its pixels: a map made faster keeps every pixel (with --ab, each digest as '
+      + 'main\'s, the times side by side)',
+    options: {
+      maps: { kind: 'list', usage: 'a,b', help: 'the recipes made, by name (every one by default)' },
+      runs: { kind: 'number', usage: 'n', help: 'how many times each is made, its time the fastest (1 by default)' },
+      canary: {
+        kind: 'switch',
+        help: 'a byte of the first map\'s pixels changed once it\'s made: its digest must change',
       },
       ...COMMON_OPTIONS,
     },

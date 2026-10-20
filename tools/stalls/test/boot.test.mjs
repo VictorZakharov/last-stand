@@ -87,9 +87,13 @@ test('the page names the step a boot ends on as the analysis looks for it', () =
 
 test('the page reads the maps\' measures by the name and detail the game gives them', () => {
   const game = readFileSync(new URL('../../../src/core/textures.ts', import.meta.url), 'utf8');
-  assert.match(game, /performance\.measure\(`map \$\{key\}`, \{ [^}]*detail: \{ kept \} \}\)/);
+  assert.match(game, /const detail = \{ kept, readMs, asked, up: up - performance\.timeOrigin \};/);
+  assert.match(game, /performance\.measure\(`map \$\{key\}`, \{ [^}]*detail \}\)/);
   assert.ok(String(stopBootRecording).includes("startsWith('map ')"));
-  assert.ok(String(stopBootRecording).includes('entry.detail?.kept === true'));
+  for (const read of ['entry.detail?.kept === true', 'entry.detail?.readMs ?? null', 'entry.detail?.asked ?? null']) {
+    assert.ok(String(stopBootRecording).includes(read));
+  }
+  assert.ok(String(stopBootRecording).includes('entry.detail?.up ?? null'));
 });
 
 test('times each step of a boot, with what held the page up and what each thread did in it', () => {
@@ -124,8 +128,88 @@ test('times each step of a boot, with what held the page up and what each thread
     from: 310,
     to: 710,
     ms: 750,
+    readMs: null,
     longest: [{ name: 'face(warrior)', ms: 400 }, { name: 'slabs(21,6,3)', ms: 200 }, { name: 'steel()', ms: 100 }],
+    workers: null,
   });
+});
+
+test('says how much of the maps\' work waited for the store, where the build tells', () => {
+  const told = record();
+  told.maps = told.maps.map((map, at) => ({ ...map, readMs: at * 100 }));
+  const findings = analyzeBoot(told, trace(), MARK);
+  assert.equal(findings.maps.readMs, 600);
+  const text = bootText({ name: 'http://x/ base, a first visit', notes: [], findings });
+  assert.match(text, /, 0\.75 s of work, 0\.60 s of it asking the store for them \(the longest /);
+});
+
+test('says when the maps\' workers were asked for and when their scripts ran, where the build tells', () => {
+  const told = record();
+  told.maps = told.maps.map((map, at) => ({ ...map, asked: 160 + at, up: 1050 + at * 10 }));
+  const findings = analyzeBoot(told, trace(), MARK);
+  assert.deepEqual(findings.maps.workers, { asked: 160, upFrom: 1050, upTo: 1080 });
+  const text = bootText({ name: 'http://x/ base, a first visit', notes: [], findings });
+  assert.match(text, /\); the workers asked for at 0\.16 s, up from 1\.05 s to 1\.08 s\n/);
+});
+
+test('lists a step\'s JS by each function\'s own time and with what it calls, where it was sampled', () => {
+  const findings = analyzeBoot(record(), trace(), MARK);
+  const arena = findings.steps.find((step) => step.name === 'Forging the arena');
+  arena.js = {
+    own: [{ name: 'derive core/engraving.ts:138', ms: 236 }],
+    within: [{ name: 'boot main.ts:64', ms: 800 }, { name: 'derive core/engraving.ts:138', ms: 300 }],
+  };
+  const text = bootText({ name: 'http://x/ base, a first visit', notes: [], findings });
+  assert.match(text, /its JS, each function's own time, ms: 236\.00 derive core\/engraving\.ts:138\n/);
+  assert.match(text, /and with what it calls, ms: 800\.00 boot main\.ts:64; 300\.00 derive core\/engraving\.ts:138/);
+});
+
+test('lists each warm-up\'s steps, its waits for its maps and their uploads where the build times them', () => {
+  const timed = record();
+  const lobby = { name: 'the lobby', compileMs: 98, mapsMs: 1200, uploadsMs: 40, linksMs: 294, drawMs: 265 };
+  const older = { name: 'the fight at once', compileMs: 58, linksMs: 656, drawMs: 82 };
+  timed.warmUps = [lobby, older];
+  const findings = analyzeBoot(timed, trace(), MARK);
+  const text = bootText({ name: 'http://x/ base, a first visit', notes: [], findings });
+  assert.match(text, /\(compile 98, maps 1200, uploads 40, links 294, draw 265\)/);
+  assert.match(text, /the fight at once \(compile 58, links 656, draw 82\)/);
+});
+
+test('counts the threads a step\'s GPU compiles ran on, on average and at most at once', () => {
+  const pool = (tid) => ({ pid: 7, tid });
+  const events = [
+    ...trace(),
+    { ph: 'M', name: 'process_name', pid: 7, args: { name: 'GPU Process' } },
+    workAt('ANGLEPlatformImpl::RunWorkerTask', pool(1), 300, 200),
+    workAt('ANGLEPlatformImpl::RunWorkerTask', pool(2), 350, 100),
+    // (starting as the second ends: two at once, not three)
+    workAt('ANGLEPlatformImpl::RunWorkerTask', pool(3), 450, 200),
+  ];
+  const findings = analyzeBoot(record(), events, MARK);
+  const text = bootText({ name: 'http://x/ base, a first visit', notes: [], findings });
+  const lines = text.match(/the GPU process's compiles: .*/g);
+  const expected = 'the GPU process\'s compiles: on 3 threads, 0.8 at once on average, 2 at most; each 0.25 s: 2 0 0';
+  assert.deepEqual(lines, [expected]);
+});
+
+test('counts a step\'s Skia programs by where they were built, with links asked for', () => {
+  const gpu = { pid: 7, tid: 70 };
+  const events = [
+    ...trace(),
+    { ph: 'M', name: 'process_name', pid: 7, args: { name: 'GPU Process' } },
+    { ph: 'M', name: 'thread_name', ...gpu, args: { name: 'CrGpuMain' } },
+    workAt('RasterTask', gpu, 400, 100),
+    workAt('driver_link_program', gpu, 410, 20),
+    workAt('driver_link_program', gpu, 440, 30),
+    workAt('FinishPaintRenderPass', gpu, 600, 50),
+    workAt('driver_link_program', gpu, 610, 10),
+  ];
+  const findings = analyzeBoot(record(), events, MARK);
+  const measure = { name: 'http://x/ base, a first visit', notes: [], findings };
+  const text = bootText(measure, { links: true });
+  assert.match(text, /its Skia programs, where they were built: 2 \(50 ms\) in RasterTask; /);
+  assert.match(text, /; 1 \(10 ms\) in FinishPaintRenderPass\n/);
+  assert.doesNotMatch(bootText(measure), /where they were built/);
 });
 
 test('reports a boot step by step, and the boots by visit over the rounds', () => {

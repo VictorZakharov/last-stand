@@ -704,17 +704,22 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   three's default left out), a kind of one with what it was made for; what uses them (the scene's top-level object
   of each object compiled or drawn with one, every foe's kind as `foes`: a program the foes alone use is one a lobby
   shown before them could compile later); the programs no draw ever used (compiled for
-  nothing); those made after the reveal (the lab's set-up). It found 177 programs at boot, 92 of them lit (each for
+  nothing) and those a draw made, each with its step and what it was made for; those made after the reveal (the
+  lab's set-up). #275's boot made 32 by a draw, each a first visit's wait inside it: the post chain's and the
+  environment maps' (now compiled with the biome), the shadows' (`compileShadows`) and the outline's
+  (`compileOutline`). Now none. It found 177 programs at boot, 92 of them lit (each for
   15 point lights), 17 of those never drawn: the crowd bodies' own materials, on a layer no pass draws (now left out
   of the warm-ups' compile; the kit's variants made uniforms, 146 were left). The lobby shows before the fight's
   programs are warm (`src/game/warm.ts`): the lab's boot asks for them at once and waits for them, listed as made
   `behind the lobby` (40 of the 146). `--cost` compiles each program again from the GLSL three gave it, alone, salted
   so no cache can answer (`page/programCost.ts`), and times it from its source to its link: the CPU a first visit's
-  ANGLE spends on it; summed by kind, by what uses them and by the point lights they're lit by, the longest listed
-  with their fragment shader's size, and a plain lit material's compile as the scene lights it and with its point
-  lights, environment map, shadows and fog each taken away. Its canary is the cache: the longest compiled again
-  with its salt must come back in under a quarter of its time, and with a new salt in over half. It found the lit
-  programs 36 of the 40 s (0.56 s each, 16 point lights written out), 23 s once lit in a loop. A minute or more.
+  ANGLE spends on it; summed by kind, by what uses them, each step's by what uses them (what that step's warm-up
+  waits for its links on) and by the point lights they're lit by, the longest listed with their fragment shader's
+  size, and a plain lit material's compile as the scene lights it and with its point lights, environment map,
+  shadows and fog each taken away. Its canary is the cache: the longest compiled again with its salt must come back
+  in under a quarter of its time, and with a new salt in over half. It found the lit programs 36 of the 40 s (0.56
+  s each, 16 point lights written out), 23 s once lit in a loop; and the spells' 91 programs 14.4 s, the hero's 6 s,
+  the effects' samples 3.9 s, the lobby's biome 3.5 s (now compiled as the arena is built). A minute or more.
   `--canary` warms a box of a kind nothing else is (it must be listed compiled and drawn) and one on a layer no
   camera sees (it must be listed never drawn).
 - `compiles`: whether the boot's warm-up compiled what a fight draws (`page/compiles.ts`). In each biome (`--biomes`,
@@ -736,8 +741,19 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   compile, the forest's wood rubble's shadow (`steadyShadowPrograms` in `src/core/shaders.ts`), and #268's: the
   hero built afresh brought his own light in after the arms' pass had put the scene's lights on its layer, which it
   did once, and through the eyes 11 programs of his arms and the shadows compiled at the run's start (15 lights to
-  14). `--canary` draws a material nothing else does before the hero, which must come out as compiled, and puts a
-  point light in the scene, which the count must find.
+  14). `--switch ranger` first picks the ranger on the lobby's class card, as a player does, and waits for him (the
+  lab's boot waits for every warm-up, so it says 0.0 s); the boot's class (`--class`) is another. A class's skills
+  are warmed with the heroes, not the lobby, so only a switch tells whether they were: with the ranger's left out of
+  `heroParts` (`src/game/warmup.ts`), `--class mage --switch ranger` found 9 programs compiled in his first wave.
+  `--canary` draws a material nothing else does before the hero, which must come out as compiled, and puts a point
+  light in the scene, which the count must find.
+- `maps`: the game's procedural maps (`page/maps.ts`; `--maps forestFloor,steel`, every one `PRELOAD` lists in
+  `src/core/pbr.ts` by default), each made on the page as a loading worker makes it, `--runs` times (its time the
+  fastest, by the browser's own clock), with a digest of its pixels and of a face's grid (its head is built on it).
+  A first visit makes every one before the lobby shows what it needs, so a map made faster must keep every pixel:
+  with `--ab` each digest must be main's, and the times are side by side. It found the 22 maps 8.7 s in all, alone
+  on one thread: the three faces 1.4 to 1.8 s each, the forest floor 1.5 s, the cobblestone 0.6 s, none of the
+  rest over 0.25 s. `--canary` changes a byte of the first map's pixels once it's made: its digest must change.
 - `weapons`: each of the hero's weapons alone (`page/weapons.ts`; `--weapons Sword,Maul`, the class's bases by
   default): a copy of the one in his right hand, at its own frame (unturned in the fist), put in a plain, lit
   studio of its own and pictured face on (a blade's flat, an axe's bit to the side), edge on, from behind (a face
