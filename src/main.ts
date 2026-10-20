@@ -40,7 +40,7 @@ import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
 import { compileTheBiome, compileTheLobby, warmLobby, warmTheRest } from './game/warmup';
 import { hurry, isAllWarm, isWarming, whenWarm } from './game/warm';
-import { initReadying } from './ui/readying';
+import { initReadying, READYING } from './ui/readying';
 import { holdQuality, initQuality, sampleQuality } from './core/quality';
 import { updateLowLife } from './core/lowLife';
 import { checkPrograms, pinPrograms, steadyShadowPrograms, watchPrograms } from './core/shaders';
@@ -111,13 +111,13 @@ async function boot() {
   buildHotbar(G.player);
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
   // (the lobby shows before the fight's programs are warm: pressed early, what needs them goes ahead once they are)
-  initMenus({ start: whenWarm(['fight'], start), toMenu, resume, abandon, profileChanged, switchClass, summaryDone, lobbyChanged: sendLobbyChoice });
-  initSaves({ use: whenWarm(['fight', 'heroes'], switchSaveSlot) });
+  initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, switchClass, summaryDone, lobbyChanged: sendLobbyChoice });
+  initSaves({ use: whenWarm(['fight', 'heroes'], switchSaveSlot, READYING.slot) });
   initReadying();
   // an item picked up off the lobby floor goes back in the stash, marked new
   initGround((it) => { if (!addToStash(G.profile, it)) return false; markNew([it]); renderMenu(); return true; });
   initSync();
-  initSession({ startRun: whenWarm(['fight'], guestStart), hostGone, changed: () => { renderCoop(); sendLobbyChoice(); } });
+  initSession({ startRun: whenWarm(['fight'], guestStart, READYING.fight), hostGone, changed: () => { renderCoop(); sendLobbyChoice(); } });
   initCoop();
   // losing the pointer mid-wave (Esc, switching windows) pauses, as mouse look can't carry on
   // (in the lobby the Esc that lets go of the mouse look brings the panels back instead)
@@ -156,7 +156,7 @@ async function boot() {
     void loadingLeft.then(() => $('#diag').classList.remove('booting'));
     // an invite link: straight into the friend's room
     const room = invitedRoom();
-    if (room) whenWarm(['fight', 'heroes'], (code: string) => void joinRoom(code))(room);
+    if (room) whenWarm(['fight', 'heroes'], (code: string) => void joinRoom(code), READYING.coop)(room);
   });
   requestAnimationFrame(frame);
 }

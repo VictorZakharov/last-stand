@@ -29,6 +29,7 @@ import { QUALITY, type QualitySetting } from '../data/quality';
 import { BIOMES, BIOME_IDS, type BiomeSetting } from '../data/biomes';
 import { biomeSetting, setBiomeSetting } from '../game/biome';
 import { whenWarm } from '../game/warm';
+import { READYING } from './readying';
 import { isCoop, isGuest, isHost } from '../net/role';
 import { session, partnerInRun } from '../net/session';
 
@@ -153,11 +154,14 @@ function mouseDiagram(id: string): string {
   </div>`;
 }
 
-/** A class or a battleground picked in the lobby: picked before the fight's programs are warm, done once they are. */
-const pickClass = whenWarm(['heroes'], (id: string) => { hooks.switchClass(id); renderMenu(); hooks.lobbyChanged(); });
+/** A class or a battleground picked in the lobby: picked before the heroes' or the fight's programs are warm, done once
+ *  they are, the bar saying which hero or battleground it readies. */
+const pickClass = whenWarm(['heroes'], (id: string) => {
+  hooks.switchClass(id); renderMenu(); hooks.lobbyChanged();
+}, READYING.hero);
 const pickBiome = whenWarm(['fight'], (setting: BiomeSetting) => {
   setBiomeSetting(setting); renderBiomeOptions(); renderWaveOptions(); hooks.lobbyChanged();
-});
+}, READYING.biome);
 
 export function initMenus(h: MenuHooks): void {
   hooks = h;
