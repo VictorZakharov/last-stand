@@ -38,7 +38,7 @@ import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfCloc
 import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
-import { warmLobby, warmTheRest } from './game/warmup';
+import { compileTheBiome, warmLobby, warmTheRest } from './game/warmup';
 import { hurry, isAllWarm, isWarming, whenWarm } from './game/warm';
 import { initReadying } from './ui/readying';
 import { holdQuality, initQuality, sampleQuality } from './core/quality';
@@ -86,6 +86,9 @@ async function boot() {
   // (built on the maps' canvases as the workers paint them: nothing is drawn till all have come)
   G.arena = await buildArena(scene, renderer);
   initQuality();
+  // the lobby's biome shown, and its programs compiled while the hero is built (game/warmup.ts)
+  initBiome();
+  const heroLit = compileTheBiome();
 
   await loadingStep('Summoning the hero', 0.35);
   await hands;
@@ -94,6 +97,7 @@ async function boot() {
   G.profile = loadProfile(savedClass());
   G.player = new Player(G.profile.classId, G.profile.equipped);
   G.players = [G.player];
+  heroLit();
 
   initHud();
   initTouch();
@@ -132,7 +136,6 @@ async function boot() {
   await loadingStep('Conjuring spells', 0.55);
   enterMenu();
   lobbyLaidOut();
-  initBiome();
   // the lobby's shaders compiled before it shows, the fight's behind it (game/warmup.ts)
   await warmLobby();
   await loadingStep('Lighting the lobby', 0.85);

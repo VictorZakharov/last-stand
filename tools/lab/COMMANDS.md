@@ -710,11 +710,13 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   programs are warm (`src/game/warm.ts`): the lab's boot asks for them at once and waits for them, listed as made
   `behind the lobby` (40 of the 146). `--cost` compiles each program again from the GLSL three gave it, alone, salted
   so no cache can answer (`page/programCost.ts`), and times it from its source to its link: the CPU a first visit's
-  ANGLE spends on it; summed by kind, by what uses them and by the point lights they're lit by, the longest listed
-  with their fragment shader's size, and a plain lit material's compile as the scene lights it and with its point
-  lights, environment map, shadows and fog each taken away. Its canary is the cache: the longest compiled again
-  with its salt must come back in under a quarter of its time, and with a new salt in over half. It found the lit
-  programs 36 of the 40 s (0.56 s each, 16 point lights written out), 23 s once lit in a loop. A minute or more.
+  ANGLE spends on it; summed by kind, by what uses them, each step's by what uses them (what that step's warm-up
+  waits for its links on) and by the point lights they're lit by, the longest listed with their fragment shader's
+  size, and a plain lit material's compile as the scene lights it and with its point lights, environment map,
+  shadows and fog each taken away. Its canary is the cache: the longest compiled again with its salt must come back
+  in under a quarter of its time, and with a new salt in over half. It found the lit programs 36 of the 40 s (0.56
+  s each, 16 point lights written out), 23 s once lit in a loop; and the spells' 91 programs 14.4 s, the hero's 6 s,
+  the effects' samples 3.9 s, the lobby's biome 3.5 s (now compiled as the arena is built). A minute or more.
   `--canary` warms a box of a kind nothing else is (it must be listed compiled and drawn) and one on a layer no
   camera sees (it must be listed never drawn).
 - `compiles`: whether the boot's warm-up compiled what a fight draws (`page/compiles.ts`). In each biome (`--biomes`,

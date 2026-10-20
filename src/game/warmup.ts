@@ -10,7 +10,7 @@
 // and a third of the boot's are the fight's alone (`lab programs`).
 import * as THREE from 'three';
 import { G } from '../state';
-import { behindTheLobby, markLoaded, warmUp, type WarmedUp } from '../core/shaders';
+import { behindTheLobby, compileAhead, markLoaded, warmUp, type WarmedUp } from '../core/shaders';
 import { sceneTarget } from '../core/renderer';
 import { mapsArrived, mapsMadeAfresh } from '../core/textures';
 import { ENEMIES, type EnemyId } from '../data/enemies';
@@ -97,6 +97,19 @@ function heroAllWorn(model: string, at?: THREE.Vector3): Model {
 
 /** the biomes the lobby doesn't show */
 const otherBiomes = () => BIOME_IDS.filter((id) => id !== G.arena.biome);
+
+/**
+ * The lobby's biome compiled as soon as it's built, a light standing in for the hero's (built next: a program is
+ * made for the scene's count of lights), so the GPU's threads link its programs while the hero is built; the
+ * lobby's warm-up waited for them after (a first visit's: 3.5 s of the 14 s of compiles it waited 2.3 s on).
+ * Returns the stand-in's removal, for once the hero's own light is in.
+ */
+export function compileTheBiome(): () => void {
+  const standIn = new THREE.PointLight(0xffffff, 0);
+  G.scene.add(standIn);
+  compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)));
+  return () => G.scene.remove(standIn);
+}
 
 /** What the lobby shows and can do, warmed before it shows (the lobby's dummies already stand in it); the fight's
  *  foes built meanwhile (`buildAhead`). */

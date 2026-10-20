@@ -14,7 +14,7 @@ import { ENEMIES } from '../../../src/data/enemies';
 import { sceneTarget } from '../../../src/core/renderer';
 import { programsMade, warmUp, type ProgramMade } from '../../../src/core/shaders';
 import { apartText, fieldsOf, kindOf, kindsApart, type KindApart } from './programKeys';
-import { cacheCanary, costs, lightsText, longestText, partsText, summedText } from './programCost';
+import { cacheCanary, costs, lightsText, longestText, partsText, summedText, type ProgramCost } from './programCost';
 
 export interface ProgramsOptions {
   canary: boolean;
@@ -136,6 +136,16 @@ async function canary(lab: Lab): Promise<Report> {
   return { text, problems };
 }
 
+/** Each step's programs' compile, summed by what uses them: what the step's warm-up waits for its links on. */
+function stepsCostText(measured: ProgramCost[]): string[] {
+  const steps = [...new Set(measured.map(({ entry }) => entry.step))];
+  return steps.map((step) => {
+    const ofStep = measured.filter(({ entry }) => entry.step === step);
+    const total = ofStep.reduce((sum, { ms }) => sum + ms, 0);
+    return `    ${step} ${ofStep.length}: ${(total / 1000).toFixed(1)} s: ${summedText(ofStep, usersOf, LISTED)}`;
+  });
+}
+
 /** What compiling each of `made` costs, alone (`programCost.ts`), and the cache's canary. */
 async function costReport(made: ProgramMade[]): Promise<Report> {
   const gl = G.renderer.getContext() as WebGL2RenderingContext;
@@ -147,6 +157,8 @@ async function costReport(made: ProgramMade[]): Promise<Report> {
       + 'in all (the CPU a first visit spends on them, several at once)',
     `  by kind: ${summedText(measured, groupOf, LISTED)}`,
     `  by what uses them: ${summedText(measured, usersOf, LISTED)}`,
+    '  each step\'s, by what uses them:',
+    ...stepsCostText(measured),
     `  by the point lights they're lit by: ${lightsText(measured)}`,
     '  the longest:',
     ...longestText(measured, groupOf),

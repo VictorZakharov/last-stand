@@ -391,6 +391,18 @@ function drawnAlone(scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebG
 }
 
 /**
+ * `scene`'s programs (`leaveOut` left out) compiled now for `target`, ahead of the warm-up that will draw them: the
+ * GPU's threads link them meanwhile, and the warm-up's compile finds them made. The whole scene, as three counts a
+ * light twice that is both in the scene and in what's compiled with it.
+ */
+export function compileAhead(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, leaveOut: THREE.Object3D[]): void {
+  const prev = renderer.getRenderTarget();
+  renderer.setRenderTarget(target);
+  without(leaveOut, () => withoutCrowdBodies(scene, () => renderer.compile(scene, camera)));
+  renderer.setRenderTarget(prev);
+}
+
+/**
  * Compile every shader the scene (plus `objects`) needs, and keep them.
  * This is a real render, not renderer.compile(): programs differ between the screen and
  * a render target (tone mapping, output colour space), the game always draws into the
