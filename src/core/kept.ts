@@ -34,14 +34,17 @@ export async function kept<T>(key: string): Promise<T | undefined> {
 }
 
 /**
- * Keeps `value` as `key`'s, resolved once written (or failed: a full disk keeps nothing). It's copied at once, so
- * its buffers may be sent on as soon as this returns; the store must be open (`kept` asked first).
+ * Keeps each value as its key's, in one transaction, resolved once written (or failed: a full disk keeps nothing).
+ * They're copied at once, so their buffers may be sent on as soon as this returns; the store must be open (`kept`
+ * asked first). Keep them once nothing is left to ask for: a read waits for every write asked before it, and a
+ * first visit's workers, each keeping a map as it made it, spent 13.8 s of their 22 s waiting on the store.
  */
-export function keep(key: string, value: unknown): Promise<void> {
-  if (!KEEPS || !db) return Promise.resolve();
+export function keepAll(entries: readonly (readonly [string, unknown])[]): Promise<void> {
+  if (!KEEPS || !db || !entries.length) return Promise.resolve();
   try {
     const transaction = db.transaction(STORE, 'readwrite');
-    transaction.objectStore(STORE).put({ build: BUILD, value }, key);
+    const store = transaction.objectStore(STORE);
+    for (const [key, value] of entries) store.put({ build: BUILD, value }, key);
     return new Promise((resolve) => {
       transaction.oncomplete = transaction.onerror = transaction.onabort = () => resolve();
     });

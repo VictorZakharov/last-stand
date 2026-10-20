@@ -127,9 +127,9 @@ export interface MapsComing {
   all: Promise<void>;
 }
 
-/** What a worker sends back: the map, when it was made (in the worker's clock from its time origin), and whether it
- *  was read back from a visit before (core/kept.ts). */
-export interface MapMade { key: string; data: PBRData; start: number; ms: number; kept: boolean }
+/** What a worker sends back: the map, when it was made (in the worker's clock from its time origin), whether it
+ *  was read back from a visit before (core/kept.ts), and how long asking the store for it took (`readMs`). */
+export interface MapMade { key: string; data: PBRData; start: number; ms: number; kept: boolean; readMs: number }
 
 /**
  * Make the game's PBR maps in workers, in parallel, while the page stays responsive: done on the
@@ -137,7 +137,8 @@ export interface MapMade { key: string; data: PBRData; start: number; ms: number
  * shows black until the main thread can paint it. Without workers, the maps are made on first use;
  * those a failed worker leaves are made on the page once the others are done. A production build's are
  * kept for the next visit (core/kept.ts). Each is timed as a user timing measure, `map <key>`, from the
- * worker's start on it to its end, its detail whether it was kept (the stalls' boot lists them).
+ * worker's start on it to its end, its detail whether it was kept and how long the store took to answer (the
+ * stalls' boot lists them).
  */
 export function preloadTextures(): MapsComing {
   const jobs = typeof Worker === 'undefined' ? [] : PRELOAD.slice();
@@ -161,8 +162,8 @@ export function preloadTextures(): MapsComing {
       if (!job) { w.postMessage('done'); resolve(); return; }
       w.postMessage(job);
     };
-    w.onmessage = ({ data: { key, data, start, ms, kept } }: MessageEvent<MapMade>) => {
-      performance.measure(`map ${key}`, { start: start - performance.timeOrigin, duration: ms, detail: { kept } });
+    w.onmessage = ({ data: { key, data, start, ms, kept, readMs } }: MessageEvent<MapMade>) => {
+      performance.measure(`map ${key}`, { start: start - performance.timeOrigin, duration: ms, detail: { kept, readMs } });
       if (!kept) madeAfresh = true;
       arrived(key, data);
       next();

@@ -503,19 +503,22 @@ function filesOf(files, revealed) {
 
 /** The maps the game's workers made (null where none were timed: a build before they were): how many, and how many
  *  of them were read back from a visit before, from the first one's start to the last one's end (the page's ms),
- *  their work in all and the longest. */
+ *  their work in all, how much of it was waiting for the store's answer (null where the build didn't say) and the
+ *  longest. */
 function mapsOf(maps) {
   if (!maps.length) return null;
   const longest = [...maps]
     .sort((a, b) => b.ms - a.ms)
     .slice(0, MAPS_SHOWN)
     .map(({ name, ms }) => ({ name, ms }));
+  const answered = maps.every((map) => typeof map.readMs === 'number');
   return {
     count: maps.length,
     kept: maps.filter((map) => map.kept).length,
     from: Math.min(...maps.map((map) => map.at)),
     to: Math.max(...maps.map((map) => map.at + map.ms)),
     ms: maps.reduce((sum, map) => sum + map.ms, 0),
+    readMs: answered ? maps.reduce((sum, map) => sum + map.readMs, 0) : null,
     longest,
   };
 }

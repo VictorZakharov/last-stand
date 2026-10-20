@@ -200,12 +200,13 @@ function bootStepLines(step) {
 }
 
 /** The maps the game's workers made in a boot: how many (and how many read back from a visit before), when, their
- *  work in all and the longest. */
-function mapsLine({ count, kept, from, to, ms: work, longest }) {
+ *  work in all (and how much of it waited for the store's answer) and the longest. */
+function mapsLine({ count, kept, from, to, ms: work, readMs, longest }) {
   const shown = longest.map((map) => `${map.name} ${bootSeconds(map.ms)}`).join(', ');
   const read = kept ? ` (${kept} of them read back from a visit before)` : '';
+  const waited = readMs === null ? '' : `, ${bootSeconds(readMs)} of it asking the store for them`;
   return `  ${count} maps made in the workers${read} from ${bootSeconds(from)} to ${bootSeconds(to)}, `
-    + `${bootSeconds(work)} of work (the longest ${shown})`;
+    + `${bootSeconds(work)} of work${waited} (the longest ${shown})`;
 }
 
 /** How the loading screen left a boot (`analyze.mjs` `exitOf`), as a few words. */

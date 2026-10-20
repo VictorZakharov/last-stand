@@ -87,9 +87,10 @@ test('the page names the step a boot ends on as the analysis looks for it', () =
 
 test('the page reads the maps\' measures by the name and detail the game gives them', () => {
   const game = readFileSync(new URL('../../../src/core/textures.ts', import.meta.url), 'utf8');
-  assert.match(game, /performance\.measure\(`map \$\{key\}`, \{ [^}]*detail: \{ kept \} \}\)/);
+  assert.match(game, /performance\.measure\(`map \$\{key\}`, \{ [^}]*detail: \{ kept, readMs \} \}\)/);
   assert.ok(String(stopBootRecording).includes("startsWith('map ')"));
   assert.ok(String(stopBootRecording).includes('entry.detail?.kept === true'));
+  assert.ok(String(stopBootRecording).includes('entry.detail?.readMs ?? null'));
 });
 
 test('times each step of a boot, with what held the page up and what each thread did in it', () => {
@@ -124,8 +125,18 @@ test('times each step of a boot, with what held the page up and what each thread
     from: 310,
     to: 710,
     ms: 750,
+    readMs: null,
     longest: [{ name: 'face(warrior)', ms: 400 }, { name: 'slabs(21,6,3)', ms: 200 }, { name: 'steel()', ms: 100 }],
   });
+});
+
+test('says how much of the maps\' work waited for the store, where the build tells', () => {
+  const told = record();
+  told.maps = told.maps.map((map, at) => ({ ...map, readMs: at * 100 }));
+  const findings = analyzeBoot(told, trace(), MARK);
+  assert.equal(findings.maps.readMs, 600);
+  const text = bootText({ name: 'http://x/ base, a first visit', notes: [], findings });
+  assert.match(text, /, 0\.75 s of work, 0\.60 s of it asking the store for them \(the longest /);
 });
 
 test('reports a boot step by step, and the boots by visit over the rounds', () => {
