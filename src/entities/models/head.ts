@@ -444,7 +444,7 @@ function beardTufts(cap: THREE.BufferGeometry, lifts: Float32Array, g: HeadGrid,
 function cropTufts(cap: THREE.BufferGeometry, roots: number[], g: HeadGrid, rng: () => number,
   clear: (x: number, y: number, z: number) => number): THREE.BufferGeometry {
   const P = cap.attributes.position, N = cap.attributes.normal, V = THREE.Vector3, out: THREE.BufferGeometry[] = [];
-  const p = new V(), nr = new V(), t = new V(), q = new V(), gr = new V(), centre = toGroup(0, 110, -10), n = Math.min(roots.length * 2, lod(380, 120));
+  const p = new V(), nr = new V(), t = new V(), q = new V(), gr = new V(), centre = toGroup(0, 110, -10), n = Math.min(roots.length * 3, lod(560, 160));
   // (a point moved along the field's gradient to `lift` mm off the skin: in or out)
   const settle = (v: THREE.Vector3, lift: number) => {
     for (let k = 0; k < 3; k++) {
@@ -462,13 +462,14 @@ function cropTufts(cap: THREE.BufferGeometry, roots: number[], g: HeadGrid, rng:
     const side = Math.sign(fx) * clamp((fz + 30) / 60, 0, 1);
     t.set(0, -1, 0).addScaledVector(new V(0, 0, -1), 0.5 * Math.abs(side)).addScaledVector(new V(Math.sign(fx), 0, 0), (rng() - 0.5) * 0.5);
     t.addScaledVector(nr, -t.dot(nr)).normalize();
-    const len = (10 + rng() * 7) * HEAD_MM, w = (6 + rng() * 4) * HEAD_MM, pts: THREE.Vector3[] = [];
+    // (short and fine at their ends: 10-17 mm long and 40% as wide at the tip, they hung off the hairline as teeth)
+    const len = (6 + rng() * 6) * HEAD_MM, w = (4 + rng() * 3) * HEAD_MM, pts: THREE.Vector3[] = [];
     for (let i = 0; i <= 4; i++) {
       const s = i / 4;
       pts.push(settle(p.clone().addScaledVector(t, len * s), 0.6 + 2.2 * s * (1 - 0.6 * s)));
     }
     const shade = 0.75 + 0.25 * rng();
-    out.push(hairCard(pts, (s) => w * (1 - 0.6 * s), centre, lod(4, 2), (rng() - 0.5) * 0.6, (s) => shade * (0.7 + 0.3 * s), (_s, O) => { O.copy(nr); }));
+    out.push(hairCard(pts, (s) => w * (1 - 0.88 * s), centre, lod(4, 2), (rng() - 0.5) * 0.6, (s) => shade * (0.7 + 0.3 * s), (_s, O) => { O.copy(nr); }));
   }
   const geo = mergeGeometries(out)!;
   for (const x of out) x.dispose();

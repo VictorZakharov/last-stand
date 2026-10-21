@@ -778,6 +778,8 @@ function tnoise(x: number, y: number, px: number, seed: number): number {
   return lerp(lerp(TABLE[y0 + x0], TABLE[y0 + x1], u), lerp(TABLE[y1 + x0], TABLE[y1 + x1], u), v);
 }
 
+/** how far below the hairline at the back short hair (`nape`) thins out down the neck (mm) */
+const NAPE_FADE = 16;
 /** 0 on the face, 1 where hair grows on the scalp: the forehead's line with recessions at the temples,
  *  sideburns in front of the ears, above the ears, down to the nape */
 export function scalp(ax: number, y: number, z: number, drop = 0, temple = 0, nape = 0): number {
@@ -1028,9 +1030,14 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         hh += b * (s1 * 0.9 + s3 * 0.3); rr = lerp(rr, 0.8, clamp(cover, 0, 1));
       }
       // --- the scalp under the hair
-      const sc = yy > 70 - (L.nape ?? 0) ? scalp(ax, yy, z, L.hairDrop, L.templeDrop, L.nape) : 0;
+      // (hair cut short at the nape, `nape`, thins out down the neck below its line in streaks the way it grows: ending
+      // at the line, the hair under a hat was a dark shell with a hard edge across the back of the neck)
+      const fade = L.nape ? NAPE_FADE * sm(1.9, 2.5, Math.atan2(ax, z + 12)) : 0;
+      const sc0 = yy > 70 - (L.nape ?? 0) - fade ? scalp(ax, yy, z, L.hairDrop, L.templeDrop, L.nape) : 0;
+      const s1 = tnoise(tx * 0.9, ty * 0.15, w * 0.9, 12);
+      const line = fade ? hairline(ax, z, L.hairDrop, L.templeDrop, L.nape) : 0;
+      const sc = fade ? Math.max(sc0, sm(line - fade, line + 3, yy) * sm(0.25, 0.75, s1 + 0.35 * sm(line - fade, line, yy))) : sc0;
       if (sc > 0) {
-        const s1 = tnoise(tx * 0.9, ty * 0.15, w * 0.9, 12);
         mix(sc * 0.97, lerp(HAIR[0], L.streak[0], s1 * 0.4), lerp(HAIR[1], L.streak[1], s1 * 0.4), lerp(HAIR[2], L.streak[2], s1 * 0.4));
         hh += sc * s1 * 0.6; rr = lerp(rr, 0.75, sc);
       }
