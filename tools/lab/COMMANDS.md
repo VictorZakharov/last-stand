@@ -698,7 +698,14 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   problems. `--canary` runs a round with the hero's update made 2 ms slower (it must read at least 0.8 of that) and
   the scene drawn twice (the scene pass's GPU time must read at least 1.3 times more), and the particles twice as
   wide (their fill must read at least 2.5 times more). The machine's load drifts: compare an A/B run `--fresh`, both
-  sides then, not one side from the cache and the other now.
+  sides then, not one side from the cache and the other now. Then the report as the overlay copies it is read
+  (`page/perfReport.ts`): its histories, 30 buckets each (frames a second, our frame's time, how late it started, the
+  GPU's for our draws), and its long frames (Chrome's Long Animation Frames API: what the main thread did in each),
+  where a task of 120 ms run by a message must be listed with what ran it (`--canary`: one of 30, under the
+  browser's 50, must be found missing). The owner's lobby fell to 28 a second hovering items, frames late by 20 to 46
+  ms where ours took 11 to 18, and the report couldn't say whether the page's thread or something outside it held
+  them up. A click's long frame ends at the page's next rendering, which the lab's held frames put off past the
+  read: the task is a message's.
 - `programs`: the programs the boot compiled (`page/programs.ts`), read from the game's ledger of them
   (`watchPrograms` in `src/core/shaders.ts`, dev builds alone: the boot's programs are made before any command can
   watch). How many each loading step made, and how many of those a draw made rather than the warm-ups' `compile()`

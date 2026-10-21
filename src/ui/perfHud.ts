@@ -59,6 +59,23 @@ export interface GpuFrame { ms: number; parts: Record<string, number> | null }
 const gpuTaken: GpuFrame[] = [];
 const GPU_KEPT = 240;
 
+// The browser's long animation frames (50 ms or more, Chrome's Long Animation Frames API): what the page's main
+// thread did in them, which the frames' own times can't say. A frame that started late (`late`) had the thread busy
+// with something else, or was held up outside the page (its GPU's process, the machine): the owner's lobby fell from
+// 144 frames a second to 28 while hovering items, frames late by 20 to 46 ms, ours 11 to 18.
+interface LongFrameScript { duration: number; invoker: string; sourceURL: string; sourceFunctionName: string }
+interface LongFrame { startTime: number; duration: number; renderStart: number; styleAndLayoutStart: number; scripts: LongFrameScript[] }
+const LONG_FRAMES = 'long-animation-frame';
+const longFramesSeen = (): boolean => PerformanceObserver.supportedEntryTypes?.includes(LONG_FRAMES) ?? false;
+/** each long frame in the window, by the timestamp of the frame it was seen in (the window's clock) */
+const longFrames: { seen: number; frame: LongFrame }[] = [];
+function watchLongFrames(): void {
+  if (!longFramesSeen()) return;
+  new PerformanceObserver((list) => {
+    if (enabled) for (const e of list.getEntries()) longFrames.push({ seen: frameNow, frame: e as unknown as LongFrame });
+  }).observe({ type: LONG_FRAMES });
+}
+
 export function initPerfHud(r: THREE.WebGLRenderer): void {
   renderer = r;
   el = $('#perf');
@@ -79,6 +96,7 @@ export function initPerfHud(r: THREE.WebGLRenderer): void {
   const dbg = gl.getExtension('WEBGL_debug_renderer_info');
   gpuName = String(gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
   el.onclick = copyReport;
+  watchLongFrames();
   setPerfHud(readCookie(COOKIE) === '1', false);
 }
 
@@ -87,7 +105,7 @@ export const perfHudEnabled = (): boolean => enabled;
 export function setPerfHud(on: boolean, persist = true): void {
   enabled = on;
   el.classList.toggle('hidden', !on);
-  samples.length = 0; gpuTimes.length = 0; gpuParts.length = 0; lastFrame = 0;
+  samples.length = 0; gpuTimes.length = 0; gpuParts.length = 0; longFrames.length = 0; lastFrame = 0;
 
   if (frameParts?.length && gl && timerExt) gl.endQuery(timerExt.TIME_ELAPSED_EXT);
   frameParts = null;
@@ -149,6 +167,7 @@ export function perfEndFrame(): void {
   const cutoff = frameNow - WINDOW_MS;
   while (samples.length && samples[0].t < cutoff) samples.shift();
   while (gpuTimes.length && gpuTimes[0].t < cutoff) gpuTimes.shift();
+  while (longFrames.length && longFrames[0].seen < cutoff) longFrames.shift();
   if (frameNow - lastDraw >= REDRAW_MS) { lastDraw = frameNow; draw(frameNow); }
 }
 
@@ -287,6 +306,39 @@ function stageStats(): string[] {
 const topStages = (s: Stages): string => Object.entries(s).sort((a, b) => b[1] - a[1]).slice(0, 3)
   .filter(([, v]) => v >= 0.5).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(', ');
 
+/** `points`' mean in each bucket of the window, as the FPS history's ('-' where it has none). */
+function bucketMeans(points: { t: number; v: number }[]): string {
+  const n = WINDOW_MS / BUCKET_MS, t0 = frameNow - WINDOW_MS;
+  const sums = new Array<number>(n).fill(0), counts = new Array<number>(n).fill(0);
+  for (const { t, v } of points) {
+    if (t < t0) continue;
+    const i = Math.min(n - 1, Math.floor((t - t0) / BUCKET_MS));
+    sums[i] += v; counts[i]++;
+  }
+  return sums.map((s, i) => counts[i] ? (s / counts[i]).toFixed(1) : '-').join(' ');
+}
+
+/** A long frame's line: how long, when, and what the main thread did in it: the tasks before its render (input,
+ *  timers, messages), its animation frame callbacks (the game's frame among them), style and layout, its scripts in
+ *  all and the longest by what ran it. */
+function longFrameLine({ seen, frame: f }: { seen: number; frame: LongFrame }): string {
+  const end = f.startTime + f.duration, render = f.renderStart || end, layout = f.styleAndLayoutStart || end;
+  const scripts = f.scripts.reduce((sum, s) => sum + s.duration, 0);
+  const longest = [...f.scripts].sort((a, b) => b.duration - a.duration)[0];
+  const file = longest?.sourceURL.split('/').pop()?.split('?')[0];
+  const named = longest && [longest.invoker, longest.sourceFunctionName, file].filter(Boolean).join(' ');
+  return `  ${f.duration.toFixed(0)} ms at -${((frameNow - seen) / 1000).toFixed(1)}s: before its render ${(render - f.startTime).toFixed(0)}, `
+    + `frame callbacks ${(layout - render).toFixed(0)}, style and layout ${(end - layout).toFixed(0)} | scripts ${scripts.toFixed(0)}`
+    + (longest ? `, the longest ${longest.duration.toFixed(0)}: ${named}` : '');
+}
+
+/** The window's long frames, the worst first. */
+function longFramesText(): string[] {
+  if (!longFramesSeen()) return ['Long frames: not reported by this browser'];
+  const worst = [...longFrames].sort((a, b) => b.frame.duration - a.frame.duration).slice(0, 6);
+  return [`Long frames (50 ms+, the main thread's work in them, ms): ${longFrames.length} in the window`, ...worst.map(longFrameLine)];
+}
+
 /** A fixed CPU workload: how fast this machine runs our kind of JS right now (ms). */
 function jsBench(): number {
   const a = new Float32Array(4096);
@@ -314,15 +366,24 @@ function report(): string {
     `GPU ${gpuName} | CPU cores ${navigator.hardwareConcurrency ?? '?'} | JS bench ${fmt(jsBench(), 2)} ms`,
     `UA ${navigator.userAgent}`,
     `FPS history (0.5s buckets) ${s.buckets.map((v) => v === null ? '-' : Math.round(v)).join(' ')}`,
+    // (each bucket's frames: ours, how late ours started, the GPU's time for our draws; a fall with ours and the GPU's
+    // steady and our frames late is held up outside our frame, which the long frames say whether the page's)
+    `Ours history (ms a frame: update + render) ${bucketMeans(samples.map((f) => ({ t: f.t, v: f.cpu })))}`,
+    `Late history (ms a frame started after its time) ${bucketMeans(samples.map((f) => ({ t: f.t, v: f.late })))}`,
+    `GPU history (ms a frame, our draws) ${bucketMeans(gpuTimes.map((g) => ({ t: g.t, v: g.ms })))}`,
     'Worst frames (interval ms: ours = update + render, late = callback start delay):',
     ...[...samples].sort((a, b) => b.frame - a.frame).slice(0, 8).map((f) =>
       `  ${f.frame.toFixed(1)} ms at -${((frameNow - f.t) / 1000).toFixed(1)}s: ours ${f.cpu.toFixed(1)} = ${f.upd.toFixed(1)} + ${f.rnd.toFixed(1)}, late ${f.late.toFixed(1)} | ${f.ctx}${topStages(f.stages) ? ` | ${topStages(f.stages)}` : ''}`),
     `CPU p95 ${fmt(percentile(samples.map((f) => f.cpu).sort((a, b) => a - b), 0.95), 2)} ms max ${fmt(Math.max(...samples.map((f) => f.cpu)), 2)} | GPU p95 ${fmt(percentile(gpuTimes.map((g) => g.ms).sort((a, b) => a - b), 0.95), 2)} ms max ${fmt(Math.max(...gpuTimes.map((g) => g.ms)), 2)}`,
+    ...longFramesText(),
     'Update stages (ms: mean p95 max):',
     ...stageStats(),
     ...(lateCompiles.length ? ['Shaders compiled after load:', ...lateCompiles.slice(-40).map((l) => '  ' + l)] : []),
   ].join('\n');
 }
+
+/** The report as the overlay copies it (for a harness: tools/lab `perf`). */
+export const perfReport = (): string => report();
 
 function copyReport(): void {
   const hint = el.querySelector('[data-p="copy"]')!;
