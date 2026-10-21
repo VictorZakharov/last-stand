@@ -919,13 +919,19 @@ export const COMMANDS = {
   maps: {
     help: 'the procedural maps a first visit makes in its workers (src/core/pbr.ts PRELOAD), each made on the page '
       + 'and timed, and a digest of its pixels: a map made faster keeps every pixel (with --ab, each digest as '
-      + 'main\'s, the times side by side)',
+      + 'main\'s, the times side by side); each repeated map\'s seams (a seam fails it) and its means',
     options: {
       maps: { kind: 'list', usage: 'a,b', help: 'the recipes made, by name (every one by default)' },
       runs: { kind: 'number', usage: 'n', help: 'how many times each is made, its time the fastest (1 by default)' },
+      pictures: {
+        kind: 'switch',
+        help: 'each map\'s albedo and height laid twice each way, its corner at its own pixels and its material lit '
+          + 'on a square and a ball, a sheet a group (metal, stone, wood...)',
+      },
       canary: {
         kind: 'switch',
-        help: 'a byte of the first map\'s pixels changed once it\'s made: its digest must change',
+        help: 'a byte of the first map\'s pixels changed once it\'s made (its digest must change), and a ramp '
+          + 'across u planted in a copy of it (a seam must be found)',
       },
       ...COMMON_OPTIONS,
     },

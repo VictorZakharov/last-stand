@@ -823,11 +823,16 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   light in the scene, which the count must find.
 - `maps`: the game's procedural maps (`page/maps.ts`; `--maps forestFloor,steel`, every one `PRELOAD` lists in
   `src/core/pbr.ts` by default), each made on the page as a loading worker makes it, `--runs` times (its time the
-  fastest, by the browser's own clock), with a digest of its pixels and of a face's grid (its head is built on it).
-  A first visit makes every one before the lobby shows what it needs, so a map made faster must keep every pixel:
-  with `--ab` each digest must be main's, and the times are side by side. It found the 22 maps 8.7 s in all, alone
-  on one thread: the three faces 1.4 to 1.8 s each, the forest floor 1.5 s, the cobblestone 0.6 s, none of the
-  rest over 0.25 s. `--canary` changes a byte of the first map's pixels once it's made: its digest must change.
+  fastest, by the browser's own clock), with a digest of its pixels and of a face's grid. A map made faster must
+  keep every pixel: with `--ab` each digest must be main's, the times side by side. A map a surface repeats must
+  tile (`page/mapSeams.ts`): each edge (the last column against the first, the last row the first) is read on the
+  albedo's brightness and on the height against every two neighbouring lines inside, by its mean step and by the
+  share of it that jumps past both neighbours' steps (a slab's shade changing, not its bevelled joint); a seam
+  reads past every line inside and twice their median (main's steel, slabs and fur had them). Its means (the
+  albedo's brightness, the roughness) show a new look's drift from main's. `--pictures`: each map's albedo and
+  height laid twice each way, its corner at its own pixels and its material lit on a square and a ball, a sheet a
+  group (`page/mapPictures.ts`). `--canary` changes a byte (its digest must change) and plants a ramp across u in a
+  copy (a seam must be found).
 - `weapons`: each of the hero's weapons alone (`page/weapons.ts`; `--weapons Sword,Maul`, the class's bases by
   default): a copy of the one in his right hand, at its own frame (unturned in the fist), put in a plain, lit
   studio of its own and pictured face on (a blade's flat, an axe's bit to the side), edge on, from behind (a face
