@@ -900,7 +900,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   `--canary` plays a round again with four faults planted: the biome's battle track played as another's, the
   lobby's fade in cut to a twentieth of a second, every fresh track started 5 s in, and every track coming back
   started from its top.
-- `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`).
+- `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`). One that
+  hasn't settled in 60 s is given up, with an error (a `requestAnimationFrame` waits on the lab's frames, `lab.step`:
+  awaited, it never settled, and held up every command after it till the server was stopped; the browser's next
+  frame is `window.__labClock.realFrame()`). `live eval` is given up the same way.
 - `live <step>`: a page of the game kept between steps, each on the state the last one left, as a modelling
   tool's scene is kept between edits (`node/live.mjs`, `page/live.ts`; needs `lab:serve`). `live start` boots the
   hero (`--class`, the warrior by default), on `--screen`'s screen if it's given (a phone's, `832x384@3.75`: its

@@ -20,7 +20,17 @@ const VIEWPORT = { width: 1920, height: 1080 };
 const BOOT_TIMEOUT_MS = 180_000;
 /** how often a booting page is asked whether the loading screen is gone, ms */
 const BOOT_POLL_MS = 100;
+/** how long an expression `evaluate` runs may take to settle, ms: one waiting on a frame of the page's, which the lab's
+ *  clock holds, never settled, and every command after it waited on it, `status` too, till the server was stopped */
+const EVALUATE_TIMEOUT_MS = 60_000;
 const BOOTED = 'booted';
+
+/** What an expression that never settled is told. */
+function evaluateTimeoutText() {
+  return `lab: eval: the expression hadn't settled after ${EVALUATE_TIMEOUT_MS / 1000} s (the page's `
+    + 'requestAnimationFrame waits on the lab\'s frames, lab.step; the browser\'s next frame is '
+    + 'window.__labClock.realFrame())';
+}
 
 /** In the page: whether its boot is over, `BOOTED` or what its loading screen says went wrong (src/ui/loading.ts
  *  `loadingFailed`); false while it's still loading, or while the fight's programs are still warmed behind the
@@ -619,9 +629,19 @@ export class Side {
     };
   }
 
-  /** Evaluates `expression` in the page, with the lab as `lab`, readied first. */
-  evaluate(expression) {
-    return this.page.evaluate(`(async (lab) => { lab.begin(); return (${expression}); })(window.__lab)`);
+  /** Evaluates `expression` in the page, with the lab as `lab`, readied first. Throws if it hasn't settled within
+   *  `EVALUATE_TIMEOUT_MS` (what it started runs on in the page). */
+  async evaluate(expression) {
+    let timer;
+    const evaluated = this.page.evaluate(`(async (lab) => { lab.begin(); return (${expression}); })(window.__lab)`);
+    const timedOut = new Promise((resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(evaluateTimeoutText())), EVALUATE_TIMEOUT_MS);
+    });
+    try {
+      return await Promise.race([evaluated, timedOut]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /** The page's errors and the lab's anatomy warnings since the last call. */
