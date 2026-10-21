@@ -17,6 +17,7 @@ import { growTree, REACH_BANDS, type Grow } from './ezTrees';
 import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
 import { bend, rag, taperTube, twist } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
+import { buildFire, emberMat } from './fire';
 import { floorRelief } from '../core/parallax';
 import type { Obstacle } from '../types';
 
@@ -39,6 +40,29 @@ const FLOOR_RELIEF = { depth: 0.045, perMetre: FLOOR_REPEAT / 220, fade: 70 };
 
 /** grass sways this far at its tips (m), slowly (rad/s), each tuft a little after the one upwind of it */
 const SWAY = 0.05, SWAY_RATE = 1.3;
+/** the bonfires' places, by the wall on the diagonal */
+const BONFIRES = [Math.PI / 4, (5 * Math.PI) / 4].map((a) => [Math.cos(a) * (WALL_R - 2.4), Math.sin(a) * (WALL_R - 2.4)]);
+/** a fire clears the ground round it (m): nothing lies within its ring of stones, and a fern's roots stand clear of
+ *  its flames by its fronds' reach (a share of its scale) besides: grown beside a bonfire, ferns spread over the flames
+ *  and hid them from the top-down view (`npm run lab -- fire`) */
+const FIRE_RING = 1.0, FIRE_FERN_CLEAR = 0.7, FROND_REACH = 0.9;
+/** how far past a fire's clearing what stood in it is moved (m, at most) */
+const FIRE_SPREAD = 0.8;
+
+/** (`x`, `z`) moved out of every bonfire's clearing `reach` (m) round its middle, away from it and up to `FIRE_SPREAD`
+ *  past its edge by its own place (moved rather than left out: a spot drawn again draws more random numbers, and every
+ *  prop placed after it moves). */
+function clearOfFires(x: number, z: number, reach: number): [number, number] {
+  for (const [fx, fz] of BONFIRES) {
+    const dx = x - fx, dz = z - fz, d = Math.hypot(dx, dz);
+    if (d >= reach) continue;
+    const spread = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
+    const out = reach + spread * FIRE_SPREAD;
+    const [ux, uz] = d > 1e-4 ? [dx / d, dz / d] : [1, 0];
+    return [fx + ux * out, fz + uz * out];
+  }
+  return [x, z];
+}
 
 /**
  * Wind in the grass: each blade's points swayed by the square of their height (a blade bends from its root), the tufts
@@ -273,8 +297,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     obstacles.push({ x, z, r: 0.75, h: 1.7 });
     breakable.add(obstacles.length - 1, 9, 0x40b090, groupLook(g, updaters, u0), 'shroom');
   }
-  for (const a of [Math.PI / 4, (5 * Math.PI) / 4]) {
-    const x = Math.cos(a) * (WALL_R - 2.4), z = Math.sin(a) * (WALL_R - 2.4);
+  for (const [x, z] of BONFIRES) {
     const g = new THREE.Group(), u0 = updaters.length;
     scene.add(g);
     buildBonfire(g, x, z, stone, barkMat, updaters);
@@ -384,6 +407,7 @@ export const buildForest: BiomeBuilder = (scene) => {
       if (!free(x, z, 0.05)) continue;
     }
     const s = r(0.9, 1.7);
+    [x, z] = clearOfFires(x, z, FIRE_FERN_CLEAR + FROND_REACH * s);
     setInstance(ferns, fi, x, 0, z, 0, r(0, TAU), 0, s, s * r(0.8, 1.2), s);
     ferns.setColorAt(fi++, plantCol.setRGB(r(0.16, 0.26), r(0.26, 0.38), r(0.1, 0.16)));
   }
@@ -419,7 +443,8 @@ export const buildForest: BiomeBuilder = (scene) => {
     if (Math.max(Math.abs(x), Math.abs(z)) < h + 0.8) continue;
     if (clump(x / 90 + 0.3, z / 90 + 0.7) < 0.38 + (rr < 16 ? 0.12 : 0)) continue;
     const s = r(0.7, 1.4);
-    setInstance(litter, li, x, 0.002 * (li % 7), z, r(-0.1, 0.1), r(0, TAU), r(-0.1, 0.1), s);
+    const [lx, lz] = clearOfFires(x, z, FIRE_RING);
+    setInstance(litter, li, lx, 0.002 * (li % 7), lz, r(-0.1, 0.1), r(0, TAU), r(-0.1, 0.1), s);
     const c = litterCols[Math.floor(rng() * litterCols.length)], v = r(0.7, 1.2);
     litter.setColorAt(li++, plantCol.setRGB(c[0] * v, c[1] * v, c[2] * v));
   }
@@ -728,34 +753,62 @@ function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.
     s.castShadow = true;
     scene.add(s);
   }
-  const logGeo = new THREE.CylinderGeometry(0.08, 0.1, 1.1, 6);
-  for (let i = 0; i < 4; i++) {
-    const log = new THREE.Mesh(logGeo, wood);
-    log.position.set(x, 0.3, z);
-    log.rotation.set(0.9, (i / 4) * TAU, 0, 'YXZ');
-    log.castShadow = true;
-    scene.add(log);
+  // a teepee of logs leaning in over the bed, two more lying across it; where the flames lick them, charred and
+  // glowing through their char
+  // (each log's bark and char merged: drawn a mesh a part, its charred end apart, a bonfire's logs were 22 draws)
+  const logs: LogParts = { bark: [], char: [] };
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * TAU + 0.3;
+    const foot = new THREE.Vector3(x + Math.cos(a) * 0.48, 0, z + Math.sin(a) * 0.48);
+    const top = new THREE.Vector3(x + Math.cos(a + 2.4) * 0.06, 0.6 + (i % 2) * 0.07, z + Math.sin(a + 2.4) * 0.06);
+    leanLog(logs, foot, top, 0.055, true);
   }
-  const coals = new THREE.Mesh(new THREE.CircleGeometry(0.45, 12).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff5010).multiplyScalar(2.5) }));
-  coals.position.set(x, 0.05, z);
-  scene.add(coals);
-  const light = new THREE.PointLight(0xff7a30, 14, 13, 2);
+  for (const a of [0.5, 2.2]) {
+    const across = new THREE.Vector3(Math.cos(a) * 0.38, 0, Math.sin(a) * 0.38);
+    const from = new THREE.Vector3(x, 0.07, z).sub(across);
+    const to = new THREE.Vector3(x, 0.09, z).add(across);
+    leanLog(logs, from, to, 0.07, false);
+  }
+  const char = emberMat(new THREE.Vector3(x, 0.25, z), 0.6);
+  for (const [parts, mat] of [[logs.bark, wood], [logs.char, char]] as const) {
+    const mesh = new THREE.Mesh(mergeGeometries(parts), mat);
+    mesh.castShadow = true;
+    scene.add(mesh);
+  }
+  const light = new THREE.PointLight(0xff7a30, 12, 13, 2);
   light.position.set(x, 1.3, z);
   scene.add(light);
-  let acc = 0;
-  updaters.push((dt, t) => {
-    light.intensity = 12 + Math.sin(t * 11 + x) * 2 + Math.sin(t * 23) * 1.5;
-    acc += dt;
-    while (acc > 0.02) {
-      acc -= 0.02;
-      particles.glow.spawn({
-        x: x + rand(-0.3, 0.3), y: 0.3, z: z + rand(-0.3, 0.3), vx: rand(-0.2, 0.2), vy: rand(1.2, 2.4), vz: rand(-0.2, 0.2),
-        life: rand(0.4, 0.8), size: rand(0.35, 0.6), sizeEnd: 0.05, color: col(0xffa040, 2.2), colorEnd: col(0xff2000, 0.5), drag: 1.2,
-      });
-      if (Math.random() < 0.1) particles.glow.spawn({
-        x: x + rand(-0.2, 0.2), y: 0.5, z: z + rand(-0.2, 0.2), vx: rand(-0.4, 0.4), vy: rand(2, 4), vz: rand(-0.4, 0.4),
-        life: rand(1, 2), size: 0.06, color: col(0xffc060, 4), colorEnd: col(0xff4000, 1), drag: 0.5,
-      });
-    }
-  });
+  buildFire(scene, {
+    at: new THREE.Vector3(x, 0.03, z), radius: 0.42, height: 1.2, dish: 0, light, intensity: 12,
+    smoke: 6, smokeColour: 0x8a8580, embers: 10,
+  }, updaters);
+}
+
+/** A bonfire's logs, their bark's geometry and their char's, in the world's frame. */
+interface LogParts {
+  bark: THREE.BufferGeometry[];
+  char: THREE.BufferGeometry[];
+}
+
+/** A log from `from` to `to` (m), `radius` thick, into `logs`: bark with its upper 60% and its end sheathed in char
+ *  (a bare end showed its pale grain at the teepee's top, in the flames), or with `barked` false charred throughout. */
+function leanLog(logs: LogParts, from: THREE.Vector3, to: THREE.Vector3, radius: number, barked: boolean): void {
+  const along = to.clone().sub(from);
+  const length = along.length();
+  const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), along.clone().normalize());
+  const at = (share: number) => new THREE.Matrix4().compose(
+    from.clone().addScaledVector(along, share), turn, new THREE.Vector3(1, 1, 1));
+  const side = new THREE.CylinderGeometry(radius * 0.85, radius, length, 7, 1, true).applyMatrix4(at(0.5));
+  // (an end facing `up` (1) or down (-1), its corners turned onto the side's)
+  const end = (r: number, share: number, up: number) =>
+    new THREE.CircleGeometry(r, 7, -up * Math.PI / 2).rotateX(-up * Math.PI / 2).applyMatrix4(at(share));
+  const foot = end(radius, 0, -1);
+  const top = end(radius * 0.85, 1, 1);
+  if (!barked) {
+    logs.char.push(side, foot, top);
+    return;
+  }
+  const sheath = new THREE.CylinderGeometry(radius * 0.9, radius * 1.02, length * 0.6, 7, 1, true);
+  logs.bark.push(side, foot);
+  logs.char.push(top, sheath.applyMatrix4(at(0.68)));
 }

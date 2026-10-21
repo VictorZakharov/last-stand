@@ -391,6 +391,35 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  fire: {
+    help: 'each biome\'s fire as the player meets it: read from beside it with its own light and without, how tall '
+      + 'and wide it burns, its light and hue from its base up, what of it is blown out white, its tongues, the smoke '
+      + 'over it, how it moves and swells, and the flashes it makes on the screen; its flames from round them, '
+      + 'whether they turn with the camera; the plants over it; pictured beside it, alone, from above, round it and '
+      + 'in the game\'s views: tools/lab/out/fire',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      seconds: { kind: 'number', usage: 's', default: '2', help: 'how long the fire is read for' },
+      cost: {
+        kind: 'switch',
+        help: 'time what its flames take of the GPU in the top-down view, drawn and not in turns (its times differ '
+          + 'from run to run, as the machine\'s load does)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant the faults the measures must catch: a still flame, one drawn white, none drawn, a strobe on the '
+          + 'screen, flames showing the same face from behind, a plant over the fire, and with --cost the flames '
+          + 'drawn four times over',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   cast: {
     help: 'a skill of the hero\'s cast as the player casts it, its effect seen frame by frame: the hero standing in '
       + 'each biome and view with the biome\'s foes coming at him, the key pressed (held for a held skill or a '
