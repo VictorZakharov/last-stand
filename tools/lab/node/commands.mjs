@@ -492,6 +492,36 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  fire: {
+    check(options) {
+      if (!(options.seconds > 0)) throw labError(`fire --seconds: ${options.seconds} is not a length of time`);
+    },
+    async each(side, options) {
+      // (a biome at a time, each on its own: its pictures sent back with it)
+      const reports = [];
+      for (const biome of options.biomes) {
+        const command = {
+          biome,
+          seconds: options.seconds,
+          cost: Boolean(options.cost),
+          canary: Boolean(options.canary),
+        };
+        reports.push(await side.command('fire', command));
+      }
+      return {
+        text: reports.map((report) => report.text).join('\n'),
+        problems: reports.flatMap((report) => report.problems),
+        moments: reports.flatMap((report) => report.moments),
+      };
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('fire'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   cast: {
     check(options) {
       const wrong = options.times.find((time) => !(Number(time) >= 0));

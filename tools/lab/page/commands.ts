@@ -16,6 +16,7 @@ import type { TapOptions } from './tap';
 import type { PracticeOptions } from './practice';
 import type { TrailOptions } from './trail';
 import type { LightOptions } from './light';
+import type { FireOptions } from './fire';
 import type { HazeOptions } from './haze';
 import type { SpawnsOptions } from './spawns';
 import type { HealthOptions } from './health';
@@ -228,6 +229,16 @@ export async function trail(lab: Lab, command: TrailOptions): Promise<Report> {
 export async function light(lab: Lab, command: LightOptions): Promise<Report> {
   const { light: lightRound } = await import('./light');
   return lightRound(lab, command);
+}
+
+/**
+ * `lab fire`, one biome: its fire read from beside it with its own light and without, and pictured beside it, from
+ * above and in the game's views; a fire drawing nothing, standing still or blown out white, a strobe on the screen and
+ * a canary missed are problems.
+ */
+export async function fire(lab: Lab, command: FireOptions): Promise<Report> {
+  const { fire: fireRound } = await import('./fire');
+  return fireRound(lab, command);
 }
 
 /** `lab haze`: through the eyes, what the hero's held weapons' light takes from the frame round them; a haze and a

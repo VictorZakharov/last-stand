@@ -376,6 +376,34 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   frame drawn. `--canary` draws the first frame at twice the exposure, which must come out brighter, and in HDR at
   1.2 times the paper white, which the check under the knee must catch. With `--ab` the SDR frames agree with main,
   line for line.
+- `fire`: each biome's fire as the player meets it (`page/fire.ts`, `page/fireMeasure.ts`, tested in
+  `test/fireMeasure.test.mjs`; `--biomes crypt,forest`). Found by its light, the warm one of the biome's six, the hero
+  stood 4.5 m before it towards the middle. For `--seconds` (2), 30 times a second, it's drawn from beside it with its
+  own light, without (what draws unlit within 1.5 m of its light, and the glow particles) and without its smoke too:
+  the differences are its light alone (graded: the tone curve carries the logs' grain into it) and its smoke (a pale
+  smoke over the daylit forest, read as light, was counted into the tips). Read: its size, its light and hue in four
+  bands from its base up, the share drawn white, the parts its top 40% breaks into (glow particles count as parts),
+  its light's spread, the share above it its smoke changes, how much of it moves a moment, its light's and its point
+  light's swing and strongest frequency, and the top-down view's flashes over a second at least. Then at one moment
+  its flames alone (all else hidden by its materials, as the culled plants show themselves again each render; the
+  adaptation held off, which exposed each picture by itself) from four sides, level from 10 m through 12°: a flame's
+  light passes through it, so from behind it's its own mirror, while sheets turned to the camera show one face from
+  either side (the owner: "fire rotates when camera rotates"). Its detail (light less its local mean) from behind
+  under 0.6 alike its front's mirror, or more alike its front as it is, turns with the camera, unless its front is
+  over 0.9 alike its own mirror, too even to tell (main's disc of coals, edge on). And the plants over it
+  (`page/fireClear.ts`): the instanced meshes' points the top-down view last drew in its column (its half-width and
+  0.3 m round, 2.5 m up). Nothing drawn, still, blown out (20% white), turning, plants over it and 3 flashes a second
+  are problems. `--cost` (`page/fireCost.ts`) times its flames on the GPU from beside them (in the top-down view they
+  cost under the timer's noise), each render by a query of its own, drawn and not in turns: its times differ run to
+  run, so they're in the lines only when asked. `--canary`: a still flame, one drawn white, one put out, a 4 Hz
+  strobe, the front shown from behind, a leaf over the bed, and with `--cost` the flames drawn four times over (twice
+  their cost at least). Pictured (`out/fire/`): close (beside it at 0, 0.13, 0.27 s, its light alone, from above),
+  round (the four sides, the first's light alone), and the top, third, first and lobby views. Main's fires (a disc of
+  coals under glow particles): 1.4 to 1.6 m by 0.9, dim orange-red throughout (7 to 25°, at most 0.22 of white), no
+  smoke, 19 to 37% moving a moment, six fern clumps over the bonfire. As sheets turned to the camera they turned with
+  it (0.52 alike their mirror); as a volume 1.55 m by 0.6 to 0.7, 0.33 to 0.41 of white at 30° low to 0.13 at 25° at
+  the tips, 0.86 alike its mirror, the bonfire's smoke over 47% above it, 7 to 9% moving, no plant over either, 0.16 ms
+  (crypt) and 0.34 (forest) of a frame from beside them on the lab's desktop GPU.
 - `haze`: the hero's held weapons' light through the eyes (`page/haze.ts`), standing in a biome (`--biome`, the
   forest by default) looking each way (`--facings`), held as `--gear` and `--weapon` say. The frame is drawn with the
   weapons and without them, each also with the grade's adaptation held off, and their surface found in the `parts`
