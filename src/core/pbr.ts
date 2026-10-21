@@ -423,16 +423,72 @@ const BARK_ALONG = 2;
 const BARK = [0.15, 0.132, 0.11] as const;
 const BARK_FURROW = [0.055, 0.042, 0.032] as const;
 
+// --- photos: a recipe may take its colours from a picture (core/photos/), decoded where the recipe runs (a worker,
+// or the page) before it runs: `photosFor`.
+
+/** the pictures recipes take, by name: each a square that tiles */
+const PHOTO_URLS = { oakBark: new URL('./photos/oak-bark.webp', import.meta.url).href };
+type PhotoName = keyof typeof PHOTO_URLS;
+interface Photo { size: number; rgba: Uint8ClampedArray }
+/** the photos decoded here, by name */
+const photos = new Map<PhotoName, Photo>();
+
+/** A picture's pixels, decoded off the DOM (OffscreenCanvas: a worker has no document). */
+async function decode(url: string): Promise<Photo> {
+  const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+  const size = bitmap.width;
+  const context = new OffscreenCanvas(size, size).getContext('2d')!;
+  context.drawImage(bitmap, 0, 0);
+  bitmap.close(); // (a closed bitmap's width reads 0)
+  return { size, rgba: context.getImageData(0, 0, size, size).data };
+}
+
+/** the brightness a photo's height is taken from (sdf-harness's weights) */
+const PHOTO_LUMA = [0.3, 0.55, 0.15] as const;
+/** the oak bark photo's albedo, its mean brightness scaled to this: the forest's light was set for bark this dark
+ *  (sdf's carved bark's, procedural, 0.134) */
+const BARK_PHOTO_MEAN = 0.16;
+
 /**
- * Tree bark (the forest's trunks, stumps, logs and roots, the crypt's dead wood, the thornlings, treants and
- * sporecallers): sdf-harness's carved oak bark (`reliefBark`, matched against studio pictures), in a tile. Long
+ * Oak bark from sdf-harness's oak photo (its `bark` preset; core/photos/oak-bark.webp): its colours darkened to the
+ * forest's light, its brightness the height (smoothed a pixel each way: its grain is the colour's, not the shading's),
+ * rougher down the furrows. Its furrows run down the picture, along v as a trunk's do.
+ */
+function photoBark(photo: Photo): PBRData {
+  const n = photo.size, rgba = photo.rgba, luma = new Float32Array(n * n);
+  let mean = 0;
+  for (let i = 0; i < n * n; i++) {
+    luma[i] = (PHOTO_LUMA[0] * rgba[i * 4] + PHOTO_LUMA[1] * rgba[i * 4 + 1] + PHOTO_LUMA[2] * rgba[i * 4 + 2]) / 255;
+    mean += luma[i];
+  }
+  const k = BARK_PHOTO_MEAN / (mean / (n * n)), at = (x: number, y: number): number => luma[((y + n) % n) * n + ((x + n) % n)];
+  return buildPBR(n, (u, v, o) => {
+    const x = Math.round(u * n), y = Math.round(v * n), i = (y * n + x) * 4;
+    let h = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) h += at(x + dx, y + dy);
+    o.h = h / 9;
+    o.r = clamp((rgba[i] / 255) * k, 0, 1); o.g = clamp((rgba[i + 1] / 255) * k, 0, 1); o.b = clamp((rgba[i + 2] / 255) * k, 0, 1);
+    o.rough = clamp(0.8 + (1 - o.h) * 0.18, 0, 1);
+  }, 6);
+}
+
+/** Tree bark (the forest's trunks, stumps, logs and roots, the crypt's dead wood, the thornlings, treants and
+ *  sporecallers): the oak photo where it was decoded (`photosFor`), else sdf's carved bark. */
+function bark(): PBRData {
+  const photo = photos.get('oakBark');
+  return photo ? photoBark(photo) : carvedBark();
+}
+
+/**
+ * Carved bark (`bark` without its photo: no worker, or one asked for before its photo came): sdf-harness's carved
+ * oak bark (`reliefBark`, matched against studio pictures), in a tile. Long
  * plates between wandering furrows (cells six furrows' widths long, `BARK_AROUND` round a tile and `BARK_ALONG`
  * along it), the furrow's walls stepped; each plate broken into blocks of their own heights along it, notched where
  * they part, cracked across and along, lumped and crumbled. Dark down the furrows, the plates' tops lighter. v runs
  * along the trunk. (sdf's blocks every 1.8 furrows' widths and its cracks 2.3 a block are 2 and 7/3 here, whole
  * numbers of each along a tile.)
  */
-function bark(): PBRData {
+function carvedBark(): PBRData {
   const U = BARK_AROUND, R = BARK_ALONG, L = R * 6, blocks = L / 2;
   // a plate's point in its cell (furrows round, cells along), as sdf's: its offsets in the cell, made once
   const offsetU = new Float32Array(U * R), offsetV = new Float32Array(U * R);
@@ -644,6 +700,18 @@ export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, grunge, 
 export type RecipeName = keyof typeof RECIPES;
 export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
+
+/** the photos each recipe takes (`photosFor`) */
+const PHOTOS_OF: Partial<Record<RecipeName, PhotoName[]>> = { bark: ['oakBark'] };
+
+/** Resolved once the photos `name`'s recipe takes are decoded here, for it to run; a photo that fails is left out
+ *  (its recipe makes its procedural map). */
+export async function photosFor(name: RecipeName): Promise<void> {
+  const wanted = (PHOTOS_OF[name] ?? []).filter((photo) => !photos.has(photo));
+  await Promise.all(wanted.map(async (photo) => {
+    try { photos.set(photo, await decode(PHOTO_URLS[photo])); } catch { /* its recipe's procedural map */ }
+  }));
+}
 
 /**
  * The maps the game uses, made in workers during loading. Anything missing here is still made on

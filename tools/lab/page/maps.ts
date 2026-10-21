@@ -7,6 +7,7 @@
 // takes it (page/mapPictures.ts). `--canary` changes a byte of the first map's pixels after it's made (its digest
 // must change) and plants a seam in a copy of it (it must be found).
 import type { Lab, Pictured, Report } from './lab';
+import * as pbr from '../../../src/core/pbr';
 import { PRELOAD, RECIPES, recipeKey, type PBRData, type RecipeName } from '../../../src/core/pbr';
 import { seamsOf, withRamp, type EdgeStep } from './mapSeams';
 
@@ -157,7 +158,10 @@ export async function maps(lab: Lab, options: MapsOptions): Promise<Report> {
   const problems: string[] = [];
   const moments: Pictured[] = [];
   const canaryLines: string[] = [];
+  // (an A/B's other side may take no photos: its pbr.ts has no `photosFor`)
+  const photosFor = (pbr as Partial<typeof pbr>).photosFor;
   for (const [name, args] of jobsOf(options)) {
+    await photosFor?.(name);
     const { data, ms } = made(name, args, runs);
     const key = recipeKey(name, args);
     const digest = digestOf(data);

@@ -2,7 +2,7 @@
 // Everything is generated on the CPU once at startup (no external art assets).
 import * as THREE from 'three';
 import { makeFbm, mulberry, clamp } from '../util';
-import { RECIPES, PRELOAD, recipeKey, makeVoronoi, type PBRData, type RecipeName, type RecipeArgs } from './pbr';
+import { RECIPES, PRELOAD, recipeKey, makeVoronoi, photosFor, type PBRData, type RecipeName, type RecipeArgs } from './pbr';
 
 function canvasOf(size: number, height = size): HTMLCanvasElement {
   const c = document.createElement('canvas');
@@ -25,10 +25,10 @@ export function readCtx2d(c: HTMLCanvasElement): CanvasRenderingContext2D {
   return c.getContext('2d', { willReadFrequently: true })!;
 }
 
-function toTexture(canvas: HTMLCanvasElement, srgb: boolean, repeat = 1): THREE.CanvasTexture {
+function toTexture(canvas: HTMLCanvasElement, srgb: boolean, u = 1, v = u): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(canvas);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(repeat, repeat);
+  t.repeat.set(u, v);
   t.anisotropy = 8;
   t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   t.needsUpdate = true;
@@ -227,25 +227,45 @@ export function preloadTextures(hero: string): MapsComing {
     // a worker that fails leaves what it took on to the page
     w.onerror = () => { w.terminate(); resolve(); };
   });
-  const all = Promise.all(Array.from({ length: n }, (_, worker) => run(worker))).then(() => {
+  const all = Promise.all(Array.from({ length: n }, (_, worker) => run(worker))).then(async () => {
     // (every map asked of the store by now: each worker keeps what it made, and closes)
     for (const w of workers) w.postMessage('keep');
-    for (const [key, { job }] of [...coming]) arrived(key, make(job));
+    for (const [key, { job }] of [...coming]) {
+      await photosFor(job[0]);
+      arrived(key, make(job));
+    }
   });
   return { ready, all };
 }
 
+/** How often a map's tile repeats across a surface's UVs: as often both ways, or `[along u, along v]`. */
+export type Repeat = number | readonly [number, number];
+
+interface MapTextures { map: THREE.Texture; normalMap: THREE.Texture; roughnessMap: THREE.Texture }
+
 // Textures are shared per (maps, repeat): every enemy of a kind reuses one GPU upload
 // instead of uploading (and mipmapping) its own copies when it first comes into view.
-const mapTextures = new WeakMap<PBRCanvases, Map<number, { map: THREE.Texture; normalMap: THREE.Texture; roughnessMap: THREE.Texture }>>();
+// Another repeat of the same maps copies the first's textures: copies share their source, so its one upload.
+const mapTextures = new WeakMap<PBRCanvases, Map<string, MapTextures>>();
 
-export function pbrMaterialMaps(maps: PBRCanvases, repeat: number, normalScale = 1) {
+/** `t` copied (its source and upload shared) to repeat `u` by `v` times. */
+function repeated(t: THREE.Texture, u: number, v: number): THREE.Texture {
+  const copy = t.clone();
+  copy.repeat.set(u, v);
+  return copy;
+}
+
+export function pbrMaterialMaps(maps: PBRCanvases, repeat: Repeat, normalScale = 1) {
+  const [u, v] = typeof repeat === 'number' ? [repeat, repeat] : repeat;
   let byRepeat = mapTextures.get(maps);
   if (!byRepeat) mapTextures.set(maps, byRepeat = new Map());
-  let tex = byRepeat.get(repeat);
+  let tex = byRepeat.get(`${u},${v}`);
   if (!tex) {
-    tex = { map: toTexture(maps.albedo, true, repeat), normalMap: toTexture(maps.normal, false, repeat), roughnessMap: toTexture(maps.rough, false, repeat) };
-    byRepeat.set(repeat, tex);
+    const first = byRepeat.values().next().value;
+    tex = first
+      ? { map: repeated(first.map, u, v), normalMap: repeated(first.normalMap, u, v), roughnessMap: repeated(first.roughnessMap, u, v) }
+      : { map: toTexture(maps.albedo, true, u, v), normalMap: toTexture(maps.normal, false, u, v), roughnessMap: toTexture(maps.rough, false, u, v) };
+    byRepeat.set(`${u},${v}`, tex);
   }
   return { ...tex, normalScale: new THREE.Vector2(normalScale, normalScale) };
 }

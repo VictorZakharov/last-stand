@@ -153,7 +153,8 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const carved = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x7e8088, roughness: 0.85 });
   const iron = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.45 });
   const boneMat = new THREE.MeshStandardMaterial({ color: 0x8a8272, roughness: 0.8 });
-  const deadWood = outsideDim(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), 1, 1.4), color: 0x6a6660, flatShading: true }));
+  // (a tile about 0.4 m: at 1, one ran round a dead tree's foot and up the whole of it, 3 by 3.5 m: `lab tiles`)
+  const deadWood = outsideDim(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), [8, 9], 1.4), color: 0x6a6660, flatShading: true }));
   const banner = new THREE.MeshStandardMaterial({ color: 0x6a1420, roughness: 0.9, side: THREE.DoubleSide });
   const gold = new THREE.MeshStandardMaterial({ color: 0x8a6a30, metalness: 0.8, roughness: 0.4 });
   const weedMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });

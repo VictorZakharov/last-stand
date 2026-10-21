@@ -2,7 +2,7 @@
 // back where a visit before kept them (core/kept.ts). The workers share the maps out among themselves, by the
 // orders each was made with (its name): the page's main thread passes a worker its messages, so a map handed out
 // by it waited for its long tasks.
-import { RECIPES, recipeKey, type PBRData } from './pbr';
+import { RECIPES, photosFor, recipeKey, type PBRData } from './pbr';
 import { keepAll, kept } from './kept';
 import type { Job, MapMade, MapOrders } from './textures';
 
@@ -40,6 +40,7 @@ async function make([name, args]: Job, key: string): Promise<void> {
   const begun = performance.now();
   const read = await kept<PBRData>(key);
   const readMs = performance.now() - begun;
+  if (!read) await photosFor(name);
   const data = read ?? (RECIPES[name] as (...a: unknown[]) => PBRData)(...args);
   if (!read) toKeep.push([key, copyOf(data)]);
   // (when, from the worker's time origin: the page's differs)
