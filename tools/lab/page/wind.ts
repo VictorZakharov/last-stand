@@ -85,7 +85,8 @@ export async function windHandoff(lab: Lab, options: WindOptions): Promise<Repor
   loading.remove();
   await settled(target);
   const pictures = await pictured(target, options.canary);
-  return reportOf({ lab, options, first, frames, taken, waited, rested, pictures });
+  const changed = await afterChange(lab, target);
+  return reportOf({ lab, options, first, frames, taken, waited, rested, pictures, changed });
 }
 
 /** The screen the page is on now. */
@@ -241,6 +242,29 @@ function canvasPixels(gl: WebGL2RenderingContext, area: Area): Uint8Array {
   return pixels;
 }
 
+/** How the lobby logo shows once the window has changed again after the exit (a tenth smaller each way, which
+ *  sizes the UI again): as itself, any picture of it the exit left gone. */
+interface Changed {
+  screen: Screen;
+  /** whether the logo showed as a picture before the change (a canvas in its place) */
+  wasPicture: boolean;
+  /** whether it shows as itself after it: its letters seen, no picture */
+  itself: boolean;
+}
+
+async function afterChange(lab: Lab, target: HTMLElement): Promise<Changed> {
+  const picture = (): boolean => target.querySelector('canvas') !== null;
+  const wasPicture = picture();
+  const smaller = (size: number): number => Math.round(size * 0.9);
+  const screen = { width: smaller(innerWidth), height: smaller(innerHeight), ratio: devicePixelRatio };
+  await lab.showOn(screen);
+  await lab.step(1);
+  await window.__labClock.realFrame();
+  const letters = target.querySelector<SVGSVGElement>('svg:not(.logo-glow)');
+  const itself = !picture() && letters !== null && getComputedStyle(letters).visibility === 'visible';
+  return { screen, wasPicture, itself };
+}
+
 /** The pictures of the patch once the exit is done: the lobby as it shows (twice, which must agree), with its logo's
  *  letters hidden (what lies behind them), and with the logo a pixel lower (the canary's). The logo's glow is hidden
  *  in each: the particles' picture is read without it. */
@@ -299,10 +323,11 @@ interface Found {
   waited: number;
   rested: Rested;
   pictures: Pictures;
+  changed: Changed;
 }
 
 function reportOf(found: Found): Report {
-  const { options, first, frames, taken, waited, rested, pictures } = found;
+  const { options, first, frames, taken, waited, rested, pictures, changed } = found;
   const lines: string[] = [];
   const problems: string[] = [];
   const resized = options.resize.map(screenName).join(' then ');
@@ -338,6 +363,10 @@ function reportOf(found: Found): Report {
     lines.push(`  canary: the logo a pixel lower ${caught ? 'caught' : 'went unseen'}, ${how}`);
     if (!caught) problems.push(`the canary's logo a pixel lower went unseen: ${lower.line}`);
   }
+  const was = changed.wasPicture ? 'shown as their picture' : 'shown as itself';
+  const after = changed.itself ? 'as itself again' : 'NOT as itself';
+  lines.push(`  the lobby logo after the exit: ${was}; the window put on ${screenName(changed.screen)}, ${after}`);
+  if (!changed.itself) problems.push(`the lobby logo didn't show as itself once the window had changed after the exit`);
   const moments: Pictured[] = [{
     label: 'the particles at rest, the lobby logo, where they are apart (x4)',
     tiles: [

@@ -382,7 +382,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   to regular)", the window resized before the exit's end, at 125%): 42% of the logo's pixels apart, the mean 21.7, the
   logo 1 px down and 0.25 px left of the particles; at 1.25x 28% and 0.5 px left; at 1920x1080 14% and in place (the
   particles' drop shadow and edges darker where several points land on one pixel, and the metal's grain drawn
-  otherwise). The stalls' `--resize` checks the exit's places as the window changes; this, its picture.
+  otherwise). Landing into the logo's snapshot, which the logo is then shown as, none apart on each, the most a
+  channel apart 1 (rounding). Once the exit is done the window is made a tenth smaller each way, which sizes the UI
+  again: the logo must show as itself then, any picture of it gone. The stalls' `--resize` checks the exit's places as
+  the window changes; this, its picture.
 - `light`: the frame's light as the player sees it. The hero stands in each biome (`--biomes crypt,forest`), in each
   view (`--views top,third,first`), the close views looking each way (`--facings 0,90,180,270`, degrees: the camera
   turned by mouse look, which the body follows), and the frame is drawn by the game's own camera and read back from
