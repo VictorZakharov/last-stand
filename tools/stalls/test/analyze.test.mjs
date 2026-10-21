@@ -259,3 +259,20 @@ test('says a phase a second at a time, where a fall through it shows', () => {
   const measure = { name: 'x sweep', notes: [], findings: analyze(record, trace(), MARK) };
   assert.match(measureText(measure), /a second at a time: 144 90 30 frames; the browser's work \d+ \d+ \d+ ms/);
 });
+
+test('says the perf overlay\'s GPU time through a phase and a second at a time', () => {
+  const record = {
+    start: 500,
+    frames: [...framesIn(1000, 144), ...framesIn(2000, 60)],
+    changes: [],
+    phases: [{ name: 'sweeping', at: 1000 }],
+    gpu: [{ at: 1200, ms: 5 }, { at: 1700, ms: 5 }, { at: 2200, ms: 13 }, { at: 2700, ms: 15 }],
+  };
+  const [phase] = analyze(record, trace(), MARK).phases;
+  assert.equal(phase.gpu, 9.5);
+  assert.deepEqual(phase.seconds.map((second) => second.gpu), [5, 14]);
+  const measure = { name: 'x sweep', notes: [], findings: analyze(record, trace(), MARK) };
+  const text = measureText(measure);
+  assert.match(text, /the perf overlay's GPU 9\.5 ms a frame/);
+  assert.match(text, /the perf overlay's GPU 5\.0 14\.0 ms a frame/);
+});

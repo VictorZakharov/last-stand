@@ -124,6 +124,11 @@ For each measure:
   Under each phase of two seconds or more, **a second at a time**: the frames drawn in each of its whole seconds and
   the browser's work in each, ms: a cost that piles up as the player goes on falls through it, which the phase's
   sums average away (the owner's overlay fell from 144 to 28 over 4 s of moving between items).
+  With `--perf`, **the perf overlay's GPU time** too, for the phase and a second at a time (ms a frame, read off the
+  overlay as it shows it: its timer queries over the game's draws, and whatever else the GPU did between them). The
+  trace's GPU work is the CPU's side of it: the hover's drop was the browser's compositor drawing the stash's masks
+  every frame, which raised that reading from 5.4 to 6.3 here (variants `noArcMask`, `noStashMask`) and the owner's
+  from 5 to 14, where nothing else in the report moved.
   Under each phase, **a frame's work**: what each thread spent its time on, shared out a frame, the most first (each
   piece's own time, less the work the trace kept inside it; the GPU's waits for the screen left out), and **a missed
   frame's**, the same over the frames that missed.

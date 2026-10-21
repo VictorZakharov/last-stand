@@ -136,6 +136,9 @@ export const VARIANTS = {
   noLitFilter: { script: styled, arg: '#menu.slot-focus .sitem.match { filter: none !important; }' },
   noDimFilter: { script: styled, arg: '#menu.slot-focus .sitem:not(.match) { filter: none !important; }' },
   noStashMask: { script: styled, arg: '#stash { mask-image: none !important; }' },
+  // (and the arc chasing round the item under the pointer without the mask that keeps it to its border: a mask is a
+  // pass of the compositor's own, drawn again each frame the arc turns)
+  noArcMask: { script: styled, arg: '.glow-arc { mask: none !important; }' },
   // (and the lobby's panels stowed and shown again with Space: at once, with no fade or slide; faded without the
   // slide; on layers of their own for good, so a fade starting makes none)
   noStowFade: { script: styled, arg: '#menu .panel { transition: none !important; }' },

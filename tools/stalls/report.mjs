@@ -55,9 +55,11 @@ function phaseLine(phase) {
   const worst = phase.worst.map((value) => value.toFixed(0)).join(', ');
   const browser = phase.browserWork === undefined ? '' : `; the browser's work for it ${phase.browserWork.toFixed(0)} `
     + 'ms a second';
+  const gpu = phase.gpu === null || phase.gpu === undefined ? '' : `; the perf overlay's GPU ${phase.gpu.toFixed(1)} `
+    + 'ms a frame';
   return `  ${phase.name}: ${phase.count} frames, ${phase.rate.toFixed(0)} a second (${percent(phase.missedShare)} `
     + `missed the screen's refresh), median ${phase.median.toFixed(1)} ms, 90% within ${phase.p90.toFixed(1)} ms, `
-    + `the worst ${worst} ms; a tooltip shown in ${percent(phase.tipShare)} of them${browser}`;
+    + `the worst ${worst} ms; a tooltip shown in ${percent(phase.tipShare)} of them${browser}${gpu}`;
 }
 
 /** A phase a second at a time (two seconds or more): the frames drawn in each, and the browser's work in it (ms),
@@ -65,7 +67,10 @@ function phaseLine(phase) {
 function secondsLine(seconds) {
   const frames = seconds.map((second) => second.frames).join(' ');
   const work = seconds.map((second) => second.work.toFixed(0)).join(' ');
-  return `    a second at a time: ${frames} frames; the browser's work ${work} ms`;
+  const read = seconds.some((second) => second.gpu !== null && second.gpu !== undefined);
+  const gpu = seconds.map((second) => (second.gpu === null || second.gpu === undefined ? '-' : second.gpu.toFixed(1)));
+  const gpuText = read ? `; the perf overlay's GPU ${gpu.join(' ')} ms a frame` : '';
+  return `    a second at a time: ${frames} frames; the browser's work ${work} ms${gpuText}`;
 }
 
 /** What a phase's threads spent a frame's time on (`what`: of which frames), the most first, as a line under its
@@ -149,7 +154,14 @@ function roundPhaseText(name, phases) {
   const rates = medianText(phases.map((phase) => phase.rate));
   const browser = medianText(phases.map((phase) => phase.browserWork ?? 0));
   const missed = percent(medianOf(phases.map((phase) => phase.missedShare)));
-  return `${name} ${rates} a second, ${missed} missed, the browser's work ${browser} ms a second`;
+  const gpus = phases.map((phase) => phase.gpu).filter((gpu) => gpu !== null && gpu !== undefined);
+  const gpu = gpus.length ? `, the perf overlay's GPU ${gpuMedianText(gpus)} ms a frame` : '';
+  return `${name} ${rates} a second, ${missed} missed, the browser's work ${browser} ms a second${gpu}`;
+}
+
+/** GPU times' median and range, to a tenth of a ms, as `5.2 (4.9–6.1)`. */
+function gpuMedianText(values) {
+  return `${medianOf(values).toFixed(1)} (${Math.min(...values).toFixed(1)}–${Math.max(...values).toFixed(1)})`;
 }
 
 /**

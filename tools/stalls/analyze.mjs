@@ -268,26 +268,34 @@ const SECOND_MS = 1000;
  * owner's overlay fell from 144 frames a second to 28 over 4 s of moving between items, the sweep read whole as 94 to
  * 118.
  */
-function bySecond(frames, from, to, browser) {
+function bySecond(frames, from, to, browser, gpu) {
   const seconds = [];
   for (let start = from; start + SECOND_MS <= to; start += SECOND_MS) {
     const end = start + SECOND_MS;
     const drawn = frames.filter((frame) => frame.at > start && frame.at <= end).length;
-    seconds.push({ frames: drawn, work: browser(start, end) });
+    seconds.push({ frames: drawn, work: browser(start, end), gpu: gpuIn(gpu, start, end) });
   }
   return seconds;
+}
+
+/** The mean of the perf overlay's GPU readings from `from` to `to` (ms a frame), or null with none read. */
+function gpuIn(gpu, from, to) {
+  const read = gpu.filter((reading) => reading.at > from && reading.at <= to);
+  return read.length ? read.reduce((sum, reading) => sum + reading.ms, 0) / read.length : null;
 }
 
 /**
  * Each phase the scenario marked (`page.mjs` `markPhase`): its frames' summary, from its mark to the next's (the
  * last's to the end), the share of them that missed the screen's refresh (`missedShare`), the share a tooltip was
  * shown in, what the threads spent their time on, a frame of the phase's and a frame of those that missed, the
- * browser's own work for the page a second (`browserWork`, ms), and both a second at a time (`seconds`). A median alone hides the misses: #269's sweep read
- * 7.0 ms, a frame every refresh, at 99 frames a second where the screen gave 145. And frames a second hang on the
- * whole GPU: with another game in a browser beside it, one variant read 102 to 124 measure to measure, where the
- * browser's work for it held within a tenth. `work` is `workIn` and `browserWorkIn` on the trace's work.
+ * browser's own work for the page a second (`browserWork`, ms), the perf overlay's GPU time (`gpu`, ms a frame;
+ * null where it wasn't shown), and each a second at a time (`seconds`). A median alone hides the misses: #269's
+ * sweep read 7.0 ms, a frame every refresh, at 99 frames a second where the screen gave 145. And frames a second hang
+ * on the whole GPU: with another game in a browser beside it, one variant read 102 to 124 measure to measure, where
+ * the browser's work for it held within a tenth. `work` is `workIn` and `browserWorkIn` on the trace's work, `gpu`
+ * the overlay's readings.
  */
-function phaseSummaries(spans, refresh, work) {
+function phaseSummaries(spans, refresh, work, gpu) {
   return spans.map(({ phase, frames, from, to }) => {
     const tipped = frames.filter((frame) => frame.tip).length;
     const missed = missedOf(frames, refresh);
@@ -299,7 +307,8 @@ function phaseSummaries(spans, refresh, work) {
       work: work.kinds([[from, to]], frames.length),
       missedWork: work.kinds(missed.map((frame) => [frame.at - frame.ms, frame.at]), missed.length),
       browserWork: perSecond(work.browser(from, to), frames),
-      seconds: bySecond(frames, from, to, work.browser),
+      gpu: gpuIn(gpu, from, to),
+      seconds: bySecond(frames, from, to, work.browser, gpu),
       js: work.js(from, to, frames.length),
     };
   });
@@ -414,7 +423,7 @@ export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = (
       kinds: (kept, count) => workIn(placed, kept, count),
       browser: (from, to) => browserWorkIn(placed, from, to),
       js: (from, to, count) => (samples.length ? jsIn(samples, from, to, count) : null),
-    }),
+    }, record.gpu ?? []),
     programs: {
       count: inRecording.length,
       total: inRecording.reduce((sum, link) => sum + link.ms, 0),
