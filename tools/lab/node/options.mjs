@@ -974,6 +974,43 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  neck: {
+    help: 'each hero\'s neck as it\'s sculpted, bare, in his chest item and under his hat or helm, at rest and '
+      + 'looking aside: read up lines all round it from the clothes to the head (the ridges and shelves round it, the '
+      + 'step and colour where the head\'s own skin takes over from the neck\'s, its girth against a man\'s, skin '
+      + 'through the clothes) and pictured close in a lit studio from behind, the sides, the front and from above '
+      + 'behind: tools/lab/out/neck/sheet.png',
+    options: {
+      classes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['warrior', 'mage', 'ranger'],
+        default: 'warrior,mage,ranger',
+        help: 'the heroes',
+      },
+      dresses: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['bare', 'chest', 'hat'],
+        default: 'bare,chest,hat',
+        help: 'what he wears: nothing over his clothes, his chest item, that and his hat or helm',
+      },
+      poses: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['rest', 'aside'],
+        default: 'rest,aside',
+        help: 'his head straight, or turned aside and bowed a little as he looks at a foe',
+      },
+      look: LOOK_OPTION,
+      canary: {
+        kind: 'switch',
+        help: 'plant the faults the measures must catch: a ridge round the neck, and the neck\'s skin paler and wider '
+          + 'where the head\'s takes over',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   eyes: {
     help: 'a skill of the hero\'s cast through the eyes, frame by frame from the press until the arms are at rest '
       + 'again: where the weapon\'s tip is on the screen at rest, wound up, through the blow and at its end, how '

@@ -828,6 +828,14 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   parts, bones), and `--canary` pictures an empty studio, which must read as nothing drawn, and builds the hand 10%
   larger, which must measure so. On `--ab` against a game whose hands were pieces, the old hand is built again from
   the materials its pieces were made in (`userData.own`).
+- `neck`: each hero's neck (`page/neck.ts`; `--classes`, `--dresses bare,chest,hat`, `--poses rest,aside`), cut
+  by level planes in the neck joint's frame and read up 72 lines round it (`neckSlices.ts`; what each says against
+  its limit, `neckRead.ts`): ridges and shelves on the free neck (the column's flat top was a ledge under the
+  ranger's ears, #261), the step and paint dE where the head's skin meets the neck's, the narrowest girth against a
+  man's (0.69 of the head's), skin come out through the clothes, and lines of sight into a loose collar as steep as
+  the game's cameras look that meet nothing (`neckGaps.ts`). Pictured close from six sides. `--canary`
+  (`neckCanaries.ts`) plants a ridge, skin over the collar, a paler wider neck and a neck stopping short in a loose
+  collar; each must be caught.
 - `held`: every held skill of the hero's class (`SkillDef.aimed`: the ranger's Quarry Mark and Strawman, the mage's
   Starfall and Veilstep; `page/held.ts`, `--class`) held as the player holds it, over a training dummy the way the
   camera looks: ready, its preview shown in its own look with no countdown, and let go it casts; then held through

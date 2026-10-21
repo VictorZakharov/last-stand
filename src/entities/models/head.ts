@@ -219,7 +219,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
 
   // --- ears
   const earAo = LOOKS[who].ao ?? 0, earMat = plainSkin(kit, who, earAo > 0);
-  for (const s of [1, -1]) part(once(`${key}:ear${s}`, () => earGeometry(s, F, earAo)), earMat, head);
+  for (const s of [1, -1]) part(once(`${key}:ear${s}`, () => earGeometry(s, F, earAo)), earMat, head).name = 'ear';
 
   const surface = (az: number, el: number, lift = 0, out = new THREE.Vector3()) => {
     const d = gridDir(az, el, { x: 0, y: 0, z: 0 }), C = origin(el, { x: 0, y: 0, z: 0 });
@@ -940,6 +940,7 @@ export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   // (a column neck's share of the head's motion, round it: the two skins stay matched at the seam as the head turns)
   if (C) g.setAttribute('skinK', new THREE.Float32BufferAttribute(share, 1));
   const mat = plainSkin(kit, who, ao > 0);
-  if (headJoint) new Sculpt().skin(g, mat, neckJoint, headJoint, len * 0.35, len).build();
-  else part(g, mat, neckJoint);
+  const meshes = headJoint ? new Sculpt().skin(g, mat, neckJoint, headJoint, len * 0.35, len).build() : [part(g, mat, neckJoint)];
+  // (named, so a probe or a tool can find it: tools/lab neck)
+  for (const m of meshes) m.name = 'neck';
 }
