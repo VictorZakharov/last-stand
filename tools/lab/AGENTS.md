@@ -134,7 +134,8 @@ What the lab gives a probe (`page/lab.ts`):
   selector names (`'#hotbar'`) or to an area of the page (`screenArea(points)`: round points of the world as the
   camera shows them), as a moment of the report's `moments` (`picture`'s views show the game's canvas alone), the
   page's running animations settled first (they run on the browser's clock: an A/B's two sides caught the wave's
-  banner at other moments of its fade; one a command holds paused is left as it is); taken
+  banner at other moments of its fade; one a command holds paused is left as it is, and so is one a scroll drives,
+  at rest while its scroll is: ended, the stash's fade was held hidden over the row it fades, `onTheClock`); taken
   through the DevTools protocol at the screen's own pixels (Playwright's screenshot put the page back on the screen
   Playwright had given it, and on a `--screen` every picture after the first showed 1920x1080);
 - `timeCalls(owner, method)` (`page/timing.ts`): every call of a method timed by the browser's own clock (the page's
