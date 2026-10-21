@@ -240,3 +240,22 @@ test('sums up each phase the scenario marked apart, with the share of its frames
   assert.match(text, /a tooltip shown in 67% of them/);
   assert.match(summaryText([measure]), /frames a second \(missed\) away 143 \(0%\), over items 57 \(67%\)/);
 });
+
+/** `count` frames evenly through the second from `start` (ms), each as long as their spacing. */
+function framesIn(start, count) {
+  const spacing = 1000 / count;
+  return Array.from({ length: count }, (_, index) => ({ at: start + (index + 1) * spacing, ms: spacing, tip: true }));
+}
+
+test('says a phase a second at a time, where a fall through it shows', () => {
+  const record = {
+    start: 500,
+    frames: [...framesIn(1000, 144), ...framesIn(2000, 90), ...framesIn(3000, 30)],
+    changes: [],
+    phases: [{ name: 'sweeping', at: 1000 }],
+  };
+  const [phase] = analyze(record, trace(), MARK).phases;
+  assert.deepEqual(phase.seconds.map((second) => second.frames), [144, 90, 30]);
+  const measure = { name: 'x sweep', notes: [], findings: analyze(record, trace(), MARK) };
+  assert.match(measureText(measure), /a second at a time: 144 90 30 frames; the browser's work \d+ \d+ \d+ ms/);
+});

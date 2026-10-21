@@ -259,11 +259,30 @@ function browserWorkIn(placed, from, to) {
   return total;
 }
 
+/** a phase cut into spans this long (ms), each's frames and work counted (`bySecond`) */
+const SECOND_MS = 1000;
+
+/**
+ * A phase a second at a time, its whole seconds from its mark: the frames drawn in each and the browser's work in it
+ * (ms, `browser`). A cost that piles up as the player goes on falls through it, where the phase's sums hide it: the
+ * owner's overlay fell from 144 frames a second to 28 over 4 s of moving between items, the sweep read whole as 94 to
+ * 118.
+ */
+function bySecond(frames, from, to, browser) {
+  const seconds = [];
+  for (let start = from; start + SECOND_MS <= to; start += SECOND_MS) {
+    const end = start + SECOND_MS;
+    const drawn = frames.filter((frame) => frame.at > start && frame.at <= end).length;
+    seconds.push({ frames: drawn, work: browser(start, end) });
+  }
+  return seconds;
+}
+
 /**
  * Each phase the scenario marked (`page.mjs` `markPhase`): its frames' summary, from its mark to the next's (the
  * last's to the end), the share of them that missed the screen's refresh (`missedShare`), the share a tooltip was
- * shown in, what the threads spent their time on, a frame of the phase's and a frame of those that missed, and the
- * browser's own work for the page a second (`browserWork`, ms). A median alone hides the misses: #269's sweep read
+ * shown in, what the threads spent their time on, a frame of the phase's and a frame of those that missed, the
+ * browser's own work for the page a second (`browserWork`, ms), and both a second at a time (`seconds`). A median alone hides the misses: #269's sweep read
  * 7.0 ms, a frame every refresh, at 99 frames a second where the screen gave 145. And frames a second hang on the
  * whole GPU: with another game in a browser beside it, one variant read 102 to 124 measure to measure, where the
  * browser's work for it held within a tenth. `work` is `workIn` and `browserWorkIn` on the trace's work.
@@ -280,6 +299,7 @@ function phaseSummaries(spans, refresh, work) {
       work: work.kinds([[from, to]], frames.length),
       missedWork: work.kinds(missed.map((frame) => [frame.at - frame.ms, frame.at]), missed.length),
       browserWork: perSecond(work.browser(from, to), frames),
+      seconds: bySecond(frames, from, to, work.browser),
       js: work.js(from, to, frames.length),
     };
   });

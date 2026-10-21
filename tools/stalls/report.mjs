@@ -60,6 +60,14 @@ function phaseLine(phase) {
     + `the worst ${worst} ms; a tooltip shown in ${percent(phase.tipShare)} of them${browser}`;
 }
 
+/** A phase a second at a time (two seconds or more): the frames drawn in each, and the browser's work in it (ms),
+ *  under its line. A fall through it is a cost piling up, which the phase's own line averages away. */
+function secondsLine(seconds) {
+  const frames = seconds.map((second) => second.frames).join(' ');
+  const work = seconds.map((second) => second.work.toFixed(0)).join(' ');
+  return `    a second at a time: ${frames} frames; the browser's work ${work} ms`;
+}
+
 /** What a phase's threads spent a frame's time on (`what`: of which frames), the most first, as a line under its
  *  own. */
 function workLine(what, work) {
@@ -77,6 +85,7 @@ function jsLine(what, functions) {
  *  any work in), and where its JS was sampled (`--js`), a frame's by function. */
 function phaseLines(phase) {
   const lines = [phaseLine(phase)];
+  if (phase.seconds?.length > 1) lines.push(secondsLine(phase.seconds));
   if (phase.work?.length) lines.push(workLine('a frame\'s work', phase.work));
   if (phase.missedWork?.length) lines.push(workLine('a missed frame\'s', phase.missedWork));
   if (phase.js?.own.length) lines.push(jsLine('a frame\'s JS, each function\'s own time', phase.js.own));

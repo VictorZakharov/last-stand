@@ -121,6 +121,9 @@ For each measure:
   fastest phase's median or longer), its median, 90% of them within what, the worst, the share the tooltip showed in
   (a phase meant to show it that reads 0% hovered nothing), and **the browser's work for the page**, ms a second (its
   style, layout, paint, layers, raster and compositor frames; not the page's scripts nor the GPU running its commands).
+  Under each phase of two seconds or more, **a second at a time**: the frames drawn in each of its whole seconds and
+  the browser's work in each, ms: a cost that piles up as the player goes on falls through it, which the phase's
+  sums average away (the owner's overlay fell from 144 to 28 over 4 s of moving between items).
   Under each phase, **a frame's work**: what each thread spent its time on, shared out a frame, the most first (each
   piece's own time, less the work the trace kept inside it; the GPU's waits for the screen left out), and **a missed
   frame's**, the same over the frames that missed.
