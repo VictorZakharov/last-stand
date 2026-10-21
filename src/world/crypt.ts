@@ -16,6 +16,7 @@ import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, s
 /** the crypt's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
+import { buildFire } from './fire';
 import type { Obstacle } from '../types';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
@@ -794,28 +795,14 @@ function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: number, ir
   const bowl = new THREE.Mesh(new THREE.LatheGeometry(pts, 12), iron);
   bowl.position.set(x, lift, z); bowl.castShadow = true;
   scene.add(bowl);
-  const coals = new THREE.Mesh(new THREE.CircleGeometry(0.5, 12).rotateX(-Math.PI / 2), seeThrough(new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff5010).multiplyScalar(2.5) }), 'prop'));
-  coals.position.set(x, lift + 1.2, z);
-  scene.add(coals);
-  const light = new THREE.PointLight(0xff7a30, 16, 15, 2);
+  const light = new THREE.PointLight(0xff7a30, 15, 15, 2);
   light.position.set(x, lift + 2.1, z);
   scene.add(light);
-  let acc = 0;
-  updaters.push((dt, t) => {
-    light.intensity = 15 + Math.sin(t * 11 + x) * 2 + Math.sin(t * 23) * 1.5;
-    acc += dt;
-    while (acc > 0.02) {
-      acc -= 0.02;
-      particles.glow.spawn({
-        x: x + rand(-0.35, 0.35), y: lift + 1.25, z: z + rand(-0.35, 0.35), vx: rand(-0.2, 0.2), vy: rand(1.2, 2.4), vz: rand(-0.2, 0.2),
-        life: rand(0.4, 0.8), size: rand(0.35, 0.6), sizeEnd: 0.05, color: col(0xffa040, 2.2), colorEnd: col(0xff2000, 0.5), drag: 1.2,
-      });
-      if (Math.random() < 0.1) particles.glow.spawn({
-        x: x + rand(-0.2, 0.2), y: lift + 1.4, z: z + rand(-0.2, 0.2), vx: rand(-0.4, 0.4), vy: rand(2, 4), vz: rand(-0.4, 0.4),
-        life: rand(1, 2), size: 0.06, color: col(0xffc060, 4), colorEnd: col(0xff4000, 1), drag: 0.5,
-      });
-    }
-  });
+  // a heap of coals in the bowl, burning thin and dark
+  buildFire(scene, {
+    at: new THREE.Vector3(x, lift + 1.06, z), radius: 0.5, height: 1.05, dish: 0.14, light, intensity: 15,
+    smoke: 2.5, smokeColour: 0x2c2a28, embers: 8,
+  }, updaters);
 }
 
 /** Clusters of candles of different heights, their flames swaying, now and then giving off a spark. */
