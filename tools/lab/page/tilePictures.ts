@@ -1,5 +1,5 @@
 // `lab tiles --pictures`: each surface pictured as the player meets it (page/tiles.ts): from the arena's middle, at its
-// nearest point there that faces the middle and is in view (of every place it's drawn at, from `LOWEST` to `HIGHEST`
+// nearest point there that faces the camera and is in view (of every place it's drawn at, from `LOWEST` to `HIGHEST`
 // up: where a hero walks past it), from `DISTANCE` m, in the biome's own light, so a map's tile shows at the size the
 // surface gives it (a tile of 0.4 m some five times across the frame). What's cut out or seen through is left out of
 // the picture: round the clearing ferns, leaf cards and a gate's membrane stood in front of every surface. (Looked at
@@ -20,8 +20,10 @@ const SHORT_OF = 0.15;
  *  before it */
 const CANDIDATES = 200;
 const SPACING = 0.3;
-/** how squarely a point's surface must face the arena's middle to be pictured from it (the cosine between them) */
-const FACING_MIDDLE = 0.3;
+/** how squarely a point's surface must face its camera, standing level towards the arena's middle, to be pictured
+ *  from it (the cosine between its normal and the way to the camera: 60° off at most; a boulder's top, which passed
+ *  as facing up, was seen edge on, a smear of streaks) */
+const FACING_CAMERA = 0.5;
 /** a layer no camera of the game draws */
 const UNSEEN_LAYER = 31;
 
@@ -43,15 +45,14 @@ export function placesOf(mesh: THREE.Mesh, most = Infinity): THREE.Matrix4[] {
   });
 }
 
-/** Whether a surface whose normal is `normal` at `at` faces the arena's middle, as a player there sees it (level, by
- *  `FACING_MIDDLE` at least; one facing up or down, a log's top, does). */
-function facesMiddle(normal: THREE.Vector3, at: THREE.Vector3): boolean {
-  const level = Math.hypot(normal.x, normal.z);
-  if (level < 0.2) return true;
-  return -(normal.x * at.x + normal.z * at.z) / (level * Math.hypot(at.x, at.z)) >= FACING_MIDDLE;
+/** Whether a surface whose normal is `normal` at `at` faces its camera, level from it towards the arena's middle, by
+ *  `FACING_CAMERA` at least. */
+function facesCamera(normal: THREE.Vector3, at: THREE.Vector3): boolean {
+  const towardsMiddle = -(normal.x * at.x + normal.z * at.z) / Math.hypot(at.x, at.z);
+  return towardsMiddle >= FACING_CAMERA * normal.length();
 }
 
-/** The points of `meshes` from `LOWEST` to `HIGHEST` up that face the arena's middle, the nearest it first, each
+/** The points of `meshes` from `LOWEST` to `HIGHEST` up that face their cameras, the nearest the middle first, each
  *  `SPACING` m from those before it, `CANDIDATES` of them at most, each looked at from the middle. */
 function nearestPoints(meshes: THREE.Mesh[]): Facing[] {
   const found: Array<Facing & { distance: number }> = [];
@@ -65,7 +66,7 @@ function nearestPoints(meshes: THREE.Mesh[]): Facing[] {
         if (at.y < LOWEST || at.y > HIGHEST) continue;
         if (normalOf) normal.fromBufferAttribute(normalOf, i).applyMatrix3(normals);
         else normal.set(0, 0, 0);
-        if (!facesMiddle(normal, at)) continue;
+        if (!facesCamera(normal, at)) continue;
         found.push({ at: at.clone(), facing: Math.atan2(-at.x, -at.z), distance: Math.hypot(at.x, at.z) });
       }
     }
@@ -84,13 +85,23 @@ const cameraFor = (point: Facing, distance: number): THREE.Vector3 =>
   point.at.clone().add(new THREE.Vector3(Math.sin(point.facing), 0, Math.cos(point.facing)).multiplyScalar(distance));
 
 /** Whether `point` is in view from its camera `DISTANCE` m out: the first thing of `group` a ray from the camera
- *  meets is one of `meshes`, at the point (a gate's roots run under its boulder, where a camera saw the rock). */
+ *  meets is one of `meshes`, at the point (a gate's roots run under its boulder, where a camera saw the rock), and the
+ *  camera stands in the open (`inTheOpen`). */
 function inView(point: Facing, meshes: THREE.Mesh[], group: THREE.Object3D): boolean {
   const camera = cameraFor(point, DISTANCE);
   const way = point.at.clone().sub(camera).normalize();
   const hit = new THREE.Raycaster(camera, way, 0, DISTANCE + SHORT_OF).intersectObject(group, true)[0];
   const own = hit !== undefined && meshes.some((m) => m.geometry === (hit.object as THREE.Mesh).geometry);
-  return own && hit.distance > DISTANCE - SPACING;
+  return own && hit.distance > DISTANCE - SPACING && inTheOpen(point, camera, group);
+}
+
+/** Whether nothing of `group` stands round `camera`: a ray from `point` out to it meets nothing on the way. (A ray
+ *  from inside a mesh meets none of its faces, all turned away: a boulder's camera stood inside a standing stone's
+ *  plinth, and saw the stone's underside edge on, a smear of streaks.) */
+function inTheOpen(point: Facing, camera: THREE.Vector3, group: THREE.Object3D): boolean {
+  const way = camera.clone().sub(point.at).normalize();
+  const from = point.at.clone().addScaledVector(way, SHORT_OF);
+  return new THREE.Raycaster(from, way, 0, DISTANCE - SHORT_OF).intersectObject(group, true).length === 0;
 }
 
 /** Whether a material is cut out or seen through: a leaf card's, a fern's, the grass's, a gate's membrane. */

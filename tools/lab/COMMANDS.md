@@ -560,9 +560,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   stretched it is (the longer over the shorter) and the map's pixels a metre. It reports, as `maps` reports means
   (a map drawn for a stretch is right on its surfaces); it fails where a biome shows no repeated map. `--pictures`
   pictures each surface as the player meets it (`page/tilePictures.ts`): from the arena's middle, at its nearest
-  point facing it and in view from 2 m (a ray from the camera meeting it first, every culled instance packed for
-  the ray), a hero's height up, the cut-outs and see-through things (ferns, leaf cards, a gate's membrane) left out,
-  a sheet a biome; `--ab` sets them beside another commit's. `--canary` lays a board 2 m by 0.5 m in each biome, its
+  point facing its camera (60 degrees off at most: a boulder's top, seen level, was a smear of streaks) and in view
+  from 2 m (a ray from the camera meeting it first, every culled instance packed for the ray, and one back out to
+  the camera meeting nothing: a camera inside a plinth saw the stone's underside edge on), a hero's height up, the
+  cut-outs and see-through things (ferns, leaf cards, a gate's membrane) left out, a sheet a biome; `--ab` sets them beside another commit's. `--canary` lays a board 2 m by 0.5 m in each biome, its
   map repeated twice along u, which must read 1 m by 0.5 m.
 - `weapons`: each of the hero's weapons alone (`page/weapons.ts`; `--weapons Sword,Maul`, the class's bases by
   default): a copy of the one in his right hand, at its own frame (unturned in the fist), put in a plain, lit
