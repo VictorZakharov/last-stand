@@ -5,10 +5,10 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { seeThrough } from '../core/seeThrough';
 import { ARENA } from '../data/balance';
-import { forestFloor, bark, flagstone, grunge, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
+import { forestFloor, bark, flagstone, grunge, rock, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
-import { buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
+import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
 
 /** the forest's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25, 1.1] };
@@ -124,9 +124,11 @@ export const buildForest: BiomeBuilder = (scene) => {
   // --- Materials ------------------------------------------------------------
   const groundMat = mossyGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(forestFloor(), FLOOR_REPEAT, 1.2), color: 0xffffff }));
   const daisMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(flagstone(47, 5), 1, 1.2), color: 0x94a488 });
-  const stoneMaps = pbrMaterialMaps(grunge(), 2, 1.6);
-  const stone = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x70746a, roughness: 0.9 });
-  const mossStone = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x5a6a48, roughness: 0.95 });
+  // weathered rock, a tile a metre on the rocks' box-mapped faces; its own moss and lichen, so the mossy stone is only
+  // greener than the bare (its colours brighter than they were on grunge, whose mean was 0.78 to the rock's 0.58)
+  const stoneMaps = pbrMaterialMaps(rock(17), 1, 1.6);
+  const stone = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x989e90, roughness: 0.9 });
+  const mossStone = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x8a967a, roughness: 0.95 });
   const barkMaps = pbrMaterialMaps(bark(), 1, 1.6);
   /** bark repeated as a surface needs it (`BARK_REPEATS`, a tree kind's `bark`): copies of the one map */
   const barkAt = (repeat: Repeat): THREE.MeshStandardMaterial =>
@@ -181,10 +183,13 @@ export const buildForest: BiomeBuilder = (scene) => {
 
   // standing stones at the dais corners, each with a glowing rune strip facing out
   const menhirGeo = buildMenhirGeo(rng);
+  // (box-mapped in metres, as the boulders are: a tile a metre. A cylinder's own UVs ran a tile round each part and
+  // up its whole height, the 0.35 m plinth's 18 times as long round as up: `lab tiles`)
+  const standing = seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(rock(17), 1, 1.6), color: 0x989e90, roughness: 0.9 }), 'prop');
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     const x = sx * (h - 0.5), z = sz * (h - 0.5), g = new THREE.Group();
     scene.add(g);
-    const mh = new THREE.Mesh(menhirGeo, stone);
+    const mh = new THREE.Mesh(menhirGeo, standing);
     mh.name = 'standing stone';
     mh.position.set(x, ARENA.daisHeight, z);
     mh.rotation.y = Math.atan2(sx, sz);
@@ -221,14 +226,14 @@ export const buildForest: BiomeBuilder = (scene) => {
   const bush = canopyGeo(rng, [[0, 0, 0, 1], [0.55, -0.2, 0.25, 0.72], [-0.5, -0.15, -0.3, 0.75]], 14, 1.0);
   const bushes = new THREE.InstancedMesh(bush.core, coreMat, edgeN * 2);
   const bushCards = new THREE.InstancedMesh(bush.cards, canopyMat, edgeN * 2);
-  const rocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 1), mossStone, edgeN);
+  const rocks = new THREE.InstancedMesh(boulderGeo(31), mossStone, edgeN);
   const plantCol = new THREE.Color(), _mx = new THREE.Matrix4();
   let bi = 0, ri = 0;
   for (let i = 0; i < edgeN; i++) {
     const a = (i / edgeN) * TAU + r(-0.01, 0.01);
     if (gateGap(a) < 0.12) continue;
     const rr = WALL_R + r(0.6, 2.2);
-    if (i % 3 === 0) setInstance(rocks, ri++, Math.cos(a) * rr, r(0, 0.4), Math.sin(a) * rr, r(0, 3), r(0, 3), r(0, 3), r(1.1, 2.1), r(0.9, 1.9), r(1.1, 2.1));
+    if (i % 3 === 0) setInstance(rocks, ri++, Math.cos(a) * rr, r(0, 0.4), Math.sin(a) * rr, r(-0.3, 0.3), r(0, TAU), r(-0.3, 0.3), r(1.1, 2.1), r(0.9, 1.9), r(1.1, 2.1));
     for (let k = 0; k < 2; k++) {
       const br = rr + r(-0.3, 2.5), ba = a + r(-0.02, 0.02), s = r(1.2, 2.2);
       setInstance(bushes, bi, Math.cos(ba) * br, s * r(0.3, 0.8), Math.sin(ba) * br, 0, r(0, TAU), 0, s, s * r(0.7, 1.1), s);
@@ -346,10 +351,11 @@ export const buildForest: BiomeBuilder = (scene) => {
   }
 
   const boulderSpots = [[24, 0.75, 1.1], [16, 2.75, 0.8], [23, 3.6, 1.2], [13, 5.2, 0.7], [24, 5.2, 1.0], [8, 3.9, 0.6], [17, 1.55, 0.7]];
-  const boulders = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 1), mossStone, boulderSpots.length);
+  const boulders = new THREE.InstancedMesh(boulderGeo(37), mossStone, boulderSpots.length);
   boulderSpots.forEach(([rr, a, s], i) => {
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
-    setInstance(boulders, i, x, s * 0.25, z, r(0, 3), r(0, 3), r(0, 3), s, s * 0.8, s);
+    // (turned about the vertical and tilted a little: a rock's foot is flattened to sit on the ground)
+    setInstance(boulders, i, x, s * 0.25, z, r(-0.3, 0.3), r(0, TAU), r(-0.3, 0.3), s, s * 0.8, s);
     obstacles.push({ x, z, r: s * 0.95, h: s * 1.05 });
     breakable.add(obstacles.length - 1, 6 + s * 4, 0x6a7060, instanceLook(boulders, i));
   });
@@ -468,11 +474,11 @@ export const buildForest: BiomeBuilder = (scene) => {
   const beams = lightShafts([[16, 1.0, 1.8], [21, 2.3, 2.2], [14, 4.0, 1.6], [20, 5.1, 2.0], [23, 3.3, 1.5]].map(([rr, a, rad]) => [Math.cos(a) * rr, Math.sin(a) * rr, rad]), SUN, new THREE.Color(0.075, 0.065, 0.035));
   scene.add(beams.group);
 
-  const pebbles = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.2, 0), stone, 160);
+  const pebbles = new THREE.InstancedMesh(boulderGeo(43, 0.2, 1), stone, 160);
   for (let i = 0; i < pebbles.count; i++) {
     const a = r(0, TAU), rr = r(6, WALL_R);
     const s = r(0.3, 1.2);
-    setInstance(pebbles, i, Math.cos(a) * rr, 0.03, Math.sin(a) * rr, r(0, 3), r(0, 3), r(0, 3), s, s * r(0.4, 0.8), s);
+    setInstance(pebbles, i, Math.cos(a) * rr, 0.03, Math.sin(a) * rr, r(-0.3, 0.3), r(0, TAU), r(-0.3, 0.3), s, s * r(0.4, 0.8), s);
   }
   pebbles.receiveShadow = true;
   pebbles.name = 'pebbles';
@@ -537,6 +543,7 @@ function buildMenhirGeo(rng: () => number): THREE.BufferGeometry {
     pos.setX(i, pos.getX(i) * 1.1 + y * lean);
     pos.setZ(i, pos.getZ(i) * 0.85);
   }
+  boxUVs(g);
   return lumpy(g, 0.04, 3);
 }
 
@@ -665,12 +672,12 @@ function buildRootGate(scene: THREE.Object3D, angle: number, rockMat: THREE.Mate
       g.add(root);
     }
     // boulder at the foot
-    const rock = new THREE.Mesh(lumpy(new THREE.DodecahedronGeometry(0.9, 1), 0.1, s + angle), rockMat);
-    rock.name = 'gate boulder';
-    rock.position.set(s * (half + 1.3), 0.3, 0.2);
-    rock.scale.set(1.1, 0.9, 1.3);
-    rock.castShadow = rock.receiveShadow = true;
-    g.add(rock);
+    const boulder = new THREE.Mesh(boulderGeo(Math.round(angle * 10) + s, 0.9), rockMat);
+    boulder.name = 'gate boulder';
+    boulder.position.set(s * (half + 1.3), 0.3, 0.2);
+    boulder.scale.set(1.1, 0.9, 1.3);
+    boulder.castShadow = boulder.receiveShadow = true;
+    g.add(boulder);
     // moss hanging in beards from the arch, ivy climbing it
     for (let k = 0; k < 5; k++) {
       const p = curve.getPointAt(0.45 + k * 0.12);
@@ -782,14 +789,14 @@ function buildGlowcaps(scene: THREE.Object3D, x: number, z: number, rng: () => n
 }
 
 function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.Material, wood: THREE.Material, updaters: Updater[]): void {
-  const ringGeo = new THREE.DodecahedronGeometry(0.2, 0);
+  const ringGeo = boulderGeo(47, 0.2, 1);
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * TAU;
     const s = new THREE.Mesh(ringGeo, stone);
     s.name = 'bonfire stones';
-    s.position.set(x + Math.cos(a) * 0.75, 0.1, z + Math.sin(a) * 0.75);
+    s.position.set(x + Math.cos(a) * 0.75, 0.08, z + Math.sin(a) * 0.75);
     s.scale.set(1.2, 0.8, 1);
-    s.rotation.set(a, a * 2, 0);
+    s.rotation.set(0.25 * Math.sin(3 * a), a * 2, 0);
     s.castShadow = true;
     scene.add(s);
   }

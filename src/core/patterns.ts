@@ -23,6 +23,16 @@ export function smoothstep(e0: number, e1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
+/** sdf's value noise as it has it, solid (0..1): smooth between the hashes at a unit lattice's corners round (x, y, z),
+ *  `salt` a lattice of its own. For shapes (a rock's lumps), where nothing need tile. */
+export function valueNoise3(x: number, y: number, z: number, salt: number): number {
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  const sx = smoothstep(0, 1, x - ix), sy = smoothstep(0, 1, y - iy), sz = smoothstep(0, 1, z - iz);
+  const at = (dx: number, dy: number, dz: number): number => hash3(ix + dx, iy + dy, iz + dz + 977 * salt);
+  const row = (dy: number, dz: number): number => mix(at(0, dy, dz), at(1, dy, dz), sx);
+  return mix(mix(row(0, 0), row(1, 0), sy), mix(row(0, 1), row(1, 1), sy), sz);
+}
+
 /** A value at a map's (u, v), 0..1. */
 export type Field = (u: number, v: number) => number;
 

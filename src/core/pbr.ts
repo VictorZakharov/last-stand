@@ -240,6 +240,46 @@ function slate(seed: number, courses: number, blocks: number): PBRData {
   }, 4);
 }
 
+/** a rock's stone (bright and near grey, as grunge was: its material's colour tints it, and each biome's light was
+ *  set for that), its cracks, the moss in its hollows and its lichen's pale crusts */
+const ROCK = [0.76, 0.75, 0.72] as const;
+const ROCK_CRACK = [0.22, 0.22, 0.21] as const;
+const ROCK_MOSS = [0.36, 0.48, 0.22] as const;
+const ROCK_LICHEN = [0.84, 0.85, 0.77] as const;
+
+/**
+ * Weathered rock (the forest's boulders, the thicket's rocks, the gates' boulders, the standing stones and pebbles), a
+ * tile a metre: sdf-harness's fractal noise in lumps (3 a tile) and a mottle (4), its grain (64 a tile and finer) and
+ * its minerals' specks (256 a tile: 4 mm), darker in its hollows; cracks along its cells' edges (sdf's cells, 5 a
+ * tile), wandering (their place warped by a noise, 3 cm at most) and only where a third noise lets them (cracked all
+ * over, or in a finer net as well, it read as paving), worn into it; moss in its hollows, its own fine tufts, and
+ * lichen in small pale crusts on what's left.
+ */
+function rock(seed: number): PBRData {
+  const lumps = latticeFbm(3, 3, seed), mottle = latticeFbm(4, 4, seed + 1), grain = latticeFbm(64, 64, seed + 2, 3);
+  const speck = latticeNoise(256, 256, seed + 3), cracked = latticeFbm(3, 3, seed + 4);
+  const warpU = latticeFbm(4, 4, seed + 5), warpV = latticeFbm(4, 4, seed + 6);
+  const cracks = latticeCells(5, 5, 0.9, seed + 7), mossy = latticeFbm(6, 6, seed + 8);
+  const tufts = latticeFbm(48, 48, seed + 9, 2), lichen = latticeFbm(24, 24, seed + 10, 3);
+  const cell: Cells = { f1: 0, f2: 0, id: 0, cx: 0, cy: 0 };
+  return buildPBR(512, (u, v, o) => {
+    cracks(u + 0.15 * (warpU(u, v) - 0.5), v + 0.15 * (warpV(u, v) - 0.5), cell);
+    const cut = (1 - smoothstep(0, 0.045, cell.f2 - cell.f1)) * smoothstep(0.5, 0.62, cracked(u, v));
+    const relief = 0.6 * lumps(u, v) + 0.25 * mottle(u, v) + 0.15 * grain(u, v);
+    // moss where it's low and the noise lets it; lichen on what's left, in crusts
+    const moss = smoothstep(0.53, 0.67, mossy(u, v) + 0.35 * (0.5 - relief)) * (1 - cut);
+    const crust = 0.75 * smoothstep(0.66, 0.72, lichen(u, v)) * (1 - moss) * (1 - cut);
+    const s = speck(u, v), mineral = s > 0.86 ? 0.75 : s < 0.1 ? 1.12 : 1;
+    const tone = (0.9 + 0.36 * (mottle(u, v) - 0.5) + 0.2 * (grain(u, v) - 0.5)) * (0.8 + 0.4 * relief) * mineral;
+    const tuft = 0.7 + 0.6 * tufts(u, v);
+    const colour = (i: number): number =>
+      mix(mix(mix(ROCK[i] * tone, ROCK_LICHEN[i], crust), ROCK_MOSS[i] * tuft, moss), ROCK_CRACK[i], cut);
+    o.h = relief * (1 - 0.85 * cut) + 0.05 * moss * tufts(u, v);
+    o.r = colour(0); o.g = colour(1); o.b = colour(2);
+    o.rough = clamp(0.82 + 0.1 * moss + 0.06 * crust + 0.08 * cut, 0, 1);
+  }, 5);
+}
+
 function grunge(): PBRData {
   const fbm = makeFbm(42, 4, 6);
   const maps = buildPBR(256, (u, v, o) => {
@@ -696,7 +736,7 @@ function fur(): PBRData {
 }
 
 /** Every recipe, by name; its arguments are part of what it makes. */
-export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
+export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, rock, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
 export type RecipeName = keyof typeof RECIPES;
 export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
@@ -724,6 +764,6 @@ export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = 
   ['steel', []],
   ['face', ['warrior']], ['face', ['mage']], ['face', ['ranger']],
   ['forestFloor', []], ['cobblestone', []], ['bark', []], ['ashlar', [21, 6, 3]], ['slate', [33, 2, 2]], ['marble', [33, 5]], ['flagstone', [47, 5]],
-  ['ashlar', [33, 2, 2]], ['grunge', []], ['wood', []], ['burlap', []],
+  ['ashlar', [33, 2, 2]], ['rock', [17]], ['grunge', []], ['wood', []], ['burlap', []],
   ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['fur', []], ['bowWood', []],
 ];

@@ -116,6 +116,8 @@ export const flagstone = (seed: number, cells: number): PBRCanvases => pbrCanvas
 export const marble = (seed: number, cells: number): PBRCanvases => pbrCanvases('marble', seed, cells);
 /** Riven slate slabs in courses (a dais): `courses` a tile, `blocks` a course. */
 export const slate = (seed: number, courses: number, blocks: number): PBRCanvases => pbrCanvases('slate', seed, courses, blocks);
+/** Weathered rock, cracked, mossy and crusted with lichen, a tile a metre (boulders, standing stones). */
+export const rock = (seed: number): PBRCanvases => pbrCanvases('rock', seed);
 export const grunge = (): PBRCanvases => pbrCanvases('grunge');
 export const wood = (): PBRCanvases => pbrCanvases('wood');
 export const burlap = (): PBRCanvases => pbrCanvases('burlap');
