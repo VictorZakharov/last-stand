@@ -156,10 +156,11 @@ const FLAG_BEVEL = 0.015 / 0.45;
 /** the forest's dais's stone (sRGB 0..1, darkened to its dusk), and its joints' */
 const FLAG_STONE = [0.17, 0.176, 0.186] as const;
 const FLAG_JOINT = [0.05, 0.05, 0.048] as const;
-/** black marble (sdf's marble_black, darkened a little: its colour #1e1e22, its veins #d8d6d0), and its joints */
-const MARBLE = [0.1, 0.1, 0.112] as const;
-const MARBLE_VEIN = [0.74, 0.73, 0.71] as const;
-const MARBLE_JOINT = [0.035, 0.035, 0.038] as const;
+/** pale marble (sdf's marble_white, #ece9e4 with veins #7a7a84, darkened to the crypt's night, cooler), and its
+ *  joints: the crypt's paths, lighter than its cobbles round them (in black marble their slabs read as the cobbles) */
+const MARBLE = [0.35, 0.355, 0.372] as const;
+const MARBLE_VEIN = [0.17, 0.172, 0.19] as const;
+const MARBLE_JOINT = [0.06, 0.06, 0.066] as const;
 /** the ways a marble slab's veins run, each a whole number of bands across a tile and down it (so they tile) */
 const VEIN_WAYS = [[6, 2], [2, 6], [5, -4], [-4, 5], [6, -1]] as const;
 
@@ -167,7 +168,7 @@ const VEIN_WAYS = [[6, 2], [2, 6], [5, -4], [-4, 5], [6, -1]] as const;
  * Flagstones (the forest's dais): sdf-harness's flagstone. Irregular slabs, cells of a lattice `cells` by `cells`
  * a tile with a point in each up to 0.35 of a cell from its middle; the joint where two meet (half their distances'
  * difference), bevelled into, each slab tilted its own way a little (its top 0.8 to 1 of the highest) and pitted, its
- * shade its own (within 25%). `veined`: cut from black marble (the crypt's dais), sdf's marble's veins through each
+ * shade its own (within 25%). `veined`: cut from pale marble (the crypt's paths), sdf's marble's veins through each
  * slab its own way, a vein 0.03 to 0.07 of a band wide with a finer one between, honed, not polished. (sdf's bands
  * warped 2.8 bands deep by noise a cell a band came out as worms in a tile's few bands: here they're warped 1.2
  * bands deep by noise three cells a tile, a slow flow.)
@@ -202,6 +203,42 @@ function flags(seed: number, cells: number, veined: boolean): PBRData {
 }
 const flagstone = (seed: number, cells: number): PBRData => flags(seed, cells, false);
 const marble = (seed: number, cells: number): PBRData => flags(seed, cells, true);
+
+/** slate's colours (sdf's slate, #464a52 with its softer layers #30343a, darkened to the crypt's night), and its
+ *  joints */
+const SLATE = [0.2, 0.21, 0.236] as const;
+const SLATE_SOFT = [0.155, 0.165, 0.188] as const;
+const SLATE_JOINT = [0.045, 0.045, 0.05] as const;
+/** slate's cleaved layers down a tile (sdf's are 1 cm: here 8 cm on the dais's 2 m tile, 21 pixels each; finer,
+ *  in long slabs, they read as boards) */
+const SLATE_LAYERS = 24;
+
+/**
+ * Riven slate slabs (the crypt's dais and its braziers' steps): ashlar's courses of slabs, `courses` a tile and
+ * `blocks` a course, each slab's face sdf-harness's slate: its strata, cleaved layers along the slab, warped by
+ * its fractal noise (0.9 of a layer deep), the softer ones darker and worn a little in, each layer's shade a little
+ * its own; each slab cut from its own place in the bed, its shade its own, mottled.
+ */
+function slate(seed: number, courses: number, blocks: number): PBRData {
+  const block = 1 / blocks, course = 1 / courses, L = SLATE_LAYERS;
+  const gap = (0.012 / 0.5) * block, bevel = (0.018 / 0.5) * block;
+  const warp = latticeFbm(L / 4, L / 4, seed + 1), mottle = latticeFbm(4, 4, seed + 6), layer = latticeNoise(L, 1, seed + 2), layer3 = latticeNoise(3 * L, 1, seed + 3);
+  const layer9 = latticeNoise(9 * L, 1, seed + 4), layer23 = latticeNoise(23 * L, 1, seed + 5);
+  return buildPBR(512, (u, v, o) => {
+    const rv = v * courses, row = Math.floor(rv), fv = rv - row;
+    const [du, index] = ashlarSpan(u * blocks + 0.5 * (row % 2), row, 50 + seed, blocks);
+    const slab = hash3(index + 24, row + 24, seed);
+    // sdf's strata: the place in the layers (here a whole number of them down a tile, each slab from its own place)
+    const t = v * L + 0.9 * warp(u, v) + Math.floor(slab * 97) * 7, s = t / L;
+    const band = smoothstep(0.42, 0.58, 0.65 * layer(s, 0) + 0.35 * layer3(s, 0)) * (0.8 + 0.2 * layer9(s, 0));
+    const h = jointBevel(Math.min(du * block, Math.min(fv, 1 - fv) * course), gap, bevel) * (1 - 0.25 * band);
+    const f = inJoint(h), tint = (1 + 0.3 * (slab - 0.5)) * (0.85 + 0.3 * mottle(u, v)) * (1 + 0.2 * (hash3(wrap(Math.floor(2 * t), 2 * L), 3, 7) - 0.5) + 0.08 * (layer23(s, 0) - 0.5));
+    const stone = (i: number): number => mix(mix(SLATE[i] * tint, SLATE_SOFT[i], band), SLATE_JOINT[i], f);
+    o.h = h;
+    o.r = stone(0); o.g = stone(1); o.b = stone(2);
+    o.rough = clamp(mix(0.62 + band * 0.15, 0.95, f), 0, 1);
+  }, 4);
+}
 
 function grunge(): PBRData {
   const fbm = makeFbm(42, 4, 6);
@@ -603,7 +640,7 @@ function fur(): PBRData {
 }
 
 /** Every recipe, by name; its arguments are part of what it makes. */
-export const RECIPES = { cobblestone, ashlar, flagstone, marble, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
+export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
 export type RecipeName = keyof typeof RECIPES;
 export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
@@ -618,7 +655,7 @@ export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = 
   // `inTheLobbysOrder`, the hero it shows his face first)
   ['steel', []],
   ['face', ['warrior']], ['face', ['mage']], ['face', ['ranger']],
-  ['forestFloor', []], ['cobblestone', []], ['bark', []], ['ashlar', [21, 6, 3]], ['marble', [33, 5]], ['flagstone', [47, 5]],
+  ['forestFloor', []], ['cobblestone', []], ['bark', []], ['ashlar', [21, 6, 3]], ['slate', [33, 2, 2]], ['marble', [33, 5]], ['flagstone', [47, 5]],
   ['ashlar', [33, 2, 2]], ['grunge', []], ['wood', []], ['burlap', []],
   ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['fur', []], ['bowWood', []],
 ];

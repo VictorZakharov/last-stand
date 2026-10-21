@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA } from '../data/balance';
-import { cobblestone, ashlar, marble, grunge, bark, pbrMaterialMaps, runeCircle } from '../core/textures';
+import { cobblestone, ashlar, marble, slate, grunge, bark, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
@@ -145,8 +145,9 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const groundMat = dampGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(cob, COBBLE_REPEAT, 1.1), color: 0xd0d4e0 }));
   const wallMaps = ashlar(21, 6, 3);
   const wallMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wallMaps, 1, 1.2), color: 0xb4b8c6 });
-  const daisMaps = marble(33, 5);
-  const daisMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(daisMaps, 1, 1.2), color: 0xb8b8c0 });
+  // the dais and the braziers' steps in riven slate; the paths to them in pale marble, lighter than the cobbles
+  const daisMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(slate(33, 2, 2), 1, 1.2), color: 0xb8b8c0 });
+  const walkMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(marble(33, 5), 1, 1.2), color: 0xb8b8c0 });
   const darkStone = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wallMaps, 1, 1), color: 0x7a7e8a });
   const stoneMaps = pbrMaterialMaps(grunge(), 2, 1.6);
   const carved = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x7e8088, roughness: 0.85 });
@@ -170,9 +171,10 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   scene.add(ground);
 
   // --- Central dais -----------------------------------------------------------
-  const lower = boxWithUV(2 * (h + 0.7), 0.18, 2 * (h + 0.7), 2.4);
+  // (a 2 m tile: its slabs a metre long; at 2.4 and 2 tiles a metre they were 8 cm and read as speckle)
+  const lower = boxWithUV(2 * (h + 0.7), 0.18, 2 * (h + 0.7), 0.5);
   const lowerM = new THREE.Mesh(lower, daisMat); lowerM.position.y = 0.09;
-  const upper = boxWithUV(2 * h, 0.35, 2 * h, 2);
+  const upper = boxWithUV(2 * h, 0.35, 2 * h, 0.5);
   const upperM = new THREE.Mesh(upper, daisMat); upperM.position.y = 0.175;
   for (const m of [lowerM, upperM]) { m.receiveShadow = true; m.castShadow = true; scene.add(m); }
 
@@ -224,7 +226,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
     walkParts.push(g.toNonIndexed());
   }
   walkParts.push(ringWalk(17.4, 19.6, 0.25));
-  const walks = new THREE.Mesh(mergeGeometries(walkParts), daisMat);
+  const walks = new THREE.Mesh(mergeGeometries(walkParts), walkMat);
   walks.receiveShadow = true;
   scene.add(walks);
 
