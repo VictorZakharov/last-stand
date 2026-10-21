@@ -19,7 +19,7 @@ import { LegIK } from './ik';
 import { fitArm } from './armIK';
 import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
-import { onTunic, tunicFront, neckHem, TUNIC_Y, WAIST } from './tunic';
+import { onTunic, tunicFront, neckHem, necklineBack, TUNIC_Y, WAIST } from './tunic';
 import { buildFlask, drink, drinkUp, type DrinkHold } from './flask';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 
@@ -146,12 +146,12 @@ export function buildMage(): Model {
   A.add(gemGeo(0.014), stone, j.chest, [br.x, br.y, br.z + 0.01], [0, 0, 0], [1, 1.4, 1]);
 
   // --- the cowl: the hood down, bunched round the neck in teal folds, its crown lying flat on the upper
-  // back
+  // back; its top round the neck as the tunic's neckline is (centred on the chest, a fold's trough at the back met his neck)
   {
     const g = lathe(COWL, 36), q = g.attributes.position;
     for (let i = 0; i < q.count; i++) {
-      const x = q.getX(i), z = q.getZ(i), a = Math.atan2(x, z), k = 1 + 0.07 * Math.sin(a * 7 + 1) + 0.03 * Math.sin(a * 13);
-      q.setXYZ(i, x * k, q.getY(i) - 0.02 * Math.max(0, Math.cos(a)), z * k * 0.95);
+      const x = q.getX(i), y = q.getY(i), z = q.getZ(i), a = Math.atan2(x, z), k = 1 + 0.07 * Math.sin(a * 7 + 1) + 0.03 * Math.sin(a * 13);
+      q.setXYZ(i, x * k, y - 0.02 * Math.max(0, Math.cos(a)), z * k * 0.95 + necklineBack(y));
     }
     g.computeVertexNormals();
     A.add(scaleUV(g, 3, 1), teal, j.chest);

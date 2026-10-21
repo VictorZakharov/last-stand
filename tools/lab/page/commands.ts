@@ -41,6 +41,7 @@ import type { MapsOptions } from './maps';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
+import type { NeckOptions } from './neck';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
 import type { EyesOptions } from './eyes';
 import type { SwingOptions } from './swing';
@@ -89,6 +90,13 @@ export async function weapons(lab: Lab, command: WeaponsOptions): Promise<Report
 export async function hands(lab: Lab, command: HandsOptions): Promise<Report> {
   const { hands: picture } = await import('./hands');
   return picture(lab, command);
+}
+
+/** `lab neck`: each hero's neck read up lines round it and pictured close; a fault past its limit, or a canary it
+ *  missed, is a problem. */
+export async function neck(lab: Lab, command: NeckOptions): Promise<Report> {
+  const { neck: read } = await import('./neck');
+  return read(lab, command);
 }
 
 /** `lab match --fit`: a rest's tunable values fitted to a reference's marks. */

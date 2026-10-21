@@ -16,8 +16,9 @@ const TUNIC_P: Keys = [[-0.12, 2], [0.12, 2], [0.2, 2.6], [0.26, 2.6], [0.3, 2]]
 /** how far back the neckline sits (m): round the neck, which rises from the back of the chest (its middle a centimetre
  *  behind the chest's: centred on the chest, the collar was tight at the back and a man's neck came through it; a few mm
  *  loose all round, as the neck leans back in it at a run and turns in it) */
-const NECKLINE_BACK = 0.0125;
-const neckBack = (y: number) => { const t = clamp((y - 0.26) / 0.04, 0, 1); return -NECKLINE_BACK * t * t * (3 - 2 * t); };
+export const NECKLINE_BACK = 0.0125;
+/** how far back a neckline is at height `y` on the chest joint (m): none on the chest, `NECKLINE_BACK` round the neck */
+export const necklineBack = (y: number) => { const t = clamp((y - 0.26) / 0.04, 0, 1); return -NECKLINE_BACK * t * t * (3 - 2 * t); };
 /** the tunic's height range on the chest joint (m): from below the chest's joint up to the neckline */
 export const TUNIC_Y: [number, number] = [-0.12, 0.3];
 /** below it, round the spine joint (m): half-width at each height, the depth 0.86 of it */
@@ -26,14 +27,14 @@ export const WAIST: [number, number][] = [[0.148, -0.05], [0.15, 0.08], [0.152, 
 /** a point on the tunic towards `a` round it (0 the front, +x his left) at height y, `lift` above it */
 export function onTunic(a: number, y: number, lift: number, out = new THREE.Vector3()): THREE.Vector3 {
   const X = curve(TUNIC_W, y) + lift, Z = curve(TUNIC_D, y) + lift, e = 2 / curve(TUNIC_P, y), s = Math.sin(a), c = Math.cos(a);
-  return out.set(Math.sign(s) * Math.abs(s) ** e * X, y, Math.sign(c) * Math.abs(c) ** e * Z + neckBack(y));
+  return out.set(Math.sign(s) * Math.abs(s) ** e * X, y, Math.sign(c) * Math.abs(c) ** e * Z + necklineBack(y));
 }
 /** the point on the tunic's front `x` across */
 export const tunicFront = (x: number, y: number, lift: number) => onTunic(Math.asin(clamp(Math.sign(x) * Math.abs(x / curve(TUNIC_W, y)) ** (curve(TUNIC_P, y) / 2), -1, 1)), y, lift);
 /** the point on the tunic's back `x` across (+x his left) */
 export const tunicBack = (x: number, y: number, lift: number) => onTunic(Math.PI - Math.asin(clamp(Math.sign(x) * Math.abs(x / curve(TUNIC_W, y)) ** (curve(TUNIC_P, y) / 2), -1, 1)), y, lift);
 /** the rolled hem round the neckline */
-export const neckHem = () => belt(0.0765, 0.0715, 0.297, 0.012, 0.006, 0, 28).translate(0, 0, neckBack(0.297));
+export const neckHem = () => belt(0.0765, 0.0715, 0.297, 0.012, 0.006, 0, 28).translate(0, 0, necklineBack(0.297));
 
 /** the armhole cut round each shoulder, in the tunic's own terms: its middle's height up the side (`y`), its half-width round
  *  the tunic (`A`, rad) and its half-height (`B`), from the shoulder's top over the joint down to the armpit, where the

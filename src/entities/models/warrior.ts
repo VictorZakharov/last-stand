@@ -17,6 +17,7 @@ import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, DRINK_SHEATHED, type DrinkHold } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
+import { NECKLINE_BACK } from './tunic';
 import { buildHand, poseHand, hold, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
 import { axe, greataxe, greatsword, mace, maul, sword, STRIKES_WITH, type WeaponMaterials } from './weapons';
 import { clamp, lerp, mulberry, damp } from '../../util';
@@ -487,8 +488,9 @@ export function buildWarrior(): Model {
     o.p.set(sa * (0.09 + 0.1 * r), 0.24 + rng() * 0.04 - Math.abs(sa) * r * 0.02, ca * (0.09 + 0.045 * r));
     o.d.set(sa, 0.5 + rng() * 0.5, ca);
   }, 0.06, 0.011), furM, j.chest);
-  // a high collar of the gambeson inside the fur, and the neck
-  S.add(new THREE.CylinderGeometry(0.075, 0.09, 0.06, 20, 1, true), cloth, j.chest, [0, 0.27, 0]);
+  // a high collar of the gambeson inside the fur, round the neck as the tunic's neckline is (centred on the chest, his
+  // neck came out through it behind), and the neck
+  S.add(new THREE.CylinderGeometry(0.075, 0.09, 0.06, 20, 1, true), cloth, j.chest, [0, 0.27, -NECKLINE_BACK]);
 
   // --- pauldrons: three steel lames over each shoulder with a rolled rim, an engraved medallion on the
   // top one, fur spilling out from under it
@@ -622,7 +624,7 @@ export function buildWarrior(): Model {
   const head = buildHead(j.head, kit, 'warrior', { hair: 'loose' });
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
-  buildNeck(j.neck, kit, 'warrior', j.P.neckL);
+  buildNeck(j.neck, kit, 'warrior', j.P.neckL, j.head);
   // (worn only with a head item equipped: bareheaded, the hair shows; setGear)
   const helm = new THREE.Group(); helm.name = 'helm'; head.group.add(helm); helm.visible = false;
   {

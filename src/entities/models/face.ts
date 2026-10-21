@@ -172,7 +172,7 @@ export function faceY(y: number, F: FaceShape): number {
 
 export const FACES: Record<'warrior' | 'mage' | 'ranger', FaceShape> = {
   // a strong jaw and chin, a brow over deep-set eyes, a straight nose
-  warrior: { jaw: 55.2, chin: 10, chinFwd: -3.4, brow: 1.7, cheek: 0.9, noseLen: 50, noseW: 13.2, nosePro: 1.5, hump: 0, lips: 0.72, long: 0.96, tip: 1.15, eyeOpen: 3.4, iris: [0.234, 0.237, 0.164], beardDepth: 0.8, browFwd: 5.5, foreheadFwd: 10, noseRoot: 11, skullFwd: -3.7, lipFwd: 16.5, mouthUp: 6, beardLine: 22, browDrop: 2.6, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -16, neckBlend: 9, lidSoft: 4, earFlare: 0.3, zygo: 2, bridgeW: 6.8, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, muzzleFwd: -1.5,
+  warrior: { jaw: 55.2, chin: 10, chinFwd: -3.4, brow: 1.7, cheek: 0.9, noseLen: 50, noseW: 13.2, nosePro: 1.5, hump: 0, lips: 0.72, long: 0.96, tip: 1.15, eyeOpen: 3.4, iris: [0.234, 0.237, 0.164], beardDepth: 0.8, browFwd: 5.5, foreheadFwd: 10, noseRoot: 11, skullFwd: -3.7, lipFwd: 16.5, mouthUp: 6, beardLine: 22, browDrop: 2.6, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -5, neckBlend: 9, neckCol: [65, 62], lidSoft: 4, earFlare: 0.3, zygo: 2, bridgeW: 6.8, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, muzzleFwd: -1.5,
     templeNarrow: -4.4, lidFold: 5, gridEye: 1,
     // (the mask, the skull and the jaw fitted by least squares (tools/facelab/fit.mjs) to the reference rebuilt in 3D from its
     // turnaround (within 1 mm rms) and to its front view's widths; the nose, lips and eyes to the pictures' landmarks)
@@ -245,12 +245,18 @@ const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a
 export const neckSeam = (c: number): number => lerp(-36, -12, ((1 - c) / 2) ** 0.7);
 /** the cosine round a column neck from its front, at a point (mm) */
 const neckCos = (ax: number, z: number, F: FaceShape): number => { const dz = z - (F.neckBack ?? -8); return dz / (Math.hypot(ax, dz) || 1); };
+/** A column neck's top (mm): its sides drawn in by `sides` of its width from `from` up to `to`, under the skin below the
+ *  ears, and the whole of it carried up behind into the base of the skull, ending inside it at `end`, as a man's neck's
+ *  muscles carry up to his skull (cut off level at 40 mm, the column stood out of the narrower skin under the ears and
+ *  behind them, a ledge the light drew as a line across the neck: lab neck) */
+const COLUMN_TOP = { from: 20, to: 60, sides: 0.10, end: 70 };
 /** A column neck (`neckCol`): the free neck's ellipse from inside the head down through the band round its seam where
  *  the rig's neck crosses it, then drawn in (below it the rig's neck is the skin, and where that bends the column moving
  *  with the head would show through; drawn in nearer the seam, its normals tilted there and the seam showed). */
 function neckColumn(ax: number, y: number, z: number, F: FaceShape): number {
-  const [rx, rz] = F.neckCol!, s = neckSeam(neckCos(ax, z, F)), k = 1 - 0.35 * sm(s - 12, s - 32, y), m = Math.min(rx, rz) * k;
-  return Math.max((Math.hypot(ax / (rx * k), (z - (F.neckBack ?? -8)) / (rz * k)) - 1) * m, y - 40, s - 32 - y);
+  const [rx, rz] = F.neckCol!, s = neckSeam(neckCos(ax, z, F)), T = COLUMN_TOP;
+  const k = 1 - 0.35 * sm(s - 12, s - 32, y), kx = k * (1 - T.sides * sm(T.from, T.to, y)), m = Math.min(rx * kx, rz * k);
+  return Math.max((Math.hypot(ax / (rx * kx), (z - (F.neckBack ?? -8)) / (rz * k)) - 1) * m, y - T.end, s - 32 - y);
 }
 
 /** eyeball centre (the left one; the right mirrors it) and radius, mm */
@@ -652,6 +658,23 @@ export function neckShade(ax: number, y: number, c = 1): number {
   return 0.82 * sm(jawY + 8, jawY - 10, y) * (1 - 0.4 * sm(-50, -110, y)) * sm(-0.5, 0.2, c);
 }
 
+/** the plain skin's shade of the face's skin colour (the ears', the neck's: models/head.ts `plainSkin`) */
+export const PLAIN_SKIN = 0.97;
+/** The light a shade `ns` (neckShade) leaves on plain skin, a share of each channel in linear light: the jaw's shadow on
+ *  the neck a warm brown, not red (models/head.ts `buildNeck` shades the neck's vertices with it). */
+export const shadedSkin = (ns: number): [number, number, number] => { const k = 1 - ns; return [k ** 0.8, k ** 0.95, k ** 1.2]; };
+const toLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const toSRGB = (c: number) => (c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055);
+/** The rig's neck's own colour as the paint puts it (sRGB, 0-1): the plain skin under the shade `ns`, so a column neck's
+ *  paint can meet it at the seam (painted as the face's shade, a multiple of the sRGB paint, it came out darker than
+ *  the neck's, which shades in linear light, and the seam showed as a band: lab neck). */
+function plainNeck(L: FaceLook, ns: number): [number, number, number] {
+  const shade = shadedSkin(ns);
+  return [0, 1, 2].map((ch) => toSRGB(toLinear(L.skin[ch] * PLAIN_SKIN) * shade[ch])) as [number, number, number];
+}
+/** how far above a column neck's seam (mm) its paint has become the rig's neck's own colour */
+const NECK_PAINT = 12;
+
 /** the occlusion's steps out from the skin (mm) and their weights */
 const AO_STEPS: [number, number][] = [[2, 0.5], [5, 0.35], [10, 0.25], [18, 0.15], [30, 0.1]];
 
@@ -1014,14 +1037,22 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
       if (aoAt) {
         // (light that does reach a crease has gone through skin: it comes out redder; and the neck is in the jaw's shadow)
         // (the jaw's shadow on the neck is a warm brown, not red)
-        const ns = neckShade(ax, yy, neckCos(ax, z, F)), k = 1 - L.ao! * (1 - aoAt(tx, ty)), kn = 1 - ns;
-        c[0] *= k ** 0.75 * kn ** 0.8; c[1] *= k * kn ** 0.95; c[2] *= k ** 1.15 * kn ** 1.2;
+        const ns = neckShade(ax, yy, neckCos(ax, z, F)), k = 1 - L.ao! * (1 - aoAt(tx, ty)), shade = shadedSkin(ns);
+        c[0] *= k ** 0.75; c[1] *= k; c[2] *= k ** 1.15;
+        // (the jaw's shadow in linear light, as the rig's neck takes it: multiplied into the sRGB paint, it came out far
+        // darker than the neck's, a dark band down a column neck's front ending at its seam: lab neck)
+        for (let ch = 0; ch < 3; ch++) c[ch] = toSRGB(toLinear(c[ch]) * shade[ch]);
         // (and no shine where it's shaded)
         rr = lerp(rr, 0.92, ns / 0.82);
       }
       // (a column neck's skin as plain down to the seam as the rig's neck below it, its relief and sheen easing out: ending at
       // it, the face's pores, stretched down the neck by the grid's sparse rows there, showed as a crumpled band)
-      if (F.neckCol) { const s = neckSeam(neckCos(ax, z, F)), nk = sm(s, s + 40, yy); hh *= nk; rr = lerp(L.ao ? 0.88 : 0.6, rr, nk); }
+      if (F.neckCol) {
+        const cz = neckCos(ax, z, F), s = neckSeam(cz), nk = sm(s, s + 40, yy), pk = sm(s, s + NECK_PAINT, yy);
+        hh *= nk; rr = lerp(L.ao ? 0.88 : 0.6, rr, nk);
+        // (and its colour the rig's neck's own by the seam)
+        if (pk < 1) { const n = plainNeck(L, L.ao ? neckShade(ax, yy, cz) : 0); for (let ch = 0; ch < 3; ch++) c[ch] = lerp(n[ch], c[ch], pk); }
+      }
       albedo[i * 4] = clamp(c[0], 0, 1) * 255; albedo[i * 4 + 1] = clamp(c[1], 0, 1) * 255; albedo[i * 4 + 2] = clamp(c[2], 0, 1) * 255; albedo[i * 4 + 3] = 255;
       const rv = clamp(rr, 0.2, 0.95) * 255;
       rough[i * 4] = rough[i * 4 + 1] = rough[i * 4 + 2] = rv; rough[i * 4 + 3] = 255;

@@ -261,7 +261,17 @@ function textWithPictureFiles(results, dir) {
       }
     }
   }
-  return written.length ? `${text}\n\npictures in ${relative(REPO, dir)}: ${written.join(', ')}` : text;
+  return written.length ? `${text}\n\n${pictureList(written, dir)}` : text;
+}
+
+/** the most picture files a run's text names one by one */
+const PICTURES_NAMED = 24;
+
+/** Where `written` went, each named, or past `PICTURES_NAMED` how many and the first and last (lab neck wrote 216). */
+function pictureList(written, dir) {
+  const where = relative(REPO, dir);
+  if (written.length <= PICTURES_NAMED) return `pictures in ${where}: ${written.join(', ')}`;
+  return `${written.length} pictures in ${where}: ${written[0]} to ${written[written.length - 1]}`;
 }
 
 /**
@@ -921,6 +931,26 @@ export const COMMANDS = {
     },
     finish(results, options, session) {
       return textWithMoments(results, session.outFor('hands'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
+  neck: {
+    each(side, options) {
+      const command = {
+        classes: options.classes,
+        dresses: options.dresses,
+        poses: options.poses,
+        look: options.look ?? 'lit',
+        canary: Boolean(options.canary),
+      };
+      return side.command('neck', command);
+    },
+    finish(results, options, session) {
+      // (a file a picture: a sheet of them all, 90 close-ups, was more than the browser would lay out)
+      return textWithPictureFiles(results, session.outFor('neck'));
     },
     textOf: asText,
     problemsOf: problemsIn,
