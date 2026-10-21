@@ -225,6 +225,17 @@ async function throttleOf(page, rate) {
   await devtools.send('Emulation.setCPUThrottlingRate', { rate });
 }
 
+/** The page put on a screen of `screen`'s size (css px) and pixel ratio, as the browser emulates one. */
+async function screenOf(page, screen) {
+  const devtools = await devtoolsOf(page);
+  await devtools.send('Emulation.setDeviceMetricsOverride', {
+    width: screen.width,
+    height: screen.height,
+    deviceScaleFactor: screen.ratio,
+    mobile: false,
+  });
+}
+
 /**
  * A key sent to the page as the browser gets it from a keyboard (`lab.press`'s): `type` is `keyDown` or `keyUp`,
  * `key` the key's code (`KeyW`). The browser's own handling follows from it, as a player's key: what it does to the
@@ -513,6 +524,8 @@ export class Side {
     await page.exposeFunction('__labMotion', (reduced) => motionOf(page, reduced));
     // (a probe's `lab.throttle`: the CPU slowed as a low-end device's, for what the page's work costs one)
     await page.exposeFunction('__labThrottle', (rate) => throttleOf(page, rate));
+    // (a probe's `lab.showOn`: the window resized as the command runs, as the player's is taken to full screen)
+    await page.exposeFunction('__labScreen', (screen) => screenOf(page, screen));
     const failed = scriptFailure(page);
     // (the boot's time for the page's load too: Playwright's own 30 s ran out on the first page after the server
     // started, a cold dev server sending every module on a machine busy with other agents)
@@ -551,14 +564,8 @@ export class Side {
    * Puts its page on a screen of `screen`'s size (css px) and pixel ratio (`--screen`), as a window moved onto another
    * monitor is: no resize may come with it, and the game fits its canvas to it on its next frame.
    */
-  async showOn(screen) {
-    const devtools = await devtoolsOf(this.page);
-    await devtools.send('Emulation.setDeviceMetricsOverride', {
-      width: screen.width,
-      height: screen.height,
-      deviceScaleFactor: screen.ratio,
-      mobile: false,
-    });
+  showOn(screen) {
+    return screenOf(this.page, screen);
   }
 
   /**

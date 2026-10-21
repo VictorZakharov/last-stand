@@ -16,7 +16,9 @@ import { labError } from './errors.mjs';
  * - `screen`: a window's size in css px and the screen's pixel ratio, `1280x720@3` (`@1` when it's left out);
  * - `screens`: two of them, `3840x2160@1,1280x720@3`.
  */
-const KINDS = ['switch', 'text', 'list', 'number', 'pair', 'numbers', 'choice', 'ref', 'screen', 'screens'];
+const KINDS = [
+  'switch', 'text', 'list', 'number', 'pair', 'numbers', 'choice', 'ref', 'screen', 'screens', 'screenList',
+];
 
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
@@ -346,6 +348,26 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'plant the system\'s cursor on the page\'s body in each state, old-style digits on it and the labels\' '
           + 'lining twin taken away (the skill tooltips made as tall as the window): each check must find its own',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
+  wind: {
+    help: 'the loading screen\'s exit as it hands over to the lobby\'s logo: the loading screen put back over the '
+      + 'lobby and its exit run on the lab\'s clock, the particles\' picture read from the exit\'s canvas column by '
+      + 'column as each rests in the logo\'s place, laid over the lobby behind them, against the lobby logo once the '
+      + 'exit is done, both at the screen\'s own pixels: the pixels apart and which way the logo stands from them (a '
+      + 'jump the player sees as the logo takes over): tools/lab/out/wind',
+    options: {
+      resize: {
+        kind: 'screenList',
+        usage: 'WxH[@ratio],...',
+        help: 'the window put on these screens one after another as the particles fly, the last where they land '
+          + '(1920x1080@1.25,1536x864@1.25 on --screen 1536x864@1.25: full screen and back at 125%)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'the lobby logo pictured a pixel lower than it is after the exit: the jump must be found, a pixel down',
       },
       ...COMMON_OPTIONS,
     },
@@ -1546,6 +1568,11 @@ function readValue(name, spec, text) {
       if (screens.length !== 2 || screens.includes(null)) {
         throw wrong('two sizes and pixel ratios, 3840x2160@1,1280x720@3');
       }
+      return screens;
+    }
+    case 'screenList': {
+      const screens = (text ?? '').split(',').map(screenFrom);
+      if (screens.includes(null)) throw wrong('sizes and pixel ratios, 1920x1080@1.25,1536x864@1.25');
       return screens;
     }
     default:

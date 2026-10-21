@@ -31,6 +31,11 @@ const GLOW_IN = GATHER_SPREAD + 0.3;   // s: the lobby logo's glow fades in as i
 // the wind front (as in the shader): a point at x (0..1 across the letters, right = 0 s) starts
 // moving at (1 - x + tear) / OVER * SWEEP, the tear being up to TEAR
 const TEAR = 0.07, OVER = 1.07;
+/** When the points landing in column `x` of the lobby logo (0..1 across its letters) are all at rest there, and when the
+ *  logo takes the column over from them, s into the exit (tools/lab `wind` reads them then) */
+export function restOf(x: number): { from: number; to: number } {
+  return { from: LANDED + GATHER_SPREAD * Math.min(Math.max(x, 0), 1), to: LANDED + GATHER_SPREAD * Math.max(x, 0) + 0.04 };
+}
 /** the letters are wiped this far (fraction of their width) behind the front, where every point there has lifted */
 const WIPE_LAG = TEAR + 0.02;
 const MAX_POINTS = 1_500_000;      // point budget of a capable desktop

@@ -11,6 +11,7 @@ import type { GaitOptions } from './gait';
 import type { StopsOptions } from './stops';
 import type { FormOptions } from './form';
 import type { UiOptions } from './ui';
+import type { WindOptions } from './wind';
 import type { TouchOptions } from './touchStick';
 import type { TapOptions } from './tap';
 import type { PracticeOptions } from './practice';
@@ -190,6 +191,15 @@ export async function form(lab: Lab, command: FormOptions): Promise<Report> {
 export async function ui(lab: Lab, command: UiOptions): Promise<Report> {
   const { ui: uiRound } = await import('./ui');
   return uiRound(lab, command);
+}
+
+/**
+ * `lab wind`: the loading screen's exit as it hands over to the lobby logo: the particles' picture as they rest in the
+ * logo's place against the logo once the exit is done; pixels apart past the limit, or a canary missed, are problems.
+ */
+export async function wind(lab: Lab, command: WindOptions): Promise<Report> {
+  const { windHandoff } = await import('./wind');
+  return windHandoff(lab, command);
 }
 
 /**

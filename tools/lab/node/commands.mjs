@@ -474,6 +474,19 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  wind: {
+    each(side, options) {
+      const command = { resize: options.resize ?? [], canary: Boolean(options.canary) };
+      return side.command('wind', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('wind'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   light: {
     check(options) {
       const wrong = options.facings.find((facing) => !Number.isFinite(Number(facing)));

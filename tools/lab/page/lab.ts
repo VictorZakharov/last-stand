@@ -67,6 +67,8 @@ declare global {
     __labMotion?: (reduced: boolean) => Promise<void>;
     /** the page's CPU slowed `rate` times, as the browser emulates a slower device's (`tools/lab/node/side.mjs`) */
     __labThrottle?: (rate: number) => Promise<void>;
+    /** the page put on another screen, as the browser emulates one (`tools/lab/node/side.mjs`) */
+    __labScreen?: (screen: Screen) => Promise<void>;
   }
 }
 
@@ -321,6 +323,13 @@ export interface Clip {
   y: number;
   width: number;
   height: number;
+}
+
+/** A screen: its size (css px) and its pixel ratio, as `--screen` names one. */
+export interface Screen {
+  width: number;
+  height: number;
+  ratio: number;
 }
 
 /** One picture, as a PNG data URL: of a view of the game, or of the screen with the page's UI (`Lab.screen`). */
@@ -856,6 +865,17 @@ export class Lab {
   async throttle(rate: number): Promise<void> {
     if (!window.__labThrottle) throw new Error('lab: throttle: this page can\'t slow its CPU (opened by an older lab)');
     await window.__labThrottle(rate);
+  }
+
+  /**
+   * The page put on a screen of `screen`'s size (css px) and pixel ratio as the command runs, as the player's window is
+   * taken to full screen or onto another monitor (`--screen`'s, sent through the DevTools protocol): the page lays
+   * itself out again and hears a resize, and the browser draws a frame of its own after it, the game's left queued.
+   */
+  async showOn(screen: Screen): Promise<void> {
+    if (!window.__labScreen) throw new Error('lab: showOn: this page can\'t change screens (opened by an older lab)');
+    await window.__labScreen(screen);
+    await window.__labClock.realFrame();
   }
 
   private async sendMouse(type: MouseType, at: PagePoint, deltaY = 0): Promise<void> {
