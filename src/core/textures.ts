@@ -136,6 +136,9 @@ export const faceCanvases = (who: 'warrior' | 'mage' | 'ranger'): PBRCanvases =>
 /** the ray grid a hero's face was painted on, once it has been (models/head.ts builds the head on it) */
 export const faceGrid = (who: 'warrior' | 'mage' | 'ranger'): PBRData['grid'] => grids.get(recipeKey('face', [who]));
 
+/** The key of the map `texture` is painted with (`bark()`), where it's one of these canvases. */
+export const mapKeyOf = (texture: THREE.Texture): string | undefined => keyOfCanvas.get(texture.image as HTMLCanvasElement);
+
 /**
  * Resolved once every map `textures` are painted with has come: what a warm-up draws waits for its own maps alone
  * (the lobby's, not the fight's: those come while it shows).
@@ -143,7 +146,7 @@ export const faceGrid = (who: 'warrior' | 'mage' | 'ranger'): PBRData['grid'] =>
 export function mapsArrived(textures: Iterable<THREE.Texture>): Promise<void> {
   const waits: Promise<void>[] = [];
   for (const texture of textures) {
-    const key = keyOfCanvas.get(texture.image as HTMLCanvasElement);
+    const key = mapKeyOf(texture);
     const map = key === undefined ? undefined : coming.get(key);
     if (map) waits.push(map.arrived);
   }

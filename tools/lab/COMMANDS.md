@@ -550,6 +550,20 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   height laid twice each way, its corner at its own pixels and its material lit on a square and a ball, a sheet a
   group (`page/mapPictures.ts`). `--canary` changes a byte (its digest must change) and plants a ramp across u in a
   copy (a seam must be found).
+- `tiles`: how big each repeated map's tile comes out on each surface of a biome (`page/tiles.ts`; `--biomes`,
+  `--maps bark,grunge` by their recipe's name, every repeated map by default). A surface's UVs decide it, with its
+  instances' scale and the map's repeat: one tile of the forest's bark ran round a whole trunk and up a section of
+  it (ez-tree's UVs), 2.2 m by 1.3 m at a trunk's foot and 9 m along a root, where the oak photo it's drawn from
+  covers 0.36 m. For each surface, a mesh by its name (an instanced mesh's first 16 instances, from its drawn copy
+  or its shadows' one, whichever holds more), the metres a tile covers along u and along v on each triangle
+  (`page/tileSpans.ts`), weighed by its area in the world: the middle and a tenth to nine tenths of the area, how
+  stretched it is (the longer over the shorter) and the map's pixels a metre. It reports, as `maps` reports means
+  (a map drawn for a stretch is right on its surfaces); it fails where a biome shows no repeated map. `--pictures`
+  pictures each surface as the player meets it (`page/tilePictures.ts`): from the arena's middle, at its nearest
+  point facing it and in view from 2 m (a ray from the camera meeting it first, every culled instance packed for
+  the ray), a hero's height up, the cut-outs and see-through things (ferns, leaf cards, a gate's membrane) left out,
+  a sheet a biome; `--ab` sets them beside another commit's. `--canary` lays a board 2 m by 0.5 m in each biome, its
+  map repeated twice along u, which must read 1 m by 0.5 m.
 - `weapons`: each of the hero's weapons alone (`page/weapons.ts`; `--weapons Sword,Maul`, the class's bases by
   default): a copy of the one in his right hand, at its own frame (unturned in the fist), put in a plain, lit
   studio of its own and pictured face on (a blade's flat, an axe's bit to the side), edge on, from behind (a face

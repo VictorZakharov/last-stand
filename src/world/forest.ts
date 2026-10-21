@@ -183,6 +183,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     const x = sx * (h - 0.5), z = sz * (h - 0.5), g = new THREE.Group();
     scene.add(g);
     const mh = new THREE.Mesh(menhirGeo, stone);
+    mh.name = 'standing stone';
     mh.position.set(x, ARENA.daisHeight, z);
     mh.rotation.y = Math.atan2(sx, sz);
     mh.castShadow = mh.receiveShadow = true;
@@ -316,6 +317,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     breakable.add(obstacles.length - 1, 6, 0x4a3520, instanceLook(stumps, i), 'wood');
   });
   stumps.castShadow = stumps.receiveShadow = true;
+  stumps.name = 'stumps';
   scene.add(stumps);
 
   const logSpots = [[21, 1.15, 0.9], [11, 4.75, -0.4], [22, 3.0, 0.3]];
@@ -324,6 +326,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr, yaw = a + rot, parts: THREE.Mesh[] = [], n0 = obstacles.length;
     for (const [geo, mat] of [[log.bark, barkMat], [log.inner, heartwood], [log.moss, mossMat], [log.fungus, capMat]] as const) {
       const m = new THREE.Mesh(geo, mat);
+      m.name = 'fallen log';
       m.position.set(x, 0.38, z);
       m.rotation.y = yaw;
       m.castShadow = mat !== capMat; m.receiveShadow = true;
@@ -344,6 +347,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     breakable.add(obstacles.length - 1, 6 + s * 4, 0x6a7060, instanceLook(boulders, i));
   });
   boulders.castShadow = boulders.receiveShadow = true;
+  boulders.name = 'boulders';
   scene.add(boulders);
 
   // --- Undergrowth: grass tufts, small glowing mushrooms, pebbles ---------------------
@@ -429,6 +433,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     roots.push(taperTube(pts, (t) => 0.28 * (1 - t * 0.85), 24, 7));
   }
   const rootMesh = new THREE.Mesh(mergeAll(roots), barkMat);
+  rootMesh.name = 'roots';
   rootMesh.castShadow = rootMesh.receiveShadow = true;
   scene.add(rootMesh);
 
@@ -463,6 +468,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     setInstance(pebbles, i, Math.cos(a) * rr, 0.03, Math.sin(a) * rr, r(0, 3), r(0, 3), r(0, 3), s, s * r(0.4, 0.8), s);
   }
   pebbles.receiveShadow = true;
+  pebbles.name = 'pebbles';
   scene.add(pebbles);
 
   // --- Ambient: drifting pollen and a light haze ---------------------------------------
@@ -614,11 +620,13 @@ function buildRootGate(scene: THREE.Object3D, angle: number, barkMat: THREE.Mate
     const pts = [[s * (half + 0.5), 0, 0.3], [s * half, 1.6, 0], [s * (half - 0.1), 3.4, -0.1], [s * (half - 0.9), 4.8, 0], [s * 0.2, 5.3, 0.05]];
     const curve = new THREE.CatmullRomCurve3(pts.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
     const tube = new THREE.Mesh(taperedTube(curve, 0.7, 0.28), barkMat);
+    tube.name = 'gate arch';
     tube.castShadow = tube.receiveShadow = true;
     g.add(tube);
     // a thinner root twisting around it
     const vine = new THREE.CatmullRomCurve3(pts.map(([x, y, z], i) => new THREE.Vector3(x + Math.sin(i * 1.9) * 0.45 * s, y, z + Math.cos(i * 1.9) * 0.45)));
     const v = new THREE.Mesh(taperedTube(vine, 0.26, 0.1), barkMat);
+    v.name = 'gate vine';
     v.castShadow = true;
     g.add(v);
     // roots splaying from its foot into the ground
@@ -626,10 +634,12 @@ function buildRootGate(scene: THREE.Object3D, angle: number, barkMat: THREE.Mate
       const a = (k - 1) * 0.7 + (s < 0 ? Math.PI : 0), c = Math.cos(a), sn = Math.sin(a), x0 = s * (half + 0.5);
       const root = new THREE.Mesh(taperTube([V(x0, 0.4, 0.3), V(x0 + c * 0.8, 0.12, 0.3 + sn * 0.8), V(x0 + c * 1.6, -0.05, 0.3 + sn * 1.5)], (t) => 0.3 * (1 - t * 0.8), 10, 7), barkMat);
       root.castShadow = root.receiveShadow = true;
+      root.name = 'gate roots';
       g.add(root);
     }
     // boulder at the foot
     const rock = new THREE.Mesh(lumpy(new THREE.DodecahedronGeometry(0.9, 1), 0.1, s + angle), rockMat);
+    rock.name = 'gate boulder';
     rock.position.set(s * (half + 1.3), 0.3, 0.2);
     rock.scale.set(1.1, 0.9, 1.3);
     rock.castShadow = rock.receiveShadow = true;
@@ -747,6 +757,7 @@ function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * TAU;
     const s = new THREE.Mesh(ringGeo, stone);
+    s.name = 'bonfire stones';
     s.position.set(x + Math.cos(a) * 0.75, 0.1, z + Math.sin(a) * 0.75);
     s.scale.set(1.2, 0.8, 1);
     s.rotation.set(a, a * 2, 0);
@@ -772,6 +783,7 @@ function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.
   const char = emberMat(new THREE.Vector3(x, 0.25, z), 0.6);
   for (const [parts, mat] of [[logs.bark, wood], [logs.char, char]] as const) {
     const mesh = new THREE.Mesh(mergeGeometries(parts), mat);
+    mesh.name = 'bonfire logs';
     mesh.castShadow = true;
     scene.add(mesh);
   }

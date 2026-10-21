@@ -39,6 +39,7 @@ import type { PerfOptions } from './perf';
 import type { CompilesOptions } from './compiles';
 import type { ProgramsOptions } from './programs';
 import type { MapsOptions } from './maps';
+import type { TilesOptions } from './tiles';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
@@ -407,6 +408,12 @@ export async function programs(lab: Lab, command: ProgramsOptions): Promise<Repo
 export async function maps(lab: Lab, command: MapsOptions): Promise<Report> {
   const { maps: mapsOf } = await import('./maps');
   return mapsOf(lab, command);
+}
+
+/** `lab tiles`: how big each repeated map's tile comes out on each surface of a biome. */
+export async function tiles(lab: Lab, command: TilesOptions): Promise<Report> {
+  const { tiles: tilesOf } = await import('./tiles');
+  return tilesOf(lab, command);
 }
 
 /** `lab draws`: one frame's draw calls with the crowd standing, by the geometry each drew, the most first. */

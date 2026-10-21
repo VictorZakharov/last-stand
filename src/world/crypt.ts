@@ -636,6 +636,7 @@ function buildNecropolis(scene: THREE.Object3D, rng: () => number, stone: THREE.
   }
   trees.count = ti;
   trees.castShadow = true;
+  trees.name = 'dead trees';
   scene.add(trees);
 }
 

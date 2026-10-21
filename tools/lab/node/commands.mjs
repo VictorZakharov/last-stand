@@ -903,6 +903,24 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  tiles: {
+    each(side, options) {
+      const command = {
+        biomes: options.biomes,
+        maps: options.maps,
+        pictures: Boolean(options.pictures),
+        canary: Boolean(options.canary),
+      };
+      return side.command('tiles', command);
+    },
+    finish(results, options, session) {
+      return textWithSheetsByGroup(results, session.outFor('tiles'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   draws: {
     check(options) {
       if (options.count !== undefined && !(options.count >= 0)) throw labError('draws --count: 0 or more');
