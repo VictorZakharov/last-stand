@@ -144,7 +144,8 @@ where you like and pass its path. Any front view of a face works, a full-body sh
    it: the step between them, the crease (the turn of the shading normals across it, skinned as posed), the colour
    difference (CIE76 dE of the painted albedo either side) and the paint's relief and roughness just above it; how high
    the collar sits at the back against the seventh vertebra's height, and skin showing through the collar (skin met
-   within 25 mm of a ray before the cloth it is under).
+   within 25 mm of a ray before the cloth it is under). The neck's shape up from the collar (ledges, shelves) and its
+   collars as he looks aside are `npm run lab -- neck`'s, on every hero, dressed and bare.
 
 ## Output (`tools/facelab/out/<tag>/`)
 
