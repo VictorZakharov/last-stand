@@ -6,7 +6,7 @@ import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
 const SWITCHES = new Set([
-  'headed', 'perf', 'js', 'angle', 'passes', 'paints', 'links', 'film', 'cold-return', 'help',
+  'headed', 'perf', 'js', 'angle', 'passes', 'paints', 'links', 'film', 'cold-return', 'stale-wind', 'help',
 ]);
 /** the views the game is played in (core/renderer.ts `VIEWS`, in the order V steps through them), and the
  *  battlegrounds (data/biomes.ts) */
@@ -25,6 +25,9 @@ const QUALITIES = ['high', 'medium', 'low'];
 const AUTO = new RegExp(`^(${QUALITIES.join('|')})@\\d+$`);
 /** a key's tap (ms: `scenarios.mjs`'s): presses can't come closer together */
 const TAP_LEAST = 90;
+/** how many times `--resize` goes and comes back unless the command says (the owner's report: full screen and back,
+ *  which the exit must follow however often) */
+const TRIPS = 5;
 
 /** each option's value and what it does, for the usage */
 const HELP = {
@@ -58,6 +61,12 @@ const HELP = {
     + 'unlike those either side of it found (a flicker)'],
   'blink-exit': ['n', 'boot: the loading screen hidden for a frame this many times as it leaves, the canary of the '
     + 'film\'s flickers (0 by default)'],
+  resize: ['WxH', 'boot: the window taken to this size and back as the loading screen shows (`--trips` times, the '
+    + 'first as its exit is made ready), and where the exit draws checked at each of its draws against where the '
+    + 'letters, the lobby\'s logo and the window are (`windFit.mjs`)'],
+  trips: ['n', `boot, with --resize: how many times the window goes to its size and comes back (${TRIPS} by default)`],
+  'stale-wind': ['', 'boot, with --resize: the exit placed once and never again (each place it sets after its first '
+    + 'ignored), the canary of its check'],
   auto: ['level@px', 'Auto\'s quality as a device settled it, a report\'s Quality line (`low@518400`: Low, at most '
     + '0.52 Mpx; by default a boot\'s own and a scenario\'s the High preset)'],
   window: ['WxH', 'the page\'s size in css px, as a report\'s `window` (1536x864 by default)'],
@@ -101,10 +110,10 @@ function readWritten(argv) {
   return written;
 }
 
-/** A size written `WxH` (css px), as `{ width, height }`; throws at anything else. */
-function sizeOf(written) {
+/** A size written `WxH` (css px) for `--name`, as `{ width, height }`; throws at anything else. */
+function sizeOf(written, name) {
   const match = /^(\d+)x(\d+)$/.exec(written);
-  if (!match) throw new Error(`stalls: --window must be a size in css px, WxH (${JSON.stringify(written)})`);
+  if (!match) throw new Error(`stalls: --${name} must be a size in css px, WxH (${JSON.stringify(written)})`);
   return { width: Number(match[1]), height: Number(match[2]) };
 }
 
@@ -133,7 +142,10 @@ export function readOptions(argv) {
     stallLobby: Number(written['stall-lobby'] ?? 0),
     blinkExit: Number(written['blink-exit'] ?? 0),
     auto: written.auto ?? null,
-    window: sizeOf(written.window ?? '1536x864'),
+    window: sizeOf(written.window ?? '1536x864', 'window'),
+    resize: written.resize === undefined ? null : sizeOf(written.resize, 'resize'),
+    trips: Number(written.trips ?? TRIPS),
+    staleWind: written['stale-wind'] === true,
     headed: written.headed === true,
     perf: written.perf === true,
     js: written.js === true,
@@ -174,6 +186,11 @@ export function readOptions(argv) {
     const levels = QUALITIES.join(', ');
     throw new Error(`stalls: --auto must be a level and the most pixels, level@px (${levels}: low@518400)`);
   }
+  if (options.resize && options.scenario !== BOOT) throw new Error(`stalls: --resize is the ${BOOT} scenario's`);
+  if (!(Number.isInteger(options.trips) && options.trips >= 1)) {
+    throw new Error('stalls: --trips must be a whole number, 1 or more');
+  }
+  if (options.staleWind && !options.resize) throw new Error('stalls: --stale-wind is a canary of --resize\'s check');
   if (!(options.listed >= LISTED_LEAST)) {
     throw new Error(`stalls: --listed must be a number of ms, ${LISTED_LEAST} or more`);
   }

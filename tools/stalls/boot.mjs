@@ -9,6 +9,7 @@ import { BLINK_FRAMES, filmFrames, filmOf, startFilm } from './film.mjs';
 import { bootRecording, fightWarm, loaded, startIfCold, stopBootRecording } from './page.mjs';
 import { startTrace } from './trace.mjs';
 import { partsOf, VARIANTS } from './variants.mjs';
+import { resizeTrips, windFitRead, windFitRecording } from './windFit.mjs';
 
 /** the page's mark on the trace, where its clock starts */
 const MARK = 'stalls:boot';
@@ -31,14 +32,16 @@ const VISITS = [
 ];
 
 /** `browser`'s first context made ready for a boot: never taking the pointer, the boot recorded from each document's
- *  start, `variant` (each of its parts) applied before the page's scripts, the performance overlay shown if `perf`
- *  and Auto's quality where `auto` says a device settled it (their cookies, set for `url`). */
+ *  start (and where its exit draws, with `--resize`), `variant` (each of its parts) applied before the page's
+ *  scripts, the performance overlay shown if `perf` and Auto's quality where `auto` says a device settled it (their
+ *  cookies, set for `url`). */
 async function bootContext(browser, url, variant, options) {
   const context = browser.contexts()[0] ?? (await browser.newContext());
   await context.addInitScript(noCapture);
   const stalls = { stallBlow: options.stallBlow, stallLobby: options.stallLobby };
   const blinks = { blinkExit: options.blinkExit, blinkFrames: BLINK_FRAMES };
   await context.addInitScript(bootRecording, { mark: MARK, ...stalls, ...blinks });
+  if (options.resize) await context.addInitScript(windFitRecording, { stale: options.staleWind });
   for (const part of partsOf(variant)) await context.addInitScript(VARIANTS[part].script, VARIANTS[part].arg);
   const cookies = [
     ...(options.perf ? [{ name: 'last-stand-perf-hud', value: '1', url }] : []),
@@ -60,7 +63,8 @@ const LEFT_NOTES = {
   warm: 'left without pressing Start, its fight warm all the same (warmed before the lobby): not a cold return',
 };
 
-/** One visit of `page` traced: loaded as `visit` loads it, the lobby revealed and watched `options.seconds` more,
+/** One visit of `page` traced: loaded as `visit` loads it (the window taken to `--resize`'s size and back as it
+ *  loads, `windFit.mjs`), the lobby revealed and watched `options.seconds` more,
  *  then, unless it's left cold (`leftCold`), Start pressed if the fight's programs aren't warm yet (`startIfCold`)
  *  and watched till they are (`fightWarm`); then its findings (`analyzeBoot`, and its exit's film with `--film`),
  *  how it was left (`LEFT_NOTES`'s key, null where Start could be pressed) and a picture of the screen
@@ -70,8 +74,10 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   const trace = await startTrace(browser, { js: options.js, angle: options.angle });
   const film = options.film ? await startFilm(page) : null;
   await visit.load(page, url);
-  await page.waitForFunction(loaded, null, { timeout: BOOT_TIMEOUT_MS, polling: 250 });
+  const resized = options.resize ? resizeTrips(page, options) : null;
+  await Promise.all([page.waitForFunction(loaded, null, { timeout: BOOT_TIMEOUT_MS, polling: 250 }), resized]);
   await page.waitForTimeout(options.seconds * 1000);
+  const windFit = options.resize ? await page.evaluate(windFitRead) : null;
   let left = null;
   if (leftCold(visit, options)) left = (await page.evaluate(fightWarm)) ? 'warm' : 'cold';
   else {
@@ -84,6 +90,7 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   await setRate(1);
   await page.screenshot({ path: picture.end });
   const findings = analyzeBoot(record, events, MARK, options.sourceOf);
+  if (windFit) findings.windFit = { ...windFit, planted: options.staleWind };
   if (options.film) {
     const files = { sheet: picture.film, close: picture.flickers };
     findings.film = await filmOf(browser, page, filmFrames(record, shots), findings.revealedAt, files, record.blinks);
@@ -92,19 +99,25 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   return { findings, left };
 }
 
-/** The notes of a boot: the visit, Auto's quality where it was set, the CPU's slowing, the blow's and the lobby's
- *  stalls and the exit's blinks, how it was left where Start wasn't pressed (`left`), the page's errors and where its
- *  end was pictured. */
+/** The notes of a boot: the visit, Auto's quality where it was set, the CPU's slowing, the window's trips, the
+ *  blow's and the lobby's stalls and the exit's blinks and stale places, how it was left where Start wasn't pressed
+ *  (`left`), the page's errors and where its end was pictured. */
 function bootNotes(visit, options, left, errors, picture) {
   const auto = options.auto ? [`Auto's quality settled at ${options.auto}`] : [];
   const slowed = options.cpuSlowdown > 1 ? [`the CPU slowed ${options.cpuSlowdown} times`] : [];
+  const size = ({ width, height }) => `${width}x${height}`;
+  const trip = `the window taken to ${options.resize && size(options.resize)} and back ${options.trips} times as it `
+    + 'loaded, the first as the exit was made ready';
+  const trips = options.resize ? [trip] : [];
+  const stale = options.staleWind ? ['the exit placed once and never again (the canary)'] : [];
   const stalled = options.stallBlow ? [`held up ${options.stallBlow} ms in the logo blow's first frames`] : [];
   const held = options.stallLobby ? [`each of the lobby's frames held up ${options.stallLobby} ms for a second`] : [];
   const blinks = `the loading screen hidden for a frame ${options.blinkExit} times as it left`;
   const blinked = options.blinkExit ? [blinks] : [];
   const leftNote = left ? [LEFT_NOTES[left]] : [];
   const failed = errors.length ? [`page errors: ${errors.slice(0, 3).join(' | ')}`] : [];
-  const notes = [visit.note, ...auto, ...slowed, ...stalled, ...held, ...blinked, ...leftNote, ...failed];
+  const notes = [visit.note, ...auto, ...slowed, ...trips, ...stalled, ...held, ...blinked, ...stale, ...leftNote,
+    ...failed];
   return [...notes, `its end pictured in ${picture.end}`];
 }
 
