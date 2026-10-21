@@ -2,19 +2,32 @@
 // so it can use nothing from here.
 
 /**
- * Records every animation frame's interval (and whether a tooltip was shown in it) and every change to the page's
- * HTML from now on, into `window.__stalls`, and marks the trace (`console.timeStamp`) at the moment its clock starts,
- * so the trace's times can be put on it. A scenario marks its phases on it (`markPhase`).
+ * Records every animation frame's interval (and whether a tooltip was shown in it), every change to the page's HTML
+ * and, with the game's perf overlay shown (`--perf`), each new GPU time it reads (ms a frame: its timer queries over
+ * the game's draws, the GPU's other work between them with them), from now on, into `window.__stalls`, and marks the
+ * trace (`console.timeStamp`) at the moment its clock starts, so the trace's times can be put on it. A scenario marks
+ * its phases on it (`markPhase`). The trace's GPU work is the CPU's side of it: the owner's lobby fell to 28 frames a
+ * second hovering items as the overlay's GPU time went from 5 ms a frame to 14, our draws the same.
  */
 export function startRecording(mark) {
-  const record = { start: performance.now(), frames: [], changes: [], phases: [] };
+  const record = { start: performance.now(), frames: [], changes: [], phases: [], gpu: [] };
   window.__stalls = record;
   console.timeStamp(mark);
   let last = record.start;
   const tooltip = document.getElementById('tooltip');
+  const gpuShown = document.querySelector('#perf [data-p="gpu"]');
+  let gpuSaid = '';
+  const readGpu = (now) => {
+    const said = gpuShown?.textContent ?? '';
+    if (said === gpuSaid) return;
+    gpuSaid = said;
+    const ms = Number.parseFloat(said);
+    if (Number.isFinite(ms)) record.gpu.push({ at: now, ms });
+  };
   const tick = (now) => {
     const tip = Boolean(tooltip && !tooltip.classList.contains('hidden'));
     record.frames.push({ at: now, ms: now - last, tip });
+    readGpu(now);
     last = now;
     if (!record.stopped) requestAnimationFrame(tick);
   };
@@ -56,12 +69,16 @@ export function markPhase(name) {
   window.__stalls.phases.push({ name, at: performance.now() });
 }
 
-/** Stops the recording and returns it (the times are the page's, ms). */
-export function stopRecording() {
+/** Stops the recording and returns it (the times are the page's, ms), marking the trace again at its end
+ *  (`${mark}:end`): a trace that filled Chrome's buffer lost its start, and the mark with it (`--passes`). */
+export function stopRecording(mark) {
   const record = window.__stalls;
   record.stopped = true;
   record.observer.disconnect();
-  return { start: record.start, frames: record.frames, changes: record.changes, phases: record.phases };
+  record.end = performance.now();
+  console.timeStamp(`${mark}:end`);
+  const { start, end, frames, changes, phases, gpu } = record;
+  return { start, end, frames, changes, phases, gpu };
 }
 
 /**

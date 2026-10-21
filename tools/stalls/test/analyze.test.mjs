@@ -240,3 +240,116 @@ test('sums up each phase the scenario marked apart, with the share of its frames
   assert.match(text, /a tooltip shown in 67% of them/);
   assert.match(summaryText([measure]), /frames a second \(missed\) away 143 \(0%\), over items 57 \(67%\)/);
 });
+
+/** `count` frames evenly through the second from `start` (ms), each as long as their spacing. */
+function framesIn(start, count) {
+  const spacing = 1000 / count;
+  return Array.from({ length: count }, (_, index) => ({ at: start + (index + 1) * spacing, ms: spacing, tip: true }));
+}
+
+test('says a phase a second at a time, where a fall through it shows', () => {
+  const record = {
+    start: 500,
+    frames: [...framesIn(1000, 144), ...framesIn(2000, 90), ...framesIn(3000, 30)],
+    changes: [],
+    phases: [{ name: 'sweeping', at: 1000 }],
+  };
+  const [phase] = analyze(record, trace(), MARK).phases;
+  assert.deepEqual(phase.seconds.map((second) => second.frames), [144, 90, 30]);
+  const measure = { name: 'x sweep', notes: [], findings: analyze(record, trace(), MARK) };
+  assert.match(measureText(measure), /a second at a time: 144 90 30 frames; the browser's work \d+ \d+ \d+ ms/);
+});
+
+/** The compositor's draws (`trace.mjs` `drawOf`) at page time `at` (ms; the trace's clock is the page's from the
+ *  mark at 1 s, the page's 500 ms): a frame, its `passes` render passes and a quad of each of `materials`. */
+function drawnAt(at, passes, materials) {
+  const ts = 1_000_000 + (at - 500) * 1000;
+  const draw = (kind, material = null) => ({ ph: 'D', kind, material, pid: GPU.pid, ts });
+  return [
+    draw('frame'),
+    ...Array.from({ length: passes }, () => draw('pass')),
+    ...materials.map((material) => draw('quad', material)),
+  ];
+}
+
+test('counts the compositor\'s render passes and quads a frame, each phase', () => {
+  const record = {
+    start: 500,
+    frames: [...framesIn(1000, 144), ...framesIn(2000, 144)],
+    changes: [],
+    phases: [{ name: 'away', at: 1000 }, { name: 'sweeping', at: 2000 }],
+  };
+  const events = [
+    ...trace(),
+    ...drawnAt(1200, 1, ['kTiledContent', 'kSolidColor']),
+    ...drawnAt(1700, 1, ['kTiledContent', 'kSolidColor']),
+    ...drawnAt(2200, 4, ['kTiledContent', 'kTiledContent', 'kCompositorRenderPass']),
+    ...drawnAt(2700, 2, ['kTiledContent', 'kCompositorRenderPass']),
+  ];
+  const [away, sweeping] = analyze(record, events, MARK).phases;
+  const awayMaterials = [{ name: 'TiledContent', perFrame: 1 }, { name: 'SolidColor', perFrame: 1 }];
+  assert.deepEqual(away.drawn, { frames: 2, passes: 1, quads: 2, materials: awayMaterials });
+  assert.equal(sweeping.drawn.passes, 3);
+  assert.equal(sweeping.drawn.quads, 2.5);
+  assert.deepEqual(sweeping.drawn.materials[0], { name: 'TiledContent', perFrame: 1.5 });
+  const text = measureText({ name: 'x sweep', notes: [], findings: analyze(record, events, MARK) });
+  assert.match(text, /the compositor: 2 frames drawn, 3\.0 render passes and 2\.5 quads a frame \(1\.5 TiledContent/);
+  assert.equal(analyze(record, trace(), MARK).phases[0].drawn, null);
+});
+
+/** A paint kept of the page's, `at` ms on its clock (`trace.mjs` `paintOf`), of the element `node` names. */
+const paintedAt = (at, node) => ({ ph: 'P', node, pid: PAGE.pid, ts: 1_000_000 + (at - 500) * 1000 });
+
+test('counts the page\'s paints a frame, each phase, by the element painted', () => {
+  const record = {
+    start: 500,
+    frames: [...framesIn(1000, 144), ...framesIn(2000, 144)],
+    changes: [],
+    phases: [{ name: 'away', at: 1000 }, { name: 'sweeping', at: 2000 }],
+  };
+  const swept = Array.from({ length: 144 }, (_, frame) => paintedAt(2003 + frame * 6.9, 7));
+  const events = [...trace(), paintedAt(1500, 9), ...swept, paintedAt(2500, 9), paintedAt(2600, 8)];
+  const names = new Map([[7, 'div#hud'], [8, 'div.tt-card'], [9, 'div.tt-card']]);
+  const [away, sweeping] = analyze(record, events, MARK, undefined, undefined, names).phases;
+  assert.equal(away.painted.elements[0].name, 'div.tt-card');
+  assert.equal(sweeping.painted.elements[0].name, 'div#hud');
+  assert.ok(Math.abs(sweeping.painted.elements[0].perFrame - 1) < 0.02);
+  const text = measureText({ name: 'x sweep', notes: [], findings: analyze(record, events, MARK, undefined,
+    undefined, names) });
+  assert.match(text, /the page painted 1\.0\d times a frame \(1\.0\d div#hud, 0\.01 div\.tt-card \(2 of them\)\)/);
+  assert.equal(analyze(record, trace(), MARK).phases[1].painted, null);
+});
+
+test('puts the trace on the page\'s clock by its end mark where it lost its start', () => {
+  const record = {
+    start: 500,
+    end: 3000,
+    frames: [...framesIn(1000, 144), ...framesIn(2000, 144)],
+    changes: [],
+    phases: [{ name: 'away', at: 1000 }, { name: 'sweeping', at: 2000 }],
+  };
+  const lostStart = trace().filter((event) => event.name !== 'TimeStamp');
+  const endMark = { ph: 'I', name: 'TimeStamp', ...PAGE, ts: 3_500_000, args: { data: { message: `${MARK}:end` } } };
+  const events = [...lostStart, endMark, ...drawnAt(2200, 2, ['kTiledContent'])];
+  const findings = analyze(record, events, MARK);
+  assert.equal(findings.clockFound, true);
+  assert.equal(findings.phases[1].drawn.passes, 2);
+  assert.equal(analyze({ ...record, end: undefined }, events, MARK).clockFound, false);
+});
+
+test('says the perf overlay\'s GPU time through a phase and a second at a time', () => {
+  const record = {
+    start: 500,
+    frames: [...framesIn(1000, 144), ...framesIn(2000, 60)],
+    changes: [],
+    phases: [{ name: 'sweeping', at: 1000 }],
+    gpu: [{ at: 1200, ms: 5 }, { at: 1700, ms: 5 }, { at: 2200, ms: 13 }, { at: 2700, ms: 15 }],
+  };
+  const [phase] = analyze(record, trace(), MARK).phases;
+  assert.equal(phase.gpu, 9.5);
+  assert.deepEqual(phase.seconds.map((second) => second.gpu), [5, 14]);
+  const measure = { name: 'x sweep', notes: [], findings: analyze(record, trace(), MARK) };
+  const text = measureText(measure);
+  assert.match(text, /the perf overlay's GPU 9\.5 ms a frame/);
+  assert.match(text, /the perf overlay's GPU 5\.0 14\.0 ms a frame/);
+});

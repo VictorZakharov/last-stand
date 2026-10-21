@@ -20,16 +20,50 @@ const VIEWPORT = { width: 1920, height: 1080 };
 const BOOT_TIMEOUT_MS = 180_000;
 /** how often a booting page is asked whether the loading screen is gone, ms */
 const BOOT_POLL_MS = 100;
+/** how long an expression `evaluate` runs may take to settle, ms: one waiting on a frame of the page's, which the lab's
+ *  clock holds, never settled, and every command after it waited on it, `status` too, till the server was stopped */
+const EVALUATE_TIMEOUT_MS = 60_000;
 const BOOTED = 'booted';
+
+/** What an expression that never settled is told. */
+function evaluateTimeoutText() {
+  return `lab: eval: the expression hadn't settled after ${EVALUATE_TIMEOUT_MS / 1000} s (the page's `
+    + 'requestAnimationFrame waits on the lab\'s frames, lab.step; the browser\'s next frame is '
+    + 'window.__labClock.realFrame())';
+}
 
 /** In the page: whether its boot is over, `BOOTED` or what its loading screen says went wrong (src/ui/loading.ts
  *  `loadingFailed`); false while it's still loading, or while the fight's programs are still warmed behind the
- *  lobby, asked for at once (src/game/warm.ts: a page from before it has no `allWarm`). */
-function bootOutcome() {
+ *  lobby, asked for at once (src/game/warm.ts: a page from before it has no `allWarm`). A `cold` boot asks for
+ *  nothing: over once the lobby shows, the fight's and the other heroes' programs left cold as a first visit's. */
+function bootOutcome(cold) {
   const loading = document.getElementById('loading');
   if (loading) return loading.classList.contains('failed') ? loading.textContent.trim() : false;
+  if (cold) return 'booted';
   window.__dev?.hurry?.();
   return window.__dev?.allWarm?.() === false ? false : 'booted';
+}
+
+/**
+ * How a page boots: at `quality`, as Auto's cookie holds it (`low@518400`; null: the lab's own, High), and `cold` or
+ * not (`bootOutcome`). The lab's own boot asks for everything the game warms after the lobby shows and waits for it.
+ */
+export const LAB_BOOT = Object.freeze({ quality: null, cold: false });
+
+/** The boot a command's `options` ask for (`--boot`, `--cold`). */
+export function bootOf(options) {
+  return { quality: options.boot ?? null, cold: Boolean(options.cold) };
+}
+
+/** How `boot` is said after the hero it booted: ` at low@518400`, `, cold`, or nothing for the lab's own. */
+export function bootText(boot) {
+  const at = boot.quality ? ` at ${boot.quality}` : '';
+  return `${at}${boot.cold ? ', cold' : ''}`;
+}
+
+/** Whether two boots are the same. */
+function sameBoot(a, b) {
+  return a.quality === b.quality && a.cold === b.cold;
 }
 /** how much of a failed script's answer is said (Vite's message of what wouldn't compile, the start of it) */
 const FAILED_ANSWER_CHARS = 600;
@@ -274,8 +308,8 @@ export class Side {
     this.partnerContext = null;
     /** the hero its page booted, null until one booted whole */
     this.heroClass = null;
-    /** the quality its page booted at, as Auto's cookie holds it (`low@518400`), null for the lab's own (High) */
-    this.bootQuality = null;
+    /** how its page booted (`LAB_BOOT`'s fields), null until one booted whole */
+    this.bootedAs = null;
     /** the source changed since the page booted */
     this.stale = true;
     /** the dev server's config changed since it started */
@@ -366,35 +400,36 @@ export class Side {
     };
   }
 
-  /** Whether its page is booted for `heroClass` at `quality` (as `boot` takes it) from the current source, and no
+  /** Whether its page is booted for `heroClass` as `how` asks (`LAB_BOOT`'s fields) from the current source, and no
    *  command has run on it yet. */
-  isFresh(heroClass, quality = null) {
+  isFresh(heroClass, how = LAB_BOOT) {
     const alive = this.page && !this.page.isClosed();
-    const booted = this.heroClass === heroClass && this.bootQuality === quality;
+    const booted = this.heroClass === heroClass && this.bootedAs !== null && sameBoot(this.bootedAs, how);
     return Boolean(alive && !this.stale && !this.used && booted);
   }
 
-  /** Boots a page for `heroClass` at `quality` unless a fresh one is up already. Returns whether it booted. */
-  async ready(heroClass, quality = null) {
+  /** Boots a page for `heroClass` as `how` asks unless a fresh one is up already. Returns whether it booted. */
+  async ready(heroClass, how = LAB_BOOT) {
     await this.serve();
-    if (this.isFresh(heroClass, quality)) return false;
-    await this.boot(heroClass, quality);
+    if (this.isFresh(heroClass, how)) return false;
+    await this.boot(heroClass, how);
     return true;
   }
 
   /**
    * Boots a page for `heroClass`: the game loaded with nothing kept from the last boot, the lab installed once the
-   * loading screen is gone, and the hero checked. At `quality` (Auto's cookie, `low@518400`), it boots as a device
-   * whose Auto settled there: the boot's warm-ups run at that level, the hero built at its detail. A boot that fails
+   * loading screen is gone, and the hero checked, as `how` asks (`LAB_BOOT`'s fields). At its `quality` (Auto's
+   * cookie, `low@518400`), it boots as a device whose Auto settled there: the boot's warm-ups run at that level, the
+   * hero built at its detail; `cold`, it asks for nothing warmed after the lobby (`bootOutcome`). A boot that fails
    * leaves no page behind (none counts as fresh).
    */
-  async boot(heroClass, quality = null) {
+  async boot(heroClass, how = LAB_BOOT) {
     if (!this.isRepo) copyLabPage(this.repo, this.root);
     await this.closePage();
     this.heroClass = null;
-    this.bootQuality = null;
+    this.bootedAs = null;
     try {
-      await this.openPage(heroClass, quality);
+      await this.openPage(heroClass, how);
       const booted = await this.page.evaluate(async () => {
         const lab = await import('/tools/lab/page/lab.ts');
         return lab.install().heroes();
@@ -407,17 +442,17 @@ export class Side {
       throw error;
     }
     this.heroClass = heroClass;
-    this.bootQuality = quality;
+    this.bootedAs = how;
   }
 
-  /** Opens a page on the game for `heroClass` (booted at `quality`, as `boot` takes it) and waits out its loading
+  /** Opens a page on the game for `heroClass` (booted as `how` asks, as `boot` takes it) and waits out its loading
    *  screen. */
-  async openPage(heroClass, quality = null) {
+  async openPage(heroClass, how = LAB_BOOT) {
     this.context ??= await this.newContext();
     this.errors = [];
     this.stale = false;
     this.used = false;
-    this.page = await this.openPageIn(this.context, heroClass, '', quality);
+    this.page = await this.openPageIn(this.context, heroClass, '', how);
   }
 
   /**
@@ -428,7 +463,7 @@ export class Side {
   async openPartner(heroClass) {
     await this.closePartner();
     this.partnerContext = await this.newContext();
-    const page = await this.openPageIn(this.partnerContext, heroClass, 'partner: ', this.bootQuality);
+    const page = await this.openPageIn(this.partnerContext, heroClass, 'partner: ', this.bootedAs ?? LAB_BOOT);
     await page.evaluate(async () => {
       const lab = await import('/tools/lab/page/lab.ts');
       lab.install();
@@ -451,9 +486,10 @@ export class Side {
 
   /**
    * Opens a page on the game for `heroClass` in `context` and waits out its loading screen, its errors kept as this
-   * side's (each after `prefix`). At `quality` (Auto's cookie), the game boots on Auto settled there.
+   * side's (each after `prefix`), booted as `how` asks: at its `quality` (Auto's cookie), on Auto settled there.
    */
-  async openPageIn(context, heroClass, prefix, quality = null) {
+  async openPageIn(context, heroClass, prefix, how = LAB_BOOT) {
+    const { quality, cold } = how;
     // (nothing kept from the last boot: the game writes cookies of its own, the skill loadout's among them, and a boot
     // after them ended its set-up a frame apart from the first; storage is cleared as the page starts, browser.mjs)
     await context.clearCookies();
@@ -487,7 +523,7 @@ export class Side {
     // screen to go alone, either was waited out to the timeout, three minutes)
     try {
       const outcome = await Promise.race([
-        page.waitForFunction(bootOutcome, null, polling).then((booted) => booted.jsonValue()),
+        page.waitForFunction(bootOutcome, cold, polling).then((booted) => booted.jsonValue()),
         failed.promise,
       ]);
       if (outcome !== BOOTED) throw labError(`${prefix}the game failed to boot: ${outcome}`);
@@ -593,9 +629,19 @@ export class Side {
     };
   }
 
-  /** Evaluates `expression` in the page, with the lab as `lab`, readied first. */
-  evaluate(expression) {
-    return this.page.evaluate(`(async (lab) => { lab.begin(); return (${expression}); })(window.__lab)`);
+  /** Evaluates `expression` in the page, with the lab as `lab`, readied first. Throws if it hasn't settled within
+   *  `EVALUATE_TIMEOUT_MS` (what it started runs on in the page). */
+  async evaluate(expression) {
+    let timer;
+    const evaluated = this.page.evaluate(`(async (lab) => { lab.begin(); return (${expression}); })(window.__lab)`);
+    const timedOut = new Promise((resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(evaluateTimeoutText())), EVALUATE_TIMEOUT_MS);
+    });
+    try {
+      return await Promise.race([evaluated, timedOut]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /** The page's errors and the lab's anatomy warnings since the last call. */
@@ -615,7 +661,7 @@ export class Side {
     this.partnerContext = null;
     this.page = null;
     this.heroClass = null;
-    this.bootQuality = null;
+    this.bootedAs = null;
   }
 
   async closePage() {

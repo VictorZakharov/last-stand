@@ -5,10 +5,11 @@
 // npm run stalls -- [--url a,b] [--scenario fight|lobby|storm|hover|sweep|stow] [--seconds 45]
 //   [--listed 300] [--variants base,cpuCanvas] [--rounds 3] [--view top] [--biome forest] [--hero warrior]
 //   [--stash 40] [--item-ms 100] [--press-ms 200] [--scale 1.25] [--window 1536x695] [--perf] [--js] [--headed]
-//   [--links] (--help: what each does)
+//   [--links] [--passes] [--paints] (--help: what each does)
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { freshStorage, noCapture } from '../lab/node/browser.mjs';
+import { nodeName } from '../lab/node/layers.mjs';
 import { analyze } from './analyze.mjs';
 import { slowCpu, startChrome } from './chrome.mjs';
 import { measureBoots } from './boot.mjs';
@@ -136,14 +137,31 @@ function chromeFor(options) {
 /** The scenario played once on `page` (in `browser`) while traced: what it did, what the frames and the trace
  *  showed, and a picture of the screen at its end (`picture`). */
 async function playTraced(browser, page, options, picture) {
-  const trace = await startTrace(browser, { js: options.js, angle: options.angle });
+  const { js, angle, passes, paints } = options;
+  const trace = await startTrace(browser, { js, angle, passes, paints });
   await page.evaluate(startRecording, MARK);
   const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000, options);
-  const record = await page.evaluate(stopRecording);
+  const record = await page.evaluate(stopRecording, MARK);
   const events = await trace.stop();
   await page.screenshot({ path: picture });
   notes.push(`its end pictured in ${picture}`);
-  return { notes, findings: analyze(record, events, MARK, options.listed, options.sourceOf) };
+  const painted = paints ? await paintedNames(page, events) : new Map();
+  return { notes, findings: analyze(record, events, MARK, options.listed, options.sourceOf, painted) };
+}
+
+/** The elements the page painted (`--paints`, `trace.mjs` `paintOf`), named as the lab's layers name them (their
+ *  tag, then their id or classes), by their backend node ids, read off the page as it's left: an element taken
+ *  off it since is `(gone)`. */
+async function paintedNames(page, events) {
+  const devtools = await page.context().newCDPSession(page);
+  const nodes = new Set(events.filter((event) => event.ph === 'P' && event.node !== null).map((paint) => paint.node));
+  const names = new Map();
+  for (const node of nodes) {
+    const described = await devtools.send('DOM.describeNode', { backendNodeId: node }).catch(() => null);
+    names.set(node, described ? nodeName(described.node) : '(gone)');
+  }
+  await devtools.detach().catch(() => undefined);
+  return names;
 }
 
 /** `playTraced`, played once more if Chrome lost its trace (`TraceLost`): a round's page is set up once, and the

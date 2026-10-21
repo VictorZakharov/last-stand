@@ -42,12 +42,14 @@
 .slot-glow { position: absolute; inset: -3px; pointer-events: none; z-index: 2; opacity: 0; transform: scale(1.18);
   will-change: opacity, transform; }
 :is(.match, .focal) > .slot-glow { opacity: 1; transform: none; }
-/* the item under the pointer's glow fades in, overshooting; every other light goes on and out at
-   once: each fade is the page's to step every frame, and the 30 to 60 items of a change of focus
-   fading in together held the owner's 144 Hz at 80 to 90 frames a second, where fading in alone
-   the item under the pointer cost nothing (tools/stalls `--scenario sweep --item-ms 300`,
-   variants snapFocus, snapOut, focalFade) */
-.focal > .slot-glow { transition: opacity .3s ease-out, transform .3s cubic-bezier(.2,1.6,.4,1); }
+/* the item under the pointer's glow pops in by its size, overshooting, lit at once; every other
+   light goes on and out at once: each fade is the page's to step every frame, and the 30 to 60
+   items of a change of focus fading in together held the owner's 144 Hz at 80 to 90 frames a
+   second (tools/stalls `--scenario sweep --item-ms 300`, variants snapFocus, snapOut, focalFade).
+   Faded in too, the glow's opacity, round its four layers, was a render pass of the compositor's
+   own every frame of the fade, which at the owner's pace from item to item was most frames:
+   sweeping drew 2.6 passes a frame, 1.9 without it (`--passes`, variant noGlowFade) */
+.focal > .slot-glow { transition: transform .3s cubic-bezier(.2,1.6,.4,1); }
 /* its light, pulsing: a brighter glow faded in and out over the steady one, the two together as
    bright at its height as the pulse's own was (a ring of .95, a glow of .7 and .45 within); the
    two cross-faded were a sixth dimmer half-way */

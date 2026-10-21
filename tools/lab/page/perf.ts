@@ -25,6 +25,7 @@ import { bindKnown, foesAhead, holdFor, pressing, skillNamed } from './cast';
 import { standIn } from './light';
 import { quantile } from './timing';
 import { particleFill } from './particleFill';
+import { reportRead } from './perfReport';
 
 export interface PerfOptions {
   biome: BiomeId;
@@ -397,6 +398,9 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
     if (phases.every((phase) => phase.frames.every((frame) => frame.cpu === 0))) {
       problems.push('the perf overlay timed nothing: its frames read 0 ms');
     }
+    const read = await reportRead(options.canary);
+    lines.push(...read.lines);
+    problems.push(...read.problems);
     if (options.canary) {
       const canary = await canaryRound(lab, aim);
       lines.push(...canary.lines);

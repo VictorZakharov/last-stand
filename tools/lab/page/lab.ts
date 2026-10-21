@@ -98,6 +98,10 @@ export function realWait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Whether `animation` runs on the browser's clock: one driven by a scroll is at rest while its scroll is, and
+ *  brought to its end it was held there (the stash's fade, shown while a row is cut, held hidden). */
+export const onTheClock = (animation: Animation): boolean => animation.timeline === document.timeline;
+
 /** The middle of `element`'s box, css px: where a measure puts the mouse or a finger to point at it. */
 export function middleOf(element: Element): PagePoint {
   const box = element.getBoundingClientRect();
@@ -1044,12 +1048,13 @@ const SETTLE_ROUNDS = 4;
 /**
  * The page's running animations brought to their end (an endless one held at its start): they run on the browser's
  * clock, not the lab's, so a picture caught each at another moment (the wave's banner fading, in one side of an A/B
- * and not the other). One a command holds paused, at the moment it pictures, is left as it is. Whether any ran.
+ * and not the other). One a command holds paused, at the moment it pictures, is left as it is, and so is one driven by
+ * a scroll (`onTheClock`). Whether any ran.
  */
 function settleRunning(): boolean {
   let settled = false;
   for (const animation of document.getAnimations()) {
-    if (animation.playState !== 'running') continue;
+    if (animation.playState !== 'running' || !onTheClock(animation)) continue;
     settled = true;
     if (animation.effect?.getComputedTiming().iterations !== Infinity) {
       animation.finish();

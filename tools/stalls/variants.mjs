@@ -103,6 +103,10 @@ export const VARIANTS = {
       + ' box-shadow: 0 0 6px #f0c860 !important; }',
   },
   noCardShadow: { script: styled, arg: '.tt-card { box-shadow: inset 0 0 0 1px var(--c, var(--frame)) !important; }' },
+  // (and the tooltip drawn again for each item without each of its costlier parts: the card compared with faded by an
+  // opacity, drawn apart and laid over the rest; the icons' shadows and glows, SVG filters)
+  noCardOpacity: { script: styled, arg: '.tt-cards .tt-card + .tt-card { opacity: 1 !important; }' },
+  noIconFilters: { script: styled, arg: '#tooltip svg * { filter: none !important; }' },
   noHoverFilter: { script: styled, arg: '.sitem:hover, .eslot:hover { filter: none !important; }' },
   stillGlow: { script: styled, arg: `${GLOW_PARTS} { animation: none !important; }` },
   // (and each of the glow's three animations stopped alone: its pulsing shadow, the arc chasing round its border, the
@@ -136,6 +140,20 @@ export const VARIANTS = {
   noLitFilter: { script: styled, arg: '#menu.slot-focus .sitem.match { filter: none !important; }' },
   noDimFilter: { script: styled, arg: '#menu.slot-focus .sitem:not(.match) { filter: none !important; }' },
   noStashMask: { script: styled, arg: '#stash { mask-image: none !important; }' },
+  // (and the arc chasing round the item under the pointer without the mask that keeps it to its border: a mask is a
+  // pass of the compositor's own, drawn again each frame the arc turns)
+  noArcMask: { script: styled, arg: '.glow-arc { mask: none !important; }' },
+  // (or without the arc at all: neither its pass nor its loop)
+  noArc: { script: styled, arg: '.glow-arc { display: none !important; }' },
+  // (or the arc's turning square, half as wide again as the item, clipped to the ring's box: turned, its corners
+  // reached over the items beside it)
+  arcClipped: { script: styled, arg: '.glow-arc { overflow: hidden; }' },
+  // (and the slot's focus without each of its looks in turn: the items that don't fit dimmed by their opacity (each a
+  // layer holding its glow's, which an opacity can draw in a pass of its own), the others lit by their glows, and
+  // lifted by their scale)
+  noDim: { script: styled, arg: '#menu.slot-focus .sitem:not(.match) { opacity: 1 !important; }' },
+  noLitGlow: { script: styled, arg: '.sitem:not(.focal) > .slot-glow { display: none !important; }' },
+  noLift: { script: styled, arg: '.sitem.focal, #menu.slot-focus .sitem.match { transform: none !important; }' },
   // (and the lobby's panels stowed and shown again with Space: at once, with no fade or slide; faded without the
   // slide; on layers of their own for good, so a fade starting makes none)
   noStowFade: { script: styled, arg: '#menu .panel { transition: none !important; }' },

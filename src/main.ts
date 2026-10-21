@@ -43,7 +43,7 @@ import { hurry, isAllWarm, isWarming, whenWarm } from './game/warm';
 import { initReadying, READYING } from './ui/readying';
 import { holdQuality, initQuality, sampleQuality } from './core/quality';
 import { updateLowLife } from './core/lowLife';
-import { checkPrograms, pinPrograms, steadyShadowPrograms, watchPrograms } from './core/shaders';
+import { checkPrograms, markLoaded, pinPrograms, steadyShadowPrograms, watchPrograms } from './core/shaders';
 import { initBiome, rollBiome } from './game/biome';
 import { BIOMES, BIOME_IDS } from './data/biomes';
 import { CLASSES } from './data/classes/index';
@@ -145,6 +145,9 @@ async function boot() {
   await loadingStep('Lighting the lobby', 0.85);
   render();   // one full frame compiles the post-processing passes (bloom, grade...)
   pinPrograms(renderer);
+  // (from here a program not made by a warm-up is a hitch: marked once the fight's were warm, a new build's lobby, its
+  // fight cold till Start, had the perf report count every program late, `lab programs --cold`)
+  markLoaded();
   // the lobby renders behind the loading screen (to settle) but only starts moving at the
   // reveal, so its opening camera zoom is seen
   updateCamera(0, G.player.pos, G.player.model.height);

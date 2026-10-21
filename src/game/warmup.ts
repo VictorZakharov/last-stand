@@ -11,7 +11,7 @@
 // and a third of the boot's are the fight's alone (`lab programs`).
 import * as THREE from 'three';
 import { G } from '../state';
-import { behindTheLobby, compileAhead, markLoaded, warmUp, type WarmedUp } from '../core/shaders';
+import { behindTheLobby, compileAhead, warmUp, type WarmedUp } from '../core/shaders';
 import { compilePasses, sceneTarget } from '../core/renderer';
 import { mapsArrived, mapsMadeAfresh } from '../core/textures';
 import { ENEMIES, type EnemyId } from '../data/enemies';
@@ -392,8 +392,8 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
  * The programs the lobby doesn't use warmed (game/warm.ts): the fight's behind it once the loading screen has `left`
  * (its logo's exit draws over the lobby till then), where this build warmed them here before and the maps were kept
  * (`rememberWarmed`: else, a first visit or a new build's, its programs are new to the GPU's cache), and the other
- * heroes' once something needs them. Once the fight's are warm, a program compiled but by a warm-up is counted as
- * compiled late.
+ * heroes' once something needs them. Their programs are the boot's (`inTurn`): from the lobby on, one compiled but
+ * by a warm-up is counted as compiled late (main.ts `markLoaded`).
  */
 export async function warmTheRest(left: Promise<void>): Promise<void> {
   const behind = async (): Promise<boolean> => {
@@ -402,7 +402,6 @@ export async function warmTheRest(left: Promise<void>): Promise<void> {
   };
   const fightWarm = warmNeed('fight', theFight(), behind).then(() => {
     rememberWarmed();
-    markLoaded();
     performance.mark('fight warm');
   });
   await Promise.all([fightWarm, warmNeed('heroes', heroParts(), async () => false)]);

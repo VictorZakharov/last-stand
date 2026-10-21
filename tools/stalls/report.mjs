@@ -55,9 +55,38 @@ function phaseLine(phase) {
   const worst = phase.worst.map((value) => value.toFixed(0)).join(', ');
   const browser = phase.browserWork === undefined ? '' : `; the browser's work for it ${phase.browserWork.toFixed(0)} `
     + 'ms a second';
+  const gpu = phase.gpu === null || phase.gpu === undefined ? '' : `; the perf overlay's GPU ${phase.gpu.toFixed(1)} `
+    + 'ms a frame';
   return `  ${phase.name}: ${phase.count} frames, ${phase.rate.toFixed(0)} a second (${percent(phase.missedShare)} `
     + `missed the screen's refresh), median ${phase.median.toFixed(1)} ms, 90% within ${phase.p90.toFixed(1)} ms, `
-    + `the worst ${worst} ms; a tooltip shown in ${percent(phase.tipShare)} of them${browser}`;
+    + `the worst ${worst} ms; a tooltip shown in ${percent(phase.tipShare)} of them${browser}${gpu}`;
+}
+
+/** A phase a second at a time (two seconds or more): the frames drawn in each, and the browser's work in it (ms),
+ *  under its line. A fall through it is a cost piling up, which the phase's own line averages away. */
+function secondsLine(seconds) {
+  const frames = seconds.map((second) => second.frames).join(' ');
+  const work = seconds.map((second) => second.work.toFixed(0)).join(' ');
+  const read = seconds.some((second) => second.gpu !== null && second.gpu !== undefined);
+  const gpu = seconds.map((second) => (second.gpu === null || second.gpu === undefined ? '-' : second.gpu.toFixed(1)));
+  const gpuText = read ? `; the perf overlay's GPU ${gpu.join(' ')} ms a frame` : '';
+  return `    a second at a time: ${frames} frames; the browser's work ${work} ms${gpuText}`;
+}
+
+/** The compositor's draws in a phase (`--passes`): the frames it drew, a frame's render passes and quads, and each
+ *  kind of quad's, the most first. */
+function drawnLine(drawn) {
+  const materials = drawn.materials.map((material) => `${material.perFrame.toFixed(1)} ${material.name}`).join(', ');
+  return `    the compositor: ${drawn.frames} frames drawn, ${drawn.passes.toFixed(1)} render passes and `
+    + `${drawn.quads.toFixed(1)} quads a frame (${materials})`;
+}
+
+/** The page's paints in a phase (`--paints`): a frame's, and each name's, the most painted first, with how many
+ *  elements of it where more than one. */
+function paintedLine(painted) {
+  const ofThem = (named) => (named.elements > 1 ? ` (${named.elements} of them)` : '');
+  const elements = painted.elements.map((named) => `${named.perFrame.toFixed(2)} ${named.name}${ofThem(named)}`);
+  return `    the page painted ${painted.perFrame.toFixed(2)} times a frame (${elements.join(', ')})`;
 }
 
 /** What a phase's threads spent a frame's time on (`what`: of which frames), the most first, as a line under its
@@ -77,6 +106,9 @@ function jsLine(what, functions) {
  *  any work in), and where its JS was sampled (`--js`), a frame's by function. */
 function phaseLines(phase) {
   const lines = [phaseLine(phase)];
+  if (phase.seconds?.length > 1) lines.push(secondsLine(phase.seconds));
+  if (phase.drawn) lines.push(drawnLine(phase.drawn));
+  if (phase.painted) lines.push(paintedLine(phase.painted));
   if (phase.work?.length) lines.push(workLine('a frame\'s work', phase.work));
   if (phase.missedWork?.length) lines.push(workLine('a missed frame\'s', phase.missedWork));
   if (phase.js?.own.length) lines.push(jsLine('a frame\'s JS, each function\'s own time', phase.js.own));
@@ -140,7 +172,20 @@ function roundPhaseText(name, phases) {
   const rates = medianText(phases.map((phase) => phase.rate));
   const browser = medianText(phases.map((phase) => phase.browserWork ?? 0));
   const missed = percent(medianOf(phases.map((phase) => phase.missedShare)));
-  return `${name} ${rates} a second, ${missed} missed, the browser's work ${browser} ms a second`;
+  const gpus = phases.map((phase) => phase.gpu).filter((gpu) => gpu !== null && gpu !== undefined);
+  const gpu = gpus.length ? `, the perf overlay's GPU ${gpuMedianText(gpus)} ms a frame` : '';
+  const drawn = phases.map((phase) => phase.drawn).filter(Boolean);
+  const passes = drawn.length ? `, ${gpuMedianText(drawn.map((each) => each.passes))} render passes and `
+    + `${gpuMedianText(drawn.map((each) => each.quads))} quads a frame` : '';
+  const painted = phases.map((phase) => phase.painted).filter(Boolean);
+  const paints = painted.length ? `, ${gpuMedianText(painted.map((each) => each.perFrame))} paints a frame` : '';
+  return `${name} ${rates} a second, ${missed} missed, the browser's work ${browser} ms a second${gpu}${passes}`
+    + paints;
+}
+
+/** GPU times' median and range, to a tenth of a ms, as `5.2 (4.9–6.1)`. */
+function gpuMedianText(values) {
+  return `${medianOf(values).toFixed(1)} (${Math.min(...values).toFixed(1)}–${Math.max(...values).toFixed(1)})`;
 }
 
 /**

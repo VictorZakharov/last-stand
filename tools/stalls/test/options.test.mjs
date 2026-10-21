@@ -29,6 +29,8 @@ test('fills in the defaults', () => {
     perf: false,
     js: false,
     angle: false,
+    passes: false,
+    paints: false,
     links: false,
     coldReturn: false,
     film: false,

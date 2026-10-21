@@ -304,14 +304,23 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   `--setup=false` skips the set-up.
 - `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,readying,
   readyingClass,clicked,views,logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch`, every one by default:
-  the lobby, an item's tooltip, the stash given 20 items and a weapon among them hovered by the mouse, those that fit
-  its slot lit (`page/uiGlow.ts`: pictured round the stash, its tooltip put away, at 400, 1000 and 1600 ms into the
+  the lobby, an item's tooltip, the stash given 60 items (more than its view shows, on most screens) and a weapon
+  among them hovered by the mouse, those that fit its slot lit (`page/uiGlow.ts`: a short screen's rail turned to the
+  gear first; pictured round the stash, its tooltip put away, at 400, 1000 and 1600 ms into the
   glow's loops, each held there, so `--ab` pictures the same moment on both sides; every loop a lit item runs must
   animate only what the compositor moves, a layer's transform or opacity, and each that animates anything else, read
   off its `@keyframes`, is a problem: its shadow, gradient and background animated, a full stash lit dropped the lobby
   from 145 frames a second to 44, #267; and each loop on a stash item not hovered is a problem: 30 lit items' 90
-  loops, composited, still halved the frames while the mouse moved between them; `--canary` loops a shadow on the
-  hovered item and turns a lit one's glow not hovered, each of which must be found),
+  loops, composited, still halved the frames while the mouse moved between them; and each part of the hovered item's
+  glow shown with a mask within another mask round it is a problem: a pass of the compositor's own within another,
+  drawn again every frame (the arc kept to the border's ring by one, within the stash's fading mask, raised the GPU's
+  time a frame from 5.4 ms to 6.3 moving between items (the owner's rose from 5 to 14 as the frames fell to 30), where
+  either mask alone raised it by 0.1 at the most, `npm run stalls -- --scenario sweep --perf`); and the stash's fade, the panel's colour laid over a
+  row its scroll cuts (its tab page's `::after`, shown by the stash's scroll), read at the stash's top and its end, the
+  mouse off the stash meanwhile: not shown at the top with a row cut is a problem, and so is shown at the end or over a
+  stash that fits (a dark band over the bare panel); `--canary` loops a shadow on the hovered item, turns a lit one's
+  glow not hovered, masks the hovered item's steady glow within a mask on the stash and holds the fade shown, each of
+  which must be found),
   How to play, the save slots, the fight's loading bar over the lobby as a press waiting for the fight's programs
   shows it (`ui/readying.ts`, 40% along: within the window, its label on one line, its fill as far as painted;
   `--canary` gives the label a letter's width, whose wrap must be found), another class picked with the mouse while
@@ -698,7 +707,14 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   problems. `--canary` runs a round with the hero's update made 2 ms slower (it must read at least 0.8 of that) and
   the scene drawn twice (the scene pass's GPU time must read at least 1.3 times more), and the particles twice as
   wide (their fill must read at least 2.5 times more). The machine's load drifts: compare an A/B run `--fresh`, both
-  sides then, not one side from the cache and the other now.
+  sides then, not one side from the cache and the other now. Then the report as the overlay copies it is read
+  (`page/perfReport.ts`): its histories, 30 buckets each (frames a second, our frame's time, how late it started, the
+  GPU's for our draws), and its long frames (Chrome's Long Animation Frames API: what the main thread did in each),
+  where a task of 120 ms run by a message must be listed with what ran it (`--canary`: one of 30, under the
+  browser's 50, must be found missing). The owner's lobby fell to 28 a second hovering items, frames late by 20 to 46
+  ms where ours took 11 to 18, and the report couldn't say whether the page's thread or something outside it held
+  them up. A click's long frame ends at the page's next rendering, which the lab's held frames put off past the
+  read: the task is a message's.
 - `programs`: the programs the boot compiled (`page/programs.ts`), read from the game's ledger of them
   (`watchPrograms` in `src/core/shaders.ts`, dev builds alone: the boot's programs are made before any command can
   watch). How many each loading step made, and how many of those a draw made rather than the warm-ups' `compile()`
@@ -725,7 +741,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   s each, 16 point lights written out), 23 s once lit in a loop; and the spells' 91 programs 14.4 s, the hero's 6 s,
   the effects' samples 3.9 s, the lobby's biome 3.5 s (now compiled as the arena is built). A minute or more.
   `--canary` warms a box of a kind nothing else is (it must be listed compiled and drawn) and one on a layer no
-  camera sees (it must be listed never drawn).
+  camera sees (it must be listed never drawn). The performance report's count of programs compiled after load (each
+  a hitch, as it says) must be the ledger's made after the reveal: a new build's lobby, its fight not yet warm,
+  counted every program the boot made (83, 106 in the owner's), the load marked only once the fight's were warm; run
+  it `--cold` to boot as that lobby shows. Its canary draws a box of a new kind in the lobby and marks the load again
+  after it, as that did: the report then misses the box's program, which must be found.
 - `compiles`: whether the boot's warm-up compiled what a fight draws (`page/compiles.ts`). In each biome (`--biomes`,
   both) the hero stands in the view (`--view`, top) and a prop of every kind the biome has is worn down (its gauge
   over it, chips knocked off) and broken in turn, its rubble, debris and smoke drawn as they fly and settle; then the
@@ -880,7 +900,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   `--canary` plays a round again with four faults planted: the biome's battle track played as another's, the
   lobby's fade in cut to a twentieth of a second, every fresh track started 5 s in, and every track coming back
   started from its top.
-- `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`).
+- `eval <expression>`: an expression evaluated in the page, with `lab` in scope (`eval "lab.player.nocked"`). One that
+  hasn't settled in 60 s is given up, with an error (a `requestAnimationFrame` waits on the lab's frames, `lab.step`:
+  awaited, it never settled, and held up every command after it till the server was stopped; the browser's next
+  frame is `window.__labClock.realFrame()`). `live eval` is given up the same way.
 - `live <step>`: a page of the game kept between steps, each on the state the last one left, as a modelling
   tool's scene is kept between edits (`node/live.mjs`, `page/live.ts`; needs `lab:serve`). `live start` boots the
   hero (`--class`, the warrior by default), on `--screen`'s screen if it's given (a phone's, `832x384@3.75`: its

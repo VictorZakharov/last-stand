@@ -12,7 +12,7 @@
 // UI laid out as a share of the screen shows the same lines and the same pictures on both, whatever the screens'
 // pixel ratios: a 4K screen at 300% as at 100%.
 import * as THREE from 'three';
-import { middleOf } from './lab';
+import { middleOf, onTheClock } from './lab';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { CLASSES, CLASS_IDS } from '../../../src/data/classes/index';
@@ -125,10 +125,10 @@ function labelBoxes(): string[] {
 
 /**
  * Every animation of the page brought to its end (an endless one to its start), so a picture shows the UI at rest:
- * CSS animations run on the browser's own clock, not the lab's.
+ * CSS animations run on the browser's own clock, not the lab's. One driven by a scroll is at rest already.
  */
 function settleAnimations(): void {
-  for (const animation of document.getAnimations()) {
+  for (const animation of document.getAnimations().filter(onTheClock)) {
     const iterations = animation.effect?.getComputedTiming().iterations ?? 1;
     if (iterations === Infinity) {
       animation.pause();
@@ -362,7 +362,7 @@ interface Steps {
   open(lab: Lab): unknown;
   close(lab: Lab): unknown;
   held?: Frame;
-  check?(canary: boolean): Found;
+  check?(canary: boolean, lab: Lab): Found | Promise<Found>;
   pictures?(lab: Lab): Promise<Pictured[]>;
 }
 
@@ -865,7 +865,7 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
   tallTips = !!options.canary;
   await steps.open(lab);
   const pictured = await pictureState(lab, state, steps.held ?? {});
-  const found = steps.check?.(!!options.canary) ?? { lines: [], problems: [] };
+  const found = (await steps.check?.(!!options.canary, lab)) ?? { lines: [], problems: [] };
   const extra = (await steps.pictures?.(lab)) ?? [];
   const cursors = cursorsShown(!!options.canary);
   const digits = await digitsShown(lab, !!options.canary);
