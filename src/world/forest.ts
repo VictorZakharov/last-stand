@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { seeThrough } from '../core/seeThrough';
 import { ARENA } from '../data/balance';
-import { forestFloor, bark, slabs, grunge, pbrMaterialMaps, runeCircle } from '../core/textures';
+import { forestFloor, bark, flagstone, grunge, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
 import { buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
@@ -123,7 +123,7 @@ export const buildForest: BiomeBuilder = (scene) => {
 
   // --- Materials ------------------------------------------------------------
   const groundMat = mossyGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(forestFloor(), FLOOR_REPEAT, 1.2), color: 0xffffff }));
-  const daisMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(slabs(47, 5, 5), 1, 1.2), color: 0x94a488 });
+  const daisMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(flagstone(47, 5), 1, 1.2), color: 0x94a488 });
   const stoneMaps = pbrMaterialMaps(grunge(), 2, 1.6);
   const stone = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x70746a, roughness: 0.9 });
   const mossStone = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x5a6a48, roughness: 0.95 });

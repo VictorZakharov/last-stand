@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA } from '../data/balance';
-import { cobblestone, slabs, grunge, bark, pbrMaterialMaps, runeCircle } from '../core/textures';
+import { cobblestone, ashlar, marble, grunge, bark, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
@@ -143,9 +143,9 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const cob = cobblestone();
   // the ground reaches past the fog's far end, so its edge melts into the sky's horizon
   const groundMat = dampGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(cob, COBBLE_REPEAT, 1.1), color: 0xd0d4e0 }));
-  const wallMaps = slabs(21, 6, 3);
+  const wallMaps = ashlar(21, 6, 3);
   const wallMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wallMaps, 1, 1.2), color: 0xb4b8c6 });
-  const daisMaps = slabs(33, 5, 5);
+  const daisMaps = marble(33, 5);
   const daisMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(daisMaps, 1, 1.2), color: 0xb8b8c0 });
   const darkStone = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wallMaps, 1, 1), color: 0x7a7e8a });
   const stoneMaps = pbrMaterialMaps(grunge(), 2, 1.6);

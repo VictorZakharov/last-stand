@@ -2,7 +2,7 @@
 // target rune. It wobbles on a spring when hit (lobby target practice).
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
-import { burlap, pbrMaterialMaps, slabs, wood } from '../../core/textures';
+import { ashlar, burlap, pbrMaterialMaps, wood } from '../../core/textures';
 import type { AnimState, Model } from '../../types';
 import { part, joint } from './rig';
 
@@ -14,7 +14,7 @@ export function buildDummy(): Model {
   const sack = kit.std({ ...pbrMaterialMaps(burlap(), 2, 1.5), roughness: 1 });
   const straw = kit.std({ color: 0xc9a54e, roughness: 0.8 });
   const rope = kit.std({ color: 0x6e5a3a, roughness: 0.9 });
-  const stone = kit.std({ ...pbrMaterialMaps(slabs(33, 2, 2), 1, 1.2), color: 0x9a9aa2 });
+  const stone = kit.std({ ...pbrMaterialMaps(ashlar(33, 2, 2), 1, 1.2), color: 0x9a9aa2 });
   const iron = kit.std({ color: 0x2a2a2e, roughness: 0.45, metalness: 0.8 });
   const paint = kit.std({ color: 0x1a1210, roughness: 0.9 });
   const rune = kit.glow(0xf0c860, 2.2);

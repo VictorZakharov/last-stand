@@ -1,4 +1,4 @@
-// Procedural textures: cobblestone, slabs, forest floor, bark, grunge, rune circles, decals.
+// Procedural textures: cobblestone, ashlar, flagstones, marble, forest floor, bark, grunge, rune circles, decals.
 // Everything is generated on the CPU once at startup (no external art assets).
 import * as THREE from 'three';
 import { makeFbm, mulberry, clamp } from '../util';
@@ -109,8 +109,11 @@ function pbrCanvases<N extends RecipeName>(name: N, ...args: RecipeArgs<N>): PBR
 }
 
 export const cobblestone = (): PBRCanvases => pbrCanvases('cobblestone');
-/** Rectangular slabs / bricks in running bond (walls, dais). */
-export const slabs = (seed = 21, rows = 4, cols = 3): PBRCanvases => pbrCanvases('slabs', seed, rows, cols);
+/** Squared blocks in courses (walls, a plinth): `courses` a tile, `blocks` a course. */
+export const ashlar = (seed: number, courses: number, blocks: number): PBRCanvases => pbrCanvases('ashlar', seed, courses, blocks);
+/** Irregular stone slabs (a dais), `cells` across a tile; `marble`'s cut from black marble. */
+export const flagstone = (seed: number, cells: number): PBRCanvases => pbrCanvases('flagstone', seed, cells);
+export const marble = (seed: number, cells: number): PBRCanvases => pbrCanvases('marble', seed, cells);
 export const grunge = (): PBRCanvases => pbrCanvases('grunge');
 export const wood = (): PBRCanvases => pbrCanvases('wood');
 export const burlap = (): PBRCanvases => pbrCanvases('burlap');

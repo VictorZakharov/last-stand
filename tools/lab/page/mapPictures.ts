@@ -27,7 +27,9 @@ const GROUPS: Record<RecipeName, string> = {
   steel: 'metal',
   mail: 'metal',
   cobblestone: 'stone',
-  slabs: 'stone',
+  ashlar: 'stone',
+  flagstone: 'stone',
+  marble: 'stone',
   grunge: 'stone',
   forestFloor: 'ground',
   wood: 'wood',
@@ -42,6 +44,10 @@ const GROUPS: Record<RecipeName, string> = {
   fur: 'cloth',
   face: 'faces',
 };
+/** the groups of recipes another commit may still make (an A/B's main side), which this tree's took over */
+const OTHERS_GROUPS: Record<string, string> = {
+  slabs: 'stone',
+};
 
 /** the laid pictures' side (px: a tile's width on the lab's sheet) and how many times the map is laid each way */
 const LAID_SIDE = 340;
@@ -54,7 +60,8 @@ const SQUARE_SIDE = 2;
 const BALL_RADIUS = 0.8;
 const LIT_REPEAT = 2;
 
-export const groupOf = (name: RecipeName): string => GROUPS[name];
+/** A recipe's group: this tree's, or one main still has (else `other`). */
+export const groupOf = (name: string): string => GROUPS[name as RecipeName] ?? OTHERS_GROUPS[name] ?? 'other';
 
 /** A map's three canvases: its albedo, its height (grey) and its normals, at its own pixels. */
 function canvasesOf(data: PBRData): { albedo: HTMLCanvasElement; height: HTMLCanvasElement; normal: HTMLCanvasElement;
