@@ -2,10 +2,11 @@
 // it (a new profile: every cache empty, no saved game, the game's own settings), then loaded again as a return (its
 // caches, the offline worker and the saved profile kept), each traced from the navigation to a while after the
 // loading screen reveals the lobby.
+import { writeFileSync } from 'node:fs';
 import { noCapture } from '../lab/node/browser.mjs';
 import { analyzeBoot } from './analyze.mjs';
 import { slowCpu } from './chrome.mjs';
-import { BLINK_FRAMES, filmFrames, filmOf, startFilm } from './film.mjs';
+import { BLINK_FRAMES, filmFrames, filmOf, logoBox, startFilm } from './film.mjs';
 import { bootRecording, fightWarm, loaded, startIfCold, stopBootRecording } from './page.mjs';
 import { startTrace } from './trace.mjs';
 import { partsOf, VARIANTS } from './variants.mjs';
@@ -72,12 +73,13 @@ const LEFT_NOTES = {
  *  painted none within Playwright's 30 s) and slowed again after. */
 async function bootTraced(browser, page, url, visit, options, picture, setRate) {
   const trace = await startTrace(browser, { js: options.js, angle: options.angle });
-  const film = options.film ? await startFilm(page) : null;
+  const film = options.film ? await startFilm(page, { full: options.filmLogo }) : null;
   await visit.load(page, url);
   const resized = options.resize ? resizeTrips(page, options) : null;
   await Promise.all([page.waitForFunction(loaded, null, { timeout: BOOT_TIMEOUT_MS, polling: 250 }), resized]);
   await page.waitForTimeout(options.seconds * 1000);
   const windFit = options.resize ? await page.evaluate(windFitRead) : null;
+  const logo = options.filmLogo ? await page.evaluate(logoBox) : null;
   let left = null;
   if (leftCold(visit, options)) left = (await page.evaluate(fightWarm)) ? 'warm' : 'cold';
   else {
@@ -90,10 +92,15 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   await setRate(1);
   await page.screenshot({ path: picture.end });
   const findings = analyzeBoot(record, events, MARK, options.sourceOf);
-  if (windFit) findings.windFit = { ...windFit, planted: options.staleWind };
+  if (windFit) {
+    const { trace, resizes, ...fit } = windFit;
+    writeFileSync(picture.wind, `${JSON.stringify({ resizes, trace })}\n`);
+    findings.windFit = { ...fit, planted: options.staleWind, file: picture.wind };
+  }
   if (options.film) {
-    const files = { sheet: picture.film, close: picture.flickers };
-    findings.film = await filmOf(browser, page, filmFrames(record, shots), findings.revealedAt, files, record.blinks);
+    const files = { sheet: picture.film, close: picture.flickers, logo: picture.logo };
+    const frames = filmFrames(record, shots);
+    findings.film = await filmOf(browser, page, frames, findings.revealedAt, files, record.blinks, logo);
   }
   await setRate(options.cpuSlowdown);
   return { findings, left };

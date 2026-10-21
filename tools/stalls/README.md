@@ -109,8 +109,13 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     loads, `--trips` times (5 by default): the first time it waits there till the exit is made ready, so it's made at
     one size and shown at another (`windFit.mjs`). At each of the exit's draws on screen, the places it draws with
     (the loading letters' box, the lobby logo's corner and size, the canvas's size) are checked against where they
-    are; each boot says the most any was off, and which, past 0.1 px. `--stale-wind` is its canary: each place the
-    exit sets after its first ignored, so it must read them left behind.
+    are; each boot says the most any was off, and which, past 0.1 px, and how far the lobby logo moved once the exit
+    was gone from where its last draw left it (`wind-N.json`: each draw's places, the lobby logo's snapshot's size and
+    the page's). `--stale-wind` is its canary: each place the exit sets after its first ignored, so it must read them
+    left behind. `--film-logo` films the exit at the window's full size and cuts its frames from the reveal on to the
+    lobby logo (`out/logo-N.png`): the particles landing and the logo taking over from them, as the player sees it
+    (the variants `noLobbyLogo` and `noWind` film each half alone). How the particles' picture at rest stands against
+    the logo is measured, pixel by pixel, by the lab's `wind` (`tools/lab/COMMANDS.md`).
 - **Recorded in the page:** every animation frame's interval and whether the item tooltip showed in it, every change
   to the page's HTML (a `MutationObserver`: what changed and on which element), and the scenario's phases
   (`markPhase`). The page marks the trace (`console.timeStamp`) as its clock starts, which puts them all on one clock.

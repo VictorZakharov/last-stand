@@ -368,7 +368,15 @@ function filmLines(film) {
   const missed = film.found < film.planted ? 'missed' : 'caught';
   const canary = film.planted ? `; the canary's ${film.planted} blinks: ${film.found} found (${missed})` : '';
   const close = film.flickers.length ? `, the flickers' frames in ${film.files.close}` : '';
-  return [`  the exit filmed: ${span}; ${flickers}${canary}`, `    the film in ${film.files.sheet}${close}`];
+  const logo = film.files.logo ? `, its frames at the lobby logo in ${film.files.logo}` : '';
+  return [`  the exit filmed: ${span}; ${flickers}${canary}`, `    the film in ${film.files.sheet}${close}${logo}`];
+}
+
+/** Where the lobby logo rests after the exit, against where the exit left it (`moved`, css px): a logo that moves
+ *  once the particles have handed over to it is a jump the player sees. */
+function restLine(moved) {
+  const moves = moved > FIT_MOST_PX ? `MOVED ${moved.toFixed(1)} px from` : `${moved.toFixed(3)} px from`;
+  return `    the lobby logo where it rests after: ${moves} where the exit left it`;
 }
 
 /** Whether a boot's exit drew anywhere but where things were (`windFit.mjs`): its worst place off by more than a
@@ -385,12 +393,13 @@ function windFitLines(fit) {
   const missed = leftBehind(fit) ? 'caught' : 'missed';
   const canary = fit.planted ? `; the canary (placed once): ${missed}` : '';
   const most = (fit.worst?.px ?? 0).toFixed(3);
-  if (!leftBehind(fit)) return [`${head}: each where it is, ${most} px off at most${canary}`];
+  const rest = fit.moved === null ? [] : [restLine(fit.moved)];
+  if (!leftBehind(fit)) return [`${head}: each where it is, ${most} px off at most${canary}`, ...rest];
   const { what, px, t } = fit.worst;
   const worst = `${px.toFixed(1)} px off at worst (${what}, ${t.toFixed(2)} s into the exit)`;
   const places = Object.entries(fit.off).filter(([, off]) => off > FIT_MOST_PX).sort(([, a], [, b]) => b - a);
   const each = places.map(([place, off]) => `${place} ${off.toFixed(1)}`).join(', ');
-  return [`${head}: LEFT BEHIND, ${worst}${canary}`, `    off (px, the most at a draw): ${each}`];
+  return [`${head}: LEFT BEHIND, ${worst}${canary}`, `    off (px, the most at a draw): ${each}`, ...rest];
 }
 
 /** When the loading screen was gone, after the reveal: `, gone 0.90 s after the reveal` (nothing where it wasn't). */

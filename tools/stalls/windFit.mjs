@@ -23,13 +23,15 @@ export const FIT_MOST_PX = 0.1;
  */
 export function windFitRecording({ stale }) {
   const record = { made: null, draws: 0, checked: 0, exitAt: null, lastAt: null, resizes: [], off: {}, worst: null };
+  // (each shown draw's uniforms, the lobby logo's snapshot's size and the boxes as they were: `--resize`'s trace)
+  record.trace = [];
   window.__windFit = record;
   const resized = () => record.resizes.push({ at: performance.now(), size: `${innerWidth}x${innerHeight}` });
   addEventListener('resize', resized);
   if (typeof WebGL2RenderingContext === 'undefined') return;
   const proto = WebGL2RenderingContext.prototype;
   const PLACES = ['uBox', 'uDst', 'uView', 'uDpr'];
-  const KEPT = [...PLACES, 'uT'];
+  const KEPT = [...PLACES, 'uT', 'uHomeAt'];
   // (each kept uniform's location by its name, and the field's contexts, each with what its uniforms were set to)
   const names = new WeakMap();
   const fields = new WeakMap();
@@ -53,7 +55,14 @@ export function windFitRecording({ stale }) {
       return original.call(this, at, ...values);
     };
   };
-  for (const method of ['uniform1f', 'uniform2f', 'uniform4f']) keep(method);
+  for (const method of ['uniform1f', 'uniform2f', 'uniform3f', 'uniform4f']) keep(method);
+  // (the lobby logo's snapshot, its size as uploaded: `texImage2D(target, level, format, width, height, ...)`)
+  const texImage2D = proto.texImage2D;
+  proto.texImage2D = function (...args) {
+    const set = fields.get(this);
+    if (set && args.length >= 9) set.texture = [args[3], args[4]];
+    return texImage2D.apply(this, args);
+  };
   const boxOf = (selector) => document.querySelector(`${selector} svg:not(.logo-glow)`)?.getBoundingClientRect();
   const offBy = (what, gap) => {
     const px = Math.abs(gap);
@@ -106,21 +115,32 @@ export function windFitRecording({ stale }) {
       record.lastAt = now;
       record.checked++;
       checkView(set, this.canvas);
-      checkPlaces(set, box, boxOf('#menu .logo-art'));
+      const dst = boxOf('#menu .logo-art');
+      checkPlaces(set, box, dst);
+      const rect = (r) => r && [r.left, r.top, r.width, r.height];
+      const { uBox, uDst, uHomeAt, texture } = set;
+      const { clientWidth, clientHeight } = document.documentElement;
+      const page = [innerWidth, innerHeight, clientWidth, clientHeight];
+      record.trace.push({ at: now, t: record.t, uBox, uDst, uHomeAt, texture, box: rect(box), dst: rect(dst), page });
+      record.left = rect(dst);
     }
     return drawArrays.call(this, mode, first, count);
   };
 }
 
 /** The exit's record (`windFitRecording`), with the window's changes counted (in all, and while the exit drew) and
- *  the sizes it took. */
+ *  the sizes it took, and how far the lobby logo is now (where it rests, the exit gone) from where the exit left it
+ *  (its box at the exit's last draw, css px: `moved`, null where the exit never drew it). */
 export function windFitRead() {
   const record = window.__windFit;
   if (!record) return null;
-  const { made, draws, checked, exitAt, lastAt, resizes, off, worst } = record;
+  const { made, draws, checked, exitAt, lastAt, resizes, off, worst, trace, left } = record;
   const during = exitAt === null ? 0 : resizes.filter(({ at }) => at >= exitAt && at <= lastAt).length;
   const sizes = [...new Set(resizes.map(({ size }) => size))];
-  return { made, draws, checked, resized: resizes.length, during, sizes, off, worst };
+  const rest = document.querySelector('#menu .logo-art svg:not(.logo-glow)')?.getBoundingClientRect();
+  const now = rest ? [rest.left, rest.top, rest.width, rest.height] : null;
+  const moved = left && now ? Math.max(...now.map((value, i) => Math.abs(value - left[i]))) : null;
+  return { made, draws, checked, resized: resizes.length, during, sizes, off, worst, moved, trace, resizes };
 }
 
 /** Whether the exit's field is made (its first place set), or the loading screen left without one. */

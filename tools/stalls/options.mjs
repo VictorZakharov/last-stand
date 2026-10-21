@@ -6,7 +6,8 @@ import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
 const SWITCHES = new Set([
-  'headed', 'perf', 'js', 'angle', 'passes', 'paints', 'links', 'film', 'cold-return', 'stale-wind', 'help',
+  'headed', 'perf', 'js', 'angle', 'passes', 'paints', 'links', 'film', 'film-logo', 'cold-return', 'stale-wind',
+  'help',
 ]);
 /** the views the game is played in (core/renderer.ts `VIEWS`, in the order V steps through them), and the
  *  battlegrounds (data/biomes.ts) */
@@ -59,6 +60,8 @@ const HELP = {
     + 'fight\'s programs not in the GPU\'s cache (a visit that never fought, a deploy that changed a shader)'],
   film: ['', 'boot: the loading screen\'s exit filmed, the screen\'s frames as the trace caught them, and any frame '
     + 'unlike those either side of it found (a flicker)'],
+  'film-logo': ['', 'boot: --film at the window\'s full size, and its frames from the reveal on cut to the lobby\'s '
+    + 'logo (`out/logo-N.png`): the particles landing and the logo taking over from them'],
   'blink-exit': ['n', 'boot: the loading screen hidden for a frame this many times as it leaves, the canary of the '
     + 'film\'s flickers (0 by default)'],
   resize: ['WxH', 'boot: the window taken to this size and back as the loading screen shows (`--trips` times, the '
@@ -154,7 +157,8 @@ export function readOptions(argv) {
     paints: written.paints === true,
     links: written.links === true,
     coldReturn: written['cold-return'] === true,
-    film: written.film === true,
+    film: written.film === true || written['film-logo'] === true,
+    filmLogo: written['film-logo'] === true,
     help: written.help === true,
   };
   if (!SCENARIOS[options.scenario] && options.scenario !== BOOT) {

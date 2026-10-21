@@ -37,6 +37,7 @@ test('fills in the defaults', () => {
     links: false,
     coldReturn: false,
     film: false,
+    filmLogo: false,
     help: false,
   });
 });
@@ -61,6 +62,9 @@ test('reads values either way, and switches', () => {
   assert.deepEqual(resized.resize, { width: 1920, height: 1080 });
   assert.equal(resized.trips, 2);
   assert.equal(resized.staleWind, true);
+  const logo = readOptions(['--scenario', 'boot', '--film-logo']);
+  assert.equal(logo.film, true);
+  assert.equal(logo.filmLogo, true);
 });
 
 test('refuses what it doesn\'t know and bad values', () => {

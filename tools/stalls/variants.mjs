@@ -53,6 +53,12 @@ export function liveCss(name) {
  *  without their glow's looping animations (#267). */
 export const VARIANTS = {
   base: { script: base },
+  // (the loading screen's exit split in two, filmed apart with --film-logo: its particles alone where the lobby logo
+  // is, the logo hidden; the logo alone as it's uncovered, the particles' canvas hidden)
+  noLobbyLogo: { script: styled, arg: '#menu .logo-art svg { visibility: hidden !important; }' },
+  noWind: { script: styled, arg: 'body > canvas[style*="z-index: 101"] { visibility: hidden !important; }' },
+  // (the lobby's panels at their own size, not zoomed with the UI's scale: the logo's SVG laid out as its snapshot is)
+  noPanelZoom: { script: styled, arg: '#menu .panel { zoom: 1 !important; }' },
   cpuCanvas: { script: cpuCanvas },
   tooltipLayer: { script: styled, arg: '#tooltip { will-change: transform; }' },
   noTooltip: { script: styled, arg: '#tooltip { display: none !important; }' },
