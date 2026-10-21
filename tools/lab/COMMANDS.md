@@ -364,6 +364,28 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   differ by text's antialiasing, 2 to 5% of their pixels (the lobby's states 12 to 16%, with the drift). The page
   takes a state at a time: a 4K screen's ten pictures sent back at once were too much for the browser, which closed.
   `--hdr` puts HDR on first, as on a display in HDR mode, so the pause menu shows its levels.
+- `wind`: the loading screen's exit as it hands over to the lobby's logo (`page/wind.ts`, `src/ui/logoWind.ts`).
+  The loading screen is put back over the lobby (index.html's, fetched) and its exit run on the lab's clock into the
+  lobby logo, the window put on the screens `--resize` names one after another as the particles fly (on
+  `--screen 1536x864@1.25`, `--resize 1920x1080@1.25,1536x864@1.25` is full screen and back at 125%, the owner's; the
+  lobby logo's snapshot, taken again on the browser's clock, is waited for at each change, and one that never came is
+  a problem). Each column of the particles' picture round the logo is read from the exit's canvas at the last frame
+  its points all rest there (`restOf`, which the exit exports: when they've all landed and before the logo takes the
+  column over), laid over the lobby as it shows behind the logo (its letters hidden), and set against the logo once
+  the exit is done, both at the screen's own pixels, the logo's glow hidden in each (`page/windCompare.ts`): the
+  logo's pixels apart by more than 8 of 255 (more than 0.1% of them is a problem: the logo jumps as it takes over),
+  the most and the mean, and the move of the particles' picture that fits the logo best, in quarter pixels, a pixel's
+  blur taking the metal's grain out (`the logo 0.25 px left and 1.00 px down of them`). The lobby is pictured twice,
+  which must agree. `--canary` pictures the logo a pixel lower than it is: the move must find it a pixel down. The
+  particles, the logo and where they're apart are pictured (`out/wind`). On main at `1536x864@1`, the owner's complaint
+  ("when it settles it doesn't directly hit the final location, so this layout shift is visible (from particle logo
+  to regular)", the window resized before the exit's end, at 125%): 42% of the logo's pixels apart, the mean 21.7, the
+  logo 1 px down and 0.25 px left of the particles; at 1.25x 28% and 0.5 px left; at 1920x1080 14% and in place (the
+  particles' drop shadow and edges darker where several points land on one pixel, and the metal's grain drawn
+  otherwise). Landing into the logo's snapshot, which the logo is then shown as, none apart on each, the most a
+  channel apart 1 (rounding). Once the exit is done the window is made a tenth smaller each way, which sizes the UI
+  again: the logo must show as itself then, any picture of it gone. The stalls' `--resize` checks the exit's places as
+  the window changes; this, its picture.
 - `light`: the frame's light as the player sees it. The hero stands in each biome (`--biomes crypt,forest`), in each
   view (`--views top,third,first`), the close views looking each way (`--facings 0,90,180,270`, degrees: the camera
   turned by mouse look, which the body follows), and the frame is drawn by the game's own camera and read back from

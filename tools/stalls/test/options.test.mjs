@@ -25,6 +25,9 @@ test('fills in the defaults', () => {
     blinkExit: 0,
     auto: null,
     window: { width: 1536, height: 864 },
+    resize: null,
+    trips: 5,
+    staleWind: false,
     headed: false,
     perf: false,
     js: false,
@@ -34,6 +37,7 @@ test('fills in the defaults', () => {
     links: false,
     coldReturn: false,
     film: false,
+    filmLogo: false,
     help: false,
   });
 });
@@ -54,6 +58,13 @@ test('reads values either way, and switches', () => {
   assert.equal(readOptions(['--stash=40']).stash, 40);
   assert.deepEqual(readOptions(['--window', '1536x695']).window, { width: 1536, height: 695 });
   assert.equal(readOptions(['--listed', '40']).listed, 40);
+  const resized = readOptions(['--scenario', 'boot', '--resize', '1920x1080', '--trips=2', '--stale-wind']);
+  assert.deepEqual(resized.resize, { width: 1920, height: 1080 });
+  assert.equal(resized.trips, 2);
+  assert.equal(resized.staleWind, true);
+  const logo = readOptions(['--scenario', 'boot', '--film-logo']);
+  assert.equal(logo.film, true);
+  assert.equal(logo.filmLogo, true);
 });
 
 test('refuses what it doesn\'t know and bad values', () => {
@@ -77,11 +88,16 @@ test('refuses what it doesn\'t know and bad values', () => {
   assert.throws(() => readOptions(['--stash', '61']), /--stash must be a whole number from 0 to 60/);
   assert.throws(() => readOptions(['--window', '1536']), /--window must be a size in css px/);
   assert.throws(() => readOptions(['--listed', '10']), /--listed must be a number of ms, 20 or more/);
+  assert.throws(() => readOptions(['--resize', '1920x1080']), /--resize is the boot scenario's/);
+  assert.throws(() => readOptions(['--scenario', 'boot', '--resize', 'full']), /--resize must be a size in css px/);
+  assert.throws(() => readOptions(['--scenario', 'boot', '--trips', '0']), /--trips must be a whole number/);
+  assert.throws(() => readOptions(['--scenario', 'boot', '--stale-wind']), /--stale-wind is a canary of --resize/);
 });
 
 test('the usage lists every option', () => {
   const names = ['url', 'scenario', 'seconds', 'variants', 'rounds', 'view', 'biome', 'hero', 'stash', 'scale'];
-  for (const name of [...names, 'window', 'item-ms', 'headed', 'perf', 'links', 'help']) {
+  const boot = ['resize', 'trips', 'stale-wind'];
+  for (const name of [...names, 'window', ...boot, 'item-ms', 'headed', 'perf', 'links', 'help']) {
     assert.match(usage(), new RegExp(`--${name}\\b`));
   }
 });

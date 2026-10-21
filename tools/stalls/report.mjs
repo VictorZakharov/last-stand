@@ -1,6 +1,7 @@
 // The stalls' report (tools/stalls): each measure's frames, the Skia programs built and every long stall with what
 // was built in it and what the page changed just before, then the measures side by side.
 import { GPU_STEP_MS, LISTED_MS, STALL_MS } from './analyze.mjs';
+import { FIT_MOST_PX } from './windFit.mjs';
 
 const ms = (value) => `${value.toFixed(0)} ms`;
 const seconds = (value) => `${(value / 1000).toFixed(1)} s`;
@@ -367,7 +368,38 @@ function filmLines(film) {
   const missed = film.found < film.planted ? 'missed' : 'caught';
   const canary = film.planted ? `; the canary's ${film.planted} blinks: ${film.found} found (${missed})` : '';
   const close = film.flickers.length ? `, the flickers' frames in ${film.files.close}` : '';
-  return [`  the exit filmed: ${span}; ${flickers}${canary}`, `    the film in ${film.files.sheet}${close}`];
+  const logo = film.files.logo ? `, its frames at the lobby logo in ${film.files.logo}` : '';
+  return [`  the exit filmed: ${span}; ${flickers}${canary}`, `    the film in ${film.files.sheet}${close}${logo}`];
+}
+
+/** Where the lobby logo rests after the exit, against where the exit left it (`moved`, css px): a logo that moves
+ *  once the particles have handed over to it is a jump the player sees. */
+function restLine(moved) {
+  const moves = moved > FIT_MOST_PX ? `MOVED ${moved.toFixed(1)} px from` : `${moved.toFixed(3)} px from`;
+  return `    the lobby logo where it rests after: ${moves} where the exit left it`;
+}
+
+/** Whether a boot's exit drew anywhere but where things were (`windFit.mjs`): its worst place off by more than a
+ *  float's rounding. */
+const leftBehind = (fit) => (fit.worst?.px ?? 0) > FIT_MOST_PX;
+
+/** Where a boot's exit drew as the window changed (`windFit.mjs`): its draws checked, the window's changes, the most a
+ *  place was off and, past `FIT_MOST_PX`, each place that was, and the canary's catch. */
+function windFitLines(fit) {
+  if (fit.made === null) return ['  the exit\'s places: no exit made (a plain fade), nothing checked'];
+  const sizes = fit.sizes.length ? `: ${fit.sizes.join(', ')}` : '';
+  const changes = `the window changed ${fit.resized} times${sizes}, ${fit.during} of them as it drew`;
+  const head = `  the exit's places, checked at its ${fit.checked} draws (${changes})`;
+  const missed = leftBehind(fit) ? 'caught' : 'missed';
+  const canary = fit.planted ? `; the canary (placed once): ${missed}` : '';
+  const most = (fit.worst?.px ?? 0).toFixed(3);
+  const rest = fit.moved === null ? [] : [restLine(fit.moved)];
+  if (!leftBehind(fit)) return [`${head}: each where it is, ${most} px off at most${canary}`, ...rest];
+  const { what, px, t } = fit.worst;
+  const worst = `${px.toFixed(1)} px off at worst (${what}, ${t.toFixed(2)} s into the exit)`;
+  const places = Object.entries(fit.off).filter(([, off]) => off > FIT_MOST_PX).sort(([, a], [, b]) => b - a);
+  const each = places.map(([place, off]) => `${place} ${off.toFixed(1)}`).join(', ');
+  return [`${head}: LEFT BEHIND, ${worst}${canary}`, `    off (px, the most at a draw): ${each}`, ...rest];
 }
 
 /** When the loading screen was gone, after the reveal: `, gone 0.90 s after the reveal` (nothing where it wasn't). */
@@ -398,6 +430,7 @@ export function bootText(measure, { links = false } = {}) {
     ...(findings.warmUps?.length ? [warmUpsLine(findings.warmUps)] : []),
     ...(findings.exit ? [`  the loading screen left: ${exitText(findings.exit)}${goneText(findings)}`] : []),
     ...(findings.film ? filmLines(findings.film) : []),
+    ...(findings.windFit ? windFitLines(findings.windFit) : []),
     ...(findings.lobby ? lobbyLines(findings.lobby) : []),
     ...findings.steps.flatMap((step) => bootStepLines(step, { links })),
   ];
@@ -464,10 +497,13 @@ export function bootRoundsText(measures) {
     const films = boots.map((boot) => boot.findings.film).filter(Boolean);
     const flickers = films.map((film) => film.flickers.length).join(', ');
     const filmRow = films.length ? [`    the exit's flickers, boot by boot: ${flickers}`] : [];
+    const fits = boots.map((boot) => boot.findings.windFit).filter((fit) => fit && fit.made !== null);
+    const offs = fits.map((fit) => (fit.worst?.px ?? 0).toFixed(fit.worst?.px > FIT_MOST_PX ? 1 : 3)).join(', ');
+    const fitRow = fits.length ? [`    the exit's places off at most (px), boot by boot: ${offs}`] : [];
     const lobbies = boots.map((boot) => boot.findings.lobby).filter(Boolean);
     const lobbyRow = lobbies.length ? [lobbyRoundsLine(lobbies)] : [];
     const title = `  ${group}: ${boots.length} boots; ${head}`;
-    return [title, ...warmRow, ...mapsRow, ...exitRow, ...goneRow, ...filmRow, ...lobbyRow, ...stepRows];
+    return [title, ...warmRow, ...mapsRow, ...exitRow, ...goneRow, ...filmRow, ...fitRow, ...lobbyRow, ...stepRows];
   });
   return ['boots by URL and visit, over the rounds:', ...rows].join('\n');
 }

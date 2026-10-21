@@ -25,10 +25,19 @@ const FLICKER_MOST = 3;
  *  starts within `BLINK_FOUND_MS` after it (the frame drawn, then sent) */
 export const BLINK_FRAMES = 4;
 const BLINK_FOUND_MS = 100;
-/** the screencast's pictures: JPEGs of this quality, at most this size (device px) */
+/** the screencast's pictures: JPEGs of this quality, at most this size (device px), or the window's own (`full`:
+ *  any window fits in this) */
 const CAST_QUALITY = 80;
 const CAST_WIDTH = 640;
 const CAST_HEIGHT = 360;
+const CAST_FULL = 8192;
+/** the logo's sheet (`--film-logo`): its frames a row, and the margin round the lobby logo each is cut to (css px).
+ *  A film at the window's size is cut and scaled in the page, `CUT_BATCH` frames at a time, its pictures JPEGs of
+ *  `CUT_QUALITY`: put whole on a sheet, a boot's 250 frames were 50 MB of a page that never loaded */
+const LOGO_COLUMNS = 6;
+const LOGO_MARGIN = 16;
+const CUT_BATCH = 20;
+const CUT_QUALITY = 0.92;
 /** the sheets: the film's frames a row and each frame's width (css px), the frames shown either side of a flicker */
 const SHEET_COLUMNS = 10;
 const TILE_WIDTH = 192;
@@ -36,17 +45,17 @@ const AROUND = 2;
 
 /**
  * Films `page` from now on, across its loads: CDP's screencast, each frame acknowledged as it comes, so the next is
- * sent. Returns `stop`, which ends it and gives the frames, each its time on the wall's clock (`wall`, ms) and its
- * picture (`jpeg`, base64).
+ * sent, at the window's own size where `full`. Returns `stop`, which ends it and gives the frames, each its time on
+ * the wall's clock (`wall`, ms) and its picture (`jpeg`, base64).
  */
-export async function startFilm(page) {
+export async function startFilm(page, { full = false } = {}) {
   const session = await page.context().newCDPSession(page);
   const shots = [];
   session.on('Page.screencastFrame', ({ data, metadata, sessionId }) => {
     session.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
     if (metadata.timestamp) shots.push({ wall: metadata.timestamp * 1000, jpeg: data });
   });
-  const size = { maxWidth: CAST_WIDTH, maxHeight: CAST_HEIGHT };
+  const size = full ? { maxWidth: CAST_FULL, maxHeight: CAST_FULL } : { maxWidth: CAST_WIDTH, maxHeight: CAST_HEIGHT };
   await session.send('Page.startScreencast', { format: 'jpeg', quality: CAST_QUALITY, ...size, everyNthFrame: 1 });
   return {
     async stop() {
@@ -73,6 +82,14 @@ export function filmFrames(record, shots) {
   return { frames, caught: shots.length };
 }
 
+/** In the page: the lobby logo's box (css px) and the window's width, which a film's frame spans; null where the
+ *  lobby has no logo laid out. */
+export function logoBox() {
+  const box = document.querySelector('#menu .logo-art')?.getBoundingClientRect();
+  if (!box || box.width < 1) return null;
+  return { left: box.left, top: box.top, width: box.width, height: box.height, view: innerWidth };
+}
+
 /** In the page: each of `jpegs` (base64) drawn `width` × `height`, its pixels' greys (0 to 255, row by row), and its
  *  own size. */
 async function greysIn({ jpegs, width, height }) {
@@ -93,6 +110,49 @@ async function greysIn({ jpegs, width, height }) {
     frames.push({ greys, size });
   }
   return frames;
+}
+
+/** In the page: each of `jpegs` (base64, the window's whole frame, `logo.view` css px wide) drawn at `width` px
+ *  wide (`small`, for the film's sheet) and cut to the lobby logo (`cut`: `logo`'s box with `margin` round it, at
+ *  the frame's own pixels), each a JPEG of `quality` (base64). */
+async function cutIn({ jpegs, width, logo, margin, quality }) {
+  const base64Of = async (canvas) => {
+    const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality });
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(binary);
+  };
+  const cuts = [];
+  for (const jpeg of jpegs) {
+    const bytes = Uint8Array.from(atob(jpeg), (char) => char.charCodeAt(0));
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }));
+    const small = new OffscreenCanvas(width, Math.round(bitmap.height * width / bitmap.width));
+    small.getContext('2d').drawImage(bitmap, 0, 0, small.width, small.height);
+    // (the frame's pixels a css px)
+    const scale = bitmap.width / logo.view;
+    const cut = new OffscreenCanvas(
+      Math.round((logo.width + 2 * margin) * scale),
+      Math.round((logo.height + 2 * margin) * scale),
+    );
+    const [left, top] = [(logo.left - margin) * scale, (logo.top - margin) * scale];
+    cut.getContext('2d').drawImage(bitmap, left, top, cut.width, cut.height, 0, 0, cut.width, cut.height);
+    bitmap.close();
+    cuts.push({ small: await base64Of(small), cut: await base64Of(cut) });
+  }
+  return cuts;
+}
+
+/** `frames` at the window's size made ready for the sheets in `page` (`cutIn`): each picture scaled to the film's
+ *  usual size (`jpeg`), and cut to the lobby logo (`cut`). */
+async function cutFrames(page, frames, logo) {
+  const cut = [];
+  for (let first = 0; first < frames.length; first += CUT_BATCH) {
+    const jpegs = frames.slice(first, first + CUT_BATCH).map((frame) => frame.jpeg);
+    const quality = CUT_QUALITY;
+    cut.push(...(await page.evaluate(cutIn, { jpegs, width: CAST_WIDTH, logo, margin: LOGO_MARGIN, quality })));
+  }
+  return frames.map((frame, index) => ({ at: frame.at, jpeg: cut[index].small, cut: cut[index].cut }));
 }
 
 /** How far apart two frames' greys are: their mean difference, in grey levels of 255. */
@@ -175,6 +235,25 @@ async function writePicture(browser, html, width, file) {
   }
 }
 
+/** A frame's tile cut to the lobby logo (`cutFrames`' `cut`), `width` css px wide. */
+function logoTileHtml(frame, index, revealedAt, width) {
+  const from = revealedAt === null ? '' : ` ${fromRevealText(frame.at - revealedAt)}`;
+  const caption = `<figcaption>${index}${escapeHtml(from)}</figcaption>`;
+  const image = `<img src="data:image/jpeg;base64,${frame.cut}">`;
+  return `<figure style="width: ${width}px">${image}${caption}</figure>`;
+}
+
+/** The logo's sheet (`--film-logo`): each frame from the reveal on cut to the lobby logo, where it rests at the
+ *  film's end (`logo`), in `file`: the particles landing and the logo taking over from them. */
+async function writeLogoSheet(browser, frames, revealedAt, logo, file) {
+  const shown = frames.map((frame, index) => ({ frame, index }))
+    .filter(({ frame }) => revealedAt === null || frame.at >= revealedAt);
+  const width = Math.ceil(logo.width + 2 * LOGO_MARGIN);
+  const tiles = shown.map(({ frame, index }) => logoTileHtml(frame, index, revealedAt, width)).join('');
+  const grid = `display: grid; grid-template-columns: repeat(${LOGO_COLUMNS}, ${width}px)`;
+  await writePicture(browser, `<div class="grid" style="${grid}">${tiles}</div>`, LOGO_COLUMNS * (width + 3) + 3, file);
+}
+
 /** The sheets: every frame of the film in `sheet`, and each flicker's frames with `AROUND` either side in `close`. */
 async function writeSheets(browser, frames, flickers, revealedAt, { sheet, close }) {
   const flickered = new Set(flickers.flatMap(({ first, length }) => {
@@ -203,10 +282,11 @@ export function blinksFound(flickers, blinks) {
 /**
  * The film of a boot's exit (`filmFrames`: its `frames`, of the `caught` in the trace): its frames decoded in `page`
  * (the game's, its measure done), the flickers among them (`flickersOf`), each by its time from the reveal
- * (`revealedAt`, ms), and the sheets written (`files.sheet`, and `files.close` for the flickers' frames). `blinks`
- * are the canary's (`--blink-exit`: the page's clock), `planted` of them, of which `found` were.
+ * (`revealedAt`, ms), and the sheets written (`files.sheet`, and `files.close` for the flickers' frames; with `logo`,
+ * `logoBox`'s, `files.logo` for the frames cut to the lobby logo). `blinks` are the canary's (`--blink-exit`: the
+ * page's clock), `planted` of them, of which `found` were.
  */
-export async function filmOf(browser, page, { frames, caught }, revealedAt, files, blinks) {
+export async function filmOf(browser, page, { frames, caught }, revealedAt, files, blinks, logo = null) {
   const planted = blinks.length;
   if (!frames.length) return { frames: 0, caught, planted, found: 0, flickers: [], files };
   const decoded = await page.evaluate(greysIn, {
@@ -215,7 +295,9 @@ export async function filmOf(browser, page, { frames, caught }, revealedAt, file
     height: GREY_HEIGHT,
   });
   const flickers = flickersOf(decoded.map((frame) => frame.greys));
-  await writeSheets(browser, frames, flickers, revealedAt, files);
+  const sheeted = logo ? await cutFrames(page, frames, logo) : frames;
+  await writeSheets(browser, sheeted, flickers, revealedAt, files);
+  if (logo) await writeLogoSheet(browser, sheeted, revealedAt, logo, files.logo);
   const from = (at) => (revealedAt === null ? null : at - revealedAt);
   const timed = flickers.map((flicker) => ({ ...flicker, at: from(frames[flicker.first].at) }));
   return {
@@ -227,6 +309,6 @@ export async function filmOf(browser, page, { frames, caught }, revealedAt, file
     flickers: timed,
     planted,
     found: blinksFound(timed, blinks.map(from)),
-    files,
+    files: logo ? files : { sheet: files.sheet, close: files.close },
   };
 }

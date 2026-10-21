@@ -119,12 +119,15 @@ async function chooseView(page, view) {
 /** The picture of what a measure's scenario left on screen: `out/end-<n>.png`, n its place in the command's
  *  measures (to see that it played what it meant to). */
 const endPicture = (index) => join(OUT, `end-${index + 1}.png`);
-/** A boot's pictures: its end (`endPicture`), and its exit's film and the film's flickers (`--film`: `out/film-<n>.png`
- *  and `out/flickers-<n>.png`). */
+/** A boot's pictures: its end (`endPicture`), and its exit's film, the film's flickers (`--film`: `out/film-<n>.png`
+ *  and `out/flickers-<n>.png`), its frames cut to the lobby logo (`--film-logo`: `out/logo-<n>.png`) and the
+ *  exit's draws as the window changed (`--resize`: `out/wind-<n>.json`). */
 const bootPictures = (index) => ({
   end: endPicture(index),
   film: join(OUT, `film-${index + 1}.png`),
   flickers: join(OUT, `flickers-${index + 1}.png`),
+  logo: join(OUT, `logo-${index + 1}.png`),
+  wind: join(OUT, `wind-${index + 1}.json`),
 });
 
 /** A Chrome of its own for a measure, as `options` have its window. */

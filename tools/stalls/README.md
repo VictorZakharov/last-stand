@@ -26,6 +26,8 @@ npm run stalls -- --scenario boot --cpu-slowdown 4 --js   # on a phone's CPU, it
 npm run stalls -- --scenario boot --url this,ref:HEAD~2 --rounds 3  # this tree beside a commit of its own
 npm run stalls -- --scenario boot --film --perf --window 799x384 --scale 3.75 --auto low@518400  # a phone's exit
 npm run stalls -- --scenario boot --film --blink-exit 2   # the film's canary: two blinks to find
+npm run stalls -- --scenario boot --resize 1920x1080       # full screen and back 5 times: the exit follows the window
+npm run stalls -- --scenario boot --resize 1920x1080 --stale-wind  # its canary: an exit placed once is caught
 npm run stalls -- --scenario sweep --stash 60 --seconds 8 --rounds 3 --variants base,iconFilter,stillGlow+noTooltip
                                                  # one page, the variants in turn three times over, by their medians
 npm run stalls -- --scenario sweep --stash 60 --seconds 6 --js   # and the page's JS, a frame's by function
@@ -103,7 +105,17 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     their own (`out/flickers-N.png`). `--blink-exit n` is its canary: the loading screen hidden for a frame n times,
     every 4th frame from the reveal, each of which the film must find. `--auto level@px` boots as a device whose Auto
     settled there (a report's Quality line: `low (setting auto, at most 0.52 Mpx)` is `low@518400`): on Low the exit
-    is the plain fade, as on the owner's phone.
+    is the plain fade, as on the owner's phone. `--resize WxH` takes the window to that size and back as the page
+    loads, `--trips` times (5 by default): the first time it waits there till the exit is made ready, so it's made at
+    one size and shown at another (`windFit.mjs`). At each of the exit's draws on screen, the places it draws with
+    (the loading letters' box, the lobby logo's corner and size, the canvas's size) are checked against where they
+    are; each boot says the most any was off, and which, past 0.1 px, and how far the lobby logo moved once the exit
+    was gone from where its last draw left it (`wind-N.json`: each draw's places, the lobby logo's snapshot's size and
+    the page's). `--stale-wind` is its canary: each place the exit sets after its first ignored, so it must read them
+    left behind. `--film-logo` films the exit at the window's full size and cuts its frames from the reveal on to the
+    lobby logo (`out/logo-N.png`): the particles landing and the logo taking over from them, as the player sees it
+    (the variants `noLobbyLogo` and `noWind` film each half alone). How the particles' picture at rest stands against
+    the logo is measured, pixel by pixel, by the lab's `wind` (`tools/lab/COMMANDS.md`).
 - **Recorded in the page:** every animation frame's interval and whether the item tooltip showed in it, every change
   to the page's HTML (a `MutationObserver`: what changed and on which element), and the scenario's phases
   (`markPhase`). The page marks the trace (`console.timeStamp`) as its clock starts, which puts them all on one clock.
