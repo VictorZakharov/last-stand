@@ -19,6 +19,9 @@
 .menu-left, .menu-right { @include frame(var(--frame), 0 10px 40px rgba(0,0,0,.8)); }
 .menu-left::before, .menu-right::before { content: ''; position: absolute; inset: 6px; pointer-events: none; border: 1px solid rgba($frame, .22);
   @include corner-brackets; }
+/* (the right panel's in front of what it frames: the stash's box reaches past it, and its fade, laid
+   over the box, would put out the line and its brackets along it) */
+.menu-right::before { z-index: 4; }
 .logo { text-align: center; padding: 6px 0 4px; }
 /* the logo art (SVG, shared with the loading screen) is defined in index.html */
 .logo .logo-art { width: 100%; max-width: 300px; margin: 0 auto; }
@@ -135,8 +138,26 @@
    hidden, enlarged state) stays inside, which neither clips it nor makes it count as overflow */
 #stash { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-content: start;
   overflow: hidden auto; scrollbar-width: thin; padding: 9px; margin: -9px -9px 4px;
-  /* a row cut by the scroll fades out above the frame instead of running into it */
-  mask-image: linear-gradient(#000 calc(100% - 18px), transparent); }
+  anchor-name: --stash; scroll-timeline: --stash block; }
+/* a row cut by the scroll fades out above the frame instead of running into it: the panel's colour
+   laid over the stash's last 18px, anchored to it in every layout (and a pixel past it, which the
+   stash's clip and the fade round apart at a fraction of a pixel: the row cut showed through as a
+   bright line), shown by the stash's scroll while there is more below it (a stash that fits has no
+   scroll, which leaves it hidden: over the bare panel it was a dark band).
+   A mask on the stash faded it, a pass of the compositor's own, and the arc chasing round the
+   item under the pointer, kept to its border by a mask of its own, was a pass within it, drawn
+   again every frame: moving between items raised the GPU's time a frame from 5.4 ms to 6.3 (the
+   owner's rose from 5 to 14 as the frames fell to 30), where either mask alone raised it by 0.1 at
+   the most, and a sweep's first second fell to 80 frames (tools/stalls `--scenario sweep --perf`,
+   variants noStashMask, noArcMask; tools/lab `ui --states glow`) */
+@supports (anchor-name: --stash) and (animation-timeline: --stash) {
+  .tab-page[data-page="gear"] { timeline-scope: --stash; }
+  .tab-page[data-page="gear"]::after { content: ''; position: absolute; position-anchor: --stash; z-index: 3; pointer-events: none;
+    left: anchor(left); right: anchor(right); bottom: calc(anchor(bottom) - 1px); height: 19px;
+    background: linear-gradient(rgba(8,7,9,0), rgba(8,7,9,.9)); opacity: 0;
+    animation: stash-cut auto linear both; animation-timeline: --stash; animation-range: max(0%, 100% - 18px) 100%; }
+}
+@keyframes stash-cut { from { opacity: 1; } to { opacity: 0; } }
 .sitem { aspect-ratio: 1; font-size: 22px; border: 1px solid #000; background: radial-gradient(circle, #1c1a1c, #0a090a); display: flex; align-items: center; justify-content: center;
   font-size: 20px; cursor: $cursor-hand; position: relative; box-shadow: inset 0 0 0 1px var(--c, #555); }
 /* a stash item brightened by its icon (a filter on the item is a pass of the compositor's own,
