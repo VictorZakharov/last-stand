@@ -9,7 +9,7 @@ import { part } from './rig';
 import { Sculpt } from './shapes';
 import { clamp, lerp, mulberry } from '../../util';
 import { faceCanvases, faceGrid } from '../../core/textures';
-import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, neckShade, beardLift, mouthY, neckSeam, type FaceShape, type HeadGrid } from './face';
+import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, neckShade, shadedSkin, PLAIN_SKIN, beardLift, mouthY, neckSeam, type FaceShape, type HeadGrid } from './face';
 import type { MaterialKit } from '../../types';
 
 /** metres per millimetre of the face's frame: the head is 1/7.5 of the heroes' stature */
@@ -26,7 +26,7 @@ export const toGroup = (x: number, y: number, z: number, out = new THREE.Vector3
 export const plainSkin = (kit: MaterialKit, who: keyof typeof FACES, vertexColors = false) => {
   const s = LOOKS[who].skin;
   // (shaded by its vertex colours, it is rougher too: a shine would light up a neck that the jaw shades)
-  return kit.rim({ color: new THREE.Color().setRGB(s[0] * 0.97, s[1] * 0.97, s[2] * 0.97, THREE.SRGBColorSpace), roughness: vertexColors ? 0.88 : 0.6, vertexColors }, 0x6a2a1c, 0.25);
+  return kit.rim({ color: new THREE.Color().setRGB(s[0] * PLAIN_SKIN, s[1] * PLAIN_SKIN, s[2] * PLAIN_SKIN, THREE.SRGBColorSpace), roughness: vertexColors ? 0.88 : 0.6, vertexColors }, 0x6a2a1c, 0.25);
 };
 
 /** bare hands' skin: the ears' and neck's a shade darker (beside the face's paint, shaded where light falls less, plain
@@ -924,8 +924,7 @@ export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: keyo
       // (moving with the head from a little below the seam, as the head's skin there does; bending under that)
       share.push(sm(s - 40, s - 12, yf));
       // (its top in the jaw's shadow, as the face's own skin under the jaw: a warm brown)
-      const k = ao ? 1 - neckShade(Math.abs(Math.sin(a)) * rx, (y - len) / HEAD_MM, Math.cos(a)) : 1;
-      col.push(k ** 0.8, k ** 0.95, k ** 1.2);
+      col.push(...shadedSkin(ao ? neckShade(Math.abs(Math.sin(a)) * rx, (y - len) / HEAD_MM, Math.cos(a)) : 0));
     }
   }
   const W = segs + 1;

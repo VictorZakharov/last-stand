@@ -38,6 +38,9 @@ const HAT = { band: [30, 57], top: 155, gap: 20, brim: [60, 46, 40], droop: [14,
 const BELT_Y = 0.12;
 /** how much higher the collar stands at the back than in front (m) */
 const COLLAR_RISE = 0.02;
+/** how much looser the collar is than it was cut round the neck (m): the neck swings 8 mm aside in it as he looks to a
+ *  side (the rig turns it about joints in front of its middle), and came 3.6 mm out through it */
+const COLLAR_EASE = 0.006;
 const UP = V(0, 1, 0), FWD = V(0, 0, 1);
 const DRINK = { wrist: V(0.03, -0.08, 0.22), tipped: V(0.03, 0.1, 0.2), pole: V(-0.8, 0.2, -0.2) };
 /** where the nock comes to at full draw (the head's mm): at the side of the jaw, low along it, below and in front of the ear, the string
@@ -431,19 +434,20 @@ export function buildRanger(): Model {
   // higher behind, up the back of the neck to under the hair: level, it left a long bare neck from behind)
   const collarUp = (x: number, y: number, z: number) => y + COLLAR_RISE * smooth(clamp((-0.1 - z / (Math.hypot(x, z) || 1)) / 0.65, 0, 1)) * clamp((y - 0.289) / 0.039, 0, 1);
   {
-    const g = lathe([[0.0795, 0.289], [0.0795, 0.31], [0.0785, 0.326], [0.0757, 0.328], [0.0757, 0.3]], 28).scale(1, 1, 0.935).translate(0, 0, -0.0125), q = g.attributes.position;
+    const g = lathe(([[0.0795, 0.289], [0.0795, 0.31], [0.0785, 0.326], [0.0757, 0.328], [0.0757, 0.3]] as [number, number][]).map(([r, y]) => [r + COLLAR_EASE, y]), 28).scale(1, 1, 0.935).translate(0, 0, -0.0125), q = g.attributes.position;
     for (let i = 0; i < q.count; i++) q.setY(i, collarUp(q.getX(i), q.getY(i), q.getZ(i) + 0.0125));
     g.computeVertexNormals();
     S.add(g, coat, j.chest);
   }
-  for (const sx of [1, -1]) S.add(taperTube([0.326, 0.27, 0.235].map((y) => y > 0.3 ? V(sx * 0.005, y, 0.0635) : tunicFront(sx * 0.005, y, 0.001)), () => 0.0022, 8, 5), dark, j.chest);
+  for (const sx of [1, -1]) S.add(taperTube([0.326, 0.27, 0.235].map((y) => y > 0.3 ? V(sx * 0.005, y, 0.0635 + COLLAR_EASE * 0.935) : tunicFront(sx * 0.005, y, 0.001)), () => 0.0022, 8, 5), dark, j.chest);
   for (const y of [0.29, 0.258]) S.add(new THREE.SphereGeometry(0.0055, 8, 6), brass, j.chest, tunicFront(0, y, 0.003).toArray());
   // the seams, stitched in a lighter thread: round the collar's top and foot, down both sides of the slit and on down the
   // front, over each shoulder from the neck to the sleeve, and down each side
   const ring = (rx: number, rz: number, y: number) => Array.from({ length: 32 }, (_, i) => { const a = i / 32 * TAU; return V(Math.sin(a) * rx, collarUp(Math.sin(a), y, Math.cos(a)), Math.cos(a) * rz * 0.935 - 0.0125); });
-  S.add(stitches(ring(0.0812, 0.0812, 0.32), 0.004, 0.0028, 0.0009, true), thread, j.chest);
-  S.add(stitches(ring(0.0812, 0.0812, 0.295), 0.004, 0.0028, 0.0009, true), thread, j.chest);
-  for (const sx of [1, -1]) S.add(stitches([0.318, 0.29, 0.26, 0.24].map((y) => y > 0.3 ? V(sx * 0.011, y, 0.065) : tunicFront(sx * 0.011, y, 0.0018))), thread, j.chest);
+  const stitched = 0.0812 + COLLAR_EASE;
+  S.add(stitches(ring(stitched, stitched, 0.32), 0.004, 0.0028, 0.0009, true), thread, j.chest);
+  S.add(stitches(ring(stitched, stitched, 0.295), 0.004, 0.0028, 0.0009, true), thread, j.chest);
+  for (const sx of [1, -1]) S.add(stitches([0.318, 0.29, 0.26, 0.24].map((y) => y > 0.3 ? V(sx * 0.011, y, 0.065 + COLLAR_EASE * 0.935) : tunicFront(sx * 0.011, y, 0.0018))), thread, j.chest);
   S.add(stitches([0.234, 0.2, 0.15, 0.1, 0.05, 0, -0.05, -0.1].map((y) => tunicFront(0, y, 0.0015))), thread, j.chest);
   for (const sa of [1, -1]) {
     // (moving with the cloth they're sewn into; round the armhole, the sleeve's seam)
