@@ -5,7 +5,9 @@ import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
-const SWITCHES = new Set(['headed', 'perf', 'js', 'angle', 'links', 'film', 'cold-return', 'help']);
+const SWITCHES = new Set([
+  'headed', 'perf', 'js', 'angle', 'passes', 'paints', 'links', 'film', 'cold-return', 'help',
+]);
 /** the views the game is played in (core/renderer.ts `VIEWS`, in the order V steps through them), and the
  *  battlegrounds (data/biomes.ts) */
 export const VIEWS = ['top', 'third', 'first'];
@@ -65,6 +67,8 @@ const HELP = {
     + 'its functions named from its source maps)'],
   angle: ['', 'ANGLE\'s own work on the GPU process traced too: a shader compiled at a draw (D3DCompile), a program '
     + 'linked or read back from the cache'],
+  passes: ['', 'the compositor\'s frames traced as it drew them: each phase\'s render passes and quads a frame'],
+  paints: ['', 'the page\'s paints traced: each phase\'s a frame, by the element painted'],
   links: ['', 'every Skia program built: when, how long, the tasks it was built in, the page\'s changes just before'],
   help: ['', 'this'],
 };
@@ -134,6 +138,8 @@ export function readOptions(argv) {
     perf: written.perf === true,
     js: written.js === true,
     angle: written.angle === true,
+    passes: written.passes === true,
+    paints: written.paints === true,
     links: written.links === true,
     coldReturn: written['cold-return'] === true,
     film: written.film === true,

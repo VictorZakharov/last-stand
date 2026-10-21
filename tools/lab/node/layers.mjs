@@ -4,7 +4,7 @@
 // rastered it, and how its layers fell is what decides that: a list for each picture says whether they fell alike.
 
 /** A DOM node as a list names it: its tag, then its id or its classes (`div#bottombar`, `div.slot.art`). */
-function nodeName(node) {
+export function nodeName(node) {
   if (!node) return '(no element)';
   const attributes = node.attributes ?? [];
   const valueOf = (name) => {

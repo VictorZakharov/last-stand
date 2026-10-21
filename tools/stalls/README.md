@@ -29,6 +29,7 @@ npm run stalls -- --scenario boot --film --blink-exit 2   # the film's canary: t
 npm run stalls -- --scenario sweep --stash 60 --seconds 8 --rounds 3 --variants base,iconFilter,stillGlow+noTooltip
                                                  # one page, the variants in turn three times over, by their medians
 npm run stalls -- --scenario sweep --stash 60 --seconds 6 --js   # and the page's JS, a frame's by function
+npm run stalls -- --scenario sweep --stash 60 --seconds 2 --passes  # the compositor's render passes a frame, exact
 npm run stalls -- --help
 npm run stalls:test                              # the tool's own unit tests
 ```
@@ -110,8 +111,12 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   `driver_compile_shader` and `driver_link_program`, the page's mark, and work of 0.5 ms or more on any thread (by its
   name, thread and times alone) are kept, as they stream in: a 20 s trace with Skia's draws in it was 250 MB.
   With `--js`, V8's sampler too (a sample every 0.1 ms), this tree then built unminified with its source maps, so
-  each function is named where it's written (`render core/renderer.ts:610`). A trace Chrome never ends (no
-  `tracingComplete` in a minute) is lost: in rounds its measure is played again.
+  each function is named where it's written (`render core/renderer.ts:610`). With `--passes`, the compositor's
+  draws too (`disabled-by-default-viz.quads`: each frame it drew, each render pass it began and each quad, of what),
+  in a buffer of 400 MB: they're 20 MB of trace a second, and a sweep's filled Chrome's 200 MB, which then dropped the
+  trace's start, so measure 2 s with it (a buffer of 1 GB was never sent back within the minute). The page marks the
+  trace again as it stops (`<mark>:end`), which puts a trace that lost its start on the page's clock all the same.
+  A trace Chrome never ends (no `tracingComplete` in a minute) is lost: in rounds its measure is played again.
 
 ## The report
 
@@ -133,6 +138,10 @@ For each measure:
   piece's own time, less the work the trace kept inside it; the GPU's waits for the screen left out), and **a missed
   frame's**, the same over the frames that missed.
   With `--js`, **a frame's JS** too: each function's own time, and its time with what it calls.
+  With `--passes`, **the compositor's draws**: the frames it drew, its render passes and quads a frame, and the
+  quads' kinds, the most first. A pass is a texture drawn and drawn again into the frame: the page alone is one, and
+  each mask, filter or opacity round more than one layer that changes in a frame is one more (the stash's hover drew
+  2.6 a frame, where the glow's fade and its arc's mask were 0.8 each).
 - **The changes of the page's look:** every change its scripts made at once (one call of the page's observer), by
   kind (the change it made most, the element named by its classes after it: `div.sitem.match` the stash's items
   lit), the costliest kinds in all first: how many, of how many changes each, the browser's work in the time after

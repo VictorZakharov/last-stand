@@ -19,6 +19,23 @@ const JS_CATEGORIES = ['disabled-by-default-v8.cpu_profiler', 'disabled-by-defau
 /** with `--angle`, ANGLE's own work on the GPU process: a shader compiled at a draw (`D3DCompile`), a program
  *  linked, read back from the cache or waited for */
 const ANGLE_CATEGORIES = ['gpu.angle'];
+/** with `--passes`, the compositor's draws as it made them: each render pass begun, each quad drawn and of what */
+const PASSES_CATEGORY = 'disabled-by-default-viz.quads';
+/** Chrome's trace buffer with `--passes` (kB): the draws are hundreds of events a frame, and a sweep's filled the
+ *  200 MB it has by default, which then dropped the trace's start */
+const PASSES_BUFFER_KB = 400_000;
+/** the compositor's draws `--passes` counts, by their names in the trace: a frame drawn, a render pass begun in it
+ *  (its root among them), a quad drawn (its `material`: a tile of a layer, a texture, a colour, a pass drawn into
+ *  another). Each is kept as a draw of its own (`ph: 'D'`), out of the work the threads spent their time on. */
+const DRAWS = {
+  'DirectRenderer::DrawFrame': 'frame',
+  'SkiaRenderer::BeginDrawingRenderPass': 'pass',
+  'SkiaRenderer::DoDrawQuad': 'quad',
+};
+
+/** with `--paints`, each paint of the page's as the timeline names it: the element it painted (its `nodeId`, the
+ *  DOM's backend node id), kept as a paint of its own (`ph: 'P'`) */
+const PAINT = 'Paint';
 
 /** the events kept whatever their length: Skia building a program, the page's mark, and the profiler's (each whole:
  *  its samples are its arguments) */
@@ -47,20 +64,44 @@ function slim(event) {
   return { ph, name, pid, tid, ts, dur };
 }
 
+/** `event` as a draw of the compositor's (`DRAWS`), or null if it's none. */
+function drawOf(event) {
+  const kind = DRAWS[event.name];
+  if (!kind || event.ph !== 'X') return null;
+  return { ph: 'D', kind, material: event.args?.material ?? null, pid: event.pid, ts: event.ts };
+}
+
+/** `event` as a paint of the page's (`PAINT`), or null if it's none. */
+function paintOf(event) {
+  if (event.name !== PAINT || event.ph !== 'X') return null;
+  return { ph: 'P', node: event.args?.data?.nodeId ?? null, pid: event.pid, ts: event.ts };
+}
+
 /**
- * Starts tracing `browser` (connected over CDP), with `js` the page's JS sampled too. Returns `stop`, which ends the
- * trace and gives its kept events, or throws `TraceLost` if Chrome never ends it.
+ * Starts tracing `browser` (connected over CDP), with `js` the page's JS sampled too, with `passes` each of the
+ * compositor's draws (`drawOf`) and with `paints` each of the page's paints (`paintOf`). Returns `stop`, which ends
+ * the trace and gives its kept events, or throws `TraceLost` if Chrome never ends it.
  */
-export async function startTrace(browser, { js = false, angle = false } = {}) {
+export async function startTrace(browser, { js = false, angle = false, passes = false, paints = false } = {}) {
   const session = await browser.newBrowserCDPSession();
   const events = [];
   session.on('Tracing.dataCollected', ({ value }) => {
     for (const event of value) {
       if (kept(event)) events.push(slim(event));
+      const draw = passes ? drawOf(event) : null;
+      if (draw) events.push(draw);
+      const paint = paints ? paintOf(event) : null;
+      if (paint) events.push(paint);
     }
   });
-  const categories = [...CATEGORIES, ...(js ? JS_CATEGORIES : []), ...(angle ? ANGLE_CATEGORIES : [])];
+  const categories = [
+    ...CATEGORIES,
+    ...(js ? JS_CATEGORIES : []),
+    ...(angle ? ANGLE_CATEGORIES : []),
+    ...(passes ? [PASSES_CATEGORY] : []),
+  ];
   const traceConfig = { includedCategories: categories, recordMode: 'recordContinuously' };
+  if (passes) traceConfig.traceBufferSizeInKb = PASSES_BUFFER_KB;
   await session.send('Tracing.start', { transferMode: 'ReportEvents', traceConfig });
   return {
     async stop() {

@@ -90,6 +90,15 @@ function markOf(events, mark) {
   return events.find((event) => event.name === 'TimeStamp' && event.args?.data?.message === mark) ?? null;
 }
 
+/** The page's mark on the trace and the page's time at it: the recording's start, or its end where the trace lost
+ *  its start (Chrome's buffer full: `page.mjs` `stopRecording`). Null with neither. */
+function clockOf(events, mark, record) {
+  const start = markOf(events, mark);
+  if (start) return { stamp: start, at: record.start };
+  const end = record.end === undefined ? null : markOf(events, `${mark}:end`);
+  return end ? { stamp: end, at: record.end } : null;
+}
+
 /** The work other pages' renderers did over the recording, which ran in its frames' time (none when they're
  *  held still while it plays: `--rounds` on more than one URL): in all (ms), and on each thread and task, the most
  *  first (`thread (pid) task`). */
@@ -278,6 +287,57 @@ function bySecond(frames, from, to, browser, gpu) {
   return seconds;
 }
 
+/** how many kinds of quad a phase names, the most a frame first */
+const MATERIALS_SHOWN = 5;
+
+/**
+ * The compositor's draws from `from` to `to` (`--passes`, `trace.mjs` `drawOf`, on the page's clock): the frames it
+ * drew, and a frame's render passes (its root among them) and quads, each kind of quad's too (its material, the most
+ * first). Counts, so a cost on the GPU reads the same however loaded the machine is, where its time moved by more
+ * than the cost. Null where nothing was drawn (or it wasn't traced).
+ */
+function drawnIn(draws, from, to) {
+  const within = draws.filter((draw) => draw.at > from && draw.at <= to);
+  const frames = within.filter((draw) => draw.kind === 'frame').length;
+  if (frames === 0) return null;
+  const quads = within.filter((draw) => draw.kind === 'quad');
+  const materials = new Map();
+  for (const quad of quads) materials.set(quad.material, (materials.get(quad.material) ?? 0) + 1);
+  const byMaterial = [...materials]
+    .map(([name, count]) => ({ name: String(name).replace(/^k/, ''), perFrame: count / frames }))
+    .sort((a, b) => b.perFrame - a.perFrame)
+    .slice(0, MATERIALS_SHOWN);
+  const passes = within.filter((draw) => draw.kind === 'pass').length;
+  return { frames, passes: passes / frames, quads: quads.length / frames, materials: byMaterial };
+}
+
+/** how many elements a phase's paints name, the most painted first */
+const PAINTED_SHOWN = 5;
+
+/**
+ * The page's paints from `from` to `to` (`--paints`, `trace.mjs` `paintOf`, on the page's clock) over `frames` frames:
+ * paints a frame, and each name's (`names`, `stalls.mjs` `paintedNames`), the most first, with how many elements of
+ * that name were painted. A paint is the page drawing an element again, to be rastered after: one every frame is
+ * something that keeps changing how it looks. Null where nothing was painted (or it wasn't traced).
+ */
+function paintedIn(paints, from, to, frames, names) {
+  const within = paints.filter((paint) => paint.at > from && paint.at <= to);
+  if (within.length === 0 || frames === 0) return null;
+  const byName = new Map();
+  for (const paint of within) {
+    const name = names.get(paint.node) ?? '(no element)';
+    const named = byName.get(name) ?? { count: 0, nodes: new Set() };
+    named.count += 1;
+    named.nodes.add(paint.node);
+    byName.set(name, named);
+  }
+  const elements = [...byName]
+    .map(([name, { count, nodes }]) => ({ name, perFrame: count / frames, elements: nodes.size }))
+    .sort((a, b) => b.perFrame - a.perFrame)
+    .slice(0, PAINTED_SHOWN);
+  return { perFrame: within.length / frames, elements };
+}
+
 /** The mean of the perf overlay's GPU readings from `from` to `to` (ms a frame), or null with none read. */
 function gpuIn(gpu, from, to) {
   const read = gpu.filter((reading) => reading.at > from && reading.at <= to);
@@ -293,9 +353,10 @@ function gpuIn(gpu, from, to) {
  * sweep read 7.0 ms, a frame every refresh, at 99 frames a second where the screen gave 145. And frames a second hang
  * on the whole GPU: with another game in a browser beside it, one variant read 102 to 124 measure to measure, where
  * the browser's work for it held within a tenth. `work` is `workIn` and `browserWorkIn` on the trace's work, `gpu`
- * the overlay's readings.
+ * the overlay's readings, `draws` the compositor's (`drawn`, with `--passes`), `paints` the page's (`painted`, with
+ * `--paints`, its elements by `names`).
  */
-function phaseSummaries(spans, refresh, work, gpu) {
+function phaseSummaries(spans, refresh, work, gpu, draws, paints, names) {
   return spans.map(({ phase, frames, from, to }) => {
     const tipped = frames.filter((frame) => frame.tip).length;
     const missed = missedOf(frames, refresh);
@@ -308,6 +369,8 @@ function phaseSummaries(spans, refresh, work, gpu) {
       missedWork: work.kinds(missed.map((frame) => [frame.at - frame.ms, frame.at]), missed.length),
       browserWork: perSecond(work.browser(from, to), frames),
       gpu: gpuIn(gpu, from, to),
+      drawn: drawnIn(draws, from, to),
+      painted: paintedIn(paints, from, to, frames.length, names),
       seconds: bySecond(frames, from, to, work.browser, gpu),
       js: work.js(from, to, frames.length),
     };
@@ -366,11 +429,11 @@ function missedOf(frames, refresh) {
  * tasks it was built in.
  */
 function onPage(record, events, mark, sourceOf) {
-  const stamp = markOf(events, mark);
-  const markTs = stamp?.ts ?? null;
+  const clock = clockOf(events, mark, record);
+  const stamp = clock?.stamp ?? null;
   const names = threadNames(events);
   const tasks = events.filter((event) => event.ph === 'X');
-  const toPage = (ts) => (markTs === null ? null : onPageClock(ts, markTs, record.start));
+  const toPage = (ts) => (clock === null ? null : onPageClock(ts, clock.stamp.ts, clock.at));
   const links = tasks
     .filter((event) => event.name === 'driver_link_program')
     .map((link) => ({
@@ -380,16 +443,26 @@ function onPage(record, events, mark, sourceOf) {
       heldIn: heldIn(link, tasks),
     }));
   const placed = placedWork(selfTimes(tasks), toPage, names);
-  return { stamp, tasks, names, toPage, placed, samples: jsSamples(events, toPage, names, sourceOf), links };
+  const draws = events
+    .filter((event) => event.ph === 'D')
+    .map((draw) => ({ kind: draw.kind, material: draw.material, at: toPage(draw.ts) }))
+    .filter((draw) => draw.at !== null);
+  const paints = events
+    .filter((event) => event.ph === 'P')
+    .map((paint) => ({ node: paint.node, at: toPage(paint.ts) }))
+    .filter((paint) => paint.at !== null);
+  const samples = jsSamples(events, toPage, names, sourceOf);
+  return { stamp, tasks, names, toPage, placed, samples, links, draws, paints };
 }
 
 /**
  * The findings of one measure: `record` is the page's (`page.mjs` `stopRecording`), `events` the trace's kept events
  * and `mark` the page's mark in them; `sourceOf` names the page's functions where its JS was sampled
- * (`sourceMap.mjs` `sourcesOf`).
+ * (`sourceMap.mjs` `sourcesOf`), `painted` the elements it painted by their node ids (`stalls.mjs` `paintedNames`).
  */
-export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = () => null) {
-  const { stamp, tasks, names, toPage, placed, samples, links } = onPage(record, events, mark, sourceOf);
+export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = () => null, painted = new Map()) {
+  const traced = onPage(record, events, mark, sourceOf);
+  const { stamp, tasks, names, toPage, placed, samples, links, draws, paints } = traced;
   const markTs = stamp?.ts ?? null;
   const inRecording = links.filter((link) => link.at === null || link.at >= record.start);
   const stalls = record.frames
@@ -423,7 +496,7 @@ export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = (
       kinds: (kept, count) => workIn(placed, kept, count),
       browser: (from, to) => browserWorkIn(placed, from, to),
       js: (from, to, count) => (samples.length ? jsIn(samples, from, to, count) : null),
-    }, record.gpu ?? []),
+    }, record.gpu ?? [], draws, paints, painted),
     programs: {
       count: inRecording.length,
       total: inRecording.reduce((sum, link) => sum + link.ms, 0),

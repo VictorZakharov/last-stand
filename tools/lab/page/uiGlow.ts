@@ -13,10 +13,13 @@
 // moving between items raised the GPU's time a frame from 5.4 ms to 6.3 (the owner's rose from 5 to 14 as the frames
 // fell to 30), where either mask alone raised it by 0.1 at the most, `npm run stalls -- --scenario sweep --perf`,
 // variants noArcMask, noStashMask).
+// And for an opacity faded round its loops: an opacity on one layer is drawn with it, round more it's a pass of the
+// compositor's own, every frame of the fade (the hovered glow faded in round its four layers: at the owner's pace from
+// item to item, sweeping drew 2.6 passes a frame, 1.9 without it, `npm run stalls -- --scenario sweep --passes`).
 // And the stash's fade, laid over a row its scroll cuts in place of that mask, shown at its top while a row is cut and
 // hidden at its end and over a stash that fits (it was a dark band over the bare panel).
 // A canary each: a shadow looped on the hovered item, a loop on a stash item not hovered, a mask on the hovered item's
-// glow within one on the stash, and the fade held shown.
+// glow within one on the stash, an opacity faded round the glow's loops, and the fade held shown.
 import { G } from '../../../src/state';
 import { makeItem } from '../../../src/loot/items';
 import * as menus from '../../../src/ui/menus';
@@ -49,6 +52,7 @@ export const GLOW_CANARIES = {
   shadow: { name: 'lab-canary-shadow', what: 'a looping shadow on the hovered item' },
   spread: { name: 'lab-canary-spread', what: 'a loop on a stash item not hovered' },
   mask: { name: 'lab-canary-mask', what: 'a mask on the hovered item\'s glow within one on the stash' },
+  opacity: { name: 'lab-canary-opacity', what: 'an opacity faded round the hovered item\'s loops' },
   fade: { name: 'lab-canary-fade', what: 'the stash\'s fade held shown' },
 };
 /** how far from shown or hidden the fade may be read (its opacity) */
@@ -127,9 +131,9 @@ interface Found {
 /**
  * The glow lit: how many items it lit, the loops they run and on how many items, and a problem each for those that
  * animate what has to be painted again (its name, where, the properties, how many such), for those on a stash item
- * not hovered and for each mask in the hovered item's glow within another; then the stash's fade (`fadeShown`). With
- * `canary`, the hovered item loops a shadow, one not hovered loops its glow round and the hovered one's glow is masked
- * within a mask on the stash first.
+ * not hovered, for each mask in the hovered item's glow within another and for each part of it whose opacity fades
+ * round its loops; then the stash's fade (`fadeShown`). With `canary`, the hovered item loops a shadow, one not
+ * hovered loops its glow round, the hovered one's glow is masked within a mask on the stash first and faded in after.
  */
 export async function glowShown(canary: boolean, lab: Lab): Promise<Found> {
   const glow = litShown(canary);
@@ -145,6 +149,9 @@ function litShown(canary: boolean): Found {
   const masked = maskedParts();
   const within = maskedAround();
   unmask();
+  const unfade = canary ? plantOpacityFade() : () => undefined;
+  const faded = fadedRoundLoops();
+  unfade();
   const running = looping().filter(runsLit);
   const painted = countedWords(running.flatMap(paintedBy));
   const spread = countedWords(running.filter(onItemNotHovered).map(namedWhere));
@@ -154,7 +161,7 @@ function litShown(canary: boolean): Found {
   const lines = [`  the glow: ${lit} of the stash's ${STASH_ITEMS} items lit, the ${HOVERED}s; ${running.length} `
     + `loops running on ${items} items, ${painting} of them animating what has to be painted again; the hovered `
     + `item's glow masked in ${masked.length} part${masked.length === 1 ? '' : 's'}, within ${within.length} `
-    + `mask${within.length === 1 ? '' : 's'} round it`];
+    + `mask${within.length === 1 ? '' : 's'} round it, faded round its loops in ${faded.length}`];
   const problems = painted.map(({ words, count }) => `glow: ${count} x ${words} (painted again every frame: animate `
     + 'a layer\'s transform or opacity alone)');
   for (const { words, count } of spread) {
@@ -166,8 +173,55 @@ function litShown(canary: boolean): Found {
       + 'pass of the compositor\'s own within another, drawn again every frame: keep one of them to a shape by its '
       + 'box)');
   }
+  for (const part of faded) {
+    problems.push(`glow: an opacity faded on ${part} round the loops in it (a pass of the compositor's own every `
+      + 'frame of the fade: fade a layer alone, or bring it in by its size)');
+  }
   if (lit === 0) problems.push(`glow: hovering a ${HOVERED} lit none of the stash's items`);
   return { lines, problems };
+}
+
+/** The parts of the hovered item's glow whose opacity fades (a transition of it, or an animation) round parts within
+ *  them that loop, by tag and classes. */
+function fadedRoundLoops(): string[] {
+  const glow = hoveredGlow();
+  if (!glow) return [];
+  return [glow, ...glow.querySelectorAll('*')].filter(fadesOpacity).filter(holdsLoops).map(elementName);
+}
+
+/** Whether `part`'s opacity fades: a transition of it (or of all) that takes any time, or an animation of it. */
+function fadesOpacity(part: Element): boolean {
+  const style = getComputedStyle(part);
+  const durations = style.transitionDuration.split(',').map((duration) => Number.parseFloat(duration));
+  const transitioned = style.transitionProperty.split(',').some((property, index) => {
+    const named = property.trim();
+    return (named === 'opacity' || named === 'all') && durations[index % durations.length] > 0;
+  });
+  const animated = part.getAnimations().some((animation) => {
+    const keyframes = (animation.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
+    return keyframes.some((keyframe) => 'opacity' in keyframe);
+  });
+  return transitioned || animated;
+}
+
+/** Whether a part within `part` (not it) runs a loop. */
+function holdsLoops(part: Element): boolean {
+  return part.getAnimations({ subtree: true }).some((animation) => {
+    const target = (animation.effect as KeyframeEffect | null)?.target;
+    return target !== part && animation.effect?.getComputedTiming().iterations === Infinity;
+  });
+}
+
+/** The opacity canary: the hovered item's glow faded in, named by its class; returns what takes it off. */
+function plantOpacityFade(): () => void {
+  const glow = hoveredGlow() as HTMLElement | null;
+  if (!glow) return () => undefined;
+  glow.classList.add(GLOW_CANARIES.opacity.name);
+  glow.style.transition = 'opacity .3s';
+  return () => {
+    glow.classList.remove(GLOW_CANARIES.opacity.name);
+    glow.style.transition = '';
+  };
 }
 
 /**

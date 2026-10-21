@@ -69,13 +69,16 @@ export function markPhase(name) {
   window.__stalls.phases.push({ name, at: performance.now() });
 }
 
-/** Stops the recording and returns it (the times are the page's, ms). */
-export function stopRecording() {
+/** Stops the recording and returns it (the times are the page's, ms), marking the trace again at its end
+ *  (`${mark}:end`): a trace that filled Chrome's buffer lost its start, and the mark with it (`--passes`). */
+export function stopRecording(mark) {
   const record = window.__stalls;
   record.stopped = true;
   record.observer.disconnect();
-  const { start, frames, changes, phases, gpu } = record;
-  return { start, frames, changes, phases, gpu };
+  record.end = performance.now();
+  console.timeStamp(`${mark}:end`);
+  const { start, end, frames, changes, phases, gpu } = record;
+  return { start, end, frames, changes, phases, gpu };
 }
 
 /**
