@@ -4,8 +4,13 @@
 // once the wind has picked it up: the real letters stay on screen and are wiped away just behind the
 // wind front, so no copy of them at rest is ever seen (a coarser snapshot would show as a swap).
 // The glows stay live and fade. Motion is closed-form in the vertex shader (hundreds of thousands
-// of points, no per-frame CPU work) and driven by smooth noise of each point's starting position,
+// of points, no CPU work a point) and driven by smooth noise of each point's starting position,
 // so neighbours move together in streaks and eddies, like real wind.
+//
+// Every point is kept as its place in the letters, never as a place on the screen, and the letters, the lobby's
+// logo and the canvas are measured again on every frame of the exit: it follows the window however often it
+// changes (full screen and back, a phone turned, the zoom). (Placed once, as the lobby was laid out, a window resized
+// on the loading screen had the letters blow from where they had been and gather where the lobby's logo had been.)
 //
 // It is heavy (up to 1.5M points while the lobby renders behind), so it scales to the device:
 // phones and low-end machines snapshot the letters at a lower resolution to stay within a much
@@ -78,11 +83,13 @@ export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null)
   const metal = letters(logo), glow = logo.querySelector<SVGSVGElement>('svg.logo-glow');
   if (!metal) return null;
   const box = metal.getBoundingClientRect();
-  const dst = target && letters(target)?.getBoundingClientRect();
+  const tMetal = target && letters(target);
+  const dst = tMetal?.getBoundingClientRect();
   if (box.width < 10) return null;
   const budget = pointBudget();
   // the canvas: device pixels, but no more than 2x on a device with a small budget
-  const dpr = Math.min(window.devicePixelRatio || 1, budget < MAX_POINTS ? 2 : 3);
+  const most = budget < MAX_POINTS ? 2 : 3;
+  const dpr = canvasScale(most);
   // the snapshot grid: device pixels when the budget allows (every point lands exactly on the pixel it
   // copies), else coarser, sized from the letters' area (about 45% of their padded box is lit)
   const area = box.width * (1 + 2 * PAD_X) * box.height * (1 + 2 * PAD_Y) * 0.45;
@@ -104,26 +111,21 @@ export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null)
   for (let y = 0; y < ph; y += step) for (let x = 0; x < pw; x += step) {
     const o = (y * pw + x) * 4;
     if (px[o + 3] === 0 || c >= n) continue;
-    pos[c * 2] = (x0 + x + step / 2) / grid;   // pixel centre, CSS px
-    pos[c * 2 + 1] = (y0 + y + step / 2) / grid;
+    // its pixel's centre, as a place in the letters' box (0..1 across it): wherever the box is as it's drawn
+    pos[c * 2] = ((x0 + x + step / 2) / grid - box.left) / box.width;
+    pos[c * 2 + 1] = ((y0 + y + step / 2) / grid - box.top) / box.height;
     col.set(px.subarray(o, o + 4), c * 4);
     for (let j = 0; j < 4; j++) rnd[c * 4 + j] = Math.random() * 256;
     c++;
   }
-  const tMetal = target && letters(target);
-  const gather = dst && dst.width > 10 ? { x: dst.left, y: dst.top, scale: dst.width / box.width } : null;
+  // (the lobby logo's letters, where the points gather: none where it isn't laid out)
+  const into = tMetal && dst && dst.width > 10 ? tMetal : null;
+  const gather = into !== null;
   // the lobby logo is drawn at its own size (its rim, shadow and shine don't simply scale), so the
   // points take its colours as they land: a snapshot of it on the canvas's pixel grid
-  let home: HomeTex | null = null;
-  if (gather && dst && tMetal) {
-    const hx = Math.floor((dst.left - dst.width * PAD_X) * dpr), hy = Math.floor((dst.top - dst.height * PAD_Y) * dpr);
-    const hw = Math.ceil((dst.right + dst.width * PAD_X) * dpr) - hx, hh = Math.ceil((dst.bottom + dst.height * PAD_Y) * dpr) - hy;
-    const tk = dst.width / vb.width;
-    const data = await snapshot(tMetal, [vb.x + (hx / dpr - dst.left) / tk, vb.y + (hy / dpr - dst.top) / tk, hw / dpr / tk, hh / dpr / tk], hw, hh);
-    if (data) home = { data, x: hx / dpr, y: hy / dpr, w: hw, h: hh };
-  }
-  // a point covers its share of the grid, in canvas pixels
-  const field = createField(pos, col, rnd, c, { box, dpr, pointPx: step * dpr / grid, gather, home });
+  const home = into && dst ? await homeOf(into, dst, dpr) : null;
+  // a point covers its cell of the grid (CSS px, at the letters' size then)
+  const field = createField(pos, col, rnd, c, { box, dst: into ? dst! : null, cell: step / grid, most, home });
   if (import.meta.env.DEV) console.info(`logo wind: ${c} points (budget ${budget}), grid ${grid.toFixed(2)}x, canvas ${dpr}x`);
   if (!field) return null;
   // the lobby logo is made of the particles until they have settled. It stays on its own layer at
@@ -135,11 +137,25 @@ export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null)
   };
   if (gather) hide(true);
   const cancel = (): void => { if (gather) hide(false); field.dispose(); };
+  // the letters and the lobby logo where they are now, and the logo's colours taken again where it has changed size
+  // or the screen its pixel ratio (till they come, the snapshot before is read where the logo is now)
+  let homeAt = home && { width: dst!.width, dpr };
+  const place = (): void => {
+    const box = metal.getBoundingClientRect(), now = into?.getBoundingClientRect() ?? null;
+    // (a window moved to another monitor can be 0 px for a moment: the last real place is kept)
+    if (innerWidth < 1 || innerHeight < 1 || box.width < 1 || (now && now.width < 1)) return;
+    field.fit({ box, dst: now });
+    const scale = canvasScale(most);
+    if (!homeAt || !into || !now || (Math.abs(now.width - homeAt.width) < 0.5 && scale === homeAt.dpr)) return;
+    const asked = homeAt = { width: now.width, dpr: scale };
+    void homeOf(into, now, scale).then((taken) => { if (taken && asked === homeAt) field.home(taken); });
+  };
   return {
     cancel,
     start(reveal, done) {
       let revealed = false, handed = false, swapped = false, glowing = false;
       const tGlow = target?.querySelector<SVGSVGElement>('svg.logo-glow');
+      field.follow(place);
       field.canvas.style.visibility = 'visible';
       field.run((t) => {
         if (!swapped) {
@@ -186,11 +202,27 @@ export async function prepareBlow(logo: HTMLElement, target: HTMLElement | null)
   };
 }
 
+/** The canvas's pixels a CSS px: the screen's, but no more than `most`. */
+const canvasScale = (most: number): number => Math.min(window.devicePixelRatio || 1, most);
+
+/** A snapshot of the lobby logo's letters `tMetal` where they are (`dst`, CSS px), `dpr` texels a CSS px. */
+async function homeOf(tMetal: SVGSVGElement, dst: DOMRect, dpr: number): Promise<HomeTex | null> {
+  const vb = tMetal.viewBox.baseVal;
+  const hx = Math.floor((dst.left - dst.width * PAD_X) * dpr), hy = Math.floor((dst.top - dst.height * PAD_Y) * dpr);
+  const hw = Math.ceil((dst.right + dst.width * PAD_X) * dpr) - hx, hh = Math.ceil((dst.bottom + dst.height * PAD_Y) * dpr) - hy;
+  const tk = dst.width / vb.width;
+  const data = await snapshot(tMetal, [vb.x + (hx / dpr - dst.left) / tk, vb.y + (hy / dpr - dst.top) / tk, hw / dpr / tk, hh / dpr / tk], hw, hh);
+  return data && { data, w: hw, h: hh, x: hx / dpr - dst.left, y: hy / dpr - dst.top, px: dpr, width: dst.width };
+}
+
+/** the font's @font-face rule, fetched once (the lobby logo is snapshotted again when it changes size) */
+let cinzel: Promise<string> | null = null;
+
 /** Render the letters' SVG (with the font embedded, which an SVG image can't load) to RGBA pixels. */
 async function snapshot(metal: SVGSVGElement, view: number[], w: number, h: number): Promise<Uint8ClampedArray | null> {
   const defs = document.querySelector('.svg-defs defs');
   if (!defs) return null;
-  const font = await fontFace('Cinzel', 900).catch(() => '');
+  const font = await (cinzel ??= fontFace('Cinzel', 900).catch(() => ''));
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${view.join(' ')}" preserveAspectRatio="none">`
     + `<style>${font}</style>${new XMLSerializer().serializeToString(defs)}${metal.innerHTML}</svg>`;
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
@@ -224,9 +256,9 @@ const VERT = /* glsl */`#version 300 es
 in vec2 aPos; in vec4 aCol; in vec4 aRnd;
 uniform float uT, uPx, uDpr;
 uniform sampler2D uHome;   // the lobby logo's snapshot...
-uniform vec3 uHomeAt;      // ...its left, top (CSS px) and whether there is one
+uniform vec4 uHomeAt;      // ...its texel at a point: (CSS px from the logo's corner) * z - xy; w = 1 when there is one
 uniform vec2 uView;
-uniform vec4 uBox;   // letters' left, top, width, height (CSS px)
+uniform vec4 uBox;   // letters' left, top, width, height (CSS px, where they are now: aPos is a place in it, 0..1)
 uniform vec4 uDst;   // lobby logo left, top, scale; w = 1 when there is one to gather into
 out vec4 vCol; out float vRound;
 const float SWEEP = ${SWEEP.toFixed(2)}, TEAR = ${TEAR.toFixed(2)}, OVER = ${OVER.toFixed(2)};
@@ -244,7 +276,7 @@ float fbm(vec2 p) { return (noise(p) * 0.65 + noise(p * 2.3 + 7.1) * 0.35) * 2.0
 float tear(float v) { return TEAR * (0.5 + 0.5 * fbm(vec2(v * 9.0, 2.0))); }
 
 void main() {
-  vec2 n = (aPos - uBox.xy) / uBox.zw;   // 0..1 across the letters
+  vec2 n = aPos;   // 0..1 across the letters
   float rel = max(0.0, (1.0 - n.x + tear(clamp(n.y, 0.0, 1.0))) / OVER * SWEEP - aRnd.x * 0.06);
   float W = uBox.z;
   bool gathers = uDst.w > 0.5;
@@ -261,7 +293,7 @@ void main() {
   float gust = 0.65 + 0.55 * fbm(vec2(n.y * 3.5, 4.2)) + 0.25 * (aRnd.y - 0.5);
   if (flake) gust *= 0.6;
   float a2 = age * age;
-  vec2 p = aPos;
+  vec2 p = uBox.xy + n * uBox.zw;
   p.x -= W * (0.16 * age + (gathers ? 0.42 : 0.9) * gust * a2);
   // eddies: neighbours curl up or down together, drifting with time; the gust also lifts
   float eddy = fbm(n * vec2(2.2, 3.0) + vec2(age * 0.9, 1.7));
@@ -274,7 +306,7 @@ void main() {
   // gathering: a curved path (quadratic Bezier) to the same pixel of the lobby logo. The curve
   // bows the same way for every point (onward with the gust, then curling up into the panel), so
   // the swarm streams in as one; the noise varies it a little between neighbours.
-  vec2 home = uDst.xy + (aPos - uBox.xy) * uDst.z;
+  vec2 home = uDst.xy + n * uBox.zw * uDst.z;
   vec2 d = home - p;
   vec2 ctrl = (p + home) * 0.5 + vec2(d.y, -d.x) * (0.38 + 0.12 * eddy + 0.1 * (aRnd.z - 0.5));
   float h = 1.0 - g;
@@ -292,10 +324,10 @@ void main() {
   if (age <= 0.0 && g <= 0.0) a = 0.0;
   // flakes whiten while airborne, like snow
   vec4 col = aCol;
-  if (uHomeAt.z > 0.5 && g > 0.0) {
+  if (uHomeAt.w > 0.5 && g > 0.0) {
     // landing: into the lobby logo's own colour at that pixel
     ivec2 size = textureSize(uHome, 0);
-    ivec2 at = clamp(ivec2((home - uHomeAt.xy) * uDpr), ivec2(0), size - 1);
+    ivec2 at = clamp(ivec2((home - uDst.xy) * uHomeAt.z - uHomeAt.xy), ivec2(0), size - 1);
     col = mix(aCol, texelFetch(uHome, at, 0), smoothstep(0.4, 1.0, g));
   }
   vec3 c = mix(col.rgb, vec3(0.95, 0.96, 1.0), flake ? 0.6 * blown : 0.0);
@@ -390,19 +422,21 @@ export function dropWind(): void {
   ahead = null;
 }
 
-/** A snapshot of the lobby logo: RGBA on the canvas's pixel grid, its top left in CSS px. */
-interface HomeTex { data: Uint8ClampedArray; x: number; y: number; w: number; h: number }
-interface FieldOpts { box: DOMRect; dpr: number; pointPx: number; gather: { x: number; y: number; scale: number } | null; home: HomeTex | null }
+/** A snapshot of the lobby logo: RGBA, `w` by `h`, taken with its letters `width` CSS px wide, `px` texels a CSS px;
+ *  its top left `x`, `y` CSS px from the letters' corner. */
+interface HomeTex { data: Uint8ClampedArray; w: number; h: number; x: number; y: number; px: number; width: number }
+/** Where the letters (`box`) and the lobby logo's (`dst`: none where the points don't gather) are, CSS px. */
+interface Place { box: DOMRect; dst: DOMRect | null }
+/** The field as it's made: where things are then, the CSS px a point covers with the letters that size, the most
+ *  canvas pixels a CSS px, and the lobby logo's snapshot. */
+interface FieldOpts extends Place { cell: number; most: number; home: HomeTex | null }
 
 function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count: number, o: FieldOpts) {
   const made = ahead ?? makeContext();
   ahead = null;
   if (!made) return null;
   const { canvas, gl, prog } = made;
-  // a whole number of device pixels, shown unscaled: any resampling would soften the letters
-  canvas.width = Math.floor(innerWidth * o.dpr); canvas.height = Math.floor(innerHeight * o.dpr);
-  const cssW = canvas.width / o.dpr, cssH = canvas.height / o.dpr;
-  Object.assign(canvas.style, { position: 'fixed', left: '0', top: '0', width: `${cssW}px`, height: `${cssH}px`, zIndex: '101', pointerEvents: 'none', visibility: 'hidden' });
+  Object.assign(canvas.style, { position: 'fixed', left: '0', top: '0', zIndex: '101', pointerEvents: 'none', visibility: 'hidden' });
   if (made.linked === undefined) made.linked = readLinked(gl, prog);
   const linked = made.linked;
   if (!linked) return null;
@@ -419,24 +453,42 @@ function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count:
   attr('aCol', col, 4, gl.UNSIGNED_BYTE, true);
   attr('aRnd', rnd, 4, gl.UNSIGNED_BYTE, true);
   const u = (name: string): WebGLUniformLocation | null => linked.uniforms[name];
-  gl.uniform2f(u('uView'), cssW, cssH);
-  gl.uniform4f(u('uBox'), o.box.left, o.box.top, o.box.width, o.box.height);
-  const g = o.gather;
-  gl.uniform4f(u('uDst'), g?.x ?? 0, g?.y ?? 0, g?.scale ?? 1, g ? 1 : 0);
-  gl.uniform1f(u('uPx'), o.pointPx);
-  gl.uniform1f(u('uDpr'), o.dpr);
-  const h = o.home;
-  gl.uniform3f(u('uHomeAt'), h?.x ?? 0, h?.y ?? 0, h ? 1 : 0);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-  if (h) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, h.w, h.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, h.data);
-  else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+  let h = o.home;
+  const upload = (): void => {
+    if (h) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, h.w, h.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, h.data);
+    else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+  };
+  upload();
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.uniform1i(u('uHome'), 0);
+  let placed: Place = o, sized = '';
+  /** the canvas fitted to the window, and the uniforms to `placed` (the lobby logo's snapshot read where it is now) */
+  const fit = (): void => {
+    const dpr = canvasScale(o.most);
+    // a whole number of device pixels, shown unscaled: any resampling would soften the letters
+    const w = Math.floor(innerWidth * dpr), ht = Math.floor(innerHeight * dpr);
+    if (sized !== `${w}x${ht}@${dpr}`) {
+      sized = `${w}x${ht}@${dpr}`;
+      canvas.width = w; canvas.height = ht;
+      Object.assign(canvas.style, { width: `${w / dpr}px`, height: `${ht / dpr}px` });
+      gl.viewport(0, 0, w, ht);
+    }
+    gl.uniform2f(u('uView'), w / dpr, ht / dpr);
+    const { box, dst } = placed;
+    gl.uniform4f(u('uBox'), box.left, box.top, box.width, box.height);
+    gl.uniform4f(u('uDst'), dst?.left ?? 0, dst?.top ?? 0, dst ? dst.width / box.width : 1, dst ? 1 : 0);
+    // (a point covers its cell with the letters as large as they are now, in canvas pixels)
+    gl.uniform1f(u('uPx'), o.cell * box.width / o.box.width * dpr);
+    gl.uniform1f(u('uDpr'), dpr);
+    const k = h && dst ? h.px * h.width / dst.width : 0;
+    gl.uniform4f(u('uHomeAt'), h ? h.x * h.px : 0, h ? h.y * h.px : 0, k, h && dst ? 1 : 0);
+  };
+  fit();
   const uT = u('uT');
-  gl.viewport(0, 0, canvas.width, canvas.height);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   const draw = (t: number): void => {
@@ -447,10 +499,23 @@ function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count:
   draw(0);   // compile and upload now, not on the first frame of the exit
   document.body.appendChild(canvas);
   // gathering: settled and handed over; otherwise the last flakes (released at SWEEP) fade by then
-  const END = g ? LANDED + GATHER_SPREAD * (1 + PAD_X) + 0.04 + HANDOFF : SWEEP + 3.2;
+  const END = o.dst ? LANDED + GATHER_SPREAD * (1 + PAD_X) + 0.04 + HANDOFF : SWEEP + 3.2;
   let disposed = false;
+  /** where things are, asked as the exit starts and on each of its frames (`follow`) */
+  let measure: (() => void) | null = null;
   return {
     canvas,
+    /** Placed where `place` says: the letters and the lobby logo where they are now. */
+    fit(place: Place): void { placed = place; fit(); },
+    /** The lobby logo's colours taken again (`homeOf`), read from now on. */
+    home(taken: HomeTex): void {
+      if (disposed) return;
+      h = taken;
+      upload();
+      fit();
+    },
+    /** `place` asked now and on every frame of the exit before it's drawn (it calls `fit`). */
+    follow(place: () => void): void { measure = place; place(); },
     /** `tick` gets the exit's time: seconds since the wind started. */
     /** `slow` fires if the watchdog cuts the exit short; `done` still follows once the backdrop has faded. */
     run(tick: (t: number) => void, done: () => void, slow: () => void): void {
@@ -475,6 +540,7 @@ function createField(pos: Float32Array, col: Uint8Array, rnd: Uint8Array, count:
           }
         }
         last = now;
+        measure?.();
         draw(t);
         tick(t);
         if (t < END) requestAnimationFrame(frame); else done();
