@@ -481,6 +481,20 @@ function ringWalk(r0: number, r1: number, texel: number): THREE.BufferGeometry {
   return g.toNonIndexed();
 }
 
+/** A floor grate (x along the ring, z across it, its top at y 0.035): an iron frame and the bars across the opening
+ *  inside it, and the opening's dark drain, a hair over the walk. */
+function grateParts(): { frame: THREE.BufferGeometry; opening: THREE.BufferGeometry } {
+  const along = 1.9, across = 1.5, rim = 0.09, tall = 0.035;
+  const bar = (w: number, d: number, x: number, z: number) => new THREE.BoxGeometry(w, tall, d).translate(x, tall / 2, z);
+  const parts = [
+    bar(along + 2 * rim, rim, 0, (across + rim) / 2), bar(along + 2 * rim, rim, 0, -(across + rim) / 2),
+    bar(rim, across, (along + rim) / 2, 0), bar(rim, across, -(along + rim) / 2, 0),
+  ];
+  for (let j = 1; j < 9; j++) parts.push(bar(0.045, across, -along / 2 + (j * along) / 9, 0));
+  const opening = new THREE.PlaneGeometry(along, across).rotateX(-Math.PI / 2).translate(0, 0.016, 0);
+  return { frame: mergeGeometries(parts.map((g) => g.toNonIndexed()))!, opening };
+}
+
 /** A pointed-arch window pane (w wide, ht tall), facing -Z. */
 function lancetGeo(w: number, ht: number): THREE.BufferGeometry {
   const s = new THREE.Shape(), hw = w / 2, spring = ht - w * 0.8;
@@ -898,21 +912,21 @@ function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.M
   skulls.castShadow = true;
   scene.add(skulls);
 
-  // iron floor grates set into the ring walk
-  const grateGeo = new THREE.BoxGeometry(0.06, 0.04, 2.2);
-  const grates = new THREE.InstancedMesh(grateGeo, iron, 8 * 9);
-  let gi = 0;
+  // iron floor grates set into the ring walk: a frame round a dark drain, bars across it (bars laid on the walk's
+  // stone with nothing under them read as a glitch, stripes on the floor)
+  const { frame: grateGeo, opening } = grateParts();
+  // (drawn nearer than the walk under it by its depth's offset as well: 4 mm over it, it might flicker far off)
+  const drainMat = new THREE.MeshStandardMaterial({ color: 0x030304, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
+  const grates = new THREE.InstancedMesh(grateGeo, iron, 8);
+  const drains = new THREE.InstancedMesh(opening, drainMat, 8);
   for (let k = 0; k < 8; k++) {
     const a = (k / 8) * TAU + Math.PI / 8, rr = 18.5;
-    const cx = Math.cos(a) * rr, cz = Math.sin(a) * rr;
-    for (let j = 0; j < 9; j++) {
-      const off = (j - 4) * 0.26;
-      // bars run radially, side by side along the ring
-      e.set(0, Math.PI / 2 - a, 0); q.setFromEuler(e); s.set(1, 1, 1);
-      const ox = Math.cos(a + Math.PI / 2) * off, oz = Math.sin(a + Math.PI / 2) * off;
-      grates.setMatrixAt(gi++, m.compose(p.set(cx + ox, 0.03, cz + oz), q, s));
-    }
+    // its bars run radially, side by side along the ring
+    e.set(0, Math.PI / 2 - a, 0); q.setFromEuler(e); s.set(1, 1, 1);
+    m.compose(p.set(Math.cos(a) * rr, 0, Math.sin(a) * rr), q, s);
+    grates.setMatrixAt(k, m);
+    drains.setMatrixAt(k, m);
   }
-  grates.receiveShadow = true;
-  scene.add(grates);
+  grates.receiveShadow = drains.receiveShadow = true;
+  scene.add(grates, drains);
 }
