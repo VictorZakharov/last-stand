@@ -13,6 +13,7 @@ import { exportCommit } from './commits.mjs';
 import { describeDifferences } from './compare.mjs';
 import { labError } from './errors.mjs';
 import { OUT, REPO } from './paths.mjs';
+import { priorityNow } from './priority.mjs';
 import { describePictureDifferences } from './pictures.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { profiled, scriptsIn, summarize } from './profile.mjs';
@@ -230,7 +231,10 @@ export class LabSession {
       const state = fresh ? 'booted for the next command' : 'used (the next command boots)';
       return `${side.name}: ${side.url}, the ${side.heroClass}${bootText(how)} ${state}`;
     });
-    return lines.join('\n') || 'nothing served yet';
+    if (lines.length === 0) lines.push('nothing served yet');
+    // (its browsers and Vite inherit it: `lowerPriority` in priority.mjs)
+    lines.push(`the lab server runs at ${priorityNow()} priority`);
+    return lines.join('\n');
   }
 
   /**

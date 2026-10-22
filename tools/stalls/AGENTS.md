@@ -4,6 +4,7 @@ The stalls harness (`README.md`): the game played in the installed Chrome on thi
 
 The rules across the game are the [root AGENTS.md](../../AGENTS.md); each directory under this one has an AGENTS.md of its own.
 
+- **It runs at the priority it's started at** (`stalls: running at ... priority`, its first line), unlike the lab, which lowers itself: below normal, the desktop's own work would read as the game's stalls.
 - **Look at the machine first.** Stalls of 1.4 to 1.9 s in the owner's Chrome went away with a reinstall of the GPU driver; another agent's browser on the same GPU is in no trace of this one.
 - It starts Chrome on a fresh profile of its own: a Chrome it started outlives a lost connection, so make sure it's closed afterwards.
 - Why page elements moved every frame stalled the lobby, and what replaced them: the overlays gotcha in `src/ui/overlay/AGENTS.md`.

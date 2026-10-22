@@ -17,11 +17,14 @@
 // comparison reads, the zoomed sheets and report.txt.
 import { createServer } from 'vite';
 import { launchBrowser, useLocalTemp } from '../lab/node/browser.mjs';
+import { lowerPriority } from '../lab/node/priority.mjs';
 import { spawnSync } from 'child_process';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
+// (below normal, as the lab runs, before Vite and the browser start: each inherits it)
+lowerPriority();
 const HERE = dirname(fileURLToPath(import.meta.url)), ROOT = resolve(HERE, '../..');
 const arg = (name, def) => { const i = process.argv.indexOf(`--${name}`); return i < 0 ? def : process.argv[i + 1] ?? true; };
 const flag = (name) => process.argv.includes(`--${name}`);

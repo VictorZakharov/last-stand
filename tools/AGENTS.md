@@ -14,6 +14,7 @@ The rules across the game are the [root AGENTS.md](../AGENTS.md); each directory
 | `stalls/` | The browser's own stalls, in the installed Chrome (`npm run stalls`) |
 
 - **Every harness is permanent** (the root's Commands): a measure is part of a tool from its first use, never a script in `.tmp`.
+- **A harness runs below normal priority** unless what it measures is the machine's own timing: the lab and facelab lower themselves as they start (`lab/node/priority.mjs`, `lowerPriority`), and what they start inherits it; `stalls` stays at the priority it's started at, since it times the browser's own stalls, and says which as it starts.
 - What a tool writes stays in its own `out/` (ignored by git), never the user's temp folder. Scratch files go in `.tmp` in the repo.
 - The Python tools run through a Node launcher: the icons', the music's and the photos' with the system's Python (`python` on Windows, `python3` elsewhere), their packages in their `requirements.txt`; the face harness's in a venv of its own (`npm run facelab -- --setup`).
 - The lab's and the stalls' Node code have unit tests (`npm run lab:test`, `npm run stalls:test`).

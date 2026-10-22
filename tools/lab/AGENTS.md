@@ -9,6 +9,7 @@ The lab as an agent works with it: what every command measures, in a line here a
 - **A check run often takes minutes**, not half an hour (Don't waste compute in the root's Workflow): `--profile` it, cut what its measures don't read, run side by side what doesn't depend on each other, and while iterating run only the scenarios a change can touch.
 - **Send a long run's output to a file** in `.tmp` (an `--ab` run, a check) and read its parts: read through `head` or `tail`, a run's end was lost.
 - **Stop the server with `npm run lab -- stop`**: its supervisor starts a killed server again.
+- **The lab runs below normal priority, and lowers itself** (`node/priority.mjs`, #283): its command line, its server's supervisor and the server lower themselves as they start, before any browser, Vite or worker, which inherit it on Windows; each browser's processes Chrome raises (its GPU process as it starts, a page's renderer as it shows it) are lowered again after its launch and each page's load (`lowerProcesses` in `node/browser.mjs`, by the browser's own `SystemInfo.getProcessInfo`). At normal priority its runs froze the owner's desktop for 10 to 20 s, about a dozen times over one task. `lab status` and the supervisor's first line say what it runs at; check its browsers with their process tree's `PriorityClass` (a page's renderer may sit at Idle, lower still).
 
 ## Commands at a glance
 

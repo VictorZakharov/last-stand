@@ -4,6 +4,7 @@
 import { chromium } from 'playwright-core';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { lowerProcess } from './priority.mjs';
 
 /** Points TEMP and TMP at `dir`/tmp: Playwright puts the browser's profile under os.tmpdir(), which reads them. */
 export function useLocalTemp(dir) {
@@ -29,6 +30,22 @@ function gpuArgs() {
 }
 
 /**
+ * Each of `browser`'s processes that runs above the lab's priority lowered to it (priority.mjs); how many were. Its
+ * processes inherit the lab's, below normal, but Chrome raised its GPU process to above normal as it started and a
+ * page's renderer to normal as it showed it, the two that work hardest (`--disable-renderer-priority-management`
+ * left the renderer raised, and the GPU's is a feature: a `--disable-features` of our own replaces Playwright's list).
+ */
+export async function lowerProcesses(browser) {
+  const cdp = await browser.newBrowserCDPSession();
+  try {
+    const { processInfo } = await cdp.send('SystemInfo.getProcessInfo');
+    return processInfo.filter(({ id }) => lowerProcess(id)).length;
+  } finally {
+    await cdp.detach();
+  }
+}
+
+/**
  * Launches a browser in its native headless mode: Playwright's Chromium (npx playwright install chromium), else Edge
  * or Chrome. (`channel: 'chromium'` is the full browser run headless, not Playwright's separate headless shell, a
  * console program that opened a console window of its own.)
@@ -37,7 +54,9 @@ export async function launchBrowser() {
   const failures = [];
   for (const channel of CHANNELS) {
     try {
-      return await chromium.launch({ headless: true, channel, args: gpuArgs() });
+      const browser = await chromium.launch({ headless: true, channel, args: gpuArgs() });
+      await lowerProcesses(browser);
+      return browser;
     } catch (error) {
       failures.push(`${channel}: ${String(error?.message ?? error).split('\n')[0]}`);
     }
