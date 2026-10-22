@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { seeThrough } from '../core/seeThrough';
 import { ARENA } from '../data/balance';
-import { forestFloor, bark, flagstone, moss, rock, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
+import { forestFloor, bark, flagstone, moss, rock, wood, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
 import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
@@ -19,6 +19,7 @@ import { bend, rag, taperTube, turnedOut, twist } from '../entities/models/shape
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import { buildFire, emberMat } from './fire';
 import { floorRelief } from '../core/parallax';
+import { tubesRelief } from './ground';
 import type { Obstacle } from '../types';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
@@ -329,7 +330,9 @@ export const buildForest: BiomeBuilder = (scene) => {
   // --- Floor obstacles: stumps, fallen logs, boulders -------------------------------
   // (r, angle) spots clear of the gates' spawn areas, the lights and the lobby dummies
   const stumpSpots = [[15, 0.4], [19, 2.0], [14, 3.45], [20, 4.35], [18, 5.85], [9, 1.2]];
-  const stumps = new THREE.InstancedMesh(buildStumpGeo(rng), barkAt(BARK_REPEATS.stumps), stumpSpots.length);
+  // (the broken top's oak weathered grey, its rings round its middle: `stumpTop`)
+  const stumpWood = seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1.4), color: 0xb4a898 }), 'prop');
+  const stumps = new THREE.InstancedMesh(buildStumpGeo(rng), [stumpWood, barkAt(BARK_REPEATS.stumps)], stumpSpots.length);
   stumpSpots.forEach(([rr, a], i) => {
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr, s = r(0.8, 1.15), yaw = r(0, TAU), sy = r(0.8, 1.4);
     setInstance(stumps, i, x, 0, z, 0, yaw, 0, s, sy, s);
@@ -341,7 +344,10 @@ export const buildForest: BiomeBuilder = (scene) => {
   scene.add(stumps);
 
   const logSpots = [[21, 1.15, 0.9], [11, 4.75, -0.4], [22, 3.0, 0.3]];
+  // (both sides: past the heartwood's rim, 0.2 m in, an end is the bark's shell alone, and from outside only it
+  // showed the floor through the log's wall)
   const log = buildLogGeo(rng), logBark = barkAt(BARK_REPEATS.log);
+  logBark.side = THREE.DoubleSide;
   for (const [rr, a, rot] of logSpots) {
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr, yaw = a + rot, parts: THREE.Mesh[] = [], n0 = obstacles.length;
     for (const [geo, mat] of [[log.bark, logBark], [log.inner, heartwood], [log.moss, logMoss], [log.fungus, capMat]] as const) {
@@ -442,7 +448,8 @@ export const buildForest: BiomeBuilder = (scene) => {
   scene.add(...cullInCells(ferns, FLOOR_CELLS));
 
   // roots snaking out of the thicket across the floor, half sunk in it
-  const roots: THREE.BufferGeometry[] = [];
+  // (each a tube's samples as well, the floor's relief: feet step onto them, `world/ground.ts`)
+  const roots: THREE.BufferGeometry[] = [], rootTops: [number, number, number, number][][] = [];
   for (let i = 0; i < 18; i++) {
     const a = (i / 18) * TAU + r(-0.1, 0.1);
     if (gateGap(a) < 0.25) continue;
@@ -451,7 +458,9 @@ export const buildForest: BiomeBuilder = (scene) => {
       const t = k / 5, rr = WALL_R + 1.5 - t * len, aa = a + bendA * t * t + Math.sin(t * 7 + i) * 0.03;
       pts.push(V(Math.cos(aa) * rr, 0.06 - t * 0.1 + Math.sin(t * 9 + i) * 0.05, Math.sin(aa) * rr));
     }
-    roots.push(turnedOut(taperTube(pts, (t) => 0.28 * (1 - t * 0.85), 24, 7)));
+    const radius = (t: number) => 0.28 * (1 - t * 0.85);
+    roots.push(turnedOut(taperTube(pts, radius, 24, 7)));
+    rootTops.push(tubeSamples(pts, radius, 48));
   }
   const rootMesh = new THREE.Mesh(mergeAll(roots), barkAt(BARK_REPEATS.roots));
   rootMesh.name = 'roots';
@@ -516,6 +525,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   });
 
   return {
+    relief: tubesRelief(rootTops, WALL_R + 3),
     look: {
       // daylight: its ordinary scenes are about 2.3 times as bright as the night crypt's
       adapt: 2.3,
@@ -644,16 +654,26 @@ const BARK_REPEATS = {
   stumps: [4, 3], log: [7, 11], roots: [3, 22], gateArch: [8, 17], gateVine: [3, 17], gateRoots: [3, 4], bonfire: [1, 2],
 } as const satisfies Record<string, Repeat>;
 
-/** A broken stump: a jagged, splintered top, buttress roots, bark lumps. */
+/** Points along the curve `taperTube` lays a tube round (by its length, `steps` of them), each with its radius. */
+function tubeSamples(pts: THREE.Vector3[], radius: (t: number) => number, steps: number): [number, number, number, number][] {
+  const curve = new THREE.CatmullRomCurve3(pts), at = new THREE.Vector3();
+  return Array.from({ length: steps + 1 }, (_, i) => {
+    curve.getPointAt(i / steps, at);
+    return [at.x, at.y, at.z, radius(i / steps)];
+  });
+}
+
+/** A broken stump: a jagged, splintered top, buttress roots, bark lumps. Its groups: the wood of its broken top, then
+ *  its bark (the top was bark as well, the same outside and in). */
 function buildStumpGeo(rng: () => number): THREE.BufferGeometry {
-  const bole = new THREE.CylinderGeometry(0.55, 0.7, 1.0, 14, 3).translate(0, 0.5, 0);
+  const bole = new THREE.CylinderGeometry(0.55, 0.7, 1.0, 14, 3, true).translate(0, 0.5, 0);
   // splinter the rim: every vertex on the top ring rises or falls by its own amount
   const p = bole.attributes.position, jag = Array.from({ length: 15 }, () => rng());
   for (let i = 0; i < p.count; i++) {
     const y = p.getY(i);
     if (y > 0.99) {
-      const centre = Math.hypot(p.getX(i), p.getZ(i)) < 0.01, k = Math.round(((Math.atan2(p.getZ(i), p.getX(i)) / TAU) + 1) % 1 * 14);
-      p.setY(i, centre ? y - 0.12 : y + jag[k] * jag[k] * 0.55 - 0.1);
+      const k = Math.round(((Math.atan2(p.getZ(i), p.getX(i)) / TAU) + 1) % 1 * 14);
+      p.setY(i, y + jag[k] * jag[k] * 0.55 - 0.1);
     }
   }
   const parts: THREE.BufferGeometry[] = [bole];
@@ -661,7 +681,30 @@ function buildStumpGeo(rng: () => number): THREE.BufferGeometry {
     const a = (i / 6) * TAU + 0.3, c = Math.cos(a), s = Math.sin(a), reach = 0.95 + rng() * 0.35;
     parts.push(turnedOut(taperTube([V(c * 0.5, 0.35, s * 0.5), V(c * 0.72, 0.1, s * 0.72), V(c * reach, -0.02, s * reach)], (t) => 0.22 * (1 - t * 0.8), 8, 6)));
   }
-  return lumpy(mergeAll(parts), 0.04, 11);
+  return lumpy(mergeGeometries([stumpTop(bole, 14), mergeAll(parts)], true)!, 0.04, 11);
+}
+
+/** The broken top over a stump's rim (the top ring of `bole`, `segments` round, from index 0): a fan from its middle
+ *  up to the splinters, the wood's grain run round it (v) so its rings (across u) come out round the middle. */
+function stumpTop(bole: THREE.BufferGeometry, segments: number): THREE.BufferGeometry {
+  const p = bole.attributes.position, mid = V(0, 0.88, 0), positions: number[] = [], uvs: number[] = [];
+  /** the rings a metre out from the middle, and the grain's tiles once round */
+  const RINGS = 2.4, ROUND = 12;
+  const at = (v: THREE.Vector3, turn: number) => {
+    positions.push(v.x, v.y, v.z);
+    uvs.push(Math.hypot(v.x, v.z) * RINGS, turn * ROUND);
+  };
+  for (let i = 0; i < segments; i++) {
+    const a = V(p.getX(i), p.getY(i), p.getZ(i)), b = V(p.getX(i + 1), p.getY(i + 1), p.getZ(i + 1));
+    at(mid, (i + 0.5) / segments);
+    at(a, i / segments);
+    at(b, (i + 1) / segments);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  g.computeVertexNormals();
+  return g;
 }
 
 interface GateMats {

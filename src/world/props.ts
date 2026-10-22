@@ -9,6 +9,7 @@ import { valueNoise3 } from '../core/patterns';
 import { particles } from '../fx/particles';
 import type { Obstacle } from '../types';
 import type { Prop } from './destructible';
+import type { Relief } from './ground';
 
 export type Updater = (dt: number, t: number) => void;
 /** Linear RGB, used as-is in shaders. */
@@ -42,6 +43,8 @@ export interface Biome {
   /** the breakable ones among them (a prop's index is its id on the network) */
   props: Prop[];
   portals: Portal[];
+  /** what lies on its floor that feet step onto (`world/ground.ts`) */
+  relief?: Relief;
   setCalm(v: number): void;
   update(dt: number, t: number): void;
 }

@@ -5,7 +5,7 @@ The arenas.
 The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 
 - `arena.ts`: every biome built once at boot into a group of its own, and the switch between them. `crypt.ts`, `forest.ts`: the biomes' builders. `props.ts`: what they share (the biome contract, boxes, instancing, the gates' membranes, the environment map, the skies, the static shadow bake, the grass). `culling.ts`: instanced meshes culled cell by cell, and what the shadow map alone draws. `foliage.ts`: the Thornwood's leaf cards. `ezTrees.ts` (with `ezTree.d.ts`, `ezTreeTextures.ts`): its trees. `fire.ts`: a fire burning on a prop (the crypt's braziers, the forest's bonfires).
-- `ground.ts`: the walkable floor's height (the dais's tiers). `collision.ts`: circles against the props and the boundary. `edge.ts`: the wall as a shape, for what flies into it. `destructible.ts`: the props that break. `navigation.ts`: how foes find their way.
+- `ground.ts`: the walkable floor's height: the dais's tiers, and a biome's relief, what lies on its floor to step onto (`Biome.relief`, set as the arena switches biome): the forest's roots, their tops baked into a 10 cm grid at build (`tubesRelief`, from the curves their tubes follow), so the legs' IK sets feet on them, and foes, arrows and bodies meet them as drawn. `collision.ts`: circles against the props and the boundary. `edge.ts`: the wall as a shape, for what flies into it. `destructible.ts`: the props that break. `navigation.ts`: how foes find their way.
 
 Adding a biome is in the root's Architecture.
 
