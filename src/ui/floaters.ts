@@ -5,12 +5,13 @@ import { G } from '../state';
 import { Label, ORDER, layoutLabels } from './overlay/layer';
 import { drawText, measure, type Shadow, type TextStyle } from './overlay/paint';
 import { uiScales } from './scale';
+import { groundHeight } from '../world/ground';
 
 type WorldPos = { x: number; y: number; z: number };
 export type FloatKind = 'dmg' | 'crit' | 'heal' | 'player' | 'info';
 
 interface Floater { label: Label; x: number; y: number; z: number; t: number; life: number; vx: number }
-interface Anchored { label: Label; at: () => WorldPos | null; clamp: boolean }
+interface Anchored { label: Label; at: () => WorldPos | null; clamp: boolean; hides: boolean }
 
 const floats: Floater[] = [];
 /** the most floating texts shown at once: past it, the oldest goes to make room (each takes a slot of the label
@@ -56,11 +57,37 @@ export function floatText(x: number, y: number, z: number, text: string | number
 const CLAMP = { side: 40, top: 40, bottom: 110 };
 
 /** A label over a point of the world (`at` gives it each frame; null hides it): `clamp` keeps it on screen, above the
- *  hotbar and below the top (a tall prop seen from close by reaches past the frame). */
-export function anchorLabel(order: number, at: () => WorldPos | null, clamp = false): Label {
+ *  hotbar and below the top (a tall prop seen from close by reaches past the frame); `hides` hides it behind a prop
+ *  (`behindProp`: a foe's bar, a dummy's name; a partner's tag shows through, to find them by). */
+export function anchorLabel(order: number, at: () => WorldPos | null, clamp = false, hides = false): Label {
   const label = new Label(order);
-  anchored.set(label, { label, at, clamp });
+  anchored.set(label, { label, at, clamp, hides });
   return label;
+}
+
+/** how far round a thing a prop is taken as its own (its stand, the dummy's own post), past the prop's circle (m) */
+const OWN_PROP = 0.4;
+
+/**
+ * Whether a prop stands between the camera and `to`: the line to it passes through a prop's column (its circle, from
+ * the floor under it up its height). The props round `to` (its own) and round the camera (dissolved round the hero,
+ * `seeThrough`) don't hide it. Labels are drawn over the frame, so nothing in the scene hides them by itself.
+ */
+export function behindProp(to: WorldPos): boolean {
+  const from = G.camera.position;
+  const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z, a = dx * dx + dz * dz;
+  if (a < 1e-6) return false;
+  for (const o of G.arena.obstacles) {
+    if (Math.hypot(to.x - o.x, to.z - o.z) < o.r + OWN_PROP || Math.hypot(from.x - o.x, from.z - o.z) < o.r) continue;
+    const ox = from.x - o.x, oz = from.z - o.z, b = ox * dx + oz * dz, c = ox * ox + oz * oz - o.r * o.r;
+    const disc = b * b - a * c;
+    if (disc <= 0) continue;
+    const t0 = Math.max(0, (-b - Math.sqrt(disc)) / a), t1 = Math.min(1, (-b + Math.sqrt(disc)) / a);
+    if (t0 >= t1) continue;
+    const top = groundHeight(o.x, o.z) + o.h;
+    if (Math.min(from.y + dy * t0, from.y + dy * t1) < top) return true;
+  }
+  return false;
 }
 
 /** The labels anchored to the world, each with where it's anchored now and whether it's held on the screen
@@ -96,8 +123,8 @@ export function updateFloaters(dt: number): void {
   for (const a of anchored.values()) {
     const w = a.at();
     const p = w ? project(w.x, w.y, w.z) : null;
-    a.label.shown = !!p && !p.behind;
-    if (!p || p.behind) continue;
+    a.label.shown = !!p && !p.behind && !(a.hides && behindProp(w!));
+    if (!a.label.shown || !p) continue;
     a.label.x = a.clamp ? Math.min(window.innerWidth - CLAMP.side * u, Math.max(CLAMP.side * u, p.x)) : p.x;
     a.label.y = a.clamp ? Math.min(window.innerHeight - CLAMP.bottom * u, Math.max(CLAMP.top * u, p.y)) : p.y;
   }

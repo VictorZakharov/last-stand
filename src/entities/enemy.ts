@@ -225,7 +225,7 @@ export class Enemy {
 
   createBar(): void {
     this.bar = anchorLabel(ORDER.bar, () => (this.alive && !this.spawning && (this.hero || this.life < this.maxLife)
-      ? { x: this.pos.x, y: this.obj.position.y + this.height + 0.35, z: this.pos.z } : null));
+      ? { x: this.pos.x, y: this.obj.position.y + this.height + 0.35, z: this.pos.z } : null), false, true);
     this.barShown = -1;
   }
 

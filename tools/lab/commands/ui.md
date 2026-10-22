@@ -3,8 +3,13 @@
 One command of the lab in full, moved here from [`COMMANDS.md`](../COMMANDS.md) (which lists every command, and the
 options every command takes) for its size.
 
+`behindProps`: the dummies' labels behind a prop (#288: they showed through an obelisk). A column is planted half way
+along the line from the camera to each label (an obstacle, `G.arena.obstacles`, for a frame): every label must hide,
+and every one show again with the columns gone. `--canary` plants each column 3 m beside its line, where at least one
+label shows through, which must be caught.
+
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,readying,
-readyingClass,clicked,views,logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch`, every one by default:
+readyingClass,clicked,views,behindProps,logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch`, every one by default:
 the lobby, an item's tooltip, the stash given 60 items (more than its view shows, on most screens) and a weapon
 among them hovered by the mouse, those that fit its slot lit (`page/uiGlow.ts`: a short screen's rail turned to the
 gear first; pictured round the stash, its tooltip put away, at 400, 1000 and 1600 ms into the
