@@ -33,8 +33,9 @@ const gateGap = (a: number) => Math.min(...GATES.map((g) => Math.abs(Math.atan2(
  *  the grass and ferns are spread over (each cell a sphere tested a frame; the trees are culled one by one) */
 const THICKET_CELLS = ringSector(48), FLOOR_CELLS = gridCell(8);
 
-/** the forest floor's maps' repeat over the ground (110 m round) */
-const FLOOR_REPEAT = 44;
+/** the forest floor's maps' repeat over the ground (110 m round): its photo 3 m a tile, where it covers 1.26 m (its
+ *  leaves, as big as they are, were a brown blur from the camera) */
+const FLOOR_REPEAT = 220 / 3;
 /** its relief: the soil this far under the pebbles' and leaves' tops (m), and gone this far off (m: past the top-down view's 30 to 51) */
 const FLOOR_RELIEF = { depth: 0.045, perMetre: FLOOR_REPEAT / 220, fade: 70 };
 

@@ -83,7 +83,8 @@ export function makeVoronoi(seed: number, cells: number) {
   };
 }
 
-function cobblestone(): PBRData {
+/** Cobbles (5 m a tile), the crypt's ground without its photo (`cobblestone`): domed stones in cells, dirt between. */
+function cellCobbles(): PBRData {
   const vor = makeVoronoi(7, 14);
   const fbm = makeFbm(3, 8, 5);
   const fine = makeFbm(11, 64, 3);
@@ -372,13 +373,13 @@ const LEAF_COLOURS: [number, number, number][] = [
 ];
 
 /**
- * Forest floor (5 m a tile, heights in cm): clumpy dark soil under a litter of fallen leaves in three layers (each leaf
+ * The forest floor without its photo (`forestFloor`; 5 m a tile, heights in cm): clumpy dark soil under a litter of fallen leaves in three layers (each leaf
  * turned its own way, cupped, a raised midrib with veins off it and its edges darker; the lower layers older and
  * darker), twigs lying across them and pebbles from 2 to 6 cm across. At each point what lies highest is what shows,
  * so pebbles poke through the leaves and twigs lie over them: the floors' relief (core/parallax.ts) stands each up out
  * of the soil. Moss is added in world space by the biome, so it doesn't tile.
  */
-function forestFloor(): PBRData {
+function litterFloor(): PBRData {
   const soil = makeFbm(29, 24, 4), crumbs = makeFbm(31, 160, 2), rot = makeFbm(37, 96, 2);
   const leafCells = 64, twigCells = 24, pebbleCells = 32;
   const layers = [makeScatter(41, leafCells, 0.55), makeScatter(43, leafCells, 0.45), makeScatter(47, leafCells, 0.35)];
@@ -466,19 +467,27 @@ const BARK_FURROW = [0.055, 0.042, 0.032] as const;
 // --- photos: a recipe may take its colours from a picture (core/photos/), decoded where the recipe runs (a worker,
 // or the page) before it runs: `photosFor`.
 
-/** the pictures recipes take, by name: each a square that tiles */
-const PHOTO_URLS = { oakBark: new URL('./photos/oak-bark.webp', import.meta.url).href };
-type PhotoName = keyof typeof PHOTO_URLS;
+/** the pictures recipes take, by name: each a square that tiles, `margin` pixels of it wrapped round each edge
+ *  outside the square (lossy coding steps at a picture's edges, where it can't see the other side: a seam in a
+ *  ground's height). */
+const PHOTO_FILES = {
+  oakBark: { url: new URL('./photos/oak-bark.webp', import.meta.url).href, margin: 0 },
+  forestLeaves: { url: new URL('./photos/forest-leaves.webp', import.meta.url).href, margin: 5 },
+  forestLeavesHeight: { url: new URL('./photos/forest-leaves-height.webp', import.meta.url).href, margin: 5 },
+  cobblestone: { url: new URL('./photos/cobblestone.webp', import.meta.url).href, margin: 5 },
+  cobblestoneHeight: { url: new URL('./photos/cobblestone-height.webp', import.meta.url).href, margin: 5 },
+};
+type PhotoName = keyof typeof PHOTO_FILES;
 interface Photo { size: number; rgba: Uint8ClampedArray }
 /** the photos decoded here, by name */
 const photos = new Map<PhotoName, Photo>();
 
-/** A picture's pixels, decoded off the DOM (OffscreenCanvas: a worker has no document). */
-async function decode(url: string): Promise<Photo> {
+/** A picture's pixels inside its margin, decoded off the DOM (OffscreenCanvas: a worker has no document). */
+async function decode(url: string, margin: number): Promise<Photo> {
   const bitmap = await createImageBitmap(await (await fetch(url)).blob());
-  const size = bitmap.width;
+  const size = bitmap.width - 2 * margin;
   const context = new OffscreenCanvas(size, size).getContext('2d')!;
-  context.drawImage(bitmap, 0, 0);
+  context.drawImage(bitmap, -margin, -margin);
   bitmap.close(); // (a closed bitmap's width reads 0)
   return { size, rgba: context.getImageData(0, 0, size, size).data };
 }
@@ -517,6 +526,44 @@ function photoBark(photo: Photo): PBRData {
 function bark(): PBRData {
   const photo = photos.get('oakBark');
   return photo ? photoBark(photo) : carvedBark();
+}
+
+/** the forest floor's and the crypt's cobbles' photos' brightness: the procedural maps' they stand in for (`lab maps`),
+ *  as each biome's light was set for them */
+const FLOOR_PHOTO_MEAN = 0.174;
+const COBBLE_PHOTO_MEAN = 0.111;
+
+/**
+ * A ground from a photo's colours and its scanned height (each a tile, of a size): the colours scaled to `mean`
+ * brightness, the roughness `rough` of the height (0 to 1).
+ */
+function photoGround(colour: Photo, height: Photo, mean: number, rough: (h: number) => number, bumps: number): PBRData {
+  const n = colour.size, rgba = colour.rgba, heights = height.rgba, m = height.size;
+  let sum = 0;
+  for (let i = 0; i < n * n; i++) {
+    sum += (PHOTO_LUMA[0] * rgba[i * 4] + PHOTO_LUMA[1] * rgba[i * 4 + 1] + PHOTO_LUMA[2] * rgba[i * 4 + 2]) / 255;
+  }
+  const k = mean / (sum / (n * n));
+  return buildPBR(n, (u, v, o) => {
+    const i = (Math.round(v * n) * n + Math.round(u * n)) * 4;
+    o.h = heights[(Math.floor(v * m) * m + Math.floor(u * m)) * 4] / 255;
+    o.r = clamp((rgba[i] / 255) * k, 0, 1); o.g = clamp((rgba[i + 1] / 255) * k, 0, 1); o.b = clamp((rgba[i + 2] / 255) * k, 0, 1);
+    o.rough = rough(o.h);
+  }, bumps);
+}
+
+/** The forest floor: Poly Haven's Leaves Forest Ground (CC0, core/photos/), fallen leaves over soil, drier on the
+ *  leaves' tops; else the litter painted here (`litterFloor`). */
+function forestFloor(): PBRData {
+  const colour = photos.get('forestLeaves'), height = photos.get('forestLeavesHeight');
+  return colour && height ? photoGround(colour, height, FLOOR_PHOTO_MEAN, (h) => 0.95 - 0.12 * h, 8) : litterFloor();
+}
+
+/** The crypt's cobbles: Poly Haven's Cobblestone Floor 04 (CC0, core/photos/), rounded cobbles in earthy joints,
+ *  their tops worn smoother; else the cobbles made here (`cellCobbles`). */
+function cobblestone(): PBRData {
+  const colour = photos.get('cobblestone'), height = photos.get('cobblestoneHeight');
+  return colour && height ? photoGround(colour, height, COBBLE_PHOTO_MEAN, (h) => 0.9 - 0.4 * h, 10) : cellCobbles();
 }
 
 /**
@@ -742,14 +789,19 @@ export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
 
 /** the photos each recipe takes (`photosFor`) */
-const PHOTOS_OF: Partial<Record<RecipeName, PhotoName[]>> = { bark: ['oakBark'] };
+const PHOTOS_OF: Partial<Record<RecipeName, PhotoName[]>> = {
+  bark: ['oakBark'],
+  forestFloor: ['forestLeaves', 'forestLeavesHeight'],
+  cobblestone: ['cobblestone', 'cobblestoneHeight'],
+};
 
 /** Resolved once the photos `name`'s recipe takes are decoded here, for it to run; a photo that fails is left out
  *  (its recipe makes its procedural map). */
 export async function photosFor(name: RecipeName): Promise<void> {
   const wanted = (PHOTOS_OF[name] ?? []).filter((photo) => !photos.has(photo));
   await Promise.all(wanted.map(async (photo) => {
-    try { photos.set(photo, await decode(PHOTO_URLS[photo])); } catch { /* its recipe's procedural map */ }
+    const file = PHOTO_FILES[photo];
+    try { photos.set(photo, await decode(file.url, file.margin)); } catch { /* its recipe's procedural map */ }
   }));
 }
 
@@ -763,7 +815,7 @@ export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = 
   // `inTheLobbysOrder`, the hero it shows his face first)
   ['steel', []],
   ['face', ['warrior']], ['face', ['mage']], ['face', ['ranger']],
-  ['forestFloor', []], ['cobblestone', []], ['bark', []], ['ashlar', [21, 6, 3]], ['slate', [33, 2, 2]], ['marble', [33, 5]], ['flagstone', [47, 5]],
-  ['ashlar', [33, 2, 2]], ['rock', [17]], ['grunge', []], ['wood', []], ['burlap', []],
+  ['rock', [17]], ['marble', [33, 5]], ['cobblestone', []], ['slate', [33, 2, 2]], ['bark', []], ['forestFloor', []],
+  ['flagstone', [47, 5]], ['ashlar', [33, 2, 2]], ['ashlar', [21, 6, 3]], ['grunge', []], ['wood', []], ['burlap', []],
   ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['fur', []], ['bowWood', []],
 ];

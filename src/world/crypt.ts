@@ -93,8 +93,9 @@ function dampMap(size = 512): THREE.DataTexture {
   return t;
 }
 
-/** the cobbles' maps' repeat over the ground (110 m round) */
-const COBBLE_REPEAT = 44;
+/** the cobbles' maps' repeat over the ground (110 m round): their photo 3.5 m a tile, where it covers 1.5 m (cobbles
+ *  a hand across, as big as they are, were a glitter of noise from the camera) */
+const COBBLE_REPEAT = 220 / 3.5;
 /** the cobbles' relief: the grout this far under their tops (m), and gone this far off (m: past the top-down view's 30 to 51) */
 const COBBLE_RELIEF = { depth: 0.06, perMetre: COBBLE_REPEAT / 220, fade: 70 };
 
