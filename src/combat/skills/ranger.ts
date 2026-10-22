@@ -1,7 +1,8 @@
 // Bow shots; damage follows the usual co-op authority checks. An arrow flies as one does: as fast as the draw sent it
 // (a bow's string drives it about in proportion to how far it was drawn), on the lower ballistic arc that crosses its
 // target at a man's chest, turning to follow its path, and where it ends it stays (fx/stuckArrows): in the ground, a
-// wooden prop, the thicket or a foe's body, or off stone onto the floor. The ranger's
+// wooden prop, the thicket, a tree beyond it or a foe's body, or off stone onto the floor. The wall is met where it's
+// drawn (world/wall.ts): an arrow over it flies on. The ranger's
 // other skills: arrowRain.ts, quarryMark.ts, strawman.ts.
 import * as THREE from 'three';
 import { G } from '../../state';
@@ -17,8 +18,9 @@ import { arrowGeometry, ARROW, pullAt } from '../../entities/models/bow';
 import { glintMotes, warmGlintMotes } from '../../fx/glintMotes';
 import { showLaser, warmLaser, LASER_POINTS } from '../../fx/aimLaser';
 import { entry, strikesBody } from '../strikes';
-import { arrowMat, stickAt, stickIn, glance, floorIsStone, propIsStone, propSurface, wallIsStone, warmStuck, SINK } from '../../fx/stuckArrows';
+import { arrowMat, stickAt, stickIn, glance, floorIsStone, propIsStone, propSurface, warmStuck, SINK } from '../../fx/stuckArrows';
 import { pastWall } from '../../world/edge';
+import { wallHit } from '../../world/wall';
 import { clamp, rand } from '../../util';
 import { FULL_DRAW } from '../../data/balance';
 import type { Obstacle } from '../../types';
@@ -35,10 +37,10 @@ export const FWD = new THREE.Vector3(0, 0, 1);
 const _v = new THREE.Vector3(), _p = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _n = new THREE.Vector3();
 export { arrowMat };
 export const arrowMesh = (): THREE.Mesh => new THREE.Mesh(arrowGeometry(), arrowMat);
-/** an arrow out through a gate is gone this far past the wall (m) */
-const GATE_DEPTH = 2;
-/** an arrow's flight ends this far out whatever happens (m): past the wall, out through a gate */
-export const ARROW_EDGE = 40;
+/** an arrow out through a gate, under its arch, is gone this far past the wall (m) */
+const GATE_DEPTH = 2, GATE_TOP = 4.5;
+/** an arrow's flight ends this far out whatever happens (m): past the furthest trees round the Thornwood */
+export const ARROW_EDGE = 62;
 
 /** a streak of light behind an arrow (a shaft is a few pixels from the top-down view, and a fast one is gone in two frames):
  *  two crossed strips along +z from its tail (z = -1, dark: it's added light) to its point (z = 0, bright), seen from any side */
@@ -107,13 +109,12 @@ export function intoFoe(e: Enemy, at: THREE.Vector3, vel: THREE.Vector3): void {
   stickIn(e.obj, _e.set(e.pos.x - _v.x * (e.radius + 1), y, e.pos.z - _v.z * (e.radius + 1)), _v, gone);
 }
 
-/** Where a flight's step from `a` to `b` meets the wall (0..1), the wall's normal into `n`, or -1 (out through a gate: -2 once gone). */
-function meetsWall(a: THREE.Vector3, b: THREE.Vector3, n: THREE.Vector3): number {
-  const w1 = pastWall(G.arena.biome, b.x, b.z, n);
-  if (w1.by <= 0) return -1;
-  if (w1.gate) return w1.by > GATE_DEPTH ? -2 : -1;
-  const w0 = pastWall(G.arena.biome, a.x, a.z, _n);
-  return w0.by >= 0 ? 0 : w0.by / (w0.by - w1.by);
+const _hit = wallHit();
+/** Whether a flight's step from `a` to `b` goes out through a gate, under its arch, into the portal: it's gone. */
+function throughGate(a: THREE.Vector3, b: THREE.Vector3): boolean {
+  const w1 = pastWall(G.arena.biome, b.x, b.z, _n);
+  if (!w1.gate || w1.by <= GATE_DEPTH || b.y > GATE_TOP) return false;
+  return pastWall(G.arena.biome, a.x, a.z, _n).by <= GATE_DEPTH;
 }
 
 type BowDef = Needs<'damage' | 'missiles' | 'spread' | 'speed' | 'range'>;
@@ -122,7 +123,8 @@ const arrowSpeed = (def: BowDef, k: number): number => def.speed * pullAt(k);
 
 const _prev = new THREE.Vector3();
 /** An arrow's flight each frame: falling, turning to follow its path (its vanes keep it so), into the ground point first
- *  (off it on stone), and into the wall (off it if it's stone, into a thicket) or out through a gate. */
+ *  (off it on stone), and into the wall where it's drawn (off it if it's stone, into the thicket or a tree beyond it)
+ *  or out through a gate. */
 function fly(proj: Projectile, dt: number): void {
   _prev.copy(proj.pos).addScaledVector(proj.vel, -dt);
   proj.vel.y -= GRAVITY * dt;
@@ -130,11 +132,11 @@ function fly(proj: Projectile, dt: number): void {
   proj.mesh.quaternion.setFromUnitVectors(FWD, _v);
   _p.copy(proj.pos).addScaledVector(_v, ARROW / 2);
   if (_p.y <= groundHeight(_p.x, _p.z)) { intoGround(_p, proj.vel); proj.kill(); return; }
-  const t = meetsWall(_prev, _p, _n);
-  if (t === -2) { proj.kill(); return; }
-  if (t < 0) return;
-  _p.lerpVectors(_prev.addScaledVector(_v, ARROW / 2), _p, t);
-  if (wallIsStone()) glance(_p, proj.vel, _n); else stickAt(_p, _v, SINK.prop);
+  _prev.addScaledVector(_v, ARROW / 2);
+  if (throughGate(_prev, _p)) { proj.kill(); return; }
+  if (!G.arena.wall.cast(_prev, _p, _hit)) return;
+  if (_hit.stone) glance(_hit.point, proj.vel, _hit.normal);
+  else stickAt(_hit.point, _v, SINK.prop);
   proj.kill();
 }
 
@@ -177,10 +179,10 @@ function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius
       const g0 = py + (_b.y - pos.y) - groundHeight(px, pz), g1 = _b.y - groundHeight(_b.x, _b.z);
       t = g0 > 0 ? g0 / (g0 - g1) : 0;
     }
-    // (the wall, by the arrow's point as `fly` has it: out through a gate the path just ends)
-    const w = meetsWall(_c.set(px, py, pz).addScaledVector(_e.copy(vel).normalize(), ARROW / 2), _b, _wn);
-    if (w === -2) return { pts, end: null };
-    if (w >= 0) t = Math.min(t, w);
+    // (the wall where it's drawn, by the arrow's point as `fly` has it: out through a gate the path just ends)
+    _c.set(px, py, pz).addScaledVector(_e.copy(vel).normalize(), ARROW / 2);
+    if (throughGate(_c, _b)) return { pts, end: null };
+    if (G.arena.wall.cast(_c, _b, _hit)) t = Math.min(t, _hit.t);
     const low = pos.y - radius * 0.5;
     for (const o of G.arena.obstacles) {
       if (o.h <= low || passed.has(o)) continue;

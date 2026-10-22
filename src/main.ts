@@ -51,6 +51,7 @@ import { loadingStep, loadingDone, loadingFailed, loadingLeft, lobbyLaidOut } fr
 import { prepareWind } from './ui/logoWind';
 import { preloadTextures } from './core/textures';
 import { preloadHands } from './entities/models/hands';
+import { preloadStump } from './world/stump';
 import { initSync } from './net/sync';
 import { initSession, joinRoom, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
 import { isCoop, isGuest, isHost, simulates } from './net/role';
@@ -64,9 +65,11 @@ let revealed = false;   // loading screen gone: the game may advance
 
 async function boot() {
   // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second), the lobby's
-  // first, and the heroes' hands sculpted: started before anything waits, as nothing they make waits on the page
+  // first, and the heroes' hands and the forest's stump sculpted: started before anything waits, as nothing they make
+  // waits on the page
   const textures = preloadTextures(CLASSES[savedClass()].model);
   const hands = preloadHands();
+  preloadStump();
   prepareWind();
   await loadingStep('Forging the arena', 0.08);
   initUIScale();

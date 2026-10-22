@@ -981,6 +981,40 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  beyond: {
+    help: 'the ranger\'s arrows loosed over the wall: in each biome, at angles round the ring, his basic attack drawn '
+      + 'to full at the ground past the wall and the nearest tree that way; each arrow left standing must have a '
+      + 'surface drawn at its point (one in the air is a problem; --class ranger)',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      angles: { kind: 'number', usage: 'n', help: 'the angles round the ring he shoots out at (8 by default)' },
+      canary: { kind: 'switch', help: 'an arrow planted standing in the air past the wall: it must be found' },
+      ...COMMON_OPTIONS,
+    },
+  },
+  wall: {
+    help: 'how near the hero walks up to the wall: in each biome, at angles round the ring, he walks straight out '
+      + 'until it stops him, and rays across his way read the gap between his body and the nearest surface drawn '
+      + '(more than 20 cm is air between them; below -5 cm his body is in it)',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      angles: { kind: 'number', usage: 'n', help: 'the angles round the ring he walks out at (48 by default)' },
+      canary: { kind: 'switch', help: 'the first angle\'s gap read a metre short of where he stopped: it must be seen' },
+      ...COMMON_OPTIONS,
+    },
+  },
   draws: {
     help: 'one frame\'s draw calls with the crowd of foes standing before the hero, by the geometry each drew, the '
       + 'most first: its draws in the scene, its shadow map and after it, the triangles, its material and what drew it '

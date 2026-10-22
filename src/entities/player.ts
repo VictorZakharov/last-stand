@@ -12,7 +12,7 @@ import { computeStats, gearOf } from '../loot/items';
 import { BLOCK, COOP, FULL_DRAW } from '../data/balance';
 import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, forStyle, type Loadout, type WeaponStyle } from '../loot/loadout';
 import { groundHeight } from '../world/arena';
-import { resolveWorld } from '../world/collision';
+import { resolveProps } from '../world/collision';
 import { input, isDown, wasPressed } from '../core/input';
 import { flashHurt, addShake, cameraYaw, lookFacing, viewMode, viewSettled, seenFromArms } from '../core/renderer';
 import { floatText } from '../ui/floaters';
@@ -45,6 +45,11 @@ const TURN_MOST = 9;
 /** a shot from the weapon's tip heads for its target, but never further off the body's line to it than a point this far
  *  along that line (m) */
 const SHOT_NEAR = 5;
+/** how hard the wall holds a body pressed into it from sliding along it, a share of his speed into it: walked into it
+ *  within 31° of square on, he stops */
+const WALL_GRIP = 0.6;
+/** how hard he slows walking up to the wall (m/s²: a comfortable stop, not `BRAKE`'s hardest) */
+const WALL_BRAKE = 10;
 const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
 /** a shot from a bow (posed as one, not channelled): it looses the arrow on the string */
@@ -408,6 +413,7 @@ export class Player {
     // (as a body moves itself, pushing and braking against the ground: turning round from a run takes a braking step
     // and a push the other way, `entities/movement.ts`)
     this.goal.set(tx, 0, tz);
+    this.slowForWall(this.goal);
     stepVelocity(this.vel, this.goal, dt);
     this.steered = true;
 
@@ -597,6 +603,55 @@ export class Player {
     return !!this.dash && (!this.dash.open || !!this.dash.ride);
   }
 
+  /**
+   * The speed `goal` asks of him out toward the wall no more than he can brake from in the room left before it (as
+   * one slows walking up to a wall): stopped by it in a frame from a run, the legs were thrown past their ranges.
+   */
+  private slowForWall(goal: THREE.Vector3): void {
+    const r = Math.hypot(this.pos.x, this.pos.z);
+    if (r < 1e-3) return;
+    const ux = this.pos.x / r, uz = this.pos.z / r;
+    const out = goal.x * ux + goal.z * uz;
+    if (out <= 0) return;
+    const room = G.arena.wall.reachAt(this.pos.x, this.pos.z) - this.radius - r;
+    const most = Math.sqrt(2 * WALL_BRAKE * Math.max(0, room));
+    if (out <= most) return;
+    goal.x -= ux * (out - most);
+    goal.z -= uz * (out - most);
+  }
+
+  /** Kept off the props, then the wall, his speed into what pushed him back let go: pressed against the wall at a
+   *  run, he kept running into it, his legs striding in place past their ranges. */
+  private resolveWorld(dt: number): void {
+    let x = this.pos.x, z = this.pos.z;
+    resolveProps(this.pos, this.radius);
+    this.pushedBack(this.pos.x - x, this.pos.z - z, 0, dt);
+    x = this.pos.x;
+    z = this.pos.z;
+    G.arena.wall.keepIn(this.pos, this.radius);
+    this.pushedBack(this.pos.x - x, this.pos.z - z, WALL_GRIP, dt);
+  }
+
+  /**
+   * His speed into a push of (`px`, `pz`) let go, and of his speed along it as much as `grip` times that, and the way
+   * it took him this frame (`dt`): walked into the wall at a slant, he slid along its faces in a corner, his speed
+   * about where he turns to his way, and turned to and fro over his planted feet (a hip turned 103° past its range).
+   */
+  private pushedBack(px: number, pz: number, grip: number, dt: number): void {
+    const push = Math.hypot(px, pz);
+    if (push < 1e-6) return;
+    const nx = px / push, nz = pz / push;
+    const into = this.vel.x * nx + this.vel.z * nz;
+    if (into >= 0) return;
+    this.vel.x -= nx * into;
+    this.vel.z -= nz * into;
+    const along = Math.hypot(this.vel.x, this.vel.z), held = -into * grip;
+    const kept = along > held ? (along - held) / along : 0;
+    this.pos.x -= this.vel.x * (1 - kept) * dt;
+    this.pos.z -= this.vel.z * (1 - kept) * dt;
+    this.vel.multiplyScalar(kept);
+  }
+
   /** A dash's time on, and the time of what rides on it, let go once over. */
   private dashOn(d: DashState, dt: number): void {
     d.t += dt;
@@ -709,7 +764,7 @@ export class Player {
     }
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
-    if (!d?.through || d.t >= d.dur) resolveWorld(this.pos, this.radius);
+    if (!d?.through || d.t >= d.dur) this.resolveWorld(dt);
     if (d) {
       d.step?.();
       if (d.t >= d.dur + d.hold) { this.dashOver(d); this.vel.multiplyScalar(this.stats.moveSpeed / Math.max(1e-3, Math.hypot(d.vx, d.vz))); }

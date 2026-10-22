@@ -41,6 +41,8 @@ import type { ProgramsOptions } from './programs';
 import type { MapsOptions } from './maps';
 import type { TilesOptions } from './tiles';
 import type { WindingOptions } from './winding';
+import type { WallOptions } from './wallGap';
+import type { BeyondOptions } from './beyond';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
@@ -421,6 +423,18 @@ export async function tiles(lab: Lab, command: TilesOptions): Promise<Report> {
 export async function winding(lab: Lab, command: WindingOptions): Promise<Report> {
   const { winding: windingOf } = await import('./winding');
   return windingOf(lab, command);
+}
+
+/** `lab wall`: how near the hero walks up to the wall in each biome, at angles round the ring. */
+export async function wall(lab: Lab, command: WallOptions): Promise<Report> {
+  const { wallGap } = await import('./wallGap');
+  return wallGap(lab, command);
+}
+
+/** `lab beyond`: the ranger's arrows loosed over the wall at what lies beyond it, each judged where it stood. */
+export async function beyond(lab: Lab, command: BeyondOptions): Promise<Report> {
+  const { beyond: beyondOf } = await import('./beyond');
+  return beyondOf(lab, command);
 }
 
 /** `lab draws`: one frame's draw calls with the crowd standing, by the geometry each drew, the most first. */

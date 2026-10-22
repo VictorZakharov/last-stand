@@ -1,18 +1,47 @@
 // Training dummy: a straw-stuffed burlap sack on a wooden post, with a glowing
 // target rune. It wobbles on a spring when hit (lobby target practice).
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createKit } from '../../core/materials';
 import { ashlar, burlap, pbrMaterialMaps, wood } from '../../core/textures';
 import type { AnimState, Model } from '../../types';
+import { mulberry } from '../../util';
 import { part, joint } from './rig';
 
 const STIFFNESS = 70, DAMPING = 5;
+/** the stream its straw is drawn from: every dummy alike */
+const STRAW_SEED = 4417;
+
+/**
+ * A bundle of `count` straws standing up from a disc `radius` wide at the origin, each `length[0]` to `length[1]` long,
+ * leaning out `splay` (rad) the further out it stands, each its own shade. Five smooth cones a bundle before, which
+ * read as spikes (#287).
+ */
+function strawBundle(rng: () => number, count: number, radius: number, length: [number, number],
+  splay: number): THREE.BufferGeometry {
+  const straws: THREE.BufferGeometry[] = [];
+  const up = new THREE.Vector3(0, 1, 0), along = new THREE.Vector3(), turn = new THREE.Quaternion();
+  for (let i = 0; i < count; i++) {
+    const a = rng() * Math.PI * 2, out = Math.sqrt(rng());
+    const len = length[0] + (length[1] - length[0]) * rng();
+    const lean = splay * out + (rng() - 0.5) * 0.15;
+    along.set(Math.cos(a) * Math.sin(lean), Math.cos(lean), Math.sin(a) * Math.sin(lean));
+    turn.setFromUnitVectors(up, along.normalize());
+    const straw = new THREE.CylinderGeometry(0.002, 0.005, len, 3, 1).translate(0, len / 2, 0)
+      .applyQuaternion(turn).translate(Math.cos(a) * radius * out, 0, Math.sin(a) * radius * out);
+    const shade = 0.6 + 0.45 * rng();
+    const colour = new Float32Array(straw.attributes.position.count * 3).fill(shade);
+    straw.setAttribute('color', new THREE.BufferAttribute(colour, 3));
+    straws.push(straw);
+  }
+  return mergeGeometries(straws);
+}
 
 export function buildDummy(): Model {
   const kit = createKit(0xf0c860);
   const woodMat = kit.std({ ...pbrMaterialMaps(wood(), 1, 1.2), roughness: 1 });
   const sack = kit.std({ ...pbrMaterialMaps(burlap(), 2, 1.5), roughness: 1 });
-  const straw = kit.std({ color: 0xc9a54e, roughness: 0.8 });
+  const straw = kit.std({ color: 0xc9a54e, roughness: 0.8, vertexColors: true });
   const rope = kit.std({ color: 0x6e5a3a, roughness: 0.9 });
   const stone = kit.std({ ...pbrMaterialMaps(ashlar(33, 2, 2), 1, 1.2), color: 0x9a9aa2 });
   const iron = kit.std({ color: 0x2a2a2e, roughness: 0.45, metalness: 0.8 });
@@ -33,26 +62,21 @@ export function buildDummy(): Model {
   ].map(([x, y]) => new THREE.Vector2(x, y));
   part(new THREE.LatheGeometry(profile, 20), sack, sway, 0, 0.7, 0);
   for (const y of [0.76, 1.3]) part(new THREE.TorusGeometry(y < 1 ? 0.23 : 0.21, 0.018, 6, 20).rotateX(Math.PI / 2), rope, sway, 0, y, 0);
-  // straw spilling out below the sack
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2;
-    const tuft = part(new THREE.ConeGeometry(0.03, 0.26, 4), straw, sway, Math.sin(a) * 0.13, 0.62, Math.cos(a) * 0.13);
-    tuft.rotation.set(Math.PI + Math.cos(a) * 0.4, 0, -Math.sin(a) * 0.4);
-    tuft.castShadow = false;
-  }
+  // straw spilling out below the sack, and out of the sleeves' tied ends
+  const rng = mulberry(STRAW_SEED);
+  const loose = [strawBundle(rng, 160, 0.17, [0.08, 0.2], 0.3).rotateX(Math.PI).translate(0, 0.74, 0)];
 
-  // arms: a crossbar with straw bundles bound at the ends
+  // arms: a crossbar through two sleeves, each gathered and tied at its end with the straw bursting out
   part(new THREE.CylinderGeometry(0.04, 0.04, 1.3, 8).rotateZ(Math.PI / 2), woodMat, sway, 0, 1.22, 0);
+  const sleeve = [[0.06, 0], [0.078, 0.03], [0.09, 0.12], [0.086, 0.2], [0.062, 0.25], [0.045, 0.27], [0.04, 0.28]]
+    .map(([r, y]) => new THREE.Vector2(r, y));
   for (const s of [1, -1]) {
-    part(new THREE.CylinderGeometry(0.07, 0.09, 0.26, 8).rotateZ(Math.PI / 2), sack, sway, s * 0.55, 1.22, 0);
-    part(new THREE.TorusGeometry(0.075, 0.012, 5, 12).rotateY(Math.PI / 2), rope, sway, s * 0.5, 1.22, 0);
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2;
-      const tuft = part(new THREE.ConeGeometry(0.022, 0.18, 4), straw, sway, s * 0.74, 1.22 + Math.sin(a) * 0.035, Math.cos(a) * 0.035);
-      tuft.rotation.z = -s * Math.PI / 2 + Math.sin(a) * 0.3;
-      tuft.castShadow = false;
-    }
+    part(new THREE.LatheGeometry(sleeve, 12).rotateZ(-s * Math.PI / 2), sack, sway, s * 0.42, 1.22, 0);
+    part(new THREE.TorusGeometry(0.072, 0.012, 5, 12).rotateY(Math.PI / 2), rope, sway, s * 0.45, 1.22, 0);
+    part(new THREE.TorusGeometry(0.05, 0.012, 5, 12).rotateY(Math.PI / 2), rope, sway, s * 0.68, 1.22, 0);
+    loose.push(strawBundle(rng, 90, 0.04, [0.05, 0.12], 0.4).rotateZ(-s * Math.PI / 2).translate(s * 0.67, 1.22, 0));
   }
+  part(mergeGeometries(loose), straw, sway).castShadow = false;
 
   // head: a tied sack with painted eyes
   const head = joint(sway, 0, 1.66, 0);
@@ -65,11 +89,7 @@ export function buildDummy(): Model {
       bar.castShadow = false;
     }
   }
-  for (let i = 0; i < 6; i++) {
-    const tuft = part(new THREE.ConeGeometry(0.02, 0.16, 4), straw, head, (i - 2.5) * 0.02, 0.23, 0);
-    tuft.rotation.z = (i - 2.5) * 0.22;
-    tuft.castShadow = false;
-  }
+  part(strawBundle(rng, 50, 0.035, [0.04, 0.1], 0.5), straw, head, 0, 0.19, 0).castShadow = false;
 
   // target rune on the chest
   const target = joint(sway, 0, 1.03, 0.3);

@@ -15,12 +15,15 @@ export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25
 import { cullInCells, eachInstance, gridCell, ringSector } from './culling';
 import { growTree, REACH_BANDS, type Grow } from './ezTrees';
 import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
-import { bend, rag, taperTube, twist } from '../entities/models/shapes';
+import { bend, rag, taperTube } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import { buildFire, emberMat } from './fire';
 import { floorRelief } from '../core/parallax';
+import { valueNoise3 } from '../core/patterns';
 import { tubesRelief } from './ground';
 import type { Obstacle } from '../types';
+import { Wall } from './wall';
+import { buildStumpGeo } from './stump';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
 /** daylight haze: the fog, and the sky at the horizon */
@@ -121,6 +124,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   const obstacles: Obstacle[] = [];
   const breakable = new PropSet(obstacles);
   const updaters: Updater[] = [];
+  const wall = new Wall('forest');
   const h = ARENA.daisHalf;
 
   // --- Materials ------------------------------------------------------------
@@ -195,6 +199,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   // (box-mapped in metres, as the boulders are: a tile a metre. A cylinder's own UVs ran a tile round each part and
   // up its whole height, the 0.35 m plinth's 18 times as long round as up: `lab tiles`)
   const standing = seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(rock(17), 1, 1.6), color: 0x989e90, roughness: 0.9 }), 'prop');
+  const menhirProbe = new THREE.Mesh(menhirGeo);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     // (its plinth reaches 1.16 m from its middle: 0.5 m in, it hung 0.66 m over the dais's edge, standing on air)
     const x = sx * (h - 1.3), z = sz * (h - 1.3), g = new THREE.Group();
@@ -203,6 +208,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     mh.name = 'standing stone';
     mh.position.set(x, ARENA.daisHeight, z);
     mh.rotation.y = Math.atan2(sx, sz);
+    mh.updateMatrix();
     mh.castShadow = mh.receiveShadow = true;
     g.add(mh);
     const strip = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 0.02), glyphMat);
@@ -211,17 +217,25 @@ export const buildForest: BiomeBuilder = (scene) => {
     strip.rotateX(-0.08);
     g.add(strip);
     // moss on its shoulders and ivy climbing the side away from the glyphs
-    const moss = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.55, 14, 8, 0, TAU, 0, Math.PI * 0.45), 0.12, sx + sz * 3).scale(1.05, 0.5, 0.85), mossMat);
-    moss.position.set(x, ARENA.daisHeight + 4.35, z);
+    // (a coat on its faces round its shoulders: a dome round where its middle would be unleaned, wider than its faces,
+    // stood off them in a ring under the pyramidion, #287)
+    const moss = new THREE.Mesh(mossCoat(menhirProbe, sx + sz * 3).applyMatrix4(mh.matrix), mossMat);
     moss.receiveShadow = true;
     g.add(moss);
-    const ivy: THREE.BufferGeometry[] = [];
+    // (each point of it on the stone's face where it climbs: wound round at 0.62 m, near the top it stood off the
+    // tapering faces in a band, #287)
+    const ivy: THREE.BufferGeometry[] = [], onStone = mh.matrix.clone();
     for (let k = 0; k < 3; k++) {
-      const len = r(2.2, 3.6), ph = r(0, TAU), yaw = Math.atan2(sx, sz) + Math.PI;
-      ivy.push(twist(len, 0.62, 0.035, 0.35, ph).translate(0, len, 0).rotateY(yaw).translate(x, ARENA.daisHeight + 0.2, z));
+      // (drawn as they were, wound the other way round the stone from its glyphs: a half turn on)
+      const len = r(2.2, 3.6), ph = r(0, TAU) + Math.PI, climb = (t: number) => ph + t * 0.35 * TAU;
+      const stem = Array.from({ length: IVY_POINTS + 1 }, (_, i) => {
+        const t = i / IVY_POINTS;
+        return onFace(menhirProbe, IVY_FOOT + len * (1 - t), climb(t), IVY_STEM);
+      });
+      ivy.push(taperTube(stem, (t) => 0.035 * (1 - t * 0.5), 12, 4).applyMatrix4(onStone));
       for (let i = 0; i < 14; i++) {
-        const t = i / 14, a = ph + t * 0.35 * TAU, px = Math.cos(a) * 0.68, pz = Math.sin(a) * 0.68;
-        ivy.push(new THREE.PlaneGeometry(0.2, 0.26).rotateY(Math.atan2(px, pz)).rotateZ(r(-0.6, 0.6)).translate(px, len * (1 - t), pz).rotateY(yaw).translate(x, ARENA.daisHeight + 0.2, z));
+        const t = i / 14, a = climb(t), at = onFace(menhirProbe, IVY_FOOT + len * (1 - t), a, IVY_LEAF);
+        ivy.push(new THREE.PlaneGeometry(0.2, 0.26).rotateY(Math.atan2(at.x, at.z)).rotateZ(r(-0.6, 0.6)).translate(at.x, at.y, at.z).applyMatrix4(onStone));
       }
     }
     const ivyM = new THREE.Mesh(mergeAll(ivy), ivyMat);
@@ -255,6 +269,13 @@ export const buildForest: BiomeBuilder = (scene) => {
   bushes.count = bushCards.count = bi; rocks.count = ri;
   bushes.receiveShadow = bushCards.castShadow = bushCards.receiveShadow = rocks.castShadow = rocks.receiveShadow = true;
   bushes.name = 'thicket'; bushCards.name = 'thicket leaves'; rocks.name = 'thicket rocks';
+  // (the thicket's leaves walked up to, its bushes' cores and rocks flown into: an arrow goes through the leaves)
+  wall.add(bushes, false, 'wall', bush.lumps);
+  // (walked up to, its lumps swollen partway into their leaves: they give, brushed through. A hull round a lump's cards
+  // spanned the air between them, and he stopped a third of a metre short of them; the cards as drawn let him in
+  // through their gaps, the line he's kept behind as ragged as they are, his legs past their ranges stood against it)
+  wall.add(bushes, false, 'foliage', bush.leafLumps);
+  wall.add(rocks, true, 'wall', true);
   for (const mesh of [bushes, bushCards, rocks]) scene.add(...cullInCells(mesh, THICKET_CELLS));
 
   // trees: short near the clearing (they'd hide the player at the edge), taller further out; a few kinds grown by
@@ -301,6 +322,8 @@ export const buildForest: BiomeBuilder = (scene) => {
     barks[k].castShadow = barks[k].receiveShadow = leaves[k].castShadow = leaves[k].receiveShadow = true;
     barks[k].name = `trees' bark: ${TREE_KINDS[k].preset}`;
     leaves[k].name = `trees' leaves: ${TREE_KINDS[k].preset}`;
+    // (what an arrow over the thicket meets: each tree's trunk, its limbs let go)
+    for (let i = 0; i < used[k]; i++) wall.addGeometry(kinds[k].trunk, barks[k].getMatrixAt(i, _mx), false, 'beyond');
     for (const mesh of [barks[k], leaves[k]]) scene.add(...cullInCells(mesh, eachInstance));
   });
 
@@ -309,7 +332,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     canopyMat: archCanopy, coreMat: archCore, hangMat, ivyMat,
     archMat: barkAt(BARK_REPEATS.gateArch), vineMat: barkAt(BARK_REPEATS.gateVine), rootMat: barkAt(BARK_REPEATS.gateRoots),
   };
-  const portals: Portal[] = GATES.map((a) => buildRootGate(scene, a, mossStone, gateMats, rng, updaters));
+  const portals: Portal[] = GATES.map((a) => buildRootGate(scene, wall, a, mossStone, gateMats, rng, updaters));
 
   // --- Glowcap clusters (teal) and bonfires (orange): the biome's 6 point lights -----
   for (const [x, z] of [[-11, -11], [11, -11], [-11, 11], [11, 11]]) {
@@ -331,9 +354,12 @@ export const buildForest: BiomeBuilder = (scene) => {
   // --- Floor obstacles: stumps, fallen logs, boulders -------------------------------
   // (r, angle) spots clear of the gates' spawn areas, the lights and the lobby dummies
   const stumpSpots = [[15, 0.4], [19, 2.0], [14, 3.45], [20, 4.35], [18, 5.85], [9, 1.2]];
-  // (the broken top's oak weathered grey, its rings round its middle: `stumpTop`)
+  // (the broken top's oak weathered grey, its rings round its middle: `world/stump.ts`)
   const stumpWood = seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1.4), color: 0xb4a898 }), 'prop');
-  const stumps = new THREE.InstancedMesh(buildStumpGeo(rng), [stumpWood, barkAt(BARK_REPEATS.stumps)], stumpSpots.length);
+  // (sculpted from a stream of its own; the old stump's draws from the biome's are still drawn: drawn from it, every
+  // prop placed after the stumps moved)
+  for (let i = 0; i < OLD_STUMP_DRAWS; i++) rng();
+  const stumps = new THREE.InstancedMesh(buildStumpGeo(), [stumpWood, barkAt(BARK_REPEATS.stumps)], stumpSpots.length);
   stumpSpots.forEach(([rr, a], i) => {
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr, s = r(0.8, 1.15), yaw = r(0, TAU), sy = r(0.8, 1.4);
     setInstance(stumps, i, x, 0, z, 0, yaw, 0, s, sy, s);
@@ -541,6 +567,7 @@ export const buildForest: BiomeBuilder = (scene) => {
       envIntensity: 0.6,
     },
     obstacles,
+    wall,
     props: breakable.list,
     portals,
     setCalm(v: number) { calmTarget = v; },
@@ -550,6 +577,61 @@ export const buildForest: BiomeBuilder = (scene) => {
 
 // ---------------------------------------------------------------------------
 // helpers
+
+/** the points along an ivy's stem, how high its foot is up the stone, and how far its stem and leaves stand off the
+ *  stone's face (m) */
+const IVY_POINTS = 16;
+const IVY_FOOT = 0.2;
+const IVY_STEM = 0.03;
+const IVY_LEAF = 0.07;
+const _ray = new THREE.Raycaster();
+
+/** The point `off` out from `stone`'s face (in its frame) at height `y`, out from its axis toward angle `a`: a ray in
+ *  from outside it. */
+function onFace(stone: THREE.Mesh, y: number, a: number, off: number): THREE.Vector3 {
+  const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+  _ray.set(out.clone().multiplyScalar(3).setY(y), out.clone().negate());
+  const [hit] = _ray.intersectObject(stone, false);
+  const at = hit ? 3 - hit.distance : 0.62;
+  return out.multiplyScalar(at + off).setY(y);
+}
+
+/** the moss round a standing stone's shoulders: from how high up it, to how high (m: the shaft meets its pyramidion at
+ *  4.3), its rings and its sides round, how thick it is in its middle, and how ragged its edges are (m) */
+const MOSS_FROM = 3.95;
+const MOSS_TO = 4.6;
+const MOSS_RINGS = 6;
+const MOSS_SIDES = 36;
+const MOSS_THICK = 0.025;
+const MOSS_RAGGED = 0.18;
+
+/** Moss on `stone`'s shoulders (in its frame): a coat cast onto its faces, thickest in its middle and coming down to
+ *  them at its ragged edges, `salt` its own. */
+function mossCoat(stone: THREE.Mesh, salt: number): THREE.BufferGeometry {
+  const positions: number[] = [], uvs: number[] = [], index: number[] = [];
+  for (let j = 0; j <= MOSS_SIDES; j++) {
+    const a = (j / MOSS_SIDES) * TAU, ca = Math.cos(a), sa = Math.sin(a);
+    const lower = MOSS_FROM + MOSS_RAGGED * valueNoise3(ca * 2, sa * 2, 0, salt);
+    const upper = MOSS_TO - MOSS_RAGGED * valueNoise3(ca * 2, sa * 2, 5, salt);
+    for (let i = 0; i <= MOSS_RINGS; i++) {
+      const s = i / MOSS_RINGS, y = lower + (upper - lower) * s;
+      const thick = MOSS_THICK * Math.sin(s * Math.PI) * (0.6 + 0.8 * valueNoise3(ca * 3, y * 6, sa * 3, salt));
+      positions.push(...onFace(stone, y, a, 0.008 + thick).toArray());
+      uvs.push(j / MOSS_SIDES, y - MOSS_FROM);
+    }
+  }
+  const row = MOSS_RINGS + 1;
+  for (let j = 0; j < MOSS_SIDES; j++) for (let i = 0; i < MOSS_RINGS; i++) {
+    const a = j * row + i, b = a + row;
+    index.push(a, a + 1, b, b, a + 1, b + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  g.setIndex(index);
+  g.computeVertexNormals();
+  return g;
+}
 
 function buildMenhirGeo(rng: () => number): THREE.BufferGeometry {
   const base = new THREE.CylinderGeometry(0.95, 1.05, 0.35, 7).translate(0, 0.17, 0);
@@ -652,6 +734,8 @@ function buildLogGeo(rng: () => number): { bark: THREE.BufferGeometry; inner: TH
 
 /** the trees round the clearing, grown by ez-tree (the last: the ancient giants), each capped to a few thousand
  *  triangles: sections and segments per level from the trunk, and fewer, bigger leaf cards */
+/** the draws the old stump took from the biome's stream */
+const OLD_STUMP_DRAWS = 21;
 /** the ancient giants' places round the ring (those clear of the gates) */
 const GIANTS = 20;
 /** over this height a crown may reach over the wall (the top-down camera sits 26 m over the hero, and the old giants'
@@ -692,57 +776,13 @@ function tubeSamples(pts: THREE.Vector3[], radius: (t: number) => number, steps:
   });
 }
 
-/** A broken stump: a jagged, splintered top, buttress roots, bark lumps. Its groups: the wood of its broken top, then
- *  its bark (the top was bark as well, the same outside and in). */
-function buildStumpGeo(rng: () => number): THREE.BufferGeometry {
-  const bole = new THREE.CylinderGeometry(0.55, 0.7, 1.0, 14, 3, true).translate(0, 0.5, 0);
-  // splinter the rim: every vertex on the top ring rises or falls by its own amount
-  const p = bole.attributes.position, jag = Array.from({ length: 15 }, () => rng());
-  for (let i = 0; i < p.count; i++) {
-    const y = p.getY(i);
-    if (y > 0.99) {
-      const k = Math.round(((Math.atan2(p.getZ(i), p.getX(i)) / TAU) + 1) % 1 * 14);
-      p.setY(i, y + jag[k] * jag[k] * 0.55 - 0.1);
-    }
-  }
-  const parts: THREE.BufferGeometry[] = [bole];
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * TAU + 0.3, c = Math.cos(a), s = Math.sin(a), reach = 0.95 + rng() * 0.35;
-    parts.push(taperTube([V(c * 0.5, 0.35, s * 0.5), V(c * 0.72, 0.1, s * 0.72), V(c * reach, -0.02, s * reach)], (t) => 0.22 * (1 - t * 0.8), 8, 6));
-  }
-  return lumpy(mergeGeometries([stumpTop(bole, 14), mergeAll(parts)], true)!, 0.04, 11);
-}
-
-/** The broken top over a stump's rim (the top ring of `bole`, `segments` round, from index 0): a fan from its middle
- *  up to the splinters, the wood's grain run round it (v) so its rings (across u) come out round the middle. */
-function stumpTop(bole: THREE.BufferGeometry, segments: number): THREE.BufferGeometry {
-  const p = bole.attributes.position, mid = V(0, 0.88, 0), positions: number[] = [], uvs: number[] = [];
-  /** the rings a metre out from the middle, and the grain's tiles once round */
-  const RINGS = 2.4, ROUND = 12;
-  const at = (v: THREE.Vector3, turn: number) => {
-    positions.push(v.x, v.y, v.z);
-    uvs.push(Math.hypot(v.x, v.z) * RINGS, turn * ROUND);
-  };
-  for (let i = 0; i < segments; i++) {
-    const a = V(p.getX(i), p.getY(i), p.getZ(i)), b = V(p.getX(i + 1), p.getY(i + 1), p.getZ(i + 1));
-    at(mid, (i + 0.5) / segments);
-    at(a, i / segments);
-    at(b, (i + 1) / segments);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  g.computeVertexNormals();
-  return g;
-}
-
 interface GateMats {
   canopyMat: THREE.Material; coreMat: THREE.Material; hangMat: THREE.Material; ivyMat: THREE.Material;
   /** the bark of its arch's roots, of the vines round them and of the roots splaying from their feet */
   archMat: THREE.Material; vineMat: THREE.Material; rootMat: THREE.Material;
 }
 
-function buildRootGate(scene: THREE.Object3D, angle: number, rockMat: THREE.Material, M: GateMats, rng: () => number, updaters: Updater[]): Portal {
+function buildRootGate(scene: THREE.Object3D, wall: Wall, angle: number, rockMat: THREE.Material, M: GateMats, rng: () => number, updaters: Updater[]): Portal {
   const g = new THREE.Group();
   const half = GATE_W / 2 + 0.45;
   const hang: THREE.BufferGeometry[] = [], ivy: THREE.BufferGeometry[] = [];
@@ -802,6 +842,7 @@ function buildRootGate(scene: THREE.Object3D, angle: number, rockMat: THREE.Mate
   const { portal } = portalMembrane(g, angle, { a: [0.04, 0.45, 0.2], b: [0.45, 0.9, 0.15], core: [0.7, 1.0, 0.55] }, updaters, true);
   placeGate(g, angle);
   scene.add(g);
+  wall.add(g, false);
   return portal;
 }
 

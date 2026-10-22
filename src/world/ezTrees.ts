@@ -10,6 +10,8 @@ import { Tree, TreePreset } from 'ez-tree';
 export interface TreeKind {
   bark: THREE.BufferGeometry;
   leaves: THREE.BufferGeometry;
+  /** its trunk alone, the bark's first branch: what an arrow meets (`world/wall.ts`; its limbs are let go) */
+  trunk: THREE.BufferGeometry;
   /** how far it reaches from the trunk, over its height, in each of REACH_BANDS bands of height from its foot */
   reach: number[];
 }
@@ -72,6 +74,22 @@ function barkAlongByGirth(bark: THREE.BufferGeometry, branches: Rings[]): void {
   uv.needsUpdate = true;
 }
 
+/** The bark's triangles on `trunk`'s rings alone, as a geometry of its own (positions only). */
+function trunkOf(bark: THREE.BufferGeometry, trunk: Rings): THREE.BufferGeometry {
+  const end = trunk.from + trunk.rings * trunk.round;
+  const index = bark.index!.array, kept: number[] = [];
+  for (let i = 0; i < index.length; i += 3) {
+    const corners = [index[i], index[i + 1], index[i + 2]];
+    if (corners.every((c) => c >= trunk.from && c < end)) kept.push(...corners.map((c) => c - trunk.from));
+  }
+  const positions = bark.attributes.position.array.slice(trunk.from * 3, end * 3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(kept);
+  geo.computeBoundingSphere();
+  return geo;
+}
+
 export function growTree(g: Grow): TreeKind {
   const json = structuredClone(TreePreset[g.preset]) as unknown as {
     seed: number;
@@ -116,5 +134,5 @@ export function growTree(g: Grow): TreeKind {
       reach[b] = Math.max(reach[b], Math.hypot(p.getX(i), p.getZ(i)));
     }
   }
-  return { bark, leaves, reach };
+  return { bark, leaves, trunk: trunkOf(bark, branches[0]), reach };
 }

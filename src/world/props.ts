@@ -10,6 +10,7 @@ import { particles } from '../fx/particles';
 import type { Obstacle } from '../types';
 import type { Prop } from './destructible';
 import type { Relief } from './ground';
+import type { Wall } from './wall';
 
 export type Updater = (dt: number, t: number) => void;
 /** Linear RGB, used as-is in shaders. */
@@ -45,6 +46,8 @@ export interface Biome {
   portals: Portal[];
   /** what lies on its floor that feet step onto (`world/ground.ts`) */
   relief?: Relief;
+  /** its wall as drawn, and what stands beyond it (`world/wall.ts`): sealed by the arena once built */
+  wall: Wall;
   setCalm(v: number): void;
   update(dt: number, t: number): void;
 }

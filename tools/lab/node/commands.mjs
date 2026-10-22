@@ -934,6 +934,38 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  wall: {
+    check(options) {
+      if (options.angles !== undefined && !(options.angles >= 1)) throw labError('wall --angles: at least 1');
+    },
+    each(side, options) {
+      const command = {
+        biomes: options.biomes,
+        angles: Math.round(options.angles ?? 48),
+        canary: Boolean(options.canary),
+      };
+      return side.command('wall', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
+  beyond: {
+    check(options) {
+      if (options.angles !== undefined && !(options.angles >= 1)) throw labError('beyond --angles: at least 1');
+    },
+    each(side, options) {
+      const command = {
+        biomes: options.biomes,
+        angles: Math.round(options.angles ?? 8),
+        canary: Boolean(options.canary),
+      };
+      return side.command('beyond', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   draws: {
     check(options) {
       if (options.count !== undefined && !(options.count >= 0)) throw labError('draws --count: 0 or more');

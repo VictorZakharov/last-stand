@@ -10,7 +10,6 @@ import { addEffect } from './effects';
 import { arrowGeometry, arrowLite, ARROW } from '../entities/models/bow';
 import { hullHit } from '../entities/models/hulls';
 import { groundHeight } from '../world/arena';
-import { pastWall } from '../world/edge';
 import { BIOMES } from '../data/biomes';
 import { sfx } from '../core/audio';
 import { clamp, rand } from '../util';
@@ -25,6 +24,10 @@ const HEADROOM = 200;
 const NEAR = 6;
 /** how deep an arrow goes in: the ground, wood, a body (m) */
 export const SINK = { ground: 0.16, prop: 0.12, body: 0.1 };
+/** a falling arrow this far past what bounds the floor (m) came over the wall, and isn't kept in the arena; one
+ *  inside is kept this far off it (its shaft's breadth) */
+const OVER_WALL = 0.5;
+const SHAFT = 0.05;
 const GRAVITY = 9.81;
 /** an arrow glancing off stone keeps a share of its speed that grows with the speed (a slow one hardly hops, a fast one
  *  skitters): GLANCE of it at GLANCE_V and over, and of that, along the stone all of it and off it GLANCE_UP of it */
@@ -203,11 +206,13 @@ function fall(s: Spent, dt: number): void {
     s.p.x = o.x + nx * o.r; s.p.z = o.z + nz * o.r;
     if (vn < 0) { const e = restitution(BOUNCE, BOUNCE_V, -vn); v.x -= (1 + e) * vn * nx; v.z -= (1 + e) * vn * nz; }
   }
-  // (and off the wall, a gate's opening too: what falls stays in the arena)
-  const wall = pastWall(G.arena.biome, s.p.x, s.p.z, _n);
-  if (wall.by > -0.1) {
-    s.p.addScaledVector(_n, wall.by + 0.1);
-    const vn = v.dot(_n);
+  // (and off the wall as it's drawn, a gate's portal too: what falls in the arena stays there, kept off the thicket's
+  // rocks as off its bushes; what glanced off something past the wall, over it, falls where it is)
+  if (Math.hypot(s.p.x, s.p.z) < G.arena.wall.reachAt(s.p.x, s.p.z) + OVER_WALL) {
+    const x = s.p.x, z = s.p.z;
+    G.arena.wall.keepIn(s.p, SHAFT);
+    const push = _n.set(s.p.x - x, 0, s.p.z - z).length();
+    const vn = push > 1e-6 ? v.dot(_n.divideScalar(push)) : 0;
     if (vn < 0) v.addScaledVector(_n, -(1 + restitution(BOUNCE, BOUNCE_V, -vn)) * vn);
   }
   const g = groundHeight(s.p.x, s.p.z) + LIE_H;
@@ -322,7 +327,6 @@ export function propSurface(o: Obstacle, at: THREE.Vector3, dir: THREE.Vector3, 
 export const floorIsStone = (x: number, z: number): boolean => groundHeight(x, z) > 0 || BIOMES[G.arena.biome].surface.floor === 'stone';
 /** What a prop is made of: stone unless it's wood, a cap or embers (which an arrow goes into). */
 export const propIsStone = (o: Obstacle): boolean => (o.prop?.kind ?? 'stone') === 'stone';
-export const wallIsStone = (): boolean => BIOMES[G.arena.biome].surface.wall === 'stone';
 
 /** The spent arrows by what they're doing (standing in the ground or a prop, riding a body, falling, fading) and how many are drawn whole, for the probes. */
 export function spentStats(): { all: number; fixed: number; inProp: number; body: number; loose: number; fading: number; near: number } {

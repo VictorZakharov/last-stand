@@ -60,6 +60,8 @@ The lab as an agent works with it: what every command measures, in a line here a
 - `maps`: the procedural maps a first visit's workers make, each timed alone with a digest of its pixels (a map made faster must keep every one: `--ab`), its seams (a repeated map must tile) and its means; `--pictures` shows each as a surface takes it
 - `tiles`: how big each repeated map's tile comes out on each surface of a biome, in metres along u and v, how stretched and its pixels a metre (a surface's UVs decide it: size a map's repeat by it); `--pictures` shows each surface as the player meets it
 - `winding`: which way every model's and biome's faces point (each mesh split into its parts, each judged by its signed volume: a part wound inside out on a one-sided material shows its inside)
+- `wall`: how near the hero walks up to the wall (at angles round the ring he walks straight out until it stops him; the gap between his body and the nearest surface drawn)
+- `beyond`: the ranger's arrows loosed over the wall at the ground and the trees beyond it, over the shoulder; each arrow left standing must have a surface drawn at its point
 - `gear`: full sets of gear rolled for every class at each tier (the Health, regeneration and draught they give, and the damage they multiply)
 - `weapons`: each of the hero's weapons alone in a lit studio (face on, edge on, from behind, from three-quarters and its head close up, with its size and its triangles)
 - `hands`: the hero's right hand alone in the studio, flat, open, relaxed, in a fist and round a handle, from each side and close up (its size against a man's, its triangles, where it was sculpted)
