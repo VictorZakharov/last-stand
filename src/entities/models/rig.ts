@@ -252,15 +252,26 @@ const _t = new THREE.Vector3(), _h = new THREE.Vector3(), _e = new THREE.Vector3
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 const X_AXIS = new THREE.Vector3(1, 0, 0), DOWN = new THREE.Vector3(0, -1, 0);
 
+/** A reach of `d` toward an arm of `length` eased into its end over the last `soft` share of it: unchanged short of
+ *  that, then nearing the full length without reaching it. */
+function softReach(d: number, length: number, soft: number): number {
+  const ease = soft * length, from = length - ease;
+  return ease <= 0 || d <= from ? d : from + ease * (1 - Math.exp(-(d - from) / ease));
+}
+
 /**
  * Two-bone IK: pose an arm so its hand reaches `target` (in the shoulder's parent space, e.g. the
  * chest), with the elbow bending forward (the rig's elbows hinge on X) and turned towards `pole`.
  * Overwrites the shoulder and elbow rotations. Out of reach, the arm points straight at the target.
  * `hinge` -1 bends the other way: a leg, whose knee folds the shin backwards (+x) with the pole in front.
+ * `soft` (a share of the arm's length) eases the reach into its end over that last share, the hand falling short of
+ * the target by at most 0.37 of it: held to the end, the elbow swings out fastest as the arm leaves it (the last 3 cm
+ * of a reach swing it 10), and a shoulder brought a centimetre nearer a grip held still in the view jumped the elbow
+ * 7 cm in a frame (Bull Rush stopped by the wall, #294).
  */
-export function reachArm(shoulder: THREE.Object3D, elbow: THREE.Object3D, upper: number, fore: number, target: THREE.Vector3, pole: THREE.Vector3, hinge = 1): void {
+export function reachArm(shoulder: THREE.Object3D, elbow: THREE.Object3D, upper: number, fore: number, target: THREE.Vector3, pole: THREE.Vector3, hinge = 1, soft = 0): void {
   _t.copy(target).sub(shoulder.position);
-  const d = Math.min(Math.max(_t.length(), 0.02), upper + fore - 1e-4);
+  const d = Math.min(Math.max(softReach(_t.length(), upper + fore, soft), 0.02), upper + fore - 1e-4);
   const cosE = (upper * upper + fore * fore - d * d) / (2 * upper * fore);
   const bend = Math.PI - Math.acos(Math.min(1, Math.max(-1, cosE)));
   elbow.rotation.set(-bend * hinge, 0, 0);
