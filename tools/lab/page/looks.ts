@@ -224,7 +224,12 @@ function drawArmsOver(arms: THREE.Camera): void {
  */
 export function drawLook(look: Look, subject: THREE.Object3D, area: Area, named: (mesh: THREE.Mesh) => string):
   { image: ImageData; parts: PartOnScreen[] } {
-  const meshes = meshesOf(subject);
+  return drawLookOf(look, meshesOf(subject), area, named);
+}
+
+/** The frame drawn as `look` has it (`drawLook`), its subject `meshes` (a prop's, from anywhere in the scene). */
+export function drawLookOf(look: Look, meshes: THREE.Mesh[], area: Area, named: (mesh: THREE.Mesh) => string):
+  { image: ImageData; parts: PartOnScreen[] } {
   const changes = dress(look, meshes);
   const renderer = G.renderer;
   try {

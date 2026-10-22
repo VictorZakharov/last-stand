@@ -20,6 +20,9 @@ export interface FireSpec {
   height: number;
   /** how far its bed rises to its rim (m): a brazier's bowl is dished, a bonfire's ground flat */
   dish: number;
+  /** the solid bowl under it, if it has one: its outside's foot, belly and rim, each a height and a radius from the
+   *  bed's middle (m; the flames behind it are hidden as it hides them) */
+  bowl?: [number, number][];
   /** the biome's point light over it (one of its six), and its intensity at rest */
   light: THREE.PointLight;
   intensity: number;
@@ -179,6 +182,7 @@ const FLAME_FRAGMENT = /* glsl */`
   uniform float uPuff;
   uniform vec2 uRise;
   uniform vec3 uSeed;
+  uniform vec2 uBowl[3];
   varying vec3 vFlameWp;
   vec3 flameColour(float heat) {
     vec3 c = mix(vec3(0.5, 0.04, 0.005), vec3(0.95, 0.22, 0.02), smoothstep(0.05, 0.3, heat));
@@ -239,10 +243,58 @@ const FLAME_FRAGMENT = /* glsl */`
     span = vec2(max(span.x, (-b - root) / a), min(span.y, (-b + root) / a));
     return vec2(max(span.x, 0.0), span.y);
   }
+  // where a ray from eye along dir first meets the side of a cone frustum round the bed's middle, from height y0 and
+  // radius r0 up to y1 and r1 (far off if it never does)
+  float sideAt(vec3 eye, vec3 dir, vec2 foot, vec2 top) {
+    float k = (top.y - foot.y) / (top.x - foot.x);
+    float q = foot.y + (eye.y - foot.x) * k;
+    float along = dir.y * k;
+    float a = dot(dir.xz, dir.xz) - along * along;
+    float b = dot(eye.xz, dir.xz) - q * along;
+    float c = dot(eye.xz, eye.xz) - q * q;
+    float meets = b * b - a * c;
+    float hit = 1e9;
+    if (abs(a) < 1e-6 || meets < 0.0) return hit;
+    float root = sqrt(meets);
+    for (int i = 0; i < 2; i++) {
+      float t = (-b + (i == 0 ? -root : root)) / a;
+      float y = eye.y + dir.y * t;
+      if (t > 0.0 && y >= foot.x && y <= top.x) hit = min(hit, t);
+    }
+    return hit;
+  }
+  // where a ray from eye along dir first meets a disc round the bed's middle at height y, radius r
+  float discAt(vec3 eye, vec3 dir, float y, float r) {
+    if (abs(dir.y) < 1e-5) return 1e9;
+    float t = (y - eye.y) / dir.y;
+    vec2 p = eye.xz + dir.xz * t;
+    return t > 0.0 && dot(p, p) <= r * r ? t : 1e9;
+  }
+  // where a ray from eye along dir first meets the bowl under the flames (uBowl: its foot, its belly and its rim, each
+  // a height and a radius from the bed's middle), or far off with none: the march stops there, as a depth test would.
+  // (The box's faces are what's depth-tested, and its corners stand out past the bowl's wall: from below, the flames
+  // showed through it.) Its foot is a disc, its walls two cones up to its rim, and the bed a disc across them.
+  float bowlAt(vec3 eye, vec3 dir) {
+    vec2 foot = uBowl[0];
+    vec2 belly = uBowl[1];
+    vec2 rim = uBowl[2];
+    if (rim.x <= foot.x) return 1e9;
+    float hit = discAt(eye, dir, foot.x, foot.y);
+    hit = min(hit, sideAt(eye, dir, foot, belly));
+    hit = min(hit, sideAt(eye, dir, belly, rim));
+    vec2 low = belly.x > 0.0 ? foot : belly;
+    vec2 high = belly.x > 0.0 ? belly : rim;
+    float bed = mix(low.y, high.y, clamp(-low.x / (high.x - low.x), 0.0, 1.0));
+    return min(hit, discAt(eye, dir, 0.0, bed));
+  }
   void main() {
     vec3 eye = cameraPosition - uCentre;
     vec3 dir = normalize(vFlameWp - cameraPosition);
     vec2 span = flameSpan(eye, dir);
+    span.y = min(span.y, bowlAt(eye, dir));
+    // (none of the flames on this ray: its steps all on one point, their light times a stride of 0 still lit the bowl
+    // from below)
+    if (span.y <= span.x) discard;
     float stride = max(span.y - span.x, 0.0) / float(${STEPS});
     // (each pixel starts its steps a little further in than its neighbours, at random: in step, the slices showed,
     // and by a pattern's offsets, its stripes did through a thin tongue)
@@ -268,6 +320,9 @@ function flameBox(radius: number, height: number): THREE.Vector3 {
   return new THREE.Vector3(reach, height * (1 + PUFF_SLOW + PUFF_QUICK) * 1.02, reach);
 }
 
+/** A bowl the flames' shader knows as none (its rim under its foot). */
+const noBowl = (): THREE.Vector2[] => [0, 0, -1].map((y) => new THREE.Vector2(y, 0));
+
 /** A fire's flames' material, for its bed's `radius` and its flames' `height` (m), by its seed. */
 function flameMat(radius: number, height: number, seed: number): THREE.ShaderMaterial {
   const mat = new THREE.ShaderMaterial({
@@ -280,6 +335,8 @@ function flameMat(radius: number, height: number, seed: number): THREE.ShaderMat
       uPuff: { value: 1 },
       uRise: { value: new THREE.Vector2() },
       uSeed: { value: new THREE.Vector3(seed % 1, (seed * 7.31) % 1, (seed * 3.17) % 1) },
+      // (none: its rim under its foot)
+      uBowl: { value: noBowl() },
     },
     vertexShader: FLAME_VERTEX,
     fragmentShader: FLAME_FRAGMENT,
@@ -418,6 +475,7 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   const seed = rng() * 100;
   const flames = flameMat(radius, height, seed);
   flames.uniforms.uCentre.value.copy(at);
+  if (spec.bowl) flames.uniforms.uBowl.value = spec.bowl.map(([y, r]) => new THREE.Vector2(y, r));
   const box = flameBox(radius, height);
   const volume = new THREE.Mesh(new THREE.BoxGeometry(box.x * 2, box.y, box.z * 2).translate(0, box.y / 2, 0), flames);
   // (its box stands over the bed unturned: the shader reads the ray in the world, from `uCentre`)

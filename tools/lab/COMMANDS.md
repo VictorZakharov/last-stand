@@ -163,13 +163,18 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   under 0.6 alike its front's mirror, or more alike its front as it is, turns with the camera, unless its front is
   over 0.9 alike its own mirror, too even to tell (main's disc of coals, edge on). And the plants over it
   (`page/fireClear.ts`): the instanced meshes' points the top-down view last drew in its column (its half-width and
-  0.3 m round, 2.5 m up). Nothing drawn, still, blown out (20% white), turning, plants over it and 3 flashes a second
-  are problems. `--cost` (`page/fireCost.ts`) times its flames on the GPU from beside them (in the top-down view they
-  cost under the timer's noise), each render by a query of its own, drawn and not in turns: its times differ run to
-  run, so they're in the lines only when asked. `--canary`: a still flame, one drawn white, one put out, a 4 Hz
-  strobe, the front shown from behind, a leaf over the bed, and with `--cost` the flames drawn four times over (twice
-  their cost at least). Pictured (`out/fire/`): close (beside it at 0, 0.13, 0.27 s, its light alone, from above),
-  round (the four sides, the first's light alone), and the top, third, first and lobby views. Main's fires (a disc of
+  0.3 m round, 2.5 m up). A fire in a bowl (a solid round its bed reaching 0.3 m under it) is read from under the
+  rim too (`page/fireBelow.ts`, #291): the share of the bowl's pixels (its meshes' in the `parts` look) its flames
+  light, its coals and embers hidden. The flames are a box marched in its shader, depth-tested at its faces, whose
+  corners stand out past the bowl's wall: main's lit 22.8% of it, as a pale band up the bowl. Over 2% is a problem.
+  Nothing drawn, still, blown out (20% white), turning, plants over it and 3 flashes a second are problems. `--cost`
+  (`page/fireCost.ts`) times its flames on the GPU from beside them (in the top-down view they cost under the
+  timer's noise), each render by a query of its own, drawn and not in turns: its times differ run to run, so they're
+  in the lines only when asked. `--canary`: a still flame, one drawn white, one put out, a 4 Hz strobe, the front
+  shown from behind, a leaf over the bed, the bowl taken from the flames' shader, and with `--cost` the flames drawn
+  four times over (twice their cost at least). Pictured (`out/fire/`): close (beside it at 0, 0.13, 0.27 s, its
+  light alone, from above, from below and where the bowl and the flames through it were found), round (the four
+  sides, the first's light alone), and the top, third, first and lobby views. Main's fires (a disc of
   coals under glow particles): 1.4 to 1.6 m by 0.9, dim orange-red throughout (7 to 25°, at most 0.22 of white), no
   smoke, 19 to 37% moving a moment, six fern clumps over the bonfire. As sheets turned to the camera they turned with
   it (0.52 alike their mirror); as a volume 1.55 m by 0.6 to 0.7, 0.33 to 0.41 of white at 30° low to 0.13 at 25° at

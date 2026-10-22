@@ -823,6 +823,8 @@ function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: number, ir
   // a heap of coals in the bowl, burning thin and dark
   buildFire(scene, {
     at: new THREE.Vector3(x, lift + 1.06, z), radius: 0.5, height: 1.05, dish: 0.14, light, intensity: 15,
+    // (the bowl's outside from the bed's middle, as its lathe draws it: its foot, its belly and its rim)
+    bowl: [[-0.16, 0.25], [0.04, 0.6], [0.19, 0.65]],
     smoke: 2.5, smokeColour: 0x2c2a28, embers: 8,
   }, updaters);
 }
