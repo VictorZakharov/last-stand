@@ -779,6 +779,9 @@ export function buildWarrior(): Model {
   };
   /** where each elbow points while the arm is placed in the view (chest space: out to its side, down) */
   const POLE_VR = V(-0.6, -1, 0), POLE_VL = V(0.6, -1, 0);
+  /** the share of an arm's length over which an arm placed in the view eases into its full reach (rig.ts `reachArm`),
+   *  where no swing holds it (a swing's keys are reached as keyed: eased, Power Strike's elbow was drawn 6 cm off them) */
+  const SOFT_REACH = 0.15;
 
   // --- round shield on the left fist: planks behind a painted navy face, a steel rim with rivets and a
   // domed boss. At rest it hangs at the side facing outwards; raised (or charging) it swings round in
@@ -1038,8 +1041,8 @@ export function buildWarrior(): Model {
 
   /** Through the eyes, a weapon held where it's seen: the arm reaches so its grip sits at `at` in the view
    *  (camera space) and the wrist turns the weapon onto `dir` (the least turn from the forearm, so the fist
-   *  keeps its roll). `k` blends it in over the pose so far. */
-  function holdInView(arm: typeof ARM_R, at: THREE.Vector3, dir: THREE.Vector3, pole: THREE.Vector3, k: number, flat?: THREE.Vector3, flatK = 0): void {
+   *  keeps its roll). `k` blends it in over the pose so far; `soft` eases its reach into its end (`reachArm`). */
+  function holdInView(arm: typeof ARM_R, at: THREE.Vector3, dir: THREE.Vector3, pole: THREE.Vector3, k: number, flat?: THREE.Vector3, flatK = 0, soft = 0): void {
     const { shoulder, elbow, hand, grip: g } = arm;
     root.updateMatrixWorld(true);
     fromEyes(root, j.neck, at, _gw).lerp(g.getWorldPosition(_cur), 1 - k);
@@ -1049,7 +1052,7 @@ export function buildWarrior(): Model {
     // (the grip sits a little off the wrist: a few rounds of reaching, then turning, settle it)
     for (let i = 0; i < 3; i++) {
       hand.getWorldPosition(_hp).add(_gw).sub(g.getWorldPosition(_cur));
-      reachArm(shoulder, elbow, j.P.upperL, j.P.foreL, j.chest.worldToLocal(_hp), pole);
+      reachArm(shoulder, elbow, j.P.upperL, j.P.foreL, j.chest.worldToLocal(_hp), pole, 1, soft);
       shoulder.updateMatrixWorld(true);
       _cur.set(0, 1, 0).transformDirection(g.matrixWorld);
       _hq.setFromUnitVectors(_cur, _dw).multiply(hand.getWorldQuaternion(_pq));
@@ -1961,7 +1964,7 @@ export function buildWarrior(): Model {
       if (turned !== 0) carryRound(turned, [_sr, _sl], []);
       shoulderTo(j.shoulderR, _sr, 1);
       shoulderTo(j.shoulderL, _sl, 1);
-      holdInView(ARM_R, _ra, _rd, swingPole(_pr, FP_TWO_POLE, holdR, _qr), viewHold, _rf, flatR);
+      holdInView(ARM_R, _ra, _rd, swingPole(_pr, FP_TWO_POLE, holdR, _qr), viewHold, _rf, flatR, SOFT_REACH * (1 - holdR));
       wR = 1;
     }
     if (fp && !two && st.dead < 0) {
@@ -2003,14 +2006,14 @@ export function buildWarrior(): Model {
         if (keyed?.hand === 'right') keyedArm.weight *= 1 - eyesR.fading;
         if (holdR > 0) shoulderTo(j.shoulderR, _sr, holdR);
         const pole = holdR > 0 ? swingPole(_pr, POLE_VR, holdR, _qr) : POLE_VR;
-        holdInView(ARM_R, _ra, _rd, pole, wR, _rf, flatR);
+        holdInView(ARM_R, _ra, _rd, pole, wR, _rf, flatR, SOFT_REACH * (1 - holdR));
       }
       if (offHeld && wL > 0) {
         holdL = eyesL.apply(_la, _ld, dt, _lf, edgeL);
         if (keyed?.hand === 'left') keyedArm.weight *= 1 - eyesL.fading;
         if (holdL > 0) shoulderTo(j.shoulderL, _sl, holdL);
         const pole = holdL > 0 ? swingPole(_pl, POLE_VL, holdL, _ql) : POLE_VL;
-        holdInView(ARM_L, _la, _ld, pole, wL, _lf, flatL);
+        holdInView(ARM_L, _la, _ld, pole, wL, _lf, flatL, SOFT_REACH * (1 - holdL));
       }
     }
     // (a hand not placed in the view this frame has no place there to fade from)
