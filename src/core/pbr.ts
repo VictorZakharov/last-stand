@@ -3,6 +3,7 @@
 // turns them into canvases and textures.
 import { makeFbm, mulberry, clamp, smooth } from '../util';
 import { faceData, type HeadGrid } from '../entities/models/face';
+import { ashlarSpan, fract, hash3, jointBevel, latticeCells, latticeFbm, latticeNoise, mix, smoothstep, wrap, type Cells, type Field } from './patterns';
 
 /** Per-pixel output of a PBR sampler: height, albedo rgb (0..1), roughness. */
 interface PBRSample { h: number; r: number; g: number; b: number; rough: number }
@@ -82,7 +83,8 @@ export function makeVoronoi(seed: number, cells: number) {
   };
 }
 
-function cobblestone(): PBRData {
+/** Cobbles (5 m a tile), the crypt's ground without its photo (`cobblestone`): domed stones in cells, dirt between. */
+function cellCobbles(): PBRData {
   const vor = makeVoronoi(7, 14);
   const fbm = makeFbm(3, 8, 5);
   const fine = makeFbm(11, 64, 3);
@@ -105,28 +107,296 @@ function cobblestone(): PBRData {
   return maps;
 }
 
-// Rectangular slabs / bricks in running bond (walls, dais).
-function slabs(seed = 21, rows = 4, cols = 3, tint: [number, number, number] = [1, 1, 1]): PBRData {
-  const rng = mulberry(seed);
-  const rowJit: number[] = [], cellShade: number[][] = [];
-  for (let r = 0; r < rows; r++) { rowJit.push(rng() * 0.5); cellShade.push(Array.from({ length: cols + 1 }, () => rng())); }
-  const fbm = makeFbm(seed + 5, 6, 5);
-  const crack = makeFbm(seed + 9, 16, 4);
-  const maps = buildPBR(512, (u, v, o) => {
-    const ry = v * rows, r = Math.floor(ry), fy = ry - r;
-    const rx = u * cols + rowJit[r] * (r % 2 ? 1 : 0.4), c = Math.floor(rx), fx = rx - c;
-    const bx = Math.min(fx, 1 - fx) * 1.0 / cols * cols, by = Math.min(fy, 1 - fy);
-    const m = Math.min(bx * 3.2, by * 3.2 * cols / rows);
-    const bevel = smooth(clamp(m / 0.08, 0, 1));
-    const n = fbm(u, v), k = crack(u, v);
-    const crackLine = clamp(1 - Math.abs(k - 0.5) * 40, 0, 1) * 0.6;
-    const id = cellShade[r][((c % (cols + 1)) + cols + 1) % (cols + 1)];
-    o.h = bevel * (0.85 + n * 0.3) - crackLine * 0.3;
-    const s = (0.13 + id * 0.07 + (n - 0.5) * 0.1) * bevel * (1 - crackLine * 0.5) + (1 - bevel) * 0.04;
-    o.r = s * tint[0]; o.g = s * tint[1]; o.b = s * 1.1 * tint[2];
-    o.rough = clamp(0.95 - bevel * 0.2 + (n - 0.5) * 0.2, 0.4, 1);
+// --- stone, wood and steel after sdf-harness's materials (core/patterns.ts: its hash, noise and cells, made to
+// tile): its patterns' shapes and its presets' numbers, in a tile. Where a preset is in metres, here it's in the
+// unit the tile is counted in (a block's length, a slab's size, a furrow's width), which the material's repeat
+// sizes on the surface; its colours are darkened to the arena's (a biome's light was set for its maps' albedo).
+
+/** a cell's sdf colour (sRGB 0..1) scaled by `k` */
+const shade = (rgb: readonly [number, number, number], k: number, o: PBRSample): void => {
+  o.r = clamp(rgb[0] * k, 0, 1); o.g = clamp(rgb[1] * k, 0, 1); o.b = clamp(rgb[2] * k, 0, 1);
+};
+/** where a relief's low places take its joints' colour: sdf's 1 - smoothstep(0.05, 0.35, height) */
+const inJoint = (h: number): number => 1 - smoothstep(0.05, 0.35, h);
+
+/** the crypt's stone (sRGB 0..1, darkened to its night): its blocks' cold grey, and the mortar's */
+const CRYPT_STONE = [0.17, 0.176, 0.198] as const;
+const CRYPT_MORTAR = [0.055, 0.055, 0.06] as const;
+
+/**
+ * Ashlar (the crypt's walls, the dummy's plinth): sdf-harness's castle stone. Squared blocks in courses, each
+ * course's joints half a block on from the one below and each joint moved up to 0.3 of a block from its place
+ * (`ashlarSpan`), so no two blocks are as long; the arrises bevelled into the mortar, each face rough-dressed (sdf's
+ * pits: 0.3 deep at 6 a block, 0.15 at 15), its shade its own (sdf's 0.5: within 25%). In sdf a block is 0.5 m long
+ * and a course 0.25 m tall, the joints 12 mm and their bevel 18 mm: here a block is a tile's width over `blocks`, a
+ * course its height over `courses` (an even number, so the courses' half-block offsets tile).
+ */
+function ashlar(seed: number, courses: number, blocks: number): PBRData {
+  const block = 1 / blocks, course = 1 / courses;
+  const gap = (0.012 / 0.5) * block, bevel = (0.018 / 0.5) * block;
+  const pits6 = latticeNoise(6 * blocks, 6 * blocks, seed + 1), pits15 = latticeNoise(15 * blocks, 15 * blocks, seed + 2);
+  const mottle = latticeFbm(2 * blocks, 2 * blocks, seed + 3);
+  return buildPBR(512, (u, v, o) => {
+    const rv = v * courses, row = Math.floor(rv), fv = rv - row;
+    const [du, index] = ashlarSpan(u * blocks + 0.5 * (row % 2), row, 40 + seed, blocks);
+    const joint = Math.min(du * block, Math.min(fv, 1 - fv) * course);
+    const pits = 0.3 * pits6(u, v) + 0.15 * pits15(u, v);
+    const h = jointBevel(joint, gap, bevel) * (1 - pits);
+    // (its pits a little darker: in the map alone the dressed face read as flat paint)
+    const f = inJoint(h), tint = (1 + 0.5 * (hash3(index + 24, row + 24, seed) - 0.5)) * (0.9 + 0.2 * mottle(u, v)) * (1.1 - 0.45 * pits);
+    o.h = h;
+    o.r = mix(CRYPT_STONE[0] * tint, CRYPT_MORTAR[0], f); o.g = mix(CRYPT_STONE[1] * tint, CRYPT_MORTAR[1], f); o.b = mix(CRYPT_STONE[2] * tint, CRYPT_MORTAR[2], f);
+    o.rough = clamp(mix(0.8, 0.95, f) + (pits - 0.22) * 0.3, 0.5, 1);
   }, 4);
-  return maps;
+}
+
+/** a flagstone's joint and its bevel, in a slab's size (sdf's flagstone: a slab 0.45 m, the joint 20 mm, its bevel
+ *  15 mm) */
+const FLAG_GAP = 0.02 / 0.45;
+const FLAG_BEVEL = 0.015 / 0.45;
+/** the forest's dais's stone (sRGB 0..1, darkened to its dusk), and its joints' */
+const FLAG_STONE = [0.17, 0.176, 0.186] as const;
+const FLAG_JOINT = [0.05, 0.05, 0.048] as const;
+/** pale marble (sdf's marble_white, #ece9e4 with veins #7a7a84, darkened to the crypt's night, cooler), and its
+ *  joints: the crypt's paths, lighter than its cobbles round them (in black marble their slabs read as the cobbles) */
+const MARBLE = [0.35, 0.355, 0.372] as const;
+const MARBLE_VEIN = [0.17, 0.172, 0.19] as const;
+const MARBLE_JOINT = [0.06, 0.06, 0.066] as const;
+/** the ways a marble slab's veins run, each a whole number of bands across a tile and down it (so they tile) */
+const VEIN_WAYS = [[6, 2], [2, 6], [5, -4], [-4, 5], [6, -1]] as const;
+
+/**
+ * Flagstones (the forest's dais): sdf-harness's flagstone. Irregular slabs, cells of a lattice `cells` by `cells`
+ * a tile with a point in each up to 0.35 of a cell from its middle; the joint where two meet (half their distances'
+ * difference), bevelled into, each slab tilted its own way a little (its top 0.8 to 1 of the highest) and pitted, its
+ * shade its own (within 25%). `veined`: cut from pale marble (the crypt's paths), sdf's marble's veins through each
+ * slab its own way, a vein 0.03 to 0.07 of a band wide with a finer one between, honed, not polished. (sdf's bands
+ * warped 2.8 bands deep by noise a cell a band came out as worms in a tile's few bands: here they're warped 1.2
+ * bands deep by noise three cells a tile, a slow flow.)
+ */
+function flags(seed: number, cells: number, veined: boolean): PBRData {
+  const c: Cells = { f1: 0, f2: 0, id: 0, cx: 0, cy: 0 }, slabsAt = latticeCells(cells, cells, 0.7, seed);
+  const pitsAt = latticeNoise(cells * 6, cells * 6, seed + 1), mottle = latticeFbm(cells * 2, cells * 2, seed + 2);
+  const flow = latticeFbm(3, 3, seed + 3), eddies = latticeFbm(8, 8, seed + 4), width = latticeNoise(6, 6, seed + 5);
+  const finer = latticeFbm(10, 10, seed + 6), cloud = latticeFbm(8, 8, seed + 7);
+  return buildPBR(512, (u, v, o) => {
+    slabsAt(u, v, c);
+    const tilt = 0.8 + 0.2 * hash3(c.cx + 48, c.cy + 48, seed), pits = pitsAt(u, v);
+    const bevel = jointBevel((c.f2 - c.f1) * 0.5, FLAG_GAP, FLAG_BEVEL);
+    const h = bevel * tilt * (1 - 0.15 * pits), f = inJoint(h);
+    const tint = 1 + 0.5 * (c.id - 0.5);
+    o.h = h;
+    if (!veined) {
+      const k = tint * (0.88 + 0.24 * mottle(u, v));
+      o.r = mix(FLAG_STONE[0] * k, FLAG_JOINT[0], f); o.g = mix(FLAG_STONE[1] * k, FLAG_JOINT[1], f); o.b = mix(FLAG_STONE[2] * k, FLAG_JOINT[2], f);
+      o.rough = clamp(mix(0.78, 0.95, f) + (pits - 0.5) * 0.12, 0.5, 1);
+      return;
+    }
+    const [ku, kv] = VEIN_WAYS[Math.floor(hash3(c.cx + 60, c.cy + 60, seed) * VEIN_WAYS.length)];
+    const t = ku * u + kv * v + 10 * hash3(c.cx + 62, c.cy + 62, seed) + 1.2 * (flow(u, v) + 0.12 * eddies(u, v));
+    const w = 0.03 + 0.04 * width(u, v);
+    const vein = 1 - smoothstep(0.3 * w, w, Math.abs(fract(t) - 0.5));
+    const fine = 1 - smoothstep(0.2 * w, 0.6 * w, Math.abs(fract(2 * t + 0.6 * finer(u, v)) - 0.5));
+    const fv = Math.max(vein, 0.45 * fine), k = tint * (1 + 0.25 * (cloud(u, v) - 0.5));
+    const stone = (i: number): number => mix(mix(MARBLE[i] * k, MARBLE_VEIN[i], fv), MARBLE_JOINT[i], f);
+    o.r = stone(0); o.g = stone(1); o.b = stone(2);
+    // (its arris worn rough: honed like the face, the bevel's few steep pixels caught the light at a grazing angle,
+    // a white line along every slab)
+    const arris = 1 - smoothstep(0.75, 1, bevel);
+    o.rough = clamp(mix(mix(0.3 + fv * 0.06, 0.85, arris), 0.92, f) + (pits - 0.5) * 0.06, 0.2, 1);
+  }, 4);
+}
+const flagstone = (seed: number, cells: number): PBRData => flags(seed, cells, false);
+const marble = (seed: number, cells: number): PBRData => flags(seed, cells, true);
+
+/** slate's colours (sdf's slate, #464a52 with its softer layers #30343a, darkened to the crypt's night), and its
+ *  joints */
+const SLATE = [0.2, 0.21, 0.236] as const;
+const SLATE_SOFT = [0.155, 0.165, 0.188] as const;
+const SLATE_JOINT = [0.045, 0.045, 0.05] as const;
+/** slate's cleaved layers down a tile (sdf's are 1 cm: here 8 cm on the dais's 2 m tile, 21 pixels each; finer,
+ *  in long slabs, they read as boards) */
+const SLATE_LAYERS = 24;
+
+/**
+ * Riven slate slabs (the crypt's dais and its braziers' steps): ashlar's courses of slabs, `courses` a tile and
+ * `blocks` a course, each slab's face sdf-harness's slate: its strata, cleaved layers along the slab, warped by
+ * its fractal noise (0.9 of a layer deep), the softer ones darker and worn a little in, each layer's shade a little
+ * its own; each slab cut from its own place in the bed, its shade its own, mottled.
+ */
+function slate(seed: number, courses: number, blocks: number): PBRData {
+  const block = 1 / blocks, course = 1 / courses, L = SLATE_LAYERS;
+  const gap = (0.012 / 0.5) * block, bevel = (0.018 / 0.5) * block;
+  const warp = latticeFbm(L / 4, L / 4, seed + 1), mottle = latticeFbm(4, 4, seed + 6), layer = latticeNoise(L, 1, seed + 2), layer3 = latticeNoise(3 * L, 1, seed + 3);
+  const layer9 = latticeNoise(9 * L, 1, seed + 4), layer23 = latticeNoise(23 * L, 1, seed + 5);
+  return buildPBR(512, (u, v, o) => {
+    const rv = v * courses, row = Math.floor(rv), fv = rv - row;
+    const [du, index] = ashlarSpan(u * blocks + 0.5 * (row % 2), row, 50 + seed, blocks);
+    const slab = hash3(index + 24, row + 24, seed);
+    // sdf's strata: the place in the layers (here a whole number of them down a tile, each slab from its own place)
+    const t = v * L + 0.9 * warp(u, v) + Math.floor(slab * 97) * 7, s = t / L;
+    const band = smoothstep(0.42, 0.58, 0.65 * layer(s, 0) + 0.35 * layer3(s, 0)) * (0.8 + 0.2 * layer9(s, 0));
+    const h = jointBevel(Math.min(du * block, Math.min(fv, 1 - fv) * course), gap, bevel) * (1 - 0.25 * band);
+    const f = inJoint(h), tint = (1 + 0.3 * (slab - 0.5)) * (0.85 + 0.3 * mottle(u, v)) * (1 + 0.2 * (hash3(wrap(Math.floor(2 * t), 2 * L), 3, 7) - 0.5) + 0.08 * (layer23(s, 0) - 0.5));
+    const stone = (i: number): number => mix(mix(SLATE[i] * tint, SLATE_SOFT[i], band), SLATE_JOINT[i], f);
+    o.h = h;
+    o.r = stone(0); o.g = stone(1); o.b = stone(2);
+    o.rough = clamp(mix(0.62 + band * 0.15, 0.95, f), 0, 1);
+  }, 4);
+}
+
+/** a rock's stone (bright and near grey, as grunge was: its material's colour tints it, and each biome's light was
+ *  set for that), its cracks, the moss in its hollows and its lichen's pale crusts */
+const ROCK = [0.76, 0.75, 0.72] as const;
+const ROCK_CRACK = [0.22, 0.22, 0.21] as const;
+const ROCK_MOSS = [0.36, 0.48, 0.22] as const;
+const ROCK_LICHEN = [0.84, 0.85, 0.77] as const;
+
+/**
+ * Weathered rock (the forest's boulders, the thicket's rocks, the gates' boulders, the standing stones and pebbles), a
+ * tile a metre: sdf-harness's fractal noise in lumps (3 a tile) and a mottle (4), its grain (64 a tile and finer) and
+ * its minerals' specks (256 a tile: 4 mm), darker in its hollows; cracks along its cells' edges (sdf's cells, 5 a
+ * tile), wandering (their place warped by a noise, 3 cm at most) and only where a third noise lets them (cracked all
+ * over, or in a finer net as well, it read as paving), worn into it; moss in its hollows, its own fine tufts, and
+ * lichen in small pale crusts on what's left.
+ */
+function rock(seed: number): PBRData {
+  const lumps = latticeFbm(3, 3, seed), mottle = latticeFbm(4, 4, seed + 1), grain = latticeFbm(64, 64, seed + 2, 3);
+  const speck = latticeNoise(256, 256, seed + 3), cracked = latticeFbm(3, 3, seed + 4);
+  const warpU = latticeFbm(4, 4, seed + 5), warpV = latticeFbm(4, 4, seed + 6);
+  const cracks = latticeCells(5, 5, 0.9, seed + 7), mossy = latticeFbm(6, 6, seed + 8);
+  const tufts = latticeFbm(48, 48, seed + 9, 2), lichen = latticeFbm(24, 24, seed + 10, 3);
+  const cell: Cells = { f1: 0, f2: 0, id: 0, cx: 0, cy: 0 };
+  return buildPBR(512, (u, v, o) => {
+    cracks(u + 0.15 * (warpU(u, v) - 0.5), v + 0.15 * (warpV(u, v) - 0.5), cell);
+    const cut = (1 - smoothstep(0, 0.045, cell.f2 - cell.f1)) * smoothstep(0.5, 0.62, cracked(u, v));
+    const relief = 0.6 * lumps(u, v) + 0.25 * mottle(u, v) + 0.15 * grain(u, v);
+    // moss where it's low and the noise lets it; lichen on what's left, in crusts
+    const moss = smoothstep(0.53, 0.67, mossy(u, v) + 0.35 * (0.5 - relief)) * (1 - cut);
+    const crust = 0.75 * smoothstep(0.66, 0.72, lichen(u, v)) * (1 - moss) * (1 - cut);
+    const s = speck(u, v), mineral = s > 0.86 ? 0.75 : s < 0.1 ? 1.12 : 1;
+    const tone = (0.9 + 0.36 * (mottle(u, v) - 0.5) + 0.2 * (grain(u, v) - 0.5)) * (0.8 + 0.4 * relief) * mineral;
+    const tuft = 0.7 + 0.6 * tufts(u, v);
+    const colour = (i: number): number =>
+      mix(mix(mix(ROCK[i] * tone, ROCK_LICHEN[i], crust), ROCK_MOSS[i] * tuft, moss), ROCK_CRACK[i], cut);
+    o.h = relief * (1 - 0.85 * cut) + 0.05 * moss * tufts(u, v);
+    o.r = colour(0); o.g = colour(1); o.b = colour(2);
+    o.rough = clamp(0.82 + 0.1 * moss + 0.06 * crust + 0.08 * cut, 0, 1);
+  }, 5);
+}
+
+/** granite's crystals (sRGB 0..1, darkened to the crypt's night): grey feldspar, its pinker kind, pale quartz and
+ *  black mica, each a share of the grains */
+const GRANITE = [
+  { share: 0.5, rgb: [0.3, 0.3, 0.31] },
+  { share: 0.18, rgb: [0.36, 0.32, 0.31] },
+  { share: 0.14, rgb: [0.46, 0.46, 0.47] },
+  { share: 0.18, rgb: [0.05, 0.05, 0.055] },
+] as const;
+
+/** the crystal a grain's hash (0..1) falls to */
+function graniteCrystal(id: number): (typeof GRANITE)[number] {
+  let at = 0;
+  for (const crystal of GRANITE) {
+    at += crystal.share;
+    if (id < at) return crystal;
+  }
+  return GRANITE[0];
+}
+
+/**
+ * Granite (the crypt's braziers' plinths), a tile half a metre: interlocking crystals (cells, 128 a tile: about 4 mm,
+ * their place warped so no grain is a cell's shape), each grey feldspar, a pinker feldspar, pale quartz or black mica
+ * by its hash, each a little its own shade, in a slow mottle; honed, its mica a shade glossier. (In slate's cleaved
+ * strata a plinth's steps read as planks.)
+ */
+function granite(seed: number): PBRData {
+  const grains = latticeCells(128, 128, 0.9, seed), mottle = latticeFbm(3, 3, seed + 1);
+  const warpU = latticeFbm(32, 32, seed + 2), warpV = latticeFbm(32, 32, seed + 3);
+  const cell: Cells = { f1: 0, f2: 0, id: 0, cx: 0, cy: 0 };
+  return buildPBR(512, (u, v, o) => {
+    grains(u + 0.006 * (warpU(u, v) - 0.5), v + 0.006 * (warpV(u, v) - 0.5), cell);
+    const crystal = graniteCrystal(cell.id);
+    const own = 0.88 + 0.24 * hash3(cell.cx + 90, cell.cy + 90, seed), k = own * (0.9 + 0.2 * mottle(u, v));
+    const edge = 1 - smoothstep(0, 0.08, cell.f2 - cell.f1);
+    o.h = 0.5 + 0.1 * (own - 1) - 0.08 * edge;
+    o.r = crystal.rgb[0] * k; o.g = crystal.rgb[1] * k; o.b = crystal.rgb[2] * k;
+    o.rough = clamp((crystal === GRANITE[3] ? 0.34 : 0.48) + 0.1 * edge, 0, 1);
+  }, 1);
+}
+
+/** limestone's weathered face (bright and near grey, as grunge was: its material's colour tints it), the grime the
+ *  rain leaves down it and in its pits, and its lichen's crusts */
+const LIMESTONE = [0.8, 0.78, 0.73] as const;
+const LIMESTONE_GRIME = [0.3, 0.3, 0.29] as const;
+const LIMESTONE_LICHEN = [0.7, 0.72, 0.6] as const;
+
+/**
+ * Weathered limestone (the crypt's carved stone: its broken columns and drums, its coffins and gravestones), a tile a
+ * metre (v down the stone, as a column's shaft runs): soft hollows the weather wore (fractal noise, 3 a tile) and its
+ * grain (64 a tile and finer); pits where the softer stuff washed out (cells, 36 a tile: about 3 cm, a fifth of them
+ * pitted, each its own size, grimed inside); hairline cracks (cells, 4 a tile, wandering, only where a noise lets them);
+ * the rain's streaks down it (a noise 12 across and 2 down: 40 drew stripes, a grain), darker; lichen in small pale
+ * crusts. A plain grunge read as flat painted grey (the owner: "add more 3d to other otherwise flat looking
+ * textures").
+ */
+function limestone(seed: number): PBRData {
+  const hollows = latticeFbm(3, 3, seed), grain = latticeFbm(64, 64, seed + 1, 3), mottle = latticeFbm(5, 5, seed + 2);
+  const pits = latticeCells(36, 36, 0.9, seed + 3), cracks = latticeCells(4, 4, 0.9, seed + 4);
+  const cracked = latticeFbm(3, 3, seed + 5), warpU = latticeFbm(6, 6, seed + 6), warpV = latticeFbm(6, 6, seed + 7);
+  const streaks = latticeFbm(12, 2, seed + 8, 3), lichen = latticeFbm(20, 20, seed + 9, 3);
+  const pit: Cells = { f1: 0, f2: 0, id: 0, cx: 0, cy: 0 };
+  const crack: Cells = { f1: 0, f2: 0, id: 0, cx: 0, cy: 0 };
+  return buildPBR(512, (u, v, o) => {
+    pits(u, v, pit);
+    // (a fifth of the cells pitted, each its own size: 0.1 to 0.35 of a cell across)
+    const size = pit.id > 0.8 ? 0.1 + 1.25 * (pit.id - 0.8) : 0;
+    const hole = size > 0 ? 1 - smoothstep(size * 0.4, size, pit.f1) : 0;
+    cracks(u + 0.12 * (warpU(u, v) - 0.5), v + 0.12 * (warpV(u, v) - 0.5), crack);
+    const cut = (1 - smoothstep(0, 0.03, crack.f2 - crack.f1)) * smoothstep(0.52, 0.64, cracked(u, v));
+    const worn = hollows(u, v);
+    const relief = 0.6 * worn + 0.18 * grain(u, v) + 0.1 * mottle(u, v);
+    o.h = relief - 0.35 * hole - 0.3 * cut;
+    // grime down the rain's streaks and deeper in the hollows, the pits and the cracks
+    const streak = smoothstep(0.55, 0.8, streaks(u, v));
+    const grime = clamp(0.45 * streak + 0.35 * (0.5 - worn) + 0.8 * hole + 0.9 * cut, 0, 1);
+    const crust = 0.7 * smoothstep(0.7, 0.76, lichen(u, v)) * (1 - hole) * (1 - cut);
+    const tone = 0.92 + 0.22 * (mottle(u, v) - 0.5) + 0.16 * (grain(u, v) - 0.5);
+    const colour = (i: number): number => mix(mix(LIMESTONE[i] * tone, LIMESTONE_GRIME[i], grime * 0.6), LIMESTONE_LICHEN[i], crust);
+    o.r = colour(0); o.g = colour(1); o.b = colour(2);
+    o.rough = clamp(0.84 + 0.1 * hole + 0.06 * crust - 0.06 * streak, 0, 1);
+  }, 5);
+}
+
+/** moss's young green, its old darker green and the shade between its cushions */
+const MOSS = [0.4, 0.52, 0.2] as const;
+const MOSS_OLD = [0.2, 0.3, 0.1] as const;
+const MOSS_GAP = [0.07, 0.09, 0.04] as const;
+
+/**
+ * Moss (the fallen logs' backs, the standing stones' shoulders), a tile half a metre: cushions (cells, 7 a tile, their
+ * place warped) domed and shaded apart in the gaps between them, each its own green, mottled young to old, its
+ * fronds' fine tufts (64 and 128 a tile) over it all. A plain grunge tinted green read as a flat painted top.
+ */
+function moss(seed: number): PBRData {
+  const cushions = latticeCells(4, 4, 0.85, seed), warpU = latticeFbm(4, 4, seed + 1), warpV = latticeFbm(4, 4, seed + 2);
+  const age = latticeFbm(3, 3, seed + 3), parted = latticeFbm(5, 5, seed + 6);
+  const fronds = latticeFbm(48, 48, seed + 4, 3), fine = latticeNoise(192, 192, seed + 5);
+  const cell: Cells = { f1: 0, f2: 0, id: 0, cx: 0, cy: 0 };
+  return buildPBR(256, (u, v, o) => {
+    cushions(u + 0.2 * (warpU(u, v) - 0.5), v + 0.2 * (warpV(u, v) - 0.5), cell);
+    const dome = smoothstep(0, 0.9, 1 - cell.f1 / 0.8);
+    // (a soft, broken dip between cushions, only where a noise parts them: drawn sharp along every edge, it was paving)
+    const gap = (1 - smoothstep(0, 0.22, cell.f2 - cell.f1)) * smoothstep(0.45, 0.65, parted(u, v));
+    const f = fine(u, v), tip = f > 0.8 ? 1.25 : f < 0.25 ? 0.8 : 1;
+    const tuft = fronds(u, v);
+    const old = smoothstep(0.3, 0.75, 0.7 * age(u, v) + 0.3 * cell.id);
+    const lit = (0.8 + 0.25 * dome) * (0.55 + 0.9 * tuft) * tip;
+    const colour = (i: number): number => mix(mix(MOSS[i], MOSS_OLD[i], old) * lit, MOSS_GAP[i], gap * 0.6);
+    o.h = 0.35 * dome * (1 - 0.5 * gap) + 0.5 * tuft + 0.15 * f;
+    o.r = colour(0); o.g = colour(1); o.b = colour(2);
+    o.rough = clamp(0.9 + 0.08 * gap - 0.06 * tuft, 0, 1);
+  }, 3);
 }
 
 function grunge(): PBRData {
@@ -139,19 +409,28 @@ function grunge(): PBRData {
   return maps;
 }
 
-/** Weathered wood: warped grain streaks running along v. */
+/** wood's rings across a tile (v runs along the grain: a tile is as long as it's wide) */
+const WOOD_RINGS = 24;
+/** sdf's oak (#a87a4a, its latewood #7a5230), greyed and darkened by weather */
+const OAK = [0.4, 0.3, 0.19] as const;
+const OAK_LATE = [0.28, 0.19, 0.115] as const;
+
+/**
+ * Weathered oak (the dummy's post, the mage's staff, the ranger's bow): sdf-harness's oak. Its rings across u, each
+ * ring's latewood a sharp band (sdf's smoothstep 0.55 to 0.85 of the ring) wavering with its fractal noise (0.6 of a
+ * ring deep, a cell a ring across and four rings' length along the grain), streaked with fine pores (sdf's: ten a
+ * ring across, one each two rings along); the latewood stands where the softer earlywood weathered away.
+ */
 function wood(): PBRData {
-  const fbm = makeFbm(77, 4, 5);
-  const maps = buildPBR(256, (u, v, o) => {
-    const warp = fbm(u, v) * 3;
-    const grain = 0.5 + 0.5 * Math.sin((u * 26 + warp) * Math.PI * 2);
-    const n = fbm(u * 2, v * 2);
-    o.h = grain * 0.6 + n * 0.4;
-    const k = 0.55 + grain * 0.25 + n * 0.2;
-    o.r = 0.42 * k; o.g = 0.29 * k; o.b = 0.18 * k;
-    o.rough = 0.75 + (1 - grain) * 0.2;
+  const R = WOOD_RINGS, waver = latticeFbm(R, R / 4, 77), pores = latticeNoise(R * 10, R / 2, 79), weathered = latticeFbm(3, 3, 81);
+  return buildPBR(256, (u, v, o) => {
+    const ring = fract(u * R + 0.6 * waver(u, v)), pore = pores(u, v);
+    const late = smoothstep(0.55, 0.85, ring) * (0.75 + 0.25 * pore), weather = weathered(u, v);
+    o.h = late * 0.55 + pore * 0.15 + weather * 0.3;
+    const k = 0.82 + (weather - 0.5) * 0.35;
+    o.r = mix(OAK[0], OAK_LATE[0], late) * k; o.g = mix(OAK[1], OAK_LATE[1], late) * k; o.b = mix(OAK[2], OAK_LATE[2], late) * k;
+    o.rough = clamp(0.76 + late * 0.1 + (1 - pore) * 0.08, 0, 1);
   }, 3);
-  return maps;
 }
 
 /** Coarse burlap weave. */
@@ -212,13 +491,13 @@ const LEAF_COLOURS: [number, number, number][] = [
 ];
 
 /**
- * Forest floor (5 m a tile, heights in cm): clumpy dark soil under a litter of fallen leaves in three layers (each leaf
+ * The forest floor without its photo (`forestFloor`; 5 m a tile, heights in cm): clumpy dark soil under a litter of fallen leaves in three layers (each leaf
  * turned its own way, cupped, a raised midrib with veins off it and its edges darker; the lower layers older and
  * darker), twigs lying across them and pebbles from 2 to 6 cm across. At each point what lies highest is what shows,
  * so pebbles poke through the leaves and twigs lie over them: the floors' relief (core/parallax.ts) stands each up out
  * of the soil. Moss is added in world space by the biome, so it doesn't tile.
  */
-function forestFloor(): PBRData {
+function litterFloor(): PBRData {
   const soil = makeFbm(29, 24, 4), crumbs = makeFbm(31, 160, 2), rot = makeFbm(37, 96, 2);
   const leafCells = 64, twigCells = 24, pebbleCells = 32;
   const layers = [makeScatter(41, leafCells, 0.55), makeScatter(43, leafCells, 0.45), makeScatter(47, leafCells, 0.35)];
@@ -296,22 +575,180 @@ function forestFloor(): PBRData {
   }, 1 / (2 * FLOOR_CM));
 }
 
-/** Tree bark: deep vertical furrows between rough plates (v runs along the trunk). */
+/** bark's furrows round a tile, and its plates' cells along it (each six furrows' widths long, sdf's) */
+const BARK_AROUND = 12;
+const BARK_ALONG = 2;
+/** sdf's carved bark (#7a6b5a, in its furrows #2e241b), darkened to the arena's */
+const BARK = [0.15, 0.132, 0.11] as const;
+const BARK_FURROW = [0.055, 0.042, 0.032] as const;
+
+// --- photos: a recipe may take its colours from a picture (core/photos/), decoded where the recipe runs (a worker,
+// or the page) before it runs: `photosFor`.
+
+/** the pictures recipes take, by name: each a square that tiles, `margin` pixels of it wrapped round each edge
+ *  outside the square (lossy coding steps at a picture's edges, where it can't see the other side: a seam in a
+ *  ground's height). */
+const PHOTO_FILES = {
+  oakBark: { url: new URL('./photos/oak-bark.webp', import.meta.url).href, margin: 0 },
+  forestLeaves: { url: new URL('./photos/forest-leaves.webp', import.meta.url).href, margin: 5 },
+  forestLeavesHeight: { url: new URL('./photos/forest-leaves-height.webp', import.meta.url).href, margin: 5 },
+  cobblestone: { url: new URL('./photos/cobblestone.webp', import.meta.url).href, margin: 5 },
+  cobblestoneHeight: { url: new URL('./photos/cobblestone-height.webp', import.meta.url).href, margin: 5 },
+};
+type PhotoName = keyof typeof PHOTO_FILES;
+interface Photo { size: number; rgba: Uint8ClampedArray }
+/** the photos decoded here, by name */
+const photos = new Map<PhotoName, Photo>();
+
+/** A picture's pixels inside its margin, decoded off the DOM (OffscreenCanvas: a worker has no document). */
+async function decode(url: string, margin: number): Promise<Photo> {
+  const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+  const size = bitmap.width - 2 * margin;
+  const context = new OffscreenCanvas(size, size).getContext('2d')!;
+  context.drawImage(bitmap, -margin, -margin);
+  bitmap.close(); // (a closed bitmap's width reads 0)
+  return { size, rgba: context.getImageData(0, 0, size, size).data };
+}
+
+/** the brightness a photo's height is taken from (sdf-harness's weights) */
+const PHOTO_LUMA = [0.3, 0.55, 0.15] as const;
+/** the oak bark photo's albedo, its mean brightness scaled to this: the forest's light was set for bark this dark
+ *  (sdf's carved bark's, procedural, 0.134) */
+const BARK_PHOTO_MEAN = 0.16;
+
+/**
+ * Oak bark from sdf-harness's oak photo (its `bark` preset; core/photos/oak-bark.webp): its colours darkened to the
+ * forest's light, its brightness the height (smoothed a pixel each way: its grain is the colour's, not the shading's),
+ * rougher down the furrows. Its furrows run down the picture, along v as a trunk's do.
+ */
+function photoBark(photo: Photo): PBRData {
+  const n = photo.size, rgba = photo.rgba, luma = new Float32Array(n * n);
+  let mean = 0;
+  for (let i = 0; i < n * n; i++) {
+    luma[i] = (PHOTO_LUMA[0] * rgba[i * 4] + PHOTO_LUMA[1] * rgba[i * 4 + 1] + PHOTO_LUMA[2] * rgba[i * 4 + 2]) / 255;
+    mean += luma[i];
+  }
+  const k = BARK_PHOTO_MEAN / (mean / (n * n)), at = (x: number, y: number): number => luma[((y + n) % n) * n + ((x + n) % n)];
+  return buildPBR(n, (u, v, o) => {
+    const x = Math.round(u * n), y = Math.round(v * n), i = (y * n + x) * 4;
+    let h = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) h += at(x + dx, y + dy);
+    o.h = h / 9;
+    o.r = clamp((rgba[i] / 255) * k, 0, 1); o.g = clamp((rgba[i + 1] / 255) * k, 0, 1); o.b = clamp((rgba[i + 2] / 255) * k, 0, 1);
+    o.rough = clamp(0.8 + (1 - o.h) * 0.18, 0, 1);
+  }, 6);
+}
+
+/** Tree bark (the forest's trunks, stumps, logs and roots, the crypt's dead wood, the thornlings, treants and
+ *  sporecallers): the oak photo where it was decoded (`photosFor`), else sdf's carved bark. */
 function bark(): PBRData {
-  const fbm = makeFbm(61, 4, 5);
-  const fine = makeFbm(67, 32, 3);
-  const maps = buildPBR(512, (u, v, o) => {
-    const warp = fbm(u, v) * 2.5;
-    const plate = Math.abs(Math.sin((u * 12 + warp) * Math.PI));
-    const f = fine(u, v);
-    const breaks = smooth(clamp((fine(v, u) - 0.3) / 0.3, 0, 1));
-    const hgt = Math.sqrt(plate) * (0.6 + breaks * 0.4) + f * 0.2;
-    o.h = hgt;
-    const k = 0.35 + hgt * 0.6;
-    o.r = 0.21 * k; o.g = 0.16 * k; o.b = 0.12 * k;
-    o.rough = 0.8 + (1 - plate) * 0.2;
+  const photo = photos.get('oakBark');
+  return photo ? photoBark(photo) : carvedBark();
+}
+
+/** the forest floor's and the crypt's cobbles' photos' brightness: the procedural maps' they stand in for (`lab maps`),
+ *  as each biome's light was set for them */
+const FLOOR_PHOTO_MEAN = 0.174;
+const COBBLE_PHOTO_MEAN = 0.111;
+
+/**
+ * A ground from a photo's colours and its scanned height (each a tile, of a size): the colours scaled to `mean`
+ * brightness, the roughness `rough` of the height (0 to 1).
+ */
+function photoGround(colour: Photo, height: Photo, mean: number, rough: (h: number) => number, bumps: number): PBRData {
+  const n = colour.size, rgba = colour.rgba, heights = height.rgba, m = height.size;
+  let sum = 0;
+  for (let i = 0; i < n * n; i++) {
+    sum += (PHOTO_LUMA[0] * rgba[i * 4] + PHOTO_LUMA[1] * rgba[i * 4 + 1] + PHOTO_LUMA[2] * rgba[i * 4 + 2]) / 255;
+  }
+  const k = mean / (sum / (n * n));
+  return buildPBR(n, (u, v, o) => {
+    const i = (Math.round(v * n) * n + Math.round(u * n)) * 4;
+    o.h = heights[(Math.floor(v * m) * m + Math.floor(u * m)) * 4] / 255;
+    o.r = clamp((rgba[i] / 255) * k, 0, 1); o.g = clamp((rgba[i + 1] / 255) * k, 0, 1); o.b = clamp((rgba[i + 2] / 255) * k, 0, 1);
+    o.rough = rough(o.h);
+  }, bumps);
+}
+
+/** The forest floor: Poly Haven's Leaves Forest Ground (CC0, core/photos/), fallen leaves over soil, drier on the
+ *  leaves' tops; else the litter painted here (`litterFloor`). */
+function forestFloor(): PBRData {
+  const colour = photos.get('forestLeaves'), height = photos.get('forestLeavesHeight');
+  return colour && height ? photoGround(colour, height, FLOOR_PHOTO_MEAN, (h) => 0.95 - 0.12 * h, 8) : litterFloor();
+}
+
+/** The crypt's cobbles: Poly Haven's Cobblestone Floor 04 (CC0, core/photos/), rounded cobbles in earthy joints,
+ *  their tops worn smoother; else the cobbles made here (`cellCobbles`). */
+function cobblestone(): PBRData {
+  const colour = photos.get('cobblestone'), height = photos.get('cobblestoneHeight');
+  return colour && height ? photoGround(colour, height, COBBLE_PHOTO_MEAN, (h) => 0.9 - 0.4 * h, 10) : cellCobbles();
+}
+
+/**
+ * Carved bark (`bark` without its photo: no worker, or one asked for before its photo came): sdf-harness's carved
+ * oak bark (`reliefBark`, matched against studio pictures), in a tile. Long
+ * plates between wandering furrows (cells six furrows' widths long, `BARK_AROUND` round a tile and `BARK_ALONG`
+ * along it), the furrow's walls stepped; each plate broken into blocks of their own heights along it, notched where
+ * they part, cracked across and along, lumped and crumbled. Dark down the furrows, the plates' tops lighter. v runs
+ * along the trunk. (sdf's blocks every 1.8 furrows' widths and its cracks 2.3 a block are 2 and 7/3 here, whole
+ * numbers of each along a tile.)
+ */
+function carvedBark(): PBRData {
+  const U = BARK_AROUND, R = BARK_ALONG, L = R * 6, blocks = L / 2;
+  // a plate's point in its cell (furrows round, cells along), as sdf's: its offsets in the cell, made once
+  const offsetU = new Float32Array(U * R), offsetV = new Float32Array(U * R);
+  for (let cv = 0; cv < R; cv++) for (let cu = 0; cu < U; cu++) {
+    offsetU[cv * U + cu] = 0.5 + 0.8 * (hash3(cu + 8, cv + 8, 8) - 0.5);
+    offsetV[cv * U + cu] = 0.5 + 0.8 * (hash3(cu + 16, cv + 16, 16) - 0.5);
+  }
+  const pointU = (cu: number, cv: number): number => cu + offsetU[wrap(cv, R) * U + wrap(cu, U)];
+  const pointV = (cu: number, cv: number): number => cv + offsetV[wrap(cv, R) * U + wrap(cu, U)];
+  // sdf's noises at the point scaled by `k` (a cell a furrow's width; along the trunk a quarter of that where `quarter`)
+  const field = (k: number, quarter: boolean, salt: number): Field => {
+    return latticeNoise(Math.round(U * k), Math.max(1, Math.round(L * k * (quarter ? 0.25 : 1))), salt);
+  };
+  const warpU = field(1.2, true, 2), warpV = field(1.2, true, 9), walls = field(7, false, 13), slant = field(3, true, 44);
+  const across = field(5, true, 71), along = field(4, true, 77), crumbs = field(10, false, 5), patches = field(1.5, false, 90);
+  const floorAt = field(2, true, 23), lumpsAt = latticeFbm(U * 5, L * 5, 3), broad = latticeNoise(Math.round(U * 0.35), 1, 61);
+  return buildPBR(512, (u, v, o) => {
+    const x = u * U + 0.5 * (warpU(u, v) - 0.5), y = (v * L) / 6 + 0.3 * (warpV(u, v) - 0.5);
+    const iu = Math.floor(x), iv = Math.floor(y);
+    let near = 1e9, cu = 0, cv = 0, pu = 0, pv = 0;
+    for (let k = 0; k < 9; k++) {
+      const qu = iu + (k % 3) - 1, qv = iv + Math.floor(k / 3) - 1, au = pointU(qu, qv), av = pointV(qu, qv);
+      const d = (x - au) * (x - au) + (y - av) * (y - av);
+      if (d < near) { near = d; cu = qu; cv = qv; pu = au; pv = av; }
+    }
+    // how far into the plate: to the nearest of the lines halfway to each next plate's point
+    let ed = 1e9;
+    for (let k = 0; k < 9; k++) {
+      if (k === 4) continue;
+      const du = pointU(cu + (k % 3) - 1, cv + Math.floor(k / 3) - 1) - pu, dv = pointV(cu + (k % 3) - 1, cv + Math.floor(k / 3) - 1) - pv;
+      ed = Math.min(ed, ((pu + 0.5 * du - x) * du + (pv + 0.5 * dv - y) * dv) / Math.sqrt(du * du + (dv * dv) / 36));
+    }
+    const id0 = wrap(cu, U), id1 = wrap(cv, R);
+    ed = Math.max(ed, 0) * (0.7 + 0.6 * walls(u, v));
+    const wall = 0.15 * clamp(ed / 0.07, 0, 1) + 0.75 * smoothstep(0.07, 0.15, ed) + 0.1 * clamp((ed - 0.15) / 0.1, 0, 1);
+    const bl = v * L * 0.5 + 3 * hash3(id0 + 40, id1 + 40, 40) + 0.6 * (hash3(id0 + 42, id1 + 42, 42) - 0.5) * (x - pu) + 0.4 * slant(u, v);
+    const fb = fract(bl), block = wrap(Math.floor(bl), blocks);
+    const hb = (s: number): number => hash3(id0 + s, id1 + s, block + s);
+    const notch = smoothstep(0, 0.1, Math.min(fb, 1 - fb));
+    const f3 = fract(bl * 7 / 3 + 0.4 * across(u, v)), f4 = fract(u * U * 2 + 0.5 * along(u, v));
+    const chunks = (1 - 0.3 * (1 - smoothstep(0, 0.08, Math.min(f3, 1 - f3)))) * (1 - 0.25 * (1 - smoothstep(0, 0.1, Math.min(f4, 1 - f4))));
+    const lumps = lumpsAt(u, v);
+    const crumb = (1 - Math.abs(2 * crumbs(u, v) - 1)) * smoothstep(0.3, 0.7, patches(u, v));
+    const top = (0.5 + 0.5 * hb(48) + 0.15 * (fb - 0.5) * (2 * hb(52) - 1)) * (1 - 0.35 * lumps - 0.22 * crumb) * chunks;
+    const floor0 = 0.1 * floorAt(u, v) + 0.2 * lumps + 0.1 * crumb;
+    const shared = mix(0.15, 0.6, hash3(id0 + 56, id1 + 56, wrap(Math.floor(bl + 0.5), blocks) + 56)) * (1 - 0.35 * lumps);
+    let h = floor0 + (shared + (top - shared) * notch - floor0) * wall;
+    h = 1.35 * h * (0.85 + 0.15 * broad(u, v));
+    h = h < 0.75 ? h : 1 - 0.25 * Math.exp(-(h - 0.75) / 0.25);
+    // sdf's bark's colour: its furrows' where it's low, the plates' tinted by their block and lighter up their sides
+    const f = 1 - smoothstep(0.05, 0.22, h), k = (1 + 0.2 * (hb(24) - 0.5)) * mix(0.5, 1.15, smoothstep(0.15, 0.55, h));
+    o.h = h;
+    o.r = mix(BARK[0] * k, BARK_FURROW[0], f); o.g = mix(BARK[1] * k, BARK_FURROW[1], f); o.b = mix(BARK[2] * k, BARK_FURROW[2], f);
+    o.rough = clamp(mix(0.86, 0.97, f) + (lumps - 0.5) * 0.1, 0, 1);
   }, 4);
-  return maps;
 }
 
 // --- the heroes' materials. Their albedo is neutral (a light grey with the pattern's shading), so the
@@ -424,25 +861,39 @@ function cloth(): PBRData {
   }, 1.5);
 }
 
-/** Worn steel: hammer dimples, fine brushing along u, long scratches, grime settled in the low spots. */
+/** a hammered steel's dents across a tile */
+const STEEL_DENTS = 12;
+
+/**
+ * Worn steel (the heroes' plate, blades and gold): hammered after sdf-harness's hammered pewter, each dent dished (its
+ * height the square of the distance to its point, 0.75 of a cell out: flat-bottomed, ridged between) with its own
+ * shade (within 3%: sdf's 0.1, within 5%, read as patches) and sheen; brushed along u after its brushed steel (fractal noise 30 times finer across
+ * the brushing than along it, 0.3 of it); long scratches; grime settled in the dents. Neutral, tinted by the
+ * material's colour.
+ */
 function steel(): PBRData {
-  const dents = makeVoronoi(171, 12), brush = makeFbm(173, 128, 2), grime = makeFbm(177, 4, 5), scr = makeFbm(179, 16, 3);
+  const grime = makeFbm(177, 4, 5), c: Cells = { f1: 0, f2: 0, id: 0, cx: 0, cy: 0 };
+  const dents = latticeCells(STEEL_DENTS, STEEL_DENTS, 0.7, 171), brush = latticeFbm(4, 120, 173), scratches = latticeFbm(6, 40, 179);
   return buildPBR(512, (u, v, o) => {
-    const d = dents(u, v), dimple = smooth(clamp(d.f1 / 0.7, 0, 1));
-    const b = brush(u * 0.05, v);
-    const s = clamp(1 - Math.abs(scr(u * 0.4 + v * 0.1, v * 2.5) - 0.5) * 70, 0, 1);
+    dents(u, v, c);
+    const r = Math.min(c.f1 / 0.75, 1), dish = r * r;
+    const brushed = clamp(0.5 + (brush(u, v) - 0.5) * 4 * 0.3, 0, 1) - 0.5;
+    const s = clamp(1 - Math.abs(scratches(u, v) - 0.5) * 70, 0, 1);
     const gr = smooth(clamp((grime(u, v) - 0.42) / 0.35, 0, 1));
-    o.h = dimple * 0.5 + b * 0.1 - s * 0.15;
-    o.r = o.g = o.b = clamp(0.78 + (b - 0.5) * 0.15 - gr * 0.4 * (1 - dimple * 0.5) + s * 0.2, 0, 1);
-    o.rough = clamp(0.32 + gr * 0.4 + (b - 0.5) * 0.15 - s * 0.12, 0.12, 1);
+    o.h = dish * 0.5 + brushed * 0.08 - s * 0.15;
+    o.r = o.g = o.b = clamp(0.78 + brushed * 0.12 + (c.id - 0.5) * 0.06 - gr * 0.4 * (1 - dish * 0.5) + s * 0.2, 0, 1);
+    o.rough = clamp(0.32 + gr * 0.4 + brushed * 0.24 + (c.id - 0.5) * 0.08 - s * 0.12, 0.12, 1);
   }, 1.5);
 }
 
 /** Fur: long streaks of hair along v, darker at the roots between tufts. */
 function fur(): PBRData {
-  const tuft = makeFbm(181, 6, 3), hair = makeFbm(183, 96, 2);
+  const tuft = makeFbm(181, 6, 3);
+  // (a hair 96 across a tile and 8 along it, and an octave finer: 0.08 along, as it was, didn't tile)
+  const hairs = latticeNoise(96, 8, 183), finer = latticeNoise(192, 16, 184);
+  const hair = (u: number, v: number): number => (hairs(u, v) * 2 + finer(u, v)) / 3;
   return buildPBR(256, (u, v, o) => {
-    const t = tuft(u, v), s = hair(u, v * 0.08);
+    const t = tuft(u, v), s = hair(u, v);
     o.h = s * 0.7 + t * 0.3;
     o.r = o.g = o.b = clamp(0.35 + s * 0.55 + (t - 0.5) * 0.4, 0, 1);
     o.rough = 0.95;
@@ -450,10 +901,27 @@ function fur(): PBRData {
 }
 
 /** Every recipe, by name; its arguments are part of what it makes. */
-export const RECIPES = { cobblestone, slabs, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
+export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, rock, granite, limestone, moss, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
 export type RecipeName = keyof typeof RECIPES;
 export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
+
+/** the photos each recipe takes (`photosFor`) */
+const PHOTOS_OF: Partial<Record<RecipeName, PhotoName[]>> = {
+  bark: ['oakBark'],
+  forestFloor: ['forestLeaves', 'forestLeavesHeight'],
+  cobblestone: ['cobblestone', 'cobblestoneHeight'],
+};
+
+/** Resolved once the photos `name`'s recipe takes are decoded here, for it to run; a photo that fails is left out
+ *  (its recipe makes its procedural map). */
+export async function photosFor(name: RecipeName): Promise<void> {
+  const wanted = (PHOTOS_OF[name] ?? []).filter((photo) => !photos.has(photo));
+  await Promise.all(wanted.map(async (photo) => {
+    const file = PHOTO_FILES[photo];
+    try { photos.set(photo, await decode(file.url, file.margin)); } catch { /* its recipe's procedural map */ }
+  }));
+}
 
 /**
  * The maps the game uses, made in workers during loading. Anything missing here is still made on
@@ -465,7 +933,7 @@ export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = 
   // `inTheLobbysOrder`, the hero it shows his face first)
   ['steel', []],
   ['face', ['warrior']], ['face', ['mage']], ['face', ['ranger']],
-  ['forestFloor', []], ['cobblestone', []], ['bark', []], ['slabs', [21, 6, 3]], ['slabs', [33, 5, 5]], ['slabs', [47, 5, 5]],
-  ['slabs', [33, 2, 2]], ['grunge', []], ['wood', []], ['burlap', []],
+  ['rock', [17]], ['marble', [33, 5]], ['cobblestone', []], ['slate', [33, 2, 2]], ['bark', []], ['forestFloor', []],
+  ['flagstone', [47, 5]], ['moss', [5]], ['granite', [7]], ['limestone', [11]], ['ashlar', [33, 2, 2]], ['ashlar', [21, 6, 3]], ['grunge', []], ['wood', []], ['burlap', []],
   ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['fur', []], ['bowWood', []],
 ];

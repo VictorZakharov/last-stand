@@ -30,6 +30,8 @@ import {
 } from './fireMeasure';
 import { CANARY_PLANT, plantIn, reachingInto, type Column, type Reaching } from './fireClear';
 import { CANARY_COST_LEAST, canaryCost, flameCost, type FlameCost } from './fireCost';
+import { belowFound, readBelow, type BelowReading } from './fireBelow';
+import { drawLookOf, partAt } from './looks';
 
 export interface FireOptions {
   biome: BiomeId;
@@ -232,6 +234,72 @@ function readFire(lab: Lab, fire: Fire, shot: Shot, none = false): FireFrame {
     showFire(fire, true);
     particles.glow.points.visible = pools[0];
     particles.smoke.points.visible = pools[1];
+    restore();
+  }
+}
+
+/** the fire seen from under its bowl's rim, towards the arena's middle (`fireBelow.ts`) */
+function belowShot(fire: Fire): Shot {
+  return { name: 'below', from: towardMiddle(fire).setY(-0.45).normalize(), distance: 2.4, rise: 0.5 };
+}
+
+/** The fire's flames' volume: the part its shader marches from the bed's middle (`uCentre`), if it has one. */
+function flamesOf(fire: Fire): THREE.Mesh | undefined {
+  return fire.parts.find((part): part is THREE.Mesh => {
+    const material = (part as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
+    return !!material?.uniforms?.uCentre;
+  });
+}
+
+/** how far under its bed a bowl's foot reaches at least (a bonfire's ring of stones lies round it) */
+const BOWL_DEPTH = 0.3;
+
+/** Whether `solids` round the fire's bed hold it in a bowl: one rises past the bed from well under it. */
+function inBowl(solids: THREE.Mesh[], fire: Fire): boolean {
+  const box = new THREE.Box3();
+  return solids.some((solid) => {
+    box.setFromObject(solid);
+    return box.min.y < fire.base - BOWL_DEPTH && box.max.y > fire.base;
+  });
+}
+
+/** The solid parts round the fire's bed (its bowl and stand: drawn by no light of their own, no higher than its bed
+ *  and a little over, within its reach across). */
+function solidsUnder(group: THREE.Object3D, fire: Fire): THREE.Mesh[] {
+  const solids: THREE.Mesh[] = [];
+  const box = new THREE.Box3();
+  const centre = new THREE.Vector3();
+  group.traverse((object) => {
+    if (!(object as THREE.Mesh).isMesh || drawsGlow(object)) return;
+    box.setFromObject(object).getCenter(centre);
+    const near = Math.hypot(centre.x - fire.at.x, centre.z - fire.at.z) <= FIRE_REACH / 2;
+    if (near && box.max.y <= fire.base + 0.4 && box.min.y < fire.base) solids.push(object as THREE.Mesh);
+  });
+  return solids;
+}
+
+/** Which pixels of `area` `meshes` cover as drawn now (1 where they do), rows from the top. */
+function coverOf(lab: Lab, meshes: THREE.Mesh[], area: Area): Uint8Array {
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    const parts = partAt(drawLookOf('parts', meshes, area, () => '').image, meshes);
+    return Uint8Array.from(parts, (part) => (part >= 0 ? 1 : 0));
+  } finally {
+    lab.drawing = drawing;
+  }
+}
+
+/** `fire` read from under its bowl (its light shown, as the player sees it). */
+function readFromBelow(lab: Lab, fire: Fire, flames: THREE.Mesh, solids: THREE.Mesh[], canary: boolean):
+  BelowReading {
+  const restore = aim(fire, belowShot(fire));
+  try {
+    const glows = [...fire.parts.filter((part) => part !== flames && !(part as THREE.Light).isLight),
+      particles.glow.points];
+    const solidsDrawn = () => coverOf(lab, solids, closeArea());
+    return readBelow({ draw: () => drawnNow(lab, closeArea()), solidsDrawn, flames, glows, canary });
+  } finally {
     restore();
   }
 }
@@ -627,6 +695,14 @@ export async function fire(lab: Lab, options: FireOptions): Promise<Report> {
     }
   }
   const above = readFire(lab, fire, shots.above);
+  const flames = flamesOf(fire);
+  const solids = solidsUnder(G.arena.groupOf(G.arena.biome), fire);
+  const below = flames && inBowl(solids, fire) ? readFromBelow(lab, fire, flames, solids, canary) : null;
+  if (below) {
+    const found = belowFound(below, canary);
+    lines.push(found.line);
+    problems.push(...found.problems.map((problem) => `${biome}: ${problem}`));
+  }
   const moments: Pictured[] = [
     {
       // (each tile says what it shows: the label names the pictures' files)
@@ -635,6 +711,7 @@ export async function fire(lab: Lab, options: FireOptions): Promise<Report> {
         ...reading.pictured.map((frame, at) => tileOf(frame.shown, `beside ${PICTURED_AT[at]} s`)),
         tileOf(aloneImage(reading.pictured[0]), 'its own light'),
         tileOf(above.shown, 'above'),
+        ...(below ? [tileOf(below.image, 'below'), tileOf(below.found, 'below-found')] : []),
       ],
       notes: lines.slice(1),
     },

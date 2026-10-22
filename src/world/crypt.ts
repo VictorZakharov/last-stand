@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA } from '../data/balance';
-import { cobblestone, slabs, grunge, bark, pbrMaterialMaps, runeCircle } from '../core/textures';
+import { cobblestone, ashlar, granite, limestone, marble, slate, bark, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
@@ -17,6 +17,7 @@ import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, s
 export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import { buildFire } from './fire';
+import { restingLift, skullGeometry } from './skull';
 import type { Obstacle } from '../types';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
@@ -93,8 +94,9 @@ function dampMap(size = 512): THREE.DataTexture {
   return t;
 }
 
-/** the cobbles' maps' repeat over the ground (110 m round) */
-const COBBLE_REPEAT = 44;
+/** the cobbles' maps' repeat over the ground (110 m round): their photo 3.5 m a tile, where it covers 1.5 m (cobbles
+ *  a hand across, as big as they are, were a glitter of noise from the camera) */
+const COBBLE_REPEAT = 220 / 3.5;
 /** the cobbles' relief: the grout this far under their tops (m), and gone this far off (m: past the top-down view's 30 to 51) */
 const COBBLE_RELIEF = { depth: 0.06, perMetre: COBBLE_REPEAT / 220, fade: 70 };
 
@@ -143,16 +145,21 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const cob = cobblestone();
   // the ground reaches past the fog's far end, so its edge melts into the sky's horizon
   const groundMat = dampGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(cob, COBBLE_REPEAT, 1.1), color: 0xd0d4e0 }));
-  const wallMaps = slabs(21, 6, 3);
+  const wallMaps = ashlar(21, 6, 3);
   const wallMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wallMaps, 1, 1.2), color: 0xb4b8c6 });
-  const daisMaps = slabs(33, 5, 5);
-  const daisMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(daisMaps, 1, 1.2), color: 0xb8b8c0 });
+  // the dais in riven slate; the paths to them in pale marble, lighter than the cobbles
+  const daisMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(slate(33, 2, 2), 1, 1.2), color: 0xb8b8c0 });
+  // (the braziers' plinths in honed granite: in slate's strata their steps read as planks)
+  const graniteMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(granite(7), 2, 0.8), color: 0xd0d0d8 });
+  const walkMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(marble(33, 5), 1, 1.2), color: 0xb8b8c0 });
   const darkStone = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wallMaps, 1, 1), color: 0x7a7e8a });
-  const stoneMaps = pbrMaterialMaps(grunge(), 2, 1.6);
-  const carved = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x7e8088, roughness: 0.85 });
+  // (weathered limestone, pitted and streaked: in a plain grunge the columns read flat, painted grey)
+  const carved = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.6), color: 0x8a8c92 });
   const iron = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.45 });
-  const boneMat = new THREE.MeshStandardMaterial({ color: 0x8a8272, roughness: 0.8 });
-  const deadWood = outsideDim(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), 1, 1.4), color: 0x6a6660, flatShading: true }));
+  // (its vertex colours darken a skull's sockets: `skullGeometry`)
+  const boneMat = new THREE.MeshStandardMaterial({ color: 0x8a8272, roughness: 0.8, vertexColors: true });
+  // (a tile about 0.4 m: at 1, one ran round a dead tree's foot and up the whole of it, 3 by 3.5 m: `lab tiles`)
+  const deadWood = outsideDim(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), [8, 9], 1.4), color: 0x6a6660, flatShading: true }));
   const banner = new THREE.MeshStandardMaterial({ color: 0x6a1420, roughness: 0.9, side: THREE.DoubleSide });
   const gold = new THREE.MeshStandardMaterial({ color: 0x8a6a30, metalness: 0.8, roughness: 0.4 });
   const weedMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
@@ -170,9 +177,10 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   scene.add(ground);
 
   // --- Central dais -----------------------------------------------------------
-  const lower = boxWithUV(2 * (h + 0.7), 0.18, 2 * (h + 0.7), 2.4);
+  // (a 2 m tile: its slabs a metre long; at 2.4 and 2 tiles a metre they were 8 cm and read as speckle)
+  const lower = boxWithUV(2 * (h + 0.7), 0.18, 2 * (h + 0.7), 0.5);
   const lowerM = new THREE.Mesh(lower, daisMat); lowerM.position.y = 0.09;
-  const upper = boxWithUV(2 * h, 0.35, 2 * h, 2);
+  const upper = boxWithUV(2 * h, 0.35, 2 * h, 0.5);
   const upperM = new THREE.Mesh(upper, daisMat); upperM.position.y = 0.175;
   for (const m of [lowerM, upperM]) { m.receiveShadow = true; m.castShadow = true; scene.add(m); }
 
@@ -224,7 +232,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
     walkParts.push(g.toNonIndexed());
   }
   walkParts.push(ringWalk(17.4, 19.6, 0.25));
-  const walks = new THREE.Mesh(mergeGeometries(walkParts), daisMat);
+  const walks = new THREE.Mesh(mergeGeometries(walkParts), walkMat);
   walks.receiveShadow = true;
   scene.add(walks);
 
@@ -293,7 +301,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
     const [x, z] = polar(WALL_R - 2.4, a);
     const g = new THREE.Group(), u0 = updaters.length;
     scene.add(g);
-    buildBrazier(g, x, z, a, iron, daisMat, updaters);
+    buildBrazier(g, x, z, a, iron, graniteMat, updaters);
     obstacles.push({ x, z, r: 1.45, h: 1.8 });
     breakable.add(obstacles.length - 1, 30, 0x3a3a48, groupLook(g, updaters, u0));
   }
@@ -314,7 +322,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   scene.add(columns);
 
   // fallen columns: a shaft lying across the floor and a couple of loose drums
-  const drumGeo = new THREE.CylinderGeometry(0.44, 0.44, 1, 24, 1).rotateZ(Math.PI / 2);
+  const drumGeo = new THREE.CylinderGeometry(0.44, 0.44, 1, FLUTED_SEGMENTS, 4).rotateZ(Math.PI / 2);
   fluted(drumGeo, 'x');
   const drums = new THREE.InstancedMesh(drumGeo, carved, 8);
   let di = 0;
@@ -338,14 +346,15 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const sarcGeo = buildSarcophagusGeo();
   sarcSpots.forEach(([rr, a], i) => {
     const [x, z] = polar(rr, a), yaw = -a;   // lying along the ring
-    const s = new THREE.Mesh(sarcGeo.body, carved);
+    const s = new THREE.Mesh(i === 2 ? sarcGeo.open : sarcGeo.body, carved);
     s.position.set(x, 0, z); s.rotation.y = yaw;
     s.castShadow = s.receiveShadow = true;
     scene.add(s);
     const lid = new THREE.Mesh(sarcGeo.lid, carved);
     lid.position.set(x, 1.0, z); lid.rotation.y = yaw;
     // one lid pushed half off, sideways
-    if (i === 2) { lid.position.x += Math.cos(yaw) * 0.45; lid.position.z -= Math.sin(yaw) * 0.45; lid.rotation.y += 0.3; lid.rotation.z = -0.1; }
+    // (turned on it, so a wedge of the hollow body shows at one end: pushed straight it hid all but a slot)
+    if (i === 2) { lid.position.x += Math.cos(yaw) * 0.5; lid.position.z -= Math.sin(yaw) * 0.5; lid.rotation.y += 0.5; lid.rotation.z = -0.1; }
     lid.castShadow = lid.receiveShadow = true;
     scene.add(lid);
     const fx = Math.sin(yaw), fz = Math.cos(yaw), n0 = obstacles.length;
@@ -454,13 +463,27 @@ function orient(geo: THREE.BufferGeometry, angle: number): THREE.BufferGeometry 
   return geo.index ? geo.toNonIndexed() : geo;
 }
 
-/** Flute a column along `axis` ('y' upright, 'x' lying): shallow grooves round the shaft. */
+/** a column's flutes round it, and how deep each is (a share of its radius) */
+const FLUTES = 12;
+const FLUTE_DEPTH = 0.1;
+/** the segments round a fluted shaft: eight a flute, so each groove is drawn round, not a facet */
+const FLUTED_SEGMENTS = FLUTES * 8;
+
+/** Flute a column along `axis` ('y' upright, 'x' lying): concave grooves round the shaft with a narrow flat
+ *  between them, and its surface worn unevenly (a few cm in and out, as weather takes a soft stone). (12 grooves
+ *  5% deep on 24 segments drew no groove at all: the shaft read as a smooth grey tube.) */
 function fluted(g: THREE.BufferGeometry, axis: 'x' | 'y'): void {
   const pos = g.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-    const [u, v] = axis === 'y' ? [x, z] : [y, z];
-    const k = 1 - 0.05 * Math.max(0, Math.cos(Math.atan2(v, u) * 12));
+    const [u, v, along] = axis === 'y' ? [x, z, y] : [y, z, x];
+    if (Math.hypot(u, v) < 0.05) continue;
+    const angle = Math.atan2(v, u), phase = (((angle / TAU) * FLUTES) % 1 + 1) % 1;
+    // (a groove's arc across 0.85 of its flute, the flat fillet the rest)
+    const across = Math.min(1, Math.abs(phase - 0.5) / 0.425);
+    const groove = Math.sqrt(Math.max(0, 1 - across * across));
+    const wear = 0.012 * Math.sin(angle * 3 + along * 2.1) + 0.008 * Math.sin(angle * 7 - along * 5.3);
+    const k = 1 - FLUTE_DEPTH * groove + wear;
     if (axis === 'y') pos.setXYZ(i, x * k, y, z * k); else pos.setXYZ(i, x, y * k, z * k);
   }
   g.computeVertexNormals();
@@ -508,11 +531,29 @@ function buildObeliskGeo(): THREE.BufferGeometry {
   return mergeGeometries([base, plinth, shaft, cap].map((g) => g.toNonIndexed()));
 }
 
+/** A column's base's mouldings over its plinth, from the plinth's top (m): a torus, a hollow under a fillet, and a
+ *  smaller torus up to the shaft's foot. */
+function columnBase(): THREE.Vector2[] {
+  const points: THREE.Vector2[] = [new THREE.Vector2(0, 0), new THREE.Vector2(0.6, 0)];
+  const torus = (y: number, height: number, from: number, out: number) => {
+    for (let k = 1; k <= 8; k++) {
+      const a = (k / 8) * Math.PI;
+      points.push(new THREE.Vector2(from + out * Math.sin(a), y + height * (1 - Math.cos(a)) / 2));
+    }
+  };
+  torus(0, 0.12, 0.6, 0.05);
+  points.push(new THREE.Vector2(0.55, 0.13), new THREE.Vector2(0.5, 0.16), new THREE.Vector2(0.52, 0.18));
+  torus(0.18, 0.06, 0.52, 0.03);
+  points.push(new THREE.Vector2(0.48, 0.24), new THREE.Vector2(0, 0.24));
+  return points;
+}
+
 /** A fluted column 4m tall (scaled per instance) on a square base, snapped off at a jagged top. */
 function buildColumnGeo(): THREE.BufferGeometry {
   const base = boxWithUV(1.3, 0.3, 1.3, 0.6).translate(0, 0.15, 0);
-  const torus = new THREE.CylinderGeometry(0.56, 0.62, 0.22, 24).translate(0, 0.41, 0);
-  const shaft = new THREE.CylinderGeometry(0.44, 0.48, 3.5, 24, 6).translate(0, 2.27, 0);
+  // its base's mouldings: a torus, a hollow and a smaller torus up to the shaft (a plain drum read as a box)
+  const torus = new THREE.LatheGeometry(columnBase(), 48).translate(0, 0.3, 0);
+  const shaft = new THREE.CylinderGeometry(0.44, 0.48, 3.5, FLUTED_SEGMENTS, 24).translate(0, 2.27, 0);
   fluted(shaft, 'y');
   const pos = shaft.attributes.position;
   for (let i = 0; i < pos.count; i++) {
@@ -525,7 +566,9 @@ function buildColumnGeo(): THREE.BufferGeometry {
 }
 
 /** A stone coffin on a plinth, and its lid (origin at the lid's centre) with a carved figure. */
-function buildSarcophagusGeo(): { body: THREE.BufferGeometry; lid: THREE.BufferGeometry } {
+/** A sarcophagus: its body (`open`: hollow, for the one whose lid is pushed half off: its walls and floor, the band
+ *  round its top a frame round the opening; solid inside, it showed stone where the lid had slid) and its lid. */
+function buildSarcophagusGeo(): { body: THREE.BufferGeometry; open: THREE.BufferGeometry; lid: THREE.BufferGeometry } {
   const flat = (gs: THREE.BufferGeometry[]) => mergeGeometries(gs.map((g) => (g.index ? g.toNonIndexed() : g)));
   const plinth = boxWithUV(1.45, 0.16, 2.65, 0.6).translate(0, 0.08, 0);
   const body = boxWithUV(1.1, 0.76, 2.3, 0.6).translate(0, 0.54, 0);
@@ -533,7 +576,17 @@ function buildSarcophagusGeo(): { body: THREE.BufferGeometry; lid: THREE.BufferG
   const slab = boxWithUV(1.25, 0.16, 2.45, 0.6);
   const figure = lumpy(new THREE.CapsuleGeometry(0.24, 1.4, 4, 10).rotateX(Math.PI / 2).scale(1, 0.55, 1), 0.05, 5).translate(0, 0.13, -0.05);
   const head = new THREE.SphereGeometry(0.17, 10, 8).scale(1, 0.8, 1).translate(0, 0.16, 0.92);
-  return { body: flat([plinth, body, band]), lid: flat([slab, figure, head]) };
+  const wall = 0.1, inX = 0.55 - wall, inZ = 1.15 - wall;
+  const walls = [
+    ...[-1, 1].map((sx) => boxWithUV(wall, 0.76, 2.3, 0.6).translate(sx * (0.55 - wall / 2), 0.54, 0)),
+    ...[-1, 1].map((sz) => boxWithUV(2 * inX, 0.76, wall, 0.6).translate(0, 0.54, sz * (1.15 - wall / 2))),
+    boxWithUV(2 * inX, 0.1, 2 * inZ, 0.6).translate(0, 0.3, 0),
+  ];
+  const frame = [
+    ...[-1, 1].map((sx) => boxWithUV(1.18 / 2 - inX, 0.1, 2.38, 0.6).translate(sx * (1.18 / 2 + inX) / 2, 0.86, 0)),
+    ...[-1, 1].map((sz) => boxWithUV(2 * inX, 0.1, 2.38 / 2 - inZ, 0.6).translate(0, 0.86, sz * (2.38 / 2 + inZ) / 2)),
+  ];
+  return { body: flat([plinth, body, band]), open: flat([plinth.clone(), ...walls, ...frame]), lid: flat([slab, figure, head]) };
 }
 
 function buildHeadstoneGeo(): THREE.BufferGeometry {
@@ -634,6 +687,7 @@ function buildNecropolis(scene: THREE.Object3D, rng: () => number, stone: THREE.
   }
   trees.count = ti;
   trees.castShadow = true;
+  trees.name = 'dead trees';
   scene.add(trees);
 }
 
@@ -801,6 +855,8 @@ function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: number, ir
   // a heap of coals in the bowl, burning thin and dark
   buildFire(scene, {
     at: new THREE.Vector3(x, lift + 1.06, z), radius: 0.5, height: 1.05, dish: 0.14, light, intensity: 15,
+    // (the bowl's outside from the bed's middle, as its lathe draws it: its foot, its belly and its rim)
+    bowl: [[-0.16, 0.25], [0.04, 0.6], [0.19, 0.65]],
     smoke: 2.5, smokeColour: 0x2c2a28, embers: 8,
   }, updaters);
 }
@@ -866,6 +922,7 @@ function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.M
     new THREE.CylinderGeometry(0.025, 0.025, 0.34, 6).rotateZ(Math.PI / 2),
     ...[-0.17, 0.17].flatMap((x) => [-0.025, 0.025].map((z) => new THREE.SphereGeometry(0.03, 6, 4).translate(x, 0, z))),
   ].map((g) => g.toNonIndexed()));
+  boneGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(boneGeo.attributes.position.count * 3).fill(1), 3));
   const bones = new THREE.InstancedMesh(boneGeo, bone, 70);
   for (let i = 0; i < bones.count; i++) {
     const a = r(0, TAU), rr = i < 12 ? r(1.5, ARENA.daisHalf) : r(6, 27);
@@ -876,33 +933,17 @@ function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.M
   }
   bones.castShadow = true;
   scene.add(bones);
-  const skullGeo = new THREE.SphereGeometry(0.12, 10, 8).scale(1, 0.9, 1.2);
+  const skullGeo = skullGeometry();
   const skulls = new THREE.InstancedMesh(skullGeo, bone, 24);
   for (let i = 0; i < skulls.count; i++) {
     const a = r(0, TAU), rr = r(2, 27);
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
-    e.set(r(-0.4, 0.4), r(0, TAU), 0); q.setFromEuler(e); s.setScalar(r(0.8, 1.2));
-    p.set(x, (Math.max(Math.abs(x), Math.abs(z)) < ARENA.daisHalf ? ARENA.daisHeight : 0) + 0.1, z);
+    // (some face up or lie on a side, as a skull without its jaw rolls)
+    e.set(r(-0.5, 0.15), r(0, TAU), r(0, 1) < 0.3 ? r(-1.3, 1.3) : r(-0.2, 0.2)); q.setFromEuler(e); s.setScalar(r(0.85, 1.15));
+    const lift = restingLift(skullGeo, q, s.x) - 0.004;
+    p.set(x, (Math.max(Math.abs(x), Math.abs(z)) < ARENA.daisHalf ? ARENA.daisHeight : 0) + lift, z);
     skulls.setMatrixAt(i, m.compose(p, q, s));
   }
   skulls.castShadow = true;
   scene.add(skulls);
-
-  // iron floor grates set into the ring walk
-  const grateGeo = new THREE.BoxGeometry(0.06, 0.04, 2.2);
-  const grates = new THREE.InstancedMesh(grateGeo, iron, 8 * 9);
-  let gi = 0;
-  for (let k = 0; k < 8; k++) {
-    const a = (k / 8) * TAU + Math.PI / 8, rr = 18.5;
-    const cx = Math.cos(a) * rr, cz = Math.sin(a) * rr;
-    for (let j = 0; j < 9; j++) {
-      const off = (j - 4) * 0.26;
-      // bars run radially, side by side along the ring
-      e.set(0, Math.PI / 2 - a, 0); q.setFromEuler(e); s.set(1, 1, 1);
-      const ox = Math.cos(a + Math.PI / 2) * off, oz = Math.sin(a + Math.PI / 2) * off;
-      grates.setMatrixAt(gi++, m.compose(p.set(cx + ox, 0.03, cz + oz), q, s));
-    }
-  }
-  grates.receiveShadow = true;
-  scene.add(grates);
 }

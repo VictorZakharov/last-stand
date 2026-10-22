@@ -887,11 +887,38 @@ export const COMMANDS = {
       if (options.runs !== undefined && !(options.runs >= 1)) throw labError('maps --runs: at least 1');
     },
     each(side, options) {
-      const command = { maps: options.maps, runs: options.runs ?? 1, canary: Boolean(options.canary) };
+      const command = {
+        maps: options.maps,
+        runs: options.runs ?? 1,
+        pictures: Boolean(options.pictures),
+        canary: Boolean(options.canary),
+      };
       return side.command('maps', command);
+    },
+    finish(results, options, session) {
+      return textWithSheetsByGroup(results, session.outFor('maps'), session.browser);
     },
     textOf: asText,
     problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
+  tiles: {
+    each(side, options) {
+      const command = {
+        biomes: options.biomes,
+        maps: options.maps,
+        pictures: Boolean(options.pictures),
+        canary: Boolean(options.canary),
+      };
+      return side.command('tiles', command);
+    },
+    finish(results, options, session) {
+      return textWithSheetsByGroup(results, session.outFor('tiles'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
   },
 
   draws: {

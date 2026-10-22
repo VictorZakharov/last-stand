@@ -22,7 +22,8 @@ const KINDS = [
 
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
-  'lobby', 'tooltip', 'glow', 'help', 'saves', 'readying', 'readyingClass', 'clicked', 'views', 'logLobby',
+  'lobby', 'tooltip', 'glow', 'help', 'saves', 'readying', 'readyingClass', 'clicked', 'views', 'behindProps',
+  'logLobby',
   'skillTipsTouch', 'run', 'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
 ];
 
@@ -335,7 +336,9 @@ export const COMMANDS = {
           + 'clicked (a class button clicked and a '
           + 'key pressed after it: '
           + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
-          + 'dummies against their anchors), run (the HUD with a hurt foe\'s bar and damage numbers), '
+          + 'dummies against their anchors), behindProps (a column planted between the camera and each dummy\'s label: '
+          + 'every label hidden behind it, every one shown with it gone; the canary plants it aside), run (the HUD '
+          + 'with a hurt foe\'s bar and damage numbers), '
           + 'scores, perf, decision, pause, summary, skillTips (each skill\'s tooltip on the hotbar opened by the '
           + 'mouse, within the window; the tallest pictured; skillTipsTouch: the lobby\'s by a finger\'s tap), log '
           + '(the battle log with hits dealt and taken: every '
@@ -919,13 +922,44 @@ export const COMMANDS = {
   maps: {
     help: 'the procedural maps a first visit makes in its workers (src/core/pbr.ts PRELOAD), each made on the page '
       + 'and timed, and a digest of its pixels: a map made faster keeps every pixel (with --ab, each digest as '
-      + 'main\'s, the times side by side)',
+      + 'main\'s, the times side by side); each repeated map\'s seams (a seam fails it) and its means',
     options: {
       maps: { kind: 'list', usage: 'a,b', help: 'the recipes made, by name (every one by default)' },
       runs: { kind: 'number', usage: 'n', help: 'how many times each is made, its time the fastest (1 by default)' },
+      pictures: {
+        kind: 'switch',
+        help: 'each map\'s albedo and height laid twice each way, its corner at its own pixels and its material lit '
+          + 'on a square and a ball, a sheet a group (metal, stone, wood...)',
+      },
       canary: {
         kind: 'switch',
-        help: 'a byte of the first map\'s pixels changed once it\'s made: its digest must change',
+        help: 'a byte of the first map\'s pixels changed once it\'s made (its digest must change), and a ramp '
+          + 'across u planted in a copy of it (a seam must be found)',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
+  tiles: {
+    help: 'how big each repeated map\'s tile comes out on each surface of a biome: the metres a tile covers along u '
+      + 'and v over the surface\'s triangles (the middle, a tenth to nine tenths of its area), how stretched it is '
+      + 'and the map\'s pixels a metre',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      maps: { kind: 'list', usage: 'a,b', help: 'the maps, by their recipe\'s name (every repeated map by default)' },
+      pictures: {
+        kind: 'switch',
+        help: 'each surface pictured as the player meets it: its point nearest the arena\'s middle, at a hero\'s height, '
+          + 'from 2 m out, a sheet a biome',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'a board 2 m by 0.5 m laid in each biome, its map repeated twice along u (it must read 1 m by 0.5 m)',
       },
       ...COMMON_OPTIONS,
     },
@@ -1419,7 +1453,7 @@ export const COMMANDS = {
   },
   live: {
     help: 'a page of the game kept between steps, each on the state the last one left (needs npm run lab:serve): '
-      + 'start (--class, the set-up), picture (--views, --look, --over, --crop), inspect [name] (--depth), eval '
+      + 'start (--class, the set-up), picture (--views, --look, --on, --over, --crop), inspect [name] (--depth), eval '
       + '<expression>, frames <count>, log, stop; its pictures in tools/lab/out/live (tools/lab/COMMANDS.md)',
     argument: 'step',
     options: {
@@ -1441,6 +1475,11 @@ export const COMMANDS = {
         help: 'picture: a reference (PNG, JPEG or WebP, a path) laid over each picture, stretched to it',
       },
       strength: { kind: 'number', usage: 'share', help: 'picture: how strongly --over is laid (0.5 by default)' },
+      on: {
+        kind: 'list',
+        usage: 'x,y,z',
+        help: 'picture: close-ups framed on this place in the world (m) instead of the hero: a prop, from --views',
+      },
       crop: {
         kind: 'list',
         usage: 'l,t,r,b',

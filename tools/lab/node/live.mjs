@@ -25,7 +25,7 @@ const DEFAULT_CLASS = 'warrior';
 /** the options each step takes besides what follows it (the set-up's for `start`) */
 const STEP_OPTIONS = {
   start: ['class', 'view', 'at', 'facing', 'nocked', 'gear', 'weapon', 'screen'],
-  picture: ['views', 'look', 'focus', 'distance', 'over', 'strength', 'crop', 'canary'],
+  picture: ['views', 'look', 'focus', 'on', 'distance', 'over', 'strength', 'crop', 'canary'],
   inspect: ['depth'],
   eval: [],
   frames: [],
@@ -54,6 +54,9 @@ export function checkStep(options) {
   if (stray) throw labError(`live ${step} takes no --${stray} (it takes ${listed(STEP_OPTIONS[step])})`);
   if (STEP_WORDS[step] && options._.length < 2) throw labError(`live ${step} needs its ${STEP_WORDS[step]}`);
   if (step === 'frames' && !(Number(options._[1]) >= 1)) throw labError('live frames: a count of at least 1');
+  if (options.on && !isPlace(options.on.map(Number))) {
+    throw labError('live picture --on: a place in the world as x,y,z in metres (7.5,0.4,17.1)');
+  }
   if (options.crop && !isCrop(options.crop.map(Number))) {
     throw labError('live picture --crop: left,top,right,bottom as shares of the picture (0.5,0,1,0.6)');
   }
@@ -63,6 +66,11 @@ export function checkStep(options) {
 const DEFAULTED = ['depth'];
 
 const listed = (names) => (names.length ? names.map((name) => `--${name}`).join(', ') : 'none');
+
+/** Whether `on` is a place: three finite numbers. */
+function isPlace(on) {
+  return on.length === 3 && on.every(Number.isFinite);
+}
 
 function isCrop(crop) {
   const [left, top, right, bottom] = crop;
@@ -145,6 +153,7 @@ export class LiveSession {
       views: options.views,
       look: options.look,
       focus: options.focus,
+      on: options.on?.map(Number),
       distance: options.distance,
       over: options.over ? pictureUrl(options.over) : undefined,
       strength: options.strength,

@@ -27,52 +27,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   in the ground, clearance, landing and its shift off a riser; each walk's feet measured as the IK has them); the worst stance of each walk is pictured whole, as the player sees it and from the
   front and the side (`out/feet/sheet.png`). A walk follows on from the ones before it (the hero, the gait and the
   game's clock carry over), so compare runs of the same `--scenarios`.
-- `gait`: the hero's walk judged as a person's, over level ground and the dais's steps, nothing drawn (standing,
-  off at a run, turned round and stopped; a long run straight on), strafing drawn, tapping, changing direction every
-  third of a second and going round in circles, nothing drawn and drawn
-  (`--scenarios walk,run,drawn,taps,zigzag,circle,circleDrawn,stairs,stairsDrawn`): each foot's share of the time on the
-  ground against the share the gait plans, both down and neither (a walk has a foot always down), the steps a second
-  and the ground a step covers, the steps' width (footprint to footprint across the way: a runner's 5 to 10 cm, a
-  walker's 10 to 15; over 30 the legs are apart), the hops (both feet leaving or landing within a few frames of each
-  other), the gallops (a foot leaving within 0.3 of a stride of the other's, the legs swinging together: a person's
-  leaves half a stride after it; the hops missed the set-off's, its second foot 6 frames after the first), a foot
-  dance's short steps, the hips' rise and fall a step and their height in the air, on one foot and on both, a planted
-  foot dragged (its leg short of it even on its toes) and one up on its toes out of a flat foot's reach (a push off),
-  each hand's swing fore and aft against its own side's knee (a person's arm swings against the hip's swing, about
-  -1; the ankle trails the thigh as the knee folds, so no arm reads -1 against it), over the whole and over each
-  half second (the median and the worst stretch, with its frames; a hand that hardly moves is held, a bow drawn, and
-  left out), the rhythm (how many strides leave near their window's start, in step with the walk cycle, and which
-  don't; how many land already out of reach, and where), the steps a foot takes back under a body that had stopped
-  (its feet were out ahead of it), the jerks (a change of the
-  change of the hips' or an ankle in the air's speed in a frame: a smooth swing's speed changes steadily, by up to 3.5
-  m/s a frame at a run, and counted by that, an ordinary run read as a hundred jerks), and what a person wouldn't do,
-  said as such. A scenario whose body moves well short of its own velocity was held up by something in its way (the
-  nearest obstacle is named) and the command fails: from where the level walks first started, the walk had run into
-  a prop and every walk number measured a body stopping and starting. Every frame is also judged as a body's
-  (`page/balance.ts`): its centre of mass from the pose, each segment weighted after de Leva (1996) for an 80 kg man,
-  with what he wears and carries (`page/gearWeight.ts`: boots, a coat, a robe or plate and mail on the segments they
-  cover, a helmet, gloves, and the bow, weapon, shield or staff and the quiver where their meshes are that frame);
-  with a foot down, where on the ground the push must come from for every mass to move as it does (the zero moment
-  point of the masses, each one's acceleration at its own height, so a foot stopped by the ground under it moves it
-  hardly at all: taken as one mass at the centre, every landing read as a fall) against the planted soles' parts on
-  the ground (outside them the body would tip, the way it lies), whether the feet's grip could give the push along the
-  ground, and that the ground never pulls; in the air, that nothing pushes the centre along and it falls as anything
-  does (held up, a run hung from a string); a push beyond any feet's grip that the game's own movement asks (its
-  acceleration is the gameplay's) counted apart. Each such episode names what moved the centre so (the game's
-  movement, the trunk, the legs, the arms, the gear) and, for a tip, how far the weight itself lay off the soles. And
-  every joint against its range, as `range` judges it. `--frames` lists every step: its foot, where in
-  its window it left and why (the IK's `Foot.leftFor`), how long it was down, its swing against the plan, every
-  jerk, every episode a body couldn't move so (its frames, the feet, what and why, at its worst) and each hand's swing
-  half second by half second; `--trace` every frame (`--span from,to` only those): the way the body faces and goes and
-  its speed over the ground, the pelvis, the curve
-  it is on, the pelvis's drop, the plan's share on the ground and the speed it plans for, the cycle's phase and rate,
-  backing or not, and each foot (planted, with its distance from its hip, `!` out of reach and `d` dragged, or its
-  stride's progress, `~` in a timed step), where it is in its window, its ankle's speed and how far its way turned,
-  and what a body couldn't do that frame (`page/legTrace.ts`, which `range --trace` shares). Each
-  scenario is measured, then run again to film it from the side round its first hop or gallop (else its middle),
-  a picture every few frames, so the motion is seen as well as measured; each film is a sheet of its own (`film-1.png` on,
-  an A/B's other side `film-main-1.png` on: both sides in one page, or all eight films, took the browser down) and an
-  A/B compares the reports.
+- `gait`: the hero's walk judged as a person's: in full in [`commands/gait.md`](commands/gait.md).
 - `form`: the hero's run judged against a runner's (`page/runner.ts`: the cadence and each foot's time on the ground
   by speed after Dorn, Schache and Pandy (2012), the hips', knees' and ankles' curves over the stride after Novacheck
   (1998) and Fukuchi (2017), the arms' after Hinrichs (1987), and the trunk's lean and the hips' rise and fall), with
@@ -89,41 +44,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the hero from both sides, the game's own views and his arms close up, measured first and run again to picture the
   frames chosen. `--frames` lists each leg's cycles (touchdown, push off, the next touchdown) and the curves bin by
   bin; `--canary` holds the left knee straight through its stances, which the knee's curve must show.
-- `coop`: two games playing together, the host's in the side's page and a guest's in a partner page beside it
-  (`Side.openPartner`), stepped together a turn of frames at a time on the lab's clock. Each page's BroadcastChannel
-  (the game's `?net=local` link) is replaced by one the lab carries (`page/coop.ts`), and the messages go from one
-  page to the other as a link of `--ping` (the least round trip, 300 ms by default) and `--jitter` (how much later each
-  way, 60 by default) delivers them: in the order sent, as a WebSocket's TCP does, a late one holding up those behind
-  it, and every couple of seconds a stall of several jitters (`node/coop.mjs`). The heroes play scenarios (`walk`: the
-  host running round in circles, the guest zigzagging; `foes`: foes chasing them; `shoot`: the guest shooting at a foe
-  that chases the host; `dodge`: the guest running from every other blow as it sees it coming; `down`: a foe bringing
-  the guest down and the host raising it; `blink`, played only by a hero with a blink, `--class mage`: the guest
-  blinking between two spots as foes close on it; `rush`, played only by a hero with Bull Rush, `--class warrior`:
-  the guest charging through three dazed foes once; `strike`, the same but for a Power Strike charged first and the
-  charge cast over it 0.35 s from its blow), each one's input frame by frame from what its own screen shows. The guest
-  practises in its lobby while it waits (stowed, as Space and a phone's Practice stow it), as a player does, and a
-  game whose hero casts freely in the run the host starts is a problem (on main the guest's did, no costs or
-  cooldowns through the whole run: `practice` measures the casts).
-  What each game showed is judged against the other's in the same frame (`node/coopJudge.mjs`): each copy's delay (the
-  one that lines its path up best with its own game's), how far off that path and how roughly it moves (its speed
-  against its own, its largest move a frame), how each game's timeline plays its partner out (how far behind the
-  freshest report, how often a stall held it, how far its clock strayed), the arrows that struck on the guest's screen
-  and whether the host counted them, the blows at the guest against whether it stood in their reach on its own screen,
-  when the guest went down and was raised on each screen, and each blink: when and how long it hid the guest's copy on
-  the host's screen, how far from where it came out on its own screen the copy came out and how far it moved after,
-  and the foes it dazed on the guest's screen against those dazed on the host's, and each foe the guest's charge met
-  on its screen: whether the host's carried and threw it too, where it was let go, came down and ended on each
-  against where the guest stopped there (one ending behind it or level with it is a problem), and its largest move a
-  frame on the guest's screen and when (eased at once onto the host's late reports as its own carry ended, a copy
-  slid back 1.2 m a frame; carried into a copy not yet met, one was shoved 73 cm off it), and the guest's Power Strike
-  under its charge on each screen (each game's hooks on each hero's pose and `fire`: `Sample.acts`): the frame it
-  landed and whether the charge ran then, the frames the charge was shown in its place, and whether it was still
-  building as it landed (a copy, replayed, was taken as landed as the charge cast over it landed, and its build-up
-  stopped short). Scenarios run on from each other, so a scenario alone can differ.
-  `--pictures` pictures both screens at a scenario's moments into `out/coop` (`down`'s: the guest downed across the
-  arena, its marker at the edge of the host's screen, then over it, then raised; `shoot`'s last: the host holding Tab,
-  the scores). The lab's link reports each game's round trip to "the server" once a second as the relay's pings would
-  (half the ping, up to the jitter more), so the scores show a ping and its graph.
+- `coop`: two games playing together: in full in [`commands/coop.md`](commands/coop.md).
 - `stops`: the hero coming to a stop from a run, judged as a person stops (a step or two as the body slows, the last
   foot landing under it or beside the other on the ground it stands on, and once still nothing moving), over runs let
   go at different points of a stride: on level ground each way, strafing drawn, and out over the dais's edge, in onto
@@ -161,119 +82,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   turned: an elbow swung round its arm turns the shoulder alone), and `--trace` (`--span a,b` for some frames) the leg IK frame by
   frame as the gait's trace does (`page/legTrace.ts`: each foot down, in the air or in a timed step `~`, dragged `d`),
   each frame's joints past their ranges after it.
-- `eyes <skill>`: a skill cast through the eyes (`page/eyes.ts`, `--class warrior`; `--gear` and `--weapon` hold the
-  weapons as `range` does), its key held as the player would through `--times` casts in a row (a basic attack's
-  chained swings), stepped frame by frame from the press until the arms are at rest again; a cast, a dash (Bull Rush,
-  Twin Fangs' lunge) or a channel (Steel Tempest) all count as what it follows. Each frame it places the weapon's
-  blade (its middle, from the grip to the tip: a long blade's tip is out of the frame's top as often as not), the grip
-  and the other hand's fist on the screen, and says per cast where the blade began, where it was wound up to, the blow
-  (the frames round the fastest that move at least 0.4 of it, measured only while the blade is in or near the frame:
-  passing close beside the eyes out of the view it swept 90 degrees of their view in a frame, and that read as the
-  blow), where the blade was as the skill fired against the blow, and where it ended, how many frames it was out of
-  the frame; the shoulders at rest in the eyes' frame and an arm's reach (where a pose through the eyes can put the
-  hands), and the arms' joints past their ranges, each one's worst and on how many frames (information: through the
-  eyes the arms are placed where they're seen, not fitted to a body's ranges), and each hand's fist on its handle
-  (`Model.fists`: how far the handle passes from where the fist closes, how far the fingers are curled), and the frames
-  each fist is in the frame (Steel Tempest's two-hander held low came round into the view's bottom once a turn, a
-  flash each time, which no line said). Each strike's whip (its blow's point against its hilt) is held to what the
-  arm and the weapon swung round the shoulder as one would give, a spin's to what carried round the body as one would
-  (`page/strike.ts` `Pivot`: held out from the shoulder, a two-hander's spin read as slid across). A strike moves
-  against the eyes, the camera, which carries the arms (in the world's space, Bull Rush's run carried the hilt along
-  at the body's pace, and the cut swung as it ended read as slid across). One slowed to a fifth of its speed within
-  60 ms is stopped dead, unless the floor stopped it: its weapon's lowest point (every corner of what's drawn) within
-  6 cm of the floor by then, Thunder Crescent's driven into the ground; further under it, it has sunk in, a problem of
-  its own. `--canary` judges each blow the floor stopped again with the floor read 30 cm under where it is, which must
-  find it stopped dead in the air. A blow is looked for only over the frames the game swings a weapon in a strike
-  (`Model.swung`, which the swing's trail follows: a war cry's, a drink's and a raised shield's weapons strike nothing,
-  and were failed as led by their flats), and one a hand where a cast's tip passes from one hand's weapon to the
-  other's (Twin Fangs' right blade, then its left: judged as one, the left's blow was never looked at). Problems: a
-  two-hander let go of by the other hand, in the frame or out of it, its fist as drawn more than 15 cm off the lower
-  grip (held, it reads about 7 cm; let go, 50 cm and more within four frames), but where the game lets that hand go
-  (`LowerGrip.free`: drinking, the weapon on the shoulder, the hand coming back onto the grip), the frames, how many in
-  the frame, and the worst with why it was let go (past the arm's reach, its joints past their ranges, the arm into
-  the body: let go of below the frame, it was only listed, and the owner saw the two-hander "one handed", #198); a
-  two-hander seen in one hand, its lower grip in the frame with the other hand out of it, for longer than
-  200 ms (a fist below the frame on a handle that runs out of it is lost to a person's own eyes too: counted whenever
-  the weapon's hand was seen, the middle guard at rest read as one-handed); and a hand seen holding its handle as an
-  open hand, the handle over 1.2 cm from where its fist closes or its fingers curled under 0.5 rad (through the eyes a
-  hand is drawn large, and the user saw the grip "not gripping the sword"); and the weapon jumping between frames, seen
-  in or near the frame: a frame its tip moves into at least 6 m/s, 3 times the median of the moves 3 frames each
-  side of it and twice the slower of the frames either side (`page/jumps.ts`; the median, as a blade out and back
-  again in a frame moves as far into the next; the sides, as a dual wielder's cut, fast for three frames, read as a
-  jump against a round mostly still), the
-  tip passed from one hand's weapon to the other's not counted (#249: Steel Tempest's blade leapt a metre and more each
-  turn of the spin, the elbow flipping over as the shoulder came round under the camera; a two-hander's dropped 43 cm
-  as Power Strike's way back ended). `--film=false` takes no film (it's
-  `tools/lab/out/eyes/<skill>/`, every `--every`
-  frames, 2 by default), `--frames` lists every frame: the grip, the weapon's way and the other hand in the camera's
-  space (the swings' keys are their own, `models/warriorEyes.ts`: `lab swing` keys a pose), held or let go and why,
-  and its joints
-  past their ranges, and the fists. `--canary` freezes the body, the trunk and the arms as they were at the press (and
-  puts the hero under the camera again by his neck as held: placed by the neck as posed, Steel Tempest's frozen arms
-  went round the eyes each turn), turns the other arm down out of the frame and lifts the weapon 15 cm up the view out
-  of the fists: there must be no blow, a two-hander must be seen in one hand, and a fist must be off its handle (frozen
-  alone, the arms swung with the trunk's turn and read as a blow); lifts it alone each frame of the cast played as it
-  is, which must show a fist off its handle (the right's weapon, or the left's where only the left fist is seen: a
-  dual wielder's Bull Rush holds the right blade under the frame, and lifted, it was never seen); and lifts the weapon
-  30 cm up the view on its stillest frame in the frame alone, which must read as a jump there. A jump is a peak, at
-  least as far as the frames either side of it (a dual wielder's elbow slowing to a stop in a cut, 23 cm, 15, then 6,
-  read as a jump on the 15): a pose out and back again in a frame reads on the further of its two moves, which a
-  canary planted on a frame takes either way. The elbows' jumps are read as the weapon's (each at least 3 m/s), seen
-  where that arm is in or near the frame anywhere from its shoulder to its fist and listed where it isn't (read on
-  the weapon alone, an arm flipped over round a hand held still passed; a two-hander's right elbow flipped out to the
-  shoulder's height under the frame, the arm out of it from the shoulder to the fist, was never seen); the canary
-  moves the right elbow 30 cm on its stillest frame alone, which must read there, seen or out of the frame as that
-  arm was. The arm a swing keys (`Model.swingKeyed`, `page/keyed.ts`) is held to the arm drawn wherever the arm is
-  all the swing's: its shoulder, elbow and grip within 4 cm (a wrist keyed at its range's end was clamped, and the
-  grip drawn 7 cm off its keys through a cut's wind-up), the weapon's way within 5 degrees and its flat within 10,
-  read by the grip's turn alone (the left hand's grip is mirrored: read through its matrix, the left blade's flat was
-  180 degrees off its keys throughout its cut), its shoulder and elbow only as far as the arm is the swing's
-  (`KeyedArm.armShare`: a backhand held by the hands, `ViewSwing.holds`, draws the right arm from its own shoulder,
-  and judged by the arm its plane lays out from the left, every frame read 44 cm off). The arms' joints past their
-  ranges fail a run where that arm is in or near the frame, and are listed everywhere (a two-hander's row of cuts
-  holds the right arm under the frame from the shoulder to the fist throughout, and its forearm was failed for a turn
-  no one sees); the arms in the body the view hides (`page/armsIn.ts`) are said, not failed: through the eyes the
-  shoulders aren't where that body has them, and none of it is drawn (the two-hander's guard read its right forearm
-  17.6 cm into the chest); their canary moves the right elbow into the chest, which must read 10 cm deep or more. A
-  spin's blow (a skill with a `spin`: Steel Tempest) isn't asked to cross the aim, as it strikes all round; whether
-  its passes may be seen is `cast`'s flashes' to say (held across the view, the one-hander's steel lit the crypt 3
-  times a second at 2.4 turns a second). Every run
-  of the cast, the canaries' as the first, starts at full energy, its cooldowns cleared (Steel Tempest drains energy
-  while held: the runs after the first spun 11 frames less, and the jump canary's lift fell past their end).
-- `swing <name>`: a swing through the eyes keyed from a pose (`page/swing.ts`, `src/entities/viewSwing.ts`;
-  `--class warrior`, a swing by its name in `models/warriorEyes.ts` `SWINGS_NAMED`). A pose is decided as a person
-  holds it, then keyed: `--grip x,y,z --way x,y,z` (camera space, a pose each three numbers, as many as given) says
-  the key of the swing that holds the grip there and the weapon that way, and what of it an arm swung in the swing's
-  plane can't hold (the grip or the way off the plane, the wrist bent past its range, the grip past the arm's reach);
-  `--key way,reach,bend,drop,roll` places keys given; with neither, every key of the swing is placed as the game
-  places it at its share: in the plane it has there (a cut in a row turned in from the one before's, `from`, over
-  `turning`), a two-hander's held swing (`holds`: its hands turned about the left shoulder) with each hand's distance
-  from its own shoulder, and its first key against where the one before leaves the arm, which must be within 1 cm and
-  1 degree (placed in its own plane, a backhand's first key read its lower grip 0.98 m from the left shoulder where
-  the game drew it at the forehand's end, 0.39). Each placed key says the grip (in the frame or not), the weapon's
-  way and its share in the frame (as `eyes` counts a cut's end), the elbow, the wrist, and a two-hander's lower grip
-  with its distance from the other shoulder against an arm's reach (keyed by trying numbers in a cast, a two-handed
-  forehand took an hour and its wind-up still put the lower grip 12 cm past the left arm's reach). `--turn rad` turns
-  it all with the trunk (to the left), as a cut turns it, a pose taken as the eyes see it so turned; `--trunk
-  rest|row|back` turns each key as far as the trunk turns a cut of the
-  hero's weapons at its share (`cutTurnAt`): a forehand from rest, one in a row, or a backhand, the other way (by its
-  keys alone, a two-handed cut's end read 64% in the frame, and 0% as the eyes saw it, turned 40 degrees left);
-  `foreOut|backOut`, the way back to the guard after one, the turn its end left unwound. Placing every key, it also
-  steps the swing in 1% steps as the game lays it out (`page/swingPath.ts`) and fails an elbow turned over round the
-  line to its grip between two (3 cm and 3 times the grip's move: as Power Strike's plane turned through upright from
-  the guard's, the elbow's drop went over to the plane's other side, 20 cm in a step the grip moved 3, each key as
-  placed alone looking right) and a two-hander's lower grip past the other arm's reach as far as the game lets go of
-  it (the backhand's way back, within reach at both its keys, went 13 cm past between them); its canary turns one
-  step's elbow over, which must be read. A guard with a head has its swings named too (`twoPowerHead`,
-  `twoOutBackHead`...). `swing all` steps every swing of every weapon each way the hero holds them (`--gear`'s and
-  `--weapon`'s alone, if given), each turned as the game turns it (`page/swing.ts` `SWINGS_HELD`: the basic
-  attack's cuts by the trunk at their shares, its ways back unwinding it, the skills' unturned), a set-up each on one
-  page: its plane, where it starts against the swing before's end and its path, its canaries on the cut from rest
-  (`check` runs it; a page booted for each weapon, its ten jobs took 547 s for 3 s of stepping). On a game that
-  places every key in its swing's own plane, nothing is stepped (its every step read as its first key, and a cut in
-  a row 97 cm from the last one's end).
-  `--canary`: the swing's blow keyed back from where its own key places it must come back as that key, and a grip
-  moved 10 cm off the plane must read 10 cm off. `--tune warriorSwings.<swing>=...` tries keys and planes unwritten.
+- `eyes <skill>`: a skill cast through the eyes: in full in [`commands/eyes.md`](commands/eyes.md).
+- `swing <name>`: a swing through the eyes keyed from a pose: in full in [`commands/swing.md`](commands/swing.md).
 - `match <picture>`: the hero through the eyes matched to a reference (`node/match.mjs`; another game's, the one the
   owner names), not by eye: handed over as matching three Vermintide 2 screenshots from a one-line summary of them, a
   rest leaned in where they lean out, was twice as wide and had its head out of the frame. He stands at rest, or is
@@ -302,68 +112,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   with a clip, what crossed what and how deep.
 - `probe <module>`: a measure of your own (Writing a measure in `AGENTS.md`). Options the lab doesn't know are passed to it (`--frames=30`), and
   `--setup=false` skips the set-up.
-- `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,readying,
-  readyingClass,clicked,views,logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch`, every one by default:
-  the lobby, an item's tooltip, the stash given 60 items (more than its view shows, on most screens) and a weapon
-  among them hovered by the mouse, those that fit its slot lit (`page/uiGlow.ts`: a short screen's rail turned to the
-  gear first; pictured round the stash, its tooltip put away, at 400, 1000 and 1600 ms into the
-  glow's loops, each held there, so `--ab` pictures the same moment on both sides; every loop a lit item runs must
-  animate only what the compositor moves, a layer's transform or opacity, and each that animates anything else, read
-  off its `@keyframes`, is a problem: its shadow, gradient and background animated, a full stash lit dropped the lobby
-  from 145 frames a second to 44, #267; and each loop on a stash item not hovered is a problem: 30 lit items' 90
-  loops, composited, still halved the frames while the mouse moved between them; and each part of the hovered item's
-  glow shown with a mask within another mask round it is a problem: a pass of the compositor's own within another,
-  drawn again every frame (the arc kept to the border's ring by one, within the stash's fading mask, raised the GPU's
-  time a frame from 5.4 ms to 6.3 moving between items (the owner's rose from 5 to 14 as the frames fell to 30), where
-  either mask alone raised it by 0.1 at the most, `npm run stalls -- --scenario sweep --perf`); and the stash's fade, the panel's colour laid over a
-  row its scroll cuts (its tab page's `::after`, shown by the stash's scroll), read at the stash's top and its end, the
-  mouse off the stash meanwhile: not shown at the top with a row cut is a problem, and so is shown at the end or over a
-  stash that fits (a dark band over the bare panel); `--canary` loops a shadow on the hovered item, turns a lit one's
-  glow not hovered, masks the hovered item's steady glow within a mask on the stash and holds the fade shown, each of
-  which must be found),
-  How to play, the save slots, the fight's loading bar over the lobby as a press waiting for the fight's programs
-  shows it (`ui/readying.ts`, 40% along: within the window, its label on one line, its fill as far as painted;
-  `--canary` gives the label a letter's width, whose wrap must be found), another class picked with the mouse while
-  the heroes' programs are kept cold (`game/warm.ts` `chill`), its bar saying it readies that hero and every label the
-  bar can show (`readyingLabels`) on one line on this screen (`--canary` puts back the page's own "Readying the fight",
-  which a class pick said, and it must be found; a tree from before it can't keep them cold, and says so), the hero's
-  class button clicked with the mouse and a key pressed after it as the browser gets them (where the focus went and whether
-  the browser shows its ring: a problem when the button kept it), the lobby's camera switched with V through every
-  view and back, each glide played and drawn (every frame, each label over the dummies against where its anchor shows
-  by the camera as the frame draws it: off by more than a pixel is a problem; placed with the camera's turn of the
-  frame before, they were up to 1442 px off as a glide set off), the battle log over the lobby with a training dummy
-  struck (clear of its panels: it first lay over the hero panel, as the performance stats did), each skill's tooltip
-  in the lobby opened by a finger's tap (the class card's and the skill book's, the book opened by taps: a short
-  screen's rail turned to the skills, the book's toggle; each tooltip pinned and within the window, the tallest
-  pictured; the mouse then puts the page back in mouse mode), the run's HUD with a hurt foe's
-  bar and damage numbers over it, the scores, the performance overlay, the choice after a wave, the pause menu, the
-  run's summary, each skill's tooltip on the hotbar opened by the mouse moved over its slot (within the window, the
-  tallest pictured; `--canary` makes each as tall as the window, which must be found past it: issue #256's damage
-  lines made them taller), the battle log with each skill on a key struck at the foe twice and its blows on the hero
-  listed, then paused: a row for every line, within the window, over none of the HUD's named elements but the layers as
-  wide as the screen, no row wider than the panel, its head on one line; and the same in touch mode, put in it by a finger's tap, where its lines must
-  let a touch through: on a phone the panel first lay over the scores button under the pause button), each pictured
-  whole as a PNG of its own at the screen's pixels (`out/ui/<state>.png`), with every
-  named element's box and every label's over the world as shares of the window. In every state, the cursor over each
-  element the mouse can be over (shown, with an area, taking the pointer) must be the game's own (its art, from
-  `index.html`) or a text field's caret: the system's (`auto`, `pointer`, a UA stylesheet's `default`) is a problem,
-  listed by element; `--canary` gives the page's body the system's, which must be found. In every state too, the
-  digits shown must sit on their line (`page/digits.ts`): each look of the page's text showing digits (its font,
-  weight, style and numeric settings) has the ten set out alone in it at 64 px (as large as fits across a narrower
-  window: past its edge the picture was cut short, "no ink of the 1"), white on black over the page, pictured
-  and each one's ink read, and each font the world's labels are painted in (`overlay/paint.ts` `fontOf`) has each
-  digit's ink measured by the canvas; their tops or their bottoms more than 8% of their size apart is a problem,
-  naming the highest and the lowest and where the look shows, with its picture (`out/ui/digits-<n>.png`). Old-style
-  digits are 11% apart; the display face's 3 and 5 dip 6% by design. `--canary` gives the page's body old-style
-  digits and takes the labels' lining twin away: both must be found. (The owner, of the skill tooltips: "digits are
-  all jumping up and down in the same line".) With `--screens`, whether
-  the UI is
-  the same share of both screens: on `3840x2160@1,1280x720@3` (a 4K screen at 100% and at 300%) the lines agree but
-  the tooltip's place (it keeps off the pointer in css px, as the OS scales the pointer) and the lobby's text, which
-  drifts by up to 1% of the screen down a panel (Blink rounds each line of text to whole css px), and the pictures
-  differ by text's antialiasing, 2 to 5% of their pixels (the lobby's states 12 to 16%, with the drift). The page
-  takes a state at a time: a 4K screen's ten pictures sent back at once were too much for the browser, which closed.
-  `--hdr` puts HDR on first, as on a display in HDR mode, so the pause menu shows its levels.
+- `ui`: the game's UI as the player sees it, in its states: in full in [`commands/ui.md`](commands/ui.md).
 - `wind`: the loading screen's exit as it hands over to the lobby's logo (`page/wind.ts`, `src/ui/logoWind.ts`).
   The loading screen is put back over the lobby (index.html's, fetched) and its exit run on the lab's clock into the
   lobby logo, the window put on the screens `--resize` names one after another as the particles fly (on
@@ -414,13 +163,18 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   under 0.6 alike its front's mirror, or more alike its front as it is, turns with the camera, unless its front is
   over 0.9 alike its own mirror, too even to tell (main's disc of coals, edge on). And the plants over it
   (`page/fireClear.ts`): the instanced meshes' points the top-down view last drew in its column (its half-width and
-  0.3 m round, 2.5 m up). Nothing drawn, still, blown out (20% white), turning, plants over it and 3 flashes a second
-  are problems. `--cost` (`page/fireCost.ts`) times its flames on the GPU from beside them (in the top-down view they
-  cost under the timer's noise), each render by a query of its own, drawn and not in turns: its times differ run to
-  run, so they're in the lines only when asked. `--canary`: a still flame, one drawn white, one put out, a 4 Hz
-  strobe, the front shown from behind, a leaf over the bed, and with `--cost` the flames drawn four times over (twice
-  their cost at least). Pictured (`out/fire/`): close (beside it at 0, 0.13, 0.27 s, its light alone, from above),
-  round (the four sides, the first's light alone), and the top, third, first and lobby views. Main's fires (a disc of
+  0.3 m round, 2.5 m up). A fire in a bowl (a solid round its bed reaching 0.3 m under it) is read from under the
+  rim too (`page/fireBelow.ts`, #291): the share of the bowl's pixels (its meshes' in the `parts` look) its flames
+  light, its coals and embers hidden. The flames are a box marched in its shader, depth-tested at its faces, whose
+  corners stand out past the bowl's wall: main's lit 22.8% of it, as a pale band up the bowl. Over 2% is a problem.
+  Nothing drawn, still, blown out (20% white), turning, plants over it and 3 flashes a second are problems. `--cost`
+  (`page/fireCost.ts`) times its flames on the GPU from beside them (in the top-down view they cost under the
+  timer's noise), each render by a query of its own, drawn and not in turns: its times differ run to run, so they're
+  in the lines only when asked. `--canary`: a still flame, one drawn white, one put out, a 4 Hz strobe, the front
+  shown from behind, a leaf over the bed, the bowl taken from the flames' shader, and with `--cost` the flames drawn
+  four times over (twice their cost at least). Pictured (`out/fire/`): close (beside it at 0, 0.13, 0.27 s, its
+  light alone, from above, from below and where the bowl and the flames through it were found), round (the four
+  sides, the first's light alone), and the top, third, first and lobby views. Main's fires (a disc of
   coals under glow particles): 1.4 to 1.6 m by 0.9, dim orange-red throughout (7 to 25°, at most 0.22 of white), no
   smoke, 19 to 37% moving a moment, six fern clumps over the bonfire. As sheets turned to the camera they turned with
   it (0.52 alike their mirror); as a volume 1.55 m by 0.6 to 0.7, 0.33 to 0.41 of white at 30° low to 0.13 at 25° at
@@ -661,39 +415,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   found. On `origin/main` the view turned 1.62 rad as the mouse went to Pause, no cursor was drawn, the click
   attacked and the wheel zoomed. (The owner: "in 3rd and 1st person user cannot press on those battle log buttons".)
   About 2 s.
-- `rush`: the foes Bull Rush sweeps up (`page/rush.ts`, `--class warrior`). The biome's commonest foes stand dazed
-  in sets, each on a fresh set-up: on the charge's line, at its sides (1.2 and 1.4 m off it), a hair from death on
-  it, and an elite and the biome's boss on it; the charge is cast through each set, aimed its whole range ahead, in a
-  lane it finds clear of props and the wall for as far again as a throw goes (the grid's spot nearest the forest's
-  open ground at -11, -12 from which a way round by 15° is clear: from that spot itself a stump a metre off blocked
-  every way, and a log at the stop held two thrown foes at its side). Every foe is followed frame by frame until it
-  has landed and stood still, or its body lain still: when the charge met it (its blow, so a game with no carry,
-  `--ab`'s main, meets it all the same), how long it rode before the hero and its body's least gap to his, how it
-  was let go (thrown, how high and how far, or shoved on) and where it ended against where he stopped. These are
-  problems: a foe never met, one met and left standing, one carried more than 2 cm inside him, one that ended behind
-  his middle or level with his body, a living foe left unthrown, and an elite or a boss thrown. On main every foe
-  it met ended 0.8 to 5.4 m behind him. Then skills are cast with the charge (`page/rushCasts.ts`), each on a fresh
-  set-up, two living foes dazed on its line (`--dummies`: the lobby's training dummies, planted, the first stopping
-  the charge), the aim carried along ahead of the hero as a still mouse is: the charge alone, a Power Strike charged
-  and the charge cast over it 0.35 s from its blow, a cleave and Twin Fangs pressed as the charge runs, a Power Strike
-  pressed as it runs and at its stop, and the charge cast 0.4 s into Steel Tempest and into the shield raised, their
-  keys held on until it's over; a combo the weapons held don't allow is left out (`check` runs the casts with a
-  shield and with two weapons). Each is followed: whether each skill was cast as it was pressed, when the one looked
-  at landed against the charge's run and what it struck, what the charge's own blows struck (the foes struck as its
-  dash steps: every foe on its line, or a problem), the frames of its run a held skill was held in, the frames the
-  skill and the charge ran together and those the charge was shown in instead (a lunge riding on the charge's dash is
-  the skill), each foot where the hips have it against the charge alone's at the same point of it (more than 20 cm
-  off is a problem: under a skill's crouch the knees bend to keep the feet on the floor, up to 12 cm off; a stride
-  frozen by the pose's fade as a skill began or ended left a foot 39 to 45 cm off, the Tempest's wide stance under
-  the charge 27 cm; through the eyes the legs aren't drawn, nor judged), and how far the charge took him. On main
-  every skill pressed with the charge was refused, and #255 refused the charge over a held Tempest and Twin Fangs in
-  it. (A guest's charge on both screens is `coop`'s `rush` and `strike`.) `--scenarios sets,casts` runs a part alone.
-  `--view` third or first pictures what the player sees there; `--pictures` (on by default) pictures each set just
-  before the charge stops, as it stops and once every foe is still, and each skill cast with it as it lands, the hero
-  close from his left too, into `out/rush`. `--canary` puts the first foe thrown 2 m behind the hero as it lands,
-  shows the charge in the strike's place as both run, drops the charge's legs from under the cleave (not through the
-  eyes, where they aren't drawn), keeps the foes from harm as the charge alone steps, lets Steel Tempest go as the
-  charge is pressed, and cuts the charge short as Twin Fangs lands in it.
+- `rush`: the foes Bull Rush sweeps up: in full in [`commands/rush.md`](commands/rush.md).
 - `crowd`: a crowd of foes killed at once (`page/crowd.ts`), and what the frame costs as their bodies fall: the low-end
   device's measure. `--count` sets the crowd (38 by default, the most a wave keeps alive); it's killed by a blow each
   from the hero, or by `--skill` cast at it. Each round sets the crowd up afresh, times 60 frames with it standing,
@@ -823,11 +545,31 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   light in the scene, which the count must find.
 - `maps`: the game's procedural maps (`page/maps.ts`; `--maps forestFloor,steel`, every one `PRELOAD` lists in
   `src/core/pbr.ts` by default), each made on the page as a loading worker makes it, `--runs` times (its time the
-  fastest, by the browser's own clock), with a digest of its pixels and of a face's grid (its head is built on it).
-  A first visit makes every one before the lobby shows what it needs, so a map made faster must keep every pixel:
-  with `--ab` each digest must be main's, and the times are side by side. It found the 22 maps 8.7 s in all, alone
-  on one thread: the three faces 1.4 to 1.8 s each, the forest floor 1.5 s, the cobblestone 0.6 s, none of the
-  rest over 0.25 s. `--canary` changes a byte of the first map's pixels once it's made: its digest must change.
+  fastest, by the browser's own clock), with a digest of its pixels and of a face's grid. A map made faster must
+  keep every pixel: with `--ab` each digest must be main's, the times side by side. A map a surface repeats must
+  tile (`page/mapSeams.ts`): each edge (the last column against the first, the last row the first) is read on the
+  albedo's brightness and on the height against every two neighbouring lines inside, by its mean step and by the
+  share of it that jumps past both neighbours' steps (a slab's shade changing, not its bevelled joint); a seam
+  reads past every line inside and twice their median (main's steel, slabs and fur had them). Its means (the
+  albedo's brightness, the roughness) show a new look's drift from main's. `--pictures`: each map's albedo and
+  height laid twice each way, its corner at its own pixels and its material lit on a square and a ball, a sheet a
+  group (`page/mapPictures.ts`). `--canary` changes a byte (its digest must change) and plants a ramp across u in a
+  copy (a seam must be found).
+- `tiles`: how big each repeated map's tile comes out on each surface of a biome (`page/tiles.ts`; `--biomes`,
+  `--maps bark,grunge` by their recipe's name, every repeated map by default). A surface's UVs decide it, with its
+  instances' scale and the map's repeat: one tile of the forest's bark ran round a whole trunk and up a section of
+  it (ez-tree's UVs), 2.2 m by 1.3 m at a trunk's foot and 9 m along a root, where the oak photo it's drawn from
+  covers 0.36 m. For each surface, a mesh by its name (an instanced mesh's first 16 instances, from its drawn copy
+  or its shadows' one, whichever holds more), the metres a tile covers along u and along v on each triangle
+  (`page/tileSpans.ts`), weighed by its area in the world: the middle and a tenth to nine tenths of the area, how
+  stretched it is (the longer over the shorter) and the map's pixels a metre. It reports, as `maps` reports means
+  (a map drawn for a stretch is right on its surfaces); it fails where a biome shows no repeated map. `--pictures`
+  pictures each surface as the player meets it (`page/tilePictures.ts`): from the arena's middle, at its nearest
+  point facing its camera (60 degrees off at most: a boulder's top, seen level, was a smear of streaks) and in view
+  from 2 m (a ray from the camera meeting it first, every culled instance packed for the ray, and one back out to
+  the camera meeting nothing: a camera inside a plinth saw the stone's underside edge on), a hero's height up, the
+  cut-outs and see-through things (ferns, leaf cards, a gate's membrane) left out, a sheet a biome; `--ab` sets them beside another commit's. `--canary` lays a board 2 m by 0.5 m in each biome, its
+  map repeated twice along u, which must read 1 m by 0.5 m.
 - `weapons`: each of the hero's weapons alone (`page/weapons.ts`; `--weapons Sword,Maul`, the class's bases by
   default): a copy of the one in his right hand, at its own frame (unturned in the fist), put in a plain, lit
   studio of its own and pictured face on (a blade's flat, an axe's bit to the side), edge on, from behind (a face
@@ -858,41 +600,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the game's cameras look that meet nothing (`neckGaps.ts`). Pictured close from six sides. `--canary`
   (`neckCanaries.ts`) plants a ridge, skin over the collar, a paler wider neck and a neck stopping short in a loose
   collar; each must be caught.
-- `held`: every held skill of the hero's class (`SkillDef.aimed`: the ranger's Quarry Mark and Strawman, the mage's
-  Starfall and Veilstep; `page/held.ts`, `--class`) held as the player holds it, over a training dummy the way the
-  camera looks: ready, its preview shown in its own look with no countdown, and let go it casts; then held through
-  its cooldown and short of energy (`page/heldCooldown.ts`, as `blink`'s), red and counting 3, 2, 1 until a release
-  would cast. Quarry Mark's red outline (`ui/overlay/outline.ts`) is checked in the top-down view, over the shoulder
-  and through the eyes: round the foe the cast would mark, the pixels it lit (red risen over the same frame drawn
-  without it) near the foe on the screen and none away from it; and in the top-down view over the biome's commonest
-  foe too, standing dazed (a creature, drawn in its kind's crowd: its own meshes are on a layer of their own, which
-  the outline must still draw). And over each biome's boss with its summons about it (one between it and the hero)
-  and two of the biome's commonest foes beside it, each a hair off its circle (`bossWithSmall`), dazed, in each view (`page/heldBoss.ts`, the screen read by `page/onScreen.ts`): the key held and the aim swept a frame each across a grid over each foe's box on the screen
-  (the crosshair turned onto each point in the close views), the outline must be round the foe drawn there at every
-  point, met by the eye's ray on its meshes as they're drawn, skinned and rigid, a breakable prop in front leaving
-  the point out (a miss says where the game's aim was against the point drawn); let go over the boss where it lies
-  deepest in another foe's circle, with the aim moving on onto a small foe as the cast goes, and again while a shot
-  is drawn (the cast waiting for it), the boss must take the mark (`main`'s aim, met on the rigid meshes alone,
-  outlined the thornheart at 53 of 119 points through the eyes and marked a small foe in every view; and the mark,
-  given to the foe nearest the cast's point on the floor, went to a small foe pressed against the boss, which the
-  outline had never been round). The boss marked, its reticle (`page/markSeen.ts`) must stand over its top as drawn
-  and be seen whole from the camera, its middle and its ring's points round it, none of them met by the eye's ray on
-  a body before it (off the screen, a close view's near a tall boss, they're said but aren't problems); `main`'s,
-  placed by its height, stood inside a boss's crown. With `--pictures`, each round pictures the mark over the dazed
-  boss, its stars with it.
-  Starfall is cast ten times over the dummy with more
-  standing round it inside its ring as drawn and outside it (`page/heldArea.ts`): every one inside must be struck on
-  every cast (each one's casts struck by its distance). Each skill is then held across the dais's step from off it
-  and let go: every mark it lays on the floor (`fx/floorPatch.ts`) is read triangle by triangle against the floor
-  under it, and must lie on more than one level with no point under the floor or standing off it. Then the shaders
-  compiled meanwhile, which must be none (the rounds they came in are said). A preview missing, in the wrong look or
-  off its countdown, a release that cast when it mustn't or didn't when it must, an outline off its foe, a foe inside
-  Starfall's ring missed, a mark off the floor and a late compile are problems. `--pictures` (on by default) pictures
-  each preview ready, on its cooldown and across the step into `out/held`; `--canary` reads each preview ready with
-  no countdown on its cooldown, draws Quarry Mark's outline round the hero (the programs it compiles aren't counted:
-  the game never outlines a hero), moves its outline over the forest's boss onto a thornling and the boss's mark onto
-  it, puts the mark's reticle at the boss's middle (which must be found hidden), reads Starfall's ring as drawn round all its crystals may strike, lays the marks
-  across the step point by point on the floor under them, as they were, and compiles a shader mid-game.
+- `held`: every held skill of the hero's class: in full in [`commands/held.md`](commands/held.md).
 - `draw`: every drawn shot of the hero's class drawn to full and held there as the player holds it (`page/draw.ts`,
   `--class ranger`), in the top-down view, over the shoulder and through the eyes (`--views`): the key held over an
   aim ahead, 120 frames at full draw, and let go. Every frame its motes on the arrowhead (`fx/glintMotes.ts`, on the
@@ -969,9 +677,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   then `live picture` pictures him from `--views` (through the eyes `eyes`, else `third`, by default; `screen`
   the whole page as the player sees it, the HUD and the touch controls over the frame) in any
   `--look` (a close-up from `--distance` m off what it's framed on: 1.7 from a joint, 4.3 from the body by
-  default), with a reference laid over each picture and stretched to it (`--over <picture> --strength 0.5`) and
-  a part of it kept (`--crop 0.5,0,1,0.6`, its edges as shares), each in its own file in `out/live/`; `live
-  inspect [name]` lists the hero (or a joint, or any object by name: the warrior's weapons and shield are named)
+  default, or a place in the world, `--on x,y,z`: a prop, the views turned by the hero's facing), with a reference
+  laid over each picture and stretched to it (`--over <picture> --strength 0.5`) and a part of it kept (`--crop
+  0.5,0,1,0.6`, its edges as shares), each in its own file in `out/live/`; `live inspect [name]` lists the hero (or a joint, or any object by name: the warrior's weapons and shield are named)
   and what's under it (`--depth`), each with where it is in the world, how it's turned, what it's drawn with and
   where its posed vertices are on the screen; `live eval <expression>` evaluates on the page (`lab` in scope: a
   joint turned, a value set); `live frames <count>` runs frames with no input; `live log` lists the steps;

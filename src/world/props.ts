@@ -5,9 +5,11 @@ import { seeThroughFade } from '../core/seeThrough';
 import { inShadowsOnly } from './culling';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rand, TAU } from '../util';
+import { valueNoise3 } from '../core/patterns';
 import { particles } from '../fx/particles';
 import type { Obstacle } from '../types';
 import type { Prop } from './destructible';
+import type { Relief } from './ground';
 
 export type Updater = (dt: number, t: number) => void;
 /** Linear RGB, used as-is in shaders. */
@@ -41,6 +43,8 @@ export interface Biome {
   /** the breakable ones among them (a prop's index is its id on the network) */
   props: Prop[];
   portals: Portal[];
+  /** what lies on its floor that feet step onto (`world/ground.ts`) */
+  relief?: Relief;
   setCalm(v: number): void;
   update(dt: number, t: number): void;
 }
@@ -67,6 +71,46 @@ export function lumpy(g: THREE.BufferGeometry, amount: number, seed: number): TH
     v.multiplyScalar(1 + n * amount);
     pos.setXYZ(i, v.x, v.y, v.z);
   }
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Each face's UVs laid from the side it faces most (box mapping), in its geometry's units: a map's tile a unit across
+ *  whichever way a face turns (`g` unindexed). */
+export function boxUVs(g: THREE.BufferGeometry): void {
+  const p = g.attributes.position, uv = g.attributes.uv;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), q = new THREE.Vector3();
+  for (let i = 0; i + 2 < p.count; i += 3) {
+    a.fromBufferAttribute(p, i);
+    b.fromBufferAttribute(p, i + 1);
+    c.fromBufferAttribute(p, i + 2);
+    const n = b.sub(a).cross(c.sub(a)), x = Math.abs(n.x), y = Math.abs(n.y), z = Math.abs(n.z);
+    for (let k = 0; k < 3; k++) {
+      q.fromBufferAttribute(p, i + k);
+      if (y >= x && y >= z) uv.setXY(i + k, q.x, q.z);
+      else if (x >= z) uv.setXY(i + k, q.z, q.y);
+      else uv.setXY(i + k, q.x, q.y);
+    }
+  }
+}
+
+/**
+ * A rock about `radius` round: an icosphere pushed in and out by sdf's solid noise in two sizes (lumps, then chips),
+ * its foot flattened to sit on the ground, each face its own normal (facets, as split stone has), and box-mapped UVs in
+ * metres (a polyhedron's own wrap a sphere's map round it: stretched 2 to 1 and pinched at its poles, `lab tiles`).
+ */
+export function boulderGeo(seed: number, radius = 1, detail = 2): THREE.BufferGeometry {
+  const g = new THREE.IcosahedronGeometry(1, detail);
+  const p = g.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const lump = valueNoise3(v.x * 1.6, v.y * 1.6, v.z * 1.6, seed) - 0.5;
+    const chip = valueNoise3(v.x * 4, v.y * 4, v.z * 4, seed + 1) - 0.5;
+    v.multiplyScalar(radius * (1 + 0.5 * lump + 0.14 * chip));
+    if (v.y < -0.3 * radius) v.y = -0.3 * radius + (v.y + 0.3 * radius) * 0.25;
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  boxUVs(g);
   g.computeVertexNormals();
   return g;
 }

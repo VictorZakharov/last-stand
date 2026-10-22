@@ -10,11 +10,12 @@ The rules across the game are the [root AGENTS.md](../AGENTS.md); each directory
 | `facelab/` | A hero's face against a reference picture (`npm run facelab`) |
 | `icons/` | The skill icons: side by side, their fit in the round buttons, an original made into one (`npm run icons`) |
 | `music/` | The music's tracks cut from their pieces, their seams checked (`npm run music`) |
+| `photos/` | The photos the maps take: a Poly Haven ground made into a recipe's two, their edges checked (`npm run photos`) |
 | `stalls/` | The browser's own stalls, in the installed Chrome (`npm run stalls`) |
 
 - **Every harness is permanent** (the root's Commands): a measure is part of a tool from its first use, never a script in `.tmp`.
 - What a tool writes stays in its own `out/` (ignored by git), never the user's temp folder. Scratch files go in `.tmp` in the repo.
-- The Python tools run through a Node launcher: the icons' and the music's with the system's Python (`python` on Windows, `python3` elsewhere), their packages in their `requirements.txt`; the face harness's in a venv of its own (`npm run facelab -- --setup`).
+- The Python tools run through a Node launcher: the icons', the music's and the photos' with the system's Python (`python` on Windows, `python3` elsewhere), their packages in their `requirements.txt`; the face harness's in a venv of its own (`npm run facelab -- --setup`).
 - The lab's and the stalls' Node code have unit tests (`npm run lab:test`, `npm run stalls:test`).
 
 ## Cleaning up
@@ -25,7 +26,8 @@ The rules across the game are the [root AGENTS.md](../AGENTS.md); each directory
   - `tools/facelab/out/`: each run's renders and sheets, about 160 MB a run (8.3 GB);
   - `tools/lab/out/` (7.2 GB): pictures, logs and the Vite servers' caches; `ab-cache/`, main's side of each A/B, run again by the next `--ab` (2.4 GB); `tmp/`, the browsers' profiles and Playwright's artifacts, which a run that was killed leaves behind (3.9 GB);
   - `tools/stalls/out/`: traces and the installed Chrome's profiles (0.5 GB);
-  - `tools/music/out/`, `tools/icons/out/`: a few MB.
+  - `tools/music/out/`, `tools/icons/out/`: a few MB;
+  - `tools/photos/out/`: the Poly Haven textures it fetched, fetched again by the next `ground` (a few MB each).
 - A profile a browser still holds can't be deleted until that browser is closed: Chrome left running by a run that was killed holds its files for days.
 - **Keep:** `tools/facelab/models/` and `tools/facelab/.venv/` (downloaded by `npm run facelab -- --setup`), and in `.tmp` what the owner handed over or an asset was made from, which can't be made again: `music-pieces/` (the music's source WAVs), `references/` (the pictures the faces were tuned against), `icon-art/` and `ranger-art/` (the icons' originals). The rest of `.tmp` is scratch, but look before deleting it: the owner saves files there to hand them over.
 

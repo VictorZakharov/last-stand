@@ -19,7 +19,7 @@ import { CLASSES, CLASS_IDS } from '../../../src/data/classes/index';
 import * as warm from '../../../src/game/warm';
 import * as readying from '../../../src/ui/readying';
 import type { Need } from '../../../src/game/warm';
-import type { DamageType, SkillDef } from '../../../src/types';
+import type { DamageType, Obstacle, SkillDef } from '../../../src/types';
 import type { Enemy } from '../../../src/entities/enemy';
 import { NUMBER_COLORS } from '../../../src/data/balance';
 import { DAMAGE_TYPES, hitEnemy, hurtPlayer } from '../../../src/combat/damage';
@@ -40,7 +40,8 @@ import { closeGlow, GLOW_CANARIES, glowPictures, glowShown, openGlow } from './u
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
-  | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'readying' | 'readyingClass' | 'clicked' | 'views' | 'logLobby'
+  | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'readying' | 'readyingClass' | 'clicked' | 'views' | 'behindProps'
+  | 'logLobby'
   | 'skillTipsTouch' | 'run' | 'scores' | 'perf'
   | 'decision' | 'pause' | 'summary' | 'skillTips' | 'log' | 'logTouch';
 
@@ -819,6 +820,53 @@ function skillTipsShown(): Found {
 /** the scores' input: Tab held */
 const TAB: Frame = { keys: ['tab'] };
 
+/** how far to the side of the line to a dummy's label the canary plants its column (m): clear of the line */
+const ASIDE = 3;
+/** a planted column's radius and height (m): taller than any line from the camera to a label over the dais */
+const COLUMN = { r: 0.5, h: 40 };
+
+/** The dummies' labels shown now (each label anchored within a metre of a standing dummy), and how many there are. */
+function dummyLabels(): { shown: number; all: number } {
+  const dummies = G.enemies.filter((enemy) => enemy.def.dummy && enemy.alive);
+  const near = (at: { x: number; z: number }) => dummies.some((d) => Math.hypot(d.pos.x - at.x, d.pos.z - at.z) < 1);
+  const labels = anchoredLabels().filter(({ at }) => at && near(at));
+  return { shown: labels.filter(({ label }) => label.shown).length, all: labels.length };
+}
+
+/** A column for each dummy's label, half way along the line from the camera to it (`aside`: that far off the line). */
+function columnsBefore(aside: number): Obstacle[] {
+  const from = G.camera.position;
+  return anchoredLabels().flatMap(({ at }) => {
+    if (!at) return [];
+    const dx = at.x - from.x, dz = at.z - from.z, length = Math.hypot(dx, dz) || 1;
+    const x = (from.x + at.x) / 2 - (dz / length) * aside, z = (from.z + at.z) / 2 + (dx / length) * aside;
+    return [{ x, z, ...COLUMN }];
+  });
+}
+
+/**
+ * The dummies' labels behind a prop: a column planted between the camera and each (beside the line in the canary)
+ * must hide every one, and with the columns gone every one shows again (#288: the labels showed through an obelisk).
+ */
+async function labelsBehindProps(canary: boolean, lab: Lab): Promise<Found> {
+  const open = dummyLabels();
+  const columns = columnsBefore(canary ? ASIDE : 0);
+  G.arena.obstacles.push(...columns);
+  await lab.step(1);
+  const behind = dummyLabels();
+  G.arena.obstacles.splice(G.arena.obstacles.length - columns.length, columns.length);
+  await lab.step(1);
+  const after = dummyLabels();
+  const lines = [`  the dummies' labels: ${open.shown} of ${open.all} shown in the open, ${behind.shown} behind `
+    + `${columns.length} columns, ${after.shown} with them gone`];
+  const problems: string[] = [];
+  if (!open.all) problems.push('behindProps: no label over a dummy was found');
+  if (open.shown < open.all) problems.push(`behindProps: ${open.all - open.shown} labels hidden in the open`);
+  if (behind.shown > 0) problems.push(`behindProps: ${behind.shown} labels shown through a prop`);
+  if (after.shown < open.shown) problems.push(`behindProps: ${open.shown - after.shown} labels stayed hidden`);
+  return { lines, problems };
+}
+
 /** How each state is opened and closed. */
 const STEPS: Record<UiState, Steps> = {
   lobby: { open: () => undefined, close: () => undefined },
@@ -830,6 +878,7 @@ const STEPS: Record<UiState, Steps> = {
   readyingClass: { open: openReadyingClass, close: closeReadyingClass, check: readyingClassShown },
   clicked: { open: clickClass, close: () => undefined, check: focusAfterClick },
   views: { open: switchViews, close: () => undefined, check: labelsThroughSwitches },
+  behindProps: { open: () => undefined, close: () => undefined, check: labelsBehindProps },
   logLobby: { open: openLogLobby, close: closeLog, check: logShown },
   skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
   run: { open: () => undefined, close: () => undefined },
@@ -896,6 +945,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const said = found.problems.some((problem) => problem.includes('the loading bar says'));
     lines.push(`  canary: "Readying the fight" for a class picked ${said ? 'caught' : 'went unseen'}`);
     if (!said) missed.push(`${state}: the canary's "Readying the fight" for a class picked went unseen`);
+  }
+  if (state === 'behindProps') {
+    const through = found.problems.some((problem) => problem.includes('shown through a prop'));
+    lines.push(`  canary: ${through ? 'the labels beside the columns caught' : 'the labels beside the columns went unseen'}`);
+    if (!through) missed.push(`${state}: the canary's labels beside the columns went unseen`);
   }
   if (state.startsWith('skillTips')) {
     const past = found.problems.some((problem) => problem.includes('reaches past the window'));

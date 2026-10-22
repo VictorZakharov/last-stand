@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
-import { groundHeight } from './ground';
+import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
 import { bakeStaticShadows, compileEnvMaps as compileEach, envMap, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
@@ -70,6 +70,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   function setBiome(id: BiomeId): void {
     biome = id;
     active = biomes[id].b;
+    setRelief(active.relief ?? null);
     for (const k of BIOME_IDS) biomes[k].group.visible = k === id;
     const L = active.look;
     (scene.background as THREE.Color).set(L.background);

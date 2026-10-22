@@ -17,6 +17,10 @@ tools/icons/__pycache__/
 tools/music/out/
 tools/music/__pycache__/
 
+# the photos tool (tools/photos): the textures it fetched
+tools/photos/out/
+tools/photos/__pycache__/
+
 # the lab (tools/lab): what it writes, the exported commits it compares with, its browser profile
 tools/lab/out/
 tools/stalls/out/

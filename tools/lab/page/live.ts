@@ -18,6 +18,8 @@ export interface LivePicture {
   views?: (ViewName | typeof SCREEN)[];
   look?: Look;
   focus?: keyof Joints;
+  /** a place in the world the close-ups are framed on instead of the hero (a prop), [x, y, z] in metres */
+  on?: number[];
   /** a close-up's distance from what it's framed on (m: the lab's own by default) */
   distance?: number;
   /** a reference laid over each picture, stretched to it (a picture's data URL), and how strongly (0-1) */
@@ -61,6 +63,11 @@ export interface LivePictured {
   problems: string[];
 }
 
+/** `--on`'s place in the world, if it's given. */
+function placeOf(on: number[] | undefined): THREE.Vector3 | undefined {
+  return on ? new THREE.Vector3(on[0], on[1], on[2]) : undefined;
+}
+
 /** `lab live picture`: the hero pictured as `options` say, each picture finished (laid over, cropped). */
 export async function picture(lab: Lab, options: LivePicture): Promise<LivePictured> {
   const asked = options.views ?? [renderer.viewMode() === 'first' ? 'eyes' : 'third'];
@@ -68,7 +75,12 @@ export async function picture(lab: Lab, options: LivePicture): Promise<LivePictu
   if (views.length) lab.checkCapture(views, renderer.viewMode(), options.focus);
   lab.model.root.updateMatrixWorld(true);
   const tiles = views.length
-    ? lab.capture(views, { focus: options.focus, distance: options.distance, look: options.look })
+    ? lab.capture(views, {
+      focus: options.focus,
+      at: placeOf(options.on),
+      distance: options.distance,
+      look: options.look,
+    })
     : [];
   if (asked.includes(SCREEN)) tiles.push(...(await lab.screen(SCREEN)).tiles);
   const notes = tiles.filter((tile) => tile.parts).map((tile) => {
