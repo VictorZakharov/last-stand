@@ -672,9 +672,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   then `live picture` pictures him from `--views` (through the eyes `eyes`, else `third`, by default; `screen`
   the whole page as the player sees it, the HUD and the touch controls over the frame) in any
   `--look` (a close-up from `--distance` m off what it's framed on: 1.7 from a joint, 4.3 from the body by
-  default), with a reference laid over each picture and stretched to it (`--over <picture> --strength 0.5`) and
-  a part of it kept (`--crop 0.5,0,1,0.6`, its edges as shares), each in its own file in `out/live/`; `live
-  inspect [name]` lists the hero (or a joint, or any object by name: the warrior's weapons and shield are named)
+  default, or a place in the world, `--on x,y,z`: a prop, the views turned by the hero's facing), with a reference
+  laid over each picture and stretched to it (`--over <picture> --strength 0.5`) and a part of it kept (`--crop
+  0.5,0,1,0.6`, its edges as shares), each in its own file in `out/live/`; `live inspect [name]` lists the hero (or a joint, or any object by name: the warrior's weapons and shield are named)
   and what's under it (`--depth`), each with where it is in the world, how it's turned, what it's drawn with and
   where its posed vertices are on the screen; `live eval <expression>` evaluates on the page (`lab` in scope: a
   joint turned, a value set); `live frames <count>` runs frames with no input; `live log` lists the steps;

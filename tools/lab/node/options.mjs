@@ -337,7 +337,8 @@ export const COMMANDS = {
           + 'key pressed after it: '
           + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
           + 'dummies against their anchors), behindProps (a column planted between the camera and each dummy\'s label: '
-          + 'every label hidden behind it, every one shown with it gone; the canary plants it aside), run (the HUD with a hurt foe\'s bar and damage numbers), '
+          + 'every label hidden behind it, every one shown with it gone; the canary plants it aside), run (the HUD '
+          + 'with a hurt foe\'s bar and damage numbers), '
           + 'scores, perf, decision, pause, summary, skillTips (each skill\'s tooltip on the hotbar opened by the '
           + 'mouse, within the window; the tallest pictured; skillTipsTouch: the lobby\'s by a finger\'s tap), log '
           + '(the battle log with hits dealt and taken: every '
@@ -1452,7 +1453,7 @@ export const COMMANDS = {
   },
   live: {
     help: 'a page of the game kept between steps, each on the state the last one left (needs npm run lab:serve): '
-      + 'start (--class, the set-up), picture (--views, --look, --over, --crop), inspect [name] (--depth), eval '
+      + 'start (--class, the set-up), picture (--views, --look, --on, --over, --crop), inspect [name] (--depth), eval '
       + '<expression>, frames <count>, log, stop; its pictures in tools/lab/out/live (tools/lab/COMMANDS.md)',
     argument: 'step',
     options: {
@@ -1474,6 +1475,11 @@ export const COMMANDS = {
         help: 'picture: a reference (PNG, JPEG or WebP, a path) laid over each picture, stretched to it',
       },
       strength: { kind: 'number', usage: 'share', help: 'picture: how strongly --over is laid (0.5 by default)' },
+      on: {
+        kind: 'list',
+        usage: 'x,y,z',
+        help: 'picture: close-ups framed on this place in the world (m) instead of the hero: a prop, from --views',
+      },
       crop: {
         kind: 'list',
         usage: 'l,t,r,b',
