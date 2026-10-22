@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA } from '../data/balance';
-import { cobblestone, ashlar, granite, marble, slate, grunge, bark, pbrMaterialMaps, runeCircle } from '../core/textures';
+import { cobblestone, ashlar, granite, limestone, marble, slate, bark, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
@@ -153,8 +153,8 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const graniteMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(granite(7), 2, 0.8), color: 0xd0d0d8 });
   const walkMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(marble(33, 5), 1, 1.2), color: 0xb8b8c0 });
   const darkStone = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wallMaps, 1, 1), color: 0x7a7e8a });
-  const stoneMaps = pbrMaterialMaps(grunge(), 2, 1.6);
-  const carved = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x7e8088, roughness: 0.85 });
+  // (weathered limestone, pitted and streaked: in a plain grunge the columns read flat, painted grey)
+  const carved = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.6), color: 0x8a8c92 });
   const iron = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.45 });
   // (its vertex colours darken a skull's sockets: `skullGeometry`)
   const boneMat = new THREE.MeshStandardMaterial({ color: 0x8a8272, roughness: 0.8, vertexColors: true });
@@ -322,7 +322,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   scene.add(columns);
 
   // fallen columns: a shaft lying across the floor and a couple of loose drums
-  const drumGeo = new THREE.CylinderGeometry(0.44, 0.44, 1, 24, 1).rotateZ(Math.PI / 2);
+  const drumGeo = new THREE.CylinderGeometry(0.44, 0.44, 1, FLUTED_SEGMENTS, 4).rotateZ(Math.PI / 2);
   fluted(drumGeo, 'x');
   const drums = new THREE.InstancedMesh(drumGeo, carved, 8);
   let di = 0;
@@ -463,13 +463,27 @@ function orient(geo: THREE.BufferGeometry, angle: number): THREE.BufferGeometry 
   return geo.index ? geo.toNonIndexed() : geo;
 }
 
-/** Flute a column along `axis` ('y' upright, 'x' lying): shallow grooves round the shaft. */
+/** a column's flutes round it, and how deep each is (a share of its radius) */
+const FLUTES = 12;
+const FLUTE_DEPTH = 0.1;
+/** the segments round a fluted shaft: eight a flute, so each groove is drawn round, not a facet */
+const FLUTED_SEGMENTS = FLUTES * 8;
+
+/** Flute a column along `axis` ('y' upright, 'x' lying): concave grooves round the shaft with a narrow flat
+ *  between them, and its surface worn unevenly (a few cm in and out, as weather takes a soft stone). (12 grooves
+ *  5% deep on 24 segments drew no groove at all: the shaft read as a smooth grey tube.) */
 function fluted(g: THREE.BufferGeometry, axis: 'x' | 'y'): void {
   const pos = g.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-    const [u, v] = axis === 'y' ? [x, z] : [y, z];
-    const k = 1 - 0.05 * Math.max(0, Math.cos(Math.atan2(v, u) * 12));
+    const [u, v, along] = axis === 'y' ? [x, z, y] : [y, z, x];
+    if (Math.hypot(u, v) < 0.05) continue;
+    const angle = Math.atan2(v, u), phase = (((angle / TAU) * FLUTES) % 1 + 1) % 1;
+    // (a groove's arc across 0.85 of its flute, the flat fillet the rest)
+    const across = Math.min(1, Math.abs(phase - 0.5) / 0.425);
+    const groove = Math.sqrt(Math.max(0, 1 - across * across));
+    const wear = 0.012 * Math.sin(angle * 3 + along * 2.1) + 0.008 * Math.sin(angle * 7 - along * 5.3);
+    const k = 1 - FLUTE_DEPTH * groove + wear;
     if (axis === 'y') pos.setXYZ(i, x * k, y, z * k); else pos.setXYZ(i, x, y * k, z * k);
   }
   g.computeVertexNormals();
@@ -517,11 +531,29 @@ function buildObeliskGeo(): THREE.BufferGeometry {
   return mergeGeometries([base, plinth, shaft, cap].map((g) => g.toNonIndexed()));
 }
 
+/** A column's base's mouldings over its plinth, from the plinth's top (m): a torus, a hollow under a fillet, and a
+ *  smaller torus up to the shaft's foot. */
+function columnBase(): THREE.Vector2[] {
+  const points: THREE.Vector2[] = [new THREE.Vector2(0, 0), new THREE.Vector2(0.6, 0)];
+  const torus = (y: number, height: number, from: number, out: number) => {
+    for (let k = 1; k <= 8; k++) {
+      const a = (k / 8) * Math.PI;
+      points.push(new THREE.Vector2(from + out * Math.sin(a), y + height * (1 - Math.cos(a)) / 2));
+    }
+  };
+  torus(0, 0.12, 0.6, 0.05);
+  points.push(new THREE.Vector2(0.55, 0.13), new THREE.Vector2(0.5, 0.16), new THREE.Vector2(0.52, 0.18));
+  torus(0.18, 0.06, 0.52, 0.03);
+  points.push(new THREE.Vector2(0.48, 0.24), new THREE.Vector2(0, 0.24));
+  return points;
+}
+
 /** A fluted column 4m tall (scaled per instance) on a square base, snapped off at a jagged top. */
 function buildColumnGeo(): THREE.BufferGeometry {
   const base = boxWithUV(1.3, 0.3, 1.3, 0.6).translate(0, 0.15, 0);
-  const torus = new THREE.CylinderGeometry(0.56, 0.62, 0.22, 24).translate(0, 0.41, 0);
-  const shaft = new THREE.CylinderGeometry(0.44, 0.48, 3.5, 24, 6).translate(0, 2.27, 0);
+  // its base's mouldings: a torus, a hollow and a smaller torus up to the shaft (a plain drum read as a box)
+  const torus = new THREE.LatheGeometry(columnBase(), 48).translate(0, 0.3, 0);
+  const shaft = new THREE.CylinderGeometry(0.44, 0.48, 3.5, FLUTED_SEGMENTS, 24).translate(0, 2.27, 0);
   fluted(shaft, 'y');
   const pos = shaft.attributes.position;
   for (let i = 0; i < pos.count; i++) {

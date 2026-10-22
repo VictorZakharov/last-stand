@@ -325,6 +325,49 @@ function granite(seed: number): PBRData {
   }, 1);
 }
 
+/** limestone's weathered face (bright and near grey, as grunge was: its material's colour tints it), the grime the
+ *  rain leaves down it and in its pits, and its lichen's crusts */
+const LIMESTONE = [0.8, 0.78, 0.73] as const;
+const LIMESTONE_GRIME = [0.3, 0.3, 0.29] as const;
+const LIMESTONE_LICHEN = [0.7, 0.72, 0.6] as const;
+
+/**
+ * Weathered limestone (the crypt's carved stone: its broken columns and drums, its coffins and gravestones), a tile a
+ * metre (v down the stone, as a column's shaft runs): soft hollows the weather wore (fractal noise, 3 a tile) and its
+ * grain (64 a tile and finer); pits where the softer stuff washed out (cells, 36 a tile: about 3 cm, a fifth of them
+ * pitted, each its own size, grimed inside); hairline cracks (cells, 4 a tile, wandering, only where a noise lets them);
+ * the rain's streaks down it (a noise 12 across and 2 down: 40 drew stripes, a grain), darker; lichen in small pale
+ * crusts. A plain grunge read as flat painted grey (the owner: "add more 3d to other otherwise flat looking
+ * textures").
+ */
+function limestone(seed: number): PBRData {
+  const hollows = latticeFbm(3, 3, seed), grain = latticeFbm(64, 64, seed + 1, 3), mottle = latticeFbm(5, 5, seed + 2);
+  const pits = latticeCells(36, 36, 0.9, seed + 3), cracks = latticeCells(4, 4, 0.9, seed + 4);
+  const cracked = latticeFbm(3, 3, seed + 5), warpU = latticeFbm(6, 6, seed + 6), warpV = latticeFbm(6, 6, seed + 7);
+  const streaks = latticeFbm(12, 2, seed + 8, 3), lichen = latticeFbm(20, 20, seed + 9, 3);
+  const pit: Cells = { f1: 0, f2: 0, id: 0, cx: 0, cy: 0 };
+  const crack: Cells = { f1: 0, f2: 0, id: 0, cx: 0, cy: 0 };
+  return buildPBR(512, (u, v, o) => {
+    pits(u, v, pit);
+    // (a fifth of the cells pitted, each its own size: 0.1 to 0.35 of a cell across)
+    const size = pit.id > 0.8 ? 0.1 + 1.25 * (pit.id - 0.8) : 0;
+    const hole = size > 0 ? 1 - smoothstep(size * 0.4, size, pit.f1) : 0;
+    cracks(u + 0.12 * (warpU(u, v) - 0.5), v + 0.12 * (warpV(u, v) - 0.5), crack);
+    const cut = (1 - smoothstep(0, 0.03, crack.f2 - crack.f1)) * smoothstep(0.52, 0.64, cracked(u, v));
+    const worn = hollows(u, v);
+    const relief = 0.6 * worn + 0.18 * grain(u, v) + 0.1 * mottle(u, v);
+    o.h = relief - 0.35 * hole - 0.3 * cut;
+    // grime down the rain's streaks and deeper in the hollows, the pits and the cracks
+    const streak = smoothstep(0.55, 0.8, streaks(u, v));
+    const grime = clamp(0.45 * streak + 0.35 * (0.5 - worn) + 0.8 * hole + 0.9 * cut, 0, 1);
+    const crust = 0.7 * smoothstep(0.7, 0.76, lichen(u, v)) * (1 - hole) * (1 - cut);
+    const tone = 0.92 + 0.22 * (mottle(u, v) - 0.5) + 0.16 * (grain(u, v) - 0.5);
+    const colour = (i: number): number => mix(mix(LIMESTONE[i] * tone, LIMESTONE_GRIME[i], grime * 0.6), LIMESTONE_LICHEN[i], crust);
+    o.r = colour(0); o.g = colour(1); o.b = colour(2);
+    o.rough = clamp(0.84 + 0.1 * hole + 0.06 * crust - 0.06 * streak, 0, 1);
+  }, 5);
+}
+
 /** moss's young green, its old darker green and the shade between its cushions */
 const MOSS = [0.4, 0.52, 0.2] as const;
 const MOSS_OLD = [0.2, 0.3, 0.1] as const;
@@ -858,7 +901,7 @@ function fur(): PBRData {
 }
 
 /** Every recipe, by name; its arguments are part of what it makes. */
-export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, rock, granite, moss, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
+export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, rock, granite, limestone, moss, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
 export type RecipeName = keyof typeof RECIPES;
 export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
@@ -891,6 +934,6 @@ export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = 
   ['steel', []],
   ['face', ['warrior']], ['face', ['mage']], ['face', ['ranger']],
   ['rock', [17]], ['marble', [33, 5]], ['cobblestone', []], ['slate', [33, 2, 2]], ['bark', []], ['forestFloor', []],
-  ['flagstone', [47, 5]], ['moss', [5]], ['granite', [7]], ['ashlar', [33, 2, 2]], ['ashlar', [21, 6, 3]], ['grunge', []], ['wood', []], ['burlap', []],
+  ['flagstone', [47, 5]], ['moss', [5]], ['granite', [7]], ['limestone', [11]], ['ashlar', [33, 2, 2]], ['ashlar', [21, 6, 3]], ['grunge', []], ['wood', []], ['burlap', []],
   ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['fur', []], ['bowWood', []],
 ];

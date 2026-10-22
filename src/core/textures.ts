@@ -119,6 +119,8 @@ export const slate = (seed: number, courses: number, blocks: number): PBRCanvase
 /** Weathered rock, cracked, mossy and crusted with lichen, a tile a metre (boulders, standing stones). */
 export const rock = (seed: number): PBRCanvases => pbrCanvases('rock', seed);
 export const granite = (seed: number): PBRCanvases => pbrCanvases('granite', seed);
+/** Weathered limestone, pitted, streaked by the rain and cracked, a tile a metre (the crypt's carved stone). */
+export const limestone = (seed: number): PBRCanvases => pbrCanvases('limestone', seed);
 export const moss = (seed: number): PBRCanvases => pbrCanvases('moss', seed);
 export const grunge = (): PBRCanvases => pbrCanvases('grunge');
 export const wood = (): PBRCanvases => pbrCanvases('wood');
