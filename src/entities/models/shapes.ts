@@ -53,6 +53,21 @@ export function taperTube(pts: THREE.Vector3[], radius: (t: number) => number, s
   return g;
 }
 
+/** `g` (a `taperTube`) turned right way out: each triangle wound the other way, its normals again. A tube's faces
+ *  point in, which a double-sided material hides (three turns a back face's normal to the camera); one sided, the
+ *  forest's roots showed their inside, lit from below: black. */
+export function turnedOut(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  const index = g.index;
+  if (!index) return g;
+  for (let i = 0; i < index.count; i += 3) {
+    const second = index.getX(i + 1);
+    index.setX(i + 1, index.getX(i + 2));
+    index.setX(i + 2, second);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
 /** A horn: out along `dir`, curling by `curl` radians about `axis`, with growth rings. */
 export function horn(len: number, base: number, curl: number, axis = new THREE.Vector3(1, 0, 0), dir = new THREE.Vector3(0, 1, 0), rings = 0): THREE.BufferGeometry {
   if (replaying) return NONE;

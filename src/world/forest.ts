@@ -15,7 +15,7 @@ export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25
 import { cullInCells, eachInstance, gridCell, ringSector } from './culling';
 import { growTree, REACH_BANDS, type Grow } from './ezTrees';
 import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
-import { bend, rag, taperTube, twist } from '../entities/models/shapes';
+import { bend, rag, taperTube, turnedOut, twist } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import { buildFire, emberMat } from './fire';
 import { floorRelief } from '../core/parallax';
@@ -444,7 +444,7 @@ export const buildForest: BiomeBuilder = (scene) => {
       const t = k / 5, rr = WALL_R + 1.5 - t * len, aa = a + bendA * t * t + Math.sin(t * 7 + i) * 0.03;
       pts.push(V(Math.cos(aa) * rr, 0.06 - t * 0.1 + Math.sin(t * 9 + i) * 0.05, Math.sin(aa) * rr));
     }
-    roots.push(taperTube(pts, (t) => 0.28 * (1 - t * 0.85), 24, 7));
+    roots.push(turnedOut(taperTube(pts, (t) => 0.28 * (1 - t * 0.85), 24, 7)));
   }
   const rootMesh = new THREE.Mesh(mergeAll(roots), barkAt(BARK_REPEATS.roots));
   rootMesh.name = 'roots';
@@ -635,7 +635,7 @@ function buildStumpGeo(rng: () => number): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [bole];
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * TAU + 0.3, c = Math.cos(a), s = Math.sin(a), reach = 0.95 + rng() * 0.35;
-    parts.push(taperTube([V(c * 0.5, 0.35, s * 0.5), V(c * 0.72, 0.1, s * 0.72), V(c * reach, -0.02, s * reach)], (t) => 0.22 * (1 - t * 0.8), 8, 6));
+    parts.push(turnedOut(taperTube([V(c * 0.5, 0.35, s * 0.5), V(c * 0.72, 0.1, s * 0.72), V(c * reach, -0.02, s * reach)], (t) => 0.22 * (1 - t * 0.8), 8, 6)));
   }
   return lumpy(mergeAll(parts), 0.04, 11);
 }
@@ -667,7 +667,7 @@ function buildRootGate(scene: THREE.Object3D, angle: number, rockMat: THREE.Mate
     // roots splaying from its foot into the ground
     for (let k = 0; k < 3; k++) {
       const a = (k - 1) * 0.7 + (s < 0 ? Math.PI : 0), c = Math.cos(a), sn = Math.sin(a), x0 = s * (half + 0.5);
-      const root = new THREE.Mesh(taperTube([V(x0, 0.4, 0.3), V(x0 + c * 0.8, 0.12, 0.3 + sn * 0.8), V(x0 + c * 1.6, -0.05, 0.3 + sn * 1.5)], (t) => 0.3 * (1 - t * 0.8), 10, 7), M.rootMat);
+      const root = new THREE.Mesh(turnedOut(taperTube([V(x0, 0.4, 0.3), V(x0 + c * 0.8, 0.12, 0.3 + sn * 0.8), V(x0 + c * 1.6, -0.05, 0.3 + sn * 1.5)], (t) => 0.3 * (1 - t * 0.8), 10, 7)), M.rootMat);
       root.castShadow = root.receiveShadow = true;
       root.name = 'gate roots';
       g.add(root);
