@@ -1,9 +1,15 @@
-// Circle-vs-world collision: static obstacles and the arena boundary.
+// Circle-vs-world collision: static obstacles and the arena's wall as it's drawn (`world/wall.ts`).
 import { G } from '../state';
 import { placeBefore, stackBefore } from '../entities/carry';
 import type { Enemy } from '../entities/enemy';
 
 export function resolveWorld(pos: { x: number; z: number }, radius: number): void {
+  resolveProps(pos, radius);
+  G.arena.wall.keepIn(pos, radius);
+}
+
+/** A body of `radius` at `pos` pushed off the static obstacles (not the wall). */
+export function resolveProps(pos: { x: number; z: number }, radius: number): void {
   for (const o of G.arena.obstacles) {
     const dx = pos.x - o.x, dz = pos.z - o.z;
     const min = o.r + radius;
@@ -14,9 +20,6 @@ export function resolveWorld(pos: { x: number; z: number }, radius: number): voi
       pos.z = o.z + (dz / d) * min;
     }
   }
-  const R = G.arena.radius - radius;
-  const r = Math.hypot(pos.x, pos.z);
-  if (r > R) { pos.x *= R / r; pos.z *= R / r; }
 }
 
 /** Does a body of `radius` at `pos` overlap a static obstacle? */

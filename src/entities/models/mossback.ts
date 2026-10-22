@@ -40,7 +40,7 @@ export function buildMossback(): Model {
   const lim = (len: number, r0: number, r1: number, b = 0, at = 0.35) => organic(limb(len, r0, r1, b, at, 14), r0 * 0.12, 10, len * 20);
   // small lumps need less detail
   const lump = (sx: number, sy: number, sz: number, seed: number, amp = 0.14, f = 1.8) => organic(new THREE.IcosahedronGeometry(1, Math.max(sx, sy, sz) > 0.12 ? 2 : 1), amp, f, seed).scale(sx, sy, sz);
-  const cap = (rad: number) => lathe([[0.001, 0.5 * rad], [0.5 * rad, 0.45 * rad], [0.85 * rad, 0.25 * rad], [rad, 0.02], [0.8 * rad, 0], [0.001, 0.05 * rad]], 12);
+  const cap = (rad: number) => lathe([[0.001, 0.05 * rad], [0.8 * rad, 0], [rad, 0.02], [0.85 * rad, 0.25 * rad], [0.5 * rad, 0.45 * rad], [0.001, 0.5 * rad]], 12);
   const beard = (parent: THREE.Object3D, pos: [number, number, number], n: number, w: number, len: number, seed: number, yaw = 0) => {
     for (let i = 0; i < n; i++) S.add(bend(rag(w, len * (0.7 + r() * 0.6), seed + i, 3), -0.15), mossDark, parent, [pos[0] + (i - (n - 1) / 2) * w * 0.7, pos[1], pos[2]], [0, yaw + (r() - 0.5) * 0.5, 0]);
   };

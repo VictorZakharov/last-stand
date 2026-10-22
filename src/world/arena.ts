@@ -11,6 +11,7 @@ import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
 import { restoreProps } from './destructible';
+import { stumpPreloaded } from './stump';
 
 export { groundHeight };
 export type { Portal } from './props';
@@ -46,6 +47,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   const fog = scene.fog = new THREE.Fog(0);
 
   const biomes = {} as Record<BiomeId, { group: THREE.Group; b: Biome }>;
+  // (what a worker sculpts for a biome meanwhile: the forest's stump)
+  await stumpPreloaded();
   for (const id of BIOME_IDS) {
     // one biome at a time, letting the page paint between them (a window moved to another
     // monitor stays black until the main thread is free)
@@ -53,6 +56,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     const group = new THREE.Group();
     group.name = id;
     const b = BUILDERS[id](group);
+    b.wall.seal();
     bakeStaticShadows(group);
     trimShadowCasters(group, shadowCameraFor(moon, b.look));
     group.visible = false;
@@ -92,6 +96,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     restoreProps() { for (const id of BIOME_IDS) restoreProps(biomes[id].b.props); },
     /** spawn gates: {pos, dir (into the arena), pulse()} */
     get portals() { return active.portals; },
+    /** the wall as drawn, which bodies walk up to and what flies meets (`world/wall.ts`) */
+    get wall() { return active.wall; },
     moon,
     radius: ARENA.radius,
     groundHeight,

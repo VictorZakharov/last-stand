@@ -26,3 +26,10 @@ export function pastWall(biome: BiomeId, x: number, z: number, normal: THREE.Vec
   const across = Math.abs(-x * Math.sin(g) + z * Math.cos(g));
   return { by, gate: across < GATE_W / 2 };
 }
+
+/** How far out from the middle the wall's inner face is along `angle` (m): an octagon's further toward its corners. */
+export function faceAt(biome: BiomeId, angle: number): number {
+  if (BIOMES[biome].minimap.wall !== 'octagon') return WALL_R;
+  const side = Math.round(angle / (TAU / 8)) * (TAU / 8);
+  return WALL_R / Math.cos(angle - side);
+}

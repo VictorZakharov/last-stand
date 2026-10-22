@@ -337,8 +337,9 @@ export class Bow {
       const c = at(0.145), leaf = new THREE.Shape();
       leaf.moveTo(0, -0.019); leaf.quadraticCurveTo(0.0085, -0.002, 0, 0.021); leaf.quadraticCurveTo(-0.0085, -0.002, 0, -0.019);
       const lg = new THREE.ExtrudeGeometry(leaf, { depth: 0.0009, bevelEnabled: true, bevelThickness: 0.0003, bevelSize: 0.0004, bevelSegments: 1, curveSegments: 10 });
-      // (standing out of the riser's face, laid round it, with a raised midrib down it)
-      lg.scale(0.8, 0.8, -1);
+      // (standing out of the riser's face, laid round it, with a raised midrib down it; turned half round to face -z,
+      // as it's the same either side: mirrored, its faces pointed in, #289)
+      lg.scale(0.8, 0.8, 1).rotateY(Math.PI);
       const rib = new THREE.BoxGeometry(0.001, 0.027, 0.0011).translate(0, 0.0008, -0.0012);
       for (const piece of [lg, rib]) {
         const P = piece.attributes.position;

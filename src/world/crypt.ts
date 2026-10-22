@@ -19,6 +19,10 @@ import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import { buildFire } from './fire';
 import { restingLift, skullGeometry } from './skull';
 import type { Obstacle } from '../types';
+import { Wall } from './wall';
+
+/** where the wall's parts are made: in the arena's frame */
+const IDENTITY = new THREE.Matrix4();
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
 /** angular distance from `a` to the nearest spawn gate */
@@ -139,6 +143,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const obstacles: Obstacle[] = [];
   const breakable = new PropSet(obstacles);
   const updaters: Updater[] = [];
+  const wall = new Wall('crypt');
   const h = ARENA.daisHalf;
 
   // --- Materials ------------------------------------------------------------
@@ -277,7 +282,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
         }
       }
     }
-    if (isGate) portals.push(buildGate(scene, a, darkStone, iron, updaters));
+    if (isGate) portals.push(buildGate(scene, wall, a, darkStone, iron, updaters));
   }
   const walls = new THREE.Mesh(mergeGeometries(wallParts), wallMat);
   const crens = new THREE.Mesh(mergeGeometries(crenParts), darkStone);
@@ -285,6 +290,9 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const rods = new THREE.Mesh(mergeGeometries(rodParts), gold);
   for (const m of [walls, crens, banners, rods]) { m.castShadow = m.receiveShadow = true; scene.add(m); }
   scene.add(new THREE.Mesh(mergeGeometries(windowParts), nicheMat));
+  for (const part of [...wallParts, ...crenParts]) wall.addGeometry(part, IDENTITY, true);
+  // (the banners hang a hand in front of the buttresses, their hems at a head's height)
+  for (const part of bannerParts) wall.addGeometry(part, IDENTITY, false);
 
   // --- Spirit beacons (blue flames) & braziers (orange): the biome's 6 point lights ---
   const beaconSpots = [[-11, -11], [11, -11], [-11, 11], [11, 11]];
@@ -405,10 +413,11 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   }
   weeds.count = wi;
   weeds.receiveShadow = true;
+  weeds.name = 'weeds';
   scene.add(weeds);
 
   // --- Beyond the wall: a ruined necropolis and dead trees ----------------------------
-  buildNecropolis(scene, rng, outsideDim(darkStone.clone()), outsideDim(nicheMat.clone()), deadWood);
+  buildNecropolis(scene, wall, rng, outsideDim(darkStone.clone()), outsideDim(nicheMat.clone()), deadWood);
 
   // --- Clutter: rubble, bones, grates -------------------------------------------
   scatterClutter(scene, rng, darkStone, boneMat, iron);
@@ -446,6 +455,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
       envIntensity: 0.55,
     },
     obstacles,
+    wall,
     props: breakable.list,
     portals,
     setCalm(v: number) { calmTarget = v; },
@@ -591,10 +601,13 @@ function buildSarcophagusGeo(): { body: THREE.BufferGeometry; open: THREE.Buffer
 
 function buildHeadstoneGeo(): THREE.BufferGeometry {
   const base = boxWithUV(0.72, 0.12, 0.3, 1).translate(0, 0.06, 0);
-  const slab = boxWithUV(0.55, 0.7, 0.14, 1).translate(0, 0.47, 0);
-  // the rounded top: a half disc, the flat side down on the slab
-  const top = new THREE.CylinderGeometry(0.275, 0.275, 0.14, 14, 1, false, Math.PI / 2, Math.PI).rotateX(Math.PI / 2).translate(0, 0.82, 0);
-  return lumpy(mergeGeometries([base, slab, top].map((g) => g.toNonIndexed())), 0.015, 9);
+  // the slab and its rounded top one outline, its foot sunk in the base: a half disc set on a box split the face where
+  // they met, `lumpy` moving the disc's corner in the middle of the box's edge and not the edge (#287)
+  const half = 0.275, foot = 0.1, shoulder = 0.82, thick = 0.14;
+  const outline = new THREE.Shape().moveTo(-half, foot).lineTo(half, foot).lineTo(half, shoulder)
+    .absarc(0, shoulder, half, 0, Math.PI, false).lineTo(-half, foot);
+  const slab = new THREE.ExtrudeGeometry(outline, { depth: thick, bevelEnabled: false, curveSegments: 14 });
+  return lumpy(mergeGeometries([base.toNonIndexed(), slab.translate(0, 0, -thick / 2)]), 0.015, 9);
 }
 
 function buildCrossGeo(): THREE.BufferGeometry {
@@ -627,7 +640,7 @@ function buildDeadTreeGeo(rng: () => number): THREE.BufferGeometry {
 
 /** Tombs, chapels and towers standing in the fog beyond the wall, with dark window openings,
  * among dead trees. Mostly outside the shadow camera: only the nearest trees cast. */
-function buildNecropolis(scene: THREE.Object3D, rng: () => number, stone: THREE.Material, niche: THREE.Material, wood: THREE.Material): void {
+function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, stone: THREE.Material, niche: THREE.Material, wood: THREE.Material): void {
   const r = (a: number, b: number) => a + rng() * (b - a);
   const parts: THREE.BufferGeometry[] = [], holes: THREE.BufferGeometry[] = [];
   const place = (g: THREE.BufferGeometry, x: number, z: number, yaw: number) => g.rotateY(yaw).translate(x, 0, z);
@@ -668,6 +681,8 @@ function buildNecropolis(scene: THREE.Object3D, rng: () => number, stone: THREE.
     }
     // face the arena (local -Z towards the centre)
     for (const p of g) parts.push(place(p.index ? p.toNonIndexed() : p, x, z, yaw));
+    // (what an arrow over the wall meets: each tomb a part of its own, its sphere round it alone)
+    wall.addGeometry(mergeGeometries(parts.slice(-g.length)), IDENTITY, true, 'beyond');
     for (const p of l) holes.push(place(p.index ? p.toNonIndexed() : p, x, z, yaw));
   });
   scene.add(new THREE.Mesh(mergeGeometries(parts), stone));
@@ -689,9 +704,10 @@ function buildNecropolis(scene: THREE.Object3D, rng: () => number, stone: THREE.
   trees.castShadow = true;
   trees.name = 'dead trees';
   scene.add(trees);
+  wall.add(trees, false, 'beyond');
 }
 
-function buildGate(scene: THREE.Object3D, angle: number, stone: THREE.Material, iron: THREE.Material, updaters: Updater[]): Portal {
+function buildGate(scene: THREE.Object3D, wall: Wall, angle: number, stone: THREE.Material, iron: THREE.Material, updaters: Updater[]): Portal {
   const g = new THREE.Group();
   const pillarGeo = boxWithUV(1.3, 5.2, 1.9, 0.35);
   for (const s of [-1, 1]) {
@@ -719,6 +735,7 @@ function buildGate(scene: THREE.Object3D, angle: number, stone: THREE.Material, 
   const { portal } = portalMembrane(g, angle, { a: [0.5, 0.05, 0.9], b: [1.0, 0.25, 0.35], core: [1.0, 0.6, 1.0] }, updaters);
   placeGate(g, angle);
   scene.add(g);
+  wall.add(g, true);
   return portal;
 }
 

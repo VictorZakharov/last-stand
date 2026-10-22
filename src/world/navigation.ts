@@ -31,12 +31,12 @@ let rebuiltAt = -1;
 function getGrid(): Grid {
   const obstacles = G.arena.obstacles;
   if (grid?.obstacles === obstacles && grid.rev === propState.rev) return grid;
-  // the outermost cells lie beyond the arena edge, so they're never open: no bounds checks needed
-  const R = G.arena.radius, n = Math.ceil((2 * R) / CELL) + 2, half = (n * CELL) / 2;
+  // the outermost cells lie beyond the wall, so they're never open: no bounds checks needed
+  const wall = G.arena.wall, n = Math.ceil((2 * wall.most) / CELL) + 2, half = (n * CELL) / 2;
   const clear = new Float32Array(n * n);
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     const x = (i + 0.5) * CELL - half, z = (j + 0.5) * CELL - half;
-    let c = R - Math.hypot(x, z);
+    let c = wall.reachAt(x, z) - Math.hypot(x, z);
     for (const o of obstacles) c = Math.min(c, Math.hypot(x - o.x, z - o.z) - o.r);
     clear[j * n + i] = c;
   }
@@ -209,8 +209,8 @@ export function steerClear(x: number, z: number, r: number, ux: number, uz: numb
     const c = Math.cos(a), sn = Math.sin(a), bx = ox / d, bz = oz / d;
     ux = bx * c - bz * sn; uz = bx * sn + bz * c;
   }
-  // the arena edge: no pushing on into it
-  const rr = Math.hypot(x, z), edge = G.arena.radius - r;
+  // the wall: no pushing on into it
+  const rr = Math.hypot(x, z), edge = G.arena.wall.reachAt(x, z) - r;
   if (rr > edge - 2 && rr > 1e-3) {
     const nx = x / rr, nz = z / rr, outward = ux * nx + uz * nz;
     if (outward > 0) {

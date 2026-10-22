@@ -21,8 +21,9 @@ export interface BiomeDef {
   bossBanner: string;
   /** minimap: shape of the boundary and colour of the spawn gates */
   minimap: { wall: 'octagon' | 'circle'; portal: string };
-  /** what the floor (off the dais, which is stone) and the wall are made of: an arrow glances off stone and sticks in the rest */
-  surface: { floor: 'stone' | 'earth'; wall: 'stone' | 'thicket' };
+  /** what the floor (off the dais, which is stone) is made of: an arrow glances off stone and sticks in the rest (the wall's
+   *  parts each say their own: `world/wall.ts`) */
+  surface: { floor: 'stone' | 'earth' };
   /** its music (data/music.ts): in its lobby and between its runs' waves, and through each wave's fight */
   music: { lobby: TrackId; battle: TrackId };
 }
@@ -38,7 +39,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     },
     boss: 'colossus', bossShort: 'Colossus', bossBanner: 'A colossal presence approaches…',
     minimap: { wall: 'octagon', portal: '#b050ff' },
-    surface: { floor: 'stone', wall: 'stone' },
+    surface: { floor: 'stone' },
     music: { lobby: 'shadowed-dusk', battle: 'crypt-motif' },
   },
   forest: {
@@ -51,7 +52,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     },
     boss: 'thornheart', bossShort: 'Thornheart', bossBanner: 'The old wood wakes…',
     minimap: { wall: 'circle', portal: '#70ff60' },
-    surface: { floor: 'earth', wall: 'thicket' },
+    surface: { floor: 'earth' },
     music: { lobby: 'quiet-beginnings', battle: 'sunlit-battle' },
   },
 };

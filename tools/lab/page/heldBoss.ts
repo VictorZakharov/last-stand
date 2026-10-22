@@ -34,6 +34,12 @@ const CAST_FRAMES = 120;
 const SMALL_GAP = 0.05;
 const SMALL_WAYS = [-0.7, 0, 0.7, Math.PI];
 const COMMON_WAYS = [-1.4, 1.4];
+/**
+ * where the hero stands unless `--at` says (m): the boss and the foes round it inside the arena's wall, whichever way
+ * he faces. From the lab's own spot, 25 m out, they stood 7 m on into the thicket: once the wall was what's drawn
+ * (#290) it put them back by the hero, and an arrow struck one the frame it left
+ */
+const SPOT: [number, number] = [12, 12];
 /** the most frames the crosshair of a close view is turned for to come over a point, and how near it must come (m) */
 const SIGHT_FRAMES = 8;
 const SIGHT_NEAR = 0.02;
@@ -41,7 +47,7 @@ const SIGHT_NEAR = 0.02;
 /** The biome's boss and the foes round it (its summons, `SMALL_WAYS`, then the biome's commonest, `COMMON_WAYS`),
  *  risen and dazed, in `view`. */
 export async function bossWithSmall(lab: Lab, fixture: Fixture, view: ViewMode): Promise<Enemy[]> {
-  await lab.setup({ ...fixture, view });
+  await lab.setup({ at: SPOT, ...fixture, view });
   const hero = G.player;
   hero.cooldowns.clear();
   hero.energy = hero.stats.maxEnergy;

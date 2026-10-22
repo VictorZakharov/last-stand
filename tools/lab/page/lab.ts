@@ -237,6 +237,8 @@ export interface Frame {
   aim?: THREE.Vector3;
   /** the point in the world the crosshair of the close views is turned towards, by a mouse-look move (`lookToward`) */
   sight?: THREE.Vector3;
+  /** the touch stick pushed this far (x right, y down the screen, its length up to 1); left as it was when not given */
+  stick?: [number, number];
 }
 
 /** The state a measure or a picture starts from. */
@@ -532,6 +534,7 @@ export class Lab {
     if (frame.m2 && !input.mouse.right) input.pressed.add('mouse2');
     input.mouse.left = !!frame.m0;
     input.mouse.right = !!frame.m2;
+    if (frame.stick) [input.stick.x, input.stick.y] = frame.stick;
   }
 
   /** Sets the run up as `fixture` says and checks that it took (throws if not). Returns what it is, for the report. */

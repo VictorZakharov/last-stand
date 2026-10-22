@@ -70,7 +70,7 @@ function nearestTo(flight: THREE.Vector3[], point: THREE.Vector3): number {
 /** The input holding the basic attack (the left button) over `point`, the crosshair turned onto it. */
 const holding = (point: THREE.Vector3): Frame => ({ m0: true, aim: point, sight: point });
 /** The input with the button let go, the aim still on `point`. */
-const letGo = (point: THREE.Vector3): Frame => ({ aim: point, sight: point });
+export const letGo = (point: THREE.Vector3): Frame => ({ aim: point, sight: point });
 
 /** Where each foe stands, and the way it faces: each is put back there before every shot. */
 interface Stand {
@@ -113,7 +113,7 @@ function aimInside(over: Over, foes: Enemy[]): boolean {
 }
 
 /** The hero's basic attack drawn or cast over `point` until it's loosed or fired. */
-async function drawAt(lab: Lab, point: THREE.Vector3): Promise<void> {
+export async function drawAt(lab: Lab, point: THREE.Vector3): Promise<void> {
   for (let f = 0; f < SIGHT_FRAMES && aimMiss(point) > SIGHT_NEAR; f++) await lab.step(1, () => letGo(point));
   const ready = () => {
     const cast = G.player.casting;

@@ -72,13 +72,17 @@ export function leafTexture(): THREE.CanvasTexture {
   return textureFromCanvas(c);
 }
 
+/** how far into a crown's leaves a body walks up to it, as its core's size swollen about its middle: the cards stand
+ *  0.62 to 0.92 of a blob's size out, each about as wide again */
+const LEAF_REACH = 1.4;
+
 /**
  * A canopy: leaf cards over overlapping blobs [x, y, z, radius], each card facing out from its blob,
  * plus a dark core that fills the gaps. The normals of both point out from the blob, not the card or the
  * core's facets, so the whole crown lights as one soft mass instead of a heap of flat planes.
  */
-export function canopyGeo(rng: () => number, blobs: [number, number, number, number][], cardsPerBlob: number, card: number): { core: THREE.BufferGeometry; cards: THREE.BufferGeometry } {
-  const cores: THREE.BufferGeometry[] = [], cards: THREE.BufferGeometry[] = [];
+export function canopyGeo(rng: () => number, blobs: [number, number, number, number][], cardsPerBlob: number, card: number): { core: THREE.BufferGeometry; cards: THREE.BufferGeometry; lumps: THREE.BufferGeometry[]; leafLumps: THREE.BufferGeometry[] } {
+  const cores: THREE.BufferGeometry[] = [], cards: THREE.BufferGeometry[] = [], leafLumps: THREE.BufferGeometry[] = [];
   const q = new THREE.Quaternion(), z = new THREE.Vector3(0, 0, 1), roll = new THREE.Quaternion(), n = new THREE.Vector3();
   // out from the blob, tipped up: the top of a crown catches the light
   const soft = (g: THREE.BufferGeometry, x: number, y: number, zz: number, s: number) => {
@@ -89,6 +93,7 @@ export function canopyGeo(rng: () => number, blobs: [number, number, number, num
     const core = lumpy(new THREE.IcosahedronGeometry(1, 1), 0.15, bi * 7 + rng()).scale(s * 0.62, s * 0.52, s * 0.62).translate(x, y, zz);
     soft(core, x, y, zz, s);
     cores.push(core);
+    leafLumps.push(core.clone().translate(-x, -y, -zz).scale(LEAF_REACH, LEAF_REACH, LEAF_REACH).translate(x, y, zz));
     for (let i = 0; i < cardsPerBlob; i++) {
       // all round, a little more on top, where the light and the camera are: a crown has no flat underside
       const d = new THREE.Vector3(rng() * 2 - 1, rng() * 2 - 0.85, rng() * 2 - 1).normalize();
@@ -105,7 +110,8 @@ export function canopyGeo(rng: () => number, blobs: [number, number, number, num
       cards.push(g);
     }
   });
-  return { core: mergeGeometries(cores.map((g) => g.index ? g.toNonIndexed() : g))!, cards: mergeGeometries(cards)! };
+  // (and each blob's core alone, and swollen into its leaves: the wall meets each by its own hull, world/wall.ts)
+  return { core: mergeGeometries(cores.map((g) => g.index ? g.toNonIndexed() : g))!, cards: mergeGeometries(cards)!, lumps: cores, leafLumps };
 }
 
 /** A clump of arching fern fronds, rooted at the origin, about 1 across; normals up like the ground. */

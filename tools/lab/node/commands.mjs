@@ -921,6 +921,59 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  winding: {
+    each(side, options) {
+      const command = {
+        models: options.models,
+        biomes: options.biomes,
+        canary: Boolean(options.canary),
+      };
+      return side.command('winding', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
+  wall: {
+    check(options) {
+      if (options.angles !== undefined && !(options.angles >= 1)) throw labError('wall --angles: at least 1');
+    },
+    each(side, options) {
+      const command = {
+        biomes: options.biomes,
+        angles: Math.round(options.angles ?? 48),
+        canary: Boolean(options.canary),
+      };
+      return side.command('wall', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
+  rim: {
+    each(side, options) {
+      return side.command('rim', { biomes: options.biomes, canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
+  beyond: {
+    check(options) {
+      if (options.angles !== undefined && !(options.angles >= 1)) throw labError('beyond --angles: at least 1');
+    },
+    each(side, options) {
+      const command = {
+        biomes: options.biomes,
+        angles: Math.round(options.angles ?? 8),
+        canary: Boolean(options.canary),
+      };
+      return side.command('beyond', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   draws: {
     check(options) {
       if (options.count !== undefined && !(options.count >= 0)) throw labError('draws --count: 0 or more');

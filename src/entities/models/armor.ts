@@ -3,7 +3,7 @@
 // swings with the legs. Static pieces go through `Sculpt` (entities/models/shapes.ts) to merge per joint.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { taperTube as rawTube, twist as rawTwist } from './shapes';
+import { taperTube, twist } from './shapes';
 import { part, joint } from './rig';
 import { clamp, lerp } from '../../util';
 
@@ -33,18 +33,8 @@ export function merge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return g;
 }
 
-/** turn an indexed geometry's triangles round (and its normals with them) */
-function flip<G extends THREE.BufferGeometry>(g: G): G {
-  const ix = g.index!;
-  for (let i = 0; i < ix.count; i += 3) { const t = ix.getX(i + 1); ix.setX(i + 1, ix.getX(i + 2)); ix.setX(i + 2, t); }
-  g.computeVertexNormals();
-  return g;
-}
-/** `shapes.taperTube`, facing out (its triangles wind inwards, which the creatures' double-sided or dark
- *  materials hide, but a lit hero part would show inside out) */
-export const taperTube = (pts: THREE.Vector3[], radius: (t: number) => number, segs = 12, radial = 7): THREE.BufferGeometry => flip(rawTube(pts, radius, segs, radial));
-/** `shapes.twist`, facing out */
-export const twist = (len: number, rad: number, thick: number, turns: number, phase = 0): THREE.BufferGeometry => flip(rawTwist(len, rad, thick, turns, phase));
+// (the tubes face out at the source now: they were turned round here, #289)
+export { taperTube, twist };
 
 /** scale a geometry's uvs */
 export function scaleUV<G extends THREE.BufferGeometry>(g: G, su: number, sv: number): G {
