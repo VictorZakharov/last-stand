@@ -28,9 +28,13 @@ const START_IN = 3;
 const WALK_FRAMES = 600;
 /** the frames he stands on his spot before he walks (put there, his feet are where he was) */
 const SETTLE_FRAMES = 30;
-/** he's stopped when he's gone less than this further out (m) over STILL_FRAMES frames */
-const STILL = 5e-4;
+/** he's stopped when he's gone less than this further out (m) over STILL_FRAMES frames (3 cm/s: braked as he nears
+ *  the wall, he creeps the last centimetres into a corner along a face he walked into at a slant) */
+const STILL = 5e-3;
 const STILL_FRAMES = 10;
+/** a walk that never stops: its way said every TRACE_EVERY frames, the last TRACE_KEPT of them */
+const TRACE_EVERY = 50;
+const TRACE_KEPT = 8;
 /** the heights the gap is read at (m: above the grass, a hip, a head), and the ways across his walk (rad either side) */
 const HEIGHTS = [0.6, 1.1, 1.6];
 const ACROSS = (75 * Math.PI) / 180;
@@ -42,10 +46,11 @@ const INTO = -0.07;
 /**
  * how far short of the thicket's leaves he may stop (m: their cards are ragged), and how near his middle they may come
  * (m): leaves give, brushed through, so his body may stand in their outer cards, but not up to his middle (a bush's
- * outer cards stand half its lumps' size out past them, and a line kept out of them all left air between)
+ * outer cards stand half its lumps' size out past them, and a line kept out of them all left air between; kept off
+ * the lumps' outlines, a card hanging low at his thigh came 9 cm from his middle, wherever their swelling was set)
  */
 const LEAVES_GIVE = 0.3;
-const LEAVES_CLEAR = 0.1;
+const LEAVES_CLEAR = 0.08;
 /** a prop this near his way out (m past its circle) skips the angle */
 const PROP_CLEAR = 1;
 /** how far the canary reads short of his stop (m) */
@@ -136,6 +141,16 @@ async function stepsUntil(lab: Lab, done: () => boolean, frame: () => Frame): Pr
   return false;
 }
 
+/** Where the hero is as a walk's trace says it: how far out, how far round from `angle` (degrees), and his speed
+ *  (m/s). */
+function placeOf(angle: number): string {
+  const hero = G.player;
+  const round = (Math.atan2(hero.pos.z, hero.pos.x) - angle) * (180 / Math.PI);
+  const speed = Math.hypot(hero.vel.x, hero.vel.z);
+  const out = Math.hypot(hero.pos.x, hero.pos.z);
+  return `${out.toFixed(2)} m out ${round.toFixed(2)}° round at ${speed.toFixed(2)} m/s`;
+}
+
 /** He walks out along `angle` from START_IN in from the face until he stops; how far from the middle he stood. */
 async function walkOut(lab: Lab, angle: number, from: THREE.Vector2): Promise<number> {
   const hero = G.player;
@@ -150,11 +165,18 @@ async function walkOut(lab: Lab, angle: number, from: THREE.Vector2): Promise<nu
     const back = outs[outs.length - 1 - STILL_FRAMES];
     return outs.length > STILL_FRAMES * 2 && outs[outs.length - 1] - back < STILL;
   };
-  const walked = await stepsUntil(lab, still, () => ({ stick }));
+  // (where he was every TRACE_EVERY frames: a walk that never stops says where it went)
+  const path: string[] = [];
+  const frame = () => {
+    if (outs.length % TRACE_EVERY === 0) path.push(placeOf(angle));
+    return { stick };
+  };
+  const walked = await stepsUntil(lab, still, frame);
   if (!walked) {
     const out = Math.hypot(hero.pos.x, hero.pos.z).toFixed(2);
     throw new Error(`lab: the hero never stopped walking out at ${degreesOf(angle)}°, ${out} m out `
-      + `(not within ${WALK_FRAMES} frames)`);
+      + `(not within ${WALK_FRAMES} frames); his way, every ${TRACE_EVERY} frames: `
+      + path.slice(-TRACE_KEPT).join('; '));
   }
   await lab.step(1, () => ({ stick: [0, 0] }));
   return Math.hypot(hero.pos.x, hero.pos.z);

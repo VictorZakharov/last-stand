@@ -11,6 +11,7 @@ import { TAU } from '../util';
 import { faceAt, pastWall } from './edge';
 import { WALL_R } from './props';
 import { entersHull, hullOf } from './hull';
+import { entersOutline, outlineOf, pushOff, type Outline } from './outline';
 import type { BiomeId } from '../data/biomes';
 
 /** the ring's slices (a quarter of a degree, 12 cm apart at the wall: at half a degree, the hero stood 8 cm into a
@@ -50,8 +51,13 @@ interface Part {
   sphere: THREE.Sphere;
   stone: boolean;
   use: WallUse;
+  /** the mesh it came from (what bounds the floor, as `boundAt` says it) */
+  name: string;
   hull?: Float32Array;
   inverse?: THREE.Matrix4;
+  /** a hulled part's outline on the floor, which a body is kept off (`outline.ts`), and its hull's geometry */
+  outline?: Outline | null;
+  hullGeometry?: THREE.BufferGeometry;
   /** the last cast that looked at it (each part once a cast) */
   seen: number;
 }
@@ -100,13 +106,20 @@ const portalAt = (angle: number): number => {
 export class Wall {
   private parts: Part[] = [];
   private bins: Part[][] = Array.from({ length: BINS }, () => []);
-  /** each slice's point (x, z) on what bounds the floor, at its middle angle */
+  /** the parts with an outline a body is kept off, by the slices they cross */
+  private outlined: Part[][] = Array.from({ length: BINS }, () => []);
+  /** each slice's point (x, z) on the line a body is kept inside of (what bounds the floor but the outlined parts),
+   *  at its middle angle */
   private edge = new Float32Array(BINS * 2);
+  /** how far out each slice's point on that line is (m) */
+  private limit = new Float32Array(BINS);
   /** how far out each slice's point is (m) */
   private reach = new Float32Array(BINS);
+  /** the part that bounds each slice, and the height it was met at (m), if one does */
+  private bounds: ({ part: Part; y: number } | null)[] = new Array(BINS).fill(null);
   /** the nearest any part comes to the middle (m): a step nearer than that meets nothing */
   private inner = Infinity;
-  /** the nearest what bounds the floor comes to the middle (m) */
+  /** the nearest the line a body is kept inside of, or an outline, comes to the middle (m) */
   private least = Infinity;
   private casts = 0;
 
@@ -114,11 +127,12 @@ export class Wall {
 
   /** `geometry` placed by `matrix` (in the arena's frame) as a part of the wall (met by `hull`'s planes if given). */
   addGeometry(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4, stone: boolean, use: WallUse = 'wall',
-    hull?: Float32Array): void {
+    hull?: Float32Array, name = ''): void {
     if (!geometry.boundingSphere) geometry.computeBoundingSphere();
     const sphere = geometry.boundingSphere!.clone().applyMatrix4(matrix);
     const inverse = hull && matrix.clone().invert();
-    this.parts.push({ geometry, matrix: matrix.clone(), sphere, stone, use, hull, inverse, seen: -1 });
+    const hullGeometry = hull ? geometry : undefined;
+    this.parts.push({ geometry, matrix: matrix.clone(), sphere, stone, use, name, hull, inverse, hullGeometry, seen: -1 });
   }
 
   /**
@@ -135,8 +149,8 @@ export class Wall {
       const instanced = mesh as THREE.InstancedMesh;
       const hulls = Array.isArray(hulled) ? hulled.map(hullOf) : hulled ? [hullOf(mesh.geometry)] : undefined;
       const place = (matrix: THREE.Matrix4) => {
-        if (!hulls) this.addGeometry(mesh.geometry, matrix, stone, use);
-        else for (const hull of hulls) this.addGeometry(hull.geometry, matrix, stone, use, hull.planes);
+        if (!hulls) this.addGeometry(mesh.geometry, matrix, stone, use, undefined, mesh.name);
+        else for (const hull of hulls) this.addGeometry(hull.geometry, matrix, stone, use, hull.planes, mesh.name);
       };
       if (!instanced.isInstancedMesh) {
         place(mesh.matrixWorld);
@@ -151,42 +165,63 @@ export class Wall {
 
   /** Its parts sorted into the slices they cross, and what bounds the floor read: once, after the biome is built. */
   seal(): void {
-    for (const part of this.parts) this.sort(part);
-    for (let bin = 0; bin < BINS; bin++) {
-      const reach = this.reachOut(bin), angle = angleOf(bin);
-      this.reach[bin] = reach;
-      this.edge[bin * 2] = Math.cos(angle) * reach;
-      this.edge[bin * 2 + 1] = Math.sin(angle) * reach;
+    let nearest = Infinity;
+    for (const part of this.parts) {
+      this.sort(part, this.bins);
+      if (!part.hullGeometry || part.use === 'beyond') continue;
+      part.outline = outlineOf(part.hullGeometry, part.matrix, HEIGHTS);
+      if (!part.outline) continue;
+      this.sort(part, this.outlined);
+      nearest = Math.min(nearest, Math.hypot(part.sphere.center.x, part.sphere.center.z) - part.sphere.radius);
     }
-    this.least = Math.min(...this.reach);
+    const bounds = (part: Part) => part.use !== 'beyond';
+    for (let bin = 0; bin < BINS; bin++) {
+      const angle = angleOf(bin);
+      // (the outlined parts' hulls met only short of what else bounds it: the gates' triangles, met one by one, were
+      // most of the time it took, and cast twice)
+      const limit = this.reachOut(bin, (part) => bounds(part) && !part.outline, this.farthest(bin));
+      this.reach[bin] = this.reachOut(bin, (part) => !!part.outline, limit);
+      this.limit[bin] = limit;
+      this.edge[bin * 2] = Math.cos(angle) * limit;
+      this.edge[bin * 2 + 1] = Math.sin(angle) * limit;
+    }
+    this.least = Math.min(nearest, ...this.limit);
   }
 
-  /** `part` into the slices its sphere crosses. */
-  private sort(part: Part): void {
+  /** `part` into `bins`, the slices its sphere crosses. */
+  private sort(part: Part, bins: Part[][]): void {
     const { center, radius } = part.sphere;
     const d = Math.hypot(center.x, center.z);
     if (part.use !== 'foliage') this.inner = Math.min(this.inner, d - radius);
     if (d <= radius) {
-      for (const bin of this.bins) bin.push(part);
+      for (const bin of bins) bin.push(part);
       return;
     }
     const at = Math.atan2(center.z, center.x), span = Math.asin(radius / d);
     const from = binOf(at - span), count = (binOf(at + span) - from + BINS) % BINS;
-    for (let k = 0; k <= count; k++) this.bins[(from + k) % BINS].push(part);
+    for (let k = 0; k <= count; k++) bins[(from + k) % BINS].push(part);
   }
 
-  /** How far out from the middle a body may go along a slice: to the nearest surface at a body's heights, no further
-   *  than a little past the wall's face, and in a gate's opening to its portal. */
-  private reachOut(bin: number): number {
+  /** The furthest a body may go out from the middle along a slice (m): a little past the wall's face, and in a gate's
+   *  opening to its portal. */
+  private farthest(bin: number): number {
     const angle = angleOf(bin), face = faceAt(this.biome, angle);
+    const gate = pastWall(this.biome, Math.cos(angle) * face, Math.sin(angle) * face, _v).gate;
+    return gate ? portalAt(angle) : face + PAST_FACE;
+  }
+
+  /** How far out from the middle a body may go along a slice: to the nearest surface of the parts that `count` at a
+   *  body's heights, no further than `reach`. */
+  private reachOut(bin: number, counts: (part: Part) => boolean, reach: number): number {
+    const angle = angleOf(bin);
     const dir = _d.set(Math.cos(angle), 0, Math.sin(angle));
-    const gate = pastWall(this.biome, dir.x * face, dir.z * face, _v).gate;
-    let reach = gate ? portalAt(angle) : face + PAST_FACE;
     for (const y of HEIGHTS) {
       ray.set(_c.set(0, y, 0), dir);
       ray.near = 0;
       ray.far = reach;
-      if (this.nearest(this.bins[bin], (part) => part.use !== 'beyond')) reach = met.distance;
+      if (!this.nearest(this.bins[bin], counts)) continue;
+      reach = met.distance;
+      this.bounds[bin] = { part: met.part, y };
     }
     return reach;
   }
@@ -258,6 +293,13 @@ export class Wall {
     return this.reach[(i + BINS) % BINS] * (1 - f) + this.reach[(i + 1) % BINS] * f;
   }
 
+  /** What bounds the floor towards (x, z): the mesh, what it is to what moves, and the height it was met at (m); null
+   *  where the wall's face or a gate's portal does. */
+  boundAt(x: number, z: number): { name: string; use: WallUse; y: number } | null {
+    const bound = this.bounds[binOf(Math.atan2(z, x))];
+    return bound && { name: bound.part.name, use: bound.part.use, y: bound.y };
+  }
+
   /** The furthest what bounds the floor reaches (m): the floor a grid over it must cover. */
   get most(): number {
     return Math.max(...this.reach);
@@ -277,7 +319,45 @@ export class Wall {
       const middle = binOf(Math.atan2(pos.z, pos.x));
       if (this.past(pos)) this.ontoLine(pos, radius, middle, span + PAST_BINS);
       for (let k = -span; k < span; k++) this.offStretch(pos, radius, (middle + k + BINS) % BINS);
+      const stamp = ++this.casts;
+      for (let k = -span; k <= span; k++) {
+        for (const part of this.outlined[(middle + k + BINS) % BINS]) {
+          if (part.seen === stamp) continue;
+          part.seen = stamp;
+          pushOff(part.outline!, pos, radius);
+        }
+      }
     }
+  }
+
+  /** How far a body of `radius` at (x, z) may go straight out from the middle before it meets the wall (m): to the
+   *  line it's kept inside of, or an outline its middle or either side meets on the way. */
+  roomOut(x: number, z: number, radius: number): number {
+    const r = Math.hypot(x, z);
+    if (r < 1e-6) return Infinity;
+    const ux = x / r, uz = z / r;
+    let room = this.limitAt(x, z) - radius - r;
+    const span = Math.ceil((Math.asin(Math.min(1, radius / Math.max(r, radius))) / TAU) * BINS) + 1;
+    const middle = binOf(Math.atan2(z, x));
+    const stamp = ++this.casts;
+    for (let k = -span; k <= span; k++) {
+      for (const part of this.outlined[(middle + k + BINS) % BINS]) {
+        if (part.seen === stamp) continue;
+        part.seen = stamp;
+        for (const side of [-1, 0, 1]) {
+          const sx = x - uz * radius * side, sz = z + ux * radius * side;
+          room = Math.min(room, entersOutline(part.outline!, sx, sz, ux, uz) - radius);
+        }
+      }
+    }
+    return room;
+  }
+
+  /** How far out the line a body is kept inside of is towards (x, z) (m), between the slices' points. */
+  private limitAt(x: number, z: number): number {
+    const k = (((Math.atan2(z, x) % TAU) + TAU) % TAU) / TAU * BINS - 0.5;
+    const i = Math.floor(k), f = k - i;
+    return this.limit[(i + BINS) % BINS] * (1 - f) + this.limit[(i + 1) % BINS] * f;
   }
 
   /** The stretch of the line a point's angle falls in: from slice `bin`'s point to the next's. */

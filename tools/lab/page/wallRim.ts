@@ -20,8 +20,9 @@ export interface RimOptions {
 
 /** how far in from the wall's line he starts, and is put again past a stop (m) */
 const START_IN = 2.5;
-/** how far his way is turned out from along the ring into the wall (rad): pressed in, yet at a slant he slides at */
-const SLANT = (40 * Math.PI) / 180;
+/** how far his way is turned out from along the ring into the wall (degrees): pressed in, yet at a slant he slides
+ *  at; and hugging it, walked along it as a player does */
+const SLANTS = [40, 10];
 /** the frames he stands on his spot before he walks (put there, his feet are where he was) */
 const SETTLE_FRAMES = 20;
 /** a frame's move further than this is a jump (m: a run goes about 0.1 m a frame) */
@@ -34,6 +35,9 @@ const FREE = 1;
 const FREE_FRAMES = 90;
 /** past a stop, how far on round the ring he's put again (rad: a few metres at the wall) */
 const ON_PAST = 0.12;
+/** how far round the ring either side of him a stop's cause is looked for (m), in how many steps */
+const AROUND = 1;
+const AROUND_STEPS = 20;
 /** the most frames a lap may take (a walk round at a slant takes about 3000) */
 const LAP_FRAMES = 12000;
 
@@ -46,8 +50,8 @@ interface Fault {
 /** A lap's account: its faults, and how many times he stopped and walked free. */
 interface Lap {
   faults: Fault[];
-  /** where he stopped (degrees round the ring) */
-  stops: number[];
+  /** where he stopped (degrees round the ring), and what against */
+  stops: { degrees: number; against: string }[];
   frames: number;
 }
 
@@ -67,6 +71,27 @@ const outNow = (): number => Math.hypot(G.player.pos.x, G.player.pos.z);
 
 /** An angle in degrees, between 0 and 360, as a line says it. */
 const degreesOf = (angle: number): number => ((((angle * 180) / Math.PI) % 360) + 360) % 360;
+
+/** What bounds the floor nearest the hero's body: the wall's point nearest him, among those within his radius and
+ *  a little more round the ring either side (a tree from before the wall was drawn has none to say). */
+function againstNow(): string {
+  const wall = G.arena.wall as typeof G.arena.wall | undefined;
+  if (!wall?.boundAt) return 'the ring';
+  const hero = G.player.pos;
+  const r = outNow();
+  let best = Infinity;
+  let said = 'the face';
+  for (let k = -AROUND_STEPS; k <= AROUND_STEPS; k++) {
+    const angle = angleNow() + (k / AROUND_STEPS) * (AROUND / r);
+    const reach = wall.reachAt(Math.cos(angle), Math.sin(angle));
+    const off = Math.hypot(Math.cos(angle) * reach - hero.x, Math.sin(angle) * reach - hero.z);
+    if (off >= best) continue;
+    best = off;
+    const bound = wall.boundAt(Math.cos(angle), Math.sin(angle));
+    said = bound ? `${bound.name || 'a mesh'} ${bound.use} at ${bound.y.toFixed(1)} m up` : 'the face';
+  }
+  return said;
+}
 
 /** The hero put START_IN in from the wall's line at `angle`, stood still a moment. */
 async function putAt(lab: Lab, angle: number): Promise<void> {
@@ -90,21 +115,22 @@ async function walksFree(lab: Lab, planted: boolean): Promise<boolean> {
   return false;
 }
 
-/** One lap round `biome`'s wall, `way` 1 anticlockwise (seen from above, +x toward +z) or -1 the other (with
- *  `canary`, a jump planted on its 100th frame and its first stop held). */
-async function lap(lab: Lab, way: 1 | -1, canary: boolean): Promise<Lap> {
+/** One lap round `biome`'s wall, `way` 1 anticlockwise (seen from above, +x toward +z) or -1 the other, his way
+ *  turned `slant` (rad) out into the wall (with `canary`, a jump planted on its 100th frame and its first stop
+ *  held). */
+async function lap(lab: Lab, way: 1 | -1, slant: number, canary: boolean): Promise<Lap> {
   const faults: Fault[] = [];
   const start = 0.01;
   await putAt(lab, start);
   let gone = 0;
-  const stops: number[] = [];
+  const stops: Lap['stops'] = [];
   let frames = 0;
   let last = G.player.pos.clone();
   let lastAngle = angleNow();
   const goneAt: number[] = [];
   while (gone < TAU && frames < LAP_FRAMES) {
     const along = angleNow() + (way * Math.PI) / 2;
-    const stick = stickToward(along - way * SLANT);
+    const stick = stickToward(along - way * slant);
     await lab.step(1, () => ({ stick }));
     frames++;
     if (canary && frames === 100) G.player.pos.x += 1;
@@ -117,7 +143,7 @@ async function lap(lab: Lab, way: 1 | -1, canary: boolean): Promise<Lap> {
     goneAt.push(gone * outNow());
     const back = goneAt[goneAt.length - 1 - STILL_FRAMES];
     if (back === undefined || goneAt[goneAt.length - 1] - back >= STILL) continue;
-    stops.push(degreesOf(now));
+    stops.push({ degrees: degreesOf(now), against: againstNow() });
     if (!(await walksFree(lab, canary && stops.length === 1))) {
       faults.push({ degrees: degreesOf(now), what: `stuck: walking back in, not ${FREE} m in ${FREE_FRAMES} frames` });
     }
@@ -133,6 +159,9 @@ async function lap(lab: Lab, way: 1 | -1, canary: boolean): Promise<Lap> {
   return { faults, stops, frames };
 }
 
+/** A stop as its line says it. */
+const stopLine = (stop: Lap['stops'][number]): string => `${stop.degrees.toFixed(0)}° (${stop.against})`;
+
 /** A fault as its line says it. */
 const faultLine = (fault: Fault): string => `${fault.degrees.toFixed(1)}°: ${fault.what}`;
 
@@ -146,11 +175,11 @@ export async function wallRim(lab: Lab, options: RimOptions): Promise<Report> {
   for (const biome of options.biomes ?? [...BIOME_IDS]) {
     if (G.arena.biome !== biome) G.arena.setBiome(biome);
     await lab.setup({});
-    for (const way of [1, -1] as const) {
+    for (const [way, slant] of SLANTS.flatMap((s) => [[1, s], [-1, s]] as const)) {
       const canary: boolean = options.canary && !planted;
       planted ||= canary;
-      const one = await lap(lab, way, canary);
-      const name = `${biome} ${way > 0 ? 'anticlockwise' : 'clockwise'}`;
+      const one = await lap(lab, way, (slant * Math.PI) / 180, canary);
+      const name = `${biome} ${way > 0 ? 'anticlockwise' : 'clockwise'}, ${slant}° into it`;
       if (canary) {
         caught.jump = one.faults.some((fault) => fault.what.startsWith('thrown'));
         caught.stuck = one.faults.some((fault) => fault.what.startsWith('stuck'));
@@ -158,7 +187,7 @@ export async function wallRim(lab: Lab, options: RimOptions): Promise<Report> {
       }
       lines.push(`${name}: ${one.frames} frames, stopped ${one.stops.length} times, `
         + `${one.faults.length} faults`);
-      lines.push(`  stopped at ${one.stops.map((at) => `${at.toFixed(0)}°`).join(', ')}`);
+      lines.push(`  stopped at ${one.stops.map(stopLine).join(', ')}`);
       for (const fault of one.faults) {
         lines.push(`  ${faultLine(fault)}`);
         problems.push(`${name}: ${faultLine(fault)}`);

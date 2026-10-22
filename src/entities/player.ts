@@ -46,8 +46,9 @@ const TURN_MOST = 9;
  *  along that line (m) */
 const SHOT_NEAR = 5;
 /** how hard the wall holds a body pressed into it from sliding along it, a share of his speed into it: walked into it
- *  within 31° of square on, he stops */
-const WALL_GRIP = 0.6;
+ *  within 10° of square on, he stops (with none, he slid along a face he walked into square on without end; within
+ *  31°, along the thicket he stopped at every rock and bush that turned its face 19° toward him) */
+const WALL_GRIP = 0.18;
 /** how hard he slows walking up to the wall (m/s²: a comfortable stop, not `BRAKE`'s hardest) */
 const WALL_BRAKE = 10;
 const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
@@ -613,7 +614,7 @@ export class Player {
     const ux = this.pos.x / r, uz = this.pos.z / r;
     const out = goal.x * ux + goal.z * uz;
     if (out <= 0) return;
-    const room = G.arena.wall.reachAt(this.pos.x, this.pos.z) - this.radius - r;
+    const room = G.arena.wall.roomOut(this.pos.x, this.pos.z, this.radius);
     const most = Math.sqrt(2 * WALL_BRAKE * Math.max(0, room));
     if (out <= most) return;
     goal.x -= ux * (out - most);
