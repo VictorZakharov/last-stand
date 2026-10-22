@@ -3,7 +3,16 @@ name: PR preview
 # Publishes what pr-preview-build.yml built into `pr-preview/pr-N/` on the
 # aggregate `gh-pages` branch, redeploys Pages, and keeps a sticky PR comment
 # with the preview link. Closing the PR without merging removes the preview;
-# merged previews are cleaned up by the next production deploy.
+# merged previews are cleaned up by the next production deploy. While a push
+# builds, its PR's preview is a placeholder saying how long it has been
+# building (`.github/preview-building.html`, from main), so the previous build
+# isn't tested by mistake (#292).
+#
+# Everything that writes `gh-pages` or deploys Pages shares the
+# `pages-publisher` group (production's deploy too), so pushes and deploys go
+# in order. GitHub keeps one pending job a group: a third arriving cancels the
+# pending one, so a publish can be lost when several PRs push at once (the
+# placeholder then says the build is taking longer than usual; re-run it).
 #
 # This runs on `workflow_run`, so it uses the workflow from main with a write
 # token even for fork PRs. It never runs PR code: the artifact is only copied as
@@ -20,21 +29,32 @@ permissions:
 
 jobs:
   building:
-    name: Mark PR preview as building
+    name: Take the PR preview down while it builds
     if: github.event.workflow_run.event == 'pull_request' && github.event.action == 'requested'
     runs-on: ubuntu-24.04
-    timeout-minutes: 2
+    # Pages deployments can wait in GitHub's queue for a few minutes.
+    timeout-minutes: 15
+    concurrency:
+      group: pages-publisher
+      cancel-in-progress: false
     permissions:
       actions: read
+      contents: write
+      pages: write
+      id-token: write
       pull-requests: write
+    environment:
+      name: github-pages-preview
+    env:
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
       - name: Find the open pull request
         id: pr
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            // this job can wait for a runner longer than a quick build takes: once the build is done,
-            // the comment is the publish job's, and "building" would overwrite its link
+            // this job can wait for a runner (or the group) longer than a quick build takes: once the build is
+            // done, the preview and the comment are the publish job's, and "building" would overwrite its link
             const { data: build } = await github.rest.actions.getWorkflowRun({ ...context.repo, run_id: context.payload.workflow_run.id });
             if (build.status === 'completed') { core.info('build already finished'); return core.setOutput('number', ''); }
             const prs = await github.paginate(github.rest.pulls.list, { ...context.repo, state: 'open', per_page: 100 });
@@ -47,7 +67,71 @@ jobs:
           header: last-stand-pr-preview
           number: ${{ steps.pr.outputs.number }}
           message: |
-            **PR preview:** building `${{ github.event.workflow_run.head_sha }}`.
+            **PR preview:** building `${{ github.event.workflow_run.head_sha }}`. The previous build is taken down meanwhile.
+
+            [Watch the build](${{ github.event.workflow_run.html_url }})
+
+      # main's own copy (this run's commit is main's head): never the PR's
+      - name: Check out the placeholder
+        if: steps.pr.outputs.number != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: trusted
+          sparse-checkout: .github/preview-building.html
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Check out gh-pages
+        if: steps.pr.outputs.number != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: gh-pages
+          path: pages
+
+      - name: Put the placeholder in place of the preview
+        id: stage
+        if: steps.pr.outputs.number != ''
+        shell: bash
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          SINCE: ${{ github.event.workflow_run.created_at }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -euo pipefail
+          pages_dir="${GITHUB_WORKSPACE}/pages"
+          preview_dir="${pages_dir}/pr-preview/pr-${PR_NUMBER}"
+          rm -rf "${preview_dir}"
+          mkdir -p "${preview_dir}"
+          # (the values are a number, hex, an ISO time and a URL: none holds a '|')
+          sed -e "s|__PR__|${PR_NUMBER}|g" \
+            -e "s|__SHORT_SHA__|${HEAD_SHA:0:7}|g" \
+            -e "s|__SINCE__|${SINCE}|g" \
+            -e "s|__RUN_URL__|${RUN_URL}|g" \
+            "${GITHUB_WORKSPACE}/trusted/.github/preview-building.html" > "${preview_dir}/index.html"
+          printf '{"headSha":"%s","building":true}\n' "${HEAD_SHA}" > "${preview_dir}/preview-metadata.json"
+          touch "${pages_dir}/.nojekyll"
+
+          git -C "${pages_dir}" config user.name "github-actions[bot]"
+          git -C "${pages_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "${pages_dir}" add -A
+          if git -C "${pages_dir}" diff --cached --quiet; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          git -C "${pages_dir}" commit -m "Preview PR #${PR_NUMBER}: building ${HEAD_SHA}"
+          git -C "${pages_dir}" push origin HEAD:gh-pages
+          echo "changed=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload aggregated Pages artifact
+        if: steps.stage.outputs.changed == 'true'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: pages
+          include-hidden-files: true
+
+      - name: Deploy aggregated Pages artifact
+        if: steps.stage.outputs.changed == 'true'
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
 
   publish:
     name: Publish PR preview
