@@ -281,6 +281,37 @@ function rock(seed: number): PBRData {
   }, 5);
 }
 
+/** moss's young green, its old darker green and the shade between its cushions */
+const MOSS = [0.4, 0.52, 0.2] as const;
+const MOSS_OLD = [0.2, 0.3, 0.1] as const;
+const MOSS_GAP = [0.07, 0.09, 0.04] as const;
+
+/**
+ * Moss (the fallen logs' backs, the standing stones' shoulders), a tile half a metre: cushions (cells, 7 a tile, their
+ * place warped) domed and shaded apart in the gaps between them, each its own green, mottled young to old, its
+ * fronds' fine tufts (64 and 128 a tile) over it all. A plain grunge tinted green read as a flat painted top.
+ */
+function moss(seed: number): PBRData {
+  const cushions = latticeCells(4, 4, 0.85, seed), warpU = latticeFbm(4, 4, seed + 1), warpV = latticeFbm(4, 4, seed + 2);
+  const age = latticeFbm(3, 3, seed + 3), parted = latticeFbm(5, 5, seed + 6);
+  const fronds = latticeFbm(48, 48, seed + 4, 3), fine = latticeNoise(192, 192, seed + 5);
+  const cell: Cells = { f1: 0, f2: 0, id: 0, cx: 0, cy: 0 };
+  return buildPBR(256, (u, v, o) => {
+    cushions(u + 0.2 * (warpU(u, v) - 0.5), v + 0.2 * (warpV(u, v) - 0.5), cell);
+    const dome = smoothstep(0, 0.9, 1 - cell.f1 / 0.8);
+    // (a soft, broken dip between cushions, only where a noise parts them: drawn sharp along every edge, it was paving)
+    const gap = (1 - smoothstep(0, 0.22, cell.f2 - cell.f1)) * smoothstep(0.45, 0.65, parted(u, v));
+    const f = fine(u, v), tip = f > 0.8 ? 1.25 : f < 0.25 ? 0.8 : 1;
+    const tuft = fronds(u, v);
+    const old = smoothstep(0.3, 0.75, 0.7 * age(u, v) + 0.3 * cell.id);
+    const lit = (0.8 + 0.25 * dome) * (0.55 + 0.9 * tuft) * tip;
+    const colour = (i: number): number => mix(mix(MOSS[i], MOSS_OLD[i], old) * lit, MOSS_GAP[i], gap * 0.6);
+    o.h = 0.35 * dome * (1 - 0.5 * gap) + 0.5 * tuft + 0.15 * f;
+    o.r = colour(0); o.g = colour(1); o.b = colour(2);
+    o.rough = clamp(0.9 + 0.08 * gap - 0.06 * tuft, 0, 1);
+  }, 3);
+}
+
 function grunge(): PBRData {
   const fbm = makeFbm(42, 4, 6);
   const maps = buildPBR(256, (u, v, o) => {
@@ -783,7 +814,7 @@ function fur(): PBRData {
 }
 
 /** Every recipe, by name; its arguments are part of what it makes. */
-export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, rock, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
+export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, rock, moss, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
 export type RecipeName = keyof typeof RECIPES;
 export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
@@ -816,6 +847,6 @@ export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = 
   ['steel', []],
   ['face', ['warrior']], ['face', ['mage']], ['face', ['ranger']],
   ['rock', [17]], ['marble', [33, 5]], ['cobblestone', []], ['slate', [33, 2, 2]], ['bark', []], ['forestFloor', []],
-  ['flagstone', [47, 5]], ['ashlar', [33, 2, 2]], ['ashlar', [21, 6, 3]], ['grunge', []], ['wood', []], ['burlap', []],
+  ['flagstone', [47, 5]], ['moss', [5]], ['ashlar', [33, 2, 2]], ['ashlar', [21, 6, 3]], ['grunge', []], ['wood', []], ['burlap', []],
   ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['fur', []], ['bowWood', []],
 ];

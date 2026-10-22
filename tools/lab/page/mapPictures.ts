@@ -34,6 +34,7 @@ const GROUPS: Record<RecipeName, string> = {
   rock: 'stone',
   grunge: 'stone',
   forestFloor: 'ground',
+  moss: 'ground',
   wood: 'wood',
   bark: 'wood',
   bowWood: 'wood',

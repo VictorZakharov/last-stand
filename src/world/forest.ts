@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { seeThrough } from '../core/seeThrough';
 import { ARENA } from '../data/balance';
-import { forestFloor, bark, flagstone, grunge, rock, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
+import { forestFloor, bark, flagstone, moss, rock, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
 import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
@@ -137,7 +137,9 @@ export const buildForest: BiomeBuilder = (scene) => {
   // foliage: leaf cards cut out of painted textures round darker cores; instance colours set each plant's hue
   const clusterTex = leafClusterTexture();
   const canopyMat = seeThrough(new THREE.MeshStandardMaterial({ map: clusterTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), 'foliage');
-  const coreMat = seeThrough(new THREE.MeshStandardMaterial({ color: 0x8a9a80, roughness: 0.95 }), 'foliage');
+  // (a plain colour read as a bare green ball under the cards: the moss's relief alone, its colour the instance's)
+  const { map: _mossColour, ...mossRelief } = pbrMaterialMaps(moss(5), [8, 4], 1.5);
+  const coreMat = seeThrough(new THREE.MeshStandardMaterial({ ...mossRelief, color: 0x8a9a80, roughness: 0.95 }), 'foliage');
   // the same for single meshes, which have no instance colour: the tint is in the material
   const archCanopy = seeThrough(new THREE.MeshStandardMaterial({ map: clusterTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x5e8048 }), 'foliage');
   const archCore = seeThrough(new THREE.MeshStandardMaterial({ color: 0x2c3c22, roughness: 0.95 }), 'foliage');
@@ -146,7 +148,11 @@ export const buildForest: BiomeBuilder = (scene) => {
   const oneLeaf = leafTexture();
   const litterMat = new THREE.MeshStandardMaterial({ map: oneLeaf, alphaTest: 0.5, roughness: 0.9 });
   const ivyMat = new THREE.MeshStandardMaterial({ map: oneLeaf, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x3e6a2a });
-  const mossMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(grunge(), 2, 3), color: 0x44642a, roughness: 1 });
+  // moss: cushions and tufts, a tile half a metre (a grunge tinted green read as a flat painted top), and a sheen,
+  // sdf-harness's substrate layer for fuzz, pale at grazing angles as moss's fronds catch the light
+  const mossLayer = { sheen: 1, sheenColor: new THREE.Color(0x5a7040), sheenRoughness: 0.6, roughness: 1 };
+  const mossMat = new THREE.MeshPhysicalMaterial({ ...pbrMaterialMaps(moss(5), [7, 1.5], 1.5), ...mossLayer });
+  const logMoss = new THREE.MeshPhysicalMaterial({ ...pbrMaterialMaps(moss(5), [2, 6], 1.5), ...mossLayer });
   const hangMat = new THREE.MeshStandardMaterial({ color: 0x2c4424, roughness: 1, side: THREE.DoubleSide });
   const heartwood = new THREE.MeshStandardMaterial({ ...barkMaps, color: 0x7a5a3c, roughness: 0.95 });
   const grassMat = windInGrass(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }), updaters);
@@ -154,7 +160,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   const stemMat = new THREE.MeshStandardMaterial({ color: 0xb8b09a, roughness: 0.8 });
   const glyphMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x6aff7a, emissiveIntensity: 2.0 });
   // the props dissolve between the camera and the player in the close views (the camera never pulls in)
-  for (const m of [stone, mossStone, ivyMat, mossMat, hangMat, heartwood, capMat, stemMat, glyphMat]) seeThrough(m, 'prop');
+  for (const m of [stone, mossStone, ivyMat, mossMat, logMoss, hangMat, heartwood, capMat, stemMat, glyphMat]) seeThrough(m, 'prop');
 
   // --- Sky: a summer sky with slow clouds above the canopy -----------------------------
   const sky = buildDaySky(FOG, [0.2, 0.4, 0.75], SUN);
@@ -188,7 +194,8 @@ export const buildForest: BiomeBuilder = (scene) => {
   // up its whole height, the 0.35 m plinth's 18 times as long round as up: `lab tiles`)
   const standing = seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(rock(17), 1, 1.6), color: 0x989e90, roughness: 0.9 }), 'prop');
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const x = sx * (h - 0.5), z = sz * (h - 0.5), g = new THREE.Group();
+    // (its plinth reaches 1.16 m from its middle: 0.5 m in, it hung 0.66 m over the dais's edge, standing on air)
+    const x = sx * (h - 1.3), z = sz * (h - 1.3), g = new THREE.Group();
     scene.add(g);
     const mh = new THREE.Mesh(menhirGeo, standing);
     mh.name = 'standing stone';
@@ -337,7 +344,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   const log = buildLogGeo(rng), logBark = barkAt(BARK_REPEATS.log);
   for (const [rr, a, rot] of logSpots) {
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr, yaw = a + rot, parts: THREE.Mesh[] = [], n0 = obstacles.length;
-    for (const [geo, mat] of [[log.bark, logBark], [log.inner, heartwood], [log.moss, mossMat], [log.fungus, capMat]] as const) {
+    for (const [geo, mat] of [[log.bark, logBark], [log.inner, heartwood], [log.moss, logMoss], [log.fungus, capMat]] as const) {
       const m = new THREE.Mesh(geo, mat);
       m.name = 'fallen log';
       m.position.set(x, 0.38, z);
@@ -557,6 +564,22 @@ function mergeAll(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
   }))!;
 }
 
+/** A log's sweep of moss (a part of a cylinder up y) sunk into the bark towards its sides and ends, by a wandering
+ *  amount: it ends raggedly where it meets the bark (laid over it whole, it ended in a straight step, a carpet). */
+function raggedMoss(g: THREE.BufferGeometry, rng: () => number): THREE.BufferGeometry {
+  const p = g.attributes.position, box = new THREE.Box3().setFromBufferAttribute(p as THREE.BufferAttribute);
+  const half = (box.max.y - box.min.y) / 2, mid = Math.PI * 0.5, span = Math.PI * 0.35, ph = rng() * TAU;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(x, z);
+    const edge = Math.max(Math.abs(a - mid) / span, Math.abs(y) / half);
+    const wander = 0.14 * Math.sin(y * 5.3 + ph) + 0.1 * Math.sin(a * 17 + y * 3 + ph * 2);
+    const sink = 1 - 0.14 * THREE.MathUtils.smoothstep(edge, 0.55 + wander, 0.95);
+    p.setXYZ(i, x * sink, y, z * sink);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
 /** A fallen hollow log along x (4.6 long, centred): splintered open ends showing the heartwood,
  * moss along its back, a stair of shelf fungus on one side. */
 function buildLogGeo(rng: () => number): { bark: THREE.BufferGeometry; inner: THREE.BufferGeometry; moss: THREE.BufferGeometry; fungus: THREE.BufferGeometry } {
@@ -580,7 +603,8 @@ function buildLogGeo(rng: () => number): { bark: THREE.BufferGeometry; inner: TH
   const rim = new THREE.RingGeometry(0.3, 0.46, 16).rotateY(Math.PI / 2);
   const inside = mergeAll([inner, rim.clone().translate(L / 2 - 0.2, 0, 0), rim.rotateY(Math.PI).translate(-L / 2 + 0.2, 0, 0)]);
   // a sweep of moss along the top (the cylinder's +x before it's laid along x becomes +y)
-  const moss = lumpy(new THREE.CylinderGeometry(0.47, 0.53, L * 0.7, 14, 4, true, Math.PI * 0.15, Math.PI * 0.7), 0.1, 9).rotateZ(Math.PI / 2).translate(0.2, 0.02, 0);
+  const moss = raggedMoss(new THREE.CylinderGeometry(0.47, 0.53, L * 0.7, 28, 14, true, Math.PI * 0.15, Math.PI * 0.7), rng);
+  lumpy(moss, 0.1, 9).rotateZ(Math.PI / 2).translate(0.2, 0.02, 0);
   const caps: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 4; i++) caps.push(new THREE.CylinderGeometry(0.2 - i * 0.03, 0.05, 0.06, 12, 1, false, 0, Math.PI).rotateY(-Math.PI / 2).translate(-0.6 + i * 0.35, 0.05 - i * 0.12, 0.45));
   return { bark, inner: inside, moss, fungus: mergeAll(caps) };
