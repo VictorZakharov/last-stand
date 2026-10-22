@@ -40,6 +40,7 @@ import type { CompilesOptions } from './compiles';
 import type { ProgramsOptions } from './programs';
 import type { MapsOptions } from './maps';
 import type { TilesOptions } from './tiles';
+import type { WindingOptions } from './winding';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
@@ -414,6 +415,12 @@ export async function maps(lab: Lab, command: MapsOptions): Promise<Report> {
 export async function tiles(lab: Lab, command: TilesOptions): Promise<Report> {
   const { tiles: tilesOf } = await import('./tiles');
   return tilesOf(lab, command);
+}
+
+/** `lab winding`: which way every model's and biome's faces point. */
+export async function winding(lab: Lab, command: WindingOptions): Promise<Report> {
+  const { winding: windingOf } = await import('./winding');
+  return windingOf(lab, command);
 }
 
 /** `lab draws`: one frame's draw calls with the crowd standing, by the geometry each drew, the most first. */

@@ -570,6 +570,19 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the camera meeting nothing: a camera inside a plinth saw the stone's underside edge on), a hero's height up, the
   cut-outs and see-through things (ferns, leaf cards, a gate's membrane) left out, a sheet a biome; `--ab` sets them beside another commit's. `--canary` lays a board 2 m by 0.5 m in each biome, its
   map repeated twice along u, which must read 1 m by 0.5 m.
+- `winding`: which way the game's faces point (`page/winding.ts`, `page/windingParts.ts`, tested in
+  `test/windingParts.test.mjs`; `--models husk,ranger` by id, every one by default; `--biomes`). Every model
+  (`MODELS`: the heroes with all they can wear, the foes, the dummy) built afresh and each biome's props, each
+  geometry once. Each mesh is split into its parts (triangles joined by a corner, the corners welded by where they
+  are: a merged mesh's parts share none) and each part's signed volume read about its middle: a closed part whose
+  faces point out encloses a positive volume, one wound inside out a negative one. A part with more than a quarter
+  of its edges open, or enclosing under 5% of its box, isn't judged (a card, a cloth, a blade's fuller: a groove
+  reads below 0 wound as it is); a mesh drawn by its back faces (the sky) is seen from inside on purpose, and a
+  mirrored mesh's winding needs nothing of its own (three turns its front-face test round). A part wound inside out
+  on a one-sided material is a problem, listed with its mesh (or its material and colour), its triangles and where
+  it is in its model or biome; on a double-sided one it's listed apart (three turns a back face's normal to the
+  camera). `--canary` plants a box wound inside out, one sided, in the first biome. Main before #289: 254 parts of
+  11 models (every creature's `taperTube`s, the shelf fungi's and caps' lathes, the bow's brass leaf); none since.
 - `weapons`: each of the hero's weapons alone (`page/weapons.ts`; `--weapons Sword,Maul`, the class's bases by
   default): a copy of the one in his right hand, at its own frame (unturned in the fist), put in a plain, lit
   studio of its own and pictured face on (a blade's flat, an axe's bit to the side), edge on, from behind (a face

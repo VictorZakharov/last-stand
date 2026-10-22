@@ -921,6 +921,19 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  winding: {
+    each(side, options) {
+      const command = {
+        models: options.models,
+        biomes: options.biomes,
+        canary: Boolean(options.canary),
+      };
+      return side.command('winding', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   draws: {
     check(options) {
       if (options.count !== undefined && !(options.count >= 0)) throw labError('draws --count: 0 or more');

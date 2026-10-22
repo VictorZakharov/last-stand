@@ -964,6 +964,23 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  winding: {
+    help: 'which way the game\'s faces point: every model built afresh and every biome\'s props, each mesh split '
+      + 'into its parts and each judged by its signed volume (out, in, or open); a part wound inside out on a '
+      + 'one-sided material shows its inside',
+    options: {
+      models: { kind: 'list', usage: 'a,b', help: 'the models, by their id (`husk`, `ranger`; every one by default)' },
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      canary: { kind: 'switch', help: 'a box wound inside out, drawn one sided, planted in the first biome' },
+      ...COMMON_OPTIONS,
+    },
+  },
   draws: {
     help: 'one frame\'s draw calls with the crowd of foes standing before the hero, by the geometry each drew, the '
       + 'most first: its draws in the scene, its shadow map and after it, the triangles, its material and what drew it '
