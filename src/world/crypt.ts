@@ -17,6 +17,7 @@ import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, s
 export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import { buildFire } from './fire';
+import { restingLift, skullGeometry } from './skull';
 import type { Obstacle } from '../types';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
@@ -153,7 +154,8 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const stoneMaps = pbrMaterialMaps(grunge(), 2, 1.6);
   const carved = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x7e8088, roughness: 0.85 });
   const iron = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.45 });
-  const boneMat = new THREE.MeshStandardMaterial({ color: 0x8a8272, roughness: 0.8 });
+  // (its vertex colours darken a skull's sockets: `skullGeometry`)
+  const boneMat = new THREE.MeshStandardMaterial({ color: 0x8a8272, roughness: 0.8, vertexColors: true });
   // (a tile about 0.4 m: at 1, one ran round a dead tree's foot and up the whole of it, 3 by 3.5 m: `lab tiles`)
   const deadWood = outsideDim(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), [8, 9], 1.4), color: 0x6a6660, flatShading: true }));
   const banner = new THREE.MeshStandardMaterial({ color: 0x6a1420, roughness: 0.9, side: THREE.DoubleSide });
@@ -871,6 +873,7 @@ function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.M
     new THREE.CylinderGeometry(0.025, 0.025, 0.34, 6).rotateZ(Math.PI / 2),
     ...[-0.17, 0.17].flatMap((x) => [-0.025, 0.025].map((z) => new THREE.SphereGeometry(0.03, 6, 4).translate(x, 0, z))),
   ].map((g) => g.toNonIndexed()));
+  boneGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(boneGeo.attributes.position.count * 3).fill(1), 3));
   const bones = new THREE.InstancedMesh(boneGeo, bone, 70);
   for (let i = 0; i < bones.count; i++) {
     const a = r(0, TAU), rr = i < 12 ? r(1.5, ARENA.daisHalf) : r(6, 27);
@@ -881,13 +884,15 @@ function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.M
   }
   bones.castShadow = true;
   scene.add(bones);
-  const skullGeo = new THREE.SphereGeometry(0.12, 10, 8).scale(1, 0.9, 1.2);
+  const skullGeo = skullGeometry();
   const skulls = new THREE.InstancedMesh(skullGeo, bone, 24);
   for (let i = 0; i < skulls.count; i++) {
     const a = r(0, TAU), rr = r(2, 27);
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
-    e.set(r(-0.4, 0.4), r(0, TAU), 0); q.setFromEuler(e); s.setScalar(r(0.8, 1.2));
-    p.set(x, (Math.max(Math.abs(x), Math.abs(z)) < ARENA.daisHalf ? ARENA.daisHeight : 0) + 0.1, z);
+    // (some face up or lie on a side, as a skull without its jaw rolls)
+    e.set(r(-0.5, 0.15), r(0, TAU), r(0, 1) < 0.3 ? r(-1.3, 1.3) : r(-0.2, 0.2)); q.setFromEuler(e); s.setScalar(r(0.85, 1.15));
+    const lift = restingLift(skullGeo, q, s.x) - 0.004;
+    p.set(x, (Math.max(Math.abs(x), Math.abs(z)) < ARENA.daisHalf ? ARENA.daisHeight : 0) + lift, z);
     skulls.setMatrixAt(i, m.compose(p, q, s));
   }
   skulls.castShadow = true;
