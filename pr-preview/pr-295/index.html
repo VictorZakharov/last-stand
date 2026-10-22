@@ -1,0 +1,86 @@
+<!doctype html>
+<!--
+  A PR preview's page while its next push builds (pr-preview.yml's "building" job puts it in place of the previous
+  build, so the old build isn't tested by mistake: #292). The job fills in the tokens: the commit, the PR, when the
+  build was asked for (ISO time) and the build's run. It reloads itself once the preview's page is the new build.
+-->
+<html lang="en" data-preview-building>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Last Stand: preview building</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: #0d0e12;
+    color: #d8d4c8;
+    font: 16px/1.5 system-ui, sans-serif;
+  }
+  main { max-width: 34rem; padding: 2rem 1rem; text-align: center; }
+  h1 { margin: 0 0 0.5rem; font-size: 1.4rem; font-weight: 600; color: #e8c372; }
+  .elapsed { margin: 1.5rem 0; font-size: 2.4rem; font-variant-numeric: tabular-nums; color: #f2eee4; }
+  .slow { color: #e88a72; }
+  code { color: #f2eee4; }
+  a { color: #e8c372; }
+  p { margin: 0.5rem 0; }
+  .note { margin-top: 1.5rem; font-size: 0.9rem; color: #8f8b80; }
+</style>
+</head>
+<body>
+<main>
+  <h1>PR #295 preview is building</h1>
+  <p>Commit <code>9888770</code></p>
+  <p class="elapsed" id="elapsed" aria-live="off">building</p>
+  <p id="status">This page reloads itself when the new build is ready.</p>
+  <p><a href="https://github.com/VictorZakharov/last-stand/actions/runs/39824877354">Watch the build</a></p>
+  <p class="note">The previous build was taken down so it isn't tested by mistake.</p>
+</main>
+<script>
+  (() => {
+    const since = Date.parse('2026-10-22T17:41:17Z');
+    // a build and its publication take a few minutes; past this, say so and point to the run
+    const SLOW_MINUTES = 15;
+    const POLL_MS = 10000;
+    const elapsed = document.getElementById('elapsed');
+    const status = document.getElementById('status');
+    const two = (n) => String(n).padStart(2, '0');
+    const tick = () => {
+      const seconds = Math.max(0, Math.floor((Date.now() - since) / 1000));
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
+      const clock = hours ? `${hours}:${two(minutes % 60)}:${two(seconds % 60)}` : `${minutes}:${two(seconds % 60)}`;
+      elapsed.textContent = `building for ${clock}`;
+      if (minutes >= SLOW_MINUTES && !status.classList.contains('slow')) {
+        status.classList.add('slow');
+        status.textContent = 'This is taking longer than usual: the build or its publication may have failed or been '
+          + 'cancelled. Check the run.';
+      }
+    };
+    // the preview's page fetched past every cache: once it's no longer this page, the new build is in
+    const poll = async () => {
+      try {
+        const reply = await fetch(location.href, { cache: 'no-store' });
+        if (reply.ok && !(await reply.text()).includes('data-preview-building')) {
+          location.reload();
+          return;
+        }
+      } catch {
+        // offline or between deploys: try again
+      }
+      setTimeout(poll, POLL_MS);
+    };
+    if (Number.isNaN(since)) elapsed.textContent = 'building';
+    else {
+      tick();
+      setInterval(tick, 1000);
+    }
+    setTimeout(poll, POLL_MS);
+  })();
+</script>
+</body>
+</html>
