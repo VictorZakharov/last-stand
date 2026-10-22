@@ -8,7 +8,7 @@
 import { createServer } from 'vite';
 import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { PAGE_SCRIPTS } from './browser.mjs';
+import { lowerProcesses, PAGE_SCRIPTS } from './browser.mjs';
 import { exportedTreePaths } from './commits.mjs';
 import { compileError, labError } from './errors.mjs';
 import { watchLayers } from './layers.mjs';
@@ -530,6 +530,8 @@ export class Side {
     // (the boot's time for the page's load too: Playwright's own 30 s ran out on the first page after the server
     // started, a cold dev server sending every module on a machine busy with other agents)
     await page.goto(this.url, { timeout: BOOT_TIMEOUT_MS });
+    // (Chrome raises a page's renderer to normal priority as it shows it: lowered again to the lab's)
+    await lowerProcesses(this.browser);
     // (polled on a timer: by default it polls by animation frame, and the lab's clock holds those once the game shows)
     const polling = { polling: BOOT_POLL_MS, timeout: BOOT_TIMEOUT_MS };
     // (a boot that threw says so on its loading screen, and a script that wouldn't load in its answer: waited for the

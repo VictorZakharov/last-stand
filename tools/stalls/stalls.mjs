@@ -10,6 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { freshStorage, noCapture } from '../lab/node/browser.mjs';
 import { nodeName } from '../lab/node/layers.mjs';
+import { priorityNow } from '../lab/node/priority.mjs';
 import { analyze } from './analyze.mjs';
 import { slowCpu, startChrome } from './chrome.mjs';
 import { measureBoots } from './boot.mjs';
@@ -285,6 +286,9 @@ async function main() {
     console.log(usage());
     return;
   }
+  // (left at the priority it was started at, unlike the lab: it times the browser's own stalls, and below normal the
+  // desktop's work would read as the game's)
+  console.log(`stalls: running at ${priorityNow()} priority`);
   mkdirSync(OUT, { recursive: true });
   const asked = options.urls.length ? options.urls : [THIS_TREE];
   const served = await serveTrees(asked, REPO, OUT, { named: options.js });

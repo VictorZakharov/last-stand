@@ -4,10 +4,12 @@
 import { request, sendToServer, waitForChange } from './node/client.mjs';
 import { describeError, labError } from './node/errors.mjs';
 import { parseCommandLine, usage } from './node/options.mjs';
+import { lowerPriority } from './node/priority.mjs';
 
 /** Runs a command in a session of its own, for when no server is up. */
-async function runAlone(call) {
-  console.log('(no lab server is up: booting for this command alone; npm run lab:serve boots ahead of each)');
+async function runAlone(call, priority) {
+  console.log('(no lab server is up: booting for this command alone, at '
+    + `${priority} priority; npm run lab:serve boots ahead of each)`);
   // (loaded only here: the browser and Vite take a moment to load, and a command sent to the server needs neither)
   const { LabSession } = await import('./node/session.mjs');
   const session = await LabSession.open();
@@ -36,6 +38,8 @@ async function watch(call, reply) {
 }
 
 async function main() {
+  // (first, before any browser, Vite or worker is started: each inherits it)
+  const priority = lowerPriority();
   const call = parseCommandLine(process.argv.slice(2));
   if (call.command === 'help') {
     console.log(usage());
@@ -80,7 +84,7 @@ async function main() {
     console.log(reply.text);
     return watch(call, reply);
   }
-  const reply = (await sendToServer(call)) ?? (await runAlone(call));
+  const reply = (await sendToServer(call)) ?? (await runAlone(call, priority));
   console.log(reply.text);
   return reply.ok ? 0 : 1;
 }

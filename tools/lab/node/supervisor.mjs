@@ -6,6 +6,7 @@ import { fork } from 'node:child_process';
 import { watch } from 'node:fs';
 import { join } from 'node:path';
 import { LAB, codeStamp } from './codeStamp.mjs';
+import { lowerPriority } from './priority.mjs';
 
 /** the server's own entry, run in the child */
 const SERVER_ENTRY = join(LAB, 'node', 'serverProcess.mjs');
@@ -35,6 +36,8 @@ function log(message) {
 
 /** Runs the lab's server under supervision until it's stopped. */
 export function supervise() {
+  // (the server, its browsers and Vite inherit it: started at normal priority, the lab froze the desktop, #283)
+  log(`the lab runs at ${lowerPriority()} priority`);
   let child = null;
   /** what to do when the child exits: start it again, stop, or wait for the code to change (it failed) */
   let next = 'wait';
