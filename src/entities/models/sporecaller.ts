@@ -55,7 +55,7 @@ export function buildSporecaller(): Model {
   stripRig(j.root);
   const P = j.P, S = new Sculpt('sporecaller').glow(spots).glow(eye);
   const r = mulberry(33);
-  const shelfGeo = (rad: number) => lathe([[0.001, 0.3 * rad], [0.6 * rad, 0.26 * rad], [rad, 0.04 * rad], [0.9 * rad, 0], [0.001, 0.02 * rad]], 12);
+  const shelfGeo = (rad: number) => lathe([[0.001, 0.02 * rad], [0.9 * rad, 0], [rad, 0.04 * rad], [0.6 * rad, 0.26 * rad], [0.001, 0.3 * rad]], 12);
 
   // --- legs: hidden under the robes but for bare knotted feet
   S.skinPair(limb(P.shinL + 0.036, 0.04, 0.035), flesh, j.kneeL, j.ankleL, j.kneeR, j.ankleR, P.shinL - 0.048, P.shinL);

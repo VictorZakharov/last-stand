@@ -16,7 +16,9 @@ const _v = new THREE.Vector3(), _n = new THREE.Vector3(), _b = new THREE.Vector3
 
 /**
  * A tube along `pts` (a Catmull-Rom curve through them) whose radius follows `radius(t)`, t 0..1 from
- * the first point, closed with a point at the far end. Horns, claws, ribs, tails, fingers.
+ * the first point, closed with a point at the far end. Horns, claws, ribs, tails, fingers. Its faces point out.
+ * (They pointed in, which a double-sided material hides, as three turns a back face's normal to the camera: one
+ * sided, the forest's roots showed their inside, lit from below, black. #289)
  */
 export function taperTube(pts: THREE.Vector3[], radius: (t: number) => number, segs = 12, radial = 7): THREE.BufferGeometry {
   if (replaying) return NONE;
@@ -38,32 +40,17 @@ export function taperTube(pts: THREE.Vector3[], radius: (t: number) => number, s
   }
   for (let i = 0; i < segs; i++) for (let k = 0; k < radial; k++) {
     const a = i * (radial + 1) + k, b = a + radial + 1;
-    idx.push(a, b, a + 1, b, b + 1, a + 1);
+    idx.push(a, a + 1, b, b, a + 1, b + 1);
   }
   // cap the far end with a point
   curve.getPointAt(1, _v); curve.getTangentAt(1, _t);
   const tip = pos.length / 3;
   pos.push(_v.x + _t.x * radius(1) * 0.8, _v.y + _t.y * radius(1) * 0.8, _v.z + _t.z * radius(1) * 0.8); uv.push(0.5, 1);
-  for (let k = 0; k < radial; k++) { const a = segs * (radial + 1) + k; idx.push(a, tip, a + 1); }
+  for (let k = 0; k < radial; k++) { const a = segs * (radial + 1) + k; idx.push(a, a + 1, tip); }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx);
-  g.computeVertexNormals();
-  return g;
-}
-
-/** `g` (a `taperTube`) turned right way out: each triangle wound the other way, its normals again. A tube's faces
- *  point in, which a double-sided material hides (three turns a back face's normal to the camera); one sided, the
- *  forest's roots showed their inside, lit from below: black. */
-export function turnedOut(g: THREE.BufferGeometry): THREE.BufferGeometry {
-  const index = g.index;
-  if (!index) return g;
-  for (let i = 0; i < index.count; i += 3) {
-    const second = index.getX(i + 1);
-    index.setX(i + 1, index.getX(i + 2));
-    index.setX(i + 2, second);
-  }
   g.computeVertexNormals();
   return g;
 }
@@ -76,7 +63,7 @@ export function horn(len: number, base: number, curl: number, axis = new THREE.V
   return taperTube(pts, (t) => base * (1 - t * 0.92) * (rings ? 1 + 0.1 * Math.max(0, Math.sin(t * rings * Math.PI * 2)) * (1 - t) : 1), rings ? 16 : 10, 7);
 }
 
-/** A lathed solid from a profile of [radius, y] pairs (bottom to top). */
+/** A lathed solid from a profile of [radius, y] pairs, bottom to top: its faces point out (top to bottom, in). */
 export const lathe = (profile: [number, number][], segs = 16): THREE.BufferGeometry => replaying ? NONE :
   new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(Math.max(1e-4, r), y)), segs);
 

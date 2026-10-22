@@ -51,7 +51,7 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
   const lim = (len: number, r0: number, r1: number, b = 0, at = 0.35) => organic(limb(len, r0, r1, b, at, 14), r0 * 0.16, 8, len * 30);
   // small burls need less detail
   const burl = (sx: number, sy: number, sz: number, seed: number, amp = 0.16, f = 1.8) => organic(new THREE.IcosahedronGeometry(1, Math.max(sx, sy, sz) > 0.12 ? 2 : 1), amp, f, seed).scale(sx, sy, sz);
-  const shelfGeo = (rad: number) => lathe([[0.001, 0.3 * rad], [0.6 * rad, 0.26 * rad], [rad, 0.04 * rad], [0.9 * rad, 0], [0.001, 0.02 * rad]], 12);
+  const shelfGeo = (rad: number) => lathe([[0.001, 0.02 * rad], [0.9 * rad, 0], [rad, 0.04 * rad], [0.6 * rad, 0.26 * rad], [0.001, 0.3 * rad]], 12);
   // a limb with roots winding round it
   // a limb piece runs on past its joint and follows the next joint there (the roots too), so the limb bends smoothly
   const rooted = (len: number, r0: number, r1: number, pl: THREE.Object3D, pr: THREE.Object3D, nl: THREE.Object3D, nr: THREE.Object3D, b = 0.3, at = 0.35, n = 2) => {
