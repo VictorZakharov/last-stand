@@ -182,7 +182,8 @@ function flags(seed: number, cells: number, veined: boolean): PBRData {
   return buildPBR(512, (u, v, o) => {
     slabsAt(u, v, c);
     const tilt = 0.8 + 0.2 * hash3(c.cx + 48, c.cy + 48, seed), pits = pitsAt(u, v);
-    const h = jointBevel((c.f2 - c.f1) * 0.5, FLAG_GAP, FLAG_BEVEL) * tilt * (1 - 0.15 * pits), f = inJoint(h);
+    const bevel = jointBevel((c.f2 - c.f1) * 0.5, FLAG_GAP, FLAG_BEVEL);
+    const h = bevel * tilt * (1 - 0.15 * pits), f = inJoint(h);
     const tint = 1 + 0.5 * (c.id - 0.5);
     o.h = h;
     if (!veined) {
@@ -199,7 +200,10 @@ function flags(seed: number, cells: number, veined: boolean): PBRData {
     const fv = Math.max(vein, 0.45 * fine), k = tint * (1 + 0.25 * (cloud(u, v) - 0.5));
     const stone = (i: number): number => mix(mix(MARBLE[i] * k, MARBLE_VEIN[i], fv), MARBLE_JOINT[i], f);
     o.r = stone(0); o.g = stone(1); o.b = stone(2);
-    o.rough = clamp(mix(0.3 + fv * 0.06, 0.92, f) + (pits - 0.5) * 0.06, 0.2, 1);
+    // (its arris worn rough: honed like the face, the bevel's few steep pixels caught the light at a grazing angle,
+    // a white line along every slab)
+    const arris = 1 - smoothstep(0.75, 1, bevel);
+    o.rough = clamp(mix(mix(0.3 + fv * 0.06, 0.85, arris), 0.92, f) + (pits - 0.5) * 0.06, 0.2, 1);
   }, 4);
 }
 const flagstone = (seed: number, cells: number): PBRData => flags(seed, cells, false);
@@ -279,6 +283,46 @@ function rock(seed: number): PBRData {
     o.r = colour(0); o.g = colour(1); o.b = colour(2);
     o.rough = clamp(0.82 + 0.1 * moss + 0.06 * crust + 0.08 * cut, 0, 1);
   }, 5);
+}
+
+/** granite's crystals (sRGB 0..1, darkened to the crypt's night): grey feldspar, its pinker kind, pale quartz and
+ *  black mica, each a share of the grains */
+const GRANITE = [
+  { share: 0.5, rgb: [0.3, 0.3, 0.31] },
+  { share: 0.18, rgb: [0.36, 0.32, 0.31] },
+  { share: 0.14, rgb: [0.46, 0.46, 0.47] },
+  { share: 0.18, rgb: [0.05, 0.05, 0.055] },
+] as const;
+
+/** the crystal a grain's hash (0..1) falls to */
+function graniteCrystal(id: number): (typeof GRANITE)[number] {
+  let at = 0;
+  for (const crystal of GRANITE) {
+    at += crystal.share;
+    if (id < at) return crystal;
+  }
+  return GRANITE[0];
+}
+
+/**
+ * Granite (the crypt's braziers' plinths), a tile half a metre: interlocking crystals (cells, 128 a tile: about 4 mm,
+ * their place warped so no grain is a cell's shape), each grey feldspar, a pinker feldspar, pale quartz or black mica
+ * by its hash, each a little its own shade, in a slow mottle; honed, its mica a shade glossier. (In slate's cleaved
+ * strata a plinth's steps read as planks.)
+ */
+function granite(seed: number): PBRData {
+  const grains = latticeCells(128, 128, 0.9, seed), mottle = latticeFbm(3, 3, seed + 1);
+  const warpU = latticeFbm(32, 32, seed + 2), warpV = latticeFbm(32, 32, seed + 3);
+  const cell: Cells = { f1: 0, f2: 0, id: 0, cx: 0, cy: 0 };
+  return buildPBR(512, (u, v, o) => {
+    grains(u + 0.006 * (warpU(u, v) - 0.5), v + 0.006 * (warpV(u, v) - 0.5), cell);
+    const crystal = graniteCrystal(cell.id);
+    const own = 0.88 + 0.24 * hash3(cell.cx + 90, cell.cy + 90, seed), k = own * (0.9 + 0.2 * mottle(u, v));
+    const edge = 1 - smoothstep(0, 0.08, cell.f2 - cell.f1);
+    o.h = 0.5 + 0.1 * (own - 1) - 0.08 * edge;
+    o.r = crystal.rgb[0] * k; o.g = crystal.rgb[1] * k; o.b = crystal.rgb[2] * k;
+    o.rough = clamp((crystal === GRANITE[3] ? 0.34 : 0.48) + 0.1 * edge, 0, 1);
+  }, 1);
 }
 
 /** moss's young green, its old darker green and the shade between its cushions */
@@ -814,7 +858,7 @@ function fur(): PBRData {
 }
 
 /** Every recipe, by name; its arguments are part of what it makes. */
-export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, rock, moss, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
+export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, rock, granite, moss, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
 export type RecipeName = keyof typeof RECIPES;
 export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
@@ -847,6 +891,6 @@ export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = 
   ['steel', []],
   ['face', ['warrior']], ['face', ['mage']], ['face', ['ranger']],
   ['rock', [17]], ['marble', [33, 5]], ['cobblestone', []], ['slate', [33, 2, 2]], ['bark', []], ['forestFloor', []],
-  ['flagstone', [47, 5]], ['moss', [5]], ['ashlar', [33, 2, 2]], ['ashlar', [21, 6, 3]], ['grunge', []], ['wood', []], ['burlap', []],
+  ['flagstone', [47, 5]], ['moss', [5]], ['granite', [7]], ['ashlar', [33, 2, 2]], ['ashlar', [21, 6, 3]], ['grunge', []], ['wood', []], ['burlap', []],
   ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['fur', []], ['bowWood', []],
 ];
