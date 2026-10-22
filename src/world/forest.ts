@@ -131,7 +131,6 @@ export const buildForest: BiomeBuilder = (scene) => {
   const stoneMaps = pbrMaterialMaps(rock(17), 1, 1.6);
   const stone = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x989e90, roughness: 0.9 });
   const mossStone = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x8a967a, roughness: 0.95 });
-  const barkMaps = pbrMaterialMaps(bark(), 1, 1.6);
   /** bark repeated as a surface needs it (`BARK_REPEATS`, a tree kind's `bark`): copies of the one map */
   const barkAt = (repeat: Repeat): THREE.MeshStandardMaterial =>
     seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), repeat, 1.6), color: 0xd8c8b0 }), 'prop');
@@ -155,7 +154,9 @@ export const buildForest: BiomeBuilder = (scene) => {
   const mossMat = new THREE.MeshPhysicalMaterial({ ...pbrMaterialMaps(moss(5), [7, 1.5], 1.5), ...mossLayer });
   const logMoss = new THREE.MeshPhysicalMaterial({ ...pbrMaterialMaps(moss(5), [4, 6], 1.5), ...mossLayer });
   const hangMat = new THREE.MeshStandardMaterial({ color: 0x2c4424, roughness: 1, side: THREE.DoubleSide });
-  const heartwood = new THREE.MeshStandardMaterial({ ...barkMaps, color: 0x7a5a3c, roughness: 0.95 });
+  // (a hollow log's inside and its ends: bare wood gone grey and dark, its grain along the log, both sides drawn as
+  // an end's wood is wound either way; in the bark's maps the hollow read as bark inside out)
+  const heartwood = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), [4, 9], 1.4), color: 0x8a7a68, roughness: 0.95, side: THREE.DoubleSide });
   const grassMat = windInGrass(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }), updaters);
   const capMat = new THREE.MeshStandardMaterial({ color: 0x0c2a24, emissive: 0x2affc8, emissiveIntensity: 0.75, roughness: 0.5 });
   const stemMat = new THREE.MeshStandardMaterial({ color: 0xb8b09a, roughness: 0.8 });
@@ -495,7 +496,9 @@ export const buildForest: BiomeBuilder = (scene) => {
   for (let i = 0; i < pebbles.count; i++) {
     const a = r(0, TAU), rr = r(6, WALL_R);
     const s = r(0.3, 1.2);
-    setInstance(pebbles, i, Math.cos(a) * rr, 0.03, Math.sin(a) * rr, r(-0.3, 0.3), r(0, TAU), r(-0.3, 0.3), s, s * r(0.4, 0.8), s);
+    // (kept out of the fires as the litter is: wherever the stream put one, it lay in a bonfire)
+    const [px, pz] = clearOfFires(Math.cos(a) * rr, Math.sin(a) * rr, FIRE_RING + s * 0.2);
+    setInstance(pebbles, i, px, 0.03, pz, r(-0.3, 0.3), r(0, TAU), r(-0.3, 0.3), s, s * r(0.4, 0.8), s);
   }
   pebbles.receiveShadow = true;
   pebbles.name = 'pebbles';
@@ -590,28 +593,54 @@ function raggedMoss(g: THREE.BufferGeometry, rng: () => number): THREE.BufferGeo
   return g;
 }
 
+/** A log's end: the wood between its bark's ring of vertices (from `outer` in `bark`) and its hollow's (from `hollow`
+ *  in `inner`), the grain's rings round it (u across the wood, v round it, in the heartwood's tiles). */
+function logEnd(bark: THREE.BufferGeometry, inner: THREE.BufferGeometry, outer: number, hollow: number): THREE.BufferGeometry {
+  const b = bark.attributes.position, h = inner.attributes.position, sides = 16, positions: number[] = [], uvs: number[] = [];
+  const corner = (p: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, i: number, across: number, k: number) => {
+    positions.push(p.getX(i), p.getY(i), p.getZ(i));
+    uvs.push(across * 0.06, (k / sides) * 0.3);
+  };
+  for (let k = 0; k < sides; k++) {
+    corner(b, outer + k, 1, k); corner(h, hollow + k, 0, k); corner(h, hollow + k + 1, 0, k + 1);
+    corner(b, outer + k, 1, k); corner(h, hollow + k + 1, 0, k + 1); corner(b, outer + k + 1, 1, k + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  g.computeVertexNormals();
+  return g;
+}
+
 /** A fallen hollow log along x (4.6 long, centred): splintered open ends showing the heartwood,
  * moss along its back, a stair of shelf fungus on one side. */
 function buildLogGeo(rng: () => number): { bark: THREE.BufferGeometry; inner: THREE.BufferGeometry; moss: THREE.BufferGeometry; fungus: THREE.BufferGeometry } {
-  const L = 4.6;
-  // splinter both ends: every vertex on an end ring pulls back along the log by its own amount
+  const L = 4.6, SIDES = 16;
+  // splinter both ends: every vertex on an end ring pulls back along the log by its own amount, the bark and the
+  // hollow by the same (each splintered its own way, 0.45 m deep, the bark's shell stood out past the hollow in
+  // spikes as thin as paper)
+  const cuts = [0, 1].map(() => Array.from({ length: SIDES + 1 }, () => rng()));
   const jag = (g: THREE.BufferGeometry) => {
-    const p = g.attributes.position, cuts = Array.from({ length: 17 }, () => rng());
+    const p = g.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const y = p.getY(i);
-      if (Math.abs(y) > L / 2 - 0.02) { const k = Math.round(((Math.atan2(p.getZ(i), p.getX(i)) / TAU) + 1) % 1 * 16); p.setY(i, y - Math.sign(y) * cuts[k] * cuts[k] * 0.45); }
+      if (Math.abs(y) > L / 2 - 0.02) {
+        const k = Math.round(((Math.atan2(p.getZ(i), p.getX(i)) / TAU) + 1) % 1 * SIDES), cut = cuts[y > 0 ? 0 : 1][k];
+        p.setY(i, y - Math.sign(y) * cut * cut * 0.22);
+      }
     }
     g.computeVertexNormals();
     return g;
   };
-  const bark = lumpy(jag(new THREE.CylinderGeometry(0.42, 0.5, L, 16, 6, true)), 0.035, 5).rotateZ(Math.PI / 2);
-  const inner = jag(new THREE.CylinderGeometry(0.3, 0.36, L - 0.02, 16, 1, true)).rotateZ(Math.PI / 2);
+  const bark = lumpy(jag(new THREE.CylinderGeometry(0.42, 0.5, L, SIDES, 6, true)), 0.035, 5).rotateZ(Math.PI / 2);
+  const inner = jag(new THREE.CylinderGeometry(0.28, 0.33, L, SIDES, 1, true)).rotateZ(Math.PI / 2);
   // the hollow faces inwards
   const ix = inner.index!.array;
   for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; }
   inner.computeVertexNormals();
-  const rim = new THREE.RingGeometry(0.3, 0.46, 16).rotateY(Math.PI / 2);
-  const inside = mergeAll([inner, rim.clone().translate(L / 2 - 0.2, 0, 0), rim.rotateY(Math.PI).translate(-L / 2 + 0.2, 0, 0)]);
+  // each end's wood, from the bark's ring to the hollow's (their first and last rows of vertices)
+  const row = SIDES + 1;
+  const inside = mergeAll([inner, logEnd(bark, inner, 0, 0), logEnd(bark, inner, 6 * row, row)]);
   // a sweep of moss along the top (the cylinder's +x before it's laid along x becomes +y)
   const moss = raggedMoss(new THREE.CylinderGeometry(0.47, 0.53, L * 0.7, 28, 14, true, Math.PI * 0.15, Math.PI * 0.7), rng);
   lumpy(moss, 0.1, 9).rotateZ(Math.PI / 2).translate(0.2, 0.02, 0);
