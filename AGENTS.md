@@ -15,6 +15,7 @@ npm run check:pages  # after build: every asset path must work under the Pages b
 npm run stalls       # the game in the installed Chrome, traced: the browser's own stalls (tools/stalls/README.md)
 npm run icons -- sheet  # every class's skill icons side by side at a slot's size (check, add: tools/icons/README.md)
 npm run music -- loops piece.wav  # where a piece can loop; make, seam: the game's tracks (tools/music/README.md)
+npm run photos -- ground <id> <name>  # a Poly Haven ground into a map's two photos (tools/photos/README.md)
 ```
 
 The game has no test suite. Verify changes with `npm run build` and by playing the dev build in a browser.

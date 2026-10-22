@@ -20,10 +20,10 @@ recipe for little of the game's size. Each one:
   at their own size the forest's leaves were a brown blur and the crypt's cobbles a glitter of noise from the camera.
   Judge a ground at full size in the frames `npm run lab -- light --ab` writes (`out/light/`), not shrunk.
 
-How a Poly Haven texture became its two files: its 1k colour JPEG and 1k displacement PNG; the colour as WebP at
-quality 82, the displacement as 8-bit grey stretched over the whole range at quality 90, each with 5 px wrapped round
-it. A ground's albedo is scaled to the mean of the map it stands in for (`lab maps` lists the means), as each biome's
-light was set for that.
+A Poly Haven texture is made into its two files by `npm run photos -- ground <id> <name>` (`tools/photos/README.md`):
+its 1k colour JPEG as WebP at quality 82, its 1k displacement PNG as 8-bit grey stretched over the whole range at
+quality 90, each with 5 px wrapped round it. A ground's albedo is scaled to the mean of the map it stands in for
+(`lab maps` lists the means), as each biome's light was set for that.
 
 | Photo | Source | Used by |
 | --- | --- | --- |
