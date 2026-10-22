@@ -152,7 +152,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   // sdf-harness's substrate layer for fuzz, pale at grazing angles as moss's fronds catch the light
   const mossLayer = { sheen: 1, sheenColor: new THREE.Color(0x5a7040), sheenRoughness: 0.6, roughness: 1 };
   const mossMat = new THREE.MeshPhysicalMaterial({ ...pbrMaterialMaps(moss(5), [7, 1.5], 1.5), ...mossLayer });
-  const logMoss = new THREE.MeshPhysicalMaterial({ ...pbrMaterialMaps(moss(5), [2, 6], 1.5), ...mossLayer });
+  const logMoss = new THREE.MeshPhysicalMaterial({ ...pbrMaterialMaps(moss(5), [4, 6], 1.5), ...mossLayer });
   const hangMat = new THREE.MeshStandardMaterial({ color: 0x2c4424, roughness: 1, side: THREE.DoubleSide });
   const heartwood = new THREE.MeshStandardMaterial({ ...barkMaps, color: 0x7a5a3c, roughness: 0.95 });
   const grassMat = windInGrass(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }), updaters);
