@@ -1015,6 +1015,21 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  rim: {
+    help: 'the hero walked round the wall pressed into it, each way: every frame he moved further than a run '
+      + 'takes him (thrown by the wall), and every stop he can\'t walk back in from (stuck)',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      canary: { kind: 'switch', help: 'a jump of 1 m planted and a stop held in place: both must be caught' },
+      ...COMMON_OPTIONS,
+    },
+  },
   draws: {
     help: 'one frame\'s draw calls with the crowd of foes standing before the hero, by the geometry each drew, the '
       + 'most first: its draws in the scene, its shadow map and after it, the triangles, its material and what drew it '

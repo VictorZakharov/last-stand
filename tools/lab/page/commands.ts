@@ -42,6 +42,7 @@ import type { MapsOptions } from './maps';
 import type { TilesOptions } from './tiles';
 import type { WindingOptions } from './winding';
 import type { WallOptions } from './wallGap';
+import type { RimOptions } from './wallRim';
 import type { BeyondOptions } from './beyond';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
@@ -429,6 +430,12 @@ export async function winding(lab: Lab, command: WindingOptions): Promise<Report
 export async function wall(lab: Lab, command: WallOptions): Promise<Report> {
   const { wallGap } = await import('./wallGap');
   return wallGap(lab, command);
+}
+
+/** `lab rim`: the hero walked round each biome's wall pressed into it, each way: its jumps and stuck stops. */
+export async function rim(lab: Lab, command: RimOptions): Promise<Report> {
+  const { wallRim } = await import('./wallRim');
+  return wallRim(lab, command);
 }
 
 /** `lab beyond`: the ranger's arrows loosed over the wall at what lies beyond it, each judged where it stood. */

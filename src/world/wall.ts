@@ -22,6 +22,8 @@ const KEEP_PASSES = 4;
 const HEIGHTS = [0.4, 1.0, 1.7];
 /** where the wall leaves a gap (between the thicket's bushes), how far past its face a body may go (m) */
 const PAST_FACE = 0.6;
+/** a body past the line is put back on its nearest point within this many slices beyond those its circle spans */
+const PAST_BINS = 8;
 /** a gate's portal, across its opening (m out from the middle: the gate stands 0.8 m out, its membrane 0.1 m in) */
 const GATE_PLANE = WALL_R + 0.7;
 
@@ -68,6 +70,8 @@ const hits: THREE.Intersection[] = [];
 /** the nearest surface a cast has met so far (`nearest`) */
 const met: Met = { distance: 0, point: new THREE.Vector3(), normal: new THREE.Vector3(), part: null! };
 const _from = new THREE.Vector3(), _along = new THREE.Vector3(), _normal = new THREE.Matrix3();
+/** a stretch of the line round the floor (`stretch`, `nearestOn`) */
+const _stretch = { ax: 0, az: 0, dx: 0, dz: 0, nx: 0, nz: 0, cx: 0, cz: 0 };
 
 /** the parts a ray enters the spheres of, and how far along it (`nearest`) */
 const near: { part: Part; enters: number }[] = [];
@@ -259,42 +263,85 @@ export class Wall {
     return Math.max(...this.reach);
   }
 
-  /** A body of `radius` at `pos` kept inside what bounds the floor and off it by its radius: off each stretch of the
-   *  line between the slices' points its circle comes to (a buttress's side, a bush's flank), pushed back in. */
+  /** A body of `radius` at `pos` kept inside what bounds the floor and off it by its radius: back onto the line if
+   *  it's past it, then off each stretch of the line its circle comes to (a buttress's side, a bush's flank), away
+   *  from the stretch's nearest point. (Judged by each stretch's side alone, a body in a gap between two bushes, past
+   *  one stretch's end, was taken for through it and put back on its inner side: thrown up to 1.7 m in a frame, and
+   *  held in the gap.) */
   keepIn(pos: { x: number; z: number }, radius: number): void {
     const r = Math.hypot(pos.x, pos.z);
     if (r + radius < this.least || r < 1e-6) return;
-    // (a body past the line, out through a gap a step jumped: back onto it first)
-    const reach = this.reachAt(pos.x, pos.z);
-    if (r > reach) {
-      pos.x *= reach / r;
-      pos.z *= reach / r;
-    }
     const span = Math.ceil((Math.asin(Math.min(1, radius / Math.max(r, radius))) / TAU) * BINS) + 1;
-    const middle = binOf(Math.atan2(pos.z, pos.x));
     // (a few times over: in a notch, kept off one side onto the other once a frame, he crept into it for seconds)
     for (let pass = 0; pass < KEEP_PASSES; pass++) {
+      const middle = binOf(Math.atan2(pos.z, pos.x));
+      if (this.past(pos)) this.ontoLine(pos, radius, middle, span + PAST_BINS);
       for (let k = -span; k < span; k++) this.offStretch(pos, radius, (middle + k + BINS) % BINS);
     }
   }
 
-  /** A body kept off the stretch of the line from slice `bin`'s point to the next's. */
+  /** The stretch of the line a point's angle falls in: from slice `bin`'s point to the next's. */
+  private stretchAt(x: number, z: number): number {
+    const k = Math.floor((((Math.atan2(z, x) % TAU) + TAU) % TAU) / TAU * BINS - 0.5);
+    return (k + BINS) % BINS;
+  }
+
+  /** Whether `pos` is past the line: on the outer side of the stretch its angle falls in (the floor seen from the
+   *  middle, the stretches round it, so a point is past the line just where it's past that one). */
+  private past(pos: { x: number; z: number }): boolean {
+    const stretch = this.stretch(this.stretchAt(pos.x, pos.z));
+    return (pos.x - stretch.ax) * stretch.nx + (pos.z - stretch.az) * stretch.nz < 0;
+  }
+
+  /** A body past the line put back on its nearest point among the stretches `reach` slices either side of slice
+   *  `middle`, and in off it by `radius`. */
+  private ontoLine(pos: { x: number; z: number }, radius: number, middle: number, reach: number): void {
+    let best = Infinity, bx = pos.x, bz = pos.z;
+    for (let k = -reach; k < reach; k++) {
+      const stretch = this.nearestOn(pos, (middle + k + BINS) % BINS);
+      const off = Math.hypot(pos.x - stretch.cx, pos.z - stretch.cz);
+      if (off >= best) continue;
+      best = off;
+      bx = stretch.cx + stretch.nx * radius;
+      bz = stretch.cz + stretch.nz * radius;
+    }
+    pos.x = bx;
+    pos.z = bz;
+  }
+
+  /** A body inside the line kept off the stretch from slice `bin`'s point to the next's: away from its nearest point
+   *  on it (round a corner, straight away from the corner). */
   private offStretch(pos: { x: number; z: number }, radius: number, bin: number): void {
+    const stretch = this.nearestOn(pos, bin);
+    const ox = pos.x - stretch.cx, oz = pos.z - stretch.cz, off = Math.hypot(ox, oz);
+    if (off >= radius) return;
+    const away = off > 1e-6;
+    pos.x = stretch.cx + (away ? ox / off : stretch.nx) * radius;
+    pos.z = stretch.cz + (away ? oz / off : stretch.nz) * radius;
+  }
+
+  /** The stretch from slice `bin`'s point to the next's (`_stretch`): its start and normal into the arena (the slices
+   *  run anticlockwise, so it's to their left). */
+  private stretch(bin: number): typeof _stretch {
     const next = (bin + 1) % BINS;
-    const ax = this.edge[bin * 2], az = this.edge[bin * 2 + 1];
-    const dx = this.edge[next * 2] - ax, dz = this.edge[next * 2 + 1] - az;
-    const length2 = dx * dx + dz * dz || 1e-9;
-    const along = Math.min(1, Math.max(0, ((pos.x - ax) * dx + (pos.z - az) * dz) / length2));
-    const cx = ax + dx * along, cz = az + dz * along;
-    // (the stretch's normal into the arena: the slices run anticlockwise, so it's to their left)
-    const length = Math.sqrt(length2), nx = -dz / length, nz = dx / length;
-    const inside = (pos.x - cx) * nx + (pos.z - cz) * nz;
-    const ox = pos.x - cx, oz = pos.z - cz, off = Math.hypot(ox, oz);
-    if (inside > 0 && off >= radius) return;
-    // (round a corner, straight away from it; through a stretch, back along its normal)
-    const away = inside > 0 && off > 1e-6;
-    pos.x = cx + (away ? ox / off : nx) * radius;
-    pos.z = cz + (away ? oz / off : nz) * radius;
+    _stretch.ax = this.edge[bin * 2];
+    _stretch.az = this.edge[bin * 2 + 1];
+    _stretch.dx = this.edge[next * 2] - _stretch.ax;
+    _stretch.dz = this.edge[next * 2 + 1] - _stretch.az;
+    const length = Math.hypot(_stretch.dx, _stretch.dz) || 1e-9;
+    _stretch.nx = -_stretch.dz / length;
+    _stretch.nz = _stretch.dx / length;
+    return _stretch;
+  }
+
+  /** The stretch from slice `bin`'s point to the next's, with its point nearest `pos` (`cx`, `cz`). */
+  private nearestOn(pos: { x: number; z: number }, bin: number): typeof _stretch {
+    const s = this.stretch(bin);
+    const length2 = s.dx * s.dx + s.dz * s.dz || 1e-9;
+    const along = Math.min(1, Math.max(0, ((pos.x - s.ax) * s.dx + (pos.z - s.az) * s.dz) / length2));
+    s.cx = s.ax + s.dx * along;
+    s.cz = s.az + s.dz * along;
+    return s;
   }
 
   /** The first surface of the wall or beyond it the step from `a` to `b` meets, into `hit`; false if none. */

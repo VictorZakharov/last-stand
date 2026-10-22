@@ -950,6 +950,14 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  rim: {
+    each(side, options) {
+      return side.command('rim', { biomes: options.biomes, canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   beyond: {
     check(options) {
       if (options.angles !== undefined && !(options.angles >= 1)) throw labError('beyond --angles: at least 1');
