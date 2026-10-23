@@ -5,8 +5,9 @@
 // - The Cinder Brute's lava chunk flies on a ballistic arc to where the hero stood as it left the hand, its landing
 //   marked on the floor while it flies (he dodges it by stepping off), bursts there and leaves a pool that burns.
 // - The Barkhide Hulk's vine creeps out along the floor in a line, through every prop, at about a bolt's speed: a hero
-//   its tip meets is held to the ground (`Player.root`) unless he steps out of its way as it comes, and a dash or a
-//   blink tears him free.
+//   any of it reaches, as it comes or as he steps on it while it lies there, is held to the ground (`Player.root`),
+//   coils erupting from the floor under him; he dodges it by stepping out of its way as it comes and keeping off it,
+//   and a dash or a blink tears him free.
 // Both are played through `fx` (enemyAI.ts), so every co-op game plays them the same from the same numbers, and each
 // judges its own hero alone: hurt where `hurtPlayer` allows, rooted by its own game. A partner's copy is shown held
 // as this game sees the vine reach it.
@@ -31,9 +32,9 @@ const FALL = 22;
 /** the chunk's look: its lava, smoke and size (m) */
 const LAVA = { color: 0xff6a2a, smoke: 0x1a1210, ring: 0xff6a20, size: 0.42 };
 /** the vine's bark and sap, and how long it lies and withers once grown (s) */
-const VINE = { bark: 0x46602a, sap: 0x9cff3a, lies: 0.6, withers: 0.5 };
+const VINE = { bark: 0x3d4d23, sap: 0x9cff3a, lies: 1.5, withers: 0.5 };
 /** how fast the coils wind up a held hero and fall from him (s), and how high they reach (m) */
-const COILS = { wind: 0.25, fall: 0.3, high: 0.7 };
+const COILS = { wind: 0.4, fall: 0.3, high: 0.95 };
 /** how often a pool burns a hero standing in it (s) */
 const BURN_EVERY = 0.5;
 
@@ -161,7 +162,8 @@ function lavaBurns(def: ThrowDef, at: THREE.Vector3, damage: number, by: Attacke
 
 /**
  * A vine from (ox, oz) along `angle` (as a facing: atan2(dx, dz)) for `length` m, sent by foe `kind` (its `throws`):
- * it creeps out to its end, a hero its tip meets held to the ground, then lies a moment and withers.
+ * it creeps out to its end, then lies a moment and withers; a hero any of it reaches until it withers (as it comes,
+ * or stepping onto it) is held to the ground, once a vine.
  */
 export function vineAt(kind: EnemyId, ox: number, oz: number, angle: number, length: number): void {
   const def = ENEMIES[kind].throws;
@@ -177,7 +179,6 @@ export function vineAt(kind: EnemyId, ox: number, oz: number, angle: number, len
   addEffect({
     update(dt) {
       t += dt;
-      const before = vine.grow;
       vine.grow = Math.min(length, t * speed);
       debrisT += dt;
       if (vine.grow < length && debrisT > 0.05) {
@@ -186,11 +187,11 @@ export function vineAt(kind: EnemyId, ox: number, oz: number, angle: number, len
         smokePuff(new THREE.Vector3(x, groundHeight(x, z), z), { count: 1, color: 0x2a2418, size: 0.4, sizeEnd: 1, speed: 0.6, life: 0.5 });
       }
       for (const p of G.players) {
-        if (caught.has(p) || !p.active) continue;
+        if (caught.has(p) || !p.active || vine.wither > 0) continue;
         const rx = p.pos.x - ox, rz = p.pos.z - oz;
         const along = rx * dx + rz * dz, off = Math.abs(rx * dz - rz * dx);
-        // the tip's sweep this frame, and a hero's reach round it
-        if (along < before - reach || along > vine.grow + reach || off > reach + p.radius) continue;
+        // anywhere along what it has laid, its head reaching a little ahead of it
+        if (along < -p.radius || along > vine.grow + reach || off > reach + p.radius) continue;
         if (p.local ? !p.root(hold) : !!p.dash) continue;
         caught.add(p);
         held = Math.max(held, t + hold);
@@ -206,15 +207,18 @@ export function vineAt(kind: EnemyId, ox: number, oz: number, angle: number, len
   });
 }
 
-/** The coils round a hero the vine caught: wound up his legs, kept at his feet, and fallen off as he's let go (his own
- *  game's hold, which a dash ends; a partner's copy's by the time it holds). */
+/** The coils round a hero the vine caught: erupting from the floor under him in a burst of earth and winding up his
+ *  legs, kept at his feet, and fallen off as he's let go (his own game's hold, which a dash ends; a partner's copy's
+ *  by the time it holds). */
 function coilRound(p: Player, hold: number): void {
   const c: Vine = coils(COILS.high, VINE.bark, VINE.sap);
-  c.mesh.name = 'vine coils';
   G.scene.add(c.mesh);
   const until = G.time + hold;
   let t = 0, off = -1;
   sfx.thud();
+  const feet = new THREE.Vector3(p.pos.x, groundHeight(p.pos.x, p.pos.z), p.pos.z);
+  debris(feet, { count: 10, speed: 2.5 });
+  smokePuff(feet, { count: 4, color: 0x2a2418, size: 0.5, sizeEnd: 1.4, speed: 0.8, life: 0.6 });
   addEffect({
     update(dt) {
       t += dt;

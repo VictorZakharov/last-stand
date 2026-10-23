@@ -842,7 +842,8 @@ export const COMMANDS = {
       + 'its AI has it, a throw a case: the Cinder Brute\'s lava at him stood still (it must land where he stood as '
       + 'it left the hand, its ring there every frame it flies, its splash and its pool hurting him), stepped off as '
       + 'it\'s thrown (nothing may hurt him) and up close (it slams, throwing nothing); the Barkhide Hulk\'s vine at him '
-      + 'stood still (held for its hold, his walking going nowhere, walking after), stepped aside (never caught) and '
+      + 'stood still (held for its hold, his walking going nowhere, walking after), stepped aside (never caught), '
+      + 'stepped back onto it as it lies (held then, not before) and '
       + 'dashing once held (torn free: --class warrior, mage)',
     options: {
       canary: {

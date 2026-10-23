@@ -208,11 +208,23 @@ function dashSkill(): BoundSkill | null {
   return null;
 }
 
-type VineCase = 'stood' | 'step' | 'dash';
+type VineCase = 'stood' | 'step' | 'onto' | 'dash';
 
-/** The Hulk's vine at a hero: stood still and walking once held, stepped aside as it's sent, or dashing once held. */
+/** the vine's names for its cases */
+const VINE_CASES: Record<VineCase, string> = {
+  stood: 'vine, stood still',
+  step: 'vine, stepped aside',
+  onto: 'vine, stepped onto',
+  dash: 'vine, dashed out',
+};
+/** in `onto`, the frames he steps aside as it's sent, and the frame he walks back onto it, laid by then */
+const ASIDE_FRAMES = 30;
+const BACK_AT = 80;
+
+/** The Hulk's vine at a hero: stood still and walking once held, stepped aside as it's sent, stepped aside and back
+ *  onto it as it lies, or dashing once held. */
 async function vineAt(lab: Lab, options: ThrowsOptions, how: VineCase, def: ThrowDef): Promise<Outcome> {
-  const name = { stood: 'vine, stood still', step: 'vine, stepped aside', dash: 'vine, dashed out' }[how];
+  const name = VINE_CASES[how];
   const dash = how === 'dash' ? dashSkill() : null;
   if (how === 'dash' && !dash) {
     return { lines: [`${name}: the ${lab.player.cls.id} has no dash (--class warrior, mage)`], problems: [] };
@@ -230,6 +242,7 @@ async function vineAt(lab: Lab, options: ThrowsOptions, how: VineCase, def: Thro
   const trace: string[] = [];
   const input = (f: number): Frame => {
     if (how === 'step') return { keys: f < 50 ? ['d'] : [] };
+    if (how === 'onto') return { keys: f < ASIDE_FRAMES ? ['d'] : f >= BACK_AT && heldFrom < 0 ? ['a'] : [] };
     if (heldFrom < 0) return {};
     if (how === 'dash' && dash) {
       // (pressed once held a while, and let go after the skill's own hold: an aimed one goes as it's let go)
@@ -262,6 +275,9 @@ async function vineAt(lab: Lab, options: ThrowsOptions, how: VineCase, def: Thro
   if (how === 'step') {
     if (heldFrom >= 0) problems.push(`${name}: held though he stepped ${metres(flat(hero.pos, stood))} aside`);
   } else if (heldFrom < 0) problems.push(`${name}: never held him`);
+  if (how === 'onto' && heldFrom >= 0 && heldFrom <= BACK_AT) {
+    problems.push(`${name}: held him at frame ${heldFrom}, before he stepped back onto it`);
+  }
   if (how === 'stood' && heldFrom >= 0) {
     if (Math.abs(heldFrames - hold * 60) > HOLD_SLACK) {
       problems.push(`${name}: held him ${heldFrames} frames (its hold ${hold * 60})`);
@@ -314,7 +330,7 @@ export async function throws(lab: Lab, options: ThrowsOptions): Promise<Report> 
     outcomes.push(await lavaStood(lab, options, false));
     outcomes.push(await lavaStood(lab, options, true));
     outcomes.push(await lavaNear(lab, options));
-    for (const how of ['stood', 'step', 'dash'] as const) outcomes.push(await vineAt(lab, options, how, vine));
+    for (const how of ['stood', 'step', 'onto', 'dash'] as const) outcomes.push(await vineAt(lab, options, how, vine));
   } finally {
     undo();
     lab.beforeFrame.splice(lab.beforeFrame.indexOf(pinThrower), 1);

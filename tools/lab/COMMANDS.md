@@ -447,9 +447,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   second), nothing may hurt him; up close (2.5 m) it must slam and throw nothing. The Barkhide Hulk's vine: at him
   stood still and walking (D) from the moment it holds him, it must hold him for its hold (90 frames, 3 frames
   either way), his walking moving him under 0.1 m, and let him walk on after (0.5 m in the frames left); stepped
-  aside as it's sent, it must never hold him; held, a dash of his (Bull Rush, Veilstep: `--class warrior` or `mage`;
-  the ranger has none, and says so) pressed 20 frames in and let go after its own hold must free him within 3 frames
-  of its start and carry him a metre (aimed 6 m to the screen's left: to its right a prop 2 m off cut Veilstep short).
+  aside as it's sent, it must never hold him; stepped aside as it's sent (D for half a second) and back onto it
+  once it lies there (A from frame 80), it must hold him, and not before; held, a dash of his (Bull Rush,
+  Veilstep: `--class warrior` or `mage`; the ranger has none, and says so) pressed 20 frames in and let go after
+  its own hold must free him within 3 frames of its start and carry him a metre (aimed 6 m to the screen's left:
+  to its right a prop 2 m off cut Veilstep short).
   The hurts are counted at `Player.takeDamage`, the hold by `Player.rooted`. `--canary` plants a splash of 6 m (the
   step off is hurt), a vine catching 4 m off its line (the step aside is held) and a dash that leaves the hold on
   (still held after it), each a problem unless caught. `--trace` lists the frames. About 5 s with `lab:serve` up.
@@ -565,8 +567,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   slammed), each piece of their throws drawn (the chunk, its ring, burst and pool, the vine and its coils: a piece
   never drawn is a problem, read from the scene by its name); then the first biome's wave is fought again by a hero
   built afresh, as the lobby's class switch builds him. Each round counts from before its set-up, whose frames are
-  the game's (the view entered, the hero rebuilt: counted from after it, the rebuilt hero's arms compiled unseen). Every program
-  compiled meanwhile is a problem, said as the game's perf report says it and with the draw that first used it, its
+  the game's (the view entered, the hero rebuilt: counted from after it, the rebuilt hero's arms compiled unseen).
+  Every program compiled meanwhile is a problem, said as the game's perf report says it and with the draw that first used it, its
   object, its material and its pass (the game can't name a shadow's: three keeps its shadow materials). Run it as a
   phone boots, `--boot low@518400`: a Low boot's warm-ups draw other shadows (small parts cast none there). Each
   fight's line counts the point lights each pass is lit by, as three counts them (shown, and on a layer its camera
