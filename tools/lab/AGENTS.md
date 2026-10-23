@@ -65,6 +65,7 @@ The lab as an agent works with it: what every command measures, in a line here a
 - `rim`: the hero walked round the wall pressed into it, each way (a frame he moved further than a run takes him, thrown by the wall; a stop he can't walk back in from, stuck)
 - `beyond`: the ranger's arrows loosed over the wall at the ground and the trees beyond it, over the shoulder; each arrow left standing must have a surface drawn at its point
 - `trees`: the trees in the play area as the ranger's arrows meet them (every tree inside the wall a wooden prop, an arrow shot at each one's trunk standing in it; then another biome shown, and no arrow left)
+- `columns`: the crypt's broken columns roll after roll (no open edge in a mesh, no cliff across a break's face)
 - `gear`: full sets of gear rolled for every class at each tier (the Health, regeneration and draught they give, and the damage they multiply)
 - `weapons`: each of the hero's weapons alone in a lit studio (face on, edge on, from behind, from three-quarters and its head close up, with its size and its triangles)
 - `hands`: the hero's right hand alone in the studio, flat, open, relaxed, in a fist and round a handle, from each side and close up (its size against a man's, its triangles, where it was sculpted)

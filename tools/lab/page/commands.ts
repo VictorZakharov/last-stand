@@ -45,6 +45,7 @@ import type { WallOptions } from './wallGap';
 import type { RimOptions } from './wallRim';
 import type { BeyondOptions } from './beyond';
 import type { TreesOptions } from './trees';
+import type { ColumnsOptions } from './columns';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
@@ -449,6 +450,12 @@ export async function beyond(lab: Lab, command: BeyondOptions): Promise<Report> 
 export async function trees(lab: Lab, command: TreesOptions): Promise<Report> {
   const { trees: treesOf } = await import('./trees');
   return treesOf(lab, command);
+}
+
+/** `lab columns`: the crypt's broken columns roll after roll: no open edge, no cliff across a break. */
+export async function columns(lab: Lab, command: ColumnsOptions): Promise<Report> {
+  const { columnsCheck } = await import('./columns');
+  return columnsCheck(lab, command);
 }
 
 /** `lab draws`: one frame's draw calls with the crowd standing, by the geometry each drew, the most first. */
