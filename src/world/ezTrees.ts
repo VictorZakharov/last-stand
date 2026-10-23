@@ -38,9 +38,16 @@ export interface Grow {
   crownStart?: number;
   /** a trunk this much thicker (longer, it stood as a pole) */
   girth?: number;
+  /** its limbs this much thicker against the trunk (never past `LIMB_MOST` of it where they fork: every finer level
+   *  follows, as ez-tree sizes a branch by its parent), each level tapering as much less: a dead tree's, whose bare
+   *  limbs ez-tree thinned to twigs ("dead trees need bigger branches") */
+  limbs?: number;
   /** its limbs this much more crooked at every level (ez-tree's gnarliness added; not its trunk): a dead tree's */
   gnarl?: number;
 }
+
+/** the thickest a first limb grows against the trunk where it forks (`Grow.limbs`) */
+const LIMB_MOST = 0.85;
 
 /** Grows one kind (deterministic: ez-tree's own generator, seeded). */
 /** a branch as ez-tree grows it among the bark's vertices: its first, how many rings it has, how many vertices each
@@ -120,6 +127,11 @@ export function growTree(g: Grow): TreeKind {
   if (g.trunk !== undefined) br.length['0'] *= g.trunk;
   if (g.girth !== undefined) br.radius['0'] *= g.girth;
   if (g.crownStart !== undefined) br.start['1'] = g.crownStart;
+  if (g.limbs !== undefined) {
+    const taper = (json.branch as unknown as { taper: Record<string, number> }).taper;
+    br.radius['1'] = Math.min(LIMB_MOST, br.radius['1'] * g.limbs);
+    for (const level of Object.keys(taper)) if (level !== '0') taper[level] /= g.limbs;
+  }
   const gnarliness = (json.branch as unknown as { gnarliness: Record<string, number> }).gnarliness;
   // (its trunk left as grown: crooked, it stood a metre off its foot at a man's chest, where an arrow is aimed)
   if (g.gnarl !== undefined) for (const level of Object.keys(gnarliness)) if (level !== '0') gnarliness[level] += g.gnarl;

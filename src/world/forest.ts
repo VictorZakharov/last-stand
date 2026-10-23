@@ -8,7 +8,7 @@ import { ARENA } from '../data/balance';
 import { forestFloor, bark, flagstone, moss, rock, wood, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
-import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
+import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
 
 /** the forest's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25, 1.1] };
@@ -943,27 +943,6 @@ function buildRootGate(scene: THREE.Object3D, wall: Wall, angle: number, rockMat
   scene.add(g);
   wall.add(g, false);
   return portal;
-}
-
-/** Tube along `curve` whose radius tapers linearly from r0 to r1. */
-function taperedTube(curve: THREE.Curve<THREE.Vector3>, r0: number, r1: number): THREE.BufferGeometry {
-  const segs = 24, radial = 8;
-  const g = new THREE.TubeGeometry(curve, segs, 1, radial, false);
-  const pos = g.attributes.position, uv = g.attributes.uv, c = new THREE.Vector3(), v = new THREE.Vector3();
-  for (let i = 0; i <= segs; i++) {
-    const k = i / segs;
-    curve.getPointAt(k, c);
-    const rad = r0 + (r1 - r0) * k;
-    for (let j = 0; j <= radial; j++) {
-      const idx = i * (radial + 1) + j;
-      v.fromBufferAttribute(pos, idx).sub(c).multiplyScalar(rad).add(c);
-      pos.setXYZ(idx, v.x, v.y, v.z);
-      // u round it and v along it, as a trunk's and `taperTube`'s are (three's tube runs u along it)
-      uv.setXY(idx, j / radial, k);
-    }
-  }
-  g.computeVertexNormals();
-  return g;
 }
 
 /** A mushroom cap of radius 1 (height ~0.55): a dome whose rim waves and curls under, its gills below. */

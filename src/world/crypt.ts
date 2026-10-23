@@ -5,17 +5,17 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA } from '../data/balance';
-import { cobblestone, ashlar, granite, limestone, marble, slate, bark, bannerCloth, pbrMaterialMaps, runeCircle } from '../core/textures';
+import { cobblestone, forestFloor, ashlar, granite, limestone, marble, slate, bark, bannerCloth, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
 import { floorRelief } from '../core/parallax';
-import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type Updater } from './props';
+import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type Updater } from './props';
 
 /** the crypt's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
-import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
+import { PropSet, instanceLook, meshLook, groupLook, type PropLook } from './destructible';
 import { buildFire } from './fire';
 import { restingLift, skullGeometry } from './skull';
 import type { Obstacle } from '../types';
@@ -34,13 +34,16 @@ const SMALL_TREES = { n: 6, near: 8, far: 24, apart: 7 };
 /** the dead trees, grown by ez-tree bare and crooked: those beyond the wall, two kinds in turn, and the small ones in the
  *  play area (their trunks thicker: an arrow at a thin one slips past) */
 const DEAD_TREES: Grow[] = [
-  { preset: 'Oak Medium', seed: 811, sections: [8, 4, 2, 1], segments: [7, 4, 3, 3], leaves: 0.01, gnarl: 0.2 },
-  { preset: 'Ash Medium', seed: 2207, sections: [8, 4, 2, 1], segments: [7, 4, 3, 3], leaves: 0.01, gnarl: 0.2 },
+  { preset: 'Oak Medium', seed: 811, sections: [8, 4, 2, 1], segments: [7, 4, 3, 3], leaves: 0.01, gnarl: 0.2, limbs: 1.8 },
+  { preset: 'Ash Medium', seed: 2207, sections: [8, 4, 2, 1], segments: [7, 4, 3, 3], leaves: 0.01, gnarl: 0.2, limbs: 1.8 },
 ];
 const SMALL_DEAD: Grow = {
   preset: 'Oak Medium', seed: 4401, sections: [8, 4, 2, 1], segments: [7, 4, 3, 3], leaves: 0.01, gnarl: 0.2, girth: 3.4,
-  trunk: 2.2, crownStart: 0.7,
+  trunk: 2.2, crownStart: 0.7, limbs: 1.8,
 };
+/** a small dead tree's foot as it grows from the earth, in its trunk's radius at the foot: its flare (as wide at the
+ *  ground, as high up the trunk) and its roots (how many, how far out, how thick where they leave the trunk) */
+const TREE_FOOT = { flare: 1.7, flareUp: 1.6, roots: 5, reach: [3, 5], girth: 0.55 };
 /** the dead bark's repeat, round and along (`growTree` lays a tile round each branch and as long as it's round) */
 const DEAD_BARK: [number, number] = [6, 6];
 /** the draws the old dead trees' geometry took from the biome's stream */
@@ -127,14 +130,29 @@ const COBBLE_REPEAT = 220 / 3.5;
 /** the cobbles' relief: the grout this far under their tops (m), and gone this far off (m: past the top-down view's 30 to 51) */
 const COBBLE_RELIEF = { depth: 0.06, perMetre: COBBLE_REPEAT / 220, fade: 70 };
 
+/** the earth round each small dead tree's foot: how far out it reaches (m), how ragged its edge (of that), and its
+ *  litter's tile (m: the forest floor's photo, soil, fallen leaves and twigs, as the Thornwood's floor has it), how
+ *  far (m) its edge goes round the cobbles, in along the grout and out past the stones' tops, and how far (m) in and
+ *  out of its edge the stones are washed with dirt: the grout fills first, then the stones are dirtied, then only
+ *  dirt. Faded out evenly it was earth under a haze of cobbles ("the tiles around it should be clearly ending");
+ *  cut sharp round the stones, a line ("some dirt on stones first, then only dirt") */
+const EARTH = { reach: 2.4, ragged: 0.5, tile: 3, stones: 0.6, washed: [0.35, 0.45] };
+
 /** Damp patches and a slow brightness drift over the cobbles in world space, so the floor doesn't
  * read as one tiled texture; the damp is darker and glossy, catching the moonlight. The cobbles stand
- * up out of their grout (core/parallax.ts). */
-function dampGround<M extends THREE.MeshStandardMaterial>(m: M): M {
+ * up out of their grout (core/parallax.ts). Round each of `earth`'s spots (x, z, reach; filled once the trees are
+ * placed) the cobbles give way to the earth a tree grows from: stood on the stones, a dead tree's trunk rose out of
+ * them as a post set in a pavement ("they need to grow from ground, not from stone"). */
+function dampGround<M extends THREE.MeshStandardMaterial>(m: M, earth: THREE.Vector3[]): M {
   const damp = { value: dampMap() };
+  const litter = pbrMaterialMaps(forestFloor(), 1);
   m.onBeforeCompile = (shader) => {
     dimOutside(shader);
     shader.uniforms.uDamp = damp;
+    shader.uniforms.uEarth = { value: earth };
+    shader.uniforms.uLitter = { value: litter.map };
+    shader.uniforms.uLitterN = { value: litter.normalMap };
+    shader.uniforms.uLitterR = { value: litter.roughnessMap };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vDampXZ;')
       .replace('#include <project_vertex>', '#include <project_vertex>\nvDampXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
@@ -142,7 +160,13 @@ function dampGround<M extends THREE.MeshStandardMaterial>(m: M): M {
       .replace('#include <common>', `#include <common>
         varying vec2 vDampXZ;
         uniform sampler2D uDamp;
-        float dampAmt;`)
+        uniform vec3 uEarth[${earth.length}];
+        uniform sampler2D uLitter;
+        uniform sampler2D uLitterN;
+        uniform sampler2D uLitterR;
+        float dampAmt;
+        float earthAmt;
+        vec2 litterAt;`)
       .replace('#include <map_fragment>', `#include <map_fragment>
         vec3 dampS = texture2D(uDamp, vDampXZ * ${(1 / DAMP_SPAN).toFixed(6)}).rgb;
         dampAmt = dampS.r;
@@ -150,10 +174,33 @@ function dampGround<M extends THREE.MeshStandardMaterial>(m: M): M {
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.5, 0.55, 0.68), dampAmt);
         // moss creeping in from the wall
         float mossR = smoothstep(22.0, 28.0, length(vDampXZ)) * dampS.b;
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.075, 0.035), mossR * 0.7);`)
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.075, 0.035), mossR * 0.7);
+        // earth round the dead trees' feet, its edge ragged by the damp's own noise and cut round the cobbles: the
+        // grout gives way first, a stone's top last, so the paving stops at whole stones
+        float stoneTop = textureGrad(roughnessMap, reliefAt, reliefDx, reliefDy).r;
+        earthAmt = 0.0;
+        float earthIn = 1.0;
+        for (int i = 0; i < ${earth.length}; i++) {
+          float reach = uEarth[i].z;
+          float d = length(vDampXZ - uEarth[i].xy) + (dampS.g - 0.5) * reach * ${EARTH.ragged.toFixed(2)};
+          float edge = d - reach - (0.5 - stoneTop) * ${EARTH.stones.toFixed(2)};
+          earthAmt = max(earthAmt, 1.0 - smoothstep(${(-EARTH.washed[0]).toFixed(2)}, ${EARTH.washed[1].toFixed(2)}, edge));
+          earthIn = min(earthIn, d / max(reach, 1e-3));
+        }
+        // (its litter the forest floor's, darkened to the crypt's night, and darker in towards the trunk)
+        litterAt = vDampXZ * ${(1 / EARTH.tile).toFixed(6)};
+        vec3 soil = texture2D(uLitter, litterAt).rgb * 0.55 * (0.75 + 0.25 * clamp(earthIn, 0.0, 1.0));
+        diffuseColor.rgb = mix(diffuseColor.rgb, soil, earthAmt);
+        dampAmt *= 1.0 - earthAmt;`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        // (the litter's own relief, its tangent space the floor's: u along x, v along z, up its normal)
+        vec3 litterN = texture2D(uLitterN, litterAt).xyz * 2.0 - 1.0;
+        vec3 litterUp = normalize((viewMatrix * vec4(litterN.x, litterN.z, -litterN.y, 0.0)).xyz);
+        normal = normalize(mix(normal, litterUp, earthAmt));`)
 
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-        roughnessFactor = mix(roughnessFactor, 0.42, dampAmt);`);
+        roughnessFactor = mix(roughnessFactor, 0.42, dampAmt);
+        roughnessFactor = mix(roughnessFactor, texture2D(uLitterR, litterAt).g, earthAmt);`);
     floorRelief(shader, COBBLE_RELIEF);
   };
   m.customProgramCacheKey = () => 'dampground';
@@ -172,7 +219,9 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   // --- Materials ------------------------------------------------------------
   const cob = cobblestone();
   // the ground reaches past the fog's far end, so its edge melts into the sky's horizon
-  const groundMat = dampGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(cob, COBBLE_REPEAT, 1.1), color: 0xd0d4e0 }));
+  // (the earth round the small dead trees' feet, one a tree: set as they're placed)
+  const earth = Array.from({ length: SMALL_TREES.n }, () => new THREE.Vector3());
+  const groundMat = dampGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(cob, COBBLE_REPEAT, 1.1), color: 0xd0d4e0 }), earth);
   const wallMaps = ashlar(21, 6, 3);
   const wallMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wallMaps, 1, 1.2), color: 0xb4b8c6 });
   // the dais in riven slate; the paths to them in pale marble, lighter than the cobbles
@@ -462,16 +511,21 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   // (as tall as the forest's young oaks, to the top of its bark: scaled by its height alone, its limbs as grown stood
   // under 4 m)
   const smallTop = barkTop(small);
+  // (each grown from the earth: its foot flared and rooted into it, its own stream's roots, `TREE_FOOT`)
+  const feet = new THREE.InstancedMesh(buildTreeFootGeo(mulberry(4402)), deadWood, smallTreeSpots.length);
   smallTreeSpots.forEach(([x, z], i) => {
-    const ht = 4.5 + treeRng() * 1.5, s = ht / smallTop;
-    setInstance(smallTrees, i, x, -0.1, z, 0, treeRng() * TAU, 0, s);
+    const ht = 4.5 + treeRng() * 1.5, s = ht / smallTop, turn = treeRng() * TAU;
+    setInstance(smallTrees, i, x, -0.1, z, 0, turn, 0, s);
+    setInstance(feet, i, x, 0, z, 0, turn, 0, small.trunkFoot * s);
     // (round its trunk's foot, measured on the grown bark: `trunkFoot`)
     obstacles.push({ x, z, r: small.trunkFoot * s + 0.1, h: ht });
-    breakable.add(obstacles.length - 1, 10, 0x4a4038, instanceLook(smallTrees, i), 'wood');
+    earth[i].set(x, z, EARTH.reach);
+    breakable.add(obstacles.length - 1, 10, 0x4a4038, bothLook(instanceLook(smallTrees, i), instanceLook(feet, i)), 'wood');
   });
-  smallTrees.castShadow = smallTrees.receiveShadow = true;
+  for (const mesh of [smallTrees, feet]) mesh.castShadow = mesh.receiveShadow = true;
   smallTrees.name = 'small dead trees';
-  scene.add(smallTrees);
+  feet.name = 'small dead roots';
+  scene.add(smallTrees, feet);
   updaters.push(contactShadows(scene, obstacles));
 
   // --- Beyond the wall: a ruined necropolis and dead trees ----------------------------
@@ -755,6 +809,43 @@ function fractureFace(rim: THREE.Vector2[], broken: Break): THREE.BufferGeometry
   face.setIndex(index);
   face.computeVertexNormals();
   return face;
+}
+
+/** Two looks hidden, shown and met by a ray as one prop's. */
+function bothLook(a: PropLook, b: PropLook): PropLook {
+  return {
+    hide: () => { a.hide(); b.hide(); },
+    show: () => { a.show(); b.show(); },
+    raycast: (ray, hits) => { a.raycast(ray, hits); b.raycast(ray, hits); },
+  };
+}
+
+/** A dead tree's foot, its trunk's radius 1: the trunk flaring out into the earth, and roots leaving it round the
+ *  flare, arching over the ground and sinking into it. Its bark's tiles as square as the trunk's (`DEAD_BARK`). */
+function buildTreeFootGeo(rng: () => number): THREE.BufferGeometry {
+  const { flare, flareUp, roots, reach, girth } = TREE_FOOT;
+  const profile = Array.from({ length: 9 }, (_, k) => {
+    const up = k / 8;
+    // (wide at the ground, narrowing fast into the trunk, a little under it at the top so the bark covers it)
+    return new THREE.Vector2(0.8 + (flare - 0.8) * (1 - up) ** 2.5, -0.15 + up * (flareUp + 0.15));
+  });
+  const collar = new THREE.LatheGeometry(profile, 16);
+  const uv = collar.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) * (flareUp / TAU));
+  const parts: THREE.BufferGeometry[] = [collar];
+  for (let k = 0; k < roots; k++) {
+    const a = ((k + 0.2 + rng() * 0.6) / roots) * TAU, out = reach[0] + rng() * (reach[1] - reach[0]);
+    const at = (r: number, y: number) => new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r);
+    const curve = new THREE.CatmullRomCurve3([at(0.6, 0.9), at(1.3, 0.35), at(out * 0.6, 0.12), at(out, -0.25)]);
+    const root = taperedTube(curve, girth, 0.08);
+    const rootUv = root.attributes.uv;
+    // (v along it in turns of its girth, as the bark's is)
+    for (let i = 0; i < rootUv.count; i++) rootUv.setY(i, rootUv.getY(i) * (curve.getLength() / (TAU * girth)));
+    parts.push(root);
+  }
+  const merged = mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g)));
+  merged.computeVertexNormals();
+  return merged;
 }
 
 /** A fluted column on a square base, snapped off at `broken`'s jagged top. */

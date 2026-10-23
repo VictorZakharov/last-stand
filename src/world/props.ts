@@ -722,3 +722,24 @@ export function bakeStaticShadows(group: THREE.Group): void {
   caster.name = `${group.name} static shadow caster`;
   group.add(caster);
 }
+
+/** Tube along `curve` whose radius tapers linearly from r0 to r1. */
+export function taperedTube(curve: THREE.Curve<THREE.Vector3>, r0: number, r1: number): THREE.BufferGeometry {
+  const segs = 24, radial = 8;
+  const g = new THREE.TubeGeometry(curve, segs, 1, radial, false);
+  const pos = g.attributes.position, uv = g.attributes.uv, c = new THREE.Vector3(), v = new THREE.Vector3();
+  for (let i = 0; i <= segs; i++) {
+    const k = i / segs;
+    curve.getPointAt(k, c);
+    const rad = r0 + (r1 - r0) * k;
+    for (let j = 0; j <= radial; j++) {
+      const idx = i * (radial + 1) + j;
+      v.fromBufferAttribute(pos, idx).sub(c).multiplyScalar(rad).add(c);
+      pos.setXYZ(idx, v.x, v.y, v.z);
+      // u round it and v along it, as a trunk's and `taperTube`'s are (three's tube runs u along it)
+      uv.setXY(idx, j / radial, k);
+    }
+  }
+  g.computeVertexNormals();
+  return g;
+}
