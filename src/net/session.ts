@@ -22,7 +22,7 @@ import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGroun
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 16;
+const PROTOCOL = 17;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** room codes: no look-alike letters or digits */
@@ -45,7 +45,7 @@ interface Peer {
 /** What the rest of the game does when the session changes (set by main). */
 export interface SessionHooks {
   /** the host started a run: a guest starts its side of it */
-  startRun(biome: BiomeId, wave: number): void;
+  startRun(biome: BiomeId, wave: number, seed: number): void;
   /** the host left, or the room broke up */
   hostGone(): void;
   /** anything the lobby shows changed (status, partner, roster) */
@@ -271,7 +271,7 @@ function onControl(from: string, m: Record<string, unknown>): void {
     } else if (m.t === 'start' && G.mode === 'menu') {
       const host = session.peers.get(from);
       if (host) host.inRun = true;
-      hooks.startRun(m.biome as BiomeId, m.wave as number);
+      hooks.startRun(m.biome as BiomeId, m.wave as number, m.seed as number);
     }
     return;
   }
@@ -470,10 +470,10 @@ export function sendLobby(biome: BiomeId, wave: number): void {
   if (role.current === 'host') send('ctl', { t: 'lobby', biome, wave });
 }
 
-/** The host starts a run: the guests in the lobby come along. */
-export function sendStart(biome: BiomeId, wave: number): void {
+/** The host starts a run: the guests in the lobby come along, its props shaped by the same `seed`. */
+export function sendStart(biome: BiomeId, wave: number, seed: number): void {
   if (role.current !== 'host') return;
-  for (const peer of session.peers.values()) if (!peer.inRun) send('ctl', { t: 'start', biome, wave }, peer.id);
+  for (const peer of session.peers.values()) if (!peer.inRun) send('ctl', { t: 'start', biome, wave, seed }, peer.id);
   // they're in from now on (their reports will say so too)
   for (const peer of session.peers.values()) peer.inRun = true;
   syncAway();

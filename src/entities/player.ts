@@ -103,6 +103,10 @@ export interface RemoteState { x: number; z: number; vx: number; vz: number; f: 
 /** Out of a co-op run for the rest of it: banked, or dead for good. */
 export type PlayerOut = 'banked' | 'dead' | null;
 
+/** how fast a light lit only at full draw eases in, as its glint comes, and out (`damp`'s rates: in over a quarter
+ *  second, the glint at full draw's first moments was lit less than main's) */
+const AURA_EASE = { in: 60, out: 12 };
+
 export class Player {
   readonly cls: ClassDef;
   readonly model: Model;
@@ -117,6 +121,8 @@ export class Player {
   /** follows the cast point; every class has one, so switching class keeps the light count. A
    *  remote player has none: another light would change the count and recompile every shader */
   readonly staffLight: THREE.PointLight | null;
+  /** how lit a light lit only at full draw is (`ClassDef.aura.drawn`), eased in and out */
+  private auraLit = 0;
   /** played here (a co-op partner is remote: driven by what its own game reports) */
   readonly local: boolean;
   /** co-op: the player's place in the party (0 = the host), and its spawn point */
@@ -977,7 +983,10 @@ export class Player {
         this.staffLight.position.y += 0.35;
       }
       const glow = this.cls.aura.intensity;
-      this.staffLight.intensity = glow * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
+      // (its intensity alone goes to none: the light stays in the scene, as the light count must)
+      const full = this.drawnFull;
+      this.auraLit = this.cls.aura.drawn ? damp(this.auraLit, full ? 1 : 0, full ? AURA_EASE.in : AURA_EASE.out, dt) : 1;
+      this.staffLight.intensity = glow * this.auraLit * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
     }
   }
 

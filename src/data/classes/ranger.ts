@@ -5,7 +5,8 @@ const ranger: ClassDef = {
   id: 'ranger', name: 'Ranger', model: 'ranger',
   tagline: 'A patient hunter who marks his quarry and rains arrows on the pack.',
   accent: '#c9d993', book: 'Fieldcraft',
-  aura: { light: 0xc9d993, intensity: 0.45 },
+  // (lit at full draw alone: lit always, his bow shone at rest, "why ranger emits light from bow on idle")
+  aura: { light: 0xc9d993, intensity: 0.45, drawn: true },
   // (an arrow nocked between shots, back in the quiver after 3 s without one; the next shot takes one out first)
   quiver: { fetch: 0.8, idle: 3 },
   base: { life: 1050, energy: 360, lifeRegen: 5, energyRegen: 20, moveSpeed: 7, crit: 8, critDmg: 60, armor: 6, resist: 0 },

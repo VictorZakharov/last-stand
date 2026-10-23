@@ -354,31 +354,92 @@ export const VIEWS: ViewMode[] = ['top', 'third', 'first'];
 
 /** three's point lights, as its lit shaders begin them: the block `loopPointLights` lights in a loop */
 const POINT_LIGHTS_IF = '#if ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )';
+/** the end of its written-out loop, the block's last line before its `#endif` */
+const POINT_LIGHTS_END = '#pragma unroll_loop_end';
+/** the shadowed point lights (three puts them first) written out, each with its shadow map, the rest in a loop */
 const POINT_LIGHTS_LOOPED = [
-  `${POINT_LIGHTS_IF} && !( defined( USE_SHADOWMAP ) && NUM_POINT_LIGHT_SHADOWS > 0 )`,
+  POINT_LIGHTS_IF,
   '\tPointLight pointLight;',
-  '\tfor ( int i = 0; i < NUM_POINT_LIGHTS; i ++ ) {',
+  '\t#if defined( USE_SHADOWMAP ) && NUM_POINT_LIGHT_SHADOWS > 0',
+  '\tPointLightShadow pointLightShadow;',
+  '\t#pragma unroll_loop_start',
+  '\tfor ( int i = 0; i < NUM_POINT_LIGHT_SHADOWS; i ++ ) {',
+  '\t\tpointLight = pointLights[ i ];',
+  '\t\tgetPointLightInfo( pointLight, geometryPosition, directLight );',
+  '\t\t#if defined( SHADOWMAP_TYPE_PCF ) || defined( SHADOWMAP_TYPE_BASIC )',
+  '\t\tpointLightShadow = pointLightShadows[ i ];',
+  '\t\tdirectLight.color *= ( directLight.visible && receiveShadow ) ? getPointShadow( pointShadowMap[ i ], '
+    + 'pointLightShadow.shadowMapSize, pointLightShadow.shadowIntensity, pointLightShadow.shadowBias, '
+    + 'pointLightShadow.shadowRadius, vPointShadowCoord[ i ], pointLightShadow.shadowCameraNear, '
+    + 'pointLightShadow.shadowCameraFar ) : 1.0;',
+  '\t\t#endif',
+  '\t\tRE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );',
+  '\t}',
+  '\t#pragma unroll_loop_end',
+  '\tconst int unshadowedFrom = NUM_POINT_LIGHT_SHADOWS;',
+  '\t#else',
+  '\tconst int unshadowedFrom = 0;',
+  '\t#endif',
+  '\tfor ( int i = unshadowedFrom; i < NUM_POINT_LIGHTS; i ++ ) {',
   '\t\tpointLight = pointLights[ i ];',
   '\t\tgetPointLightInfo( pointLight, geometryPosition, directLight );',
   '\t\tRE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );',
   '\t}',
-  '#elif ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )',
 ].join('\n');
 
 /**
  * The point lights lit in a loop, not written out once a light as three writes them (`#pragma unroll_loop_start`,
- * which a light's shadow map needs: no point light here casts one, and with one the written-out block is kept). With
- * 16 point lights a lit shader was 85 kB, and on a first visit ANGLE's D3D compiler spent half a second on each: 36 of
- * the 40 s the boot's programs cost (`lab programs --cost`).
+ * which a light's shadow map needs): with 16 point lights a lit shader was 85 kB, and on a first visit ANGLE's D3D
+ * compiler spent half a second on each, 36 of the 40 s the boot's programs cost (`lab programs --cost`). Only the
+ * lights that cast (each biome's two warmest, `staticShadow` in `world/props.ts`) are written out; with one casting,
+ * three wrote every point light out again.
  */
 function loopPointLights(): void {
   const chunk = THREE.ShaderChunk.lights_fragment_begin;
   const at = chunk.indexOf(POINT_LIGHTS_IF);
-  if (at < 0) {
+  const end = at < 0 ? -1 : chunk.indexOf(POINT_LIGHTS_END, at);
+  if (end < 0) {
     console.error('loopPointLights: three\'s lights_fragment_begin has changed: its point lights stay written out');
     return;
   }
-  THREE.ShaderChunk.lights_fragment_begin = chunk.slice(0, at) + POINT_LIGHTS_LOOPED + chunk.slice(at + POINT_LIGHTS_IF.length);
+  THREE.ShaderChunk.lights_fragment_begin = chunk.slice(0, at) + POINT_LIGHTS_LOOPED
+    + chunk.slice(end + POINT_LIGHTS_END.length);
+}
+
+/** three's sun's (the moon's) shadow on a lit point, as its lit shaders take it in their directional lights' loop */
+const SUN_SHADOW = 'directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], '
+  + 'directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, '
+  + 'directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;';
+const SUN_SHADOW_KEPT = SUN_SHADOW.replace('directLight.color *= ', 'shadowSeen = ')
+  + ' directLight.color *= shadowSeen; sunShadow = min( sunShadow, shadowSeen );';
+/** the share of the environment's reflection, and of the ambient light (the sky's, the environment's), left in the
+ *  sun's shadow */
+const ENV_IN_SHADOW = 0.25;
+const AMBIENT_IN_SHADOW = 0.5;
+const ENV_SPECULAR = 'RE_IndirectSpecular( radiance,';
+const AMBIENT = '#if defined( RE_IndirectDiffuse )\n';
+
+/**
+ * The ambient light and the environment's reflection darkened in the sun's shadow. three lights a surface by the sky
+ * and its reflection of the environment whatever stands between it and the sky, and each biome's environment has one
+ * bright panel where the sun stands. The crypt's pale marble walks are lit mostly by the sky (with the moon off, as
+ * bright as with it), so a column's or a tree's shadow stopped at a walk's edge, the cobbles beside it dark. (Kept:
+ * the share of the sky a point in shadow still sees, `AMBIENT_IN_SHADOW`, `ENV_IN_SHADOW`.)
+ */
+function shadeEnvironment(): void {
+  const begin = THREE.ShaderChunk.lights_fragment_begin, end = THREE.ShaderChunk.lights_fragment_end;
+  if (!begin.includes(SUN_SHADOW) || !end.includes(ENV_SPECULAR) || !end.includes(AMBIENT)) {
+    console.error('shadeEnvironment: three\'s lit shaders have changed: the ambient light ignores shadows');
+    return;
+  }
+  // (declared once ahead of the loop: three writes its body out once a light, in one scope)
+  THREE.ShaderChunk.lights_fragment_begin = 'float sunShadow = 1.0, shadowSeen;\n'
+    + begin.replace(SUN_SHADOW, SUN_SHADOW_KEPT);
+  // (the environment's light on a physical surface is `iblIrradiance`, taken in its indirect specular)
+  const ambient = `\tfloat ambientSeen = mix( ${AMBIENT_IN_SHADOW.toFixed(2)}, 1.0, sunShadow );\n`
+    + '\tirradiance *= ambientSeen;\n\tiblIrradiance *= ambientSeen;\n';
+  THREE.ShaderChunk.lights_fragment_end = end.replace(AMBIENT, AMBIENT + ambient).replace(ENV_SPECULAR,
+    `radiance *= mix( ${ENV_IN_SHADOW.toFixed(2)}, 1.0, sunShadow );\n\t${ENV_SPECULAR}`);
 }
 
 /** WEBGL_provoking_vertex, as its spec names it (lib.dom has no type for it) */
@@ -397,6 +458,7 @@ function firstVertexProvokes(context: WebGLRenderingContext | WebGL2RenderingCon
 
 export function initRenderer(container: HTMLElement) {
   loopPointLights();
+  shadeEnvironment();
   const renderer = gl = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(canvasRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { makeFbm, mulberry, clamp } from '../util';
 import { RECIPES, PRELOAD, recipeKey, makeVoronoi, photosFor, type PBRData, type RecipeName, type RecipeArgs } from './pbr';
 
-function canvasOf(size: number, height = size): HTMLCanvasElement {
+export function canvasOf(size: number, height = size): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = size; c.height = height;
   return c;
@@ -126,6 +126,8 @@ export const grunge = (): PBRCanvases => pbrCanvases('grunge');
 export const wood = (): PBRCanvases => pbrCanvases('wood');
 export const burlap = (): PBRCanvases => pbrCanvases('burlap');
 export const forestFloor = (): PBRCanvases => pbrCanvases('forestFloor');
+/** Bare earth: clumpy soil and grit, no litter (where the crypt's dead trees grow). */
+export const soil = (): PBRCanvases => pbrCanvases('soil');
 export const bark = (): PBRCanvases => pbrCanvases('bark');
 /** the heroes' materials: neutral albedo, tinted by the material's colour */
 export const leather = (): PBRCanvases => pbrCanvases('leather');
@@ -279,6 +281,74 @@ export function pbrMaterialMaps(maps: PBRCanvases, repeat: Repeat, normalScale =
 export function textureFromCanvas(c: HTMLCanvasElement, srgb = true): THREE.CanvasTexture {
   const t = toTexture(c, srgb, 1);
   t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  return t;
+}
+
+/** the banners' velvet and its gold thread (sRGB) */
+const VELVET = { base: [106, 20, 32], pile: 0.12 };
+const THREAD = '#c99a48', THREAD_SHADE = '#4a2c10';
+
+/**
+ * A banner's cloth: deep red velvet, its pile a fine mottle, a gold border sewn round its edges and the order's sigil
+ * embroidered over its upper half (a ring round a crescent, a blade down through both, a star over it), the same on
+ * every banner. The canvas is the banner's u across and v down from its top (`bannerGeo` in `world/crypt.ts`).
+ */
+export function bannerCloth(width = 256, height = 512): THREE.CanvasTexture {
+  const c = canvasOf(width, height);
+  const g = ctx2d(c);
+  const rng = mulberry(31);
+  const img = g.createImageData(width, height);
+  for (let i = 0; i < width * height; i++) {
+    const shade = 1 + (rng() - 0.5) * 2 * VELVET.pile;
+    for (let ch = 0; ch < 3; ch++) img.data[i * 4 + ch] = Math.min(255, VELVET.base[ch] * shade);
+    img.data[i * 4 + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const thread = (draw: () => void, line: number): void => {
+    // (a dark edge under the thread, as raised embroidery throws one)
+    g.lineCap = g.lineJoin = 'round';
+    g.strokeStyle = THREAD_SHADE;
+    g.lineWidth = line + 5;
+    draw();
+    g.stroke();
+    g.strokeStyle = THREAD;
+    g.lineWidth = line;
+    draw();
+    g.stroke();
+  };
+  const border = 14;
+  thread(() => { g.beginPath(); g.rect(border, border, width - border * 2, height * 0.78); }, 5);
+  const cx = width / 2, cy = height * 0.36, ring = width * 0.3;
+  thread(() => { g.beginPath(); g.arc(cx, cy, ring, 0, Math.PI * 2); }, 7);
+  // the crescent, horns up
+  thread(() => {
+    g.beginPath();
+    g.arc(cx, cy + ring * 0.12, ring * 0.62, Math.PI * 0.12, Math.PI * 0.88);
+    g.arc(cx, cy - ring * 0.12, ring * 0.5, Math.PI * 0.8, Math.PI * 0.2, true);
+    g.closePath();
+  }, 5);
+  // the blade, point down, its guard across the ring's top
+  thread(() => {
+    g.beginPath();
+    g.moveTo(cx, cy - ring * 1.25);
+    g.lineTo(cx, cy + ring * 1.35);
+    g.moveTo(cx - ring * 0.42, cy - ring * 0.82);
+    g.lineTo(cx + ring * 0.42, cy - ring * 0.82);
+  }, 6);
+  // a four-pointed star over it all
+  thread(() => {
+    const sy = cy - ring * 1.6, s = ring * 0.22;
+    g.beginPath();
+    g.moveTo(cx, sy - s);
+    g.lineTo(cx + s * 0.3, sy);
+    g.lineTo(cx, sy + s);
+    g.lineTo(cx - s * 0.3, sy);
+    g.closePath();
+    g.moveTo(cx - s, sy);
+    g.lineTo(cx + s, sy);
+  }, 4);
+  const t = textureFromCanvas(c);
+  t.anisotropy = 4;
   return t;
 }
 

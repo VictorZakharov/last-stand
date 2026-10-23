@@ -58,9 +58,10 @@ function ownerOf(renderer: THREE.WebGLRenderer, p: THREE.WebGLProgram): string {
 export function steadyShadowPrograms(renderer: THREE.WebGLRenderer): void {
   const draw = renderer.renderBufferDirect.bind(renderer);
   renderer.renderBufferDirect = (camera, scene, geometry, material, object, group) => {
-    // (a shadow pass's draw: three gives it no scene)
-    const depth = material as THREE.MeshDepthMaterial;
-    if (scene === null && depth.isMeshDepthMaterial && !(depth.alphaTest > 0)) {
+    // (a shadow pass's draw: three gives it no scene; a point light's draws with distance, as `shadowStandIn`)
+    const depth = material as THREE.MeshDepthMaterial & { isMeshDistanceMaterial?: boolean };
+    const casting = depth.isMeshDepthMaterial || depth.isMeshDistanceMaterial;
+    if (scene === null && casting && !(depth.alphaTest > 0)) {
       depth.map = null;
       depth.alphaMap = null;
     }
@@ -77,21 +78,26 @@ const SHADOW_SIDE: Record<THREE.Side, THREE.Side> = {
 type Casting = THREE.Material & Partial<Pick<THREE.MeshStandardMaterial,
   'map' | 'alphaMap' | 'displacementMap' | 'displacementScale' | 'displacementBias' | 'wireframe'>>;
 
+/** the materials a shadow pass draws casters with: the moon's (a directional light) depth, a point light's distance */
+type ShadowKind = 'depth' | 'distance';
+type CastAs = THREE.MeshDepthMaterial | THREE.MeshDistanceMaterial;
+
 /**
- * A stand-in for the depth material three's shadow pass draws `caster` with, `material` its own (r185's
- * `getDepthMaterial`, for the moon's light, a directional one): its custom one, else three's own, set as the pass
- * sets it, the map let go where `steadyShadowPrograms` lets it go. The pass's own are private, and one serves every
- * caster: a stand-in a caster, as a material has one program to wait for.
+ * A stand-in for the material three's shadow pass draws `caster` with, `material` its own (r185's `getDepthMaterial`:
+ * depth for the moon's light, a directional one, distance for a point light's): its custom one, else three's own, set
+ * as the pass sets it, the map let go where `steadyShadowPrograms` lets it go. The pass's own are private, and one
+ * serves every caster: a stand-in a caster, as a material has one program to wait for.
  */
-function shadowStandIn(caster: THREE.Mesh, material: Casting): THREE.MeshDepthMaterial {
-  const custom = caster.customDepthMaterial as THREE.MeshDepthMaterial | undefined;
-  const depth = custom ? custom.clone() : new THREE.MeshDepthMaterial();
+function shadowStandIn(caster: THREE.Mesh, material: Casting, kind: ShadowKind): CastAs {
+  const custom = (kind === 'depth' ? caster.customDepthMaterial : caster.customDistanceMaterial) as CastAs | undefined;
+  const depth = custom ? custom.clone() : kind === 'depth' ? new THREE.MeshDepthMaterial() : new THREE.MeshDistanceMaterial();
   if (custom) {
     depth.onBeforeCompile = custom.onBeforeCompile;
     depth.customProgramCacheKey = custom.customProgramCacheKey;
   }
   depth.visible = material.visible;
-  depth.wireframe = material.wireframe ?? false;
+  // (set on a distance material too, as the pass sets it: its type leaves it out)
+  (depth as THREE.MeshDepthMaterial).wireframe = material.wireframe ?? false;
   depth.side = material.shadowSide ?? SHADOW_SIDE[material.side];
   depth.alphaTest = material.alphaToCoverage ? 0.5 : material.alphaTest;
   const tested = depth.alphaTest > 0;
@@ -115,6 +121,17 @@ function shadowStandIn(caster: THREE.Mesh, material: Casting): THREE.MeshDepthMa
  * undisposed: their programs are pinned whatever happens to them.
  */
 export function compileShadows(renderer: THREE.WebGLRenderer, root: THREE.Object3D, camera: THREE.Camera, scene: THREE.Scene): Compiled {
+  // (a point light that casts draws its casters' distance from it: the biomes' warmest, #298)
+  let pointShadows = false;
+  scene.traverse((o) => { if ((o as THREE.PointLight).isPointLight && o.castShadow) pointShadows = true; });
+  const compiled: Compiled = new Set(compileCasters(renderer, root, camera, scene, 'depth'));
+  if (pointShadows) for (const m of compileCasters(renderer, root, camera, scene, 'distance')) compiled.add(m);
+  return compiled;
+}
+
+/** `compileShadows` for one kind of shadow pass. */
+function compileCasters(renderer: THREE.WebGLRenderer, root: THREE.Object3D, camera: THREE.Camera, scene: THREE.Scene,
+  kind: ShadowKind): Compiled {
   const own = new Map<THREE.Mesh, THREE.Mesh['material']>();
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
@@ -123,7 +140,7 @@ export function compileShadows(renderer: THREE.WebGLRenderer, root: THREE.Object
     own.set(mesh, mesh.material);
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     const casts = mesh.castShadow && mesh.layers.test(camera.layers);
-    const standIns = casts ? materials.filter((m) => m.visible).map((m) => shadowStandIn(mesh, m)) : [];
+    const standIns = casts ? materials.filter((m) => m.visible).map((m) => shadowStandIn(mesh, m, kind)) : [];
     // (what casts nothing is left out: a compile passes over a mesh with no material)
     mesh.material = (Array.isArray(mesh.material) ? standIns : standIns[0]) as THREE.Mesh['material'];
   });

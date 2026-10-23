@@ -998,6 +998,34 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  trees: {
+    help: 'the trees in the play area as the ranger\'s arrows meet them: in each biome every tree inside the wall a '
+      + 'wooden prop and an arrow shot at its trunk standing in it; then another biome shown, and no arrow left '
+      + '(--class ranger)',
+    options: {
+      biomes: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['crypt', 'forest'],
+        default: 'crypt,forest',
+        help: 'the biomes: crypt, forest',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'the first tree made stone and an arrow stuck again after the switch: both must be found',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
+  columns: {
+    help: 'the crypt\'s broken columns roll after roll: each mesh welded, an edge one triangle uses above the '
+      + 'shaft\'s foot is a hole; the break\'s face inside the flutes no steeper than 75 degrees',
+    options: {
+      seeds: { kind: 'list', usage: 'a,b', help: 'the runs\' seeds the columns are rolled from (1 to 12)' },
+      canary: { kind: 'switch', help: 'a triangle taken out of the first column\'s break: it must be found' },
+      ...COMMON_OPTIONS,
+    },
+  },
   wall: {
     help: 'how near the hero walks up to the wall: in each biome, at angles round the ring, he walks straight out '
       + 'until it stops him, and rays across his way read the gap between his body and the nearest surface drawn '

@@ -1,7 +1,7 @@
 // Breakable scenery: low props (stumps, logs, boulders, drums, gravestones, sarcophagi) have hit points
 // and give way to focused fire, an enemy's included, so nobody can sit behind one for the whole wave.
 // A prop is one or more of the obstacle circles; when it breaks its circles leave the biome's list (the
-// flow field is rebuilt from `state.rev`), its mesh goes, and rubble flies. Tall props (trees, pillars,
+// flow field is rebuilt from `state.rev`), its mesh goes, and rubble flies. Tall props (the trees round the ring, pillars,
 // walls, the lights) stay. The fight's owner deals the damage (`simulates`); a co-op guest is told which
 // prop's health (`setPropSink` / `setPropLife`). A damaged prop shows a bar for a few seconds. A new run brings everything back (`restoreProps`).
 import * as THREE from 'three';

@@ -8,7 +8,7 @@ import { ARENA } from '../data/balance';
 import { forestFloor, bark, flagstone, moss, rock, wood, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
-import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
+import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
 
 /** the forest's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25, 1.1] };
@@ -23,7 +23,7 @@ import { valueNoise3 } from '../core/patterns';
 import { tubesRelief } from './ground';
 import type { Obstacle } from '../types';
 import { Wall } from './wall';
-import { buildStumpGeo } from './stump';
+import { buildStumpGeos } from './stump';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
 /** daylight haze: the fog, and the sky at the horizon */
@@ -334,7 +334,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   };
   const portals: Portal[] = GATES.map((a) => buildRootGate(scene, wall, a, mossStone, gateMats, rng, updaters));
 
-  // --- Glowcap clusters (teal) and bonfires (orange): the biome's 6 point lights -----
+  // --- Glowcap clusters (teal) and bonfires (orange): 6 of the biome's 10 point lights (and a portal's each) --
   for (const [x, z] of [[-11, -11], [11, -11], [-11, 11], [11, 11]]) {
     const g = new THREE.Group(), u0 = updaters.length;
     scene.add(g);
@@ -359,16 +359,24 @@ export const buildForest: BiomeBuilder = (scene) => {
   // (sculpted from a stream of its own; the old stump's draws from the biome's are still drawn: drawn from it, every
   // prop placed after the stumps moved)
   for (let i = 0; i < OLD_STUMP_DRAWS; i++) rng();
-  const stumps = new THREE.InstancedMesh(buildStumpGeo(), [stumpWood, barkAt(BARK_REPEATS.stumps)], stumpSpots.length);
-  stumpSpots.forEach(([rr, a], i) => {
-    const x = Math.cos(a) * rr, z = Math.sin(a) * rr, s = r(0.8, 1.15), yaw = r(0, TAU), sy = r(0.8, 1.4);
-    setInstance(stumps, i, x, 0, z, 0, yaw, 0, s, sy, s);
-    obstacles.push({ x, z, r: 0.75 * s, h: sy });
-    breakable.add(obstacles.length - 1, 6, 0x4a3520, instanceLook(stumps, i), 'wood');
+  // (a mesh each, dealt one of the pool's sculpts, its size and its turn anew for every run: `rollStumps`)
+  const pool = stumpPool(buildStumpGeos());
+  const stumpMats = [stumpWood, barkAt(BARK_REPEATS.stumps)];
+  const stumps: Stump[] = stumpSpots.map(([rr, a]) => {
+    const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+    // (the old instances' size and turn still drawn from the stream: every prop placed after them would move)
+    r(0.8, 1.15); r(0, TAU); r(0.8, 1.4);
+    const mesh = new THREE.Mesh(pool[0].geometry, stumpMats);
+    mesh.position.set(x, 0, z);
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.name = 'stump';
+    scene.add(mesh);
+    const circle: Obstacle = { x, z, r: 0, h: 0 };
+    obstacles.push(circle);
+    breakable.add(obstacles.length - 1, 6, 0x4a3520, meshLook(mesh), 'wood');
+    return { mesh, circle };
   });
-  stumps.castShadow = stumps.receiveShadow = true;
-  stumps.name = 'stumps';
-  scene.add(stumps);
+  rollStumps(stumps, pool, BOOT_ROLL);
 
   const logSpots = [[21, 1.15, 0.9], [11, 4.75, -0.4], [22, 3.0, 0.3]];
   // (both sides: past the heartwood's rim, 0.2 m in, an end is the bark's shell alone, and from outside only it
@@ -530,6 +538,32 @@ export const buildForest: BiomeBuilder = (scene) => {
   pebbles.name = 'pebbles';
   scene.add(pebbles);
 
+  // --- Young trees in the clearing: wood an arrow goes into ----------------------------
+  // (last, from streams of their own: placed before, they'd move what's placed round the obstacles; their bark and
+  // leaves the trees' programs)
+  const young = growTree(SAPLING);
+  const sapSpots = treeSpots(mulberry(2718), SAPLINGS, gateGap, obstacles,
+    (x, z) => Math.max(Math.abs(x), Math.abs(z)) < h + 2 || BONFIRES.some(([bx, bz]) => Math.hypot(x - bx, z - bz) < 4));
+  const sapBark = new THREE.InstancedMesh(young.bark, barkAt(SAPLING.bark), sapSpots.length);
+  const sapLeaves = new THREE.InstancedMesh(young.leaves, canopyMat, sapSpots.length);
+  const sapRng = mulberry(1618);
+  sapSpots.forEach(([x, z], i) => {
+    const ht = 4.5 + sapRng() * 1.5;
+    setInstance(sapBark, i, x, -0.1, z, 0, sapRng() * TAU, 0, ht);
+    sapBark.getMatrixAt(i, _mx); sapLeaves.setMatrixAt(i, _mx);
+    sapLeaves.setColorAt(i, plantCol.setRGB(0.1 + sapRng() * 0.06, 0.2 + sapRng() * 0.1, 0.07 + sapRng() * 0.03).multiplyScalar(2.2));
+    // (round its trunk's foot, measured on the grown bark: `trunkFoot`)
+    obstacles.push({ x, z, r: young.trunkFoot * ht + 0.1, h: ht });
+    // (an arrow goes into the bark; the leaves let it through)
+    const bark = instanceLook(sapBark, i), leaves = instanceLook(sapLeaves, i);
+    const look = { hide() { bark.hide(); leaves.hide(); }, show() { bark.show(); leaves.show(); }, raycast: bark.raycast };
+    breakable.add(obstacles.length - 1, 10, 0x4a3520, look, 'wood');
+  });
+  for (const m of [sapBark, sapLeaves]) { m.castShadow = m.receiveShadow = true; scene.add(m); }
+  sapBark.name = 'young trees\' bark';
+  sapLeaves.name = 'young trees\' leaves';
+  updaters.push(contactShadows(scene, obstacles));
+
   // --- Ambient: drifting pollen and a light haze ---------------------------------------
   let moteT = 0;
   updaters.push((dt, t) => {
@@ -572,6 +606,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     portals,
     setCalm(v: number) { calmTarget = v; },
     update(dt: number, t: number) { for (const u of updaters) u(dt, t); },
+    roll(seed: number) { rollStumps(stumps, pool, seed); },
   };
 };
 
@@ -734,8 +769,72 @@ function buildLogGeo(rng: () => number): { bark: THREE.BufferGeometry; inner: TH
 
 /** the trees round the clearing, grown by ez-tree (the last: the ancient giants), each capped to a few thousand
  *  triangles: sections and segments per level from the trunk, and fewer, bigger leaf cards */
+/** the young trees standing in the clearing among the props (`treeSpots`): small oaks as round the ring, their trunks
+ *  thicker (grown as those are, a trunk at a man's chest was 6 cm across, and an arrow at it slipped past) */
+const SAPLINGS = { n: 6, near: 8, far: 23, apart: 7 };
+const SAPLING: TreeGrow = {
+  preset: 'Oak Small', seed: 99, sections: [7, 4, 3], segments: [7, 4, 3], leaves: 0.6, leafSize: 1.5, levels: 2, girth: 1.8,
+  bark: 5,
+};
 /** the draws the old stump took from the biome's stream */
 const OLD_STUMP_DRAWS = 21;
+/** the roll the stumps stand in until a run rolls them (the lobby before the first run) */
+const BOOT_ROLL = 1;
+/** a stump's size across and its height, each rolled between these (its girth and its break are its sculpt's) */
+const STUMP_SIZE = [0.85, 1.15];
+const STUMP_HEIGHT = [0.85, 1.25];
+/** the heights a sculpt's trunk is measured between for its girth (m: over its foot's flare, under its break) */
+const STUMP_GIRTH_AT = [0.3, 0.5];
+
+/** A stump standing in the forest: its mesh and its circle, both rolled anew for a run. */
+interface Stump {
+  mesh: THREE.Mesh;
+  circle: Obstacle;
+}
+
+/** One of the pool's sculpts, with its trunk's girth and its height (m, at a scale of 1). */
+interface Sculpt {
+  geometry: THREE.BufferGeometry;
+  girth: number;
+  height: number;
+}
+
+/** The pool's sculpts, each measured: its trunk's farthest out between STUMP_GIRTH_AT, its top. */
+function stumpPool(geometries: THREE.BufferGeometry[]): Sculpt[] {
+  return geometries.map((geometry) => {
+    const pos = geometry.attributes.position;
+    let girth = 0;
+    let height = 0;
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i);
+      height = Math.max(height, y);
+      if (y > STUMP_GIRTH_AT[0] && y < STUMP_GIRTH_AT[1]) girth = Math.max(girth, Math.hypot(pos.getX(i), pos.getZ(i)));
+    }
+    return { geometry, girth, height };
+  });
+}
+
+/** Every stump dealt a sculpt of the pool from `seed` (none twice), its size and turn: a run's own, the same on every
+ *  game in co-op. */
+function rollStumps(stumps: Stump[], pool: Sculpt[], seed: number): void {
+  const rng = mulberry(seed * 104729 + 31);
+  const between = ([low, high]: number[]) => low + rng() * (high - low);
+  const order = pool.map((_, k) => k);
+  for (let k = order.length - 1; k > 0; k--) {
+    const j = Math.floor(rng() * (k + 1));
+    [order[k], order[j]] = [order[j], order[k]];
+  }
+  stumps.forEach((stump, i) => {
+    const sculpt = pool[order[i % order.length]];
+    const size = between(STUMP_SIZE);
+    const height = between(STUMP_HEIGHT);
+    stump.mesh.geometry = sculpt.geometry;
+    stump.mesh.scale.set(size, height, size);
+    stump.mesh.rotation.y = rng() * TAU;
+    stump.circle.r = sculpt.girth * size;
+    stump.circle.h = sculpt.height * height;
+  });
+}
 /** the ancient giants' places round the ring (those clear of the gates) */
 const GIANTS = 20;
 /** over this height a crown may reach over the wall (the top-down camera sits 26 m over the hero, and the old giants'
@@ -846,27 +945,6 @@ function buildRootGate(scene: THREE.Object3D, wall: Wall, angle: number, rockMat
   return portal;
 }
 
-/** Tube along `curve` whose radius tapers linearly from r0 to r1. */
-function taperedTube(curve: THREE.Curve<THREE.Vector3>, r0: number, r1: number): THREE.BufferGeometry {
-  const segs = 24, radial = 8;
-  const g = new THREE.TubeGeometry(curve, segs, 1, radial, false);
-  const pos = g.attributes.position, uv = g.attributes.uv, c = new THREE.Vector3(), v = new THREE.Vector3();
-  for (let i = 0; i <= segs; i++) {
-    const k = i / segs;
-    curve.getPointAt(k, c);
-    const rad = r0 + (r1 - r0) * k;
-    for (let j = 0; j <= radial; j++) {
-      const idx = i * (radial + 1) + j;
-      v.fromBufferAttribute(pos, idx).sub(c).multiplyScalar(rad).add(c);
-      pos.setXYZ(idx, v.x, v.y, v.z);
-      // u round it and v along it, as a trunk's and `taperTube`'s are (three's tube runs u along it)
-      uv.setXY(idx, j / radial, k);
-    }
-  }
-  g.computeVertexNormals();
-  return g;
-}
-
 /** A mushroom cap of radius 1 (height ~0.55): a dome whose rim waves and curls under, its gills below. */
 function glowcapGeo(): { cap: THREE.BufferGeometry; gills: THREE.BufferGeometry } {
   const prof: [number, number][] = [[0.88, -0.02], [1, 0.05]];
@@ -963,6 +1041,7 @@ function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.
   }
   const light = new THREE.PointLight(0xff7a30, 12, 13, 2);
   light.position.set(x, 1.3, z);
+  staticShadow(light);
   scene.add(light);
   buildFire(scene, {
     at: new THREE.Vector3(x, 0.03, z), radius: 0.42, height: 1.2, dish: 0, light, intensity: 12,

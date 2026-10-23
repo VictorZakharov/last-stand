@@ -974,6 +974,22 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  trees: {
+    each(side, options) {
+      return side.command('trees', { biomes: options.biomes, canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
+  columns: {
+    each(side, options) {
+      return side.command('columns', { seeds: options.seeds?.map(Number), canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   draws: {
     check(options) {
       if (options.count !== undefined && !(options.count >= 0)) throw labError('draws --count: 0 or more');
