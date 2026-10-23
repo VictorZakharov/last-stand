@@ -11,7 +11,7 @@ import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
 import { floorRelief } from '../core/parallax';
-import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type Updater } from './props';
+import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, treeSpots, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type Updater } from './props';
 
 /** the crypt's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
@@ -27,6 +27,8 @@ const IDENTITY = new THREE.Matrix4();
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
 /** angular distance from `a` to the nearest spawn gate */
 const gateGap = (a: number) => Math.min(...GATES.map((g) => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g)))));
+/** the small dead trees standing on the floor among the props (`treeSpots`) */
+const SMALL_TREES = { n: 6, near: 8, far: 24, apart: 7 };
 const polar = (r: number, a: number): [number, number] => [Math.cos(a) * r, Math.sin(a) * r];
 
 const FOG = 0x1a2034;
@@ -415,6 +417,23 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   weeds.receiveShadow = true;
   weeds.name = 'weeds';
   scene.add(weeds);
+
+  // --- Small dead trees on the floor: wood an arrow goes into -------------------------
+  // (after the weeds, which are placed round the obstacles; from streams of their own)
+  const smallTreeSpots = treeSpots(mulberry(2718), SMALL_TREES, gateGap, obstacles,
+    (x, z) => Math.max(Math.abs(x), Math.abs(z)) < h + 2 || Math.abs(Math.hypot(x, z) - 18.5) < 2);
+  const smallTrees = new THREE.InstancedMesh(buildDeadTreeGeo(mulberry(3141)), deadWood, smallTreeSpots.length);
+  const treeRng = mulberry(1618);
+  smallTreeSpots.forEach(([x, z], i) => {
+    const ht = 2.2 + treeRng() * 1.2;
+    setInstance(smallTrees, i, x, 0, z, (treeRng() - 0.5) * 0.12, treeRng() * TAU, (treeRng() - 0.5) * 0.12, ht);
+    // (its trunk's foot, 0.09 of its height across: `buildDeadTreeGeo`)
+    obstacles.push({ x, z, r: 0.09 * ht + 0.1, h: ht });
+    breakable.add(obstacles.length - 1, 10, 0x4a4038, instanceLook(smallTrees, i), 'wood');
+  });
+  smallTrees.castShadow = smallTrees.receiveShadow = true;
+  smallTrees.name = 'small dead trees';
+  scene.add(smallTrees);
 
   // --- Beyond the wall: a ruined necropolis and dead trees ----------------------------
   buildNecropolis(scene, wall, rng, outsideDim(darkStone.clone()), outsideDim(nicheMat.clone()), deadWood);

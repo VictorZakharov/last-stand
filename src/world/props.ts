@@ -58,6 +58,28 @@ export const WALL_R = 28.5;   // radius of the arena's boundary (inner face)
 export const GATE_W = 4.2;    // spawn gate width
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
+
+/** where a biome's small trees may stand: `n` of them `near` to `far` m from the middle, `apart` from each other */
+export interface TreeSpots { n: number; near: number; far: number; apart: number }
+/**
+ * Spots for a biome's small trees in the play area, from a stream of their own (`rng`: drawn from the biome's, every
+ * prop placed after them would move): clear of the gates' lanes (`laneGap`: an angle's from the nearest gate's), of
+ * every obstacle by 1.5 m and of what `keepOff` says.
+ */
+export function treeSpots(rng: () => number, { n, near, far, apart }: TreeSpots, laneGap: (a: number) => number,
+  obstacles: Obstacle[], keepOff: (x: number, z: number) => boolean = () => false): [number, number][] {
+  const spots: [number, number][] = [];
+  for (let tries = 0; spots.length < n && tries < 4000; tries++) {
+    const a = rng() * TAU, rr = near + rng() * (far - near);
+    const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+    // (a gate's lane: half its width and the way the foes walk in from it)
+    if (laneGap(a) * rr < GATE_W) continue;
+    if (keepOff(x, z) || obstacles.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + 1.5)) continue;
+    if (spots.some(([sx, sz]) => Math.hypot(sx - x, sz - z) < apart)) continue;
+    spots.push([x, z]);
+  }
+  return spots;
+}
 export function setInstance(mesh: THREE.InstancedMesh, i: number, x: number, y: number, z: number, rx: number, ry: number, rz: number, sx: number, sy = sx, sz = sx): void {
   _e.set(rx, ry, rz); _q.setFromEuler(_e);
   mesh.setMatrixAt(i, _m.compose(_p.set(x, y, z), _q, _s.set(sx, sy, sz)));

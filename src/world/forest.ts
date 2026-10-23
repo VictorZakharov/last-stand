@@ -8,7 +8,7 @@ import { ARENA } from '../data/balance';
 import { forestFloor, bark, flagstone, moss, rock, wood, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
-import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
+import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, treeSpots, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
 
 /** the forest's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25, 1.1] };
@@ -530,6 +530,31 @@ export const buildForest: BiomeBuilder = (scene) => {
   pebbles.name = 'pebbles';
   scene.add(pebbles);
 
+  // --- Young trees in the clearing: wood an arrow goes into ----------------------------
+  // (last, from streams of their own: placed before, they'd move what's placed round the obstacles; their bark and
+  // leaves the trees' programs)
+  const young = growTree(SAPLING);
+  const sapSpots = treeSpots(mulberry(2718), SAPLINGS, gateGap, obstacles,
+    (x, z) => Math.max(Math.abs(x), Math.abs(z)) < h + 2 || BONFIRES.some(([bx, bz]) => Math.hypot(x - bx, z - bz) < 4));
+  const sapBark = new THREE.InstancedMesh(young.bark, barkAt(SAPLING.bark), sapSpots.length);
+  const sapLeaves = new THREE.InstancedMesh(young.leaves, canopyMat, sapSpots.length);
+  const sapRng = mulberry(1618);
+  sapSpots.forEach(([x, z], i) => {
+    const ht = 4.5 + sapRng() * 1.5;
+    setInstance(sapBark, i, x, -0.1, z, 0, sapRng() * TAU, 0, ht);
+    sapBark.getMatrixAt(i, _mx); sapLeaves.setMatrixAt(i, _mx);
+    sapLeaves.setColorAt(i, plantCol.setRGB(0.1 + sapRng() * 0.06, 0.2 + sapRng() * 0.1, 0.07 + sapRng() * 0.03).multiplyScalar(2.2));
+    // (round its trunk's foot, measured on the grown bark: `trunkFoot`)
+    obstacles.push({ x, z, r: young.trunkFoot * ht + 0.1, h: ht });
+    // (an arrow goes into the bark; the leaves let it through)
+    const bark = instanceLook(sapBark, i), leaves = instanceLook(sapLeaves, i);
+    const look = { hide() { bark.hide(); leaves.hide(); }, show() { bark.show(); leaves.show(); }, raycast: bark.raycast };
+    breakable.add(obstacles.length - 1, 10, 0x4a3520, look, 'wood');
+  });
+  for (const m of [sapBark, sapLeaves]) { m.castShadow = m.receiveShadow = true; scene.add(m); }
+  sapBark.name = 'young trees\' bark';
+  sapLeaves.name = 'young trees\' leaves';
+
   // --- Ambient: drifting pollen and a light haze ---------------------------------------
   let moteT = 0;
   updaters.push((dt, t) => {
@@ -734,6 +759,13 @@ function buildLogGeo(rng: () => number): { bark: THREE.BufferGeometry; inner: TH
 
 /** the trees round the clearing, grown by ez-tree (the last: the ancient giants), each capped to a few thousand
  *  triangles: sections and segments per level from the trunk, and fewer, bigger leaf cards */
+/** the young trees standing in the clearing among the props (`treeSpots`): small oaks as round the ring, their trunks
+ *  thicker (grown as those are, a trunk at a man's chest was 6 cm across, and an arrow at it slipped past) */
+const SAPLINGS = { n: 6, near: 8, far: 23, apart: 7 };
+const SAPLING: TreeGrow = {
+  preset: 'Oak Small', seed: 99, sections: [7, 4, 3], segments: [7, 4, 3], leaves: 0.6, leafSize: 1.5, levels: 2, girth: 1.8,
+  bark: 5,
+};
 /** the draws the old stump took from the biome's stream */
 const OLD_STUMP_DRAWS = 21;
 /** the ancient giants' places round the ring (those clear of the gates) */

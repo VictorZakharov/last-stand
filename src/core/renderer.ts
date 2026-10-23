@@ -381,6 +381,35 @@ function loopPointLights(): void {
   THREE.ShaderChunk.lights_fragment_begin = chunk.slice(0, at) + POINT_LIGHTS_LOOPED + chunk.slice(at + POINT_LIGHTS_IF.length);
 }
 
+/** three's sun's (the moon's) shadow on a lit point, as its lit shaders take it in their directional lights' loop */
+const SUN_SHADOW = 'directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], '
+  + 'directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, '
+  + 'directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;';
+const SUN_SHADOW_KEPT = SUN_SHADOW.replace('directLight.color *= ', 'shadowSeen = ')
+  + ' directLight.color *= shadowSeen; sunShadow = min( sunShadow, shadowSeen );';
+/** the share of the environment's reflection left in the sun's shadow */
+const ENV_IN_SHADOW = 0.25;
+const ENV_SPECULAR = 'RE_IndirectSpecular( radiance,';
+
+/**
+ * The environment's reflection darkened in the sun's shadow. three lights a surface's reflection of the environment
+ * whatever stands between it and the sky, and each biome's environment has one bright panel where the sun stands, so
+ * a glossy floor (the crypt's marble walks) shone as bright in a column's shadow as out of it. (Kept: the share of
+ * the sky a point in shadow still sees, `ENV_IN_SHADOW`.)
+ */
+function shadeEnvironment(): void {
+  const begin = THREE.ShaderChunk.lights_fragment_begin, end = THREE.ShaderChunk.lights_fragment_end;
+  if (!begin.includes(SUN_SHADOW) || !end.includes(ENV_SPECULAR)) {
+    console.error('shadeEnvironment: three\'s lit shaders have changed: the environment\'s reflection ignores shadows');
+    return;
+  }
+  // (declared once ahead of the loop: three writes its body out once a light, in one scope)
+  THREE.ShaderChunk.lights_fragment_begin = 'float sunShadow = 1.0, shadowSeen;\n'
+    + begin.replace(SUN_SHADOW, SUN_SHADOW_KEPT);
+  THREE.ShaderChunk.lights_fragment_end = end.replace(ENV_SPECULAR,
+    `radiance *= mix( ${ENV_IN_SHADOW.toFixed(2)}, 1.0, sunShadow );\n\t${ENV_SPECULAR}`);
+}
+
 /** WEBGL_provoking_vertex, as its spec names it (lib.dom has no type for it) */
 interface ProvokingVertex { FIRST_VERTEX_CONVENTION_WEBGL: number; provokingVertexWEBGL(mode: number): void }
 
@@ -397,6 +426,7 @@ function firstVertexProvokes(context: WebGLRenderingContext | WebGL2RenderingCon
 
 export function initRenderer(container: HTMLElement) {
   loopPointLights();
+  shadeEnvironment();
   const renderer = gl = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(canvasRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);

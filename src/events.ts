@@ -2,6 +2,7 @@
 import type { Enemy } from './entities/enemy';
 import type { Player } from './entities/player';
 import type { Item } from './types';
+import type { BiomeId } from './data/biomes';
 
 export interface GameEvents {
   enemyKilled: [enemy: Enemy];
@@ -10,6 +11,8 @@ export interface GameEvents {
   lootGained: [item: Item];
   waveCleared: [wave: number];
   waveStarted: [wave: number];
+  /** the arena shows another biome (`world/arena.ts` `setBiome`) */
+  biomeChanged: [biome: BiomeId];
 }
 
 type Handler<K extends keyof GameEvents> = (...args: GameEvents[K]) => void;

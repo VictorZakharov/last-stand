@@ -1,6 +1,6 @@
-// Spent arrows: every arrow that came down stays where it ended until there are too many (STUCK_MAX), and then the
-// oldest fade out, shrinking into where they're buried: standing in the ground or a prop, riding a foe's body (on the
-// joint it struck, until the body dissolves or the prop breaks, when they drop), or loose, glancing off stone and
+// Spent arrows: every arrow that came down stays where it ended until the arena shows another biome (`clearSpent`: they
+// all go) or there are too many (STUCK_MAX), and then the oldest fade out, shrinking into where they're buried:
+// standing in the ground or a prop, riding a foe's body (on the joint it struck, until the body dissolves or the prop breaks, when they drop), or loose, glancing off stone and
 // tumbling to lie on the floor. Two instanced meshes hold them: the whole arrow within NEAR of the camera, the plain
 // one (`arrowLite`, 18 triangles to its 301) beyond. Only the moving ones (riding, falling, fading) are written each
 // frame. Purely visual: every game keeps its own, from the arrows it sees.
@@ -13,6 +13,7 @@ import { groundHeight } from '../world/arena';
 import { BIOMES } from '../data/biomes';
 import { sfx } from '../core/audio';
 import { clamp, rand } from '../util';
+import { on } from '../events';
 import type { Obstacle } from '../types';
 
 /** how many spent arrows stay; past that the oldest fade out over FADE s (shrinking into their buried point) */
@@ -338,6 +339,12 @@ export function spentStats(): { all: number; fixed: number; inProp: number; body
   }
   return n;
 }
+
+/** Every spent arrow gone at once: another biome's floor and props aren't where they lay. */
+export function clearSpent(): void {
+  for (const l of lists) for (const s of [...l]) remove(s);
+}
+on('biomeChanged', clearSpent);
 
 /** Every spent arrow's middle and its point (for the probes: where they lie against the floor, the props and the wall). */
 export const spentPoints = (): { p: THREE.Vector3; tip: THREE.Vector3; mode: Mode; fading: boolean; on?: THREE.Object3D }[] =>

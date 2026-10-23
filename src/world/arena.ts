@@ -11,6 +11,7 @@ import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
 import { restoreProps } from './destructible';
+import { emit } from '../events';
 import { stumpPreloaded } from './stump';
 
 export { groundHeight };
@@ -72,6 +73,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   let active = biomes[biome].b;
 
   function setBiome(id: BiomeId): void {
+    const changed = id !== biome;
     biome = id;
     active = biomes[id].b;
     setRelief(active.relief ?? null);
@@ -84,6 +86,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     scene.environment = envMap(renderer, L.env);
     scene.environmentIntensity = L.envIntensity;
     setAdaptScale(L.adapt ?? 1);
+    if (changed) emit('biomeChanged', id);
   }
   setBiome(biome);
 

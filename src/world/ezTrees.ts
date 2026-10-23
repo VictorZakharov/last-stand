@@ -12,6 +12,8 @@ export interface TreeKind {
   leaves: THREE.BufferGeometry;
   /** its trunk alone, the bark's first branch: what an arrow meets (`world/wall.ts`; its limbs are let go) */
   trunk: THREE.BufferGeometry;
+  /** its trunk's radius at its foot (of its height of 1) */
+  trunkFoot: number;
   /** how far it reaches from the trunk, over its height, in each of REACH_BANDS bands of height from its foot */
   reach: number[];
 }
@@ -90,6 +92,18 @@ function trunkOf(bark: THREE.BufferGeometry, trunk: Rings): THREE.BufferGeometry
   return geo;
 }
 
+/** The mean radius of `trunk`'s first ring round its middle. */
+function footOf(bark: THREE.BufferGeometry, trunk: Rings): number {
+  const p = bark.attributes.position, n = trunk.round - 1;
+  let cx = 0, cz = 0, radius = 0;
+  for (let j = 0; j < n; j++) {
+    cx += p.getX(trunk.from + j) / n;
+    cz += p.getZ(trunk.from + j) / n;
+  }
+  for (let j = 0; j < n; j++) radius += Math.hypot(p.getX(trunk.from + j) - cx, p.getZ(trunk.from + j) - cz) / n;
+  return radius;
+}
+
 export function growTree(g: Grow): TreeKind {
   const json = structuredClone(TreePreset[g.preset]) as unknown as {
     seed: number;
@@ -134,5 +148,5 @@ export function growTree(g: Grow): TreeKind {
       reach[b] = Math.max(reach[b], Math.hypot(p.getX(i), p.getZ(i)));
     }
   }
-  return { bark, leaves, trunk: trunkOf(bark, branches[0]), reach };
+  return { bark, leaves, trunk: trunkOf(bark, branches[0]), trunkFoot: footOf(bark, branches[0]), reach };
 }
