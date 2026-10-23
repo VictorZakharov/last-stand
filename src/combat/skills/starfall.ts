@@ -7,6 +7,8 @@ import * as THREE from 'three';
 import { additive, nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
+import { evades, type Threat } from '../../entities/evade';
+import type { Enemy } from '../../entities/enemy';
 import { blastCorpses } from '../../entities/corpse';
 import { addEffect, shockwave, decal, glyphMarker, lightPillar, crackDecal, crystalBurst } from '../../fx/effects';
 import { burst, particles, col, smokePuff, debris } from '../../fx/particles';
@@ -35,7 +37,11 @@ const _up = new THREE.Vector3(0, 1, 0);
 const getMeteorMat = () => meteorMat ??= new THREE.MeshStandardMaterial({ color: 0x0b2a1c, emissive: new THREE.Color(COLOR), emissiveIntensity: 4, roughness: 0.2, flatShading: true });
 const streakMaterial = () => nearGlow(new THREE.MeshBasicMaterial({ color: new THREE.Color(COLOR).multiplyScalar(2.2), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8 }));
 
-function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: number, blasted: Set<object>): void {
+/** A cast's crystals together: the bodies they've thrown already (each thrown once a cast), and the foes that have seen
+ *  the cast coming (each judged once: entities/evade.ts) and where it's coming down, the whole of it. */
+interface Fall { blasted: Set<object>; judged: Set<Enemy>; area: Threat }
+
+function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: number, fall: Fall): void {
   const streakMat = streakMaterial();
   const meteor = new THREE.Mesh(meteorGeo, getMeteorMat());
   const streak = new THREE.Mesh(streakGeo, streakMat);
@@ -68,15 +74,16 @@ function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: num
         vx: -dir.x * 3 + rand(-0.6, 0.6), vy: -dir.y * 3 + rand(-0.6, 0.6), vz: -dir.z * 3 + rand(-0.6, 0.6),
         life: 0.45, size: rand(0.12, 0.3), sizeEnd: 0.02, color: col(i % 2 ? COLOR : CORE, 2.4), colorEnd: col(0x1040ff, 0.4), drag: 2,
       });
-      if (k >= 1) { landed = true; marker.cancel(); impact(player, def, landing, blasted); }
+      if (k >= 1) { landed = true; marker.cancel(); impact(player, def, landing, fall); }
       return true;
     },
     dispose() { G.scene.remove(group); streakMat.dispose(); },
   });
 }
 
-/** A crystal's impact at `p`; `blasted`, the bodies its cast's crystals have thrown already, thrown no more. */
-function impact(player: Player, def: Def, p: THREE.Vector3, blasted: Set<object>): void {
+/** A crystal's impact at `p`, one of its cast's (`fall`). */
+function impact(player: Player, def: Def, p: THREE.Vector3, fall: Fall): void {
+  const { blasted, judged } = fall;
   const at = new THREE.Vector3(p.x, p.y + 0.3, p.z);
   // a slim pillar: a wide pale one blooms into a haze over the whole impact
   lightPillar(p, { color: CORE, intensity: 1.8, radius: 0.25, height: 7, life: 0.3 });
@@ -107,6 +114,7 @@ function impact(player: Player, def: Def, p: THREE.Vector3, blasted: Set<object>
     if (!e.alive) continue;
     const d = Math.hypot(e.pos.x - p.x, e.pos.z - p.z) - e.radius * 0.5;
     if (d < def.radius) {
+      if (!judged.has(e) && judged.add(e) && evades(e, player, fall.area)) continue;
       // a direct hit takes full damage, easing down to the edge's share (smoothstep: no kinks)
       const x = Math.max(0, d) / def.radius, k = 1 - (1 - def.edge) * x * x * (3 - 2 * x);
       // (struck from above: what it kills is thrown out and high)
@@ -185,12 +193,13 @@ const skill: InstantSkill = {
   cast(player, rawDef, target) {
     const def = rawDef as Def;
     sfx.starfallCall();
-    const blasted = new Set<object>();
+    const area: Threat = { kind: 'area', x: target.x, z: target.z, half: def.scatter + def.radius };
+    const fall: Fall = { blasted: new Set(), judged: new Set(), area };
     for (let i = 0; i < def.shards; i++) {
       const a = Math.random() * Math.PI * 2, r = i === 0 ? 0 : rand(0.6, def.scatter);
       const land = inArena({ x: target.x + Math.cos(a) * r, z: target.z + Math.sin(a) * r }, new THREE.Vector3());
       land.y = groundHeight(land.x, land.z);
-      dropMeteor(player, def, land, i * 0.14, blasted);
+      dropMeteor(player, def, land, i * 0.14, fall);
     }
   },
 };

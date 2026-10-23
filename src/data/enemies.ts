@@ -24,6 +24,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     life: 105, damage: 34, damageType: 'vitality', speed: 4.3, radius: 0.5,
     range: 13, keepAway: 8.5, windup: 0.75, recover: 0.4, cooldown: 2.2,
     projectile: { speed: 13, radius: 0.35, color: 0xc050ff, trail: 0x1a0428, core: 0.7, look: 'void' },
+    evade: { how: 'blink', chance: 0.5, from: ['shot', 'wave', 'rush', 'beam', 'area'], sees: Math.PI / 4, reach: [3, 5.5] },
     cost: 2, score: 2,
   },
   brute: {
@@ -59,6 +60,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     life: 95, damage: 32, damageType: 'vitality', speed: 4.0, radius: 0.5,
     range: 12.5, keepAway: 8, windup: 0.8, recover: 0.4, cooldown: 2.3,
     projectile: { speed: 11.5, radius: 0.38, color: 0x9cff3a, trail: 0x2c4a1c, core: 0.6, look: 'spore' },
+    evade: { how: 'duck', chance: 0.5, from: ['shot'], sees: Math.PI / 4, down: 1.1, top: 0.5 },
     cost: 2, score: 2,
   },
   barkhulk: {

@@ -9,6 +9,7 @@ import { nearGlow } from '../core/materials';
 import { hurtProp, PROP_DAMAGE } from '../world/destructible';
 import type { Obstacle } from '../types';
 import { entry, strikesBody } from './strikes';
+import { evades, SEEN_AHEAD, type Threat } from '../entities/evade';
 
 const coreGeo = new THREE.SphereGeometry(1, 12, 8);
 const matCache = new Map<string, THREE.Material>();
@@ -82,6 +83,11 @@ export interface ProjectileOpts {
   onProp?(o: Obstacle, proj: Projectile, from: THREE.Vector3): boolean;
   /** how far from the middle it's gone (m, 28 by default): an arrow meets the wall itself */
   edge?: number;
+  /** the hero whose shot it is: a foe that sees it coming may get out of its way (entities/evade.ts) */
+  by?: Player;
+  /** the foes that have seen it coming, shared by a cast's shots (a volley's arrows, a bolt's splits): each foe judged
+   *  once a cast (each arrow of five judged alone, a foe got out of nearly every volley) */
+  judged?: Set<Enemy>;
 }
 
 const _to = new THREE.Vector3(), _from = new THREE.Vector3(), _hits: Enemy[] = [], _along: number[] = [], _order: number[] = [];
@@ -111,6 +117,9 @@ export class Projectile {
   /** the props it has flown past (their circles, not what they draw) */
   readonly passed = new Set<Obstacle>();
   readonly edge: number;
+  readonly by?: Player;
+  /** the foes that have seen it coming (each judged once a cast, `foresee`) */
+  readonly judged: Set<Enemy>;
   readonly trail?: TrailOpts;
   readonly color: THREE.ColorRepresentation;
   alive = true;
@@ -137,6 +146,8 @@ export class Projectile {
     this.onExpire = o.onExpire;
     this.onProp = o.onProp;
     this.edge = o.edge ?? 28;
+    this.by = o.hostile ? undefined : o.by;
+    this.judged = o.judged ?? new Set();
     this.trail = o.trail;
     this.color = o.color ?? 0xffffff;
     this.mesh = o.mesh ?? new THREE.Mesh(coreGeo, coreMat(this.color, o.intensity ?? 4, this.hostile));
@@ -171,10 +182,15 @@ export class Projectile {
     const k = Math.min(1, Math.max(0, (d - d0) / (d1 - d0)));
     this.mesh.scale.setScalar(this.size * k * k * (3 - 2 * k));
     this.mesh.visible = k > 0;
+    if (this.by) this.foresee(this.by);
     if (this.level && !this.hostile && this.strikeFoes(_from.set(px, py, pz))) return false;
     this.tick?.(this, dt);
-    // (its own flight may end it: an arrow into the ground)
-    if (!this.alive) return false;
+    // (its own flight may end it: an arrow into the ground, past a foe it went through first, which takes it: a
+    // Lancewood Shot at a ducked foe's feet went through what was left of it into the ground)
+    if (!this.alive) {
+      if (!this.level && !this.hostile) this.strikeFoes(_from.set(px, py, pz));
+      return false;
+    }
 
     if (this.trail) {
       const tr = this.trail;
@@ -219,6 +235,24 @@ export class Projectile {
     return true;
   }
 
+  /** The foes that see it coming within `SEEN_AHEAD` of its flight, each judged once (`evades`): one that blinks out
+   *  of its way is passed by, and one that ducks is struck only where its drawn body is left over the ground. */
+  private foresee(by: Player): void {
+    const speed = Math.hypot(this.vel.x, this.vel.z);
+    if (speed < 1e-3) return;
+    const x = this.pos.x, z = this.pos.z, dx = this.vel.x * SEEN_AHEAD, dz = this.vel.z * SEEN_AHEAD;
+    for (const e of G.enemies) {
+      if (!e.def.evade || this.ignore.has(e) || this.judged.has(e)) continue;
+      if (entry(x, z, dx, dz, e.pos.x, e.pos.z, Math.max(e.radius, e.reach.out) + this.radius) < 0) continue;
+      this.judged.add(e);
+      const way = { x: this.vel.x / speed, z: this.vel.z / speed };
+      const threat: Threat = { kind: 'shot', x, z, way, half: this.radius };
+      if (!evades(e, by, threat) || e.def.evade.how !== 'blink') continue;
+      // (blinked out of the cast's way: every shot of it passes it by, a volley's other arrows too)
+      for (const shot of G.projectiles) if (shot.judged === this.judged) shot.ignore.add(e);
+    }
+  }
+
   /** The foes this frame's step from `from` strikes, struck: the first alone (true: it's gone), or going on through
    *  them each, in the order the step meets them. */
   private strikeFoes(from: THREE.Vector3): boolean {
@@ -249,11 +283,12 @@ export class Projectile {
    */
   private strikes(e: Enemy, from: THREE.Vector3): number {
     const ahead = _ahead.copy(this.vel).setLength(this.point);
-    const body = strikesBody(e, _stepFrom.copy(from).add(ahead), _stepTo.copy(this.pos).add(ahead));
+    const body = strikesBody(e, _stepFrom.copy(from).add(ahead), _stepTo.copy(this.pos).add(ahead), this.radius * 0.5);
     if (this.level) return body;
     const dx = this.pos.x - from.x, dz = this.pos.z - from.z, r = e.radius + this.radius;
     const circle = this.swept ? entry(from.x, from.z, dx, dz, e.pos.x, e.pos.z, r) : (this.distanceSq(e.pos.x, e.pos.z, from.x, from.z) < r * r ? 1 : -1);
-    if (circle < 0) return body;
+    // (ducked, it's struck only where what's left of it stands over the ground: entities/evade.ts)
+    if (circle < 0 || e.ducked > 0) return body;
     return body < 0 ? circle : Math.min(body, circle);
   }
 
@@ -283,6 +318,8 @@ export class Projectile {
   }
 
   kill(): false {
+    // (once: a shot its flight ended may still strike the foe it went through first)
+    if (!this.alive) return false;
     this.alive = false;
     G.scene.remove(this.mesh);
     release(this.light);

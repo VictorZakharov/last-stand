@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
+import { evades } from '../../entities/evade';
 import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
 import { addEffect, shockwave } from '../../fx/effects';
 import { burst, debris } from '../../fx/particles';
@@ -61,6 +62,8 @@ interface RainState {
   done: boolean;
   /** its effect was cleared (a run starting): nothing more is shown */
   gone: boolean;
+  /** the foes that have seen it coming (each judged once a channel: entities/evade.ts) */
+  judged: Set<Enemy>;
 }
 
 /** a streak's longest (m) */
@@ -134,7 +137,7 @@ const skill: ChannelSkill<RainState> = {
     const def = rawDef as Def;
     const q = player.cls.quiver;
     const s: RainState = { player, def, center: aimOf(player, def, new THREE.Vector3()), cyc: 0, loosed: false,
-      fetch: q && !player.nocked ? q.fetch / pace(player) : 0, rising: [], showers: [], done: false, gone: false };
+      fetch: q && !player.nocked ? q.fetch / pace(player) : 0, rising: [], showers: [], done: false, gone: false, judged: new Set() };
     // the area on the floor, and the showers' arrows as they fall (one instanced mesh)
     const ringMat = additive(LEAF, 1.2, 0), fillMat = additive(LEAF, 0.35, 0);
     const ringGeo = floorPatch(def.radius * 0.95, def.radius, 1, 256), fillGeo = floorPatch(0, def.radius, 1, 128);
@@ -181,6 +184,9 @@ const skill: ChannelSkill<RainState> = {
             const hit = struck(_a);
             // (its speed as it comes down)
             const vel = _d.copy(f.dir).multiplyScalar(FALL_V0 + FALL_A * f.t);
+            // (one that sees the rain coming may blink out from under it, the arrow falling on past)
+            const seen = hit && !s.judged.has(hit) && s.judged.add(hit);
+            if (seen && evades(hit, player, { kind: 'area', x: s.center.x, z: s.center.z, half: def.radius })) continue;
             if (hit) {
               hitEnemy(hit, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical', from: { x: f.from.x, z: f.from.z }, blow: arrowBlow(hit, _a, vel, 0.7) });
               intoFoe(hit, _a, vel);

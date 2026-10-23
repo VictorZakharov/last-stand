@@ -68,9 +68,13 @@ export interface DealtHit {
   carry?: { seconds: number; way: XZ };
   /** a kill's throw */
   fling?: Fling;
+  /** it got out of the hero's attack (entities/evade.ts): how (`EVADE_HOW`), and where to for a blink */
+  evade?: { how: number; x: number; z: number };
 }
 let dealtSink: ((enemy: Enemy, hit: DealtHit) => void) | null = null;
 export function setDealtSink(fn: typeof dealtSink): void { dealtSink = fn; }
+/** What the local player did to a foe, told to the host where it's a co-op guest's copy (`evades`, entities/evade.ts). */
+export function tellHost(enemy: Enemy, hit: DealtHit): void { dealtSink?.(enemy, hit); }
 
 /** How a foe's attack came at a player, as the battle log names it. */
 export type EnemyAttack = 'strike' | 'slam' | 'bolt';

@@ -196,7 +196,7 @@ function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius
     // (a foe as the projectile strikes it: an arrow where its point meets its body, `strikesBody`)
     if (!pierce) for (const en of G.enemies) {
       if (!en.alive || en.invulnerable) continue;
-      const k = level ? strikesBody(en, _c.set(px, py, pz).add(_tip.subVectors(_b, pos)), _f.copy(pos).add(_tip)) : entry(px, pz, dx, dz, en.pos.x, en.pos.z, en.radius + radius);
+      const k = level ? strikesBody(en, _c.set(px, py, pz).add(_tip.subVectors(_b, pos)), _f.copy(pos).add(_tip), radius * 0.5) : entry(px, pz, dx, dz, en.pos.x, en.pos.z, en.radius + radius);
       if (k < 0 || k >= t) continue;
       t = k;
     }
@@ -263,11 +263,13 @@ export const bowShot: InstantSkill = {
     // (the string gives the arrow the energy the bow stored, which goes with the square of the draw: that is its blow)
     const damage = def.damage * pull * pull, knock = (def.knock ?? 0) * pull;
     const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v);
+    // (a volley seen coming as one: entities/evade.ts)
+    const judged = new Set<Enemy>();
     for (let i = 0; i < def.missiles; i++) {
       const dir = shotDir(yaw + (i - (def.missiles - 1) / 2) * def.spread, pitch);
       const mesh = arrowMesh(); mesh.quaternion.setFromUnitVectors(FWD, dir);
       spawnProjectile({
-        pos: origin, dir, speed: v, radius: 0.22, life: 4, mesh, color: 0xd3bf8d, swept: true, level: true, point: ARROW / 2, tick: fly, edge: ARROW_EDGE, onProp: arrowProp,
+        pos: origin, dir, speed: v, radius: 0.22, life: 4, mesh, color: 0xd3bf8d, swept: true, level: true, point: ARROW / 2, tick: fly, edge: ARROW_EDGE, onProp: arrowProp, by: player, judged,
         onHit(enemy, proj) {
           intoFoe(enemy as Enemy, proj.pos, proj.vel);
           hitEnemy(enemy as Enemy, damage, { by: player, skill: def, tags: def.tags, type: 'physical', knock,
@@ -309,7 +311,7 @@ export const piercingShot: InstantSkill = {
     let through = 0;
     const pr = spawnProjectile({
       // (through everything on its line, short foes too: it flies near level, and over the nearest heads a line shot missed them)
-      pos: origin, dir, speed: v, radius: 0.24, life: 3, mesh, color: 0xd3bf8d, swept: true, pierce: true, tick: fly, edge: ARROW_EDGE, onProp: arrowProp,
+      pos: origin, dir, speed: v, radius: 0.24, life: 3, mesh, color: 0xd3bf8d, swept: true, pierce: true, tick: fly, edge: ARROW_EDGE, onProp: arrowProp, by: player,
       trail: { color: GLINT, colorEnd: 0x5a4020, intensity: full ? 1.3 : 0.55, size: full ? 0.13 : 0.08, rate: full ? 90 : 40, life: 0.28 },
       onHit(enemy, proj) {
         const share = def.falloff[Math.min(through++, def.falloff.length - 1)];

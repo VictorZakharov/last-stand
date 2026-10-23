@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
+import { evades } from '../../entities/evade';
+import type { Enemy } from '../../entities/enemy';
 import { particles, col, burst } from '../../fx/particles';
 import { flash, release } from '../../fx/lights';
 import { sfx } from '../../core/audio';
@@ -30,6 +32,8 @@ interface LanceState {
   /** where the beam runs this frame, and what takes its pull on the fallen away */
   beam: Beam;
   calm: () => void;
+  /** the foes that have seen it coming (each judged once a channel: entities/evade.ts) */
+  judged: Set<Enemy>;
 }
 
 /** The beam as the fallen meet it: from (x, y, z) along (dx, dz), this long and wide (m), while it's out. */
@@ -182,7 +186,7 @@ const skill: ChannelSkill<LanceState> = {
     if (opens > 0) sfx.charge(opens);
     const beam: Beam = { on: false, x: 0, y: 0, z: 0, dx: 0, dz: 1, len: 0, w: 0 };
     return {
-      outer, core, portal, outerMat, coreMat, portalMat, tick: 0, t: 0, firing: false, beam, calm: addField(carry(beam)),
+      outer, core, portal, outerMat, coreMat, portalMat, tick: 0, t: 0, firing: false, beam, calm: addField(carry(beam)), judged: new Set(),
       // a glow at the hand and a pool where it hits, a few metres across: green light washed over a wide
       // circle of ground reads as a haze round the whole cast
       lightA: flash({ color: 0x5dffa8, intensity: 2, distance: 4, life: 1, hold: 999 }),
@@ -302,6 +306,10 @@ const skill: ChannelSkill<LanceState> = {
         const proj = ex * _dir.x + ez * _dir.z;
         if (proj < 0 || proj > len + e.radius) continue;
         if (Math.abs(ex * _dir.z - ez * _dir.x) < w * 0.5 + e.radius) {
+          // (over a ducked foe; and one that sees it coming may blink out of its way)
+          if (origin.y > (e.duckedTop ?? Infinity)) continue;
+          const threat = { kind: 'beam', x: origin.x, z: origin.z, way: _dir, half: w * 0.5 } as const;
+          if (!st.judged.has(e) && st.judged.add(e) && evades(e, player, threat)) continue;
           // (the beam through it where it passes: off its middle, the body turns off the beam)
           const on = { x: origin.x + _dir.x * proj, z: origin.z + _dir.z * proj };
           const blow = { dir: { x: _dir.x, z: _dir.z }, lift: 0.15, on };
