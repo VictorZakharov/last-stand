@@ -12,13 +12,16 @@ type Def = Needs<'damage' | 'missiles' | 'spread' | 'speed' | 'splitCount' | 'sp
 import type { SkillDef } from '../../types';
 import { sfx } from '../../core/audio';
 
-function launch(player: Player, origin: THREE.Vector3, angle: number, def: Def, damage: number, gen: number, ignore: Set<Enemy>, withLight: boolean): void {
+function launch(
+  player: Player, origin: THREE.Vector3, angle: number, def: Def, damage: number, gen: number, ignore: Set<Enemy>, withLight: boolean,
+  judged: Set<Enemy>,
+): void {
   const dir = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
   spawnProjectile({
     pos: origin, dir, speed: def.speed * (gen ? 0.85 : 1), radius: gen ? 0.3 : 0.38,
     life: (def.range / def.speed) * (gen ? 0.6 : 1),
     color: def.color, size: gen ? 0.08 : 0.12, intensity: 6,
-    glow: withLight ? 10 : 0, homing: gen ? 5 : 2.2, ignore,
+    glow: withLight ? 10 : 0, homing: gen ? 5 : 2.2, ignore, by: player, judged,
     trail: { color: def.color, colorEnd: def.trailEnd, size: gen ? 0.22 : 0.34, rate: gen ? 50 : 90, life: 0.3 },
     onHit: (target, proj) => {
       const enemy = target as Enemy;   // friendly projectiles only hit enemies
@@ -31,7 +34,7 @@ function launch(player: Player, origin: THREE.Vector3, angle: number, def: Def, 
         const n = def.splitCount;
         for (let i = 0; i < n; i++) {
           const a = heading + (i - (n - 1) / 2) * 1.1;
-          launch(player, proj.pos.clone(), a, def, damage * def.splitDamage, 1, new Set([enemy]), false);
+          launch(player, proj.pos.clone(), a, def, damage * def.splitDamage, 1, new Set([enemy]), false, judged);
         }
       }
     },
@@ -52,9 +55,11 @@ const skill: InstantSkill = {
     const origin = player.castPoint;
     const base = player.shotHeading(origin, target);
     const n = def.missiles;
+    // (the cast's bolts and their splits seen coming as one: entities/evade.ts)
+    const judged = new Set<Enemy>();
     for (let i = 0; i < n; i++) {
       const a = base + (i - (n - 1) / 2) * def.spread;
-      launch(player, origin.clone(), a, def, def.damage, 0, new Set(), i === Math.floor(n / 2));
+      launch(player, origin.clone(), a, def, def.damage, 0, new Set(), i === Math.floor(n / 2), judged);
     }
     burst(origin, { count: 10, color: def.color, speed: 2, life: 0.25, size: 0.25, gravity: 0 });
     sfx.bolt();

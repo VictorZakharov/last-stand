@@ -33,6 +33,7 @@ import type { LogOptions } from './log';
 import type { TooltipsOptions } from './tooltips';
 import type { CursorOptions } from './cursor';
 import type { RushOptions } from './rush';
+import type { EvadeOptions } from './evade';
 import type { CrowdOptions } from './crowd';
 import type { DrawsOptions } from './draws';
 import type { PerfOptions } from './perf';
@@ -378,6 +379,16 @@ export async function tooltips(lab: Lab, command: TooltipsOptions): Promise<Repo
 export async function cursor(lab: Lab, command: CursorOptions): Promise<Report> {
   const { cursor: cursorRound } = await import('./cursor');
   return cursorRound(lab, command);
+}
+
+/**
+ * `lab evade`: the shooters getting out of the hero's attacks, tried from in front of them, behind them and at a
+ * ducked foe's feet; an evaded share off a half from in front, a try struck after it evaded or missed without it, a
+ * blink gone wrong, and any evade from behind are problems.
+ */
+export async function evade(lab: Lab, command: EvadeOptions): Promise<Report> {
+  const { evade: evadeRound } = await import('./evade');
+  return evadeRound(lab, command);
 }
 
 /**

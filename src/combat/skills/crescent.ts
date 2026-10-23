@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
+import { evades } from '../../entities/evade';
 import { addEffect, lightning, groundFlash, shockwave, crackDecal } from '../../fx/effects';
 import { particles, col, burst } from '../../fx/particles';
 import { flash, release } from '../../fx/lights';
@@ -103,6 +104,8 @@ const skill: InstantSkill = {
           if (!e.alive || hit.has(e)) continue;
           if (Math.hypot(e.pos.x - fx, e.pos.z - fz) > R * 0.85 + e.radius) continue;
           hit.add(e);
+          // (one that sees it coming may blink out of its way: behind it, or off its sides)
+          if (evades(e, player, { kind: 'wave', x: pos.x, z: pos.z, way: dir, half: R })) continue;
           hitEnemy(e, def.damage, { by: player, skill: def, tags: def.tags, type: 'lightning', knock: 1.5, from: pos, blow: { dir, lift: 0.25 } });
           // (a body it killed is thrown by its blow, not swept on again)
           if (e.corpse) swept.add(e.corpse);

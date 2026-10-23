@@ -21,9 +21,12 @@ export function entry(ax: number, az: number, dx: number, dz: number, cx: number
 
 /**
  * Where along the step from `a` to `b` (0..1) a shot first meets `e`'s body, its meshes as drawn, or -1 if it doesn't.
- * They're met only when the step comes within the body's reach (`Enemy.reach`).
+ * They're met only when the step comes within the body's reach (`Enemy.reach`). A ducked foe is met within `around`
+ * (m) of what's left of it (the shot's own size).
  */
-export function strikesBody(e: Enemy, a: THREE.Vector3, b: THREE.Vector3): number {
+export function strikesBody(e: Enemy, a: THREE.Vector3, b: THREE.Vector3, around = 0): number {
+  const top = e.duckedTop;
+  if (top !== null) return strikesDucked(e, top, a, b, around);
   const dx = b.x - a.x, dz = b.z - a.z, base = e.obj.position.y;
   if (Math.min(a.y, b.y) > base + Math.max(e.height, e.reach.top) || Math.max(a.y, b.y) < base) return -1;
   if (entry(a.x, a.z, dx, dz, e.pos.x, e.pos.z, Math.max(e.radius, e.reach.out)) < 0) return -1;
@@ -33,4 +36,15 @@ export function strikesBody(e: Enemy, a: THREE.Vector3, b: THREE.Vector3): numbe
   ray.far = length;
   const hit = castSolid(e.obj, ray);
   return hit ? hit.distance / length : -1;
+}
+
+/**
+ * Where along the step from `a` to `b` a shot meets a ducked foe (entities/evade.ts), or -1: within its circle and
+ * under `top`, what's left of it over the ground (a cap over its body). Its body is met by the hulls of its skinned
+ * limbs, which leave a cap's top out: aimed at a ducked Sporecaller's cap, at its feet, an arrow flew on through it.
+ */
+function strikesDucked(e: Enemy, top: number, a: THREE.Vector3, b: THREE.Vector3, around: number): number {
+  const t = entry(a.x, a.z, b.x - a.x, b.z - a.z, e.pos.x, e.pos.z, e.radius + around);
+  if (t < 0) return -1;
+  return a.y + (b.y - a.y) * t < top + around ? t : -1;
 }

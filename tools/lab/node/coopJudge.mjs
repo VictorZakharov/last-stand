@@ -127,11 +127,12 @@ function takeWithin(events, used, from, to) {
   return null;
 }
 
-/** One foe's position a frame (null where a game didn't show it) in `samples`. */
+/** One foe's position a frame (null where a game didn't show it: not there, or gone in a blink as a guest's copy
+ *  waits for the host's reports to have it where it went, slid there unseen) in `samples`. */
 function foePath(samples, id) {
   return samples.map((sample) => {
     const foe = sample.foes.find((candidate) => candidate.id === id);
-    return foe ? [foe.x, foe.z] : null;
+    return foe && !foe.gone ? [foe.x, foe.z] : null;
   });
 }
 
@@ -588,6 +589,83 @@ function describeStrike(host, guest) {
   return { line: `the guest's Power Strike under its charge: ${parts.join('; ')}`, problems };
 }
 
+/** how long after the guest's screen showed a foe evade the host's may show it, frames (the link and the playout) */
+const EVADE_AFTER = 60;
+/** a foe moving further than this in a frame on the host's screen has blinked, m */
+const BLINK_JUMP = 2;
+/** a copy that blinked coming back further than this from where the host's foe came out is off, m */
+const EVADE_OFF = 0.6;
+
+/** The runs of frames in which foe `id` shows `state` (`ducked`, `gone`) on `samples`' screen. */
+function foeRuns(samples, id, state) {
+  return hiddenRuns(samples, (sample) => Boolean(sample.foes.find((foe) => foe.id === id)?.[state]));
+}
+
+/** The frames foe `id` blinked on the host's screen (moved further than `BLINK_JUMP` in a frame), each with where it
+ *  came out. */
+function foeJumps(samples, id) {
+  const path = foePath(samples, id);
+  const jumps = [];
+  for (let frame = 1; frame < path.length; frame++) {
+    if (!path[frame] || !path[frame - 1]) continue;
+    if (distance(path[frame], path[frame - 1]) > BLINK_JUMP) jumps.push({ frame, at: path[frame] });
+  }
+  return jumps;
+}
+
+/**
+ * The foes getting out of the guest's shots, which its own game judges on its copies (entities/evade.ts): each duck
+ * on its screen against one on the host's within `EVADE_AFTER`, each blink (its copy gone) against the host's foe
+ * jumping within it, and how far from where the host's came out the copy came back; and the host's ducks and blinks
+ * with none on the guest's screen.
+ */
+export function judgeEvades(host, guest) {
+  const tally = { ducks: 0, ducksSeen: 0, blinks: 0, blinksSeen: 0, cameBack: [], hostAlone: 0 };
+  for (const id of foeIds(host)) {
+    const ducksHere = foeRuns(guest, id, 'ducked');
+    const ducksThere = foeRuns(host, id, 'ducked');
+    const usedDucks = new Set();
+    for (const duck of ducksHere) {
+      tally.ducks++;
+      if (takeWithin(ducksThere, usedDucks, duck.from, duck.from + EVADE_AFTER)) tally.ducksSeen++;
+    }
+    tally.hostAlone += ducksThere.length - usedDucks.size;
+    const jumps = foeJumps(host, id);
+    const usedJumps = new Set();
+    for (const gone of foeRuns(guest, id, 'gone')) {
+      tally.blinks++;
+      const jump = takeWithin(jumps, usedJumps, gone.from, gone.from + EVADE_AFTER);
+      if (!jump) continue;
+      tally.blinksSeen++;
+      const back = gone.to < guest.length ? foePath(guest, id)[gone.to] : null;
+      if (back) tally.cameBack.push(distance(back, jump.at));
+    }
+    tally.hostAlone += jumps.length - usedJumps.size;
+  }
+  return tally;
+}
+
+function describeEvades(host, guest) {
+  const tally = judgeEvades(host, guest);
+  const back = tally.cameBack.length
+    ? `, its copy back ${cm(median(tally.cameBack))} from where the host's came out (the most `
+      + `${cm(Math.max(...tally.cameBack))})`
+    : '';
+  const line = `evades on the guest's screen: ${tally.ducks} ducks, ${tally.ducksSeen} shown on the host's; `
+    + `${tally.blinks} blinks, ${tally.blinksSeen} shown on the host's${back}; on the host's alone ${tally.hostAlone}`;
+  const problems = [];
+  if (!tally.ducks) problems.push('no foe ducked out of the guest\'s shots');
+  if (!tally.blinks) problems.push('no foe blinked out of the guest\'s shots');
+  if (tally.ducksSeen < tally.ducks) problems.push(`${tally.ducks - tally.ducksSeen} ducks never shown on the host's`);
+  if (tally.blinksSeen < tally.blinks) {
+    problems.push(`${tally.blinks - tally.blinksSeen} blinks never shown on the host's`);
+  }
+  const off = tally.cameBack.filter((metres) => metres > EVADE_OFF).length;
+  if (off) problems.push(`${off} blinked copies came back more than ${cm(EVADE_OFF)} from where the host's foe did`);
+  if (tally.hostAlone) problems.push(`${tally.hostAlone} evades on the host's screen with none on the guest's`);
+  return { line, problems };
+}
+
 /**
  * Where a game shows `who` (its own hero, `self`, or its `partner`) a frame, none where its body isn't drawn (a
  * blink's crossing: no one sees it move there).
@@ -618,6 +696,7 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   }
   if (foeIds(host).length) add(describeFoes(host, guest, frameMs));
   if (name === 'shoot') add(describeShots(host, guest, frameMs));
+  if (name === 'evade') add(describeEvades(host, guest));
   if (name === 'dodge') add(describeBlows(guest, frameMs));
   if (name === 'down') add(describeDown(host, guest, frameMs));
   if (name === 'blink') add(describeBlinks(host, guest, frameMs));

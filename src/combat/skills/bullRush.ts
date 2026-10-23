@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { G } from '../../state';
 import { carryEnemy, hitEnemy } from '../damage';
+import { evades } from '../../entities/evade';
 import { addEffect, shockwave, groundFlash, crackDecal, decal } from '../../fx/effects';
 import { particles, col, smokePuff, debris } from '../../fx/particles';
 import { flash } from '../../fx/lights';
@@ -153,6 +154,7 @@ const skill: InstantSkill = {
         const near = Math.hypot(e.pos.x - p.x, e.pos.z - p.z) <= REACH + e.radius;
         if (!near && !touchesAny(e, riding, touch)) continue;
         hit.add(e);
+        if (evades(e, player, { kind: 'rush', x: p.x, z: p.z, way: dir, half: REACH })) continue;
         // (struck through its middle along the charge: a kill thrown on ahead, its body carried on by the field, and
         // a foe it leaves standing carried before it to the stop)
         hitEnemy(e, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical', from: p, blow: { dir, lift: 0.3 } });

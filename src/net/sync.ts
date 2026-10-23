@@ -9,7 +9,9 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { setSpawnSink, spawnEnemy } from '../entities/spawner';
-import { setFxSink, FX, type FxName } from '../entities/enemyAI';
+import { setFxSink, fx, FX, type FxName } from '../entities/enemyAI';
+import { EVADE_HOW } from '../entities/evade';
+import { inObstacle } from '../world/collision';
 import { setDealtSink, DAMAGE_TYPES, type DealtHit } from '../combat/damage';
 import { flingFrom, flingRow } from '../combat/fling';
 import { setPropSink, setPropLife } from '../world/destructible';
@@ -48,8 +50,8 @@ interface Snapshot { r: number[]; v: number[]; p: number[][]; e: (number | strin
 export interface WorldMessage { t: number; x?: WorldEvent[]; s?: Snapshot }
 
 /** A guest's hit on a foe, for the host: [its number, foe, amount, crit, type, knock, from x, from z, chill, freeze,
- *  daze, carry, carry's way x, z] (a daze alone, `dazeEnemy`, and a charge's carry, `carryEnemy`, deal nothing), and a
- *  kill's throw after them (`flingRow`) */
+ *  daze, carry, carry's way x, z, evade, evade's x, z] (a daze alone, `dazeEnemy`, a charge's carry, `carryEnemy`, and
+ *  the foe getting out of the hero's attack, `evades`, deal nothing), and a kill's throw after them (`flingRow`) */
 export type HitReport = number[];
 
 const PHASES: RunPhase[] = ['countdown', 'fighting', 'cleared', 'over'];
@@ -130,16 +132,18 @@ function snap(): Snapshot {
 /** Host: a guest's hits on the foes, as its own game dealt them on its copies: dealt here too, its kill and loot. */
 export function onGuestHits(p: Player, hits: HitReport[]): void {
   if (role.current !== 'host' || G.mode !== 'run') return;
-  for (const [seq, id, amount, crit, type, knock, fx, fz, chill, freeze, daze, carry, wayX, wayZ, ...thrown] of hits) {
+  for (const [seq, id, amount, crit, type, knock, ox, oz, chill, freeze, daze, carry, wayX, wayZ, evade, ex, ez, ...thrown] of hits) {
     dealtUpTo.set(p.slot, Math.max(dealtUpTo.get(p.slot) ?? 0, seq));
     const e = G.enemies.find((q) => q.id === id);
     if (!e || !e.alive) continue;
     if (daze) { e.daze(daze); continue; }
     if (carry) { e.carry(p, { x: wayX, z: wayZ }, carry); continue; }
+    // (where it blinks to kept clear of the props here too: the guest's copies stand a little off the foes)
+    if (evade) { if (evade === EVADE_HOW.duck || !inObstacle({ x: ex, z: ez }, e.radius)) fx('evade', e.id, evade, ex, ez); continue; }
     if (e.invulnerable) continue;
     e.takeDamage(amount, {
       type: DAMAGE_TYPES[type], crit: crit === 1, by: p, chill: chill || undefined, freeze: freeze || undefined,
-      ...(knock ? { knock, from: { x: fx, z: fz } } : {}), fling: flingFrom(thrown),
+      ...(knock ? { knock, from: { x: ox, z: oz } } : {}), fling: flingFrom(thrown),
     });
   }
 }
@@ -155,6 +159,7 @@ function onDealt(e: Enemy, hit: DealtHit): void {
     hitSeq, e.id, r2(hit.amount), hit.crit ? 1 : 0, DAMAGE_TYPES.indexOf(hit.type),
     r2(hit.knock ?? 0), r2(from.x), r2(from.z), r2(hit.chill ?? 0), r2(hit.freeze ?? 0), r2(hit.daze ?? 0),
     r2(hit.carry?.seconds ?? 0), r2(hit.carry?.way.x ?? 0), r2(hit.carry?.way.z ?? 0),
+    hit.evade?.how ?? 0, r2(hit.evade?.x ?? 0), r2(hit.evade?.z ?? 0),
     ...(hit.fling ? flingRow(hit.fling) : []),
   ]);
 }

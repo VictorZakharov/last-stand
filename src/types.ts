@@ -231,6 +231,30 @@ export interface Profile {
 
 export type EnemyAIKind = 'melee' | 'ranged' | 'slam' | 'boss' | 'idle';
 
+/** What a hero's attack is, as a foe sees it coming (entities/evade.ts): a shot (an arrow, a bolt), a wave along the
+ *  ground (a crescent), a charge, a beam, or an area coming down (a rain of arrows, falling stars). */
+export type ThreatKind = 'shot' | 'wave' | 'rush' | 'beam' | 'area';
+
+/**
+ * How a foe gets out of an attack it sees coming, at random, rolled once an attack (entities/evade.ts): it ducks into
+ * the ground ('duck': a shot flies over what's left of it, struck only low, at its feet) or blinks to a spot nearby
+ * clear of the attack ('blink'). It sees only what comes from a hero within `sees` (rad) either side of its facing.
+ */
+export interface EvadeDef {
+  how: 'duck' | 'blink';
+  /** the chance it gets out of each attack it sees */
+  chance: number;
+  /** the attacks it gets out of */
+  from: readonly ThreatKind[];
+  /** how far either side of its facing it sees an attack coming (rad) */
+  sees: number;
+  /** ducked: how long it stays down (s), and how high it still stands over the ground (m) */
+  down?: number;
+  top?: number;
+  /** blinked: how far it goes (m, the nearest and the farthest) */
+  reach?: readonly [number, number];
+}
+
 export interface EnemyDef {
   name: string;
   model: string;
@@ -265,6 +289,8 @@ export interface EnemyDef {
   boss?: boolean;
   /** training dummy: never dies, meters the damage it takes instead */
   dummy?: boolean;
+  /** how it gets out of an attack it sees coming */
+  evade?: EvadeDef;
 }
 
 // ---------------------------------------------------------------------------

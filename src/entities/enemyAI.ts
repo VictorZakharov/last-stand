@@ -159,6 +159,10 @@ export const FX = {
   toss(id: number, vx: number, vz: number, vy: number) {
     G.enemies.find((e) => e.id === id)?.toss(vx, vz, vy);
   },
+  /** foe `id` getting out of a hero's attack (entities/evade.ts): ducked where it stands (`how` 1) or blinked to (x, z) */
+  evade(id: number, how: number, x: number, z: number) {
+    G.enemies.find((e) => e.id === id)?.evade(how, x, z);
+  },
 };
 export type FxName = keyof typeof FX;
 

@@ -24,6 +24,7 @@ import { emit } from '../events';
 import { angleDamp, damp, hitFlash, pick, rand } from '../util';
 import { applyShadowDetail, qualityLevel } from '../core/quality';
 import { Corpse } from './corpse';
+import { BLINK_FORM, copyBack, duckDepth, duckLooks, EVADE_HOW, formLooks, vanishLooks } from './evade';
 import { flingOf, type Blow, type Fling } from '../combat/fling';
 import { QUALITY } from '../data/quality';
 import { CARRY } from '../data/balance';
@@ -44,6 +45,9 @@ function inView(x: number, y: number, z: number, r: number): boolean {
 import { nearestPlayer } from '../net/role';
 import { LookAt } from './models/ik';
 import { joinCrowd, leaveCrowd } from './models/crowd';
+
+/** a co-op guest's copy's own evade and the host's word of it, coming back, come within this (s) */
+const OWN_EVADE_ECHO = 1.5;
 
 const auraGeo = new THREE.RingGeometry(0.7, 1, 48).rotateX(-Math.PI / 2);
 
@@ -154,6 +158,25 @@ export class Enemy {
    *  reports (net/sync) */
   ownFor = -1;
   handOff = false;
+  /** ducked into the ground out of a shot's way (entities/evade.ts): seconds left down, of how long it went down for */
+  ducked = 0;
+  private duckFor = 1;
+  /** how far down into the ground it's drawn as it ducks (m) */
+  sunk = 0;
+  /** Ducked, how high what's left of it stands as hits have it (m, world): down from the moment it ducks, its drawn
+   *  body following over `DUCK.down` (a Lancewood Shot crosses 7 m in five frames, and met the body half down);
+   *  null while it isn't. */
+  get duckedTop(): number | null {
+    return this.ducked > 0 ? this.obj.position.y + this.sunk + (this.def.evade?.top ?? this.height) : null;
+  }
+  /** blinked: seconds left forming again where it went (its body's dissolve running back) */
+  forming = 0;
+  /** a co-op guest's copy that blinked on its own game: where it went, and how long it's been gone (s; 0: it isn't),
+   *  untouchable meanwhile, until the host's reports have it there */
+  private goneTo: XZ | null = null;
+  gone = 0;
+  /** a co-op guest's copy: when its own game last had it evade, and how (the host's word of it, coming back, is passed over) */
+  private ownEvade = { at: -Infinity, how: 0 };
   /** how its kill threw it, and its body from then (entities/corpse.ts) */
   fling: Fling | null = null;
   corpse: Corpse | null = null;
@@ -257,6 +280,53 @@ export class Enemy {
     this.dazed = Math.max(this.dazed, s * (1 - (this.def.freezeResist || 0)));
     if (!this.net) this.cancelAction();
     for (const drop of this.onDazed.splice(0)) drop();
+  }
+
+  /**
+   * It gets out of an attack (entities/evade.ts, the `evade` fx): ducked where it stands (`how` 1), or blinked to
+   * (`x`, `z`) (2). A co-op guest's copy blinks from its own game (`own`: as its screen shows the shot) and stays gone
+   * until the host's reports have it where it went; the host's word of the same evade, coming back, is passed over.
+   */
+  evade(how: number, x: number, z: number, own = false): void {
+    if (!this.alive) return;
+    if (own) this.ownEvade = { at: G.time, how };
+    else if (this.net && this.ownEvade.how === how && G.time - this.ownEvade.at < OWN_EVADE_ECHO) return;
+    if (how === EVADE_HOW.duck) {
+      this.ducked = this.duckFor = this.def.evade?.down ?? 1;
+      if (!this.net) this.cancelAction();
+      duckLooks(this);
+      return;
+    }
+    vanishLooks(this, this.pos.x, this.pos.z);
+    if (this.net) {
+      this.goneTo = { x, z };
+      this.gone = G.dt;
+      this.invulnerable = true;
+      return;
+    }
+    this.cancelAction();
+    this.pos.set(x, this.pos.y, z);
+    this.vel.set(0, 0, 0);
+    this.knock.set(0, 0, 0);
+    this.formAgain();
+  }
+
+  private formAgain(): void {
+    this.forming = BLINK_FORM;
+    this.obj.position.x = this.pos.x;
+    this.obj.position.z = this.pos.z;
+    formLooks(this);
+  }
+
+  /** A guest's copy gone in a blink comes back once the host's reports have it where it went. */
+  private comeBack(dt: number): void {
+    if (!this.goneTo) return;
+    this.gone += dt;
+    if (!copyBack(this, this.goneTo, this.gone)) return;
+    this.goneTo = null;
+    this.gone = 0;
+    this.invulnerable = false;
+    this.formAgain();
   }
 
   /** Carried before `by`'s charge along `way` (its length 1) for `seconds`, dazed meanwhile (combat/damage
@@ -403,13 +473,15 @@ export class Enemy {
     const frozen = this.frozen > 0, dazed = this.dazed > 0;
     if (frozen) this.frozen = Math.max(0, this.frozen - dt);
     if (dazed) this.dazed = Math.max(0, this.dazed - dt);
+    this.ducked = Math.max(0, this.ducked - dt);
+    this.forming = Math.max(0, this.forming - dt);
 
     this.desired.set(0, 0, 0);
     this.targetFacing = this.facing;
     if (this.net) return this.updateCopy(dt, t, frozen);
     if (this.carried || this.tossed) return this.updateCarried(dt, t, frozen);
     if (this.lure && (this.lure.until <= t || !lures.includes(this.lure))) this.lure = null;
-    if (!frozen && !dazed && this.pickTarget()) {
+    if (!frozen && !dazed && this.ducked <= 0 && this.pickTarget()) {
       if (this.lure) lured(this, this.lure);
       else AI[this.def.ai](this, dt);
       this.tickAction(dt);
@@ -453,6 +525,7 @@ export class Enemy {
       this.pos.x = n.x;
       this.pos.z = n.z;
     }
+    this.comeBack(dt);
     // (thrown by the host, as its `toss` tells every game: risen and fallen here, carried on by its reports)
     if (this.tossed && this.ownFor < 0) this.fly(dt, false);
     this.vel.set(n.vx, 0, n.vz);
@@ -466,6 +539,7 @@ export class Enemy {
   }
 
   private updateLooks(dt: number, t: number, frozen: boolean): boolean {
+    if (this.def.evade) this.model.kit.u.uDissolve.value = this.goneTo ? 1 : this.forming / BLINK_FORM;
     this.model.kit.u.uFrozen.value = damp(this.model.kit.u.uFrozen.value, frozen ? 1 : this.chill > 0 ? 0.35 : 0, 10, dt);
     this.model.kit.u.uHit.value = this.hitT;
     if (this.dazed > 0) dazedStars(this.pos.x, this.obj.position.y + this.overHead + 0.25, this.pos.z, t, this.dazed);
@@ -492,7 +566,12 @@ export class Enemy {
     this.obj.position.z = this.pos.z;
     const ground = groundHeight(this.pos.x, this.pos.z);
     if (this.tossed) this.obj.position.y = ground + this.tossed.y;
-    else if (!this.spawning) this.obj.position.y = damp(this.obj.position.y, ground, 12, G.dt);
+    else if (!this.spawning) {
+      // (ducked, drawn down into the ground but for its top: entities/evade.ts)
+      this.obj.position.y = damp(this.obj.position.y + this.sunk, ground, 12, G.dt);
+      this.sunk = duckDepth(this.ducked, this.duckFor) * Math.max(0, this.height - (this.def.evade?.top ?? this.height));
+      this.obj.position.y -= this.sunk;
+    }
     // (thrown, tipped back about its own side as it flies: turned first, then tipped)
     this.model.root.rotation.set(this.tossed ? tipOf(this.tossed) : 0, this.facing, 0, 'YXZ');
     // the leg IK only where its feet are seen: in view and (on Low) near the player
@@ -577,7 +656,7 @@ export class Enemy {
   }
 
   /** whether its body casts a shadow (models/crowd.ts): not as it dissolves */
-  get castsShadow(): boolean { return !this.corpse?.fading; }
+  get castsShadow(): boolean { return !this.corpse?.fading && !this.goneTo; }
 
   dispose(): void {
     leaveCrowd(this);
