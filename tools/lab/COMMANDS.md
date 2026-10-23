@@ -416,6 +416,28 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   attacked and the wheel zoomed. (The owner: "in 3rd and 1st person user cannot press on those battle log buttons".)
   About 2 s.
 - `rush`: the foes Bull Rush sweeps up: in full in [`commands/rush.md`](commands/rush.md).
+- `evade`: the shooters getting out of the hero's attacks (`page/evade.ts`, `--class ranger`, `mage`, `warrior`):
+  each foe that evades (`EnemyDef.evade`: the Sporecaller ducks into the ground, the Rift Witch blinks away) stood
+  7 m before the hero, held to its spot (or where it blinked to: left to its AI, it walked back into a rain of
+  arrows), kept from shooting and from dying, and each attack of his it evades (`--skills`; by default every one of
+  his that one does: Nockshot, Briarflight, Lancewood Shot, Hailfletch, Splintering Bolt, Void Lance, Starfall,
+  Thunder Crescent, Bull Rush) cast at it try after try as the player casts it, over the shoulder by default (from
+  above, the aim met a cap's or a hood's rim first, and a swaying body let the shot graze past): `--tries` from in
+  front of it (30 by default), a third as many from behind it (it faces away), and for a ducking foe and a drawn shot
+  as many at its feet (ducked as the shot is loosed, the shot aimed at what's left of it). Each try's evade is
+  caught as it's played (`Enemy.evade`) and each hit as it lands. From in front, an evaded share outside 0.3 to 0.7
+  (its `chance`, 0.5), a try struck after it evaded, and one missed without it (the try measured nothing) are
+  problems, and so is a blink out of its reach, into a prop, by the wall or the hero, or through a prop, judged as it
+  goes (Thunder Crescent breaks the props in its way); from behind, any evade; at its feet, a shot that missed.
+  `--trace` lists each try: its evade and where to, its hits, where the hero's aim was as he let go and where each
+  shot ended against the foe's feet and top. `--canary` lets the foes see all round them and duck without going
+  down, which the tries from behind and the struck ducks must catch. The lab's frames draw nothing, so it places the
+  foe's meshes itself each frame (`updateMatrixWorld`): unplaced, a ducked foe's body was met standing. It found a
+  five-arrow volley judged arrow by arrow (a foe got out of 30 of 30 volleys: now a cast's shots are judged as one),
+  a Lancewood Shot meeting a duck half down (it crosses 7 m in five frames: now a duck counts as down at once) and
+  going into the ground through a ducked foe's cap untouched, and an arrow at a ducked Sporecaller's cap flying
+  through it (its skinned body is met by its hulls, which leave the cap's top out). About 3 min for the ranger, 1 for
+  the mage, 20 s for the warrior.
 - `crowd`: a crowd of foes killed at once (`page/crowd.ts`), and what the frame costs as their bodies fall: the low-end
   device's measure. `--count` sets the crowd (38 by default, the most a wave keeps alive); it's killed by a blow each
   from the hero, or by `--skill` cast at it. Each round sets the crowd up afresh, times 60 frames with it standing,

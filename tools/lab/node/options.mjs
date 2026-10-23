@@ -256,9 +256,9 @@ export const COMMANDS = {
       scenarios: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['walk', 'foes', 'shoot', 'dodge', 'down', 'blink', 'rush', 'strike'],
-        help: 'the scenarios (all the hero can play by default): walk, foes, shoot, dodge, down, blink (a mage), rush '
-          + 'and strike (a warrior)',
+        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'rush', 'strike'],
+        help: 'the scenarios (all the hero can play by default): walk, foes, shoot, evade (a ranger or a mage), dodge, '
+          + 'down, blink (a mage), rush and strike (a warrior)',
       },
       ping: { kind: 'number', usage: 'ms', help: 'the link\'s least round trip (300 by default)' },
       jitter: { kind: 'number', usage: 'ms', help: 'how much later each way a message may come (60 by default)' },
@@ -802,6 +802,38 @@ export const COMMANDS = {
       facing: SETUP_OPTIONS.facing,
       gear: SETUP_OPTIONS.gear,
       weapon: SETUP_OPTIONS.weapon,
+      ...COMMON_OPTIONS,
+    },
+  },
+  evade: {
+    help: 'the shooters getting out of the hero\'s attacks: each foe that evades (the Sporecaller ducks into the '
+      + 'ground, the Rift Witch blinks away) stood before him, held to its spot and kept from shooting, and each '
+      + 'attack of his it evades cast at it try after try, from in front of it, from behind it and (a drawn shot at '
+      + 'a ducked foe) at its feet, every evade and hit caught; from in front, an evaded share off a half, a try '
+      + 'struck after it evaded or missed without it, and a blink out of its reach, into a prop, by the wall or the '
+      + 'hero or past a prop, from behind any evade, and at its feet a shot that missed, are problems (--class '
+      + 'ranger, mage, warrior)',
+    options: {
+      skills: {
+        kind: 'list',
+        usage: 'a,b',
+        help: 'the attacks, by key, behaviour or name (every one of the hero\'s that a foe evades by default)',
+      },
+      tries: {
+        kind: 'number',
+        usage: 'n',
+        help: 'tries from in front, each attack and foe (30 by default; a third as many from behind and at its feet)',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'plant the faults the checks must catch: the foes seeing all round them, and ducking without going down',
+      },
+      trace: {
+        kind: 'switch',
+        help: 'list each try: its evade, its hits, and where each of the hero\'s shots ended against the foe\'s feet '
+          + 'and top',
+      },
+      ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
     },
   },

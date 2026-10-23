@@ -71,6 +71,10 @@ export interface FoeSample {
   /** carried before a hero's charge as this game shows it, and how high it flies off it (m: 0 on its feet) */
   carried: boolean;
   up: number;
+  /** ducked out of a shot's way as this game shows it, and (a guest's copy) gone in a blink, waiting for the host's
+   *  reports to have it where it went (entities/evade.ts) */
+  ducked: boolean;
+  gone: boolean;
 }
 
 /** What one game shows in one frame of a scenario. */
@@ -134,8 +138,8 @@ interface Scenario {
   foes: { type: EnemyId; at: XZ; dazed?: boolean }[];
   /** the guest's life as it starts (unhurt by default) */
   guestLife?: number;
-  /** the skill (its `impl`) the guest's hero must know to play it: a class's own */
-  skill?: string;
+  /** the skill (its `impl`) the guest's hero must know to play it, or one of them: a class's own */
+  skill?: string | string[];
   /** the frames (after it settled) each game's screen is pictured at, with `--pictures` */
   pictures?: number[];
   hostInput(frame: number): Frame;
@@ -268,6 +272,19 @@ function shootInput(frame: number): Frame {
   return { aim, m0: frame % 36 < 2 };
 }
 
+/** the frames between the guest's shots in `evade`, each at the other foe */
+const EVADE_EVERY = 40;
+
+/** The guest in `evade`: a tap at one foe and then the other, aimed where its screen shows it, its bow ready. */
+function evadeInput(frame: number): Frame {
+  const foes = G.enemies.filter((foe) => foe.alive).sort((a, b) => a.id - b.id);
+  const foe = foes[Math.floor(frame / EVADE_EVERY) % Math.max(1, foes.length)];
+  if (!foe) return {};
+  const aim = foe.pos.clone();
+  aim.y = foe.height * 0.5;
+  return { aim, m0: frame % EVADE_EVERY < 2 };
+}
+
 /** the guest's two spots in `blink`, 7 m apart in the open (the lab's `blink` lands there), and the frames between its
  *  blinks from one to the other */
 const BLINK_SPOTS: XZ[] = [[12, 22], [8.65, 15.85]];
@@ -397,6 +414,19 @@ const SCENARIOS: Record<string, Scenario> = {
     pictures: [140, 330, 460, 540],
     hostInput: raiseInput,
     guestInput: () => ({}),
+  },
+  evade: {
+    about: 'the guest shoots at a Rift Witch and a Sporecaller in turn, each of which may blink or duck out of the way',
+    frames: 900,
+    host: [-4, 22],
+    guest: [16, 25],
+    foes: [
+      { type: 'witch', at: [8, 17] },
+      { type: 'sporecaller', at: [12, 15] },
+    ],
+    skill: ['nockShot', 'splinterBolt'],
+    hostInput: () => ({}),
+    guestInput: evadeInput,
   },
   blink: {
     about: 'the guest, a mage, blinks between two spots as foes close on it, the host standing off',
@@ -643,8 +673,9 @@ export async function coopFrames(lab: Lab, turn: CoopTurn): Promise<CoopTurnResu
 /** Why this game's hero can't play scenario `name` (null: it can). */
 export function coopUnplayable(_lab: Lab, { name }: { name: string }): string | null {
   const skill = SCENARIOS[name].skill;
-  if (!skill || keyOf(skill)) return null;
-  return `the ${G.player.cls.id} has no ${skill} skill`;
+  const skills = skill === undefined ? [] : [skill].flat();
+  if (!skills.length || skills.some(keyOf)) return null;
+  return `the ${G.player.cls.id} has no ${skills.join(' or ')} skill`;
 }
 
 /** How many frames scenario `name` records, and the frames its screens are pictured at. */
@@ -697,7 +728,10 @@ function foeSample(foe: Enemy, hero: Player): FoeSample {
   const dazed = ((foe as { dazed?: number }).dazed ?? 0) > 0;
   const carried = Boolean(foe.carried);
   const up = foe.tossed?.y ?? 0;
-  return { id: foe.id, x: foe.pos.x, z: foe.pos.z, life: foe.life, blow, inReach, dazed, carried, up };
+  // (an older tree's foes never evade)
+  const ducked = ((foe as { ducked?: number }).ducked ?? 0) > 0;
+  const gone = ((foe as { gone?: number }).gone ?? 0) > 0;
+  return { id: foe.id, x: foe.pos.x, z: foe.pos.z, life: foe.life, blow, inReach, dazed, carried, up, ducked, gone };
 }
 
 /** How this game plays its partner's reports out, where this tree's session has a timeline for it. */

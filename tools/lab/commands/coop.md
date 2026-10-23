@@ -10,7 +10,9 @@ page to the other as a link of `--ping` (the least round trip, 300 ms by default
 way, 60 by default) delivers them: in the order sent, as a WebSocket's TCP does, a late one holding up those behind
 it, and every couple of seconds a stall of several jitters (`node/coop.mjs`). The heroes play scenarios (`walk`: the
 host running round in circles, the guest zigzagging; `foes`: foes chasing them; `shoot`: the guest shooting at a foe
-that chases the host; `dodge`: the guest running from every other blow as it sees it coming; `down`: a foe bringing
+that chases the host; `evade`, played by a hero with a shot (a ranger or a mage): the guest shooting at a Rift
+Witch and a Sporecaller in turn, which may blink or duck out of its shots as its own game judges them; `dodge`: the
+guest running from every other blow as it sees it coming; `down`: a foe bringing
 the guest down and the host raising it; `blink`, played only by a hero with a blink, `--class mage`: the guest
 blinking between two spots as foes close on it; `rush`, played only by a hero with Bull Rush, `--class warrior`:
 the guest charging through three dazed foes once; `strike`, the same but for a Power Strike charged first and the
@@ -22,7 +24,11 @@ What each game showed is judged against the other's in the same frame (`node/coo
 one that lines its path up best with its own game's), how far off that path and how roughly it moves (its speed
 against its own, its largest move a frame), how each game's timeline plays its partner out (how far behind the
 freshest report, how often a stall held it, how far its clock strayed), the arrows that struck on the guest's screen
-and whether the host counted them, the blows at the guest against whether it stood in their reach on its own screen,
+and whether the host counted them, each foe that ducked or blinked out of the guest's shots on its screen (a copy
+gone in a blink is left out of the foes' paths: it slides to where it went unseen) against the host's foe ducking or
+jumping there within a second, and how far from where the host's came out the copy came back, an evade on the host's
+screen alone a problem too (in `evade`: 3 ducks and a blink for the ranger, the copy back 8 cm off; 4 and 3 for the
+mage, 15 cm), the blows at the guest against whether it stood in their reach on its own screen,
 when the guest went down and was raised on each screen, and each blink: when and how long it hid the guest's copy on
 the host's screen, how far from where it came out on its own screen the copy came out and how far it moved after,
 and the foes it dazed on the guest's screen against those dazed on the host's, and each foe the guest's charge met
