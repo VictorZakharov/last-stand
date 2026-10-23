@@ -1,6 +1,7 @@
 // Verifies that dist/index.html only references assets that resolve correctly
-// when served from a GitHub Pages subpath. PAGES_BASE (e.g. /last-stand/pr-preview/pr-3/)
-// is required for preview builds; production builds use relative ('./') paths.
+// when served from a GitHub Pages subpath. PAGES_BASE (a commit's folder, e.g.
+// /last-stand/pr-preview/pr-3/1edf3c2/) is required for preview builds;
+// production builds use relative ('./') paths.
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
