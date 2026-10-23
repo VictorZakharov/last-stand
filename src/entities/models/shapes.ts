@@ -263,7 +263,7 @@ const CACHE = new Map<string, THREE.BufferGeometry[]>();
 export const SKINNING = typeof location === 'undefined' || !/[?&]skin=0/.test(location.search);
 /** The shadow pass draws every caster with one shared depth material, so a skinned caster among rigid ones made
  *  three rebuild that material's program parameters at each switch; skinned meshes get a depth material of their own */
-const SKIN_DEPTH = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+export const SKIN_DEPTH = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
 /** pieces smaller than this (bounding radius, m) cast no shadow: chain links, claws, charms */
 const SHADOW_MIN = 0.07;
 

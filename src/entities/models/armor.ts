@@ -383,7 +383,7 @@ export class Skirt {
       idx.push(a, b, a + 1, a + 1, b, b + 1);
     }
     this.rest = new Float32Array(pos);
-    this.geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    this.geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     this.geo.setIndex(idx);
     if (trim) { const n = body * radial * 6; this.geo.addGroup(0, n, 0); this.geo.addGroup(n, idx.length - n, 1); }

@@ -33,6 +33,23 @@ export function inShadowsOnly(mesh: THREE.Mesh): void {
 /** Whether the shadow map alone draws `mesh` (`inShadowsOnly`). */
 export const drawnInShadowsOnly = (mesh: THREE.Mesh): boolean => shadowOnly.has(mesh);
 
+/** `mesh` let go of by the shadow map (`inShadowsOnly`), as what it belonged to is disposed. */
+export function outOfShadowsOnly(mesh: THREE.Mesh): void {
+  shadowOnly.delete(mesh);
+}
+
+/** Work done round each draw of the shadow map, as its render's matrices stand: each before it, with the render's
+ *  camera, and what it returns after it (`aroundShadows`). */
+type AroundShadows = (camera: THREE.Camera) => () => void;
+const aroundShadow = new Set<AroundShadows>();
+
+/** `around` run round each draw of the shadow map (a hero's shadow cast as one, `models/castAsOne.ts`); the returned
+ *  function lets go of it. */
+export function aroundShadows(around: AroundShadows): () => void {
+  aroundShadow.add(around);
+  return () => aroundShadow.delete(around);
+}
+
 const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _c = new THREE.Color(), _sphere = new THREE.Sphere();
 
 /** A mesh of `mesh`'s geometry and material casting its shadow, every instance of it, drawn by the shadow map alone. */
@@ -157,9 +174,11 @@ export function cullWhileDrawn(scene: THREE.Scene, renderer: THREE.WebGLRenderer
   const draw = shadows.render.bind(shadows);
   shadows.render = (lights, scene, camera) => {
     for (const caster of shadowOnly) caster.visible = true;
+    const after = [...aroundShadow].map((around) => around(camera));
     try {
       draw(lights, scene, camera);
     } finally {
+      for (const undo of after) undo();
       for (const caster of shadowOnly) caster.visible = false;
     }
   };

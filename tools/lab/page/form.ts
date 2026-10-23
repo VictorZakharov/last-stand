@@ -113,7 +113,7 @@ interface Measured {
 const SIDES = ['L', 'R'] as const;
 
 /** The ways the class holds its weapons, or none when it has one way. */
-function stylesOf(lab: Lab): WeaponStyle[] {
+export function stylesOf(lab: Lab): WeaponStyle[] {
   const cls = lab.player.cls;
   if (!cls.skills.some((skill) => skill.needs)) return [];
   const styles: WeaponStyle[] = ['oneHanded'];
