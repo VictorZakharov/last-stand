@@ -52,10 +52,11 @@ const LONGEST_GAP = 20;
 const CANARY_FROM = 0.5;
 /** the least share of the frame's pixels the glint must light held at full draw, in every view (as glow particles it
  *  lit 0 to 0.1 in 10,000 from above and none through the eyes: hardly seen; its motes light 0.5 to 0.8 at their
- *  least), and the largest patch it may glare on, a share of the frame's pixels (a star of light on the arrowhead
- *  glared in one blob of 0.64 to 3.6 in 10,000 and was too bright, and motes bright enough to bloom merged into blobs
- *  of 0.9 to 1.6; the motes' specks are 0.41 at most) */
-const SEEN_LEAST = 0.4e-4;
+ *  least, Briarflight's over the shoulder 0.4: 81 to 83 pixels of a 1920x1080 frame, as what stands behind it
+ *  changes, so the least is under it), and the largest patch it may glare on, a share of the frame's pixels (a star
+ *  of light on the arrowhead glared in one blob of 0.64 to 3.6 in 10,000 and was too bright, and motes bright enough
+ *  to bloom merged into blobs of 0.9 to 1.6; the motes' specks are 0.41 at most) */
+const SEEN_LEAST = 0.35e-4;
 const BLOB_MOST = 0.55e-4;
 /** the frames into the hold at full draw at which the glint is judged as the player sees it, every few over a cycle of
  *  its motes and more (they move: at one frame, as many as three times more of them showed for one shot as for
@@ -128,9 +129,18 @@ function hideGlint(): () => void {
   };
 }
 
+/** the hero's own light counts as lit over this share of its class's intensity (`ClassDef.aura`) */
+const LIGHT_LIT = 0.05;
+/** the share of the frames held at full draw the bow's light must be lit on (it eases in over its first few) */
+const LIGHT_FULL_SHARE = 0.9;
+
 /** One shot's frames: idle, drawn short of full and held at full, each frame's glint counted, and what it showed. */
 interface Drawn {
   idleGlinting: number;
+  /** the frames the hero's own light shone idle and held at full draw (a ranger's lights at full draw alone: lit
+   *  always, "why ranger emits light from bow on idle") */
+  idleLit: number;
+  fullLit: number;
   drawingFrames: number;
   drawingGlinting: number;
   fullFrames: number;
@@ -166,16 +176,19 @@ async function drawToFull(
   const ahead = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
   const aim = hero.pos.clone().addScaledVector(ahead, AIM_AHEAD);
   const drawn: Drawn = {
-    idleGlinting: 0, drawingFrames: 0, drawingGlinting: 0, fullFrames: 0, fullGlinting: 0, longestGap: 0, seen: null,
-    crosshair: null,
+    idleGlinting: 0, idleLit: 0, fullLit: 0, drawingFrames: 0, drawingGlinting: 0, fullFrames: 0, fullGlinting: 0,
+    longestGap: 0, seen: null, crosshair: null,
   };
   let watch: CrosshairWatch | null | undefined;
+  const lightAlways = options.canary ? plantLight(hero) : null;
   await lab.step(IDLE_FRAMES, () => ({ aim }), () => {
     if (glinting(hero)) drawn.idleGlinting++;
+    if (lightShines(hero)) drawn.idleLit++;
     if (watch === undefined) watch = crosshairShown() ? new CrosshairWatch() : null;
     watch?.frame('idle');
   });
   drawn.crosshair = watch?.frames ?? null;
+  lightAlways?.();
   let gap = 0;
   const moments: Pictured[] = [];
   const crosshairMoments: Pictured[] = [];
@@ -197,6 +210,7 @@ async function drawToFull(
     }
     if (options.canary) takeAway();
     drawn.fullFrames++;
+    if (lightShines(hero)) drawn.fullLit++;
     gap = glinting(hero) ? 0 : gap + 1;
     if (!gap) drawn.fullGlinting++;
     drawn.longestGap = Math.max(drawn.longestGap, gap);
@@ -215,6 +229,22 @@ async function drawToFull(
   await lab.step(1, () => ({ aim }));
   await lab.until(() => !hero.casting, DRAW_FRAMES, `${shot.name}'s shot never ended`);
   return { drawn, moments: [...moments, ...crosshairMoments] };
+}
+
+/** Whether the hero's own light shines (`Player.staffLight`, a class's aura). */
+function lightShines(hero: Player): boolean {
+  return (hero.staffLight?.intensity ?? 0) > hero.cls.aura.intensity * LIGHT_LIT;
+}
+
+/** The canary's light: the class's aura lit always, as it was before it was lit at full draw alone. Returns the
+ *  undoing. */
+function plantLight(hero: Player): () => void {
+  const aura = hero.cls.aura;
+  const was = aura.drawn;
+  aura.drawn = false;
+  return () => {
+    aura.drawn = was;
+  };
 }
 
 /** The canary's early faults: the glint and the crosshair's bold shown as the bow is drawn. */
@@ -264,6 +294,8 @@ function describeDrawn(shot: DrawnShot, drawn: Drawn): string[] {
       + `${drawn.fullGlinting} of ${drawn.fullFrames}, ${drawn.longestGap} frames without at the longest`,
     `  held at full, as the player sees it (the least seen and the brightest of ${SEEN_FRAMES.length} moments): `
       + describeSeen(drawn.seen),
+    `  the bow's light: lit idle on ${drawn.idleLit} of ${IDLE_FRAMES} frames, held at full on ${drawn.fullLit} of `
+      + `${drawn.fullFrames}`,
     describeCrosshair(drawn.crosshair, shotFrames(drawn)),
   ];
 }
@@ -273,6 +305,10 @@ function drawnProblems(shot: DrawnShot, drawn: Drawn, view: string): string[] {
   const problems: string[] = [];
   const say = (problem: string) => problems.push(`${shot.name}, ${view}: ${problem}`);
   if (drawn.idleGlinting) say(`glinting with no shot drawn on ${drawn.idleGlinting} frames`);
+  if (drawn.idleLit) say(`the bow's light lit with no shot drawn on ${drawn.idleLit} frames`);
+  if (drawn.fullLit < drawn.fullFrames * LIGHT_FULL_SHARE) {
+    say(`the bow's light lit on only ${drawn.fullLit} of ${drawn.fullFrames} frames held at full draw`);
+  }
   if (drawn.drawingGlinting) {
     say(`glinting before the draw was full on ${drawn.drawingGlinting} of its ${drawn.drawingFrames} frames`);
   }
@@ -310,6 +346,9 @@ function canaryCaught(
   const early = caught(glint, 'before the draw was full');
   lines.push(`  canary, the glint shown as the bow is drawn: ${word(early)}`);
   if (!early) miss('glint shown as it\'s drawn');
+  const lightIdle = caught(glint, 'light lit with no shot drawn');
+  lines.push(`  canary, the bow's light lit always: ${word(lightIdle)}`);
+  if (!lightIdle) miss('bow\'s light lit always');
   if (!drawn.crosshair) return { lines, missed };
   const boldEarly = caught(crosshair, 'before the draw was full');
   const regularAtFull = caught(crosshair, 'at full draw');

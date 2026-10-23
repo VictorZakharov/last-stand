@@ -627,8 +627,12 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   (`page/addedLight.ts`: the frame drawn with it and without it round the arrowhead, only that box read back, the
   pixels it lit by a tenth of white and its glare, those it lit by 0.4, in patches, `page/patches.ts`), the least it
   was seen and the most it glared. A glint before the draw is full (it's the sign that it is), on fewer than 90% of
-  the frames held at full or gone for more than 20 of them, one with nothing drawn, a glint lighting less than 0.4 in
-  10,000 of the frame's pixels in any view (as glow particles it lit none through the eyes), a patch of glare over
+  the frames held at full or gone for more than 20 of them, one with nothing drawn, a glint lighting less than 0.35 in
+  10,000 of the frame's pixels in any view (as glow particles it lit none through the eyes; Briarflight's over the
+  shoulder lights 81 to 83 pixels of a 1920x1080 frame, 0.4, as what stands behind it changes), the hero's own light
+  (`Player.staffLight`, the class's aura) lit with nothing drawn or on fewer than 90% of the frames held at full (a
+  ranger's is lit at full draw alone: lit always, "why ranger emits light from bow on idle"; `--canary` lights it
+  always), a patch of glare over
   0.55 in 10,000 (a star of light on the arrowhead glared in one of 0.64 to 3.6, and was too bright, and motes bright
   enough to bloom merged into blobs of 0.9 to 1.6; the motes' specks are 0.41 at most) and a shader compiled meanwhile
   are problems. In the close views the crosshair is read every frame too (`page/crosshair.ts`: its lines' thickness as
