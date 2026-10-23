@@ -387,26 +387,33 @@ const SUN_SHADOW = 'directLight.color *= ( directLight.visible && receiveShadow 
   + 'directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;';
 const SUN_SHADOW_KEPT = SUN_SHADOW.replace('directLight.color *= ', 'shadowSeen = ')
   + ' directLight.color *= shadowSeen; sunShadow = min( sunShadow, shadowSeen );';
-/** the share of the environment's reflection left in the sun's shadow */
+/** the share of the environment's reflection, and of the ambient light (the sky's, the environment's), left in the
+ *  sun's shadow */
 const ENV_IN_SHADOW = 0.25;
+const AMBIENT_IN_SHADOW = 0.5;
 const ENV_SPECULAR = 'RE_IndirectSpecular( radiance,';
+const AMBIENT = '#if defined( RE_IndirectDiffuse )\n';
 
 /**
- * The environment's reflection darkened in the sun's shadow. three lights a surface's reflection of the environment
- * whatever stands between it and the sky, and each biome's environment has one bright panel where the sun stands, so
- * a glossy floor (the crypt's marble walks) shone as bright in a column's shadow as out of it. (Kept: the share of
- * the sky a point in shadow still sees, `ENV_IN_SHADOW`.)
+ * The ambient light and the environment's reflection darkened in the sun's shadow. three lights a surface by the sky
+ * and its reflection of the environment whatever stands between it and the sky, and each biome's environment has one
+ * bright panel where the sun stands. The crypt's pale marble walks are lit mostly by the sky (with the moon off, as
+ * bright as with it), so a column's or a tree's shadow stopped at a walk's edge, the cobbles beside it dark. (Kept:
+ * the share of the sky a point in shadow still sees, `AMBIENT_IN_SHADOW`, `ENV_IN_SHADOW`.)
  */
 function shadeEnvironment(): void {
   const begin = THREE.ShaderChunk.lights_fragment_begin, end = THREE.ShaderChunk.lights_fragment_end;
-  if (!begin.includes(SUN_SHADOW) || !end.includes(ENV_SPECULAR)) {
-    console.error('shadeEnvironment: three\'s lit shaders have changed: the environment\'s reflection ignores shadows');
+  if (!begin.includes(SUN_SHADOW) || !end.includes(ENV_SPECULAR) || !end.includes(AMBIENT)) {
+    console.error('shadeEnvironment: three\'s lit shaders have changed: the ambient light ignores shadows');
     return;
   }
   // (declared once ahead of the loop: three writes its body out once a light, in one scope)
   THREE.ShaderChunk.lights_fragment_begin = 'float sunShadow = 1.0, shadowSeen;\n'
     + begin.replace(SUN_SHADOW, SUN_SHADOW_KEPT);
-  THREE.ShaderChunk.lights_fragment_end = end.replace(ENV_SPECULAR,
+  // (the environment's light on a physical surface is `iblIrradiance`, taken in its indirect specular)
+  const ambient = `\tfloat ambientSeen = mix( ${AMBIENT_IN_SHADOW.toFixed(2)}, 1.0, sunShadow );\n`
+    + '\tirradiance *= ambientSeen;\n\tiblIrradiance *= ambientSeen;\n';
+  THREE.ShaderChunk.lights_fragment_end = end.replace(AMBIENT, AMBIENT + ambient).replace(ENV_SPECULAR,
     `radiance *= mix( ${ENV_IN_SHADOW.toFixed(2)}, 1.0, sunShadow );\n\t${ENV_SPECULAR}`);
 }
 

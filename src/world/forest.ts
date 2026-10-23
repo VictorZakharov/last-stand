@@ -8,7 +8,7 @@ import { ARENA } from '../data/balance';
 import { forestFloor, bark, flagstone, moss, rock, wood, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
-import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, treeSpots, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
+import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, treeSpots, contactShadows, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
 
 /** the forest's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25, 1.1] };
@@ -554,6 +554,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   for (const m of [sapBark, sapLeaves]) { m.castShadow = m.receiveShadow = true; scene.add(m); }
   sapBark.name = 'young trees\' bark';
   sapLeaves.name = 'young trees\' leaves';
+  updaters.push(contactShadows(scene, obstacles));
 
   // --- Ambient: drifting pollen and a light haze ---------------------------------------
   let moteT = 0;

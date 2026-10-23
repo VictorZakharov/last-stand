@@ -38,6 +38,8 @@ export interface Grow {
   crownStart?: number;
   /** a trunk this much thicker (longer, it stood as a pole) */
   girth?: number;
+  /** its limbs this much more crooked at every level (ez-tree's gnarliness added; not its trunk): a dead tree's */
+  gnarl?: number;
 }
 
 /** Grows one kind (deterministic: ez-tree's own generator, seeded). */
@@ -118,6 +120,9 @@ export function growTree(g: Grow): TreeKind {
   if (g.trunk !== undefined) br.length['0'] *= g.trunk;
   if (g.girth !== undefined) br.radius['0'] *= g.girth;
   if (g.crownStart !== undefined) br.start['1'] = g.crownStart;
+  const gnarliness = (json.branch as unknown as { gnarliness: Record<string, number> }).gnarliness;
+  // (its trunk left as grown: crooked, it stood a metre off its foot at a man's chest, where an arrow is aimed)
+  if (g.gnarl !== undefined) for (const level of Object.keys(gnarliness)) if (level !== '0') gnarliness[level] += g.gnarl;
   for (let l = 0; l <= json.branch.levels; l++) {
     const k = String(l);
     json.branch.sections[k] = Math.min(json.branch.sections[k], g.sections[Math.min(l, g.sections.length - 1)]);

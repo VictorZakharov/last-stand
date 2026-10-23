@@ -7,6 +7,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rand, TAU } from '../util';
 import { valueNoise3 } from '../core/patterns';
 import { particles } from '../fx/particles';
+import { canvasOf, ctx2d, textureFromCanvas } from '../core/textures';
 import type { Obstacle } from '../types';
 import type { Prop } from './destructible';
 import type { Relief } from './ground';
@@ -59,24 +60,86 @@ export const GATE_W = 4.2;    // spawn gate width
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
 
+/** how far a prop's contact shadow reaches past its circle (a share of its radius), and how dark its middle is */
+const CONTACT_REACH = 1.7;
+const CONTACT_DARK = 0.7;
+
+/** A soft round shadow's alpha, dark in its middle and gone at its edge. */
+function contactTexture(): THREE.CanvasTexture {
+  const size = 128;
+  const canvas = canvasOf(size);
+  const g = ctx2d(canvas);
+  const fall = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  for (let k = 0; k <= 8; k++) {
+    // (eased out: a straight fall read as a disc with an edge)
+    const t = k / 8;
+    fall.addColorStop(t, `rgba(0,0,0,${((1 - t) ** 2 * (1 + t)).toFixed(3)})`);
+  }
+  g.fillStyle = fall;
+  g.fillRect(0, 0, size, size);
+  return textureFromCanvas(canvas, false);
+}
+
+/**
+ * The contact shadows under a biome's props: a soft dark patch on the floor round each obstacle circle, one instanced
+ * draw, gone with its prop as it breaks and back as it's restored. The moon's shadow falls away from a prop, and under
+ * it the floor was lit to its foot by the sky: a fallen drum or a column stood on the floor as if pasted over it.
+ * Returns its updater (each prop's patch shown while it stands).
+ */
+export function contactShadows(scene: THREE.Object3D, obstacles: Obstacle[]): Updater {
+  const circles = [...obstacles];
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x000000, alphaMap: contactTexture(), transparent: true, opacity: CONTACT_DARK, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  });
+  const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mat, circles.length);
+  const standing = circles.map(() => true);
+  const place = (i: number, shown: boolean): void => {
+    const o = circles[i], d = shown ? o.r * 2 * CONTACT_REACH : 0;
+    // (just over the floor and the crypt's walks, under anything on them)
+    setInstance(mesh, i, o.x, 0.03, o.z, 0, 0, 0, d, 1, d);
+  };
+  circles.forEach((_, i) => place(i, true));
+  mesh.name = 'contact shadows';
+  mesh.renderOrder = -1;
+  scene.add(mesh);
+  return () => {
+    let changed = false;
+    circles.forEach((o, i) => {
+      const shown = !o.prop?.broken;
+      if (shown === standing[i]) return;
+      standing[i] = shown;
+      place(i, shown);
+      changed = true;
+    });
+    if (changed) mesh.instanceMatrix.needsUpdate = true;
+  };
+}
+
 /** where a biome's small trees may stand: `n` of them `near` to `far` m from the middle, `apart` from each other */
 export interface TreeSpots { n: number; near: number; far: number; apart: number }
 /**
- * Spots for a biome's small trees in the play area, from a stream of their own (`rng`: drawn from the biome's, every
- * prop placed after them would move): clear of the gates' lanes (`laneGap`: an angle's from the nearest gate's), of
- * every obstacle by 1.5 m and of what `keepOff` says.
+ * Spots for a biome's small trees in the play area, one in each of `n` equal slices of the ring round the middle (drawn
+ * anywhere, three of the forest's six stood within a quarter of it, by one gate), from a stream of their own (`rng`:
+ * drawn from the biome's, every prop placed after them would move): clear of the gates' lanes (`laneGap`: an angle's
+ * from the nearest gate's), of every obstacle by 1.5 m and of what `keepOff` says. A slice with no room has none.
  */
 export function treeSpots(rng: () => number, { n, near, far, apart }: TreeSpots, laneGap: (a: number) => number,
   obstacles: Obstacle[], keepOff: (x: number, z: number) => boolean = () => false): [number, number][] {
   const spots: [number, number][] = [];
-  for (let tries = 0; spots.length < n && tries < 4000; tries++) {
-    const a = rng() * TAU, rr = near + rng() * (far - near);
-    const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
-    // (a gate's lane: half its width and the way the foes walk in from it)
-    if (laneGap(a) * rr < GATE_W) continue;
-    if (keepOff(x, z) || obstacles.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + 1.5)) continue;
-    if (spots.some(([sx, sz]) => Math.hypot(sx - x, sz - z) < apart)) continue;
-    spots.push([x, z]);
+  for (let slice = 0; slice < n; slice++) {
+    for (let tries = 0; tries < 400; tries++) {
+      const a = (slice + rng()) / n * TAU;
+      // (even over the slice's area, not crowded towards the middle)
+      const rr = Math.sqrt(near * near + rng() * (far * far - near * near));
+      const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+      // (a gate's lane: half its width and the way the foes walk in from it)
+      if (laneGap(a) * rr < GATE_W) continue;
+      if (keepOff(x, z) || obstacles.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + 1.5)) continue;
+      if (spots.some(([sx, sz]) => Math.hypot(sx - x, sz - z) < apart)) continue;
+      spots.push([x, z]);
+      break;
+    }
   }
   return spots;
 }

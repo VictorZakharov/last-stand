@@ -16,6 +16,10 @@ import { setHeroDetail } from '../entities/models/armor';
 import { setRubbleShadows } from '../fx/rubble';
 import { setReliefSteps } from './parallax';
 
+/** how far the moon's shadows' edges blur on the floor (m): at its default a texel, 1.7 to 7 cm by the map's size,
+ *  every shadow's edge was hard */
+const PENUMBRA = 0.12;
+
 const COOKIE = 'last-stand-quality';
 // what Auto settled on, the next session starting there: its level, and the most pixels it lets the scene render
 // (`high@4147200`: a budget measured in pixels holds on a screen of any size or pixel ratio)
@@ -77,6 +81,8 @@ function apply(l: QualityLevel, most = Infinity): void {
     shadow.map?.dispose();
     shadow.map = null;   // recreated at the new size on the next render
   }
+  // (a uniform: as wide on the floor at every map's size)
+  shadow.radius = PENUMBRA * p.shadowMap / (shadow.camera.right - shadow.camera.left);
   setRubbleShadows(p.minCasterRadius);
   setReliefSteps(p.relief);
   for (const p of G.players) applyShadowDetail(p.obj);

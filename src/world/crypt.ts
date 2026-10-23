@@ -5,13 +5,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA } from '../data/balance';
-import { cobblestone, ashlar, granite, limestone, marble, slate, bark, pbrMaterialMaps, runeCircle } from '../core/textures';
+import { cobblestone, ashlar, granite, limestone, marble, slate, bark, bannerCloth, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
 import { floorRelief } from '../core/parallax';
-import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, treeSpots, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type Updater } from './props';
+import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, treeSpots, contactShadows, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type Updater } from './props';
 
 /** the crypt's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
@@ -20,6 +20,8 @@ import { buildFire } from './fire';
 import { restingLift, skullGeometry } from './skull';
 import type { Obstacle } from '../types';
 import { Wall } from './wall';
+import { valueNoise3 } from '../core/patterns';
+import { growTree, type Grow } from './ezTrees';
 
 /** where the wall's parts are made: in the arena's frame */
 const IDENTITY = new THREE.Matrix4();
@@ -29,6 +31,20 @@ const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
 const gateGap = (a: number) => Math.min(...GATES.map((g) => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g)))));
 /** the small dead trees standing on the floor among the props (`treeSpots`) */
 const SMALL_TREES = { n: 6, near: 8, far: 24, apart: 7 };
+/** the dead trees, grown by ez-tree bare and crooked: those beyond the wall, two kinds in turn, and the small ones in the
+ *  play area (their trunks thicker: an arrow at a thin one slips past) */
+const DEAD_TREES: Grow[] = [
+  { preset: 'Oak Medium', seed: 811, sections: [8, 4, 2, 1], segments: [7, 4, 3, 3], leaves: 0.01, gnarl: 0.2 },
+  { preset: 'Ash Medium', seed: 2207, sections: [8, 4, 2, 1], segments: [7, 4, 3, 3], leaves: 0.01, gnarl: 0.2 },
+];
+const SMALL_DEAD: Grow = {
+  preset: 'Oak Medium', seed: 4401, sections: [8, 4, 2, 1], segments: [7, 4, 3, 3], leaves: 0.01, gnarl: 0.2, girth: 3.4,
+  trunk: 2.2, crownStart: 0.7,
+};
+/** the dead bark's repeat, round and along (`growTree` lays a tile round each branch and as long as it's round) */
+const DEAD_BARK: [number, number] = [6, 6];
+/** the draws the old dead trees' geometry took from the biome's stream */
+const OLD_DEAD_TREE_DRAWS = 12;
 const polar = (r: number, a: number): [number, number] => [Math.cos(a) * r, Math.sin(a) * r];
 
 const FOG = 0x1a2034;
@@ -165,9 +181,14 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const iron = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.45 });
   // (its vertex colours darken a skull's sockets: `skullGeometry`)
   const boneMat = new THREE.MeshStandardMaterial({ color: 0x8a8272, roughness: 0.8, vertexColors: true });
-  // (a tile about 0.4 m: at 1, one ran round a dead tree's foot and up the whole of it, 3 by 3.5 m: `lab tiles`)
-  const deadWood = outsideDim(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), [8, 9], 1.4), color: 0x6a6660, flatShading: true }));
-  const banner = new THREE.MeshStandardMaterial({ color: 0x6a1420, roughness: 0.9, side: THREE.DoubleSide });
+  // (grey, weathered: the forest's oak bark, its tiles square on ez-tree's trunks as on the forest's trees)
+  const deadWood = outsideDim(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), DEAD_BARK, 1.4), color: 0x7a7670 }));
+  // (velvet, as sdf-harness's: matte, with a sheen of its own colour at grazing angles; its gold sigil embroidered)
+  const cloth = bannerCloth();
+  const banner = new THREE.MeshPhysicalMaterial({
+    map: cloth, roughness: 0.9, sheen: 1, sheenColorMap: cloth, sheenColor: new THREE.Color(1.8, 1.8, 1.8),
+    sheenRoughness: 0.4, side: THREE.DoubleSide,
+  });
   const gold = new THREE.MeshStandardMaterial({ color: 0x8a6a30, metalness: 0.8, roughness: 0.4 });
   const weedMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
   const wax = new THREE.MeshStandardMaterial({ color: 0xd8ceb4, roughness: 0.6, emissive: 0x3a2008 });
@@ -422,18 +443,20 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   // (after the weeds, which are placed round the obstacles; from streams of their own)
   const smallTreeSpots = treeSpots(mulberry(2718), SMALL_TREES, gateGap, obstacles,
     (x, z) => Math.max(Math.abs(x), Math.abs(z)) < h + 2 || Math.abs(Math.hypot(x, z) - 18.5) < 2);
-  const smallTrees = new THREE.InstancedMesh(buildDeadTreeGeo(mulberry(3141)), deadWood, smallTreeSpots.length);
+  const small = growTree(SMALL_DEAD);
+  const smallTrees = new THREE.InstancedMesh(small.bark, deadWood, smallTreeSpots.length);
   const treeRng = mulberry(1618);
   smallTreeSpots.forEach(([x, z], i) => {
-    const ht = 2.2 + treeRng() * 1.2;
-    setInstance(smallTrees, i, x, 0, z, (treeRng() - 0.5) * 0.12, treeRng() * TAU, (treeRng() - 0.5) * 0.12, ht);
-    // (its trunk's foot, 0.09 of its height across: `buildDeadTreeGeo`)
-    obstacles.push({ x, z, r: 0.09 * ht + 0.1, h: ht });
+    const ht = 3.5 + treeRng() * 1.5;
+    setInstance(smallTrees, i, x, -0.1, z, 0, treeRng() * TAU, 0, ht);
+    // (round its trunk's foot, measured on the grown bark: `trunkFoot`)
+    obstacles.push({ x, z, r: small.trunkFoot * ht + 0.1, h: ht });
     breakable.add(obstacles.length - 1, 10, 0x4a4038, instanceLook(smallTrees, i), 'wood');
   });
   smallTrees.castShadow = smallTrees.receiveShadow = true;
   smallTrees.name = 'small dead trees';
   scene.add(smallTrees);
+  updaters.push(contactShadows(scene, obstacles));
 
   // --- Beyond the wall: a ruined necropolis and dead trees ----------------------------
   buildNecropolis(scene, wall, rng, outsideDim(darkStone.clone()), outsideDim(nicheMat.clone()), deadWood);
@@ -537,6 +560,9 @@ function lancetGeo(w: number, ht: number): THREE.BufferGeometry {
   return new THREE.ShapeGeometry(s, 6).rotateY(Math.PI);
 }
 
+/** how long a banner's cloth is drawn (m: its longest tails' end) */
+const BANNER_CLOTH = 2.65;
+
 /** A tattered hanging banner, 1m wide, top edge at y = 0, facing -Z. */
 function bannerGeo(rng: () => number): THREE.BufferGeometry {
   const s = new THREE.Shape(), len = 1.9 + rng() * 0.5;
@@ -545,9 +571,12 @@ function bannerGeo(rng: () => number): THREE.BufferGeometry {
   for (let i = 1; i <= 6; i++) { const x = 0.45 - (i * 0.9) / 6; s.lineTo(x + 0.075, -len - rng() * 0.25 + (i % 2) * 0.28); s.lineTo(x, -len + 0.15 + rng() * 0.1); }
   s.lineTo(-0.45, 0);
   const g = new THREE.ShapeGeometry(s, 1);
-  // hang slightly away from the wall towards the bottom
-  const pos = g.attributes.position;
-  for (let i = 0; i < pos.count; i++) pos.setZ(i, -pos.getY(i) * 0.06);
+  // hang slightly away from the wall towards the bottom; its cloth across it and down from its top (`bannerCloth`)
+  const pos = g.attributes.position, uv = g.attributes.uv;
+  for (let i = 0; i < pos.count; i++) {
+    uv.setXY(i, (pos.getX(i) + 0.45) / 0.9, 1 + pos.getY(i) / BANNER_CLOTH);
+    pos.setZ(i, -pos.getY(i) * 0.06);
+  }
   g.computeVertexNormals();
   return g.rotateY(Math.PI);
 }
@@ -577,21 +606,78 @@ function columnBase(): THREE.Vector2[] {
   return points;
 }
 
+/** where a column's shaft breaks off (m): its break's mean height, how far it slopes across (two lobes round it), how
+ *  deep the chips out of its rim go, how rough its face is, and how far its middle sinks into the stump */
+const BREAK = { at: 3.55, slope: 0.32, chips: 0.12, rough: 0.05, hollow: 0.1 };
+/** the shaft's radius at its top, and the rings its fracture's face is laid in */
+const SHAFT_TOP = 0.44;
+const FACE_RINGS = 8;
+
+/** How high the break is at (x, z) on the shaft's axis: a slope round it, chips out of its rim, the middle sunk. */
+function breakAt(x: number, z: number): number {
+  const a = Math.atan2(z, x), out = Math.min(1, Math.hypot(x, z) / SHAFT_TOP);
+  // (a chip a tenth of the way round, as deep as its own hash says, deepest at the rim)
+  const chip = Math.floor((a + Math.PI) / (Math.PI / 5));
+  const k = Math.sin(chip * 12.9898) * 43758.5453;
+  const chips = (k - Math.floor(k) - 0.5) * 2 * BREAK.chips * out * out;
+  return BREAK.at + BREAK.slope * Math.sin(a + 0.6) + 0.12 * Math.sin(2 * a + 1.9) + chips - (1 - out) * BREAK.hollow;
+}
+
+/**
+ * A shaft snapped off as stone breaks: everything above a sloping surface, chipped at its rim, brought down onto it,
+ * and the open top closed by the fracture's face (`fractureFace`). Each vertex of its top was raised at random by up to
+ * 0.45 m, and its neighbours apart, so it ended in thin spikes, a sheet of paper's edge, not stone's ("difficult to
+ * break concrete like it is"); closed by a cylinder's own cap, its face was a clean fan, an umbrella over the stump.
+ */
+function breakTop(shaft: THREE.BufferGeometry, radial: number): THREE.BufferGeometry {
+  const pos = shaft.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i), top = breakAt(x, z);
+    if (pos.getY(i) > top) pos.setY(i, top);
+  }
+  // (a cylinder's top row of its side is its first: one vertex round it a segment, and the seam's again)
+  const rim = Array.from({ length: radial + 1 }, (_, j) => new THREE.Vector2(pos.getX(j), pos.getZ(j)));
+  return fractureFace(rim);
+}
+
+/** The broken top's face inside its rim (the shaft's top row, as broken): rings in to the middle, each point at the
+ *  break's height and roughened as split stone is, but not on the rim, where it meets the shaft. */
+function fractureFace(rim: THREE.Vector2[]): THREE.BufferGeometry {
+  const positions: number[] = [], uvs: number[] = [], index: number[] = [];
+  for (const edge of rim) {
+    for (let k = 0; k <= FACE_RINGS; k++) {
+      const share = k / FACE_RINGS, x = edge.x * share, z = edge.y * share;
+      const rough = (valueNoise3(x * 7, 0, z * 7, 3) - 0.5) * 2 * BREAK.rough * (1 - share ** 3);
+      positions.push(x, breakAt(x, z) + rough, z);
+      uvs.push(x + 0.5, z + 0.5);
+    }
+  }
+  const row = FACE_RINGS + 1;
+  for (let j = 0; j < rim.length - 1; j++) {
+    for (let k = 0; k < FACE_RINGS; k++) {
+      const a = j * row + k, b = (j + 1) * row + k;
+      index.push(a, a + 1, b, b, a + 1, b + 1);
+    }
+  }
+  const face = new THREE.BufferGeometry();
+  face.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  face.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  face.setIndex(index);
+  face.computeVertexNormals();
+  return face;
+}
+
 /** A fluted column 4m tall (scaled per instance) on a square base, snapped off at a jagged top. */
 function buildColumnGeo(): THREE.BufferGeometry {
   const base = boxWithUV(1.3, 0.3, 1.3, 0.6).translate(0, 0.15, 0);
   // its base's mouldings: a torus, a hollow and a smaller torus up to the shaft (a plain drum read as a box)
   const torus = new THREE.LatheGeometry(columnBase(), 48).translate(0, 0.3, 0);
-  const shaft = new THREE.CylinderGeometry(0.44, 0.48, 3.5, FLUTED_SEGMENTS, 24).translate(0, 2.27, 0);
+  // (open: its top closed by the fracture's face)
+  const shaft = new THREE.CylinderGeometry(SHAFT_TOP, 0.48, 3.5, FLUTED_SEGMENTS, 24, true).translate(0, 2.27, 0);
   fluted(shaft, 'y');
-  const pos = shaft.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    if (pos.getY(i) < 3.9) continue;
-    const x = pos.getX(i), z = pos.getZ(i), k = Math.sin(x * 17.3 + z * 29.1) * 43758.5;
-    pos.setY(i, pos.getY(i) + (k - Math.floor(k)) * 0.45 - (Math.hypot(x, z) < 0.1 ? 0.2 : 0));
-  }
+  const face = breakTop(shaft, FLUTED_SEGMENTS);
   shaft.computeVertexNormals();
-  return mergeGeometries([base, torus, shaft].map((g) => (g.index ? g.toNonIndexed() : g)));
+  return mergeGeometries([base, torus, shaft, face].map((g) => (g.index ? g.toNonIndexed() : g)));
 }
 
 /** A stone coffin on a plinth, and its lid (origin at the lid's centre) with a carved figure. */
@@ -641,20 +727,6 @@ function gable(w: number, ht: number, len: number): THREE.BufferGeometry {
   const s = new THREE.Shape();
   s.moveTo(-w / 2, 0); s.lineTo(w / 2, 0); s.lineTo(0, ht); s.lineTo(-w / 2, 0);
   return new THREE.ExtrudeGeometry(s, { depth: len, bevelEnabled: false }).translate(0, 0, -len / 2);
-}
-
-/** A leafless tree 1 unit tall (scaled per instance): a leaning trunk and crooked branches. */
-function buildDeadTreeGeo(rng: () => number): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = [new THREE.CylinderGeometry(0.035, 0.09, 1, 6, 3).translate(0, 0.5, 0)];
-  for (let i = 0; i < 6; i++) {
-    const y = 0.4 + i * 0.1, len = 0.45 - i * 0.04, a = i * 2.4 + rng();
-    const br = new THREE.CylinderGeometry(0.008, 0.03, len, 5).translate(0, len / 2, 0).rotateZ(-0.7 - rng() * 0.4).rotateY(a).translate(0, y, 0);
-    parts.push(br);
-    const tw = new THREE.CylinderGeometry(0.004, 0.012, len * 0.5, 4).translate(0, len * 0.25, 0).rotateZ(0.5).rotateY(a + 0.6)
-      .translate(Math.cos(-a) * len * 0.4 * 0.7, y + len * 0.5, Math.sin(-a) * len * 0.4 * 0.7);
-    parts.push(tw);
-  }
-  return lumpy(mergeGeometries(parts.map((p) => p.toNonIndexed())), 0.08, 2);
 }
 
 /** Tombs, chapels and towers standing in the fog beyond the wall, with dark window openings,
@@ -709,21 +781,30 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
 
   // dead trees between the wall and the tombs, and a few among them
   const treeN = 46;
-  const trees = new THREE.InstancedMesh(buildDeadTreeGeo(rng), wood, treeN);
-  let ti = 0;
-  for (let tries = 0; ti < treeN && tries < 2000; tries++) {
+  // (grown by ez-tree, a kind or another in turn; the old trees' draws from the stream still drawn: drawn from it,
+  // every tree and the clutter placed after it moved)
+  for (let i = 0; i < OLD_DEAD_TREE_DRAWS; i++) rng();
+  const kinds = DEAD_TREES.map(growTree);
+  const trees = kinds.map((k) => new THREE.InstancedMesh(k.bark, wood, treeN));
+  const used = kinds.map(() => 0);
+  const at = new THREE.Matrix4();
+  for (let tries = 0, ti = 0; ti < treeN && tries < 2000; tries++) {
     const a = r(0, TAU), rr = 33 + Math.pow(r(0, 1), 1.3) * 26;
     if (rr < 42 && gateGap(a) < 0.12) continue;
     const [x, z] = polar(rr, a);
     if (spots.some(([sx, sz]) => Math.hypot(sx - x, sz - z) < 5)) continue;
-    const ht = r(5, 10) * (rr < 38 ? 0.8 : 1);
-    setInstance(trees, ti++, x, 0, z, r(-0.08, 0.08), r(0, TAU), r(-0.08, 0.08), ht, ht, ht);
+    const ht = r(5, 10) * (rr < 38 ? 0.8 : 1), k = ti++ % kinds.length;
+    // (sunk a little: a trunk is an open tube at its foot)
+    setInstance(trees[k], used[k], x, -0.2, z, r(-0.08, 0.08), r(0, TAU), r(-0.08, 0.08), ht, ht, ht);
+    // (what an arrow over the wall meets: each tree's trunk, its limbs let go, as the forest's)
+    wall.addGeometry(kinds[k].trunk, trees[k].getMatrixAt(used[k]++, at), false, 'beyond');
   }
-  trees.count = ti;
-  trees.castShadow = true;
-  trees.name = 'dead trees';
-  scene.add(trees);
-  wall.add(trees, false, 'beyond');
+  trees.forEach((mesh, k) => {
+    mesh.count = used[k];
+    mesh.castShadow = true;
+    mesh.name = `dead trees: ${DEAD_TREES[k].preset}`;
+    scene.add(mesh);
+  });
 }
 
 function buildGate(scene: THREE.Object3D, wall: Wall, angle: number, stone: THREE.Material, iron: THREE.Material, updaters: Updater[]): Portal {

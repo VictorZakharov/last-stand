@@ -114,8 +114,11 @@ async function shootAt(lab: Lab, tree: Tree): Promise<string> {
   const inTree = left.some((spent) => spent.mode === 'fixed' && acrossTrunk(spent.tip, tree.foot) < IN_TRUNK);
   if (inTree) return 'in the tree';
   if (!left.length) return 'no arrow left';
-  const where = left.map((spent) => `${spent.mode} ${acrossTrunk(spent.tip, tree.foot).toFixed(2)} m off its trunk`);
-  return where.join(', ');
+  const where = left.map((spent) => {
+    const tip = spent.tip.toArray().map((v) => v.toFixed(1)).join(', ');
+    return `${spent.mode} at ${tip}, ${acrossTrunk(spent.tip, tree.foot).toFixed(2)} m off its trunk`;
+  });
+  return `${where.join('; ')} (shot from ${from.x.toFixed(1)}, ${from.y.toFixed(1)})`;
 }
 
 /** How far a point stands off a trunk's upright line (m). */
