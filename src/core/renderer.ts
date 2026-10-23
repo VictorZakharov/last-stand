@@ -354,31 +354,56 @@ export const VIEWS: ViewMode[] = ['top', 'third', 'first'];
 
 /** three's point lights, as its lit shaders begin them: the block `loopPointLights` lights in a loop */
 const POINT_LIGHTS_IF = '#if ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )';
+/** the end of its written-out loop, the block's last line before its `#endif` */
+const POINT_LIGHTS_END = '#pragma unroll_loop_end';
+/** the shadowed point lights (three puts them first) written out, each with its shadow map, the rest in a loop */
 const POINT_LIGHTS_LOOPED = [
-  `${POINT_LIGHTS_IF} && !( defined( USE_SHADOWMAP ) && NUM_POINT_LIGHT_SHADOWS > 0 )`,
+  POINT_LIGHTS_IF,
   '\tPointLight pointLight;',
-  '\tfor ( int i = 0; i < NUM_POINT_LIGHTS; i ++ ) {',
+  '\t#if defined( USE_SHADOWMAP ) && NUM_POINT_LIGHT_SHADOWS > 0',
+  '\tPointLightShadow pointLightShadow;',
+  '\t#pragma unroll_loop_start',
+  '\tfor ( int i = 0; i < NUM_POINT_LIGHT_SHADOWS; i ++ ) {',
+  '\t\tpointLight = pointLights[ i ];',
+  '\t\tgetPointLightInfo( pointLight, geometryPosition, directLight );',
+  '\t\t#if defined( SHADOWMAP_TYPE_PCF ) || defined( SHADOWMAP_TYPE_BASIC )',
+  '\t\tpointLightShadow = pointLightShadows[ i ];',
+  '\t\tdirectLight.color *= ( directLight.visible && receiveShadow ) ? getPointShadow( pointShadowMap[ i ], '
+    + 'pointLightShadow.shadowMapSize, pointLightShadow.shadowIntensity, pointLightShadow.shadowBias, '
+    + 'pointLightShadow.shadowRadius, vPointShadowCoord[ i ], pointLightShadow.shadowCameraNear, '
+    + 'pointLightShadow.shadowCameraFar ) : 1.0;',
+  '\t\t#endif',
+  '\t\tRE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );',
+  '\t}',
+  '\t#pragma unroll_loop_end',
+  '\tconst int unshadowedFrom = NUM_POINT_LIGHT_SHADOWS;',
+  '\t#else',
+  '\tconst int unshadowedFrom = 0;',
+  '\t#endif',
+  '\tfor ( int i = unshadowedFrom; i < NUM_POINT_LIGHTS; i ++ ) {',
   '\t\tpointLight = pointLights[ i ];',
   '\t\tgetPointLightInfo( pointLight, geometryPosition, directLight );',
   '\t\tRE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );',
   '\t}',
-  '#elif ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )',
 ].join('\n');
 
 /**
  * The point lights lit in a loop, not written out once a light as three writes them (`#pragma unroll_loop_start`,
- * which a light's shadow map needs: no point light here casts one, and with one the written-out block is kept). With
- * 16 point lights a lit shader was 85 kB, and on a first visit ANGLE's D3D compiler spent half a second on each: 36 of
- * the 40 s the boot's programs cost (`lab programs --cost`).
+ * which a light's shadow map needs): with 16 point lights a lit shader was 85 kB, and on a first visit ANGLE's D3D
+ * compiler spent half a second on each, 36 of the 40 s the boot's programs cost (`lab programs --cost`). Only the
+ * lights that cast (each biome's two warmest, `staticShadow` in `world/props.ts`) are written out; with one casting,
+ * three wrote every point light out again.
  */
 function loopPointLights(): void {
   const chunk = THREE.ShaderChunk.lights_fragment_begin;
   const at = chunk.indexOf(POINT_LIGHTS_IF);
-  if (at < 0) {
+  const end = at < 0 ? -1 : chunk.indexOf(POINT_LIGHTS_END, at);
+  if (end < 0) {
     console.error('loopPointLights: three\'s lights_fragment_begin has changed: its point lights stay written out');
     return;
   }
-  THREE.ShaderChunk.lights_fragment_begin = chunk.slice(0, at) + POINT_LIGHTS_LOOPED + chunk.slice(at + POINT_LIGHTS_IF.length);
+  THREE.ShaderChunk.lights_fragment_begin = chunk.slice(0, at) + POINT_LIGHTS_LOOPED
+    + chunk.slice(end + POINT_LIGHTS_END.length);
 }
 
 /** three's sun's (the moon's) shadow on a lit point, as its lit shaders take it in their directional lights' loop */

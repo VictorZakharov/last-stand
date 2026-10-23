@@ -51,6 +51,9 @@ export interface Biome {
   wall: Wall;
   setCalm(v: number): void;
   update(dt: number, t: number): void;
+  /** the props a run shapes anew built again from its seed (the crypt's columns, the forest's stumps): the same on
+   *  every game in co-op, as each judges its own hits on them */
+  roll?(seed: number): void;
 }
 
 export type BiomeBuilder = (group: THREE.Group) => Biome;
@@ -59,6 +62,85 @@ export const WALL_R = 28.5;   // radius of the arena's boundary (inner face)
 export const GATE_W = 4.2;    // spawn gate width
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
+
+/** the point lights casting the shadows of what stands still (`staticShadow`) */
+const stillShadows = new Set<THREE.PointLight>();
+/** their shadow maps' size (px a face of the cube), their nearest (m), their bias and their edges' softness */
+const STILL_SHADOW = { size: 512, near: 0.3, bias: -0.004, radius: 3 };
+
+/**
+ * `light` casting the shadows of what stands in its biome (the props, the wall, the trees), drawn only when they change
+ * (`drawStillShadows`): a point light lit everything round it through the props, its reflection on the crypt's marble
+ * walks through a column ("shadows on ground for reflected lights still dont work"). Each biome's two warmest (the
+ * braziers, the bonfires): a biome casting another count would compile every lit program again as it's shown, and
+ * each light that casts is a lit shader's point light written out again (`loopPointLights` in `core/renderer.ts`).
+ */
+export function staticShadow(light: THREE.PointLight): void {
+  light.castShadow = true;
+  light.shadow.mapSize.set(STILL_SHADOW.size, STILL_SHADOW.size);
+  light.shadow.camera.near = STILL_SHADOW.near;
+  light.shadow.bias = STILL_SHADOW.bias;
+  light.shadow.radius = STILL_SHADOW.radius;
+  light.shadow.autoUpdate = false;
+  // (drawn by three's own pass as it's first lit, so a lit shader finds its map; drawn again of what stands still)
+  light.shadow.needsUpdate = true;
+  stillShadows.add(light);
+}
+
+/** what the still shadows are drawn into: nothing seen, a pixel (`drawStillShadows`) */
+let stillTarget: THREE.WebGLRenderTarget | null = null;
+
+/** Whether `object` draws (a mesh, points, a line, a sprite). */
+const draws = (object: THREE.Object3D): boolean => (object as THREE.Mesh).isMesh || (object as THREE.Points).isPoints
+  || (object as THREE.Line).isLine || (object as THREE.Sprite).isSprite;
+
+/** Whether a light stands in `object` or under it. */
+function holdsLight(object: THREE.Object3D): boolean {
+  let found = false;
+  object.traverse((part) => { if ((part as THREE.Light).isLight) found = true; });
+  return found;
+}
+
+/** What draws under `parent` outside `shown` hidden, into `hidden`: never a light, nor what holds one (each hidden
+ *  light changes the count every lit program is made for, and the still shadows' render compiled 26 of them anew). */
+function hideBodies(parent: THREE.Object3D, shown: THREE.Object3D, hidden: THREE.Object3D[]): void {
+  for (const child of parent.children) {
+    if (child === shown || !child.visible) continue;
+    if (draws(child) && !holdsLight(child)) {
+      child.visible = false;
+      hidden.push(child);
+    } else {
+      hideBodies(child, shown, hidden);
+    }
+  }
+}
+
+/**
+ * The shadow maps of `shown`'s still-shadow lights drawn again, of what stands in it alone: every other part of the
+ * scene (the heroes, the foes, the arrows, the rubble) hidden meanwhile, as a shadow drawn once of a body would stay
+ * where it stood. By a render of their own, into a pixel, `kept`'s shadow map left as it is (the moon's: drawn again
+ * by the frame's own render): three's shadow pass reads the render's state, and called alone it threw.
+ */
+export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
+  shown: THREE.Group, kept: THREE.LightShadow): void {
+  const lights = [...stillShadows].filter((light) => shown.getObjectById(light.id));
+  if (!lights.length) return;
+  stillTarget ??= new THREE.WebGLRenderTarget(1, 1);
+  const hidden: THREE.Object3D[] = [];
+  hideBodies(scene, shown, hidden);
+  const keptAuto = kept.autoUpdate;
+  const target = renderer.getRenderTarget();
+  for (const light of lights) light.shadow.needsUpdate = true;
+  kept.autoUpdate = false;
+  renderer.setRenderTarget(stillTarget);
+  try {
+    renderer.render(scene, camera);
+  } finally {
+    renderer.setRenderTarget(target);
+    kept.autoUpdate = keptAuto;
+    for (const child of hidden) child.visible = true;
+  }
+}
 
 /** how far a prop's contact shadow reaches past its circle (a share of its radius), and how dark its middle is */
 const CONTACT_REACH = 1.7;
@@ -293,6 +375,10 @@ export function boxWithUV(w: number, h: number, d: number, texel = 0.5): THREE.B
  * Square-cornered by default (a gate with a lintel), round-topped with `arch`.
  * Returns the portal for the gate at `angle`.
  */
+/** a portal's light (each gate's one of its biome's point lights): how bright, how far it reaches (m), how far out in
+ *  front of the membrane and how high it stands, and how much more as foes come through (`pulse`) */
+const PORTAL_LIGHT = { intensity: 7, reach: 11, out: 1.2, up: 2.0, pulse: 1.2 };
+
 export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { a: RGB; b: RGB; core: RGB }, updaters: Updater[], arch = false): { mesh: THREE.Mesh; portal: Portal } {
   const uniforms = {
     uTime: { value: 0 }, uPower: { value: 0.4 }, uArch: { value: arch ? 1 : 0 },
@@ -361,6 +447,12 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
   const spill = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W + 2.5, 4).rotateX(-Math.PI / 2).rotateY(Math.PI), spillMat);
   spill.position.set(0, 0.04, 2.0);
   parent.add(spill);
+  // its light on what stands round it: the arch, the wall, the floor, a body coming through (a glow on the floor alone,
+  // "portals emit no light")
+  const glow = new THREE.PointLight(new THREE.Color(...colors.b).lerp(new THREE.Color(...colors.core), 0.5),
+    PORTAL_LIGHT.intensity, PORTAL_LIGHT.reach, 2);
+  glow.position.set(0, PORTAL_LIGHT.up, PORTAL_LIGHT.out);
+  parent.add(glow);
 
   const pos = new THREE.Vector3(Math.cos(angle) * (WALL_R - 2.5), 0, Math.sin(angle) * (WALL_R - 2.5));
   const dir = new THREE.Vector3(-Math.cos(angle), 0, -Math.sin(angle));
@@ -372,6 +464,7 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
     pulse = Math.max(0, pulse - dt * 0.8);
     uniforms.uTime.value = t;
     uniforms.uPower.value = 0.35 + pulse * 1.3;
+    glow.intensity = PORTAL_LIGHT.intensity * (1 + pulse * PORTAL_LIGHT.pulse);
     acc += dt * (1 + pulse * 4);
     while (acc > 0.07) {
       acc -= 0.07;

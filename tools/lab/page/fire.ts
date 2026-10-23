@@ -1,5 +1,5 @@
 // tools/lab fire: a biome's fire as the player meets it, and its flames measured as fire burns. The fire is found by
-// its light (the warm one of the biome's six point lights: a brazier's, a bonfire's) and read back from beside it
+// its light (the warm one of the biome's ten point lights: a brazier's, a bonfire's) and read back from beside it
 // three times a moment, with its own light (what it draws unlit near its light: flames and glows, and the glow
 // particles), without it, and without the smoke too, so the differences are the fire alone and its smoke
 // (fireMeasure.ts): how tall and wide it burns, its light

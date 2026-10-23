@@ -196,18 +196,21 @@ function spawnDummies() {
 function start() {
   if (isGuest() || (isHost() && partnerInRun())) return;
   rollBiome();
-  sendStart(G.arena.biome, selectedWave());
-  beginRun(selectedWave());
+  // (the props a run shapes anew: its columns, its stumps; the guests' built from the same)
+  const seed = Math.floor(Math.random() * 2 ** 31);
+  sendStart(G.arena.biome, selectedWave(), seed);
+  beginRun(selectedWave(), seed);
 }
 
 /** A guest: the host started a run. */
-function guestStart(biome: BiomeId, wave: number) {
+function guestStart(biome: BiomeId, wave: number, seed: number) {
   G.arena.setBiome(biome);
-  beginRun(wave);
+  beginRun(wave, seed);
 }
 
-function beginRun(wave: number) {
+function beginRun(wave: number, seed: number) {
   clearGround();   // what's left on the lobby floor is lost
+  G.arena.rollProps(seed);
   G.arena.restoreProps();
   showMenu(false);
   hideTooltip();

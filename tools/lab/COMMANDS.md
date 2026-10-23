@@ -148,7 +148,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   1.2 times the paper white, which the check under the knee must catch. With `--ab` the SDR frames agree with main,
   line for line.
 - `fire`: each biome's fire as the player meets it (`page/fire.ts`, `page/fireMeasure.ts`, tested in
-  `test/fireMeasure.test.mjs`; `--biomes crypt,forest`). Found by its light, the warm one of the biome's six, the hero
+  `test/fireMeasure.test.mjs`; `--biomes crypt,forest`). Found by its light, the warm one of the biome's ten, the hero
   stood 4.5 m before it towards the middle. For `--seconds` (2), 30 times a second, it's drawn from beside it with its
   own light, without (what draws unlit within 1.5 m of its light, and the glow particles) and without its smoke too:
   the differences are its light alone (graded: the tone curve carries the logs' grain into it) and its smoke (a pale

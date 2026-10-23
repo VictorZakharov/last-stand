@@ -6,12 +6,13 @@ import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
-import { bakeStaticShadows, compileEnvMaps as compileEach, envMap, type Biome, type BiomeBuilder, type BiomeLook } from './props';
+import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
-import { restoreProps } from './destructible';
+import { restoreProps, state as propState } from './destructible';
 import { emit } from '../events';
+import { G } from '../state';
 import { stumpPreloaded } from './stump';
 
 export { groundHeight };
@@ -67,10 +68,19 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   if (import.meta.env.DEV) {
     const lights = BIOME_IDS.map((id) => { let n = 0; biomes[id].group.traverse((o) => { if ((o as THREE.PointLight).isPointLight) n++; }); return n; });
     if (new Set(lights).size > 1) console.error(`Biomes must have the same number of point lights (switching recompiles every shader): ${lights}`);
+    // (and as many casting: each is written out in every lit program, `loopPointLights`)
+    const casting = BIOME_IDS.map((id) => {
+      let n = 0;
+      biomes[id].group.traverse((o) => { if ((o as THREE.PointLight).isPointLight && o.castShadow) n++; });
+      return n;
+    });
+    if (new Set(casting).size > 1) console.error(`Biomes must have as many point lights casting shadows: ${casting}`);
   }
 
   let biome: BiomeId = BIOME_IDS[0];
   let active = biomes[biome].b;
+  /** the biome and the props' revision its still shadows were last drawn for (`drawStillShadows`) */
+  const stillDrawn = { biome: null as BiomeId | null, rev: -1 };
 
   function setBiome(id: BiomeId): void {
     const changed = id !== biome;
@@ -97,6 +107,12 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     get props() { return active.props; },
     /** every biome's props whole again (a new run, the lobby) */
     restoreProps() { for (const id of BIOME_IDS) restoreProps(biomes[id].b.props); },
+    /** every biome's run-shaped props built again from a run's seed (`Biome.roll`) */
+    rollProps(seed: number) {
+      for (const id of BIOME_IDS) biomes[id].b.roll?.(seed);
+      // (their circles' heights and girths: the navigation's grid made again)
+      propState.rev++;
+    },
     /** spawn gates: {pos, dir (into the arena), pulse()} */
     get portals() { return active.portals; },
     /** the wall as drawn, which bodies walk up to and what flies meets (`world/wall.ts`) */
@@ -108,6 +124,14 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     /** a biome's own pieces (hidden while another is shown): what the warm-up leaves out or shows */
     groupOf(id: BiomeId): THREE.Group { return biomes[id].group; },
     setCalm(v: number) { for (const id of BIOME_IDS) biomes[id].b.setCalm(v); },
-    update(dt: number, t: number) { active.update(dt, t); },
+    update(dt: number, t: number) {
+      active.update(dt, t);
+      // (the still shadows of its warmest lights, drawn again when what stands in it changed: shown, broken, rolled)
+      if (stillDrawn.biome !== biome || stillDrawn.rev !== propState.rev) {
+        drawStillShadows(renderer, scene, G.camera, biomes[biome].group, moon.shadow);
+        stillDrawn.biome = biome;
+        stillDrawn.rev = propState.rev;
+      }
+    },
   };
 }

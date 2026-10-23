@@ -11,7 +11,7 @@ import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
 import { floorRelief } from '../core/parallax';
-import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, treeSpots, contactShadows, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type Updater } from './props';
+import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type Updater } from './props';
 
 /** the crypt's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
@@ -21,7 +21,7 @@ import { restingLift, skullGeometry } from './skull';
 import type { Obstacle } from '../types';
 import { Wall } from './wall';
 import { valueNoise3 } from '../core/patterns';
-import { growTree, type Grow } from './ezTrees';
+import { growTree, type Grow, type TreeKind } from './ezTrees';
 
 /** where the wall's parts are made: in the arena's frame */
 const IDENTITY = new THREE.Matrix4();
@@ -46,6 +46,11 @@ const DEAD_BARK: [number, number] = [6, 6];
 /** the draws the old dead trees' geometry took from the biome's stream */
 const OLD_DEAD_TREE_DRAWS = 12;
 const polar = (r: number, a: number): [number, number] => [Math.cos(a) * r, Math.sin(a) * r];
+/** how high a grown tree's bark reaches (of its height of 1, its leaves' cards counted: bare, its bark stops short) */
+function barkTop(kind: TreeKind): number {
+  kind.bark.computeBoundingBox();
+  return kind.bark.boundingBox!.max.y;
+}
 
 const FOG = 0x1a2034;
 /** where the painted moon hangs in the sky (the shadow-casting light stays overhead for readable shadows) */
@@ -317,7 +322,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   // (the banners hang a hand in front of the buttresses, their hems at a head's height)
   for (const part of bannerParts) wall.addGeometry(part, IDENTITY, false);
 
-  // --- Spirit beacons (blue flames) & braziers (orange): the biome's 6 point lights ---
+  // --- Spirit beacons (blue flames) & braziers (orange): 6 of the biome's 10 point lights (and a portal's each) ---
   const beaconSpots = [[-11, -11], [11, -11], [-11, 11], [11, 11]];
   const beaconFlame = beaconFlameMat(updaters);
   for (const [x, z] of beaconSpots) {
@@ -340,17 +345,25 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   // --- Floor obstacles: broken columns, fallen drums, sarcophagi, gravestones -------------
   // (r, angle) spots clear of the gates' lanes, the lights, the grates and the lobby dummies
   const colSpots = [[9.5, 0.4, 3.4], [15, 1.95, 2.2], [22, 0.62, 4.2], [9.5, 3.55, 2.6], [14.5, 4.35, 3.8], [22, 2.72, 1.6], [15, 5.85, 3.0], [21.5, 4.05, 2.4]];
-  const columns = new THREE.InstancedMesh(buildColumnGeo(), carved, colSpots.length);
+  // (a mesh each, its height and its break rolled anew for every run: `rollColumns`)
+  const columns: Column[] = [];
   const candleSpots: [number, number, number][] = [];
-  colSpots.forEach(([rr, a, ht], i) => {
+  colSpots.forEach(([rr, a]) => {
     const [x, z] = polar(rr, a);
-    setInstance(columns, i, x, 0, z, 0, r(0, TAU), 0, 1, ht / 4, 1);
-    obstacles.push({ x, z, r: 0.85, h: ht });
-    breakable.add(obstacles.length - 1, 12 + ht * 5, 0x8a8478, instanceLook(columns, i));
+    const mesh = new THREE.Mesh(undefined, carved);
+    mesh.position.set(x, 0, z);
+    // (the old instances' turn still drawn from the stream: every prop placed after them would move)
+    mesh.rotation.y = r(0, TAU);
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.name = 'column';
+    scene.add(mesh);
+    const circle: Obstacle = { x, z, r: 0.85, h: 0 };
+    obstacles.push(circle);
+    breakable.add(obstacles.length - 1, COLUMN_HP, 0x8a8478, meshLook(mesh));
+    columns.push({ mesh, circle });
     candleSpots.push([x + 0.9, z + 0.3, 0]);
   });
-  columns.castShadow = columns.receiveShadow = true;
-  scene.add(columns);
+  rollColumns(columns, BOOT_ROLL);
 
   // fallen columns: a shaft lying across the floor and a couple of loose drums
   const drumGeo = new THREE.CylinderGeometry(0.44, 0.44, 1, FLUTED_SEGMENTS, 4).rotateZ(Math.PI / 2);
@@ -446,11 +459,14 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const small = growTree(SMALL_DEAD);
   const smallTrees = new THREE.InstancedMesh(small.bark, deadWood, smallTreeSpots.length);
   const treeRng = mulberry(1618);
+  // (as tall as the forest's young oaks, to the top of its bark: scaled by its height alone, its limbs as grown stood
+  // under 4 m)
+  const smallTop = barkTop(small);
   smallTreeSpots.forEach(([x, z], i) => {
-    const ht = 3.5 + treeRng() * 1.5;
-    setInstance(smallTrees, i, x, -0.1, z, 0, treeRng() * TAU, 0, ht);
+    const ht = 4.5 + treeRng() * 1.5, s = ht / smallTop;
+    setInstance(smallTrees, i, x, -0.1, z, 0, treeRng() * TAU, 0, s);
     // (round its trunk's foot, measured on the grown bark: `trunkFoot`)
-    obstacles.push({ x, z, r: small.trunkFoot * ht + 0.1, h: ht });
+    obstacles.push({ x, z, r: small.trunkFoot * s + 0.1, h: ht });
     breakable.add(obstacles.length - 1, 10, 0x4a4038, instanceLook(smallTrees, i), 'wood');
   });
   smallTrees.castShadow = smallTrees.receiveShadow = true;
@@ -502,6 +518,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
     portals,
     setCalm(v: number) { calmTarget = v; },
     update(dt: number, t: number) { for (const u of updaters) u(dt, t); },
+    roll(seed: number) { rollColumns(columns, seed); },
   };
 };
 
@@ -606,49 +623,117 @@ function columnBase(): THREE.Vector2[] {
   return points;
 }
 
-/** where a column's shaft breaks off (m): its break's mean height, how far it slopes across (two lobes round it), how
- *  deep the chips out of its rim go, how rough its face is, and how far its middle sinks into the stump */
-const BREAK = { at: 3.55, slope: 0.32, chips: 0.12, rough: 0.05, hollow: 0.1 };
+/** the columns' heights to their breaks' middles (m), how far a break slopes across (m), how wavy it is round the rim,
+ *  how deep the chips out of its rim go, how rough its face is and how far its middle sinks: each rolled for each
+ *  column between these */
+const COLUMN_HEIGHT = [1.6, 4.4];
+const BREAK_SLOPE = [0.08, 0.45];
+const BREAK_WAVE = [0.04, 0.16];
+const BREAK_CHIPS = [0.05, 0.16];
+const BREAK_ROUGH = [0.03, 0.07];
+const BREAK_HOLLOW = [0.04, 0.14];
+/** the chips round the rim */
+const CHIPS = 10;
+/** a column's hit points, whatever its height */
+const COLUMN_HP = 28;
+/** the roll the columns stand in until a run rolls them (the lobby before the first run) */
+const BOOT_ROLL = 1;
 /** the shaft's radius at its top, and the rings its fracture's face is laid in */
 const SHAFT_TOP = 0.44;
 const FACE_RINGS = 8;
+/** the shaft's foot over the base's mouldings (m), and how far past its break's highest it's built before it's broken */
+const SHAFT_FOOT = 0.54;
+const SHAFT_SPARE = 0.3;
 
-/** How high the break is at (x, z) on the shaft's axis: a slope round it, chips out of its rim, the middle sunk. */
-function breakAt(x: number, z: number): number {
-  const a = Math.atan2(z, x), out = Math.min(1, Math.hypot(x, z) / SHAFT_TOP);
-  // (a chip a tenth of the way round, as deep as its own hash says, deepest at the rim)
-  const chip = Math.floor((a + Math.PI) / (Math.PI / 5));
-  const k = Math.sin(chip * 12.9898) * 43758.5453;
-  const chips = (k - Math.floor(k) - 0.5) * 2 * BREAK.chips * out * out;
-  return BREAK.at + BREAK.slope * Math.sin(a + 0.6) + 0.12 * Math.sin(2 * a + 1.9) + chips - (1 - out) * BREAK.hollow;
+/** A column standing in the crypt: its mesh and its circle, both rolled anew for a run. */
+interface Column {
+  mesh: THREE.Mesh;
+  circle: Obstacle;
 }
+
+/** How a column's shaft breaks off: its middle's height, its slope and the way it falls, its wave round the rim and
+ *  where it turns, the chips out of its rim, its face's roughness and noise, and how far its middle sinks. */
+interface Break {
+  at: number;
+  slope: number;
+  facing: number;
+  wave: number;
+  waveTurn: number;
+  chips: number[];
+  rough: number;
+  salt: number;
+  hollow: number;
+}
+
+/** A break rolled from `rng`. */
+function rollBreak(rng: () => number): Break {
+  const between = ([low, high]: number[]) => low + rng() * (high - low);
+  return {
+    at: between(COLUMN_HEIGHT),
+    slope: between(BREAK_SLOPE),
+    facing: rng() * TAU,
+    wave: between(BREAK_WAVE),
+    waveTurn: rng() * TAU,
+    chips: Array.from({ length: CHIPS }, () => (rng() - 0.5) * 2 * between(BREAK_CHIPS)),
+    rough: between(BREAK_ROUGH),
+    salt: Math.floor(rng() * 1000),
+    hollow: between(BREAK_HOLLOW),
+  };
+}
+
+/** Every column built again from `seed`: its height and its break (a run's own, the same on every game in co-op). */
+function rollColumns(columns: Column[], seed: number): void {
+  const rng = mulberry(seed * 7919 + 17);
+  for (const column of columns) {
+    const broken = rollBreak(rng);
+    column.mesh.geometry.dispose();
+    column.mesh.geometry = buildColumnGeo(broken);
+    column.circle.h = broken.at;
+  }
+}
+
+/** How high `broken` is at (x, z) on the shaft's axis: a slope across it, a wave round it, chips out of its rim, the
+ *  middle sunk. */
+function breakAt(broken: Break, x: number, z: number): number {
+  const a = Math.atan2(z, x), out = Math.min(1, Math.hypot(x, z) / SHAFT_TOP);
+  const sector = Math.floor(((a + Math.PI) / TAU) * CHIPS) % CHIPS;
+  return broken.at + broken.slope * Math.sin(a - broken.facing) + broken.wave * Math.sin(2 * a + broken.waveTurn)
+    + broken.chips[sector] * out * out - (1 - out) * broken.hollow;
+}
+
+/** The highest `broken` reaches anywhere over the shaft (m). */
+const breakTopmost = (broken: Break): number =>
+  broken.at + broken.slope + broken.wave + Math.max(0, ...broken.chips);
 
 /**
  * A shaft snapped off as stone breaks: everything above a sloping surface, chipped at its rim, brought down onto it,
- * and the open top closed by the fracture's face (`fractureFace`). Each vertex of its top was raised at random by up to
- * 0.45 m, and its neighbours apart, so it ended in thin spikes, a sheet of paper's edge, not stone's ("difficult to
- * break concrete like it is"); closed by a cylinder's own cap, its face was a clean fan, an umbrella over the stump.
+ * and the open top closed by the fracture's face (`fractureFace`), laid in from the shaft's own top row as it stands
+ * fluted (laid from its round rim before the flutes were cut, the face stood off the grooves and the sky showed between
+ * them). Each vertex of its top was raised at random by up to 0.45 m, and its neighbours apart, so it ended in thin
+ * spikes, a sheet of paper's edge, not stone's ("difficult to break concrete like it is"); closed by a cylinder's own
+ * cap, its face was a clean fan, an umbrella over the stump.
  */
-function breakTop(shaft: THREE.BufferGeometry, radial: number): THREE.BufferGeometry {
+function breakTop(shaft: THREE.BufferGeometry, radial: number, broken: Break): THREE.BufferGeometry {
   const pos = shaft.attributes.position;
   for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), z = pos.getZ(i), top = breakAt(x, z);
+    const top = breakAt(broken, pos.getX(i), pos.getZ(i));
     if (pos.getY(i) > top) pos.setY(i, top);
   }
   // (a cylinder's top row of its side is its first: one vertex round it a segment, and the seam's again)
   const rim = Array.from({ length: radial + 1 }, (_, j) => new THREE.Vector2(pos.getX(j), pos.getZ(j)));
-  return fractureFace(rim);
+  return fractureFace(rim, broken);
 }
 
 /** The broken top's face inside its rim (the shaft's top row, as broken): rings in to the middle, each point at the
  *  break's height and roughened as split stone is, but not on the rim, where it meets the shaft. */
-function fractureFace(rim: THREE.Vector2[]): THREE.BufferGeometry {
+function fractureFace(rim: THREE.Vector2[], broken: Break): THREE.BufferGeometry {
   const positions: number[] = [], uvs: number[] = [], index: number[] = [];
   for (const edge of rim) {
     for (let k = 0; k <= FACE_RINGS; k++) {
-      const share = k / FACE_RINGS, x = edge.x * share, z = edge.y * share;
-      const rough = (valueNoise3(x * 7, 0, z * 7, 3) - 0.5) * 2 * BREAK.rough * (1 - share ** 3);
-      positions.push(x, breakAt(x, z) + rough, z);
+      const share = 1 - k / FACE_RINGS, x = edge.x * share, z = edge.y * share;
+      const noise = valueNoise3(x * 7, 0, z * 7, broken.salt) - 0.5;
+      const rough = noise * 2 * broken.rough * (1 - share ** 3);
+      positions.push(x, breakAt(broken, x, z) + rough, z);
       uvs.push(x + 0.5, z + 0.5);
     }
   }
@@ -656,7 +741,7 @@ function fractureFace(rim: THREE.Vector2[]): THREE.BufferGeometry {
   for (let j = 0; j < rim.length - 1; j++) {
     for (let k = 0; k < FACE_RINGS; k++) {
       const a = j * row + k, b = (j + 1) * row + k;
-      index.push(a, a + 1, b, b, a + 1, b + 1);
+      index.push(a, b, a + 1, b, b + 1, a + 1);
     }
   }
   const face = new THREE.BufferGeometry();
@@ -667,15 +752,18 @@ function fractureFace(rim: THREE.Vector2[]): THREE.BufferGeometry {
   return face;
 }
 
-/** A fluted column 4m tall (scaled per instance) on a square base, snapped off at a jagged top. */
-function buildColumnGeo(): THREE.BufferGeometry {
+/** A fluted column on a square base, snapped off at `broken`'s jagged top. */
+function buildColumnGeo(broken: Break): THREE.BufferGeometry {
   const base = boxWithUV(1.3, 0.3, 1.3, 0.6).translate(0, 0.15, 0);
   // its base's mouldings: a torus, a hollow and a smaller torus up to the shaft (a plain drum read as a box)
   const torus = new THREE.LatheGeometry(columnBase(), 48).translate(0, 0.3, 0);
-  // (open: its top closed by the fracture's face)
-  const shaft = new THREE.CylinderGeometry(SHAFT_TOP, 0.48, 3.5, FLUTED_SEGMENTS, 24, true).translate(0, 2.27, 0);
+  // (open: its top closed by the fracture's face; fluted before it's broken, so the face meets its grooves)
+  const length = breakTopmost(broken) + SHAFT_SPARE - SHAFT_FOOT;
+  const rows = Math.max(8, Math.round(length * 7));
+  const shaft = new THREE.CylinderGeometry(SHAFT_TOP, 0.48, length, FLUTED_SEGMENTS, rows, true)
+    .translate(0, SHAFT_FOOT + length / 2, 0);
   fluted(shaft, 'y');
-  const face = breakTop(shaft, FLUTED_SEGMENTS);
+  const face = breakTop(shaft, FLUTED_SEGMENTS, broken);
   shaft.computeVertexNormals();
   return mergeGeometries([base, torus, shaft, face].map((g) => (g.index ? g.toNonIndexed() : g)));
 }
@@ -784,7 +872,7 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
   // (grown by ez-tree, a kind or another in turn; the old trees' draws from the stream still drawn: drawn from it,
   // every tree and the clutter placed after it moved)
   for (let i = 0; i < OLD_DEAD_TREE_DRAWS; i++) rng();
-  const kinds = DEAD_TREES.map(growTree);
+  const kinds = DEAD_TREES.map(growTree), tops = kinds.map(barkTop);
   const trees = kinds.map((k) => new THREE.InstancedMesh(k.bark, wood, treeN));
   const used = kinds.map(() => 0);
   const at = new THREE.Matrix4();
@@ -793,9 +881,14 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
     if (rr < 42 && gateGap(a) < 0.12) continue;
     const [x, z] = polar(rr, a);
     if (spots.some(([sx, sz]) => Math.hypot(sx - x, sz - z) < 5)) continue;
-    const ht = r(5, 10) * (rr < 38 ? 0.8 : 1), k = ti++ % kinds.length;
+    // (as tall as the forest's trees round its ring, taller further out, to the top of the bark: 5 to 10 m across the
+    // whole tree, they stood under the wall's towers; narrowed by their reach, as the forest's, to keep their limbs
+    // outside the wall)
+    const k = ti++ % kinds.length, s = Math.min(22, 9 + (rr - 34) * 0.6) * r(0.85, 1.15) / tops[k];
+    let w = s;
+    for (const reach of kinds[k].reach) if (reach > 0) w = Math.min(w, (rr - WALL_R - 1) / reach);
     // (sunk a little: a trunk is an open tube at its foot)
-    setInstance(trees[k], used[k], x, -0.2, z, r(-0.08, 0.08), r(0, TAU), r(-0.08, 0.08), ht, ht, ht);
+    setInstance(trees[k], used[k], x, -0.2, z, r(-0.08, 0.08), r(0, TAU), r(-0.08, 0.08), w, s, w);
     // (what an arrow over the wall meets: each tree's trunk, its limbs let go, as the forest's)
     wall.addGeometry(kinds[k].trunk, trees[k].getMatrixAt(used[k]++, at), false, 'beyond');
   }
@@ -968,6 +1061,7 @@ function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: number, ir
   scene.add(bowl);
   const light = new THREE.PointLight(0xff7a30, 15, 15, 2);
   light.position.set(x, lift + 2.1, z);
+  staticShadow(light);
   scene.add(light);
   // a heap of coals in the bowl, burning thin and dark
   buildFire(scene, {
