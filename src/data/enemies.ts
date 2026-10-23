@@ -31,6 +31,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     name: 'Cinder Brute', model: 'brute', ai: 'slam',
     life: 620, damage: 80, damageType: 'fire', speed: 3.0, radius: 1.0,
     range: 3.0, slamRadius: 3.4, windup: 1.05, recover: 0.8, cooldown: 2.6,
+    throws: { what: 'lava', from: 7, reach: 16, windup: 0.85, recover: 0.6, cooldown: 3.2, flight: [0.85, 0.035], splash: [1.8, 0.75], pool: [1.5, 2.5, 0.3] },
     cost: 5, score: 6, knockbackResist: 0.7,
   },
   colossus: {
@@ -67,6 +68,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     name: 'Barkhide Hulk', model: 'barkhulk', ai: 'slam',
     life: 660, damage: 76, damageType: 'physical', speed: 2.8, radius: 1.0,
     range: 3.0, slamRadius: 3.4, windup: 1.1, recover: 0.8, cooldown: 2.6,
+    throws: { what: 'vine', from: 6, reach: 15, windup: 0.8, recover: 0.6, cooldown: 4, creep: [13, 0.6, 1.5] },
     cost: 5, score: 6, knockbackResist: 0.75, accent: 0x9cff3a,
   },
   thornheart: {

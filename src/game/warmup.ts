@@ -28,6 +28,7 @@ import { particles } from '../fx/particles';
 import { coreSamples } from '../combat/projectiles';
 import { sporeOrbSample } from '../fx/sporeOrb';
 import { riftBoltSamples } from '../fx/riftBolts';
+import { vineSamples } from '../fx/vine';
 import { swingTrailSamples } from '../fx/swingTrail';
 import { groundSamples } from './groundItems';
 import { compileOutline, warmOutline } from '../ui/overlay/outline';
@@ -238,7 +239,8 @@ function fightParts(): Part[] {
   const shots: Part = {
     name: 'shots',
     build() {
-      const samples = [...named('spore orb', [sporeOrbSample()]), ...named('rift bolts', riftBoltSamples())];
+      const samples = [...named('spore orb', [sporeOrbSample()]), ...named('rift bolts', riftBoltSamples()),
+        ...named('vine', vineSamples())];
       return { compile: samples, objects: samples, drawn: [], outlined: [], done: () => undefined };
     },
   };

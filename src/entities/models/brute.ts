@@ -180,6 +180,15 @@ export function buildBrute(variant: Variant = 'brute'): Model {
         j.kneeL.rotation.x += 0.5 * down; j.kneeR.rotation.x += 0.5 * down;
         j.thighL.rotation.x += -0.4 * down; j.thighR.rotation.x += -0.4 * down;
         jaw.rotation.x += 0.35 * up;
+      } else if (a.name === 'throw') {
+        // a chunk scooped up in the right hand, drawn back over the shoulder and hurled overarm, let go on `hit`
+        const h = a.hit ?? 0.55, back = ramp(k, 0, h - 0.08) * (1 - ramp(k, h - 0.08, h));
+        const out = ramp(k, h - 0.08, h) * (1 - ramp(k, h + 0.15, 1));
+        j.shoulderR.rotation.x += -2.7 * back - 1.1 * out; j.elbowR.rotation.x += -1.3 * back - 0.1 * out;
+        j.shoulderL.rotation.x += -0.8 * back + 0.3 * out; j.shoulderL.rotation.z += 0.3 * back;
+        j.spine.rotation.y += 0.45 * back - 0.35 * out; j.spine.rotation.x += -0.2 * back + 0.45 * out;
+        j.thighL.rotation.x += -0.3 * out; j.kneeL.rotation.x += 0.3 * out;
+        jaw.rotation.x += 0.3 * out;
       } else if (a.name === 'cast') {
         const w = Math.sin(k * Math.PI);
         j.shoulderR.rotation.x += -1.6 * w; j.shoulderL.rotation.x += -1.3 * w;

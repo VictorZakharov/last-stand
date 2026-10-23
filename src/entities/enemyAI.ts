@@ -19,10 +19,11 @@ import { navTarget, lineClear, steerClear, MARGIN } from '../world/navigation';
 import { lures, lureAt, type Lure } from '../combat/lures';
 // Circular (spawner -> enemy -> enemyAI -> spawner) but only used at runtime, which is safe.
 import { spawnEnemy } from './spawner';
+import { lavaChunk, lavaFlight, releaseFrom, vineAt } from './throws';
 import type { Enemy } from './enemy';
 import type { Player } from './player';
 import type { DamageType, EnemyAIKind } from '../types';
-import type { EnemyId } from '../data/enemies';
+import { ENEMIES, type EnemyId } from '../data/enemies';
 
 const _dir = new THREE.Vector3();
 const _way = { x: 0, z: 0 };
@@ -159,12 +160,23 @@ export const FX = {
   toss(id: number, vx: number, vz: number, vy: number) {
     G.enemies.find((e) => e.id === id)?.toss(vx, vz, vy);
   },
+  /** a chunk of lava thrown by foe `id` (of kind ENEMY_IDS[`kind`]) from (ox, oy, oz) to land at (tx, tz) in `flight` s
+   *  (entities/throws.ts) */
+  lava(id: number, kind: number, ox: number, oy: number, oz: number, tx: number, tz: number, flight: number, damage: number) {
+    lavaChunk(id, ENEMY_IDS[kind], ox, oy, oz, tx, tz, flight, damage);
+  },
+  /** a vine sent by a foe of kind ENEMY_IDS[`kind`] from (ox, oz) along `angle` for `length` m (entities/throws.ts) */
+  vine(kind: number, ox: number, oz: number, angle: number, length: number) {
+    vineAt(ENEMY_IDS[kind], ox, oz, angle, length);
+  },
   /** foe `id` getting out of a hero's attack (entities/evade.ts): ducked where it stands (`how` 1) or blinked to (x, z) */
   evade(id: number, how: number, x: number, z: number) {
     G.enemies.find((e) => e.id === id)?.evade(how, x, z);
   },
 };
 export type FxName = keyof typeof FX;
+/** the foes' kinds by number, as the `lava` and `vine` fx name them */
+const ENEMY_IDS = Object.keys(ENEMIES) as EnemyId[];
 
 /** Play an attack effect here and on every co-op guest. */
 export function fx<K extends FxName>(name: K, ...args: Parameters<(typeof FX)[K]>): void {
@@ -191,6 +203,22 @@ function fireBolt(e: Enemy, angleOffset = 0, lead = true): void {
   else origin.set(e.pos.x, e.height * 0.6, e.pos.z);
   const tx = p.pos.x + (lead ? p.vel.x * 0.35 : 0), tz = p.pos.z + (lead ? p.vel.z * 0.35 : 0);
   fx('bolt', e.id, origin.x, origin.z, Math.atan2(tx - origin.x, tz - origin.z) + angleOffset, e.damage, origin.y);
+}
+
+/** Something thrown at the target, too far off to slam (`EnemyDef.throws`, entities/throws.ts): lava at where he
+ *  stands as it leaves the hand, a vine along the floor to him and on past him. */
+function throwAt(e: Enemy): void {
+  const def = e.def.throws!, p = e.target!, kind = ENEMY_IDS.indexOf(e.type);
+  const from = releaseFrom(e, _dir);
+  if (def.what === 'lava') {
+    const flight = lavaFlight(def, Math.hypot(p.pos.x - from.x, p.pos.z - from.z));
+    fx('lava', e.id, kind, from.x, from.y, from.z, p.pos.x, p.pos.z, flight, e.damage);
+    return;
+  }
+  const angle = Math.atan2(p.pos.x - e.pos.x, p.pos.z - e.pos.z);
+  const start = e.radius * 0.8, dist = Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z);
+  const ox = e.pos.x + Math.sin(angle) * start, oz = e.pos.z + Math.cos(angle) * start;
+  fx('vine', kind, ox, oz, angle, Math.min(def.reach, dist + 3) - start);
 }
 
 /** A slam's telegraph, taken down with the action if the enemy dies first. */
@@ -255,6 +283,13 @@ export const AI: Record<EnemyAIKind, (e: Enemy, dt: number) => void> = {
       const tx = e.pos.x + (dx / dist) * Math.min(dist, d.range * 0.6), tz = e.pos.z + (dz / dist) * Math.min(dist, d.range * 0.6);
       slamRing(e, tx, tz, slamRadius, d.windup, 0xff3020);
       e.startAction('slam', d.windup + d.recover, [[d.windup / (d.windup + d.recover), () => slamAt(e, tx, tz, slamRadius)]]);
+      return;
+    }
+    // too far off to slam: throw at him, where nothing stands between (a vine creeps through props, a chunk flies over)
+    const th = d.throws;
+    if (th && e.cd <= 0 && dist > th.from && dist < th.reach) {
+      e.cd = th.cooldown * rand(0.85, 1.15);
+      e.startAction('throw', th.windup + th.recover, [[th.windup / (th.windup + th.recover), () => throwAt(e)]]);
       return;
     }
     chase(e);

@@ -201,6 +201,16 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
         j.body.position.y += -0.12 * down;
         j.kneeL.rotation.x += 0.5 * down; j.kneeR.rotation.x += 0.5 * down;
         j.thighL.rotation.x += -0.4 * down; j.thighR.rotation.x += -0.4 * down;
+      } else if (a.name === 'throw') {
+        // the right arm raised and driven down into the floor before it on `hit`, sending the vine out along it
+        const h = a.hit ?? 0.55, up = ramp(k, 0, h - 0.1) * (1 - ramp(k, h - 0.1, h));
+        const down = ramp(k, h - 0.1, h) * (1 - ramp(k, h + 0.2, 1));
+        j.shoulderR.rotation.x += -2.6 * up - 0.7 * down; j.elbowR.rotation.x += -0.6 * up;
+        j.shoulderR.rotation.z += 0.3 * down;
+        j.spine.rotation.x += -0.25 * up + 0.75 * down; j.spine.rotation.y += 0.2 * up - 0.2 * down;
+        j.body.position.y += -0.1 * down;
+        j.kneeL.rotation.x += 0.4 * down; j.kneeR.rotation.x += 0.4 * down;
+        j.thighL.rotation.x += -0.35 * down; j.thighR.rotation.x += -0.35 * down;
       } else if (a.name === 'cast') {
         // flings seeds from both arms
         const w = Math.sin(k * Math.PI);

@@ -255,6 +255,30 @@ export interface EvadeDef {
   reach?: readonly [number, number];
 }
 
+/**
+ * What a slamming foe throws at a hero too far off to slam (entities/throws.ts): 'lava', a chunk lobbed on a high arc
+ * at where he stood, its landing marked on the floor as it flies, bursting there and leaving a pool that burns;
+ * 'vine', a tendril sent creeping along the floor in a line through anything in its way, holding a hero its tip
+ * meets to the ground for `hold` s (a dash tears him free). It throws from `from` m out to `reach`, its own windup,
+ * recover and cooldown.
+ */
+export interface ThrowDef {
+  what: 'lava' | 'vine';
+  from: number;
+  reach: number;
+  windup: number;
+  recover: number;
+  cooldown: number;
+  /** lava: the chunk's time in the air at its nearest and per metre further (s) */
+  flight?: readonly [number, number];
+  /** lava: the burst's radius (m) and its share of `damage` */
+  splash?: readonly [number, number];
+  /** lava: the pool's radius (m), how long it burns (s) and its share of `damage` a second */
+  pool?: readonly [number, number, number];
+  /** vine: how fast it creeps (m/s), how near its tip a hero is caught (m) and how long he's held (s) */
+  creep?: readonly [number, number, number];
+}
+
 export interface EnemyDef {
   name: string;
   model: string;
@@ -291,6 +315,8 @@ export interface EnemyDef {
   dummy?: boolean;
   /** how it gets out of an attack it sees coming */
   evade?: EvadeDef;
+  /** what it throws at a hero too far off for its slam */
+  throws?: ThrowDef;
 }
 
 // ---------------------------------------------------------------------------

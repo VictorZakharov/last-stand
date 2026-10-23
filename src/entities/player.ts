@@ -180,6 +180,9 @@ export class Player {
    *  it can move but not attack, cast or raise the shield */
   guardBroken = -1;
   get staggered(): boolean { return this.guardBroken > G.time; }
+  /** game time until which a vine holds his feet to the ground (`root`): he can't walk, but a dash tears him free */
+  rootedUntil = -1;
+  get rooted(): boolean { return this.rootedUntil > G.time; }
   /** game time the hero was last busy with an action: casting, channelling, dashing or staggered */
   private busyAt = -Infinity;
   lastBlock = -99;
@@ -419,6 +422,7 @@ export class Player {
     let speed = this.stats.moveSpeed;
     if (this.casting && !this.casting.skill.def.freeMove) speed *= 0.45;
     if (this.channel) speed *= this.channel.skill.def.moveMult ?? 0.4;
+    if (this.rooted) speed = 0;
     const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const k = len ? speed * Math.min(1, len) / len : 0;
     const tx = (mx * cy + mz * sy) * k, tz = (mz * cy - mx * sy) * k;
@@ -605,6 +609,7 @@ export class Player {
    *  Fangs' lunge in Bull Rush's charge, its cuts landing as it runs; put in the charge's place, it cut it short). */
   startDash(dir: THREE.Vector3, speed: number, dur: number, { lift = 0, anim = 'charge', hold = 0, through = false, open = false, step, pace }: DashOpts = {}): void {
     if (this.dash?.open && this.dashRunning()) { this.dash.ride = { anim, t: 0, dur: dur + hold }; return; }
+    this.rootedUntil = -1;
     this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, hold, lift, anim, through, open, step, pace };
     this.facing = Math.atan2(dir.x, dir.z);
   }
@@ -1001,6 +1006,16 @@ export class Player {
     this.life = Math.min(this.stats.maxLife, this.life + amount);
     if (this.local) countHealed(this.life - before);
     if (!silent && this.life - before >= 1) floatText(this.pos.x, 2.4, this.pos.z, `+${Math.round(this.life - before)}`, 'heal', '#6dff7a');
+  }
+
+  /** Held to the ground by a vine for `seconds` (the Barkhide Hulk's, `throws.ts`): stopped where he stands, and
+   *  walking nowhere until it lets go or a dash tears him free (`startDash`). A dash under way is never caught.
+   *  Returns whether it held him. */
+  root(seconds: number): boolean {
+    if (!this.active || !this.local || this.dash) return false;
+    this.rootedUntil = Math.max(this.rootedUntil, G.time + seconds);
+    this.vel.set(0, 0, 0);
+    return true;
   }
 
   /** Apply already-mitigated damage (see combat/damage hurtPlayer). Returns how it turned out (null: it didn't land,
