@@ -584,13 +584,19 @@ export class Enemy {
     this.model.animate({
       t, dt, phase: this.phase, move,
       // (from the data, so a co-op guest's copy has it too)
-      action: this.action ? { name: this.action.name, t: Math.min(1, this.action.t / this.action.dur), hit: this.def.windup / Math.max(0.01, this.def.windup + this.def.recover) } : null,
+      action: this.action ? { name: this.action.name, t: Math.min(1, this.action.t / this.action.dur), hit: this.hitShare(this.action.name) } : null,
       hit: this.hitT, dead: this.deadT >= 0 ? Math.min(1, this.deadT / 0.8) : -1,
     });
     this.lookAtTarget(dt);
   }
 
   /** the head follows its target (the players in the fight, for a co-op guest's copy too) */
+  /** the share of action `name` its blow lands at: a throw's own windup (`EnemyDef.throws`), else the data's */
+  private hitShare(name: string): number {
+    const w = name === 'throw' && this.def.throws ? this.def.throws : this.def;
+    return w.windup / Math.max(0.01, w.windup + w.recover);
+  }
+
   private lookAtTarget(dt: number): void {
     const j = this.model.joints;
     if (!j || this.def.dummy) return;

@@ -438,6 +438,23 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   going into the ground through a ducked foe's cap untouched, and an arrow at a ducked Sporecaller's cap flying
   through it (its skinned body is met by its hulls, which leave the cap's top out). About 3 min for the ranger, 1 for
   the mage, 20 s for the warrior.
+- `throws`: what the slammers throw at a hero too far off to slam (`page/throws.ts`; `EnemyDef.throws`,
+  `src/entities/throws.ts`), a throw a case, each thrower risen 12 m before the hero along the screen's W, pinned to
+  its spot before every frame (it turns and throws as its AI has it, but never walks up) and its cooldown held out
+  after its throw. The Cinder Brute's lava: at him stood still, the chunk must land within 0.25 m of where he stood as
+  it left the hand, its ring (`Thrown.ring`) on the floor every frame it flies and within 5 cm of where it lands, its
+  splash hurt him as it lands and its pool burn him at least twice after; stepped off as it's thrown (D for a
+  second), nothing may hurt him; up close (2.5 m) it must slam and throw nothing. The Barkhide Hulk's vine: at him
+  stood still and walking (D) from the moment it holds him, it must hold him for its hold (90 frames, 3 frames
+  either way), his walking moving him under 0.1 m, and let him walk on after (0.5 m in the frames left); stepped
+  aside as it's sent, it must never hold him; stepped aside as it's sent (D for half a second) and back onto it
+  once it lies there (A from frame 80), it must hold him, and not before; held, a dash of his (Bull Rush,
+  Veilstep: `--class warrior` or `mage`; the ranger has none, and says so) pressed 20 frames in and let go after
+  its own hold must free him within 3 frames of its start and carry him a metre (aimed 6 m to the screen's left:
+  to its right a prop 2 m off cut Veilstep short).
+  The hurts are counted at `Player.takeDamage`, the hold by `Player.rooted`. `--canary` plants a splash of 6 m (the
+  step off is hurt), a vine catching 4 m off its line (the step aside is held) and a dash that leaves the hold on
+  (still held after it), each a problem unless caught. `--trace` lists the frames. About 5 s with `lab:serve` up.
 - `crowd`: a crowd of foes killed at once (`page/crowd.ts`), and what the frame costs as their bodies fall: the low-end
   device's measure. `--count` sets the crowd (38 by default, the most a wave keeps alive); it's killed by a blow each
   from the hero, or by `--skill` cast at it. Each round sets the crowd up afresh, times 60 frames with it standing,
@@ -545,10 +562,13 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   over it, chips knocked off) and broken in turn, its rubble, debris and smoke drawn as they fly and settle; then the
   run's first wave is set off and fought as the game plays it, the hero (kept whole) casting each skill on his bar
   in turn at the nearest foe, until it's cleared or 40 s are up, its foes killed as a fight kills them (no other
-  check lets a foe die of a fight); then the first biome's wave is fought again by a hero built afresh, as the
-  lobby's class switch builds him. Each round counts from before its set-up, whose frames are the game's (the
-  view entered, the hero rebuilt: counted from after it, the rebuilt hero's arms compiled unseen). Every program
-  compiled meanwhile is a problem, said as the game's perf report says it and with the draw that first used it, its
+  check lets a foe die of a fight); then a Cinder Brute and a Barkhide Hulk throw at him from 12 m off towards the
+  arena's middle for 420 frames (out the other way they stood beyond the wall, rose inside it 6 m off and only
+  slammed), each piece of their throws drawn (the chunk, its ring, burst and pool, the vine and its coils: a piece
+  never drawn is a problem, read from the scene by its name); then the first biome's wave is fought again by a hero
+  built afresh, as the lobby's class switch builds him. Each round counts from before its set-up, whose frames are
+  the game's (the view entered, the hero rebuilt: counted from after it, the rebuilt hero's arms compiled unseen).
+  Every program compiled meanwhile is a problem, said as the game's perf report says it and with the draw that first used it, its
   object, its material and its pass (the game can't name a shadow's: three keeps its shadow materials). Run it as a
   phone boots, `--boot low@518400`: a Low boot's warm-ups draw other shadows (small parts cast none there). Each
   fight's line counts the point lights each pass is lit by, as three counts them (shown, and on a layer its camera

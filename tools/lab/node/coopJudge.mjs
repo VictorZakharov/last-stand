@@ -666,6 +666,80 @@ function describeEvades(host, guest) {
   return { line, problems };
 }
 
+/** how far apart the two screens may land a chunk of lava (m: a frame of its flight, as each last saw it) */
+const LANDED_APART = 0.3;
+/** how near a landing the guest's hurt must come, frames */
+const LANDED_HURT = 3;
+/** how far the guest may move while a vine holds it (m), walking all the while */
+const HELD_MOVE = 0.1;
+/** the least share of the guest's held frames its copy must be shown in coils on the host's screen */
+const COILED_SHARE = 0.5;
+
+/** Whether a game's own hero lost life within `span` frames of `frame`. */
+function hurtNear(samples, frame, span) {
+  const first = Math.max(1, frame - span);
+  const last = Math.min(samples.length - 1, frame + span);
+  for (let f = first; f <= last; f++) {
+    if (samples[f - 1].life - samples[f].life > LIFE_DROP) return true;
+  }
+  return false;
+}
+
+/** The chunks of lava each screen saw land, the vines sent, the guest's hold on its screen and on the host's. */
+function judgeThrows(host, guest) {
+  const landedAt = (sample, frame) => (sample.thrown?.landed ?? []).map((at) => ({ at, frame }));
+  const landed = (samples) => samples.flatMap(landedAt);
+  const vines = (samples) => samples.reduce((sum, sample) => sum + (sample.thrown?.vines ?? 0), 0);
+  const hostLanded = landed(host), guestLanded = landed(guest);
+  const apart = guestLanded.map(({ at }) => Math.min(Infinity, ...hostLanded.map((other) => distance(at, other.at))));
+  const hurtAt = guestLanded.filter(({ frame }) => hurtNear(guest, frame, LANDED_HURT));
+  const held = guest.map((sample) => Boolean(sample.thrown?.held));
+  let heldFrames = 0, coiled = 0, moved = 0, from = null;
+  held.forEach((isHeld, frame) => {
+    if (!isHeld) {
+      from = null;
+      return;
+    }
+    heldFrames++;
+    from ??= guest[frame].self;
+    moved = Math.max(moved, distance(guest[frame].self, from));
+    const near = host.slice(frame, frame + MOST_DELAY);
+    if (near.some((sample) => sample.thrown?.coiled)) coiled++;
+  });
+  const hostHeld = host.filter((sample) => sample.thrown?.held).length;
+  return {
+    hostLanded: hostLanded.length, guestLanded: guestLanded.length, apart, hurt: hurtAt.length,
+    hostVines: vines(host), guestVines: vines(guest), heldFrames, coiled, moved, hostHeld,
+  };
+}
+
+function describeThrows(host, guest) {
+  const t = judgeThrows(host, guest);
+  const most = t.apart.length ? Math.max(...t.apart) : 0;
+  const line = `lava: ${t.guestLanded} chunks landed on the guest's screen, ${t.hostLanded} on the host's (the most `
+    + `${cm(most)} apart), ${t.hurt} hurting the guest as they landed; vines: ${t.guestVines} on the guest's screen, `
+    + `${t.hostVines} on the host's, the guest held ${t.heldFrames} frames (moved ${cm(t.moved)} walking), shown in `
+    + `coils on the host's for ${t.coiled} of them; the host held ${t.hostHeld} frames`;
+  const problems = [];
+  if (!t.guestLanded) problems.push('no lava landed on the guest\'s screen');
+  if (t.hostLanded !== t.guestLanded) {
+    problems.push(`${t.guestLanded} chunks on the guest's screen, ${t.hostLanded} on the host's`);
+  }
+  if (most > LANDED_APART) problems.push(`a chunk landed ${cm(most)} apart on the two screens`);
+  if (t.guestLanded && !t.hurt) problems.push('no chunk hurt the guest as it landed at its feet');
+  if (!t.guestVines) problems.push('no vine on the guest\'s screen');
+  if (t.hostVines !== t.guestVines) {
+    problems.push(`${t.guestVines} vines on the guest's screen, ${t.hostVines} on the host's`);
+  }
+  if (!t.heldFrames) problems.push('no vine held the guest');
+  if (t.moved > HELD_MOVE) problems.push(`the guest walked ${cm(t.moved)} while held`);
+  if (t.heldFrames && t.coiled < t.heldFrames * COILED_SHARE) {
+    problems.push(`the guest's copy in coils on the host's screen for ${t.coiled} of its ${t.heldFrames} held frames`);
+  }
+  if (t.hostHeld) problems.push(`the host, far off, held ${t.hostHeld} frames`);
+  return { line, problems };
+}
+
 /**
  * Where a game shows `who` (its own hero, `self`, or its `partner`) a frame, none where its body isn't drawn (a
  * blink's crossing: no one sees it move there).
@@ -697,6 +771,7 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (foeIds(host).length) add(describeFoes(host, guest, frameMs));
   if (name === 'shoot') add(describeShots(host, guest, frameMs));
   if (name === 'evade') add(describeEvades(host, guest));
+  if (name === 'throws') add(describeThrows(host, guest));
   if (name === 'dodge') add(describeBlows(guest, frameMs));
   if (name === 'down') add(describeDown(host, guest, frameMs));
   if (name === 'blink') add(describeBlinks(host, guest, frameMs));

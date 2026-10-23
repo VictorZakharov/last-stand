@@ -9,6 +9,8 @@
 // scene's, and through the eyes the arms', drawn by a camera of their own) against the boot's: a program is compiled
 // for a count, and a pass drawn with another compiles all it draws again (#268: a hero built afresh, as a class switch
 // builds him, had his light missing from the arms' pass). The first biome's wave is fought again by such a hero.
+// In each biome a Cinder Brute and a Barkhide Hulk throw at him from afar, every piece of their throws drawn (the
+// chunk, its ring, its burst and pool, the vine and its coils: entities/throws.ts), which no first wave brings.
 // `--canary` draws a material of a kind nothing else is before the hero, which must come out as compiled, and puts a
 // light in the scene that the count must find.
 import * as THREE from 'three';
@@ -48,6 +50,13 @@ const HURT_FRAMES = 20;
 const BREAK_FRAMES = 40;
 /** the frames the canary's material is drawn for */
 const CANARY_FRAMES = 2;
+/** the throwers, how far off the hero each stands (m), and the most frames they're given to throw and their throws
+ *  to play out */
+const THROWERS = ['brute', 'barkhulk'] as const;
+const THROWN_FROM = 12;
+const THROWS_MOST = 420;
+/** what the throws draw, by their meshes' names (an older tree has none) */
+const THROWN_PIECES = ['lava chunk', 'vine', 'vine coils'];
 /** the first wave's random numbers, and the most of it fought (s) */
 const WAVE_SEED = 1;
 const WAVE_MOST = 40;
@@ -254,6 +263,39 @@ async function fightFirstWave(lab: Lab, biome: BiomeId, fight: Fight): Promise<R
   return { text: text.join('\n'), problems };
 }
 
+/** In `biome`, a Cinder Brute and a Barkhide Hulk throwing at the hero from afar, until each piece of their throws has
+ *  been drawn and its effects played out; its lines and problems. */
+async function throwsDrawn(lab: Lab, biome: BiomeId, { view, gear, weapon }: Fight): Promise<Report> {
+  const since = compilesFromNow();
+  await standIn(lab, { biome, view, gear, weapon, facing: 0 });
+  const hero = G.player.pos;
+  // (towards the arena's middle, side by side: out the other way they stood beyond the wall, and rose inside it 6 m
+  // from him, too near to throw)
+  const inward = new THREE.Vector3(-hero.x, 0, -hero.z).normalize();
+  const aside = new THREE.Vector3(-inward.z, 0, inward.x);
+  const throwers = THROWERS.map((kind, i) => {
+    const at = hero.clone().addScaledVector(inward, THROWN_FROM).addScaledVector(aside, i ? 2 : -2);
+    return { kind, foe: lab.spawnFoe(kind, at), acts: new Set<string>() };
+  });
+  const drawn = new Set<string>();
+  let frames = 0;
+  for (; frames < THROWS_MOST; frames++) {
+    await lab.step(1);
+    for (const object of G.scene.children) if (THROWN_PIECES.includes(object.name)) drawn.add(object.name);
+    for (const thrower of throwers) if (thrower.foe.action) thrower.acts.add(thrower.foe.action.name);
+  }
+  const acted = throwers.map(({ kind, foe, acts }) => `${kind} ${foe.alive ? 'alive' : 'dead'} `
+    + `${foe.pos.distanceTo(G.player.pos).toFixed(1)} m off: ${[...acts].join(', ') || 'no action'}`);
+  const { count, lines } = since();
+  const missing = THROWN_PIECES.filter((piece) => !drawn.has(piece));
+  const text = [`${biome}, the ${view} view: a Brute and a Hulk threw at the hero for ${frames} frames (drew `
+    + `${[...drawn].join(', ') || 'nothing of their throws'}), ${count} programs compiled`,
+  `  ${acted.join('; ')}`, ...lines.map((line) => `  ${line}`)];
+  const problems = count > 0 ? [`${biome}: ${count} programs compiled as the foes threw`] : [];
+  if (missing.length) problems.push(`${biome}: the throws never drew ${missing.join(', ')}`);
+  return { text: text.join('\n'), problems };
+}
+
 /** The lights' canary: a point light put in the scene (dark) and taken out again before a frame is drawn, a problem
  *  unless the count finds the scene's pass lit by one more than the boot's. */
 function lightsCanary(booted: number): Report {
@@ -325,6 +367,7 @@ export async function compiles(lab: Lab, options: CompilesOptions): Promise<Repo
     for (const biome of options.biomes) {
       reports.push(await breakEachKind(lab, biome, round));
       reports.push(await fightFirstWave(lab, biome, round));
+      reports.push(await throwsDrawn(lab, biome, round));
     }
     reports.push(await fightFirstWave(lab, options.biomes[0], { ...round, fresh: true }));
     if (options.canary) {

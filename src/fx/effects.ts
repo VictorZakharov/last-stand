@@ -122,6 +122,34 @@ export function telegraph(pos: Pos, radius: number, duration: number, color: THR
   return e;
 }
 
+// A pool of lava left where a chunk landed (the Cinder Brute's, entities/throws.ts): a glowing disc over a scorch,
+// swelling in, churning slowly (well under a beat a second) and cooling out over its last second.
+export function lavaPool(pos: Pos, radius: number, life: number, color: THREE.ColorRepresentation = 0xff5a14): Effect {
+  const glowMat = additive(color, 1.6);
+  glowMat.map = TEX.soft;
+  const coreMat = additive(0xffc060, 1.1);
+  coreMat.map = TEX.soft;
+  const glow = new THREE.Mesh(GEO.plane, glowMat), core = new THREE.Mesh(GEO.plane, coreMat);
+  const g = new THREE.Group();
+  g.add(glow, core);
+  g.position.set(pos.x, floor(pos) + 0.05, pos.z);
+  core.position.y = 0.01;
+  decal(pos, { size: radius * 1.5, life: life + 4 });
+  const dispose = tracked(g, [glowMat, coreMat]);
+  let t = 0;
+  return addEffect({
+    update(dt: number) {
+      t += dt;
+      const swell = Math.min(1, t / 0.25), cool = Math.min(1, Math.max(0, life - t));
+      glow.scale.setScalar(radius * (0.6 + 0.4 * swell));
+      core.scale.setScalar(radius * 0.6 * (0.9 + 0.1 * Math.sin(t * 4)));
+      glowMat.opacity = cool * (0.85 + 0.15 * Math.sin(t * 3.1));
+      coreMat.opacity = cool * cool * 0.8;
+      return t < life;
+    }, dispose,
+  });
+}
+
 // Jagged lightning bolt rendered as a camera-facing ribbon.
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _side = new THREE.Vector3(), _view = new THREE.Vector3();
 export function lightning(from: THREE.Vector3, to: THREE.Vector3, { color = 0x9fb2ff, intensity = 5, width = 0.09, life = 0.14, segments = 12, jag = 0.5, branches = 2 } = {}) {
