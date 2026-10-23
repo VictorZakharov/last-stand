@@ -169,8 +169,9 @@ export interface ClassDef {
   accent: string;
   /** title of the lobby's skill loadout panel */
   book: string;
-  /** the light that follows the cast point, and the motes drifting off the off-hand (if any) */
-  aura: { light: number; intensity: number; motes?: [color: number, end: number] };
+  /** the light that follows the cast point (`drawn`: lit only while a shot is held at full draw, as its glint is), and
+   *  the motes drifting off the off-hand (if any) */
+  aura: { light: number; intensity: number; drawn?: boolean; motes?: [color: number, end: number] };
   base: BaseStats;
   skills: SkillDef[];
   starterGear: { slot: Slot; rarity: RarityId; ilvl: number }[];
