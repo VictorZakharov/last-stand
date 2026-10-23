@@ -51,13 +51,27 @@ function exportOf(repo, outDir, ref) {
 }
 
 /**
+ * A URL as the command line names it, split into the tree it names and the query asked of its page:
+ * `this?castAsOne=0` is this tree's page with `?castAsOne=0` (a switch of the game's measured in turns with the
+ * page as it is, one build served for both). Any other URL is its own tree.
+ */
+export function splitEntry(entry) {
+  const at = entry.indexOf('?');
+  const tree = at < 0 ? entry : entry.slice(0, at);
+  if (tree !== THIS_TREE && !tree.startsWith(REF)) return { tree: entry, query: '' };
+  return { tree, query: at < 0 ? '' : entry.slice(at) };
+}
+
+/**
  * Serves each tree `urls` name: `this` (`repo`'s tree, built into `outDir`/dist) and `ref:<git ref>` (that commit,
- * exported into `outDir`/commits and built there). Returns each such URL's served one (`urlOf`), the name each URL
- * is reported by (`nameOf`: a commit's by its ref and sha), the served trees' builds by URL (`builds`), and `close`.
+ * exported into `outDir`/commits and built there), each with any query after it (`splitEntry`). Returns each such
+ * URL's served one (`urlOf`), the name each URL is reported by (`nameOf`: a commit's by its ref and sha, and the
+ * query asked of it), the served trees' builds by URL (`builds`), and `close`.
  */
 export async function serveTrees(urls, repo, outDir, { named = false } = {}) {
   const served = new Map();
-  for (const entry of new Set(urls)) {
+  for (const { tree: entry } of new Set(urls.map(splitEntry))) {
+    if (served.has(entry)) continue;
     if (entry === THIS_TREE) {
       served.set(entry, { ...(await serveBuild(repo, outDir, { named })), name: 'this tree' });
     } else if (entry.startsWith(REF)) {
@@ -67,11 +81,18 @@ export async function serveTrees(urls, repo, outDir, { named = false } = {}) {
       served.set(entry, { ...tree, name: `${ref} (${sha.slice(0, 7)})` });
     }
   }
-  const names = new Map([...served.values()].map((tree) => [tree.url, tree.name]));
+  const urlOf = (entry) => {
+    const { tree, query } = splitEntry(entry);
+    const page = served.get(tree);
+    return page ? `${page.url}${query}` : entry;
+  };
+  // (each URL asked for, a served tree's under its name and query)
+  const asked = urls.map((entry) => ({ entry, page: served.get(splitEntry(entry).tree) })).filter(({ page }) => page);
+  const names = new Map(asked.map(({ entry, page }) => [urlOf(entry), `${page.name}${splitEntry(entry).query}`]));
   return {
-    urlOf: (entry) => served.get(entry)?.url ?? entry,
+    urlOf,
     nameOf: (url) => names.get(url) ?? url,
-    builds: new Map([...served.values()].map((tree) => [tree.url, tree.distDir])),
+    builds: new Map(asked.map(({ entry, page }) => [urlOf(entry), page.distDir])),
     close: () => Promise.all([...served.values()].map((tree) => tree.close())),
   };
 }

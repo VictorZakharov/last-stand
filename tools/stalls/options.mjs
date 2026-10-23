@@ -33,7 +33,8 @@ const TRIPS = 5;
 /** each option's value and what it does, for the usage */
 const HELP = {
   url: ['a,b', 'the game at these URLs (production, a PR preview), each in turn; `this` this tree, built and served '
-    + '(as it is with none); `ref:<git ref>` a commit, exported, built and served alike (`ref:HEAD~2`)'],
+    + '(as it is with none); `ref:<git ref>` a commit, exported, built and served alike (`ref:HEAD~2`); either '
+    + 'with a query asked of its page (`this,this?castAsOne=0`: a switch of the game\'s in turns, one build)'],
   scenario: ['name', `what the player does: ${Object.keys(SCENARIOS).join(', ')} (fight by default); ${BOOT}: the `
     + 'game loaded as a first visit, then a return, each step of its loading timed'],
   seconds: ['n', `how long the scenario plays (45 by default; ${BOOT}: the lobby watched once revealed, `

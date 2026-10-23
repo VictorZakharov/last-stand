@@ -22,6 +22,7 @@ import { SHINE } from '../core/materials';
 import { emit } from '../events';
 import { angleDamp, damp, hitFlash, rand } from '../util';
 import { applyShadowDetail } from '../core/quality';
+import { castAsOne, type OneShadow } from './models/castAsOne';
 import { countDown, countHealed, countTaken } from '../game/stats';
 import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SkillDef, SkillKey } from '../types';
 import type { Enemy } from './enemy';
@@ -121,6 +122,8 @@ export class Player {
   /** follows the cast point; every class has one, so switching class keeps the light count. A
    *  remote player has none: another light would change the count and recompile every shader */
   readonly staffLight: THREE.PointLight | null;
+  /** his pieces' shadow, cast in one draw (`models/castAsOne.ts`) */
+  readonly shadow: OneShadow;
   /** how lit a light lit only at full draw is (`ClassDef.aura.drawn`), eased in and out */
   private auraLit = 0;
   /** played here (a co-op partner is remote: driven by what its own game reports) */
@@ -221,6 +224,7 @@ export class Player {
     this.obj.add(this.model.root);
     this.obj.name = `hero ${classId}`;   // names show up in the perf report
     applyShadowDetail(this.obj);
+    this.shadow = castAsOne(this.model.root, this.obj);
     G.scene.add(this.obj, ...(this.staffLight ? [this.staffLight] : []));
 
     for (const def of this.cls.skills) {
@@ -237,6 +241,7 @@ export class Player {
     this.stopChannel();
     this.ward?.onEnd?.();
     G.scene.remove(this.obj, ...(this.staffLight ? [this.staffLight] : []));
+    this.shadow.dispose();
     this.obj.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as THREE.Material).dispose(); } });   // (skinned meshes own a copy of their material)
     this.model.dispose();
     this.staffLight?.dispose();

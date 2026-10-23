@@ -46,6 +46,7 @@ import type { RimOptions } from './wallRim';
 import type { BeyondOptions } from './beyond';
 import type { TreesOptions } from './trees';
 import type { ColumnsOptions } from './columns';
+import type { ShadowsOptions } from './shadows';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
@@ -456,6 +457,12 @@ export async function trees(lab: Lab, command: TreesOptions): Promise<Report> {
 export async function columns(lab: Lab, command: ColumnsOptions): Promise<Report> {
   const { columnsCheck } = await import('./columns');
   return columnsCheck(lab, command);
+}
+
+/** `lab shadows`: the hero's shadow cast as one against his pieces cast alone, frame by frame: no pixel apart. */
+export async function shadows(lab: Lab, command: ShadowsOptions): Promise<Report> {
+  const { shadowsCheck } = await import('./shadows');
+  return shadowsCheck(lab, command);
 }
 
 /** `lab draws`: one frame's draw calls with the crowd standing, by the geometry each drew, the most first. */

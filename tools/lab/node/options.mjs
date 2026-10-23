@@ -1026,6 +1026,26 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  shadows: {
+    help: 'the hero\'s shadow cast as one against his pieces cast each on its own: in each way he holds his '
+      + 'weapons, in all his armour and in none, and in each view, the frame drawn both ways and compared pixel by '
+      + 'pixel (more than 2 levels apart is a difference)',
+    options: {
+      views: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['top', 'third', 'first'],
+        default: 'top,third,first',
+        help: 'the views: top, third, first',
+      },
+      canary: { kind: 'switch', help: 'his pieces\' shadow moved 30 cm in the first case: it must be seen' },
+      cost: {
+        kind: 'switch',
+        help: 'time the shadow map\'s draw a frame instead, cast as one and each piece alone in turns on one page',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   wall: {
     help: 'how near the hero walks up to the wall: in each biome, at angles round the ring, he walks straight out '
       + 'until it stops him, and rays across his way read the gap between his body and the nearest surface drawn '

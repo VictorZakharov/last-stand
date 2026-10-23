@@ -990,6 +990,15 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  shadows: {
+    each(side, options) {
+      const command = { views: options.views, canary: Boolean(options.canary), cost: Boolean(options.cost) };
+      return side.command('shadows', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   draws: {
     check(options) {
       if (options.count !== undefined && !(options.count >= 0)) throw labError('draws --count: 0 or more');
