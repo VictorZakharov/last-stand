@@ -692,13 +692,18 @@ function rollColumns(columns: Column[], seed: number): void {
   }
 }
 
-/** How high `broken` is at (x, z) on the shaft's axis: a slope across it, a wave round it, chips out of its rim, the
- *  middle sunk. */
+/** How high `broken` is at (x, z) on the shaft's axis: a plane sloping across it, a wave round it and chips out of
+ *  its rim, both growing out from the middle, and the middle sunk. Everything that turns with the angle is scaled by
+ *  how far out it is: the slope taken round by the angle alone twisted the face about its middle, every point there
+ *  at another height, and a vertical slit ran down through it ("still seeing holes in concrete pillars"). The chips
+ *  are eased from one to the next round the rim, never a step: each step stood a cliff across the face. */
 function breakAt(broken: Break, x: number, z: number): number {
   const a = Math.atan2(z, x), out = Math.min(1, Math.hypot(x, z) / SHAFT_TOP);
-  const sector = Math.floor(((a + Math.PI) / TAU) * CHIPS) % CHIPS;
-  return broken.at + broken.slope * Math.sin(a - broken.facing) + broken.wave * Math.sin(2 * a + broken.waveTurn)
-    + broken.chips[sector] * out * out - (1 - out) * broken.hollow;
+  const along = ((a + Math.PI) / TAU) * CHIPS, sector = Math.floor(along) % CHIPS;
+  const ease = (1 - Math.cos((along % 1) * Math.PI)) / 2;
+  const chip = broken.chips[sector] * (1 - ease) + broken.chips[(sector + 1) % CHIPS] * ease;
+  return broken.at + broken.slope * out * Math.sin(a - broken.facing)
+    + (broken.wave * Math.sin(2 * a + broken.waveTurn) + chip * out) * out - (1 - out) * broken.hollow;
 }
 
 /** The highest `broken` reaches anywhere over the shaft (m). */
