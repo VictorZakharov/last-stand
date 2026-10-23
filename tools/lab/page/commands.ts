@@ -44,6 +44,7 @@ import type { WindingOptions } from './winding';
 import type { WallOptions } from './wallGap';
 import type { RimOptions } from './wallRim';
 import type { BeyondOptions } from './beyond';
+import type { TreesOptions } from './trees';
 import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
@@ -442,6 +443,12 @@ export async function rim(lab: Lab, command: RimOptions): Promise<Report> {
 export async function beyond(lab: Lab, command: BeyondOptions): Promise<Report> {
   const { beyond: beyondOf } = await import('./beyond');
   return beyondOf(lab, command);
+}
+
+/** `lab trees`: every tree in the play area a wooden prop an arrow stands in; none left after a biome switch. */
+export async function trees(lab: Lab, command: TreesOptions): Promise<Report> {
+  const { trees: treesOf } = await import('./trees');
+  return treesOf(lab, command);
 }
 
 /** `lab draws`: one frame's draw calls with the crowd standing, by the geometry each drew, the most first. */

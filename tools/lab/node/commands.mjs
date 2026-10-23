@@ -974,6 +974,14 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  trees: {
+    each(side, options) {
+      return side.command('trees', { biomes: options.biomes, canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   draws: {
     check(options) {
       if (options.count !== undefined && !(options.count >= 0)) throw labError('draws --count: 0 or more');
