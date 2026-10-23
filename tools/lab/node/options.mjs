@@ -256,9 +256,9 @@ export const COMMANDS = {
       scenarios: {
         kind: 'list',
         usage: 'a,b',
-        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'rush', 'strike'],
+        choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'rush', 'strike', 'throws'],
         help: 'the scenarios (all the hero can play by default): walk, foes, shoot, evade (a ranger or a mage), dodge, '
-          + 'down, blink (a mage), rush and strike (a warrior)',
+          + 'down, blink (a mage), rush and strike (a warrior), throws',
       },
       ping: { kind: 'number', usage: 'ms', help: 'the link\'s least round trip (300 by default)' },
       jitter: { kind: 'number', usage: 'ms', help: 'how much later each way a message may come (60 by default)' },
@@ -832,6 +832,27 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'list each try: its evade, its hits, and where each of the hero\'s shots ended against the foe\'s feet '
           + 'and top',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  throws: {
+    help: 'what the slamming foes throw at a hero too far off to slam, the thrower held to its spot and throwing as '
+      + 'its AI has it, a throw a case: the Cinder Brute\'s lava at him stood still (it must land where he stood as '
+      + 'it left the hand, its ring there every frame it flies, its splash and its pool hurting him), stepped off as '
+      + 'it\'s thrown (nothing may hurt him) and up close (it slams, throwing nothing); the Barkhide Hulk\'s vine at him '
+      + 'stood still (held for its hold, his walking going nowhere, walking after), stepped aside (never caught) and '
+      + 'dashing once held (torn free: --class warrior, mage)',
+    options: {
+      canary: {
+        kind: 'switch',
+        help: 'plant the faults the checks must catch: a splash far wider than its ring, a vine catching far off its '
+          + 'line, and a dash leaving the hero held',
+      },
+      trace: {
+        kind: 'switch',
+        help: 'list each case\'s frames: the chunk\'s flight, the hero\'s place and hold',
       },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,

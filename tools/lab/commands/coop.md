@@ -16,7 +16,10 @@ guest running from every other blow as it sees it coming; `down`: a foe bringing
 the guest down and the host raising it; `blink`, played only by a hero with a blink, `--class mage`: the guest
 blinking between two spots as foes close on it; `rush`, played only by a hero with Bull Rush, `--class warrior`:
 the guest charging through three dazed foes once; `strike`, the same but for a Power Strike charged first and the
-charge cast over it 0.35 s from its blow), each one's input frame by frame from what its own screen shows. The guest
+charge cast over it 0.35 s from its blow; `throws`: a Cinder Brute 15.5 m off and a Barkhide Hulk 11 m off
+throwing at the guest, which stands, walking only while a vine holds it, the host far off: the Brute's first chunk
+lands in the settling, and from there it throws again before it walks into slamming range), each one's input frame
+by frame from what its own screen shows. The guest
 practises in its lobby while it waits (stowed, as Space and a phone's Practice stow it), as a player does, and a
 game whose hero casts freely in the run the host starts is a problem (on main the guest's did, no costs or
 cooldowns through the whole run: `practice` measures the casts).
@@ -29,8 +32,12 @@ gone in a blink is left out of the foes' paths: it slides to where it went unsee
 jumping there within a second, and how far from where the host's came out the copy came back, an evade on the host's
 screen alone a problem too (in `evade`: 3 ducks and a blink for the ranger, the copy back 8 cm off; 4 and 3 for the
 mage, 15 cm), the blows at the guest against whether it stood in their reach on its own screen,
-when the guest went down and was raised on each screen, and each blink: when and how long it hid the guest's copy on
-the host's screen, how far from where it came out on its own screen the copy came out and how far it moved after,
+when the guest went down and was raised on each screen, what the slammers threw (each screen's chunks of lava as
+they came down, read from the scene by their meshes' names, `Sample.thrown`: as many on each and within 0.3 m, each
+hurting the guest within 3 frames of landing at its feet; as many vines on each; the guest held on its screen,
+moving under 0.1 m though it walks, and its copy shown in coils on the host's for at least half its held frames; the
+host never held: at 300 ms one chunk 13 cm apart, held 90 frames, all 90 in coils), and each blink: when and how
+long it hid the guest's copy on the host's screen, how far from where it came out on its own screen the copy came out and how far it moved after,
 and the foes it dazed on the guest's screen against those dazed on the host's, and each foe the guest's charge met
 on its screen: whether the host's carried and threw it too, where it was let go, came down and ended on each
 against where the guest stopped there (one ending behind it or level with it is a problem), and its largest move a

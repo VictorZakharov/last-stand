@@ -99,6 +99,10 @@ export interface Sample {
   loosed: number;
   /** its own hero's action and its partner's, as it shows them */
   acts: { self: Act; partner: Act | null };
+  /** what the foes threw as this game shows it (entities/throws.ts; none in an older tree): where each chunk of lava
+   *  that came down this frame landed, the vines sent this frame, its own hero held by one and its partner's copy
+   *  shown in a vine's coils */
+  thrown: { landed: XZ[]; vines: number; held: boolean; coiled: boolean };
 }
 
 /** Where a page's co-op stands, for the lab to wait on. */
@@ -428,6 +432,21 @@ const SCENARIOS: Record<string, Scenario> = {
     hostInput: () => ({}),
     guestInput: evadeInput,
   },
+  throws: {
+    about: 'a Cinder Brute throws lava and a Barkhide Hulk sends vines at the guest from afar, the guest standing and '
+      + 'walking only while a vine holds it, the host standing off',
+    frames: 900,
+    host: [-14, -10],
+    guest: [16, 25],
+    // (the Brute far enough off that it throws again once its first lands, in the settling, before it walks into
+    // slamming range)
+    foes: [
+      { type: 'brute', at: [16, 9.5] },
+      { type: 'barkhulk', at: [5, 25] },
+    ],
+    hostInput: () => ({}),
+    guestInput: () => ({ keys: (G.player as { rooted?: boolean }).rooted ? ['d'] : [] }),
+  },
   blink: {
     about: 'the guest, a mage, blinks between two spots as foes close on it, the host standing off',
     frames: 800,
@@ -551,6 +570,9 @@ const play = {
   ended: [] as XZ[],
   /** each foe's shown attack and how far through it was last frame */
   attacks: new Map<number, { action: unknown; share: number }>(),
+  /** the chunks of lava and the vines in the scene last frame, a chunk with where it was */
+  chunks: new Map<THREE.Object3D, XZ>(),
+  vines: new WeakSet<THREE.Object3D>(),
 };
 
 /** Notes where each friendly arrow ends, to tell an arrow that struck a foe on this game's screen. */
@@ -708,9 +730,35 @@ function sampleNow(): Sample {
     struck: struckFoes(),
     loosed: loosedArrows(),
     acts: { self: actOf(self), partner: partner ? actOf(partner) : null },
+    thrown: thrownNow(self, partner),
   };
   play.ended = [];
   return sample;
+}
+
+/** Whether `a` is within `reach` of `b` on the floor. */
+const near = (a: THREE.Vector3, b: THREE.Vector3, reach: number): boolean => Math.hypot(a.x - b.x, a.z - b.z) < reach;
+
+/** how near a hero's feet a vine's coils are to be his (m) */
+const COILED_NEAR = 0.3;
+
+/** What the foes threw this frame as this game shows it, read from the scene by its meshes' names (`lava chunk`,
+ *  `vine`, `vine coils`: an older tree has none): a chunk gone from it since last frame landed where it last was. */
+function thrownNow(self: Player, partner: Player | undefined): Sample['thrown'] {
+  const chunks = new Map<THREE.Object3D, XZ>();
+  let vines = 0, coiled = false;
+  for (const object of G.scene.children) {
+    if (object.name === 'lava chunk') chunks.set(object, [object.position.x, object.position.z]);
+    if (object.name === 'vine' && !play.vines.has(object)) {
+      play.vines.add(object);
+      vines++;
+    }
+    if (object.name === 'vine coils' && partner && near(object.position, partner.pos, COILED_NEAR)) coiled = true;
+  }
+  const landed = [...play.chunks].filter(([chunk]) => !chunks.has(chunk)).map(([, at]) => at);
+  play.chunks = chunks;
+  const held = Boolean((self as { rooted?: boolean }).rooted);
+  return { landed, vines, held, coiled };
 }
 
 function foeSample(foe: Enemy, hero: Player): FoeSample {

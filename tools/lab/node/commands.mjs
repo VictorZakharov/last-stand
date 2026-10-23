@@ -780,6 +780,19 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  throws: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        canary: Boolean(options.canary),
+        trace: Boolean(options.trace),
+      };
+      return side.command('throws', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   evade: {
     check(options) {
       if (options.tries !== undefined && !(options.tries >= 3)) throw labError('evade --tries: at least 3');

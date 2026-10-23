@@ -34,6 +34,7 @@ import type { TooltipsOptions } from './tooltips';
 import type { CursorOptions } from './cursor';
 import type { RushOptions } from './rush';
 import type { EvadeOptions } from './evade';
+import type { ThrowsOptions } from './throws';
 import type { CrowdOptions } from './crowd';
 import type { DrawsOptions } from './draws';
 import type { PerfOptions } from './perf';
@@ -389,6 +390,17 @@ export async function cursor(lab: Lab, command: CursorOptions): Promise<Report> 
 export async function evade(lab: Lab, command: EvadeOptions): Promise<Report> {
   const { evade: evadeRound } = await import('./evade');
   return evadeRound(lab, command);
+}
+
+/**
+ * `lab throws`: what the slamming foes throw at a hero too far off to slam, a case a throw: the Brute's lava where he
+ * stood, its ring and its burns, stepped off and up close; the Hulk's vine holding him, stepped aside and dashed out
+ * of. A chunk landing off where he stood or its ring, a hurt he stepped off, a throw up close, a hold off its time or
+ * walked out of, a catch he stepped aside from, and a dash that left him held are problems.
+ */
+export async function throws(lab: Lab, command: ThrowsOptions): Promise<Report> {
+  const { throws: throwsRound } = await import('./throws');
+  return throwsRound(lab, command);
 }
 
 /**
