@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA } from '../data/balance';
-import { cobblestone, forestFloor, ashlar, granite, limestone, marble, slate, bark, bannerCloth, pbrMaterialMaps, runeCircle } from '../core/textures';
+import { cobblestone, soil, ashlar, granite, limestone, marble, slate, bark, bannerCloth, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
@@ -130,13 +130,14 @@ const COBBLE_REPEAT = 220 / 3.5;
 /** the cobbles' relief: the grout this far under their tops (m), and gone this far off (m: past the top-down view's 30 to 51) */
 const COBBLE_RELIEF = { depth: 0.06, perMetre: COBBLE_REPEAT / 220, fade: 70 };
 
-/** the earth round each small dead tree's foot: how far out it reaches (m), how ragged its edge (of that), and its
- *  litter's tile (m: the forest floor's photo, soil, fallen leaves and twigs, as the Thornwood's floor has it), how
+/** the earth round each small dead tree's foot: how far out it reaches (m: at 2.4 "could be smaller"), how ragged
+ *  its edge (of that), and its soil's tile (m: bare earth, `soil`; the forest floor's photo was fallen leaves, which in
+ *  the crypt "cannot come from anywhere"), how
  *  far (m) its edge goes round the cobbles, in along the grout and out past the stones' tops, and how far (m) in and
  *  out of its edge the stones are washed with dirt: the grout fills first, then the stones are dirtied, then only
  *  dirt. Faded out evenly it was earth under a haze of cobbles ("the tiles around it should be clearly ending");
  *  cut sharp round the stones, a line ("some dirt on stones first, then only dirt") */
-const EARTH = { reach: 2.4, ragged: 0.5, tile: 3, stones: 0.6, washed: [0.35, 0.45] };
+const EARTH = { reach: 1.4, ragged: 0.45, tile: 3, stones: 0.4, washed: [0.25, 0.3] };
 
 /** Damp patches and a slow brightness drift over the cobbles in world space, so the floor doesn't
  * read as one tiled texture; the damp is darker and glossy, catching the moonlight. The cobbles stand
@@ -145,7 +146,7 @@ const EARTH = { reach: 2.4, ragged: 0.5, tile: 3, stones: 0.6, washed: [0.35, 0.
  * them as a post set in a pavement ("they need to grow from ground, not from stone"). */
 function dampGround<M extends THREE.MeshStandardMaterial>(m: M, earth: THREE.Vector3[]): M {
   const damp = { value: dampMap() };
-  const litter = pbrMaterialMaps(forestFloor(), 1);
+  const litter = pbrMaterialMaps(soil(), 1);
   m.onBeforeCompile = (shader) => {
     dimOutside(shader);
     shader.uniforms.uDamp = damp;
@@ -187,13 +188,13 @@ function dampGround<M extends THREE.MeshStandardMaterial>(m: M, earth: THREE.Vec
           earthAmt = max(earthAmt, 1.0 - smoothstep(${(-EARTH.washed[0]).toFixed(2)}, ${EARTH.washed[1].toFixed(2)}, edge));
           earthIn = min(earthIn, d / max(reach, 1e-3));
         }
-        // (its litter the forest floor's, darkened to the crypt's night, and darker in towards the trunk)
+        // (bare soil, darker in towards the trunk)
         litterAt = vDampXZ * ${(1 / EARTH.tile).toFixed(6)};
-        vec3 soil = texture2D(uLitter, litterAt).rgb * 0.55 * (0.75 + 0.25 * clamp(earthIn, 0.0, 1.0));
+        vec3 soil = texture2D(uLitter, litterAt).rgb * (0.75 + 0.25 * clamp(earthIn, 0.0, 1.0));
         diffuseColor.rgb = mix(diffuseColor.rgb, soil, earthAmt);
         dampAmt *= 1.0 - earthAmt;`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-        // (the litter's own relief, its tangent space the floor's: u along x, v along z, up its normal)
+        // (the soil's own relief, its tangent space the floor's: u along x, v along z, up its normal)
         vec3 litterN = texture2D(uLitterN, litterAt).xyz * 2.0 - 1.0;
         vec3 litterUp = normalize((viewMatrix * vec4(litterN.x, litterN.z, -litterN.y, 0.0)).xyz);
         normal = normalize(mix(normal, litterUp, earthAmt));`)

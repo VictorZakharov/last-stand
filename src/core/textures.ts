@@ -126,6 +126,8 @@ export const grunge = (): PBRCanvases => pbrCanvases('grunge');
 export const wood = (): PBRCanvases => pbrCanvases('wood');
 export const burlap = (): PBRCanvases => pbrCanvases('burlap');
 export const forestFloor = (): PBRCanvases => pbrCanvases('forestFloor');
+/** Bare earth: clumpy soil and grit, no litter (where the crypt's dead trees grow). */
+export const soil = (): PBRCanvases => pbrCanvases('soil');
 export const bark = (): PBRCanvases => pbrCanvases('bark');
 /** the heroes' materials: neutral albedo, tinted by the material's colour */
 export const leather = (): PBRCanvases => pbrCanvases('leather');

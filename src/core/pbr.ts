@@ -575,6 +575,43 @@ function litterFloor(): PBRData {
   }, 1 / (2 * FLOOR_CM));
 }
 
+/** bare soil's tile (m) and its pixels' size (cm) */
+const SOIL_TILE = 3;
+const SOIL_CM = SOIL_TILE * 100 / 512;
+
+/**
+ * Bare earth (3 m a tile, heights in cm): the forest floor's clumpy soil without its litter, crumbs over it, darker
+ * where it's damp, and grit, small stones 0.5 to 2 cm across poking out of it. Where the crypt's dead trees grow
+ * (`crypt.ts`): the forest floor's photo was fallen leaves, and in the crypt "they cannot come from anywhere".
+ */
+function soil(): PBRData {
+  const clods = makeFbm(61, 16, 4), crumbs = makeFbm(67, 128, 2), cracks = makeFbm(71, 48, 3);
+  const gritCells = 96;
+  const grit = makeScatter(73, gritCells, 0.15);
+  const size = SOIL_TILE * 100 / gritCells;
+  return buildPBR(512, (u, v, o) => {
+    const s = clods(u, v), c = crumbs(u, v);
+    // (dried into clods: a dark seam where the fbm's ridges meet)
+    const seam = Math.max(0, 1 - Math.abs(cracks(u, v) - 0.5) / 0.03);
+    let h = s * 1.6 + c * 0.5 - seam * 0.6;
+    const damp = smooth(clamp((s - 0.55) / 0.2, 0, 1));
+    const k = (0.75 + c * 0.5) * (1 - damp * 0.3) * (1 - seam * 0.35);
+    let r = 0.13 * k, g = 0.095 * k, b = 0.065 * k, rough = 0.95 - damp * 0.15;
+    const near = grit.near(u, v);
+    for (let j = 0; j < near.count; j++) {
+      const key = near.k[j], radius = 0.25 + grit.size[key] * 0.75;
+      const px = -near.dx[j] * size, py = -near.dy[j] * size;
+      const d = Math.hypot(px, py);
+      if (d >= radius) continue;
+      const dome = Math.sqrt(1 - (d / radius) ** 2), top = 1.1 + dome * radius * 0.6;
+      if (top <= h) continue;
+      const grey = (0.13 + grit.id[key] * 0.08) * (0.85 + dome * 0.25);
+      h = top; r = grey; g = grey * 0.96; b = grey * 0.9; rough = 0.7;
+    }
+    o.h = h; o.r = clamp(r, 0, 1); o.g = clamp(g, 0, 1); o.b = clamp(b, 0, 1); o.rough = rough;
+  }, 1 / SOIL_CM);
+}
+
 /** bark's furrows round a tile, and its plates' cells along it (each six furrows' widths long, sdf's) */
 const BARK_AROUND = 12;
 const BARK_ALONG = 2;
@@ -901,7 +938,7 @@ function fur(): PBRData {
 }
 
 /** Every recipe, by name; its arguments are part of what it makes. */
-export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, rock, granite, limestone, moss, grunge, wood, burlap, forestFloor, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
+export const RECIPES = { cobblestone, ashlar, flagstone, marble, slate, rock, granite, limestone, moss, grunge, wood, burlap, forestFloor, soil, bark, leather, oiled, wool, felt, mail, cloth, steel, fur, bowWood, face: faceData };
 export type RecipeName = keyof typeof RECIPES;
 export type RecipeArgs<N extends RecipeName> = Parameters<(typeof RECIPES)[N]>;
 export const recipeKey = (name: RecipeName, args: readonly unknown[]): string => `${name}(${args.join(',')})`;
@@ -933,7 +970,7 @@ export const PRELOAD: { [N in RecipeName]: [N, RecipeArgs<N>] }[RecipeName][] = 
   // `inTheLobbysOrder`, the hero it shows his face first)
   ['steel', []],
   ['face', ['warrior']], ['face', ['mage']], ['face', ['ranger']],
-  ['rock', [17]], ['marble', [33, 5]], ['cobblestone', []], ['slate', [33, 2, 2]], ['bark', []], ['forestFloor', []],
+  ['rock', [17]], ['marble', [33, 5]], ['cobblestone', []], ['slate', [33, 2, 2]], ['bark', []], ['forestFloor', []], ['soil', []],
   ['flagstone', [47, 5]], ['moss', [5]], ['granite', [7]], ['limestone', [11]], ['ashlar', [33, 2, 2]], ['ashlar', [21, 6, 3]], ['grunge', []], ['wood', []], ['burlap', []],
   ['leather', []], ['oiled', []], ['wool', []], ['felt', []], ['mail', []], ['cloth', []], ['fur', []], ['bowWood', []],
 ];
