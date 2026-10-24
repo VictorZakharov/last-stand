@@ -170,6 +170,8 @@ For each measure:
 - **Each stall of 300 ms or more** (`--listed` sets it, down to 20):
   - the programs built in it, and the tasks each was built inside;
   - the longest tasks (20 ms or more) on any thread through it, and the work in it as a frame's work is given;
+  - with `--js`, its JS by function, with what each calls: a phase's is a frame's mean, where one stall's is lost
+    among the frames round it (it named the hero screen's reopening: the hall's heroes built again each time);
   - the page's changes in the 400 ms before it, by kind and element, the most frequent first.
 
 A boot's report says when the lobby was revealed and the page first painted, the files fetched (bytes over the
