@@ -289,18 +289,18 @@ const VELVET = { base: [106, 20, 32], pile: 0.12 };
 const THREAD = '#c99a48', THREAD_SHADE = '#4a2c10';
 
 /**
- * A banner's cloth: deep red velvet, its pile a fine mottle, a gold border sewn round its edges and the order's sigil
- * embroidered over its upper half (a ring round a crescent, a blade down through both, a star over it), the same on
+ * A banner's cloth: deep red velvet (or `base`, its colour 0-255), its pile a fine mottle, a gold border sewn round its
+ * edges and the order's sigil embroidered over its upper half (a ring round a crescent, a blade down through both, a star over it), the same on
  * every banner. The canvas is the banner's u across and v down from its top (`bannerGeo` in `world/crypt.ts`).
  */
-export function bannerCloth(width = 256, height = 512): THREE.CanvasTexture {
+export function bannerCloth(width = 256, height = 512, base: readonly number[] = VELVET.base): THREE.CanvasTexture {
   const c = canvasOf(width, height);
   const g = ctx2d(c);
   const rng = mulberry(31);
   const img = g.createImageData(width, height);
   for (let i = 0; i < width * height; i++) {
     const shade = 1 + (rng() - 0.5) * 2 * VELVET.pile;
-    for (let ch = 0; ch < 3; ch++) img.data[i * 4 + ch] = Math.min(255, VELVET.base[ch] * shade);
+    for (let ch = 0; ch < 3; ch++) img.data[i * 4 + ch] = Math.min(255, base[ch] * shade);
     img.data[i * 4 + 3] = 255;
   }
   g.putImageData(img, 0, 0);

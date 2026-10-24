@@ -270,17 +270,25 @@ async function buildAhead(parts: Part[]): Promise<void> {
   }
 }
 
-/** The heroes' parts: each other class's hero, with all he can wear, away from the arena. */
+/** The heroes' parts: each other class's hero, with all he can wear, away from the arena; and the hall of heroes'
+ *  room they're chosen in, shown in the lobby's biome's place (world/heroHall.ts). */
 function heroParts(): Part[] {
   const models = [...new Set(Object.values(CLASSES).map((c) => c.model))].filter((m) => m !== G.player.cls.model);
-  return models.map((model): Part => ({
+  const hall: Part = {
+    name: 'hall',
+    build() {
+      const swap = { show: G.arena.hallGroup, hide: G.arena.groupOf(G.arena.biome) };
+      return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
+    },
+  };
+  return [hall, ...models.map((model): Part => ({
     name: model,
     build() {
       const hero = heroAllWorn(model, AWAY);
       const parts = [hero.root, ...skillSamples(model)];
       return { compile: parts, objects: parts, drawn: [], outlined: [], done: () => hero.dispose() };
     },
-  }));
+  }))];
 }
 
 /** the warm-ups after the lobby shows, one after another: each sets the render target, and the needs' run apart */

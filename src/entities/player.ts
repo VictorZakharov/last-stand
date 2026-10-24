@@ -996,7 +996,9 @@ export class Player {
       // (its intensity alone goes to none: the light stays in the scene, as the light count must)
       const full = this.drawnFull;
       this.auraLit = this.cls.aura.drawn ? damp(this.auraLit, full ? 1 : 0, full ? AURA_EASE.in : AURA_EASE.out, dt) : 1;
-      this.staffLight.intensity = glow * this.auraLit * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
+      // (hidden, as the hero selection screen hides him: it lights nothing)
+      const shown = this.obj.visible ? 1 : 0;
+      this.staffLight.intensity = shown * glow * this.auraLit * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
     }
   }
 

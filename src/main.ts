@@ -19,14 +19,16 @@ import { updateSwingTrails } from './fx/swingTrail';
 import { updateEnemies, clearEnemies } from './entities/enemy';
 import { spawnEnemy } from './entities/spawner';
 import { updateProjectiles, clearProjectiles } from './combat/projectiles';
-import { loadProfile, savedClass, saveClass, addToStash } from './loot/profile';
+import { loadProfile, savedClass, saveClass, addToStash, hasSavedClass, peekProfile, saveProfile } from './loot/profile';
 import { initGround, updateGround, clearGround } from './game/groundItems';
-import { setSaveSlot } from './loot/saveSlots';
+import { saveSlot, setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
 import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
+import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift } from './ui/heroSelect';
+import { updateHall } from './game/hall';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { releaseClickedFocus } from './ui/focus';
@@ -39,7 +41,7 @@ import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
 import { compileTheBiome, compileTheLobby, warmLobby, warmTheRest } from './game/warmup';
-import { hurry, isAllWarm, isWarming, whenWarm } from './game/warm';
+import { hurry, isAllWarm, isWarming, want, warmed, whenWarm } from './game/warm';
 import { initReadying, READYING } from './ui/readying';
 import { holdQuality, initQuality, sampleQuality } from './core/quality';
 import { updateLowLife } from './core/lowLife';
@@ -58,6 +60,7 @@ import { isCoop, isGuest, isHost, simulates } from './net/role';
 import { initCoop, renderCoop, updateCoopHud, touchReviving } from './ui/coop';
 import { updateScoreboard } from './ui/scoreboard';
 import type { BiomeId } from './data/biomes';
+import type { Profile } from './types';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 const timer = new THREE.Timer();
@@ -114,7 +117,8 @@ async function boot() {
   buildHotbar(G.player);
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
   // (the lobby shows before the fight's programs are warm: pressed early, what needs them goes ahead once they are)
-  initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, switchClass, summaryDone, lobbyChanged: sendLobbyChoice });
+  initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice });
+  initHeroSelect({ choose: chooseHero, closed: heroSelectClosed });
   initSaves({ use: whenWarm(['fight', 'heroes'], switchSaveSlot, READYING.slot) });
   initReadying();
   // an item picked up off the lobby floor goes back in the stash, marked new
@@ -142,9 +146,21 @@ async function boot() {
 
   await loadingStep('Conjuring spells', 0.55);
   enterMenu();
-  lobbyLaidOut();
-  // the lobby's shaders compiled before it shows, the fight's behind it (game/warmup.ts)
+  // a first visit opens on the hero selection screen, no hero chosen yet: the logo's exit gathers into its logo
+  const firstVisit = !hasSavedClass();
+  if (!firstVisit) lobbyLaidOut();
+  // the lobby's shaders compiled before it shows, the fight's and the other heroes' behind it (game/warmup.ts)
   await warmLobby();
+  const rest = warmTheRest(loadingLeft);
+  if (firstVisit) {
+    // (every hero shown on it: theirs warmed under the loading screen)
+    await loadingStep('Gathering the heroes', 0.7);
+    want('heroes');
+    await warmed('heroes');
+    openHeroSelect(G.player.cls.id, true);
+    showMenu(false);
+    lobbyLaidOut();
+  }
   await loadingStep('Lighting the lobby', 0.85);
   render();   // one full frame compiles the post-processing passes (bloom, grade...)
   pinPrograms(renderer);
@@ -157,7 +173,7 @@ async function boot() {
   loadingDone(() => {
     revealed = true;
     setTimeout(() => checkPrograms(renderer));
-    void warmTheRest(loadingLeft).then(() => checkPrograms(renderer));
+    void rest.then(() => checkPrograms(renderer));
     // the overlays down the left (performance, network, the battle log) once the loading screen is gone (_perf.scss)
     void loadingLeft.then(() => $('#diag').classList.remove('booting'));
     // an invite link: straight into the friend's room
@@ -301,11 +317,30 @@ function abandon() {
   playerOut(G.player, 'dead');
 }
 
-/** Lobby class pick: the new class brings its own profile (gear, stash, records) and loadout. */
-function switchClass(id: string) {
-  if (G.mode !== 'menu' || id === G.player.cls.id) return;
+/** The lobby's "Change hero": the hero selection screen over the hall of heroes, the lobby's panels out of the way. */
+function changeHero() {
+  if (G.mode !== 'menu' || heroSelectOpen()) return;
+  showMenu(false);
+  openHeroSelect(G.player.cls.id);
+}
+
+/** A hero chosen on the selection screen: the new class brings its own profile (gear, stash, records) and loadout; a
+ *  class never played in this slot keeps the starter gear the screen showed him in. A first visit's choice is kept,
+ *  so the next visit opens on the lobby. */
+function chooseHero(id: string, profile: Profile) {
+  if (G.mode !== 'menu') return;
   saveClass(id);
+  if (id === G.player.cls.id) return;
+  if (!peekProfile(id, saveSlot())) saveProfile(profile);
   swapHero(id);
+  sendLobbyChoice();   // its records set the starting wave
+}
+
+/** The selection screen closed (a hero chosen, or Back): the lobby again, its dummies back up. */
+function heroSelectClosed() {
+  if (G.mode !== 'menu') return;
+  spawnDummies();
+  showMenu(true);
 }
 
 /** Lobby save slot pick (or the slot in play erased): the slot's last hero, or in an empty slot a
@@ -375,6 +410,8 @@ function syncView(): void {
 
 // --- loop ---------------------------------------------------------------------------
 function handleGlobalKeys() {
+  // the hero selection screen takes the keys (ui/heroSelect.ts)
+  if (heroSelectOpen()) { heroSelectKeys(); return; }
   // the save slots screen takes the keys: Esc goes back (out of its delete popup first)
   if (savesOpen()) { if (wasPressed('escape')) savesBack(); return; }
   if (G.mode === 'menu' && !G.menuOpen && wasPressed('space')) toggleMenuStowed();
@@ -432,6 +469,7 @@ function update(dt: number): void {
   // the player can move and cast in both the arena and the lobby (sandbox); co-op partners as reported
   G.player.reviving = G.mode === 'run' && !G.menuOpen && (isDown('e') || touchReviving());
   for (const p of G.players) p.update(dt);
+  updateHall(dt);
   updateGround(dt);
   perfLap('player');
   updateProjectiles(dt); perfLap('projectiles');
@@ -452,7 +490,7 @@ function update(dt: number): void {
   }
   updateScoreboard(dt);
   // (top-down only: a close view shifted off its middle would leave the crosshair off the aim)
-  const vs = view === 'top' || input.touchMode ? lobbyViewShift() : { x: 0, y: 0 };
+  const vs = heroSelectOpen() ? heroSelectShift() : view === 'top' || input.touchMode ? lobbyViewShift() : { x: 0, y: 0 };
   setViewShift(vs.x, vs.y);
   const focus = focusPlayer();
   updateCamera(dt, focus.pos, focus.model.height);
