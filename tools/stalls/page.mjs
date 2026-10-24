@@ -188,6 +188,21 @@ export function fightWarm() {
   return !document.getElementById('readying') || performance.getEntriesByName('fight warm').length > 0;
 }
 
+/** Whether the hero selection screen is up (a first visit opens on it; a tree from before it has none). */
+export function heroesShown() {
+  const screen = document.getElementById('heroes');
+  return Boolean(screen?.checkVisibility());
+}
+
+/** The hero in focus chosen where the hero selection screen is up, as a first visit's player chooses one before the
+ *  lobby: whether it was. (Run in the page, alone: `heroesShown`'s test written again.) */
+export function chooseIfAsked() {
+  const screen = document.getElementById('heroes');
+  if (!screen || !screen.checkVisibility()) return false;
+  screen.querySelector('.hs-choose').click();
+  return true;
+}
+
 /**
  * Presses the lobby's Start where the fight's programs aren't warm yet (`fightWarm`'s test): a build that leaves
  * them for what needs them where they don't come from a cache, as a first visit's, warms them then, under the

@@ -8,8 +8,8 @@ along the line from the camera to each label (an obstacle, `G.arena.obstacles`, 
 and every one show again with the columns gone. `--canary` plants each column 3 m beside its line, where at least one
 label shows through, which must be caught.
 
-`ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,readying,
-readyingClass,clicked,views,behindProps,logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch`, every one by default:
+`ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
+readyingHeroes,clicked,views,behindProps,logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch`, every one by default:
 the lobby, an item's tooltip, the stash given 60 items (more than its view shows, on most screens) and a weapon
 among them hovered by the mouse, those that fit its slot lit (`page/uiGlow.ts`: a short screen's rail turned to the
 gear first; pictured round the stash, its tooltip put away, at 400, 1000 and 1600 ms into the
@@ -27,14 +27,21 @@ mouse off the stash meanwhile: not shown at the top with a row cut is a problem,
 stash that fits (a dark band over the bare panel); `--canary` loops a shadow on the hovered item, turns a lit one's
 glow not hovered, masks the hovered item's steady glow within a mask on the stash and holds the fade shown, each of
 which must be found),
-How to play, the save slots, the fight's loading bar over the lobby as a press waiting for the fight's programs
+How to play, the save slots, the hero selection screen over the hall of heroes (`page/uiHeroes.ts`: opened by the
+lobby's Change hero clicked with the mouse and pictured once the camera has come to the hero and his showcase is over:
+the screen and the hall up, the hero in focus the lobby's own, his card alone shown, the hero in the room the panel
+leaves (his middle clear of the panel, the arrows and the heroes' names, head to feet within the window, 40% of its
+height at the least), the screen's parts within the window and none over another, the choice within reach and its
+words within its padding (on a phone the buttons' own 24 px ran past it), the hero beside him clicked and in focus,
+Esc back to the lobby with its hero; `--canary` lays Back over the heroes' names, which must be found), the fight's
+loading bar over the lobby as a press waiting for the fight's programs
 shows it (`ui/readying.ts`, 40% along: within the window, its label on one line, its fill as far as painted;
-`--canary` gives the label a letter's width, whose wrap must be found), another class picked with the mouse while
-the heroes' programs are kept cold (`game/warm.ts` `chill`), its bar saying it readies that hero and every label the
+`--canary` gives the label a letter's width, whose wrap must be found), Change hero clicked with the mouse while
+the heroes' programs are kept cold (`game/warm.ts` `chill`), its bar saying it readies the heroes and every label the
 bar can show (`readyingLabels`) on one line on this screen (`--canary` puts back the page's own "Readying the fight",
-which a class pick said, and it must be found; a tree from before it can't keep them cold, and says so), the hero's
-class button clicked with the mouse and a key pressed after it as the browser gets them (where the focus went and whether
-the browser shows its ring: a problem when the button kept it), the lobby's camera switched with V through every
+which a class pick once said, and it must be found; a tree from before it can't keep them cold, and says so), the
+lobby's battleground button on clicked with the mouse and a key pressed after it as the browser gets them (where the
+focus went and whether the browser shows its ring: a problem when the button kept it), the lobby's camera switched with V through every
 view and back, each glide played and drawn (every frame, each label over the dummies against where its anchor shows
 by the camera as the frame draws it: off by more than a pixel is a problem; placed with the camera's turn of the
 frame before, they were up to 1442 px off as a glide set off), the battle log over the lobby with a training dummy

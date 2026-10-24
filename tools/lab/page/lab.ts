@@ -647,6 +647,8 @@ export class Lab {
         await this.step(1, () => ({ keys: ['v'] }));
         await this.step(2);
       }
+      // (in the view already, still gliding into it: from the hero selection screen's shot, as it closed)
+      if (!renderer.viewSettled()) await this.step(2);
     } finally {
       camera.switchTime = glide;
     }

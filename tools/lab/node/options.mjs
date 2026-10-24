@@ -22,7 +22,8 @@ const KINDS = [
 
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
-  'lobby', 'tooltip', 'glow', 'help', 'saves', 'readying', 'readyingClass', 'clicked', 'views', 'behindProps',
+  'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
+  'behindProps',
   'logLobby',
   'skillTipsTouch', 'run', 'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
 ];
@@ -331,9 +332,11 @@ export const COMMANDS = {
         choices: UI_STATES,
         help: 'the states (every one by default): lobby, tooltip, glow (the stash\'s items lit for a hovered item\'s '
           + 'slot, pictured at set moments of its loops, each of which must animate only what the compositor moves), '
-          + 'help, saves, readying (the fight\'s loading bar over the lobby: within the window, its label on a line), '
-          + 'readyingClass (another class picked with the heroes\' programs cold: the bar says it readies that hero), '
-          + 'clicked (a class button clicked and a '
+          + 'help, saves, heroes (the hero selection screen opened by Change hero: the hero in focus in the room '
+          + 'its panel leaves, its parts within the window and none over another, the hero beside clicked into focus, '
+          + 'Esc back to the lobby), readying (the fight\'s loading bar over the lobby: within the window, its label '
+          + 'on a line), readyingHeroes (Change hero clicked with the heroes\' programs cold: the bar says it readies '
+          + 'the heroes), clicked (a battleground\'s button clicked and a '
           + 'key pressed after it: '
           + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
           + 'dummies against their anchors), behindProps (a column planted between the camera and each dummy\'s label: '

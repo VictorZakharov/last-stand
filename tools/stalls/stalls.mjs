@@ -16,10 +16,10 @@ import { slowCpu, startChrome } from './chrome.mjs';
 import { measureBoots } from './boot.mjs';
 import { BOOT, readOptions, usage, VIEWS } from './options.mjs';
 import {
-  equipmentShown, loaded, menuStowed, seededProfile, seedStash, startRecording, stopRecording, useStyle,
+  chooseIfAsked, equipmentShown, loaded, menuStowed, seededProfile, seedStash, startRecording, stopRecording, useStyle,
 } from './page.mjs';
 import { bootRoundsText, bootText, measureText, roundsText, summaryText } from './report.mjs';
-import { SCENARIOS } from './scenarios.mjs';
+import { pickHero, SCENARIOS } from './scenarios.mjs';
 import { serveTrees, THIS_TREE } from './serve.mjs';
 import { sourcesOf } from './sourceMap.mjs';
 import { startTrace, TraceLost } from './trace.mjs';
@@ -77,9 +77,10 @@ async function openGame(context, url, options) {
   return { page, errors };
 }
 
-/** Waits out the loading screen and the lobby's panels. */
+/** Waits out the loading screen and the lobby's panels (a first visit's hero chosen on the screen it opens on). */
 async function waitLoaded(page) {
   await page.waitForFunction(loaded, null, { timeout: LOAD_TIMEOUT_MS, polling: 250 });
+  await page.evaluate(chooseIfAsked);
   await page.waitForFunction(equipmentShown, null, { timeout: LOAD_TIMEOUT_MS, polling: 250 });
 }
 
@@ -99,7 +100,7 @@ async function fillStash(page, count) {
 /** Sets the lobby up as `options` say: the hero chosen, his stash filled, the view. */
 async function setUpLobby(page, options) {
   if (options.hero) {
-    await page.click(`#opt-class button[data-c="${options.hero}"]`);
+    await pickHero(page, options.hero);
     await page.waitForTimeout(HERO_BUILT_MS);
   }
   if (options.stash > 0) await fillStash(page, options.stash);

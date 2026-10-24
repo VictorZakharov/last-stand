@@ -330,27 +330,61 @@ async function canaryRound(lab: Lab): Promise<Report> {
   return { text, problems: count > 0 ? [] : ['the canary\'s material of its own came out as compiling nothing'] };
 }
 
-/**
- * The hero switched to `id` as a player picks a class in the lobby: its button clicked with the mouse, and the
- * switch waited for as the lobby's waits for the heroes' warm-up (`pickClass` in src/ui/menus.ts), the frames drawn
- * meanwhile. Its line, or an error where it never came.
- */
-async function switchClass(lab: Lab, id: string): Promise<Report> {
-  const button = document.querySelector<HTMLElement>(`#opt-class button[data-c="${id}"]`);
-  if (!button) throw new Error(`lab: compiles: the class card has no button for ${id}`);
-  if (G.player.cls.id === id) throw new Error(`lab: compiles: the hero is a ${id} already (--class picks the boot's)`);
-  const from = G.player.cls.id;
-  const box = button.getBoundingClientRect();
-  await lab.click({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
+/** Frames until `done`, drawn as the game draws them; an error saying `what` never came if it took longer than
+ *  `SWITCH_MOST_MS` by the browser's clock. */
+async function stepUntil(lab: Lab, done: () => boolean, what: string): Promise<void> {
   const start = window.__labClock.realNow();
-  while (G.player.cls.id !== id) {
+  while (!done()) {
     if (window.__labClock.realNow() - start > SWITCH_MOST_MS) {
-      throw new Error(`lab: compiles: the switch to ${id} never came in ${SWITCH_MOST_MS / 1000} s`);
+      throw new Error(`lab: compiles: ${what} never came in ${SWITCH_MOST_MS / 1000} s`);
     }
     await lab.step(1);
   }
+}
+
+/** frames the hero selection screen is shown on each hero before the next (each one's showcase cast meanwhile) */
+const HALL_FRAMES = 150;
+
+/**
+ * The hero switched to `id` as a player picks a class: the lobby's Change hero clicked with the mouse (waited for as
+ * the lobby waits for the heroes' warm-up, `changeHero` in src/ui/menus.ts), every hero shown on the hero selection
+ * screen in turn, each casting his showcase, and `id`'s chosen there; every frame drawn meanwhile. Its line, or an
+ * error where it never came. A tree from before the screen picks the class by its button in the lobby.
+ */
+async function switchClass(lab: Lab, id: string): Promise<Report> {
+  if (G.player.cls.id === id) throw new Error(`lab: compiles: the hero is a ${id} already (--class picks the boot's)`);
+  const from = G.player.cls.id;
+  const start = window.__labClock.realNow();
+  const change = document.getElementById('btn-hero');
+  let hall: { count: number; lines: string[] } | null = null;
+  if (change) {
+    await lab.clickOn(change);
+    const screen = document.getElementById('heroes')!;
+    await stepUntil(lab, () => !screen.classList.contains('hidden'), 'the hero selection screen');
+    // (its heroes warm by then: anything compiled from here is the screen's own, late)
+    const since = compilesFromNow();
+    for (const name of screen.querySelectorAll<HTMLElement>('.hs-tabs button')) {
+      await lab.clickOn(name);
+      await lab.step(HALL_FRAMES);
+    }
+    await lab.clickOn(screen.querySelector(`.hs-tabs button[data-c="${id}"]`)!);
+    await lab.clickOn(screen.querySelector('.hs-choose')!);
+    hall = since();
+  } else {
+    const button = document.querySelector<HTMLElement>(`#opt-class button[data-c="${id}"]`);
+    if (!button) throw new Error(`lab: compiles: the class card has no button for ${id}`);
+    await lab.clickOn(button);
+  }
+  await stepUntil(lab, () => G.player.cls.id === id, `the switch to ${id}`);
   const waited = (window.__labClock.realNow() - start) / 1000;
-  return { text: `switched from the ${from} to the ${id} in the lobby (${waited.toFixed(1)} s)`, problems: [] };
+  const how = change ? 'on the hero selection screen, every hero shown' : 'in the lobby';
+  const text = [`switched from the ${from} to the ${id} ${how} (${waited.toFixed(1)} s)`];
+  if (hall) {
+    text.push(`  the hero selection screen: ${hall.count} programs compiled`);
+    text.push(...hall.lines.map((line) => `    ${line}`));
+  }
+  const problems = hall?.count ? [`the hero selection screen compiled ${hall.count} programs`] : [];
+  return { text: text.join('\n'), problems };
 }
 
 export async function compiles(lab: Lab, options: CompilesOptions): Promise<Report> {
