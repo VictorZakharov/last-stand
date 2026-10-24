@@ -41,6 +41,8 @@ const changed = (): void => { for (const fn of listeners) fn(); };
 export const warmed = (need: Need): Promise<void> => needs[need].warmed;
 /** resolved once something waits for `need` (`whenWarm`), or `hurry` is called: compiled at once then */
 export const wanted = (need: Need): Promise<void> => needs[need].wanted;
+/** Whether `need` is warm already (a first visit's heroes, warmed with the lobby). */
+export const isWarm = (need: Need): boolean => needs[need].warm;
 export const isAllWarm = (): boolean => NEEDS.every((need) => needs[need].warm);
 /** whether something pressed is waiting (the lobby shows the fight's loading bar) */
 export const isReadying = (): boolean => NEEDS.some((need) => needs[need].waiting > 0);

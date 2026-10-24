@@ -30,6 +30,9 @@ const KEY = { color: 0xffd2a0, intensity: 9, distance: 9, ahead: 2.2, side: 1.4,
 const RIM = { color: 0x8fb4ff, intensity: 14, distance: 6, behind: 1.3, side: -0.8, up: 1.95 };
 /** how fast a hero turns to his showcase's spot and back (`angleDamp`'s rate) */
 const TURN = 9;
+/** a drag along the row (ui/heroSelect.ts): how far past either end it may pull the camera (heroes), and how fast the
+ *  camera follows it (`stageCamera`'s glide: about a frame and a half behind the finger) */
+const DRAG = { over: 0.35, glide: 24 };
 /** how long after the camera starts towards a hero he shows off his skill (s), and how long before he can again */
 const SHOWCASE = { after: 0.8, again: 6 };
 
@@ -57,6 +60,8 @@ let opened = 0;
 /** how much further back than `SHOT.back` the camera stands, so the hero fits the room the screen leaves him
  *  (`frameHall`) */
 let further = 1;
+/** the camera's place along the row while the scene is dragged (heroes from the first; null: on the hero in focus) */
+let dragged: number | null = null;
 /** whether the shot is an upright screen's: looking at his middle, so he stands in the middle of the room above the
  *  panel, his head clear of the window's top (looking at his hips, as beside a panel, it was cut off) */
 let upright = false;
@@ -105,6 +110,7 @@ export function closeHall(): void {
   if (!hallOpen()) return;
   for (const h of heroes) h.player.dispose();
   heroes = [];
+  dragged = null;
   for (const l of lights) release(l);
   lights = [];
   clearProjectiles(); clearEffects(); particles.clear();
@@ -121,17 +127,38 @@ export function focusHall(i: number, cut = false): void {
   const n = heroes.length;
   focus = ((i % n) + n) % n;
   for (const [j, h] of heroes.entries()) h.due = j === focus && G.time - h.shown > SHOWCASE.again ? G.time + SHOWCASE.after : Infinity;
-  stageCamera(shotOn(focus, G.time), cut || reduced());
+  stageCamera(shotAlong(focus, G.time), cut || reduced());
 }
 
-/** The shot on hero `i` at game time `t`: in front of him, drifting slowly round him. */
-function shotOn(i: number, t: number): Shot {
-  const at = spot(i);
+/** The camera's place along the row: where a drag holds it, or on the hero in focus. */
+export const hallAlong = (): number => dragged ?? focus;
+
+/** The scene dragged: the camera held `along` the row (heroes from the first, a little past either end). */
+export function dragHall(along: number): void {
+  dragged = Math.max(-DRAG.over, Math.min(heroes.length - 1 + DRAG.over, along));
+}
+
+/** The drag let go `along` the row: the hero nearest in focus (returned). */
+export function dropHall(along: number): number {
+  dragged = null;
+  const i = nearest(along);
+  focusHall(i);
+  return i;
+}
+
+/** The hero nearest `along` the row. */
+const nearest = (along: number): number => Math.max(0, Math.min(heroes.length - 1, Math.round(along)));
+
+/** The shot `along` the row at game time `t` (heroes from the first: on a hero, in front of him, drifting slowly
+ *  round him; between two, between them), at the height of the plinth nearest (`glide`: how fast the camera follows
+ *  it, `stageCamera`). */
+function shotAlong(along: number, t: number, glide?: number): Shot {
+  const at = hallSpot(along).setY(spot(nearest(along)).y);
   const yaw = reduced() ? 0 : Math.sin(((t - opened) / SHOT.driftS) * Math.PI * 2) * SHOT.drift;
   const back = SHOT.back * further;
   const lift = upright ? SHOT.upright : 0;
   const pos = new THREE.Vector3(at.x + Math.sin(yaw) * back, at.y + SHOT.high + lift, at.z + Math.cos(yaw) * back);
-  return { pos, look: new THREE.Vector3(at.x, at.y + SHOT.at + lift, at.z), fov: SHOT.fov };
+  return { pos, look: new THREE.Vector3(at.x, at.y + SHOT.at + lift, at.z), fov: SHOT.fov, glide };
 }
 
 /** The camera `k` times as far back as the shot's own (1 or more): an upright screen leaves the hero a share of its
@@ -161,11 +188,11 @@ export function updateHall(dt: number): void {
     r.ax = r.x + Math.sin(r.f) * 4; r.az = r.z + Math.cos(r.f) * 4;
     h.player.update(dt);
   }
-  const at = spot(focus);
+  const at = spot(nearest(hallAlong()));
   const [key, rim] = lights;
   key.light.position.set(at.x + KEY.side, at.y + KEY.up, at.z + KEY.ahead);
   rim.light.position.set(at.x + RIM.side, at.y + RIM.up, at.z - RIM.behind);
-  stageCamera(shotOn(focus, t));
+  stageCamera(dragged === null ? shotAlong(focus, t) : shotAlong(dragged, t, DRAG.glide));
 }
 
 /** Hero `h` begins his showcase: the cast reported as his game would report it (a drawn shot drawn to full). */
@@ -180,9 +207,12 @@ function showOff(h: HallHero, t: number): void {
   const target = new THREE.Vector3(from.x + Math.sin(f) * at[0] + Math.sin(right) * at[1], 0, from.z + Math.cos(f) * at[0] + Math.cos(right) * at[1]);
   h.facing = Math.atan2(target.x - from.x, target.z - from.z);
   const drawn = def.draw !== undefined;
-  const dur = drawn ? def.draw! : def.castTime;
-  const fireIn = drawn ? def.draw! : dur * (def.fireAt ?? 0.55);
-  h.player.replay(drawn ? { t: 'cast', s: skill, dur, x: target.x, z: target.z, h: 1 } : { t: 'cast', s: skill, dur, x: target.x, z: target.z });
+  // (a bow's arrows taken from the quiver first, as the hero's own cast reports it: without, he drew an empty string)
+  const nockT = h.player.nockTime(known), n = nockT ? { n: nockT } : {};
+  const dur = drawn ? def.draw! : nockT + def.castTime;
+  const fireIn = nockT + (drawn ? def.draw! : def.castTime * (def.fireAt ?? 0.55));
+  const aim = { x: target.x, z: target.z, ...n };
+  h.player.replay(drawn ? { t: 'cast', s: skill, dur, h: 1, ...aim } : { t: 'cast', s: skill, dur, ...aim });
   h.cast = { target, fireAt: t + fireIn, doneAt: t + Math.max(dur, fireIn) + 0.9, drawn };
 }
 

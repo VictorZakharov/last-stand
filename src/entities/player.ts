@@ -511,8 +511,7 @@ export class Player {
     const target = at.clone();
     if (!s.impl.channel && s.impl.canCast && !s.impl.canCast(this, s.def, target)) { this.noTarget(); return false; }
     const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
-    // (a bow's shot with fewer arrows on the string than it looses takes them from the quiver first)
-    const q = this.cls.quiver, nockT = q && isBowShot(s) && this.nocked < (s.def.missiles ?? 1) ? q.fetch / (1 + this.stats.castSpeed / 100) : 0, n = nockT ? { n: nockT } : {};
+    const nockT = this.nockTime(s), n = nockT ? { n: nockT } : {};
     // (casting anything else forgets a queued shot)
     if (this.queued?.skill !== s) this.queued = null;
     if (s.def.draw && key) {
@@ -579,6 +578,13 @@ export class Player {
   }
 
   /** A remote player's action, replayed as its owner reported it. */
+  /** How long `s` cast now takes its arrows from the quiver first (s): a bow's shot with fewer arrows on the string
+   *  than it looses; 0 for any other. */
+  nockTime(s: KnownSkill): number {
+    const q = this.cls.quiver;
+    return q && isBowShot(s) && this.nocked < (s.def.missiles ?? 1) ? q.fetch / (1 + this.stats.castSpeed / 100) : 0;
+  }
+
   replay(a: PlayerAction): void {
     if (a.t === 'che') { this.stopChannel(); return; }
     if (a.t === 'hurt') { this.applyHit(a.r); return; }

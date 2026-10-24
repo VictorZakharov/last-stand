@@ -33,7 +33,7 @@ import { swingTrailSamples } from '../fx/swingTrail';
 import { groundSamples } from './groundItems';
 import { compileOutline, warmOutline } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
-import { markWarm, wanted, warming, warmingRuns, type Need } from './warm';
+import { isWarm, markWarm, wanted, warming, warmingRuns, type Need } from './warm';
 import type { Model } from '../types';
 
 /** far outside the arena, past what the lobby's camera sees: where the fight's warm-up stands what it builds */
@@ -173,12 +173,16 @@ export function compileTheLobby(): void {
 const dummies = (): THREE.Object3D[] => G.enemies.map((e) => e.obj);
 
 /** What the lobby shows and can do, warmed before it shows (the lobby's dummies already stand in it, its effects,
- *  loot and skills made with its hero: `compileTheLobby`); the fight's foes built meanwhile (`buildAhead`). */
-export async function warmLobby(): Promise<void> {
+ *  loot and skills made with its hero: `compileTheLobby`); the fight's foes built meanwhile (`buildAhead`). With
+ *  `heroes` (a first visit, which opens on the hero selection screen), the other heroes too, their programs' links
+ *  waited for with the lobby's (warmed after it, in turn, they held the screen back 1.8 s), then the hall of heroes'
+ *  room drawn in the biome's place: the `heroes` need warm. */
+export async function warmLobby(heroes = false): Promise<void> {
   // (the hero's class with all it can wear: equipping anything in the lobby compiles nothing)
   await nextTask();
   const hero = heroAllWorn(G.player.cls.model);
-  const extra = [...lobbyExtras, hero.root];
+  const others = heroes ? heroModelParts().map((part) => part.build()) : [];
+  const extra = [...lobbyExtras, hero.root, ...others.flatMap((b) => b.objects)];
   lobbyExtras = [];
   const leaveOut = otherBiomes().map((id) => G.arena.groupOf(id));
   const start = performance.now();
@@ -190,6 +194,11 @@ export async function warmLobby(): Promise<void> {
   const took = await warming;
   performance.measure('warm the lobby', { start, duration: performance.now() - start, detail: took });
   hero.dispose();
+  for (const b of others) b.done();
+  if (heroes) {
+    await warmBuilt([hallPart().build()]);
+    markWarm('heroes');
+  }
   // (the outline a held skill draws round a foe: the dummies' meshes drawn into its mask)
   warmOutline(dummies());
   clearEffects(); clearLights(); particles.clear();
@@ -270,25 +279,32 @@ async function buildAhead(parts: Part[]): Promise<void> {
   }
 }
 
-/** The heroes' parts: each other class's hero, with all he can wear, away from the arena; and the hall of heroes'
- *  room they're chosen in, shown in the lobby's biome's place (world/heroHall.ts). */
-function heroParts(): Part[] {
-  const models = [...new Set(Object.values(CLASSES).map((c) => c.model))].filter((m) => m !== G.player.cls.model);
-  const hall: Part = {
+/** The heroes' parts: the hall of heroes' room they're chosen in (`hallPart`), and each other class's hero
+ *  (`heroModelParts`). */
+const heroParts = (): Part[] => [hallPart(), ...heroModelParts()];
+
+/** The hall of heroes' room, shown in the lobby's biome's place (world/heroHall.ts). */
+function hallPart(): Part {
+  return {
     name: 'hall',
     build() {
       const swap = { show: G.arena.hallGroup, hide: G.arena.groupOf(G.arena.biome) };
       return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
     },
   };
-  return [hall, ...models.map((model): Part => ({
+}
+
+/** Each other class's hero, with all he can wear, away from the arena, and his skills' samples. */
+function heroModelParts(): Part[] {
+  const models = [...new Set(Object.values(CLASSES).map((c) => c.model))].filter((m) => m !== G.player.cls.model);
+  return models.map((model): Part => ({
     name: model,
     build() {
       const hero = heroAllWorn(model, AWAY);
       const parts = [hero.root, ...skillSamples(model)];
       return { compile: parts, objects: parts, drawn: [], outlined: [], done: () => hero.dispose() };
     },
-  }))];
+  }));
 }
 
 /** the warm-ups after the lobby shows, one after another: each sets the render target, and the needs' run apart */
@@ -380,6 +396,7 @@ async function warmAtOnce(need: Need, parts: Part[], progress: (share: number) =
  * goes ahead.
  */
 async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean>): Promise<void> {
+  if (isWarm(need)) return;
   let hurried = false;
   void wanted(need).then(() => { hurried = true; });
   const step = (): Promise<void> => (hurried ? nextTask() : nextFrame());

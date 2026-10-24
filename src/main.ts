@@ -41,7 +41,7 @@ import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
 import { compileTheBiome, compileTheLobby, warmLobby, warmTheRest } from './game/warmup';
-import { hurry, isAllWarm, isWarming, want, warmed, whenWarm } from './game/warm';
+import { hurry, isAllWarm, isWarming, whenWarm } from './game/warm';
 import { initReadying, READYING } from './ui/readying';
 import { holdQuality, initQuality, sampleQuality } from './core/quality';
 import { updateLowLife } from './core/lowLife';
@@ -149,14 +149,12 @@ async function boot() {
   // a first visit opens on the hero selection screen, no hero chosen yet: the logo's exit gathers into its logo
   const firstVisit = !hasSavedClass();
   if (!firstVisit) lobbyLaidOut();
-  // the lobby's shaders compiled before it shows, the fight's and the other heroes' behind it (game/warmup.ts)
-  await warmLobby();
+  // the lobby's shaders compiled before it shows, the fight's and the other heroes' behind it (game/warmup.ts); on a
+  // first visit every hero is shown on the screen it opens on: theirs warmed with the lobby's, under the loading screen
+  if (firstVisit) await loadingStep('Gathering the heroes', 0.6);
+  await warmLobby(firstVisit);
   const rest = warmTheRest(loadingLeft);
   if (firstVisit) {
-    // (every hero shown on it: theirs warmed under the loading screen)
-    await loadingStep('Gathering the heroes', 0.7);
-    want('heroes');
-    await warmed('heroes');
     openHeroSelect(G.player.cls.id, true);
     showMenu(false);
     lobbyLaidOut();

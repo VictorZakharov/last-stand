@@ -13,7 +13,8 @@
 body.in-hall :is(#hud, #touch) { display: none !important; }
 
 /* a darkened rim and letterbox bands, under a glow of the hero's colour where he stands: one paint */
-.hs-shade { position: absolute; inset: 0; pointer-events: auto; cursor: $cursor;
+// (the scene is dragged along the row: its touches the page's, none the browser's pan)
+.hs-shade { position: absolute; inset: 0; pointer-events: auto; cursor: $cursor; touch-action: none; user-select: none;
   background:
     linear-gradient(rgba(3,2,4,.88), transparent 14%, transparent 80%, rgba(3,2,4,.92)),
     radial-gradient(ellipse 34% 62% at var(--hx, 36%) 50%, transparent 45%, rgba(3,2,4,.7) 100%); }
@@ -37,10 +38,12 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
 .hs-prev { left: calc(var(--gut) + env(safe-area-inset-left, 0px)); }
 .hs-next { right: calc(var(--pw) + var(--gut) * 2 + env(safe-area-inset-right, 0px)); }
 .hs-tabs { position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); right: calc(var(--pw) + var(--gut) * 2 + env(safe-area-inset-right, 0px));
-  bottom: calc(var(--gut) * 1.4 + env(safe-area-inset-bottom, 0px)); display: flex; justify-content: center; gap: ui(10px); pointer-events: none; }
-.hs-tabs button { position: relative; pointer-events: auto; cursor: $cursor-hand; padding: ui(8px) ui(18px) ui(10px); background: none; border: 0;
-  font: 700 ui(16px) var(--font-display); letter-spacing: ui(3px); text-transform: uppercase; color: var(--ink-dim); text-shadow: $outline; }
-.hs-tabs button::after { content: ''; position: absolute; left: 50%; bottom: 0; width: ui(7px); height: ui(7px); translate: -50% 0; rotate: 45deg;
+  bottom: calc(var(--gut) * 1.4 + env(safe-area-inset-bottom, 0px)); display: flex; justify-content: center; gap: ui(18px); pointer-events: none; }
+/* (large enough to read as the screen's own choice: at 16 px they were "too small" on a desktop; held to the window's
+   width too, as the room beside the panel narrows, clear of Back) */
+.hs-tabs button { position: relative; pointer-events: auto; cursor: $cursor-hand; padding: ui(10px) min(#{ui(24px)}, 1.1vw) ui(16px);
+  background: none; border: 0; font: 700 min(#{ui(26px)}, 1.45vw) var(--font-display); letter-spacing: min(#{ui(4px)}, .2vw); text-transform: uppercase; color: var(--ink-dim); text-shadow: $outline; }
+.hs-tabs button::after { content: ''; position: absolute; left: 50%; bottom: 0; width: ui(10px); height: ui(10px); translate: -50% 0; rotate: 45deg;
   border: 1px solid rgba($frame, .7); background: #120e0a; }
 .hs-tabs button:hover { color: var(--ink); }
 .hs-tabs button.active { color: var(--cc); text-shadow: 0 0 ui(12px) color-mix(in srgb, var(--cc) 45%, transparent), $outline; }
@@ -54,10 +57,12 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
   display: flex; flex-direction: column; gap: ui(14px); padding: ui(22px) ui(24px) ui(22px); pointer-events: auto;
   background: linear-gradient(rgba(8,7,9,.82), rgba(8,7,9,.94)); }
 .hs-panel::before { content: ''; position: absolute; inset: ui(5px); pointer-events: none; @include corner-brackets(ui(22px), 2px, var(--cc)); }
-/* every class's card in one cell, the one in focus shown: the panel never changes size */
-.hs-cards { flex: 1; min-height: 0; display: grid; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
-  scrollbar-color: rgba($frame, .5) transparent; }
-.hs-card { grid-area: 1 / 1; display: flex; flex-direction: column; gap: ui(12px); visibility: hidden; }
+/* every class's card in one cell, the one in focus shown: the panel never changes size. Their parts on rows the
+   cards share (a subgrid), each as tall as the tallest card's: in a column of their own, the ranger's tagline on two
+   lines put his traits and skills 30 px lower than the others' as the hero changed */
+.hs-cards { flex: 1; min-height: 0; display: grid; grid-template-rows: repeat(6, auto) 1fr; row-gap: ui(12px); overflow-y: auto;
+  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba($frame, .5) transparent; }
+.hs-card { grid-column: 1; grid-row: 1 / span 7; display: grid; grid-template-rows: subgrid; visibility: hidden; }
 .hs-card.active { visibility: visible; animation: hs-in .45s ease-out; }
 @keyframes hs-in { from { opacity: 0; transform: translateY(ui(10px)); } }
 .hs-name { position: relative; aspect-ratio: 600 / 110; }
@@ -88,7 +93,7 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
 @media (max-height: 520px) {
   #heroes { --gut: #{ui(12px)}; --pw: #{ui(380px)}; }
   .hs-panel { gap: ui(10px); padding: ui(14px) ui(16px); }
-  .hs-card { gap: ui(8px); }
+  .hs-cards { row-gap: ui(8px); }
   .hs-tag { font-size: ui(15px); }
   .hs-logo { width: ui(110px); }
   .hs-title { font-size: ui(20px); }
@@ -96,6 +101,9 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
   .btn.hs-choose { font-size: min(#{ui(16px)}, 4.5vh); padding: ui(11px) ui(16px); }
   .hs-skills { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: ui(4px); }
   .hs-skills .slot .icon { font-size: ui(16px); }
+  .hs-tabs { gap: ui(10px); }
+  .hs-tabs button { font-size: ui(17px); letter-spacing: ui(3px); padding: ui(6px) ui(14px) ui(12px); }
+  .hs-tabs button::after { width: ui(8px); height: ui(8px); }
 }
 
 /* ---------- short and upright screens: Back at the top of the room the panel leaves, the title beside it ---------- */
@@ -111,7 +119,9 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
 @media (orientation: portrait) {
   #heroes { --ph: 44%; }
   .hs-panel { top: auto; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); width: auto; height: var(--ph); }
-  .hs-card { display: grid; grid-template-columns: 1fr 1fr; align-content: start; gap: ui(10px) ui(22px); }
+  // (the skills' heading hidden, the traits and the skills side by side: five rows)
+  .hs-cards { grid-template-rows: repeat(4, auto) 1fr; row-gap: ui(10px); }
+  .hs-card { grid-row: 1 / span 5; grid-template-columns: 1fr 1fr; column-gap: ui(22px); }
   .hs-card > :is(.hs-name, .hs-role, .hs-tag) { grid-column: 1 / -1; }
   .hs-card > .hs-label { display: none; }
   .hs-records { grid-column: 1 / -1; }
@@ -119,6 +129,7 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
   .hs-next { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); }
   .hs-arrow { top: calc((100% - var(--ph)) / 2); }
   .hs-tabs { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); bottom: calc(var(--ph) + var(--gut) * 1.6); }
+  .hs-tabs button { font-size: ui(20px); letter-spacing: ui(3px); padding: ui(8px) ui(18px) ui(14px); }
   .hs-back { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); }
   #heroes .hs-shade { --hx: 50%; }
 }

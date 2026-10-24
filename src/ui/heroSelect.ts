@@ -1,7 +1,7 @@
 // The hero selection screen (#heroes): the hall of heroes behind it (game/hall.ts), the hero in focus's name, role,
 // how he plays, his skills and his records in this save slot in a panel beside him, and a choice that leads into the
 // lobby. A first visit opens on it (no hero chosen yet, nothing to go back to); the lobby's "Change hero" opens it again.
-// Picked by the arrows, the tabs, a click or tap on a hero, a swipe, or the keys (left and right, A and D; Enter or
+// Picked by the arrows, the tabs, a click or tap on a hero, the scene dragged along the row, or the keys (left and right, A and D; Enter or
 // Space chooses, Esc goes back). Every class's card is laid over the others in one cell, the one in focus shown, so
 // the panel is the largest's size and nothing moves as the focus does.
 import { G } from '../state';
@@ -9,7 +9,7 @@ import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { saveSlot } from '../loot/saveSlots';
 import { wasPressed } from '../core/input';
 import { sfx } from '../core/audio';
-import { openHall, closeHall, focusHall, frameHall, hallFocus, hallHeroes, hallOpen } from '../game/hall';
+import { openHall, closeHall, dragHall, dropHall, focusHall, frameHall, hallAlong, hallFocus, hallHeroes, hallOpen } from '../game/hall';
 import { makeSkillSlot } from './hud';
 import { hideTooltip } from './tooltip';
 import type { ClassDef, Profile } from '../types';
@@ -28,10 +28,16 @@ let hooks: HeroSelectHooks;
 let first = false;
 /** the view's shift that keeps the hero in focus in the screen's room beside the panel (css px), as last laid out */
 let shift = { x: 0, y: 0 };
-/** a press on the screen's backdrop: where it went down, to tell a tap on a hero from a swipe */
-let press: { x: number; y: number } | null = null;
-/** how far a press moves sideways to be a swipe (css px) */
-const SWIPE = 48;
+/** a press on the screen's backdrop: where it went down and the camera's place along the row then, whether it's
+ *  dragging the scene, and how fast it last moved (css px a ms, eased) and when */
+interface Press { x: number; y: number; along: number; dragging: boolean; v: number; lastX: number; lastT: number }
+let press: Press | null = null;
+/** how far a press moves sideways to drag the scene (css px: short of it, a tap on a hero) */
+const DRAG_START = 8;
+/** how far a drag let go carries on, as the time its speed goes on for (ms): a flick lands a hero further; and how
+ *  long it may have stood still before the lift for its speed to count */
+const FLICK_MS = 220;
+const FLICK_STILL_MS = 80;
 /** the most a tap may land from a hero's middle on screen to pick him, as a share of the screen's width */
 const TAP_REACH = 0.12;
 /** the hero in focus's height on the screen as the hall frames him, a share of its height (game/hall.ts `SHOT`), and
@@ -53,15 +59,24 @@ export function initHeroSelect(h: HeroSelectHooks): void {
   $('.hs-choose').onclick = () => { sfx.click(); choose(); };
   $('.hs-back').onclick = () => { sfx.click(); if (!first) closeHeroSelect(); };
   const shade = $('.hs-shade');
-  shade.addEventListener('pointerdown', (e) => { press = { x: e.clientX, y: e.clientY }; });
+  shade.addEventListener('pointerdown', (e) => {
+    if (!hallOpen() || press) return;
+    shade.setPointerCapture(e.pointerId);
+    const now = performance.now();
+    press = { x: e.clientX, y: e.clientY, along: hallAlong(), dragging: false, v: 0, lastX: e.clientX, lastT: now };
+  });
+  shade.addEventListener('pointermove', (e) => { if (press) dragTo(press, e.clientX); });
   shade.addEventListener('pointerup', (e) => {
     if (!press) return;
-    const dx = e.clientX - press.x;
+    const p = press;
     press = null;
-    if (Math.abs(dx) >= SWIPE) step(dx < 0 ? 1 : -1);
+    if (p.dragging) letGo(p, e.clientX);
     else tapAt(e.clientX, e.clientY);
   });
-  shade.addEventListener('pointercancel', () => { press = null; });
+  shade.addEventListener('pointercancel', (e) => {
+    if (press?.dragging) letGo({ ...press, v: 0 }, e.clientX);
+    press = null;
+  });
   new ResizeObserver(layOut).observe($('.hs-panel'));
   window.addEventListener('resize', layOut);
 }
@@ -127,6 +142,37 @@ function records(p: Profile): string {
 }
 
 function step(d: number): void { focusOn(hallFocus() + d); }
+
+/** The heroes' spacing on the screen (css px): the scene moves with the finger, a hero's spacing a hero along. */
+function spacing(): number {
+  const [a, b] = hallHeroes().map((h) => h.player.pos.clone().project(G.camera).x * innerWidth / 2);
+  const apart = Math.abs(b - a);
+  return apart > 1 ? apart : innerWidth / 3;
+}
+
+/** A press moved to `x`: past `DRAG_START`, the scene dragged with it (the row the other way: the camera follows
+ *  the scene's motion as a pan), its speed kept for the flick. */
+function dragTo(p: Press, x: number): void {
+  const dx = x - p.x;
+  if (!p.dragging && Math.abs(dx) < DRAG_START) return;
+  p.dragging = true;
+  const now = performance.now(), dt = now - p.lastT;
+  if (dt > 0) p.v = 0.3 * p.v + 0.7 * (x - p.lastX) / dt;
+  p.lastX = x;
+  p.lastT = now;
+  dragHall(p.along - dx / spacing());
+}
+
+/** A drag let go at `x`: carried on by its speed (unless it stood still before the lift), and the hero nearest
+ *  where it lands in focus. */
+function letGo(p: Press, x: number): void {
+  const v = performance.now() - p.lastT > FLICK_STILL_MS ? 0 : p.v;
+  const before = hallFocus();
+  const i = dropHall(p.along - (x - p.x + v * FLICK_MS) / spacing());
+  if (i !== before) sfx.click();
+  hideTooltip();
+  shown();
+}
 
 function focusOn(i: number): void {
   if (!hallOpen()) return;
