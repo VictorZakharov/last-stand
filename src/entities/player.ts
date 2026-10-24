@@ -938,9 +938,10 @@ export class Player {
     if (dashed && action && action !== dashed && !this.staggered) action.under = dashed;
     this.pose(dt, t, Math.min(1, speed / this.stats.moveSpeed), 1, side / this.stats.moveSpeed, action);
 
-    // ambient motes around the offhand (the mage's arcana)
+    // ambient motes around the offhand (the mage's arcana; none while hidden: as the hero selection screen hides the
+    // lobby's mage, his rose among the hall's heroes where he stood)
     const motes = this.cls.aura.motes;
-    if (motes && Math.random() < dt * 20) {
+    if (motes && this.obj.visible && Math.random() < dt * 20) {
       const p = this.palmPoint;
       particles.glow.spawn({
         x: p.x + rand(-0.08, 0.08), y: p.y + rand(-0.05, 0.08), z: p.z + rand(-0.08, 0.08), vy: rand(0.2, 0.6),
