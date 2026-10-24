@@ -687,8 +687,9 @@ export function settleCamera(focus: THREE.Vector3): void {
   shift.x = shift.tx; shift.y = shift.ty;
 }
 
-/** A staged shot (the hero selection screen, game/hall.ts): where the camera stands and what it looks at. */
-export interface Shot { pos: THREE.Vector3; look: THREE.Vector3; fov: number }
+/** A staged shot (the hero selection screen, game/hall.ts): where the camera stands and what it looks at, and how
+ *  fast it glides there (`damp`'s rate: `STAGE_GLIDE` if left out; a drag's, faster, to keep up with the finger). */
+export interface Shot { pos: THREE.Vector3; look: THREE.Vector3; fov: number; glide?: number }
 /** the shot asked for (null: the views have the camera), and the camera's glide to it */
 const stage = { shot: null as Shot | null, pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: CAMERA.fov };
 /** how fast the camera glides to a new shot (`damp`'s rate: most of the way in about a second) */
@@ -715,7 +716,7 @@ export function stageCamera(shot: Shot | null, cut = false): void {
 
 /** The camera on its staged shot, gliding there. */
 function onStage(cam: THREE.PerspectiveCamera, shot: Shot, dt: number): void {
-  const k = 1 - Math.exp(-STAGE_GLIDE * dt);
+  const k = 1 - Math.exp(-(shot.glide ?? STAGE_GLIDE) * dt);
   stage.pos.lerp(shot.pos, k);
   stage.look.lerp(shot.look, k);
   stage.fov += (shot.fov - stage.fov) * k;
