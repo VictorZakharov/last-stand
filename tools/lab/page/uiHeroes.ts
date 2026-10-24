@@ -11,6 +11,7 @@
 // hero it carried the row to in focus as it lifts. The canary lays Back over the heroes' names and pushes a card's
 // traits down, which must be found.
 import { G } from '../../../src/state';
+import { col, particles } from '../../../src/fx/particles';
 import type { Lab } from './lab';
 import type * as THREE from 'three';
 
@@ -173,6 +174,27 @@ async function clickBeside(lab: Lab, id: string): Promise<Found> {
   return { lines, problems };
 }
 
+/** how near the lobby's hidden hero's hand a glow counts as his (m) */
+const HAND_REACH = 0.6;
+
+/** The glows by the lobby's own hero's hand while the screen hides him (`canary`: one put there first): a mage's
+ *  motes went on rising from his hand where he stood, among the hall's heroes ("mage's hand glowing near warrior").
+ *  A hero with none says so. */
+function hiddenHandGlows(canary: boolean): Found {
+  const hand = G.player.palmPoint;
+  if (canary) particles.glow.spawn({ x: hand.x, y: hand.y, z: hand.z, life: 1, color: col(0xffffff) });
+  const pool = particles.glow;
+  let near = 0;
+  for (let i = 0; i < pool.count; i++) {
+    const apart = Math.hypot(pool.pos[i * 3] - hand.x, pool.pos[i * 3 + 1] - hand.y, pool.pos[i * 3 + 2] - hand.z);
+    if (pool.life[i] > 0 && apart < HAND_REACH) near++;
+  }
+  const motes = G.player.cls.aura.motes ? 'his motes' : 'no motes of his';
+  const lines = [`  the lobby's ${G.player.cls.id} hidden (${motes}): ${near} glows by his hand`];
+  const problems = near ? [`heroes: ${near} glows by the hidden lobby ${G.player.cls.id}'s hand`] : [];
+  return { lines, problems };
+}
+
 /** The choice on the hero in focus (`canary`: put in the window's corner first), and seen as the mouse comes over
  *  him and not once it has left him for the backdrop (on a screen with no hover, always seen). */
 async function choiceOnHero(lab: Lab, screen: HTMLElement, id: string, canary: boolean): Promise<Found> {
@@ -248,11 +270,14 @@ export async function heroesShown(canary: boolean, lab: Lab): Promise<Found> {
   if (!wordsFit(choose)) problems.push("heroes: the choice's words reach its edges");
   const placed = heroPlaced(id, boxes);
   const onHim = await choiceOnHero(lab, screen, id, canary);
+  const hand = hiddenHandGlows(canary);
   const clicked = await clickBeside(lab, id);
   const steady = await cardsSteady(lab, screen, canary);
   const swept = await dragged(lab, screen);
-  lines.push(...placed.lines, ...onHim.lines, ...clicked.lines, ...steady.lines, ...swept.lines);
-  problems.push(...placed.problems, ...onHim.problems, ...clicked.problems, ...steady.problems, ...swept.problems);
+  for (const found of [placed, onHim, hand, clicked, steady, swept]) {
+    lines.push(...found.lines);
+    problems.push(...found.problems);
+  }
   return { lines, problems };
 }
 
@@ -408,12 +433,13 @@ async function dragged(lab: Lab, screen: HTMLElement): Promise<Found> {
   return { lines: [line], problems };
 }
 
-/** Whether the canaries were found among `problems`: Back over the heroes' names, the card's moved traits, and the
- *  choice put off the hero. */
+/** Whether the canaries were found among `problems`: Back over the heroes' names, the card's moved traits, the
+ *  choice put off the hero, and a glow by the hidden lobby hero's hand. */
 export const heroesCanaryCaught = (problems: string[]): boolean =>
   problems.some((problem) => problem.includes('Back lies over') || problem.includes('lies over Back'))
   && problems.some((problem) => problem.includes(' moved '))
-  && problems.some((problem) => problem.includes('choice stands off'));
+  && problems.some((problem) => problem.includes('choice stands off'))
+  && problems.some((problem) => problem.includes('glows by the hidden'));
 
 /** After the screen closed by Esc: the lobby back, its hero drawn. */
 export function heroesClosed(): Found {
