@@ -5,6 +5,13 @@ const ranger: ClassDef = {
   id: 'ranger', name: 'Ranger', model: 'ranger',
   tagline: 'A patient hunter who marks his quarry and rains arrows on the pack.',
   accent: '#c9d993', book: 'Fieldcraft',
+  hall: {
+    role: 'Marksman · Ranged bow',
+    traits: [{ label: 'Toughness', value: 3 }, { label: 'Damage', value: 4 }, { label: 'Range', value: 5 }, { label: 'Ease', value: 2 }],
+    // (loosed off to his right, past the camera's side, not at it)
+    showcase: { skill: 'fanShot', at: [8, 6] },
+    banner: [44, 64, 22],
+  },
   // (lit at full draw alone: lit always, his bow shone at rest, "why ranger emits light from bow on idle")
   aura: { light: 0xc9d993, intensity: 0.45, drawn: true },
   // (an arrow nocked between shots, back in the quiver after 3 s without one; the next shot takes one out first)

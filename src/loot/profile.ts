@@ -89,6 +89,11 @@ export function savedClass(fallback = DEFAULT_CLASS): string {
   return id && Object.hasOwn(CLASSES, id) ? id : fallback;
 }
 
+/** Whether a hero was ever chosen or played in the save slot in use (a first visit has neither: it opens on the hero
+ *  selection screen; a player from before it had played the mage without ever choosing). */
+export const hasSavedClass = (): boolean =>
+  readCookie(saveKey(CLASS_COOKIE)) !== null || CLASS_IDS.some((id) => peekProfile(id, saveSlot()) !== null);
+
 export function saveClass(classId: string): void { writeCookie(saveKey(CLASS_COOKIE), classId); }
 
 /** The slots an item can go in: its own, and the off-hand for a one-handed weapon of a class that dual-wields. */

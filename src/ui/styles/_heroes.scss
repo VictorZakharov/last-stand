@@ -1,0 +1,128 @@
+// The hero selection screen (ui/heroSelect.ts) over the hall of heroes (game/hall.ts): a cinematic shade over the
+// stage, the title and logo at the top left, the arrows and the heroes' names round the hero in focus, his card in a
+// panel at the right (at the foot on an upright screen), Back at the bottom left. Nothing loops: the card fades in
+// once as the focus comes to it, and the shade is painted once.
+@use 'theme' as *;
+@use 'mixins' as *;
+
+/* the room the panel leaves the hero, as the shift in ui/heroSelect.ts lays the camera out */
+#heroes { --cc: var(--accent); --gut: #{ui(22px)}; --pw: #{ui(430px)};
+  position: fixed; inset: 0; z-index: 30; pointer-events: none;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+/* the rest of the page out of the way while it's up: the lobby's HUD and the touch controls */
+body.in-hall :is(#hud, #touch) { display: none !important; }
+
+/* a darkened rim and letterbox bands, under a glow of the hero's colour where he stands: one paint */
+.hs-shade { position: absolute; inset: 0; pointer-events: auto; cursor: $cursor;
+  background:
+    linear-gradient(rgba(3,2,4,.88), transparent 14%, transparent 80%, rgba(3,2,4,.92)),
+    radial-gradient(ellipse 34% 62% at var(--hx, 36%) 50%, transparent 45%, rgba(3,2,4,.7) 100%); }
+#heroes .hs-shade { --hx: calc((100% - var(--pw) - var(--gut) * 2) / 2); }
+
+/* ---------- the title and the logo ---------- */
+.hs-top { position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); top: calc(var(--gut) * .7 + env(safe-area-inset-top, 0px));
+  display: flex; align-items: center; gap: ui(18px); pointer-events: none; }
+.hs-logo { width: ui(150px); flex: none; }
+.hs-logo .logo-glow { opacity: .8; }
+.hs-heading { display: flex; flex-direction: column; gap: ui(3px); padding-left: ui(18px); border-left: 1px solid rgba($frame, .45); }
+.hs-title { font: 700 ui(26px) var(--font-display); letter-spacing: ui(5px); text-transform: uppercase; color: var(--accent);
+  text-shadow: 0 0 ui(14px) rgba($accent-glow, .35), $outline; }
+.hs-slot { font-size: ui(15px); letter-spacing: ui(1px); color: var(--ink-dim); text-shadow: $outline; }
+
+/* ---------- the arrows either side of the hero, and the heroes' names under him ---------- */
+.hs-arrow { position: absolute; top: 50%; translate: 0 -50%; width: ui(54px); height: ui(96px); padding: ui(18px) ui(14px); pointer-events: auto;
+  cursor: $cursor-hand; color: var(--accent); background: radial-gradient(ellipse at center, rgba(0,0,0,.55), transparent 70%); border: 0; }
+.hs-arrow svg { width: 100%; height: 100%; filter: drop-shadow(0 0 ui(6px) rgba($accent-glow, .5)); }
+.hs-arrow:hover { color: var(--highlight); }
+.hs-prev { left: calc(var(--gut) + env(safe-area-inset-left, 0px)); }
+.hs-next { right: calc(var(--pw) + var(--gut) * 2 + env(safe-area-inset-right, 0px)); }
+.hs-tabs { position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); right: calc(var(--pw) + var(--gut) * 2 + env(safe-area-inset-right, 0px));
+  bottom: calc(var(--gut) * 1.4 + env(safe-area-inset-bottom, 0px)); display: flex; justify-content: center; gap: ui(10px); pointer-events: none; }
+.hs-tabs button { position: relative; pointer-events: auto; cursor: $cursor-hand; padding: ui(8px) ui(18px) ui(10px); background: none; border: 0;
+  font: 700 ui(16px) var(--font-display); letter-spacing: ui(3px); text-transform: uppercase; color: var(--ink-dim); text-shadow: $outline; }
+.hs-tabs button::after { content: ''; position: absolute; left: 50%; bottom: 0; width: ui(7px); height: ui(7px); translate: -50% 0; rotate: 45deg;
+  border: 1px solid rgba($frame, .7); background: #120e0a; }
+.hs-tabs button:hover { color: var(--ink); }
+.hs-tabs button.active { color: var(--cc); text-shadow: 0 0 ui(12px) color-mix(in srgb, var(--cc) 45%, transparent), $outline; }
+.hs-tabs button.active::after { border-color: var(--cc); background: var(--cc); box-shadow: 0 0 ui(8px) var(--cc); }
+.hs-back { position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); bottom: calc(var(--gut) + env(safe-area-inset-bottom, 0px));
+  font-size: ui(15px); padding: ui(9px) ui(16px); }
+#heroes.first .hs-back { display: none; }
+
+/* ---------- the panel: the hero in focus's card, and the choice ---------- */
+.hs-panel { position: absolute; top: var(--gut); right: calc(var(--gut) + env(safe-area-inset-right, 0px)); bottom: var(--gut); width: var(--pw);
+  display: flex; flex-direction: column; gap: ui(14px); padding: ui(22px) ui(24px) ui(22px); pointer-events: auto;
+  background: linear-gradient(rgba(8,7,9,.82), rgba(8,7,9,.94)); }
+.hs-panel::before { content: ''; position: absolute; inset: ui(5px); pointer-events: none; @include corner-brackets(ui(22px), 2px, var(--cc)); }
+/* every class's card in one cell, the one in focus shown: the panel never changes size */
+.hs-cards { flex: 1; min-height: 0; display: grid; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  scrollbar-color: rgba($frame, .5) transparent; }
+.hs-card { grid-area: 1 / 1; display: flex; flex-direction: column; gap: ui(12px); visibility: hidden; }
+.hs-card.active { visibility: visible; animation: hs-in .45s ease-out; }
+@keyframes hs-in { from { opacity: 0; transform: translateY(ui(10px)); } }
+.hs-name { position: relative; aspect-ratio: 600 / 110; }
+.hs-name svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.hs-name .logo-glow { opacity: .75; }
+.hs-role { margin-top: ui(-4px); text-align: center; font: 700 ui(14px) var(--font-display); letter-spacing: ui(3px); text-transform: uppercase;
+  color: var(--cc); text-shadow: 0 0 ui(10px) color-mix(in srgb, var(--cc) 40%, transparent); }
+.hs-tag { margin: 0; text-align: center; font-size: ui(17px); font-style: italic; line-height: 1.35; color: var(--ink); }
+.hs-card > .hs-role + .hs-tag { padding-bottom: ui(10px); border-bottom: 1px solid rgba($frame, .3); }
+.hs-traits { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: ui(7px) ui(16px); margin: 0; }
+.hs-traits dt { font: 700 ui(12px) var(--font-display); letter-spacing: ui(2px); text-transform: uppercase; color: var(--ink-dim); }
+.hs-traits dd { display: flex; gap: ui(5px); margin: 0; }
+.hs-traits i { flex: 1; height: ui(8px); max-width: ui(44px); background: #1a1614; border: 1px solid rgba($frame, .35); transform: skewX(-24deg); }
+.hs-traits i.on { background: linear-gradient(color-mix(in srgb, var(--cc) 90%, #fff), color-mix(in srgb, var(--cc) 55%, #000)); border-color: var(--cc);
+  box-shadow: 0 0 ui(6px) color-mix(in srgb, var(--cc) 45%, transparent); }
+.hs-label { @include section-head; font-size: ui(12px); }
+.hs-skills { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: ui(7px); }
+.hs-skills .slot { width: auto; height: auto; aspect-ratio: 1; }
+.hs-skills .slot .icon { font-size: ui(24px); }
+.hs-records { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: ui(6px); margin-top: auto; }
+.hs-records div { display: flex; flex-direction: column; align-items: center; padding: ui(6px) ui(2px); font-size: ui(10px); letter-spacing: ui(1px);
+  text-transform: uppercase; color: var(--ink-dim); background: linear-gradient(135deg, rgba(40,32,22,.55), rgba(12,10,12,.8)); border: 1px solid rgba($frame, .3); }
+.hs-records b { font: 700 ui(18px) var(--font-display); letter-spacing: 0; text-transform: none; color: #f3e1b0; }
+.hs-records .hs-new { padding: ui(8px); text-align: center; font-size: ui(14px); font-style: italic; color: var(--ink-dim); border: 1px dashed rgba($frame, .35); }
+.btn.hs-choose { flex: none; font-size: ui(22px); padding: ui(16px) ui(20px); white-space: nowrap; }
+
+/* ---------- short screens (phones held sideways): a narrower, tighter panel ---------- */
+@media (max-height: 520px) {
+  #heroes { --gut: #{ui(12px)}; --pw: #{ui(380px)}; }
+  .hs-panel { gap: ui(10px); padding: ui(14px) ui(16px); }
+  .hs-card { gap: ui(8px); }
+  .hs-tag { font-size: ui(15px); }
+  .hs-logo { width: ui(110px); }
+  .hs-title { font-size: ui(20px); }
+  // (held to the screen's height too: on a phone the UI's floor in css px set it wider than the button)
+  .btn.hs-choose { font-size: min(#{ui(16px)}, 4.5vh); padding: ui(11px) ui(16px); }
+  .hs-skills { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: ui(4px); }
+  .hs-skills .slot .icon { font-size: ui(16px); }
+}
+
+/* ---------- short and upright screens: Back at the top of the room the panel leaves, the title beside it ---------- */
+@media (max-height: 520px), (orientation: portrait) {
+  .hs-back { top: calc(var(--gut) * .7 + env(safe-area-inset-top, 0px)); bottom: auto; left: auto;
+    right: calc(var(--pw) + var(--gut) * 2 + env(safe-area-inset-right, 0px)); }
+  .hs-long { display: none; }
+  .hs-logo { width: ui(100px); }
+  .hs-title { font-size: ui(19px); letter-spacing: ui(3px); }
+}
+
+/* ---------- upright screens (tablets held upright): the panel along the foot, the hero above it ---------- */
+@media (orientation: portrait) {
+  #heroes { --ph: 44%; }
+  .hs-panel { top: auto; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); width: auto; height: var(--ph); }
+  .hs-card { display: grid; grid-template-columns: 1fr 1fr; align-content: start; gap: ui(10px) ui(22px); }
+  .hs-card > :is(.hs-name, .hs-role, .hs-tag) { grid-column: 1 / -1; }
+  .hs-card > .hs-label { display: none; }
+  .hs-records { grid-column: 1 / -1; }
+  .hs-name { width: min(100%, ui(420px)); justify-self: center; }
+  .hs-next { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); }
+  .hs-arrow { top: calc((100% - var(--ph)) / 2); }
+  .hs-tabs { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); bottom: calc(var(--ph) + var(--gut) * 1.6); }
+  .hs-back { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); }
+  #heroes .hs-shade { --hx: 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hs-card.active { animation: none; }
+}

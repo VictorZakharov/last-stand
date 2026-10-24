@@ -11,6 +11,12 @@ const mage: ClassDef = {
   model: 'mage',
   accent: '#9fffd0',
   book: 'Spellbook',
+  hall: {
+    role: 'Arcanist · Ranged spells',
+    traits: [{ label: 'Toughness', value: 1 }, { label: 'Damage', value: 5 }, { label: 'Range', value: 4 }, { label: 'Ease', value: 3 }],
+    showcase: { skill: 'starfall', at: [2.2, 1.1] },
+    banner: [16, 62, 92],
+  },
   // (the staff's light in its crystal's colour, the bolts')
   aura: { light: 0xff4fd8, intensity: 1.8, motes: [0x5dffa8, 0x1060ff] },
 

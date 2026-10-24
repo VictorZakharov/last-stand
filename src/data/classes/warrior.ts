@@ -9,6 +9,12 @@ const warrior: ClassDef = {
   model: 'warrior',
   accent: '#ffc27a',
   book: 'Arsenal',
+  hall: {
+    role: 'Vanguard · Close combat',
+    traits: [{ label: 'Toughness', value: 5 }, { label: 'Damage', value: 4 }, { label: 'Range', value: 1 }, { label: 'Ease', value: 5 }],
+    showcase: { skill: 'powerStrike', at: [2.6, 0] },
+    banner: [112, 22, 18],
+  },
   aura: { light: 0xff9a4a, intensity: 0.8 },
 
   base: {

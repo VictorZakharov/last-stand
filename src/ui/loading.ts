@@ -27,14 +27,17 @@ export async function loadingStep(label: string, progress: number): Promise<void
 // use (on a first visit its shader cache is cold), and that should not be seen as a stutter
 const SMOOTH_FRAMES = 8, SMOOTH_MS = 70, MAX_WAIT_MS = 4000;
 
-// the logo's particle field gathers into the lobby's logo. A plain fade instead with reduced motion, on low
+// the logo's particle field gathers into the lobby's logo (a first visit's hero selection screen's, ui/heroSelect.ts,
+// where it opens on that). A plain fade instead with reduced motion, on low
 // graphics quality (picked, or where Auto settled last time), and on a device where the particles were too slow
 // before
 const plainExit = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches || qualityLevel() === 'low' || logoWindOff();
 /** the logo's exit, made ready from when the lobby is laid out (`lobbyLaidOut`) */
 let exit: Promise<LogoBlow | null> | null = null;
 const blowFor = (l: HTMLElement): Promise<LogoBlow | null> => {
-  return prepareBlow(l.querySelector<HTMLElement>('.ld-logo')!, document.querySelector<HTMLElement>('#menu .logo-art'));
+  const target = document.querySelector<HTMLElement>('#heroes:not(.hidden) .logo-art')
+    ?? document.querySelector<HTMLElement>('#menu .logo-art');
+  return prepareBlow(l.querySelector<HTMLElement>('.ld-logo')!, target);
 };
 
 /** Call once the lobby is laid out (its logo is where the particles gather): the logo's exit is made ready while
