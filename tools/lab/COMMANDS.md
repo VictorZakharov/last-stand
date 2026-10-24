@@ -579,8 +579,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   compile, the forest's wood rubble's shadow (`steadyShadowPrograms` in `src/core/shaders.ts`), and #268's: the
   hero built afresh brought his own light in after the arms' pass had put the scene's lights on its layer, which it
   did once, and through the eyes 11 programs of his arms and the shadows compiled at the run's start (15 lights to
-  14). `--switch ranger` first picks the ranger on the lobby's class card, as a player does, and waits for him (the
-  lab's boot waits for every warm-up, so it says 0.0 s); the boot's class (`--class`) is another. A class's skills
+  14). `--switch ranger` first picks the ranger on the hero selection screen, as a player does (Change hero
+  clicked, each hero in the hall of heroes shown 150 frames, his showcase and all, and every program compiled
+  meanwhile a problem; then the ranger's name and the choice), and waits for him (the lab's boot waits for every
+  warm-up, so it says 0.0 s); the boot's class (`--class`) is another. A class's skills
   are warmed with the heroes, not the lobby, so only a switch tells whether they were: with the ranger's left out of
   `heroParts` (`src/game/warmup.ts`), `--class mage --switch ranger` found 9 programs compiled in his first wave.
   `--canary` draws a material nothing else does before the hero, which must come out as compiled, and puts a point

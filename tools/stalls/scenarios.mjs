@@ -1,7 +1,7 @@
 // What the player does while the stalls are measured (tools/stalls), with the page's own controls alone (real key
 // presses and mouse moves sent to the page, its buttons clicked): a production build has no dev hooks to drive it.
 import {
-  choiceClosed, deciding, inRun, itemBoxes, markPhase, menuStowed, runOver, scoresShown, stowsRecorded,
+  choiceClosed, deciding, heroesShown, inRun, itemBoxes, markPhase, menuStowed, runOver, scoresShown, stowsRecorded,
 } from './page.mjs';
 
 /** the keys held in turn while walking round the lobby, and how long each */
@@ -122,9 +122,26 @@ async function scoresNote(page) {
   return `${scores.kills} foes killed, ${scores.damage} damage dealt`;
 }
 
+/** how long the hero selection screen is given to open and to close (ms) */
+const HEROES_MS = 10_000;
+
+/** `hero` picked in the lobby as a player picks him: on the hero selection screen its Change hero opens (his name
+ *  clicked, then the choice), or by the lobby's class buttons in a tree from before it. */
+export async function pickHero(page, hero) {
+  if (await page.$('#opt-class')) {
+    await page.click(`#opt-class button[data-c="${hero}"]`);
+    return;
+  }
+  await page.click('#btn-hero');
+  await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
+  await page.click(`#heroes .hs-tabs [data-c="${hero}"]`);
+  await page.click('#heroes .hs-choose');
+  await page.waitForFunction(() => !document.getElementById('heroes').checkVisibility(), null, { timeout: HEROES_MS });
+}
+
 /** Starts a run as `hero` from the lobby; returns once it has begun. */
 async function startRun(page, hero) {
-  await page.click(`#opt-class button[data-c="${hero}"]`);
+  await pickHero(page, hero);
   await page.waitForTimeout(500);
   await page.click('#btn-start');
   await page.waitForFunction(inRun, null, { timeout: 30_000 });
