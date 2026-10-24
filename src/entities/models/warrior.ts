@@ -382,8 +382,9 @@ const SM_YAW: Keys = [[0, 0.7], [0.42, 0.7], [0.5, 0.4], [1, 0.4]];
 const SM_TAKE = [0, 0.12], SM_FALL = [0.45, 0.55];
 const SM_BLADE: Keys = [[0, 1.1], [0.34, 2], [0.42, 2.05]];
 /** where the blow ends: from these shares of the cast the hands come to rest together before the middle of him, this
- *  far ahead of his feet and this high over the floor (m at a man's size), the elbows out and down (chest's frame) */
-const SM_LAND = [0.47, 0.55], SM_AHEAD = 0.6, SM_HIGH = 0.8;
+ *  far ahead of his feet and this high over the floor (m at a man's size), the elbows out and down (chest's frame).
+ *  (0.6 ahead put a two-hander's haft through the left thigh; 0.8 took its lower grip out of the left hand's reach) */
+const SM_LAND = [0.47, 0.55], SM_AHEAD = 0.7, SM_HIGH = 0.8;
 const SM_POLE = new THREE.Vector3(-1, -0.6, -0.5);
 /** the overhead blows through the eyes: the weapon raised by `lift` of the cast, coming down from `from` to `to` (as
  *  their keys in models/warriorEyes.ts, landing where the skill fires), and how much it trembles as it's held up
@@ -1761,6 +1762,9 @@ export function buildWarrior(): Model {
         // (and from just before it lands, the hands out before him where a blow into the ground ends)
         const end = w * ramp(k, SM_LAND[0], SM_LAND[1]);
         if (end > 0 && held) holdAtFloor(end);
+        // (a two-hander's held there as placed, its head on the floor: turned onto it and stopped by it again after, the
+        // lower grip went 19 cm out of the left hand's reach)
+        if (two) { aimDown *= 1 - end; stop *= 1 - end; }
       } else if (a.name === 'chop' || a.name === 'smite') {
         // the overhead blows through the eyes (OVERHEAD; third person's are above), keyed in the view
         // (models/warriorEyes.ts): the weapon raised high, the fists seen at the top of the view, trembling while Power
