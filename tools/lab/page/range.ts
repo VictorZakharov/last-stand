@@ -419,6 +419,8 @@ async function runScenario(
   if (run.grip.seen) report.lines.push(`  ${describeLetGo(run.grip)}`);
   const underFloor = floor.describe();
   if (underFloor) report.lines.push(`  ${underFloor}`);
+  const nearFloor = scenario.legs.some((leg) => leg.cast) ? floor.describeNearest() : '';
+  if (nearFloor) report.lines.push(`  ${nearFloor}`);
   const inBody = through.describe();
   if (inBody) report.lines.push(`  ${inBody}`);
   const atStops = pinned.describe();

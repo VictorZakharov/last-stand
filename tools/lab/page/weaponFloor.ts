@@ -30,6 +30,8 @@ const _gripWay = new THREE.Vector3();
 export class WeaponFloor {
   private frames = 0;
   private deepest: Under | null = null;
+  /** the weapon's lowest point at its nearest the floor (under it, or how far over it as a negative depth) */
+  private nearest: Under | null = null;
   /** each frame it was under, as words */
   readonly listed: string[] = [];
 
@@ -39,6 +41,7 @@ export class WeaponFloor {
   /** Notes how far under the floor the weapon is this frame (`frame`: the frame as the report names it). */
   observe(lab: Lab, frame: string): void {
     const under = deepestUnder(lab, frame);
+    if (under && (!this.nearest || under.depth > this.nearest.depth)) this.nearest = under;
     if (!under || under.depth < UNDER_FROM) return;
     this.frames++;
     this.listed.push(`  ${this.scenario} frame ${frame}: the weapon ${describeUnder(under)}`);
@@ -49,6 +52,15 @@ export class WeaponFloor {
   describe(): string {
     if (!this.deepest) return '';
     return `the weapon under the floor on ${this.frames} frames, the deepest ${describeUnder(this.deepest)}`;
+  }
+
+  /** How near the floor the weapon's lowest point came, as words (a blow into the ground must reach it: Thunder
+   *  Crescent's two-handed end, held where it was placed, stopped short of it unseen), or none if none was held. */
+  describeNearest(): string {
+    const nearest = this.nearest;
+    if (!nearest) return '';
+    if (nearest.depth >= 0) return `the weapon nearest the floor ${describeUnder(nearest)}`;
+    return `the weapon nearest the floor ${describeUnder({ ...nearest, depth: -nearest.depth }, 'over it')}`;
   }
 }
 
@@ -63,10 +75,11 @@ export function weaponCanary(lab: Lab): number {
   return depth;
 }
 
-/** A point under the floor as words: how deep, where along the weapon, and in which frame. */
-function describeUnder(under: Under): string {
+/** A point under the floor as words: how deep, where along the weapon, and in which frame (`side`: over it, for a
+ *  point over the floor by `depth`). */
+function describeUnder(under: Under, side = 'under'): string {
   const along = under.along < 0 ? `${cm(-under.along)} behind the grip` : `${cm(under.along)} along it from the grip`;
-  return `${cm(under.depth)} under (frame ${under.at}, ${along})`;
+  return `${cm(under.depth)} ${side} (frame ${under.at}, ${along})`;
 }
 
 const cm = (metres: number) => `${(metres * 100).toFixed(1)} cm`;
