@@ -158,11 +158,12 @@ export interface Fist { hand: 'left' | 'right'; off: number; along?: number; cur
 export type WeaponStyle = 'shield' | 'twoHanded' | 'dual' | 'oneHanded';
 
 /** A class on the hero selection screen: its role in a few words, how it plays (each trait 1 to 5), and the skill it
- *  shows off as the camera comes to it, cast at a spot `at` (m, in front of it and to its right, as it faces). */
+ *  shows off as the camera comes to it, cast at a spot `at` (m, in front of it and to its right, as it faces); a
+ *  channel held for `hold` s. */
 export interface HallDef {
   role: string;
   traits: { label: string; value: number }[];
-  showcase: { skill: string; at: [ahead: number, right: number] };
+  showcase: { skill: string; at: [ahead: number, right: number]; hold?: number };
   /** the velvet of his banner behind him in the hall (0-255 a channel: `bannerCloth`) */
   banner: [number, number, number];
 }

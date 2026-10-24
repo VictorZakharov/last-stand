@@ -53,8 +53,9 @@ export interface HallHero {
   shown: number;
   /** the way he turns to face (the camera, or his showcase's spot) */
   facing: number;
-  /** a showcase under way: the skill's spot and when it fires (game time), and when he faces the camera again */
-  cast: { target: THREE.Vector3; fireAt: number; doneAt: number; drawn: boolean } | null;
+  /** a showcase under way: the skill's spot and when it fires (game time), and when he faces the camera again; a
+   *  channel's, when it's let go */
+  cast: { target: THREE.Vector3; fireAt: number; doneAt: number; drawn: boolean; endAt?: number } | null;
 }
 
 let heroes: HallHero[] = [];
@@ -243,13 +244,19 @@ export function updateHall(dt: number): void {
 function showOff(h: HallHero, t: number): void {
   h.due = Infinity;
   h.shown = t;
-  const { skill, at } = CLASSES[h.id].hall.showcase;
+  const { skill, at, hold = 0 } = CLASSES[h.id].hall.showcase;
   const known = h.player.known.get(skill);
   if (!known) return;
   const def = known.def, from = spot(heroes.indexOf(h));
   const f = ROW.facing, right = f - Math.PI / 2;
   const target = new THREE.Vector3(from.x + Math.sin(f) * at[0] + Math.sin(right) * at[1], 0, from.z + Math.cos(f) * at[0] + Math.cos(right) * at[1]);
   h.facing = Math.atan2(target.x - from.x, target.z - from.z);
+  // (a channel opened as his game reports it, aimed the way he turns: his copy's aim follows his facing)
+  if (def.channel) {
+    h.player.replay({ t: 'chs', s: skill, k: def.key });
+    h.cast = { target, fireAt: 0, doneAt: t + hold + 0.9, drawn: false, endAt: t + hold };
+    return;
+  }
   const drawn = def.draw !== undefined;
   // (a bow's arrows taken from the quiver first, as the hero's own cast reports it: without, he drew an empty string)
   const nockT = h.player.nockTime(known), n = nockT ? { n: nockT } : {};
@@ -269,6 +276,10 @@ function stepCast(h: HallHero, t: number): void {
     const skill = CLASSES[h.id].hall.showcase.skill;
     p.replay({ t: 'fire', s: skill, x: c.target.x, z: c.target.z, px: p.pos.x, pz: p.pos.z, f: h.facing, ...(c.drawn ? { k: 1 } : {}) });
     c.fireAt = 0;
+  }
+  if (c.endAt !== undefined && t >= c.endAt) {
+    h.player.replay({ t: 'che' });
+    c.endAt = undefined;
   }
   if (t >= c.doneAt) {
     h.cast = null;
