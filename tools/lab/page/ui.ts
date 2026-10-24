@@ -944,8 +944,8 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
   }
   if (state === 'heroes' && document.getElementById('btn-hero')) {
     const caught = heroesCanaryCaught(found.problems);
-    const planted = 'Back over the heroes\' names, a card\'s traits moved, the choice off the hero and a glow by the '
-      + 'hidden hero\'s hand';
+    const planted = 'Back over the heroes\' names, a card\'s traits moved, the choice off the hero, a glow by the '
+      + 'hidden hero\'s hand and an item of his draggable';
     lines.push(`  canary: ${planted} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${planted}: not all seen`);
   }
