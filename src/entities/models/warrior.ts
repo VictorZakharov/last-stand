@@ -77,6 +77,13 @@ const RUN_TWO_POLE = new THREE.Vector3(-1, -1, -0.2);
  *  it off at once, the move's own fade bringing it down */
 const SHOULDER_AT = new THREE.Vector3(-0.22, 0.14, 0.3), SHOULDER_DIR = new THREE.Vector3(0.06, 0.62, -0.78).normalize();
 const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHOULDER_RATE = 6;
+/** a two-hander at the ready in a fight, standing and walking, in the chest's own frame (rig units): held at port, as a
+ *  person holds a greataxe ready, the right fist before the right of the chest, the weapon up past the right shoulder
+ *  and its haft down across the belly to the left hand by the left hip, the right elbow down and out. (Posed by the
+ *  joints, it stood upright before the chest, the right forearm straight across at it, the elbow flared, the left
+ *  hand clamped on from outside: "the whole guard" looked wrong) */
+const PORT_AT = new THREE.Vector3(-0.12, 0.05, 0.3), PORT_DIR = new THREE.Vector3(-0.75, 1, -0.05).normalize();
+const PORT_POLE = new THREE.Vector3(-1, -1, -0.2);
 /** Through the eyes (tuned live in a dev build, `--tune warriorEyes.shoulder=...`): the right arm's shoulder in the
  *  view (camera space, m: x right, y up, -z ahead; the left's mirrors it), low beside the camera, as a game's
  *  first-person arms come up from the screen's bottom corners; where a two-hander's right elbow points (`pole`, the
@@ -347,7 +354,6 @@ const SW_TILT: Keys = [[0, 0.08], [0.45, 0.12], [0.7, -0.02], [1, -0.1]];
 // as the weapon goes up, the body rising and arching back over the rear foot while the charge gathers (the
 // knees loading), then everything thrown down onto the front foot, the trunk crunching over the blow
 const PS_PITCH: Keys = [[0, -1.3], [0.25, -2.95], [0.86, -3.05], [0.9, -2.75], [0.95, -1.3], [0.975, -1.08], [1, -1.12]];
-const PS_WRIST: Keys = [[0, 1], [0.92, 1], [0.975, 0.15], [1, 0.1]];
 const PS_ELBOW: Keys = [[0, -0.35], [0.25, -0.55], [0.86, -0.7], [0.93, -0.15], [1, -0.12]];
 const PS_BEND: Keys = [[0, 0], [0.25, -0.18], [0.86, -0.26], [0.9, -0.2], [0.95, 0.42], [0.975, 0.52], [1, 0.48]];
 const PS_FWD: Keys = [[0, 0], [0.25, -0.05], [0.86, -0.08], [0.95, 0.13], [1, 0.14]];
@@ -1677,8 +1683,10 @@ export function buildWarrior(): Model {
         const pitch = curve(PS_PITCH, k) + shake, bend = curve(two ? [[0, -0.55], [1, -0.55]] : PS_ELBOW, k);
         R.x = lerp(R.x, pitch, w); R.z = lerp(R.z, 0, w); R.y = (two ? 0.7 : 0.25) * w;
         j.elbowR.rotation.x = lerp(j.elbowR.rotation.x, bend, w);
-        // (the wrists cock back as the blow lands, so a one-hander finishes pointing ahead, not into the ground)
-        const wr = ALONG_ARM * (two ? 1 : curve(PS_WRIST, k)) * w;
+        // (the blade kept along the arm, so it's driven down into the ground before him, where the skill strikes:
+        // with the wrists cocked back as it landed, a one-hander finished pointing ahead at the hips, its tip 1.2 m
+        // over the floor, "warrior should hit the ground right?")
+        const wr = ALONG_ARM * w;
         j.handR.rotation.x += wr;
         if (offHeld) {
           const L = j.shoulderL.rotation;
@@ -1871,6 +1879,9 @@ export function buildWarrior(): Model {
     // (out of a fight on the shoulder, at a run too; in one, at high port)
     const onShoulder = shouldered;
     if (!fp && two && !a && runK > 0 && st.dead < 0) holdInChest(ARM_R, RUN_TWO_AT, RUN_TWO_DIR, RUN_TWO_POLE, runK * (1 - onShoulder));
+    // (and standing or walking in a fight, at port)
+    const port = (1 - runK) * (1 - onShoulder);
+    if (!fp && two && !a && port > 0 && st.dead < 0) holdInChest(ARM_R, PORT_AT, PORT_DIR, PORT_POLE, port);
     if (!fp && two && onShoulder > 0 && st.dead < 0) holdInChest(ARM_R, SHOULDER_AT, SHOULDER_DIR, SHOULDER_POLE, onShoulder, SHOULDER_FLAT);
     // (a two-handed move placed by the weapon)
     if (!fp && two && twoHold.k > 0 && st.dead < 0) holdInChest(ARM_R, twoHold.at, twoHold.dir, twoHold.pole, twoHold.k, twoHold.flat, twoHold.flatK);

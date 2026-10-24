@@ -49,7 +49,8 @@ export interface MenuHooks {
   resume(): void;
   abandon(): void;
   profileChanged(): void;
-  switchClass(id: string): void;
+  /** the hero selection screen opened from the lobby (ui/heroSelect.ts) */
+  changeHero(): void;
   /** the summary's button: back to the lobby, or to watching the rest of a co-op run */
   summaryDone(): void;
   /** the battleground or starting wave changed (a co-op host shows its guests) */
@@ -154,11 +155,9 @@ function mouseDiagram(id: string): string {
   </div>`;
 }
 
-/** A class or a battleground picked in the lobby: picked before the heroes' or the fight's programs are warm, done once
- *  they are, the bar saying which hero or battleground it readies. */
-const pickClass = whenWarm(['heroes'], (id: string) => {
-  hooks.switchClass(id); renderMenu(); hooks.lobbyChanged();
-}, READYING.hero);
+/** The hero selection screen or a battleground picked in the lobby: picked before the heroes' or the fight's programs
+ *  are warm, done once they are, the bar saying what it readies (the screen shows every hero). */
+const changeHero = whenWarm(['heroes'], () => hooks.changeHero(), READYING.heroes);
 const pickBiome = whenWarm(['fight'], (setting: BiomeSetting) => {
   setBiomeSetting(setting); renderBiomeOptions(); renderWaveOptions(); hooks.lobbyChanged();
 }, READYING.biome);
@@ -184,17 +183,12 @@ export function initMenus(h: MenuHooks): void {
   $<HTMLInputElement>('#opt-hdr-peak').oninput = (e) => { setHdrSettings({ peak: Number((e.target as HTMLInputElement).value) }); renderHdrOptions(); };
   // (it starts, stops or fails on its own: a window moved to another monitor, the WebGPU device lost)
   onHdrChange(renderHdrOptions);
-  const classes = $('#opt-class');
-  classes.innerHTML = CLASS_IDS.map((id) => `<button data-c="${id}">${CLASSES[id].name}</button>`).join('');
+  $('#btn-hero').onclick = () => { sfx.click(); changeHero(); };
   // every class's name and tagline laid over the others, the one shown picked: the card is as wide and as tall as the
-  // largest, so it never moves as the class changes (the warrior's name pushed the buttons onto a line of their own,
-  // and the ranger's tagline took two lines)
+  // largest, so it never moves as the class changes (the warrior's name pushed the class buttons, as they were then,
+  // onto a line of their own, and the ranger's tagline took two lines)
   $('.cc-name').innerHTML = CLASS_IDS.map((id) => `<span data-c="${id}">${CLASSES[id].name}</span>`).join('');
   $('.cc-tag').innerHTML = CLASS_IDS.map((id) => `<span data-c="${id}">${CLASSES[id].tagline}</span>`).join('');
-  classes.querySelectorAll<HTMLElement>('button').forEach((b) => {
-    // the class's records set the starting wave: a co-op host shows its guests
-    b.onclick = () => { sfx.click(); pickClass(b.dataset.c!); };
-  });
   const biomes = $('#opt-biome');
   biomes.insertAdjacentHTML('afterbegin', BIOME_IDS.map((id) => `<button data-b="${id}">${BIOMES[id].label}</button>`).join(''));
   biomes.querySelectorAll<HTMLElement>('button').forEach((b) => {
@@ -462,7 +456,6 @@ export function renderMenu(): void {
   renderBiomeOptions();
   renderWaveOptions();
   const cls = CLASSES[p.classId];
-  document.querySelectorAll<HTMLElement>('#opt-class button').forEach((b) => b.classList.toggle('active', b.dataset.c === cls.id));
   $('.class-card').style.setProperty('--cc', cls.accent);
   $('.lo-title').textContent = cls.book;
   document.querySelectorAll<HTMLElement>('#equip .doll').forEach((d) => d.classList.toggle('hidden', d.dataset.class !== cls.id));
@@ -604,13 +597,13 @@ function openItemSheet(it: Item, compare: boolean, label: string, act: (() => vo
 const GLOW = '<span class="slot-glow"><span class="glow-steady"></span><span class="glow-bright"></span>'
   + '<span class="glow-arc"><span></span></span><span class="glow-sheen"><span></span></span></span>';
 /** a padlock over the off-hand while a two-handed weapon takes both hands */
-const LOCK = '<svg class="slot-lock" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5" '
+export const LOCK = '<svg class="slot-lock" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5" '
   + 'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'
   + '<rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor"/>'
   + '<circle cx="12" cy="15.2" r="1.6" fill="#141214"/><rect x="11.2" y="15.5" width="1.6" height="3" fill="#141214"/></svg>';
 
 /** The off-hand's tooltip while the two-handed `weapon` takes both hands (`swaps`: the class has off-hands to equip). */
-function lockedTooltip(weapon: Item, swaps: boolean): { html: string; color: string; foot?: string } {
+export function lockedTooltip(weapon: Item, swaps: boolean): { html: string; color: string; foot?: string } {
   const html = '<div class="tt-card empty"><div class="tt-name">Off-hand</div><div class="tt-type">Locked</div>'
     + `<div class="tt-desc">Both hands are on the two-handed ${weapon.name}.</div></div>`;
   return { html, color: '#666', foot: swaps ? 'Equipping an off-hand puts the two-hander back in the stash' : undefined };

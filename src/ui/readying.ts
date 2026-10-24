@@ -3,15 +3,14 @@
 // far along their warm-up is, in the middle of the dimmed lobby, and goes ahead once it's done (game/warm.ts). It says
 // what it readies, the latest press's: the fight, the hero picked, the save slot, the battleground, co-op.
 import { isReadying, onReadying, readyingLabel, readyingShare } from '../game/warm';
-import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { BIOMES, BIOME_IDS, type BiomeSetting } from '../data/biomes';
 import { SAVE_SLOTS } from '../loot/saveSlots';
 
-/** What each press readies, as the bar says it (each `whenWarm`'s label): Start the fight (a guest's start too), a
- *  class pick its hero, a battleground pick its battleground, a save slot pick its slot, a co-op room co-op. */
+/** What each press readies, as the bar says it (each `whenWarm`'s label): Start the fight (a guest's start too), the
+ *  hero selection screen the heroes, a battleground pick its battleground, a save slot pick its slot, a co-op room co-op. */
 export const READYING = {
   fight: 'Readying the fight',
-  hero: (id: string): string => `Readying the ${CLASSES[id].name}`,
+  heroes: 'Readying the heroes',
   biome: (setting: BiomeSetting): string => {
     return setting === 'random' ? 'Readying the battlegrounds' : `Readying ${BIOMES[setting].title}`;
   },
@@ -19,10 +18,10 @@ export const READYING = {
   coop: 'Readying co-op',
 };
 
-/** Every label the bar can show (tools/lab `ui --states readyingClass` lays each out on its screen). */
+/** Every label the bar can show (tools/lab `ui --states readyingHeroes` lays each out on its screen). */
 export const readyingLabels = (): string[] => [
   READYING.fight,
-  ...CLASS_IDS.map(READYING.hero),
+  READYING.heroes,
   ...(['random', ...BIOME_IDS] as BiomeSetting[]).map(READYING.biome),
   ...SAVE_SLOTS.map(READYING.slot),
   READYING.coop,

@@ -43,10 +43,11 @@ export interface FlashOpts {
 }
 
 let counter = 0;
-/** Flash a light; steals the oldest light if all are busy. */
+/** Flash a light; steals the oldest light if all are busy, never one held for good (`hold: Infinity`, the hall of
+ *  heroes' key and rim: released by whoever took it). */
 export function flash({ color = 0xffffff, intensity = 20, distance = 10, life = 0.3, hold = 0, pos = null, follow = null, y = 1 }: FlashOpts): LightSlot {
   let slot = lights.find((l) => l.life <= 0);
-  if (!slot) slot = lights.reduce((a, b) => (a.born < b.born ? a : b));
+  if (!slot) slot = lights.filter((l) => l.hold !== Infinity).reduce((a, b) => (a.born < b.born ? a : b));
   slot.light.color.set(color);
   slot.light.distance = distance;
   slot.peak = intensity;

@@ -7,7 +7,7 @@ import { noCapture } from '../lab/node/browser.mjs';
 import { analyzeBoot } from './analyze.mjs';
 import { slowCpu } from './chrome.mjs';
 import { BLINK_FRAMES, filmFrames, filmOf, logoBox, startFilm } from './film.mjs';
-import { bootRecording, fightWarm, loaded, startIfCold, stopBootRecording } from './page.mjs';
+import { bootRecording, chooseIfAsked, fightWarm, loaded, startIfCold, stopBootRecording } from './page.mjs';
 import { startTrace } from './trace.mjs';
 import { partsOf, VARIANTS } from './variants.mjs';
 import { resizeTrips, windFitRead, windFitRecording } from './windFit.mjs';
@@ -80,6 +80,8 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   await page.waitForTimeout(options.seconds * 1000);
   const windFit = options.resize ? await page.evaluate(windFitRead) : null;
   const logo = options.filmLogo ? await page.evaluate(logoBox) : null;
+  // (a first visit opens on the hero selection screen: the hero in focus chosen, as a player chooses one)
+  await page.evaluate(chooseIfAsked);
   let left = null;
   if (leftCold(visit, options)) left = (await page.evaluate(fightWarm)) ? 'warm' : 'cold';
   else {

@@ -687,6 +687,47 @@ export function settleCamera(focus: THREE.Vector3): void {
   shift.x = shift.tx; shift.y = shift.ty;
 }
 
+/** A staged shot (the hero selection screen, game/hall.ts): where the camera stands and what it looks at, and how
+ *  fast it glides there (`damp`'s rate: `STAGE_GLIDE` if left out; a drag's, faster, to keep up with the finger). */
+export interface Shot { pos: THREE.Vector3; look: THREE.Vector3; fov: number; glide?: number }
+/** the shot asked for (null: the views have the camera), and the camera's glide to it */
+const stage = { shot: null as Shot | null, pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: CAMERA.fov };
+/** how fast the camera glides to a new shot (`damp`'s rate: most of the way in about a second) */
+const STAGE_GLIDE = 2.6;
+
+/**
+ * The camera on a staged shot, gliding to it from where it is (`cut`: there at once), or given back to the views
+ * (null), which glide in from it as a view switch does.
+ */
+export function stageCamera(shot: Shot | null, cut = false): void {
+  const cam = G.camera;
+  if (shot && (!stage.shot || cut)) {
+    stage.pos.copy(cut ? shot.pos : cam.position);
+    stage.look.copy(cut ? shot.look : _look.set(0, 0, -1).applyQuaternion(cam.quaternion).multiplyScalar(6).add(cam.position));
+    stage.fov = cut ? shot.fov : cam.fov;
+  }
+  if (!shot && stage.shot) {
+    rig.fromPos.copy(cam.position); rig.fromQuat.copy(cam.quaternion); rig.fromFov = cam.fov;
+    rig.blend = 0;
+    rig.fromView = rig.view;
+  }
+  stage.shot = shot;
+}
+
+/** The camera on its staged shot, gliding there. */
+function onStage(cam: THREE.PerspectiveCamera, shot: Shot, dt: number): void {
+  const k = 1 - Math.exp(-(shot.glide ?? STAGE_GLIDE) * dt);
+  stage.pos.lerp(shot.pos, k);
+  stage.look.lerp(shot.look, k);
+  stage.fov += (shot.fov - stage.fov) * k;
+  cam.position.copy(stage.pos);
+  cam.lookAt(stage.look);
+  if (cam.fov !== stage.fov || cam.near !== 0.3) { cam.fov = stage.fov; cam.near = 0.3; cam.updateProjectionMatrix(); }
+  // (nothing between the camera and the heroes to see through)
+  updateSeeThrough(stage.look.x, stage.look.y, stage.look.z, 0, 0);
+  cam.updateMatrixWorld();
+}
+
 /** `height`: the character's, for the close views' shoulder and eye level. */
 export function updateCamera(dt: number, focus: THREE.Vector3, height: number): void {
   const cam = G.camera;
@@ -696,6 +737,7 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
     const w = fitted.w, h = fitted.h;
     cam.setViewOffset(w, h, -shift.x, -shift.y, w, h);
   } else if (cam.view) cam.clearViewOffset();
+  if (stage.shot) { onStage(cam, stage.shot, dt); return; }
   rig.zoom = damp(rig.zoom, rig.targetZoom, 8, dt);
   rig.focus.x = damp(rig.focus.x, focus.x, CAMERA.follow, dt);
   rig.focus.z = damp(rig.focus.z, focus.z, CAMERA.follow, dt);

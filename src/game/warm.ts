@@ -30,7 +30,7 @@ function needState(): NeedState {
 const needs: Record<Need, NeedState> = { fight: needState(), heroes: needState() };
 const listeners: (() => void)[] = [];
 
-/** What a press waiting for its needs readies, as the fight's loading bar says it (`Readying the Mage`, ui/readying.ts
+/** What a press waiting for its needs readies, as the fight's loading bar says it (`Readying the heroes`, ui/readying.ts
  *  `READYING`): a text, or one made from what was pressed. */
 export type ReadyingLabel<A extends unknown[]> = string | ((...args: A) => string);
 /** the presses waiting, each its label, the latest asked last */
@@ -41,6 +41,8 @@ const changed = (): void => { for (const fn of listeners) fn(); };
 export const warmed = (need: Need): Promise<void> => needs[need].warmed;
 /** resolved once something waits for `need` (`whenWarm`), or `hurry` is called: compiled at once then */
 export const wanted = (need: Need): Promise<void> => needs[need].wanted;
+/** Whether `need` is warm already (a first visit's heroes, warmed with the lobby). */
+export const isWarm = (need: Need): boolean => needs[need].warm;
 export const isAllWarm = (): boolean => NEEDS.every((need) => needs[need].warm);
 /** whether something pressed is waiting (the lobby shows the fight's loading bar) */
 export const isReadying = (): boolean => NEEDS.some((need) => needs[need].waiting > 0);
@@ -62,6 +64,8 @@ export function warmingRuns(on: boolean): void { running += on ? 1 : -1; }
 
 /** Every need wanted now (the lab's boot, which then waits for them). */
 export function hurry(): void { for (const need of NEEDS) needs[need].resolveWanted(); }
+/** `need` wanted now, nothing waiting on it (a first visit's hero selection, warmed under the loading screen). */
+export function want(need: Need): void { needs[need].resolveWanted(); }
 
 /** `need`'s warm-up has got `share` of the way. */
 export function warming(need: Need, share: number): void {
@@ -74,7 +78,7 @@ export function markWarm(need: Need): void {
   needs[need].resolveWarm();
 }
 
-/** The lab's: `need` cold again till `markWarm` (tools/lab `ui --states readyingClass`), so a press that needs it waits
+/** The lab's: `need` cold again till `markWarm` (tools/lab `ui --states readyingHeroes`), so a press that needs it waits
  *  under the fight's loading bar as a first visit's does (the lab's boot warms every need at once). */
 export function chill(need: Need): void { needs[need] = needState(); }
 

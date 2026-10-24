@@ -11,6 +11,23 @@ import { part, joint } from './rig';
 const STIFFNESS = 70, DAMPING = 5;
 /** the stream its straw is drawn from: every dummy alike */
 const STRAW_SEED = 4417;
+/** the straw's two geometries (spilling out of the sack and the sleeves, and out of the head), made once and shared by
+ *  every dummy (`userData.shared`): made for each, the lobby's dummies held Back out of the hero selection screen up
+ *  20 to 26 ms */
+let straws: { loose: THREE.BufferGeometry; head: THREE.BufferGeometry } | null = null;
+
+/** The straw's geometries, made the first time they're asked for. */
+function strawOnce(): { loose: THREE.BufferGeometry; head: THREE.BufferGeometry } {
+  if (straws) return straws;
+  const rng = mulberry(STRAW_SEED);
+  const loose = [strawBundle(rng, 160, 0.17, [0.08, 0.2], 0.3).rotateX(Math.PI).translate(0, 0.74, 0)];
+  for (const s of [1, -1]) {
+    loose.push(strawBundle(rng, 90, 0.04, [0.05, 0.12], 0.4).rotateZ(-s * Math.PI / 2).translate(s * 0.67, 1.22, 0));
+  }
+  straws = { loose: mergeGeometries(loose), head: strawBundle(rng, 50, 0.035, [0.04, 0.1], 0.5) };
+  straws.loose.userData.shared = straws.head.userData.shared = true;
+  return straws;
+}
 
 /**
  * A bundle of `count` straws standing up from a disc `radius` wide at the origin, each `length[0]` to `length[1]` long,
@@ -63,8 +80,7 @@ export function buildDummy(): Model {
   part(new THREE.LatheGeometry(profile, 20), sack, sway, 0, 0.7, 0);
   for (const y of [0.76, 1.3]) part(new THREE.TorusGeometry(y < 1 ? 0.23 : 0.21, 0.018, 6, 20).rotateX(Math.PI / 2), rope, sway, 0, y, 0);
   // straw spilling out below the sack, and out of the sleeves' tied ends
-  const rng = mulberry(STRAW_SEED);
-  const loose = [strawBundle(rng, 160, 0.17, [0.08, 0.2], 0.3).rotateX(Math.PI).translate(0, 0.74, 0)];
+  const spilt = strawOnce();
 
   // arms: a crossbar through two sleeves, each gathered and tied at its end with the straw bursting out
   part(new THREE.CylinderGeometry(0.04, 0.04, 1.3, 8).rotateZ(Math.PI / 2), woodMat, sway, 0, 1.22, 0);
@@ -74,9 +90,8 @@ export function buildDummy(): Model {
     part(new THREE.LatheGeometry(sleeve, 12).rotateZ(-s * Math.PI / 2), sack, sway, s * 0.42, 1.22, 0);
     part(new THREE.TorusGeometry(0.072, 0.012, 5, 12).rotateY(Math.PI / 2), rope, sway, s * 0.45, 1.22, 0);
     part(new THREE.TorusGeometry(0.05, 0.012, 5, 12).rotateY(Math.PI / 2), rope, sway, s * 0.68, 1.22, 0);
-    loose.push(strawBundle(rng, 90, 0.04, [0.05, 0.12], 0.4).rotateZ(-s * Math.PI / 2).translate(s * 0.67, 1.22, 0));
   }
-  part(mergeGeometries(loose), straw, sway).castShadow = false;
+  part(spilt.loose, straw, sway).castShadow = false;
 
   // head: a tied sack with painted eyes
   const head = joint(sway, 0, 1.66, 0);
@@ -89,7 +104,7 @@ export function buildDummy(): Model {
       bar.castShadow = false;
     }
   }
-  part(strawBundle(rng, 50, 0.035, [0.04, 0.1], 0.5), straw, head, 0, 0.19, 0).castShadow = false;
+  part(spilt.head, straw, head, 0, 0.19, 0).castShadow = false;
 
   // target rune on the chest
   const target = joint(sway, 0, 1.03, 0.3);
