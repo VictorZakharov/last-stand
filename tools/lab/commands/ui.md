@@ -33,7 +33,11 @@ the screen and the hall up, the hero in focus the lobby's own, his card alone sh
 leaves (his middle clear of the panel, the arrows and the heroes' names, head to feet within the window, 40% of its
 height at the least), the screen's parts within the window and none over another, the choice within reach and its
 words within its padding (on a phone the buttons' own 24 px ran past it), the hero beside him clicked and in focus,
-Esc back to the lobby with its hero; `--canary` lays Back over the heroes' names, which must be found), the fight's
+each hero's name clicked in turn with the card's parts and the choice kept in their places in the panel (the
+ranger's tagline on two lines put his traits 30 px lower), a finger dragged across the scene 1.6 heroes' spacing
+(short of the room) with the camera following it and the hero it carried the row to in focus as it lifts, Esc back
+to the lobby with its hero; `--canary` lays Back over the heroes' names and pushes a card's traits down, which must
+both be found), the fight's
 loading bar over the lobby as a press waiting for the fight's programs
 shows it (`ui/readying.ts`, 40% along: within the window, its label on one line, its fill as far as painted;
 `--canary` gives the label a letter's width, whose wrap must be found), Change hero clicked with the mouse while
