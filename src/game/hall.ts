@@ -25,9 +25,10 @@ import type { Profile } from '../types';
 /** the way the heroes face (to the camera) */
 const ROW = { facing: 0 };
 /** The shot on the hero in focus: the camera `back` m in front of him at `high`, looking at him at `at` m up (over
- *  where he stands), both `upright` m higher on an upright screen (`frameHall`); the
- *  field of view, and how far it drifts round him (rad, with reduced motion none) over `driftS` s */
-const SHOT = { back: 6.4, high: 2.3, at: 0.8, fov: 30, drift: 0.07, driftS: 14, upright: 0.3 };
+ *  where he stands: his chest, "center on chest, not groin area"), on an upright screen at `middle` m, both `upright`
+ *  m higher there (`frameHall`: at his chest, he stood behind the heroes' names and the panel); the field of view,
+ *  and how far it drifts round him (rad, with reduced motion none) over `driftS` s */
+const SHOT = { back: 6.4, high: 2.3, at: 1.35, middle: 0.8, fov: 30, drift: 0.07, driftS: 14, upright: 0.3 };
 /** The key light (warm, ahead of him and up to one side) and the rim light (cold, behind him), from the pool */
 const KEY = { color: 0xffd2a0, intensity: 12, distance: 3.4, ahead: 1.4, side: 0.3, up: 2.1 };
 /** the most light a highlight on a hero reflects (`Player.shine`): near, the key's glint on steel bloomed */
@@ -200,7 +201,8 @@ function shotAlong(along: number, t: number, glide?: number): Shot {
   const back = SHOT.back * further;
   const lift = upright ? SHOT.upright : 0;
   const pos = new THREE.Vector3(at.x + Math.sin(yaw) * back, at.y + SHOT.high + lift, at.z + Math.cos(yaw) * back);
-  return { pos, look: new THREE.Vector3(at.x, at.y + SHOT.at + lift, at.z), fov: SHOT.fov, glide };
+  const aim = (upright ? SHOT.middle : SHOT.at) + lift;
+  return { pos, look: new THREE.Vector3(at.x, at.y + aim, at.z), fov: SHOT.fov, glide };
 }
 
 /** The camera `k` times as far back as the shot's own (1 or more): an upright screen leaves the hero a share of its
