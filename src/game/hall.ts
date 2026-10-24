@@ -7,7 +7,8 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { Player } from '../entities/player';
-import { loadProfile } from '../loot/profile';
+import { loadProfile, peekProfile } from '../loot/profile';
+import { saveSlot } from '../loot/saveSlots';
 import { clearEnemies } from '../entities/enemy';
 import { clearProjectiles } from '../combat/projectiles';
 import { clearEffects } from '../fx/effects';
@@ -17,6 +18,8 @@ import { stageCamera, type Shot } from '../core/renderer';
 import { angleDamp } from '../util';
 import { groundHeight } from '../world/ground';
 import { hallSpot } from '../world/heroHall';
+import { heroDetail } from '../entities/models/armor';
+import { applyShadowDetail, qualityLevel } from '../core/quality';
 import type { Profile } from '../types';
 
 /** the way the heroes face (to the camera) */
@@ -54,6 +57,10 @@ export interface HallHero {
 }
 
 let heroes: HallHero[] = [];
+/** each class's hero as the hall last built him, kept out of the scene while it's down, and the gear he wears: built
+ *  afresh at every opening, the three held the click that opened it up 190 to 236 ms, and disposed held Back up 30
+ *  (`npm run stalls -- --scenario heroes`) */
+const kept = new Map<string, { player: Player; gear: string; profile: Profile; slot: number; level: string }>();
 let focus = 0;
 let lights: LightSlot[] = [];
 /** the co-op partners' heroes the lobby showed, hidden while the hall is up (they'd stand in its room) */
@@ -94,8 +101,8 @@ export function openHall(focusId: string, cut = false): void {
   for (const p of partners) p.show(false);
   G.arena.showHall(true);
   heroes = CLASS_IDS.map((id, i) => {
-    const profile = id === G.profile.classId ? G.profile : loadProfile(id);
-    const player = new Player(id, profile.equipped, false);
+    const profile = profileOf(id);
+    const player = heroIn(id, profile);
     const at = spot(i);
     player.spawn.copy(at);
     player.reset();
@@ -108,10 +115,39 @@ export function openHall(focusId: string, cut = false): void {
   focusHall(Math.max(0, CLASS_IDS.indexOf(focusId)), cut);
 }
 
-/** The hall taken down, the lobby's hero shown again. */
+/** The profile class `id`'s hero wears in the hall: the lobby's own, else his in the save slot in play; one never
+ *  played there is his starter gear, rolled afresh at every load, so the one the hall last showed is kept (and played
+ *  if he's chosen): rolled at each opening, he was built again every time and wore other gear. */
+function profileOf(id: string): Profile {
+  if (id === G.profile.classId) return G.profile;
+  const hero = kept.get(id);
+  const unplayed = hero && hero.slot === saveSlot() && !hero.profile.saved && !peekProfile(id, saveSlot());
+  return unplayed ? hero.profile : loadProfile(id);
+}
+
+/** Class `id`'s hero in the gear `profile` wears, in the scene: the one kept from the hall's last opening if he wore
+ *  the same at the same detail (a save slot switched, gear changed or the quality's detail since builds him again),
+ *  his shadows as the quality has them now. */
+function heroIn(id: string, profile: Profile): Player {
+  const gear = `${heroDetail()} ${JSON.stringify(profile.equipped)}`;
+  let hero = kept.get(id);
+  if (hero?.gear !== gear) {
+    hero?.player.dispose();
+    hero = { player: new Player(id, profile.equipped, false), gear, profile, slot: saveSlot(), level: qualityLevel() };
+    kept.set(id, hero);
+  } else {
+    G.scene.add(hero.player.obj);
+    // (a walk of every mesh: 7 ms of the opening's frame, needed only where the quality changed meanwhile)
+    if (hero.level !== qualityLevel()) applyShadowDetail(hero.player.obj);
+    Object.assign(hero, { profile, slot: saveSlot(), level: qualityLevel() });
+  }
+  return hero.player;
+}
+
+/** The hall taken down, the lobby's hero shown again; its heroes kept out of the scene for its next opening. */
 export function closeHall(): void {
   if (!hallOpen()) return;
-  for (const h of heroes) h.player.dispose();
+  for (const h of heroes) G.scene.remove(h.player.obj);
   heroes = [];
   dragged = null;
   for (const l of lights) release(l);
