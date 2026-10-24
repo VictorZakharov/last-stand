@@ -1,6 +1,7 @@
 // The hero selection screen (#heroes): the hall of heroes behind it (game/hall.ts), the hero in focus's name, role,
-// how he plays, his skills and his records in this save slot in a panel beside him, and a choice that leads into the
-// lobby. A first visit opens on it (no hero chosen yet, nothing to go back to); the lobby's "Change hero" opens it again.
+// how he plays, his skills and his records in this save slot in a panel beside him (its other tabs his gear, to look
+// at, and his attributes: the tab last chosen kept), and a choice that leads into the lobby. The save slot under the
+// title opens the save slots, and a slot switched there opens the hall again on its heroes. A first visit opens on it (no hero chosen yet, nothing to go back to); the lobby's "Change hero" opens it again.
 // Picked by the arrows, the tabs, a click or tap on a hero, the scene dragged along the row, or the keys (left and right, A and D; Enter or
 // Space chooses, Esc goes back). The choice stands on the hero in focus, shown as the mouse comes over him (on touch,
 // always). Every class's card is laid over the others in one cell, the one in focus shown, so
@@ -13,6 +14,9 @@ import { sfx } from '../core/audio';
 import { openHall, closeHall, dragHall, dropHall, focusHall, frameHall, hallAlong, hallFocus, hallHeroes, hallOpen, hallShot } from '../game/hall';
 import { makeSkillSlot } from './hud';
 import { hideTooltip } from './tooltip';
+import { renderAttributes } from './attributes';
+import { renderHeroGear } from './heroGear';
+import { openSaves } from './saves';
 import type { ClassDef, Profile } from '../types';
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -54,6 +58,10 @@ const TAP_REACH = 0.12;
  *  the most of the room above an upright screen's panel he may take */
 const HERO_SHARE = 0.585;
 const ROOM_FILL = 0.8;
+/** the panel's pages, and where the one last chosen is kept (a player who keeps to the gear finds it there again) */
+const PAGES = ['hero', 'gear', 'attrs'] as const;
+type Page = (typeof PAGES)[number];
+const PAGE_KEY = 'last-stand.hero-page';
 
 export const heroSelectOpen = (): boolean => !$('#heroes').classList.contains('hidden');
 
@@ -68,6 +76,10 @@ export function initHeroSelect(h: HeroSelectHooks): void {
   $('.hs-next').onclick = () => { sfx.click(); step(1); };
   $('.hs-choose').onclick = () => { if (dragged) return; sfx.click(); choose(); };
   $('.hs-back').onclick = () => { sfx.click(); if (!first) closeHeroSelect(); };
+  $('.hs-slot').onclick = () => { sfx.click(); openSaves(true); };
+  document.querySelectorAll<HTMLElement>('.hs-pagetabs .tab').forEach((b) => {
+    b.onclick = () => { sfx.click(); showPage(b.dataset.page as Page, true); };
+  });
   // (the scene is dragged from the backdrop or from the choice on the hero: a swipe across him starts on it)
   for (const el of [$('.hs-shade'), $('.hs-choose')]) {
     el.addEventListener('pointerdown', (e) => {
@@ -133,10 +145,43 @@ export function openHeroSelect(focusId: string, firstVisit = false): void {
   box.classList.toggle('first', first);
   $('.hs-slot').textContent = `Save slot ${saveSlot()}`;
   for (const h of hallHeroes()) $(`.hs-card[data-c="${h.id}"] .hs-records`).innerHTML = records(h.profile);
+  showPage(keptPage());
   box.classList.remove('hidden');
   document.body.classList.add('in-hall');
   shown();
   layOut();
+}
+
+/** The save slot in play switched under the screen (its save slots opened from it): the hall built again at once on
+ *  its heroes, the hero of `focusId` in focus. */
+export function heroSelectSlotSwitched(focusId: string): void {
+  if (!heroSelectOpen()) return;
+  hideTooltip();
+  closeHall();
+  openHall(focusId, true);
+  $('.hs-slot').textContent = `Save slot ${saveSlot()}`;
+  for (const h of hallHeroes()) $(`.hs-card[data-c="${h.id}"] .hs-records`).innerHTML = records(h.profile);
+  shown();
+  layOut();
+}
+
+/** The page last chosen (the hero's card if none was, or storage is out of reach). */
+function keptPage(): Page {
+  let page: string | null = null;
+  try { page = localStorage.getItem(PAGE_KEY); } catch { /* storage blocked: the card */ }
+  return PAGES.find((p) => p === page) ?? 'hero';
+}
+
+/** The panel's page `page` shown, its tab lit; `keep`: chosen by the player, so kept for the screen's next opening. */
+function showPage(page: Page, keep = false): void {
+  hideTooltip();
+  document.querySelectorAll<HTMLElement>('.hs-pagetabs .tab').forEach((b) => {
+    b.classList.toggle('active', b.dataset.page === page);
+    b.setAttribute('aria-selected', String(b.dataset.page === page));
+  });
+  document.querySelectorAll<HTMLElement>('.hs-page').forEach((p) => p.classList.toggle('off', p.dataset.page !== page));
+  if (!keep) return;
+  try { localStorage.setItem(PAGE_KEY, page); } catch { /* storage blocked: kept for this opening alone */ }
 }
 
 /** Close the screen and take the hall down (the lobby's hero shown again), the hero of `chosen` chosen (none: Back). */
@@ -227,12 +272,14 @@ function focusOn(i: number): void {
   shown();
 }
 
-/** The card, tab and choice of the hero in focus shown. */
+/** The card, tab, gear, attributes and choice of the hero in focus shown. */
 function shown(): void {
-  const id = hallHeroes()[hallFocus()].id, cls = CLASSES[id];
+  const hero = hallHeroes()[hallFocus()], id = hero.id, cls = CLASSES[id];
   document.querySelectorAll<HTMLElement>('.hs-card').forEach((c) => c.classList.toggle('active', c.dataset.c === id));
   document.querySelectorAll<HTMLElement>('.hs-tabs button').forEach((b) => b.classList.toggle('active', b.dataset.c === id));
   $('#heroes').style.setProperty('--cc', cls.accent);
+  renderHeroGear(hero.profile, $('.hs-equip'), $('.hs-stash'), $('.hs-stash-count'));
+  renderAttributes($('.hs-stats'), hero.player, hero.profile);
   $('.hs-choose').textContent = !first && id === G.profile.classId ? `Stay the ${cls.name}` : `Play the ${cls.name}`;
   hover(false);
   placeChoice();

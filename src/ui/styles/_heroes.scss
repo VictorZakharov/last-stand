@@ -28,7 +28,11 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
 .hs-heading { display: flex; flex-direction: column; gap: ui(3px); padding-left: ui(18px); border-left: 1px solid rgba($frame, .45); }
 .hs-title { font: 700 ui(26px) var(--font-display); letter-spacing: ui(5px); text-transform: uppercase; color: var(--accent);
   text-shadow: 0 0 ui(14px) rgba($accent-glow, .35), $outline; }
-.hs-slot { font-size: ui(15px); letter-spacing: ui(1px); color: var(--ink-dim); text-shadow: $outline; }
+/* the save slot in play, which opens the save slots */
+.hs-slot { align-self: flex-start; pointer-events: auto; cursor: $cursor-hand; padding: 0; background: none; border: 0;
+  font-family: var(--font-body); font-size: ui(15px); letter-spacing: ui(1px); color: var(--ink-dim); text-shadow: $outline;
+  text-decoration: underline dotted rgba($frame, .7); text-underline-offset: ui(4px); }
+.hs-slot:hover { color: var(--accent); text-decoration-color: currentColor; }
 
 /* ---------- the arrows either side of the hero, and the heroes' names under him ---------- */
 .hs-arrow { position: absolute; top: 50%; translate: 0 -50%; width: ui(54px); height: ui(96px); padding: ui(18px) ui(14px); pointer-events: auto;
@@ -57,6 +61,24 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
   display: flex; flex-direction: column; gap: ui(14px); padding: ui(22px) ui(24px) ui(22px); pointer-events: auto;
   background: linear-gradient(rgba(8,7,9,.82), rgba(8,7,9,.94)); }
 .hs-panel::before { content: ''; position: absolute; inset: ui(5px); pointer-events: none; @include corner-brackets(ui(22px), 2px, var(--cc)); }
+/* the panel's tabs, as the lobby's (its hero's card, his gear and his attributes), and their pages in one cell, the
+   one chosen shown (the panel is held to the screen's height: no page sizes it) */
+.hs-pagetabs { flex: none; margin-bottom: 0; gap: ui(4px); }
+.hs-pagetabs .tab { font-size: ui(14px); letter-spacing: ui(1px); padding: ui(8px) ui(6px); }
+.hs-pagetabs .tab.active { color: var(--cc); box-shadow: inset 0 2px 0 var(--cc); }
+.hs-pages { flex: 1; min-height: 0; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
+.hs-page { grid-area: 1 / 1; min-height: 0; }
+// (an id's weight: the attributes' shared rule shows them with an id's)
+#heroes .hs-page.off { display: none; }
+// (the lobby's gear and attributes, in its px and zoomed as its panels are)
+.hs-gear, .hs-stats { zoom: var(--ui, 1); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  scrollbar-color: rgba($frame, .5) transparent; }
+.hs-gear { padding-top: 14px; }
+.hs-equip .eslot { cursor: $cursor; }
+.hs-stash { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.hs-stash .sitem { cursor: $cursor; }
+.hs-stats { padding-top: 10px; }
+
 /* every class's card in one cell, the one in focus shown: the panel never changes size. Their parts on rows the
    cards share (a subgrid), each as tall as the tallest card's: in a column of their own, the ranger's tagline on two
    lines put his traits and skills 30 px lower than the others' as the hero changed */

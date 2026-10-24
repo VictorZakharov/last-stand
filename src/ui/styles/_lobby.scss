@@ -118,21 +118,21 @@
   background: var(--highlight); box-shadow: 0 0 6px var(--highlight); }
 
 /* paper doll: square slots arranged around a character silhouette (an item's name is in its tooltip) */
-#equip { position: relative; display: grid; gap: 8px 14px; justify-content: center;
+:is(#equip, .hs-equip) { position: relative; display: grid; gap: 8px 14px; justify-content: center;
   grid-template-columns: repeat(3, 64px); grid-template-rows: repeat(3, 64px);
   grid-template-areas: "amulet head ring" "weapon chest offhand" ". hands ."; }
-#equip .doll { position: absolute; left: 50%; top: -8px; height: calc(100% + 16px); transform: translateX(-50%); opacity: .6; pointer-events: none; }
+:is(#equip, .hs-equip) .doll { position: absolute; left: 50%; top: -8px; height: calc(100% + 16px); transform: translateX(-50%); opacity: .6; pointer-events: none; }
 .eslot[data-slot="head"] { grid-area: head; } .eslot[data-slot="amulet"] { grid-area: amulet; } .eslot[data-slot="ring"] { grid-area: ring; }
 .eslot[data-slot="weapon"] { grid-area: weapon; } .eslot[data-slot="chest"] { grid-area: chest; } .eslot[data-slot="offhand"] { grid-area: offhand; }
 .eslot[data-slot="hands"] { grid-area: hands; }
 .eslot { z-index: 1; border: 1px solid #000; box-shadow: inset 0 0 0 1px rgba($frame, .5); background: radial-gradient(circle, #1c1a1c, #0a090a);
   display: flex; align-items: center; justify-content: center; cursor: $cursor-hand; position: relative; }
-#stats { display: flex; flex-direction: column; gap: 2px; font-size: 15px; }
-#stats .grp { font-family: var(--font-display); color: var(--accent); font-size: 14px; margin: 12px 0 4px; border-bottom: 1px solid rgba($frame, .3); padding-bottom: 3px; }
-#stats .grp:first-child { margin-top: 0; }
-#stats div.row { display: flex; justify-content: space-between; color: var(--ink-dim); padding: 3px 4px; }
-#stats div.row:nth-child(odd) { background: rgba(255,255,255,.025); }
-#stats b { color: var(--ink); font-weight: 500; }
+:is(#stats, .hs-stats) { display: flex; flex-direction: column; gap: 2px; font-size: 15px; }
+:is(#stats, .hs-stats) .grp { font-family: var(--font-display); color: var(--accent); font-size: 14px; margin: 12px 0 4px; border-bottom: 1px solid rgba($frame, .3); padding-bottom: 3px; }
+:is(#stats, .hs-stats) .grp:first-child { margin-top: 0; }
+:is(#stats, .hs-stats) div.row { display: flex; justify-content: space-between; color: var(--ink-dim); padding: 3px 4px; }
+:is(#stats, .hs-stats) div.row:nth-child(odd) { background: rgba(255,255,255,.025); }
+:is(#stats, .hs-stats) b { color: var(--ink); font-weight: 500; }
 /* five to a row, scrolling only when they don't all fit: padded so the edge items' glow (even its
    hidden, enlarged state) stays inside, which neither clips it nor makes it count as overflow */
 #stash { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-content: start;
@@ -162,7 +162,7 @@
 /* a stash item brightened by its icon (a filter on the item is a pass of the compositor's own,
    redrawn every frame its glow's loops run: _items.scss) */
 .sitem:hover > .item-icon, .eslot:hover { filter: brightness(1.5); }
-#equip .eslot { background: radial-gradient(circle, rgba(28,26,28,.6), rgba(10,9,10,.5)); }
+:is(#equip, .hs-equip) .eslot { background: radial-gradient(circle, rgba(28,26,28,.6), rgba(10,9,10,.5)); }
 .sitem.new::after { content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--highlight); box-shadow: 0 0 6px var(--highlight); }
 .sitem.up::before { content: '▲'; position: absolute; left: 2px; bottom: 0; font-size: 9px; color: #4cff6a; }
 .eslot.droppable { box-shadow: inset 0 0 0 2px var(--highlight), 0 0 14px rgba($highlight, .5) !important; animation: lowpulse .5s infinite alternate; }
