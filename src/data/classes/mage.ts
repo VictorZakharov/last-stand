@@ -14,7 +14,9 @@ const mage: ClassDef = {
   hall: {
     role: 'Arcanist · Ranged spells',
     traits: [{ label: 'Toughness', value: 1 }, { label: 'Damage', value: 5 }, { label: 'Range', value: 4 }, { label: 'Ease', value: 3 }],
-    showcase: { skill: 'starfall', at: [2.2, 1.1] },
+    // (a beam across the frame: Starfall's crystals fell from above the hall's camera, unseen; "can he do a void
+    // lance attack instead")
+    showcase: { skill: 'voidLance', at: [2, 4], hold: 2.2 },
     banner: [16, 62, 92],
   },
   // (the staff's light in its crystal's colour, the bolts')
