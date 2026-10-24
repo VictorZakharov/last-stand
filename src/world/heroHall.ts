@@ -35,8 +35,9 @@ const COLUMNS = { x: 6.3, z: [-3.9, 1.2, 6.3], radius: 0.4, high: 6.6 };
 /** each banner: its top's height, how far off the wall it hangs, and its scale (`bannerGeo`'s 0.9 m across) */
 const BANNER = { top: 4.9, off: 0.28, scale: 1.3 };
 /** the braziers on the stage either side of the row (x, z), and their light (the crypt's 15 lit every hero from
- *  behind, off the key light's spot too, and lit their steel's edges white) */
-const BRAZIERS = { x: 3.4, z: -2.4, glow: 7 };
+ *  behind, off the key light's spot too, and lit their steel's edges white; at 7 their flames swelled too bright at
+ *  times, "fire glows too bright") */
+const BRAZIERS = { x: 3.4, z: -2.4, glow: 5 };
 /** the torches on the columns: their bed's height, how far in from the column's middle, their fire and light */
 const TORCH = { up: 3.0, in: 0.55, radius: 0.12, height: 0.5, color: 0xff8a3c, intensity: 2.5, distance: 9 };
 /** the light on each banner, warm, from in front of it */
@@ -158,7 +159,9 @@ export function buildHeroHall(group: THREE.Group): HeroHall {
   const graniteMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(granite(7), 2, 0.8), color: 0xd0d0d8 });
   const wallMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(ashlar(21, 6, 3), 1, 1.2), color: 0x9a9eac });
   const carved = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.6), color: 0x8a8c92 });
-  const iron = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.45 });
+  // (rougher than the crypt's: polished, the braziers' bowls took their own light as a white spot over the flames'
+  // foot, "reflections are glaring")
+  const iron = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.75 });
   for (const m of [wallMat, carved, iron]) seeThrough(m, 'prop');
 
   // --- The floor, the stage (the dais's square and its step) and the plinths ---
