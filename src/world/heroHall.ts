@@ -34,14 +34,15 @@ const WALL = { z: -4.6, high: 10, half: 10, side: 10 };
 const COLUMNS = { x: 6.3, z: [-3.9, 1.2, 6.3], radius: 0.4, high: 6.6 };
 /** each banner: its top's height, how far off the wall it hangs, and its scale (`bannerGeo`'s 0.9 m across) */
 const BANNER = { top: 4.9, off: 0.28, scale: 1.3 };
-/** the braziers on the stage either side of the row (x, z) */
-const BRAZIERS = { x: 3.4, z: -2.4 };
+/** the braziers on the stage either side of the row (x, z), and their light (the crypt's 15 lit every hero from
+ *  behind, off the key light's spot too, and lit their steel's edges white) */
+const BRAZIERS = { x: 3.4, z: -2.4, glow: 7 };
 /** the torches on the columns: their bed's height, how far in from the column's middle, their fire and light */
-const TORCH = { up: 3.0, in: 0.55, radius: 0.12, height: 0.5, color: 0xff8a3c, intensity: 6, distance: 9 };
+const TORCH = { up: 3.0, in: 0.55, radius: 0.12, height: 0.5, color: 0xff8a3c, intensity: 2.5, distance: 9 };
 /** the light on each banner, warm, from in front of it */
-const BANNER_LIGHT = { color: 0xffc890, intensity: 2.5, distance: 4.5, up: 3.2, out: 1.3 };
+const BANNER_LIGHT = { color: 0xffc890, intensity: 1.6, distance: 4.5, up: 3.2, out: 1.3 };
 /** a cold light from high up, as a window's: the heroes' tops and the stone's edges */
-const HIGH_LIGHT = { color: 0x7f9cff, intensity: 5, distance: 16, at: [0, 8.5, -1.5] as const };
+const HIGH_LIGHT = { color: 0x7f9cff, intensity: 2, distance: 16, at: [0, 8.5, -1.5] as const };
 /** the dust drifting in the firelight: how many motes a second, and the box they're born in round the row */
 const DUST = { rate: 7, half: [3.6, 1.6, 2.2] as const, middle: [0, 2.0, 0.2] as const };
 
@@ -49,10 +50,10 @@ const DUST = { rate: 7, half: [3.6, 1.6, 2.2] as const, middle: [0, 2.0, 0.2] as
 const HALL_LOOK: BiomeLook = {
   background: 0x040306,
   fog: { color: 0x060508, near: 12, far: 34 },
-  hemi: { sky: 0x3a3448, ground: 0x140c08, intensity: 0.45 },
-  moon: { color: 0xa8b8ff, intensity: 0.6, pos: [-8, 30, 16] },
+  hemi: { sky: 0x3a3448, ground: 0x140c08, intensity: 0.25 },
+  moon: { color: 0xa8b8ff, intensity: 0.35, pos: [-8, 30, 16] },
   env: CRYPT_ENV,
-  envIntensity: 0.3,
+  envIntensity: 0.18,
 };
 
 /** The room as built: its look, its relief (the plinths) and its frame's step. */
@@ -189,7 +190,7 @@ export function buildHeroHall(group: THREE.Group): HeroHall {
 
   // --- The fires: two braziers (the still shadows' lights), four torches; the banners' lights; one from high up ---
   for (const side of [-1, 1]) {
-    buildBrazier(group, side * BRAZIERS.x, BRAZIERS.z, Math.PI / 2, iron, graniteMat, updaters, top);
+    buildBrazier(group, side * BRAZIERS.x, BRAZIERS.z, Math.PI / 2, iron, graniteMat, updaters, top, BRAZIERS.glow);
     for (const z of COLUMNS.z.slice(0, 2)) torch(group, side * COLUMNS.x, z, iron, updaters);
   }
   for (let i = 0; i < CLASS_IDS.length; i++) banner(group, i, iron, rng);

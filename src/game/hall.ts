@@ -26,8 +26,10 @@ const ROW = { facing: 0 };
  *  field of view, and how far it drifts round him (rad, with reduced motion none) over `driftS` s */
 const SHOT = { back: 6.4, high: 1.15, at: 0.65, fov: 30, drift: 0.07, driftS: 14, upright: 0.3 };
 /** The key light (warm, ahead of him and up to one side) and the rim light (cold, behind him), from the pool */
-const KEY = { color: 0xffd2a0, intensity: 9, distance: 9, ahead: 2.2, side: 1.4, up: 2.25 };
-const RIM = { color: 0x8fb4ff, intensity: 14, distance: 6, behind: 1.3, side: -0.8, up: 1.95 };
+const KEY = { color: 0xffd2a0, intensity: 12, distance: 3.4, ahead: 1.4, side: 0.3, up: 2.1 };
+/** the most light a highlight on a hero reflects (`Player.shine`): near, the key's glint on steel bloomed */
+const SHINE = 0.55;
+const RIM = { color: 0x8fb4ff, intensity: 5, distance: 6, behind: 1.3, side: -0.8, up: 1.95 };
 /** how fast a hero turns to his showcase's spot and back (`angleDamp`'s rate) */
 const TURN = 9;
 /** a drag along the row (ui/heroSelect.ts): how far past either end it may pull the camera (heroes), and how fast the
@@ -97,6 +99,7 @@ export function openHall(focusId: string, cut = false): void {
     const at = spot(i);
     player.spawn.copy(at);
     player.reset();
+    player.shine = SHINE;
     place(player, at, ROW.facing);
     return { id, profile, player, due: Infinity, shown: -Infinity, facing: ROW.facing, cast: null };
   });
@@ -129,6 +132,9 @@ export function focusHall(i: number, cut = false): void {
   for (const [j, h] of heroes.entries()) h.due = j === focus && G.time - h.shown > SHOWCASE.again ? G.time + SHOWCASE.after : Infinity;
   stageCamera(shotAlong(focus, G.time), cut || reduced());
 }
+
+/** The shot the camera comes to rest on, on the hero in focus (its drift at its middle). */
+export const hallShot = (): Shot => shotAlong(focus, opened);
 
 /** The camera's place along the row: where a drag holds it, or on the hero in focus. */
 export const hallAlong = (): number => dragged ?? focus;

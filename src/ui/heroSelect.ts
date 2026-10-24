@@ -2,14 +2,15 @@
 // how he plays, his skills and his records in this save slot in a panel beside him, and a choice that leads into the
 // lobby. A first visit opens on it (no hero chosen yet, nothing to go back to); the lobby's "Change hero" opens it again.
 // Picked by the arrows, the tabs, a click or tap on a hero, the scene dragged along the row, or the keys (left and right, A and D; Enter or
-// Space chooses, Esc goes back). Every class's card is laid over the others in one cell, the one in focus shown, so
+// Space chooses, Esc goes back). The choice stands on the hero in focus, shown as the mouse comes over him (on touch,
+// always). Every class's card is laid over the others in one cell, the one in focus shown, so
 // the panel is the largest's size and nothing moves as the focus does.
 import { G } from '../state';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { saveSlot } from '../loot/saveSlots';
 import { wasPressed } from '../core/input';
 import { sfx } from '../core/audio';
-import { openHall, closeHall, dragHall, dropHall, focusHall, frameHall, hallAlong, hallFocus, hallHeroes, hallOpen } from '../game/hall';
+import { openHall, closeHall, dragHall, dropHall, focusHall, frameHall, hallAlong, hallFocus, hallHeroes, hallOpen, hallShot } from '../game/hall';
 import { makeSkillSlot } from './hud';
 import { hideTooltip } from './tooltip';
 import type { ClassDef, Profile } from '../types';
@@ -32,6 +33,15 @@ let shift = { x: 0, y: 0 };
  *  dragging the scene, and how fast it last moved (css px a ms, eased) and when */
 interface Press { x: number; y: number; along: number; dragging: boolean; v: number; lastX: number; lastT: number }
 let press: Press | null = null;
+/** whether the last press dragged the scene (a drag begun on the choice lets go there, and isn't a click on it) */
+let dragged = false;
+/** where the hero in focus stands on the screen once the camera has come to him (css px: his middle across, his head
+ *  and feet), as last laid out */
+let standing = { x: 0, top: 0, bottom: 0 };
+/** where the choice stands on him, a share of his height from his feet (his thighs: his face and his skill clear) */
+const CHOICE_UP = 0.3;
+/** how far beside his middle the mouse is over him, a share of his height */
+const HOVER_SIDE = 0.22;
 /** how far a press moves sideways to drag the scene (css px: short of it, a tap on a hero) */
 const DRAG_START = 8;
 /** how far a drag let go carries on, as the time its speed goes on for (ms): a flick lands a hero further; and how
@@ -56,27 +66,34 @@ export function initHeroSelect(h: HeroSelectHooks): void {
   });
   $('.hs-prev').onclick = () => { sfx.click(); step(-1); };
   $('.hs-next').onclick = () => { sfx.click(); step(1); };
-  $('.hs-choose').onclick = () => { sfx.click(); choose(); };
+  $('.hs-choose').onclick = () => { if (dragged) return; sfx.click(); choose(); };
   $('.hs-back').onclick = () => { sfx.click(); if (!first) closeHeroSelect(); };
-  const shade = $('.hs-shade');
-  shade.addEventListener('pointerdown', (e) => {
-    if (!hallOpen() || press) return;
-    shade.setPointerCapture(e.pointerId);
-    const now = performance.now();
-    press = { x: e.clientX, y: e.clientY, along: hallAlong(), dragging: false, v: 0, lastX: e.clientX, lastT: now };
-  });
-  shade.addEventListener('pointermove', (e) => { if (press) dragTo(press, e.clientX); });
-  shade.addEventListener('pointerup', (e) => {
-    if (!press) return;
-    const p = press;
-    press = null;
-    if (p.dragging) letGo(p, e.clientX);
-    else tapAt(e.clientX, e.clientY);
-  });
-  shade.addEventListener('pointercancel', (e) => {
-    if (press?.dragging) letGo({ ...press, v: 0 }, e.clientX);
-    press = null;
-  });
+  // (the scene is dragged from the backdrop or from the choice on the hero: a swipe across him starts on it)
+  for (const el of [$('.hs-shade'), $('.hs-choose')]) {
+    el.addEventListener('pointerdown', (e) => {
+      if (!hallOpen() || press) return;
+      el.setPointerCapture(e.pointerId);
+      const now = performance.now();
+      dragged = false;
+      press = { x: e.clientX, y: e.clientY, along: hallAlong(), dragging: false, v: 0, lastX: e.clientX, lastT: now };
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (press) dragTo(press, e.clientX);
+      hover(!press && e.pointerType === 'mouse' && overHero(e.clientX, e.clientY));
+    });
+    el.addEventListener('pointerup', (e) => {
+      if (!press) return;
+      const p = press;
+      press = null;
+      dragged = p.dragging;
+      if (p.dragging) letGo(p, e.clientX);
+      else if (el.classList.contains('hs-shade')) tapAt(e.clientX, e.clientY);
+    });
+    el.addEventListener('pointercancel', (e) => {
+      if (press?.dragging) letGo({ ...press, v: 0 }, e.clientX);
+      press = null;
+    });
+  }
   new ResizeObserver(layOut).observe($('.hs-panel'));
   window.addEventListener('resize', layOut);
 }
@@ -174,6 +191,35 @@ function letGo(p: Press, x: number): void {
   shown();
 }
 
+/** The hero in focus where the camera comes to rest on him (`standing`), and the choice placed on him: placed as
+ *  the focus or the layout changes, never every frame (the camera's drift round him moves him a few px). */
+function placeChoice(): void {
+  const hero = hallHeroes()[hallFocus()].player;
+  const cam = G.camera.clone();
+  const shot = hallShot();
+  cam.position.copy(shot.pos);
+  cam.lookAt(shot.look);
+  cam.fov = shot.fov;
+  cam.aspect = innerWidth / innerHeight;
+  cam.setViewOffset(innerWidth, innerHeight, -shift.x, -shift.y, innerWidth, innerHeight);
+  cam.updateMatrixWorld();
+  const at = (up: number) => hero.obj.position.clone().setY(hero.obj.position.y + up).project(cam);
+  const feet = at(0), head = at(hero.model.height);
+  standing = { x: (feet.x + 1) / 2 * innerWidth, top: (1 - head.y) / 2 * innerHeight, bottom: (1 - feet.y) / 2 * innerHeight };
+  const box = $('#heroes');
+  box.style.setProperty('--hs-cx', `${standing.x}px`);
+  box.style.setProperty('--hs-cy', `${standing.bottom - (standing.bottom - standing.top) * CHOICE_UP}px`);
+}
+
+/** Whether the pointer at (`x`, `y`) is over the hero in focus. */
+function overHero(x: number, y: number): boolean {
+  const tall = standing.bottom - standing.top;
+  return Math.abs(x - standing.x) < tall * HOVER_SIDE && y > standing.top && y < standing.bottom;
+}
+
+/** The choice shown on the hero, as the mouse comes over him, or hidden as it leaves. */
+function hover(on: boolean): void { $('#heroes').classList.toggle('over-hero', on); }
+
 function focusOn(i: number): void {
   if (!hallOpen()) return;
   hideTooltip();
@@ -188,6 +234,8 @@ function shown(): void {
   document.querySelectorAll<HTMLElement>('.hs-tabs button').forEach((b) => b.classList.toggle('active', b.dataset.c === id));
   $('#heroes').style.setProperty('--cc', cls.accent);
   $('.hs-choose').textContent = !first && id === G.profile.classId ? `Stay the ${cls.name}` : `Play the ${cls.name}`;
+  hover(false);
+  placeChoice();
 }
 
 function choose(): void {
@@ -229,4 +277,5 @@ function layOut(): void {
   // (above an upright screen's panel he'd stand taller than the room: the camera further back)
   const room = beside ? 1 : r.top / innerHeight;
   frameHall(Math.max(1, HERO_SHARE / (room * ROOM_FILL)), !beside);
+  placeChoice();
 }
