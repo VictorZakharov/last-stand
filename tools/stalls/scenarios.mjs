@@ -125,6 +125,9 @@ async function scoresNote(page) {
 /** how long the hero selection screen is given to open and to close (ms) */
 const HEROES_MS = 10_000;
 
+/** Whether the hero selection screen has gone. (Run in the page.) */
+const heroesGone = () => !document.getElementById('heroes').checkVisibility();
+
 /** `hero` picked in the lobby as a player picks him: on the hero selection screen its Change hero opens (his name
  *  clicked, then the choice), or by the lobby's class buttons in a tree from before it. */
 export async function pickHero(page, hero) {
@@ -136,7 +139,7 @@ export async function pickHero(page, hero) {
   await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
   await page.click(`#heroes .hs-tabs [data-c="${hero}"]`);
   await page.click('#heroes .hs-choose');
-  await page.waitForFunction(() => !document.getElementById('heroes').checkVisibility(), null, { timeout: HEROES_MS });
+  await page.waitForFunction(heroesGone, null, { timeout: HEROES_MS });
 }
 
 /** Starts a run as `hero` from the lobby; returns once it has begun. */
@@ -311,6 +314,36 @@ async function stow(page, ms, { pressMs }) {
     + `stowed or shown again ${followed} times of ${presses + 1}`];
 }
 
+/** how many times `heroes` opens the hero selection screen and goes back */
+const HERO_TRIPS = 3;
+
+/**
+ * The hero selection screen opened from the lobby by its Change hero and left by Back, `HERO_TRIPS` times (from play:
+ * "brief lag when reentering hero selection room"): a fifth of `ms` in the lobby first (the frames to beat), then
+ * each trip's way in (the click, the hall built, the camera's flight) and way out a phase of its own, so the first
+ * opening (its heroes perhaps warmed for it) is read apart from the ones after.
+ */
+async function heroes(page, ms) {
+  if (!(await page.$('#btn-hero'))) return ['no hero selection screen in this tree: opened nothing'];
+  const world = await worldBox(page);
+  await page.mouse.move(world.x + world.width / 2, world.y + world.height / 2);
+  await page.evaluate(markPhase, 'away');
+  await page.waitForTimeout(ms / 5);
+  const half = (ms * 4) / 5 / HERO_TRIPS / 2;
+  for (let trip = 1; trip <= HERO_TRIPS; trip++) {
+    await page.evaluate(markPhase, `opening ${trip}`);
+    await page.click('#btn-hero');
+    await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
+    await page.waitForTimeout(half);
+    await page.evaluate(markPhase, `closing ${trip}`);
+    await page.click('#heroes .hs-back');
+    await page.waitForFunction(heroesGone, null, { timeout: HEROES_MS });
+    await page.waitForTimeout(half);
+  }
+  return [`the lobby, then the hero selection screen opened by Change hero and left by Back ${HERO_TRIPS} times, `
+    + `${(half / 1000).toFixed(1)} s each way`];
+}
+
 /** Stands in the lobby, then walks round it, for `ms` in all. */
 async function lobby(page, ms) {
   await page.waitForTimeout(ms / 4);
@@ -320,4 +353,4 @@ async function lobby(page, ms) {
 
 /** The scenarios by name: each plays the page for `ms` (as `options` say, those it reads) and returns notes of what
  *  happened. */
-export const SCENARIOS = { fight, lobby, storm, hover, sweep, stow };
+export const SCENARIOS = { fight, lobby, storm, hover, sweep, stow, heroes };

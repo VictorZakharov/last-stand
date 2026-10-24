@@ -2,7 +2,7 @@
 // browser traced, for the stalls the lab's Chromium never shows (Chrome on Windows holding up its GPU process, and
 // the game's canvas with it, for seconds while Skia builds a program). See tools/stalls/README.md.
 //
-// npm run stalls -- [--url a,b] [--scenario fight|lobby|storm|hover|sweep|stow] [--seconds 45]
+// npm run stalls -- [--url a,b] [--scenario fight|lobby|storm|hover|sweep|stow|heroes] [--seconds 45]
 //   [--listed 300] [--variants base,cpuCanvas] [--rounds 3] [--view top] [--biome forest] [--hero warrior]
 //   [--stash 40] [--item-ms 100] [--press-ms 200] [--scale 1.25] [--window 1536x695] [--perf] [--js] [--headed]
 //   [--links] [--passes] [--paints] (--help: what each does)
