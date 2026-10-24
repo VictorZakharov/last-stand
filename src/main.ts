@@ -27,7 +27,7 @@ import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
 import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays } from './ui/menus';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
-import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift } from './ui/heroSelect';
+import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched } from './ui/heroSelect';
 import { updateHall } from './game/hall';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
@@ -349,6 +349,7 @@ function switchSaveSlot(n: number) {
   const id = savedClass(G.player.cls.id);
   saveClass(id);
   swapHero(id);
+  heroSelectSlotSwitched(id);   // switched from over the hero selection screen: its hall on the slot's heroes
   renderMenu();
   sendLobbyChoice();   // its records set the starting wave
 }
@@ -408,10 +409,11 @@ function syncView(): void {
 
 // --- loop ---------------------------------------------------------------------------
 function handleGlobalKeys() {
+  // the save slots screen takes the keys: Esc goes back (out of its delete popup first); over the hero selection
+  // screen too, which opens it
+  if (savesOpen()) { if (wasPressed('escape')) savesBack(); return; }
   // the hero selection screen takes the keys (ui/heroSelect.ts)
   if (heroSelectOpen()) { heroSelectKeys(); return; }
-  // the save slots screen takes the keys: Esc goes back (out of its delete popup first)
-  if (savesOpen()) { if (wasPressed('escape')) savesBack(); return; }
   if (G.mode === 'menu' && !G.menuOpen && wasPressed('space')) toggleMenuStowed();
   // the Esc that released the mouse-look pointer already paused the game
   if (wasPressed('escape') && performance.now() - lockLostAt < 300) return;

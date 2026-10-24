@@ -5,7 +5,8 @@ import { SLOTS, STATS } from '../data/items';
 import { rarityOf } from '../loot/items';
 import { itemIconSVG } from './itemIcons';
 import { bindTooltip, type TooltipContent } from './tooltip';
-import type { BaseStats, DerivedStats, StatKey } from '../types';
+import type { Player } from '../entities/player';
+import type { BaseStats, DerivedStats, Profile, StatKey } from '../types';
 
 interface AttributeDef {
   label: string;
@@ -54,8 +55,7 @@ export const ATTRIBUTE_GROUPS: [string, AttributeDef[]][] = [
   ]],
 ];
 
-function breakdown(def: AttributeDef): TooltipContent {
-  const p = G.player;
+function breakdown(def: AttributeDef, p: Player, profile: Profile): TooltipContent {
   const derived = p.stats[def.value];
   let html = `<div class="tt-card attr-card"><div class="tt-name">${def.label}</div>`;
   html += `<div class="attr-total">${def.fmt(derived)}</div>`;
@@ -66,7 +66,7 @@ function breakdown(def: AttributeDef): TooltipContent {
   let itemTotal = 0;
   if (def.stat) {
     for (const slot of SLOTS) {
-      const it = G.profile.equipped[slot];
+      const it = profile.equipped[slot];
       const v = it?.stats[def.stat!];
       if (!it || !v) continue;
       itemTotal += v;
@@ -90,15 +90,16 @@ function formatBase(def: AttributeDef, v: number): string {
   return def.percentOfBase ? v.toFixed(1) : def.fmt(v);
 }
 
-/** Render the attributes list into `el` and bind the breakdown tooltips. */
-export function renderAttributes(el: HTMLElement): void {
-  const s = G.player.stats, unused = G.player.cls.excludeStats ?? [];
+/** Render the attributes list into `el` and bind the breakdown tooltips: the lobby's hero's, or `player`'s in the gear
+ *  `profile` wears (the hall of heroes'). */
+export function renderAttributes(el: HTMLElement, player = G.player, profile = G.profile): void {
+  const s = player.stats, unused = player.cls.excludeStats ?? [];
   // stats the class can never roll are left out
   el.innerHTML = ATTRIBUTE_GROUPS.map(([title, defs], gi) =>
     `<div class="grp">${title}</div>` + defs.map((d, di) => (d.stat && unused.includes(d.stat) ? '' :
       `<div class="row" data-attr="${gi}:${di}"><span>${d.label}</span><b>${d.fmt(s[d.value])}</b></div>`)).join('')).join('');
   el.querySelectorAll<HTMLElement>('[data-attr]').forEach((row) => {
     const [gi, di] = row.dataset.attr!.split(':').map(Number);
-    bindTooltip(row, () => breakdown(ATTRIBUTE_GROUPS[gi][1][di]));
+    bindTooltip(row, () => breakdown(ATTRIBUTE_GROUPS[gi][1][di], player, profile));
   });
 }

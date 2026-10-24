@@ -597,13 +597,13 @@ function openItemSheet(it: Item, compare: boolean, label: string, act: (() => vo
 const GLOW = '<span class="slot-glow"><span class="glow-steady"></span><span class="glow-bright"></span>'
   + '<span class="glow-arc"><span></span></span><span class="glow-sheen"><span></span></span></span>';
 /** a padlock over the off-hand while a two-handed weapon takes both hands */
-const LOCK = '<svg class="slot-lock" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5" '
+export const LOCK = '<svg class="slot-lock" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5" '
   + 'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'
   + '<rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor"/>'
   + '<circle cx="12" cy="15.2" r="1.6" fill="#141214"/><rect x="11.2" y="15.5" width="1.6" height="3" fill="#141214"/></svg>';
 
 /** The off-hand's tooltip while the two-handed `weapon` takes both hands (`swaps`: the class has off-hands to equip). */
-function lockedTooltip(weapon: Item, swaps: boolean): { html: string; color: string; foot?: string } {
+export function lockedTooltip(weapon: Item, swaps: boolean): { html: string; color: string; foot?: string } {
   const html = '<div class="tt-card empty"><div class="tt-name">Off-hand</div><div class="tt-type">Locked</div>'
     + `<div class="tt-desc">Both hands are on the two-handed ${weapon.name}.</div></div>`;
   return { html, color: '#666', foot: swaps ? 'Equipping an off-hand puts the two-hander back in the stash' : undefined };
