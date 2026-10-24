@@ -2,13 +2,15 @@
 // opened as a player opens it, by the lobby's Change hero clicked with the mouse, and pictured once the camera has
 // come to the hero and his showcase is over. Checked: the screen and the hall up, the hero in focus the lobby's own,
 // his card shown and every other hidden, the hero standing in the room the panel leaves (his middle on the screen,
-// clear of the panel, the arrows and the heroes' names, head to feet within the window, and tall enough to read); the
-// screen's parts within the window and none over another; the choice within reach, its words within it; the hero
+// clear of the panel, the arrows and the heroes' names, his feet clear of the panel, head to feet within the window,
+// and tall enough to read); the screen's parts within the window and none over another; the choice within reach, its
+// words within it; the save slot clicked, the save slots over the screen and Esc taking them alone away; the hero
 // beside him clicked and in focus as he would be; each hero's name clicked in turn, the card's parts and the choice
 // keeping their places in the panel (a shift as the hero changed); and the screen closed by Esc, the lobby back with
 // its hero. Read through the page and the scene alone (the heroes by their names, `hero <class>`): main's side of an
-// A/B has no such screen, and says so. Then a finger dragged across the scene: the camera following it, and the
-// hero it carried the row to in focus as it lifts. The canary lays Back over the heroes' names and pushes a card's
+// A/B has no such screen, and says so. Then the panel's pages (`uiHeroPages.ts`), a finger dragged across the scene
+// (the camera following it, and the hero it carried the row to in focus as it lifts) and save slot 2 played from the
+// screen (the screen still up on its heroes). The canary lays Back over the heroes' names and pushes a card's
 // traits down, which must be found.
 import { G } from '../../../src/state';
 import { col, particles } from '../../../src/fx/particles';
@@ -142,6 +144,9 @@ function heroPlaced(id: string, boxes: [string, DOMRect][]): Found {
     if (at.x > box.left && at.x < box.right && at.y > box.top && at.y < box.bottom) {
       problems.push(`heroes: the ${id}'s middle is under ${name}`);
     }
+    // (his feet too: aimed at his chest, an upright screen's panel stood over his legs, his middle still clear)
+    const feetUnder = at.x > box.left && at.x < box.right && at.bottom > box.top + SLACK && at.bottom < box.bottom;
+    if (name === 'the panel' && feetUnder) problems.push(`heroes: the ${id}'s feet are under the panel`);
   }
   const off = at.x < 0 || at.x > innerWidth || at.y < 0 || at.y > innerHeight;
   if (off) problems.push(`heroes: the ${id} is off the screen`);
@@ -225,6 +230,53 @@ async function choiceOnHero(lab: Lab, screen: HTMLElement, id: string, canary: b
   return { lines, problems };
 }
 
+/** The save slot under the title clicked, as a player clicks it to switch slots (`canary`: made to let the click
+ *  through first): the save slots over the screen; then Esc, the save slots gone and the screen still up. */
+async function slotOpens(lab: Lab, screen: HTMLElement, canary: boolean): Promise<Found> {
+  const slot = screen.querySelector<HTMLElement>('.hs-slot');
+  const saves = document.getElementById('saves');
+  if (!slot || !saves) return { lines: ['  no save slot to click'], problems: [] };
+  if (canary) slot.style.pointerEvents = 'none';
+  await lab.clickOn(slot);
+  await lab.step(1);
+  slot.style.pointerEvents = '';
+  const opened = shown(saves);
+  if (opened) await lab.step(1, () => ({ keys: ['escape'] }));
+  const problems: string[] = [];
+  if (!opened) problems.push('heroes: the save slot clicked, and no save slots came');
+  if (opened && shown(saves)) problems.push('heroes: Esc left the save slots up');
+  if (!shown(screen)) problems.push('heroes: Esc over the save slots closed the hero selection screen');
+  const line = `  "${slot.textContent}" clicked: the save slots ${opened ? 'came' : 'never came'}, `
+    + `Esc: ${shown(saves) ? 'still up' : 'gone'}, the screen ${shown(screen) ? 'still up' : 'closed'}`;
+  return { lines: [line], problems };
+}
+
+/** frames run after a save slot is played: the switch waits for nothing the lab's boot hasn't warmed */
+const SWITCH_FRAMES = 30;
+
+/** The save slots opened from the screen again and slot 2 played, as a player switches slots there: the screen still
+ *  up over the hall, on slot 2, its three heroes drawn and the lobby's new hero hidden. */
+async function slotSwitched(lab: Lab, screen: HTMLElement): Promise<Found> {
+  const slot = screen.querySelector<HTMLElement>('.hs-slot');
+  if (!slot) return { lines: [], problems: [] };
+  await lab.clickOn(slot);
+  await lab.step(1);
+  const play = document.querySelectorAll<HTMLElement>('#saves .sv-play')[1];
+  if (!play) return { lines: [], problems: ['heroes: no second save slot to play'] };
+  await lab.clickOn(play);
+  await lab.step(SWITCH_FRAMES);
+  const drawn = [...hallHeroes().keys()];
+  const problems: string[] = [];
+  if (!slot.textContent?.includes('2')) problems.push(`heroes: slot 2 played, the screen says "${slot.textContent}"`);
+  if (shown(document.getElementById('saves'))) problems.push('heroes: slot 2 played, and the save slots stayed up');
+  if (!shown(screen)) problems.push('heroes: slot 2 played, and the hero selection screen closed');
+  if (drawn.length !== 3) problems.push(`heroes: slot 2 played, ${drawn.length} heroes drawn in the hall`);
+  if (G.player.obj.visible) problems.push("heroes: slot 2 played, and the lobby's new hero drawn over the hall");
+  const line = `  slot 2 played from it: the screen ${shown(screen) ? 'up' : 'closed'} on "${slot.textContent}", `
+    + `${drawn.join(', ')} drawn, the lobby's hero ${G.player.obj.visible ? 'drawn' : 'hidden'}`;
+  return { lines: [line], problems };
+}
+
 /** The parts laid out (`canary`: Back laid over the heroes' names first), and those over another or past the
  *  window. */
 function partsPlaced(screen: HTMLElement, canary: boolean): { boxes: [string, DOMRect][]; problems: string[] } {
@@ -271,13 +323,15 @@ export async function heroesShown(canary: boolean, lab: Lab): Promise<Found> {
   const placed = heroPlaced(id, boxes);
   const onHim = await choiceOnHero(lab, screen, id, canary);
   const hand = hiddenHandGlows(canary);
+  const slot = await slotOpens(lab, screen, canary);
   const clicked = await clickBeside(lab, id);
   const steady = await cardsSteady(lab, screen, canary);
   // (loaded here alone: it imports the screen's modules, which main's side of an A/B hasn't got)
   const { heroPages } = await import('./uiHeroPages');
   const pages = await heroPages(lab, screen, canary);
   const swept = await dragged(lab, screen);
-  for (const found of [placed, onHim, hand, clicked, steady, pages, swept]) {
+  const switched = await slotSwitched(lab, screen);
+  for (const found of [placed, onHim, hand, slot, clicked, steady, pages, swept, switched]) {
     lines.push(...found.lines);
     problems.push(...found.problems);
   }
@@ -437,13 +491,15 @@ async function dragged(lab: Lab, screen: HTMLElement): Promise<Found> {
 }
 
 /** Whether the canaries were found among `problems`: Back over the heroes' names, the card's moved traits, the
- *  choice put off the hero, a glow by the hidden lobby hero's hand, and an item of his made draggable. */
+ *  choice put off the hero, a glow by the hidden lobby hero's hand, an item of his made draggable, and the save slot
+ *  letting a click through. */
 export const heroesCanaryCaught = (problems: string[]): boolean =>
   problems.some((problem) => problem.includes('Back lies over') || problem.includes('lies over Back'))
   && problems.some((problem) => problem.includes(' moved '))
   && problems.some((problem) => problem.includes('choice stands off'))
   && problems.some((problem) => problem.includes('glows by the hidden'))
-  && problems.some((problem) => problem.includes('can be dragged'));
+  && problems.some((problem) => problem.includes('can be dragged'))
+  && problems.some((problem) => problem.includes('no save slots came'));
 
 /** After the screen closed by Esc: the lobby back, its hero drawn. */
 export function heroesClosed(): Found {
