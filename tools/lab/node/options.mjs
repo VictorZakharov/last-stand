@@ -216,6 +216,7 @@ export const COMMANDS = {
       skill: { kind: 'text', usage: 'name', help: 'the cast scenario\'s skill: its key, its behaviour or its name' },
       gear: SETUP_OPTIONS.gear,
       weapon: SETUP_OPTIONS.weapon,
+      tune: SETUP_OPTIONS.tune,
       canary: {
         kind: 'switch',
         help: 'plant faults the measure must catch: the head turned past the neck\'s range, the fist bent on its '

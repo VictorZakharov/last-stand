@@ -424,6 +424,7 @@ export const COMMANDS = {
         skill: options.skill,
         gear: options.gear,
         weapon: options.weapon,
+        tune: fixtureFrom(options).tune,
       });
     },
     finish(results, options, session) {

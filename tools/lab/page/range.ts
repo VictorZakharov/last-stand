@@ -21,6 +21,7 @@ import { LegTrace, traceSpanOf } from './legTrace';
 import { bindKnown, holdFor, pressing, skillNamed } from './cast';
 import { TipMoves } from './tipMoves';
 import { CANARY_CAUGHT as WEAPON_CAUGHT, WeaponFloor, weaponCanary } from './weaponFloor';
+import { BODY_CANARY_CAUGHT, WeaponBody, bodyCanary } from './weaponBody';
 import { ArmsPinned, describeStrain, pinnedCanary, type ArmLimits, type Ranges } from './armStrain';
 
 /**
@@ -224,6 +225,8 @@ export interface RangeOptions {
   skill?: string;
   gear?: WeaponStyle;
   weapon?: string;
+  /** the game's tunable values set before each scenario (`--tune`) */
+  tune?: Record<string, number[]>;
 }
 
 /** where every scenario starts: open ground, facing +z */
@@ -254,7 +257,7 @@ function attackDown(leg: RangeLeg, frame: number): boolean {
 export interface RangeReport {
   lines: string[];
   moments: Pictured[];
-  canary?: { caught: boolean; measured: number; weapon: number; wrist: string[]; pinned: boolean };
+  canary?: { caught: boolean; measured: number; weapon: number; body: number; wrist: string[]; pinned: boolean };
   /** each scenario in which a two-hander was let go of by the other hand, as words */
   letGo: string[];
 }
@@ -330,6 +333,8 @@ interface ScenarioRun {
   moment: Pictured | null;
   /** the frame an arm was pinned at the most stops, pictured */
   pinnedMoment: Pictured | null;
+  /** the frame the weapon was deepest in the body, pictured */
+  bodyMoment: Pictured | null;
   /** each ankle's fastest move in a frame (m) and where */
   fastest: number;
   fastestAt: string;
@@ -341,15 +346,16 @@ async function runScenario(
   listed: string[],
 ): Promise<void> {
   const fixture = { at: START, facing: 0, nocked: Boolean(lab.player.cls.quiver), fresh: true };
-  await lab.setup({ ...fixture, gear: options.gear, weapon: options.weapon });
+  await lab.setup({ ...fixture, gear: options.gear, weapon: options.weapon, tune: options.tune });
   const run: ScenarioRun = {
     frame: 0, framesPast: 0, grip: freshLetGo(), worstHere: PICTURE_FROM, moment: null, pinnedMoment: null,
-    fastest: 0, fastestAt: '',
+    bodyMoment: null, fastest: 0, fastestAt: '',
   };
   const ankles = [lab.joints.ankleL, lab.joints.ankleR];
   const last = ankles.map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
   const tip = new TipMoves(scenario.name);
   const floor = new WeaponFloor(scenario.name);
+  const through = new WeaponBody(scenario.name);
   const pinned = new ArmsPinned(scenario.name, ARM_LIMITS);
   const tracer = traceOf(lab, options);
   const measure = () => {
@@ -358,7 +364,8 @@ async function runScenario(
       const wrist = wristCanary(lab);
       const atStops = pinnedCanary(bodyBreaches(lab.joints).angles, ARM_LIMITS);
       const caught = measured >= CANARY_CAUGHT;
-      report.canary = { caught, measured, weapon: weaponCanary(lab), wrist, pinned: atStops };
+      const body = bodyCanary(lab);
+      report.canary = { caught, measured, weapon: weaponCanary(lab), body, wrist, pinned: atStops };
     }
     const { angles, found } = bodyBreaches(lab.joints, grippingSides(lab));
     if (found.length) run.framesPast++;
@@ -371,6 +378,10 @@ async function runScenario(
     noteGrip(run.grip, lab.model.lowerGrip, `${run.frame}${momentIn(lab)}`);
     tip.observe(lab, `${run.frame}${momentIn(lab)}`);
     floor.observe(lab, `${run.frame}${momentIn(lab)}`);
+    const deeper = through.observe(lab, `${run.frame}${momentIn(lab)}`);
+    if (deeper) run.bodyMoment = lab.picture(`${scenario.what}, the weapon in the body`, ['third', 'front', 'left'], [
+      `frame ${run.frame}${momentIn(lab)}`, `the weapon ${deeper}`,
+    ]);
     const worse = pinned.observe(angles, grippingRanges(lab), `${run.frame}${momentIn(lab)}`);
     if (worse) {
       const notes = [`frame ${run.frame}${momentIn(lab)}`, describeStrain(worse)];
@@ -400,7 +411,7 @@ async function runScenario(
     const input = (f: number) => (press && f < held ? press.frame : { keys: leg.keys, m0: attackDown(leg, f) });
     await lab.step(leg.frames + Math.max(0, held - 1), input, measure);
   }
-  if (options.frames) listed.push(...tip.listed, ...floor.listed, ...pinned.listed);
+  if (options.frames) listed.push(...tip.listed, ...floor.listed, ...through.listed, ...pinned.listed);
   const tipLine = tip.describe();
   const fastest = `fastest ankle ${(run.fastest * 100).toFixed(1)} cm a frame (${run.fastestAt})`
     + (tipLine ? `; ${tipLine}` : '');
@@ -408,12 +419,15 @@ async function runScenario(
   if (run.grip.seen) report.lines.push(`  ${describeLetGo(run.grip)}`);
   const underFloor = floor.describe();
   if (underFloor) report.lines.push(`  ${underFloor}`);
+  const inBody = through.describe();
+  if (inBody) report.lines.push(`  ${inBody}`);
   const atStops = pinned.describe();
   if (atStops) report.lines.push(`  ${atStops}`, `    the stops: ${pinned.tally()}`);
   if (run.grip.frames > 0) report.letGo.push(`${scenario.what}: ${describeLetGo(run.grip)}`);
   report.lines.push(...(tracer?.frames ?? []).map((traced) => traced.line));
   if (run.moment) report.moments.push(run.moment);
   if (run.pinnedMoment) report.moments.push(run.pinnedMoment);
+  if (run.bodyMoment) report.moments.push(run.bodyMoment);
 }
 
 /** The frame that casts the skill asked for (`--skill`) ahead of the hero, as the player would on its key, with its
@@ -532,6 +546,9 @@ export async function range(lab: Lab, options: RangeOptions): Promise<RangeRepor
     const weapon = report.canary.weapon;
     const under = `${weapon >= WEAPON_CAUGHT ? 'caught' : 'MISSED'} (${(weapon * 100).toFixed(0)} cm under)`;
     report.lines.push(`canary, the hero sunk under the floor: the weapon ${under}`);
+    const body = report.canary.body;
+    const into = `${body >= BODY_CANARY_CAUGHT ? 'caught' : 'MISSED'} (${(body * 100).toFixed(0)} cm into it)`;
+    report.lines.push(`canary, the grip moved into the left thigh: the weapon ${into}`);
     report.lines.push(`canary, the right fist bent on its forearm: ${report.canary.wrist.join('; ')}`);
     report.lines.push(`canary, the right arm held at its stops: ${report.canary.pinned ? 'caught' : 'MISSED'}`);
   }
@@ -544,10 +561,12 @@ export function missedRangeCanary(report: RangeReport): string[] {
   const missed = report.canary.caught ? [] : ['range: the canary (the head turned past its range) was missed'];
   const sunk = report.canary.weapon >= WEAPON_CAUGHT;
   const weapon = sunk ? [] : ['range: the canary (the weapon under the floor) was missed'];
+  const inThigh = report.canary.body >= BODY_CANARY_CAUGHT;
+  const body = inThigh ? [] : ['range: the canary (the weapon through the thigh) was missed'];
   const bent = report.canary.wrist.some((verdict) => verdict.startsWith('missed'));
   const wrist = bent ? ['range: the canary (the fist bent on its forearm) was missed'] : [];
   const pinned = report.canary.pinned ? [] : ['range: the canary (the right arm held at its stops) was missed'];
-  return [...missed, ...weapon, ...wrist, ...pinned];
+  return [...missed, ...weapon, ...body, ...wrist, ...pinned];
 }
 
 /** Each scenario in which a two-hander was let go of, as a problem: nothing it runs flings the arms apart. */

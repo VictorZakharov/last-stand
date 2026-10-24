@@ -81,13 +81,19 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   wrist at their ends, so a pose asking more of an arm than it gives is held there, within every range; two-handed
   Power Strike's end held the forearm at 89.9° of its 90 and the wrist at 30° of its 30, and looked "broken". On how
   many frames, the first with the most stops pictured, and each stop's frames tallied: said, not failed, until every
-  hero's are fixed, #307). `--canary` turns the head past the neck's range on one frame and sinks the hero 2 m for one
-  measure (the weapon must be found under the floor), and reads an arm whose forearm and wrist are at their ends (it
-  must read pinned), `--frames` lists every frame with a joint past its range, every frame an arm was pinned, every
-  frame the weapon was under the floor and every frame between moves the tip moved 10 cm or more (with every joint that
+  hero's are fixed, #307), and the weapon through the body (`page/weaponBody.ts`: every corner of the same surface
+  against the thighs and shins, capsules round their bones at their drawn radii, and the belly and chest, the
+  anatomy's solids; on how many frames, the deepest, in which part and how far along the weapon, pictured: said, not
+  failed, as main has it too. Thunder Crescent's end and Rending Cleave put the haft's butt 10 cm into a thigh, "axe
+  shaft going through leg"). `--canary` turns the head past the neck's range on one frame and sinks the hero 2 m for
+  one measure (the weapon must be found under the floor), moves the weapon's grip to the left thigh's middle for one
+  (it must be found in it), and reads an arm whose forearm and wrist are at their ends (it must read pinned),
+  `--frames` lists every frame with a joint past its range, every frame an arm was pinned, every frame the weapon was
+  under the floor or in the body and every frame between moves the tip moved 10 cm or more (with every joint that
   turned: an elbow swung round its arm turns the shoulder alone), and `--trace` (`--span a,b` for some frames) the leg IK frame by
   frame as the gait's trace does (`page/legTrace.ts`: each foot down, in the air or in a timed step `~`, dragged `d`),
-  each frame's joints past their ranges after it.
+  each frame's joints past their ranges after it. `--tune` sets the game's tunable values first (a pose's numbers
+  compared without editing them, `--sweep` for many).
 - `eyes <skill>`: a skill cast through the eyes: in full in [`commands/eyes.md`](commands/eyes.md).
 - `swing <name>`: a swing through the eyes keyed from a pose: in full in [`commands/swing.md`](commands/swing.md).
 - `match <picture>`: the hero through the eyes matched to a reference (`node/match.mjs`; another game's, the one the
