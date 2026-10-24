@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import type { Frame, Lab, Pictured } from './lab';
 import {
-  breaches, elevationLimit, measureBody, rotationRange, type BodyAngles, type Breach,
+  breaches, elevationLimit, measureBody, rotationRange, ROM, type BodyAngles, type Breach,
 } from '../../../src/entities/models/anatomy';
 import type { Joints } from '../../../src/entities/models/rig';
 import type { LegIK } from '../../../src/entities/models/ik';
@@ -21,6 +21,7 @@ import { LegTrace, traceSpanOf } from './legTrace';
 import { bindKnown, holdFor, pressing, skillNamed } from './cast';
 import { TipMoves } from './tipMoves';
 import { CANARY_CAUGHT as WEAPON_CAUGHT, WeaponFloor, weaponCanary } from './weaponFloor';
+import { ArmsPinned, describeStrain, pinnedCanary, type ArmLimits, type Ranges } from './armStrain';
 
 /**
  * A hand as it's drawn, turned in its grip on the joint (`Hand.vis`), as `watchBody` measures it: marked so (models/
@@ -55,11 +56,19 @@ type Side = 'L' | 'R';
  * back to a little flexed, and to each side as an empty hand's does. (Judged against the empty hand's 80, a fist
  * hung flexed off its forearm through a cut passed.)
  */
-const GRIPPING = { 'wrist.flexion': [-70, 30] } as const;
+export const GRIPPING = { 'wrist.flexion': [-70, 30] } as const;
 
 /** The sides whose hands hold a handle now (`Model.fists`: none on a game without it). */
 export function grippingSides(lab: Lab): Side[] {
   return (lab.model.fists ?? []).map((fist) => (fist.hand === 'right' ? 'R' : 'L'));
+}
+
+/** the body's limits for an arm, as anatomy.ts has them, for `ArmsPinned` */
+const ARM_LIMITS: ArmLimits = { ranges: ROM, elevationLimit, rotationRange };
+
+/** The ranges each gripping hand's wrist is judged by (`GRIPPING`), for `ArmsPinned`. */
+function grippingRanges(lab: Lab): Partial<Record<Side, Ranges>> {
+  return Object.fromEntries(grippingSides(lab).map((side) => [side, GRIPPING]));
 }
 
 /** a joint is past its range once it's this far past (degrees): a joint held at its limit read "0 past" by rounding */
@@ -245,7 +254,7 @@ function attackDown(leg: RangeLeg, frame: number): boolean {
 export interface RangeReport {
   lines: string[];
   moments: Pictured[];
-  canary?: { caught: boolean; measured: number; weapon: number; wrist: string[] };
+  canary?: { caught: boolean; measured: number; weapon: number; wrist: string[]; pinned: boolean };
   /** each scenario in which a two-hander was let go of by the other hand, as words */
   letGo: string[];
 }
@@ -319,6 +328,8 @@ interface ScenarioRun {
   grip: LetGo;
   worstHere: number;
   moment: Pictured | null;
+  /** the frame an arm was pinned at the most stops, pictured */
+  pinnedMoment: Pictured | null;
   /** each ankle's fastest move in a frame (m) and where */
   fastest: number;
   fastestAt: string;
@@ -332,18 +343,22 @@ async function runScenario(
   const fixture = { at: START, facing: 0, nocked: Boolean(lab.player.cls.quiver), fresh: true };
   await lab.setup({ ...fixture, gear: options.gear, weapon: options.weapon });
   const run: ScenarioRun = {
-    frame: 0, framesPast: 0, grip: freshLetGo(), worstHere: PICTURE_FROM, moment: null, fastest: 0, fastestAt: '',
+    frame: 0, framesPast: 0, grip: freshLetGo(), worstHere: PICTURE_FROM, moment: null, pinnedMoment: null,
+    fastest: 0, fastestAt: '',
   };
   const ankles = [lab.joints.ankleL, lab.joints.ankleR];
   const last = ankles.map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
   const tip = new TipMoves(scenario.name);
   const floor = new WeaponFloor(scenario.name);
+  const pinned = new ArmsPinned(scenario.name, ARM_LIMITS);
   const tracer = traceOf(lab, options);
   const measure = () => {
     if (options.canary && !report.canary && run.frame === CANARY_FRAME) {
       const measured = measureCanary(lab);
       const wrist = wristCanary(lab);
-      report.canary = { caught: measured >= CANARY_CAUGHT, measured, weapon: weaponCanary(lab), wrist };
+      const atStops = pinnedCanary(bodyBreaches(lab.joints).angles, ARM_LIMITS);
+      const caught = measured >= CANARY_CAUGHT;
+      report.canary = { caught, measured, weapon: weaponCanary(lab), wrist, pinned: atStops };
     }
     const { angles, found } = bodyBreaches(lab.joints, grippingSides(lab));
     if (found.length) run.framesPast++;
@@ -356,6 +371,11 @@ async function runScenario(
     noteGrip(run.grip, lab.model.lowerGrip, `${run.frame}${momentIn(lab)}`);
     tip.observe(lab, `${run.frame}${momentIn(lab)}`);
     floor.observe(lab, `${run.frame}${momentIn(lab)}`);
+    const worse = pinned.observe(angles, grippingRanges(lab), `${run.frame}${momentIn(lab)}`);
+    if (worse) {
+      const notes = [`frame ${run.frame}${momentIn(lab)}`, describeStrain(worse)];
+      run.pinnedMoment = lab.picture(`${scenario.what}, pinned`, ['third', 'front', 'left'], notes);
+    }
     tracer?.observe(run.frame);
     const traced = tracer?.frames.at(-1);
     if (found.length && traced?.frame === run.frame) traced.line += `  ${found.map(describeBreach).join(', ')}`;
@@ -380,7 +400,7 @@ async function runScenario(
     const input = (f: number) => (press && f < held ? press.frame : { keys: leg.keys, m0: attackDown(leg, f) });
     await lab.step(leg.frames + Math.max(0, held - 1), input, measure);
   }
-  if (options.frames) listed.push(...tip.listed, ...floor.listed);
+  if (options.frames) listed.push(...tip.listed, ...floor.listed, ...pinned.listed);
   const tipLine = tip.describe();
   const fastest = `fastest ankle ${(run.fastest * 100).toFixed(1)} cm a frame (${run.fastestAt})`
     + (tipLine ? `; ${tipLine}` : '');
@@ -388,9 +408,12 @@ async function runScenario(
   if (run.grip.seen) report.lines.push(`  ${describeLetGo(run.grip)}`);
   const underFloor = floor.describe();
   if (underFloor) report.lines.push(`  ${underFloor}`);
+  const atStops = pinned.describe();
+  if (atStops) report.lines.push(`  ${atStops}`, `    the stops: ${pinned.tally()}`);
   if (run.grip.frames > 0) report.letGo.push(`${scenario.what}: ${describeLetGo(run.grip)}`);
   report.lines.push(...(tracer?.frames ?? []).map((traced) => traced.line));
   if (run.moment) report.moments.push(run.moment);
+  if (run.pinnedMoment) report.moments.push(run.pinnedMoment);
 }
 
 /** The frame that casts the skill asked for (`--skill`) ahead of the hero, as the player would on its key, with its
@@ -510,6 +533,7 @@ export async function range(lab: Lab, options: RangeOptions): Promise<RangeRepor
     const under = `${weapon >= WEAPON_CAUGHT ? 'caught' : 'MISSED'} (${(weapon * 100).toFixed(0)} cm under)`;
     report.lines.push(`canary, the hero sunk under the floor: the weapon ${under}`);
     report.lines.push(`canary, the right fist bent on its forearm: ${report.canary.wrist.join('; ')}`);
+    report.lines.push(`canary, the right arm held at its stops: ${report.canary.pinned ? 'caught' : 'MISSED'}`);
   }
   return report;
 }
@@ -522,7 +546,8 @@ export function missedRangeCanary(report: RangeReport): string[] {
   const weapon = sunk ? [] : ['range: the canary (the weapon under the floor) was missed'];
   const bent = report.canary.wrist.some((verdict) => verdict.startsWith('missed'));
   const wrist = bent ? ['range: the canary (the fist bent on its forearm) was missed'] : [];
-  return [...missed, ...weapon, ...wrist];
+  const pinned = report.canary.pinned ? [] : ['range: the canary (the right arm held at its stops) was missed'];
+  return [...missed, ...weapon, ...wrist, ...pinned];
 }
 
 /** Each scenario in which a two-hander was let go of, as a problem: nothing it runs flings the arms apart. */

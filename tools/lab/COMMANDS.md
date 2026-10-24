@@ -76,9 +76,15 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   shoulder or the flask in hand are counted apart, `LowerGrip.free`), and its worst moment pictured, and the weapon
   under the floor (`page/weaponFloor.ts`: every corner of the surface of what the main hand holds, on how many frames,
   the deepest and how far along the weapon; Thunder Crescent put an axe's or a maul's head into the floor to its
-  middle). `--canary` turns the head past the neck's range on one frame and sinks the hero 2 m for one measure (the
-  weapon must be found under the floor), `--frames` lists every frame with a joint past its range, every frame the
-  weapon was under the floor and every frame between moves the tip moved 10 cm or more (with every joint that
+  middle), and an arm held at its stops (`page/armStrain.ts`: two or more of one arm's joints within 2° of an end of
+  their ranges on the same frame, a gripping wrist by a gripping wrist's: the arm IK stops the forearm's turn and the
+  wrist at their ends, so a pose asking more of an arm than it gives is held there, within every range; two-handed
+  Power Strike's end held the forearm at 89.9° of its 90 and the wrist at 30° of its 30, and looked "broken". On how
+  many frames, the first with the most stops pictured, and each stop's frames tallied: said, not failed, until every
+  hero's are fixed, #307). `--canary` turns the head past the neck's range on one frame and sinks the hero 2 m for one
+  measure (the weapon must be found under the floor), and reads an arm whose forearm and wrist are at their ends (it
+  must read pinned), `--frames` lists every frame with a joint past its range, every frame an arm was pinned, every
+  frame the weapon was under the floor and every frame between moves the tip moved 10 cm or more (with every joint that
   turned: an elbow swung round its arm turns the shoulder alone), and `--trace` (`--span a,b` for some frames) the leg IK frame by
   frame as the gait's trace does (`page/legTrace.ts`: each foot down, in the air or in a timed step `~`, dragged `d`),
   each frame's joints past their ranges after it.
