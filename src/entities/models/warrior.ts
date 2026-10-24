@@ -77,13 +77,11 @@ const RUN_TWO_POLE = new THREE.Vector3(-1, -1, -0.2);
  *  it off at once, the move's own fade bringing it down */
 const SHOULDER_AT = new THREE.Vector3(-0.22, 0.14, 0.3), SHOULDER_DIR = new THREE.Vector3(0.06, 0.62, -0.78).normalize();
 const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHOULDER_RATE = 6;
-/** a two-hander at the ready in a fight, standing and walking, in the chest's own frame (rig units): held at port, as a
- *  person holds a greataxe ready, the right fist before the right of the chest, the weapon up past the right shoulder
- *  and its haft down across the belly to the left hand by the left hip, the right elbow down and out. (Posed by the
- *  joints, it stood upright before the chest, the right forearm straight across at it, the elbow flared, the left
- *  hand clamped on from outside: "the whole guard" looked wrong) */
-const PORT_AT = new THREE.Vector3(-0.12, 0.05, 0.3), PORT_DIR = new THREE.Vector3(-0.75, 1, -0.05).normalize();
-const PORT_POLE = new THREE.Vector3(-1, -1, -0.2);
+/** a two-hander's way back to its guard out of a move, faded by the weapon (`backOut`), in the chest's frame: the grip
+ *  and the weapon's way as drawn last frame, where the way back left from, and where the pose holds them now */
+const DRAWN_AT = new THREE.Vector3(), DRAWN_DIR = new THREE.Vector3(0, 1, 0);
+const BACK_AT = new THREE.Vector3(), BACK_DIR = new THREE.Vector3(), _backQ = new THREE.Quaternion(), _backW = new THREE.Quaternion();
+const GUARD_AT = new THREE.Vector3(), GUARD_DIR = new THREE.Vector3(0, 1, 0), GUARD_POLE = new THREE.Vector3();
 /** Through the eyes (tuned live in a dev build, `--tune warriorEyes.shoulder=...`): the right arm's shoulder in the
  *  view (camera space, m: x right, y up, -z ahead; the left's mirrors it), low beside the camera, as a game's
  *  first-person arms come up from the screen's bottom corners; where a two-hander's right elbow points (`pole`, the
@@ -360,6 +358,8 @@ const PS_FWD: Keys = [[0, 0], [0.25, -0.05], [0.86, -0.08], [0.95, 0.13], [1, 0.
 const PS_DIP: Keys = [[0, 0], [0.25, 0.01], [0.86, -0.05], [0.9, -0.03], [0.96, -0.19], [0.98, -0.21], [1, -0.2]];
 /** the hips open towards the weapon side as it rises and drive square into the blow */
 const PS_HIPS: Keys = [[0, 0], [0.25, -0.15], [0.86, -0.22], [0.95, 0.1], [1, 0.08]];
+/** a two-hander's Power Strike: the hands placed out before him as the blow lands (`holdAtFloor`) */
+const PS_LAND = [0.95, 0.99];
 
 // --- Thunder Crescent (third person), keyed over its cast, the blow into the ground at 0.55 (the skill's fireAt): the
 // great weapon swung up overhead as the weight goes back, a moment at the top, then driven down before him, the trunk
@@ -845,6 +845,8 @@ export function buildWarrior(): Model {
   // weapon in each hand they alternate hands instead: the backhand side is the left hand's forehand
   let side = 1, lastK = 1, lastName = '', lastCharged = false;
   let tailName = '', tailT = 0;
+  // (whether the fade under way is a two-hander's way back to its guard out of a move, placed by the weapon)
+  let backOut = false;
   /** when a swing last ended, and whether this one follows straight on from it (it starts wound, where the last one
    *  finished); and whether it's the next of a row, begun while the last one's end was held (`SWING_HOLD`) */
   let swingEnd = -9, chain = false, inRow = false;
@@ -1221,6 +1223,33 @@ export function buildWarrior(): Model {
     shouldersMoved = true;
   }
 
+  /** The grip and the weapon's way as the arm holds them now, into `at` and `dir`, in the chest's frame (and with
+   *  `pole`, where the elbow is from the shoulder): a way back leaves from the drawn ones and goes to the pose's. */
+  function weaponNow(at: THREE.Vector3, dir: THREE.Vector3, pole?: THREE.Vector3): void {
+    root.updateMatrixWorld(true);
+    j.chest.worldToLocal(grip.getWorldPosition(at));
+    j.chest.getWorldQuaternion(_backQ).invert();
+    dir.set(0, 1, 0).transformDirection(grip.matrixWorld).applyQuaternion(_backQ);
+    if (pole) j.chest.worldToLocal(j.elbowR.getWorldPosition(pole)).sub(j.shoulderR.position);
+  }
+
+  /** A cut out of a two-handed move (third person): the way back to the guard leaves from the weapon as last drawn. */
+  function backFrom(): void {
+    BACK_AT.copy(DRAWN_AT); BACK_DIR.copy(DRAWN_DIR);
+    backOut = true;
+  }
+
+  /** The weapon on its way back to the guard, `e` of the way still where the move left it (the fade's weight): the grip
+   *  along a line from where the move left it to where the pose holds it, the weapon's way turned between them, the arm
+   *  reaching both with its elbow towards the pose's own. */
+  function backToGuard(e: number): void {
+    _hw1.copy(GUARD_AT).lerp(BACK_AT, e);
+    _backW.setFromUnitVectors(GUARD_DIR, BACK_DIR);
+    _backQ.identity().slerp(_backW, e);
+    _hw3.copy(GUARD_DIR).applyQuaternion(_backQ);
+    holdInChest(ARM_R, _hw1, _hw3, GUARD_POLE, 1);
+  }
+
   /** The weapon arm placed by a point and a way in the chest's own frame, by `k` from the pose's own: the grip at `at`,
    *  the weapon along `dir` (its flat facing `flat`, if given, `flatK` of the way), the arm reaching by IK with its
    *  elbow towards `pole` (third person's `holdInView`). */
@@ -1342,7 +1371,7 @@ export function buildWarrior(): Model {
     // through the eyes, a cut's alone, held as the hero walks on)
     const tailFor = (name: string) => (fp ? (name === 'swing' ? SWING_HOLD : 0) : TAIL[name] ?? 0);
     if (!raw && lastName !== '' && tailFor(lastName) > 0) { tailName = lastName; tailT = tailFor(lastName); }
-    if (raw || (move > 0.3 && !fp)) { if (tailT > 0 && !raw) fade.cut(0.25); tailT = 0; }
+    if (raw || (move > 0.3 && !fp)) { if (tailT > 0 && !raw) { fade.cut(0.25); if (!fp && two) backFrom(); } tailT = 0; }
     if (raw || !fp) outT = 0;
     let inTail = !raw && tailT > 0;
     // (over on the frame its cut fades from it: held a frame longer, a blow turned to the floor and stopped by it
@@ -1355,6 +1384,7 @@ export function buildWarrior(): Model {
       if (tailT <= 0) {
         const out = fp ? SWING_OUT : TAIL_OUT[tailName] ?? 0.4;
         fade.cut(out); eyesL.cut(out);
+        if (!fp && two) backFrom();
         // (a one-hander's forehand goes back to rest from where it left the blade out of the frame by way of under the
         // frame, as a dual wielder's hand does: `dipUnder`; its backhand keyed back to where a forehand starts,
         // `ONE_BACK_OUT`, and a two-hander's cut into its guard, `TWO_OUTS`)
@@ -1436,7 +1466,8 @@ export function buildWarrior(): Model {
     // (the charge's legs run on through a cut between moves both over them: a skill cast as it runs, begun or ended)
     const charged = raw?.name === 'charge' || raw?.under?.name === 'charge', legsFade = !(charged && lastCharged);
     if (began) fade.cut(chain && raw.name === 'swing' ? 0.08 : 0.14, legsFade);
-    else if (ended && !inTail) fade.cut(lastName === 'spin' ? SPIN_BACK : 0.3, legsFade);
+    else if (ended && !inTail) { fade.cut(lastName === 'spin' ? SPIN_BACK : 0.3, legsFade); if (!fp && two) backFrom(); }
+    if (raw) backOut = false;
     // (through the eyes a move goes on from where the last ended, its hands seen the whole way; a dual wielder's cut,
     // a third of a second, from its rest sooner: faded in 0.14 s, it was still fading as the blow came, and an axe's
     // and a mace's arc kinked 35 degrees in a frame. Its other hand goes back to its rest from where its own cut left
@@ -1703,6 +1734,11 @@ export function buildWarrior(): Model {
         j.body.position.z += curve(PS_FWD, k) * ws; j.body.position.y += curve(PS_DIP, k) * ws;
         // (a step in with the left foot as the weapon rises; the right stays back, turned out)
         feet = CHOP_FEET;
+        // (a two-hander's blow ends as Thunder Crescent's does, the hands out before him and low, the elbows down: posed
+        // by the shoulder's turn across, its upper arm lay level across the chest at shoulder height, the forearm
+        // folded down to the left hip, "broken" to the owner)
+        const end = two && held ? w * ramp(k, PS_LAND[0], PS_LAND[1]) : 0;
+        if (end > 0) holdAtFloor(end);
       } else if (a.name === 'smite' && !fp) {
         // Thunder Crescent (SM_*): the great weapon raised overhead and driven down into the ground before him (a
         // two-hander raised over the middle of the head, within the left hand's reach, as Power Strike's is)
@@ -1879,13 +1915,18 @@ export function buildWarrior(): Model {
     // (out of a fight on the shoulder, at a run too; in one, at high port)
     const onShoulder = shouldered;
     if (!fp && two && !a && runK > 0 && st.dead < 0) holdInChest(ARM_R, RUN_TWO_AT, RUN_TWO_DIR, RUN_TWO_POLE, runK * (1 - onShoulder));
-    // (and standing or walking in a fight, at port)
-    const port = (1 - runK) * (1 - onShoulder);
-    if (!fp && two && !a && port > 0 && st.dead < 0) holdInChest(ARM_R, PORT_AT, PORT_DIR, PORT_POLE, port);
     if (!fp && two && onShoulder > 0 && st.dead < 0) holdInChest(ARM_R, SHOULDER_AT, SHOULDER_DIR, SHOULDER_POLE, onShoulder, SHOULDER_FLAT);
     // (a two-handed move placed by the weapon)
     if (!fp && two && twoHold.k > 0 && st.dead < 0) holdInChest(ARM_R, twoHold.at, twoHold.dir, twoHold.pole, twoHold.k, twoHold.flat, twoHold.flatK);
+    // (a two-hander's way back to its guard out of a move, placed by the weapon: its grip and way eased from where the
+    // move left them to where the pose holds them, the arm reaching them. Faded joint by joint, the greataxe swung up
+    // through the face's way out of Power Strike's end, the right elbow flared: every joint within its range, the arm
+    // "broken")
+    const backing = backOut && !fp && two && !a && st.dead < 0;
+    if (backing) weaponNow(GUARD_AT, GUARD_DIR, GUARD_POLE);
     if (st.dead < 0) fade.apply(dt); else fade.reset();
+    if (backOut && fade.weight === 0) backOut = false;
+    if (backing && backOut) backToGuard(fade.weight);
     st.look?.();
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
     else {
@@ -2133,6 +2174,7 @@ export function buildWarrior(): Model {
     // other from the pose's own: from the arms as fitted, the cut into a two-handed swing blended two elbows, and the
     // lower grip went 9 cm out of the left arm's reach)
     if (!fp && st.dead < 0 && (aimDown > 0 || stop > 0)) fade.drawnArms();
+    if (!fp && st.dead < 0 && two && held) weaponNow(DRAWN_AT, DRAWN_DIR);
     // (and through the eyes, where the arms are placed after the fade, from the arms as drawn: a one-handed swing over,
     // the arm was back in the stance in a frame)
     if (fp && st.dead < 0) fade.drawnArms();

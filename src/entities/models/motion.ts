@@ -86,6 +86,9 @@ export class PoseFade {
     this.primed = true;
   }
 
+  /** how much of the pose shown is still the old one (eased, 0 once the fade is over): read after `apply` */
+  get weight(): number { return this.w * this.w * (3 - 2 * this.w); }
+
   /** the arms as drawn this frame, once what comes after the fade has placed them (the arms fitted, a weapon
    *  turned or stopped by the floor): a cut fades from these. (Faded from the pose before them, Thunder Crescent's
    *  weapon, turned to the floor after the fade, was back at rest in a frame, its tip 1.3 m away.) */
