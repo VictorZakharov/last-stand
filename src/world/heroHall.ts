@@ -36,8 +36,9 @@ const COLUMNS = { x: 6.3, z: [-3.9, 1.2, 6.3], radius: 0.4, high: 6.6 };
 const BANNER = { top: 4.9, off: 0.28, scale: 1.3 };
 /** the braziers on the stage either side of the row (x, z), and their light (the crypt's 15 lit every hero from
  *  behind, off the key light's spot too, and lit their steel's edges white; at 7 their flames swelled too bright at
- *  times, "fire glows too bright") */
-const BRAZIERS = { x: 3.4, z: -2.4, glow: 5 };
+ *  times, "fire glows too bright"); and their flames' own light (`FireSpec.glow`: from the hall's low camera their foot
+ *  burned white, "still too much reflections on fire pits") */
+const BRAZIERS = { x: 3.4, z: -2.4, glow: 5, flames: 0.5 };
 /** the torches on the columns: their bed's height, how far in from the column's middle, their fire and light */
 const TORCH = { up: 3.0, in: 0.55, radius: 0.12, height: 0.5, color: 0xff8a3c, intensity: 2.5, distance: 9 };
 /** the light on each banner, warm, from in front of it */
@@ -193,7 +194,7 @@ export function buildHeroHall(group: THREE.Group): HeroHall {
 
   // --- The fires: two braziers (the still shadows' lights), four torches; the banners' lights; one from high up ---
   for (const side of [-1, 1]) {
-    buildBrazier(group, side * BRAZIERS.x, BRAZIERS.z, Math.PI / 2, iron, graniteMat, updaters, top, BRAZIERS.glow);
+    buildBrazier(group, side * BRAZIERS.x, BRAZIERS.z, Math.PI / 2, iron, graniteMat, updaters, top, BRAZIERS.glow, BRAZIERS.flames);
     for (const z of COLUMNS.z.slice(0, 2)) torch(group, side * COLUMNS.x, z, iron, updaters);
   }
   for (let i = 0; i < CLASS_IDS.length; i++) banner(group, i, iron, rng);
