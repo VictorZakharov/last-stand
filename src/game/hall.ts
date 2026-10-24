@@ -27,7 +27,7 @@ const ROW = { facing: 0 };
 /** The shot on the hero in focus: the camera `back` m in front of him at `high`, looking at him at `at` m up (over
  *  where he stands), both `upright` m higher on an upright screen (`frameHall`); the
  *  field of view, and how far it drifts round him (rad, with reduced motion none) over `driftS` s */
-const SHOT = { back: 6.4, high: 1.55, at: 0.8, fov: 30, drift: 0.07, driftS: 14, upright: 0.3 };
+const SHOT = { back: 6.4, high: 2.3, at: 0.8, fov: 30, drift: 0.07, driftS: 14, upright: 0.3 };
 /** The key light (warm, ahead of him and up to one side) and the rim light (cold, behind him), from the pool */
 const KEY = { color: 0xffd2a0, intensity: 12, distance: 3.4, ahead: 1.4, side: 0.3, up: 2.1 };
 /** the most light a highlight on a hero reflects (`Player.shine`): near, the key's glint on steel bloomed */
