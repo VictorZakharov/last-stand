@@ -173,6 +173,36 @@ async function clickBeside(lab: Lab, id: string): Promise<Found> {
   return { lines, problems };
 }
 
+/** The choice on the hero in focus (`canary`: put in the window's corner first), and seen as the mouse comes over
+ *  him and not once it has left him for the backdrop (on a screen with no hover, always seen). */
+async function choiceOnHero(lab: Lab, screen: HTMLElement, id: string, canary: boolean): Promise<Found> {
+  const hero = hallHeroes().get(id);
+  const choice = screen.querySelector<HTMLElement>('.hs-choose')!;
+  if (!hero) return { lines: [], problems: [] };
+  if (canary) Object.assign(choice.style, { left: '60px', top: '60px' });
+  const at = onScreen(hero);
+  const box = choice.getBoundingClientRect();
+  choice.style.cssText = '';
+  const middle = { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
+  const tall = at.bottom - at.top;
+  const problems: string[] = [];
+  const onHim = Math.abs(middle.x - at.x) < tall * 0.15 && middle.y > at.top && middle.y < at.bottom;
+  if (!onHim) problems.push(`heroes: the choice stands off the ${id} (${middle.x.toFixed(0)},${middle.y.toFixed(0)})`);
+  const up = ((at.bottom - middle.y) / tall * 100).toFixed(0);
+  const noHover = matchMedia('(hover: none)').matches;
+  await lab.mouseTo({ x: at.x + tall * 0.1, y: at.y });
+  await lab.step(1);
+  const overHim = screen.classList.contains('over-hero') || noHover;
+  await lab.mouseTo({ x: Math.max(4, at.x - tall * 0.6), y: at.top + 4 });
+  await lab.step(1);
+  const away = screen.classList.contains('over-hero') || noHover;
+  if (!overHim) problems.push(`heroes: the mouse over the ${id}, and his choice hidden`);
+  if (away && !noHover) problems.push(`heroes: the mouse off the ${id}, and his choice still shown`);
+  const how = noHover ? 'always shown (no hover)' : `shown over him: ${overHim}, off him: ${away}`;
+  const lines = [`  the choice on the ${id}, ${up}% up him; ${how}`];
+  return { lines, problems };
+}
+
 /** The parts laid out (`canary`: Back laid over the heroes' names first), and those over another or past the
  *  window. */
 function partsPlaced(screen: HTMLElement, canary: boolean): { boxes: [string, DOMRect][]; problems: string[] } {
@@ -217,18 +247,19 @@ export async function heroesShown(canary: boolean, lab: Lab): Promise<Found> {
   if (!within(choose.getBoundingClientRect())) problems.push('heroes: the choice reaches past the window');
   if (!wordsFit(choose)) problems.push("heroes: the choice's words reach its edges");
   const placed = heroPlaced(id, boxes);
+  const onHim = await choiceOnHero(lab, screen, id, canary);
   const clicked = await clickBeside(lab, id);
   const steady = await cardsSteady(lab, screen, canary);
   const swept = await dragged(lab, screen);
-  lines.push(...placed.lines, ...clicked.lines, ...steady.lines, ...swept.lines);
-  problems.push(...placed.problems, ...clicked.problems, ...steady.problems, ...swept.problems);
+  lines.push(...placed.lines, ...onHim.lines, ...clicked.lines, ...steady.lines, ...swept.lines);
+  problems.push(...placed.problems, ...onHim.problems, ...clicked.problems, ...steady.problems, ...swept.problems);
   return { lines, problems };
 }
 
 /** the card's parts that must stand in the same place whichever hero's card is shown, and the choice */
 const STEADY_PARTS: [string, string][] = [
   ['traits', '.hs-card.active .hs-traits'], ['skills', '.hs-card.active .hs-skills'],
-  ['records', '.hs-card.active .hs-records'], ['choice', '.hs-choose'],
+  ['records', '.hs-card.active .hs-records'],
 ];
 
 /** Where `element`'s box is laid out within `root` (css px), its transforms left out (a card fades up as it shows). */
@@ -242,16 +273,44 @@ function laidOutIn(element: HTMLElement, root: HTMLElement): { x: number; y: num
   return { x, y, height: element.offsetHeight };
 }
 
-/** Each hero's name clicked in turn, as a player goes through them: the panel's parts where his card lays them out.
- *  One that stands elsewhere for another hero is a layout shift (`canary`: the second card's traits pushed down). */
+/** The most `selector`'s parts move on the screen over the animations the card in focus starts as it's shown, from
+ *  their start to their end (css px), each held there and finished after: a card that slides in reads as the panel
+ *  shifting as the hero changes ("like its adjusting font"), though laid out it stands still. */
+function entranceMoves(screen: HTMLElement): number {
+  const card = screen.querySelector<HTMLElement>('.hs-card.active');
+  const animations = card?.getAnimations({ subtree: true }) ?? [];
+  const parts = STEADY_PARTS.map(([, selector]) => screen.querySelector<HTMLElement>(selector)).filter((e) => !!e);
+  const boxes = (): DOMRect[] => parts.map((part) => part!.getBoundingClientRect());
+  for (const animation of animations) {
+    animation.pause();
+    animation.currentTime = 0;
+  }
+  const from = boxes();
+  for (const animation of animations) {
+    animation.currentTime = Number(animation.effect?.getComputedTiming().endTime ?? 0);
+  }
+  const to = boxes();
+  for (const animation of animations) animation.finish();
+  return Math.max(0, ...from.map((box, i) => Math.max(Math.abs(box.x - to[i].x), Math.abs(box.y - to[i].y))));
+}
+
+/** Each hero's name clicked in turn, as a player goes through them, with the page's motion on: the panel's parts
+ *  where his card lays them out, and how far its entrance moves them. One that stands elsewhere for another hero, or
+ *  moves as he's shown, is a layout shift (`canary`: the second card's traits pushed down). */
 async function cardsSteady(lab: Lab, screen: HTMLElement, canary: boolean): Promise<Found> {
   const panel = screen.querySelector<HTMLElement>('.hs-panel')!;
   const names = [...screen.querySelectorAll<HTMLElement>('.hs-tabs [data-c]')];
   const planted = canary ? screen.querySelectorAll<HTMLElement>('.hs-card .hs-traits')[1] : undefined;
   if (planted) planted.style.marginTop = '20px';
   const places = new Map<string, Map<string, { x: number; y: number; height: number }>>();
+  const entrances: string[] = [];
+  const problems: string[] = [];
+  await lab.reduceMotion(false);
   for (const name of names) {
     await lab.clickOn(name);
+    const moved = entranceMoves(screen);
+    entrances.push(`${name.dataset.c} ${moved.toFixed(1)}`);
+    if (moved > SLACK) problems.push(`heroes: the ${name.dataset.c}'s card moved ${moved.toFixed(1)} px as it came in`);
     await lab.step(2);
     const parts = new Map<string, { x: number; y: number; height: number }>();
     for (const [part, selector] of STEADY_PARTS) {
@@ -260,9 +319,9 @@ async function cardsSteady(lab: Lab, screen: HTMLElement, canary: boolean): Prom
     }
     places.set(name.dataset.c!, parts);
   }
+  await lab.reduceMotion(true);
   if (planted) planted.style.marginTop = '';
   const [first, ...rest] = [...places.entries()];
-  const problems: string[] = [];
   for (const [hero, parts] of rest) {
     for (const [part, at] of parts) {
       const was = first[1].get(part);
@@ -273,7 +332,9 @@ async function cardsSteady(lab: Lab, screen: HTMLElement, canary: boolean): Prom
     }
   }
   const verdict = problems.length ? `${problems.length} parts moved` : 'every part kept its place';
-  return { lines: [`  each hero's name clicked in turn (${[...places.keys()].join(', ')}): ${verdict}`], problems };
+  const lines = [`  each hero's name clicked in turn (${[...places.keys()].join(', ')}): ${verdict}; each card's `
+    + `entrance moved it (px): ${entrances.join(', ')}`];
+  return { lines, problems };
 }
 
 /** how far a drag carries the scene, in the heroes' spacing on the screen, and the frames it's moved over */
@@ -281,6 +342,10 @@ const DRAG_HEROES = 1.6;
 const DRAG_FRAMES = 10;
 /** how far the camera must have gone with the finger by the drag's middle, a share of the drag (it glides after) */
 const DRAG_FOLLOW = 0.3;
+/** how far the camera may move along the row in a frame and be at rest (heroes: its slow drift round him is half
+ *  of it), and the frames it may take to get there */
+const REST_STEP = 0.004;
+const REST_FRAMES = 300;
 
 /** The heroes' spacing on the screen (css px): from the first to the second as the camera shows them. */
 function heroSpacing(): number {
@@ -292,6 +357,19 @@ function heroSpacing(): number {
 function cameraAlongRow(): number {
   const xs = [...hallHeroes().values()].map((hero) => hero.position.x);
   return (G.camera.position.x - xs[0]) / (xs[1] - xs[0]);
+}
+
+/** Frames run until the camera has come to rest on the hero in focus: a drag begun as it glides to him reads its
+ *  glide as the drag's (the names clicked in turn before it end on another hero than the screen opened on). */
+async function cameraAtRest(lab: Lab): Promise<void> {
+  let last = cameraAlongRow();
+  const still = (): boolean => {
+    const now = cameraAlongRow();
+    const moved = Math.abs(now - last);
+    last = now;
+    return moved < REST_STEP;
+  };
+  await lab.until(still, REST_FRAMES, 'the camera at rest on the hero in focus');
 }
 
 /** A finger dragged across the scene towards the first hero, held still, and lifted, as a player pans to a hero:
@@ -308,6 +386,7 @@ async function dragged(lab: Lab, screen: HTMLElement): Promise<Found> {
   const from = { x: room * 0.15, y: panel.top < innerHeight * 0.4 ? innerHeight * 0.5 : panel.top * 0.45 };
   const across = Math.min(DRAG_HEROES * spacing, room * 0.7);
   const expected = Math.max(0, Math.min(ids.length - 1, Math.round(before - across / spacing)));
+  await cameraAtRest(lab);
   const start = cameraAlongRow();
   await lab.touchDown(from);
   let midway = start;
@@ -329,10 +408,12 @@ async function dragged(lab: Lab, screen: HTMLElement): Promise<Found> {
   return { lines: [line], problems };
 }
 
-/** Whether the canaries were found among `problems`: Back over the heroes' names, and the card's moved traits. */
+/** Whether the canaries were found among `problems`: Back over the heroes' names, the card's moved traits, and the
+ *  choice put off the hero. */
 export const heroesCanaryCaught = (problems: string[]): boolean =>
   problems.some((problem) => problem.includes('Back lies over') || problem.includes('lies over Back'))
-  && problems.some((problem) => problem.includes(' moved '));
+  && problems.some((problem) => problem.includes(' moved '))
+  && problems.some((problem) => problem.includes('choice stands off'));
 
 /** After the screen closed by Esc: the lobby back, its hero drawn. */
 export function heroesClosed(): Found {

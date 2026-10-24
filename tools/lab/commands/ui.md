@@ -32,12 +32,15 @@ lobby's Change hero clicked with the mouse and pictured once the camera has come
 the screen and the hall up, the hero in focus the lobby's own, his card alone shown, the hero in the room the panel
 leaves (his middle clear of the panel, the arrows and the heroes' names, head to feet within the window, 40% of its
 height at the least), the screen's parts within the window and none over another, the choice within reach and its
-words within its padding (on a phone the buttons' own 24 px ran past it), the hero beside him clicked and in focus,
-each hero's name clicked in turn with the card's parts and the choice kept in their places in the panel (the
-ranger's tagline on two lines put his traits 30 px lower), a finger dragged across the scene 1.6 heroes' spacing
-(short of the room) with the camera following it and the hero it carried the row to in focus as it lifts, Esc back
-to the lobby with its hero; `--canary` lays Back over the heroes' names and pushes a card's traits down, which must
-both be found), the fight's
+words within its padding (on a phone the buttons' own 24 px ran past it), the choice standing on the hero in focus
+and shown as the mouse comes over him, hidden once it leaves him (always shown on a screen with no hover), the hero
+beside him clicked and in focus, each hero's name clicked in turn with the card's parts kept in their places in the
+panel (the ranger's tagline on two lines put his traits 30 px lower) and held still by the card's entrance (motion
+on, its animations held at their start and end: it slid up 10 px, which read as the panel shifting "like its
+adjusting font"), a finger dragged across the scene 1.6 heroes' spacing (short of the room), once the camera rests
+on the hero, with the camera following it and the hero it carried the row to in focus as it lifts, Esc back to the
+lobby with its hero; `--canary` lays Back over the heroes' names, pushes a card's traits down and puts the choice in
+the window's corner, which must all be found), the fight's
 loading bar over the lobby as a press waiting for the fight's programs
 shows it (`ui/readying.ts`, 40% along: within the window, its label on one line, its fill as far as painted;
 `--canary` gives the label a letter's width, whose wrap must be found), Change hero clicked with the mouse while
