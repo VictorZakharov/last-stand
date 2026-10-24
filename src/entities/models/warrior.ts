@@ -77,11 +77,14 @@ const RUN_TWO_POLE = new THREE.Vector3(-1, -1, -0.2);
  *  it off at once, the move's own fade bringing it down */
 const SHOULDER_AT = new THREE.Vector3(-0.22, 0.14, 0.3), SHOULDER_DIR = new THREE.Vector3(0.06, 0.62, -0.78).normalize();
 const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHOULDER_RATE = 6;
-/** a two-hander's way back to its guard out of a move, faded by the weapon (`backOut`), in the chest's frame: the grip
- *  and the weapon's way as drawn last frame, where the way back left from, and where the pose holds them now */
-const DRAWN_AT = new THREE.Vector3(), DRAWN_DIR = new THREE.Vector3(0, 1, 0);
-const BACK_AT = new THREE.Vector3(), BACK_DIR = new THREE.Vector3(), _backQ = new THREE.Quaternion(), _backW = new THREE.Quaternion();
-const GUARD_AT = new THREE.Vector3(), GUARD_DIR = new THREE.Vector3(0, 1, 0), GUARD_POLE = new THREE.Vector3();
+/** a two-hander's way back to its guard out of a move, faded by the weapon (`backOut`), in the chest's frame: the grip,
+ *  the weapon's turn (its way and its flat's) and the elbow as drawn last frame, where the way back left from, and
+ *  where the pose holds them now */
+const DRAWN_AT = new THREE.Vector3(), DRAWN_TURN = new THREE.Quaternion(), DRAWN_POLE = new THREE.Vector3(0, -1, 0);
+const BACK_AT = new THREE.Vector3(), BACK_TURN = new THREE.Quaternion(), BACK_POLE = new THREE.Vector3();
+const GUARD_AT = new THREE.Vector3(), GUARD_TURN = new THREE.Quaternion(), GUARD_POLE = new THREE.Vector3();
+const _backQ = new THREE.Quaternion(), _backDir = new THREE.Vector3(), _backFlat = new THREE.Vector3();
+const _backPole = new THREE.Vector3();
 /** Through the eyes (tuned live in a dev build, `--tune warriorEyes.shoulder=...`): the right arm's shoulder in the
  *  view (camera space, m: x right, y up, -z ahead; the left's mirrors it), low beside the camera, as a game's
  *  first-person arms come up from the screen's bottom corners; where a two-hander's right elbow points (`pole`, the
@@ -1225,29 +1228,31 @@ export function buildWarrior(): Model {
 
   /** The grip and the weapon's way as the arm holds them now, into `at` and `dir`, in the chest's frame (and with
    *  `pole`, where the elbow is from the shoulder): a way back leaves from the drawn ones and goes to the pose's. */
-  function weaponNow(at: THREE.Vector3, dir: THREE.Vector3, pole?: THREE.Vector3): void {
+  function weaponNow(at: THREE.Vector3, turn: THREE.Quaternion, pole: THREE.Vector3): void {
     root.updateMatrixWorld(true);
     j.chest.worldToLocal(grip.getWorldPosition(at));
-    j.chest.getWorldQuaternion(_backQ).invert();
-    dir.set(0, 1, 0).transformDirection(grip.matrixWorld).applyQuaternion(_backQ);
-    if (pole) j.chest.worldToLocal(j.elbowR.getWorldPosition(pole)).sub(j.shoulderR.position);
+    turn.copy(j.chest.getWorldQuaternion(_backQ).invert()).multiply(grip.getWorldQuaternion(_pq));
+    j.chest.worldToLocal(j.elbowR.getWorldPosition(pole)).sub(j.shoulderR.position);
   }
 
   /** A cut out of a two-handed move (third person): the way back to the guard leaves from the weapon as last drawn. */
   function backFrom(): void {
-    BACK_AT.copy(DRAWN_AT); BACK_DIR.copy(DRAWN_DIR);
+    BACK_AT.copy(DRAWN_AT); BACK_TURN.copy(DRAWN_TURN); BACK_POLE.copy(DRAWN_POLE);
     backOut = true;
   }
 
   /** The weapon on its way back to the guard, `e` of the way still where the move left it (the fade's weight): the grip
-   *  along a line from where the move left it to where the pose holds it, the weapon's way turned between them, the arm
-   *  reaching both with its elbow towards the pose's own. */
+   *  along a line from where the move left it to where the pose holds it, the weapon turned between them (its flat
+   *  too), the arm reaching both with its elbow between them. (With the guard's elbow and the hand turned the least
+   *  way onto the weapon's way, the first frame back turned the shoulder 63 degrees and the hand 51 out of Thunder
+   *  Crescent's end.) */
   function backToGuard(e: number): void {
     _hw1.copy(GUARD_AT).lerp(BACK_AT, e);
-    _backW.setFromUnitVectors(GUARD_DIR, BACK_DIR);
-    _backQ.identity().slerp(_backW, e);
-    _hw3.copy(GUARD_DIR).applyQuaternion(_backQ);
-    holdInChest(ARM_R, _hw1, _hw3, GUARD_POLE, 1);
+    _backQ.copy(GUARD_TURN).slerp(BACK_TURN, e);
+    _backDir.set(0, 1, 0).applyQuaternion(_backQ);
+    _backFlat.copy(FLAT_IN_GRIP).applyQuaternion(_backQ);
+    _backPole.copy(GUARD_POLE).lerp(BACK_POLE, e);
+    holdInChest(ARM_R, _hw1, _backDir, _backPole, 1, _backFlat);
   }
 
   /** The weapon arm placed by a point and a way in the chest's own frame, by `k` from the pose's own: the grip at `at`,
@@ -1923,7 +1928,7 @@ export function buildWarrior(): Model {
     // through the face's way out of Power Strike's end, the right elbow flared: every joint within its range, the arm
     // "broken")
     const backing = backOut && !fp && two && !a && st.dead < 0;
-    if (backing) weaponNow(GUARD_AT, GUARD_DIR, GUARD_POLE);
+    if (backing) weaponNow(GUARD_AT, GUARD_TURN, GUARD_POLE);
     if (st.dead < 0) fade.apply(dt); else fade.reset();
     if (backOut && fade.weight === 0) backOut = false;
     if (backing && backOut) backToGuard(fade.weight);
@@ -2174,7 +2179,7 @@ export function buildWarrior(): Model {
     // other from the pose's own: from the arms as fitted, the cut into a two-handed swing blended two elbows, and the
     // lower grip went 9 cm out of the left arm's reach)
     if (!fp && st.dead < 0 && (aimDown > 0 || stop > 0)) fade.drawnArms();
-    if (!fp && st.dead < 0 && two && held) weaponNow(DRAWN_AT, DRAWN_DIR);
+    if (!fp && st.dead < 0 && two && held) weaponNow(DRAWN_AT, DRAWN_TURN, DRAWN_POLE);
     // (and through the eyes, where the arms are placed after the fade, from the arms as drawn: a one-handed swing over,
     // the arm was back in the stance in a frame)
     if (fp && st.dead < 0) fade.drawnArms();
