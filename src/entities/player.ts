@@ -215,6 +215,9 @@ export class Player {
   rising = 0;
   /** the pause menu is open in co-op (the game can't stop for one player): the character stands idle */
   idle = false;
+  /** the most light a highlight on him reflects outside the eyes (`kit.u.uShine`; 0: as it is): the hall of heroes'
+   *  key light a metre off put a glare on a shield's boss */
+  shine = 0;
   /** a remote player holds its revive key (reported with its state) */
   reviving = false;
 
@@ -984,7 +987,7 @@ export class Player {
     // (dev builds: a joint taken past a body's range is reported; through the eyes the arms keep hand-placed poses)
     if (import.meta.env.DEV && this.local && dead < 0 && !this.eyes && this.model.joints) watchBody(this.model.joints, action?.name ?? (move > 0.05 ? 'moving' : 'standing'));
     this.model.kit.u.uHit.value = this.hitT * 0.5;
-    this.model.kit.u.uShine.value = this.eyes ? SHINE.eyes : 0;
+    this.model.kit.u.uShine.value = this.eyes ? SHINE.eyes : this.shine;
     if (this.staffLight) {
       // a little above the cast point: right at it, the metal round a staff's crystal (a few cm off,
       // with the light's inverse-square falloff) burns out white-green

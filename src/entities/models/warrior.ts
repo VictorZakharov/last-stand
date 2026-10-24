@@ -347,7 +347,6 @@ const SW_TILT: Keys = [[0, 0.08], [0.45, 0.12], [0.7, -0.02], [1, -0.1]];
 // as the weapon goes up, the body rising and arching back over the rear foot while the charge gathers (the
 // knees loading), then everything thrown down onto the front foot, the trunk crunching over the blow
 const PS_PITCH: Keys = [[0, -1.3], [0.25, -2.95], [0.86, -3.05], [0.9, -2.75], [0.95, -1.3], [0.975, -1.08], [1, -1.12]];
-const PS_WRIST: Keys = [[0, 1], [0.92, 1], [0.975, 0.15], [1, 0.1]];
 const PS_ELBOW: Keys = [[0, -0.35], [0.25, -0.55], [0.86, -0.7], [0.93, -0.15], [1, -0.12]];
 const PS_BEND: Keys = [[0, 0], [0.25, -0.18], [0.86, -0.26], [0.9, -0.2], [0.95, 0.42], [0.975, 0.52], [1, 0.48]];
 const PS_FWD: Keys = [[0, 0], [0.25, -0.05], [0.86, -0.08], [0.95, 0.13], [1, 0.14]];
@@ -1677,8 +1676,10 @@ export function buildWarrior(): Model {
         const pitch = curve(PS_PITCH, k) + shake, bend = curve(two ? [[0, -0.55], [1, -0.55]] : PS_ELBOW, k);
         R.x = lerp(R.x, pitch, w); R.z = lerp(R.z, 0, w); R.y = (two ? 0.7 : 0.25) * w;
         j.elbowR.rotation.x = lerp(j.elbowR.rotation.x, bend, w);
-        // (the wrists cock back as the blow lands, so a one-hander finishes pointing ahead, not into the ground)
-        const wr = ALONG_ARM * (two ? 1 : curve(PS_WRIST, k)) * w;
+        // (the blade kept along the arm, so it's driven down into the ground before him, where the skill strikes:
+        // with the wrists cocked back as it landed, a one-hander finished pointing ahead at the hips, its tip 1.2 m
+        // over the floor, "warrior should hit the ground right?")
+        const wr = ALONG_ARM * w;
         j.handR.rotation.x += wr;
         if (offHeld) {
           const L = j.shoulderL.rotation;

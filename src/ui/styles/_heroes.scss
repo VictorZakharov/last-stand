@@ -1,6 +1,6 @@
 // The hero selection screen (ui/heroSelect.ts) over the hall of heroes (game/hall.ts): a cinematic shade over the
 // stage, the title and logo at the top left, the arrows and the heroes' names round the hero in focus, his card in a
-// panel at the right (at the foot on an upright screen), Back at the bottom left. Nothing loops: the card fades in
+// panel at the right (at the foot on an upright screen), the choice on him, Back at the bottom left. Nothing loops: the card fades in
 // once as the focus comes to it, and the shade is painted once.
 @use 'theme' as *;
 @use 'mixins' as *;
@@ -64,7 +64,8 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
   overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba($frame, .5) transparent; }
 .hs-card { grid-column: 1; grid-row: 1 / span 7; display: grid; grid-template-rows: subgrid; visibility: hidden; }
 .hs-card.active { visibility: visible; animation: hs-in .45s ease-out; }
-@keyframes hs-in { from { opacity: 0; transform: translateY(ui(10px)); } }
+// (a fade alone: a card that slid in read as the panel shifting as the hero changed)
+@keyframes hs-in { from { opacity: 0; } }
 .hs-name { position: relative; aspect-ratio: 600 / 110; }
 .hs-name svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .hs-name .logo-glow { opacity: .75; }
@@ -87,7 +88,15 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
   text-transform: uppercase; color: var(--ink-dim); background: linear-gradient(135deg, rgba(40,32,22,.55), rgba(12,10,12,.8)); border: 1px solid rgba($frame, .3); }
 .hs-records b { font: 700 ui(18px) var(--font-display); letter-spacing: 0; text-transform: none; color: #f3e1b0; }
 .hs-records .hs-new { padding: ui(8px); text-align: center; font-size: ui(14px); font-style: italic; color: var(--ink-dim); border: 1px dashed rgba($frame, .35); }
-.btn.hs-choose { flex: none; font-size: ui(22px); padding: ui(16px) ui(20px); white-space: nowrap; }
+/* the choice on the hero in focus (where ui/heroSelect.ts `placeChoice` finds him), seen through: shown as the mouse
+   comes over him or onto it, on touch always (no hover) */
+.btn.hs-choose { position: absolute; left: var(--hs-cx, 36%); top: var(--hs-cy, 62%); translate: -50% -50%;
+  font-size: ui(22px); padding: ui(14px) ui(28px); white-space: nowrap; color: #ffe7b0;
+  background: rgba(14,10,8,.42); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cc) 75%, transparent), 0 0 ui(14px) rgba(0,0,0,.35);
+  text-shadow: 0 0 ui(10px) color-mix(in srgb, var(--cc) 45%, transparent), $outline; opacity: 0; transition: opacity .18s ease-out; }
+#heroes.over-hero .hs-choose, .hs-choose:is(:hover, :focus-visible) { opacity: .92; }
+.hs-choose:hover { filter: none; background: rgba(30,20,12,.55); }
+@media (hover: none) { .btn.hs-choose { opacity: .85; } }
 
 /* ---------- short screens (phones held sideways): a narrower, tighter panel ---------- */
 @media (max-height: 520px) {
@@ -98,7 +107,7 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
   .hs-logo { width: ui(110px); }
   .hs-title { font-size: ui(20px); }
   // (held to the screen's height too: on a phone the UI's floor in css px set it wider than the button)
-  .btn.hs-choose { font-size: min(#{ui(16px)}, 4.5vh); padding: ui(11px) ui(16px); }
+  .btn.hs-choose { font-size: min(#{ui(16px)}, 4.5vh); padding: ui(9px) ui(16px); }
   .hs-skills { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: ui(4px); }
   .hs-skills .slot .icon { font-size: ui(16px); }
   .hs-tabs { gap: ui(10px); }
