@@ -273,8 +273,11 @@ export async function heroesShown(canary: boolean, lab: Lab): Promise<Found> {
   const hand = hiddenHandGlows(canary);
   const clicked = await clickBeside(lab, id);
   const steady = await cardsSteady(lab, screen, canary);
+  // (loaded here alone: it imports the screen's modules, which main's side of an A/B hasn't got)
+  const { heroPages } = await import('./uiHeroPages');
+  const pages = await heroPages(lab, screen, canary);
   const swept = await dragged(lab, screen);
-  for (const found of [placed, onHim, hand, clicked, steady, swept]) {
+  for (const found of [placed, onHim, hand, clicked, steady, pages, swept]) {
     lines.push(...found.lines);
     problems.push(...found.problems);
   }
@@ -434,12 +437,13 @@ async function dragged(lab: Lab, screen: HTMLElement): Promise<Found> {
 }
 
 /** Whether the canaries were found among `problems`: Back over the heroes' names, the card's moved traits, the
- *  choice put off the hero, and a glow by the hidden lobby hero's hand. */
+ *  choice put off the hero, a glow by the hidden lobby hero's hand, and an item of his made draggable. */
 export const heroesCanaryCaught = (problems: string[]): boolean =>
   problems.some((problem) => problem.includes('Back lies over') || problem.includes('lies over Back'))
   && problems.some((problem) => problem.includes(' moved '))
   && problems.some((problem) => problem.includes('choice stands off'))
-  && problems.some((problem) => problem.includes('glows by the hidden'));
+  && problems.some((problem) => problem.includes('glows by the hidden'))
+  && problems.some((problem) => problem.includes('can be dragged'));
 
 /** After the screen closed by Esc: the lobby back, its hero drawn. */
 export function heroesClosed(): Found {
