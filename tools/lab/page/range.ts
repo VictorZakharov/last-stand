@@ -22,6 +22,8 @@ import { bindKnown, holdFor, pressing, skillNamed } from './cast';
 import { TipMoves } from './tipMoves';
 import { CANARY_CAUGHT as WEAPON_CAUGHT, WeaponFloor, weaponCanary } from './weaponFloor';
 import { BODY_CANARY_CAUGHT, WeaponBody, bodyCanary } from './weaponBody';
+import { WeaponOnFoe, foeCanary } from './weaponOnFoe';
+import type { EnemyId } from '../../../src/data/enemies';
 import { ArmsPinned, describeStrain, pinnedCanary, type ArmLimits, type Ranges } from './armStrain';
 
 /**
@@ -227,6 +229,9 @@ export interface RangeOptions {
   weapon?: string;
   /** the game's tunable values set before each scenario (`--tune`) */
   tune?: Record<string, number[]>;
+  /** a foe stood ahead of him for the `cast` scenario, by its kind, and how far ahead (m) */
+  foe?: string;
+  foeAt?: number;
 }
 
 /** where every scenario starts: open ground, facing +z */
@@ -257,7 +262,11 @@ function attackDown(leg: RangeLeg, frame: number): boolean {
 export interface RangeReport {
   lines: string[];
   moments: Pictured[];
-  canary?: { caught: boolean; measured: number; weapon: number; body: number; wrist: string[]; pinned: boolean };
+  canary?: {
+    caught: boolean; measured: number; weapon: number; body: number; wrist: string[]; pinned: boolean;
+    /** with a foe ahead: whether the weapon read as over it while it stood aside (it must not) */
+    foeAside?: boolean;
+  };
   /** each scenario in which a two-hander was let go of by the other hand, as words */
   letGo: string[];
 }
@@ -358,6 +367,7 @@ async function runScenario(
   const through = new WeaponBody(scenario.name);
   const pinned = new ArmsPinned(scenario.name, ARM_LIMITS);
   const tracer = traceOf(lab, options);
+  const onFoe = await foeAhead(lab, scenario, options);
   const measure = () => {
     if (options.canary && !report.canary && run.frame === CANARY_FRAME) {
       const measured = measureCanary(lab);
@@ -378,6 +388,10 @@ async function runScenario(
     noteGrip(run.grip, lab.model.lowerGrip, `${run.frame}${momentIn(lab)}`);
     tip.observe(lab, `${run.frame}${momentIn(lab)}`);
     floor.observe(lab, `${run.frame}${momentIn(lab)}`);
+    onFoe?.observe(lab, `${run.frame}${momentIn(lab)}`);
+    if (onFoe && report.canary && report.canary.foeAside === undefined) {
+      report.canary.foeAside = foeCanary(lab, onFoe.foe);
+    }
     const deeper = through.observe(lab, `${run.frame}${momentIn(lab)}`);
     if (deeper) run.bodyMoment = lab.picture(`${scenario.what}, the weapon in the body`, ['third', 'front', 'left'], [
       `frame ${run.frame}${momentIn(lab)}`, `the weapon ${deeper}`,
@@ -419,6 +433,7 @@ async function runScenario(
   if (run.grip.seen) report.lines.push(`  ${describeLetGo(run.grip)}`);
   const underFloor = floor.describe();
   if (underFloor) report.lines.push(`  ${underFloor}`);
+  if (onFoe) report.lines.push(`  ${onFoe.describe()}`);
   const nearFloor = scenario.legs.some((leg) => leg.cast) ? floor.describeNearest() : '';
   if (nearFloor) report.lines.push(`  ${nearFloor}`);
   const inBody = through.describe();
@@ -553,8 +568,25 @@ export async function range(lab: Lab, options: RangeOptions): Promise<RangeRepor
     report.lines.push(`canary, the grip moved into the left thigh: the weapon ${into}`);
     report.lines.push(`canary, the right fist bent on its forearm: ${report.canary.wrist.join('; ')}`);
     report.lines.push(`canary, the right arm held at its stops: ${report.canary.pinned ? 'caught' : 'MISSED'}`);
+    const aside = report.canary.foeAside;
+    if (aside !== undefined) report.lines.push(`canary, the foe moved aside: ${aside ? 'MISSED' : 'caught'}`);
   }
   return report;
+}
+
+/** how far ahead of him the foe of `--foe` stands by default (m: within a two-hander's blow) */
+const FOE_AHEAD = 1.8;
+
+/** The foe `--foe` asks for stood ahead of the hero for the `cast` scenario, once it has risen, and what's read of
+ *  the weapon over it; none for any other scenario. */
+async function foeAhead(lab: Lab, scenario: RangeScenario, options: RangeOptions): Promise<WeaponOnFoe | null> {
+  if (!options.foe || scenario.name !== 'cast') return null;
+  const ahead = options.foeAt ?? FOE_AHEAD;
+  const facing = lab.player.facing;
+  const at = lab.player.pos.clone().add(new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing)).multiplyScalar(ahead));
+  const foe = lab.spawnFoe(options.foe as EnemyId, at);
+  await lab.until(() => foe.spawning <= 0, 600, `the ${options.foe} ahead never rose`);
+  return new WeaponOnFoe(foe);
 }
 
 /** The canary, if it ran and was missed, as a problem. */
@@ -568,7 +600,8 @@ export function missedRangeCanary(report: RangeReport): string[] {
   const bent = report.canary.wrist.some((verdict) => verdict.startsWith('missed'));
   const wrist = bent ? ['range: the canary (the fist bent on its forearm) was missed'] : [];
   const pinned = report.canary.pinned ? [] : ['range: the canary (the right arm held at its stops) was missed'];
-  return [...missed, ...weapon, ...body, ...wrist, ...pinned];
+  const aside = report.canary.foeAside ? ['range: the canary (the foe moved aside) was missed'] : [];
+  return [...missed, ...weapon, ...body, ...wrist, ...pinned, ...aside];
 }
 
 /** Each scenario in which a two-hander was let go of, as a problem: nothing it runs flings the arms apart. */

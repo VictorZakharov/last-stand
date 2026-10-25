@@ -214,6 +214,8 @@ export const COMMANDS = {
         help: 'the scenarios (all by default): stand, walk, shoot, reverse, taps, run, cast (with --skill)',
       },
       skill: { kind: 'text', usage: 'name', help: 'the cast scenario\'s skill: its key, its behaviour or its name' },
+      foe: { kind: 'text', usage: 'kind', help: 'a foe of this kind stood ahead of him for the cast scenario (dummy)' },
+      ahead: { kind: 'number', usage: 'm', help: 'with --foe, how far ahead it stands (1.8 by default)' },
       gear: SETUP_OPTIONS.gear,
       weapon: SETUP_OPTIONS.weapon,
       tune: SETUP_OPTIONS.tune,

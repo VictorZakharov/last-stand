@@ -422,6 +422,8 @@ export const COMMANDS = {
         trace: Boolean(options.trace),
         span: options.span,
         skill: options.skill,
+        foe: options.foe,
+        foeAt: options.ahead,
         gear: options.gear,
         weapon: options.weapon,
         tune: fixtureFrom(options).tune,

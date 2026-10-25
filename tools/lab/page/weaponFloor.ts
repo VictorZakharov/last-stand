@@ -9,8 +9,9 @@ import { groundHeight } from '../../../src/world/ground';
 
 /** under the floor by this much a part counts (m): a blow stopped on it rests its tip there */
 const UNDER_FROM = 0.02;
-/** the canary sinks the hero this far (m): the weapon, its lowest point a metre or so up, must be found under the
- *  floor by at least `CANARY_CAUGHT` */
+/** the canary sinks the hero this far further than the weapon's lowest point is over the floor (m), and it must be
+ *  found under the floor by at least `CANARY_CAUGHT` (sunk 2 m alone, a weapon raised overhead in a cast's charge,
+ *  over 2 m up, was still over the floor, and the canary was missed on every commit) */
 const CANARY_SINK = 2;
 export const CANARY_CAUGHT = 0.5;
 
@@ -23,6 +24,7 @@ interface Under {
 }
 
 const _corner = new THREE.Vector3();
+const _flat = new THREE.Vector3();
 const _gripAt = new THREE.Vector3();
 const _gripWay = new THREE.Vector3();
 
@@ -32,6 +34,8 @@ export class WeaponFloor {
   private deepest: Under | null = null;
   /** the weapon's lowest point at its nearest the floor (under it, or how far over it as a negative depth) */
   private nearest: Under | null = null;
+  /** how far its blade was off upright then (degrees: 0, its edge to the floor; 90, lying flat on it) */
+  private nearestTilt = 0;
   /** each frame it was under, as words */
   readonly listed: string[] = [];
 
@@ -41,7 +45,10 @@ export class WeaponFloor {
   /** Notes how far under the floor the weapon is this frame (`frame`: the frame as the report names it). */
   observe(lab: Lab, frame: string): void {
     const under = deepestUnder(lab, frame);
-    if (under && (!this.nearest || under.depth > this.nearest.depth)) this.nearest = under;
+    if (under && (!this.nearest || under.depth > this.nearest.depth)) {
+      this.nearest = under;
+      this.nearestTilt = bladeTilt(lab);
+    }
     if (!under || under.depth < UNDER_FROM) return;
     this.frames++;
     this.listed.push(`  ${this.scenario} frame ${frame}: the weapon ${describeUnder(under)}`);
@@ -59,8 +66,10 @@ export class WeaponFloor {
   describeNearest(): string {
     const nearest = this.nearest;
     if (!nearest) return '';
-    if (nearest.depth >= 0) return `the weapon nearest the floor ${describeUnder(nearest)}`;
-    return `the weapon nearest the floor ${describeUnder({ ...nearest, depth: -nearest.depth }, 'over it')}`;
+    const tilt = `its blade ${this.nearestTilt.toFixed(0)}° off upright`;
+    const over = { ...nearest, depth: -nearest.depth };
+    const point = nearest.depth >= 0 ? describeUnder(nearest) : describeUnder(over, 'over it');
+    return `the weapon nearest the floor ${point}, ${tilt}`;
   }
 }
 
@@ -68,11 +77,22 @@ export class WeaponFloor {
  *  weapon read (m; none held, 0). */
 export function weaponCanary(lab: Lab): number {
   const root = lab.model.root;
-  root.position.y -= CANARY_SINK;
+  const over = Math.max(0, -(deepestUnder(lab, 'canary')?.depth ?? 0));
+  root.position.y -= over + CANARY_SINK;
   const depth = deepestUnder(lab, 'canary')?.depth ?? 0;
-  root.position.y += CANARY_SINK;
+  root.position.y += over + CANARY_SINK;
   root.updateMatrixWorld(true);
   return depth;
+}
+
+/** How far the blade in the main hand is off upright (degrees): its flat's normal, the grip's own x (the warrior's
+ *  `FLAT_IN_GRIP`), against level. An axe driven into the ground bites it edge first, its flat upright (from play: "axe
+ *  needs to strike with blade perpendicular to ground"). */
+function bladeTilt(lab: Lab): number {
+  const grip = lab.model.tip?.parent;
+  if (!grip) return 0;
+  const normal = _flat.set(1, 0, 0).transformDirection(grip.matrixWorld);
+  return THREE.MathUtils.radToDeg(Math.asin(Math.min(1, Math.abs(normal.y))));
 }
 
 /** A point under the floor as words: how deep, where along the weapon, and in which frame (`side`: over it, for a

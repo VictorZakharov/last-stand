@@ -76,7 +76,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   shoulder or the flask in hand are counted apart, `LowerGrip.free`), and its worst moment pictured, and the weapon
   under the floor (`page/weaponFloor.ts`: every corner of the surface of what the main hand holds, on how many frames,
   the deepest and how far along the weapon; Thunder Crescent put an axe's or a maul's head into the floor to its
-  middle), and an arm held at its stops (`page/armStrain.ts`: two or more of one arm's joints within 2° of an end of
+  middle; in a cast, the weapon's nearest the floor and its blade's tilt off upright, the grip's flat against level:
+  "axe needs to strike with blade perpendicular to ground"), and an arm held at its stops (`page/armStrain.ts`:
+  two or more of one arm's joints within 2° of an end of
   their ranges on the same frame, a gripping wrist by a gripping wrist's: the arm IK stops the forearm's turn and the
   wrist at their ends, so a pose asking more of an arm than it gives is held there, within every range; two-handed
   Power Strike's end held the forearm at 89.9° of its 90 and the wrist at 30° of its 30, and looked "broken". On how
@@ -85,8 +87,13 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   against the thighs and shins, capsules round their bones at their drawn radii, and the belly and chest, the
   anatomy's solids; on how many frames, the deepest, in which part and how far along the weapon, pictured: said, not
   failed, as main has it too. Thunder Crescent's end and Rending Cleave put the haft's butt 10 cm into a thigh, "axe
-  shaft going through leg"). `--canary` turns the head past the neck's range on one frame and sinks the hero 2 m for
-  one measure (the weapon must be found under the floor), moves the weapon's grip to the left thigh's middle for one
+  shaft going through leg"). `--foe <kind>` stands a foe `--ahead` m before him (1.8 by default) for the cast
+  scenario (`page/weaponOnFoe.ts`): the weapon's lowest over its body, a share of its height ("power strike should
+  land on the enemy its striking"), its canary moving the foe 3 m aside for a reading, which must find nothing.
+  `--canary` turns the head past the neck's range on one frame and sinks the hero below the floor by the weapon's
+  height over it and 2 m for one measure (the weapon must be found under the floor: sunk 2 m alone, a weapon raised in
+  a cast's charge stayed over it, and the canary was missed on main too), moves the weapon's grip to the left
+  thigh's middle for one
   (it must be found in it), and reads an arm whose forearm and wrist are at their ends (it must read pinned),
   `--frames` lists every frame with a joint past its range, every frame an arm was pinned, every frame the weapon was
   under the floor or in the body and every frame between moves the tip moved 10 cm or more (with every joint that
