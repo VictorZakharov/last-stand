@@ -23,6 +23,7 @@ import { TipMoves } from './tipMoves';
 import { CANARY_CAUGHT as WEAPON_CAUGHT, WeaponFloor, weaponCanary } from './weaponFloor';
 import { BODY_CANARY_CAUGHT, WeaponBody, bodyCanary } from './weaponBody';
 import { WeaponOnFoe, foeCanary } from './weaponOnFoe';
+import { WeaponPath } from './weaponPath';
 import type { EnemyId } from '../../../src/data/enemies';
 import { ArmsPinned, describeStrain, pinnedCanary, type ArmLimits, type Ranges } from './armStrain';
 
@@ -276,6 +277,8 @@ export interface RangeReport {
     caught: boolean; measured: number; weapon: number; body: number; wrist: string[]; pinned: boolean;
     /** with a foe ahead: whether the weapon read as over it while it stood aside (it must not) */
     foeAside?: boolean;
+    /** in a cast: whether the tip's path, one fast point moved aside, read as off its line (it must) */
+    pathAside?: boolean;
   };
   /** each scenario in which a two-hander was let go of by the other hand, as words */
   letGo: string[];
@@ -354,6 +357,8 @@ interface ScenarioRun {
   pinnedMoment: Pictured | null;
   /** the frame the weapon was deepest in the body, pictured */
   bodyMoment: Pictured | null;
+  /** the weapon's tip's path through a cast, pictured as the cast ends */
+  pathMoment?: Pictured | null;
   /** each ankle's fastest move in a frame (m) and where */
   fastest: number;
   fastestAt: string;
@@ -379,6 +384,7 @@ async function runScenario(
   const pinned = new ArmsPinned(scenario.name, ARM_LIMITS);
   const tracer = traceOf(lab, options);
   const onFoe = await foeAhead(lab, scenario, options);
+  const path = scenario.legs.some((leg) => leg.cast) ? new WeaponPath() : null;
   const measure = () => {
     if (options.canary && !report.canary && run.frame === CANARY_FRAME) {
       const measured = measureCanary(lab);
@@ -400,6 +406,9 @@ async function runScenario(
     tip.observe(lab, `${run.frame}${momentIn(lab)}`);
     floor.observe(lab, `${run.frame}${momentIn(lab)}`);
     onFoe?.observe(lab, `${run.frame}${momentIn(lab)}`);
+    if (path?.observe(lab, `${run.frame}${momentIn(lab)}`)) {
+      run.pathMoment = path.picture(lab, `${scenario.what}, the weapon's tip frame by frame`);
+    }
     if (onFoe && report.canary && report.canary.foeAside === undefined) {
       report.canary.foeAside = foeCanary(lab, onFoe.foe);
     }
@@ -449,6 +458,10 @@ async function runScenario(
   if (nearFloor) report.lines.push(`  ${nearFloor}`);
   const inBody = through.describe();
   if (inBody) report.lines.push(`  ${inBody}`);
+  const pathLine = path?.describe();
+  if (pathLine) report.lines.push(`  ${pathLine}`);
+  if (run.pathMoment) report.moments.push(run.pathMoment);
+  if (path && report.canary) report.canary.pathAside = path.canary();
   const atStops = pinned.describe();
   if (atStops) report.lines.push(`  ${atStops}`, `    the stops: ${pinned.tally()}`);
   if (run.grip.frames > 0) report.letGo.push(`${scenario.what}: ${describeLetGo(run.grip)}`);
@@ -581,6 +594,10 @@ export async function range(lab: Lab, options: RangeOptions): Promise<RangeRepor
     report.lines.push(`canary, the right arm held at its stops: ${report.canary.pinned ? 'caught' : 'MISSED'}`);
     const aside = report.canary.foeAside;
     if (aside !== undefined) report.lines.push(`canary, the foe moved aside: ${aside ? 'MISSED' : 'caught'}`);
+    const pathAside = report.canary.pathAside;
+    if (pathAside !== undefined) {
+      report.lines.push(`canary, a point of the tip's path moved aside: ${pathAside ? 'caught' : 'MISSED'}`);
+    }
   }
   return report;
 }
@@ -612,7 +629,9 @@ export function missedRangeCanary(report: RangeReport): string[] {
   const wrist = bent ? ['range: the canary (the fist bent on its forearm) was missed'] : [];
   const pinned = report.canary.pinned ? [] : ['range: the canary (the right arm held at its stops) was missed'];
   const aside = report.canary.foeAside ? ['range: the canary (the foe moved aside) was missed'] : [];
-  return [...missed, ...weapon, ...body, ...wrist, ...pinned, ...aside];
+  const pathMissed = report.canary.pathAside === false;
+  const path = pathMissed ? ["range: the canary (a point of the tip's path moved aside) was missed"] : [];
+  return [...missed, ...weapon, ...body, ...wrist, ...pinned, ...aside, ...path];
 }
 
 /** Each scenario in which a two-hander was let go of, as a problem: nothing it runs flings the arms apart. */
