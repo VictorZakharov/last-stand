@@ -389,6 +389,10 @@ const SM_LAND = [0.47, 0.55];
  *  elbows out and the fists slanted on the handle, the hands could tip it down themselves: the knees went past their
  *  ranges, the blade lay flat, 53 degrees off upright, and the left hand let go.) */
 const GROUND = tunable('warriorGround', { ahead: 0.6, side: 0, high: 0.8, pole: [-1, -0.6, -0.5] });
+/** how far a one-hander's wrist turns its blade toward the arm as Power Strike lands (rad, of `ALONG_ARM`'s 50
+ *  degrees): a fist gives 30 toward the little finger, and asked for the rest the forearm turned to its stop too,
+ *  the elbow thrown out ("one handed weird elbow bent too"); the floor stop brings the blade down the rest */
+const ONE_LAND_WRIST = 0.45;
 const SM_POLE = new THREE.Vector3();
 const _land = new THREE.Vector2();
 const _strikeOn: Struck = { x: 0, z: 0, r: 0, top: 0 };
@@ -958,7 +962,9 @@ export function buildWarrior(): Model {
     // (his right is the way he faces turned a quarter round, -z for +x)
     const ax = feet.x + (fx * GROUND.ahead - fz * GROUND.side) * s, az = feet.z + (fz * GROUND.ahead + fx * GROUND.side) * s;
     const land = landing(ax, az, fx, fz, len);
-    const ay = groundHeight(ax, az) + GROUND.high * s;
+    // (over the ground he stands on: over the ground ahead, on a plinth in the hall of heroes the hands came down by
+    // its height, the weapon stood straight down and the left hand let go of it, "holding it with just one hand")
+    const ay = groundHeight(feet.x, feet.z) + GROUND.high * s;
     const down = -Math.atan2(ay - land.y, land.x);
     _hw1.set(ax, ay, az);
     _hw2.set(fx * Math.cos(down), Math.sin(down), fz * Math.cos(down));
@@ -1761,7 +1767,8 @@ export function buildWarrior(): Model {
         // (the blade kept along the arm, so it's driven down into the ground before him, where the skill strikes:
         // with the wrists cocked back as it landed, a one-hander finished pointing ahead at the hips, its tip 1.2 m
         // over the floor, "warrior should hit the ground right?")
-        const wr = ALONG_ARM * w;
+        // (a one-hander's wrist gives only so much as the blow lands, `ONE_LAND_WRIST`)
+        const wr = lerp(ALONG_ARM, ONE_LAND_WRIST, two ? 0 : ramp(k, 0.9, 0.95)) * w;
         j.handR.rotation.x += wr;
         if (offHeld) {
           const L = j.shoulderL.rotation;
@@ -1786,6 +1793,8 @@ export function buildWarrior(): Model {
         // (and its weapon turned onto the floor in the fist and stopped by it, as Thunder Crescent's is: held as placed,
         // its head stopped 63 to 67 cm over the floor, "should land on the ground")
         if (end > 0) { aimDown = end; stop = end; fall = 1; }
+        // (a one-hander's turned down onto the floor about the shoulder as it lands, and stopped by it)
+        if (!two && held) { stop = w * ramp(k, PS_LAND[0], PS_LAND[1]); fall = 1; }
       } else if (a.name === 'smite' && !fp) {
         // Thunder Crescent (SM_*): the great weapon raised overhead and driven down into the ground before him (a
         // two-hander raised over the middle of the head, within the left hand's reach, as Power Strike's is)
