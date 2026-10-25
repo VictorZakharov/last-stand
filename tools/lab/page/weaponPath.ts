@@ -58,12 +58,15 @@ export class WeaponPath {
     return false;
   }
 
-  /** How straight the fast part ran, as words, or none if the tip never moved fast in a cast. */
+  /** How straight the fast part ran on its way down, as words, or none if the tip never moved fast coming down.
+   *  (Read from the tip's highest point on: the raise before it crosses the body from a guard held across it, and
+   *  counted in, it read 39 cm with a downswing that kept its line.) */
   describe(): string {
-    const stray = strayOf(this.points);
+    const stray = strayOf(downFrom(this.points));
     if (!stray) return '';
     const most = `${(stray.most * 100).toFixed(1)} cm (frame ${stray.at})`;
-    return `the weapon's tip over its ${stray.fast} fast frames, seen from above, off a straight line by ${most}`;
+    const fast = `its ${stray.fast} fast frames on the way down from its highest`;
+    return `the weapon's tip over ${fast}, seen from above, off a straight line by ${most}`;
   }
 
   /** The path drawn as a line with a mark every few frames, pictured from `views`, and taken out again. */
@@ -83,9 +86,10 @@ export class WeaponPath {
 
   /** The canary: one fast point moved `CANARY_ASIDE` across its line. Returns whether the stray then read caught it. */
   canary(): boolean {
-    const fast = this.points.filter((point) => point.fast);
+    const down = downFrom(this.points);
+    const fast = down.filter((point) => point.fast);
     if (fast.length < 3) return false;
-    const moved = this.points.map((point) => ({ ...point, at: point.at.clone() }));
+    const moved = down.map((point) => ({ ...point, at: point.at.clone() }));
     const middle = moved.filter((point) => point.fast)[Math.floor(fast.length / 2)];
     const line = lineOf(fast);
     middle.at.x += -line.z * CANARY_ASIDE;
@@ -93,6 +97,15 @@ export class WeaponPath {
     const stray = strayOf(moved);
     return stray !== null && stray.most >= CANARY_CAUGHT;
   }
+}
+
+/** The points from the highest on: the way down. */
+function downFrom(points: PathPoint[]): PathPoint[] {
+  let highest = 0;
+  points.forEach((point, i) => {
+    if (point.at.y > points[highest].at.y) highest = i;
+  });
+  return points.slice(highest);
 }
 
 /** The fast points' most distance from their straight line seen from above, or none with fewer than two. */

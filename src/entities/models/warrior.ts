@@ -394,6 +394,13 @@ const GROUND = tunable('warriorGround', { ahead: 0.6, side: 0, high: 0.8, pole: 
  *  the elbow thrown out ("one handed weird elbow bent too"); the floor stop brings the blade down the rest */
 const ONE_LAND_WRIST = 0.45;
 const SM_POLE = new THREE.Vector3();
+/** A two-hander's Power Strike raised and brought down by the right arm's raise across him (rad, the shoulder's z),
+ *  its grip over the middle of his head within the left hand's reach, not turned across the chest nor twisted at
+ *  the hips: a heavy weapon swung hard keeps its line ("axe should go down in 1 line, without changing
+ *  direction/turning", "keeping momentum"). Turned across (the shoulder's y 0.7) the arm swung down on a cone, and the
+ *  tip strayed 39 to 49 cm off a straight line from above on its way down (`lab range`'s path), 11 to 12 now; with
+ *  no raise across the left hand let go of it overhead, and at 0.2 the shoulder went past its range as it charged. */
+const PS_ACROSS = 0.18;
 const _land = new THREE.Vector2();
 const _strikeOn: Struck = { x: 0, z: 0, r: 0, top: 0 };
 /** the overhead blows through the eyes: the weapon raised by `lift` of the cast, coming down from `from` to `to` (as
@@ -1762,7 +1769,7 @@ export function buildWarrior(): Model {
         const w = ramp(k, 0, 0.1), blow = ramp(k, 0.9, 0.97), lift = ramp(k, 0, 0.3);
         const shake = (1 - blow) * lift * Math.sin(t * 45) * 0.02 * (0.5 + ramp(k, 0.3, 0.88));
         const pitch = curve(PS_PITCH, k) + shake, bend = curve(two ? [[0, -0.55], [1, -0.55]] : PS_ELBOW, k);
-        R.x = lerp(R.x, pitch, w); R.z = lerp(R.z, 0, w); R.y = (two ? 0.7 : 0.25) * w;
+        R.x = lerp(R.x, pitch, w); R.z = lerp(R.z, two ? PS_ACROSS : 0, w); R.y = (two ? 0 : 0.25) * w;
         j.elbowR.rotation.x = lerp(j.elbowR.rotation.x, bend, w);
         // (the blade kept along the arm, so it's driven down into the ground before him, where the skill strikes:
         // with the wrists cocked back as it landed, a one-hander finished pointing ahead at the hips, its tip 1.2 m
@@ -1781,7 +1788,9 @@ export function buildWarrior(): Model {
         }
         const sb = curve(PS_BEND, k), ws = w * (0.4 + 0.6 * still);
         j.spine.rotation.x += sb * w; j.neck.rotation.x -= 0.55 * sb * w;
-        j.hips.rotation.y += curve(PS_HIPS, k) * w; j.chest.rotation.y -= 0.6 * curve(PS_HIPS, k) * w;
+        // (a two-hander's hips not twisted into the blow, `PS_ACROSS`: twisted, its tip swung across its line)
+        const hipsK = two ? 0 : 1;
+        j.hips.rotation.y += curve(PS_HIPS, k) * w * hipsK; j.chest.rotation.y -= 0.6 * curve(PS_HIPS, k) * w * hipsK;
         j.body.position.z += curve(PS_FWD, k) * ws; j.body.position.y += curve(PS_DIP, k) * ws;
         // (a step in with the left foot as the weapon rises; the right stays back, turned out)
         feet = CHOP_FEET;

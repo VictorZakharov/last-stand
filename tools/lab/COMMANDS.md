@@ -90,10 +90,12 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   shaft going through leg"). In a cast, the weapon's tip is traced frame by frame (`page/weaponPath.ts`) and drawn as
   a line in the pictures (red where it moves fast, a mark every third frame; from the front, the left and above,
   framed on the path): a heavy weapon swung hard keeps its line ("axe should go down in 1 line, without changing
-  direction/turning", "just draw a line of the same point of the axe"), so its fast frames should run straight from
-  above, and the line says how far they stray off it (two-handed Power Strike: 48 cm, its shoulder turned across him
-  as it's raised); its canary moves one fast point 30 cm aside. The cast scenario runs 4.5 s from the press, through
-  the stand after the end until a two-hander goes onto his shoulder (at 2.5 s a 1.5 s cast's stand went unread).
+  direction/turning", "just draw a line of the same point of the axe"), so its fast frames on the way down (from its
+  highest: the raise crosses the body from a guard held across it) should run straight from above, and the line says
+  how far they stray off it (two-handed Power Strike: 39 to 49 cm with its shoulder turned across him as it's raised,
+  11 to 12 raised across instead); its canary moves one fast point 30 cm aside. The cast scenario runs 4.5 s from the
+  press, through the stand after the end until a two-hander goes onto his shoulder (at 2.5 s a 1.5 s cast's stand went
+  unread).
   `--at x,z` and `--facing` stand every scenario elsewhere (`--at 0,4.7`: the dais's edge facing off it, the ground ahead a step lower than under
   his feet, as off a plinth in the hall of heroes, where the left hand let go of a two-hander after Power Strike).
   `--foe <kind>` stands a foe `--ahead` m before him (1.8 by default) for the cast scenario (`page/weaponOnFoe.ts`):
