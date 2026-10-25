@@ -87,15 +87,21 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   against the thighs and shins, capsules round their bones at their drawn radii, and the belly and chest, the
   anatomy's solids; on how many frames, the deepest, in which part and how far along the weapon, pictured: said, not
   failed, as main has it too. Thunder Crescent's end and Rending Cleave put the haft's butt 10 cm into a thigh, "axe
-  shaft going through leg"). In a cast, the weapon's tip is traced frame by frame (`page/weaponPath.ts`) and drawn as
-  a line in the pictures (red where it moves fast, a mark every third frame; from the front, the left and above,
-  framed on the path): a heavy weapon swung hard keeps its line ("axe should go down in 1 line, without changing
-  direction/turning", "just draw a line of the same point of the axe"), so its fast frames on the way down (from its
-  highest: the raise crosses the body from a guard held across it) should run straight from above, and the line says
-  how far they stray off it (two-handed Power Strike: 39 to 49 cm with its shoulder turned across him as it's raised,
-  11 to 12 raised across instead); its canary moves one fast point 30 cm aside. The cast scenario runs 4.5 s from the
-  press, through the stand after the end until a two-hander goes onto his shoulder (at 2.5 s a 1.5 s cast's stand went
-  unread).
+  shaft going through leg"). The arms against the body: each forearm and hand against the trunk and head
+  (`page/armsIn.ts`, as `eyes` reads them) and against the thighs and shins (`page/armsInLegs.ts`, capsules at their
+  drawn radii), the deepest pictured, said, not failed (from play: "power strike ending pose makes hand go through
+  body, its a regression, pls figure out how it went past our guards": range read the joints' angles and the weapon
+  alone, on level ground, and two-handed Power Strike's end put a fist 9 cm into the left thigh and the right forearm
+  16 cm into the belly in the hall of heroes, on a plinth; `--at 0,4.3`, 0.9 m back from the dais's step, shows it, 23
+  frames); their canaries plant the right elbow in the chest and a hand in the left thigh. In a cast, the weapon's tip
+  is traced frame by frame (`page/weaponPath.ts`) and drawn as a line in the pictures (red where it moves fast, a mark
+  every third frame; from the front, the left and above, framed on the path): a heavy weapon swung hard keeps its line
+  ("axe should go down in 1 line, without changing direction/turning", "just draw a line of the same point of the
+  axe"), so its fast frames on the way down (from its highest: the raise crosses the body from a guard held across it)
+  should run straight from above, and the line says how far they stray off it (two-handed Power Strike: 39 to 49 cm
+  with its shoulder turned across him as it's raised, 11 to 12 raised across instead); its canary moves one fast point
+  30 cm aside. The cast scenario runs 4.5 s from the press, through the stand after the end until a two-hander goes
+  onto his shoulder (at 2.5 s a 1.5 s cast's stand went unread).
   `--at x,z` and `--facing` stand every scenario elsewhere (`--at 0,4.7`: the dais's edge facing off it, the ground ahead a step lower than under
   his feet, as off a plinth in the hall of heroes, where the left hand let go of a two-hander after Power Strike).
   `--foe <kind>` stands a foe `--ahead` m before him (1.8 by default) for the cast scenario (`page/weaponOnFoe.ts`):

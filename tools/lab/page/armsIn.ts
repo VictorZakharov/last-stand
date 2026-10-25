@@ -36,9 +36,11 @@ export function armsInBody(joints: Joints): ArmIn[] {
   return [...deepest.values()];
 }
 
-/** The arms in the body over a run's frames, as a line: each arm's deepest and where, and on how many frames it was
- *  past `IN_BODY_PAST`. */
-export function describeArmsIn(seen: readonly ArmsInSeen[]): string {
+/** The arms in the body over a run's frames, as a line under `heading`: each arm's deepest and where, and on how
+ *  many frames it was past `IN_BODY_PAST`. */
+export function describeArmsIn(
+  seen: readonly ArmsInSeen[], heading = 'the arms in the body the view hides (said, not failed)',
+): string {
   const words = (['R', 'L'] as const).map((side) => {
     const arm = side === 'R' ? 'the right arm' : 'the left arm';
     const frames = seen.flatMap((now) => now.inBody.filter((arm) => arm.side === side).map((arm) => ({ now, arm })));
@@ -51,8 +53,11 @@ export function describeArmsIn(seen: readonly ArmsInSeen[]): string {
     const counted = `past ${centimetres(IN_BODY_PAST)} on ${past.length} frames${listed}`;
     return `${arm} up to ${centimetres(worst.arm.depth)} into it (frame ${worst.now.frame}, ${where}), ${counted}`;
   });
-  return `the arms in the body the view hides (said, not failed): ${words.join('; ')}`;
+  return `${heading}: ${words.join('; ')}`;
 }
+
+/** The deepest any arm is in the body now (the rig's units: 0 when both are clear of it). */
+export const deepestArm = (inBody: readonly ArmIn[]): number => Math.max(0, ...inBody.map((arm) => arm.depth));
 
 /** A depth as words, in cm. */
 const centimetres = (depth: number) => `${(depth * 100).toFixed(1)} cm`;
