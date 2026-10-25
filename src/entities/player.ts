@@ -24,10 +24,14 @@ import { angleDamp, damp, hitFlash, rand } from '../util';
 import { applyShadowDetail } from '../core/quality';
 import { castAsOne, type OneShadow } from './models/castAsOne';
 import { countDown, countHealed, countTaken } from '../game/stats';
-import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SkillDef, SkillKey } from '../types';
+import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SkillDef, SkillKey, Struck } from '../types';
 import type { Enemy } from './enemy';
 
 const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3();
+/** an overhead blow comes down on a foe whose near side is within this ahead (m: a two-hander's reach past the hands
+ *  held before him), on the share of its height its top is taken at (the shoulders and the head) */
+const STRUCK_REACH = 2.2, STRUCK_TOP = 0.85;
+const _struck: Struck = { x: 0, z: 0, r: 0, top: 0 };
 
 /** A skill the class knows: its tuning data + behavior. Keyed by `def.impl`. */
 export interface KnownSkill { def: SkillDef; impl: SkillImpl }
@@ -966,6 +970,24 @@ export class Player {
     look.update(dt, _lookFrom, this.facing, best ? _lookAt.set(best.pos.x, best.obj.position.y + best.height * 0.6, best.pos.z) : null);
   }
 
+  /** The foe an overhead blow comes down on: the nearest alive on the line straight ahead within `STRUCK_REACH`, its
+   *  body across the line, as this game shows it (a co-op partner's copy reads its own foes), or none. */
+  private struckAhead(): Struck | null {
+    const fx = Math.sin(this.facing), fz = Math.cos(this.facing);
+    let best: Enemy | null = null, bestAlong = Infinity;
+    for (const e of G.enemies) {
+      if (!e.alive || e.spawning) continue;
+      const dx = e.pos.x - this.pos.x, dz = e.pos.z - this.pos.z;
+      const along = dx * fx + dz * fz, across = Math.abs(dx * fz - dz * fx);
+      if (along <= 0 || along - e.radius > STRUCK_REACH || across > e.radius || along >= bestAlong) continue;
+      best = e; bestAlong = along;
+    }
+    if (!best) return null;
+    _struck.x = best.pos.x; _struck.z = best.pos.z; _struck.r = best.radius;
+    _struck.top = best.obj.position.y + best.height * STRUCK_TOP;
+    return _struck;
+  }
+
   pose(dt: number, t: number, move: number, dir: number, lean: number, action: ActionState | null): void {
     this.obj.position.set(this.pos.x, damp(this.obj.position.y, groundHeight(this.pos.x, this.pos.z), 14, dt), this.pos.z);
     // (all of it: through the eyes the last frame placed the model in view, entities/viewModel.ts)
@@ -983,6 +1005,7 @@ export class Player {
       hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,
       charge: this.channel ? 1 : this.casting ? this.casting.t / this.casting.dur : 0,
       nocked: this.nocked,
+      strike: action?.name === 'chop' ? this.struckAhead() : null,
       look: () => this.lookAtFoe(dt, dead),
     });
     // (dev builds: a joint taken past a body's range is reported; through the eyes the arms keep hand-placed poses)

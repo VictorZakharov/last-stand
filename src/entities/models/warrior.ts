@@ -36,7 +36,7 @@ import {
   ONE_POWER,
   TWO_SPINS, TWO_POWERS, TWO_SMITES,
 } from './warriorEyes';
-import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Model } from '../../types';
+import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Model, Struck } from '../../types';
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
 /** the actions that strike with the weapons (Rending Cleave, Power Strike, Thunder Crescent, Steel Tempest, Twin Fangs):
@@ -381,11 +381,17 @@ const SM_YAW: Keys = [[0, 0.7], [0.42, 0.7], [0.5, 0.4], [1, 0.4]];
  *  raised, then falling from there over these shares, faster as it comes, until it points at the floor */
 const SM_TAKE = [0, 0.12], SM_FALL = [0.45, 0.55];
 const SM_BLADE: Keys = [[0, 1.1], [0.34, 2], [0.42, 2.05]];
-/** where the blow ends: from these shares of the cast the hands come to rest together before the middle of him, this
- *  far ahead of his feet and this high over the floor (m at a man's size), the elbows out and down (chest's frame).
- *  (0.6 ahead put a two-hander's haft through the left thigh; 0.8 took its lower grip out of the left hand's reach) */
-const SM_LAND = [0.47, 0.55], SM_AHEAD = 0.7, SM_HIGH = 0.8;
-const SM_POLE = new THREE.Vector3(-1, -0.6, -0.5);
+/** where the blow ends: from these shares of the cast the hands come to rest together before the middle of him */
+const SM_LAND = [0.47, 0.55];
+/** A blow driven into the ground ends standing, the hands before him, `ahead` of his feet, `side` to his right and
+ *  `high` over the floor (m at a man's size), the elbows towards `pole` (chest's frame), and the weapon turned onto the
+ *  floor in the fist (`aimAtFloor`), its blade upright and its head on the ground. (Bowed and crouched, with the
+ *  elbows out and the fists slanted on the handle, the hands could tip it down themselves: the knees went past their
+ *  ranges, the blade lay flat, 53 degrees off upright, and the left hand let go.) */
+const GROUND = tunable('warriorGround', { ahead: 0.6, side: 0, high: 0.8, pole: [-1, -0.6, -0.5] });
+const SM_POLE = new THREE.Vector3();
+const _land = new THREE.Vector2();
+const _strikeOn: Struck = { x: 0, z: 0, r: 0, top: 0 };
 /** the overhead blows through the eyes: the weapon raised by `lift` of the cast, coming down from `from` to `to` (as
  *  their keys in models/warriorEyes.ts, landing where the skill fires), and how much it trembles as it's held up
  *  (Power Strike's charge) */
@@ -851,6 +857,8 @@ export function buildWarrior(): Model {
   let tailName = '', tailT = 0;
   // (whether the fade under way is a two-hander's way back to its guard out of a move, placed by the weapon)
   let backOut = false;
+  // (the foe an overhead blow comes down on this frame, `AnimState.strike`)
+  let strikeOn: Struck | null = null;
   /** when a swing last ended, and whether this one follows straight on from it (it starts wound, where the last one
    *  finished); and whether it's the next of a row, begun while the last one's end was held (`SWING_HOLD`) */
   let swingEnd = -9, chain = false, inRow = false;
@@ -918,21 +926,43 @@ export function buildWarrior(): Model {
     if (offHeld) { bladeL.from.position.y = offHeld.edge[0]; bladeL.to.position.y = offHeld.edge[1]; }
   }
 
-  /** The weapon arm, `k` of the way, where a blow into the ground ends: the grip before the middle of him (`SM_AHEAD`,
-   *  `SM_HIGH`), the weapon from there to the floor straight ahead as far off as its length reaches. */
+  /** Where a blow coming down at (`x`, `z`) lands: the top of the foe it strikes (`AnimState.strike`) within its body,
+   *  else the floor. */
+  function landHeight(x: number, z: number): number {
+    const on = strikeOn;
+    if (on && Math.hypot(x - on.x, z - on.z) < on.r) return Math.max(on.top, groundHeight(x, z));
+    return groundHeight(x, z);
+  }
+
+  /** How far ahead of (`x`, `z`) along (`fx`, `fz`) a weapon `len` long comes down, and how high (into `_land`): on the
+   *  foe it strikes, its near side, if it's within that; else on the floor as far off as the weapon reaches. */
+  function landing(x: number, z: number, fx: number, fz: number, len: number): THREE.Vector2 {
+    const on = strikeOn;
+    if (on) {
+      const along = (on.x - x) * fx + (on.z - z) * fz;
+      if (along > 0 && along - on.r < len) return _land.set(Math.max(0.2, along - on.r * 0.5), on.top);
+    }
+    return _land.set(len * 0.8, groundHeight(x + fx * len * 0.8, z + fz * len * 0.8));
+  }
+
+  /** The weapon arm, `k` of the way, where a blow into the ground ends: the grip before the middle of him (`GROUND`),
+   *  the weapon from there to the floor straight ahead as far off as its length reaches, or onto the top of the foe
+   *  it strikes. (With the hands raised over a foe's top, the arms went up overhead after the blow had come down,
+   *  the shoulder 119 degrees past its raise.) */
   function holdAtFloor(k: number): void {
     root.updateMatrixWorld(true);
     const s = root.scale.x, len = tip.position.y * s;
     const way = _hw2.set(0, 0, 1).transformDirection(root.matrixWorld), level = Math.hypot(way.x, way.z) || 1;
     const fx = way.x / level, fz = way.z / level;
     const feet = root.getWorldPosition(_hw1);
-    const ax = feet.x + fx * SM_AHEAD * s, az = feet.z + fz * SM_AHEAD * s;
-    const ay = groundHeight(ax, az) + SM_HIGH * s;
-    const drop = Math.min(len * 0.98, ay - groundHeight(ax + fx * len * 0.8, az + fz * len * 0.8));
-    const down = -Math.asin(drop / len);
+    // (his right is the way he faces turned a quarter round, -z for +x)
+    const ax = feet.x + (fx * GROUND.ahead - fz * GROUND.side) * s, az = feet.z + (fz * GROUND.ahead + fx * GROUND.side) * s;
+    const land = landing(ax, az, fx, fz, len);
+    const ay = groundHeight(ax, az) + GROUND.high * s;
+    const down = -Math.atan2(ay - land.y, land.x);
     _hw1.set(ax, ay, az);
     _hw2.set(fx * Math.cos(down), Math.sin(down), fz * Math.cos(down));
-    holdInWorld(ARM_R, _hw1, _hw2, SM_POLE, k);
+    holdInWorld(ARM_R, _hw1, _hw2, SM_POLE.fromArray(GROUND.pole), k);
   }
 
   /** The weapon turned in the fist, `k` of the way, to point in the upright plane straight ahead, `u` of the way down
@@ -943,10 +973,11 @@ export function buildWarrior(): Model {
     // (straight ahead of the body, level)
     const way = _gs2.set(0, 0, 1).transformDirection(root.matrixWorld), level = Math.hypot(way.x, way.z) || 1;
     const fx = way.x / level, fz = way.z / level;
-    let drop = from.y - groundHeight(from.x + fx * len * 0.8, from.z + fz * len * 0.8);
+    const land = landing(from.x, from.z, fx, fz, len);
     // (a grip held higher than the weapon is long points it down, a little ahead)
-    drop = Math.min(drop, len * 0.98);
-    const down = lerp(up, -Math.asin(drop / len), u);
+    const drop = Math.min(from.y - land.y, len * 0.98);
+    const onto = strikeOn && land.y > groundHeight(from.x, from.z) ? -Math.atan2(drop, land.x) : -Math.asin(drop / len);
+    const down = lerp(up, onto, u);
     _gs2.set(fx * Math.cos(down), Math.sin(down), fz * Math.cos(down));
     _gs3.set(0, 1, 0).transformDirection(grip.matrixWorld);
     // (turned about the line square to both ways; nearly opposite, where that line is lost and a frame turned the
@@ -986,7 +1017,7 @@ export function buildWarrior(): Model {
       _gs3.copy(p).applyMatrix4(held!.group.matrixWorld);
       // (in the upright plane across the line the turn is about: out along the way, and up)
       const along = (_gs3.x - sh.x) * wx + (_gs3.z - sh.z) * wz, up = _gs3.y - sh.y, r = Math.hypot(along, up);
-      const floor = groundHeight(_gs3.x, _gs3.z) - sh.y;
+      const floor = landHeight(_gs3.x, _gs3.z) - sh.y;
       // (a point behind the shoulder goes down as the weapon comes up; one nearer it than the floor never meets it:
       // counted as turned at most straight down, a maul's butt below the shoulder held the blow off the floor)
       if (along <= 0 || r < -floor) continue;
@@ -1246,10 +1277,13 @@ export function buildWarrior(): Model {
    *  along a line from where the move left it to where the pose holds it, the weapon turned between them (its flat
    *  too), the arm reaching both with its elbow between them. (With the guard's elbow and the hand turned the least
    *  way onto the weapon's way, the first frame back turned the shoulder 63 degrees and the hand 51 out of Thunder
-   *  Crescent's end.) */
+   *  Crescent's end. Lifted, as a weapon is out of the ground, the grip rises sooner than it comes in and the weapon
+   *  turns up later: turned and moved alike, out of a blow driven into the ground the end behind the hands swung down
+   *  and back 9 cm through the left thigh.) */
   function backToGuard(e: number): void {
     _hw1.copy(GUARD_AT).lerp(BACK_AT, e);
-    _backQ.copy(GUARD_TURN).slerp(BACK_TURN, e);
+    _hw1.y = THREE.MathUtils.lerp(GUARD_AT.y, BACK_AT.y, e * e);
+    _backQ.copy(GUARD_TURN).slerp(BACK_TURN, Math.sqrt(e));
     _backDir.set(0, 1, 0).applyQuaternion(_backQ);
     _backFlat.copy(FLAT_IN_GRIP).applyQuaternion(_backQ);
     _backPole.copy(GUARD_POLE).lerp(BACK_POLE, e);
@@ -1380,6 +1414,10 @@ export function buildWarrior(): Model {
     if (raw || (move > 0.3 && !fp)) { if (tailT > 0 && !raw) { fade.cut(0.25); if (!fp && two) backFrom(); } tailT = 0; }
     if (raw || !fp) outT = 0;
     let inTail = !raw && tailT > 0;
+    // (the foe a blow comes down on, kept through its end held and its way back, which no action names: read only as
+    // it was cast, the end held after it fell to the floor through the foe)
+    if (st.strike) strikeOn = Object.assign(_strikeOn, st.strike);
+    else if (raw || (!inTail && !backOut)) strikeOn = null;
     // (over on the frame its cut fades from it: held a frame longer, a blow turned to the floor and stopped by it
     // after the fade was turned and stopped again over the arms it had drawn, which the cut fades from, and the
     // arm's solve swung the elbow round 30 degrees in two frames, the greatsword's tip 52 cm)
@@ -1745,6 +1783,9 @@ export function buildWarrior(): Model {
         // folded down to the left hip, "broken" to the owner)
         const end = two && held ? w * ramp(k, PS_LAND[0], PS_LAND[1]) : 0;
         if (end > 0) holdAtFloor(end);
+        // (and its weapon turned onto the floor in the fist and stopped by it, as Thunder Crescent's is: held as placed,
+        // its head stopped 63 to 67 cm over the floor, "should land on the ground")
+        if (end > 0) { aimDown = end; stop = end; fall = 1; }
       } else if (a.name === 'smite' && !fp) {
         // Thunder Crescent (SM_*): the great weapon raised overhead and driven down into the ground before him (a
         // two-hander raised over the middle of the head, within the left hand's reach, as Power Strike's is)
@@ -1762,9 +1803,6 @@ export function buildWarrior(): Model {
         // (and from just before it lands, the hands out before him where a blow into the ground ends)
         const end = w * ramp(k, SM_LAND[0], SM_LAND[1]);
         if (end > 0 && held) holdAtFloor(end);
-        // (a two-hander's held there as placed, its head on the floor: turned onto it and stopped by it again after, the
-        // lower grip went 19 cm out of the left hand's reach)
-        if (two) { aimDown *= 1 - end; stop *= 1 - end; }
       } else if (a.name === 'chop' || a.name === 'smite') {
         // the overhead blows through the eyes (OVERHEAD; third person's are above), keyed in the view
         // (models/warriorEyes.ts): the weapon raised high, the fists seen at the top of the view, trembling while Power

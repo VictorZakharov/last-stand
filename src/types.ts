@@ -372,10 +372,16 @@ export interface AnimState {
   charge?: number;
   /** a bow's hero: how many arrows are on the string (`Player.nocked`) */
   nocked?: number;
+  /** what an overhead blow comes down on: the nearest foe on the line straight ahead (its middle, how wide it is and
+   *  the height of its top, in the world), or none, the ground (`Player.struckAhead`) */
+  strike?: Struck | null;
   /** turns the chest, neck and head onto what the character looks at: a model with cloth calls it before
    *  the leg IK and the cloth step, so the sleeves follow the arms the turn moves */
   look?: () => void;
 }
+
+/** A foe an overhead blow comes down on (`AnimState.strike`): its middle on the ground, its radius and its top (m). */
+export interface Struck { x: number; z: number; r: number; top: number }
 
 export type MaterialKit = ReturnType<typeof createKit>;
 
