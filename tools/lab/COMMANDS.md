@@ -87,8 +87,12 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   against the thighs and shins, capsules round their bones at their drawn radii, and the belly and chest, the
   anatomy's solids; on how many frames, the deepest, in which part and how far along the weapon, pictured: said, not
   failed, as main has it too. Thunder Crescent's end and Rending Cleave put the haft's butt 10 cm into a thigh, "axe
-  shaft going through leg"). `--foe <kind>` stands a foe `--ahead` m before him (1.8 by default) for the cast
-  scenario (`page/weaponOnFoe.ts`): the weapon's lowest over its body, a share of its height ("power strike should
+  shaft going through leg"). The cast scenario runs 4.5 s from the press, through the stand after the end until a
+  two-hander goes onto his shoulder (at 2.5 s a 1.5 s cast's stand went unread). `--at x,z` and `--facing` stand
+  every scenario elsewhere (`--at 0,4.7`: the dais's edge facing off it, the ground ahead a step lower than under
+  his feet, as off a plinth in the hall of heroes, where the left hand let go of a two-hander after Power Strike).
+  `--foe <kind>` stands a foe `--ahead` m before him (1.8 by default) for the cast scenario (`page/weaponOnFoe.ts`):
+  the weapon's lowest over its body, a share of its height ("power strike should
   land on the enemy its striking"), its canary moving the foe 3 m aside for a reading, which must find nothing.
   `--canary` turns the head past the neck's range on one frame and sinks the hero below the floor by the weapon's
   height over it and 2 m for one measure (the weapon must be found under the floor: sunk 2 m alone, a weapon raised in

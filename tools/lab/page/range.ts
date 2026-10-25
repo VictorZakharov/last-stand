@@ -162,6 +162,10 @@ interface RangeScenario {
   legs: RangeLeg[];
 }
 
+/** how many frames the cast scenario runs from the press (4.5 s: a 1.5 s cast, its end held, and the stand after it
+ *  until a two-hander goes onto his shoulder) */
+const CAST_FRAMES = 270;
+
 const legOf = (keys: string[], attack: RangeLeg['attack'], frames: number): RangeLeg => ({ keys, attack, frames });
 
 /** a tapped attack: pressed this many frames, then let go this many (a bow's tap looses at its least draw) */
@@ -199,8 +203,10 @@ const SCENARIOS: RangeScenario[] = [
   },
   {
     name: 'cast',
-    what: 'casting the skill asked for, standing, and its end held',
-    legs: [legOf([], false, 20), { ...legOf([], false, 150), cast: true }],
+    what: 'casting the skill asked for, standing, its end held and the stand after it',
+    // (on until a two-hander is back on his shoulder, 2 s after the last blow: ended 2.5 s after the press, a 1.5 s
+    // cast's stand after it went unread, where the left hand let go, "stands holding it with just one hand")
+    legs: [legOf([], false, 20), { ...legOf([], false, CAST_FRAMES), cast: true }],
   },
 ];
 
@@ -232,6 +238,10 @@ export interface RangeOptions {
   /** a foe stood ahead of him for the `cast` scenario, by its kind, and how far ahead (m) */
   foe?: string;
   foeAt?: number;
+  /** where every scenario stands him (x, z: `START` by default) and the way he faces (rad, 0 is +z): at the dais's
+   *  edge facing off it, the ground ahead lies lower than under his feet, as off a plinth in the hall of heroes */
+  at?: [number, number];
+  facing?: number;
 }
 
 /** where every scenario starts: open ground, facing +z */
@@ -354,7 +364,8 @@ async function runScenario(
   lab: Lab, scenario: RangeScenario, options: RangeOptions, records: Map<string, AngleRecord>, report: RangeReport,
   listed: string[],
 ): Promise<void> {
-  const fixture = { at: START, facing: 0, nocked: Boolean(lab.player.cls.quiver), fresh: true };
+  const at = options.at ?? START;
+  const fixture = { at, facing: options.facing ?? 0, nocked: Boolean(lab.player.cls.quiver), fresh: true };
   await lab.setup({ ...fixture, gear: options.gear, weapon: options.weapon, tune: options.tune });
   const run: ScenarioRun = {
     frame: 0, framesPast: 0, grip: freshLetGo(), worstHere: PICTURE_FROM, moment: null, pinnedMoment: null,

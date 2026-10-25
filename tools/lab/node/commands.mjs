@@ -424,6 +424,8 @@ export const COMMANDS = {
         skill: options.skill,
         foe: options.foe,
         foeAt: options.ahead,
+        at: options.at,
+        facing: options.facing,
         gear: options.gear,
         weapon: options.weapon,
         tune: fixtureFrom(options).tune,
