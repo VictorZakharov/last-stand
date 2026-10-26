@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { groundHeight } from './ground';
+import { state as props, type Prop } from './destructible';
 import { placeBefore, stackBefore } from '../entities/carry';
 import type { Enemy } from '../entities/enemy';
 
@@ -24,7 +25,7 @@ export function resolveProps(pos: { x: number; z: number }, radius: number): voi
   }
 }
 
-/** How high the top of what a prop draws is over (x, z), as a ray straight down from over it meets it (a breakable
+/** How high the top of what a prop draws is over (x, z), as its top grid has it (`buildTops`: a breakable
  *  prop: the crypt's and the forest's four pillars, the columns, the stones), or its circle's height where it draws
  *  nothing that can be met (`Obstacle.h`); none (-Infinity) where no standing prop is. A blow brought down onto a
  *  prop stops on it as it does on a foe (from play: "if warrior hits a prop, weapon should not disappear inside of
@@ -38,26 +39,99 @@ export function propTopAt(x: number, z: number): number {
     if (o.prop?.broken) continue;
     const dx = x - o.x, dz = z - o.z;
     if (dx * dx + dz * dz >= o.r * o.r) continue;
-    const floor = groundHeight(o.x, o.z);
     if (!o.prop) {
-      top = Math.max(top, floor + o.h);
+      top = Math.max(top, groundHeight(o.x, o.z) + o.h);
       continue;
     }
-    _down.set(x, floor + o.h + PROP_OVER, z);
-    _ray.set(_down, DOWN);
-    _ray.far = o.h + PROP_OVER * 2;
-    _hits.length = 0;
-    o.prop.raycast(_ray, _hits);
-    for (const hit of _hits) top = Math.max(top, hit.point.y);
+    top = Math.max(top, topOf(gridOf(o.prop), x, z));
   }
   return top;
 }
-const DOWN = new THREE.Vector3(0, -1, 0);
-/** how far over a prop's height its ray starts (m): a prop's mesh stands a little over its circle's height */
-const PROP_OVER = 1;
-const _ray = new THREE.Raycaster();
-const _down = new THREE.Vector3();
-const _hits: THREE.Intersection[] = [];
+
+/** A prop's top on a grid over its circles: the highest of what it draws over each cell's middle (m), made once from
+ *  its triangles. (Read by three's raycaster, every triangle of the prop for each point, a two-hander's blow brought
+ *  down onto a pillar or a log held the game at 4 fps: its stop reads hundreds of points a frame.) */
+interface TopGrid { x0: number; z0: number; nx: number; nz: number; tops: Float32Array }
+/** a top grid's cell (m) */
+const TOP_CELL = 0.04;
+/** each prop's top grid, made as it's first read, all made again once the props change (`state.rev`: rolled, broken,
+ *  back) */
+const grids = new Map<Prop, TopGrid>();
+let gridsRev = -1;
+
+function gridOf(p: Prop): TopGrid {
+  if (gridsRev !== props.rev) {
+    grids.clear();
+    gridsRev = props.rev;
+  }
+  let grid = grids.get(p);
+  if (!grid) {
+    grid = buildTops(p);
+    grids.set(p, grid);
+  }
+  return grid;
+}
+
+/** what `grid` holds at (x, z), -Infinity outside it or where the prop draws nothing */
+function topOf(grid: TopGrid, x: number, z: number): number {
+  const i = Math.floor((x - grid.x0) / TOP_CELL), k = Math.floor((z - grid.z0) / TOP_CELL);
+  if (i < 0 || k < 0 || i >= grid.nx || k >= grid.nz) return -Infinity;
+  return grid.tops[k * grid.nx + i];
+}
+
+/** `p`'s top grid over the box round its circles: each triangle it draws laid over the cells whose middles it covers
+ *  seen from above, the highest kept, and each corner in its own cell (a face standing upright covers none). */
+function buildTops(p: Prop): TopGrid {
+  let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+  for (const o of p.parts) {
+    minX = Math.min(minX, o.x - o.r); maxX = Math.max(maxX, o.x + o.r);
+    minZ = Math.min(minZ, o.z - o.r); maxZ = Math.max(maxZ, o.z + o.r);
+  }
+  const nx = Math.max(1, Math.ceil((maxX - minX) / TOP_CELL)), nz = Math.max(1, Math.ceil((maxZ - minZ) / TOP_CELL));
+  const grid: TopGrid = { x0: minX, z0: minZ, nx, nz, tops: new Float32Array(nx * nz).fill(-Infinity) };
+  p.surfaces((mesh) => {
+    const position = mesh.geometry.getAttribute('position');
+    if (!position) return;
+    const index = mesh.geometry.getIndex();
+    const count = index ? index.count : position.count;
+    for (let t = 0; t + 2 < count; t += 3) {
+      for (let c = 0; c < 3; c++) {
+        _corners[c].fromBufferAttribute(position, index ? index.getX(t + c) : t + c).applyMatrix4(mesh.matrixWorld);
+      }
+      layTriangle(grid, _corners[0], _corners[1], _corners[2]);
+    }
+  });
+  return grid;
+}
+const _corners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+
+/** One triangle laid over `grid`: its height at each cell's middle it covers seen from above, and its corners'. */
+function layTriangle(grid: TopGrid, a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3): void {
+  for (const v of [a, b, c]) raise(grid, Math.floor((v.x - grid.x0) / TOP_CELL), Math.floor((v.z - grid.z0) / TOP_CELL), v.y);
+  const area = (b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z);
+  if (Math.abs(area) < 1e-9) return;
+  const i0 = Math.max(0, Math.floor((Math.min(a.x, b.x, c.x) - grid.x0) / TOP_CELL));
+  const i1 = Math.min(grid.nx - 1, Math.floor((Math.max(a.x, b.x, c.x) - grid.x0) / TOP_CELL));
+  const k0 = Math.max(0, Math.floor((Math.min(a.z, b.z, c.z) - grid.z0) / TOP_CELL));
+  const k1 = Math.min(grid.nz - 1, Math.floor((Math.max(a.z, b.z, c.z) - grid.z0) / TOP_CELL));
+  for (let k = k0; k <= k1; k++) {
+    const z = grid.z0 + (k + 0.5) * TOP_CELL;
+    for (let i = i0; i <= i1; i++) {
+      const x = grid.x0 + (i + 0.5) * TOP_CELL;
+      // (the cell's middle in the triangle's own terms, seen from above)
+      const wb = ((x - a.x) * (c.z - a.z) - (c.x - a.x) * (z - a.z)) / area;
+      const wc = ((b.x - a.x) * (z - a.z) - (x - a.x) * (b.z - a.z)) / area;
+      if (wb < 0 || wc < 0 || wb + wc > 1) continue;
+      raise(grid, i, k, a.y + wb * (b.y - a.y) + wc * (c.y - a.y));
+    }
+  }
+}
+
+function raise(grid: TopGrid, i: number, k: number, y: number): void {
+  if (i < 0 || k < 0 || i >= grid.nx || k >= grid.nz) return;
+  const cell = k * grid.nx + i;
+  if (y > grid.tops[cell]) grid.tops[cell] = y;
+}
 
 /** Does a body of `radius` at `pos` overlap a static obstacle? */
 export function inObstacle(pos: { x: number; z: number }, radius: number): boolean {

@@ -818,6 +818,7 @@ function bothLook(a: PropLook, b: PropLook): PropLook {
     hide: () => { a.hide(); b.hide(); },
     show: () => { a.show(); b.show(); },
     raycast: (ray, hits) => { a.raycast(ray, hits); b.raycast(ray, hits); },
+    surfaces: (visit) => { a.surfaces(visit); b.surfaces(visit); },
   };
 }
 
