@@ -39,6 +39,8 @@ import { battleLog } from './battleLog';
 import { digitsShown } from './digits';
 import { closeGlow, GLOW_CANARIES, glowPictures, glowShown, openGlow } from './uiGlow';
 import { closeHeroes, heroesCanaryCaught, heroesClosed, heroesShown, openHeroes } from './uiHeroes';
+import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouch, openHudTouch, TOUCH_CANARIES }
+  from './uiTouch';
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
@@ -46,7 +48,7 @@ export type UiState =
   | 'behindProps'
   | 'logLobby'
   | 'skillTipsTouch' | 'run' | 'scores' | 'perf'
-  | 'decision' | 'pause' | 'summary' | 'skillTips' | 'log' | 'logTouch';
+  | 'decision' | 'pause' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch';
 
 export interface UiOptions {
   state: UiState;
@@ -57,7 +59,9 @@ export interface UiOptions {
 }
 
 /** the states pictured in a run (the rest are the lobby's) */
-const RUN_STATES: UiState[] = ['run', 'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch'];
+const RUN_STATES: UiState[] = [
+  'run', 'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch', 'hudTouch', 'decisionTouch',
+];
 /** where the tooltip is opened, as shares of the window (the mouse over the lobby's left panel) */
 const TOOLTIP_AT = { x: 0.18, y: 0.3 };
 /** the foe spawned for the run's labels, how far ahead of the hero (m), and the share of its life it has left */
@@ -885,8 +889,10 @@ const STEPS: Record<UiState, Steps> = {
   summary: { open: openSummary, close: hideSummary },
   skillTips: { open: openSkillTips, close: closeSkillTips, check: skillTipsShown },
   log: { open: openLog, close: closeLog, check: logShown },
-  // (the last state: the page is left in touch mode)
+  // (the page is left in touch mode from here on)
   logTouch: { open: openLogTouch, close: closeLog, check: logTouchShown },
+  hudTouch: { open: openHudTouch, close: () => undefined, check: hudTouchShown },
+  decisionTouch: { open: openDecisionTouch, close: closeDecisionTouch, check: decisionTouchShown },
 };
 
 /** whether this page's run is set up for the run's states (each command's page is booted for it: false at first) */
@@ -953,6 +959,12 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const through = found.problems.some((problem) => problem.includes('shown through a prop'));
     lines.push(`  canary: ${through ? 'the labels beside the columns caught' : 'the labels beside the columns went unseen'}`);
     if (!through) missed.push(`${state}: the canary's labels beside the columns went unseen`);
+  }
+  if (state === 'hudTouch' || state === 'decisionTouch') {
+    const { name, what } = TOUCH_CANARIES[state];
+    const caught = found.problems.some((problem) => problem.includes(name));
+    lines.push(`  canary: ${what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${what} went unseen`);
   }
   if (state.startsWith('skillTips')) {
     const past = found.problems.some((problem) => problem.includes('reaches past the window'));

@@ -26,6 +26,7 @@ export const UI_STATES = [
   'behindProps',
   'logLobby',
   'skillTipsTouch', 'run', 'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
+  'hudTouch', 'decisionTouch',
 ];
 
 /** the ways a hero may hold his weapons (src/loot/loadout.ts `WeaponStyle`) */
@@ -116,6 +117,13 @@ const COMMON_OPTIONS = {
     help: 'this tree on two screens, one after the other, compared as --ab compares two commits: the lines and the '
       + 'pictures that differ (3840x2160@1,1280x720@3: a 4K screen at 100% and at 300%, pictured at its 3840x2160 '
       + 'pixels on both)',
+  },
+  insets: {
+    kind: 'numbers',
+    count: 4,
+    usage: 'left,top,right,bottom',
+    help: 'with --screen or --screens, the screen\'s safe-area insets (css px), as a phone\'s camera cutout gives '
+      + 'them to env(safe-area-inset-*) (34,0,0,0: a phone held sideways with its camera on the left)',
   },
   profile: {
     kind: 'switchOrText',
@@ -358,7 +366,10 @@ export const COMMANDS = {
           + '(the battle log with hits dealt and taken: every '
           + 'line shown, within the screen, over nothing of the HUD), logLobby (the same over the lobby, clear of its '
           + 'panels), '
-          + 'logTouch (the same in touch mode: clear of the touch HUD, touches let through)',
+          + 'logTouch (the same in touch mode: clear of the touch HUD, touches let through), hudTouch (the touch '
+          + 'HUD\'s top corners at the screen\'s edges, none of its corners\' controls over another; --insets for a '
+          + 'phone\'s cutout), decisionTouch (the choice after a wave in touch mode: on a short screen within its top '
+          + '30%, its buttons a finger\'s height)',
       },
       hdr: { kind: 'switch', help: 'HDR on, as on a display in HDR mode (the pause menu shows its levels)' },
       canary: {
@@ -1836,6 +1847,9 @@ function passedOn(text) {
 
 /** Throws at options that can't go together: `--screens` names both sides' screens, and runs this tree alone. */
 function checkTogether(options) {
+  if (options.insets && !options.screen && !options.screens) {
+    throw labError('--insets are a screen\'s: give its --screen (or --screens)');
+  }
   if (!options.screens) return;
   if (options.ab) throw labError('--screens compares this tree on two screens: it takes no --ab');
   if (options.screen) throw labError('--screens names both screens: it takes no --screen');
