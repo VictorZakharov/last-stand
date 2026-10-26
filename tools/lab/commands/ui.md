@@ -68,8 +68,10 @@ the window and within the sheet as it shows, 28 px tall at least, and again with
 at the cards' end, their text scrolling and the buttons staying; `--canary` keeps the long cards from scrolling, which
 must be found), a worn weapon pressed long by a finger (0.7 s) with the stash holding weapons and other items: every
 weapon lit 1.2 s after the finger lifted (it went out with it), still lit after a lit one's sheet is opened by a tap
-and closed, put out by a tap on an empty stash cell; `--canary` puts the light out as the finger lifts, which must be
-found), the run's HUD with a hurt foe's
+and closed, put out by a tap on an empty stash cell, then a stash weapon pressed long, lighting them again; neither
+long press may open a card, its sheet or the tap's tooltip (the browser clicks after one, and a stash item's sheet
+opened with the light; the moment after the stash weapon's is pictured, card and all);
+`--canary` puts the light out and opens the sheet as the finger lifts, which must both be found), the run's HUD with a hurt foe's
 bar and damage numbers over it, the scores, the performance overlay, the choice after a wave (each button's label on one line, `page/uiDecision.ts`:
 narrowed on a short screen, the mouse's labels, their keys beside them, wrapped onto two; `--canary` makes it too
 narrow for them, which must be found; put away at once as it closes: folded back into the badge on the browser's own
