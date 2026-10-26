@@ -152,6 +152,8 @@ function heroIn(id: string, profile: Profile): Player {
 /** The hall taken down, the lobby's hero shown again; its heroes kept out of the scene for its next opening. */
 export function closeHall(): void {
   if (!hallOpen()) return;
+  // (a showcase under way let go: a channel left open, Void Lance's hum played on in the lobby)
+  for (const h of heroes) endShowcase(h);
   for (const h of heroes) G.scene.remove(h.player.obj);
   heroes = [];
   dragged = null;
@@ -276,6 +278,13 @@ function showOff(h: HallHero, t: number): void {
   const aim = { x: target.x, z: target.z, ...n };
   h.player.replay(drawn ? { t: 'cast', s: skill, dur, h: 1, ...aim } : { t: 'cast', s: skill, dur, ...aim });
   h.cast = { target, fireAt: t + fireIn, doneAt: t + Math.max(dur, fireIn) + 0.9, drawn };
+}
+
+/** Hero `h`'s showcase given up where it is: his channel let go, and he faces the camera again. */
+function endShowcase(h: HallHero): void {
+  if (h.cast?.endAt !== undefined) h.player.replay({ t: 'che' });
+  h.cast = null;
+  h.facing = ROW.facing;
 }
 
 /** A showcase under way: fired when due, the hero turned back to the camera once it's done. */
