@@ -700,6 +700,15 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   parts, bones), and `--canary` pictures an empty studio, which must read as nothing drawn, and builds the hand 10%
   larger, which must measure so. On `--ab` against a game whose hands were pieces, the old hand is built again from
   the materials its pieces were made in (`userData.own`).
+- `turnaround`: the hero standing as the game has him (its set-up: `--class`, `--gear`, `--wear`), taken out of the
+  world into the studio (`page/turnaround.ts`, `page/studio.ts`) and pictured as a character sheet's turnaround shows
+  him: from the front, three-quarters to his right, his right side and his back, framed on his whole figure with what
+  he holds, and his head close from the front and the side, with how many triangles and meshes he's drawn with.
+  `--ref <sheet> --panels l,t,r,b;...` cuts a reference sheet's panels (shares of it, one a view in that order; an
+  empty one leaves its place empty) and sets them in a row under ours, each fitted whole into a tile the size of ours.
+  A hero is rebuilt against such a sheet part by part from the same side (the mage against Codex's realistic render
+  of him: in the forest the ferns and the light hid what he wore). `--canary` pictures the studio empty, which must
+  read as nothing drawn. Writes `out/turnaround/sheet.png`.
 - `neck`: each hero's neck (`page/neck.ts`; `--classes`, `--dresses bare,chest,hat`, `--poses rest,aside`), cut
   by level planes in the neck joint's frame and read up 72 lines round it (`neckSlices.ts`; what each says against
   its limit, `neckRead.ts`): ridges and shelves on the free neck (the column's flat top was a ledge under the

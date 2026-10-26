@@ -1263,6 +1263,23 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  turnaround: {
+    help: 'the hero standing in a plain, lit studio from the front, three-quarters to his right, his right side and '
+      + 'his back, and his head close from the front and the side, with how many triangles he is drawn with; '
+      + '--ref sets a reference sheet\'s panels in a row under ours: tools/lab/out/turnaround/sheet.png',
+    options: {
+      ref: { kind: 'text', usage: 'picture', help: 'a reference sheet (PNG, JPEG or WebP) whose panels --panels cuts' },
+      panels: {
+        kind: 'text',
+        usage: 'l,t,r,b;...',
+        help: 'the reference\'s panel for each view in order (front, quarter, right, back, face, profile), its '
+          + 'edges as shares of the picture; an empty one leaves its place empty',
+      },
+      canary: { kind: 'switch', help: 'an empty studio pictured too: the measure of what\'s drawn must find nothing' },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   eyes: {
     help: 'a skill of the hero\'s cast through the eyes, frame by frame from the press until the arms are at rest '
       + 'again: where the weapon\'s tip is on the screen at rest, wound up, through the blow and at its end, how '

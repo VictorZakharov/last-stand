@@ -7,6 +7,7 @@ import { labError } from './errors.mjs';
 import { UI_STATES, WEAPON_STYLES } from './options.mjs';
 import { REPO } from './paths.mjs';
 import { probeFiles } from './probeFiles.mjs';
+import { pictureUrl } from './pictureFile.mjs';
 import { writeSheet, writeStack } from './sheetImage.mjs';
 import { compare, marksOf, readReference, screenFor, writeMatch } from './match.mjs';
 
@@ -266,6 +267,19 @@ function textWithPictureFiles(results, dir) {
 
 /** the most picture files a run's text names one by one */
 const PICTURES_NAMED = 24;
+
+/** `turnaround --panels`: a panel a view, each four shares (left, top, right, bottom), or none for an empty one. */
+function panelsOf(text) {
+  return String(text).split(';').map((panel) => {
+    if (panel.trim() === '') return null;
+    const edges = panel.split(',').map(Number);
+    const shares = edges.length === 4 && edges.every((edge) => edge >= 0 && edge <= 1);
+    if (!shares || edges[0] >= edges[2] || edges[1] >= edges[3]) {
+      throw labError(`turnaround --panels: each panel left,top,right,bottom in shares, not ${panel}`);
+    }
+    return edges;
+  });
+}
 
 /** Where `written` went, each named, or past `PICTURES_NAMED` how many and the first and last (lab neck wrote 216). */
 function pictureList(written, dir) {
@@ -1106,6 +1120,27 @@ export const COMMANDS = {
     finish(results, options, session) {
       // (a file a picture: a sheet of them all, 90 close-ups, was more than the browser would lay out)
       return textWithPictureFiles(results, session.outFor('neck'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
+  turnaround: {
+    check(options) {
+      if (options.panels !== undefined && options.ref === undefined) throw labError('turnaround --panels: with --ref');
+      if (options.ref !== undefined && options.panels === undefined) throw labError('turnaround --ref: with --panels');
+      if (options.panels !== undefined) panelsOf(options.panels);
+    },
+    each(side, options) {
+      const reference = options.ref === undefined
+        ? undefined
+        : { url: pictureUrl(options.ref, 'turnaround --ref'), panels: panelsOf(options.panels) };
+      const command = { fixture: fixtureFrom(options), reference, canary: Boolean(options.canary) };
+      return side.command('turnaround', command);
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('turnaround'), session.browser);
     },
     textOf: asText,
     problemsOf: problemsIn,
