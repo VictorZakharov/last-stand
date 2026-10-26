@@ -6,7 +6,14 @@
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { groundHeight } from '../../../src/world/ground';
-import { propTopAt } from '../../../src/world/collision';
+import * as collision from '../../../src/world/collision';
+
+/** A prop's top over (x, z), where the commit measured has `propTopAt` (an A/B against one from before it: imported by
+ *  name, the module failed to link there, and every `range --ab` with it) */
+function propTop(x: number, z: number): number {
+  const read = (collision as { propTopAt?: (x: number, z: number) => number }).propTopAt;
+  return read ? read(x, z) : -Infinity;
+}
 
 /** under the floor by this much a part counts (m): a blow stopped on it rests its tip there */
 const UNDER_FROM = 0.02;
@@ -152,7 +159,7 @@ function deepestUnder(lab: Lab, at: string): Under | null {
     for (let i = 0; i < corners.count; i++) {
       _corner.fromBufferAttribute(corners, i).applyMatrix4(mesh.matrixWorld);
       // (a prop's top counts as floor: a blow into a pillar or a stone stops on it as on the ground)
-      const depth = Math.max(groundHeight(_corner.x, _corner.z), propTopAt(_corner.x, _corner.z)) - _corner.y;
+      const depth = Math.max(groundHeight(_corner.x, _corner.z), propTop(_corner.x, _corner.z)) - _corner.y;
       if (deepest && depth <= deepest.depth) continue;
       deepest = { depth, at, along: _corner.sub(_gripAt).dot(_gripWay) };
     }

@@ -24,6 +24,7 @@ import { CANARY_CAUGHT as WEAPON_CAUGHT, EDGE_OFF_MOST, WeaponFloor, bladeCanary
 import { BODY_CANARY_CAUGHT, WeaponBody, bodyCanary } from './weaponBody';
 import { WeaponOnFoe, foeCanary } from './weaponOnFoe';
 import { WeaponPath } from './weaponPath';
+import { POSE_MOST, PoseCost } from './poseCost';
 import { armsInBody, armsInCanary, deepestArm, describeArmsIn, type ArmsInSeen } from './armsIn';
 import { armsInLegs, armsInLegsCanary, type ArmInLeg } from './armsInLegs';
 import type { EnemyId } from '../../../src/data/enemies';
@@ -287,11 +288,15 @@ export interface RangeReport {
     armsInLegs?: string;
     /** the weapon turned a quarter round its grip: how much further off the blow's line its blade read (degrees) */
     bladeTurned?: number;
+    /** one frame's pose made 40 ms slower: whether it read as too slow (it must) */
+    poseSlow?: boolean;
   };
   /** each scenario in which a two-hander was let go of by the other hand, as words */
   letGo: string[];
   /** each scenario whose blow met the floor with the blade's flat or side, as words */
   bladeAcross: string[];
+  /** each scenario with a frame whose pose took longer than `POSE_MOST`, as words */
+  slowPose: string[];
   /** each scenario in which a forearm or a hand passed into a leg, as words */
   armsInLegs: string[];
 }
@@ -406,7 +411,12 @@ async function runScenario(
   const tracer = traceOf(lab, options);
   const onFoe = await foeAhead(lab, scenario, options);
   const path = scenario.legs.some((leg) => leg.cast) ? new WeaponPath() : null;
+  // (the pose's cost a frame by the browser's clock, `poseCost.ts`; the canary slows one frame's, in the first
+  // scenario a canary runs in)
+  const planted = options.canary && !report.canary;
+  const cost = new PoseCost(lab.model, planted ? CANARY_FRAME : undefined);
   const measure = () => {
+    cost.observe(`${run.frame}${momentIn(lab)}`);
     if (options.canary && !report.canary && run.frame === CANARY_FRAME) {
       const measured = measureCanary(lab);
       const wrist = wristCanary(lab);
@@ -496,11 +506,15 @@ async function runScenario(
     const input = (f: number) => (press && f < held ? press.frame : { keys: leg.keys, m0: attackDown(leg, f) });
     await lab.step(leg.frames + Math.max(0, held - 1), input, measure);
   }
+  cost.stop();
+  if (planted && report.canary) report.canary.poseSlow = cost.tooSlow();
+  if (!planted && cost.tooSlow()) report.slowPose.push(`${scenario.what}: ${cost.describe()}`);
   if (options.frames) listed.push(...tip.listed, ...floor.listed, ...through.listed, ...pinned.listed);
   const tipLine = tip.describe();
   const fastest = `fastest ankle ${(run.fastest * 100).toFixed(1)} cm a frame (${run.fastestAt})`
     + (tipLine ? `; ${tipLine}` : '');
   report.lines.push(`${scenario.what}: ${run.frame} frames, ${run.framesPast} with a joint past its range; ${fastest}`);
+  report.lines.push(`  ${cost.describe()}`);
   if (run.grip.seen) report.lines.push(`  ${describeLetGo(run.grip)}`);
   const underFloor = floor.describe();
   if (underFloor) report.lines.push(`  ${underFloor}`);
@@ -630,7 +644,7 @@ export async function range(lab: Lab, options: RangeOptions): Promise<RangeRepor
   const every = RANGE_SCENARIOS.filter((name) => name !== 'cast' || options.skill);
   const asked = options.scenarios?.length ? options.scenarios : every;
   const records = new Map<string, AngleRecord>();
-  const report: RangeReport = { lines: [], moments: [], letGo: [], armsInLegs: [], bladeAcross: [] };
+  const report: RangeReport = { lines: [], moments: [], letGo: [], armsInLegs: [], bladeAcross: [], slowPose: [] };
   const listed: string[] = [];
   for (const scenario of SCENARIOS.filter((candidate) => asked.includes(candidate.name))) {
     await runScenario(lab, scenario, options, records, report, listed);
@@ -663,6 +677,10 @@ export async function range(lab: Lab, options: RangeOptions): Promise<RangeRepor
       const verdict = turned > EDGE_OFF_MOST ? 'caught' : 'MISSED';
       const further = `${turned.toFixed(0)}° further`;
       report.lines.push(`canary, the weapon turned a quarter round its grip: ${verdict} (${further})`);
+    }
+    const poseSlow = report.canary.poseSlow;
+    if (poseSlow !== undefined) {
+      report.lines.push(`canary, one frame's pose made 40 ms slower: ${poseSlow ? 'caught' : 'MISSED'}`);
     }
     const pathAside = report.canary.pathAside;
     if (pathAside !== undefined) {
@@ -720,7 +738,8 @@ export function missedRangeCanary(report: RangeReport): string[] {
   const blade = turned !== undefined && turned <= EDGE_OFF_MOST
     ? ['range: the canary (the weapon turned a quarter round its grip) was missed']
     : [];
-  return [...missed, ...weapon, ...body, ...wrist, ...pinned, ...aside, ...path, ...arm, ...leg, ...blade];
+  const slow = report.canary.poseSlow === false ? ["range: the canary (one frame's pose made slower) was missed"] : [];
+  return [...missed, ...weapon, ...body, ...wrist, ...pinned, ...aside, ...path, ...arm, ...leg, ...blade, ...slow];
 }
 
 /** Each scenario in which a two-hander was let go of, as a problem: nothing it runs flings the arms apart. */
@@ -729,6 +748,11 @@ export function lettingGo(report: RangeReport): string[] {
 }
 
 /** Each scenario whose blow met the floor flat or sideways, as a problem ("nobody hits like this"). */
+/** Each scenario with a frame whose pose took longer than `POSE_MOST`, as a problem. */
+export function slowPose(report: RangeReport): string[] {
+  return report.slowPose.map((line) => `range: a frame's pose took over ${POSE_MOST} ms: ${line}`);
+}
+
 export function bladeAcross(report: RangeReport): string[] {
   return report.bladeAcross.map((line) => `range: the blade met the floor off the blow's line: ${line}`);
 }

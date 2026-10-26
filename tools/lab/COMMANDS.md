@@ -67,7 +67,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   channel through; pressed for a frame, Steel Tempest stopped at once), the weapons held `--gear`'s way throughout
   (`--weapon` the base): each angle past its range, on how many frames, its worst and where (for a leg, whether its
   foot was planted; for a shoulder, its raise, the plane it rises in and its turn against what each allows), each
-  scenario's fastest ankle, its weapon tip's fastest move a frame between moves and through them, each with how far
+  scenario's pose timed frame by frame by the browser's clock (`page/poseCost.ts`: its slowest frame, median and
+  p90; a frame over 20 ms fails, canary one frame's made 40 ms slower: the lab's frames run on its own clock, and a
+  blow onto a pillar or a log that read the prop's every triangle for each point its stop tried took 571 ms a frame
+  unseen), its fastest ankle, its weapon tip's fastest move a frame between moves and through them, each with how far
   the hand moved then and the joint whose own turn changed most (`page/tipMoves.ts`, in the hero's own frame: between
   moves, where a pose eases back to the stance, a jump shows; Thunder Crescent's end was back at rest in a frame,
   131 cm, and a two-handed swing's end turned the hand over, `handR turned 178°`), a two-hander's lower grip let go
