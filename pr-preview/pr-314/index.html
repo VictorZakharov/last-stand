@@ -1,0 +1,178 @@
+<!doctype html>
+<!--
+  A PR preview's stable page, `pr-preview/pr-N/` (#299). Each build is published in a folder of its own,
+  `pr-preview/pr-N/<sha7>/`, a path no cache has held before, and this page sends the visitor to the newest one.
+  Pages' CDN caches this page and everything at a fixed path for up to 10 minutes, 404s included, and ignores a
+  query string, so the page reads where to go from the PR's `latest.json` on the gh-pages branch through GitHub's
+  API, which the CDN never serves: `{ headSha, state: building | ready | failed, folder, since, run }`, written by
+  pr-preview.yml (`ready` only once Pages serves the folder). Never ask for a folder before `latest.json` names
+  it: a 404 the CDN cached for it would stand for 10 minutes after it's published.
+  The tokens are filled in where the page is put in place: the repository, the PR, and the newest folder known
+  then, gone to if neither copy of `latest.json` can be read (a build published by main's copy of pr-preview.yml
+  before #299 has none).
+-->
+<html lang="en" data-preview-index>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Last Stand: PR preview</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: #0d0e12;
+    color: #d8d4c8;
+    font: 16px/1.5 system-ui, sans-serif;
+  }
+  main { max-width: 34rem; padding: 2rem 1rem; text-align: center; }
+  h1 { margin: 0 0 0.5rem; font-size: 1.4rem; font-weight: 600; color: #e8c372; }
+  .elapsed { margin: 1.5rem 0; font-size: 2.4rem; font-variant-numeric: tabular-nums; color: #f2eee4; }
+  .slow { color: #e88a72; }
+  code { color: #f2eee4; }
+  a { color: #e8c372; }
+  p { margin: 0.5rem 0; }
+  [hidden] { display: none; }
+  .note { margin-top: 1.5rem; font-size: 0.9rem; color: #8f8b80; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">PR #314 preview</h1>
+  <p id="commit" hidden>Commit <code id="sha"></code></p>
+  <p class="elapsed" id="elapsed" aria-live="off" hidden></p>
+  <p id="status">Finding the newest build.</p>
+  <p id="run" hidden><a id="run-link" href="#">Open the build's run</a></p>
+  <p id="previous" hidden><a id="previous-link" href="#">The previous build</a></p>
+  <p class="note" id="note" hidden>Each build stays at a link of its own: this page is the newest.</p>
+</main>
+<script>
+  (() => {
+    const REPO = 'VictorZakharov/last-stand';
+    const PR = '314';
+    const KNOWN_FOLDER = '';
+    // from the API, the branch as it is; this page's own folder's copy only where the API can't be reached (it is
+    // as stale as Pages' cache)
+    const API_LATEST = `https://api.github.com/repos/${REPO}/contents/pr-preview/pr-${PR}/latest.json?ref=gh-pages`;
+    const PAGES_LATEST = './latest.json';
+    // a build and its publication take a few minutes; past this, say so and point to the run
+    const SLOW_MINUTES = 15;
+    // GitHub's API answers 60 requests an hour from one address without a token: 3 a minute while building
+    const POLL_MS = 20000;
+    const POLL_LIMITED_MS = 60000;
+    const FOLDER = /^[0-9a-f]{7}$/;
+
+    const element = (id) => document.getElementById(id);
+    const two = (n) => String(n).padStart(2, '0');
+    let since = NaN;
+    let ticking = 0;
+
+    /** The newest build's state from the API (`latest` null: it couldn't be read, `limited` by its rate). */
+    const readLatest = async () => {
+      try {
+        const reply = await fetch(API_LATEST, {
+          cache: 'no-store',
+          headers: { Accept: 'application/vnd.github.raw+json' },
+        });
+        if (reply.ok) return { latest: await reply.json(), limited: false };
+        return { latest: null, limited: reply.status === 403 || reply.status === 429 };
+      } catch {
+        return { latest: null, limited: false };
+      }
+    };
+    const readPagesCopy = async () => {
+      try {
+        const reply = await fetch(PAGES_LATEST, { cache: 'no-store' });
+        return reply.ok ? await reply.json() : null;
+      } catch {
+        return null;
+      }
+    };
+
+    /** To a build's folder, keeping the query (`?net=local`, `?hdr=1`) and the hash. */
+    const goTo = (folder) => location.replace(`./${folder}/${location.search}${location.hash}`);
+
+    const tick = () => {
+      const seconds = Math.max(0, Math.floor((Date.now() - since) / 1000));
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
+      const clock = hours ? `${hours}:${two(minutes % 60)}:${two(seconds % 60)}` : `${minutes}:${two(seconds % 60)}`;
+      element('elapsed').textContent = `building for ${clock}`;
+      if (minutes >= SLOW_MINUTES) {
+        element('status').classList.add('slow');
+        element('status').textContent = 'This is taking longer than usual: the build or its publication may have '
+          + 'failed or been cancelled. Check the run.';
+      }
+    };
+
+    const showRun = (latest) => {
+      const run = typeof latest.run === 'string' && latest.run.startsWith('https://github.com/') ? latest.run : '';
+      element('run').hidden = !run;
+      if (run) element('run-link').href = run;
+    };
+    const showPrevious = (latest) => {
+      const folder = FOLDER.test(latest.folder ?? '') ? latest.folder : '';
+      element('previous').hidden = !folder;
+      if (folder) {
+        element('previous-link').href = `./${folder}/`;
+        element('previous-link').textContent = `The previous build (${folder})`;
+      }
+    };
+    const showCommit = (latest) => {
+      const sha = typeof latest.headSha === 'string' ? latest.headSha.slice(0, 7) : '';
+      element('commit').hidden = !sha;
+      element('sha').textContent = sha;
+    };
+
+    const showBuilding = (latest) => {
+      element('title').textContent = `PR #${PR} preview is building`;
+      showCommit(latest);
+      showRun(latest);
+      showPrevious(latest);
+      element('note').hidden = false;
+      element('elapsed').hidden = false;
+      element('status').classList.remove('slow');
+      element('status').textContent = 'This page goes to the new build once it is published.';
+      since = Date.parse(latest.since ?? '');
+      if (Number.isNaN(since)) element('elapsed').textContent = 'building';
+      else if (!ticking) {
+        tick();
+        ticking = setInterval(tick, 1000);
+      }
+    };
+    const showFailed = (latest) => {
+      element('title').textContent = `PR #${PR} preview failed to build`;
+      showCommit(latest);
+      showRun(latest);
+      showPrevious(latest);
+      element('elapsed').hidden = true;
+      element('status').classList.add('slow');
+      element('status').textContent = 'The newest push didn\'t build or wasn\'t published.';
+    };
+    const showUnknown = (limited) => {
+      element('status').textContent = limited
+        ? 'GitHub\'s API is limiting requests from this address; trying again in a minute.'
+        : 'Couldn\'t find the newest build; trying again.';
+    };
+
+    const check = async () => {
+      const read = await readLatest();
+      const { limited } = read;
+      // without the API: the folder this page was put in place with, at least as new as Pages' copy of latest.json
+      if (!read.latest && FOLDER.test(KNOWN_FOLDER)) return goTo(KNOWN_FOLDER);
+      const latest = read.latest ?? await readPagesCopy();
+      if (latest?.state === 'ready' && FOLDER.test(latest.folder ?? '')) return goTo(latest.folder);
+      if (latest?.state === 'building') showBuilding(latest);
+      else if (latest?.state === 'failed') showFailed(latest);
+      else showUnknown(limited);
+      // (a failed build waits for the next push, which takes minutes: no need to ask often)
+      setTimeout(check, limited || latest?.state === 'failed' ? POLL_LIMITED_MS : POLL_MS);
+    };
+    check();
+  })();
+</script>
+</body>
+</html>
