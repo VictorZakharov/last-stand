@@ -9,7 +9,7 @@ and every one show again with the columns gone. `--canary` plants each column 3 
 label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
-readyingHeroes,clicked,views,behindProps,logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch,hudTouch,decisionTouch`, every one by default:
+readyingHeroes,clicked,views,behindProps,logLobby,skillTipsTouch,sheetTouch,litTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch,hudTouch,decisionTouch`, every one by default:
 the lobby, an item's tooltip, the stash given 60 items (more than its view shows, on most screens) and a weapon
 among them hovered by the mouse, those that fit its slot lit (`page/uiGlow.ts`: a short screen's rail turned to the
 gear first; pictured round the stash, its tooltip put away, at 400, 1000 and 1600 ms into the
@@ -61,7 +61,15 @@ frame before, they were up to 1442 px off as a glide set off), the battle log ov
 struck (clear of its panels: it first lay over the hero panel, as the performance stats did), each skill's tooltip
 in the lobby opened by a finger's tap (the class card's and the skill book's, the book opened by taps: a short
 screen's rail turned to the skills, the book's toggle; each tooltip pinned and within the window, the tallest
-pictured; the mouse then puts the page back in mouse mode), the run's HUD with a hurt foe's
+pictured; the mouse then puts the page back in mouse mode), a stash item's sheet opened by a finger's tap
+(`page/uiSheet.ts`: a magic shield beside the common one worn, each card with the block's long note, as on the
+owner's phone held sideways, where the sheet scrolled its buttons below the screen with the cards: each button within
+the window and within the sheet as it shows, 28 px tall at least, and again with a block three windows tall planted
+at the cards' end, their text scrolling and the buttons staying; `--canary` keeps the long cards from scrolling, which
+must be found), a worn weapon pressed long by a finger (0.7 s) with the stash holding weapons and other items: every
+weapon lit 1.2 s after the finger lifted (it went out with it), still lit after a lit one's sheet is opened by a tap
+and closed, put out by a tap on an empty stash cell; `--canary` puts the light out as the finger lifts, which must be
+found), the run's HUD with a hurt foe's
 bar and damage numbers over it, the scores, the performance overlay, the choice after a wave (each button's label on one line, `page/uiDecision.ts`:
 narrowed on a short screen, the mouse's labels, their keys beside them, wrapped onto two; `--canary` makes it too
 narrow for them, which must be found; put away at once as it closes: folded back into the badge on the browser's own
@@ -91,7 +99,9 @@ and each one's ink read, and each font the world's labels are painted in (`overl
 digit's ink measured by the canvas; their tops or their bottoms more than 8% of their size apart is a problem,
 naming the highest and the lowest and where the look shows, with its picture (`out/ui/digits-<n>.png`). Old-style
 digits are 11% apart; the display face's 3 and 5 dip 6% by design. `--canary` gives the page's body old-style
-digits and takes the labels' lining twin away: both must be found. (The owner, of the skill tooltips: "digits are
+digits, with a line of digits in its own text at the window's foot (a phone's stash alone showed digits only in the
+display face, which the canary can't change, and went unseen), and takes the labels' lining twin away: both must be
+found. (The owner, of the skill tooltips: "digits are
 all jumping up and down in the same line".) With `--screens`, whether
 the UI is
 the same share of both screens: on `3840x2160@1,1280x720@3` (a 4K screen at 100% and at 300%) the lines agree but

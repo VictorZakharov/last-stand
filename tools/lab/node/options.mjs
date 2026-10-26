@@ -25,7 +25,8 @@ export const UI_STATES = [
   'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
   'behindProps',
   'logLobby',
-  'skillTipsTouch', 'run', 'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
+  'skillTipsTouch', 'sheetTouch', 'litTouch',
+  'run', 'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
   'hudTouch', 'decisionTouch',
 ];
 
@@ -369,7 +370,9 @@ export const COMMANDS = {
           + 'logTouch (the same in touch mode: clear of the touch HUD, touches let through), hudTouch (the touch '
           + 'HUD\'s top corners at the screen\'s edges, none of its corners\' controls over another; --insets for a '
           + 'phone\'s cutout), decisionTouch (the choice after a wave in touch mode: on a short screen within its top '
-          + '30%, its buttons a finger\'s height)',
+          + '30%, its buttons a finger\'s height), sheetTouch (a stash shield\'s sheet opened by a tap, its card '
+          + 'beside the worn one\'s: its buttons within the window and the sheet), litTouch (a worn item pressed long: '
+          + 'the stash items that fit its slot lit until a tap elsewhere)',
       },
       hdr: { kind: 'switch', help: 'HDR on, as on a display in HDR mode (the pause menu shows its levels)' },
       canary: {
