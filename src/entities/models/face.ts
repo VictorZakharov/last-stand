@@ -183,7 +183,9 @@ export const FACES: Record<'warrior' | 'mage' | 'ranger', FaceShape> = {
       p: [2, 2.15, 2.22, 2.21, 2.11, 1.98, 1.84, 1.76, 1.8, 2.02, 2.36, 2.5, 2.44, 2.39, 2.4, 2.2],
       pz: [1.2, 1.2, 1.2, 1.2, 1.22, 1.58, 2.11, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2], hollow: 0 } },
   // longer and leaner, a long straight nose
-  mage: { jaw: 27, chin: 11.3, chinFwd: 9, brow: 0.7, cheek: 1.25, noseLen: 57, noseW: 16.5, nosePro: 1.1, hump: 0, noseRoot: 6, bridgeW: 6.5, lips: 1, long: 1.04, eyeOpen: 4.3, iris: [0.3, 0.42, 0.34], beardDepth: 6, beardFull: 24, beardLine: 12, neckBack: -5, neckCol: [65, 62], beardUnder: -30,
+  // (after his sheet's head views, facelab's front measures: the face and the jaw wider, the chin shorter under a beard cut
+  // shorter, the mouth wider and lower, and the ranger's hooded, deep-set lids: the old open lids stared)
+  mage: { jaw: 32, chin: 3, chinFwd: 9, brow: 0.9, cheek: 1.25, noseLen: 52, noseW: 17.8, nosePro: 1.25, hump: 0, noseRoot: 6, bridgeW: 6.5, lips: 0.9, long: 1.0, eyeOpen: 3.8, iris: [0.35, 0.38, 0.35], lidSoft: 4, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, lidFold: 5, gridEye: 1, beardDepth: 6, beardFull: 17, beardLine: 12, neckBack: -5, neckCol: [65, 62], beardUnder: -30, mouthUp: -3,
     // (the mask and the broad shape fitted by least squares (tools/facelab/fit.mjs) to the real face nearest his old one,
     // built of blobs: its cheekbones stood up to 12 mm out of any real face's; the nose straight, its bridge raised to
     // the mask's front (a hump stood out of a sunken ridge with a cliff at its top))
@@ -195,7 +197,7 @@ export const FACES: Record<'warrior' | 'mage' | 'ranger', FaceShape> = {
     lipFwd: 24.4,
     mask: { y: [-2, 8, 18, 30, 45, 60, 75, 90, 100, 110, 120, 132, 145, 160, 175, 190],
       front: [95, 90.7, 88.4, 88.3, 89.9, 92.2, 93.7, 92, 88.7, 87.6, 89.9, 94.8, 98.7, 98.1, 94, 80],
-      half: [20, 31.1, 41.7, 51.2, 57.3, 60.3, 63.1, 65.6, 66.9, 67.1, 67, 65.9, 65.3, 64.6, 63, 58],
+      half: [22, 34.2, 45.9, 56.3, 63, 66.3, 69.1, 71.2, 71.6, 70.4, 69, 66.9, 65.3, 64.6, 63, 58],
       side: [60, 50.8, 41.6, 32.4, 23.8, 16.5, 11.1, 8.6, 7.7, 7.9, 8.8, 9.1, 8.3, 5.6, 0, -10],
       p: [2, 1.77, 1.62, 1.58, 1.69, 1.94, 2.25, 2.45, 2.54, 2.63, 2.7, 2.59, 2.44, 2.35, 2.4, 2.2],
       pz: [1.2, 1.42, 1.61, 1.79, 2, 2.25, 2.55, 2.85, 2.98, 3.01, 2.97, 2.79, 2.61, 2.47, 2.4, 2.2], hollow: 0 } },
@@ -743,7 +745,9 @@ export interface FaceLook {
 
 export const LOOKS: Record<keyof typeof FACES, FaceLook> = {
   warrior: { skin: [0.822, 0.628, 0.572], hair: [0.155, 0.112, 0.07], streak: [0.4, 0.3, 0.18], ao: 0.55, beardHair: [0.42, 0.29, 0.17], eyeShade: 0.55, flush: 1.3, noseWarm: 0.1, lipGloss: 0.3, grey: 0.02, beard: 1, age: 0.5, brows: 0.92, hairDrop: 20, cheekShade: 0.5, stubble: 0.8, beardClump: 1, contour: 0.6, browArch: 0.1, pores: 0.8, lipTint: 1.25, lipColor: [0.69, 0.41, 0.38], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.2, browEven: 1, under: 0.8, browLift: 2.5, browY: -5.5, browIn: 10, templeDrop: 22 },
-  mage: { skin: [0.78, 0.57, 0.46], hair: [0.12, 0.08, 0.058], streak: [0.28, 0.19, 0.13], grey: 0.06, beard: 1, age: 1 },
+  // (a lean face weathered by the sun, dark brown hair with warm lights and a dark beard, as his sheet's; shaded and
+  // textured as the others: his plain look left the face flat, the skin pale peach and the eyes staring)
+  mage: { skin: [0.71, 0.52, 0.42], hair: [0.13, 0.085, 0.06], streak: [0.32, 0.2, 0.13], ao: 0.6, beardHair: [0.075, 0.052, 0.04], eyeShade: 0.8, flush: 1.15, noseWarm: 0.1, lipGloss: 0.3, grey: 0.03, beard: 1, age: 0.85, brows: 1, cheekShade: 0.6, beardClump: 1, contour: 0.95, browArch: 0.1, pores: 0.9, lipTint: 1.1, lipColor: [0.6, 0.37, 0.33], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.3, browEven: 1, under: 0.9, browLift: 2.5, browY: -5.5, browIn: 10 },
   // (weathered from the outdoors, his hair and beard a dark brown; shaded and textured as the warrior's, which was tuned
   // against a photograph: the mage's plain look left his face flat and his eyes staring)
   ranger: { skin: [0.72, 0.5, 0.38], hair: [0.1, 0.066, 0.045], streak: [0.22, 0.15, 0.1], ao: 0.55, beardHair: [0.16, 0.105, 0.072], eyeShade: 0.55, flush: 1.1, noseWarm: 0.1, lipGloss: 0.3, grey: 0.01, beard: 1, age: 0.45, brows: 1, hairDrop: 20, nape: 55, cheekShade: 0.5, beardClump: 1, contour: 0.7, browArch: 0.1, pores: 0.8, lipTint: 1.1, lipColor: [0.6, 0.38, 0.33], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.3, browEven: 1, under: 0.8, browLift: 2.5, browY: -5.5, browIn: 10, templeDrop: 22 },

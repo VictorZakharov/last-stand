@@ -60,7 +60,7 @@ const HAND_HANG = Math.PI / 2;
 const TAIL: Record<string, number> = { cast: 0.35, summon: 0.35, slam: 0.4, buff: 0.5 }, TAIL_OUT: Record<string, number> = { cast: 0.45, summon: 0.45, slam: 0.6, buff: 0.5 };
 /** drinking: the flask raised straight up before the chin, the elbow down and forward (the bell sleeve falls back off the forearm) */
 const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.03, -0.08, 0.22), tipped: new THREE.Vector3(0.03, 0.1, 0.2), pole: new THREE.Vector3(0.4, -1, 0.5) };
-const REST_FEET = [0.12, 0.06, 0.22, -0.12, -0.05, -0.35], CAST_FEET = [0.13, 0.2, 0.15, -0.13, -0.1, -0.45];
+const REST_FEET = [0.14, 0.06, 0.22, -0.14, -0.05, -0.35], CAST_FEET = [0.13, 0.2, 0.15, -0.13, -0.1, -0.45];
 const SLAM_FEET = [0.2, 0.06, 0.4, -0.2, -0.04, -0.4], AIM_FEET = [0.13, -0.04, 0.35, -0.12, 0.14, -0.05], LANCE_FEET = [0.14, 0.24, 0.1, -0.15, -0.14, -0.55];
 
 // --- a spell thrown from the free hand (cast: Starfall, Maelstrom), keyed over the cast, released at 0.55
@@ -100,7 +100,7 @@ export function buildMage(): Model {
   // the plain tunic under the robe: undyed linen
   const linen = kit.rim({ color: 0x9a8e76, roughness: 1, ...tex(clothMaps(), 1, 0.7) }, 0x6a6050, 0.25);
   // the cowl's heavy wool, its weave coarser and deeper than the robe's
-  const scarf = kit.rim({ color: 0x1f5560, roughness: 1, ...tex(woolMaps(), 1, 1.6), side: THREE.DoubleSide }, 0x2a6a70, 0.3);
+  const scarf = kit.rim({ color: 0x235e6e, roughness: 1, ...tex(woolMaps(), 1, 1.6), side: THREE.DoubleSide }, 0x2a6a70, 0.3);
   const teal = kit.rim({ color: 0x1f5058, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.DoubleSide }, 0x2a6a70, 0.3);
   const lining = kit.rim({ color: 0x184048, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x2a6a70, 0.2);
   // the robe's hem band: copper thread woven thick, as the sheet's (a thin gold trim was lost at a distance)
@@ -153,7 +153,7 @@ export function buildMage(): Model {
   for (const s of [1, -1]) {
     const pts: THREE.Vector3[] = [];
     for (let k = 0; k <= 8; k++) { const y = lerp(0.24, -0.1, k / 8); pts.push(onChest(s * lerp(0.05, 0.075, k / 8), y, 0.003)); }
-    A.add(taperTube(pts, () => 0.005, 16, 5), gold, j.chest);
+    A.add(taperTube(pts, () => 0.0075, 16, 6), gold, j.chest);
   }
   // without it the tunic: belted at the waist like the robe, a rolled hem round the neck and a short laced slit down the front
   // (its rows closer together towards the shoulders)
@@ -175,7 +175,8 @@ export function buildMage(): Model {
       const x = q.getX(i), y = q.getY(i), z = q.getZ(i), a = Math.atan2(x, z), r = Math.hypot(x, z);
       const out = clamp((r - 0.09) / 0.06, 0, 1);
       const k = 1 + out * (0.055 * Math.sin(a * 5 + y * 45 + 1) + 0.025 * Math.sin(a * 11 - y * 70) + 0.012 * Math.sin(a * 23 + y * 90));
-      q.setXYZ(i, x * k, y - 0.02 * Math.max(0, Math.cos(a)), z * k * 0.95 + necklineBack(y));
+      // (dipping in front under the beard, which lies over it as the sheet's does)
+      q.setXYZ(i, x * k, y - 0.05 * Math.max(0, Math.cos(a)) ** 2, z * k * 0.95 + necklineBack(y));
     }
     g.computeVertexNormals();
     A.add(scaleUV(g, 4, 2), scarf, j.chest);
@@ -200,7 +201,7 @@ export function buildMage(): Model {
       return onChest(s * lerp(x0, x1, u), y, 0.012 + 0.004 * v, out);
     };
     A.add(plate(flap, 8, 10, 0.004, (u, v) => [s > 0 ? u : 1 - u, 1 - v * 0.8]), lapel, j.chest);
-    for (const e of ['u0', 'u1'] as const) A.add(edgeTube(flap, e, 0.0045, 12), gold, j.chest);
+    for (const e of ['u0', 'u1'] as const) A.add(edgeTube(flap, e, 0.0075, 12), gold, j.chest);
   }
 
   // --- pauldrons: a domed cap of tooled black leather over a flared lame, each rimmed in gold, and a gold boss set with a
@@ -209,6 +210,7 @@ export function buildMage(): Model {
     // sized to sit over a man's deltoid (they were cut for a far broader frame)
     const sh = joint(joint0);
     sh.scale.setScalar(PAULDRON);
+    sh.position.x -= s * 0.022;
     const lame = (R: number, lat0: number, lat1: number, y: number, tall = 0.75): SurfaceFn => (u, v, out) => {
       const lon = (u - 0.5) * 3.2, lat = lerp(lat0, lat1, v);
       return out.set(s * Math.cos(lat) * Math.cos(lon) * R * 1.1 + s * 0.015, Math.sin(lat) * R * tall + y, Math.cos(lat) * Math.sin(lon) * R);
@@ -263,7 +265,7 @@ export function buildMage(): Model {
     const bell = new THREE.CylinderGeometry(0.075, 0.15, 0.3, 28, 6, true).translate(0, -0.15, 0), q = bell.attributes.position;
     for (let i = 0; i < q.count; i++) {
       const x = q.getX(i), y = q.getY(i), z = q.getZ(i), a = Math.atan2(x, -z), k = -y / 0.3;
-      const hang = 0.12 * k * (0.5 + 0.5 * Math.cos(a)) , fold = 1 + 0.08 * k * Math.sin(Math.atan2(z, x) * 7);
+      const hang = 0.17 * k * (0.5 + 0.5 * Math.cos(a)), fold = 1 + 0.08 * k * Math.sin(Math.atan2(z, x) * 7);
       q.setXYZ(i, x * fold, y - hang, z * fold);
     }
     bell.computeVertexNormals();
@@ -272,7 +274,7 @@ export function buildMage(): Model {
     bells.push(bj);
     // the bell is cloth: its top ring on the forearm, the rest hanging with weight and following the arm
     // (sleeve.ts); the lining and the gold hem ride the same particles
-    cloths.push(new BellCloth({ joint: bj, hand: hd, shape: scaleUV(bell, 3, 1), outer: robe, lining, rim: gold, armRadius: 0.066, rimRadius: 0.007, bodies, skirts: sleeveSkirts }));
+    cloths.push(new BellCloth({ joint: bj, hand: hd, shape: scaleUV(bell, 3, 1), outer: robe, lining, rim: gold, armRadius: 0.066, rimRadius: 0.011, bodies, skirts: sleeveSkirts }));
     H.add(scaleUV(lathe([[0.046, -0.26], [0.052, -0.2], [0.058, -0.12], [0.06, -0.1]], 16), 2, 1), leather, el);
     for (const y of [-0.13, -0.245]) H.add(belt(0.058 - (y + 0.13) * 0.1, 0.058 - (y + 0.13) * 0.1, y, 0.012, 0.005, 0, 14), gold, el);
     H.add(new THREE.OctahedronGeometry(0.02, 0), gold, el, [s * 0.058, -0.19, 0], [0, 0, 0], [0.4, 1.2, 1]);
@@ -318,8 +320,8 @@ export function buildMage(): Model {
 
   // --- skirts: the navy robe to below the knee with a gold hem, a longer teal underskirt, the
   // embroidered front panel, and teal tails at the front corners
-  const under = new Skirt({ r0: 0.19, r1: 0.33, len: 0.78, depth: 0.82, folds: 11, foldAmp: 0.07, rows: 10, hem: (a) => 0.05 * Math.sin(a * 5) });
-  const over = new Skirt({ r0: 0.2, r1: 0.35, len: 0.66, depth: 0.82, folds: 9, foldAmp: 0.06, rows: 10, trim: 0.075, hem: (a) => 0.08 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
+  const under = new Skirt({ r0: 0.19, r1: 0.44, len: 0.82, depth: 0.84, folds: 13, foldAmp: 0.08, rows: 10, hem: (a) => 0.012 * Math.sin(a * 5) });
+  const over = new Skirt({ r0: 0.2, r1: 0.46, len: 0.7, depth: 0.84, folds: 11, foldAmp: 0.085, rows: 10, trim: 0.075, hem: (a) => 0.03 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
   const skirts: THREE.Mesh[] = [];
   for (const [sk, mats] of [[under, [teal]], [over, [robe, copper]], [over, [lining, copper]]] as const) {
     const m = new THREE.Mesh(sk.geo, mats.length > 1 ? [...mats] : mats[0]);
@@ -392,12 +394,12 @@ export function buildMage(): Model {
     const up = Math.min(fit(0, 0, 0.15, h, swing), swing + 1);
     return [up, Math.min(fit(-h * Math.cos(up), h * Math.sin(up), 0, h, swing), swing + 1)];
   };
-  hang(0, 0.19, 0.84, panel, 110, PH, 0.02);
-  for (const s of [1, -1]) hang(s * 0.75, 0.15, 0.6, tail, 120, TH2, 0.03);
+  hang(0, 0.19, 0.66, panel, 110, PH, 0.02);
+  for (const s of [1, -1]) hang(s * 0.75, 0.15, 0.5, tail, 120, TH2, 0.03);
 
   // --- the head: face, a full beard, hair, and a wide-brimmed pointed hat (worn with a head item equipped: setGear), its
   // crown bent back by its own weight, a gold band with a stone
-  const head = buildHead(j.head, kit, 'mage', { hair: 'swept' });
+  const head = buildHead(j.head, kit, 'mage', { hair: 'mane' });
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, 'mage', j.P.neckL, j.head);
@@ -441,9 +443,9 @@ export function buildMage(): Model {
   {
     const w = new Sculpt(), pts: THREE.Vector3[] = [];
     // (the haft wandering a little and knotted along its length, its grain twisted round it)
-    for (let k = 0; k <= 20; k++) { const y = -0.52 - GRIP + k * 0.088; pts.push(V(Math.sin(k * 0.9) * 0.007, y, Math.cos(k * 1.3) * 0.007)); }
+    for (let k = 0; k <= 20; k++) { const y = -0.52 - GRIP + k * 0.088; pts.push(V(Math.sin(k * 0.9) * 0.003, y, Math.cos(k * 1.3) * 0.003)); }
     const knots = (t: number) => 1 + 0.1 * Math.sin(t * 46) + 0.12 * Math.exp(-(((t - 0.33) / 0.02) ** 2)) + 0.14 * Math.exp(-(((t - 0.71) / 0.025) ** 2));
-    const haft = taperTube(pts, (t) => 0.028 * (1 - t * 0.15) * knots(t), lod(80, 30), lod(12, 8)), hq = haft.attributes.position;
+    const haft = taperTube(pts, (t) => 0.033 * (1 - t * 0.15) * knots(t), lod(80, 30), lod(12, 8)), hq = haft.attributes.position;
     for (let i = 0; i < hq.count; i++) {
       const x = hq.getX(i), y = hq.getY(i), z = hq.getZ(i), a = Math.atan2(x, z);
       const k = 1 + 0.06 * Math.sin(a * 5 + y * 9) + 0.03 * Math.sin(a * 9 - y * 23);
@@ -453,26 +455,26 @@ export function buildMage(): Model {
     w.add(scaleUV(haft, 2, 8), wood, staff);
     // engraved gold bands, a pair at the hand and singles along it, a gold ferrule at the foot
     for (const y of [-0.47, 0.02, 0.1, 0.62, 0.96, 1.02]) {
-      const ring = lathe([[0.031, -0.022], [0.034, -0.016], [0.034, 0.016], [0.031, 0.022]], lod(20, 12));
+      const ring = lathe([[0.036, -0.022], [0.04, -0.016], [0.04, 0.016], [0.036, 0.022]], lod(20, 12));
       projectUV(ring, steelRegion('chest'), (x, y, z) => [Math.atan2(x, z) / TAU + 0.5, 0.4 + (y + 0.022) / 0.044 * 0.2]);
       w.add(ring, goldE, staff, [0, y - GRIP, 0]);
     }
-    w.add(lathe([[0.004, -0.13], [0.022, -0.1], [0.03, -0.03], [0.031, 0]], 12), gold, staff, [0, -0.52 - GRIP, 0]);
+    w.add(lathe([[0.004, -0.13], [0.026, -0.1], [0.035, -0.03], [0.036, 0]], 12), gold, staff, [0, -0.52 - GRIP, 0]);
     // the head: a gold collar, then two prongs rising out of it, bowed out round the crystal and in again over it, the
     // one's tip curling past the other's (the sheet's; three thin curls read as wire)
-    w.add(lathe([[0.03, 0], [0.04, 0.02], [0.036, 0.05], [0.024, 0.07]], 16), gold, staff, [0, 1.06 - GRIP, 0]);
+    w.add(lathe([[0.034, 0], [0.046, 0.02], [0.042, 0.05], [0.03, 0.07]], 16), gold, staff, [0, 1.06 - GRIP, 0]);
     for (const p of [1, -1]) {
       const prong: THREE.Vector3[] = [];
       for (let q = 0; q <= 14; q++) {
         const t = q / 14, out = Math.sin(Math.min(1, t * 1.1) * Math.PI) * 0.1 + 0.018 * (1 - t), tip = t > 0.8 ? (t - 0.8) * 0.25 * p : 0;
         prong.push(V(p * out - tip, 1.11 - GRIP + t * 0.42, 0.012 * Math.sin(t * Math.PI) * p));
       }
-      w.add(taperTube(prong, (t) => 0.019 * (1 - t * 0.75), 28, 8), gold, staff);
+      w.add(taperTube(prong, (t) => 0.028 * (1 - t * 0.8), 28, 10), gold, staff);
     }
     w.build();
   }
   const tip = joint(staff, 0, 1.36 - GRIP, 0);
-  const crystal = part(new THREE.OctahedronGeometry(0.07, 0).scale(0.8, 1.6, 0.8), gem, tip);
+  const crystal = part(new THREE.OctahedronGeometry(0.095, 0).scale(0.75, 1.6, 0.75), gem, tip);
   crystal.castShadow = false;
   const ringA = part(new THREE.TorusGeometry(0.14, 0.004, 4, 32), glow, tip);
   const ringB = part(new THREE.TorusGeometry(0.11, 0.004, 4, 32), glow, tip);
