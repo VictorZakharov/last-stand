@@ -1,12 +1,12 @@
 // The Mage: the same bare-headed man in layered navy and teal robes, the hood down in a cowl round
 // the neck, gold-trimmed and embroidered with arcane signs, long bell sleeves, black-and-gold spiked
-// pauldrons set with green stones, a wide medallion belt with pouches and charms, strapped boots with
-// gold caps, and a gnarled staff cradling a floating crystal. The robe with its pauldrons, collar flaps and
+// pauldrons set with green stones, a wide medallion belt with pouches and charms, worn brown leather boots,
+// and a gnarled staff cradling a floating crystal. The robe with its pauldrons, collar flaps and
 // brooch is the chest item's, the bracers and gloves the hands item's: without them a plain linen tunic, its
 // sleeves (or the robe's) on to the wrists, and bare hands. Fully procedural.
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
-import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
+import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as woodMaps, oiled, pbrMaterialMaps } from '../../core/textures';
 import { engravedSteel, embroidered, arcaneColumn, projectUV, steelRegion } from '../../core/engraving';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
@@ -16,6 +16,7 @@ import { buildHand, poseHand, hold, seat, gripTurn, bare, handCapsules, SLANT } 
 import { clamp, lerp, damp, TAU, mulberry } from '../../util';
 import { BellCloth, type BellOptions } from './sleeve';
 import { LegIK } from './ik';
+import { buildBoot } from './boot';
 import { fitArm } from './armIK';
 import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
@@ -99,6 +100,10 @@ export function buildMage(): Model {
   const goldE = kit.std({ color: 0xd4ab58, metalness: 1, roughness: 1, map: E.map, normalMap: E.normalMap, roughnessMap: E.roughnessMap });
   const blackLeather = kit.std({ color: 0x1a1614, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
   const leather = kit.std({ color: 0x3e281a, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
+  // the boots: worn, oiled dark brown leather on darker soles, as the sheet's
+  const boot = kit.std({ color: 0x5a3a26, roughness: 1, ...pbrMaterialMaps(oiled(), 1) });
+  const bootStrap = kit.std({ color: 0x3a2618, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
+  const sole = kit.std({ color: 0x22180f, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
   const wood = kit.std({ color: 0x5a3d28, roughness: 1, ...tex(woodMaps(), 1, 1.5) });
   const skinTip = kit.rim({ color: 0xc9957c, roughness: 0.6 }, 0x6a2a1c, 0.25);
   // the staff's crystal and its rings in the colour of the bolts it shoots (Splintering Bolt's `color`, #197)
@@ -246,23 +251,12 @@ export function buildMage(): Model {
   const handL = buildHand(j.handL, 1, leather, skinTip, 1, bareSkin), handR = buildHand(j.handR, -1, leather, skinTip, 1, bareSkin);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
-  // --- legs: dark breeches, boots with strap buckles, a gold cap and a stone at the shin
+  // --- legs: dark breeches into tall boots of worn brown leather (models/boot.ts, the ranger's last and sole: lathed
+  // tubes with gold toe caps read as a doll's slippers beside the sheet's boots)
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
     S.add(scaleUV(limb(0.46, 0.09, 0.07, 0.1, 0.3, 12), 2, 1.5), robe, th);
     S.add(scaleUV(limb(0.41, 0.068, 0.052, 0.08, 0.35, 12), 2, 1.5), robe, kn);
-    S.add(scaleUV(lathe([[0.056, -0.42], [0.062, -0.37], [0.069, -0.26], [0.074, -0.16], [0.08, -0.12], [0.078, -0.11]], 18), 2, 1.5), leather, kn, [0, 0, 0.004], [0, 0, 0], [1, 1, 1.06]);
-    S.add(edgeTube((u, v, o) => o.set(Math.sin(u * TAU) * 0.079, -0.115, Math.cos(u * TAU) * 0.084), 'v0', 0.006, 24), gold, kn);
-    for (const y of [-0.24, -0.35]) {
-      const r = 0.075 + (y + 0.16) * 0.1;
-      S.add(belt(r, r * 1.06, y, 0.018, 0.006, 0, 16), blackLeather, kn);
-      S.add(buckle(0.022, 0.022, 0.005), gold, kn, [r + 0.006, y, 0], [0, Math.PI / 2, 0]);
-    }
-    S.add(new THREE.OctahedronGeometry(0.03, 0), gold, kn, [0, -0.15, 0.085], [0, 0, 0], [0.8, 1, 0.3]);
-    S.add(gemGeo(0.012), stone, kn, [0, -0.15, 0.092]);
-    const foot = [V(0, -0.028, -0.05), V(0, -0.03, 0.04), V(0, -0.037, 0.14), V(0, -0.046, 0.205)];
-    S.add(scaleUV(taperTube(foot, (t) => 0.047 - 0.02 * t * t, 12, 12), 1, 2), leather, an, [0, 0, 0], [0, 0, 0], [1.12, 0.82, 1]);
-    S.add(taperTube(foot.map((p) => V(0, 0, p.z)), (t) => 0.052 - 0.02 * t * t, 12, 12), blackLeather, an, [0, -0.064, 0], [0, 0, 0], [1.15, 0.2, 1.04]);
-    S.add(new THREE.SphereGeometry(0.045, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), gold, an, [0, -0.042, 0.16], [0.5, 0, 0], [1.08, 0.9, 1.3]);
+    buildBoot(S, { leather: boot, sole, strap: bootStrap, metal: gold }, kn, an, th === j.thighL ? 1 : -1);
   }
 
   // --- the belt: wide leather with a gold medallion and a stone, a second belt slung across the hips
