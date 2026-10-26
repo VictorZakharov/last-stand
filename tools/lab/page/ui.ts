@@ -28,7 +28,8 @@ import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { anchoredLabels, floatText } from '../../../src/ui/floaters';
 import { viewMode } from '../../../src/core/renderer';
 import * as overlay from '../../../src/ui/overlay/layer';
-import { hideDecision, showDecision } from '../../../src/ui/hud';
+import { showDecision } from '../../../src/ui/hud';
+import { closeDecision, DECISION_CANARY, decisionShown } from './uiDecision';
 import { hideSummary, showPause, showSummary } from '../../../src/ui/menus';
 import { setPerfHud } from '../../../src/ui/perfHud';
 import { openSaves } from '../../../src/ui/saves';
@@ -884,7 +885,7 @@ const STEPS: Record<UiState, Steps> = {
   // (shown while Tab is held: pictured with it down, let go after)
   scores: { open: (lab) => lab.step(SCORES_FRAMES, () => TAB), close: (lab) => lab.step(1), held: TAB },
   perf: { open: () => setPerfHud(true, false), close: () => setPerfHud(false, false) },
-  decision: { open: showDecision, close: hideDecision },
+  decision: { open: showDecision, close: closeDecision, check: decisionShown },
   pause: { open: () => showPause(true), close: () => showPause(false) },
   summary: { open: openSummary, close: hideSummary },
   skillTips: { open: openSkillTips, close: closeSkillTips, check: skillTipsShown },
@@ -959,6 +960,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const through = found.problems.some((problem) => problem.includes('shown through a prop'));
     lines.push(`  canary: ${through ? 'the labels beside the columns caught' : 'the labels beside the columns went unseen'}`);
     if (!through) missed.push(`${state}: the canary's labels beside the columns went unseen`);
+  }
+  if (state === 'decision') {
+    const caught = found.problems.some((problem) => problem.includes(DECISION_CANARY.name));
+    lines.push(`  canary: ${DECISION_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${DECISION_CANARY.what} went unseen`);
   }
   if (state === 'hudTouch' || state === 'decisionTouch') {
     const { name, what } = TOUCH_CANARIES[state];

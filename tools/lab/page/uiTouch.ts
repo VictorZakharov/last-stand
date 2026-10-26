@@ -7,10 +7,11 @@
 //   buttons a finger's height. It covered the top 40% of the owner's phone, over the hero.
 // A canary each: the pause button moved a cutout's inset in, the choice's padding doubled.
 import { G } from '../../../src/state';
-import { hideDecision, showDecision } from '../../../src/ui/hud';
+import { showDecision } from '../../../src/ui/hud';
 import { makeItem } from '../../../src/loot/items';
 import type { RarityId } from '../../../src/types';
 import type { Lab } from './lab';
+import { closeDecision, labelsOnOneLine } from './uiDecision';
 
 /** What a state found besides its boxes: lines for its report, and its problems. */
 export interface TouchFound {
@@ -140,7 +141,7 @@ export async function openDecisionTouch(lab: Lab): Promise<void> {
 
 /** The choice put away again. */
 export function closeDecisionTouch(): void {
-  hideDecision();
+  closeDecision();
   if (G.run) G.run.bag = [];
 }
 
@@ -163,6 +164,9 @@ function choiceFound(): TouchFound {
       problems.push(`decisionTouch: a button ${height.toFixed(1)} px tall (${BUTTON_PX} at least)`);
     }
   }
+  const labels = labelsOnOneLine('decisionTouch');
+  lines.push(...labels.lines);
+  problems.push(...labels.problems);
   if (box.right > innerWidth || box.left < 0) problems.push('decisionTouch: the choice reaches past the window');
   for (const selector of CORNERS) {
     const other = boxOf(selector);

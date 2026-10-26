@@ -62,7 +62,10 @@ struck (clear of its panels: it first lay over the hero panel, as the performanc
 in the lobby opened by a finger's tap (the class card's and the skill book's, the book opened by taps: a short
 screen's rail turned to the skills, the book's toggle; each tooltip pinned and within the window, the tallest
 pictured; the mouse then puts the page back in mouse mode), the run's HUD with a hurt foe's
-bar and damage numbers over it, the scores, the performance overlay, the choice after a wave, the pause menu, the
+bar and damage numbers over it, the scores, the performance overlay, the choice after a wave (each button's label on one line, `page/uiDecision.ts`:
+narrowed on a short screen, the mouse's labels, their keys beside them, wrapped onto two; `--canary` makes it too
+narrow for them, which must be found; put away at once as it closes: folded back into the badge on the browser's own
+timers, it was still half shown in the next state's picture), the pause menu, the
 run's summary, each skill's tooltip on the hotbar opened by the mouse moved over its slot (within the window, the
 tallest pictured; `--canary` makes each as tall as the window, which must be found past it: issue #256's damage
 lines made them taller), the battle log with each skill on a key struck at the foe twice and its blows on the hero
