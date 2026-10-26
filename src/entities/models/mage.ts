@@ -10,7 +10,7 @@ import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as
 import { engravedSteel, embroidered, arcaneColumn, projectUV, steelRegion } from '../../core/engraving';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
-import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
+import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, stitches, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, gripTurn, bare, handCapsules, SLANT } from './hands';
 import { clamp, lerp, damp, TAU, mulberry } from '../../util';
@@ -95,13 +95,16 @@ export function buildMage(): Model {
   const kit = createKit(0x5dffa8);
   const rng = mulberry(5);
   const tex = (maps: ReturnType<typeof clothMaps>, rep: number, ns = 1) => { const m = pbrMaterialMaps(maps, rep, ns); return { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, normalScale: m.normalScale }; };
-  const robe = kit.rim({ color: 0x252d48, roughness: 1, ...tex(clothMaps(), 1, 0.9) }, 0x2a3a60, 0.3);
+  // (heavy wool, its weave seen up close as the sheet's: the fine cloth's read as satin)
+  const robe = kit.rim({ color: 0x262f4e, roughness: 1, ...tex(woolMaps(), 1, 1.1) }, 0x2a3a60, 0.3);
   // the plain tunic under the robe: undyed linen
   const linen = kit.rim({ color: 0x9a8e76, roughness: 1, ...tex(clothMaps(), 1, 0.7) }, 0x6a6050, 0.25);
   // the cowl's heavy wool, its weave coarser and deeper than the robe's
   const scarf = kit.rim({ color: 0x1f5560, roughness: 1, ...tex(woolMaps(), 1, 1.6), side: THREE.DoubleSide }, 0x2a6a70, 0.3);
   const teal = kit.rim({ color: 0x1f5058, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.DoubleSide }, 0x2a6a70, 0.3);
   const lining = kit.rim({ color: 0x184048, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x2a6a70, 0.2);
+  // the robe's hem band: copper thread woven thick, as the sheet's (a thin gold trim was lost at a distance)
+  const copper = kit.std({ color: 0xc06a2a, metalness: 0.7, roughness: 0.5, ...tex(clothMaps(), 2, 1.2) });
   const gold = kit.std({ color: 0xc9a14a, metalness: 1, roughness: 1, roughnessMap: pbrMaterialMaps(steelMaps(), 1).roughnessMap });
   const E = engravedSteel();
   const goldE = kit.std({ color: 0xd4ab58, metalness: 1, roughness: 1, map: E.map, normalMap: E.normalMap, roughnessMap: E.roughnessMap });
@@ -109,11 +112,12 @@ export function buildMage(): Model {
   // the pauldrons' hardened leather, tooled: its grain raised more and finer, a dull sheen on the black
   const tooled = kit.std({ color: 0x1c1a20, roughness: 0.75, ...tex(leatherMaps(), 3, 2.4) });
   const leather = kit.std({ color: 0x3e281a, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
+  const beltLeather = kit.std({ color: 0x4a2f1e, roughness: 0.85, ...tex(leatherMaps(), 2, 1.8) });
   // the boots: worn, oiled dark brown leather on darker soles, as the sheet's
   const boot = kit.std({ color: 0x5a3a26, roughness: 1, ...pbrMaterialMaps(oiled(), 1) });
   const bootStrap = kit.std({ color: 0x3a2618, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
   const sole = kit.std({ color: 0x22180f, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
-  const wood = kit.std({ color: 0x5a3d28, roughness: 1, ...tex(woodMaps(), 1, 1.5) });
+  const wood = kit.std({ color: 0x6a4630, roughness: 0.9, ...tex(woodMaps(), 1, 2) });
   const skinTip = kit.rim({ color: 0xc9957c, roughness: 0.6 }, 0x6a2a1c, 0.25);
   // the staff's crystal and its rings in the colour of the bolts it shoots (Splintering Bolt's `color`, #197)
   const glow = kit.glow(0xff6fe0, 1.5);
@@ -126,8 +130,11 @@ export function buildMage(): Model {
   const PW = 256, PH = 1024, TW2 = 256, TH2 = 640;
   const panelTex = embroidered(PW, PH, [[0, 0], [PW, 0], [PW, PH - 110], [PW / 2, PH], [0, PH - 110]], [0.13, 0.16, 0.27], [0.85, 0.66, 0.3], arcaneColumn);
   const panel = kit.rim({ color: 0xffffff, roughness: 1, map: panelTex.map, normalMap: panelTex.normalMap, roughnessMap: panelTex.roughnessMap, side: THREE.DoubleSide }, 0x2a3a60, 0.3);
-  const tailTex = embroidered(TW2, TH2, [[0, 0], [TW2, 0], [TW2, TH2 - 120], [TW2 / 2, TH2], [0, TH2 - 120]], [0.12, 0.3, 0.33], [0.85, 0.66, 0.3]);
-  const tail = kit.rim({ color: 0xffffff, roughness: 1, map: tailTex.map, normalMap: tailTex.normalMap, roughnessMap: tailTex.roughnessMap, side: THREE.DoubleSide }, 0x2a6a70, 0.3);
+  const tailTex = embroidered(TW2, TH2, [[0, 0], [TW2, 0], [TW2, TH2 - 120], [TW2 / 2, TH2], [0, TH2 - 120]], [0.14, 0.17, 0.29], [0.85, 0.66, 0.3]);
+  const tail = kit.rim({ color: 0xffffff, roughness: 1, map: tailTex.map, normalMap: tailTex.normalMap, roughnessMap: tailTex.roughnessMap, side: THREE.DoubleSide }, 0x2a3a60, 0.3);
+  // the lapels: teal, embroidered at their borders as the tails are
+  const lapelTex = embroidered(TW2, TH2, [[0, 0], [TW2, 0], [TW2, TH2 - 120], [TW2 / 2, TH2], [0, TH2 - 120]], [0.12, 0.3, 0.33], [0.85, 0.66, 0.3]);
+  const lapel = kit.rim({ color: 0xffffff, roughness: 1, map: lapelTex.map, normalMap: lapelTex.normalMap, roughnessMap: lapelTex.roughnessMap, side: THREE.DoubleSide }, 0x2a6a70, 0.3);
 
   const j = buildHumanoid({ skin: robe }, {
     chestW: 0.17, chestD: 0.14, shoulderW: 0.2, shoulderY: 0.45, upperR: 0.06, foreR: 0.05, shinL: 0.41,
@@ -156,8 +163,8 @@ export function buildMage(): Model {
   for (const s of [1, -1]) T.add(taperTube([0.292, 0.25, 0.215].map((y) => tunicFront(s * 0.006, y, 0.001)), () => 0.0025, 8, 5), blackLeather, j.chest);
   for (const y of [0.275, 0.245, 0.222]) T.add(taperTube([tunicFront(0.011, y + 0.004, 0.002), tunicFront(0, y, 0.004), tunicFront(-0.011, y - 0.004, 0.002)], () => 0.0015, 6, 4), leather, j.chest);
   const br = onChest(0, 0.1, 0.012);
-  A.add(new THREE.OctahedronGeometry(0.032, 0), gold, j.chest, br.toArray(), [0, 0, 0], [0.75, 1.1, 0.35]);
-  A.add(gemGeo(0.014), stone, j.chest, [br.x, br.y, br.z + 0.01], [0, 0, 0], [1, 1.4, 1]);
+  A.add(new THREE.OctahedronGeometry(0.03, 0), gold, j.chest, br.toArray(), [0, 0, 0], [0.8, 1.3, 0.3]);
+  A.add(new THREE.OctahedronGeometry(0.02, 0), stone, j.chest, [br.x, br.y, br.z + 0.006], [0, 0, 0], [0.85, 1.35, 0.45]);
 
   // --- the cowl: the hood down, bunched round the neck in teal folds, its crown lying flat on the upper
   // back; its top round the neck as the tunic's neckline is (centred on the chest, a fold's trough at the back met his neck)
@@ -188,11 +195,12 @@ export function buildMage(): Model {
   // pointed collar flaps over the chest, teal with a gold border
   for (const s of [1, -1]) {
     const flap: SurfaceFn = (u, v, out) => {
-      const y = lerp(0.26, 0.0, v), x0 = lerp(0.045, 0.02, v), x1 = lerp(0.2, 0.05, v ** 0.8);
+      // (wide, from the scarf out towards the shoulders, narrowing to the chest's foot, as the sheet's lapels)
+      const y = lerp(0.26, 0.0, v), x0 = lerp(0.05, 0.035, v), x1 = lerp(0.205, 0.075, v ** 0.6);
       return onChest(s * lerp(x0, x1, u), y, 0.012 + 0.004 * v, out);
     };
-    A.add(plate(flap, 8, 10, 0.004, (u, v) => [s > 0 ? u : 1 - u, 1 - v * 0.8]), tail, j.chest);
-    A.add(edgeTube(flap, s > 0 ? 'u1' : 'u1', 0.0045, 12), gold, j.chest);
+    A.add(plate(flap, 8, 10, 0.004, (u, v) => [s > 0 ? u : 1 - u, 1 - v * 0.8]), lapel, j.chest);
+    for (const e of ['u0', 'u1'] as const) A.add(edgeTube(flap, e, 0.0045, 12), gold, j.chest);
   }
 
   // --- pauldrons: a domed cap of tooled black leather over a flared lame, each rimmed in gold, and a gold boss set with a
@@ -287,12 +295,16 @@ export function buildMage(): Model {
 
   // --- the belt: wide leather with a gold medallion and a stone, a second belt slung across the hips
   // with pouches, a hanging strap with a gold charm
-  S.add(belt(0.165, 0.142, 0.02, 0.07, 0.012), leather, j.spine);
-  for (const y of [-0.01, 0.05]) S.add(belt(0.173, 0.149, y, 0.008, 0.004), gold, j.spine);
-  const md = disc(0.05, 0.016);
-  projectUV(md, steelRegion('disc'), (x, y) => [(x / 0.05 + 1) / 2, (y / 0.05 + 1) / 2]);
-  S.add(md, goldE, j.spine, [0, 0.02, 0.155]);
-  S.add(gemGeo(0.017), stone, j.spine, [0, 0.02, 0.167]);
+  // (broad tooled brown leather, stitched along its edges, as the sheet's: a dark band with gold edges read as a sash)
+  S.add(belt(0.166, 0.143, 0.02, 0.085, 0.014), beltLeather, j.spine);
+  for (const y of [-0.019, 0.059]) {
+    const ring = Array.from({ length: 48 }, (_, k) => { const a = (k / 48) * TAU; return V(Math.sin(a) * 0.175, y, Math.cos(a) * 0.152); });
+    S.add(stitches(ring, 0.006, 0.004, 0.0013, true), linen, j.spine);
+  }
+  const md = disc(0.058, 0.018);
+  projectUV(md, steelRegion('disc'), (x, y) => [(x / 0.058 + 1) / 2, (y / 0.058 + 1) / 2]);
+  S.add(md, goldE, j.spine, [0, 0.02, 0.158]);
+  S.add(gemGeo(0.022), stone, j.spine, [0, 0.02, 0.172]);
   S.add(strap(Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * TAU; return V(Math.sin(a) * 0.215, -0.01 - 0.05 * Math.sin(a + 0.6) - 0.02 * Math.cos(a), Math.cos(a) * 0.18); }), 0.035, 0.01, true), leather, j.hips);
   for (const [x, z, ry] of [[0.2, 0.07, 0.9], [0.17, -0.1, 2.1]] as const) {
     S.add(new THREE.BoxGeometry(0.075, 0.1, 0.04), leather, j.hips, [x, -0.07, z], [0, ry, 0]);
@@ -307,9 +319,9 @@ export function buildMage(): Model {
   // --- skirts: the navy robe to below the knee with a gold hem, a longer teal underskirt, the
   // embroidered front panel, and teal tails at the front corners
   const under = new Skirt({ r0: 0.19, r1: 0.33, len: 0.78, depth: 0.82, folds: 11, foldAmp: 0.07, rows: 10, hem: (a) => 0.05 * Math.sin(a * 5) });
-  const over = new Skirt({ r0: 0.2, r1: 0.35, len: 0.66, depth: 0.82, folds: 9, foldAmp: 0.06, rows: 10, trim: 0.045, hem: (a) => 0.08 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
+  const over = new Skirt({ r0: 0.2, r1: 0.35, len: 0.66, depth: 0.82, folds: 9, foldAmp: 0.06, rows: 10, trim: 0.075, hem: (a) => 0.08 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
   const skirts: THREE.Mesh[] = [];
-  for (const [sk, mats] of [[under, [teal]], [over, [robe, gold]], [over, [lining, gold]]] as const) {
+  for (const [sk, mats] of [[under, [teal]], [over, [robe, copper]], [over, [lining, copper]]] as const) {
     const m = new THREE.Mesh(sk.geo, mats.length > 1 ? [...mats] : mats[0]);
     m.position.y = 0.03; m.castShadow = m.receiveShadow = true;
     j.hips.add(m); skirts.push(m);
@@ -416,25 +428,46 @@ export function buildMage(): Model {
     w.build();
   }
 
-  // --- staff (right hand): a gnarled haft bound in gold, its head two curling prongs cradling a
+  // --- staff (right hand): a thick gnarled haft bound in engraved gold, its head two gold prongs curving up round a
   // floating crystal
   // turned in the fist so it stands up out of the forward-reaching forearm, the orb up and ahead.
-  // Held GRIP further up the haft than its old balance point, so the crystal rides at head height
-  // and the bolts it casts fly at the foes, not over them.
+  // Held GRIP up the haft from its foot (less its length below the hand): standing, its foot comes down to the floor
+  // beside his right foot and the crystal rides over his head, as the sheet's (gripped higher, its foot stood 25 cm into
+  // the floor); aimed, the crystal is level with a foe's chest, so the bolts fly at the foes, not over them.
   const staff = joint(j.handR, 0, -0.05, 0.02);
   const STAFF_PITCH = 1.25, STAFF_R = 0.026;
   staff.rotation.x = STAFF_PITCH;
-  const GRIP = 0.62;
+  const GRIP = 0.44;
   {
     const w = new Sculpt(), pts: THREE.Vector3[] = [];
-    for (let k = 0; k <= 10; k++) { const y = -0.52 - GRIP + k * 0.176; pts.push(V(Math.sin(k * 1.7) * 0.008, y, Math.cos(k * 2.3) * 0.008)); }
-    w.add(scaleUV(taperTube(pts, (t) => 0.024 * (1 - t * 0.2) * (1 + 0.12 * Math.sin(t * 40)), 40, 8), 2, 6), wood, staff);
-    for (const y of [-0.45, 0.0, 0.9, 1.05]) w.add(new THREE.CylinderGeometry(0.03, 0.03, 0.045, 12), gold, staff, [0, y - GRIP, 0]);
-    w.add(new THREE.ConeGeometry(0.028, 0.12, 10), gold, staff, [0, -0.58 - GRIP, 0], [Math.PI, 0, 0]);
-    for (let k = 0; k < 3; k++) {
-      const a = k * TAU / 3, curl: THREE.Vector3[] = [];
-      for (let q = 0; q <= 8; q++) { const t = q / 8, r = 0.03 + Math.sin(t * Math.PI) * 0.1; curl.push(V(Math.cos(a + t * 1.2) * r, 1.14 - GRIP + t * 0.34, Math.sin(a + t * 1.2) * r)); }
-      w.add(taperTube(curl, (t) => 0.017 * (1 - t * 0.7), 16, 6), gold, staff);
+    // (the haft wandering a little and knotted along its length, its grain twisted round it)
+    for (let k = 0; k <= 20; k++) { const y = -0.52 - GRIP + k * 0.088; pts.push(V(Math.sin(k * 0.9) * 0.007, y, Math.cos(k * 1.3) * 0.007)); }
+    const knots = (t: number) => 1 + 0.1 * Math.sin(t * 46) + 0.12 * Math.exp(-(((t - 0.33) / 0.02) ** 2)) + 0.14 * Math.exp(-(((t - 0.71) / 0.025) ** 2));
+    const haft = taperTube(pts, (t) => 0.028 * (1 - t * 0.15) * knots(t), lod(80, 30), lod(12, 8)), hq = haft.attributes.position;
+    for (let i = 0; i < hq.count; i++) {
+      const x = hq.getX(i), y = hq.getY(i), z = hq.getZ(i), a = Math.atan2(x, z);
+      const k = 1 + 0.06 * Math.sin(a * 5 + y * 9) + 0.03 * Math.sin(a * 9 - y * 23);
+      hq.setXYZ(i, x * k, y, z * k);
+    }
+    haft.computeVertexNormals();
+    w.add(scaleUV(haft, 2, 8), wood, staff);
+    // engraved gold bands, a pair at the hand and singles along it, a gold ferrule at the foot
+    for (const y of [-0.47, 0.02, 0.1, 0.62, 0.96, 1.02]) {
+      const ring = lathe([[0.031, -0.022], [0.034, -0.016], [0.034, 0.016], [0.031, 0.022]], lod(20, 12));
+      projectUV(ring, steelRegion('chest'), (x, y, z) => [Math.atan2(x, z) / TAU + 0.5, 0.4 + (y + 0.022) / 0.044 * 0.2]);
+      w.add(ring, goldE, staff, [0, y - GRIP, 0]);
+    }
+    w.add(lathe([[0.004, -0.13], [0.022, -0.1], [0.03, -0.03], [0.031, 0]], 12), gold, staff, [0, -0.52 - GRIP, 0]);
+    // the head: a gold collar, then two prongs rising out of it, bowed out round the crystal and in again over it, the
+    // one's tip curling past the other's (the sheet's; three thin curls read as wire)
+    w.add(lathe([[0.03, 0], [0.04, 0.02], [0.036, 0.05], [0.024, 0.07]], 16), gold, staff, [0, 1.06 - GRIP, 0]);
+    for (const p of [1, -1]) {
+      const prong: THREE.Vector3[] = [];
+      for (let q = 0; q <= 14; q++) {
+        const t = q / 14, out = Math.sin(Math.min(1, t * 1.1) * Math.PI) * 0.1 + 0.018 * (1 - t), tip = t > 0.8 ? (t - 0.8) * 0.25 * p : 0;
+        prong.push(V(p * out - tip, 1.11 - GRIP + t * 0.42, 0.012 * Math.sin(t * Math.PI) * p));
+      }
+      w.add(taperTube(prong, (t) => 0.019 * (1 - t * 0.75), 28, 8), gold, staff);
     }
     w.build();
   }
