@@ -53,6 +53,8 @@ import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
 import type { NeckOptions } from './neck';
+import type { HallOptions } from './hallMoves';
+import type { CoatOptions } from './coat';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
 import type { EyesOptions } from './eyes';
 import type { SwingOptions } from './swing';
@@ -110,6 +112,20 @@ export async function neck(lab: Lab, command: NeckOptions): Promise<Report> {
   return read(lab, command);
 }
 
+/** `lab coat`: the hero's skirts as he stands at idle, frame by frame; a point that jerked, or a canary it missed, is a
+ *  problem. */
+export async function coat(lab: Lab, command: CoatOptions): Promise<Report> {
+  const { coat: follow } = await import('./coat');
+  return follow(lab, command);
+}
+
+/** `lab hall`: the hero in focus in the hall of heroes through his showcase and after it; a point that jerked, or a
+ *  canary it missed, is a problem. */
+export async function hall(lab: Lab, command: HallOptions): Promise<Report> {
+  const { hallMoves } = await import('./hallMoves');
+  return hallMoves(lab, command);
+}
+
 /** `lab match --fit`: a rest's tunable values fitted to a reference's marks. */
 export async function fitRest(lab: Lab, command: FitOptions): Promise<Fit> {
   const { fitRest: fit } = await import('./fitRest');
@@ -156,9 +172,10 @@ export async function feet(lab: Lab, command: FeetOptions): Promise<Report> {
  * reversals, the worst moments pictured; a canary it missed is a problem.
  */
 export async function range(lab: Lab, command: RangeOptions): Promise<Report> {
-  const { range: rangeRound, missedRangeCanary, lettingGo } = await import('./range');
+  const { range: rangeRound, missedRangeCanary, lettingGo, bladeAcross, slowPose } = await import('./range');
   const report = await rangeRound(lab, command);
-  const problems = [...missedRangeCanary(report), ...lettingGo(report)];
+  // (an arm held at its stops is said, not failed, until the poses every hero is pinned in are fixed: #307)
+  const problems = [...missedRangeCanary(report), ...lettingGo(report), ...bladeAcross(report), ...slowPose(report)];
   return { text: report.lines.join('\n'), problems, moments: report.moments };
 }
 

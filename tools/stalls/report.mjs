@@ -21,8 +21,8 @@ function chainText(heldIn) {
 }
 
 /**
- * One stall's lines: when and how long, the programs built in it and where, the longest tasks through it, the page's
- * changes before it.
+ * One stall's lines: when and how long, the programs built in it and where, the longest tasks through it, its JS by
+ * function (`--js`), the page's changes before it.
  */
 function stallLines(stall) {
   const lines = [`  stall of ${ms(stall.ms)} at ${stall.at.toFixed(1)} s`];
@@ -34,6 +34,7 @@ function stallLines(stall) {
   const busy = stall.busy.map((task) => `${ms(task.ms)} ${task.name} on ${task.thread}`);
   if (busy.length) lines.push(`    the longest tasks through it: ${busy.join('; ')}`);
   if (stall.work?.length) lines.push(workLine('the work in it', stall.work));
+  if (stall.js?.within.length) lines.push(jsLine('its JS, each function with what it calls', stall.js.within));
   if (stall.changes.length) lines.push(`    the page's changes just before: ${stall.changes.join('; ')}`);
   return lines;
 }

@@ -476,6 +476,8 @@ export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = (
         built,
         busy: busyIn(tasks, from, frame.at, toPage, names),
         work: workIn(placed, [[from, frame.at]], 1).slice(0, STALL_WORK_SHOWN),
+        // (a phase's JS is a frame's mean, where one stall's is lost among the frames round it)
+        js: samples.length ? jsIn(samples, from, frame.at, 1) : null,
         changes: changesBetween(record.changes, from - CHANGES_BEFORE_MS, from + 20),
       };
     });

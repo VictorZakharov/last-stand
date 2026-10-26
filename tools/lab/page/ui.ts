@@ -1,6 +1,8 @@
 // The game's UI as the player sees it on this screen (tools/lab `ui`): the lobby, an item's tooltip, the stash's items
 // lit for a hovered item's slot (`uiGlow.ts`: pictured at set moments of its loops, which mustn't paint), How to play,
-// the save slots, a class button clicked with the mouse and a key pressed after it (where the focus went), the lobby's
+// the save slots, the hero selection screen over the hall of heroes (`uiHeroes.ts`), the fight's loading bar for it
+// asked for with the heroes cold, a battleground's button clicked with the mouse and a key pressed after it (where the
+// focus went), the lobby's
 // camera switched through its views (the labels over the dummies against where they stand on the screen, frame by
 // frame through each glide), the run's HUD with the world's labels over it (a hurt foe's bar, damage numbers), the
 // scores, the performance overlay, the bank-or-continue choice, the pause menu, the run's summary, the hotbar's skill
@@ -15,7 +17,6 @@ import * as THREE from 'three';
 import { middleOf, onTheClock } from './lab';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
-import { CLASSES, CLASS_IDS } from '../../../src/data/classes/index';
 import * as warm from '../../../src/game/warm';
 import * as readying from '../../../src/ui/readying';
 import type { Need } from '../../../src/game/warm';
@@ -37,10 +38,12 @@ import { hdrOutput } from './hdrOutput';
 import { battleLog } from './battleLog';
 import { digitsShown } from './digits';
 import { closeGlow, GLOW_CANARIES, glowPictures, glowShown, openGlow } from './uiGlow';
+import { closeHeroes, heroesCanaryCaught, heroesClosed, heroesShown, openHeroes } from './uiHeroes';
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
-  | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'readying' | 'readyingClass' | 'clicked' | 'views' | 'behindProps'
+  | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
+  | 'behindProps'
   | 'logLobby'
   | 'skillTipsTouch' | 'run' | 'scores' | 'perf'
   | 'decision' | 'pause' | 'summary' | 'skillTips' | 'log' | 'logTouch';
@@ -70,7 +73,7 @@ const NUMBERS = [
 ] as const;
 /** frames run after the numbers are shown, so each has risen a little and none is in its first pop */
 const NUMBER_FRAMES = 12;
-/** the key pressed after the class button is clicked: one the game takes in the lobby (a step forward) */
+/** the key pressed after the battleground's button is clicked: one the game takes in the lobby (a step forward) */
 const KEY_AFTER_CLICK = 'KeyW';
 /** the frames run after each press of V as the camera glides to the next view (its glide is 0.45 s) */
 const SWITCH_FRAMES = 40;
@@ -253,76 +256,65 @@ function labelsWrapped(label: HTMLElement): { text: string; rows: number }[] {
   return laidOut.filter(({ rows }) => rows !== 1);
 }
 
-/** The class card's button for the class `id`. */
-function classButton(id: string): HTMLElement {
-  const button = document.querySelector<HTMLElement>(`#opt-class button[data-c="${id}"]`);
-  if (!button) throw new Error(`lab: ui: the class card has no button for the ${id}`);
-  return button;
-}
-
-/** the class `readyingClass` picked and the hero's before it, while its pick waits (null: none, or no `chill`) */
-let picked: { id: string; before: string } | null = null;
+/** whether `readyingHeroes` asked for the hero selection screen with the heroes kept cold, while it waits */
+let askedCold = false;
 
 /**
- * Another class picked with the mouse while the heroes' programs are cold (`chill`: the lab's boot warms every need at
- * once), as a first visit's pick waits for them: under the fight's loading bar, which says what it readies. No frame
- * runs, here or as it closes: the states after it are pictured at the moment they'd be without it (three frames moved
- * the lobby's opening zoom, and every label after it with it).
+ * The lobby's Change hero clicked with the mouse while the heroes' programs are cold (`chill`: the lab's boot warms
+ * every need at once), as a first visit's lobby waits for them: under the fight's loading bar, which says what it
+ * readies. No frame runs, here or as it closes: the states after it are pictured at the moment they'd be without it
+ * (three frames moved the lobby's opening zoom, and every label after it with it).
  */
-async function openReadyingClass(lab: Lab): Promise<void> {
+async function openReadyingHeroes(lab: Lab): Promise<void> {
   const chill = chillOf();
-  const before = G.player.cls.id;
-  const id = CLASS_IDS.find((other) => other !== before);
-  if (!chill || !id) return;
+  const button = document.getElementById('btn-hero');
+  if (!chill || !button) return;
   chill('heroes');
-  picked = { id, before };
-  await lab.clickOn(classButton(id));
+  askedCold = true;
+  await lab.clickOn(button);
 }
 
 /**
- * The hero before it picked back while the pick still waits (the waiting press now asks for the hero on show, which
- * does nothing), and the heroes warm again: the hero is never rebuilt (rebuilt twice, he stood in another phase of his
- * idle in every picture after it). The bar's cover takes the mouse's clicks, so the page presses the button itself.
+ * The heroes warm again, so the screen asked for opens, and it's closed at once as Back closes it: the lobby's hero
+ * is never rebuilt (rebuilt twice, he stood in another phase of his idle in every picture after it).
  */
-async function closeReadyingClass(): Promise<void> {
-  if (!picked) return;
-  const { before } = picked;
-  picked = null;
-  classButton(before).click();
+async function closeReadyingHeroes(): Promise<void> {
+  if (!askedCold) return;
+  askedCold = false;
   warm.markWarm('heroes');
   // (the press goes ahead as its wait resolves)
   await new Promise((resolve) => setTimeout(resolve));
+  document.querySelector<HTMLElement>('#heroes .hs-back')?.click();
 }
 
 /**
- * The fight's loading bar shown for the class picked (`openReadyingClass`), within the window, its label on one line,
- * saying it readies that hero (a class pick said "Readying the fight", the page's own text, whatever was waiting).
- * `canary`: that text put back, which must be found.
+ * The fight's loading bar shown for the hero selection screen asked for (`openReadyingHeroes`), within the window,
+ * its label on one line, saying it readies the heroes (a class pick once said "Readying the fight", the page's own
+ * text, whatever was waiting). `canary`: that text put back, which must be found.
  */
-function readyingClassShown(canary: boolean): Found {
+function readyingHeroesShown(canary: boolean): Found {
   const bar = readyingBar();
-  if (!bar || !picked) {
-    return { lines: ['  no way to keep the heroes cold in this tree (game/warm.ts chill)'], problems: [] };
+  if (!bar || !askedCold) {
+    return { lines: ['  no way to keep the heroes cold for a hero selection screen in this tree'], problems: [] };
   }
   const label = bar.querySelector<HTMLElement>('.rd-sub')!;
   const said = label.textContent ?? '';
   if (canary) label.textContent = 'Readying the fight';
   const text = label.textContent?.trim() ?? '';
-  const placed = barPlaced(bar, label, 'readyingClass');
+  const placed = barPlaced(bar, label, 'readyingHeroes');
   label.textContent = said;
-  const name = CLASSES[picked.id].name;
   const shown = bar.classList.contains('on');
   const rows = `${placed.rows} line${placed.rows === 1 ? '' : 's'}`;
   const wrapped = labelsWrapped(label);
   const lines = [
-    `  the ${name} picked, the heroes cold: the fight's loading bar ${shown ? 'shown' : 'not shown'}, `
+    `  Change hero clicked, the heroes cold: the fight's loading bar ${shown ? 'shown' : 'not shown'}, `
       + `saying "${text}" on ${rows}`,
     `  every label it can show (${labelsOf().length}) on one line: ${wrapped.length ? 'no' : 'yes'}`,
   ];
   const problems = [...placed.problems];
-  for (const { text: wraps, rows: on } of wrapped) problems.push(`readyingClass: "${wraps}" runs onto ${on} lines`);
-  if (!shown) problems.push(`readyingClass: the ${name} picked with the heroes cold showed no loading bar`);
-  if (!text.includes(name)) problems.push(`readyingClass: the ${name} picked, the loading bar says "${text}"`);
+  for (const { text: wraps, rows: on } of wrapped) problems.push(`readyingHeroes: "${wraps}" runs onto ${on} lines`);
+  if (!shown) problems.push('readyingHeroes: Change hero clicked with the heroes cold showed no loading bar');
+  if (!text.includes('heroes')) problems.push(`readyingHeroes: Change hero clicked, the loading bar says "${text}"`);
   return { lines, problems };
 }
 
@@ -365,6 +357,8 @@ interface Steps {
   held?: Frame;
   check?(canary: boolean, lab: Lab): Found | Promise<Found>;
   pictures?(lab: Lab): Promise<Pictured[]>;
+  /** what it checks once closed */
+  closed?(): Found;
 }
 
 /** One switch of the view: from which to which, the labels measured, and how far the furthest was off and when. */
@@ -452,13 +446,13 @@ function labelsThroughSwitches(): Found {
 }
 
 /**
- * The hero's own class button clicked with the mouse (nothing changes) and a game key pressed after it, as a player
- * picks a class and then plays, each as the browser gets it from a mouse and a keyboard. Throws if the click never
- * reached the button.
+ * The battleground's button the lobby has on clicked with the mouse (nothing changes) and a game key pressed after it,
+ * as a player picks one and then plays, each as the browser gets it from a mouse and a keyboard (the class buttons that
+ * stood in the lobby kept the focus so). Throws if the click never reached the button.
  */
 async function clickClass(lab: Lab): Promise<void> {
-  const button = document.querySelector<HTMLElement>(`#opt-class button[data-c="${G.player.cls.id}"]`);
-  if (!button) throw new Error('lab: ui: the class card has no button for the hero\'s class');
+  const button = document.querySelector<HTMLElement>('#opt-biome button.active');
+  if (!button) throw new Error('lab: ui: the lobby has no battleground\'s button on');
   let clicked = false;
   const heard = (event: MouseEvent) => {
     clicked = event.detail > 0;
@@ -467,7 +461,7 @@ async function clickClass(lab: Lab): Promise<void> {
   const box = button.getBoundingClientRect();
   await lab.click({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
   button.removeEventListener('click', heard);
-  if (!clicked) throw new Error('lab: ui: the mouse\'s click never reached the class button');
+  if (!clicked) throw new Error('lab: ui: the mouse\'s click never reached the battleground\'s button');
   await lab.press(KEY_AFTER_CLICK);
 }
 
@@ -490,7 +484,7 @@ function focusAfterClick(): Found {
   const ring = document.querySelector(':focus-visible');
   const lines = [`  focus: ${holder}`, `  focus ring: ${ring ? describe(ring) : 'none'}`];
   const kept = focused?.closest('button');
-  const problems = kept ? [`the class button clicked kept the focus (${describe(kept)})`] : [];
+  const problems = kept ? [`the button clicked kept the focus (${describe(kept)})`] : [];
   return { lines, problems };
 }
 
@@ -874,8 +868,9 @@ const STEPS: Record<UiState, Steps> = {
   glow: { open: openGlow, close: closeGlow, check: glowShown, pictures: glowPictures },
   help: { open: openHelp, close: closeHelp },
   saves: { open: () => openSaves(true), close: () => openSaves(false) },
+  heroes: { open: openHeroes, close: closeHeroes, check: heroesShown, closed: heroesClosed },
   readying: { open: openReadying, close: closeReadying, check: readyingShown },
-  readyingClass: { open: openReadyingClass, close: closeReadyingClass, check: readyingClassShown },
+  readyingHeroes: { open: openReadyingHeroes, close: closeReadyingHeroes, check: readyingHeroesShown },
   clicked: { open: clickClass, close: () => undefined, check: focusAfterClick },
   views: { open: switchViews, close: () => undefined, check: labelsThroughSwitches },
   behindProps: { open: () => undefined, close: () => undefined, check: labelsBehindProps },
@@ -919,8 +914,9 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
   const cursors = cursorsShown(!!options.canary);
   const digits = await digitsShown(lab, !!options.canary);
   await steps.close(lab);
-  const lines = [...pictured.lines, ...found.lines, ...cursors.lines, ...digits.lines];
-  const problems = [...found.problems, ...cursors.problems, ...digits.problems];
+  const after = steps.closed?.() ?? { lines: [], problems: [] };
+  const lines = [...pictured.lines, ...found.lines, ...after.lines, ...cursors.lines, ...digits.lines];
+  const problems = [...found.problems, ...after.problems, ...cursors.problems, ...digits.problems];
   const moments = [pictured.moment, ...extra, ...digits.moments];
   if (!options.canary) return { text: lines.join('\n'), problems, moments };
   const caught = cursors.problems.some((problem) => problem.includes('body'));
@@ -941,10 +937,17 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     lines.push(`  canary: ${wrapped ? 'the label a letter wide caught' : 'the label a letter wide went unseen'}`);
     if (!wrapped) missed.push(`${state}: the canary's label a letter wide went unseen`);
   }
-  if (state === 'readyingClass' && readyingBar() && chillOf()) {
+  if (state === 'readyingHeroes' && readyingBar() && chillOf()) {
     const said = found.problems.some((problem) => problem.includes('the loading bar says'));
-    lines.push(`  canary: "Readying the fight" for a class picked ${said ? 'caught' : 'went unseen'}`);
-    if (!said) missed.push(`${state}: the canary's "Readying the fight" for a class picked went unseen`);
+    lines.push(`  canary: "Readying the fight" for Change hero ${said ? 'caught' : 'went unseen'}`);
+    if (!said) missed.push(`${state}: the canary's "Readying the fight" for Change hero went unseen`);
+  }
+  if (state === 'heroes' && document.getElementById('btn-hero')) {
+    const caught = heroesCanaryCaught(found.problems);
+    const planted = 'Back over the heroes\' names, a card\'s traits moved, the choice off the hero, a glow by the '
+      + 'hidden hero\'s hand, an item of his draggable and the save slot letting a click through';
+    lines.push(`  canary: ${planted} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${planted}: not all seen`);
   }
   if (state === 'behindProps') {
     const through = found.problems.some((problem) => problem.includes('shown through a prop'));

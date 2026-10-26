@@ -556,7 +556,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     obstacles.push({ x, z, r: young.trunkFoot * ht + 0.1, h: ht });
     // (an arrow goes into the bark; the leaves let it through)
     const bark = instanceLook(sapBark, i), leaves = instanceLook(sapLeaves, i);
-    const look = { hide() { bark.hide(); leaves.hide(); }, show() { bark.show(); leaves.show(); }, raycast: bark.raycast };
+    const look = { hide() { bark.hide(); leaves.hide(); }, show() { bark.show(); leaves.show(); }, raycast: bark.raycast, surfaces: bark.surfaces };
     breakable.add(obstacles.length - 1, 10, 0x4a3520, look, 'wood');
   });
   for (const m of [sapBark, sapLeaves]) { m.castShadow = m.receiveShadow = true; scene.add(m); }

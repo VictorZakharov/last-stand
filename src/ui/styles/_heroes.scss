@@ -1,0 +1,170 @@
+// The hero selection screen (ui/heroSelect.ts) over the hall of heroes (game/hall.ts): a cinematic shade over the
+// stage, the title and logo at the top left, the arrows and the heroes' names round the hero in focus, his card in a
+// panel at the right (at the foot on an upright screen), the choice on him, Back at the bottom left. Nothing loops: the card fades in
+// once as the focus comes to it, and the shade is painted once.
+@use 'theme' as *;
+@use 'mixins' as *;
+
+/* the room the panel leaves the hero, as the shift in ui/heroSelect.ts lays the camera out */
+#heroes { --cc: var(--accent); --gut: #{ui(22px)}; --pw: #{ui(430px)};
+  position: fixed; inset: 0; z-index: 30; pointer-events: none;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+/* the rest of the page out of the way while it's up: the lobby's HUD and the touch controls */
+body.in-hall :is(#hud, #touch) { display: none !important; }
+
+/* a darkened rim and letterbox bands, under a glow of the hero's colour where he stands: one paint */
+// (the scene is dragged along the row: its touches the page's, none the browser's pan)
+.hs-shade { position: absolute; inset: 0; pointer-events: auto; cursor: $cursor; touch-action: none; user-select: none;
+  background:
+    linear-gradient(rgba(3,2,4,.88), transparent 14%, transparent 80%, rgba(3,2,4,.92)),
+    radial-gradient(ellipse 34% 62% at var(--hx, 36%) 50%, transparent 45%, rgba(3,2,4,.7) 100%); }
+#heroes .hs-shade { --hx: calc((100% - var(--pw) - var(--gut) * 2) / 2); }
+
+/* ---------- the title and the logo ---------- */
+.hs-top { position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); top: calc(var(--gut) * .7 + env(safe-area-inset-top, 0px));
+  display: flex; align-items: center; gap: ui(18px); pointer-events: none; }
+.hs-logo { width: ui(150px); flex: none; }
+.hs-logo .logo-glow { opacity: .8; }
+.hs-heading { display: flex; flex-direction: column; gap: ui(3px); padding-left: ui(18px); border-left: 1px solid rgba($frame, .45); }
+.hs-title { font: 700 ui(26px) var(--font-display); letter-spacing: ui(5px); text-transform: uppercase; color: var(--accent);
+  text-shadow: 0 0 ui(14px) rgba($accent-glow, .35), $outline; }
+/* the save slot in play, which opens the save slots */
+.hs-slot { align-self: flex-start; pointer-events: auto; cursor: $cursor-hand; padding: 0; background: none; border: 0;
+  font-family: var(--font-body); font-size: ui(15px); letter-spacing: ui(1px); color: var(--ink-dim); text-shadow: $outline;
+  text-decoration: underline dotted rgba($frame, .7); text-underline-offset: ui(4px); }
+.hs-slot:hover { color: var(--accent); text-decoration-color: currentColor; }
+
+/* ---------- the arrows either side of the hero, and the heroes' names under him ---------- */
+.hs-arrow { position: absolute; top: 50%; translate: 0 -50%; width: ui(54px); height: ui(96px); padding: ui(18px) ui(14px); pointer-events: auto;
+  cursor: $cursor-hand; color: var(--accent); background: radial-gradient(ellipse at center, rgba(0,0,0,.55), transparent 70%); border: 0; }
+.hs-arrow svg { width: 100%; height: 100%; filter: drop-shadow(0 0 ui(6px) rgba($accent-glow, .5)); }
+.hs-arrow:hover { color: var(--highlight); }
+.hs-prev { left: calc(var(--gut) + env(safe-area-inset-left, 0px)); }
+.hs-next { right: calc(var(--pw) + var(--gut) * 2 + env(safe-area-inset-right, 0px)); }
+.hs-tabs { position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); right: calc(var(--pw) + var(--gut) * 2 + env(safe-area-inset-right, 0px));
+  bottom: calc(var(--gut) * 1.4 + env(safe-area-inset-bottom, 0px)); display: flex; justify-content: center; gap: ui(18px); pointer-events: none; }
+/* (large enough to read as the screen's own choice: at 16 px they were "too small" on a desktop; held to the window's
+   width too, as the room beside the panel narrows, clear of Back) */
+.hs-tabs button { position: relative; pointer-events: auto; cursor: $cursor-hand; padding: ui(10px) min(#{ui(24px)}, 1.1vw) ui(16px);
+  background: none; border: 0; font: 700 min(#{ui(26px)}, 1.45vw) var(--font-display); letter-spacing: min(#{ui(4px)}, .2vw); text-transform: uppercase; color: var(--ink-dim); text-shadow: $outline; }
+.hs-tabs button::after { content: ''; position: absolute; left: 50%; bottom: 0; width: ui(10px); height: ui(10px); translate: -50% 0; rotate: 45deg;
+  border: 1px solid rgba($frame, .7); background: #120e0a; }
+.hs-tabs button:hover { color: var(--ink); }
+.hs-tabs button.active { color: var(--cc); text-shadow: 0 0 ui(12px) color-mix(in srgb, var(--cc) 45%, transparent), $outline; }
+.hs-tabs button.active::after { border-color: var(--cc); background: var(--cc); box-shadow: 0 0 ui(8px) var(--cc); }
+.hs-back { position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); bottom: calc(var(--gut) + env(safe-area-inset-bottom, 0px));
+  font-size: ui(15px); padding: ui(9px) ui(16px); }
+#heroes.first .hs-back { display: none; }
+
+/* ---------- the panel: the hero in focus's card, and the choice ---------- */
+.hs-panel { position: absolute; top: var(--gut); right: calc(var(--gut) + env(safe-area-inset-right, 0px)); bottom: var(--gut); width: var(--pw);
+  display: flex; flex-direction: column; gap: ui(14px); padding: ui(22px) ui(24px) ui(22px); pointer-events: auto;
+  background: linear-gradient(rgba(8,7,9,.82), rgba(8,7,9,.94)); }
+.hs-panel::before { content: ''; position: absolute; inset: ui(5px); pointer-events: none; @include corner-brackets(ui(22px), 2px, var(--cc)); }
+/* the panel's tabs, as the lobby's (its hero's card, his gear and his attributes), and their pages in one cell, the
+   one chosen shown (the panel is held to the screen's height: no page sizes it) */
+.hs-pagetabs { flex: none; margin-bottom: 0; gap: ui(4px); }
+.hs-pagetabs .tab { font-size: ui(14px); letter-spacing: ui(1px); padding: ui(8px) ui(6px); }
+.hs-pagetabs .tab.active { color: var(--cc); box-shadow: inset 0 2px 0 var(--cc); }
+.hs-pages { flex: 1; min-height: 0; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
+.hs-page { grid-area: 1 / 1; min-height: 0; }
+// (an id's weight: the attributes' shared rule shows them with an id's)
+#heroes .hs-page.off { display: none; }
+// (the lobby's gear and attributes, in its px and zoomed as its panels are)
+.hs-gear, .hs-stats { zoom: var(--ui, 1); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  scrollbar-color: rgba($frame, .5) transparent; }
+.hs-gear { padding-top: 14px; }
+.hs-equip .eslot { cursor: $cursor; }
+.hs-stash { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.hs-stash .sitem { cursor: $cursor; }
+.hs-stats { padding-top: 10px; }
+
+/* every class's card in one cell, the one in focus shown: the panel never changes size. Their parts on rows the
+   cards share (a subgrid), each as tall as the tallest card's: in a column of their own, the ranger's tagline on two
+   lines put his traits and skills 30 px lower than the others' as the hero changed */
+.hs-cards { flex: 1; min-height: 0; display: grid; grid-template-rows: repeat(6, auto) 1fr; row-gap: ui(12px); overflow-y: auto;
+  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba($frame, .5) transparent; }
+.hs-card { grid-column: 1; grid-row: 1 / span 7; display: grid; grid-template-rows: subgrid; visibility: hidden; }
+.hs-card.active { visibility: visible; animation: hs-in .45s ease-out; }
+// (a fade alone: a card that slid in read as the panel shifting as the hero changed)
+@keyframes hs-in { from { opacity: 0; } }
+.hs-name { position: relative; aspect-ratio: 600 / 110; }
+.hs-name svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.hs-name .logo-glow { opacity: .75; }
+.hs-role { margin-top: ui(-4px); text-align: center; font: 700 ui(14px) var(--font-display); letter-spacing: ui(3px); text-transform: uppercase;
+  color: var(--cc); text-shadow: 0 0 ui(10px) color-mix(in srgb, var(--cc) 40%, transparent); }
+.hs-tag { margin: 0; text-align: center; font-size: ui(17px); font-style: italic; line-height: 1.35; color: var(--ink); }
+.hs-card > .hs-role + .hs-tag { padding-bottom: ui(10px); border-bottom: 1px solid rgba($frame, .3); }
+.hs-traits { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: ui(7px) ui(16px); margin: 0; }
+.hs-traits dt { font: 700 ui(12px) var(--font-display); letter-spacing: ui(2px); text-transform: uppercase; color: var(--ink-dim); }
+.hs-traits dd { display: flex; gap: ui(5px); margin: 0; }
+.hs-traits i { flex: 1; height: ui(8px); max-width: ui(44px); background: #1a1614; border: 1px solid rgba($frame, .35); transform: skewX(-24deg); }
+.hs-traits i.on { background: linear-gradient(color-mix(in srgb, var(--cc) 90%, #fff), color-mix(in srgb, var(--cc) 55%, #000)); border-color: var(--cc);
+  box-shadow: 0 0 ui(6px) color-mix(in srgb, var(--cc) 45%, transparent); }
+.hs-label { @include section-head; font-size: ui(12px); }
+.hs-skills { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: ui(7px); }
+.hs-skills .slot { width: auto; height: auto; aspect-ratio: 1; }
+.hs-skills .slot .icon { font-size: ui(24px); }
+.hs-records { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: ui(6px); margin-top: auto; }
+.hs-records div { display: flex; flex-direction: column; align-items: center; padding: ui(6px) ui(2px); font-size: ui(10px); letter-spacing: ui(1px);
+  text-transform: uppercase; color: var(--ink-dim); background: linear-gradient(135deg, rgba(40,32,22,.55), rgba(12,10,12,.8)); border: 1px solid rgba($frame, .3); }
+.hs-records b { font: 700 ui(18px) var(--font-display); letter-spacing: 0; text-transform: none; color: #f3e1b0; }
+.hs-records .hs-new { padding: ui(8px); text-align: center; font-size: ui(14px); font-style: italic; color: var(--ink-dim); border: 1px dashed rgba($frame, .35); }
+/* the choice on the hero in focus (where ui/heroSelect.ts `placeChoice` finds him), seen through: shown as the mouse
+   comes over him or onto it, on touch always (no hover) */
+.btn.hs-choose { position: absolute; left: var(--hs-cx, 36%); top: var(--hs-cy, 62%); translate: -50% -50%;
+  font-size: ui(22px); padding: ui(14px) ui(28px); white-space: nowrap; color: #ffe7b0;
+  background: rgba(14,10,8,.42); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cc) 75%, transparent), 0 0 ui(14px) rgba(0,0,0,.35);
+  text-shadow: 0 0 ui(10px) color-mix(in srgb, var(--cc) 45%, transparent), $outline; opacity: 0; transition: opacity .18s ease-out; }
+#heroes.over-hero .hs-choose, .hs-choose:is(:hover, :focus-visible) { opacity: .92; }
+.hs-choose:hover { filter: none; background: rgba(30,20,12,.55); }
+@media (hover: none) { .btn.hs-choose { opacity: .85; } }
+
+/* ---------- short screens (phones held sideways): a narrower, tighter panel ---------- */
+@media (max-height: 520px) {
+  #heroes { --gut: #{ui(12px)}; --pw: #{ui(380px)}; }
+  .hs-panel { gap: ui(10px); padding: ui(14px) ui(16px); }
+  .hs-cards { row-gap: ui(8px); }
+  .hs-tag { font-size: ui(15px); }
+  .hs-logo { width: ui(110px); }
+  .hs-title { font-size: ui(20px); }
+  // (held to the screen's height too: on a phone the UI's floor in css px set it wider than the button)
+  .btn.hs-choose { font-size: min(#{ui(16px)}, 4.5vh); padding: ui(9px) ui(16px); }
+  .hs-skills { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: ui(4px); }
+  .hs-skills .slot .icon { font-size: ui(16px); }
+  .hs-tabs { gap: ui(10px); }
+  .hs-tabs button { font-size: ui(17px); letter-spacing: ui(3px); padding: ui(6px) ui(14px) ui(12px); }
+  .hs-tabs button::after { width: ui(8px); height: ui(8px); }
+}
+
+/* ---------- short and upright screens: Back at the top of the room the panel leaves, the title beside it ---------- */
+@media (max-height: 520px), (orientation: portrait) {
+  .hs-back { top: calc(var(--gut) * .7 + env(safe-area-inset-top, 0px)); bottom: auto; left: auto;
+    right: calc(var(--pw) + var(--gut) * 2 + env(safe-area-inset-right, 0px)); }
+  .hs-long { display: none; }
+  .hs-logo { width: ui(100px); }
+  .hs-title { font-size: ui(19px); letter-spacing: ui(3px); }
+}
+
+/* ---------- upright screens (tablets held upright): the panel along the foot, the hero above it ---------- */
+@media (orientation: portrait) {
+  #heroes { --ph: 44%; }
+  .hs-panel { top: auto; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); width: auto; height: var(--ph); }
+  // (the skills' heading hidden, the traits and the skills side by side: five rows)
+  .hs-cards { grid-template-rows: repeat(4, auto) 1fr; row-gap: ui(10px); }
+  .hs-card { grid-row: 1 / span 5; grid-template-columns: 1fr 1fr; column-gap: ui(22px); }
+  .hs-card > :is(.hs-name, .hs-role, .hs-tag) { grid-column: 1 / -1; }
+  .hs-card > .hs-label { display: none; }
+  .hs-records { grid-column: 1 / -1; }
+  .hs-name { width: min(100%, ui(420px)); justify-self: center; }
+  .hs-next { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); }
+  .hs-arrow { top: calc((100% - var(--ph)) / 2); }
+  .hs-tabs { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); bottom: calc(var(--ph) + var(--gut) * 1.6); }
+  .hs-tabs button { font-size: ui(20px); letter-spacing: ui(3px); padding: ui(8px) ui(18px) ui(14px); }
+  .hs-back { right: calc(var(--gut) + env(safe-area-inset-right, 0px)); }
+  #heroes .hs-shade { --hx: 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hs-card.active { animation: none; }
+}

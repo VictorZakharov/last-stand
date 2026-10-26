@@ -300,6 +300,23 @@ export class Wall {
     return bound && { name: bound.part.name, use: bound.part.use, y: bound.y };
   }
 
+  /** The nearest any part comes to the middle (m): nearer than that, nothing of it stands. */
+  get near(): number {
+    return this.inner;
+  }
+
+  /** Each part a blow meets (not foliage) whose sphere reaches over the box from (`x0`, `z0`) to (`x1`, `z1`) seen
+   *  from above, its geometry and where it stands. */
+  solidsOver(x0: number, z0: number, x1: number, z1: number,
+    visit: (geometry: THREE.BufferGeometry, matrix: THREE.Matrix4) => void): void {
+    for (const part of this.parts) {
+      if (part.use === 'foliage') continue;
+      const { center, radius } = part.sphere;
+      const dx = Math.max(x0 - center.x, 0, center.x - x1), dz = Math.max(z0 - center.z, 0, center.z - z1);
+      if (dx * dx + dz * dz <= radius * radius) visit(part.geometry, part.matrix);
+    }
+  }
+
   /** The furthest what bounds the floor reaches (m): the floor a grid over it must cover. */
   get most(): number {
     return Math.max(...this.reach);

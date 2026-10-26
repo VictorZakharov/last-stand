@@ -21,6 +21,7 @@ npm run stalls -- --scenario sweep --stash 60 --view top --window 1536x695 --sec
 npm run stalls -- --scenario sweep --stash 60 --item-ms 100 --seconds 8 --rounds 3  # the owner's pace, fast
 npm run stalls -- --scenario hover --stash 60 --listed 40   # every frame of 40 ms+ listed with what was busy
 npm run stalls -- --scenario stow --view top --perf --press-ms 100 --rounds 4  # Space pressed 10 times a second
+npm run stalls -- --scenario heroes --seconds 20 --listed 50  # the hero screen opened and left three times
 npm run stalls -- --scenario boot --url this,https://victorzakharov.github.io/last-stand/ --rounds 3  # the boot
 npm run stalls -- --scenario boot --cpu-slowdown 4 --js   # on a phone's CPU, its JS by function
 npm run stalls -- --scenario boot --url this,ref:HEAD~2 --rounds 3  # this tree beside a commit of its own
@@ -79,6 +80,9 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   - `stow`: the lobby's panels stowed and shown again with Space, as the owner pressed it "rapidly": a quarter of
     the time with them shown (the frames to beat), a quarter stowed (practice: the run's bar at the bottom), then
     Space pressed every 200 ms for the rest (`--press-ms`), the mouse over the world throughout.
+  - `heroes`: the hero selection screen opened by the lobby's Change hero and left by Back, three times, after a
+    fifth of the time in the lobby (the frames to beat): each trip's way in and way out a phase of its own, so the
+    first opening is read apart from the ones after ("brief lag when reentering hero selection room").
   - `storm`: the mage in a run, walking away from the foes a side of a square at a time and casting Maelstrom back
     at those following him in a line, every other side: its storm draws them in and whirls what it kills.
   - `boot` (`boot.mjs`): no set-up and nothing played. In a fresh Chrome the game is loaded as a first visit has it
@@ -166,6 +170,8 @@ For each measure:
 - **Each stall of 300 ms or more** (`--listed` sets it, down to 20):
   - the programs built in it, and the tasks each was built inside;
   - the longest tasks (20 ms or more) on any thread through it, and the work in it as a frame's work is given;
+  - with `--js`, its JS by function, with what each calls: a phase's is a frame's mean, where one stall's is lost
+    among the frames round it (it named the hero screen's reopening: the hall's heroes built again each time);
   - the page's changes in the 400 ms before it, by kind and element, the most frequent first.
 
 A boot's report says when the lobby was revealed and the page first painted, the files fetched (bytes over the

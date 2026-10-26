@@ -1,6 +1,7 @@
 // The arena: every biome is built once at boot into its own group, and switching
 // shows one and hides the others (instant, and no shader compiles). The hemisphere
-// light and the shadow-casting moon are shared; the active biome sets their look.
+// light and the shadow-casting moon are shared; the active biome sets their look. The hall of heroes' room
+// (`heroHall.ts`) is built beside them and shown in their place while the hero selection screen is up.
 import * as THREE from 'three';
 import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
@@ -10,6 +11,7 @@ import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, env
 import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
+import { buildHeroHall } from './heroHall';
 import { restoreProps, state as propState } from './destructible';
 import { emit } from '../events';
 import { G } from '../state';
@@ -65,13 +67,22 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     scene.add(group);
     biomes[id] = { group, b };
   }
+  // (the hall of heroes' room, shown in the biomes' place while the hero selection screen is up: `showHall`)
+  const hallGroup = new THREE.Group();
+  hallGroup.name = 'hall';
+  const hall = buildHeroHall(hallGroup);
+  bakeStaticShadows(hallGroup);
+  trimShadowCasters(hallGroup, shadowCameraFor(moon, hall.look));
+  hallGroup.visible = false;
+  scene.add(hallGroup);
   if (import.meta.env.DEV) {
-    const lights = BIOME_IDS.map((id) => { let n = 0; biomes[id].group.traverse((o) => { if ((o as THREE.PointLight).isPointLight) n++; }); return n; });
+    const groups = [...BIOME_IDS.map((id) => biomes[id].group), hallGroup];
+    const lights = groups.map((g) => { let n = 0; g.traverse((o) => { if ((o as THREE.PointLight).isPointLight) n++; }); return n; });
     if (new Set(lights).size > 1) console.error(`Biomes must have the same number of point lights (switching recompiles every shader): ${lights}`);
     // (and as many casting: each is written out in every lit program, `loopPointLights`)
-    const casting = BIOME_IDS.map((id) => {
+    const casting = groups.map((g) => {
       let n = 0;
-      biomes[id].group.traverse((o) => { if ((o as THREE.PointLight).isPointLight && o.castShadow) n++; });
+      g.traverse((o) => { if ((o as THREE.PointLight).isPointLight && o.castShadow) n++; });
       return n;
     });
     if (new Set(casting).size > 1) console.error(`Biomes must have as many point lights casting shadows: ${casting}`);
@@ -80,15 +91,25 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   let biome: BiomeId = BIOME_IDS[0];
   let active = biomes[biome].b;
   /** the biome and the props' revision its still shadows were last drawn for (`drawStillShadows`) */
-  const stillDrawn = { biome: null as BiomeId | null, rev: -1 };
+  const stillDrawn = { biome: null as BiomeId | 'hall' | null, rev: -1 };
+  /** whether the hall of heroes stands in the biomes' place */
+  let hallShown = false;
 
   function setBiome(id: BiomeId): void {
     const changed = id !== biome;
     biome = id;
     active = biomes[id].b;
+    // (chosen while the hall is up, a co-op host's pick: shown as it's taken down)
+    if (!hallShown) showBiome();
+    if (changed) emit('biomeChanged', id);
+  }
+  function showBiome(): void {
     setRelief(active.relief ?? null);
-    for (const k of BIOME_IDS) biomes[k].group.visible = k === id;
-    const L = active.look;
+    for (const k of BIOME_IDS) biomes[k].group.visible = k === biome;
+    hallGroup.visible = false;
+    setLook(active.look);
+  }
+  function setLook(L: BiomeLook): void {
     (scene.background as THREE.Color).set(L.background);
     fog.color.set(L.fog.color); fog.near = L.fog.near; fog.far = L.fog.far;
     hemi.color.set(L.hemi.sky); hemi.groundColor.set(L.hemi.ground); hemi.intensity = L.hemi.intensity;
@@ -96,12 +117,13 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     scene.environment = envMap(renderer, L.env);
     scene.environmentIntensity = L.envIntensity;
     setAdaptScale(L.adapt ?? 1);
-    if (changed) emit('biomeChanged', id);
   }
   setBiome(biome);
 
   return {
     get biome() { return biome; },
+    /** whether the hall of heroes is shown in the biomes' place (its stage has no props; `obstacles` stay the biome's) */
+    get hallShown() { return hallShown; },
     get obstacles() { return active.obstacles; },
     /** the breakable ones (`world/destructible.ts`) */
     get props() { return active.props; },
@@ -121,15 +143,28 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     radius: ARENA.radius,
     groundHeight,
     setBiome,
+    /** The hall of heroes shown in the biomes' place (`on`), or the biome back: its plinths the floor's relief, its
+     *  look the scene's. Its lights are as many as a biome's, so the switch compiles nothing. */
+    showHall(on: boolean) {
+      hallShown = on;
+      if (!on) { showBiome(); return; }
+      for (const k of BIOME_IDS) biomes[k].group.visible = false;
+      hallGroup.visible = true;
+      setRelief(hall.relief);
+      setLook(hall.look);
+    },
+    /** the hall of heroes' room (hidden but while it's shown): what the heroes' warm-up shows */
+    hallGroup,
     /** a biome's own pieces (hidden while another is shown): what the warm-up leaves out or shows */
     groupOf(id: BiomeId): THREE.Group { return biomes[id].group; },
     setCalm(v: number) { for (const id of BIOME_IDS) biomes[id].b.setCalm(v); },
     update(dt: number, t: number) {
-      active.update(dt, t);
+      const shown = hallShown ? 'hall' : biome;
+      if (hallShown) hall.update(dt, t); else active.update(dt, t);
       // (the still shadows of its warmest lights, drawn again when what stands in it changed: shown, broken, rolled)
-      if (stillDrawn.biome !== biome || stillDrawn.rev !== propState.rev) {
-        drawStillShadows(renderer, scene, G.camera, biomes[biome].group, moon.shadow);
-        stillDrawn.biome = biome;
+      if (stillDrawn.biome !== shown || stillDrawn.rev !== propState.rev) {
+        drawStillShadows(renderer, scene, G.camera, hallShown ? hallGroup : biomes[biome].group, moon.shadow);
+        stillDrawn.biome = shown;
         stillDrawn.rev = propState.rev;
       }
     },

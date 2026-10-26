@@ -157,6 +157,17 @@ export interface Fist { hand: 'left' | 'right'; off: number; along?: number; cur
 /** How the weapons are held: each has its own loadout (for a class with gear-driven skills). */
 export type WeaponStyle = 'shield' | 'twoHanded' | 'dual' | 'oneHanded';
 
+/** A class on the hero selection screen: its role in a few words, how it plays (each trait 1 to 5), and the skill it
+ *  shows off as the camera comes to it, cast at a spot `at` (m, in front of it and to its right, as it faces); a
+ *  channel held for `hold` s. */
+export interface HallDef {
+  role: string;
+  traits: { label: string; value: number }[];
+  showcase: { skill: string; at: [ahead: number, right: number]; hold?: number };
+  /** the velvet of his banner behind him in the hall (0-255 a channel: `bannerCloth`) */
+  banner: [number, number, number];
+}
+
 /** What a weapon style may change of a skill. */
 export type StyleTuning = Partial<Pick<SkillDef, 'castTime' | 'damage' | 'gain' | 'spin'>>;
 
@@ -169,6 +180,8 @@ export interface ClassDef {
   accent: string;
   /** title of the lobby's skill loadout panel */
   book: string;
+  /** how the hero selection screen presents the class (ui/heroSelect.ts, game/hall.ts) */
+  hall: HallDef;
   /** the light that follows the cast point (`drawn`: lit only while a shot is held at full draw, as its glint is), and
    *  the motes drifting off the off-hand (if any) */
   aura: { light: number; intensity: number; drawn?: boolean; motes?: [color: number, end: number] };
@@ -359,10 +372,16 @@ export interface AnimState {
   charge?: number;
   /** a bow's hero: how many arrows are on the string (`Player.nocked`) */
   nocked?: number;
+  /** what an overhead blow comes down on: the nearest foe on the line straight ahead (its middle, how wide it is and
+   *  the height of its top, in the world), or none, the ground (`Player.struckAhead`) */
+  strike?: Struck | null;
   /** turns the chest, neck and head onto what the character looks at: a model with cloth calls it before
    *  the leg IK and the cloth step, so the sleeves follow the arms the turn moves */
   look?: () => void;
 }
+
+/** A foe an overhead blow comes down on (`AnimState.strike`): its middle on the ground, its radius and its top (m). */
+export interface Struck { x: number; z: number; r: number; top: number }
 
 export type MaterialKit = ReturnType<typeof createKit>;
 

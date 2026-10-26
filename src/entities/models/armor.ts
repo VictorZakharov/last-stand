@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { taperTube, twist } from './shapes';
 import { part, joint } from './rig';
-import { clamp, lerp } from '../../util';
+import { clamp, lerp, smooth } from '../../util';
 
 let detail = 1;
 /** The heroes' geometric detail, 1 = full (the quality preset's `heroDetail`): heroes built from now on
@@ -383,6 +383,8 @@ export class Skirt {
       idx.push(a, b, a + 1, a + 1, b, b + 1);
     }
     this.rest = new Float32Array(pos);
+    // (the lab's handle on it: tools/lab coat)
+    this.geo.name = 'skirt';
     this.geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     this.geo.setIndex(idx);
@@ -536,14 +538,12 @@ export class Skirt {
     const L2 = _sab.lengthSq(), u = L2 > 1e-9 ? Math.min(1, Math.max(0, _sq.subVectors(_sp, b.a).dot(_sab) / L2)) : 0;
     _sq.copy(b.a).addScaledVector(_sab, u);
     const rad = b.ra + (b.rb - b.ra) * u + extra, dn = _sn.subVectors(_sp, _sq), d = dn.length();
-    // (a hand lying on the cloth also holds in what lies just outside it, within the points' spacing: its fingers are thinner
-    // than that, and the cloth's triangles crossed them with no point inside)
-    if (d >= rad + (inward ? HAND_REACH : 0)) return;
-    // (the way out preferred: from the skirt's middle and up for a leg, towards it for a hand; across the limb)
-    _so.set(_sp.x, 0, _sp.z).normalize(); if (inward) _so.negate(); else _so.y += 0.6;
+    if (inward) { this.behind(P, j, dn, rad, L2); return; }
+    if (d >= rad) return;
+    // (the way out preferred: from the skirt's middle and up; across the limb)
+    _so.set(_sp.x, 0, _sp.z).normalize(); _so.y += 0.6;
     if (L2 > 1e-9) _so.addScaledVector(_sab, -_so.dot(_sab) / L2);
-    if (d >= rad && dn.dot(_so) >= 0) return;
-    if (!inward && _so.lengthSq() > 1e-12) {
+    if (_so.lengthSq() > 1e-12) {
       // (along that way to where it leaves the limb: the distance to the axis grows no faster than the step)
       _so.normalize();
       for (let it = 0, g = rad - d; it < 8 && g > 0; it++) {
@@ -560,6 +560,27 @@ export class Skirt {
     P[j * 3] = _sp.x; P[j * 3 + 1] = _sp.y; P[j * 3 + 2] = _sp.z;
   }
 
+  /** Point `j` (at `_sp`, `dn` from the nearest point on a limb's axis, `rad` its radius there, `L2` its axis's length
+   *  squared in `_sab`) held in behind a limb lying on the cloth from outside (a hand, a bow): moved straight in, towards
+   *  the skirt's middle across the limb, until it lies behind the limb's surface there, as much as the limb overlaps it
+   *  seen from outside, and eased to nothing over `HAND_REACH` past the limb's side. A hanging hand's sway brought points
+   *  in and out of its reach, and each put round onto its far side jumped by the hand's width: the ranger's coat jumped up
+   *  to 11 cm a frame behind his hands as he stood, "moving unnaturally". */
+  private behind(P: Float32Array, j: number, dn: THREE.Vector3, rad: number, L2: number): void {
+    _so.set(-_sp.x, 0, -_sp.z);
+    if (L2 > 1e-9) _so.addScaledVector(_sab, -_so.dot(_sab) / L2);
+    if (_so.lengthSq() < 1e-12) return;
+    _so.normalize();
+    // (how far behind the axis it lies, and how far to the side of the way in)
+    const back = dn.dot(_so), side = Math.sqrt(Math.max(0, dn.lengthSq() - back * back));
+    if (side >= rad + HAND_REACH) return;
+    const depth = side < rad ? Math.sqrt(rad * rad - side * side) : 0;
+    const k = side <= rad ? 1 : 1 - smooth((side - rad) / HAND_REACH);
+    const need = (depth - back) * k;
+    if (need <= 0) return;
+    P[j * 3] += _so.x * need; P[j * 3 + 1] += _so.y * need; P[j * 3 + 2] += _so.z * need;
+  }
+
   /** The cloth from point `i` down to point `j` (`len` apart) kept out of leg `b` too (`extra` further): where it passes through
    *  the leg, `j` is on the leg's far side from where the cloth comes (outside, under a raised thigh or in front of a raised knee),
    *  and it is put round onto the leg's surface where that line went deepest and on over it, along the surface, by the length
@@ -572,10 +593,15 @@ export class Skirt {
     _sab.subVectors(b.b, b.a); _sn.subVectors(_sp, b.a);
     const A = _sd.dot(_sd), E = _sab.dot(_sab), F = _sab.dot(_sn);
     if (A < 1e-12 || E < 1e-12) return;
+    // (a line out of a point inside the leg is the push's to settle, however near its start the line goes deepest:
+    // the robe's waist lies inside the top of the thigh, and judged by where its line went deepest, a hair off that
+    // point the point below was put round onto the thigh, 2.5 cm a frame at idle)
+    const ui = Math.min(1, Math.max(0, F / E)), ri = b.ra + (b.rb - b.ra) * ui + extra;
+    if (_sn.lengthSq() - 2 * ui * F + ui * ui * E < ri * ri) return;
     const Cc = _sd.dot(_sn), Bb = _sd.dot(_sab), den = A * E - Bb * Bb;
     let sl = den > 1e-12 ? Math.min(1, Math.max(0, (Bb * F - Cc * E) / den)) : 0, t = (Bb * sl + F) / E;
     if (t < 0) { t = 0; sl = Math.min(1, Math.max(0, -Cc / A)); } else if (t > 1) { t = 1; sl = Math.min(1, Math.max(0, (Bb - Cc) / A)); }
-    // (a line out of a point inside the leg, or ending inside it, is the push's to settle)
+    // (a line ending inside it is the push's to settle too)
     if (sl <= 1e-3 || sl >= 1 - 1e-3) return;
     _sp.addScaledVector(_sd, sl); _sq.copy(b.a).addScaledVector(_sab, t);
     const rad = b.ra + (b.rb - b.ra) * t + extra, dn = _sn.subVectors(_sp, _sq), d = dn.length();

@@ -31,6 +31,9 @@ export interface FireSpec {
   smokeColour: THREE.ColorRepresentation;
   /** how many embers a second it gives off */
   embers: number;
+  /** its flames' light, a share of a fire's own (1 by default): seen from low and near, as the hall of heroes' camera
+   *  sees its braziers, a ray through their foot crosses the most of them, and at a fire's own it burned white there */
+  glow?: number;
 }
 
 /** the steps a ray takes through the flames' box: fewer, and the flames read as slices across the view */
@@ -180,6 +183,7 @@ const FLAME_FRAGMENT = /* glsl */`
   uniform float uRadius;
   uniform float uHeight;
   uniform float uPuff;
+  uniform float uGlow;
   uniform vec2 uRise;
   uniform vec3 uSeed;
   uniform vec2 uBowl[3];
@@ -311,7 +315,7 @@ const FLAME_FRAGMENT = /* glsl */`
       through *= exp(-flame * stride * ${glsl(SOOT_PER_METRE)});
       if (through < 0.02) break;
     }
-    gl_FragColor = vec4(light * stride * ${glsl(GLOW_PER_METRE)} * (1.0 - seeFade()), 1.0);
+    gl_FragColor = vec4(light * stride * ${glsl(GLOW_PER_METRE)} * uGlow * (1.0 - seeFade()), 1.0);
   }`;
 
 /** A fire's flames' box over its bed's middle (m): as far round as their tongues bend, as high as their tallest puff. */
@@ -333,6 +337,7 @@ function flameMat(radius: number, height: number, seed: number): THREE.ShaderMat
       uRadius: { value: radius },
       uHeight: { value: height },
       uPuff: { value: 1 },
+      uGlow: { value: 1 },
       uRise: { value: new THREE.Vector2() },
       uSeed: { value: new THREE.Vector3(seed % 1, (seed * 7.31) % 1, (seed * 3.17) % 1) },
       // (none: its rim under its foot)
@@ -475,6 +480,7 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   const seed = rng() * 100;
   const flames = flameMat(radius, height, seed);
   flames.uniforms.uCentre.value.copy(at);
+  flames.uniforms.uGlow.value = spec.glow ?? 1;
   if (spec.bowl) flames.uniforms.uBowl.value = spec.bowl.map(([y, r]) => new THREE.Vector2(y, r));
   const box = flameBox(radius, height);
   const volume = new THREE.Mesh(new THREE.BoxGeometry(box.x * 2, box.y, box.z * 2).translate(0, box.y / 2, 0), flames);

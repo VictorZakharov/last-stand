@@ -24,10 +24,14 @@ import { angleDamp, damp, hitFlash, rand } from '../util';
 import { applyShadowDetail } from '../core/quality';
 import { castAsOne, type OneShadow } from './models/castAsOne';
 import { countDown, countHealed, countTaken } from '../game/stats';
-import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SkillDef, SkillKey } from '../types';
+import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SkillDef, SkillKey, Struck } from '../types';
 import type { Enemy } from './enemy';
 
 const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3();
+/** an overhead blow comes down on a foe whose near side is within this ahead (m: a two-hander's reach past the hands
+ *  held before him), on the share of its height its top is taken at (the shoulders and the head) */
+const STRUCK_REACH = 2.2, STRUCK_TOP = 0.85;
+const _struck: Struck = { x: 0, z: 0, r: 0, top: 0 };
 
 /** A skill the class knows: its tuning data + behavior. Keyed by `def.impl`. */
 export interface KnownSkill { def: SkillDef; impl: SkillImpl }
@@ -215,6 +219,9 @@ export class Player {
   rising = 0;
   /** the pause menu is open in co-op (the game can't stop for one player): the character stands idle */
   idle = false;
+  /** the most light a highlight on him reflects outside the eyes (`kit.u.uShine`; 0: as it is): the hall of heroes'
+   *  key light a metre off put a glare on a shield's boss */
+  shine = 0;
   /** a remote player holds its revive key (reported with its state) */
   reviving = false;
 
@@ -511,8 +518,7 @@ export class Player {
     const target = at.clone();
     if (!s.impl.channel && s.impl.canCast && !s.impl.canCast(this, s.def, target)) { this.noTarget(); return false; }
     const dur = s.def.castTime / (1 + this.stats.castSpeed / 100);
-    // (a bow's shot with fewer arrows on the string than it looses takes them from the quiver first)
-    const q = this.cls.quiver, nockT = q && isBowShot(s) && this.nocked < (s.def.missiles ?? 1) ? q.fetch / (1 + this.stats.castSpeed / 100) : 0, n = nockT ? { n: nockT } : {};
+    const nockT = this.nockTime(s), n = nockT ? { n: nockT } : {};
     // (casting anything else forgets a queued shot)
     if (this.queued?.skill !== s) this.queued = null;
     if (s.def.draw && key) {
@@ -579,6 +585,13 @@ export class Player {
   }
 
   /** A remote player's action, replayed as its owner reported it. */
+  /** How long `s` cast now takes its arrows from the quiver first (s): a bow's shot with fewer arrows on the string
+   *  than it looses; 0 for any other. */
+  nockTime(s: KnownSkill): number {
+    const q = this.cls.quiver;
+    return q && isBowShot(s) && this.nocked < (s.def.missiles ?? 1) ? q.fetch / (1 + this.stats.castSpeed / 100) : 0;
+  }
+
   replay(a: PlayerAction): void {
     if (a.t === 'che') { this.stopChannel(); return; }
     if (a.t === 'hurt') { this.applyHit(a.r); return; }
@@ -929,9 +942,10 @@ export class Player {
     if (dashed && action && action !== dashed && !this.staggered) action.under = dashed;
     this.pose(dt, t, Math.min(1, speed / this.stats.moveSpeed), 1, side / this.stats.moveSpeed, action);
 
-    // ambient motes around the offhand (the mage's arcana)
+    // ambient motes around the offhand (the mage's arcana; none while hidden: as the hero selection screen hides the
+    // lobby's mage, his rose among the hall's heroes where he stood)
     const motes = this.cls.aura.motes;
-    if (motes && Math.random() < dt * 20) {
+    if (motes && this.obj.visible && Math.random() < dt * 20) {
       const p = this.palmPoint;
       particles.glow.spawn({
         x: p.x + rand(-0.08, 0.08), y: p.y + rand(-0.05, 0.08), z: p.z + rand(-0.08, 0.08), vy: rand(0.2, 0.6),
@@ -956,6 +970,24 @@ export class Player {
     look.update(dt, _lookFrom, this.facing, best ? _lookAt.set(best.pos.x, best.obj.position.y + best.height * 0.6, best.pos.z) : null);
   }
 
+  /** The foe an overhead blow comes down on: the nearest alive on the line straight ahead within `STRUCK_REACH`, its
+   *  body across the line, as this game shows it (a co-op partner's copy reads its own foes), or none. */
+  private struckAhead(): Struck | null {
+    const fx = Math.sin(this.facing), fz = Math.cos(this.facing);
+    let best: Enemy | null = null, bestAlong = Infinity;
+    for (const e of G.enemies) {
+      if (!e.alive || e.spawning) continue;
+      const dx = e.pos.x - this.pos.x, dz = e.pos.z - this.pos.z;
+      const along = dx * fx + dz * fz, across = Math.abs(dx * fz - dz * fx);
+      if (along <= 0 || along - e.radius > STRUCK_REACH || across > e.radius || along >= bestAlong) continue;
+      best = e; bestAlong = along;
+    }
+    if (!best) return null;
+    _struck.x = best.pos.x; _struck.z = best.pos.z; _struck.r = best.radius;
+    _struck.top = best.obj.position.y + best.height * STRUCK_TOP;
+    return _struck;
+  }
+
   pose(dt: number, t: number, move: number, dir: number, lean: number, action: ActionState | null): void {
     this.obj.position.set(this.pos.x, damp(this.obj.position.y, groundHeight(this.pos.x, this.pos.z), 14, dt), this.pos.z);
     // (all of it: through the eyes the last frame placed the model in view, entities/viewModel.ts)
@@ -973,12 +1005,13 @@ export class Player {
       hit: this.hitT, blockHit: Math.max(0, 1 - (G.time - this.lastBlock) / 0.25), dead,
       charge: this.channel ? 1 : this.casting ? this.casting.t / this.casting.dur : 0,
       nocked: this.nocked,
+      strike: action?.name === 'chop' ? this.struckAhead() : null,
       look: () => this.lookAtFoe(dt, dead),
     });
     // (dev builds: a joint taken past a body's range is reported; through the eyes the arms keep hand-placed poses)
     if (import.meta.env.DEV && this.local && dead < 0 && !this.eyes && this.model.joints) watchBody(this.model.joints, action?.name ?? (move > 0.05 ? 'moving' : 'standing'));
     this.model.kit.u.uHit.value = this.hitT * 0.5;
-    this.model.kit.u.uShine.value = this.eyes ? SHINE.eyes : 0;
+    this.model.kit.u.uShine.value = this.eyes ? SHINE.eyes : this.shine;
     if (this.staffLight) {
       // a little above the cast point: right at it, the metal round a staff's crystal (a few cm off,
       // with the light's inverse-square falloff) burns out white-green
@@ -996,7 +1029,9 @@ export class Player {
       // (its intensity alone goes to none: the light stays in the scene, as the light count must)
       const full = this.drawnFull;
       this.auraLit = this.cls.aura.drawn ? damp(this.auraLit, full ? 1 : 0, full ? AURA_EASE.in : AURA_EASE.out, dt) : 1;
-      this.staffLight.intensity = glow * this.auraLit * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
+      // (hidden, as the hero selection screen hides him: it lights nothing)
+      const shown = this.obj.visible ? 1 : 0;
+      this.staffLight.intensity = shown * glow * this.auraLit * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
     }
   }
 

@@ -22,7 +22,8 @@ const KINDS = [
 
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
-  'lobby', 'tooltip', 'glow', 'help', 'saves', 'readying', 'readyingClass', 'clicked', 'views', 'behindProps',
+  'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
+  'behindProps',
   'logLobby',
   'skillTipsTouch', 'run', 'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
 ];
@@ -213,8 +214,19 @@ export const COMMANDS = {
         help: 'the scenarios (all by default): stand, walk, shoot, reverse, taps, run, cast (with --skill)',
       },
       skill: { kind: 'text', usage: 'name', help: 'the cast scenario\'s skill: its key, its behaviour or its name' },
+      foe: { kind: 'text', usage: 'kind', help: 'a foe of this kind stood ahead of him for the cast scenario (dummy)' },
+      ahead: { kind: 'number', usage: 'm', help: 'with --foe, how far ahead it stands (1.8 by default)' },
+      biome: {
+        kind: 'choice',
+        choices: ['crypt', 'forest'],
+        usage: 'crypt|forest',
+        help: 'the biome he stands in (the lobby\'s by default): with --at, by its wall',
+      },
+      at: SETUP_OPTIONS.at,
+      facing: SETUP_OPTIONS.facing,
       gear: SETUP_OPTIONS.gear,
       weapon: SETUP_OPTIONS.weapon,
+      tune: SETUP_OPTIONS.tune,
       canary: {
         kind: 'switch',
         help: 'plant faults the measure must catch: the head turned past the neck\'s range, the fist bent on its '
@@ -331,9 +343,11 @@ export const COMMANDS = {
         choices: UI_STATES,
         help: 'the states (every one by default): lobby, tooltip, glow (the stash\'s items lit for a hovered item\'s '
           + 'slot, pictured at set moments of its loops, each of which must animate only what the compositor moves), '
-          + 'help, saves, readying (the fight\'s loading bar over the lobby: within the window, its label on a line), '
-          + 'readyingClass (another class picked with the heroes\' programs cold: the bar says it readies that hero), '
-          + 'clicked (a class button clicked and a '
+          + 'help, saves, heroes (the hero selection screen opened by Change hero: the hero in focus in the room '
+          + 'its panel leaves, its parts within the window and none over another, the hero beside clicked into focus, '
+          + 'Esc back to the lobby), readying (the fight\'s loading bar over the lobby: within the window, its label '
+          + 'on a line), readyingHeroes (Change hero clicked with the heroes\' programs cold: the bar says it readies '
+          + 'the heroes), clicked (a battleground\'s button clicked and a '
           + 'key pressed after it: '
           + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
           + 'dummies against their anchors), behindProps (a column planted between the camera and each dummy\'s label: '
@@ -1424,6 +1438,32 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'plant a fault the check must catch: the ranger\'s Health from gear rolled as the mage\'s',
       },
+      ...COMMON_OPTIONS,
+    },
+  },
+  hall: {
+    help: 'the hero in focus in the hall of heroes (the hero selection screen) showing off his skill and standing '
+      + 'after it, frame by frame: each hand, elbow and the weapon\'s tip in his own frame, and each jerk (its move '
+      + 'a frame changing by over 12 cm, a jump, a stop or a start; a blow already flying past 25 cm a frame is its '
+      + 'own); --gear and --weapon put the weapon in his hand there',
+    options: {
+      frames: { kind: 'switch', help: 'list every frame a point jerked, with its action and its moves' },
+      canary: {
+        kind: 'switch',
+        help: 'plant a fault the measure must catch: the right shoulder turned for a frame after the showcase',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  coat: {
+    help: 'the hero\'s skirts (the ranger\'s coat, the mage\'s robe, the warrior\'s mail) as he stands at idle, frame '
+      + 'by frame: every point of the cloth in its own space, and each jerk (its move a frame changing by over 1 cm)',
+    options: {
+      seconds: { kind: 'number', usage: 's', help: 'how long he stands (5 by default)' },
+      frames: { kind: 'switch', help: 'list the frames a point jerked, with where on the cloth' },
+      canary: { kind: 'switch', help: 'plant a fault the measure must catch: a point kicked out for a frame' },
+      ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
     },
   },
