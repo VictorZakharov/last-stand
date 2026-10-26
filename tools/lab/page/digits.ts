@@ -265,21 +265,29 @@ async function worldDigits(): Promise<Found> {
 }
 
 /**
- * The canary's plants: the page's text given old-style digits, and the world's labels' fonts with lining ones taken
- * away (the canvas then paints the face's own); both must be found jumping.
+ * The canary's plants: the page's text given old-style digits, a line of digits in the body's own text with them (a
+ * state whose digits are all in the display face, a phone's stash alone, showed nothing the canary could change),
+ * and the world's labels' fonts with lining ones taken away (the canvas then paints the face's own); both must be
+ * found jumping. Returns the line's removal.
  */
-function plantOldStyle(): void {
+function plantOldStyle(): () => void {
   document.body.style.fontVariantNumeric = 'oldstyle-nums';
+  const line = document.createElement('div');
+  line.textContent = DIGITS;
+  Object.assign(line.style, { position: 'fixed', left: '0', bottom: '0', zIndex: '2147483647', pointerEvents: 'none' });
+  document.body.append(line);
   for (const face of [...document.fonts]) {
     if (face.featureSettings.includes('lnum')) document.fonts.delete(face);
   }
+  return () => line.remove();
 }
 
 /** The digits shown in this state, on the page and over the world, each look and font of them on its line. */
 export async function digitsShown(lab: Lab, canary: boolean): Promise<Found> {
-  if (canary) plantOldStyle();
+  const removeLine = canary ? plantOldStyle() : null;
   const page = await pageDigits(lab);
   const world = await worldDigits();
+  removeLine?.();
   if (canary) document.body.style.fontVariantNumeric = '';
   const lines = [...page.lines, ...world.lines];
   return { lines, problems: [...page.problems, ...world.problems], moments: page.moments };

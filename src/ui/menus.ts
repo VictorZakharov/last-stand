@@ -520,7 +520,8 @@ export function renderMenu(): void {
         if (!isTouch()) { doUnequip(); return; }
         openItemSheet(it, false, 'Unequip', p.stash.length < RUN.bagLimit ? doUnequip : null, () => { toss(discardEquipped(p, slot)); newIds.delete(it.id); sfx.salvage(); changed(); });
       };
-      d.oncontextmenu = (e) => { e.preventDefault(); doUnequip(); };
+      // (a long press is a context menu on Android: on touch it lights the slot's items, and unequips nothing)
+      d.oncontextmenu = (e) => { e.preventDefault(); if (!isTouch()) doUnequip(); };
       makeDraggable(d, { from: 'equip', item: it, slot });
     }
     eq.appendChild(d);
@@ -559,7 +560,7 @@ export function renderMenu(): void {
       sfx.salvage();
       changed();
     };
-    d.oncontextmenu = (e) => { e.preventDefault(); equip(); };
+    d.oncontextmenu = (e) => { e.preventDefault(); if (!isTouch()) equip(); };
     makeDraggable(d, { from: 'stash', item: it, slot: it.slot });
     st.appendChild(d);
   }
@@ -645,9 +646,34 @@ function pointAt(el: HTMLElement, slot: Slot): void {
   pending = setTimeout(() => focusSlot(slot), FOCUS_DELAY_MS);
 }
 
+/** A finger down on `el`: the light of another slot put out, `el` lit at once and the others that fit `slot` once it
+ *  has rested `FOCUS_DELAY_MS` (a long press). */
+function pressAt(el: HTMLElement, slot: Slot): void {
+  if (focused !== slot) focusSlot(null);
+  pointAt(el, slot);
+}
+
+/** The finger lifted from an item of `slot`: a long press's light stays till the next tap; a tap's never comes. */
+function liftFrom(slot: Slot): void {
+  if (focused === slot) return;
+  clearTimeout(pending);
+  markFocal(null);
+}
+
+// On touch the light stays once the finger lifts (it went out with it, a moment after it came): a tap on a lit item
+// keeps it, its sheet's buttons too; a tap anywhere else puts it out, and so does equipping (the menu drawn again).
+document.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'touch' || !(e.target instanceof Element)) return;
+  if (!e.target.closest('.sitem[data-slot], .eslot, #item-sheet')) focusSlot(null);
+}, true);
+
 function bindSlotFocus(el: HTMLElement, slot: Slot): void {
-  el.addEventListener('pointerenter', () => { if (!drag) pointAt(el, slot); });
-  el.addEventListener('pointerleave', () => focusSlot(null));
+  el.addEventListener('pointerenter', (e) => { if (e.pointerType !== 'touch' && !drag) pointAt(el, slot); });
+  el.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch') focusSlot(null); });
+  el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') pressAt(el, slot); });
+  const lift = (e: PointerEvent) => { if (e.pointerType === 'touch') liftFrom(slot); };
+  el.addEventListener('pointerup', lift);
+  el.addEventListener('pointercancel', lift);
 }
 
 // --- item drag & drop -------------------------------------------------------------
@@ -658,6 +684,8 @@ let drag: ItemDrag | null = null;
 function makeDraggable(el: HTMLElement, payload: ItemDrag): void {
   el.draggable = true;
   el.addEventListener('dragstart', (e) => {
+    // (a long press on Android starts a drag: on touch it lights the slot's items instead)
+    if (isTouch()) { e.preventDefault(); return; }
     drag = payload;
     hideTooltip();
     focusSlot(null);
