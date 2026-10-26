@@ -5,6 +5,7 @@ import { groundHeight } from './ground';
 import { state as props, type Prop } from './destructible';
 import { placeBefore, stackBefore } from '../entities/carry';
 import type { Enemy } from '../entities/enemy';
+import type { Wall } from './wall';
 
 export function resolveWorld(pos: { x: number; z: number }, radius: number): void {
   resolveProps(pos, radius);
@@ -48,6 +49,48 @@ export function propTopAt(x: number, z: number): number {
   return top;
 }
 
+/** How high the top of the arena's wall is over (x, z), as its top tiles have it (`wallTiles`: the crypt's walls and
+ *  buttresses, the thicket's rocks and bushes, the gates, the trunks and tombs beyond), not its foliage; none
+ *  (-Infinity) where none of it stands. A blow brought down onto the wall stops on it as on a prop (from play: "power
+ *  strike is not hitting obstacles if they are walls of the arena, it should stop on them same like destructible
+ *  props"). */
+export function wallTopAt(x: number, z: number): number {
+  if (!G.arena || G.arena.hallShown) return -Infinity;
+  const wall = G.arena.wall;
+  if (Math.hypot(x, z) < wall.near) return -Infinity;
+  return topOf(wallTile(wall, Math.floor(x / WALL_TILE), Math.floor(z / WALL_TILE)), x, z);
+}
+
+/** a tile of the wall's top (m), made as it's first read: the wall's parts are big (a side of the crypt's wall is one
+ *  geometry), and a grid of the whole ring at `TOP_CELL` would be 2 million cells a biome */
+const WALL_TILE = 1;
+/** each wall's top tiles, by the tile's place (`tileKey`); the wall never changes */
+const wallTiles = new WeakMap<Wall, Map<number, TopGrid>>();
+const tileKey = (i: number, k: number): number => (i + 1000) * 2000 + (k + 1000);
+
+function wallTile(wall: Wall, i: number, k: number): TopGrid {
+  let tiles = wallTiles.get(wall);
+  if (!tiles) {
+    tiles = new Map();
+    wallTiles.set(wall, tiles);
+  }
+  const key = tileKey(i, k);
+  let tile = tiles.get(key);
+  if (!tile) {
+    tile = buildWallTile(wall, i * WALL_TILE, k * WALL_TILE);
+    tiles.set(key, tile);
+  }
+  return tile;
+}
+
+/** The wall's top over the tile from (`x0`, `z0`): each triangle of the parts reaching over it laid over its cells. */
+function buildWallTile(wall: Wall, x0: number, z0: number): TopGrid {
+  const n = Math.round(WALL_TILE / TOP_CELL);
+  const grid: TopGrid = { x0, z0, nx: n, nz: n, tops: new Float32Array(n * n).fill(-Infinity) };
+  wall.solidsOver(x0, z0, x0 + WALL_TILE, z0 + WALL_TILE, (geometry, matrix) => layGeometry(grid, geometry, matrix));
+  return grid;
+}
+
 /** A prop's top on a grid over its circles: the highest of what it draws over each cell's middle (m), made once from
  *  its triangles. (Read by three's raycaster, every triangle of the prop for each point, a two-hander's blow brought
  *  down onto a pillar or a log held the game at 4 fps: its stop reads hundreds of points a frame.) */
@@ -89,24 +132,31 @@ function buildTops(p: Prop): TopGrid {
   }
   const nx = Math.max(1, Math.ceil((maxX - minX) / TOP_CELL)), nz = Math.max(1, Math.ceil((maxZ - minZ) / TOP_CELL));
   const grid: TopGrid = { x0: minX, z0: minZ, nx, nz, tops: new Float32Array(nx * nz).fill(-Infinity) };
-  p.surfaces((mesh) => {
-    const position = mesh.geometry.getAttribute('position');
-    if (!position) return;
-    const index = mesh.geometry.getIndex();
-    const count = index ? index.count : position.count;
-    for (let t = 0; t + 2 < count; t += 3) {
-      for (let c = 0; c < 3; c++) {
-        _corners[c].fromBufferAttribute(position, index ? index.getX(t + c) : t + c).applyMatrix4(mesh.matrixWorld);
-      }
-      layTriangle(grid, _corners[0], _corners[1], _corners[2]);
-    }
-  });
+  p.surfaces((mesh) => layGeometry(grid, mesh.geometry, mesh.matrixWorld));
   return grid;
+}
+
+/** Each triangle of `geometry`, placed by `matrix`, laid over `grid` (`layTriangle`). */
+function layGeometry(grid: TopGrid, geometry: THREE.BufferGeometry, matrix: THREE.Matrix4): void {
+  const position = geometry.getAttribute('position');
+  if (!position) return;
+  const index = geometry.getIndex();
+  const count = index ? index.count : position.count;
+  for (let t = 0; t + 2 < count; t += 3) {
+    for (let c = 0; c < 3; c++) {
+      _corners[c].fromBufferAttribute(position, index ? index.getX(t + c) : t + c).applyMatrix4(matrix);
+    }
+    layTriangle(grid, _corners[0], _corners[1], _corners[2]);
+  }
 }
 const _corners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
 
 /** One triangle laid over `grid`: its height at each cell's middle it covers seen from above, and its corners'. */
 function layTriangle(grid: TopGrid, a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3): void {
+  // (one wholly off the grid: a wall tile is crossed by a part's few triangles of thousands)
+  const right = grid.x0 + grid.nx * TOP_CELL, far = grid.z0 + grid.nz * TOP_CELL;
+  if (Math.max(a.x, b.x, c.x) < grid.x0 || Math.min(a.x, b.x, c.x) >= right) return;
+  if (Math.max(a.z, b.z, c.z) < grid.z0 || Math.min(a.z, b.z, c.z) >= far) return;
   for (const v of [a, b, c]) raise(grid, Math.floor((v.x - grid.x0) / TOP_CELL), Math.floor((v.z - grid.z0) / TOP_CELL), v.y);
   const area = (b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z);
   if (Math.abs(area) < 1e-9) return;

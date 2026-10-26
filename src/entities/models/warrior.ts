@@ -22,7 +22,7 @@ import { buildHand, poseHand, hold, seat, fistReach, fistTurn, fistOn, gripTurn,
 import { axe, greataxe, greatsword, mace, maul, sword, STRIKES_WITH, type WeaponMaterials } from './weapons';
 import { clamp, lerp, mulberry, damp } from '../../util';
 import { groundHeight } from '../../world/ground';
-import { propTopAt } from '../../world/collision';
+import { propTopAt, wallTopAt } from '../../world/collision';
 import {
   fromEyes, dirFromEyes, intoEyes, dirIntoEyes, fromScreen, turnTowards, ViewFade,
 } from '../viewModel';
@@ -991,10 +991,10 @@ export function buildWarrior(): Model {
   }
 
   /** Where a blow coming down at (`x`, `z`) lands: the top of the foe it strikes (`AnimState.strike`) within its body,
-   *  else the floor. */
+   *  else the floor, a prop's top or the arena's wall's. */
   function landHeight(x: number, z: number): number {
     const on = strikeOn;
-    const floor = Math.max(groundHeight(x, z), propTopAt(x, z));
+    const floor = Math.max(groundHeight(x, z), propTopAt(x, z), wallTopAt(x, z));
     if (on && Math.hypot(x - on.x, z - on.z) < on.r) return Math.max(on.top, floor);
     return floor;
   }
