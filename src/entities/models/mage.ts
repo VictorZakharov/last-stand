@@ -184,7 +184,7 @@ export function buildMage(): Model {
     // middle, gold along its edges and a short gold bar at its point (the old one was a strip under the scarf, unseen)
     const hood: SurfaceFn = (u, v, out) => {
       const y = lerp(0.29, 0.02, v), hw = lerp(0.13, 0.008, v ** 0.85), x = (u - 0.5) * 2 * hw;
-      const r = torsoR(y), a = Math.PI - Math.asin(clamp(x / r, -1, 1)), lift = 0.014 + 0.022 * Math.sin(u * Math.PI) * (1 - v);
+      const r = torsoR(y), a = Math.PI - Math.asin(clamp(x / r, -1, 1)), lift = 0.014 + 0.045 * Math.sin(u * Math.PI) ** 0.7 * (1 - v) ** 0.8;
       return out.set(Math.sin(a) * (r + lift), y, Math.cos(a) * (r * DEPTH + lift));
     };
     A.add(plate(hood, 14, 14, 0.008, undefined, V(0, 0.15, 0)), scarf, j.chest);
