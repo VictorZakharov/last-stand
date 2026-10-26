@@ -34,7 +34,7 @@ const DEPTH = 0.86;
 /** the cowl's profile (chest joint space): the hood down, bunched round the neck */
 const COWL: [number, number][] = [[0.1, 0.2], [0.155, 0.235], [0.16, 0.27], [0.13, 0.31], [0.095, 0.34], [0.085, 0.36]];
 /** the pauldrons' size against the shoulder */
-const PAULDRON = 0.72;
+const PAULDRON = 0.78;
 function torsoR(y: number): number {
   for (let i = 1; i < TORSO.length; i++) if (y <= TORSO[i][1]) { const [r0, y0] = TORSO[i - 1], [r1, y1] = TORSO[i]; return lerp(r0, r1, clamp((y - y0) / (y1 - y0), 0, 1)); }
   return TORSO[TORSO.length - 1][0];
@@ -99,6 +99,8 @@ export function buildMage(): Model {
   const E = engravedSteel();
   const goldE = kit.std({ color: 0xd4ab58, metalness: 1, roughness: 1, map: E.map, normalMap: E.normalMap, roughnessMap: E.roughnessMap });
   const blackLeather = kit.std({ color: 0x1a1614, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
+  // the pauldrons' hardened leather, tooled: its grain raised more and finer, a dull sheen on the black
+  const tooled = kit.std({ color: 0x1c1a20, roughness: 0.75, ...tex(leatherMaps(), 3, 2.4) });
   const leather = kit.std({ color: 0x3e281a, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
   // the boots: worn, oiled dark brown leather on darker soles, as the sheet's
   const boot = kit.std({ color: 0x5a3a26, roughness: 1, ...pbrMaterialMaps(oiled(), 1) });
@@ -174,24 +176,29 @@ export function buildMage(): Model {
     A.add(edgeTube(flap, s > 0 ? 'u1' : 'u1', 0.0045, 12), gold, j.chest);
   }
 
-  // --- pauldrons: two lames of black leather rimmed in gold, a gold boss set with a stone, a spike
+  // --- pauldrons: a domed cap of tooled black leather over a flared lame, each rimmed in gold, and a gold boss set with a
+  // green stone on the cap (the sheet's claw on top is none of his: a spike there read as one)
   for (const [s, joint0] of [[1, j.shoulderL], [-1, j.shoulderR]] as const) {
     // sized to sit over a man's deltoid (they were cut for a far broader frame)
     const sh = joint(joint0);
     sh.scale.setScalar(PAULDRON);
-    const lame = (R: number, lat0: number, lat1: number, y: number): SurfaceFn => (u, v, out) => {
+    const lame = (R: number, lat0: number, lat1: number, y: number, tall = 0.75): SurfaceFn => (u, v, out) => {
       const lon = (u - 0.5) * 3.2, lat = lerp(lat0, lat1, v);
-      return out.set(s * Math.cos(lat) * Math.cos(lon) * R * 1.1 + s * 0.015, Math.sin(lat) * R * 0.75 + y, Math.cos(lat) * Math.sin(lon) * R);
+      return out.set(s * Math.cos(lat) * Math.cos(lon) * R * 1.1 + s * 0.015, Math.sin(lat) * R * tall + y, Math.cos(lat) * Math.sin(lon) * R);
     };
-    for (const L of [lame(0.145, -0.3, 0.2, -0.01), lame(0.135, 0.1, 1.45, 0.01)]) {
-      A.add(plate(L, 16, 6, 0.006), blackLeather, sh);
-      A.add(edgeTube(L, 'v0', 0.006, 16), gold, sh);
+    // (the cap rising higher over the joint than the old flat lame, a dome as the sheet's; a second gold band round it)
+    const cap = lame(0.14, 0.05, 1.5, 0.02, 1.05), lower = lame(0.152, -0.36, 0.12, -0.02);
+    for (const L of [lower, cap]) {
+      A.add(plate(L, 20, 8, 0.007), tooled, sh);
+      A.add(edgeTube(L, 'v0', 0.0065, 20), gold, sh);
     }
-    const md = disc(0.036, 0.014);
-    projectUV(md, steelRegion('disc'), (x, y) => [(x / 0.036 + 1) / 2, (y / 0.036 + 1) / 2]);
-    A.add(md, goldE, sh, [s * 0.095, 0.075, 0.07], [-0.55, s * 0.7, 0]);
-    A.add(gemGeo(0.014), stone, sh, [s * 0.104, 0.083, 0.08], [-0.55, s * 0.7, 0]);
-    A.add(taperTube([V(0, 0, 0), V(s * 0.02, 0.05, 0), V(s * 0.05, 0.1, -0.01)], (t) => 0.018 * (1 - t), 8, 6), gold, sh, [s * 0.07, 0.1, -0.01]);
+    const band: SurfaceFn = (u, v, out) => cap(u, 0.3, out).multiplyScalar(1.02);
+    A.add(edgeTube(band, 'v0', 0.005, 20), gold, sh);
+    // (the boss on the cap's outer face, larger: the stone was lost against the black)
+    const md = disc(0.042, 0.014);
+    projectUV(md, steelRegion('disc'), (x, y) => [(x / 0.042 + 1) / 2, (y / 0.042 + 1) / 2]);
+    A.add(md, goldE, sh, [s * 0.16, 0.06, 0.0], [0, s * Math.PI / 2, 0]);
+    A.add(gemGeo(0.019), stone, sh, [s * 0.17, 0.06, 0.0], [0, s * Math.PI / 2, 0]);
   }
 
   // --- arms: robe sleeves widening into long bell sleeves lined in teal, leather bracers with a stone,
