@@ -705,6 +705,20 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the game's cameras look that meet nothing (`neckGaps.ts`). Pictured close from six sides. `--canary`
   (`neckCanaries.ts`) plants a ridge, skin over the collar, a paler wider neck and a neck stopping short in a loose
   collar; each must be caught.
+- `hall`: the hero in focus in the hall of heroes (`page/hallMoves.ts`; `src/game/hall.ts`), the lab's run left
+  for the lobby and Change hero clicked: his showcase and the stand after it, 480 frames, each hand, elbow and the
+  weapon's tip in his own frame, and each jerk: its move a frame changing by over 12 cm from the frame before (a
+  jump, a stop or a start in a frame), 40 cm while the weapon flies (its tip 25 cm a frame or more, this frame or the
+  two before: a blow speeding down and coming to rest), the tip's by its speed (0.7 of its larger move, at least
+  20 cm: its arc turns its way by about its speed squared over its reach). `--gear` and `--weapon` put the weapon in
+  his profile, which the hall dresses him from; `--frames` lists each jerk with its action and its moves; the canary
+  turns his right shoulder for a frame. From play: "warrior arms jerk in various poses after he finishes power
+  strike, in char selection screen". The hall's heroes are remote copies beside the lobby's own hero, hidden but
+  still posed, which `range` never saw: the warriors shared the way back's state (`DRAWN_*`, `BACK_*` at the module's
+  top), and the hall's went back to its guard from where the lobby's hero had drawn his weapon, the axe's tip 2.2 m in
+  a frame. Found with it too: the first frame of the landing's hold turned the arm 65 degrees down onto the stage
+  under the plinth, the hands 84 cm; the left hand onto the haft off the shoulder in a frame, 39 cm; the way back
+  into the guard stopping dead, the lift onto the shoulder and the move off it starting at full speed.
 - `held`: every held skill of the hero's class: in full in [`commands/held.md`](commands/held.md).
 - `draw`: every drawn shot of the hero's class drawn to full and held there as the player holds it (`page/draw.ts`,
   `--class ranger`), in the top-down view, over the shoulder and through the eyes (`--views`): the key held over an

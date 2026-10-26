@@ -1435,6 +1435,21 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  hall: {
+    help: 'the hero in focus in the hall of heroes (the hero selection screen) showing off his skill and standing '
+      + 'after it, frame by frame: each hand, elbow and the weapon\'s tip in his own frame, and each jerk (its move '
+      + 'a frame changing by over 12 cm, a jump, a stop or a start; a blow already flying past 25 cm a frame is its '
+      + 'own); --gear and --weapon put the weapon in his hand there',
+    options: {
+      frames: { kind: 'switch', help: 'list every frame a point jerked, with its action and its moves' },
+      canary: {
+        kind: 'switch',
+        help: 'plant a fault the measure must catch: the right shoulder turned for a frame after the showcase',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   touch: {
     help: 'the touch controls\' move stick pushed by a finger, sent as a touch screen\'s: slid out to its edge and '
       + 'far past it, half the window across, and what each push gave (the stick\'s push, the knob, the hero\'s '

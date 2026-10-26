@@ -1205,6 +1205,20 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  hall: {
+    each(side, options) {
+      const command = {
+        gear: options.gear,
+        weapon: options.weapon,
+        frames: Boolean(options.frames),
+        canary: Boolean(options.canary),
+      };
+      return side.command('hall', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   touch: {
     each(side, options) {
       return side.command('touch', { fixture: fixtureFrom(options), canary: Boolean(options.canary) });

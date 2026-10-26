@@ -53,6 +53,7 @@ import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
 import type { NeckOptions } from './neck';
+import type { HallOptions } from './hallMoves';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
 import type { EyesOptions } from './eyes';
 import type { SwingOptions } from './swing';
@@ -108,6 +109,13 @@ export async function hands(lab: Lab, command: HandsOptions): Promise<Report> {
 export async function neck(lab: Lab, command: NeckOptions): Promise<Report> {
   const { neck: read } = await import('./neck');
   return read(lab, command);
+}
+
+/** `lab hall`: the hero in focus in the hall of heroes through his showcase and after it; a point that jerked, or a
+ *  canary it missed, is a problem. */
+export async function hall(lab: Lab, command: HallOptions): Promise<Report> {
+  const { hallMoves } = await import('./hallMoves');
+  return hallMoves(lab, command);
 }
 
 /** `lab match --fit`: a rest's tunable values fitted to a reference's marks. */
