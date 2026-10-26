@@ -782,8 +782,18 @@ a channel, looked up once (matched against every part's colour, a picture took 1
   fonts (a face of Cinzel and of Alegreya Sans loaded), every load after the swap this tree's build (its entry
   script: a plain reload must show a new deploy), and each of this tree's loads the labels' lining twin
   (`overlay/paint.ts`).
+  Then the installed app: this tree built twice more as a PR's preview builds (another commit stamped in each, so
+  another bundle and worker's cache, as a PR's are), served in their folders under the site
+  (`pr-preview/pr-1/aaaaaaa/`, `bbbbbbb/`) and visited in turn, each its worker installed; then the app opened
+  offline at its start (production's cache must have outlived the previews' workers), at the first preview's
+  folder pruned (a game must show: its worker's cached build, or this tree's by the 404 page) and at a closed PR's
+  build never served (the build's `404.html` answering it, as Pages does, must send it to the game at
+  `/last-stand/`). Under main's worker the offline start fails.
   `--canary` serves a stale page on the first reload after the swap and the font stylesheet's address broken after
-  it: both must be found. About 35 s (the canary's two minutes: its waits run out). (The owner, of #263's preview:
+  it, deletes production's cache before the offline start, and answers a missing path with a plain 404: all four
+  must be found. About 40 s to 100 s (the canary's two and a half minutes: its waits run out). (The owner's
+  installed app on their phone opened Pages' plain 404: it was left on a PR preview's build, pruned since, and the
+  previews' workers had deleted the caches that would have shown it.) (The owner, of #263's preview:
   the page's font stylesheet had been asked for with CORS, and the previous deploy's worker answered with the copy
   it kept from a request without, which can't answer one with; the stylesheet failed, and the lobby showed the
   system's fonts, wider, its links wrapping: "increasing font size had unintended side effects".)

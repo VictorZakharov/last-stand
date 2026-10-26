@@ -31,21 +31,43 @@ const POLL = 250;
 /** the page's font stylesheet's address as it's written, and as the canary breaks it */
 const FONT_SHEET = 'fonts.googleapis.com/css2?';
 const BROKEN_SHEET = 'fonts.googleapis.com/css2-lab-canary?';
+/** two builds of one PR's preview, visited in turn (each a worker of its own, its caches beside production's) */
+const PREVIEWS = ['pr-preview/pr-1/aaaaaaa/', 'pr-preview/pr-1/bbbbbbb/'];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const seconds = (since) => `${((Date.now() - since) / 1000).toFixed(1)} s`;
 
-/** Builds the game in `root` for production into `outDir`; an exported tree finds its packages in this one's. */
-async function buildTree(root, outDir, exported) {
+/**
+ * Builds the game in `root` for production into `outDir`; an exported tree finds its packages in this one's. `sha`,
+ * when given, is the commit the build says it is (a preview's: its bundle and its worker's cache another build's).
+ */
+async function buildTree(root, outDir, exported, sha = null) {
   const { build } = await import('vite');
-  await build({
-    root,
-    configFile: join(root, 'vite.config.ts'),
-    configLoader: 'runner',
-    logLevel: 'error',
-    ...(exported ? { plugins: [exportedTreePaths(root, REPO)] } : {}),
-    build: { outDir, emptyOutDir: true },
-  });
+  const buildSha = process.env.BUILD_SHA;
+  if (sha) process.env.BUILD_SHA = sha;
+  // (in the tree's own folder: an older commit's PWA plugin read `public/` from the working directory, and built
+  // there from another tree listed that one's files to precache, its worker never installing for a file it lacked)
+  const workingDir = process.cwd();
+  process.chdir(root);
+  try {
+    await build({
+      root,
+      configFile: join(root, 'vite.config.ts'),
+      configLoader: 'runner',
+      logLevel: 'error',
+      ...(exported ? { plugins: [exportedTreePaths(root, REPO)] } : {}),
+      build: { outDir, emptyOutDir: true },
+    });
+  } finally {
+    process.chdir(workingDir);
+    if (sha) restoreEnv('BUILD_SHA', buildSha);
+  }
+}
+
+/** Puts an environment variable back as it was (`value` undefined: it wasn't set). */
+function restoreEnv(name, value) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
 }
 
 /** A build: its name, folder, its page's entry script (which a load shows it by) and its worker's cache's name. */
@@ -53,20 +75,36 @@ function buildOf(name, dir) {
   const page = readFileSync(join(dir, 'index.html'), 'utf8');
   const worker = readFileSync(join(dir, 'sw.js'), 'utf8');
   const entry = /<script type="module"[^>]*src="([^"]+)"/.exec(page)?.[1];
-  const cache = /const CACHE = '([^']+)'/.exec(worker)?.[1];
+  // (named by the worker's scope since the previews' workers stopped deleting production's caches, before as a build)
+  const scoped = /const CACHE = OWN \+ '([^']+)'/.exec(worker)?.[1];
+  const cacheAt = (scope) => `last-stand:${scope}:${scoped}`;
+  const cache = scoped ? cacheAt(BASE) : /const CACHE = '([^']+)'/.exec(worker)?.[1];
   if (!entry || !cache) throw new Error(`lab: pwa: the ${name} build has no entry script or no worker's cache`);
-  return { name, dir, entry, cache };
+  return { name, dir, entry, cache, cacheAt: scoped ? cacheAt : () => cache };
 }
 
-/** Both builds: `from`'s, exported, and this tree's. */
-async function buildBoth(from) {
+/** A PR preview's commit, named by its folder (`pr-preview/pr-1/aaaaaaa/`: aaaaaaa000...). */
+const previewSha = (folder) => folder.split('/').at(-2).padEnd(40, '0');
+
+/**
+ * The builds: `from`'s, exported, this tree's, and this tree's as each preview's commit (`previews`, by folder),
+ * each another bundle with a worker's cache of its own, as a PR's builds are.
+ */
+async function buildAll(from) {
   mkdirSync(PWA_DIR, { recursive: true });
   const exported = exportCommit(REPO, OUT, from);
   const oldDir = join(PWA_DIR, 'from');
   const newDir = join(PWA_DIR, 'this');
   await buildTree(exported.dir, oldDir, true);
   await buildTree(REPO, newDir, false);
-  return { old: buildOf(`${from} (${exported.sha.slice(0, 7)})`, oldDir), now: buildOf('this tree', newDir) };
+  const previews = new Map();
+  for (const [index, folder] of PREVIEWS.entries()) {
+    const dir = join(PWA_DIR, `preview-${index + 1}`);
+    await buildTree(REPO, dir, false, previewSha(folder));
+    previews.set(folder, buildOf(`the preview at ${folder}`, dir));
+  }
+  const old = buildOf(`${from} (${exported.sha.slice(0, 7)})`, oldDir);
+  return { old, now: buildOf('this tree', newDir), previews };
 }
 
 /** The cache the page's worker serves (run in the page): its answer to 'cache', null with no worker. */
@@ -194,6 +232,94 @@ function loadsOf(builds, canary) {
   ];
 }
 
+/** a closed PR's build, which a phone's app last showed: never served here */
+const GONE = 'pr-preview/pr-2/ccccccc/';
+/** how long a page may take to show the game, sent on by the 404 page or not (ms) */
+const GAME_WAIT = 15_000;
+
+/** Where the page is and the game's entry script once it shows (no entry: it never did in `GAME_WAIT`). */
+async function gameShown(page) {
+  const started = Date.now();
+  let shown = { path: null, entry: null };
+  while (Date.now() - started < GAME_WAIT) {
+    // (the 404 page sends the page on: a look between the two finds no page to ask)
+    shown = await page.evaluate(() => ({
+      path: location.pathname,
+      entry: document.querySelector('script[type="module"][src]')?.getAttribute('src') ?? null,
+    })).catch(() => shown);
+    if (shown.entry) return shown;
+    await sleep(POLL);
+  }
+  return shown;
+}
+
+/** Opens `url` as the installed app opens a page: what it shows, or the error it couldn't be loaded with. */
+async function opened(page, url) {
+  try {
+    await page.goto(url);
+  } catch (error) {
+    return { path: null, entry: null, error: error.message.split('\n')[0] };
+  }
+  return gameShown(page);
+}
+
+/** The game an opening showed, for its line: another build's, this tree's, or none. */
+function gameNamed(shows, other) {
+  if (other) return `${other.name}'s game`;
+  return shows ? 'this tree\'s game' : 'no game (Pages\' plain 404 or a browser error)';
+}
+
+/**
+ * One opening's line, and its problem: a game must show, this tree's or one of `alike` (the builds it may show in its
+ * place), at `path` when given.
+ */
+function judgedOpening(name, shown, builds, { path = null, alike = [] } = {}) {
+  const at = shown.error ?? shown.path ?? 'nothing';
+  const other = alike.find((build) => build.entry === shown.entry);
+  const shows = shown.entry === builds.now.entry || Boolean(other);
+  const game = gameNamed(shows, other);
+  const line = `  ${name}: ${game}, at ${at}`;
+  if (!shows) return { line, problem: `${name}: ${game}` };
+  if (path && shown.path !== path) return { line, problem: `${name}: the game at ${shown.path}, not ${path}` };
+  return { line, problem: null };
+}
+
+/**
+ * The installed app, once this tree is deployed: a PR's preview builds visited in turn (each its own worker, its
+ * caches beside production's on the one origin), then the app opened offline at its start, at a preview's build pruned
+ * since (the page it last showed) and at a closed PR's (Pages' 404 for it). With the canary, production's cache is
+ * deleted before the offline start, and a path with nothing is answered with a plain 404, not the build's page.
+ */
+async function playInstalled({ page, context, host, url, builds, canary }) {
+  const lines = [];
+  const problems = [];
+  const note = (found) => {
+    lines.push(found.line);
+    if (found.problem) problems.push(found.problem);
+  };
+  await context.setOffline(false);
+  for (const [folder, preview] of builds.previews) {
+    host.mount(folder, preview.dir);
+    await page.goto(url + folder);
+    await waitForWorker(page, preview.cacheAt(BASE + folder), `the preview's worker at ${folder}`);
+    lines.push(`  a preview visited, its worker installed: ${folder}`);
+  }
+  if (canary) await page.evaluate((name) => caches.delete(name), builds.now.cache);
+  await context.setOffline(true);
+  note(judgedOpening('the app started offline', await opened(page, url), builds));
+  await context.setOffline(false);
+  // (its worker may still show its own build from its cache; else the 404 page sends it on)
+  const [pruned] = PREVIEWS;
+  host.unmount(pruned);
+  const prunedShown = await opened(page, url + pruned);
+  const alike = [builds.previews.get(pruned)];
+  note(judgedOpening(`the app at a pruned build (${pruned})`, prunedShown, builds, { alike }));
+  host.answerMissingWithPage(!canary);
+  const goneShown = await opened(page, url + GONE);
+  note(judgedOpening(`the app at a closed PR's build (${GONE})`, goneShown, builds, { path: BASE }));
+  return { lines, problems };
+}
+
 /** The loads played in a fresh browser: each one's line and problems. */
 async function playLoads(builds, canary) {
   const host = new StaticHost(BASE);
@@ -217,6 +343,10 @@ async function playLoads(builds, canary) {
       lines.push(found.line);
       problems.push(...found.problems);
     }
+    lines.push('the installed app:');
+    const installed = await playInstalled({ page, context, host, url, builds, canary });
+    lines.push(...installed.lines);
+    problems.push(...installed.problems);
   } finally {
     await browser.close();
     await host.close();
@@ -224,17 +354,20 @@ async function playLoads(builds, canary) {
   return { lines, problems };
 }
 
-/** The canary's verdict: the stale page and the broken font stylesheet each found. */
+/** The canary's verdict: the stale page, the broken font stylesheet, the lost cache and the plain 404 each found. */
 function canaryVerdict(problems) {
   const stale = problems.some((problem) => problem.includes('not this tree'));
   const fonts = problems.some((problem) => problem.includes('the system\'s fonts'));
-  const lines = [
-    `canary: the stale page ${stale ? 'caught' : 'went unseen'}`,
-    `canary: the broken font stylesheet ${fonts ? 'caught' : 'went unseen'}`,
+  const offline = problems.some((problem) => problem.startsWith('the app started offline'));
+  const gone = problems.some((problem) => problem.startsWith('the app at a closed PR'));
+  const caught = [
+    ['stale page', stale],
+    ['broken font stylesheet', fonts],
+    ['deleted production cache', offline],
+    ['plain 404', gone],
   ];
-  const missed = [];
-  if (!stale) missed.push('the canary\'s stale page went unseen');
-  if (!fonts) missed.push('the canary\'s broken font stylesheet went unseen');
+  const lines = caught.map(([what, seen]) => `canary: the ${what} ${seen ? 'caught' : 'went unseen'}`);
+  const missed = caught.filter(([, seen]) => !seen).map(([what]) => `the canary's ${what} went unseen`);
   return { lines, missed };
 }
 
@@ -244,8 +377,8 @@ export async function runPwa(options) {
   const canary = Boolean(options.canary);
   const started = Date.now();
   try {
-    const builds = await buildBoth(from);
-    console.log(`built ${builds.old.name} and this tree (${seconds(started)})`);
+    const builds = await buildAll(from);
+    console.log(`built ${builds.old.name}, this tree and its previews (${seconds(started)})`);
     const { lines, problems } = await playLoads(builds, canary);
     console.log([`from ${builds.old.name} to this tree:`, ...lines].join('\n'));
     const missed = canary ? canaryVerdict(problems) : { lines: [], missed: problems };

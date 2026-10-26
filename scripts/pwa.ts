@@ -6,27 +6,31 @@
 // the page is served network-first, so a plain reload shows a new deploy.
 import { readdirSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { join } from 'node:path';
 import { Resvg } from '@resvg/resvg-js';
 import type { Plugin } from 'vite';
 
+// Pages' page for a missing path (public/404.html): never the game's, so never precached
+const NOT_FOUND = '404.html';
 const ICONS: [file: string, size: number][] = [['icon-192.png', 192], ['icon-512.png', 512], ['apple-touch-icon.png', 180]];
 
 export function pwa(): Plugin {
   let base = './';
+  let publicDir = 'public';   // (the config's, not the working directory's: the lab builds other commits' trees)
   return {
     name: 'last-stand-pwa',
     apply: 'build',
     enforce: 'post',   // after Vite has emitted index.html, so the build hash covers it
-    configResolved(config) { base = config.base; },
+    configResolved(config) { base = config.base; publicDir = config.publicDir; },
     transformIndexHtml: () => [{ tag: 'link', attrs: { rel: 'apple-touch-icon', href: `${base}apple-touch-icon.png` }, injectTo: 'head' }],
     generateBundle(_options, bundle) {
-      const svg = readFileSync('public/icon.svg');
+      const svg = readFileSync(join(publicDir, 'icon.svg'));
       for (const [fileName, size] of ICONS) {
         const source = new Resvg(svg, { fitTo: { mode: 'width', value: size } }).render().asPng();
         this.emitFile({ type: 'asset', fileName, source });
       }
-      const files = [...new Set([...Object.keys(bundle), ...ICONS.map(([f]) => f), ...readdirSync('public')])]
-        .filter((f) => !f.endsWith('.map')).sort();
+      const files = [...new Set([...Object.keys(bundle), ...ICONS.map(([f]) => f), ...readdirSync(publicDir)])]
+        .filter((f) => !f.endsWith('.map') && f !== NOT_FOUND).sort();
       const html = bundle['index.html'];
       const version = createHash('sha256').update(files.join('\n')).update(html && 'source' in html ? html.source : '').digest('hex').slice(0, 12);
       this.emitFile({ type: 'asset', fileName: 'sw.js', source: serviceWorker(version, files) });
@@ -40,10 +44,16 @@ function serviceWorker(version: string, files: string[]): string {
 // the network when it can (a plain reload shows a new deploy), the hashed files from the cache.
 // A new deploy's worker takes over at once; the previous build's cache stays, so a page still
 // running the old build can load its remaining chunks.
-const CACHE = 'last-stand-${version}';
+const SCOPE = new URL(self.registration.scope).pathname;
+// The caches are the origin's, shared by every scope's worker (production's scope holds the PR previews', each with a
+// worker of its own), so each worker's are named by its scope and it deletes only its own. Named alike, each preview
+// visited deleted all but two, production's among them, and an app left on a preview build pruned since met Pages' 404.
+const OWN = 'last-stand:' + SCOPE + ':';
+const CACHE = OWN + '${version}';
+// (every scope's, named before they were kept apart)
+const LEGACY = /^last-stand-[0-9a-f]{12}$/;
 const FONTS = 'last-stand-fonts';
 const FILES = ${JSON.stringify(['./', ...files.map((f) => `./${f}`)])};
-const SCOPE = new URL(self.registration.scope).pathname;
 const PAGE_WAIT = 4000;   // ms before a slow network gives way to the cached page
 
 self.addEventListener('install', (e) => {
@@ -54,10 +64,13 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
-    // caches.keys() lists in creation order: keep this build's and the one before it
-    const builds = (await caches.keys()).filter((k) => k.startsWith('last-stand-') && k !== FONTS);
-    const keep = new Set([CACHE, builds.filter((k) => k !== CACHE).pop()]);
-    for (const k of builds) if (!keep.has(k)) await caches.delete(k);
+    // caches.keys() lists in creation order: keep this build's and the one before it (production's last unnamed one
+    // when it has none); a preview leaves the unnamed ones to production
+    const names = await caches.keys();
+    const own = names.filter((k) => k.startsWith(OWN));
+    const legacy = SCOPE.includes('/pr-preview/') ? [] : names.filter((k) => LEGACY.test(k));
+    const keep = new Set([CACHE, own.filter((k) => k !== CACHE).pop() ?? legacy[legacy.length - 1]]);
+    for (const k of [...own, ...legacy]) if (!keep.has(k)) await caches.delete(k);
     await self.clients.claim();
   })());
 });

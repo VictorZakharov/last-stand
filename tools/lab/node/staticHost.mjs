@@ -1,6 +1,8 @@
 // A static host for a production build (tools/lab `pwa`), as GitHub Pages serves the game: its files under a path,
-// kept by the browser for 10 minutes and revalidated by their ETag, and what it serves swapped at once, as a deploy
-// swaps it. Pages answers from 127.0.0.1 here, a secure context, so the game's offline worker registers.
+// kept by the browser for 10 minutes and revalidated by their ETag, what it serves swapped at once, as a deploy
+// swaps it, builds put in folders under it as PR previews are, and a path it has nothing for answered with the
+// build's own 404.html, as Pages answers it. Pages answers from 127.0.0.1 here, a secure context, so the game's
+// offline worker registers.
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -36,6 +38,24 @@ export class StaticHost {
     this.root = null;
     this.rewrite = null;
     this.server = null;
+    /** builds served in folders under the base (a PR preview's), by their folder's path under it */
+    this.folders = new Map();
+    this.notFoundPage = true;
+  }
+
+  /** Serves the build in `root` at `folder` under the base too (`pr-preview/pr-1/aaaaaaa/`), until `unmount`. */
+  mount(folder, root) {
+    this.folders.set(folder, root);
+  }
+
+  /** Stops serving the build at `folder`, as a preview's folder is pruned. */
+  unmount(folder) {
+    this.folders.delete(folder);
+  }
+
+  /** `on`: a path with nothing is answered with the build's 404.html when it has one (Pages'), else a plain 404. */
+  answerMissingWithPage(on) {
+    this.notFoundPage = on;
   }
 
   /** Serves the build in `root` from now on; `rewrite(text)`, when given, changes its page as it's served. */
@@ -61,10 +81,19 @@ export class StaticHost {
   fileOf(url) {
     const path = decodeURIComponent(new URL(url, 'http://host').pathname);
     if (!path.startsWith(this.base)) return null;
-    const relative = path.slice(this.base.length) || 'index.html';
-    const file = normalize(join(this.root, relative.endsWith('/') ? `${relative}index.html` : relative));
-    if (!file.startsWith(this.root + sep) || !existsSync(file) || !statSync(file).isFile()) return null;
-    return file;
+    let root = this.root;
+    let relative = path.slice(this.base.length);
+    for (const [folder, folderRoot] of this.folders) {
+      if (!relative.startsWith(folder)) continue;
+      root = folderRoot;
+      relative = relative.slice(folder.length);
+    }
+    return fileIn(root, relative || 'index.html');
+  }
+
+  /** The build's 404.html, which Pages serves for a path it has nothing for, or null. */
+  notFoundFile() {
+    return this.notFoundPage ? fileIn(this.root, '404.html') : null;
   }
 
   /** Its body as served: the page rewritten when asked. */
@@ -77,8 +106,7 @@ export class StaticHost {
   answer(request, response) {
     const file = this.root ? this.fileOf(request.url) : null;
     if (!file) {
-      response.writeHead(404, { 'Content-Type': 'text/plain' });
-      response.end('not found');
+      this.answerMissing(response);
       return;
     }
     const body = this.bodyOf(file);
@@ -93,4 +121,24 @@ export class StaticHost {
     response.writeHead(200, { ...headers, 'Content-Type': type, 'Content-Length': body.length });
     response.end(body);
   }
+
+  answerMissing(response) {
+    const page = this.notFoundFile();
+    if (!page) {
+      response.writeHead(404, { 'Content-Type': 'text/plain' });
+      response.end('not found');
+      return;
+    }
+    const body = readFileSync(page);
+    response.writeHead(404, { 'Content-Type': TYPES['.html'], 'Content-Length': body.length });
+    response.end(body);
+  }
+}
+
+/** The file `relative` names in the build in `root`, or null (outside it, or none). */
+function fileIn(root, relative) {
+  if (!root) return null;
+  const file = normalize(join(root, relative.endsWith('/') ? `${relative}index.html` : relative));
+  if (!file.startsWith(root + sep) || !existsSync(file) || !statSync(file).isFile()) return null;
+  return file;
 }
