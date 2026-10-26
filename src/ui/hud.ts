@@ -125,7 +125,6 @@ export function showDecision(): void {
   const refresh = () => {
     if (box.classList.contains('hidden') || box.classList.contains('closing')) return;
     $('.dc-title', box).textContent = `Wave ${r.wave} is broken`;
-    $('.dc-sub', box).textContent = `Score ${Math.round(r.score).toLocaleString()} · ${r.kills} slain · Health ${Math.round(G.player.life)}/${Math.round(G.player.stats.maxLife)}`;
     const bag = $('.dc-bag', box);
     bag.innerHTML = '';
     if (!r.bag.length) bag.innerHTML = '<span class="chip" style="color:#9a8f7c">No spoils yet</span>';

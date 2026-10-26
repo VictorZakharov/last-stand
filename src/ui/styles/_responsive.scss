@@ -54,9 +54,8 @@ body.touch .stow-hint kbd { display: none; }
      the risk on one line, the buttons as tall as anywhere (a thumb's) */
   #decision { width: 500px; padding: 8px 14px; }
   #decision .dc-details > div { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0 10px; padding-bottom: 8px; }
-  #decision :is(.dc-title, .dc-sub, .dc-party) { flex-basis: 100%; }
-  .dc-title { font-size: 20px; line-height: 1.15; }
-  .dc-sub { margin: 0 0 4px; font-size: 14px; }
+  #decision :is(.dc-title, .dc-party) { flex-basis: 100%; }
+  .dc-title { margin-bottom: 4px; font-size: 20px; line-height: 1.15; }
   .dc-bag { margin-bottom: 0; }
   .dc-bag .chip.sealed { display: none; }
   .dc-risk { margin-bottom: 0; font-size: 14px; }
