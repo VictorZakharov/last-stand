@@ -5,13 +5,18 @@
 // various poses after he finishes power strike, in char selection screen ... like an introvert on public speech".
 // The hall's heroes are remote copies, posed from what their game reports, beside the lobby's own hero, hidden but
 // still posed, so the lobby hero's measures (`range`) never saw them. The canary turns his right shoulder for a frame.
+// Then the hall is opened again and left as his showcase is under way, and any sound it leaves playing is a problem
+// (from play: "if mage was attacking in hall of heroes, going back to lobby keeps the attack sound"); its canary
+// starts Void Lance's hum there and never stops it.
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import * as hall from '../../../src/game/hall';
+import { sfx } from '../../../src/core/audio';
 import { makeItem } from '../../../src/loot/items';
 import type { WeaponStyle } from '../../../src/loot/loadout';
 import type { Model } from '../../../src/types';
 import type { Lab, Report } from './lab';
+import { OpenTones } from './soundsLeft';
 
 /** What `lab hall` takes. */
 export interface HallOptions {
@@ -51,6 +56,10 @@ const OPEN_FRAMES = 600;
 /** the canary's frame (after the showcase's blow), and how far it turns the right shoulder (rad) */
 const CANARY_FRAME = 260;
 const CANARY_TURN = 0.5;
+/** frames into his showcase the hall is left at (Void Lance's beam is out by then), and frames run in the lobby
+ *  after, for what was stopped to have stopped */
+const LEAVE_AT = 60;
+const AFTER_LEAVING = 60;
 
 /** One point's place over the last three frames, its jerks, the worst and where, and each, as words. */
 interface Followed {
@@ -90,6 +99,54 @@ async function toLobby(lab: Lab): Promise<void> {
   await lab.clickOn(abandon);
   await lab.until(() => G.mode === 'menu', LOBBY_FRAMES, 'hall: the run giving way to the lobby');
   await lab.step(LOBBY_FRAMES);
+}
+
+/** The hall opened from the lobby (Change hero), waited for until it's up. */
+async function openHall(lab: Lab): Promise<boolean> {
+  const button = document.getElementById('btn-hero');
+  if (!button) return false;
+  await lab.clickOn(button);
+  await lab.until(() => hall.hallOpen(), OPEN_FRAMES, 'hall: the hall to open');
+  return true;
+}
+
+/** The hall left by its Back button, for the lobby. */
+async function leaveHall(lab: Lab): Promise<void> {
+  const back = document.querySelector<HTMLElement>('.hs-back');
+  if (!back) throw new Error('lab: hall: no Back button to leave the hall by');
+  await lab.clickOn(back);
+  await lab.until(() => !hall.hallOpen(), OPEN_FRAMES, 'hall: the hall to close');
+}
+
+/** What leaving the hall as his showcase is under way left playing. */
+interface Leaving {
+  /** the tones sounding as it was left, and those still sounding after */
+  sounding: number;
+  left: number;
+  canary: boolean;
+}
+
+/** The hall opened again (his showcase due again, its time since the last gone by), left `LEAVE_AT` frames into
+ *  his showcase, and the tones it left sounding read `AFTER_LEAVING` frames on (`canary`: Void Lance's hum started
+ *  as it's left, never stopped). */
+async function leaveMidShowcase(lab: Lab, canary: boolean): Promise<Leaving> {
+  await leaveHall(lab);
+  // (a second in the lobby: his showcase is shown again once 6 s have gone by since the last)
+  await lab.step(AFTER_LEAVING);
+  const tones = new OpenTones();
+  try {
+    await openHall(lab);
+    const hero = hall.hallHeroes()[hall.hallFocus()];
+    await lab.until(() => !!hero?.cast, OPEN_FRAMES, 'hall: his showcase, again');
+    await lab.step(LEAVE_AT);
+    if (canary) sfx.lance();
+    const sounding = tones.sounding();
+    await leaveHall(lab);
+    await lab.step(AFTER_LEAVING);
+    return { sounding, left: tones.sounding(), canary };
+  } finally {
+    tones.remove();
+  }
 }
 
 /** Where point `name` of `model` is, in his own frame. */
@@ -136,10 +193,7 @@ export async function hallMoves(lab: Lab, options: HallOptions): Promise<Report>
   // (the hall shows the hero in his profile's gear, not the lobby's hero's: his weapon put in his hand there)
   if (options.gear) holdInProfile();
   await toLobby(lab);
-  const button = document.getElementById('btn-hero');
-  if (!button) return { text: 'no hero selection screen in this tree', problems: [] };
-  await lab.clickOn(button);
-  await lab.until(() => hall.hallOpen(), OPEN_FRAMES, 'hall: the hall to open');
+  if (!(await openHall(lab))) return { text: 'no hero selection screen in this tree', problems: [] };
   const hero = hall.hallHeroes()[hall.hallFocus()];
   if (!hero) throw new Error('lab: hall: no hero in focus');
   const model = hero.player.model;
@@ -182,7 +236,24 @@ export async function hallMoves(lab: Lab, options: HallOptions): Promise<Report>
   });
   model.animate = animate;
   if (shownAt < 0) throw new Error('lab: hall: the hero never showed off his skill');
-  return reportOf(hero.id, hero.player.gear.weapon, shownAt, points, canaryJerk);
+  const report = reportOf(hero.id, hero.player.gear.weapon, shownAt, points, canaryJerk);
+  const leaving = leavingReport(await leaveMidShowcase(lab, !!options.canary));
+  return { text: `${report.text}\n${leaving.text}`, problems: [...report.problems, ...leaving.problems] };
+}
+
+/** The lines and problems of leaving the hall mid-showcase. */
+function leavingReport(leaving: Leaving): Report {
+  const left = `${leaving.left} of the ${leaving.sounding} tones sounding as it was left still sounding`;
+  const text = [`left ${(LEAVE_AT / 60).toFixed(2)} s into his showcase: ${left} ${AFTER_LEAVING} frames on`];
+  const problems: string[] = [];
+  if (leaving.canary) {
+    const caught = leaving.left > 0;
+    text.push(`canary, Void Lance's hum never stopped: ${caught ? 'caught' : 'MISSED'}`);
+    if (!caught) problems.push('hall: the canary (a hum never stopped) was missed');
+  } else if (leaving.left > 0) {
+    problems.push(`hall: leaving it mid-showcase left ${leaving.left} tones sounding in the lobby`);
+  }
+  return { text: text.join('\n'), problems };
 }
 
 /** The report: each point's jerks, the frames listed, and the canary. */

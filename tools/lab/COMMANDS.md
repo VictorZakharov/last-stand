@@ -718,7 +718,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   top), and the hall's went back to its guard from where the lobby's hero had drawn his weapon, the axe's tip 2.2 m in
   a frame. Found with it too: the first frame of the landing's hold turned the arm 65 degrees down onto the stage
   under the plinth, the hands 84 cm; the left hand onto the haft off the shoulder in a frame, 39 cm; the way back
-  into the guard stopping dead, the lift onto the shoulder and the move off it starting at full speed.
+  into the guard stopping dead, the lift onto the shoulder and the move off it starting at full speed. Then the hall
+  is opened again and left by Back 1 s into his showcase, and any oscillator still not told to stop 60 frames on in
+  the lobby is a sound left playing (`page/soundsLeft.ts`); its canary starts Void Lance's hum there and never stops
+  it. From play: "if mage was attacking in hall of heroes, going back to lobby keeps the attack sound": the hall
+  closed with his channel open, and its hum (3 tones) played on.
 - `held`: every held skill of the hero's class: in full in [`commands/held.md`](commands/held.md).
 - `draw`: every drawn shot of the hero's class drawn to full and held there as the player holds it (`page/draw.ts`,
   `--class ranger`), in the top-down view, over the shoulder and through the eyes (`--views`): the key held over an
