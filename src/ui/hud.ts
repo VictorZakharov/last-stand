@@ -125,13 +125,14 @@ export function showDecision(): void {
   const refresh = () => {
     if (box.classList.contains('hidden') || box.classList.contains('closing')) return;
     $('.dc-title', box).textContent = `Wave ${r.wave} is broken`;
-    $('.dc-sub', box).textContent = `Score ${Math.round(r.score).toLocaleString()} · ${r.kills} slain · Health ${Math.round(G.player.life)}/${Math.round(G.player.stats.maxLife)}`;
     const bag = $('.dc-bag', box);
     bag.innerHTML = '';
     if (!r.bag.length) bag.innerHTML = '<span class="chip" style="color:#9a8f7c">No spoils yet</span>';
     // what they are stays hidden until banked: the gamble is on the counts alone
     else bag.innerHTML = rarityChips(r.bag) + '<span class="chip sealed">revealed when you bank</span>';
+    // with nothing in the bag there's nothing to lose
     $('.dc-risk', box).innerHTML = `If you fall, <b>${r.bag.length} unbanked item${r.bag.length === 1 ? '' : 's'}</b> will be lost forever.`;
+    $('.dc-risk', box).classList.toggle('hidden', !r.bag.length);
     const next = r.wave + 1;
     // co-op: the next wave waits for everyone staying
     const waiting = waitingForParty();

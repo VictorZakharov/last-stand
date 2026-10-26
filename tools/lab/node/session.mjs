@@ -41,6 +41,13 @@ function screenName(screen) {
   return `${screen.width}x${screen.height}@${screen.ratio}`;
 }
 
+/** `screen` given the safe-area insets `--insets` names (left, top, right, bottom: css px), if any. */
+function withInsets(screen, insets) {
+  if (!screen || !insets) return screen;
+  const [left, top, right, bottom] = insets;
+  return { ...screen, insets: { left, top, right, bottom } };
+}
+
 export class LabSession {
   /**
    * Opens a session: the browser launched, nothing served or booted until a command needs it. A check's sessions run
@@ -191,17 +198,18 @@ export class LabSession {
   async turnsFor(options) {
     const mine = this.repoSide;
     if (options.screens) {
-      return options.screens.map((screen) => ({
+      return options.screens.map((screen) => withInsets(screen, options.insets)).map((screen) => ({
         side: mine,
         name: `this tree on ${screenName(screen)}`,
         screen,
         filePrefix: `${screenName(screen)}-`,
       }));
     }
-    const turns = [{ side: mine, name: mine.name, screen: options.screen, filePrefix: '' }];
+    const screen = withInsets(options.screen, options.insets);
+    const turns = [{ side: mine, name: mine.name, screen, filePrefix: '' }];
     if (options.ab) {
       const other = await this.sideFor(options.ab === true ? 'origin/main' : options.ab);
-      turns.unshift({ side: other, name: other.name, screen: options.screen, filePrefix: 'main-' });
+      turns.unshift({ side: other, name: other.name, screen, filePrefix: 'main-' });
     }
     return turns;
   }

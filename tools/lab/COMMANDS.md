@@ -918,6 +918,9 @@ Options every command run on a page takes:
 - `--screen WxH[@ratio]`: the page put on a screen of that size in css px and pixel ratio once it has booted (`1280x720@3`:
   a 4K screen at 300%), as a window moved onto another monitor is: the game fits its canvas to it on the next frame
   (1920x1080 at 1 by default);
+- `--insets left,top,right,bottom` (with `--screen` or `--screens`): the screen's safe-area insets in css px, as a
+  phone's camera cutout gives them to the page's `env(safe-area-inset-*)` (DevTools' `setSafeAreaInsetsOverride`):
+  `ui --states hudTouch --screen 832x384@2.8125 --insets 34,0,0,0` is the owner's S25 Edge held sideways;
 - `--screens WxH[@ratio],WxH[@ratio]`: this tree on two screens, one after the other, compared as `--ab` compares two
   commits: the lines that differ, and the pictures pixel by pixel (both 3840x2160 for a 4K screen at 100% and 300%);
 - `--ab[=ref]`: also on another commit (`origin/main` by default), its results beside this tree's, ending with the

@@ -234,6 +234,17 @@ async function screenOf(page, screen) {
     deviceScaleFactor: screen.ratio,
     mobile: false,
   });
+  if (screen.insets) await insetsOf(devtools, screen.insets);
+}
+
+/** The screen's safe-area insets (css px) as the browser emulates a phone's camera cutout: what the page's
+ *  `env(safe-area-inset-*)` reads. */
+async function insetsOf(devtools, insets) {
+  try {
+    await devtools.send('Emulation.setSafeAreaInsetsOverride', { insets });
+  } catch (error) {
+    throw new Error(`lab: --insets: this browser can't emulate a screen's safe area (${error.message})`);
+  }
 }
 
 /**
