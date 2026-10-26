@@ -9,7 +9,7 @@ and every one show again with the columns gone. `--canary` plants each column 3 
 label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
-readyingHeroes,clicked,views,behindProps,logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch`, every one by default:
+readyingHeroes,clicked,views,behindProps,logLobby,skillTipsTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch,hudTouch,decisionTouch`, every one by default:
 the lobby, an item's tooltip, the stash given 60 items (more than its view shows, on most screens) and a weapon
 among them hovered by the mouse, those that fit its slot lit (`page/uiGlow.ts`: a short screen's rail turned to the
 gear first; pictured round the stash, its tooltip put away, at 400, 1000 and 1600 ms into the
@@ -68,7 +68,14 @@ tallest pictured; `--canary` makes each as tall as the window, which must be fou
 lines made them taller), the battle log with each skill on a key struck at the foe twice and its blows on the hero
 listed, then paused: a row for every line, within the window, over none of the HUD's named elements but the layers as
 wide as the screen, no row wider than the panel, its head on one line; and the same in touch mode, put in it by a finger's tap, where its lines must
-let a touch through: on a phone the panel first lay over the scores button under the pause button), each pictured
+let a touch through: on a phone the panel first lay over the scores button under the pause button), the run's HUD
+in touch mode (`page/uiTouch.ts`: the top corners' controls at the window's edges, the pause button and the minimap
+24 px in at the most, whatever the safe area's insets, and none of the corners' controls over another; on the owner's
+phone held sideways, its camera cutout's 34 px inset and a margin stood the pause button 44 px in, and the bars at 85;
+`--canary` moves the pause button 40 px in, which must be found), the choice after a wave in touch mode with a rare
+and a common in the bag (on a short screen, 520 px high or less, down to 30% of the window's height at the most; its
+buttons 28 px tall at least; over none of the corners' controls: on the owner's phone it reached 41.6% down, over the
+bars, on a 1024x700 touch screen it lay over them too, and an upright tablet's buttons were 26 px tall; `--canary` pads it twice over, which must be found), each pictured
 whole as a PNG of its own at the screen's pixels (`out/ui/<state>.png`), with every
 named element's box and every label's over the world as shares of the window. In every state, the cursor over each
 element the mouse can be over (shown, with an area, taking the pointer) must be the game's own (its art, from

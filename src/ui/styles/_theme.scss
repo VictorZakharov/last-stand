@@ -42,3 +42,10 @@ $outline: 0 1px 2px #000, 0 0 6px #000;
 @function ui($v) { @return calc(#{$v} * var(--ui, 1)); }
 @function hud($v) { @return calc(#{$v} * var(--hud, 1)); }
 @function touch($v) { @return calc(#{$v} * var(--touch, 1)); }
+
+// the touch HUD's top-left corner: its round buttons (pause, scores) at the screen's edge, the bars, buffs and
+// partners' frames beside them. No safe-area inset: a phone held sideways has its camera cutout in the middle of its
+// short side, and the inset (34 px on an S25 Edge) stood them that far in from the edge, the minimap's corner never
+// taking it
+$touch-edge: 10px;
+$touch-beside: calc(#{$touch-edge} + 54px * var(--touch, 1));
