@@ -733,9 +733,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   out 3 cm for a frame. From play: "ranger has a clothing bug, behind that right arm, in idle", "you should observe
   3-5sec of frames to see it moving unnaturally", "under left arm/hand too, but less": each point a hand or the bow
   reached was put round onto its far side, so as the idle swayed them points jumped by a hand's width, the coat on 224
-  of 300 frames, up to 11.2 cm; now none over 1 cm. The mage's robe jerks 1.7 to 2.5 cm on 8 frames at its top by the
-  waist, the same with the hands' push taken out (not yet looked into); the warrior's mail shows only with body
-  armour on, which the set-up doesn't give him.
+  of 300 frames, up to 11.2 cm; now none over 1 cm. The mage's robe jerked 1.7 to 2.5 cm on 8 frames by the waist at
+  its sides, a line down the cloth from a point inside the thigh's top put round onto the thigh once its deepest moved
+  a hair off that point (`Skirt.over`); now none over 1 cm. The warrior's mail shows only with body armour on, which
+  the set-up doesn't give him.
 - `held`: every held skill of the hero's class: in full in [`commands/held.md`](commands/held.md).
 - `draw`: every drawn shot of the hero's class drawn to full and held there as the player holds it (`page/draw.ts`,
   `--class ranger`), in the top-down view, over the shoulder and through the eyes (`--views`): the key held over an

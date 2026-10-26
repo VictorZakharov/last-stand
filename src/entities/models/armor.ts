@@ -593,10 +593,15 @@ export class Skirt {
     _sab.subVectors(b.b, b.a); _sn.subVectors(_sp, b.a);
     const A = _sd.dot(_sd), E = _sab.dot(_sab), F = _sab.dot(_sn);
     if (A < 1e-12 || E < 1e-12) return;
+    // (a line out of a point inside the leg is the push's to settle, however near its start the line goes deepest:
+    // the robe's waist lies inside the top of the thigh, and judged by where its line went deepest, a hair off that
+    // point the point below was put round onto the thigh, 2.5 cm a frame at idle)
+    const ui = Math.min(1, Math.max(0, F / E)), ri = b.ra + (b.rb - b.ra) * ui + extra;
+    if (_sn.lengthSq() - 2 * ui * F + ui * ui * E < ri * ri) return;
     const Cc = _sd.dot(_sn), Bb = _sd.dot(_sab), den = A * E - Bb * Bb;
     let sl = den > 1e-12 ? Math.min(1, Math.max(0, (Bb * F - Cc * E) / den)) : 0, t = (Bb * sl + F) / E;
     if (t < 0) { t = 0; sl = Math.min(1, Math.max(0, -Cc / A)); } else if (t > 1) { t = 1; sl = Math.min(1, Math.max(0, (Bb - Cc) / A)); }
-    // (a line out of a point inside the leg, or ending inside it, is the push's to settle)
+    // (a line ending inside it is the push's to settle too)
     if (sl <= 1e-3 || sl >= 1 - 1e-3) return;
     _sp.addScaledVector(_sd, sl); _sq.copy(b.a).addScaledVector(_sab, t);
     const rad = b.ra + (b.rb - b.ra) * t + extra, dn = _sn.subVectors(_sp, _sq), d = dn.length();
