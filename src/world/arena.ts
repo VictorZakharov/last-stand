@@ -122,6 +122,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
 
   return {
     get biome() { return biome; },
+    /** whether the hall of heroes is shown in the biomes' place (its stage has no props; `obstacles` stay the biome's) */
+    get hallShown() { return hallShown; },
     get obstacles() { return active.obstacles; },
     /** the breakable ones (`world/destructible.ts`) */
     get props() { return active.props; },

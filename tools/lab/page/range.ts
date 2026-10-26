@@ -20,7 +20,7 @@ import type { LowerGrip } from '../../../src/types';
 import { LegTrace, traceSpanOf } from './legTrace';
 import { bindKnown, holdFor, pressing, skillNamed } from './cast';
 import { TipMoves } from './tipMoves';
-import { CANARY_CAUGHT as WEAPON_CAUGHT, WeaponFloor, weaponCanary } from './weaponFloor';
+import { CANARY_CAUGHT as WEAPON_CAUGHT, EDGE_OFF_MOST, WeaponFloor, bladeCanary, weaponCanary } from './weaponFloor';
 import { BODY_CANARY_CAUGHT, WeaponBody, bodyCanary } from './weaponBody';
 import { WeaponOnFoe, foeCanary } from './weaponOnFoe';
 import { WeaponPath } from './weaponPath';
@@ -285,9 +285,13 @@ export interface RangeReport {
     armsIn?: string;
     /** a hand at the left thigh's middle, read as an arm in the legs (`caught ...` or `missed ...`) */
     armsInLegs?: string;
+    /** the weapon turned a quarter round its grip: how much further off the blow's line its blade read (degrees) */
+    bladeTurned?: number;
   };
   /** each scenario in which a two-hander was let go of by the other hand, as words */
   letGo: string[];
+  /** each scenario whose blow met the floor with the blade's flat or side, as words */
+  bladeAcross: string[];
   /** each scenario in which a forearm or a hand passed into a leg, as words */
   armsInLegs: string[];
 }
@@ -412,6 +416,7 @@ async function runScenario(
       report.canary = { caught, measured, weapon: weaponCanary(lab), body, wrist, pinned: atStops };
       report.canary.armsIn = armsInCanary(lab.joints);
       report.canary.armsInLegs = armsInLegsCanary(lab.joints);
+      report.canary.bladeTurned = bladeCanary(lab);
     }
     const { angles, found } = bodyBreaches(lab.joints, grippingSides(lab));
     if (found.length) run.framesPast++;
@@ -502,6 +507,7 @@ async function runScenario(
   if (onFoe) report.lines.push(`  ${onFoe.describe()}`);
   const nearFloor = scenario.legs.some((leg) => leg.cast) ? floor.describeNearest() : '';
   if (nearFloor) report.lines.push(`  ${nearFloor}`);
+  if (nearFloor && floor.bladeAcross()) report.bladeAcross.push(`${scenario.what}: ${nearFloor}`);
   const inBody = through.describe();
   if (inBody) report.lines.push(`  ${inBody}`);
   const pathLine = path?.describe();
@@ -624,7 +630,7 @@ export async function range(lab: Lab, options: RangeOptions): Promise<RangeRepor
   const every = RANGE_SCENARIOS.filter((name) => name !== 'cast' || options.skill);
   const asked = options.scenarios?.length ? options.scenarios : every;
   const records = new Map<string, AngleRecord>();
-  const report: RangeReport = { lines: [], moments: [], letGo: [], armsInLegs: [] };
+  const report: RangeReport = { lines: [], moments: [], letGo: [], armsInLegs: [], bladeAcross: [] };
   const listed: string[] = [];
   for (const scenario of SCENARIOS.filter((candidate) => asked.includes(candidate.name))) {
     await runScenario(lab, scenario, options, records, report, listed);
@@ -652,6 +658,12 @@ export async function range(lab: Lab, options: RangeOptions): Promise<RangeRepor
     if (report.canary.armsIn) report.lines.push(`canary, the right elbow in the chest: ${report.canary.armsIn}`);
     const inLegs = report.canary.armsInLegs;
     if (inLegs) report.lines.push(`canary, a hand in the left thigh: ${inLegs}`);
+    const turned = report.canary.bladeTurned;
+    if (turned !== undefined) {
+      const verdict = turned > EDGE_OFF_MOST ? 'caught' : 'MISSED';
+      const further = `${turned.toFixed(0)}° further`;
+      report.lines.push(`canary, the weapon turned a quarter round its grip: ${verdict} (${further})`);
+    }
     const pathAside = report.canary.pathAside;
     if (pathAside !== undefined) {
       report.lines.push(`canary, a point of the tip's path moved aside: ${pathAside ? 'caught' : 'MISSED'}`);
@@ -704,10 +716,19 @@ export function missedRangeCanary(report: RangeReport): string[] {
   const arm = armMissed ? ['range: the canary (the right elbow moved into the chest) was missed'] : [];
   const pathMissed = report.canary.pathAside === false;
   const path = pathMissed ? ["range: the canary (a point of the tip's path moved aside) was missed"] : [];
-  return [...missed, ...weapon, ...body, ...wrist, ...pinned, ...aside, ...path, ...arm, ...leg];
+  const turned = report.canary.bladeTurned;
+  const blade = turned !== undefined && turned <= EDGE_OFF_MOST
+    ? ['range: the canary (the weapon turned a quarter round its grip) was missed']
+    : [];
+  return [...missed, ...weapon, ...body, ...wrist, ...pinned, ...aside, ...path, ...arm, ...leg, ...blade];
 }
 
 /** Each scenario in which a two-hander was let go of, as a problem: nothing it runs flings the arms apart. */
 export function lettingGo(report: RangeReport): string[] {
   return report.letGo.map((line) => `range: ${line}`);
+}
+
+/** Each scenario whose blow met the floor flat or sideways, as a problem ("nobody hits like this"). */
+export function bladeAcross(report: RangeReport): string[] {
+  return report.bladeAcross.map((line) => `range: the blade met the floor off the blow's line: ${line}`);
 }

@@ -76,8 +76,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   shoulder or the flask in hand are counted apart, `LowerGrip.free`), and its worst moment pictured, and the weapon
   under the floor (`page/weaponFloor.ts`: every corner of the surface of what the main hand holds, on how many frames,
   the deepest and how far along the weapon; Thunder Crescent put an axe's or a maul's head into the floor to its
-  middle; in a cast, the weapon's nearest the floor and its blade's tilt off upright, the grip's flat against level:
-  "axe needs to strike with blade perpendicular to ground"), and an arm held at its stops (`page/armStrain.ts`:
+  middle; in a cast, the weapon's nearest the floor and its blade off the blow's line, the flat's normal against
+  his side's axis, so a blade lying flat or turned across the blow fails, its canary the grip turned a quarter:
+  "axe needs to strike with blade perpendicular to ground"; a prop's top counts as floor, `propTopAt`, so a blow
+  into a pillar or a stone is read where it stops on it; `--frames` lists each frame's weapon in the body or under
+  the floor), and an arm held at its stops (`page/armStrain.ts`:
   two or more of one arm's joints within 2° of an end of
   their ranges on the same frame, a gripping wrist by a gripping wrist's: the arm IK stops the forearm's turn and the
   wrist at their ends, so a pose asking more of an arm than it gives is held there, within every range; two-handed

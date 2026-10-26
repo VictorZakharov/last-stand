@@ -156,10 +156,10 @@ export async function feet(lab: Lab, command: FeetOptions): Promise<Report> {
  * reversals, the worst moments pictured; a canary it missed is a problem.
  */
 export async function range(lab: Lab, command: RangeOptions): Promise<Report> {
-  const { range: rangeRound, missedRangeCanary, lettingGo } = await import('./range');
+  const { range: rangeRound, missedRangeCanary, lettingGo, bladeAcross } = await import('./range');
   const report = await rangeRound(lab, command);
   // (an arm held at its stops is said, not failed, until the poses every hero is pinned in are fixed: #307)
-  const problems = [...missedRangeCanary(report), ...lettingGo(report)];
+  const problems = [...missedRangeCanary(report), ...lettingGo(report), ...bladeAcross(report)];
   return { text: report.lines.join('\n'), problems, moments: report.moments };
 }
 

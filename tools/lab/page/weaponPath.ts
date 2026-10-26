@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
+import { bladeOffLine } from './weaponFloor';
 
 /** a frame counts as fast from this speed of the tip (m a frame: 6 cm, 3.6 m/s) */
 const FAST = 0.06;
@@ -20,11 +21,13 @@ const MARK_RADIUS = 0.03;
 const CANARY_ASIDE = 0.3;
 const CANARY_CAUGHT = 0.2;
 
-/** A point of the path: where the tip was, its frame, and whether it moved fast to get there. */
+/** A point of the path: where the tip was, its frame, whether it moved fast to get there, and how far its blade was
+ *  off the blow's line (degrees, `bladeOffLine`). */
 interface PathPoint {
   at: THREE.Vector3;
   frame: string;
   fast: boolean;
+  blade: number;
 }
 
 /** How far the fast points stray from their straight line seen from above (m), at which frame, and over how many. */
@@ -54,7 +57,7 @@ export class WeaponPath {
     tip.getWorldPosition(_tip);
     const last = this.points.at(-1);
     const fast = last !== undefined && last.at.distanceTo(_tip) >= FAST;
-    this.points.push({ at: _tip.clone(), frame, fast });
+    this.points.push({ at: _tip.clone(), frame, fast, blade: bladeOffLine(lab) });
     return false;
   }
 
@@ -66,7 +69,17 @@ export class WeaponPath {
     if (!stray) return '';
     const most = `${(stray.most * 100).toFixed(1)} cm (frame ${stray.at})`;
     const fast = `its ${stray.fast} fast frames on the way down from its highest`;
-    return `the weapon's tip over ${fast}, seen from above, off a straight line by ${most}`;
+    return `the weapon's tip over ${fast}, seen from above, off a straight line by ${most}; ${this.describeBlade()}`;
+  }
+
+  /** How far the blade turned off the blow's line over the fast frames on the way down, as words: a blow leads
+   *  with its edge all the way, not turned onto it as it lands (turned at its end alone, the tip whipped 106 cm). */
+  private describeBlade(): string {
+    const fast = downFrom(this.points).filter((point) => point.fast);
+    const worst = fast.reduce((was: PathPoint | null, point) => (!was || point.blade > was.blade ? point : was), null);
+    if (!worst) return '';
+    const ends = `${fast[0].blade.toFixed(0)}° on the first, ${fast[fast.length - 1].blade.toFixed(0)}° on the last`;
+    return `its blade up to ${worst.blade.toFixed(0)}° off the blow's line on them (frame ${worst.frame}; ${ends})`;
   }
 
   /** The path drawn as a line with a mark every few frames, pictured from `views`, and taken out again. */

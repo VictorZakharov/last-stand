@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { groundHeight } from '../../../src/world/ground';
+import { propTopAt } from '../../../src/world/collision';
 
 /** under the floor by this much a part counts (m): a blow stopped on it rests its tip there */
 const UNDER_FROM = 0.02;
@@ -14,6 +15,10 @@ const UNDER_FROM = 0.02;
  *  over 2 m up, was still over the floor, and the canary was missed on every commit) */
 const CANARY_SINK = 2;
 export const CANARY_CAUGHT = 0.5;
+/** a blade met the floor with its flat or side past this far off the blow's line (degrees) */
+export const EDGE_OFF_MOST = 30;
+/** near the floor, for its blade's way to count: within this of it (m) */
+const NEAR_FLOOR = 0.1;
 
 /** A frame's deepest point of the weapon: how far under the floor (m), the frame, and how far along the weapon from
  *  the grip it is (m: less than 0, the pommel's side). */
@@ -25,6 +30,9 @@ interface Under {
 
 const _corner = new THREE.Vector3();
 const _flat = new THREE.Vector3();
+const _side = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
+const _quarter = new THREE.Quaternion();
 const _gripAt = new THREE.Vector3();
 const _gripWay = new THREE.Vector3();
 
@@ -34,7 +42,7 @@ export class WeaponFloor {
   private deepest: Under | null = null;
   /** the weapon's lowest point at its nearest the floor (under it, or how far over it as a negative depth) */
   private nearest: Under | null = null;
-  /** how far its blade was off upright then (degrees: 0, its edge to the floor; 90, lying flat on it) */
+  /** how far its blade was off the blow's line then (degrees: 0, its edge leading; 90, its flat) */
   private nearestTilt = 0;
   /** each frame it was under, as words */
   readonly listed: string[] = [];
@@ -47,7 +55,7 @@ export class WeaponFloor {
     const under = deepestUnder(lab, frame);
     if (under && (!this.nearest || under.depth > this.nearest.depth)) {
       this.nearest = under;
-      this.nearestTilt = bladeTilt(lab);
+      this.nearestTilt = bladeOffLine(lab);
     }
     if (!under || under.depth < UNDER_FROM) return;
     this.frames++;
@@ -61,12 +69,18 @@ export class WeaponFloor {
     return `the weapon under the floor on ${this.frames} frames, the deepest ${describeUnder(this.deepest)}`;
   }
 
+  /** Whether the blade met the floor flat or sideways (`EDGE_OFF_MOST` off the blow's line at its nearest): none
+   *  held, or never near it, is no fault. */
+  bladeAcross(): boolean {
+    return this.nearest !== null && this.nearest.depth > -NEAR_FLOOR && this.nearestTilt > EDGE_OFF_MOST;
+  }
+
   /** How near the floor the weapon's lowest point came, as words (a blow into the ground must reach it: Thunder
    *  Crescent's two-handed end, held where it was placed, stopped short of it unseen), or none if none was held. */
   describeNearest(): string {
     const nearest = this.nearest;
     if (!nearest) return '';
-    const tilt = `its blade ${this.nearestTilt.toFixed(0)}° off upright`;
+    const tilt = `its blade ${this.nearestTilt.toFixed(0)}° off the blow's line`;
     const over = { ...nearest, depth: -nearest.depth };
     const point = nearest.depth >= 0 ? describeUnder(nearest) : describeUnder(over, 'over it');
     return `the weapon nearest the floor ${point}, ${tilt}`;
@@ -85,14 +99,32 @@ export function weaponCanary(lab: Lab): number {
   return depth;
 }
 
-/** How far the blade in the main hand is off upright (degrees): its flat's normal, the grip's own x (the warrior's
- *  `FLAT_IN_GRIP`), against level. An axe driven into the ground bites it edge first, its flat upright (from play: "axe
- *  needs to strike with blade perpendicular to ground"). */
-function bladeTilt(lab: Lab): number {
+/** How far the blade in the main hand is off the line of a blow straight ahead of him (degrees): its flat's normal,
+ *  the grip's own x (the warrior's `FLAT_IN_GRIP`), against his own side. An axe driven down before him bites edge
+ *  first, its flat facing his sides (from play: "axe needs to strike with blade perpendicular to ground", "axe lands
+ *  oddly on the ground, it should perpendicular", "nobody hits like this"). Read against level alone, a flat facing
+ *  ahead of him with the haft near upright read as 1 to 6 degrees off: it met the floor and the dummy flat on. */
+export function bladeOffLine(lab: Lab): number {
   const grip = lab.model.tip?.parent;
   if (!grip) return 0;
+  grip.updateWorldMatrix(true, false);
   const normal = _flat.set(1, 0, 0).transformDirection(grip.matrixWorld);
-  return THREE.MathUtils.radToDeg(Math.asin(Math.min(1, Math.abs(normal.y))));
+  const side = _side.set(1, 0, 0).transformDirection(lab.model.root.matrixWorld);
+  return THREE.MathUtils.radToDeg(Math.acos(Math.min(1, Math.abs(normal.dot(side)))));
+}
+
+/** The canary: the weapon turned a quarter round its grip, read, and turned back (degrees: must read past
+ *  `EDGE_OFF_MOST` wherever the edge led). */
+export function bladeCanary(lab: Lab): number {
+  const grip = lab.model.tip?.parent;
+  if (!grip) return 0;
+  const was = grip.quaternion.clone();
+  const read = bladeOffLine(lab);
+  grip.quaternion.multiply(_quarter.setFromAxisAngle(_up, Math.PI / 2));
+  const turned = bladeOffLine(lab);
+  grip.quaternion.copy(was);
+  grip.updateWorldMatrix(true, true);
+  return Math.abs(turned - read);
 }
 
 /** A point under the floor as words: how deep, where along the weapon, and in which frame (`side`: over it, for a
@@ -119,7 +151,8 @@ function deepestUnder(lab: Lab, at: string): Under | null {
     const corners = mesh.geometry.attributes.position;
     for (let i = 0; i < corners.count; i++) {
       _corner.fromBufferAttribute(corners, i).applyMatrix4(mesh.matrixWorld);
-      const depth = groundHeight(_corner.x, _corner.z) - _corner.y;
+      // (a prop's top counts as floor: a blow into a pillar or a stone stops on it as on the ground)
+      const depth = Math.max(groundHeight(_corner.x, _corner.z), propTopAt(_corner.x, _corner.z)) - _corner.y;
       if (deepest && depth <= deepest.depth) continue;
       deepest = { depth, at, along: _corner.sub(_gripAt).dot(_gripWay) };
     }
