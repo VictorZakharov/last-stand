@@ -383,6 +383,8 @@ export class Skirt {
       idx.push(a, b, a + 1, a + 1, b, b + 1);
     }
     this.rest = new Float32Array(pos);
+    // (the lab's handle on it: tools/lab coat)
+    this.geo.name = 'skirt';
     this.geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     this.geo.setIndex(idx);

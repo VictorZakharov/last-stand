@@ -28,6 +28,8 @@ import { POSE_MOST, PoseCost } from './poseCost';
 import { armsInBody, armsInCanary, deepestArm, describeArmsIn, type ArmsInSeen } from './armsIn';
 import { armsInLegs, armsInLegsCanary, type ArmInLeg } from './armsInLegs';
 import type { EnemyId } from '../../../src/data/enemies';
+import type { BiomeId } from '../../../src/data/biomes';
+import { G } from '../../../src/state';
 import { ArmsPinned, describeStrain, pinnedCanary, type ArmLimits, type Ranges } from './armStrain';
 
 /**
@@ -242,8 +244,11 @@ export interface RangeOptions {
   /** a foe stood ahead of him for the `cast` scenario, by its kind, and how far ahead (m) */
   foe?: string;
   foeAt?: number;
+  /** the biome he stands in (the lobby's by default): the crypt's wall is stone, the forest's a thicket */
+  biome?: BiomeId;
   /** where every scenario stands him (x, z: `START` by default) and the way he faces (rad, 0 is +z): at the dais's
-   *  edge facing off it, the ground ahead lies lower than under his feet, as off a plinth in the hall of heroes */
+   *  edge facing off it, the ground ahead lies lower than under his feet, as off a plinth in the hall of heroes; by
+   *  the arena's wall facing out, a two-hander's blow comes down on it */
   at?: [number, number];
   facing?: number;
 }
@@ -397,6 +402,7 @@ async function runScenario(
 ): Promise<void> {
   const at = options.at ?? START;
   const fixture = { at, facing: options.facing ?? 0, nocked: Boolean(lab.player.cls.quiver), fresh: true };
+  if (options.biome && G.arena.biome !== options.biome) G.arena.setBiome(options.biome);
   await lab.setup({ ...fixture, gear: options.gear, weapon: options.weapon, tune: options.tune });
   const run: ScenarioRun = {
     frame: 0, framesPast: 0, grip: freshLetGo(), worstHere: PICTURE_FROM, moment: null, pinnedMoment: null,

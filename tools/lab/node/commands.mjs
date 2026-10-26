@@ -424,6 +424,7 @@ export const COMMANDS = {
         skill: options.skill,
         foe: options.foe,
         foeAt: options.ahead,
+        biome: options.biome,
         at: options.at,
         facing: options.facing,
         gear: options.gear,
@@ -1214,6 +1215,21 @@ export const COMMANDS = {
         canary: Boolean(options.canary),
       };
       return side.command('hall', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
+  coat: {
+    each(side, options) {
+      const command = {
+        gear: options.gear,
+        weapon: options.weapon,
+        seconds: options.seconds,
+        frames: Boolean(options.frames),
+        canary: Boolean(options.canary),
+      };
+      return side.command('coat', command);
     },
     textOf: asText,
     problemsOf: problemsIn,

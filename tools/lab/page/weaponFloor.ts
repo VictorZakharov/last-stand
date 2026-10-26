@@ -7,12 +7,39 @@ import * as THREE from 'three';
 import type { Lab } from './lab';
 import { groundHeight } from '../../../src/world/ground';
 import * as collision from '../../../src/world/collision';
+import { G } from '../../../src/state';
 
 /** A prop's top over (x, z), where the commit measured has `propTopAt` (an A/B against one from before it: imported by
  *  name, the module failed to link there, and every `range --ab` with it) */
 function propTop(x: number, z: number): number {
   const read = (collision as { propTopAt?: (x: number, z: number) => number }).propTopAt;
   return read ? read(x, z) : -Infinity;
+}
+
+/** a ray down through the wall starts this high (m): over the crypt's walls and the trunks beyond the ring */
+const WALL_RAY_FROM = 60;
+const _rayFrom = new THREE.Vector3();
+const _rayTo = new THREE.Vector3();
+const _wallHit = { point: new THREE.Vector3(), normal: new THREE.Vector3(), t: 0, stone: false };
+
+/** How far the point (x, y, z) is into the arena's wall (m; none, -Infinity), as the wall is drawn (`Wall.cast`):
+ *  the less of how far under its top (a ray straight down to it) and how far past its face (a ray out from the middle
+ *  at its height to it). Read by the lab itself, not the game's `wallTopAt`, so a commit with none reads a blow into
+ *  the wall as into it too. Under its top alone, a weapon's pommel at rest a few centimetres into the crypt's wall's
+ *  face read as 1.4 m in. */
+function wallDepth(x: number, y: number, z: number): number {
+  if (!G.arena || G.arena.hallShown) return -Infinity;
+  const wall = G.arena.wall;
+  _rayFrom.set(x, WALL_RAY_FROM, z);
+  _rayTo.set(x, y, z);
+  if (!wall.cast(_rayFrom, _rayTo, _wallHit)) return -Infinity;
+  const under = _wallHit.point.y - y;
+  const out = Math.hypot(x, z);
+  // (from just inside the nearest of it, at the point's height, out to the point)
+  const from = Math.max(0, wall.near - 1) / out;
+  _rayFrom.set(x * from, y, z * from);
+  if (!wall.cast(_rayFrom, _rayTo, _wallHit)) return under;
+  return Math.min(under, out - Math.hypot(_wallHit.point.x, _wallHit.point.z));
 }
 
 /** under the floor by this much a part counts (m): a blow stopped on it rests its tip there */
@@ -158,8 +185,10 @@ function deepestUnder(lab: Lab, at: string): Under | null {
     const corners = mesh.geometry.attributes.position;
     for (let i = 0; i < corners.count; i++) {
       _corner.fromBufferAttribute(corners, i).applyMatrix4(mesh.matrixWorld);
-      // (a prop's top counts as floor: a blow into a pillar or a stone stops on it as on the ground)
-      const depth = Math.max(groundHeight(_corner.x, _corner.z), propTop(_corner.x, _corner.z)) - _corner.y;
+      // (a prop's or the wall's top counts as floor: a blow into a pillar, a stone or the wall stops on it as on the
+      // ground)
+      const floor = Math.max(groundHeight(_corner.x, _corner.z), propTop(_corner.x, _corner.z));
+      const depth = Math.max(floor - _corner.y, wallDepth(_corner.x, _corner.y, _corner.z));
       if (deepest && depth <= deepest.depth) continue;
       deepest = { depth, at, along: _corner.sub(_gripAt).dot(_gripWay) };
     }

@@ -216,6 +216,12 @@ export const COMMANDS = {
       skill: { kind: 'text', usage: 'name', help: 'the cast scenario\'s skill: its key, its behaviour or its name' },
       foe: { kind: 'text', usage: 'kind', help: 'a foe of this kind stood ahead of him for the cast scenario (dummy)' },
       ahead: { kind: 'number', usage: 'm', help: 'with --foe, how far ahead it stands (1.8 by default)' },
+      biome: {
+        kind: 'choice',
+        choices: ['crypt', 'forest'],
+        usage: 'crypt|forest',
+        help: 'the biome he stands in (the lobby\'s by default): with --at, by its wall',
+      },
       at: SETUP_OPTIONS.at,
       facing: SETUP_OPTIONS.facing,
       gear: SETUP_OPTIONS.gear,
@@ -1446,6 +1452,17 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'plant a fault the measure must catch: the right shoulder turned for a frame after the showcase',
       },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  coat: {
+    help: 'the hero\'s skirts (the ranger\'s coat, the mage\'s robe, the warrior\'s mail) as he stands at idle, frame '
+      + 'by frame: every point of the cloth in its own space, and each jerk (its move a frame changing by over 1 cm)',
+    options: {
+      seconds: { kind: 'number', usage: 's', help: 'how long he stands (5 by default)' },
+      frames: { kind: 'switch', help: 'list the frames a point jerked, with where on the cloth' },
+      canary: { kind: 'switch', help: 'plant a fault the measure must catch: a point kicked out for a frame' },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
     },

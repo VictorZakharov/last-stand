@@ -79,7 +79,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   shoulder or the flask in hand are counted apart, `LowerGrip.free`), and its worst moment pictured, and the weapon
   under the floor (`page/weaponFloor.ts`: every corner of the surface of what the main hand holds, on how many frames,
   the deepest and how far along the weapon; Thunder Crescent put an axe's or a maul's head into the floor to its
-  middle; in a cast, the weapon's nearest the floor and its blade off the blow's line, the flat's normal against
+  middle; a prop's top counts as floor, and the arena's wall as drawn: how far into it, the less of under its top and
+  past its face, read by rays of the lab's own through `Wall.cast`, so a commit with no `wallTopAt` reads a blow into
+  the wall too; `--biome` and `--at`/`--facing` stand him by it: two-handed Power Strike went 2.6 m into the crypt's
+  wall, `--biome crypt --at 24.9,14.4 --facing 1.047`, and now holds on it; in a cast, the weapon's nearest the floor and its blade off the blow's line, the flat's normal against
   his side's axis, so a blade lying flat or turned across the blow fails, its canary the grip turned a quarter:
   "axe needs to strike with blade perpendicular to ground"; a prop's top counts as floor, `propTopAt`, so a blow
   into a pillar or a stone is read where it stops on it; `--frames` lists each frame's weapon in the body or under
@@ -723,6 +726,16 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the lobby is a sound left playing (`page/soundsLeft.ts`); its canary starts Void Lance's hum there and never stops
   it. From play: "if mage was attacking in hall of heroes, going back to lobby keeps the attack sound": the hall
   closed with his channel open, and its hum (3 tones) played on.
+- `coat`: the hero's skirts (`page/coat.ts`; `models/armor.ts` `Skirt`, found by its geometry's name, 'skirt', or a
+  commit from before by the ranger's mesh's, 'tunic hem') as he stands at idle, `--seconds` (5 by default): every
+  point of the cloth in its own space, hung from the hips, so his sway is taken out, and each jerk, its move a frame
+  changing by over 1 cm, with where on the cloth and the hand nearest; `--frames` lists them; the canary kicks a point
+  out 3 cm for a frame. From play: "ranger has a clothing bug, behind that right arm, in idle", "you should observe
+  3-5sec of frames to see it moving unnaturally", "under left arm/hand too, but less": each point a hand or the bow
+  reached was put round onto its far side, so as the idle swayed them points jumped by a hand's width, the coat on 224
+  of 300 frames, up to 11.2 cm; now none over 1 cm. The mage's robe jerks 1.7 to 2.5 cm on 8 frames at its top by the
+  waist, the same with the hands' push taken out (not yet looked into); the warrior's mail shows only with body
+  armour on, which the set-up doesn't give him.
 - `held`: every held skill of the hero's class: in full in [`commands/held.md`](commands/held.md).
 - `draw`: every drawn shot of the hero's class drawn to full and held there as the player holds it (`page/draw.ts`,
   `--class ranger`), in the top-down view, over the shoulder and through the eyes (`--views`): the key held over an
