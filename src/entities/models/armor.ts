@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { taperTube, twist } from './shapes';
 import { part, joint } from './rig';
-import { clamp, lerp } from '../../util';
+import { clamp, lerp, smooth } from '../../util';
 
 let detail = 1;
 /** The heroes' geometric detail, 1 = full (the quality preset's `heroDetail`): heroes built from now on
@@ -538,14 +538,12 @@ export class Skirt {
     const L2 = _sab.lengthSq(), u = L2 > 1e-9 ? Math.min(1, Math.max(0, _sq.subVectors(_sp, b.a).dot(_sab) / L2)) : 0;
     _sq.copy(b.a).addScaledVector(_sab, u);
     const rad = b.ra + (b.rb - b.ra) * u + extra, dn = _sn.subVectors(_sp, _sq), d = dn.length();
-    // (a hand lying on the cloth also holds in what lies just outside it, within the points' spacing: its fingers are thinner
-    // than that, and the cloth's triangles crossed them with no point inside)
-    if (d >= rad + (inward ? HAND_REACH : 0)) return;
-    // (the way out preferred: from the skirt's middle and up for a leg, towards it for a hand; across the limb)
-    _so.set(_sp.x, 0, _sp.z).normalize(); if (inward) _so.negate(); else _so.y += 0.6;
+    if (inward) { this.behind(P, j, dn, rad, L2); return; }
+    if (d >= rad) return;
+    // (the way out preferred: from the skirt's middle and up; across the limb)
+    _so.set(_sp.x, 0, _sp.z).normalize(); _so.y += 0.6;
     if (L2 > 1e-9) _so.addScaledVector(_sab, -_so.dot(_sab) / L2);
-    if (d >= rad && dn.dot(_so) >= 0) return;
-    if (!inward && _so.lengthSq() > 1e-12) {
+    if (_so.lengthSq() > 1e-12) {
       // (along that way to where it leaves the limb: the distance to the axis grows no faster than the step)
       _so.normalize();
       for (let it = 0, g = rad - d; it < 8 && g > 0; it++) {
@@ -560,6 +558,27 @@ export class Skirt {
     if (dn.lengthSq() < 1e-12) return;
     _sp.copy(_sq).addScaledVector(dn.normalize(), rad);
     P[j * 3] = _sp.x; P[j * 3 + 1] = _sp.y; P[j * 3 + 2] = _sp.z;
+  }
+
+  /** Point `j` (at `_sp`, `dn` from the nearest point on a limb's axis, `rad` its radius there, `L2` its axis's length
+   *  squared in `_sab`) held in behind a limb lying on the cloth from outside (a hand, a bow): moved straight in, towards
+   *  the skirt's middle across the limb, until it lies behind the limb's surface there, as much as the limb overlaps it
+   *  seen from outside, and eased to nothing over `HAND_REACH` past the limb's side. A hanging hand's sway brought points
+   *  in and out of its reach, and each put round onto its far side jumped by the hand's width: the ranger's coat jumped up
+   *  to 11 cm a frame behind his hands as he stood, "moving unnaturally". */
+  private behind(P: Float32Array, j: number, dn: THREE.Vector3, rad: number, L2: number): void {
+    _so.set(-_sp.x, 0, -_sp.z);
+    if (L2 > 1e-9) _so.addScaledVector(_sab, -_so.dot(_sab) / L2);
+    if (_so.lengthSq() < 1e-12) return;
+    _so.normalize();
+    // (how far behind the axis it lies, and how far to the side of the way in)
+    const back = dn.dot(_so), side = Math.sqrt(Math.max(0, dn.lengthSq() - back * back));
+    if (side >= rad + HAND_REACH) return;
+    const depth = side < rad ? Math.sqrt(rad * rad - side * side) : 0;
+    const k = side <= rad ? 1 : 1 - smooth((side - rad) / HAND_REACH);
+    const need = (depth - back) * k;
+    if (need <= 0) return;
+    P[j * 3] += _so.x * need; P[j * 3 + 1] += _so.y * need; P[j * 3 + 2] += _so.z * need;
   }
 
   /** The cloth from point `i` down to point `j` (`len` apart) kept out of leg `b` too (`extra` further): where it passes through
