@@ -15,7 +15,7 @@ import { clearEffects } from '../fx/effects';
 import { flash, release, type LightSlot } from '../fx/lights';
 import { particles } from '../fx/particles';
 import { stageCamera, type Shot } from '../core/renderer';
-import { angleDamp } from '../util';
+import { TAU } from '../util';
 import { groundHeight } from '../world/ground';
 import { hallSpot } from '../world/heroHall';
 import { heroDetail } from '../entities/models/armor';
@@ -34,8 +34,10 @@ const KEY = { color: 0xffd2a0, intensity: 12, distance: 3.4, ahead: 1.4, side: 0
 /** the most light a highlight on a hero reflects (`Player.shine`): near, the key's glint on steel bloomed */
 const SHINE = 0.55;
 const RIM = { color: 0x8fb4ff, intensity: 5, distance: 6, behind: 1.3, side: -0.8, up: 1.95 };
-/** how fast a hero turns to his showcase's spot and back (`angleDamp`'s rate) */
-const TURN = 9;
+/** how fast a hero turns to his showcase's spot and back: a critically damped spring's rate (1/s), so a turn speeds up
+ *  from rest and settles (eased in a frame by the angle alone, he set off at full speed: turning back to the camera
+ *  after Power Strike, the axe's tip went from still to 11 cm a frame) */
+const TURN = 7;
 /** a drag along the row (ui/heroSelect.ts): how far past either end it may pull the camera (heroes), and how fast the
  *  camera follows it (`stageCamera`'s glide: about a frame and a half behind the finger) */
 const DRAG = { over: 0.35, glide: 24 };
@@ -51,8 +53,9 @@ export interface HallHero {
   due: number;
   /** game time he last showed off */
   shown: number;
-  /** the way he turns to face (the camera, or his showcase's spot) */
+  /** the way he turns to face (the camera, or his showcase's spot), and how fast he's turning (rad/s) */
   facing: number;
+  spin: number;
   /** a showcase under way: the skill's spot and when it fires (game time), and when he faces the camera again; a
    *  channel's, when it's let go */
   cast: { target: THREE.Vector3; fireAt: number; doneAt: number; drawn: boolean; endAt?: number } | null;
@@ -110,7 +113,7 @@ export function openHall(focusId: string, cut = false): void {
     player.reset();
     player.shine = SHINE;
     place(player, at, ROW.facing);
-    return { id, profile, player, due: Infinity, shown: -Infinity, facing: ROW.facing, cast: null };
+    return { id, profile, player, due: Infinity, shown: -Infinity, facing: ROW.facing, spin: 0, cast: null };
   });
   opened = G.time;
   lights = [flash({ ...KEY, life: 1, hold: Infinity }), flash({ ...RIM, life: 1, hold: Infinity })];
@@ -229,7 +232,7 @@ export function updateHall(dt: number): void {
     if (t >= h.due) showOff(h, t);
     stepCast(h, t);
     const r = h.player.remote;
-    r.f = angleDamp(r.f, h.facing, TURN, dt);
+    turnTo(h, dt);
     r.ax = r.x + Math.sin(r.f) * 4; r.az = r.z + Math.cos(r.f) * 4;
     h.player.update(dt);
   }
@@ -238,6 +241,14 @@ export function updateHall(dt: number): void {
   key.light.position.set(at.x + KEY.side, at.y + KEY.up, at.z + KEY.ahead);
   rim.light.position.set(at.x + RIM.side, at.y + RIM.up, at.z - RIM.behind);
   stageCamera(dragged === null ? shotAlong(focus, t) : shotAlong(dragged, t, DRAG.glide));
+}
+
+/** Hero `h` turned towards the way he faces, by a critically damped spring (`TURN`). */
+function turnTo(h: HallHero, dt: number): void {
+  const r = h.player.remote;
+  const off = ((h.facing - r.f + Math.PI) % TAU + TAU) % TAU - Math.PI;
+  h.spin += (TURN * TURN * off - 2 * TURN * h.spin) * dt;
+  r.f += h.spin * dt;
 }
 
 /** Hero `h` begins his showcase: the cast reported as his game would report it (a drawn shot drawn to full). */

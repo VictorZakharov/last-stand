@@ -74,16 +74,13 @@ const RUN_TWO_POLE = new THREE.Vector3(-1, -1, -0.2);
  *  from the forearm, `GRIP`), the left hand let go of it and hanging. (Held before him in both hands at rest and
  *  walking, it was too heavy to carry so, #225; the fist before the shoulder bent the wrist back 60 degrees, and
  *  turned to lay the blade's flat on it, 84 sideways: a fist holds a flat along its palm.) Shouldered once he hasn't
- *  fought for `SHOULDER_AFTER` s, lifted onto it over about half a second (`SHOULDER_RATE`); any move but a drink takes
- *  it off at once, the move's own fade bringing it down */
+ *  fought for `SHOULDER_AFTER` s, lifted onto it over `SHOULDER_LIFT` s, eased in and out (damped towards it, the lift
+ *  set off at full speed: the axe's tip from still to 11 cm a frame); any move but a drink takes it off at once, the
+ *  move's own fade bringing it down */
 const SHOULDER_AT = new THREE.Vector3(-0.22, 0.14, 0.3), SHOULDER_DIR = new THREE.Vector3(0.06, 0.62, -0.78).normalize();
-const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHOULDER_RATE = 6;
-/** a two-hander's way back to its guard out of a move, faded by the weapon (`backOut`), in the chest's frame: the grip,
- *  the weapon's turn (its way and its flat's) and the elbow as drawn last frame, where the way back left from, and
- *  where the pose holds them now */
-const DRAWN_AT = new THREE.Vector3(), DRAWN_TURN = new THREE.Quaternion(), DRAWN_POLE = new THREE.Vector3(0, -1, 0);
-const BACK_AT = new THREE.Vector3(), BACK_TURN = new THREE.Quaternion(), BACK_POLE = new THREE.Vector3();
-const GUARD_AT = new THREE.Vector3(), GUARD_TURN = new THREE.Quaternion(), GUARD_POLE = new THREE.Vector3();
+const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHOULDER_LIFT = 0.6;
+/** a move begun from the shoulder carry fades in over this long (s) */
+const OFF_SHOULDER = 0.3;
 const _backQ = new THREE.Quaternion(), _backDir = new THREE.Vector3(), _backFlat = new THREE.Vector3();
 const _backPole = new THREE.Vector3();
 /** Through the eyes (tuned live in a dev build, `--tune warriorEyes.shoulder=...`): the right arm's shoulder in the
@@ -171,8 +168,9 @@ function spinRest(_w: Weapon, on: THREE.Vector3, way: THREE.Vector3, flat: THREE
 const _fw = [0, 1, 2, 3, 4, 5].map(() => new THREE.Vector3()), _fwq = new THREE.Quaternion();
 /** a held swing's fit blended back to the arm as posed (`fitHeld`): the elbows, the target, the hand joint's turns */
 const _hb = [0, 1, 2].map(() => new THREE.Vector3()), _hbq = [new THREE.Quaternion(), new THREE.Quaternion()];
-/** how long the left hand takes to come onto the lower grip as a two-hander comes off the shoulder (s) */
-const TAKE_HOLD = 0.15;
+/** how long the left hand takes to come onto the lower grip as a two-hander comes off the shoulder (s): in 0.15 s,
+ *  reaching for a haft already on its way up to Power Strike's raise, it went 28 cm in a frame */
+const TAKE_HOLD = 0.35;
 /** the way a shouldered weapon's flat faces, in the chest's frame: sideways, as a straight fist holds it, palm in and
  *  thumb up (left to the turn the weapon was in before, the wrist stopped at its range with the blade upright) */
 const SHOULDER_FLAT = new THREE.Vector3(1, 0, 0);
@@ -366,8 +364,9 @@ const PS_DIP_MOST = -0.2;
 const PS_HIPS: Keys = [[0, 0], [0.25, -0.15], [0.86, -0.22], [0.95, 0.1], [1, 0.08]];
 /** a two-hander's Power Strike: the hands placed out before him as the blow lands (`holdAtFloor`) */
 const PS_LAND = tunable('warriorPsLand', { from: 0.95, to: 0.99 });
-/** a two-hander's way back to its guard turns the weapon up by the fade's weight to this power (`backToGuard`) */
-const BACK_EASE = tunable('warriorBackEase', { turn: 0.4 });
+/** a two-hander's way back to its guard keeps the weapon's turn as drawn longer than its grip's place: turned by
+ *  `1 - (1 - e)^late` of the fade's weight `e` (`backToGuard`) */
+const BACK_EASE = tunable('warriorBackEase', { late: 2.5 });
 /** and stopped by what it meets from the top of its swing down (`groundStop`) */
 const PS_FALL = [0.86, 0.88];
 
@@ -438,7 +437,6 @@ const EDGE_ON = tunable('warriorEdge', { k: 1 });
  *  no raise across the left hand let go of it overhead, and at 0.2 the shoulder went past its range as it charged. */
 const PS_ACROSS = 0.18;
 const _land = new THREE.Vector2();
-const _strikeOn: Struck = { x: 0, z: 0, r: 0, top: 0 };
 /** the overhead blows through the eyes: the weapon raised by `lift` of the cast, coming down from `from` to `to` (as
  *  their keys in models/warriorEyes.ts, landing where the skill fires), and how much it trembles as it's held up
  *  (Power Strike's charge) */
@@ -943,6 +941,15 @@ export function buildWarrior(): Model {
   let feet: readonly number[] | null = null;
   /** through the eyes, how far Power Strike's blow is still held after the cast (1 at the end, fading) */
   let chopTail = 0;
+  /** a two-hander's way back to its guard out of a move, faded by the weapon (`backOut`), in the chest's frame: the
+   *  grip, the weapon's turn (its way and its flat's) and the elbow as drawn last frame, where the way back left from,
+   *  and where the pose holds them now. Each model's own: shared by every warrior, the hall of heroes' copy went back
+   *  to its guard from where the lobby's hidden hero had drawn his weapon, and the axe's tip jumped 2.2 m in a frame */
+  const DRAWN_AT = new THREE.Vector3(), DRAWN_TURN = new THREE.Quaternion(), DRAWN_POLE = new THREE.Vector3(0, -1, 0);
+  const BACK_AT = new THREE.Vector3(), BACK_TURN = new THREE.Quaternion(), BACK_POLE = new THREE.Vector3();
+  const GUARD_AT = new THREE.Vector3(), GUARD_TURN = new THREE.Quaternion(), GUARD_POLE = new THREE.Vector3();
+  /** the foe a blow comes down on, kept through its end (`strikeOn`): each model's own too */
+  const _strikeOn: Struck = { x: 0, z: 0, r: 0, top: 0 };
   /** the share of a two-hander's Power Strike its blow stopped at on something high (1: none, `STUCK_LIFT`) */
   let chopStuck = 1;
   /** and a two-hander's way back from it to its guard (`TWO_POWERS`, `TWO_SMITES`) */
@@ -1112,7 +1119,7 @@ export function buildWarrior(): Model {
    *  as it would on the ground, along the line the blow came down. (Stopped by its tip alone, an axe's or a maul's
    *  head went into the floor to its middle; by its lowest point, turned each its own way, the haft's end behind
    *  the hands was pulled down to the floor as the blow landed, and the lower hand let go.) */
-  function groundStop(k: number, landed: boolean): number {
+  function groundStop(k: number, landed: boolean, downK = k): number {
     const at = tip.getWorldPosition(_gs1), sh = j.shoulderR.getWorldPosition(_gs2);
     const dx = at.x - sh.x, dz = at.z - sh.z, out = Math.hypot(dx, dz);
     if (out < 1e-3) return 0;
@@ -1137,8 +1144,9 @@ export function buildWarrior(): Model {
     // lifts what's ahead of the shoulder)
     const parent = j.shoulderR.parent!.getWorldQuaternion(_gsq).invert();
     _gs3.set(-dz / out, 0, dx / out).applyQuaternion(parent);
-    j.shoulderR.quaternion.premultiply(_gsq.setFromAxisAngle(_gs3, turn * k));
-    return turn * k;
+    const by = turn < 0 ? downK : k;
+    j.shoulderR.quaternion.premultiply(_gsq.setFromAxisAngle(_gs3, turn * by));
+    return turn * by;
   }
 
   /** The least turn about the level line through the shoulder `sh` across the way (`wx`, `wz`) that leaves every
@@ -1209,7 +1217,11 @@ export function buildWarrior(): Model {
   let flaskOut = 0, shieldHang = 0, drinkOn = 0;
   /** how far a two-hander is on the shoulder (`SHOULDER_AT`), and how long the left hand has left to take its lower
    *  grip as it comes off (s: `TAKE_HOLD`) */
-  let shouldered = 0, takingHold = 0;
+  let shouldered = 0, shoulderT = 0, takingHold = 0;
+  /** how far the left hand is still off a two-hander's lower grip for the shoulder carry: up with the carry, down over
+   *  `TAKE_HOLD` once it's off (with the carry's own share, cut at once for a move, the hand came from hanging onto the
+   *  haft in a frame, 39 cm, as Power Strike began) */
+  let leftOff = 0;
   /** how long the left hand has left to come back onto a two-hander's lower grip off the flask (s: `TAKE_HOLD`) */
   let regrip = 0;
   /** a two-handed move placed by the weapon this frame, in the chest's frame: its grip, its way, its flat's and how far
@@ -1452,7 +1464,9 @@ export function buildWarrior(): Model {
   function backToGuard(e: number): void {
     _hw1.copy(GUARD_AT).lerp(BACK_AT, e);
     _hw1.y = THREE.MathUtils.lerp(GUARD_AT.y, BACK_AT.y, e * e);
-    _backQ.copy(GUARD_TURN).slerp(BACK_TURN, Math.pow(e, BACK_EASE.turn));
+    // (coming into the guard as the fade does: by the weight to a power, `e^0.4`, the weapon came into the guard at
+    // full speed and stopped there in a frame in the hall of heroes, its tip 15 cm a frame to none)
+    _backQ.copy(GUARD_TURN).slerp(BACK_TURN, 1 - Math.pow(1 - e, BACK_EASE.late));
     _backDir.set(0, 1, 0).applyQuaternion(_backQ);
     _backFlat.copy(FLAT_IN_GRIP).applyQuaternion(_backQ);
     _backPole.copy(GUARD_POLE).lerp(BACK_POLE, e);
@@ -1645,6 +1659,8 @@ export function buildWarrior(): Model {
     // how far a blow driven into the ground is stopped by it (groundStop), and its blade turned to the floor ahead
     // (aimAtFloor)
     let stop = 0, aimDown = 0, fall = 0, bladeUp = 0;
+    // (how far the floor's stop turns the weapon down onto it, where that's less than its lift's share: `stop`)
+    let settle = -1;
     // and how far it owns one leg (a step in, a lunge) while the other stands: standing only, moving the IK steps
     let ownL = 0, ownR = 0;
     const still = 1 - Math.min(1, move * 4);
@@ -1678,7 +1694,9 @@ export function buildWarrior(): Model {
     // two-hander round with it at 19 m/s)
     // (the charge's legs run on through a cut between moves both over them: a skill cast as it runs, begun or ended)
     const charged = raw?.name === 'charge' || raw?.under?.name === 'charge', legsFade = !(charged && lastCharged);
-    if (began) fade.cut(chain && raw.name === 'swing' ? 0.08 : 0.14, legsFade);
+    // (a move begun from the shoulder carry, `shouldered` still last frame's, fades in slower: in 0.14 s Power Strike
+    // flicked the axe off the shoulder into its raise, its tip's way turning 37 cm in a frame)
+    if (began) fade.cut(chain && raw.name === 'swing' ? 0.08 : shouldered > 0.5 ? OFF_SHOULDER : 0.14, legsFade);
     else if (ended && !inTail) { fade.cut(lastName === 'spin' ? SPIN_BACK : 0.3, legsFade); if (!fp && two) backFrom(); }
     if (raw) backOut = false;
     // (through the eyes a move goes on from where the last ended, its hands seen the whole way; a dual wielder's cut,
@@ -1712,7 +1730,8 @@ export function buildWarrior(): Model {
     const shoulderIt = two && !fp && (!a || a.name === 'drink') && t - fightT > SHOULDER_AFTER;
     if (!shoulderIt && shouldered > 0.5) takingHold = TAKE_HOLD;
     else takingHold = Math.max(0, takingHold - dt);
-    shouldered = shoulderIt ? damp(shouldered, 1, SHOULDER_RATE, dt) : 0;
+    shoulderT = shoulderIt ? Math.min(1, shoulderT + dt / SHOULDER_LIFT) : 0;
+    shouldered = smooth(shoulderT);
     lastName = raw?.name ?? ''; lastK = raw?.t ?? 1; lastCharged = charged;
     armsFromBelow(fp && st.dead < 0, two);
     if (fp && two) FP_TWO_POLE.fromArray(EYES.pole);
@@ -1974,6 +1993,10 @@ export function buildWarrior(): Model {
         // (and stopped by what it meets on the way down, a pillar's face, a stone, a foe's top, from the top of the
         // swing: stopped only once it had come down, it went through a pillar and was pulled back out of it)
         if (two && held) stop = Math.max(stop, w * ramp(k, PS_FALL[0], PS_FALL[1]));
+        // (but turned down onto the floor only as the blow lands: by the fall's share, the first frame of the landing
+        // turned the arm 65 degrees down about the shoulder onto the stage under a plinth in the hall of heroes, and
+        // the axe's tip jumped 2 m for a frame)
+        if (two && held) settle = end;
         // (a one-hander's turned down onto the floor about the shoulder as it lands, and stopped by it)
         if (!two && held) { stop = w * ramp(k, PS_LAND.from, PS_LAND.to); fall = 1; }
       } else if (a.name === 'smite' && !fp) {
@@ -2151,6 +2174,8 @@ export function buildWarrior(): Model {
     // a two-hander at a run, carried at high port
     // (out of a fight on the shoulder, at a run too; in one, at high port)
     const onShoulder = shouldered;
+    leftOff = shouldered > 0 ? Math.max(shouldered, leftOff) : Math.max(0, leftOff - dt / TAKE_HOLD);
+    const leftAway = shouldered > 0 ? shouldered : smooth(leftOff);
     if (!fp && two && !a && runK > 0 && st.dead < 0) holdInChest(ARM_R, RUN_TWO_AT, RUN_TWO_DIR, RUN_TWO_POLE, runK * (1 - onShoulder));
     if (!fp && two && onShoulder > 0 && st.dead < 0) holdInChest(ARM_R, SHOULDER_AT, SHOULDER_DIR, SHOULDER_POLE, onShoulder, SHOULDER_FLAT);
     // (a two-handed move placed by the weapon)
@@ -2358,7 +2383,7 @@ export function buildWarrior(): Model {
     if (fp && st.dead < 0 && held && (!two || posed)) wristInGrip(false, gripTurn(handR, grip, _vr, slantR));
     if (held) seat(handR, grip, held.r, slantR);
     if (stop > 0 && held && st.dead < 0) {
-      const lifted = groundStop(stop, fall >= 1);
+      const lifted = groundStop(stop, fall >= 1, settle < 0 ? stop : settle);
       // (lifted off something standing high, a pillar's face, a stone, a foe's top, before the blow reached the floor
       // ahead: the swing stops there, as a blow does on what it hits, and holds that moment's pose. Lifted about the
       // shoulder alone from a pillar close before him, the shoulder went 83 to 111 degrees past its raise)
@@ -2382,8 +2407,8 @@ export function buildWarrior(): Model {
       // and the arm eases back from the grip after; and it lets go as the right hand lifts the weapon onto the
       // shoulder, easing back to hang on the way. Eased back while still holding, the hand slid off the grip and the
       // wrist bent 52 degrees; held halfway to the shoulder, the lower grip's turn bent it 30)
-      let k = (1 - ramp(out, 0.07, 0.2)) * Math.min(1, 2 * (1 - drinkOn)) * (1 - onShoulder);
-      const reach = out < 0.07 && drinkOn < 0.5 && onShoulder === 0;
+      let k = (1 - ramp(out, 0.07, 0.2)) * Math.min(1, 2 * (1 - drinkOn)) * (1 - leftAway);
+      const reach = out < 0.07 && drinkOn < 0.5 && leftAway === 0;
       if (k > 0) {
         _sq.copy(j.shoulderL.quaternion); _eq.copy(j.elbowL.quaternion); _wq.copy(j.handL.quaternion);
         // the wrist where the fist closes round the lower grip (a hand stays on its wrist), the hand's length along
