@@ -130,7 +130,9 @@ export function showDecision(): void {
     if (!r.bag.length) bag.innerHTML = '<span class="chip" style="color:#9a8f7c">No spoils yet</span>';
     // what they are stays hidden until banked: the gamble is on the counts alone
     else bag.innerHTML = rarityChips(r.bag) + '<span class="chip sealed">revealed when you bank</span>';
+    // with nothing in the bag there's nothing to lose
     $('.dc-risk', box).innerHTML = `If you fall, <b>${r.bag.length} unbanked item${r.bag.length === 1 ? '' : 's'}</b> will be lost forever.`;
+    $('.dc-risk', box).classList.toggle('hidden', !r.bag.length);
     const next = r.wave + 1;
     // co-op: the next wave waits for everyone staying
     const waiting = waitingForParty();
