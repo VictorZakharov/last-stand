@@ -43,8 +43,8 @@ import { closeHeroes, heroesCanaryCaught, heroesClosed, heroesShown, openHeroes 
 import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouch, openHudTouch, TOUCH_CANARIES }
   from './uiTouch';
 import {
-  closeLitTouch, closeSheetTouch, litTouchShown, openLitTouch, openSheetTouch, plantLitCanary, SHEET_CANARIES,
-  sheetTouchShown,
+  closeLitTouch, closeSheetTouch, litTouchPictures, litTouchShown, openLitTouch, openSheetTouch, plantLitCanary,
+  SHEET_CANARIES, sheetTouchShown,
 } from './uiSheet';
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
@@ -886,7 +886,9 @@ const STEPS: Record<UiState, Steps> = {
   logLobby: { open: openLogLobby, close: closeLog, check: logShown },
   skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
   sheetTouch: { open: openSheetTouch, close: closeSheetTouch, check: sheetTouchShown },
-  litTouch: { open: openLitTouch, close: closeLitTouch, check: litTouchShown },
+  litTouch: {
+    open: openLitTouch, close: closeLitTouch, check: litTouchShown, pictures: async () => litTouchPictures(),
+  },
   run: { open: () => undefined, close: () => undefined },
   // (shown while Tab is held: pictured with it down, let go after)
   scores: { open: (lab) => lab.step(SCORES_FRAMES, () => TAB), close: (lab) => lab.step(1), held: TAB },
@@ -980,10 +982,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     if (!caught) missed.push(`${state}: the canary's ${what} went unseen`);
   }
   if (state === 'sheetTouch' || state === 'litTouch') {
-    const { name, what } = SHEET_CANARIES[state];
-    const caught = found.problems.some((problem) => problem.includes(name));
-    lines.push(`  canary: ${what} ${caught ? 'caught' : 'went unseen'}`);
-    if (!caught) missed.push(`${state}: the canary's ${what} went unseen`);
+    for (const { name, what } of SHEET_CANARIES[state]) {
+      const caught = found.problems.some((problem) => problem.includes(name));
+      lines.push(`  canary: ${what} ${caught ? 'caught' : 'went unseen'}`);
+      if (!caught) missed.push(`${state}: the canary's ${what} went unseen`);
+    }
   }
   if (state.startsWith('skillTips')) {
     const past = found.problems.some((problem) => problem.includes('reaches past the window'));

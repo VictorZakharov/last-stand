@@ -5,16 +5,17 @@
 //   them. Every button must be within the window and within the sheet as it shows, a finger's height.
 // - litTouch: a worn item pressed long lights the stash items that fit its slot. The light went out as the finger
 //   lifted; it must stay until the next tap: on a lit item (its sheet opened and closed again, still lit), or
-//   elsewhere (put out).
-// A canary each: the cards kept from scrolling (the buttons pushed out of the sheet), and the light put out as the
-// finger lifts.
+//   elsewhere (put out). A long press lights alone: on a stash item it opened the item's sheet too, on the owner's
+//   phone, where a short tap opens it.
+// A canary each: the cards kept from scrolling (the buttons pushed out of the sheet), and the light put out and the
+// sheet opened as the finger lifts.
 import { G } from '../../../src/state';
 import { makeItem } from '../../../src/loot/items';
 import * as menus from '../../../src/ui/menus';
 import { hideTooltip } from '../../../src/ui/tooltip';
 import type { Item, Slot } from '../../../src/types';
 import { middleOf, realWait } from './lab';
-import type { Lab } from './lab';
+import type { Lab, Pictured } from './lab';
 
 /** What a check found: lines for its report, and its problems. */
 export interface SheetFound {
@@ -38,8 +39,11 @@ const STASH_SLOTS: Slot[] = ['weapon', 'chest', 'head', 'weapon', 'ring', 'hands
 const PRESSED: Slot = 'weapon';
 /** what the canaries plant, and the problem each must raise */
 export const SHEET_CANARIES = {
-  sheetTouch: { name: 'lies out of', what: 'the cards kept from scrolling' },
-  litTouch: { name: 'went out', what: 'the light put out as the finger lifts' },
+  sheetTouch: [{ name: 'lies out of', what: 'the cards kept from scrolling' }],
+  litTouch: [
+    { name: 'went out', what: 'the light put out as the finger lifts' },
+    { name: 'opened its card', what: 'the sheet opened as the finger lifts' },
+  ],
 };
 
 /** the hero's own stash and worn item, kept while the state's are shown */
@@ -243,14 +247,46 @@ export async function openLitTouch(lab: Lab): Promise<void> {
   await touchGear(lab);
   const worn = document.querySelector<HTMLElement>(`#equip .eslot[data-slot="${PRESSED}"]`);
   if (!worn) throw new Error('lab: ui: no worn weapon to press');
-  await lab.touchDown(middleOf(worn));
+  wornOpened = await pressLong(lab, worn, canary);
+  afterPress = lightLine(`${HELD_MS} ms after the finger lifted`);
+}
+
+/** the moments after a long press pictured, as the finger left them (a card opened over the stash, or none) */
+let pressPictures: Pictured[] = [];
+
+/** The moments after a long press `litTouch` pictured, given once. */
+export function litTouchPictures(): Pictured[] {
+  const pictures = pressPictures;
+  pressPictures = [];
+  return pictures;
+}
+
+/** whether the long press on the worn weapon opened its card (its sheet or its tooltip) */
+let wornOpened = false;
+
+/**
+ * `element` pressed long by a finger (`PRESS_MS`) and let go, and `HELD_MS` waited (with `canary`, the light put out
+ * and the sheet opened as the finger lifts); whether its card opened (its sheet or its tooltip), put away again.
+ */
+async function pressLong(lab: Lab, element: HTMLElement, canary: boolean, pictured?: string): Promise<boolean> {
+  const sheet = document.getElementById('item-sheet')!;
+  sheet.classList.add('hidden');
+  await lab.touchDown(middleOf(element));
   await realWait(PRESS_MS);
   await lab.touchUp();
-  if (canary) putOut();
+  if (canary) {
+    putOut();
+    sheet.classList.remove('hidden');
+  }
   await lab.step(TAP_FRAMES);
   await realWait(HELD_MS);
-  afterPress = lightLine(`${HELD_MS} ms after the finger lifted`);
-  document.getElementById('item-sheet')!.classList.add('hidden');
+  // (its sheet, or the tap's tooltip pinned in its place: shown when the sheet, which hides it, isn't)
+  const tooltip = document.getElementById('tooltip')!;
+  const opened = !sheet.classList.contains('hidden') || !tooltip.classList.contains('hidden');
+  if (pictured) pressPictures.push(await lab.screen(pictured));
+  sheet.classList.add('hidden');
+  hideTooltip();
+  return opened;
 }
 
 /**
@@ -261,8 +297,9 @@ export async function litTouchShown(_canary: boolean, lab: Lab): Promise<SheetFo
   const lines: string[] = [];
   const problems: string[] = [];
   const pressed = afterPress ?? lightLine('after the press');
-  lines.push(pressed.line);
+  lines.push(pressed.line, `  its card: ${wornOpened ? 'opened' : 'not opened'}`);
   if (!pressed.lit) problems.push('litTouch: the light went out as the finger lifted');
+  if (wornOpened) problems.push('litTouch: a long press on the worn weapon opened its card');
   if (!pressed.lit) return { lines, problems };
   const lit = document.querySelector<HTMLElement>(`#stash .sitem.match[data-slot="${PRESSED}"]`)!;
   await tap(lab, middleOf(lit));
@@ -282,6 +319,12 @@ export async function litTouchShown(_canary: boolean, lab: Lab): Promise<SheetFo
   const after = lightLine('a tap elsewhere');
   lines.push(after.line);
   if (litCount(PRESSED).lit > 0) problems.push('litTouch: the light stayed after a tap elsewhere');
+  const stashed = document.querySelector<HTMLElement>(`#stash .sitem[data-slot="${PRESSED}"]`)!;
+  const stashOpened = await pressLong(lab, stashed, false, 'a stash weapon pressed long');
+  const stashLit = lightLine('a stash weapon pressed long');
+  lines.push(stashLit.line, `  its card: ${stashOpened ? 'opened' : 'not opened'}`);
+  if (!stashLit.lit) problems.push('litTouch: a long press on a stash weapon lit nothing');
+  if (stashOpened) problems.push('litTouch: a long press on a stash weapon opened its card');
   return { lines, problems };
 }
 
