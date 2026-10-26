@@ -518,6 +518,7 @@ export function renderMenu(): void {
       const doUnequip = () => { unequip(p, slot); hideTooltip(); sfx.click(); changed(); };
       d.onclick = () => {
         if (!isTouch()) { doUnequip(); return; }
+        if (longPressClick()) return;
         openItemSheet(it, false, 'Unequip', p.stash.length < RUN.bagLimit ? doUnequip : null, () => { toss(discardEquipped(p, slot)); newIds.delete(it.id); sfx.salvage(); changed(); });
       };
       // (a long press is a context menu on Android: on touch it lights the slot's items, and unequips nothing)
@@ -552,6 +553,7 @@ export function renderMenu(): void {
     bindTooltip(d, () => ({ ...itemTooltip(it)(), foot: 'Right-click or drag to equip · Shift-click, or drag it onto the floor, to throw it there' }));
     const equip = () => { newIds.delete(it.id); equipFromStash(p, it.id); hideTooltip(); sfx.click(); changed(); };
     d.onclick = (e) => {
+      if (longPressClick()) return;
       if (isTouch()) { openItemSheet(it, true, 'Equip', equip, () => { newIds.delete(it.id); toss(discard(p, it.id)); sfx.salvage(); changed(); }); return; }
       if (!e.shiftKey) { equip(); return; }
       newIds.delete(it.id);
@@ -646,18 +648,35 @@ function pointAt(el: HTMLElement, slot: Slot): void {
   pending = setTimeout(() => focusSlot(slot), FOCUS_DELAY_MS);
 }
 
+/** whether the finger's last press on an item rested `FOCUS_DELAY_MS` (a long press: it lights, and opens no sheet) */
+let pressedLong = false;
+
 /** A finger down on `el`: the light of another slot put out, `el` lit at once and the others that fit `slot` once it
  *  has rested `FOCUS_DELAY_MS` (a long press). */
 function pressAt(el: HTMLElement, slot: Slot): void {
   if (focused !== slot) focusSlot(null);
-  pointAt(el, slot);
+  markFocal(el);
+  clearTimeout(pending);
+  pressedLong = false;
+  pending = setTimeout(() => {
+    pressedLong = true;
+    focusSlot(slot);
+  }, FOCUS_DELAY_MS);
 }
 
 /** The finger lifted from an item of `slot`: a long press's light stays till the next tap; a tap's never comes. */
 function liftFrom(slot: Slot): void {
-  if (focused === slot) return;
+  if (pressedLong) return;
   clearTimeout(pending);
-  markFocal(null);
+  if (focused !== slot) markFocal(null);
+}
+
+/** Whether a click on an item ends a long press, which lights its slot's items alone: the browser clicks after one
+ *  too (on a stash item, its sheet opened with the light). Its card, which the tap's tooltip pinned, is put away. */
+function longPressClick(): boolean {
+  if (!isTouch() || !pressedLong) return false;
+  hideTooltip();
+  return true;
 }
 
 // On touch the light stays once the finger lifts (it went out with it, a moment after it came): a tap on a lit item
