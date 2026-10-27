@@ -232,7 +232,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   const L = LOOKS[who], rng = mulberry(7);
   // (both styles' locks in the dense clump texture: thin strands of high contrast read as wood grain, and sparse cards
   // hanging apart read as a wig's fringe)
-  const hk = o.hair === 'loose' ? 2.4 : o.hair === 'mane' ? 2.8 : 2.1, hairCol = new THREE.Color().setRGB(L.hair[0] * hk, L.hair[1] * hk, L.hair[2] * hk, THREE.SRGBColorSpace);
+  const hk = o.hair === 'loose' ? 2.4 : o.hair === 'mane' ? 2.4 : 2.1, hairCol = new THREE.Color().setRGB(L.hair[0] * hk, L.hair[1] * hk, L.hair[2] * hk, THREE.SRGBColorSpace);
   const cards = kit.std({ color: hairCol, map: strandMap(true), alphaTest: 0.35, alphaToCoverage: true, side: THREE.DoubleSide, roughness: o.hair === 'loose' ? 0.72 : 0.62, vertexColors: true });
   const hair: THREE.Mesh[] = [];
   const skullC = toGroup(0, 128, -12);
@@ -668,22 +668,22 @@ function sweptLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
       az0 = (rng() - 0.5) * 1.7 * (mane ? 0.35 + 0.65 * rng() : 1); el0 = hairEl(az0) + 0.015;
       // (a mane's cross the middle to either side, as hair combed straight back does: each kept to its own side, the two
       // halves parted down the middle)
-      az1 = (mane ? s : Math.sign(az0) || s) * (Math.PI - 0.1 - 0.35 * Math.abs(az0) - 0.2 * rng()); el1 = -0.12 - rng() * 0.12 - fall * (0.2 + rng() * 0.12);
+      az1 = (mane ? s : Math.sign(az0) || s) * (Math.PI - 0.1 - 0.35 * Math.abs(az0) - 0.2 * rng()); el1 = -0.12 - rng() * 0.12 - fall * (0.08 + rng() * 0.08);
       top = 5 + rng() * 3 + fall * 9; w = 16 + rng() * 8;
     } else if (kind < 0.5) {
       // the temples, back round above the ears to behind them
       az0 = s * (0.85 + rng() * 0.6); el0 = hairEl(az0) + 0.015;
-      az1 = s * (2.05 + rng() * 0.45 + fall * 0.35); el1 = 0.02 + rng() * 0.2 - fall * (0.08 + rng() * 0.1);
+      az1 = s * (2.05 + rng() * 0.45 + fall * 0.35); el1 = 0.02 + rng() * 0.2;
       top = 4 + rng() * 3 + fall * 3; w = 14 + rng() * 7;
     } else if (kind < 0.75) {
       // the crown, behind the hairline, straight back over it to the nape
       az0 = (rng() - 0.5) * 1.4; el0 = hairEl(az0) + 0.15 + rng() * 0.45;
-      az1 = (mane ? s : Math.sign(az0) || s) * (Math.PI - 0.05 - 0.45 * rng()); el1 = -0.16 - rng() * 0.1 - fall * (0.2 + rng() * 0.12);
+      az1 = (mane ? s : Math.sign(az0) || s) * (Math.PI - 0.05 - 0.45 * rng()); el1 = -0.16 - rng() * 0.1 - fall * (0.08 + rng() * 0.08);
       top = 8 + rng() * 4 + fall * 10; w = 18 + rng() * 9;
     } else {
       // the back of the head, down to the nape (the deeper layers)
       az0 = s * (1.6 + rng() * 1.5); el0 = 0.4 + rng() * 0.55;
-      az1 = s * Math.min(Math.PI, Math.abs(az0) + rng() * 0.25); el1 = -0.2 - rng() * 0.1 - fall * (0.18 + rng() * 0.12);
+      az1 = s * Math.min(Math.PI, Math.abs(az0) + rng() * 0.25); el1 = -0.2 - rng() * 0.1 - fall * (0.06 + rng() * 0.08);
       top = 6 + rng() * 4 + fall * 4; w = 18 + rng() * 9;
     }
     pts.length = 0;
@@ -698,6 +698,7 @@ function sweptLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
       const lift = lerp(1, top + layer * 2.5, sm(0, 0.4, t)) * (1 - 0.65 * sm(0.75, 1, t)) + 1.5 * wave * Math.sin(ph * 1.3 + t * Math.PI * 2 * wave) * sm(0.25, 0.6, t) + (4 + 3 * rng()) * (1 + fall * 0.6) * sm(0.9, 1, t);
       pts.push(surface(az, el, lift));
     }
+    if (mane) hang(pts, skullC, ph);
     for (let k = 2; k <= N; k++) pushOut(pts[k], 1.5 + layer * 1.8);
     // (smoothed once: a point pushed out on its own would kink the lock)
     for (let k = 1; k < pts.length - 1; k++) pts[k].lerp(new V().addVectors(pts[k - 1], pts[k + 1]).multiplyScalar(0.5), 0.3);
@@ -713,6 +714,32 @@ function sweptLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
     const card = hairCard(pts, (t) => wm * (0.35 + 0.65 * sm(0, 0.1, t)) * (1 - 0.4 * t ** 2), skullC, lod(40, 12), (rng() - 0.5) * 0.6, shade, undefined, vAt);
     if (mane) massNormals(card, skullC);
     out.push(card);
+  }
+}
+
+/** where a long lock ends (mm, the head's frame: the chin is about -60): at the collar behind, give or take `HANG_SPREAD` */
+const HANG_END = -32, HANG_SPREAD = 24;
+
+/** A long lock past the back of the skull hanging by its weight (sdf-harness's `grow`): from where it turns under the
+ *  skull's widest, straight down to the collar, a little out from the head and waving across (along the scalp it curled
+ *  in under the skull and ended at the ear lobes in a bowl; laid to a point far down the neck, it fell to the shoulders). */
+function hang(pts: THREE.Vector3[], centre: THREE.Vector3, phase: number): void {
+  const d = new THREE.Vector3();
+  // (only behind the ears: a lock over the side of the head hanging straight down fell over the face)
+  const from = pts.findIndex((p, k) => k > 2 && d.subVectors(p, centre).normalize().y < -0.3 && d.z < -0.35);
+  const end = (HANG_END + HANG_SPREAD * Math.sin(phase * 3.7)) * HEAD_MM;
+  if (from < 0) {
+    // (a lock that stays on the side of the head is kept above the collar too)
+    for (const p of pts) if (p.y < end) p.y = end - (end - p.y) * 0.15;
+    return;
+  }
+  const base = pts[from].clone(), out = d.subVectors(base, centre).setY(0).normalize(), side = new THREE.Vector3(-out.z, 0, out.x);
+  const drop = Math.max(0.01, base.y - end), n = pts.length - 1 - from;
+  for (let k = from + 1; k < pts.length; k++) {
+    const t = (k - from) / n, fall = drop * t;
+    // (its end flicking out off the neck, as the sheet's ends curl)
+    const flick = drop * 0.35 * Math.max(0, t - 0.7) ** 2 / 0.09;
+    pts[k].copy(base).addScaledVector(out, fall * 0.18 + flick).addScaledVector(side, 0.008 * Math.sin(phase + t * 9)).setY(base.y - fall + flick * 0.4);
   }
 }
 
