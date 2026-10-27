@@ -536,13 +536,15 @@ export function buildMage(): Model {
     // base stance: staff held at the side, slightly forward
     idle(j, t, 1 - move * 0.6);
     // at rest: the weight on one leg, the other easy (the hips tipping and the shoulders answering them),
-    // shifting slowly from foot to foot, leaning a little on the staff; the free hand drifts and the head wanders
+    // shifting slowly from foot to foot, leaning a little on the staff; the free arm hangs and the head wanders
     if (!fp) {
       const amt = 1 - Math.min(1, move * 2), sway = Math.sin(t * 0.45) + 0.3 * Math.sin(t * 1.07 + 2), br = Math.sin(t * 1.8);
       j.body.position.x += 0.025 * sway * amt; j.hips.rotation.z += 0.055 * sway * amt; j.spine.rotation.z += -0.035 * sway * amt - 0.03 * amt; j.neck.rotation.z += -0.025 * sway * amt;
       j.hips.rotation.y += -0.12 * amt; j.chest.rotation.y += 0.08 * amt;
       j.neck.rotation.y += 0.12 * Math.sin(t * 0.31) * amt; j.neck.rotation.x += 0.04 * Math.sin(t * 0.53 + 1) * amt;
-      j.shoulderL.rotation.x += (-0.15 + 0.05 * Math.sin(t * 0.6)) * amt; j.elbowL.rotation.x += -0.35 * amt;
+      // (the free arm hanging at his side as the warrior's and the ranger's do, drifting a little: held out before him with
+      // the elbow bent, it read as a pose struck)
+      j.shoulderL.rotation.x += 0.03 * Math.sin(t * 0.6) * amt;
       j.shoulderL.position.y = j.shoulderR.position.y = shY + 0.006 * br * amt;
     }
     // (the free arm pumps at a run as a runner's does; the staff arm carries the staff, swinging less than at a walk: pumped,
