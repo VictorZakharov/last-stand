@@ -65,15 +65,15 @@ function forearmRunes(): THREE.CanvasTexture {
     const ring = (y: number, r: number, lw: number) => { c.lineWidth = lw; c.beginPath(); c.arc(cx, y, r, 0, TAU); c.stroke(); };
     const line = (x0: number, y0: number, x1: number, y1: number, lw: number) => { c.lineWidth = lw; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); };
     const cy = 320;
-    ring(cy, 78, 9); ring(cy, 50, 6); ring(cy, 16, 6);
+    ring(cy, 78, 5); ring(cy, 50, 4); ring(cy, 16, 4);
     for (let k = 0; k < 8; k++) {
       const a = k * Math.PI / 4;
-      line(cx + Math.cos(a) * 16, cy + Math.sin(a) * 16, cx + Math.cos(a) * 100, cy + Math.sin(a) * 100, 6);
+      line(cx + Math.cos(a) * 16, cy + Math.sin(a) * 16, cx + Math.cos(a) * 100, cy + Math.sin(a) * 100, 3.5);
     }
-    line(cx, 40, cx, cy - 100, 6);
-    for (const [y, r] of [[190, 18], [120, 13], [70, 10]] as const) { ring(y, r, 6); line(cx - r - 16, y, cx + r + 16, y, 6); }
-    line(cx, cy + 100, cx, 480, 6);
-    for (const y of [430, 465]) line(cx - 18, y, cx + 18, y, 6);
+    line(cx, 40, cx, cy - 100, 4);
+    for (const [y, r] of [[190, 18], [120, 13], [70, 10]] as const) { ring(y, r, 4); line(cx - r - 16, y, cx + r + 16, y, 4); }
+    line(cx, cy + 100, cx, 480, 4);
+    for (const y of [430, 465]) line(cx - 18, y, cx + 18, y, 4);
   }
   runes = new THREE.CanvasTexture(cv);
   runes.colorSpace = THREE.SRGBColorSpace;
@@ -229,10 +229,10 @@ export function buildMage(): Model {
   // --- the harness: a strap down the front from each shoulder to the belt, buckled at the chest, and crossed behind
   for (const s of [1, -1]) {
     const down = [0.29, 0.22, 0.14, 0.06, -0.02, -0.1].map((y) => onChest(s * lerp(0.075, 0.1, (0.29 - y) / 0.39), y, 0.008));
-    A.add(strap(down, 0.042, 0.007), leather, j.chest);
+    A.add(strap(down, 0.05, 0.008), leather, j.chest);
     A.add(buckle(0.028, 0.034, 0.005), brass, j.chest, onChest(s * 0.088, 0.15, 0.014).toArray());
     const back = [0.28, 0.18, 0.08, -0.02, -0.11].map((y, k) => onChest(s * lerp(0.1, -0.11, k / 4), y, 0.008).multiply(V(1, 1, -1)));
-    A.add(strap(back, 0.042, 0.007), leather, j.chest);
+    A.add(strap(back, 0.05, 0.008), leather, j.chest);
   }
   A.add(disc(0.022, 0.008), brass, j.chest, onChest(0, 0.13, 0.012).multiply(V(1, 1, -1)).toArray(), [0, Math.PI, 0]);
 
@@ -242,7 +242,7 @@ export function buildMage(): Model {
     // (its round top sunk into the deltoid: standing 5 cm over the joint, it was the shoulder)
     S.skin(scaleUV(limb(0.33, 0.062, 0.058, 0.05, 0.3, 14), 2, 1), sleeve, sh, el, 0.2, 0.33, [0, -0.025, 0]);
     // (the roll: two thick turns of the cloth bunched round the elbow)
-    for (const [y, r, t] of [[-0.012, 0.056, 0.016], [0.02, 0.061, 0.018]] as const) {
+    for (const [y, r, t] of [[-0.008, 0.058, 0.011], [0.016, 0.062, 0.012]] as const) {
       const roll = new THREE.TorusGeometry(r, t, lod(8, 6), lod(22, 14)).rotateX(Math.PI / 2);
       S.add(scaleUV(roll, 4, 1), sleeve, el, [0, y, 0]);
     }

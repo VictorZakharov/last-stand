@@ -233,7 +233,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   // (both styles' locks in the dense clump texture: thin strands of high contrast read as wood grain, and sparse cards
   // hanging apart read as a wig's fringe)
   const hk = o.hair === 'loose' || o.hair === 'mane' || o.hair === 'short' ? 2.4 : 2.1, hairCol = new THREE.Color().setRGB(L.hair[0] * hk, L.hair[1] * hk, L.hair[2] * hk, THREE.SRGBColorSpace);
-  const cards = kit.std({ color: hairCol, map: strandMap(true), alphaTest: 0.35, alphaToCoverage: true, side: THREE.DoubleSide, roughness: o.hair === 'loose' ? 0.72 : 0.62, vertexColors: true });
+  const cards = kit.std({ color: hairCol, map: strandMap(true), alphaTest: 0.35, alphaToCoverage: true, side: THREE.DoubleSide, roughness: o.hair === 'loose' ? 0.72 : o.hair === 'short' ? 0.78 : 0.62, vertexColors: true });
   const hair: THREE.Mesh[] = [];
   const skullC = toGroup(0, 128, -12);
   let crop: THREE.Mesh | undefined;
