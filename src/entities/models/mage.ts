@@ -34,9 +34,10 @@ const NECK_LIFT = 0.008;
 /** how far the slung belt and the book on it draw in round his hips without the coat (a share of their size over it:
  *  across, and from front to back, where it stood out behind his seat) */
 const SLUNG_IN = 0.9, SLUNG_IN_BACK = 0.84;
-/** where round the slung belt the book hangs (rad from ahead, towards his left: at the back of the hip, clear of the
- *  hanging arm), and how far it draws in along its face without the coat, on the belt drawn in (m) */
-const BOOK_AT = 2.3, BOOK_IN = 0.035;
+/** where round the slung belt the book hangs (rad from ahead, towards his left): over the coat at the back of the
+ *  hip, clear of the hanging arm; without it at the side of the hip, against the thigh, just behind the arm (at the
+ *  back, without the coat, it lay glued to his seat); and how far it draws in along its face without the coat (m) */
+const BOOK_AT = 2.3, BOOK_AT_BARE = 1.95, BOOK_IN = 0.02;
 /** a point on the coat's front at x, y, `lift` above it: the tunic's (a round body of the coat's own, narrower over the
  *  shoulders with the arms' tubes stood beside it under caps, read as a bottle from behind) */
 function onChest(x: number, y: number, lift: number, out = new THREE.Vector3()): THREE.Vector3 {
@@ -926,7 +927,9 @@ export function buildMage(): Model {
       for (const o of [...robeParts, ...skirts, ...flaps.map((f) => f.g), ...cloths.flatMap((c) => c.meshes)]) o.visible = robed;
       for (const o of [...tunic, tunicSkirt]) o.visible = !robed;
       sling.scale.set(robed ? 1 : SLUNG_IN, 1, robed ? 1 : SLUNG_IN_BACK);
-      book.position.set(robed ? 0 : -BOOK_IN * Math.sin(BOOK_AT), 0, robed ? 0 : -BOOK_IN * Math.cos(BOOK_AT));
+      // (swung round the belt to its place, a turn about the belt's middle)
+      book.rotation.y = robed ? 0 : BOOK_AT_BARE - BOOK_AT;
+      book.position.set(robed ? 0 : -BOOK_IN * Math.sin(BOOK_AT_BARE), 0, robed ? 0 : -BOOK_IN * Math.cos(BOOK_AT_BARE));
       gloved = gear.hands;
       for (const o of bracers) o.visible = gear.hands;
       bare(handL, !gear.hands); bare(handR, !gear.hands);
