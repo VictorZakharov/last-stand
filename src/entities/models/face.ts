@@ -53,6 +53,9 @@ export interface FaceShape {
   lowerW?: number;
   /** how far out the chewing muscle fills the face's side below the cheekbone (mm, 47) */
   masseter?: number;
+  /** the chewing muscle under a measured mask too (its `masseter` the same): the mask rounds off behind the cheekbones
+   *  inside a skull far narrower there, and on a clean-shaven face the overhang showed as a dark band to the ear */
+  maskMasseter?: boolean;
   /** the top of the neck under the jaw: half its width (mm, 57), its middle's depth (mm, -8) and how softly it
    *  blends into the jaw (mm, 18); narrower, further back and blended less, the jaw stands out over it in a line */
   neckW?: number; neckBack?: number; neckBlend?: number;
@@ -187,7 +190,7 @@ export const FACES: Record<'warrior' | 'mage' | 'ranger', FaceShape> = {
       pz: [1.2, 1.2, 1.2, 1.2, 1.22, 1.58, 2.11, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2], hollow: 0 } },
   // the battle scholar, clean-shaven: the warrior's face (fitted with facelab to a strong jaw) as a start, the nose and
   // the lower face shorter and the lips fuller after his sheet's front view, his own grey-green eyes
-  mage: { jaw: 46, chin: 10, chinFwd: -3.4, brow: 2.2, cheek: 0.9, noseLen: 50, noseW: 13.5, nosePro: 1.25, hump: 0, lips: 1.05, long: 0.95, tip: 1.15, eyeOpen: 2.6, mouthW: 0.95, iris: [0.26, 0.29, 0.23], beardDepth: 0, browFwd: 6, foreheadFwd: 10, noseRoot: 6, skullFwd: -3.7, occiput: 12, lipFwd: 9, mouthUp: 1, beardLine: 22, browDrop: 2.6, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 43, neckBack: -22, neckBlend: 13, neckCol: [54, 58], lidSoft: 4, earFlare: 0.3, zygo: 3.5, bridgeW: 5.6, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, muzzleFwd: -1.5,
+  mage: { jaw: 46, chin: 10, chinFwd: -3.4, brow: 2.2, cheek: 0.9, noseLen: 50, noseW: 13.5, nosePro: 1.25, hump: 0, lips: 1.05, long: 0.95, tip: 1.15, eyeOpen: 2.6, mouthW: 0.95, iris: [0.26, 0.29, 0.23], beardDepth: 0, browFwd: 6, foreheadFwd: 10, noseRoot: 6, skullFwd: -3.7, occiput: 12, lipFwd: 9, mouthUp: 1, beardLine: 22, browDrop: 2.6, masseter: 53, maskMasseter: true, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 43, neckBack: -22, neckBlend: 13, neckCol: [54, 58], lidSoft: 4, earFlare: 0.3, zygo: 3.5, bridgeW: 5.6, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, muzzleFwd: -1.5,
     templeNarrow: -4.4, lidFold: 6, gridEye: 1,
     // (the mask, the skull and the jaw fitted by least squares (tools/facelab/fit.mjs) to the reference rebuilt in 3D from its
     // turnaround (within 1 mm rms) and to its front view's widths; the nose, lips and eyes to the pictures' landmarks)
@@ -333,7 +336,7 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
   d = smin(d, seg(ax, yl, z, F.jaw - 3, 30, 6, 46, 80, 2, 9, 7.5), 12);
   d = smin(d, ell(ax, yl, z, 0, 28, 24, 44, 18, 44), 12);
   // the side of the face under the cheekbone's arch, in front of the ear (the chewing muscle)
-  if (!M) d = smin(d, ell(ax, yl, z, (F.masseter ?? 47) + zg * 0.6, 76, 20, 12, 30, 24), 18);
+  if (!M || F.maskMasseter) d = smin(d, ell(ax, yl, z, (F.masseter ?? 47) + zg * 0.6, 76, 20, 12, 30, 24), 18);
   // the top of the neck under the jaw and the skull (the rig's neck carries on below it)
   d = smin(d, F.neckCol ? neckColumn(ax, y, z, F) : ell(ax, y, z, 0, 0, F.neckBack ?? -8, F.neckW ?? 57, 58, 53), F.neckBlend ?? 18);
   // the cheekbones' arches back towards the ears (a measured face's mask has its own cheekbones: these stood out of it
