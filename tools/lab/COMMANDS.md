@@ -11,7 +11,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   behaviour or its name; bound to its own key if the hero knows it but hasn't it on one) ahead of him and pictures
   it at shares of its cast (`--shares`, 0.3,0.55,0.8 by default; a channel at shares of its key's hold, `holdFor`),
   with where its cast point (the weapon's tip) is: how high over the floor, how far ahead, and the way the weapon
-  points (up, from ahead, and in the chest's frame, as a two-hander's holds are placed). `--gear` holds the weapons a
+  points (up, from ahead, and in the chest's frame, as a two-hander's holds are placed). While the healing draught's
+  flask is out (`--skill potion`), how far its mouth is from the lips and how far its bulb is tipped, and where a miss
+  comes from: the wrist off where the drink put it, or the fist closed off where it planned the grip (`page/drink.ts`:
+  at the sip the fist swung 13 cm off the lips while the wrist landed true; the reference is the owner's Codex photos
+  of a man drinking from a flask held by its neck, `.tmp/references/drink`). `--gear` holds the weapons a
   style's way (`--weapon` the base). `--look` draws the pictures another way (below: the hero's wireframe, his
   faces' orientation, his parts with where each is, his skeleton). Writes `out/sheets/<--tag>/sheet.png` and
   `notes.txt`.

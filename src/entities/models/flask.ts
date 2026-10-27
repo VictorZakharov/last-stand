@@ -19,25 +19,30 @@ const Y = new THREE.Vector3(0, 1, 0);
 export interface DrinkHold { wrist: THREE.Vector3; /** the base as it drinks: above and before the mouth, so the neck points down into the lips and the bottom is tipped up */ tipped: THREE.Vector3; pole: THREE.Vector3; /** where the elbow points as it drinks: up and forward, the upper arm about level (low, as at the sip, the forearm stood up before the face) */ tippedPole: THREE.Vector3 }
 
 /** the neck's radius where the fist closes round it, and how far the flask's mouth is from there, up its length */
-const NECK_R = 0.019, MOUTH_UP = 0.045;
+const NECK_R = 0.019, MOUTH_UP = 0.047;
+/** how many times `drink` reaches for the flask's place, each from the forearm the last left */
+const REACHES = 6;
 
 /** where the flask's body's middle is from where the fist holds the neck, the glass's radius and the draught's (inside
- *  it), and how high the draught stands over the body's middle (m: two-thirds full) */
-const BODY_Y = -0.077, GLASS_R = 0.05, DRAUGHT_R = 0.046, FILL = 0.012;
+ *  it), and how high the draught stands over the body's middle (m: three-quarters full) */
+const BODY_Y = -0.085, GLASS_R = 0.05, DRAUGHT_R = 0.046, FILL = 0.024;
 /** the bubbles in the draught, from its middle (m), and how big each is */
 const BUBBLES: readonly (readonly [number, number, number, number])[] = [
-  [0.012, -0.018, 0.006, 0.0042], [-0.016, -0.006, -0.01, 0.0032], [0.004, 0.004, -0.019, 0.0026],
-  [-0.006, -0.028, 0.012, 0.0036], [0.02, -0.004, -0.004, 0.0022],
+  // (few and small: five, up to 8 mm across, read as polka dots)
+  [0.014, -0.012, 0.008, 0.0024], [-0.012, 0.004, -0.012, 0.0018], [0.004, -0.026, 0.014, 0.002],
 ];
 
 /** a round-bottomed glass flask, two-thirds full of a glowing red draught (its surface kept level by `holdFlask`, a
  *  hot core glowing through it, a few bubbles), its brass-wrapped neck lipped and collared in brass, a cork tied down
- *  with twine; its origin on the neck (where the fist holds it, as a flask is held), its mouth up its +y; `cap` and
- *  `stopper` are materials the model already has. Hung on the hand's joint: `holdFlask` seats it in the fist. (Held
+ *  with twine; its origin on the neck (where the fist holds it, as a flask is held), its mouth up its +y. Hung on the hand's joint: `holdFlask` seats it in the fist. (Held
  *  by its base, the body out past the fingers, no fist could close round it, and the hand turned to aim the neck at
  *  the lips drank with its palm out; held round its body, the fingers stood up beside the ball. A solid glowing ball,
  *  it read as a red light, not a potion.) */
-export function buildFlask(kit: MaterialKit, cap: THREE.Material, stopper: THREE.Material): THREE.Group {
+export function buildFlask(kit: MaterialKit): THREE.Group {
+  // (its own bright brass and a pale cork: in the heroes' own metal and leather, the neck read dark brown)
+  const cap = kit.std({ color: 0xc8963c, metalness: 1, roughness: 0.32 });
+  const stopper = kit.std({ color: 0xa47c52, roughness: 0.85 });
+  const twine = kit.std({ color: 0xd2c29a, roughness: 0.9 });
   const g = new THREE.Group();
   const add = (geo: THREE.BufferGeometry, m: THREE.Material, y: number, to: THREE.Object3D = g) => {
     const o = new THREE.Mesh(geo, m);
@@ -57,28 +62,43 @@ export function buildFlask(kit: MaterialKit, cap: THREE.Material, stopper: THREE
     return new THREE.Vector2(DRAUGHT_R * Math.cos(a), DRAUGHT_R * Math.sin(a));
   });
   outline.push(new THREE.Vector2(0, FILL));
-  const deep = kit.std({ color: 0x7a0412, emissive: 0x6a0610, emissiveIntensity: 0.7, roughness: 0.08, transparent: true, opacity: 0.94 });
+  // (solid: seen through, it went a pale salmon over the forest behind)
+  const deep = kit.std({ color: 0x420006, emissive: 0x7a0008, emissiveIntensity: 0.45, roughness: 0.06 });
   add(new THREE.LatheGeometry(outline, 20), deep, 0, draught);
   // (its surface lit, as light pools under a liquid's skin; a hot core lit through it read as a ball in a ball)
   const skin = kit.glow(0xb0141a, 0.8, false);
   add(new THREE.CircleGeometry(Math.sqrt(DRAUGHT_R * DRAUGHT_R - FILL * FILL) * 0.98, 20).rotateX(-Math.PI / 2), skin, FILL + 0.0005, draught);
-  const fizz = kit.glow(0xffc0a0, 2.4, false);
+  const fizz = kit.glow(0xff6050, 1.2, false);
   for (const [x, y, z, r] of BUBBLES) add(new THREE.SphereGeometry(r, 6, 4), fizz, y, draught).position.set(x, y, z);
-  // the glass round it: clear, a sheen at its edges, the draught seen through it
-  const glass = kit.phys({ color: 0xcfe6e4, roughness: 0.04, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05, transparent: true, opacity: 0.1, depthWrite: false });
+  // the glass round it: a dark tint carrying its highlights, the draught seen through it (pale, it laid a milky
+  // white over the draught, which read pink)
+  const glass = kit.phys({ color: 0x000000, roughness: 0.04, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05, transparent: true, opacity: 0.3, depthWrite: false });
   add(new THREE.SphereGeometry(GLASS_R, 24, 16), glass, BODY_Y).renderOrder = 1;
-  // the neck, wrapped in brass where the fist holds it (no longer than the fist: past it, held tipped, the flask read
-  // as a wine glass), collared where it leaves the body and lipped at its mouth
-  add(new THREE.CylinderGeometry(0.016, 0.021, 0.064, 14), cap, 0);
-  add(new THREE.TorusGeometry(0.022, 0.0035, 6, 18).rotateX(Math.PI / 2), cap, -0.03);
-  add(new THREE.TorusGeometry(0.0172, 0.003, 6, 18).rotateX(Math.PI / 2), cap, 0.031);
-  // the cork, and the twine tying it down over its top
-  add(new THREE.CylinderGeometry(0.0145, 0.0125, 0.024, 10), stopper, 0.042);
-  add(new THREE.TorusGeometry(0.0128, 0.0016, 4, 14).rotateX(Math.PI / 2), stopper, 0.036);
-  for (const a of [0, Math.PI / 2]) add(new THREE.TorusGeometry(0.0145, 0.0012, 4, 12, Math.PI).rotateY(a), stopper, 0.042);
+  // the neck, wrapped in brass where the fist holds it, a little longer than the fist so it shows between the thumb
+  // and the lips (as long as the fist, the fist covered the mouth), collared where it leaves the body and lipped at
+  // its mouth
+  add(new THREE.CylinderGeometry(0.016, 0.021, 0.085, 14), cap, 0.0025);
+  add(new THREE.TorusGeometry(0.022, 0.0035, 6, 18).rotateX(Math.PI / 2), cap, -0.036);
+  add(new THREE.TorusGeometry(0.0172, 0.003, 6, 18).rotateX(Math.PI / 2), cap, 0.044);
+  // the cork, and the twine tying it down over its top: off while it's drunk (`holdFlask`)
+  const cork = new THREE.Group();
+  cork.name = 'cork';
+  g.add(cork);
+  add(new THREE.CylinderGeometry(0.0145, 0.0125, 0.024, 10), stopper, 0.055, cork);
+  add(new THREE.TorusGeometry(0.0128, 0.0016, 4, 14).rotateX(Math.PI / 2), twine, 0.049, cork);
+  for (const a of [0, Math.PI / 2]) add(new THREE.TorusGeometry(0.0145, 0.0012, 4, 12, Math.PI).rotateY(a), twine, 0.055, cork);
   g.userData.aim = new THREE.Vector3();
   g.userData.lift = 0;
+  g.userData.wrist = new THREE.Vector3();
+  g.userData.grip = new THREE.Vector3();
+  g.userData.up = new THREE.Vector3();
   g.userData.draught = draught;
+  // (the flask's mouth, which `drink` puts at the lips: the lab measures how far off them it lands)
+  const lip = new THREE.Object3D();
+  lip.name = 'flaskLip';
+  lip.position.y = MOUTH_UP;
+  g.add(lip);
+  g.userData.cork = cork;
   g.visible = false;
   return g;
 }
@@ -106,7 +126,7 @@ export function drink(j: Joints, k: number, mouth: THREE.Object3D, how: DrinkHol
   // to the belt on the left hip
   j.shoulderL.rotation.x += 0.35 * hip; j.shoulderL.rotation.z += 0.12 * hip; j.elbowL.rotation.x += -0.6 * hip;
   // the head and shoulders tip back as it drinks
-  j.neck.rotation.x += -0.4 * tip; j.head.rotation.x += -0.3 * tip; j.spine.rotation.x += -0.08 * tip;
+  j.neck.rotation.x += -0.3 * tip; j.head.rotation.x += -0.2 * tip; j.spine.rotation.x += -0.08 * tip;
   flask.userData.lift = e;
   if (e > 0) {
     const sc = j.root.scale.x;
@@ -120,14 +140,20 @@ export function drink(j: Joints, k: number, mouth: THREE.Object3D, how: DrinkHol
     (flask.userData.aim as THREE.Vector3).copy(_f);
     _t.copy(_m).addScaledVector(_f, -MOUTH_UP * sc);
     // the wrist where the fist round the flask's neck has it there: the hand's length along the forearm, first
-    // taken as the line to the shoulder, then as the arm that reaches lies
+    // taken as the line to the shoulder, then as the arm that reaches lies, again till it settles (the neck running
+    // near the forearm's line at the sip, the fist's turn round it swings far for a small change in the forearm: from
+    // the arm two reaches back, the fist closed 13 cm off the lips)
     j.shoulderL.getWorldPosition(_a);
     _up.copy(_a).sub(_t).normalize();
     _r.copy(j.shoulderL.quaternion);
     const e0 = j.elbowL.rotation.x;
-    for (let pass = 0; pass < 2; pass++) {
+    for (let pass = 0; pass < REACHES; pass++) {
       fistReach(h, _f, _up, NECK_R, _d);
       _w.copy(_t).sub(_d);
+      // (where it wants the wrist and the grip, world: the lab reads how far from them they land)
+      (flask.userData.wrist as THREE.Vector3).copy(_w);
+      (flask.userData.grip as THREE.Vector3).copy(_t);
+      (flask.userData.up as THREE.Vector3).copy(_up);
       j.chest.worldToLocal(_w);
       reachArm(j.shoulderL, j.elbowL, j.P.upperL, j.P.foreL, _w, _p.lerpVectors(how.pole, how.tippedPole, tip));
       j.root.updateMatrixWorld(true);
@@ -158,22 +184,23 @@ export function holdFlask(h: Hand, flask: THREE.Object3D, out: number): void {
   const lift = flask.userData.lift as number;
   if (lift > 0) _d.lerp(flask.userData.aim as THREE.Vector3, lift).normalize();
   const r = NECK_R * out;
-  // (the hand's length along the forearm, as `drink` placed the wrist for it: along the hand's joint, which the pose
-  // may have bent at the wrist, the fist closed a hand's width off where the arm had put the flask's mouth)
-  joint.parent!.getWorldPosition(_a);
-  joint.getWorldPosition(_b);
-  hold(h, _d, r, _a.sub(_b));
+  // (the hand's length along the forearm as `drink` placed the wrist for it, the line it planned with while it lifts
+  // the flask: with the neck near the forearm's line at the sip, the few millimetres the body's fitting moves the arm
+  // after it swung the fist round the neck 13 cm off the lips; along the hand's joint, which the pose may have bent
+  // at the wrist, the fist closed a hand's width off)
+  if (lift > 0) _a.copy(flask.userData.up as THREE.Vector3);
+  else _a.subVectors(joint.parent!.getWorldPosition(_a), joint.getWorldPosition(_b));
+  hold(h, _d, r, _a);
   seatHeld(h, flask, r);
   flask.quaternion.setFromUnitVectors(Y, _d.applyQuaternion(_q.invert()));
   // (the draught's surface level, however the flask is tipped: the draught turned back from the flask's own turn)
   flask.updateWorldMatrix(true, false);
   (flask.userData.draught as THREE.Object3D).quaternion.copy(flask.getWorldQuaternion(_q).invert());
+  // (the cork out as it reaches the lips: drunk through, it read as a stoppered bottle pressed to the mouth)
+  (flask.userData.cork as THREE.Object3D).visible = lift < 0.6;
   // (a drink not posed this frame leaves the flask the fist's own way)
   flask.userData.lift = 0;
 }
-
-/** where the flask's mouth is (world): what `drink` puts at the lips (the lab measures how far off them it lands) */
-export const flaskMouth = (flask: THREE.Object3D, out: THREE.Vector3): THREE.Vector3 => flask.localToWorld(out.set(0, MOUTH_UP, 0));
 
 /** how far the flask is up at the lips (0..1) at `k`: a model eases what it moves out of the way by it */
 export const drinkUp = (k: number): number => curve(LIFT, k);

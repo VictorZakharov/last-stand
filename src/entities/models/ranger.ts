@@ -42,7 +42,7 @@ const COLLAR_RISE = 0.02;
  *  side (the rig turns it about joints in front of its middle), and came 3.6 mm out through it */
 const COLLAR_EASE = 0.006;
 const UP = V(0, 1, 0), FWD = V(0, 0, 1);
-const DRINK = { wrist: V(-0.08, -0.13, 0.19), tipped: V(-0.12, 0.06, 0.18), pole: V(-0.6, -0.7, 0.7), tippedPole: V(-0.6, -0.4, 1) };
+const DRINK = { wrist: V(-0.13, -0.12, 0.16), tipped: V(-0.16, 0.07, 0.16), pole: V(-0.35, -1, 0.5), tippedPole: V(-0.6, -0.4, 1) };
 /** where the nock comes to at full draw (the head's mm): at the side of the jaw, low along it, below and in front of the ear, the string
  *  a finger's width off the face, so the arrow and its fletching lie beside the cheek and the beard (on the jaw's skin, the
  *  arrow's last 9 cm went through them), and the string's lower half passes in front of the coat over the bow shoulder
@@ -582,7 +582,7 @@ export function buildRanger(): Model {
   });
   // (where the shot leaves: the nocked arrow's middle; and its head, where a full draw glints)
   const tip = joint(bow.group), palm = joint(j.handR, 0, -0.07, 0.03), arrowHead = joint(bow.group);
-  const flask = buildFlask(kit, brass, hide); flask.name = 'flask'; j.handR.add(flask);
+  const flask = buildFlask(kit); flask.name = 'flask'; j.handR.add(flask);
   const drinkRig = { ...j, shoulderL: j.shoulderR, elbowL: j.elbowR, handL: j.handR };
   const legs = new LegIK(j), root = j.root;
   root.scale.setScalar(1.08);
