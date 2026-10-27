@@ -994,13 +994,26 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
       // face of `long` 0.95 the line between the lips was painted 3.4 mm under their crease, a second line)
       const yq = yy < 114 ? 114 - (114 - yy) / F.long : yy;
       const axm = ax / (F.mouthW ?? 1), my = mouthY(Math.min(axm, 24)), mouth = axm < 30 && yq > 25 && yq < 62 && z > 80;
-      const lipK = mouth ? sm(lipBorder(ax, 1, F) + 0.5, lipBorder(ax, 1, F) - 0.5, yq) * sm(lipBorder(ax, -1, F) - 0.5, lipBorder(ax, -1, F) + 0.5, yq) * sm(84, 90, z) : 0;
+      const top = mouth ? lipBorder(ax, 1, F) : 0, bot = mouth ? lipBorder(ax, -1, F) : 0;
+      const lipK = mouth ? sm(top + 1.1, top - 0.7, yq) * sm(bot - 1.2, bot + 0.8, yq) * sm(84, 90, z) : 0;
+      if (mouth && z > 84) {
+        // (the pale roll along the upper lip's border, and the skin under the lower lip in its shade)
+        const roll = Math.exp(-(((yq - top - 1.2) / 0.8) ** 2)) * sm(24, 16, axm) * sm(84, 90, z);
+        mix(0.08 * roll, 1, 0.92, 0.86);
+        const under = Math.exp(-(((yq - bot + 3) / 2.6) ** 2)) * sm(22, 10, axm) * sm(84, 90, z) * (1 - lipK);
+        c[0] *= 1 - 0.16 * under; c[1] *= 1 - 0.2 * under; c[2] *= 1 - 0.2 * under;
+      }
       if (lipK > 0.01) {
-        // dusky rose, the lower lip a little lighter and wetter
+        // dusky rose: the upper lip darker (it faces down), the lower lighter and wetter at its middle, both darker into
+        // the corners and the lower one under its curve
         const lo = yq < my ? 1 : 0;
         const lc = L.lipColor ?? [0.6, 0.34, 0.32];
         mix(0.62 * (L.lipTint ?? 1) * lipK, lc[0] + 0.04 * lo, lc[1] + 0.03 * lo, lc[2] + 0.02 * lo);
-        hh += lipK * 0.25 * Math.sin(x * 9 + Math.sin(yq * 2) * 0.6); rr -= lipK * (0.16 + 0.1 * lo) * (L.lipGloss ?? 1);
+        const mid = lo * sm(14, 3, axm) * Math.exp(-(((yq - (my + bot) / 2) / 2.2) ** 2));
+        const shade = (1 - lo) * 0.1 + 0.16 * sm(10, 22, axm) + lo * 0.14 * sm(bot + 3.5, bot + 0.5, yq);
+        const k = 1 + (0.1 * mid - shade) * lipK;
+        c[0] *= k; c[1] *= k; c[2] *= k;
+        hh += lipK * 0.25 * Math.sin(x * 9 + Math.sin(yq * 2) * 0.6); rr -= lipK * (0.12 + 0.12 * lo + 0.1 * mid) * (L.lipGloss ?? 1);
       }
       // the line between the lips, darker into the corners
       if (mouth) {
