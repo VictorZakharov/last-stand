@@ -835,7 +835,7 @@ function radiusAt(g: HeadGrid, az: number, el: number): number {
 /** the ear's outline round the middle of its bowl (degrees round from forward, towards the top: mm) */
 const EAR_OUTLINE: [number, number][] = [[0, 12], [45, 16], [70, 24], [92, 33], [118, 31], [145, 26], [182, 21], [220, 21], [250, 26], [272, 29], [298, 23], [326, 15], [360, 12]];
 // (a rounder top, the helix one C from front to back: the outline above came to a point at its top)
-const EAR_ROUND: [number, number][] = [[0, 13], [45, 19], [70, 27], [92, 31], [118, 31], [145, 27], [182, 22], [220, 21], [250, 26], [272, 29], [298, 23], [326, 15], [360, 13]];
+const EAR_ROUND: [number, number][] = [[0, 14], [45, 21], [70, 27], [95, 30], [120, 30], [150, 28], [185, 24], [220, 23], [250, 26], [275, 27], [300, 24], [330, 17], [360, 14]];
 function outlineR(table: [number, number][], deg: number): number {
   const a = ((deg % 360) + 360) % 360;
   for (let i = 1; i < table.length; i++) {
@@ -898,14 +898,16 @@ function earGeometry(s: number, F: FaceShape, ao = 0): THREE.BufferGeometry {
   while (sx < 90 && headSDF(sx, 97, 0, F) < 0) sx += 0.5;
   const tilt = 0.26, flare = F.earFlare ?? 0.5, cu = -8 * sc, cv = 3 * sc;
   const seat = earSeat(F, sx);
-  const place = (u: number, v: number, h: number, out: THREE.Vector3) => {
+  // (`floor`: the least a point stands off the head's skin, mm: a rounded ear's bowl sank into the head, the skin
+  // showing through as a hole)
+  const place = (u: number, v: number, h: number, out: THREE.Vector3, floor = -Infinity) => {
     // tilt the ear back, then flare it out from the head about its front edge
     const u1 = u * Math.cos(tilt) - v * Math.sin(tilt), v1 = u * Math.sin(tilt) + v * Math.cos(tilt);
     const back = Math.max(0, -u1);
     const out1 = h + back * Math.sin(flare), u2 = u1 + (u1 < 0 ? back * (1 - Math.cos(flare)) : 0);
     // (a seated ear's front edge, the rim's root and the flap before the canal, grows out of the cheek: sunk into it)
     const root = F.earIn === undefined ? 0 : 4 * sm(-2, 10, u2);
-    return toGroup(s * (seat(v1, u2) + 4 - (F.earIn ?? 0) - root + out1), 97 + v1, u2, out);
+    return toGroup(s * (seat(v1, u2) + Math.max(floor, 4 - (F.earIn ?? 0) - root + out1)), 97 + v1, u2, out);
   };
   const front: number[] = [], backP: number[] = [], v = new THREE.Vector3(), cf: number[] = [], cb: number[] = [];
   for (let j = 0; j <= nr; j++) {
@@ -926,7 +928,7 @@ function earGeometry(s: number, F: FaceShape, ao = 0): THREE.BufferGeometry {
       const u = cu + Math.cos(a) * R, vv = cv + Math.sin(a) * R, th = thick * (1 + 0.6 * lobe);
       // (a rolled rim: the front and the back curling round to meet at the outer edge, not a flat band between them)
       const roll = rd * sm(0.86, 1, rho) ** 1.5 * th * 0.45;
-      place(u, vv, h - roll, v); front.push(v.x, v.y, v.z);
+      place(u, vv, h - roll, v, rd ? 1 : -Infinity); front.push(v.x, v.y, v.z);
       place(u, vv, h - th + roll, v); backP.push(v.x, v.y, v.z);
       // (occlusion: deep in the bowl, the back against the head; all of it in the hair's shade, the top most)
       const k = ao ? 1 - (0.55 + 0.1 * sm(-10, 25, vv) + 0.2 * sm(0, -6, h)) : 1, kb = k * (1 - 0.45 * ao);
