@@ -116,8 +116,8 @@ export interface FaceShape {
   templeNarrow?: number;
   /** the mouth's width (1 average): the lips, their corners and their paint drawn in towards the middle */
   mouthW?: number;
-  /** how deep the mouth's corners are tucked in (1 as most faces; less, a shallower tuck): lips standing off a recessed
-   *  muzzle with the full tuck had a notch cut into each corner (the mage) */
+  /** how deep the mouth's corners are tucked in (1 as most faces; less, a shallower tuck; 0 none): lips standing off a
+   *  recessed muzzle with the full tuck had a notch cut into each corner (the mage) */
   mouthTuck?: number;
   /** more of the mesh's rows and columns over the eyes (0 none, 1 about 3.5 times the rows there): at the grid's spacing
    *  an opening 8 mm tall fell between two rows and showed as a slot, its corners cut off square */
@@ -199,8 +199,8 @@ export const FACES: Record<'warrior' | 'mage' | 'ranger', FaceShape> = {
       pz: [1.2, 1.2, 1.2, 1.2, 1.22, 1.58, 2.11, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2], hollow: 0 } },
   // the battle scholar, clean-shaven: the warrior's face (fitted with facelab to a strong jaw) as a start, the nose and
   // the lower face shorter and the lips fuller after his sheet's front view, his own grey-green eyes
-  mage: { jaw: 46, chin: 13, chinFwd: -1.5, brow: 2, cheek: 0.9, noseLen: 54, noseW: 13, nosePro: 1.25, hump: 0, lips: 1.15, long: 0.95, tip: 1.0, eyeOpen: 3.1, mouthW: 1.12, mouthTuck: 0.2, iris: [0.26, 0.29, 0.23], beardDepth: 0, browFwd: 5, browFrown: 4, foreheadFwd: 10, noseRoot: 6, skullFwd: -3.7, occiput: 12, lipFwd: 6, mouthUp: 4, beardLine: 22, browDrop: 3.5, masseter: 53, maskMasseter: true, maskCheekbones: true, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 43, neckBack: -22, neckBlend: 13, neckCol: [54, 58], lidSoft: 4, earFlare: 0.3, zygo: 3.5, bridgeW: 5.6, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 16.5, muzzleFwd: -1.5,
-    templeNarrow: -4.4, lidFold: 5, gridEye: 1,
+  mage: { jaw: 46, chin: 13, chinFwd: -1.5, brow: 2.6, cheek: 0.9, noseLen: 54, noseW: 13, nosePro: 1.25, hump: 0, lips: 1.15, long: 0.95, tip: 1.0, eyeOpen: 2.75, mouthW: 1.12, mouthTuck: 0, iris: [0.26, 0.29, 0.23], beardDepth: 0, browFwd: 8, browFrown: 4, foreheadFwd: 10, noseRoot: 6, skullFwd: -3.7, occiput: 12, lipFwd: 6, mouthUp: 4, beardLine: 22, browDrop: 3.5, masseter: 53, maskMasseter: true, maskCheekbones: true, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 43, neckBack: -22, neckBlend: 13, neckCol: [54, 58], lidSoft: 4, earFlare: 0.3, zygo: 3.5, bridgeW: 5.6, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 16.5, muzzleFwd: -1.5,
+    templeNarrow: 3, lidFold: 3, gridEye: 1,
     // (the mask, the skull and the jaw fitted by least squares (tools/facelab/fit.mjs) to the reference rebuilt in 3D from its
     // turnaround (within 1 mm rms) and to its front view's widths; the nose, lips and eyes to the pictures' landmarks)
     mask: { y: [-2, 8, 18, 30, 45, 60, 75, 90, 100, 110, 120, 132, 145, 160, 175, 190, 205],
@@ -383,7 +383,7 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
     // (on a measured face, blended more softly: a sharp corner shows the mesh's steps)
     d = smin(d, lips, M ? 4.5 : 3.5);
     const tk = F.mouthTuck ?? 1;
-    d = smax(d, -ell(ax, yl, z, 25 * mw, mouthY(axm) - 0.3, 90 + lf * 0.7 - (M ? 2 : 0) - 3 * (1 - tk), 3 * tk, 2.4 * tk, 3.5), M ? 3 : 2);
+    if (tk > 0) d = smax(d, -ell(ax, yl, z, 25 * mw, mouthY(axm) - 0.3, 90 + lf * 0.7 - (M ? 2 : 0) - 3 * (1 - tk), 3 * tk, 2.4 * tk, 3.5), M ? 3 : 2);
   }
   if (Math.abs(ax - EYE.x) < 32 && y > 85 && y < 150) {
     // eye sockets under the brow, then the lids riding on the eyeball round the opening
@@ -759,7 +759,7 @@ export const LOOKS: Record<keyof typeof FACES, FaceLook> = {
   warrior: { skin: [0.822, 0.628, 0.572], hair: [0.155, 0.112, 0.07], streak: [0.4, 0.3, 0.18], ao: 0.55, beardHair: [0.42, 0.29, 0.17], eyeShade: 0.55, flush: 1.3, noseWarm: 0.1, lipGloss: 0.3, grey: 0.02, beard: 1, age: 0.5, brows: 0.92, hairDrop: 20, cheekShade: 0.5, stubble: 0.8, beardClump: 1, contour: 0.6, browArch: 0.1, pores: 0.8, lipTint: 1.25, lipColor: [0.69, 0.41, 0.38], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.2, browEven: 1, under: 0.8, browLift: 2.5, browY: -5.5, browIn: 10, templeDrop: 22 },
   // (a lean face weathered by the sun, dark brown hair with warm lights and a dark beard, as his sheet's; shaded and
   // textured as the others: his plain look left the face flat, the skin pale peach and the eyes staring)
-  mage: { skin: [0.64, 0.5, 0.42], hair: [0.15, 0.085, 0.055], streak: [0.22, 0.13, 0.08], ao: 0.6, beardHair: [0.055, 0.04, 0.032], eyeShade: 0.6, flush: 0.8, noseWarm: 0.1, lipGloss: 0.3, grey: 0.03, beard: 0, age: 0.45, folds: 1, brows: 0.8, hairDrop: 6, nape: 40, templeDrop: 6, cheekShade: 0, beardClump: 0.55, contour: 0.3, browArch: 0.12, pores: 0.9, lipTint: 1.35, lipColor: [0.6, 0.37, 0.33], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.5, browEven: 1, under: 0.9, browLift: 2.5, browY: -3.5, browIn: 10 },
+  mage: { skin: [0.64, 0.5, 0.42], hair: [0.15, 0.085, 0.055], streak: [0.22, 0.13, 0.08], ao: 0.6, beardHair: [0.055, 0.04, 0.032], eyeShade: 0.6, flush: 0.8, noseWarm: 0.1, lipGloss: 0.3, grey: 0.03, beard: 0, age: 0.45, folds: 1, brows: 0.8, hairDrop: 6, nape: 40, templeDrop: 6, cheekShade: 0, beardClump: 0.55, contour: 0, browArch: 0.12, pores: 0.9, lipTint: 1, lipColor: [0.6, 0.37, 0.33], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.5, browEven: 1, under: 0.9, browLift: 2.5, browY: -3.5, browIn: 10 },
   // (weathered from the outdoors, his hair and beard a dark brown; shaded and textured as the warrior's, which was tuned
   // against a photograph: the mage's plain look left his face flat and his eyes staring)
   ranger: { skin: [0.72, 0.5, 0.38], hair: [0.1, 0.066, 0.045], streak: [0.22, 0.15, 0.1], ao: 0.55, beardHair: [0.16, 0.105, 0.072], eyeShade: 0.55, flush: 1.1, noseWarm: 0.1, lipGloss: 0.3, grey: 0.01, beard: 1, age: 0.45, brows: 1, hairDrop: 20, nape: 55, cheekShade: 0.5, beardClump: 1, contour: 0.7, browArch: 0.1, pores: 0.8, lipTint: 1.1, lipColor: [0.6, 0.38, 0.33], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.3, browEven: 1, under: 0.8, browLift: 2.5, browY: -5.5, browIn: 10, templeDrop: 22 },
