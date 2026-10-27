@@ -768,7 +768,7 @@ export const LOOKS: Record<keyof typeof FACES, FaceLook> = {
   warrior: { skin: [0.822, 0.628, 0.572], hair: [0.155, 0.112, 0.07], streak: [0.4, 0.3, 0.18], ao: 0.55, beardHair: [0.42, 0.29, 0.17], eyeShade: 0.55, flush: 1.3, noseWarm: 0.1, lipGloss: 0.3, grey: 0.02, beard: 1, age: 0.5, brows: 0.92, hairDrop: 20, cheekShade: 0.5, stubble: 0.8, beardClump: 1, contour: 0.6, browArch: 0.1, pores: 0.8, lipTint: 1.25, lipColor: [0.69, 0.41, 0.38], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.2, browEven: 1, under: 0.8, browLift: 2.5, browY: -5.5, browIn: 10, templeDrop: 22 },
   // (a lean face weathered by the sun, dark brown hair with warm lights and a dark beard, as his sheet's; shaded and
   // textured as the others: his plain look left the face flat, the skin pale peach and the eyes staring)
-  mage: { skin: [0.64, 0.5, 0.42], hair: [0.15, 0.085, 0.055], streak: [0.22, 0.13, 0.08], ao: 0.6, beardHair: [0.055, 0.04, 0.032], eyeShade: 0.6, flush: 0.8, noseWarm: 0.1, lipGloss: 0.3, grey: 0.03, beard: 0, age: 0.45, folds: 0.7, brows: 0.8, hairDrop: 6, nape: 40, templeDrop: 6, cheekShade: 0, beardClump: 0.55, contour: 0, browArch: 0.12, pores: 0.9, lipTint: 1, lipColor: [0.6, 0.37, 0.33], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.5, browEven: 1, under: 0.9, browLift: 2.5, browY: -3.5, browIn: 10 },
+  mage: { skin: [0.64, 0.5, 0.42], hair: [0.15, 0.085, 0.055], streak: [0.22, 0.13, 0.08], ao: 0.6, beardHair: [0.055, 0.04, 0.032], eyeShade: 0.6, flush: 0.8, noseWarm: 0.1, lipGloss: 0.3, grey: 0.03, beard: 0, age: 0.45, folds: 1, brows: 0.8, hairDrop: 6, nape: 40, templeDrop: 6, cheekShade: 0, beardClump: 0.55, contour: 0, browArch: 0.12, pores: 0.9, lipTint: 1, lipColor: [0.6, 0.37, 0.33], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.5, browEven: 1, under: 0.9, browLift: 2.5, browY: -3.5, browIn: 10 },
   // (weathered from the outdoors, his hair and beard a dark brown; shaded and textured as the warrior's, which was tuned
   // against a photograph: the mage's plain look left his face flat and his eyes staring)
   ranger: { skin: [0.72, 0.5, 0.38], hair: [0.1, 0.066, 0.045], streak: [0.22, 0.15, 0.1], ao: 0.55, beardHair: [0.16, 0.105, 0.072], eyeShade: 0.55, flush: 1.1, noseWarm: 0.1, lipGloss: 0.3, grey: 0.01, beard: 1, age: 0.45, brows: 1, hairDrop: 20, nape: 55, cheekShade: 0.5, beardClump: 1, contour: 0.7, browArch: 0.1, pores: 0.8, lipTint: 1.1, lipColor: [0.6, 0.38, 0.33], nostrils: 1.1, alar: 1, browTail: 0, browFill: 0.3, browEven: 1, under: 0.8, browLift: 2.5, browY: -5.5, browIn: 10, templeDrop: 22 },
@@ -1033,14 +1033,18 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         const rays = Math.max(0, Math.sin(Math.atan2(ey - 1, ex - 14) * 11)) ** 5;
         hh -= L.age * cf * rays * 0.6;
       }
-      // --- the folds from the nose's wings down past the mouth's corners: a groove, a little shaded (a clean-shaven face
-      // without them read as a boy's)
-      if (L.folds && z > 60 && yy > 20 && yy < nb + 6) {
-        // (well outside the mouth's corners: ending 6 mm from them, they read as hooks on the mouth)
-        const ux = 37 - 19, uy = mouthY(24) - 10 - (nb + 1), t = clamp(((ax - 19) * ux + (yy - nb - 1) * uy) / (ux * ux + uy * uy), 0, 1);
-        const d = Math.hypot(ax - 19 - ux * t, yy - nb - 1 - uy * t), fold = L.folds * Math.exp(-((d / 2.4) ** 2)) * (1 - 0.6 * t) * face;
-        hh -= fold * 2.6;
-        c[0] *= 1 - fold * 0.18; c[1] *= 1 - fold * 0.24; c[2] *= 1 - fold * 0.24;
+      // --- the folds from the nose's wings round the mouth (a clean-shaven face without them read as a boy's): the cheek
+      // overhanging the mouth's surround, a soft light on it and a broad soft shade under it fading towards the lip, no
+      // line; from the crease at the wing, faded out by the mouth's corner (a dark groove read as a drawn wrinkle, an edge
+      // of tone with a light stripe beside it as an inked bracket)
+      if (L.folds && z > 60 && yy > 20 && yy < nb + 8) {
+        const y0 = nb + 5, y1 = mouthY(24) - 1, f = clamp((y0 - yy) / (y0 - y1), 0, 1);
+        // (how far out on the cheek's side of the fold, mm: hugging the wing, then bowing out round the mouth)
+        const out = ax - (14 + 20 * Math.pow(f, 0.6));
+        const k = L.folds * sm(-0.1, 0.15, f) * sm(1.05, 0.55, f) * face;
+        const shade = k * sm(1.5, -1, out) * Math.exp(-((Math.min(0, out) / 6) ** 2));
+        const lit = k * sm(-1, 2, out) * Math.exp(-((Math.max(0, out - 2) / 6) ** 2));
+        c[0] *= 1 - shade * 0.08 + lit * 0.035; c[1] *= 1 - shade * 0.1 + lit * 0.035; c[2] *= 1 - shade * 0.1 + lit * 0.03;
       }
       // --- the beard: dense short hairs growing down, lighter strands through it, stubble at its edge
       const b = yy < 125 && z > -40 ? L.beard * beardAt(ax, yy, z, F, 1.5 + 2.5 * (L.stubble ?? 0)) : 0;
