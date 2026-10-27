@@ -29,9 +29,9 @@ export const plainSkin = (kit: MaterialKit, who: keyof typeof FACES, vertexColor
   return kit.rim({ color: new THREE.Color().setRGB(s[0] * PLAIN_SKIN, s[1] * PLAIN_SKIN, s[2] * PLAIN_SKIN, THREE.SRGBColorSpace), roughness: vertexColors ? 0.88 : 0.6, vertexColors }, 0x6a2a1c, 0.25);
 };
 
-/** bare hands' skin: the ears' and neck's a shade darker (beside the face's paint, shaded where light falls less, plain
- *  skin reads pale) */
-export const handSkin = (kit: MaterialKit, who: keyof typeof FACES) => { const m = plainSkin(kit, who); m.color.multiplyScalar(0.86); return m; };
+/** bare hands' skin: the ears' and neck's darker (beside the face's paint, shaded where light falls less, plain skin
+ *  reads pale: at 0.86 of it, every hero's hands were paler and pinker than his face) */
+export const handSkin = (kit: MaterialKit, who: keyof typeof FACES) => { const m = plainSkin(kit, who); m.color.multiplyScalar(0.76); return m; };
 
 /** the head's geometry, made once for each face, hair and detail and shared by every head built after it (a class
  *  switch builds the hero again: made afresh each time, the head was 60% of the build, its hair's cards most of it) */

@@ -111,7 +111,7 @@ const GLOVE_TOP = 0.006;
 const CUFF_REACH = 1.45;
 const CUFF_ROLL = 0.0025;
 /** how softly a digit's segments join (m: a soft join swells by a quarter of it where two surfaces meet) */
-const SEGMENT_BLEND = 0.0012;
+const SEGMENT_BLEND = 0.0006;
 /** the thumb's root joint among the bones (the hand's own, then each finger's three) */
 const THUMB_ROOT = 13;
 
@@ -122,7 +122,8 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number): Pa
   const palm = (shape: Shape, blend: number, bones: [number, number][] = [[0, 1]]) => {
     parts.push({ shape, frame: IDENTITY, blend, bones });
   };
-  palm(slab(-0.004, -0.094, 0.029, 0.0385, 0.0135, 0.0115, 0.3, 0.0095), 0.006);
+  // (domed across its back and rounded off at its sides: domed a third, it was a box with hard sides)
+  palm(slab(-0.004, -0.094, 0.027, 0.0385, 0.0135, 0.0115, 0.5, 0.012), 0.006);
   // the wrist, into the cuff
   palm(tube(0.026, 0.028, -0.006, 0.014, 0.68), 0.012);
   for (const finger of fingers) {
@@ -131,14 +132,15 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number): Pa
     // its knuckle, the head of its bone in the palm, low and broad; and its pad on the palm's side, broad and flat,
     // joining its neighbours' under the fingers' roots (each a ball, they stood in a row of beads; fuller, in a
     // sausage across the palm)
-    palm(ellipsoid(k.x, k.y + 0.001, k.z + 0.0015, w * 0.92, w * 0.85, w * 0.85), 0.007);
-    palm(ellipsoid(k.x, k.y - 0.0075, k.z - 0.006, w * 1.12, 0.0095, 0.0056), 0.005);
+    // (low under the skin: as tall as they were broad, they stood in a row of balls along the back's edge)
+    palm(ellipsoid(k.x, k.y + 0.001, k.z + 0.0005, w * 0.86, w * 0.72, w * 0.64), 0.012);
+    palm(ellipsoid(k.x, k.y - 0.0075, k.z - 0.0055, w * 1.4, 0.0082, 0.0046), 0.011);
   }
   // the little finger's mound along the palm's edge
   palm(ellipsoid(...at(-0.0285, -0.05, -0.0062), 0.0115, 0.033, 0.0102), 0.009);
   // the thumb's mound, between the palm and its root, moving half with the thumb
   const root = thumb.j[0].position;
-  palm(ellipsoid(root.x * 0.62, -0.044, root.z - 0.0035, 0.0175, 0.025, 0.0122), 0.01, [[0, 0.5], [THUMB_ROOT, 0.5]]);
+  palm(ellipsoid(root.x * 0.62, -0.045, root.z - 0.0035, 0.0195, 0.028, 0.0135), 0.011, [[0, 0.5], [THUMB_ROOT, 0.5]]);
   // (cut off flat inside the cuff: the wrist's rounded end rose 3 cm up the forearm)
   parts.push({ shape: above(WRIST_TOP), frame: IDENTITY, blend: 0.002, cut: true, bones: [] });
   // the palm's hollow
@@ -157,7 +159,8 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
   const on = (n: number, shape: Shape, blend: number, bones: [number, number][]) => {
     parts.push({ shape, frame: frames[n], blend, bones });
   };
-  const radii = thumb ? [0.98, 0.92, 0.92, 0.84, 0.84, 0.75] : [1, 0.9, 0.88, 0.82, 0.8, 0.74];
+  // (each segment starting at the width the one before it ends: a step between them, joined softly, swelled in a ring)
+  const radii = thumb ? [0.98, 0.92, 0.92, 0.84, 0.84, 0.75] : [1, 0.9, 0.9, 0.82, 0.82, 0.74];
   const depths = thumb ? [0.86, 0.84, 0.78] : [0.86, 0.84, 0.8];
   // (the thumb's root segment is its bone in the palm, rising out of its mound)
   const rootTube = (from: number) => tube(w * radii[0], w * radii[1], from, l0, depths[0]);
@@ -174,9 +177,42 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
   on(2, ellipsoid(0, 0, 0, w * radii[3], w * 0.75, w * 0.68), 0, [[first + 1, 0.5], [first + 2, 0.5]]);
   // (the last segment's rounded end at the digit's tip)
   on(2, tube(w * radii[4], w * radii[5], 0, l2 - w * radii[5] * 0.85, depths[2]), SEGMENT_BLEND, [[first + 2, 1]]);
-  on(2, ellipsoid(0, -0.58 * l2, -0.24 * w, w * 0.76, 0.42 * l2, w * 0.58), 0.004, [[first + 2, 1]]);
+  // (blended in wide: joined in 4 mm, each stood on the fingertip's underside as a button)
+  on(2, ellipsoid(0, -0.58 * l2, -0.2 * w, w * 0.72, 0.42 * l2, w * 0.54), 0.007, [[first + 2, 1]]);
   for (const joint of [parts[2], parts[4]]) joint.sayOnly = true;
   return parts;
+}
+
+/** how far out from the skin its closing in is read (m), and how much darker it is where it closes in wholly */
+const SHUT_STEPS = [0.0025, 0.005, 0.008];
+const SHUT_DARK = 0.7;
+/** the fingertips' last segments' bones, and how much warmer (redder) the skin is over them */
+const TIP_BONES = new Set([3, 6, 9, 12, 15]);
+const TIP_WARM: [number, number, number] = [1.06, 0.84, 0.8];
+
+/** The skin's colour at each vertex (`color`, multiplying its material's): darker where the skin round it closes in,
+ *  read from `field` a few millimetres out along its normal (a point outside the hand nearer to another part of it than
+ *  it is out), and warmer over the fingertips. */
+function shadeSkin(geometry: THREE.BufferGeometry, field: Field): void {
+  const position = geometry.attributes.position;
+  const normal = geometry.attributes.normal;
+  const bones = geometry.attributes.skinIndex;
+  const shares = geometry.attributes.skinWeight;
+  const colour = new Float32Array(position.count * 3);
+  for (let i = 0; i < position.count; i++) {
+    let shut = 0;
+    for (const step of SHUT_STEPS) {
+      const x = position.getX(i) + normal.getX(i) * step;
+      const y = position.getY(i) + normal.getY(i) * step;
+      const z = position.getZ(i) + normal.getZ(i) * step;
+      shut += clamp((step - field(x, y, z)) / step, 0, 1);
+    }
+    const light = 1 - SHUT_DARK * shut / SHUT_STEPS.length;
+    let tip = 0;
+    for (let k = 0; k < 4; k++) if (TIP_BONES.has(bones.getComponent(i, k))) tip += shares.getComponent(i, k);
+    for (let c = 0; c < 3; c++) colour[i * 3 + c] = light * (1 + (TIP_WARM[c] - 1) * tip);
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colour, 3));
 }
 
 /** the hand's bones: its own, each finger's three and the thumb's three */
@@ -456,6 +492,7 @@ export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: 
   const nails = new NailMesh();
   digits.forEach((digit, i) => nail(hand, digit, 3 + i * 3, space, nails));
   const skin = skinnedNet(hand, box, parts);
+  shadeSkin(skin, hand);
   return {
     skin,
     tips: bareOf(skin, digits, frames),

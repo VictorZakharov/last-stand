@@ -48,7 +48,7 @@ const FINGERS: DigitSpec[] = [
   { u: -0.0315, y: -0.093, z: 0.001, len: [0.035, 0.021, 0.019], width: 0.0089 },
 ];
 /** the thumb: rooted low on the inner side of the palm, its first segment its bone in the palm's mound */
-const THUMB: DigitSpec = { u: 0.028, y: -0.022, z: -0.007, len: [0.038, 0.03, 0.025], width: 0.0118 };
+const THUMB: DigitSpec = { u: 0.028, y: -0.022, z: -0.007, len: [0.038, 0.03, 0.025], width: 0.0126 };
 /** a digit's depth over its width at its root (a grip wraps its half-depth) */
 const DEPTH = 0.86;
 /** how far apart the fingers are fanned in the pose the hand is sculpted in (`poseHand`'s spread): apart, so the
@@ -57,7 +57,7 @@ const SCULPT_SPREAD = 0.6;
 /** the hand's skin, glove and nails, sculpted once for each side (a hero built again shares them) */
 const SCULPTED = new Map<number, HandGeometries>();
 /** the nails: the skin a little lighter and glossier */
-const NAIL_TINT = new THREE.Color(0xf2ddd6);
+const NAIL_TINT = new THREE.Color(0xe6bfb2);
 
 /** A digit's joints on the hand (`s` its side), as `spec` places and sizes them. */
 function digitOn(vis: THREE.Object3D, s: number, spec: DigitSpec): Digit {
@@ -193,6 +193,9 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
   h.skin = skinnedOn(vis, shape.tips, skin, skeleton, true);
   h.bareSkin = bareSkin ? skinnedOn(vis, shape.skin, bareSkin, skeleton, true) : null;
   h.glove = skinnedOn(vis, shape.glove, glove, skeleton, true);
+  // (the skin shaded by the colours its sculpt gave it, `shadeSkin`: each mesh's own copy of the material, which other
+  // skin without them shares)
+  for (const m of [h.skin, h.bareSkin]) if (m) (m.material as THREE.MeshStandardMaterial).vertexColors = true;
   h.nails = skinnedOn(vis, shape.nails, skin, skeleton, false);
   const nail = h.nails.material as THREE.MeshStandardMaterial;
   nail.color.lerp(NAIL_TINT, 0.4);
