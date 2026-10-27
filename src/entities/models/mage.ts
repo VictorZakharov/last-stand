@@ -31,13 +31,13 @@ const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 // of that: a man's chest (ANSUR II: 29 cm across, 25 deep) with the robe over it, rising to the shoulders
 const TORSO: [number, number][] = [[0.145, -0.12], [0.155, -0.02], [0.165, 0.1], [0.168, 0.18], [0.15, 0.245], [0.1, 0.28], [0.075, 0.29]];
 const DEPTH = 0.86;
-/** the cowl's profile (chest joint space), bottom to top: the hood down and wrapped round the neck as a thick scarf in two
- *  rolls, rounded over at its top onto the neck (a ring with a flat top edge read as a collar of card, the sheet's a
- *  scarf of heavy wool up under the beard) */
-const COWL: [number, number][] = [
-  [0.1, 0.18], [0.135, 0.174], [0.158, 0.19], [0.166, 0.214], [0.156, 0.236], [0.168, 0.258], [0.174, 0.29],
-  [0.167, 0.322], [0.152, 0.35], [0.13, 0.372], [0.106, 0.386], [0.088, 0.38],
-];
+/** the cowl's core (chest joint space), bottom to top: the hood down, wrapped round the neck as a scarf whose rolls lie
+ *  over it (`SCARF_ROLLS`), rounded over at its top onto the neck */
+const COWL: [number, number][] = [[0.1, 0.19], [0.128, 0.2], [0.134, 0.26], [0.124, 0.33], [0.106, 0.372], [0.088, 0.38]];
+/** the scarf's rolls, bottom to top: each's height, the radius of its ring round the neck and of the roll itself (m). As
+ *  the sheet's: three thick rolls of knit wrapped up under the beard, a dark crease between each (one shapeless lathe
+ *  read as a fur ruff) */
+const SCARF_ROLLS: [number, number, number][] = [[0.214, 0.15, 0.047], [0.266, 0.143, 0.045], [0.316, 0.126, 0.039]];
 /** the pauldrons' size against the shoulder */
 const PAULDRON = 0.78;
 function torsoR(y: number): number {
@@ -100,7 +100,7 @@ export function buildMage(): Model {
   // the plain tunic under the robe: undyed linen
   const linen = kit.rim({ color: 0x9a8e76, roughness: 1, ...tex(clothMaps(), 1, 0.7) }, 0x6a6050, 0.25);
   // the cowl's heavy wool, its weave coarser and deeper than the robe's
-  const scarf = kit.rim({ color: 0x235e6e, roughness: 1, ...tex(woolMaps(), 1, 1.6), side: THREE.DoubleSide }, 0x2a6a70, 0.3);
+  const scarf = kit.rim({ color: 0x235e6e, roughness: 1, ...tex(woolMaps(), 2, 2.2), side: THREE.DoubleSide }, 0x2a6a70, 0.3);
   const teal = kit.rim({ color: 0x1f5058, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.DoubleSide }, 0x2a6a70, 0.3);
   const lining = kit.rim({ color: 0x184048, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x2a6a70, 0.2);
   // the robe's hem band: copper thread woven thick, as the sheet's (a thin gold trim was lost at a distance)
@@ -152,7 +152,7 @@ export function buildMage(): Model {
   // gold piping down the front of the robe on each side, and a diamond brooch set with a stone
   for (const s of [1, -1]) {
     const pts: THREE.Vector3[] = [];
-    for (let k = 0; k <= 8; k++) { const y = lerp(0.24, -0.1, k / 8); pts.push(onChest(s * lerp(0.05, 0.075, k / 8), y, 0.003)); }
+    for (let k = 0; k <= 8; k++) { const y = lerp(0.2, -0.1, k / 8); pts.push(onChest(s * lerp(0.05, 0.075, k / 8), y, 0.003)); }
     A.add(taperTube(pts, () => 0.0075, 16, 6), gold, j.chest);
   }
   // without it the tunic: belted at the waist like the robe, a rolled hem round the neck and a short laced slit down the front
@@ -169,17 +169,31 @@ export function buildMage(): Model {
   // --- the cowl: the hood down, bunched round the neck in teal folds, its crown lying flat on the upper
   // back; its top round the neck as the tunic's neckline is (centred on the chest, a fold's trough at the back met his neck)
   {
-    const g = lathe(COWL, lod(48, 24)), q = g.attributes.position;
+    // (dipping in front under the beard, which lies over it as the sheet's does)
+    const dip = (a: number) => 0.05 * Math.max(0, Math.cos(a)) ** 2;
+    const g = lathe(COWL, lod(40, 20)), q = g.attributes.position;
     for (let i = 0; i < q.count; i++) {
-      // (its folds wound round it as a wrapped scarf's are, slanting with the height, softer at its inner lip)
-      const x = q.getX(i), y = q.getY(i), z = q.getZ(i), a = Math.atan2(x, z), r = Math.hypot(x, z);
-      const out = clamp((r - 0.09) / 0.06, 0, 1);
-      const k = 1 + out * (0.055 * Math.sin(a * 5 + y * 45 + 1) + 0.025 * Math.sin(a * 11 - y * 70) + 0.012 * Math.sin(a * 23 + y * 90));
-      // (dipping in front under the beard, which lies over it as the sheet's does)
-      q.setXYZ(i, x * k, y - 0.05 * Math.max(0, Math.cos(a)) ** 2, z * k * 0.95 + necklineBack(y));
+      const x = q.getX(i), y = q.getY(i), z = q.getZ(i), a = Math.atan2(x, z);
+      q.setXYZ(i, x, y - dip(a), z * 0.95 + necklineBack(y));
     }
     g.computeVertexNormals();
     A.add(scaleUV(g, 4, 2), scarf, j.chest);
+    // each roll a thick tube once round and a little over (its end tucked under its start), slanting round the neck as a
+    // wrapped scarf's turns do, swelling and thinning along it
+    SCARF_ROLLS.forEach(([h, R, r], k) => {
+      const turn: THREE.Vector3[] = [], a0 = 1.3 + k * 2.1;
+      for (let i = 0; i <= 40; i++) {
+        const a = a0 + (i / 40) * TAU * 1.06, ring = R * (1 + 0.035 * Math.sin(a * 3 + k));
+        const y = h + 0.022 * Math.sin(a - a0 + k) + 0.008 * Math.sin(a * 4 + k * 2) - dip(a);
+        turn.push(V(Math.sin(a) * ring, y, Math.cos(a) * ring * 0.95 + necklineBack(y)));
+      }
+      const tube = taperTube(turn, (t) => r * (1 + 0.14 * Math.sin(t * 17 + k) + 0.07 * Math.sin(t * 41 + k * 3)) * Math.min(1, t * 14, (1 - t) * 6 + 0.35), lod(64, 28), lod(14, 8));
+      // (squashed onto the ones under it, as heavy knit settles: round, each roll stood apart as a coil)
+      const tq = tube.attributes.position;
+      for (let i = 0; i < tq.count; i++) tq.setY(i, h + (tq.getY(i) - h) * 0.72);
+      tube.computeVertexNormals();
+      A.add(scaleUV(tube, 6, 2), scarf, j.chest);
+    });
     // the hood laid down the back: from under the scarf's back to a point between the shoulder blades, a little full in its
     // middle, gold along its edges and a short gold bar at its point (the old one was a strip under the scarf, unseen)
     const hood: SurfaceFn = (u, v, out) => {
@@ -197,7 +211,7 @@ export function buildMage(): Model {
   for (const s of [1, -1]) {
     const flap: SurfaceFn = (u, v, out) => {
       // (wide, from the scarf out towards the shoulders, narrowing to the chest's foot, as the sheet's lapels)
-      const y = lerp(0.26, 0.0, v), x0 = lerp(0.05, 0.035, v), x1 = lerp(0.205, 0.075, v ** 0.6);
+      const y = lerp(0.235, 0.0, v), x0 = lerp(0.05, 0.035, v), x1 = lerp(0.205, 0.075, v ** 0.6);
       return onChest(s * lerp(x0, x1, u), y, 0.012 + 0.004 * v, out);
     };
     A.add(plate(flap, 8, 10, 0.004, (u, v) => [s > 0 ? u : 1 - u, 1 - v * 0.8]), lapel, j.chest);
