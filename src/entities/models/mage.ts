@@ -19,29 +19,24 @@ import { buildBoot } from './boot';
 import { fitArm } from './armIK';
 import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
-import { onTunic, tunicFront, neckHem, necklineBack, TUNIC_Y, WAIST } from './tunic';
+import { onTunic, tunicFront, tunicCut, armholeEdge, neckHem, necklineBack, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
 import { buildFlask, drink, drinkUp, type DrinkHold } from './flask';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _vr = new THREE.Quaternion();
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
-// the robe's upper body (chest joint space): its half-width (x) at height y, and its depth (z) as a share
-// of that: a man's chest (ANSUR II: 29 cm across, 25 deep) with the robe over it, rising to the shoulders
-const TORSO: [number, number][] = [[0.145, -0.12], [0.155, -0.02], [0.165, 0.1], [0.168, 0.18], [0.15, 0.245], [0.1, 0.28], [0.075, 0.29]];
-const DEPTH = 0.86;
-/** the coat's shoulder caps' size against the shoulder */
-const SHOULDER_CAP = 0.68;
+/** the coat's and the waistcoat's share of the arm round each armhole (`ArmBlend`: as the ranger's coat, with nothing over
+ *  the shoulder to keep it down) */
+const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.09, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96 };
+/** how far the coat and the waistcoat stand off the tunic round the neckline (m) */
+const NECK_LIFT = 0.008;
 /** how far the slung belt and the book on it draw in round his hips without the coat (a share of their size over it) */
 const SLUNG_IN = 0.9;
-function torsoR(y: number): number {
-  for (let i = 1; i < TORSO.length; i++) if (y <= TORSO[i][1]) { const [r0, y0] = TORSO[i - 1], [r1, y1] = TORSO[i]; return lerp(r0, r1, clamp((y - y0) / (y1 - y0), 0, 1)); }
-  return TORSO[TORSO.length - 1][0];
-}
-/** a point on the robe's front at x, y, `lift` above it */
+/** a point on the coat's front at x, y, `lift` above it: the tunic's (a round body of the coat's own, narrower over the
+ *  shoulders with the arms' tubes stood beside it under caps, read as a bottle from behind) */
 function onChest(x: number, y: number, lift: number, out = new THREE.Vector3()): THREE.Vector3 {
-  const r = torsoR(y), a = Math.asin(clamp(x / r, -1, 1));
-  return out.set(Math.sin(a) * (r + lift), y, Math.cos(a) * (r * DEPTH + lift));
+  return out.copy(tunicFront(x, y, lift));
 }
 
 /** the coat's front panels' embroidery: a column of diamonds, each with a smaller one inside (`embroidered`'s motif) */
@@ -184,8 +179,26 @@ export function buildMage(): Model {
   const A = new Sculpt(), T = new Sculpt(), H = new Sculpt();
   const bareSkin = handSkin(kit, 'mage');
 
-  // --- the longcoat's body: fitted, open down the front over the charcoal waistcoat and the shirt's red at the throat
-  A.add(scaleUV(lathe(TORSO, 28), 3, 1.5), coat, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, DEPTH]);
+  // --- the longcoat's body: fitted, open down the front over the charcoal waistcoat and the shirt's red at the throat; cut
+  // as the ranger's coat is, an armhole round each shoulder with the shirt's sleeve set into it (`SetInShoulders`)
+  const sets = new SetInShoulders(j, ARM_K, lod(ARM_K.around, 48));
+  // (stood off the tunic round the neckline, up from over the armholes: his neck widens into the shoulders, `neckFlare`, and
+  // at the tunic's own height it came through the cloth behind)
+  const cut = (into: Sculpt, mat: THREE.Material) => {
+    const [L, R] = tunicCut(sets.around, lod(22, 12));
+    for (const g of [L, R]) {
+      const p = g.attributes.position, n = g.attributes.normal;
+      for (let i = 0; i < p.count; i++) {
+        // (lower down on the back and front alone: at the sides it is the armhole's edge, which the sleeve's top keeps to)
+        const y = p.getY(i), faces = clamp((Math.abs(n.getZ(i)) - 0.4) / 0.4, 0, 1);
+        const lift = NECK_LIFT * Math.max(clamp((y - 0.252) / 0.035, 0, 1), clamp((y - 0.19) / 0.06, 0, 1) * faces);
+        p.setXYZ(i, p.getX(i) + n.getX(i) * lift, p.getY(i) + n.getY(i) * lift, p.getZ(i) + n.getZ(i) * lift);
+      }
+    }
+    into.skinChain(sets.withArm(R, -1), mat, j.chest, sets.chainOf(-1));
+    into.skinChain(sets.withArm(L, 1), mat, j.chest, sets.chainOf(1));
+  };
+  cut(A, coat);
   A.add(scaleUV(lathe(WAIST, 24), 3, 1), coat, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
   /** the coat's front edge on each side (half-width from the middle) at height y: close at the collar, opening down to the waist */
   const edgeX = (y: number) => lerp(0.035, 0.085, clamp((0.27 - y) / 0.37, 0, 1));
@@ -216,21 +229,12 @@ export function buildMage(): Model {
     for (const e of ['u0', 'u1', 'v1'] as const) A.add(edgeTube(collar, e, 0.004, e === 'v1' ? 36 : 8), brass, j.chest);
   }
 
-  // --- the shoulders: a cap of the coat's wool over each, brass-edged, a leather strap with a buckle across it
-  for (const [s, joint0] of [[1, j.shoulderL], [-1, j.shoulderR]] as const) {
-    const sh = joint(joint0);
-    sh.scale.setScalar(SHOULDER_CAP);
-    sh.position.x -= s * 0.022;
-    const cap: SurfaceFn = (u, v, out) => {
-      const lon = (u - 0.5) * 3, lat = lerp(-0.25, 1.45, v), R = 0.14;
-      return out.set(s * Math.cos(lat) * Math.cos(lon) * R * 1.1 + s * 0.015, Math.sin(lat) * R * 0.85 + 0.01, Math.cos(lat) * Math.sin(lon) * R);
-    };
-    A.add(plate(cap, 18, 8, 0.008), coat, sh);
-    A.add(edgeTube(cap, 'v0', 0.005, 18), brass, sh);
-    const band: SurfaceFn = (u, v, out) => cap(u, 0.28, out).multiplyScalar(1.03);
-    const strapPts = Array.from({ length: 12 }, (_, k) => { const p = band(k / 11, 0, new THREE.Vector3()); return p; });
-    A.add(strap(strapPts, 0.03, 0.006), leather, sh);
-    A.add(buckle(0.026, 0.03, 0.005), brass, sh, band(0.5, 0, new THREE.Vector3()).multiplyScalar(1.02).toArray(), [0, s * Math.PI / 2, 0]);
+  // --- the shoulders: the coat's seams stitched in its thread, over each shoulder from the collar to the sleeve and round
+  // the armhole (moving with the cloth they're sewn into)
+  for (const sa of [1, -1]) {
+    const top = ARMHOLE.y + ARMHOLE.B;
+    A.skinChain(sets.withArm(stitches([0.272, 0.262, top].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), sa), linen, j.chest, sets.chainOf(sa));
+    A.skinChain(sets.withArm(stitches(armholeEdge(sa, 48, 0.0016), 0.004, 0.0028, 0.0009, true), sa), linen, j.chest, sets.chainOf(sa));
   }
 
   // --- the harness: a strap down the front from each shoulder to the belt, buckled at the chest, and crossed behind
@@ -247,8 +251,8 @@ export function buildMage(): Model {
   // --- arms: the shirt's charcoal sleeves pushed up to the elbow in a thick roll, a strap round each upper arm, the forearms
   // bare and inked with runes; leather bracers buckled over them (the hands item's), fingerless gloves
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
-    // (its round top sunk into the deltoid: standing 5 cm over the joint, it was the shoulder)
-    S.skin(scaleUV(limb(0.33, 0.062, 0.058, 0.05, 0.3, 14), 2, 1), sleeve, sh, el, 0.2, 0.33, [0, -0.025, 0]);
+    // (set into the armhole: from its edge over the deltoid onto the arm, and over the elbow under the roll)
+    S.skinChain(sets.sleeve(s, { len: 0.31, r0: 0.062, r1: 0.056, bulge: 0.04, at: 0.3, cap: lod(10, 6), tube: lod(14, 8) }), sleeve, sh, [...sets.chainOf(s), el]);
     // (the roll: two thick turns of the cloth bunched round the elbow)
     for (const [y, r, t] of [[-0.008, 0.058, 0.011], [0.016, 0.062, 0.012]] as const) {
       const roll = new THREE.TorusGeometry(r, t, lod(8, 6), lod(22, 14)).rotateX(Math.PI / 2);
@@ -273,7 +277,7 @@ export function buildMage(): Model {
   // --- without the coat: the waistcoat over the shirt, buttoned in brass, the shirt's collar round the neck
   // (eased out over the shoulders' top and round the neckline: the neck, a man's girth widening into the shoulders,
   // came through it behind)
-  T.add(plate((u, v, out) => { const y = lerp(TUNIC_Y[0], TUNIC_Y[1], 1 - (1 - v) ** 1.5); return onTunic((u - 0.5) * TAU, y, 0.008 * clamp((y - 0.2) / 0.06, 0, 1), out); }, 40, 30, 0, undefined, V(0, 0.1, 0)), charcoal, j.chest);
+  cut(T, charcoal);
   T.add(scaleUV(lathe(WAIST, 24), 3, 1), charcoal, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
   T.add(neckHem(), shirt, j.chest);
   T.add(plate((u, v, out) => out.copy(tunicFront((u - 0.5) * 2 * lerp(0.04, 0.012, v), lerp(0.29, 0.2, v), 0.003)), 6, 6, 0.002), shirt, j.chest);
@@ -761,6 +765,7 @@ export function buildMage(): Model {
     if (!fp && st.dead < 0) { fitArm(j, true, undefined, body); slant = fitArm(j, false, gripTurn(handR, staff, _vr), body, SLANT).slant; }
     // (the haft seated in the fist as the hand holds it, diagonal across the palm by the slant the arm took)
     seat(handR, staff, STAFF_R, slant);
+    sets.bend();
     placeBodies();
     // (the hands only against the outer skirt: pushed in, the inner one would come out over it)
     if (robed) { under.update(fL, fR, move, t, dt, legBodies.list); over.update(fL, fR, move, t + 0.4, dt, legBodies.list, handBodies.list); }
