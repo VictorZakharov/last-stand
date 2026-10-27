@@ -1,5 +1,5 @@
 // The Mage: a battle scholar, lean and clean-shaven, his dark hair cropped short, in a fitted oxblood longcoat with a
-// high standing collar, split up the front over a charcoal waistcoat and underskirts, brass-edged, a leather harness
+// high standing collar, split up the front over a charcoal waistcoat, brass-edged, a leather harness
 // buckled in brass; his shirt's charcoal sleeves pushed up over forearms inked with runes, a grimoire chained at his hip,
 // tall worn boots, and a gnarled staff cradling a floating crystal. The longcoat with its collar, shoulders, harness and
 // skirts is the chest item's, the bracers the hands item's: without them the waistcoat and bare forearms. Fully procedural.
@@ -33,7 +33,7 @@ const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.09, topY: 0.235, join: 
 const NECK_LIFT = 0.008;
 /** how far the slung belt and the book on it draw in round his hips without the coat (a share of their size over it:
  *  across, and from front to back, where it stood out behind his seat) */
-const SLUNG_IN = 0.9, SLUNG_IN_BACK = 0.84;
+const SLUNG_IN = 1, SLUNG_IN_BACK = 0.94;
 /** where round the slung belt the book hangs (rad from ahead, towards his left): over the coat at the back of the
  *  hip, clear of the hanging arm; without it at the side of the hip, against the thigh, just behind the arm (at the
  *  back, without the coat, it lay glued to his seat); and how far it draws in along its face without the coat (m) */
@@ -305,6 +305,8 @@ export function buildMage(): Model {
   };
   cut(A, coat);
   A.add(scaleUV(lathe(WAIST, 24), 3, 1), coat, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
+  // (carried on down inside the skirt's top, under the belt: the skirt hung from a step below the waist)
+  A.add(scaleUV(lathe([[0.17, -0.1], [0.16, -0.075], [0.148, -0.05]], 24), 3, 1), coat, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
   /** the coat's front edge on each side (half-width from the middle) at height y: close at the collar, opening down to the waist */
   const edgeX = (y: number) => lerp(0.035, 0.085, clamp((0.27 - y) / 0.37, 0, 1));
   // (stood off further down, over the coat's waist, which came through its foot in a jagged edge)
@@ -454,7 +456,7 @@ export function buildMage(): Model {
   j.hips.add(sling);
   // (drawn tight round the coat: a hand's width off it, it stood out from it as a hoop)
   const slung = (a: number, out = 0, dy = 0) =>
-    V(Math.sin(a) * (0.205 + out), -0.01 - 0.05 * Math.sin(a + 0.6) - 0.02 * Math.cos(a) + dy, Math.cos(a) * (0.19 + out));
+    V(Math.sin(a) * (0.185 + out), -0.01 - 0.05 * Math.sin(a + 0.6) - 0.02 * Math.cos(a) + dy, Math.cos(a) * (0.17 + out));
   const around = (out = 0, dy = 0) => Array.from({ length: 36 }, (_, k) => slung((k / 36) * TAU, out, dy));
   S.add(strap(around(), 0.05, 0.01, true), beltLeather, sling);
   for (const dy of [-0.02, 0.02]) S.add(stitches(around(0.006, dy), 0.005, 0.0035, 0.0011, true), linen, sling);
@@ -497,12 +499,17 @@ export function buildMage(): Model {
   // waist, it read as a tent's flap over a dark wedge)
   /** an angle round the skirt from its front, either way (its columns run 0 to 2π, the front at both ends) */
   const fromFront = (a: number) => (a > Math.PI ? a - TAU : a);
-  // (the coat's cut over finer columns, 72 round: over 40 the narrowest it could be was a V two columns wide)
+  // (no underskirts under the closed coat: the breeches show in its slit; cut away at its front, they came through it
+  // between the legs and showed their cut edges at its sides)
+  // (the coat's slit its front seam parted, a few centimetres at the hem, its corners rounded a little: as the owner's
+  // reference has it at rest; cut out of the hem it was a V notch)
   const slit = (a: number, deep: number, wide: number) => -deep * Math.exp(-((fromFront(a) / wide) ** 4));
-  const under = new Skirt({ r0: 0.19, r1: 0.28, len: 0.7, depth: 0.84, folds: 13, foldAmp: 0.05, rows: 10, hem: (a) => slit(a, 0.5, 0.2) + 0.02 * Math.sin(a * 5) });
-  const over = new Skirt({ r0: 0.2, r1: 0.31, len: 0.74, depth: 0.84, folds: 15, foldAmp: 0.065, rows: 12, trim: 0.03, radial: 72, hem: (a) => slit(a, 0.5, 0.11) + 0.03 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
+  // (from the coat's waist under the broad belt, hanging near straight to below the knee, in a few broad folds, as Codex
+  // measured it against the reference photos: from 20 cm out, wider than the waist, its top stood proud of the body,
+  // flared to 31 cm it read as a bell, and its fifteen folds and brass hem as a pleated skirt)
+  const over = new Skirt({ r0: 0.162, r1: 0.255, len: 0.68, depth: 0.84, folds: 8, foldAmp: 0.03, rows: 12, trim: 0.03, radial: 72, flare: 0.6, slit: { from: 0.45, gap: 0.05 }, hem: (a) => slit(a, 0.02, 0.06) + 0.03 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
   const skirts: THREE.Mesh[] = [];
-  for (const [sk, mats] of [[under, [charcoal]], [over, [coat, brass]], [over, [lining, brass]]] as const) {
+  for (const [sk, mats] of [[over, [coat, coat]], [over, [lining, lining]]] as const) {
     const m = new THREE.Mesh(sk.geo, mats.length > 1 ? [...mats] : mats[0]);
     m.position.y = 0.03; m.castShadow = m.receiveShadow = true;
     j.hips.add(m); skirts.push(m);
@@ -925,7 +932,7 @@ export function buildMage(): Model {
     sets.bend();
     placeBodies();
     // (the hands only against the outer skirt: pushed in, the inner one would come out over it)
-    if (robed) { under.update(fL, fR, move, t, dt, legBodies.list); over.update(fL, fR, move, t + 0.4, dt, legBodies.list, handBodies.list); }
+    if (robed) { over.update(fL, fR, move, t + 0.4, dt, legBodies.list, handBodies.list); }
     else short.update(fL, fR, move, t, dt, legBodies.list, handBodies.list);
     for (const f of flaps) {
       const wl = clamp(0.5 + Math.sin(f.a) * 0.9, 0, 1);

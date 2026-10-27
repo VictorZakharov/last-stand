@@ -294,6 +294,9 @@ export interface SkirtOpts {
   layer?: number;
   /** a band this share of the length deep round the hem, drawn with the mesh's second material (a trim) */
   trim?: number;
+  /** the front seam parted into a slit: from this share of the length down, eased open to `gap` across at the hem
+   *  (m), its two edges hanging straight (a long coat's; cut out of the hem, a slit was a V two columns wide) */
+  slit?: { from: number; gap: number };
 }
 
 /** A limb a skirt keeps clear of, in the skirt's own space: from `a` (radius `ra`) to `b` (radius `rb`), the cloth's gap
@@ -352,12 +355,16 @@ export function armOffThigh(space: THREE.Object3D, shoulder: THREE.Object3D, sid
  * on below it. (Swung by the thighs' angles alone, a knee lifted at a run came out through the front and the flare swept over
  * a hand at the side; swinging whole columns out past the knee instead stood the cloth out as a stiff cone, in points.)
  */
+const smoothstep = (e0: number, e1: number, x: number) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+
 export class Skirt {
   readonly geo = new THREE.BufferGeometry();
   private rest: Float32Array;
   private ang: Float32Array;
   private theta: Float32Array;
   private vel: Float32Array;
+  /** each point's sideways parting at the slit (m: `SkirtOpts.slit`) */
+  private open: Float32Array;
   /** points round it in each row (the last a copy of the first, at the seam) */
   readonly cols: number;
 
@@ -365,7 +372,7 @@ export class Skirt {
     const radial = o.radial ?? 40, body = o.rows ?? 10, depth = o.depth ?? 0.85, trim = o.trim ?? 0;
     const rows = body + (trim ? 1 : 0);
     this.cols = radial + 1;
-    const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+    const pos: number[] = [], uv: number[] = [], idx: number[] = [], open: number[] = [];
     this.ang = new Float32Array(this.cols);
     for (let j = 0; j <= rows; j++) {
       const k = j <= body ? (j / body) * (1 - trim) : 1;
@@ -374,7 +381,10 @@ export class Skirt {
         this.ang[i] = a;
         const len = o.len * (1 + (o.hem?.(a) ?? 0));
         const r = (o.r0 + (o.r1 - o.r0) * Math.pow(k, 0.8)) * (1 + (o.foldAmp ?? 0.05) * k * Math.sin(a * (o.folds ?? 9)));
-        pos.push(Math.sin(a) * r, -len * k, Math.cos(a) * r * depth);
+        // (the front seam's two columns, the first and the last, parted either way: kept apart from the rest place, which
+        // the swing turns about the skirt's middle, and added after it)
+        open.push(o.slit && (i === 0 || i === radial) ? (i === 0 ? 0.5 : -0.5) * o.slit.gap * smoothstep(o.slit.from, 1, k) : 0);
+        pos.push(Math.sin(a) * r + open[open.length - 1], -len * k, Math.cos(a) * r * depth);
         uv.push((i / radial) * (Math.PI * 2 * o.r1) / TILE, (1 - k) * len / TILE);
       }
     }
@@ -382,7 +392,9 @@ export class Skirt {
       const a = j * this.cols + i, b = a + this.cols;
       idx.push(a, b, a + 1, a + 1, b, b + 1);
     }
+    this.open = new Float32Array(open);
     this.rest = new Float32Array(pos);
+    for (let n = 0; n < open.length; n++) this.rest[n * 3] -= open[n];
     // (the lab's handle on it: tools/lab coat)
     this.geo.name = 'skirt';
     this.geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
@@ -417,7 +429,7 @@ export class Skirt {
         const x = R[j * 3], y = R[j * 3 + 1], z = R[j * 3 + 2] / depth;
         const r = Math.hypot(x, z), r0 = o.r0, dr = r - r0;
         const nr = r0 + dr * c - y * s, ny = y * c + dr * s;
-        p.setXYZ(j, sx * nr, ny, cz * nr * depth);
+        p.setXYZ(j, sx * nr + this.open[j], ny, cz * nr * depth);
       }
     }
     if (legs?.length || hands?.length) this.drape(legs ?? [], hands ?? []);
@@ -461,7 +473,7 @@ export class Skirt {
       for (let j = 0; j < n; j++) if (j % C < C - 1) round[j] = d(j, j + 1);
       this.lens = { down, round };
     }
-    const { down, round } = this.lens, layer = this.o.layer ?? 0;
+    const { down, round } = this.lens, layer = this.o.layer ?? 0, slit = !!this.o.slit;
     // (limb by limb, each point a limb's box doesn't hold skipped, and the limbs in runs whose boxes overlap, a point outside a
     // run's box skipping all of it: most points are nowhere near most limbs, a hand's dozen capsules among them; each point
     // still meets the hands before the legs)
@@ -487,8 +499,9 @@ export class Skirt {
           // (a point outside the run's box, the cloth to its neighbours aside, skipped before anything else is read)
           if (!withLines && (x < gx0 || x > gx1 || y < gy0 || y > gy1 || z < gz0 || z > gz1)) continue;
           // (against a leg, the cloth from the point above and to the next round too: their box; the last column is the first's
-          // copy, so the one before it goes on to the first, and the copy itself to none)
-          const a = (j - C) * 3, nx = c === C - 2 ? j + 2 - C : c === C - 1 ? j : j + 1, e = nx * 3;
+          // copy, so the one before it goes on to the first, and the copy itself to none; parted in a slit, the last is a
+          // point of its own and the one before it goes on to it)
+          const a = (j - C) * 3, nx = c === C - 2 && !slit ? j + 2 - C : c === C - 1 ? j : j + 1, e = nx * 3;
           let x0 = x, x1 = x, y0 = y, y1 = y, z0 = z, z1 = z;
           if (withLines) {
             x0 = Math.min(x, P[a], P[e]); x1 = Math.max(x, P[a], P[e]); y0 = Math.min(y, P[a + 1], P[e + 1]);
@@ -520,13 +533,13 @@ export class Skirt {
       for (let j = C; j < n; j++) pull(P, j, j - C, down[j] * 1.04, 1);
       // (round it: neighbours no further apart than theirs and a little, both moving; across the seam the last column but one
       // with the first, the last being a copy of the first: tied to that copy, the cloth parted down the front)
-      for (let j = C; j < n; j++) if (j % C < C - 1) pull(P, j, j % C === C - 2 ? j + 2 - C : j + 1, round[j] * 1.15, 0.5);
-      // (the seam where the last column meets the first)
-      for (let j = C - 1; j < n; j += C) for (let k = 0; k < 3; k++) P[j * 3 + k] = P[(j - C + 1) * 3 + k];
+      for (let j = C; j < n; j++) if (j % C < C - 1) pull(P, j, j % C === C - 2 && !slit ? j + 2 - C : j + 1, round[j] * 1.15, 0.5);
+      // (the seam where the last column meets the first, unless it's parted in a slit: welded every frame, a slit closed)
+      if (!slit) for (let j = C - 1; j < n; j += C) for (let k = 0; k < 3; k++) P[j * 3 + k] = P[(j - C + 1) * 3 + k];
     }
-    // (ending off the limbs: the lengths last pulled points back into a thigh; and the seam closed again)
+    // (ending off the limbs: the lengths last pulled points back into a thigh; and the seam closed again, unless it's a slit)
     offAll(true);
-    for (let j = C - 1; j < n; j += C) for (let k = 0; k < 3; k++) P[j * 3 + k] = P[(j - C + 1) * 3 + k];
+    if (!slit) for (let j = C - 1; j < n; j += C) for (let k = 0; k < 3; k++) P[j * 3 + k] = P[(j - C + 1) * 3 + k];
   }
 
   /** Point `j` put out of limb `b` (and `extra` further): a leg's moved away from the skirt's middle and up until it is clear
