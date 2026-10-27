@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { belt, TILE } from './armor';
 import { curve, type Keys } from './motion';
 import { clamp } from '../../util';
+import { joint } from './rig';
 
 /** chest joint space (m): at each height its half-width and half-depth, and how square its section is. Over the shoulders
  *  it is as broad as the arms' tops and thin front to back, the trapezius sloping down from the neck and a deltoid
@@ -188,4 +189,96 @@ export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: n
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setAttribute('capT', new THREE.Float32BufferAttribute(ct, 1));
   return g;
+}
+
+/** the cloth's share of the arm round each armhole (`share`, m in the chest's frame): `seam` on the armhole's edge, falling
+ *  off to none `reach` from it (`top` above `topY`, under a strap over the shoulder), and the sleeve's rising from it to the
+ *  whole arm's at its tube, `join` below the joint (`joinIn` more under the arm); `around` points round the armhole, the
+ *  body's and the sleeve's the same */
+export type ArmBlend = { seam: number; reach: number; top: number; topY: number; join: number; joinIn: number; around: number };
+const DOWN = new THREE.Vector3(0, -1, 0), _sw = new THREE.Vector3(), _tw = new THREE.Quaternion(), _tq = new THREE.Quaternion(), _p = new THREE.Vector3();
+const smooth = (t: number) => t * t * (3 - 2 * t);
+
+/**
+ * A tunic's shoulders with the sleeves set in (`tunicCut`, `setInSleeve`): the cloth round each seam blended from the chest
+ * to the arm through joints turned a quarter, half and three quarters as far as it (`delts`), so the body round the armhole
+ * goes some way up with a raised arm and the sleeve comes out of it. A sleeve's tube stood in a whole coat: raised, it came
+ * out of the cloth over the shoulder as a tube stuck into the body, and with the cloth over the deltoid blended straight
+ * from the chest to the arm, the cloth between folded in on the joint in a lip round it. `bend()` each frame after the arms
+ * are posed.
+ */
+export class SetInShoulders {
+  /** each side's part-turned joints on the chest (+1 his left first) */
+  readonly delts: THREE.Group[][];
+  /** points round each armhole's edge, as many as the sleeve's top */
+  readonly around: number;
+  private readonly holes: THREE.Vector3[][];
+  private readonly swings = [new THREE.Quaternion(), new THREE.Quaternion()];
+
+  constructor(private readonly j: { chest: THREE.Object3D; shoulderL: THREE.Object3D; shoulderR: THREE.Object3D }, readonly K: ArmBlend, around: number) {
+    this.delts = [j.shoulderL, j.shoulderR].map((sh) => [1, 2, 3].map((q) => {
+      const d = joint(j.chest, ...(sh.position.toArray() as [number, number, number]));
+      d.name = (sh === j.shoulderL ? 'deltL' : 'deltR') + q;
+      return d;
+    }));
+    this.around = around;
+    this.holes = [1, -1].map((s) => armholeEdge(s, around));
+  }
+
+  private shoulder(s: number): THREE.Object3D { return s > 0 ? this.j.shoulderL : this.j.shoulderR; }
+  /** side s's shoulder joint at rest, in the chest's frame */
+  restOf(s: number): THREE.Vector3 { return this.shoulder(s).userData.rest as THREE.Vector3; }
+  /** the joints side s's cloth is blended along, from the chest to the shoulder (`Sculpt.skinChain`'s) */
+  chainOf(s: number): THREE.Object3D[] { return [this.j.chest, ...this.delts[s > 0 ? 0 : 1], this.shoulder(s)]; }
+
+  /** how far the cloth at `p` (the chest's frame, at rest) goes with the arm on side `s`, 0 to 1 */
+  share(p: THREE.Vector3, s: number): number {
+    let d = Infinity;
+    for (const q of this.holes[s > 0 ? 0 : 1]) d = Math.min(d, p.distanceToSquared(q));
+    const reach = this.K.reach + (this.K.top - this.K.reach) * smooth(clamp((p.y - this.K.topY) / 0.03, 0, 1));
+    return this.K.seam * (1 - smooth(clamp(Math.sqrt(d) / reach, 0, 1)));
+  }
+
+  /** `g` (the chest's frame) given its vertices' shares of side s's arm as `skinK` */
+  withArm(g: THREE.BufferGeometry, s: number): THREE.BufferGeometry {
+    const p = g.attributes.position, k = new Float32Array(p.count);
+    for (let i = 0; i < p.count; i++) k[i] = this.share(_p.fromBufferAttribute(p, i), s);
+    g.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
+    return g;
+  }
+
+  /** side s's sleeve (`setInSleeve`, in the shoulder's frame), its `skinK` along the chain on to the elbow: from the
+   *  armhole's share at its edge to the arm's wholly a little way down it, and over the elbow onto the forearm */
+  sleeve(s: number, o: { len: number; r0: number; r1: number; bulge: number; at: number; cap?: number; tube?: number }): THREE.BufferGeometry {
+    const at = this.restOf(s), seam = this.K.seam;
+    const g = setInSleeve(s, at, { ...o, join: this.K.join, joinIn: this.K.joinIn, around: this.around }).translate(-at.x, -at.y, -at.z);
+    const p = g.attributes.position, c = g.attributes.capT, k = new Float32Array(p.count);
+    for (let i = 0; i < p.count; i++) {
+      const e = smooth(clamp((-p.getY(i) - 0.2) / 0.13, 0, 1));
+      k[i] = (seam + (1 - seam) * smooth(c.getX(i))) * 4 / 5 + e / 5;
+    }
+    g.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
+    return g;
+  }
+
+  /** each shoulder's part-turned joints: a quarter, half and three quarters of the arm's swing from hanging and of the
+   *  girdle's move, and less of its turn about its own length (the square of that share: the cloth round the armhole
+   *  barely turns with it). Near straight up the swing's axis is anyone's, so it's kept as it was */
+  bend(): void {
+    for (let i = 0; i < 2; i++) {
+      const sh = this.shoulder(i ? -1 : 1), swing = this.swings[i];
+      _sw.set(0, -1, 0).applyQuaternion(sh.quaternion);
+      if (_sw.dot(DOWN) > -0.995) swing.setFromUnitVectors(DOWN, _sw);
+      // (what's left of its turn once swung: about its own length)
+      _tw.copy(swing).invert().multiply(sh.quaternion);
+      _tw.x = 0;
+      _tw.z = 0;
+      _tw.normalize();
+      this.delts[i].forEach((d, q) => {
+        const f = (q + 1) / 4;
+        d.quaternion.identity().slerp(swing, f).multiply(_tq.identity().slerp(_tw, f * f));
+        d.position.lerpVectors(sh.userData.rest, sh.position, f);
+      });
+    }
+  }
 }
