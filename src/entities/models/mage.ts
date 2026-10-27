@@ -1,20 +1,19 @@
-// The Mage: the same bare-headed man in layered navy and teal robes, the hood down in a cowl round
-// the neck, gold-trimmed and embroidered with arcane signs, long bell sleeves, black-and-gold spiked
-// pauldrons set with green stones, a wide medallion belt with pouches and charms, worn brown leather boots,
-// and a gnarled staff cradling a floating crystal. The robe with its pauldrons, collar flaps and
-// brooch is the chest item's, the bracers and gloves the hands item's: without them a plain linen tunic, its
-// sleeves (or the robe's) on to the wrists, and bare hands. Fully procedural.
+// The Mage: a battle scholar, lean and clean-shaven, his dark hair cropped short, in a fitted oxblood longcoat with a
+// high standing collar, split up the front over a charcoal waistcoat and underskirts, brass-edged, a leather harness
+// buckled in brass; his shirt's charcoal sleeves pushed up over forearms inked with runes, a grimoire chained at his hip,
+// tall worn boots, and a gnarled staff cradling a floating crystal. The longcoat with its collar, shoulders, harness and
+// skirts is the chest item's, the bracers the hands item's: without them the waistcoat and bare forearms. Fully procedural.
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
-import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as woodMaps, wool as woolMaps, oiled, pbrMaterialMaps } from '../../core/textures';
-import { engravedSteel, embroidered, arcaneColumn, projectUV, steelRegion } from '../../core/engraving';
+import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as woodMaps, wool as woolMaps, oiled, pbrMaterialMaps, ctx2d } from '../../core/textures';
+import { engravedSteel, embroidered, projectUV, steelRegion } from '../../core/engraving';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, stitches, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
 import { buildHand, poseHand, hold, seat, gripTurn, bare, handCapsules, SLANT } from './hands';
 import { clamp, lerp, damp, TAU, mulberry } from '../../util';
-import { BellCloth, type BellOptions } from './sleeve';
+import type { BellCloth } from './sleeve';
 import { LegIK } from './ik';
 import { buildBoot } from './boot';
 import { fitArm } from './armIK';
@@ -31,15 +30,8 @@ const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 // of that: a man's chest (ANSUR II: 29 cm across, 25 deep) with the robe over it, rising to the shoulders
 const TORSO: [number, number][] = [[0.145, -0.12], [0.155, -0.02], [0.165, 0.1], [0.168, 0.18], [0.15, 0.245], [0.1, 0.28], [0.075, 0.29]];
 const DEPTH = 0.86;
-/** the cowl's core (chest joint space), bottom to top: the hood down, wrapped round the neck as a scarf whose rolls lie
- *  over it (`SCARF_ROLLS`), rounded over at its top onto the neck */
-const COWL: [number, number][] = [[0.1, 0.19], [0.128, 0.2], [0.134, 0.26], [0.124, 0.33], [0.106, 0.372], [0.088, 0.38]];
-/** the scarf's rolls, bottom to top: each's height, the radius of its ring round the neck and of the roll itself (m). As
- *  the sheet's: three thick rolls of knit wrapped up under the beard, a dark crease between each (one shapeless lathe
- *  read as a fur ruff) */
-const SCARF_ROLLS: [number, number, number][] = [[0.214, 0.15, 0.047], [0.266, 0.143, 0.045], [0.316, 0.126, 0.039]];
-/** the pauldrons' size against the shoulder */
-const PAULDRON = 0.78;
+/** the coat's shoulder caps' size against the shoulder */
+const SHOULDER_CAP = 0.7;
 function torsoR(y: number): number {
   for (let i = 1; i < TORSO.length; i++) if (y <= TORSO[i][1]) { const [r0, y0] = TORSO[i - 1], [r1, y1] = TORSO[i]; return lerp(r0, r1, clamp((y - y0) / (y1 - y0), 0, 1)); }
   return TORSO[TORSO.length - 1][0];
@@ -48,6 +40,40 @@ function torsoR(y: number): number {
 function onChest(x: number, y: number, lift: number, out = new THREE.Vector3()): THREE.Vector3 {
   const r = torsoR(y), a = Math.asin(clamp(x / r, -1, 1));
   return out.set(Math.sin(a) * (r + lift), y, Math.cos(a) * (r * DEPTH + lift));
+}
+
+/** the coat's front panels' embroidery: a column of diamonds, each with a smaller one inside (`embroidered`'s motif) */
+function diamondColumn(c: CanvasRenderingContext2D, w: number, h: number): void {
+  const m = w / 2;
+  c.lineWidth = 4;
+  const diamond = (y: number, r: number) => { c.beginPath(); c.moveTo(m, y - r); c.lineTo(m + r * 0.6, y); c.lineTo(m, y + r); c.lineTo(m - r * 0.6, y); c.closePath(); c.stroke(); };
+  for (let y = h * 0.42; y < h - 80; y += 150) { diamond(y, 52); diamond(y, 22); }
+}
+
+/** The runes inked round a forearm (an alpha-tested texture: the ink opaque, the rest clear), wrapping the lathe's u round
+ *  the arm and v along it: a ring of circles with spokes over the inner forearm, a line of small rings and crosses down to
+ *  the wrist, as the sheet's. Made once, shared by every build. */
+let runes: THREE.CanvasTexture | undefined;
+function forearmRunes(): THREE.CanvasTexture {
+  if (runes) return runes;
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 512;
+  const c = ctx2d(cv);
+  c.strokeStyle = '#000'; c.fillStyle = '#000'; c.lineCap = 'round';
+  // (the inner forearm faces u = 0.5; v runs from the wrist (0) to the elbow (1))
+  const cx = 256, ring = (y: number, r: number, lw: number) => { c.lineWidth = lw; c.beginPath(); c.arc(cx, y, r, 0, TAU); c.stroke(); };
+  const cy = 330;
+  ring(cy, 70, 6); ring(cy, 44, 4); ring(cy, 12, 4);
+  for (let k = 0; k < 8; k++) {
+    const a = k * Math.PI / 4;
+    c.lineWidth = 4; c.beginPath(); c.moveTo(cx + Math.cos(a) * 12, cy + Math.sin(a) * 12); c.lineTo(cx + Math.cos(a) * 92, cy + Math.sin(a) * 92); c.stroke();
+  }
+  c.lineWidth = 4; c.beginPath(); c.moveTo(cx, 60); c.lineTo(cx, cy - 92); c.stroke();
+  for (const [y, r] of [[200, 14], [130, 10], [80, 8]] as const) { ring(y, r, 4); c.beginPath(); c.moveTo(cx - r - 12, y); c.lineTo(cx + r + 12, y); c.stroke(); }
+  c.beginPath(); c.moveTo(cx, cy + 92); c.lineTo(cx, 470); c.stroke();
+  for (const y of [430, 460]) { c.beginPath(); c.moveTo(cx - 14, y); c.lineTo(cx + 14, y); c.stroke(); }
+  runes = new THREE.CanvasTexture(cv);
+  runes.colorSpace = THREE.SRGBColorSpace;
+  return runes;
 }
 
 /** where the feet stand (left x, z, turn, then right), rig units: at rest, throwing a spell (the left steps in), slamming the ground, aiming the staff (the right forward), bracing for the lance */
@@ -95,162 +121,205 @@ export function buildMage(): Model {
   const kit = createKit(0x5dffa8);
   const rng = mulberry(5);
   const tex = (maps: ReturnType<typeof clothMaps>, rep: number, ns = 1) => { const m = pbrMaterialMaps(maps, rep, ns); return { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, normalScale: m.normalScale }; };
-  // (heavy wool, its weave seen up close as the sheet's: the fine cloth's read as satin)
-  const robe = kit.rim({ color: 0x262f4e, roughness: 1, ...tex(woolMaps(), 1, 1.1) }, 0x2a3a60, 0.3);
-  // the plain tunic under the robe: undyed linen
-  const linen = kit.rim({ color: 0x9a8e76, roughness: 1, ...tex(clothMaps(), 1, 0.7) }, 0x6a6050, 0.25);
-  // the cowl's heavy wool, its weave coarser and deeper than the robe's
-  const scarf = kit.rim({ color: 0x2a5a68, roughness: 1, ...tex(woolMaps(), 2, 2.2), side: THREE.DoubleSide }, 0x2a6a70, 0.3);
-  const teal = kit.rim({ color: 0x1f5058, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.DoubleSide }, 0x2a6a70, 0.3);
-  const lining = kit.rim({ color: 0x184048, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x2a6a70, 0.05);
-  // the robe's hem band: copper thread woven thick, as the sheet's (a thin gold trim was lost at a distance)
-  const copper = kit.std({ color: 0xa8643a, metalness: 0.7, roughness: 0.5, ...tex(clothMaps(), 2, 1.2) });
-  const gold = kit.std({ color: 0xc9a14a, metalness: 1, roughness: 1, roughnessMap: pbrMaterialMaps(steelMaps(), 1).roughnessMap });
+  // the coat's felted wool: oxblood, its weave seen up close as the sheet's
+  const coat = kit.rim({ color: 0x5c1a1f, roughness: 1, ...tex(woolMaps(), 1, 1.2) }, 0x7a2a2a, 0.3);
+  const coatD = kit.rim({ color: 0x5c1a1f, roughness: 1, ...tex(woolMaps(), 1, 1.2), side: THREE.DoubleSide }, 0x7a2a2a, 0.3);
+  // the waistcoat's and the underskirts' charcoal wool, the shirt's darker red linen, the trousers' charcoal twill
+  const charcoal = kit.rim({ color: 0x2b2a2e, roughness: 1, ...tex(woolMaps(), 1, 1.4), side: THREE.DoubleSide }, 0x3a3a44, 0.25);
+  const shirt = kit.rim({ color: 0x3a1418, roughness: 1, ...tex(clothMaps(), 1, 0.9) }, 0x5a2a2a, 0.25);
+  const sleeve = kit.rim({ color: 0x2e2d32, roughness: 1, ...tex(clothMaps(), 1, 1.1) }, 0x3a3a44, 0.25);
+  const trousers = kit.rim({ color: 0x24232a, roughness: 1, ...tex(clothMaps(), 1, 1.2) }, 0x34343c, 0.2);
+  // brass, rubbed bright on its edges (the steel map's roughness: worn smooth where it is handled)
+  const brass = kit.std({ color: 0xb8904c, metalness: 1, roughness: 0.55, roughnessMap: pbrMaterialMaps(steelMaps(), 1).roughnessMap });
+  const gold = brass;
   const E = engravedSteel();
-  const goldE = kit.std({ color: 0xd4ab58, metalness: 1, roughness: 1, map: E.map, normalMap: E.normalMap, roughnessMap: E.roughnessMap });
+  const goldE = kit.std({ color: 0xc9a058, metalness: 1, roughness: 1, map: E.map, normalMap: E.normalMap, roughnessMap: E.roughnessMap });
   const blackLeather = kit.std({ color: 0x1a1614, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
-  // the pauldrons' hardened leather, tooled: its grain raised more and finer, a dull sheen on the black
-  const tooled = kit.std({ color: 0x1c1a20, roughness: 0.75, ...tex(leatherMaps(), 3, 2.4) });
-  const leather = kit.std({ color: 0x3e281a, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
-  const beltLeather = kit.std({ color: 0x4a2f1e, roughness: 0.85, ...tex(leatherMaps(), 2, 1.8) });
+  // the belts' and the harness's brown leather, worn and creased
+  const leather = kit.std({ color: 0x4a2c1a, roughness: 0.8, ...tex(leatherMaps(), 2, 1.8) });
+  const beltLeather = kit.std({ color: 0x3c2414, roughness: 0.75, ...tex(leatherMaps(), 2, 2) });
+  // the grimoire: dark tooled leather over its boards, its pages old paper
+  const tome = kit.std({ color: 0x2e1c12, roughness: 0.8, ...tex(leatherMaps(), 3, 2.4) });
+  const paper = kit.std({ color: 0xb8a882, roughness: 1, ...tex(clothMaps(), 4, 0.6) });
+  const linen = kit.rim({ color: 0x9a8e76, roughness: 1, ...tex(clothMaps(), 1, 0.7) }, 0x6a6050, 0.25);
   // the boots: worn, oiled dark brown leather on darker soles, as the sheet's
-  const boot = kit.std({ color: 0x5a3a26, roughness: 1, ...pbrMaterialMaps(oiled(), 1) });
-  const bootStrap = kit.std({ color: 0x3a2618, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
-  const sole = kit.std({ color: 0x22180f, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
+  const boot = kit.std({ color: 0x4a2c1c, roughness: 1, ...pbrMaterialMaps(oiled(), 1) });
+  const bootStrap = kit.std({ color: 0x3a2214, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
+  const sole = kit.std({ color: 0x1e140c, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
   const wood = kit.std({ color: 0x7a5236, roughness: 0.9, ...tex(woodMaps(), 1, 2) });
   const skinTip = kit.rim({ color: 0xc9957c, roughness: 0.6 }, 0x6a2a1c, 0.25);
+  // the hat's charcoal felt and its dark lining
+  const felt = kit.rim({ color: 0x2a2628, roughness: 1, ...tex(woolMaps(), 1, 1.4), side: THREE.DoubleSide }, 0x3a3434, 0.25);
+  const lining = kit.rim({ color: 0x3a1418, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x5a2a2a, 0.05);
   // the staff's crystal and its rings in the colour of the bolts it shoots (Splintering Bolt's `color`, #197)
   const glow = kit.glow(0xff6fe0, 1.5);
   // the staff's crystal: glowing softly, a little more while casting (animate() sets it each frame)
   const GEM_GLOW = 0.4;
   const gem = kit.phys({ color: 0xff4fd8, emissive: 0xff4fd8, emissiveIntensity: GEM_GLOW, roughness: 0.05, metalness: 0, clearcoat: 1, flatShading: true });
-  // set stones: green, lit from within a little
-  const stone = kit.phys({ color: 0x0f7a4a, emissive: 0x1aff8a, emissiveIntensity: 0.6, roughness: 0.08, metalness: 0, clearcoat: 1, flatShading: true });
-  // embroidered panels: the long front panel with its column of arcane signs, the teal tails and collar
-  const PW = 256, PH = 1024, TW2 = 256, TH2 = 640;
-  const panelTex = embroidered(PW, PH, [[0, 0], [PW, 0], [PW, PH - 110], [PW / 2, PH], [0, PH - 110]], [0.13, 0.16, 0.27], [0.85, 0.66, 0.3], arcaneColumn);
-  const panel = kit.rim({ color: 0xffffff, roughness: 1, map: panelTex.map, normalMap: panelTex.normalMap, roughnessMap: panelTex.roughnessMap, side: THREE.DoubleSide }, 0x2a3a60, 0.3);
-  const tailTex = embroidered(TW2, TH2, [[0, 0], [TW2, 0], [TW2, TH2 - 120], [TW2 / 2, TH2], [0, TH2 - 120]], [0.14, 0.17, 0.29], [0.85, 0.66, 0.3]);
-  const tail = kit.rim({ color: 0xffffff, roughness: 1, map: tailTex.map, normalMap: tailTex.normalMap, roughnessMap: tailTex.roughnessMap, side: THREE.DoubleSide }, 0x2a3a60, 0.3);
-  // the lapels: teal, embroidered at their borders as the tails are
-  const lapelTex = embroidered(TW2, TH2, [[0, 0], [TW2, 0], [TW2, TH2 - 120], [TW2 / 2, TH2], [0, TH2 - 120]], [0.12, 0.3, 0.33], [0.85, 0.66, 0.3]);
-  const lapel = kit.rim({ color: 0xffffff, roughness: 1, map: lapelTex.map, normalMap: lapelTex.normalMap, roughnessMap: lapelTex.roughnessMap, side: THREE.DoubleSide }, 0x2a6a70, 0.3);
+  // the grimoire's set stone: red, lit from within a little
+  const stone = kit.phys({ color: 0x7a0f1a, emissive: 0xff2a3a, emissiveIntensity: 0.5, roughness: 0.08, metalness: 0, clearcoat: 1, flatShading: true });
+  // the coat's front panels: oxblood, a brass-thread border and a column of diamonds down each, as the sheet's
+  const PW = 256, PH = 1024;
+  const panelTex = embroidered(PW, PH, [[0, 0], [PW, 0], [PW, PH], [0, PH]], [0.36, 0.1, 0.12], [0.78, 0.6, 0.32], diamondColumn);
+  const panel = kit.rim({ color: 0xffffff, roughness: 1, map: panelTex.map, normalMap: panelTex.normalMap, roughnessMap: panelTex.roughnessMap, side: THREE.DoubleSide }, 0x7a2a2a, 0.3);
+  // the runes inked on his forearms (an alpha-tested layer over the skin)
+  const ink = kit.std({ color: 0x1c2230, roughness: 0.6, map: forearmRunes(), alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
 
-  const j = buildHumanoid({ skin: robe }, {
+  const j = buildHumanoid({ skin: coat }, {
     chestW: 0.17, chestD: 0.14, shoulderW: 0.2, shoulderY: 0.45, upperR: 0.06, foreR: 0.05, shinL: 0.41,
   });
   stripRig(j.root);
   const S = new Sculpt();
-  // what comes off (setGear): the chest item's (the robe with its pauldrons, collar flaps and brooch) and the tunic shown
-  // without it, the hands item's, and the bare wrists shown without them (out of the robe's sleeves or the tunic's)
-  const A = new Sculpt(), T = new Sculpt(), H = new Sculpt(), B = new Sculpt(), BR = new Sculpt(), BT = new Sculpt();
+  // what comes off (setGear): the chest item's (the longcoat with its collar, shoulders, harness and skirts) and the
+  // waistcoat shown without it, the hands item's (bracers over the forearms' runes)
+  const A = new Sculpt(), T = new Sculpt(), H = new Sculpt();
   const bareSkin = handSkin(kit, 'mage');
 
-  // --- the robe's body, a teal inner layer showing at the collar, the neck
-  A.add(scaleUV(lathe(TORSO, 28), 3, 1.5), robe, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, DEPTH]);
-  A.add(scaleUV(lathe(WAIST, 24), 3, 1), robe, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
-  // gold piping down the front of the robe on each side, and a diamond brooch set with a stone
+  // --- the longcoat's body: fitted, open down the front over the charcoal waistcoat and the shirt's red at the throat
+  A.add(scaleUV(lathe(TORSO, 28), 3, 1.5), coat, j.chest, [0, 0, 0], [0, 0, 0], [1, 1, DEPTH]);
+  A.add(scaleUV(lathe(WAIST, 24), 3, 1), coat, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
+  /** the coat's front edge on each side (half-width from the middle) at height y: close at the collar, opening down to the waist */
+  const edgeX = (y: number) => lerp(0.035, 0.085, clamp((0.27 - y) / 0.37, 0, 1));
+  const front: SurfaceFn = (u, v, out) => { const y = lerp(0.27, -0.12, v); return onChest((u - 0.5) * 2 * edgeX(y), y, 0.002, out); };
+  A.add(plate(front, 10, 12, 0.003, undefined, V(0, 0.1, 0)), charcoal, j.chest);
+  // (the shirt's red at the throat, between the collar's points)
+  A.add(plate((u, v, out) => { const y = lerp(0.285, 0.2, v); return onChest((u - 0.5) * 2 * lerp(0.034, 0.012, v), y, 0.004, out); }, 6, 6, 0.002), shirt, j.chest);
+  // the waistcoat's brass buttons down its middle, and brass piping down the coat's front edges
+  for (const y of [0.17, 0.1, 0.03, -0.04]) A.add(stud(0.0075), brass, j.chest, onChest(0, y, 0.006).toArray());
   for (const s of [1, -1]) {
     const pts: THREE.Vector3[] = [];
-    for (let k = 0; k <= 8; k++) { const y = lerp(0.2, -0.1, k / 8); pts.push(onChest(s * lerp(0.05, 0.075, k / 8), y, 0.003)); }
-    A.add(taperTube(pts, () => 0.0075, 16, 6), gold, j.chest);
+    for (let k = 0; k <= 10; k++) { const y = lerp(0.275, -0.12, k / 10); pts.push(onChest(s * edgeX(y), y, 0.004)); }
+    A.add(taperTube(pts, () => 0.005, 20, 6), brass, j.chest);
   }
-  // without it the tunic: belted at the waist like the robe, a rolled hem round the neck and a short laced slit down the front
-  // (its rows closer together towards the shoulders)
-  T.add(plate((u, v, out) => onTunic((u - 0.5) * TAU, lerp(TUNIC_Y[0], TUNIC_Y[1], 1 - (1 - v) ** 1.5), 0, out), 40, 30, 0, undefined, V(0, 0.1, 0)), linen, j.chest);
-  T.add(scaleUV(lathe(WAIST, 24), 3, 1), linen, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
-  T.add(neckHem(), linen, j.chest);
-  for (const s of [1, -1]) T.add(taperTube([0.292, 0.25, 0.215].map((y) => tunicFront(s * 0.006, y, 0.001)), () => 0.0025, 8, 5), blackLeather, j.chest);
-  for (const y of [0.275, 0.245, 0.222]) T.add(taperTube([tunicFront(0.011, y + 0.004, 0.002), tunicFront(0, y, 0.004), tunicFront(-0.011, y - 0.004, 0.002)], () => 0.0015, 6, 4), leather, j.chest);
-  const br = onChest(0, 0.1, 0.012);
-  A.add(new THREE.OctahedronGeometry(0.03, 0), gold, j.chest, br.toArray(), [0, 0, 0], [0.8, 1.3, 0.3]);
-  A.add(new THREE.OctahedronGeometry(0.02, 0), stone, j.chest, [br.x, br.y, br.z + 0.006], [0, 0, 0], [0.85, 1.35, 0.45]);
 
-  // --- the cowl: the hood down, bunched round the neck in teal folds, its crown lying flat on the upper
-  // back; its top round the neck as the tunic's neckline is (centred on the chest, a fold's trough at the back met his neck)
+  // --- the collar: standing high round the neck and flaring a little, open at the throat, brass along its edges (as the
+  // sheet's, higher behind than at its points in front)
   {
-    // (dipping in front under the beard, which lies over it as the sheet's does)
-    const dip = (a: number) => 0.05 * Math.max(0, Math.cos(a)) ** 2;
-    const g = lathe(COWL, lod(40, 20)), q = g.attributes.position;
-    for (let i = 0; i < q.count; i++) {
-      const x = q.getX(i), y = q.getY(i), z = q.getZ(i), a = Math.atan2(x, z);
-      q.setXYZ(i, x, y - dip(a), z * 0.95 + necklineBack(y));
-    }
-    g.computeVertexNormals();
-    A.add(scaleUV(g, 4, 2), scarf, j.chest);
-    // each roll a thick tube once round and a little over (its end tucked under its start), slanting round the neck as a
-    // wrapped scarf's turns do, swelling and thinning along it
-    SCARF_ROLLS.forEach(([h, R, r], k) => {
-      const turn: THREE.Vector3[] = [], a0 = 1.3 + k * 2.1;
-      for (let i = 0; i <= 40; i++) {
-        const a = a0 + (i / 40) * TAU * 1.06, ring = R * (1 + 0.035 * Math.sin(a * 3 + k));
-        const y = h + 0.022 * Math.sin(a - a0 + k) + 0.008 * Math.sin(a * 4 + k * 2) - dip(a);
-        turn.push(V(Math.sin(a) * ring, y, Math.cos(a) * ring * 0.95 + necklineBack(y)));
-      }
-      const tube = taperTube(turn, (t) => r * (1 + 0.14 * Math.sin(t * 17 + k) + 0.07 * Math.sin(t * 41 + k * 3)) * Math.min(1, t * 14, (1 - t) * 6 + 0.35), lod(64, 28), lod(14, 8));
-      // (squashed onto the ones under it, as heavy knit settles: round, each roll stood apart as a coil)
-      const tq = tube.attributes.position;
-      for (let i = 0; i < tq.count; i++) tq.setY(i, h + (tq.getY(i) - h) * 0.72);
-      tube.computeVertexNormals();
-      A.add(scaleUV(tube, 6, 2), scarf, j.chest);
-    });
-    // the hood laid down the back: from under the scarf's back to a point between the shoulder blades, a little full in its
-    // middle, gold along its edges and a short gold bar at its point (the old one was a strip under the scarf, unseen)
-    const hood: SurfaceFn = (u, v, out) => {
-      const y = lerp(0.29, 0.02, v), hw = lerp(0.13, 0.008, v ** 0.85), x = (u - 0.5) * 2 * hw;
-      const r = torsoR(y), a = Math.PI - Math.asin(clamp(x / r, -1, 1)), lift = 0.014 + 0.045 * Math.sin(u * Math.PI) ** 0.7 * (1 - v) ** 0.8;
-      return out.set(Math.sin(a) * (r + lift), y, Math.cos(a) * (r * DEPTH + lift));
+    const PHI = 0.62;
+    const collar: SurfaceFn = (u, v, out) => {
+      const a = lerp(PHI, TAU - PHI, u), back = 0.5 - 0.5 * Math.cos(a);
+      const top = lerp(0.322, 0.372, back), y = lerp(0.268, top, v), r = lerp(0.088, 0.106, v ** 1.4);
+      return out.set(Math.sin(a) * r, y, Math.cos(a) * r * 0.95 + necklineBack(y));
     };
-    A.add(plate(hood, 14, 14, 0.008, undefined, V(0, 0.15, 0)), scarf, j.chest);
-    A.add(edgeTube(hood, 'u0', 0.004, 14), gold, j.chest);
-    A.add(edgeTube(hood, 'u1', 0.004, 14), gold, j.chest);
-    const point = onChest(0, 0.03, 0.02).multiply(V(1, 1, -1));
-    A.add(new THREE.CylinderGeometry(0.004, 0.004, 0.05, 8), gold, j.chest, point.toArray(), [0, 0, Math.PI / 2]);
-  }
-  // pointed collar flaps over the chest, teal with a gold border
-  for (const s of [1, -1]) {
-    const flap: SurfaceFn = (u, v, out) => {
-      // (wide, from the scarf out towards the shoulders, narrowing to the chest's foot, as the sheet's lapels)
-      const y = lerp(0.235, 0.0, v), x0 = lerp(0.05, 0.035, v), x1 = lerp(0.205, 0.075, v ** 0.6);
-      return onChest(s * lerp(x0, x1, u), y, 0.012 + 0.004 * v, out);
-    };
-    A.add(plate(flap, 8, 10, 0.004, (u, v) => [s > 0 ? u : 1 - u, 1 - v * 0.8]), lapel, j.chest);
-    for (const e of ['u0', 'u1'] as const) A.add(edgeTube(flap, e, 0.0075, 12), gold, j.chest);
+    A.add(plate(collar, 36, 6, 0.006, undefined, V(0, 0.3, 0)), coatD, j.chest);
+    for (const e of ['u0', 'u1', 'v1'] as const) A.add(edgeTube(collar, e, 0.004, e === 'v1' ? 36 : 8), brass, j.chest);
   }
 
-  // --- pauldrons: a domed cap of tooled black leather over a flared lame, each rimmed in gold, and a gold boss set with a
-  // green stone on the cap (the sheet's claw on top is none of his: a spike there read as one)
+  // --- the shoulders: a cap of the coat's wool over each, brass-edged, a leather strap with a buckle across it
   for (const [s, joint0] of [[1, j.shoulderL], [-1, j.shoulderR]] as const) {
-    // sized to sit over a man's deltoid (they were cut for a far broader frame)
     const sh = joint(joint0);
-    sh.scale.setScalar(PAULDRON);
-    sh.position.x -= s * 0.022;
-    const lame = (R: number, lat0: number, lat1: number, y: number, tall = 0.75): SurfaceFn => (u, v, out) => {
-      const lon = (u - 0.5) * 3.2, lat = lerp(lat0, lat1, v);
-      return out.set(s * Math.cos(lat) * Math.cos(lon) * R * 1.1 + s * 0.015, Math.sin(lat) * R * tall + y, Math.cos(lat) * Math.sin(lon) * R);
+    sh.scale.setScalar(SHOULDER_CAP);
+    sh.position.x -= s * 0.024;
+    const cap: SurfaceFn = (u, v, out) => {
+      const lon = (u - 0.5) * 3, lat = lerp(-0.25, 1.45, v), R = 0.14;
+      return out.set(s * Math.cos(lat) * Math.cos(lon) * R * 1.1 + s * 0.015, Math.sin(lat) * R * 0.85 + 0.01, Math.cos(lat) * Math.sin(lon) * R);
     };
-    // (the cap rising higher over the joint than the old flat lame, a dome as the sheet's; a second gold band round it)
-    const cap = lame(0.14, 0.05, 1.5, 0.02, 1.05), lower = lame(0.152, -0.36, 0.12, -0.02);
-    for (const L of [lower, cap]) {
-      A.add(plate(L, 20, 8, 0.007), tooled, sh);
-      A.add(edgeTube(L, 'v0', 0.0065, 20), gold, sh);
-    }
-    const band: SurfaceFn = (u, v, out) => cap(u, 0.3, out).multiplyScalar(1.02);
-    A.add(edgeTube(band, 'v0', 0.005, 20), gold, sh);
-    // (the boss on the cap's outer face, larger: the stone was lost against the black)
-    const md = disc(0.042, 0.014);
-    projectUV(md, steelRegion('disc'), (x, y) => [(x / 0.042 + 1) / 2, (y / 0.042 + 1) / 2]);
-    A.add(md, goldE, sh, [s * 0.16, 0.06, 0.0], [0, s * Math.PI / 2, 0]);
-    A.add(gemGeo(0.019), stone, sh, [s * 0.17, 0.06, 0.0], [0, s * Math.PI / 2, 0]);
+    A.add(plate(cap, 18, 8, 0.008), coat, sh);
+    A.add(edgeTube(cap, 'v0', 0.005, 18), brass, sh);
+    const band: SurfaceFn = (u, v, out) => cap(u, 0.28, out).multiplyScalar(1.03);
+    const strapPts = Array.from({ length: 12 }, (_, k) => { const p = band(k / 11, 0, new THREE.Vector3()); return p; });
+    A.add(strap(strapPts, 0.03, 0.006), leather, sh);
+    A.add(buckle(0.026, 0.03, 0.005), brass, sh, band(0.5, 0, new THREE.Vector3()).multiplyScalar(1.02).toArray(), [0, s * Math.PI / 2, 0]);
   }
 
-  // --- arms: robe sleeves widening into long bell sleeves lined in teal, leather bracers with a stone,
-  // fingerless gloves
-  const bells: THREE.Group[] = [];
-  /** where a bell's top ring rides on the forearm (above the elbow), and how far the left one is pushed back up the arm (drinking) */
-  const BELL_Y = 0.07;
-  let sleeveUp = 0;
-  const cloths: BellCloth[] = [];
+  // --- the harness: a strap down the front from each shoulder to the belt, buckled at the chest, and crossed behind
+  for (const s of [1, -1]) {
+    const down = [0.29, 0.22, 0.14, 0.06, -0.02, -0.1].map((y) => onChest(s * lerp(0.075, 0.1, (0.29 - y) / 0.39), y, 0.008));
+    A.add(strap(down, 0.032, 0.006), leather, j.chest);
+    A.add(buckle(0.028, 0.034, 0.005), brass, j.chest, onChest(s * 0.088, 0.15, 0.014).toArray());
+    const back = [0.28, 0.18, 0.08, -0.02, -0.11].map((y, k) => onChest(s * lerp(0.1, -0.11, k / 4), y, 0.008).multiply(V(1, 1, -1)));
+    A.add(strap(back, 0.032, 0.006), leather, j.chest);
+  }
+  A.add(disc(0.022, 0.008), brass, j.chest, onChest(0, 0.13, 0.012).multiply(V(1, 1, -1)).toArray(), [0, Math.PI, 0]);
+
+  // --- arms: the shirt's charcoal sleeves pushed up to the elbow in a thick roll, a strap round each upper arm, the forearms
+  // bare and inked with runes; leather bracers buckled over them (the hands item's), fingerless gloves
+  for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
+    // (its round top sunk into the deltoid: standing 5 cm over the joint, it was the shoulder)
+    S.skin(scaleUV(limb(0.33, 0.062, 0.058, 0.05, 0.3, 14), 2, 1), sleeve, sh, el, 0.2, 0.33, [0, -0.025, 0]);
+    // (the roll: two thick turns of the cloth bunched round the elbow)
+    for (const [y, r, t] of [[-0.012, 0.056, 0.016], [0.02, 0.061, 0.018]] as const) {
+      const roll = new THREE.TorusGeometry(r, t, lod(8, 6), lod(22, 14)).rotateX(Math.PI / 2);
+      S.add(scaleUV(roll, 4, 1), sleeve, el, [0, y, 0]);
+    }
+    S.add(belt(0.064, 0.064, -0.17, 0.022, 0.005, 0, 16), leather, sh);
+    S.add(buckle(0.018, 0.022, 0.004), brass, sh, [s * 0.066, -0.17, 0], [0, s * Math.PI / 2, 0]);
+    // the forearm, from under the roll to the wrist, and its runes over it
+    const fore: [number, number][] = [[0.033, -0.3], [0.035, -0.27], [0.04, -0.2], [0.046, -0.12], [0.048, -0.06], [0.046, -0.02]];
+    S.skin(lathe(fore, 18), bareSkin, el, hd, 0.25, 0.29);
+    S.skin(lathe(fore.map(([r, y]) => [r + 0.0006, y]), 18), ink, el, hd, 0.25, 0.29);
+    // the bracer: leather round the lower forearm, two brass-buckled straps
+    H.add(scaleUV(lathe([[0.04, -0.27], [0.045, -0.22], [0.051, -0.15], [0.053, -0.12]], 16), 2, 1), leather, el);
+    for (const y of [-0.16, -0.235]) {
+      H.add(belt(0.054 - (y + 0.16) * 0.12, 0.054 - (y + 0.16) * 0.12, y, 0.012, 0.004, 0, 14), beltLeather, el);
+      H.add(buckle(0.014, 0.016, 0.003), brass, el, [s * (0.056 - (y + 0.16) * 0.12), y, 0], [0, s * Math.PI / 2, 0]);
+    }
+  }
+  const handL = buildHand(j.handL, 1, leather, skinTip, 1, bareSkin), handR = buildHand(j.handR, -1, leather, skinTip, 1, bareSkin);
+  const body = bodyShape(j, { L: handL.vis, R: handR.vis });
+
+  // --- without the coat: the waistcoat over the shirt, buttoned in brass, the shirt's collar round the neck
+  T.add(plate((u, v, out) => onTunic((u - 0.5) * TAU, lerp(TUNIC_Y[0], TUNIC_Y[1], 1 - (1 - v) ** 1.5), 0, out), 40, 30, 0, undefined, V(0, 0.1, 0)), charcoal, j.chest);
+  T.add(scaleUV(lathe(WAIST, 24), 3, 1), charcoal, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
+  T.add(neckHem(), shirt, j.chest);
+  T.add(plate((u, v, out) => out.copy(tunicFront((u - 0.5) * 2 * lerp(0.04, 0.012, v), lerp(0.29, 0.2, v), 0.003)), 6, 6, 0.002), shirt, j.chest);
+  for (const y of [0.17, 0.1, 0.03, -0.04]) T.add(stud(0.0075), brass, j.chest, tunicFront(0, y, 0.005).toArray());
+
+  // --- legs: charcoal trousers into tall boots of worn brown leather (models/boot.ts, the ranger's last and sole)
+  for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
+    S.add(scaleUV(limb(0.46, 0.09, 0.07, 0.1, 0.3, 12), 2, 1.5), trousers, th);
+    S.add(scaleUV(limb(0.41, 0.068, 0.052, 0.08, 0.35, 12), 2, 1.5), trousers, kn);
+    buildBoot(S, { leather: boot, sole, strap: bootStrap, metal: brass }, kn, an, th === j.thighL ? 1 : -1);
+  }
+
+  // --- the belts: a broad one at the waist with a square brass buckle, a second slung across the hips, and the grimoire
+  // hanging from it at his left hip on a brass chain
+  S.add(belt(0.166, 0.143, 0.02, 0.06, 0.012), beltLeather, j.spine);
+  for (const y of [-0.006, 0.046]) {
+    const ring = Array.from({ length: 48 }, (_, k) => { const a = (k / 48) * TAU; return V(Math.sin(a) * 0.174, y, Math.cos(a) * 0.151); });
+    S.add(stitches(ring, 0.006, 0.004, 0.0013, true), linen, j.spine);
+  }
+  S.add(buckle(0.06, 0.05, 0.008), brass, j.spine, [0, 0.02, 0.156]);
+  S.add(strap(Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * TAU; return V(Math.sin(a) * 0.215, -0.01 - 0.05 * Math.sin(a + 0.6) - 0.02 * Math.cos(a), Math.cos(a) * 0.18); }), 0.04, 0.01, true), beltLeather, j.hips);
+  S.add(buckle(0.04, 0.045, 0.007), brass, j.hips, [-0.06, -0.02, 0.184], [0, -0.3, 0]);
+  {
+    // (the book's boards and spine round its pages, brass corners, a brass boss with the stone, hung on its side by the hip)
+    const at: [number, number, number] = [0.25, -0.17, 0.215], ry = 0.75;
+    const W = 0.12, Hh = 0.16, D = 0.05;
+    const place = (x: number, y: number, z: number): [number, number, number] =>
+      [at[0] + Math.sin(ry) * z + Math.cos(ry) * x, at[1] + y, at[2] + Math.cos(ry) * z - Math.sin(ry) * x];
+    S.add(new THREE.BoxGeometry(W - 0.006, Hh - 0.008, D - 0.012), paper, j.hips, at, [0, ry, 0]);
+    for (const z of [D / 2 - 0.004, -D / 2 + 0.004]) S.add(new THREE.BoxGeometry(W, Hh, 0.008), tome, j.hips, place(0, 0, z), [0, ry, 0]);
+    S.add(new THREE.BoxGeometry(0.01, Hh, D), tome, j.hips, place(-W / 2, 0, 0), [0, ry, 0]);
+    for (const cx of [1, -1]) for (const cy of [1, -1]) S.add(new THREE.BoxGeometry(0.022, 0.022, 0.01), brass, j.hips, place(cx * (W / 2 - 0.009), cy * (Hh / 2 - 0.009), D / 2), [0, ry, 0]);
+    S.add(disc(0.026, 0.006), goldE, j.hips, place(0, 0, D / 2 + 0.003), [0, ry, 0]);
+    S.add(gemGeo(0.012), stone, j.hips, place(0, 0, D / 2 + 0.008), [0, ry, 0]);
+    // the chain: links turned alternately, sagging from the slung belt to the book's top corner
+    const a0 = V(0.19, -0.03, 0.17), a1 = V(...place(W / 2 - 0.01, Hh / 2, D / 2));
+    const n = 9;
+    for (let k = 0; k <= n; k++) {
+      const t = k / n, p = a0.clone().lerp(a1, t);
+      p.y -= 0.035 * Math.sin(t * Math.PI);
+      const link = new THREE.TorusGeometry(0.009, 0.0024, 5, 10).scale(1, 1.5, 1);
+      S.add(link, brass, j.hips, p.toArray(), [0, k % 2 ? Math.PI / 2 : 0, 0.3]);
+    }
+  }
+
+  // --- skirts: the coat to below the knee, split up the front, brass at its hem, its front panels hanging either side of
+  // the split, and the charcoal underskirts showing between them
+  const under = new Skirt({ r0: 0.19, r1: 0.31, len: 0.7, depth: 0.84, folds: 11, foldAmp: 0.06, rows: 10, hem: (a) => -0.42 * Math.exp(-((a / 0.22) ** 2)) + 0.02 * Math.sin(a * 5) });
+  const over = new Skirt({ r0: 0.2, r1: 0.37, len: 0.74, depth: 0.84, folds: 13, foldAmp: 0.08, rows: 10, trim: 0.03, hem: (a) => -0.68 * Math.exp(-((a / 0.62) ** 4)) + 0.03 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
+  const skirts: THREE.Mesh[] = [];
+  for (const [sk, mats] of [[under, [charcoal]], [over, [coat, brass]], [over, [lining, brass]]] as const) {
+    const m = new THREE.Mesh(sk.geo, mats.length > 1 ? [...mats] : mats[0]);
+    m.position.y = 0.03; m.castShadow = m.receiveShadow = true;
+    j.hips.add(m); skirts.push(m);
+  }
+  // (without the coat the waistcoat's skirt, short over the hips)
+  const short = new Skirt({ r0: 0.19, r1: 0.215, len: 0.14, depth: 0.82, folds: 5, foldAmp: 0.02, rows: 4, hem: (a) => 0.04 * Math.max(0, Math.cos(a)) ** 3 });
+  const tunicSkirt = new THREE.Mesh(short.geo, charcoal);
+  tunicSkirt.position.y = 0.03; tunicSkirt.castShadow = tunicSkirt.receiveShadow = true;
+  j.hips.add(tunicSkirt);
   const legs = new LegIK(j);
   /** smooths every cut between poses: an action starting, restarting or ending */
   const fade = new PoseFade(j);
@@ -258,96 +327,8 @@ export function buildMage(): Model {
   let tailName = '', tailT = 0;
   /** a staff shot's kick, 1 as it leaves, dying away */
   let recoil = 0;
-  // what the bells must not sink into: the torso, the hips and the robe's skirt
-  // (and the robe's skirts as they lie, filled in below)
-  const sleeveSkirts: NonNullable<BellOptions['skirts']> = [];
-  const bodies = [
-    { joint: j.chest, y0: 0.22, y1: -0.02, rx: 0.2, rz: 0.17 },
-    { joint: j.hips, y0: 0.02, y1: -0.25, rx: 0.26, rz: 0.23 },
-    { joint: j.hips, y0: -0.3, y1: -0.62, rx: 0.34, rz: 0.3 },
-  ];
-  for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
-    // the sleeve carries on 8cm past the elbow, under the bell, and follows the forearm there
-    A.skin(scaleUV(limb(0.38, 0.075, 0.068, 0.05, 0.24, 14), 2, 1), robe, sh, el, 0.2, 0.33);
-    // (the tunic's, narrower, on down the forearm to the wrist: under the bracers, or ending in a cuff)
-    // (its round top sunk into the deltoid: standing 5 cm over the joint, it was the shoulder)
-    T.skin(scaleUV(limb(0.38, 0.06, 0.056, 0.04, 0.24, 14), 2, 1), linen, sh, el, 0.2, 0.33, [0, -0.025, 0]);
-    T.add(scaleUV(lathe([[0.043, -0.25], [0.046, -0.2], [0.05, -0.12], [0.054, -0.04], [0.055, 0]], 16), 2, 1), linen, el);
-    BT.add(belt(0.045, 0.045, -0.245, 0.012, 0.004, 0, 14), linen, el);
-    // the bell: from above the elbow, flaring, longest on the underside of the arm (+z hangs below
-    // the forearm when the arm is raised forward)
-    const bell = new THREE.CylinderGeometry(0.075, 0.16, 0.38, 28, 7, true).translate(0, -0.19, 0), q = bell.attributes.position;
-    for (let i = 0; i < q.count; i++) {
-      const x = q.getX(i), y = q.getY(i), z = q.getZ(i), a = Math.atan2(x, -z), k = -y / 0.38;
-      const hang = 0.17 * k * (0.5 + 0.5 * Math.cos(a)), fold = 1 + 0.08 * k * Math.sin(Math.atan2(z, x) * 7);
-      q.setXYZ(i, x * fold, y - hang, z * fold);
-    }
-    bell.computeVertexNormals();
-    // on a joint of its own, so the first-person view can narrow it (from behind, it hides the hand)
-    const bj = joint(el, 0, BELL_Y, 0);
-    bells.push(bj);
-    // the bell is cloth: its top ring on the forearm, the rest hanging with weight and following the arm
-    // (sleeve.ts); the lining and the gold hem ride the same particles
-    cloths.push(new BellCloth({ joint: bj, hand: hd, shape: scaleUV(bell, 3, 1), outer: robe, lining, rim: gold, armRadius: 0.066, rimRadius: 0.011, bodies, skirts: sleeveSkirts }));
-    H.add(scaleUV(lathe([[0.046, -0.26], [0.052, -0.2], [0.058, -0.12], [0.06, -0.1]], 16), 2, 1), leather, el);
-    for (const y of [-0.13, -0.245]) H.add(belt(0.058 - (y + 0.13) * 0.1, 0.058 - (y + 0.13) * 0.1, y, 0.012, 0.005, 0, 14), gold, el);
-    H.add(new THREE.OctahedronGeometry(0.02, 0), gold, el, [s * 0.058, -0.19, 0], [0, 0, 0], [0.4, 1.2, 1]);
-    H.add(gemGeo(0.009), stone, el, [s * 0.064, -0.19, 0], [0, s * Math.PI / 2, 0]);
-    // bare: the robe's sleeve on down the forearm under the bell, a gold-edged cuff, the wrist into the palm
-    BR.add(scaleUV(lathe([[0.044, -0.25], [0.047, -0.2], [0.052, -0.12], [0.056, -0.04], [0.056, 0]], 16), 2, 1), robe, el);
-    BR.add(belt(0.046, 0.046, -0.245, 0.01, 0.004, 0, 14), gold, el);
-    B.skin(lathe([[0.033, -0.3], [0.034, -0.28], [0.036, -0.255], [0.04, -0.235]], 16), bareSkin, el, hd, 0.25, 0.29);
-  }
-  const handL = buildHand(j.handL, 1, leather, skinTip, 1, bareSkin), handR = buildHand(j.handR, -1, leather, skinTip, 1, bareSkin);
-  const body = bodyShape(j, { L: handL.vis, R: handR.vis });
-
-  // --- legs: dark breeches into tall boots of worn brown leather (models/boot.ts, the ranger's last and sole: lathed
-  // tubes with gold toe caps read as a doll's slippers beside the sheet's boots)
-  for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
-    S.add(scaleUV(limb(0.46, 0.09, 0.07, 0.1, 0.3, 12), 2, 1.5), robe, th);
-    S.add(scaleUV(limb(0.41, 0.068, 0.052, 0.08, 0.35, 12), 2, 1.5), robe, kn);
-    buildBoot(S, { leather: boot, sole, strap: bootStrap, metal: gold }, kn, an, th === j.thighL ? 1 : -1);
-  }
-
-  // --- the belt: wide leather with a gold medallion and a stone, a second belt slung across the hips
-  // with pouches, a hanging strap with a gold charm
-  // (broad tooled brown leather, stitched along its edges, as the sheet's: a dark band with gold edges read as a sash)
-  S.add(belt(0.166, 0.143, 0.02, 0.085, 0.014), beltLeather, j.spine);
-  for (const y of [-0.019, 0.059]) {
-    const ring = Array.from({ length: 48 }, (_, k) => { const a = (k / 48) * TAU; return V(Math.sin(a) * 0.175, y, Math.cos(a) * 0.152); });
-    S.add(stitches(ring, 0.006, 0.004, 0.0013, true), linen, j.spine);
-  }
-  const md = disc(0.058, 0.018);
-  projectUV(md, steelRegion('disc'), (x, y) => [(x / 0.058 + 1) / 2, (y / 0.058 + 1) / 2]);
-  S.add(md, goldE, j.spine, [0, 0.02, 0.158]);
-  S.add(gemGeo(0.022), stone, j.spine, [0, 0.02, 0.172]);
-  S.add(strap(Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * TAU; return V(Math.sin(a) * 0.215, -0.01 - 0.05 * Math.sin(a + 0.6) - 0.02 * Math.cos(a), Math.cos(a) * 0.18); }), 0.035, 0.01, true), leather, j.hips);
-  for (const [x, z, ry] of [[0.2, 0.07, 0.9], [0.17, -0.1, 2.1]] as const) {
-    S.add(new THREE.BoxGeometry(0.075, 0.1, 0.04), leather, j.hips, [x, -0.07, z], [0, ry, 0]);
-    S.add(new THREE.BoxGeometry(0.08, 0.04, 0.046), blackLeather, j.hips, [x, -0.03, z], [0, ry, 0]);
-    S.add(stud(0.008), gold, j.hips, [x + Math.sin(ry) * 0.024, -0.04, z + Math.cos(ry) * 0.024], [0, ry, 0]);
-  }
-  // (the robe's: on a plain tunic it read as a letter)
-  A.add(strap([V(-0.16, -0.02, 0.12), V(-0.165, -0.12, 0.135), V(-0.17, -0.24, 0.14)], 0.022, 0.006, false, () => V(-0.5, 0, 0.85).normalize()), leather, j.hips);
-  A.add(new THREE.OctahedronGeometry(0.022, 0), gold, j.hips, [-0.17, -0.27, 0.142], [0, 0, 0], [0.7, 1.3, 0.5]);
-  A.add(buckle(0.022, 0.03, 0.005), gold, j.hips, [-0.163, -0.1, 0.14], [0, -0.5, 0]);
-
-  // --- skirts: the navy robe to below the knee with a gold hem, a longer teal underskirt, the
-  // embroidered front panel, and teal tails at the front corners
-  const under = new Skirt({ r0: 0.19, r1: 0.39, len: 0.82, depth: 0.84, folds: 15, foldAmp: 0.08, rows: 10, hem: (a) => 0.012 * Math.sin(a * 5) });
-  const over = new Skirt({ r0: 0.2, r1: 0.41, len: 0.7, depth: 0.84, folds: 13, foldAmp: 0.09, rows: 10, trim: 0.075, hem: (a) => 0.03 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
-  const skirts: THREE.Mesh[] = [];
-  for (const [sk, mats] of [[under, [teal]], [over, [robe, copper]], [over, [lining, copper]]] as const) {
-    const m = new THREE.Mesh(sk.geo, mats.length > 1 ? [...mats] : mats[0]);
-    m.position.y = 0.03; m.castShadow = m.receiveShadow = true;
-    j.hips.add(m); skirts.push(m);
-  }
-  sleeveSkirts.push({ mesh: skirts[0], skirt: under, gap: 0.012 }, { mesh: skirts[1], skirt: over, gap: 0.012 });
-  // (without the robe the tunic's skirt, to mid-thigh)
-  const short = new Skirt({ r0: 0.19, r1: 0.24, len: 0.34, depth: 0.82, folds: 7, foldAmp: 0.035, rows: 6, hem: (a) => 0.012 * Math.sin(a * 3 + 0.5) });
-  const tunicSkirt = new THREE.Mesh(short.geo, linen);
-  tunicSkirt.position.y = 0.03; tunicSkirt.castShadow = tunicSkirt.receiveShadow = true;
-  j.hips.add(tunicSkirt);
+  /** no cloth sleeves: the shirt's are rolled up */
+  const cloths: BellCloth[] = [];
   // what the skirts keep clear of, in their own space (all of them hang where the tunic's does): the thighs from the hip and
   // the shins over the boots from inside, the hands from outside; the breeches' and the boots' radii (the boot's cuff and its
   // stone stand 10 cm off the shin: sized to the breeches, the shin came through the robe there) and the cloth's gap (with a
@@ -408,12 +389,11 @@ export function buildMage(): Model {
     const up = Math.min(fit(0, 0, 0.15, h, swing), swing + 1);
     return [up, Math.min(fit(-h * Math.cos(up), h * Math.sin(up), 0, h, swing), swing + 1)];
   };
-  hang(0, 0.165, 0.72, panel, 110, PH, 0.02);
-  for (const s of [1, -1]) hang(s * 0.75, 0.15, 0.5, tail, 120, TH2, 0.03);
+  for (const s of [1, -1]) hang(s * 0.4, 0.14, 0.64, panel, 0, PH, 0.026);
 
   // --- the head: face, a full beard, hair, and a wide-brimmed pointed hat (worn with a head item equipped: setGear), its
   // crown bent back by its own weight, a gold band with a stone
-  const head = buildHead(j.head, kit, 'mage', { hair: 'mane' });
+  const head = buildHead(j.head, kit, 'mage', { hair: 'short', crop: true });
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, 'mage', j.P.neckL, j.head);
@@ -427,20 +407,19 @@ export function buildMage(): Model {
     // a gentle wave round the brim, dipping at the front and back
     for (let i = 0; i < q.count; i++) { const x = q.getX(i), z = q.getZ(i), a = Math.atan2(x, z), r = Math.hypot(x, z); q.setY(i, q.getY(i) - (r - RX * M) * (0.12 * Math.cos(2 * a) + 0.05 * Math.sin(a * 5))); }
     brim.computeVertexNormals();
-    w.add(scaleUV(brim, 3, 1), robe, hg, at.toArray(), tilt, [1, 1, DZ]);
+    w.add(scaleUV(brim, 3, 1), felt, hg, at.toArray(), tilt, [1, 1, DZ]);
     w.add(scaleUV(brim.clone(), 3, 1), lining, hg, [at.x, at.y - 0.002, at.z], tilt, [1, 1, DZ]);
     // the crown: tapering up from the band, bent back by its own weight
     const crown: THREE.Vector3[] = [];
     for (let k = 0; k <= 8; k++) { const t = k / 8; crown.push(V(10 * M * Math.sin(t * 4), (t * 300 - t * t * 50) * M, -140 * M * t ** 2.2)); }
     const cg = taperTube(crown, (t) => (RX * M * (1 - t) ** 0.9 + 0.004) * (1 + 0.04 * Math.sin(t * 20)), lod(24, 10), lod(24, 12));
-    w.add(scaleUV(cg, 3, 3), robe, hg, at.toArray(), tilt, [1, 1, DZ]);
+    w.add(scaleUV(cg, 3, 3), felt, hg, at.toArray(), tilt, [1, 1, DZ]);
     // a leather band with gold edges, a gold diamond set with a stone at the front
     const band = (y: number, wd: number, k = 0) => belt((RX + 2 + k) * M, (RX + 2 + k) * M * DZ, y * M, wd * M, 4 * M, 0.004, 28);
     w.add(band(14, 24), leather, hg, at.toArray(), tilt);
     for (const y of [3, 25]) w.add(band(y, 4, 1.5), gold, hg, at.toArray(), tilt);
     const front = V(0, 14 * M, (RX + 6) * M * DZ).applyEuler(new THREE.Euler(...tilt)).add(at);
-    w.add(new THREE.OctahedronGeometry(0.022, 0), gold, hg, front.toArray(), tilt, [0.8, 1.1, 0.35]);
-    w.add(gemGeo(0.01), stone, hg, [front.x, front.y, front.z + 0.007], tilt);
+    w.add(buckle(0.024, 0.02, 0.004), brass, hg, front.toArray(), tilt);
     w.build();
   }
 
@@ -497,10 +476,10 @@ export function buildMage(): Model {
   // offhand focus point (left palm)
   const palm = joint(j.handL, 0, -0.08, 0.03);
   S.build();
-  const robeParts = A.build(), tunic = T.build(), bracers = H.build(), wrists = B.build(), robeCuffs = BR.build(), tunicCuffs = BT.build();
+  const robeParts = A.build(), tunic = T.build(), bracers = H.build();
   // (robed until setGear says otherwise)
   let robed = true, gloved = true;
-  for (const o of [...tunic, ...tunicCuffs, tunicSkirt]) o.visible = false;
+  for (const o of [...tunic, tunicSkirt]) o.visible = false;
 
   /** set once a channel's opening completes, for the thrust into the portal */
   let openedAt = -1;
@@ -762,9 +741,7 @@ export function buildMage(): Model {
     // the flask comes out of the fist and is put away again (the fist closed round it)
     flaskOut = damp(flaskOut, flaskWant, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
     if (flaskOut > 0.01) poseHand(handL, lerp(0.45, 1.1, flaskOut), 0.08 + 0.04 * (1 - flaskOut));
-    // (drinking, the left sleeve is pushed back up the arm, its bell shorter, so the hand and the flask at the lips come out of it)
-    sleeveUp = damp(sleeveUp, drinkLift, 8, dt);
-    if (!fp) { bells[0].position.y = BELL_Y + 0.17 * sleeveUp; bells[0].scale.y = 1 - 0.25 * sleeveUp; }
+    void drinkLift;
     // the right hand closes round the staff wherever the arm has taken it
     root.updateMatrixWorld(true);
     hold(handR, _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), STAFF_R, undefined, slant);
@@ -795,14 +772,10 @@ export function buildMage(): Model {
       for (const o of [...tunic, tunicSkirt]) o.visible = !robed;
       gloved = gear.hands;
       for (const o of bracers) o.visible = gear.hands;
-      for (const o of wrists) o.visible = !gear.hands;
-      for (const o of robeCuffs) o.visible = robed && !gear.hands;
-      for (const o of tunicCuffs) o.visible = !robed && !gear.hands;
       bare(handL, !gear.hands); bare(handR, !gear.hands);
     },
     reset: () => { legs.reset(); fade.reset(); for (const c of cloths) c.reset(); },
-    // through the eyes the bells, seen from behind, would hide the hands: narrow and shorter
-    firstPerson: (on) => { fp = on; for (const b of bells) b.scale.set(on ? 0.6 : 1, on ? 0.75 : 1, on ? 0.6 : 1); },
+    firstPerson: (on) => { fp = on; },
     dispose() {
       kit.dispose();
       disposeGeometries(root);

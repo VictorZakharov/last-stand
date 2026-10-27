@@ -191,7 +191,7 @@ export interface Head {
  * `crop`: short tufts over the back and sides below a hat's band (`Head.crop`), for a hat to show under its brim.
  * A face with `beardFull` gets a full beard: a volume over the skin and tufts of cards along it.
  */
-export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, o: { hair?: 'swept' | 'mane' | 'loose'; crop?: boolean } = {}): Head {
+export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, o: { hair?: 'swept' | 'mane' | 'loose' | 'short'; crop?: boolean } = {}): Head {
   const F: FaceShape = FACES[who];
   const head = new THREE.Group();
   headJoint.add(head);
@@ -232,7 +232,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   const L = LOOKS[who], rng = mulberry(7);
   // (both styles' locks in the dense clump texture: thin strands of high contrast read as wood grain, and sparse cards
   // hanging apart read as a wig's fringe)
-  const hk = o.hair === 'loose' ? 2.4 : o.hair === 'mane' ? 2.4 : 2.1, hairCol = new THREE.Color().setRGB(L.hair[0] * hk, L.hair[1] * hk, L.hair[2] * hk, THREE.SRGBColorSpace);
+  const hk = o.hair === 'loose' || o.hair === 'mane' || o.hair === 'short' ? 2.4 : 2.1, hairCol = new THREE.Color().setRGB(L.hair[0] * hk, L.hair[1] * hk, L.hair[2] * hk, THREE.SRGBColorSpace);
   const cards = kit.std({ color: hairCol, map: strandMap(true), alphaTest: 0.35, alphaToCoverage: true, side: THREE.DoubleSide, roughness: o.hair === 'loose' ? 0.72 : 0.62, vertexColors: true });
   const hair: THREE.Mesh[] = [];
   const skullC = toGroup(0, 128, -12);
@@ -258,6 +258,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     const locks = once(`${key}:locks`, () => {
       const made: THREE.BufferGeometry[] = [];
       if (loose) looseLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0);
+      else if (o.hair === 'short') shortLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0);
       else sweptLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0, o.hair === 'mane');
       const merged = mergeGeometries(made)!;
       for (const x of made) x.dispose();
@@ -713,6 +714,60 @@ function sweptLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
     // (narrow at the root, so its end never shows as a block)
     const card = hairCard(pts, (t) => wm * (0.35 + 0.65 * sm(0, 0.1, t)) * (1 - 0.4 * t ** 2), skullC, lod(40, 12), (rng() - 0.5) * 0.6, shade, undefined, vAt);
     if (mane) massNormals(card, skullC);
+    out.push(card);
+  }
+}
+
+/** Hair cut short (`short`, the mage's: the battle scholar's sheet): short locks rooted all over the top and the upper sides,
+ *  longer on top and close at the sides (sdf-harness's short groom, `groomHair`: lengths by where they root), standing off
+ *  the scalp on top and tousled, each running back over the head turned a random way from the comb's line, its tip lifting;
+ *  `crop`'s tufts cover the back and the sides below them. Lit by the hair's mass (`massNormals`). */
+function shortLocks(surface: Head['surface'], rng: () => number, skullC: THREE.Vector3, out: THREE.BufferGeometry[], F: FaceShape, drop: number, temple: number): void {
+  const n = lod(720, 180), V = THREE.Vector3, N = 9;
+  const { dirOf, hairEl, clear, pushOut } = hairTools(surface, F, drop, temple), q = new V();
+  const r = new V(), flow = new V(), end = new V(), d = new V(), pts: THREE.Vector3[] = [];
+  const slerp = (A: THREE.Vector3, B: THREE.Vector3, t: number) => {
+    const ang = A.angleTo(B), a = ang > 1e-4 ? Math.sin((1 - t) * ang) / Math.sin(ang) : 1 - t, b = ang > 1e-4 ? Math.sin(t * ang) / Math.sin(ang) : t;
+    return d.copy(A).multiplyScalar(a).addScaledVector(B, b).normalize();
+  };
+  for (let i = 0; i < n; i++) {
+    const layer = i % 3, ph = rng() * Math.PI * 2, tone = 0.72 + rng() * 0.45;
+    // (rooted anywhere from the hairline up, more of them towards the top, where the hair is longest)
+    const az0 = (rng() * 2 - 1) * Math.PI, e0 = hairEl(az0) + 0.01, el0 = lerp(e0, 1.5, Math.sqrt(rng()));
+    const topness = sm(0.55, 1.25, el0) * (1 - 0.5 * sm(2.2, 3, Math.abs(az0)));
+    dirOf(az0, el0, r);
+    // the comb's line: back over the head and down at the sides; along the front of the hairline forward instead, falling
+    // over the forehead and swept to his right, as the sheet's (combed back, it read as slicked); turned a random way from
+    // it (tousled), the crown's every way
+    const fringe = sm(1.2, 0.4, Math.abs(az0)) * sm(0.45, 0.1, el0 - e0) * (rng() < 0.7 ? 1 : 0);
+    flow.set(-0.45 * fringe, -0.35 * (1 - topness) - 0.5 * fringe, lerp(-1, 1, fringe));
+    flow.addScaledVector(r, -r.dot(flow)).normalize();
+    const crown = sm(1.0, 1.35, el0);
+    flow.applyAxisAngle(r, (rng() - 0.5) * (0.6 + 1.2 * topness + 2.5 * crown) * (1 - 0.6 * fringe));
+    // its length (mm): 18 to 30 at the sides, 40 to 65 on top; as an angle round the skull
+    const R = surface(az0, el0, 0).distanceTo(skullC) / HEAD_MM, len = lerp(26, 56, topness) + rng() * lerp(14, 30, topness);
+    const ang = len / R;
+    end.copy(r).multiplyScalar(Math.cos(ang)).addScaledVector(flow, Math.sin(ang)).normalize();
+    const top = 7 + 20 * topness + rng() * 7;
+    pts.length = 0;
+    for (let k = 0; k <= N; k++) {
+      const t = k / N;
+      slerp(r, end, t);
+      const az = Math.atan2(d.x, d.z), el = Math.asin(clamp(d.y, -1, 1));
+      // (standing up off the root, lying along the head, the tip lifting off it again on top)
+      const lift = lerp(1, top + layer * 2, sm(0, 0.35, t)) * (1 - 0.3 * sm(0.6, 1, t)) + 5 * topness * sm(0.7, 1, t) + 1.2 * Math.sin(ph + t * 5);
+      pts.push(surface(az, el, lift));
+    }
+    for (let k = 2; k <= N; k++) pushOut(pts[k], 1.2 + layer * 1.5);
+    for (let k = 1; k < pts.length - 1; k++) pts[k].lerp(new V().addVectors(pts[k - 1], pts[k + 1]).multiplyScalar(0.5), 0.3);
+    // (each lock its own shade: darker at the root, in the deeper layers and where it lies close to the head)
+    const occ = pts.map((p) => { toFace(p, q); return 0.6 + 0.4 * sm(2, 20, clear(q.x, q.y, q.z)); });
+    const occAt = (t: number) => { const f = t * (occ.length - 1), j = Math.min(occ.length - 2, Math.floor(f)); return lerp(occ[j], occ[j + 1], f - j); };
+    const shade = (t: number) => tone * (0.68 + 0.32 * sm(0, 0.3, t)) * (0.82 + 0.08 * layer) * occAt(t);
+    const wm = (12 + rng() * 8 + 6 * topness) * HEAD_MM;
+    const vAt = (t: number) => (t < 0.8 ? 0.7 * t / 0.8 : 0.7 + 0.3 * (t - 0.8) / 0.2);
+    const card = hairCard(pts, (t) => wm * (0.4 + 0.6 * sm(0, 0.15, t)) * (1 - 0.55 * t ** 2), skullC, lod(14, 6), (rng() - 0.5) * 0.8, shade, undefined, vAt);
+    massNormals(card, skullC);
     out.push(card);
   }
 }
