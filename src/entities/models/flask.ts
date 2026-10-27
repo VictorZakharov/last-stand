@@ -90,6 +90,7 @@ export function buildFlask(kit: MaterialKit): THREE.Group {
   for (const a of [0, Math.PI / 2]) add(new THREE.TorusGeometry(0.0145, 0.0012, 4, 12, Math.PI).rotateY(a), twine, 0.055, cork);
   g.userData.aim = new THREE.Vector3();
   g.userData.lift = 0;
+  g.userData.lifted = 0;
   g.userData.wrist = new THREE.Vector3();
   g.userData.grip = new THREE.Vector3();
   g.userData.up = new THREE.Vector3();
@@ -129,6 +130,8 @@ export function drink(j: Joints, k: number, mouth: THREE.Object3D, how: DrinkHol
   // the head and shoulders tip back as it drinks
   j.neck.rotation.x += -0.3 * tip; j.head.rotation.x += -0.2 * tip; j.spine.rotation.x += -0.08 * tip;
   flask.userData.lift = e;
+  // (kept for the lab: `lift` is spent by `holdFlask` each frame)
+  flask.userData.lifted = e;
   if (e > 0) {
     const sc = j.root.scale.x;
     j.root.updateMatrixWorld(true);

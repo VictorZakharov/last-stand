@@ -31,8 +31,12 @@ const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.09, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96 };
 /** how far the coat and the waistcoat stand off the tunic round the neckline (m) */
 const NECK_LIFT = 0.008;
-/** how far the slung belt and the book on it draw in round his hips without the coat (a share of their size over it) */
-const SLUNG_IN = 0.9;
+/** how far the slung belt and the book on it draw in round his hips without the coat (a share of their size over it:
+ *  across, and from front to back, where it stood out behind his seat) */
+const SLUNG_IN = 0.9, SLUNG_IN_BACK = 0.84;
+/** where round the slung belt the book hangs (rad from ahead, towards his left: at the back of the hip, clear of the
+ *  hanging arm), and how far it draws in along its face without the coat, on the belt drawn in (m) */
+const BOOK_AT = 2.3, BOOK_IN = 0.035;
 /** a point on the coat's front at x, y, `lift` above it: the tunic's (a round body of the coat's own, narrower over the
  *  shoulders with the arms' tubes stood beside it under caps, read as a bottle from behind) */
 function onChest(x: number, y: number, lift: number, out = new THREE.Vector3()): THREE.Vector3 {
@@ -421,29 +425,35 @@ export function buildMage(): Model {
   S.add(strap(around(), 0.05, 0.01, true), beltLeather, sling);
   for (const dy of [-0.02, 0.02]) S.add(stitches(around(0.006, dy), 0.005, 0.0035, 0.0011, true), linen, sling);
   S.add(buckle(0.06, 0.062, 0.009), brass, sling, slung(-0.35, 0.008).toArray(), [0, -0.35, -0.24]);
+  const book = new THREE.Group();
+  sling.add(book);
   {
-    // (the book's boards and spine round its pages, brass corners, a brass boss with the stone, hung on its side by the hip)
-    // (behind the hanging hand: at his side it lay under it)
-    const at: [number, number, number] = [0.275, -0.17, -0.13], ry = 1.45;
-    const W = 0.15, Hh = 0.2, D = 0.06;
+    // (the book's boards and spine round its pages, brass corners, a brass boss with the stone, hung flat against the
+    // back of the hip, its top just under the slung belt: at his side behind the hanging hand, off the coat on a long
+    // chain, it floated beside him; in a group of its own with its chain, drawn in without the coat: `BOOK_IN`)
+    const W = 0.15, Hh = 0.2, D = 0.06, ry = BOOK_AT;
+    const seat = slung(BOOK_AT, D / 2 + 0.004);
+    // (its top tucked behind the belt's lower edge: at that edge, a gap showed under the belt from behind)
+    const at: [number, number, number] = [seat.x, seat.y - 0.014 - Hh / 2, seat.z];
     const place = (x: number, y: number, z: number): [number, number, number] =>
       [at[0] + Math.sin(ry) * z + Math.cos(ry) * x, at[1] + y, at[2] + Math.cos(ry) * z - Math.sin(ry) * x];
-    S.add(new THREE.BoxGeometry(W - 0.006, Hh - 0.008, D - 0.012), paper, sling, at, [0, ry, 0]);
-    for (const z of [D / 2 - 0.004, -D / 2 + 0.004]) S.add(new THREE.BoxGeometry(W, Hh, 0.008), tome, sling, place(0, 0, z), [0, ry, 0]);
-    S.add(new THREE.BoxGeometry(0.01, Hh, D), tome, sling, place(-W / 2, 0, 0), [0, ry, 0]);
-    for (const cx of [1, -1]) for (const cy of [1, -1]) S.add(new THREE.BoxGeometry(0.022, 0.022, 0.01), brass, sling, place(cx * (W / 2 - 0.009), cy * (Hh / 2 - 0.009), D / 2), [0, ry, 0]);
-    S.add(disc(0.026, 0.006), goldE, sling, place(0, 0, D / 2 + 0.003), [0, ry, 0]);
-    S.add(gemGeo(0.012), stone, sling, place(0, 0, D / 2 + 0.008), [0, ry, 0]);
-    S.add(new THREE.OctahedronGeometry(0.016, 0), brass, sling, place(W / 2 - 0.02, -Hh / 2 - 0.04, D / 2), [0, ry, 0], [0.7, 1.6, 0.7]);
-    S.add(new THREE.CylinderGeometry(0.0015, 0.0015, 0.03, 4), brass, sling, place(W / 2 - 0.02, -Hh / 2 - 0.012, D / 2), [0, ry, 0]);
-    // the chain: links turned alternately, sagging from the slung belt to the book's top corner
-    const a0 = slung(1.45, 0.008), a1 = V(...place(-W / 2 + 0.012, Hh / 2, D / 2));
-    const n = 9;
+    S.add(new THREE.BoxGeometry(W - 0.006, Hh - 0.008, D - 0.012), paper, book, at, [0, ry, 0]);
+    for (const z of [D / 2 - 0.004, -D / 2 + 0.004]) S.add(new THREE.BoxGeometry(W, Hh, 0.008), tome, book, place(0, 0, z), [0, ry, 0]);
+    S.add(new THREE.BoxGeometry(0.01, Hh, D), tome, book, place(-W / 2, 0, 0), [0, ry, 0]);
+    for (const cx of [1, -1]) for (const cy of [1, -1]) S.add(new THREE.BoxGeometry(0.022, 0.022, 0.01), brass, book, place(cx * (W / 2 - 0.009), cy * (Hh / 2 - 0.009), D / 2), [0, ry, 0]);
+    S.add(disc(0.026, 0.006), goldE, book, place(0, 0, D / 2 + 0.003), [0, ry, 0]);
+    S.add(gemGeo(0.012), stone, book, place(0, 0, D / 2 + 0.008), [0, ry, 0]);
+    S.add(new THREE.OctahedronGeometry(0.016, 0), brass, book, place(W / 2 - 0.02, -Hh / 2 - 0.04, D / 2), [0, ry, 0], [0.7, 1.6, 0.7]);
+    S.add(new THREE.CylinderGeometry(0.0015, 0.0015, 0.03, 4), brass, book, place(W / 2 - 0.02, -Hh / 2 - 0.012, D / 2), [0, ry, 0]);
+    // the chain: a few links turned alternately, from the slung belt just above down to the book's top corner
+    const a1 = V(...place(-W / 2 + 0.012, Hh / 2, D / 2));
+    const a0 = slung(Math.atan2(a1.x / 0.205, a1.z / 0.19), 0.008);
+    const n = 4;
     for (let k = 0; k <= n; k++) {
       const t = k / n, p = a0.clone().lerp(a1, t);
-      p.y -= 0.035 * Math.sin(t * Math.PI);
+      p.y -= 0.006 * Math.sin(t * Math.PI);
       const link = new THREE.TorusGeometry(0.009, 0.0024, 5, 10).scale(1, 1.5, 1);
-      S.add(link, brass, sling, p.toArray(), [0, k % 2 ? Math.PI / 2 : 0, 0.3]);
+      S.add(link, brass, book, p.toArray(), [0, k % 2 ? Math.PI / 2 : 0, 0.3]);
     }
   }
 
@@ -915,7 +925,8 @@ export function buildMage(): Model {
       }
       for (const o of [...robeParts, ...skirts, ...flaps.map((f) => f.g), ...cloths.flatMap((c) => c.meshes)]) o.visible = robed;
       for (const o of [...tunic, tunicSkirt]) o.visible = !robed;
-      sling.scale.set(robed ? 1 : SLUNG_IN, 1, robed ? 1 : SLUNG_IN);
+      sling.scale.set(robed ? 1 : SLUNG_IN, 1, robed ? 1 : SLUNG_IN_BACK);
+      book.position.set(robed ? 0 : -BOOK_IN * Math.sin(BOOK_AT), 0, robed ? 0 : -BOOK_IN * Math.cos(BOOK_AT));
       gloved = gear.hands;
       for (const o of bracers) o.visible = gear.hands;
       bare(handL, !gear.hands); bare(handR, !gear.hands);

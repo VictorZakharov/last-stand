@@ -24,10 +24,14 @@ export function describeDrink(lab: Lab): string | null {
   // (up from level: the flask's neck below its bulb is tipped up, drinking)
   const up = Math.asin(THREE.MathUtils.clamp(_base.sub(_at).normalize().y, -1, 1)) * 180 / Math.PI;
   const off = _at.distanceTo(_lips) * 100;
-  // (and where a miss comes from: the wrist off where the drink put it, or the fist closed off where it planned the grip)
+  const bulb = `${up.toFixed(0)}° ${up >= 0 ? 'above' : 'below'} its mouth`;
+  const tipped = `the flask: its mouth ${off.toFixed(1)} cm from the lips, its bulb ${bulb}`;
+  // (and once it's lifted all the way, where a miss comes from: the wrist off where the drink put it, or the fist
+  // closed off where it planned the grip; on its way, the arm is only part of the way to the plan)
+  if (!((flask.userData.lifted as number) >= 0.99)) return tipped;
   flask.parent!.getWorldPosition(_wrist);
   const wristOff = _wrist.distanceTo(flask.userData.wrist as THREE.Vector3) * 100;
   const gripOff = flask.getWorldPosition(_base).distanceTo(flask.userData.grip as THREE.Vector3) * 100;
-  return `the flask: its mouth ${off.toFixed(1)} cm from the lips, its bulb ${up.toFixed(0)}° ${up >= 0 ? 'above' : 'below'} its mouth`
-    + ` (the wrist ${wristOff.toFixed(1)} cm off where the drink put it, the grip ${gripOff.toFixed(1)} cm off its plan)`;
+  const wrist = `the wrist ${wristOff.toFixed(1)} cm off where the drink put it`;
+  return `${tipped} (${wrist}, the grip ${gripOff.toFixed(1)} cm off its plan)`;
 }
