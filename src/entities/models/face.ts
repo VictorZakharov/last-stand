@@ -184,13 +184,13 @@ export const FACES: Record<'warrior' | 'mage' | 'ranger', FaceShape> = {
       pz: [1.2, 1.2, 1.2, 1.2, 1.22, 1.58, 2.11, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2], hollow: 0 } },
   // the battle scholar, clean-shaven: the warrior's face (fitted with facelab to a strong jaw) as a start, the nose and
   // the lower face shorter and the lips fuller after his sheet's front view, his own grey-green eyes
-  mage: { jaw: 55.2, chin: 10, chinFwd: -3.4, brow: 1.7, cheek: 0.9, noseLen: 50, noseW: 12, nosePro: 1.5, hump: 0, lips: 1.05, long: 0.92, tip: 1.15, eyeOpen: 3.0, mouthW: 0.85, iris: [0.26, 0.29, 0.23], beardDepth: 0.8, browFwd: 5.5, foreheadFwd: 10, noseRoot: 11, skullFwd: -3.7, lipFwd: 16.5, mouthUp: 1, beardLine: 22, browDrop: 2.6, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -5, neckBlend: 9, neckCol: [65, 62], lidSoft: 4, earFlare: 0.3, zygo: 2, bridgeW: 6.8, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, muzzleFwd: -1.5,
+  mage: { jaw: 55.2, chin: 10, chinFwd: -3.4, brow: 1.7, cheek: 0.9, noseLen: 50, noseW: 12, nosePro: 1.25, hump: 0, lips: 1.05, long: 0.92, tip: 1.15, eyeOpen: 3.0, mouthW: 0.85, iris: [0.26, 0.29, 0.23], beardDepth: 0.8, browFwd: 5.5, foreheadFwd: 10, noseRoot: 6, skullFwd: -3.7, lipFwd: 16.5, mouthUp: 1, beardLine: 22, browDrop: 2.6, masseter: 53, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 48, neckBack: -5, neckBlend: 9, neckCol: [65, 62], lidSoft: 4, earFlare: 0.3, zygo: 2, bridgeW: 6.8, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, muzzleFwd: -1.5,
     templeNarrow: -4.4, lidFold: 5, gridEye: 1,
     // (the mask, the skull and the jaw fitted by least squares (tools/facelab/fit.mjs) to the reference rebuilt in 3D from its
     // turnaround (within 1 mm rms) and to its front view's widths; the nose, lips and eyes to the pictures' landmarks)
     mask: { y: [-2, 8, 18, 30, 45, 60, 75, 90, 100, 110, 120, 132, 145, 160, 175, 190],
-      front: [95, 96.5, 97.5, 99.3, 101.1, 101.3, 100.2, 98, 95.6, 93.7, 94.4, 98.1, 99.9, 98.6, 94, 80],
-      half: [20, 32.6, 45.1, 56.4, 63.8, 66.8, 68, 69.5, 69, 67.2, 66.2, 65.2, 65.1, 65.1, 63, 58],
+      front: [95, 102, 103.5, 104, 103, 101.3, 100.2, 98, 95.6, 93.7, 94.4, 98.1, 99.9, 98.6, 94, 80],
+      half: [20, 31.5, 43, 52.5, 59.5, 63.5, 66.5, 69.5, 69, 67.2, 66.2, 65.2, 65.1, 65.1, 63, 58],
       side: [60, 48.6, 38.1, 29, 21.3, 15.5, 11.8, 10.4, 10.1, 10.7, 11.8, 11.7, 10, 6.3, 0, -10],
       p: [2, 2.15, 2.22, 2.21, 2.11, 1.98, 1.84, 1.76, 1.8, 2.02, 2.36, 2.5, 2.44, 2.39, 2.4, 2.2],
       pz: [1.2, 1.2, 1.2, 1.2, 1.22, 1.58, 2.11, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2], hollow: 2 } },
