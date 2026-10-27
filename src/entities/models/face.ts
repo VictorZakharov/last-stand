@@ -123,6 +123,8 @@ export interface FaceShape {
   /** how much narrower (mm each side) the skull is towards the front, at the temples, than at its widest behind the ears:
    *  the face's sides then run straight down from the temples to the jaw instead of the cheekbones standing out of them */
   templeNarrow?: number;
+  /** how far out (mm) the mouth's corners are tucked in (25 as most faces) */
+  cornerIn?: number;
   /** the mouth's width (1 average): the lips, their corners and their paint drawn in towards the middle */
   mouthW?: number;
   /** more of the mesh's rows and columns over the eyes (0 none, 1 about 3.5 times the rows there): at the grid's spacing
@@ -205,7 +207,7 @@ export const FACES: Record<'warrior' | 'mage' | 'ranger', FaceShape> = {
       pz: [1.2, 1.2, 1.2, 1.2, 1.22, 1.58, 2.11, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2], hollow: 0 } },
   // the battle scholar, clean-shaven: the warrior's face (fitted with facelab to a strong jaw) as a start, the nose and
   // the lower face shorter and the lips fuller after his sheet's front view, his own grey-green eyes
-  mage: { jaw: 46, chin: 15, chinFwd: 1.5, brow: 2.6, cheek: 0.9, noseLen: 54, noseW: 13, nosePro: 1.25, hump: 0, lips: 1.1, long: 0.95, tip: 1.0, eyeOpen: 2.75, iris: [0.26, 0.29, 0.23], beardDepth: 0, browFwd: 8, browFrown: 4, foreheadFwd: 10, noseRoot: 6, skullFwd: -3.7, occiput: 12, lipFwd: 11, mouthUp: 7, beardLine: 22, browDrop: 3.5, masseter: 46, maskMasseter: true, earIn: 2, earThick: 5.5, neckFlare: 12, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 43, neckBack: -22, neckBlend: 13, neckCol: [54, 58], lidSoft: 4, earFlare: 0.2, zygo: 3.5, bridgeW: 5.6, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 16.5, muzzleFwd: -1.5,
+  mage: { jaw: 46, chin: 15, chinFwd: 1.5, brow: 2.6, cheek: 0.9, noseLen: 54, noseW: 13, nosePro: 1.25, hump: 0, lips: 1.1, long: 0.95, tip: 1.0, eyeOpen: 2.75, iris: [0.26, 0.29, 0.23], beardDepth: 0, browFwd: 8, browFrown: 4, foreheadFwd: 10, noseRoot: 6, skullFwd: -3.7, occiput: 12, lipFwd: 11, cornerIn: 22, mouthUp: 7, beardLine: 22, browDrop: 3.5, masseter: 46, maskMasseter: true, earIn: 2, earThick: 5.5, neckFlare: 12, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 43, neckBack: -22, neckBlend: 13, neckCol: [54, 58], lidSoft: 4, earFlare: 0.2, zygo: 3.5, bridgeW: 5.6, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 16.5, muzzleFwd: -1.5,
     templeNarrow: 3, lidFold: 3, gridEye: 1,
     // (the mask, the skull and the jaw fitted by least squares (tools/facelab/fit.mjs) to the reference rebuilt in 3D from its
     // turnaround (within 1 mm rms) and to its front view's widths; the nose, lips and eyes to the pictures' landmarks)
@@ -388,7 +390,9 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
     const lips = Math.min(lip(axm, yl, z, m0 + 3.8 * lp + 0.6, 94.8 + lf, 22.5, 3.8 * lp, 3), lip(axm, yl, z, m0 - 4.8 * lp - 0.6, 92.5 + lf, 20.5, 4.8 * lp, 1.8));
     // (on a measured face, blended more softly: a sharp corner shows the mesh's steps)
     d = smin(d, lips, M ? 4.5 : 3.5);
-    d = smax(d, -ell(ax, yl, z, 25 * mw, mouthY(axm) - 0.3, 90 + lf * 0.7 - (M ? 2 : 0), 3, 2.4, 3.5), M ? 3 : 2);
+    // (on the lips' ends where they stand off a flat muzzle: at 25 mm their round ends stood out past it, bright nubs)
+    const tc = F.cornerIn ?? 25;
+    d = smax(d, -ell(ax, yl, z, tc * mw, mouthY(axm) - 0.3, 90 + lf * 0.7 - (M ? 2 : 0), 3, 2.4, 3.5), M ? 3 : 2);
   }
   if (Math.abs(ax - EYE.x) < 32 && y > 85 && y < 150) {
     // eye sockets under the brow, then the lids riding on the eyeball round the opening
@@ -986,18 +990,21 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         }
       }
       // --- lips: the vermilion with its fine vertical lines, and the line between them
-      const axm = ax / (F.mouthW ?? 1), my = mouthY(Math.min(axm, 24)), mouth = axm < 30 && yy > 25 && yy < 62 && z > 80;
-      const lipK = mouth ? sm(lipBorder(ax, 1, F) + 0.5, lipBorder(ax, 1, F) - 0.5, yy) * sm(lipBorder(ax, -1, F) - 0.5, lipBorder(ax, -1, F) + 0.5, yy) * sm(84, 90, z) : 0;
+      // (at the height the shape builds them: the lower face stretched for a longer face, as in headSDF; unstretched, on a
+      // face of `long` 0.95 the line between the lips was painted 3.4 mm under their crease, a second line)
+      const yq = yy < 114 ? 114 - (114 - yy) / F.long : yy;
+      const axm = ax / (F.mouthW ?? 1), my = mouthY(Math.min(axm, 24)), mouth = axm < 30 && yq > 25 && yq < 62 && z > 80;
+      const lipK = mouth ? sm(lipBorder(ax, 1, F) + 0.5, lipBorder(ax, 1, F) - 0.5, yq) * sm(lipBorder(ax, -1, F) - 0.5, lipBorder(ax, -1, F) + 0.5, yq) * sm(84, 90, z) : 0;
       if (lipK > 0.01) {
         // dusky rose, the lower lip a little lighter and wetter
-        const lo = yy < my ? 1 : 0;
+        const lo = yq < my ? 1 : 0;
         const lc = L.lipColor ?? [0.6, 0.34, 0.32];
         mix(0.62 * (L.lipTint ?? 1) * lipK, lc[0] + 0.04 * lo, lc[1] + 0.03 * lo, lc[2] + 0.02 * lo);
-        hh += lipK * 0.25 * Math.sin(x * 9 + Math.sin(yy * 2) * 0.6); rr -= lipK * (0.16 + 0.1 * lo) * (L.lipGloss ?? 1);
+        hh += lipK * 0.25 * Math.sin(x * 9 + Math.sin(yq * 2) * 0.6); rr -= lipK * (0.16 + 0.1 * lo) * (L.lipGloss ?? 1);
       }
       // the line between the lips, darker into the corners
       if (mouth) {
-        const line = Math.exp(-(((yy - my) / 0.75) ** 2)) * sm(25.5, 21, axm) * sm(84, 90, z) * (0.75 + 0.25 * sm(12, 22, axm));
+        const line = Math.exp(-(((yq - my) / 0.75) ** 2)) * sm(25.5, 21, axm) * sm(84, 90, z) * (0.75 + 0.25 * sm(12, 22, axm));
         mix(0.85 * line, 0.16, 0.06, 0.05); hh -= line * 0.8;
       }
       // --- age: lines across the brow, crow's feet at the eyes' outer corners
