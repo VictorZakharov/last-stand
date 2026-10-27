@@ -102,7 +102,7 @@ export function buildMage(): Model {
   // the cowl's heavy wool, its weave coarser and deeper than the robe's
   const scarf = kit.rim({ color: 0x2a5a68, roughness: 1, ...tex(woolMaps(), 2, 2.2), side: THREE.DoubleSide }, 0x2a6a70, 0.3);
   const teal = kit.rim({ color: 0x1f5058, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.DoubleSide }, 0x2a6a70, 0.3);
-  const lining = kit.rim({ color: 0x184048, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x2a6a70, 0.2);
+  const lining = kit.rim({ color: 0x184048, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x2a6a70, 0.05);
   // the robe's hem band: copper thread woven thick, as the sheet's (a thin gold trim was lost at a distance)
   const copper = kit.std({ color: 0xa8643a, metalness: 0.7, roughness: 0.5, ...tex(clothMaps(), 2, 1.2) });
   const gold = kit.std({ color: 0xc9a14a, metalness: 1, roughness: 1, roughnessMap: pbrMaterialMaps(steelMaps(), 1).roughnessMap });

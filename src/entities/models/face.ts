@@ -185,7 +185,7 @@ export const FACES: Record<'warrior' | 'mage' | 'ranger', FaceShape> = {
   // longer and leaner, a long straight nose
   // (after his sheet's head views, facelab's front measures: the face and the jaw wider, the chin shorter under a beard cut
   // shorter, the mouth wider and lower, and the ranger's hooded, deep-set lids: the old open lids stared)
-  mage: { jaw: 27, chin: 3, chinFwd: 9, brow: 0.9, cheek: 1.25, noseLen: 52, noseW: 17.8, nosePro: 1.25, hump: 0, noseRoot: 6, bridgeW: 6.5, lips: 0.9, long: 1.0, eyeOpen: 3.8, iris: [0.26, 0.29, 0.23], lidSoft: 4, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, lidFold: 5, gridEye: 1, beardDepth: 6, beardFull: 21, beardLine: -6, neckBack: -5, neckCol: [65, 62], beardUnder: -34, mouthUp: -3,
+  mage: { jaw: 27, chin: 3, chinFwd: 9, brow: 0.9, cheek: 1.25, noseLen: 52, noseW: 17.8, nosePro: 1.25, hump: 0, noseRoot: 6, bridgeW: 6.5, lips: 0.9, long: 1.0, eyeOpen: 3.2, iris: [0.26, 0.29, 0.23], lidSoft: 4, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, lidFold: 5, gridEye: 1, beardDepth: 6, beardFull: 15, beardLine: 5, neckBack: -5, neckCol: [65, 62], beardUnder: -34, mouthUp: -3,
     // (the mask and the broad shape fitted by least squares (tools/facelab/fit.mjs) to the real face nearest his old one,
     // built of blobs: its cheekbones stood up to 12 mm out of any real face's; the nose straight, its bridge raised to
     // the mask's front (a hump stood out of a sunken ridge with a cliff at its top))
