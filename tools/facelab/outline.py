@@ -2,9 +2,11 @@
 
 turn.py lays the side out from the near eye, which MediaPipe places badly on a strict profile; the skull's own shape (how
 long and how high it is, how the forehead runs into it, where the back of the head and the jaw's underside are) needs
-the whole outline instead. Both heads are cut out against their backgrounds, faced to the picture's left, scaled so
-the crown to the nose's tip is as tall on both and laid over each other at the nose's tip. Then, at each height (a share
-of the crown to the nose's tip, 0 the crown), how far forward and back each reaches, in the same share.
+the whole outline instead. Both heads are cut out against their backgrounds, faced to the picture's left, scaled to one
+head length (the row through the back of the skull's furthest point, from the brow to it: no feature of the face moves
+it; scaled by the crown to the nose's tip, a longer nose shrank the whole head) and laid over each other at the crown's
+height and that furthest point. Then, at each height (a share of the length below the crown), how far forward and back
+of that point each reaches, in the same share.
 Writes sheet-outline-side.png (the reference red, ours cyan, grey where both) and, given our clay picture from the same
 camera, sheet-side-clay.png (the reference and ours side by side, laid out alike), and appends to report.txt.
 python outline.py <the reference's side view> <our side silhouette, white on black> <out dir> [our clay side view]
@@ -16,9 +18,9 @@ import numpy as np
 REF, OURS, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
 CLAY = sys.argv[4] if len(sys.argv) > 4 else None
 SIZE = 1000           # the sheet's side, px
-CROWN_TO_TIP = 420    # the crown to the nose's tip on the sheet, px
-TIP_AT = (180, 520)   # where the nose's tip lands on the sheet
-ROWS = [0.05, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0, 1.15, 1.3, 1.45]
+LENGTH = 560          # the head's length on the sheet, px
+BACK_AT = (800, 100)  # where the back of the skull's furthest point (x) and the crown (y) land on the sheet
+ROWS = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95, 1.05]
 
 
 def largest(mask):
@@ -60,11 +62,15 @@ def nose_tip(mask, crown):
 
 
 def layout(mask):
-    """the transform onto the sheet: the crown to the nose's tip CROWN_TO_TIP tall, the tip at TIP_AT"""
+    """the transform onto the sheet: the head's length LENGTH long (the row through the back's furthest point, above the
+    nose's tip, which only bounds the search), that point and the crown at BACK_AT"""
     crown = int(np.flatnonzero(mask.any(1))[0])
     tip = nose_tip(mask, crown)
-    k = CROWN_TO_TIP / (tip[1] - crown)
-    return np.float32([[k, 0, TIP_AT[0] - tip[0] * k], [0, k, TIP_AT[1] - tip[1] * k]])
+    backs = [(int(np.flatnonzero(mask[y])[-1]), y) for y in range(crown, tip[1]) if mask[y].any()]
+    back_x, back_y = max(backs)
+    length = back_x - int(np.flatnonzero(mask[back_y])[0])
+    k = LENGTH / length
+    return np.float32([[k, 0, BACK_AT[0] - back_x * k], [0, k, BACK_AT[1] - crown * k]])
 
 
 def laid_out(mask, M):
@@ -72,13 +78,18 @@ def laid_out(mask, M):
     return cv2.warpAffine(mask * 255, M, (SIZE, SIZE), flags=cv2.INTER_LINEAR) > 127
 
 
+def row_at(share):
+    """the sheet's row a share of the head's length below the crown"""
+    return int(BACK_AT[1] + share * LENGTH)
+
+
 def reach(mask, share):
-    """how far forward and back (shares of the crown to the tip, from the tip) the outline reaches at a height"""
-    y = int(TIP_AT[1] - CROWN_TO_TIP + share * CROWN_TO_TIP)
+    """how far forward and back (shares of the head's length, from the back's furthest point) the outline reaches"""
+    y = row_at(share)
     xs = np.flatnonzero(mask[y]) if 0 <= y < SIZE else np.array([])
     if not xs.size:
         return None
-    return (TIP_AT[0] - xs[0]) / CROWN_TO_TIP, (TIP_AT[0] - xs[-1]) / CROWN_TO_TIP
+    return (BACK_AT[0] - xs[0]) / LENGTH, (BACK_AT[0] - xs[-1]) / LENGTH
 
 
 ref_img = cv2.imread(REF)
@@ -108,13 +119,13 @@ sheet[R] = (60, 60, 200)
 sheet[O] = (200, 200, 60)
 sheet[R & O] = (170, 170, 170)
 for s in ROWS:
-    y = int(TIP_AT[1] - CROWN_TO_TIP + s * CROWN_TO_TIP)
+    y = row_at(s)
     cv2.line(sheet, (0, y), (12, y), (255, 255, 255), 1)
 cv2.putText(sheet, 'side outline: reference red, ours cyan, both grey', (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
 cv2.imwrite(f'{OUT}/sheet-outline-side.png', sheet)
 
-lines = ['', 'the side outline (outline.py: no landmarks; scaled crown to nose tip, laid over at the tip), by height as a share',
-         'of the crown to the tip (0 the crown): how far forward and back of the nose\'s tip each reaches, the same share',
+lines = ['', 'the side outline (outline.py: no landmarks; scaled to one head length, laid over at the crown and the back), by',
+         'height as a share of the length below the crown: how far forward and back of the back\'s furthest point each reaches',
          '   height   reference fwd/back   ours fwd/back   ours minus the reference']
 for s in ROWS:
     a, b = reach(R, s), reach(O, s)
