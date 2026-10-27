@@ -20,7 +20,7 @@ import { fitArm } from './armIK';
 import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { onTunic, tunicFront, tunicCut, armholeEdge, neckHem, necklineBack, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
-import { buildFlask, drink, drinkUp, type DrinkHold } from './flask';
+import { buildFlask, drink, drinkUp, holdFlask, type DrinkHold } from './flask';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _vr = new THREE.Quaternion();
@@ -173,7 +173,7 @@ const FREE_HAND = new Set(['cast', 'summon', 'channel', 'slam', 'buff', 'drink']
 const HAND_HANG = Math.PI / 2;
 const TAIL: Record<string, number> = { cast: 0.35, summon: 0.35, slam: 0.4, buff: 0.5 }, TAIL_OUT: Record<string, number> = { cast: 0.45, summon: 0.45, slam: 0.6, buff: 0.5 };
 /** drinking: the flask raised straight up before the chin, the elbow down and forward (the bell sleeve falls back off the forearm) */
-const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.03, -0.08, 0.22), tipped: new THREE.Vector3(0.03, 0.1, 0.2), pole: new THREE.Vector3(0.4, -1, 0.5) };
+const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.08, -0.13, 0.19), tipped: new THREE.Vector3(0.12, 0.06, 0.18), pole: new THREE.Vector3(0.6, -0.7, 0.7), tippedPole: new THREE.Vector3(0.6, -0.4, 1) };
 const REST_FEET = [0.14, 0.06, 0.22, -0.14, -0.05, -0.35], CAST_FEET = [0.13, 0.2, 0.15, -0.13, -0.1, -0.45];
 const SLAM_FEET = [0.2, 0.06, 0.4, -0.2, -0.04, -0.4], AIM_FEET = [0.13, -0.04, 0.35, -0.12, 0.14, -0.05], LANCE_FEET = [0.14, 0.24, 0.1, -0.15, -0.14, -0.55];
 
@@ -645,7 +645,7 @@ export function buildMage(): Model {
 
   const shY = j.shoulderL.position.y;
   // the healing draught, in the free fist while it is drunk
-  const flask = buildFlask(kit, gold, leather); flask.name = 'flask'; j.handL.add(flask); flask.position.set(0, -0.07, 0.03); flask.rotation.x = Math.PI;
+  const flask = buildFlask(kit, gold, leather); flask.name = 'flask'; j.handL.add(flask);
   let flaskOut = 0;
   let feet: readonly number[] | null = null;
 
@@ -784,7 +784,7 @@ export function buildMage(): Model {
         }
       } else if (a.name === 'drink' && !fp) {
         // the healing draught: taken from the belt and drunk (models/flask.ts)
-        flaskWant = drink(j, k, mouth, DRINK); drinkLift = drinkUp(k);
+        flaskWant = drink(j, k, mouth, DRINK, handL, flask); drinkLift = drinkUp(k);
       } else if (a.name === 'summon' && !fp) {
         const w = ramp(k, 0, 0.15), rise = ramp(k, 0, 0.45) * (1 - ramp(k, 0.5, 0.62)), pull = ramp(k, 0.5, 0.62);
         j.shoulderL.rotation.x = lerp(j.shoulderL.rotation.x, curve(SU_ARM_X, k), w); j.shoulderL.rotation.z = lerp(j.shoulderL.rotation.z, curve(SU_ARM_Z, k), w);
@@ -885,7 +885,7 @@ export function buildMage(): Model {
 
     // the flask comes out of the fist and is put away again (the fist closed round it)
     flaskOut = damp(flaskOut, flaskWant, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
-    if (flaskOut > 0.01) poseHand(handL, lerp(0.45, 1.1, flaskOut), 0.08 + 0.04 * (1 - flaskOut));
+    if (flaskOut > 0.01) holdFlask(handL, flask, flaskOut);
     void drinkLift;
     // the right hand closes round the staff wherever the arm has taken it
     root.updateMatrixWorld(true);

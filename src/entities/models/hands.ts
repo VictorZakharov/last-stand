@@ -358,6 +358,11 @@ export function seat(h: Hand, grip: THREE.Object3D, r: number, slant = 0): void 
   fistAxis(h, fist(h, _d.set(0, 1, 0).applyQuaternion(grip.quaternion), _u.set(0, 1, 0), _q, slant), r, grip.position);
 }
 
+/** Seat a held thing in the fist as `hold` last closed it (after it): `grip`, a child of the hand's joint, on the fist's axis */
+export function seatHeld(h: Hand, grip: THREE.Object3D, r: number): void {
+  fistAxis(h, h.vis.quaternion, r, grip.position);
+}
+
 /**
  * For a hand reaching a grip it doesn't carry (a two-hander's lower grip): from its wrist to where a
  * handle of radius `r` along `dir` runs through the fist, the hand's length along `up` (world, towards

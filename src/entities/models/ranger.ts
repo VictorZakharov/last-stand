@@ -19,7 +19,7 @@ import { buildHand, hold, fistReach, fistTurn, SLANT, type Hand } from './hands'
 import { LegIK } from './ik';
 import { fitArm, solveArm } from './armIK';
 import { bodyShape } from './anatomy';
-import { buildFlask, drink } from './flask';
+import { buildFlask, drink, holdFlask } from './flask';
 import { buildBoot } from './boot';
 import { Bow, pullAt, arrowGeometry, arrowPieces, fanHold, ARROW, FAN_PITCH, REST_Y, GRIP, GRIP_R } from './bow';
 import { fromEyes, dirFromEyes, toEyes } from '../viewModel';
@@ -42,7 +42,7 @@ const COLLAR_RISE = 0.02;
  *  side (the rig turns it about joints in front of its middle), and came 3.6 mm out through it */
 const COLLAR_EASE = 0.006;
 const UP = V(0, 1, 0), FWD = V(0, 0, 1);
-const DRINK = { wrist: V(0.03, -0.08, 0.22), tipped: V(0.03, 0.1, 0.2), pole: V(-0.8, 0.2, -0.2) };
+const DRINK = { wrist: V(-0.08, -0.13, 0.19), tipped: V(-0.12, 0.06, 0.18), pole: V(-0.6, -0.7, 0.7), tippedPole: V(-0.6, -0.4, 1) };
 /** where the nock comes to at full draw (the head's mm): at the side of the jaw, low along it, below and in front of the ear, the string
  *  a finger's width off the face, so the arrow and its fletching lie beside the cheek and the beard (on the jaw's skin, the
  *  arrow's last 9 cm went through them), and the string's lower half passes in front of the coat over the bow shoulder
@@ -582,7 +582,7 @@ export function buildRanger(): Model {
   });
   // (where the shot leaves: the nocked arrow's middle; and its head, where a full draw glints)
   const tip = joint(bow.group), palm = joint(j.handR, 0, -0.07, 0.03), arrowHead = joint(bow.group);
-  const flask = buildFlask(kit, brass, hide); flask.name = 'flask'; j.handR.add(flask); flask.position.set(0, -0.07, 0.03); flask.rotation.x = Math.PI;
+  const flask = buildFlask(kit, brass, hide); flask.name = 'flask'; j.handR.add(flask);
   const drinkRig = { ...j, shoulderL: j.shoulderR, elbowL: j.elbowR, handL: j.handR };
   const legs = new LegIK(j), root = j.root;
   root.scale.setScalar(1.08);
@@ -822,7 +822,7 @@ export function buildRanger(): Model {
     // carrying the bow: the arm a little out from the side and the elbow a little bent (the walk swings it)
     j.shoulderL.rotation.z += CARRY_RAISE; j.elbowL.rotation.x -= CARRY_BEND;
     hook(handR, 0, 0);
-    const drinkOut = drinking ? drink(drinkRig, a.t, mouth, DRINK) : 0;
+    const drinkOut = drinking ? drink(drinkRig, a.t, mouth, DRINK, handR, flask) : 0;
     flaskOut = damp(flaskOut, drinkOut, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
     if (aim < 0.5) st.look?.();
     if (st.dead >= 0) { deathFall(j, st.dead); legs.reset(); }
@@ -1104,6 +1104,8 @@ export function buildRanger(): Model {
       if (!fp) { root.updateMatrixWorld(true); fitArm(j, false, undefined, body); }
     }
     hook(handR, hk, pinch);
+    // (the draught's fist over the hook: the draw hand has let go of the string)
+    if (flaskOut > 0.01) holdFlask(handR, flask, flaskOut);
     j.chest.worldToLocal(j.handR.getWorldPosition(lastHandC));
     // the coat's skirt last: over the legs, and behind the hands and the bow where they are now (through the eyes neither shows)
     root.updateMatrixWorld(true);
