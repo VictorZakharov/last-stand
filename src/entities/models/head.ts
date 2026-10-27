@@ -234,6 +234,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   // hanging apart read as a wig's fringe)
   const hk = o.hair === 'loose' || o.hair === 'mane' || o.hair === 'short' ? 2.4 : 2.1, hairCol = new THREE.Color().setRGB(L.hair[0] * hk, L.hair[1] * hk, L.hair[2] * hk, THREE.SRGBColorSpace);
   const cards = kit.std({ color: hairCol, map: strandMap(true), alphaTest: 0.35, alphaToCoverage: true, side: THREE.DoubleSide, roughness: o.hair === 'loose' ? 0.72 : o.hair === 'short' ? 0.78 : 0.62, vertexColors: true });
+  bothSidesOut(cards);
   const hair: THREE.Mesh[] = [];
   const skullC = toGroup(0, 128, -12);
   let crop: THREE.Mesh | undefined;
@@ -943,13 +944,56 @@ function earGeometry(s: number, F: FaceShape, ao = 0): THREE.BufferGeometry {
 
 // --- hair ----------------------------------------------------------------------------------------
 
-const strandTex = new Map<boolean, THREE.CanvasTexture>();
+const strandTex = new Map<boolean, THREE.DataTexture>();
 /**
  * A lock of hair for the hair cards: fine strands running down the texture (v along the lock), each its own shade,
  * thinning towards the card's sides and its tip, on transparency. `dense`: a clump, solid in its middle (its strands
  * shown by their shades), its edges and tip ragged: thick hair rather than a few strings.
  */
-function strandMap(dense = false): THREE.CanvasTexture {
+/**
+ * A thin two-sided material lit on both sides as its front: a hair card is a lock of strands, not a sheet with an
+ * inside, but three turns a back face's normal over, into the head, and seen from behind (along the hair's outline)
+ * it shaded near black against the sky. Its own program, compiled with the rest at the boot's warm-up.
+ */
+function bothSidesOut(m: THREE.Material): void {
+  const base = m.onBeforeCompile.bind(m), key = m.customProgramCacheKey.bind(m);
+  m.onBeforeCompile = (shader, renderer) => {
+    base(shader, renderer);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>',
+      THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', ''));
+  };
+  m.customProgramCacheKey = () => key() + '-bothsides';
+}
+
+/**
+ * A cut-out map from a canvas, its see-through pixels given its strands' mean colour (alpha kept): cleared to
+ * transparent black, the filtering and the mipmaps blended that black into every edge the alpha test keeps, a dark
+ * outline round the hair against a bright sky. (A canvas is stored premultiplied, so the colour is set in the pixels
+ * read back, and the map made from them; rows turned over as a canvas texture's are.)
+ */
+function bledMap(c: CanvasRenderingContext2D, W: number, H: number): THREE.DataTexture {
+  const src = c.getImageData(0, 0, W, H).data, d = new Uint8Array(W * H * 4);
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let i = 0; i < src.length; i += 4) {
+    const a = src[i + 3] / 255;
+    r += src[i] * a; g += src[i + 1] * a; b += src[i + 2] * a; n += a;
+  }
+  if (n > 0) { r /= n; g /= n; b /= n; }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4, o = ((H - 1 - y) * W + x) * 4;
+    // (a faint pixel's own colour is too coarse to keep: blended towards the mean as it fades out)
+    const k = Math.min(1, src[i + 3] / 128);
+    d[o] = src[i] * k + r * (1 - k); d[o + 1] = src[i + 1] * k + g * (1 - k); d[o + 2] = src[i + 2] * k + b * (1 - k);
+    d[o + 3] = src[i + 3];
+  }
+  const t = new THREE.DataTexture(d, W, H, THREE.RGBAFormat);
+  t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  t.needsUpdate = true;
+  return t;
+}
+
+function strandMap(dense = false): THREE.DataTexture {
   const hit = strandTex.get(dense);
   if (hit) return hit;
   const W = 128, H = 512, cv = document.createElement('canvas');
@@ -990,7 +1034,7 @@ function strandMap(dense = false): THREE.CanvasTexture {
   const g = c.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(dense ? 0.75 : 0.65, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
   c.fillStyle = g; c.fillRect(0, 0, W, H);
-  const t = new THREE.CanvasTexture(cv);
+  const t = bledMap(c, W, H);
   t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   strandTex.set(dense, t);
   return t;
