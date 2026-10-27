@@ -24,6 +24,7 @@ for research, so it's used here and never shipped).
 """
 import sys, os, pickle
 import cv2, numpy as np, onnxruntime as ort
+from views import read_view
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODELS = os.path.join(HERE, 'models')
@@ -238,7 +239,7 @@ def main():
     bfm = BFM(); reg = Regressor(bfm)
     views, a_each = [], []
     for n, (path, box) in spec.items():
-        img = cv2.imread(path)
+        img = read_view(path, n, mp_landmarks)
         L = mp_landmarks(img)
         if box is None:
             if L is None: raise SystemExit(f'recon: no face found in {path}; give a box round it ({n}={path}:x0,y0,x1,y1)')

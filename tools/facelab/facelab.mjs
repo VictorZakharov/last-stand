@@ -78,6 +78,8 @@ if (TURN) {
     REC = rec;
     SIDE_AZ = Math.min(90, Math.max(60, Math.round(Math.abs(JSON.parse(readFileSync(done, 'utf8')).yaw.side) / 5) * 5));
   }
+  // (a side view known to be a true profile, such as Codex's clay turnaround: the fit put one at 70 degrees)
+  if (arg('side-az')) SIDE_AZ = +arg('side-az');
 }
 
 // the page must never capture the real pointer (the harness runs beside someone's desktop)
@@ -386,6 +388,8 @@ if (POINTS) {
 if (TURN) {
   const t = spawnSync(PY, [join(HERE, 'turn.py'), TURN, OUT, String(SIDE_AZ)], { stdio: ['ignore', 'inherit', 'pipe'], env: QUIET });
   if (t.status) { console.error(String(t.stderr)); process.exit(t.status); }
+  const o = spawnSync(PY, [join(HERE, 'outline.py'), `${TURN}side.png`, join(OUT, 'turn-sil.png'), OUT, join(OUT, `turn-clay-${SIDE_AZ}.png`)], { stdio: ['ignore', 'inherit', 'pipe'], env: QUIET });
+  if (o.status) { console.error(String(o.stderr)); process.exit(o.status); }
 }
 if (REC) {
   const t = spawnSync(PY, [join(HERE, 'dense.py'), OUT, REC, CLS, ...(POINTS ? [POINTS] : [])], { stdio: ['ignore', 'inherit', 'pipe'], env: QUIET });

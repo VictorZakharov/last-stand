@@ -18,6 +18,7 @@ import sys, json
 import cv2, numpy as np
 import mediapipe as mp
 import sideprofile
+from views import read_view
 
 PRE, OUT = sys.argv[1], sys.argv[2]
 # the side panel's turn (recon.py fits it: a turnaround's "side" needn't be a profile), ours rendered at it
@@ -58,7 +59,7 @@ def anaglyph(a, b):
     return cv2.merge([gb, gb, ga])
 
 
-ref = {n: cv2.imread(f'{PRE}{n}.png') for n in ('front', '34', 'side')}
+ref = {n: read_view(f'{PRE}{n}.png', n, landmarks) for n in ('front', '34', 'side')}
 for n, v in ref.items():
     if v is None: raise SystemExit(f'turn: no {PRE}{n}.png')
 LF = landmarks(ref['front'])
