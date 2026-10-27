@@ -11,7 +11,7 @@ import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, puls
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, stitches, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
-import { buildHand, poseHand, hold, seat, gripTurn, bare, handCapsules, SLANT } from './hands';
+import { buildHand, poseHand, hold, seat, gripTurn, bare, handCapsules, glowOutline, SLANT } from './hands';
 import { clamp, lerp, damp, TAU, mulberry } from '../../util';
 import type { BellCloth } from './sleeve';
 import { LegIK } from './ik';
@@ -55,7 +55,7 @@ function diamondColumn(c: CanvasRenderingContext2D, w: number, h: number): void 
 /** The runes inked round a forearm (an alpha-tested texture: the ink opaque, the rest clear), wrapping the lathe's u round
  *  the arm and v along it: over the inner forearm a sigil, a seven-pointed star in a ring of written glyphs, a chain of
  *  small sealed glyphs from it towards the elbow with dots between, a line of glyphs down to the wrist, and a band round
- *  the arm at each end, as the sheet's. Made once, shared by every build. (Its first, a few circles and spokes in thick
+ *  the arm at each end, as the sheet's; on the outer and back faces a column of large glyphs. Made once, shared by every build. (Its first, a few circles and spokes in thick
  *  lines, read as a target drawn in marker) */
 let runes: THREE.CanvasTexture | undefined;
 function forearmRunes(): THREE.CanvasTexture {
@@ -69,8 +69,9 @@ function forearmRunes(): THREE.CanvasTexture {
   c.lineCap = 'round';
   c.lineJoin = 'round';
   const rng = mulberry(11);
-  // (each line a third again as wide as drawn here: at the width of a pen's, it greyed out a few metres off)
-  const stroke = (lw: number, path: () => void) => { c.lineWidth = lw * 1.3; c.beginPath(); path(); c.stroke(); };
+  // (each line twice as wide as drawn here: at the width of a pen's it greyed out a few metres off, and at a third
+  // again it was gone at the game's distance)
+  const stroke = (lw: number, path: () => void) => { c.lineWidth = lw * 2; c.beginPath(); path(); c.stroke(); };
   const ring = (x: number, y: number, r: number, lw: number) => stroke(lw, () => c.arc(x, y, r, 0, TAU));
   const line = (x0: number, y0: number, x1: number, y1: number, lw: number) => stroke(lw, () => { c.moveTo(x0, y0); c.lineTo(x1, y1); });
   const dot = (x: number, y: number, r: number) => { c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); };
@@ -163,6 +164,13 @@ function forearmRunes(): THREE.CanvasTexture {
       dot(cx + 26, y, 2.5);
     }
   }
+  // between the sigils, on the forearm's outer and back faces (u 0 and 0.5, the seam's drawn on both its edges), a
+  // column of large glyphs between two lines from band to band: the face the game's camera sees from above and
+  // behind, which held only the bands
+  for (const cx of [0, 512, N]) {
+    for (const sx of [-1, 1]) line(cx + sx * 34, 128, cx + sx * 34, 908, 3);
+    for (let y = 170; y < 900; y += 70) glyphAt(cx, y, 0, 30, 40, 4);
+  }
   runes = new THREE.CanvasTexture(cv);
   runes.colorSpace = THREE.SRGBColorSpace;
   runes.anisotropy = 4;
@@ -175,6 +183,9 @@ function forearmRunes(): THREE.CanvasTexture {
  *  forward (`HAND_HANG`, about its length): turned palm back, its width stood across the body and its thumb's side went into
  *  the hip and the skirt over it */
 const FREE_HAND = new Set(['cast', 'summon', 'channel', 'slam', 'buff', 'drink']);
+/** his free hand's outline: its green, and how far it breathes either way and how fast (rad/s: well under the
+ *  1.5 flashes a second a large glow may pulse at) */
+const HAND_GLOW = { color: new THREE.Color(0x5dffa8).multiplyScalar(3.2), breathe: 0.3, rate: 2.2 };
 const HAND_HANG = Math.PI / 2;
 const TAIL: Record<string, number> = { cast: 0.35, summon: 0.35, slam: 0.4, buff: 0.5 }, TAIL_OUT: Record<string, number> = { cast: 0.45, summon: 0.45, slam: 0.6, buff: 0.5 };
 /** drinking: the flask raised straight up before the chin, the elbow down and forward (the bell sleeve falls back off the forearm) */
@@ -256,7 +267,9 @@ export function buildMage(): Model {
   const panelTex = embroidered(PW, PH, [[0, 0], [PW, 0], [PW, PH], [0, PH]], [0.36, 0.1, 0.12], [0.78, 0.6, 0.32], diamondColumn);
   const panel = kit.rim({ color: 0xffffff, roughness: 1, map: panelTex.map, normalMap: panelTex.normalMap, roughnessMap: panelTex.roughnessMap, side: THREE.DoubleSide }, 0x7a2a2a, 0.3);
   // the runes inked on his forearms (an alpha-tested layer over the skin)
-  const ink = kit.std({ color: 0x343846, roughness: 0.6, map: forearmRunes(), alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  // (blended, not cut out: cut at half, a line thinner than a texel of the smaller mip levels was dropped whole, and
+  // at the game's distance the runes were gone; blended it fades to a grey that still shows)
+  const ink = kit.std({ color: 0x1a1c26, roughness: 0.6, map: forearmRunes(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
 
   const j = buildHumanoid({ skin: coat }, {
     chestW: 0.17, chestD: 0.14, shoulderW: 0.2, shoulderY: 0.45, upperR: 0.06, foreR: 0.05, shinL: 0.41,
@@ -383,6 +396,9 @@ export function buildMage(): Model {
     }
   }
   const handL = buildHand(j.handL, 1, leather, skinTip, 1, bareSkin), handR = buildHand(j.handR, -1, leather, skinTip, 1, bareSkin);
+  // (his arcana: the free hand's outline lit green, breathing slowly: `HAND_GLOW`)
+  const handGlow = new THREE.Color();
+  glowOutline(handL, handGlow);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
   // --- without the coat: the waistcoat over the shirt, buttoned in brass, the shirt's collar round the neck
@@ -697,6 +713,7 @@ export function buildMage(): Model {
 
     // hands at rest: the free one loosely curled and breathing, the other gripping the staff
     poseHand(handL, 0.45 + Math.sin(t * 1.3) * 0.06, 0.12);
+    handGlow.copy(HAND_GLOW.color).multiplyScalar(1 + HAND_GLOW.breathe * Math.sin(t * HAND_GLOW.rate));
     const raw = st.action;
     feet = null;
     let flaskWant = 0, drinkLift = 0;

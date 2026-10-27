@@ -84,6 +84,22 @@ function ownCopy(material: THREE.Material): THREE.Material {
   return dualQuaternionSkinned(triplanar(copy, GRAIN_TILE));
 }
 
+/** Light `h`'s outline with `rim`, a colour the model may change each frame: the kit's light at glancing angles
+ *  (`uRim`) on the hand's own copies of its materials, the same program as every hand's, a uniform of their own (the
+ *  mage's arcana in his free hand: motes drifting off it read as a stray particle effect, not a hand that glows). Call
+ *  before the hand is first drawn. */
+export function glowOutline(h: Hand, rim: THREE.Color): void {
+  for (const mesh of [h.skin, h.bareSkin, h.glove, h.nails]) {
+    if (!mesh) continue;
+    const material = mesh.material as THREE.Material;
+    const before = material.onBeforeCompile;
+    material.onBeforeCompile = (shader, renderer) => {
+      before.call(material, shader, renderer);
+      shader.uniforms.uRim = { value: rim };
+    };
+  }
+}
+
 /** a map's tile across the hand (m): the glove's leather grain at about the size it had on the old palm */
 const GRAIN_TILE = 0.12;
 
