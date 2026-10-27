@@ -134,7 +134,7 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number): Pa
     // sausage across the palm)
     // (low under the skin: as tall as they were broad, they stood in a row of balls along the back's edge)
     palm(ellipsoid(k.x, k.y + 0.001, k.z + 0.0005, w * 0.86, w * 0.72, w * 0.64), 0.012);
-    palm(ellipsoid(k.x, k.y - 0.0075, k.z - 0.0055, w * 1.4, 0.0082, 0.0046), 0.011);
+    palm(ellipsoid(k.x, k.y - 0.0075, k.z - 0.0055, w * 1.22, 0.0082, 0.0046), 0.008);
   }
   // the little finger's mound along the palm's edge
   palm(ellipsoid(...at(-0.0285, -0.05, -0.0062), 0.0115, 0.033, 0.0102), 0.009);
@@ -144,7 +144,8 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number): Pa
   // (cut off flat inside the cuff: the wrist's rounded end rose 3 cm up the forearm)
   parts.push({ shape: above(WRIST_TOP), frame: IDENTITY, blend: 0.002, cut: true, bones: [] });
   // the palm's hollow
-  parts.push({ shape: ellipsoid(...at(0.003, -0.056, -0.0248), 0.024, 0.026, 0.0095), frame: IDENTITY,
+  // (off the thumb's mound towards the little finger's: over against it, the mound read as a crater)
+  parts.push({ shape: ellipsoid(...at(-0.004, -0.06, -0.0248), 0.02, 0.024, 0.0095), frame: IDENTITY,
     blend: 0.006, cut: true, bones: [] });
   return parts;
 }

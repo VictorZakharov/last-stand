@@ -198,8 +198,8 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
   for (const m of [h.skin, h.bareSkin]) if (m) (m.material as THREE.MeshStandardMaterial).vertexColors = true;
   h.nails = skinnedOn(vis, shape.nails, skin, skeleton, false);
   const nail = h.nails.material as THREE.MeshStandardMaterial;
-  nail.color.lerp(NAIL_TINT, 0.4);
-  nail.roughness = 0.35;
+  nail.color.lerp(NAIL_TINT, 0.25);
+  nail.roughness = 0.45;
   bare(h, false);
   // (unposed, as its joints were before it was sculpted)
   for (const d of [...f, thumb]) for (const j of d.j) j.rotation.set(0, 0, 0);

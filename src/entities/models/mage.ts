@@ -357,9 +357,9 @@ export function buildMage(): Model {
       const roll = new THREE.TorusGeometry(r, t, lod(8, 6), lod(44, 20)).rotateX(Math.PI / 2), p = roll.attributes.position;
       for (let i = 0; i < p.count; i++) {
         const x = p.getX(i), z = p.getZ(i), a = Math.atan2(z, x), out = Math.hypot(x, z) - r;
-        const fold = 0.28 * Math.sin(a * 6 + phase) + 0.14 * Math.sin(a * 11 + phase * 2.3);
+        const fold = 0.45 * Math.sin(a * 5 + phase) + 0.25 * Math.sin(a * 9 + phase * 2.3);
         const k = (r + out * (1 + fold)) / Math.hypot(x, z);
-        p.setXYZ(i, x * k, p.getY(i) * (1 + fold * 0.6) + t * 0.25 * Math.sin(a * 3 + phase), z * k);
+        p.setXYZ(i, x * k, p.getY(i) * (1 + fold * 0.6) + t * 0.5 * Math.sin(a * 3 + phase), z * k);
       }
       roll.computeVertexNormals();
       S.add(scaleUV(roll, 4, 1), sleeve, el, [0, y, 0]);
