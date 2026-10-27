@@ -117,7 +117,7 @@ export function buildMage(): Model {
   const boot = kit.std({ color: 0x5a3a26, roughness: 1, ...pbrMaterialMaps(oiled(), 1) });
   const bootStrap = kit.std({ color: 0x3a2618, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
   const sole = kit.std({ color: 0x22180f, roughness: 1, ...pbrMaterialMaps(oiled(), 2) });
-  const wood = kit.std({ color: 0x6a4630, roughness: 0.9, ...tex(woodMaps(), 1, 2) });
+  const wood = kit.std({ color: 0x7a5236, roughness: 0.9, ...tex(woodMaps(), 1, 2) });
   const skinTip = kit.rim({ color: 0xc9957c, roughness: 0.6 }, 0x6a2a1c, 0.25);
   // the staff's crystal and its rings in the colour of the bolts it shoots (Splintering Bolt's `color`, #197)
   const glow = kit.glow(0xff6fe0, 1.5);
@@ -262,9 +262,9 @@ export function buildMage(): Model {
     BT.add(belt(0.045, 0.045, -0.245, 0.012, 0.004, 0, 14), linen, el);
     // the bell: from above the elbow, flaring, longest on the underside of the arm (+z hangs below
     // the forearm when the arm is raised forward)
-    const bell = new THREE.CylinderGeometry(0.075, 0.15, 0.3, 28, 6, true).translate(0, -0.15, 0), q = bell.attributes.position;
+    const bell = new THREE.CylinderGeometry(0.075, 0.16, 0.38, 28, 7, true).translate(0, -0.19, 0), q = bell.attributes.position;
     for (let i = 0; i < q.count; i++) {
-      const x = q.getX(i), y = q.getY(i), z = q.getZ(i), a = Math.atan2(x, -z), k = -y / 0.3;
+      const x = q.getX(i), y = q.getY(i), z = q.getZ(i), a = Math.atan2(x, -z), k = -y / 0.38;
       const hang = 0.17 * k * (0.5 + 0.5 * Math.cos(a)), fold = 1 + 0.08 * k * Math.sin(Math.atan2(z, x) * 7);
       q.setXYZ(i, x * fold, y - hang, z * fold);
     }
@@ -320,8 +320,8 @@ export function buildMage(): Model {
 
   // --- skirts: the navy robe to below the knee with a gold hem, a longer teal underskirt, the
   // embroidered front panel, and teal tails at the front corners
-  const under = new Skirt({ r0: 0.19, r1: 0.44, len: 0.82, depth: 0.84, folds: 13, foldAmp: 0.08, rows: 10, hem: (a) => 0.012 * Math.sin(a * 5) });
-  const over = new Skirt({ r0: 0.2, r1: 0.46, len: 0.7, depth: 0.84, folds: 11, foldAmp: 0.085, rows: 10, trim: 0.075, hem: (a) => 0.03 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
+  const under = new Skirt({ r0: 0.19, r1: 0.39, len: 0.82, depth: 0.84, folds: 15, foldAmp: 0.08, rows: 10, hem: (a) => 0.012 * Math.sin(a * 5) });
+  const over = new Skirt({ r0: 0.2, r1: 0.41, len: 0.7, depth: 0.84, folds: 13, foldAmp: 0.09, rows: 10, trim: 0.075, hem: (a) => 0.03 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
   const skirts: THREE.Mesh[] = [];
   for (const [sk, mats] of [[under, [teal]], [over, [robe, copper]], [over, [lining, copper]]] as const) {
     const m = new THREE.Mesh(sk.geo, mats.length > 1 ? [...mats] : mats[0]);
@@ -394,7 +394,7 @@ export function buildMage(): Model {
     const up = Math.min(fit(0, 0, 0.15, h, swing), swing + 1);
     return [up, Math.min(fit(-h * Math.cos(up), h * Math.sin(up), 0, h, swing), swing + 1)];
   };
-  hang(0, 0.19, 0.66, panel, 110, PH, 0.02);
+  hang(0, 0.165, 0.72, panel, 110, PH, 0.02);
   for (const s of [1, -1]) hang(s * 0.75, 0.15, 0.5, tail, 120, TH2, 0.03);
 
   // --- the head: face, a full beard, hair, and a wide-brimmed pointed hat (worn with a head item equipped: setGear), its
@@ -466,8 +466,8 @@ export function buildMage(): Model {
     for (const p of [1, -1]) {
       const prong: THREE.Vector3[] = [];
       for (let q = 0; q <= 14; q++) {
-        const t = q / 14, out = Math.sin(Math.min(1, t * 1.1) * Math.PI) * 0.1 + 0.018 * (1 - t), tip = t > 0.8 ? (t - 0.8) * 0.25 * p : 0;
-        prong.push(V(p * out - tip, 1.11 - GRIP + t * 0.42, 0.012 * Math.sin(t * Math.PI) * p));
+        const t = q / 14, out = Math.sin(t * Math.PI) ** 0.85 * 0.1 + 0.018 * (1 - t) ** 2;
+        prong.push(V(p * out, 1.11 - GRIP + t * 0.42, 0.012 * Math.sin(t * Math.PI) * p));
       }
       w.add(taperTube(prong, (t) => 0.028 * (1 - t * 0.8), 28, 10), gold, staff);
     }

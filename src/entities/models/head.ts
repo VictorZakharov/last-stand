@@ -665,8 +665,10 @@ function sweptLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
     let az0: number, el0: number, az1: number, el1: number, top: number, w: number;
     if (kind < 0.3) {
       // from along the front of the hairline straight back over the top to the nape (rooted on it: no lock's end shows there)
-      az0 = (rng() - 0.5) * 1.7; el0 = hairEl(az0) + 0.015;
-      az1 = (Math.sign(az0) || s) * (Math.PI - 0.1 - 0.35 * Math.abs(az0) - 0.2 * rng()); el1 = -0.12 - rng() * 0.12 - fall * (0.2 + rng() * 0.12);
+      az0 = (rng() - 0.5) * 1.7 * (mane ? 0.35 + 0.65 * rng() : 1); el0 = hairEl(az0) + 0.015;
+      // (a mane's cross the middle to either side, as hair combed straight back does: each kept to its own side, the two
+      // halves parted down the middle)
+      az1 = (mane ? s : Math.sign(az0) || s) * (Math.PI - 0.1 - 0.35 * Math.abs(az0) - 0.2 * rng()); el1 = -0.12 - rng() * 0.12 - fall * (0.2 + rng() * 0.12);
       top = 5 + rng() * 3 + fall * 9; w = 16 + rng() * 8;
     } else if (kind < 0.5) {
       // the temples, back round above the ears to behind them
@@ -676,7 +678,7 @@ function sweptLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
     } else if (kind < 0.75) {
       // the crown, behind the hairline, straight back over it to the nape
       az0 = (rng() - 0.5) * 1.4; el0 = hairEl(az0) + 0.15 + rng() * 0.45;
-      az1 = (Math.sign(az0) || s) * (Math.PI - 0.05 - 0.45 * rng()); el1 = -0.16 - rng() * 0.1 - fall * (0.2 + rng() * 0.12);
+      az1 = (mane ? s : Math.sign(az0) || s) * (Math.PI - 0.05 - 0.45 * rng()); el1 = -0.16 - rng() * 0.1 - fall * (0.2 + rng() * 0.12);
       top = 8 + rng() * 4 + fall * 10; w = 18 + rng() * 9;
     } else {
       // the back of the head, down to the nape (the deeper layers)
