@@ -48,32 +48,121 @@ function diamondColumn(c: CanvasRenderingContext2D, w: number, h: number): void 
 }
 
 /** The runes inked round a forearm (an alpha-tested texture: the ink opaque, the rest clear), wrapping the lathe's u round
- *  the arm and v along it: a ring of circles with spokes over the inner forearm, a line of small rings and crosses down to
- *  the wrist, as the sheet's. Made once, shared by every build. */
+ *  the arm and v along it: over the inner forearm a sigil, a seven-pointed star in a ring of written glyphs, a chain of
+ *  small sealed glyphs from it towards the elbow with dots between, a line of glyphs down to the wrist, and a band round
+ *  the arm at each end, as the sheet's. Made once, shared by every build. (Its first, a few circles and spokes in thick
+ *  lines, read as a target drawn in marker) */
 let runes: THREE.CanvasTexture | undefined;
 function forearmRunes(): THREE.CanvasTexture {
   if (runes) return runes;
-  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 512;
+  const N = 1024, cv = document.createElement('canvas');
+  cv.width = N;
+  cv.height = N;
   const c = ctx2d(cv);
-  c.strokeStyle = '#000'; c.fillStyle = '#000'; c.lineCap = 'round';
-  // (drawn twice round the arm, at u = 0.25 and 0.75, so one faces out however the forearm turns; v runs from the wrist (0)
-  // to the elbow (1))
-  for (const cx of [128, 384]) {
-    const ring = (y: number, r: number, lw: number) => { c.lineWidth = lw; c.beginPath(); c.arc(cx, y, r, 0, TAU); c.stroke(); };
-    const line = (x0: number, y0: number, x1: number, y1: number, lw: number) => { c.lineWidth = lw; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); };
-    const cy = 320;
-    ring(cy, 78, 5); ring(cy, 50, 4); ring(cy, 16, 4);
-    for (let k = 0; k < 8; k++) {
-      const a = k * Math.PI / 4;
-      line(cx + Math.cos(a) * 16, cy + Math.sin(a) * 16, cx + Math.cos(a) * 100, cy + Math.sin(a) * 100, 3.5);
+  c.strokeStyle = '#000';
+  c.fillStyle = '#000';
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  const rng = mulberry(11);
+  // (each line a third again as wide as drawn here: at the width of a pen's, it greyed out a few metres off)
+  const stroke = (lw: number, path: () => void) => { c.lineWidth = lw * 1.3; c.beginPath(); path(); c.stroke(); };
+  const ring = (x: number, y: number, r: number, lw: number) => stroke(lw, () => c.arc(x, y, r, 0, TAU));
+  const line = (x0: number, y0: number, x1: number, y1: number, lw: number) => stroke(lw, () => { c.moveTo(x0, y0); c.lineTo(x1, y1); });
+  const dot = (x: number, y: number, r: number) => { c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); };
+  /** a glyph w by h about (0, 0): a stem and two to three strokes between the points of a three by three grid */
+  const glyph = (w: number, h: number, lw: number) => {
+    const at = (k: number): [number, number] => [((k % 3) - 1) * w / 2, (Math.floor(k / 3) - 1) * h / 2];
+    const stem = rng() < 0.5 ? [1, 7] : [rng() < 0.5 ? 0 : 2, rng() < 0.5 ? 6 : 8];
+    const pairs = [stem];
+    for (let n = 2 + Math.floor(rng() * 2); n > 0; n--) {
+      const a = Math.floor(rng() * 9);
+      let b = Math.floor(rng() * 9);
+      if (b === a) b = (a + 4) % 9;
+      pairs.push([a, b]);
     }
-    line(cx, 40, cx, cy - 100, 4);
-    for (const [y, r] of [[190, 18], [120, 13], [70, 10]] as const) { ring(y, r, 4); line(cx - r - 16, y, cx + r + 16, y, 4); }
-    line(cx, cy + 100, cx, 480, 4);
-    for (const y of [430, 465]) line(cx - 18, y, cx + 18, y, 4);
+    for (const [a, b] of pairs) line(...at(a), ...at(b), lw);
+    if (rng() < 0.4) dot(...at(Math.floor(rng() * 9)), lw * 0.9);
+  };
+  /** glyph at (x, y), turned by `a` */
+  const glyphAt = (x: number, y: number, a: number, w: number, h: number, lw: number) => {
+    c.save();
+    c.translate(x, y);
+    c.rotate(a);
+    glyph(w, h, lw);
+    c.restore();
+  };
+
+  // the bands round the arm (the canvas's top is the elbow's end): at the elbow a double line with diamonds and dots
+  // between, at the wrist a double line with a row of triangles between
+  for (const y of [52, 92]) line(0, y, N, y, 5);
+  for (let x = 16; x < N; x += 32) {
+    if ((x / 32) % 2 < 1) { c.beginPath(); c.moveTo(x, 60); c.lineTo(x + 9, 72); c.lineTo(x, 84); c.lineTo(x - 9, 72); c.closePath(); c.fill(); }
+    else dot(x, 72, 3.5);
+  }
+  for (const y of [944, 990]) line(0, y, N, y, 5);
+  for (let x = 0; x < N; x += 32) stroke(3.5, () => { c.moveTo(x, 984); c.lineTo(x + 16, 950); c.lineTo(x + 32, 984); });
+
+  // (twice round the arm, at u = 0.25 and 0.75, so one faces out however the forearm turns)
+  for (const cx of [256, 768]) {
+    // the sigil: a ring of glyphs between two rings, ticks round it, a seven-pointed star, a crescent and a dot at its middle
+    const cy = 640;
+    ring(cx, cy, 164, 5);
+    ring(cx, cy, 152, 2.5);
+    ring(cx, cy, 116, 4);
+    for (let k = 0; k < 48; k++) {
+      const a = k / 48 * TAU, r0 = k % 4 ? 164 : 158;
+      line(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0, cx + Math.cos(a) * 176, cy + Math.sin(a) * 176, 2.5);
+    }
+    for (let k = 0; k < 20; k++) {
+      const a = k / 20 * TAU;
+      glyphAt(cx + Math.cos(a) * 134, cy + Math.sin(a) * 134, a + Math.PI / 2, 15, 20, 2.6);
+    }
+    stroke(3.5, () => {
+      for (let k = 0; k <= 7; k++) {
+        const a = -Math.PI / 2 + k * 3 / 7 * TAU, x = cx + Math.cos(a) * 112, y = cy + Math.sin(a) * 112;
+        if (k) c.lineTo(x, y); else c.moveTo(x, y);
+      }
+    });
+    for (let k = 0; k < 7; k++) {
+      const a = -Math.PI / 2 + k / 7 * TAU;
+      dot(cx + Math.cos(a) * 116, cy + Math.sin(a) * 116, 6);
+    }
+    ring(cx, cy, 44, 4);
+    ring(cx, cy, 36, 2);
+    stroke(4, () => { c.arc(cx, cy, 24, 0.35 * Math.PI, 1.65 * Math.PI); c.arc(cx + 9, cy, 18, 1.6 * Math.PI, 0.4 * Math.PI, true); });
+    dot(cx + 6, cy, 4);
+
+    // up towards the elbow: a stem through a chain of glyphs, each sealed in a small ring, dots between
+    line(cx, 112, cx, cy - 176, 3.5);
+    for (const [y, r] of [[420, 30], [312, 24], [216, 20], [140, 15]] as const) {
+      c.save();
+      c.globalCompositeOperation = 'destination-out';
+      dot(cx, y, r + 3);
+      c.restore();
+      ring(cx, y, r, 3.5);
+      glyphAt(cx, y, 0, r * 0.75, r * 1.05, 2.6);
+      for (const sx of [-1, 1]) {
+        line(cx + sx * (r + 8), y, cx + sx * (r + 34), y, 2.5);
+        dot(cx + sx * (r + 44), y, 3.5);
+      }
+    }
+    for (const d of [-1, 1]) dot(cx + d * 12, 468, 3);
+    // down towards the wrist: a column of glyphs, with dots beside them
+    line(cx, cy + 176, cx, 930, 3);
+    for (let k = 0; k < 4; k++) {
+      const y = 840 + k * 24;
+      c.save();
+      c.globalCompositeOperation = 'destination-out';
+      c.fillRect(cx - 14, y - 11, 28, 22);
+      c.restore();
+      glyphAt(cx, y, 0, 14, 16, 2.4);
+      dot(cx - 26, y, 2.5);
+      dot(cx + 26, y, 2.5);
+    }
   }
   runes = new THREE.CanvasTexture(cv);
   runes.colorSpace = THREE.SRGBColorSpace;
+  runes.anisotropy = 4;
   return runes;
 }
 
