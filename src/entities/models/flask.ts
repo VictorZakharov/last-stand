@@ -70,9 +70,10 @@ export function buildFlask(kit: MaterialKit): THREE.Group {
   add(new THREE.CircleGeometry(Math.sqrt(DRAUGHT_R * DRAUGHT_R - FILL * FILL) * 0.98, 20).rotateX(-Math.PI / 2), skin, FILL + 0.0005, draught);
   const fizz = kit.glow(0xff6050, 1.2, false);
   for (const [x, y, z, r] of BUBBLES) add(new THREE.SphereGeometry(r, 6, 4), fizz, y, draught).position.set(x, y, z);
-  // the glass round it: a dark tint carrying its highlights, the draught seen through it (pale, it laid a milky
-  // white over the draught, which read pink)
-  const glass = kit.phys({ color: 0x000000, roughness: 0.04, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05, transparent: true, opacity: 0.3, depthWrite: false });
+  // the glass round it: a dark tint carrying its highlights and a rim of light round its edge, the draught seen
+  // through it (pale, it laid a milky white over the draught, which read pink; without the rim its empty dome
+  // vanished against the sky, the flask a red goblet)
+  const glass = kit.rim({ color: 0x000000, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.3, depthWrite: false }, 0xffffff, 1.4);
   add(new THREE.SphereGeometry(GLASS_R, 24, 16), glass, BODY_Y).renderOrder = 1;
   // the neck, wrapped in brass where the fist holds it, a little longer than the fist so it shows between the thumb
   // and the lips (as long as the fist, the fist covered the mouth), collared where it leaves the body and lipped at
@@ -197,7 +198,7 @@ export function holdFlask(h: Hand, flask: THREE.Object3D, out: number): void {
   flask.updateWorldMatrix(true, false);
   (flask.userData.draught as THREE.Object3D).quaternion.copy(flask.getWorldQuaternion(_q).invert());
   // (the cork out as it reaches the lips: drunk through, it read as a stoppered bottle pressed to the mouth)
-  (flask.userData.cork as THREE.Object3D).visible = lift < 0.6;
+  (flask.userData.cork as THREE.Object3D).visible = lift < 0.95;
   // (a drink not posed this frame leaves the flask the fist's own way)
   flask.userData.lift = 0;
 }

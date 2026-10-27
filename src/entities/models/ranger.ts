@@ -42,7 +42,7 @@ const COLLAR_RISE = 0.02;
  *  side (the rig turns it about joints in front of its middle), and came 3.6 mm out through it */
 const COLLAR_EASE = 0.006;
 const UP = V(0, 1, 0), FWD = V(0, 0, 1);
-const DRINK = { wrist: V(-0.13, -0.12, 0.16), tipped: V(-0.16, 0.07, 0.16), pole: V(-0.35, -1, 0.5), tippedPole: V(-0.6, -0.4, 1) };
+const DRINK = { wrist: V(-0.07, -0.16, 0.14), tipped: V(-0.08, 0.08, 0.19), pole: V(-0.35, -1, 0.5), tippedPole: V(-0.6, -0.4, 1) };
 /** where the nock comes to at full draw (the head's mm): at the side of the jaw, low along it, below and in front of the ear, the string
  *  a finger's width off the face, so the arrow and its fletching lie beside the cheek and the beard (on the jaw's skin, the
  *  arrow's last 9 cm went through them), and the string's lower half passes in front of the coat over the bow shoulder
@@ -504,7 +504,8 @@ export function buildRanger(): Model {
   // the shared anatomical head, with his own face (face.ts FACES.ranger)
   const head = buildHead(j.head, kit, 'ranger', { hair: 'swept', crop: true });
   buildNeck(j.neck, kit, 'ranger', j.P.neckL, j.head);
-  const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
+  // (on the lips, under the moustache: at the others' height he drank at his nose)
+  const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 44, 112, mouth.position);
   const anchor = new THREE.Object3D(); anchor.name = 'anchor'; head.group.add(anchor); anchor.position.copy(ANCHOR);
   const cap = joint(head.group); cap.name = 'cap'; cap.visible = false;
   buildHat(head, cap, felt, boot, strapLeather);
