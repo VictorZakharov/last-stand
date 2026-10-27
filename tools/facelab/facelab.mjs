@@ -188,7 +188,7 @@ try {
   await p.evaluate(() => {
     const { THREE } = __dev, G = __G, clay = new THREE.MeshStandardMaterial({ color: 0xb4aca4, roughness: 0.7 });
     window.__clayRestore = [];
-    G.scene.traverse((o) => { if (!o.isMesh && !o.isSkinnedMesh) return; window.__clayRestore.push([o, o.material, o.visible]); if (o.name === 'hair') o.visible = false; else o.material = clay; });
+    G.scene.traverse((o) => { if (!o.isMesh && !o.isSkinnedMesh) return; window.__clayRestore.push([o, o.material, o.visible]); if (o.name === 'hair' || o.name === 'crop') o.visible = false; else o.material = clay; });
   });
   await p.waitForTimeout(400);
   writeFileSync(join(OUT, 'ours-clay.png'), await canvas.screenshot());
@@ -205,7 +205,7 @@ try {
   await p.evaluate(() => {
     const { THREE } = __dev, G = __G, clay = new THREE.MeshStandardMaterial({ color: 0xb4aca4, roughness: 0.7 });
     window.__clayRestore = [];
-    G.scene.traverse((o) => { if (!o.isMesh && !o.isSkinnedMesh) return; window.__clayRestore.push([o, o.material, o.visible]); if (o.name === 'hair') o.visible = false; else o.material = clay; });
+    G.scene.traverse((o) => { if (!o.isMesh && !o.isSkinnedMesh) return; window.__clayRestore.push([o, o.material, o.visible]); if (o.name === 'hair' || o.name === 'crop') o.visible = false; else o.material = clay; });
   });
   for (const [name, az, el] of [['front', 0, 0], ['three-quarter-r', -35, 0], ['profile-r', -90, 0], ['three-quarter-l', 35, 0], ['profile-l', 90, 0], ['below', 0, -30], ['above', 0, 40]]) {
     await p.evaluate(([a, e]) => { window.__orbit = { az: a * Math.PI / 180, el: e * Math.PI / 180 }; window.__clay = { az: a * Math.PI / 180 }; }, [az, el]);
@@ -227,7 +227,7 @@ try {
     await p.evaluate(() => {
       const { THREE } = __dev, G = __G, clay = new THREE.MeshStandardMaterial({ color: 0xb4aca4, roughness: 0.7 });
       window.__clayRestore = [];
-      G.scene.traverse((o) => { if (!o.isMesh && !o.isSkinnedMesh) return; window.__clayRestore.push([o, o.material, o.visible]); if (o.name === 'hair') o.visible = false; else o.material = clay; });
+      G.scene.traverse((o) => { if (!o.isMesh && !o.isSkinnedMesh) return; window.__clayRestore.push([o, o.material, o.visible]); if (o.name === 'hair' || o.name === 'crop') o.visible = false; else o.material = clay; });
     });
     for (const az of AZ) { await p.evaluate((a) => { window.__clay = { az: a * Math.PI / 180 }; }, az); await shoot(`turn-clay-${az}.png`, az); }
     await p.evaluate(() => {
@@ -294,7 +294,7 @@ try {
   // the face's own skin alone, the hair taken off
   await p.evaluate(() => {
     const { THREE } = __dev, G = __G, white = new THREE.MeshBasicMaterial({ color: 0xffffff }), black = new THREE.MeshBasicMaterial({ color: 0x000000 });
-    G.scene.traverse((o) => { if (!o.isMesh && !o.isSkinnedMesh) return; if (o.name === 'hair') o.visible = false; else o.material = o.name === 'face' ? white : black; });
+    G.scene.traverse((o) => { if (!o.isMesh && !o.isSkinnedMesh) return; if (o.name === 'hair' || o.name === 'crop') o.visible = false; else o.material = o.name === 'face' ? white : black; });
   });
   await p.waitForTimeout(800);
   writeFileSync(join(OUT, 'ours-face.png'), await canvas.screenshot());
@@ -390,6 +390,9 @@ if (TURN) {
   if (t.status) { console.error(String(t.stderr)); process.exit(t.status); }
   const o = spawnSync(PY, [join(HERE, 'outline.py'), `${TURN}side.png`, join(OUT, 'turn-sil.png'), OUT, join(OUT, `turn-clay-${SIDE_AZ}.png`)], { stdio: ['ignore', 'inherit', 'pipe'], env: QUIET });
   if (o.status) { console.error(String(o.stderr)); process.exit(o.status); }
+  // (the three-quarter shown at the turn its reference was drawn at: Codex's clay turnaround's is about 30 degrees)
+  const a = spawnSync(PY, [join(HERE, 'angles.py'), TURN, OUT, String(arg('az34', 30)), String(SIDE_AZ)], { stdio: ['ignore', 'inherit', 'pipe'], env: QUIET });
+  if (a.status) { console.error(String(a.stderr)); process.exit(a.status); }
 }
 if (REC) {
   const t = spawnSync(PY, [join(HERE, 'dense.py'), OUT, REC, CLS, ...(POINTS ? [POINTS] : [])], { stdio: ['ignore', 'inherit', 'pipe'], env: QUIET });

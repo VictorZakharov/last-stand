@@ -171,6 +171,9 @@ export function buildMage(): Model {
 
   const j = buildHumanoid({ skin: coat }, {
     chestW: 0.17, chestD: 0.14, shoulderW: 0.2, shoulderY: 0.45, upperR: 0.06, foreR: 0.05, shinL: 0.41,
+    // (a shorter neck than the rig's: at 0.1 it stood long and thin out of the collar, beside his sheet; at 0.085 the jaw
+    // sat on the collar)
+    neckL: 0.093,
   });
   stripRig(j.root);
   const S = new Sculpt();

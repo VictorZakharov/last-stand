@@ -850,23 +850,54 @@ const win = (deg: number, a: number, b: number, e = 20): number => {
 };
 
 /**
+ * Where an ear's point (v up, u forward of the ear canal, mm) sits out from the middle: flat at the side of the head at
+ * the canal (`sx`), or, with `earIn` set, on the side of the head under it: a flat ear's back half sank into a fuller
+ * back of the skull, its front edge stood off where the head narrows before the canal (the mage). The head's side is
+ * found on a grid over the ear.
+ */
+function earSeat(F: FaceShape, sx: number): (v: number, u: number) => number {
+  if (F.earIn === undefined) return () => sx;
+  const U0 = -50, V0 = -45, STEP = 2.5, NU = 33, NV = 37, grid: number[] = [];
+  for (let j = 0; j < NV; j++) for (let i = 0; i < NU; i++) {
+    const y = 97 + V0 + j * STEP, z = U0 + i * STEP;
+    let x = 30;
+    while (x < 90 && headSDF(x, y, z, F) < 0) x += 1;
+    let lo = x - 1, hi = x;
+    for (let k = 0; k < 6; k++) {
+      const m = (lo + hi) / 2;
+      if (headSDF(m, y, z, F) < 0) lo = m;
+      else hi = m;
+    }
+    grid.push(lo);
+  }
+  return (v, u) => {
+    const fi = clamp((u - U0) / STEP, 0, NU - 1.001), fj = clamp((v - V0) / STEP, 0, NV - 1.001);
+    const i = Math.floor(fi), j = Math.floor(fj), a = fi - i, b = fj - j, at = (ii: number, jj: number) => grid[jj * NU + ii];
+    return lerp(lerp(at(i, j), at(i + 1, j), a), lerp(at(i, j + 1), at(i + 1, j + 1), a), b);
+  };
+}
+
+/**
  * An ear (ANSUR II: 64 mm long, 36 wide): a rolled rim (the helix) round a shallow groove, a ridge
  * inside it, a deep bowl leading to the ear canal with the small flap in front of it, a soft lobe.
  * Built in the ear's own frame (u forward, v up, the relief out from the head), set on the side of the
  * head at the ear canal, its top tilted back and its back edge standing off the head.
  */
 function earGeometry(s: number, F: FaceShape, ao = 0): THREE.BufferGeometry {
-  const nt = lod(40, 20), nr = lod(12, 6), thick = 3.4;
+  const nt = lod(40, 20), nr = lod(12, 6), thick = F.earThick ?? 3.4;
   // the side of the head at the ear canal
   let sx = 40;
   while (sx < 90 && headSDF(sx, 97, 0, F) < 0) sx += 0.5;
   const tilt = 0.26, flare = F.earFlare ?? 0.5, cu = -8, cv = 3;
+  const seat = earSeat(F, sx);
   const place = (u: number, v: number, h: number, out: THREE.Vector3) => {
     // tilt the ear back, then flare it out from the head about its front edge
     const u1 = u * Math.cos(tilt) - v * Math.sin(tilt), v1 = u * Math.sin(tilt) + v * Math.cos(tilt);
     const back = Math.max(0, -u1);
     const out1 = h + back * Math.sin(flare), u2 = u1 + (u1 < 0 ? back * (1 - Math.cos(flare)) : 0);
-    return toGroup(s * (sx + 4 + out1), 97 + v1, u2, out);
+    // (a seated ear's front edge, the rim's root and the flap before the canal, grows out of the cheek: sunk into it)
+    const root = F.earIn === undefined ? 0 : 4 * sm(-2, 10, u2);
+    return toGroup(s * (seat(v1, u2) + 4 - (F.earIn ?? 0) - root + out1), 97 + v1, u2, out);
   };
   const front: number[] = [], backP: number[] = [], v = new THREE.Vector3(), cf: number[] = [], cb: number[] = [];
   for (let j = 0; j <= nr; j++) {
@@ -1011,7 +1042,7 @@ export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     let rx = lerp(66, (F.neckW ?? 54) + 3, sm(0, 1, t)), rz = lerp(62, 52, sm(0, 1, t)), cz = lerp(-2, -13, t);
     if (C) {
       // a column neck: the head's own column's section all the way up, flaring only at its base inside the clothes
-      const fl = 5 * sm(-60, -95, yf);
+      const fl = 5 * sm(-60, -95, yf) + (F.neckFlare ?? 0) * sm(-35, -110, yf) ** 1.5;
       rx = C[0] + fl; rz = C[1] + fl * 0.8; cz = (F.neckBack ?? -8) - ORIGIN.z;
     }
     for (let i = 0; i <= segs; i++) {
