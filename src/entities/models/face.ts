@@ -83,6 +83,11 @@ export interface FaceShape {
   earFlare?: number;
   /** how thick the ears are (mm; 3.4 as most): thin, from the front they read as fins (the mage) */
   earThick?: number;
+  /** how big the ears are (1 as most: ANSUR's 64 mm long) */
+  earScale?: number;
+  /** how round the ears are (0 as most, 1 round): the top of the rim rounded, the rim rolled round from front to back
+   *  (pointed and with a flat band of an edge, the mage's read as an elf's) */
+  earRound?: number;
   /** how much closer (mm) the ears sit in against the side of the head (0 as most), set (even to 0) riding out over the
    *  head where it bulges under them: a lean head drawn in round the ear canal left a gap before them, and a full back of
    *  the skull swallowed their back halves (the mage) */
@@ -207,7 +212,7 @@ export const FACES: Record<'warrior' | 'mage' | 'ranger', FaceShape> = {
       pz: [1.2, 1.2, 1.2, 1.2, 1.22, 1.58, 2.11, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2], hollow: 0 } },
   // the battle scholar, clean-shaven: the warrior's face (fitted with facelab to a strong jaw) as a start, the nose and
   // the lower face shorter and the lips fuller after his sheet's front view, his own grey-green eyes
-  mage: { jaw: 46, chin: 15, chinFwd: 1.5, brow: 2.6, cheek: 0.9, noseLen: 54, noseW: 13, nosePro: 1.25, hump: 0, lips: 1.1, long: 0.95, tip: 1.0, eyeOpen: 2.75, iris: [0.26, 0.29, 0.23], beardDepth: 0, browFwd: 8, browFrown: 4, foreheadFwd: 10, noseRoot: 6, skullFwd: -3.7, occiput: 12, lipFwd: 11, cornerIn: 22, mouthUp: 7, beardLine: 22, browDrop: 3.5, masseter: 46, maskMasseter: true, earIn: 2, earThick: 5.5, neckFlare: 12, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 43, neckBack: -22, neckBlend: 13, neckCol: [54, 58], lidSoft: 4, earFlare: 0.2, zygo: 3.5, bridgeW: 5.6, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 16.5, muzzleFwd: -1.5,
+  mage: { jaw: 46, chin: 15, chinFwd: 1.5, brow: 2.6, cheek: 0.9, noseLen: 54, noseW: 13, nosePro: 1.25, hump: 0, lips: 1.1, long: 0.95, tip: 1.0, eyeOpen: 2.75, iris: [0.26, 0.29, 0.23], beardDepth: 0, browFwd: 8, browFrown: 4, foreheadFwd: 10, noseRoot: 6, skullFwd: -3.7, occiput: 12, lipFwd: 11, cornerIn: 22, mouthUp: 7, beardLine: 22, browDrop: 3.5, masseter: 46, maskMasseter: true, earIn: 2, earThick: 5.5, earScale: 1.15, earRound: 1, neckFlare: 12, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 43, neckBack: -22, neckBlend: 13, neckCol: [54, 58], lidSoft: 4, earFlare: 0.2, zygo: 3.5, bridgeW: 5.6, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 16.5, muzzleFwd: -1.5,
     templeNarrow: 3, lidFold: 3, gridEye: 1,
     // (the mask, the skull and the jaw fitted by least squares (tools/facelab/fit.mjs) to the reference rebuilt in 3D from its
     // turnaround (within 1 mm rms) and to its front view's widths; the nose, lips and eyes to the pictures' landmarks)

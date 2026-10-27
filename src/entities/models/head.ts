@@ -834,14 +834,18 @@ function radiusAt(g: HeadGrid, az: number, el: number): number {
 
 /** the ear's outline round the middle of its bowl (degrees round from forward, towards the top: mm) */
 const EAR_OUTLINE: [number, number][] = [[0, 12], [45, 16], [70, 24], [92, 33], [118, 31], [145, 26], [182, 21], [220, 21], [250, 26], [272, 29], [298, 23], [326, 15], [360, 12]];
-function earR(deg: number): number {
+// (a rounder top, the helix one C from front to back: the outline above came to a point at its top)
+const EAR_ROUND: [number, number][] = [[0, 13], [45, 19], [70, 27], [92, 31], [118, 31], [145, 27], [182, 22], [220, 21], [250, 26], [272, 29], [298, 23], [326, 15], [360, 13]];
+function outlineR(table: [number, number][], deg: number): number {
   const a = ((deg % 360) + 360) % 360;
-  for (let i = 1; i < EAR_OUTLINE.length; i++) {
-    const [a1, r1] = EAR_OUTLINE[i];
-    if (a <= a1) { const [a0, r0] = EAR_OUTLINE[i - 1], t = (a - a0) / (a1 - a0); return lerp(r0, r1, t * t * (3 - 2 * t)); }
+  for (let i = 1; i < table.length; i++) {
+    const [a1, r1] = table[i];
+    if (a <= a1) { const [a0, r0] = table[i - 1], t = (a - a0) / (a1 - a0); return lerp(r0, r1, t * t * (3 - 2 * t)); }
   }
-  return EAR_OUTLINE[0][1];
+  return table[0][1];
 }
+/** the ear's outline's radius (mm) at `deg`, rounder at its top by `round` (0 to 1) */
+const earR = (deg: number, round = 0): number => lerp(outlineR(EAR_OUTLINE, deg), outlineR(EAR_ROUND, deg), round);
 /** a bump rising from 0 at a to 1 halfway and back to 0 at b */
 const bump = (x: number, a: number, b: number): number => (x <= a || x >= b ? 0 : Math.sin(((x - a) / (b - a)) * Math.PI));
 /** 1 inside the angular window [a, b] (degrees), easing over `e` */
@@ -885,11 +889,14 @@ function earSeat(F: FaceShape, sx: number): (v: number, u: number) => number {
  * head at the ear canal, its top tilted back and its back edge standing off the head.
  */
 function earGeometry(s: number, F: FaceShape, ao = 0): THREE.BufferGeometry {
-  const nt = lod(40, 20), nr = lod(12, 6), thick = F.earThick ?? 3.4;
+  const rd = F.earRound ?? 0, sc = F.earScale ?? 1;
+  // (more rings for a rim rolled round, more steps round a rounded outline: over one its edge was a step, round 40 a
+  // polygon)
+  const nt = rd ? lod(64, 28) : lod(40, 20), nr = rd ? lod(18, 8) : lod(12, 6), thick = F.earThick ?? 3.4;
   // the side of the head at the ear canal
   let sx = 40;
   while (sx < 90 && headSDF(sx, 97, 0, F) < 0) sx += 0.5;
-  const tilt = 0.26, flare = F.earFlare ?? 0.5, cu = -8, cv = 3;
+  const tilt = 0.26, flare = F.earFlare ?? 0.5, cu = -8 * sc, cv = 3 * sc;
   const seat = earSeat(F, sx);
   const place = (u: number, v: number, h: number, out: THREE.Vector3) => {
     // tilt the ear back, then flare it out from the head about its front edge
@@ -904,18 +911,23 @@ function earGeometry(s: number, F: FaceShape, ao = 0): THREE.BufferGeometry {
   for (let j = 0; j <= nr; j++) {
     const rho = j / nr;
     for (let i = 0; i <= nt; i++) {
-      const deg = (i / nt) * 360, a = deg * Math.PI / 180, R = earR(deg) * rho;
+      const deg = (i / nt) * 360, a = deg * Math.PI / 180, R = earR(deg, rd) * rho * sc;
       const lobe = win(deg, 245, 305, 25), tragus = win(deg, 330, 30, 18), back = win(deg, 80, 250, 30);
       // relief: the rolled rim, the groove inside it, the ridge, the bowl, the flap before the canal
-      let h = 3.3 * bump(rho, 0.76, 1.08) * (1 - lobe) + 0.6 * bump(rho, 0.62, 0.8);
-      h += 2.6 * bump(rho, 0.44, 0.7) * (0.35 + 0.65 * back) * (1 - lobe);
+      // (a rounded ear's rim a C, open at the front where it runs down into the bowl; the ridge inside it at the back;
+      // a shallower bowl: rings all round and a 7.5 mm bowl read as a target with a hole in it)
+      const open = rd * win(deg, 300, 40, 30);
+      let h = 3.3 * bump(rho, 0.76, 1.08) * (1 - lobe) * (1 - 0.75 * open) + 0.6 * bump(rho, 0.62, 0.8) * (1 - rd);
+      h += 2.6 * bump(rho, 0.44, 0.7) * (0.35 * (1 - rd) + 0.65 * back) * (1 - lobe);
       h += 2.4 * bump(rho, 0.4, 0.7) * win(deg, 215, 250, 12);
-      h -= 7.5 * Math.max(0, 1 - rho / 0.5) ** 1.4 * (1 + 0.25 * win(deg, 330, 30, 30));
+      h -= (7.5 - 2.5 * rd) * Math.max(0, 1 - rho / 0.5) ** 1.4 * (1 + 0.25 * win(deg, 330, 30, 30));
       h += 3.4 * bump(rho, 0.5, 1.02) * tragus;
       h += 1.2 * lobe * sm(0.3, 0.8, rho);
-      const u = cu + Math.cos(a) * R, vv = cv + Math.sin(a) * R;
-      place(u, vv, h, v); front.push(v.x, v.y, v.z);
-      place(u, vv, h - thick * (1 + 0.6 * lobe), v); backP.push(v.x, v.y, v.z);
+      const u = cu + Math.cos(a) * R, vv = cv + Math.sin(a) * R, th = thick * (1 + 0.6 * lobe);
+      // (a rolled rim: the front and the back curling round to meet at the outer edge, not a flat band between them)
+      const roll = rd * sm(0.86, 1, rho) ** 1.5 * th * 0.45;
+      place(u, vv, h - roll, v); front.push(v.x, v.y, v.z);
+      place(u, vv, h - th + roll, v); backP.push(v.x, v.y, v.z);
       // (occlusion: deep in the bowl, the back against the head; all of it in the hair's shade, the top most)
       const k = ao ? 1 - (0.55 + 0.1 * sm(-10, 25, vv) + 0.2 * sm(0, -6, h)) : 1, kb = k * (1 - 0.45 * ao);
       cf.push(k ** 0.8, k, k ** 1.05); cb.push(kb ** 0.8, kb, kb ** 1.05);
