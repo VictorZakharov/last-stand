@@ -32,6 +32,8 @@ const TORSO: [number, number][] = [[0.145, -0.12], [0.155, -0.02], [0.165, 0.1],
 const DEPTH = 0.86;
 /** the coat's shoulder caps' size against the shoulder */
 const SHOULDER_CAP = 0.68;
+/** how far the slung belt and the book on it draw in round his hips without the coat (a share of their size over it) */
+const SLUNG_IN = 0.9;
 function torsoR(y: number): number {
   for (let i = 1; i < TORSO.length; i++) if (y <= TORSO[i][1]) { const [r0, y0] = TORSO[i - 1], [r1, y1] = TORSO[i]; return lerp(r0, r1, clamp((y - y0) / (y1 - y0), 0, 1)); }
   return TORSO[TORSO.length - 1][0];
@@ -205,7 +207,9 @@ export function buildMage(): Model {
     const PHI = 0.62;
     const collar: SurfaceFn = (u, v, out) => {
       const a = lerp(PHI, TAU - PHI, u), back = 0.5 - 0.5 * Math.cos(a);
-      const top = lerp(0.322, 0.372, back), y = lerp(0.268, top, v), r = lerp(0.088, 0.106, v ** 1.4);
+      // (its foot run down into the coat's body and out under it: from the foot at 0.268 the coat's shoulders, squashed
+      // front to back more than the collar, left a gap behind the neck that showed the skin and through it)
+      const top = lerp(0.322, 0.372, back), y = lerp(0.235, top, v), r = lerp(0.112, 0.106, v ** 0.6) - 0.016 * Math.sin(Math.PI * v ** 0.8);
       return out.set(Math.sin(a) * r, y, Math.cos(a) * r * 0.95 + necklineBack(y));
     };
     A.add(plate(collar, 36, 6, 0.006, undefined, V(0, 0.3, 0)), coatD, j.chest);
@@ -231,10 +235,11 @@ export function buildMage(): Model {
 
   // --- the harness: a strap down the front from each shoulder to the belt, buckled at the chest, and crossed behind
   for (const s of [1, -1]) {
-    const down = [0.29, 0.22, 0.14, 0.06, -0.02, -0.1].map((y) => onChest(s * lerp(0.075, 0.1, (0.29 - y) / 0.39), y, 0.008));
+    // (from under the collar's foot: laid flat up the shoulders' slope above it, the straps' ends stood out of the coat)
+    const down = [0.255, 0.2, 0.14, 0.06, -0.02, -0.1].map((y) => onChest(s * lerp(0.085, 0.1, (0.255 - y) / 0.355), y, 0.008));
     A.add(strap(down, 0.05, 0.008), leather, j.chest);
     A.add(buckle(0.028, 0.034, 0.005), brass, j.chest, onChest(s * 0.088, 0.15, 0.014).toArray());
-    const back = [0.28, 0.18, 0.08, -0.02, -0.11].map((y, k) => onChest(s * lerp(0.1, -0.11, k / 4), y, 0.008).multiply(V(1, 1, -1)));
+    const back = [0.255, 0.17, 0.08, -0.02, -0.11].map((y, k) => onChest(s * lerp(0.1, -0.11, k / 4), y, 0.008).multiply(V(1, 1, -1)));
     A.add(strap(back, 0.05, 0.008), leather, j.chest);
   }
   A.add(disc(0.022, 0.008), brass, j.chest, onChest(0, 0.13, 0.012).multiply(V(1, 1, -1)).toArray(), [0, Math.PI, 0]);
@@ -266,7 +271,9 @@ export function buildMage(): Model {
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
   // --- without the coat: the waistcoat over the shirt, buttoned in brass, the shirt's collar round the neck
-  T.add(plate((u, v, out) => onTunic((u - 0.5) * TAU, lerp(TUNIC_Y[0], TUNIC_Y[1], 1 - (1 - v) ** 1.5), 0, out), 40, 30, 0, undefined, V(0, 0.1, 0)), charcoal, j.chest);
+  // (eased out over the shoulders' top and round the neckline: the neck, a man's girth widening into the shoulders,
+  // came through it behind)
+  T.add(plate((u, v, out) => { const y = lerp(TUNIC_Y[0], TUNIC_Y[1], 1 - (1 - v) ** 1.5); return onTunic((u - 0.5) * TAU, y, 0.008 * clamp((y - 0.2) / 0.06, 0, 1), out); }, 40, 30, 0, undefined, V(0, 0.1, 0)), charcoal, j.chest);
   T.add(scaleUV(lathe(WAIST, 24), 3, 1), charcoal, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
   T.add(neckHem(), shirt, j.chest);
   T.add(plate((u, v, out) => out.copy(tunicFront((u - 0.5) * 2 * lerp(0.04, 0.012, v), lerp(0.29, 0.2, v), 0.003)), 6, 6, 0.002), shirt, j.chest);
@@ -287,22 +294,26 @@ export function buildMage(): Model {
     S.add(stitches(ring, 0.006, 0.004, 0.0013, true), linen, j.spine);
   }
   S.add(buckle(0.06, 0.05, 0.008), brass, j.spine, [0, 0.02, 0.156]);
-  S.add(strap(Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * TAU; return V(Math.sin(a) * 0.215, -0.01 - 0.05 * Math.sin(a + 0.6) - 0.02 * Math.cos(a), Math.cos(a) * 0.18); }), 0.04, 0.01, true), beltLeather, j.hips);
-  S.add(buckle(0.055, 0.05, 0.008), brass, j.hips, [-0.07, -0.025, 0.184], [0, -0.3, 0]);
+  // (the slung belt and the book on it in a group of their own on the hips: sized round the coat, without it they hung
+  // in the air off the waistcoat, and the group draws in to it, `SLUNG_IN`)
+  const sling = new THREE.Group();
+  j.hips.add(sling);
+  S.add(strap(Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * TAU; return V(Math.sin(a) * 0.215, -0.01 - 0.05 * Math.sin(a + 0.6) - 0.02 * Math.cos(a), Math.cos(a) * 0.18); }), 0.04, 0.01, true), beltLeather, sling);
+  S.add(buckle(0.055, 0.05, 0.008), brass, sling, [-0.07, -0.025, 0.184], [0, -0.3, 0]);
   {
     // (the book's boards and spine round its pages, brass corners, a brass boss with the stone, hung on its side by the hip)
     const at: [number, number, number] = [0.285, -0.17, 0.02], ry = 1.45;
     const W = 0.15, Hh = 0.2, D = 0.06;
     const place = (x: number, y: number, z: number): [number, number, number] =>
       [at[0] + Math.sin(ry) * z + Math.cos(ry) * x, at[1] + y, at[2] + Math.cos(ry) * z - Math.sin(ry) * x];
-    S.add(new THREE.BoxGeometry(W - 0.006, Hh - 0.008, D - 0.012), paper, j.hips, at, [0, ry, 0]);
-    for (const z of [D / 2 - 0.004, -D / 2 + 0.004]) S.add(new THREE.BoxGeometry(W, Hh, 0.008), tome, j.hips, place(0, 0, z), [0, ry, 0]);
-    S.add(new THREE.BoxGeometry(0.01, Hh, D), tome, j.hips, place(-W / 2, 0, 0), [0, ry, 0]);
-    for (const cx of [1, -1]) for (const cy of [1, -1]) S.add(new THREE.BoxGeometry(0.022, 0.022, 0.01), brass, j.hips, place(cx * (W / 2 - 0.009), cy * (Hh / 2 - 0.009), D / 2), [0, ry, 0]);
-    S.add(disc(0.026, 0.006), goldE, j.hips, place(0, 0, D / 2 + 0.003), [0, ry, 0]);
-    S.add(gemGeo(0.012), stone, j.hips, place(0, 0, D / 2 + 0.008), [0, ry, 0]);
-    S.add(new THREE.OctahedronGeometry(0.016, 0), brass, j.hips, place(W / 2 - 0.02, -Hh / 2 - 0.04, D / 2), [0, ry, 0], [0.7, 1.6, 0.7]);
-    S.add(new THREE.CylinderGeometry(0.0015, 0.0015, 0.03, 4), brass, j.hips, place(W / 2 - 0.02, -Hh / 2 - 0.012, D / 2), [0, ry, 0]);
+    S.add(new THREE.BoxGeometry(W - 0.006, Hh - 0.008, D - 0.012), paper, sling, at, [0, ry, 0]);
+    for (const z of [D / 2 - 0.004, -D / 2 + 0.004]) S.add(new THREE.BoxGeometry(W, Hh, 0.008), tome, sling, place(0, 0, z), [0, ry, 0]);
+    S.add(new THREE.BoxGeometry(0.01, Hh, D), tome, sling, place(-W / 2, 0, 0), [0, ry, 0]);
+    for (const cx of [1, -1]) for (const cy of [1, -1]) S.add(new THREE.BoxGeometry(0.022, 0.022, 0.01), brass, sling, place(cx * (W / 2 - 0.009), cy * (Hh / 2 - 0.009), D / 2), [0, ry, 0]);
+    S.add(disc(0.026, 0.006), goldE, sling, place(0, 0, D / 2 + 0.003), [0, ry, 0]);
+    S.add(gemGeo(0.012), stone, sling, place(0, 0, D / 2 + 0.008), [0, ry, 0]);
+    S.add(new THREE.OctahedronGeometry(0.016, 0), brass, sling, place(W / 2 - 0.02, -Hh / 2 - 0.04, D / 2), [0, ry, 0], [0.7, 1.6, 0.7]);
+    S.add(new THREE.CylinderGeometry(0.0015, 0.0015, 0.03, 4), brass, sling, place(W / 2 - 0.02, -Hh / 2 - 0.012, D / 2), [0, ry, 0]);
     // the chain: links turned alternately, sagging from the slung belt to the book's top corner
     const a0 = V(0.235, -0.03, 0.09), a1 = V(...place(W / 2 - 0.01, Hh / 2, D / 2));
     const n = 9;
@@ -310,7 +321,7 @@ export function buildMage(): Model {
       const t = k / n, p = a0.clone().lerp(a1, t);
       p.y -= 0.035 * Math.sin(t * Math.PI);
       const link = new THREE.TorusGeometry(0.009, 0.0024, 5, 10).scale(1, 1.5, 1);
-      S.add(link, brass, j.hips, p.toArray(), [0, k % 2 ? Math.PI / 2 : 0, 0.3]);
+      S.add(link, brass, sling, p.toArray(), [0, k % 2 ? Math.PI / 2 : 0, 0.3]);
     }
   }
 
@@ -779,6 +790,7 @@ export function buildMage(): Model {
       }
       for (const o of [...robeParts, ...skirts, ...flaps.map((f) => f.g), ...cloths.flatMap((c) => c.meshes)]) o.visible = robed;
       for (const o of [...tunic, tunicSkirt]) o.visible = !robed;
+      sling.scale.set(robed ? 1 : SLUNG_IN, 1, robed ? 1 : SLUNG_IN);
       gloved = gear.hands;
       for (const o of bracers) o.visible = gear.hands;
       bare(handL, !gear.hands); bare(handR, !gear.hands);
