@@ -369,18 +369,22 @@ export function buildMage(): Model {
     // (its top run on close over the deltoid, `full`: as full as the ranger's coat sleeve, the shirt's stood out of the coat's
     // armhole in a ball)
     S.skinChain(sets.sleeve(s, { len: 0.31, r0: 0.062, r1: 0.056, bulge: 0.04, at: 0.3, full: 0.6, fullIn: 0.9, cap: lod(10, 6), tube: lod(14, 8) }), sleeve, sh, [...sets.chainOf(s), el]);
-    // (the roll: two thick turns of the cloth bunched round the elbow, each swelling and pinching in folds round the arm
-    // and wandering up and down, out of step with the other: as smooth rings they read as inner tubes)
-    for (const [y, r, t, phase] of [[-0.008, 0.058, 0.011, 0], [0.016, 0.062, 0.012, 1.7]] as const) {
-      const roll = new THREE.TorusGeometry(r, t, lod(8, 6), lod(44, 20)).rotateX(Math.PI / 2), p = roll.attributes.position;
+    // (the sleeve turned back on itself round the elbow: a band of the cloth a little proud of the sleeve, its folded
+    // edges top and bottom, soft creases running round it; as two thick lumpy rings it read as a dark knot)
+    {
+      const cuff = lathe([[0.059, -0.03], [0.0635, -0.027], [0.065, -0.012], [0.065, 0.012], [0.0635, 0.024], [0.06, 0.027]], lod(40, 20));
+      const p = cuff.attributes.position, phase = s > 0 ? 0 : 1.3;
       for (let i = 0; i < p.count; i++) {
-        const x = p.getX(i), z = p.getZ(i), a = Math.atan2(z, x), out = Math.hypot(x, z) - r;
-        const fold = 0.45 * Math.sin(a * 5 + phase) + 0.25 * Math.sin(a * 9 + phase * 2.3);
-        const k = (r + out * (1 + fold)) / Math.hypot(x, z);
-        p.setXYZ(i, x * k, p.getY(i) * (1 + fold * 0.6) + t * 0.5 * Math.sin(a * 3 + phase), z * k);
+        const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x), r = Math.hypot(x, z);
+        // (looser at the back of the elbow, creased across in a few soft waves, its hem rising and falling a little)
+        const k = (r + 0.0025 * Math.sin(a * 3 + phase) + 0.0012 * Math.sin(a * 7 + phase * 2)) / r;
+        p.setXYZ(i, x * k, y + 0.003 * Math.sin(a * 2 + phase) * Math.sign(y), z * k);
       }
-      roll.computeVertexNormals();
-      S.add(scaleUV(roll, 4, 1), sleeve, el, [0, y, 0]);
+      cuff.computeVertexNormals();
+      S.add(scaleUV(cuff, 4, 1), sleeve, el, [0, 0.004, 0]);
+      for (const [y, r] of [[-0.026, 0.0615], [0.031, 0.0605]] as const) {
+        S.add(new THREE.TorusGeometry(r, 0.004, lod(6, 4), lod(40, 20)).rotateX(Math.PI / 2), sleeve, el, [0, y, 0]);
+      }
     }
     S.add(belt(0.064, 0.064, -0.17, 0.022, 0.005, 0, 16), leather, sh);
     S.add(buckle(0.018, 0.022, 0.004), brass, sh, [s * 0.066, -0.17, 0], [0, s * Math.PI / 2, 0]);
@@ -389,10 +393,23 @@ export function buildMage(): Model {
     S.skin(lathe(fore, 18), bareSkin, el, hd, 0.25, 0.29);
     S.skin(lathe(fore.map(([r, y]) => [r + 0.0006, y]), 18), ink, el, hd, 0.25, 0.29);
     // the bracer: leather round the lower forearm, two brass-buckled straps
-    H.add(scaleUV(lathe([[0.04, -0.27], [0.045, -0.22], [0.051, -0.15], [0.053, -0.12]], 16), 2, 1), leather, el);
+    const bracer: [number, number][] = [[0.04, -0.27], [0.045, -0.22], [0.051, -0.15], [0.053, -0.12]];
+    H.add(scaleUV(lathe(bracer, 16), 2, 1), leather, el);
+    // (its top rolled over, so it ends in an edge rather than a cut)
+    H.add(new THREE.TorusGeometry(0.0535, 0.0035, 5, 18).rotateX(Math.PI / 2), leather, el, [0, -0.122, 0]);
+    // its straps drawn snug round it where they lie (sized as if it widened towards the wrist, the lower stood off it
+    // as a loose ring)
+    const bracerAt = (y: number) => {
+      for (let k = 1; k < bracer.length; k++) {
+        const [r0, y0] = bracer[k - 1], [r1, y1] = bracer[k];
+        if (y <= y1) return lerp(r0, r1, (y - y0) / (y1 - y0));
+      }
+      return bracer[bracer.length - 1][0];
+    };
     for (const y of [-0.16, -0.235]) {
-      H.add(belt(0.054 - (y + 0.16) * 0.12, 0.054 - (y + 0.16) * 0.12, y, 0.012, 0.004, 0, 14), beltLeather, el);
-      H.add(buckle(0.014, 0.016, 0.003), brass, el, [s * (0.056 - (y + 0.16) * 0.12), y, 0], [0, s * Math.PI / 2, 0]);
+      const r = bracerAt(y) + 0.003;
+      H.add(belt(r, r, y, 0.012, 0.004, 0, 14), beltLeather, el);
+      H.add(buckle(0.014, 0.016, 0.003), brass, el, [s * (r + 0.003), y, 0], [0, s * Math.PI / 2, 0]);
     }
   }
   const handL = buildHand(j.handL, 1, leather, skinTip, 1, bareSkin), handR = buildHand(j.handR, -1, leather, skinTip, 1, bareSkin);
