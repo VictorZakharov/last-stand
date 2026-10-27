@@ -59,18 +59,22 @@ function forearmRunes(): THREE.CanvasTexture {
   const cv = document.createElement('canvas'); cv.width = 512; cv.height = 512;
   const c = ctx2d(cv);
   c.strokeStyle = '#000'; c.fillStyle = '#000'; c.lineCap = 'round';
-  // (the inner forearm faces u = 0.5; v runs from the wrist (0) to the elbow (1))
-  const cx = 256, ring = (y: number, r: number, lw: number) => { c.lineWidth = lw; c.beginPath(); c.arc(cx, y, r, 0, TAU); c.stroke(); };
-  const cy = 330;
-  ring(cy, 70, 6); ring(cy, 44, 4); ring(cy, 12, 4);
-  for (let k = 0; k < 8; k++) {
-    const a = k * Math.PI / 4;
-    c.lineWidth = 4; c.beginPath(); c.moveTo(cx + Math.cos(a) * 12, cy + Math.sin(a) * 12); c.lineTo(cx + Math.cos(a) * 92, cy + Math.sin(a) * 92); c.stroke();
+  // (drawn twice round the arm, at u = 0.25 and 0.75, so one faces out however the forearm turns; v runs from the wrist (0)
+  // to the elbow (1))
+  for (const cx of [128, 384]) {
+    const ring = (y: number, r: number, lw: number) => { c.lineWidth = lw; c.beginPath(); c.arc(cx, y, r, 0, TAU); c.stroke(); };
+    const line = (x0: number, y0: number, x1: number, y1: number, lw: number) => { c.lineWidth = lw; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); };
+    const cy = 320;
+    ring(cy, 78, 9); ring(cy, 50, 6); ring(cy, 16, 6);
+    for (let k = 0; k < 8; k++) {
+      const a = k * Math.PI / 4;
+      line(cx + Math.cos(a) * 16, cy + Math.sin(a) * 16, cx + Math.cos(a) * 100, cy + Math.sin(a) * 100, 6);
+    }
+    line(cx, 40, cx, cy - 100, 6);
+    for (const [y, r] of [[190, 18], [120, 13], [70, 10]] as const) { ring(y, r, 6); line(cx - r - 16, y, cx + r + 16, y, 6); }
+    line(cx, cy + 100, cx, 480, 6);
+    for (const y of [430, 465]) line(cx - 18, y, cx + 18, y, 6);
   }
-  c.lineWidth = 4; c.beginPath(); c.moveTo(cx, 60); c.lineTo(cx, cy - 92); c.stroke();
-  for (const [y, r] of [[200, 14], [130, 10], [80, 8]] as const) { ring(y, r, 4); c.beginPath(); c.moveTo(cx - r - 12, y); c.lineTo(cx + r + 12, y); c.stroke(); }
-  c.beginPath(); c.moveTo(cx, cy + 92); c.lineTo(cx, 470); c.stroke();
-  for (const y of [430, 460]) { c.beginPath(); c.moveTo(cx - 14, y); c.lineTo(cx + 14, y); c.stroke(); }
   runes = new THREE.CanvasTexture(cv);
   runes.colorSpace = THREE.SRGBColorSpace;
   return runes;
@@ -122,21 +126,21 @@ export function buildMage(): Model {
   const rng = mulberry(5);
   const tex = (maps: ReturnType<typeof clothMaps>, rep: number, ns = 1) => { const m = pbrMaterialMaps(maps, rep, ns); return { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, normalScale: m.normalScale }; };
   // the coat's felted wool: oxblood, its weave seen up close as the sheet's
-  const coat = kit.rim({ color: 0x5c1a1f, roughness: 1, ...tex(woolMaps(), 1, 1.2) }, 0x7a2a2a, 0.3);
-  const coatD = kit.rim({ color: 0x5c1a1f, roughness: 1, ...tex(woolMaps(), 1, 1.2), side: THREE.DoubleSide }, 0x7a2a2a, 0.3);
+  const coat = kit.rim({ color: 0x681c22, roughness: 1, ...tex(woolMaps(), 1, 1.2) }, 0x7a2a2a, 0.3);
+  const coatD = kit.rim({ color: 0x681c22, roughness: 1, ...tex(woolMaps(), 1, 1.2), side: THREE.DoubleSide }, 0x7a2a2a, 0.3);
   // the waistcoat's and the underskirts' charcoal wool, the shirt's darker red linen, the trousers' charcoal twill
   const charcoal = kit.rim({ color: 0x2b2a2e, roughness: 1, ...tex(woolMaps(), 1, 1.4), side: THREE.DoubleSide }, 0x3a3a44, 0.25);
   const shirt = kit.rim({ color: 0x3a1418, roughness: 1, ...tex(clothMaps(), 1, 0.9) }, 0x5a2a2a, 0.25);
   const sleeve = kit.rim({ color: 0x2e2d32, roughness: 1, ...tex(clothMaps(), 1, 1.1) }, 0x3a3a44, 0.25);
   const trousers = kit.rim({ color: 0x24232a, roughness: 1, ...tex(clothMaps(), 1, 1.2) }, 0x34343c, 0.2);
   // brass, rubbed bright on its edges (the steel map's roughness: worn smooth where it is handled)
-  const brass = kit.std({ color: 0xb8904c, metalness: 1, roughness: 0.55, roughnessMap: pbrMaterialMaps(steelMaps(), 1).roughnessMap });
+  const brass = kit.std({ color: 0xa47a40, metalness: 1, roughness: 0.6, roughnessMap: pbrMaterialMaps(steelMaps(), 1).roughnessMap });
   const gold = brass;
   const E = engravedSteel();
   const goldE = kit.std({ color: 0xc9a058, metalness: 1, roughness: 1, map: E.map, normalMap: E.normalMap, roughnessMap: E.roughnessMap });
   const blackLeather = kit.std({ color: 0x1a1614, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
   // the belts' and the harness's brown leather, worn and creased
-  const leather = kit.std({ color: 0x4a2c1a, roughness: 0.8, ...tex(leatherMaps(), 2, 1.8) });
+  const leather = kit.std({ color: 0x5a3820, roughness: 0.75, ...tex(leatherMaps(), 2, 1.8) });
   const beltLeather = kit.std({ color: 0x3c2414, roughness: 0.75, ...tex(leatherMaps(), 2, 2) });
   // the grimoire: dark tooled leather over its boards, its pages old paper
   const tome = kit.std({ color: 0x2e1c12, roughness: 0.8, ...tex(leatherMaps(), 3, 2.4) });
@@ -163,7 +167,7 @@ export function buildMage(): Model {
   const panelTex = embroidered(PW, PH, [[0, 0], [PW, 0], [PW, PH], [0, PH]], [0.36, 0.1, 0.12], [0.78, 0.6, 0.32], diamondColumn);
   const panel = kit.rim({ color: 0xffffff, roughness: 1, map: panelTex.map, normalMap: panelTex.normalMap, roughnessMap: panelTex.roughnessMap, side: THREE.DoubleSide }, 0x7a2a2a, 0.3);
   // the runes inked on his forearms (an alpha-tested layer over the skin)
-  const ink = kit.std({ color: 0x1c2230, roughness: 0.6, map: forearmRunes(), alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const ink = kit.std({ color: 0x343846, roughness: 0.6, map: forearmRunes(), alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
 
   const j = buildHumanoid({ skin: coat }, {
     chestW: 0.17, chestD: 0.14, shoulderW: 0.2, shoulderY: 0.45, upperR: 0.06, foreR: 0.05, shinL: 0.41,
@@ -225,10 +229,10 @@ export function buildMage(): Model {
   // --- the harness: a strap down the front from each shoulder to the belt, buckled at the chest, and crossed behind
   for (const s of [1, -1]) {
     const down = [0.29, 0.22, 0.14, 0.06, -0.02, -0.1].map((y) => onChest(s * lerp(0.075, 0.1, (0.29 - y) / 0.39), y, 0.008));
-    A.add(strap(down, 0.032, 0.006), leather, j.chest);
+    A.add(strap(down, 0.042, 0.007), leather, j.chest);
     A.add(buckle(0.028, 0.034, 0.005), brass, j.chest, onChest(s * 0.088, 0.15, 0.014).toArray());
     const back = [0.28, 0.18, 0.08, -0.02, -0.11].map((y, k) => onChest(s * lerp(0.1, -0.11, k / 4), y, 0.008).multiply(V(1, 1, -1)));
-    A.add(strap(back, 0.032, 0.006), leather, j.chest);
+    A.add(strap(back, 0.042, 0.007), leather, j.chest);
   }
   A.add(disc(0.022, 0.008), brass, j.chest, onChest(0, 0.13, 0.012).multiply(V(1, 1, -1)).toArray(), [0, Math.PI, 0]);
 
@@ -268,7 +272,7 @@ export function buildMage(): Model {
   // --- legs: charcoal trousers into tall boots of worn brown leather (models/boot.ts, the ranger's last and sole)
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
     S.add(scaleUV(limb(0.46, 0.09, 0.07, 0.1, 0.3, 12), 2, 1.5), trousers, th);
-    S.add(scaleUV(limb(0.41, 0.068, 0.052, 0.08, 0.35, 12), 2, 1.5), trousers, kn);
+    S.add(scaleUV(limb(0.12, 0.068, 0.064, 0.04, 0.35, 12), 2, 1.5), trousers, kn);
     buildBoot(S, { leather: boot, sole, strap: bootStrap, metal: brass }, kn, an, th === j.thighL ? 1 : -1);
   }
 
@@ -281,11 +285,11 @@ export function buildMage(): Model {
   }
   S.add(buckle(0.06, 0.05, 0.008), brass, j.spine, [0, 0.02, 0.156]);
   S.add(strap(Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * TAU; return V(Math.sin(a) * 0.215, -0.01 - 0.05 * Math.sin(a + 0.6) - 0.02 * Math.cos(a), Math.cos(a) * 0.18); }), 0.04, 0.01, true), beltLeather, j.hips);
-  S.add(buckle(0.04, 0.045, 0.007), brass, j.hips, [-0.06, -0.02, 0.184], [0, -0.3, 0]);
+  S.add(buckle(0.055, 0.05, 0.008), brass, j.hips, [-0.07, -0.025, 0.184], [0, -0.3, 0]);
   {
     // (the book's boards and spine round its pages, brass corners, a brass boss with the stone, hung on its side by the hip)
-    const at: [number, number, number] = [0.25, -0.17, 0.215], ry = 0.75;
-    const W = 0.12, Hh = 0.16, D = 0.05;
+    const at: [number, number, number] = [0.285, -0.17, 0.02], ry = 1.45;
+    const W = 0.15, Hh = 0.2, D = 0.06;
     const place = (x: number, y: number, z: number): [number, number, number] =>
       [at[0] + Math.sin(ry) * z + Math.cos(ry) * x, at[1] + y, at[2] + Math.cos(ry) * z - Math.sin(ry) * x];
     S.add(new THREE.BoxGeometry(W - 0.006, Hh - 0.008, D - 0.012), paper, j.hips, at, [0, ry, 0]);
@@ -294,8 +298,10 @@ export function buildMage(): Model {
     for (const cx of [1, -1]) for (const cy of [1, -1]) S.add(new THREE.BoxGeometry(0.022, 0.022, 0.01), brass, j.hips, place(cx * (W / 2 - 0.009), cy * (Hh / 2 - 0.009), D / 2), [0, ry, 0]);
     S.add(disc(0.026, 0.006), goldE, j.hips, place(0, 0, D / 2 + 0.003), [0, ry, 0]);
     S.add(gemGeo(0.012), stone, j.hips, place(0, 0, D / 2 + 0.008), [0, ry, 0]);
+    S.add(new THREE.OctahedronGeometry(0.016, 0), brass, j.hips, place(W / 2 - 0.02, -Hh / 2 - 0.04, D / 2), [0, ry, 0], [0.7, 1.6, 0.7]);
+    S.add(new THREE.CylinderGeometry(0.0015, 0.0015, 0.03, 4), brass, j.hips, place(W / 2 - 0.02, -Hh / 2 - 0.012, D / 2), [0, ry, 0]);
     // the chain: links turned alternately, sagging from the slung belt to the book's top corner
-    const a0 = V(0.19, -0.03, 0.17), a1 = V(...place(W / 2 - 0.01, Hh / 2, D / 2));
+    const a0 = V(0.235, -0.03, 0.09), a1 = V(...place(W / 2 - 0.01, Hh / 2, D / 2));
     const n = 9;
     for (let k = 0; k <= n; k++) {
       const t = k / n, p = a0.clone().lerp(a1, t);
@@ -307,8 +313,8 @@ export function buildMage(): Model {
 
   // --- skirts: the coat to below the knee, split up the front, brass at its hem, its front panels hanging either side of
   // the split, and the charcoal underskirts showing between them
-  const under = new Skirt({ r0: 0.19, r1: 0.31, len: 0.7, depth: 0.84, folds: 11, foldAmp: 0.06, rows: 10, hem: (a) => -0.42 * Math.exp(-((a / 0.22) ** 2)) + 0.02 * Math.sin(a * 5) });
-  const over = new Skirt({ r0: 0.2, r1: 0.37, len: 0.74, depth: 0.84, folds: 13, foldAmp: 0.08, rows: 10, trim: 0.03, hem: (a) => -0.68 * Math.exp(-((a / 0.62) ** 4)) + 0.03 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
+  const under = new Skirt({ r0: 0.19, r1: 0.33, len: 0.8, depth: 0.84, folds: 13, foldAmp: 0.07, rows: 10, hem: (a) => -0.6 * Math.exp(-((a / 0.32) ** 4)) + 0.02 * Math.sin(a * 5) });
+  const over = new Skirt({ r0: 0.2, r1: 0.4, len: 0.84, depth: 0.84, folds: 17, foldAmp: 0.1, rows: 12, trim: 0.03, hem: (a) => -0.74 * Math.exp(-((a / 0.4) ** 4)) + 0.03 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
   const skirts: THREE.Mesh[] = [];
   for (const [sk, mats] of [[under, [charcoal]], [over, [coat, brass]], [over, [lining, brass]]] as const) {
     const m = new THREE.Mesh(sk.geo, mats.length > 1 ? [...mats] : mats[0]);
@@ -389,7 +395,7 @@ export function buildMage(): Model {
     const up = Math.min(fit(0, 0, 0.15, h, swing), swing + 1);
     return [up, Math.min(fit(-h * Math.cos(up), h * Math.sin(up), 0, h, swing), swing + 1)];
   };
-  for (const s of [1, -1]) hang(s * 0.4, 0.14, 0.64, panel, 0, PH, 0.026);
+  void hang; void panel;
 
   // --- the head: face, a full beard, hair, and a wide-brimmed pointed hat (worn with a head item equipped: setGear), its
   // crown bent back by its own weight, a gold band with a stone

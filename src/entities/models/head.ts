@@ -755,7 +755,7 @@ function shortLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
       slerp(r, end, t);
       const az = Math.atan2(d.x, d.z), el = Math.asin(clamp(d.y, -1, 1));
       // (standing up off the root, lying along the head, the tip lifting off it again on top)
-      const lift = lerp(1, top + layer * 2, sm(0, 0.35, t)) * (1 - 0.3 * sm(0.6, 1, t)) + 5 * topness * sm(0.7, 1, t) + 1.2 * Math.sin(ph + t * 5);
+      const lift = lerp(1, top * (1 - 0.6 * fringe) + layer * 2, sm(0, 0.35, t)) * (1 - (0.3 + 0.6 * fringe) * sm(0.6, 1, t)) + 5 * topness * (1 - fringe) * sm(0.7, 1, t) + 1.2 * Math.sin(ph + t * 5);
       pts.push(surface(az, el, lift));
     }
     for (let k = 2; k <= N; k++) pushOut(pts[k], 1.2 + layer * 1.5);
