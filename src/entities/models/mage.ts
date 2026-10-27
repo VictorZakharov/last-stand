@@ -31,7 +31,7 @@ const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const TORSO: [number, number][] = [[0.145, -0.12], [0.155, -0.02], [0.165, 0.1], [0.168, 0.18], [0.15, 0.245], [0.1, 0.28], [0.075, 0.29]];
 const DEPTH = 0.86;
 /** the coat's shoulder caps' size against the shoulder */
-const SHOULDER_CAP = 0.7;
+const SHOULDER_CAP = 0.6;
 function torsoR(y: number): number {
   for (let i = 1; i < TORSO.length; i++) if (y <= TORSO[i][1]) { const [r0, y0] = TORSO[i - 1], [r1, y1] = TORSO[i]; return lerp(r0, r1, clamp((y - y0) / (y1 - y0), 0, 1)); }
   return TORSO[TORSO.length - 1][0];
@@ -213,7 +213,7 @@ export function buildMage(): Model {
   for (const [s, joint0] of [[1, j.shoulderL], [-1, j.shoulderR]] as const) {
     const sh = joint(joint0);
     sh.scale.setScalar(SHOULDER_CAP);
-    sh.position.x -= s * 0.024;
+    sh.position.x -= s * 0.032;
     const cap: SurfaceFn = (u, v, out) => {
       const lon = (u - 0.5) * 3, lat = lerp(-0.25, 1.45, v), R = 0.14;
       return out.set(s * Math.cos(lat) * Math.cos(lon) * R * 1.1 + s * 0.015, Math.sin(lat) * R * 0.85 + 0.01, Math.cos(lat) * Math.sin(lon) * R);
@@ -313,8 +313,8 @@ export function buildMage(): Model {
 
   // --- skirts: the coat to below the knee, split up the front, brass at its hem, its front panels hanging either side of
   // the split, and the charcoal underskirts showing between them
-  const under = new Skirt({ r0: 0.19, r1: 0.33, len: 0.8, depth: 0.84, folds: 13, foldAmp: 0.07, rows: 10, hem: (a) => -0.6 * Math.exp(-((a / 0.32) ** 4)) + 0.02 * Math.sin(a * 5) });
-  const over = new Skirt({ r0: 0.2, r1: 0.4, len: 0.84, depth: 0.84, folds: 17, foldAmp: 0.1, rows: 12, trim: 0.03, hem: (a) => -0.74 * Math.exp(-((a / 0.4) ** 4)) + 0.03 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
+  const under = new Skirt({ r0: 0.19, r1: 0.29, len: 0.8, depth: 0.84, folds: 13, foldAmp: 0.05, rows: 10, hem: (a) => -0.6 * Math.exp(-((a / 0.32) ** 4)) + 0.02 * Math.sin(a * 5) });
+  const over = new Skirt({ r0: 0.2, r1: 0.33, len: 0.84, depth: 0.84, folds: 15, foldAmp: 0.065, rows: 12, trim: 0.03, hem: (a) => -0.74 * Math.exp(-((a / 0.4) ** 4)) + 0.03 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
   const skirts: THREE.Mesh[] = [];
   for (const [sk, mats] of [[under, [charcoal]], [over, [coat, brass]], [over, [lining, brass]]] as const) {
     const m = new THREE.Mesh(sk.geo, mats.length > 1 ? [...mats] : mats[0]);
