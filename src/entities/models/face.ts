@@ -846,12 +846,14 @@ export function beardAt(ax: number, y: number, z: number, F: FaceShape, soft = 1
   // (a trimmed one thins in the groove under the nose)
   if (sc) b *= 1 - 0.6 * sm(9, 3, ax) * sm(nb + 2, nb - 4, y) * sm(mouthY(0) + 4, mouthY(0) + 9, y);
   // the lips stay bare, right up to their border
-  if (axm < 26 && y > 25 && y < 62 && z > 82) {
+  // (at the height the shape builds them, as the lips' paint: the lower face stretched for a longer face)
+  const yq = y < 114 ? 114 - (114 - y) / F.long : y;
+  if (axm < 26 && yq > 25 && yq < 62 && z > 82) {
     const top = lipBorder(ax, 1, F), bot = lipBorder(ax, -1, F);
     // (a trimmed one comes right up to them: a margin of bare skin reads as a light line drawn round the lips)
     // (just inside their border, under the lip colour's own soft edge)
     const mg = F.stacheCurve ? 0.25 : 0.8, ins = F.stacheCurve ? 0.7 : 0;
-    b *= 1 - sm(24 + soft, 22, axm) * sm(top - ins + mg * soft, top - ins, y) * sm(bot + ins - mg * soft, bot + ins, y) * sm(84, 90, z);
+    b *= 1 - sm(24 + soft, 22, axm) * sm(top - ins + mg * soft, top - ins, yq) * sm(bot + ins - mg * soft, bot + ins, yq) * sm(84, 90, z);
   }
   const back = beardBack(y);
   let out = b * sm(back - 4, back + 6, z) * sm(F.beardUnder ?? -45, (F.beardUnder ?? -45) + 20, y);
@@ -995,13 +997,13 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
       const yq = yy < 114 ? 114 - (114 - yy) / F.long : yy;
       const axm = ax / (F.mouthW ?? 1), my = mouthY(Math.min(axm, 24)), mouth = axm < 30 && yq > 25 && yq < 62 && z > 80;
       const top = mouth ? lipBorder(ax, 1, F) : 0, bot = mouth ? lipBorder(ax, -1, F) : 0;
-      const lipK = mouth ? sm(top + 1.1, top - 0.7, yq) * sm(bot - 1.2, bot + 0.8, yq) * sm(84, 90, z) : 0;
+      const lipK = mouth ? sm(top + 0.3, top - 0.9, yq) * sm(bot - 0.3, bot + 0.9, yq) * sm(84, 90, z) : 0;
       if (mouth && z > 84) {
         // (the pale roll along the upper lip's border, and the skin under the lower lip in its shade)
-        const roll = Math.exp(-(((yq - top - 1.2) / 0.8) ** 2)) * sm(24, 16, axm) * sm(84, 90, z);
-        mix(0.08 * roll, 1, 0.92, 0.86);
-        const under = Math.exp(-(((yq - bot + 3) / 2.6) ** 2)) * sm(22, 10, axm) * sm(84, 90, z) * (1 - lipK);
-        c[0] *= 1 - 0.16 * under; c[1] *= 1 - 0.2 * under; c[2] *= 1 - 0.2 * under;
+        const roll = Math.exp(-(((yq - top - 0.6) / 0.6) ** 2)) * sm(22, 14, axm) * sm(84, 90, z);
+        mix(0.07 * roll, 1, 0.92, 0.86);
+        const under = Math.exp(-(((yq - bot + 1.6) / 1.4) ** 2)) * sm(15, 5, axm) * sm(84, 90, z) * (1 - lipK);
+        c[0] *= 1 - 0.13 * under; c[1] *= 1 - 0.16 * under; c[2] *= 1 - 0.16 * under;
       }
       if (lipK > 0.01) {
         // dusky rose: the upper lip darker (it faces down), the lower lighter and wetter at its middle, both darker into
@@ -1009,15 +1011,16 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         const lo = yq < my ? 1 : 0;
         const lc = L.lipColor ?? [0.6, 0.34, 0.32];
         mix(0.62 * (L.lipTint ?? 1) * lipK, lc[0] + 0.04 * lo, lc[1] + 0.03 * lo, lc[2] + 0.02 * lo);
-        const mid = lo * sm(14, 3, axm) * Math.exp(-(((yq - (my + bot) / 2) / 2.2) ** 2));
-        const shade = (1 - lo) * 0.1 + 0.16 * sm(10, 22, axm) + lo * 0.14 * sm(bot + 3.5, bot + 0.5, yq);
-        const k = 1 + (0.1 * mid - shade) * lipK;
+        const mid = lo * sm(9, 2, axm) * Math.exp(-(((yq - (my + bot) / 2 - 0.8) / 1.3) ** 2));
+        const shade = (1 - lo) * 0.07 * sm(top - 0.5, my + 0.5, yq) + 0.1 * sm(12, 22, axm) + lo * 0.1 * sm(bot + 3, bot + 0.5, yq);
+        const k = 1 + (0.05 * mid - shade) * lipK;
         c[0] *= k; c[1] *= k; c[2] *= k;
-        hh += lipK * 0.25 * Math.sin(x * 9 + Math.sin(yq * 2) * 0.6); rr -= lipK * (0.12 + 0.12 * lo + 0.1 * mid) * (L.lipGloss ?? 1);
+        hh += lipK * 0.25 * Math.sin(x * 9 + Math.sin(yq * 2) * 0.6); rr -= lipK * (0.12 + 0.1 * lo + 0.06 * mid) * (L.lipGloss ?? 1);
       }
       // the line between the lips, darker into the corners
       if (mouth) {
-        const line = Math.exp(-(((yq - my) / 0.75) ** 2)) * sm(25.5, 21, axm) * sm(84, 90, z) * (0.75 + 0.25 * sm(12, 22, axm));
+        // (darkest where they press together; thinning out before the corners, not on into the cheek)
+        const line = Math.exp(-(((yq - my) / (0.75 - 0.2 * sm(14, 22, axm))) ** 2)) * sm(23, 18, axm) * sm(84, 90, z) * (1 - 0.3 * sm(8, 20, axm));
         mix(0.85 * line, 0.16, 0.06, 0.05); hh -= line * 0.8;
       }
       // --- age: lines across the brow, crow's feet at the eyes' outer corners
