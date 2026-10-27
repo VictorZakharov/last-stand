@@ -133,7 +133,6 @@ function forearmRunes(): THREE.CanvasTexture {
     dot(cx + 6, cy, 4);
 
     // up towards the elbow: a stem through a chain of glyphs, each sealed in a small ring, dots between
-    line(cx, 112, cx, cy - 176, 3.5);
     for (const [y, r] of [[420, 30], [312, 24], [216, 20], [140, 15]] as const) {
       c.save();
       c.globalCompositeOperation = 'destination-out';
@@ -148,7 +147,6 @@ function forearmRunes(): THREE.CanvasTexture {
     }
     for (const d of [-1, 1]) dot(cx + d * 12, 468, 3);
     // down towards the wrist: a column of glyphs, with dots beside them
-    line(cx, cy + 176, cx, 930, 3);
     for (let k = 0; k < 4; k++) {
       const y = 840 + k * 24;
       c.save();
@@ -229,7 +227,7 @@ export function buildMage(): Model {
   const leather = kit.std({ color: 0x5a3820, roughness: 0.75, ...tex(leatherMaps(), 2, 1.8) });
   const beltLeather = kit.std({ color: 0x5c3418, roughness: 0.6, ...tex(leatherMaps(), 2, 2.2) });
   // the grimoire: dark tooled leather over its boards, its pages old paper
-  const tome = kit.std({ color: 0x2e1c12, roughness: 0.8, ...tex(leatherMaps(), 3, 2.4) });
+  const tome = kit.std({ color: 0x4e2c18, roughness: 0.7, ...tex(leatherMaps(), 3, 2.4) });
   const paper = kit.std({ color: 0xb8a882, roughness: 1, ...tex(clothMaps(), 4, 0.6) });
   const linen = kit.rim({ color: 0x9a8e76, roughness: 1, ...tex(clothMaps(), 1, 0.7) }, 0x6a6050, 0.25);
   // the boots: worn, oiled dark brown leather on darker soles, as the sheet's
@@ -291,7 +289,9 @@ export function buildMage(): Model {
   A.add(scaleUV(lathe(WAIST, 24), 3, 1), coat, j.spine, [0, 0, 0], [0, 0, 0], [1, 1, 0.86]);
   /** the coat's front edge on each side (half-width from the middle) at height y: close at the collar, opening down to the waist */
   const edgeX = (y: number) => lerp(0.035, 0.085, clamp((0.27 - y) / 0.37, 0, 1));
-  const front: SurfaceFn = (u, v, out) => { const y = lerp(0.27, -0.12, v); return onChest((u - 0.5) * 2 * edgeX(y), y, 0.002, out); };
+  // (stood off further down, over the coat's waist, which came through its foot in a jagged edge)
+  const low = (y: number) => 0.012 * clamp((0.05 - y) / 0.12, 0, 1);
+  const front: SurfaceFn = (u, v, out) => { const y = lerp(0.27, -0.12, v); return onChest((u - 0.5) * 2 * edgeX(y), y, 0.002 + low(y), out); };
   A.add(plate(front, 10, 12, 0.003, undefined, V(0, 0.1, 0)), charcoal, j.chest);
   // (the shirt's red at the throat, between the collar's points)
   A.add(plate((u, v, out) => { const y = lerp(0.285, 0.2, v); return onChest((u - 0.5) * 2 * lerp(0.034, 0.012, v), y, 0.004, out); }, 6, 6, 0.002), shirt, j.chest);
@@ -299,7 +299,7 @@ export function buildMage(): Model {
   for (const y of [0.17, 0.1, 0.03, -0.04]) A.add(stud(0.0075), brass, j.chest, onChest(0, y, 0.006).toArray());
   for (const s of [1, -1]) {
     const pts: THREE.Vector3[] = [];
-    for (let k = 0; k <= 10; k++) { const y = lerp(0.275, -0.12, k / 10); pts.push(onChest(s * edgeX(y), y, 0.004)); }
+    for (let k = 0; k <= 10; k++) { const y = lerp(0.275, -0.12, k / 10); pts.push(onChest(s * edgeX(y), y, 0.004 + low(y))); }
     A.add(taperTube(pts, () => 0.005, 20, 6), brass, j.chest);
   }
 
@@ -318,12 +318,12 @@ export function buildMage(): Model {
     for (const e of ['u0', 'u1', 'v1'] as const) A.add(edgeTube(collar, e, 0.004, e === 'v1' ? 36 : 8), brass, j.chest);
   }
 
-  // --- the shoulders: the coat's seams stitched in its thread, over each shoulder from the collar to the sleeve and round
-  // the armhole (moving with the cloth they're sewn into)
+  // --- the shoulders: the coat's seams stitched in a dark thread, over each shoulder from the collar to the sleeve and
+  // round the armhole (moving with the cloth they're sewn into; in the linen's, the armhole's outlined each sleeve as a plug)
   for (const sa of [1, -1]) {
     const top = ARMHOLE.y + ARMHOLE.B;
-    A.skinChain(sets.withArm(stitches([0.272, 0.262, top].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), sa), linen, j.chest, sets.chainOf(sa));
-    A.skinChain(sets.withArm(stitches(armholeEdge(sa, 48, 0.0016), 0.004, 0.0028, 0.0009, true), sa), linen, j.chest, sets.chainOf(sa));
+    A.skinChain(sets.withArm(stitches([0.272, 0.262, top].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), sa), shirt, j.chest, sets.chainOf(sa));
+    A.skinChain(sets.withArm(stitches(armholeEdge(sa, 48, 0.0016), 0.004, 0.0028, 0.0009, true), sa), shirt, j.chest, sets.chainOf(sa));
   }
 
   // --- the harness: a strap down the front from each shoulder to the belt, buckled at the chest, and crossed behind
@@ -407,7 +407,7 @@ export function buildMage(): Model {
   {
     // (the book's boards and spine round its pages, brass corners, a brass boss with the stone, hung on its side by the hip)
     // (behind the hanging hand: at his side it lay under it)
-    const at: [number, number, number] = [0.275, -0.17, -0.1], ry = 1.45;
+    const at: [number, number, number] = [0.275, -0.17, -0.13], ry = 1.45;
     const W = 0.15, Hh = 0.2, D = 0.06;
     const place = (x: number, y: number, z: number): [number, number, number] =>
       [at[0] + Math.sin(ry) * z + Math.cos(ry) * x, at[1] + y, at[2] + Math.cos(ry) * z - Math.sin(ry) * x];
