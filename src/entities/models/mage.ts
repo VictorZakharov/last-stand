@@ -143,7 +143,7 @@ export function buildMage(): Model {
   const blackLeather = kit.std({ color: 0x1a1614, roughness: 1, ...tex(leatherMaps(), 1, 1.2) });
   // the belts' and the harness's brown leather, worn and creased
   const leather = kit.std({ color: 0x5a3820, roughness: 0.75, ...tex(leatherMaps(), 2, 1.8) });
-  const beltLeather = kit.std({ color: 0x3c2414, roughness: 0.75, ...tex(leatherMaps(), 2, 2) });
+  const beltLeather = kit.std({ color: 0x5c3418, roughness: 0.6, ...tex(leatherMaps(), 2, 2.2) });
   // the grimoire: dark tooled leather over its boards, its pages old paper
   const tome = kit.std({ color: 0x2e1c12, roughness: 0.8, ...tex(leatherMaps(), 3, 2.4) });
   const paper = kit.std({ color: 0xb8a882, roughness: 1, ...tex(clothMaps(), 4, 0.6) });
@@ -293,16 +293,28 @@ export function buildMage(): Model {
     const ring = Array.from({ length: 48 }, (_, k) => { const a = (k / 48) * TAU; return V(Math.sin(a) * 0.174, y, Math.cos(a) * 0.151); });
     S.add(stitches(ring, 0.006, 0.004, 0.0013, true), linen, j.spine);
   }
-  S.add(buckle(0.06, 0.05, 0.008), brass, j.spine, [0, 0.02, 0.156]);
+  // (its buckle a broad brass frame with a prong; the belt's end through it, held by a leather keeper, with its holes)
+  S.add(buckle(0.076, 0.07, 0.01), brass, j.spine, [0, 0.02, 0.158]);
+  S.add(new THREE.BoxGeometry(0.042, 0.006, 0.006), brass, j.spine, [-0.012, 0.02, 0.166]);
+  const onWaist = (a: number, out: number, y = 0.02) => V(Math.sin(a) * (0.166 + out), y, Math.cos(a) * (0.143 + out));
+  S.add(strap(Array.from({ length: 8 }, (_, k) => onWaist(0.04 + k * 0.08, 0.009)), 0.048, 0.007), beltLeather, j.spine);
+  S.add(buckle(0.014, 0.066, 0.008), beltLeather, j.spine, onWaist(0.36, 0.016).toArray(), [0, 0.36, 0]);
+  for (const a of [0.46, 0.52]) S.add(new THREE.CylinderGeometry(0.0035, 0.0035, 0.003, 8).rotateX(Math.PI / 2), sole, j.spine, onWaist(a, 0.0135).toArray(), [0, a, 0]);
   // (the slung belt and the book on it in a group of their own on the hips: sized round the coat, without it they hung
   // in the air off the waistcoat, and the group draws in to it, `SLUNG_IN`)
   const sling = new THREE.Group();
   j.hips.add(sling);
-  S.add(strap(Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * TAU; return V(Math.sin(a) * 0.215, -0.01 - 0.05 * Math.sin(a + 0.6) - 0.02 * Math.cos(a), Math.cos(a) * 0.18); }), 0.04, 0.01, true), beltLeather, sling);
-  S.add(buckle(0.055, 0.05, 0.008), brass, sling, [-0.07, -0.025, 0.184], [0, -0.3, 0]);
+  // (drawn tight round the coat: a hand's width off it, it stood out from it as a hoop)
+  const slung = (a: number, out = 0, dy = 0) =>
+    V(Math.sin(a) * (0.205 + out), -0.01 - 0.05 * Math.sin(a + 0.6) - 0.02 * Math.cos(a) + dy, Math.cos(a) * (0.19 + out));
+  const around = (out = 0, dy = 0) => Array.from({ length: 36 }, (_, k) => slung((k / 36) * TAU, out, dy));
+  S.add(strap(around(), 0.05, 0.01, true), beltLeather, sling);
+  for (const dy of [-0.02, 0.02]) S.add(stitches(around(0.006, dy), 0.005, 0.0035, 0.0011, true), linen, sling);
+  S.add(buckle(0.06, 0.062, 0.009), brass, sling, slung(-0.35, 0.008).toArray(), [0, -0.35, -0.24]);
   {
     // (the book's boards and spine round its pages, brass corners, a brass boss with the stone, hung on its side by the hip)
-    const at: [number, number, number] = [0.285, -0.17, 0.02], ry = 1.45;
+    // (behind the hanging hand: at his side it lay under it)
+    const at: [number, number, number] = [0.275, -0.17, -0.1], ry = 1.45;
     const W = 0.15, Hh = 0.2, D = 0.06;
     const place = (x: number, y: number, z: number): [number, number, number] =>
       [at[0] + Math.sin(ry) * z + Math.cos(ry) * x, at[1] + y, at[2] + Math.cos(ry) * z - Math.sin(ry) * x];
@@ -315,7 +327,7 @@ export function buildMage(): Model {
     S.add(new THREE.OctahedronGeometry(0.016, 0), brass, sling, place(W / 2 - 0.02, -Hh / 2 - 0.04, D / 2), [0, ry, 0], [0.7, 1.6, 0.7]);
     S.add(new THREE.CylinderGeometry(0.0015, 0.0015, 0.03, 4), brass, sling, place(W / 2 - 0.02, -Hh / 2 - 0.012, D / 2), [0, ry, 0]);
     // the chain: links turned alternately, sagging from the slung belt to the book's top corner
-    const a0 = V(0.235, -0.03, 0.09), a1 = V(...place(W / 2 - 0.01, Hh / 2, D / 2));
+    const a0 = slung(1.45, 0.008), a1 = V(...place(-W / 2 + 0.012, Hh / 2, D / 2));
     const n = 9;
     for (let k = 0; k <= n; k++) {
       const t = k / n, p = a0.clone().lerp(a1, t);
