@@ -491,10 +491,16 @@ export function buildMage(): Model {
     }
   }
 
-  // --- skirts: the coat to below the knee, split up the front, brass at its hem, its front panels hanging either side of
-  // the split, and the charcoal underskirts showing between them
-  const under = new Skirt({ r0: 0.19, r1: 0.28, len: 0.7, depth: 0.84, folds: 13, foldAmp: 0.05, rows: 10, hem: (a) => -0.6 * Math.exp(-((a / 0.32) ** 4)) + 0.02 * Math.sin(a * 5) });
-  const over = new Skirt({ r0: 0.2, r1: 0.31, len: 0.74, depth: 0.84, folds: 15, foldAmp: 0.065, rows: 12, trim: 0.03, hem: (a) => -0.74 * Math.exp(-((a / 0.4) ** 4)) + 0.03 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
+  // --- skirts: the coat to below the knee, its front edges hanging straight down from the belt and parting in a narrow
+  // slit from the knee to the hem, rounded at its corners, brass at its hem, the charcoal underskirts showing in the slit
+  // (as a long coat hangs: the owner's reference photos, `.tmp/references/coat-split`; cut in a pointed arch up to the
+  // waist, it read as a tent's flap over a dark wedge)
+  /** an angle round the skirt from its front, either way (its columns run 0 to 2π, the front at both ends) */
+  const fromFront = (a: number) => (a > Math.PI ? a - TAU : a);
+  // (the coat's cut over finer columns, 72 round: over 40 the narrowest it could be was a V two columns wide)
+  const slit = (a: number, deep: number, wide: number) => -deep * Math.exp(-((fromFront(a) / wide) ** 4));
+  const under = new Skirt({ r0: 0.19, r1: 0.28, len: 0.7, depth: 0.84, folds: 13, foldAmp: 0.05, rows: 10, hem: (a) => slit(a, 0.5, 0.2) + 0.02 * Math.sin(a * 5) });
+  const over = new Skirt({ r0: 0.2, r1: 0.31, len: 0.74, depth: 0.84, folds: 15, foldAmp: 0.065, rows: 12, trim: 0.03, radial: 72, hem: (a) => slit(a, 0.5, 0.11) + 0.03 * (1 - Math.cos(a)) * 0.5, layer: 0.015 });
   const skirts: THREE.Mesh[] = [];
   for (const [sk, mats] of [[under, [charcoal]], [over, [coat, brass]], [over, [lining, brass]]] as const) {
     const m = new THREE.Mesh(sk.geo, mats.length > 1 ? [...mats] : mats[0]);
