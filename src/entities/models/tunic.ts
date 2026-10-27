@@ -249,7 +249,7 @@ export class SetInShoulders {
 
   /** side s's sleeve (`setInSleeve`, in the shoulder's frame), its `skinK` along the chain on to the elbow: from the
    *  armhole's share at its edge to the arm's wholly a little way down it, and over the elbow onto the forearm */
-  sleeve(s: number, o: { len: number; r0: number; r1: number; bulge: number; at: number; cap?: number; tube?: number }): THREE.BufferGeometry {
+  sleeve(s: number, o: { len: number; r0: number; r1: number; bulge: number; at: number; full?: number; fullIn?: number; cap?: number; tube?: number }): THREE.BufferGeometry {
     const at = this.restOf(s), seam = this.K.seam;
     const g = setInSleeve(s, at, { ...o, join: this.K.join, joinIn: this.K.joinIn, around: this.around }).translate(-at.x, -at.y, -at.z);
     const p = g.attributes.position, c = g.attributes.capT, k = new Float32Array(p.count);

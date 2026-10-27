@@ -300,7 +300,9 @@ export function buildMage(): Model {
   for (const s of [1, -1]) {
     const pts: THREE.Vector3[] = [];
     for (let k = 0; k <= 10; k++) { const y = lerp(0.275, -0.12, k / 10); pts.push(onChest(s * edgeX(y), y, 0.004 + low(y))); }
-    A.add(taperTube(pts, () => 0.005, 20, 6), brass, j.chest);
+    // (in the engraved, duller gold: in the bright brass, where it lies up the shoulders' slope it faced the sky and glowed
+    // in two rods under the collar)
+    A.add(taperTube(pts, () => 0.005, 20, 6), goldE, j.chest);
   }
 
   // --- the collar: standing high round the neck and flaring a little, open at the throat, brass along its edges (as the
@@ -315,7 +317,8 @@ export function buildMage(): Model {
       return out.set(Math.sin(a) * r, y, Math.cos(a) * r * 0.95 + necklineBack(y));
     };
     A.add(plate(collar, 36, 6, 0.006, undefined, V(0, 0.3, 0)), coatD, j.chest);
-    for (const e of ['u0', 'u1', 'v1'] as const) A.add(edgeTube(collar, e, 0.004, e === 'v1' ? 36 : 8), brass, j.chest);
+    // (brass round its top alone: down its points' edges too, the two caught the light in a pair of glowing rods)
+    A.add(edgeTube(collar, 'v1', 0.004, 36), brass, j.chest);
   }
 
   // --- the shoulders: the coat's seams stitched in a dark thread, over each shoulder from the collar to the sleeve and
@@ -323,7 +326,10 @@ export function buildMage(): Model {
   for (const sa of [1, -1]) {
     const top = ARMHOLE.y + ARMHOLE.B;
     A.skinChain(sets.withArm(stitches([0.272, 0.262, top].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), sa), shirt, j.chest, sets.chainOf(sa));
-    A.skinChain(sets.withArm(stitches(armholeEdge(sa, 48, 0.0016), 0.004, 0.0028, 0.0009, true), sa), shirt, j.chest, sets.chainOf(sa));
+    // (the coat's armhole turned under in a rolled edge, over the sleeve's seam)
+    const roll = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(armholeEdge(sa, 48, 0.004), true), lod(64, 32), 0.0055, 6, true);
+    A.skinChain(sets.withArm(roll, sa), coat, j.chest, sets.chainOf(sa));
+    A.skinChain(sets.withArm(stitches(armholeEdge(sa, 48, 0.011), 0.004, 0.0028, 0.0009, true), sa), shirt, j.chest, sets.chainOf(sa));
   }
 
   // --- the harness: a strap down the front from each shoulder to the belt, buckled at the chest, and crossed behind
@@ -331,7 +337,8 @@ export function buildMage(): Model {
     // (from under the collar's foot: laid flat up the shoulders' slope above it, the straps' ends stood out of the coat)
     const down = [0.255, 0.2, 0.14, 0.06, -0.02, -0.1].map((y) => onChest(s * lerp(0.085, 0.1, (0.255 - y) / 0.355), y, 0.008));
     A.add(strap(down, 0.05, 0.008), leather, j.chest);
-    A.add(buckle(0.028, 0.034, 0.005), brass, j.chest, onChest(s * 0.088, 0.15, 0.014).toArray());
+    // (its bar along the strap: across it, the buckle read as a letter E)
+    A.add(buckle(0.034, 0.028, 0.005), brass, j.chest, onChest(s * 0.088, 0.15, 0.014).toArray(), [0, 0, Math.PI / 2]);
     const back = [0.255, 0.17, 0.08, -0.02, -0.11].map((y, k) => onChest(s * lerp(0.1, -0.11, k / 4), y, 0.008).multiply(V(1, 1, -1)));
     A.add(strap(back, 0.05, 0.008), leather, j.chest);
   }
@@ -341,10 +348,20 @@ export function buildMage(): Model {
   // bare and inked with runes; leather bracers buckled over them (the hands item's), fingerless gloves
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
     // (set into the armhole: from its edge over the deltoid onto the arm, and over the elbow under the roll)
-    S.skinChain(sets.sleeve(s, { len: 0.31, r0: 0.062, r1: 0.056, bulge: 0.04, at: 0.3, cap: lod(10, 6), tube: lod(14, 8) }), sleeve, sh, [...sets.chainOf(s), el]);
-    // (the roll: two thick turns of the cloth bunched round the elbow)
-    for (const [y, r, t] of [[-0.008, 0.058, 0.011], [0.016, 0.062, 0.012]] as const) {
-      const roll = new THREE.TorusGeometry(r, t, lod(8, 6), lod(22, 14)).rotateX(Math.PI / 2);
+    // (its top run on close over the deltoid, `full`: as full as the ranger's coat sleeve, the shirt's stood out of the coat's
+    // armhole in a ball)
+    S.skinChain(sets.sleeve(s, { len: 0.31, r0: 0.062, r1: 0.056, bulge: 0.04, at: 0.3, full: 0.6, fullIn: 0.9, cap: lod(10, 6), tube: lod(14, 8) }), sleeve, sh, [...sets.chainOf(s), el]);
+    // (the roll: two thick turns of the cloth bunched round the elbow, each swelling and pinching in folds round the arm
+    // and wandering up and down, out of step with the other: as smooth rings they read as inner tubes)
+    for (const [y, r, t, phase] of [[-0.008, 0.058, 0.011, 0], [0.016, 0.062, 0.012, 1.7]] as const) {
+      const roll = new THREE.TorusGeometry(r, t, lod(8, 6), lod(44, 20)).rotateX(Math.PI / 2), p = roll.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), z = p.getZ(i), a = Math.atan2(z, x), out = Math.hypot(x, z) - r;
+        const fold = 0.28 * Math.sin(a * 6 + phase) + 0.14 * Math.sin(a * 11 + phase * 2.3);
+        const k = (r + out * (1 + fold)) / Math.hypot(x, z);
+        p.setXYZ(i, x * k, p.getY(i) * (1 + fold * 0.6) + t * 0.25 * Math.sin(a * 3 + phase), z * k);
+      }
+      roll.computeVertexNormals();
       S.add(scaleUV(roll, 4, 1), sleeve, el, [0, y, 0]);
     }
     S.add(belt(0.064, 0.064, -0.17, 0.022, 0.005, 0, 16), leather, sh);
