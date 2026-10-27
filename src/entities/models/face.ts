@@ -56,6 +56,9 @@ export interface FaceShape {
   /** the chewing muscle under a measured mask too (its `masseter` the same): the mask rounds off behind the cheekbones
    *  inside a skull far narrower there, and on a clean-shaven face the overhang showed as a dark band to the ear */
   maskMasseter?: boolean;
+  /** the cheekbones and their arches back to the ears under a measured mask too: the mask's own cheeks, on a clean-shaven
+   *  face, read flat and blank (the mage) */
+  maskCheekbones?: boolean;
   /** the top of the neck under the jaw: half its width (mm, 57), its middle's depth (mm, -8) and how softly it
    *  blends into the jaw (mm, 18); narrower, further back and blended less, the jaw stands out over it in a line */
   neckW?: number; neckBack?: number; neckBlend?: number;
@@ -110,6 +113,9 @@ export interface FaceShape {
   templeNarrow?: number;
   /** the mouth's width (1 average): the lips, their corners and their paint drawn in towards the middle */
   mouthW?: number;
+  /** how deep the mouth's corners are tucked in (1 as most faces; less, a shallower tuck): lips standing off a recessed
+   *  muzzle with the full tuck had a notch cut into each corner (the mage) */
+  mouthTuck?: number;
   /** more of the mesh's rows and columns over the eyes (0 none, 1 about 3.5 times the rows there): at the grid's spacing
    *  an opening 8 mm tall fell between two rows and showed as a slot, its corners cut off square */
   gridEye?: number;
@@ -190,16 +196,16 @@ export const FACES: Record<'warrior' | 'mage' | 'ranger', FaceShape> = {
       pz: [1.2, 1.2, 1.2, 1.2, 1.22, 1.58, 2.11, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2], hollow: 0 } },
   // the battle scholar, clean-shaven: the warrior's face (fitted with facelab to a strong jaw) as a start, the nose and
   // the lower face shorter and the lips fuller after his sheet's front view, his own grey-green eyes
-  mage: { jaw: 46, chin: 10, chinFwd: -3.4, brow: 2.2, cheek: 0.9, noseLen: 50, noseW: 13.5, nosePro: 1.25, hump: 0, lips: 1.05, long: 0.95, tip: 1.15, eyeOpen: 2.6, mouthW: 0.95, iris: [0.26, 0.29, 0.23], beardDepth: 0, browFwd: 6, foreheadFwd: 10, noseRoot: 6, skullFwd: -3.7, occiput: 12, lipFwd: 9, mouthUp: 1, beardLine: 22, browDrop: 2.6, masseter: 53, maskMasseter: true, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 43, neckBack: -22, neckBlend: 13, neckCol: [54, 58], lidSoft: 4, earFlare: 0.3, zygo: 3.5, bridgeW: 5.6, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, muzzleFwd: -1.5,
-    templeNarrow: -4.4, lidFold: 6, gridEye: 1,
+  mage: { jaw: 46, chin: 10, chinFwd: -3.4, brow: 1.2, cheek: 0.9, noseLen: 54, noseW: 15, nosePro: 1.25, hump: 0, lips: 1.1, long: 0.95, tip: 1.15, eyeOpen: 3.1, mouthW: 1.2, mouthTuck: 0.45, iris: [0.26, 0.29, 0.23], beardDepth: 0, browFwd: 2, foreheadFwd: 10, noseRoot: 6, skullFwd: -3.7, occiput: 12, lipFwd: 7, mouthUp: 1, beardLine: 22, browDrop: 3.5, masseter: 53, maskMasseter: true, maskCheekbones: true, stacheCurve: 8, beardUnder: -12, lowerW: 60, neckW: 43, neckBack: -22, neckBlend: 13, neckCol: [54, 58], lidSoft: 4, earFlare: 0.3, zygo: 3.5, bridgeW: 5.6, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 16.5, muzzleFwd: -1.5,
+    templeNarrow: -4.4, lidFold: 2, gridEye: 1,
     // (the mask, the skull and the jaw fitted by least squares (tools/facelab/fit.mjs) to the reference rebuilt in 3D from its
     // turnaround (within 1 mm rms) and to its front view's widths; the nose, lips and eyes to the pictures' landmarks)
     mask: { y: [-2, 8, 18, 30, 45, 60, 75, 90, 100, 110, 120, 132, 145, 160, 175, 190, 205],
-      front: [91, 97, 99, 100.5, 102, 101.3, 100.2, 98, 95.6, 93.7, 94.4, 95.5, 94.5, 93, 90, 85, 69],
+      front: [91, 97, 99, 100, 100.5, 100.5, 100, 98, 95.6, 93.7, 94.4, 95.5, 94.5, 93, 90, 85, 69],
       half: [18, 30, 42, 50, 55, 58, 62, 66, 69, 67.2, 66.2, 65.2, 65.1, 65.1, 63, 58, 50],
       side: [60, 48.6, 38.1, 29, 21.3, 15.5, 11.8, 10.4, 10.1, 10.7, 11.8, 11.7, 10, 6.3, 1, -4, -14],
       p: [2.5, 2.6, 2.6, 2.45, 2.2, 1.98, 1.84, 1.76, 1.8, 2.02, 2.36, 2.5, 2.44, 2.39, 2.4, 2.2, 2.2],
-      pz: [1.2, 1.2, 1.25, 1.35, 1.5, 1.85, 2.3, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2, 2.2], hollow: 0 } },
+      pz: [1.2, 1.3, 1.5, 1.75, 1.95, 2.1, 2.3, 2.65, 2.98, 3.18, 3.3, 3.18, 2.88, 2.61, 2.4, 2.2, 2.2], hollow: 0 } },
   // the ranger, after his reference sheet: younger and darker than the mage, his eyes brown and deep-set, his full beard
   // cut short (about 3 cm under the chin)
   ranger: { jaw: 25.9, chin: -5.4, chinFwd: 1.1, brow: 1.4, cheek: 1.25, noseLen: 51, noseW: 17.5, nosePro: 1.1, hump: 0, noseRoot: 6, bridgeW: 7.5, lips: 1, long: 1.04, eyeOpen: 3, iris: [0.27, 0.17, 0.1], lidSoft: 4, eyeTilt: -0.3, lidUp: 1.25, lidLow: 1.03, eyeW: 14, lidFold: 5, gridEye: 1, beardDepth: 6, beardFull: 15, beardLine: 12, neckBack: -5, neckCol: [65, 62], beardUnder: -30,
@@ -341,7 +347,7 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
   d = smin(d, F.neckCol ? neckColumn(ax, y, z, F) : ell(ax, y, z, 0, 0, F.neckBack ?? -8, F.neckW ?? 57, 58, 53), F.neckBlend ?? 18);
   // the cheekbones' arches back towards the ears (a measured face's mask has its own cheekbones: these stood out of it
   // with grooves between them)
-  if (!M) d = smin(d, seg(ax, yl, z, 55 + zg, 102, 44, 59 + zg, 100, 14, 5, 4.5), 14);
+  if (!M || F.maskCheekbones) d = smin(d, seg(ax, yl, z, 55 + zg, 102, 44, 59 + zg, 100, 14, 5, 4.5), 14);
   // (and the temples above them, the muscle there filling the side of the head out to the arches)
   if (zg && !M) d = smin(d, ell(ax, y, z, 56 + zg * 0.6, 120, 28, 9, 22, 24), 14);
   // nothing below reaches this far back (but the beard does: cut off here it left a step down the jaw)
@@ -353,7 +359,7 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
   // cheekbones, the cheeks' fullness below them
   const c = F.cheek;
   // (over a hollow the cheekbone stands further out, catching the light above it)
-  if (!M) d = smin(d, ell(ax, yl, z, 50, 101 + (F.hollow ?? 0) * 0.6, 57 + (F.hollow ?? 0) * 0.9, 15 * c, 11, 16), 10);
+  if (!M || F.maskCheekbones) d = smin(d, ell(ax, yl, z, 50, 101 + (F.hollow ?? 0) * 0.6, 57 + (F.hollow ?? 0) * 0.9, 15 * c, 11, 16), 10);
   if (!M) d = smin(d, ell(ax, yl, z, 40, 78, 62, 18, 20, 15), 12);
   // (in front of the face's side, so the outline keeps its line)
   if (F.hollow) d = smax(d, -ell(ax, yl, z, 38, 66, 62 + F.hollow * 2.2, 11, 15, 11), 14);
@@ -373,7 +379,8 @@ export function headSDF(x: number, y: number, z: number, F: FaceShape): number {
     const lips = Math.min(lip(axm, yl, z, m0 + 3.8 * lp + 0.6, 94.8 + lf, 22.5, 3.8 * lp, 3), lip(axm, yl, z, m0 - 4.8 * lp - 0.6, 92.5 + lf, 20.5, 4.8 * lp, 1.8));
     // (on a measured face, blended more softly: a sharp corner shows the mesh's steps)
     d = smin(d, lips, M ? 4.5 : 3.5);
-    d = smax(d, -ell(ax, yl, z, 25 * mw, mouthY(axm) - 0.3, 90 + lf * 0.7 - (M ? 2 : 0), 3, 2.4, 3.5), M ? 3 : 2);
+    const tk = F.mouthTuck ?? 1;
+    d = smax(d, -ell(ax, yl, z, 25 * mw, mouthY(axm) - 0.3, 90 + lf * 0.7 - (M ? 2 : 0) - 3 * (1 - tk), 3 * tk, 2.4 * tk, 3.5), M ? 3 : 2);
   }
   if (Math.abs(ax - EYE.x) < 32 && y > 85 && y < 150) {
     // eye sockets under the brow, then the lids riding on the eyeball round the opening
