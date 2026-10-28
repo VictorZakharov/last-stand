@@ -59,15 +59,20 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
    * (a variant each made 26 more programs at boot, each compiled for half a second on a first visit's ANGLE).
    */
   function patch<M extends THREE.Material>(m: M, near = false, rim?: THREE.Color): M {
+    // (in a hood's shade, `Head.shade`: x how deep, y where up the mesh it's full, z where it's gone, w how much more
+    // towards the sides; the game's shadow map is too coarse to shade a face under a brim)
+    const shade = { value: new THREE.Vector4() };
+    m.userData.shade = shade;
     m.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, u);
       shader.uniforms.uNear = { value: near ? 1 : 0 };
       shader.uniforms.uRim = { value: rim ?? new THREE.Color(0) };
+      shader.uniforms.uShade = shade;
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vFxPos;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFxPos = position;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\n' + FX_CHUNK_COMMON + 'uniform float uNear;\nuniform vec3 uRim;')
+        .replace('#include <common>', '#include <common>\n' + FX_CHUNK_COMMON + 'uniform float uNear;\nuniform vec3 uRim;\nuniform vec4 uShade;')
         .replace('#include <color_fragment>', `#include <color_fragment>
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55,0.8,1.0), uFrozen*0.75);
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045,0.035,0.03), uChar*0.9);`)
@@ -85,6 +90,14 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
           // a tint, not white, dimmer near the camera like the effect glows: up close a body fills much of the screen
           totalEmissiveRadiance += vec3(1.0,0.9,0.85) * uHit * 0.45 * nearGlow();`)
         .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+          if (uShade.x > 0.0) {
+            float hood = uShade.x * clamp(smoothstep(uShade.z, uShade.y, vFxPos.y) + uShade.w * abs(vFxPos.x), 0.0, 1.0);
+            reflectedLight.directDiffuse *= 1.0 - hood;
+            reflectedLight.directSpecular *= 1.0 - hood;
+            reflectedLight.indirectDiffuse *= 1.0 - hood;
+            reflectedLight.indirectSpecular *= 1.0 - hood;
+            totalEmissiveRadiance *= 1.0 - hood;
+          }
           if (uShine > 0.0) {
             vec3 shine = reflectedLight.directSpecular;
             float most = max(max(shine.r, shine.g), shine.b), knee = 0.5 * uShine;

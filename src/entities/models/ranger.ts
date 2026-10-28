@@ -12,14 +12,14 @@ import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, bowWood as bo
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, armOffThigh, lod, type JointPoint } from './armor';
-import { onTunic, tunicFront, tunicBack, tunicCut, setInSleeve, armholeEdge, ARMHOLE, WAIST } from './tunic';
+import { onTunic, tunicFront, tunicBack, tunicCut, armholeEdge, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM, type Head } from './head';
 import { EYE } from './face';
 import { buildHand, hold, fistReach, fistTurn, SLANT, type Hand } from './hands';
 import { LegIK } from './ik';
 import { fitArm, solveArm } from './armIK';
 import { bodyShape } from './anatomy';
-import { buildFlask, drink } from './flask';
+import { buildFlask, drink, holdFlask } from './flask';
 import { buildBoot } from './boot';
 import { Bow, pullAt, arrowGeometry, arrowPieces, fanHold, ARROW, FAN_PITCH, REST_Y, GRIP, GRIP_R } from './bow';
 import { fromEyes, dirFromEyes, toEyes } from '../viewModel';
@@ -42,7 +42,7 @@ const COLLAR_RISE = 0.02;
  *  side (the rig turns it about joints in front of its middle), and came 3.6 mm out through it */
 const COLLAR_EASE = 0.006;
 const UP = V(0, 1, 0), FWD = V(0, 0, 1);
-const DRINK = { wrist: V(0.03, -0.08, 0.22), tipped: V(0.03, 0.1, 0.2), pole: V(-0.8, 0.2, -0.2) };
+const DRINK = { wrist: V(-0.07, -0.16, 0.14), tipped: V(-0.08, 0.08, 0.19), pole: V(-0.35, -1, 0.5), tippedPole: V(-0.6, -0.4, 1) };
 /** where the nock comes to at full draw (the head's mm): at the side of the jaw, low along it, below and in front of the ear, the string
  *  a finger's width off the face, so the arrow and its fletching lie beside the cheek and the beard (on the jaw's skin, the
  *  arrow's last 9 cm went through them), and the string's lower half passes in front of the coat over the bow shoulder
@@ -230,12 +230,8 @@ const LET_DOWN = 0.35;
  *  slowing into the anchor (the bow's own `pullAt`, quick at first, brought half the string back in a few frames) */
 const drawnAt = (k: number): number => (pullAt(k) + smooth(clamp(k, 0, 1))) / 2;
 
-/** the coat's share of the arm round each armhole (`coatK`, m in the chest's frame): `seam` on the armhole's edge, falling
- *  off to none `reach` from it (`top` above `topY`, under the baldric), and the sleeve's rising from it to the whole arm's at
- *  its tube, `join` below the joint (`joinIn` more under the arm); `around` points round the armhole, the coat's and the
- *  sleeve's the same */
-const ARM_K = { seam: 0.5, reach: 0.09, top: 0.05, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96 };
-const DOWN = new THREE.Vector3(0, -1, 0), _sw = new THREE.Vector3(), _tw = new THREE.Quaternion(), _tq = new THREE.Quaternion();
+/** the coat's share of the arm round each armhole (`ArmBlend`; less above `topY`, under the baldric) */
+const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.05, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96, bulk: 0.35 };
 
 /**
  * `share` of the turn `q` from rest into `out`, taken the way round that is nearer `middle` (the middle of the turns
@@ -405,26 +401,8 @@ export function buildRanger(): Model {
   // coat round the armhole goes some way up with a raised arm and the sleeve comes out of it. A sleeve's tube stood in a
   // whole coat: raised, it came out of the cloth over the shoulder as a tube stuck into the body, and with the coat over the
   // deltoid blended straight from the chest to the arm, the cloth between folded in on the joint in a lip round it)
-  const delts = [j.shoulderL, j.shoulderR].map((sh) => [1, 2, 3].map((q) => { const d = joint(j.chest, ...(sh.position.toArray() as [number, number, number])); d.name = (sh === j.shoulderL ? 'deltL' : 'deltR') + q; return d; }));
-  const restOf = (s: number) => (s > 0 ? j.shoulderL : j.shoulderR).userData.rest as THREE.Vector3;
-  const chainOf = (s: number) => [j.chest, ...delts[s > 0 ? 0 : 1], s > 0 ? j.shoulderL : j.shoulderR];
-  const around = lod(ARM_K.around, 48), holes = [1, -1].map((s) => armholeEdge(s, around));
-  /** how far the coat at `p` (the chest's frame, at rest) goes with the arm on side `s` (+1 his left), 0 to 1: `ARM_K.seam`
-   *  on the armhole's edge (as the sleeve's top there), none from a hand's breadth off it (less up over the shoulder, where
-   *  the baldric lies) */
-  const coatK = (p: THREE.Vector3, s: number) => {
-    let d = Infinity;
-    for (const q of holes[s > 0 ? 0 : 1]) d = Math.min(d, p.distanceToSquared(q));
-    const reach = lerp(ARM_K.reach, ARM_K.top, smooth(clamp((p.y - ARM_K.topY) / 0.03, 0, 1)));
-    return ARM_K.seam * (1 - smooth(clamp(Math.sqrt(d) / reach, 0, 1)));
-  };
-  /** `g` (the chest's frame) given its vertices' shares of side s's arm as `skinK` */
-  const withArm = (g: THREE.BufferGeometry, s: number) => {
-    const p = g.attributes.position, k = new Float32Array(p.count);
-    for (let i = 0; i < p.count; i++) k[i] = coatK(_a.fromBufferAttribute(p, i), s);
-    g.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
-    return g;
-  };
+  const sets = new SetInShoulders(j, ARM_K, lod(ARM_K.around, 48)), around = sets.around;
+  const chainOf = (s: number) => sets.chainOf(s), withArm = (g: THREE.BufferGeometry, s: number) => sets.withArm(g, s);
   {
     const [L, R] = tunicCut(around, lod(22, 12));
     S.skinChain(withArm(R, -1), coat, j.chest, chainOf(-1));
@@ -499,15 +477,8 @@ export function buildRanger(): Model {
   for (const [sh, el, hand] of [[j.shoulderL, j.elbowL, j.handL], [j.shoulderR, j.elbowR, j.handR]]) {
     // (set into the armhole: from its edge over the deltoid onto the arm, the arm's wholly from a little way down it, and over
     // the elbow onto the forearm)
-    const sa = sh === j.shoulderL ? 1 : -1, at = restOf(sa);
-    const g = setInSleeve(sa, at, { len: 0.38, r0: 0.06, r1: 0.056, bulge: 0.04, at: 0.24, join: ARM_K.join, joinIn: ARM_K.joinIn, around, cap: lod(10, 6), tube: lod(14, 8) }).translate(-at.x, -at.y, -at.z);
-    const p = g.attributes.position, c = g.attributes.capT, k = new Float32Array(p.count);
-    for (let i = 0; i < p.count; i++) {
-      const e = smooth(clamp((-p.getY(i) - 0.2) / 0.13, 0, 1));
-      k[i] = (ARM_K.seam + (1 - ARM_K.seam) * smooth(c.getX(i))) * 4 / 5 + e / 5;
-    }
-    g.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
-    S.skinChain(g, coat, sh, [...chainOf(sa), el]);
+    const sa = sh === j.shoulderL ? 1 : -1;
+    S.skinChain(sets.sleeve(sa, { len: 0.38, r0: 0.06, r1: 0.056, bulge: 0.04, at: 0.24, cap: lod(10, 6), tube: lod(14, 8) }), coat, sh, [...chainOf(sa), el]);
     // (the sleeve on down the forearm into a bracer from the wrist, a brass band round the bracer's top)
     S.add(lathe([[0.052, -0.12], [0.055, -0.04], [0.056, 0]], 14), coat, el);
     // (tapering down the forearm as one does, to the wrist's flattened oval: round and as wide at the wrist as below the
@@ -533,7 +504,8 @@ export function buildRanger(): Model {
   // the shared anatomical head, with his own face (face.ts FACES.ranger)
   const head = buildHead(j.head, kit, 'ranger', { hair: 'swept', crop: true });
   buildNeck(j.neck, kit, 'ranger', j.P.neckL, j.head);
-  const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
+  // (on the lips, under the moustache: at the others' height he drank at his nose)
+  const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 44, 112, mouth.position);
   const anchor = new THREE.Object3D(); anchor.name = 'anchor'; head.group.add(anchor); anchor.position.copy(ANCHOR);
   const cap = joint(head.group); cap.name = 'cap'; cap.visible = false;
   buildHat(head, cap, felt, boot, strapLeather);
@@ -611,7 +583,7 @@ export function buildRanger(): Model {
   });
   // (where the shot leaves: the nocked arrow's middle; and its head, where a full draw glints)
   const tip = joint(bow.group), palm = joint(j.handR, 0, -0.07, 0.03), arrowHead = joint(bow.group);
-  const flask = buildFlask(kit, brass, hide); flask.name = 'flask'; j.handR.add(flask); flask.position.set(0, -0.07, 0.03); flask.rotation.x = Math.PI;
+  const flask = buildFlask(kit); flask.name = 'flask'; j.handR.add(flask);
   const drinkRig = { ...j, shoulderL: j.shoulderR, elbowL: j.elbowR, handL: j.handR };
   const legs = new LegIK(j), root = j.root;
   root.scale.setScalar(1.08);
@@ -776,7 +748,6 @@ export function buildRanger(): Model {
     held.userData.len = out * s;
   };
 
-  const swings = [new THREE.Quaternion(), new THREE.Quaternion()];
   function animate(st: AnimState): void {
     const dt = st.dt, a = st.action, s = sc();
     dtNow = dt;
@@ -852,7 +823,7 @@ export function buildRanger(): Model {
     // carrying the bow: the arm a little out from the side and the elbow a little bent (the walk swings it)
     j.shoulderL.rotation.z += CARRY_RAISE; j.elbowL.rotation.x -= CARRY_BEND;
     hook(handR, 0, 0);
-    const drinkOut = drinking ? drink(drinkRig, a.t, mouth, DRINK) : 0;
+    const drinkOut = drinking ? drink(drinkRig, a.t, mouth, DRINK, handR, flask) : 0;
     flaskOut = damp(flaskOut, drinkOut, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
     if (aim < 0.5) st.look?.();
     if (st.dead >= 0) { deathFall(j, st.dead); legs.reset(); }
@@ -1134,6 +1105,8 @@ export function buildRanger(): Model {
       if (!fp) { root.updateMatrixWorld(true); fitArm(j, false, undefined, body); }
     }
     hook(handR, hk, pinch);
+    // (the draught's fist over the hook: the draw hand has let go of the string)
+    if (flaskOut > 0.01) holdFlask(handR, flask, flaskOut);
     j.chest.worldToLocal(j.handR.getWorldPosition(lastHandC));
     // the coat's skirt last: over the legs, and behind the hands and the bow where they are now (through the eyes neither shows)
     root.updateMatrixWorld(true);
@@ -1145,26 +1118,13 @@ export function buildRanger(): Model {
     tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt, fp ? undefined : legBodies.list, outer);
     bendShoulders();
   }
-  /** each shoulder's part-turned joints (`delts`): a quarter, half and three quarters of the arm's swing from hanging and of
-   *  the girdle's move, and less of its turn about its own length (the square of that share: the coat round the armhole
-   *  barely turns with it). Near straight up the swing's axis is anyone's, so it's kept as it was */
+  /** each shoulder's part-turned joints (`SetInShoulders.bend`), and each wrist's (`blendTurn`) */
   function bendShoulders(): void {
     for (let i = 0; i < 2; i++) {
       const h = i ? j.handR : j.handL;
       wrists[i].forEach((d, q) => { blendTurn(d.quaternion, h.quaternion, (q + 1) / 4, wristMiddles[i]); d.position.copy(h.position); });
     }
-    for (let i = 0; i < 2; i++) {
-      const sh = i ? j.shoulderR : j.shoulderL;
-      _sw.set(0, -1, 0).applyQuaternion(sh.quaternion);
-      if (_sw.dot(DOWN) > -0.995) swings[i].setFromUnitVectors(DOWN, _sw);
-      // (what's left of its turn once swung: about its own length)
-      _tw.copy(swings[i]).invert().multiply(sh.quaternion); _tw.x = 0; _tw.z = 0; _tw.normalize();
-      delts[i].forEach((d, q) => {
-        const f = (q + 1) / 4;
-        d.quaternion.identity().slerp(swings[i], f).multiply(_tq.identity().slerp(_tw, f * f));
-        d.position.lerpVectors(sh.userData.rest, sh.position, f);
-      });
-    }
+    sets.bend();
   }
   return {
     root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, palm, arrowHead, height: 2,

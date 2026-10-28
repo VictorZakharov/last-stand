@@ -14,7 +14,7 @@ import { LegIK, IK } from './ik';
 import { fitArm, solveArm, type ArmResult } from './armIK';
 import { bodyShape, clampWrist, GRIPPED_FLEXION } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
-import { buildFlask, drink, drinkUp, DRINK_SHEATHED, type DrinkHold } from './flask';
+import { buildFlask, drink, drinkUp, holdFlask, DRINK_SHEATHED, type DrinkHold } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
 import { NECKLINE_BACK } from './tunic';
@@ -277,7 +277,7 @@ function dipUnder(at: THREE.Vector3, dir: THREE.Vector3, flat: THREE.Vector3, fa
 /** a blade's turn in the fist about its own length (third person): its flats along the palm, its edge (an axe's bit) out over the knuckles, as a real one is held */
 const MOUNT = -Math.PI / 2;
 /** drinking: the elbow raised out to the side, the wrist out to the left of the chin (as from a horn: the shield on that forearm turns edge on beside the head, not over the face) */
-const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.1, -0.06, 0.2), tipped: new THREE.Vector3(0.09, 0.1, 0.19), pole: new THREE.Vector3(1, -0.2, 0) };
+const DRINK: DrinkHold = { wrist: new THREE.Vector3(0.07, -0.16, 0.14), tipped: new THREE.Vector3(0.08, 0.08, 0.19), pole: new THREE.Vector3(0.35, -1, 0.5), tippedPole: new THREE.Vector3(0.6, -0.4, 1) };
 const REST_FEET = [0.13, 0.09, 0.15, -0.14, -0.1, -0.55], FIGHT_FEET = [0.13, 0.22, 0.15, -0.14, -0.15, -0.55];
 /** Twin Fangs as the skill times it (data/balance `FANGS`, as tuned): the shares of it that are the lunge and that its
  *  blades strike at, the right's and the left's (each cut's start; through the eyes, where it crosses the aim), and
@@ -1213,7 +1213,7 @@ export function buildWarrior(): Model {
 
   const shY = j.shoulderL.position.y;
   // the healing draught, in the left fist while it is drunk
-  const flask = buildFlask(kit, brass, leatherDark); flask.name = 'flask'; j.handL.add(flask); flask.position.set(0, -0.07, 0.03); flask.rotation.x = Math.PI;
+  const flask = buildFlask(kit); flask.name = 'flask'; j.handL.add(flask);
   let flaskOut = 0, shieldHang = 0, drinkOn = 0;
   /** how far a two-hander is on the shoulder (`SHOULDER_AT`), and how long the left hand has left to take its lower
    *  grip as it comes off (s: `TAKE_HOLD`) */
@@ -2137,7 +2137,7 @@ export function buildWarrior(): Model {
       } else if (a.name === 'drink' && !fp) {
         // the healing draught: the free hand takes the flask from the belt and drinks it (models/flask.ts); the shield
         // stays on its arm, a two-hander's left hand lets go of the grip (out of its reach)
-        flaskWant = drink(j, k, mouth, DRINK); aw = 1; guard = 0; drinkLift = drinkUp(k);
+        flaskWant = drink(j, k, mouth, DRINK, handL, flask); aw = 1; guard = 0; drinkLift = drinkUp(k);
       } else if (a.name === 'buff') {
         // war cry: gathered in, hunched over the fists, then thrown open, chest out, arms flung wide and up,
         // head back in the roar (held as the cast ends: the fade out of it is slow)
@@ -2475,7 +2475,8 @@ export function buildWarrior(): Model {
     else poseHand(handR, 0.5 + Math.sin(t * 1.3) * 0.05, 0.1);
     if (offHeld && !sheathed) { seat(handL, gripL, offHeld.r, slantL); hold(handL, along(gripL), offHeld.r, undefined, slantL); }
     else if (twoHeld && held) hold(handL, along(grip), held.r, _up, slantL);
-    else poseHand(handL, lerp(shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 1.1, flaskOut), 0.08);
+    else if (flaskOut > 0.01) holdFlask(handL, flask, flaskOut);
+    else poseHand(handL, shield.visible ? 1.35 : 0.5 + Math.sin(t * 1.3 + 1) * 0.05, 0.08);
     // the flask comes out of the fist and is put away again
     flaskOut = damp(flaskOut, flaskWant, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
 

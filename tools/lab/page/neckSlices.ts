@@ -109,7 +109,11 @@ function pixelsOf(texture: THREE.Texture): ImageData | null {
   if (pixelsRead.has(texture)) return pixelsRead.get(texture)!;
   const image = texture.image as CanvasImageSource & { width: number; height: number };
   let pixels: ImageData | null = null;
-  if (image && image.width && image.height) {
+  // (a data texture's pixels are its own, its first row v = 0: the hair's strand map is one)
+  const data = (texture as THREE.DataTexture).isDataTexture ? (texture.image as { data: unknown }).data : null;
+  if (data instanceof Uint8Array && image.width && image.height) {
+    pixels = new ImageData(new Uint8ClampedArray(data), image.width, image.height);
+  } else if (image && image.width && image.height) {
     const canvas = document.createElement('canvas');
     canvas.width = image.width;
     canvas.height = image.height;

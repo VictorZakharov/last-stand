@@ -11,7 +11,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   behaviour or its name; bound to its own key if the hero knows it but hasn't it on one) ahead of him and pictures
   it at shares of its cast (`--shares`, 0.3,0.55,0.8 by default; a channel at shares of its key's hold, `holdFor`),
   with where its cast point (the weapon's tip) is: how high over the floor, how far ahead, and the way the weapon
-  points (up, from ahead, and in the chest's frame, as a two-hander's holds are placed). `--gear` holds the weapons a
+  points (up, from ahead, and in the chest's frame, as a two-hander's holds are placed). While the healing draught's
+  flask is out (`--skill potion`), how far its mouth is from the lips and how far its bulb is tipped, and where a miss
+  comes from: the wrist off where the drink put it, or the fist closed off where it planned the grip (`page/drink.ts`:
+  at the sip the fist swung 13 cm off the lips while the wrist landed true; the reference is the owner's Codex photos
+  of a man drinking from a flask held by its neck, `.tmp/references/drink`). `--gear` holds the weapons a
   style's way (`--weapon` the base). `--look` draws the pictures another way (below: the hero's wireframe, his
   faces' orientation, his parts with where each is, his skeleton). Writes `out/sheets/<--tag>/sheet.png` and
   `notes.txt`.
@@ -235,6 +239,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   map: the weapons blue, their glare yellow, their bloom pink, the haze red (`out/haze/`). `--canary` plants a veil
   (the frame at 0.8 of its exposure), which must haze, and the weapons lit white, which must glare and bloom. Not
   yet within its haze: on main as here, a single sword hazes up to 4.9% of the frame looking 135 to 315 degrees.
+  `--part hands` measures the hands instead and `--view third` looks over the shoulder: the mage's glowing hand, its
+  light at the palm and its outline at 3.2, blew out 12 to 23% of its surface (the owner: "his hands glows too
+  bright", "we should never have blinding lights in our game"); a halo is held to the part's own size when that's
+  under 0.5% of the frame, as a hand's is.
 - `touch`: the touch controls' move stick pushed by a finger, its touches sent by the browser as a touch screen's
   (`lab.touchDown`): put down on the move pad and slid right, within the dead zone, through the stick's travel, to its
   edge and far past it, and half the window across, each push from a fresh set-up. Each push's line says what the
@@ -700,6 +708,64 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   parts, bones), and `--canary` pictures an empty studio, which must read as nothing drawn, and builds the hand 10%
   larger, which must measure so. On `--ab` against a game whose hands were pieces, the old hand is built again from
   the materials its pieces were made in (`userData.own`).
+- `hood`: the mage's hood against its reference, by numbers (`page/hood.ts`), as tuning it by eye didn't converge (one
+  change to its cut reshaped the whole of it, and four reviews in a row failed it). Its outline: the hero taken into
+  the studio and drawn flat white from the front, his left and the back (what he holds hidden), and the reference's
+  figure cut from its plain backdrop (`--ref <marks.json>`: each view's picture beside the file, with where its eyes
+  and chin are, shares of it, and the sizes below as `"sizes": { "brim": [least, most] }` in cm where the reference
+  was made to others than the first's), both read on one grid in the face's unit `E` (the eye line to the chin; ours
+  from the head's anatomy, `toGroup`): how much of the two outlines is shared, how high it stands over the eyes, and
+  its width (from the side, its reach ahead and behind) at the crown, the temples, the chin, the nape, the neck and
+  the shoulders, ours beside the reference's, with each view's pictures cut to that window (through a 6° lens: at the
+  studio's 20° the hood's back, 20 cm nearer the camera than the eyes the scale is set at, read 10% wider) and the
+  outlines laid over each other (both white, the reference's alone red, ours alone green); its fullness held to the
+  reference's within 0.1 E at the chin (from his left how far behind the eyes it reaches, and at the nape; from the
+  back how wide: pulled in to the neck, it read as a shell where the reference's cloth hangs loose behind the head and
+  gathers at the nape, "do you see bagginess in the ref? where is ours?", and cut fuller, as a sack; below the nape
+  it's the capelet's, read, not held); and the head under it in the same unit (its scalp's height, its brow ahead of
+  the eyes, its skull's back behind them and its half width at four heights), so the reference's outline reads as how
+  far the hood stands off the head (the mage's snug hood was laid out from it). Its shape on the head, from its cloth
+  (`HoodCloth`'s `userData.grid`) and the face's skin: the rim ahead of the brow and of the cheeks and out from the
+  cheeks, the point above the scalp and the capelet below the nape, each against the sizes the reference was made to
+  (its marks' `sizes`; the first reference's, from its modelling notes: 6-8, 4-6, 4-6, 5-7 and 16-18 cm), outside them
+  a problem; and how far its top half moves from its standing shape over a walk (more than 4 cm, a tip flipping, is a
+  problem). Its opening round the face from the front and his left (`page/hoodOpening.ts`; laid close to those sizes
+  and that outline, the hood still hid the face as a tunnel, and neither read it): where its rim crosses each 0.2 E
+  from 0.6 over the eyes down to the throat (-1.4), ours from its cloth's edge and the reference's from its piping
+  (each row scanned in from the backdrop to the first run of its pale gold, past the seam's on the outline from the
+  side; its reads drawn as dots on the pictures), the rim's stand-off from the face shown, and the face shown (E²,
+  ours drawn flat with the skin white, the reference's by its skin's colour inside the rim). From the front ours more
+  than 0.1 E from the reference's rim from 0.4 down to -1.4 (flared out below the chin, it read as a funnel), from his
+  left the face shown ahead of its rim more than 0.05 E from the reference's from 0.4 to -0.8 (the reference's brow,
+  nose and chin stand further ahead of its eyes than ours: laid where its rim runs from the eyes, ours hung over the
+  brow, "do you see hood overhang in our case?"), or showing less than 85% of its face, is a problem. The seam down
+  the back: how far it strays aside from straight, standing and walking (0.3 cm at most; the Z a review saw at the
+  nape was the gathers' depth seen from above, not the seam). And the capelet's lie read again as he walks, every 15
+  frames (standing it lay clear; walking, the coat's stitched shoulder seam came through it as the arm swung). And how
+  deep his body comes through the hood above the capelet, from below the jaw to the join, standing and walking
+  (`page/hoodLie.ts`; the harness straps' tops came out through its front below the jaw, where the capelet's reading
+  never looked, "cloth should not clip through hood"): looked for within 6 cm out along the cloth's normal, a surface
+  met counting where it faces the way the cloth does (in the gathers' valleys at the nape the normal turns down, and
+  from 15 cm out its ray met his back from below, and a brass fitting); more than 0.1 cm is a problem, as through the
+  capelet (at 0.3, the coat's front of the shoulder stood 2 mm out through it and passed: what's read is the cloth's
+  outside, so anything through it shows). `--canary` makes the hood 0.7x as wide, which the rim's clearance, the front
+  outline's width at the temples, the back's at the neck and the opening at the eyes must read; moves it 2 cm forward,
+  which the rim from his left, the face shown ahead of it and the face shown must read; makes it 0.8x as deep, which
+  its reach behind at the chin from his left must read; sinks its front below the jaw 5 cm into him, which his body
+  through the hood must read; and puts a point of the seam 1 cm aside, which its straightness must read. `--edges`
+  lists each view's outline every 0.2 E down, ours beside the reference's (its edges; from the side, its reach ahead
+  of and behind the eyes): five levels didn't show where the side's parted from the reference's. Writes
+  `out/hood/sheet.png`.
+- `turnaround`: the hero standing as the game has him (its set-up: `--class`, `--gear`, `--wear`), taken out of the
+  world into the studio (`page/turnaround.ts`, `page/studio.ts`) and pictured as a character sheet's turnaround shows
+  him: from the front, three-quarters to his right, his right side and his back, framed on his whole figure with what
+  he holds, and his head close from the front, his right side, three-quarters to his left and behind (a hood is judged
+  all round; from his right front the staff came between), with how many triangles and meshes he's drawn with.
+  `--ref <sheet> --panels l,t,r,b;...` cuts a reference sheet's panels (shares of it, one a view in that order; an
+  empty one leaves its place empty) and sets them in a row under ours, each fitted whole into a tile the size of ours.
+  A hero is rebuilt against such a sheet part by part from the same side (the mage against Codex's realistic render
+  of him: in the forest the ferns and the light hid what he wore). `--canary` pictures the studio empty, which must
+  read as nothing drawn. Writes `out/turnaround/sheet.png`.
 - `neck`: each hero's neck (`page/neck.ts`; `--classes`, `--dresses bare,chest,hat`, `--poses rest,aside`), cut
   by level planes in the neck joint's frame and read up 72 lines round it (`neckSlices.ts`; what each says against
   its limit, `neckRead.ts`): ridges and shelves on the free neck (the column's flat top was a ledge under the
@@ -726,11 +792,15 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the lobby is a sound left playing (`page/soundsLeft.ts`); its canary starts Void Lance's hum there and never stops
   it. From play: "if mage was attacking in hall of heroes, going back to lobby keeps the attack sound": the hall
   closed with his channel open, and its hum (3 tones) played on.
-- `coat`: the hero's skirts (`page/coat.ts`; `models/armor.ts` `Skirt`, found by its geometry's name, 'skirt', or a
-  commit from before by the ranger's mesh's, 'tunic hem') as he stands at idle, `--seconds` (5 by default): every
-  point of the cloth in its own space, hung from the hips, so his sway is taken out, and each jerk, its move a frame
-  changing by over 1 cm, with where on the cloth and the hand nearest; `--frames` lists them; the canary kicks a point
-  out 3 cm for a frame. From play: "ranger has a clothing bug, behind that right arm, in idle", "you should observe
+- `coat`: the hero's skirts and hood (`page/coat.ts`; `models/armor.ts` `Skirt` and `models/hood.ts` `HoodCloth`,
+  found by their geometries' names, 'skirt' and 'hood', or a commit from before by the ranger's mesh's, 'tunic hem') as
+  he stands at idle in his head item and body armour, `--seconds` (5 by default): every point of the cloth in its own
+  space, a skirt's hung from the hips and a hood's from the head, so his sway is taken out, and each jerk, its move a frame
+  changing by over 1 cm, with where on the cloth and the hand nearest (or, with none, the most any point's did);
+  `--frames` lists them; the canary kicks a point out 3 cm for a frame. He stands once at each of `--rates` (60 and
+  144 Hz by default): the cloth steps at 1/60 s, so on a faster screen most frames step it none and some once, which
+  a 60 Hz clock never shows. From play, "the hood is jerking when idle": held firmly and damped as the free cloth, it
+  rang every 0.2 s, at 144 Hz on 34 frames, up to 1.2 cm, and at 60 Hz on none; damped critically, 0.1 cm at most. From play: "ranger has a clothing bug, behind that right arm, in idle", "you should observe
   3-5sec of frames to see it moving unnaturally", "under left arm/hand too, but less": each point a hand or the bow
   reached was put round onto its far side, so as the idle swayed them points jumped by a hand's width, the coat on 224
   of 300 frames, up to 11.2 cm; now none over 1 cm. The mage's robe jerked 1.7 to 2.5 cm on 8 frames by the waist at

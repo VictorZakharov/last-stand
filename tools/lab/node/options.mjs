@@ -632,7 +632,8 @@ export const COMMANDS = {
     },
   },
   haze: {
-    help: 'the hero\'s held weapons\' light through the eyes: the frame drawn with them and without, each with the '
+    help: 'the hero\'s held weapons\' light through the eyes (or his hands\', or over the shoulder: --part, --view): '
+      + 'the frame drawn with them and without, each with the '
       + 'grade\'s adaptation and without it; their surface near white (glare over 5% of it is a problem), their '
       + 'bloom past it (over 0.5% of the frame), and any pixel outside their own darkened by their light (the '
       + 'adaptation to a bright area spread round them as a veil; over 0.5% of the frame): tools/lab/out/haze (the '
@@ -643,6 +644,18 @@ export const COMMANDS = {
         choices: ['crypt', 'forest'],
         usage: 'crypt|forest',
         help: 'the biome (the forest by default)',
+      },
+      part: {
+        kind: 'choice',
+        choices: ['weapons', 'hands'],
+        usage: 'weapons|hands',
+        help: 'what\'s measured: the held weapons (by default), or the hands (the mage\'s glowing one)',
+      },
+      view: {
+        kind: 'choice',
+        choices: ['first', 'third'],
+        usage: 'first|third',
+        help: 'the view: through the eyes (by default), or over the shoulder',
       },
       facings: {
         kind: 'list',
@@ -1263,6 +1276,42 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  hood: {
+    help: 'the mage\'s hood against its reference: its outline from the front, his left and the back laid over the '
+      + 'reference\'s in the face\'s unit (the eyes to the chin), how much they share and how wide and high each is; its '
+      + 'rim, point and capelet against the sizes the reference was made to; how much it sways as he walks: '
+      + 'tools/lab/out/hood/sheet.png',
+    options: {
+      ref: {
+        kind: 'text',
+        usage: 'marks.json',
+        help: 'the reference: each view\'s picture beside the file, with where its eyes and chin are '
+          + '({ "front": { "picture": "front.png", "eyes": [x, y], "chin": [x, y] }, "left": ..., "back": ... })',
+      },
+      canary: { kind: 'switch', help: 'the hood made narrower: its rim and its outline must read it so' },
+      edges: { kind: 'switch', help: 'list each view\'s outline every 0.2 E down, ours beside the reference\'s' },
+      rows: { kind: 'switch', help: 'list how far the capelet stands off him row by row, its front, shoulders, back' },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  turnaround: {
+    help: 'the hero standing in a plain, lit studio from the front, three-quarters to his right, his right side and '
+      + 'his back, and his head close from the front and the side, with how many triangles he is drawn with; '
+      + '--ref sets a reference sheet\'s panels in a row under ours: tools/lab/out/turnaround/sheet.png',
+    options: {
+      ref: { kind: 'text', usage: 'picture', help: 'a reference sheet (PNG, JPEG or WebP) whose panels --panels cuts' },
+      panels: {
+        kind: 'text',
+        usage: 'l,t,r,b;...',
+        help: 'the reference\'s panel for each view in order (front, quarter, right, back, face, profile), its '
+          + 'edges as shares of the picture; an empty one leaves its place empty',
+      },
+      canary: { kind: 'switch', help: 'an empty studio pictured too: the measure of what\'s drawn must find nothing' },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   eyes: {
     help: 'a skill of the hero\'s cast through the eyes, frame by frame from the press until the arms are at rest '
       + 'again: where the weapon\'s tip is on the screen at rest, wound up, through the blow and at its end, how '
@@ -1471,11 +1520,13 @@ export const COMMANDS = {
     },
   },
   coat: {
-    help: 'the hero\'s skirts (the ranger\'s coat, the mage\'s robe, the warrior\'s mail) as he stands at idle, frame '
+    help: 'the hero\'s skirts (the ranger\'s coat, the mage\'s robe, the warrior\'s mail) and hood (the mage\'s) as he '
+      + 'stands at idle in his head item and body armour, frame '
       + 'by frame: every point of the cloth in its own space, and each jerk (its move a frame changing by over 1 cm)',
     options: {
       seconds: { kind: 'number', usage: 's', help: 'how long he stands (5 by default)' },
       frames: { kind: 'switch', help: 'list the frames a point jerked, with where on the cloth' },
+      rates: { kind: 'list', usage: 'a,b', help: 'the frame rates he stands at, once each (60,144 by default)' },
       canary: { kind: 'switch', help: 'plant a fault the measure must catch: a point kicked out for a frame' },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,

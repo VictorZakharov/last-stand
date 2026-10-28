@@ -21,31 +21,52 @@ const TILE_SHAPE = 340 / 560;
 const STUDIO_FOV = 20;
 const MARGIN = 1.12;
 
-/** The studio: the backdrop, a sky light and two lamps, a key from above in front and a rim from behind. */
-export function studio(): THREE.Scene {
+/** where the studio's key and rim stand, for a camera in front (+z): the key above it and to its right, the rim behind
+ *  on the left */
+const KEY_AT = new THREE.Vector3(1.5, 3, 4);
+const RIM_AT = new THREE.Vector3(-3, 1.5, -3);
+
+/** The studio: the backdrop, a sky light and two lamps, a key from above in front and a rim from behind; with
+ *  `withCamera`, each picture `shoot` takes lit so from its own camera's side, as a photograph is (lit from the front,
+ *  a hood's back showed in the shade). */
+export function studio(withCamera = false): THREE.Scene {
   const scene = new THREE.Scene();
   scene.background = BACKDROP;
   scene.environment = G.scene.environment;
   scene.add(new THREE.HemisphereLight(0xdfe6ee, 0x3a3530, 1.4));
   const key = new THREE.DirectionalLight(0xfff2e0, 2.6);
-  key.position.set(1.5, 3, 4);
+  key.name = 'key';
+  key.position.copy(KEY_AT);
   const rim = new THREE.DirectionalLight(0xc8d8ff, 1.6);
-  rim.position.set(-3, 1.5, -3);
+  rim.name = 'rim';
+  rim.position.copy(RIM_AT);
   scene.add(key, rim);
+  scene.userData.lightWithCamera = withCamera;
   return scene;
+}
+
+/** The studio's key and rim turned round the upright with `camera`, from where they stand for a camera in front. */
+function lightFrom(scene: THREE.Scene, camera: THREE.Camera): void {
+  const towards = camera.getWorldDirection(new THREE.Vector3());
+  const turn = Math.atan2(-towards.x, -towards.z);
+  const up = new THREE.Vector3(0, 1, 0);
+  scene.getObjectByName('key')!.position.copy(KEY_AT).applyAxisAngle(up, turn);
+  scene.getObjectByName('rim')!.position.copy(RIM_AT).applyAxisAngle(up, turn);
 }
 
 /**
  * The studio's camera looking at `part` from the side `from` points to (from its middle), near enough to frame it in
- * a picture of `TILE_SHAPE`: its height (y) up the picture, its width or depth across it, with `up` up the picture.
+ * a picture of `TILE_SHAPE`: its height (y) up the picture, its width or depth across it, with `up` up the picture,
+ * through a lens of `fov` degrees (a longer one, from further off, draws what's nearer it and what's further at
+ * nearer their sizes beside each other).
  */
-export function cameraOn(part: THREE.Box3, from: THREE.Vector3Tuple, up: THREE.Vector3Tuple = [0, 1, 0]):
-  THREE.PerspectiveCamera {
+export function cameraOn(part: THREE.Box3, from: THREE.Vector3Tuple, up: THREE.Vector3Tuple = [0, 1, 0],
+  fov = STUDIO_FOV): THREE.PerspectiveCamera {
   const canvas = G.renderer.domElement;
-  const camera = new THREE.PerspectiveCamera(STUDIO_FOV, canvas.width / canvas.height, 0.01, 50);
+  const camera = new THREE.PerspectiveCamera(fov, canvas.width / canvas.height, 0.01, 50);
   const centre = part.getCenter(new THREE.Vector3());
   const size = part.getSize(new THREE.Vector3());
-  const tall = Math.tan(THREE.MathUtils.degToRad(STUDIO_FOV / 2));
+  const tall = Math.tan(THREE.MathUtils.degToRad(fov / 2));
   const upWay = new THREE.Vector3(...up).normalize();
   const height = Math.abs(size.dot(upWay));
   // (its widest square to `up`, one of the box's axes)
@@ -108,6 +129,7 @@ export function shoot(lab: Lab, scene: THREE.Scene, shots: Shot[]): { tiles: Til
   let most = 0;
   try {
     for (const shot of shots) {
+      if (scene.userData.lightWithCamera) lightFrom(scene, shot.camera);
       renderer.setRenderTarget(null);
       renderer.render(scene, shot.camera);
       const { tile, drawn } = readTile(shot.name);

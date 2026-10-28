@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { belt, TILE } from './armor';
 import { curve, type Keys } from './motion';
 import { clamp } from '../../util';
+import { joint } from './rig';
 
 /** chest joint space (m): at each height its half-width and half-depth, and how square its section is. Over the shoulders
  *  it is as broad as the arms' tops and thin front to back, the trapezius sloping down from the neck and a deltoid
@@ -28,6 +29,43 @@ export const WAIST: [number, number][] = [[0.148, -0.05], [0.15, 0.08], [0.152, 
 export function onTunic(a: number, y: number, lift: number, out = new THREE.Vector3()): THREE.Vector3 {
   const X = curve(TUNIC_W, y) + lift, Z = curve(TUNIC_D, y) + lift, e = 2 / curve(TUNIC_P, y), s = Math.sin(a), c = Math.cos(a);
   return out.set(Math.sign(s) * Math.abs(s) ** e * X, y, Math.sign(c) * Math.abs(c) ** e * Z + necklineBack(y));
+}
+/** how far inside the tunic lifted `lift` off it a point (chest joint space) is: under 1 inside, 1 on it */
+function within(x: number, y: number, z: number, lift: number): number {
+  const X = curve(TUNIC_W, y) + lift, Z = curve(TUNIC_D, y) + lift, e = curve(TUNIC_P, y);
+  return Math.abs(x / X) ** e + Math.abs((z - necklineBack(y)) / Z) ** e;
+}
+/** the step `outOfTunic` reads the way out by (m) */
+const OUT_STEP = 0.002;
+
+/** the way out of the tunic lifted `lift` off it at `p`: `within`'s gradient (unnormalised) */
+function outward(p: THREE.Vector3, lift: number, out: THREE.Vector3): THREE.Vector3 {
+  const d = 2 * OUT_STEP;
+  return out.set(
+    (within(p.x + OUT_STEP, p.y, p.z, lift) - within(p.x - OUT_STEP, p.y, p.z, lift)) / d,
+    (within(p.x, p.y + OUT_STEP, p.z, lift) - within(p.x, p.y - OUT_STEP, p.z, lift)) / d,
+    (within(p.x, p.y, p.z + OUT_STEP, lift) - within(p.x, p.y, p.z - OUT_STEP, lift)) / d,
+  );
+}
+const _g = new THREE.Vector3();
+
+/** the tunic's normal near `p` (chest joint space): what lies on it faces this way (a strap) */
+export const tunicNormal = (p: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 => outward(p, 0, out).normalize();
+
+/** `p` (chest joint space) put out of the tunic lifted `lift` off it if it's inside, by Newton's steps along the way out
+ *  of its surface (over the shoulders that's up their slope: put out across, cloth laid there slid off them); whether it
+ *  was inside */
+export function outOfTunic(p: THREE.Vector3, lift: number): boolean {
+  if (p.y < TUNIC_Y[0] || p.y > TUNIC_Y[1]) return false;
+  let v = within(p.x, p.y, p.z, lift);
+  if (v >= 1) return false;
+  for (let k = 0; k < 3 && v < 1; k++) {
+    const g2 = outward(p, lift, _g).lengthSq();
+    if (g2 < 1e-9) break;
+    p.addScaledVector(_g, (1 - v) / g2);
+    v = within(p.x, p.y, p.z, lift);
+  }
+  return true;
 }
 /** the point on the tunic's front `x` across */
 export const tunicFront = (x: number, y: number, lift: number) => onTunic(Math.asin(clamp(Math.sign(x) * Math.abs(x / curve(TUNIC_W, y)) ** (curve(TUNIC_P, y) / 2), -1, 1)), y, lift);
@@ -188,4 +226,108 @@ export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: n
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setAttribute('capT', new THREE.Float32BufferAttribute(ct, 1));
   return g;
+}
+
+/** the cloth's share of the arm round each armhole (`share`, m in the chest's frame): `seam` on the armhole's edge, falling
+ *  off to none `reach` from it (`top` above `topY`, under a strap over the shoulder), and the sleeve's rising from it to the
+ *  whole arm's at its tube, `join` below the joint (`joinIn` more under the arm); `around` points round the armhole, the
+ *  body's and the sleeve's the same; `bulk`, how much the cloth between swells with the arm raised level (a share of its
+ *  size about the joint, none hanging) */
+export type ArmBlend = { seam: number; reach: number; top: number; topY: number; join: number; joinIn: number; around: number; bulk?: number };
+const DOWN = new THREE.Vector3(0, -1, 0), _sw = new THREE.Vector3(), _tw = new THREE.Quaternion(), _tq = new THREE.Quaternion(), _p = new THREE.Vector3();
+const smooth = (t: number) => t * t * (3 - 2 * t);
+/** the cloth round the armhole under the shoulder joint: how much of the arm's share it keeps from going, wholly this far
+ *  (m) below the joint */
+const UNDER = { keep: 0.7, depth: 0.08 };
+
+/**
+ * A tunic's shoulders with the sleeves set in (`tunicCut`, `setInSleeve`): the cloth round each seam blended from the chest
+ * to the arm through joints turned a quarter, half and three quarters as far as it (`delts`), so the body round the armhole
+ * goes some way up with a raised arm and the sleeve comes out of it. A sleeve's tube stood in a whole coat: raised, it came
+ * out of the cloth over the shoulder as a tube stuck into the body, and with the cloth over the deltoid blended straight
+ * from the chest to the arm, the cloth between folded in on the joint in a lip round it. `bend()` each frame after the arms
+ * are posed.
+ */
+export class SetInShoulders {
+  /** each side's part-turned joints on the chest (+1 his left first) */
+  readonly delts: THREE.Group[][];
+  /** points round each armhole's edge, as many as the sleeve's top */
+  readonly around: number;
+  private readonly holes: THREE.Vector3[][];
+  private readonly swings = [new THREE.Quaternion(), new THREE.Quaternion()];
+
+  constructor(private readonly j: { chest: THREE.Object3D; shoulderL: THREE.Object3D; shoulderR: THREE.Object3D }, readonly K: ArmBlend, around: number) {
+    this.delts = [j.shoulderL, j.shoulderR].map((sh) => [1, 2, 3].map((q) => {
+      const d = joint(j.chest, ...(sh.position.toArray() as [number, number, number]));
+      d.name = (sh === j.shoulderL ? 'deltL' : 'deltR') + q;
+      return d;
+    }));
+    this.around = around;
+    this.holes = [1, -1].map((s) => armholeEdge(s, around));
+  }
+
+  private shoulder(s: number): THREE.Object3D { return s > 0 ? this.j.shoulderL : this.j.shoulderR; }
+  /** side s's shoulder joint at rest, in the chest's frame */
+  restOf(s: number): THREE.Vector3 { return this.shoulder(s).userData.rest as THREE.Vector3; }
+  /** the joints side s's cloth is blended along, from the chest to the shoulder (`Sculpt.skinChain`'s) */
+  chainOf(s: number): THREE.Object3D[] { return [this.j.chest, ...this.delts[s > 0 ? 0 : 1], this.shoulder(s)]; }
+
+  /** how far the cloth at `p` (the chest's frame, at rest) goes with the arm on side `s`, 0 to 1: less under the joint
+   *  (`UNDER`), where the cloth stays with the chest as the arm rises (going with it half way, the cloth before the armpit
+   *  swung out with a raised arm into a mound, a breast under it) */
+  share(p: THREE.Vector3, s: number): number {
+    let d = Infinity;
+    for (const q of this.holes[s > 0 ? 0 : 1]) d = Math.min(d, p.distanceToSquared(q));
+    const reach = this.K.reach + (this.K.top - this.K.reach) * smooth(clamp((p.y - this.K.topY) / 0.03, 0, 1));
+    const under = 1 - UNDER.keep * smooth(clamp((this.restOf(s).y - p.y) / UNDER.depth, 0, 1));
+    return this.K.seam * under * (1 - smooth(clamp(Math.sqrt(d) / reach, 0, 1)));
+  }
+
+  /** `g` (the chest's frame) given its vertices' shares of side s's arm as `skinK` */
+  withArm(g: THREE.BufferGeometry, s: number): THREE.BufferGeometry {
+    const p = g.attributes.position, k = new Float32Array(p.count);
+    for (let i = 0; i < p.count; i++) k[i] = this.share(_p.fromBufferAttribute(p, i), s);
+    g.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
+    return g;
+  }
+
+  /** side s's sleeve (`setInSleeve`, in the shoulder's frame), its `skinK` along the chain on to the elbow: from the
+   *  armhole's share at its edge to the arm's wholly a little way down it, and over the elbow onto the forearm */
+  sleeve(s: number, o: { len: number; r0: number; r1: number; bulge: number; at: number; full?: number; fullIn?: number; cap?: number; tube?: number }): THREE.BufferGeometry {
+    const at = this.restOf(s), seam = this.K.seam;
+    const g = setInSleeve(s, at, { ...o, join: this.K.join, joinIn: this.K.joinIn, around: this.around }).translate(-at.x, -at.y, -at.z);
+    const p = g.attributes.position, c = g.attributes.capT, k = new Float32Array(p.count);
+    for (let i = 0; i < p.count; i++) {
+      const e = smooth(clamp((-p.getY(i) - 0.2) / 0.13, 0, 1));
+      k[i] = (seam + (1 - seam) * smooth(c.getX(i))) * 4 / 5 + e / 5;
+    }
+    g.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
+    return g;
+  }
+
+  /** each shoulder's part-turned joints: a quarter, half and three quarters of the arm's swing from hanging and of the
+   *  girdle's move, and less of its turn about its own length (the square of that share: the cloth round the armhole
+   *  barely turns with it), swelled by `bulk` as the arm rises, most at the middle one, as a deltoid bunches (the
+   *  armhole, a tall oval, lay along an arm raised forward: the cloth where the sleeve left the coat went thin, the
+   *  shoulder squashed). Near straight up the swing's axis is anyone's, so it's kept as it was */
+  bend(): void {
+    for (let i = 0; i < 2; i++) {
+      const sh = this.shoulder(i ? -1 : 1), swing = this.swings[i];
+      _sw.set(0, -1, 0).applyQuaternion(sh.quaternion);
+      if (_sw.dot(DOWN) > -0.995) swing.setFromUnitVectors(DOWN, _sw);
+      // (what's left of its turn once swung: about its own length)
+      _tw.copy(swing).invert().multiply(sh.quaternion);
+      _tw.x = 0;
+      _tw.z = 0;
+      _tw.normalize();
+      // (how far up the arm is: none hanging, whole level and above)
+      const up = Math.min(1, (1 + _sw.y) ** 2), bulk = this.K.bulk ?? 0;
+      this.delts[i].forEach((d, q) => {
+        const f = (q + 1) / 4;
+        d.quaternion.identity().slerp(swing, f).multiply(_tq.identity().slerp(_tw, f * f));
+        d.position.lerpVectors(sh.userData.rest, sh.position, f);
+        d.scale.setScalar(1 + bulk * up * 4 * f * (1 - f));
+      });
+    }
+  }
 }

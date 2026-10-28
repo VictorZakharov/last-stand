@@ -53,6 +53,8 @@ import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
 import type { NeckOptions } from './neck';
+import type { HoodOptions } from './hood';
+import type { TurnaroundOptions } from './turnaround';
 import type { HallOptions } from './hallMoves';
 import type { CoatOptions } from './coat';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
@@ -110,6 +112,20 @@ export async function hands(lab: Lab, command: HandsOptions): Promise<Report> {
 export async function neck(lab: Lab, command: NeckOptions): Promise<Report> {
   const { neck: read } = await import('./neck');
   return read(lab, command);
+}
+
+/** `lab hood`: the mage's hood against its reference, its outline and its shape on the head; a size outside the
+ *  reference's, a sway past its limit, or a canary it missed, is a problem. */
+export async function hood(lab: Lab, command: HoodOptions): Promise<Report> {
+  const { hood: read } = await import('./hood');
+  return read(lab, command);
+}
+
+/** `lab turnaround`: the hero standing, pictured in the studio from a sheet's sides beside its panels; a hero not
+ *  drawn, or a canary it missed, is a problem. */
+export async function turnaround(lab: Lab, command: TurnaroundOptions): Promise<Report> {
+  const { turnaround: picture } = await import('./turnaround');
+  return picture(lab, command);
 }
 
 /** `lab coat`: the hero's skirts as he stands at idle, frame by frame; a point that jerked, or a canary it missed, is a

@@ -182,9 +182,9 @@ export interface ClassDef {
   book: string;
   /** how the hero selection screen presents the class (ui/heroSelect.ts, game/hall.ts) */
   hall: HallDef;
-  /** the light that follows the cast point (`drawn`: lit only while a shot is held at full draw, as its glint is), and
-   *  the motes drifting off the off-hand (if any) */
-  aura: { light: number; intensity: number; drawn?: boolean; motes?: [color: number, end: number] };
+  /** the light that follows the cast point (`drawn`: lit only while a shot is held at full draw, as its glint is), the
+   *  motes drifting off the off-hand (if any), and the light the off-hand gives (if it glows: the mage's) */
+  aura: { light: number; intensity: number; drawn?: boolean; motes?: [color: number, end: number]; hand?: { light: number; intensity: number } };
   base: BaseStats;
   skills: SkillDef[];
   starterGear: { slot: Slot; rarity: RarityId; ilvl: number }[];

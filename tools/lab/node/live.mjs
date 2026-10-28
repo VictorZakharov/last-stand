@@ -8,14 +8,15 @@
 // go of the input on a blur (session.mjs), so a command run beside the live page would have measured another game.
 // What's found here is measured by a command, on a page booted for it: the live page's state is wherever its steps
 // took it.
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { extname, join, relative, resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { launchBrowser } from './browser.mjs';
 import { fixtureFrom } from './commands.mjs';
 import { labError } from './errors.mjs';
 import { LiveLog, describeStep, pictureName } from './liveLog.mjs';
 import { OUT, REPO } from './paths.mjs';
 import { Side } from './side.mjs';
+import { pictureUrl } from './pictureFile.mjs';
 
 /** where the live session writes its pictures, and keeps its steps */
 const LIVE_DIR = join(OUT, 'live');
@@ -35,7 +36,6 @@ const STEP_OPTIONS = {
 /** the steps that need words after them, and what they are */
 const STEP_WORDS = { eval: 'expression', frames: 'count' };
 /** a reference picture's types by its file's extension */
-const PICTURE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
 
 /** A screen as `--screen` writes it: `832x384@3.75`. */
 const screenText = (screen) => `${screen.width}x${screen.height}@${screen.ratio}`;
@@ -76,14 +76,6 @@ function isCrop(crop) {
   const [left, top, right, bottom] = crop;
   const shares = crop.length === 4 && crop.every((share) => share >= 0 && share <= 1);
   return shares && left < right && top < bottom;
-}
-
-/** A picture's file as a data URL, for the page to lay over its pictures. */
-function pictureUrl(path) {
-  const file = resolve(REPO, path);
-  const type = PICTURE_TYPES[extname(file).toLowerCase()];
-  if (!type) throw labError(`live picture --over: a PNG, JPEG or WebP picture, not ${path}`);
-  return `data:${type};base64,${readFileSync(file).toString('base64')}`;
 }
 
 export class LiveSession {
@@ -155,7 +147,7 @@ export class LiveSession {
       focus: options.focus,
       on: options.on?.map(Number),
       distance: options.distance,
-      over: options.over ? pictureUrl(options.over) : undefined,
+      over: options.over ? pictureUrl(options.over, 'live picture --over') : undefined,
       strength: options.strength,
       crop: options.crop?.map(Number),
       canary: Boolean(options.canary),

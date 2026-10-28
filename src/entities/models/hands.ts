@@ -48,7 +48,7 @@ const FINGERS: DigitSpec[] = [
   { u: -0.0315, y: -0.093, z: 0.001, len: [0.035, 0.021, 0.019], width: 0.0089 },
 ];
 /** the thumb: rooted low on the inner side of the palm, its first segment its bone in the palm's mound */
-const THUMB: DigitSpec = { u: 0.028, y: -0.022, z: -0.007, len: [0.038, 0.03, 0.025], width: 0.0118 };
+const THUMB: DigitSpec = { u: 0.028, y: -0.022, z: -0.007, len: [0.038, 0.03, 0.025], width: 0.0126 };
 /** a digit's depth over its width at its root (a grip wraps its half-depth) */
 const DEPTH = 0.86;
 /** how far apart the fingers are fanned in the pose the hand is sculpted in (`poseHand`'s spread): apart, so the
@@ -57,7 +57,7 @@ const SCULPT_SPREAD = 0.6;
 /** the hand's skin, glove and nails, sculpted once for each side (a hero built again shares them) */
 const SCULPTED = new Map<number, HandGeometries>();
 /** the nails: the skin a little lighter and glossier */
-const NAIL_TINT = new THREE.Color(0xf2ddd6);
+const NAIL_TINT = new THREE.Color(0xe6bfb2);
 
 /** A digit's joints on the hand (`s` its side), as `spec` places and sizes them. */
 function digitOn(vis: THREE.Object3D, s: number, spec: DigitSpec): Digit {
@@ -82,6 +82,25 @@ function ownCopy(material: THREE.Material): THREE.Material {
   copy.onBeforeCompile = material.onBeforeCompile;
   copy.customProgramCacheKey = material.customProgramCacheKey;
   return dualQuaternionSkinned(triplanar(copy, GRAIN_TILE));
+}
+
+/** Light `h`'s outline with `rim`, a colour the model may change each frame: the kit's light at glancing angles
+ *  (`uRim`) on the hand's own copies of its materials, the same program as every hand's, a uniform of their own (the
+ *  mage's arcana in his free hand: motes drifting off it read as a stray particle effect, not a hand that glows). Call
+ *  before the hand is first drawn. `body`, if given, is the glow over the whole of it, its emissive (seen face on, the
+ *  outline alone lit almost nothing: a plain hand). */
+export function glowOutline(h: Hand, rim: THREE.Color, body?: THREE.Color): void {
+  // (not the nails: thin and turned every way, each glowed nearly whole, five hot dots like lamps at the fingertips)
+  for (const mesh of [h.skin, h.bareSkin, h.glove]) {
+    if (!mesh) continue;
+    const material = mesh.material as THREE.MeshStandardMaterial;
+    if (body) material.emissive = body;
+    const before = material.onBeforeCompile;
+    material.onBeforeCompile = (shader, renderer) => {
+      before.call(material, shader, renderer);
+      shader.uniforms.uRim = { value: rim };
+    };
+  }
 }
 
 /** a map's tile across the hand (m): the glove's leather grain at about the size it had on the old palm */
@@ -193,10 +212,13 @@ export function buildHand(hand: THREE.Object3D, s: number, glove: THREE.Material
   h.skin = skinnedOn(vis, shape.tips, skin, skeleton, true);
   h.bareSkin = bareSkin ? skinnedOn(vis, shape.skin, bareSkin, skeleton, true) : null;
   h.glove = skinnedOn(vis, shape.glove, glove, skeleton, true);
+  // (the skin shaded by the colours its sculpt gave it, `shadeSkin`: each mesh's own copy of the material, which other
+  // skin without them shares)
+  for (const m of [h.skin, h.bareSkin]) if (m) (m.material as THREE.MeshStandardMaterial).vertexColors = true;
   h.nails = skinnedOn(vis, shape.nails, skin, skeleton, false);
   const nail = h.nails.material as THREE.MeshStandardMaterial;
-  nail.color.lerp(NAIL_TINT, 0.4);
-  nail.roughness = 0.35;
+  nail.color.lerp(NAIL_TINT, 0.25);
+  nail.roughness = 0.45;
   bare(h, false);
   // (unposed, as its joints were before it was sculpted)
   for (const d of [...f, thumb]) for (const j of d.j) j.rotation.set(0, 0, 0);
@@ -353,6 +375,11 @@ function fistAxis(h: Hand, q: THREE.Quaternion, r: number, out: THREE.Vector3): 
  */
 export function seat(h: Hand, grip: THREE.Object3D, r: number, slant = 0): void {
   fistAxis(h, fist(h, _d.set(0, 1, 0).applyQuaternion(grip.quaternion), _u.set(0, 1, 0), _q, slant), r, grip.position);
+}
+
+/** Seat a held thing in the fist as `hold` last closed it (after it): `grip`, a child of the hand's joint, on the fist's axis */
+export function seatHeld(h: Hand, grip: THREE.Object3D, r: number): void {
+  fistAxis(h, h.vis.quaternion, r, grip.position);
 }
 
 /**

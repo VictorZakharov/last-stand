@@ -24,6 +24,7 @@ for research, so it's used here and never shipped).
 """
 import sys, os, pickle
 import cv2, numpy as np, onnxruntime as ort
+from views import read_view
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODELS = os.path.join(HERE, 'models')
@@ -229,13 +230,16 @@ def main():
     for a in sys.argv[2:]:
         if a.startswith('--'): continue
         n, rest = a.split('=', 1)
-        path, box = (rest.split(':') + [None])[:2]
+        # (the box after the last colon only when it's four numbers: a Windows path has a colon after its drive)
+        path, box = rest, None
+        head, _, tail = rest.rpartition(':')
+        if head and tail.count(',') == 3: path, box = head, tail
         spec[n] = (path, [float(v) for v in box.split(',')] if box else None)
     pts = next((json.load(open(a[9:])) for a in sys.argv[2:] if a.startswith('--points=')), {})
     bfm = BFM(); reg = Regressor(bfm)
     views, a_each = [], []
     for n, (path, box) in spec.items():
-        img = cv2.imread(path)
+        img = read_view(path, n, mp_landmarks)
         L = mp_landmarks(img)
         if box is None:
             if L is None: raise SystemExit(f'recon: no face found in {path}; give a box round it ({n}={path}:x0,y0,x1,y1)')

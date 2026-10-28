@@ -29,9 +29,17 @@ export const plainSkin = (kit: MaterialKit, who: keyof typeof FACES, vertexColor
   return kit.rim({ color: new THREE.Color().setRGB(s[0] * PLAIN_SKIN, s[1] * PLAIN_SKIN, s[2] * PLAIN_SKIN, THREE.SRGBColorSpace), roughness: vertexColors ? 0.88 : 0.6, vertexColors }, 0x6a2a1c, 0.25);
 };
 
-/** bare hands' skin: the ears' and neck's a shade darker (beside the face's paint, shaded where light falls less, plain
- *  skin reads pale) */
-export const handSkin = (kit: MaterialKit, who: keyof typeof FACES) => { const m = plainSkin(kit, who); m.color.multiplyScalar(0.86); return m; };
+/** bare hands' skin: the ears' and neck's darker and warmer (beside the face's paint, shaded where light falls less,
+ *  plain skin reads pale: at 0.86 of it, every hero's hands were paler and pinker than his face; at 0.76, as bright as
+ *  the warrior's brow but a paler, yellower pink, red to green 1.24 against its 1.30) */
+const HAND_TONE: readonly [number, number, number] = [0.77, 0.71, 0.67];
+export const handSkin = (kit: MaterialKit, who: keyof typeof FACES) => {
+  const m = plainSkin(kit, who);
+  m.color.r *= HAND_TONE[0];
+  m.color.g *= HAND_TONE[1];
+  m.color.b *= HAND_TONE[2];
+  return m;
+};
 
 /** the head's geometry, made once for each face, hair and detail and shared by every head built after it (a class
  *  switch builds the hero again: made afresh each time, the head was 60% of the build, its hair's cards most of it) */
@@ -181,16 +189,20 @@ export interface Head {
   crop?: THREE.Mesh;
   /** a full beard's volume and its tufts (`FACES[...].beardFull`) */
   beards: THREE.Mesh[];
+  /** the face in a hood's shade, `depth` deep (0: none): the forehead and the eyes the most, gone by the mouth, the sides
+   *  of the face more (the game's shadow map is too coarse to shade a face under a brim: it sat lit, pasted into it) */
+  shade(depth: number): void;
 }
 
 /**
  * Build the head of `who` on `headJoint` (the rig's head joint). `hair`: a cap of hair over the scalp
- * with locks of cards over it, `swept` back behind the ears to the nape, or `loose`: parted a little off the
- * middle, swept out over the temples and falling in waves past the ears to the chin (left out, the scalp is painted).
+ * with locks of cards over it, `swept` back behind the ears to the nape, `mane` swept back as it is but fuller, in
+ * waves and falling past the nape to the collar (the mage's), or `loose`: parted a little off the middle, swept out
+ * over the temples and falling in waves past the ears to the chin (left out, the scalp is painted).
  * `crop`: short tufts over the back and sides below a hat's band (`Head.crop`), for a hat to show under its brim.
  * A face with `beardFull` gets a full beard: a volume over the skin and tufts of cards along it.
  */
-export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, o: { hair?: 'swept' | 'loose'; crop?: boolean } = {}): Head {
+export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, o: { hair?: 'swept' | 'mane' | 'loose' | 'short'; crop?: boolean } = {}): Head {
   const F: FaceShape = FACES[who];
   const head = new THREE.Group();
   headJoint.add(head);
@@ -231,8 +243,9 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
   const L = LOOKS[who], rng = mulberry(7);
   // (both styles' locks in the dense clump texture: thin strands of high contrast read as wood grain, and sparse cards
   // hanging apart read as a wig's fringe)
-  const hk = o.hair === 'loose' ? 2.4 : 2.1, hairCol = new THREE.Color().setRGB(L.hair[0] * hk, L.hair[1] * hk, L.hair[2] * hk, THREE.SRGBColorSpace);
-  const cards = kit.std({ color: hairCol, map: strandMap(true), alphaTest: 0.35, alphaToCoverage: true, side: THREE.DoubleSide, roughness: o.hair === 'loose' ? 0.72 : 0.62, vertexColors: true });
+  const hk = o.hair === 'loose' || o.hair === 'mane' || o.hair === 'short' ? 2.4 : 2.1, hairCol = new THREE.Color().setRGB(L.hair[0] * hk, L.hair[1] * hk, L.hair[2] * hk, THREE.SRGBColorSpace);
+  const cards = kit.std({ color: hairCol, map: strandMap(true), alphaTest: 0.35, alphaToCoverage: true, side: THREE.DoubleSide, roughness: o.hair === 'loose' ? 0.72 : o.hair === 'short' ? 0.78 : 0.62, vertexColors: true });
+  bothSidesOut(cards);
   const hair: THREE.Mesh[] = [];
   const skullC = toGroup(0, 128, -12);
   let crop: THREE.Mesh | undefined;
@@ -240,7 +253,7 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     // (under the locks the cap is only the shadow between them: darker and plain, as its texture would show the grid's
     // rows closing to a point on top as a starburst through the part; and a cap of combed fur with a sharp edge, the swept
     // locks over it few and apart, read as a wig)
-    const loose = o.hair === 'loose', capCol = new THREE.Color().setRGB(L.hair[0] * 1.3, L.hair[1] * 1.3, L.hair[2] * 1.3, THREE.SRGBColorSpace);
+    const loose = o.hair === 'loose', capK = o.hair === 'mane' ? 1.8 : 1.3, capCol = new THREE.Color().setRGB(L.hair[0] * capK, L.hair[1] * capK, L.hair[2] * capK, THREE.SRGBColorSpace);
     const capMat = kit.std({ color: capCol, roughness: 0.8 });
     const { cap, roots } = once(`${key}:cap`, () => capGeometry(g, who, loose, !!o.crop));
     hair.push(part(cap, capMat, head));
@@ -256,8 +269,9 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     // (the locks draw from `rng` before the beard's tufts do: both are made in the head's first build, in this order)
     const locks = once(`${key}:locks`, () => {
       const made: THREE.BufferGeometry[] = [];
-      const lay = loose ? looseLocks : sweptLocks;
-      lay(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0);
+      if (loose) looseLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0);
+      else if (o.hair === 'short') shortLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0);
+      else sweptLocks(surface, rng, skullC, made, F, L.hairDrop ?? 0, L.templeDrop ?? 0, o.hair === 'mane');
       const merged = mergeGeometries(made)!;
       for (const x of made) x.dispose();
       return merged;
@@ -296,7 +310,16 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     depths.set(y, z);
     return z;
   };
-  return { group: head, face, eyes, surface, midZ, hair, crop, beards };
+  // (from the brow down to the chin, deeper towards the sides, as a recess is: full to below the eyes and gone above
+  // the cheeks, it read as a mask's stripe)
+  const full = toGroup(0, EYE.y + 5, 0).y, gone = toGroup(0, EYE.y - 115, 0).y;
+  // (the face, the hair and the beard: not what hangs from the head, as a hood, its wool shaded above the eye line)
+  const shade = (depth: number) => head.traverse((o) => {
+    if (o.userData.hoodPart) return;
+    const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+    (m?.userData.shade as { value: THREE.Vector4 } | undefined)?.value.set(depth, full, gone, 6);
+  });
+  return { group: head, face, eyes, surface, midZ, hair, crop, beards, shade };
 }
 
 /** The hair's cap over the scalp, on the skin's grid (`loose` or swept), and the grid points the crop's tufts root on
@@ -648,8 +671,10 @@ function looseLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
  * field). (Fewer locks standing well off a cap of combed fur read as a wig; and hung straight down from where they left the
  * head, all ending about the jaw, they made a bob over the ears.)
  */
-function sweptLocks(surface: Head['surface'], rng: () => number, skullC: THREE.Vector3, out: THREE.BufferGeometry[], F: FaceShape, drop: number, temple: number): void {
-  const n = lod(400, 120), V = THREE.Vector3;
+function sweptLocks(surface: Head['surface'], rng: () => number, skullC: THREE.Vector3, out: THREE.BufferGeometry[], F: FaceShape, drop: number, temple: number, mane = false): void {
+  // (`mane`: the locks run on past the nape to the collar and behind the ears down the neck, stand fuller off the head and
+  // wave more along their length, as the mage's sheet's: swept to the nape, his read as a slick black helmet)
+  const n = lod(mane ? 480 : 400, 120), V = THREE.Vector3, fall = mane ? 1 : 0;
   const { dirOf, hairEl, clear, pushOut } = hairTools(surface, F, drop, temple), q = new V();
   const d0 = new V(), d1 = new V(), d = new V(), pts: THREE.Vector3[] = [];
   const slerp = (A: THREE.Vector3, B: THREE.Vector3, t: number) => {
@@ -662,37 +687,40 @@ function sweptLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
     let az0: number, el0: number, az1: number, el1: number, top: number, w: number;
     if (kind < 0.3) {
       // from along the front of the hairline straight back over the top to the nape (rooted on it: no lock's end shows there)
-      az0 = (rng() - 0.5) * 1.7; el0 = hairEl(az0) + 0.015;
-      az1 = (Math.sign(az0) || s) * (Math.PI - 0.1 - 0.35 * Math.abs(az0) - 0.2 * rng()); el1 = -0.12 - rng() * 0.12;
-      top = 5 + rng() * 3; w = 16 + rng() * 8;
+      az0 = (rng() - 0.5) * 1.7 * (mane ? 0.35 + 0.65 * rng() : 1); el0 = hairEl(az0) + 0.015;
+      // (a mane's cross the middle to either side, as hair combed straight back does: each kept to its own side, the two
+      // halves parted down the middle)
+      az1 = (mane ? s : Math.sign(az0) || s) * (Math.PI - 0.1 - 0.35 * Math.abs(az0) - 0.2 * rng()); el1 = -0.12 - rng() * 0.12 - fall * (0.08 + rng() * 0.08);
+      top = 5 + rng() * 3 + fall * 9; w = 16 + rng() * 8;
     } else if (kind < 0.5) {
       // the temples, back round above the ears to behind them
       az0 = s * (0.85 + rng() * 0.6); el0 = hairEl(az0) + 0.015;
-      az1 = s * (2.05 + rng() * 0.45); el1 = 0.02 + rng() * 0.2;
-      top = 4 + rng() * 3; w = 14 + rng() * 7;
+      az1 = s * (2.05 + rng() * 0.45 + fall * 0.35); el1 = 0.02 + rng() * 0.2;
+      top = 4 + rng() * 3 + fall * 3; w = 14 + rng() * 7;
     } else if (kind < 0.75) {
       // the crown, behind the hairline, straight back over it to the nape
       az0 = (rng() - 0.5) * 1.4; el0 = hairEl(az0) + 0.15 + rng() * 0.45;
-      az1 = (Math.sign(az0) || s) * (Math.PI - 0.05 - 0.45 * rng()); el1 = -0.16 - rng() * 0.1;
-      top = 8 + rng() * 4; w = 18 + rng() * 9;
+      az1 = (mane ? s : Math.sign(az0) || s) * (Math.PI - 0.05 - 0.45 * rng()); el1 = -0.16 - rng() * 0.1 - fall * (0.08 + rng() * 0.08);
+      top = 8 + rng() * 4 + fall * 10; w = 18 + rng() * 9;
     } else {
       // the back of the head, down to the nape (the deeper layers)
       az0 = s * (1.6 + rng() * 1.5); el0 = 0.4 + rng() * 0.55;
-      az1 = s * Math.min(Math.PI, Math.abs(az0) + rng() * 0.25); el1 = -0.2 - rng() * 0.1;
-      top = 6 + rng() * 4; w = 18 + rng() * 9;
+      az1 = s * Math.min(Math.PI, Math.abs(az0) + rng() * 0.25); el1 = -0.2 - rng() * 0.1 - fall * (0.06 + rng() * 0.08);
+      top = 6 + rng() * 4 + fall * 4; w = 18 + rng() * 9;
     }
     pts.length = 0;
-    const N = 12;
+    const N = mane ? 16 : 12, wave = mane ? 2.4 : 1;
     dirOf(az0, el0, d0); dirOf(az1, el1, d1);
     for (let k = 0; k <= N; k++) {
       // (along the great circle between the two: combed, a gentle wave across it and in and out; settling onto the neck
       // at its end, the tip flicking out)
       const t = k / N;
       slerp(d0, d1, t);
-      const az = Math.atan2(d.x, d.z) + 0.03 * Math.sin(ph + t * Math.PI * 2) * sm(0.2, 0.6, t), el = Math.asin(clamp(d.y, -1, 1));
-      const lift = lerp(1, top + layer * 2.5, sm(0, 0.4, t)) * (1 - 0.65 * sm(0.75, 1, t)) + 1.5 * Math.sin(ph * 1.3 + t * Math.PI * 2) * sm(0.25, 0.6, t) + (4 + 3 * rng()) * sm(0.9, 1, t);
+      const az = Math.atan2(d.x, d.z) + 0.03 * wave * Math.sin(ph + t * Math.PI * 2 * wave) * sm(0.2, 0.6, t), el = Math.asin(clamp(d.y, -1, 1));
+      const lift = lerp(1, top + layer * 2.5, sm(0, 0.4, t)) * (1 - 0.65 * sm(0.75, 1, t)) + 1.5 * wave * Math.sin(ph * 1.3 + t * Math.PI * 2 * wave) * sm(0.25, 0.6, t) + (4 + 3 * rng()) * (1 + fall * 0.6) * sm(0.9, 1, t);
       pts.push(surface(az, el, lift));
     }
+    if (mane) hang(pts, skullC, ph);
     for (let k = 2; k <= N; k++) pushOut(pts[k], 1.5 + layer * 1.8);
     // (smoothed once: a point pushed out on its own would kink the lock)
     for (let k = 1; k < pts.length - 1; k++) pts[k].lerp(new V().addVectors(pts[k - 1], pts[k + 1]).multiplyScalar(0.5), 0.3);
@@ -705,7 +733,104 @@ function sweptLocks(surface: Head['surface'], rng: () => number, skullC: THREE.V
     // of it, narrowing and fading, was the back of the head, and the hair seemed to stop at the crown's back)
     const vAt = (t: number) => (t < 0.88 ? 0.7 * t / 0.88 : 0.7 + 0.3 * (t - 0.88) / 0.12);
     // (narrow at the root, so its end never shows as a block)
-    out.push(hairCard(pts, (t) => wm * (0.35 + 0.65 * sm(0, 0.1, t)) * (1 - 0.4 * t ** 2), skullC, lod(40, 12), (rng() - 0.5) * 0.6, shade, undefined, vAt));
+    const card = hairCard(pts, (t) => wm * (0.35 + 0.65 * sm(0, 0.1, t)) * (1 - 0.4 * t ** 2), skullC, lod(40, 12), (rng() - 0.5) * 0.6, shade, undefined, vAt);
+    if (mane) massNormals(card, skullC);
+    out.push(card);
+  }
+}
+
+/** Hair cut short (`short`, the mage's: the battle scholar's sheet): short locks rooted all over the top and the upper sides,
+ *  longer on top and close at the sides (sdf-harness's short groom, `groomHair`: lengths by where they root), standing off
+ *  the scalp on top and tousled, each running back over the head turned a random way from the comb's line, its tip lifting;
+ *  `crop`'s tufts cover the back and the sides below them. Lit by the hair's mass (`massNormals`). */
+function shortLocks(surface: Head['surface'], rng: () => number, skullC: THREE.Vector3, out: THREE.BufferGeometry[], F: FaceShape, drop: number, temple: number): void {
+  const n = lod(720, 180), V = THREE.Vector3, N = 9;
+  const { dirOf, hairEl, clear, pushOut } = hairTools(surface, F, drop, temple), q = new V();
+  const r = new V(), flow = new V(), end = new V(), d = new V(), pts: THREE.Vector3[] = [];
+  const slerp = (A: THREE.Vector3, B: THREE.Vector3, t: number) => {
+    const ang = A.angleTo(B), a = ang > 1e-4 ? Math.sin((1 - t) * ang) / Math.sin(ang) : 1 - t, b = ang > 1e-4 ? Math.sin(t * ang) / Math.sin(ang) : t;
+    return d.copy(A).multiplyScalar(a).addScaledVector(B, b).normalize();
+  };
+  for (let i = 0; i < n; i++) {
+    const layer = i % 3, ph = rng() * Math.PI * 2, tone = 0.72 + rng() * 0.45;
+    // (rooted anywhere from the hairline up, more of them towards the top, where the hair is longest)
+    const az0 = (rng() * 2 - 1) * Math.PI, e0 = hairEl(az0) + 0.01, el0 = lerp(e0, 1.5, Math.sqrt(rng()));
+    const topness = sm(0.55, 1.25, el0) * (1 - 0.5 * sm(2.2, 3, Math.abs(az0)));
+    dirOf(az0, el0, r);
+    // the comb's line: back over the head and down at the sides; along the front of the hairline forward instead, falling
+    // over the forehead and swept to his right, as the sheet's (combed back, it read as slicked); turned a random way from
+    // it (tousled), the crown's every way
+    const fringe = sm(1.2, 0.4, Math.abs(az0)) * sm(0.45, 0.1, el0 - e0) * (rng() < 0.7 ? 1 : 0);
+    flow.set(-0.45 * fringe, -0.35 * (1 - topness) - 0.5 * fringe, lerp(-1, 1, fringe));
+    flow.addScaledVector(r, -r.dot(flow)).normalize();
+    const crown = sm(1.0, 1.35, el0);
+    flow.applyAxisAngle(r, (rng() - 0.5) * (0.6 + 1.2 * topness + 2.5 * crown) * (1 - 0.6 * fringe));
+    // its length (mm): 18 to 30 at the sides, 40 to 65 on top; as an angle round the skull
+    const R = surface(az0, el0, 0).distanceTo(skullC) / HEAD_MM, len = lerp(26, 56, topness) + rng() * lerp(14, 30, topness);
+    const ang = len / R;
+    end.copy(r).multiplyScalar(Math.cos(ang)).addScaledVector(flow, Math.sin(ang)).normalize();
+    const top = 7 + 20 * topness + rng() * 7;
+    pts.length = 0;
+    for (let k = 0; k <= N; k++) {
+      const t = k / N;
+      slerp(r, end, t);
+      const az = Math.atan2(d.x, d.z), el = Math.asin(clamp(d.y, -1, 1));
+      // (standing up off the root, lying along the head, the tip lifting off it again on top)
+      const lift = lerp(1, top * (1 - 0.6 * fringe) + layer * 2, sm(0, 0.35, t)) * (1 - (0.3 + 0.6 * fringe) * sm(0.6, 1, t)) + 5 * topness * (1 - fringe) * sm(0.7, 1, t) + 1.2 * Math.sin(ph + t * 5);
+      pts.push(surface(az, el, lift));
+    }
+    for (let k = 2; k <= N; k++) pushOut(pts[k], 1.2 + layer * 1.5);
+    for (let k = 1; k < pts.length - 1; k++) pts[k].lerp(new V().addVectors(pts[k - 1], pts[k + 1]).multiplyScalar(0.5), 0.3);
+    // (each lock its own shade: darker at the root, in the deeper layers and where it lies close to the head)
+    const occ = pts.map((p) => { toFace(p, q); return 0.6 + 0.4 * sm(2, 20, clear(q.x, q.y, q.z)); });
+    const occAt = (t: number) => { const f = t * (occ.length - 1), j = Math.min(occ.length - 2, Math.floor(f)); return lerp(occ[j], occ[j + 1], f - j); };
+    const shade = (t: number) => tone * (0.68 + 0.32 * sm(0, 0.3, t)) * (0.82 + 0.08 * layer) * occAt(t);
+    const wm = (12 + rng() * 8 + 6 * topness) * HEAD_MM;
+    const vAt = (t: number) => (t < 0.8 ? 0.7 * t / 0.8 : 0.7 + 0.3 * (t - 0.8) / 0.2);
+    const card = hairCard(pts, (t) => wm * (0.4 + 0.6 * sm(0, 0.15, t)) * (1 - 0.55 * t ** 2), skullC, lod(14, 6), (rng() - 0.5) * 0.8, shade, undefined, vAt);
+    massNormals(card, skullC);
+    out.push(card);
+  }
+}
+
+/** where a long lock ends (mm, the head's frame: the chin is about -60): at the collar behind, give or take `HANG_SPREAD` */
+const HANG_END = -32, HANG_SPREAD = 24;
+
+/** A long lock past the back of the skull hanging by its weight (sdf-harness's `grow`): from where it turns under the
+ *  skull's widest, straight down to the collar, a little out from the head and waving across (along the scalp it curled
+ *  in under the skull and ended at the ear lobes in a bowl; laid to a point far down the neck, it fell to the shoulders). */
+function hang(pts: THREE.Vector3[], centre: THREE.Vector3, phase: number): void {
+  const d = new THREE.Vector3();
+  // (only behind the ears: a lock over the side of the head hanging straight down fell over the face)
+  const from = pts.findIndex((p, k) => k > 2 && d.subVectors(p, centre).normalize().y < -0.3 && d.z < -0.35);
+  const end = (HANG_END + HANG_SPREAD * Math.sin(phase * 3.7)) * HEAD_MM;
+  if (from < 0) {
+    // (a lock that stays on the side of the head is kept above the collar too)
+    for (const p of pts) if (p.y < end) p.y = end - (end - p.y) * 0.15;
+    return;
+  }
+  const base = pts[from].clone(), out = d.subVectors(base, centre).setY(0).normalize(), side = new THREE.Vector3(-out.z, 0, out.x);
+  const drop = Math.max(0.01, base.y - end), n = pts.length - 1 - from;
+  for (let k = from + 1; k < pts.length; k++) {
+    const t = (k - from) / n, fall = drop * t;
+    // (its end flicking out off the neck, as the sheet's ends curl)
+    const flick = drop * 0.35 * Math.max(0, t - 0.7) ** 2 / 0.09;
+    pts[k].copy(base).addScaledVector(out, fall * 0.18 + flick).addScaledVector(side, 0.008 * Math.sin(phase + t * 9)).setY(base.y - fall + flick * 0.4);
+  }
+}
+
+/** A card lit as the hair's mass is (sdf-harness's strands): its normals turned most of the way to point out from the head's
+ *  middle, so the side of the hair away from the light falls into shade as a whole; lit by the flat card's own, each lock
+ *  caught the light on its own and the long hair read as overlapping shingles. */
+function massNormals(card: THREE.BufferGeometry, centre: THREE.Vector3, share = 0.75): void {
+  const p = card.attributes.position, n = card.attributes.normal, o = new THREE.Vector3(), f = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    o.set(p.getX(i), p.getY(i), p.getZ(i)).sub(centre).normalize();
+    f.set(n.getX(i), n.getY(i), n.getZ(i));
+    // (the card's face turned to the mass's side first: a twisted card's normal may point into the head)
+    if (f.dot(o) < 0) f.negate();
+    f.lerp(o, share).normalize();
+    n.setXYZ(i, f.x, f.y, f.z);
   }
 }
 
@@ -729,14 +854,18 @@ function radiusAt(g: HeadGrid, az: number, el: number): number {
 
 /** the ear's outline round the middle of its bowl (degrees round from forward, towards the top: mm) */
 const EAR_OUTLINE: [number, number][] = [[0, 12], [45, 16], [70, 24], [92, 33], [118, 31], [145, 26], [182, 21], [220, 21], [250, 26], [272, 29], [298, 23], [326, 15], [360, 12]];
-function earR(deg: number): number {
+// (a rounder top, the helix one C from front to back: the outline above came to a point at its top)
+const EAR_ROUND: [number, number][] = [[0, 14], [45, 21], [70, 27], [95, 30], [120, 30], [150, 28], [185, 24], [220, 23], [250, 26], [275, 27], [300, 24], [330, 17], [360, 14]];
+function outlineR(table: [number, number][], deg: number): number {
   const a = ((deg % 360) + 360) % 360;
-  for (let i = 1; i < EAR_OUTLINE.length; i++) {
-    const [a1, r1] = EAR_OUTLINE[i];
-    if (a <= a1) { const [a0, r0] = EAR_OUTLINE[i - 1], t = (a - a0) / (a1 - a0); return lerp(r0, r1, t * t * (3 - 2 * t)); }
+  for (let i = 1; i < table.length; i++) {
+    const [a1, r1] = table[i];
+    if (a <= a1) { const [a0, r0] = table[i - 1], t = (a - a0) / (a1 - a0); return lerp(r0, r1, t * t * (3 - 2 * t)); }
   }
-  return EAR_OUTLINE[0][1];
+  return table[0][1];
 }
+/** the ear's outline's radius (mm) at `deg`, rounder at its top by `round` (0 to 1) */
+const earR = (deg: number, round = 0): number => lerp(outlineR(EAR_OUTLINE, deg), outlineR(EAR_ROUND, deg), round);
 /** a bump rising from 0 at a to 1 halfway and back to 0 at b */
 const bump = (x: number, a: number, b: number): number => (x <= a || x >= b ? 0 : Math.sin(((x - a) / (b - a)) * Math.PI));
 /** 1 inside the angular window [a, b] (degrees), easing over `e` */
@@ -746,40 +875,81 @@ const win = (deg: number, a: number, b: number, e = 20): number => {
 };
 
 /**
+ * Where an ear's point (v up, u forward of the ear canal, mm) sits out from the middle: flat at the side of the head at
+ * the canal (`sx`), or, with `earIn` set, on the side of the head under it: a flat ear's back half sank into a fuller
+ * back of the skull, its front edge stood off where the head narrows before the canal (the mage). The head's side is
+ * found on a grid over the ear.
+ */
+function earSeat(F: FaceShape, sx: number): (v: number, u: number) => number {
+  if (F.earIn === undefined) return () => sx;
+  const U0 = -50, V0 = -45, STEP = 2.5, NU = 33, NV = 37, grid: number[] = [];
+  for (let j = 0; j < NV; j++) for (let i = 0; i < NU; i++) {
+    const y = 97 + V0 + j * STEP, z = U0 + i * STEP;
+    let x = 30;
+    while (x < 90 && headSDF(x, y, z, F) < 0) x += 1;
+    let lo = x - 1, hi = x;
+    for (let k = 0; k < 6; k++) {
+      const m = (lo + hi) / 2;
+      if (headSDF(m, y, z, F) < 0) lo = m;
+      else hi = m;
+    }
+    grid.push(lo);
+  }
+  return (v, u) => {
+    const fi = clamp((u - U0) / STEP, 0, NU - 1.001), fj = clamp((v - V0) / STEP, 0, NV - 1.001);
+    const i = Math.floor(fi), j = Math.floor(fj), a = fi - i, b = fj - j, at = (ii: number, jj: number) => grid[jj * NU + ii];
+    return lerp(lerp(at(i, j), at(i + 1, j), a), lerp(at(i, j + 1), at(i + 1, j + 1), a), b);
+  };
+}
+
+/**
  * An ear (ANSUR II: 64 mm long, 36 wide): a rolled rim (the helix) round a shallow groove, a ridge
  * inside it, a deep bowl leading to the ear canal with the small flap in front of it, a soft lobe.
  * Built in the ear's own frame (u forward, v up, the relief out from the head), set on the side of the
  * head at the ear canal, its top tilted back and its back edge standing off the head.
  */
 function earGeometry(s: number, F: FaceShape, ao = 0): THREE.BufferGeometry {
-  const nt = lod(40, 20), nr = lod(12, 6), thick = 3.4;
+  const rd = F.earRound ?? 0, sc = F.earScale ?? 1;
+  // (more rings for a rim rolled round, more steps round a rounded outline: over one its edge was a step, round 40 a
+  // polygon)
+  const nt = rd ? lod(64, 28) : lod(40, 20), nr = rd ? lod(18, 8) : lod(12, 6), thick = F.earThick ?? 3.4;
   // the side of the head at the ear canal
   let sx = 40;
   while (sx < 90 && headSDF(sx, 97, 0, F) < 0) sx += 0.5;
-  const tilt = 0.26, flare = F.earFlare ?? 0.5, cu = -8, cv = 3;
-  const place = (u: number, v: number, h: number, out: THREE.Vector3) => {
+  const tilt = 0.26, flare = F.earFlare ?? 0.5, cu = -8 * sc, cv = 3 * sc;
+  const seat = earSeat(F, sx);
+  // (`floor`: the least a point stands off the head's skin, mm: a rounded ear's bowl sank into the head, the skin
+  // showing through as a hole)
+  const place = (u: number, v: number, h: number, out: THREE.Vector3, floor = -Infinity) => {
     // tilt the ear back, then flare it out from the head about its front edge
     const u1 = u * Math.cos(tilt) - v * Math.sin(tilt), v1 = u * Math.sin(tilt) + v * Math.cos(tilt);
     const back = Math.max(0, -u1);
     const out1 = h + back * Math.sin(flare), u2 = u1 + (u1 < 0 ? back * (1 - Math.cos(flare)) : 0);
-    return toGroup(s * (sx + 4 + out1), 97 + v1, u2, out);
+    // (a seated ear's front edge, the rim's root and the flap before the canal, grows out of the cheek: sunk into it)
+    const root = F.earIn === undefined ? 0 : 4 * sm(-2, 10, u2);
+    return toGroup(s * (seat(v1, u2) + Math.max(floor, 4 - (F.earIn ?? 0) - root + out1)), 97 + v1, u2, out);
   };
   const front: number[] = [], backP: number[] = [], v = new THREE.Vector3(), cf: number[] = [], cb: number[] = [];
   for (let j = 0; j <= nr; j++) {
     const rho = j / nr;
     for (let i = 0; i <= nt; i++) {
-      const deg = (i / nt) * 360, a = deg * Math.PI / 180, R = earR(deg) * rho;
+      const deg = (i / nt) * 360, a = deg * Math.PI / 180, R = earR(deg, rd) * rho * sc;
       const lobe = win(deg, 245, 305, 25), tragus = win(deg, 330, 30, 18), back = win(deg, 80, 250, 30);
       // relief: the rolled rim, the groove inside it, the ridge, the bowl, the flap before the canal
-      let h = 3.3 * bump(rho, 0.76, 1.08) * (1 - lobe) + 0.6 * bump(rho, 0.62, 0.8);
-      h += 2.6 * bump(rho, 0.44, 0.7) * (0.35 + 0.65 * back) * (1 - lobe);
+      // (a rounded ear's rim a C, open at the front where it runs down into the bowl; the ridge inside it at the back;
+      // a shallower bowl: rings all round and a 7.5 mm bowl read as a target with a hole in it)
+      const open = rd * win(deg, 300, 40, 30);
+      let h = 3.3 * bump(rho, 0.76, 1.08) * (1 - lobe) * (1 - 0.75 * open) + 0.6 * bump(rho, 0.62, 0.8) * (1 - rd);
+      h += 2.6 * bump(rho, 0.44, 0.7) * (0.35 * (1 - rd) + 0.65 * back) * (1 - lobe);
       h += 2.4 * bump(rho, 0.4, 0.7) * win(deg, 215, 250, 12);
-      h -= 7.5 * Math.max(0, 1 - rho / 0.5) ** 1.4 * (1 + 0.25 * win(deg, 330, 30, 30));
+      h -= (7.5 - 2.5 * rd) * Math.max(0, 1 - rho / 0.5) ** 1.4 * (1 + 0.25 * win(deg, 330, 30, 30));
       h += 3.4 * bump(rho, 0.5, 1.02) * tragus;
       h += 1.2 * lobe * sm(0.3, 0.8, rho);
-      const u = cu + Math.cos(a) * R, vv = cv + Math.sin(a) * R;
-      place(u, vv, h, v); front.push(v.x, v.y, v.z);
-      place(u, vv, h - thick * (1 + 0.6 * lobe), v); backP.push(v.x, v.y, v.z);
+      const u = cu + Math.cos(a) * R, vv = cv + Math.sin(a) * R, th = thick * (1 + 0.6 * lobe);
+      // (a rolled rim: the front and the back curling round to meet at the outer edge, not a flat band between them)
+      const roll = rd * sm(0.86, 1, rho) ** 1.5 * th * 0.45;
+      place(u, vv, h - roll, v, rd ? 1 : -Infinity); front.push(v.x, v.y, v.z);
+      place(u, vv, h - th + roll, v); backP.push(v.x, v.y, v.z);
       // (occlusion: deep in the bowl, the back against the head; all of it in the hair's shade, the top most)
       const k = ao ? 1 - (0.55 + 0.1 * sm(-10, 25, vv) + 0.2 * sm(0, -6, h)) : 1, kb = k * (1 - 0.45 * ao);
       cf.push(k ** 0.8, k, k ** 1.05); cb.push(kb ** 0.8, kb, kb ** 1.05);
@@ -808,13 +978,56 @@ function earGeometry(s: number, F: FaceShape, ao = 0): THREE.BufferGeometry {
 
 // --- hair ----------------------------------------------------------------------------------------
 
-const strandTex = new Map<boolean, THREE.CanvasTexture>();
+const strandTex = new Map<boolean, THREE.DataTexture>();
 /**
  * A lock of hair for the hair cards: fine strands running down the texture (v along the lock), each its own shade,
  * thinning towards the card's sides and its tip, on transparency. `dense`: a clump, solid in its middle (its strands
  * shown by their shades), its edges and tip ragged: thick hair rather than a few strings.
  */
-function strandMap(dense = false): THREE.CanvasTexture {
+/**
+ * A thin two-sided material lit on both sides as its front: a hair card is a lock of strands, not a sheet with an
+ * inside, but three turns a back face's normal over, into the head, and seen from behind (along the hair's outline)
+ * it shaded near black against the sky. Its own program, compiled with the rest at the boot's warm-up.
+ */
+function bothSidesOut(m: THREE.Material): void {
+  const base = m.onBeforeCompile.bind(m), key = m.customProgramCacheKey.bind(m);
+  m.onBeforeCompile = (shader, renderer) => {
+    base(shader, renderer);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>',
+      THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', ''));
+  };
+  m.customProgramCacheKey = () => key() + '-bothsides';
+}
+
+/**
+ * A cut-out map from a canvas, its see-through pixels given its strands' mean colour (alpha kept): cleared to
+ * transparent black, the filtering and the mipmaps blended that black into every edge the alpha test keeps, a dark
+ * outline round the hair against a bright sky. (A canvas is stored premultiplied, so the colour is set in the pixels
+ * read back, and the map made from them; rows turned over as a canvas texture's are.)
+ */
+function bledMap(c: CanvasRenderingContext2D, W: number, H: number): THREE.DataTexture {
+  const src = c.getImageData(0, 0, W, H).data, d = new Uint8Array(W * H * 4);
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let i = 0; i < src.length; i += 4) {
+    const a = src[i + 3] / 255;
+    r += src[i] * a; g += src[i + 1] * a; b += src[i + 2] * a; n += a;
+  }
+  if (n > 0) { r /= n; g /= n; b /= n; }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4, o = ((H - 1 - y) * W + x) * 4;
+    // (a faint pixel's own colour is too coarse to keep: blended towards the mean as it fades out)
+    const k = Math.min(1, src[i + 3] / 128);
+    d[o] = src[i] * k + r * (1 - k); d[o + 1] = src[i + 1] * k + g * (1 - k); d[o + 2] = src[i + 2] * k + b * (1 - k);
+    d[o + 3] = src[i + 3];
+  }
+  const t = new THREE.DataTexture(d, W, H, THREE.RGBAFormat);
+  t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  t.needsUpdate = true;
+  return t;
+}
+
+function strandMap(dense = false): THREE.DataTexture {
   const hit = strandTex.get(dense);
   if (hit) return hit;
   const W = 128, H = 512, cv = document.createElement('canvas');
@@ -855,7 +1068,7 @@ function strandMap(dense = false): THREE.CanvasTexture {
   const g = c.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(dense ? 0.75 : 0.65, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
   c.fillStyle = g; c.fillRect(0, 0, W, H);
-  const t = new THREE.CanvasTexture(cv);
+  const t = bledMap(c, W, H);
   t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   strandTex.set(dense, t);
   return t;
@@ -907,7 +1120,7 @@ export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     let rx = lerp(66, (F.neckW ?? 54) + 3, sm(0, 1, t)), rz = lerp(62, 52, sm(0, 1, t)), cz = lerp(-2, -13, t);
     if (C) {
       // a column neck: the head's own column's section all the way up, flaring only at its base inside the clothes
-      const fl = 5 * sm(-60, -95, yf);
+      const fl = 5 * sm(-60, -95, yf) + (F.neckFlare ?? 0) * sm(-35, -110, yf) ** 1.5;
       rx = C[0] + fl; rz = C[1] + fl * 0.8; cz = (F.neckBack ?? -8) - ORIGIN.z;
     }
     for (let i = 0; i <= segs; i++) {

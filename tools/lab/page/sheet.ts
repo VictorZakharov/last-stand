@@ -13,6 +13,7 @@ import { groundHeight } from '../../../src/world/ground';
 import { describeParts, type Look } from './looks';
 import { viewMode } from '../../../src/core/renderer';
 import { describeFramed, framed, type Framed } from './inFrame';
+import { describeDrink } from './drink';
 
 /** One pictured moment: its tiles and the notes read beside them. */
 export interface Moment {
@@ -187,8 +188,8 @@ export async function sheet(lab: Lab, options: SheetOptions): Promise<Sheet> {
   return { setup, moments };
 }
 
-/** What to read beside the pictures: each arm's load and posture, how the bow is carried, and through the eyes how
- *  the weapon is framed. */
+/** What to read beside the pictures: each arm's load and posture, how the bow is carried, the draught's flask at the
+ *  lips, and through the eyes how the weapon is framed. */
 function notesOn(lab: Lab, seen?: Framed): string[] {
   const held = HELD[lab.player.cls.id] ?? {};
   const notes: string[] = [];
@@ -202,6 +203,8 @@ function notesOn(lab: Lab, seen?: Framed): string[] {
   if (bow) notes.push(describeBow(lab, bow));
   const weapon = describeWeapon(lab);
   if (weapon) notes.push(weapon);
+  const drink = describeDrink(lab);
+  if (drink) notes.push(drink);
   // (through the eyes, the weapon as the frame shows it: what a rest is matched to a reference's screenshots by)
   if (seen) notes.push(describeFramed(seen));
   return notes;

@@ -87,7 +87,16 @@ where you like and pass its path. Any front view of a face works, a full-body sh
    rebuild once by hand with a box round the face (`.venv/Scripts/python recon.py <prefix>recon front=<prefix>front.png
    34=<prefix>34.png side=<prefix>side.png:x0,y0,x1,y1`; the harness reuses it while it is newer than the pictures),
    and the turnaround then compares the three-quarter view and skips the side. Under a hat (`--helm`) the reference's
-   hair top isn't measured.
+   hair top isn't measured. A side view facing the picture's right is mirrored first (`views.py`: the profile is read
+   from the picture's left). Views made one at a time rather than cropped from one sheet (Codex's clay turnaround) are
+   only roughly at one scale; a side known to be a true profile is compared with ours at 90 degrees by `--side-az 90`
+   (the rebuild fitted Codex's at 70).
+   **The head's side outline** (`outline.py`, with `--turn`): no landmarks (MediaPipe places a strict profile's eye
+   badly), the whole silhouette instead: both heads cut out (the reference by its warmth against a grey or bluish
+   background), scaled to one height from the crown to the nose's tip and laid over at the tip, and at each height how
+   far forward and back each reaches. The skull's length and height, the forehead, the back of the head, the nape and
+   the jaw's underside read here. `sheet-outline-side.png` overlays them, `sheet-side-clay.png` sets the two clay views
+   side by side at that layout.
 7. **The surface** (with `--turn`; `recon.py`, `dense.py`): outlines and a few points leave the surface between them
    free, and a face sculpted to match them alone came out with flat fronts, puffed cheeks, a shelf of a brow and
    grooves. So the reference is rebuilt in 3D the way face reconstruction is done: a statistical model of real faces
@@ -166,6 +175,8 @@ where you like and pass its path. Any front view of a face works, a full-body sh
 - `sheet-sides.png`: the face's sides as each picture shows them.
 - `sheet-points.png` (with `--points`): the reference's hand-placed points green, ours red.
 - `sheet-turn.png` (with `--turn`): the three-quarter and side views and their outlines.
+- `sheet-outline-side.png`, `sheet-side-clay.png` (with `--turn`): the side outlines over each other, and both clay
+  side views at the same scale.
 - `sheet-dense.png` (with `--turn`): ours against the rebuilt reference, against the real face nearest it, and our
   skin's curvature, each from the front and the reference's turns; `fit-target.f32` / `.json`, the fitter's target.
 - `beard-front-N.png`, `beard-side-N.png` (a hero with a beard): its masks over each body (skin, painted beard, cards,
