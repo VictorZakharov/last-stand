@@ -662,13 +662,13 @@ export function buildMage(): Model {
     const RIM = { brow: 0.06, cheekAhead: 0.04, cheekOut: 0.08, jawOut: 0.05 };
     // how far out it's laid round the head (mm): its sides by the face, at the seam behind, how much more it swells
     // between them, and its top seam over the crown (and how much higher in the middle)
-    const LAY = { side: 95, back: 55, swell: 20, crest: 50, crestRise: 5 };
+    const LAY = { side: 95, back: 75, swell: 20, crest: 80, crestRise: 5 };
     const rim = new THREE.CatmullRomCurve3([
       new THREE.Vector3(0, browY + 0.05, browZ + RIM.brow),
       new THREE.Vector3(cheekWide + RIM.cheekOut * 0.9, (browY + cheekY) / 2 + 0.02, cheekZ + RIM.cheekAhead + 0.01),
       new THREE.Vector3(cheekWide + RIM.cheekOut, cheekY, cheekZ + RIM.cheekAhead),
       new THREE.Vector3(cheekWide + RIM.jawOut, chinY + 0.01, chinZ - 0.01),
-      new THREE.Vector3(0.03, chinY - 0.03, chinZ - 0.035),
+      new THREE.Vector3(0.06, chinY - 0.05, chinZ - 0.01),
     ], false, 'centripetal');
     const rimAt = new THREE.Vector3(), rimRound = new THREE.Vector3();
     // (`deep`: the hood laid out to its rim; 0, round the head alone, as the cut's widths are measured)
@@ -725,7 +725,7 @@ export function buildMage(): Model {
     // onto the head)
     const EASE = 1.05;
     const widths = Array.from({ length: neckRow + 1 }, (_, r) => measure((c) => [c / nu, r / nv], nu / 2, 1) * EASE);
-    const draft = draftHood({ front, top, bulge: 0, widths, neck: widths[neckRow], chin: 0, mantle: 0.16, hem: 0.78 }, nu, nv, neckRow);
+    const draft = draftHood({ front, top, bulge: 0, widths, neck: widths[neckRow], chin: 0, mantle: 0.175, hem: 0.78 }, nu, nv, neckRow);
     // its creases (m out along the cloth), after the references: the cloth gathered where it turns from the head onto the
     // shoulders into rolls running round the nape and the sides of the neck (round tops, sharp valleys between, wavering
     // a little and fading out at the face's edge), and the seam down the back where the halves are sewn. (Folds running
@@ -753,7 +753,7 @@ export function buildMage(): Model {
       length: draft.length, settle: { steps: 200, key: 'mage' },
       // (fastened at the throat over the collar: open, the capelet lay on the shoulders as a cone and drew the face's
       // edges out to them)
-      clasp: { rows: [neckRow], gap: 0.06 },
+      clasp: { rows: [neckRow], gap: 0.1 },
       // (gold piping round the face and the capelet's hem, as the coat's collar is edged)
       piping: { material: piping, radius: 0.004, from: 0 }, detail: 2, crease,
       bodies: [
@@ -763,8 +763,8 @@ export function buildMage(): Model {
         { joint: j.neck, y0: 0.08, y1: -0.02, rx: 0.07, rz: 0.07 },
         { joint: j.chest, y0: 0.33, y1: 0.24, rx: 0.11, rz: 0.11 },
         { joint: j.chest, y0: 0.24, y1: -0.05, rx: 0.185, rz: 0.17 },
-        { joint: j.chest, y0: sh.y - 0.05, y1: sh.y - 0.08, rx: 0.075, rz: 0.13, x: sh.x * 0.95 },
-        { joint: j.chest, y0: sh.y - 0.05, y1: sh.y - 0.08, rx: 0.075, rz: 0.13, x: -sh.x * 0.95 },
+        { joint: j.chest, y0: sh.y - 0.04, y1: sh.y - 0.08, rx: 0.09, rz: 0.14, x: sh.x * 0.95 },
+        { joint: j.chest, y0: sh.y - 0.04, y1: sh.y - 0.08, rx: 0.09, rz: 0.14, x: -sh.x * 0.95 },
       ],
     });
   }
