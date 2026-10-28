@@ -675,29 +675,8 @@ export function gridR(g: HeadGrid, fi: number, fj: number): number {
 
 // --- the painted skin ---------------------------------------------------------------------------
 
-/** How much of the light the jaw takes from the neck under it, at height `y` (mm, the face's frame) `ax` from the middle
- *  and `c` round the neck (the cosine from its front): the game's shadows are too coarse to show it (the neck in
- *  models/head.ts shades its own top the same way). Only under the jaw: nothing overhangs the back of the neck (shaded
- *  all round, the shadow's edge rising from the nape to the sides showed as a dark V from behind). */
-export function neckShade(ax: number, y: number, c = 1): number {
-  const jawY = 30 * Math.min(1, ax / 50) ** 1.5;
-  return 0.82 * sm(jawY + 8, jawY - 10, y) * (1 - 0.4 * sm(-50, -110, y)) * sm(-0.5, 0.2, c);
-}
-
 /** the plain skin's shade of the face's skin colour (the ears', the neck's: models/head.ts `plainSkin`) */
 export const PLAIN_SKIN = 0.97;
-/** The light a shade `ns` (neckShade) leaves on plain skin, a share of each channel in linear light: the jaw's shadow on
- *  the neck a warm brown, not red (models/head.ts `buildNeck` shades the neck's vertices with it). */
-export const shadedSkin = (ns: number): [number, number, number] => { const k = 1 - ns; return [k ** 0.8, k ** 0.95, k ** 1.2]; };
-const toLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-const toSRGB = (c: number) => (c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055);
-/** The rig's neck's own colour as the paint puts it (sRGB, 0-1): the plain skin under the shade `ns`, so a column neck's
- *  paint can meet it at the seam (painted as the face's shade, a multiple of the sRGB paint, it came out darker than
- *  the neck's, which shades in linear light, and the seam showed as a band: lab neck). */
-function plainNeck(L: FaceLook, ns: number): [number, number, number] {
-  const shade = shadedSkin(ns);
-  return [0, 1, 2].map((ch) => toSRGB(toLinear(L.skin[ch] * PLAIN_SKIN) * shade[ch])) as [number, number, number];
-}
 /** how far above a column neck's seam (mm) its paint has become the rig's neck's own colour */
 const NECK_PAINT = 12;
 
@@ -1104,15 +1083,10 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         hh += sc * s1 * 0.6; rr = lerp(rr, 0.75, sc);
       }
       if (aoAt) {
-        // (light that does reach a crease has gone through skin: it comes out redder; and the neck is in the jaw's shadow)
-        // (the jaw's shadow on the neck is a warm brown, not red)
-        const ns = neckShade(ax, yy, neckCos(ax, z, F)), k = 1 - L.ao! * (1 - aoAt(tx, ty)), shade = shadedSkin(ns);
+        // (light that reaches a crease has gone through skin and comes out redder; leave the neck to the lighting)
+        const neck = F.neckCol ? sm(0, 8, neckColumn(ax, yy, z, F)) : 1;
+        const k = 1 - L.ao! * neck * (1 - aoAt(tx, ty));
         c[0] *= k ** 0.75; c[1] *= k; c[2] *= k ** 1.15;
-        // (the jaw's shadow in linear light, as the rig's neck takes it: multiplied into the sRGB paint, it came out far
-        // darker than the neck's, a dark band down a column neck's front ending at its seam: lab neck)
-        for (let ch = 0; ch < 3; ch++) c[ch] = toSRGB(toLinear(c[ch]) * shade[ch]);
-        // (and no shine where it's shaded)
-        rr = lerp(rr, 0.92, ns / 0.82);
       }
       // (a column neck's skin as plain down to the seam as the rig's neck below it, its relief and sheen easing out: ending at
       // it, the face's pores, stretched down the neck by the grid's sparse rows there, showed as a crumpled band)
@@ -1120,7 +1094,7 @@ export function paintFace(F: FaceShape, L: FaceLook, g: HeadGrid, w: number, h: 
         const cz = neckCos(ax, z, F), s = neckSeam(cz), nk = sm(s, s + 40, yy), pk = sm(s, s + NECK_PAINT, yy);
         hh *= nk; rr = lerp(L.ao ? 0.88 : 0.6, rr, nk);
         // (and its colour the rig's neck's own by the seam)
-        if (pk < 1) { const n = plainNeck(L, L.ao ? neckShade(ax, yy, cz) : 0); for (let ch = 0; ch < 3; ch++) c[ch] = lerp(n[ch], c[ch], pk); }
+        if (pk < 1) for (let ch = 0; ch < 3; ch++) c[ch] = lerp(L.skin[ch] * PLAIN_SKIN, c[ch], pk);
       }
       albedo[i * 4] = clamp(c[0], 0, 1) * 255; albedo[i * 4 + 1] = clamp(c[1], 0, 1) * 255; albedo[i * 4 + 2] = clamp(c[2], 0, 1) * 255; albedo[i * 4 + 3] = 255;
       const rv = clamp(rr, 0.2, 0.95) * 255;
