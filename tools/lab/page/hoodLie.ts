@@ -13,16 +13,21 @@ import * as THREE from 'three';
 import type { Lab } from './lab';
 import { BakedBody, isUnder } from './geometry';
 
-/** where round him a point is: how far from his front about the chest's axis, either way (degrees), at most */
+/** the most the capelet may stand off him (cm): as a rule (its median), and at its tenth farthest; over the fronts
+ *  of his shoulders, closer: the reference's lies flat on them (lifted off the coat over the straps' tops and the
+ *  front of the shoulder, ours puffed out forward over them, "reference does not overhang over shoulder, ours does";
+ *  read with the rest of his shoulders, it passed) */
+const MOST_OFF = { typical: 2, far: 4 };
+const MOST_OFF_FORE = { typical: 1.2, far: 2.5 };
+/** where round him a point is: how far from his front about the chest's axis, either way (degrees), at most, and how
+ *  far the capelet may stand off him there */
 const REGIONS = [
-  { name: 'front', most: 45 },
-  { name: 'shoulders', most: 135 },
-  { name: 'back', most: 180 },
+  { name: 'front', most: 45, off: MOST_OFF },
+  { name: 'shoulders in front', most: 90, off: MOST_OFF_FORE },
+  { name: 'shoulders', most: 135, off: MOST_OFF },
+  { name: 'back', most: 180, off: MOST_OFF },
 ] as const;
 type Region = (typeof REGIONS)[number]['name'];
-
-/** the most the capelet may stand off him (cm): as a rule (its median), and at its tenth farthest */
-const MOST_OFF = { typical: 2, far: 4 };
 /** the deepest his body may come out through it (cm): what's read is the cloth's outside, so anything through it
  *  shows (at 3 mm, the coat's front of the shoulder stood 2 mm out through the capelet and passed, a patch of the coat
  *  on it in the parts look) */
@@ -102,7 +107,8 @@ interface Reading {
 
 function emptyLie(rows: number): Lie {
   const region = (): RegionLie => ({ points: [], bare: 0 });
-  return { regions: { front: region(), shoulders: region(), back: region() }, rows };
+  const regions = Object.fromEntries(REGIONS.map(({ name }) => [name, region()]));
+  return { regions: regions as Record<Region, RegionLie>, rows };
 }
 
 /** His body as drawn this frame, but what he holds and the hood. */
@@ -199,9 +205,8 @@ function readingOf(region: RegionLie): Reading | null {
 
 /** The lie as lines, a problem for each region standing off or come through past its limit. */
 export function lieLines(lie: Lie, problems: string[]): string[] {
-  const lines = [`the capelet on him, cm off his body (${MOST_OFF.typical} as a rule and ${MOST_OFF.far} at its tenth `
-    + `farthest at most; his body through it ${MOST_THROUGH} deep at most):`];
-  for (const { name } of REGIONS) {
+  const lines = [`the capelet on him, cm off his body (his body through it ${MOST_THROUGH} deep at most):`];
+  for (const { name, off } of REGIONS) {
     const region = lie.regions[name];
     const read = readingOf(region);
     if (!read) {
@@ -209,22 +214,23 @@ export function lieLines(lie: Lie, problems: string[]): string[] {
       continue;
     }
     const bare = region.bare ? `, ${region.bare} over nothing` : '';
-    lines.push(`  ${name}: ${read.typical.toFixed(1)} as a rule, ${read.far.toFixed(1)} at its tenth farthest, `
-      + `through it ${read.through.toFixed(1)} at worst (${region.points.length} points${bare})`);
-    problems.push(...regionProblems(name, read));
+    lines.push(`  ${name}: ${read.typical.toFixed(1)} as a rule (${off.typical} at most), ${read.far.toFixed(1)} at its `
+      + `tenth farthest (${off.far}), through it ${read.through.toFixed(1)} at worst (${region.points.length} `
+      + `points${bare})`);
+    problems.push(...regionProblems(name, off, read));
   }
   const overNone = REGIONS.every(({ name }) => !lie.regions[name].points.length);
   if (overNone) problems.push('hood: the capelet lies over none of him');
   return lines;
 }
 
-/** A region's problems: standing off him, or him come through it, past the limits. */
-function regionProblems(name: Region, read: Reading): string[] {
+/** A region's problems: standing off him past `off`, or him come through it. */
+function regionProblems(name: Region, off: { typical: number; far: number }, read: Reading): string[] {
   const problems: string[] = [];
-  if (read.typical > MOST_OFF.typical) {
+  if (read.typical > off.typical) {
     problems.push(`hood: the capelet stands ${read.typical.toFixed(1)} cm off his ${name}`);
   }
-  if (read.far > MOST_OFF.far) {
+  if (read.far > off.far) {
     problems.push(`hood: a tenth of the capelet stands ${read.far.toFixed(1)} cm off his ${name}`);
   }
   if (read.through > MOST_THROUGH) {

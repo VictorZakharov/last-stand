@@ -628,7 +628,7 @@ export function buildMage(): Model {
    *  cm off the coat; walking, their tops came through it behind at 1.8, and in front at 2 under the rim's foot drawn
    *  in round the collar), in front and crossing his back, bridging
    *  between them behind, over the crossing (two straps and the disc deep) and on the bare coat */
-  const HOOD_OVER_COAT = 0.023, HOOD_OVER_BACK = 0.022, HOOD_OVER_BETWEEN = 0.016, HOOD_OVER_CROSSING = 0.026, HOOD_OVER_BARE = 0.008;
+  const HOOD_OVER_COAT = 0.021, HOOD_OVER_BACK = 0.022, HOOD_OVER_BETWEEN = 0.016, HOOD_OVER_CROSSING = 0.026, HOOD_OVER_BARE = 0.008;
   /** how far from a strap's middle the capelet rides over it (m): its half width and a little more, and on out to the
    *  lift's foot; and how far round the crossing behind (held to the strap's edge alone, the cloth dropped onto it, and
    *  its top came 4 mm through the hood's front below the jaw: "cloth should not clip through hood") */
@@ -691,7 +691,7 @@ export function buildMage(): Model {
     // where it meets the capelet, round the neck on the shoulders' tops (a centimetre or two over the coat): at the
     // collar's sides in front, over the shoulders, standing off the nape behind, where its slack gathers in a roll on
     // the capelet (laid a centimetre off the nape, it was pulled in to the neck where the reference's hangs loose)
-    const ring = [chestAt(0.088, 0.262, 0.107), chestAt(0.205, 0.255, 0.065), chestAt(0.235, 0.25, 0), chestAt(0.16, 0.24, -0.095),
+    const ring = [chestAt(0.088, 0.262, 0.102), chestAt(0.205, 0.255, 0.065), chestAt(0.235, 0.25, 0), chestAt(0.16, 0.24, -0.095),
       chestAt(0, 0.288, -0.116)];
     // the hood's lines down from its top seam to the ring: its rim, its front quarter, its side (where it's widest, as the
     // front sees it), its back quarter and the seam down the back; the top seam their tops, from the rim's top at the
@@ -715,19 +715,19 @@ export function buildMage(): Model {
         inE(1.02, 0, -0.78), inE(1.17, -0.4, -0.8), inE(1.21, -0.7, -0.82), inE(1.04, -1, -0.8), ring[2]],
       [inE(0, 1.16, -1.12), inE(0.35, 1, -1.27), inE(0.58, 0.75, -1.43), inE(0.72, 0.4, -1.58), inE(0.8, 0, -1.65),
         inE(0.87, -0.4, -1.7), inE(0.91, -0.75, -1.8), inE(0.9, -1.05, -1.85), ring[3]],
-      [inE(0, 1.12, -1.25), inE(0, 0.8, -1.5), inE(0, 0.4, -1.76), inE(0, 0, -1.85), inE(0, -0.4, -1.84), inE(0, -0.8, -1.98),
-        inE(0, -1.05, -2.05), ring[4]],
+      [inE(0, 1.12, -1.25), inE(0, 0.8, -1.5), inE(0, 0.4, -1.76), inE(0, 0, -1.87), inE(0, -0.4, -1.92), inE(0, -0.8, -1.95),
+        inE(0, -1.05, -1.92), ring[4]],
     ];
     // the capelet's, from the ring to its hem over the coat (its measured profile, the chest's space): a short mantle over
     // the shoulders, its front edge down from the collar's side to the hem's corner over the chest, its front quarter,
     // over the shoulder and down the deltoid, its back quarter, and down the middle of the back to 16-18 cm below the
     // nape (the reference's notes), its hem rising from the shoulders to the collar's sides in front
     const capeLines = [
-      [ring[0], chestAt(0.13, 0.205, 0.133), chestAt(0.145, 0.175, 0.132)],
-      [ring[1], chestAt(0.195, 0.218, 0.1), chestAt(0.185, 0.195, 0.104)],
+      [ring[0], chestAt(0.13, 0.205, 0.123), chestAt(0.145, 0.175, 0.121)],
+      [ring[1], chestAt(0.195, 0.218, 0.085), chestAt(0.185, 0.195, 0.086)],
       [ring[2], chestAt(0.26, 0.223, 0), chestAt(0.28, 0.205, 0), chestAt(0.292, 0.19, 0)],
       [ring[3], chestAt(0.185, 0.222, -0.1), chestAt(0.185, 0.195, -0.106)],
-      [ring[4], chestAt(0, 0.21, -0.14), chestAt(0, 0.145, -0.162)],
+      [ring[4], chestAt(0, 0.21, -0.134), chestAt(0, 0.145, -0.162)],
     ];
     // each row through its five lines at its share of the way down them, from the rim (or the capelet's front edge) to
     // the seam behind, where it runs on into its mirror (its top seam on into the seam down the back)
@@ -758,7 +758,7 @@ export function buildMage(): Model {
     // its sides from the temples back towards them; and the capelet's soft folds over the shoulders, fuller towards its
     // hem. All fade out at the face's edge. (Folds running straight down the hood, as ribs, read as a plane at right
     // angles to the references')
-    const GATHER = 0.17, ROLLS = 3, ROLL_DEEP = 0.009;
+    const GATHER = 0.17, ROLLS = 3, ROLL_DEEP = 0.006;
     /** how wide the band of its wool turned back inside the rim is (a share of a row, from rim to rim: 1.4 cm) */
     const FACING = 0.025;
     const crease = (u: number, v: number) => {
@@ -815,13 +815,18 @@ export function buildMage(): Model {
         { joint: j.neck, y0: 0.08, y1: -0.02, rx: 0.07, rz: 0.07 },
         // the coat under it: its standing collar, the surface its body is cut from (`outOfTunic`, the chest's space: its
         // shoulders' slope, its chest and its back) out over the harness's straps where they run, and the upper arms
-        // (raised, they lift the cloth; as deep as the coat over them: 8 cm in front of the arm, the coat's front of the
-        // shoulder, raised with the staff, came 2 mm out through the capelet). (Ellipsoids fitted to its shoulders and
-        // its torso by hand held the capelet 2-5 cm over the shoulders' slope and off the back: `lab hood`)
+        // (raised, they lift the cloth: at the shoulder as deep as the coat over it, 8 cm in front of the arm, where
+        // raised with the staff it came 2 mm out through the capelet; down the arm fuller than the arm behind, as the
+        // cloth lags it swinging back: the arm's own size, the sleeve came through the capelet as he walked; closer in
+        // front, where as full it held the capelet off his shoulders).
+        // (Ellipsoids fitted to its shoulders and its torso by hand held the capelet 2-5 cm over the shoulders' slope and
+        // off the back: `lab hood`)
         { joint: j.chest, y0: 0.365, y1: 0.3, rx: 0.098, rz: 0.098, ry: 0.015 },
         { joint: j.chest, out: (p, clear) => outOfTunic(p, capeletLift(p) + clear) },
-        { joint: j.shoulderL, y0: 0, y1: -0.14, rx: 0.075, rz: 0.088, ry: 0.045 },
-        { joint: j.shoulderR, y0: 0, y1: -0.14, rx: 0.075, rz: 0.088, ry: 0.045 },
+        ...[j.shoulderL, j.shoulderR].flatMap((joint) => [
+          { joint, y0: 0.035, y1: 0, rx: 0.075, rz: 0.086, ry: 0.03 },
+          { joint, y0: 0, y1: -0.14, rx: 0.075, rz: 0.086, ry: 0.045, z: -0.006 },
+        ]),
       ],
     });
   }
