@@ -708,6 +708,20 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   parts, bones), and `--canary` pictures an empty studio, which must read as nothing drawn, and builds the hand 10%
   larger, which must measure so. On `--ab` against a game whose hands were pieces, the old hand is built again from
   the materials its pieces were made in (`userData.own`).
+- `hood`: the mage's hood against its reference, by numbers (`page/hood.ts`), as tuning it by eye didn't converge (one
+  change to its cut reshaped the whole of it, and four reviews in a row failed it). Its outline: the hero taken into
+  the studio and drawn flat white from the front, his left and the back (what he holds hidden), and the reference's
+  figure cut from its plain backdrop (`--ref <marks.json>`: each view's picture beside the file, with where its eyes
+  and chin are, shares of it), both read on one grid in the face's unit `E` (the eye line to the chin; ours from the
+  head's anatomy, `toGroup`): how much of the two outlines is shared, how high it stands over the eyes, and its width
+  (from the side, its reach ahead and behind) at the crown, the temples, the chin, the neck and the shoulders, ours
+  beside the reference's, with each view's pictures cut to that window and the outlines laid over each other (both
+  white, the reference's alone red, ours alone green). Its shape on the head, from its cloth (`HoodCloth`'s
+  `userData.grid`) and the face's skin: the rim ahead of the brow and of the cheeks and out from the cheeks, the point
+  above the scalp and the capelet below the nape, each against the sizes the reference was made to (its modelling
+  notes: 6-8, 4-6, 4-6, 5-7 and 16-18 cm), outside them a problem; and how far its top half moves from its standing
+  shape over a walk (more than 4 cm, a tip flipping, is a problem). `--canary` makes the hood 0.7x as wide, which the
+  rim's clearance and the front outline's width at the temples must read. Writes `out/hood/sheet.png`.
 - `turnaround`: the hero standing as the game has him (its set-up: `--class`, `--gear`, `--wear`), taken out of the
   world into the studio (`page/turnaround.ts`, `page/studio.ts`) and pictured as a character sheet's turnaround shows
   him: from the front, three-quarters to his right, his right side and his back, framed on his whole figure with what

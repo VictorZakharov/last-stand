@@ -136,7 +136,8 @@ export class HoodCloth {
     this.creases = new Float32Array(FU * FV);
     for (let r = 0; r < FV; r++) for (let c = 0; c < FU; c++) this.creases[r * FU + c] = o.crease?.(c / (FU - 1), r / (FV - 1)) ?? 0;
     this.outer = this.grid(1);
-    this.outer.name = 'hood';   // (what the lab's `coat` follows)
+    this.outer.name = 'hood';   // (what the lab's `coat` and `hood` follow)
+    this.outer.userData.grid = { across: FU, down: FV };
     this.inner = this.grid(3);
     this.add(this.outer, o.outer, true);
     this.add(this.inner, o.lining, false);
@@ -192,6 +193,7 @@ export class HoodCloth {
   private add(g: THREE.BufferGeometry, m: THREE.Material, shadow: boolean): void {
     const mesh = new THREE.Mesh(g, m);
     mesh.castShadow = shadow; mesh.receiveShadow = true;
+    mesh.userData.hoodPart = true;
     mesh.frustumCulled = false;   // it moves off its bind bounds
     this.o.joint.add(mesh);
     this.meshes.push(mesh);

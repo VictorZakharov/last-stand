@@ -1,6 +1,6 @@
 // The lab's commands as the session runs them (tools/lab): each one's work on a side, how the sides' results are
 // put together and compared, and the problems a result reports. Their options are read and checked by options.mjs.
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { runCoop } from './coop.mjs';
 import { labError } from './errors.mjs';
@@ -267,6 +267,28 @@ function textWithPictureFiles(results, dir) {
 
 /** the most picture files a run's text names one by one */
 const PICTURES_NAMED = 24;
+
+/** the views `hood --ref`'s marks name, as page/hood.ts reads them */
+const HOOD_VIEWS = ['front', 'left', 'back'];
+
+/**
+ * `hood --ref`: a marks file's references, each view's picture (beside the file) as a data URL with where its eyes and
+ * chin are (shares of it across and down): `{ "front": { "picture": "front.png", "eyes": [x, y], "chin": [x, y] } }`.
+ */
+function hoodReferences(path) {
+  const file = resolve(REPO, path);
+  if (!existsSync(file)) throw labError(`hood --ref: no such marks file, ${path}`);
+  const marks = JSON.parse(readFileSync(file, 'utf8'));
+  const references = {};
+  for (const [view, mark] of Object.entries(marks)) {
+    if (!HOOD_VIEWS.includes(view)) throw labError(`hood --ref: a view of ${HOOD_VIEWS.join(', ')}, not ${view}`);
+    const shares = (pair) => Array.isArray(pair) && pair.length === 2 && pair.every((n) => n >= 0 && n <= 1);
+    if (!shares(mark.eyes) || !shares(mark.chin)) throw labError(`hood --ref: ${view}'s eyes and chin as [x, y] shares`);
+    const picture = resolve(dirname(file), mark.picture);
+    references[view] = { url: pictureUrl(picture, 'hood --ref'), eyes: mark.eyes, chin: mark.chin };
+  }
+  return references;
+}
 
 /** `turnaround --panels`: a panel a view, each four shares (left, top, right, bottom), or none for an empty one. */
 function panelsOf(text) {
@@ -1122,6 +1144,20 @@ export const COMMANDS = {
     finish(results, options, session) {
       // (a file a picture: a sheet of them all, 90 close-ups, was more than the browser would lay out)
       return textWithPictureFiles(results, session.outFor('neck'));
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
+  hood: {
+    each(side, options) {
+      const reference = options.ref === undefined ? undefined : hoodReferences(options.ref);
+      const command = { fixture: fixtureFrom(options), reference, canary: Boolean(options.canary) };
+      return side.command('hood', command);
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('hood'), session.browser);
     },
     textOf: asText,
     problemsOf: problemsIn,

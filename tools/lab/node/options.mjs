@@ -1276,6 +1276,23 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  hood: {
+    help: 'the mage\'s hood against its reference: its outline from the front, his left and the back laid over the '
+      + 'reference\'s in the face\'s unit (the eyes to the chin), how much they share and how wide and high each is; its '
+      + 'rim, point and capelet against the sizes the reference was made to; how much it sways as he walks: '
+      + 'tools/lab/out/hood/sheet.png',
+    options: {
+      ref: {
+        kind: 'text',
+        usage: 'marks.json',
+        help: 'the reference: each view\'s picture beside the file, with where its eyes and chin are '
+          + '({ "front": { "picture": "front.png", "eyes": [x, y], "chin": [x, y] }, "left": ..., "back": ... })',
+      },
+      canary: { kind: 'switch', help: 'the hood made narrower: its rim and its outline must read it so' },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   turnaround: {
     help: 'the hero standing in a plain, lit studio from the front, three-quarters to his right, his right side and '
       + 'his back, and his head close from the front and the side, with how many triangles he is drawn with; '

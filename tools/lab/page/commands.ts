@@ -53,6 +53,7 @@ import type { ShotsOptions } from './shots';
 import type { WeaponsOptions } from './weapons';
 import type { HandsOptions } from './hands';
 import type { NeckOptions } from './neck';
+import type { HoodOptions } from './hood';
 import type { TurnaroundOptions } from './turnaround';
 import type { HallOptions } from './hallMoves';
 import type { CoatOptions } from './coat';
@@ -110,6 +111,13 @@ export async function hands(lab: Lab, command: HandsOptions): Promise<Report> {
  *  missed, is a problem. */
 export async function neck(lab: Lab, command: NeckOptions): Promise<Report> {
   const { neck: read } = await import('./neck');
+  return read(lab, command);
+}
+
+/** `lab hood`: the mage's hood against its reference, its outline and its shape on the head; a size outside the
+ *  reference's, a sway past its limit, or a canary it missed, is a problem. */
+export async function hood(lab: Lab, command: HoodOptions): Promise<Report> {
+  const { hood: read } = await import('./hood');
   return read(lab, command);
 }
 
