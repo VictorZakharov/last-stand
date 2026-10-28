@@ -79,6 +79,8 @@ export class HoodCloth {
   private readonly stiff: number[] = [];
   /** each constraint's length as cut (the head's space), and as the head's scale makes it now */
   private restLen = new Float32Array(0);
+  /** how many of the links are the cloth's own (the clasp's after them) */
+  private links = 0;
   private len = new Float32Array(0);
   /** each particle's anchor (the lowest particle of its column riding the head) and how far from it it may be: the cloth's
    *  length down to it, and a little (with soft constraints alone it stretched down the back and the chest) */
@@ -166,6 +168,7 @@ export class HoodCloth {
     const P = this.pairs, cut = this.stiff.length;
     for (const r of this.o.clasp?.rows ?? []) join(id(r, 0), id(r, nu), 1);
     this.restLen = new Float32Array(this.stiff.length);
+    this.links = cut;
     for (let k = 0; k < this.restLen.length; k++) this.restLen[k] = k < cut ? this.cutLength(P[k * 2], P[k * 2 + 1]) : this.o.clasp!.gap;
     this.len = new Float32Array(this.stiff.length);
   }
@@ -216,7 +219,12 @@ export class HoodCloth {
       // (settled once on the body before it's first seen: cut on the head, the mantle stood off the shoulders)
       if (CLOTH) for (let s = 0; s < 30; s++) this.step(true);
     } else {
-      for (let i = 0; i < n * 3; i++) { const d = (T[i] - this.lastTgt[i]) * CARRY; this.pos[i] += d; this.prev[i] += d; }
+      // (what's held firmly, wholly: carried as the capelet is, the hood's dome trailed the head 7 cm as he ran)
+      for (let i = 0; i < n * 3; i++) {
+        const carry = CARRY + (1 - CARRY) * Math.min(1, this.hold[(i / 3) | 0] / SETTLE_HELD);
+        const d = (T[i] - this.lastTgt[i]) * carry;
+        this.pos[i] += d; this.prev[i] += d;
+      }
       this.acc += Math.min(dt, 0.05);
       let k = 0;
       while (this.acc >= STEP && k++ < MAX_STEPS) { this.acc -= STEP; this.step(false); }
@@ -245,12 +253,12 @@ export class HoodCloth {
   private settleRest(): void {
     const { settle, nu, nv, joint } = this.o, key = `${settle!.key}:${nu}x${nv}`, kept = SETTLED.get(key);
     this.settled = true;
-    if (kept) { this.rest.set(kept); return; }
+    if (kept) { this.rest.set(kept); this.lengthsFromRest(); return; }
     this.place();
     this.pos.set(this.tgt); this.prev.set(this.tgt);
     // (what's held firmly kept so, the face's stiffened edge: let fall with the rest, it fell across the face)
     const hold = this.hold;
-    this.hold = hold.map((w) => (w >= SETTLE_HELD ? 1 : 0));
+    this.hold = hold.map((w) => (w >= SETTLE_HELD ? 1 : w));
     try {
       // (with its momentum, damped: without, it never finished falling, and the capelet stood stiff)
       for (let s = 0; s < settle!.steps; s++) this.step(false, SETTLE_ITER);
@@ -263,6 +271,17 @@ export class HoodCloth {
       this.rest[i * 3] = _p.x; this.rest[i * 3 + 1] = _p.y; this.rest[i * 3 + 2] = _p.z;
     }
     SETTLED.set(key, this.rest.slice());
+    this.lengthsFromRest();
+  }
+
+  /** the cloth's lengths its settled rest's: what the cut drapes into, it's held to from then on (held firmly at its top
+   *  while it settled, its rest and the cut's lengths pulled against each other as he walked) */
+  private lengthsFromRest(): void {
+    const R = this.rest, P = this.pairs;
+    for (let k = 0; k < this.links; k++) {
+      const a = P[k * 2] * 3, b = P[k * 2 + 1] * 3;
+      this.restLen[k] = Math.hypot(R[b] - R[a], R[b + 1] - R[a + 1], R[b + 2] - R[a + 2]);
+    }
   }
 
   private step(settling: boolean, iterations = ITER): void {

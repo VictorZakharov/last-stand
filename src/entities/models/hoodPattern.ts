@@ -14,11 +14,13 @@
 
 /** a hood's cut (m, flat): its face edge from the top seam to the neck, its top seam from the face to the point behind,
  *  how far the back's curve stands out behind the skull, its neck edge (half the neckline), the capelet below the neck,
- *  and its hem (half of it); `chin`, how far back the face edge comes in at the throat */
+ *  and its hem (half of it); `chin`, how far back the face edge comes in at the throat. `widths`, each row's width from
+ *  the top seam to the neck as measured off the head, in place of the top, the bulge and the neck's curve between */
 export interface HoodCut {
   front: number;
   top: number;
   bulge: number;
+  widths?: number[];
   neck: number;
   chin: number;
   mantle: number;
@@ -40,6 +42,12 @@ const smooth = (t: number) => { const s = Math.min(1, Math.max(0, t)); return s 
 /** The panel's front and back edges at depth `y` down it: where the face's edge and the seam are across it (m). */
 function edges(cut: HoodCut, y: number): [number, number] {
   const chin = cut.chin, neckBack = chin + cut.neck;
+  if (y <= cut.front && cut.widths) {
+    // (between the rows measured)
+    const s = y / cut.front, at = s * (cut.widths.length - 1), k = Math.min(Math.floor(at), cut.widths.length - 2);
+    const width = cut.widths[k] + (cut.widths[k + 1] - cut.widths[k]) * (at - k);
+    return [chin * s * s, chin * s * s + width];
+  }
   if (y <= cut.front) {
     const s = y / cut.front;
     // (the face's edge coming back under the chin; the seam from the point behind the crown out round the back of the

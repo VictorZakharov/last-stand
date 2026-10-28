@@ -11,6 +11,7 @@ import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, puls
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, stitches, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
+import { EYE } from './face';
 import { buildHand, poseHand, hold, seat, gripTurn, bare, handCapsules, glowOutline, SLANT } from './hands';
 import { clamp, lerp, damp, TAU, mulberry, smooth } from '../../util';
 import type { BellCloth } from './sleeve';
@@ -635,11 +636,42 @@ export function buildMage(): Model {
     // surface the brow, the cheekbones and the jaw made the face's edge wobble)
     const sz = (az: number, el: number) => head.surface(az, el).sub(mid);
     const R = { side: Math.abs(sz(Math.PI / 2, 0).x), ahead: sz(0, 0).z, behind: -sz(Math.PI, 0).z, up: sz(0, Math.PI / 2).y };
+    const FULL = 0.6;
     const round = (az: number, el: number, lift: number, out: THREE.Vector3) => {
-      const c = Math.cos(el), x = Math.sin(az) * c, z = Math.cos(az) * c, y = Math.sin(el), m = lift / 1000;
+      // (fuller above its middle than an ellipsoid, as a hood's dome is: on one, the crown narrowed to a point)
+      const c = Math.cos(el) ** (el > 0 ? FULL : 1), x = Math.sin(az) * c, z = Math.cos(az) * c, y = Math.sin(el), m = lift / 1000;
       return out.set(mid.x + x * (R.side + m), mid.y + y * ((el > 0 ? R.up : R.side) + m), mid.z + z * ((z > 0 ? R.ahead : R.behind) + m));
     };
-    // (`deep`: the face's edge stood off the face and its brim brought forward, as a cowl's; 0 as the cut is measured)
+    // its rim, set from the face's own skin at the reference's sizes (its modelling notes, `lab hood`): ahead of the
+    // brow, ahead of and out from the cheeks, drawn in under the chin to the throat. (Laid round the skull by angles, it
+    // stood 3 cm behind the brow and 6 behind the cheeks, the face flat in the opening)
+    const skin = head.face.geometry.attributes.position, sp = new THREE.Vector3();
+    const skinAt = (y: number, keep: (p: THREE.Vector3) => boolean, of: (p: THREE.Vector3) => number) => {
+      let most = -Infinity;
+      for (let k = 0; k < skin.count; k++) {
+        sp.fromBufferAttribute(skin, k);
+        if (Math.abs(sp.y - y) < 0.008 && keep(sp)) most = Math.max(most, of(sp));
+      }
+      return most;
+    };
+    const browY = toGroup(0, EYE.y + 15, 0).y, cheekY = toGroup(0, EYE.y - 25, 0).y, chinY = toGroup(0, 0, 0).y;
+    const browZ = skinAt(browY, (q) => Math.abs(q.x) < 0.02, (q) => q.z);
+    const cheekWide = skinAt(cheekY, () => true, (q) => Math.abs(q.x));
+    const cheekZ = skinAt(cheekY, (q) => Math.abs(q.x) > cheekWide * 0.6, (q) => q.z);
+    const chinZ = skinAt(chinY + 0.01, (q) => Math.abs(q.x) < 0.02, (q) => q.z);
+    const RIM = { brow: 0.06, cheekAhead: 0.04, cheekOut: 0.08, jawOut: 0.05 };
+    // how far out it's laid round the head (mm): its sides by the face, at the seam behind, how much more it swells
+    // between them, and its top seam over the crown (and how much higher in the middle)
+    const LAY = { side: 95, back: 55, swell: 20, crest: 50, crestRise: 5 };
+    const rim = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, browY + 0.05, browZ + RIM.brow),
+      new THREE.Vector3(cheekWide + RIM.cheekOut * 0.9, (browY + cheekY) / 2 + 0.02, cheekZ + RIM.cheekAhead + 0.01),
+      new THREE.Vector3(cheekWide + RIM.cheekOut, cheekY, cheekZ + RIM.cheekAhead),
+      new THREE.Vector3(cheekWide + RIM.jawOut, chinY + 0.01, chinZ - 0.01),
+      new THREE.Vector3(0.03, chinY - 0.03, chinZ - 0.035),
+    ], false, 'centripetal');
+    const rimAt = new THREE.Vector3(), rimRound = new THREE.Vector3();
+    // (`deep`: the hood laid out to its rim; 0, round the head alone, as the cut's widths are measured)
     const shape = (u: number, v: number, out: THREE.Vector3, deep = 1): THREE.Vector3 => {
       const left = u <= 0.5, f = (left ? u : 1 - u) * 2, turn = (az: number) => (left ? az : TAU - az);
       if (v > NECK) {
@@ -653,7 +685,11 @@ export function buildMage(): Model {
         // (the top seam on the crest, the brim standing out over the brow, highest over the crown and the point a little
         // off it behind: highest at the brim, it stood as a column over the face)
         const a = BRIM + (POINT - BRIM) * f, over = a > Math.PI / 2;
-        return round(over ? Math.PI : 0, over ? Math.PI - a : a, 35 + 20 * Math.sin(Math.PI * f), out);
+        round(over ? Math.PI : 0, over ? Math.PI - a : a, LAY.crest + LAY.crestRise * Math.sin(Math.PI * f), out);
+        // (its front out to the rim's top)
+        round(0, BRIM, LAY.crest, rimRound);
+        rim.getPoint(0, rimAt);
+        return out.addScaledVector(rimAt.sub(rimRound), deep * (1 - f) ** 2);
       }
       // (below it round the side of the head, from the face's edge, an arch from the brim round the forehead, widest
       // beside the cheeks and drawn in again under the chin to the throat, back to the seam down the back of the head;
@@ -662,29 +698,34 @@ export function buildMage(): Model {
       const edgeEl = lerp(BRIM, LOW, 0.5 - 0.5 * Math.cos(arch) / Math.cos(Math.PI * 0.03));
       const seamEl = lerp(Math.PI - POINT, LOW - 0.15, t), el0 = lerp(edgeEl, seamEl, f);
       const el = el0 + (Math.PI / 2 - 0.05 - el0) * Math.sin(Math.PI * f) * (1 - t) ** 2;
-      // (standing 4 cm off the cheeks at its edge, 6 deep, its shadow round the face, closer over the side of the head;
-      // deep, the brim brought forward over the brow: round the head alone, the face sat flat in the opening)
-      const edge = deep * (1 - f) ** 3;
-      round(turn(lerp(edgeAz, Math.PI, f)), el, lerp(40, 22, f) + 10 * Math.sin(Math.PI * f) + 20 * edge, out);
-      out.z += 0.035 * edge * (1 - t) ** 1.5;
-      return out;
+      // (round the head, closer over its side; out to the rim at the face's edge, less so further back)
+      round(turn(lerp(edgeAz, Math.PI, f)), el, lerp(LAY.side, LAY.back, f) + LAY.swell * Math.sin(Math.PI * f), out);
+      round(turn(edgeAz), edgeEl, LAY.side, rimRound);
+      rim.getPoint(t, rimAt);
+      if (!left) rimAt.x = -rimAt.x;
+      return out.addScaledVector(rimAt.sub(rimRound), deep * (1 - f) ** 2);
     };
     // the cut (m), its top seam as long as the crest it's laid along (`shape`'s row 0) and its face edge as the arch
     // round the face. (Its face edge shorter, fastened at the throat it ran taut across the cheeks; cut as wide as the
     // head where it's laid and more, its face edge buckled into waves and the back billowed; with the capelet a half
     // circle, it hung from the neck as a cone)
     const along = new THREE.Vector3(), last = new THREE.Vector3();
-    const measure = (at: (k: number) => [number, number], count: number) => {
+    const measure = (at: (k: number) => [number, number], count: number, deep = 0) => {
       let run = 0;
       for (let k = 0; k <= count; k++) {
-        shape(...at(k), along, 0);
+        shape(...at(k), along, deep);
         if (k > 0) run += along.distanceTo(last);
         last.copy(along);
       }
       return run;
     };
-    const top = measure((c) => [c / nu, 0], nu / 2), front = measure((r) => [0, r / nv], neckRow) * 1.04;
-    const draft = draftHood({ front, top, bulge: 0.012, neck: 0.25, chin: 0.03, mantle: 0.17, hem: 0.78 }, nu, nv, neckRow);
+    const top = measure((c) => [c / nu, 0], nu / 2), front = measure((r) => [0, r / nv], neckRow, 1) * 1.04;
+    // (each row as long as where it's laid, from the rim round to the back seam, with a little ease: its rows near the
+    // top only as long as the top seam, while the rim stood out in front, pulled the crown into a point and the sides
+    // onto the head)
+    const EASE = 1.05;
+    const widths = Array.from({ length: neckRow + 1 }, (_, r) => measure((c) => [c / nu, r / nv], nu / 2, 1) * EASE);
+    const draft = draftHood({ front, top, bulge: 0, widths, neck: widths[neckRow], chin: 0, mantle: 0.16, hem: 0.78 }, nu, nv, neckRow);
     // its creases (m out along the cloth), after the references: the cloth gathered where it turns from the head onto the
     // shoulders into rolls running round the nape and the sides of the neck (round tops, sharp valleys between, wavering
     // a little and fading out at the face's edge), and the seam down the back where the halves are sewn. (Folds running
@@ -702,7 +743,7 @@ export function buildMage(): Model {
     const hold = (u: number, v: number) => {
       if (v === 0) return 1;
       const edge = Math.max(0, 1 - Math.min(u, 1 - u) / 0.04) * (v <= NECK ? 0.35 : 0);
-      return Math.max(v <= NECK ? lerp(0.15, 0.06, v / NECK) : 0.02, edge);
+      return Math.max(v <= NECK ? lerp(0.3, 0.25, v / NECK) : 0.02, edge);
     };
     // the body it falls onto: the head, the neck, the collar, the chest and the shoulders (`shoulderL`'s place on the chest)
     const sh = j.shoulderL.position;
@@ -721,7 +762,7 @@ export function buildMage(): Model {
         { joint: hat, y0: mid.y + 0.11, y1: mid.y, rx: 0.095, rz: 0.11, z: mid.z },
         { joint: j.neck, y0: 0.08, y1: -0.02, rx: 0.07, rz: 0.07 },
         { joint: j.chest, y0: 0.33, y1: 0.24, rx: 0.11, rz: 0.11 },
-        { joint: j.chest, y0: 0.24, y1: -0.05, rx: 0.175, rz: 0.15 },
+        { joint: j.chest, y0: 0.24, y1: -0.05, rx: 0.185, rz: 0.17 },
         { joint: j.chest, y0: sh.y - 0.05, y1: sh.y - 0.08, rx: 0.075, rz: 0.13, x: sh.x * 0.95 },
         { joint: j.chest, y0: sh.y - 0.05, y1: sh.y - 0.08, rx: 0.075, rz: 0.13, x: -sh.x * 0.95 },
       ],

@@ -94,7 +94,7 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
             float hood = uShade.x * clamp(smoothstep(uShade.z, uShade.y, vFxPos.y) + uShade.w * abs(vFxPos.x), 0.0, 1.0);
             reflectedLight.directDiffuse *= 1.0 - hood;
             reflectedLight.directSpecular *= 1.0 - hood;
-            reflectedLight.indirectDiffuse *= 1.0 - 0.7 * hood;
+            reflectedLight.indirectDiffuse *= 1.0 - hood;
             reflectedLight.indirectSpecular *= 1.0 - hood;
             totalEmissiveRadiance *= 1.0 - hood;
           }

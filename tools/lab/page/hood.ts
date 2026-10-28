@@ -65,7 +65,8 @@ const SIZES = {
   fall: { least: 16, most: 18, what: 'the capelet below the nape' },
 };
 type Size = keyof typeof SIZES;
-/** the most the hood's top half may change shape from its standing one as he walks (cm): a tip flipping */
+/** the most the hood's top half may change shape from its standing one as he walks (cm): a tip flipping, or the dome
+ *  trailing the head as he runs (7 cm, carried as the capelet is) */
 const MOST_SWAY = 4;
 const STAND_FRAMES = 60;
 const WALK_FRAMES = 120;

@@ -310,10 +310,14 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     depths.set(y, z);
     return z;
   };
-  const full = toGroup(0, EYE.y + 10, 0).y, gone = toGroup(0, EYE.y - 60, 0).y;
+  // (from the brow down to the chin, deeper towards the sides, as a recess is: full to below the eyes and gone above
+  // the cheeks, it read as a mask's stripe)
+  const full = toGroup(0, EYE.y + 5, 0).y, gone = toGroup(0, EYE.y - 115, 0).y;
+  // (the face, the hair and the beard: not what hangs from the head, as a hood, its wool shaded above the eye line)
   const shade = (depth: number) => head.traverse((o) => {
+    if (o.userData.hoodPart) return;
     const m = (o as THREE.Mesh).material as THREE.Material | undefined;
-    (m?.userData.shade as { value: THREE.Vector4 } | undefined)?.value.set(depth, full, gone, 4);
+    (m?.userData.shade as { value: THREE.Vector4 } | undefined)?.value.set(depth, full, gone, 6);
   });
   return { group: head, face, eyes, surface, midZ, hair, crop, beards, shade };
 }
