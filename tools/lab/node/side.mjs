@@ -127,9 +127,17 @@ const OTHER_PORT = 5191;
 const WATCHED = /[\\/](src|tools[\\/]lab[\\/]page)[\\/]|[\\/]index\.html$/;
 /** the dev server's own config and what it reads: a change here starts this tree's server afresh, then the page */
 const SERVER_CONFIG = /[\\/](vite\.config\.ts|package(-lock)?\.json|scripts[\\/]pwa\.ts)$/;
-/** What this tree's server never watches: scratch, other checkouts and generated harness output. The stalls browser
- *  profiles alone can hold hundreds of thousands of files; traversing them delayed a lab boot for minutes. */
-const UNWATCHED = ['**/.tmp/**', '**/.claude/**', '**/tools/lab/out/**', '**/tools/stalls/out/**', '**/tools/facelab/**', '**/dist/**'];
+/** What this tree's server never watches, from the tree's root: scratch, other checkouts and generated harness
+ *  output. The stalls browser profiles alone can hold hundreds of thousands of files; traversing them delayed a lab
+ *  boot for minutes. From the root, not anywhere on the path: as `**\/.claude/**`, a tree that is itself a worktree
+ *  under `.claude/worktrees` had every file ignored, and its server ran a page booted before each edit. */
+const UNWATCHED = ['.tmp', '.claude', 'tools/lab/out', 'tools/stalls/out', 'tools/facelab', 'dist'];
+
+/** Whether `path` (absolute) is one of `root`'s `UNWATCHED` folders or in one. */
+export function unwatched(root, path) {
+  const relative = toSlashes(path).toLowerCase().slice(toSlashes(root).toLowerCase().length + 1);
+  return UNWATCHED.some((folder) => relative === folder || relative.startsWith(`${folder}/`));
+}
 /** the cookies every boot starts with besides its hero's: the forest, the high quality preset */
 const BOOT_COOKIES = { 'last-stand-biome': 'forest', 'last-stand-quality': 'high' };
 
@@ -394,6 +402,11 @@ export class Side {
     this.onStale?.(file);
   }
 
+  /** What this tree's watcher leaves alone (`UNWATCHED`), as Vite's `ignored` takes it. */
+  unwatchedHere() {
+    return (path) => unwatched(this.root, path);
+  }
+
   /** This tree watched for changes; an exported one never changes, and finds its packages in this tree. */
   viteConfig() {
     // (the config loaded by Vite's module runner: bundled, it's written next to itself, imported and deleted, and
@@ -403,7 +416,7 @@ export class Side {
       return {
         ...common,
         cacheDir: join(this.outDir, this.worker ? `vite-${this.worker}` : 'vite'),
-        server: { port: REPO_PORT, strictPort: false, hmr: false, watch: { ignored: UNWATCHED } },
+        server: { port: REPO_PORT, strictPort: false, hmr: false, watch: { ignored: this.unwatchedHere() } },
       };
     }
     return {
