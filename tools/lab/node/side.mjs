@@ -127,8 +127,9 @@ const OTHER_PORT = 5191;
 const WATCHED = /[\\/](src|tools[\\/]lab[\\/]page)[\\/]|[\\/]index\.html$/;
 /** the dev server's own config and what it reads: a change here starts this tree's server afresh, then the page */
 const SERVER_CONFIG = /[\\/](vite\.config\.ts|package(-lock)?\.json|scripts[\\/]pwa\.ts)$/;
-/** what this tree's server never watches: scratch, the lab's own output, the face harness's Python environment */
-const UNWATCHED = ['**/.tmp/**', '**/tools/lab/out/**', '**/tools/facelab/**', '**/dist/**'];
+/** What this tree's server never watches: scratch, other checkouts and generated harness output. The stalls browser
+ *  profiles alone can hold hundreds of thousands of files; traversing them delayed a lab boot for minutes. */
+const UNWATCHED = ['**/.tmp/**', '**/.claude/**', '**/tools/lab/out/**', '**/tools/stalls/out/**', '**/tools/facelab/**', '**/dist/**'];
 /** the cookies every boot starts with besides its hero's: the forest, the high quality preset */
 const BOOT_COOKIES = { 'last-stand-biome': 'forest', 'last-stand-quality': 'high' };
 

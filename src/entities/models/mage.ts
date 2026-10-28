@@ -692,7 +692,7 @@ export function buildMage(): Model {
     // collar's sides in front, over the shoulders, standing off the nape behind, where its slack gathers in a roll on
     // the capelet (laid a centimetre off the nape, it was pulled in to the neck where the reference's hangs loose)
     const ring = [chestAt(0.088, 0.262, 0.102), chestAt(0.205, 0.255, 0.065), chestAt(0.235, 0.25, 0), chestAt(0.16, 0.24, -0.095),
-      chestAt(0, 0.288, -0.116)];
+      chestAt(0, 0.288, -0.123)];
     // the hood's lines down from its top seam to the ring: its rim, its front quarter, its side (where it's widest, as the
     // front sees it), its back quarter and the seam down the back; the top seam their tops, from the rim's top at the
     // hairline up over the head to the soft point over the crown and down behind it, as the reference's profile has it.
@@ -727,7 +727,7 @@ export function buildMage(): Model {
       [ring[1], chestAt(0.195, 0.218, 0.085), chestAt(0.185, 0.195, 0.086)],
       [ring[2], chestAt(0.26, 0.223, 0), chestAt(0.28, 0.205, 0), chestAt(0.292, 0.19, 0)],
       [ring[3], chestAt(0.185, 0.222, -0.1), chestAt(0.185, 0.195, -0.106)],
-      [ring[4], chestAt(0, 0.21, -0.134), chestAt(0, 0.145, -0.162)],
+      [ring[4], chestAt(0, 0.21, -0.142), chestAt(0, 0.13, -0.166)],
     ];
     // each row through its five lines at its share of the way down them, from the rim (or the capelet's front edge) to
     // the seam behind, where it runs on into its mirror (its top seam on into the seam down the back)
@@ -751,14 +751,14 @@ export function buildMage(): Model {
       return out;
     };
     // its creases (m out along the cloth), after the references: soft shallow folds gathered round the nape where it
-    // turns from the head onto the shoulders (three, round tops and tight valleys, the lower fuller, wavering a little,
+    // turns from the head onto the shoulders (two, round tops and soft valleys, the lower fuller, wavering a little,
     // fading round the sides of the neck, a few millimetres deep as the owner's reference's: two a centimetre deep read
     // as one thick roll, and the seam's piping, dipping into their valleys, jogged aside seen from above; squeezed into
     // two of the drawn rows, they read as a crack; 3 cm deep, as the first reference's, a sack's); faint long folds down
     // its sides from the temples back towards them; and the capelet's soft folds over the shoulders, fuller towards its
     // hem. All fade out at the face's edge. (Folds running straight down the hood, as ribs, read as a plane at right
     // angles to the references')
-    const GATHER = 0.17, ROLLS = 3, ROLL_DEEP = 0.006;
+    const GATHER = 0.17, ROLLS = 2, ROLL_DEEP = 0.004;
     /** how wide the band of its wool turned back inside the rim is (a share of a row, from rim to rim: 1.4 cm) */
     const FACING = 0.025;
     const crease = (u: number, v: number) => {
@@ -779,7 +779,7 @@ export function buildMage(): Model {
     };
     // drawn twice as finely as its particles, and finer still where its creases are: across the seam down the back (an
     // even count of spaces, so a column runs down the seam itself, as its piping does), and down the gathers at the
-    // nape, seven rows a roll (in two or three each they read as a crack); and down from its top seam, where the face's
+    // nape, at least seven rows a roll (in two or three each they read as a crack); and down from its top seam, where the face's
     // arch turns round over the brow (in two or three rows it read as a point)
     const band = (x: number, from: number, to: number, ease: number) => smooth(u01((x - from + ease) / ease)) * (1 - smooth(u01((x - to) / ease)));
     const drawn = {
@@ -787,17 +787,16 @@ export function buildMage(): Model {
       down: spaced(nv * 2 + 16, (v) => 1 + 3.5 * band(v, NECK - GATHER, NECK, 0.03) + 3 * (1 - smooth(u01(v / 0.08)))),
     };
     // (the hood above the jaw riding the head wholly; below it, down to the ring, held less and less and carried by the
-    // chest as much as the head at the ring, its rim held more firmly, a hem; the capelet carried by the chest, held
-    // lightly, free to swing)
+    // chest at the ring, its rim held more firmly, a hem; the capelet follows the shoulders while still yielding to them)
     const RIDE = 0.6;
     const below = (v: number) => Math.max(0, (v / NECK - RIDE) / (1 - RIDE));
     const hold = (u: number, v: number) => {
-      if (v > NECK) return lerp(0.08, 0.03, (v - NECK) / (1 - NECK));
+      if (v > NECK) return 0.3;
       if (v / NECK <= RIDE) return 1;
       const edge = Math.max(0, 1 - Math.min(u, 1 - u) / 0.04);
-      return Math.max(lerp(0.45, 0.15, below(v)), edge * 0.5);
+      return Math.max(lerp(0.45, 0.3, below(v)), edge * 0.5);
     };
-    const share = (_u: number, v: number) => (v > NECK ? lerp(0.5, 1, (v - NECK) / (1 - NECK)) : below(v) * 0.5);
+    const share = (_u: number, v: number) => (v > NECK ? 1 : below(v));
     hood = new HoodCloth({
       // (the outside on both sides: where it folds over, wool)
       joint: hat, shape, body: { joint: j.chest, share }, capelet: NECK, nu, nv, hold, outer: coatD, lining: hoodLining, thick: 0.004,

@@ -8,3 +8,4 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md), the lab'
 - A script `browser.mjs` serializes into the page can use nothing from its module.
 - What can be tested without a browser is, in `test/` (`npm run lab:test`).
 - A change to this code restarts the server under `lab:serve` (its hash, `codeStamp.mjs`, is sent with every command).
+- Keep generated output and other checkouts out of Vite's watcher (`UNWATCHED` in `side.mjs`). `tools/stalls/out` can hold hundreds of thousands of browser-profile files: watching it kept the lab busy for minutes and used gigabytes before a picture. If a boot stalls, profile the Node process and check its file traversal before repeating the run; do not delete saved output or references to make it faster.
