@@ -33,6 +33,34 @@ const SHOT = { back: 6.4, high: 2.3, at: 1.35, middle: 0.8, fov: 30, drift: 0.07
 const KEY = { color: 0xffd2a0, intensity: 12, distance: 3.4, ahead: 1.4, side: 0.3, up: 2.1 };
 /** the most light a highlight on a hero reflects (`Player.shine`): near, the key's glint on steel bloomed */
 const SHINE = 0.55;
+/** A glowing weapon head (the mage's staff's crystal) in the hall, kept under the bloom's threshold (a luminance of
+ *  0.9, all or nothing) even on its facet turned to the key light, and given a halo of its own instead (`HALO`).
+ *  Raised, it comes within a metre of the key light, which lit its glossy facets white and bloomed them into a blob,
+ *  flaring as each facet turned to the light ("the staff's light is too bright when its flickering"). Its colour at
+ *  0.4 still took that facet over the threshold every 0.7 s, its glow doubling, and under it, between those, it was a
+ *  flat pink stone ("most of the time its completely boring"); its own glow over the threshold bloomed it into a flat
+ *  pink coin, its saturated pink clipped (its luminance a third of its red), its facets gone. So: some of its colour
+ *  (`lit`), for its facets to shade from dark to bright as a gem's, and less of its own glow (`glow` times its own),
+ *  for the light's side to stay under the threshold (at 0.25 and 2 its faces were one flat pastel pink, paler than
+ *  its halo); its facets rough, its coat thin and rough (polished, once a turn a facet mirrored the light warm-white:
+ *  the hall's cap on highlights, `SHINE`, doesn't reach a coat's) and its highlight weak. */
+const HEAD = { lit: 0.3, rough: 0.7, coat: 0.1, specular: 0.3, glow: 1.2, rings: 0.5 };
+/** The light at a glowing weapon head's heart: a small glow particle a frame at its middle, brought `toward` m
+ *  towards the camera so its own front faces don't hide it, its colour `white` of the way to white as a hot light's
+ *  heart is, otherwise as the halo's (`HALO`): without it the gem's faces were a lit solid, paler than its halo, with no
+ *  light of its own. Well over the bloom's threshold, for it to stay over it (at 1.35 it bloomed and didn't by turns),
+ *  and small and pink (0.13 m across, a third white, it was a pale blob over the facets). */
+const CORE = { size: 0.09, strength: 2.2, toward: 0.11, white: 0.1 };
+/** The halo round a glowing weapon head: a glow particle a frame at its middle (`size` m across), each of its glow's
+ *  colour fading to none over `life` s, as strong as the frame is long (`strength` a 30th of a second's), so the
+ *  overlapping particles add up to the same halo at any frame rate (one every 30th of a second rippled 15% between
+ *  frames); breathing by `breath` of it `rate` times a second, slow (nothing large pulses faster than 1.5 a second).
+ *  Additive, as the glow pool draws (fx/particles.ts: already compiled, and dimmed near the camera). At 0.35 and
+ *  0.9 m it flooded the wall magenta round a gem paler than it. */
+const HALO = { life: 0.2, size: 0.75, strength: 0.22, breath: 0.2, rate: 0.4 };
+
+/** Each hall hero's glowing weapon head: the mesh, and its glow's colour (before `HEAD.glow`). */
+const halos = new Map<Player, { gem: THREE.Object3D; colour: THREE.Color }>();
 const RIM = { color: 0x8fb4ff, intensity: 5, distance: 6, behind: 1.3, side: -0.8, up: 1.95 };
 /** how fast a hero turns to his showcase's spot and back: a critically damped spring's rate (1/s), so a turn speeds up
  *  from rest and settles (eased in a frame by the angle alone, he set off at full speed: turning back to the camera
@@ -137,8 +165,10 @@ function heroIn(id: string, profile: Profile): Player {
   const gear = `${heroDetail()} ${JSON.stringify(profile.equipped)}`;
   let hero = kept.get(id);
   if (hero?.gear !== gear) {
+    if (hero) halos.delete(hero.player);
     hero?.player.dispose();
     hero = { player: new Player(id, profile.equipped, false), gear, profile, slot: saveSlot(), level: qualityLevel() };
+    glowingHead(hero.player);
     kept.set(id, hero);
   } else {
     G.scene.add(hero.player.obj);
@@ -147,6 +177,33 @@ function heroIn(id: string, profile: Profile): Player {
     Object.assign(hero, { profile, slot: saveSlot(), level: qualityLevel() });
   }
   return hero.player;
+}
+
+/** A hall hero's glowing weapon head kept under the bloom and given a halo of its own (`HEAD`, `HALO`): its colour,
+ *  glow, roughness and coat, uniforms all (no program changes), on the hall's own copy, which never fights. */
+function glowingHead(player: Player): void {
+  const done = new Set<THREE.Material>();
+  player.model.tip?.traverse((o) => {
+    const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+    if (!m?.emissive || m.emissiveIntensity <= 0 || m.emissive.getHex() === 0 || done.has(m)) return;
+    done.add(m);
+    // (a glow alone, black but for its own light, as the crystal's rings: the key light finds nothing on it, and it's
+    // dimmed, its even pink a flat ring over the gem)
+    if (m.color.getHex() === 0) {
+      m.emissive.multiplyScalar(HEAD.rings);
+      return;
+    }
+    halos.set(player, { gem: o, colour: m.emissive.clone() });
+    m.color.multiplyScalar(HEAD.lit);
+    m.emissive.multiplyScalar(HEAD.glow);
+    m.roughness = Math.max(m.roughness, HEAD.rough);
+    const coated = m as THREE.MeshPhysicalMaterial;
+    if (!coated.isMeshPhysicalMaterial) return;
+    // (its coat thinned and roughened, never to none: a coat of none is another program)
+    if (coated.clearcoat > 0) coated.clearcoat = Math.min(coated.clearcoat, HEAD.coat);
+    coated.clearcoatRoughness = Math.max(coated.clearcoatRoughness, HEAD.rough);
+    coated.specularIntensity = Math.min(coated.specularIntensity, HEAD.specular);
+  });
 }
 
 /** The hall taken down, the lobby's hero shown again; its heroes kept out of the scene for its next opening. */
@@ -239,12 +296,35 @@ export function updateHall(dt: number): void {
     turnTo(h, dt);
     r.ax = r.x + Math.sin(r.f) * 4; r.az = r.z + Math.cos(r.f) * 4;
     h.player.update(dt);
+    haloRound(h.player, dt);
   }
   const at = spot(nearest(hallAlong()));
   const [key, rim] = lights;
   key.light.position.set(at.x + KEY.side, at.y + KEY.up, at.z + KEY.ahead);
   rim.light.position.set(at.x + RIM.side, at.y + RIM.up, at.z - RIM.behind);
   stageCamera(dragged === null ? shotAlong(focus, t) : shotAlong(dragged, t, DRAG.glide));
+}
+
+const _gemAt = new THREE.Vector3();
+const _black = new THREE.Color(0, 0, 0);
+/** How strong the halo breathes now (`HALO`), none with reduced motion. */
+const breathing = (): number => (reduced() ? 1 : 1 + HALO.breath * Math.sin(G.time * HALO.rate * TAU));
+/** The halo round `p`'s glowing weapon head and the light at its heart, this frame of `dt` s (`HALO`, `CORE`). */
+function haloRound(p: Player, dt: number): void {
+  const halo = halos.get(p);
+  if (!halo || dt <= 0) return;
+  halo.gem.getWorldPosition(_gemAt);
+  const share = breathing() * dt * 30;
+  glowAt(_gemAt, HALO.size, halo.colour.clone().multiplyScalar(HALO.strength * share));
+  _gemAt.add(_toCamera.subVectors(G.camera.position, _gemAt).setLength(CORE.toward));
+  glowAt(_gemAt, CORE.size, halo.colour.clone().lerp(_white, CORE.white).multiplyScalar(CORE.strength * share));
+}
+
+const _toCamera = new THREE.Vector3();
+const _white = new THREE.Color(1, 1, 1);
+/** A halo's glow particle at `at`, `size` m across, of `color` fading to none over `HALO.life`. */
+function glowAt(at: THREE.Vector3, size: number, color: THREE.Color): void {
+  particles.glow.spawn({ x: at.x, y: at.y, z: at.z, life: HALO.life, size, sizeEnd: size, color, colorEnd: _black });
 }
 
 /** Hero `h` turned towards the way he faces, by a critically damped spring (`TURN`). */

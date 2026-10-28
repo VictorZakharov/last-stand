@@ -1312,8 +1312,13 @@ export const COMMANDS = {
         weapon: options.weapon,
         frames: Boolean(options.frames),
         canary: Boolean(options.canary),
+        glow: Boolean(options.glow),
+        pictures: options.pictures !== false,
       };
       return side.command('hall', command);
+    },
+    finish(results, options, session) {
+      return textWithPictureFiles(results, session.outFor('hall'));
     },
     textOf: asText,
     problemsOf: problemsIn,
