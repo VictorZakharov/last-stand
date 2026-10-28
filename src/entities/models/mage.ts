@@ -696,8 +696,9 @@ export function buildMage(): Model {
     // the hood's lines down from its top seam to the ring: its rim, its front quarter, its side (where it's widest, as the
     // front sees it), its back quarter and the seam down the back; the top seam their tops, from the rim's top at the
     // hairline up over the head to the soft point over the crown and down behind it, as the reference's profile has it.
-    // Its rim as the reference's piping runs (`lab hood`'s opening): round over the brow at the hairline, then out and
-    // back, 2-4 cm off the face past the temples and the cheekbones, widest at the jaw, and in under the chin to the
+    // Its rim as the reference's piping runs (`lab hood`'s opening): its top corner over the brow, as low and as far
+    // ahead of it as the reference's (laid higher, it jutted from the side as a beak), then out and back nearly level
+    // to the temples, 2-4 cm off the face past the temples and the cheekbones, widest at the jaw, and in under the chin to the
     // collar's sides, closing round the throat; from the side as far behind the face it frames as the reference's is
     // behind its own (laid where the reference's runs from the eyes, it stood out over his flatter brow, a visor: "do
     // you see hood overhang in our case?"; laid a centimetre off the face, it was a tunnel; open under the chin, a
@@ -705,10 +706,10 @@ export function buildMage(): Model {
     // wider to the jaw and in a little at the chin before the shoulders; roomy behind the head, its slack hanging lowest
     // at the nape ("do you see bagginess in the ref? where is ours?": pulled in to the neck, it read as a shell)
     const hoodLines = [
-      [inE(0, 0.76, 0.49), inE(0.3, 0.6, 0.22), inE(0.51, 0.4, 0.01), inE(0.7, 0.2, -0.15), inE(0.865, 0, -0.31),
+      [inE(0, 0.68, 0.52), inE(0.3, 0.6, 0.24), inE(0.51, 0.4, 0.01), inE(0.7, 0.2, -0.15), inE(0.865, 0, -0.31),
         inE(1, -0.2, -0.44), inE(1.15, -0.4, -0.53), inE(1.27, -0.6, -0.58), inE(1.27, -0.8, -0.58), inE(1.08, -1, -0.47),
         inE(0.86, -1.2, -0.32), inE(0.7, -1.45, -0.14), ring[0]],
-      [inE(0, 1.08, 0), inE(0.33, 0.98, -0.18), inE(0.6, 0.76, -0.32), inE(0.8, 0.42, -0.42), inE(0.97, 0.02, -0.52),
+      [inE(0, 1.06, -0.04), inE(0.33, 0.98, -0.18), inE(0.6, 0.76, -0.32), inE(0.8, 0.42, -0.42), inE(0.97, 0.02, -0.52),
         inE(1.18, -0.4, -0.66), inE(1.27, -0.72, -0.7), inE(1.12, -1.02, -0.64), inE(1.04, -1.32, -0.52), ring[1]],
       [inE(0, 1.27, -0.68), inE(0.22, 1.16, -0.68), inE(0.55, 0.96, -0.72), inE(0.68, 0.78, -0.74), inE(0.85, 0.4, -0.76),
         inE(1.02, 0, -0.78), inE(1.17, -0.4, -0.8), inE(1.21, -0.7, -0.82), inE(1.04, -1, -0.8), ring[2]],
