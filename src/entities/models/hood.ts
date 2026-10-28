@@ -58,9 +58,14 @@ export interface HoodOptions {
   /** how far clear of `bodies` the free cloth is laid, wherever `shape` laid it into them (m) */
   clear: number;
   /** a piping round its open edge and its hem: down the face's edge on one side from `from` (a share of the rows down,
-   *  where the face opens), along the hem, and up the other; and with `seam`, down its middle seam too, from the face's
-   *  edge over the top and down the back to the hem */
-  piping?: { material: THREE.Material; radius: number; from: number; seam?: boolean };
+   *  where the face opens), along the hem, and up the other; with `roll`, along the front of a roll of cloth there,
+   *  the edge turned in on itself (a sheet's bare edge read paper thin, a knife's at the brim's corner); and with `seam`,
+   *  down its middle seam too, from the face's edge over the top and down the back to the hem, two cords `apart` (m)
+   *  where it's given */
+  piping?: {
+    material: THREE.Material; radius: number; from: number; seam?: boolean; apart?: number;
+    roll?: { material: THREE.Material; radius: number };
+  };
   /** where it's drawn: its columns at u across and its rows at v down (0 to 1, in order: finer than its particles, and
    *  finer still where its creases are, `spaced`), and its creases there: how far out along its normal the cloth at
    *  (u, v) lies (m; in, below none) */
@@ -111,11 +116,14 @@ export class HoodCloth {
   private readonly smooth: Float32Array;
   private readonly creases: Float32Array;
   private readonly across: Float32Array;
-  /** the piping's path, point by point on the drawn surface, and its tube; and the seam's */
+  /** the piping's path, point by point on the drawn surface, the point a step into the cloth from each, its tube and
+   *  its roll's; and the seam's, one tube a cord */
   private readonly path: number[] = [];
+  private readonly inward: number[] = [];
   private readonly pipe?: THREE.BufferGeometry;
+  private readonly rollPipe?: THREE.BufferGeometry;
   private readonly seamPath: number[] = [];
-  private readonly seamPipe?: THREE.BufferGeometry;
+  private readonly seamPipes: THREE.BufferGeometry[] = [];
   private readonly bodyInv: THREE.Matrix4[] = [];
   private acc = 0;
   private needsReset = true;
@@ -176,18 +184,24 @@ export class HoodCloth {
     if (o.piping) {
       // (up one side of the face from the hem, down the other, and back along the hem)
       const r0 = nearest(down, o.piping.from);
-      for (let r = FV - 1; r >= r0; r--) this.path.push(r * FU);
-      for (let r = r0; r < FV; r++) this.path.push(r * FU + FU - 1);
-      for (let c = FU - 2; c >= 0; c--) this.path.push((FV - 1) * FU + c);
+      for (let r = FV - 1; r >= r0; r--) this.path.push(r * FU), this.inward.push(r * FU + 1);
+      for (let r = r0; r < FV; r++) this.path.push(r * FU + FU - 1), this.inward.push(r * FU + FU - 2);
+      for (let c = FU - 2; c >= 0; c--) this.path.push((FV - 1) * FU + c), this.inward.push((FV - 2) * FU + c);
       this.pipe = tube(this.path.length);
       this.add(this.pipe, o.piping.material, false);
+      if (o.piping.roll) {
+        this.rollPipe = tube(this.path.length);
+        this.add(this.rollPipe, o.piping.roll.material, false);
+      }
       if (o.piping.seam) {
         // (from the face's edge along the top seam to the back, where the halves meet, and down the middle to the hem)
         const middle = nearest(across, 0.5);
         for (let c = 0; c <= middle; c++) this.seamPath.push(c);
         for (let r = 1; r < FV; r++) this.seamPath.push(r * FU + middle);
-        this.seamPipe = tube(this.seamPath.length);
-        this.add(this.seamPipe, o.piping.material, false);
+        for (let k = 0; k < (o.piping.apart ? 2 : 1); k++) {
+          this.seamPipes.push(tube(this.seamPath.length));
+          this.add(this.seamPipes[k], o.piping.material, false);
+        }
       }
     }
   }
@@ -420,31 +434,54 @@ export class HoodCloth {
     }
     normals(F, FU, FV, S);
     this.outer.attributes.position.needsUpdate = this.outer.attributes.normal.needsUpdate = pi.needsUpdate = true;
-    if (this.pipe) this.writePipe(this.pipe, this.path);
-    if (this.seamPipe) this.writePipe(this.seamPipe, this.seamPath);
+    const P = this.o.piping, roll = P?.roll, under = roll ? roll.radius - this.o.thick / 2 : 0;
+    // (the roll turned in under the outside, its outer face a little proud of it, reaching a little past the edge; the
+    // cord along its outer front, the edge's outermost line seen from the front and the side)
+    if (this.rollPipe) this.writePipe(this.rollPipe, this.path, roll!.radius, 0, under, this.inward);
+    const cord = roll ? { out: roll.radius * 0.6, under: under - roll.radius * 0.6 } : { out: 0, under: 0 };
+    if (this.pipe) this.writePipe(this.pipe, this.path, P!.radius, cord.out, cord.under, this.inward);
+    this.seamPipes.forEach((g, k) => {
+      const aside = this.seamPipes.length > 1 ? (k - 0.5) * P!.apart! : 0;
+      this.writePipe(g, this.seamPath, P!.radius, aside, 0);
+    });
   }
 
-  /** a piping's tube `g` along its `path` on the drawn surface, its sides turned by the surface's normal there */
-  private writePipe(g: THREE.BufferGeometry, path: number[]): void {
+  /** a tube `g` of radius `rad` along its `path` on the drawn surface, its sides turned by the surface's normal there:
+   *  its middle `out` (m) across the surface from the path, past the cloth's edge, away from `inward`'s points (the
+   *  path's neighbours a step into the cloth; without them, across one way), and `under` in under its outside */
+  private writePipe(g: THREE.BufferGeometry, path: number[], rad: number, out: number, under: number, inward?: number[]): void {
     const pos = g.attributes.position as THREE.BufferAttribute, nor = g.attributes.normal as THREE.BufferAttribute;
-    const L = this.fine, N = this.smooth, n = path.length, rad = this.o.piping!.radius;
+    const L = this.fine, N = this.smooth, n = path.length;
     for (let k = 0; k < n; k++) {
       const i = path[k], prev = path[Math.max(0, k - 1)], next = path[Math.min(n - 1, k + 1)];
       _a.set(L[next * 3] - L[prev * 3], L[next * 3 + 1] - L[prev * 3 + 1], L[next * 3 + 2] - L[prev * 3 + 2]).normalize();
       _n.set(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]);
       _b.crossVectors(_a, _n).normalize();
       _n.crossVectors(_b, _a);
+      // (the way past the edge turns the offset alone: the circle turned with it ran the other way round, its faces wound
+      // inside out, a pale far wall)
+      let past = out;
+      if (inward) {
+        const j = inward[k];
+        _c.set(L[i * 3] - L[j * 3], L[i * 3 + 1] - L[j * 3 + 1], L[i * 3 + 2] - L[j * 3 + 2]);
+        if (_c.dot(_b) < 0) past = -out;
+      }
+      const cx = L[i * 3] + _b.x * past - _n.x * under, cy = L[i * 3 + 1] + _b.y * past - _n.y * under;
+      const cz = L[i * 3 + 2] + _b.z * past - _n.z * under;
       for (let s = 0; s <= SIDES; s++) {
         const t = (s / SIDES) * Math.PI * 2, cs = Math.cos(t), sn = Math.sin(t);
         const nx = _n.x * cs + _b.x * sn, ny = _n.y * cs + _b.y * sn, nz = _n.z * cs + _b.z * sn, v = k * (SIDES + 1) + s;
-        pos.setXYZ(v, L[i * 3] + nx * rad, L[i * 3 + 1] + ny * rad, L[i * 3 + 2] + nz * rad);
+        pos.setXYZ(v, cx + nx * rad, cy + ny * rad, cz + nz * rad);
         nor.setXYZ(v, nx, ny, nz);
       }
     }
     pos.needsUpdate = nor.needsUpdate = true;
   }
 
-  dispose(): void { this.outer.dispose(); this.inner.dispose(); this.pipe?.dispose(); this.seamPipe?.dispose(); }
+  dispose(): void {
+    this.outer.dispose(); this.inner.dispose(); this.pipe?.dispose(); this.rollPipe?.dispose();
+    for (const g of this.seamPipes) g.dispose();
+  }
 }
 
 /** `count + 1` points evenly along a centripetal Catmull-Rom through `pts`, its ends shaped by the points beyond them
@@ -500,7 +537,11 @@ function tube(n: number): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry(), idx: number[] = [], W = SIDES + 1;
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * W * 3), 3).setUsage(THREE.DynamicDrawUsage));
   g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(n * W * 3), 3).setUsage(THREE.DynamicDrawUsage));
-  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * W * 2), 2));
+  // (its texture's coordinates along it and round it, at about a cloth's scale: a step of the drawn surface a centimetre
+  // or so, a whole map 60 cm; all at naught, a roll of wool took its one texel, a pale pink trim)
+  const uv = new Float32Array(n * W * 2);
+  for (let k = 0; k < n; k++) for (let s = 0; s < W; s++) uv.set([k * 0.015, (s / SIDES) * 0.05], (k * W + s) * 2);
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   for (let k = 0; k + 1 < n; k++) for (let s = 0; s < SIDES; s++) {
     const a = k * W + s, b = a + W;
     idx.push(a, a + 1, b, a + 1, b + 1, b);

@@ -4,13 +4,16 @@
 // - its outline in the studio from the front, his left and the back, laid over the reference's (its figure cut from
 //   its plain backdrop), both on one grid in the face's own unit (the eye line to the chin, `E`, from marks on the
 //   reference and the head's anatomy on ours): how much of the two outlines is shared, how high the hood stands over
-//   the eyes and how wide or deep it is at the crown, the temples, the chin, the neck and the shoulders;
+//   the eyes and how wide or deep it is at the crown, the temples, the chin, the nape, the neck and the shoulders, its
+//   fullness held to the reference's at the chin (from his left how far behind it hangs, and at the nape; from the
+//   back how wide);
 // - its shape on the head, from its cloth, against the sizes the reference was made to (its modelling notes): how far
 //   its rim stands ahead of the brow and of the cheeks and out from the cheeks, how far its point rises above the
 //   scalp and how far its capelet falls below the nape; and how much it changes shape as he walks;
 // - its opening round the face from the front and his left (`hoodOpening.ts`): where its rim runs, how much of the
 //   face it shows;
-// - how its capelet lies on him (`hoodLie.ts`): how far it stands off his front, his shoulders and his back;
+// - how its capelet lies on him (`hoodLie.ts`): how far it stands off his front, his shoulders and his back, and how
+//   deep his body comes through the hood above it;
 // - what its cloth costs a frame as he stands and walks (`HoodCloth.update`, by the browser's own clock).
 import * as THREE from 'three';
 import type { Lab, Fixture, Report, Pictured, Tile } from './lab';
@@ -19,10 +22,11 @@ import { toGroup } from '../../../src/entities/models/head';
 import { EYE } from '../../../src/entities/models/face';
 import { HoodCloth } from '../../../src/entities/models/hood';
 import {
-  deepestOf, lieCanary, lieLines, lieOf, lieRows, walkingLine, type CapeletMesh, type Deepest,
+  deepestOf, hoodThroughCanary, hoodThroughLine, hoodThroughOf, lieCanary, lieLines, lieOf, lieRows, walkingLine,
+  type CapeletMesh, type Deepest,
 } from './hoodLie';
 import {
-  aheadAt, halfWidthAt, isSkinMesh, maskOf, onTile, openingLines, ourOpening, referenceOpening, rimDots,
+  aheadAt, halfWidthAt, isSkinMesh, maskOf, onTile, openingLines, ourOpening, referenceOpening, rimDots, shownAt,
   type FaceMarks, type Figure, type Mask, type Opening, type OpeningView,
 } from './hoodOpening';
 import { timeCalls, type CallTimes } from './timing';
@@ -40,7 +44,7 @@ export interface HoodOptions {
   reference?: Partial<Record<ViewName, HoodReference>>;
   /** the sizes the reference was made to (cm, the least and the most), where its marks give them */
   sizes?: Partial<Record<Size, [number, number]>>;
-  /** plant the faults the measures must catch: the hood narrowed, and its rim pulled in to the face */
+  /** plant the faults the measures must catch: the hood narrowed, moved forward, made shallower front to back */
   canary?: boolean;
   /** list each view's outline every `EDGES_STEP` down the window, ours beside the reference's */
   edges?: boolean;
@@ -65,13 +69,25 @@ const LEVELS = [
   { name: 'crown', up: 1.2 },
   { name: 'temples', up: 0.4 },
   { name: 'chin', up: -1.0 },
+  { name: 'nape', up: -1.3 },
   { name: 'neck', up: -1.6 },
   { name: 'shoulders', up: -2.2 },
 ];
 /** how far apart the heights `--edges` lists are (`E`) */
 const EDGES_STEP = 0.2;
-/** what the camera frames round the head's joint (m): across, below it (the capelet, the shoulders), above it */
+/** the heights the hood's fullness is held to the reference's at from his left and the back (`LEVELS`' names), and
+ *  how far ours may stray from it there (`E`): from his left how far it reaches behind the eyes, from the back how
+ *  wide it is. (Pulled in to the neck, it read as a shell where the reference's cloth hangs loose behind the head and
+ *  gathers at the nape: "do you see bagginess in the ref? where is ours?"; cut wider and deeper than the reference's,
+ *  it read as a sack.) Below the nape it's the capelet's: the reference's stands out behind the shoulder blades and
+ *  over the shoulders in a ledge, ours lies on his back, read at the neck and the shoulders but not held */
+const FULL_LEVELS: Record<'left' | 'back', string[]> = { left: ['chin', 'nape'], back: ['chin'] };
+const FULL_SLACK = 0.1;
+/** what the camera frames round the head's joint (m): across, below it (the capelet, the shoulders), above it, and its
+ *  lens (degrees): at the studio's 20°, from 2.2 m, the hood's back, 20 cm nearer the camera than the eyes the scale
+ *  is set at, read 10% wider than it is (from 7 m, 3%) */
 const FRAME = { across: 0.3, below: 0.32, above: 0.3 };
+const LENS = 6;
 /** how far a reference's pixel may be from its backdrop's colour and still count as backdrop (0-255 a channel) */
 const BACKDROP_SLACK = 24;
 /** a reference's backdrop is read from its rows down to here (a share of it): below, the figure reaches its sides */
@@ -101,10 +117,17 @@ const CANARY_LEAST_CLEAR = 1;
 const CANARY_LEAST_TEMPLES = 0.2;
 const CANARY_LEAST_OPENING = 0.15;
 /** with --canary: how far forward the hood is moved (cm), and how much further ahead the measure must read its rim at
- *  the eyes from his left (`E`) and how much less of the face shown (a share) */
+ *  the eyes from his left (`E`), how much less of the face shown ahead of it there (`E`) and of the face shown in all
+ *  (a share) */
 const CANARY_FORWARD = 2;
 const CANARY_LEAST_AHEAD = 0.12;
 const CANARY_LEAST_HIDDEN = 0.1;
+/** with --canary: how much shallower front to back the hood is made, and how much less far behind the eyes the
+ *  measure must read it reach at the chin from his left (`E`); and how much narrower from the back at the neck it must
+ *  read the narrowed hood (`E`) */
+const CANARY_SHALLOW = 0.8;
+const CANARY_LEAST_SHALLOWER = 0.15;
+const CANARY_LEAST_NECK = 0.2;
 
 /** An outline on the grid: a cell a value, true where the figure covers it, row by row from the top. */
 interface Outline {
@@ -527,12 +550,57 @@ function cameraFrom(lab: Lab, from: THREE.Vector3Tuple): THREE.PerspectiveCamera
     new THREE.Vector3(head.x - FRAME.across, head.y - FRAME.below, head.z - FRAME.across),
     new THREE.Vector3(head.x + FRAME.across, head.y + FRAME.above, head.z + FRAME.across),
   );
-  return cameraOn(box, from);
+  return cameraOn(box, from, undefined, LENS);
 }
 
-/** What the views read: the front's outline, and the opening from the front and his left. */
+/** Our outline from one of `VIEWS` as the hood is now, in a studio of its own (for the canaries). */
+function outlineNow(lab: Lab, view: ViewName): Outline {
+  const scene = studio();
+  const back = intoStudio(lab, scene);
+  try {
+    const camera = cameraFrom(lab, VIEWS.find((side) => side.name === view)!.from);
+    const figure = ourFigure(lab, scene, camera);
+    return outlineOf(figure.covered, ourMarks(lab, camera, figure));
+  } finally {
+    back();
+  }
+}
+
+/** The height of one of `LEVELS` by its name (`E` over the eyes). */
+function levelUp(name: string): number {
+  return LEVELS.find((level) => level.name === name)!.up;
+}
+
+/** How full the hood hangs at a height (`E`): from his left how far its outline reaches behind the eyes, from the
+ *  front and the back how wide it is; null where the outline doesn't reach the height. */
+function fullnessAt(outline: Outline, view: ViewName, up: number): number | null {
+  const reach = reachAt(outline, up);
+  if (!reach) return null;
+  return view === 'left' ? reach.to : reach.to - reach.from;
+}
+
+/** A problem where the hood hangs fuller or tighter than the reference's at `FULL_LEVELS`, from his left and the
+ *  back. */
+function fullness(view: ViewName, ours: Outline, theirs: Outline, problems: string[]): void {
+  if (view === 'front') return;
+  for (const level of LEVELS.filter((height) => FULL_LEVELS[view].includes(height.name))) {
+    const mine = fullnessAt(ours, view, level.up);
+    const reference = fullnessAt(theirs, view, level.up);
+    if (mine === null || reference === null) continue;
+    const off = mine - reference;
+    if (Math.abs(off) <= FULL_SLACK) continue;
+    const how = view === 'left'
+      ? `it reaches ${Math.abs(off).toFixed(2)} E ${off > 0 ? 'further' : 'less far'} behind`
+      : `it's ${Math.abs(off).toFixed(2)} E ${off > 0 ? 'wider' : 'narrower'}`;
+    const where = view === 'left' ? 'from his left' : 'from the back';
+    problems.push(`hood: ${where} ${how} at the ${level.name} than the reference's (${mine.toFixed(2)}, the `
+      + `reference's ${reference.toFixed(2)}): ${off > 0 ? 'a sack' : 'pulled in where the reference hangs loose'}`);
+  }
+}
+
+/** What the views read: each one's outline, and the opening from the front and his left. */
 interface ViewsRead {
-  front: Outline;
+  outlines: Record<ViewName, Outline>;
   openings: Record<OpeningView, Opening>;
 }
 
@@ -543,7 +611,7 @@ async function outlines(lab: Lab, options: HoodOptions, lines: string[], problem
   // (each view lit from its camera's side, as the reference's are)
   const scene = studio(true);
   const back = intoStudio(lab, scene);
-  let front: Outline | null = null;
+  const read: Partial<Record<ViewName, Outline>> = {};
   const openings: Partial<Record<OpeningView, Opening>> = {};
   try {
     const shots: Shot[] = VIEWS.map((view) => ({ name: view.name, camera: cameraFrom(lab, view.from) }));
@@ -553,13 +621,14 @@ async function outlines(lab: Lab, options: HoodOptions, lines: string[], problem
       const figure = ourFigure(lab, scene, camera);
       const marks = ourMarks(lab, camera, figure);
       const ours = outlineOf(figure.covered, marks);
-      if (view.name === 'front') front = ours;
+      read[view.name] = ours;
       const reference = options.reference?.[view.name];
       const theirs = reference ? await referenceOutline(reference) : null;
       const shared = theirs ? `, ${(overlap(ours, theirs.outline) * 100).toFixed(0)}% of the outlines shared` : '';
       lines.push(`${view.name}${shared}`);
       lines.push(`  ours, E from the eyes: ${readings(ours, view.name)}`);
       if (theirs) lines.push(`  the reference's:       ${readings(theirs.outline, view.name)}`);
+      if (theirs) fullness(view.name, ours, theirs.outline, problems);
       if (options.edges) lines.push(...edgeLines(ours, theirs?.outline ?? null, view.name));
       const dots = { ours: [] as [number, number][], theirs: [] as [number, number][] };
       if (view.name !== 'back') {
@@ -582,7 +651,7 @@ async function outlines(lab: Lab, options: HoodOptions, lines: string[], problem
   } finally {
     back();
   }
-  return { front: front!, openings: openings as Record<OpeningView, Opening> };
+  return { outlines: read as Record<ViewName, Outline>, openings: openings as Record<OpeningView, Opening> };
 }
 
 /** How the hood moves as he walks: how far its top half moves from its standing shape at most (cm, the hat's own
@@ -722,6 +791,8 @@ function capeletLie(lab: Lab, options: HoodOptions, problems: string[]): string[
   const lines = lieLines(lie, problems);
   if (options.rows) lines.push(...lieRows(lie));
   if (options.canary) lines.push(lieCanary(lab, capelet, held, lie, problems));
+  lines.push(hoodThroughLine(hoodThroughOf(lab, capelet, held), 'standing', problems));
+  if (options.canary) lines.push(hoodThroughCanary(lab, capelet, held, problems));
   return lines;
 }
 
@@ -747,31 +818,28 @@ function planted(lab: Lab, change: (part: THREE.Object3D) => void, undo: (part: 
   };
 }
 
+/** How much less a view's fullness reads at a height now than `was` read it (`E`; none where either missed it). */
+function lessFull(lab: Lab, was: Outline, view: ViewName, up: number): number {
+  const before = fullnessAt(was, view, up);
+  const now = fullnessAt(outlineNow(lab, view), view, up);
+  return before !== null && now !== null ? before - now : 0;
+}
+
 /** The canary for the hood's width: made narrower about the head, the rim must read nearer the cheeks, the outline
- *  narrower at the temples and the opening narrower at the eyes. */
+ *  narrower at the temples and, from the back, at the neck, and the opening narrower at the eyes. */
 function narrowCanary(lab: Lab, sizes: Record<Size, number>, read: ViewsRead, problems: string[]): string | null {
   const undo = planted(lab, (part) => (part.scale.x *= CANARY_NARROW), (part) => (part.scale.x /= CANARY_NARROW));
   try {
     const clear = sizesOf(lab).clear;
-    const scene = studio();
-    const back = intoStudio(lab, scene);
-    let temples = 0;
-    try {
-      const camera = cameraFrom(lab, VIEWS[0].from);
-      const figure = ourFigure(lab, scene, camera);
-      const outline = outlineOf(figure.covered, ourMarks(lab, camera, figure));
-      const was = reachAt(read.front, 0.4);
-      const now = reachAt(outline, 0.4);
-      temples = was && now ? was.to - was.from - (now.to - now.from) : 0;
-    } finally {
-      back();
-    }
+    const temples = lessFull(lab, read.outlines.front, 'front', 0.4);
+    const neck = lessFull(lab, read.outlines.back, 'back', levelUp('neck'));
     const opening = (halfWidthAt(read.openings.front, 0) ?? 0) - (halfWidthAt(openingNow(lab, 'front'), 0) ?? 0);
     const lost = sizes.clear - clear;
     const said = `canary, the hood ${CANARY_NARROW}x as wide: the rim ${lost.toFixed(1)} cm nearer the cheeks, `
-      + `${temples.toFixed(2)} E narrower at the temples, the opening ${opening.toFixed(2)} E narrower either side at `
-      + 'the eyes';
-    const missed = lost < CANARY_LEAST_CLEAR || temples < CANARY_LEAST_TEMPLES || opening < CANARY_LEAST_OPENING;
+      + `${temples.toFixed(2)} E narrower at the temples and ${neck.toFixed(2)} at the neck from the back, the `
+      + `opening ${opening.toFixed(2)} E narrower either side at the eyes`;
+    const missed = lost < CANARY_LEAST_CLEAR || temples < CANARY_LEAST_TEMPLES || neck < CANARY_LEAST_NECK
+      || opening < CANARY_LEAST_OPENING;
     if (!missed) return said;
     problems.push(`missed: ${said}`);
     return null;
@@ -780,8 +848,8 @@ function narrowCanary(lab: Lab, sizes: Record<Size, number>, read: ViewsRead, pr
   }
 }
 
-/** The canary for the opening from his left: the hood moved forward, its rim must read further ahead at the eyes and
- *  less of the face shown. */
+/** The canary for the opening from his left: the hood moved forward, its rim must read further ahead at the eyes,
+ *  the face shown ahead of it less there, and less of the face shown in all. */
 function forwardCanary(lab: Lab, read: ViewsRead, problems: string[]): string | null {
   const step = CANARY_FORWARD / 100 / hoodParts(lab)[0].parent!.getWorldScale(new THREE.Vector3()).z;
   const undo = planted(lab, (part) => (part.position.z += step), (part) => (part.position.z -= step));
@@ -789,10 +857,29 @@ function forwardCanary(lab: Lab, read: ViewsRead, problems: string[]): string | 
     const before = read.openings.left;
     const after = openingNow(lab, 'left');
     const ahead = (aheadAt(after, 0) ?? 0) - (aheadAt(before, 0) ?? 0);
+    const shown = (shownAt(before, 0) ?? 0) - (shownAt(after, 0) ?? 0);
     const hidden = before.face ? 1 - after.face / before.face : 0;
     const said = `canary, the hood ${CANARY_FORWARD} cm forward: from his left its rim ${ahead.toFixed(2)} E further `
-      + `ahead at the eyes, ${(hidden * 100).toFixed(0)}% less of the face shown`;
-    if (ahead >= CANARY_LEAST_AHEAD && hidden >= CANARY_LEAST_HIDDEN) return said;
+      + `ahead at the eyes, the face shown ${shown.toFixed(2)} E less ahead of it there, `
+      + `${(hidden * 100).toFixed(0)}% less of the face shown`;
+    const caught = ahead >= CANARY_LEAST_AHEAD && shown >= CANARY_LEAST_AHEAD && hidden >= CANARY_LEAST_HIDDEN;
+    if (caught) return said;
+    problems.push(`missed: ${said}`);
+    return null;
+  } finally {
+    undo();
+  }
+}
+
+/** The canary for the hood's fullness: made shallower front to back about the head, its outline from his left must
+ *  read less far behind the eyes at the chin. */
+function shallowCanary(lab: Lab, read: ViewsRead, problems: string[]): string | null {
+  const undo = planted(lab, (part) => (part.scale.z *= CANARY_SHALLOW), (part) => (part.scale.z /= CANARY_SHALLOW));
+  try {
+    const shallower = lessFull(lab, read.outlines.left, 'left', levelUp('chin'));
+    const said = `canary, the hood ${CANARY_SHALLOW}x as deep: from his left it reaches ${shallower.toFixed(2)} E less `
+      + 'far behind at the chin';
+    if (shallower >= CANARY_LEAST_SHALLOWER) return said;
     problems.push(`missed: ${said}`);
     return null;
   } finally {
@@ -810,21 +897,26 @@ export async function hood(lab: Lab, options: HoodOptions): Promise<Report> {
   lines.push(headLine(lab));
   const read = await outlines(lab, options, lines, problems, moments);
   if (options.canary) {
-    for (const canary of [narrowCanary(lab, sizes, read, problems), forwardCanary(lab, read, problems)]) {
+    const canaries = [
+      narrowCanary(lab, sizes, read, problems), forwardCanary(lab, read, problems), shallowCanary(lab, read, problems),
+    ];
+    for (const canary of canaries) {
       if (canary) lines.push(canary);
     }
   }
   lines.push(...capeletLie(lab, options, problems));
   const capelet = capeletOf(lab);
   const held = heldThings(lab);
-  const walk = { deepest: null as Deepest | null, moments: 0 };
+  const walk = { deepest: null as Deepest | null, hood: null as Deepest | null, moments: 0 };
+  const deeper = (was: Deepest | null, now: Deepest | null) => (now && (!was || now.through > was.through) ? now : was);
   const swayed = await sway(lab, () => {
     walk.moments++;
-    const now = deepestOf(lieOf(lab, capelet, held));
-    if (now && (!walk.deepest || now.through > walk.deepest.through)) walk.deepest = now;
+    walk.deepest = deeper(walk.deepest, deepestOf(lieOf(lab, capelet, held)));
+    walk.hood = deeper(walk.hood, hoodThroughOf(lab, capelet, held));
   });
   const { moved, cost } = swayed;
   lines.push(walkingLine(walk.deepest, walk.moments, problems));
+  lines.push(hoodThroughLine(walk.hood, 'walking', problems));
   lines.push(`walking, its top half moved at most ${moved.toFixed(1)} cm from its standing shape (${MOST_SWAY} at most)`);
   if (moved > MOST_SWAY) problems.push(`hood: its top half moved ${moved.toFixed(1)} cm from its shape as he walked`);
   lines.push(...kinkLines(swayed, hoodOf(lab), Boolean(options.canary), problems));

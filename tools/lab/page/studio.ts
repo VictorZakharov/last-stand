@@ -56,15 +56,17 @@ function lightFrom(scene: THREE.Scene, camera: THREE.Camera): void {
 
 /**
  * The studio's camera looking at `part` from the side `from` points to (from its middle), near enough to frame it in
- * a picture of `TILE_SHAPE`: its height (y) up the picture, its width or depth across it, with `up` up the picture.
+ * a picture of `TILE_SHAPE`: its height (y) up the picture, its width or depth across it, with `up` up the picture,
+ * through a lens of `fov` degrees (a longer one, from further off, draws what's nearer it and what's further at
+ * nearer their sizes beside each other).
  */
-export function cameraOn(part: THREE.Box3, from: THREE.Vector3Tuple, up: THREE.Vector3Tuple = [0, 1, 0]):
-  THREE.PerspectiveCamera {
+export function cameraOn(part: THREE.Box3, from: THREE.Vector3Tuple, up: THREE.Vector3Tuple = [0, 1, 0],
+  fov = STUDIO_FOV): THREE.PerspectiveCamera {
   const canvas = G.renderer.domElement;
-  const camera = new THREE.PerspectiveCamera(STUDIO_FOV, canvas.width / canvas.height, 0.01, 50);
+  const camera = new THREE.PerspectiveCamera(fov, canvas.width / canvas.height, 0.01, 50);
   const centre = part.getCenter(new THREE.Vector3());
   const size = part.getSize(new THREE.Vector3());
-  const tall = Math.tan(THREE.MathUtils.degToRad(STUDIO_FOV / 2));
+  const tall = Math.tan(THREE.MathUtils.degToRad(fov / 2));
   const upWay = new THREE.Vector3(...up).normalize();
   const height = Math.abs(size.dot(upWay));
   // (its widest square to `up`, one of the box's axes)

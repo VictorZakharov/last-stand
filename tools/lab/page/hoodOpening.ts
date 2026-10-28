@@ -6,7 +6,10 @@
 //   far ahead of the eyes; ours from its cloth's edge, the reference's from its piping (each row scanned in from the
 //   backdrop to the first run of the piping's pale gold; from his left, over the hood's cloth past the seam's);
 // - how much of the face it shows from each (E², from over the brow down to the chin): ours drawn flat, its skin
-//   white and all else black; the reference's by its skin's colour, inside its rim (its piping is skin-coloured).
+//   white and all else black; the reference's by its skin's colour, inside its rim (its piping is skin-coloured);
+// - from his left, how far the face shows ahead of the rim at each height, held to the reference's: the rim frames
+//   the face it shows. (The reference's brow, nose and chin stand further ahead of its eyes than ours: laid where its
+//   rim runs from the eyes, ours stood out over the brow, "do you see hood overhang in our case?")
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
@@ -39,12 +42,19 @@ export interface Opening {
   face: number;
 }
 
-/** the heights the rim is read at (`E` over the eyes), and those it's held to the reference's at (above, the arch
- *  closes over the brow; below the chin it opens onto the collar) */
-export const RIM_LEVELS = [0.6, 0.4, 0.2, 0, -0.2, -0.4, -0.6, -0.8, -1.0];
-const HELD = { top: 0.4, bottom: -0.8 };
-/** how far ours may stray from the reference's rim (`E`: 1.2 cm) */
+/** the heights the rim is read at (`E` over the eyes), and those it's held to the reference's at from each side
+ *  (above, the arch closes over the brow; from the front, down past the chin to the throat, where the reference's
+ *  closes in onto the collar: ours stood open below the chin, a funnel half as wide again; from his left, to the jaw,
+ *  below which the face shown ahead of it is the chin's and the neck's) */
+export const RIM_LEVELS = [0.6, 0.4, 0.2, 0, -0.2, -0.4, -0.6, -0.8, -1.0, -1.2, -1.4];
+const HELD: Record<OpeningView, { top: number; bottom: number }> = {
+  front: { top: 0.4, bottom: -1.4 },
+  left: { top: 0.4, bottom: -0.8 },
+};
+/** how far ours may stray from the reference's rim from the front (`E`: 1.2 cm), and how far the face shown ahead of
+ *  the rim from his left from the reference's (6 mm) */
 const RIM_SLACK = 0.1;
+const SHOWN_SLACK = 0.05;
 /** the band the face shown is read in (`E` over the eyes): from over the brow down to the chin */
 const FACE_BAND = { top: 0.8, bottom: -1.0 };
 /** the least share of the reference's face shown ours may show */
@@ -337,10 +347,24 @@ export function aheadAt(opening: Opening, up: number): number | null {
   return rim && rim.length === 1 ? -rim[0] : null;
 }
 
-/** The opening's reading at a level as a number: its half width from the front, its rim's reach ahead from his
- *  left. */
+/** From the front the rim's stand-off from the face shown either side, from his left how far the face shows ahead of
+ *  it (`E`; none where the face is hidden behind it), or null where the rim wasn't found. */
+function standOffAt(opening: Opening, view: OpeningView, k: number): number[] | null {
+  const [rim, face] = [opening.rims[k], opening.faces[k]];
+  if (!rim) return null;
+  if (view === 'left') return [face ? rim[0] - face[0] : 0];
+  return face ? [face[0] - rim[0], rim[1] - face[1]] : null;
+}
+
+/** How far the face shows ahead of the rim from his left at `up` (`E`), or null. */
+export function shownAt(opening: Opening, up: number): number | null {
+  return standOffAt(opening, 'left', RIM_LEVELS.indexOf(up))?.[0] ?? null;
+}
+
+/** The opening's reading held to the reference's at a level: its half width from the front, how far the face shows
+ *  ahead of its rim from his left. */
 function readingAt(opening: Opening, view: OpeningView, up: number): number | null {
-  return view === 'left' ? aheadAt(opening, up) : halfWidthAt(opening, up);
+  return view === 'left' ? shownAt(opening, up) : halfWidthAt(opening, up);
 }
 
 /** The opening's readings as lines, ours beside the reference's, and a problem where ours strays from it. */
@@ -353,15 +377,9 @@ export function openingLines(view: OpeningView, ours: Opening, theirs: Opening |
   });
   const lines = [`  the opening, E from the eyes at each height up, ${what} (ours | the reference's):`,
     `    ${levels.join('; ')}`];
-  // (from the front the rim's stand-off from the face either side; from his left how far the face shows ahead of it)
-  const standOff = (opening: Opening, k: number) => {
-    const [rim, face] = [opening.rims[k], opening.faces[k]];
-    if (!rim || !face) return null;
-    return view === 'left' ? [rim[0] - face[0]] : [face[0] - rim[0], rim[1] - face[1]];
-  };
   const offs = RIM_LEVELS.map((up, k) => {
-    const theirsToo = theirs ? ` | ${format(standOff(theirs, k))}` : '';
-    return `${up.toFixed(1)}: ${format(standOff(ours, k))}${theirsToo}`;
+    const theirsToo = theirs ? ` | ${format(standOffAt(theirs, view, k))}` : '';
+    return `${up.toFixed(1)}: ${format(standOffAt(ours, view, k))}${theirsToo}`;
   });
   const shows = view === 'left' ? 'the face shown ahead of the rim' : 'the rim out from the face shown either side';
   lines.push(`  ${shows}, E:`, `    ${offs.join('; ')}`);
@@ -371,21 +389,23 @@ export function openingLines(view: OpeningView, ours: Opening, theirs: Opening |
   return lines;
 }
 
-/** A problem for each way ours strays from the reference's: its rim, where it strays most, and the face shown. */
+/** A problem for each way ours strays from the reference's: its rim (from his left, the face shown ahead of it),
+ *  where it strays most, and the face shown. */
 function strays(view: OpeningView, ours: Opening, theirs: Opening, problems: string[]): void {
   let worst: { up: number; ours: number; theirs: number } | null = null;
   for (const up of RIM_LEVELS) {
-    if (up > HELD.top || up < HELD.bottom) continue;
+    if (up > HELD[view].top || up < HELD[view].bottom) continue;
     const [mine, reference] = [readingAt(ours, view, up), readingAt(theirs, view, up)];
     if (mine === null || reference === null) continue;
     if (!worst || Math.abs(mine - reference) > Math.abs(worst.ours - worst.theirs)) {
       worst = { up, ours: mine, theirs: reference };
     }
   }
-  if (worst && Math.abs(worst.ours - worst.theirs) > RIM_SLACK) {
+  const slack = view === 'left' ? SHOWN_SLACK : RIM_SLACK;
+  if (worst && Math.abs(worst.ours - worst.theirs) > slack) {
     const off = worst.ours - worst.theirs;
     const how = view === 'left'
-      ? `its rim ${Math.abs(off).toFixed(2)} E ${off > 0 ? 'further ahead' : 'further back'} than the reference's`
+      ? `the face shows ${Math.abs(off).toFixed(2)} E ${off > 0 ? 'more' : 'less'} ahead of its rim than the reference's`
       : `its opening ${Math.abs(off).toFixed(2)} E ${off > 0 ? 'wider' : 'narrower'} either side than the reference's`;
     problems.push(`hood: from ${view === 'left' ? 'his left' : 'the front'} ${how} at ${worst.up.toFixed(1)} E `
       + `over the eyes (${worst.ours.toFixed(2)}, the reference's ${worst.theirs.toFixed(2)})`);

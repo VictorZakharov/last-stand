@@ -5,7 +5,10 @@
 // `LIE_FROM` out along its normal back in onto his body as drawn (`BakedBody`:
 // what he holds and the hood itself left out): how far it stands off what it covers, or, where the ray meets him
 // before it, how deep his body has come out through it. Read round him: the front, over the shoulders, down the back;
-// with --rows, row by row from its first, and where its farthest and deepest points are and what they lie over.
+// with --rows, row by row from its first, and where its farthest and deepest points are and what they lie over. And
+// above the capelet, from below the jaw down to the join, how deep his body comes through the hood (the harness
+// straps' tops came out through its front there, under the rim's foot drawn in round the collar, and the capelet's
+// reading never looked: "cloth should not clip through hood").
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { BakedBody, isUnder } from './geometry';
@@ -20,8 +23,10 @@ type Region = (typeof REGIONS)[number]['name'];
 
 /** the most the capelet may stand off him (cm): as a rule (its median), and at its tenth farthest */
 const MOST_OFF = { typical: 2, far: 4 };
-/** the deepest his body may come out through it (cm): the cloth's own thickness lies over him */
-const MOST_THROUGH = 0.3;
+/** the deepest his body may come out through it (cm): what's read is the cloth's outside, so anything through it
+ *  shows (at 3 mm, the coat's front of the shoulder stood 2 mm out through the capelet and passed, a patch of the coat
+ *  on it in the parts look) */
+const MOST_THROUGH = 0.1;
 /** how far out along a point's normal its ray starts back in (m): past anything the capelet lies over */
 const LIE_FROM = 0.15;
 /** how far past the point its ray looks for him (m): beyond, the point covers nothing */
@@ -35,12 +40,29 @@ const CANARY_LEAST_LIFT = 3;
  *  deep the measure must read him come through */
 const CANARY_SINK = 7;
 const CANARY_LEAST_SINK = 2;
+/** how far down the hood (a share of its rows from the top seam) its body's coming through it is read from, above the
+ *  capelet: below the jaw, where it falls onto the collar and the shoulders; and the rows over the join left out
+ *  (their normals the fold's) */
+const THROUGH_FROM = 0.35;
+const JOIN_ROWS = 1;
+/** how far out along the cloth's normal his body is looked for over the hood above the capelet (m: a body come through
+ *  lies a few millimetres out, the canary's 5 cm), and the least its surface there may face the way the cloth does (the
+ *  cosine between their normals). In the gathers' valleys at the nape the cloth's normal turns down: looked for from 15
+ *  cm out, and whatever it faced, the ray met his back from below, and a brass fitting 14 cm out, read as come through
+ *  as he walked */
+const THROUGH_LOOK = 0.06;
+const LEAST_FACING = 0.5;
+/** with --canary: how deep the hood's front below the jaw is sunk into him (cm), and how deep the measure must read
+ *  him come through it */
+const CANARY_HOOD_SINK = 5;
+const CANARY_LEAST_HOOD_SINK = 2;
 
-/** The hood's outside, its grid and the row its capelet begins on. */
+/** The hood's outside, its grid (how far down it each row is, 0 to 1) and the row its capelet begins on. */
 export interface CapeletMesh {
   mesh: THREE.Mesh;
   across: number;
   down: number;
+  rows: number[];
   capelet: number;
 }
 
@@ -95,31 +117,48 @@ function firstRow(hood: CapeletMesh): number {
   return hood.capelet + 1;
 }
 
-/** The capelet's outside, point by point, from its first row down to its hem. */
-function capeletPoints(hood: CapeletMesh): ClothPoint[] {
+/** The capelet's rows: from its first down to its hem. */
+function capeletRows(hood: CapeletMesh): [number, number] {
+  return [firstRow(hood), hood.down];
+}
+
+/** The hood's rows above its capelet that its body's coming through is read on: from `THROUGH_FROM` of the way down
+ *  to those over the join. */
+function hoodRows(hood: CapeletMesh): [number, number] {
+  return [hood.rows.findIndex((share) => share >= THROUGH_FROM), hood.capelet - JOIN_ROWS];
+}
+
+/** The hood's outside, point by point, over rows `from` to `to` (each point's row counted from `from`). */
+function clothPoints(hood: CapeletMesh, [from, to]: [number, number]): ClothPoint[] {
   const geometry = hood.mesh.geometry;
   const position = geometry.attributes.position;
   const normal = geometry.attributes.normal;
   const world = hood.mesh.matrixWorld;
   const turn = new THREE.Matrix3().getNormalMatrix(world);
   const points: ClothPoint[] = [];
-  for (let k = firstRow(hood) * hood.across; k < hood.down * hood.across; k++) {
+  for (let k = from * hood.across; k < to * hood.across; k++) {
     const at = new THREE.Vector3().fromBufferAttribute(position, k).applyMatrix4(world);
     const facing = new THREE.Vector3().fromBufferAttribute(normal, k).applyMatrix3(turn).normalize();
-    points.push({ at, normal: facing, row: Math.floor(k / hood.across) - firstRow(hood) });
+    points.push({ at, normal: facing, row: Math.floor(k / hood.across) - from });
   }
   return points;
 }
 
-/** What the point lies over and how far it stands off it (cm; negative, how deep it's come through), or null if it
- *  covers nothing. */
-function overAt(point: ClothPoint, body: THREE.Mesh[], ray: THREE.Raycaster): { off: number; over: string } | null {
-  const from = point.at.clone().addScaledVector(point.normal, LIE_FROM);
+/** What the point lies over and how far it stands off it (cm; negative, how deep it's come through), how square the
+ *  surface met faces the way the cloth does (the cosine between their normals), or null if it covers nothing. */
+function overAt(point: ClothPoint, body: THREE.Mesh[], ray: THREE.Raycaster, look = LIE_FROM):
+  { off: number; over: string; facing: number } | null {
+  const from = point.at.clone().addScaledVector(point.normal, look);
   ray.set(from, point.normal.clone().negate());
-  ray.far = LIE_FROM + LIE_PAST;
+  ray.far = look + LIE_PAST;
   const hit = ray.intersectObjects(body, false)[0];
   if (!hit) return null;
-  return { off: (hit.distance - LIE_FROM) * 100, over: String(hit.object.userData.label ?? hit.object.name) };
+  const met = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : point.normal;
+  return {
+    off: (hit.distance - look) * 100,
+    over: String(hit.object.userData.label ?? hit.object.name),
+    facing: met.dot(point.normal),
+  };
 }
 
 /** Where round him a point is, from where it is in the chest's space. */
@@ -134,11 +173,11 @@ export function lieOf(lab: Lab, hood: CapeletMesh, held: THREE.Object3D[]): Lie 
   const ray = new THREE.Raycaster();
   const toChest = lab.joints.chest.matrixWorld.clone().invert();
   const lie = emptyLie(hood.down - firstRow(hood));
-  for (const point of capeletPoints(hood)) {
+  for (const point of clothPoints(hood, capeletRows(hood))) {
     const inChest = point.at.clone().applyMatrix4(toChest);
     const region = lie.regions[regionOf(inChest)];
     const read = overAt(point, body, ray);
-    if (read) region.points.push({ ...read, row: point.row, inChest });
+    if (read) region.points.push({ off: read.off, over: read.over, row: point.row, inChest });
     else region.bare++;
   }
   return lie;
@@ -249,8 +288,58 @@ export function lieRows(lie: Lie): string[] {
   return lines;
 }
 
+/** Where his body comes through the hood above its capelet deepest as he stands now (its point's row counted from the
+ *  first read, `hoodRows`), or null where it comes through nowhere. */
+export function hoodThroughOf(lab: Lab, hood: CapeletMesh, held: THREE.Object3D[]): Deepest | null {
+  const body = bodyOf(lab, held);
+  const ray = new THREE.Raycaster();
+  const toChest = lab.joints.chest.matrixWorld.clone().invert();
+  let deepest: Deepest | null = null;
+  for (const point of clothPoints(hood, hoodRows(hood))) {
+    const read = overAt(point, body, ray, THROUGH_LOOK);
+    if (!read || read.off >= 0 || read.facing < LEAST_FACING) continue;
+    if (deepest && -read.off <= deepest.through) continue;
+    const inChest = point.at.clone().applyMatrix4(toChest);
+    deepest = { through: -read.off, region: regionOf(inChest), point: { off: read.off, over: read.over, row: point.row, inChest } };
+  }
+  return deepest;
+}
+
+/** The deepest his body comes through the hood above its capelet (`when`: standing, walking) as a line, and a problem
+ *  past the limit. */
+export function hoodThroughLine(deepest: Deepest | null, when: string, problems: string[]): string {
+  const what = `${when}, his body through the hood above the capelet (below the jaw)`;
+  if (!deepest) return `${what} nowhere`;
+  const read = `${deepest.through.toFixed(1)} cm at worst, his ${deepest.region}: ${pointWords(deepest.point)}`;
+  if (deepest.through > MOST_THROUGH) problems.push(`hood: ${what} ${read}`);
+  return `${what} ${read} (${MOST_THROUGH} at most)`;
+}
+
+/** The canary for his body through the hood above the capelet: its front below the jaw sunk into him, which must read
+ *  as his body come through. Returns its line; a miss is a problem. */
+export function hoodThroughCanary(lab: Lab, hood: CapeletMesh, held: THREE.Object3D[], problems: string[]): string {
+  const inFront = (inChest: THREE.Vector3) => regionOf(inChest) === 'front';
+  const undo = moveRows(lab, hood, -CANARY_HOOD_SINK, hoodRows(hood), inFront);
+  try {
+    const through = hoodThroughOf(lab, hood, held)?.through ?? 0;
+    const read = `canary, the hood's front below the jaw sunk ${CANARY_HOOD_SINK} cm into him: his body `
+      + `${through.toFixed(1)} cm through it`;
+    if (through < CANARY_LEAST_HOOD_SINK) problems.push(`missed: ${read}`);
+    return read;
+  } finally {
+    undo();
+  }
+}
+
 /** The capelet's outside moved along its normals by `cm` where `moved` says (in the chest's space); returns the undo. */
 function moveCapelet(lab: Lab, hood: CapeletMesh, cm: number, moved: (inChest: THREE.Vector3) => boolean): () => void {
+  return moveRows(lab, hood, cm, capeletRows(hood), moved);
+}
+
+/** The hood's outside over rows `from` to `to` moved along its normals by `cm` where `moved` says (in the chest's
+ *  space); returns the undo. */
+function moveRows(lab: Lab, hood: CapeletMesh, cm: number, [from, to]: [number, number],
+  moved: (inChest: THREE.Vector3) => boolean): () => void {
   const geometry = hood.mesh.geometry;
   const position = geometry.attributes.position as THREE.BufferAttribute;
   const normal = geometry.attributes.normal;
@@ -259,7 +348,7 @@ function moveCapelet(lab: Lab, hood: CapeletMesh, cm: number, moved: (inChest: T
   const scale = hood.mesh.getWorldScale(new THREE.Vector3()).x;
   const point = new THREE.Vector3();
   const facing = new THREE.Vector3();
-  for (let k = firstRow(hood) * hood.across; k < hood.down * hood.across; k++) {
+  for (let k = from * hood.across; k < to * hood.across; k++) {
     if (!moved(point.fromBufferAttribute(position, k).applyMatrix4(toChest))) continue;
     facing.fromBufferAttribute(normal, k).multiplyScalar(cm / 100 / scale);
     position.setXYZ(k, position.getX(k) + facing.x, position.getY(k) + facing.y, position.getZ(k) + facing.z);
