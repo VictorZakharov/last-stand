@@ -11,7 +11,7 @@ npm run facelab -- --ref path/to/reference.jpg --tag try1   # render and compare
 npm run facelab -- --ref head_front.png --turn path/to/head_ --points points.json --tag try2
 ```
 
-Options: `--class warrior|mage|ranger` (the hero), `--tag name` (the output folder, `latest` by default), `--helm` (with a
+Options: `--class warrior|mage|ranger` (the hero), `--tag name` (the output folder, `latest` by default), `--face-only` (skip the beard, hair, shoulder and neck measures when comparing the face), `--render-only` (just the pictures, no measurements or comparison; use a fresh tag), `--helm` (with a
 head item worn), `--size 1200` (pixels), `--fov 14` (degrees: a long lens, as a portrait's), `--key 20,30` (the key
 light's direction as the reference is lit: degrees round from the front, + from the picture's right, and up; the
 cheeks' lightness left and right in the report shows which side it comes from), `--fill 1.3` (the soft light from all
