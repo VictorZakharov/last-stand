@@ -1,6 +1,7 @@
 // tools/lab `coat`: the hero's skirts (models/armor.ts `Skirt`: the ranger's coat, the mage's robe, the warrior's mail)
-// as he stands at idle, frame by frame: every point of the cloth in its own space (hung from the hips, so the body's
-// own sway is taken out), and where one jerks, its move a frame changing by more than `JERK_FROM` from the frame
+// and his hood (models/hood.ts `HoodCloth`: the mage's) as he stands at idle, dressed in his head item and body armour,
+// frame by frame: every point of the cloth in its own space (a skirt hung from the hips, a hood from the head, so the
+// body's own sway is taken out), and where one jerks, its move a frame changing by more than `JERK_FROM` from the frame
 // before. From play: "range[r] has a clothing bug, behind that right arm, in idle", "you should observe 3-5sec of
 // frames to see it moving unnaturally", "under left arm/hand too, but less". The canary kicks one point out for a
 // frame.
@@ -31,6 +32,9 @@ const CANARY_FRAME = 120;
 const CANARY_KICK = 0.03;
 /** how many of the frames are listed with `--frames` */
 const LISTED = 40;
+/** the least share of a cloth's normals facing out from its middle (its folds turn a few in): the hood's pointed in,
+ *  and every light behind it lit it in pink and green blotches */
+const FACING_OUT = 0.8;
 
 /** One skirt followed: its mesh and geometry, its points over the last two frames, and its jerks. */
 interface Followed {
@@ -51,15 +55,18 @@ const cm = (metres: number): string => (metres * 100).toFixed(1);
 /** a commit from before skirts were named finds the ranger's coat by its mesh's name (an A/B against one) */
 const OLD_NAMES = ['tunic hem'];
 
-/** Each skirt the hero wears that's shown (`Skirt.geo`, named 'skirt'). */
+/** the cloth followed: a skirt's (`Skirt.geo`) and a hood's (`HoodCloth`'s outside) geometry names */
+const CLOTHS = ['skirt', 'hood'];
+
+/** Each skirt and hood the hero wears that's shown. */
 function skirtsOf(root: THREE.Object3D): Followed[] {
   const found: Followed[] = [];
   root.traverseVisible((object) => {
     const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh || (mesh.geometry.name !== 'skirt' && !OLD_NAMES.includes(mesh.name))) return;
+    if (!mesh.isMesh || (!CLOTHS.includes(mesh.geometry.name) && !OLD_NAMES.includes(mesh.name))) return;
     const count = mesh.geometry.attributes.position.array.length;
-    const name = mesh.name || `skirt ${found.length + 1}`;
-    // (its first triangle runs from a point to the one below it, a row on: `Skirt`'s index)
+    const name = mesh.name || (mesh.geometry.name === 'hood' ? 'hood' : `skirt ${found.length + 1}`);
+    // (its first triangle runs from a point to the one below it, a row on: `Skirt`'s index, and `HoodCloth`'s)
     const index = mesh.geometry.getIndex()!;
     const cols = index.getX(1) - index.getX(0);
     found.push({
@@ -123,9 +130,25 @@ function follow(skirt: Followed, frame: number, judged: boolean, listing: boolea
   return largest;
 }
 
+/** The share of `cloth`'s normals facing away from its points' middle (`turned`: as if each were turned in). */
+function facingOut(cloth: Followed, turned: boolean): number {
+  const at = cloth.geometry.attributes.position;
+  const normal = cloth.geometry.attributes.normal;
+  const middle = new THREE.Vector3();
+  for (let i = 0; i < at.count; i++) middle.add(_point.fromBufferAttribute(at, i));
+  middle.multiplyScalar(1 / at.count);
+  let out = 0;
+  for (let i = 0; i < at.count; i++) {
+    _point.fromBufferAttribute(at, i).sub(middle);
+    const facing = _point.dot(_hand.fromBufferAttribute(normal, i)) * (turned ? -1 : 1);
+    if (facing > 0) out++;
+  }
+  return out / at.count;
+}
+
 /** Runs `lab coat`. */
 export async function coat(lab: Lab, options: CoatOptions): Promise<Report> {
-  await lab.setup({ at: [14, 17], facing: 0, gear: options.gear, weapon: options.weapon });
+  await lab.setup({ at: [14, 17], facing: 0, gear: options.gear, weapon: options.weapon, wear: ['helm', 'chest'] });
   await lab.step(SETTLE);
   const skirts = skirtsOf(lab.model.root);
   if (!skirts.length) return { text: `the ${lab.player.cls.id} wears no skirt`, problems: [] };
@@ -149,7 +172,25 @@ export async function coat(lab: Lab, options: CoatOptions): Promise<Report> {
     if (planted) kicked[point * 3] += CANARY_KICK;
     frame++;
   });
-  return reportOf(lab.player.cls.id, frames, skirts, canaryJerk);
+  const report = reportOf(lab.player.cls.id, frames, skirts, canaryJerk);
+  facingReport(skirts, !!options.canary, report);
+  return report;
+}
+
+/** Each cloth's normals facing out, into `report` (with the canary, the first one's turned in too). */
+function facingReport(cloths: Followed[], canary: boolean, report: Report): void {
+  const lines: string[] = [];
+  for (const cloth of cloths) {
+    const out = facingOut(cloth, false);
+    lines.push(`  ${cloth.name}: ${(out * 100).toFixed(0)}% of its normals facing out`);
+    if (out < FACING_OUT) report.problems.push(`coat: the ${cloth.name}'s normals face in (${(out * 100).toFixed(0)}% out)`);
+  }
+  if (canary) {
+    const caught = facingOut(cloths[0], true) < FACING_OUT;
+    lines.push(`canary, the ${cloths[0].name}'s normals turned in: ${caught ? 'caught' : 'MISSED'}`);
+    if (!caught) report.problems.push('coat: the canary (normals turned in) was missed');
+  }
+  report.text += '\n' + lines.join('\n');
 }
 
 /** The report: each skirt's jerks, the frames listed, and the canary. */

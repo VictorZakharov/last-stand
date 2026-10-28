@@ -1488,7 +1488,8 @@ export const COMMANDS = {
     },
   },
   coat: {
-    help: 'the hero\'s skirts (the ranger\'s coat, the mage\'s robe, the warrior\'s mail) as he stands at idle, frame '
+    help: 'the hero\'s skirts (the ranger\'s coat, the mage\'s robe, the warrior\'s mail) and hood (the mage\'s) as he '
+      + 'stands at idle in his head item and body armour, frame '
       + 'by frame: every point of the cloth in its own space, and each jerk (its move a frame changing by over 1 cm)',
     options: {
       seconds: { kind: 'number', usage: 's', help: 'how long he stands (5 by default)' },

@@ -194,8 +194,9 @@ export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: n
 /** the cloth's share of the arm round each armhole (`share`, m in the chest's frame): `seam` on the armhole's edge, falling
  *  off to none `reach` from it (`top` above `topY`, under a strap over the shoulder), and the sleeve's rising from it to the
  *  whole arm's at its tube, `join` below the joint (`joinIn` more under the arm); `around` points round the armhole, the
- *  body's and the sleeve's the same */
-export type ArmBlend = { seam: number; reach: number; top: number; topY: number; join: number; joinIn: number; around: number };
+ *  body's and the sleeve's the same; `bulk`, how much the cloth between swells with the arm raised level (a share of its
+ *  size about the joint, none hanging) */
+export type ArmBlend = { seam: number; reach: number; top: number; topY: number; join: number; joinIn: number; around: number; bulk?: number };
 const DOWN = new THREE.Vector3(0, -1, 0), _sw = new THREE.Vector3(), _tw = new THREE.Quaternion(), _tq = new THREE.Quaternion(), _p = new THREE.Vector3();
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
@@ -263,7 +264,9 @@ export class SetInShoulders {
 
   /** each shoulder's part-turned joints: a quarter, half and three quarters of the arm's swing from hanging and of the
    *  girdle's move, and less of its turn about its own length (the square of that share: the cloth round the armhole
-   *  barely turns with it). Near straight up the swing's axis is anyone's, so it's kept as it was */
+   *  barely turns with it), swelled by `bulk` as the arm rises, most at the middle one, as a deltoid bunches (the
+   *  armhole, a tall oval, lay along an arm raised forward: the cloth where the sleeve left the coat went thin, the
+   *  shoulder squashed). Near straight up the swing's axis is anyone's, so it's kept as it was */
   bend(): void {
     for (let i = 0; i < 2; i++) {
       const sh = this.shoulder(i ? -1 : 1), swing = this.swings[i];
@@ -274,10 +277,13 @@ export class SetInShoulders {
       _tw.x = 0;
       _tw.z = 0;
       _tw.normalize();
+      // (how far up the arm is: none hanging, whole level and above)
+      const up = Math.min(1, (1 + _sw.y) ** 2), bulk = this.K.bulk ?? 0;
       this.delts[i].forEach((d, q) => {
         const f = (q + 1) / 4;
         d.quaternion.identity().slerp(swing, f).multiply(_tq.identity().slerp(_tw, f * f));
         d.position.lerpVectors(sh.userData.rest, sh.position, f);
+        d.scale.setScalar(1 + bulk * up * 4 * f * (1 - f));
       });
     }
   }

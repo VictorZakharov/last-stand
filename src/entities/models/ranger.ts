@@ -231,7 +231,7 @@ const LET_DOWN = 0.35;
 const drawnAt = (k: number): number => (pullAt(k) + smooth(clamp(k, 0, 1))) / 2;
 
 /** the coat's share of the arm round each armhole (`ArmBlend`; less above `topY`, under the baldric) */
-const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.05, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96 };
+const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.05, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96, bulk: 0.35 };
 
 /**
  * `share` of the turn `q` from rest into `out`, taken the way round that is nearer `middle` (the middle of the turns

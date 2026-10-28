@@ -739,9 +739,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the lobby is a sound left playing (`page/soundsLeft.ts`); its canary starts Void Lance's hum there and never stops
   it. From play: "if mage was attacking in hall of heroes, going back to lobby keeps the attack sound": the hall
   closed with his channel open, and its hum (3 tones) played on.
-- `coat`: the hero's skirts (`page/coat.ts`; `models/armor.ts` `Skirt`, found by its geometry's name, 'skirt', or a
-  commit from before by the ranger's mesh's, 'tunic hem') as he stands at idle, `--seconds` (5 by default): every
-  point of the cloth in its own space, hung from the hips, so his sway is taken out, and each jerk, its move a frame
+- `coat`: the hero's skirts and hood (`page/coat.ts`; `models/armor.ts` `Skirt` and `models/hood.ts` `HoodCloth`,
+  found by their geometries' names, 'skirt' and 'hood', or a commit from before by the ranger's mesh's, 'tunic hem') as
+  he stands at idle in his head item and body armour, `--seconds` (5 by default): every point of the cloth in its own
+  space, a skirt's hung from the hips and a hood's from the head, so his sway is taken out, and each jerk, its move a frame
   changing by over 1 cm, with where on the cloth and the hand nearest; `--frames` lists them; the canary kicks a point
   out 3 cm for a frame. From play: "ranger has a clothing bug, behind that right arm, in idle", "you should observe
   3-5sec of frames to see it moving unnaturally", "under left arm/hand too, but less": each point a hand or the bow

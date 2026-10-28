@@ -126,6 +126,8 @@ export class Player {
   /** follows the cast point; every class has one, so switching class keeps the light count. A
    *  remote player has none: another light would change the count and recompile every shader */
   readonly staffLight: THREE.PointLight | null;
+  /** at the off-hand, lit where it glows (`ClassDef.aura.hand`); every class has one too, unlit without it */
+  readonly handLight: THREE.PointLight | null;
   /** his pieces' shadow, cast in one draw (`models/castAsOne.ts`) */
   readonly shadow: OneShadow;
   /** how lit a light lit only at full draw is (`ClassDef.aura.drawn`), eased in and out */
@@ -230,12 +232,13 @@ export class Player {
     this.local = local;
     this.sandbox = !local;   // a remote player's casts replay as its owner fires them: no costs here
     this.staffLight = local ? new THREE.PointLight(this.cls.aura.light, this.cls.aura.intensity, 6, 2) : null;
+    this.handLight = local ? new THREE.PointLight(this.cls.aura.hand?.light ?? 0xffffff, 0, 3.5, 2) : null;
     this.model = buildModel(this.cls.model);
     this.obj.add(this.model.root);
     this.obj.name = `hero ${classId}`;   // names show up in the perf report
     applyShadowDetail(this.obj);
     this.shadow = castAsOne(this.model.root, this.obj);
-    G.scene.add(this.obj, ...(this.staffLight ? [this.staffLight] : []));
+    G.scene.add(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.handLight ? [this.handLight] : []));
 
     for (const def of this.cls.skills) {
       const impl = SKILL_IMPLS[def.impl];
@@ -250,11 +253,12 @@ export class Player {
   dispose(): void {
     this.stopChannel();
     this.ward?.onEnd?.();
-    G.scene.remove(this.obj, ...(this.staffLight ? [this.staffLight] : []));
+    G.scene.remove(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.handLight ? [this.handLight] : []));
     this.shadow.dispose();
     this.obj.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as THREE.Material).dispose(); } });   // (skinned meshes own a copy of their material)
     this.model.dispose();
     this.staffLight?.dispose();
+    this.handLight?.dispose();
   }
 
   /** Bind a skill (or nothing) to a key and persist the loadout (of the weapon style held). */
@@ -1032,6 +1036,14 @@ export class Player {
       // (hidden, as the hero selection screen hides him: it lights nothing)
       const shown = this.obj.visible ? 1 : 0;
       this.staffLight.intensity = shown * glow * this.auraLit * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
+    }
+    // (the glowing hand lights what's round it, breathing as its glow does; off through the eyes, where a light by the
+    // camera floods the view)
+    const hand = this.cls.aura.hand;
+    if (this.handLight && hand) {
+      this.handLight.position.copy(this.palmPoint);
+      const shown = this.obj.visible && !this.eyes ? 1 : 0;
+      this.handLight.intensity = shown * hand.intensity * (1 + 0.3 * Math.sin(t * 2.2));
     }
   }
 
