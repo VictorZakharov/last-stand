@@ -1519,6 +1519,20 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  glance: {
+    help: 'the hero\'s casual look round as he stands idle, read from the head\'s turn from the chest and the eyes\' '
+      + 'in their sockets: in a run\'s countdown, walking and attacking from a glance, through the eyes, in the lobby '
+      + 'and in the hall of heroes (within a neck\'s range, unhurried, no jerk, the eyes leading, never a loop)',
+    options: {
+      seconds: { kind: 'number', usage: 's', help: 'how long he stands in the countdown (40 by default)' },
+      canary: {
+        kind: 'switch',
+        help: 'plant faults the measure must catch: the head kicked aside for a frame, glances let come as he walks',
+      },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   coat: {
     help: 'the hero\'s skirts (the ranger\'s coat, the mage\'s robe, the warrior\'s mail) and hood (the mage\'s) as he '
       + 'stands at idle in his head item and body armour, frame '

@@ -792,6 +792,15 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the lobby is a sound left playing (`page/soundsLeft.ts`); its canary starts Void Lance's hum there and never stops
   it. From play: "if mage was attacking in hall of heroes, going back to lobby keeps the attack sound": the hall
   closed with his channel open, and its hum (3 tones) played on.
+- `glance`: the hero's casual look round as he stands idle (`page/glance.ts`, `page/glances.ts`; `models/glance.ts`),
+  read from what's drawn: the head's turn from the chest and the eyeballs' in their sockets. He stands `--seconds` (40)
+  in the countdown: each glance (past 10°, one carried across joined), their spacing (never a loop, none within 1.5 s
+  of the last), the most turn (a neck's 80°), the fastest (200°/s), each jerk (a move a frame changing by over 0.6°),
+  the eyes leading every glance, a strip of the first and what `Glance.update` costs. He walks and attacks from the
+  middle of one (back ahead in 0.8 s, none after, the way back's jerk against the same walk's with no glance: later,
+  the steps jerk the head 3 to 5° on main too), stands through the eyes (none), in the lobby (one at least) and is
+  shown in the hall (none before his showcase is done, one within 10 s after). The canary kicks the head 3° for a
+  frame and lets him glance as he walks. The owner's words: "when idle, characters should look left/right casually".
 - `coat`: the hero's skirts and hood (`page/coat.ts`; `models/armor.ts` `Skirt` and `models/hood.ts` `HoodCloth`,
   found by their geometries' names, 'skirt' and 'hood', or a commit from before by the ranger's mesh's, 'tunic hem') as
   he stands at idle in his head item and body armour, `--seconds` (5 by default): every point of the cloth in its own
