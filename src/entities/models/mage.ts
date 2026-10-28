@@ -22,6 +22,7 @@ import { curve, PoseFade, type Keys } from './motion';
 import { onTunic, tunicFront, tunicCut, armholeEdge, neckHem, necklineBack, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
 import { buildFlask, drink, drinkUp, holdFlask, type DrinkHold } from './flask';
 import { HoodCloth } from './hood';
+import { draftHood } from './hoodPattern';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _vr = new THREE.Quaternion();
@@ -617,94 +618,105 @@ export function buildMage(): Model {
   const piping = kit.std({ color: 0xc8963c, metalness: 0.55, roughness: 0.4 });
   const hoodLining = kit.rim({ color: 0x3a3a3e, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x3a3a44, 0.05);
   {
-    // as Codex's reference photos have it (`.tmp/references/hood`): cut loose over the head's own surface, the hair hidden
-    // under it, rising in a soft point behind the crown where its halves are sewn; open round the face from the brow
-    // down (`OPEN` either side of the front), its edge drawn forward of the brow and the cheeks, the face set back in its
-    // shadow; and on down past the jaw and the nape into a mantle, which falls as cloth onto the collar and the
-    // shoulders (`HoodCloth`). (Laid close over the head it read as a helmet, and in the coat's red, hugging the face, as a
-    // superhero's mask; shaped once on the head, its cowl turned with it through the shoulders.)
-    const OPEN = 1.15, LOW = -0.4, HEAD = 0.6, DROP = 0.13;
-    const mid = toGroup(0, 40, -25), BROW = toGroup(0, 150, 0), u01 = (x: number) => clamp(x, 0, 1);
-    const shape = (u: number, v: number, out: THREE.Vector3) => {
-      const down = Math.min(1, v / HEAD), el = Math.PI / 2 - 0.02 - down * (Math.PI / 2 - 0.02 - LOW);
-      // (its opening a round arch over the brow, a circle's top: eased in, the two edges met in a gothic point)
-      const a0 = OPEN * Math.sqrt(Math.max(0, 1 - u01((el - 0.5) / 0.45) ** 2)) * (el < 0.95 ? 1 : 0), az = a0 + u * (TAU - 2 * a0);
-      const front = Math.max(0, Math.cos(az)), back = Math.max(0, -Math.cos(az));
-      const rim = Math.exp(-((Math.min(az - a0, TAU - a0 - az) / 0.4) ** 2)) * smooth(a0 / OPEN);
-      // (resting on the head: on the hair over the crown, a little fuller behind it, where the point is sewn, and standing
-      // 2 cm off the temples, its shadow round the face; 7 cm over the crown it stood off the head as a sack, a bedsheet
-      // over a pole, and close at the temples it was skin-tight, a cowl)
-      const ease = 9 + 22 * back * Math.exp(-(((el - 0.95) / 0.4) ** 2)) + 20 * Math.abs(Math.sin(az)) * smooth(down) + 14 * back * smooth(down)
-        // (and its soft point, where the two halves meet over the back of the crown)
-        + 10 * back ** 4 * Math.exp(-(((el - 1.1) / 0.22) ** 2));
-      head.surface(az, el, ease, out);
-      // (the edge drawn forward round the face's opening alone, and out from it, the face framed with room round it and the
-      // lining showing either side, 4 to 6 cm off the cheeks as the references are: over the closed crown it jutted as a
-      // beak, and 3 cm off the cheeks it hugged them, a narrow red band round a full face)
-      out.z += 70 * HEAD_MM * rim;
-      out.x += Math.sign(out.x) * 42 * HEAD_MM * rim;
-      // (its brim over the brow drawn forward, most in the middle, a round arch, as the references' deep opening is, and
-      // raised a little off the brow: lying on it, it read as a cap's band; raised 3.5 cm, with the crown behind it, the
-      // hood stood 5.6 cm over the scalp, a box; drawn 6 cm out it jutted from the side as a beak)
-      const brim = front ** 2 * Math.exp(-(((el - 0.95) / 0.35) ** 2));
-      out.y += 15 * HEAD_MM * brim; out.z += 42 * HEAD_MM * brim;
-      // (below the skull's widest it falls away from the neck, out from the back of the head and its sides to the mantle,
-      // as the references' slopes from the point to the shoulders: following the head down onto the neck it hung straight
-      // from the skull to the shoulders, a chimney in profile)
-      const away = smooth(u01((v - 0.3) / (HEAD - 0.3))), sides = Math.abs(Math.sin(az)) * (1 - rim);
-      out.z = mid.z + (out.z - mid.z) * (1 + 0.45 * away * back);
-      out.x = mid.x + (out.x - mid.x) * (1 + 0.25 * away * sides);
-      // (the face's edges drawn in under the jaw towards the throat, the opening an oval closing on the collar: straight
-      // down beside the face to the shoulders, it was a tall box framing it)
-      out.x = mid.x + (out.x - mid.x) * (1 - 0.4 * away * rim);
-      if (v > HEAD) {
-        // (the mantle cut hanging from the jaw and the nape, flaring: the cloth then lies on the shoulders)
-        // (its edges on down beside the neck to the collar, closing in at the throat, the rest out over the shoulders: flared
-        // with the rest, the face's edges hung past the shoulders in a nun's veil)
-        const h = (v - HEAD) / (1 - HEAD), side = Math.abs(Math.sin(az)), edge = Math.exp(-((Math.min(az - a0, TAU - a0 - az) / 0.8) ** 2));
-        // (spread over the shoulders to the arm's top, as the references' mantle is: cut narrower it hung as a bell)
-        out.y -= DROP * h * (0.8 + 0.4 * back);
-        out.x = mid.x + (out.x - mid.x) * (1 + 2.6 * side * h * (1 - edge)); out.z = mid.z + (out.z - mid.z) * (1 + 0.9 * h);
-        out.x *= 1 - 0.45 * edge * h;
-      }
-      return out;
+    // as Codex's reference photos have it (`.tmp/references/hood/mage`) and as a tailor cuts one (`draftHood`): two panels
+    // sewn over the top of the head and down the back, the hair hidden under it, falling to a soft point behind the crown,
+    // open round the face from the brim to the throat, its edge standing off the cheeks with the face in its shadow, and
+    // on below the neck into a capelet over the collar and the shoulders (`HoodCloth`). Laid on the head roughly here
+    // (`shape`), it settles on it by its weight, its lengths the cut's. (Shaped by hand as offsets over the head it read as
+    // a helmet, a superhero's mask, a sack, then a chimney with a straight-walled frame round the face.)
+    const nu = lod(28, 16), nv = lod(16, 10), neckRow = Math.round(nv * 0.62), NECK = neckRow / nv;
+    const OPEN = 1.45, LOW = -0.45, mid = toGroup(0, 40, -25), u01 = (x: number) => clamp(x, 0, 1);
+    // (its top seam along the crest: from the brim's top over the brow to the soft point behind the crown, as angles round
+    // the head from level ahead, over the top and down behind)
+    const BRIM = 0.95, POINT = Math.PI - 0.55;
+    // (laid on a smooth round of the skull, its size the head's ahead, behind, beside and above: on the head's own
+    // surface the brow, the cheekbones and the jaw made the face's edge wobble)
+    const sz = (az: number, el: number) => head.surface(az, el).sub(mid);
+    const R = { side: Math.abs(sz(Math.PI / 2, 0).x), ahead: sz(0, 0).z, behind: -sz(Math.PI, 0).z, up: sz(0, Math.PI / 2).y };
+    const round = (az: number, el: number, lift: number, out: THREE.Vector3) => {
+      const c = Math.cos(el), x = Math.sin(az) * c, z = Math.cos(az) * c, y = Math.sin(el), m = lift / 1000;
+      return out.set(mid.x + x * (R.side + m), mid.y + y * ((el > 0 ? R.up : R.side) + m), mid.z + z * ((z > 0 ? R.ahead : R.behind) + m));
     };
-    // its creases (m out along the cloth), after the references: smooth over the head and the mantle, the cloth gathered
-    // where it turns from the head onto the shoulders into rolls running round the nape and the sides of the neck (round
-    // tops, sharp valleys between, wavering a little and fading out at the face's edge), and the seam down the back where
-    // the halves are sewn. (Folds running down the hood, as ribs, read as a plane at right angles to the references')
+    const shape = (u: number, v: number, out: THREE.Vector3): THREE.Vector3 => {
+      const left = u <= 0.5, f = (left ? u : 1 - u) * 2, turn = (az: number) => (left ? az : TAU - az);
+      if (v > NECK) {
+        // (the capelet out from the neck and down over the collar and the shoulders, to settle on them)
+        shape(u, NECK, out);
+        const s = (v - NECK) / (1 - NECK), dx = out.x - mid.x, dz = out.z - mid.z, d = Math.hypot(dx, dz) || 1;
+        out.x += (dx / d) * 0.14 * s; out.z += (dz / d) * 0.14 * s; out.y -= 0.1 * s;
+        return out;
+      }
+      if (v === 0) {
+        // (the top seam on the crest, the brim standing out over the brow, highest over the crown and the point a little
+        // off it behind: highest at the brim, it stood as a column over the face)
+        const a = BRIM + (POINT - BRIM) * f, over = a > Math.PI / 2;
+        return round(over ? Math.PI : 0, over ? Math.PI - a : a, 35 + 20 * Math.sin(Math.PI * f), out);
+      }
+      // (below it round the side of the head, from the face's edge, an arch from the brim round the forehead, widest
+      // beside the cheeks and drawn in again under the chin to the throat, back to the seam down the back of the head;
+      // over the top first and lower down round the side. Opened below the brim alone, it shut over the brow)
+      const t = v / NECK, arch = t * Math.PI * 0.97, edgeAz = OPEN * Math.sin(arch);
+      const edgeEl = lerp(BRIM, LOW, 0.5 - 0.5 * Math.cos(arch) / Math.cos(Math.PI * 0.03));
+      const seamEl = lerp(Math.PI - POINT, LOW - 0.15, t), el0 = lerp(edgeEl, seamEl, f);
+      const el = el0 + (Math.PI / 2 - 0.05 - el0) * Math.sin(Math.PI * f) * (1 - t) ** 2;
+      // (standing 4 cm off the cheeks at its edge, its shadow round the face, closer over the side of the head)
+      return round(turn(lerp(edgeAz, Math.PI, f)), el, lerp(40, 22, f) + 10 * Math.sin(Math.PI * f), out);
+    };
+    // the cut (m), its top seam as long as the crest it's laid along (`shape`'s row 0) and its face edge as the arch
+    // round the face. (Its face edge shorter, fastened at the throat it ran taut across the cheeks; cut as wide as the
+    // head where it's laid and more, its face edge buckled into waves and the back billowed; with the capelet a half
+    // circle, it hung from the neck as a cone)
+    const along = new THREE.Vector3(), last = new THREE.Vector3();
+    const measure = (at: (k: number) => [number, number], count: number) => {
+      let run = 0;
+      for (let k = 0; k <= count; k++) {
+        shape(...at(k), along);
+        if (k > 0) run += along.distanceTo(last);
+        last.copy(along);
+      }
+      return run;
+    };
+    const top = measure((c) => [c / nu, 0], nu / 2), front = measure((r) => [0, r / nv], neckRow) * 1.04;
+    const draft = draftHood({ front, top, bulge: 0.012, neck: 0.25, chin: 0.03, mantle: 0.17, hem: 0.78 }, nu, nv, neckRow);
+    // its creases (m out along the cloth), after the references: the cloth gathered where it turns from the head onto the
+    // shoulders into rolls running round the nape and the sides of the neck (round tops, sharp valleys between, wavering
+    // a little and fading out at the face's edge), and the seam down the back where the halves are sewn. (Folds running
+    // down the hood, as ribs, read as a plane at right angles to the references')
     const crease = (u: number, v: number) => {
       const edge = smooth(u01(Math.min(u, 1 - u) / 0.12)), back = Math.max(0, -Math.cos(u * TAU));
-      const band = Math.exp(-(((v - HEAD + 0.03) / 0.11) ** 2)) * (0.45 + 0.55 * back);
-      const phase = (v - HEAD) * TAU * 7.5 + 0.5 * Math.sin(u * TAU * 3 + 0.7);
-      const rolls = band * (Math.abs(Math.sin(phase)) - 0.6) * (0.8 + 0.2 * Math.sin(u * TAU * 5)) * 0.05;
-      const seam = -0.005 * Math.exp(-(((u - 0.5) / 0.012) ** 2)) * (1 - smooth(u01((v - HEAD) / 0.1)));
+      const band = Math.exp(-(((v - NECK + 0.03) / 0.11) ** 2)) * (0.45 + 0.55 * back);
+      const phase = (v - NECK) * TAU * 7.5 + 0.5 * Math.sin(u * TAU * 3 + 0.7);
+      const rolls = band * (Math.abs(Math.sin(phase)) - 0.6) * (0.8 + 0.2 * Math.sin(u * TAU * 5)) * 0.025;
+      const seam = -0.005 * Math.exp(-(((u - 0.5) / 0.012) ** 2)) * (1 - smooth(u01((v - NECK) / 0.1)));
       return edge * rolls + seam;
     };
-    // (riding the head: pinned over the crown, held to its shape down the sides of the head, letting go towards the neck;
-    // the mantle hanging free. Held at 0.06 below the crown, the sides hung straight down from its widest point, a box;
-    // at half, the back of the head crumpled walking into dark dents)
+    // (its top seam riding the head; the face's edge stiffened, a hem standing round the face to the throat; the rest
+    // kept to its settled drape, less down to the neck, the capelet lightly)
     const hold = (u: number, v: number) => {
-      const edge = Math.max(0, 1 - Math.min(u, 1 - u) / 0.08) * (1 - smooth(u01((v - 0.35) / 0.3)));
-      const fall = v < 0.3 ? 1 : v < HEAD ? lerp(0.8, 0.12, smooth(u01((v - 0.3) / (HEAD - 0.3))))
-        : lerp(0.06, 0.004, smooth(u01((v - HEAD) / (1 - HEAD))));
-      return Math.min(1, Math.max(fall, 0.4 * edge));
+      if (v === 0) return 1;
+      const edge = Math.max(0, 1 - Math.min(u, 1 - u) / 0.04) * (v <= NECK ? 0.35 : 0);
+      return Math.max(v <= NECK ? lerp(0.15, 0.06, v / NECK) : 0.02, edge);
     };
     // the body it falls onto: the head, the neck, the collar, the chest and the shoulders (`shoulderL`'s place on the chest)
     const sh = j.shoulderL.position;
     hood = new HoodCloth({
-      joint: hat, shape, nu: lod(28, 16), nv: lod(16, 10), hold, outer: coat, lining: hoodLining, thick: 0.004,
-      // (gold piping round the face and the mantle's hem, as the coat's collar is edged)
-      piping: { material: piping, radius: 0.004, from: 0.19 }, detail: 2, crease,
+      // (the outside on both sides: where it folds over, wool)
+      joint: hat, shape, nu, nv, hold, outer: coatD, lining: hoodLining, thick: 0.004, inside: mid,
+      length: draft.length, settle: { steps: 200, key: 'mage' },
+      // (fastened at the throat over the collar: open, the capelet lay on the shoulders as a cone and drew the face's
+      // edges out to them)
+      clasp: { rows: [neckRow], gap: 0.06 },
+      // (gold piping round the face and the capelet's hem, as the coat's collar is edged)
+      piping: { material: piping, radius: 0.004, from: 0 }, detail: 2, crease,
       bodies: [
-        // (the skull, up its back to the crown: an ellipsoid round its middle alone tapered away above it, and with the
-        // hood let go down the sides of the head the back of the skull came through the cloth over the crown)
-        { joint: hat, y0: mid.y + 0.08, y1: mid.y, rx: 0.095, rz: 0.11, z: mid.z },
+        // (the skull, up its back to the crown and the hair over it: an ellipsoid round its middle alone tapered away above
+        // it, and the back of the skull came through the cloth over the crown)
+        { joint: hat, y0: mid.y + 0.11, y1: mid.y, rx: 0.095, rz: 0.11, z: mid.z },
         { joint: j.neck, y0: 0.08, y1: -0.02, rx: 0.07, rz: 0.07 },
-        { joint: j.chest, y0: 0.37, y1: 0.24, rx: 0.13, rz: 0.125 },
+        { joint: j.chest, y0: 0.33, y1: 0.24, rx: 0.11, rz: 0.11 },
         { joint: j.chest, y0: 0.24, y1: -0.05, rx: 0.2, rz: 0.165 },
-        { joint: j.chest, y0: sh.y + 0.03, y1: sh.y - 0.02, rx: 0.1, rz: 0.11, x: sh.x * 0.9 },
-        { joint: j.chest, y0: sh.y + 0.03, y1: sh.y - 0.02, rx: 0.1, rz: 0.11, x: -sh.x * 0.9 },
+        { joint: j.chest, y0: sh.y, y1: sh.y - 0.04, rx: 0.075, rz: 0.08, x: sh.x * 0.95 },
+        { joint: j.chest, y0: sh.y, y1: sh.y - 0.04, rx: 0.075, rz: 0.08, x: -sh.x * 0.95 },
       ],
     });
   }

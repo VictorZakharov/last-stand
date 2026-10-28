@@ -1,10 +1,11 @@
-// A hood as cloth: a sheet of particles cut as the hood is (`shape`, in the head's space, round from one side of the
-// face over the crown to the other, and down from the crown to the mantle's hem), whose crown and face edge ride the
-// head while the rest hangs by its weight and falls onto the neck, the collar and the shoulders as they move under it.
-// Each particle is pulled towards its cut place by how far up it is (`hold`): the crown not at all free, the mantle
-// barely, so it keeps its cut but lies on the shoulders when the head turns. Position-based dynamics as the bell
-// sleeves' (`sleeve.ts`): verlet, distance constraints, the body as elliptical capsules on its joints. (Shaped once on the
-// head, a hood turned with it through the shoulders, and laid close it read as a helmet.)
+// A hood as cloth: a sheet of particles round from one side of the face over the head to the other and down to the
+// capelet's hem, its lengths those of its cut laid flat (`length`, `hoodPattern.ts`), whose top seam rides the head
+// while the rest hangs by its weight onto the head, the neck, the collar and the shoulders as they move under it. Laid
+// on the head roughly (`shape`), it's settled there once by its weight alone (`settle`), and that shape is its rest:
+// each particle is pulled towards it a little (`hold`), so it keeps its drape but lies on the shoulders when the head
+// turns. Position-based dynamics as the bell sleeves' (`sleeve.ts`): verlet, distance constraints, the body as
+// elliptical capsules on its joints. (Shaped once on the head, a hood turned with it through the shoulders, and laid
+// close it read as a helmet.)
 import * as THREE from 'three';
 
 /** `?cloth=0` holds the hood at its cut shape, as the sleeves are */
@@ -22,17 +23,27 @@ export interface HoodBody { joint: THREE.Object3D; y0: number; y1: number; rx: n
 export interface HoodOptions {
   /** the head: the hood's cut is in its space, and its meshes its children */
   joint: THREE.Object3D;
-  /** a point of the hood as cut at (u, v): u across from one side of the face round the back to the other, v down from
-   *  the crown to the hem */
+  /** where the cloth at (u, v) is laid on the head before it settles (u across from one side of the face round the back
+   *  to the other, v down from the top seam to the hem) */
   shape: (u: number, v: number, out: THREE.Vector3) => THREE.Vector3;
+  /** the cloth's length between particles `a` and `b` as cut (`draftHood`'s): without it, as laid by `shape` */
+  length?: (a: number, b: number) => number;
+  /** the rows where the face's two edges are fastened together (m apart), as a clasp at the throat */
+  clasp?: { rows: number[]; gap: number };
+  /** settled on the body this many steps by its weight alone when first seen (but what's held firmly), that shape its
+   *  rest from then on (kept by `key` for every hood built after it) */
+  settle?: { steps: number; key: string };
   /** columns across and rows down */
   nu: number; nv: number;
   /** how hard a particle at (u, v) is held to its cut place each step: 1 rides the head, a few thousandths hang free */
   hold: (u: number, v: number) => number;
   outer: THREE.Material;
   lining: THREE.Material;
-  /** how far in the lining lies from the outside (m) */
+  /** how far in the lining lies from the outside (m), along its normal turned towards `inside` (in the joint's space:
+   *  the head's middle). (Along the normal alone, where the cloth folded over it came out in front, grey patches at the
+   *  nape; straight towards the head, on the capelet across the shoulders it ran along the cloth and came through) */
   thick: number;
+  inside: THREE.Vector3;
   bodies: HoodBody[];
   /** a piping round its open edge and its hem: down the face's edge on one side from `from` (a share of the rows down,
    *  where the face opens), along the hem, and up the other */
@@ -45,6 +56,13 @@ export interface HoodOptions {
 
 /** the piping's sides round */
 const SIDES = 6;
+/** each cut's settled rest (by its key and its grid) */
+const SETTLED = new Map<string, Float32Array>();
+/** the constraints' passes each step while it settles (it falls from a rough fit: the cloth's four kept it stretched) */
+const SETTLE_ITER = 10;
+/** what's held at least this firmly is pinned where it was laid while it settles (held less, the constraints' passes
+ *  drew it away: the hood slid back off the shoulders) */
+const SETTLE_HELD = 0.25;
 
 export class HoodCloth {
   readonly meshes: THREE.Mesh[] = [];
@@ -56,7 +74,7 @@ export class HoodCloth {
   private readonly tgt: Float32Array;
   private readonly lastTgt: Float32Array;
   private readonly local: Float32Array;
-  private readonly hold: Float32Array;
+  private hold: Float32Array;
   private readonly pairs: number[] = [];
   private readonly stiff: number[] = [];
   /** each constraint's length as cut (the head's space), and as the head's scale makes it now */
@@ -82,6 +100,7 @@ export class HoodCloth {
   private readonly bodyInv: THREE.Matrix4[] = [];
   private acc = 0;
   private needsReset = true;
+  private settled = false;
   private readonly last = new THREE.Vector3();
 
   constructor(private readonly o: HoodOptions) {
@@ -106,8 +125,7 @@ export class HoodCloth {
         const i = r * W + c;
         if (this.hold[i] >= 1) { top = i; run = 0; continue; }
         if (top < 0) continue;
-        const a = (i - W) * 3, b = i * 3, R = this.rest;
-        run += Math.hypot(R[a] - R[b], R[a + 1] - R[b + 1], R[a + 2] - R[b + 2]);
+        run += this.cutLength(i - W, i);
         this.anchor[i] = top; this.tether[i] = run * 1.03;
       }
     }
@@ -144,13 +162,18 @@ export class HoodCloth {
       if (c + 2 <= nu) join(id(r, c), id(r, c + 2), 0.15);
       if (r + 2 <= nv) join(id(r, c), id(r + 2, c), 0.15);
     }
-    const P = this.pairs, R = this.rest;
+    const P = this.pairs, cut = this.stiff.length;
+    for (const r of this.o.clasp?.rows ?? []) join(id(r, 0), id(r, nu), 1);
     this.restLen = new Float32Array(this.stiff.length);
-    for (let k = 0; k < this.restLen.length; k++) {
-      const a = P[k * 2] * 3, b = P[k * 2 + 1] * 3;
-      this.restLen[k] = Math.hypot(R[a] - R[b], R[a + 1] - R[b + 1], R[a + 2] - R[b + 2]);
-    }
+    for (let k = 0; k < this.restLen.length; k++) this.restLen[k] = k < cut ? this.cutLength(P[k * 2], P[k * 2 + 1]) : this.o.clasp!.gap;
     this.len = new Float32Array(this.stiff.length);
+  }
+
+  /** the cloth's length between particles `a` and `b` as cut, or as laid */
+  private cutLength(a: number, b: number): number {
+    if (this.o.length) return this.o.length(a, b);
+    const R = this.rest, ia = a * 3, ib = b * 3;
+    return Math.hypot(R[ia] - R[ib], R[ia + 1] - R[ib + 1], R[ia + 2] - R[ib + 2]);
   }
 
   /** the drawn surface's mesh (`uvScale` across, for the lining's finer weave) */
@@ -178,18 +201,11 @@ export class HoodCloth {
 
   /** Step the cloth (after the skeleton is posed, its world matrices current) and write it into the meshes. */
   update(dt: number): void {
-    const { joint } = this.o, n = this.n;
+    const { joint } = this.o, n = this.n, T = this.tgt;
     joint.updateWorldMatrix(true, false);
-    const M = joint.matrixWorld, e = M.elements, R = this.rest, T = this.tgt;
-    for (let i = 0; i < n * 3; i += 3) {
-      const x = R[i], y = R[i + 1], z = R[i + 2];
-      T[i] = e[0] * x + e[4] * y + e[8] * z + e[12];
-      T[i + 1] = e[1] * x + e[5] * y + e[9] * z + e[13];
-      T[i + 2] = e[2] * x + e[6] * y + e[10] * z + e[14];
-    }
-    // (the cut's lengths in the head's scale: measured again between the targets each frame, it was a third of the cost)
-    const sc = Math.cbrt(Math.abs(M.determinant()));
-    for (let k = 0; k < this.len.length; k++) this.len[k] = this.restLen[k] * sc;
+    const e = joint.matrixWorld.elements;
+    if (CLOTH && this.o.settle && !this.settled) this.settleRest();
+    this.place();
     _p.set(e[12], e[13], e[14]);
     const jumped = this.last.distanceToSquared(_p) > 2.25;   // a teleport: settle where it landed
     this.last.copy(_p);
@@ -208,7 +224,46 @@ export class HoodCloth {
     this.write();
   }
 
-  private step(settling: boolean): void {
+  /** the targets (the rest, where the head is now) and the cut's lengths in the head's scale (measured again between the
+   *  targets each frame, they were a third of the cost) */
+  private place(): void {
+    const M = this.o.joint.matrixWorld, e = M.elements, R = this.rest, T = this.tgt;
+    for (let i = 0; i < this.n * 3; i += 3) {
+      const x = R[i], y = R[i + 1], z = R[i + 2];
+      T[i] = e[0] * x + e[4] * y + e[8] * z + e[12];
+      T[i + 1] = e[1] * x + e[5] * y + e[9] * z + e[13];
+      T[i + 2] = e[2] * x + e[6] * y + e[10] * z + e[14];
+    }
+    const sc = Math.cbrt(Math.abs(M.determinant()));
+    for (let k = 0; k < this.len.length; k++) this.len[k] = this.restLen[k] * sc;
+  }
+
+  /** settled on the body from where it was laid, by its weight alone (all but its top seam free of the rest), and that
+   *  its rest from then on, kept for every hood of this cut after it */
+  private settleRest(): void {
+    const { settle, nu, nv, joint } = this.o, key = `${settle!.key}:${nu}x${nv}`, kept = SETTLED.get(key);
+    this.settled = true;
+    if (kept) { this.rest.set(kept); return; }
+    this.place();
+    this.pos.set(this.tgt); this.prev.set(this.tgt);
+    // (what's held firmly kept so, the face's stiffened edge: let fall with the rest, it fell across the face)
+    const hold = this.hold;
+    this.hold = hold.map((w) => (w >= SETTLE_HELD ? 1 : 0));
+    try {
+      // (with its momentum, damped: without, it never finished falling, and the capelet stood stiff)
+      for (let s = 0; s < settle!.steps; s++) this.step(false, SETTLE_ITER);
+    } finally {
+      this.hold = hold;
+    }
+    _inv.copy(joint.matrixWorld).invert();
+    for (let i = 0; i < this.n; i++) {
+      _p.set(this.pos[i * 3], this.pos[i * 3 + 1], this.pos[i * 3 + 2]).applyMatrix4(_inv);
+      this.rest[i * 3] = _p.x; this.rest[i * 3 + 1] = _p.y; this.rest[i * 3 + 2] = _p.z;
+    }
+    SETTLED.set(key, this.rest.slice());
+  }
+
+  private step(settling: boolean, iterations = ITER): void {
     const { pos, prev, tgt, hold } = this, n = this.n, h2 = STEP * STEP;
     for (let i = 0; i < n; i++) {
       const w = hold[i];
@@ -221,7 +276,7 @@ export class HoodCloth {
     const bodies = this.o.bodies;
     for (let b = 0; b < bodies.length; b++) (this.bodyInv[b] ??= new THREE.Matrix4()).copy(bodies[b].joint.matrixWorld).invert();
     const P = this.pairs;
-    for (let it = 0; it < ITER; it++) {
+    for (let it = 0; it < iterations; it++) {
       for (let k = 0; k < this.len.length; k++) {
         const a = P[k * 2], b = P[k * 2 + 1], wa = 1 - hold[a], wb = 1 - hold[b], w = wa + wb;
         if (w < 1e-6) continue;
@@ -232,7 +287,7 @@ export class HoodCloth {
       }
       this.tie();
       // (the body last, as the sleeves': each iteration it was most of the cloth's cost)
-      if (it === ITER - 1) this.collide(bodies);
+      if (it === iterations - 1) this.collide(bodies);
     }
     // (what rides the head, wholly)
     for (let i = 0; i < n; i++) if (hold[i] >= 1) for (let k = 0; k < 3; k++) { pos[i * 3 + k] = tgt[i * 3 + k]; prev[i * 3 + k] = tgt[i * 3 + k]; }
@@ -300,11 +355,11 @@ export class HoodCloth {
     normals(F, FU, FV, S);
     const po = this.outer.attributes.position as THREE.BufferAttribute, no = this.outer.attributes.normal as THREE.BufferAttribute;
     const pi = this.inner.attributes.position as THREE.BufferAttribute, ni = this.inner.attributes.normal as THREE.BufferAttribute;
-    const t = this.o.thick;
+    const t = this.o.thick, C = this.o.inside;
     for (let i = 0; i < FU * FV; i++) {
-      const j = i * 3;
+      const j = i * 3, inward = S[j] * (C.x - F[j]) + S[j + 1] * (C.y - F[j + 1]) + S[j + 2] * (C.z - F[j + 2]), k = inward < 0 ? -t : t;
       po.setXYZ(i, F[j], F[j + 1], F[j + 2]); no.setXYZ(i, S[j], S[j + 1], S[j + 2]);
-      pi.setXYZ(i, F[j] - S[j] * t, F[j + 1] - S[j + 1] * t, F[j + 2] - S[j + 2] * t); ni.setXYZ(i, S[j], S[j + 1], S[j + 2]);
+      pi.setXYZ(i, F[j] + S[j] * k, F[j + 1] + S[j + 1] * k, F[j + 2] + S[j + 2] * k); ni.setXYZ(i, S[j], S[j + 1], S[j + 2]);
     }
     po.needsUpdate = no.needsUpdate = pi.needsUpdate = ni.needsUpdate = true;
     if (this.pipe) this.writePipe();
