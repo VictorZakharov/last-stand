@@ -9,7 +9,7 @@ import { part } from './rig';
 import { Sculpt } from './shapes';
 import { clamp, lerp, mulberry } from '../../util';
 import { faceCanvases, faceGrid } from '../../core/textures';
-import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, neckShade, shadedSkin, PLAIN_SKIN, beardLift, mouthY, neckSeam, type FaceShape, type HeadGrid } from './face';
+import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, PLAIN_SKIN, beardLift, mouthY, neckSeam, type FaceShape, type HeadGrid } from './face';
 import type { MaterialKit } from '../../types';
 
 /** metres per millimetre of the face's frame: the head is 1/7.5 of the heroes' stature */
@@ -25,7 +25,7 @@ export const toGroup = (x: number, y: number, z: number, out = new THREE.Vector3
 /** bare skin away from the painted face (ears, neck, bare hands): one material setup, so one shader */
 export const plainSkin = (kit: MaterialKit, who: keyof typeof FACES, vertexColors = false) => {
   const s = LOOKS[who].skin;
-  // (shaded by its vertex colours, it is rougher too: a shine would light up a neck that the jaw shades)
+  // (the ears' shaded creases are rougher too)
   return kit.rim({ color: new THREE.Color().setRGB(s[0] * PLAIN_SKIN, s[1] * PLAIN_SKIN, s[2] * PLAIN_SKIN, THREE.SRGBColorSpace), roughness: vertexColors ? 0.88 : 0.6, vertexColors }, 0x6a2a1c, 0.25);
 };
 
@@ -1112,7 +1112,7 @@ function hairCard(pts: THREE.Vector3[], width: (t: number) => number, centre: TH
  */
 /** With the head's joint, the top of the neck follows the head (skinned; see Sculpt.skin) */
 export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: keyof typeof FACES, len: number, headJoint?: THREE.Object3D): void {
-  const F = FACES[who], C = F.neckCol, rings = C ? 32 : 24, segs = C ? lod(64, 24) : lod(28, 14), pos: number[] = [], posN: number[] = [], idx: number[] = [], col: number[] = [], share: number[] = [], ao = LOOKS[who].ao ?? 0;
+  const F = FACES[who], C = F.neckCol, rings = C ? 32 : 24, segs = C ? lod(64, 24) : lod(28, 14), pos: number[] = [], posN: number[] = [], idx: number[] = [], share: number[] = [];
   for (let k = 0; k <= rings; k++) {
     const t = k / rings, y = lerp(-0.03, len + 0.012, t), yf = (y - len) / HEAD_MM;
     // wider at the base, set a little back at the top (under the skull), in mm
@@ -1137,22 +1137,20 @@ export function buildNeck(neckJoint: THREE.Object3D, kit: MaterialKit, who: keyo
       posN.push(Math.sin(a) * (rx + scm) * HEAD_MM, y, (cz + Math.cos(a) * (rz + scm + adam)) * HEAD_MM);
       // (moving with the head from a little below the seam, as the head's skin there does; bending under that)
       share.push(sm(s - 40, s - 12, yf));
-      // (its top in the jaw's shadow, as the face's own skin under the jaw: a warm brown)
-      col.push(...shadedSkin(ao ? neckShade(Math.abs(Math.sin(a)) * rx, (y - len) / HEAD_MM, Math.cos(a)) : 0));
     }
   }
   const W = segs + 1;
   for (let k = 0; k < rings; k++) for (let i = 0; i < segs; i++) { const a = k * W + i; idx.push(a, a + 1, a + W, a + 1, a + W + 1, a + W); }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(posN, 3));
-  if (ao) g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   g.setIndex(idx);
   g.computeVertexNormals();
   weldNormals(g, W);
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   // (a column neck's share of the head's motion, round it: the two skins stay matched at the seam as the head turns)
   if (C) g.setAttribute('skinK', new THREE.Float32BufferAttribute(share, 1));
-  const mat = plainSkin(kit, who, ao > 0);
+  const mat = plainSkin(kit, who);
+  mat.roughness = LOOKS[who].ao ? 0.88 : 0.6;
   const meshes = headJoint ? new Sculpt().skin(g, mat, neckJoint, headJoint, len * 0.35, len).build() : [part(g, mat, neckJoint)];
   // (named, so a probe or a tool can find it: tools/lab neck)
   for (const m of meshes) m.name = 'neck';

@@ -16,7 +16,7 @@
 // window, its profile under tools/facelab/out). Output goes to tools/facelab/out/<tag>/: ours.png, the passes the
 // comparison reads, the zoomed sheets and report.txt.
 import { createServer } from 'vite';
-import { launchBrowser, useLocalTemp } from '../lab/node/browser.mjs';
+import { launchBrowser, lowerProcesses, useLocalTemp } from '../lab/node/browser.mjs';
 import { lowerPriority } from '../lab/node/priority.mjs';
 import { spawnSync } from 'child_process';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync } from 'fs';
@@ -66,7 +66,7 @@ const QUIET = { ...process.env, GLOG_minloglevel: '3', TF_CPP_MIN_LOG_LEVEL: '3'
 
 // a turnaround's reference rebuilt in 3D, once per set of views (its side panel's turn decides where ours is shot from)
 let REC = null, SIDE_AZ = 90;
-if (TURN) {
+if (TURN && !flag('render-only')) {
   const views = ['front', '34', 'side'].map((v) => `${TURN}${v}.png`), rec = `${TURN}recon`, done = join(rec, 'recon.json');
   const newer = (f) => existsSync(f) && (!existsSync(done) || statSync(f).mtimeMs > statSync(done).mtimeMs);
   if (!existsSync(join(HERE, 'models', 'resnet22.onnx'))) console.warn('facelab: no face model for the 3D rebuild: run `npm run facelab -- --setup`');
@@ -78,9 +78,9 @@ if (TURN) {
     REC = rec;
     SIDE_AZ = Math.min(90, Math.max(60, Math.round(Math.abs(JSON.parse(readFileSync(done, 'utf8')).yaw.side) / 5) * 5));
   }
-  // (a side view known to be a true profile, such as Codex's clay turnaround: the fit put one at 70 degrees)
-  if (arg('side-az')) SIDE_AZ = +arg('side-az');
 }
+// (a side view known to be a true profile, such as Codex's clay turnaround: the fit put one at 70 degrees)
+if (arg('side-az')) SIDE_AZ = +arg('side-az');
 
 // the page must never capture the real pointer (the harness runs beside someone's desktop)
 const NO_CAPTURE = () => {
@@ -92,7 +92,10 @@ const NO_CAPTURE = () => {
   if (navigator.keyboard) Object.defineProperty(navigator.keyboard, 'lock', { value: no, configurable: false });
 };
 
-const server = await createServer({ root: ROOT, logLevel: 'error', server: { port: 5198, strictPort: false } });
+// Each run boots a fresh page: generated references and harness environments need no watch. Vite's config merge can
+// discard `watch: null`, so exclude those paths explicitly and don't follow a worktree's linked Python environment.
+const ignored = ['**/.tmp/**', '**/.claude/**', '**/tools/facelab/**', '**/tools/lab/out/**', '**/tools/stalls/out/**', '**/dist/**'];
+const server = await createServer({ root: ROOT, logLevel: 'error', server: { port: 5198, strictPort: false, watch: { ignored, followSymlinks: false } } });
 await server.listen();
 const url = server.resolvedUrls.local[0];
 useLocalTemp(join(HERE, 'out'));
@@ -103,7 +106,9 @@ try {
   await ctx.addCookies([['last-stand-class', CLS], ['last-stand-biome', 'forest'], ['last-stand-quality', 'high']].map(([name, value]) => ({ name, value, url })));
   const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(String(e)));
   // (the grade's adaptation held off: the face's colours mustn't follow how much of the frame is dark hair)
-  await p.goto(url + '?adapt=0'); await p.waitForFunction(() => !document.getElementById('loading'), null, { timeout: 180000 });
+  await p.goto(url + '?adapt=0', { timeout: 180000 });
+  await lowerProcesses(b);
+  await p.waitForFunction(() => !document.getElementById('loading'), null, { timeout: 180000 });
   await p.waitForTimeout(2500);
   if (flag('helm')) await p.evaluate(async () => {
     const { makeItem } = await import('/src/loot/items.ts'); const { equipFromStash } = await import('/src/loot/profile.ts'); const { CLASSES } = await import('/src/data/classes/index.ts');
@@ -318,9 +323,10 @@ try {
     return c2.toDataURL('image/png').split(',')[1];
   });
   writeFileSync(join(OUT, 'ours-depth.png'), Buffer.from(depth, 'base64'));
+  const faceOnly = flag('face-only') || flag('render-only');
   // a beard of cards: its shape (beard.ts) at rest, over each body it may lie on (the chest item worn or not), and its
   // cards the body hides as the hero stands
-  const beard = await p.evaluate(async (cls) => {
+  const beard = faceOnly ? null : await p.evaluate(async (cls) => {
     const B = await import('/tools/facelab/beard.ts'), { buildModel } = await import('/src/entities/models/index.ts'), { CLASSES } = await import('/src/data/classes/index.ts');
     const G = __G, who = CLASSES[cls].model;
     if (!G.player.model.root.getObjectByName('beard')) return null;
@@ -346,7 +352,7 @@ try {
   // the hair (hair.ts: a wig's edge, a bob's hem, the ears covered), the shoulders (shoulders.ts: the slope from the neck,
   // a coat hanger's bump) and the neck (neck.ts: its girth up from the collar against a man's, the seam into the head's
   // skin), on a model at rest, without armour and with the chest item
-  const body = await p.evaluate(async (cls) => {
+  const body = faceOnly ? null : await p.evaluate(async (cls) => {
     const Hm = await import('/tools/facelab/hair.ts'), Sh = await import('/tools/facelab/shoulders.ts'), Nk = await import('/tools/facelab/neck.ts'), { buildModel } = await import('/src/entities/models/index.ts'), { CLASSES } = await import('/src/data/classes/index.ts');
     const G = __G, who = CLASSES[cls].model, m = buildModel(who), out = { hair: null, shoulders: [], neck: [] };
     for (const chest of [false, true]) {
@@ -358,7 +364,7 @@ try {
     m.dispose?.();
     return out;
   }, CLS);
-  {
+  if (body) {
     const h = body.hair, lines = ['', "hair (hair.ts; mm in the face's frame, at rest)"];
     if (h) lines.push(`  off the skin just behind the hairline (90th percentile): forehead ${h.edgeFront}, temples ${h.edgeTemple}`,
       `  locks' ends' heights (10th 50th 90th percentiles): at the sides ${h.endsSide.join(' ')}, behind ${h.endsBack.join(' ')}; ears covered ${h.ears}`);
@@ -378,9 +384,10 @@ try {
   await b.close();
   await server.close();
 }
+if (flag('render-only')) { console.log(`facelab: renders in ${OUT}`); process.exit(0); }
 const r = spawnSync(PY, [join(HERE, 'compare.py'), REF, OUT, TAG], { stdio: ['ignore', 'inherit', 'pipe'], env: { ...process.env, GLOG_minloglevel: '3', TF_CPP_MIN_LOG_LEVEL: '3', PYTHONWARNINGS: 'ignore' } });
 if (r.status) { console.error(String(r.stderr)); process.exit(r.status); }
-for (const f of ['beard.txt', 'body.txt']) if (existsSync(join(OUT, f))) { const t = readFileSync(join(OUT, f), 'utf8'); process.stdout.write(t); writeFileSync(join(OUT, 'report.txt'), readFileSync(join(OUT, 'report.txt'), 'utf8') + t); }
+if (!flag('face-only')) for (const f of ['beard.txt', 'body.txt']) if (existsSync(join(OUT, f))) { const t = readFileSync(join(OUT, f), 'utf8'); process.stdout.write(t); writeFileSync(join(OUT, 'report.txt'), readFileSync(join(OUT, 'report.txt'), 'utf8') + t); }
 if (POINTS) {
   const t = spawnSync(PY, [join(HERE, 'points.py'), POINTS, REF, OUT], { stdio: ['ignore', 'inherit', 'pipe'], env: { ...process.env, PYTHONWARNINGS: 'ignore' } });
   if (t.status) { console.error(String(t.stderr)); process.exit(t.status); }
