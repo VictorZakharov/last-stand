@@ -189,6 +189,9 @@ export interface Head {
   crop?: THREE.Mesh;
   /** a full beard's volume and its tufts (`FACES[...].beardFull`) */
   beards: THREE.Mesh[];
+  /** the face in a hood's shade, `depth` deep (0: none): the forehead and the eyes the most, gone by the mouth, the sides
+   *  of the face more (the game's shadow map is too coarse to shade a face under a brim: it sat lit, pasted into it) */
+  shade(depth: number): void;
 }
 
 /**
@@ -307,7 +310,12 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     depths.set(y, z);
     return z;
   };
-  return { group: head, face, eyes, surface, midZ, hair, crop, beards };
+  const full = toGroup(0, EYE.y + 10, 0).y, gone = toGroup(0, EYE.y - 60, 0).y;
+  const shade = (depth: number) => head.traverse((o) => {
+    const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+    (m?.userData.shade as { value: THREE.Vector4 } | undefined)?.value.set(depth, full, gone, 4);
+  });
+  return { group: head, face, eyes, surface, midZ, hair, crop, beards, shade };
 }
 
 /** The hair's cap over the scalp, on the skin's grid (`loose` or swept), and the grid points the crop's tufts root on

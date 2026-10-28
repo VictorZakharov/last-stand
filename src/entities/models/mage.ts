@@ -616,7 +616,9 @@ export function buildMage(): Model {
   // (lined in the shirt's charcoal, which shows in the shadow round the face: in the coat's red it read as a mask)
   // (its piping a warm gold, less of a mirror than the brass: in the hood's shadow the brass read grey)
   const piping = kit.std({ color: 0xc8963c, metalness: 0.55, roughness: 0.4 });
-  const hoodLining = kit.rim({ color: 0x3a3a3e, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x3a3a44, 0.05);
+  /** how deep the hood's shade on the face (the forehead and the eyes; `Head.shade`) */
+  const HOOD_SHADE = 0.9;
+  const hoodLining = kit.rim({ color: 0x3a3836, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x3a3836, 0.05);
   {
     // as Codex's reference photos have it (`.tmp/references/hood/mage`) and as a tailor cuts one (`draftHood`): two panels
     // sewn over the top of the head and down the back, the hair hidden under it, falling to a soft point behind the crown,
@@ -637,11 +639,12 @@ export function buildMage(): Model {
       const c = Math.cos(el), x = Math.sin(az) * c, z = Math.cos(az) * c, y = Math.sin(el), m = lift / 1000;
       return out.set(mid.x + x * (R.side + m), mid.y + y * ((el > 0 ? R.up : R.side) + m), mid.z + z * ((z > 0 ? R.ahead : R.behind) + m));
     };
-    const shape = (u: number, v: number, out: THREE.Vector3): THREE.Vector3 => {
+    // (`deep`: the face's edge stood off the face and its brim brought forward, as a cowl's; 0 as the cut is measured)
+    const shape = (u: number, v: number, out: THREE.Vector3, deep = 1): THREE.Vector3 => {
       const left = u <= 0.5, f = (left ? u : 1 - u) * 2, turn = (az: number) => (left ? az : TAU - az);
       if (v > NECK) {
         // (the capelet out from the neck and down over the collar and the shoulders, to settle on them)
-        shape(u, NECK, out);
+        shape(u, NECK, out, deep);
         const s = (v - NECK) / (1 - NECK), dx = out.x - mid.x, dz = out.z - mid.z, d = Math.hypot(dx, dz) || 1;
         out.x += (dx / d) * 0.14 * s; out.z += (dz / d) * 0.14 * s; out.y -= 0.1 * s;
         return out;
@@ -659,8 +662,12 @@ export function buildMage(): Model {
       const edgeEl = lerp(BRIM, LOW, 0.5 - 0.5 * Math.cos(arch) / Math.cos(Math.PI * 0.03));
       const seamEl = lerp(Math.PI - POINT, LOW - 0.15, t), el0 = lerp(edgeEl, seamEl, f);
       const el = el0 + (Math.PI / 2 - 0.05 - el0) * Math.sin(Math.PI * f) * (1 - t) ** 2;
-      // (standing 4 cm off the cheeks at its edge, its shadow round the face, closer over the side of the head)
-      return round(turn(lerp(edgeAz, Math.PI, f)), el, lerp(40, 22, f) + 10 * Math.sin(Math.PI * f), out);
+      // (standing 4 cm off the cheeks at its edge, 6 deep, its shadow round the face, closer over the side of the head;
+      // deep, the brim brought forward over the brow: round the head alone, the face sat flat in the opening)
+      const edge = deep * (1 - f) ** 3;
+      round(turn(lerp(edgeAz, Math.PI, f)), el, lerp(40, 22, f) + 10 * Math.sin(Math.PI * f) + 20 * edge, out);
+      out.z += 0.035 * edge * (1 - t) ** 1.5;
+      return out;
     };
     // the cut (m), its top seam as long as the crest it's laid along (`shape`'s row 0) and its face edge as the arch
     // round the face. (Its face edge shorter, fastened at the throat it ran taut across the cheeks; cut as wide as the
@@ -670,7 +677,7 @@ export function buildMage(): Model {
     const measure = (at: (k: number) => [number, number], count: number) => {
       let run = 0;
       for (let k = 0; k <= count; k++) {
-        shape(...at(k), along);
+        shape(...at(k), along, 0);
         if (k > 0) run += along.distanceTo(last);
         last.copy(along);
       }
@@ -714,9 +721,9 @@ export function buildMage(): Model {
         { joint: hat, y0: mid.y + 0.11, y1: mid.y, rx: 0.095, rz: 0.11, z: mid.z },
         { joint: j.neck, y0: 0.08, y1: -0.02, rx: 0.07, rz: 0.07 },
         { joint: j.chest, y0: 0.33, y1: 0.24, rx: 0.11, rz: 0.11 },
-        { joint: j.chest, y0: 0.24, y1: -0.05, rx: 0.2, rz: 0.165 },
-        { joint: j.chest, y0: sh.y, y1: sh.y - 0.04, rx: 0.075, rz: 0.08, x: sh.x * 0.95 },
-        { joint: j.chest, y0: sh.y, y1: sh.y - 0.04, rx: 0.075, rz: 0.08, x: -sh.x * 0.95 },
+        { joint: j.chest, y0: 0.24, y1: -0.05, rx: 0.175, rz: 0.15 },
+        { joint: j.chest, y0: sh.y - 0.05, y1: sh.y - 0.08, rx: 0.075, rz: 0.13, x: sh.x * 0.95 },
+        { joint: j.chest, y0: sh.y - 0.05, y1: sh.y - 0.08, rx: 0.075, rz: 0.13, x: -sh.x * 0.95 },
       ],
     });
   }
@@ -1068,6 +1075,8 @@ export function buildMage(): Model {
     setGear: (gear: Gear) => {
       if (gear.helm && !hat.visible) hood.reset();
       hat.visible = gear.helm;
+      // (the face in the hood's shade: lit as bare, it sat pasted into the opening)
+      head.shade(gear.helm ? HOOD_SHADE : 0);
       for (const m of [...head.hair, ...(head.crop ? [head.crop] : [])]) m.visible = !gear.helm;
       // the robe or the tunic: the bell sleeves (cloth, put back on the arms when the robe is), the skirts
       if (gear.chest !== robed) {
