@@ -225,6 +225,9 @@ export class Player {
   rising = 0;
   /** the pause menu is open in co-op (the game can't stop for one player): the character stands idle */
   idle = false;
+  /** whether he may glance round as he stands idle (models/glance.ts): the hall of heroes holds a hero's glances until
+   *  his showcase is done */
+  glances = true;
   /** the most light a highlight on him reflects outside the eyes (`kit.u.uShine`; 0: as it is): the hall of heroes'
    *  key light a metre off put a glare on a shield's boss */
   shine = 0;
@@ -962,20 +965,28 @@ export class Player {
     }
   }
 
-  /** the head glances at the nearest foe within a dozen metres (not through the eyes: the camera rides the head) */
-  private lookAtFoe(dt: number, dead: number): void {
+  /** the head glances at the nearest foe within a dozen metres (not through the eyes: the camera rides the head), and
+   *  with none about looks round now and then while he stands `idle` (models/glance.ts); a training dummy only while
+   *  he isn't idle (stared at, the lobby's hero never looked round) */
+  private lookAtFoe(dt: number, dead: number, idle: boolean, weight = 1): void {
     const j = this.model.joints;
     if (!j) return;
-    const look = this.look ??= new LookAt(j);
+    const look = this.look ??= new LookAt(j, this.cls.id);
     if (dead >= 0 || this.eyes) { look.reset(); return; }
     let best: Enemy | null = null, bd = 144;
     for (const e of G.enemies) {
-      if (!e.alive || e.spawning) continue;
+      if (!e.alive || e.spawning || (idle && e.def.dummy)) continue;
       const d = (e.pos.x - this.pos.x) ** 2 + (e.pos.z - this.pos.z) ** 2;
       if (d < bd) { bd = d; best = e; }
     }
     _lookFrom.set(this.pos.x, this.obj.position.y, this.pos.z);
-    look.update(dt, _lookFrom, this.facing, best ? _lookAt.set(best.pos.x, best.obj.position.y + best.height * 0.6, best.pos.z) : null);
+    look.update(dt, _lookFrom, this.facing, best ? _lookAt.set(best.pos.x, best.obj.position.y + best.height * 0.6, best.pos.z) : null, weight, idle);
+  }
+
+  /** standing still with nothing cast, aimed or held on an aim: free to glance round (`move` the pose's share of his
+   *  speed) */
+  private standsIdle(move: number, action: ActionState | null): boolean {
+    return this.glances && move < 0.05 && !action && !this.dash && !this.aiming && this.aimHold <= 0;
   }
 
   /** The foe an overhead blow comes down on: the nearest alive on the line straight ahead within `STRUCK_REACH`, its
@@ -1014,7 +1025,7 @@ export class Player {
       charge: this.channel ? 1 : this.casting ? this.casting.t / this.casting.dur : 0,
       nocked: this.nocked,
       strike: action?.name === 'chop' ? this.struckAhead() : null,
-      look: () => this.lookAtFoe(dt, dead),
+      look: (weight) => this.lookAtFoe(dt, dead, this.standsIdle(move, action), weight),
     });
     // (dev builds: a joint taken past a body's range is reported; through the eyes the arms keep hand-placed poses)
     if (import.meta.env.DEV && this.local && dead < 0 && !this.eyes && this.model.joints) watchBody(this.model.joints, action?.name ?? (move > 0.05 ? 'moving' : 'standing'));

@@ -825,7 +825,7 @@ export function buildRanger(): Model {
     hook(handR, 0, 0);
     const drinkOut = drinking ? drink(drinkRig, a.t, mouth, DRINK, handR, flask) : 0;
     flaskOut = damp(flaskOut, drinkOut, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
-    if (aim < 0.5) st.look?.();
+    st.look?.(aim < 0.5 ? 1 : 0);
     if (st.dead >= 0) { deathFall(j, st.dead); legs.reset(); }
     else {
       if (!fp) legs.captureArms();
