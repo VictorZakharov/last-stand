@@ -7,13 +7,18 @@
 //   the eyes and how wide or deep it is at the crown, the temples, the chin, the neck and the shoulders;
 // - its shape on the head, from its cloth, against the sizes the reference was made to (its modelling notes): how far
 //   its rim stands ahead of the brow and of the cheeks and out from the cheeks, how far its point rises above the
-//   scalp and how far its capelet falls below the nape; and how much it changes shape as he walks.
+//   scalp and how far its capelet falls below the nape; and how much it changes shape as he walks;
+// - how its capelet lies on him (`hoodLie.ts`): how far it stands off his front, his shoulders and his back;
+// - what its cloth costs a frame as he stands and walks (`HoodCloth.update`, by the browser's own clock).
 import * as THREE from 'three';
 import type { Lab, Fixture, Report, Pictured, Tile } from './lab';
 import { cameraOn, shoot, studio, type Shot } from './studio';
 import { G } from '../../../src/state';
 import { toGroup } from '../../../src/entities/models/head';
 import { EYE } from '../../../src/entities/models/face';
+import { HoodCloth } from '../../../src/entities/models/hood';
+import { lieCanary, lieLines, lieOf, lieRows, type CapeletMesh } from './hoodLie';
+import { timeCalls, type CallTimes } from './timing';
 
 /** A reference picture and where its face is on it (shares of the picture across and down). */
 export interface HoodReference {
@@ -26,8 +31,14 @@ export interface HoodOptions {
   fixture: Fixture;
   /** the reference's pictures from the front, his left and the back, each with its marks */
   reference?: Partial<Record<ViewName, HoodReference>>;
+  /** the sizes the reference was made to (cm, the least and the most), where its marks give them */
+  sizes?: Partial<Record<Size, [number, number]>>;
   /** plant the faults the measures must catch: the hood narrowed, and its rim pulled in to the face */
   canary?: boolean;
+  /** list each view's outline every `EDGES_STEP` down the window, ours beside the reference's */
+  edges?: boolean;
+  /** list how the capelet lies on him row by row */
+  rows?: boolean;
 }
 
 type ViewName = 'front' | 'left' | 'back';
@@ -50,17 +61,23 @@ const LEVELS = [
   { name: 'neck', up: -1.6 },
   { name: 'shoulders', up: -2.2 },
 ];
+/** how far apart the heights `--edges` lists are (`E`) */
+const EDGES_STEP = 0.2;
 /** what the camera frames round the head's joint (m): across, below it (the capelet, the shoulders), above it */
 const FRAME = { across: 0.3, below: 0.32, above: 0.3 };
 /** how far a reference's pixel may be from its backdrop's colour and still count as backdrop (0-255 a channel) */
 const BACKDROP_SLACK = 24;
 /** a reference's backdrop is read from its rows down to here (a share of it): below, the figure reaches its sides */
 const BACKDROP_ROWS = 0.55;
-/** the sizes the reference was made to (cm, its modelling notes), the least and the most */
+/** the sizes the first reference was made to (cm, its modelling notes), the least and the most, where a reference's
+ *  marks give none of their own (`sizes`); round the cheeks, as its pictures draw them, where the notes disagree with
+ *  them (4-6 cm ahead of the cheeks and out from them): from the front its opening is 10 cm out from the cheekbones at
+ *  their height, and from the side the whole profile shows, its near rim behind the ear (and its far one ahead of the
+ *  face, as the three-quarter view has it too: laid between them, the rim runs a little behind the cheekbones) */
 const SIZES = {
   brim: { least: 6, most: 8, what: 'the rim ahead of the brow' },
-  cheeks: { least: 4, most: 6, what: 'the rim ahead of the cheeks' },
-  clear: { least: 4, most: 6, what: 'the rim out from the cheeks' },
+  cheeks: { least: -4, most: 0, what: 'the rim ahead of the cheeks' },
+  clear: { least: 7, most: 11, what: 'the rim out from the cheeks' },
   rise: { least: 5, most: 7, what: 'the point above the scalp' },
   fall: { least: 16, most: 18, what: 'the capelet below the nape' },
 };
@@ -88,11 +105,14 @@ interface FaceMarks {
   unit: number;
 }
 
-/** The hood's cloth: its outside's mesh and its grid (`HoodCloth`'s `userData.grid`). */
+/** The hood's cloth: its outside's mesh and its grid (`HoodCloth`'s `userData.grid`: its columns and rows, and how far
+ *  down it each row is, 0 to 1), and the row its capelet begins on if it says. */
 interface HoodMesh {
   mesh: THREE.Mesh;
   across: number;
   down: number;
+  rows: number[];
+  capelet?: number;
 }
 
 function gridSize(): { across: number; down: number } {
@@ -168,6 +188,24 @@ function readings(outline: Outline, view: ViewName): string {
   return `top ${topOf(outline).toFixed(2)}; ${parts.join('; ')}`;
 }
 
+/** The outlines' edges every `EDGES_STEP` down the window, ours beside the reference's (`E` from the eyes: from the
+ *  front and the back, its left and right edges on the picture; from the side, its reach ahead and behind). */
+function edgeLines(ours: Outline, theirs: Outline | null, view: ViewName): string[] {
+  const edges = (outline: Outline | null, up: number): string => {
+    const reach = outline ? reachAt(outline, up) : null;
+    if (!reach) return '-'.padStart(11);
+    const [first, second] = view === 'left' ? [-reach.from, reach.to] : [reach.from, reach.to];
+    return `${first.toFixed(2)} ${second.toFixed(2)}`.padStart(11);
+  };
+  const what = view === 'left' ? 'ahead, behind' : 'left, right';
+  const lines = [`  every ${EDGES_STEP} E down (${what}): ours | the reference's`];
+  for (let step = 1; WINDOW.top - step * EDGES_STEP > WINDOW.bottom; step++) {
+    const up = WINDOW.top - step * EDGES_STEP;
+    lines.push(`  ${up.toFixed(1).padStart(5)}: ${edges(ours, up)} | ${edges(theirs, up)}`);
+  }
+  return lines;
+}
+
 /** An image from a data URL, its pixels readable. */
 async function pixelsOf(url: string): Promise<ImageData> {
   const image = new Image();
@@ -223,8 +261,8 @@ function hoodOf(lab: Lab): HoodMesh {
   lab.model.root.traverse((object) => {
     const mesh = object as THREE.Mesh;
     if (mesh.isMesh && mesh.geometry.name === 'hood' && mesh.visible) {
-      const grid = mesh.geometry.userData.grid as { across: number; down: number };
-      found = { mesh, across: grid.across, down: grid.down };
+      const grid = mesh.geometry.userData.grid as { across: number; down: number; rows: number[]; capelet?: number };
+      found = { mesh, across: grid.across, down: grid.down, rows: grid.rows, capelet: grid.capelet };
     }
   });
   if (!found) throw new Error('lab: hood: the hero wears no hood (--wear helm)');
@@ -289,10 +327,39 @@ function sizesOf(lab: Lab): Record<Size, number> {
   };
 }
 
-/** The sizes as a line, and a problem for each outside the reference's. */
-function sizeLines(sizes: Record<Size, number>, problems: string[]): string {
+/** the heights the head's width is read at, in `E` over the eyes (its crown, its temples, the eyes, its cheeks), and
+ *  how far round each a skin point may be and count */
+const HEAD_LEVELS = [0.8, 0.4, 0, -0.4];
+const HEAD_BAND = 0.05;
+/** the brow's height (`E` over the eyes: `sizesOf`'s, 15 mm) and how far from the middle its skin is read (m) */
+const BROW_UP = 15 / EYE.y;
+const BROW_ACROSS = 0.02;
+
+/** The head the hood is laid round, in `E` from the eyes as the outlines are read: how high its scalp rises, how far
+ *  its brow stands ahead of the eyes and its skull's back behind them, and how wide it is at each `HEAD_LEVELS`. */
+function headLine(lab: Lab): string {
+  const skin = skinPoints(headOf(lab).face);
+  const eyes = toGroup(0, EYE.y, EYE.z);
+  const unit = toGroup(0, EYE.y, 0).y - toGroup(0, 0, 0).y;
+  const up = (p: THREE.Vector3) => (p.y - eyes.y) / unit;
+  const at = (level: number) => skin.filter((p) => Math.abs(up(p) - level) < HEAD_BAND);
+  const scalp = Math.max(...skin.map(up));
+  const brow = Math.max(...at(BROW_UP).filter((p) => Math.abs(p.x) < BROW_ACROSS).map((p) => p.z));
+  const back = Math.min(...skin.map((p) => p.z));
+  const sides = HEAD_LEVELS.map((level) => {
+    const wide = Math.max(...at(level).map((p) => Math.abs(p.x)));
+    return `${level.toFixed(1)}: ${(wide / unit).toFixed(2)}`;
+  });
+  return `the head under it, E from the eyes: its scalp ${scalp.toFixed(2)} up, its brow `
+    + `${((brow - eyes.z) / unit).toFixed(2)} ahead, its skull's back ${((eyes.z - back) / unit).toFixed(2)} behind; `
+    + `its half width at each height up, ${sides.join(', ')}`;
+}
+
+/** The sizes as a line, and a problem for each outside the reference's (`given`, where its marks give them). */
+function sizeLines(sizes: Record<Size, number>, given: HoodOptions['sizes'], problems: string[]): string {
   const parts = (Object.keys(SIZES) as Size[]).map((size) => {
-    const { least, most, what } = SIZES[size];
+    const { what } = SIZES[size];
+    const [least, most] = given?.[size] ?? [SIZES[size].least, SIZES[size].most];
     const read = sizes[size];
     if (read < least || read > most) {
       problems.push(`hood: ${what} ${read.toFixed(1)} cm, the reference's ${least} to ${most}`);
@@ -444,7 +511,8 @@ function cameraFrom(lab: Lab, from: THREE.Vector3Tuple): THREE.PerspectiveCamera
 
 /** Each view's outline and readings, ours beside the reference's, with its pictures. */
 async function outlines(lab: Lab, options: HoodOptions, lines: string[], moments: Pictured[]): Promise<Outline> {
-  const scene = studio();
+  // (each view lit from its camera's side, as the reference's are)
+  const scene = studio(true);
   const back = intoStudio(lab, scene);
   let frontOutline: Outline | null = null;
   try {
@@ -462,6 +530,7 @@ async function outlines(lab: Lab, options: HoodOptions, lines: string[], moments
       lines.push(`${view.name}${shared}`);
       lines.push(`  ours, E from the eyes: ${readings(ours, view.name)}`);
       if (theirs) lines.push(`  the reference's:       ${readings(theirs.outline, view.name)}`);
+      if (options.edges) lines.push(...edgeLines(ours, theirs?.outline ?? null, view.name));
       const pictured = await imageOf(tiles[k].png);
       const row: Tile[] = [windowTile(pictured, marks, `${view.name}: ours`)];
       if (theirs && reference) {
@@ -479,23 +548,51 @@ async function outlines(lab: Lab, options: HoodOptions, lines: string[], moments
   return frontOutline!;
 }
 
-/** How far the hood's top half moves from its standing shape as he walks, at most (cm, the hat's own space). */
-async function sway(lab: Lab): Promise<number> {
+/** How the hood moves as he walks: how far its top half moves from its standing shape at most (cm, the hat's own
+ *  space), and what its cloth's frames cost as he stands and walks. */
+interface Sway {
+  moved: number;
+  cost: CallTimes;
+}
+
+/** How the hood moves and what it costs as he stands, then walks. */
+async function sway(lab: Lab): Promise<Sway> {
   const hood = hoodOf(lab);
   const at = hood.mesh.geometry.attributes.position;
-  const topHalf = Math.floor(hood.down / 2) * hood.across;
+  // (its rows down to half its length: they're drawn finer where its creases are)
+  const topHalf = hood.rows.filter((v) => v <= 0.5).length * hood.across;
   const standing: THREE.Vector3[] = [];
   const start = lab.player.pos.clone();
-  await lab.step(STAND_FRAMES);
-  for (let k = 0; k < topHalf; k++) standing.push(new THREE.Vector3().fromBufferAttribute(at, k));
+  const timing = timeCalls(HoodCloth.prototype, 'update');
   let most = 0;
-  const point = new THREE.Vector3();
-  await lab.step(WALK_FRAMES, () => ({ keys: ['w'] }), () => {
-    for (let k = 0; k < topHalf; k++) most = Math.max(most, point.fromBufferAttribute(at, k).distanceTo(standing[k]));
-  });
+  let cost: CallTimes;
+  try {
+    await lab.step(STAND_FRAMES);
+    for (let k = 0; k < topHalf; k++) standing.push(new THREE.Vector3().fromBufferAttribute(at, k));
+    const point = new THREE.Vector3();
+    await lab.step(WALK_FRAMES, () => ({ keys: ['w'] }), () => {
+      for (let k = 0; k < topHalf; k++) most = Math.max(most, point.fromBufferAttribute(at, k).distanceTo(standing[k]));
+    });
+  } finally {
+    cost = timing.stop();
+  }
   if (lab.player.pos.distanceTo(start) < 1) throw new Error('lab: hood: the hero never walked');
+  if (cost.calls === 0) throw new Error('lab: hood: its cloth never stepped');
   const scale = hood.mesh.getWorldScale(new THREE.Vector3()).x;
-  return most * scale * 100;
+  return { moved: most * scale * 100, cost };
+}
+
+/** How the capelet lies on him as he stands, row by row with --rows, and with --canary its canary. */
+function capeletLie(lab: Lab, options: HoodOptions, problems: string[]): string[] {
+  const hood = hoodOf(lab);
+  if (hood.capelet === undefined) throw new Error('lab: hood: the hood says nowhere where its capelet begins');
+  const capelet: CapeletMesh = { ...hood, capelet: hood.capelet };
+  const held = heldThings(lab);
+  const lie = lieOf(lab, capelet, held);
+  const lines = lieLines(lie, problems);
+  if (options.rows) lines.push(...lieRows(lie));
+  if (options.canary) lines.push(lieCanary(lab, capelet, held, lie, problems));
+  return lines;
 }
 
 /** The hood's meshes made narrower about the head for the canary; returns the undo. */
@@ -521,7 +618,8 @@ export async function hood(lab: Lab, options: HoodOptions): Promise<Report> {
   const problems: string[] = [];
   const moments: Pictured[] = [];
   const sizes = sizesOf(lab);
-  lines.push(sizeLines(sizes, problems));
+  lines.push(sizeLines(sizes, options.sizes, problems));
+  lines.push(headLine(lab));
   const front = await outlines(lab, options, lines, moments);
   if (options.canary) {
     const undo = narrowed(lab);
@@ -549,8 +647,11 @@ export async function hood(lab: Lab, options: HoodOptions): Promise<Report> {
       undo();
     }
   }
-  const moved = await sway(lab);
+  lines.push(...capeletLie(lab, options, problems));
+  const { moved, cost } = await sway(lab);
   lines.push(`walking, its top half moved at most ${moved.toFixed(1)} cm from its standing shape (${MOST_SWAY} at most)`);
   if (moved > MOST_SWAY) problems.push(`hood: its top half moved ${moved.toFixed(1)} cm from its shape as he walked`);
+  lines.push(`its cloth a frame, standing and walking: ${cost.median.toFixed(2)} ms at the median, `
+    + `${cost.p90.toFixed(2)} at the 90th percentile (${cost.calls} frames, by the browser's clock)`);
   return { text: lines.join('\n'), problems, moments };
 }

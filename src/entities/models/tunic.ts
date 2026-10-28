@@ -30,6 +30,43 @@ export function onTunic(a: number, y: number, lift: number, out = new THREE.Vect
   const X = curve(TUNIC_W, y) + lift, Z = curve(TUNIC_D, y) + lift, e = 2 / curve(TUNIC_P, y), s = Math.sin(a), c = Math.cos(a);
   return out.set(Math.sign(s) * Math.abs(s) ** e * X, y, Math.sign(c) * Math.abs(c) ** e * Z + necklineBack(y));
 }
+/** how far inside the tunic lifted `lift` off it a point (chest joint space) is: under 1 inside, 1 on it */
+function within(x: number, y: number, z: number, lift: number): number {
+  const X = curve(TUNIC_W, y) + lift, Z = curve(TUNIC_D, y) + lift, e = curve(TUNIC_P, y);
+  return Math.abs(x / X) ** e + Math.abs((z - necklineBack(y)) / Z) ** e;
+}
+/** the step `outOfTunic` reads the way out by (m) */
+const OUT_STEP = 0.002;
+
+/** the way out of the tunic lifted `lift` off it at `p`: `within`'s gradient (unnormalised) */
+function outward(p: THREE.Vector3, lift: number, out: THREE.Vector3): THREE.Vector3 {
+  const d = 2 * OUT_STEP;
+  return out.set(
+    (within(p.x + OUT_STEP, p.y, p.z, lift) - within(p.x - OUT_STEP, p.y, p.z, lift)) / d,
+    (within(p.x, p.y + OUT_STEP, p.z, lift) - within(p.x, p.y - OUT_STEP, p.z, lift)) / d,
+    (within(p.x, p.y, p.z + OUT_STEP, lift) - within(p.x, p.y, p.z - OUT_STEP, lift)) / d,
+  );
+}
+const _g = new THREE.Vector3();
+
+/** the tunic's normal near `p` (chest joint space): what lies on it faces this way (a strap) */
+export const tunicNormal = (p: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 => outward(p, 0, out).normalize();
+
+/** `p` (chest joint space) put out of the tunic lifted `lift` off it if it's inside, by Newton's steps along the way out
+ *  of its surface (over the shoulders that's up their slope: put out across, cloth laid there slid off them); whether it
+ *  was inside */
+export function outOfTunic(p: THREE.Vector3, lift: number): boolean {
+  if (p.y < TUNIC_Y[0] || p.y > TUNIC_Y[1]) return false;
+  let v = within(p.x, p.y, p.z, lift);
+  if (v >= 1) return false;
+  for (let k = 0; k < 3 && v < 1; k++) {
+    const g2 = outward(p, lift, _g).lengthSq();
+    if (g2 < 1e-9) break;
+    p.addScaledVector(_g, (1 - v) / g2);
+    v = within(p.x, p.y, p.z, lift);
+  }
+  return true;
+}
 /** the point on the tunic's front `x` across */
 export const tunicFront = (x: number, y: number, lift: number) => onTunic(Math.asin(clamp(Math.sign(x) * Math.abs(x / curve(TUNIC_W, y)) ** (curve(TUNIC_P, y) / 2), -1, 1)), y, lift);
 /** the point on the tunic's back `x` across (+x his left) */

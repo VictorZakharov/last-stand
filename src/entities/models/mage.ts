@@ -20,10 +20,9 @@ import { buildBoot } from './boot';
 import { fitArm } from './armIK';
 import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
-import { onTunic, tunicFront, tunicCut, armholeEdge, neckHem, necklineBack, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
+import { onTunic, tunicFront, tunicCut, armholeEdge, neckHem, necklineBack, outOfTunic, tunicNormal, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
 import { buildFlask, drink, drinkUp, holdFlask, type DrinkHold } from './flask';
-import { HoodCloth } from './hood';
-import { draftHood } from './hoodPattern';
+import { HoodCloth, evenly, spaced } from './hood';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
 
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _vr = new THREE.Quaternion();
@@ -329,15 +328,17 @@ export function buildMage(): Model {
     A.add(taperTube(pts, () => 0.005, 20, 6), goldE, j.chest);
   }
 
-  // --- the collar: standing high round the neck and flaring a little, open at the throat, brass along its edges (as the
-  // sheet's, higher behind than at its points in front)
+  // --- the collar: standing high round the neck, open at the throat, its points turned out as lapels, brass along its
+  // edges (as the sheet's, higher behind than at its points in front; pinched in round the neck at its points too, and
+  // the shirt's red filling the gap, it read as a ring under the chin)
   {
-    const PHI = 0.62;
+    const PHI = 0.7;
     const collar: SurfaceFn = (u, v, out) => {
       const a = lerp(PHI, TAU - PHI, u), back = 0.5 - 0.5 * Math.cos(a);
       // (its foot run down into the coat's body and out under it: from the foot at 0.268 the coat's shoulders, squashed
       // front to back more than the collar, left a gap behind the neck that showed the skin and through it)
-      const top = lerp(0.322, 0.372, back), y = lerp(0.235, top, v), r = lerp(0.112, 0.106, v ** 0.6) - 0.016 * Math.sin(Math.PI * v ** 0.8);
+      const top = lerp(0.322, 0.372, back), y = lerp(0.235, top, v), flare = 0.024 * (1 - back) * v ** 1.6;
+      const r = lerp(0.112, 0.106, v ** 0.6) - 0.016 * Math.sin(Math.PI * v ** 0.8) * back + flare;
       return out.set(Math.sin(a) * r, y, Math.cos(a) * r * 0.95 + necklineBack(y));
     };
     A.add(plate(collar, 36, 6, 0.006, undefined, V(0, 0.3, 0)), coatD, j.chest);
@@ -358,9 +359,10 @@ export function buildMage(): Model {
 
   // --- the harness: a strap down the front from each shoulder to the belt, buckled at the chest, and crossed behind
   // (its lower half going with the waist, the coat under it there: on the chest alone, the coat's waist turned under it
-  // walking and the strap's end stood out of the coat by the hip, a dark shard below the bracer)
+  // walking and the strap's end stood out of the coat by the hip, a dark shard below the bracer). Each lies flat on the
+  // coat (faced along its normal: along a radial from the chest's axis, each stood tilted, an edge 1.9 cm off the coat)
   const harness = (pts: THREE.Vector3[]) => {
-    const g = strap(pts, 0.05, 0.008), p = g.attributes.position, k = new Float32Array(p.count);
+    const g = strap(pts, 0.05, 0.008, false, tunicNormal), p = g.attributes.position, k = new Float32Array(p.count);
     for (let i = 0; i < p.count; i++) k[i] = smooth(clamp((0.06 - p.getY(i)) / 0.12, 0, 1));
     g.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
     A.skinChain(g, leather, j.chest, [j.chest, j.spine]);
@@ -618,39 +620,55 @@ export function buildMage(): Model {
   // (its piping a warm gold, less of a mirror than the brass: in the hood's shadow the brass read grey)
   const piping = kit.std({ color: 0xc8963c, metalness: 0.55, roughness: 0.4 });
   /** how deep the hood's shade on the face (the forehead and the eyes; `Head.shade`) */
-  const HOOD_SHADE = 0.9;
-  const hoodLining = kit.rim({ color: 0x3a3836, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x3a3836, 0.05);
+  const HOOD_SHADE = 0.65;
+  /** how far the capelet lies off the coat's body at the least (m): over the harness's straps (their outer face 1.3-1.6
+   *  cm off the coat; walking, their tops came through it behind at 1.8), in front and crossing his back, bridging
+   *  between them behind, over the crossing (two straps and the disc deep) and on the bare coat */
+  const HOOD_OVER_COAT = 0.02, HOOD_OVER_BACK = 0.022, HOOD_OVER_BETWEEN = 0.016, HOOD_OVER_CROSSING = 0.026, HOOD_OVER_BARE = 0.008;
+  /** how far from a strap's middle the capelet rides over it (m): its half width, and on out to the lift's foot; and
+   *  how far round the crossing behind */
+  const STRAP_HALF = 0.025, STRAP_FOOT = 0.02, CROSSING_HALF = 0.035;
+  /** the distance from (x, y) to the segment from (ax, ay) to (bx, by) */
+  const toSegment = (x: number, y: number, ax: number, ay: number, bx: number, by: number) => {
+    const dx = bx - ax, dy = by - ay, t = clamp(((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy), 0, 1);
+    return Math.hypot(x - ax - dx * t, y - ay - dy * t);
+  };
+  /** how far off the coat the capelet lies at `p` (the chest's space): over the harness's straps (as lines across the
+   *  coat, as `harness` lays them: down his front from each shoulder, crossed behind, and the disc where they cross),
+   *  across between them behind, above where they cross (the cloth bridging them: let down onto the coat between them,
+   *  it lay in two lobes), and on the bare coat elsewhere */
+  const capeletLift = (p: THREE.Vector3) => {
+    let d = Infinity;
+    for (const s of [1, -1]) {
+      d = Math.min(d, p.z >= 0 ? toSegment(p.x, p.y, s * 0.085, 0.255, s * 0.1, -0.1) : toSegment(p.x, p.y, s * 0.1, 0.255, -s * 0.11, -0.11));
+    }
+    const over = lerp(HOOD_OVER_COAT, HOOD_OVER_BACK, smooth(clamp(-p.z / 0.08, 0, 1)));
+    const straps = lerp(over, HOOD_OVER_BARE, smooth(clamp((d - STRAP_HALF) / STRAP_FOOT, 0, 1)));
+    if (p.z >= 0) return straps;
+    // (the crossed straps' way out from the middle at this height, and the disc where they cross)
+    const apart = 0.1 - (0.255 - p.y) * (0.21 / 0.365), crossing = Math.hypot(p.x, p.y - 0.13);
+    const between = Math.abs(p.x) < apart ? HOOD_OVER_BETWEEN : HOOD_OVER_BARE;
+    return Math.max(straps, between, lerp(HOOD_OVER_CROSSING, HOOD_OVER_BARE, smooth(clamp((crossing - CROSSING_HALF) / STRAP_FOOT, 0, 1))));
+  };
+  const hoodLining = kit.rim({ color: 0x3a3836, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide, vertexColors: true }, 0x3a3836, 0.05);
   {
-    // as Codex's reference photos have it (`.tmp/references/hood/mage`) and as a tailor cuts one (`draftHood`): two panels
-    // sewn over the top of the head and down the back, the hair hidden under it, falling to a soft point behind the crown,
-    // open round the face from the brim to the throat, its edge standing off the cheeks with the face in its shadow, and
-    // on below the neck into a capelet over the collar and the shoulders (`HoodCloth`). Laid on the head roughly here
-    // (`shape`), it settles on it by its weight, its lengths the cut's. (Shaped by hand as offsets over the head it read as
-    // a helmet, a superhero's mask, a sack, then a chimney with a straight-walled frame round the face.)
-    const nu = lod(28, 16), nv = lod(16, 10), neckRow = Math.round(nv * 0.62), NECK = neckRow / nv;
-    const OPEN = 1.45, LOW = -0.45, mid = toGroup(0, 40, -25), u01 = (x: number) => clamp(x, 0, 1);
-    // (its top seam along the crest: from the brim's top over the brow to the soft point behind the crown, as angles round
-    // the head from level ahead, over the top and down behind)
-    const BRIM = 0.95, POINT = Math.PI - 0.55;
-    // (laid on a smooth round of the skull, its size the head's ahead, behind, beside and above: on the head's own
-    // surface the brow, the cheekbones and the jaw made the face's edge wobble)
-    const sz = (az: number, el: number) => head.surface(az, el).sub(mid);
-    const R = { side: Math.abs(sz(Math.PI / 2, 0).x), ahead: sz(0, 0).z, behind: -sz(Math.PI, 0).z, up: sz(0, Math.PI / 2).y };
-    const FULL = 0.6;
-    const round = (az: number, el: number, lift: number, out: THREE.Vector3) => {
-      // (fuller above its middle than an ellipsoid, as a hood's dome is: on one, the crown narrowed to a point)
-      const c = Math.cos(el) ** (el > 0 ? FULL : 1), x = Math.sin(az) * c, z = Math.cos(az) * c, y = Math.sin(el), m = lift / 1000;
-      return out.set(mid.x + x * (R.side + m), mid.y + y * ((el > 0 ? R.up : R.side) + m), mid.z + z * ((z > 0 ? R.ahead : R.behind) + m));
-    };
-    // its rim, set from the face's own skin at the reference's sizes (its modelling notes, `lab hood`): ahead of the
-    // brow, ahead of and out from the cheeks, drawn in under the chin to the throat. (Laid round the skull by angles, it
-    // stood 3 cm behind the brow and 6 behind the cheeks, the face flat in the opening)
+    // as Codex's reference photos have it (`.tmp/references/hood/mage`): two panels sewn over the top of the head and down
+    // the back, the hair hidden under it, a soft point behind the crown, deep and open round the face from the brim to
+    // the throat with the face in its shadow, its sides falling wide onto the shoulders, and on below them into a
+    // capelet over the collar, the shoulders and the upper back (`HoodCloth`). Laid as it's worn (`shape`), along lines
+    // set from the face's skin, the crown and the coat's shoulders at the reference's sizes and outline (`lab hood`), and
+    // held there: the hood rides the head, the cloth below lies on the body. (Shaped by hand as offsets over the head it
+    // read as a helmet, a superhero's mask, a sack, then a chimney; cut flat as a tailor cuts one and settled by its
+    // weight, it drifted from where it was laid as no tuning converged on: a cone over the head, a bell on the shoulders)
+    const nu = lod(28, 16), nv = lod(16, 10), neckRow = Math.round(nv * 0.62), NECK = neckRow / nv, half = nu / 2;
+    const mid = toGroup(0, 40, -25), u01 = (x: number) => clamp(x, 0, 1), V3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+    // the face's skin where the hood frames it: its brow, its cheekbones and its chin, the crown and the back of the skull
     const skin = head.face.geometry.attributes.position, sp = new THREE.Vector3();
-    const skinAt = (y: number, keep: (p: THREE.Vector3) => boolean, of: (p: THREE.Vector3) => number) => {
+    const skinAt = (y: number | null, keep: (p: THREE.Vector3) => boolean, of: (p: THREE.Vector3) => number) => {
       let most = -Infinity;
       for (let k = 0; k < skin.count; k++) {
         sp.fromBufferAttribute(skin, k);
-        if (Math.abs(sp.y - y) < 0.008 && keep(sp)) most = Math.max(most, of(sp));
+        if ((y === null || Math.abs(sp.y - y) < 0.008) && keep(sp)) most = Math.max(most, of(sp));
       }
       return most;
     };
@@ -659,112 +677,125 @@ export function buildMage(): Model {
     const cheekWide = skinAt(cheekY, () => true, (q) => Math.abs(q.x));
     const cheekZ = skinAt(cheekY, (q) => Math.abs(q.x) > cheekWide * 0.6, (q) => q.z);
     const chinZ = skinAt(chinY + 0.01, (q) => Math.abs(q.x) < 0.02, (q) => q.z);
-    const RIM = { brow: 0.06, cheekAhead: 0.04, cheekOut: 0.08, jawOut: 0.05 };
-    // how far out it's laid round the head (mm): its sides by the face, at the seam behind, how much more it swells
-    // between them, and its top seam over the crown (and how much higher in the middle)
-    const LAY = { side: 95, back: 75, swell: 20, crest: 80, crestRise: 5 };
-    const rim = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0, browY + 0.05, browZ + RIM.brow),
-      new THREE.Vector3(cheekWide + RIM.cheekOut * 0.9, (browY + cheekY) / 2 + 0.02, cheekZ + RIM.cheekAhead + 0.01),
-      new THREE.Vector3(cheekWide + RIM.cheekOut, cheekY, cheekZ + RIM.cheekAhead),
-      new THREE.Vector3(cheekWide + RIM.jawOut, chinY + 0.01, chinZ - 0.01),
-      new THREE.Vector3(0.06, chinY - 0.05, chinZ - 0.01),
-    ], false, 'centripetal');
-    const rimAt = new THREE.Vector3(), rimRound = new THREE.Vector3();
-    // (`deep`: the hood laid out to its rim; 0, round the head alone, as the cut's widths are measured)
-    const shape = (u: number, v: number, out: THREE.Vector3, deep = 1): THREE.Vector3 => {
-      const left = u <= 0.5, f = (left ? u : 1 - u) * 2, turn = (az: number) => (left ? az : TAU - az);
-      if (v > NECK) {
-        // (the capelet out from the neck and down over the collar and the shoulders, to settle on them)
-        shape(u, NECK, out, deep);
-        const s = (v - NECK) / (1 - NECK), dx = out.x - mid.x, dz = out.z - mid.z, d = Math.hypot(dx, dz) || 1;
-        out.x += (dx / d) * 0.14 * s; out.z += (dz / d) * 0.14 * s; out.y -= 0.1 * s;
-        return out;
-      }
-      if (v === 0) {
-        // (the top seam on the crest, the brim standing out over the brow, highest over the crown and the point a little
-        // off it behind: highest at the brim, it stood as a column over the face)
-        const a = BRIM + (POINT - BRIM) * f, over = a > Math.PI / 2;
-        round(over ? Math.PI : 0, over ? Math.PI - a : a, LAY.crest + LAY.crestRise * Math.sin(Math.PI * f), out);
-        // (its front out to the rim's top)
-        round(0, BRIM, LAY.crest, rimRound);
-        rim.getPoint(0, rimAt);
-        return out.addScaledVector(rimAt.sub(rimRound), deep * (1 - f) ** 2);
-      }
-      // (below it round the side of the head, from the face's edge, an arch from the brim round the forehead, widest
-      // beside the cheeks and drawn in again under the chin to the throat, back to the seam down the back of the head;
-      // over the top first and lower down round the side. Opened below the brim alone, it shut over the brow)
-      const t = v / NECK, arch = t * Math.PI * 0.97, edgeAz = OPEN * Math.sin(arch);
-      const edgeEl = lerp(BRIM, LOW, 0.5 - 0.5 * Math.cos(arch) / Math.cos(Math.PI * 0.03));
-      const seamEl = lerp(Math.PI - POINT, LOW - 0.15, t), el0 = lerp(edgeEl, seamEl, f);
-      const el = el0 + (Math.PI / 2 - 0.05 - el0) * Math.sin(Math.PI * f) * (1 - t) ** 2;
-      // (round the head, closer over its side; out to the rim at the face's edge, less so further back)
-      round(turn(lerp(edgeAz, Math.PI, f)), el, lerp(LAY.side, LAY.back, f) + LAY.swell * Math.sin(Math.PI * f), out);
-      round(turn(edgeAz), edgeEl, LAY.side, rimRound);
-      rim.getPoint(t, rimAt);
-      if (!left) rimAt.x = -rimAt.x;
-      return out.addScaledVector(rimAt.sub(rimRound), deep * (1 - f) ** 2);
+    const crownY = skinAt(null, () => true, (q) => q.y), backZ = -skinAt(null, () => true, (q) => -q.z);
+    // a place on the coat (the chest's space, as the rig stands at rest) in the head's
+    hat.updateWorldMatrix(true, false);
+    j.chest.updateWorldMatrix(true, false);
+    const chestToHead = new THREE.Matrix4().copy(hat.matrixWorld).invert().multiply(j.chest.matrixWorld);
+    const chestAt = (x: number, y: number, z: number) => V3(x, y, z).applyMatrix4(chestToHead);
+    // where it meets the capelet, round the neck on the shoulders' tops (a centimetre or two over the coat): at the
+    // collar's sides in front, over the shoulders, standing off the nape behind, where it gathers
+    const ring = [chestAt(0.105, 0.255, 0.102), chestAt(0.205, 0.255, 0.065), chestAt(0.235, 0.25, 0), chestAt(0.16, 0.24, -0.095),
+      chestAt(0, 0.293, -0.1)];
+    // the hood's lines down from its top seam to the ring: its rim, its front quarter, its side (where it's widest, as the
+    // front sees it: the reference's outline), its back quarter and the seam down the back; the top seam their tops,
+    // from the brim over the brow up over the crown to the soft point behind it, as the reference's profile has it. Its
+    // rim as the reference's gold trim runs (`lab hood`): ahead of the brow, then out, down and back past the face, wider
+    // and wider to the chin, the lining showing round the face and the face in profile ahead of it, and in again below,
+    // forward to the collar's sides
+    const hoodLines = [
+      [V3(0, browY + 0.068, browZ + 0.065), V3(0.077, browY + 0.057, browZ + 0.04), V3(cheekWide + 0.058, (browY + cheekY) / 2 + 0.017, cheekZ - 0.005),
+        V3(cheekWide + 0.078, cheekY + 0.002, cheekZ - 0.022), V3(cheekWide + 0.098, chinY + 0.073, cheekZ - 0.027),
+        V3(cheekWide + 0.123, chinY + 0.025, chinZ - 0.045), V3(cheekWide + 0.133, chinY, chinZ - 0.045),
+        V3(cheekWide + 0.113, chinY - 0.04, chinZ - 0.02), V3(0.145, chinY - 0.07, chinZ + 0.003), ring[0]],
+      [V3(0, crownY + 0.01, 0.085), V3(0.075, crownY - 0.012, 0.075), V3(0.125, crownY - 0.06, 0.06), V3(0.158, crownY - 0.11, 0.045),
+        V3(0.18, crownY - 0.16, 0.035), V3(0.2, crownY - 0.21, 0.035), V3(0.213, crownY - 0.25, 0.04), V3(0.21, crownY - 0.29, 0.045), ring[1]],
+      [V3(0, crownY + 0.058, -0.01), V3(0.068, crownY + 0.028, -0.015), V3(0.115, crownY - 0.017, -0.02), V3(0.148, crownY - 0.073, -0.025),
+        V3(0.182, crownY - 0.132, -0.025), V3(0.213, crownY - 0.202, -0.025), V3(0.225, crownY - 0.257, -0.02), ring[2]],
+      [V3(0, crownY + 0.035, -0.085), V3(0.065, crownY + 0.008, -0.11), V3(0.11, crownY - 0.065, -0.14), V3(0.14, crownY - 0.15, -0.155),
+        V3(0.158, crownY - 0.23, -0.165), V3(0.16, crownY - 0.285, -0.15), ring[3]],
+      [V3(0, crownY + 0.019, backZ + 0.015), V3(0, crownY - 0.032, backZ - 0.028), V3(0, crownY - 0.102, backZ - 0.056),
+        V3(0, crownY - 0.182, backZ - 0.069), V3(0, crownY - 0.245, backZ - 0.071), V3(0, crownY - 0.28, backZ - 0.041), ring[4]],
+    ];
+    // the capelet's, from the ring to its hem over the coat (its measured profile, the chest's space): a short mantle over
+    // the shoulders, its front edge down from the collar's side to the hem's corner over the chest, its front quarter,
+    // over the shoulder and down the deltoid, its back quarter, and down the middle of the back to 16-18 cm below the
+    // nape (the reference's notes), its hem rising from the shoulders to the collar's sides in front
+    const capeLines = [
+      [ring[0], chestAt(0.13, 0.205, 0.128), chestAt(0.145, 0.175, 0.13)],
+      [ring[1], chestAt(0.195, 0.218, 0.1), chestAt(0.185, 0.195, 0.104)],
+      [ring[2], chestAt(0.26, 0.223, 0), chestAt(0.28, 0.205, 0), chestAt(0.292, 0.19, 0)],
+      [ring[3], chestAt(0.185, 0.222, -0.1), chestAt(0.185, 0.195, -0.106)],
+      [ring[4], chestAt(0, 0.21, -0.14), chestAt(0, 0.145, -0.162)],
+    ];
+    // each row through its five lines at its share of the way down them, from the rim (or the capelet's front edge) to
+    // the seam behind, where it runs on into its mirror (its top seam on into the seam down the back)
+    const reflect = (a: THREE.Vector3, b: THREE.Vector3) => a.clone().multiplyScalar(2).sub(b), LINE = 128;
+    const alongLines = (lines: THREE.Vector3[][]) => lines.map((line) => evenly(line, reflect(line[0], line[1]), reflect(line[line.length - 1], line[line.length - 2]), LINE));
+    const hoodAlong = alongLines(hoodLines), capeAlong = alongLines(capeLines);
+    const rows: THREE.Vector3[][] = [];
+    for (let r = 0; r <= nv; r++) {
+      const onHood = r <= neckRow, t = onHood ? r / neckRow : (r - neckRow) / (nv - neckRow);
+      const at = (onHood ? hoodAlong : capeAlong).map((line) => line[Math.round(t * LINE)]);
+      const post = r === 0 ? reflect(at[4], at[3]) : V3(-at[3].x, at[3].y, at[3].z);
+      rows.push(evenly(at, reflect(at[0], at[1]), post, half));
+    }
+    const shape = (u: number, v: number, out: THREE.Vector3): THREE.Vector3 => {
+      const left = u <= 0.5;
+      out.copy(rows[Math.round(v * nv)][Math.round((left ? u : 1 - u) * nu)]);
+      if (!left) out.x = -out.x;
+      return out;
     };
-    // the cut (m), its top seam as long as the crest it's laid along (`shape`'s row 0) and its face edge as the arch
-    // round the face. (Its face edge shorter, fastened at the throat it ran taut across the cheeks; cut as wide as the
-    // head where it's laid and more, its face edge buckled into waves and the back billowed; with the capelet a half
-    // circle, it hung from the neck as a cone)
-    const along = new THREE.Vector3(), last = new THREE.Vector3();
-    const measure = (at: (k: number) => [number, number], count: number, deep = 0) => {
-      let run = 0;
-      for (let k = 0; k <= count; k++) {
-        shape(...at(k), along, deep);
-        if (k > 0) run += along.distanceTo(last);
-        last.copy(along);
-      }
-      return run;
-    };
-    const top = measure((c) => [c / nu, 0], nu / 2), front = measure((r) => [0, r / nv], neckRow, 1) * 1.04;
-    // (each row as long as where it's laid, from the rim round to the back seam, with a little ease: its rows near the
-    // top only as long as the top seam, while the rim stood out in front, pulled the crown into a point and the sides
-    // onto the head)
-    const EASE = 1.05;
-    const widths = Array.from({ length: neckRow + 1 }, (_, r) => measure((c) => [c / nu, r / nv], nu / 2, 1) * EASE);
-    const draft = draftHood({ front, top, bulge: 0, widths, neck: widths[neckRow], chin: 0, mantle: 0.175, hem: 0.78 }, nu, nv, neckRow);
-    // its creases (m out along the cloth), after the references: the cloth gathered where it turns from the head onto the
-    // shoulders into rolls running round the nape and the sides of the neck (round tops, sharp valleys between, wavering
-    // a little and fading out at the face's edge), and the seam down the back where the halves are sewn. (Folds running
-    // down the hood, as ribs, read as a plane at right angles to the references')
+    // its creases (m out along the cloth), after the references: two bands gathered round the nape where it turns from
+    // the head onto the shoulders (rolls bunching out, round tops and tight valleys, the lower fuller, wavering a little,
+    // fading round the sides of the neck: squeezed into two of the drawn rows, they read as a crack); long soft folds
+    // down its sides from the temples back towards them; the seam down the middle of the back, a groove between two
+    // welts, on down the capelet; and the capelet's soft folds over the shoulders, fuller towards its hem. All fade out
+    // at the face's edge. (Folds running straight down the hood, as ribs, read as a plane at right angles to the
+    // references')
+    const GATHER = 0.17;
     const crease = (u: number, v: number) => {
-      const edge = smooth(u01(Math.min(u, 1 - u) / 0.12)), back = Math.max(0, -Math.cos(u * TAU));
-      const band = Math.exp(-(((v - NECK + 0.03) / 0.11) ** 2)) * (0.45 + 0.55 * back);
-      const phase = (v - NECK) * TAU * 7.5 + 0.5 * Math.sin(u * TAU * 3 + 0.7);
-      const rolls = band * (Math.abs(Math.sin(phase)) - 0.6) * (0.8 + 0.2 * Math.sin(u * TAU * 5)) * 0.025;
-      const seam = -0.005 * Math.exp(-(((u - 0.5) / 0.012) ** 2)) * (1 - smooth(u01((v - NECK) / 0.1)));
-      return edge * rolls + seam;
+      const side = Math.min(u, 1 - u), edge = smooth(u01(side / 0.08)), t = (v - NECK + GATHER) / GATHER;
+      const wrap = smooth(u01((side - 0.16) / 0.2)), waver = 0.25 * Math.sin(u * TAU * 4);
+      const gathers = t > 0 && t < 1 ? Math.abs(Math.sin(t * Math.PI * 2 + waver)) ** 0.6 * (0.7 + 0.3 * t) * wrap * 0.034 : 0;
+      const sides = smooth(u01((v - 0.12) / 0.15)) * (1 - smooth(u01(t * 2.5))) * smooth(u01((side - 0.06) / 0.06)) * (1 - smooth(u01((side - 0.4) / 0.06)));
+      const folds = sides * (Math.cos((side - 0.5 * v) * TAU * 9) * 0.5 + 0.5) ** 1.5 * 0.011;
+      const off = Math.abs(u - 0.5), seam = -0.005 * Math.exp(-((off / 0.007) ** 2)) + 0.0018 * Math.exp(-(((off - 0.014) / 0.006) ** 2));
+      // (the capelet's bunching out alone: their valleys in, they sank it onto the straps crossing his back)
+      const capelet = v > NECK ? (0.5 + 0.5 * Math.cos(side * TAU * 7)) * 0.006 * smooth(u01((v - NECK) / (1 - NECK))) : 0;
+      // (the seam faded out at its top, where the top seam turns back on itself and the normal has no way across: laid
+      // along it there, its groove jerked 2 cm at idle)
+      return edge * (gathers + folds + capelet) + seam * (v > NECK ? 0.6 : 1) * smooth(u01(v / 0.06));
     };
-    // (its top seam riding the head; the face's edge stiffened, a hem standing round the face to the throat; the rest
-    // kept to its settled drape, less down to the neck, the capelet lightly)
+    // drawn twice as finely as its particles, and finer still where its creases are: across the seam down the back, and
+    // down the gathers at the nape, seven rows a roll (in two or three each they read as a crack, the seam as nothing)
+    const band = (x: number, from: number, to: number, ease: number) => smooth(u01((x - from + ease) / ease)) * (1 - smooth(u01((x - to) / ease)));
+    const drawn = {
+      across: spaced(nu * 2 + 6, (u) => 1 + 5 * Math.exp(-(((u - 0.5) / 0.015) ** 2))),
+      down: spaced(nv * 2 + 8, (v) => 1 + 2.5 * band(v, NECK - GATHER, NECK, 0.03)),
+    };
+    // (the hood above the jaw riding the head wholly; below it, down to the ring, held less and less and carried by the
+    // chest as much as the head at the ring, its rim held more firmly, a hem; the capelet carried by the chest, held
+    // lightly, free to swing)
+    const RIDE = 0.6;
+    const below = (v: number) => Math.max(0, (v / NECK - RIDE) / (1 - RIDE));
     const hold = (u: number, v: number) => {
-      if (v === 0) return 1;
-      const edge = Math.max(0, 1 - Math.min(u, 1 - u) / 0.04) * (v <= NECK ? 0.35 : 0);
-      return Math.max(v <= NECK ? lerp(0.3, 0.25, v / NECK) : 0.02, edge);
+      if (v > NECK) return lerp(0.08, 0.03, (v - NECK) / (1 - NECK));
+      if (v / NECK <= RIDE) return 1;
+      const edge = Math.max(0, 1 - Math.min(u, 1 - u) / 0.04);
+      return Math.max(lerp(0.45, 0.15, below(v)), edge * 0.5);
     };
-    // the body it falls onto: the head, the neck, the collar, the chest and the shoulders (`shoulderL`'s place on the chest)
-    const sh = j.shoulderL.position;
+    const share = (_u: number, v: number) => (v > NECK ? lerp(0.5, 1, (v - NECK) / (1 - NECK)) : below(v) * 0.5);
     hood = new HoodCloth({
       // (the outside on both sides: where it folds over, wool)
-      joint: hat, shape, nu, nv, hold, outer: coatD, lining: hoodLining, thick: 0.004, inside: mid,
-      length: draft.length, settle: { steps: 200, key: 'mage' },
-      // (fastened at the throat over the collar: open, the capelet lay on the shoulders as a cone and drew the face's
-      // edges out to them)
-      clasp: { rows: [neckRow], gap: 0.1 },
+      joint: hat, shape, body: { joint: j.chest, share }, capelet: NECK, nu, nv, hold, outer: coatD, lining: hoodLining, thick: 0.004,
+      // (light reaches its lining through the opening alone: lit at the face's edge, dark deep inside and under the
+      // capelet, the reference's charcoal shadow; lit evenly, it read as a pale grey hole round the face)
+      shade: (u, v) => (v > NECK ? 0.45 : lerp(1, 0.3, smooth(u01(Math.min(u, 1 - u) / 0.2)))),
       // (gold piping round the face and the capelet's hem, as the coat's collar is edged)
-      piping: { material: piping, radius: 0.004, from: 0 }, detail: 2, crease,
+      piping: { material: piping, radius: 0.004, from: 0 }, drawn, crease, clear: 0.004,
       bodies: [
-        // (the skull, up its back to the crown and the hair over it: an ellipsoid round its middle alone tapered away above
-        // it, and the back of the skull came through the cloth over the crown)
+        // (the skull and the neck, for the cloth below the jaw)
         { joint: hat, y0: mid.y + 0.11, y1: mid.y, rx: 0.095, rz: 0.11, z: mid.z },
         { joint: j.neck, y0: 0.08, y1: -0.02, rx: 0.07, rz: 0.07 },
-        { joint: j.chest, y0: 0.33, y1: 0.24, rx: 0.11, rz: 0.11 },
-        { joint: j.chest, y0: 0.24, y1: -0.05, rx: 0.185, rz: 0.17 },
-        { joint: j.chest, y0: sh.y - 0.04, y1: sh.y - 0.08, rx: 0.09, rz: 0.14, x: sh.x * 0.95 },
-        { joint: j.chest, y0: sh.y - 0.04, y1: sh.y - 0.08, rx: 0.09, rz: 0.14, x: -sh.x * 0.95 },
+        // the coat under it: its standing collar, the surface its body is cut from (`outOfTunic`, the chest's space: its
+        // shoulders' slope, its chest and its back) out over the harness's straps where they run, and the upper arms
+        // (raised, they lift the cloth). (Ellipsoids fitted to its shoulders and its torso by hand held the capelet 2-5 cm
+        // over the shoulders' slope and off the back: `lab hood`)
+        { joint: j.chest, y0: 0.365, y1: 0.3, rx: 0.115, rz: 0.115, ry: 0.015 },
+        { joint: j.chest, out: (p, clear) => outOfTunic(p, capeletLift(p) + clear) },
+        { joint: j.shoulderL, y0: 0, y1: -0.14, rx: 0.075, rz: 0.07, ry: 0.035 },
+        { joint: j.shoulderR, y0: 0, y1: -0.14, rx: 0.075, rz: 0.07, ry: 0.035 },
       ],
     });
   }

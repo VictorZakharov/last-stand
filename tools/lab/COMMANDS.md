@@ -712,7 +712,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   change to its cut reshaped the whole of it, and four reviews in a row failed it). Its outline: the hero taken into
   the studio and drawn flat white from the front, his left and the back (what he holds hidden), and the reference's
   figure cut from its plain backdrop (`--ref <marks.json>`: each view's picture beside the file, with where its eyes
-  and chin are, shares of it), both read on one grid in the face's unit `E` (the eye line to the chin; ours from the
+  and chin are, shares of it, and the sizes below as `"sizes": { "brim": [least, most] }` in cm where the reference
+  was made to others than the first's), both read on one grid in the face's unit `E` (the eye line to the chin; ours from the
   head's anatomy, `toGroup`): how much of the two outlines is shared, how high it stands over the eyes, and its width
   (from the side, its reach ahead and behind) at the crown, the temples, the chin, the neck and the shoulders, ours
   beside the reference's, with each view's pictures cut to that window and the outlines laid over each other (both
@@ -721,7 +722,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   above the scalp and the capelet below the nape, each against the sizes the reference was made to (its modelling
   notes: 6-8, 4-6, 4-6, 5-7 and 16-18 cm), outside them a problem; and how far its top half moves from its standing
   shape over a walk (more than 4 cm, a tip flipping, is a problem). `--canary` makes the hood 0.7x as wide, which the
-  rim's clearance and the front outline's width at the temples must read. Writes `out/hood/sheet.png`.
+  rim's clearance and the front outline's width at the temples must read. `--edges` lists each view's outline every
+  0.2 E down, ours beside the reference's (its edges; from the side, its reach ahead of and behind the eyes): five
+  levels didn't show where the side's parted from the reference's. Writes `out/hood/sheet.png`.
 - `turnaround`: the hero standing as the game has him (its set-up: `--class`, `--gear`, `--wear`), taken out of the
   world into the studio (`page/turnaround.ts`, `page/studio.ts`) and pictured as a character sheet's turnaround shows
   him: from the front, three-quarters to his right, his right side and his back, framed on his whole figure with what
@@ -761,8 +764,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   found by their geometries' names, 'skirt' and 'hood', or a commit from before by the ranger's mesh's, 'tunic hem') as
   he stands at idle in his head item and body armour, `--seconds` (5 by default): every point of the cloth in its own
   space, a skirt's hung from the hips and a hood's from the head, so his sway is taken out, and each jerk, its move a frame
-  changing by over 1 cm, with where on the cloth and the hand nearest; `--frames` lists them; the canary kicks a point
-  out 3 cm for a frame. From play: "ranger has a clothing bug, behind that right arm, in idle", "you should observe
+  changing by over 1 cm, with where on the cloth and the hand nearest (or, with none, the most any point's did);
+  `--frames` lists them; the canary kicks a point out 3 cm for a frame. He stands once at each of `--rates` (60 and
+  144 Hz by default): the cloth steps at 1/60 s, so on a faster screen most frames step it none and some once, which
+  a 60 Hz clock never shows. From play, "the hood is jerking when idle": held firmly and damped as the free cloth, it
+  rang every 0.2 s, at 144 Hz on 34 frames, up to 1.2 cm, and at 60 Hz on none; damped critically, 0.1 cm at most. From play: "ranger has a clothing bug, behind that right arm, in idle", "you should observe
   3-5sec of frames to see it moving unnaturally", "under left arm/hand too, but less": each point a hand or the bow
   reached was put round onto its far side, so as the idle swayed them points jumped by a hand's width, the coat on 224
   of 300 frames, up to 11.2 cm; now none over 1 cm. The mage's robe jerked 1.7 to 2.5 cm on 8 frames by the waist at

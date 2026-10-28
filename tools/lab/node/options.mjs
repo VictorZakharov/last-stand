@@ -1289,6 +1289,8 @@ export const COMMANDS = {
           + '({ "front": { "picture": "front.png", "eyes": [x, y], "chin": [x, y] }, "left": ..., "back": ... })',
       },
       canary: { kind: 'switch', help: 'the hood made narrower: its rim and its outline must read it so' },
+      edges: { kind: 'switch', help: 'list each view\'s outline every 0.2 E down, ours beside the reference\'s' },
+      rows: { kind: 'switch', help: 'list how far the capelet stands off him row by row, its front, shoulders, back' },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
     },
@@ -1524,6 +1526,7 @@ export const COMMANDS = {
     options: {
       seconds: { kind: 'number', usage: 's', help: 'how long he stands (5 by default)' },
       frames: { kind: 'switch', help: 'list the frames a point jerked, with where on the cloth' },
+      rates: { kind: 'list', usage: 'a,b', help: 'the frame rates he stands at, once each (60,144 by default)' },
       canary: { kind: 'switch', help: 'plant a fault the measure must catch: a point kicked out for a frame' },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
