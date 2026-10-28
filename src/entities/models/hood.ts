@@ -59,6 +59,8 @@ export class HoodCloth {
   private readonly hold: Float32Array;
   private readonly pairs: number[] = [];
   private readonly stiff: number[] = [];
+  /** each constraint's length as cut (the head's space), and as the head's scale makes it now */
+  private restLen = new Float32Array(0);
   private len = new Float32Array(0);
   /** each particle's anchor (the lowest particle of its column riding the head) and how far from it it may be: the cloth's
    *  length down to it, and a little (with soft constraints alone it stretched down the back and the chest) */
@@ -142,6 +144,12 @@ export class HoodCloth {
       if (c + 2 <= nu) join(id(r, c), id(r, c + 2), 0.15);
       if (r + 2 <= nv) join(id(r, c), id(r + 2, c), 0.15);
     }
+    const P = this.pairs, R = this.rest;
+    this.restLen = new Float32Array(this.stiff.length);
+    for (let k = 0; k < this.restLen.length; k++) {
+      const a = P[k * 2] * 3, b = P[k * 2 + 1] * 3;
+      this.restLen[k] = Math.hypot(R[a] - R[b], R[a + 1] - R[b + 1], R[a + 2] - R[b + 2]);
+    }
     this.len = new Float32Array(this.stiff.length);
   }
 
@@ -172,16 +180,16 @@ export class HoodCloth {
   update(dt: number): void {
     const { joint } = this.o, n = this.n;
     joint.updateWorldMatrix(true, false);
-    const M = joint.matrixWorld, e = M.elements;
-    for (let i = 0; i < n; i++) {
-      _p.set(this.rest[i * 3], this.rest[i * 3 + 1], this.rest[i * 3 + 2]).applyMatrix4(M);
-      this.tgt[i * 3] = _p.x; this.tgt[i * 3 + 1] = _p.y; this.tgt[i * 3 + 2] = _p.z;
+    const M = joint.matrixWorld, e = M.elements, R = this.rest, T = this.tgt;
+    for (let i = 0; i < n * 3; i += 3) {
+      const x = R[i], y = R[i + 1], z = R[i + 2];
+      T[i] = e[0] * x + e[4] * y + e[8] * z + e[12];
+      T[i + 1] = e[1] * x + e[5] * y + e[9] * z + e[13];
+      T[i + 2] = e[2] * x + e[6] * y + e[10] * z + e[14];
     }
-    const P = this.pairs, T = this.tgt;
-    for (let k = 0; k < this.len.length; k++) {
-      const a = P[k * 2] * 3, b = P[k * 2 + 1] * 3;
-      this.len[k] = Math.hypot(T[a] - T[b], T[a + 1] - T[b + 1], T[a + 2] - T[b + 2]);
-    }
+    // (the cut's lengths in the head's scale: measured again between the targets each frame, it was a third of the cost)
+    const sc = Math.cbrt(Math.abs(M.determinant()));
+    for (let k = 0; k < this.len.length; k++) this.len[k] = this.restLen[k] * sc;
     _p.set(e[12], e[13], e[14]);
     const jumped = this.last.distanceToSquared(_p) > 2.25;   // a teleport: settle where it landed
     this.last.copy(_p);
@@ -361,6 +369,8 @@ function normals(p: Float32Array, cols: number, rows: number, out: Float32Array)
     _a.set(p[a] - p[b], p[a + 1] - p[b + 1], p[a + 2] - p[b + 2]);
     _b.set(p[d] - p[u], p[d + 1] - p[u + 1], p[d + 2] - p[u + 2]);
     _n.crossVectors(_b, _a).normalize();
-    out.set([_n.x, _n.y, _n.z], (r * cols + c) * 3);
+    // (written one by one: set from an array made for each point, it fed the garbage collector a few thousand a frame)
+    const at = (r * cols + c) * 3;
+    out[at] = _n.x; out[at + 1] = _n.y; out[at + 2] = _n.z;
   }
 }

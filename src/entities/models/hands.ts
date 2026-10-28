@@ -87,11 +87,14 @@ function ownCopy(material: THREE.Material): THREE.Material {
 /** Light `h`'s outline with `rim`, a colour the model may change each frame: the kit's light at glancing angles
  *  (`uRim`) on the hand's own copies of its materials, the same program as every hand's, a uniform of their own (the
  *  mage's arcana in his free hand: motes drifting off it read as a stray particle effect, not a hand that glows). Call
- *  before the hand is first drawn. */
-export function glowOutline(h: Hand, rim: THREE.Color): void {
-  for (const mesh of [h.skin, h.bareSkin, h.glove, h.nails]) {
+ *  before the hand is first drawn. `body`, if given, is the glow over the whole of it, its emissive (seen face on, the
+ *  outline alone lit almost nothing: a plain hand). */
+export function glowOutline(h: Hand, rim: THREE.Color, body?: THREE.Color): void {
+  // (not the nails: thin and turned every way, each glowed nearly whole, five hot dots like lamps at the fingertips)
+  for (const mesh of [h.skin, h.bareSkin, h.glove]) {
     if (!mesh) continue;
-    const material = mesh.material as THREE.Material;
+    const material = mesh.material as THREE.MeshStandardMaterial;
+    if (body) material.emissive = body;
     const before = material.onBeforeCompile;
     material.onBeforeCompile = (shader, renderer) => {
       before.call(material, shader, renderer);

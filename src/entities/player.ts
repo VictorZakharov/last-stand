@@ -50,9 +50,10 @@ const TURN_MOST = 9;
 /** a shot from the weapon's tip heads for its target, but never further off the body's line to it than a point this far
  *  along that line (m) */
 const SHOT_NEAR = 5;
-/** how far under the glowing palm its light is held (m): from there it pools on the ground and the coat, the hand
- *  itself a light's breadth away */
-const HAND_LIGHT_BELOW = 0.3;
+/** where the glowing palm's light is held (m): under it, and out from the body beside it, so it pools on the ground
+ *  and washes the coat, the hand itself a light's breadth away (at the palm the hand blew out white; under it alone,
+ *  against the coat, it lit a hard spot on the skirt, a torch) */
+const HAND_LIGHT = { below: 0.25, out: 0.2 };
 /** how hard the wall holds a body pressed into it from sliding along it, a share of his speed into it: walked into it
  *  within 10° of square on, he stops (with none, he slid along a face he walked into square on without end; within
  *  31°, along the thicket he stopped at every rock and bush that turned its face 19° toward him) */
@@ -1041,12 +1042,11 @@ export class Player {
       this.staffLight.intensity = shown * glow * this.auraLit * (1 + (this.channel ? 0.5 : 0) + Math.sin(t * 6) * 0.13);
     }
     // (the glowing hand lights what's round it, breathing as its glow does; off through the eyes, where a light by the
-    // camera floods the view. Held `HAND_LIGHT_BELOW` under the palm: at the palm, a hand's breadth from the light, the
-    // hand itself blew out white)
+    // camera floods the view; held off the palm, `HAND_LIGHT`)
     const hand = this.cls.aura.hand;
     if (this.handLight && hand) {
-      this.handLight.position.copy(this.palmPoint);
-      this.handLight.position.y -= HAND_LIGHT_BELOW;
+      const palm = this.palmPoint, dx = palm.x - this.pos.x, dz = palm.z - this.pos.z, d = Math.hypot(dx, dz) || 1;
+      this.handLight.position.set(palm.x + dx / d * HAND_LIGHT.out, palm.y - HAND_LIGHT.below, palm.z + dz / d * HAND_LIGHT.out);
       const shown = this.obj.visible && !this.eyes ? 1 : 0;
       this.handLight.intensity = shown * hand.intensity * (1 + 0.3 * Math.sin(t * 2.2));
     }

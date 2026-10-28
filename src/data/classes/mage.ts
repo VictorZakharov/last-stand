@@ -21,7 +21,7 @@ const mage: ClassDef = {
   },
   // (the staff's light in its crystal's colour, the bolts')
   // (no motes: his free hand's outline glows instead, models/mage.ts)
-  aura: { light: 0xff4fd8, intensity: 1.8, hand: { light: 0x5dffa8, intensity: 0.8 } },
+  aura: { light: 0xff4fd8, intensity: 1.8, hand: { light: 0x5dffa8, intensity: 0.5 } },
 
   base: {
     life: 800,

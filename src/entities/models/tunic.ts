@@ -199,6 +199,9 @@ export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: n
 export type ArmBlend = { seam: number; reach: number; top: number; topY: number; join: number; joinIn: number; around: number; bulk?: number };
 const DOWN = new THREE.Vector3(0, -1, 0), _sw = new THREE.Vector3(), _tw = new THREE.Quaternion(), _tq = new THREE.Quaternion(), _p = new THREE.Vector3();
 const smooth = (t: number) => t * t * (3 - 2 * t);
+/** the cloth round the armhole under the shoulder joint: how much of the arm's share it keeps from going, wholly this far
+ *  (m) below the joint */
+const UNDER = { keep: 0.7, depth: 0.08 };
 
 /**
  * A tunic's shoulders with the sleeves set in (`tunicCut`, `setInSleeve`): the cloth round each seam blended from the chest
@@ -232,12 +235,15 @@ export class SetInShoulders {
   /** the joints side s's cloth is blended along, from the chest to the shoulder (`Sculpt.skinChain`'s) */
   chainOf(s: number): THREE.Object3D[] { return [this.j.chest, ...this.delts[s > 0 ? 0 : 1], this.shoulder(s)]; }
 
-  /** how far the cloth at `p` (the chest's frame, at rest) goes with the arm on side `s`, 0 to 1 */
+  /** how far the cloth at `p` (the chest's frame, at rest) goes with the arm on side `s`, 0 to 1: less under the joint
+   *  (`UNDER`), where the cloth stays with the chest as the arm rises (going with it half way, the cloth before the armpit
+   *  swung out with a raised arm into a mound, a breast under it) */
   share(p: THREE.Vector3, s: number): number {
     let d = Infinity;
     for (const q of this.holes[s > 0 ? 0 : 1]) d = Math.min(d, p.distanceToSquared(q));
     const reach = this.K.reach + (this.K.top - this.K.reach) * smooth(clamp((p.y - this.K.topY) / 0.03, 0, 1));
-    return this.K.seam * (1 - smooth(clamp(Math.sqrt(d) / reach, 0, 1)));
+    const under = 1 - UNDER.keep * smooth(clamp((this.restOf(s).y - p.y) / UNDER.depth, 0, 1));
+    return this.K.seam * under * (1 - smooth(clamp(Math.sqrt(d) / reach, 0, 1)));
   }
 
   /** `g` (the chest's frame) given its vertices' shares of side s's arm as `skinK` */

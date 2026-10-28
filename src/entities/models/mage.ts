@@ -184,9 +184,9 @@ function forearmRunes(): THREE.CanvasTexture {
  *  forward (`HAND_HANG`, about its length): turned palm back, its width stood across the body and its thumb's side went into
  *  the hip and the skirt over it */
 const FREE_HAND = new Set(['cast', 'summon', 'channel', 'slam', 'buff', 'drink']);
-/** his free hand's outline: its green, and how far it breathes either way and how fast (rad/s: well under the
- *  1.5 flashes a second a large glow may pulse at) */
-const HAND_GLOW = { color: new THREE.Color(0x5dffa8).multiplyScalar(1.0), breathe: 0.3, rate: 2.2 };
+/** his free hand's outline: its green, how far it breathes either way and how fast (rad/s: well under the
+ *  1.5 flashes a second a large glow may pulse at), and the share of it glowing over the whole hand */
+const HAND_GLOW = { color: new THREE.Color(0x5dffa8).multiplyScalar(1.8), breathe: 0.3, rate: 2.2, body: 0.1 };
 const HAND_HANG = Math.PI / 2;
 const TAIL: Record<string, number> = { cast: 0.35, summon: 0.35, slam: 0.4, buff: 0.5 }, TAIL_OUT: Record<string, number> = { cast: 0.45, summon: 0.45, slam: 0.6, buff: 0.5 };
 /** drinking: the flask raised straight up before the chin, the elbow down and forward (the bell sleeve falls back off the forearm) */
@@ -268,8 +268,10 @@ export function buildMage(): Model {
   const panel = kit.rim({ color: 0xffffff, roughness: 1, map: panelTex.map, normalMap: panelTex.normalMap, roughnessMap: panelTex.roughnessMap, side: THREE.DoubleSide }, 0x7a2a2a, 0.3);
   // the runes inked on his forearms (an alpha-tested layer over the skin)
   // (blended, not cut out: cut at half, a line thinner than a texel of the smaller mip levels was dropped whole, and
-  // at the game's distance the runes were gone; blended it fades to a grey that still shows)
-  const ink = kit.std({ color: 0x1a1c26, roughness: 0.6, map: forearmRunes(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  // at the game's distance the runes were gone; blended it fades to a grey that still shows. Drawn forward by a constant
+  // offset alone: by the slope's too, at the forearm's outline it came forward through the coat's skirt the arm passed
+  // behind, a dark shard below the bracer)
+  const ink = kit.std({ color: 0x1a1c26, roughness: 0.6, map: forearmRunes(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: -4 });
 
   const j = buildHumanoid({ skin: coat }, {
     chestW: 0.17, chestD: 0.14, shoulderW: 0.2, shoulderY: 0.45, upperR: 0.06, foreR: 0.05, shinL: 0.41,
@@ -353,14 +355,22 @@ export function buildMage(): Model {
   }
 
   // --- the harness: a strap down the front from each shoulder to the belt, buckled at the chest, and crossed behind
+  // (its lower half going with the waist, the coat under it there: on the chest alone, the coat's waist turned under it
+  // walking and the strap's end stood out of the coat by the hip, a dark shard below the bracer)
+  const harness = (pts: THREE.Vector3[]) => {
+    const g = strap(pts, 0.05, 0.008), p = g.attributes.position, k = new Float32Array(p.count);
+    for (let i = 0; i < p.count; i++) k[i] = smooth(clamp((0.06 - p.getY(i)) / 0.12, 0, 1));
+    g.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
+    A.skinChain(g, leather, j.chest, [j.chest, j.spine]);
+  };
   for (const s of [1, -1]) {
     // (from under the collar's foot: laid flat up the shoulders' slope above it, the straps' ends stood out of the coat)
     const down = [0.255, 0.2, 0.14, 0.06, -0.02, -0.1].map((y) => onChest(s * lerp(0.085, 0.1, (0.255 - y) / 0.355), y, 0.008));
-    A.add(strap(down, 0.05, 0.008), leather, j.chest);
+    harness(down);
     // (its bar along the strap: across it, the buckle read as a letter E)
     A.add(buckle(0.034, 0.028, 0.005), brass, j.chest, onChest(s * 0.088, 0.15, 0.014).toArray(), [0, 0, Math.PI / 2]);
     const back = [0.255, 0.17, 0.08, -0.02, -0.11].map((y, k) => onChest(s * lerp(0.1, -0.11, k / 4), y, 0.008).multiply(V(1, 1, -1)));
-    A.add(strap(back, 0.05, 0.008), leather, j.chest);
+    harness(back);
   }
   A.add(disc(0.022, 0.008), brass, j.chest, onChest(0, 0.13, 0.012).multiply(V(1, 1, -1)).toArray(), [0, Math.PI, 0]);
 
@@ -369,8 +379,9 @@ export function buildMage(): Model {
   for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
     // (set into the armhole: from its edge over the deltoid onto the arm, and over the elbow under the roll)
     // (its top run on close over the deltoid, `full`: as full as the ranger's coat sleeve, the shirt's stood out of the coat's
-    // armhole in a ball)
-    S.skinChain(sets.sleeve(s, { len: 0.31, r0: 0.062, r1: 0.056, bulge: 0.04, at: 0.3, full: 0.6, fullIn: 0.9, cap: lod(10, 6), tube: lod(14, 8) }), sleeve, sh, [...sets.chainOf(s), el]);
+    // armhole in a ball; its top as wide as the armhole's, the deltoid under it: narrower, it hung out of the coat's
+    // shoulder as a thin tube under a shelf)
+    S.skinChain(sets.sleeve(s, { len: 0.31, r0: 0.076, r1: 0.057, bulge: 0.09, at: 0.12, full: 1, fullIn: 0.9, cap: lod(10, 6), tube: lod(14, 8) }), sleeve, sh, [...sets.chainOf(s), el]);
     // (the sleeve turned back on itself round the elbow: a band of the cloth a little proud of the sleeve, its folded
     // edges top and bottom, soft creases running round it; as two thick lumpy rings it read as a dark knot)
     {
@@ -418,8 +429,8 @@ export function buildMage(): Model {
   }
   const handL = buildHand(j.handL, 1, leather, skinTip, 1, bareSkin), handR = buildHand(j.handR, -1, leather, skinTip, 1, bareSkin);
   // (his arcana: the free hand's outline lit green, breathing slowly: `HAND_GLOW`)
-  const handGlow = new THREE.Color();
-  glowOutline(handL, handGlow);
+  const handGlow = new THREE.Color(), handBody = new THREE.Color();
+  glowOutline(handL, handGlow, handBody);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
   // --- without the coat: the waistcoat over the shirt, buttoned in brass, the shirt's collar round the neck
@@ -536,9 +547,9 @@ export function buildMage(): Model {
   // little over for the flat triangles between its points)
   const legBodies = new SkirtLimbs(), handBodies = new SkirtLimbs(), GAP = 0.018, O = () => new THREE.Vector3();
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
-    // (close over the breeches at the hip, where the coat lies on them: with the full gap there it stood 24 cm out at
-    // the sides just under the belt, a wide seat)
-    legBodies.add([th, O()], [kn, O()], 0.09 + 0.004, 0.07 + GAP);
+    // (the full gap at the hip too: closer, 4 to 14 mm, the thigh came through the coat by the hip walking, a dark shard
+    // under the belt; the seat stands in without the skirt's layer)
+    legBodies.add([th, O()], [kn, O()], 0.09 + GAP, 0.07 + GAP);
     legBodies.add([kn, O()], [an, O()], 0.1 + GAP, 0.085 + GAP);
   }
   // (each hand as capsules from its own joints, with a little over for the cloth's flat triangles between its points)
@@ -604,7 +615,7 @@ export function buildMage(): Model {
   // (lined in the shirt's charcoal, which shows in the shadow round the face: in the coat's red it read as a mask)
   // (its piping a warm gold, less of a mirror than the brass: in the hood's shadow the brass read grey)
   const piping = kit.std({ color: 0xc8963c, metalness: 0.55, roughness: 0.4 });
-  const hoodLining = kit.rim({ color: 0x2e2d32, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x3a3a44, 0.05);
+  const hoodLining = kit.rim({ color: 0x3a3a3e, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x3a3a44, 0.05);
   {
     // as Codex's reference photos have it (`.tmp/references/hood`): cut loose over the head's own surface, the hair hidden
     // under it, rising in a soft point behind the crown where its halves are sewn; open round the face from the brow
@@ -620,24 +631,32 @@ export function buildMage(): Model {
       const a0 = OPEN * Math.sqrt(Math.max(0, 1 - u01((el - 0.5) / 0.45) ** 2)) * (el < 0.95 ? 1 : 0), az = a0 + u * (TAU - 2 * a0);
       const front = Math.max(0, Math.cos(az)), back = Math.max(0, -Math.cos(az));
       const rim = Math.exp(-((Math.min(az - a0, TAU - a0 - az) / 0.4) ** 2)) * smooth(a0 / OPEN);
-      // (resting on the head: on the hair over the crown, a little fuller behind it, where the point is sewn, and at the
-      // sides; 7 cm over the crown it stood off the head as a sack, a bedsheet over a pole)
-      const ease = 9 + 22 * back * Math.exp(-(((el - 0.95) / 0.4) ** 2)) + 8 * Math.abs(Math.sin(az)) * smooth(down) + 14 * back * smooth(down)
+      // (resting on the head: on the hair over the crown, a little fuller behind it, where the point is sewn, and standing
+      // 2 cm off the temples, its shadow round the face; 7 cm over the crown it stood off the head as a sack, a bedsheet
+      // over a pole, and close at the temples it was skin-tight, a cowl)
+      const ease = 9 + 22 * back * Math.exp(-(((el - 0.95) / 0.4) ** 2)) + 20 * Math.abs(Math.sin(az)) * smooth(down) + 14 * back * smooth(down)
         // (and its soft point, where the two halves meet over the back of the crown)
-        + 18 * back ** 4 * Math.exp(-(((el - 1.1) / 0.22) ** 2));
+        + 10 * back ** 4 * Math.exp(-(((el - 1.1) / 0.22) ** 2));
       head.surface(az, el, ease, out);
-      // (the crown behind the brim raised in one smooth rise up and forward, by where the point is, not by its angle round:
-      // from the side the brim jutted alone as a bill, and a bump of its own behind it stood up as a second lobe)
-      const rise = smooth(u01((out.y - BROW.y) / (60 * HEAD_MM))) * smooth(u01((out.z - mid.z + 40 * HEAD_MM) / (100 * HEAD_MM)));
-      out.y += 20 * HEAD_MM * rise;
-      // (the edge drawn forward round the face's opening alone, and out from it, the face framed with room round it: over
-      // the closed crown it jutted as a beak, and on the face's own edge it hugged the cheeks)
+      // (the edge drawn forward round the face's opening alone, and out from it, the face framed with room round it and the
+      // lining showing either side, 4 to 6 cm off the cheeks as the references are: over the closed crown it jutted as a
+      // beak, and 3 cm off the cheeks it hugged them, a narrow red band round a full face)
       out.z += 70 * HEAD_MM * rim;
-      out.x += Math.sign(out.x) * 22 * HEAD_MM * rim;
-      // (its brim over the brow raised and drawn forward, most in the middle, a round arch, as the references' deep opening
-      // is: lying on the brow it read as a cap's band, and raised by the opening's edges alone it stood up in two ears)
+      out.x += Math.sign(out.x) * 42 * HEAD_MM * rim;
+      // (its brim over the brow drawn forward, most in the middle, a round arch, as the references' deep opening is, and
+      // raised a little off the brow: lying on it, it read as a cap's band; raised 3.5 cm, with the crown behind it, the
+      // hood stood 5.6 cm over the scalp, a box; drawn 6 cm out it jutted from the side as a beak)
       const brim = front ** 2 * Math.exp(-(((el - 0.95) / 0.35) ** 2));
-      out.y += 35 * HEAD_MM * brim; out.z += 60 * HEAD_MM * brim;
+      out.y += 15 * HEAD_MM * brim; out.z += 42 * HEAD_MM * brim;
+      // (below the skull's widest it falls away from the neck, out from the back of the head and its sides to the mantle,
+      // as the references' slopes from the point to the shoulders: following the head down onto the neck it hung straight
+      // from the skull to the shoulders, a chimney in profile)
+      const away = smooth(u01((v - 0.3) / (HEAD - 0.3))), sides = Math.abs(Math.sin(az)) * (1 - rim);
+      out.z = mid.z + (out.z - mid.z) * (1 + 0.45 * away * back);
+      out.x = mid.x + (out.x - mid.x) * (1 + 0.25 * away * sides);
+      // (the face's edges drawn in under the jaw towards the throat, the opening an oval closing on the collar: straight
+      // down beside the face to the shoulders, it was a tall box framing it)
+      out.x = mid.x + (out.x - mid.x) * (1 - 0.4 * away * rim);
       if (v > HEAD) {
         // (the mantle cut hanging from the jaw and the nape, flaring: the cloth then lies on the shoulders)
         // (its edges on down beside the neck to the collar, closing in at the throat, the rest out over the shoulders: flared
@@ -662,10 +681,13 @@ export function buildMage(): Model {
       const seam = -0.005 * Math.exp(-(((u - 0.5) / 0.012) ** 2)) * (1 - smooth(u01((v - HEAD) / 0.1)));
       return edge * rolls + seam;
     };
-    // (riding the head over the crown and down the face's edge; the mantle hanging free)
+    // (riding the head: pinned over the crown, held to its shape down the sides of the head, letting go towards the neck;
+    // the mantle hanging free. Held at 0.06 below the crown, the sides hung straight down from its widest point, a box;
+    // at half, the back of the head crumpled walking into dark dents)
     const hold = (u: number, v: number) => {
       const edge = Math.max(0, 1 - Math.min(u, 1 - u) / 0.08) * (1 - smooth(u01((v - 0.35) / 0.3)));
-      const fall = v < 0.3 ? 1 : lerp(0.06, 0.004, smooth(u01((v - 0.3) / 0.6)));
+      const fall = v < 0.3 ? 1 : v < HEAD ? lerp(0.8, 0.12, smooth(u01((v - 0.3) / (HEAD - 0.3))))
+        : lerp(0.06, 0.004, smooth(u01((v - HEAD) / (1 - HEAD))));
       return Math.min(1, Math.max(fall, 0.4 * edge));
     };
     // the body it falls onto: the head, the neck, the collar, the chest and the shoulders (`shoulderL`'s place on the chest)
@@ -673,9 +695,11 @@ export function buildMage(): Model {
     hood = new HoodCloth({
       joint: hat, shape, nu: lod(28, 16), nv: lod(16, 10), hold, outer: coat, lining: hoodLining, thick: 0.004,
       // (gold piping round the face and the mantle's hem, as the coat's collar is edged)
-      piping: { material: piping, radius: 0.004, from: 0.19 }, detail: 3, crease,
+      piping: { material: piping, radius: 0.004, from: 0.19 }, detail: 2, crease,
       bodies: [
-        { joint: hat, y0: mid.y, y1: mid.y, rx: 0.095, rz: 0.11, z: mid.z },
+        // (the skull, up its back to the crown: an ellipsoid round its middle alone tapered away above it, and with the
+        // hood let go down the sides of the head the back of the skull came through the cloth over the crown)
+        { joint: hat, y0: mid.y + 0.08, y1: mid.y, rx: 0.095, rz: 0.11, z: mid.z },
         { joint: j.neck, y0: 0.08, y1: -0.02, rx: 0.07, rz: 0.07 },
         { joint: j.chest, y0: 0.37, y1: 0.24, rx: 0.13, rz: 0.125 },
         { joint: j.chest, y0: 0.24, y1: -0.05, rx: 0.2, rz: 0.165 },
@@ -807,6 +831,7 @@ export function buildMage(): Model {
     // hands at rest: the free one loosely curled and breathing, the other gripping the staff
     poseHand(handL, 0.45 + Math.sin(t * 1.3) * 0.06, 0.12);
     handGlow.copy(HAND_GLOW.color).multiplyScalar(1 + HAND_GLOW.breathe * Math.sin(t * HAND_GLOW.rate));
+    handBody.copy(handGlow).multiplyScalar(HAND_GLOW.body);
     const raw = st.action;
     feet = null;
     let flaskWant = 0, drinkLift = 0;
