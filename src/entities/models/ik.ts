@@ -20,6 +20,7 @@ import { groundHeight } from '../../world/ground';
 import { angleDamp, damp } from '../../util';
 import { ROM, ROM_ON, clampAnkle, clampAnkleRoll, twistAngle } from './anatomy';
 import { curve, type Keys } from './motion';
+import { Glance } from './glance';
 import { predictMotion, stepVelocity, timeToSlow, type Flat } from '../movement';
 
 /** `?ik=0` keeps the walk cycle's own legs and its old gait, for A/B comparison */
@@ -2776,21 +2777,26 @@ export class LookAt {
   private pitch = 0;
   /** the eyes' height above the root, at the pose's rest */
   private readonly eyeH: number;
+  /** a casual look round while he stands idle with nothing to look at (`seed`: whose; none, no glances) */
+  readonly glance: Glance | null;
 
-  constructor(private readonly j: Joints) {
+  constructor(private readonly j: Joints, seed?: string) {
     this.eyeH = j.body.position.y + j.hips.position.y + j.spine.position.y + j.chest.position.y + j.neck.position.y
       + j.head.position.y;
+    this.glance = seed === undefined ? null : new Glance(j, seed);
   }
 
   reset(): void {
     this.yaw = 0;
     this.pitch = 0;
+    this.glance?.reset();
   }
 
   /** `from` the body's spot (x, ground y, z) and `facing`; `target` a world point, or null to look ahead; `weight`
-   *  0..1 */
-  update(dt: number, from: THREE.Vector3, facing: number, target: THREE.Vector3 | null, weight = 1): void {
+   *  0..1; `idle`: standing with nothing cast or aimed, when with no target he glances round now and then */
+  update(dt: number, from: THREE.Vector3, facing: number, target: THREE.Vector3 | null, weight = 1, idle = false): void {
     if (!IK || dt <= 0) return;
+    this.glance?.update(dt, idle && !target);
     const j = this.j, sc = j.root.scale.x;
     let ty = 0, tp = 0;
     if (target && weight > 0) {

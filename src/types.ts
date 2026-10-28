@@ -376,8 +376,9 @@ export interface AnimState {
    *  the height of its top, in the world), or none, the ground (`Player.struckAhead`) */
   strike?: Struck | null;
   /** turns the chest, neck and head onto what the character looks at: a model with cloth calls it before
-   *  the leg IK and the cloth step, so the sleeves follow the arms the turn moves */
-  look?: () => void;
+   *  the leg IK and the cloth step, so the sleeves follow the arms the turn moves; `weight` 0 eases the look back
+   *  ahead (a drawn bow's aim: left uncalled, a glance's eyes stayed turned and its head snapped back) */
+  look?: (weight?: number) => void;
 }
 
 /** A foe an overhead blow comes down on (`AnimState.strike`): its middle on the ground, its radius and its top (m). */

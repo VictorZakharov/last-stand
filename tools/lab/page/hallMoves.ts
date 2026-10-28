@@ -92,7 +92,7 @@ function holdInProfile(): void {
 
 /** The run the set-up held in its countdown abandoned from the pause menu, back to the lobby (Change hero is the
  *  lobby's). */
-async function toLobby(lab: Lab): Promise<void> {
+export async function toLobby(lab: Lab): Promise<void> {
   await lab.step(1, () => ({ keys: ['escape'] }));
   const abandon = document.getElementById('btn-abandon');
   if (!abandon) throw new Error('lab: hall: no pause menu to leave the run by');
@@ -102,7 +102,7 @@ async function toLobby(lab: Lab): Promise<void> {
 }
 
 /** The hall opened from the lobby (Change hero), waited for until it's up. */
-async function openHall(lab: Lab): Promise<boolean> {
+export async function openHall(lab: Lab): Promise<boolean> {
   const button = document.getElementById('btn-hero');
   if (!button) return false;
   await lab.clickOn(button);

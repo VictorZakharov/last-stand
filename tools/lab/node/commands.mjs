@@ -339,6 +339,21 @@ async function writeStacks(results, dir, browser, wanted) {
   return written;
 }
 
+/**
+ * Each side's text under its name, and a sheet of each side's moments, written in `dir`: `sheet.png` for this tree's,
+ * `main-sheet.png` for the other side's (a turn's `filePrefix` first). The ranger's range, two sides of 1329 x 8446 px
+ * side by side in one sheet, was a page too big for the browser, which closed, and its A/B never ran to the end.
+ */
+async function textWithSheetPerSide(results, dir, browser) {
+  const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
+  const images = [];
+  for (const [side, result] of results) {
+    const image = await writeMoments([[side, result]], dir, browser, `${side.filePrefix}sheet.png`);
+    if (image) images.push(relative(REPO, image));
+  }
+  return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
+}
+
 /** Each side's text under its name, and the sheet of the moments they pictured, written in `dir` (when any did). */
 async function textWithMoments(results, dir, browser) {
   const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
@@ -477,7 +492,7 @@ export const COMMANDS = {
       });
     },
     finish(results, options, session) {
-      return textWithMoments(results, session.outFor('range'), session.browser);
+      return textWithSheetPerSide(results, session.outFor('range'), session.browser);
     },
     textOf: asText,
     problemsOf: problemsIn,
@@ -1302,6 +1317,22 @@ export const COMMANDS = {
     },
     textOf: asText,
     problemsOf: problemsIn,
+  },
+
+  glance: {
+    each(side, options) {
+      const command = {
+        seconds: options.seconds,
+        canary: Boolean(options.canary),
+      };
+      return side.command('glance', command);
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('glance'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
   },
 
   coat: {

@@ -57,6 +57,7 @@ import type { HoodOptions } from './hood';
 import type { TurnaroundOptions } from './turnaround';
 import type { HallOptions } from './hallMoves';
 import type { CoatOptions } from './coat';
+import type { GlanceOptions } from './glance';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
 import type { EyesOptions } from './eyes';
 import type { SwingOptions } from './swing';
@@ -132,6 +133,14 @@ export async function turnaround(lab: Lab, command: TurnaroundOptions): Promise<
  *  problem. */
 export async function coat(lab: Lab, command: CoatOptions): Promise<Report> {
   const { coat: follow } = await import('./coat');
+  return follow(lab, command);
+}
+
+/** `lab glance`: the hero's casual look round as he stands idle; a glance out of a neck's range, too fast, jerking,
+ *  in a loop, as he moves or attacks, through the eyes or before the hall's showcase, or a canary it missed, is a
+ *  problem. */
+export async function glance(lab: Lab, command: GlanceOptions): Promise<Report> {
+  const { glance: follow } = await import('./glance');
   return follow(lab, command);
 }
 

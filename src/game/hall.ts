@@ -233,6 +233,8 @@ export function updateHall(dt: number): void {
   for (const h of heroes) {
     if (t >= h.due) showOff(h, t);
     stepCast(h, t);
+    // (his showcase first: no glance round while it's due or under way)
+    h.player.glances = h.due === Infinity && !h.cast;
     const r = h.player.remote;
     turnTo(h, dt);
     r.ax = r.x + Math.sin(r.f) * 4; r.az = r.z + Math.cos(r.f) * 4;

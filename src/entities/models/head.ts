@@ -224,6 +224,8 @@ export function buildHead(headJoint: THREE.Object3D, kit: MaterialKit, who: keyo
     const m = part(eg, eyeMat, head);
     toGroup(s * EYE.x, EYE.y, EYE.z, m.position);
     m.castShadow = false;
+    // (turned in its socket by a glance, models/glance.ts)
+    m.name = 'eye';
     eyes.push(m);
   }
   // (a deep-set eye's lashes are painted: a strip reads as a line drawn round the eye)
