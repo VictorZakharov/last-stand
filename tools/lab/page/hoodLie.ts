@@ -194,6 +194,35 @@ function regionProblems(name: Region, read: Reading): string[] {
   return problems;
 }
 
+/** Where his body comes through the capelet deepest in a lie: how deep (cm), round him where, and the point; null
+ *  where it comes through nowhere. */
+export interface Deepest {
+  through: number;
+  region: Region;
+  point: LiePoint;
+}
+
+export function deepestOf(lie: Lie): Deepest | null {
+  let deepest: Deepest | null = null;
+  for (const { name } of REGIONS) {
+    for (const point of lie.regions[name].points) {
+      if (point.off >= 0 || (deepest && -point.off <= deepest.through)) continue;
+      deepest = { through: -point.off, region: name, point };
+    }
+  }
+  return deepest;
+}
+
+/** The deepest his body came through the capelet as he walked as a line, and a problem past the limit. (Standing it
+ *  lay clear of him; as his arm swung forward, the sleeve's top and the coat's stitched shoulder seam came through
+ *  it) */
+export function walkingLine(deepest: Deepest | null, moments: number, problems: string[]): string {
+  if (!deepest) return `walking, his body through the capelet nowhere (${moments} moments)`;
+  const read = `${deepest.through.toFixed(1)} cm at worst, his ${deepest.region}: ${pointWords(deepest.point)}`;
+  if (deepest.through > MOST_THROUGH) problems.push(`hood: walking, his body came through the capelet ${read}`);
+  return `walking, his body through the capelet ${read} (${MOST_THROUGH} at most; ${moments} moments)`;
+}
+
 /** A point as words: how far off (or through), its row, where in the chest's space (cm) and what it lies over. */
 function pointWords(point: LiePoint): string {
   const where = [point.inChest.x, point.inChest.y, point.inChest.z].map((v) => (v * 100).toFixed(0)).join(', ');

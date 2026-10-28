@@ -713,22 +713,37 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the studio and drawn flat white from the front, his left and the back (what he holds hidden), and the reference's
   figure cut from its plain backdrop (`--ref <marks.json>`: each view's picture beside the file, with where its eyes
   and chin are, shares of it, and the sizes below as `"sizes": { "brim": [least, most] }` in cm where the reference
-  was made to others than the first's), both read on one grid in the face's unit `E` (the eye line to the chin; ours from the
-  head's anatomy, `toGroup`): how much of the two outlines is shared, how high it stands over the eyes, and its width
-  (from the side, its reach ahead and behind) at the crown, the temples, the chin, the neck and the shoulders, ours
-  beside the reference's, with each view's pictures cut to that window and the outlines laid over each other (both
-  white, the reference's alone red, ours alone green). Its shape on the head, from its cloth (`HoodCloth`'s
-  `userData.grid`) and the face's skin: the rim ahead of the brow and of the cheeks and out from the cheeks, the point
-  above the scalp and the capelet below the nape, each against the sizes the reference was made to (its modelling
-  notes: 6-8, 4-6, 4-6, 5-7 and 16-18 cm), outside them a problem; and how far its top half moves from its standing
-  shape over a walk (more than 4 cm, a tip flipping, is a problem). `--canary` makes the hood 0.7x as wide, which the
-  rim's clearance and the front outline's width at the temples must read. `--edges` lists each view's outline every
-  0.2 E down, ours beside the reference's (its edges; from the side, its reach ahead of and behind the eyes): five
-  levels didn't show where the side's parted from the reference's. Writes `out/hood/sheet.png`.
+  was made to others than the first's), both read on one grid in the face's unit `E` (the eye line to the chin; ours
+  from the head's anatomy, `toGroup`): how much of the two outlines is shared, how high it stands over the eyes, and
+  its width (from the side, its reach ahead and behind) at the crown, the temples, the chin, the neck and the
+  shoulders, ours beside the reference's, with each view's pictures cut to that window and the outlines laid over each
+  other (both white, the reference's alone red, ours alone green); and the head under it in the same unit (its scalp's
+  height, its brow ahead of the eyes, its skull's back behind them and its half width at four heights), so the
+  reference's outline reads as how far the hood stands off the head (the mage's snug hood was laid out from it). Its
+  shape on the head, from its cloth (`HoodCloth`'s `userData.grid`) and the face's skin: the rim ahead of the brow and
+  of the cheeks and out from the cheeks, the point above the scalp and the capelet below the nape, each against the
+  sizes the reference was made to (its marks' `sizes`; the first reference's, from its modelling notes: 6-8, 4-6, 4-6,
+  5-7 and 16-18 cm), outside them a problem; and how far its top half moves from its standing shape over a walk (more
+  than 4 cm, a tip flipping, is a problem). Its opening round the face from the front and his left
+  (`page/hoodOpening.ts`; laid close to those sizes and that outline, the hood still hid the face as a tunnel, and
+  neither read it): where its rim crosses each 0.2 E from 0.6 over the eyes to the chin, ours from its cloth's edge
+  and the reference's from its piping (each row scanned in from the backdrop to the first run of its pale gold, past
+  the seam's on the outline from the side; its reads drawn as dots on the pictures), the rim's stand-off from the face
+  shown, and the face shown (E², ours drawn flat with the skin white, the reference's by its skin's colour inside the
+  rim); ours more than 0.1 E from the reference's rim from 0.4 to -0.8, or showing less than 85% of its face, is a
+  problem. The seam down the back: how far it strays aside from straight, standing and walking (0.3 cm at most; the Z
+  a review saw at the nape was the gathers' depth seen from above, not the seam). And the capelet's lie read again as
+  he walks, every 15 frames (standing it lay clear; walking, the coat's stitched shoulder seam came through it as the
+  arm swung). `--canary` makes the hood 0.7x as wide, which the rim's clearance, the front outline's width at the
+  temples and the opening at the eyes must read; moves it 2 cm forward, which the rim from his left and the face shown
+  must read; and puts a point of the seam 1 cm aside, which its straightness must read. `--edges` lists each view's
+  outline every 0.2 E down, ours beside the reference's (its edges; from the side, its reach ahead of and behind the
+  eyes): five levels didn't show where the side's parted from the reference's. Writes `out/hood/sheet.png`.
 - `turnaround`: the hero standing as the game has him (its set-up: `--class`, `--gear`, `--wear`), taken out of the
   world into the studio (`page/turnaround.ts`, `page/studio.ts`) and pictured as a character sheet's turnaround shows
   him: from the front, three-quarters to his right, his right side and his back, framed on his whole figure with what
-  he holds, and his head close from the front and the side, with how many triangles and meshes he's drawn with.
+  he holds, and his head close from the front, his right side, three-quarters to his left and behind (a hood is judged
+  all round; from his right front the staff came between), with how many triangles and meshes he's drawn with.
   `--ref <sheet> --panels l,t,r,b;...` cuts a reference sheet's panels (shares of it, one a view in that order; an
   empty one leaves its place empty) and sets them in a row under ours, each fitted whole into a tile the size of ours.
   A hero is rebuilt against such a sheet part by part from the same side (the mage against Codex's realistic render

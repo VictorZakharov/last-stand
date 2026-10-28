@@ -58,8 +58,9 @@ export interface HoodOptions {
   /** how far clear of `bodies` the free cloth is laid, wherever `shape` laid it into them (m) */
   clear: number;
   /** a piping round its open edge and its hem: down the face's edge on one side from `from` (a share of the rows down,
-   *  where the face opens), along the hem, and up the other */
-  piping?: { material: THREE.Material; radius: number; from: number };
+   *  where the face opens), along the hem, and up the other; and with `seam`, down its middle seam too, from the face's
+   *  edge over the top and down the back to the hem */
+  piping?: { material: THREE.Material; radius: number; from: number; seam?: boolean };
   /** where it's drawn: its columns at u across and its rows at v down (0 to 1, in order: finer than its particles, and
    *  finer still where its creases are, `spaced`), and its creases there: how far out along its normal the cloth at
    *  (u, v) lies (m; in, below none) */
@@ -69,6 +70,8 @@ export interface HoodOptions {
 
 /** the piping's sides round */
 const SIDES = 6;
+/** how short a grid's step across may be (m, squared) before its row counts as folded back on itself there */
+const FOLDED = 1e-12;
 
 export class HoodCloth {
   readonly meshes: THREE.Mesh[] = [];
@@ -108,9 +111,11 @@ export class HoodCloth {
   private readonly smooth: Float32Array;
   private readonly creases: Float32Array;
   private readonly across: Float32Array;
-  /** the piping's path, point by point on the drawn surface, and its tube */
+  /** the piping's path, point by point on the drawn surface, and its tube; and the seam's */
   private readonly path: number[] = [];
   private readonly pipe?: THREE.BufferGeometry;
+  private readonly seamPath: number[] = [];
+  private readonly seamPipe?: THREE.BufferGeometry;
   private readonly bodyInv: THREE.Matrix4[] = [];
   private acc = 0;
   private needsReset = true;
@@ -176,6 +181,14 @@ export class HoodCloth {
       for (let c = FU - 2; c >= 0; c--) this.path.push((FV - 1) * FU + c);
       this.pipe = tube(this.path.length);
       this.add(this.pipe, o.piping.material, false);
+      if (o.piping.seam) {
+        // (from the face's edge along the top seam to the back, where the halves meet, and down the middle to the hem)
+        const middle = nearest(across, 0.5);
+        for (let c = 0; c <= middle; c++) this.seamPath.push(c);
+        for (let r = 1; r < FV; r++) this.seamPath.push(r * FU + middle);
+        this.seamPipe = tube(this.seamPath.length);
+        this.add(this.seamPipe, o.piping.material, false);
+      }
     }
   }
 
@@ -384,8 +397,14 @@ export class HoodCloth {
     }
     for (let r = 0; r < FV; r++) {
       const q = r * 4, t = rt[r], r0 = ra[q] * FU, r1 = ra[q + 1] * FU, r2 = ra[q + 2] * FU, r3 = ra[q + 3] * FU;
-      for (let c = 0; c < FU; c++) for (let k = 0; k < 3; k++) {
-        F[(r * FU + c) * 3 + k] = catmull(A[(r0 + c) * 3 + k], A[(r1 + c) * 3 + k], A[(r2 + c) * 3 + k], A[(r3 + c) * 3 + k], t);
+      // (down from the top seam each column runs on from the other half's, across the seam, as the cloth is sewn: begun
+      // on the seam itself, each half left it straight for its next row, a ridge, and the face's arch came to a point)
+      const over = ra[q] === ra[q + 1];
+      for (let c = 0; c < FU; c++) {
+        const before = over ? FU + FU - 1 - c : r0 + c;
+        for (let k = 0; k < 3; k++) {
+          F[(r * FU + c) * 3 + k] = catmull(A[before * 3 + k], A[(r1 + c) * 3 + k], A[(r2 + c) * 3 + k], A[(r3 + c) * 3 + k], t);
+        }
       }
     }
     // (the creases out along the smooth surface's normals, the lining `thick` in along them, then the normals again over
@@ -401,13 +420,14 @@ export class HoodCloth {
     }
     normals(F, FU, FV, S);
     this.outer.attributes.position.needsUpdate = this.outer.attributes.normal.needsUpdate = pi.needsUpdate = true;
-    if (this.pipe) this.writePipe();
+    if (this.pipe) this.writePipe(this.pipe, this.path);
+    if (this.seamPipe) this.writePipe(this.seamPipe, this.seamPath);
   }
 
-  /** the piping along its path, round the drawn surface's edge, its sides turned by the surface's normal there */
-  private writePipe(): void {
-    const g = this.pipe!, pos = g.attributes.position as THREE.BufferAttribute, nor = g.attributes.normal as THREE.BufferAttribute;
-    const L = this.fine, N = this.smooth, path = this.path, n = path.length, rad = this.o.piping!.radius;
+  /** a piping's tube `g` along its `path` on the drawn surface, its sides turned by the surface's normal there */
+  private writePipe(g: THREE.BufferGeometry, path: number[]): void {
+    const pos = g.attributes.position as THREE.BufferAttribute, nor = g.attributes.normal as THREE.BufferAttribute;
+    const L = this.fine, N = this.smooth, n = path.length, rad = this.o.piping!.radius;
     for (let k = 0; k < n; k++) {
       const i = path[k], prev = path[Math.max(0, k - 1)], next = path[Math.min(n - 1, k + 1)];
       _a.set(L[next * 3] - L[prev * 3], L[next * 3 + 1] - L[prev * 3 + 1], L[next * 3 + 2] - L[prev * 3 + 2]).normalize();
@@ -424,7 +444,7 @@ export class HoodCloth {
     pos.needsUpdate = nor.needsUpdate = true;
   }
 
-  dispose(): void { this.outer.dispose(); this.inner.dispose(); this.pipe?.dispose(); }
+  dispose(): void { this.outer.dispose(); this.inner.dispose(); this.pipe?.dispose(); this.seamPipe?.dispose(); }
 }
 
 /** `count + 1` points evenly along a centripetal Catmull-Rom through `pts`, its ends shaped by the points beyond them
@@ -474,7 +494,8 @@ function outOf(B: HoodBody, p: THREE.Vector3, inv: THREE.Matrix4, clear: number)
   return true;
 }
 
-/** a tube of `n` points along a path with `SIDES` sides (placeholder positions, filled by `writePipe`) */
+/** a tube of `n` points along a path with `SIDES` sides (placeholder positions, filled by `writePipe`), its faces out
+ *  (wound the other way, the far wall was drawn, lit from behind: the piping read thin and grey) */
 function tube(n: number): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry(), idx: number[] = [], W = SIDES + 1;
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * W * 3), 3).setUsage(THREE.DynamicDrawUsage));
@@ -482,7 +503,7 @@ function tube(n: number): THREE.BufferGeometry {
   g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * W * 2), 2));
   for (let k = 0; k + 1 < n; k++) for (let s = 0; s < SIDES; s++) {
     const a = k * W + s, b = a + W;
-    idx.push(a, b, a + 1, a + 1, b, b + 1);
+    idx.push(a, a + 1, b, a + 1, b + 1, b);
   }
   g.setIndex(idx);
   return g;
@@ -529,16 +550,25 @@ function catmull(a: number, b: number, c: number, d: number, t: number): number 
 }
 
 /** each point's normal of a `cols` by `rows` grid `p` into `out`, by differences over its neighbours: down, then across,
- *  crossed to point out (crossed the other way they pointed in, and every light behind the hood lit it in blotches) */
+ *  crossed to point out (crossed the other way they pointed in, and every light behind the hood lit it in blotches);
+ *  on the first row, the top seam, up across it into the other half (one-sided, each half's lit the seam as a crease);
+ *  where a row folds back on itself, its neighbours one place (the top seam where it turns down the back), across along
+ *  the next row (there the normal came out naught: the seam's piping pinched to a black knot over the crown) */
 function normals(p: Float32Array, cols: number, rows: number, out: Float32Array): void {
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
     const a = (r * cols + Math.min(cols - 1, c + 1)) * 3, b = (r * cols + Math.max(0, c - 1)) * 3;
-    const d = (Math.min(rows - 1, r + 1) * cols + c) * 3, u = (Math.max(0, r - 1) * cols + c) * 3;
+    const d = (Math.min(rows - 1, r + 1) * cols + c) * 3, u = (r > 0 ? (r - 1) * cols + c : cols + cols - 1 - c) * 3;
     _a.set(p[a] - p[b], p[a + 1] - p[b + 1], p[a + 2] - p[b + 2]);
+    if (_a.lengthSq() < FOLDED) {
+      const next = (r + 1 < rows ? cols : -cols) * 3;
+      _a.set(p[a + next] - p[b + next], p[a + next + 1] - p[b + next + 1], p[a + next + 2] - p[b + next + 2]);
+    }
+    const at = (r * cols + c) * 3;
     _b.set(p[d] - p[u], p[d + 1] - p[u + 1], p[d + 2] - p[u + 2]);
+    // (the seam down the back is its own other half: there, down from the top seam alone)
+    if (_b.lengthSq() < FOLDED) _b.set(p[d] - p[at], p[d + 1] - p[at + 1], p[d + 2] - p[at + 2]);
     _n.crossVectors(_b, _a).normalize();
     // (written one by one: set from an array made for each point, it fed the garbage collector a few thousand a frame)
-    const at = (r * cols + c) * 3;
     out[at] = _n.x; out[at + 1] = _n.y; out[at + 2] = _n.z;
   }
 }

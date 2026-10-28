@@ -8,16 +8,23 @@
 // - its shape on the head, from its cloth, against the sizes the reference was made to (its modelling notes): how far
 //   its rim stands ahead of the brow and of the cheeks and out from the cheeks, how far its point rises above the
 //   scalp and how far its capelet falls below the nape; and how much it changes shape as he walks;
+// - its opening round the face from the front and his left (`hoodOpening.ts`): where its rim runs, how much of the
+//   face it shows;
 // - how its capelet lies on him (`hoodLie.ts`): how far it stands off his front, his shoulders and his back;
 // - what its cloth costs a frame as he stands and walks (`HoodCloth.update`, by the browser's own clock).
 import * as THREE from 'three';
 import type { Lab, Fixture, Report, Pictured, Tile } from './lab';
 import { cameraOn, shoot, studio, type Shot } from './studio';
-import { G } from '../../../src/state';
 import { toGroup } from '../../../src/entities/models/head';
 import { EYE } from '../../../src/entities/models/face';
 import { HoodCloth } from '../../../src/entities/models/hood';
-import { lieCanary, lieLines, lieOf, lieRows, type CapeletMesh } from './hoodLie';
+import {
+  deepestOf, lieCanary, lieLines, lieOf, lieRows, walkingLine, type CapeletMesh, type Deepest,
+} from './hoodLie';
+import {
+  aheadAt, halfWidthAt, isSkinMesh, maskOf, onTile, openingLines, ourOpening, referenceOpening, rimDots,
+  type FaceMarks, type Figure, type Mask, type Opening, type OpeningView,
+} from './hoodOpening';
 import { timeCalls, type CallTimes } from './timing';
 
 /** A reference picture and where its face is on it (shares of the picture across and down). */
@@ -87,22 +94,23 @@ type Size = keyof typeof SIZES;
 const MOST_SWAY = 4;
 const STAND_FRAMES = 60;
 const WALK_FRAMES = 120;
-/** with --canary: how much narrower the hood is made, and how much the measures must read it so */
+/** with --canary: how much narrower the hood is made, and how much the measures must read it so (cm, `E` at the
+ *  temples, `E` either side of the opening at the eyes) */
 const CANARY_NARROW = 0.7;
 const CANARY_LEAST_CLEAR = 1;
 const CANARY_LEAST_TEMPLES = 0.2;
+const CANARY_LEAST_OPENING = 0.15;
+/** with --canary: how far forward the hood is moved (cm), and how much further ahead the measure must read its rim at
+ *  the eyes from his left (`E`) and how much less of the face shown (a share) */
+const CANARY_FORWARD = 2;
+const CANARY_LEAST_AHEAD = 0.12;
+const CANARY_LEAST_HIDDEN = 0.1;
 
 /** An outline on the grid: a cell a value, true where the figure covers it, row by row from the top. */
 interface Outline {
   across: number;
   down: number;
   cells: boolean[];
-}
-
-/** Where the face is in a picture (px, down from its top) and its unit `E` (px). */
-interface FaceMarks {
-  eyes: THREE.Vector2;
-  unit: number;
 }
 
 /** The hood's cloth: its outside's mesh and its grid (`HoodCloth`'s `userData.grid`: its columns and rows, and how far
@@ -221,7 +229,7 @@ async function pixelsOf(url: string): Promise<ImageData> {
 
 /** A reference's figure: each pixel that isn't its backdrop, the backdrop's colour read row by row off its two sides
  *  (it's shaded down the picture) down to `BACKDROP_ROWS`, and the last of those below. */
-function figureOf(image: ImageData): (x: number, y: number) => boolean {
+function figureOf(image: ImageData): Figure {
   const { width, height, data } = image;
   const backdropRow = (y: number) => {
     const row = Math.min(y, Math.floor(height * BACKDROP_ROWS));
@@ -240,12 +248,22 @@ function figureOf(image: ImageData): (x: number, y: number) => boolean {
   };
 }
 
+/** A reference read: its pixels, its figure, where its face is, and its outline. */
+interface ReferenceRead {
+  image: ImageData;
+  figure: Figure;
+  marks: FaceMarks;
+  outline: Outline;
+}
+
 /** The reference's outline from its marks. */
-async function referenceOutline(reference: HoodReference): Promise<{ outline: Outline; image: ImageData }> {
+async function referenceOutline(reference: HoodReference): Promise<ReferenceRead> {
   const image = await pixelsOf(reference.url);
   const eyes = new THREE.Vector2(reference.eyes[0] * image.width, reference.eyes[1] * image.height);
   const unit = (reference.chin[1] - reference.eyes[1]) * image.height;
-  return { outline: outlineOf(figureOf(image), { eyes, unit }), image };
+  const figure = figureOf(image);
+  const marks = { eyes, unit };
+  return { image, figure, marks, outline: outlineOf(figure, marks) };
 }
 
 /** The head's group (where the face's anatomy is placed, `toGroup`) and its face. */
@@ -372,54 +390,48 @@ function sizeLines(sizes: Record<Size, number>, given: HoodOptions['sizes'], pro
 /** Where the face is in a studio picture of ours (px of the tile `shoot` reads, down from its top). */
 function ourMarks(lab: Lab, camera: THREE.Camera, tile: { width: number; height: number }): FaceMarks {
   const { group } = headOf(lab);
-  const canvas = G.renderer.getContext();
-  const onTile = (point: THREE.Vector3) => {
-    const ndc = point.applyMatrix4(group.matrixWorld).project(camera);
-    const x = ((ndc.x + 1) / 2) * canvas.drawingBufferWidth - (canvas.drawingBufferWidth - tile.width) / 2;
-    const y = ((1 - ndc.y) / 2) * canvas.drawingBufferHeight;
-    return new THREE.Vector2(x, y);
-  };
-  const eyes = onTile(toGroup(0, EYE.y, EYE.z));
-  const chin = onTile(toGroup(0, 0, EYE.z));
+  const project = onTile(camera, tile);
+  const eyes = project(toGroup(0, EYE.y, EYE.z).applyMatrix4(group.matrixWorld));
+  const chin = project(toGroup(0, 0, EYE.z).applyMatrix4(group.matrixWorld));
   return { eyes, unit: chin.y - eyes.y };
 }
 
 /** Our figure from `camera`: every mesh of his drawn flat white on black, the staff in his hand hidden (it stands up
  *  through the outline), read back as the tile `shoot` reads. */
-function ourFigure(lab: Lab, scene: THREE.Scene, camera: THREE.Camera): { covered: (x: number, y: number) => boolean;
-  width: number; height: number; } {
-  const hidden = heldThings(lab).filter((object) => object.visible);
-  for (const object of hidden) object.visible = false;
-  const renderer = G.renderer;
-  const background = scene.background;
-  scene.background = new THREE.Color(0x000000);
-  scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-  const toneMapping = renderer.toneMapping;
-  renderer.toneMapping = THREE.NoToneMapping;
-  const drawing = lab.drawing;
-  lab.drawing = true;
+function ourFigure(lab: Lab, scene: THREE.Scene, camera: THREE.Camera): Mask {
+  return maskOf(lab, scene, camera, () => true, heldThings(lab));
+}
+
+/** The rim's two edges (world space), each from the top of the face down: the drawn grid's first and last columns. */
+function rimEdges(lab: Lab): THREE.Vector3[][] {
+  const hood = hoodOf(lab);
+  const at = hood.mesh.geometry.attributes.position;
+  const edge = (column: number) => {
+    const points: THREE.Vector3[] = [];
+    for (let row = 0; row < hood.down; row++) {
+      const point = new THREE.Vector3().fromBufferAttribute(at, row * hood.across + column);
+      points.push(point.applyMatrix4(hood.mesh.matrixWorld));
+    }
+    return points;
+  };
+  return [edge(0), edge(hood.across - 1)];
+}
+
+/** Our opening from `camera` as drawn in `scene` (the model in it). */
+function ourOpeningFrom(lab: Lab, scene: THREE.Scene, camera: THREE.Camera, view: OpeningView): Opening {
+  const skin = maskOf(lab, scene, camera, isSkinMesh, heldThings(lab));
+  return ourOpening(rimEdges(lab), camera, skin, ourMarks(lab, camera, skin), view);
+}
+
+/** Our opening from `view` now, read in a studio of its own (the canary's, its faults planted). */
+function openingNow(lab: Lab, view: OpeningView): Opening {
+  const scene = studio();
+  const back = intoStudio(lab, scene);
   try {
-    renderer.setRenderTarget(null);
-    renderer.render(scene, camera);
-    const gl = renderer.getContext();
-    const height = gl.drawingBufferHeight;
-    const width = Math.round((height * 340) / 560);
-    const left = Math.round((gl.drawingBufferWidth - width) / 2);
-    const pixels = new Uint8Array(width * height * 4);
-    gl.readPixels(left, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-    // (read bottom up)
-    const covered = (x: number, y: number) => {
-      if (x < 0 || y < 0 || x >= width || y >= height) return false;
-      return pixels[((height - 1 - y) * width + x) * 4] > 128;
-    };
-    return { covered, width, height };
+    const from = VIEWS.find((each) => each.name === view)!.from;
+    return ourOpeningFrom(lab, scene, cameraFrom(lab, from), view);
   } finally {
-    (scene.overrideMaterial as THREE.Material).dispose();
-    scene.overrideMaterial = null;
-    scene.background = background;
-    renderer.toneMapping = toneMapping;
-    lab.drawing = drawing;
-    for (const object of hidden) object.visible = true;
+    back();
   }
 }
 
@@ -463,8 +475,9 @@ function overlayTile(ours: Outline, theirs: Outline | null, name: string): Tile 
   return { view: name, png: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height };
 }
 
-/** A picture cut to the grid's window round the face, as a tile the size of the overlay's. */
-function windowTile(source: CanvasImageSource, marks: FaceMarks, name: string): Tile {
+/** A picture cut to the grid's window round the face, as a tile the size of the overlay's, with `dots` on it (`E`
+ *  from the eyes: across, up; where the opening's rim was read). */
+function windowTile(source: CanvasImageSource, marks: FaceMarks, name: string, dots: [number, number][] = []): Tile {
   const { across, down } = gridSize();
   const scale = 4;
   const canvas = document.createElement('canvas');
@@ -476,6 +489,14 @@ function windowTile(source: CanvasImageSource, marks: FaceMarks, name: string): 
   const sw = (WINDOW.right - WINDOW.left) * marks.unit;
   const sh = (WINDOW.top - WINDOW.bottom) * marks.unit;
   context.drawImage(source, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  context.fillStyle = '#3fe0ff';
+  for (const [x, up] of dots) {
+    const across = ((x - WINDOW.left) / WINDOW.cell) * scale;
+    const down = ((WINDOW.top - up) / WINDOW.cell) * scale;
+    context.beginPath();
+    context.arc(across, down, 3, 0, Math.PI * 2);
+    context.fill();
+  }
   return { view: name, png: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height };
 }
 
@@ -509,12 +530,21 @@ function cameraFrom(lab: Lab, from: THREE.Vector3Tuple): THREE.PerspectiveCamera
   return cameraOn(box, from);
 }
 
-/** Each view's outline and readings, ours beside the reference's, with its pictures. */
-async function outlines(lab: Lab, options: HoodOptions, lines: string[], moments: Pictured[]): Promise<Outline> {
+/** What the views read: the front's outline, and the opening from the front and his left. */
+interface ViewsRead {
+  front: Outline;
+  openings: Record<OpeningView, Opening>;
+}
+
+/** Each view's outline and readings, ours beside the reference's, with its pictures; from the front and his left
+ *  its opening too. */
+async function outlines(lab: Lab, options: HoodOptions, lines: string[], problems: string[], moments: Pictured[]):
+  Promise<ViewsRead> {
   // (each view lit from its camera's side, as the reference's are)
   const scene = studio(true);
   const back = intoStudio(lab, scene);
-  let frontOutline: Outline | null = null;
+  let front: Outline | null = null;
+  const openings: Partial<Record<OpeningView, Opening>> = {};
   try {
     const shots: Shot[] = VIEWS.map((view) => ({ name: view.name, camera: cameraFrom(lab, view.from) }));
     const { tiles } = shoot(lab, scene, shots);
@@ -523,7 +553,7 @@ async function outlines(lab: Lab, options: HoodOptions, lines: string[], moments
       const figure = ourFigure(lab, scene, camera);
       const marks = ourMarks(lab, camera, figure);
       const ours = outlineOf(figure.covered, marks);
-      if (view.name === 'front') frontOutline = ours;
+      if (view.name === 'front') front = ours;
       const reference = options.reference?.[view.name];
       const theirs = reference ? await referenceOutline(reference) : null;
       const shared = theirs ? `, ${(overlap(ours, theirs.outline) * 100).toFixed(0)}% of the outlines shared` : '';
@@ -531,13 +561,20 @@ async function outlines(lab: Lab, options: HoodOptions, lines: string[], moments
       lines.push(`  ours, E from the eyes: ${readings(ours, view.name)}`);
       if (theirs) lines.push(`  the reference's:       ${readings(theirs.outline, view.name)}`);
       if (options.edges) lines.push(...edgeLines(ours, theirs?.outline ?? null, view.name));
+      const dots = { ours: [] as [number, number][], theirs: [] as [number, number][] };
+      if (view.name !== 'back') {
+        const mine = ourOpeningFrom(lab, scene, camera, view.name);
+        const referenceOpened = theirs ? referenceOpening(theirs.image, theirs.figure, theirs.marks, view.name) : null;
+        lines.push(...openingLines(view.name, mine, referenceOpened, problems));
+        openings[view.name] = mine;
+        dots.ours = rimDots(mine);
+        if (referenceOpened) dots.theirs = rimDots(referenceOpened);
+      }
       const pictured = await imageOf(tiles[k].png);
-      const row: Tile[] = [windowTile(pictured, marks, `${view.name}: ours`)];
+      const row: Tile[] = [windowTile(pictured, marks, `${view.name}: ours`, dots.ours)];
       if (theirs && reference) {
         const image = await imageOf(reference.url);
-        const eyes = new THREE.Vector2(reference.eyes[0] * image.naturalWidth, reference.eyes[1] * image.naturalHeight);
-        const unit = (reference.chin[1] - reference.eyes[1]) * image.naturalHeight;
-        row.push(windowTile(image, { eyes, unit }, `${view.name}: the reference`));
+        row.push(windowTile(image, theirs.marks, `${view.name}: the reference`, dots.theirs));
       }
       row.push(overlayTile(ours, theirs?.outline ?? null, `${view.name}: both (white), theirs (red), ours (green)`));
       moments.push({ label: view.name, tiles: row, notes: [] });
@@ -545,18 +582,71 @@ async function outlines(lab: Lab, options: HoodOptions, lines: string[], moments
   } finally {
     back();
   }
-  return frontOutline!;
+  return { front: front!, openings: openings as Record<OpeningView, Opening> };
 }
 
 /** How the hood moves as he walks: how far its top half moves from its standing shape at most (cm, the hat's own
- *  space), and what its cloth's frames cost as he stands and walks. */
+ *  space), how far its seam down the back strays from straight standing and walking (cm, `seamKink`), what its
+ *  cloth's frames cost as he stands and walks, and the seam as he stood (for the canary). */
 interface Sway {
   moved: number;
+  kink: { standing: Kink; walking: Kink };
   cost: CallTimes;
+  seam: THREE.Vector3[];
 }
 
-/** How the hood moves and what it costs as he stands, then walks. */
-async function sway(lab: Lab): Promise<Sway> {
+/** How far the seam strays from straight at the most (cm) and at which drawn row (its share down the hood). */
+interface Kink {
+  most: number;
+  down: number;
+}
+
+/** how many drawn rows either side of a point the seam's line is read through, and the most the seam may stray aside
+ *  from it (cm): walking, it jogged aside in a Z where it crossed the gathers at the nape */
+const SEAM_SPAN = 2;
+const MOST_SEAM_KINK = 0.3;
+/** with --canary: how far one of the seam's points is put aside (cm), and how much of it the measure must read */
+const CANARY_KINK = 1;
+const CANARY_LEAST_KINK = 0.6;
+
+/** The seam down the back from the top, its points in the hat's space (the drawn grid's middle column: an even count
+ *  of spaces across puts one on it). */
+function seamOf(hood: HoodMesh): THREE.Vector3[] {
+  const middle = (hood.across - 1) / 2;
+  if (!Number.isInteger(middle)) throw new Error('lab: hood: no column of its drawn grid runs down the seam');
+  const at = hood.mesh.geometry.attributes.position;
+  const points: THREE.Vector3[] = [];
+  for (let row = 0; row < hood.down; row++) {
+    points.push(new THREE.Vector3().fromBufferAttribute(at, row * hood.across + middle));
+  }
+  return points;
+}
+
+/** How far the seam strays aside (across, x) from straight at the most: each point against the line through the points
+ *  `SEAM_SPAN` rows either side, at its share of the way along them (m, the hat's space). */
+function seamKink(seam: THREE.Vector3[], rows: number[]): { most: number; down: number } {
+  let most = 0;
+  let down = 0;
+  for (let k = SEAM_SPAN; k + SEAM_SPAN < seam.length; k++) {
+    const [before, after] = [seam[k - SEAM_SPAN], seam[k + SEAM_SPAN]];
+    const along = Math.hypot(seam[k].y - before.y, seam[k].z - before.z);
+    const rest = Math.hypot(after.y - seam[k].y, after.z - seam[k].z);
+    const t = along + rest > 0 ? along / (along + rest) : 0.5;
+    const aside = Math.abs(seam[k].x - THREE.MathUtils.lerp(before.x, after.x, t));
+    if (aside > most) {
+      most = aside;
+      down = rows[k];
+    }
+  }
+  return { most, down };
+}
+
+/** how often the capelet's lie is read as he walks (frames) */
+const WALK_LIE_EVERY = 15;
+
+/** How the hood moves and what it costs as he stands, then walks, `walking` called every `WALK_LIE_EVERY` frames of
+ *  the walk. */
+async function sway(lab: Lab, walking: () => void): Promise<Sway> {
   const hood = hoodOf(lab);
   const at = hood.mesh.geometry.attributes.position;
   // (its rows down to half its length: they're drawn finer where its creases are)
@@ -564,29 +654,69 @@ async function sway(lab: Lab): Promise<Sway> {
   const standing: THREE.Vector3[] = [];
   const start = lab.player.pos.clone();
   const timing = timeCalls(HoodCloth.prototype, 'update');
+  const scale = hood.mesh.getWorldScale(new THREE.Vector3()).x;
+  const kink = { standing: { most: 0, down: 0 }, walking: { most: 0, down: 0 } };
+  const readKink = (into: Kink) => {
+    const now = seamKink(seamOf(hood), hood.rows);
+    if (now.most * scale * 100 <= into.most) return;
+    into.most = now.most * scale * 100;
+    into.down = now.down;
+  };
   let most = 0;
   let cost: CallTimes;
+  let seam: THREE.Vector3[] = [];
   try {
-    await lab.step(STAND_FRAMES);
+    await lab.step(STAND_FRAMES, undefined, () => readKink(kink.standing));
     for (let k = 0; k < topHalf; k++) standing.push(new THREE.Vector3().fromBufferAttribute(at, k));
+    seam = seamOf(hood);
     const point = new THREE.Vector3();
+    let frame = 0;
     await lab.step(WALK_FRAMES, () => ({ keys: ['w'] }), () => {
       for (let k = 0; k < topHalf; k++) most = Math.max(most, point.fromBufferAttribute(at, k).distanceTo(standing[k]));
+      readKink(kink.walking);
+      if (++frame % WALK_LIE_EVERY === 0) walking();
     });
   } finally {
     cost = timing.stop();
   }
   if (lab.player.pos.distanceTo(start) < 1) throw new Error('lab: hood: the hero never walked');
   if (cost.calls === 0) throw new Error('lab: hood: its cloth never stepped');
+  return { moved: most * scale * 100, kink, cost, seam };
+}
+
+/** The seam's kink as lines, a problem where it strays too far, and with --canary its canary: one of its points as he
+ *  stood put aside, the measure must read it. */
+function kinkLines(sway: Sway, hood: HoodMesh, canary: boolean, problems: string[]): string[] {
+  const said = (kink: Kink) => `${kink.most.toFixed(2)} cm (at ${kink.down.toFixed(2)} of the way down)`;
+  const lines = [`the seam down the back strays aside from straight at most ${said(sway.kink.standing)} standing, `
+    + `${said(sway.kink.walking)} walking (${MOST_SEAM_KINK} at most)`];
+  for (const [how, kink] of Object.entries(sway.kink)) {
+    if (kink.most <= MOST_SEAM_KINK) continue;
+    problems.push(`hood: its seam strays ${kink.most.toFixed(2)} cm from straight ${how}`);
+  }
+  if (!canary) return lines;
   const scale = hood.mesh.getWorldScale(new THREE.Vector3()).x;
-  return { moved: most * scale * 100, cost };
+  const planted = sway.seam.map((point) => point.clone());
+  const k = Math.round(planted.length / 2);
+  planted[k].x += CANARY_KINK / 100 / scale;
+  const read = seamKink(planted, hood.rows).most * scale * 100;
+  const canaryLine = `canary, a point of the seam put ${CANARY_KINK} cm aside: read ${read.toFixed(2)} cm `
+    + 'from straight';
+  if (read < CANARY_LEAST_KINK) problems.push(`missed: ${canaryLine}`);
+  else lines.push(canaryLine);
+  return lines;
+}
+
+/** The hood's capelet: its cloth and the row it begins on. */
+function capeletOf(lab: Lab): CapeletMesh {
+  const hood = hoodOf(lab);
+  if (hood.capelet === undefined) throw new Error('lab: hood: the hood says nowhere where its capelet begins');
+  return { ...hood, capelet: hood.capelet };
 }
 
 /** How the capelet lies on him as he stands, row by row with --rows, and with --canary its canary. */
 function capeletLie(lab: Lab, options: HoodOptions, problems: string[]): string[] {
-  const hood = hoodOf(lab);
-  if (hood.capelet === undefined) throw new Error('lab: hood: the hood says nowhere where its capelet begins');
-  const capelet: CapeletMesh = { ...hood, capelet: hood.capelet };
+  const capelet = capeletOf(lab);
   const held = heldThings(lab);
   const lie = lieOf(lab, capelet, held);
   const lines = lieLines(lie, problems);
@@ -595,21 +725,79 @@ function capeletLie(lab: Lab, options: HoodOptions, problems: string[]): string[
   return lines;
 }
 
-/** The hood's meshes made narrower about the head for the canary; returns the undo. */
-function narrowed(lab: Lab): () => void {
+/** The hood's meshes (its outside, its lining, its piping). */
+function hoodParts(lab: Lab): THREE.Object3D[] {
   const hood = hoodOf(lab);
   const meshes = hood.mesh.parent!.children.filter((child) => (child as THREE.Mesh).isMesh && child.userData.hoodPart);
-  const parts = meshes.length ? meshes : [hood.mesh];
+  return meshes.length ? meshes : [hood.mesh];
+}
+
+/** The hood's meshes changed by `change` for a canary and `undo` back; returns the undo. */
+function planted(lab: Lab, change: (part: THREE.Object3D) => void, undo: (part: THREE.Object3D) => void): () => void {
+  const parts = hoodParts(lab);
   for (const part of parts) {
-    part.scale.x *= CANARY_NARROW;
+    change(part);
     part.updateMatrixWorld(true);
   }
   return () => {
     for (const part of parts) {
-      part.scale.x /= CANARY_NARROW;
+      undo(part);
       part.updateMatrixWorld(true);
     }
   };
+}
+
+/** The canary for the hood's width: made narrower about the head, the rim must read nearer the cheeks, the outline
+ *  narrower at the temples and the opening narrower at the eyes. */
+function narrowCanary(lab: Lab, sizes: Record<Size, number>, read: ViewsRead, problems: string[]): string | null {
+  const undo = planted(lab, (part) => (part.scale.x *= CANARY_NARROW), (part) => (part.scale.x /= CANARY_NARROW));
+  try {
+    const clear = sizesOf(lab).clear;
+    const scene = studio();
+    const back = intoStudio(lab, scene);
+    let temples = 0;
+    try {
+      const camera = cameraFrom(lab, VIEWS[0].from);
+      const figure = ourFigure(lab, scene, camera);
+      const outline = outlineOf(figure.covered, ourMarks(lab, camera, figure));
+      const was = reachAt(read.front, 0.4);
+      const now = reachAt(outline, 0.4);
+      temples = was && now ? was.to - was.from - (now.to - now.from) : 0;
+    } finally {
+      back();
+    }
+    const opening = (halfWidthAt(read.openings.front, 0) ?? 0) - (halfWidthAt(openingNow(lab, 'front'), 0) ?? 0);
+    const lost = sizes.clear - clear;
+    const said = `canary, the hood ${CANARY_NARROW}x as wide: the rim ${lost.toFixed(1)} cm nearer the cheeks, `
+      + `${temples.toFixed(2)} E narrower at the temples, the opening ${opening.toFixed(2)} E narrower either side at `
+      + 'the eyes';
+    const missed = lost < CANARY_LEAST_CLEAR || temples < CANARY_LEAST_TEMPLES || opening < CANARY_LEAST_OPENING;
+    if (!missed) return said;
+    problems.push(`missed: ${said}`);
+    return null;
+  } finally {
+    undo();
+  }
+}
+
+/** The canary for the opening from his left: the hood moved forward, its rim must read further ahead at the eyes and
+ *  less of the face shown. */
+function forwardCanary(lab: Lab, read: ViewsRead, problems: string[]): string | null {
+  const step = CANARY_FORWARD / 100 / hoodParts(lab)[0].parent!.getWorldScale(new THREE.Vector3()).z;
+  const undo = planted(lab, (part) => (part.position.z += step), (part) => (part.position.z -= step));
+  try {
+    const before = read.openings.left;
+    const after = openingNow(lab, 'left');
+    const ahead = (aheadAt(after, 0) ?? 0) - (aheadAt(before, 0) ?? 0);
+    const hidden = before.face ? 1 - after.face / before.face : 0;
+    const said = `canary, the hood ${CANARY_FORWARD} cm forward: from his left its rim ${ahead.toFixed(2)} E further `
+      + `ahead at the eyes, ${(hidden * 100).toFixed(0)}% less of the face shown`;
+    if (ahead >= CANARY_LEAST_AHEAD && hidden >= CANARY_LEAST_HIDDEN) return said;
+    problems.push(`missed: ${said}`);
+    return null;
+  } finally {
+    undo();
+  }
 }
 
 export async function hood(lab: Lab, options: HoodOptions): Promise<Report> {
@@ -620,37 +808,26 @@ export async function hood(lab: Lab, options: HoodOptions): Promise<Report> {
   const sizes = sizesOf(lab);
   lines.push(sizeLines(sizes, options.sizes, problems));
   lines.push(headLine(lab));
-  const front = await outlines(lab, options, lines, moments);
+  const read = await outlines(lab, options, lines, problems, moments);
   if (options.canary) {
-    const undo = narrowed(lab);
-    try {
-      const clear = sizesOf(lab).clear;
-      const scene = studio();
-      const back = intoStudio(lab, scene);
-      let temples = 0;
-      try {
-        const camera = cameraFrom(lab, VIEWS[0].from);
-        const figure = ourFigure(lab, scene, camera);
-        const outline = outlineOf(figure.covered, ourMarks(lab, camera, figure));
-        const was = reachAt(front, 0.4);
-        const now = reachAt(outline, 0.4);
-        temples = was && now ? was.to - was.from - (now.to - now.from) : 0;
-      } finally {
-        back();
-      }
-      const lost = sizes.clear - clear;
-      const read = `canary, the hood ${CANARY_NARROW}x as wide: the rim ${lost.toFixed(1)} cm nearer the cheeks, `
-        + `${temples.toFixed(2)} E narrower at the temples`;
-      if (lost < CANARY_LEAST_CLEAR || temples < CANARY_LEAST_TEMPLES) problems.push(`missed: ${read}`);
-      else lines.push(read);
-    } finally {
-      undo();
+    for (const canary of [narrowCanary(lab, sizes, read, problems), forwardCanary(lab, read, problems)]) {
+      if (canary) lines.push(canary);
     }
   }
   lines.push(...capeletLie(lab, options, problems));
-  const { moved, cost } = await sway(lab);
+  const capelet = capeletOf(lab);
+  const held = heldThings(lab);
+  const walk = { deepest: null as Deepest | null, moments: 0 };
+  const swayed = await sway(lab, () => {
+    walk.moments++;
+    const now = deepestOf(lieOf(lab, capelet, held));
+    if (now && (!walk.deepest || now.through > walk.deepest.through)) walk.deepest = now;
+  });
+  const { moved, cost } = swayed;
+  lines.push(walkingLine(walk.deepest, walk.moments, problems));
   lines.push(`walking, its top half moved at most ${moved.toFixed(1)} cm from its standing shape (${MOST_SWAY} at most)`);
   if (moved > MOST_SWAY) problems.push(`hood: its top half moved ${moved.toFixed(1)} cm from its shape as he walked`);
+  lines.push(...kinkLines(swayed, hoodOf(lab), Boolean(options.canary), problems));
   lines.push(`its cloth a frame, standing and walking: ${cost.median.toFixed(2)} ms at the median, `
     + `${cost.p90.toFixed(2)} at the 90th percentile (${cost.calls} frames, by the browser's clock)`);
   return { text: lines.join('\n'), problems, moments };

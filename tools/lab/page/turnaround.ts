@@ -1,9 +1,10 @@
 // tools/lab turnaround: the hero standing as the game has him, in a plain, lit studio, from the four sides a character
 // sheet's turnaround shows (his front, three-quarters to his right, his right side and his back) and his head close from
-// the front and the side, with a reference sheet's panels in a row of their own under ours: a hero is rebuilt against
-// such a sheet (the mage's, Codex's realistic render of him), judged part by part beside it from the same side, where
-// in a biome the forest's ferns and its light hid what he wore. Each picture says how many triangles and meshes he is
-// drawn with.
+// the front, his right side, three-quarters to his left and behind (a hood is judged all round, as a sheet shows it;
+// from his right front the staff came between), with a reference sheet's panels in a row of their own under ours: a
+// hero is rebuilt against such a sheet (the mage's, Codex's realistic render of him), judged part by part beside it
+// from the same side, where in a biome the forest's ferns and its light hid what he wore. Each picture says how many
+// triangles and meshes he is drawn with.
 import * as THREE from 'three';
 import type { Lab, Fixture, Report, Pictured, Tile } from './lab';
 import { cameraOn, countsOf, shoot, studio, type Shot } from './studio';
@@ -31,6 +32,8 @@ const VIEWS: View[] = [
   { name: 'back', from: [0, 0.05, -1], frames: 'body' },
   { name: 'face', from: [0, 0, 1], frames: 'head' },
   { name: 'profile', from: [-1, 0, 0], frames: 'head' },
+  { name: 'head, quarter', from: [0.7, 0, 0.7], frames: 'head' },
+  { name: 'head, back', from: [0, 0, -1], frames: 'head' },
 ];
 
 /** what a head close-up frames round the head's joint (m): across, below it (the cowl, the collar), above it */
@@ -72,6 +75,17 @@ async function imageOf(url: string): Promise<HTMLImageElement> {
   return image;
 }
 
+/** A tile the size of `like`, the studio's grey, and its canvas to draw on. */
+function blankTile(like: Tile): { canvas: HTMLCanvasElement; context: CanvasRenderingContext2D } {
+  const canvas = document.createElement('canvas');
+  canvas.width = like.width;
+  canvas.height = like.height;
+  const context = canvas.getContext('2d')!;
+  context.fillStyle = '#5a5f66';
+  context.fillRect(0, 0, like.width, like.height);
+  return { canvas, context };
+}
+
 /** The reference's panel cut out and fitted, whole and centred, into a tile the size of `like`. */
 function panelTile(image: HTMLImageElement, panel: [number, number, number, number], like: Tile, name: string): Tile {
   const [left, top, right, bottom] = panel;
@@ -80,24 +94,23 @@ function panelTile(image: HTMLImageElement, panel: [number, number, number, numb
   const sw = (right - left) * image.naturalWidth;
   const sh = (bottom - top) * image.naturalHeight;
   const scale = Math.min(like.width / sw, like.height / sh);
-  const canvas = document.createElement('canvas');
-  canvas.width = like.width;
-  canvas.height = like.height;
-  const context = canvas.getContext('2d')!;
-  context.fillStyle = '#5a5f66';
-  context.fillRect(0, 0, like.width, like.height);
+  const { canvas, context } = blankTile(like);
   const width = sw * scale;
   const height = sh * scale;
   context.drawImage(image, sx, sy, sw, sh, (like.width - width) / 2, (like.height - height) / 2, width, height);
   return { view: name, png: canvas.toDataURL('image/png'), width: like.width, height: like.height };
 }
 
-/** The reference's row: a tile a panel, in the views' order, each the size of ours beside it. */
+/** The reference's row: a tile a panel, in the views' order, each the size of ours beside it; an empty one left
+ *  empty, so each panel after it stays under its view of ours (dropped, the row closed up under the wrong views). */
 async function referenceRow(reference: NonNullable<TurnaroundOptions['reference']>, ours: Tile[]): Promise<Tile[]> {
   const image = await imageOf(reference.url);
-  return ours.flatMap((tile, k) => {
+  const lastPanel = reference.panels.length - 1;
+  return ours.slice(0, lastPanel + 1).map((tile, k) => {
     const panel = reference.panels[k];
-    return panel ? [panelTile(image, panel, tile, `${tile.view} (reference)`)] : [];
+    if (panel) return panelTile(image, panel, tile, `${tile.view} (reference)`);
+    const { canvas } = blankTile(tile);
+    return { view: `${tile.view} (none)`, png: canvas.toDataURL('image/png'), width: tile.width, height: tile.height };
   });
 }
 
