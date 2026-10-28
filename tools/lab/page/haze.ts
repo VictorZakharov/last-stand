@@ -12,6 +12,10 @@
 // highlight on a blade's flat held up by the eyes, blown out and bloomed round, its rougher grime left as dark blots
 // across it (the owner, of each of a dual wielder's blades in the Thornwood: "this graphical issue seems lame",
 // "right one too"). Seen through the adaptation, that blade was 0.6 of white and paled the hand under it.
+//
+// Any part of the hero can be measured so (`part`), in any view: the mage's glowing hand, its outline lit and a light
+// of its own at the palm, blew out white over the back of it in third person (the owner: "his hands glows too
+// bright", "we should never have blinding lights in our game").
 import type * as THREE from 'three';
 import type { Lab, Pictured, Report, Tile } from './lab';
 import { G } from '../../../src/state';
@@ -24,6 +28,10 @@ import { isWeapon } from './strike';
 
 export interface HazeOptions {
   biome: BiomeId;
+  /** what's measured: the held weapons (by default) or the hands */
+  part?: PartName;
+  /** the view it's seen from: through the eyes (by default) or over the shoulder */
+  view?: 'first' | 'third';
   /** the ways the hero looks (degrees, 0 is +z) */
   facings: number[];
   gear?: WeaponStyle;
@@ -32,6 +40,14 @@ export interface HazeOptions {
   pictures: boolean;
   canary: boolean;
 }
+
+/** The parts the measure can take, each a test of whether an object is one (or the top of one). */
+const PARTS = {
+  weapons: isWeapon,
+  hands: (object: THREE.Object3D) => object.userData.drawnHand === true,
+};
+type PartName = keyof typeof PARTS;
+type IsPart = (object: THREE.Object3D) => boolean;
 
 /** The game's renderer as far as it goes: `--ab` runs this on main's game, which can't hold its adaptation off. */
 const holdAdaptation = (rendererCode as Partial<typeof rendererCode>).holdAdaptation;
@@ -56,6 +72,10 @@ const GLARE_MOST = 0.05;
 const HALO = 0.03;
 /** the most of the frame their halo may cover */
 const HALO_MOST = 0.005;
+/** the most of the frame a part's halo may cover: `HALO_MOST`, or as much as the part's own surface when that's
+ *  less (a hand over the shoulder covers a fifth of what a blade does through the eyes; lit white, its bloom covered
+ *  0.3% of the frame) */
+const haloMost = (found: Haze) => Math.min(HALO_MOST, found.surface);
 /** the glare canary lights the weapons' materials white at this strength */
 const CANARY_GLOW = 2;
 
@@ -118,11 +138,11 @@ function drawBoth(lab: Lab, exposure = 1): Drawn {
   }
 }
 
-/** The hero's weapons hidden; returns the undoing. */
-function hideWeapons(lab: Lab): () => void {
+/** The hero's part hidden; returns the undoing. */
+function hidePart(lab: Lab, isPart: IsPart): () => void {
   const hidden: { visible: boolean }[] = [];
   lab.model.root.traverse((object) => {
-    if (object.visible && isWeapon(object)) hidden.push(object);
+    if (object.visible && isPart(object)) hidden.push(object);
   });
   for (const object of hidden) object.visible = false;
   return () => {
@@ -130,11 +150,11 @@ function hideWeapons(lab: Lab): () => void {
   };
 }
 
-/** The hero's weapons' materials lit white (the glare canary); returns the undoing. */
-function glowWeapons(lab: Lab): () => void {
+/** The hero's part's materials lit white (the glare canary); returns the undoing. */
+function glowPart(lab: Lab, isPart: IsPart): () => void {
   const was = new Map<THREE.MeshStandardMaterial, { emissive: number; intensity: number }>();
   lab.model.root.traverse((object) => {
-    if (!isWeapon(object)) return;
+    if (!isPart(object)) return;
     object.traverse((part) => {
       const material = (part as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
       if (!material?.emissive || was.has(material)) return;
@@ -153,17 +173,17 @@ function glowWeapons(lab: Lab): () => void {
   };
 }
 
-/** Whether `object` is one of the hero's weapons or part of one. */
-function ofWeapon(object: THREE.Object3D): boolean {
+/** Whether `object` is the measured part or within it. */
+function within(object: THREE.Object3D, isPart: IsPart): boolean {
   for (let at: THREE.Object3D | null = object; at; at = at.parent) {
-    if (isWeapon(at)) return true;
+    if (isPart(at)) return true;
   }
   return false;
 }
 
-/** Which of the canvas's pixels (rows from the bottom, as a `Canvas` reads them) are the hero's weapons' surface as
- *  drawn now: their meshes' in the `parts` look. */
-function surfaceOf(lab: Lab): Uint8Array {
+/** Which of the canvas's pixels (rows from the bottom, as a `Canvas` reads them) are the hero's part's surface as
+ *  drawn now: its meshes' in the `parts` look. */
+function surfaceOf(lab: Lab, isPart: IsPart): Uint8Array {
   const { width, height } = canvasSize();
   const meshes = meshesOf(lab.model.root);
   const area = { left: 0, top: 0, width: innerWidth, height: innerHeight };
@@ -180,7 +200,7 @@ function surfaceOf(lab: Lab): Uint8Array {
     throw new Error(`the parts look's ${image.width}x${image.height} isn't the canvas's ${width}x${height}`);
   }
   const parts = partAt(image, meshes);
-  const weapon = meshes.map(ofWeapon);
+  const weapon = meshes.map((mesh) => within(mesh, isPart));
   const surface = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -249,7 +269,7 @@ function hazeOf(shown: Drawn, hidden: Drawn, surface: Uint8Array): { haze: Haze;
 async function standIn(lab: Lab, options: HazeOptions, facing: number): Promise<void> {
   if (G.arena.biome !== options.biome) G.arena.setBiome(options.biome);
   const rad = facing * Math.PI / 180;
-  await lab.setup({ view: 'first', facing: rad, gear: options.gear, weapon: options.weapon, at: options.at });
+  await lab.setup({ view: options.view ?? 'first', facing: rad, gear: options.gear, weapon: options.weapon, at: options.at });
   await lookAlong(lab, rad);
   await lab.step(SETTLE_FRAMES);
 }
@@ -299,9 +319,9 @@ function pictureOf(label: string, shown: Drawn, losses: Float32Array, notes: str
 
 const percent = (share: number) => `${(share * 100).toFixed(1)}%`;
 
-/** A frame's haze as words. */
-function hazeLine(haze: Haze): string {
-  return `the weapons ${percent(haze.own)} of the frame, their light ${haze.ownLight.toFixed(2)} of white (the `
+/** A frame's haze as words, `noun` what's measured. */
+function hazeLine(haze: Haze, noun: string): string {
+  return `the ${noun} ${percent(haze.own)} of the frame, their light ${haze.ownLight.toFixed(2)} of white (the `
     + `adaptation took ${percent(haze.ownTaken)} of it); their surface ${percent(haze.surface)} of the frame, `
     + `${percent(haze.glared)} of it near white, their halo ${percent(haze.halo)} of the frame; round them `
     + `${percent(haze.hazed)} of the frame darkened by their light, by ${haze.loss.toFixed(3)} of white on average, `
@@ -313,8 +333,9 @@ const asItIs: Plant = () => () => {};
 
 /** The frame as it stands, with the weapons and without, measured; `exposure` the shown frame's and `plant` a fault
  *  planted in it (the canaries'). */
-function measureNow(lab: Lab, exposure = 1, plant = asItIs): { haze: Haze; losses: Float32Array; shown: Drawn } {
-  const surface = surfaceOf(lab);
+function measureNow(lab: Lab, isPart: IsPart, exposure = 1, plant = asItIs):
+  { haze: Haze; losses: Float32Array; shown: Drawn } {
+  const surface = surfaceOf(lab, isPart);
   const unplant = plant(lab);
   let shown: Drawn;
   try {
@@ -322,7 +343,7 @@ function measureNow(lab: Lab, exposure = 1, plant = asItIs): { haze: Haze; losse
   } finally {
     unplant();
   }
-  const show = hideWeapons(lab);
+  const show = hidePart(lab, isPart);
   let hidden: Drawn;
   try {
     hidden = drawBoth(lab);
@@ -332,47 +353,49 @@ function measureNow(lab: Lab, exposure = 1, plant = asItIs): { haze: Haze; losse
   return { ...hazeOf(shown, hidden, surface), shown };
 }
 
-/** `lab haze`: through the eyes in each facing, what the hero's weapons' light takes from the frame round them. */
+/** `lab haze`: in each facing, what the hero's part's light (his weapons' by default) takes from the frame round it. */
 export async function haze(lab: Lab, options: HazeOptions): Promise<Report> {
   if (!holdAdaptation) return { text: 'this game can\'t hold its adaptation off: no haze measured', problems: [] };
+  const noun = options.part ?? 'weapons';
+  const isPart = PARTS[noun];
   const lines: string[] = [];
   const problems: string[] = [];
   const moments: Pictured[] = [];
   for (const facing of options.facings) {
     await standIn(lab, options, facing);
     const name = `${options.biome}, looking ${facing}°`;
-    const { haze: found, losses, shown } = measureNow(lab);
-    lines.push(`${name}: ${hazeLine(found)}`);
-    if (found.own === 0) problems.push(`${name}: no weapon in the frame`);
+    const { haze: found, losses, shown } = measureNow(lab, isPart);
+    lines.push(`${name}: ${hazeLine(found, noun)}`);
+    if (found.own === 0) problems.push(`${name}: no ${noun} in the frame`);
     if (found.hazed > HAZE_MOST) {
-      problems.push(`${name}: the weapons' light hazes ${percent(found.hazed)} of the frame round them (at most `
+      problems.push(`${name}: the ${noun}' light hazes ${percent(found.hazed)} of the frame round them (at most `
         + `${percent(HAZE_MOST)})`);
     }
     if (found.glared > GLARE_MOST) {
-      problems.push(`${name}: the weapons glare: ${percent(found.glared)} of their surface near white (at most `
+      problems.push(`${name}: the ${noun} glare: ${percent(found.glared)} of their surface near white (at most `
         + `${percent(GLARE_MOST)})`);
     }
-    if (found.halo > HALO_MOST) {
-      problems.push(`${name}: the weapons' light blooms over ${percent(found.halo)} of the frame past them (at most `
-        + `${percent(HALO_MOST)})`);
+    if (found.halo > haloMost(found)) {
+      problems.push(`${name}: the ${noun}' light blooms over ${percent(found.halo)} of the frame past them (at most `
+        + `${percent(haloMost(found))})`);
     }
-    if (options.pictures) moments.push(pictureOf(name, shown, losses, [hazeLine(found)]));
-    if (options.canary && facing === options.facings[0]) canaries(lab, lines, problems);
+    if (options.pictures) moments.push(pictureOf(name, shown, losses, [hazeLine(found, noun)]));
+    if (options.canary && facing === options.facings[0]) canaries(lab, isPart, noun, lines, problems);
   }
   return { text: lines.join('\n'), problems, moments };
 }
 
 /** The faults the measures must catch, planted in the frame as it stands: a veil over all of it, which hazes it,
- *  and the weapons lit white, which glare. */
-function canaries(lab: Lab, lines: string[], problems: string[]): void {
-  const veiled = measureNow(lab, CANARY_EXPOSURE).haze;
+ *  and the part lit white, which glares. */
+function canaries(lab: Lab, isPart: IsPart, noun: string, lines: string[], problems: string[]): void {
+  const veiled = measureNow(lab, isPart, CANARY_EXPOSURE).haze;
   const veilCaught = veiled.hazed > HAZE_MOST;
-  lines.push(`canary, the frame with the weapons drawn at ${CANARY_EXPOSURE} of its exposure: `
+  lines.push(`canary, the frame with the ${noun} drawn at ${CANARY_EXPOSURE} of its exposure: `
     + `${veilCaught ? 'caught' : 'missed'}: ${percent(veiled.hazed)} of it darkened`);
   if (!veilCaught) problems.push('the haze\'s canary was missed');
-  const glowing = measureNow(lab, 1, glowWeapons).haze;
-  const glareCaught = glowing.glared > GLARE_MOST && glowing.halo > HALO_MOST;
-  lines.push(`canary, the weapons lit white: ${glareCaught ? 'caught' : 'missed'}: ${percent(glowing.glared)} of `
+  const glowing = measureNow(lab, isPart, 1, (planted) => glowPart(planted, isPart)).haze;
+  const glareCaught = glowing.glared > GLARE_MOST && glowing.halo > haloMost(glowing);
+  lines.push(`canary, the ${noun} lit white: ${glareCaught ? 'caught' : 'missed'}: ${percent(glowing.glared)} of `
     + `their surface near white, their halo ${percent(glowing.halo)} of the frame`);
   if (!glareCaught) problems.push('the glare\'s canary was missed');
 }

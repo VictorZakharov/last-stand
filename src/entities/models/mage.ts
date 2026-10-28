@@ -186,7 +186,7 @@ function forearmRunes(): THREE.CanvasTexture {
 const FREE_HAND = new Set(['cast', 'summon', 'channel', 'slam', 'buff', 'drink']);
 /** his free hand's outline: its green, and how far it breathes either way and how fast (rad/s: well under the
  *  1.5 flashes a second a large glow may pulse at) */
-const HAND_GLOW = { color: new THREE.Color(0x5dffa8).multiplyScalar(3.2), breathe: 0.3, rate: 2.2 };
+const HAND_GLOW = { color: new THREE.Color(0x5dffa8).multiplyScalar(1.0), breathe: 0.3, rate: 2.2 };
 const HAND_HANG = Math.PI / 2;
 const TAIL: Record<string, number> = { cast: 0.35, summon: 0.35, slam: 0.4, buff: 0.5 }, TAIL_OUT: Record<string, number> = { cast: 0.45, summon: 0.45, slam: 0.6, buff: 0.5 };
 /** drinking: the flask raised straight up before the chin, the elbow down and forward (the bell sleeve falls back off the forearm) */

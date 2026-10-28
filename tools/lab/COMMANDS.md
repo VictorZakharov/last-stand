@@ -239,6 +239,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   map: the weapons blue, their glare yellow, their bloom pink, the haze red (`out/haze/`). `--canary` plants a veil
   (the frame at 0.8 of its exposure), which must haze, and the weapons lit white, which must glare and bloom. Not
   yet within its haze: on main as here, a single sword hazes up to 4.9% of the frame looking 135 to 315 degrees.
+  `--part hands` measures the hands instead and `--view third` looks over the shoulder: the mage's glowing hand, its
+  light at the palm and its outline at 3.2, blew out 12 to 23% of its surface (the owner: "his hands glows too
+  bright", "we should never have blinding lights in our game"); a halo is held to the part's own size when that's
+  under 0.5% of the frame, as a hand's is.
 - `touch`: the touch controls' move stick pushed by a finger, its touches sent by the browser as a touch screen's
   (`lab.touchDown`): put down on the move pad and slid right, within the dead zone, through the stick's travel, to its
   edge and far past it, and half the window across, each push from a fresh set-up. Each push's line says what the

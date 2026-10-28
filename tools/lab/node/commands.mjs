@@ -660,6 +660,8 @@ export const COMMANDS = {
     each(side, options) {
       const command = {
         biome: options.biome ?? 'forest',
+        part: options.part ?? 'weapons',
+        view: options.view ?? 'first',
         facings: options.facings.map(Number),
         gear: options.gear,
         weapon: options.weapon,

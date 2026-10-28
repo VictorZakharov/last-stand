@@ -632,7 +632,8 @@ export const COMMANDS = {
     },
   },
   haze: {
-    help: 'the hero\'s held weapons\' light through the eyes: the frame drawn with them and without, each with the '
+    help: 'the hero\'s held weapons\' light through the eyes (or his hands\', or over the shoulder: --part, --view): '
+      + 'the frame drawn with them and without, each with the '
       + 'grade\'s adaptation and without it; their surface near white (glare over 5% of it is a problem), their '
       + 'bloom past it (over 0.5% of the frame), and any pixel outside their own darkened by their light (the '
       + 'adaptation to a bright area spread round them as a veil; over 0.5% of the frame): tools/lab/out/haze (the '
@@ -643,6 +644,18 @@ export const COMMANDS = {
         choices: ['crypt', 'forest'],
         usage: 'crypt|forest',
         help: 'the biome (the forest by default)',
+      },
+      part: {
+        kind: 'choice',
+        choices: ['weapons', 'hands'],
+        usage: 'weapons|hands',
+        help: 'what\'s measured: the held weapons (by default), or the hands (the mage\'s glowing one)',
+      },
+      view: {
+        kind: 'choice',
+        choices: ['first', 'third'],
+        usage: 'first|third',
+        help: 'the view: through the eyes (by default), or over the shoulder',
       },
       facings: {
         kind: 'list',
