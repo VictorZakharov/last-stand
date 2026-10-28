@@ -119,7 +119,7 @@ function decoded(encoded: number, hdr: boolean): number {
 }
 
 /** The light of the pixel at `at` (its first channel's index), Rec. 709's weights. */
-function pixelLight(canvas: Canvas, at: number): number {
+export function pixelLight(canvas: Canvas, at: number): number {
   const { pixels, hdr } = canvas;
   const red = decoded(pixels[at], hdr);
   const green = decoded(pixels[at + 1], hdr);
@@ -128,7 +128,7 @@ function pixelLight(canvas: Canvas, at: number): number {
 }
 
 /** The brightest channel's light of the pixel at `at`: what the grade grows past the knee. */
-function topLight(canvas: Canvas, at: number): number {
+export function topLight(canvas: Canvas, at: number): number {
   const { pixels, hdr } = canvas;
   return Math.max(decoded(pixels[at], hdr), decoded(pixels[at + 1], hdr), decoded(pixels[at + 2], hdr));
 }

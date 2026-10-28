@@ -792,6 +792,23 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the lobby is a sound left playing (`page/soundsLeft.ts`); its canary starts Void Lance's hum there and never stops
   it. From play: "if mage was attacking in hall of heroes, going back to lobby keeps the attack sound": the hall
   closed with his channel open, and its hum (3 tones) played on.
+  `--glow` (`page/hallGlow.ts`) reads the light round the weapon's tip instead, the mage's staff's crystal, frame by
+  frame from his showcase on (540 frames, the camera's flight in left out), read back from the frame drawn as the
+  player sees it: a box 0.5 m across there, its share near white (0.75 of white), its mean light, the median frame's
+  and the brightest against it, the flashes of its mean in any second (`page/flashes.ts`), and its mean every 0.25 s;
+  and how much of it glows (its pixels' brightest channel 0.1 of white or more, the crystal and its halo), the
+  median frame's and the largest against it, every 0.25 s; pictured round the staff's head at its brightest, at its
+  largest glow, at its dimmest and as he stands after his showcase (`--pictures=false` for none). It fails on any
+  frame over 0.25 of white, the brightest over 3 times the median, over 2 flashes a second, a glow over 1.25 times
+  its median frame's (a flare) or under 30% of the box the median frame (a flat stone). By its brightest channel,
+  not its luminance: a saturated pink's luminance is a third of its red, and a facet's flare that doubled the glow
+  moved the box's luminance by a few hundredths. From play: "in hero selection screen, the staff's light is too
+  bright when its flickering, pls lower": raised, the crystal came within 0.86 m of the hall's key light, which lit
+  its glossy facets white (main's brightest frame 0.34, its glow flaring 1.53 times on 84 frames); then, lit less,
+  "it still flickers bright, but most of the time its completely boring" (its glow 25% of the box, flaring 2.1 times
+  as a facet turned to the light every 0.7 s). Now it's lit by its own light: its faces under the bloom's threshold,
+  and a halo and a hot core of its own (`HEAD`, `HALO`, `CORE` in `src/game/hall.ts`).
+  Its canary lights the crystal as main lit it, its colour its glow's hue.
 - `glance`: the hero's casual look round as he stands idle (`page/glance.ts`, `page/glances.ts`; `models/glance.ts`),
   read from what's drawn: the head's turn from the chest and the eyeballs' in their sockets. He stands `--seconds` (40)
   in the countdown: each glance (past 10°, one carried across joined), their spacing (never a loop, none within 1.5 s

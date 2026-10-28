@@ -1511,9 +1511,16 @@ export const COMMANDS = {
       + 'own); --gear and --weapon put the weapon in his hand there',
     options: {
       frames: { kind: 'switch', help: 'list every frame a point jerked, with its action and its moves' },
+      glow: {
+        kind: 'switch',
+        help: 'the light round the weapon\'s tip instead (the mage\'s staff\'s crystal) frame by frame: its near '
+          + 'white share, its peak against its mean and its flashes, pictured at its brightest and dimmest',
+      },
+      pictures: { kind: 'switch', help: 'with --glow, picture the tip (on by default; --pictures=false for none)' },
       canary: {
         kind: 'switch',
-        help: 'plant a fault the measure must catch: the right shoulder turned for a frame after the showcase',
+        help: 'plant a fault the measure must catch: the right shoulder turned for a frame after the showcase '
+          + '(with --glow, the tip\'s glow lit up three times over for a second)',
       },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
