@@ -125,9 +125,12 @@ export class Carried {
   }
 
   /** Each piece the pose moved (held at some frame, or taken from where it hangs), and what it did: its mesh that
-   *  went furthest on its own, and its worst jump. */
+   *  went furthest on its own, and its worst jump. A piece worn on a strap (`userData.worn` on it or over it: the
+   *  ranger's quiver, tipped back off the floor as he sits) swings there with no hand on it, and is judged by its
+   *  jumps alone. */
   findings(): CarriedFinding[] {
     const judged = this.followed.filter((each) => each.heldEver || each.movedFrom > MOVED_FROM);
+    for (const each of judged) if (worn(each.part.mesh)) each.loose = 0;
     const byName = new Map<string, CarriedFinding>();
     for (const each of judged) {
       const was = byName.get(each.part.name);
@@ -285,6 +288,12 @@ function palmOn(mesh: THREE.Mesh, palm: THREE.Vector3): number {
 /** The farthest any point of `a` is from its own in `b`. */
 function farthest(a: THREE.Vector3[], b: THREE.Vector3[]): number {
   return Math.max(...a.map((point, i) => point.distanceTo(b[i])));
+}
+
+/** Whether `object` is worn on a strap (`userData.worn` on it or over it). */
+function worn(object: THREE.Object3D): boolean {
+  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (at.userData.worn) return true;
+  return false;
 }
 
 /** Whether `object` is drawn: it and everything over it shown. */
