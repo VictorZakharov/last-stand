@@ -21,14 +21,14 @@ import { particles, col } from '../fx/particles';
 import { sfx } from '../core/audio';
 import { SHINE } from '../core/materials';
 import { emit } from '../events';
-import { angleDamp, damp, hitFlash, rand } from '../util';
+import { angleDamp, damp, hitFlash, rand, smooth } from '../util';
 import { applyShadowDetail } from '../core/quality';
 import { castAsOne, type OneShadow } from './models/castAsOne';
 import { countDown, countHealed, countTaken } from '../game/stats';
 import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SitState, SkillDef, SkillKey, Struck } from '../types';
 import type { Enemy } from './enemy';
 
-const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3(), _neck = new THREE.Vector3();
+const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3(), _neck = new THREE.Vector3(), _aura = new THREE.Vector3();
 /** an overhead blow comes down on a foe whose near side is within this ahead (m: a two-hander's reach past the hands
  *  held before him), on the share of its height its top is taken at (the shoulders and the head) */
 const STRUCK_REACH = 2.2, STRUCK_TOP = 0.85;
@@ -116,8 +116,9 @@ export type PlayerOut = 'banked' | 'dead' | null;
 /** how fast a light lit only at full draw eases in, as its glint comes, and out (`damp`'s rates: in over a quarter
  *  second, the glint at full draw's first moments was lit less than main's) */
 const AURA_EASE = { in: 60, out: 12 };
-/** the least height (m) of the aura's light over the ground under it */
-const AURA_FLOOR = 0.6;
+/** sat, a weapon's tip low by the floor (between these heights over it, m) moves the aura's light to over his head (`over`, m
+ *  over his feet): a blade's point set in the ground lit a hot disc round it, and over it, his hand on the pommel */
+const AURA_LOW = { from: 0.5, to: 1.2, over: 2.3 };
 
 export class Player {
   readonly cls: ClassDef;
@@ -1091,9 +1092,12 @@ export class Player {
         const cam = G.camera.position, yaw = cameraYaw();
         this.staffLight.position.set(cam.x - Math.sin(yaw) * 1.5, cam.y + 0.8, cam.z - Math.cos(yaw) * 1.5);
       } else {
-        // (never down by the floor: a blade's point set in the ground lit a hot disc round it)
         const at = this.staffLight.position.copy(this.castPoint);
-        at.y = Math.max(at.y + 0.35, groundHeight(at.x, at.z) + AURA_FLOOR);
+        at.y += 0.35;
+        // (sat: stood, a one-hander's point hangs by his foot, and his light was always there)
+        const sat = Math.min(1, (this.sitting.pose?.w ?? 0) / 0.2);
+        const low = sat - sat * smooth(THREE.MathUtils.clamp((at.y - this.obj.position.y - AURA_LOW.from) / (AURA_LOW.to - AURA_LOW.from), 0, 1));
+        if (low > 0) at.lerp(_aura.copy(this.obj.position).setY(this.obj.position.y + AURA_LOW.over), low);
       }
       const glow = this.cls.aura.intensity;
       // (its intensity alone goes to none: the light stays in the scene, as the light count must)
