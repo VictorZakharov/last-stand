@@ -33,6 +33,9 @@ export const SEAT = {
   near: 0.25,
   /** sat on the floor by a fire: the hips' pivot over the floor, and the feet ahead of it, the knees up (m) */
   ground: { hip: 0.13, foot: 0.62 },
+  /** where a sat body is, out from the seat's line (m): on a seat, his legs past where he sits; on the floor, his
+   *  feet before where they stand and his back behind his hips */
+  body: { legs: 0.6, feet: 0.15, back: 0.35 },
 };
 
 const _ray = new THREE.Raycaster(), _from = new THREE.Vector3(), _down = new THREE.Vector3(0, -1, 0);
@@ -99,6 +102,17 @@ function nearestOn(s: Seat, px: number, pz: number): { cx: number; cz: number; n
     nz /= d;
   }
   return { cx, cz, nx, nz };
+}
+
+/** Whether (`x`, `z`) is within `reach` (m) of where a body sat on one of `seats` is: a biome keeps its plants off it
+ *  (from the owner: "lots clipping near fire", the grass and ferns grown through him sat by a bonfire). */
+export function whereSat(seats: readonly Seat[], x: number, z: number, reach: number): boolean {
+  return seats.some((s) => {
+    const { cx, cz } = nearestOn(s, x, z), d = Math.hypot(x - cx, z - cz);
+    const from = s.ground ? s.sit - SEAT.ground.foot - SEAT.body.feet : 0;
+    const to = s.sit + (s.ground ? SEAT.body.back : SEAT.body.legs);
+    return d > from - reach && d < to + reach;
+  });
 }
 
 /** The seat's top over (`x`, `z`) as drawn (m), or -Infinity where none of it is (a fire's, the floor). */
