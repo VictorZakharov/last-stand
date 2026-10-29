@@ -612,6 +612,8 @@ export class Lab {
     if (fixture.gear) this.hold(fixture.gear, fixture.weapon);
     if (fixture.wear) this.dress(fixture.wear);
     if (fixture.rarity) this.glowAs(fixture.rarity);
+    // (never off to sit on a log nearby as he stands for a measure: `sit` lets him once set up)
+    this.player.sits = false;
     this.player.place(spot, facing);
     // (the camera too, for a hero built afresh: a commit from before it has none, and its camera glides)
     if (fixture.fresh) renderer.settleCamera?.(spot);
