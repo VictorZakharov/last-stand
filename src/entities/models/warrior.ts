@@ -1632,8 +1632,8 @@ export function buildWarrior(): Model {
     p.q.setFromRotationMatrix(_sm);
     const laid = _s1.copy(spot).addScaledVector(ahead, -(box.min.y + box.max.y) / 2 * s);
     laid.y = groundHeight(spot.x, spot.z) - (flatZ ? box.min.z : box.min.x) * s + 0.005;
-    // (on the sit's own ease alone: eased again, a one-hander's head went 16 cm a frame as he picked it up)
-    const e = w;
+    // (a one-hander on the sit's own ease alone: eased again, its head went 16 cm a frame as he picked it up)
+    const e = weapon.off == null ? w : smooth(w);
     seat(hand, grip, weapon.r);
     root.updateMatrixWorld(true);
     if (from) _pq.copy(_turnQ.copy(p.q));
