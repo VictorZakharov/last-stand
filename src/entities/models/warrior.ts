@@ -1493,7 +1493,7 @@ export function buildWarrior(): Model {
    *  his hand reaches from a seat, so the hand slides up its haft as he sets it down, to `hold` (m) off the floor and
    *  no nearer its head than `head` (the grip's units): held at the grip to the end, it was let go of 57 cm over the
    *  floor and dropped there in a frame. */
-  const LEAN = tunable('warriorLean', { at: [-0.42, 0.28], lean: 0.3, letGo: 0.8, hold: 0.55, head: 0.15, bend: 0.9, bow: 0.4 });
+  const LEAN = tunable('warriorLean', { at: [-0.55, 0.28], lean: 0.3, letGo: 0.8, hold: 0.55, head: 0.15, bend: 0.9, bow: 0.4 });
   const LEANS = new Set(['Axe', 'Mace']);
   const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95 });
   const _plantHand = new THREE.Vector3(), _plantBox = new THREE.Box3(), _plantM = new THREE.Matrix4();
@@ -1515,13 +1515,15 @@ export function buildWarrior(): Model {
     startAt: THREE.Vector3; startQ: THREE.Quaternion;
     /** how far up its haft from its grip the fist has slid (the grip's units), leaning it on a seat */
     slide: number;
+    /** leant where it is, let go of */
+    leant: boolean;
   }
   function plantOf(left: boolean, hand: Hand, grip: THREE.Object3D): Planted {
     return {
       left, hand, joint: left ? j.handL : j.handR, grip, shoulder: left ? j.shoulderL : j.shoulderR,
       q: new THREE.Quaternion(), at: new THREE.Vector3(), up: new THREE.Vector3(), on: null, carried: false, turn: -1,
       landAt: new THREE.Vector3(), landQ: new THREE.Quaternion(), handAt: new THREE.Vector3(), handQ: new THREE.Quaternion(),
-      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), slide: 0,
+      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), slide: 0, leant: false,
     };
   }
   const _standQ = new THREE.Quaternion(), _standAt = new THREE.Vector3(), _holdQ = new THREE.Quaternion();
@@ -1632,6 +1634,9 @@ export function buildWarrior(): Model {
    *  `p.at`) on an arc out from his legs, as `layDown` lays one by a fire: its haft's end on the floor, its head up and
    *  leant back, its flats out to his sides (its edge ahead). */
   function leanDown(p: Planted, w: number, weapon: Weapon): void {
+    // (where it was let go of it stays: placed by him as he settled onto the seat, it went on 4 cm with no hand on it)
+    if (w >= 1 && p.leant) return;
+    p.leant = w >= 1;
     const { hand, grip } = p, side = p.left ? -1 : 1, box = boxOf(weapon, grip);
     root.updateMatrixWorld(true);
     const s = _s5.setFromMatrixScale(grip.matrixWorld).y, k = root.scale.x;
@@ -1836,6 +1841,7 @@ export function buildWarrior(): Model {
   function unplant(p: Planted): void {
     p.carried = false;
     p.slide = 0;
+    p.leant = false;
     p.turn = -1;
     if (!p.on) return;
     p.grip.rotation.set(GRIP, 0, 0);
