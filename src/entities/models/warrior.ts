@@ -1690,6 +1690,7 @@ export function buildWarrior(): Model {
   function carryDown(p: Planted, w: number, weapon: Weapon, sit: NonNullable<AnimState['sit']>, leant = false): void {
     const letGo = leant ? LEAN.letGo : LAY.letGo;
     if (leant) leanDown(p, Math.min(1, w / letGo), weapon);
+    else if (weapon.off == null) layDown(p, Math.min(1, w / letGo), weapon);
     else layDown(p, Math.min(1, w / letGo), weapon, weapon.group.name === 'Maul' ? LAY.maulAt : LAY.twoAt, LAY.twoArc);
     const direction = _hd.set(0, 1, 0).applyQuaternion(p.q);
     const held = _s7.copy(p.at).addScaledVector(direction, p.slide * _s5.setFromMatrixScale(p.grip.matrixWorld).y);
@@ -2641,7 +2642,9 @@ export function buildWarrior(): Model {
     const plants = !fp && st.dead < 0;
     if (!(held && plants)) _lifted.push(1);
     if (!(offHeld && !sheathed && plants)) _lifted.push(0);
-    const carryTwo = !!(floorSit && two && plants);
+    // (by a fire, a one-hander carried down in the fist as a two-hander is: eased there from it, it went there with no
+    // hand on it, 5.8 m in all)
+    const carryTwo = !!(floorSit && held && plants);
     // (a hand that stands its weapon on a seat is the plant's alone, from the arm fitted holding it: rested first, its
     // arm solved again to a pole of the rest's from the sit's first frame on, the axe in it went 82 cm in that frame)
     _resting.length = 0;
@@ -2816,10 +2819,9 @@ export function buildWarrior(): Model {
       _shq.copy(_sq).multiply(HALF_ROUND);
       if (_shq.angleTo(shield.quaternion) < _sq.angleTo(shield.quaternion)) _sq.copy(_shq);
       shield.quaternion.slerp(_sq, shieldHang);
-      // (on a seat, round the fist that holds it, its face out: hung 26 cm down the forearm, it slid back up the arm as he
+      // (sat, round the fist that holds it, its face out: hung 26 cm down the forearm, it slid back up the arm as he
       // stood, and the fist came out through its face, "whats this hand clipping through shield ?")
-      if (out && !floorSit) _s1.copy(_s2).addScaledVector(n, SIDE_POS.x * _s3.setFromMatrixScale(j.handL.matrixWorld).x);
-      // (sat on the floor, its rim on it: hung as far down from a forearm on his knee, it went 11 cm into it)
+      if (out) _s1.copy(_s2).addScaledVector(n, SIDE_POS.x * _s3.setFromMatrixScale(j.handL.matrixWorld).x);
       else _s1.lerp(_s2, 0.3).addScaledVector(_s4.set(0, -1, 0), 0.26 * root.scale.x);
       shield.position.lerp(j.handL.worldToLocal(_s1), shieldHang);
     }
@@ -2836,8 +2838,7 @@ export function buildWarrior(): Model {
     carryingTwo = (carryTwo && plant > 0 && plant <= LAY.letGo) || (leanR && plant > 0 && plant <= LEAN.letGo);
     const gripped = held && (!(plant > 0 && (floorSit || leanR)) || carryingTwo);
     if (plant > 0 && floorSit) {
-      if (carryTwo) carryDown(plantR, plant, held!, st.sit!);
-      else layDown(plantR, plant, held!);
+      carryDown(plantR, plant, held!, st.sit!);
     }
     if (plant > 0 && leanR) carryDown(plantR, plant, held!, st.sit!, true);
     if (carryingTwo) {
@@ -2955,7 +2956,6 @@ export function buildWarrior(): Model {
     else if (fp && st.dead < 0 && offHeld && !sheathed) slantL = fitInView(true, gripL, gripTurn(handL, gripL, _vl), SLANT, holdL) + holdL * swingSlantL;
     if (fp && st.dead < 0 && offHeld && !sheathed) wristInGrip(true, gripTurn(handL, gripL, _vl, slantL));
     // (set down once the arm is fitted: the fit moved the hand, and the shield with it, 8 cm into the floor)
-    if (floorSit && shield.visible) layShield(smooth(st.sit!.w));
     // (on a seat it stays on his forearm, hung beside his leg: stood on its rim by his shin, its grip was lower than
     // his hand reaches sat, and it flew there off his arm, "weapons are being pulled around with jedi force")
     // (a cut out of a blow turned to the floor and stopped by it, after the fade, fades from the arms as drawn; every
