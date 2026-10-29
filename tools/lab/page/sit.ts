@@ -73,8 +73,11 @@ const PALM_AT = new THREE.Vector3(0, -0.06, -0.02);
 
 /** how far a point of his skirts may wander as he sits still (m): his feet's slow swing and his breath move it a few
  *  centimetres; from the owner, "on log cloth is jerking few times per sec", the drape went round a knee one way and
- *  the other, and eased it'd slide there and back */
-const WANDER_MOST = 0.05;
+ *  the other, and eased it would slide there and back (left: a point between his knees shifting 9 cm over half a
+ *  second as his hands and breath move) */
+const WANDER_MOST = 0.1;
+/** how long after he's sat the wander is read from (s) */
+const SETTLED = 1.5;
 
 /** by a fire, his body's way off the way to it at most (degrees): from review, he sat 30 to 45 off it */
 const FACING_FIRE = 15;
@@ -101,8 +104,10 @@ interface Ask {
   held: boolean;
 }
 
-const SEAT_VIEWS: ViewName[] = ['front', 'left', 'above'];
-const FIRE_VIEWS: ViewName[] = ['right', 'back', 'above'];
+// (sat, in the game's own views too, and by a fire from ahead: seen from its sides and behind alone, his coat through
+// his legs and the grass through him went unseen, "lots clipping near fire, how did you miss it ?")
+const SEAT_VIEWS: ViewName[] = ['front', 'left', 'above', 'top', 'third'];
+const FIRE_VIEWS: ViewName[] = ['right', 'back', 'above', 'front', 'top', 'third'];
 
 const lengthOf = (s: Seat) => Math.hypot(s.bx - s.ax, s.bz - s.az);
 
@@ -349,7 +354,8 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): P
     const read = readNow(lab);
     // (the first two frames fill each point's last two places)
     for (const skirt of skirts) follow(skirt, frame, frame >= 2, !!options.frames, j);
-    skirts.forEach((skirt, i) => spans[i].add(skirt.last));
+    // (once the cloth has settled where he sat: eased, it comes to rest over the first second)
+    if (frame >= SETTLED * RATE) skirts.forEach((skirt, i) => spans[i].add(skirt.last));
     frame++;
     const past = bodyBreaches(j, grippingSides(lab)).found[0];
     if (past) frames++;
