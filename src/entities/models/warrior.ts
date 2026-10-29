@@ -45,6 +45,7 @@ import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Mo
  *  his shield-side forearm over the thigh. */
 const SIT_HANDS = tunable('warriorSit', { roll: [3.14, 2.5], bend: [0, 0], rise: 0.005 });
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0] };
+const _lifted: number[] = [];
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
 /** the actions that strike with the weapons (Rending Cleave, Power Strike, Thunder Crescent, Steel Tempest, Twin Fangs):
@@ -2431,7 +2432,13 @@ export function buildWarrior(): Model {
     _sitTurn.roll[0] = offHeld && !sheathed && !floorSit ? SIT_HANDS.roll[0] : 0;
     _sitTurn.roll[1] = held && !floorSit ? SIT_HANDS.roll[1] : 0;
     st.look?.();
-    restHands(j, st.sit, [0, 1], _sitTurn, SIT_HANDS.rise);
+    // (a hand that stands its weapon up after isn't lifted over his thighs: lifted to his chest, the plant took it
+    // from there, and for a frame the weapon swung across his chest and the hand through his head, 9 to 18 cm)
+    _lifted.length = 0;
+    const plants = !fp && st.dead < 0;
+    if (!(held && plants)) _lifted.push(1);
+    if (!(offHeld && !sheathed && plants)) _lifted.push(0);
+    restHands(j, st.sit, [0, 1], _sitTurn, SIT_HANDS.rise, _lifted);
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
     else {
       // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
