@@ -607,6 +607,8 @@ export function buildWarrior(): Model {
   }
   const handL = buildHand(j.handL, 1, leather, skinTip, HAND_K, bareSkin), handR = buildHand(j.handR, -1, leather, skinTip, HAND_K, bareSkin);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
+  // His fuller thighs need a capsule to keep the seated forearms out all the way to the knees.
+  body.legCapsules = true;
 
   // --- legs: leather trousers, engraved knee cops, tall boots with fur tops, straps and a steel toe
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {

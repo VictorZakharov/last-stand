@@ -185,8 +185,8 @@ export interface Solid { name: string; at: THREE.Object3D; c: THREE.Vector3; r: 
 /** a limb: a capsule from a point on one joint to a point on another (each in its joint's frame), its radius */
 export interface Limb { name: string; a: THREE.Object3D; pa: THREE.Vector3; b: THREE.Object3D; pb: THREE.Vector3; r: number }
 /** `legs`: how much the arms' IK keeps them out of the thighs too (0 to 1: sat on the floor, set by the hero each
- *  frame as he goes down) */
-export interface BodyShape { solids: Solid[]; limbs: Limb[]; pairs: [Limb, Solid][]; legs?: number }
+ *  frame as he goes down). `legCapsules` uses the warrior's fuller thigh and a hanging elbow in that solve. */
+export interface BodyShape { solids: Solid[]; limbs: Limb[]; pairs: [Limb, Solid][]; legs?: number; legCapsules?: boolean }
 
 /**
  * The body's solids (the head from its skin, the chest, belly and neck from the rig's proportions) and the arms as
