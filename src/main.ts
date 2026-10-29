@@ -472,10 +472,12 @@ function syncView(): void {
   input.centerAim = v !== 'top';
   // mouse look holds the pointer through the run, the bank-or-continue choice included (B / C
   // pick there), and lets go for the pause menu and the run's end; in the lobby, while its panels
-  // are stowed (the pointer is free for them otherwise)
+  // are stowed and no screen of its own is up (the hall of heroes, walked to and used, kept the lock and hid the
+  // pointer over its cards; the pointer is free for them otherwise)
   const phase = G.run?.phase;
   const inRun = G.mode === 'run' && G.player.active && (phase === 'countdown' || phase === 'fighting' || phase === 'cleared');
-  const inLobby = G.mode === 'menu' && menuStowed() && !savesOpen() && !villageCardOf() && !villageMapOpen();
+  const inLobby = G.mode === 'menu' && menuStowed() && !savesOpen() && !villageCardOf() && !villageMapOpen()
+    && !heroSelectOpen();
   const look = v !== 'top' && !G.menuOpen && (inRun || inLobby);
   wantPointerLock(look);
   crosshair.classList.toggle('hidden', v === 'top');
