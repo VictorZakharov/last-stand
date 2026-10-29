@@ -205,7 +205,14 @@ What the lab gives a probe (`page/lab.ts`):
   `draw`) lets it run and puts it back as it ends. CSS's animations run on the page's clock, not the lab's: read them
   with `getAnimations()`, and hold one at a moment to picture it;
 - in `page/geometry.ts`, the body's meshes skinned into the world as drawn (`BakedBody`), what a line crosses among
-  them (`crossingsAlong`), and the distance between segments (`segmentDistance`).
+  them (`crossingsAlong`), and the distance between segments (`segmentDistance`);
+- `distinctCorners(positions)` (`page/corners.ts`): a mesh's corners, each place once (a mesh repeats one for each
+  face whose normals part there: the mage's staff has 12,234 points at 2,515 places).
+
+A measure read every frame costs every frame, in every job a check runs: read each frame only what the frame's
+verdicts use, and what can't change (a weapon's head, a geometry's box) once. Through the eyes, each frame read the
+weapon's head off its meshes for a share no frame kept, a third of each job; the range's floor and body read every
+corner of the weapon five times over, 60% of its jobs. `--profile` shows a measure's share beside the game's frames.
 
 A measure is only as good as what it can catch:
 

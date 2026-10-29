@@ -24,9 +24,10 @@ import {
 } from './strike';
 import type { Strike, StrikeFrame } from './strike';
 import {
-  aimCrossing, describeLanding, landingProblems, restBlades, restInView, sweptOver, tipAtEnd, weaponsInView,
+  aimCrossing, describeLanding, landingProblems, restBlades, restInView, sweptOver, tipAtEnd, weaponsAlong,
+  weaponsInView,
 } from './cuts';
-import type { InView, Landing } from './cuts';
+import type { AlongView, InView, Landing } from './cuts';
 import { atRest, rowOfCuts } from './cutRows';
 import type { CutFrame, RestBlades, RowCast } from './cutRows';
 import { swingDiagram } from './swingDiagram';
@@ -129,7 +130,7 @@ interface Seen {
    *  the tip is on */
   side: number | null;
   hand: 'right' | 'left';
-  /** that weapon in the frame (page/cuts.ts `weaponsInView`: its share along its length, and how long it looks, a share
+  /** that weapon in the frame (page/cuts.ts `weaponsAlong`: its share along its length, and how long it looks, a share
    *  of the frame's height; 0 with none held) */
   shown: number;
   looks: number;
@@ -545,7 +546,7 @@ function seeFrame(lab: Lab, frame: number, casts: CastCount, last: Seen | undefi
     pose: armsAt(lab),
     side: lab.model.swing ?? null,
     hand,
-    ...shownOf(weaponsInView(lab).find((view) => view.hand === hand)),
+    ...shownOf(weaponsAlong(lab).find((view) => view.hand === hand)),
     keyed: keyedNow(lab),
     inBody: armsInBody(lab.joints),
     armsNear: [armNear(lab, 'R'), armNear(lab, 'L')],
@@ -581,7 +582,7 @@ const cutOf = (now: Seen): CutFrame => ({
 });
 
 /** A weapon in the frame as a frame keeps it (`Seen.shown`, `Seen.looks`). */
-const shownOf = (view: InView | undefined) => ({ shown: view?.share ?? 0, looks: view?.length ?? 0 });
+const shownOf = (view: AlongView | undefined) => ({ shown: view?.share ?? 0, looks: view?.length ?? 0 });
 
 /** Each wrist's angles as `measureBody` has them. */
 function wristsOf(angles: Record<string, number>): Wrist[] {
