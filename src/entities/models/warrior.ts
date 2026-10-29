@@ -1716,7 +1716,11 @@ export function buildWarrior(): Model {
    *  place): from where the fist had it as he started, in his own frame, turned the same way round all the way. */
   function restBetween(p: Planted, sat: number, weapon: Weapon): void {
     const { grip } = p, w = Math.min(1, sat / BETWEEN.letGo);
-    const stand = smooth(ramp(sat, BETWEEN.letGo + BETWEEN.take, 1)), lean = lerp(BETWEEN.slant, BETWEEN.lean, stand);
+    // (carried in the fist, which it follows, to where its point meets the floor slanting; then from where the fist
+    // left it, upright under the palm: placed on a way of its own, the fist fell short of it, and it went 3.5 m with no
+    // hand on it)
+    p.carried = sat < BETWEEN.letGo;
+    const stand = smooth(ramp(sat, BETWEEN.letGo + BETWEEN.take, 1)), lean = p.carried ? BETWEEN.slant : BETWEEN.lean;
     root.updateMatrixWorld(true);
     root.getWorldQuaternion(_rootQ);
     if (p.turn < 0) {
@@ -1742,6 +1746,14 @@ export function buildWarrior(): Model {
     const sink = THREE.MathUtils.clamp(floor + tall - (hips + BETWEEN.top * k), PLANT.deep[0], PLANT.deep[1]) * stand;
     spot.y = floor - sink;
     _standAt.copy(spot).addScaledVector(down, -far * s);
+    weapon.group.userData.stuckIn = sink;
+    p.on = weapon;
+    if (!p.carried) {
+      p.at.copy(p.landAt).applyMatrix4(root.matrixWorld).lerp(_standAt, stand);
+      p.q.copy(_rootQ).multiply(p.landQ).slerp(_standQ, stand);
+      p.up.copy(p.at).addScaledVector(_s2.set(0, 1, 0).applyQuaternion(p.q), low * s);
+      return;
+    }
     p.at.copy(p.startAt).applyMatrix4(root.matrixWorld).lerp(_standAt, w);
     const arc = Math.sin(Math.PI * w) * k;
     p.at.addScaledVector(ahead, BETWEEN.arc[0] * arc).addScaledVector(up, BETWEEN.arc[1] * arc);
@@ -1756,10 +1768,8 @@ export function buildWarrior(): Model {
     // the rest of the way onto how it stands, a small turn, eased as the tip goes
     _turnQ.copy(_standQ).multiply(_pq.copy(_wayQ).invert());
     p.q.setFromAxisAngle(side, tip * w).multiply(from).premultiply(_pq.identity().slerp(_turnQ, w));
-    weapon.group.userData.stuckIn = sink;
     // its pommel's top, for the hand to rest on
     p.up.copy(p.at).addScaledVector(_s2.set(0, 1, 0).applyQuaternion(p.q), low * s);
-    p.on = weapon;
   }
   /** The right fist round a two-hander's grip where `p` has it (`restBetween`), its length towards the shoulder, and
    *  past `BETWEEN.letGo` off it onto its pommel, palm down, fingers ahead. */
@@ -3040,7 +3050,7 @@ export function buildWarrior(): Model {
     // (sat, his weapons stand on their ends and his hands rest on them)
     const plant = held && st.sit && !fp && st.dead < 0 ? st.sit.w : 0;
     const plantOff = offHeld && !sheathed && st.sit && !fp && st.dead < 0 ? st.sit.w : 0;
-    carryingTwo = (carryTwo && plant > 0 && plant <= LAY.letGo) || (leanR && plant > 0 && plant <= LEAN.letGo);
+    carryingTwo = (carryTwo && plant > 0 && plant <= LAY.letGo) || (leanR && plant > 0 && plant <= LEAN.letGo) || (between && plant > 0 && plant < BETWEEN.letGo);
     const gripped = held && (!(plant > 0 && (floorSit || leanR)) || carryingTwo);
     if (plant > 0 && floorSit) {
       carryDown(plantR, plant, held!, st.sit!);
@@ -3094,7 +3104,7 @@ export function buildWarrior(): Model {
       if (leanR) overFloor(plantR, held!);
     }
     // (sat, the weapon where it stands, taken from the fist; carried there, where the fist has it)
-    if (plant > 0 && !floorSit && !leanR && !between) carriedGrip(plantR);
+    if (plant > 0 && !floorSit && !leanR) carriedGrip(plantR);
     if (plant > 0) plantGrip(plantR);
     if (stop > 0 && held && st.dead < 0) {
       const lifted = groundStop(stop, fall >= 1, settle < 0 ? stop : settle);
