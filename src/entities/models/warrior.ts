@@ -1808,8 +1808,9 @@ export function buildWarrior(): Model {
     // degrees in the frame he was up)
     const fresh = 1 - smooth(ramp(sat, 0, BETWEEN.lift * BETWEEN.letGo));
     _fq.slerp(_pq.copy(root.getWorldQuaternion(_pq)).multiply(p.handQ), fresh);
-    // (and rolled round it only once it hangs: rolled as it came off his shoulder, the hand turned 28 degrees in a frame)
-    const turns = (1 - onTop) * smooth(ramp(sat, BETWEEN.lift * BETWEEN.letGo, (BETWEEN.lift + 0.2) * BETWEEN.letGo));
+    // (rolled round it as it comes off his shoulder too, eased in: held to the one turn there, the elbow changed sides
+    // in a frame, 32 cm)
+    const turns = (1 - onTop) * smooth(ramp(sat, 0, BETWEEN.lift * BETWEEN.letGo));
     const roll = turns > 0 ? { axis: direction, range: Math.PI * turns, at: p.at } : undefined;
     // (the elbow swung round, not thrown: it changed sides in a frame getting up, 62 cm)
     solveArm(j, false, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, roll, glide: roll ? 0.3 : undefined, maxMove: PLANT_ELBOW });
