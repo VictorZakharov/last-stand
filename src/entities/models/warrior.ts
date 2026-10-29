@@ -1873,8 +1873,8 @@ export function buildWarrior(): Model {
       const vis = gripTurn(hand, grip, _pq);
       // (the elbow swung round, not thrown: the hand stopped at its wrist's ends, a change of side turned the axe 20 cm
       // in a frame as he got up)
-      solveArm(j, p.left, { wrist, hand: _fq.multiply(vis), vis, pole, body, flexion: GRIPPED_FLEXION, maxMove: PLANT_ELBOW });
-    } else solveArm(j, p.left, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION });
+      solveArm(j, p.left, { wrist, hand: _fq.multiply(vis), vis, pole, body, flexion: GRIPPED_FLEXION, maxMove: PLANT_ELBOW, remember: false });
+    } else solveArm(j, p.left, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, remember: false });
     // (how far its point is in, which the lab's measure of what goes under the floor allows)
     weapon.group.userData.stuckIn = p.carried ? sink * p.pivot : sink;
     p.on = weapon;
