@@ -205,6 +205,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   const side = (lab.player.pos.x - spot.x) ** 2 + (lab.player.pos.z - spot.z) ** 2;
   if (side > 0.05 ** 2) out.problems.push(`sit: on the ${c.name} he sat ${Math.sqrt(side).toFixed(2)} m off its spot`);
   out.moments.push(lab.picture(`${c.name}: sat`, c.views));
+  if (seat.ground) out.moments.push(fromBeyond(lab, c.name));
   const under = deepestUnder(lab);
   if (under.depth > UNDER_MOST) {
     out.problems.push(`sit: on the ${c.name}, his ${under.name} ${(under.depth * 100).toFixed(0)} cm under the floor`);
@@ -216,6 +217,28 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   const reads = await readSat(lab, options, c.name, out);
   judgeSat(c, label, reads, seat, out);
   for (const ask of c.asks) await askOf(lab, c, ask, out);
+}
+
+/** what of a fire hides him from ahead, hidden for `fromBeyond` */
+const FIRE_PARTS = ['flames', 'bonfire logs', 'bonfire stones'];
+/** where `fromBeyond` frames him: his knees' height over his hips' place, from this far ahead (m) */
+const BEYOND = { up: 0.15, distance: 2.6 };
+
+/** Him sat by a fire pictured from ahead, the fire hidden: the player's camera sees him so from across it, and the
+ *  lab's view ahead through it saw nothing of his legs. */
+function fromBeyond(lab: Lab, name: string): Pictured {
+  const hidden: THREE.Object3D[] = [];
+  G.arena.groupOf(G.arena.biome).traverse((object) => {
+    if (FIRE_PARTS.includes(object.name) && object.visible) hidden.push(object);
+  });
+  for (const each of hidden) each.visible = false;
+  const at = lab.joints.hips.getWorldPosition(new THREE.Vector3());
+  at.y += BEYOND.up;
+  try {
+    return lab.picture(`${name}: sat, from ahead (the fire hidden)`, ['front'], [], { at, distance: BEYOND.distance });
+  } finally {
+    for (const each of hidden) each.visible = true;
+  }
 }
 
 const _box = new THREE.Box3();
@@ -366,7 +389,8 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): P
   skirts.forEach((skirt, i) => {
     const { most, at } = spans[i].widest();
     out.text.push(`    his ${skirt.name}: a point wandered ${cmOf(most)} cm at most (point ${at})`);
-    if (most > WANDER_MOST) out.problems.push(`sit: on the ${name} his ${skirt.name} wandered ${cmOf(most)} cm`);
+    // (a hood turns with his glance, lagging it: its wander is its own)
+    if (skirt.geometry.name !== 'hood' && most > WANDER_MOST) out.problems.push(`sit: on the ${name} his ${skirt.name} wandered ${cmOf(most)} cm`);
   });
   for (const skirt of skirts) {
     if (!skirt.frames) continue;
