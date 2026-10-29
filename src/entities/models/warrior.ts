@@ -1465,9 +1465,10 @@ export function buildWarrior(): Model {
   const PLANT = tunable('warriorPlant', {
     at: [-0.27, 0.46], blade: 0.42, haft: 0.3, deep: [0.12, 0.6], pole: [-0.4, -1, -0.3], palm: [0.015, 0.06], rest: 0.05,
   });
-  /** how each weapon stands: point down, stuck into the floor; on its head; head up, on its haft's butt */
+  /** how each weapon stands: point down, stuck into the floor; on its head; head up, on its haft's butt (a maul and
+   *  a greataxe head up, easy to grab) */
   const STANDS: Record<string, 'point' | 'head' | 'butt'> = {
-    Sword: 'point', Axe: 'head', Mace: 'head', Greatsword: 'point', Maul: 'head', Greataxe: 'butt',
+    Sword: 'point', Axe: 'head', Mace: 'head', Greatsword: 'point', Maul: 'butt', Greataxe: 'butt',
   };
   /** the most the arm bends at the elbow setting it down (rad) */
   const PLANT_BEND = 2.45;
