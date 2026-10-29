@@ -42,6 +42,7 @@ screen's edges, and the choice after a wave within a short screen's top 30%) wit
 - `hall`: the hero in focus in the hall of heroes showing off his skill and standing after it (each hand, elbow and the weapon's tip frame by frame in his own frame: a move a frame changing by over 12 cm a jerk, 40 as the weapon flies, the tip's by its speed; `--gear`/`--weapon` the weapon in his hand there), then the hall left mid-showcase and any sound it leaves playing; `--glow` the light round the weapon's tip frame by frame (the staff's crystal: near white, its median and brightest frames, its flashes, pictured at its brightest)
 - `glance`: the hero's casual look round as he stands idle (the head's turn from the chest and the eyes' in their sockets, frame by frame: in the countdown, the lobby and the hall after his showcase; none walking, attacking or through the eyes; within a neck's range, its speed, a jerk, the eyes leading, never a loop; a strip of the first glance)
 - `poses`: the hero's pose a move at a time as a digest to the last bit (every object's world matrix, every moving point of cloth: standing, walking, strafing attacking, stopped), and his `animate` timed each frame: a change made to cost less keeps the pose when an A/B's digests agree
+- `sit`: an idle hero's sit on a log, a stone or the floor by a fire (walked to and sat on his side of it, his hips on its top, his feet hanging on a high seat and down and still on a low one, every joint within its range, nothing under the floor, glancing; asked to act, a tap and a key held: up first each time, a tap left undone, a held key done once he's up)
 - `coat`: the hero's skirts and hood as he stands at idle (every point of the cloth in its own space frame by frame: a move a frame changing by over 1 cm a jerk, with the hand nearest)
 - `haze`: the hero's held weapons' light through the eyes (each way he looks: their surface blown out near white, their bloom past it, and the frame round them darkened by the adaptation to them)
 - `spawns`: the foes coming in (boss waves one after another, a seed each: the gate every foe came by, its spot against the props, the gates each group and wave left idle, when the boss came against the rest of its wave, and its walk to the hero from each gate)
@@ -105,7 +106,7 @@ Each command in full (what it measures and what it was measured against, its opt
 the options every command takes) is in [`COMMANDS.md`](COMMANDS.md), out of this file, which every session working on
 the lab loads whole, as it neared 120k characters. Read a command's entry there before running it for a measure or
 changing it; a new command gets its line in Commands at a glance above and its entry there. The largest entries are
-notes of their own in [`commands/`](commands) (`eyes`, `ui`, `gait`, `held`, `coop`, `swing`, `rush`, `check`), a line in
+notes of their own in [`commands/`](commands) (`eyes`, `ui`, `gait`, `held`, `coop`, `swing`, `rush`, `check`, `range`), a line in
 `COMMANDS.md` pointing to each, as `COMMANDS.md` neared 120k in turn: an entry that grows past some 4k characters
 moves there too.
 

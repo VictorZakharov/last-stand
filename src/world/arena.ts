@@ -16,6 +16,7 @@ import { restoreProps, state as propState } from './destructible';
 import { emit } from '../events';
 import { G } from '../state';
 import { stumpPreloaded } from './stump';
+import type { Seat } from './seats';
 
 export { groundHeight };
 export type { Portal } from './props';
@@ -125,6 +126,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     /** whether the hall of heroes is shown in the biomes' place (its stage has no props; `obstacles` stay the biome's) */
     get hallShown() { return hallShown; },
     get obstacles() { return active.obstacles; },
+    /** what an idle hero sits on (none while the hall is shown) */
+    get seats(): readonly Seat[] { return hallShown ? [] : active.seats ?? []; },
     /** the breakable ones (`world/destructible.ts`) */
     get props() { return active.props; },
     /** every biome's props whole again (a new run, the lobby) */

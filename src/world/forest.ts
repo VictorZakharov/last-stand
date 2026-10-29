@@ -25,6 +25,7 @@ import type { Obstacle } from '../types';
 import { Wall } from './wall';
 import { buildStumpGeos } from './stump';
 import { runPhase } from './runPhase';
+import { fireSeat, lengthSeat, stoneSeat, type Seat } from './seats';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
 /** daylight haze: the fog, and the sky at the horizon */
@@ -123,6 +124,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   const rng = mulberry(4242);
   const r = (a: number, b: number) => a + rng() * (b - a);
   const obstacles: Obstacle[] = [];
+  const seats: Seat[] = [];
   const breakable = new PropSet(obstacles);
   const updaters: Updater[] = [];
   const wall = new Wall('forest');
@@ -352,6 +354,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     buildBonfire(g, x, z, stone, bonfireBark, updaters);
     obstacles.push({ x, z, r: 0.9, h: 1 });
     breakable.add(obstacles.length - 1, 12, 0x5a4a38, groupLook(g, updaters, u0), 'ember');
+    seats.push(fireSeat(obstacles[obstacles.length - 1]));
   }
 
   // --- Floor obstacles: stumps, fallen logs, boulders -------------------------------
@@ -400,6 +403,8 @@ export const buildForest: BiomeBuilder = (scene) => {
     // collision: circles along the log
     for (const u of [-1.6, 0, 1.6]) obstacles.push({ x: x + Math.cos(yaw) * u, z: z - Math.sin(yaw) * u, r: 0.55, h: 0.9 });
     breakable.add(n0, 10, 0x4a3520, meshLook(...parts), 'wood');
+    // (sat on along its middle, a little past its top on the side sat on: the fungus and the ends left out)
+    seats.push(lengthSeat(x, z, yaw, 1.4, 0.22, obstacles.slice(n0), parts.slice(0, 3)));
   }
 
   const boulderSpots = [[24, 0.75, 1.1], [16, 2.75, 0.8], [23, 3.6, 1.2], [13, 5.2, 0.7], [24, 5.2, 1.0], [8, 3.9, 0.6], [17, 1.55, 0.7]];
@@ -410,6 +415,8 @@ export const buildForest: BiomeBuilder = (scene) => {
     setInstance(boulders, i, x, s * 0.25, z, r(-0.3, 0.3), r(0, TAU), r(-0.3, 0.3), s, s * 0.8, s);
     obstacles.push({ x, z, r: s * 0.95, h: s * 1.05 });
     breakable.add(obstacles.length - 1, 6 + s * 4, 0x6a7060, instanceLook(boulders, i));
+    // (a stone of a seat's height, sat on at its rim: a smaller one is a step, a bigger one a ledge)
+    if (s >= 0.6 && s <= 0.8) seats.push(stoneSeat(obstacles[obstacles.length - 1], s * 0.7, [boulders]));
   });
   boulders.castShadow = boulders.receiveShadow = true;
   boulders.name = 'boulders';
@@ -591,6 +598,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   });
 
   return {
+    seats,
     relief: tubesRelief(rootTops, WALL_R + 3),
     look: {
       // daylight: its ordinary scenes are about 2.3 times as bright as the night crypt's
