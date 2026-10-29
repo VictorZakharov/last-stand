@@ -1510,7 +1510,7 @@ export function buildWarrior(): Model {
    *  89 degrees past its turn; its fingers ahead on the pommel, the wrist bent 34 degrees past its range.) From play: "keep it stood", with a natural regrip. Stood point down at his side in one fist, the fist had
    *  to turn 120 degrees from how it held it standing, past a wrist's turn: his arm shot straight out ahead and the
    *  blade swept 0.5 to 2 m in a frame. */
-  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, held: [0.6, 0.1, 0.15], swing: [0.1, 0.7], pace: 1.8 });
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, held: [0.6, 0.1, 0.15], swing: [0, 1], pace: 1.8 });
   const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95 });
   const _plantHand = new THREE.Vector3(), _plantBox = new THREE.Box3(), _plantM = new THREE.Matrix4();
   /** a hand's weapon stood on its end: its grip's place there (world, `q`, `at`), the way from the hand to its
@@ -3213,7 +3213,9 @@ export function buildWarrior(): Model {
     // keep it within, so the clamp has nothing left to do once the view's fade back from it is over)
     const posed = viewHold < 1 || eyesR.fading > 0;
     if (fp && st.dead < 0 && held && (!two || posed)) wristInGrip(false, gripTurn(handR, grip, _vr, slantR));
-    if (held) seat(handR, grip, held.r, slantR);
+    // (carried to where it's set down, where the fist held it from his shoulder: seated afresh round the handle as it
+    // swung through the fist, it shifted 34 cm in a frame)
+    if (held && !(carryingTwo && carriedBetween)) seat(handR, grip, held.r, slantR);
     // (and slid down through it as far as the hand has slid up its haft, leaning it on a seat)
     if (carryingTwo && plantR.slide > 0) grip.position.addScaledVector(_s1.set(0, -plantR.slide, 0).applyQuaternion(grip.quaternion), grip.scale.y);
     // The fitted arm may fall short of the target: carry the seated grip with it until release.
