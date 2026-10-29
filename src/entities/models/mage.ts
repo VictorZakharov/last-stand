@@ -945,6 +945,8 @@ export function buildMage(): Model {
   const ringA = part(new THREE.TorusGeometry(0.14, 0.004, 4, 32), glow, tip);
   const ringB = part(new THREE.TorusGeometry(0.11, 0.004, 4, 32), glow, tip);
   ringA.castShadow = ringB.castShadow = false;
+  // These turn continuously even when the staff is still; the lab compares their mount after a sit.
+  crystal.userData.sitAnimated = ringA.userData.sitAnimated = ringB.userData.sitAnimated = true;
 
   // offhand focus point (left palm)
   const palm = joint(j.handL, 0, -0.08, 0.03);
@@ -1052,7 +1054,8 @@ export function buildMage(): Model {
     }
     // (aimed straight along the shot: angled out to keep its haft out of the cape the heroes wore, it went 9 cm
     // through his own sleeve)
-    staff.rotation.x = STAFF_PITCH + 1.75 * aim;
+    // A floor sit turns the staff in all three axes; restore the standing grip before posing it again.
+    staff.rotation.set(STAFF_PITCH + 1.75 * aim, 0, 0);
     // (the haft sits in the fist, the hand on its wrist)
     seat(handR, staff, STAFF_R);
     if (a) {

@@ -3,6 +3,10 @@
 The unobstructed front close-up hides the brazier's whole assembly, including its stepped plinth: hiding the flames
 alone left the mage's lower body behind the step. The ordinary views still show the scene as played.
 
+The mage's crystal and rings turn continuously: the held-again check compares their mount and scale, while the
+frame-by-frame motion check still follows the meshes as drawn. Comparing their spin at two times reported a 140°
+change even when the grip had returned.
+
 One command of the lab in full, moved here from [`COMMANDS.md`](../COMMANDS.md) (which lists every command, and the
 options every command takes) for its size.
 

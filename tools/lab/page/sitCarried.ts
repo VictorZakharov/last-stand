@@ -162,11 +162,17 @@ export function heldNow(lab: Lab): HeldNow {
   const now: HeldNow = new Map();
   for (const part of parts) {
     if (!held.has(part.group) || !shown(part.mesh)) continue;
+    // A staff's crystal and rings turn continuously on their mount. Compare the mount and their scale, not the
+    // time-dependent spin and bob; their actual movement is still followed frame by frame by Carried.observe.
+    const animated = part.mesh.userData.sitAnimated && part.mesh.parent;
     const onJoint = part.corners.map((corner) => {
-      return part.joint.worldToLocal(part.mesh.localToWorld(corner.clone())).multiplyScalar(k);
+      const point = corner.clone();
+      if (animated) animated.localToWorld(point.multiply(part.mesh.scale));
+      else part.mesh.localToWorld(point);
+      return part.joint.worldToLocal(point).multiplyScalar(k);
     });
     const quaternion = part.joint.getWorldQuaternion(new THREE.Quaternion()).invert()
-      .multiply(part.mesh.getWorldQuaternion(new THREE.Quaternion()));
+      .multiply((animated || part.mesh).getWorldQuaternion(new THREE.Quaternion()));
     const meshes = now.get(part.name) ?? [];
     meshes.push({ onJoint, quaternion });
     now.set(part.name, meshes);
