@@ -12,7 +12,7 @@ import { faceAt, pastWall } from './edge';
 import { WALL_R } from './props';
 import { entersHull, hullOf } from './hull';
 import { entersOutline, outlineOf, pushOff, type Outline } from './outline';
-import type { BiomeId } from '../data/biomes';
+import type { PlaceId } from '../data/biomes';
 
 /** the ring's slices (a quarter of a degree, 12 cm apart at the wall: at half a degree, the hero stood 8 cm into a
  *  buttress's corner) */
@@ -123,7 +123,7 @@ export class Wall {
   private least = Infinity;
   private casts = 0;
 
-  constructor(private readonly biome: BiomeId) {}
+  constructor(private readonly biome: PlaceId) {}
 
   /** `geometry` placed by `matrix` (in the arena's frame) as a part of the wall (met by `hull`'s planes if given). */
   addGeometry(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4, stone: boolean, use: WallUse = 'wall',

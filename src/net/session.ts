@@ -14,7 +14,7 @@ import { openLink, ServerDown, SERVER_DOWN, type Link } from './transport';
 import { netLog, serverPings } from './netlog';
 import { mine, freshNumbers, type RunNumbers } from '../game/stats';
 import { role } from './role';
-import { showBiomeSetting } from '../game/biome';
+import { ownOffset, setHostOffset } from '../game/clock';
 import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGuestHits, takeHits, type HitReport, type WorldMessage } from './sync';
 import { Playout, Smoother, Timeline, Track, type Pose } from './timeline';
 import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGround, type GroundDrop } from '../game/groundItems';
@@ -22,7 +22,7 @@ import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGroun
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 19;
+const PROTOCOL = 20;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** room codes: no look-alike letters or digits */
@@ -163,8 +163,8 @@ export function leaveRoom(): void {
   actions = [];
   G.player.slot = 0;
   placeSpawns();
-  // back to our own battleground
-  if (G.mode === 'menu') showBiomeSetting();
+  // (the village lit by our own clock again)
+  setHostOffset(null);
   // an invite link in the address bar would join again on reload
   if (invitedRoom()) history.replaceState(null, '', location.pathname);
   hooks?.changed();
@@ -227,7 +227,7 @@ function onHello(from: string, m: Record<string, unknown>): void {
     while (used.has(slot)) slot++;
     if (slot >= COOP.maxPlayers) { send('ctl', { t: 'refuse', why: 'full' }, from); return; }
     addPeer(from, slot, look);
-    send('ctl', { t: 'welcome', slot, biome: G.arena.biome, wave: session.wave, inRun: G.mode === 'run' }, from);
+    send('ctl', { t: 'welcome', slot, biome: G.arena.biome, wave: session.wave, inRun: G.mode === 'run', tz: ownOffset() }, from);
     send('ctl', { t: 'gall', list: groundDrops() }, from);
     send('hello', hello(), from);
     hooks.changed();
@@ -253,6 +253,8 @@ function onControl(from: string, m: Record<string, unknown>): void {
       session.biome = m.biome as BiomeId;
       session.wave = m.wave as number;
       if (G.mode === 'menu' && BIOME_IDS.includes(session.biome)) G.arena.setBiome(session.biome);
+      // (the village lit by the host's clock: the party stands in the same light)
+      if (typeof m.tz === 'number') setHostOffset(m.tz);
       placeSpawns();
       // step over to our side of the spawn
       if (G.mode === 'menu') G.player.place(G.player.spawn, G.player.facing);
@@ -267,6 +269,7 @@ function onControl(from: string, m: Record<string, unknown>): void {
       session.biome = m.biome as BiomeId;
       session.wave = m.wave as number;
       if (G.mode === 'menu') G.arena.setBiome(session.biome);
+      if (typeof m.tz === 'number') setHostOffset(m.tz);
       hooks.changed();
     } else if (m.t === 'start' && G.mode === 'menu') {
       const host = session.peers.get(from);
@@ -467,7 +470,7 @@ export function sendLook(): void { send('look', myLook()); }
 /** The host's lobby choices (battleground, starting wave), shown to the guests. */
 export function sendLobby(biome: BiomeId, wave: number): void {
   session.wave = wave;
-  if (role.current === 'host') send('ctl', { t: 'lobby', biome, wave });
+  if (role.current === 'host') send('ctl', { t: 'lobby', biome, wave, tz: ownOffset() });
 }
 
 /** The host starts a run: the guests in the lobby come along, its props shaped by the same `seed`. */

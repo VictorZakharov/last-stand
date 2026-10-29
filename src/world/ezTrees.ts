@@ -113,7 +113,18 @@ function footOf(bark: THREE.BufferGeometry, trunk: Rings): number {
   return radius;
 }
 
+/** each kind grown, by how it was asked for: the forest's and the village's trees grown once */
+const grown = new Map<string, TreeKind>();
+
+/** A kind grown (once for each way of growing it: the village shares the forest's). */
 export function growTree(g: Grow): TreeKind {
+  const key = JSON.stringify(g);
+  let kind = grown.get(key);
+  if (!kind) grown.set(key, kind = growAfresh(g));
+  return kind;
+}
+
+function growAfresh(g: Grow): TreeKind {
   const json = structuredClone(TreePreset[g.preset]) as unknown as {
     seed: number;
     branch: { levels: number; sections: Record<string, number>; segments: Record<string, number> };

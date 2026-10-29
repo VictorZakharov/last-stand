@@ -47,9 +47,28 @@ const screenOf = (): HTMLElement | null => document.getElementById('heroes');
 /** whether `element` is laid out and visible (the screen is fixed: it has no `offsetParent`) */
 const shown = (element: Element | null): boolean => !!element?.checkVisibility({ visibilityProperty: true });
 
+/** the most presses of Esc a player makes for the pause menu: one putting away the village's panels, one pausing */
+const ESC_PRESSES = 2;
+
+/**
+ * The lobby's Change hero where a player finds it: in the village, the pause menu's, opened by Esc (the first press
+ * putting away what an object opened, if anything); before it, the lobby's own link, shown as it is. Null in a tree
+ * without one.
+ */
+export async function changeHeroLink(lab: Lab): Promise<HTMLElement | null> {
+  const button = document.getElementById('btn-hero');
+  for (let press = 0; button && !shown(button) && press < ESC_PRESSES; press++) {
+    await lab.step(1, () => ({ keys: ['escape'] }));
+    // (the game hears a press on the frame it begins: the next frame lets it go)
+    await lab.step(1);
+  }
+  if (button && !shown(button)) throw new Error('lab: ui: Esc showed no Change hero');
+  return button;
+}
+
 /** Change hero clicked with the mouse, and the camera's flight and the hero's showcase played out. */
 export async function openHeroes(lab: Lab): Promise<void> {
-  const button = document.getElementById('btn-hero');
+  const button = await changeHeroLink(lab);
   opened = { before: G.player.cls.id, screen: !!button && !!screenOf() };
   if (!button) return;
   await lab.clickOn(button);
