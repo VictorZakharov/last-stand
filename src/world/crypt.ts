@@ -22,6 +22,7 @@ import type { Obstacle } from '../types';
 import { Wall } from './wall';
 import { valueNoise3 } from '../core/patterns';
 import { growTree, type Grow, type TreeKind } from './ezTrees';
+import { restartsAt, runPhase } from './runPhase';
 
 /** where the wall's parts are made: in the arena's frame */
 const IDENTITY = new THREE.Matrix4();
@@ -63,7 +64,7 @@ const MOON_DIR = new THREE.Vector3(-0.74, 0.3, 0.6).normalize();
  * Beyond the wall, the ground, tombs and trees darken in the top-down view (`outside` eases to 1),
  * so the eye stays on the arena; the close views look out at the full skyline.
  */
-const outside = { value: 0 };
+const outside = restartsAt({ value: 0 }, { value: 1 });
 function dimOutside(shader: THREE.WebGLProgramParametersWithUniforms): void {
   shader.uniforms.uOutside = outside;
   shader.vertexShader = shader.vertexShader
@@ -275,9 +276,11 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const rune = new THREE.Mesh(new THREE.PlaneGeometry(8, 8).rotateX(-Math.PI / 2), runeMat);
   rune.position.y = ARENA.daisHeight + 0.02;
   scene.add(rune);
-  let calm = 0, calmTarget = 0;
+  const eased = runPhase({ calm: 0 });
+  let calmTarget = 0;
   updaters.push((dt: number, t: number) => {
-    calm += (calmTarget - calm) * Math.min(1, dt * 2);
+    eased.calm += (calmTarget - eased.calm) * Math.min(1, dt * 2);
+    const calm = eased.calm;
     const pulse = 0.55 + Math.sin(t * 1.6) * 0.15;
     // calm (lobby / between waves) brightens the circle slightly; keep the peak modest for bloom
     runeMat.color.setRGB(0.25, 0.8, 1.0).multiplyScalar(pulse * (0.6 + calm * 0.9));
@@ -536,12 +539,12 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   scatterClutter(scene, rng, darkStone, boneMat, iron);
 
   // --- Ambient motes & ground mist -------------------------------------------------
-  let moteT = 0;
+  const due = runPhase({ motes: 0 });
   updaters.push((dt: number) => {
     outside.value = damp(outside.value, viewMode() === 'top' ? 1 : 0, 4, dt);
-    moteT += dt;
-    while (moteT > 0.05) {
-      moteT -= 0.05;
+    due.motes += dt;
+    while (due.motes > 0.05) {
+      due.motes -= 0.05;
       const a = Math.random() * TAU, r = Math.sqrt(Math.random()) * 30;
       particles.glow.spawn({
         x: Math.cos(a) * r, y: rand(0.3, 4), z: Math.sin(a) * r,
@@ -1064,7 +1067,7 @@ function buildBeacon(scene: THREE.Object3D, x: number, z: number, stone: THREE.M
   const light = new THREE.PointLight(0x5aa8ff, 6, 12, 2);
   light.position.set(x, 2.0, z);
   scene.add(light);
-  let acc = 0;
+  const due = runPhase({ acc: 0 });
   updaters.push((dt, t) => {
     const f = Math.sin(t * 7 + x) * 0.5 + Math.sin(t * 13 + z) * 0.5;
     light.intensity = 6 + f * 0.9;
@@ -1072,9 +1075,9 @@ function buildBeacon(scene: THREE.Object3D, x: number, z: number, stone: THREE.M
     rings[0].rotation.set(0.35 + Math.sin(t * 0.7 + x) * 0.1, t * 0.8, 0.2);
     rings[1].rotation.set(-0.5, -t * 1.3, Math.sin(t * 0.9 + z) * 0.15);
     rings[0].position.y = 1.5 + Math.sin(t * 1.4 + x) * 0.05;
-    acc += dt;
-    while (acc > 0.03) {
-      acc -= 0.03;
+    due.acc += dt;
+    while (due.acc > 0.03) {
+      due.acc -= 0.03;
       particles.glow.spawn({
         x: x + rand(-0.12, 0.12), y: 1.5, z: z + rand(-0.12, 0.12), vx: rand(-0.1, 0.1), vy: rand(0.9, 1.7), vz: rand(-0.1, 0.1),
         life: rand(0.4, 0.8), size: rand(0.16, 0.26), sizeEnd: 0.02, color: col(0x6ab8ff, 1.2), colorEnd: col(0x2030ff, 0.5), drag: 1,
@@ -1191,16 +1194,16 @@ function buildCandles(scene: THREE.Object3D, spots: [number, number, number][], 
   }
   sticks.castShadow = true;
   scene.add(sticks, flames);
-  let acc = 0;
+  const due = runPhase({ acc: 0 });
   updaters.push((dt, t) => {
     for (let k = 0; k < tips.length; k++) {
       const [x, y, z, ph] = tips[k], f = Math.sin(t * 9 + ph) * 0.5 + Math.sin(t * 17 + ph * 2) * 0.5;
       setInstance(flames, k, x + f * 0.006, y - 0.005, z, f * 0.12, 0, 0, 0.022, 0.022 * (1 + f * 0.15), 0.022);
     }
     flames.instanceMatrix.needsUpdate = true;
-    acc += dt;
-    while (acc > 0.15) {
-      acc -= 0.15;
+    due.acc += dt;
+    while (due.acc > 0.15) {
+      due.acc -= 0.15;
       const [x, y, z] = tips[Math.floor(Math.random() * tips.length)];
       particles.glow.spawn({
         x, y: y + 0.04, z, vx: rand(-0.05, 0.05), vy: rand(0.3, 0.6), vz: rand(-0.05, 0.05),

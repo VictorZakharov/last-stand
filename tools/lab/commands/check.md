@@ -35,12 +35,14 @@ folder beside it.
   and boots only for another side, hero or kind; the other side's tasks are handed out first. A boot is 8 s alone,
   25 to 30 s with eight at once, and a boot a job was most of a check. A page is kept only for the commands shown to
   come out the same on it as on a page booted for each job (`keepsPage` and `pageKind` in `node/commands.mjs`): most
-  share pages whatever ran on them before (`'shared'`), `hits` only its own jobs' (`'own'`), and `form`, `log`,
-  `cast` and the two-hander's eyes jobs boot each (`log` lists the game's clock, `form`'s runner differed, a cast's
-  frames part from about 0.6 s on a kept page as the foes come: the biomes' emitters, the gates' motes and the
-  braziers', keep their phase from frame to frame, so on a kept page they spawn on other frames, and the random
-  numbers the foes draw after them in the frame are others; set afresh, the game's particles would differ from
-  main's in every command). Each set-up in a check builds
+  share pages whatever ran on them before (`'shared'`), `hits` and `cast` only their own jobs' (`'own'`), and
+  `form`, `log` and the two-hander's eyes jobs boot each (`log` lists the game's clock, `form`'s runner differed).
+  A cast's frames parted from about 0.6 s on a kept page as the foes came: what the biomes carry from frame to frame
+  (what's due of an emitter's next spawn, the gates' pulse, the rune's ease to the run's calm, the crypt's darkening
+  outside the wall as the view changes) is started again at each set-up (`src/world/runPhase.ts`, `restartEmitters`
+  in `page/lab.ts`), the particles cleared: kept, the emitters spawned on other frames, and the random numbers the
+  foes drew after them in the frame were others; and a crowd whose last foe has gone is hidden at once (left to the
+  next frame drawn, the last biome's crowds stood shown through the frames run undrawn). Each set-up in a check builds
   the hero afresh, in a run of its own (`afresh`, `page/lab.ts`: `Fixture.fresh` for every set-up, the view taken
   from the top down, the boot's cookies and storage put back as each command begins; a page's later set-ups leave
   the run by the pause menu, read the profile again and start a new one at the game's time the page's first run
@@ -79,7 +81,13 @@ hero's jobs, each side's, in its line of the log and at the head of its report w
 
 ## What it takes
 
-On the owner's desktop (12 cores, RTX 4070 Ti), 8 sessions, 2026-10-29: all 199 jobs on this tree alone (a warm
+On the owner's desktop (12 cores, RTX 4070 Ti), 8 sessions, 2026-10-29, latest: all 199 jobs on this tree alone in
+235 s, its sessions' time 1,822 s, of which 349 s are 28 boots. A check's sessions keep their browser profiles from
+check to check (`tools/lab/out/profiles`, `browserOptions` in `node/session.mjs`): on fresh ones, the eight first
+boots at once made every map again and started on an empty GPU program cache, 45 to 55 s each, against about 27 s
+now; and the casts keep their pages (8 boots, not 27).
+
+Before that, on the same desktop: all 199 jobs on this tree alone (a warm
 `check --ab`, main's side read back) in 334 s, its sessions' time 2,540 s, of which 854 s are 46 boots: the casts
 boot for every job (27 of them, 352 s), and `form`, `log` and `hits` once each. The sessions end within 20 s of each
 other, so a check is now as long as its work over eight: each job takes about three times as long with eight

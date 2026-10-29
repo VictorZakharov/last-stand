@@ -12,6 +12,7 @@ import type { Obstacle } from '../types';
 import type { Prop } from './destructible';
 import type { Relief } from './ground';
 import type { Wall } from './wall';
+import { runPhase } from './runPhase';
 
 export type Updater = (dt: number, t: number) => void;
 /** Linear RGB, used as-is in shaders. */
@@ -466,15 +467,16 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
   // the membrane's centre in the world, and the direction along it
   const cx = Math.cos(angle) * (WALL_R + 0.7), cz = Math.sin(angle) * (WALL_R + 0.7), sx = -Math.sin(angle), sz = Math.cos(angle);
   const coreCol = new THREE.Color(...colors.core), edgeCol = new THREE.Color(...colors.b), mistCol = new THREE.Color(...colors.a);
-  let pulse = 0, acc = 0;
+  const due = runPhase({ pulse: 0, acc: 0 });
   updaters.push((dt, t) => {
-    pulse = Math.max(0, pulse - dt * 0.8);
+    due.pulse = Math.max(0, due.pulse - dt * 0.8);
+    const pulse = due.pulse;
     uniforms.uTime.value = t;
     uniforms.uPower.value = 0.35 + pulse * 1.3;
     glow.intensity = PORTAL_LIGHT.intensity * (1 + pulse * PORTAL_LIGHT.pulse);
-    acc += dt * (1 + pulse * 4);
-    while (acc > 0.07) {
-      acc -= 0.07;
+    due.acc += dt * (1 + pulse * 4);
+    while (due.acc > 0.07) {
+      due.acc -= 0.07;
       // motes drawn in from the rim towards the core
       const a = Math.random() * TAU, ex = Math.cos(a) * GATE_W * 0.48, ey = 2.2 + Math.sin(a) * 2.1;
       particles.glow.spawn({
@@ -491,7 +493,7 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
       }
     }
   });
-  return { mesh, portal: { pos, dir, pulse() { pulse = 1; } } };
+  return { mesh, portal: { pos, dir, pulse() { due.pulse = 1; } } };
 }
 
 /** Night sky dome: fog colour at the horizon (where the ground fades into it), a faint glow

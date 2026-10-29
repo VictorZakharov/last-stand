@@ -24,6 +24,7 @@ import { clearProjectiles } from '../../../src/combat/projectiles';
 import { clearEffects } from '../../../src/fx/effects';
 import { clearLights } from '../../../src/fx/lights';
 import { particles } from '../../../src/fx/particles';
+type RunPhaseModule = typeof import('../../../src/world/runPhase');
 import { buildHotbar } from '../../../src/ui/hud';
 import * as culling from '../../../src/world/culling';
 import { loadProfile } from '../../../src/loot/profile';
@@ -132,8 +133,9 @@ const KEY_EVENTS: Record<KeyType, string[]> = {
   keyDown: ['keydown'],
   keyUp: ['keyup'],
 };
-/** how long an input's event may take to reach the page, ms of the browser's own clock */
-const INPUT_WAIT_MS = 2000;
+/** how long an input's event may take to reach the page, ms of the browser's own clock (2 s failed a click now and
+ *  then as a check's eight sessions booted at once, the machine at full load) */
+const INPUT_WAIT_MS = 10000;
 
 /** An input's events as the page gets them: their names, which of them are this input's, and what it is (`touch`). */
 interface InputEvents {
@@ -194,6 +196,19 @@ const COMMAND_SEED = 0x1b873593;
 const SETUP_TIME = 60;
 /** the frames a set-up stands still once the hero is on his spot */
 const SETTLE_FRAMES = 90;
+
+/** the game's emitters' phases (src/world/runPhase.ts), where the tree has them: an A/B's older commit has none */
+const RUN_PHASES = Object.values(import.meta.glob<RunPhaseModule>('../../../src/world/runPhase.ts', { eager: true }));
+
+/**
+ * The biomes' emitters started again at a set-up, their particles cleared: kept from the commands before, they
+ * spawned on other frames, and the random numbers the foes drew after them in each frame were others (a cast on a page
+ * a check kept walked its foes a fraction of a millimetre elsewhere from their first step).
+ */
+function restartEmitters(): void {
+  particles.clear();
+  for (const phases of RUN_PHASES) phases.restartPhases();
+}
 /** the most presses of V a view takes (it cycles top-down, over the shoulder, through the eyes) */
 const VIEW_PRESSES = 3;
 
@@ -599,6 +614,7 @@ export class Lab {
     const later = Math.max(SETUP_TIME, Math.ceil(G.time / SETUP_TIME) * SETUP_TIME);
     G.time = fixture.fresh ? SETUP_TIME : later;
     window.__labSeed(SETUP_SEED);
+    restartEmitters();
     // (standing a moment: what was still moving as the run started, the camera gliding in and the hero settling on
     // his spot, comes to rest, so it reaches the measure the same however many frames the start took)
     await this.step(SETTLE_FRAMES);

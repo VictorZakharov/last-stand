@@ -19,7 +19,7 @@ import { probeFiles } from './probeFiles.mjs';
 import { profiled, scriptsIn, summarize } from './profile.mjs';
 import { layersDiffer, summarizeLayers } from './layers.mjs';
 import { placedTally, randomsDiffer, scriptsOfTally, summarizeRandoms, tallied } from './randoms.mjs';
-import { bootOf, bootText, LAB_BOOT, layered, Side } from './side.mjs';
+import { bootOf, bootText, CONTEXT_OPTIONS, LAB_BOOT, layered, Side } from './side.mjs';
 import { cacheShown, keep, readKept, sideKey } from './sideCache.mjs';
 
 /** the hero a session boots until a command names another */
@@ -48,6 +48,17 @@ function withInsets(screen, insets) {
   return { ...screen, insets: { left, top, right, bottom } };
 }
 
+/**
+ * How a session's browser is launched: a check's (`worker` 1 and on) on a profile kept for its place from check to
+ * check (tools/lab/out/profiles), so its pages find this tree's maps made and the GPU's programs cached on disk; on a
+ * fresh one, every first boot of eight sessions made them all again, 45 to 55 s each. The server's and a command's
+ * own (`worker` 0) start fresh: two commands run at once from one tree would want the same profile.
+ */
+function browserOptions(worker) {
+  if (worker < 1) return {};
+  return { profile: join(OUT, 'profiles', `check-${worker}`), contextOptions: CONTEXT_OPTIONS };
+}
+
 export class LabSession {
   /**
    * Opens a session: the browser launched, nothing served or booted until a command needs it. A check's sessions run
@@ -57,7 +68,7 @@ export class LabSession {
   static async open({ worker = 0, serving = null, keepPages = false } = {}) {
     mkdirSync(OUT, { recursive: true });
     useLocalTemp(OUT);
-    const session = new LabSession(await launchBrowser(), worker, serving);
+    const session = new LabSession(await launchBrowser(browserOptions(worker)), worker, serving);
     session.keepPages = keepPages;
     return session;
   }
@@ -303,7 +314,7 @@ export class LabSession {
    */
   async keepBrowser() {
     if (this.browser.isConnected()) return null;
-    this.browser = await launchBrowser();
+    this.browser = await launchBrowser(browserOptions(this.worker));
     for (const side of [this.repoSide, this.otherSide]) side?.useBrowser(this.browser);
     return 'the browser had closed: launched it again';
   }

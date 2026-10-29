@@ -386,10 +386,9 @@ function probePath(file) {
  *   ran on (`pageKind`), each of its set-ups in a check building the hero afresh from the boot's storage in a run of
  *   its own (`afresh`): one whose results were shown to be the same there as on a page booted for each job, with
  *   `lab check --reuse=false` and `--like`. True: a page any such command ran on; `'own'`: one its own jobs alone ran
- *   on (on a page kept from the gait's and the eyes' jobs, Twin Fangs' blows dealt 10 to 40 more). `form`, `log` and
- *   `cast` run on pages of their own: `log` lists the game's clock, `form`'s runner differed, and a cast's frames
- *   came out a little otherwise from about 0.6 s, as the foes came, even after its own jobs (with the run started
- *   afresh, the foes' ways and the view's frustum found again: not found yet).
+ *   on (on a page kept from the gait's and the eyes' jobs, Twin Fangs' blows dealt 10 to 40 more; a cast after
+ *   other casts, once the biomes' emitters started again at each set-up, src/world/runPhase.ts). `form` and `log` run
+ *   on pages of their own: `log` lists the game's clock, `form`'s runner differed.
  */
 export const COMMANDS = {
   sheet: {
@@ -627,6 +626,7 @@ export const COMMANDS = {
 
   cast: {
     countsCompiles: true,
+    keepsPage: 'own',
     check(options) {
       const wrong = options.times.find((time) => !(Number(time) >= 0));
       if (wrong !== undefined) throw labError(`cast --times: ${wrong} is not a number of seconds`);

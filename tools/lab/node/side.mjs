@@ -8,7 +8,7 @@
 import { createServer } from 'vite';
 import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { lowerProcesses, PAGE_SCRIPTS } from './browser.mjs';
+import { lowerProcesses, PAGE_SCRIPTS, takeKeptContext } from './browser.mjs';
 import { exportedTreePaths } from './commits.mjs';
 import { compileError, labError } from './errors.mjs';
 import { mapsCodeOf } from './mapsCode.mjs';
@@ -18,6 +18,8 @@ import { stampOf } from './sideCache.mjs';
 import { decodeMappings, sourceOf } from './sourceMaps.mjs';
 
 const VIEWPORT = { width: 1920, height: 1080 };
+/** the size every page of the lab's is given, in a context of its own or the browser's kept one */
+export const CONTEXT_OPTIONS = { viewport: VIEWPORT, deviceScaleFactor: 1 };
 const BOOT_TIMEOUT_MS = 180_000;
 /** how often a booting page is asked whether the loading screen is gone, ms */
 const BOOT_POLL_MS = 100;
@@ -512,7 +514,7 @@ export class Side {
   /** Opens a page on the game for `heroClass` (booted as `how` asks, as `boot` takes it) and waits out its loading
    *  screen. */
   async openPage(heroClass, how = LAB_BOOT) {
-    this.context ??= await this.newContext();
+    this.context ??= await this.newContext({ kept: this.isRepo });
     this.errors = [];
     this.stale = false;
     this.used = false;
@@ -542,9 +544,13 @@ export class Side {
     this.partnerContext = null;
   }
 
-  /** A browser context as every page of the lab's has it: its viewport and the scripts run before the page's own. */
-  async newContext() {
-    const context = await this.browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1 });
+  /**
+   * A browser context as every page of the lab's has it: its viewport and the scripts run before the page's own. With
+   * `kept`, the one the browser keeps on its profile where it has one (`takeKeptContext`): this tree's maps made once.
+   */
+  async newContext({ kept = false } = {}) {
+    const keptContext = kept ? takeKeptContext(this.browser) : null;
+    const context = keptContext ?? await this.browser.newContext(CONTEXT_OPTIONS);
     for (const script of PAGE_SCRIPTS) await context.addInitScript(script);
     return context;
   }
