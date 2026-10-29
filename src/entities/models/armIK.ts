@@ -7,7 +7,7 @@
 // the pole said: behind the back, up past the head, the wrist bent double round a handle.
 import * as THREE from 'three';
 import type { Joints } from './rig';
-import { GIRDLE, GRIPPED_FLEXION, ROM_ON, capsuleDepth, clampWrist, girdlePlace, shoulderExcess, type BodyShape } from './anatomy';
+import { GIRDLE, GRIPPED_FLEXION, ROM_ON, capsuleDepth, clampWrist, girdlePlace, shoulderExcess, type BodyShape, type Solid } from './anatomy';
 
 const N = 24, REFINE = 7, ROLLS = 5;
 
@@ -111,7 +111,13 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   const rest = g.shoulder ?? (sh.userData.rest as THREE.Vector3 | undefined) ?? sh.position;
   _S.copy(rest);
   const keep = g.keep ?? 8, prev = last.get(sh);
-  const solids = g.body?.solids.filter((s) => s.name === 'head' || s.name === 'chest' || s.name === 'belly' || s.name === 'neck');
+  // (sat on the floor, the thighs too: the knees up, the elbow hung beside the thigh and the forearm went up through
+  // it to the hand on the knee, 6 to 10 cm. Weighed as he goes down: in full as he started, the arm hanging by the
+  // thigh was pushed 4 cm into the belly)
+  const trunk = (s: Solid) => s.name === 'head' || s.name === 'chest' || s.name === 'belly' || s.name === 'neck';
+  const legs = g.body?.legs ?? 0;
+  const solids = g.body?.solids.filter((s) => trunk(s) || (legs > 0 && s.name.startsWith('thigh')));
+  const weights = solids?.map((s) => trunk(s) ? 1 : legs);
   // (each solid's frame, once for the whole search)
   const invs = solids?.map((s) => { s.at.updateWorldMatrix(true, false); return new THREE.Matrix4().copy(s.at.matrixWorld).invert(); }), head = solids ? solids.findIndex((s) => s.name === 'head') : -1;
   // (and a sphere round each, world: a limb clear of it needs no closer look)
@@ -182,7 +188,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
       _wa.copy(_S).applyMatrix4(par.matrixWorld); _wb.copy(_E).applyMatrix4(par.matrixWorld);
       let deep = near(_wa, _wb, j.P.upperR, head) ? Math.max(0, capsuleDepth(_wa, _wb, j.P.upperR, solids[head], invs![head])) : 0;
       _wa.copy(_W).applyMatrix4(par.matrixWorld);
-      for (let i = 0; i < solids.length; i++) if (near(_wb, _wa, j.P.foreR, i)) deep = Math.max(deep, capsuleDepth(_wb, _wa, j.P.foreR, solids[i], invs![i]));
+      for (let i = 0; i < solids.length; i++) if (near(_wb, _wa, j.P.foreR, i)) deep = Math.max(deep, weights![i] * capsuleDepth(_wb, _wa, j.P.foreR, solids[i], invs![i]));
       if (final) depthAt = deep;
       cost += 400 * Math.max(0, deep - 0.005);
     }

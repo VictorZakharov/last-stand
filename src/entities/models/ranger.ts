@@ -38,7 +38,7 @@ const SIT_HANDS: RestTurn = tunable('rangerSit', { roll: [0, 0], bend: [0, 0] })
  *  face sat. */
 /** sat on the floor, how far the quiver tips back off it (rad) */
 const QUIVER_TIP = 0.4;
-const BOW_SIT = tunable('rangerBowSit', { lap: [0.95, 0.07], floor: [0.75, -0.05, 0.03] });
+const BOW_SIT = tunable('rangerBowSit', { lap: [0.95, 0.07], floor: [0.75, -0.05, 0.03], layBy: 0.5 });
 
 /** the broadhead's middle, back from the arrow's point (m) */
 const HEAD_MIDDLE = 0.035;
@@ -880,6 +880,7 @@ export function buildRanger(): Model {
     quiver.rotation.x = -QUIVER_TIP * floorW;
     st.look?.(aim < 0.5 ? 1 : 0);
     restHands(j, st.sit, [0, 1], SIT_HANDS);
+    body.legs = floorW;
     if (st.dead >= 0) { deathFall(j, st.dead); legs.reset(); }
     else {
       if (!fp) legs.captureArms();
@@ -1021,7 +1022,9 @@ export function buildRanger(): Model {
       // bent 13 degrees past its range)
       root.updateMatrixWorld(true);
       fitArm(j, true, undefined, body);
-      laidBow(sitW);
+      // (on the floor by `layBy` of the way down: laid over the whole of it, the bow swung from his hand to the floor
+      // across his rising shin, 6 cm through it)
+      laidBow(Math.min(1, sitW / BOW_SIT.layBy));
     }
     // the arrows on the string (a fan side by side in the flat bow's window), and where the shot leaves (the nocked arrow's middle)
     const n = arrows;
