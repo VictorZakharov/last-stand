@@ -41,8 +41,9 @@ import {
 import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Model, Struck } from '../../types';
 
 /** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
- *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down */
-const SIT_HANDS: RestTurn = tunable('warriorSit', { roll: [3.14, 2.5], bend: [0, 0] });
+ *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
+ *  his shield-side forearm over the thigh. */
+const SIT_HANDS = tunable('warriorSit', { roll: [3.14, 2.5], bend: [0, 0], rise: 0.005 });
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0] };
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -2430,7 +2431,7 @@ export function buildWarrior(): Model {
     _sitTurn.roll[0] = offHeld && !sheathed && !floorSit ? SIT_HANDS.roll[0] : 0;
     _sitTurn.roll[1] = held && !floorSit ? SIT_HANDS.roll[1] : 0;
     st.look?.();
-    restHands(j, st.sit, [0, 1], _sitTurn);
+    restHands(j, st.sit, [0, 1], _sitTurn, SIT_HANDS.rise);
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
     else {
       // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet

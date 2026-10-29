@@ -38,7 +38,7 @@ const SIT_HANDS: RestTurn = tunable('rangerSit', { roll: [0, 0], bend: [0, 0] })
  *  face sat. */
 /** sat on the floor, how far the quiver tips back off it (rad) */
 const QUIVER_TIP = 0.4;
-const BOW_SIT = tunable('rangerBowSit', { lap: [0.55, 0.07], floor: [0.75, -0.05, 0.03] });
+const BOW_SIT = tunable('rangerBowSit', { lap: [0.95, 0.07], floor: [0.75, -0.05, 0.03] });
 
 /** the broadhead's middle, back from the arrow's point (m) */
 const HEAD_MIDDLE = 0.035;
