@@ -1634,12 +1634,23 @@ export function buildWarrior(): Model {
    *  `p.at`) on an arc out from his legs, as `layDown` lays one by a fire: its haft's end on the floor, its head up and
    *  leant back, its flats out to his sides (its edge ahead). */
   function leanDown(p: Planted, w: number, weapon: Weapon): void {
-    // (where it was let go of it stays: placed by him as he settled onto the seat, it went on 4 cm with no hand on it)
-    if (w >= 1 && p.leant) return;
-    p.leant = w >= 1;
     const { hand, grip } = p, side = p.left ? -1 : 1, box = boxOf(weapon, grip);
     root.updateMatrixWorld(true);
     const s = _s5.setFromMatrixScale(grip.matrixWorld).y, k = root.scale.x;
+    p.on = weapon;
+    // (let go of where the fist had it, its end set on the floor, and it stays there: placed where it was meant to
+    // lean, it went 4.5 cm as it was let go of, and placed afresh as he settled, on 15 cm with no hand on it)
+    if (w >= 1) {
+      if (p.leant) return;
+      const end = _s1.set(0, box.min.y * s, 0).applyQuaternion(p.q).add(p.at);
+      p.at.y += groundHeight(end.x, end.z) + 0.005 - end.y;
+      p.leant = true;
+      return;
+    }
+    // (taken again from where it lies: from the grip, still where the resting hand last had it, it turned 110 degrees
+    // in the frame the hand took it)
+    const from = p.leant;
+    p.leant = false;
     seat(hand, grip, weapon.r);
     root.updateMatrixWorld(true);
     const spot = root.localToWorld(_plantHand.set(side * LEAN.at[0], 0, LEAN.at[1]));
@@ -1648,7 +1659,8 @@ export function buildWarrior(): Model {
     const up = _s3.set(0, 1, 0).multiplyScalar(Math.cos(LEAN.lean)).addScaledVector(ahead, -Math.sin(LEAN.lean));
     // (turned about its haft as the fist holds it, only tipped to its lean: its flats turned out to his side as well,
     // it swung flat across his thighs on the way, 10 cm into the left)
-    grip.getWorldQuaternion(_pq);
+    if (from) _pq.copy(p.q);
+    else grip.getWorldQuaternion(_pq);
     p.q.setFromUnitVectors(_s2.set(0, 1, 0).applyQuaternion(_pq), up).multiply(_pq);
     const leant = _s1.copy(spot).addScaledVector(up, -box.min.y * s);
     leant.y += groundHeight(spot.x, spot.z) - spot.y + 0.005;
@@ -1656,13 +1668,13 @@ export function buildWarrior(): Model {
     const above = leant.y - groundHeight(spot.x, spot.z);
     const slide = THREE.MathUtils.clamp((LEAN.hold * k - above) / (up.y * s), 0, box.max.y - LEAN.head);
     p.slide = slide * e;
-    grip.getWorldPosition(p.at).lerp(leant, e);
+    if (!from) grip.getWorldPosition(p.at);
+    p.at.lerp(leant, e);
     // (on an arc out and up from his legs, as one is laid by a fire)
     const arc = Math.sin(Math.PI * e) * k;
     p.at.addScaledVector(out, LAY.arc[0] * arc);
     p.at.y += LAY.arc[1] * arc;
     p.q.copy(_pq.slerp(p.q, e));
-    p.on = weapon;
   }
   /** Carry the two-hander out beside the legs (by a fire), or a one-handed axe or mace to where it's leant on a seat
    *  (`leant`), then take the empty hand to the knee. The old interpolation from a hand already going to its knee
