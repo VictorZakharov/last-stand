@@ -1548,6 +1548,9 @@ export function buildWarrior(): Model {
   const PLANT_TURNS = 24, _rootQ = new THREE.Quaternion();
   /** the most a weapon arm's elbow moves a frame carrying it to where it stands (rig units) */
   const PLANT_ELBOW = 0.03;
+  /** how far a blade's fist may roll about its handle carrying it to stand (rad), and how much of the way to the best
+   *  roll it goes a frame (`ArmGoal.glide`) */
+  const PLANT_ROLL = Math.PI / 2, PLANT_GLIDE = 0.2;
   /** an arm's joints as fitted holding its weapon standing (shoulder, elbow, hand), to ease the plant in from */
   const _fittedArm = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
   /** The arm fitted holding its weapon kept (`keep`), or eased back to by `1 - by` once it's planted. (From the arm the
@@ -1838,7 +1841,7 @@ export function buildWarrior(): Model {
       turnWay(p, fromQ, _fq, even, drawn);
       p.pivot = even;
       p.standQ.copy(_standQ);
-    } else if (pivots) {
+    } else if (pivots && p.carried) {
       wrist.copy(_restAt);
       drawn.copy(_fq);
       p.at.copy(_standAt);
@@ -1890,7 +1893,15 @@ export function buildWarrior(): Model {
       // (the elbow swung round, not thrown: the hand stopped at its wrist's ends, a change of side turned the axe 20 cm
       // in a frame as he got up)
       solveArm(j, p.left, { wrist, hand: _fq.multiply(vis), vis, pole, body, flexion: GRIPPED_FLEXION, maxMove: PLANT_ELBOW, remember: false });
-    } else solveArm(j, p.left, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, maxMove: pivots ? PLANT_ELBOW : undefined, remember: pivots });
+    } else if (pivots && p.carried) {
+      // (the fist free to roll about the handle as far as the wrist needs, eased there frame to frame: held to one turn
+      // of it, the stood fist and the standing one were past the wrist's turn apart, and the elbow's solve flipped
+      // sides on the way, a greatsword 86 cm in a frame)
+      const axis = _s2.set(0, 1, 0).applyQuaternion(grip.quaternion).applyQuaternion(_fq);
+      const at = _s4.copy(grip.position).multiplyScalar(handScale).applyQuaternion(_fq).add(wrist);
+      const roll = { axis, range: PLANT_ROLL, at };
+      solveArm(j, p.left, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, roll, glide: PLANT_GLIDE, maxMove: PLANT_ELBOW });
+    } else solveArm(j, p.left, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, remember: false });
     // (how far its point is in, which the lab's measure of what goes under the floor allows)
     weapon.group.userData.stuckIn = p.carried ? sink * p.pivot : sink;
     p.on = weapon;
