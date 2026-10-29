@@ -1501,6 +1501,13 @@ export function buildWarrior(): Model {
    *  floor and dropped there in a frame. */
   const LEAN = tunable('warriorLean', { at: [-0.65, 0.28], lean: 0.3, letGo: 0.8, hold: 0.62, head: 0.15, bend: 0.9, bow: 0.4 });
   const LEANS = new Set(['Axe', 'Mace']);
+  /** A two-hander on a seat planted point down between his feet, both hands on its handle, as a knight rests on his
+   *  sword: its point `ahead` of his hips (rig units, his own frame), its top leant back towards him (`lean`, rad), its
+   *  grip `high` over his hips (sunk as far as `PLANT.deep` allows to reach it), carried there on an arc ahead and up
+   *  (`arc`). From play: "keep it stood", with a natural regrip. Stood point down at his side in one fist, the fist had
+   *  to turn 120 degrees from how it held it standing, past a wrist's turn: his arm shot straight out ahead and the
+   *  blade swept 0.5 to 2 m in a frame. */
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.5, lean: 0.2, high: 0.3, arc: [0.25, 0.15] });
   const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95 });
   const _plantHand = new THREE.Vector3(), _plantBox = new THREE.Box3(), _plantM = new THREE.Matrix4();
   /** a hand's weapon stood on its end: its grip's place there (world, `q`, `at`), the way from the hand to its
@@ -1701,6 +1708,50 @@ export function buildWarrior(): Model {
     p.at.addScaledVector(out, LAY.arc[0] * arc);
     p.at.y += LAY.arc[1] * arc;
     p.q.copy(_pq.slerp(p.q, e));
+  }
+  /** A two-hander carried to stand between his feet (`BETWEEN`), `w` of the way, into `p.q` and `p.at` (its grip's
+   *  place): from where the fist had it as he started, in his own frame, turned the same way round all the way. */
+  function restBetween(p: Planted, w: number, weapon: Weapon): void {
+    const { grip } = p;
+    root.updateMatrixWorld(true);
+    root.getWorldQuaternion(_rootQ);
+    if (p.turn < 0) {
+      root.worldToLocal(grip.getWorldPosition(p.startAt));
+      p.startQ.copy(_rootQ).invert().multiply(grip.getWorldQuaternion(_pq));
+      p.turn = 0;
+    }
+    const k = root.scale.x, s = _s5.setFromMatrixScale(grip.matrixWorld).y, far = reachAlong(weapon, grip)[1];
+    const ahead = _s4.set(0, 0, 1).transformDirection(root.matrixWorld).setY(0).normalize(), up = _s3.set(0, 1, 0);
+    // its point down and ahead, its flats to him (the side of them nearer how he held it)
+    const down = _s2.copy(up).multiplyScalar(-Math.cos(BETWEEN.lean)).addScaledVector(ahead, Math.sin(BETWEEN.lean));
+    const from = _fromQ.copy(_rootQ).multiply(p.startQ);
+    const flat = _s6.copy(ahead).addScaledVector(down, -ahead.dot(down)).normalize();
+    if (p.way === 0) p.way = _s7.set(0, 0, 1).applyQuaternion(from).dot(flat) >= 0 ? 1 : -1;
+    flat.multiplyScalar(p.way);
+    _sm.makeBasis(_s7.crossVectors(down, flat), down, flat);
+    _standQ.setFromRotationMatrix(_sm);
+    // its grip where its point, sunk to reach it, puts it
+    const spot = root.localToWorld(_plantHand.set(0, 0, BETWEEN.ahead));
+    const floor = groundHeight(spot.x, spot.z), hips = j.hips.getWorldPosition(_s1).y;
+    const sink = THREE.MathUtils.clamp(floor + far * s * Math.cos(BETWEEN.lean) - (hips + BETWEEN.high * k), PLANT.deep[0], PLANT.deep[1]);
+    spot.y = floor - sink;
+    _standAt.copy(spot).addScaledVector(down, -far * s);
+    p.at.copy(p.startAt).applyMatrix4(root.matrixWorld).lerp(_standAt, w);
+    const arc = Math.sin(Math.PI * w) * k;
+    p.at.addScaledVector(ahead, BETWEEN.arc[0] * arc).addScaledVector(up, BETWEEN.arc[1] * arc);
+    turnWay(p, from, _standQ, w, p.q);
+    weapon.group.userData.stuckIn = sink * smooth(ramp(w, 0.85, 1));
+    p.on = weapon;
+  }
+  /** The right fist round a two-hander's grip where `p` has it (`restBetween`), its length towards the shoulder. */
+  function fistOnGrip(p: Planted, weapon: Weapon): void {
+    const direction = _hd.set(0, 1, 0).applyQuaternion(p.q);
+    const up = p.shoulder.getWorldPosition(p.up).sub(p.at).normalize();
+    fistReach(p.hand, direction, up, weapon.r, _cur);
+    fistTurn(p.hand, direction, up, _fq);
+    const wrist = _cur.negate().add(p.at);
+    const pole = _pw.set(-PLANT.pole[0], PLANT.pole[1], PLANT.pole[2]).applyQuaternion(j.chest.getWorldQuaternion(_cq));
+    solveArm(j, false, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION });
   }
   /** a weapon carried to where it leans kept from going under the floor, its end on it at the lowest: the fist falls a
    *  few cm short of its haft's top (let go of there and set on the floor, it moved 4 cm as the hand left it) */
@@ -2762,6 +2813,8 @@ export function buildWarrior(): Model {
     // (by a fire, a one-hander carried down in the fist as a two-hander is: eased there from it, it went there with no
     // hand on it, 5.8 m in all)
     const carryTwo = !!(floorSit && held && plants);
+    // (a two-hander on a seat stood between his feet, in both hands)
+    const between = !!(st.sit && !floorSit && held && two && plants);
     // (a hand that stands its weapon on a seat is the plant's alone, from the arm fitted holding it: rested first, its
     // arm solved again to a pole of the rest's from the sit's first frame on, the axe in it went 82 cm in that frame)
     _resting.length = 0;
@@ -2952,17 +3005,21 @@ export function buildWarrior(): Model {
     // (sat, his weapons stand on their ends and his hands rest on them)
     const plant = held && st.sit && !fp && st.dead < 0 ? st.sit.w : 0;
     const plantOff = offHeld && !sheathed && st.sit && !fp && st.dead < 0 ? st.sit.w : 0;
-    carryingTwo = (carryTwo && plant > 0 && plant <= LAY.letGo) || (leanR && plant > 0 && plant <= LEAN.letGo);
+    carryingTwo = (carryTwo && plant > 0 && plant <= LAY.letGo) || (leanR && plant > 0 && plant <= LEAN.letGo) || (between && plant > 0);
     const gripped = held && (!(plant > 0 && (floorSit || leanR)) || carryingTwo);
     if (plant > 0 && floorSit) {
       carryDown(plantR, plant, held!, st.sit!);
     }
     if (plant > 0 && leanR) carryDown(plantR, plant, held!, st.sit!, true);
+    if (plant > 0 && between) {
+      restBetween(plantR, plant, held!);
+      fistOnGrip(plantR, held!);
+    }
     if (carryingTwo) {
       j.handR.getWorldQuaternion(_pq).invert();
       grip.quaternion.copy(_pq).multiply(plantR.q);
     }
-    if (plant > 0 && !floorSit && !leanR) {
+    if (plant > 0 && !floorSit && !leanR && !between) {
       // (a blade's arm its own solve's from the start, warm-started from its last frame: from the fit's each frame,
       // which changed sides near standing, the elbow went 11 cm and a greatsword 86 cm in a frame)
       const own = STANDS[held!.group.name] === 'point' && plantR.turn >= 0;
@@ -3002,7 +3059,7 @@ export function buildWarrior(): Model {
       if (leanR) overFloor(plantR, held!);
     }
     // (sat, the weapon where it stands, taken from the fist; carried there, where the fist has it)
-    if (plant > 0 && !floorSit && !leanR) carriedGrip(plantR);
+    if (plant > 0 && !floorSit && !leanR && !between) carriedGrip(plantR);
     if (plant > 0) plantGrip(plantR);
     if (stop > 0 && held && st.dead < 0) {
       const lifted = groundStop(stop, fall >= 1, settle < 0 ? stop : settle);
@@ -3020,7 +3077,7 @@ export function buildWarrior(): Model {
     // a two-hander: the left hand follows the grip wherever the right arm takes the weapon, and lets go
     // where it can't reach (a pose that flings the arms apart), the arm easing back to the pose's own
     let twoHeld = false;
-    if (two && plant === 0) {
+    if (two && (plant === 0 || between)) {
       root.updateMatrixWorld(true);
       offGrip.getWorldPosition(_grip);
       j.chest.worldToLocal(_grip);
@@ -3107,10 +3164,10 @@ export function buildWarrior(): Model {
     // (each handle diagonal across its palm by the slant the arm took, the weapon seated in that fist)
     // (sat, his hand round a weapon stood on its end thumb up, once he has it; open as he sets it down)
     // (eased from the fist as it holds it: thumb up at once, the wrist bent 12 degrees past its range the first frame)
-    if (plant > 0 && !floorSit && !leanR && STANDS[held!.group.name] === 'point') {
+    if (plant > 0 && !floorSit && !leanR && !between && STANDS[held!.group.name] === 'point') {
       const k = smooth(ramp(plant, 0, PLANT.thumb));
       hold(handR, along(grip).lerp(_cur.set(0, 1, 0), k).normalize(), held!.r, undefined, slantR * (1 - k));
-    } else if (plant >= 1 && two && !floorSit) hold(handR, _hd.set(0, 1, 0), held!.r, plantR.up);
+    } else if (plant >= 1 && two && !floorSit && !between) hold(handR, _hd.set(0, 1, 0), held!.r, plantR.up);
     else if (carryingTwo || (plant > 0 && plantR.carried)) hold(handR, along(grip), held!.r, undefined, slantR);
     else if (plant > 0) poseHand(handR, restingHand(plant, two), 0.1);
     else if (held) hold(handR, along(grip), held.r, undefined, slantR);
