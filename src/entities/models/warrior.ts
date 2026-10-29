@@ -1233,6 +1233,9 @@ export function buildWarrior(): Model {
   // the healing draught, in the left fist while it is drunk
   const flask = buildFlask(kit); flask.name = 'flask'; j.handL.add(flask);
   let flaskOut = 0, shieldHang = 0, drinkOn = 0;
+  /** which way the shield hangs as it eases off: out beside his leg from a sit, else before his chest from a draught
+   *  (from which is the more now, it turned from out to ahead as the sit ended, eased 5% on, and went 50 cm) */
+  let hangOut = false;
   /** how far a two-hander is on the shoulder (`SHOULDER_AT`), and how long the left hand has left to take its lower
    *  grip as it comes off (s: `TAKE_HOLD`) */
   let shouldered = 0, shoulderT = 0, takingHold = 0;
@@ -2801,14 +2804,18 @@ export function buildWarrior(): Model {
     if (shieldHang > 1e-4 && shield.visible) {
       root.updateMatrixWorld(true);
       j.elbowL.getWorldPosition(_s1); j.handL.getWorldPosition(_s2);
-      const out = sat > drinkLift ? 1 : 0;
+      if (sat !== drinkLift) hangOut = sat > drinkLift;
+      const out = hangOut ? 1 : 0;
       const a = _s3.subVectors(_s2, _s1).normalize(), n = _s4.set(out, 0, 1 - out).transformDirection(root.matrixWorld);
       n.addScaledVector(a, -a.dot(n)).normalize();
       _sm.makeBasis(_s5.crossVectors(a, n), a, n);
       _sq.setFromRotationMatrix(_sm).premultiply(j.handL.getWorldQuaternion(_shq).invert());
       shield.quaternion.slerp(_sq, shieldHang);
-      _s1.lerp(_s2, 0.3).addScaledVector(_s4.set(0, -1, 0), 0.26 * root.scale.x).addScaledVector(n, 0.02 * root.scale.x);
+      // (on a seat, round the fist that holds it, its face out: hung 26 cm down the forearm, it slid back up the arm as he
+      // stood, and the fist came out through its face, "whats this hand clipping through shield ?")
+      if (out && !floorSit) _s1.copy(_s2).addScaledVector(n, SIDE_POS.x * _s3.setFromMatrixScale(j.handL.matrixWorld).x);
       // (sat on the floor, its rim on it: hung as far down from a forearm on his knee, it went 11 cm into it)
+      else _s1.lerp(_s2, 0.3).addScaledVector(_s4.set(0, -1, 0), 0.26 * root.scale.x);
       shield.position.lerp(j.handL.worldToLocal(_s1), shieldHang);
     }
 
