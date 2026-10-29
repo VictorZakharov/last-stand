@@ -59,6 +59,10 @@ export interface ArmGoal {
    *  found now they go (0..1), the best found between the few tried, not one of them: picked from those, the hand turned
    *  and slanted in steps, and as the walk moved the elbow a bow carried in the fist jumped between two or three places */
   glide?: number;
+  /** false: a solve over the one this frame keeps its elbow from (its last elbow, girdle, slant and roll left as the
+   *  first left them): solved again over the warrior's fitted arm to stand his weapon, each solve started from the
+   *  other's last frame, and the carried greatsword turned 10 to 20 degrees a frame back and forth */
+  remember?: boolean;
   /** the wrist's flexion range (degrees): a hand gripping a handle, a gripping wrist's (anatomy.ts `GRIPPED_FLEXION`);
    *  the open hand's by default. (Solved within the open hand's, a two-hander's lower fist flexed 50 to 75 degrees
    *  round its grip, through the eyes and out of them, where a fist can't stay closed) */
@@ -344,12 +348,14 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     }
   }
   // (not asked for, the girdle is at rest, and eases from there when it is again: kept as it last was, the shoulder jumped back to it)
-  if (g.girdle || g.girdleSet) (pg ?? lastG.set(sh, [0, 0]).get(sh)!).splice(0, 2, gE, gP);
-  else if (pg) pg.splice(0, 2, 0, 0);
-  if (g.slant) lastS.set(sh, slant);
-  if (g.glide !== undefined) lastR.set(sh, roll);
+  if (g.remember !== false) {
+    if (g.girdle || g.girdleSet) (pg ?? lastG.set(sh, [0, 0]).get(sh)!).splice(0, 2, gE, gP);
+    else if (pg) pg.splice(0, 2, 0, 0);
+    if (g.slant) lastS.set(sh, slant);
+    if (g.glide !== undefined) lastR.set(sh, roll);
+    (prev ?? last.set(sh, new THREE.Vector3()).get(sh)!).copy(_E);
+  }
   sh.position.copy(_S);
-  (prev ?? last.set(sh, new THREE.Vector3()).get(sh)!).copy(_E);
   // the joints: the upper arm on its parent, the elbow a hinge, the hand within the forearm's turn and the wrist's bend
   sh.quaternion.copy(_Qu);
   const flex = Math.acos(THREE.MathUtils.clamp(_b.dot(_f), -1, 1));
