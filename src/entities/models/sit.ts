@@ -22,6 +22,8 @@ export const SIT_POSE = tunable('sit', {
   /** a hand at rest on its thigh: how far down the thigh from the hip (a share of it), over it (rig units, on the
    *  thigh's top) and out to its side (rig units) */
   rest: [0.55, 0.025, 0.03],
+  /** on a seat, hands lifted as the knees rise, before settling onto them (rig units) */
+  handLift: 0.25,
   /** the way a resting hand's elbow points (out and back, the chest's frame; the left's, the right's mirrored) */
   pole: [1, -0.2, -1],
   /** sat on the floor: the pelvis rolled back (rad: a man's on the floor rolls back, and his hips upright bent 10
@@ -124,7 +126,7 @@ const _pole = new THREE.Vector3(), _q = new THREE.Quaternion(), _bone = new THRE
  * his face). Call after `sitPose` and the look (before it, a glance carried the shoulders round and the hands with them,
  * 8 cm over the knee); the arms' IK (`fitArm`) keeps them within their ranges after.
  */
-export function restHands(j: Joints, s: SitState | null | undefined, sides: readonly number[], turn?: RestTurn): void {
+export function restHands(j: Joints, s: SitState | null | undefined, sides: readonly number[], turn?: RestTurn, rise = 0): void {
   if (!s || s.w <= 0) return;
   const floor = onFloor(s), [along, over, out] = floor ? SIT_POSE.knee : SIT_POSE.rest;
   const pole = floor ? SIT_POSE.floorPole : SIT_POSE.pole, P = j.P, w = satBy(s);
@@ -135,10 +137,12 @@ export function restHands(j: Joints, s: SitState | null | undefined, sides: read
     // (on the floor, from the knee down the front of the shin: along the thigh past it, the knees up, the hands were
     // held in the air before the chest)
     if (floor) (left ? j.kneeL : j.kneeR).localToWorld(_on.set(sign * out, -P.shinL * along, P.shinR + over));
-    else thigh.localToWorld(_on.set(sign * out, -P.thighL * along, P.thighR + over));
+    else thigh.localToWorld(_on.set(sign * out, -P.thighL * along, P.thighR + over + rise));
     j.chest.worldToLocal(_on);
     j.chest.worldToLocal(hand.getWorldPosition(_now));
     _now.lerp(_on, w);
+    // Lift the hands over the rising thighs before resting them, rather than sweeping through them.
+    if (!floor) _now.y += SIT_POSE.handLift * Math.sin(Math.PI * w);
     _pole.set(sign * pole[0], pole[1], pole[2]);
     reachArm(left ? j.shoulderL : j.shoulderR, left ? j.elbowL : j.elbowR, P.upperL, P.foreL, _now, _pole);
     if (turn && (turn.roll[side] || turn.bend[side])) {
