@@ -816,6 +816,8 @@ export function buildWarrior(): Model {
   const tipL = joint(gripL, 0, 1, 0);
   const plantR = plantOf(false, handR, grip), plantL = plantOf(true, handL, gripL);
   let carryingTwo = false;
+  /** the weapon hand's slant across its handle as it was fitted as he started to sit (`fitArm`) */
+  let plantSlant = 0;
   const bladeL = { from: joint(gripL, 0, 0, 0), to: joint(gripL, 0, 0, 0) };
   /** the weapons a strike swings this frame (`swung`): every one in a hand, none between strikes */
   const struck: Blade[] = [];
@@ -2913,9 +2915,12 @@ export function buildWarrior(): Model {
     if (plant > 0 && !floorSit && !leanR) {
       const fitted = fitArm(j, false, gripTurn(handR, grip, _vr), body, two ? undefined : SLANT).slant;
       fittedArm(false, true);
+      // (the handle's slant across the palm as it was fitted as he started: refitted each frame, it changed between
+      // the few the fit tries as he got up, and a greatsword turned 35 degrees in a frame)
+      if (plantR.turn < 0) plantSlant = fitted;
       plantArm(plantR, plant, held!);
       fittedArm(false, false, STANDS[held!.group.name] === 'point' ? 1 : smooth(ramp(plant, 0, PLANT.ease)));
-      slantR = plantR.carried ? fitted * (1 - smooth(ramp(plant, 0, PLANT.stood))) : 0;
+      slantR = plantR.carried ? plantSlant * (1 - smooth(ramp(plant, 0, PLANT.stood))) : 0;
     } else if (!fp && st.dead < 0) slantR = fitArm(j, false, gripped ? gripTurn(handR, grip, _vr) : undefined, body, gripped && !two ? SLANT : undefined).slant;
     // (a two-hander through the eyes is held as its swings key it: fitted so, its weapon turned off its place and the
     // lower grip went out of the left hand's reach)
