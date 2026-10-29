@@ -2943,7 +2943,8 @@ export function buildWarrior(): Model {
     if (fp && st.dead < 0 && offHeld && !sheathed) wristInGrip(true, gripTurn(handL, gripL, _vl, slantL));
     // (set down once the arm is fitted: the fit moved the hand, and the shield with it, 8 cm into the floor)
     if (floorSit && shield.visible) layShield(smooth(st.sit!.w));
-    else if (st.sit && shield.visible) standShield(smooth(st.sit.w));
+    // (on a seat it stays on his forearm, hung beside his leg: stood on its rim by his shin, its grip was lower than
+    // his hand reaches sat, and it flew there off his arm, "weapons are being pulled around with jedi force")
     // (a cut out of a blow turned to the floor and stopped by it, after the fade, fades from the arms as drawn; every
     // other from the pose's own: from the arms as fitted, the cut into a two-handed swing blended two elbows, and the
     // lower grip went 9 cm out of the left arm's reach)
