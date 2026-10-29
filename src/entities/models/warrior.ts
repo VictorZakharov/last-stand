@@ -1630,26 +1630,25 @@ export function buildWarrior(): Model {
     const { hand, grip } = p, side = p.left ? -1 : 1, box = boxOf(weapon, grip);
     root.updateMatrixWorld(true);
     const s = _s5.setFromMatrixScale(grip.matrixWorld).y, k = root.scale.x;
+    seat(hand, grip, weapon.r);
+    root.updateMatrixWorld(true);
     const spot = root.localToWorld(_plantHand.set(side * LEAN.at[0], 0, LEAN.at[1]));
     const ahead = _s4.set(0, 0, 1).transformDirection(root.matrixWorld).setY(0).normalize();
     const out = _s6.set(-side, 0, 0).transformDirection(root.matrixWorld).setY(0).normalize();
     const up = _s3.set(0, 1, 0).multiplyScalar(Math.cos(LEAN.lean)).addScaledVector(ahead, -Math.sin(LEAN.lean));
-    // (its thinnest side out: an axe's cheek, a mace's flange)
-    const flatZ = box.max.z - box.min.z < box.max.x - box.min.x;
-    if (flatZ) _sm.makeBasis(_s2.crossVectors(up, out), up, out);
-    else _sm.makeBasis(out, up, _s2.crossVectors(out, up));
-    p.q.setFromRotationMatrix(_sm);
+    // (turned about its haft as the fist holds it, only tipped to its lean: its flats turned out to his side as well,
+    // it swung flat across his thighs on the way, 10 cm into the left)
+    grip.getWorldQuaternion(_pq);
+    p.q.setFromUnitVectors(_s2.set(0, 1, 0).applyQuaternion(_pq), up).multiply(_pq);
     const leant = _s1.copy(spot).addScaledVector(up, -box.min.y * s);
     leant.y += groundHeight(spot.x, spot.z) - spot.y + 0.005;
     const e = smooth(w);
-    seat(hand, grip, weapon.r);
-    root.updateMatrixWorld(true);
     grip.getWorldPosition(p.at).lerp(leant, e);
     // (on an arc out and up from his legs, as one is laid by a fire)
     const arc = Math.sin(Math.PI * e) * k;
     p.at.addScaledVector(out, LAY.arc[0] * arc);
     p.at.y += LAY.arc[1] * arc;
-    p.q.copy(grip.getWorldQuaternion(_pq).slerp(p.q, e));
+    p.q.copy(_pq.slerp(p.q, e));
     p.on = weapon;
   }
   /** Carry the two-hander out beside the legs (by a fire), or a one-handed axe or mace to where it's leant on a seat
