@@ -25,10 +25,15 @@ export const SIT_POSE = tunable('sit', {
   /** the way a resting hand's elbow points (out and back, the chest's frame; the left's, the right's mirrored) */
   pole: [1, -0.2, -1],
   /** sat on the floor: the pelvis rolled back (rad: a man's on the floor rolls back, and his hips upright bent 10
-   *  degrees past their range), the knees apart (rad, each thigh out), and a hand at rest over its knee (as `rest`,
-   *  down the shin from the knee) */
+   *  degrees past their range), the knees apart (rad, each thigh out), and a wrist at rest over its knee (as `rest`:
+   *  along the shin from the knee, less up it, and before it), the forearm laid on the knee's top and the hand
+   *  hanging before it, as a man sat on the ground rests (placed down the shin's front, the forearm went 9 to 13 cm
+   *  through the thigh: "ranger hands clipping through legs, in sitting pose near fire") */
   floor: [0.25, 0.22],
-  knee: [0.12, 0.025, 0.02],
+  knee: [-0.25, -0.02, -0.04],
+  /** and the way its elbow points: out and ahead, outside the knee, the forearm across the knee's top (pointed out and
+   *  back, the forearm lay along the thigh and 5 to 8 cm through it) */
+  floorPole: [1, -0.5, 0.6],
   /** and a hand that holds something, its wrist let hang over the knee (rad, the palm bent down to the forearm) */
   dangle: 0.6,
 });
@@ -122,7 +127,7 @@ const _pole = new THREE.Vector3(), _q = new THREE.Quaternion(), _bone = new THRE
 export function restHands(j: Joints, s: SitState | null | undefined, sides: readonly number[], turn?: RestTurn): void {
   if (!s || s.w <= 0) return;
   const floor = onFloor(s), [along, over, out] = floor ? SIT_POSE.knee : SIT_POSE.rest;
-  const pole = SIT_POSE.pole, P = j.P, w = satBy(s);
+  const pole = floor ? SIT_POSE.floorPole : SIT_POSE.pole, P = j.P, w = satBy(s);
   j.root.updateMatrixWorld(true);
   for (const side of sides) {
     const left = side === 0, sign = left ? 1 : -1;

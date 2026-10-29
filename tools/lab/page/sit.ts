@@ -17,6 +17,9 @@ import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import { bodyBreaches, grippingSides } from './range';
 import { cm as cmOf, follow, JERK_FROM, skirtsOf } from './coat';
 import { WeaponBody } from './weaponBody';
+import { bowOf } from './ranger';
+import { armsInLegs } from './armsInLegs';
+import { armsInBody } from './armsIn';
 
 /** What `lab sit` takes. */
 export interface SitOptions {
@@ -79,6 +82,11 @@ const PALM_AT = new THREE.Vector3(0, -0.06, -0.02);
 const WANDER_MOST = 0.1;
 /** how long after he's sat the wander is read from (s) */
 const SETTLED = 1.5;
+
+/** how far into his legs or trunk a forearm, a hand, a weapon or the bow may go (m: the bones' capsules, bare; the
+ *  clothes over them, a hand resting on a thigh). From play: "ranger hands clipping through legs, in sitting pose near
+ *  fire", "bow clipping through body in log sitting"; from review, a maul's haft through his hip sitting down */
+const INTO_BODY = 0.03;
 
 /** by a fire, his body's way off the way to it at most (degrees): from review, he sat 30 to 45 off it */
 const FACING_FIRE = 15;
@@ -206,7 +214,6 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   const side = (lab.player.pos.x - spot.x) ** 2 + (lab.player.pos.z - spot.z) ** 2;
   if (side > 0.05 ** 2) out.problems.push(`sit: on the ${c.name} he sat ${Math.sqrt(side).toFixed(2)} m off its spot`);
   out.moments.push(lab.picture(`${c.name}: sat`, c.views));
-  out.moments.push(lab.picture(`${c.name}: sat, parts`, ['right', 'back', 'above', 'left'], [], { look: 'parts' }));
   if (seat.ground) out.moments.push(fromBeyond(lab, c.name));
   const under = deepestUnder(lab);
   if (under.depth > UNDER_MOST) {
@@ -341,7 +348,7 @@ async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out): P
   // (the worst joint past its range sitting down, and standing idle before it: said, not the sit's; and the weapon in
   // his hand through his legs or trunk as he sets it down: from review, a maul's haft through his hip by a fire)
   const worst: (Breached | null)[] = [null, null];
-  const through = new WeaponBody(label);
+  const into = new IntoBody(label);
   for (let f = 0; f < SAT_BY * RATE; f++) {
     await lab.step(1);
     walked ||= sitting.walking;
@@ -350,7 +357,7 @@ async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out): P
     const past = sitting.walking ? undefined : bodyBreaches(lab.joints, grippingSides(lab)).found[0];
     const at = w > 0 ? 0 : 1;
     if (past && (!worst[at] || past.by > worst[at].by)) worst[at] = { by: past.by, name: past.name, w };
-    if (w > 0) through.observe(lab, `${f}, ${(w * 100).toFixed(0)}% down`);
+    if (w > 0) into.observe(lab, `${f}, ${(w * 100).toFixed(0)}% down`);
     if (!half && w >= 0.5) {
       half = true;
       out.moments.push(lab.picture(`${label}: half way down`, views));
@@ -362,8 +369,7 @@ async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out): P
         out.problems.push(`sit: by the ${label}, sitting down, ${pastOf(down)} ${(down.w * 100).toFixed(0)}% down`);
       }
       if (stood) out.text.push(`    standing idle before it (not the sit's): ${pastOf(stood)}`);
-      const inBody = through.describe();
-      if (inBody) out.problems.push(`sit: by the ${label}, sitting down, ${inBody}`);
+      for (const said of into.problems()) out.problems.push(`sit: by the ${label}, sitting down, ${said}`);
       return true;
     }
   }
@@ -377,13 +383,13 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): P
   let worst: { by: number; name: string; neck: number } | null = null;
   let frames = 0;
   const skirts = skirtsOf(lab.model.root);
-  const through = new WeaponBody(name);
+  const into = new IntoBody(name);
   const spans = skirts.map((skirt) => new Spans(skirt.last.length));
   let frame = 0;
   const reads = await lab.step(SAT_FOR * RATE, undefined, () => {
     if (canary) j.body.position.y += CANARY_RAISE / j.root.scale.x;
     const read = readNow(lab);
-    through.observe(lab, `${frame}`);
+    into.observe(lab, `${frame}`);
     // (the first two frames fill each point's last two places)
     for (const skirt of skirts) follow(skirt, frame, frame >= 2, !!options.frames, j);
     // (once the cloth has settled where he sat: eased, it comes to rest over the first second)
@@ -395,8 +401,7 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): P
     if (canary) j.body.position.y -= CANARY_RAISE / j.root.scale.x;
     return read;
   });
-  const inBody = through.describe();
-  if (inBody) out.problems.push(`sit: on the ${name}, ${inBody}`);
+  for (const said of into.problems()) out.problems.push(`sit: on the ${name}, ${said}`);
   skirts.forEach((skirt, i) => {
     const { most, at } = spans[i].widest();
     out.text.push(`    his ${skirt.name}: a point wandered ${cmOf(most)} cm at most (point ${at})`);
@@ -415,6 +420,45 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): P
       + `the head ${found.neck.toFixed(0)}° from the chest then)`);
   }
   return reads;
+}
+
+/** The ranger's bow, unless it's the main hand's grip `WeaponBody` reads already. */
+function bowApart(lab: Lab): THREE.Object3D | null {
+  const bow = bowOf(lab)?.group;
+  const grip = lab.model.tip?.parent;
+  if (!bow || (grip && bow.getObjectById(grip.id))) return null;
+  return bow;
+}
+
+/** What of him goes into his legs or trunk over frames: the weapon in his hand, the bow, and each forearm and hand. */
+class IntoBody {
+  private readonly pieces: WeaponBody[];
+  private arms: { depth: number; what: string } | null = null;
+  private armFrames = 0;
+
+  constructor(name: string) {
+    this.pieces = [new WeaponBody(name), new WeaponBody(name, bowApart)];
+  }
+
+  observe(lab: Lab, frame: string): void {
+    for (const piece of this.pieces) piece.observe(lab, frame);
+    const legs = armsInLegs(lab.joints).map((arm) => ({ ...arm, part: arm.leg }));
+    const trunk = armsInBody(lab.joints).map((arm) => ({ ...arm, part: arm.solid }));
+    const deepest = [...legs, ...trunk].sort((a, b) => b.depth - a.depth)[0];
+    if (!deepest || deepest.depth <= INTO_BODY) return;
+    this.armFrames++;
+    if (this.arms && deepest.depth <= this.arms.depth) return;
+    const what = `his ${deepest.side === 'L' ? 'left' : 'right'} ${deepest.limb} `
+      + `${(deepest.depth * 100).toFixed(1)} cm into the ${deepest.part} (frame ${frame})`;
+    this.arms = { depth: deepest.depth, what };
+  }
+
+  /** What went in further than `INTO_BODY`, as words. */
+  problems(): string[] {
+    const said = this.pieces.filter((piece) => piece.depth > INTO_BODY).map((piece) => piece.describe());
+    if (this.arms) said.push(`${this.arms.what}, on ${this.armFrames} frames`);
+    return said;
+  }
 }
 
 /** Each point's least and most x, y and z over the frames added. */
