@@ -626,6 +626,7 @@ export class Enemy {
     }
     if (this.meter) {
       this.meter.record(amount);
+      emit('dummyHit');
       debris({ x: this.pos.x, y: this.height * 0.6, z: this.pos.z }, { count: 3, color: 0xc9a54e, speed: 3, size: 0.07, life: 0.7 });
     } else if (this.life <= 0) {
       this.die(info.fling ?? flingOf(this, amount - before, info.type ?? 'physical', this.frozen > 0, info.from ?? info.by?.pos, info.blow));

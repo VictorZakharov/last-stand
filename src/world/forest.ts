@@ -8,7 +8,7 @@ import { ARENA } from '../data/balance';
 import { forestFloor, bark, flagstone, moss, rock, wood, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
 import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
-import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type TuftColours, type Updater } from './props';
+import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type TuftColours, type Updater } from './props';
 
 /** the forest's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25, 1.1] };
@@ -849,11 +849,11 @@ const CANOPY_Y = 24;
  * 8.5), so the repeat makes it about 0.4 m at the foot, the oak photo's plates their own size (a giant's 0.6 m: old
  * bark's plates are coarser), and narrower round thinner branches.
  */
-interface TreeGrow extends Grow {
+export interface TreeGrow extends Grow {
   bark: number;
 }
 
-const TREE_KINDS: TreeGrow[] = [
+export const TREE_KINDS: TreeGrow[] = [
   { preset: 'Oak Medium', seed: 4021, sections: [7, 4, 3], segments: [7, 4, 3], leaves: 0.4, leafSize: 1.6, levels: 2, bark: 6 },
   { preset: 'Ash Medium', seed: 717, sections: [7, 4, 3], segments: [7, 4, 3], leaves: 0.4, leafSize: 1.6, levels: 2, bark: 7 },
   { preset: 'Oak Small', seed: 99, sections: [7, 4, 3], segments: [7, 4, 3], leaves: 0.6, leafSize: 1.5, levels: 2, bark: 5 },
@@ -869,6 +869,23 @@ const BARK_REPEATS = {
   stumps: [4, 3], log: [7, 11], roots: [3, 22], gateArch: [8, 17], gateVine: [3, 17], gateRoots: [3, 4], bonfire: [1, 2],
 } as const satisfies Record<string, Repeat>;
 
+/** A root gate's materials as the Thornwood's own are made (the village's gate: the same programs and looks). */
+export function rootGateMats(): GateMats {
+  const barkAt = (repeat: Repeat): THREE.MeshStandardMaterial =>
+    seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), repeat, 1.6), color: 0xd8c8b0 }), 'prop');
+  const canopyMat = seeThrough(new THREE.MeshStandardMaterial({
+    map: leafClusterTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x5e8048,
+  }), 'foliage');
+  const coreMat = seeThrough(new THREE.MeshStandardMaterial({ color: 0x2c3c22, roughness: 0.95 }), 'foliage');
+  const ivyMat = new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x3e6a2a });
+  const hangMat = new THREE.MeshStandardMaterial({ color: 0x2c4424, roughness: 1, side: THREE.DoubleSide });
+  for (const m of [ivyMat, hangMat]) seeThrough(m, 'prop');
+  return {
+    canopyMat, coreMat, hangMat, ivyMat,
+    archMat: barkAt(BARK_REPEATS.gateArch), vineMat: barkAt(BARK_REPEATS.gateVine), rootMat: barkAt(BARK_REPEATS.gateRoots),
+  };
+}
+
 /** Points along the curve `taperTube` lays a tube round (by its length, `steps` of them), each with its radius. */
 function tubeSamples(pts: THREE.Vector3[], radius: (t: number) => number, steps: number): [number, number, number, number][] {
   const curve = new THREE.CatmullRomCurve3(pts), at = new THREE.Vector3();
@@ -878,13 +895,16 @@ function tubeSamples(pts: THREE.Vector3[], radius: (t: number) => number, steps:
   });
 }
 
-interface GateMats {
+export interface GateMats {
   canopyMat: THREE.Material; coreMat: THREE.Material; hangMat: THREE.Material; ivyMat: THREE.Material;
   /** the bark of its arch's roots, of the vines round them and of the roots splaying from their feet */
   archMat: THREE.Material; vineMat: THREE.Material; rootMat: THREE.Material;
 }
 
-function buildRootGate(scene: THREE.Object3D, wall: Wall, angle: number, rockMat: THREE.Material, M: GateMats, rng: () => number, updaters: Updater[]): Portal {
+/** A gate of the Thornwood's: two twisted roots meeting overhead round its portal's membrane, a crown of leaves on
+ *  them (`place`: stood there, not in the thicket at `angle`: the village's). */
+export function buildRootGate(scene: THREE.Object3D, wall: Wall, angle: number, rockMat: THREE.Material, M: GateMats, rng: () => number,
+  updaters: Updater[], place?: GatePlace): Portal {
   const g = new THREE.Group();
   const half = GATE_W / 2 + 0.45;
   const hang: THREE.BufferGeometry[] = [], ivy: THREE.BufferGeometry[] = [];
@@ -941,8 +961,8 @@ function buildRootGate(scene: THREE.Object3D, wall: Wall, angle: number, rockMat
     g.add(m);
   }
 
-  const { portal } = portalMembrane(g, angle, { a: [0.04, 0.45, 0.2], b: [0.45, 0.9, 0.15], core: [0.7, 1.0, 0.55] }, updaters, true);
-  placeGate(g, angle);
+  const { portal } = portalMembrane(g, angle, { a: [0.04, 0.45, 0.2], b: [0.45, 0.9, 0.15], core: [0.7, 1.0, 0.55] }, updaters, true, place);
+  placeGate(g, angle, place);
   scene.add(g);
   wall.add(g, false);
   return portal;
@@ -1007,7 +1027,8 @@ function buildGlowcaps(scene: THREE.Object3D, x: number, z: number, rng: () => n
   });
 }
 
-function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.Material, wood: THREE.Material, updaters: Updater[]): void {
+export function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.Material, wood: THREE.Material, updaters: Updater[],
+  casts = true): void {
   const ringGeo = boulderGeo(47, 0.2, 1);
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * TAU;
@@ -1044,7 +1065,7 @@ function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.
   }
   const light = new THREE.PointLight(0xff7a30, 12, 13, 2);
   light.position.set(x, 1.3, z);
-  staticShadow(light);
+  if (casts) staticShadow(light);
   scene.add(light);
   buildFire(scene, {
     at: new THREE.Vector3(x, 0.03, z), radius: 0.42, height: 1.2, dish: 0, light, intensity: 12,

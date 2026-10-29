@@ -356,10 +356,10 @@ export const COMMANDS = {
           + 'its panel leaves, its parts within the window and none over another, the hero beside clicked into focus, '
           + 'Esc back to the lobby), readying (the fight\'s loading bar over the lobby: within the window, its label '
           + 'on a line), readyingHeroes (Change hero clicked with the heroes\' programs cold: the bar says it readies '
-          + 'the heroes), clicked (a battleground\'s button clicked and a '
-          + 'key pressed after it: '
-          + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
-          + 'dummies against their anchors), behindProps (a column planted between the camera and each dummy\'s label: '
+          + 'the heroes), clicked (the crypt\'s portal card left by its Leave clicked and a key pressed after it: '
+          + 'where the focus went), views (the lobby\'s camera switched through its views from the training yard: '
+          + 'the labels over the dummies against their anchors), '
+          + 'behindProps (a column planted between the camera and each dummy\'s label: '
           + 'every label hidden behind it, every one shown with it gone; the canary plants it aside), run (the HUD '
           + 'with a hurt foe\'s bar and damage numbers), '
           + 'scores, perf, decision, pause, summary, skillTips (each skill\'s tooltip on the hotbar opened by the '
@@ -1130,6 +1130,20 @@ export const COMMANDS = {
       canary: {
         kind: 'switch',
         help: 'the first tree made stone and an arrow stuck again after the switch: both must be found',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
+  village: {
+    help: "the lobby's village as a player walks it: every object usable from its stand, casting in the yard alone, "
+      + "no walk out past the palisade or along a way out, the stair up to the hall, the first visit's training ticked "
+      + "step by step with the portal shut till it's done or skipped, and no program compiled as the hour changes",
+    options: {
+      canary: {
+        kind: 'switch',
+        help: "a fault planted for each check (an object's stand moved, the yard read outside it, a hero put past the "
+          + 'palisade, the stair walked at beside it, the notice board left unread, a new material at noon): all '
+          + 'must be found',
       },
       ...COMMON_OPTIONS,
     },

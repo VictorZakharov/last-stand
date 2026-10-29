@@ -11,7 +11,7 @@ import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
 import { floorRelief } from '../core/parallax';
-import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type Updater } from './props';
+import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type Updater } from './props';
 
 /** the crypt's environment's colours (compiled ahead: `compileEnvMaps`) */
 export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
@@ -1001,7 +1001,10 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
   });
 }
 
-function buildGate(scene: THREE.Object3D, wall: Wall, angle: number, stone: THREE.Material, iron: THREE.Material, updaters: Updater[]): Portal {
+/** A gate of the crypt's: two pillars, an arch and a lintel, a raised portcullis, its portal's membrane (`place`:
+ *  stood there, not in the wall at `angle`: the village's). */
+export function buildGate(scene: THREE.Object3D, wall: Wall, angle: number, stone: THREE.Material, iron: THREE.Material, updaters: Updater[],
+  place?: GatePlace): Portal {
   const g = new THREE.Group();
   const pillarGeo = boxWithUV(1.3, 5.2, 1.9, 0.35);
   for (const s of [-1, 1]) {
@@ -1026,8 +1029,8 @@ function buildGate(scene: THREE.Object3D, wall: Wall, angle: number, stone: THRE
   bars.castShadow = true;
   g.add(bars);
 
-  const { portal } = portalMembrane(g, angle, { a: [0.5, 0.05, 0.9], b: [1.0, 0.25, 0.35], core: [1.0, 0.6, 1.0] }, updaters);
-  placeGate(g, angle);
+  const { portal } = portalMembrane(g, angle, { a: [0.5, 0.05, 0.9], b: [1.0, 0.25, 0.35], core: [1.0, 0.6, 1.0] }, updaters, false, place);
+  placeGate(g, angle, place);
   scene.add(g);
   wall.add(g, true);
   return portal;

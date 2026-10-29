@@ -1,0 +1,984 @@
+// The village the lobby stands in (data/village.ts lays it out, world/villagePlan.ts makes its plan geometry, and
+// game/village.ts makes its objects work): a green hamlet in a meadow, built once at boot beside the biomes and shown in
+// their place between runs (`Arena`'s place). It's laid out as a hamlet grows: a palisade wandering round it, its roads
+// winding from a cobbled square round a fountain, cottages each turned its own way with a footpath worn from its door,
+// sheds, groves of trees inside and a wood round it. North, up a broad stair, a terrace where the hall of heroes stands
+// in the open (the heroes on plinths before their banners, the stash's chest at its top step); the training yard
+// south-east, fenced, its dummies the only place skills are cast; a campfire, the chronicle's lectern on a platform, a
+// notice board. Its two ways out are places of their own beyond gaps in the palisade (world/villageWays.ts): the crypt's
+// walled court and sunken door north-east, the Thornwood's grove south-west, each with its portal. Grass grows wherever
+// nothing's built or trodden (world/meadow.ts, its mask painted from the plan). Its floor has levels (the terrace, the
+// platform: world/ground.ts's relief, and no dais), reached by stairs alone: each ledge is faced by a wall a body is kept
+// off (world/wall.ts outlines), so feet climb the steps one by one; its wall is what's built (`wallShape` 'free'). Its
+// light follows the hour (`daylight`, a uniform's change: nothing compiles), and as a biome it has 10 point lights, two
+// casting the still shadows (the hall's braziers).
+import * as THREE from 'three';
+import { CLASSES, CLASS_IDS } from '../data/classes/index';
+import {
+  CAMPFIRE, CHEST, COTTAGES, DAIS_EAST, DAY, ENTRANCES, GAP_HALF, HALL, NOTICE, STEP_RISE, TERRACE, YARD, portalPlace,
+  type Cottage, type Spot,
+} from '../data/village';
+import { BIOME_IDS, type BiomeId } from '../data/biomes';
+import {
+  ashlar, bannerCloth, bark, canvasOf, ctx2d, flagstone, granite, limestone, pbrMaterialMaps, slate, soil, textureFromCanvas,
+  wood, cobblestone, grunge,
+} from '../core/textures';
+import { seeThrough } from '../core/seeThrough';
+import { particles, col } from '../fx/particles';
+import { mulberry, rand, TAU } from '../util';
+import { buildBrazier, bannerGeo } from './crypt';
+import { buildBonfire } from './forest';
+import { buildFire } from './fire';
+import { boxWithUV, contactShadows, setInstance, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
+import { buildMeadow, meadowGround, MeadowMask, type MaskUniforms } from './meadow';
+import { growTree, type TreeKind } from './ezTrees';
+import { TREE_KINDS } from './forest';
+import { leafClusterTexture } from './foliage';
+import { cullInCells, eachInstance } from './culling';
+import { buildFountain } from './fountain';
+import {
+  COTTAGE, PODIUM, SQUARE_R, TOMB, builtAt, footpathOf, fromGap, inWay, insidePalisade, palisadeCurve, palisadePolygon, roadLines, withinVillage,
+} from './villagePlan';
+import { buildCryptWay, buildForestWay, groveTrees } from './villageWays';
+import { Wall } from './wall';
+import type { Relief } from './ground';
+import type { Obstacle } from '../types';
+
+/** the village's environment: a clear sky's, blue overhead and the meadow's green low */
+export const VILLAGE_ENV: EnvColours = { sky: [0.5, 0.62, 0.78], panel: [1.25, 1.2, 1.05] };
+
+/** Where hero `i` of the hall's row stands (on the terrace: his plinth lifts him, `groundHeight`). */
+export const hallSpot = (i: number): THREE.Vector3 =>
+  new THREE.Vector3(TERRACE.x + (i - (CLASS_IDS.length - 1) / 2) * HALL.gap, 0, HALL.z);
+
+/** the relief's grid: a 10 cm cell over the whole village, so a step's edge is sharp under a foot */
+const RELIEF = { cell: 0.1, half: 40 };
+/** a step's run (m): with `STEP_RISE`, a stair a man climbs a step a stride */
+const STEP_RUN = 0.32;
+/** the walls facing a ledge: how thick, and how far over the floor above them they stand (a parapet) */
+const PARAPET = { thick: 0.36, over: 0.75 };
+/** the plinths: two drums, the lower's radius and the upper's, and the step between them (m) */
+const PLINTH = { lower: 0.82, upper: 0.66, step: 0.1 };
+/** the hall's colonnade: its columns (x either side, the row's z), their shaft's radius and height, the lintel's */
+const COLONNADE = { x: [4.3, 7.6], z: -13.4, radius: 0.36, high: 5.2, lintel: 0.55 };
+/** the hall's back wall: how high over the terrace and how far either way */
+const BACK = { high: 5.4, half: 8.6 };
+/** the braziers on the terrace either side of the row (x, z: the still shadows' lights) and their light */
+const BRAZIERS = { x: 5.9, z: -16.2, glow: 9, flames: 0.7 };
+/** each banner: its top's height over the terrace, how far off the wall it hangs, its scale (`bannerGeo`'s 0.9 m) */
+const BANNER = { top: 4.7, off: 0.28, scale: 1.3 };
+/** the palisade: its logs' radius, how tall they stand (from, to), and the gates' gap (m either side of a portal) */
+const PALISADE = { radius: 0.17, low: 4.2, high: 5.4 };
+/** the groves in the village: each one's middle and how many trees (scattered round it where nothing's built) */
+const GROVES: readonly [number, number, number][] = [
+  [-21.5, -13, 3], [-9.5, -8, 1], [-11, 21, 3], [3.5, 22.5, 2], [24, -3.5, 2], [23.5, 16.5, 2], [-7, -24.5, 2], [6, -24.5, 2],
+  [-25.5, 3, 2], [12.5, -23, 1], [16, 20.5, 1],
+];
+/** the wood round the palisade: how many trees, from how far past it to how far, and how tall (m) */
+const WOOD = { n: 130, near: 2.4, far: 30, low: 9, high: 20 };
+/** the lamp posts flanking the stair's foot (x either side, z), their lantern's height and light */
+const LAMPS = { x: 3.5, z: -7.0, high: 3.1, color: 0xffb46a, intensity: 4, distance: 11 };
+/** the yard's torches on its gate posts: their fire's height, their light */
+const YARD_TORCH = { up: 2.25, color: 0xff8a3c, intensity: 3.2, distance: 10 };
+/** the candle on the chronicle's lectern: its light */
+const CANDLE = { color: 0xffc070, intensity: 2.2, distance: 6 };
+
+/** the village's light at each height of the sun (its sine): the night's, the twilight's and the day's */
+// (a bright moonlit night, a golden evening, a clear spring day)
+const NIGHT = { fog: 0x1c2640, sky: [0.02, 0.03, 0.08] as RGB, hemi: 0x6a7cb8, ground: 0x18201a, hemiI: 0.85, light: 0xbcccff, lightI: 1.7, env: 0.32, adapt: 1 };
+const TWILIGHT = { fog: 0xc89a80, sky: [0.16, 0.2, 0.42] as RGB, hemi: 0xd8b49a, ground: 0x3a3418, hemiI: 1.0, light: 0xffaa60, lightI: 2.8, env: 0.5, adapt: 1.5 };
+const NOON = { fog: 0xb4cce0, sky: [0.16, 0.38, 0.78] as RGB, hemi: 0xd8e8ff, ground: 0x4a5a28, hemiI: 1.45, light: 0xfff4e2, lightI: 4.0, env: 0.75, adapt: 2.3 };
+/** how far the key light (the sun, or by night the moon) stands from the middle, along its way (m) */
+const SKY_LIGHT_FAR = 42;
+/** the sun's highest (rad over the horizon, at noon), and the moon's */
+const SUN_HIGH = 1.05, MOON_HIGH = 0.85;
+
+/** The village as built: a biome's parts (`Biome`), its relief, its light at an hour, and its chest's lid. */
+export interface Village extends Biome {
+  relief: Relief;
+  /** its light at `hour` (0-24 of the clock), into `look`: called every frame while it's shown */
+  daylight(hour: number, look: BiomeLook): void;
+  /** the stash's chest open or shut (its lid swings) */
+  setChest(open: boolean): void;
+  /** its trees as they stand (the map draws them) */
+  trees: readonly { x: number; z: number; height: number }[];
+  /** each portal's way out into the village, by its battleground: where a hero coming back stands, and his facing */
+  exits: Record<BiomeId, { at: THREE.Vector3; facing: number }>;
+}
+
+/** A mesh casting and taking shadows, added to `group`. */
+function solid(group: THREE.Object3D, geometry: THREE.BufferGeometry, material: THREE.Material): THREE.Mesh {
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = mesh.receiveShadow = true;
+  group.add(mesh);
+  return mesh;
+}
+
+/** A box of size (w, h, d) standing on y0, its middle at (x, z), turned `turn` about y, added to `group`. */
+function block(group: THREE.Object3D, w: number, h: number, d: number, x: number, y0: number, z: number,
+  material: THREE.Material, texel = 0.5, turn = 0): THREE.Mesh {
+  const mesh = solid(group, boxWithUV(w, h, d, texel), material);
+  mesh.position.set(x, y0 + h / 2, z);
+  mesh.rotation.y = turn;
+  return mesh;
+}
+
+// --- the floor's levels ---------------------------------------------------------------------------------------------
+
+/** The relief the village's levels make, painted into its grid by `paint` (each cell's height its highest). */
+class Levels {
+  readonly n = Math.ceil((2 * RELIEF.half) / RELIEF.cell) + 1;
+  readonly heights = new Float32Array(this.n * this.n);
+
+  /** `height(x, z)` over the rectangle from (x0, z0) to (x1, z1), where it's higher than what's there */
+  paint(x0: number, z0: number, x1: number, z1: number, height: (x: number, z: number) => number): void {
+    const { cell, half } = RELIEF, n = this.n;
+    const i0 = Math.max(0, Math.floor((x0 + half) / cell)), i1 = Math.min(n - 1, Math.ceil((x1 + half) / cell));
+    const j0 = Math.max(0, Math.floor((z0 + half) / cell)), j1 = Math.min(n - 1, Math.ceil((z1 + half) / cell));
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const x = i * cell - half, z = j * cell - half;
+        if (x < x0 || x > x1 || z < z0 || z > z1) continue;
+        const h = height(x, z);
+        if (h > this.heights[j * n + i]) this.heights[j * n + i] = h;
+      }
+    }
+  }
+
+  get relief(): Relief { return { half: RELIEF.half, cell: RELIEF.cell, n: this.n, heights: this.heights, dais: false }; }
+}
+
+/** The height of a stair's step `along` m from its foot: a whole number of rises, up to `top`. */
+const stepAt = (along: number, top: number): number => Math.min(top, Math.max(0, Math.ceil(along / STEP_RUN - 1e-6)) * STEP_RISE);
+
+/** The village's materials, made once: its stones, its woods, its plaster, its iron. */
+interface Mats {
+  yardFloor: THREE.Material; cobbles: THREE.Material; flags: THREE.Material;
+  ashlar: THREE.Material; coping: THREE.Material; granite: THREE.Material; column: THREE.Material;
+  plaster: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material;
+  iron: THREE.Material; window: THREE.MeshStandardMaterial; glass: THREE.MeshStandardMaterial; paper: THREE.Material;
+}
+
+function makeMats(): Mats {
+  // (the biomes' own recipes, at the same arguments: their maps and their programs are theirs, nothing made afresh)
+  const stoneMaps = ashlar(21, 6, 3), flagMaps = flagstone(47, 5);
+  const mats: Mats = {
+    yardFloor: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(soil(), 8, 0.8), color: 0xc8b090 }),
+    cobbles: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(cobblestone(), 1, 1.1), color: 0xfff4e4 }),
+    flags: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(flagMaps, 1, 1.2), color: 0xd0c8bc }),
+    ashlar: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(stoneMaps, 1, 1.2), color: 0xd0c4b0 }),
+    coping: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.2), color: 0x9c968c }),
+    granite: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(granite(7), 2, 0.8), color: 0xc8c4c0 }),
+    column: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.6), color: 0x9a948a }),
+    // (lime plaster, washed warm and stained: the grunge map's patches under a cream)
+    plaster: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(grunge(), 1, 0.6), color: 0xd8c8a8 }),
+    timber: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x5a4030 }),
+    planks: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x8a6a4a }),
+    logs: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), [1, 2], 1.4), color: 0x8a7a6a }),
+    roof: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(slate(33, 2, 2), 1, 1.3), color: 0x6a6870 }),
+    iron: new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.7 }),
+    // (lit from within by night: its glow is a uniform the hour sets, `daylight`)
+    window: new THREE.MeshStandardMaterial({ color: 0x1a120c, roughness: 0.6, emissive: 0xffa050, emissiveIntensity: 0 }),
+    glass: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffc070, emissiveIntensity: 2.2 }),
+    paper: new THREE.MeshStandardMaterial({ map: noticePaper(), roughness: 0.9 }),
+  };
+  for (const m of [mats.ashlar, mats.coping, mats.column, mats.plaster, mats.timber, mats.planks, mats.logs, mats.roof, mats.iron, mats.window]) {
+    seeThrough(m, 'prop');
+  }
+  return mats;
+}
+
+/** The notices pinned to the board: a sheet of rough paper, its lines of ink as a hand writes them, a seal or two. */
+function noticePaper(): THREE.CanvasTexture {
+  const c = canvasOf(256, 256), g = ctx2d(c), rng = mulberry(77);
+  g.fillStyle = '#d8c8a0';
+  g.fillRect(0, 0, 256, 256);
+  for (let k = 0; k < 900; k++) {
+    g.fillStyle = `rgba(90,60,30,${0.03 + rng() * 0.05})`;
+    g.fillRect(rng() * 256, rng() * 256, 2 + rng() * 6, 1 + rng() * 3);
+  }
+  g.strokeStyle = 'rgba(40,24,12,.75)';
+  g.lineWidth = 2;
+  for (let y = 28; y < 230; y += 18 + rng() * 6) {
+    g.beginPath();
+    let x = 18 + rng() * 10;
+    g.moveTo(x, y);
+    const end = 200 + rng() * 36;
+    while (x < end) { x += 4 + rng() * 9; g.lineTo(x, y + (rng() - 0.5) * 3); }
+    g.stroke();
+  }
+  g.fillStyle = '#8a1e14';
+  g.beginPath(); g.arc(196, 214, 14, 0, TAU); g.fill();
+  return textureFromCanvas(c);
+}
+
+// --- the builder ----------------------------------------------------------------------------------------------------
+
+export function buildVillage(scene: THREE.Group): Village {
+  const rng = mulberry(9001);
+  const obstacles: Obstacle[] = [];
+  const updaters: Updater[] = [];
+  const wall = new Wall('village');
+  const levels = new Levels();
+  const M = makeMats();
+  const lights: THREE.PointLight[] = [];
+
+  const sky = buildDaySky();
+  scene.add(sky.mesh);
+  // (where the trees stand first: the meadow's mask leaves their feet bare)
+  const trees = treeSpots(rng);
+  const mask = meadowMask(trees);
+  const maskTexture = mask.texture();
+  const maskUniforms: MaskUniforms = { uMeadow: { value: maskTexture }, uMeadowHalf: { value: mask.half } };
+  buildGround(scene, M, maskUniforms);
+  scene.add(buildMeadow(mask, maskTexture, updaters));
+  buildSquare(scene, M, obstacles, updaters);
+  buildTerrace(scene, wall, levels, M);
+  buildHall(scene, wall, levels, M, rng, updaters);
+  const lid = buildChest(scene, M, obstacles);
+  buildPlatform(scene, wall, levels, M, obstacles, lights);
+  buildPalisade(scene, wall, M, rng);
+  const portals: Portal[] = [buildCryptWay(scene, wall, M, updaters), buildForestWay(scene, wall, updaters)];
+  const exits = {} as Village['exits'];
+  for (const id of BIOME_IDS) {
+    const p = portalPlace(id);
+    const at = new THREE.Vector3(p.x + Math.sin(p.facing) * 3.3, 0, p.z + Math.cos(p.facing) * 3.3);
+    exits[id] = { at, facing: p.facing };
+  }
+  for (const c of COTTAGES) buildCottage(scene, wall, M, c, rng);
+  buildTrees(scene, wall, obstacles, trees);
+  buildYard(scene, wall, M, updaters);
+  buildBonfire(scene, CAMPFIRE[0], CAMPFIRE[1], M.ashlar, M.logs, updaters, false);
+  obstacles.push({ x: CAMPFIRE[0], z: CAMPFIRE[1], r: 1.0, h: 0.5 });
+  buildBenches(scene, M, obstacles);
+  buildNoticeBoard(scene, wall, M);
+  for (const s of [-1, 1]) lights.push(buildLamp(scene, TERRACE.x + s * LAMPS.x, LAMPS.z, M, obstacles));
+  updaters.push(contactShadows(scene, obstacles));
+  updaters.push(sky.update);
+  updaters.push(chimneySmoke());
+
+  let lidOpen = 0, lidWanted = 0;
+  updaters.push((dt) => {
+    lidOpen += (lidWanted - lidOpen) * Math.min(1, dt * 8);
+    lid.rotation.x = -lidOpen * 1.15;
+  });
+
+  return {
+    look: { ...lookAt(18), env: VILLAGE_ENV },
+    obstacles,
+    wall,
+    props: [],
+    portals,
+    relief: levels.relief,
+    exits,
+    trees,
+    setCalm() {},
+    update(dt, t) { for (const u of updaters) u(dt, t); },
+    setChest(open) { lidWanted = open ? 1 : 0; },
+    daylight(hour, look) {
+      Object.assign(look, lookAt(hour));
+      sky.set(hour);
+      // (the windows lit as the light goes; the lanterns' glass burns the same at any hour)
+      M.window.emissiveIntensity = 2.4 * (1 - dayness(hour));
+    },
+  };
+}
+
+// --- the light by the hour ------------------------------------------------------------------------------------------
+
+/** How high the sun is at `hour` (the sine of its height over the horizon: below 0 it's night). */
+function sunHeight(hour: number): number {
+  const share = (hour - DAY.dawn) / (DAY.dusk - DAY.dawn);
+  return Math.sin(share * Math.PI) * Math.sin(SUN_HIGH);
+}
+
+/** 0 by night, 1 by full day, between through the twilights. */
+const dayness = (hour: number): number => THREE.MathUtils.smoothstep(sunHeight(hour), -0.12, 0.35);
+
+/** The way to the key light at `hour`: the sun along its arc from east through south to west, by night the moon. */
+function skyLightDir(hour: number, out = new THREE.Vector3()): THREE.Vector3 {
+  const day = DAY.dusk - DAY.dawn;
+  const sun = (hour - DAY.dawn) / day;
+  const up = sun >= 0 && sun <= 1;
+  // (the moon crosses the night the sun's way, from the dusk to the dawn)
+  const night = 24 - day;
+  const moon = (((hour - DAY.dusk) % 24) + 24) % 24 / night;
+  const share = up ? sun : moon, high = up ? SUN_HIGH : MOON_HIGH;
+  const height = Math.max(0.12, Math.sin(share * Math.PI) * high);
+  const round = share * Math.PI;
+  return out.set(Math.cos(round) * Math.cos(height), Math.sin(height), Math.sin(round) * Math.cos(height) * 0.75 + 0.25).normalize();
+}
+
+const _a = new THREE.Color(), _b = new THREE.Color();
+/** `a` to `b` by `k`, as a hex colour. */
+const mixHex = (a: number, b: number, k: number): number => _a.set(a).lerp(_b.set(b), k).getHex();
+
+/** The village's look at `hour`: night to twilight as the sun nears the horizon, twilight to day as it climbs. */
+function lookAt(hour: number): Omit<BiomeLook, 'env'> {
+  const s = sunHeight(hour);
+  const toTwilight = THREE.MathUtils.smoothstep(s, -0.35, -0.02);
+  const toDay = THREE.MathUtils.smoothstep(s, 0.02, 0.5);
+  const low = s < 0.02;
+  const [from, to, k] = low ? [NIGHT, TWILIGHT, toTwilight] as const : [TWILIGHT, NOON, toDay] as const;
+  const fog = mixHex(from.fog, to.fog, k);
+  const dir = skyLightDir(hour).multiplyScalar(SKY_LIGHT_FAR);
+  return {
+    background: fog,
+    fog: { color: fog, near: 55, far: 150 },
+    hemi: { sky: mixHex(from.hemi, to.hemi, k), ground: mixHex(from.ground, to.ground, k), intensity: THREE.MathUtils.lerp(from.hemiI, to.hemiI, k) },
+    moon: { color: mixHex(from.light, to.light, k), intensity: THREE.MathUtils.lerp(from.lightI, to.lightI, k), pos: [dir.x, dir.y, dir.z] },
+    envIntensity: THREE.MathUtils.lerp(from.env, to.env, k),
+    adapt: THREE.MathUtils.lerp(from.adapt, to.adapt, k),
+  };
+}
+
+/** The sky over the village: the fog's colour at the horizon rising into its zenith, the sun's disc and glow by day, by
+ *  night the moon and stars; clouds drifting. Set by the hour (`set`: uniforms alone). Unfogged, behind everything. */
+function buildDaySky(): { mesh: THREE.Mesh; update: Updater; set(hour: number): void } {
+  const uniforms = {
+    uHorizon: { value: new THREE.Color() }, uZenith: { value: new THREE.Color() }, uSun: { value: new THREE.Vector3(0, 1, 0) },
+    uDay: { value: 0 }, uTime: { value: 0 },
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms, side: THREE.BackSide, depthWrite: false, fog: false,
+    // on the far plane, drawn after everything opaque: the depth test skips every covered pixel
+    vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); gl_Position.z = gl_Position.w; }`,
+    fragmentShader: `
+      varying vec3 vDir; uniform vec3 uHorizon; uniform vec3 uZenith; uniform vec3 uSun; uniform float uDay; uniform float uTime;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      // no sin(): its precision loss on big cell coordinates lines the stars up in rings round the zenith
+      float h3(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+        return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
+      void main(){
+        vec3 d = normalize(vDir);
+        float y = max(d.y, 0.0);
+        vec3 c = mix(uHorizon, uZenith, smoothstep(0.0, 0.55, y));
+        float m = max(dot(d, uSun), 0.0);
+        // the sun's glow and disc by day, warmer low; the moon's by night, small and pale
+        vec3 glow = mix(vec3(0.05, 0.06, 0.1), vec3(0.55, 0.38, 0.2), uDay);
+        c += glow * pow(m, 10.0) * 0.4;
+        float disc = smoothstep(mix(0.99988, 0.9993, uDay), mix(0.99993, 0.9996, uDay), m);
+        c += mix(vec3(0.5, 0.54, 0.64), vec3(1.0, 0.9, 0.72) * 2.4, uDay) * disc;
+        // stars, fading in as the day goes (cubic cells cut the sphere unevenly: scaled to even the density out)
+        vec3 ad = abs(d);
+        vec3 g = floor(d * 700.0);
+        float dens = 0.004 * 1.732 / (ad.x + ad.y + ad.z);
+        float b = h3(g + 1.0);
+        c += vec3(0.8, 0.82, 1.0) * 0.5 * step(1.0 - dens, h3(g)) * smoothstep(0.12, 0.4, y) * (0.25 + b * b * b) * (1.0 - uDay);
+        // clouds on a plane overhead, thinning towards the horizon, lit by the day and grey by night
+        vec2 p = d.xz / max(d.y, 0.08) * 1.6 + vec2(uTime * 0.01, uTime * 0.004);
+        float cl = n(p) * 0.55 + n(p * 2.3 + 5.0) * 0.3 + n(p * 5.1 + 9.0) * 0.15;
+        cl = smoothstep(0.52, 0.82, cl) * smoothstep(0.04, 0.3, y);
+        c = mix(c, uHorizon * mix(0.7, 1.25, uDay) + vec3(0.1, 0.06, 0.03) * pow(m, 4.0), cl * 0.6);
+        gl_FragColor = vec4(c, 1.0);
+      }`,
+  });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), mat);
+  mesh.renderOrder = 100;
+  mesh.frustumCulled = false;
+  return {
+    mesh,
+    update: (_dt, t) => { uniforms.uTime.value = t; },
+    set(hour) {
+      const look = lookAt(hour), day = dayness(hour);
+      uniforms.uHorizon.value.set(look.fog.color);
+      const k = THREE.MathUtils.smoothstep(sunHeight(hour), -0.3, 0.4);
+      uniforms.uZenith.value.setRGB(...(k < 0.5 ? lerpRGB(NIGHT.sky, TWILIGHT.sky, k * 2) : lerpRGB(TWILIGHT.sky, NOON.sky, k * 2 - 1)));
+      skyLightDir(hour, uniforms.uSun.value);
+      uniforms.uDay.value = day;
+    },
+  };
+}
+
+const lerpRGB = (a: RGB, b: RGB, k: number): RGB => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+
+// --- the ground, the square and its fountain ------------------------------------------------------------------------
+
+/** The ground: a meadow's sward out past the fog (bare earth where the mask has no grass), the cobbled square round the
+ *  fountain, its edge wandering, and the cobbled roads winding from it. */
+function buildGround(scene: THREE.Object3D, M: Mats, mask: MaskUniforms): void {
+  const earth = meadowGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(soil(), 90, 1.1), color: 0xe0c8a4 }), mask);
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(220, 96).rotateX(-Math.PI / 2), earth);
+  ground.receiveShadow = true;
+  scene.add(ground);
+  // (the square and the roads cobbled alike, a tile a metre and a half in the world's frame: where they overlap, they
+  // draw the same)
+  scene.add(flatPatch(squareOutline(), M.cobbles, 0.012));
+  roadLines.forEach((road, k) => scene.add(roadStrip(road.line, road.width, M.cobbles, k)));
+}
+
+/** The square's edge: round the fountain, wandering in and out. */
+function squareOutline(): Spot[] {
+  return Array.from({ length: 64 }, (_, k): Spot => {
+    const a = (k / 64) * TAU;
+    const r = SQUARE_R * (1 + 0.09 * Math.sin(3 * a + 1.1) + 0.05 * Math.sin(5 * a + 2.3) + 0.03 * Math.sin(9 * a));
+    return [Math.cos(a) * r, Math.sin(a) * r];
+  });
+}
+
+/** UVs a tile `tile` m in the world's frame (x, z), for a flat geometry lying on the ground. */
+function worldUVs(g: THREE.BufferGeometry, tile: number): void {
+  const p = g.attributes.position, uv = new Float32Array(p.count * 2);
+  for (let k = 0; k < p.count; k++) {
+    uv[k * 2] = p.getX(k) / tile;
+    uv[k * 2 + 1] = p.getZ(k) / tile;
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
+/** A flat patch of `m` over the polygon `points` (x, z), `y` over the ground. */
+function flatPatch(points: readonly Spot[], m: THREE.Material, y: number): THREE.Mesh {
+  const shape = new THREE.Shape(points.map(([x, z]) => new THREE.Vector2(x, -z)));
+  const g = new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2);
+  worldUVs(g, 1.5);
+  const mesh = new THREE.Mesh(g, m);
+  mesh.position.y = y;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+/** A road along `line` (points every 0.4 m), `width` m wide, its edges wandering a little either side (each road its
+ *  own, `seed`). */
+function roadStrip(line: readonly Spot[], width: number, m: THREE.Material, seed: number): THREE.Mesh {
+  const positions: number[] = [], index: number[] = [];
+  line.forEach(([x, z], i) => {
+    const [ax, az] = line[Math.max(0, i - 1)], [bx, bz] = line[Math.min(line.length - 1, i + 1)];
+    const len = Math.hypot(bx - ax, bz - az) || 1, nx = -(bz - az) / len, nz = (bx - ax) / len;
+    for (const s of [-1, 1]) {
+      const wander = 0.16 * Math.sin(i * 0.37 + seed * 3.1 + s) + 0.1 * Math.sin(i * 1.13 + seed + s * 2.0);
+      const half = width / 2 + wander;
+      positions.push(x + nx * half * s, 0, z + nz * half * s);
+    }
+    if (i > 0) {
+      const a = (i - 1) * 2;
+      index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.setIndex(index);
+  worldUVs(g, 1.5);
+  g.computeVertexNormals();
+  const mesh = new THREE.Mesh(g, m);
+  mesh.position.y = 0.016;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+/** Where grass grows: everywhere but the roads, the square, what's built and where feet wear it (the footpaths, the
+ *  yard, round the campfire, the trees' feet). */
+function meadowMask(trees: readonly TreeSpot[]): MeadowMask {
+  const mask = new MeadowMask(48);
+  const square = squareOutline();
+  mask.clearPolygon(square);
+  mask.clearPath([...square, square[0]], 1.6, 0.5);
+  // the roads, worn along their edges; the footpaths, earth trodden bare down their middles
+  for (const road of roadLines) {
+    mask.clearPath(road.line, road.width + 1.4, 0.55);
+    mask.clearPath(road.line, road.width - 0.1);
+  }
+  for (const c of COTTAGES) {
+    const path = footpathOf(c);
+    if (!path) continue;
+    mask.clearPath(path, 1.5, 0.45);
+    mask.clearPath(path, 0.75, 0.1);
+  }
+  const X = TERRACE.x;
+  mask.clearRect(X - TERRACE.half - 0.6, TERRACE.back - 0.6, X + TERRACE.half + 0.6, TERRACE.front + 0.5);
+  mask.clearRect(X - TERRACE.stairHalf - 0.3, TERRACE.front, X + TERRACE.stairHalf + 0.3, TERRACE.stairFoot + 0.4);
+  const { x, z, half } = DAIS_EAST;
+  mask.clearRect(x - half - 0.5, z - half - 0.5, x + half + 0.5, z + half + 1.9);
+  mask.clearRect(YARD.x - YARD.halfX, YARD.z - YARD.halfZ, YARD.x + YARD.halfX, YARD.z + YARD.halfZ, 0.4, YARD.turn);
+  for (const c of COTTAGES) {
+    const w = (COTTAGE.w / 2 + 0.5) * c.size, d = (COTTAGE.d / 2 + 0.5) * c.size;
+    mask.clearRect(c.x - w, c.z - d, c.x + w, c.z + d, 0, c.facing);
+  }
+  mask.clearCircle(CAMPFIRE[0], CAMPFIRE[1], 1.6);
+  mask.clearCircle(CAMPFIRE[0], CAMPFIRE[1], 3.4, 0.45);
+  mask.clearCircle(NOTICE.x, NOTICE.z, 1.3, 0.4);
+  for (const s of [-1, 1]) mask.clearCircle(TERRACE.x + s * LAMPS.x, LAMPS.z, 0.5);
+  for (const t of trees) mask.clearCircle(t.x, t.z, 0.9, 0.4);
+  // the palisade's foot; the crypt's court, paved; the trodden path into the grove to its portal
+  const line = palisadePolygon();
+  mask.clearPath([...line, line[0]], 0.9);
+  const court = (across: number, out: number): Spot => wayPoint('crypt', across, out);
+  mask.clearPolygon([court(-GAP_HALF, -1), court(GAP_HALF, -1), court(GAP_HALF + 0.4, PODIUM.front + 0.3),
+    court(TOMB.w / 2 + 1.2, PODIUM.front), court(TOMB.w / 2 + 1.2, TOMB.back + 1.2), court(-TOMB.w / 2 - 1.2, TOMB.back + 1.2),
+    court(-TOMB.w / 2 - 1.2, PODIUM.front), court(-GAP_HALF - 0.4, PODIUM.front + 0.3)]);
+  const forest = portalPlace('forest');
+  const pathIn: Spot[] = [roadLines[1].line[roadLines[1].line.length - 1], wayPoint('forest', 0.4, 2.5), [forest.x, forest.z]];
+  mask.clearPath(pathIn, 1.8, 0.35);
+  mask.clearPath(pathIn, 0.9, 0.1);
+  return mask;
+}
+
+/** A point of way `id`'s frame in the village's: `across` its way (m, to its right going out) and `out` from its gap. */
+function wayPoint(id: BiomeId, across: number, out: number): Spot {
+  const { gap, out: dir } = ENTRANCES[id];
+  return [gap[0] + dir[0] * out - dir[1] * across, gap[1] + dir[1] * out + dir[0] * across];
+}
+
+/** The fountain in the middle of the square (world/fountain.ts). */
+function buildSquare(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[], updaters: Updater[]): void {
+  buildFountain(scene, { stone: M.ashlar, coping: M.coping }, obstacles, updaters);
+}
+
+// --- the terrace, its stair, the hall of heroes ---------------------------------------------------------------------
+
+/**
+ * A wall facing a ledge, from the ground to `top` (m) along x0..x1 at z (or along z0..z1 at x: `alongZ`), its coping on
+ * top: drawn, flown into, and kept off by bodies (its outline), so the only way onto what it faces is a stair.
+ */
+function ledgeWall(scene: THREE.Object3D, wall: Wall, M: Mats, a0: number, a1: number, at: number, top: number, alongZ = false): void {
+  const len = a1 - a0, mid = (a0 + a1) / 2, t = PARAPET.thick;
+  const body = alongZ ? block(scene, t, top, len, at, 0, mid, M.ashlar, 0.5) : block(scene, len, top, t, mid, 0, at, M.ashlar, 0.5);
+  const cap = alongZ ? block(scene, t + 0.12, 0.12, len + 0.12, at, top, mid, M.coping) : block(scene, len + 0.12, 0.12, t + 0.12, mid, top, at, M.coping);
+  cap.castShadow = true;
+  wall.add(body, true, 'wall', true);
+}
+
+/** The terrace: a stone platform the hall stands on, faced on every side by its walls, a broad stair up its middle. */
+function buildTerrace(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats): void {
+  const { x: X, front, back, half, high, stairHalf, stairFoot } = TERRACE;
+  const deep = front - back;
+  block(scene, half * 2, high, deep, X, 0, (front + back) / 2, M.ashlar, 0.5).receiveShadow = true;
+  const top = new THREE.Mesh(new THREE.PlaneGeometry(half * 2, deep).rotateX(-Math.PI / 2), M.flags);
+  const uv = top.geometry.attributes.uv;
+  for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * half * 2 / 2.25, uv.getY(k) * deep / 2.25);
+  top.position.set(X, high + 0.005, (front + back) / 2);
+  top.receiveShadow = true;
+  scene.add(top);
+  levels.paint(X - half, back, X + half, front, () => high);
+  // its walls: the front either side of the stair, the sides, the back (each stands a parapet over the terrace)
+  const wallTop = high + PARAPET.over, t = PARAPET.thick / 2;
+  ledgeWall(scene, wall, M, X - half, X - stairHalf - t, front + t, wallTop);
+  ledgeWall(scene, wall, M, X + stairHalf + t, X + half, front + t, wallTop);
+  for (const s of [-1, 1]) ledgeWall(scene, wall, M, back, front + PARAPET.thick, X + s * (half + t), wallTop, true);
+  ledgeWall(scene, wall, M, X - half - PARAPET.thick, X + half + PARAPET.thick, back - t, wallTop);
+  // the stair: a step a rise, each a block from its front back under the terrace's edge
+  const steps = Math.round(high / STEP_RISE);
+  for (let k = 1; k <= steps; k++) {
+    const z0 = stairFoot - (k - 1) * STEP_RUN, d = z0 - front;
+    block(scene, stairHalf * 2, k * STEP_RISE, d, X, 0, front + d / 2, M.flags, 1 / 2.25);
+  }
+  levels.paint(X - stairHalf, front, X + stairHalf, stairFoot, (_x, z) => stepAt(stairFoot - z, high));
+  // its cheeks: sloping walls either side, from the foot's knee to the parapet's top (convex: a body kept off them)
+  for (const s of [-1, 1]) cheek(scene, wall, M, X + s * (stairHalf + t), stairFoot, front, 0.55, wallTop);
+}
+
+/** A stair's cheek wall at x, from its foot (z0, `low` m tall) to the ledge (z1, `high`): a sloping slab of stone. */
+function cheek(scene: THREE.Object3D, wall: Wall, M: Mats, x: number, z0: number, z1: number, low: number, high: number): void {
+  const s = new THREE.Shape();
+  // (drawn in (z, y), then turned so its depth runs across x)
+  s.moveTo(z0, 0); s.lineTo(z1, 0); s.lineTo(z1, high); s.lineTo(z0, low); s.lineTo(z0, 0);
+  const g = new THREE.ExtrudeGeometry(s, { depth: PARAPET.thick, bevelEnabled: false }).rotateY(-Math.PI / 2);
+  g.translate(x + PARAPET.thick / 2, 0, 0);
+  // (its uvs as a box's would be: the extrusion's are in shape units already, a metre a tile)
+  const mesh = solid(scene, g, M.ashlar);
+  wall.add(mesh, true, 'wall', true);
+}
+
+/** The hall of heroes on the terrace: the row's plinths (a relief on the terrace), the back wall with each class's
+ *  banner over his plinth, the colonnade either side and its lintel, the two braziers (the still shadows' lights). */
+function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, rng: () => number, updaters: Updater[]): void {
+  const y0 = TERRACE.high;
+  for (const [i] of CLASS_IDS.entries()) {
+    const at = hallSpot(i);
+    const lower = new THREE.CylinderGeometry(PLINTH.lower, PLINTH.lower, PLINTH.step, 40);
+    solid(scene, lower, M.granite).position.set(at.x, y0 + PLINTH.step / 2, at.z);
+    const upperHigh = HALL.plinthTop - PLINTH.step;
+    const upper = new THREE.CylinderGeometry(PLINTH.upper, PLINTH.upper * 1.04, upperHigh, 40);
+    solid(scene, upper, M.granite).position.set(at.x, y0 + PLINTH.step + upperHigh / 2, at.z);
+    levels.paint(at.x - PLINTH.upper, at.z - PLINTH.upper, at.x + PLINTH.upper, at.z + PLINTH.upper,
+      (x, z) => (Math.hypot(x - at.x, z - at.z) <= PLINTH.upper ? y0 + HALL.plinthTop : 0));
+    banner(scene, i, M.iron, rng);
+  }
+  // the back wall, a plinth course along its foot
+  const backWall = block(scene, BACK.half * 2, BACK.high, 0.6, TERRACE.x, y0, HALL.wall - 0.3, M.ashlar);
+  wall.add(backWall, true, 'wall', true);
+  block(scene, BACK.half * 2, 0.45, 0.35, TERRACE.x, y0, HALL.wall + 0.17, M.coping);
+  // the colonnade: a pair of columns either side, a lintel over each pair
+  for (const s of [-1, 1]) {
+    for (const x of COLONNADE.x) {
+      const cx = TERRACE.x + s * x, cz = COLONNADE.z;
+      wall.add(block(scene, 1.0, 0.4, 1.0, cx, y0, cz, M.granite), true, 'wall', true);
+      const shaft = new THREE.CylinderGeometry(COLONNADE.radius * 0.88, COLONNADE.radius, COLONNADE.high, 18);
+      solid(scene, shaft, M.column).position.set(cx, y0 + 0.4 + COLONNADE.high / 2, cz);
+      block(scene, 0.95, 0.32, 0.95, cx, y0 + 0.4 + COLONNADE.high, cz, M.granite);
+    }
+    const [a, b] = COLONNADE.x;
+    block(scene, b - a + 1.1, COLONNADE.lintel, 1.0, TERRACE.x + s * (a + b) / 2, y0 + 0.72 + COLONNADE.high, COLONNADE.z, M.coping);
+    // (a beam from each lintel back to the wall: the colonnade's sides roofed by nothing, open to the sky)
+    block(scene, 0.5, 0.4, COLONNADE.z - HALL.wall, TERRACE.x + s * (a + b) / 2, y0 + 0.75 + COLONNADE.high, (COLONNADE.z + HALL.wall) / 2, M.timber);
+    buildBrazier(scene, TERRACE.x + s * BRAZIERS.x, BRAZIERS.z, Math.PI / 2, M.iron, M.granite, updaters, y0, BRAZIERS.glow, BRAZIERS.flames);
+  }
+}
+
+/** Hero `i`'s banner on the hall's back wall over his plinth, in his class's colour, on an iron rod. */
+function banner(scene: THREE.Object3D, i: number, iron: THREE.Material, rng: () => number): void {
+  const x = hallSpot(i).x, y = TERRACE.high + BANNER.top, z = HALL.wall + BANNER.off;
+  const cloth = bannerCloth(256, 512, CLASSES[CLASS_IDS[i]].hall.banner);
+  const velvet = new THREE.MeshPhysicalMaterial({
+    map: cloth, roughness: 0.9, sheen: 1, sheenColorMap: cloth, sheenColor: new THREE.Color(1.8, 1.8, 1.8),
+    sheenRoughness: 0.4, side: THREE.DoubleSide,
+  });
+  seeThrough(velvet, 'prop');
+  // (`bannerGeo` hangs facing -z, away from a crypt's wall's face: turned round to face the square)
+  const geometry = bannerGeo(rng).rotateY(Math.PI).scale(BANNER.scale, BANNER.scale, BANNER.scale);
+  solid(scene, geometry, velvet).position.set(x, y, z);
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9 * BANNER.scale + 0.3, 8).rotateZ(Math.PI / 2), iron);
+  rod.position.set(x, y + 0.03, z);
+  scene.add(rod);
+}
+
+/** The stash's chest at the top of the stair: an iron-bound box, its lid hinged at the back (returned, to swing). */
+function buildChest(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): THREE.Object3D {
+  const g = new THREE.Group();
+  g.position.set(CHEST.x, TERRACE.high, CHEST.z);
+  g.rotation.y = CHEST.facing;
+  const w = 1.15, d = 0.7, h = 0.55;
+  block(g, w, h, d, 0, 0, 0, M.planks, 0.4);
+  for (const x of [-0.42, 0.42]) block(g, 0.06, h + 0.02, d + 0.02, x, 0, 0, M.iron);
+  const hinge = new THREE.Group();
+  hinge.position.set(0, h, -d / 2);
+  g.add(hinge);
+  // (the lid's half drum, its back edge on the hinge)
+  const lid = new THREE.Mesh(new THREE.CylinderGeometry(d / 2, d / 2, w, 16, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateX(Math.PI / 2), M.planks);
+  lid.position.set(0, 0, d / 2);
+  lid.castShadow = true;
+  hinge.add(lid);
+  for (const x of [-0.42, 0.42]) {
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(d / 2 + 0.015, d / 2 + 0.015, 0.06, 16, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateX(Math.PI / 2), M.iron);
+    band.position.set(x, 0, d / 2);
+    hinge.add(band);
+  }
+  const lock = block(g, 0.14, 0.18, 0.05, 0, h - 0.18, d / 2 + 0.02, M.iron);
+  lock.castShadow = false;
+  g.traverse((o) => { o.userData.noBake = true; });
+  scene.add(g);
+  obstacles.push({ x: CHEST.x, z: CHEST.z, r: 0.7, h: h + 0.35 });
+  return hinge;
+}
+
+/** The chronicle's platform east of the square: a block of stone 0.8 m up, its stair on its west side, a lectern with
+ *  an open book and a candle on it (its light, one of the village's). */
+function buildPlatform(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, obstacles: Obstacle[], lights: THREE.PointLight[]): void {
+  const { x, z, half, high } = DAIS_EAST;
+  block(scene, half * 2, high, half * 2, x, 0, z, M.ashlar);
+  const top = block(scene, half * 2 + 0.1, 0.06, half * 2 + 0.1, x, high - 0.06, z, M.flags, 1 / 2.25);
+  top.castShadow = false;
+  levels.paint(x - half, z - half, x + half, z + half, () => high);
+  const t = PARAPET.thick / 2, wallTop = high + 0.6, stairHalf = 1.3;
+  ledgeWall(scene, wall, M, x - half - PARAPET.thick, x + half + PARAPET.thick, z - half - t, wallTop);
+  ledgeWall(scene, wall, M, z - half, z + half, x + half + t, wallTop, true);
+  ledgeWall(scene, wall, M, z - half, z + half, x - half - t, wallTop, true);
+  ledgeWall(scene, wall, M, x - half - PARAPET.thick, x - stairHalf - t, z + half + t, wallTop);
+  ledgeWall(scene, wall, M, x + stairHalf + t, x + half + PARAPET.thick, z + half + t, wallTop);
+  // its stair, coming down south onto the road
+  const foot = z + half + Math.round(high / STEP_RISE) * STEP_RUN;
+  for (let k = 1; k * STEP_RISE <= high + 1e-6; k++) {
+    const z1 = foot - (k - 1) * STEP_RUN, d = z1 - (z + half);
+    block(scene, stairHalf * 2, k * STEP_RISE, d, x, 0, z + half + d / 2, M.flags, 1 / 2.25);
+  }
+  levels.paint(x - stairHalf, z + half, x + stairHalf, foot, (_px, pz) => stepAt(foot - pz, high));
+  // the lectern facing the stair: a post on a foot, its slanted desk, the book open on it, a candle (laid out
+  // facing -x, turned to face +z)
+  const lectern = new THREE.Group();
+  lectern.position.set(x, high, z - 0.2);
+  lectern.rotation.y = Math.PI / 2;
+  block(lectern, 0.5, 0.08, 0.5, 0, 0, 0, M.timber);
+  block(lectern, 0.12, 1.0, 0.12, 0, 0.08, 0, M.timber);
+  const desk = block(lectern, 0.62, 0.05, 0.46, 0, 1.06, 0, M.planks);
+  desk.rotation.z = 0.35;
+  desk.rotation.y = Math.PI / 2;
+  const book = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.04, 0.32), M.paper);
+  book.position.set(-0.02, 1.12, 0);
+  book.rotation.set(0, Math.PI / 2, 0.35);
+  lectern.add(book);
+  const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.16, 8), M.coping);
+  candle.position.set(0.22, 1.2, 0.28);
+  lectern.add(candle);
+  const flame = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6).scale(1, 2.2, 1), M.glass);
+  flame.position.set(0.22, 1.32, 0.28);
+  lectern.add(flame);
+  const light = new THREE.PointLight(CANDLE.color, CANDLE.intensity, CANDLE.distance, 2);
+  light.position.set(0.22, 1.55, 0.28);
+  lectern.add(light);
+  scene.add(lectern);
+  lights.push(light);
+  obstacles.push({ x, z: z - 0.2, r: 0.45, h: high + 1.1 });
+}
+
+// --- the palisade, the cottages ------------------------------------------------------------------------
+
+/** The palisade along its winding line: sharpened logs side by side, open at each way out's gap (the wall: walked up
+ *  to and flown into). */
+function buildPalisade(scene: THREE.Object3D, wall: Wall, M: Mats, rng: () => number): void {
+  const n = Math.ceil(palisadeCurve.getLength() / (PALISADE.radius * 2.05));
+  const spots: [THREE.Vector3, number, number][] = [];
+  for (const p of palisadeCurve.getSpacedPoints(n).slice(0, n)) {
+    if (fromGap(p.x, p.z) < GAP_HALF) continue;
+    spots.push([p, PALISADE.low + rng() * (PALISADE.high - PALISADE.low), rng()]);
+  }
+  const shaft = new THREE.CylinderGeometry(PALISADE.radius, PALISADE.radius * 1.08, 1, 7).translate(0, 0.5, 0);
+  const tip = new THREE.ConeGeometry(PALISADE.radius, 0.55, 7).translate(0, 0.275, 0);
+  const logs = new THREE.InstancedMesh(shaft, M.logs, spots.length);
+  const tips = new THREE.InstancedMesh(tip, M.timber, spots.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), at = new THREE.Vector3();
+  for (const [i, [p, h, k]] of spots.entries()) {
+    e.set((k - 0.5) * 0.04, k * TAU, (k - 0.5) * 0.05);
+    q.setFromEuler(e);
+    m.compose(at.set(p.x, 0, p.z), q, s.set(1, h, 1));
+    logs.setMatrixAt(i, m);
+    m.compose(at.set(p.x, h, p.z), q, s.set(1, 1, 1));
+    tips.setMatrixAt(i, m);
+  }
+  for (const mesh of [logs, tips]) { mesh.castShadow = mesh.receiveShadow = true; scene.add(mesh); }
+  wall.add(logs, false);
+}
+
+/** A cottage where `c` says, its door the way it faces, `size` its scale: a stone footing, lime walls
+ *  framed in dark timber, a door and shuttered windows (lit by night), a slate roof and its chimney. Its walls are a
+ *  part of the wall a body is kept off; its roof is flown into. */
+function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rng: () => number): void {
+  const g = new THREE.Group();
+  g.position.set(c.x, 0, c.z);
+  g.rotation.y = c.facing;
+  g.scale.setScalar(c.size);
+  const { w, d, h, rise, eave } = COTTAGE;
+  block(g, w + 0.2, 0.5, d + 0.2, 0, 0, 0, M.ashlar);
+  const body = block(g, w, h - 0.5, d, 0, 0.5, 0, M.plaster, 1);
+  // the frame: posts at the corners and between, a sill and a plate along each face
+  for (const sx of [-1, -0.33, 0.33, 1]) for (const sz of [-1, 1]) block(g, 0.18, h - 0.5, 0.06, sx * (w / 2 - 0.09), 0.5, sz * (d / 2 + 0.02), M.timber);
+  for (const sz of [-1, 1]) for (const y of [0.5, h - 0.18]) block(g, w + 0.04, 0.16, 0.06, 0, y, sz * (d / 2 + 0.02), M.timber);
+  for (const sx of [-1, 1]) block(g, 0.06, h - 0.5, d, sx * (w / 2 + 0.02), 0.5, 0, M.timber);
+  // the door and two windows on its face (+z, as it's turned), lit within by night
+  block(g, 1.0, 1.9, 0.08, 0, 0.5, d / 2 + 0.04, M.planks);
+  for (const sx of [-1, 1]) {
+    block(g, 0.8, 0.7, 0.06, sx * (w / 2 - 1.2), 1.35, d / 2 + 0.05, M.window);
+    for (const k of [-1, 1]) {
+      const shutter = block(g, 0.42, 0.74, 0.05, sx * (w / 2 - 1.2) + k * 0.65, 1.33, d / 2 + 0.1, M.planks);
+      shutter.rotation.y = k * (0.3 + rng() * 0.6);
+    }
+  }
+  // the roof: two slopes of slate over the gables, and the gables' triangles of plaster
+  const slope = Math.hypot(d / 2 + eave, rise), pitch = Math.atan2(rise, d / 2 + eave);
+  const roofParts: THREE.Mesh[] = [];
+  for (const sz of [-1, 1]) {
+    const slab = block(g, w + eave * 2, 0.14, slope, 0, 0, 0, M.roof);
+    slab.position.set(0, h + rise / 2, sz * (d / 2 + eave) / 2);
+    slab.rotation.x = sz * pitch;
+    roofParts.push(slab);
+  }
+  const gable = new THREE.Shape();
+  gable.moveTo(-d / 2, 0); gable.lineTo(d / 2, 0); gable.lineTo(0, rise); gable.lineTo(-d / 2, 0);
+  for (const sx of [-1, 1]) {
+    const tri = new THREE.ExtrudeGeometry(gable, { depth: 0.1, bevelEnabled: false }).rotateY(Math.PI / 2);
+    solid(g, tri, M.plaster).position.set(sx * (w / 2) - 0.05, h, 0);
+  }
+  const chimney = block(g, 0.6, rise + 1.2, 0.6, w / 2 - 0.9, h - 0.2, -d / 4, M.ashlar);
+  g.userData.chimney = chimney;
+  scene.add(g);
+  g.updateMatrixWorld(true);
+  chimneys.push(new THREE.Vector3(w / 2 - 0.9, h + rise + 1.1, -d / 4).applyMatrix4(g.matrixWorld));
+  wall.add(body, true, 'wall', true);
+  for (const part of [...roofParts, chimney]) wall.add(part, true, 'beyond');
+}
+
+/** where each cottage's chimney smokes (`chimneySmoke`) */
+const chimneys: THREE.Vector3[] = [];
+/** A thin smoke from every chimney, drifting off with the wind. */
+function chimneySmoke(): Updater {
+  let due = 0;
+  return (dt) => {
+    due += dt * chimneys.length * 1.6;
+    for (; due >= 1; due--) {
+      const at = chimneys[Math.floor(Math.random() * chimneys.length)];
+      particles.smoke.spawn({
+        x: at.x, y: at.y, z: at.z, vx: rand(0.1, 0.35), vy: rand(0.5, 0.8), vz: rand(-0.1, 0.1),
+        life: rand(3, 5), size: rand(0.5, 0.8), sizeEnd: 2.4, color: col(0x6a6460), alpha: 0.16,
+      });
+    }
+  };
+}
+
+// --- the yard, the campfire's benches, the notice board, the lamps -------------------------------------------------
+
+/** The training yard: a fence of posts and rails round a field of trodden grass, a gate on its north side with a torch on each
+ *  post (two of the village's lights). */
+function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats, updaters: Updater[]): void {
+  // (laid out in its own frame: its gate side at -z, turned as the plan has it)
+  const scene = new THREE.Group();
+  scene.position.set(YARD.x, 0, YARD.z);
+  scene.rotation.y = YARD.turn;
+  parent.add(scene);
+  scene.updateMatrixWorld(true);
+  const { halfX, halfZ, gate } = YARD, x = 0, z = 0;
+  // (its floor the meadow trodden thin: `meadowMask`)
+  // each side of the fence: posts along it and two rails, the rails the part a body is kept off
+  const side = (x0: number, z0: number, x1: number, z1: number): void => {
+    const len = Math.hypot(x1 - x0, z1 - z0), turn = Math.atan2(x1 - x0, z1 - z0) - Math.PI / 2;
+    const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+    const n = Math.max(2, Math.round(len / 1.6));
+    for (let k = 0; k <= n; k++) {
+      const t = k / n;
+      block(scene, 0.16, 1.25, 0.16, x0 + (x1 - x0) * t, 0, z0 + (z1 - z0) * t, M.timber, 0.4);
+    }
+    for (const y of [0.45, 0.95]) block(scene, len, 0.1, 0.08, mx, y, mz, M.planks, 0.4, turn);
+    // (one slab the rails' height for bodies to be kept off: the rails as drawn have a man's gap under them)
+    const keep = block(scene, len, 1.1, 0.12, mx, 0, mz, M.planks, 0.4, turn);
+    keep.visible = false;
+    wall.add(keep, false, 'wall', true);
+  };
+  const n0 = z - halfZ, n1 = z + halfZ, w0 = x - halfX, w1 = x + halfX;
+  const { gateAt } = YARD;
+  side(w0, n0, gateAt - gate, n0);
+  side(gateAt + gate, n0, w1, n0);
+  side(w1, n0, w1, n1);
+  side(w1, n1, w0, n1);
+  side(w0, n1, w0, n0);
+  for (const s of [-1, 1]) {
+    const px = gateAt + s * gate;
+    block(scene, 0.26, YARD_TORCH.up, 0.26, px, 0, n0, M.timber);
+    const light = new THREE.PointLight(YARD_TORCH.color, YARD_TORCH.intensity, YARD_TORCH.distance, 2);
+    const at = new THREE.Vector3(px, YARD_TORCH.up + 0.05, n0);
+    light.position.set(at.x, at.y + 0.45, at.z);
+    scene.add(light);
+    buildFire(scene, {
+      at, radius: 0.11, height: 0.45, dish: 0.03, light, intensity: YARD_TORCH.intensity, smoke: 1.2, smokeColour: 0x2a2826, embers: 3,
+    }, updaters);
+  }
+  // a rack of practice weapons against the fence's south side, and straw bales
+  for (let k = 0; k < 3; k++) {
+    const bale = block(scene, 1.1, 0.55, 0.6, x + halfX - 1.0, 0, n1 - 0.6 - k * 0.7, M.yardFloor, 0.5, 0.1 * k);
+    bale.castShadow = true;
+  }
+}
+
+/** Logs to sit on round the campfire. */
+function buildBenches(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): void {
+  const [cx, cz] = CAMPFIRE;
+  for (const a of [0.4, 2.3, 4.2]) {
+    const x = cx + Math.cos(a) * 2.2, z = cz + Math.sin(a) * 2.2;
+    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 1.7, 10).rotateZ(Math.PI / 2), M.logs);
+    log.position.set(x, 0.22, z);
+    log.rotation.y = -a + Math.PI / 2;
+    log.castShadow = log.receiveShadow = true;
+    scene.add(log);
+    for (const k of [-0.5, 0, 0.5]) obstacles.push({ x: x + Math.cos(a + Math.PI / 2) * k, z: z + Math.sin(a + Math.PI / 2) * k, r: 0.3, h: 0.44 });
+  }
+}
+
+/** The notice board: two posts, a board under a little roof, notices pinned to it. */
+function buildNoticeBoard(scene: THREE.Object3D, wall: Wall, M: Mats): void {
+  const g = new THREE.Group();
+  g.position.set(NOTICE.x, 0, NOTICE.z);
+  g.rotation.y = NOTICE.facing;
+  for (const s of [-1, 1]) block(g, 0.16, 2.6, 0.16, s * 0.9, 0, 0, M.timber);
+  const board = block(g, 1.9, 1.1, 0.08, 0, 1.0, 0, M.planks, 0.4);
+  const roof = block(g, 2.3, 0.08, 0.7, 0, 2.55, 0.05, M.roof);
+  roof.rotation.x = 0.35;
+  for (const [x, y, w, h, tilt] of [[-0.5, 1.6, 0.5, 0.6, 0.05], [0.15, 1.5, 0.45, 0.55, -0.08], [0.6, 1.75, 0.4, 0.4, 0.1], [-0.1, 1.15, 0.5, 0.35, 0]]) {
+    const note = new THREE.Mesh(new THREE.PlaneGeometry(w, h), M.paper);
+    note.position.set(x, y, 0.05);
+    note.rotation.z = tilt;
+    g.add(note);
+  }
+  scene.add(g);
+  wall.add(board, false, 'wall', true);
+}
+
+/** A lamp post at (x, z): a post, an arm and a lantern of glass with its light (one of the village's). */
+function buildLamp(scene: THREE.Object3D, x: number, z: number, M: Mats, obstacles: Obstacle[]): THREE.PointLight {
+  block(scene, 0.4, 0.3, 0.4, x, 0, z, M.ashlar);
+  block(scene, 0.14, LAMPS.high, 0.14, x, 0.3, z, M.timber);
+  const side = -Math.sign(x);
+  block(scene, 0.55, 0.08, 0.08, x + side * 0.24, LAMPS.high + 0.1, z, M.iron);
+  const lantern = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.32, 6), M.glass);
+  lantern.position.set(x + side * 0.48, LAMPS.high - 0.12, z);
+  scene.add(lantern);
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.16, 6), M.iron);
+  cap.position.set(x + side * 0.48, LAMPS.high + 0.1, z);
+  scene.add(cap);
+  const light = new THREE.PointLight(LAMPS.color, LAMPS.intensity, LAMPS.distance, 2);
+  light.position.set(x + side * 0.48, LAMPS.high - 0.3, z);
+  scene.add(light);
+  obstacles.push({ x, z, r: 0.35, h: LAMPS.high });
+  return light;
+}
+
+// --- the trees ------------------------------------------------------------------------------------------------------
+
+/** A tree's place: where, its kind (`TREE_KINDS`), its height (m), how it's turned and its crown's colour. */
+interface TreeSpot { x: number; z: number; kind: number; height: number; turn: number; colour: THREE.Color }
+
+/** the kinds the village grows (the forest's first three: grown once for both, `growTree`) */
+const VILLAGE_KINDS = [0, 1, 2];
+
+/** Where the trees stand: groves in the village wherever nothing's built (`GROVES`), the Thornwood's grove round its way
+ *  out, and the wood round the palisade, clear of the ways out. */
+function treeSpots(rng: () => number): TreeSpot[] {
+  const r = (a: number, b: number): number => a + rng() * (b - a);
+  // spring greens, a little apart tree to tree
+  const crown = (): THREE.Color => new THREE.Color().setRGB(r(0.13, 0.22), r(0.3, 0.42), r(0.06, 0.12)).multiplyScalar(2.1);
+  const spots: TreeSpot[] = [];
+  const clear = (x: number, z: number, apart: number): boolean => spots.every((s) => Math.hypot(s.x - x, s.z - z) >= apart);
+  const add = (x: number, z: number, height: number): void => {
+    spots.push({ x, z, kind: Math.floor(r(0, VILLAGE_KINDS.length)), height, turn: r(0, TAU), colour: crown() });
+  };
+  for (const [cx, cz, n] of GROVES) {
+    for (let placed = 0, tries = 0; placed < n && tries < 40; tries++) {
+      const a = r(0, TAU), d = placed === 0 ? r(0, 1) : r(1.5, 3.4);
+      const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+      if (builtAt(x, z, 1.2) || !insidePalisade(x, z, 1.4) || !clear(x, z, 3.2)) continue;
+      add(x, z, r(6.5, 9.5));
+      placed++;
+    }
+  }
+  for (const [x, z] of groveTrees()) add(x, z, r(9, 13));
+  const line = palisadeCurve.getSpacedPoints(400);
+  for (let tries = 0, n = 0; n < WOOD.n && tries < WOOD.n * 40; tries++) {
+    const p = line[Math.floor(r(0, line.length))], len = Math.hypot(p.x, p.z);
+    const past = WOOD.near + Math.pow(r(0, 1), 1.3) * (WOOD.far - WOOD.near);
+    const x = p.x * (1 + past / len), z = p.z * (1 + past / len);
+    // (a way out's own ground and its sight out kept open, and no two trunks within 3.5 m)
+    if (insidePalisade(x, z) || inWay(x, z, 2.5) || fromGap(x, z) < 8 || !clear(x, z, 3.5)) continue;
+    add(x, z, Math.min(WOOD.high, WOOD.low + past * 0.5) * r(0.85, 1.15));
+    n++;
+  }
+  return spots;
+}
+
+/** The trees, a pair of instanced meshes a kind (bark, leaves), each culled tree by tree; each in the village is an
+ *  obstacle round its trunk's foot, and every trunk is met by what flies. */
+function buildTrees(scene: THREE.Object3D, wall: Wall, obstacles: Obstacle[], spots: readonly TreeSpot[]): void {
+  const kinds: TreeKind[] = VILLAGE_KINDS.map((k) => growTree(TREE_KINDS[k]));
+  const leafMat = seeThrough(new THREE.MeshStandardMaterial({
+    map: leafClusterTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8,
+  }), 'foliage');
+  const mx = new THREE.Matrix4();
+  kinds.forEach((kind, k) => {
+    const mine = spots.filter((s) => s.kind === k);
+    const barkMat = seeThrough(new THREE.MeshStandardMaterial({
+      ...pbrMaterialMaps(bark(), TREE_KINDS[VILLAGE_KINDS[k]].bark, 1.6), color: 0xd8c8b0,
+    }), 'prop');
+    const barks = new THREE.InstancedMesh(kind.bark, barkMat, mine.length);
+    const leaves = new THREE.InstancedMesh(kind.leaves, leafMat, mine.length);
+    mine.forEach((s, i) => {
+      // (sunk a little: a trunk is an open tube at its foot)
+      setInstance(barks, i, s.x, -0.25, s.z, 0, s.turn, 0, s.height, s.height, s.height);
+      barks.getMatrixAt(i, mx);
+      leaves.setMatrixAt(i, mx);
+      leaves.setColorAt(i, s.colour);
+      wall.addGeometry(kind.trunk, mx, false, 'beyond');
+      if (withinVillage(s.x, s.z)) {
+        obstacles.push({ x: s.x, z: s.z, r: Math.max(0.3, kind.trunkFoot * s.height + 0.1), h: s.height });
+      }
+    });
+    barks.castShadow = barks.receiveShadow = leaves.castShadow = leaves.receiveShadow = true;
+    barks.name = `village trees' bark: ${TREE_KINDS[VILLAGE_KINDS[k]].preset}`;
+    leaves.name = `village trees' leaves: ${TREE_KINDS[VILLAGE_KINDS[k]].preset}`;
+    for (const mesh of [barks, leaves]) scene.add(...cullInCells(mesh, eachInstance));
+  });
+}

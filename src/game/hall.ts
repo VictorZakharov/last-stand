@@ -1,8 +1,11 @@
-// The hall of heroes: the hero selection screen's stage (ui/heroSelect.ts), in a room of its own shown in the biome's
-// place (world/heroHall.ts). Every class's hero stands in a row on a plinth in his gear from the save slot in play, each a remote player's copy (its casts play for show, dealing nothing:
-// net/role.ts `dealsDamage`), the lobby's own hero hidden meanwhile. The camera comes to the hero in focus, lit by a key
-// light and a rim light from the pool (fx/lights.ts: the count never changes), and he shows off a skill of his as it
-// arrives (`HallDef.showcase`). Every hero's programs are warm before it opens (game/warm.ts, the `heroes` need).
+// The hall of heroes: the hero selection screen's stage (ui/heroSelect.ts), on the village's terrace (world/village.ts).
+// The classes the player isn't playing stand on their plinths there whenever the lobby is up, his own plinth empty
+// (`standHall`); opened, his hero's copy steps onto it, and every class's hero stands in the row in his gear from the
+// save slot in play, each a remote player's copy (its casts play for show, dealing nothing: net/role.ts `dealsDamage`),
+// the lobby's own hero hidden meanwhile. The camera comes to the hero in focus, lit by a key light and a rim light from
+// the pool (fx/lights.ts: the count never changes), and he shows off a skill of his as it arrives (`HallDef.showcase`).
+// They stand only once every hero's programs are warm (game/warm.ts, the `heroes` need); each player's hall is his own,
+// in co-op too.
 import * as THREE from 'three';
 import { G } from '../state';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
@@ -17,7 +20,8 @@ import { particles } from '../fx/particles';
 import { stageCamera, type Shot } from '../core/renderer';
 import { TAU } from '../util';
 import { groundHeight } from '../world/ground';
-import { hallSpot } from '../world/heroHall';
+import { hallSpot } from '../world/village';
+import { isWarm } from './warm';
 import { heroDetail } from '../entities/models/armor';
 import { applyShadowDetail, qualityLevel } from '../core/quality';
 import type { Profile } from '../types';
@@ -90,14 +94,16 @@ export interface HallHero {
 }
 
 let heroes: HallHero[] = [];
+/** the heroes standing on their plinths while the hall is down (every class but the lobby's own), by class */
+const standing = new Map<string, HallHero>();
+/** whether the hall is open (the selection screen up), and whether its heroes stand at all (the lobby, not a run) */
+let open = false, stood = false;
 /** each class's hero as the hall last built him, kept out of the scene while it's down, and the gear he wears: built
  *  afresh at every opening, the three held the click that opened it up 190 to 236 ms, and disposed held Back up 30
  *  (`npm run stalls -- --scenario heroes`) */
 const kept = new Map<string, { player: Player; gear: string; profile: Profile; slot: number; level: string }>();
 let focus = 0;
 let lights: LightSlot[] = [];
-/** the co-op partners' heroes the lobby showed, hidden while the hall is up (they'd stand in its room) */
-let partners: Player[] = [];
 let opened = 0;
 /** how much further back than `SHOT.back` the camera stands, so the hero fits the room the screen leaves him
  *  (`frameHall`) */
@@ -109,7 +115,7 @@ let dragged: number | null = null;
 let upright = false;
 const reduced = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export const hallOpen = (): boolean => heroes.length > 0;
+export const hallOpen = (): boolean => open;
 export const hallHeroes = (): readonly HallHero[] => heroes;
 export const hallFocus = (): number => focus;
 
@@ -119,30 +125,63 @@ const spot = (i: number): THREE.Vector3 => {
   return at.setY(groundHeight(at.x, at.z));
 };
 
+/** Class `id`'s hero of the hall, standing on his plinth (`i` in the row) in the gear his profile has. */
+function hallHero(id: string, i: number): HallHero {
+  const profile = profileOf(id);
+  const player = heroIn(id, profile);
+  const at = spot(i);
+  player.spawn.copy(at);
+  player.reset();
+  player.shine = SHINE;
+  place(player, at, ROW.facing);
+  return { id, profile, player, due: Infinity, shown: -Infinity, facing: ROW.facing, spin: 0, cast: null };
+}
+
+/** Class `id`'s hero taken off his plinth (kept, out of the scene, for the next time he stands). */
+function stepDown(h: HallHero): void {
+  endShowcase(h);
+  G.scene.remove(h.player.obj);
+}
+
 /**
- * The hall built, the hero of class `focusId` in focus: the lobby's dummies and skill visuals cleared, its hero and
- * a co-op room's partners hidden. Each hero wears his profile in the save slot in play (the local hero's own, a class never played there its
- * starter gear, kept for it if it's chosen). The camera flies in from the lobby's view, or is there at once (`cut`: a
- * first visit's, under the loading screen).
+ * Whether the hall's heroes stand on the terrace (`on`: the lobby is up; a run takes them down): every class but the
+ * lobby's own, each in his profile's gear, once every hero's programs are warm, one a frame (`standNext`: a hero's
+ * first build is 30 to 170 ms). Called again (with `on`) when the lobby's hero, the save slot or a profile changed,
+ * they stand again as they are now.
+ */
+export function standHall(on: boolean): void {
+  stood = on;
+  if (open) return;
+  for (const h of standing.values()) stepDown(h);
+  standing.clear();
+}
+
+/** The next class missing from the plinths stood on his (the lobby's own stays empty). */
+function standNext(): void {
+  const i = CLASS_IDS.findIndex((id) => id !== G.player.cls.id && !standing.has(id));
+  if (i >= 0) standing.set(CLASS_IDS[i], hallHero(CLASS_IDS[i], i));
+}
+
+/**
+ * The hall opened, the hero of class `focusId` in focus: the lobby's dummies and skill visuals cleared, its hero
+ * hidden and his copy on his own plinth beside the others. Each hero wears his profile in the save slot in play (the
+ * local hero's own, a class never played there its starter gear, kept for it if it's chosen). The camera flies in
+ * from the lobby's view, or is there at once (`cut`: a first visit's, under the loading screen).
  */
 export function openHall(focusId: string, cut = false): void {
   if (hallOpen()) return;
   clearEnemies(); clearProjectiles(); clearEffects(); particles.clear();
   G.player.idle = true;
   G.player.show(false);
-  partners = G.players.filter((p) => p !== G.player && p.obj.visible);
-  for (const p of partners) p.show(false);
-  G.arena.showHall(true);
+  // (the heroes standing there already keep their place; their showcases are the hall's own from here)
   heroes = CLASS_IDS.map((id, i) => {
-    const profile = profileOf(id);
-    const player = heroIn(id, profile);
-    const at = spot(i);
-    player.spawn.copy(at);
-    player.reset();
-    player.shine = SHINE;
-    place(player, at, ROW.facing);
-    return { id, profile, player, due: Infinity, shown: -Infinity, facing: ROW.facing, spin: 0, cast: null };
+    const kept = standing.get(id);
+    if (kept && kept.profile === profileOf(id)) return kept;
+    if (kept) stepDown(kept);
+    return hallHero(id, i);
   });
+  standing.clear();
+  open = true;
   opened = G.time;
   lights = [flash({ ...KEY, life: 1, hold: Infinity }), flash({ ...RIM, life: 1, hold: Infinity })];
   focusHall(Math.max(0, CLASS_IDS.indexOf(focusId)), cut);
@@ -206,23 +245,23 @@ function glowingHead(player: Player): void {
   });
 }
 
-/** The hall taken down, the lobby's hero shown again; its heroes kept out of the scene for its next opening. */
+/** The hall closed, the lobby's hero shown again where he stood; the other classes stay standing on their plinths, his
+ *  own copy kept out of the scene for its next opening. */
 export function closeHall(): void {
   if (!hallOpen()) return;
   // (a showcase under way let go: a channel left open, Void Lance's hum played on in the lobby)
-  for (const h of heroes) endShowcase(h);
-  for (const h of heroes) G.scene.remove(h.player.obj);
+  for (const h of heroes) stepDown(h);
   heroes = [];
+  open = false;
   dragged = null;
   for (const l of lights) release(l);
   lights = [];
   clearProjectiles(); clearEffects(); particles.clear();
-  G.arena.showHall(false);
   G.player.show(true);
-  for (const p of partners) if (G.players.includes(p)) p.show(true);
-  partners = [];
   G.player.idle = false;
   stageCamera(null);
+  // (the hero chosen may be another: the others stand as they are now)
+  standHall(stood);
 }
 
 /** Hero `i` in focus: the camera comes to him (`cut`: at once), and once it nears him he shows off his skill. */
@@ -285,7 +324,13 @@ function place(p: Player, at: THREE.Vector3, facing: number): void {
 /** The hall's frame: each hero stepped, the one in focus showing off when due, the lights on him, the camera's
  *  drift. */
 export function updateHall(dt: number): void {
-  if (!hallOpen()) return;
+  // (the heroes stand once their programs are warm: the warm-up behind the lobby, or the walk up to the hall's)
+  if (!open && stood && standing.size < CLASS_IDS.length - 1 && isWarm('heroes')) standNext();
+  if (!open) {
+    viewFrom(G.camera);
+    for (const h of standing.values()) if (inView(h)) stepHero(h, dt);
+    return;
+  }
   const t = G.time;
   for (const h of heroes) {
     if (t >= h.due) showOff(h, t);
@@ -325,6 +370,35 @@ const _white = new THREE.Color(1, 1, 1);
 /** A halo's glow particle at `at`, `size` m across, of `color` fading to none over `HALO.life`. */
 function glowAt(at: THREE.Vector3, size: number, color: THREE.Color): void {
   particles.glow.spawn({ x: at.x, y: at.y, z: at.z, life: HALO.life, size, sizeEnd: size, color, colorEnd: _black });
+}
+
+// (a standing hero is posed only where he can be seen: two heroes posed every frame, their cloth draped, were 4 ms of
+// the village's frame, for heroes on a terrace mostly off the screen; one out of view holds his pose till he's back)
+/** how far round a standing hero his pose reaches (m, from his feet): his weapon over his head, his shadow aside */
+const HERO_REACH = 2.5;
+const _view = new THREE.Frustum();
+const _viewMatrix = new THREE.Matrix4();
+const _reach = new THREE.Sphere();
+/** The camera's view this frame, for `inView`. */
+function viewFrom(camera: THREE.Camera): void {
+  _viewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  _view.setFromProjectionMatrix(_viewMatrix);
+}
+/** Whether any of `h` may show in the camera's view. */
+function inView(h: HallHero): boolean {
+  _reach.center.copy(h.player.obj.position);
+  _reach.center.y += 1;
+  _reach.radius = HERO_REACH;
+  return _view.intersectsSphere(_reach);
+}
+
+/** A hero standing on his plinth while the hall is down: idle, glancing round. */
+function stepHero(h: HallHero, dt: number): void {
+  h.player.glances = true;
+  const r = h.player.remote;
+  turnTo(h, dt);
+  r.ax = r.x + Math.sin(r.f) * 4; r.az = r.z + Math.cos(r.f) * 4;
+  h.player.update(dt);
 }
 
 /** Hero `h` turned towards the way he faces, by a critically damped spring (`TURN`). */

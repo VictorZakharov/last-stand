@@ -1117,6 +1117,14 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  village: {
+    each(side, options) {
+      return side.command('village', { canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   columns: {
     each(side, options) {
       return side.command('columns', { seeds: options.seeds?.map(Number), canary: Boolean(options.canary) });

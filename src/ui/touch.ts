@@ -19,6 +19,7 @@ import { makeSkillSlot } from './hud';
 import { hideTooltip } from './tooltip';
 import { uiScales } from './scale';
 import type { SkillDef, SkillKey } from '../types';
+import type { VillageObject } from '../data/village';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 
@@ -65,7 +66,29 @@ function setTouchMode(on: boolean): void {
 export const isTouch = (): boolean => input.touchMode;
 export function onTouchMode(f: (touch: boolean) => void): void { listeners.push(f); }
 
-export function initTouch(): void {
+/** The village's touch buttons (the lobby's alone): what the hero can use, the inventory, the map. */
+export interface TouchVillage {
+  /** whether the village takes the hero's input now */
+  active(): boolean;
+  /** the object the hero is near, if any: Use's */
+  near(): VillageObject | null;
+  use(o: VillageObject): void;
+  inventory(): void;
+  map(): void;
+}
+
+let village: TouchVillage;
+/** what the village's row last showed: shown at all, and Use's verb ('' hidden) */
+let villageShown = false, useSays = '';
+
+export function initTouch(v: TouchVillage): void {
+  village = v;
+  $('#touch-village .tv-use').addEventListener('click', () => {
+    const o = village.near();
+    if (o) village.use(o);
+  });
+  $('#touch-village .tv-bag').addEventListener('click', () => village.inventory());
+  $('#touch-village .tv-map').addEventListener('click', () => village.map());
   // start in touch mode on a device whose main pointer is a finger
   setTouchMode(matchMedia('(pointer: coarse)').matches);
   window.addEventListener('pointerdown', (e) => setTouchMode(e.pointerType !== 'mouse'), true);
@@ -227,6 +250,21 @@ function giveUp(p: Press): void {
 }
 
 /** Per frame, before the player updates: the aim point, and whether the controls show at all. */
+/** The village's row shown (`on`), Use naming what it would do, or hidden with nothing near; the page touched only
+ *  when either changes. */
+function updateVillageRow(on: boolean): void {
+  if (on !== villageShown) {
+    villageShown = on;
+    $('#touch-village').classList.toggle('hidden', !on);
+  }
+  const says = on ? village.near()?.verb ?? '' : '';
+  if (says === useSays) return;
+  useSays = says;
+  const use = $('#touch-village .tv-use');
+  use.textContent = says;
+  use.classList.toggle('hidden', !says);
+}
+
 export function updateTouch(dt: number): void {
   const menu = $('#menu');
   const show = input.touchMode && !G.menuOpen && (G.mode === 'run'
@@ -234,6 +272,7 @@ export function updateTouch(dt: number): void {
     : menu.classList.contains('stowed'));
 
   $('#touch').classList.toggle('hidden', !show);
+  updateVillageRow(show && G.mode === 'menu' && village.active());
   if (!show && (press || stick)) {
     if (press) giveUp(press);
     press = null; stick = null; input.stick.x = input.stick.y = 0; input.touch.clear();
