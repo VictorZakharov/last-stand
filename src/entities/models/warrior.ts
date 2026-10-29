@@ -1489,8 +1489,11 @@ export function buildWarrior(): Model {
    *  ahead (`at`, as `PLANT.at`), its head up and leant back towards the seat (`lean`, rad), let go of at `letGo` of
    *  the way down. From play: "lean it on the log". Stood on its head under his palm instead, the fist could carry it
    *  only about level (thumb down, past the wrist's range), and it turned 90 degrees under the palm as he sat and back
-   *  as he got up, its head 15 to 20 cm a frame. */
-  const LEAN = tunable('warriorLean', { at: [-0.42, 0.28], lean: 0.3, letGo: 0.8 });
+   *  as he got up, its head 15 to 20 cm a frame. Held where it's held, its grip stood 19 cm off the floor, lower than
+   *  his hand reaches from a seat, so the hand slides up its haft as he sets it down, to `hold` (m) off the floor and
+   *  no nearer its head than `head` (the grip's units): held at the grip to the end, it was let go of 57 cm over the
+   *  floor and dropped there in a frame. */
+  const LEAN = tunable('warriorLean', { at: [-0.42, 0.28], lean: 0.3, letGo: 0.8, hold: 0.55, head: 0.15 });
   const LEANS = new Set(['Axe', 'Mace']);
   const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95 });
   const _plantHand = new THREE.Vector3(), _plantBox = new THREE.Box3(), _plantM = new THREE.Matrix4();
@@ -1510,13 +1513,15 @@ export function buildWarrior(): Model {
     handAt: THREE.Vector3; handQ: THREE.Quaternion;
     /** and where the fist held it standing as he started (its joint's, in the root's frame) */
     startAt: THREE.Vector3; startQ: THREE.Quaternion;
+    /** how far up its haft from its grip the fist has slid (the grip's units), leaning it on a seat */
+    slide: number;
   }
   function plantOf(left: boolean, hand: Hand, grip: THREE.Object3D): Planted {
     return {
       left, hand, joint: left ? j.handL : j.handR, grip, shoulder: left ? j.shoulderL : j.shoulderR,
       q: new THREE.Quaternion(), at: new THREE.Vector3(), up: new THREE.Vector3(), on: null, carried: false, turn: -1,
       landAt: new THREE.Vector3(), landQ: new THREE.Quaternion(), handAt: new THREE.Vector3(), handQ: new THREE.Quaternion(),
-      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(),
+      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), slide: 0,
     };
   }
   const _standQ = new THREE.Quaternion(), _standAt = new THREE.Vector3(), _holdQ = new THREE.Quaternion();
@@ -1643,6 +1648,9 @@ export function buildWarrior(): Model {
     const leant = _s1.copy(spot).addScaledVector(up, -box.min.y * s);
     leant.y += groundHeight(spot.x, spot.z) - spot.y + 0.005;
     const e = smooth(w);
+    const above = leant.y - groundHeight(spot.x, spot.z);
+    const slide = THREE.MathUtils.clamp((LEAN.hold * k - above) / (up.y * s), 0, box.max.y - LEAN.head);
+    p.slide = slide * e;
     grip.getWorldPosition(p.at).lerp(leant, e);
     // (on an arc out and up from his legs, as one is laid by a fire)
     const arc = Math.sin(Math.PI * e) * k;
@@ -1659,10 +1667,11 @@ export function buildWarrior(): Model {
     if (leant) leanDown(p, Math.min(1, w / letGo), weapon);
     else layDown(p, Math.min(1, w / letGo), weapon, weapon.group.name === 'Maul' ? LAY.maulAt : LAY.twoAt, LAY.twoArc);
     const direction = _hd.set(0, 1, 0).applyQuaternion(p.q);
-    const up = p.shoulder.getWorldPosition(p.up).sub(p.at).normalize();
+    const held = _s7.copy(p.at).addScaledVector(direction, p.slide * _s5.setFromMatrixScale(p.grip.matrixWorld).y);
+    const up = p.shoulder.getWorldPosition(p.up).sub(held).normalize();
     fistReach(p.hand, direction, up, weapon.r, _cur);
     fistTurn(p.hand, direction, up, _fq);
-    const wrist = _cur.negate().add(p.at);
+    const wrist = _cur.negate().add(held);
     const pole = _pw.set(-PLANT.pole[0], PLANT.pole[1], PLANT.pole[2]).applyQuaternion(j.chest.getWorldQuaternion(_cq));
     solveArm(j, false, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION });
     // The full lift took the greataxe arm past its shoulder range; without a lift the forearm crossed the thigh 5.5 cm.
@@ -1826,6 +1835,7 @@ export function buildWarrior(): Model {
   /** the grip back as the hand holds it, a frame after it stood its weapon */
   function unplant(p: Planted): void {
     p.carried = false;
+    p.slide = 0;
     p.turn = -1;
     if (!p.on) return;
     p.grip.rotation.set(GRIP, 0, 0);
@@ -2819,6 +2829,8 @@ export function buildWarrior(): Model {
     const posed = viewHold < 1 || eyesR.fading > 0;
     if (fp && st.dead < 0 && held && (!two || posed)) wristInGrip(false, gripTurn(handR, grip, _vr, slantR));
     if (held) seat(handR, grip, held.r, slantR);
+    // (and slid down through it as far as the hand has slid up its haft, leaning it on a seat)
+    if (carryingTwo && plantR.slide > 0) grip.position.addScaledVector(_s1.set(0, -plantR.slide, 0).applyQuaternion(grip.quaternion), grip.scale.y);
     // The fitted arm may fall short of the target: carry the seated grip with it until release.
     if (carryingTwo) {
       grip.getWorldPosition(plantR.at);
