@@ -428,7 +428,8 @@ export class Skirt {
       const flutter = Math.sin(t * 3 + a * 3) * 0.015 * (1 - settle);
       // (sat on the floor, its back under him: hung straight down behind him it stood round his hips as a sack wider
       // than his shoulders, its hem laid out on the floor beyond)
-      const under = cz < 0 ? tuck * -cz : 0;
+      // (and its sides half as far in, against his thighs: hung straight down they stood out past his shoulders)
+      const under = tuck * (1 - cz) / 2;
       const target = Math.max(-0.1 - under, legPush * push - under) + (0.04 + move * 0.08 + flutter) * flare + (cz > 0 ? 0 : move * 0.25 * -cz) * flare;
       // a stiff, damped spring: cloth follows the legs a moment late and settles without wobbling
       if (h > 0) {
@@ -467,35 +468,56 @@ export class Skirt {
   }
 
   /** Every point kept over the floor at `y` (the mesh's own space), the cloth lying on it there: a robe sat in, its hem
-   *  hung down through the floor. Down each column from where it first meets the floor, the rest lies out along it at
-   *  its length, away from the skirt's middle: each point only lifted onto the floor, a coat hanging straight down
-   *  from a man sat on the ground piled up in a ring round his hips, a sack wider than his shoulders. Call after
-   *  `update`. */
+   *  hung down through the floor. Down each column from where it first meets the floor, the rest lies out along it,
+   *  bunched up the more the further under the floor it hung: each point only lifted onto the floor, a coat hanging
+   *  straight down from a man sat on the ground piled up in a ring round his hips, a sack wider than his shoulders.
+   *  Call after `update`. */
   keepAbove(y: number): void {
     const p = this.geo.attributes.position as THREE.BufferAttribute, P = p.array as Float32Array, C = this.cols;
-    const R = this.rest, rows = P.length / 3 / C;
+    const rows = P.length / 3 / C;
+    const hung = (this.hung ??= new Float32Array(P.length));
+    hung.set(P);
     let moved = false;
     for (let i = 0; i < C; i++) {
+      // (out along its column's own way where it hung straight down: out through the point above it, a point tucked
+      // under him near the middle went out one way or the other as it moved a millimetre)
+      const ox = Math.sin(this.ang[i]), oz = Math.cos(this.ang[i]);
       for (let k = 1; k < rows; k++) {
         const j = (k * C + i) * 3, above = j - C * 3;
-        if (P[j + 1] >= y) continue;
+        const under = y - hung[j + 1];
+        if (under <= 0) continue;
         moved = true;
-        // (its length to the point above it as cut, laid from that point down to the floor and out along it)
-        const len = Math.hypot(R[j] - R[above], R[j + 1] - R[above + 1], R[j + 2] - R[above + 2]);
-        const drop = Math.max(0, P[above + 1] - y), along = Math.sqrt(Math.max(0, len * len - drop * drop));
-        let ox = P[above], oz = P[above + 2];
-        const out = Math.hypot(ox, oz);
-        if (out > 1e-4) { ox /= out; oz /= out; }
-        else { ox = Math.sin(this.ang[i]); oz = Math.cos(this.ang[i]); }
-        P[j] = P[above] + ox * along;
+        // (its length to the point above it as it hung, from that point down to the floor and on along it, bunched by
+        // how far under the floor it hung: laid out whole, a coat's sides lay round him in a ring half a metre across;
+        // where it first meets the floor it lies where it hung, or it jumped there as it dipped under: by its length
+        // as cut, the drape's stretch made it jump 1 to 2 cm)
+        const len = Math.hypot(hung[j] - hung[above], hung[j + 1] - hung[above + 1], hung[j + 2] - hung[above + 2]);
+        const drop = Math.max(0, P[above + 1] - y);
+        const bunch = 1 - (1 - LIES_OUT) * Math.min(1, under / len);
+        const far = Math.sqrt(Math.max(0, len * len - drop * drop)) * bunch;
+        // (the way it hung from the point above, and on out its column's way as far as it lies)
+        let dx = hung[j] - hung[above], dz = hung[j + 2] - hung[above + 2];
+        const hangs = Math.hypot(dx, dz);
+        if (hangs >= far) {
+          const scale = hangs > 1e-6 ? far / hangs : 0;
+          dx *= scale;
+          dz *= scale;
+        } else {
+          dx += ox * (far - hangs);
+          dz += oz * (far - hangs);
+        }
+        P[j] = P[above] + dx;
         P[j + 1] = y;
-        P[j + 2] = P[above + 2] + oz * along;
+        P[j + 2] = P[above + 2] + dz;
       }
     }
     if (!moved) return;
     p.needsUpdate = true;
     vertexNormals(this.geo);
   }
+
+  /** the points as they hung before `keepAbove` laid them on the floor */
+  private hung?: Float32Array;
 
   /** Point `p` (in the mesh's own space) put outside the cloth as it lies now, `gap` further out: out from the skirt's middle,
    *  where it is between the waist and the hem. Whether it moved. (A sleeve hanging beside it: kept off an ellipse the size of
@@ -733,6 +755,8 @@ function pull(P: Float32Array, a: number, b: number, max: number, wa: number): v
 const _sp = new THREE.Vector3(), _sq = new THREE.Vector3(), _sab = new THREE.Vector3(), _sn = new THREE.Vector3(), _so = new THREE.Vector3(), _sd = new THREE.Vector3();
 /** how far outside a hand's capsule the cloth beside it is still held in behind it (m): about the skirts' points' spacing */
 const HAND_REACH = 0.035;
+/** the share of its length a skirt's cloth on the floor lies out over, bunched (`Skirt.keepAbove`) */
+const LIES_OUT = 0.35;
 /** the columns tucked under a hero sat on the floor are kept off his thighs no more: those further round than this
  *  from the front (the cosine of their angle) */
 const TUCKED_FROM = -0.3;
