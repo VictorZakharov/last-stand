@@ -71,6 +71,11 @@ const OFF_LEG = 0.06;
 const IN_LEG = 0.03;
 const PALM_AT = new THREE.Vector3(0, -0.06, -0.02);
 
+/** how far a point of his skirts may wander as he sits still (m): his feet's slow swing and his breath move it a few
+ *  centimetres; from the owner, "on log cloth is jerking few times per sec", the drape went round a knee one way and
+ *  the other, and eased it'd slide there and back */
+const WANDER_MOST = 0.05;
+
 /** by a fire, his body's way off the way to it at most (degrees): from review, he sat 30 to 45 off it */
 const FACING_FIRE = 15;
 
@@ -337,18 +342,25 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): P
   let worst: { by: number; name: string; neck: number } | null = null;
   let frames = 0;
   const skirts = skirtsOf(lab.model.root);
+  const spans = skirts.map((skirt) => new Spans(skirt.last.length));
   let frame = 0;
   const reads = await lab.step(SAT_FOR * RATE, undefined, () => {
     if (canary) j.body.position.y += CANARY_RAISE / j.root.scale.x;
     const read = readNow(lab);
     // (the first two frames fill each point's last two places)
     for (const skirt of skirts) follow(skirt, frame, frame >= 2, !!options.frames, j);
+    skirts.forEach((skirt, i) => spans[i].add(skirt.last));
     frame++;
     const past = bodyBreaches(j, grippingSides(lab)).found[0];
     if (past) frames++;
     if (past && (!worst || past.by > worst.by)) worst = { by: past.by, name: past.name, neck: read.neck };
     if (canary) j.body.position.y -= CANARY_RAISE / j.root.scale.x;
     return read;
+  });
+  skirts.forEach((skirt, i) => {
+    const { most, at } = spans[i].widest();
+    out.text.push(`    his ${skirt.name}: a point wandered ${cmOf(most)} cm at most (point ${at})`);
+    if (most > WANDER_MOST) out.problems.push(`sit: on the ${name} his ${skirt.name} wandered ${cmOf(most)} cm`);
   });
   for (const skirt of skirts) {
     if (!skirt.frames) continue;
@@ -362,6 +374,39 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): P
       + `the head ${found.neck.toFixed(0)}° from the chest then)`);
   }
   return reads;
+}
+
+/** Each point's least and most x, y and z over the frames added. */
+class Spans {
+  private readonly low: Float32Array;
+  private readonly high: Float32Array;
+
+  constructor(size: number) {
+    this.low = new Float32Array(size).fill(Infinity);
+    this.high = new Float32Array(size).fill(-Infinity);
+  }
+
+  add(points: Float32Array): void {
+    for (let i = 0; i < points.length; i++) {
+      this.low[i] = Math.min(this.low[i], points[i]);
+      this.high[i] = Math.max(this.high[i], points[i]);
+    }
+  }
+
+  /** The point whose box of places is widest across, and how wide (m). */
+  widest(): { most: number; at: number } {
+    let most = 0;
+    let at = 0;
+    for (let i = 0; i < this.low.length; i += 3) {
+      const across = Math.hypot(this.high[i] - this.low[i], this.high[i + 1] - this.low[i + 1],
+        this.high[i + 2] - this.low[i + 2]);
+      if (across > most) {
+        most = across;
+        at = i / 3;
+      }
+    }
+    return { most, at };
+  }
 }
 
 const _q = new THREE.Quaternion(), _r = new THREE.Quaternion(), _f = new THREE.Vector3();
