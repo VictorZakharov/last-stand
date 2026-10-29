@@ -1510,7 +1510,7 @@ export function buildWarrior(): Model {
    *  89 degrees past its turn; its fingers ahead on the pommel, the wrist bent 34 degrees past its range.) From play: "keep it stood", with a natural regrip. Stood point down at his side in one fist, the fist had
    *  to turn 120 degrees from how it held it standing, past a wrist's turn: his arm shot straight out ahead and the
    *  blade swept 0.5 to 2 m in a frame. */
-  const BETWEEN = tunable('warriorBetween', { ahead: 0.65, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.1, fingers: 1.6, lift: 0.4, held: [0.6, 0.1, 0.15] });
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.65, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.3, fingers: 1.6, lift: 0.4, held: [0.6, 0.1, 0.15] });
   const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95 });
   const _plantHand = new THREE.Vector3(), _plantBox = new THREE.Box3(), _plantM = new THREE.Matrix4();
   /** a hand's weapon stood on its end: its grip's place there (world, `q`, `at`), the way from the hand to its
@@ -1756,7 +1756,10 @@ export function buildWarrior(): Model {
       // hanging point down at his side, then stood between his feet (as he takes it up again: lifted upright before
       // his chest first, its point let fall ahead set its grip in his belly, and the fist 15 cm into his chest)
       const held = _holdQ.setFromUnitVectors(_s7.set(0, 1, 0).applyQuaternion(from), _s1.copy(up).negate()).multiply(from);
-      const slant = pointing(BETWEEN.slant, _s6);
+      // (set down with its top leant out to his right, his arm out, and pushed upright under his palm: held upright
+      // before his belly, the fist's thumb pointed down the blade and the forearm went 83 degrees past its turn)
+      const slant = pointing(0, _s6).multiplyScalar(Math.cos(BETWEEN.slant));
+      slant.addScaledVector(_s1.set(1, 0, 0).transformDirection(root.matrixWorld), Math.sin(BETWEEN.slant)).normalize();
       const set = _standQ.setFromUnitVectors(_s1.copy(up).negate(), slant).multiply(held);
       const heldAt = p.shoulder.getWorldPosition(_holdAt).addScaledVector(ahead, BETWEEN.held[1] * k);
       heldAt.y -= BETWEEN.held[0] * k;
