@@ -42,8 +42,34 @@ body (`WeaponBody`), each allowed 3 cm in (`INTO_BODY`: "ranger hands clipping t
 fire", "bow clipping through body in log sitting"), and the moment any went deepest is pictured close from his
 right, ahead, his left and above, his skeleton drawn over him and his skirts, the fire, the plants and the rocks
 round him hidden (`IntoBody`, `DEEPEST_VIEWS`): the depth alone didn't say which way an arm went in, and fixes tried
-blind took a minute a round, two agents' worth of them, without converging on the floor pose. `--canary` raises his body 12 cm off the log as he sits: it must
-be read as sitting on air. The owner's words: "if there is a nearby log or not high stone ... and character is idle,
+blind took a minute a round, two agents' worth of them, without converging on the floor pose.
+
+What he carries is followed from his set-up until he's up again (`page/sitCarried.ts`): every rigid mesh of his model
+(a weapon's, the shield's, the staff's, the bow's, the book's), grouped by the object over it hung from a joint. A
+piece the pose moves (one hung from a hand that a palm is on at some frame, within 6 cm of its box, or one taken over
+15 cm from where it hangs) may move only in a hand or lie still: one that went over 3 cm in all with no palm on it,
+moving in the world and on the joint it hangs from, moved on its own; and any mesh turned over 25° or thrown over 12 cm
+in a frame jumped. Once a tap has left him up and still, what he held before he sat must be held as it was, every
+corner within 3 cm on its joint and turned under 10°. From play, both passed by every measure before: "staff dropping
+in a weird way" (the mage let go of it at a fifth of the way down and it went on to the floor on its own, 8 m of
+movement in all), "staff rotated when he stands up" (140° turned in his hand), "he just summons the bow into his hand
+using jedi force", "when warrior sits on a log, weapons are being pulled around with jedi force too, on sit down, and
+on stand up" (his sword flew 113 cm in a frame). His legs are read against his skirts (`page/sitCloth.ts`): every
+triangle's corners, edges' middles and middle against the thighs' and shins' capsules at their drawn radii, a point
+over 1.5 cm inside one the leg through the cloth, the deepest pictured as it deepens ("knees clipping through robe
+when sitting near fire": the mage's thigh 9 cm through his robe; the skirts' wander and jerks were read, never what
+they cover). The first way down and the first way up are filmed (`page/sitFilm.ts`), every 5th frame in the seat's
+first view and the game's third-person view, each labelled with how far down he is: the two moments pictured never
+showed what moved between them. And zoomed in all the way over his shoulder (`page/sitFraming.ts`, the game's own
+camera code given `Player.framedHeight`), his neck sits on the screen within 0.15 of the screen's half height of where
+it sits standing: "zoom in/out with mouse wheel in 3rd person should zoom in on the seated character, not the
+standing one (if seated)" (by a fire it sat 0.67 under it, the camera at a standing hero's shoulders).
+
+`--canary` raises his body 12 cm off the log as he sits: it must be read as sitting on air; pushes what he holds out
+of his hand, 15 cm and a centimetre further each frame for half a second as he sits, read on its own by a `Carried`
+of its own: at least 15 cm of it must read as moved with no hand on it; turns what he holds 0.5 rad in his hand once
+he's up, read against how he held it a moment before: it must read as held otherwise; and reads a cloth point at his
+left knee's joint, which must read 4 cm deep or more. The owner's words: "if there is a nearby log or not high stone ... and character is idle,
 they need to walk up to this prop and sit on it, should sit on the closest side", "when user presses any action,
 they should stand up first, then perform the action if user is still pressing it (do not queue)", "while seated,
 they should continue looking left/right like now", "it should be also possible to sit near fire after idle... just
