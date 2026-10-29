@@ -1473,7 +1473,7 @@ export function buildWarrior(): Model {
    *  stands over his hips (rig units) */
   const PLANT = tunable('warriorPlant', {
     at: [-0.27, 0.46], blade: 0.42, haft: 0.3, deep: [0.12, 0.6], pole: [-0.4, -1, -0.3], palm: [0.015, 0.06], rest: 0.05,
-    stood: 0.6, ease: 0.35, settle: 0.4, lean: 0.8, holdPole: [-1, 0, -0.3], pivot: [0.15, 0.55],
+    stood: 0.6, ease: 0.35, settle: 0.4, lean: 0.8, holdPole: [-1, 0, -0.3], thumb: 0.15,
   });
   /** how each weapon stands: point down, stuck into the floor; on its head; head up, on its haft's butt (a maul and
    *  a greataxe head up, easy to grab) */
@@ -1521,7 +1521,7 @@ export function buildWarrior(): Model {
     slide: number;
     /** leant where it is, let go of */
     leant: boolean;
-    /** how far a blade has turned point down through the loosened fist (`PLANT.pivot`), and how it then stands */
+    /** how far a blade has turned point down through the loosened fist, and how it then stands */
     pivot: number; standQ: THREE.Quaternion;
   }
   function plantOf(left: boolean, hand: Hand, grip: THREE.Object3D): Planted {
@@ -1811,16 +1811,20 @@ export function buildWarrior(): Model {
     }
     const wrist = _s7, drawn = _wq;
     p.pivot = 0;
+    // (a blade turns over the whole sit, evenly in time: its tip goes nearly 4 m turning half round, and over 40% of
+    // the sit it went 25 to 35 cm a frame)
+    const even = 0.5 - Math.sin(Math.asin(1 - 2 * w) / 3);
+    if (pivots) p.carried = even < 1;
     if (pivots && p.carried) {
       // (a blade: the fist, thumb up as it holds it, to where it holds it stood, and the blade turned point down
       // through it as it goes, as a loosened grip lets a sword swing down: carried point down in the fist, the fist
       // round the upright handle thumb down was past the wrist's range, and the arm's solve flipped it over, a
       // greatsword 2 m in a frame)
-      wrist.copy(fromAt).lerp(_restAt, carry);
-      const arc = Math.sin(Math.PI * carry) * k;
+      wrist.copy(fromAt).lerp(_restAt, even);
+      const arc = Math.sin(Math.PI * even) * k;
       wrist.add(_s2.set(side * PLANT_ARC[0], 0, PLANT_ARC[1]).transformDirection(root.matrixWorld).multiplyScalar(arc));
-      drawn.copy(fromQ).slerp(_fq, carry);
-      p.pivot = smooth(ramp(w, PLANT.pivot[0], PLANT.pivot[1]));
+      drawn.copy(fromQ).slerp(_fq, even);
+      p.pivot = even;
       p.standQ.copy(_standQ);
     } else if (pivots) {
       wrist.copy(_restAt);
@@ -3044,7 +3048,7 @@ export function buildWarrior(): Model {
     // (sat, his hand round a weapon stood on its end thumb up, once he has it; open as he sets it down)
     // (eased from the fist as it holds it: thumb up at once, the wrist bent 12 degrees past its range the first frame)
     if (plant > 0 && !floorSit && !leanR && STANDS[held!.group.name] === 'point') {
-      const k = smooth(ramp(plant, 0, PLANT.pivot[0]));
+      const k = smooth(ramp(plant, 0, PLANT.thumb));
       hold(handR, along(grip).lerp(_cur.set(0, 1, 0), k).normalize(), held!.r, undefined, slantR * (1 - k));
     } else if (plant >= 1 && two && !floorSit) hold(handR, _hd.set(0, 1, 0), held!.r, plantR.up);
     else if (carryingTwo || (plant > 0 && plantR.carried)) hold(handR, along(grip), held!.r, undefined, slantR);
