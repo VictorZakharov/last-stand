@@ -2914,7 +2914,7 @@ export function buildWarrior(): Model {
       const fitted = fitArm(j, false, gripTurn(handR, grip, _vr), body, two ? undefined : SLANT).slant;
       fittedArm(false, true);
       plantArm(plantR, plant, held!);
-      fittedArm(false, false, smooth(ramp(plant, 0, PLANT.ease)));
+      fittedArm(false, false, STANDS[held!.group.name] === 'point' ? 1 : smooth(ramp(plant, 0, PLANT.ease)));
       slantR = plantR.carried ? fitted * (1 - smooth(ramp(plant, 0, PLANT.stood))) : 0;
     } else if (!fp && st.dead < 0) slantR = fitArm(j, false, gripped ? gripTurn(handR, grip, _vr) : undefined, body, gripped && !two ? SLANT : undefined).slant;
     // (a two-hander through the eyes is held as its swings key it: fitted so, its weapon turned off its place and the
