@@ -531,6 +531,8 @@ export function buildRanger(): Model {
   // (long and narrow as the sheet's, down to the belt, three bands round it and a cap on its foot)
   // (as deep as the arrows are long, less the 28 cm standing out of it)
   const quiver = joint(j.chest, -0.13, 0.04, -0.19); quiver.rotation.z = 0.35; quiver.name = 'quiver';
+  // (worn on its strap: it swings there as he sits, no hand moves it; tools/lab `sit` judges it by its jumps alone)
+  quiver.userData.worn = true;
   S.add(lathe([[0.02, -0.52], [0.05, -0.5], [0.052, 0.14], [0.057, 0.16]], 18), boot, quiver);
   S.add(lathe([[0.045, -0.525], [0.055, -0.51], [0.056, -0.45]], 18), strapLeather, quiver);
   for (const y of [-0.36, -0.08, 0.12]) { S.add(belt(0.056, 0.056, y, 0.02, 0.005), strapLeather, quiver); for (const a of [0.6, 1.8, 3, 4.2]) S.add(new THREE.SphereGeometry(0.004, 6, 4), brass, quiver, [Math.sin(a) * 0.061, y, Math.cos(a) * 0.061]); }
