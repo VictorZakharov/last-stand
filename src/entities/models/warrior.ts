@@ -1539,7 +1539,7 @@ export function buildWarrior(): Model {
     setAt: THREE.Vector3; setQ: THREE.Quaternion;
     /** the grip's turn in the fist it's swung to as its point goes down (`carryArm`), which way chosen once a sit (-1 till
      *  then), and its turn there this frame */
-    flipWay: number; seatSet: THREE.Quaternion; seatNow: THREE.Quaternion;
+    flipWay: number; flipSign: number; seatSet: THREE.Quaternion; seatNow: THREE.Quaternion;
     /** how far it has swung there (0..1) */
     swung: number;
     /** how far up its haft from its grip the fist has slid (the grip's units), leaning it on a seat */
@@ -1560,7 +1560,7 @@ export function buildWarrior(): Model {
       left, hand, joint: left ? j.handL : j.handR, grip, shoulder: left ? j.shoulderL : j.shoulderR,
       q: new THREE.Quaternion(), at: new THREE.Vector3(), up: new THREE.Vector3(), on: null, carried: false, turn: -1,
       landAt: new THREE.Vector3(), landQ: new THREE.Quaternion(), handAt: new THREE.Vector3(), handQ: new THREE.Quaternion(),
-      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), armWas: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], liftAt: new THREE.Vector3(), liftQ: new THREE.Quaternion(), gripWas: new THREE.Quaternion(), gripAtWas: new THREE.Vector3(), setAt: new THREE.Vector3(), setQ: new THREE.Quaternion(), flipWay: -1, seatSet: new THREE.Quaternion(), seatNow: new THREE.Quaternion(), swung: 0, liftedAt: new THREE.Vector3(), liftedQ: new THREE.Quaternion(), slide: 0, leant: false, pivot: 0, standQ: new THREE.Quaternion(), drawWay: new THREE.Vector3(), drawWas: null, restTurn: -1, way: 0,
+      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), armWas: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], liftAt: new THREE.Vector3(), liftQ: new THREE.Quaternion(), gripWas: new THREE.Quaternion(), gripAtWas: new THREE.Vector3(), setAt: new THREE.Vector3(), setQ: new THREE.Quaternion(), flipWay: -1, flipSign: 1, seatSet: new THREE.Quaternion(), seatNow: new THREE.Quaternion(), swung: 0, liftedAt: new THREE.Vector3(), liftedQ: new THREE.Quaternion(), slide: 0, leant: false, pivot: 0, standQ: new THREE.Quaternion(), drawWay: new THREE.Vector3(), drawWas: null, restTurn: -1, way: 0,
     };
   }
   const _standQ = new THREE.Quaternion(), _standAt = new THREE.Vector3(), _holdQ = new THREE.Quaternion();
@@ -1854,13 +1854,26 @@ export function buildWarrior(): Model {
         if (excess < least) { least = excess; p.flipWay = way; }
       }
       p.seatSet.setFromAxisAngle(FLIP_AXES[p.flipWay], Math.PI).premultiply(p.gripWas);
+      // (and which way round: the one that keeps the blade halfway between how it lay and how it hangs, the arm's own
+      // turn taking up the swing's; the other way, it went round 260 degrees, 19 a frame)
+      const was = _s1.set(0, 1, 0).applyQuaternion(_pq.copy(root.getWorldQuaternion(_pq)).multiply(p.startQ));
+      const mid = was.add(_s2.set(0, 1, 0).applyQuaternion(p.liftQ)).normalize();
+      armOf(p).forEach((joint, i) => joint.quaternion.slerpQuaternions(p.armWas[i], _keyA[i], 0.5));
+      p.joint.updateWorldMatrix(true, false);
+      p.joint.getWorldQuaternion(_kg);
+      let best = -Infinity;
+      for (const sign of [1, -1]) {
+        const seat = _kf.setFromAxisAngle(FLIP_AXES[p.flipWay], sign * Math.PI / 2).premultiply(p.gripWas);
+        const along = _s3.set(0, 1, 0).applyQuaternion(seat).applyQuaternion(_kg).dot(mid);
+        if (along > best) { best = along; p.flipSign = sign; }
+      }
     }
     const lifted = w / BETWEEN.lift;
     holdKey(p, p.liftAt, p.liftQ, _keyA, p.seatSet);
     if (lifted < 1) {
       armOf(p).forEach((joint, i) => joint.quaternion.slerpQuaternions(p.armWas[i], _keyA[i], smooth(lifted)));
       p.swung = smooth(lifted);
-      p.seatNow.slerpQuaternions(p.gripWas, p.seatSet, p.swung);
+      p.seatNow.setFromAxisAngle(FLIP_AXES[p.flipWay], p.flipSign * Math.PI * p.swung).premultiply(p.gripWas);
       return;
     }
     holdKey(p, p.setAt, p.setQ, _keyB, p.seatSet);
