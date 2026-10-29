@@ -227,7 +227,8 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   }
   const stood = highestStood(lab);
   if (stood && stood.over > STOOD_OVER) {
-    out.problems.push(`sit: on the ${c.name}, his ${stood.name} stood ${(stood.over * 100).toFixed(0)} cm over the floor`);
+    const over = (stood.over * 100).toFixed(0);
+    out.problems.push(`sit: on the ${c.name}, his ${stood.name} stood ${over} cm over the floor`);
   }
   const reads = await readSat(lab, options, c.name, out);
   judgeSat(c, label, reads, seat, out);
@@ -427,7 +428,9 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): P
     const { most, at } = spans[i].widest();
     out.text.push(`    his ${skirt.name}: a point wandered ${cmOf(most)} cm at most (point ${at})`);
     // (a hood turns with his glance, lagging it: its wander is its own)
-    if (skirt.geometry.name !== 'hood' && most > WANDER_MOST) out.problems.push(`sit: on the ${name} his ${skirt.name} wandered ${cmOf(most)} cm`);
+    if (skirt.geometry.name !== 'hood' && most > WANDER_MOST) {
+      out.problems.push(`sit: on the ${name} his ${skirt.name} wandered ${cmOf(most)} cm`);
+    }
   });
   for (const skirt of skirts) {
     if (!skirt.frames) continue;
@@ -495,7 +498,7 @@ class IntoBody {
     const label = `${this.name}: deepest into him, ${cmOf(depth)} cm (frame ${frame}), `
       + 'his skirts and what stands round him hidden';
     const hides = (part: string) => FIRE_PARTS.includes(part) || PLANTS.test(part) || AROUND.test(part);
-    // (framed on his lap, with his skirts off: on his hips, the coat filled the frame and hid where the arm met the leg)
+    // (framed on his lap, his skirts off: on his hips, the coat filled the frame and hid where the arm met the leg)
     const at = lab.joints.hips.getWorldPosition(new THREE.Vector3());
     at.y += DEEPEST_FRAME.up;
     const skirts = skirtsOf(lab.model.root).map((skirt) => skirt.mesh);
