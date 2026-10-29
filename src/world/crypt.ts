@@ -642,8 +642,9 @@ const BANNER_CLOTH = 2.65;
 export function bannerGeo(rng: () => number): THREE.BufferGeometry {
   const s = new THREE.Shape(), len = 1.9 + rng() * 0.5;
   s.moveTo(-0.45, 0); s.lineTo(0.45, 0); s.lineTo(0.45, -len + 0.25);
-  // ragged tails
-  for (let i = 1; i <= 6; i++) { const x = 0.45 - (i * 0.9) / 6; s.lineTo(x + 0.075, -len - rng() * 0.25 + (i % 2) * 0.28); s.lineTo(x, -len + 0.15 + rng() * 0.1); }
+  // ragged tails, each tip below the notches either side of it (a tip drawn above them crossed the outline over
+  // itself, and its triangles, turned over, showed black: "black jagged spikes" under every banner)
+  for (let i = 1; i <= 6; i++) { const x = 0.45 - (i * 0.9) / 6; s.lineTo(x + 0.075, -len - rng() * 0.25 + (i % 2) * 0.12); s.lineTo(x, -len + 0.15 + rng() * 0.1); }
   s.lineTo(-0.45, 0);
   const g = new THREE.ShapeGeometry(s, 1);
   // hang slightly away from the wall towards the bottom; its cloth across it and down from its top (`bannerCloth`)

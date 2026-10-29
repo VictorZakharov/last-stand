@@ -33,9 +33,9 @@ export const TERRACE = { x: -1.5, front: -11, back: -22, half: 10.5, high: 1.6, 
 /** the steps of a stair: how high each rises (m), the same for every stair (a man's step) */
 export const STEP_RISE = 0.16;
 
-/** The hall of heroes on the terrace: its row of plinths (z) and how far apart they stand, the plinths' top over the
- *  terrace, the back wall's face (z) */
-export const HALL = { z: -16.5, gap: 1.75, plinthTop: 0.2, wall: -20.4 };
+/** The hall of heroes on the terrace, a building (its room within is world/heroHall.ts): its back wall's inner face
+ *  (z), its front wall's face with the door (z), and the door's half width and height (m) */
+export const HALL = { wall: -20.4, door: -14.7, doorHalf: 1.1, doorHigh: 3.4 };
 
 /** The chronicle's platform (the lectern on it): its middle, its half sides, how high; its stair comes down south,
  *  toward the crypt's road */
@@ -139,7 +139,7 @@ export const VILLAGE_OBJECTS: readonly VillageObject[] = [
     name: 'Stash', verb: 'Open the stash',
   },
   {
-    id: 'hall', use: 'heroes', at: [TERRACE.x, HALL.z], reach: 4.0, stand: [TERRACE.x, HALL.z + 3], label: 3.2,
+    id: 'hall', use: 'heroes', at: [TERRACE.x, HALL.door], reach: 3.6, stand: [TERRACE.x, HALL.door + 1.8], label: 3.9,
     name: 'Hall of Heroes', verb: 'Choose your hero',
   },
   {

@@ -258,14 +258,16 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   notice board) used from where the hero stands to use it, and what it opens shown; his skills armed in the training
   yard and not on the square; straight walks out from the square at angles round it, and along each way out, stopped
   inside the palisade or the way's walls; the terrace's stair walked up, the body's height on its top (`obj.position.y`:
-  the player's `pos.y` is always 0, and a reading of it said 0 m up); the first visit's training begun afresh
+  the player's `pos.y` is always 0, and a reading of it said 0 m up); in the close view (V), mouse look asking for the
+  pointer on the square and letting it go once the hall of heroes is used (`pointerWanted` in `core/input.ts`: its
+  screen kept the lock and the mouse was gone over its cards, from play); the first visit's training begun afresh
   (`restartTraining`: the lab's boots are a returning player's), each step taken as a player takes it (the yard walked
   into, the middle dummy struck by the basic attack held and let go, as the ranger's bow looses only as it's let go,
   M pressed, the chest and the notice board used) and ticked, the crypt's portal card warning with no Enter till it's
   done, and begun again and skipped, Enter there at once; and the village held at six hours of the day, drawn, with
   no program compiled (`G.renderer.info.programs`). `--canary` plants a fault for each (an object's stand moved off it,
   the yard's reading taken outside it, a hero put past the palisade after a walk, the stair walked at beside it, the
-  notice board never read, a new material shown at one hour), each listed and each must be caught. It found the
+  pointer asked of the square, the notice board never read, a new material shown at one hour), each listed and each must be caught. It found the
   chest's stand off the terrace's edge, below it, where the hero could never use it.
 - `tap`: every skill of the hero's class aimed by holding (`SkillDef.aimed`: `--class mage` Starfall and Veilstep,
   `ranger` Quarry Mark and Strawman), its touch button pressed by a finger, the other thumb on the move stick
