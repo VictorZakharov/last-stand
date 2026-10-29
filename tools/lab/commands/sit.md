@@ -36,7 +36,13 @@ attack: a tap isn't queued) and do a held key (walked off 0.6 m, or attacked). P
 the front, the left and above behind, and sat in the game's own views (`top`, `third`); by a fire from his right,
 behind and above, and from ahead with the fire hidden, framed on his knees (`fromBeyond`: through the flames the
 front view saw nothing of his legs, and the robe's panels standing out from his knees through his hands went unseen,
-"lots clipping near fire, how did you miss it ?"). `--canary` raises his body 12 cm off the log as he sits: it must
+"lots clipping near fire, how did you miss it ?"). Sitting down and sat, his forearms and hands are read against
+his legs' and trunk's capsules (`armsInLegs`, `armsIn`) and the weapon in his hand and the ranger's bow against his
+body (`WeaponBody`), each allowed 3 cm in (`INTO_BODY`: "ranger hands clipping through legs, in sitting pose near
+fire", "bow clipping through body in log sitting"), and the moment any went deepest is pictured close from his
+right, ahead, his left and above, his skeleton drawn over him and his skirts, the fire, the plants and the rocks
+round him hidden (`IntoBody`, `DEEPEST_VIEWS`): the depth alone didn't say which way an arm went in, and fixes tried
+blind took a minute a round, two agents' worth of them, without converging on the floor pose. `--canary` raises his body 12 cm off the log as he sits: it must
 be read as sitting on air. The owner's words: "if there is a nearby log or not high stone ... and character is idle,
 they need to walk up to this prop and sit on it, should sit on the closest side", "when user presses any action,
 they should stand up first, then perform the action if user is still pressing it (do not queue)", "while seated,
