@@ -116,8 +116,16 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   // thigh was pushed 4 cm into the belly)
   const trunk = (s: Solid) => s.name === 'head' || s.name === 'chest' || s.name === 'belly' || s.name === 'neck';
   const legs = g.body?.legs ?? 0;
-  const solids = g.body?.solids.filter((s) => trunk(s) || (legs > 0 && s.name.startsWith('thigh')));
+  // The warrior's forearm crossed his thigh 5 cm into it: an ellipsoid narrows towards the knee, unlike the leg's
+  // capsule. Read the whole thigh for him; keep the other heroes' fits, which also hold their clothes in place.
+  const capsules = legs > 0 && g.body?.legCapsules;
+  const solids = g.body?.solids.filter((s) => trunk(s) || (legs > 0 && !capsules && s.name.startsWith('thigh')));
   const weights = solids?.map((s) => trunk(s) ? 1 : legs);
+  const legLines = capsules ? [
+    new THREE.Line3(j.thighL.getWorldPosition(new THREE.Vector3()), j.kneeL.getWorldPosition(new THREE.Vector3())),
+    new THREE.Line3(j.thighR.getWorldPosition(new THREE.Vector3()), j.kneeR.getWorldPosition(new THREE.Vector3())),
+  ] : [];
+  const legPoint = new THREE.Vector3(), legNear = new THREE.Vector3(), legScale = j.root.scale.x;
   // (each solid's frame, once for the whole search)
   const invs = solids?.map((s) => { s.at.updateWorldMatrix(true, false); return new THREE.Matrix4().copy(s.at.matrixWorld).invert(); }), head = solids ? solids.findIndex((s) => s.name === 'head') : -1;
   // (and a sphere round each, world: a limb clear of it needs no closer look)
@@ -189,6 +197,15 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
       let deep = near(_wa, _wb, j.P.upperR, head) ? Math.max(0, capsuleDepth(_wa, _wb, j.P.upperR, solids[head], invs![head])) : 0;
       _wa.copy(_W).applyMatrix4(par.matrixWorld);
       for (let i = 0; i < solids.length; i++) if (near(_wb, _wa, j.P.foreR, i)) deep = Math.max(deep, weights![i] * capsuleDepth(_wb, _wa, j.P.foreR, solids[i], invs![i]));
+      let legDepth = 0;
+      for (const line of legLines) for (let i = 0; i <= 4; i++) {
+        legPoint.lerpVectors(_wb, _wa, i / 4);
+        line.closestPointToPoint(legPoint, true, legNear);
+        legDepth = Math.max(legDepth, legs * ((j.P.thighR + j.P.foreR) - legPoint.distanceTo(legNear) / legScale));
+      }
+      // Without the elbow's drop the least-penetrating arm lifted it level with the shoulder.
+      cost += 1600 * Math.max(0, legDepth - 0.005) + (capsules ? 600 * legs * Math.max(0, _E.y - _S.y + 0.15) : 0);
+      deep = Math.max(deep, legDepth);
       if (final) depthAt = deep;
       cost += 400 * Math.max(0, deep - 0.005);
     }
