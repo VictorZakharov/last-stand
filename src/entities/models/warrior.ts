@@ -1613,6 +1613,15 @@ export function buildWarrior(): Model {
     const { hand, grip } = p, side = p.left ? -1 : 1, box = boxOf(weapon, grip);
     root.updateMatrixWorld(true);
     const s = _s5.setFromMatrixScale(grip.matrixWorld).y;
+    p.on = weapon;
+    // (let go of where the fist had it, and it lies there; taken again from there, as one leant on a seat is: laid
+    // afresh where it was meant to lie, a one-hander went 9 cm as the hand left it)
+    if (w >= 1) {
+      p.leant = true;
+      return;
+    }
+    const from = p.leant;
+    p.leant = false;
     const spot = root.localToWorld(_plantHand.set(side * at[0], 0, at[1]));
     // (its point back past his hip: laid pointing ahead, a greatsword hanging from his hand swept through his shin)
     const ahead = _s4.set(0, 0, -1).transformDirection(root.matrixWorld).setY(0).normalize(), up = _s3.set(0, 1, 0);
@@ -1626,13 +1635,15 @@ export function buildWarrior(): Model {
     const e = smooth(w);
     seat(hand, grip, weapon.r);
     root.updateMatrixWorld(true);
-    grip.getWorldPosition(p.at).lerp(laid, e);
+    if (from) _pq.copy(_turnQ.copy(p.q));
+    else grip.getWorldQuaternion(_pq);
+    if (!from) grip.getWorldPosition(p.at);
+    p.at.lerp(laid, e);
     // (on an arc up and out from his legs: straight from the fist to the floor, a sword passed through both calves)
     const arc = Math.sin(Math.PI * e) * root.scale.x;
     p.at.add(_s2.set(-side, 0, 0).transformDirection(root.matrixWorld).multiplyScalar(path[0] * arc));
     p.at.y += path[1] * arc;
-    p.q.copy(grip.getWorldQuaternion(_pq).slerp(p.q, e));
-    p.on = weapon;
+    p.q.copy(_pq.slerp(p.q, e));
   }
   /** A one-handed axe or mace leant on the seat beside his right knee (`LEAN`), eased from the fist by `w` (`p.q`,
    *  `p.at`) on an arc out from his legs, as `layDown` lays one by a fire: its haft's end on the floor, its head up and
