@@ -438,6 +438,9 @@ export interface Model {
   readonly lowerGrip?: LowerGrip | null;
   /** each hand holding a handle, and how it holds it (for the lab) */
   readonly fists?: readonly Fist[];
+  /** how many times as long as the sit's own (`entities/sitting.ts` `SIT`) he takes to sit and to get up, with what
+   *  he has to set down and take up (1 if absent) */
+  readonly sitPace?: number;
   dispose(): void;
 }
 

@@ -1510,7 +1510,7 @@ export function buildWarrior(): Model {
    *  89 degrees past its turn; its fingers ahead on the pommel, the wrist bent 34 degrees past its range.) From play: "keep it stood", with a natural regrip. Stood point down at his side in one fist, the fist had
    *  to turn 120 degrees from how it held it standing, past a wrist's turn: his arm shot straight out ahead and the
    *  blade swept 0.5 to 2 m in a frame. */
-  const BETWEEN = tunable('warriorBetween', { ahead: 0.75, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, held: [0.6, 0.1, 0.15] });
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.75, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, held: [0.6, 0.1, 0.15], out: 0.2, pace: 1.8 });
   const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95 });
   const _plantHand = new THREE.Vector3(), _plantBox = new THREE.Box3(), _plantM = new THREE.Matrix4();
   /** a hand's weapon stood on its end: its grip's place there (world, `q`, `at`), the way from the hand to its
@@ -1767,7 +1767,9 @@ export function buildWarrior(): Model {
       _standAt.copy(spot).addScaledVector(slant, -far * s);
       if (w < BETWEEN.lift) {
         const e = smooth(w / BETWEEN.lift);
+        // (out from him on the way: off his shoulder straight to his side, the blade swept 8 cm through his chest)
         p.at.copy(p.startAt).applyMatrix4(root.matrixWorld).lerp(heldAt, e);
+        p.at.addScaledVector(_s1.set(-1, 0, 0).transformDirection(root.matrixWorld), BETWEEN.out * Math.sin(Math.PI * e) * k);
         p.q.copy(from).slerp(held, e);
       } else {
         const e = smooth((w - BETWEEN.lift) / (1 - BETWEEN.lift));
@@ -1806,7 +1808,8 @@ export function buildWarrior(): Model {
     // degrees in the frame he was up)
     const fresh = 1 - smooth(ramp(sat, 0, BETWEEN.lift * BETWEEN.letGo));
     _fq.slerp(_pq.copy(root.getWorldQuaternion(_pq)).multiply(p.handQ), fresh);
-    const turns = (1 - onTop) * (1 - fresh);
+    // (and rolled round it only once it hangs: rolled as it came off his shoulder, the hand turned 28 degrees in a frame)
+    const turns = (1 - onTop) * smooth(ramp(sat, BETWEEN.lift * BETWEEN.letGo, (BETWEEN.lift + 0.2) * BETWEEN.letGo));
     const roll = turns > 0 ? { axis: direction, range: Math.PI * turns, at: p.at } : undefined;
     // (the elbow swung round, not thrown: it changed sides in a frame getting up, 62 cm)
     solveArm(j, false, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, roll, glide: roll ? 0.3 : undefined, maxMove: PLANT_ELBOW });
@@ -3257,6 +3260,9 @@ export function buildWarrior(): Model {
     swingBones: (left: boolean) => ({ ...armBones(left ? offHeld : held) }),
     get offTip() { return offHeld ? tipL : null; },
     get lowerGrip() { return held?.off != null ? grasp : null; },
+    // (a two-hander taken off his shoulder and stood between his feet takes him longer: in the sit's own 1.1 s, its
+    // tip went 15 cm a frame coming off the shoulder)
+    get sitPace() { return held?.off != null ? BETWEEN.pace : 1; },
     get offGrip() { return held?.off != null ? offGrip : null; },
     get fists() {
       const fists: Fist[] = [];
