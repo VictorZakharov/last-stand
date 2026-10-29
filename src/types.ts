@@ -379,7 +379,13 @@ export interface AnimState {
    *  the leg IK and the cloth step, so the sleeves follow the arms the turn moves; `weight` 0 eases the look back
    *  ahead (a drawn bow's aim: left uncalled, a glance's eyes stayed turned and its head snapped back) */
   look?: (weight?: number) => void;
+  /** sat on a log or a stone (`entities/sitting.ts`, posed by `models/sit.ts`), or none */
+  sit?: SitState | null;
 }
+
+/** How far a hero is sat (`w`: 0 standing, 1 sat), his hips' pivot over the floor and his feet ahead of it (m), on the
+ *  floor where he stood to sit if they reach it. */
+export interface SitState { w: number; hip: number; foot: number }
 
 /** A foe an overhead blow comes down on (`AnimState.strike`): its middle on the ground, its radius and its top (m). */
 export interface Struck { x: number; z: number; r: number; top: number }

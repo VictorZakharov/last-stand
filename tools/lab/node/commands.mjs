@@ -1352,6 +1352,23 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  sit: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        seats: options.seats,
+        canary: Boolean(options.canary),
+      };
+      return side.command('sit', command);
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('sit'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
+  },
+
   glance: {
     each(side, options) {
       const command = {

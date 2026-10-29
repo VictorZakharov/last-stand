@@ -18,12 +18,15 @@ import type { BellCloth } from './sleeve';
 import { LegIK } from './ik';
 import { buildBoot } from './boot';
 import { fitArm } from './armIK';
+import { floorUnder, footOutOfFloor, onFloor, restHands, satBy, sitPose } from './sit';
 import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { onTunic, tunicFront, tunicCut, armholeEdge, neckHem, necklineBack, outOfTunic, tunicNormal, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
 import { buildFlask, drink, drinkUp, holdFlask, type DrinkHold } from './flask';
 import { HoodCloth, evenly, spaced } from './hood';
 import type { ActionState, AnimState, Gear, Model } from '../../types';
+import { tunable } from '../../core/tuning';
+import { groundHeight } from '../../world/ground';
 
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _vr = new THREE.Quaternion();
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -40,6 +43,19 @@ const SLUNG_IN = 1, SLUNG_IN_BACK = 0.94;
  *  hip, clear of the hanging arm; without it at the side of the hip, against the thigh, just behind the arm (at the
  *  back, without the coat, it lay glued to his seat); and how far it draws in along its face without the coat (m) */
 const BOOK_AT = 2.3, BOOK_AT_BARE = 1.95, BOOK_IN = 0.02;
+/** sat on the floor, how far the book hung at his hip swings out about its top to lie on the floor beside him (rad;
+ *  hanging, it went 21 cm into the floor), and how far it's lifted as it goes (m) */
+const BOOK_LAY = 1.62, BOOK_LIFT = 0.04;
+/** sat on the floor, where his staff lies beside him along his way, its crystal ahead (rig units, the root's frame:
+ *  its foot out to his left, ahead; its haft's half thickness over the floor), its head tipped up (rad) and its
+ *  crystal's rings drawn in (a share). From review: held, his hand went down to its foot by the robe's hem and its
+ *  haft through his knee. */
+const STAFF_LAY = tunable('mageStaffLay', { at: [-0.6, -0.95], over: 0.035, rise: 0.04, rings: 0.45 });
+/** how far down he is as his hand lets go of the staff he lays down (closed round it as it turned down, the wrist went
+ *  22 degrees past its range), as the staff goes from it to the floor (from, to), and as the hand goes to his knee */
+const STAFF_LET_GO = 0.5, STAFF_DOWN = [0.3, 1], STAFF_HAND = [0.5, 1];
+const _bookQ = new THREE.Quaternion(), _bookTurn = new THREE.Quaternion(), _bookAxis = new THREE.Vector3();
+const _bookPivot = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
 /** a point on the coat's front at x, y, `lift` above it: the tunic's (a round body of the coat's own, narrower over the
  *  shoulders with the arms' tubes stood beside it under caps, read as a bottle from behind) */
 function onChest(x: number, y: number, lift: number, out = new THREE.Vector3()): THREE.Vector3 {
@@ -486,6 +502,46 @@ export function buildMage(): Model {
   S.add(buckle(0.06, 0.062, 0.009), brass, sling, slung(-0.35, 0.008).toArray(), [0, -0.35, -0.24]);
   const book = new THREE.Group();
   sling.add(book);
+  /** the book's top, where it hangs from (the sling's space), and its turn round the belt and place there (`setGear`) */
+  const bookTop = new THREE.Vector3(), bookBase = new THREE.Vector3();
+  let bookTurn = 0;
+  /** The staff laid on the floor beside him (`STAFF_LAY`), eased from the fist by `w` (after `seat`): its foot on the
+   *  floor, its head tipped up off it (`rise`) and its crystal's rings drawn in round it (`rings`: laid flat, they went
+   *  11 cm into the floor). */
+  const _layM = new THREE.Matrix4(), _layP = new THREE.Vector3(), _layQ = new THREE.Quaternion();
+  const _layS = new THREE.Vector3(), _layA = new THREE.Vector3(), _layH = new THREE.Matrix4();
+  const _layY = new THREE.Vector3(), _layZ = new THREE.Vector3();
+  function layStaff(w: number): void {
+    root.updateMatrixWorld(true);
+    const k = root.scale.x, [out, ahead] = STAFF_LAY.at, rise = STAFF_LAY.rise;
+    const way = _layA.set(0, 0, 1).transformDirection(root.matrixWorld).setY(0).normalize();
+    // (along his way, its head ahead and up a little; turned over, what stands off its haft at the head up)
+    const along = _layY.copy(way).multiplyScalar(Math.cos(rise)).addScaledVector(UP, Math.sin(rise));
+    const under = _layZ.copy(way).multiplyScalar(Math.sin(rise)).addScaledVector(UP, -Math.cos(rise));
+    _layQ.setFromRotationMatrix(_layM.makeBasis(_layS.crossVectors(along, under), along, under));
+    // (its foot on the floor there, the haft's half thickness over it)
+    const foot = root.localToWorld(_layP.set(out, 0, ahead));
+    foot.y = groundHeight(foot.x, foot.z) + STAFF_LAY.over * k;
+    const at = foot.addScaledVector(along, -STAFF_FOOT * k);
+    j.handR.updateWorldMatrix(true, false);
+    _layM.compose(at, _layQ, _layS.setScalar(k)).premultiply(_layH.copy(j.handR.matrixWorld).invert());
+    _layM.decompose(_layP, _layQ, _layS);
+    staff.position.lerp(_layP, w);
+    staff.quaternion.slerp(_layQ, w);
+    staff.userData.stoodOn = false;
+    ringA.scale.setScalar(1 - (1 - STAFF_LAY.rings) * w);
+    ringB.scale.copy(ringA.scale);
+  }
+  /** The book in its place, swung out about its top by `w` of `BOOK_LAY` (sat on the floor). */
+  function layBook(w: number): void {
+    const a = BOOK_AT + bookTurn;
+    _bookQ.setFromAxisAngle(_bookAxis.set(-Math.cos(a), 0, Math.sin(a)), BOOK_LAY * w);
+    book.quaternion.copy(_bookQ.multiply(_bookTurn.setFromAxisAngle(UP, bookTurn)));
+    // (and lifted a little as it goes: its top's chain and corners came under the floor laid flat)
+    const pivot = _bookPivot.copy(bookTop).applyAxisAngle(UP, bookTurn).add(bookBase);
+    pivot.y += BOOK_LIFT * w;
+    book.position.copy(bookTop).applyQuaternion(book.quaternion).negate().add(pivot);
+  }
   {
     // (the book's boards and spine round its pages, brass corners, a brass boss with the stone, hung flat against the
     // back of the hip, its top just under the slung belt: at his side behind the hanging hand, off the coat on a long
@@ -494,6 +550,7 @@ export function buildMage(): Model {
     const seat = slung(BOOK_AT, D / 2 + 0.004);
     // (its top tucked behind the belt's lower edge: at that edge, a gap showed under the belt from behind)
     const at: [number, number, number] = [seat.x, seat.y - 0.014 - Hh / 2, seat.z];
+    bookTop.set(seat.x, seat.y - 0.014, seat.z);
     const place = (x: number, y: number, z: number): [number, number, number] =>
       [at[0] + Math.sin(ry) * z + Math.cos(ry) * x, at[1] + y, at[2] + Math.cos(ry) * z - Math.sin(ry) * x];
     S.add(new THREE.BoxGeometry(W - 0.006, Hh - 0.008, D - 0.012), paper, book, at, [0, ry, 0]);
@@ -574,10 +631,10 @@ export function buildMage(): Model {
   };
   // (the free arm swung out just enough to keep its hand and its cuff off the thigh and the cloth over it: armOffThigh)
   const handPts = [...segsL.flatMap(([a, b, r]) => [[a, r], [b, r]] as [JointPoint, number][]), [[j.elbowL, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], 0], [[j.handL, new THREE.Vector3()], 0]] as [JointPoint, number][];
-  const clearThigh = () => {
+  const clearThigh = (weight: number) => {
     const n = handPts.length;
     handPts[n - 2][1] = cuffR() - 0.012; handPts[n - 1][1] = cuffR();
-    armOffThigh(tunicSkirt, j.shoulderL, 1, legBodies.list[0], HAND_GAP + (robed ? 0.015 : 0), handPts);
+    armOffThigh(tunicSkirt, j.shoulderL, 1, legBodies.list[0], HAND_GAP + (robed ? 0.015 : 0), handPts, weight);
   };
   const flaps: { g: THREE.Group; knee: THREE.Group; a: number; len: number; w: number }[] = [];
   const hang = (a: number, w: number, len: number, mat: THREE.Material, hemPx: number, texH: number, lift: number) => {
@@ -840,6 +897,8 @@ export function buildMage(): Model {
   const STAFF_PITCH = 1.25, STAFF_R = 0.026;
   staff.rotation.x = STAFF_PITCH;
   const GRIP = 0.44;
+  /** the staff's foot along it from the fist (its ferrule's tip) */
+  const STAFF_FOOT = -0.52 - GRIP - 0.13;
   {
     const w = new Sculpt(), pts: THREE.Vector3[] = [];
     // (the haft wandering a little and knotted along its length, its grain twisted round it)
@@ -1116,14 +1175,24 @@ export function buildMage(): Model {
     if (!fp && !(a && FREE_HAND.has(a.name))) j.handL.rotation.y += HAND_HANG;
     if (st.hit > 0) { j.spine.rotation.x += -0.25 * st.hit; j.neck.rotation.x += -0.2 * st.hit; }
     if (st.dead < 0) fade.apply(dt); else fade.reset();
+    const legW = sitPose(j, st.sit, t);
+    const floorW = st.sit && onFloor(st.sit) ? st.sit.w : 0;
+    layBook(floorW * floorW * (3 - 2 * floorW));
+    // (the free hand on his thigh, the staff stood on the floor in the other; on the floor both on his knees, the staff
+    // laid down)
     st.look?.();
+    const staffDown = st.sit && onFloor(st.sit) ? satBy(st.sit) : 0;
+    restHands(j, st.sit, [0]);
+    // (the staff hand to his knee once he's well down: from the start, his fist round the staff as it went, the wrist
+    // bent 19 degrees past its range)
+    if (staffDown > 0) restHands(j, { ...st.sit!, w: ramp(staffDown, STAFF_HAND[0], STAFF_HAND[1]) }, [1]);
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
     else {
       // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
       if (!fp) legs.captureArms();
       const F = feet ?? REST_FEET;
       legs.stance(0, F[0], F[1], F[2]); legs.stance(1, F[3], F[4], F[5]);
-      legs.update(dt, st.phase, st.dead, 1, fp ? 0 : 1);
+      legs.update(dt, st.phase, st.dead, legW, fp ? 0 : 1);
       groundFeet(j, 0.07);
       if (!fp) legs.holdArms();
     }
@@ -1132,16 +1201,32 @@ export function buildMage(): Model {
     const fL = -j.thighL.rotation.x, fR = -j.thighR.rotation.x;
     root.updateMatrixWorld(true);
     legBodies.place(tunicSkirt);
-    if (!fp && st.dead < 0) clearThigh();
+    // (sat, the hand rests on the thigh)
+    if (!fp && st.dead < 0) clearThigh(1 - satBy(st.sit));
     // every arm within a body's ranges, each hand where the pose put it (armIK.ts)
     let slant = 0;
-    if (!fp && st.dead < 0) { fitArm(j, true, undefined, body); slant = fitArm(j, false, gripTurn(handR, staff, _vr), body, SLANT).slant; }
+    // (fitted to the fist round it till it lets go: fitted open, the drawn fist turned the forearm 68 degrees past)
+    const gripped = staffDown < STAFF_LET_GO;
+    if (!fp && st.dead < 0) {
+      fitArm(j, true, undefined, body);
+      slant = fitArm(j, false, gripped ? gripTurn(handR, staff, _vr) : undefined, body, gripped ? SLANT : undefined).slant;
+    }
     // (the haft seated in the fist as the hand holds it, diagonal across the palm by the slant the arm took)
     seat(handR, staff, STAFF_R, slant);
+    if (st.sit) footOutOfFloor(staff, STAFF_FOOT);
+    if (staffDown > 0) layStaff(ramp(staffDown, STAFF_DOWN[0], STAFF_DOWN[1]));
+    else {
+      ringA.scale.setScalar(1);
+      ringB.scale.setScalar(1);
+    }
     sets.bend();
     placeBodies();
     // (the hands only against the outer skirt: pushed in, the inner one would come out over it)
-    if (robed) { over.update(fL, fR, move, t + 0.4, dt, legBodies.list, handBodies.list); }
+    if (robed) {
+      over.update(fL, fR, move, t + 0.4, dt, legBodies.list, handBodies.list);
+      // (sat low, the robe's hem lies on the floor)
+      if (st.sit) over.keepAbove(floorUnder(skirts[0]));
+    }
     else short.update(fL, fR, move, t, dt, legBodies.list, handBodies.list);
     for (const f of flaps) {
       const wl = clamp(0.5 + Math.sin(f.a) * 0.9, 0, 1);
@@ -1156,7 +1241,9 @@ export function buildMage(): Model {
     void drinkLift;
     // the right hand closes round the staff wherever the arm has taken it
     root.updateMatrixWorld(true);
-    hold(handR, _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), STAFF_R, undefined, slant);
+    // (let go of it once it's laid down)
+    if (gripped) hold(handR, _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), STAFF_R, undefined, slant);
+    else poseHand(handR, 0.35, 0.1);
 
     // cloth runs after the pose so it collides with this frame's skeleton
     if (dt > 0 && robed) for (const c of cloths) c.update(dt);
@@ -1189,8 +1276,9 @@ export function buildMage(): Model {
       for (const o of [...tunic, tunicSkirt]) o.visible = !robed;
       sling.scale.set(robed ? 1 : SLUNG_IN, 1, robed ? 1 : SLUNG_IN_BACK);
       // (swung round the belt to its place, a turn about the belt's middle)
-      book.rotation.y = robed ? 0 : BOOK_AT_BARE - BOOK_AT;
-      book.position.set(robed ? 0 : -BOOK_IN * Math.sin(BOOK_AT_BARE), 0, robed ? 0 : -BOOK_IN * Math.cos(BOOK_AT_BARE));
+      bookTurn = robed ? 0 : BOOK_AT_BARE - BOOK_AT;
+      bookBase.set(robed ? 0 : -BOOK_IN * Math.sin(BOOK_AT_BARE), 0, robed ? 0 : -BOOK_IN * Math.cos(BOOK_AT_BARE));
+      layBook(0);
       gloved = gear.hands;
       for (const o of bracers) o.visible = gear.hands;
       bare(handL, !gear.hands); bare(handR, !gear.hands);

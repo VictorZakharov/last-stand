@@ -1,0 +1,506 @@
+// tools/lab `sit`: an idle hero's sit on a log or a stone (entities/sitting.ts, models/sit.ts), read from what's drawn.
+// From the owner: "if there is a nearby log or not high stone ... and character is idle, they need to walk up to this
+// prop and sit on it, should sit on the closest side", "when user presses any action, they should stand up first,
+// then perform the action if user is still pressing it (do not queue)", "while seated, they should continue looking
+// left/right like now"; a high seat sat on "up on it, feet hanging", a low stone with the feet on the floor. On each
+// seat he stands 3 m off it idle until he has walked there and sat: on its side he stood on, his hips on its top, his
+// feet down or hanging as its height has them, every joint within its range, glancing round; then he's asked to act,
+// a tap and a key held, a step and an attack: up first each time, a tap left undone, a key held done once he's up.
+// The canary raises his body off the seat as he sits.
+import * as THREE from 'three';
+import { G } from '../../../src/state';
+import { groundHeight } from '../../../src/world/ground';
+import { seatSpot, seatTopAt, type Seat } from '../../../src/world/seats';
+import type { BiomeId } from '../../../src/data/biomes';
+import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
+import { bodyBreaches, grippingSides } from './range';
+
+/** What `lab sit` takes. */
+export interface SitOptions {
+  /** the set-up's (`--gear`, `--weapon`, `--wear`, `--tune`): where he stands is the measure's */
+  fixture?: Fixture;
+  /** the seats tried, by name (all by default) */
+  seats?: string[];
+  canary?: boolean;
+}
+
+const RATE = 60;
+const DEG = 180 / Math.PI;
+/** how far off the seat he stands to begin with (m), and how long he has to have sat by (s) */
+const START_OFF = 3;
+/** clear of the props by this to begin with (m): a hero's radius and some */
+const BODY = 0.6;
+const SAT_BY = 16;
+/** how long he sits for the reads (s) */
+const SAT_FOR = 7;
+/** his hips' pivot over the seat's top as drawn (m): any higher he sits on air, any lower in the seat */
+const PIVOT_OVER: [number, number] = [0.06, 0.17];
+/** an ankle this near the floor is down on it, this far over it hanging (m) */
+const DOWN_WITHIN = 0.13;
+const HANGS_FROM = 0.16;
+/** how far a foot down may slide as he sits (m) */
+const SLIDE_MOST = 0.03;
+/** the head's turn from the chest that counts as a glance (degrees) */
+const GLANCED = 15;
+/** frames a key is pressed for a tap, frames he may take to begin getting up, and how long after he's up a tap's or a
+ *  held key's doing is watched for (s) */
+const TAP = 3;
+const RISE_IN = 2;
+const AFTER_UP = 1.2;
+/** the longest getting up may take (s): `SIT.up` with room to spare */
+const RISE_MOST = 1.2;
+/** how far he may move after a tap once he's up (m), and how far a held step takes him at least */
+const STILL_AFTER = 0.05;
+const WALKS_OFF = 0.6;
+/** how far under the floor a piece of him may be drawn (m): a sole's rounding */
+const UNDER_MOST = 0.03;
+/** and how far over it a handle stood on its end on the floor may be drawn (m): from review, the mage's staff slid up
+ *  past the floor stood on air, 18 cm on the log and 78 on the stone */
+const STOOD_OVER = 0.03;
+
+/** an empty hand's palm this far off his legs' surface rests on nothing (m): from review, an empty hand hung beside
+ *  the knee, palm forward, touching nothing; the palm's middle down the hand from the wrist and onto its palm (rig
+ *  units) */
+const OFF_LEG = 0.06;
+/** and this far into the bare leg is into it, through the clothes over it (m: the boots, trousers and robe drawn over
+ *  the rig's capsules) */
+const IN_LEG = 0.03;
+const PALM_AT = new THREE.Vector3(0, -0.06, -0.02);
+
+/** by a fire, his body's way off the way to it at most (degrees): from review, he sat 30 to 45 off it */
+const FACING_FIRE = 15;
+
+/** the canary's raise of his body over the seat (m) */
+const CANARY_RAISE = 0.12;
+
+/** A seat tried: its name, its biome, how it's picked from the biome's, and whether its feet hang. */
+interface SeatCase {
+  name: string;
+  biome: BiomeId;
+  pick: (seats: readonly Seat[]) => Seat | undefined;
+  hangs: boolean;
+  /** the views he's pictured in, sat (the first two half way down too): by a fire, from its sides, as one ahead of
+   *  him looks through the flames */
+  views: ViewName[];
+  /** what he's asked to do from it, in turn */
+  asks: Ask[];
+}
+
+/** An ask: a step or an attack, tapped or held. */
+interface Ask {
+  what: 'step' | 'attack';
+  held: boolean;
+}
+
+const SEAT_VIEWS: ViewName[] = ['front', 'left', 'above'];
+const FIRE_VIEWS: ViewName[] = ['right', 'back', 'above'];
+
+const lengthOf = (s: Seat) => Math.hypot(s.bx - s.ax, s.bz - s.az);
+
+const CASES: SeatCase[] = [
+  {
+    name: 'log', biome: 'forest', pick: (seats) => seats.find((s) => lengthOf(s) > 2), hangs: true,
+    views: SEAT_VIEWS,
+    asks: [{ what: 'step', held: false }, { what: 'attack', held: true }],
+  },
+  {
+    name: 'stone', biome: 'forest', pick: lowestStone, hangs: false, views: SEAT_VIEWS,
+    asks: [{ what: 'attack', held: false }, { what: 'step', held: true }],
+  },
+  {
+    name: 'column', biome: 'crypt', pick: (seats) => seats.find((s) => lengthOf(s) > 2), hangs: true,
+    views: SEAT_VIEWS,
+    asks: [{ what: 'step', held: false }],
+  },
+  {
+    name: 'fire', biome: 'forest', pick: (seats) => seats.find((s) => s.ground), hangs: false, views: FIRE_VIEWS,
+    asks: [{ what: 'attack', held: true }],
+  },
+  {
+    name: 'brazier', biome: 'crypt', pick: (seats) => seats.find((s) => s.ground), hangs: false, views: FIRE_VIEWS,
+    asks: [{ what: 'step', held: false }],
+  },
+];
+
+/** The forest's stone seat with the lowest top. */
+function lowestStone(seats: readonly Seat[]): Seat | undefined {
+  const stones = seats.filter((s) => lengthOf(s) < 1e-3 && !s.ground);
+  const topOf = (s: Seat) => seatTopAt(s, s.ax + s.sit, s.az);
+  return stones.sort((a, b) => topOf(a) - topOf(b))[0];
+}
+
+/** What the seats tried found, added to as they go. */
+interface Out {
+  text: string[];
+  problems: string[];
+  moments: Pictured[];
+}
+
+/** One frame of a sit as drawn. */
+interface Read {
+  w: number;
+  pivot: THREE.Vector3;
+  ankles: [THREE.Vector3, THREE.Vector3];
+  neck: number;
+  /** each empty hand (holding nothing), its palm's gap to his legs (m) */
+  palms: { side: string; gap: number }[];
+  /** the way his hips face, as a world point 1 m ahead of their pivot */
+  ahead: THREE.Vector3;
+}
+
+/** Runs `lab sit`. */
+export async function sit(lab: Lab, options: SitOptions): Promise<Report> {
+  const text: string[] = [`the ${lab.player.cls.id} sitting`];
+  const problems: string[] = [];
+  const moments: Pictured[] = [];
+  const cases = CASES.filter((c) => !options.seats?.length || options.seats.includes(c.name));
+  const fixture = options.fixture ?? {};
+  if (options.canary) return canaryOn(lab, cases[0], fixture, { text, problems, moments });
+  for (const each of cases) await trySeat(lab, each, fixture, false, { text, problems, moments });
+  return { text: text.join('\n'), problems, moments };
+}
+
+/** The canary on one seat: his body raised off it as he sits must be caught as sitting on air. */
+async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Promise<Report> {
+  await trySeat(lab, { ...c, asks: [] }, fixture, true, out);
+  const caught = out.problems.some((problem) => problem.includes('sat on air'));
+  out.text.push(`  canary, his body raised ${CANARY_RAISE} m off the seat: ${caught ? 'caught' : 'MISSED'}`);
+  const problems = caught ? [] : ['sit: the canary (his body raised off the seat) was missed'];
+  return { text: out.text.join('\n'), problems, moments: out.moments };
+}
+
+/** A seat tried: sat on, read, and got up from by each of its asks. */
+async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, canary: boolean, out: Out): Promise<void> {
+  if (G.arena.biome !== c.biome) G.arena.setBiome(c.biome);
+  const seat = c.pick(G.arena.seats);
+  if (!seat) {
+    out.problems.push(`sit: the ${c.biome} has no ${c.name} to sit on`);
+    return;
+  }
+  const { at, facing } = startOff(seat);
+  await lab.setup({ ...fixture, at, facing });
+  lab.player.sits = true;
+  const spot = seatSpot(seat, at[0], at[1], lab.player.radius);
+  if (!spot) {
+    out.problems.push(`sit: the ${c.name} has no spot to sit on from ${at.map((v) => v.toFixed(1))}`);
+    return;
+  }
+  const label = `${c.name} (top ${seatTopAt(seat, spot.x, spot.z).toFixed(2)} m)`;
+  const sat = await untilSat(lab, label, c.views.slice(0, 2), out);
+  if (!sat) return;
+  const side = (lab.player.pos.x - spot.x) ** 2 + (lab.player.pos.z - spot.z) ** 2;
+  if (side > 0.05 ** 2) out.problems.push(`sit: on the ${c.name} he sat ${Math.sqrt(side).toFixed(2)} m off its spot`);
+  out.moments.push(lab.picture(`${c.name}: sat`, c.views));
+  const under = deepestUnder(lab);
+  if (under.depth > UNDER_MOST) {
+    out.problems.push(`sit: on the ${c.name}, his ${under.name} ${(under.depth * 100).toFixed(0)} cm under the floor`);
+  }
+  const stood = highestStood(lab);
+  if (stood && stood.over > STOOD_OVER) {
+    out.problems.push(`sit: on the ${c.name}, his ${stood.name} stood ${(stood.over * 100).toFixed(0)} cm over the floor`);
+  }
+  const reads = await readSat(lab, canary, c.name, out);
+  judgeSat(c, label, reads, seat, out);
+  for (const ask of c.asks) await askOf(lab, c, ask, out);
+}
+
+const _box = new THREE.Box3();
+
+/** The piece of him drawn deepest under the floor (a staff's foot as he sits low), and how deep (m), less what it
+ *  says it's stuck in (a greatsword stood point down, `userData.stuckIn` on it or over it). */
+function deepestUnder(lab: Lab): { name: string; depth: number } {
+  lab.model.root.updateMatrixWorld(true);
+  let deepest = { name: 'nothing', depth: 0 };
+  lab.model.root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || !shown(mesh) || (mesh as THREE.SkinnedMesh).isSkinnedMesh) return;
+    _box.setFromObject(mesh, true);
+    const mid = _box.getCenter(new THREE.Vector3());
+    const depth = groundHeight(mid.x, mid.z) - _box.min.y - stuckIn(mesh);
+    if (depth > deepest.depth) deepest = { name: nameOf(mesh, lab.joints), depth };
+  });
+  return deepest;
+}
+
+/** Of what's stood on its end on the floor as he sits (`userData.stoodOn`: the mage's staff, slid up through his fist
+ *  out of the floor), the one drawn highest over it, and how high its lowest point is (m). */
+function highestStood(lab: Lab): { name: string; over: number } | null {
+  lab.model.root.updateMatrixWorld(true);
+  let highest: { name: string; over: number } | null = null;
+  lab.model.root.traverse((object) => {
+    if (!object.userData.stoodOn || !shown(object)) return;
+    _box.setFromObject(object, true);
+    const mid = _box.getCenter(new THREE.Vector3());
+    const over = _box.min.y - groundHeight(mid.x, mid.z);
+    if (!highest || over > highest.over) highest = { name: nameOf(object, lab.joints), over };
+  });
+  return highest;
+}
+
+/** How deep `object` is meant to be in the floor (m): a weapon stood on its point, as the model says. */
+function stuckIn(object: THREE.Object3D): number {
+  for (let at: THREE.Object3D | null = object; at; at = at.parent) {
+    const depth = at.userData.stuckIn as number | undefined;
+    if (depth) return depth;
+  }
+  return 0;
+}
+
+/** Whether `object` is drawn: it and everything over it shown (a weapon not held is hidden by its group). */
+function shown(object: THREE.Object3D): boolean {
+  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (!at.visible) return false;
+  return true;
+}
+
+/** A piece's name, or the nearest named object over it, or the joint it hangs from. */
+function nameOf(piece: THREE.Object3D, joints: Lab['joints']): string {
+  const jointNames = new Map(Object.entries(joints).map(([name, joint]) => [joint, name]));
+  for (let at: THREE.Object3D | null = piece; at; at = at.parent) {
+    if (at.name) return at.name;
+    const joint = jointNames.get(at as never);
+    if (joint) return `piece on the ${joint}`;
+  }
+  return 'unnamed piece';
+}
+
+/** Where he stands to begin with: `START_OFF` off the seat's middle, on the first side and turn round it clear of
+ *  every prop by a body's width (the arena's middle side first), facing it. */
+function startOff(seat: Seat): { at: [number, number]; facing: number } {
+  const mx = (seat.ax + seat.bx) / 2, mz = (seat.az + seat.bz) / 2;
+  const lx = seat.bx - seat.ax, lz = seat.bz - seat.az, len = Math.hypot(lx, lz);
+  const inward = Math.atan2(-mx, -mz);
+  // (a log's sides straight across it first, then slanting off them; a stone's all round from the arena's middle)
+  const across = len > 1e-3 ? Math.atan2(-lz, lx) : inward;
+  const sideFirst = Math.cos(across - inward) >= 0 ? across : across + Math.PI;
+  for (const turn of [0, Math.PI, 0.5, -0.5, Math.PI + 0.5, Math.PI - 0.5]) {
+    const way = sideFirst + turn;
+    const x = mx + Math.sin(way) * START_OFF, z = mz + Math.cos(way) * START_OFF;
+    if (clear(x, z)) return { at: [x, z], facing: Math.atan2(mx - x, mz - z) };
+  }
+  throw new Error('lab: no clear floor round the seat to stand on');
+}
+
+/** Whether a hero stands at (`x`, `z`) clear of every prop by a body's width, and of the wall. */
+function clear(x: number, z: number): boolean {
+  if (G.arena.wall.roomOut(x, z, BODY) <= 0) return false;
+  return G.arena.obstacles.every((o) => Math.hypot(x - o.x, z - o.z) > o.r + BODY);
+}
+
+/** A joint past its range, and how far down he was. */
+interface Breached {
+  by: number;
+  name: string;
+  w: number;
+}
+
+const pastOf = (b: Breached) => `${b.name} ${b.by.toFixed(0)}° past its range`;
+
+/** Frames until he's sat, as he stands idle; whether he did. */
+async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out): Promise<boolean> {
+  const sitting = lab.player.sitting;
+  let walked = false, half = false;
+  // (the worst joint past its range sitting down, and standing idle before it: said, not the sit's)
+  const worst: (Breached | null)[] = [null, null];
+  for (let f = 0; f < SAT_BY * RATE; f++) {
+    await lab.step(1);
+    walked ||= sitting.walking;
+    const w = sitting.pose?.w ?? 0;
+    // (the joints past their ranges on the way down, with how far down he was)
+    const past = sitting.walking ? undefined : bodyBreaches(lab.joints, grippingSides(lab)).found[0];
+    const at = w > 0 ? 0 : 1;
+    if (past && (!worst[at] || past.by > worst[at].by)) worst[at] = { by: past.by, name: past.name, w };
+    if (!half && w >= 0.5) {
+      half = true;
+      out.moments.push(lab.picture(`${label}: half way down`, views));
+    }
+    if (w >= 1) {
+      out.text.push(`  ${label}: sat after ${(f / RATE).toFixed(1)} s${walked ? ', walking there' : ''}`);
+      const [down, stood] = worst;
+      if (down) {
+        out.problems.push(`sit: by the ${label}, sitting down, ${pastOf(down)} ${(down.w * 100).toFixed(0)}% down`);
+      }
+      if (stood) out.text.push(`    standing idle before it (not the sit's): ${pastOf(stood)}`);
+      return true;
+    }
+  }
+  out.problems.push(`sit: idle ${SAT_BY} s by the ${label}, he never sat${walked ? '' : ' (never walked there)'}`);
+  return false;
+}
+
+/** His sit read for `SAT_FOR` s (the canary raising his body as he sits). */
+async function readSat(lab: Lab, canary: boolean, name: string, out: Out): Promise<Read[]> {
+  const j = lab.joints;
+  let worst: { by: number; name: string; neck: number } | null = null;
+  let frames = 0;
+  const reads = await lab.step(SAT_FOR * RATE, undefined, () => {
+    if (canary) j.body.position.y += CANARY_RAISE / j.root.scale.x;
+    const read = readNow(lab);
+    const past = bodyBreaches(j, grippingSides(lab)).found[0];
+    if (past) frames++;
+    if (past && (!worst || past.by > worst.by)) worst = { by: past.by, name: past.name, neck: read.neck };
+    if (canary) j.body.position.y -= CANARY_RAISE / j.root.scale.x;
+    return read;
+  });
+  const found = worst as { by: number; name: string; neck: number } | null;
+  if (found) {
+    out.problems.push(`sit: on the ${name}, ${found.name} ${found.by.toFixed(0)}° past its range (${frames} frames; `
+      + `the head ${found.neck.toFixed(0)}° from the chest then)`);
+  }
+  return reads;
+}
+
+const _q = new THREE.Quaternion(), _r = new THREE.Quaternion(), _f = new THREE.Vector3();
+
+/** This frame as drawn: the thighs' pivot, the ankles, the head's turn from the chest. */
+function readNow(lab: Lab): Read {
+  const j = lab.joints;
+  j.root.updateMatrixWorld(true);
+  const pivot = j.thighL.getWorldPosition(new THREE.Vector3()).add(j.thighR.getWorldPosition(new THREE.Vector3()));
+  const ankles: [THREE.Vector3, THREE.Vector3] = [
+    j.ankleL.getWorldPosition(new THREE.Vector3()), j.ankleR.getWorldPosition(new THREE.Vector3()),
+  ];
+  j.chest.getWorldQuaternion(_q).invert();
+  j.head.getWorldQuaternion(_r);
+  _f.set(0, 0, 1).applyQuaternion(_q.multiply(_r));
+  const neck = Math.atan2(_f.x, _f.z) * DEG;
+  pivot.multiplyScalar(0.5);
+  const ahead = j.hips.localToWorld(new THREE.Vector3(0, 0, 1)).sub(j.hips.getWorldPosition(new THREE.Vector3()));
+  ahead.setY(0).normalize().add(pivot);
+  return { w: lab.player.sitting.pose?.w ?? 0, pivot, ankles, neck, palms: emptyPalms(lab), ahead };
+}
+
+/** Each empty hand, its palm's gap to his legs. */
+function emptyPalms(lab: Lab): { side: string; gap: number }[] {
+  const sides = [{ side: 'L', hand: lab.joints.handL }, { side: 'R', hand: lab.joints.handR }];
+  return sides
+    .filter(({ hand }) => !holdsSomething(hand))
+    .map(({ side, hand }) => ({ side, gap: legGap(lab.joints, hand.localToWorld(_f.copy(PALM_AT))) }));
+}
+
+/** Whether `hand` holds something: a piece shown under it that isn't skinned (the hand's own is). A weapon stood up
+ *  is still under it, his palm on its top; the mage's staff and the ranger's bow are held without a `fists` entry. */
+function holdsSomething(hand: THREE.Object3D): boolean {
+  let holds = false;
+  hand.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (mesh.isMesh && !(mesh as THREE.SkinnedMesh).isSkinnedMesh && shown(mesh)) holds = true;
+  });
+  return holds;
+}
+
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _line = new THREE.Line3(), _near = new THREE.Vector3();
+
+/** How far `point` is off the nearest of his thighs' and shins' surfaces (m: the rig's capsules, bare of clothing). */
+function legGap(j: Lab['joints'], point: THREE.Vector3): number {
+  const P = j.P, k = j.root.scale.x;
+  const bones = [
+    { from: j.thighL, length: P.thighL, radius: P.thighR }, { from: j.thighR, length: P.thighL, radius: P.thighR },
+    { from: j.kneeL, length: P.shinL, radius: P.shinR }, { from: j.kneeR, length: P.shinL, radius: P.shinR },
+  ];
+  const gaps = bones.map(({ from, length, radius }) => {
+    _line.set(from.localToWorld(_a.set(0, 0, 0)), from.localToWorld(_b.set(0, -length, 0)));
+    return _line.closestPointToPoint(point, true, _near).distanceTo(point) - radius * k;
+  });
+  return Math.min(...gaps);
+}
+
+/** The sit judged: the hips on the seat, the feet down or hanging and still, the head glancing. */
+function judgeSat(c: SeatCase, label: string, reads: Read[], seat: Seat, out: Out): void {
+  const overs = reads.map((r) => r.pivot.y - seatTopAt(seat, r.pivot.x, r.pivot.z));
+  const lowest = Math.min(...overs), highest = Math.max(...overs);
+  if (lowest < PIVOT_OVER[0]) out.problems.push(`sit: on the ${c.name} his hips sank into it (${lowest.toFixed(2)} m)`);
+  if (highest > PIVOT_OVER[1]) out.problems.push(`sit: on the ${c.name} his hips sat on air (${highest.toFixed(2)} m)`);
+  const heights = reads.map((r) => r.ankles.map((a) => a.y - groundHeight(a.x, a.z)));
+  const most = Math.max(...heights.flat()), least = Math.min(...heights.flat());
+  const hanging = least > HANGS_FROM, down = most < DOWN_WITHIN;
+  const feet = hanging ? 'hanging' : down ? 'on the floor' : 'neither down nor hanging';
+  if (c.hangs && !hanging) out.problems.push(`sit: on the ${c.name} his feet are ${feet}, not hanging`);
+  if (!c.hangs && !down) out.problems.push(`sit: on the ${c.name} his feet are ${feet}, not on the floor`);
+  const slid = down ? Math.max(...[0, 1].map((i) => slideOf(reads.map((r) => r.ankles[i])))) : 0;
+  if (slid > SLIDE_MOST) out.problems.push(`sit: on the ${c.name} a foot slid ${(slid * 100).toFixed(0)} cm`);
+  const fire = seat.ground ? judgeFacing(c, seat, reads, out) : '';
+  const glance = Math.max(...reads.map((r) => Math.abs(r.neck)));
+  if (glance < GLANCED) out.problems.push(`sit: on the ${c.name} he never glanced round (${glance.toFixed(0)}°)`);
+  out.text.push(`  ${label}: hips ${lowest.toFixed(2)} to ${highest.toFixed(2)} m over its top, feet ${feet} `
+    + `(${least.toFixed(2)} to ${most.toFixed(2)} m)${down ? `, slid ${(slid * 100).toFixed(1)} cm` : ''}, `
+    + `${fire}glanced ${glance.toFixed(0)}°, ${judgeHands(c, reads, out)}`);
+}
+
+/** His empty hands judged on his legs, each frame he sits; what's said of them. */
+function judgeHands(c: SeatCase, reads: Read[], out: Out): string {
+  const gaps = reads.flatMap((r) => r.palms.map((p) => p.gap));
+  const off = Math.max(0, ...gaps), into = Math.min(off, ...gaps);
+  const cm = (m: number) => (m * 100).toFixed(0);
+  if (into < -IN_LEG) out.problems.push(`sit: on the ${c.name} an empty hand is in his leg (${cm(-into)} cm)`);
+  if (off > OFF_LEG) {
+    out.problems.push(`sit: on the ${c.name} an empty hand rests on nothing (${cm(off)} cm off his legs)`);
+  }
+  const empty = [...new Set(reads.flatMap((r) => r.palms.map((p) => p.side)))].join('') || 'none';
+  return `empty hands (${empty}) ${cm(into)} to ${cm(off)} cm off his legs`;
+}
+
+/** By a fire, his way to it judged; what's said of it. */
+function judgeFacing(c: SeatCase, seat: Seat, reads: Read[], out: Out): string {
+  const facing = fireOff(seat, reads);
+  if (facing > FACING_FIRE) out.problems.push(`sit: by the ${c.name} he faces ${facing.toFixed(0)}° off the fire`);
+  return `${facing.toFixed(0)}° off the fire, `;
+}
+
+/** The most his hips face off the way to the fire (degrees, over the floor). */
+function fireOff(seat: Seat, reads: Read[]): number {
+  const offs = reads.map((read) => {
+    const ahead = Math.atan2(read.ahead.x - read.pivot.x, read.ahead.z - read.pivot.z);
+    const toFire = Math.atan2(seat.ax - read.pivot.x, seat.az - read.pivot.z);
+    return Math.abs(Math.atan2(Math.sin(ahead - toFire), Math.cos(ahead - toFire))) * DEG;
+  });
+  return Math.max(...offs);
+}
+
+/** How far a point's path strays from where it began (m, over the floor). */
+function slideOf(path: THREE.Vector3[]): number {
+  return Math.max(...path.map((p) => Math.hypot(p.x - path[0].x, p.z - path[0].z)));
+}
+
+/** One frame of an ask: how far he's sat, where he is, whether he casts. */
+interface AskRead {
+  w: number;
+  at: THREE.Vector3;
+  cast: boolean;
+}
+
+/** He's asked to act from the seat (sat again first if he's up): up before anything, then only a held key's done. */
+async function askOf(lab: Lab, c: SeatCase, ask: Ask, out: Out): Promise<void> {
+  const player = lab.player;
+  const sat = (player.sitting.pose?.w ?? 0) >= 1;
+  if (!sat && !(await untilSat(lab, `${c.name} again`, c.views.slice(0, 2), { ...out, moments: [] }))) return;
+  const ahead = new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
+  const aim = player.pos.clone().addScaledVector(ahead, 4);
+  const input = ask.what === 'step' ? { keys: ['w'] } : { m0: true, aim };
+  const frames = Math.round((RISE_MOST + AFTER_UP) * RATE);
+  const reads = await lab.step(frames, (f) => (ask.held || f < TAP ? input : { aim }), (): AskRead => ({
+    w: player.sitting.pose?.w ?? 0, at: player.pos.clone(), cast: Boolean(player.casting || player.channel),
+  }));
+  judgeAsk(`the ${c.name}, ${ask.held ? 'held' : 'tapped'} ${ask.what}`, ask, reads, out);
+}
+
+/** An ask judged: getting up at once, nothing done until he's up, a tap left undone, a held key done. */
+function judgeAsk(what: string, ask: Ask, reads: AskRead[], out: Out): void {
+  const rising = reads.slice(0, RISE_IN + 1).some((r, i) => i > 0 && r.w < reads[i - 1].w);
+  const up = reads.findIndex((r) => r.w <= 0);
+  const castSat = reads.slice(0, Math.max(0, up)).some((r) => r.cast);
+  const after = up < 0 ? [] : reads.slice(up);
+  const moved = after.length ? Math.max(...after.map((r) => r.at.distanceTo(after[0].at))) : 0;
+  const cast = after.some((r) => r.cast);
+  const problems: string[] = [];
+  if (!rising) problems.push(`sit: ${what}, he didn't begin getting up within ${RISE_IN} frames`);
+  if (up < 0) problems.push(`sit: ${what}, he wasn't up after ${RISE_MOST} s`);
+  if (castSat) problems.push(`sit: ${what}, he attacked before he was up`);
+  if (!ask.held && (cast || moved > STILL_AFTER)) {
+    problems.push(`sit: ${what}, the tap was done once he was up (queued)`);
+  }
+  if (ask.held && ask.what === 'step' && moved < WALKS_OFF) problems.push(`sit: ${what}, he never walked off once up`);
+  if (ask.held && ask.what === 'attack' && !cast) problems.push(`sit: ${what}, he never attacked once up`);
+  out.problems.push(...problems);
+  const upAt = up < 0 ? 'never up' : `up in ${(up / RATE).toFixed(2)} s`;
+  out.text.push(`  ${what}: ${upAt}, then moved ${moved.toFixed(2)} m${cast ? ', attacked' : ''}`);
+}

@@ -20,6 +20,7 @@ import { buildFire } from './fire';
 import { restingLift, skullGeometry } from './skull';
 import type { Obstacle } from '../types';
 import { Wall } from './wall';
+import { fireSeat, lengthSeat, type Seat } from './seats';
 import { valueNoise3 } from '../core/patterns';
 import { growTree, type Grow, type TreeKind } from './ezTrees';
 import { restartsAt, runPhase } from './runPhase';
@@ -213,6 +214,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const rng = mulberry(1337);
   const r = (a: number, b: number) => a + rng() * (b - a);
   const obstacles: Obstacle[] = [];
+  const seats: Seat[] = [];
   const breakable = new PropSet(obstacles);
   const updaters: Updater[] = [];
   const wall = new Wall('crypt');
@@ -393,6 +395,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
     buildBrazier(g, x, z, a, iron, graniteMat, updaters);
     obstacles.push({ x, z, r: 1.45, h: 1.8 });
     breakable.add(obstacles.length - 1, 30, 0x3a3a48, groupLook(g, updaters, u0));
+    seats.push(fireSeat(obstacles[obstacles.length - 1]));
   }
 
   // --- Floor obstacles: broken columns, fallen drums, sarcophagi, gravestones -------------
@@ -429,11 +432,14 @@ export const buildCrypt: BiomeBuilder = (scene) => {
     setInstance(drums, di++, x, 0.42, z, 0, yaw, 0, 3.2, 1, 1);
     for (const u of [-1.1, 0, 1.1]) obstacles.push({ x: x + Math.cos(yaw) * u, z: z - Math.sin(yaw) * u, r: 0.55, h: 0.9 });
     breakable.add(n0, 14, 0x8a8478, instanceLook(drums, shaft));
+    seats.push(lengthSeat(x, z, yaw, 1.2, 0.2, obstacles.slice(n0), [drums]));
     // a drum broken off the end
     const ex = x + Math.cos(yaw) * 2.4, ez = z - Math.sin(yaw) * 2.4;
-    setInstance(drums, di, ex, 0.44, ez, 0, yaw + r(0.3, 0.9), r(-0.1, 0.1), 0.9, 1, 1);
+    const drumYaw = yaw + r(0.3, 0.9);
+    setInstance(drums, di, ex, 0.44, ez, 0, drumYaw, r(-0.1, 0.1), 0.9, 1, 1);
     obstacles.push({ x: ex, z: ez, r: 0.6, h: 0.9 });
     breakable.add(obstacles.length - 1, 7, 0x8a8478, instanceLook(drums, di++));
+    seats.push(lengthSeat(ex, ez, drumYaw, 0.15, 0.2, obstacles.slice(-1), [drums]));
   }
   drums.count = di;
   drums.castShadow = drums.receiveShadow = true;
@@ -562,6 +568,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   });
 
   return {
+    seats,
     look: {
       background: FOG,
       fog: { color: FOG, near: 42, far: 90 },
