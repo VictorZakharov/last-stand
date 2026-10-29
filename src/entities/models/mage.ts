@@ -18,7 +18,7 @@ import type { BellCloth } from './sleeve';
 import { LegIK } from './ik';
 import { buildBoot } from './boot';
 import { fitArm } from './armIK';
-import { floorUnder, footOutOfFloor, onFloor, restHands, satBy, sitPose } from './sit';
+import { SKIRT_TUCK, floorUnder, footOutOfFloor, onFloor, restHands, satBy, sitPose } from './sit';
 import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { onTunic, tunicFront, tunicCut, armholeEdge, neckHem, necklineBack, outOfTunic, tunicNormal, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
@@ -1226,7 +1226,8 @@ export function buildMage(): Model {
     placeBodies();
     // (the hands only against the outer skirt: pushed in, the inner one would come out over it)
     if (robed) {
-      over.update(fL, fR, move, t + 0.4, dt, legBodies.list, handBodies.list, satBy(st.sit));
+      over.update(fL, fR, move, t + 0.4, dt, legBodies.list, handBodies.list, satBy(st.sit),
+        st.sit && onFloor(st.sit) ? satBy(st.sit) * SKIRT_TUCK : 0);
       // (sat low, the robe's hem lies on the floor)
       if (st.sit) over.keepAbove(floorUnder(skirts[0]));
     }

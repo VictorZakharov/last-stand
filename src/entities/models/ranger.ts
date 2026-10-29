@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, bowWood as bowWoodMaps, pbrMaterialMaps } from '../../core/textures';
-import { floorUnder, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
+import { SKIRT_TUCK, floorUnder, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
 import { tunable } from '../../core/tuning';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
@@ -1179,7 +1179,9 @@ export function buildRanger(): Model {
     const outer = fp ? [] : !hasBow ? handBodies.list : bow.arrows[0].visible ? outsideNocked : outside;
     // (through the eyes the body isn't drawn, nor its shadow, a layer the camera and the lights don't see: the coat swings
     // undraped, a tenth of the cost)
-    tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt, fp ? undefined : legBodies.list, outer, satBy(st.sit));
+    const tuck = st.sit && onFloor(st.sit) ? satBy(st.sit) * SKIRT_TUCK : 0;
+    tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt, fp ? undefined : legBodies.list, outer,
+      satBy(st.sit), tuck);
     // (sat on the floor, the coat's hem lies on it)
     if (st.sit) tunic.keepAbove(floorUnder(hem));
     bendShoulders();
