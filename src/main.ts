@@ -37,7 +37,7 @@ import { initCrestBlow, updateCrestBlow } from './ui/crestBlow';
 import { hourNow, holdHour } from './game/clock';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched } from './ui/heroSelect';
-import { standHall, updateHall } from './game/hall';
+import { updateHall } from './game/hall';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { releaseClickedFocus } from './ui/focus';
@@ -253,7 +253,6 @@ function enterMenu() {
   practising = false;
   setZoom(CAMERA.lobbyZoom);
   spawnDummies();
-  standHall(true);
   renderCoop();
   buildNextRunAhead();
 }
@@ -344,7 +343,6 @@ function beginRun(wave: number, seed: number) {
   cameThrough = G.arena.biome;
   showVillageCard(null);
   closedFrom();
-  standHall(false);
   G.arena.showVillage(false);
   G.arena.rollProps(seed);
   G.arena.restoreProps();
@@ -455,7 +453,6 @@ function chooseHero(id: string, profile: Profile) {
   if (!peekProfile(id, saveSlot())) saveProfile(profile);
   swapHero(id);
   sendLobbyChoice();   // its records set the starting wave
-  standHall(true);
 }
 
 /** The selection screen closed (a hero chosen, or Back): the lobby again, its dummies back up. */
@@ -474,7 +471,6 @@ function switchSaveSlot(n: number) {
   saveClass(id);
   swapHero(id);
   heroSelectSlotSwitched(id);   // switched from over the hero selection screen: its hall on the slot's heroes
-  standHall(true);
   renderMenu();
   sendLobbyChoice();   // its records set the starting wave
 }
@@ -609,7 +605,7 @@ function update(dt: number): void {
   updateVillage();
   updateVillageMap(dt);
   updateTrainingTracker(dt, villageActive() && !panelsOpen() && !villageCardOf());
-  updateCrestBlow(dt, revealed && G.mode === 'menu' && G.arena.place === 'village' && !heroSelectOpen());
+  updateCrestBlow(dt, revealed && G.mode === 'menu' && G.arena.place === 'village' && !heroSelectOpen(), villageMapOpen());
   // the player can move and cast in both the arena and the lobby (sandbox); co-op partners as reported
   G.player.reviving = G.mode === 'run' && !G.menuOpen && (isDown('e') || touchReviving());
   for (const p of G.players) p.update(dt);
