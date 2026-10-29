@@ -1521,13 +1521,15 @@ export function buildWarrior(): Model {
     slide: number;
     /** leant where it is, let go of */
     leant: boolean;
+    /** carried in the fist last frame, turned as `lastQ` */
+    turning: boolean; lastQ: THREE.Quaternion;
   }
   function plantOf(left: boolean, hand: Hand, grip: THREE.Object3D): Planted {
     return {
       left, hand, joint: left ? j.handL : j.handR, grip, shoulder: left ? j.shoulderL : j.shoulderR,
       q: new THREE.Quaternion(), at: new THREE.Vector3(), up: new THREE.Vector3(), on: null, carried: false, turn: -1,
       landAt: new THREE.Vector3(), landQ: new THREE.Quaternion(), handAt: new THREE.Vector3(), handQ: new THREE.Quaternion(),
-      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), slide: 0, leant: false,
+      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), slide: 0, leant: false, turning: false, lastQ: new THREE.Quaternion(),
     };
   }
   const _standQ = new THREE.Quaternion(), _standAt = new THREE.Vector3(), _holdQ = new THREE.Quaternion();
@@ -1535,6 +1537,8 @@ export function buildWarrior(): Model {
   const _fromAt = new THREE.Vector3(), _fromQ = new THREE.Quaternion();
   const _standUp = new THREE.Quaternion(), _gripInv = new THREE.Quaternion(), _turnQ = new THREE.Quaternion();
   /** the turns about its length a weapon stood is tried at, for the fist holding it most at ease */
+  /** the fastest a weapon carried down turns (rad/s) */
+  const CARRY_TURN = 4;
   const PLANT_TURNS = 24, _rootQ = new THREE.Quaternion();
   /** the most a weapon arm's elbow moves a frame carrying it to where it stands (rig units) */
   const PLANT_ELBOW = 0.03;
@@ -2888,8 +2892,14 @@ export function buildWarrior(): Model {
     if (carryingTwo) {
       grip.getWorldPosition(plantR.at);
       grip.getWorldQuaternion(plantR.q);
+      // (turned no faster than a hand turns what it carries: the fist's turn jumps a few degrees where the arm meets
+      // the end of a range, and a greatsword's point went 30 cm in a frame)
+      // (and from where it lies as the hand takes it again)
+      if (plantR.turning) plantR.q.copy(plantR.lastQ.rotateTowards(plantR.q, CARRY_TURN * dt));
       if (leanR) overFloor(plantR, held!);
     }
+    plantR.turning = plant > 0 && (carryingTwo || plantR.leant);
+    plantR.lastQ.copy(plantR.q);
     // (sat, the weapon where it stands, taken from the fist; carried there, where the fist has it)
     if (plant > 0 && !floorSit && !leanR) carriedGrip(plantR);
     if (plant > 0) plantGrip(plantR);
