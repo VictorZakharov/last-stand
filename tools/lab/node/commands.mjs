@@ -379,7 +379,17 @@ function probePath(file) {
  * - `textOf(result)` is the result as text, which an A/B compares line by line;
  * - `problemsOf(result)` the problems it found, which fail the command;
  * - `countsOf(result)`, when there is one, what it counted by name, which a check adds up over a hero's jobs;
- * - `pictures(before, after)` pairs the pictures an A/B compares, for a command that takes them.
+ * - `pictures(before, after)` pairs the pictures an A/B compares, for a command that takes them;
+ * - `countsCompiles`, for a command that counts the shaders compiled after loading: a check runs it on a kept page
+ *   only while the page has compiled nothing since it loaded (side.mjs `ready`);
+ * - `keepsPage` (true, `'own'`, or either by the options), for a command a check may run on a page jobs before it
+ *   ran on (`pageKind`), each of its set-ups in a check building the hero afresh from the boot's storage in a run of
+ *   its own (`afresh`): one whose results were shown to be the same there as on a page booted for each job, with
+ *   `lab check --reuse=false` and `--like`. True: a page any such command ran on; `'own'`: one its own jobs alone ran
+ *   on (on a page kept from the gait's and the eyes' jobs, Twin Fangs' blows dealt 10 to 40 more; a cast after
+ *   other casts, once the biomes' emitters started again at each set-up, src/world/runPhase.ts). `log` runs on pages
+ *   of its own: it lists the game's clock, which runs on through its cases there (each set-up afresh starts it again),
+ *   and its cases follow on from each other.
  */
 export const COMMANDS = {
   sheet: {
@@ -409,6 +419,7 @@ export const COMMANDS = {
   },
 
   carry: {
+    keepsPage: true,
     each(side, options) {
       const canary = Boolean(options.canary);
       return side.command('carry', { fixture: fixtureFrom(options), canary, frames: Boolean(options.frames) });
@@ -418,6 +429,7 @@ export const COMMANDS = {
   },
 
   gait: {
+    keepsPage: true,
     each(side, options) {
       return side.command('gait', {
         scenarios: options.scenarios,
@@ -451,6 +463,7 @@ export const COMMANDS = {
   },
 
   form: {
+    keepsPage: true,
     each(side, options) {
       const listed = { canary: Boolean(options.canary), frames: Boolean(options.frames) };
       return side.command('form', { gear: options.gear, ...listed, pictures: options.pictures !== false });
@@ -464,6 +477,7 @@ export const COMMANDS = {
   },
 
   stops: {
+    keepsPage: true,
     each(side, options) {
       const listed = { frames: Boolean(options.frames), trace: Boolean(options.trace) };
       return side.command('stops', { scenarios: options.scenarios, only: options.only, ...listed });
@@ -473,6 +487,7 @@ export const COMMANDS = {
   },
 
   range: {
+    keepsPage: true,
     each(side, options) {
       return side.command('range', {
         scenarios: options.scenarios,
@@ -500,6 +515,7 @@ export const COMMANDS = {
   },
 
   feet: {
+    keepsPage: true,
     each(side, options) {
       return side.command('feet', {
         scenarios: options.scenarios,
@@ -611,6 +627,8 @@ export const COMMANDS = {
   },
 
   cast: {
+    countsCompiles: true,
+    keepsPage: 'own',
     check(options) {
       const wrong = options.times.find((time) => !(Number(time) >= 0));
       if (wrong !== undefined) throw labError(`cast --times: ${wrong} is not a number of seconds`);
@@ -725,6 +743,7 @@ export const COMMANDS = {
   },
 
   draw: {
+    countsCompiles: true,
     async each(side, options) {
       // (a view at a time, each set up in it: through the eyes the bow is posed for the view)
       const reports = [];
@@ -768,6 +787,7 @@ export const COMMANDS = {
   },
 
   death: {
+    countsCompiles: true,
     each(side, options) {
       const command = {
         fixture: fixtureFrom(options),
@@ -787,6 +807,7 @@ export const COMMANDS = {
   },
 
   hits: {
+    keepsPage: 'own',
     check(options) {
       if (options.apart !== undefined && !(options.apart > 0)) throw labError('hits --apart: more than 0 s');
     },
@@ -879,6 +900,7 @@ export const COMMANDS = {
   },
 
   rush: {
+    keepsPage: true,
     each(side, options) {
       const command = {
         fixture: fixtureFrom(options),
@@ -898,6 +920,7 @@ export const COMMANDS = {
   },
 
   held: {
+    countsCompiles: true,
     each(side, options) {
       const command = {
         fixture: fixtureFrom(options),
@@ -957,6 +980,7 @@ export const COMMANDS = {
   },
 
   compiles: {
+    countsCompiles: true,
     each(side, options) {
       const command = {
         biomes: options.biomes,
@@ -1212,6 +1236,10 @@ export const COMMANDS = {
   },
 
   eyes: {
+    // (a two-hander's too, since each set-up starts a run of its own: a page kept from the jobs before had turned its
+    // forearm past its range on 9 frames more of a cleave with pauses; but his Steel Tempest on a page of its own: on
+    // a kept one, the left wrist at the spin's fastest read a degree to five otherwise, not found yet)
+    keepsPage: (options) => options.gear !== 'twoHanded' || options._?.[0] !== 'tempest',
     check(options) {
       if (options.times !== undefined && !(options.times >= 1)) throw labError('eyes --times: at least 1');
       if (options.every !== undefined && !(options.every >= 1)) throw labError('eyes --every: at least 1');
@@ -1340,6 +1368,14 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  poses: {
+    each(side, options) {
+      return side.command('poses', { fixture: fixtureFrom(options), canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   coat: {
     each(side, options) {
       const command = {
@@ -1459,6 +1495,7 @@ export const COMMANDS = {
   },
 
   swing: {
+    keepsPage: true,
     check(options) {
       if (options.grip?.length !== options.way?.length) throw labError('swing: --grip with a --way for each');
     },
@@ -1487,3 +1524,14 @@ export const COMMANDS = {
     textOf: asText,
   },
 };
+
+/**
+ * The pages a check may run `command` with `options` on, as its `keepsPage` says: `'shared'`, a page any command
+ * that shares pages ran on; the command's name, a page its own jobs alone ran on; or null, a page booted for it.
+ */
+export function pageKind(command, options) {
+  const keeps = COMMANDS[command]?.keepsPage;
+  const says = typeof keeps === 'function' ? keeps(options) : keeps;
+  if (says === 'own') return command;
+  return says ? 'shared' : null;
+}

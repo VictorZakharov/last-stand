@@ -213,6 +213,9 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   };
 
   const ps = lastS.get(sh);
+  /** whether an arm's cost is never below nothing (no weight on it below nothing), so a choice whose own cost alone
+   *  reaches the best found can't be better, and needn't be searched (a sum of floats rounded only grows as it adds) */
+  const bounded = (g.shoulderW ?? 3) >= 0 && (g.wristW ?? 0) >= 0 && keep >= 0;
   /** the slant's least and most */
   const [slLo, slHi] = typeof g.slant === 'number' ? [-g.slant, g.slant] : g.slant ?? [0, 0];
   const slantIn = (x: number): number => Math.max(slLo, Math.min(slHi, x));
@@ -222,17 +225,26 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     // (warm: round last frame's slant; all of them when that's nowhere near)
     const sls = !(slants && g.slant && ROM_ON) ? [0] : ps ? [ps - 0.12, ps, ps + 0.12].map(slantIn) : [0, -0.5, 0.5, -1, 1].map((k) => k * (k < 0 ? -slLo : slHi));
     let roll = 0, slant = 0, bestC = Infinity, bi = 0, bk = 0;
-    const cs = sls.map(() => rolls.map(() => 0));
-    sls.forEach((sl, i) => rolls.forEach((ro, k) => {
+    // (each one's cost: its arm's, and what the turn and the slant cost of themselves, a slant also its change; none when
+    // nothing asks for them)
+    const own = (ro: number, sl: number) => 4 * Math.abs(ro) + 4 * Math.abs(sl) + (ps !== undefined ? 8 * Math.abs(sl - ps) : 0);
+    const costOf = (ro: number, sl: number) => {
       setup(ro, sl);
-      // (a turn or a slant costs a little of itself, none when nothing asks for it; a slant also its change)
-      const c = cs[i][k] = search(N / 2, 2)[1] + 4 * Math.abs(ro) + 4 * Math.abs(sl) + (ps !== undefined ? 8 * Math.abs(sl - ps) : 0);
+      return search(N / 2, 2)[1] + 4 * Math.abs(ro) + 4 * Math.abs(sl) + (ps !== undefined ? 8 * Math.abs(sl - ps) : 0);
+    };
+    // (one whose own cost already reaches the best isn't searched, as for the girdle's places, until gliding needs it:
+    // its search depends on it alone; NaN, not yet searched)
+    const cs = sls.map(() => rolls.map(() => NaN));
+    sls.forEach((sl, i) => rolls.forEach((ro, k) => {
+      if (bounded && own(ro, sl) >= bestC) return;
+      const c = cs[i][k] = costOf(ro, sl);
       if (c < bestC) { bestC = c; roll = ro; slant = sl; bi = i; bk = k; }
     }));
+    const costAt = (i: number, k: number) => (Number.isNaN(cs[i][k]) ? (cs[i][k] = costOf(rolls[k], sls[i])) : cs[i][k]);
     // (gliding, between the ones tried: where a parabola through the best and its neighbours is least)
     if (g.glide !== undefined) {
-      if (bk > 0 && bk < rolls.length - 1) roll += vertex(cs[bi][bk - 1], cs[bi][bk], cs[bi][bk + 1]) * (rolls[1] - rolls[0]);
-      if (sls.length === 3 && bi === 1) slant = slantIn(slant + vertex(cs[0][bk], cs[1][bk], cs[2][bk]) * (sls[2] - sls[0]) / 2);
+      if (bk > 0 && bk < rolls.length - 1) roll += vertex(costAt(bi, bk - 1), cs[bi][bk], costAt(bi, bk + 1)) * (rolls[1] - rolls[0]);
+      if (sls.length === 3 && bi === 1) slant = slantIn(slant + vertex(costAt(0, bk), cs[1][bk], costAt(2, bk)) * (sls[2] - sls[0]) / 2);
     }
     return [roll, slant, bestC];
   };
@@ -268,9 +280,14 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   }
   else if (g.girdle && ROM_ON && (over() > 0.5 || depthAt > 0.01 || (pg && (pg[0] || pg[1])))) {
     let bestC = Infinity;
+    // (a place whose own cost already reaches the best can't be it, and its arm isn't searched: each place searched every
+    // roll and slant, most of the ranger's draw)
     for (const e of G_ELEV) for (const pr of G_PRO) {
+      const lift = 0.3 * (Math.abs(e) + Math.abs(pr)), fromLast = pg ? 0.3 * (Math.abs(e - pg[0]) + Math.abs(pr - pg[1])) : 0;
+      // (summed as the cost is, the arm's first: rounded, a sum only grows with what's added)
+      if (bounded && lift + fromLast >= bestC) continue;
       girdlePlace(rest, left, e, pr, _S); gNow = pr;
-      const c = turnsFor(!!slant)[2] + 0.3 * (Math.abs(e) + Math.abs(pr)) + (pg ? 0.3 * (Math.abs(e - pg[0]) + Math.abs(pr - pg[1])) : 0);
+      const c = turnsFor(!!slant)[2] + lift + fromLast;
       if (c < bestC) { bestC = c; gE = e; gP = pr; }
     }
     // (eased towards it: the girdle is slow next to the arm)

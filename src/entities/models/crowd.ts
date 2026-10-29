@@ -323,6 +323,9 @@ export function leaveCrowd(body: CrowdBody): void {
   const list = seat.kind.seats, i = list.indexOf(seat);
   list[i] = list[list.length - 1];
   list.pop();
+  // (its last body gone, its draws hidden at once: left to the next frame drawn, a crowd of the last biome's foes
+  // stood shown through the frames run undrawn after it, and a cast on a page a check kept came out otherwise)
+  if (!list.length) for (const slot of seat.kind.slots) slot.visible = false;
 }
 
 let hooked = false;

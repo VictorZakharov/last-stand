@@ -13,7 +13,8 @@ import { ENEMIES, HERO, SCALING } from '../data/enemies';
 import { BIOMES } from '../data/biomes';
 import { spawnEnemy } from '../entities/spawner';
 import { inObstacle, resolveWorld } from '../world/collision';
-import { clearEnemies, RISE_TIME } from '../entities/enemy';
+import { clearEnemies, forgetFrustum, RISE_TIME } from '../entities/enemy';
+import { forgetFields } from '../world/navigation';
 import { clearProjectiles } from '../combat/projectiles';
 import { clearEffects } from '../fx/effects';
 import { clearLights } from '../fx/lights';
@@ -112,6 +113,8 @@ function cleanupWorld(): void {
   clearFloaters();
   particles.clear();
   clearTimers();
+  forgetFields();
+  forgetFrustum();
 }
 
 /** Start a run at `wave` (the lobby allows any wave up to the best one banked in the biome).

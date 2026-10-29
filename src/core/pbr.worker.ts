@@ -3,12 +3,13 @@
 // orders each was made with (its name): the page's main thread passes a worker its messages, so a map handed out
 // by it waited for its long tasks.
 import { RECIPES, photosFor, recipeKey, type PBRData } from './pbr';
-import { keepAll, kept } from './kept';
+import { keepAll, keepAs, kept } from './kept';
 import type { Job, MapMade, MapOrders } from './textures';
 
 /** when this script ran, in this worker's clock (`MapMade.up`) */
 const up = performance.timeOrigin + performance.now();
 const orders = JSON.parse(self.name) as MapOrders;
+if (orders.keepAs) keepAs(orders.keepAs);
 
 /** the maps made here, kept once every worker has finished (`keep`, the page's word): a read of the store waits
  *  for every write asked before it (core/kept.ts `keepAll`) */

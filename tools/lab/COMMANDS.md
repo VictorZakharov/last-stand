@@ -72,7 +72,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   (`--weapon` the base): each angle past its range, on how many frames, its worst and where (for a leg, whether its
   foot was planted; for a shoulder, its raise, the plane it rises in and its turn against what each allows), each
   scenario's pose timed frame by frame by the browser's clock (`page/poseCost.ts`: its slowest frame, median and
-  p90; a frame over 20 ms fails, canary one frame's made 40 ms slower: the lab's frames run on its own clock, and a
+  p90; two frames over 20 ms fail, or one over 30 (one frame alone read 21 to 23 by the noise of a check's eight
+  sessions), canary one frame's made 40 ms slower: the lab's frames run on its own clock, and a
   blow onto a pillar or a log that read the prop's every triangle for each point its stop tried took 571 ms a frame
   unseen), its fastest ankle, its weapon tip's fastest move a frame between moves and through them, each with how far
   the hand moved then and the joint whose own turn changed most (`page/tipMoves.ts`, in the hero's own frame: between
@@ -818,6 +819,15 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the steps jerk the head 3 to 5° on main too), stands through the eyes (none), in the lobby (one at least) and is
   shown in the hall (none before his showcase is done, one within 10 s after). The canary kicks the head 3° for a
   frame and lets him glance as he walks. The owner's words: "when idle, characters should look left/right casually".
+- `poses`: the hero's pose a move at a time (`page/poses.ts`): he stands (60 frames), walks ahead (90), strafes
+  with the attack held (90) and stops (90), and after each frame every object of his model (its world matrix) and
+  every point of the geometries that move (positions drawn as `DynamicDrawUsage`: the cloth, a bowstring) is folded
+  into a digest by the bits of each number, a line a move and one for all; then his model's `animate` timed each
+  frame by the browser's clock (median, 90th percentile, in all), lines that differ from run to run. A change made
+  to cost less poses him exactly as before when `--ab`'s digest lines agree, and its time lines say what it saved:
+  a clip or range measure's lines agree for changes far past the last bit, and a gait's later strides go elsewhere
+  after one (`check`'s offsets). `--canary` moves a number of the last frame by its last bit, and the digest must
+  change. Run it with each `--gear` a change can touch (a hero's arms are fitted per weapon style).
 - `coat`: the hero's skirts and hood (`page/coat.ts`; `models/armor.ts` `Skirt` and `models/hood.ts` `HoodCloth`,
   found by their geometries' names, 'skirt' and 'hood', or a commit from before by the ranger's mesh's, 'tunic hem') as
   he stands at idle in his head item and body armour, `--seconds` (5 by default): every point of the cloth in its own
@@ -969,35 +979,7 @@ a channel, looked up once (matched against every part's colour, a picture took 1
   the page's font stylesheet had been asked for with CORS, and the previous deploy's worker answered with the copy
   it kept from a request without, which can't answer one with; the stylesheet failed, and the lobby showed the
   system's fonts, wider, its links wrapping: "increasing font size had unintended side effects".)
-- `check`: the checks of a change to how the heroes move, run side by side: the gait (its steps listed, no films), the
-  stops, the ranges and the run's form for every hero, the ranger's feet and carry, and the warrior through the eyes
-  (`eyes`: the basic attack's rows on every weapon, and every other skill on every weapon its way of holding them
-  takes, `check.mjs` `EYES_SKILLS`, its canaries on each way's first; with the cuts alone checked, five skills were
-  broken through the eyes and no check said so, #252) and his skills' light there (`cast`: the basic attack and
-  `EYES_SKILLS` on each way's first weapon, through the eyes in both biomes, `castParts`; a dual wielder's Power
-  Strike flashed three times a second and Bull Rush stood the camera inside a husk, and no check said so, #252), every
-  swing of his weapons stepped between its keys (`swing all`, in one job: Thunder Crescent's way back from the floor
-  took a greatsword's lower grip 7.7 cm past the left arm's reach between its keys, as far as the game holds it before
-  letting go, and its frames through the eyes read it held) and the foes his charge sweeps up and the skills cast with
-  it, with a shield and with two weapons (`rush`, `check.mjs` `RUSH_PARTS`), Twin Fangs' blows' pace (`hits`), and
-  every hero's hits in the battle log (`log`) (`--classes`, `--commands` for fewer), each in a session of its own
-  (`--jobs n`, a core in three by default, at most 8), the longest first as they last took, each report in
-  `out/check/<command>-<hero>.txt` and its pictures in a folder beside it. With `--ab`, the other commit is exported
-  once before the sessions start, and its side read back from the cache once it has run (below). The gait runs a
-  scenario a job, each on a page booted for it, and each hero's scenarios are put back together
-  (`out/check/gait-<hero>.txt`, each under its name): one after another on one page, each was set up from where the
-  last had left the hero and the clock, and main's own gallops were 18, 23 and 17 a hero with films and 13, 14 and 16
-  without. Each gait scenario runs from three starts (`--starts n`, at most 5): its first move 0, 7 and 13 frames
-  longer (`gait --offset`), so every later turn and stop comes at another point of a stride. Run once from one start,
-  a frame's change anywhere sent every later stride elsewhere, and a change's gallops came out 2 or 3 either way over
-  a check's gait scenarios by chance; stood a few frames first instead, nothing changed (the set-off is the same from
-  any moment of the idle). What a command counts (`countsOf`: the gait's gallops, hops and short steps) is added up
-  over a hero's jobs, each side's, in its line of the log and at the head of its report with each scenario's (`hops 2
-  (048deb5 9)`: this tree's, then the other's), so a check's verdict needs no script of its own to read it. It runs in
-  the command line's own process, not the server's. One command at a time, both sides every time, the mage's cape
-  stepped throughout and each gait scenario run again for its film, the same check took 31 to 35 minutes a round; the
-  harness is run hundreds of times, so keep every check that runs often to minutes: profile it (`--profile`), cut what
-  its measures don't read, and run side by side what doesn't depend on each other.
+- `check`: every hero's checks of a change to how they move, side by side: in full in [`commands/check.md`](commands/check.md).
 
 Options every command run on a page takes:
 
@@ -1024,8 +1006,10 @@ Options every command run on a page takes:
   noise, with where (the region of each, and a picture of each in `out/ab/<command>/`: this tree's dimmed, its
   differing pixels magenta). A commit compared with itself (`--ab=HEAD`) agrees, so the other commit's side is kept
   once it has run (`out/ab-cache`, by its commit, the hero, the command and its options, and a hash of the lab's code
-  it ran: its page modules, its Node side and a probe's own files) and read back after: run again each time, main's
-  side was half of every A/B. `--fresh` runs it again; a side whose page raised an error isn't kept;
+  that command runs: the page modules its entry reaches, its Node entry and what that reaches, the browser's scripts,
+  `side.mjs` and a probe's own files, `node/labCode.mjs`) and read back after: run again each time, main's side was
+  half of every A/B, and keyed on every file of the lab, a change to one command's measure ran every command's other
+  side again. `--fresh` runs it again; a side whose page raised an error isn't kept;
 - `--profile`: where the command's time went in the page, its busiest functions by their own time and in total,
   each at its line in the source; `--profile=<function>` (its name, or its name and file: `"--profile=animate
   ranger.ts"`) lists only the time in that function, by its share of it (the busiest 14 of a whole profile left the

@@ -161,6 +161,12 @@ export function mapsArrived(textures: Iterable<THREE.Texture>): Promise<void> {
   return Promise.all(waits).then(() => undefined);
 }
 
+/** Resolved once every map the loading workers were asked for has come (the lab waits for it before it measures: a
+ *  map landing mid-measure, later under a loaded machine, drew a foe's skin blank for some frames and not others). */
+export function everyMapCome(): Promise<void> {
+  return Promise.all([...coming.values()].map((map) => map.arrived)).then(() => undefined);
+}
+
 /** `PRELOAD` in the order the lobby needs its maps: the steel and `hero`'s face (the one it shows), the other maps,
  *  then the other heroes' faces (1.5 s each in a worker: on a first visit, made before the heroes' materials, the
  *  lobby waited 1.7 s for its maps). */
@@ -184,9 +190,13 @@ export interface MapsComing {
 export interface MapMade { key: string; data: PBRData; start: number; ms: number; kept: boolean; readMs: number; up: number }
 
 /** What a maps worker is given as it's made, in its name: the maps in the order they're needed, its place among
- *  the workers and how many there are, and this boot's mark (the locks the workers share the maps out by are this
- *  boot's alone, `pbr.worker.ts`). */
-export interface MapOrders { jobs: Job[]; worker: number; workers: number; boot: string }
+ *  the workers and how many there are, this boot's mark (the locks the workers share the maps out by are this
+ *  boot's alone, `pbr.worker.ts`), and in the lab's pages the name their maps are kept under (core/kept.ts `keepAs`,
+ *  `window.__labMapsAs`). */
+export interface MapOrders { jobs: Job[]; worker: number; workers: number; boot: string; keepAs?: string }
+
+/** the name the lab keeps a dev build's maps under (tools/lab/node/side.mjs), none in the game */
+const labMapsAs = (): string | undefined => (globalThis as { __labMapsAs?: string }).__labMapsAs;
 
 /**
  * Make the game's PBR maps in workers, in parallel, while the page stays responsive: done on the
@@ -217,7 +227,7 @@ export function preloadTextures(hero: string): MapsComing {
   const boot = `${performance.timeOrigin} ${Math.random()}`;
   const workers: Worker[] = [];
   const run = (worker: number): Promise<void> => new Promise((resolve) => {
-    const orders: MapOrders = { jobs, worker, workers: n, boot };
+    const orders: MapOrders = { jobs, worker, workers: n, boot, keepAs: labMapsAs() };
     let w: Worker;
     const asked = performance.now();
     try {

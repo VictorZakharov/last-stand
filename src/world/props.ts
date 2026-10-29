@@ -2,7 +2,7 @@
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import * as THREE from 'three';
 import { seeThroughFade } from '../core/seeThrough';
-import { inShadowsOnly } from './culling';
+import { drawingStill, inShadowsOnly } from './culling';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rand, TAU } from '../util';
 import { valueNoise3 } from '../core/patterns';
@@ -12,6 +12,7 @@ import type { Obstacle } from '../types';
 import type { Prop } from './destructible';
 import type { Relief } from './ground';
 import type { Wall } from './wall';
+import { runPhase } from './runPhase';
 
 export type Updater = (dt: number, t: number) => void;
 /** Linear RGB, used as-is in shaders. */
@@ -102,16 +103,21 @@ function holdsLight(object: THREE.Object3D): boolean {
 }
 
 /** What draws under `parent` outside `shown` hidden, into `hidden`: never a light, nor what holds one (each hidden
- *  light changes the count every lit program is made for, and the still shadows' render compiled 26 of them anew). */
-function hideBodies(parent: THREE.Object3D, shown: THREE.Object3D, hidden: THREE.Object3D[]): void {
+ *  light changes the count every lit program is made for, and the still shadows' render compiled 26 of them anew),
+ *  which casts nothing meanwhile instead, into `uncast`. */
+function hideBodies(parent: THREE.Object3D, shown: THREE.Object3D, hidden: THREE.Object3D[], uncast: THREE.Object3D[]): void {
   for (const child of parent.children) {
     if (child === shown || !child.visible) continue;
     if (draws(child) && !holdsLight(child)) {
       child.visible = false;
       hidden.push(child);
-    } else {
-      hideBodies(child, shown, hidden);
+      continue;
     }
+    if (draws(child) && child.castShadow) {
+      child.castShadow = false;
+      uncast.push(child);
+    }
+    hideBodies(child, shown, hidden, uncast);
   }
 }
 
@@ -127,18 +133,20 @@ export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Sce
   if (!lights.length) return;
   stillTarget ??= new THREE.WebGLRenderTarget(1, 1);
   const hidden: THREE.Object3D[] = [];
-  hideBodies(scene, shown, hidden);
+  const uncast: THREE.Object3D[] = [];
+  hideBodies(scene, shown, hidden, uncast);
   const keptAuto = kept.autoUpdate;
   const target = renderer.getRenderTarget();
   for (const light of lights) light.shadow.needsUpdate = true;
   kept.autoUpdate = false;
   renderer.setRenderTarget(stillTarget);
   try {
-    renderer.render(scene, camera);
+    drawingStill(shown, () => renderer.render(scene, camera));
   } finally {
     renderer.setRenderTarget(target);
     kept.autoUpdate = keptAuto;
     for (const child of hidden) child.visible = true;
+    for (const child of uncast) child.castShadow = true;
   }
 }
 
@@ -459,15 +467,16 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
   // the membrane's centre in the world, and the direction along it
   const cx = Math.cos(angle) * (WALL_R + 0.7), cz = Math.sin(angle) * (WALL_R + 0.7), sx = -Math.sin(angle), sz = Math.cos(angle);
   const coreCol = new THREE.Color(...colors.core), edgeCol = new THREE.Color(...colors.b), mistCol = new THREE.Color(...colors.a);
-  let pulse = 0, acc = 0;
+  const due = runPhase({ pulse: 0, acc: 0 });
   updaters.push((dt, t) => {
-    pulse = Math.max(0, pulse - dt * 0.8);
+    due.pulse = Math.max(0, due.pulse - dt * 0.8);
+    const pulse = due.pulse;
     uniforms.uTime.value = t;
     uniforms.uPower.value = 0.35 + pulse * 1.3;
     glow.intensity = PORTAL_LIGHT.intensity * (1 + pulse * PORTAL_LIGHT.pulse);
-    acc += dt * (1 + pulse * 4);
-    while (acc > 0.07) {
-      acc -= 0.07;
+    due.acc += dt * (1 + pulse * 4);
+    while (due.acc > 0.07) {
+      due.acc -= 0.07;
       // motes drawn in from the rim towards the core
       const a = Math.random() * TAU, ex = Math.cos(a) * GATE_W * 0.48, ey = 2.2 + Math.sin(a) * 2.1;
       particles.glow.spawn({
@@ -484,7 +493,7 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
       }
     }
   });
-  return { mesh, portal: { pos, dir, pulse() { pulse = 1; } } };
+  return { mesh, portal: { pos, dir, pulse() { due.pulse = 1; } } };
 }
 
 /** Night sky dome: fog colour at the horizon (where the ground fades into it), a faint glow

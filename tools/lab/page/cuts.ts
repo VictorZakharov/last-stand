@@ -184,7 +184,8 @@ function ownBox(weapon: THREE.Object3D): THREE.Box3 {
   weapon.traverse((child) => {
     const mesh = child as THREE.Mesh;
     if (!mesh.isMesh || !mesh.visible) return;
-    mesh.geometry.computeBoundingBox();
+    // (once a geometry: a weapon's never change, and read again every frame through the eyes it was a tenth of a job)
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
     box.union(mesh.geometry.boundingBox!.clone().applyMatrix4(toOwn.clone().multiply(mesh.matrixWorld)));
   });
   return box;
@@ -225,10 +226,12 @@ export function seenAlong(points: THREE.Vector3[]): { share: number; length: num
   return { share: shown.length / points.length, length: shown[0].at.distanceTo(shown[shown.length - 1].at) };
 }
 
-/** Each held weapon in the frame now: `ALONG_POINTS` points along its length (its own +Y, through the middle of its
- *  box) as the frame shows them. */
-export function weaponsInView(lab: Lab): InView[] {
-  lab.model.root.updateWorldMatrix(true, true);
+/** A held weapon's share of the frame along its length, and how long it looks (`InView`'s). */
+export type AlongView = Pick<InView, 'hand' | 'weapon' | 'share' | 'length'>;
+
+/** Each held weapon in the frame now, along its length alone: `ALONG_POINTS` points along it (its own +Y, through the
+ *  middle of its box) as the frame shows them. The hero's world matrices must be up to date. */
+export function weaponsAlong(lab: Lab): (AlongView & { held: THREE.Object3D })[] {
   return weaponsHeld(lab).map(({ hand, weapon }) => {
     const box = ownBox(weapon);
     const middle = box.getCenter(new THREE.Vector3());
@@ -236,9 +239,18 @@ export function weaponsInView(lab: Lab): InView[] {
       const y = box.min.y + ((box.max.y - box.min.y) * i) / (ALONG_POINTS - 1);
       return weapon.localToWorld(new THREE.Vector3(middle.x, y, middle.z));
     });
-    const { points: headAt, headed } = headOf(weapon);
+    return { hand, weapon: weapon.name, ...seenAlong(points), held: weapon };
+  });
+}
+
+/** Each held weapon in the frame now: along its length (`weaponsAlong`) and how much of its head is shown (its head
+ *  read off its meshes' points: a third of a job through the eyes when every frame read it, for nothing). */
+export function weaponsInView(lab: Lab): InView[] {
+  lab.model.root.updateWorldMatrix(true, true);
+  return weaponsAlong(lab).map(({ held, ...along }) => {
+    const { points: headAt, headed } = headOf(held);
     const head = shareShown(headAt, armsLens());
-    return { hand, weapon: weapon.name, ...seenAlong(points), head, headAt, headed };
+    return { ...along, head, headAt, headed };
   });
 }
 

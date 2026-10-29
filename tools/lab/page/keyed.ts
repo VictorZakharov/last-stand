@@ -112,6 +112,11 @@ const MISSES: readonly Miss[] = [
   { name: 'its flat', unit: '°', most: KEYED_FLAT, of: flatTurnedOf, keys: (frame) => frame.keyedFlat !== null },
 ];
 
+/** how much worse a frame's miss must be than an earlier frame's to be the worst, in its unit (m, degrees): misses
+ *  as small as each other but for the last bits of a float, the earliest is (one 0 cm off the keys came on frame 71 or
+ *  on frame 12, by the page's history) */
+const WORSE_BY = { cm: 1e-4, '°': 0.01 } as Record<string, number>;
+
 /** A miss's amount in its unit, as words. */
 function amount(miss: Miss, value: number): string {
   return miss.unit === 'cm' ? `${(value * 100).toFixed(0)} cm` : `${value.toFixed(0)}°`;
@@ -168,7 +173,7 @@ export function describeKeyed(seen: readonly KeyedSeen[]): { lines: string[]; pr
     if (judged.length === 0) continue;
     let worst = judged[0];
     for (const now of judged) {
-      if (miss.of(now.keyed!) > miss.of(worst.keyed!)) worst = now;
+      if (miss.of(now.keyed!) > miss.of(worst.keyed!) + WORSE_BY[miss.unit]) worst = now;
     }
     const said = `${miss.name} up to ${amount(miss, miss.of(worst.keyed!))} (frame ${worst.frame})`;
     words.push(said);

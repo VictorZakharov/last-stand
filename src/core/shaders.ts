@@ -33,7 +33,9 @@ export function pinPrograms(renderer: THREE.WebGLRenderer, context?: () => strin
 
 /** Which scene object renders with program `p` (for the report): material type and object path. */
 function ownerOf(renderer: THREE.WebGLRenderer, p: THREE.WebGLProgram): string {
-  let found = 'unknown owner (shadow / post pass?)';
+  // (a shadow pass's material is three's own, on no object: the ledger, in dev builds, saw what it was drawing)
+  const drawn = programsMade.find((entry) => entry.program === p);
+  let found = drawn && drawn.owner !== '?' ? `drawing ${drawn.owner}` : 'unknown owner (shadow / post pass?)';
   G.scene.traverse((o) => {
     const mats = (o as THREE.Mesh).material;
     for (const m of Array.isArray(mats) ? mats : mats ? [mats] : []) {

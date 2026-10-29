@@ -1,29 +1,15 @@
 // The other side of an A/B, kept (tools/lab): what a commit computes for a command can't change while the commit, the
-// lab's code it runs (its page modules, copied into the exported tree, and this Node side) and the command's options
-// stay the same, as a commit run against itself agrees line for line. So it runs once and is read back after
-// (`out/ab-cache`): run each time, main's side was half of every A/B, the same results again and again.
+// lab's code it runs (its page modules, copied into the exported tree, and this Node side: labCode.mjs) and the
+// command's options stay the same, as a commit run against itself agrees line for line. So it runs once and is read
+// back after (`out/ab-cache`): run each time, main's side was half of every A/B, the same results again and again.
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { labCodeOf } from './labCode.mjs';
 import { OUT, REPO } from './paths.mjs';
 
 /** where the kept results are */
 export const CACHE_DIR = join(OUT, 'ab-cache');
-/**
- * the lab's code that decides what an exported side computes, a change in which runs the side afresh: its page
- * modules, how a command's options become the page's (`commands.mjs`, co-op's own), and how a page is booted (its
- * cookies, its viewport, the scripts run before the game's: the clock, the random numbers). The rest of the Node side
- * (the session, the server, a check, this cache) runs it the same whatever it is: in the key, every edit to it ran
- * main's side again.
- */
-const LAB_CODE = [
-  'tools/lab/page',
-  'tools/lab/node/commands.mjs',
-  'tools/lab/node/coop.mjs',
-  'tools/lab/node/coopJudge.mjs',
-  'tools/lab/node/side.mjs',
-  'tools/lab/node/browser.mjs',
-];
 /** the options that don't change what a side computes: the A/B itself, how the command is run and shown */
 const UNKEYED = new Set(['ab', 'profile', 'watch', 'fresh']);
 
@@ -38,13 +24,14 @@ function filesUnder(path) {
   return entries.flatMap((entry) => filesUnder(join(path, entry.name))).sort();
 }
 
-/** A hash of the files `paths` name (folders whole), by their paths and contents. */
-export function stampOf(paths) {
+/** A hash of the files `paths` name (folders whole), by their paths and contents, and of `texts`. */
+export function stampOf(paths, texts = []) {
   const hash = createHash('sha1');
   for (const file of paths.flatMap(filesUnder)) {
     hash.update(file);
     hash.update(readFileSync(join(REPO, file)));
   }
+  for (const text of texts) hash.update(text);
   return hash.digest('hex');
 }
 
@@ -56,15 +43,18 @@ export function keyedOptions(options) {
 
 /**
  * The key a side's result is kept under: its commit, the hero, the command and its options, and a stamp of the code
- * it ran besides its commit's own (the lab's, and a probe's own files, `extraFiles`).
+ * it ran besides its commit's own (the lab's that the command runs, labCode.mjs, and a probe's own files,
+ * `extraFiles`). The rest of the lab (the session, the server, a check, this cache, another command's measures) runs
+ * it the same whatever it is: in the key, every lab PR ran main's side of every job again.
  */
 export function sideKey({ sha, heroClass, command, options, extraFiles = [] }) {
+  const lab = labCodeOf(command);
   const parts = {
     sha,
     heroClass,
     command,
     options: keyedOptions(options),
-    code: stampOf([...LAB_CODE, ...extraFiles]),
+    code: stampOf([...lab.files, ...extraFiles], lab.texts),
   };
   return createHash('sha1').update(JSON.stringify(parts)).digest('hex').slice(0, 20);
 }

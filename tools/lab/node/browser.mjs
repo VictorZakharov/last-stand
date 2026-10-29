@@ -45,16 +45,65 @@ export async function lowerProcesses(browser) {
   }
 }
 
+/** every browser the lab launched that is still open */
+const OPEN_BROWSERS = new Set();
+
+/** Closes every browser the lab has open (the command was stopped, running.mjs), within `ms`. */
+export async function closeEveryBrowser(ms = 5000) {
+  const closing = Promise.allSettled([...OPEN_BROWSERS].map((browser) => browser.close()));
+  const waited = new Promise((resolve) => {
+    setTimeout(resolve, ms).unref();
+  });
+  await Promise.race([closing, waited]);
+}
+
+/** the context of each browser launched on a profile kept from run to run (`launchBrowser`'s `profile`) */
+const KEPT_CONTEXTS = new WeakMap();
+
+/**
+ * The context `browser` keeps on its profile, once (null after, and for a browser launched on a fresh profile): its
+ * storage is on the profile's disk, the procedural maps a page made among it (src/core/kept.ts), kept for the next run.
+ */
+export function takeKeptContext(browser) {
+  const context = KEPT_CONTEXTS.get(browser) ?? null;
+  KEPT_CONTEXTS.delete(browser);
+  return context;
+}
+
+/**
+ * A browser launched on `profile`, a folder kept from run to run, its pages `contextOptions`' size; null if it won't
+ * launch there (another browser has the profile open). Launched on a fresh profile, every first boot of a check's
+ * eight sessions made every map again and compiled every program, each taking 45 to 55 s, eight at once, where a
+ * boot on a kept one takes 10.
+ */
+async function launchOnProfile(profile, channel, contextOptions) {
+  try {
+    const options = { headless: true, channel, args: gpuArgs(), ...contextOptions };
+    const context = await chromium.launchPersistentContext(profile, options);
+    // (the page it opens with closed: two pages alive at once, one loses the focus)
+    for (const page of context.pages()) await page.close();
+    const browser = context.browser();
+    KEPT_CONTEXTS.set(browser, context);
+    return browser;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Launches a browser in its native headless mode: Playwright's Chromium (npx playwright install chromium), else Edge
  * or Chrome. (`channel: 'chromium'` is the full browser run headless, not Playwright's separate headless shell, a
- * console program that opened a console window of its own.)
+ * console program that opened a console window of its own.) On `profile`, a folder kept from run to run, where it
+ * can (`launchOnProfile`), its own context there sized by `contextOptions` (`takeKeptContext`); else on a fresh one.
  */
-export async function launchBrowser() {
+export async function launchBrowser({ profile = null, contextOptions = {} } = {}) {
   const failures = [];
   for (const channel of CHANNELS) {
     try {
-      const browser = await chromium.launch({ headless: true, channel, args: gpuArgs() });
+      const kept = profile ? await launchOnProfile(profile, channel, contextOptions) : null;
+      const browser = kept ?? await chromium.launch({ headless: true, channel, args: gpuArgs() });
+      OPEN_BROWSERS.add(browser);
+      browser.on('disconnected', () => OPEN_BROWSERS.delete(browser));
       await lowerProcesses(browser);
       return browser;
     } catch (error) {

@@ -1540,6 +1540,16 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  poses: {
+    help: 'the hero\'s pose a move at a time (standing, walking, strafing with the attack held, stopped) as a digest '
+      + 'of every object\'s world matrix and every moving point of cloth to the last bit, and his animate timed '
+      + 'each frame: a change made to cost less poses him exactly as before when an A/B\'s digests agree',
+    options: {
+      canary: { kind: 'switch', help: 'plant a fault the measure must catch: a number moved by its last bit' },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   coat: {
     help: 'the hero\'s skirts (the ranger\'s coat, the mage\'s robe, the warrior\'s mail) and hood (the mage\'s) as he '
       + 'stands at idle in his head item and body armour, frame '
@@ -1740,6 +1750,28 @@ export const COMMANDS = {
         kind: 'number',
         usage: 'n',
         help: 'how many moments each gait scenario starts from, its counts added up (5 by default, at most 8)',
+      },
+      reuse: {
+        kind: 'switch',
+        help: 'each session\'s page kept for its next job of the same side and hero (=false: a page booted for each '
+          + 'job, to show the reports come out the same)',
+      },
+      only: {
+        kind: 'text',
+        usage: 'text',
+        help: 'only the jobs whose name has this in it, or any of these (eyes-warrior-dual: the eyes\' jobs with '
+          + 'two weapons; hits,gait-warrior-run)',
+      },
+      plan: {
+        kind: 'switch',
+        help: 'run nothing: the order the sessions would take the jobs in and when each would be done, by what each '
+          + 'took last time (tools/lab/out/check/durations.json)',
+      },
+      like: {
+        kind: 'text',
+        usage: 'dir',
+        help: 'every report compared line by line with the one of its name in dir (a copy of an earlier check\'s '
+          + 'tools/lab/out/check), how each run went aside: fails on any that differs',
       },
       ab: COMMON_OPTIONS.ab,
       fresh: COMMON_OPTIONS.fresh,

@@ -24,6 +24,7 @@ import { tubesRelief } from './ground';
 import type { Obstacle } from '../types';
 import { Wall } from './wall';
 import { buildStumpGeos } from './stump';
+import { runPhase } from './runPhase';
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
 /** daylight haze: the fog, and the sky at the horizon */
@@ -186,9 +187,11 @@ export const buildForest: BiomeBuilder = (scene) => {
   const rune = new THREE.Mesh(new THREE.PlaneGeometry(8, 8).rotateX(-Math.PI / 2), runeMat);
   rune.position.y = ARENA.daisHeight + 0.02;
   scene.add(rune);
-  let calm = 0, calmTarget = 0;
+  const eased = runPhase({ calm: 0 });
+  let calmTarget = 0;
   updaters.push((dt, t) => {
-    calm += (calmTarget - calm) * Math.min(1, dt * 2);
+    eased.calm += (calmTarget - eased.calm) * Math.min(1, dt * 2);
+    const calm = eased.calm;
     const pulse = 0.55 + Math.sin(t * 1.3) * 0.15;
     runeMat.color.setRGB(0.35, 1.0, 0.45).multiplyScalar(pulse * (0.5 + calm * 0.8));
     rune.rotation.y = -t * 0.025;
@@ -565,12 +568,12 @@ export const buildForest: BiomeBuilder = (scene) => {
   updaters.push(contactShadows(scene, obstacles));
 
   // --- Ambient: drifting pollen and a light haze ---------------------------------------
-  let moteT = 0;
+  const due = runPhase({ motes: 0 });
   updaters.push((dt, t) => {
     beams.update(t); sky.update(t);
-    moteT += dt;
-    while (moteT > 0.06) {
-      moteT -= 0.06;
+    due.motes += dt;
+    while (due.motes > 0.06) {
+      due.motes -= 0.06;
       const a = Math.random() * TAU, rr = Math.sqrt(Math.random()) * 29;
       particles.glow.spawn({
         x: Math.cos(a) * rr, y: rand(0.3, 3), z: Math.sin(a) * rr,
@@ -990,12 +993,12 @@ function buildGlowcaps(scene: THREE.Object3D, x: number, z: number, rng: () => n
   const light = new THREE.PointLight(0x40ffc8, 5, 10, 2);
   light.position.set(x, 1.9, z);
   scene.add(light);
-  let acc = 0;
+  const due = runPhase({ acc: 0 });
   updaters.push((dt, t) => {
     light.intensity = 4.2 + Math.sin(t * 1.7 + x) * 0.8;
-    acc += dt;
-    while (acc > 0.12) {
-      acc -= 0.12;
+    due.acc += dt;
+    while (due.acc > 0.12) {
+      due.acc -= 0.12;
       particles.glow.spawn({
         x: x + rand(-0.6, 0.6), y: rand(0.6, 1.4), z: z + rand(-0.6, 0.6), vx: rand(-0.1, 0.1), vy: rand(0.2, 0.5), vz: rand(-0.1, 0.1),
         life: rand(1.5, 2.5), size: rand(0.06, 0.12), color: col(0x60ffd0, 1.4), colorEnd: col(0x106050, 0.3),

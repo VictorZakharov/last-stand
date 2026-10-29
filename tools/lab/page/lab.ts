@@ -24,7 +24,12 @@ import { clearProjectiles } from '../../../src/combat/projectiles';
 import { clearEffects } from '../../../src/fx/effects';
 import { clearLights } from '../../../src/fx/lights';
 import { particles } from '../../../src/fx/particles';
+type RunPhaseModule = typeof import('../../../src/world/runPhase');
 import { buildHotbar } from '../../../src/ui/hud';
+import * as culling from '../../../src/world/culling';
+import { loadProfile } from '../../../src/loot/profile';
+import * as textures from '../../../src/core/textures';
+import * as anatomy from '../../../src/entities/models/anatomy';
 import { drawLook, jointsByObject, partName, withBones, type Look, type PartOnScreen } from './looks';
 import type { Area } from './pixels';
 
@@ -128,8 +133,9 @@ const KEY_EVENTS: Record<KeyType, string[]> = {
   keyDown: ['keydown'],
   keyUp: ['keyup'],
 };
-/** how long an input's event may take to reach the page, ms of the browser's own clock */
-const INPUT_WAIT_MS = 2000;
+/** how long an input's event may take to reach the page, ms of the browser's own clock (2 s failed a click now and
+ *  then as a check's eight sessions booted at once, the machine at full load) */
+const INPUT_WAIT_MS = 10000;
 
 /** An input's events as the page gets them: their names, which of them are this input's, and what it is (`touch`). */
 interface InputEvents {
@@ -190,6 +196,19 @@ const COMMAND_SEED = 0x1b873593;
 const SETUP_TIME = 60;
 /** the frames a set-up stands still once the hero is on his spot */
 const SETTLE_FRAMES = 90;
+
+/** the game's emitters' phases (src/world/runPhase.ts), where the tree has them: an A/B's older commit has none */
+const RUN_PHASES = Object.values(import.meta.glob<RunPhaseModule>('../../../src/world/runPhase.ts', { eager: true }));
+
+/**
+ * The biomes' emitters started again at a set-up, their particles cleared: kept from the commands before, they
+ * spawned on other frames, and the random numbers the foes drew after them in each frame were others (a cast on a page
+ * a check kept walked its foes a fraction of a millimetre elsewhere from their first step).
+ */
+function restartEmitters(): void {
+  particles.clear();
+  for (const phases of RUN_PHASES) phases.restartPhases();
+}
 /** the most presses of V a view takes (it cycles top-down, over the shoulder, through the eyes) */
 const VIEW_PRESSES = 3;
 
@@ -376,6 +395,15 @@ export class Lab {
   readonly warnings: string[] = [];
   /** draw each frame as the game does (off: only the scene's matrices are updated) */
   drawing = false;
+  /** every set-up of this command builds the hero afresh (`Fixture.fresh`): a check's, on a page its jobs before ran on */
+  afresh = false;
+  /** the page's cookies and storage as the boot left them, put back as a command that builds its heroes afresh begins
+   *  (`storeAgain`) */
+  private booted: Stored = { cookies: [], storage: [] };
+  /** whether a set-up has run on this page */
+  private setUpBefore = false;
+  /** the game's clock as the page's first run started (`runAfresh` starts its own at the same moment) */
+  private firstRunAt: number | null = null;
   /** the point the mouse is over unless a frame says otherwise */
   aim = new THREE.Vector3();
   /** the share of his most Health the hero is kept at every frame, until the next set-up (whole: 1) */
@@ -407,10 +435,14 @@ export class Lab {
    * Readies the page for a command: the random numbers started again. A booted page waits for its command while the
    * textures made in workers land, and every three.js object made draws a random number for its id, so one command
    * in four started at another point of the sequence, and the haze and pollen spawned before its set-up (alive up to
-   * 10 s) lay elsewhere in its pictures.
+   * 10 s) lay elsewhere in its pictures. And every joint past its range told of again, as on a page booted for the
+   * command (a check's page runs one command after another; an older commit has no `forgetReported`).
    */
-  begin(): void {
+  begin(afresh = false): void {
+    this.afresh = afresh;
+    if (afresh) storeAgain(this.booted);
     window.__labSeed(COMMAND_SEED);
+    (anatomy as { forgetReported?: () => void }).forgetReported?.();
   }
 
   /** The hero the page booted, and the heroes the game has: the session checks it booted the one it asked for. */
@@ -420,10 +452,15 @@ export class Lab {
 
   /** Takes the game's clock over, makes its draws skippable, and starts keeping its anatomy warnings. */
   install(): void {
+    this.booted = storedNow();
     const gl = G.renderer;
     const draw = gl.render.bind(gl);
     gl.render = (scene, camera) => {
-      if (this.drawing) return draw(scene, camera);
+      // (a biome's still shadows are drawn once, as it's shown: skipped, the first frame drawn drew them of everything,
+      // the hero's shadow with them, and compiled a program then)
+      // (an older commit has no `isDrawingStill`)
+      const still = (culling as { isDrawingStill?: () => boolean }).isDrawingStill?.() ?? false;
+      if (this.drawing || still) return draw(scene, camera);
       // (what a draw would have done that the game reads back: the world matrices)
       if (scene === G.scene) {
         scene.updateMatrixWorld();
@@ -538,13 +575,24 @@ export class Lab {
   }
 
   /** Sets the run up as `fixture` says and checks that it took (throws if not). Returns what it is, for the report. */
-  async setup(fixture: Fixture = {}): Promise<Record<string, unknown>> {
-    await this.enterRun();
+  async setup(given: Fixture = {}): Promise<Record<string, unknown>> {
+    const fixture = this.afresh ? { ...given, fresh: true } : given;
+    // (a page's first set-up starts its run from the lobby the boot showed; afresh, a later one starts its own)
+    if (this.afresh && this.setUpBefore) await this.runAfresh();
+    else await this.enterRun();
+    this.setUpBefore = true;
     this.foes.clear();
     this.lifeShare = 1;
     this.keepUp = [() => holdTheWave(this.foes), this.keepHeroUp];
     await this.until(() => !this.player.casting && !this.player.channel, 400, 'the hero is still busy with a cast');
-    if (fixture.fresh) this.buildHeroAgain();
+    if (fixture.fresh) {
+      // (the view taken from the top down, as a booted page's first set-up takes it: a view kept from before held
+      // what it had followed, and a two-hander's cleaves through the eyes came out otherwise on a page a check kept;
+      // taken before the hero is built, as the frames that take it would run his legs before he's placed, and a gait
+      // after a job through the eyes started its settle from another drop of the hips)
+      await this.useView('top');
+      this.buildHeroAgain();
+    }
     setTunes(fixture.tune ?? {});
     await this.useView(fixture.view ?? 'top');
     const [x, z] = fixture.at ?? SPOT;
@@ -568,6 +616,7 @@ export class Lab {
     const later = Math.max(SETUP_TIME, Math.ceil(G.time / SETUP_TIME) * SETUP_TIME);
     G.time = fixture.fresh ? SETUP_TIME : later;
     window.__labSeed(SETUP_SEED);
+    restartEmitters();
     // (standing a moment: what was still moving as the run started, the camera gliding in and the hero settling on
     // his spot, comes to rest, so it reaches the measure the same however many frames the start took)
     await this.step(SETTLE_FRAMES);
@@ -627,8 +676,33 @@ export class Lab {
     this.model.setGear?.(gear);
   }
 
+  /**
+   * A run started anew from the lobby, as a booted page's first set-up starts one, for a set-up afresh on a page kept
+   * from a command before (`begin`): the run left by the pause menu, the profile read again as the boot read it, and
+   * the random numbers started again for the run's start. Kept, a run carried the commands' leavings into the next:
+   * the game's timers still pending, the wave's state, the props broken and the run's rolled columns.
+   */
+  private async runAfresh(): Promise<void> {
+    if (G.mode === 'run') {
+      await this.step(1, () => ({ keys: ['escape'] }));
+      const abandon = document.getElementById('btn-abandon');
+      if (!abandon) throw new Error('lab: no pause menu to leave the run by');
+      // (clicked as the run is started, by the element: clicked by the mouse, a set-up waited for the menu's slide in
+      // by the browser's clock, 60 ms of its 300)
+      abandon.click();
+      await this.until(() => G.mode === 'menu', 600, 'the run never gave way to the lobby');
+    }
+    G.profile = loadProfile(G.profile.classId);
+    window.__labSeed(COMMAND_SEED);
+    // (the run stamps what it starts with the game's clock, before a set-up moves it: at the moment the boot's own
+    // started, as a fresh page's first set-up starts it)
+    if (this.firstRunAt !== null) G.time = this.firstRunAt;
+    await this.enterRun();
+  }
+
   private async enterRun(): Promise<void> {
     if (G.mode === 'run') return;
+    this.firstRunAt ??= G.time;
     document.getElementById('btn-start')?.click();
     await this.until(() => G.mode === 'run' && !this.player.sandbox, 600, 'the run never started');
   }
@@ -1240,9 +1314,51 @@ function setSomeOf(path: string, value: number): void {
   window.__tune!(list, numbers);
 }
 
+/**
+ * Resolved once every map the loading workers make has come, before the lab installs (`everyMapCome` in
+ * src/core/textures.ts; an older commit has none): landing mid-command, later as the machine was loaded, a map drew
+ * the crypt's foes otherwise in some of a check's casts. No frame runs meanwhile: the clock is the lab's from the
+ * reveal.
+ */
+export async function mapsCome(): Promise<void> {
+  await (textures as { everyMapCome?: () => Promise<void> }).everyMapCome?.();
+}
+
 /** The session's entry: the lab installed on this page. */
 export function install(): Lab {
   const lab = new Lab();
   lab.install();
   return lab;
+}
+
+/** The page's cookies and local storage, by name. */
+interface Stored {
+  cookies: [string, string][];
+  storage: [string, string][];
+}
+
+/** The page's cookies and local storage as they are now. */
+function storedNow(): Stored {
+  const cookies = document.cookie
+    .split('; ')
+    .filter(Boolean)
+    .map((pair): [string, string] => {
+      const at = pair.indexOf('=');
+      return [pair.slice(0, at), pair.slice(at + 1)];
+    });
+  const storage = Object.keys(localStorage).map((name): [string, string] => [name, localStorage.getItem(name) ?? '']);
+  return { cookies, storage };
+}
+
+/**
+ * The page's cookies and local storage put back as `stored` had them, as a command begins whose heroes are built
+ * afresh, for them to read what the boot's read (a skill bound to a key by a command before, `bindKnown`, saved its
+ * loadout, which the next command's heroes loaded). Not at each set-up: a command's own bindings hold for its own
+ * set-ups after them, as on a page booted for it (put back at each, the eyes' canaries cast another skill).
+ */
+function storeAgain(stored: Stored): void {
+  for (const [name] of storedNow().cookies) document.cookie = `${name}=; max-age=0; path=/`;
+  for (const [name, value] of stored.cookies) document.cookie = `${name}=${value}; path=/; SameSite=Lax`;
+  localStorage.clear();
+  for (const [name, value] of stored.storage) localStorage.setItem(name, value);
 }

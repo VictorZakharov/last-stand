@@ -8,15 +8,18 @@
 import { createServer } from 'vite';
 import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { lowerProcesses, PAGE_SCRIPTS } from './browser.mjs';
+import { lowerProcesses, PAGE_SCRIPTS, takeKeptContext } from './browser.mjs';
 import { exportedTreePaths } from './commits.mjs';
 import { compileError, labError } from './errors.mjs';
+import { mapsCodeOf } from './mapsCode.mjs';
 import { watchLayers } from './layers.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { stampOf } from './sideCache.mjs';
 import { decodeMappings, sourceOf } from './sourceMaps.mjs';
 
 const VIEWPORT = { width: 1920, height: 1080 };
+/** the size every page of the lab's is given, in a context of its own or the browser's kept one */
+export const CONTEXT_OPTIONS = { viewport: VIEWPORT, deviceScaleFactor: 1 };
 const BOOT_TIMEOUT_MS = 180_000;
 /** how often a booting page is asked whether the loading screen is gone, ms */
 const BOOT_POLL_MS = 100;
@@ -347,6 +350,10 @@ export class Side {
     this.serverStale = false;
     /** a command has run on the page since it booted */
     this.used = false;
+    /** its commands' set-ups build the hero afresh (session.mjs `afresh`) */
+    this.afresh = false;
+    /** the kind of page it has up, as the commands run on it (commands.mjs `pageKind`; null: none to keep) */
+    this.pageKind = null;
     /** called with the file when this tree's source changes (the server boots the next page then) */
     this.onStale = null;
     /** what the page raised or logged as an error since they were last read */
@@ -439,17 +446,38 @@ export class Side {
   /** Whether its page is booted for `heroClass` as `how` asks (`LAB_BOOT`'s fields) from the current source, and no
    *  command has run on it yet. */
   isFresh(heroClass, how = LAB_BOOT) {
-    const alive = this.page && !this.page.isClosed();
-    const booted = this.heroClass === heroClass && this.bootedAs !== null && sameBoot(this.bootedAs, how);
-    return Boolean(alive && !this.stale && !this.used && booted);
+    return this.isBooted(heroClass, how) && !this.used;
   }
 
-  /** Boots a page for `heroClass` as `how` asks unless a fresh one is up already. Returns whether it booted. */
-  async ready(heroClass, how = LAB_BOOT) {
+  /** Whether its page is booted for `heroClass` as `how` asks from the current source, used or not. */
+  isBooted(heroClass, how = LAB_BOOT) {
+    const alive = this.page && !this.page.isClosed();
+    const booted = this.heroClass === heroClass && this.bootedAs !== null && sameBoot(this.bootedAs, how);
+    return Boolean(alive && !this.stale && booted);
+  }
+
+  /**
+   * Boots a page for `heroClass` as `how` asks unless a fresh one is up already, or with `used`, one a command has run
+   * on (a check's, `keepPages` in session.mjs): with `clean` too, only one that has compiled nothing since it loaded,
+   * whose programs are the boot's alone as a fresh page's are (a command that counts the shaders compiled late: a
+   * program an earlier command had compiled was there for the next, which counted none). Returns whether it booted.
+   */
+  async ready(heroClass, how = LAB_BOOT, { used = false, clean = false } = {}) {
     await this.serve();
     if (this.isFresh(heroClass, how)) return false;
+    const kept = used && this.isBooted(heroClass, how);
+    if (kept && !(clean && (await this.compiledSinceLoad()) > 0)) return false;
     await this.boot(heroClass, how);
     return true;
+  }
+
+  /** How many programs its page has compiled since it loaded (src/core/shaders.ts; 0 on a commit without the count). */
+  compiledSinceLoad() {
+    const count = async () => {
+      const shaders = await import('/src/core/shaders.ts');
+      return shaders.programsCompiledInGame?.() ?? 0;
+    };
+    return this.page.evaluate(count);
   }
 
   /**
@@ -464,10 +492,12 @@ export class Side {
     await this.closePage();
     this.heroClass = null;
     this.bootedAs = null;
+    this.pageKind = null;
     try {
       await this.openPage(heroClass, how);
       const booted = await this.page.evaluate(async () => {
         const lab = await import('/tools/lab/page/lab.ts');
+        await lab.mapsCome();
         return lab.install().heroes();
       });
       if (booted.hero !== heroClass) {
@@ -484,7 +514,7 @@ export class Side {
   /** Opens a page on the game for `heroClass` (booted as `how` asks, as `boot` takes it) and waits out its loading
    *  screen. */
   async openPage(heroClass, how = LAB_BOOT) {
-    this.context ??= await this.newContext();
+    this.context ??= await this.newContext({ kept: this.isRepo });
     this.errors = [];
     this.stale = false;
     this.used = false;
@@ -502,6 +532,7 @@ export class Side {
     const page = await this.openPageIn(this.partnerContext, heroClass, 'partner: ', this.bootedAs ?? LAB_BOOT);
     await page.evaluate(async () => {
       const lab = await import('/tools/lab/page/lab.ts');
+      await lab.mapsCome();
       lab.install();
     });
     return page;
@@ -513,9 +544,13 @@ export class Side {
     this.partnerContext = null;
   }
 
-  /** A browser context as every page of the lab's has it: its viewport and the scripts run before the page's own. */
-  async newContext() {
-    const context = await this.browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1 });
+  /**
+   * A browser context as every page of the lab's has it: its viewport and the scripts run before the page's own. With
+   * `kept`, the one the browser keeps on its profile where it has one (`takeKeptContext`): this tree's maps made once.
+   */
+  async newContext({ kept = false } = {}) {
+    const keptContext = kept ? takeKeptContext(this.browser) : null;
+    const context = keptContext ?? await this.browser.newContext(CONTEXT_OPTIONS);
     for (const script of PAGE_SCRIPTS) await context.addInitScript(script);
     return context;
   }
@@ -533,6 +568,10 @@ export class Side {
     const cookies = { ...BOOT_COOKIES, ...settled, 'last-stand-class': heroClass };
     await context.addCookies(Object.entries(cookies).map(([name, value]) => ({ name, value, url: this.url })));
     const page = await context.newPage();
+    // (the maps made once kept in the context's store, under a name for their code: src/core/kept.ts `keepAs`)
+    await page.addInitScript((name) => {
+      window.__labMapsAs = name;
+    }, mapsCodeOf(this.root));
     page.on('pageerror', (error) => this.errors.push(`${prefix}${String(error)}`));
     page.on('console', (message) => {
       if (message.type() === 'error' && !fromDevClient(message)) this.errors.push(`${prefix}${message.text()}`);
@@ -580,11 +619,11 @@ export class Side {
 
   /** Calls `fn` from page/commands.ts with the lab and `options`; returns its result. */
   command(fn, options) {
-    return this.page.evaluate(async ([fn, options]) => {
+    return this.page.evaluate(async ([fn, options, afresh]) => {
       const commands = await import('/tools/lab/page/commands.ts');
-      window.__lab.begin();
+      window.__lab.begin(afresh);
       return commands[fn](window.__lab, options);
-    }, [fn, options]);
+    }, [fn, options, this.afresh]);
   }
 
   /**

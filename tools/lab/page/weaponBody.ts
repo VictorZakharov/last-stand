@@ -5,6 +5,7 @@
 // his thigh, and no measure said so (from play: "main problem here is axe shaft going through leg").
 import * as THREE from 'three';
 import type { Lab } from './lab';
+import { distinctCorners } from './corners';
 import { bodyShape } from '../../../src/entities/models/anatomy';
 import { capsuleDepth, ellipsoidDepth } from './bodyDepth';
 
@@ -135,7 +136,7 @@ function deepestInto(lab: Lab, at: string): Into | null {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh) return;
     const corners = mesh.geometry.attributes.position;
-    for (let i = 0; i < corners.count; i++) {
+    for (const i of distinctCorners(corners)) {
       _corner.fromBufferAttribute(corners, i).applyMatrix4(mesh.matrixWorld);
       for (const part of parts) {
         const depth = part.depthAt(_corner);

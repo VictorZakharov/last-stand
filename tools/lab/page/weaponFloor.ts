@@ -5,6 +5,7 @@
 // put an axe's or a maul's head into the floor to its middle.
 import * as THREE from 'three';
 import type { Lab } from './lab';
+import { distinctCorners } from './corners';
 import { groundHeight } from '../../../src/world/ground';
 import * as collision from '../../../src/world/collision';
 import { G } from '../../../src/state';
@@ -183,7 +184,7 @@ function deepestUnder(lab: Lab, at: string): Under | null {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh) return;
     const corners = mesh.geometry.attributes.position;
-    for (let i = 0; i < corners.count; i++) {
+    for (const i of distinctCorners(corners)) {
       _corner.fromBufferAttribute(corners, i).applyMatrix4(mesh.matrixWorld);
       // (a prop's or the wall's top counts as floor: a blow into a pillar, a stone or the wall stops on it as on the
       // ground)

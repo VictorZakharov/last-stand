@@ -27,6 +27,14 @@ let grid: Grid | null = null;
 const fields = new Map<number, Field>();
 let rebuiltAt = -1;
 
+/** The fields let go, as a run starts: each is found again as its foes first ask, as on a run's first frames
+ *  (stamped by the game's clock, a field kept from the last run read as fresh where the lab's set-up moves the clock
+ *  back, and its foes walked otherwise than on a page booted for it). */
+export function forgetFields(): void {
+  fields.clear();
+  rebuiltAt = -1;
+}
+
 /** The clearance grid of the current biome (rebuilt when the biome's obstacles change). */
 function getGrid(): Grid {
   const obstacles = G.arena.obstacles;

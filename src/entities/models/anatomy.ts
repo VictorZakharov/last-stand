@@ -336,6 +336,9 @@ export function clampWrist(q: THREE.Quaternion, left: boolean, out: THREE.Quater
 /** a hand joint's hand as it's drawn (`Hand.vis`, which `hold` turns on the joint), or the joint */
 export const drawnHand = (h: THREE.Object3D) => h.children.find((c) => c.userData.drawnHand) ?? h;
 const reported = new Set<string>();
+/** Dev builds: every angle and action told of afresh from here on (the lab, as each command begins: a page runs many,
+ *  and a later one heard nothing of a joint an earlier one had taken past its range) */
+export const forgetReported = (): void => reported.clear();
 /** Dev builds: tell the console of each joint the body takes past its range (by more than `tol` degrees), once per angle and action */
 export function watchBody(j: Joints, action: string, tol = 5): void {
   j.root.updateMatrixWorld(true);

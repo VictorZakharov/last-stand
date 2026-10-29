@@ -16,7 +16,7 @@ import { BIOMES, type BiomeId } from '../../../src/data/biomes';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { lateCompiles, programsCompiledInGame } from '../../../src/core/shaders';
 import { standIn } from './light';
-import { cellName, frameCells, type FrameCells } from './screenCells';
+import { cellName, FrameReader, type FrameCells } from './screenCells';
 import { blinksIn, describeBlinks } from './blinks';
 import { whatIsAt } from './whatIsAt';
 import { worstFlashing, type FlashCount } from './flashes';
@@ -294,7 +294,7 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
   const lateBefore = lateCompiles.length;
   const exposure = G.renderer.toneMappingExposure;
   const drawing = lab.drawing;
-  const frames: FrameCells[] = [];
+  const reader = new FrameReader();
   const moments: Pictured[] = [];
   const met: string[] = [];
   const whatFrame = options.what ? Math.round(options.what[0] / frameTime) : -1;
@@ -302,11 +302,11 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
   lab.drawing = true;
   try {
     await lab.step(1, () => ({ aim }));
-    const before = frameCells();
+    reader.take();
     for (let frame = 0; frame < lookFrames; frame++) {
       if (options.canary) G.renderer.toneMappingExposure = strobed(frame, exposure);
       await lab.step(1, () => pressing(key, aim, frame < holdFrames));
-      frames.push(frameCells());
+      reader.take();
       if (frame === whatFrame && options.what) met.push(...metAt(options.what));
       cast ||= hero.cooldowns.has(def.impl) || Boolean(hero.casting) || Boolean(hero.channel);
       const time = pictureFrames.get(frame);
@@ -315,6 +315,7 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
         moments.push(await lab.screen(label));
       }
     }
+    const [before, ...frames] = reader.frames();
     return judged(def, options, { before, frames, frameTime, cast, moments, met, compiledBefore, lateBefore });
   } finally {
     G.renderer.toneMappingExposure = exposure;

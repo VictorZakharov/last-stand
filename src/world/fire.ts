@@ -10,6 +10,7 @@ import { particles, col } from '../fx/particles';
 import { rand } from '../util';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
 import type { Updater } from './props';
+import { runPhase } from './runPhase';
 
 /** A fire to build: its bed and flames, and the biome's light it flickers. */
 export interface FireSpec {
@@ -491,8 +492,7 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   scene.add(volume);
   const rise: THREE.Vector2 = flames.uniforms.uRise.value;
   const lightAt = light.position.clone();
-  let embersDue = 0;
-  let smokeDue = 0;
+  const due = runPhase({ embers: 0, smoke: 0 });
   updaters.push((dt, t) => {
     const puff = puffAt(t, seed);
     flames.uniforms.uPuff.value = puff;
@@ -501,14 +501,14 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
     emberTime.value = t;
     light.intensity = spec.intensity * (1 + (puff - 1) * LIGHT_SWELL);
     light.position.set(lightAt.x + (puff - 1) * LIGHT_SWAY, lightAt.y + (puff - 1) * LIGHT_SWAY * 2, lightAt.z);
-    embersDue += dt * spec.embers;
-    while (embersDue >= 1) {
-      embersDue -= 1;
+    due.embers += dt * spec.embers;
+    while (due.embers >= 1) {
+      due.embers -= 1;
       spawnEmber(at, radius, height);
     }
-    smokeDue += dt * spec.smoke;
-    while (smokeDue >= 1) {
-      smokeDue -= 1;
+    due.smoke += dt * spec.smoke;
+    while (due.smoke >= 1) {
+      due.smoke -= 1;
       spawnSmoke(at, radius, height * puff, spec.smokeColour);
     }
   });

@@ -57,6 +57,7 @@ import type { HoodOptions } from './hood';
 import type { TurnaroundOptions } from './turnaround';
 import type { HallOptions } from './hallMoves';
 import type { CoatOptions } from './coat';
+import type { PosesOptions } from './poses';
 import type { GlanceOptions } from './glance';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
 import type { EyesOptions } from './eyes';
@@ -127,6 +128,13 @@ export async function hood(lab: Lab, command: HoodOptions): Promise<Report> {
 export async function turnaround(lab: Lab, command: TurnaroundOptions): Promise<Report> {
   const { turnaround: picture } = await import('./turnaround');
   return picture(lab, command);
+}
+
+/** `lab poses`: the hero's pose a move at a time as digests, and what his animation took a frame; a canary missed is a
+ *  problem. */
+export async function poses(lab: Lab, command: PosesOptions): Promise<Report> {
+  const { poses: follow } = await import('./poses');
+  return follow(lab, command);
 }
 
 /** `lab coat`: the hero's skirts as he stands at idle, frame by frame; a point that jerked, or a canary it missed, is a
