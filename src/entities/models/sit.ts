@@ -128,9 +128,10 @@ const _pole = new THREE.Vector3(), _q = new THREE.Quaternion(), _bone = new THRE
  * his face). Call after `sitPose` and the look (before it, a glance carried the shoulders round and the hands with them,
  * 8 cm over the knee); the arms' IK (`fitArm`) keeps them within their ranges after. `lifted`: the sides lifted over
  * the rising thighs on a seat (all of them by default; not a hand that sets a weapon down after, `plantArm`).
+ * `floorLift` scales the arc for a hand already lowered beside the legs.
  */
 export function restHands(
-  j: Joints, s: SitState | null | undefined, sides: readonly number[], turn?: RestTurn, rise = 0, lifted = sides,
+  j: Joints, s: SitState | null | undefined, sides: readonly number[], turn?: RestTurn, rise = 0, lifted = sides, floorLift = 1,
 ): void {
   if (!s || s.w <= 0) return;
   const floor = onFloor(s), [along, over, out] = floor ? SIT_POSE.knee : SIT_POSE.rest;
@@ -153,8 +154,8 @@ export function restHands(
     } else {
       // (out early: at the way's own pace, the thigh rose into a hand still hanging at his side, 7 cm, 16% down)
       const arc = Math.max(Math.sin(Math.PI * Math.sqrt(w)), Math.sin(Math.PI * w));
-      _now.y += SIT_POSE.floorLift[0] * arc;
-      _now.x += sign * SIT_POSE.floorLift[1] * arc;
+      _now.y += SIT_POSE.floorLift[0] * arc * floorLift;
+      _now.x += sign * SIT_POSE.floorLift[1] * arc * floorLift;
     }
     reachArm(left ? j.shoulderL : j.shoulderR, left ? j.elbowL : j.elbowR, P.upperL, P.foreL, _now, _pole);
     if (turn && (turn.roll[side] || turn.bend[side])) {
