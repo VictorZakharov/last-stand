@@ -412,8 +412,10 @@ export class Skirt {
 
   /** `fL`, `fR`: how far forward each thigh swings (radians); `move` 0..1; `t`, `dt` in seconds; `legs` and `hands`, the
    *  limbs it keeps clear of from inside and from outside (the skirt's own space); `settle`, how far it's eased to where
-   *  it's draped instead of put there (0 to 1: sat, `satBy`) */
-  update(fL: number, fR: number, move: number, t: number, dt: number, legs?: SkirtBody[], hands?: SkirtBody[], settle = 0): void {
+   *  it's draped instead of put there (0 to 1: sat, `satBy`); `tuck`, how far its back swings in under him (rad: sat on
+   *  the floor, he sits on it) */
+  update(fL: number, fR: number, move: number, t: number, dt: number, legs?: SkirtBody[], hands?: SkirtBody[], settle = 0,
+    tuck = 0): void {
     const o = this.o, depth = o.depth ?? 0.85, push = o.push ?? 0.8, flare = o.flare ?? 1;
     const p = this.geo.attributes.position as THREE.BufferAttribute, R = this.rest;
     const h = Math.min(dt, 0.05);
@@ -424,7 +426,10 @@ export class Skirt {
       // (no flutter sat: its few millimetres tipped the drape between his raised knees from one side to the other
       // every 2 s, 54 cm by a fire)
       const flutter = Math.sin(t * 3 + a * 3) * 0.015 * (1 - settle);
-      const target = Math.max(-0.1, legPush * push) + (0.04 + move * 0.08 + flutter) * flare + (cz > 0 ? 0 : move * 0.25 * -cz) * flare;
+      // (sat on the floor, its back under him: hung straight down behind him it stood round his hips as a sack wider
+      // than his shoulders, its hem laid out on the floor beyond)
+      const under = cz < 0 ? tuck * -cz : 0;
+      const target = Math.max(-0.1 - under, legPush * push - under) + (0.04 + move * 0.08 + flutter) * flare + (cz > 0 ? 0 : move * 0.25 * -cz) * flare;
       // a stiff, damped spring: cloth follows the legs a moment late and settles without wobbling
       if (h > 0) {
         this.vel[i] += ((target - this.theta[i]) * 260 - this.vel[i] * 26) * h;
@@ -438,6 +443,7 @@ export class Skirt {
         p.setXYZ(j, sx * nr + this.open[j], ny, cz * nr * depth);
       }
     }
+    this.tucked = tuck > 0;
     if (legs?.length || hands?.length) this.drape(legs ?? [], hands ?? []);
     // (eased while sat; followed at once otherwise, so a sit begins from where it was drawn)
     this.ease(settle, h);
@@ -445,6 +451,8 @@ export class Skirt {
     vertexNormals(this.geo);
   }
 
+  /** whether its back is tucked under him this frame (`update`'s `tuck`) */
+  private tucked = false;
   /** where it was drawn last frame, eased from */
   private drawn?: Float32Array;
   /** The cloth eased from where it was drawn last frame to where it's draped now, by `settle` (0 to 1) of `SETTLE`'s
@@ -564,6 +572,9 @@ export class Skirt {
             const k = q * 6;
             if (x1 < B[k] || x0 > B[k + 1] || y1 < B[k + 2] || y0 > B[k + 3] || z1 < B[k + 4] || z0 > B[k + 5]) continue;
             if (!leg) { this.off(P, j, body(q), 0, true); continue; }
+            // (tucked under him, its back lies under his seat: put out of the thighs' tops there, up and out, it stood
+            // back up round his hips)
+            if (this.tucked && Math.cos(this.ang[c]) < TUCKED_FROM) continue;
             const b = body(q);
             this.off(P, j, b, layer, false);
             if (!lines) continue;
@@ -722,6 +733,9 @@ function pull(P: Float32Array, a: number, b: number, max: number, wa: number): v
 const _sp = new THREE.Vector3(), _sq = new THREE.Vector3(), _sab = new THREE.Vector3(), _sn = new THREE.Vector3(), _so = new THREE.Vector3(), _sd = new THREE.Vector3();
 /** how far outside a hand's capsule the cloth beside it is still held in behind it (m): about the skirts' points' spacing */
 const HAND_REACH = 0.035;
+/** the columns tucked under a hero sat on the floor are kept off his thighs no more: those further round than this
+ *  from the front (the cosine of their angle) */
+const TUCKED_FROM = -0.3;
 /** how long a sat hero's skirt takes to ease to where it's draped (s): `Skirt.ease` */
 const SETTLE = 0.4;
 /** how far into a leg's gap the cloth between neighbours round a row may dip before it is put round (m): between two points
