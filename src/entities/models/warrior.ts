@@ -1841,8 +1841,6 @@ export function buildWarrior(): Model {
   function unplant(p: Planted): void {
     p.carried = false;
     p.slide = 0;
-    p.leant = false;
-    p.turn = -1;
     if (!p.on) return;
     p.grip.rotation.set(GRIP, 0, 0);
     p.on.group.userData.stuckIn = 0;
@@ -1931,6 +1929,9 @@ export function buildWarrior(): Model {
     const two = held?.off != null;
     twoHold.k = 0;
     unplant(plantR); unplant(plantL);
+    // (what a sit chose kept until he's up: cleared with the grip each frame, the stood weapon's turn was chosen
+    // afresh every frame, and the leant one went on 15 cm after it was let go of)
+    if (!st.sit) for (const p of [plantR, plantL]) { p.turn = -1; p.leant = false; }
     // (through the eyes the hands drawn larger, `EYES.hand`: the fists seat and close round their handles at that scale)
     const handK = HAND_K * (fp ? EYES.hand : 1);
     handL.vis.scale.setScalar(handK); handR.vis.scale.setScalar(handK);
