@@ -1488,6 +1488,7 @@ export const COMMANDS = {
         fixture: fixtureFrom(options),
         seats: options.seats,
         frames: Boolean(options.frames),
+        trace: options.trace,
         canary: Boolean(options.canary),
       };
       return side.command('sit', command);

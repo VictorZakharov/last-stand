@@ -36,6 +36,8 @@ export interface SitOptions {
   seats?: string[];
   /** list every frame his skirts jerked as he sat */
   frames?: boolean;
+  /** list this carried piece frame by frame */
+  trace?: string;
   canary?: boolean;
 }
 
@@ -259,7 +261,8 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   }
   const label = `${c.name} (top ${seatTopAt(seat, spot.x, spot.z).toFixed(2)} m)`;
   const watch: Watch = {
-    carried: new Carried(lab), film: new SitFilm(c.name, [c.views[0], 'third']), through: null, shown: 0,
+    carried: new Carried(lab, options.trace), film: new SitFilm(c.name, [c.views[0], 'third']), through: null,
+    shown: 0,
     before: heldNow(lab), canary: !!options.canary, moments: [],
   };
   const sat = await untilSat(lab, label, c.views.slice(0, 2), out, watch);
@@ -286,6 +289,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
     watch.film.end('up');
   }
   judgeWatch(c.name, watch, out);
+  for (const line of watch.carried.traced) out.text.push(`    ${line}`);
 }
 
 /** The over-the-shoulder camera zoomed in all the way: his neck as high on the screen sat as standing. */
