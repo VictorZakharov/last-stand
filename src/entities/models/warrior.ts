@@ -1527,6 +1527,8 @@ export function buildWarrior(): Model {
     pivot: number; standQ: THREE.Quaternion;
     /** the way round the fist turns carrying a blade to where it holds it stood, chosen once a sit (`turnWay`) */
     drawWay: THREE.Vector3; drawWas: number | null;
+    /** the way round its upright handle a blade's fist rests, chosen once a sit (`restLength`), or -1 */
+    restTurn: number;
     /** which way round it turns (+1 or -1 about the palm; 0 till it first turns) */
     way: number;
   }
@@ -1535,13 +1537,13 @@ export function buildWarrior(): Model {
       left, hand, joint: left ? j.handL : j.handR, grip, shoulder: left ? j.shoulderL : j.shoulderR,
       q: new THREE.Quaternion(), at: new THREE.Vector3(), up: new THREE.Vector3(), on: null, carried: false, turn: -1,
       landAt: new THREE.Vector3(), landQ: new THREE.Quaternion(), handAt: new THREE.Vector3(), handQ: new THREE.Quaternion(),
-      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), slide: 0, leant: false, pivot: 0, standQ: new THREE.Quaternion(), drawWay: new THREE.Vector3(), drawWas: null, way: 0,
+      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), slide: 0, leant: false, pivot: 0, standQ: new THREE.Quaternion(), drawWay: new THREE.Vector3(), drawWas: null, restTurn: -1, way: 0,
     };
   }
   const _standQ = new THREE.Quaternion(), _standAt = new THREE.Vector3(), _holdQ = new THREE.Quaternion();
   const _holdAt = new THREE.Vector3(), _restAt = new THREE.Vector3();
   const _fromAt = new THREE.Vector3(), _fromQ = new THREE.Quaternion();
-  const _wayQ = new THREE.Quaternion(), _standUp = new THREE.Quaternion(), _gripInv = new THREE.Quaternion(), _turnQ = new THREE.Quaternion();
+  const _restQ = new THREE.Quaternion(), _s8 = new THREE.Vector3(), _wayQ = new THREE.Quaternion(), _standUp = new THREE.Quaternion(), _gripInv = new THREE.Quaternion(), _turnQ = new THREE.Quaternion();
   /** the turns about its length a weapon stood is tried at, for the fist holding it most at ease */
   const PLANT_TURNS = 24, _rootQ = new THREE.Quaternion();
   /** the most a weapon arm's elbow moves a frame carrying it to where it stands (rig units) */
@@ -1799,6 +1801,10 @@ export function buildWarrior(): Model {
     // range)
     p.shoulder.getWorldPosition(p.up).sub(_plantHand).normalize();
     const up = _hd.set(0, 1, 0);
+    // (a blade's fist round its handle turned about it the way nearest the fist that carried it there, chosen once a
+    // sit: with the hand's length towards the shoulder, it was 120 degrees off the standing fist, past the wrist's
+    // turn, and the elbow's solve flipped sides on the way, a greatsword 86 cm in a frame)
+    if (stands === 'point') p.up.copy(restLength(p, hand, up, fromQ));
     fistReach(hand, up, p.up, weapon.r, _cur);
     fistTurn(hand, up, p.up, _fq);
     _restAt.copy(_cur).negate().add(_plantHand);
@@ -1888,6 +1894,22 @@ export function buildWarrior(): Model {
     // (how far its point is in, which the lab's measure of what goes under the floor allows)
     weapon.group.userData.stuckIn = p.carried ? sink * p.pivot : sink;
     p.on = weapon;
+  }
+  /** The way a fist round an upright handle has its length (world, level) that turns it least from `from`, chosen
+   *  once a sit (`p.restTurn`, about him) */
+  function restLength(p: Planted, hand: Hand, up: THREE.Vector3, from: THREE.Quaternion): THREE.Vector3 {
+    const length = (i: number) => _s8.set(0, 0, 1).applyAxisAngle(up, (i / PLANT_TURNS) * Math.PI * 2).transformDirection(root.matrixWorld).setY(0).normalize();
+    if (p.restTurn < 0) {
+      let least = Infinity;
+      for (let i = 0; i < PLANT_TURNS; i++) {
+        const turned = fistTurn(hand, up, length(i), _restQ).angleTo(from);
+        if (turned < least) {
+          least = turned;
+          p.restTurn = i;
+        }
+      }
+    }
+    return length(p.restTurn);
   }
   /** `from` turned `by` of the way to `to` into `out`, the way round chosen once a sit (`p.drawWay`, in the turn's own
    *  frame): the standing fist and the one round a stood blade's handle are nearly half a turn apart, and by the
@@ -2036,7 +2058,7 @@ export function buildWarrior(): Model {
     unplant(plantR); unplant(plantL);
     // (what a sit chose kept until he's up: cleared with the grip each frame, the stood weapon's turn was chosen
     // afresh every frame, and the leant one went on 15 cm after it was let go of)
-    if (!st.sit) for (const p of [plantR, plantL]) { p.turn = -1; p.leant = false; p.way = 0; p.drawWay.set(0, 0, 0); p.drawWas = null; }
+    if (!st.sit) for (const p of [plantR, plantL]) { p.turn = -1; p.leant = false; p.way = 0; p.drawWay.set(0, 0, 0); p.drawWas = null; p.restTurn = -1; }
     // (through the eyes the hands drawn larger, `EYES.hand`: the fists seat and close round their handles at that scale)
     const handK = HAND_K * (fp ? EYES.hand : 1);
     handL.vis.scale.setScalar(handK); handR.vis.scale.setScalar(handK);
