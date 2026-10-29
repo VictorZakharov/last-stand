@@ -91,6 +91,8 @@ const last = new WeakMap<THREE.Object3D, THREE.Vector3>(), lastG = new WeakMap<T
 /** and its turn about a handle (`glide` only) */
 const lastR = new WeakMap<THREE.Object3D, number>();
 const _wy = new THREE.Vector3();
+const _legLines = [new THREE.Line3(), new THREE.Line3()], _noLegLines: THREE.Line3[] = [];
+const _legPoint = new THREE.Vector3(), _legNear = new THREE.Vector3();
 /** how far past the best's ranges (degrees) an elbow held back by `maxMove` may go before it gives way */
 const REACH_SLACK = 2;
 /** where the least of a parabola through three evenly spaced costs lies, in steps from the middle one (-0.5..0.5) */
@@ -121,11 +123,11 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   const capsules = legs > 0 && g.body?.legCapsules;
   const solids = g.body?.solids.filter((s) => trunk(s) || (legs > 0 && !capsules && s.name.startsWith('thigh')));
   const weights = solids?.map((s) => trunk(s) ? 1 : legs);
-  const legLines = capsules ? [
-    new THREE.Line3(j.thighL.getWorldPosition(new THREE.Vector3()), j.kneeL.getWorldPosition(new THREE.Vector3())),
-    new THREE.Line3(j.thighR.getWorldPosition(new THREE.Vector3()), j.kneeR.getWorldPosition(new THREE.Vector3())),
-  ] : [];
-  const legPoint = new THREE.Vector3(), legNear = new THREE.Vector3(), legScale = j.root.scale.x;
+  if (capsules) {
+    j.thighL.getWorldPosition(_legLines[0].start); j.kneeL.getWorldPosition(_legLines[0].end);
+    j.thighR.getWorldPosition(_legLines[1].start); j.kneeR.getWorldPosition(_legLines[1].end);
+  }
+  const legLines = capsules ? _legLines : _noLegLines, legScale = j.root.scale.x;
   // (each solid's frame, once for the whole search)
   const invs = solids?.map((s) => { s.at.updateWorldMatrix(true, false); return new THREE.Matrix4().copy(s.at.matrixWorld).invert(); }), head = solids ? solids.findIndex((s) => s.name === 'head') : -1;
   // (and a sphere round each, world: a limb clear of it needs no closer look)
@@ -199,9 +201,9 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
       for (let i = 0; i < solids.length; i++) if (near(_wb, _wa, j.P.foreR, i)) deep = Math.max(deep, weights![i] * capsuleDepth(_wb, _wa, j.P.foreR, solids[i], invs![i]));
       let legDepth = 0;
       for (const line of legLines) for (let i = 0; i <= 4; i++) {
-        legPoint.lerpVectors(_wb, _wa, i / 4);
-        line.closestPointToPoint(legPoint, true, legNear);
-        legDepth = Math.max(legDepth, legs * ((j.P.thighR + j.P.foreR) - legPoint.distanceTo(legNear) / legScale));
+        _legPoint.lerpVectors(_wb, _wa, i / 4);
+        line.closestPointToPoint(_legPoint, true, _legNear);
+        legDepth = Math.max(legDepth, legs * ((j.P.thighR + j.P.foreR) - _legPoint.distanceTo(_legNear) / legScale));
       }
       // Without the elbow's drop the least-penetrating arm lifted it level with the shoulder.
       cost += 1600 * Math.max(0, legDepth - 0.005) + (capsules ? 600 * legs * Math.max(0, _E.y - _S.y + 0.15) : 0);
