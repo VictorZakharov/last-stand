@@ -35,6 +35,8 @@ export const SIT_POSE = tunable('sit', {
 
 /** Whether a sit is on the floor (by a fire): hips too low for any seat. */
 export const onFloor = (s: SitState): boolean => s.hip < SEAT.low;
+/** how far a skirt's back swings in under a hero sat on the floor (rad: `Skirt.update`'s `tuck`) */
+export const SKIRT_TUCK = 0.6;
 
 /** How far `s` has him sat, eased (0 standing, 1 sat). */
 export const satBy = (s: SitState | null | undefined): number => (s ? s.w * s.w * (3 - 2 * s.w) : 0);
