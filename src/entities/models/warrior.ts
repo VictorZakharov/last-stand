@@ -2797,7 +2797,8 @@ export function buildWarrior(): Model {
     const sat = st.sit?.w ?? 0;
     shieldHang = damp(shieldHang, Math.max(drinkLift, sat), 12, dt); drinkOn = damp(drinkOn, a?.name === 'drink' ? 1 : 0, 12, dt);
     regrip = drinkOn >= 0.5 ? TAKE_HOLD : Math.max(0, regrip - dt);
-    if (shieldHang > 0.01 && shield.visible) {
+    // (eased off to nothing: cut off at 1%, the shield went 10 cm in that frame as he stood up)
+    if (shieldHang > 1e-4 && shield.visible) {
       root.updateMatrixWorld(true);
       j.elbowL.getWorldPosition(_s1); j.handL.getWorldPosition(_s2);
       const out = sat > drinkLift ? 1 : 0;
