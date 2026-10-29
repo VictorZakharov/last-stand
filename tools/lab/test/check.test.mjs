@@ -181,7 +181,8 @@ test('a job\'s page: shared among the commands that share pages, its own command
   assert.equal(page('eyes'), 'shared');
   assert.equal(page('cast'), 'cast');
   assert.equal(page('hits'), 'hits');
-  assert.equal(page('form'), null);
+  assert.equal(page('form'), 'shared');
+  assert.equal(page('log'), null);
   const twoHanded = (part) => jobsOf({ commands: ['eyes'], classes: ['warrior'], only: `twoHanded-Maul-${part}` })[0];
   assert.equal(twoHanded('row').page, 'shared');
   assert.equal(twoHanded('tempest').page, null);

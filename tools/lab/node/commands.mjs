@@ -387,8 +387,9 @@ function probePath(file) {
  *   its own (`afresh`): one whose results were shown to be the same there as on a page booted for each job, with
  *   `lab check --reuse=false` and `--like`. True: a page any such command ran on; `'own'`: one its own jobs alone ran
  *   on (on a page kept from the gait's and the eyes' jobs, Twin Fangs' blows dealt 10 to 40 more; a cast after
- *   other casts, once the biomes' emitters started again at each set-up, src/world/runPhase.ts). `form` and `log` run
- *   on pages of their own: `log` lists the game's clock, `form`'s runner differed.
+ *   other casts, once the biomes' emitters started again at each set-up, src/world/runPhase.ts). `log` runs on pages
+ *   of its own: it lists the game's clock, which runs on through its cases there (each set-up afresh starts it again),
+ *   and its cases follow on from each other.
  */
 export const COMMANDS = {
   sheet: {
@@ -462,6 +463,7 @@ export const COMMANDS = {
   },
 
   form: {
+    keepsPage: true,
     each(side, options) {
       const listed = { canary: Boolean(options.canary), frames: Boolean(options.frames) };
       return side.command('form', { gear: options.gear, ...listed, pictures: options.pictures !== false });

@@ -36,7 +36,9 @@ folder beside it.
   25 to 30 s with eight at once, and a boot a job was most of a check. A page is kept only for the commands shown to
   come out the same on it as on a page booted for each job (`keepsPage` and `pageKind` in `node/commands.mjs`): most
   share pages whatever ran on them before (`'shared'`), `hits` and `cast` only their own jobs' (`'own'`), and
-  `form`, `log` and the two-hander's eyes jobs boot each (`log` lists the game's clock, `form`'s runner differed).
+  `log` and the two-hander's eyes jobs boot each (`log` lists the game's clock, which runs on through its cases).
+  The set-up takes the view from the top down before it builds the hero again: the frames that take it ran the new
+  hero's legs before he was placed, and a gait after a job through the eyes started from another drop of the hips.
   A cast's frames parted from about 0.6 s on a kept page as the foes came: what the biomes carry from frame to frame
   (what's due of an emitter's next spawn, the gates' pulse, the rune's ease to the run's calm, the crypt's darkening
   outside the wall as the view changes) is started again at each set-up (`src/world/runPhase.ts`, `restartEmitters`
