@@ -443,23 +443,6 @@ function focusPlayer() {
   return G.players.find((p) => !p.local && p.inRun) ?? G.player;
 }
 
-/** each hero's neck over his feet as he last stood (m), and the scratch point for it */
-const standingNeck = new WeakMap<Player, number>();
-const _neck = new THREE.Vector3();
-/** The height the camera frames `p` by: his own, lowered with his neck as he sits (from play: zoomed in over the
- *  shoulder, the camera closed on where a standing hero's shoulders would be, over a seated one's head). */
-function framedHeight(p: Player): number {
-  const neck = p.model.joints?.neck;
-  if (!neck) return p.model.height;
-  const at = neck.getWorldPosition(_neck).y - p.pos.y;
-  if (!p.sitting.pose) {
-    standingNeck.set(p, at);
-    return p.model.height;
-  }
-  const stood = standingNeck.get(p);
-  return stood ? p.model.height * Math.min(1, at / stood) : p.model.height;
-}
-
 /** The run is over for everyone: once the summary is closed, back to the lobby. */
 let runOver = false;
 function checkRunOver() {
@@ -510,7 +493,7 @@ function update(dt: number): void {
   const vs = heroSelectOpen() ? heroSelectShift() : view === 'top' || input.touchMode ? lobbyViewShift() : { x: 0, y: 0 };
   setViewShift(vs.x, vs.y);
   const focus = focusPlayer();
-  updateCamera(dt, focus.pos, framedHeight(focus));
+  updateCamera(dt, focus.pos, focus.framedHeight());
   updateLowLife(dt);
   // through the eyes the body would fill the view (it still casts, animates and blocks): only the
   // arms and what they hold show
