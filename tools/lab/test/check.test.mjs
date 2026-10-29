@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CHECK_CLASSES, CHECK_OFFSETS, CHECK_SPLIT, EYES_ROWS, EYES_SKILLS, RUSH_PARTS, castParts, countsLine, countsOver,
-  eyesParts, jobsOf, longestFirst, offsetsOf, scenariosOf,
+  eyesParts, jobsOf, offsetsOf, scenariosOf,
 } from '../node/check.mjs';
 import { keyedOptions, sideKey } from '../node/sideCache.mjs';
 
@@ -135,12 +135,6 @@ test('Twin Fangs\' blows held to the basic attack\'s pace and to 0.2 s apart, wi
   assert.equal(hits.options.gear, 'dual');
 });
 
-test('the longest last time first, one never timed before them all', () => {
-  const jobs = jobsOf({ commands: ['range', 'stops'], classes: ['warrior', 'mage'] });
-  const order = longestFirst(jobs, { 'range-warrior': 60, 'stops-warrior': 300, 'range-mage': 90 });
-  assert.deepEqual(names(order), ['stops-mage', 'stops-warrior', 'range-mage', 'range-warrior']);
-});
-
 test('the options that bear on a result, sorted; the A/B and how it runs left out', () => {
   const options = { ab: true, profile: true, fresh: true, watch: true, class: 'mage', frames: true, _: [] };
   assert.deepEqual(keyedOptions(options), [['_', []], ['class', 'mage'], ['frames', true]]);
@@ -163,4 +157,15 @@ test('each side\'s counts added up over a hero\'s jobs, this tree\'s first and t
   assert.equal(countsLine(sums, 'abc1234'), 'hops 1 (abc1234 7), gallops 2 (abc1234 0)');
   assert.equal(countsLine(countsOver([{ counts: [{ mine: true, counts: { hops: 2 } }] }]), 'x'), 'hops 2');
   assert.equal(countsLine(countsOver([{ text: 'a job that threw' }]), 'x'), '');
+});
+
+test('a command a check keeps pages for sets each hero up afresh, its other side kept under that option', () => {
+  const jobs = jobsOf({ commands: ['eyes', 'log'], classes: ['warrior'] });
+  assert.ok(jobs.filter((job) => job.command === 'eyes').every((job) => job.options.afresh === true));
+  assert.equal(jobs.find((job) => job.command === 'log').options.afresh, undefined);
+  const [eyes] = jobs;
+  const keyOf = (options) => sideKey({ sha: 'abc', heroClass: 'warrior', command: 'eyes', options });
+  const { afresh, ...without } = eyes.options;
+  assert.equal(afresh, true);
+  assert.notEqual(keyOf(eyes.options), keyOf(without));
 });

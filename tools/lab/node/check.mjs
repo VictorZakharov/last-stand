@@ -3,14 +3,19 @@
 // run (sideCache.mjs). One command at a time, both sides run every time, the mage's cape stepped all along and each
 // gait scenario run again for a film, the same check took 31 to 35 minutes a round; it is run hundreds of times.
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { cpus } from 'node:os';
+import { CheckQueue, pageOf, planOf, taskName, tasksOf } from './checkQueue.mjs';
+import { compareReports } from './checkReports.mjs';
+import { isStopping } from './running.mjs';
 import { exportCommit } from './commits.mjs';
 import { describeError } from './errors.mjs';
+import { COMMANDS as HANDLERS } from './commands.mjs';
 import { COMMANDS } from './options.mjs';
 import { OUT, REPO } from './paths.mjs';
 import { LabSession } from './session.mjs';
 import { Side, copyLabPage } from './side.mjs';
+import { readKept, sideKey } from './sideCache.mjs';
 
 /** where a check writes: each job's report, its pictures in a folder of its own, and the jobs' last durations */
 export const CHECK_DIR = join(OUT, 'check');
@@ -166,10 +171,13 @@ function partsOf(command, starts) {
 /**
  * One job: a command for a hero (or one of its parts, `of`: a scenario from each start, a weapon swung through the
  * eyes), its options, its name (where its report goes) and its group's (the command and hero, whose parts' reports
- * make one).
+ * make one). A command a check may keep a page for (`keepsPage` in commands.mjs) builds the hero afresh at each of its
+ * set-ups (`afresh`), its page kept or not, and its other side is kept under that option too: kept for a key without
+ * it, a warm check found 156 of its 162 other sides missing and ran them again.
  */
 function jobOf(command, heroClass, base, of = null) {
-  const options = { _: [], ...CHECK_OPTIONS[command], ...base, class: heroClass };
+  const afresh = HANDLERS[command]?.keepsPage ? { afresh: true } : {};
+  const options = { _: [], ...CHECK_OPTIONS[command], ...afresh, ...base, class: heroClass };
   const group = `${command}-${heroClass}`;
   if (!of) return { command, heroClass, options, name: group, group };
   const name = `${group}-${of.part}`;
@@ -187,7 +195,6 @@ export function jobsOf(options, plan = CHECK_PLAN) {
   const commands = options.commands ?? Object.keys(plan);
   const base = {};
   if (options.ab) base.ab = options.ab;
-  if (options.fresh) base.fresh = true;
   const jobs = [];
   for (const command of commands) {
     const heroes = (plan[command] ?? classes).filter((hero) => classes.includes(hero));
@@ -196,7 +203,7 @@ export function jobsOf(options, plan = CHECK_PLAN) {
       for (const part of parts) jobs.push(jobOf(command, heroClass, base, part));
     }
   }
-  return jobs;
+  return options.only ? jobs.filter((job) => job.name.includes(options.only)) : jobs;
 }
 
 /** The jobs' durations as the last check found them (s, by name). */
@@ -207,12 +214,6 @@ function lastDurations() {
   } catch {
     return {};
   }
-}
-
-/** The jobs longest first, as they last took (an unknown one first of all): the last to start is a short one. */
-export function longestFirst(jobs, durations) {
-  const cost = (job) => durations[job.name] ?? Infinity;
-  return [...jobs].sort((a, b) => cost(b) - cost(a));
 }
 
 /** `ab`'s commit resolved and exported once, its lab page copied in, before the sessions start side by side. */
@@ -284,6 +285,26 @@ function verdictOf(job, result) {
   return `${job.name}: ${state} in ${result.seconds.toFixed(0)} s${tail}`;
 }
 
+/**
+ * Runs the other side of `job` alone on `session`, kept for the job to read back (sideCache.mjs); logs it only if it
+ * failed (the job, which runs it again then, says why).
+ */
+async function runOther(session, job, started) {
+  const jobStarted = Date.now();
+  session.outRoot = join(CHECK_DIR, job.name);
+  let failed = null;
+  let booting = 0;
+  try {
+    const ran = await session.run({ command: job.command, options: job.options, only: 'other' });
+    if (ran.problems.length) failed = ran.problems.join('; ');
+    booting = ran.booting;
+  } catch (error) {
+    failed = describeError(error).split('\n')[0];
+  }
+  if (failed) logLine(started, `${job.name}, its other side: ${failed}`);
+  return { job, seconds: (Date.now() - jobStarted) / 1000, booting };
+}
+
 /** Runs `job` on `session`, its pictures in its own folder; writes a whole job's report, logs its line. */
 async function runJob(session, job, started) {
   const jobStarted = Date.now();
@@ -291,18 +312,20 @@ async function runJob(session, job, started) {
   let text;
   let ok;
   let counts = [];
+  let booting = 0;
   try {
     const ran = await session.run({ command: job.command, options: job.options });
     text = ran.text;
     ok = ran.problems.length === 0;
     counts = ran.counts;
+    booting = ran.booting;
   } catch (error) {
     text = describeError(error);
     ok = false;
   }
   const seconds = (Date.now() - jobStarted) / 1000;
-  const result = { job, seconds, ok, text, counts };
-  if (!job.part) {
+  const result = { job, seconds, ok, text, counts, booting };
+  if (!job.part && !isStopping()) {
     writeFileSync(join(CHECK_DIR, `${job.name}.txt`), text);
     logLine(started, verdictOf(job, result));
   }
@@ -361,19 +384,71 @@ function joinParts(done, order, started) {
   }
 }
 
-/** A session working through the queue of jobs until it's empty, its pages served by `serving`. */
-async function work(worker, serving, queue, started, done) {
-  const session = await LabSession.open({ worker, serving });
+/**
+ * A session working through the queue until it's empty, its pages served by `serving` (and kept from task to task,
+ * `keepPages`): each task's time in `times`, each job's result in `done`.
+ */
+async function work({ worker, serving, queue, started, done, times, keepPages }) {
+  const session = await LabSession.open({ worker, serving, keepPages });
+  let page = null;
   try {
-    for (let job = queue.shift(); job; job = queue.shift()) done.push(await runJob(session, job, started));
+    for (let next = queue.next(page); next; next = queue.next(page)) {
+      const { task, before } = next;
+      const running = (async () => {
+        await before;
+        if (task.side === 'other') return runOther(session, task.job, started);
+        return runJob(session, task.job, started);
+      })();
+      queue.started(task, running);
+      const result = await running;
+      times[taskName(task)] = timeOf(result, pageOf(task) === page);
+      if (task.side === 'mine') done.push(result);
+      page = pageOf(task);
+    }
   } finally {
     await session.close();
   }
 }
 
+/** What a task took, as durations.json keeps it (s): its own work and its boot, and whether its page was booted
+ *  again for it although the session had one of its side and hero up (`reboots`, checkQueue.mjs `lastRun`). */
+function timeOf(result, samePage) {
+  const boot = Math.round(result.booting * 10) / 10;
+  const step = Math.round((result.seconds - result.booting) * 10) / 10;
+  return { step, boot, reboots: samePage && boot > 0 };
+}
+
+/** The check `tasks` would make in `workers` sessions, by what each last took (`--plan`): logged, session by session,
+ *  with its projected end. */
+function logPlan(tasks, workers, durations) {
+  const plan = planOf(tasks, workers, durations);
+  const clock = (seconds) => {
+    const whole = Math.round(seconds);
+    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+  };
+  plan.sessions.forEach((session, index) => {
+    console.log(`session ${index + 1}: ${session.tasks} tasks, ${session.boots} boots, done at ${clock(session.end)}`);
+  });
+  const work = plan.sessions.reduce((sum, session) => sum + session.end, 0);
+  const boots = plan.sessions.reduce((sum, session) => sum + session.boots, 0);
+  console.log(`projected: ${clock(plan.end)} (${Math.round(work)} s of sessions' time, ${boots} boots of ${plan.boot} s)`);
+}
+
+/** Whether `job`'s other side must run (an A/B's, not kept yet or `fresh`), its key as the session keeps it. */
+function runsOtherOf(sha, fresh) {
+  if (!sha) return () => false;
+  return (job) => {
+    if (fresh) return true;
+    const key = sideKey({ sha, heroClass: job.options.class, command: job.command, options: job.options });
+    return readKept(key) === null;
+  };
+}
+
 /**
  * `lab check`: the jobs run side by side in `--jobs` sessions (as many as there are jobs, up to `MOST_WORKERS` and a
- * core in three), longest first; each report in out/check/<command>-<hero>.txt. Returns the exit status.
+ * core in three), an A/B's other side first where it isn't kept, the longest first, each session's page kept for the
+ * next task of its side and hero (`--reuse=false`: a page booted for each); each report in
+ * out/check/<command>-<hero>.txt. Returns the exit status.
  */
 export async function runCheck(options) {
   const started = Date.now();
@@ -381,22 +456,44 @@ export async function runCheck(options) {
   const other = prepareOtherSide(options.ab);
   const sha = other?.sha;
   const jobs = jobsOf(sha ? { ...options, ab: sha } : options);
-  const queue = longestFirst(jobs, lastDurations());
-  const workers = Math.min(options.jobs ?? Math.min(MOST_WORKERS, Math.ceil(cpus().length / 3)), queue.length);
+  const durations = lastDurations();
+  const tasks = tasksOf(jobs, runsOtherOf(sha, options.fresh), durations);
+  const queue = new CheckQueue(tasks);
+  const workers = Math.min(options.jobs ?? Math.min(MOST_WORKERS, Math.ceil(cpus().length / 3)), tasks.length);
+  if (options.plan) {
+    logPlan(tasks, workers, durations);
+    return 0;
+  }
   const serving = servingSides(other);
-  logLine(started, `${queue.length} jobs in ${workers} sessions${sha ? `, against ${sha.slice(0, 7)}` : ''}`);
+  const others = tasks.length - jobs.length;
+  const against = sha ? `, against ${sha.slice(0, 7)} (its side run for ${others}, kept for the rest)` : '';
+  logLine(started, `${jobs.length} jobs in ${workers} sessions${against}`);
   const done = [];
+  const times = {};
+  const keepPages = options.reuse !== false;
+  const each = { serving, queue, started, done, times, keepPages };
   try {
-    await Promise.all(Array.from({ length: workers }, (_, index) => work(index + 1, serving, queue, started, done)));
+    await Promise.all(Array.from({ length: workers }, (_, index) => work({ worker: index + 1, ...each })));
   } finally {
     await Promise.allSettled([serving.repo.server?.close(), serving.other?.server?.close()]);
   }
+  // (stopped: what failed as its browsers closed is no result, and its time no job's)
+  if (isStopping()) return 1;
   joinParts(done, jobs.map((job) => job.name), started);
-  const durations = { ...lastDurations() };
-  for (const { job, seconds } of done) durations[job.name] = Math.round(seconds);
-  writeFileSync(DURATIONS, JSON.stringify(durations, null, 2));
+  writeFileSync(DURATIONS, JSON.stringify({ ...durations, ...times }, null, 2));
   const failed = done.filter((result) => !result.ok);
   const shown = relative(REPO, CHECK_DIR).split('\\').join('/');
   logLine(started, `done: ${done.length - failed.length} ok, ${failed.length} failed; the reports in ${shown}`);
-  return failed.length ? 1 : 0;
+  const unlike = options.like ? logLikeness(jobs, options.like, started) : 0;
+  return failed.length || unlike ? 1 : 0;
+}
+
+/** Each report this check wrote against `like`'s of the same name (`--like`), logged; how many differ. */
+function logLikeness(jobs, like, started) {
+  const names = [...new Set(jobs.map((job) => `${job.group}.txt`))];
+  const compared = compareReports(CHECK_DIR, resolve(REPO, like), names);
+  const unlike = compared.filter((report) => !report.same);
+  for (const report of unlike) console.log(report.text);
+  logLine(started, `like ${like}: ${compared.length - unlike.length} of ${compared.length} reports the same`);
+  return unlike.length;
 }

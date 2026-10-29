@@ -45,6 +45,18 @@ export async function lowerProcesses(browser) {
   }
 }
 
+/** every browser the lab launched that is still open */
+const OPEN_BROWSERS = new Set();
+
+/** Closes every browser the lab has open (the command was stopped, running.mjs), within `ms`. */
+export async function closeEveryBrowser(ms = 5000) {
+  const closing = Promise.allSettled([...OPEN_BROWSERS].map((browser) => browser.close()));
+  const waited = new Promise((resolve) => {
+    setTimeout(resolve, ms).unref();
+  });
+  await Promise.race([closing, waited]);
+}
+
 /**
  * Launches a browser in its native headless mode: Playwright's Chromium (npx playwright install chromium), else Edge
  * or Chrome. (`channel: 'chromium'` is the full browser run headless, not Playwright's separate headless shell, a
@@ -55,6 +67,8 @@ export async function launchBrowser() {
   for (const channel of CHANNELS) {
     try {
       const browser = await chromium.launch({ headless: true, channel, args: gpuArgs() });
+      OPEN_BROWSERS.add(browser);
+      browser.on('disconnected', () => OPEN_BROWSERS.delete(browser));
       await lowerProcesses(browser);
       return browser;
     } catch (error) {

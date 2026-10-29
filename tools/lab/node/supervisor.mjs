@@ -7,23 +7,12 @@ import { watch } from 'node:fs';
 import { join } from 'node:path';
 import { LAB, codeStamp } from './codeStamp.mjs';
 import { lowerPriority } from './priority.mjs';
+import { whenStarterGone } from './running.mjs';
 
 /** the server's own entry, run in the child */
 const SERVER_ENTRY = join(LAB, 'node', 'serverProcess.mjs');
 /** how long the code must be left alone after a change before the server starts again, ms */
 const CODE_SETTLE_MS = 300;
-/** how often the supervisor checks that whatever started it is still there, ms */
-const PARENT_CHECK_MS = 2000;
-
-/** Whether a process is alive. */
-function isAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /** Sends the server a message, if it can still hear one (it may be on its way out). */
 function tell(child, message) {
@@ -88,10 +77,9 @@ export function supervise() {
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
-  const parent = process.ppid;
-  setInterval(() => {
-    if (!isAlive(parent)) stop();
-  }, PARENT_CHECK_MS).unref();
+  // (every process above it: a task stopped on Windows kills its own process alone, and the shells between it and
+  // the supervisor lived on)
+  whenStarterGone(stop);
 
   start();
 }

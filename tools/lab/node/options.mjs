@@ -1741,6 +1741,27 @@ export const COMMANDS = {
         usage: 'n',
         help: 'how many moments each gait scenario starts from, its counts added up (5 by default, at most 8)',
       },
+      reuse: {
+        kind: 'switch',
+        help: 'each session\'s page kept for its next job of the same side and hero (=false: a page booted for each '
+          + 'job, to show the reports come out the same)',
+      },
+      only: {
+        kind: 'text',
+        usage: 'text',
+        help: 'only the jobs whose name has this in it (eyes-warrior-dual: the eyes\' jobs with two weapons)',
+      },
+      plan: {
+        kind: 'switch',
+        help: 'run nothing: the order the sessions would take the jobs in and when each would be done, by what each '
+          + 'took last time (tools/lab/out/check/durations.json)',
+      },
+      like: {
+        kind: 'text',
+        usage: 'dir',
+        help: 'every report compared line by line with the one of its name in dir (a copy of an earlier check\'s '
+          + 'tools/lab/out/check), how each run went aside: fails on any that differs',
+      },
       ab: COMMON_OPTIONS.ab,
       fresh: COMMON_OPTIONS.fresh,
     },

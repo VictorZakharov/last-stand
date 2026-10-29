@@ -379,7 +379,14 @@ function probePath(file) {
  * - `textOf(result)` is the result as text, which an A/B compares line by line;
  * - `problemsOf(result)` the problems it found, which fail the command;
  * - `countsOf(result)`, when there is one, what it counted by name, which a check adds up over a hero's jobs;
- * - `pictures(before, after)` pairs the pictures an A/B compares, for a command that takes them.
+ * - `pictures(before, after)` pairs the pictures an A/B compares, for a command that takes them;
+ * - `countsCompiles`, for a command that counts the shaders compiled after loading: a check runs it on a kept page
+ *   only while the page has compiled nothing since it loaded (side.mjs `ready`);
+ * - `keepsPage` (true, or by the options), for a command a check may run on a page its jobs before it ran on
+ *   (session.mjs `keepPages`, `keepsPageFor`), each of its set-ups in a check building the hero afresh from the boot's
+ *   storage (`afresh`): one whose results were shown to be the same there as on a page booted for each job, with
+ *   `lab check --reuse=false` and `--like`. `form` and `log` run on pages of their own: `log` lists the game's clock,
+ *   and `form`'s runner differed.
  */
 export const COMMANDS = {
   sheet: {
@@ -409,6 +416,7 @@ export const COMMANDS = {
   },
 
   carry: {
+    keepsPage: true,
     each(side, options) {
       const canary = Boolean(options.canary);
       return side.command('carry', { fixture: fixtureFrom(options), canary, frames: Boolean(options.frames) });
@@ -418,6 +426,7 @@ export const COMMANDS = {
   },
 
   gait: {
+    keepsPage: true,
     each(side, options) {
       return side.command('gait', {
         scenarios: options.scenarios,
@@ -464,6 +473,7 @@ export const COMMANDS = {
   },
 
   stops: {
+    keepsPage: true,
     each(side, options) {
       const listed = { frames: Boolean(options.frames), trace: Boolean(options.trace) };
       return side.command('stops', { scenarios: options.scenarios, only: options.only, ...listed });
@@ -473,6 +483,7 @@ export const COMMANDS = {
   },
 
   range: {
+    keepsPage: true,
     each(side, options) {
       return side.command('range', {
         scenarios: options.scenarios,
@@ -500,6 +511,7 @@ export const COMMANDS = {
   },
 
   feet: {
+    keepsPage: true,
     each(side, options) {
       return side.command('feet', {
         scenarios: options.scenarios,
@@ -611,6 +623,8 @@ export const COMMANDS = {
   },
 
   cast: {
+    keepsPage: true,
+    countsCompiles: true,
     check(options) {
       const wrong = options.times.find((time) => !(Number(time) >= 0));
       if (wrong !== undefined) throw labError(`cast --times: ${wrong} is not a number of seconds`);
@@ -725,6 +739,7 @@ export const COMMANDS = {
   },
 
   draw: {
+    countsCompiles: true,
     async each(side, options) {
       // (a view at a time, each set up in it: through the eyes the bow is posed for the view)
       const reports = [];
@@ -768,6 +783,7 @@ export const COMMANDS = {
   },
 
   death: {
+    countsCompiles: true,
     each(side, options) {
       const command = {
         fixture: fixtureFrom(options),
@@ -787,6 +803,7 @@ export const COMMANDS = {
   },
 
   hits: {
+    keepsPage: true,
     check(options) {
       if (options.apart !== undefined && !(options.apart > 0)) throw labError('hits --apart: more than 0 s');
     },
@@ -879,6 +896,7 @@ export const COMMANDS = {
   },
 
   rush: {
+    keepsPage: true,
     each(side, options) {
       const command = {
         fixture: fixtureFrom(options),
@@ -898,6 +916,7 @@ export const COMMANDS = {
   },
 
   held: {
+    countsCompiles: true,
     each(side, options) {
       const command = {
         fixture: fixtureFrom(options),
@@ -957,6 +976,7 @@ export const COMMANDS = {
   },
 
   compiles: {
+    countsCompiles: true,
     each(side, options) {
       const command = {
         biomes: options.biomes,
@@ -1212,6 +1232,10 @@ export const COMMANDS = {
   },
 
   eyes: {
+    // (a two-hander's on a page of its own: one kept from the jobs before still turned its forearm past its range on 9
+    // frames more of a cleave with pauses, every set-up afresh, its view taken from the top down and the boot's
+    // storage put back; what else carries over isn't found yet)
+    keepsPage: (options) => options.gear !== 'twoHanded',
     check(options) {
       if (options.times !== undefined && !(options.times >= 1)) throw labError('eyes --times: at least 1');
       if (options.every !== undefined && !(options.every >= 1)) throw labError('eyes --every: at least 1');
@@ -1459,6 +1483,7 @@ export const COMMANDS = {
   },
 
   swing: {
+    keepsPage: true,
     check(options) {
       if (options.grip?.length !== options.way?.length) throw labError('swing: --grip with a --way for each');
     },

@@ -24,7 +24,7 @@ import { CANARY_CAUGHT as WEAPON_CAUGHT, EDGE_OFF_MOST, WeaponFloor, bladeCanary
 import { BODY_CANARY_CAUGHT, WeaponBody, bodyCanary } from './weaponBody';
 import { WeaponOnFoe, foeCanary } from './weaponOnFoe';
 import { WeaponPath } from './weaponPath';
-import { POSE_MOST, PoseCost } from './poseCost';
+import { POSE_MOST, POSE_ONCE_MOST, PoseCost } from './poseCost';
 import { armsInBody, armsInCanary, deepestArm, describeArmsIn, type ArmsInSeen } from './armsIn';
 import { armsInLegs, armsInLegsCanary, type ArmInLeg } from './armsInLegs';
 import type { EnemyId } from '../../../src/data/enemies';
@@ -143,7 +143,7 @@ export function wristCanary(lab: Lab): string[] {
     const ulnar = -angles['wristR.radial'];
     const [wanted, other] = reads === 'flexion' ? [flexion, ulnar] : [ulnar, flexion];
     const near = Math.abs(wanted - angle) <= WRIST_CANARY_NEAR && Math.abs(other) <= WRIST_CANARY_NEAR;
-    const read = `bent ${angle}° (${reads}), read flexion ${flexion.toFixed(0)}°, ulnar ${ulnar.toFixed(0)}°`;
+    const read = `bent ${angle}° (${reads}), read flexion ${wholeDegrees(flexion)}°, ulnar ${wholeDegrees(ulnar)}°`;
     return `${near ? 'caught' : 'missed'}: ${read}`;
   });
   fist.quaternion.copy(was);
@@ -756,9 +756,15 @@ export function lettingGo(report: RangeReport): string[] {
 /** Each scenario whose blow met the floor flat or sideways, as a problem ("nobody hits like this"). */
 /** Each scenario with a frame whose pose took longer than `POSE_MOST`, as a problem. */
 export function slowPose(report: RangeReport): string[] {
-  return report.slowPose.map((line) => `range: a frame's pose took over ${POSE_MOST} ms: ${line}`);
+  const most = `over ${POSE_MOST} ms on two frames or more, or ${POSE_ONCE_MOST} on one`;
+  return report.slowPose.map((line) => `range: the pose took ${most}: ${line}`);
 }
 
 export function bladeAcross(report: RangeReport): string[] {
   return report.bladeAcross.map((line) => `range: the blade met the floor off the blow's line: ${line}`);
+}
+
+/** An angle in whole degrees, a hair under nought said as 0 (`-0`, by the last bits of a float, came and went). */
+function wholeDegrees(degrees: number): string {
+  return Math.round(degrees) === 0 ? '0' : degrees.toFixed(0);
 }

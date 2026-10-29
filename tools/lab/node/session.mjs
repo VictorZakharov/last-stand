@@ -48,22 +48,35 @@ function withInsets(screen, insets) {
   return { ...screen, insets: { left, top, right, bottom } };
 }
 
+/** Whether a check may run `handler`'s command with `options` on a page its jobs before ran on (`keepsPage`). */
+function keepsPageFor(handler, options) {
+  const keeps = handler.keepsPage;
+  return typeof keeps === 'function' ? keeps(options) : Boolean(keeps);
+}
+
 export class LabSession {
   /**
    * Opens a session: the browser launched, nothing served or booted until a command needs it. A check's sessions run
    * side by side, each its own `worker` (0 for the one the server keeps), their pages served by the check's servers
    * (`serving`: a side for this tree, and one for the other commit, which serve and boot nothing themselves).
    */
-  static async open({ worker = 0, serving = null } = {}) {
+  static async open({ worker = 0, serving = null, keepPages = false } = {}) {
     mkdirSync(OUT, { recursive: true });
     useLocalTemp(OUT);
-    return new LabSession(await launchBrowser(), worker, serving);
+    const session = new LabSession(await launchBrowser(), worker, serving);
+    session.keepPages = keepPages;
+    return session;
   }
 
   constructor(browser, worker = 0, serving = null) {
     this.browser = browser;
     this.worker = worker;
     this.serving = serving;
+    /**
+     * a page runs one command after another until another hero or boot is asked for, for the commands that keep one
+     * (`keepsPage` in commands.mjs; a check's sessions: a boot a job, 15 to 20 s each, was most of a check)
+     */
+    this.keepPages = false;
     const servedBy = serving?.repo ?? null;
     this.repoSide = new Side({ name: 'this tree', root: REPO, repo: REPO, outDir: OUT, browser, worker, servedBy });
     this.otherSide = null;
@@ -80,13 +93,16 @@ export class LabSession {
    * Runs one command (`{ command, options }`, as options.mjs reads it) on each side it asks for, each on a page
    * booted for it. Resolves with its report (with `--ab` the other commit's first, then how the two sides differ),
    * the problems that fail it (errors in a page, and what the command's own result reports: a canary missed), and
-   * what it counted on each side, for a command that counts (`countsOf`).
+   * what it counted on each side, for a command that counts (`countsOf`), and how long its pages took to boot (s).
    *
    * Each side is the only page open while its turn runs: with two pages alive at once one of them lost the
    * browser's focus (the game lets go of the input on a blur), and a commit compared with itself came out three
    * clip frames apart.
+   *
+   * `only: 'other'` runs the A/B's other side alone and keeps it, run afresh (a check runs every job's so first, side
+   * by side, each session keeping its page for the next; the job then reads it back).
    */
-  async run({ command, options = { _: [] } }) {
+  async run({ command, options = { _: [] }, only = null }) {
     if (command === 'status') return { text: this.status(), problems: [] };
     const relaunched = await this.keepBrowser();
     const handler = COMMANDS[command];
@@ -96,18 +112,23 @@ export class LabSession {
     const boot = bootOf(options);
     const started = Date.now();
     const shown = await this.turnsFor(options);
+    if (only === 'other' && shown.length !== 2) throw labError('only the other side: the command runs no A/B');
     // (this tree's turn first: its page was booted ahead, as the last command finished)
-    const turns = [...shown].reverse();
+    const turns = only === 'other' ? [shown[0]] : [...shown].reverse();
     const heroClass = options.class ?? this.repoSide.heroClass ?? DEFAULT_CLASS;
     const notes = relaunched ? [relaunched] : [];
+    /** how long its pages took to boot, s */
+    let booting = 0;
     const problems = [];
     const resultOf = new Map();
     const randomsOf = new Map();
     const layersOf = new Map();
     for (const turn of turns) {
       const side = turn.side;
+      // (every set-up building the hero afresh, a check's: `afresh` in check.mjs `jobOf`)
+      const afresh = Boolean(options.afresh) && Boolean(handler.keepsPage);
       const key = this.keyOf(side, command, options, heroClass);
-      const kept = key ? readKept(key) : null;
+      const kept = key && only !== 'other' ? readKept(key) : null;
       if (kept) {
         resultOf.set(turn, kept.result);
         notes.push(`${turn.name}: as it ran ${kept.ranAt} (kept in ${cacheShown()}; --fresh runs it again)`);
@@ -117,12 +138,19 @@ export class LabSession {
       }
       const sideNotes = [];
       const sideProblems = [];
-      for (const other of turns) if (other.side !== side) await other.side.closePage();
+      // (one page alive at a time: this tree's closed too when the other side runs alone)
+      for (const other of [this.repoSide, this.otherSide]) if (other && other !== side) await other.closePage();
       const bootStarted = Date.now();
-      if (await side.ready(heroClass, boot)) {
+      // (a page its own command's jobs ran on alone: checkQueue.mjs `pageOf`)
+      const keeps = this.keepPages && keepsPageFor(handler, options) && side.ranCommand === command;
+      const keeping = { used: keeps, clean: Boolean(handler.countsCompiles) };
+      if (await side.ready(heroClass, boot, keeping)) {
         notes.push(`${turn.name}: booted the ${heroClass}${bootText(boot)} (${seconds(bootStarted)})`);
+        booting += (Date.now() - bootStarted) / 1000;
       }
       side.used = true;
+      side.ranCommand = command;
+      side.afresh = afresh;
       if (turn.screen) await side.showOn(turn.screen);
       let tally = null;
       let layers = null;
@@ -176,6 +204,7 @@ export class LabSession {
         keep(key, { result: resultOf.get(turn), notes: sideNotes, problems: sideProblems });
       }
     }
+    if (only === 'other') return { text: notes.join('\n'), problems, counts: [], booting };
     const results = shown.map((turn) => [turn, resultOf.get(turn)]);
     if (randomsOf.size === 2) notes.push(randomsDiffer(randomsOf.get(turns[0]), randomsOf.get(turns[1])));
     if (layersOf.size === 2) notes.push(layersDiffer(layersOf.get(turns[0]), layersOf.get(turns[1])));
@@ -187,7 +216,7 @@ export class LabSession {
     const failed = problems.length ? `FAILED: ${problems.join('; ')}` : null;
     const report = [...notes, text, verdict, failed, `(${seconds(started)})`].filter(Boolean).join('\n');
     const counts = handler.countsOf ? results.map(([turn, result]) => this.countsOn(turn, handler, result)) : [];
-    return { text: report, problems, counts };
+    return { text: report, problems, counts, booting };
   }
 
   /**

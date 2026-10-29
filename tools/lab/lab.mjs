@@ -5,11 +5,27 @@ import { request, sendToServer, waitForChange } from './node/client.mjs';
 import { describeError, labError } from './node/errors.mjs';
 import { parseCommandLine, usage } from './node/options.mjs';
 import { lowerPriority } from './node/priority.mjs';
+import { stopRunning, stopWhenAsked } from './node/running.mjs';
+
+/**
+ * A command that runs its browsers in this process stops when `lab stop` asks it to or what started it is gone
+ * (running.mjs): its browsers closed, then the process. A check stopped by its agent ran on unseen for over an hour,
+ * eight browsers at full load.
+ */
+function stoppable(command) {
+  stopWhenAsked(command, async (why) => {
+    console.error(`lab: ${why}: closing its browsers and stopping`);
+    const { closeEveryBrowser } = await import('./node/browser.mjs');
+    await closeEveryBrowser();
+    process.exit(1);
+  });
+}
 
 /** Runs a command in a session of its own, for when no server is up. */
 async function runAlone(call, priority) {
   console.log('(no lab server is up: booting for this command alone, at '
     + `${priority} priority; npm run lab:serve boots ahead of each)`);
+  stoppable(call.command);
   // (loaded only here: the browser and Vite take a moment to load, and a command sent to the server needs neither)
   const { LabSession } = await import('./node/session.mjs');
   const session = await LabSession.open();
@@ -46,10 +62,12 @@ async function main() {
     return 0;
   }
   if (call.command === 'check') {
+    stoppable('check');
     const { runCheck } = await import('./node/check.mjs');
     return runCheck(call.options);
   }
   if (call.command === 'pwa') {
+    stoppable('pwa');
     const { runPwa } = await import('./node/pwa.mjs');
     return runPwa(call.options);
   }
@@ -61,6 +79,8 @@ async function main() {
   if (call.command === 'stop') {
     const reply = await request('/stop');
     console.log(reply ? reply.text : 'no lab server is up');
+    // (and every command running in a process of its own from this tree: a check, pwa, one run without the server)
+    for (const line of await stopRunning()) console.log(line);
     return 0;
   }
   if (call.command === 'status') {

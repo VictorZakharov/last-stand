@@ -9,6 +9,10 @@ import { timeCalls, type CallTimes, type Timing } from './timing';
 /** a frame's pose may take this long (ms, by the browser's clock): the lab's median is about 1.5, and main's slowest
  *  frame read up to 10 by the noise of a machine shared with other work (the pillar's raycasts took 571) */
 export const POSE_MOST = 20;
+/** but a frame alone over `POSE_MOST` fails only past this (ms): a check's eight sessions at once load the machine, and
+ *  one frame of a scenario read 21 to 23 ms by its noise, the median 2.6 (a slow pose is slow on more than one frame,
+ *  and the canary's one frame reads over 40) */
+export const POSE_ONCE_MOST = 30;
 /** the canary's spin (ms): one frame's pose made this much slower must read as too slow */
 const CANARY_SPIN = 40;
 
@@ -44,9 +48,9 @@ export class PoseCost {
     this.unplant();
   }
 
-  /** whether a frame's pose took longer than `POSE_MOST` */
+  /** whether the poses took longer than `POSE_MOST` on two frames or more, or one longer than `POSE_ONCE_MOST` */
   tooSlow(): boolean {
-    return this.over > 0;
+    return this.over > 1 || this.slowest > POSE_ONCE_MOST;
   }
 
   /** the slowest frame's pose, in words */

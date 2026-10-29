@@ -347,6 +347,10 @@ export class Side {
     this.serverStale = false;
     /** a command has run on the page since it booted */
     this.used = false;
+    /** its commands' set-ups build the hero afresh (session.mjs `afresh`) */
+    this.afresh = false;
+    /** the command last run on its page (a check keeps a page for its own command's jobs alone) */
+    this.ranCommand = null;
     /** called with the file when this tree's source changes (the server boots the next page then) */
     this.onStale = null;
     /** what the page raised or logged as an error since they were last read */
@@ -439,17 +443,38 @@ export class Side {
   /** Whether its page is booted for `heroClass` as `how` asks (`LAB_BOOT`'s fields) from the current source, and no
    *  command has run on it yet. */
   isFresh(heroClass, how = LAB_BOOT) {
-    const alive = this.page && !this.page.isClosed();
-    const booted = this.heroClass === heroClass && this.bootedAs !== null && sameBoot(this.bootedAs, how);
-    return Boolean(alive && !this.stale && !this.used && booted);
+    return this.isBooted(heroClass, how) && !this.used;
   }
 
-  /** Boots a page for `heroClass` as `how` asks unless a fresh one is up already. Returns whether it booted. */
-  async ready(heroClass, how = LAB_BOOT) {
+  /** Whether its page is booted for `heroClass` as `how` asks from the current source, used or not. */
+  isBooted(heroClass, how = LAB_BOOT) {
+    const alive = this.page && !this.page.isClosed();
+    const booted = this.heroClass === heroClass && this.bootedAs !== null && sameBoot(this.bootedAs, how);
+    return Boolean(alive && !this.stale && booted);
+  }
+
+  /**
+   * Boots a page for `heroClass` as `how` asks unless a fresh one is up already, or with `used`, one a command has run
+   * on (a check's, `keepPages` in session.mjs): with `clean` too, only one that has compiled nothing since it loaded,
+   * whose programs are the boot's alone as a fresh page's are (a command that counts the shaders compiled late: a
+   * program an earlier command had compiled was there for the next, which counted none). Returns whether it booted.
+   */
+  async ready(heroClass, how = LAB_BOOT, { used = false, clean = false } = {}) {
     await this.serve();
     if (this.isFresh(heroClass, how)) return false;
+    const kept = used && this.isBooted(heroClass, how);
+    if (kept && !(clean && (await this.compiledSinceLoad()) > 0)) return false;
     await this.boot(heroClass, how);
     return true;
+  }
+
+  /** How many programs its page has compiled since it loaded (src/core/shaders.ts; 0 on a commit without the count). */
+  compiledSinceLoad() {
+    const count = async () => {
+      const shaders = await import('/src/core/shaders.ts');
+      return shaders.programsCompiledInGame?.() ?? 0;
+    };
+    return this.page.evaluate(count);
   }
 
   /**
@@ -464,6 +489,7 @@ export class Side {
     await this.closePage();
     this.heroClass = null;
     this.bootedAs = null;
+    this.ranCommand = null;
     try {
       await this.openPage(heroClass, how);
       const booted = await this.page.evaluate(async () => {
@@ -580,11 +606,11 @@ export class Side {
 
   /** Calls `fn` from page/commands.ts with the lab and `options`; returns its result. */
   command(fn, options) {
-    return this.page.evaluate(async ([fn, options]) => {
+    return this.page.evaluate(async ([fn, options, afresh]) => {
       const commands = await import('/tools/lab/page/commands.ts');
-      window.__lab.begin();
+      window.__lab.begin(afresh);
       return commands[fn](window.__lab, options);
-    }, [fn, options]);
+    }, [fn, options, this.afresh]);
   }
 
   /**

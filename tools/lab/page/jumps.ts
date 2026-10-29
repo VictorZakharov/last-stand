@@ -10,6 +10,10 @@
 
 /** the frames each side of one whose moves it's measured against */
 export const JUMP_ROUND = 3;
+/** how much stiller a frame's moves round it must be than an earlier frame's to be the stillest (m): frames as still
+ *  as each other but for the last bits of a float, the earliest is (a page a check's jobs before had run on picked a
+ *  frame 6 later, its moves a hair less) */
+const STILLER_BY = 1e-4;
 /** a jump moves at least this many times as far as the median of the moves round it */
 export const JUMP_TIMES = 3;
 /** and this many times as far as the slower of the frames either side of it (a dual wielder's cut, fast for three
@@ -129,7 +133,7 @@ export function stillestFrame(frames: readonly JumpFrame[], rest: JumpFrame): nu
   for (let i = JUMP_ROUND; i < frames.length - JUMP_ROUND; i++) {
     if (!frames[i].near) continue;
     const round = median(movesRound(moves, i));
-    if (round < least) {
+    if (round < least - STILLER_BY) {
       least = round;
       stillest = i;
     }
