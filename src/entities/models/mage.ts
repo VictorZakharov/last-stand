@@ -53,6 +53,8 @@ const BOOK_LAY = 1.62, BOOK_LIFT = 0.04;
 const STAFF_LAY = tunable('mageStaffLay', { at: [-0.6, -0.95], over: 0.035, rise: 0.04, rings: 0.45 });
 /** how far down he is as his hand lets go of the staff he lays down (closed round it as it turned down, the wrist went
  *  22 degrees past its range), as the staff goes from it to the floor (from, to), and as the hand goes to his knee */
+/** a robe's panel's lower half's swing sat (rad from straight down): it hangs from the knee */
+const PANEL_HANGS = 0.15;
 const STAFF_LET_GO = 0.5, STAFF_DOWN = [0.3, 1], STAFF_HAND = [0.5, 1];
 const _bookQ = new THREE.Quaternion(), _bookTurn = new THREE.Quaternion(), _bookAxis = new THREE.Vector3();
 const _bookPivot = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
@@ -652,8 +654,9 @@ export function buildMage(): Model {
   // (each half of a panel swung out at least as far as the robe under it, a little clear of it: the robe lies over a raised
   // knee, and swung by the thighs' angles alone a panel hung behind it; in one piece, laid along the robe over a knee raised at
   // a run it stood straight out. `swing` its own swing, both halves' angles from straight down in its pivot's frame turned to
-  // face out; the upper from a hand's breadth down it, as cloth bends over what is just under its top)
-  const overRobe = (f: (typeof flaps)[number], swing: number): [number, number] => {
+  // face out; the upper from a hand's breadth down it, as cloth bends over what is just under its top; the lower half
+  // from `lowFrom`, its own swing)
+  const overRobe = (f: (typeof flaps)[number], swing: number, lowFrom = swing): [number, number] => {
     const P = (over.geo.attributes.position as THREE.BufferAttribute).array as Float32Array, c = Math.cos(f.a), sn = Math.sin(f.a), hw = f.w / 2 + 0.02, o = f.g.position, h = f.len / 2;
     // (only the robe's columns round the panel's own angle: its seam at the front, the first column's angle 0)
     const C = over.cols, span = Math.ceil(((hw / 0.2) / TAU) * (C - 1)) + 1, i0 = Math.round((((f.a / TAU) % 1 + 1) % 1) * (C - 1));
@@ -668,7 +671,7 @@ export function buildMage(): Model {
       return need;
     };
     const up = Math.min(fit(0, 0, 0.15, h, swing), swing + 1);
-    return [up, Math.min(fit(-h * Math.cos(up), h * Math.sin(up), 0, h, swing), swing + 1)];
+    return [up, Math.min(fit(-h * Math.cos(up), h * Math.sin(up), 0, h, lowFrom), lowFrom + 1)];
   };
   void hang; void panel;
 
@@ -1228,10 +1231,14 @@ export function buildMage(): Model {
       if (st.sit) over.keepAbove(floorUnder(skirts[0]));
     }
     else short.update(fL, fR, move, t, dt, legBodies.list, handBodies.list);
+    // (sat, no flutter, and each panel's lower half hanging from the knee as far as the robe under it lets it: swung as
+    // the thigh is, it stood straight out from a raised knee through the hand resting on it, "lots clipping near fire")
+    const sat = satBy(st.sit);
     for (const f of flaps) {
       const wl = clamp(0.5 + Math.sin(f.a) * 0.9, 0, 1);
-      const out = Math.max(-0.05, (fL * wl + fR * (1 - wl)) * Math.cos(f.a)) * 0.85 + 0.26 + move * 0.08 + Math.sin(t * 3 + f.a * 3) * 0.015;
-      const [up, low] = robed ? overRobe(f, out) : [out, out];
+      const flutter = Math.sin(t * 3 + f.a * 3) * 0.015 * (1 - sat);
+      const out = Math.max(-0.05, (fL * wl + fR * (1 - wl)) * Math.cos(f.a)) * 0.85 + 0.26 + move * 0.08 + flutter;
+      const [up, low] = robed ? overRobe(f, out, lerp(out, PANEL_HANGS, sat)) : [out, lerp(out, PANEL_HANGS, sat)];
       f.g.rotation.x = -up; f.knee.rotation.x = up - low;
     }
 
