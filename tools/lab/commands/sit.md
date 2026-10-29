@@ -1,5 +1,8 @@
 # `sit`
 
+The unobstructed front close-up hides the brazier's whole assembly, including its stepped plinth: hiding the flames
+alone left the mage's lower body behind the step. The ordinary views still show the scene as played.
+
 One command of the lab in full, moved here from [`COMMANDS.md`](../COMMANDS.md) (which lists every command, and the
 options every command takes) for its size.
 
