@@ -228,6 +228,7 @@ const _fn = new THREE.Vector3(), _ft = new THREE.Vector3(), _fc = new THREE.Vect
 const SHIELD_SIDE = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2, 0));
 const SHIELD_FRONT = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
 const SIDE_POS = new THREE.Vector3(0.07, -0.02, 0), FRONT_POS = new THREE.Vector3(0, -0.1, 0);
+const HALF_ROUND = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI);
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
@@ -2810,6 +2811,10 @@ export function buildWarrior(): Model {
       n.addScaledVector(a, -a.dot(n)).normalize();
       _sm.makeBasis(_s5.crossVectors(a, n), a, n);
       _sq.setFromRotationMatrix(_sm).premultiply(j.handL.getWorldQuaternion(_shq).invert());
+      // (a round shield, turned half round its face whichever is nearer how it's held: a half turn off, the way it
+      // eased flipped as the hand turned, and it went 49 cm in a frame)
+      _shq.copy(_sq).multiply(HALF_ROUND);
+      if (_shq.angleTo(shield.quaternion) < _sq.angleTo(shield.quaternion)) _sq.copy(_shq);
       shield.quaternion.slerp(_sq, shieldHang);
       // (on a seat, round the fist that holds it, its face out: hung 26 cm down the forearm, it slid back up the arm as he
       // stood, and the fist came out through its face, "whats this hand clipping through shield ?")
