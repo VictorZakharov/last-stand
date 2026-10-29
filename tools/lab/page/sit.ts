@@ -6,7 +6,8 @@
 // seat he stands 3 m off it idle until he has walked there and sat: on its side he stood on, his hips on its top, his
 // feet down or hanging as its height has them, every joint within its range, glancing round; then he's asked to act,
 // a tap and a key held, a step and an attack: up first each time, a tap left undone, a key held done once he's up.
-// The canary raises his body off the seat as he sits.
+// His skirts are followed as he sits, as `coat` follows them standing: from the owner, "on log cloth is jerking few
+// times per sec". The canary raises his body off the seat as he sits.
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
@@ -14,6 +15,7 @@ import { seatSpot, seatTopAt, type Seat } from '../../../src/world/seats';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import { bodyBreaches, grippingSides } from './range';
+import { cm as cmOf, follow, JERK_FROM, skirtsOf } from './coat';
 
 /** What `lab sit` takes. */
 export interface SitOptions {
@@ -21,6 +23,8 @@ export interface SitOptions {
   fixture?: Fixture;
   /** the seats tried, by name (all by default) */
   seats?: string[];
+  /** list every frame his skirts jerked as he sat */
+  frames?: boolean;
   canary?: boolean;
 }
 
@@ -156,13 +160,13 @@ export async function sit(lab: Lab, options: SitOptions): Promise<Report> {
   const cases = CASES.filter((c) => !options.seats?.length || options.seats.includes(c.name));
   const fixture = options.fixture ?? {};
   if (options.canary) return canaryOn(lab, cases[0], fixture, { text, problems, moments });
-  for (const each of cases) await trySeat(lab, each, fixture, false, { text, problems, moments });
+  for (const each of cases) await trySeat(lab, each, fixture, options, { text, problems, moments });
   return { text: text.join('\n'), problems, moments };
 }
 
 /** The canary on one seat: his body raised off it as he sits must be caught as sitting on air. */
 async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Promise<Report> {
-  await trySeat(lab, { ...c, asks: [] }, fixture, true, out);
+  await trySeat(lab, { ...c, asks: [] }, fixture, { canary: true }, out);
   const caught = out.problems.some((problem) => problem.includes('sat on air'));
   out.text.push(`  canary, his body raised ${CANARY_RAISE} m off the seat: ${caught ? 'caught' : 'MISSED'}`);
   const problems = caught ? [] : ['sit: the canary (his body raised off the seat) was missed'];
@@ -170,7 +174,7 @@ async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Prom
 }
 
 /** A seat tried: sat on, read, and got up from by each of its asks. */
-async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, canary: boolean, out: Out): Promise<void> {
+async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOptions, out: Out): Promise<void> {
   if (G.arena.biome !== c.biome) G.arena.setBiome(c.biome);
   const seat = c.pick(G.arena.seats);
   if (!seat) {
@@ -199,7 +203,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, canary: boolean,
   if (stood && stood.over > STOOD_OVER) {
     out.problems.push(`sit: on the ${c.name}, his ${stood.name} stood ${(stood.over * 100).toFixed(0)} cm over the floor`);
   }
-  const reads = await readSat(lab, canary, c.name, out);
+  const reads = await readSat(lab, options, c.name, out);
   judgeSat(c, label, reads, seat, out);
   for (const ask of c.asks) await askOf(lab, c, ask, out);
 }
@@ -328,19 +332,30 @@ async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out): P
 }
 
 /** His sit read for `SAT_FOR` s (the canary raising his body as he sits). */
-async function readSat(lab: Lab, canary: boolean, name: string, out: Out): Promise<Read[]> {
-  const j = lab.joints;
+async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): Promise<Read[]> {
+  const j = lab.joints, canary = !!options.canary;
   let worst: { by: number; name: string; neck: number } | null = null;
   let frames = 0;
+  const skirts = skirtsOf(lab.model.root);
+  let frame = 0;
   const reads = await lab.step(SAT_FOR * RATE, undefined, () => {
     if (canary) j.body.position.y += CANARY_RAISE / j.root.scale.x;
     const read = readNow(lab);
+    // (the first two frames fill each point's last two places)
+    for (const skirt of skirts) follow(skirt, frame, frame >= 2, !!options.frames, j);
+    frame++;
     const past = bodyBreaches(j, grippingSides(lab)).found[0];
     if (past) frames++;
     if (past && (!worst || past.by > worst.by)) worst = { by: past.by, name: past.name, neck: read.neck };
     if (canary) j.body.position.y -= CANARY_RAISE / j.root.scale.x;
     return read;
   });
+  for (const skirt of skirts) {
+    if (!skirt.frames) continue;
+    out.problems.push(`sit: on the ${name} his ${skirt.name} jerked over ${cmOf(JERK_FROM)} cm on ${skirt.frames} `
+      + `frames, the worst ${cmOf(skirt.worst)} cm (${skirt.worstAt})`);
+    out.text.push(...skirt.listed);
+  }
   const found = worst as { by: number; name: string; neck: number } | null;
   if (found) {
     out.problems.push(`sit: on the ${name}, ${found.name} ${found.by.toFixed(0)}° past its range (${frames} frames; `

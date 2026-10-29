@@ -20,7 +20,7 @@ import { buildFire } from './fire';
 import { restingLift, skullGeometry } from './skull';
 import type { Obstacle } from '../types';
 import { Wall } from './wall';
-import { fireSeat, lengthSeat, type Seat } from './seats';
+import { fireSeat, lengthSeat, whereSat, type Seat } from './seats';
 import { valueNoise3 } from '../core/patterns';
 import { growTree, type Grow, type TreeKind } from './ezTrees';
 import { restartsAt, runPhase } from './runPhase';
@@ -496,15 +496,18 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const free = (x: number, z: number, pad: number) => Math.max(Math.abs(x), Math.abs(z)) > h + 0.9 && obstacles.every((o) => Math.hypot(x - o.x, z - o.z) > o.r + pad);
   const weeds = new THREE.InstancedMesh(buildGrassGeo(rng, [0.02, 0.025, 0.018], [0.09, 0.1, 0.05]), weedMat, 700);
   let wi = 0;
-  for (let tries = 0; wi < weeds.count && tries < 12000; tries++) {
+  for (let tries = 0, drawn = 0; drawn < weeds.count && tries < 12000; tries++) {
     const byWall = rng() < 0.55;
     let x: number, z: number;
     // the wall is an octagon: its inner face is furthest out at the corners
     if (byWall) { const a = r(0, TAU); [x, z] = polar((WALL_R - r(0.1, 2.2)) / Math.cos(((a + Math.PI / 8) % (Math.PI / 4)) - Math.PI / 8), a); }
     else { const o = obstacles[Math.floor(rng() * obstacles.length)], a = r(0, TAU), d = o.r + r(0, 0.8); x = o.x + Math.cos(a) * d; z = o.z + Math.sin(a) * d; }
     if (!free(x, z, 0.02)) continue;
-    const s = r(0.6, 1.2);
-    setInstance(weeds, wi++, x, 0, z, 0, r(0, TAU), 0, s, s * r(0.7, 1.2), s);
+    const s = r(0.6, 1.2), turn = r(0, TAU), tall = r(0.7, 1.2);
+    // (none where a hero sits, every number still drawn: one drawn fewer moves every prop placed after it)
+    drawn++;
+    if (whereSat(seats, x, z, 0.15 * s)) continue;
+    setInstance(weeds, wi++, x, 0, z, 0, turn, 0, s, s * tall, s);
   }
   weeds.count = wi;
   weeds.receiveShadow = true;
