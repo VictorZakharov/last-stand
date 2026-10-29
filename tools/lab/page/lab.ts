@@ -586,10 +586,12 @@ export class Lab {
     this.keepUp = [() => holdTheWave(this.foes), this.keepHeroUp];
     await this.until(() => !this.player.casting && !this.player.channel, 400, 'the hero is still busy with a cast');
     if (fixture.fresh) {
-      this.buildHeroAgain();
-      // (and the view taken from the top down, as a booted page's first set-up takes it: a view kept from before held
-      // what it had followed, and a two-hander's cleaves through the eyes came out otherwise on a page a check kept)
+      // (the view taken from the top down, as a booted page's first set-up takes it: a view kept from before held
+      // what it had followed, and a two-hander's cleaves through the eyes came out otherwise on a page a check kept;
+      // taken before the hero is built, as the frames that take it would run his legs before he's placed, and a gait
+      // after a job through the eyes started its settle from another drop of the hips)
       await this.useView('top');
+      this.buildHeroAgain();
     }
     setTunes(fixture.tune ?? {});
     await this.useView(fixture.view ?? 'top');
@@ -685,7 +687,9 @@ export class Lab {
       await this.step(1, () => ({ keys: ['escape'] }));
       const abandon = document.getElementById('btn-abandon');
       if (!abandon) throw new Error('lab: no pause menu to leave the run by');
-      await this.clickOn(abandon);
+      // (clicked as the run is started, by the element: clicked by the mouse, a set-up waited for the menu's slide in
+      // by the browser's clock, 60 ms of its 300)
+      abandon.click();
       await this.until(() => G.mode === 'menu', 600, 'the run never gave way to the lobby');
     }
     G.profile = loadProfile(G.profile.classId);
