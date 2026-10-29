@@ -7,7 +7,10 @@
 // feet down or hanging as its height has them, every joint within its range, glancing round; then he's asked to act,
 // a tap and a key held, a step and an attack: up first each time, a tap left undone, a key held done once he's up.
 // His skirts are followed as he sits, as `coat` follows them standing: from the owner, "on log cloth is jerking few
-// times per sec". The canary raises his body off the seat as he sits.
+// times per sec"; and what he carries (`sitCarried.ts`: moved only in a hand, held as before once he's up) and his
+// legs through his skirts (`sitCloth.ts`), with a film of the way down and up (`sitFilm.ts`). The canary raises his
+// body off the seat as he sits, pushes what he holds out of his hand, turns it in his hand as he gets up, and reads
+// a cloth point at his knee.
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
@@ -15,11 +18,15 @@ import { seatSpot, seatTopAt, type Seat } from '../../../src/world/seats';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import { bodyBreaches, grippingSides } from './range';
-import { cm as cmOf, follow, JERK_FROM, skirtsOf } from './coat';
+import { cm as cmOf, follow, JERK_FROM, skirtsOf, type Followed } from './coat';
 import { WeaponBody } from './weaponBody';
 import { bowOf } from './ranger';
 import { armsInLegs } from './armsInLegs';
 import { armsInBody } from './armsIn';
+import { Carried, heldApart, heldNow, LOOSE_MOST, PALM_AT, turnHeld } from './sitCarried';
+import { legsThrough, legsThroughCanary, THROUGH_FROM, type LegThrough } from './sitCloth';
+import { SitFilm } from './sitFilm';
+import { FRAMED_MOST, neckOnScreen } from './sitFraming';
 
 /** What `lab sit` takes. */
 export interface SitOptions {
@@ -73,7 +80,6 @@ const OFF_LEG = 0.06;
 /** and this far into the bare leg is into it, through the clothes over it (m: the boots, trousers and robe drawn over
  *  the rig's capsules) */
 const IN_LEG = 0.03;
-const PALM_AT = new THREE.Vector3(0, -0.06, -0.02);
 
 /** how far a point of his skirts may wander as he sits still (m): his feet's slow swing and his breath move it a few
  *  centimetres; from the owner, "on log cloth is jerking few times per sec", the drape went round a knee one way and
@@ -97,8 +103,11 @@ const PICTURE_DEEPER = 0.01;
 /** by a fire, his body's way off the way to it at most (degrees): from review, he sat 30 to 45 off it */
 const FACING_FIRE = 15;
 
-/** the canary's raise of his body over the seat (m) */
+/** the canary's raise of his body over the seat (m); its push of what he holds out of his hand, from how far and a
+ *  frame further (m), over which frames he sits; its turn of it in his hand as he's up (rad) */
 const CANARY_RAISE = 0.12;
+const CANARY_PUSH = { from: 0.15, by: 0.01, frames: [60, 90] };
+const CANARY_TURN = 0.5;
 
 /** A seat tried: its name, its biome, how it's picked from the biome's, and whether its feet hang. */
 interface SeatCase {
@@ -143,7 +152,7 @@ const CASES: SeatCase[] = [
   },
   {
     name: 'fire', biome: 'forest', pick: (seats) => seats.find((s) => s.ground), hangs: false, views: FIRE_VIEWS,
-    asks: [{ what: 'attack', held: true }],
+    asks: [{ what: 'step', held: false }, { what: 'attack', held: true }],
   },
   {
     name: 'brazier', biome: 'crypt', pick: (seats) => seats.find((s) => s.ground), hangs: false, views: FIRE_VIEWS,
@@ -162,6 +171,21 @@ function lowestStone(seats: readonly Seat[]): Seat | undefined {
 interface Out {
   text: string[];
   problems: string[];
+  moments: Pictured[];
+  /** the canary's reads of its own pieces: how far what it pushed went with no hand on it (m), and whether what it
+   *  turned in his hand read as held otherwise (each on its own, so a real fault can't pass for it) */
+  canary?: { pushed: number; turned: boolean };
+}
+
+/** What's followed on a seat from its set-up until he's up again: what he carries, his legs through his skirts (the
+ *  deepest, pictured), the film; and what he held before he sat. */
+interface Watch {
+  carried: Carried;
+  film: SitFilm;
+  through: (LegThrough & { at: string }) | null;
+  shown: number;
+  before: ReturnType<typeof heldNow>;
+  canary: boolean;
   moments: Pictured[];
 }
 
@@ -191,10 +215,28 @@ export async function sit(lab: Lab, options: SitOptions): Promise<Report> {
 
 /** The canary on one seat: his body raised off it as he sits must be caught as sitting on air. */
 async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Promise<Report> {
-  await trySeat(lab, { ...c, asks: [] }, fixture, { canary: true }, out);
-  const caught = out.problems.some((problem) => problem.includes('sat on air'));
-  out.text.push(`  canary, his body raised ${CANARY_RAISE} m off the seat: ${caught ? 'caught' : 'MISSED'}`);
-  const problems = caught ? [] : ['sit: the canary (his body raised off the seat) was missed'];
+  out.canary = { pushed: 0, turned: false };
+  await trySeat(lab, { ...c, asks: [{ what: 'step', held: false }] }, fixture, { canary: true }, out);
+  const problems: string[] = [];
+  const pushedTo = CANARY_PUSH.by * (CANARY_PUSH.frames[1] - CANARY_PUSH.frames[0]) / 2;
+  const canaries = [
+    {
+      what: `his body raised ${CANARY_RAISE} m off the seat`,
+      caught: out.problems.some((problem) => problem.includes('sat on air')),
+    },
+    {
+      what: `what he holds pushed out of his hand (${cmOf(out.canary.pushed)} cm read with no hand on it)`,
+      caught: out.canary.pushed >= pushedTo,
+    },
+    { what: 'what he holds turned in his hand as he gets up', caught: out.canary.turned },
+  ];
+  for (const canary of canaries) {
+    out.text.push(`  canary, ${canary.what}: ${canary.caught ? 'caught' : 'MISSED'}`);
+    if (!canary.caught) problems.push(`sit: the canary (${canary.what}) was missed`);
+  }
+  const cloth = legsThroughCanary(lab.joints);
+  out.text.push(`  canary, legs through the skirts: ${cloth}`);
+  if (!cloth.startsWith('caught')) problems.push(`sit: the canary (a cloth point at the knee) was missed`);
   return { text: out.text.join('\n'), problems, moments: out.moments };
 }
 
@@ -208,6 +250,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   }
   const { at, facing } = startOff(seat);
   await lab.setup({ ...fixture, at, facing });
+  const standing = await neckOnScreen(lab);
   lab.player.sits = true;
   const spot = seatSpot(seat, at[0], at[1], lab.player.radius);
   if (!spot) {
@@ -215,7 +258,12 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
     return;
   }
   const label = `${c.name} (top ${seatTopAt(seat, spot.x, spot.z).toFixed(2)} m)`;
-  const sat = await untilSat(lab, label, c.views.slice(0, 2), out);
+  const watch: Watch = {
+    carried: new Carried(lab), film: new SitFilm(c.name, [c.views[0], 'third']), through: null, shown: 0,
+    before: heldNow(lab), canary: !!options.canary, moments: [],
+  };
+  const sat = await untilSat(lab, label, c.views.slice(0, 2), out, watch);
+  watch.film.end('down');
   if (!sat) return;
   const side = (lab.player.pos.x - spot.x) ** 2 + (lab.player.pos.z - spot.z) ** 2;
   if (side > 0.05 ** 2) out.problems.push(`sit: on the ${c.name} he sat ${Math.sqrt(side).toFixed(2)} m off its spot`);
@@ -230,9 +278,60 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
     const over = (stood.over * 100).toFixed(0);
     out.problems.push(`sit: on the ${c.name}, his ${stood.name} stood ${over} cm over the floor`);
   }
-  const reads = await readSat(lab, options, c.name, out);
+  const reads = await readSat(lab, options, c.name, out, watch);
   judgeSat(c, label, reads, seat, out);
-  for (const ask of c.asks) await askOf(lab, c, ask, out);
+  judgeFraming(c.name, standing, await neckOnScreen(lab), out);
+  for (const ask of c.asks) {
+    await askOf(lab, c, ask, out, watch);
+    watch.film.end('up');
+  }
+  judgeWatch(c.name, watch, out);
+}
+
+/** The over-the-shoulder camera zoomed in all the way: his neck as high on the screen sat as standing. */
+function judgeFraming(name: string, standing: number, sat: number, out: Out): void {
+  const off = sat - standing;
+  out.text.push(`    zoomed in over his shoulder, his neck ${sat.toFixed(2)} of the screen's half height sat, `
+    + `${standing.toFixed(2)} standing`);
+  if (Math.abs(off) > FRAMED_MOST) {
+    const way = off < 0 ? 'over' : 'under';
+    out.problems.push(`sit: on the ${name}, zoomed in over his shoulder, the camera frames him `
+      + `${Math.abs(off).toFixed(2)} of the screen's half height ${way} where it frames him standing`);
+  }
+}
+
+/** A frame of what's followed: what he carries, his legs through his skirts (the deepest pictured as it deepens). */
+function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts: Followed[]): void {
+  watch.carried.observe(frame);
+  const through = legsThrough(lab.joints, skirts);
+  if (!through || through.depth <= THROUGH_FROM) return;
+  if (!watch.through || through.depth > watch.through.depth) watch.through = { ...through, at: frame };
+  if (through.depth < watch.shown + PICTURE_DEEPER) return;
+  watch.shown = through.depth;
+  const label = `${name}: his ${through.leg} ${cmOf(through.depth)} cm through his ${through.skirt} (${frame})`;
+  watch.moments.push(closeUp(lab, label, DEEPEST_VIEWS, false));
+}
+
+/** What's followed judged once he's up again: what he carries moved with no hand on it or jumping, his legs
+ *  through his skirts, and the film. */
+function judgeWatch(name: string, watch: Watch, out: Out): void {
+  for (const found of watch.carried.findings()) {
+    if (found.loose > LOOSE_MOST) {
+      out.problems.push(`sit: by the ${name}, his ${found.name} moved ${cmOf(found.loose)} cm with no hand on it `
+        + `(${found.looseFrames} frames, from ${found.looseAt})`);
+    }
+    if (found.jump) {
+      out.problems.push(`sit: by the ${name}, his ${found.name} ${found.jump.by} in a frame (${found.jump.at})`);
+    }
+    const jump = found.jump ? `, ${found.jump.by} in a frame` : '';
+    out.text.push(`    his ${found.name}: ${cmOf(found.loose)} cm with no hand on it${jump}`);
+  }
+  const through = watch.through;
+  if (through) {
+    out.problems.push(`sit: by the ${name}, his ${through.leg} ${cmOf(through.depth)} cm through his ${through.skirt} `
+      + `(${through.at})`);
+  }
+  out.moments.push(...watch.moments.splice(0), ...watch.film.moments());
 }
 
 /** what of a fire hides him from ahead, hidden for `fromBeyond` (the brazier includes its stepped plinth) */
@@ -381,8 +480,9 @@ interface Breached {
 const pastOf = (b: Breached) => `${b.name} ${b.by.toFixed(0)}° past its range`;
 
 /** Frames until he's sat, as he stands idle; whether he did. */
-async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out): Promise<boolean> {
+async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out, watch: Watch): Promise<boolean> {
   const sitting = lab.player.sitting;
+  const skirts = skirtsOf(lab.model.root);
   let walked = false, half = false;
   // (the worst joint past its range sitting down, and standing idle before it: said, not the sit's; and the weapon in
   // his hand through his legs or trunk as he sets it down: from review, a maul's haft through his hip by a fire)
@@ -397,6 +497,8 @@ async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out): P
     const at = w > 0 ? 0 : 1;
     if (past && (!worst[at] || past.by > worst[at].by)) worst[at] = { by: past.by, name: past.name, w };
     if (w > 0) into.observe(lab, `${f}, ${(w * 100).toFixed(0)}% down`);
+    watchFrame(lab, label, `${(w * 100).toFixed(0)}% down`, watch, skirts);
+    watch.film.take(lab, w, 'down');
     if (!half && w >= 0.5) {
       half = true;
       out.moments.push(lab.picture(`${label}: half way down`, views));
@@ -418,18 +520,29 @@ async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out): P
 }
 
 /** His sit read for `SAT_FOR` s (the canary raising his body as he sits). */
-async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): Promise<Read[]> {
+async function readSat(lab: Lab, options: SitOptions, name: string, out: Out, watch: Watch): Promise<Read[]> {
   const j = lab.joints, canary = !!options.canary;
   let worst: { by: number; name: string; neck: number } | null = null;
   let frames = 0;
   const skirts = skirtsOf(lab.model.root);
   const into = new IntoBody(name, true);
   const spans = skirts.map((skirt) => new Spans(skirt.last.length));
+  // (the canary's push read on its own, from just before it)
+  const pushing = canary ? new Carried(lab) : null;
   let frame = 0;
   const reads = await lab.step(SAT_FOR * RATE, undefined, () => {
     if (canary) j.body.position.y += CANARY_RAISE / j.root.scale.x;
+    const pushed = canary ? pushOutOfHand(lab, frame) : null;
     const read = readNow(lab);
     into.observe(lab, `${frame}`);
+    watchFrame(lab, name, `sat, frame ${frame}`, watch, skirts);
+    if (pushing && frame >= CANARY_PUSH.frames[0] - 1 && frame < CANARY_PUSH.frames[1]) {
+      pushing.observe(`${frame}`);
+      if (frame === CANARY_PUSH.frames[1] - 1 && out.canary) {
+        out.canary.pushed = Math.max(0, ...pushing.findings().map((found) => found.loose));
+      }
+    }
+    pushed?.();
     // (the first two frames fill each point's last two places)
     for (const skirt of skirts) follow(skirt, frame, frame >= 2, !!options.frames, j);
     // (once the cloth has settled where he sat: eased, it comes to rest over the first second)
@@ -686,18 +799,70 @@ interface AskRead {
 }
 
 /** He's asked to act from the seat (sat again first if he's up): up before anything, then only a held key's done. */
-async function askOf(lab: Lab, c: SeatCase, ask: Ask, out: Out): Promise<void> {
+async function askOf(lab: Lab, c: SeatCase, ask: Ask, out: Out, watch: Watch): Promise<void> {
   const player = lab.player;
   const sat = (player.sitting.pose?.w ?? 0) >= 1;
-  if (!sat && !(await untilSat(lab, `${c.name} again`, c.views.slice(0, 2), { ...out, moments: [] }))) return;
+  const again = { ...out, moments: [] };
+  if (!sat && !(await untilSat(lab, `${c.name} again`, c.views.slice(0, 2), again, watch))) return;
+  const skirts = skirtsOf(lab.model.root);
   const ahead = new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
   const aim = player.pos.clone().addScaledVector(ahead, 4);
   const input = ask.what === 'step' ? { keys: ['w'] } : { m0: true, aim };
   const frames = Math.round((RISE_MOST + AFTER_UP) * RATE);
-  const reads = await lab.step(frames, (f) => (ask.held || f < TAP ? input : { aim }), (): AskRead => ({
-    w: player.sitting.pose?.w ?? 0, at: player.pos.clone(), cast: Boolean(player.casting || player.channel),
-  }));
-  judgeAsk(`the ${c.name}, ${ask.held ? 'held' : 'tapped'} ${ask.what}`, ask, reads, out);
+  const reads = await lab.step(frames, (f) => (ask.held || f < TAP ? input : { aim }), (): AskRead => {
+    const w = player.sitting.pose?.w ?? 0;
+    // (the way up is followed until he acts: a held attack swings what he holds as it means to)
+    if (!ask.held) watchFrame(lab, c.name, `${(w * 100).toFixed(0)}% down, getting up`, watch, skirts);
+    watch.film.take(lab, w, 'up');
+    return { w, at: player.pos.clone(), cast: Boolean(player.casting || player.channel) };
+  });
+  const what = `the ${c.name}, ${ask.held ? 'held' : 'tapped'} ${ask.what}`;
+  judgeAsk(what, ask, reads, out);
+  if (!ask.held) judgeHeldAgain(lab, what, watch, out);
+}
+
+/** What he held before he sat, held as it was once he's up again (the canary turns it in his hand, read against
+ *  how he holds it now). */
+function judgeHeldAgain(lab: Lab, what: string, watch: Watch, out: Out): void {
+  const now = heldNow(lab);
+  if (watch.canary && out.canary) {
+    const turned = turnHeld(lab, CANARY_TURN);
+    out.canary.turned = !!turned && heldApart(now, heldNow(lab)).length > 0;
+    turned?.();
+  }
+  const apart = heldApart(watch.before, now);
+  for (const piece of apart) {
+    const how = piece.gone ? 'no longer in his hand'
+      : `${cmOf(piece.off)} cm off and ${piece.turned.toFixed(0)}° turned from how he held it`;
+    out.problems.push(`sit: ${what}, his ${piece.name} ${how} once he was up`);
+  }
+}
+
+/** The canary: on `CANARY_PUSH`'s frames, the first piece he holds pushed out of his hand a little further each
+ *  frame (and back after the frame's reads, by what's returned). */
+function pushOutOfHand(lab: Lab, frame: number): (() => void) | null {
+  const [from, to] = CANARY_PUSH.frames;
+  if (frame < from || frame >= to) return null;
+  const palm = lab.joints.handR.localToWorld(PALM_AT.clone());
+  let mesh: THREE.Mesh | undefined;
+  lab.model.root.traverse((object) => {
+    const each = object as THREE.Mesh;
+    if (mesh || !each.isMesh || (each as THREE.SkinnedMesh).isSkinnedMesh || !shown(each)) return;
+    if (_box.setFromObject(each, true).distanceToPoint(palm) < 0.06) mesh = each;
+  });
+  if (!mesh || !mesh.parent) return null;
+  const pushed = mesh;
+  const scale = pushed.parent!.getWorldScale(new THREE.Vector3()).x;
+  const by = (CANARY_PUSH.from + CANARY_PUSH.by * (frame - from)) / scale;
+  const origin = pushed.parent!.getWorldPosition(new THREE.Vector3());
+  const way = pushed.parent!.worldToLocal(origin.clone().add(new THREE.Vector3(1, 0, 0)));
+  way.normalize().multiplyScalar(by);
+  pushed.position.add(way);
+  pushed.updateMatrixWorld(true);
+  return () => {
+    pushed.position.sub(way);
+    pushed.updateMatrixWorld(true);
+  };
 }
 
 /** An ask judged: getting up at once, nothing done until he's up, a tap left undone, a held key done. */
