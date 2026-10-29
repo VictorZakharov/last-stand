@@ -411,8 +411,9 @@ export class Skirt {
   }
 
   /** `fL`, `fR`: how far forward each thigh swings (radians); `move` 0..1; `t`, `dt` in seconds; `legs` and `hands`, the
-   *  limbs it keeps clear of from inside and from outside (the skirt's own space) */
-  update(fL: number, fR: number, move: number, t: number, dt: number, legs?: SkirtBody[], hands?: SkirtBody[]): void {
+   *  limbs it keeps clear of from inside and from outside (the skirt's own space); `settle`, how far it's eased to where
+   *  it's draped instead of put there (0 to 1: sat, `satBy`) */
+  update(fL: number, fR: number, move: number, t: number, dt: number, legs?: SkirtBody[], hands?: SkirtBody[], settle = 0): void {
     const o = this.o, depth = o.depth ?? 0.85, push = o.push ?? 0.8, flare = o.flare ?? 1;
     const p = this.geo.attributes.position as THREE.BufferAttribute, R = this.rest;
     const h = Math.min(dt, 0.05);
@@ -435,8 +436,23 @@ export class Skirt {
       }
     }
     if (legs?.length || hands?.length) this.drape(legs ?? [], hands ?? []);
+    // (eased while sat; followed at once otherwise, so a sit begins from where it was drawn)
+    this.ease(settle, h);
     p.needsUpdate = true;
     vertexNormals(this.geo);
+  }
+
+  /** where it was drawn last frame, eased from */
+  private drawn?: Float32Array;
+  /** The cloth eased from where it was drawn last frame to where it's draped now, by `settle` (0 to 1) of `SETTLE`'s
+   *  ease (s) over `h`. Sat, his raised thighs across every column and his hanging feet swinging slowly, the drape put a
+   *  point between his knees round one or the other as they moved a millimetre, and his robe jumped up to 17 cm a frame,
+   *  a few times a second ("on log cloth is jerking"); walking it follows at once. */
+  private ease(settle: number, h: number): void {
+    const P = (this.geo.attributes.position as THREE.BufferAttribute).array as Float32Array;
+    const was = this.drawn ??= Float32Array.from(P);
+    const k = 1 - settle * Math.exp(-h / SETTLE);
+    for (let n = 0; n < P.length; n++) P[n] = was[n] += (P[n] - was[n]) * k;
   }
 
   /** Every point kept over the floor at `y` (the mesh's own space), the cloth lying on it there: a robe sat in, its hem
@@ -683,6 +699,8 @@ function pull(P: Float32Array, a: number, b: number, max: number, wa: number): v
 const _sp = new THREE.Vector3(), _sq = new THREE.Vector3(), _sab = new THREE.Vector3(), _sn = new THREE.Vector3(), _so = new THREE.Vector3(), _sd = new THREE.Vector3();
 /** how far outside a hand's capsule the cloth beside it is still held in behind it (m): about the skirts' points' spacing */
 const HAND_REACH = 0.035;
+/** how long a sat hero's skirt takes to ease to where it's draped (s): `Skirt.ease` */
+const SETTLE = 0.4;
 /** how far into a leg's gap the cloth between neighbours round a row may dip before it is put round (m): between two points
  *  lying on a thigh the line dips a millimetre or two into the gap, and moving them for it pushed the cloth out into the free
  *  hand's cuff */

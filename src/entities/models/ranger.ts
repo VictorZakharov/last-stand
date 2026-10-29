@@ -1179,7 +1179,7 @@ export function buildRanger(): Model {
     const outer = fp ? [] : !hasBow ? handBodies.list : bow.arrows[0].visible ? outsideNocked : outside;
     // (through the eyes the body isn't drawn, nor its shadow, a layer the camera and the lights don't see: the coat swings
     // undraped, a tenth of the cost)
-    tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt, fp ? undefined : legBodies.list, outer);
+    tunic.update(-j.thighL.rotation.x, -j.thighR.rotation.x, st.move, st.t, dt, fp ? undefined : legBodies.list, outer, satBy(st.sit));
     // (sat on the floor, the coat's hem lies on it)
     if (st.sit) tunic.keepAbove(floorUnder(hem));
     bendShoulders();
