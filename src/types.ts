@@ -446,6 +446,9 @@ export interface Model {
   readonly fists?: readonly Fist[];
   /** a hero's cloth dyed in a player's colour (models/dye.ts, data/heroColours.ts) */
   readonly dye?: Dye;
+  /** how many times as long as the sit's own (`entities/sitting.ts` `SIT`) he takes to sit and to get up, with what
+   *  he has to set down and take up (1 if absent) */
+  readonly sitPace?: number;
   dispose(): void;
 }
 
