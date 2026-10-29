@@ -36,23 +36,31 @@ const _gripWay = new THREE.Vector3();
 const _from = new THREE.Vector3();
 const _to = new THREE.Vector3();
 
+/** What the weapon is read from: the piece in the hand whose parts are read, its grip the frame `along` is
+ *  measured from (the main hand's grip, `Model.tip`'s parent, by default). */
+export type PieceOf = (lab: Lab) => THREE.Object3D | null | undefined;
+
+const mainGrip: PieceOf = (lab) => lab.model.tip?.parent;
+
 /** The frames the weapon was in the body, and the deepest. */
 export class WeaponBody {
   private readonly scenario: string;
+  private readonly pieceOf: PieceOf;
   private frames = 0;
   private deepest: Into | null = null;
   /** each frame it was in the body, as words */
   readonly listed: string[] = [];
 
-  /** `scenario`: the scenario's name, as its listed frames say it */
-  constructor(scenario: string) {
+  /** `scenario`: the scenario's name, as its listed frames say it; `pieceOf`, what's read (a bow, a staff) */
+  constructor(scenario: string, pieceOf: PieceOf = mainGrip) {
     this.scenario = scenario;
+    this.pieceOf = pieceOf;
   }
 
   /** Notes how far into the body the weapon is this frame (`frame`: the frame as the report names it). Returns the
    *  point as words if it's the deepest yet. */
   observe(lab: Lab, frame: string): string {
-    const into = deepestInto(lab, frame);
+    const into = deepestInto(lab, frame, this.pieceOf(lab));
     if (!into || into.depth < INTO_FROM) return '';
     this.frames++;
     this.listed.push(`  ${this.scenario} frame ${frame}: the weapon ${describeInto(into)}`);
@@ -70,6 +78,11 @@ export class WeaponBody {
   /** how many frames it was in the body */
   get count(): number {
     return this.frames;
+  }
+
+  /** how deep it was at its deepest (m) */
+  get depth(): number {
+    return this.deepest?.depth ?? 0;
   }
 }
 
@@ -124,8 +137,7 @@ function partsOf(lab: Lab): Part[] {
 
 /** The weapon's point deepest in the body this frame (none if he holds none): every corner of the surface of the
  *  parts shown in the main hand's grip, against each part of the body. */
-function deepestInto(lab: Lab, at: string): Into | null {
-  const grip = lab.model.tip?.parent;
+function deepestInto(lab: Lab, at: string, grip = mainGrip(lab)): Into | null {
   if (!grip) return null;
   grip.updateWorldMatrix(true, true);
   grip.getWorldPosition(_gripAt);
