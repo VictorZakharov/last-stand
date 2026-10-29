@@ -1469,7 +1469,7 @@ export function buildWarrior(): Model {
    *  stands over his hips (rig units) */
   const PLANT = tunable('warriorPlant', {
     at: [-0.27, 0.46], blade: 0.42, haft: 0.3, deep: [0.12, 0.6], pole: [-0.4, -1, -0.3], palm: [0.015, 0.06], rest: 0.05,
-    stood: 0.7, ease: 0.2, settle: 0.3, lean: 0.8,
+    stood: 0.6, ease: 0.35, settle: 0.4, lean: 0.8,
   });
   /** how each weapon stands: point down, stuck into the floor; on its head; head up, on its haft's butt (a maul and
    *  a greataxe head up, easy to grab) */
@@ -1501,12 +1501,15 @@ export function buildWarrior(): Model {
     landAt: THREE.Vector3; landQ: THREE.Quaternion;
     /** and where the hand was then (its joint's), which it goes on from to where it rests */
     handAt: THREE.Vector3; handQ: THREE.Quaternion;
+    /** and where the fist held it standing as he started (its joint's, in the root's frame) */
+    startAt: THREE.Vector3; startQ: THREE.Quaternion;
   }
   function plantOf(left: boolean, hand: Hand, grip: THREE.Object3D): Planted {
     return {
       left, hand, joint: left ? j.handL : j.handR, grip, shoulder: left ? j.shoulderL : j.shoulderR,
       q: new THREE.Quaternion(), at: new THREE.Vector3(), up: new THREE.Vector3(), on: null, carried: false, turn: -1,
       landAt: new THREE.Vector3(), landQ: new THREE.Quaternion(), handAt: new THREE.Vector3(), handQ: new THREE.Quaternion(),
+      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(),
     };
   }
   const _standQ = new THREE.Quaternion(), _standAt = new THREE.Vector3(), _holdQ = new THREE.Quaternion();
@@ -1515,6 +1518,8 @@ export function buildWarrior(): Model {
   const _standUp = new THREE.Quaternion(), _gripInv = new THREE.Quaternion(), _turnQ = new THREE.Quaternion();
   /** the turns about its length a weapon stood is tried at, for the fist holding it most at ease */
   const PLANT_TURNS = 24, _rootQ = new THREE.Quaternion();
+  /** the most a weapon arm's elbow moves a frame carrying it to where it stands (rig units) */
+  const PLANT_ELBOW = 0.03;
   /** an arm's joints as fitted holding its weapon standing (shoulder, elbow, hand), to ease the plant in from */
   const _fittedArm = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
   /** The arm fitted holding its weapon kept (`keep`), or eased back to by `1 - by` once it's planted. (From the arm the
@@ -1634,9 +1639,16 @@ export function buildWarrior(): Model {
   function plantArm(p: Planted, w: number, weapon: Weapon): void {
     const { hand, joint, grip } = p, side = p.left ? -1 : 1;
     root.updateMatrixWorld(true);
-    // (from the arm as it was fitted holding it, standing: from the pose's own, the fit's slant and turn were gone in
-    // the first frame, and the axe went 81 cm in it)
-    const fromAt = joint.getWorldPosition(_fromAt), fromQ = joint.getWorldQuaternion(_fromQ);
+    // (from the arm as it was fitted holding it, standing, as he started, in his own frame: from the pose's own, the
+    // fit's slant and turn were gone in the first frame, and the axe went 81 cm in it; fitted afresh each frame, the
+    // fit warm-started from the carry's arm changed sides getting up, and the axe went 15 to 20 cm in a frame)
+    root.getWorldQuaternion(_rootQ);
+    if (p.turn < 0) {
+      root.worldToLocal(joint.getWorldPosition(p.startAt));
+      p.startQ.copy(_rootQ).invert().multiply(joint.getWorldQuaternion(_fromQ));
+    }
+    const fromAt = _fromAt.copy(p.startAt).applyMatrix4(root.matrixWorld);
+    const fromQ = _fromQ.copy(_rootQ).multiply(p.startQ);
     const s = _s5.setFromMatrixScale(grip.matrixWorld).y, k = root.scale.x;
     const hips = j.hips.getWorldPosition(_plantHand).y;
     root.localToWorld(_plantHand.set(side * PLANT.at[0], 0, PLANT.at[1]));
@@ -1744,7 +1756,9 @@ export function buildWarrior(): Model {
     // (carried, the wrist's range is the fist's round the grip, which stops the hand's turn at its ends)
     if (p.carried) {
       const vis = gripTurn(hand, grip, _pq);
-      solveArm(j, p.left, { wrist, hand: _fq.multiply(vis), vis, pole, body, flexion: GRIPPED_FLEXION });
+      // (the elbow swung round, not thrown: the hand stopped at its wrist's ends, a change of side turned the axe 20 cm
+      // in a frame as he got up)
+      solveArm(j, p.left, { wrist, hand: _fq.multiply(vis), vis, pole, body, flexion: GRIPPED_FLEXION, maxMove: PLANT_ELBOW });
     } else solveArm(j, p.left, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION });
     // (how far its point is in, which the lab's measure of what goes under the floor allows)
     weapon.group.userData.stuckIn = p.carried ? 0 : sink;
