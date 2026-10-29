@@ -43,9 +43,9 @@ const SLUNG_IN = 1, SLUNG_IN_BACK = 0.94;
  *  hip, clear of the hanging arm; without it at the side of the hip, against the thigh, just behind the arm (at the
  *  back, without the coat, it lay glued to his seat); and how far it draws in along its face without the coat (m) */
 const BOOK_AT = 2.3, BOOK_AT_BARE = 1.95, BOOK_IN = 0.02;
-/** sat on the floor, how far the book hung at his hip swings out about its top to lie on the floor beside him (rad;
- *  hanging, it went 21 cm into the floor), and how far it's lifted as it goes (m) */
-const BOOK_LAY = 1.62, BOOK_LIFT = 0.04;
+/** sat on the floor, the book tips out and rises clear of the floor (rad, m): hanging it went 21 cm into the floor;
+ *  tipped horizontal from its top it stuck straight out from his hip. */
+const BOOK_LAY = 0.8, BOOK_LIFT = 0.12;
 /** sat on the floor, where his staff lies beside him along his way, its crystal ahead (rig units, the root's frame:
  *  its foot out to his left, ahead; its haft's half thickness over the floor), its head tipped up (rad) and its
  *  crystal's rings drawn in (a share). From review: held, his hand went down to its foot by the robe's hem and its
@@ -543,7 +543,7 @@ export function buildMage(): Model {
     const a = BOOK_AT + bookTurn;
     _bookQ.setFromAxisAngle(_bookAxis.set(-Math.cos(a), 0, Math.sin(a)), BOOK_LAY * w);
     book.quaternion.copy(_bookQ.multiply(_bookTurn.setFromAxisAngle(UP, bookTurn)));
-    // (and lifted a little as it goes: its top's chain and corners came under the floor laid flat)
+    // (lifted as it goes so the lower edge clears the floor without turning the book horizontal)
     const pivot = _bookPivot.copy(bookTop).applyAxisAngle(UP, bookTurn).add(bookBase);
     pivot.y += BOOK_LIFT * w;
     book.position.copy(bookTop).applyQuaternion(book.quaternion).negate().add(pivot);
