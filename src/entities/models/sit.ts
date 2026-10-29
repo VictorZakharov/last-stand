@@ -27,21 +27,17 @@ export const SIT_POSE = tunable('sit', {
   /** the way a resting hand's elbow points (out and back, the chest's frame; the left's, the right's mirrored) */
   pole: [1, -0.2, -1],
   /** sat on the floor: the pelvis rolled back (rad: a man's on the floor rolls back, and his hips upright bent 10
-   *  degrees past their range), the knees apart (rad, each thigh out), and a wrist at rest over its knee (as `rest`:
-   *  along the shin from the knee, less up it, and before it), the forearm laid on the knee's top and the hand
-   *  hanging before it, as a man sat on the ground rests (placed down the shin's front, the forearm went 9 to 13 cm
-   *  through the thigh: "ranger hands clipping through legs, in sitting pose near fire") */
+   *  degrees past their range), the knees apart (rad, each thigh out), and a wrist at rest on top of its knee (as
+   *  `rest`, from the knee: along the shin, back up the thigh where less than 0; over it and out to its side), the hand
+   *  palm down over the kneecap ("rest hands on knees, on top of knees"). Wrapped round the shin, the forearm crossed
+   *  the knee's side 8 cm into the thigh; out 4 cm, the elbow was still inside the thigh's line */
   floor: [0.25, 0.22],
-  /** and his forearms resting on his knees, as a man sat on the ground rests them: the elbow on the knee's top (over
-   *  its joint by the thigh's and the forearm's thickness and this gap, and out to its side, rig units: a fixed 0.09
-   *  over it put the warrior's forearm, thicker on a thicker thigh, 6 cm into it), the forearm on from it ahead (its way in the hips' frame: in to
-   *  the middle, down, ahead), the hand hanging past it. With the wrist placed by the knee and the elbow left to the
-   *  arm's reach, the elbows flared out level with the shoulders and the hands lay palm up beside the knees, the
-   *  forearms 5 to 8 cm through the thighs ("ranger hands clipping through legs, in sitting pose near fire") */
-  kneeTop: [0, 0],
-  forearm: [0.25, -0.45, 1],
+  knee: [-0.06, 0.03, 0.08],
+  /** and the way its elbow points (the chest's frame, as `pole`): out to his side, outside the knee. The arm's IK keeps
+   *  the forearm out of the thighs on the floor (`BodyShape.legs`), so this is only where it starts looking */
+  floorPole: [1, -0.3, 0.3],
   /** and on the way down to the floor, the hands carried up and out over the rising knees (rig units, at its middle) */
-  floorLift: [0.15, 0.2],
+  floorLift: [0.1, 0.25],
   /** and a hand that holds something, its wrist let hang over the knee (rad, the palm bent down to the forearm) */
   dangle: 0.6,
 });
@@ -137,18 +133,18 @@ export function restHands(
   j: Joints, s: SitState | null | undefined, sides: readonly number[], turn?: RestTurn, rise = 0, lifted = sides,
 ): void {
   if (!s || s.w <= 0) return;
-  const floor = onFloor(s), [along, over, out] = SIT_POSE.rest;
-  const pole = SIT_POSE.pole, P = j.P, w = satBy(s);
+  const floor = onFloor(s), [along, over, out] = floor ? SIT_POSE.knee : SIT_POSE.rest;
+  const pole = floor ? SIT_POSE.floorPole : SIT_POSE.pole, P = j.P, w = satBy(s);
   j.root.updateMatrixWorld(true);
   for (const side of sides) {
     const left = side === 0, sign = left ? 1 : -1;
     const thigh = left ? j.thighL : j.thighR, hand = left ? j.handL : j.handR;
-    if (floor) onKnee(j, side, _on, _pole);
-    else {
-      thigh.localToWorld(_on.set(sign * out, -P.thighL * along, P.thighR + over + rise));
-      j.chest.worldToLocal(_on);
-      _pole.set(sign * pole[0], pole[1], pole[2]);
-    }
+    // (on the floor, placed from the knee: along the thigh past it, the knees up, the hands were held in the air before
+    // the chest)
+    if (floor) (left ? j.kneeL : j.kneeR).localToWorld(_on.set(sign * out, -P.shinL * along, P.shinR + over));
+    else thigh.localToWorld(_on.set(sign * out, -P.thighL * along, P.thighR + over + rise));
+    j.chest.worldToLocal(_on);
+    _pole.set(sign * pole[0], pole[1], pole[2]);
     j.chest.worldToLocal(hand.getWorldPosition(_now));
     _now.lerp(_on, w);
     // Lift the hands over the rising thighs before resting them, rather than sweeping through them.
@@ -168,51 +164,13 @@ export function restHands(
       continue;
     }
     // (an empty hand laid on the bone it rests on: its fingers along it, its palm onto it. Left with the arm's turn as
-    // it hung, it stood beside the knee palm up, touching nothing. On the floor it hangs over the knee, its fingers
-    // down the shin and its palm in towards the other knee: laid palm onto the shin's front, the forearm had to turn
-    // past its range, and the arm's fit turned it palm out, as if begging)
+    // it hung, it stood beside the knee palm up, touching nothing)
     const bone = floor ? (left ? j.kneeL : j.kneeR) : thigh;
     bone.getWorldQuaternion(_bone);
-    if (floor) hangInward(j, _bone, sign);
     hand.parent!.updateWorldMatrix(true, false);
     hand.parent!.getWorldQuaternion(_q).invert().multiply(_bone);
     hand.quaternion.slerp(_q, w);
   }
-}
-
-const _knee = new THREE.Vector3(), _way = new THREE.Vector3();
-
-/**
- * Arm `side`'s forearm rested on its knee (on the floor): where its wrist goes (`wrist`) and the way its elbow points
- * (`pole`), both in the chest's frame: the elbow on the knee's top, the forearm on ahead from it.
- */
-function onKnee(j: Joints, side: number, wrist: THREE.Vector3, pole: THREE.Vector3): void {
-  const sign = side === 0 ? 1 : -1, P = j.P, k = j.root.scale.x;
-  const [gap, out] = SIT_POSE.kneeTop, [inward, down, ahead] = SIT_POSE.forearm;
-  const up = P.thighR + P.foreR + gap;
-  (side === 0 ? j.kneeL : j.kneeR).getWorldPosition(_knee);
-  j.hips.getWorldQuaternion(_q);
-  _knee.add(_way.set(sign * out, 0, 0).applyQuaternion(_q).multiplyScalar(k));
-  _knee.y += up * k;
-  _way.set(-sign * inward, down, ahead).normalize().applyQuaternion(_q);
-  wrist.copy(_knee).addScaledVector(_way, P.foreL * k);
-  j.chest.worldToLocal(wrist);
-  // (the elbow pointed from the shoulder to the knee's top, so it comes down onto it)
-  j.chest.worldToLocal(_knee);
-  pole.copy(_knee).sub((side === 0 ? j.shoulderL : j.shoulderR).position);
-}
-
-const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _basis = new THREE.Matrix4();
-
-/** `turned`, a shin's turn in the world, made a hand's hanging along it with its palm in towards the hips' middle (the
- *  hand's fingers run down its -y, its palm faces its -z; `sign` 1 the left, -1 the right). */
-function hangInward(j: Joints, turned: THREE.Quaternion, sign: number): void {
-  _y.set(0, 1, 0).applyQuaternion(turned);
-  j.hips.getWorldQuaternion(_q);
-  _z.set(sign, 0, 0).applyQuaternion(_q);
-  _z.addScaledVector(_y, -_z.dot(_y)).normalize();
-  _x.crossVectors(_y, _z);
-  turned.setFromRotationMatrix(_basis.makeBasis(_x, _y, _z));
 }
 
 /** The floor's height under `object` in its own space, a centimetre up (for cloth kept over it: `Skirt.keepAbove`). */

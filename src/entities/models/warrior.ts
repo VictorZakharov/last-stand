@@ -2439,6 +2439,7 @@ export function buildWarrior(): Model {
     if (!(held && plants)) _lifted.push(1);
     if (!(offHeld && !sheathed && plants)) _lifted.push(0);
     restHands(j, st.sit, [0, 1], _sitTurn, SIT_HANDS.rise, _lifted);
+    body.legs = floorSit ? satBy(st.sit) : 0;
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
     else {
       // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
