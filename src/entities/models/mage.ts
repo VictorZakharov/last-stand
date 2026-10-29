@@ -50,12 +50,12 @@ const BOOK_LAY = 1.62, BOOK_LIFT = 0.04;
  *  its foot out to his left, ahead; its haft's half thickness over the floor), its head tipped up (rad) and its
  *  crystal's rings drawn in (a share). From review: held, his hand went down to its foot by the robe's hem and its
  *  haft through his knee. */
-const STAFF_LAY = tunable('mageStaffLay', { at: [-0.6, -0.95], over: 0.035, rise: 0.04, rings: 0.45 });
-/** how far down he is as his hand lets go of the staff he lays down (closed round it as it turned down, the wrist went
- *  22 degrees past its range), as the staff goes from it to the floor (from, to), and as the hand goes to his knee */
+const STAFF_LAY = tunable('mageStaffLay', { at: [-0.6, -0.95], over: 0.035, rise: 0.04, rings: 0.45, swing: 0.6 });
 /** a robe's panel's lower half's swing sat (rad from straight down): it hangs from the knee */
 const PANEL_HANGS = 0.15;
-const STAFF_LET_GO = 0.5, STAFF_DOWN = [0.3, 1], STAFF_HAND = [0.5, 1];
+/** how far down he is as his hand lets go of the staff he lays down (closed round it as it turned down, the wrist went
+ *  22 degrees past its range), as the staff goes from it to the floor (from, to), and as the hand goes to his knee */
+const STAFF_LET_GO = 0.3, STAFF_DOWN = [0.3, 1], STAFF_HAND = [0, 1];
 const _bookQ = new THREE.Quaternion(), _bookTurn = new THREE.Quaternion(), _bookAxis = new THREE.Vector3();
 const _bookPivot = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
 /** a point on the coat's front at x, y, `lift` above it: the tunic's (a round body of the coat's own, narrower over the
@@ -529,6 +529,10 @@ export function buildMage(): Model {
     _layM.compose(at, _layQ, _layS.setScalar(k)).premultiply(_layH.copy(j.handR.matrixWorld).invert());
     _layM.decompose(_layP, _layQ, _layS);
     staff.position.lerp(_layP, w);
+    // (carried out to his side on its way, as the warrior's weapons are set down: turned down in place beside him, its
+    // lower half swept back through his hip and thigh, 4 to 9 cm)
+    _layA.set(-1, 0, 0).transformDirection(root.matrixWorld).transformDirection(_layH);
+    staff.position.addScaledVector(_layA, STAFF_LAY.swing * Math.sin(Math.PI * w));
     staff.quaternion.slerp(_layQ, w);
     staff.userData.stoodOn = false;
     ringA.scale.setScalar(1 - (1 - STAFF_LAY.rings) * w);

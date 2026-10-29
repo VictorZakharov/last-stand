@@ -32,10 +32,16 @@ export const SIT_POSE = tunable('sit', {
    *  hanging before it, as a man sat on the ground rests (placed down the shin's front, the forearm went 9 to 13 cm
    *  through the thigh: "ranger hands clipping through legs, in sitting pose near fire") */
   floor: [0.25, 0.22],
-  knee: [-0.25, -0.02, -0.04],
-  /** and the way its elbow points: out and ahead, outside the knee, the forearm across the knee's top (pointed out and
-   *  back, the forearm lay along the thigh and 5 to 8 cm through it) */
-  floorPole: [1, -0.5, 0.6],
+  /** and his forearms resting on his knees, as a man sat on the ground rests them: the elbow on the knee's top (over
+   *  its joint by the thigh's and the forearm's thickness and this gap, and out to its side, rig units: a fixed 0.09
+   *  over it put the warrior's forearm, thicker on a thicker thigh, 6 cm into it), the forearm on from it ahead (its way in the hips' frame: in to
+   *  the middle, down, ahead), the hand hanging past it. With the wrist placed by the knee and the elbow left to the
+   *  arm's reach, the elbows flared out level with the shoulders and the hands lay palm up beside the knees, the
+   *  forearms 5 to 8 cm through the thighs ("ranger hands clipping through legs, in sitting pose near fire") */
+  kneeTop: [0, 0],
+  forearm: [0.25, -0.45, 1],
+  /** and on the way down to the floor, the hands carried up and out over the rising knees (rig units, at its middle) */
+  floorLift: [0.15, 0.15],
   /** and a hand that holds something, its wrist let hang over the knee (rad, the palm bent down to the forearm) */
   dangle: 0.6,
 });
@@ -128,22 +134,28 @@ const _pole = new THREE.Vector3(), _q = new THREE.Quaternion(), _bone = new THRE
  */
 export function restHands(j: Joints, s: SitState | null | undefined, sides: readonly number[], turn?: RestTurn, rise = 0): void {
   if (!s || s.w <= 0) return;
-  const floor = onFloor(s), [along, over, out] = floor ? SIT_POSE.knee : SIT_POSE.rest;
-  const pole = floor ? SIT_POSE.floorPole : SIT_POSE.pole, P = j.P, w = satBy(s);
+  const floor = onFloor(s), [along, over, out] = SIT_POSE.rest;
+  const pole = SIT_POSE.pole, P = j.P, w = satBy(s);
   j.root.updateMatrixWorld(true);
   for (const side of sides) {
     const left = side === 0, sign = left ? 1 : -1;
     const thigh = left ? j.thighL : j.thighR, hand = left ? j.handL : j.handR;
-    // (on the floor, from the knee down the front of the shin: along the thigh past it, the knees up, the hands were
-    // held in the air before the chest)
-    if (floor) (left ? j.kneeL : j.kneeR).localToWorld(_on.set(sign * out, -P.shinL * along, P.shinR + over));
-    else thigh.localToWorld(_on.set(sign * out, -P.thighL * along, P.thighR + over + rise));
-    j.chest.worldToLocal(_on);
+    if (floor) onKnee(j, side, _on, _pole);
+    else {
+      thigh.localToWorld(_on.set(sign * out, -P.thighL * along, P.thighR + over + rise));
+      j.chest.worldToLocal(_on);
+      _pole.set(sign * pole[0], pole[1], pole[2]);
+    }
     j.chest.worldToLocal(hand.getWorldPosition(_now));
     _now.lerp(_on, w);
     // Lift the hands over the rising thighs before resting them, rather than sweeping through them.
     if (!floor) _now.y += SIT_POSE.handLift * Math.sin(Math.PI * w);
-    _pole.set(sign * pole[0], pole[1], pole[2]);
+    else {
+      // (out early: at the way's own pace, the thigh rose into a hand still hanging at his side, 7 cm, 16% down)
+      const arc = Math.max(Math.sin(Math.PI * Math.sqrt(w)), Math.sin(Math.PI * w));
+      _now.y += SIT_POSE.floorLift[0] * arc;
+      _now.x += sign * SIT_POSE.floorLift[1] * arc;
+    }
     reachArm(left ? j.shoulderL : j.shoulderR, left ? j.elbowL : j.elbowR, P.upperL, P.foreL, _now, _pole);
     if (turn && (turn.roll[side] || turn.bend[side])) {
       hand.rotation.y += sign * turn.roll[side] * w;
@@ -162,6 +174,28 @@ export function restHands(j: Joints, s: SitState | null | undefined, sides: read
     hand.parent!.getWorldQuaternion(_q).invert().multiply(_bone);
     hand.quaternion.slerp(_q, w);
   }
+}
+
+const _knee = new THREE.Vector3(), _way = new THREE.Vector3();
+
+/**
+ * Arm `side`'s forearm rested on its knee (on the floor): where its wrist goes (`wrist`) and the way its elbow points
+ * (`pole`), both in the chest's frame: the elbow on the knee's top, the forearm on ahead from it.
+ */
+function onKnee(j: Joints, side: number, wrist: THREE.Vector3, pole: THREE.Vector3): void {
+  const sign = side === 0 ? 1 : -1, P = j.P, k = j.root.scale.x;
+  const [gap, out] = SIT_POSE.kneeTop, [inward, down, ahead] = SIT_POSE.forearm;
+  const up = P.thighR + P.foreR + gap;
+  (side === 0 ? j.kneeL : j.kneeR).getWorldPosition(_knee);
+  j.hips.getWorldQuaternion(_q);
+  _knee.add(_way.set(sign * out, 0, 0).applyQuaternion(_q).multiplyScalar(k));
+  _knee.y += up * k;
+  _way.set(-sign * inward, down, ahead).normalize().applyQuaternion(_q);
+  wrist.copy(_knee).addScaledVector(_way, P.foreL * k);
+  j.chest.worldToLocal(wrist);
+  // (the elbow pointed from the shoulder to the knee's top, so it comes down onto it)
+  j.chest.worldToLocal(_knee);
+  pole.copy(_knee).sub((side === 0 ? j.shoulderL : j.shoulderR).position);
 }
 
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _basis = new THREE.Matrix4();

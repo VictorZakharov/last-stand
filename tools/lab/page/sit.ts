@@ -20,6 +20,7 @@ import { WeaponBody } from './weaponBody';
 import { bowOf } from './ranger';
 import { armsInLegs } from './armsInLegs';
 import { armsInBody } from './armsIn';
+import { onFloor } from '../../../src/entities/models/sit';
 
 /** What `lab sit` takes. */
 export interface SitOptions {
@@ -89,8 +90,8 @@ const SETTLED = 1.5;
 const INTO_BODY = 0.03;
 /** the views a moment he went into himself is pictured in, close on his hips, his skeleton drawn over him */
 const DEEPEST_VIEWS: ViewName[] = ['right', 'front', 'left', 'above'];
-/** where it's framed: over his hips (m) and from how far */
-const DEEPEST_FRAME = { up: 0.3, distance: 3.2 };
+/** where a close-up of him is framed: over his hips (m) and from how far (on his hips at 1.7, the coat filled it) */
+const CLOSE = { up: 0.3, distance: 3.2 };
 /** how much deeper (m) a moment goes in than the one pictured before it is pictured in its place */
 const PICTURE_DEEPER = 0.01;
 
@@ -259,6 +260,25 @@ function withHidden<T>(hides: (name: string) => boolean, take: () => T): T {
   }
 }
 
+/**
+ * Him pictured close in `views`, framed on his lap, with the fire, the plants and the rocks round him hidden (they
+ * stood between him and the camera), and `bare`, his skirts too and his skeleton drawn over him.
+ */
+function closeUp(lab: Lab, label: string, views: ViewName[], bare: boolean): Pictured {
+  const at = lab.joints.hips.getWorldPosition(new THREE.Vector3());
+  at.y += CLOSE.up;
+  const hides = (part: string) => FIRE_PARTS.includes(part) || PLANTS.test(part) || AROUND.test(part);
+  const skirts = bare ? skirtsOf(lab.model.root).map((skirt) => skirt.mesh) : [];
+  for (const skirt of skirts) skirt.visible = false;
+  const options = { at, distance: CLOSE.distance, look: bare ? 'bones' as const : 'lit' as const };
+  const said = bare ? 'his skirts and what stands round him hidden' : 'what stands round him hidden';
+  try {
+    return withHidden(hides, () => lab.picture(`${label}, ${said}`, views, [], options));
+  } finally {
+    for (const skirt of skirts) skirt.visible = true;
+  }
+}
+
 /** Him sat by a fire pictured from ahead, the fire hidden: the player's camera sees him so from across it, and the
  *  lab's view ahead through it saw nothing of his legs. */
 function fromBeyond(lab: Lab, name: string): Pictured {
@@ -424,6 +444,7 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): P
   });
   for (const said of into.problems()) out.problems.push(`sit: on the ${name}, ${said}`);
   if (into.moment) out.moments.push(into.moment);
+  out.moments.push(closeUp(lab, `${name}: sat, close`, DEEPEST_VIEWS, false));
   skirts.forEach((skirt, i) => {
     const { most, at } = spans[i].widest();
     out.text.push(`    his ${skirt.name}: a point wandered ${cmOf(most)} cm at most (point ${at})`);
@@ -495,20 +516,9 @@ class IntoBody {
     if (this.views.length === 0) return;
     const depth = Math.max(this.arms?.depth ?? 0, ...this.pieces.map((piece) => piece.depth));
     if (depth <= INTO_BODY || depth < (this.shown?.depth ?? 0) + PICTURE_DEEPER) return;
-    const label = `${this.name}: deepest into him, ${cmOf(depth)} cm (frame ${frame}), `
-      + 'his skirts and what stands round him hidden';
-    const hides = (part: string) => FIRE_PARTS.includes(part) || PLANTS.test(part) || AROUND.test(part);
-    // (framed on his lap, his skirts off: on his hips, the coat filled the frame and hid where the arm met the leg)
-    const at = lab.joints.hips.getWorldPosition(new THREE.Vector3());
-    at.y += DEEPEST_FRAME.up;
-    const skirts = skirtsOf(lab.model.root).map((skirt) => skirt.mesh);
-    for (const skirt of skirts) skirt.visible = false;
-    try {
-      const options = { at, distance: DEEPEST_FRAME.distance, look: 'bones' as const };
-      this.shown = { depth, moment: withHidden(hides, () => lab.picture(label, this.views, [], options)) };
-    } finally {
-      for (const skirt of skirts) skirt.visible = true;
-    }
+    const label = `${this.name}: deepest into him, ${cmOf(depth)} cm (frame ${frame})`;
+    // (his skirts off: they hid where the arm met the leg)
+    this.shown = { depth, moment: closeUp(lab, label, this.views, true) };
   }
 
   /** What went in further than `INTO_BODY`, as words. */
@@ -579,10 +589,44 @@ function readNow(lab: Lab): Read {
 
 /** Each empty hand, its palm's gap to his legs. */
 function emptyPalms(lab: Lab): { side: string; gap: number }[] {
-  const sides = [{ side: 'L', hand: lab.joints.handL }, { side: 'R', hand: lab.joints.handR }];
+  const j = lab.joints, pose = lab.player.sitting.pose;
+  const floor = !!pose && onFloor(pose);
+  const sides = [
+    { side: 'L', hand: j.handL, elbow: j.elbowL },
+    { side: 'R', hand: j.handR, elbow: j.elbowR },
+  ];
   return sides
     .filter(({ hand }) => !holdsSomething(hand))
-    .map(({ side, hand }) => ({ side, gap: legGap(lab.joints, hand.localToWorld(_f.copy(PALM_AT))) }));
+    .map(({ side, hand, elbow }) => ({ side, gap: floor ? forearmGap(j, elbow, hand) : palmGap(j, hand) }));
+}
+
+/** How far an empty hand's palm is off his legs (m). */
+function palmGap(j: Lab['joints'], hand: THREE.Object3D): number {
+  return legGap(j, hand.localToWorld(_f.copy(PALM_AT)));
+}
+
+const _elbowAt = new THREE.Vector3(), _wristAt = new THREE.Vector3(), _onForearm = new THREE.Vector3();
+
+/** the points along a forearm read against his legs, as shares of it from the elbow */
+const ALONG_FOREARM = [0, 0.25, 0.5, 0.75];
+
+/**
+ * How far a forearm is off his legs at its nearest (m): on the floor it rests on his knee, the hand hanging past it,
+ * as a man sat on the ground rests (read by the palm, a hand hung before the knee rested on nothing).
+ */
+function forearmGap(j: Lab['joints'], elbow: THREE.Object3D, hand: THREE.Object3D): number {
+  elbow.getWorldPosition(_elbowAt);
+  hand.getWorldPosition(_wristAt);
+  // (its own points: `legGap` uses the module's)
+  const gaps = ALONG_FOREARM.map((share) => {
+    return legGap(j, _onForearm.lerpVectors(_elbowAt, _wristAt, share)) - forearmRadius(j);
+  });
+  return Math.min(...gaps);
+}
+
+/** the forearm's own thickness (m), its surface off its bone */
+function forearmRadius(j: Lab['joints']): number {
+  return j.P.foreR * j.root.scale.x;
 }
 
 /** Whether `hand` holds something: a piece shown under it that isn't skinned (the hand's own is). A weapon stood up
