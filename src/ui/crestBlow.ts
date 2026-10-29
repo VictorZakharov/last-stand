@@ -16,9 +16,10 @@ export function initCrestBlow(): void {
   art = crest.querySelector<HTMLElement>('.logo .logo-art')!;
 }
 
-/** Its frame: counting while the village is `showing`, the crest blown away once it has stayed; put back up as the
- *  lobby goes (`showing` false), for the next time it shows. */
-export function updateCrestBlow(dt: number, showing: boolean): void {
+/** Its frame: counting while the village is `showing`, the crest blown away once it has stayed, or at once when
+ *  `aside` (the village's map open: the crest stood over its title); put back up as the lobby goes (`showing` false),
+ *  for the next time it shows. */
+export function updateCrestBlow(dt: number, showing: boolean, aside = false): void {
   if (!showing) {
     if (state !== 'up') putBack();
     shownFor = 0;
@@ -26,7 +27,7 @@ export function updateCrestBlow(dt: number, showing: boolean): void {
   }
   if (state !== 'up') return;
   shownFor += dt;
-  if (shownFor >= STAYS) void blowAway();
+  if (shownFor >= STAYS || aside) void blowAway();
 }
 
 async function blowAway(): Promise<void> {

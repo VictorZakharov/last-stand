@@ -2,8 +2,8 @@
 // every effect, loot and skill visual (the lobby lets the hero try his skills on its dummies) compiled with the hero
 // as he's built (`compileTheLobby`), then all drawn with the hero wearing all he can (`warmLobby`); the fight's
 // foes are built meanwhile, as it waits on the GPU (`buildAhead`). The rest after it (`warmTheRest`), as two needs
-// (game/warm.ts): the fight's (every foe, the biomes) and the other classes' heroes (who stand in the village's hall
-// of heroes), a part at a time behind the lobby, a step a frame, once the loading screen has left and where this build
+// (game/warm.ts): the fight's (every foe, the biomes) and the other classes' heroes (and the hall of heroes' room they
+// stand in), a part at a time behind the lobby, a step a frame, once the loading screen has left and where this build
 // warmed them on this machine before (they come from the GPU's cache), else at once when something needs them (the
 // heroes' as the hero nears their hall: game/village.ts). Each briefly creates one of
 // everything that brings its own materials, compiles their shaders and clears it all again: with core/shaders.ts
@@ -175,7 +175,8 @@ const dummies = (): THREE.Object3D[] => G.enemies.map((e) => e.obj);
 /** What the lobby shows and can do, warmed before it shows (the lobby's dummies already stand in it, its effects,
  *  loot and skills made with its hero: `compileTheLobby`); the fight's foes built meanwhile (`buildAhead`). With
  *  `heroes` (a first visit, which opens on the hero selection screen), the other heroes too, their programs' links
- *  waited for with the lobby's (warmed after it, in turn, they held the screen back 1.8 s): the `heroes` need warm. */
+ *  waited for with the lobby's (warmed after it, in turn, they held the screen back 1.8 s), then the hall of heroes'
+ *  room drawn in the village's place: the `heroes` need warm. */
 export async function warmLobby(heroes = false): Promise<void> {
   // (the hero's class with all it can wear: equipping anything in the lobby compiles nothing)
   await nextTask();
@@ -194,7 +195,10 @@ export async function warmLobby(heroes = false): Promise<void> {
   performance.measure('warm the lobby', { start, duration: performance.now() - start, detail: took });
   hero.dispose();
   for (const b of others) b.done();
-  if (heroes) markWarm('heroes');
+  if (heroes) {
+    await warmBuilt([hallPart().build()]);
+    markWarm('heroes');
+  }
   // (the outline a held skill draws round a foe: the dummies' meshes drawn into its mask)
   warmOutline(dummies());
   clearEffects(); clearLights(); particles.clear();
@@ -275,8 +279,20 @@ async function buildAhead(parts: Part[]): Promise<void> {
   }
 }
 
-/** The heroes' parts: each other class's hero (`heroModelParts`; the hall they're chosen in is the village's). */
-const heroParts = (): Part[] => heroModelParts();
+/** The heroes' parts: the hall of heroes' room they're chosen in (`hallPart`), and each other class's hero
+ *  (`heroModelParts`). */
+const heroParts = (): Part[] => [hallPart(), ...heroModelParts()];
+
+/** The hall of heroes' room, shown in the village's place (world/heroHall.ts). */
+function hallPart(): Part {
+  return {
+    name: 'hall',
+    build() {
+      const swap = { show: G.arena.hallGroup, hide: G.arena.groupOf(G.arena.place) };
+      return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
+    },
+  };
+}
 
 /** Each other class's hero, with all he can wear, away from the arena, and his skills' samples. */
 function heroModelParts(): Part[] {

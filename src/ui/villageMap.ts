@@ -10,7 +10,6 @@ import {
   CAMPFIRE, COTTAGES, DAIS_EAST, ENTRANCES, GAP_HALF, HALL, NOTICE, TERRACE, VILLAGE_OBJECTS, YARD, portalPlace, yardToWorld,
   type Spot, type VillageObject,
 } from '../data/village';
-import { CLASS_IDS } from '../data/classes/index';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { COTTAGE, PODIUM, SQUARE_EDGE, TOMB, WAY, footpathOf, fromGap, palisadePolygon, roadLines } from '../world/villagePlan';
 import { canvasOf, ctx2d } from '../core/textures';
@@ -19,8 +18,12 @@ import { mulberry } from '../util';
 import { sfx } from '../core/audio';
 import { completeStep } from '../game/training';
 
-/** what the map shows of the world (m): x and z from, to */
-const VIEW = { x0: -39, x1: 39, z0: -31.5, z1: 31.5 };
+/** what the map shows of the world (m): x and z from, to (the crypt's court reaches 46 m east: at 39 it ran off the
+ *  parchment's edge) */
+const VIEW = { x0: -50, x1: 50, z0: -40.4, z1: 40.4 };
+/** the hall of heroes' roof as the map draws it (world/village.ts builds it): how far past the back wall's face it
+ *  reaches, its front's z and half its width with the eaves' overhang (m) */
+const HALL_ROOF = { back: 1.2, front: -12.3, half: 9.2 };
 /** the panels it folds into, and how long it takes to open or fold (s) */
 const PANELS = 4, FOLD_TIME = 0.75;
 /** the ink and washes it's drawn in */
@@ -314,16 +317,15 @@ function drawBuildings(g: CanvasRenderingContext2D, at: At, metre: number): void
   const X = TERRACE.x;
   drawBox(g, at, X, (TERRACE.front + TERRACE.back) / 2, TERRACE.half, (TERRACE.front - TERRACE.back) / 2, 0, STONE);
   drawBox(g, at, X, (TERRACE.stairFoot + TERRACE.front) / 2, TERRACE.stairHalf, (TERRACE.front - TERRACE.stairFoot) / 2, 0, STONE, INK_SOFT);
-  drawBox(g, at, X, HALL.wall - 0.3, 8.6, 0.3, 0, DARK_STONE);
-  for (let i = 0; i < CLASS_IDS.length; i++) {
-    g.beginPath();
-    g.arc(...at(X + (i - (CLASS_IDS.length - 1) / 2) * HALL.gap, HALL.z), 0.7 * metre, 0, Math.PI * 2);
-    g.fillStyle = '#d8d0c0';
-    g.fill();
-    g.strokeStyle = INK;
-    g.lineWidth = 1;
-    g.stroke();
-  }
+  // (the hall a roofed building: its slate roof from the back wall to past the colonnade, its ridge front to back)
+  const back = HALL.wall - HALL_ROOF.back, front = HALL_ROOF.front;
+  drawBox(g, at, X, (front + back) / 2, HALL_ROOF.half, (front - back) / 2, 0, DARK_STONE);
+  g.beginPath();
+  g.moveTo(...at(X, back));
+  g.lineTo(...at(X, front));
+  g.strokeStyle = 'rgba(234, 217, 180, 0.6)';
+  g.lineWidth = Math.max(1, metre * 0.12);
+  g.stroke();
   drawBox(g, at, DAIS_EAST.x, DAIS_EAST.z, DAIS_EAST.half, DAIS_EAST.half, 0, STONE);
   for (const c of COTTAGES) {
     const hx = (COTTAGE.w / 2 + COTTAGE.eave) * c.size, hz = (COTTAGE.d / 2 + COTTAGE.eave) * c.size;

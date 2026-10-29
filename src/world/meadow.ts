@@ -215,11 +215,15 @@ const VERTEX_BLADE = /* glsl */ `
   uvec2 hB = pcg2d(hA ^ uvec2(0x9e3779b9u, 0x85ebca6bu));
   vec4 h = vec4(hA, hB) / 4294967295.0;
   vec2 root = (cellI + h.xy) * uCell;
-  // tufts: the blades pulled towards a centre on a coarse grid, sharing its height and how dry it is
-  vec2 tuftCell = floor(root / 0.7);
-  vec2 tuftAt = (tuftCell + 0.25 + 0.5 * vec2(hash21(tuftCell), hash21(tuftCell + 31.7))) * 0.7;
+  // tufts: the blades pulled towards a centre on a coarse grid, sharing its height and how dry it is. The grid is
+  // looked up through a warp of slow noise, its centres anywhere in their cells and each pulling its own share: with
+  // centres in the middle half of a straight grid, all pulling alike, the tufts stood in rows ("too tiled")
+  vec2 warped = root + (vec2(noise2(root * 0.31), noise2(root * 0.31 + 17.9)) - 0.5) * 1.6;
+  vec2 tuftCell = floor(warped / 0.7);
+  vec2 tuftAt = (tuftCell + vec2(hash21(tuftCell), hash21(tuftCell + 31.7))) * 0.7;
+  tuftAt -= warped - root;
   float tuft = hash21(tuftCell + 7.3);
-  root = mix(root, tuftAt, 0.35);
+  root = mix(root, tuftAt, mix(0.1, 0.45, hash21(tuftCell + 3.1)));
   float d = length(root - uFocus);
   float band = smoothstep(uBand.x, uBand.y, d) * (1.0 - smoothstep(uBand.z, uBand.w, d));
   float grass = meadowAt(root);

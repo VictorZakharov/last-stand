@@ -175,7 +175,7 @@ async function boundsClosed(lab: Lab, canary: boolean): Promise<Checked> {
 async function stairClimbed(lab: Lab, canary: boolean): Promise<Checked> {
   const across = canary ? TERRACE.stairHalf + 2 : 0;
   await stand(lab, [TERRACE.x + across, TERRACE.stairFoot + 1.5], Math.PI);
-  await walkToward(lab, [TERRACE.x + across, HALL.z + 3]);
+  await walkToward(lab, [TERRACE.x + across, HALL.door + 1.2]);
   // (the body's height over the ground he stands on: his position is on the floor's plane)
   const up = G.player.obj.position.y > TERRACE.high - 0.15;
   const { x, z } = G.player.pos, y = G.player.obj.position.y;

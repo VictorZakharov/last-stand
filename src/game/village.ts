@@ -181,7 +181,7 @@ export function updateVillage(): void {
   // (in the close views the pointer is the crosshair's, and picks nothing: the object near is named)
   if (viewMode() !== 'top') pointed = null;
   // (the other heroes readied as he nears their hall, where the warm-up behind the lobby hasn't yet)
-  if (Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.z) < HALL_NEAR) want('heroes');
+  if (Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_NEAR) want('heroes');
   syncLabels();
 }
 

@@ -17,6 +17,7 @@ import type { WeaponStyle } from '../../../src/loot/loadout';
 import type { Model } from '../../../src/types';
 import type { Lab, Report } from './lab';
 import { OpenTones } from './soundsLeft';
+import * as heroesUi from './uiHeroes';
 
 /** What `lab hall` takes. */
 export interface HallOptions {
@@ -101,9 +102,11 @@ export async function toLobby(lab: Lab): Promise<void> {
   await lab.step(LOBBY_FRAMES);
 }
 
-/** The hall opened from the lobby (Change hero), waited for until it's up. */
+/** The hall opened from the lobby (Change hero: in the village's pause menu, Esc first; an older tree's lobby shows
+ *  it, `changeHeroLink` missing there), waited for until it's up. */
 export async function openHall(lab: Lab): Promise<boolean> {
-  const button = document.getElementById('btn-hero');
+  const link = (heroesUi as { changeHeroLink?: (lab: Lab) => Promise<HTMLElement | null> }).changeHeroLink;
+  const button = link ? await link(lab) : document.getElementById('btn-hero');
   if (!button) return false;
   await lab.clickOn(button);
   await lab.until(() => hall.hallOpen(), OPEN_FRAMES, 'hall: the hall to open');

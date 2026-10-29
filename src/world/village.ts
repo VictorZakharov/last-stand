@@ -2,8 +2,8 @@
 // game/village.ts makes its objects work): a green hamlet in a meadow, built once at boot beside the biomes and shown in
 // their place between runs (`Arena`'s place). It's laid out as a hamlet grows: a palisade wandering round it, its roads
 // winding from a cobbled square round a fountain, cottages each turned its own way with a footpath worn from its door,
-// sheds, groves of trees inside and a wood round it. North, up a broad stair, a terrace where the hall of heroes stands
-// in the open (the heroes on plinths before their banners, the stash's chest at its top step); the training yard
+// sheds, groves of trees inside and a wood round it, lamps along its roads. North, up a broad stair, a terrace where the
+// hall of heroes stands, a building its door opens on the heroes' room (the stash's chest at the stair's top); the yard
 // south-east, fenced, its dummies the only place skills are cast; a campfire, the chronicle's lectern on a platform, a
 // notice board. Its two ways out are places of their own beyond gaps in the palisade (world/villageWays.ts): the crypt's
 // walled court and sunken door north-east, the Thornwood's grove south-west, each with its portal. Grass grows wherever
@@ -13,20 +13,19 @@
 // light follows the hour (`daylight`, a uniform's change: nothing compiles), and as a biome it has 10 point lights, two
 // casting the still shadows (the hall's braziers).
 import * as THREE from 'three';
-import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import {
   CAMPFIRE, CHEST, COTTAGES, DAIS_EAST, DAY, ENTRANCES, GAP_HALF, HALL, NOTICE, STEP_RISE, TERRACE, YARD, portalPlace,
   type Cottage, type Spot,
 } from '../data/village';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import {
-  ashlar, bannerCloth, bark, canvasOf, ctx2d, flagstone, granite, limestone, pbrMaterialMaps, slate, soil, textureFromCanvas,
+  ashlar, bark, canvasOf, ctx2d, flagstone, granite, limestone, pbrMaterialMaps, slate, soil, textureFromCanvas,
   wood, cobblestone, grunge,
 } from '../core/textures';
 import { seeThrough } from '../core/seeThrough';
 import { particles, col } from '../fx/particles';
 import { mulberry, rand, TAU } from '../util';
-import { buildBrazier, bannerGeo } from './crypt';
+import { buildBrazier } from './crypt';
 import { buildBonfire } from './forest';
 import { buildFire } from './fire';
 import { boxWithUV, contactShadows, setInstance, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
@@ -47,26 +46,23 @@ import type { Obstacle } from '../types';
 /** the village's environment: a clear sky's, blue overhead and the meadow's green low */
 export const VILLAGE_ENV: EnvColours = { sky: [0.5, 0.62, 0.78], panel: [1.25, 1.2, 1.05] };
 
-/** Where hero `i` of the hall's row stands (on the terrace: his plinth lifts him, `groundHeight`). */
-export const hallSpot = (i: number): THREE.Vector3 =>
-  new THREE.Vector3(TERRACE.x + (i - (CLASS_IDS.length - 1) / 2) * HALL.gap, 0, HALL.z);
-
 /** the relief's grid: a 10 cm cell over the whole village, so a step's edge is sharp under a foot */
 const RELIEF = { cell: 0.1, half: 40 };
 /** a step's run (m): with `STEP_RISE`, a stair a man climbs a step a stride */
 const STEP_RUN = 0.32;
 /** the walls facing a ledge: how thick, and how far over the floor above them they stand (a parapet) */
 const PARAPET = { thick: 0.36, over: 0.75 };
-/** the plinths: two drums, the lower's radius and the upper's, and the step between them (m) */
-const PLINTH = { lower: 0.82, upper: 0.66, step: 0.1 };
-/** the hall's colonnade: its columns (x either side, the row's z), their shaft's radius and height, the lintel's */
+/** the hall's portico: its columns (x either side, their row's z), their shaft's radius and height, the lintel's */
 const COLONNADE = { x: [4.3, 7.6], z: -13.4, radius: 0.36, high: 5.2, lintel: 0.55 };
-/** the hall's back wall: how high over the terrace and how far either way */
-const BACK = { high: 5.4, half: 8.6 };
-/** the braziers on the terrace either side of the row (x, z: the still shadows' lights) and their light */
-const BRAZIERS = { x: 5.9, z: -16.2, glow: 9, flames: 0.7 };
-/** each banner: its top's height over the terrace, how far off the wall it hangs, its scale (`bannerGeo`'s 0.9 m) */
-const BANNER = { top: 4.7, off: 0.28, scale: 1.3 };
+/** the hall's door: its stone frame's width, how far its leaves are set back in the wall, its iron straps' heights */
+const DOOR = { frame: 0.32, set: 0.22, straps: [0.5, 1.7, 2.9] };
+/** the hall's walls: how far either way, how thick (they rise to the portico's entablature) */
+const BACK = { half: 8.6, thick: 0.6 };
+/** the hall's roof: its ridge over the eaves, its slabs' thickness and overhang, its gables' depth, the ceiling's
+ *  planks' thickness and the beams' spacing under it (m) */
+const ROOF = { rise: 2.8, thick: 0.24, over: 0.6, gable: 0.5, ceiling: 0.14, beamGap: 1.6 };
+/** the braziers in the portico either side of the door (x, z: the still shadows' lights) and their light */
+const BRAZIERS = { x: 2.5, z: -13.8, glow: 9, flames: 0.7 };
 /** the palisade: its logs' radius, how tall they stand (from, to), and the gates' gap (m either side of a portal) */
 const PALISADE = { radius: 0.17, low: 4.2, high: 5.4 };
 /** the groves in the village: each one's middle and how many trees (scattered round it where nothing's built) */
@@ -78,6 +74,18 @@ const GROVES: readonly [number, number, number][] = [
 const WOOD = { n: 130, near: 2.4, far: 30, low: 9, high: 20 };
 /** the lamp posts flanking the stair's foot (x either side, z), their lantern's height and light */
 const LAMPS = { x: 3.5, z: -7.0, high: 3.1, color: 0xffb46a, intensity: 4, distance: 11 };
+/** the street lamps (unlit by a point light, `buildStreetLamps`): how far apart along a road and the first from its
+ *  start, how far out past its side (`builtAt` keeps 0.8 m by a road), how clear of any obstacle and of another lamp,
+ *  their pool's width on the ground and its strength by night, and how many round the square (m) */
+const STREET = { every: 6, first: 3, off: 1.1, clear: 0.9, apart: 4.5, pool: 7, night: 0.8, square: 8 };
+/** the motes drawn into a portal (`portalMotes`): how many a second, the vortex's middle's height, the rim they
+ *  start round (m out from the middle) and how far before the gate's face at most */
+const MOTES = { rate: 70, high: 2.2, rim: 1.0, ahead: 2.8 };
+/** each portal's motes' colours, its gate's (`portalMembrane`'s colours in crypt.ts and forest.ts) */
+const MOTE_COLORS: Record<BiomeId, { rim: THREE.Color; core: THREE.Color }> = {
+  crypt: { rim: new THREE.Color(1.0, 0.25, 0.55), core: new THREE.Color(1.0, 0.6, 1.0) },
+  forest: { rim: new THREE.Color(0.45, 0.9, 0.15), core: new THREE.Color(0.7, 1.0, 0.55) },
+};
 /** the yard's torches on its gate posts: their fire's height, their light */
 const YARD_TORCH = { up: 2.25, color: 0xff8a3c, intensity: 3.2, distance: 10 };
 /** the candle on the chronicle's lectern: its light */
@@ -85,7 +93,7 @@ const CANDLE = { color: 0xffc070, intensity: 2.2, distance: 6 };
 
 /** the village's light at each height of the sun (its sine): the night's, the twilight's and the day's */
 // (a bright moonlit night, a golden evening, a clear spring day)
-const NIGHT = { fog: 0x1c2640, sky: [0.02, 0.03, 0.08] as RGB, hemi: 0x6a7cb8, ground: 0x18201a, hemiI: 0.85, light: 0xbcccff, lightI: 1.7, env: 0.32, adapt: 1 };
+const NIGHT = { fog: 0x1c2640, sky: [0.02, 0.03, 0.08] as RGB, hemi: 0x6a7cb8, ground: 0x18201a, hemiI: 1.1, light: 0xbcccff, lightI: 2.1, env: 0.32, adapt: 1 };
 const TWILIGHT = { fog: 0xc89a80, sky: [0.16, 0.2, 0.42] as RGB, hemi: 0xd8b49a, ground: 0x3a3418, hemiI: 1.0, light: 0xffaa60, lightI: 2.8, env: 0.5, adapt: 1.5 };
 const NOON = { fog: 0xb4cce0, sky: [0.16, 0.38, 0.78] as RGB, hemi: 0xd8e8ff, ground: 0x4a5a28, hemiI: 1.45, light: 0xfff4e2, lightI: 4.0, env: 0.75, adapt: 2.3 };
 /** how far the key light (the sun, or by night the moon) stands from the middle, along its way (m) */
@@ -169,7 +177,9 @@ function makeMats(): Mats {
     ashlar: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(stoneMaps, 1, 1.2), color: 0xd0c4b0 }),
     coping: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.2), color: 0x9c968c }),
     granite: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(granite(7), 2, 0.8), color: 0xc8c4c0 }),
-    column: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.6), color: 0x9a948a }),
+    // (stuccoed, the plaster's stained wash: limestone's pits read as pocks on a shaft, a review said, and marble's
+    // maps are slabs; a shaft's own uvs run once round it and once up it, so a tile round and two up are near square)
+    column: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(grunge(), [1, 2], 0.5), color: 0xccc2b0 }),
     // (lime plaster, washed warm and stained: the grunge map's patches under a cream)
     plaster: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(grunge(), 1, 0.6), color: 0xd8c8a8 }),
     timber: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x5a4030 }),
@@ -234,7 +244,7 @@ export function buildVillage(scene: THREE.Group): Village {
   scene.add(buildMeadow(mask, maskTexture, updaters));
   buildSquare(scene, M, obstacles, updaters);
   buildTerrace(scene, wall, levels, M);
-  buildHall(scene, wall, levels, M, rng, updaters);
+  buildHall(scene, wall, M, updaters);
   const lid = buildChest(scene, M, obstacles);
   buildPlatform(scene, wall, levels, M, obstacles, lights);
   buildPalisade(scene, wall, M, rng);
@@ -253,9 +263,11 @@ export function buildVillage(scene: THREE.Group): Village {
   buildBenches(scene, M, obstacles);
   buildNoticeBoard(scene, wall, M);
   for (const s of [-1, 1]) lights.push(buildLamp(scene, TERRACE.x + s * LAMPS.x, LAMPS.z, M, obstacles));
+  const pools = buildStreetLamps(scene, M, obstacles);
   updaters.push(contactShadows(scene, obstacles));
   updaters.push(sky.update);
   updaters.push(chimneySmoke());
+  updaters.push(portalMotes());
 
   let lidOpen = 0, lidWanted = 0;
   updaters.push((dt) => {
@@ -280,6 +292,7 @@ export function buildVillage(scene: THREE.Group): Village {
       sky.set(hour);
       // (the windows lit as the light goes; the lanterns' glass burns the same at any hour)
       M.window.emissiveIntensity = 2.4 * (1 - dayness(hour));
+      pools.opacity = STREET.night * (1 - dayness(hour));
     },
   };
 }
@@ -579,57 +592,90 @@ function cheek(scene: THREE.Object3D, wall: Wall, M: Mats, x: number, z0: number
   wall.add(mesh, true, 'wall', true);
 }
 
-/** The hall of heroes on the terrace: the row's plinths (a relief on the terrace), the back wall with each class's
- *  banner over his plinth, the colonnade either side and its lintel, the two braziers (the still shadows' lights). */
-function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, rng: () => number, updaters: Updater[]): void {
-  const y0 = TERRACE.high;
-  for (const [i] of CLASS_IDS.entries()) {
-    const at = hallSpot(i);
-    const lower = new THREE.CylinderGeometry(PLINTH.lower, PLINTH.lower, PLINTH.step, 40);
-    solid(scene, lower, M.granite).position.set(at.x, y0 + PLINTH.step / 2, at.z);
-    const upperHigh = HALL.plinthTop - PLINTH.step;
-    const upper = new THREE.CylinderGeometry(PLINTH.upper, PLINTH.upper * 1.04, upperHigh, 40);
-    solid(scene, upper, M.granite).position.set(at.x, y0 + PLINTH.step + upperHigh / 2, at.z);
-    levels.paint(at.x - PLINTH.upper, at.z - PLINTH.upper, at.x + PLINTH.upper, at.z + PLINTH.upper,
-      (x, z) => (Math.hypot(x - at.x, z - at.z) <= PLINTH.upper ? y0 + HALL.plinthTop : 0));
-    banner(scene, i, M.iron, rng);
+/** The hall of heroes on the terrace, a building its heroes are chosen in (their room, world/heroHall.ts, shown in the
+ *  village's place as its door is used): walls on every side, a stone-framed double door in the front one under a
+ *  portico of four columns, a roof, and the two braziers before the door (the still shadows' lights). */
+function buildHall(scene: THREE.Object3D, wall: Wall, M: Mats, updaters: Updater[]): void {
+  const y0 = TERRACE.high, X = TERRACE.x;
+  const eaves = 0.72 + COLONNADE.high + COLONNADE.lintel;
+  const back = HALL.wall - BACK.thick, face = HALL.door, front = COLONNADE.z + 0.5;
+  // the back and side walls, a plinth course along their feet
+  wall.add(block(scene, BACK.half * 2, eaves, BACK.thick, X, y0, HALL.wall - BACK.thick / 2, M.ashlar), true, 'wall', true);
+  for (const s of [-1, 1]) {
+    const sideX = X + s * (BACK.half - BACK.thick / 2), sideLen = face - back;
+    wall.add(block(scene, BACK.thick, eaves, sideLen, sideX, y0, back + sideLen / 2, M.ashlar), true, 'wall', true);
+    block(scene, 0.35, 0.45, sideLen, sideX + s * 0.47, y0, back + sideLen / 2, M.coping);
   }
-  // the back wall, a plinth course along its foot
-  const backWall = block(scene, BACK.half * 2, BACK.high, 0.6, TERRACE.x, y0, HALL.wall - 0.3, M.ashlar);
-  wall.add(backWall, true, 'wall', true);
-  block(scene, BACK.half * 2, 0.45, 0.35, TERRACE.x, y0, HALL.wall + 0.17, M.coping);
-  // the colonnade: a pair of columns either side, a lintel over each pair
+  // the front wall either side of the door and over it, its plinth course, the door in its stone frame
+  const { doorHalf: dh, doorHigh: high } = HALL, wing = BACK.half - dh;
+  for (const s of [-1, 1]) {
+    const cx = X + s * (dh + wing / 2);
+    wall.add(block(scene, wing, eaves, BACK.thick, cx, y0, face - BACK.thick / 2, M.ashlar), true, 'wall', true);
+    block(scene, wing - DOOR.frame, 0.45, 0.35, cx + s * DOOR.frame / 2, y0, face + 0.17, M.coping);
+  }
+  block(scene, dh * 2, eaves - high, BACK.thick, X, y0 + high, face - BACK.thick / 2, M.ashlar);
+  hallDoor(scene, M, X, y0, face);
+  // the portico: a pair of columns either side, one entablature across the whole front
   for (const s of [-1, 1]) {
     for (const x of COLONNADE.x) {
-      const cx = TERRACE.x + s * x, cz = COLONNADE.z;
+      const cx = X + s * x, cz = COLONNADE.z;
       wall.add(block(scene, 1.0, 0.4, 1.0, cx, y0, cz, M.granite), true, 'wall', true);
       const shaft = new THREE.CylinderGeometry(COLONNADE.radius * 0.88, COLONNADE.radius, COLONNADE.high, 18);
       solid(scene, shaft, M.column).position.set(cx, y0 + 0.4 + COLONNADE.high / 2, cz);
       block(scene, 0.95, 0.32, 0.95, cx, y0 + 0.4 + COLONNADE.high, cz, M.granite);
     }
-    const [a, b] = COLONNADE.x;
-    block(scene, b - a + 1.1, COLONNADE.lintel, 1.0, TERRACE.x + s * (a + b) / 2, y0 + 0.72 + COLONNADE.high, COLONNADE.z, M.coping);
-    // (a beam from each lintel back to the wall: the colonnade's sides roofed by nothing, open to the sky)
-    block(scene, 0.5, 0.4, COLONNADE.z - HALL.wall, TERRACE.x + s * (a + b) / 2, y0 + 0.75 + COLONNADE.high, (COLONNADE.z + HALL.wall) / 2, M.timber);
-    buildBrazier(scene, TERRACE.x + s * BRAZIERS.x, BRAZIERS.z, Math.PI / 2, M.iron, M.granite, updaters, y0, BRAZIERS.glow, BRAZIERS.flames);
+    buildBrazier(scene, X + s * BRAZIERS.x, BRAZIERS.z, Math.PI / 2, M.iron, M.granite, updaters, y0, BRAZIERS.glow, BRAZIERS.flames);
+  }
+  block(scene, BACK.half * 2, COLONNADE.lintel, 1.0, X, y0 + 0.72 + COLONNADE.high, COLONNADE.z, M.coping);
+  hallRoof(scene, M, y0 + eaves, back, front);
+}
+
+/** The hall's door in the front wall's face at `face` (z): a frame of dressed stone round it, a lintel stone over it,
+ *  and its two leaves of planks set back in it, iron-strapped, an iron ring on each. */
+function hallDoor(scene: THREE.Object3D, M: Mats, X: number, y0: number, face: number): void {
+  const { doorHalf: dh, doorHigh: high } = HALL, f = DOOR.frame;
+  for (const s of [-1, 1]) block(scene, f, high, 0.2, X + s * (dh + f / 2 - 0.02), y0, face + 0.08, M.coping);
+  block(scene, dh * 2 + f * 2 + 0.2, f, 0.24, X, y0 + high, face + 0.1, M.coping);
+  for (const s of [-1, 1]) {
+    const lx = X + s * dh / 2;
+    block(scene, dh - 0.03, high - 0.02, 0.12, lx, y0, face - DOOR.set, M.planks, 0.5);
+    for (const y of DOOR.straps) block(scene, dh - 0.12, 0.09, 0.03, lx, y0 + y, face - DOOR.set + 0.07, M.iron);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.018, 6, 16), M.iron);
+    ring.position.set(X + s * 0.22, y0 + 1.3, face - DOOR.set + 0.1);
+    scene.add(ring);
   }
 }
 
-/** Hero `i`'s banner on the hall's back wall over his plinth, in his class's colour, on an iron rod. */
-function banner(scene: THREE.Object3D, i: number, iron: THREE.Material, rng: () => number): void {
-  const x = hallSpot(i).x, y = TERRACE.high + BANNER.top, z = HALL.wall + BANNER.off;
-  const cloth = bannerCloth(256, 512, CLASSES[CLASS_IDS[i]].hall.banner);
-  const velvet = new THREE.MeshPhysicalMaterial({
-    map: cloth, roughness: 0.9, sheen: 1, sheenColorMap: cloth, sheenColor: new THREE.Color(1.8, 1.8, 1.8),
-    sheenRoughness: 0.4, side: THREE.DoubleSide,
-  });
-  seeThrough(velvet, 'prop');
-  // (`bannerGeo` hangs facing -z, away from a crypt's wall's face: turned round to face the square)
-  const geometry = bannerGeo(rng).rotateY(Math.PI).scale(BANNER.scale, BANNER.scale, BANNER.scale);
-  solid(scene, geometry, velvet).position.set(x, y, z);
-  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9 * BANNER.scale + 0.3, 8).rotateZ(Math.PI / 2), iron);
-  rod.position.set(x, y + 0.03, z);
-  scene.add(rod);
+/** The hall's ceiling and roof over its walls, from `back` to `front` (z), its eaves at `eaves` (m): a planked
+ *  ceiling on beams across, a gabled slate roof whose ridge runs from front to back, a gable over each end. */
+function hallRoof(scene: THREE.Object3D, M: Mats, eaves: number, back: number, front: number): void {
+  const X = TERRACE.x, half = BACK.half, deep = front - back, mid = (front + back) / 2;
+  const roof = new THREE.Group();
+  scene.add(roof);
+  block(roof, half * 2, ROOF.ceiling, deep, X, eaves - ROOF.ceiling, mid, M.planks);
+  for (let z = back + ROOF.beamGap; z < front - 0.5; z += ROOF.beamGap) {
+    block(roof, half * 2 - 0.2, 0.32, 0.36, X, eaves - ROOF.ceiling - 0.32, z, M.timber);
+  }
+  // the two slopes, each a slab from the ridge out past the wall's top by the overhang
+  const slope = Math.atan2(ROOF.rise, half), run = Math.hypot(half, ROOF.rise) + ROOF.over;
+  const length = deep + ROOF.over * 2;
+  for (const s of [-1, 1]) {
+    const slab = block(roof, run, ROOF.thick, length, 0, 0, mid, M.roof, 1 / 2.4);
+    // (its top's middle half a run down from the ridge, along the slope; lifted by half its thickness off it)
+    const down = run / 2;
+    slab.position.x = X + s * (Math.cos(slope) * down + Math.sin(slope) * ROOF.thick / 2);
+    slab.position.y = eaves + ROOF.rise - Math.sin(slope) * down + Math.cos(slope) * ROOF.thick / 2;
+    slab.rotation.z = -s * slope;
+  }
+  block(roof, 0.4, 0.3, length, X, eaves + ROOF.rise + 0.02, mid, M.coping);
+  // the gables: a triangle of stone over each end's top, from eave to eave and up to the ridge
+  const gable = new THREE.Shape();
+  gable.moveTo(-half, 0);
+  gable.lineTo(half, 0);
+  gable.lineTo(0, ROOF.rise);
+  gable.lineTo(-half, 0);
+  const geometry = new THREE.ExtrudeGeometry(gable, { depth: ROOF.gable, bevelEnabled: false });
+  for (const z of [front - ROOF.gable, back]) solid(roof, geometry, M.ashlar).position.set(X, eaves, z);
 }
 
 /** The stash's chest at the top of the stair: an iron-bound box, its lid hinged at the back (returned, to swing). */
@@ -789,6 +835,42 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
 /** where each cottage's chimney smokes (`chimneySmoke`) */
 const chimneys: THREE.Vector3[] = [];
 /** A thin smoke from every chimney, drifting off with the wind. */
+/**
+ * Motes drawn into each portal's vortex from round its rim and the air before it, in its colours: the gate's sheet
+ * alone read as a flat picture in a frame (a review: "the portal reads as a flat rectangle"). The glow pool's own
+ * program: nothing compiles.
+ */
+function portalMotes(): Updater {
+  const ways = BIOME_IDS.map((id) => {
+    const p = portalPlace(id);
+    // (toward the village from the gate's face, and across it)
+    const out = new THREE.Vector3(Math.sin(p.facing), 0, Math.cos(p.facing));
+    const across = new THREE.Vector3(out.z, 0, -out.x);
+    const middle = new THREE.Vector3(p.x, MOTES.high, p.z);
+    return { middle, out, across, colors: MOTE_COLORS[id] };
+  });
+  const from = new THREE.Vector3();
+  let due = 0;
+  return (dt) => {
+    due += dt * MOTES.rate * ways.length;
+    for (; due >= 1; due--) {
+      const way = ways[Math.floor(Math.random() * ways.length)];
+      const a = rand(0, TAU), r = rand(MOTES.rim, MOTES.rim + 0.9), ahead = rand(0.2, MOTES.ahead);
+      from.copy(way.middle).addScaledVector(way.across, Math.cos(a) * r * 0.75)
+        .addScaledVector(way.out, ahead);
+      from.y += Math.sin(a) * r;
+      const life = rand(1.4, 2.2);
+      // (to the vortex's heart over its life, slowing as it nears: drag)
+      const vx = (way.middle.x - from.x) / life * 1.6, vy = (way.middle.y - from.y) / life * 1.6;
+      const vz = (way.middle.z - from.z) / life * 1.6;
+      particles.glow.spawn({
+        x: from.x, y: from.y, z: from.z, vx, vy, vz, life, drag: 1.1,
+        size: rand(0.14, 0.26), sizeEnd: 0.03, color: way.colors.rim, colorEnd: way.colors.core, alpha: 0.9,
+      });
+    }
+  };
+}
+
 function chimneySmoke(): Updater {
   let due = 0;
   return (dt) => {
@@ -891,21 +973,99 @@ function buildNoticeBoard(scene: THREE.Object3D, wall: Wall, M: Mats): void {
 
 /** A lamp post at (x, z): a post, an arm and a lantern of glass with its light (one of the village's). */
 function buildLamp(scene: THREE.Object3D, x: number, z: number, M: Mats, obstacles: Obstacle[]): THREE.PointLight {
-  block(scene, 0.4, 0.3, 0.4, x, 0, z, M.ashlar);
-  block(scene, 0.14, LAMPS.high, 0.14, x, 0.3, z, M.timber);
-  const side = -Math.sign(x);
-  block(scene, 0.55, 0.08, 0.08, x + side * 0.24, LAMPS.high + 0.1, z, M.iron);
-  const lantern = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.32, 6), M.glass);
-  lantern.position.set(x + side * 0.48, LAMPS.high - 0.12, z);
-  scene.add(lantern);
-  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.16, 6), M.iron);
-  cap.position.set(x + side * 0.48, LAMPS.high + 0.1, z);
-  scene.add(cap);
+  const at = lampPost(scene, x, z, x < 0 ? 0 : Math.PI, M, obstacles);
   const light = new THREE.PointLight(LAMPS.color, LAMPS.intensity, LAMPS.distance, 2);
-  light.position.set(x + side * 0.48, LAMPS.high - 0.3, z);
+  light.position.set(at.x, at.y - 0.18, at.z);
   scene.add(light);
-  obstacles.push({ x, z, r: 0.35, h: LAMPS.high });
   return light;
+}
+
+/** A lamp post at (x, z), its lantern hung on an arm toward `turn` (rad about y: 0 toward +x); returns the lantern's
+ *  middle. */
+function lampPost(scene: THREE.Object3D, x: number, z: number, turn: number, M: Mats, obstacles: Obstacle[]): THREE.Vector3 {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  g.rotation.y = -turn;
+  scene.add(g);
+  block(g, 0.4, 0.3, 0.4, 0, 0, 0, M.ashlar);
+  block(g, 0.14, LAMPS.high, 0.14, 0, 0.3, 0, M.timber);
+  block(g, 0.55, 0.08, 0.08, 0.24, LAMPS.high + 0.1, 0, M.iron);
+  const lantern = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.32, 6), M.glass);
+  lantern.position.set(0.48, LAMPS.high - 0.12, 0);
+  g.add(lantern);
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.16, 6), M.iron);
+  cap.position.set(0.48, LAMPS.high + 0.1, 0);
+  g.add(cap);
+  obstacles.push({ x, z, r: 0.35, h: LAMPS.high });
+  g.updateMatrixWorld(true);
+  return lantern.getWorldPosition(new THREE.Vector3());
+}
+
+/**
+ * The street lamps along the roads, a post every `STREET.every` m on alternate sides, each its lantern over the road
+ * and a pool of its light on the ground under it (from play: "its dark so we need lights in the village"). The village
+ * keeps its 10 point lights (more would compile every lit program again), so the pools are drawn, not lit: one
+ * instanced quad a lamp, added to the frame's light and brighter as night falls (`pools.opacity`, `daylight`).
+ */
+function buildStreetLamps(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): THREE.MeshBasicMaterial {
+  const spots: { x: number; z: number; turn: number }[] = [];
+  // (the stair's lamps, hung by `buildLamp` with their lights, are lamps too)
+  const lamps: Spot[] = [-1, 1].map((s) => [TERRACE.x + s * LAMPS.x, LAMPS.z]);
+  const clear = (x: number, z: number): boolean => !builtAt(x, z) && insidePalisade(x, z, 1)
+    && obstacles.every((o) => Math.hypot(o.x - x, o.z - z) > o.r + STREET.clear)
+    && lamps.every(([lx, lz]) => Math.hypot(lx - x, lz - z) > STREET.apart);
+  const place = (x: number, z: number, turn: number): void => {
+    if (!clear(x, z)) return;
+    spots.push({ x, z, turn });
+    lamps.push([x, z]);
+  };
+  for (const { line, width } of roadLines) {
+    if (line.length < 2) continue;
+    let along = STREET.first, side = 1, walked = 0;
+    for (let k = 1; k < line.length; k++) {
+      const [x0, z0] = line[k - 1], [x1, z1] = line[k];
+      const len = Math.hypot(x1 - x0, z1 - z0);
+      while (along <= walked + len) {
+        const t = (along - walked) / len, x = x0 + (x1 - x0) * t, z = z0 + (z1 - z0) * t;
+        // (out to the road's side, across its way: the arm turned back over it)
+        const nx = -(z1 - z0) / len * side, nz = (x1 - x0) / len * side, off = width / 2 + STREET.off;
+        const px = x + nx * off, pz = z + nz * off;
+        place(px, pz, Math.atan2(-nz, -nx));
+        along += STREET.every;
+        side = -side;
+      }
+      walked += len;
+    }
+  }
+  // (round the square, its lanterns hung over its cobbles, where no road leaves it)
+  for (let k = 0; k < STREET.square; k++) {
+    const a = (k + 0.5) / STREET.square * TAU, r = SQUARE_R + 1.3;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    place(x, z, a + Math.PI);
+  }
+  const pools = new THREE.MeshBasicMaterial({
+    map: lightPool(), color: LAMPS.color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending,
+    depthWrite: false, toneMapped: true,
+  });
+  const quads = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), pools, spots.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(STREET.pool, 1, STREET.pool);
+  for (const [i, spot] of spots.entries()) {
+    const lantern = lampPost(scene, spot.x, spot.z, spot.turn, M, obstacles);
+    quads.setMatrixAt(i, m.compose(new THREE.Vector3(lantern.x, 0.04, lantern.z), q, s));
+  }
+  quads.renderOrder = 1;
+  scene.add(quads);
+  return pools;
+}
+
+/** A pool of lamplight on the ground: bright under the lantern, fading out to its rim. */
+function lightPool(): THREE.CanvasTexture {
+  const c = canvasOf(128, 128), g = ctx2d(c);
+  const fall = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  for (let k = 0; k <= 8; k++) fall.addColorStop(k / 8, `rgba(255,255,255,${Math.pow(1 - k / 8, 2.2).toFixed(3)})`);
+  g.fillStyle = fall;
+  g.fillRect(0, 0, 128, 128);
+  return textureFromCanvas(c);
 }
 
 // --- the trees ------------------------------------------------------------------------------------------------------
