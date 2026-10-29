@@ -205,6 +205,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   const side = (lab.player.pos.x - spot.x) ** 2 + (lab.player.pos.z - spot.z) ** 2;
   if (side > 0.05 ** 2) out.problems.push(`sit: on the ${c.name} he sat ${Math.sqrt(side).toFixed(2)} m off its spot`);
   out.moments.push(lab.picture(`${c.name}: sat`, c.views));
+  out.moments.push(lab.picture(`${c.name}: sat, parts`, ['right', 'back', 'above', 'left'], [], { look: 'parts' }));
   if (seat.ground) out.moments.push(fromBeyond(lab, c.name));
   const under = deepestUnder(lab);
   if (under.depth > UNDER_MOST) {
