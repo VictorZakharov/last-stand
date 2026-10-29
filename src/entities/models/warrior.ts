@@ -1733,11 +1733,12 @@ export function buildWarrior(): Model {
     const k = root.scale.x, s = _s5.setFromMatrixScale(grip.matrixWorld).y, [low, far] = reachAlong(weapon, grip);
     const ahead = _s4.set(0, 0, 1).transformDirection(root.matrixWorld).setY(0).normalize(), up = _s3.set(0, 1, 0);
     const pointing = (lean: number, out: THREE.Vector3) => out.copy(up).multiplyScalar(-Math.cos(lean)).addScaledVector(ahead, Math.sin(lean));
-    // where its point goes in, sunk as it's stood to bring its pommel down
+    // where its point goes in, driven in as he sets it there to bring its pommel down (stood on the floor first, the
+    // fist holding it there was over his head)
     const spot = root.localToWorld(_plantHand.set(0, 0, BETWEEN.ahead));
     const floor = groundHeight(spot.x, spot.z), hips = j.hips.getWorldPosition(_s1).y;
     const tall = (far - low) * s * Math.cos(BETWEEN.lean);
-    const sink = THREE.MathUtils.clamp(floor + tall - (hips + BETWEEN.top * k), PLANT.deep[0], PLANT.deep[1]) * stand;
+    const sink = THREE.MathUtils.clamp(floor + tall - (hips + BETWEEN.top * k), PLANT.deep[0], PLANT.deep[1]);
     spot.y = floor - sink;
     weapon.group.userData.stuckIn = sink;
     p.on = weapon;
