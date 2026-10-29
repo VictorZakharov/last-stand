@@ -2807,7 +2807,7 @@ export function buildWarrior(): Model {
       _sm.makeBasis(_s5.crossVectors(a, n), a, n);
       _sq.setFromRotationMatrix(_sm).premultiply(j.handL.getWorldQuaternion(_shq).invert());
       shield.quaternion.slerp(_sq, shieldHang);
-      _s1.lerp(_s2, 0.3).addScaledVector(_s4.set(0, -1, 0), 0.26 * root.scale.x).addScaledVector(n, 0.07 * root.scale.x);
+      _s1.lerp(_s2, 0.3).addScaledVector(_s4.set(0, -1, 0), 0.26 * root.scale.x).addScaledVector(n, 0.02 * root.scale.x);
       // (sat on the floor, its rim on it: hung as far down from a forearm on his knee, it went 11 cm into it)
       shield.position.lerp(j.handL.worldToLocal(_s1), shieldHang);
     }
