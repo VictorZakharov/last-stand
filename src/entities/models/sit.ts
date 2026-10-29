@@ -143,12 +143,29 @@ export function restHands(j: Joints, s: SitState | null | undefined, sides: read
       continue;
     }
     // (an empty hand laid on the bone it rests on: its fingers along it, its palm onto it. Left with the arm's turn as
-    // it hung, it stood beside the knee palm up, touching nothing)
+    // it hung, it stood beside the knee palm up, touching nothing. On the floor it hangs over the knee, its fingers
+    // down the shin and its palm in towards the other knee: laid palm onto the shin's front, the forearm had to turn
+    // past its range, and the arm's fit turned it palm out, as if begging)
     const bone = floor ? (left ? j.kneeL : j.kneeR) : thigh;
+    bone.getWorldQuaternion(_bone);
+    if (floor) hangInward(j, _bone, sign);
     hand.parent!.updateWorldMatrix(true, false);
-    hand.parent!.getWorldQuaternion(_q).invert().multiply(bone.getWorldQuaternion(_bone));
+    hand.parent!.getWorldQuaternion(_q).invert().multiply(_bone);
     hand.quaternion.slerp(_q, w);
   }
+}
+
+const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _basis = new THREE.Matrix4();
+
+/** `turned`, a shin's turn in the world, made a hand's hanging along it with its palm in towards the hips' middle (the
+ *  hand's fingers run down its -y, its palm faces its -z; `sign` 1 the left, -1 the right). */
+function hangInward(j: Joints, turned: THREE.Quaternion, sign: number): void {
+  _y.set(0, 1, 0).applyQuaternion(turned);
+  j.hips.getWorldQuaternion(_q);
+  _z.set(sign, 0, 0).applyQuaternion(_q);
+  _z.addScaledVector(_y, -_z.dot(_y)).normalize();
+  _x.crossVectors(_y, _z);
+  turned.setFromRotationMatrix(_basis.makeBasis(_x, _y, _z));
 }
 
 /** The floor's height under `object` in its own space, a centimetre up (for cloth kept over it: `Skirt.keepAbove`). */
