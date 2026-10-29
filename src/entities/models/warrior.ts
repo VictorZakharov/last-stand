@@ -1470,6 +1470,9 @@ export function buildWarrior(): Model {
   const STANDS: Record<string, 'point' | 'head' | 'butt'> = {
     Sword: 'point', Axe: 'head', Mace: 'head', Greatsword: 'point', Maul: 'butt', Greataxe: 'butt',
   };
+  /** how far out to his side (as `PLANT.at`: out is less) and ahead a weapon he sets down goes on its way, at most
+   *  (rig units) */
+  const PLANT_ARC = [-0.45, 0.2];
   /** the most the arm bends at the elbow setting it down (rad) */
   const PLANT_BEND = 2.45;
   const boxes = new Map<Weapon, THREE.Box3>();
@@ -1626,6 +1629,10 @@ export function buildWarrior(): Model {
     seat(hand, grip, weapon.r);
     root.updateMatrixWorld(true);
     grip.getWorldPosition(p.at).lerp(plantedAt, e);
+    // (out to his side and ahead on the way, as it turns: moved and turned in a line from his fist to where it stands,
+    // a two-hander went 7 to 10 cm through his shin or thigh, and a greatsword's pommel 20 cm into his chest)
+    const arc = Math.sin(Math.PI * e) * root.scale.x;
+    p.at.add(_s2.set(side * PLANT_ARC[0], 0, PLANT_ARC[1]).transformDirection(root.matrixWorld).multiplyScalar(arc));
     grip.getWorldQuaternion(_pq);
     p.q.copy(_pq.slerp(p.q, e));
     const drawn = joint.getWorldQuaternion(_wq).multiply(gripTurn(hand, grip, _vr));
