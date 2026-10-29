@@ -1510,7 +1510,7 @@ export function buildWarrior(): Model {
    *  89 degrees past its turn; its fingers ahead on the pommel, the wrist bent 34 degrees past its range.) From play: "keep it stood", with a natural regrip. Stood point down at his side in one fist, the fist had
    *  to turn 120 degrees from how it held it standing, past a wrist's turn: his arm shot straight out ahead and the
    *  blade swept 0.5 to 2 m in a frame. */
-  const BETWEEN = tunable('warriorBetween', { ahead: 0.75, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, held: [0.6, 0.1, 0.15], rise: 0.5, pace: 1.8 });
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, held: [0.6, 0.1, 0.15], rise: 0.5, pace: 1.8 });
   const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95 });
   const _plantHand = new THREE.Vector3(), _plantBox = new THREE.Box3(), _plantM = new THREE.Matrix4();
   /** a hand's weapon stood on its end: its grip's place there (world, `q`, `at`), the way from the hand to its
@@ -1754,6 +1754,11 @@ export function buildWarrior(): Model {
     p.on = weapon;
     if (!p.carried) {
       const upright = pointing(BETWEEN.lean, _s6);
+      // (stood up about its point where the fist set it in: stood where it was meant to go, its point slid 90 cm
+      // through the ground under the palm)
+      const landed = _s2.set(0, far * s, 0).applyQuaternion(_pq.copy(_rootQ).multiply(p.landQ));
+      landed.add(_s1.copy(p.landAt).applyMatrix4(root.matrixWorld));
+      spot.set(landed.x, groundHeight(landed.x, landed.z) - sink, landed.z);
       _standAt.copy(spot).addScaledVector(upright, -far * s);
       _pq.copy(_rootQ).multiply(p.landQ);
       _standQ.setFromUnitVectors(_s7.set(0, 1, 0).applyQuaternion(_pq), upright).multiply(_pq);
@@ -1796,7 +1801,7 @@ export function buildWarrior(): Model {
       return;
     }
     // (from the fist still round its grip as it was carried, `holdKey`, its palm onto its pommel)
-    holdKey(p, p.at, p.q, _keyA);
+    holdKey(p, p.at, p.q, _keyA, false);
     const top = _s8.copy(p.up);
     const direction = _hd.set(0, 1, 0).applyQuaternion(p.q);
     const up = p.shoulder.getWorldPosition(_s3).sub(p.at).normalize();
@@ -1848,17 +1853,26 @@ export function buildWarrior(): Model {
   }
   /** The weapon arm's joints (into `out`, shoulder to hand) holding the weapon's grip at `at`, turned `q` (the world's),
    *  in the fist as it held it standing (`gripWas`, `gripAtWas`), as near as the arm's ranges let it. */
-  function holdKey(p: Planted, at: THREE.Vector3, q: THREE.Quaternion, out: THREE.Quaternion[]): void {
+  function holdKey(p: Planted, at: THREE.Vector3, q: THREE.Quaternion, out: THREE.Quaternion[], drawn = true): void {
     const hand = _fq.copy(q).multiply(_kq.copy(p.gripWas).invert());
     const s = _s5.setFromMatrixScale(p.joint.matrixWorld).x;
     const wrist = _kv.copy(p.gripAtWas).multiplyScalar(s).applyQuaternion(hand).negate().add(at);
     const pole = _pw.set(-PLANT.pole[0], PLANT.pole[1], PLANT.pole[2]).applyQuaternion(j.chest.getWorldQuaternion(_cq));
-    solveArm(j, false, { wrist, hand, pole, body, flexion: GRIPPED_FLEXION, remember: false });
+    // (the hand as it's drawn round the grip within the wrist's range: the joint's alone, the drawn hand went 38
+    // degrees past its bend)
+    _kg.copy(p.grip.quaternion);
+    _ka.copy(p.grip.position);
+    p.grip.quaternion.copy(p.gripWas);
+    p.grip.position.copy(p.gripAtWas);
+    const vis = drawn ? gripTurn(p.hand, p.grip, _kw) : _kw.identity();
+    p.grip.quaternion.copy(_kg);
+    p.grip.position.copy(_ka);
+    solveArm(j, p.left, { wrist, hand: hand.multiply(vis), vis, pole, body, flexion: GRIPPED_FLEXION, remember: false });
     armOf(p).forEach((joint, i) => out[i].copy(joint.quaternion));
   }
   const _keyA = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
   const _keyB = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
-  const _kq = new THREE.Quaternion(), _kv = new THREE.Vector3();
+  const _kq = new THREE.Quaternion(), _kw = new THREE.Quaternion(), _kg = new THREE.Quaternion(), _kv = new THREE.Vector3(), _ka = new THREE.Vector3();
   /** a weapon arm's joints, shoulder to hand */
   function armOf(p: Planted): THREE.Object3D[] {
     return p.left ? [j.shoulderL, j.elbowL, j.handL] : [j.shoulderR, j.elbowR, j.handR];
