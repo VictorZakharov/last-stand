@@ -1473,7 +1473,7 @@ export function buildWarrior(): Model {
    *  stands over his hips (rig units) */
   const PLANT = tunable('warriorPlant', {
     at: [-0.27, 0.46], blade: 0.42, haft: 0.3, deep: [0.12, 0.6], pole: [-0.4, -1, -0.3], palm: [0.015, 0.06], rest: 0.05,
-    stood: 0.6, ease: 0.35, settle: 0.4, lean: 0.8,
+    stood: 0.6, ease: 0.35, settle: 0.4, lean: 0.8, holdPole: [-1, 0, -0.3],
   });
   /** how each weapon stands: point down, stuck into the floor; on its head; head up, on its haft's butt (a maul and
    *  a greataxe head up, easy to grab) */
@@ -1836,7 +1836,13 @@ export function buildWarrior(): Model {
     const off = wrist.sub(shoulder), apart = off.length();
     if (apart < nearest) off.multiplyScalar(nearest / apart);
     wrist.add(shoulder);
+    // (the elbow out to his side and level with the fist as it carries the blade down to stand on its point, the
+    // forearm across the handle, then down again as the hand takes it thumb up: hung under the fist, the forearm
+    // rose to it, the fist round the upright handle thumb down bent past the wrist's range, and the arm's solve flipped
+    // the fist over, a greatsword 2 m in a frame)
+    const outward = p.carried ? smooth(ramp(w, 0, PLANT.stood)) : 1 - smooth(ramp(w, PLANT.stood, 1));
     const pole = _pw.set(side * PLANT.pole[0], PLANT.pole[1], PLANT.pole[2]);
+    pole.lerp(_s2.set(side * PLANT.holdPole[0], PLANT.holdPole[1], PLANT.holdPole[2]), outward);
     pole.applyQuaternion(j.chest.getWorldQuaternion(_cq));
     // (carried, the wrist's range is the fist's round the grip, which stops the hand's turn at its ends)
     if (p.carried) {
