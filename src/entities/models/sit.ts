@@ -24,6 +24,9 @@ export const SIT_POSE = tunable('sit', {
   rest: [0.55, 0.025, 0.03],
   /** on a seat, hands lifted as the knees rise, before settling onto them (rig units) */
   handLift: 0.25,
+  /** how far sat (eased) the arm's own elbow has given way to the rest's whole (reached with the rest's elbow from his
+   *  first moment sat, the warrior's left elbow went 19 cm in the frame the sit ended, and his shield 49 cm) */
+  armIn: 0.15,
   /** the way a resting hand's elbow points (out and back, the chest's frame; the left's, the right's mirrored) */
   pole: [1, -0.2, -1],
   /** sat on the floor: the pelvis rolled back (rad: a man's on the floor rolls back, and his hips upright bent 10
@@ -121,6 +124,7 @@ const clamp1 = (v: number) => Math.max(-1, Math.min(1, v));
 
 const _foot = new THREE.Vector3(), _up = new THREE.Vector3(), _on = new THREE.Vector3(), _now = new THREE.Vector3();
 const _pole = new THREE.Vector3(), _q = new THREE.Quaternion(), _bone = new THREE.Quaternion();
+const _shoulderWas = new THREE.Quaternion(), _elbowWas = new THREE.Quaternion();
 
 /**
  * The hands on `sides` (0 the left, 1 the right) brought to rest on their thighs as he sits, palms down, the elbows
@@ -157,7 +161,15 @@ export function restHands(
       _now.y += SIT_POSE.floorLift[0] * arc * floorLift;
       _now.x += sign * SIT_POSE.floorLift[1] * arc * floorLift;
     }
-    reachArm(left ? j.shoulderL : j.shoulderR, left ? j.elbowL : j.elbowR, P.upperL, P.foreL, _now, _pole);
+    const shoulder = left ? j.shoulderL : j.shoulderR, elbow = left ? j.elbowL : j.elbowR;
+    _shoulderWas.copy(shoulder.quaternion);
+    _elbowWas.copy(elbow.quaternion);
+    reachArm(shoulder, elbow, P.upperL, P.foreL, _now, _pole);
+    const armIn = w >= SIT_POSE.armIn ? 1 : w / SIT_POSE.armIn;
+    if (armIn < 1) {
+      shoulder.quaternion.slerpQuaternions(_shoulderWas, shoulder.quaternion, armIn);
+      elbow.quaternion.slerpQuaternions(_elbowWas, elbow.quaternion, armIn);
+    }
     if (turn && (turn.roll[side] || turn.bend[side])) {
       hand.rotation.y += sign * turn.roll[side] * w;
       hand.rotation.x += turn.bend[side] * w;
