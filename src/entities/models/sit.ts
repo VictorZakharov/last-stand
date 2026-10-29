@@ -167,8 +167,8 @@ export function restHands(
     reachArm(shoulder, elbow, P.upperL, P.foreL, _now, _pole);
     const armIn = w >= SIT_POSE.armIn ? 1 : w / SIT_POSE.armIn;
     if (armIn < 1) {
-      shoulder.quaternion.slerpQuaternions(_shoulderWas, shoulder.quaternion, armIn);
-      elbow.quaternion.slerpQuaternions(_elbowWas, elbow.quaternion, armIn);
+      shoulder.quaternion.copy(_shoulderWas.slerp(shoulder.quaternion, armIn));
+      elbow.quaternion.copy(_elbowWas.slerp(elbow.quaternion, armIn));
     }
     if (turn && (turn.roll[side] || turn.bend[side])) {
       hand.rotation.y += sign * turn.roll[side] * w;
