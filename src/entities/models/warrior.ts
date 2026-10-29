@@ -1760,11 +1760,6 @@ export function buildWarrior(): Model {
     p.on = weapon;
     if (!p.carried) {
       const upright = pointing(BETWEEN.lean, _s6);
-      // (stood up about its point where the fist set it in: stood where it was meant to go, its point slid 39 cm
-      // through the ground under the palm)
-      const landed = _s2.set(0, far * s, 0).applyQuaternion(_pq.copy(_rootQ).multiply(p.landQ));
-      landed.add(_s1.copy(p.landAt).applyMatrix4(root.matrixWorld));
-      spot.set(landed.x, groundHeight(landed.x, landed.z) - sink, landed.z);
       _standAt.copy(spot).addScaledVector(upright, -far * s);
       _pq.copy(_rootQ).multiply(p.landQ);
       _standQ.setFromUnitVectors(_s7.set(0, 1, 0).applyQuaternion(_pq), upright).multiply(_pq);
