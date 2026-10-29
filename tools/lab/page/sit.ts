@@ -87,6 +87,12 @@ const SETTLED = 1.5;
  *  clothes over them, a hand resting on a thigh). From play: "ranger hands clipping through legs, in sitting pose near
  *  fire", "bow clipping through body in log sitting"; from review, a maul's haft through his hip sitting down */
 const INTO_BODY = 0.03;
+/** the views a moment he went into himself is pictured in, close on his hips, his skeleton drawn over him */
+const DEEPEST_VIEWS: ViewName[] = ['right', 'front', 'left', 'above'];
+/** where it's framed: over his hips (m) and from how far */
+const DEEPEST_FRAME = { up: 0.3, distance: 3.2 };
+/** how much deeper (m) a moment goes in than the one pictured before it is pictured in its place */
+const PICTURE_DEEPER = 0.01;
 
 /** by a fire, his body's way off the way to it at most (degrees): from review, he sat 30 to 45 off it */
 const FACING_FIRE = 15;
@@ -233,21 +239,34 @@ const FIRE_PARTS = ['flames', 'bonfire logs', 'bonfire stones', 'brazier'];
 /** where `fromBeyond` frames him: his knees' height over his hips' place, from this far ahead (m) */
 const BEYOND = { up: 0.15, distance: 2.6 };
 
-/** Him sat by a fire pictured from ahead, the fire hidden: the player's camera sees him so from across it, and the
- *  lab's view ahead through it saw nothing of his legs. */
-function fromBeyond(lab: Lab, name: string): Pictured {
+/** the plants round a seat, hidden for a close-up of his limbs (a tuft of grass before the camera hid his arms) */
+const PLANTS = /^(grass \d|ferns|weeds)$/;
+/** what of the biome stands round him to hide for a close-up of him (a boulder filled the picture from his left) */
+const AROUND = /^(boulders|standing stone|thicket.*|stump|column)$/;
+
+/** `take` done with the biome's parts `hides` names hidden, shown again after. */
+function withHidden<T>(hides: (name: string) => boolean, take: () => T): T {
   const hidden: THREE.Object3D[] = [];
   G.arena.groupOf(G.arena.biome).traverse((object) => {
-    if (FIRE_PARTS.includes(object.name) && object.visible) hidden.push(object);
+    if (hides(object.name) && object.visible) hidden.push(object);
   });
   for (const each of hidden) each.visible = false;
-  const at = lab.joints.hips.getWorldPosition(new THREE.Vector3());
-  at.y += BEYOND.up;
   try {
-    return lab.picture(`${name}: sat, from ahead (the fire hidden)`, ['front'], [], { at, distance: BEYOND.distance });
+    return take();
   } finally {
     for (const each of hidden) each.visible = true;
   }
+}
+
+/** Him sat by a fire pictured from ahead, the fire hidden: the player's camera sees him so from across it, and the
+ *  lab's view ahead through it saw nothing of his legs. */
+function fromBeyond(lab: Lab, name: string): Pictured {
+  const at = lab.joints.hips.getWorldPosition(new THREE.Vector3());
+  at.y += BEYOND.up;
+  const label = `${name}: sat, from ahead (the fire hidden)`;
+  return withHidden((part) => FIRE_PARTS.includes(part), () => {
+    return lab.picture(label, ['front'], [], { at, distance: BEYOND.distance });
+  });
 }
 
 const _box = new THREE.Box3();
@@ -348,7 +367,7 @@ async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out): P
   // (the worst joint past its range sitting down, and standing idle before it: said, not the sit's; and the weapon in
   // his hand through his legs or trunk as he sets it down: from review, a maul's haft through his hip by a fire)
   const worst: (Breached | null)[] = [null, null];
-  const into = new IntoBody(label);
+  const into = new IntoBody(label, true);
   for (let f = 0; f < SAT_BY * RATE; f++) {
     await lab.step(1);
     walked ||= sitting.walking;
@@ -370,6 +389,7 @@ async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out): P
       }
       if (stood) out.text.push(`    standing idle before it (not the sit's): ${pastOf(stood)}`);
       for (const said of into.problems()) out.problems.push(`sit: by the ${label}, sitting down, ${said}`);
+      if (into.moment) out.moments.push(into.moment);
       return true;
     }
   }
@@ -383,7 +403,7 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): P
   let worst: { by: number; name: string; neck: number } | null = null;
   let frames = 0;
   const skirts = skirtsOf(lab.model.root);
-  const into = new IntoBody(name);
+  const into = new IntoBody(name, true);
   const spans = skirts.map((skirt) => new Spans(skirt.last.length));
   let frame = 0;
   const reads = await lab.step(SAT_FOR * RATE, undefined, () => {
@@ -402,6 +422,7 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): P
     return read;
   });
   for (const said of into.problems()) out.problems.push(`sit: on the ${name}, ${said}`);
+  if (into.moment) out.moments.push(into.moment);
   skirts.forEach((skirt, i) => {
     const { most, at } = spans[i].widest();
     out.text.push(`    his ${skirt.name}: a point wandered ${cmOf(most)} cm at most (point ${at})`);
@@ -432,11 +453,18 @@ function bowApart(lab: Lab): THREE.Object3D | null {
 
 /** What of him goes into his legs or trunk over frames: the weapon in his hand, the bow, and each forearm and hand. */
 class IntoBody {
+  private readonly name: string;
+  private readonly views: ViewName[];
   private readonly pieces: WeaponBody[];
   private arms: { depth: number; what: string } | null = null;
   private armFrames = 0;
+  /** the moment it went deepest past `INTO_BODY`, pictured with his skeleton over it */
+  private shown: { depth: number; moment: Pictured } | null = null;
 
-  constructor(name: string) {
+  /** `pictured`: whether the deepest moment is pictured */
+  constructor(name: string, pictured = false) {
+    this.name = name;
+    this.views = pictured ? DEEPEST_VIEWS : [];
     this.pieces = [new WeaponBody(name), new WeaponBody(name, bowApart)];
   }
 
@@ -445,12 +473,39 @@ class IntoBody {
     const legs = armsInLegs(lab.joints).map((arm) => ({ ...arm, part: arm.leg }));
     const trunk = armsInBody(lab.joints).map((arm) => ({ ...arm, part: arm.solid }));
     const deepest = [...legs, ...trunk].sort((a, b) => b.depth - a.depth)[0];
-    if (!deepest || deepest.depth <= INTO_BODY) return;
-    this.armFrames++;
-    if (this.arms && deepest.depth <= this.arms.depth) return;
-    const what = `his ${deepest.side === 'L' ? 'left' : 'right'} ${deepest.limb} `
-      + `${(deepest.depth * 100).toFixed(1)} cm into the ${deepest.part} (frame ${frame})`;
-    this.arms = { depth: deepest.depth, what };
+    if (deepest && deepest.depth > INTO_BODY) {
+      this.armFrames++;
+      if (!this.arms || deepest.depth > this.arms.depth) {
+        const what = `his ${deepest.side === 'L' ? 'left' : 'right'} ${deepest.limb} `
+          + `${(deepest.depth * 100).toFixed(1)} cm into the ${deepest.part} (frame ${frame})`;
+        this.arms = { depth: deepest.depth, what };
+      }
+    }
+    this.pictureIfDeeper(lab, frame);
+  }
+
+  /**
+   * The moment pictured again when it has gone a centimetre deeper than the one pictured: a number alone said how
+   * deep, not which way the arm or the weapon went in, and a fix tried blind took a minute a round (the floor pose).
+   */
+  private pictureIfDeeper(lab: Lab, frame: string): void {
+    if (this.views.length === 0) return;
+    const depth = Math.max(this.arms?.depth ?? 0, ...this.pieces.map((piece) => piece.depth));
+    if (depth <= INTO_BODY || depth < (this.shown?.depth ?? 0) + PICTURE_DEEPER) return;
+    const label = `${this.name}: deepest into him, ${cmOf(depth)} cm (frame ${frame}), `
+      + 'his skirts and what stands round him hidden';
+    const hides = (part: string) => FIRE_PARTS.includes(part) || PLANTS.test(part) || AROUND.test(part);
+    // (framed on his lap, with his skirts off: on his hips, the coat filled the frame and hid where the arm met the leg)
+    const at = lab.joints.hips.getWorldPosition(new THREE.Vector3());
+    at.y += DEEPEST_FRAME.up;
+    const skirts = skirtsOf(lab.model.root).map((skirt) => skirt.mesh);
+    for (const skirt of skirts) skirt.visible = false;
+    try {
+      const options = { at, distance: DEEPEST_FRAME.distance, look: 'bones' as const };
+      this.shown = { depth, moment: withHidden(hides, () => lab.picture(label, this.views, [], options)) };
+    } finally {
+      for (const skirt of skirts) skirt.visible = true;
+    }
   }
 
   /** What went in further than `INTO_BODY`, as words. */
@@ -458,6 +513,11 @@ class IntoBody {
     const said = this.pieces.filter((piece) => piece.depth > INTO_BODY).map((piece) => piece.describe());
     if (this.arms) said.push(`${this.arms.what}, on ${this.armFrames} frames`);
     return said;
+  }
+
+  /** the deepest moment past `INTO_BODY`, pictured, if it went in */
+  get moment(): Pictured | null {
+    return this.shown?.moment ?? null;
   }
 }
 
