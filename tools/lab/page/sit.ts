@@ -16,6 +16,7 @@ import type { BiomeId } from '../../../src/data/biomes';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import { bodyBreaches, grippingSides } from './range';
 import { cm as cmOf, follow, JERK_FROM, skirtsOf } from './coat';
+import { WeaponBody } from './weaponBody';
 
 /** What `lab sit` takes. */
 export interface SitOptions {
@@ -337,8 +338,10 @@ const pastOf = (b: Breached) => `${b.name} ${b.by.toFixed(0)}° past its range`;
 async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out): Promise<boolean> {
   const sitting = lab.player.sitting;
   let walked = false, half = false;
-  // (the worst joint past its range sitting down, and standing idle before it: said, not the sit's)
+  // (the worst joint past its range sitting down, and standing idle before it: said, not the sit's; and the weapon in
+  // his hand through his legs or trunk as he sets it down: from review, a maul's haft through his hip by a fire)
   const worst: (Breached | null)[] = [null, null];
+  const through = new WeaponBody(label);
   for (let f = 0; f < SAT_BY * RATE; f++) {
     await lab.step(1);
     walked ||= sitting.walking;
@@ -347,6 +350,7 @@ async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out): P
     const past = sitting.walking ? undefined : bodyBreaches(lab.joints, grippingSides(lab)).found[0];
     const at = w > 0 ? 0 : 1;
     if (past && (!worst[at] || past.by > worst[at].by)) worst[at] = { by: past.by, name: past.name, w };
+    if (w > 0) through.observe(lab, `${f}, ${(w * 100).toFixed(0)}% down`);
     if (!half && w >= 0.5) {
       half = true;
       out.moments.push(lab.picture(`${label}: half way down`, views));
@@ -358,6 +362,8 @@ async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out): P
         out.problems.push(`sit: by the ${label}, sitting down, ${pastOf(down)} ${(down.w * 100).toFixed(0)}% down`);
       }
       if (stood) out.text.push(`    standing idle before it (not the sit's): ${pastOf(stood)}`);
+      const inBody = through.describe();
+      if (inBody) out.problems.push(`sit: by the ${label}, sitting down, ${inBody}`);
       return true;
     }
   }
@@ -371,11 +377,13 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): P
   let worst: { by: number; name: string; neck: number } | null = null;
   let frames = 0;
   const skirts = skirtsOf(lab.model.root);
+  const through = new WeaponBody(name);
   const spans = skirts.map((skirt) => new Spans(skirt.last.length));
   let frame = 0;
   const reads = await lab.step(SAT_FOR * RATE, undefined, () => {
     if (canary) j.body.position.y += CANARY_RAISE / j.root.scale.x;
     const read = readNow(lab);
+    through.observe(lab, `${frame}`);
     // (the first two frames fill each point's last two places)
     for (const skirt of skirts) follow(skirt, frame, frame >= 2, !!options.frames, j);
     // (once the cloth has settled where he sat: eased, it comes to rest over the first second)
@@ -387,6 +395,8 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out): P
     if (canary) j.body.position.y -= CANARY_RAISE / j.root.scale.x;
     return read;
   });
+  const inBody = through.describe();
+  if (inBody) out.problems.push(`sit: on the ${name}, ${inBody}`);
   skirts.forEach((skirt, i) => {
     const { most, at } = spans[i].widest();
     out.text.push(`    his ${skirt.name}: a point wandered ${cmOf(most)} cm at most (point ${at})`);
