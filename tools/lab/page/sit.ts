@@ -228,8 +228,8 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   for (const ask of c.asks) await askOf(lab, c, ask, out);
 }
 
-/** what of a fire hides him from ahead, hidden for `fromBeyond` */
-const FIRE_PARTS = ['flames', 'bonfire logs', 'bonfire stones'];
+/** what of a fire hides him from ahead, hidden for `fromBeyond` (the brazier includes its stepped plinth) */
+const FIRE_PARTS = ['flames', 'bonfire logs', 'bonfire stones', 'brazier'];
 /** where `fromBeyond` frames him: his knees' height over his hips' place, from this far ahead (m) */
 const BEYOND = { up: 0.15, distance: 2.6 };
 
