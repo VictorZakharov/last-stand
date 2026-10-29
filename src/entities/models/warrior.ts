@@ -1783,7 +1783,10 @@ export function buildWarrior(): Model {
       _fq.slerp(_restQ, onTop);
     }
     const pole = _pw.set(-PLANT.pole[0], PLANT.pole[1], PLANT.pole[2]).applyQuaternion(j.chest.getWorldQuaternion(_cq));
-    solveArm(j, false, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION });
+    // (the fist turned round the handle as far as the arm needs, eased there, while it holds it: held with its length
+    // towards the shoulder, the forearm went 86 degrees past its turn)
+    const roll = onTop < 1 ? { axis: direction, range: Math.PI * (1 - onTop), at: p.at } : undefined;
+    solveArm(j, false, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, roll, glide: roll ? 0.3 : undefined });
   }
   /** a weapon carried to where it leans kept from going under the floor, its end on it at the lowest: the fist falls a
    *  few cm short of its haft's top (let go of there and set on the floor, it moved 4 cm as the hand left it) */
