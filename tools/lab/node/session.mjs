@@ -8,7 +8,7 @@
 import { mkdirSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { launchBrowser, useLocalTemp } from './browser.mjs';
-import { COMMANDS, qualityOf } from './commands.mjs';
+import { COMMANDS, pageKind, qualityOf } from './commands.mjs';
 import { exportCommit } from './commits.mjs';
 import { describeDifferences } from './compare.mjs';
 import { labError } from './errors.mjs';
@@ -46,12 +46,6 @@ function withInsets(screen, insets) {
   if (!screen || !insets) return screen;
   const [left, top, right, bottom] = insets;
   return { ...screen, insets: { left, top, right, bottom } };
-}
-
-/** Whether a check may run `handler`'s command with `options` on a page its jobs before ran on (`keepsPage`). */
-function keepsPageFor(handler, options) {
-  const keeps = handler.keepsPage;
-  return typeof keeps === 'function' ? keeps(options) : Boolean(keeps);
 }
 
 export class LabSession {
@@ -141,15 +135,16 @@ export class LabSession {
       // (one page alive at a time: this tree's closed too when the other side runs alone)
       for (const other of [this.repoSide, this.otherSide]) if (other && other !== side) await other.closePage();
       const bootStarted = Date.now();
-      // (a page its own command's jobs ran on alone: checkQueue.mjs `pageOf`)
-      const keeps = this.keepPages && keepsPageFor(handler, options) && side.ranCommand === command;
+      // (a page of the kind the command may be run on: commands.mjs `pageKind`, checkQueue.mjs `pageOf`)
+      const kind = pageKind(command, options);
+      const keeps = this.keepPages && kind !== null && side.pageKind === kind;
       const keeping = { used: keeps, clean: Boolean(handler.countsCompiles) };
       if (await side.ready(heroClass, boot, keeping)) {
         notes.push(`${turn.name}: booted the ${heroClass}${bootText(boot)} (${seconds(bootStarted)})`);
         booting += (Date.now() - bootStarted) / 1000;
       }
       side.used = true;
-      side.ranCommand = command;
+      side.pageKind = kind;
       side.afresh = afresh;
       if (turn.screen) await side.showOn(turn.screen);
       let tally = null;

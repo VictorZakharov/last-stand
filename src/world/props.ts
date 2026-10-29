@@ -2,7 +2,7 @@
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import * as THREE from 'three';
 import { seeThroughFade } from '../core/seeThrough';
-import { inShadowsOnly } from './culling';
+import { drawingStill, inShadowsOnly } from './culling';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rand, TAU } from '../util';
 import { valueNoise3 } from '../core/patterns';
@@ -102,16 +102,21 @@ function holdsLight(object: THREE.Object3D): boolean {
 }
 
 /** What draws under `parent` outside `shown` hidden, into `hidden`: never a light, nor what holds one (each hidden
- *  light changes the count every lit program is made for, and the still shadows' render compiled 26 of them anew). */
-function hideBodies(parent: THREE.Object3D, shown: THREE.Object3D, hidden: THREE.Object3D[]): void {
+ *  light changes the count every lit program is made for, and the still shadows' render compiled 26 of them anew),
+ *  which casts nothing meanwhile instead, into `uncast`. */
+function hideBodies(parent: THREE.Object3D, shown: THREE.Object3D, hidden: THREE.Object3D[], uncast: THREE.Object3D[]): void {
   for (const child of parent.children) {
     if (child === shown || !child.visible) continue;
     if (draws(child) && !holdsLight(child)) {
       child.visible = false;
       hidden.push(child);
-    } else {
-      hideBodies(child, shown, hidden);
+      continue;
     }
+    if (draws(child) && child.castShadow) {
+      child.castShadow = false;
+      uncast.push(child);
+    }
+    hideBodies(child, shown, hidden, uncast);
   }
 }
 
@@ -127,18 +132,20 @@ export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Sce
   if (!lights.length) return;
   stillTarget ??= new THREE.WebGLRenderTarget(1, 1);
   const hidden: THREE.Object3D[] = [];
-  hideBodies(scene, shown, hidden);
+  const uncast: THREE.Object3D[] = [];
+  hideBodies(scene, shown, hidden, uncast);
   const keptAuto = kept.autoUpdate;
   const target = renderer.getRenderTarget();
   for (const light of lights) light.shadow.needsUpdate = true;
   kept.autoUpdate = false;
   renderer.setRenderTarget(stillTarget);
   try {
-    renderer.render(scene, camera);
+    drawingStill(shown, () => renderer.render(scene, camera));
   } finally {
     renderer.setRenderTarget(target);
     kept.autoUpdate = keptAuto;
     for (const child of hidden) child.visible = true;
+    for (const child of uncast) child.castShadow = true;
   }
 }
 

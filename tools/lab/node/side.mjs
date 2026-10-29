@@ -349,8 +349,8 @@ export class Side {
     this.used = false;
     /** its commands' set-ups build the hero afresh (session.mjs `afresh`) */
     this.afresh = false;
-    /** the command last run on its page (a check keeps a page for its own command's jobs alone) */
-    this.ranCommand = null;
+    /** the kind of page it has up, as the commands run on it (commands.mjs `pageKind`; null: none to keep) */
+    this.pageKind = null;
     /** called with the file when this tree's source changes (the server boots the next page then) */
     this.onStale = null;
     /** what the page raised or logged as an error since they were last read */
@@ -489,11 +489,12 @@ export class Side {
     await this.closePage();
     this.heroClass = null;
     this.bootedAs = null;
-    this.ranCommand = null;
+    this.pageKind = null;
     try {
       await this.openPage(heroClass, how);
       const booted = await this.page.evaluate(async () => {
         const lab = await import('/tools/lab/page/lab.ts');
+        await lab.mapsCome();
         return lab.install().heroes();
       });
       if (booted.hero !== heroClass) {
@@ -528,6 +529,7 @@ export class Side {
     const page = await this.openPageIn(this.partnerContext, heroClass, 'partner: ', this.bootedAs ?? LAB_BOOT);
     await page.evaluate(async () => {
       const lab = await import('/tools/lab/page/lab.ts');
+      await lab.mapsCome();
       lab.install();
     });
     return page;

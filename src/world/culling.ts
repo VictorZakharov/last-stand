@@ -173,16 +173,42 @@ export function cullWhileDrawn(scene: THREE.Scene, renderer: THREE.WebGLRenderer
   const shadows = renderer.shadowMap;
   const draw = shadows.render.bind(shadows);
   shadows.render = (lights, scene, camera) => {
-    for (const caster of shadowOnly) caster.visible = true;
-    const after = [...aroundShadow].map((around) => around(camera));
+    // (a biome's still shadows draw its own casters alone: a hero's shadow cast as one, shown for them, stayed in the
+    // braziers' shadow where he stood, and compiled a point light's skinned program mid-fight)
+    const casters = stillOf ? [...shadowOnly].filter((caster) => isUnder(caster, stillOf!)) : [...shadowOnly];
+    for (const caster of casters) caster.visible = true;
+    const after = stillOf ? [] : [...aroundShadow].map((around) => around(camera));
     try {
       draw(lights, scene, camera);
     } finally {
       for (const undo of after) undo();
-      for (const caster of shadowOnly) caster.visible = false;
+      for (const caster of casters) caster.visible = false;
     }
   };
 }
+
+/** the biome whose still shadows are being drawn (`drawingStill`) */
+let stillOf: THREE.Object3D | null = null;
+
+/** Whether `object` hangs under `root`. */
+function isUnder(object: THREE.Object3D, root: THREE.Object3D): boolean {
+  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (at === root) return true;
+  return false;
+}
+
+/** `draw` run as `biome`'s still shadows are drawn (`drawStillShadows` in `props.ts`): the shadow map shows only the
+ *  casters it alone draws that stand in the biome, and runs no work round its draw (`aroundShadows`). */
+export function drawingStill(biome: THREE.Object3D, draw: () => void): void {
+  stillOf = biome;
+  try {
+    draw();
+  } finally {
+    stillOf = null;
+  }
+}
+
+/** Whether a biome's still shadows are being drawn (`drawingStill`). */
+export const isDrawingStill = (): boolean => stillOf !== null;
 
 const _box = new THREE.Frustum();
 /** Lets go of the instances of `group`'s shadow casters outside the box of the shadow map `camera` draws (placed for

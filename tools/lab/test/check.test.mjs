@@ -10,7 +10,7 @@ import { keyedOptions, sideKey } from '../node/sideCache.mjs';
 
 const names = (jobs) => jobs.map((job) => job.name);
 
-test('every command of the plan for each of its heroes, the ranger\'s alone for his, the gait a scenario a job', () => {
+test('every command of the plan for each of its heroes, the ranger\'s alone for his, a split one a scenario a job', () => {
   const jobs = jobsOf({});
   const gaitScenarios = scenariosOf('gait').length;
   const starts = offsetsOf().length;
@@ -18,17 +18,22 @@ test('every command of the plan for each of its heroes, the ranger\'s alone for 
   assert.ok(starts > 1);
   assert.ok(CHECK_SPLIT.has('gait'));
   const eyes = eyesParts().length + castParts().length;
-  // (the stops, the ranges, the form and the battle log for each; the ranger's feet and carry, the warrior's swings,
-  // his rush in its parts and his hits)
-  assert.equal(jobs.length, (4 + gaitScenarios) * CHECK_CLASSES.length + 4 + RUSH_PARTS.length + eyes);
+  // (the ranges' but the cast's, which needs a skill named)
+  const each = gaitScenarios + scenariosOf('stops').length + scenariosOf('range').length - 1;
+  // (the gait, the stops and the ranges a scenario a job, the form and the battle log for each; the ranger's feet a
+  // scenario a job and his carry, the warrior's swings, his rush in its parts and his hits)
+  const ranger = scenariosOf('feet').length + 1;
+  assert.equal(jobs.length, (2 + each) * CHECK_CLASSES.length + ranger + 2 + RUSH_PARTS.length + eyes);
   assert.ok(names(jobs).includes('carry-ranger'));
   assert.ok(names(jobs).includes('log-mage'));
   assert.ok(names(jobs).includes('eyes-warrior-twoHanded-Maul-row'));
   assert.ok(!names(jobs).some((name) => name.startsWith('eyes-mage')));
   assert.ok(!names(jobs).includes('carry-warrior'));
-  assert.ok(names(jobs).includes('stops-mage'));
+  assert.ok(names(jobs).includes(`stops-mage-${scenariosOf('stops')[0]}`));
   const gait = jobs.find((job) => job.name === `gait-mage-${scenariosOf('gait')[0]}`);
   assert.deepEqual(gait.options.offsets, offsetsOf());
+  const stops = jobs.find((job) => job.name === `stops-mage-${scenariosOf('stops')[0]}`);
+  assert.equal(stops.options.offsets, undefined, 'a stop run once');
 });
 
 test('the starts asked for, at least one and at most every offset there is', () => {
@@ -41,8 +46,8 @@ test('the starts asked for, at least one and at most every offset there is', () 
 });
 
 test('the commands and heroes asked for, and a hero a command is not for left out', () => {
-  const jobs = jobsOf({ commands: ['stops', 'feet'], classes: ['warrior'] });
-  assert.deepEqual(names(jobs), ['stops-warrior']);
+  const jobs = jobsOf({ commands: ['carry', 'log'], classes: ['warrior'] });
+  assert.deepEqual(names(jobs), ['log-warrior']);
 });
 
 test('a split command\'s job runs one scenario, in its group; the gait listed without films; the A/B passed on', () => {
@@ -168,4 +173,16 @@ test('a command a check keeps pages for sets each hero up afresh, its other side
   const { afresh, ...without } = eyes.options;
   assert.equal(afresh, true);
   assert.notEqual(keyOf(eyes.options), keyOf(without));
+});
+
+test('a job\'s page: shared among the commands that share pages, its own command\'s alone, or one of its own', () => {
+  const page = (command, hero = 'warrior') => jobsOf({ commands: [command], classes: [hero] })[0].page;
+  assert.equal(page('gait'), 'shared');
+  assert.equal(page('eyes'), 'shared');
+  assert.equal(page('cast'), null);
+  assert.equal(page('hits'), 'hits');
+  assert.equal(page('form'), null);
+  const twoHanded = (part) => jobsOf({ commands: ['eyes'], classes: ['warrior'], only: `twoHanded-Maul-${part}` })[0];
+  assert.equal(twoHanded('row').page, 'shared');
+  assert.equal(twoHanded('tempest').page, null);
 });

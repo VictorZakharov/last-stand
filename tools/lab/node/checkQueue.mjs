@@ -4,13 +4,13 @@
 // check of 162 jobs booted 324 pages, at 15 to 20 s a boot most of its time.
 
 /**
- * A task's page: its side, its hero and its command (a session's page runs every task of the same one). Never kept
- * from one command to another: each command was shown to come out the same on a page its own jobs had run on, but
- * a page kept from the eyes' jobs dealt Twin Fangs' blows 20 less (`hits`) and stepped two of the warrior's gait
- * scenarios otherwise.
+ * A task's page: its side, its hero and the kind of page its command may run on (a session's page runs every task of
+ * the same one: commands.mjs `pageKind`, `page` in check.mjs `jobOf`). Each set-up afresh starts a run of its own
+ * (page/lab.ts `runAfresh`): in the run kept from the eyes' jobs, Twin Fangs' blows dealt 20 less (`hits`) and two of
+ * the warrior's gait scenarios stepped otherwise.
  */
 export function pageOf(task) {
-  return `${task.side}:${task.job.options.class}:${task.job.command}`;
+  return `${task.side}:${task.job.options.class}:${task.job.page ?? task.job.command}`;
 }
 
 /** The name a task's time is kept under (durations.json): a job's own for this tree, `@other` after it for the
@@ -45,11 +45,14 @@ export function tasksOf(jobs, runsOther, durations) {
 
 /**
  * The tasks still to run, handed out a session at a time: the first that runs on the page the session has up, else
- * the first there is, a job on this tree only once its other side has started (it waits for it to finish).
+ * the first whose page no other session has up (a boot either way: one another session would have run without),
+ * else the first there is; a job on this tree only once its other side has started (it waits for it to finish).
  */
 export class CheckQueue {
   constructor(tasks) {
     this.waiting = [...tasks];
+    /** the page each session has up, by the session */
+    this.held = new Map();
     /** each job's other side once started, by the job's name: settled when it's done */
     this.othersStarted = new Map();
     this.othersQueued = new Set(tasks.filter((task) => task.side === 'other').map((task) => task.job.name));
@@ -62,13 +65,20 @@ export class CheckQueue {
   }
 
   /**
-   * The next task for a session whose page is `page` (`pageOf`; null: none yet), taken off the queue, with what it
-   * must wait for first (its job's other side, still running), or null when every task has been handed out.
+   * The next task for session `who` whose page is `page` (`pageOf`; null: none yet), taken off the queue, with what
+   * it must wait for first (its job's other side, still running), or null when every task has been handed out.
    */
-  next(page) {
+  next(page, who = 0) {
     const startable = this.waiting.filter((task) => this.canStart(task));
-    const task = startable.find((each) => pageOf(each) === page) ?? startable[0];
-    if (!task) return null;
+    const othersUp = new Set([...this.held].filter(([session]) => session !== who).map(([, up]) => up));
+    const task = startable.find((each) => pageOf(each) === page)
+      ?? startable.find((each) => !othersUp.has(pageOf(each)))
+      ?? startable[0];
+    if (!task) {
+      this.held.delete(who);
+      return null;
+    }
+    this.held.set(who, pageOf(task));
     this.waiting.splice(this.waiting.indexOf(task), 1);
     if (task.side === 'other') this.othersQueued.delete(task.job.name);
     const before = this.othersStarted.get(task.job.name) ?? null;
@@ -108,14 +118,16 @@ export function planOf(tasks, workers, durations, boot = bootSeconds(durations))
     const waiting = sessions.filter((session) => !session.done);
     if (!waiting.length) break;
     const session = waiting.reduce((first, each) => (each.clock < first.clock ? each : first));
-    const next = queue.next(session.page);
+    const next = queue.next(session.page, sessions.indexOf(session));
     if (!next) {
       session.done = true;
       continue;
     }
     const { task } = next;
     const last = lastRun(durations, task);
-    const boots = pageOf(task) !== session.page || Boolean(last?.reboots);
+    // (a job on a page of its own boots every time: commands.mjs `pageKind`)
+    const ownPage = task.job.page === null;
+    const boots = ownPage || pageOf(task) !== session.page || Boolean(last?.reboots);
     const start = task.side === 'mine' ? Math.max(session.clock, othersEnd.get(task.job.name) ?? 0) : session.clock;
     session.clock = start + (boots ? boot : 0) + (last?.step ?? UNTIMED);
     if (task.side === 'other') othersEnd.set(task.job.name, session.clock);

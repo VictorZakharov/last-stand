@@ -274,6 +274,9 @@ Some of what that takes:
 - **Every command on a fresh page.** A page a command ran on is left as that command left it (the game's clock on,
   the hero wherever it took him), and a set-up on it starts from another moment, so it is never used again. Within
   one command its steps run in order on its page (the sheet's states one after another), the same order every time.
+  A check alone keeps pages from job to job, for the commands shown to come out the same that way, each set-up
+  afresh in a run of its own (`commands/check.md`). A page is booted once every map the loading workers make has
+  come (`mapsCome`: one landing mid-command drew the crypt's foes otherwise on a loaded machine).
 - **The clock.** From the moment the loading screen reveals the game, its frames run on the lab's clock: each a hair
   over a 60th of a second, as fast as the page can, nothing drawn unless asked (the scene's matrices are still
   updated). Every time the page reads is on a grid of 1/1024 ms, so the game's frame time is exact and the same on

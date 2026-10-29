@@ -22,28 +22,35 @@ folder beside it.
 
 - **Sessions side by side** (`--jobs n`, a core in three by default, at most 8), each a browser of its own, all of
   them served by one Vite server for this tree and one for the other commit. A job is one command for one hero, or a
-  part of one (a gait scenario, an eyes row or skill, a cast); the eyes', the casts' and the gait's parts are put
-  back together into one report a hero (`out/check/eyes-warrior.txt`, each under its name). It runs in the command
-  line's own process, not the server's.
+  part of one (a scenario of the gait, the stops, the ranges or the feet, an eyes row or skill, a cast); the parts
+  are put back together into one report a hero (`out/check/eyes-warrior.txt`, each under its name). Whole, the
+  ranger's stops, feet and ranges were single jobs of 90 to 210 s that ended the check; each scenario runs set up
+  afresh, and split, each comes out as it did whole, line for line (`CHECK_SPLIT` in `check.mjs`). It runs in the
+  command line's own process, not the server's.
 - **The other commit first** (`--ab`): it is exported once before the sessions start, and every job's side not kept
   yet (`out/ab-cache`, by the lab code the command runs: `node/labCode.mjs`) is run first, side by side, kept, and
   read back as its job runs this tree's; a warm check runs this tree's alone.
 - **Pages kept between jobs** (`node/checkQueue.mjs`): a session takes next the longest job left for the page it has
-  up (its side, hero and command), so a page booted for one job runs the next of its kind, and boots only for another
-  side, hero or command; the other side's tasks are handed out first. Never from one command to another: each was
-  shown the same on a page its own jobs had run on, but a page kept from the eyes' jobs dealt Twin Fangs' blows 20
-  less (`hits`) and stepped two of the warrior's gait scenarios otherwise. A boot is 8 s alone, 25 to 30 s with four at once, and a boot a
-  job was most of a check. A page is kept only for the commands shown to come out the same on it as on a page booted
-  for each job (`keepsPage` in `node/commands.mjs`), and each of their set-ups in a check builds the hero afresh
-  (`afresh`: `Fixture.fresh` for every set-up, the view taken from the top down, and the boot's cookies and storage
-  put back as each command begins, `page/lab.ts`). Set up over the hero the jobs before had left, the eyes' Steel
-  Tempest struck 25 frames earlier, and a skill bound to a key by one job (`bindKnown`) saved its loadout, which the
-  next job's hero loaded. `form` and `log` run on pages of their own (`log` lists the game's clock), and so do the
-  two-hander's eyes jobs: a cleave with pauses still turned its forearm past its range on 9 frames more after
-  another job, with all of the above, and what carries over isn't found yet. A command that counts the shaders
-  compiled late (`countsCompiles`: `cast`) runs only on a page that has compiled none since it loaded, so every
-  cast job boots while the warrior's casts compile one late (a point light's shadow of a skinned mesh, on `main`
-  too).
+  up (its side, its hero and the kind of page its command may run on), so a page booted for one job runs the next,
+  and boots only for another side, hero or kind; the other side's tasks are handed out first. A boot is 8 s alone,
+  25 to 30 s with eight at once, and a boot a job was most of a check. A page is kept only for the commands shown to
+  come out the same on it as on a page booted for each job (`keepsPage` and `pageKind` in `node/commands.mjs`): most
+  share pages whatever ran on them before (`'shared'`), `hits` only its own jobs' (`'own'`), and `form`, `log`,
+  `cast` and the two-hander's eyes jobs boot each (`log` lists the game's clock, `form`'s runner differed, a cast's
+  frames still part from about 0.6 s on a kept page as the foes come, not yet found). Each set-up in a check builds
+  the hero afresh, in a run of its own (`afresh`, `page/lab.ts`: `Fixture.fresh` for every set-up, the view taken
+  from the top down, the boot's cookies and storage put back as each command begins; a page's later set-ups leave
+  the run by the pause menu, read the profile again and start a new one at the game's time the page's first run
+  started at, `runAfresh`). Each was a leak found by running a part both ways: set up over the hero the jobs before
+  had left, the eyes' Steel Tempest struck 25 frames earlier; a skill bound to a key by one job (`bindKnown`) saved
+  its loadout, which the next job's hero loaded; in the run kept from the eyes' jobs Twin Fangs' blows dealt 20 less
+  and two of the warrior's gait scenarios stepped otherwise (its timers pending, its wave's state, its props). A run
+  started afresh lets go of its foes' ways and the view's frustum (`forgetFields`, `forgetFrustum`: stamped by the
+  game's clock, which a set-up moves back, each read as fresh). The lab boots a page only once every map the
+  loading workers make has come (`mapsCome`): landing mid-command, later on a loaded machine, a map drew the crypt's
+  foes otherwise in some of a check's casts and not others, so two checks' casts differed with nothing changed. A
+  command that counts the shaders compiled late (`countsCompiles`: `cast`) runs only on a page that has compiled
+  none since it loaded.
 - **`--reuse=false`** boots a page for every job, as the check did before; **`--like <dir>`** compares each report
   with the one of the same name in another check's `out/check` (copy it aside first), the lines that say how the run
   went left out (a boot's time, a side read back, the command's time, the range's frame times by the browser's
@@ -69,14 +76,16 @@ hero's jobs, each side's, in its line of the log and at the head of its report w
 
 ## What it takes
 
-On the owner's desktop (12 cores, RTX 4070 Ti), 8 sessions, all 162 jobs, 2026-10-28: `check --ab` 715 s with
-main's side run too (cold), 398 s with it read back (warm). Before pages were kept and main's side was keyed on the
-code each command runs, a cold check had written 11 of its 21 reports after 11.5 minutes and was stopped past 17. Of
-the warm check's 3,077 s of sessions' time, 1,344 s are boots, 8 s each alone and 25 to 30 with eight at once: the
-casts boot for every job (344 s) while the warrior's casts compile a shader late, the two-hander's eyes jobs for
-every job (above), and every hero's command once a session. The longest jobs (`stops` for the ranger, 150 to 210 s;
-`feet`, 100 to 150) are one page each, and end the check. Eight sessions load every core: a job takes about half
-as long again as with four.
+On the owner's desktop (12 cores, RTX 4070 Ti), 8 sessions, 2026-10-29: all 199 jobs on this tree alone (a warm
+`check --ab`, main's side read back) in 334 s, its sessions' time 2,540 s, of which 854 s are 46 boots: the casts
+boot for every job (27 of them, 352 s), and `form`, `log` and `hits` once each. The sessions end within 20 s of each
+other, so a check is now as long as its work over eight: each job takes about three times as long with eight
+sessions at once as alone (the casts' 414 s of work, the eyes' 362, the gait's 235, the stops' 302). Main's side run
+too (cold) took 924 s, main's own casts compiling their shader late and booting for every job. Before: 398 s warm
+and 715 s cold, with pages kept per command, the casts and the two-hander's eyes jobs booting each; before pages
+were kept and main's side was keyed on the code each command runs, a cold check had written 11 of its 21 reports
+after 11.5 minutes and was stopped past 17. A cast reads back only the pixels it measures, every second one each way,
+picked on the GPU (`page/sampledPixels.ts`: the whole canvas read back was 70% of a cast).
 
 One command at a time, both sides every time, the mage's cape stepped throughout and each gait scenario run again for
 its film, the same check took 31 to 35 minutes a round; the harness is run hundreds of times, so keep every check

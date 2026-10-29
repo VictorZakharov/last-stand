@@ -35,6 +35,8 @@ const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3();
 // the view's frustum, taken once a frame: an enemy out of it skips the leg IK
 const _frustum = new THREE.Frustum(), _pm = new THREE.Matrix4(), _sph = new THREE.Sphere();
 let _frustumAt = -1;
+/** The view's frustum taken again at its next use, as a run starts (its stamp is the game's clock: `forgetFields`). */
+export function forgetFrustum(): void { _frustumAt = -1; }
 function inView(x: number, y: number, z: number, r: number): boolean {
   if (_frustumAt !== G.time) {
     _frustumAt = G.time;

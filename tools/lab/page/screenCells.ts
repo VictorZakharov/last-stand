@@ -4,6 +4,7 @@
 // the flashes, is the relative luminance a screen shows (gamma 2.2), a share of white. An SDR canvas only: the lab
 // draws in SDR unless a command puts HDR on.
 import { G } from '../../../src/state';
+import { sampledPixels, type Sampled } from './sampledPixels';
 
 /** the cells across and down the frame: each a sixteenth of it, about the area a flash is judged over */
 export const CELLS = 4;
@@ -32,25 +33,53 @@ export interface FrameCells {
 /** an encoded channel's light (gamma 2.2), by its stored value */
 const LIGHT_OF = Float32Array.from({ length: 256 }, (_, value) => (value / 255) ** 2.2);
 
-let bytes = new Uint8Array(0);
+/** whether the pixels picked on the GPU have been checked against the whole canvas read back, on this page */
+let pickingChecked = false;
 
 /** The canvas's pixels as last drawn, bottom row first, and its size. */
 function readCanvas(): { pixels: Uint8Array; width: number; height: number } {
+  const gl = G.renderer.getContext();
+  G.renderer.setRenderTarget(null);
+  const width = gl.drawingBufferWidth;
+  const height = gl.drawingBufferHeight;
+  const pixels = new Uint8Array(width * height * 4);
+  gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  return { pixels, width, height };
+}
+
+/** Throws unless `sampled` holds the colour of every `SAMPLE_STEP`th pixel of the whole canvas read back. */
+function checkPicking(sampled: Sampled): void {
+  const whole = readCanvas();
+  for (let row = 0; row < sampled.height; row++) {
+    for (let column = 0; column < sampled.width; column++) {
+      const at = (row * sampled.width + column) * 4;
+      const from = (row * SAMPLE_STEP * whole.width + column * SAMPLE_STEP) * 4;
+      for (let channel = 0; channel < 3; channel++) {
+        if (sampled.pixels[at + channel] === whole.pixels[from + channel]) continue;
+        throw new Error(`lab: the pixels picked on the GPU differ from the canvas's at ${column}, ${row}`);
+      }
+    }
+  }
+}
+
+/** The canvas's every `SAMPLE_STEP`th pixel each way as last drawn (`sampledPixels`), bottom row first. */
+function sampleCanvas(): Sampled {
   const gl = G.renderer.getContext() as WebGL2RenderingContext & { drawingBufferFormat?: number };
   if (gl.drawingBufferFormat === gl.RGBA16F) {
     throw new Error('lab: cast: the canvas is HDR; its frames are read in SDR');
   }
-  G.renderer.setRenderTarget(null);
-  const width = gl.drawingBufferWidth;
-  const height = gl.drawingBufferHeight;
-  if (bytes.length !== width * height * 4) bytes = new Uint8Array(width * height * 4);
-  gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
-  return { pixels: bytes, width, height };
+  const sampled = sampledPixels(SAMPLE_STEP);
+  if (!pickingChecked) checkPicking(sampled);
+  pickingChecked = true;
+  return sampled;
 }
 
 /** The frame last drawn, as its light. Read it in the frame it was drawn in: the canvas is cleared after. */
 export function frameCells(): FrameCells {
-  const { pixels, width, height } = readCanvas();
+  const { pixels, width: across, height: down } = sampleCanvas();
+  const gl = G.renderer.getContext();
+  const width = gl.drawingBufferWidth;
+  const height = gl.drawingBufferHeight;
   const cellCount = CELLS * CELLS;
   const sums = new Float64Array(cellCount);
   const lights = new Float64Array(cellCount);
@@ -58,12 +87,14 @@ export function frameCells(): FrameCells {
   const fineSums = new Float32Array(FINE_ACROSS * FINE_DOWN);
   const fineCounts = new Float32Array(FINE_ACROSS * FINE_DOWN);
   let bright = 0;
-  for (let y = 0; y < height; y += SAMPLE_STEP) {
+  for (let sampledRow = 0; sampledRow < down; sampledRow++) {
     // (the canvas reads from its bottom row up)
+    const y = sampledRow * SAMPLE_STEP;
     const row = Math.min(CELLS - 1, Math.floor((height - 1 - y) / height * CELLS));
     const fineRow = Math.min(FINE_DOWN - 1, Math.floor((height - 1 - y) / height * FINE_DOWN));
-    for (let x = 0; x < width; x += SAMPLE_STEP) {
-      const at = (y * width + x) * 4;
+    for (let sampledColumn = 0; sampledColumn < across; sampledColumn++) {
+      const x = sampledColumn * SAMPLE_STEP;
+      const at = (sampledRow * across + sampledColumn) * 4;
       const red = pixels[at];
       const green = pixels[at + 1];
       const blue = pixels[at + 2];

@@ -382,11 +382,14 @@ function probePath(file) {
  * - `pictures(before, after)` pairs the pictures an A/B compares, for a command that takes them;
  * - `countsCompiles`, for a command that counts the shaders compiled after loading: a check runs it on a kept page
  *   only while the page has compiled nothing since it loaded (side.mjs `ready`);
- * - `keepsPage` (true, or by the options), for a command a check may run on a page its jobs before it ran on
- *   (session.mjs `keepPages`, `keepsPageFor`), each of its set-ups in a check building the hero afresh from the boot's
- *   storage (`afresh`): one whose results were shown to be the same there as on a page booted for each job, with
- *   `lab check --reuse=false` and `--like`. `form` and `log` run on pages of their own: `log` lists the game's clock,
- *   and `form`'s runner differed.
+ * - `keepsPage` (true, `'own'`, or either by the options), for a command a check may run on a page jobs before it
+ *   ran on (`pageKind`), each of its set-ups in a check building the hero afresh from the boot's storage in a run of
+ *   its own (`afresh`): one whose results were shown to be the same there as on a page booted for each job, with
+ *   `lab check --reuse=false` and `--like`. True: a page any such command ran on; `'own'`: one its own jobs alone ran
+ *   on (on a page kept from the gait's and the eyes' jobs, Twin Fangs' blows dealt 10 to 40 more). `form`, `log` and
+ *   `cast` run on pages of their own: `log` lists the game's clock, `form`'s runner differed, and a cast's frames
+ *   came out a little otherwise from about 0.6 s, as the foes came, even after its own jobs (with the run started
+ *   afresh, the foes' ways and the view's frustum found again: not found yet).
  */
 export const COMMANDS = {
   sheet: {
@@ -623,7 +626,6 @@ export const COMMANDS = {
   },
 
   cast: {
-    keepsPage: true,
     countsCompiles: true,
     check(options) {
       const wrong = options.times.find((time) => !(Number(time) >= 0));
@@ -803,7 +805,7 @@ export const COMMANDS = {
   },
 
   hits: {
-    keepsPage: true,
+    keepsPage: 'own',
     check(options) {
       if (options.apart !== undefined && !(options.apart > 0)) throw labError('hits --apart: more than 0 s');
     },
@@ -1232,10 +1234,10 @@ export const COMMANDS = {
   },
 
   eyes: {
-    // (a two-hander's on a page of its own: one kept from the jobs before still turned its forearm past its range on 9
-    // frames more of a cleave with pauses, every set-up afresh, its view taken from the top down and the boot's
-    // storage put back; what else carries over isn't found yet)
-    keepsPage: (options) => options.gear !== 'twoHanded',
+    // (a two-hander's too, since each set-up starts a run of its own: a page kept from the jobs before had turned its
+    // forearm past its range on 9 frames more of a cleave with pauses; but his Steel Tempest on a page of its own: on
+    // a kept one, the left wrist at the spin's fastest read a degree to five otherwise, not found yet)
+    keepsPage: (options) => options.gear !== 'twoHanded' || options._?.[0] !== 'tempest',
     check(options) {
       if (options.times !== undefined && !(options.times >= 1)) throw labError('eyes --times: at least 1');
       if (options.every !== undefined && !(options.every >= 1)) throw labError('eyes --every: at least 1');
@@ -1512,3 +1514,14 @@ export const COMMANDS = {
     textOf: asText,
   },
 };
+
+/**
+ * The pages a check may run `command` with `options` on, as its `keepsPage` says: `'shared'`, a page any command
+ * that shares pages ran on; the command's name, a page its own jobs alone ran on; or null, a page booted for it.
+ */
+export function pageKind(command, options) {
+  const keeps = COMMANDS[command]?.keepsPage;
+  const says = typeof keeps === 'function' ? keeps(options) : keeps;
+  if (says === 'own') return command;
+  return says ? 'shared' : null;
+}

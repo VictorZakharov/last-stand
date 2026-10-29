@@ -10,7 +10,7 @@ import { compareReports } from './checkReports.mjs';
 import { isStopping } from './running.mjs';
 import { exportCommit } from './commits.mjs';
 import { describeError } from './errors.mjs';
-import { COMMANDS as HANDLERS } from './commands.mjs';
+import { COMMANDS as HANDLERS, pageKind } from './commands.mjs';
 import { COMMANDS } from './options.mjs';
 import { OUT, REPO } from './paths.mjs';
 import { LabSession } from './session.mjs';
@@ -49,12 +49,19 @@ const CHECK_OPTIONS = {
   hits: { _: ['twinFangs'], than: 'cleave', apart: 0.2, gear: 'dual' },
 };
 /**
- * the commands run a scenario a job, side by side, each job running its scenario from every start on one page
- * (each run sets a fresh hero up, so it comes out the same whatever ran before it; set up again over the same hero,
- * a scenario's gallops moved with the scenarios run before it, by as much as a change being judged moved them, and a
- * page booted for each run spent 11 of its 25 s booting)
+ * the commands run a scenario a job, side by side, by whether each scenario runs from every start (`CHECK_OFFSETS`):
+ * the gait's from every start on one page (each run sets a fresh hero up, so it comes out the same whatever ran
+ * before it; set up again over the same hero, a scenario's gallops moved with the scenarios run before it, by as much
+ * as a change being judged moved them, and a page booted for each run spent 11 of its 25 s booting); the stops', the
+ * ranges' and the feet's once (whole, each was one job of 90 to 210 s, and the ranger's ended the check)
  */
-export const CHECK_SPLIT = new Set(['gait']);
+export const CHECK_SPLIT = new Map([
+  ['gait', { starts: true }],
+  ['stops', { starts: false }],
+  // (the cast's scenario runs only with a skill named, as the command whole leaves it out without one)
+  ['range', { starts: false, without: ['cast'] }],
+  ['feet', { starts: false }],
+]);
 /**
  * how many frames longer a split command's scenarios' first moves last (`--offsets`), as many of them as `--starts`
  * asks for, so every later change of way comes at another point of a stride: run so once alone, a frame's change
@@ -159,8 +166,10 @@ function skillsHeld(gear) {
  */
 function partsOf(command, starts) {
   if (CHECK_SPLIT.has(command)) {
-    const offsets = offsetsOf(starts);
-    return scenariosOf(command).map((part) => ({ part, options: { scenarios: [part], offsets } }));
+    const split = CHECK_SPLIT.get(command);
+    const offsets = split.starts ? { offsets: offsetsOf(starts) } : {};
+    const scenarios = scenariosOf(command).filter((scenario) => !split.without?.includes(scenario));
+    return scenarios.map((part) => ({ part, options: { scenarios: [part], ...offsets } }));
   }
   if (command === 'eyes') return eyesParts();
   if (command === 'cast') return castParts();
@@ -179,9 +188,11 @@ function jobOf(command, heroClass, base, of = null) {
   const afresh = HANDLERS[command]?.keepsPage ? { afresh: true } : {};
   const options = { _: [], ...CHECK_OPTIONS[command], ...afresh, ...base, class: heroClass };
   const group = `${command}-${heroClass}`;
-  if (!of) return { command, heroClass, options, name: group, group };
+  if (!of) return { command, heroClass, options, name: group, group, page: pageKind(command, options) };
   const name = `${group}-${of.part}`;
-  return { command, heroClass, options: { ...options, ...of.options }, name, group, part: of.part };
+  const partOptions = { ...options, ...of.options };
+  const page = pageKind(command, partOptions);
+  return { command, heroClass, options: partOptions, name, group, part: of.part, page };
 }
 
 /** The offsets a split command's scenarios start from, as many as `starts` asks (all there are at most). */
@@ -203,7 +214,9 @@ export function jobsOf(options, plan = CHECK_PLAN) {
       for (const part of parts) jobs.push(jobOf(command, heroClass, base, part));
     }
   }
-  return options.only ? jobs.filter((job) => job.name.includes(options.only)) : jobs;
+  if (!options.only) return jobs;
+  const wanted = options.only.split(',');
+  return jobs.filter((job) => wanted.some((text) => job.name.includes(text)));
 }
 
 /** The jobs' durations as the last check found them (s, by name). */
@@ -392,7 +405,7 @@ async function work({ worker, serving, queue, started, done, times, keepPages })
   const session = await LabSession.open({ worker, serving, keepPages });
   let page = null;
   try {
-    for (let next = queue.next(page); next; next = queue.next(page)) {
+    for (let next = queue.next(page, worker); next; next = queue.next(page, worker)) {
       const { task, before } = next;
       const running = (async () => {
         await before;

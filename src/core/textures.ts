@@ -161,6 +161,12 @@ export function mapsArrived(textures: Iterable<THREE.Texture>): Promise<void> {
   return Promise.all(waits).then(() => undefined);
 }
 
+/** Resolved once every map the loading workers were asked for has come (the lab waits for it before it measures: a
+ *  map landing mid-measure, later under a loaded machine, drew a foe's skin blank for some frames and not others). */
+export function everyMapCome(): Promise<void> {
+  return Promise.all([...coming.values()].map((map) => map.arrived)).then(() => undefined);
+}
+
 /** `PRELOAD` in the order the lobby needs its maps: the steel and `hero`'s face (the one it shows), the other maps,
  *  then the other heroes' faces (1.5 s each in a worker: on a first visit, made before the heroes' materials, the
  *  lobby waited 1.7 s for its maps). */

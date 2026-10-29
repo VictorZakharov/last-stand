@@ -25,6 +25,9 @@ import { clearEffects } from '../../../src/fx/effects';
 import { clearLights } from '../../../src/fx/lights';
 import { particles } from '../../../src/fx/particles';
 import { buildHotbar } from '../../../src/ui/hud';
+import * as culling from '../../../src/world/culling';
+import { loadProfile } from '../../../src/loot/profile';
+import * as textures from '../../../src/core/textures';
 import * as anatomy from '../../../src/entities/models/anatomy';
 import { drawLook, jointsByObject, partName, withBones, type Look, type PartOnScreen } from './looks';
 import type { Area } from './pixels';
@@ -382,6 +385,10 @@ export class Lab {
   /** the page's cookies and storage as the boot left them, put back as a command that builds its heroes afresh begins
    *  (`storeAgain`) */
   private booted: Stored = { cookies: [], storage: [] };
+  /** whether a set-up has run on this page */
+  private setUpBefore = false;
+  /** the game's clock as the page's first run started (`runAfresh` starts its own at the same moment) */
+  private firstRunAt: number | null = null;
   /** the point the mouse is over unless a frame says otherwise */
   aim = new THREE.Vector3();
   /** the share of his most Health the hero is kept at every frame, until the next set-up (whole: 1) */
@@ -434,7 +441,11 @@ export class Lab {
     const gl = G.renderer;
     const draw = gl.render.bind(gl);
     gl.render = (scene, camera) => {
-      if (this.drawing) return draw(scene, camera);
+      // (a biome's still shadows are drawn once, as it's shown: skipped, the first frame drawn drew them of everything,
+      // the hero's shadow with them, and compiled a program then)
+      // (an older commit has no `isDrawingStill`)
+      const still = (culling as { isDrawingStill?: () => boolean }).isDrawingStill?.() ?? false;
+      if (this.drawing || still) return draw(scene, camera);
       // (what a draw would have done that the game reads back: the world matrices)
       if (scene === G.scene) {
         scene.updateMatrixWorld();
@@ -551,7 +562,10 @@ export class Lab {
   /** Sets the run up as `fixture` says and checks that it took (throws if not). Returns what it is, for the report. */
   async setup(given: Fixture = {}): Promise<Record<string, unknown>> {
     const fixture = this.afresh ? { ...given, fresh: true } : given;
-    await this.enterRun();
+    // (a page's first set-up starts its run from the lobby the boot showed; afresh, a later one starts its own)
+    if (this.afresh && this.setUpBefore) await this.runAfresh();
+    else await this.enterRun();
+    this.setUpBefore = true;
     this.foes.clear();
     this.lifeShare = 1;
     this.keepUp = [() => holdTheWave(this.foes), this.keepHeroUp];
@@ -644,8 +658,31 @@ export class Lab {
     this.model.setGear?.(gear);
   }
 
+  /**
+   * A run started anew from the lobby, as a booted page's first set-up starts one, for a set-up afresh on a page kept
+   * from a command before (`begin`): the run left by the pause menu, the profile read again as the boot read it, and
+   * the random numbers started again for the run's start. Kept, a run carried the commands' leavings into the next:
+   * the game's timers still pending, the wave's state, the props broken and the run's rolled columns.
+   */
+  private async runAfresh(): Promise<void> {
+    if (G.mode === 'run') {
+      await this.step(1, () => ({ keys: ['escape'] }));
+      const abandon = document.getElementById('btn-abandon');
+      if (!abandon) throw new Error('lab: no pause menu to leave the run by');
+      await this.clickOn(abandon);
+      await this.until(() => G.mode === 'menu', 600, 'the run never gave way to the lobby');
+    }
+    G.profile = loadProfile(G.profile.classId);
+    window.__labSeed(COMMAND_SEED);
+    // (the run stamps what it starts with the game's clock, before a set-up moves it: at the moment the boot's own
+    // started, as a fresh page's first set-up starts it)
+    if (this.firstRunAt !== null) G.time = this.firstRunAt;
+    await this.enterRun();
+  }
+
   private async enterRun(): Promise<void> {
     if (G.mode === 'run') return;
+    this.firstRunAt ??= G.time;
     document.getElementById('btn-start')?.click();
     await this.until(() => G.mode === 'run' && !this.player.sandbox, 600, 'the run never started');
   }
@@ -1255,6 +1292,16 @@ function setSomeOf(path: string, value: number): void {
     numbers[place] = value;
   }
   window.__tune!(list, numbers);
+}
+
+/**
+ * Resolved once every map the loading workers make has come, before the lab installs (`everyMapCome` in
+ * src/core/textures.ts; an older commit has none): landing mid-command, later as the machine was loaded, a map drew
+ * the crypt's foes otherwise in some of a check's casts. No frame runs meanwhile: the clock is the lab's from the
+ * reveal.
+ */
+export async function mapsCome(): Promise<void> {
+  await (textures as { everyMapCome?: () => Promise<void> }).everyMapCome?.();
 }
 
 /** The session's entry: the lab installed on this page. */

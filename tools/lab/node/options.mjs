@@ -1749,7 +1749,8 @@ export const COMMANDS = {
       only: {
         kind: 'text',
         usage: 'text',
-        help: 'only the jobs whose name has this in it (eyes-warrior-dual: the eyes\' jobs with two weapons)',
+        help: 'only the jobs whose name has this in it, or any of these (eyes-warrior-dual: the eyes\' jobs with '
+          + 'two weapons; hits,gait-warrior-run)',
       },
       plan: {
         kind: 'switch',
