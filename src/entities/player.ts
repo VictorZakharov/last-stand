@@ -120,6 +120,8 @@ export type PlayerOut = 'banked' | 'dead' | null;
 /** how fast a light lit only at full draw eases in, as its glint comes, and out (`damp`'s rates: in over a quarter
  *  second, the glint at full draw's first moments was lit less than main's) */
 const AURA_EASE = { in: 60, out: 12 };
+/** the least height (m) of the aura's light over the ground under it */
+const AURA_FLOOR = 0.6;
 
 /** the local hero's lights (`heroLights`) */
 let lightsKept: { staff: THREE.PointLight; hand: THREE.PointLight } | null = null;
@@ -1138,8 +1140,9 @@ export class Player {
         const cam = G.camera.position, yaw = cameraYaw();
         this.staffLight.position.set(cam.x - Math.sin(yaw) * 1.5, cam.y + 0.8, cam.z - Math.cos(yaw) * 1.5);
       } else {
-        this.staffLight.position.copy(this.castPoint);
-        this.staffLight.position.y += 0.35;
+        // (never down by the floor: a blade's point set in the ground lit a hot disc round it)
+        const at = this.staffLight.position.copy(this.castPoint);
+        at.y = Math.max(at.y + 0.35, groundHeight(at.x, at.z) + AURA_FLOOR);
       }
       const glow = this.cls.aura.intensity;
       // (its intensity alone goes to none: the light stays in the scene, as the light count must)
