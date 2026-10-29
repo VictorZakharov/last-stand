@@ -1728,6 +1728,8 @@ export function buildWarrior(): Model {
     if (p.turn < 0) {
       root.worldToLocal(grip.getWorldPosition(p.startAt));
       p.startQ.copy(_rootQ).invert().multiply(grip.getWorldQuaternion(_pq));
+      // (and the fist as it held it, which it eases from)
+      p.handQ.copy(_rootQ).invert().multiply(p.joint.getWorldQuaternion(_pq));
       p.turn = 0;
     }
     const k = root.scale.x, s = _s5.setFromMatrixScale(grip.matrixWorld).y, [low, far] = reachAlong(weapon, grip);
@@ -1796,8 +1798,14 @@ export function buildWarrior(): Model {
     const pole = _pw.set(-PLANT.pole[0], PLANT.pole[1], PLANT.pole[2]).applyQuaternion(j.chest.getWorldQuaternion(_cq));
     // (the fist turned round the handle as far as the arm needs, eased there, while it holds it: held with its length
     // towards the shoulder, the forearm went 86 degrees past its turn)
-    const roll = onTop < 1 ? { axis: direction, range: Math.PI * (1 - onTop), at: p.at } : undefined;
-    solveArm(j, false, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, roll, glide: roll ? 0.3 : undefined });
+    // (eased from the fist as it held it as he started, unrolled: turned round the handle at once, the hand turned 91
+    // degrees in the frame he was up)
+    const fresh = 1 - smooth(ramp(sat, 0, BETWEEN.lift * BETWEEN.letGo));
+    _fq.slerp(_pq.copy(root.getWorldQuaternion(_pq)).multiply(p.handQ), fresh);
+    const turns = (1 - onTop) * (1 - fresh);
+    const roll = turns > 0 ? { axis: direction, range: Math.PI * turns, at: p.at } : undefined;
+    // (the elbow swung round, not thrown: it changed sides in a frame getting up, 62 cm)
+    solveArm(j, false, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, roll, glide: roll ? 0.3 : undefined, maxMove: PLANT_ELBOW });
   }
   /** a weapon carried to where it leans kept from going under the floor, its end on it at the lowest: the fist falls a
    *  few cm short of its haft's top (let go of there and set on the floor, it moved 4 cm as the hand left it) */
