@@ -75,8 +75,11 @@ export interface CarriedFinding {
 /** Every rigid piece of the hero, followed frame by frame. */
 export class Carried {
   private readonly followed: Followed[];
+  /** the piece `trace` names, frame by frame: how far its meshes went and turned at most, held or not */
+  readonly traced: string[] = [];
 
-  constructor(private readonly lab: Lab) {
+  /** `trace`: a piece to list frame by frame (`lab sit --trace`), by its name */
+  constructor(private readonly lab: Lab, private readonly trace?: string) {
     this.followed = partsOf(lab).map((part) => ({
       part, world: null, onJoint: null, start: null, quaternion: null, heldEver: false, movedFrom: 0,
       loose: 0, looseFrames: 0, looseAt: '', jump: null,
@@ -89,6 +92,7 @@ export class Carried {
     lab.model.root.updateMatrixWorld(true);
     const held = heldPieces(lab, this.followed.map((each) => each.part));
     const k = lab.joints.root.scale.x;
+    const frameOf: TraceFrame = { went: 0, turned: 0, held: false, seen: false };
     for (const each of this.followed) {
       const { part } = each;
       if (!shown(part.mesh)) {
@@ -111,6 +115,7 @@ export class Carried {
         }
         const turned = each.quaternion.angleTo(quaternion) * DEG;
         const mesh = meshName(part.mesh);
+        if (part.name === this.trace) traceInto(frameOf, moved, turned, inHand);
         if (turned > TURN_MOST) {
           each.jump = worse(each.jump, `${mesh} turned ${turned.toFixed(0)}°`, turned / TURN_MOST, frame);
         }
@@ -122,6 +127,7 @@ export class Carried {
       each.onJoint = onJoint;
       each.quaternion = quaternion;
     }
+    if (frameOf.seen) this.traced.push(traceLine(frame, frameOf));
   }
 
   /** Each piece the pose moved (held at some frame, or taken from where it hangs), and what it did: its mesh that
@@ -142,6 +148,28 @@ export class Carried {
     }
     return [...byName.values()];
   }
+}
+
+/** A traced piece's frame: the most any of its meshes went (m) and turned (degrees), and whether a hand held it. */
+interface TraceFrame {
+  went: number;
+  turned: number;
+  held: boolean;
+  seen: boolean;
+}
+
+/** One of the traced piece's meshes read into its frame. */
+function traceInto(frame: TraceFrame, went: number, turned: number, held: boolean): void {
+  frame.went = Math.max(frame.went, went);
+  frame.turned = Math.max(frame.turned, turned);
+  frame.held ||= held;
+  frame.seen = true;
+}
+
+/** The traced piece's frame as a line. */
+function traceLine(at: string, frame: TraceFrame): string {
+  const went = `${(frame.went * 100).toFixed(1)} cm`;
+  return `${at}: went ${went}, turned ${frame.turned.toFixed(1)}°${frame.held ? '' : ', no hand on it'}`;
 }
 
 /** The worse of a jump and one of `size` (none of size 0). */
