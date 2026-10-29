@@ -1190,6 +1190,7 @@ export function buildMage(): Model {
     st.look?.();
     const staffDown = st.sit && onFloor(st.sit) ? satBy(st.sit) : 0;
     restHands(j, st.sit, [0]);
+    body.legs = floorW * floorW * (3 - 2 * floorW);
     // (the staff hand to his knee once he's well down: from the start, his fist round the staff as it went, the wrist
     // bent 19 degrees past its range)
     if (staffDown > 0) restHands(j, { ...st.sit!, w: ramp(staffDown, STAFF_HAND[0], STAFF_HAND[1]) }, [1]);
