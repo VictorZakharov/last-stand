@@ -1223,7 +1223,7 @@ export function buildMage(): Model {
     placeBodies();
     // (the hands only against the outer skirt: pushed in, the inner one would come out over it)
     if (robed) {
-      over.update(fL, fR, move, t + 0.4, dt, legBodies.list, handBodies.list);
+      over.update(fL, fR, move, t + 0.4, dt, legBodies.list, handBodies.list, satBy(st.sit));
       // (sat low, the robe's hem lies on the floor)
       if (st.sit) over.keepAbove(floorUnder(skirts[0]));
     }

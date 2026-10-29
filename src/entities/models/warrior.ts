@@ -2713,7 +2713,7 @@ export function buildWarrior(): Model {
     // (sat, the free hand rests on the thigh)
     placeBodies(!fp && st.dead < 0 && !(offHeld && !sheathed) && !twoHeld ? 1 - satBy(st.sit) : 0);
     // (through the eyes the body isn't drawn, nor its shadow: the mail swings undraped)
-    skirt.update(fL, fR, move, t, dt, fp ? undefined : legBodies.list, fp ? undefined : handBodies.list);
+    skirt.update(fL, fR, move, t, dt, fp ? undefined : legBodies.list, fp ? undefined : handBodies.list, satBy(st.sit));
 
     // fists round whatever they hold; an empty hand hangs loosely curled
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
