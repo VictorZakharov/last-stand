@@ -77,7 +77,7 @@ export class Carried {
   private readonly followed: Followed[];
   /** the piece `trace` names, frame by frame: how far its meshes went and turned at most, held or not */
   readonly traced: string[] = [];
-  /** each hand where it was the frame before, for the trace: whether a piece jumped with its hand or in it */
+  /** each hand and elbow where it was the frame before, for the trace: whether a piece jumped with its hand or in it */
   private readonly handsWere = new Map<THREE.Object3D, HandAt>();
 
   /** `trace`: a piece to list frame by frame (`lab sit --trace`), by its name */
@@ -132,10 +132,13 @@ export class Carried {
     if (frameOf.seen) this.traced.push(`${traceLine(frame, frameOf)}; ${this.handsMoved()}`);
   }
 
-  /** How far each hand went and turned since the frame before, as a line's end. */
+  /** How far each hand and elbow went and turned since the frame before, as a line's end. */
   private handsMoved(): string {
-    const hands: [string, THREE.Object3D][] = [['right', this.lab.joints.handR], ['left', this.lab.joints.handL]];
-    return hands.map(([name, hand]) => `${name} hand ${handMoved(hand, this.handsWere)}`).join(', ');
+    const joints = this.lab.joints;
+    const arms: [string, THREE.Object3D][] = [
+      ['right hand', joints.handR], ['elbow', joints.elbowR], ['left hand', joints.handL], ['elbow', joints.elbowL],
+    ];
+    return arms.map(([name, joint]) => `${name} ${handMoved(joint, this.handsWere)}`).join(', ');
   }
 
   /** Each piece the pose moved (held at some frame, or taken from where it hangs), and what it did: its mesh that
