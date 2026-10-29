@@ -1540,6 +1540,16 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  poses: {
+    help: 'the hero\'s pose a move at a time (standing, walking, strafing with the attack held, stopped) as a digest '
+      + 'of every object\'s world matrix and every moving point of cloth to the last bit, and his animate timed '
+      + 'each frame: a change made to cost less poses him exactly as before when an A/B\'s digests agree',
+    options: {
+      canary: { kind: 'switch', help: 'plant a fault the measure must catch: a number moved by its last bit' },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   coat: {
     help: 'the hero\'s skirts (the ranger\'s coat, the mage\'s robe, the warrior\'s mail) and hood (the mage\'s) as he '
       + 'stands at idle in his head item and body armour, frame '

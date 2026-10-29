@@ -1368,6 +1368,14 @@ export const COMMANDS = {
     pictures: picturePairs,
   },
 
+  poses: {
+    each(side, options) {
+      return side.command('poses', { fixture: fixtureFrom(options), canary: Boolean(options.canary) });
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   coat: {
     each(side, options) {
       const command = {

@@ -819,6 +819,15 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the steps jerk the head 3 to 5° on main too), stands through the eyes (none), in the lobby (one at least) and is
   shown in the hall (none before his showcase is done, one within 10 s after). The canary kicks the head 3° for a
   frame and lets him glance as he walks. The owner's words: "when idle, characters should look left/right casually".
+- `poses`: the hero's pose a move at a time (`page/poses.ts`): he stands (60 frames), walks ahead (90), strafes
+  with the attack held (90) and stops (90), and after each frame every object of his model (its world matrix) and
+  every point of the geometries that move (positions drawn as `DynamicDrawUsage`: the cloth, a bowstring) is folded
+  into a digest by the bits of each number, a line a move and one for all; then his model's `animate` timed each
+  frame by the browser's clock (median, 90th percentile, in all), lines that differ from run to run. A change made
+  to cost less poses him exactly as before when `--ab`'s digest lines agree, and its time lines say what it saved:
+  a clip or range measure's lines agree for changes far past the last bit, and a gait's later strides go elsewhere
+  after one (`check`'s offsets). `--canary` moves a number of the last frame by its last bit, and the digest must
+  change. Run it with each `--gear` a change can touch (a hero's arms are fitted per weapon style).
 - `coat`: the hero's skirts and hood (`page/coat.ts`; `models/armor.ts` `Skirt` and `models/hood.ts` `HoodCloth`,
   found by their geometries' names, 'skirt' and 'hood', or a commit from before by the ranger's mesh's, 'tunic hem') as
   he stands at idle in his head item and body armour, `--seconds` (5 by default): every point of the cloth in its own
