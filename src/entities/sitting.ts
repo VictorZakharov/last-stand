@@ -43,6 +43,8 @@ export interface Sitter {
   readonly pos: THREE.Vector3;
   facing: number;
   readonly radius: number;
+  /** how many times as long as `SIT`'s he takes to sit and to get up (`Model.sitPace`) */
+  readonly sitPace: number;
 }
 
 export class Sitting {
@@ -171,14 +173,14 @@ export class Sitting {
       this.phase = 'up';
       return this.rise(me, dt);
     }
-    this.u = Math.min(1, this.u + dt / SIT.down);
+    this.u = Math.min(1, this.u + dt / (SIT.down * me.sitPace));
     if (this.u >= 1) this.phase = 'sat';
     this.place(me, dt);
     return true;
   }
 
   private rise(me: Sitter, dt: number): boolean {
-    this.u = Math.max(0, this.u - dt / SIT.up);
+    this.u = Math.max(0, this.u - dt / (SIT.up * me.sitPace));
     this.place(me, dt);
     if (this.u > 0) return true;
     // (up: let go of the seat only as he leaves it, from as near as he stands, or its circles would throw him off it)
