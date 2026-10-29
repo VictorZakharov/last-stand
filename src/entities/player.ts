@@ -117,7 +117,7 @@ export type PlayerOut = 'banked' | 'dead' | null;
  *  second, the glint at full draw's first moments was lit less than main's) */
 const AURA_EASE = { in: 60, out: 12 };
 /** the least height (m) of the aura's light over the ground under it */
-const AURA_FLOOR = 0.6;
+const AURA_FLOOR = 1.3;
 
 export class Player {
   readonly cls: ClassDef;
