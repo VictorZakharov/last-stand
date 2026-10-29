@@ -1510,7 +1510,7 @@ export function buildWarrior(): Model {
    *  89 degrees past its turn; its fingers ahead on the pommel, the wrist bent 34 degrees past its range.) From play: "keep it stood", with a natural regrip. Stood point down at his side in one fist, the fist had
    *  to turn 120 degrees from how it held it standing, past a wrist's turn: his arm shot straight out ahead and the
    *  blade swept 0.5 to 2 m in a frame. */
-  const BETWEEN = tunable('warriorBetween', { ahead: 0.75, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, held: [0.6, 0.1, 0.15], pace: 1.8 });
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.75, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, held: [0.6, 0.1, 0.15], rise: 0.5, pace: 1.8 });
   const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95 });
   const _plantHand = new THREE.Vector3(), _plantBox = new THREE.Box3(), _plantM = new THREE.Matrix4();
   /** a hand's weapon stood on its end: its grip's place there (world, `q`, `at`), the way from the hand to its
@@ -1534,7 +1534,9 @@ export function buildWarrior(): Model {
     armWas: THREE.Quaternion[]; liftAt: THREE.Vector3; liftQ: THREE.Quaternion;
     /** and its grip's turn in the fist then, which it keeps as it's lifted, and where the fist had it lifted (the
      *  root's frame), which it's set down from */
-    gripWas: THREE.Quaternion; liftedAt: THREE.Vector3; liftedQ: THREE.Quaternion;
+    gripWas: THREE.Quaternion; gripAtWas: THREE.Vector3; liftedAt: THREE.Vector3; liftedQ: THREE.Quaternion;
+    /** where it's set point down in the ground, carried in the fist (the world's) */
+    setAt: THREE.Vector3; setQ: THREE.Quaternion;
     /** how far up its haft from its grip the fist has slid (the grip's units), leaning it on a seat */
     slide: number;
     /** leant where it is, let go of */
@@ -1553,7 +1555,7 @@ export function buildWarrior(): Model {
       left, hand, joint: left ? j.handL : j.handR, grip, shoulder: left ? j.shoulderL : j.shoulderR,
       q: new THREE.Quaternion(), at: new THREE.Vector3(), up: new THREE.Vector3(), on: null, carried: false, turn: -1,
       landAt: new THREE.Vector3(), landQ: new THREE.Quaternion(), handAt: new THREE.Vector3(), handQ: new THREE.Quaternion(),
-      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), armWas: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], liftAt: new THREE.Vector3(), liftQ: new THREE.Quaternion(), gripWas: new THREE.Quaternion(), liftedAt: new THREE.Vector3(), liftedQ: new THREE.Quaternion(), slide: 0, leant: false, pivot: 0, standQ: new THREE.Quaternion(), drawWay: new THREE.Vector3(), drawWas: null, restTurn: -1, way: 0,
+      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), armWas: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], liftAt: new THREE.Vector3(), liftQ: new THREE.Quaternion(), gripWas: new THREE.Quaternion(), gripAtWas: new THREE.Vector3(), setAt: new THREE.Vector3(), setQ: new THREE.Quaternion(), liftedAt: new THREE.Vector3(), liftedQ: new THREE.Quaternion(), slide: 0, leant: false, pivot: 0, standQ: new THREE.Quaternion(), drawWay: new THREE.Vector3(), drawWas: null, restTurn: -1, way: 0,
     };
   }
   const _standQ = new THREE.Quaternion(), _standAt = new THREE.Vector3(), _holdQ = new THREE.Quaternion();
@@ -1772,26 +1774,15 @@ export function buildWarrior(): Model {
       heldAt.y -= BETWEEN.held[0] * k;
       heldAt.addScaledVector(_s1.set(-1, 0, 0).transformDirection(root.matrixWorld), BETWEEN.held[2] * k);
       _standAt.copy(spot).addScaledVector(slant, -far * s);
+      // (the arm carries it between these, `carryArm`, and it's where the fist has it: `carriedGrip`)
       p.liftAt.copy(heldAt);
       p.liftQ.copy(held);
-      if (w < BETWEEN.lift) {
-        // (where the arm, lifting it, takes it: `liftArm`; and where the fist had it last frame, set down from there)
-        p.liftedAt.copy(p.landAt);
-        p.liftedQ.copy(p.landQ);
-        p.at.copy(heldAt);
-        p.q.copy(held);
-      } else {
-        // (from where the lift left it, which is near enough the way the plan hangs it)
-        const e = smooth((w - BETWEEN.lift) / (1 - BETWEEN.lift));
-        // (its point tipped ahead and down into the ground, as a blade held up at the side is lowered before him:
-        // turned the shortest way from upright to its point down, it swept flat across his chest, 18 cm into it)
-        const lifted = _pq.copy(_rootQ).multiply(p.liftedQ);
-        const level = _wayQ.setFromUnitVectors(_s7.set(0, 1, 0).applyQuaternion(lifted), ahead).multiply(lifted);
-        _standQ.setFromUnitVectors(_s7.set(0, 1, 0).applyQuaternion(level), slant).multiply(level);
-        p.at.copy(p.liftedAt).applyMatrix4(root.matrixWorld).lerp(_standAt, e).addScaledVector(ahead, BETWEEN.arc[0] * Math.sin(Math.PI * e) * k);
-        if (e < 0.5) p.q.copy(lifted).slerp(level, e * 2);
-        else p.q.copy(level).slerp(_standQ, e * 2 - 1);
-      }
+      p.setAt.copy(_standAt);
+      // (its point turned over ahead of him about his side to side, then leant out as it's set)
+      const over = _pq.setFromAxisAngle(_s7.set(1, 0, 0).transformDirection(root.matrixWorld), Math.PI);
+      p.setQ.copy(_wayQ.setFromUnitVectors(_s2.copy(up).negate(), slant)).multiply(over).multiply(held);
+      p.at.copy(w < BETWEEN.lift ? heldAt : _standAt);
+      p.q.copy(w < BETWEEN.lift ? held : p.setQ);
     }
     // its pommel's top, for the hand to rest on
     p.up.copy(p.at).addScaledVector(_s2.set(0, 1, 0).applyQuaternion(p.q), low * s);
@@ -1799,11 +1790,13 @@ export function buildWarrior(): Model {
   /** The right fist round a two-hander's grip where `p` has it (`restBetween`), its length towards the shoulder, and
    *  past `BETWEEN.letGo` off it onto its pommel, palm down, fingers ahead. */
   function fistOnGrip(p: Planted, sat: number, weapon: Weapon): void {
-    const lifted = Math.min(1, sat / BETWEEN.letGo) / BETWEEN.lift;
-    if (lifted < 1) {
-      liftArm(p, smooth(lifted), weapon);
+    const w = Math.min(1, sat / BETWEEN.letGo);
+    if (w < 1) {
+      carryArm(p, w);
       return;
     }
+    // (from the fist still round its grip as it was carried, `holdKey`, its palm onto its pommel)
+    holdKey(p, p.at, p.q, _keyA);
     const top = _s8.copy(p.up);
     const direction = _hd.set(0, 1, 0).applyQuaternion(p.q);
     const up = p.shoulder.getWorldPosition(_s3).sub(p.at).normalize();
@@ -1833,24 +1826,39 @@ export function buildWarrior(): Model {
     // in a frame, 32 cm)
     const turns = (1 - onTop) * smooth(ramp(sat, 0, BETWEEN.lift * BETWEEN.letGo));
     const roll = turns > 0 ? { axis: direction, range: Math.PI * turns, at: p.at } : undefined;
-    // (the elbow swung round, not thrown: it changed sides in a frame getting up, 62 cm)
-    solveArm(j, false, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, roll, glide: roll ? 0.3 : undefined, maxMove: PLANT_ELBOW });
+    solveArm(j, false, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, roll, glide: roll ? 0.3 : undefined });
+    armOf(p).forEach((joint, i) => joint.quaternion.slerpQuaternions(_keyA[i], joint.quaternion, onTop));
   }
-  /** The weapon arm lifting a two-hander off his shoulder to where it hangs at his side (`restBetween`'s `liftAt`),
-   *  `e` of the way: each of its joints turned from where it was as he started to where it holds it there, as a body
-   *  moves an arm, the weapon in the fist. (Its fist placed on the weapon's own way there and the arm fitted to it each
-   *  frame, the elbow changed sides 8% of the way down, 37 to 47 cm in a frame, and the blade jumped 50 to 150 cm.) */
-  function liftArm(p: Planted, e: number, weapon: Weapon): void {
-    const direction = _hd.set(0, 1, 0).applyQuaternion(p.liftQ);
-    const up = p.shoulder.getWorldPosition(_s3).sub(p.liftAt).normalize();
-    fistReach(p.hand, direction, up, weapon.r, _cur);
-    fistTurn(p.hand, direction, up, _fq);
-    const wrist = _cur.negate().add(p.liftAt);
+  /** The weapon arm carrying a two-hander, `w` of the way, the fist holding it as it held it on his shoulder: lifted
+   *  off it to stand up at his side (`restBetween`'s `liftAt`), then its point tipped ahead into the ground (`setAt`).
+   *  Each of the arm's joints is turned from one of those holds to the next, as a body moves an arm, and the weapon
+   *  goes where the fist takes it. (Its fist placed on the weapon's own way each frame and the arm fitted to it, the
+   *  elbow changed sides 8% of the way down, 37 to 47 cm in a frame, the blade jumped 50 to 150 cm, and the hand was
+   *  bent 59 degrees past its range to the blade's way.) */
+  function carryArm(p: Planted, w: number): void {
+    const lifted = w / BETWEEN.lift;
+    holdKey(p, p.liftAt, p.liftQ, _keyA);
+    if (lifted < 1) {
+      armOf(p).forEach((joint, i) => joint.quaternion.slerpQuaternions(p.armWas[i], _keyA[i], smooth(lifted)));
+      return;
+    }
+    holdKey(p, p.setAt, p.setQ, _keyB);
+    const e = smooth((w - BETWEEN.lift) / (1 - BETWEEN.lift));
+    armOf(p).forEach((joint, i) => joint.quaternion.slerpQuaternions(_keyA[i], _keyB[i], e));
+  }
+  /** The weapon arm's joints (into `out`, shoulder to hand) holding the weapon's grip at `at`, turned `q` (the world's),
+   *  in the fist as it held it standing (`gripWas`, `gripAtWas`), as near as the arm's ranges let it. */
+  function holdKey(p: Planted, at: THREE.Vector3, q: THREE.Quaternion, out: THREE.Quaternion[]): void {
+    const hand = _fq.copy(q).multiply(_kq.copy(p.gripWas).invert());
+    const s = _s5.setFromMatrixScale(p.joint.matrixWorld).x;
+    const wrist = _kv.copy(p.gripAtWas).multiplyScalar(s).applyQuaternion(hand).negate().add(at);
     const pole = _pw.set(-PLANT.pole[0], PLANT.pole[1], PLANT.pole[2]).applyQuaternion(j.chest.getWorldQuaternion(_cq));
-    const roll = { axis: direction, range: Math.PI, at: p.liftAt };
-    solveArm(j, false, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, roll, glide: 0.3 });
-    armOf(p).forEach((joint, i) => joint.quaternion.slerpQuaternions(p.armWas[i], joint.quaternion, e));
+    solveArm(j, false, { wrist, hand, pole, body, flexion: GRIPPED_FLEXION, remember: false });
+    armOf(p).forEach((joint, i) => out[i].copy(joint.quaternion));
   }
+  const _keyA = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _keyB = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _kq = new THREE.Quaternion(), _kv = new THREE.Vector3();
   /** a weapon arm's joints, shoulder to hand */
   function armOf(p: Planted): THREE.Object3D[] {
     return p.left ? [j.shoulderL, j.elbowL, j.handL] : [j.shoulderR, j.elbowR, j.handR];
@@ -3109,7 +3117,7 @@ export function buildWarrior(): Model {
     const plantOff = offHeld && !sheathed && st.sit && !fp && st.dead < 0 ? st.sit.w : 0;
     carryingTwo = (carryTwo && plant > 0 && plant <= LAY.letGo) || (leanR && plant > 0 && plant <= LEAN.letGo) || (between && plant > 0 && plant < BETWEEN.letGo);
     const gripped = held && (!(plant > 0 && (floorSit || leanR)) || carryingTwo);
-    const lifting = between && plant > 0 && Math.min(1, plant / BETWEEN.letGo) < BETWEEN.lift;
+    const carriedBetween = between && plant > 0 && plant < BETWEEN.letGo;
     if (plant > 0 && floorSit) {
       carryDown(plantR, plant, held!, st.sit!);
     }
@@ -3118,8 +3126,11 @@ export function buildWarrior(): Model {
       restBetween(plantR, plant, held!);
       fistOnGrip(plantR, plant, held!);
     }
-    // (lifted off his shoulder, it turns as the fist does: `liftArm`)
-    if (carryingTwo && lifting) grip.quaternion.copy(plantR.gripWas);
+    // (carried to where it's set down, it turns as the fist does: `carryArm`)
+    if (carryingTwo && carriedBetween) {
+      grip.quaternion.copy(plantR.gripWas);
+      grip.position.copy(plantR.gripAtWas);
+    }
     else if (carryingTwo) {
       j.handR.getWorldQuaternion(_pq).invert();
       grip.quaternion.copy(_pq).multiply(plantR.q);
@@ -3144,6 +3155,7 @@ export function buildWarrior(): Model {
       if (plant === 0) {
         armOf(plantR).forEach((joint, i) => plantR.armWas[i].copy(joint.quaternion));
         plantR.gripWas.copy(grip.quaternion);
+        plantR.gripAtWas.copy(grip.position);
       }
     }
     // (a two-hander through the eyes is held as its swings key it: fitted so, its weapon turned off its place and the
