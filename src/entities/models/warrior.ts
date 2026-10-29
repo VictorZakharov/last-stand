@@ -1879,12 +1879,28 @@ export function buildWarrior(): Model {
     weapon.group.userData.stuckIn = p.carried ? sink * p.pivot : sink;
     p.on = weapon;
   }
+  /** A blade turned point down through the loosened fist, `p.pivot` of the way: about the palm's normal, its tip
+   *  forward and down, then onto how it stands. (Eased from how the fist had it to how it stands, nearly a half turn,
+   *  the way it turned flipped as the hand moved, and a greatsword went 2 m in a frame) */
+  function pivotThrough(p: Planted): void {
+    const handle = _s1.set(0, 1, 0).applyQuaternion(p.q), stood = _s2.set(0, 1, 0).applyQuaternion(p.standQ);
+    const axis = _s3.set(0, 0, 1).applyQuaternion(p.hand.vis.getWorldQuaternion(_pq)).normalize();
+    handle.addScaledVector(axis, -handle.dot(axis)).normalize();
+    stood.addScaledVector(axis, -stood.dot(axis)).normalize();
+    let angle = Math.atan2(_s4.crossVectors(handle, stood).dot(axis), handle.dot(stood));
+    // (the way round that takes its tip ahead of him, not back past his face)
+    const ahead = _s5.set(0, 0, 1).transformDirection(root.matrixWorld);
+    const other = angle - Math.sign(angle) * Math.PI * 2;
+    const tipAt = (a: number) => _s6.copy(handle).applyAxisAngle(axis, a / 2).dot(ahead);
+    if (tipAt(other) > tipAt(angle)) angle = other;
+    p.q.premultiply(_turnQ.setFromAxisAngle(axis, angle * p.pivot)).slerp(p.standQ, p.pivot * p.pivot);
+  }
   /** a weapon carried to where it stands: its place taken from the fist as the arm's fit left it (after `seat`) */
   function carriedGrip(p: Planted): void {
     if (!p.carried) return;
     p.grip.getWorldPosition(p.at);
     p.grip.getWorldQuaternion(p.q);
-    if (p.pivot > 0) p.q.slerp(p.standQ, p.pivot);
+    if (p.pivot > 0) pivotThrough(p);
     const local = _rootQ.copy(root.getWorldQuaternion(_rootQ)).invert();
     root.worldToLocal(p.landAt.copy(p.at));
     p.landQ.copy(local).multiply(p.q);
@@ -3026,8 +3042,11 @@ export function buildWarrior(): Model {
     const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
     // (each handle diagonal across its palm by the slant the arm took, the weapon seated in that fist)
     // (sat, his hand round a weapon stood on its end thumb up, once he has it; open as he sets it down)
-    if (plant > 0 && !floorSit && !leanR && STANDS[held!.group.name] === 'point') hold(handR, _hd.set(0, 1, 0), held!.r);
-    else if (plant >= 1 && two && !floorSit) hold(handR, _hd.set(0, 1, 0), held!.r, plantR.up);
+    // (eased from the fist as it holds it: thumb up at once, the wrist bent 12 degrees past its range the first frame)
+    if (plant > 0 && !floorSit && !leanR && STANDS[held!.group.name] === 'point') {
+      const k = smooth(ramp(plant, 0, PLANT.pivot[0]));
+      hold(handR, along(grip).lerp(_cur.set(0, 1, 0), k).normalize(), held!.r, undefined, slantR * (1 - k));
+    } else if (plant >= 1 && two && !floorSit) hold(handR, _hd.set(0, 1, 0), held!.r, plantR.up);
     else if (carryingTwo || (plant > 0 && plantR.carried)) hold(handR, along(grip), held!.r, undefined, slantR);
     else if (plant > 0) poseHand(handR, restingHand(plant, two), 0.1);
     else if (held) hold(handR, along(grip), held.r, undefined, slantR);
