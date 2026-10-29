@@ -1088,7 +1088,7 @@ export class Lab {
     renderer.setView(view === 'third' ? 'third' : 'top');
     if (view !== 'third') renderer.setZoom(view === 'lobby' ? CAMERA.lobbyZoom : 1);
     // (a long step: every glide and ease of the camera at its end)
-    for (let i = 0; i < 3; i++) renderer.updateCamera(10, this.player.pos, this.model.height);
+    for (let i = 0; i < 3; i++) renderer.updateCamera(10, this.player.pos, this.framedHeight());
     const camera = G.camera;
     camera.updateMatrixWorld();
     const hips = this.joints.hips.getWorldPosition(new THREE.Vector3()).project(camera);
@@ -1103,6 +1103,13 @@ export class Lab {
       width: height * 0.6,
       height,
     };
+  }
+
+  /** The height the game's camera frames the hero by (`Player.framedHeight`: lowered as he sits), or his own in a
+   *  commit from before it. */
+  framedHeight(): number {
+    const player = this.player as { framedHeight?: () => number };
+    return player.framedHeight?.() ?? this.model.height;
   }
 
   /** The game's camera and its rig as they are now, and a function that puts them back. */

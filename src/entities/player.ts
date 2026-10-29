@@ -28,7 +28,7 @@ import { countDown, countHealed, countTaken } from '../game/stats';
 import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SitState, SkillDef, SkillKey, Struck } from '../types';
 import type { Enemy } from './enemy';
 
-const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3();
+const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3(), _neck = new THREE.Vector3();
 /** an overhead blow comes down on a foe whose near side is within this ahead (m: a two-hander's reach past the hands
  *  held before him), on the share of its height its top is taken at (the shoulders and the head) */
 const STRUCK_REACH = 2.2, STRUCK_TOP = 0.85;
@@ -234,12 +234,27 @@ export class Player {
   sits = true;
   /** his sit on a log or a stone */
   readonly sitting = new Sitting();
+  /** his neck over his feet as he last stood (m): `framedHeight` lowers his height with it as he sits */
+  private standingNeck = 0;
   /** the most light a highlight on him reflects outside the eyes (`kit.u.uShine`; 0: as it is): the hall of heroes'
    *  key light a metre off put a glare on a shield's boss */
   shine = 0;
   /** a remote player holds its revive key (reported with its state) */
   reviving = false;
 
+
+  /** The height the camera frames him by: his own, lowered with his neck as he sits (from play: zoomed in over the
+   *  shoulder, the camera closed on where a standing hero's shoulders would be, over a seated one's head). */
+  framedHeight(): number {
+    const neck = this.model.joints?.neck;
+    if (!neck) return this.model.height;
+    const at = neck.getWorldPosition(_neck).y - this.pos.y;
+    if (!this.sitting.pose) {
+      this.standingNeck = at;
+      return this.model.height;
+    }
+    return this.standingNeck > 0 ? this.model.height * Math.min(1, at / this.standingNeck) : this.model.height;
+  }
   constructor(classId: string, equipped: Profile['equipped'], local = true) {
     this.cls = CLASSES[classId];
     this.local = local;
