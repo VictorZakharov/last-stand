@@ -22,7 +22,7 @@ import { particles } from '../../../src/fx/particles';
 import type { BiomeId } from '../../../src/data/biomes';
 import { standIn } from './light';
 import { canvasOf, readOpaque, type Area } from './pixels';
-import { frameCells } from './screenCells';
+import { FrameReader } from './screenCells';
 import { worstFlashing } from './flashes';
 import {
   BANDS, LIT, changeBetween, frameStats, medianOf, strongestFrequency, swingOf, turningOf,
@@ -358,18 +358,18 @@ async function readOver(lab: Lab, fire: Fire, shot: Shot, seconds: number): Prom
 /** The screen's cells' light in the top-down view as it stands, each frame for `seconds`. */
 async function screenLights(lab: Lab, seconds: number): Promise<number[][]> {
   const frames = Math.round(seconds / (window.__labClock.frame / 1000));
-  const lights: number[][] = [];
+  const reader = new FrameReader();
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
     for (let frame = 0; frame < frames; frame++) {
       await lab.step(1);
-      lights.push(frameCells().cellLights);
+      reader.take();
     }
   } finally {
     lab.drawing = drawing;
   }
-  return lights;
+  return reader.frames().map((frame) => frame.cellLights);
 }
 
 /** The most flashes any cell of `lights` (each frame's) showed in one second. */

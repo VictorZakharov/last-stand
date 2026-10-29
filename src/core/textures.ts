@@ -190,9 +190,13 @@ export interface MapsComing {
 export interface MapMade { key: string; data: PBRData; start: number; ms: number; kept: boolean; readMs: number; up: number }
 
 /** What a maps worker is given as it's made, in its name: the maps in the order they're needed, its place among
- *  the workers and how many there are, and this boot's mark (the locks the workers share the maps out by are this
- *  boot's alone, `pbr.worker.ts`). */
-export interface MapOrders { jobs: Job[]; worker: number; workers: number; boot: string }
+ *  the workers and how many there are, this boot's mark (the locks the workers share the maps out by are this
+ *  boot's alone, `pbr.worker.ts`), and in the lab's pages the name their maps are kept under (core/kept.ts `keepAs`,
+ *  `window.__labMapsAs`). */
+export interface MapOrders { jobs: Job[]; worker: number; workers: number; boot: string; keepAs?: string }
+
+/** the name the lab keeps a dev build's maps under (tools/lab/node/side.mjs), none in the game */
+const labMapsAs = (): string | undefined => (globalThis as { __labMapsAs?: string }).__labMapsAs;
 
 /**
  * Make the game's PBR maps in workers, in parallel, while the page stays responsive: done on the
@@ -223,7 +227,7 @@ export function preloadTextures(hero: string): MapsComing {
   const boot = `${performance.timeOrigin} ${Math.random()}`;
   const workers: Worker[] = [];
   const run = (worker: number): Promise<void> => new Promise((resolve) => {
-    const orders: MapOrders = { jobs, worker, workers: n, boot };
+    const orders: MapOrders = { jobs, worker, workers: n, boot, keepAs: labMapsAs() };
     let w: Worker;
     const asked = performance.now();
     try {

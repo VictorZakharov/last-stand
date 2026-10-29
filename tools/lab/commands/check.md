@@ -37,7 +37,10 @@ folder beside it.
   come out the same on it as on a page booted for each job (`keepsPage` and `pageKind` in `node/commands.mjs`): most
   share pages whatever ran on them before (`'shared'`), `hits` only its own jobs' (`'own'`), and `form`, `log`,
   `cast` and the two-hander's eyes jobs boot each (`log` lists the game's clock, `form`'s runner differed, a cast's
-  frames still part from about 0.6 s on a kept page as the foes come, not yet found). Each set-up in a check builds
+  frames part from about 0.6 s on a kept page as the foes come: the biomes' emitters, the gates' motes and the
+  braziers', keep their phase from frame to frame, so on a kept page they spawn on other frames, and the random
+  numbers the foes draw after them in the frame are others; set afresh, the game's particles would differ from
+  main's in every command). Each set-up in a check builds
   the hero afresh, in a run of its own (`afresh`, `page/lab.ts`: `Fixture.fresh` for every set-up, the view taken
   from the top down, the boot's cookies and storage put back as each command begins; a page's later set-ups leave
   the run by the pause menu, read the profile again and start a new one at the game's time the page's first run
@@ -84,8 +87,15 @@ sessions at once as alone (the casts' 414 s of work, the eyes' 362, the gait's 2
 too (cold) took 924 s, main's own casts compiling their shader late and booting for every job. Before: 398 s warm
 and 715 s cold, with pages kept per command, the casts and the two-hander's eyes jobs booting each; before pages
 were kept and main's side was keyed on the code each command runs, a cold check had written 11 of its 21 reports
-after 11.5 minutes and was stopped past 17. A cast reads back only the pixels it measures, every second one each way,
-picked on the GPU (`page/sampledPixels.ts`: the whole canvas read back was 70% of a cast).
+after 11.5 minutes and was stopped past 17.
+
+One session alone (`--jobs 1`, this tree), the check's work was 822 s and 40 boots of 5.5 s; a warm boot is about
+2.5 s to the lobby (the modules from Vite, the lobby's warm-ups) and 2 s more for the fight's and the heroes'. A cast
+reads back only its cells' sums: every second pixel each way summed over the fine grid's cells on the GPU, as whole
+numbers, read a frame behind (`page/gridSums.ts`; the whole canvas read back was 70% of a cast, and each read waited
+for the GPU to finish the frame), checked once a page against the whole canvas summed on the CPU. A cast's page time
+went from 7.3 s to 3.5 s with every line the same, and the casts' work from 213 s to about 100. What's left of a job
+is the game's own frames: the hero's animation and his coat's drape (`stops`), the eyes' set-ups and frames.
 
 One command at a time, both sides every time, the mage's cape stepped throughout and each gait scenario run again for
 its film, the same check took 31 to 35 minutes a round; the harness is run hundreds of times, so keep every check

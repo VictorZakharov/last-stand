@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import { lowerProcesses, PAGE_SCRIPTS } from './browser.mjs';
 import { exportedTreePaths } from './commits.mjs';
 import { compileError, labError } from './errors.mjs';
+import { mapsCodeOf } from './mapsCode.mjs';
 import { watchLayers } from './layers.mjs';
 import { probeFiles } from './probeFiles.mjs';
 import { stampOf } from './sideCache.mjs';
@@ -561,6 +562,10 @@ export class Side {
     const cookies = { ...BOOT_COOKIES, ...settled, 'last-stand-class': heroClass };
     await context.addCookies(Object.entries(cookies).map(([name, value]) => ({ name, value, url: this.url })));
     const page = await context.newPage();
+    // (the maps made once kept in the context's store, under a name for their code: src/core/kept.ts `keepAs`)
+    await page.addInitScript((name) => {
+      window.__labMapsAs = name;
+    }, mapsCodeOf(this.root));
     page.on('pageerror', (error) => this.errors.push(`${prefix}${String(error)}`));
     page.on('console', (message) => {
       if (message.type() === 'error' && !fromDevClient(message)) this.errors.push(`${prefix}${message.text()}`);
