@@ -120,7 +120,7 @@ export type PlayerOut = 'banked' | 'dead' | null;
 const AURA_EASE = { in: 60, out: 12 };
 /** sat, a weapon's tip low by the floor (between these heights over it, m) moves the aura's light to over his head (`over`, m
  *  over his feet): a blade's point set in the ground lit a hot disc round it, and over it, his hand on the pommel */
-const AURA_LOW = { from: 0.5, to: 1.2, over: 2.9 };
+const AURA_LOW = { from: 0.5, to: 1.2, over: 2.3 };
 
 /** the local hero's lights (`heroLights`) */
 let lightsKept: { staff: THREE.PointLight; hand: THREE.PointLight } | null = null;
