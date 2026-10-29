@@ -245,6 +245,11 @@ export class Player {
 
   /** The height the camera frames him by: his own, lowered with his neck as he sits (from play: zoomed in over the
    *  shoulder, the camera closed on where a standing hero's shoulders would be, over a seated one's head). */
+  /** how many times as long as the sit's own he takes to sit and to get up (`Model.sitPace`) */
+  get sitPace(): number {
+    return this.model.sitPace ?? 1;
+  }
+
   framedHeight(): number {
     const neck = this.model.joints?.neck;
     if (!neck) return this.model.height;
