@@ -421,7 +421,10 @@ export class Skirt {
       const a = this.ang[i], sx = Math.sin(a), cz = Math.cos(a);
       const wl = clamp(0.5 + sx * 0.9, 0, 1);
       const legPush = (fL * wl + fR * (1 - wl)) * cz;
-      const target = Math.max(-0.1, legPush * push) + (0.04 + move * 0.08 + Math.sin(t * 3 + a * 3) * 0.015) * flare + (cz > 0 ? 0 : move * 0.25 * -cz) * flare;
+      // (no flutter sat: its few millimetres tipped the drape between his raised knees from one side to the other
+      // every 2 s, 54 cm by a fire)
+      const flutter = Math.sin(t * 3 + a * 3) * 0.015 * (1 - settle);
+      const target = Math.max(-0.1, legPush * push) + (0.04 + move * 0.08 + flutter) * flare + (cz > 0 ? 0 : move * 0.25 * -cz) * flare;
       // a stiff, damped spring: cloth follows the legs a moment late and settles without wobbling
       if (h > 0) {
         this.vel[i] += ((target - this.theta[i]) * 260 - this.vel[i] * 26) * h;
