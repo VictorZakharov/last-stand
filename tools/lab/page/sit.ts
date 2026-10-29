@@ -318,7 +318,7 @@ function judgeWatch(name: string, watch: Watch, out: Out): void {
   for (const found of watch.carried.findings()) {
     if (found.loose > LOOSE_MOST) {
       out.problems.push(`sit: by the ${name}, his ${found.name} moved ${cmOf(found.loose)} cm with no hand on it `
-        + `(${found.looseFrames} frames, from ${found.looseAt})`);
+        + `(${found.looseFrames} frames: ${found.looseAt})`);
     }
     if (found.jump) {
       out.problems.push(`sit: by the ${name}, his ${found.name} ${found.jump.by} in a frame (${found.jump.at})`);
