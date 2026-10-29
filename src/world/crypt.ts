@@ -391,6 +391,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   for (const a of [Math.PI / 4, (5 * Math.PI) / 4]) {
     const [x, z] = polar(WALL_R - 2.4, a);
     const g = new THREE.Group(), u0 = updaters.length;
+    g.name = 'brazier';
     scene.add(g);
     buildBrazier(g, x, z, a, iron, graniteMat, updaters);
     obstacles.push({ x, z, r: 1.45, h: 1.8 });
