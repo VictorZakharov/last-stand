@@ -1533,6 +1533,10 @@ export const COMMANDS = {
     options: {
       seats: { kind: 'list', usage: 'a,b', help: 'the seats tried: log, stone, column, fire, brazier (all by default)' },
       frames: { kind: 'switch', help: 'list every frame his skirts jerked as he sat (their first 40)' },
+      trace: {
+        kind: 'text', usage: 'piece',
+        help: 'list a carried piece frame by frame (shield, Greatsword...): how far it went and turned, held or not',
+      },
       canary: { kind: 'switch', help: 'plant a fault the measure must catch: his body raised off the seat as he sits' },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,

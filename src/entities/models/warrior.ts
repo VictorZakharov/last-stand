@@ -1885,25 +1885,21 @@ export function buildWarrior(): Model {
     weapon.group.userData.stuckIn = p.carried ? sink * p.pivot : sink;
     p.on = weapon;
   }
-  /** A blade turned point down through the loosened fist, `p.pivot` of the way: about the palm's normal, its tip
-   *  forward and down, then onto how it stands. (Eased from how the fist had it to how it stands, nearly a half turn,
-   *  the way it turned flipped as the hand moved, and a greatsword went 2 m in a frame) */
+  /** A blade turned point down through the loosened fist, `p.pivot` of the way: half round the palm's normal, in the
+   *  hand's own frame, its tip forward and down, then onto how it stands. (Eased from how the fist had it to how it
+   *  stands, nearly a half turn, the way it turned flipped as the hand moved, and a greatsword went 2 m in a frame;
+   *  turned by the angle left between them in the world, measured afresh each frame, it went 30 cm in one) */
   function pivotThrough(p: Planted): void {
-    const handle = _s1.set(0, 1, 0).applyQuaternion(p.q), stood = _s2.set(0, 1, 0).applyQuaternion(p.standQ);
-    const axis = _s3.set(0, 0, 1).applyQuaternion(p.hand.vis.getWorldQuaternion(_pq)).normalize();
-    handle.addScaledVector(axis, -handle.dot(axis)).normalize();
-    stood.addScaledVector(axis, -stood.dot(axis)).normalize();
-    let angle = Math.atan2(_s4.crossVectors(handle, stood).dot(axis), handle.dot(stood));
-    // (the way round that takes its tip ahead of him, not back past his face, chosen once a sit: chosen afresh each
-    // frame, near a half turn it changed its mind, and the greatsword's tip went 30 cm in a frame)
-    const other = angle - Math.sign(angle) * Math.PI * 2;
+    const hand = p.joint.getWorldQuaternion(_pq);
+    const axis = _s3.set(0, 0, 1).applyQuaternion(p.hand.vis.quaternion).applyQuaternion(hand).normalize();
+    // (the way round that takes its tip ahead of him, not back past his face, chosen once a sit)
     if (p.way === 0) {
       const ahead = _s5.set(0, 0, 1).transformDirection(root.matrixWorld);
-      const tipAt = (a: number) => _s6.copy(handle).applyAxisAngle(axis, a / 2).dot(ahead);
-      p.way = Math.sign(tipAt(other) > tipAt(angle) ? other : angle);
+      const handle = _s1.set(0, 1, 0).applyQuaternion(p.q);
+      p.way = _s6.copy(handle).applyAxisAngle(axis, Math.PI / 2).dot(ahead) >= 0 ? 1 : -1;
     }
-    if (Math.sign(angle) !== p.way) angle = other;
-    p.q.premultiply(_turnQ.setFromAxisAngle(axis, angle * p.pivot)).slerp(p.standQ, p.pivot * p.pivot);
+    p.q.premultiply(_turnQ.setFromAxisAngle(axis, p.way * Math.PI * p.pivot));
+    p.q.slerp(p.standQ, p.pivot ** 4);
   }
   /** a weapon carried to where it stands: its place taken from the fist as the arm's fit left it (after `seat`) */
   function carriedGrip(p: Planted): void {
