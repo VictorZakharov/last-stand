@@ -55,6 +55,9 @@ export interface ArmGoal {
   /** the farthest the elbow may move from where it was last solved (the rig's units): further, it goes that far round its
    *  circle towards where it would be, so a change of side is a swing, not a jump */
   maxMove?: number;
+  /** with `maxMove`: how far past the best's ranges (degrees) the elbow held back may go before it gives way
+   *  (`REACH_SLACK` if absent) */
+  slack?: number;
   /** with `roll` or `slant`: how much of the way from the last solve's turn about the handle and slant on it to the best
    *  found now they go (0..1), the best found between the few tried, not one of them: picked from those, the hand turned
    *  and slanted in steps, and as the walk moved the elbow a bow carried in the fist jumped between two or three places */
@@ -332,15 +335,15 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     _rad.copy(prev).sub(_S).addScaledVector(_n, -a);
     const phiP = Math.atan2(_rad.dot(_u2), _rad.dot(_u1));
     if (_E.distanceTo(prev) > g.maxMove) {
-      const d = Math.atan2(Math.sin(best - phiP), Math.cos(best - phiP)), ob = over();
+      const d = Math.atan2(Math.sin(best - phiP), Math.cos(best - phiP)), ob = over(), slack = g.slack ?? REACH_SLACK;
       let lo = 0, hi = 1;
       for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; at(phiP + d * mid); if (_E.distanceTo(prev) > g.maxMove) hi = mid; else lo = mid; }
       // (further, past the cap, as far as the ranges need: held back, an elbow swinging up over the shoulder for the quiver
       // took the shoulder 200 degrees past its range)
       at(phiP + d * lo);
-      if (over() > ob + REACH_SLACK) {
+      if (over() > ob + slack) {
         let l = lo, h = 1;
-        for (let i = 0; i < 12; i++) { const mid = (l + h) / 2; at(phiP + d * mid); if (over() > ob + REACH_SLACK) l = mid; else h = mid; }
+        for (let i = 0; i < 12; i++) { const mid = (l + h) / 2; at(phiP + d * mid); if (over() > ob + slack) l = mid; else h = mid; }
         lo = h;
       }
       best = phiP + d * lo;
