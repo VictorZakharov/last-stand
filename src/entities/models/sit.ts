@@ -26,7 +26,7 @@ export const SIT_POSE = tunable('sit', {
   handLift: 0.25,
   /** how far sat (eased) the arm's own elbow has given way to the rest's whole (reached with the rest's elbow from his
    *  first moment sat, the warrior's left elbow went 19 cm in the frame the sit ended, and his shield 49 cm) */
-  armIn: 0.15,
+  armIn: 0.3,
   /** the way a resting hand's elbow points (out and back, the chest's frame; the left's, the right's mirrored) */
   pole: [1, -0.2, -1],
   /** sat on the floor: the pelvis rolled back (rad: a man's on the floor rolls back, and his hips upright bent 10
