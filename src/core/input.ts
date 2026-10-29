@@ -78,6 +78,8 @@ export function wantPointerLock(on: boolean): void {
   if (!on) { if (pointerLocked()) document.exitPointerLock(); return; }
   if (!pointerLocked() && navigator.userActivation?.isActive && performance.now() - lockTried > 600) requestLock();
 }
+/** whether mouse look wants the pointer this frame (`lab village` reads it: headless, the lock itself may not come) */
+export const pointerWanted = (): boolean => lockWanted;
 export function onPointerLockLost(fn: () => void): void { onLockLost = fn; }
 
 const ray = new THREE.Raycaster();
