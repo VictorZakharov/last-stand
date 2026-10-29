@@ -53,9 +53,9 @@ const BOOK_LAY = 0.8, BOOK_LIFT = 0.12;
 const STAFF_LAY = tunable('mageStaffLay', { at: [-0.6, -0.95], over: 0.035, rise: 0.04, rings: 0.45, swing: 0.6 });
 /** a robe's panel's lower half's swing sat (rad from straight down): it hangs from the knee */
 const PANEL_HANGS = 0.15;
-/** how far down he is as his hand lets go of the staff he lays down (closed round it as it turned down, the wrist went
- *  22 degrees past its range), as the staff goes from it to the floor (from, to), and as the hand goes to his knee */
-const STAFF_LET_GO = 0.3, STAFF_DOWN = [0.3, 1], STAFF_HAND = [0, 1];
+/** how far down he is as his hand lets go of the staff he lays down, as the staff goes to the floor (from, to), and
+ *  as the hand goes to his knee. Moving the staff only after 0.3 left it 7.6 cm through his rising thigh. */
+const STAFF_LET_GO = 0.2, STAFF_DOWN = [0, 1], STAFF_HAND = [0, 1];
 const _bookQ = new THREE.Quaternion(), _bookTurn = new THREE.Quaternion(), _bookAxis = new THREE.Vector3();
 const _bookPivot = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
 /** a point on the coat's front at x, y, `lift` above it: the tunic's (a round body of the coat's own, narrower over the
