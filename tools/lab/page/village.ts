@@ -1,12 +1,13 @@
 // `lab village`: the village the lobby stands in, as a player walks it (tools/lab). The run is left for the lobby, and:
 // every object is usable from where the hero stands to use it; his skills cast in the training yard and nowhere else;
 // no straight walk out from inside the palisade or along a way out leaves the village; the terrace's stair takes him
-// up to the hall; the first visit's training ticks off each step as the player takes it (the yard walked into, a
-// dummy struck, the map opened by M, the stash and the notice board used), the portal's card holding its way in
-// until it's done, and skipped it opens the portals at once; and no hour of the day compiles a program.
+// up to the hall; in the close view the hall's screen lets the pointer go; the first visit's training ticks off each
+// step as the player takes it (the yard walked into, a dummy struck, the map opened by M, the stash and the notice
+// board used), the portal's card holding its way in until it's done, and skipped it opens the portals at once; and
+// no hour of the day compiles a program.
 // `--canary` plants a fault for each check: an object's stand moved off it, the yard's reading taken outside it, a
-// hero put past the palisade after a walk, the stair walked at beside it into the terrace's wall, the notice board
-// never read, a new material shown at one hour.
+// hero put past the palisade after a walk, the stair walked at beside it into the terrace's wall, the pointer asked
+// of the square (where mouse look holds it), the notice board never read, a new material shown at one hour.
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
@@ -21,6 +22,9 @@ import { restartTraining, skipTraining, stepDone, trainingPending } from '../../
 import { TRAINING } from '../../../src/data/training';
 import { holdHour } from '../../../src/game/clock';
 import { villageMapOpen } from '../../../src/ui/villageMap';
+import { closeHeroSelect, heroSelectOpen } from '../../../src/ui/heroSelect';
+import { pointerWanted } from '../../../src/core/input';
+import * as renderer from '../../../src/core/renderer';
 
 export interface VillageOptions {
   canary: boolean;
@@ -54,6 +58,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     await castingInYard(lab, options.canary),
     await boundsClosed(lab, options.canary),
     await stairClimbed(lab, options.canary),
+    await hallFreesPointer(lab, options.canary),
     await training(lab, options.canary),
     await hoursCompileNothing(lab, options.canary),
   ];
@@ -178,6 +183,38 @@ async function stairClimbed(lab: Lab, canary: boolean): Promise<Checked> {
   const line = `stair: ${up ? 'up' : 'not up'} on the terrace (${ended}; its top ${TERRACE.high} m up)`;
   const problems = up || canary ? [] : ['stair: the hero never got up onto the terrace'];
   return { lines: [line], problems, caught: canary ? !up : null };
+}
+
+/** V pressed for a frame (held, every frame would be a press), the view let settle. */
+async function pressV(lab: Lab): Promise<void> {
+  await lab.step(1, () => ({ keys: ['v'] }));
+  await lab.step(SETTLE);
+}
+
+/** In the close view, the pointer let go once the hall of heroes is used (asked of the square instead, with
+ *  `canary`, where mouse look holds it). */
+async function hallFreesPointer(lab: Lab, canary: boolean): Promise<Checked> {
+  await stand(lab, [0, 4.5]);
+  await pressV(lab);
+  await lab.step(SETTLE);
+  if (renderer.viewMode() === 'top') throw new Error('lab: V never took the village into a close view');
+  const lookHeld = pointerWanted();
+  if (!canary) {
+    await stand(lab, villageObject('hall')!.stand);
+    goUse(villageObject('hall')!);
+    await lab.until(heroSelectOpen, 600, 'the hall never opened the hero selection screen');
+    await lab.step(SETTLE);
+  }
+  const held = pointerWanted();
+  const line = `pointer: mouse look ${lookHeld ? 'holds' : 'lets go of'} it on the square, `
+    + `${held ? 'holds' : 'lets go of'} it ${canary ? 'there (asked there)' : 'over the hall\'s screen'}`;
+  const problems = !lookHeld ? ['pointer: the close view never asked for mouse look on the square'] : [];
+  if (!canary && held) problems.push('pointer: the hall of heroes\' screen kept the pointer locked (hidden)');
+  if (heroSelectOpen()) closeHeroSelect();
+  await pressV(lab);
+  await pressV(lab);
+  await lab.step(SETTLE);
+  return { lines: [line], problems: canary ? [] : problems, caught: canary ? held : null };
 }
 
 /** The portal's card as it stands: its way in shown, or the training's warning in its place. */
