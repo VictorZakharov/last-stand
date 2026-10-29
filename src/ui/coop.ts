@@ -55,7 +55,7 @@ async function checkServer(): Promise<void> {
   renderCoop();
 }
 
-function openCoop(open: boolean): void {
+export function openCoop(open: boolean): void {
   $('#coop').classList.toggle('hidden', !open);
   if (!open) return;
   if (session.status === 'off' || session.status === 'failed') void checkServer();

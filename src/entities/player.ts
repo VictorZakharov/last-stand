@@ -171,6 +171,11 @@ export class Player {
   private phaseDir = 1;
   /** true in the lobby: free casting, no costs, no cooldowns */
   sandbox = false;
+  /** whether the hero may cast (in the village, in its training yard alone: game/village.ts) */
+  armed = true;
+  /** where he walks of himself, with no key or stick held (the village: an object clicked, walked to and used), or
+   *  null; a key or the stick takes him back */
+  walkTo: THREE.Vector3 | null = null;
 
   /** all skills of the class, by id */
   readonly known = new Map<string, KnownSkill>();
@@ -436,6 +441,7 @@ export class Player {
     if (isDown('d') || isDown('arrowright')) mx += 1;
     // the touch stick is analog: a small push walks
     if (!mx && !mz) { mx = input.stick.x; mz = input.stick.y; }
+    if (mx || mz) this.walkTo = null;
     const len = Math.hypot(mx, mz);
     let speed = this.stats.moveSpeed;
     if (this.casting && !this.casting.skill.def.freeMove) speed *= 0.45;
@@ -443,7 +449,14 @@ export class Player {
     if (this.rooted) speed = 0;
     const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const k = len ? speed * Math.min(1, len) / len : 0;
-    const tx = (mx * cy + mz * sy) * k, tz = (mz * cy - mx * sy) * k;
+    let tx = (mx * cy + mz * sy) * k, tz = (mz * cy - mx * sy) * k;
+    // (walking of himself to a spot: straight at it, slowing over its last metre)
+    if (this.walkTo && !len) {
+      const dx = this.walkTo.x - this.pos.x, dz = this.walkTo.z - this.pos.z, d = Math.hypot(dx, dz);
+      const v = d > 1e-3 ? (speed * Math.min(1, d)) / d : 0;
+      tx = dx * v;
+      tz = dz * v;
+    }
     // (as a body moves itself, pushing and braking against the ground: turning round from a run takes a braking step
     // and a push the other way, `entities/movement.ts`)
     this.goal.set(tx, 0, tz);
@@ -456,6 +469,13 @@ export class Player {
 
     // a channel ends when the key that started it is released
     if (this.channel && !isDown(this.channel.key)) this.stopChannel();
+    // (out of the village's yard nothing is cast: what was held is let go, what was aimed given up)
+    if (!this.armed) {
+      if (this.channel) this.stopChannel();
+      this.endAim();
+      this.queued = null;
+      return;
+    }
     this.holdAim();
     if ((input.mouse.overUI && !input.touchMode) || this.dashShut() || this.staggered) return;
     // the shot remembered from a press while busy: drawn now, and loosed at once if its key is up again (a tap)

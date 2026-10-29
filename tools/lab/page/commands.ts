@@ -48,6 +48,7 @@ import type { WallOptions } from './wallGap';
 import type { RimOptions } from './wallRim';
 import type { BeyondOptions } from './beyond';
 import type { TreesOptions } from './trees';
+import type { VillageOptions } from './village';
 import type { ColumnsOptions } from './columns';
 import type { ShadowsOptions } from './shadows';
 import type { ShotsOptions } from './shots';
@@ -538,6 +539,13 @@ export async function beyond(lab: Lab, command: BeyondOptions): Promise<Report> 
 export async function trees(lab: Lab, command: TreesOptions): Promise<Report> {
   const { trees: treesOf } = await import('./trees');
   return treesOf(lab, command);
+}
+
+/** `lab village`: the lobby's village as a player walks it: its objects, the yard, its bounds, the stair, the
+ *  training, its hours. */
+export async function village(lab: Lab, command: VillageOptions): Promise<Report> {
+  const { village: villageOf } = await import('./village');
+  return villageOf(lab, command);
 }
 
 /** `lab columns`: the crypt's broken columns roll after roll: no open edge, no cliff across a break. */

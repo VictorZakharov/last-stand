@@ -387,7 +387,8 @@ export function boxWithUV(w: number, h: number, d: number, texel = 0.5): THREE.B
  *  front of the membrane and how high it stands, and how much more as foes come through (`pulse`) */
 const PORTAL_LIGHT = { intensity: 7, reach: 11, out: 1.2, up: 2.0, pulse: 1.2 };
 
-export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { a: RGB; b: RGB; core: RGB }, updaters: Updater[], arch = false): { mesh: THREE.Mesh; portal: Portal } {
+export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { a: RGB; b: RGB; core: RGB }, updaters: Updater[], arch = false,
+  place?: GatePlace): { mesh: THREE.Mesh; portal: Portal } {
   const uniforms = {
     uTime: { value: 0 }, uPower: { value: 0.4 }, uArch: { value: arch ? 1 : 0 },
     uA: { value: new THREE.Color(...colors.a) }, uB: { value: new THREE.Color(...colors.b) }, uCore: { value: new THREE.Color(...colors.core) },
@@ -465,7 +466,15 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
   const pos = new THREE.Vector3(Math.cos(angle) * (WALL_R - 2.5), 0, Math.sin(angle) * (WALL_R - 2.5));
   const dir = new THREE.Vector3(-Math.cos(angle), 0, -Math.sin(angle));
   // the membrane's centre in the world, and the direction along it
-  const cx = Math.cos(angle) * (WALL_R + 0.7), cz = Math.sin(angle) * (WALL_R + 0.7), sx = -Math.sin(angle), sz = Math.cos(angle);
+  let cx = Math.cos(angle) * (WALL_R + 0.7), cz = Math.sin(angle) * (WALL_R + 0.7), sx = -Math.sin(angle), sz = Math.cos(angle);
+  if (place) {
+    dir.set(Math.sin(place.facing), 0, Math.cos(place.facing));
+    pos.set(place.x + dir.x * 3.3, 0, place.z + dir.z * 3.3);
+    cx = place.x + dir.x * 0.1;
+    cz = place.z + dir.z * 0.1;
+    sx = Math.cos(place.facing);
+    sz = -Math.sin(place.facing);
+  }
   const coreCol = new THREE.Color(...colors.core), edgeCol = new THREE.Color(...colors.b), mistCol = new THREE.Color(...colors.a);
   const due = runPhase({ pulse: 0, acc: 0 });
   updaters.push((dt, t) => {
@@ -568,11 +577,19 @@ export function buildDaySky(horizon: number, zenith: RGB, sunDir: THREE.Vector3)
 }
 
 /** Place a gate group on the boundary at `angle`, its local +Z facing the arena center. */
-export function placeGate(g: THREE.Object3D, angle: number): void {
+export function placeGate(g: THREE.Object3D, angle: number, place?: GatePlace): void {
+  if (place) {
+    g.position.set(place.x, 0, place.z);
+    g.rotation.y = place.facing;
+    return;
+  }
   const r = WALL_R + 0.8;
   g.position.set(Math.cos(angle) * r, 0, Math.sin(angle) * r);
   g.lookAt(0, 0, 0);
 }
+
+/** A gate stood anywhere (the village's): its middle, and the way its front faces (rad about y: 0 faces +z). */
+export interface GatePlace { x: number; z: number; facing: number }
 
 /** A biome's environment's colours: its sky's, and its one soft panel's. */
 export interface EnvColours { sky: RGB; panel: RGB }

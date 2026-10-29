@@ -1,0 +1,266 @@
+// `lab village`: the village the lobby stands in, as a player walks it (tools/lab). The run is left for the lobby, and:
+// every object is usable from where the hero stands to use it; his skills cast in the training yard and nowhere else;
+// no straight walk out from inside the palisade or along a way out leaves the village; the terrace's stair takes him
+// up to the hall; the first visit's training ticks off each step as the player takes it (the yard walked into, a
+// dummy struck, the map opened by M, the stash and the notice board used), the portal's card holding its way in
+// until it's done, and skipped it opens the portals at once; and no hour of the day compiles a program.
+// `--canary` plants a fault for each check: an object's stand moved off it, the yard's reading taken outside it, a
+// hero put past the palisade after a walk, the stair walked at beside it into the terrace's wall, the notice board
+// never read, a new material shown at one hour.
+import * as THREE from 'three';
+import type { Lab, Report } from './lab';
+import { G } from '../../../src/state';
+import {
+  ENTRANCES, HALL, TERRACE, VILLAGE_OBJECTS, YARD_DUMMIES, yardToWorld, type Spot, type VillageObject,
+} from '../../../src/data/village';
+import { BIOME_IDS } from '../../../src/data/biomes';
+import { inWay, insidePalisade, palisadePolygon } from '../../../src/world/villagePlan';
+import { groundHeight } from '../../../src/world/ground';
+import { goUse, objectNear, villageObject } from '../../../src/game/village';
+import { restartTraining, skipTraining, stepDone, trainingPending } from '../../../src/game/training';
+import { TRAINING } from '../../../src/data/training';
+import { holdHour } from '../../../src/game/clock';
+import { villageMapOpen } from '../../../src/ui/villageMap';
+
+export interface VillageOptions {
+  canary: boolean;
+}
+
+/** frames the hero is left to settle where he's put, and to walk to a spot or out to the village's edge */
+const SETTLE = 15;
+const WALK = 300;
+/** frames the basic attack is held at a dummy (a bow drawn to full), and run after it's let go (the shot's flight) */
+const STRIKE_HELD = 90;
+const STRIKE_AFTER = 60;
+/** how far a canary moves the first object's stand off it, and the yard's reading out past the yard (m) */
+const STAND_OFF = 9;
+const OUT_OF_YARD = 14;
+/** the walks out: from how far in toward the middle each starts (a share of the palisade's distance), how many */
+const WALK_IN = 0.7;
+const WALKS = 16;
+/** how far past the end of a walk its target lies (m), so he never stops short of the edge on his own */
+const FAR = 70;
+/** the hours of the day shown, each drawn once */
+const HOURS = [0, 6, 9, 12, 18, 21];
+
+/** One check's lines, its problems, and whether its canary was caught (null: no canary ran). */
+interface Checked { lines: string[]; problems: string[]; caught: boolean | null }
+
+/** The village checked as a player walks it. */
+export async function village(lab: Lab, options: VillageOptions): Promise<Report> {
+  await toVillage(lab);
+  const checks = [
+    await objectsUsable(lab, options.canary),
+    await castingInYard(lab, options.canary),
+    await boundsClosed(lab, options.canary),
+    await stairClimbed(lab, options.canary),
+    await training(lab, options.canary),
+    await hoursCompileNothing(lab, options.canary),
+  ];
+  const lines = checks.flatMap((c) => c.lines);
+  const caught = checks.map((c) => c.caught);
+  if (!options.canary) return { text: lines.join('\n'), problems: checks.flatMap((c) => c.problems) };
+  lines.push(`canaries: ${caught.filter(Boolean).length} of ${caught.length} caught`);
+  const missed = caught.includes(false) ? ['canary: a planted fault went unseen'] : [];
+  return { text: lines.join('\n'), problems: missed };
+}
+
+/** The run left by the pause menu, the lobby's village shown and taking the hero's input. */
+async function toVillage(lab: Lab): Promise<void> {
+  await lab.step(1, () => ({ keys: ['escape'] }));
+  const abandon = document.getElementById('btn-abandon');
+  if (!abandon) throw new Error('lab: no pause menu to leave the run by');
+  abandon.click();
+  await lab.until(() => G.mode === 'menu' && G.arena.place === 'village', 600, 'the run never gave way to the village');
+  await lab.step(SETTLE);
+}
+
+/** The hero put at (x, z) on the ground there, still, and let settle. */
+async function stand(lab: Lab, [x, z]: Spot, facing = 0): Promise<void> {
+  G.player.walkTo = null;
+  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  await lab.step(SETTLE);
+}
+
+/** The hero walked of himself toward (x, z) for `frames` frames. */
+async function walkToward(lab: Lab, [x, z]: Spot, frames = WALK): Promise<void> {
+  G.player.walkTo = new THREE.Vector3(x, 0, z);
+  await lab.step(frames);
+  G.player.walkTo = null;
+}
+
+const at = (): Spot => [G.player.pos.x, G.player.pos.z];
+const shown = (selector: string): boolean => !document.querySelector(selector)?.classList.contains('hidden');
+
+/** Every object the one the hero is near where he stands to use it (the first moved off its stand, with `canary`). */
+async function objectsUsable(lab: Lab, canary: boolean): Promise<Checked> {
+  const missed: string[] = [];
+  let caught: boolean | null = null;
+  for (const [i, o] of VILLAGE_OBJECTS.entries()) {
+    const planted = canary && i === 0;
+    await stand(lab, planted ? [o.stand[0] + STAND_OFF, o.stand[1]] : o.stand);
+    const near = objectNear()?.id ?? 'nothing';
+    const found = near === o.id;
+    if (planted) caught = !found;
+    if (!found) missed.push(`${o.id}: from its stand${planted ? ' (moved off it)' : ''} the hero is near ${near}`);
+  }
+  const usable = VILLAGE_OBJECTS.length - missed.length;
+  const line = `objects: ${usable} of ${VILLAGE_OBJECTS.length} usable from their stands`;
+  return { lines: [line, ...missed], problems: missed, caught };
+}
+
+/** His skills armed in the yard's middle and not on the square (the yard read outside it, with `canary`). */
+async function castingInYard(lab: Lab, canary: boolean): Promise<Checked> {
+  const [yx, yz] = yardToWorld(0, 0);
+  await stand(lab, canary ? [yx + OUT_OF_YARD, yz] : [yx, yz]);
+  const inYard = G.player.armed;
+  await stand(lab, [0, 4.5]);
+  const onSquare = G.player.armed;
+  const problems = [
+    ...(inYard ? [] : ['casting: he can\'t cast in the yard']),
+    ...(onSquare ? ['casting: he can cast on the square'] : []),
+  ];
+  const armed = (on: boolean): string => (on ? 'armed' : 'not armed');
+  const line = `casting: in the yard ${armed(inYard)}, on the square ${armed(onSquare)}`;
+  return { lines: [line], problems: canary ? [] : problems, caught: canary ? !inYard : null };
+}
+
+/** The walks out: from inside the palisade toward it all round, and along each way out and across it. */
+function walksOut(): { from: Spot; toward: Spot; name: string }[] {
+  const walks = palisadePolygon(WALKS).map(([x, z], k) => {
+    const out = Math.hypot(x, z);
+    const from: Spot = [x * WALK_IN, z * WALK_IN];
+    const toward: Spot = [x / out * FAR, z / out * FAR];
+    return { from, toward, name: `out ${k}` };
+  });
+  for (const id of BIOME_IDS) {
+    const { gap, out } = ENTRANCES[id];
+    const along = (d: number, across: number): Spot => [
+      gap[0] + out[0] * d - out[1] * across,
+      gap[1] + out[1] * d + out[0] * across,
+    ];
+    walks.push({ from: along(2, 0), toward: along(FAR, 0), name: `${id} way, out` });
+    walks.push({ from: along(3, 0), toward: along(3, FAR), name: `${id} way, right` });
+    walks.push({ from: along(3, 0), toward: along(3, -FAR), name: `${id} way, left` });
+  }
+  return walks;
+}
+
+/** No walk ends outside the palisade but in a way out (a hero put past it after the first walk, with `canary`). */
+async function boundsClosed(lab: Lab, canary: boolean): Promise<Checked> {
+  const leaks: string[] = [];
+  let caught: boolean | null = null;
+  for (const [i, walk] of walksOut().entries()) {
+    await stand(lab, walk.from);
+    await walkToward(lab, walk.toward);
+    if (canary && i === 0) G.player.pos.set(G.player.pos.x * 2.2, 0, G.player.pos.z * 2.2);
+    const [x, z] = at();
+    const inside = insidePalisade(x, z) || inWay(x, z, 1);
+    const planted = canary && i === 0;
+    if (planted) caught = !inside;
+    const put = planted ? ' (put there)' : '';
+    if (!inside) leaks.push(`bounds: ${walk.name} ended outside${put}, at ${x.toFixed(1)}, ${z.toFixed(1)}`);
+  }
+  const line = `bounds: ${walksOut().length - leaks.length} of ${walksOut().length} walks out stopped inside`;
+  return { lines: [line, ...leaks], problems: leaks, caught };
+}
+
+/** Up the terrace's stair to the hall's plinths: on the terrace's top by its end (beside it, into the wall, with
+ *  `canary`: he must not get up). */
+async function stairClimbed(lab: Lab, canary: boolean): Promise<Checked> {
+  const across = canary ? TERRACE.stairHalf + 2 : 0;
+  await stand(lab, [TERRACE.x + across, TERRACE.stairFoot + 1.5], Math.PI);
+  await walkToward(lab, [TERRACE.x + across, HALL.z + 3]);
+  // (the body's height over the ground he stands on: his position is on the floor's plane)
+  const up = G.player.obj.position.y > TERRACE.high - 0.15;
+  const { x, z } = G.player.pos, y = G.player.obj.position.y;
+  const ended = `at ${x.toFixed(1)}, ${y.toFixed(2)}, ${z.toFixed(1)}`;
+  const line = `stair: ${up ? 'up' : 'not up'} on the terrace (${ended}; its top ${TERRACE.high} m up)`;
+  const problems = up || canary ? [] : ['stair: the hero never got up onto the terrace'];
+  return { lines: [line], problems, caught: canary ? !up : null };
+}
+
+/** The portal's card as it stands: its way in shown, or the training's warning in its place. */
+async function portalCard(lab: Lab): Promise<{ enter: boolean; warned: boolean }> {
+  const portal = villageObject('crypt')!;
+  await stand(lab, portal.stand);
+  goUse(portal);
+  await lab.step(SETTLE);
+  const card = { enter: shown('#btn-start'), warned: shown('#vcard .vc-training') };
+  (document.querySelector('#vcard .vc-close') as HTMLElement | null)?.click();
+  await lab.step(SETTLE);
+  return card;
+}
+
+/** An object used where the hero stands for it, then walked off from (what it opened put away). */
+async function use(lab: Lab, o: VillageObject): Promise<void> {
+  await stand(lab, o.stand);
+  goUse(o);
+  await lab.step(SETTLE);
+  await stand(lab, [0, 4.5]);
+}
+
+/** The training's steps taken as a player takes them (the notice board left out, with `canary`): each ticked, the
+ *  portal holding its way in until all are done; then begun again and skipped, the portal open at once. */
+async function training(lab: Lab, canary: boolean): Promise<Checked> {
+  restartTraining();
+  const problems: string[] = [];
+  const before = await portalCard(lab);
+  if (before.enter || !before.warned) problems.push('training: the portal let him in with the training under way');
+  await stand(lab, yardToWorld(0, 0));
+  const [dx, dz] = YARD_DUMMIES[1];
+  const dummy = new THREE.Vector3(dx, 1, dz);
+  await stand(lab, [dx, dz - 3]);
+  // (held, then let go: the ranger's bow looses only as it's let go, and held throughout it struck nothing)
+  await lab.step(STRIKE_HELD, () => ({ m0: true, aim: dummy }));
+  await lab.step(STRIKE_AFTER, () => ({ aim: dummy }));
+  await lab.step(1, () => ({ keys: ['m'] }));
+  await lab.step(SETTLE);
+  const mapped = villageMapOpen();
+  await lab.step(1, () => ({ keys: ['m'] }));
+  await lab.step(60);
+  await use(lab, villageObject('chest')!);
+  if (!canary) await use(lab, villageObject('notice')!);
+  const left = TRAINING.filter((t) => !stepDone(t.id)).map((t) => t.id);
+  if (!mapped) problems.push('training: M never opened the map');
+  if (!canary && left.length) problems.push(`training: steps taken but not ticked: ${left.join(', ')}`);
+  const after = await portalCard(lab);
+  if (!canary && (!after.enter || after.warned)) problems.push('training: the portal stayed shut after the training');
+  restartTraining();
+  skipTraining();
+  const skipped = await portalCard(lab);
+  if (trainingPending() || !skipped.enter) problems.push('training: skipped, the portal stayed shut');
+  const lines = [
+    `training: under way, the portal ${before.enter ? 'open' : 'shut'}${before.warned ? ', warned' : ''}; `
+      + `steps left after taking them: ${left.length ? left.join(', ') : 'none'}; `
+      + `then ${after.enter ? 'open' : 'shut'}; skipped, ${skipped.enter ? 'open' : 'shut'}`,
+  ];
+  return { lines, problems: canary ? [] : problems, caught: canary ? left.includes('notice') && !after.enter : null };
+}
+
+/** Each hour of the day drawn: no program compiled for any (a new material shown at noon, with `canary`). */
+async function hoursCompileNothing(lab: Lab, canary: boolean): Promise<Checked> {
+  await stand(lab, [0, 4.5]);
+  holdHour(HOURS[0]);
+  lab.capture(['lobby']);
+  const programs = (): number => G.renderer.info.programs?.length ?? 0;
+  const first = programs();
+  let planted: THREE.Mesh | null = null;
+  for (const hour of HOURS) {
+    holdHour(hour);
+    if (canary && hour === 12) {
+      const unseen = new THREE.MeshPhysicalMaterial({ sheen: 1, iridescence: 1 });
+      planted = new THREE.Mesh(new THREE.SphereGeometry(0.5), unseen);
+      planted.position.set(0, 1.5, 3);
+      G.scene.add(planted);
+    }
+    await lab.step(2);
+    lab.capture(['lobby']);
+  }
+  holdHour(null);
+  if (planted) G.scene.remove(planted);
+  const made = programs() - first;
+  const line = `hours: ${HOURS.join(', ')} drawn, ${made} program${made === 1 ? '' : 's'} compiled`;
+  const problems = made && !canary ? [`hours: ${made} programs compiled as the hour changed`] : [];
+  return { lines: [line], problems, caught: canary ? made > 0 : null };
+}

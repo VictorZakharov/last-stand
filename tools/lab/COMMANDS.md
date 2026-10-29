@@ -253,6 +253,20 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   divided by the finger's whole distance, so half a screen out the hero walked at a seventh of his speed. `--canary`
   slides the furthest push's finger back to 20 px before it's read. Try it on a phone too
   (`--screen 844x390@3`): the stick is drawn at the touch controls' scale, and so is its travel.
+- `village`: the lobby's village as a player walks it (`page/village.ts`; `src/game/village.ts`), the run left for
+  the lobby. Each check in turn: every object (the portals, the chest, the hall, the campfire, the chronicle, the
+  notice board) used from where the hero stands to use it, and what it opens shown; his skills armed in the training
+  yard and not on the square; straight walks out from the square at angles round it, and along each way out, stopped
+  inside the palisade or the way's walls; the terrace's stair walked up, the body's height on its top (`obj.position.y`:
+  the player's `pos.y` is always 0, and a reading of it said 0 m up); the first visit's training begun afresh
+  (`restartTraining`: the lab's boots are a returning player's), each step taken as a player takes it (the yard walked
+  into, the middle dummy struck by the basic attack held and let go, as the ranger's bow looses only as it's let go,
+  M pressed, the chest and the notice board used) and ticked, the crypt's portal card warning with no Enter till it's
+  done, and begun again and skipped, Enter there at once; and the village held at six hours of the day, drawn, with
+  no program compiled (`G.renderer.info.programs`). `--canary` plants a fault for each (an object's stand moved off it,
+  the yard's reading taken outside it, a hero put past the palisade after a walk, the stair walked at beside it, the
+  notice board never read, a new material shown at one hour), each listed and each must be caught. It found the
+  chest's stand off the terrace's edge, below it, where the hero could never use it.
 - `tap`: every skill of the hero's class aimed by holding (`SkillDef.aimed`: `--class mage` Starfall and Veilstep,
   `ranger` Quarry Mark and Strawman), its touch button pressed by a finger, the other thumb on the move stick
   (`lab.touchDown(at, finger)`), each from a fresh set-up with a training dummy standing clear at the hero's side.
@@ -271,17 +285,17 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   in over its first frames, metres for one off the edge: spots are picked where one stands clear.)
 - `practice`: casting in the lobby and in the runs it starts, the hero's every skill on a key with a cooldown of a
   second or more (its effect's own `fire` counted) cast, then cast again as soon as he is free (no cast, channel, aim
-  or charge under way), from full energy. In the lobby as it shows, and shown again after practice, casting is free:
-  both casts must be made (nothing left cooling from practice). In practice (stowed, by the control the screen shows:
-  a phone's rail's Practice, or the hint over the arena that Space works), with every panel folded on a screen that
-  shows them side by side (not played on one showing one at a time, where folds don't count), in a run started by the
-  lobby's start the screen shows, and in a run begun in practice (a co-op guest's, as its host starts: no button of
-  a stowed lobby starts one, so `#btn-start` is clicked by script), the second must be refused while the first cools,
+  or charge under way), from full energy. The lobby is the village, and each lobby case casts from the training
+  yard, turned to its dummies (a blink carries him off, so he's put back before each skill). With the inventory open
+  (I), and open again after practice, casting is free: both casts must be made (nothing left cooling from practice).
+  On the square, out of the yard, nothing may be cast. In practice (the inventory put away by I), in a run started
+  at the crypt's portal (its card's Enter), and in a run begun in practice (a co-op guest's, as its host starts:
+  `#btn-start` is clicked by script), the second must be refused while the first cools,
   the HUD must count it down on its key, and the cast must spend at least half its energy as the HUD shows it. A run is
   held in its countdown with a dummy before the hero, and left from the pause menu (`lab.clickOn`: scrolled to, as a
   phone's has its Abandon below the screen's edge). On main the run begun in practice kept the lobby's free casting
   through it: every skill cast twice, no countdown, no energy spent. `--canary` plays that run again with free casting
-  planted, which must be caught. Run with `--screen 832x384@3.75` for a phone's (the rail's controls).
+  planted, which must be caught. A run left from the pause menu puts the hero back in the yard.
 - `spawns`: the foes coming in. Boss waves (the 5th, 10th, 15th and 20th in turn, `--waves 32` in each biome,
   `--biomes`) are set off one after another, each from a seed of its own (every set-up seeds the same numbers, which
   would roll the same gates), the hero at the arena's middle (`--at`). Every foe is read as it rises: the gate it

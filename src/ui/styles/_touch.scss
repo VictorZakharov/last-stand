@@ -52,3 +52,13 @@ body.touch #decision .dc-buttons .btn { min-height: calc(32px / var(--hud, 1)); 
 
 .mouse-only { display: inline; } .touch-inline { display: none; }
 body.touch .mouse-only { display: none; } body.touch .touch-inline { display: inline; }
+
+/* ---------- the village's touch buttons (the lobby's alone): in the top-right corner, Use naming what it does ---------- */
+#touch-village { position: absolute; right: 8px; top: 8px; display: flex; gap: 10px;
+  align-items: center; justify-content: flex-end; scale: var(--touch, 1); transform-origin: right top;
+  pointer-events: none; }
+#touch-village.hidden, #touch-village .hidden { display: none; }
+#touch-village button { pointer-events: auto; touch-action: manipulation; height: 48px; min-width: 56px; padding: 0 14px;
+  border-radius: 24px; border: 1px solid rgba($accent, .55); background: rgba(8, 7, 9, .78); color: #f3e1b0;
+  font: 600 15px var(--font-display); letter-spacing: .04em; cursor: $cursor-hand; }
+#touch-village .tv-use { border-color: var(--accent); box-shadow: 0 0 12px rgba($highlight, .45); color: #ffe7b0; }

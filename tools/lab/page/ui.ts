@@ -1,7 +1,7 @@
 // The game's UI as the player sees it on this screen (tools/lab `ui`): the lobby, an item's tooltip, the stash's items
 // lit for a hovered item's slot (`uiGlow.ts`: pictured at set moments of its loops, which mustn't paint), How to play,
 // the save slots, the hero selection screen over the hall of heroes (`uiHeroes.ts`), the fight's loading bar for it
-// asked for with the heroes cold, a battleground's button clicked with the mouse and a key pressed after it (where the
+// asked for with the heroes cold, a portal card's Leave clicked with the mouse and a key pressed after it (where the
 // focus went), the lobby's
 // camera switched through its views (the labels over the dummies against where they stand on the screen, frame by
 // frame through each glide), the run's HUD with the world's labels over it (a hurt foe's bar, damage numbers), the
@@ -17,6 +17,10 @@ import * as THREE from 'three';
 import { middleOf, onTheClock } from './lab';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
+import { goUse, villageObject } from '../../../src/game/village';
+import { groundHeight } from '../../../src/world/ground';
+import { YARD, yardToWorld } from '../../../src/data/village';
+import type { Spot } from '../../../src/data/village';
 import * as warm from '../../../src/game/warm';
 import * as readying from '../../../src/ui/readying';
 import type { Need } from '../../../src/game/warm';
@@ -36,10 +40,11 @@ import { openSaves } from '../../../src/ui/saves';
 import { openBook } from '../../../src/ui/loadoutEditor';
 import { hideTooltip, itemTooltip, showTooltipAt } from '../../../src/ui/tooltip';
 import { hdrOutput } from './hdrOutput';
+import { panelsBack, showPanels } from './lobbyPanels';
 import { battleLog } from './battleLog';
 import { digitsShown } from './digits';
 import { closeGlow, GLOW_CANARIES, glowPictures, glowShown, openGlow } from './uiGlow';
-import { closeHeroes, heroesCanaryCaught, heroesClosed, heroesShown, openHeroes } from './uiHeroes';
+import { changeHeroLink, closeHeroes, heroesCanaryCaught, heroesClosed, heroesShown, openHeroes } from './uiHeroes';
 import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouch, openHudTouch, TOUCH_CANARIES }
   from './uiTouch';
 import {
@@ -82,8 +87,10 @@ const NUMBERS = [
 ] as const;
 /** frames run after the numbers are shown, so each has risen a little and none is in its first pop */
 const NUMBER_FRAMES = 12;
-/** the key pressed after the battleground's button is clicked: one the game takes in the lobby (a step forward) */
+/** the key pressed after the portal card's Leave is clicked: one the game takes in the lobby (a step forward) */
 const KEY_AFTER_CLICK = 'KeyW';
+/** the frames run for the hero to settle where he's put, and for a village card to open */
+const CARD_FRAMES = 2;
 /** the frames run after each press of V as the camera glides to the next view (its glide is 0.45 s) */
 const SWITCH_FRAMES = 40;
 /** a label further than this from where its anchor shows on the screen is off (css px) */
@@ -276,8 +283,8 @@ let askedCold = false;
  */
 async function openReadyingHeroes(lab: Lab): Promise<void> {
   const chill = chillOf();
-  const button = document.getElementById('btn-hero');
-  if (!chill || !button) return;
+  if (!chill || !document.getElementById('btn-hero')) return;
+  const button = (await changeHeroLink(lab))!;
   chill('heroes');
   askedCold = true;
   await lab.clickOn(button);
@@ -406,10 +413,12 @@ function labelsOff(): { labels: number; worst: number } {
 
 /**
  * The lobby's camera switched with V through every view and back to the top-down one, each glide played and drawn:
- * every frame of it, the labels over the dummies measured against where their anchors show.
+ * every frame of it, the labels over the dummies measured against where their anchors show. The hero stands in the
+ * village's training yard facing its dummies (through the eyes, the labels are those before him).
  */
 async function switchViews(lab: Lab): Promise<void> {
   switches = [];
+  await standAt(lab, yardToWorld(0, -2), YARD.turn);
   // (every frame drawn, as the game draws them: the drawing refreshed the camera's matrices once a frame)
   const drawing = lab.drawing;
   lab.drawing = true;
@@ -454,14 +463,41 @@ function labelsThroughSwitches(): Found {
   return { lines, problems };
 }
 
+/** where the hero stood before a state took him elsewhere in the village, put back as it closes */
+let stoodAt: { at: THREE.Vector3; facing: number } | null = null;
+
+/** The hero stood at `spot` facing `facing`, where he stood kept for `standBack`, and let settle. */
+async function standAt(lab: Lab, spot: Spot, facing: number): Promise<void> {
+  stoodAt ??= { at: lab.player.pos.clone(), facing: lab.player.facing };
+  const [x, z] = spot;
+  lab.player.walkTo = null;
+  lab.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  await lab.step(CARD_FRAMES);
+}
+
+/** The hero put back where he stood before `standAt`, so the states after it picture the lobby as it was. */
+async function standBack(lab: Lab): Promise<void> {
+  if (!stoodAt) return;
+  lab.player.walkTo = null;
+  lab.player.place(stoodAt.at, stoodAt.facing);
+  stoodAt = null;
+  await lab.step(CARD_FRAMES);
+}
+
 /**
- * The battleground's button the lobby has on clicked with the mouse (nothing changes) and a game key pressed after it,
- * as a player picks one and then plays, each as the browser gets it from a mouse and a keyboard (the class buttons that
- * stood in the lobby kept the focus so). Throws if the click never reached the button.
+ * The crypt's portal used where the hero stands for it, and its card's Leave clicked with the mouse and a game key
+ * pressed after it, as a player looks at a portal, leaves it and plays on, each as the browser gets it from a mouse
+ * and a keyboard (the class buttons that stood in the lobby kept the focus so). Throws if the card never opened or
+ * the click never reached its button.
  */
 async function clickClass(lab: Lab): Promise<void> {
-  const button = document.querySelector<HTMLElement>('#opt-biome button.active');
-  if (!button) throw new Error('lab: ui: the lobby has no battleground\'s button on');
+  const portal = villageObject('crypt');
+  if (!portal) throw new Error('lab: ui: the village has no crypt\'s portal');
+  await standAt(lab, portal.stand, lab.player.facing);
+  goUse(portal);
+  await lab.step(CARD_FRAMES);
+  const button = document.querySelector<HTMLElement>('#vcard:not(.hidden) .vc-close');
+  if (!button) throw new Error('lab: ui: the crypt\'s portal opened no card to leave');
   let clicked = false;
   const heard = (event: MouseEvent) => {
     clicked = event.detail > 0;
@@ -470,9 +506,10 @@ async function clickClass(lab: Lab): Promise<void> {
   const box = button.getBoundingClientRect();
   await lab.click({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
   button.removeEventListener('click', heard);
-  if (!clicked) throw new Error('lab: ui: the mouse\'s click never reached the battleground\'s button');
+  if (!clicked) throw new Error('lab: ui: the mouse\'s click never reached the card\'s Leave');
   await lab.press(KEY_AFTER_CLICK);
 }
+
 
 /** `element` named for a report: its tag, its id or its data attributes, and the id of what it's in. */
 function describe(element: Element): string {
@@ -773,6 +810,7 @@ async function tapIfReached(lab: Lab, element: HTMLElement | null): Promise<bool
  */
 async function openSkillTipsTouch(lab: Lab): Promise<void> {
   openedBy = 'a tap';
+  showPanels('inventory');
   // (the first tap puts the page in touch mode, as a phone starts in it: what a finger reaches is judged in it)
   await tapIfReached(lab, document.querySelector<HTMLElement>('#lobby-rail [data-lt="skills"]'));
   // (a short screen shows it whole, with no toggle)
@@ -794,6 +832,7 @@ async function closeSkillTipsTouch(lab: Lab): Promise<void> {
   hideTooltip();
   openBook(false);
   document.querySelector<HTMLElement>('#lobby-rail [data-lt="hero"]')?.click();
+  panelsBack();
   await lab.mouseTo({ x: innerWidth / 2, y: innerHeight / 2 });
   await lab.mouseTo({ x: innerWidth / 2 + 1, y: innerHeight / 2 });
   if (document.body.classList.contains('touch')) throw new Error('lab: ui: the mouse left the page in touch mode');
@@ -880,8 +919,8 @@ const STEPS: Record<UiState, Steps> = {
   heroes: { open: openHeroes, close: closeHeroes, check: heroesShown, closed: heroesClosed },
   readying: { open: openReadying, close: closeReadying, check: readyingShown },
   readyingHeroes: { open: openReadyingHeroes, close: closeReadyingHeroes, check: readyingHeroesShown },
-  clicked: { open: clickClass, close: () => undefined, check: focusAfterClick },
-  views: { open: switchViews, close: () => undefined, check: labelsThroughSwitches },
+  clicked: { open: clickClass, close: standBack, check: focusAfterClick },
+  views: { open: switchViews, close: standBack, check: labelsThroughSwitches },
   behindProps: { open: () => undefined, close: () => undefined, check: labelsBehindProps },
   logLobby: { open: openLogLobby, close: closeLog, check: logShown },
   skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
@@ -967,7 +1006,8 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
   }
   if (state === 'behindProps') {
     const through = found.problems.some((problem) => problem.includes('shown through a prop'));
-    lines.push(`  canary: ${through ? 'the labels beside the columns caught' : 'the labels beside the columns went unseen'}`);
+    const seen = through ? 'caught' : 'went unseen';
+    lines.push(`  canary: the labels beside the columns ${seen}`);
     if (!through) missed.push(`${state}: the canary's labels beside the columns went unseen`);
   }
   if (state === 'decision') {

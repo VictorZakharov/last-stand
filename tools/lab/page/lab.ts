@@ -292,7 +292,7 @@ const ARMOUR = ['helm', 'chest', 'hands'] as const;
 type Armour = (typeof ARMOUR)[number];
 
 /** The pictures the lab can take: the game's own views, or a close-up from round the hero. */
-export const VIEW_NAMES = ['lobby', 'top', 'third', 'eyes', 'front', 'left', 'right', 'back', 'above'] as const;
+export const VIEW_NAMES = ['lobby', 'top', 'third', 'eyes', 'front', 'left', 'right', 'back', 'above', 'plan'] as const;
 export type ViewName = (typeof VIEW_NAMES)[number];
 
 /** A moment pictured (`Lab.picture`): its label, its pictures, and notes to read beside them. */
@@ -319,6 +319,8 @@ export interface Report {
 interface CloseUp {
   turn: number;
   rise: number;
+  /** straight down from `distance` over what it's framed on, north up the picture, a square, unfogged: a map */
+  down?: boolean;
 }
 
 const CLOSE_UPS: Partial<Record<ViewName, CloseUp>> = {
@@ -327,6 +329,7 @@ const CLOSE_UPS: Partial<Record<ViewName, CloseUp>> = {
   right: { turn: -Math.PI / 2, rise: 0.25 },
   back: { turn: Math.PI, rise: 0.25 },
   above: { turn: Math.PI + 0.35, rise: 1.6 },
+  plan: { turn: 0, rise: 0, down: true },
 };
 
 /** a close-up's distance from the whole body, and from a joint it's focused on (m) */
@@ -1022,8 +1025,15 @@ export class Lab {
     const area = areaOf(crop);
     const look = options.look ?? 'lit';
     if (look === 'lit' || look === 'bones') {
-      if (closeUp && renderer.viewMode() === 'first') this.renderArmsFromOutside();
-      else renderer.render();
+      // (a plan is a map: the fog would hide what's far below the camera)
+      const fog = G.scene.fog;
+      if (closeUp?.down) G.scene.fog = null;
+      try {
+        if (closeUp && renderer.viewMode() === 'first') this.renderArmsFromOutside();
+        else renderer.render();
+      } finally {
+        G.scene.fog = fog;
+      }
       const canvas = cropOf(G.renderer.domElement, area);
       return { view, canvas: look === 'bones' ? withBones(canvas, this.joints, area) : canvas };
     }
@@ -1065,6 +1075,7 @@ export class Lab {
     const target = (focus ? this.joints[focus] : this.joints.hips) as THREE.Object3D;
     const centre = options.at?.clone() ?? target.getWorldPosition(new THREE.Vector3());
     const distance = options.distance ?? (focus ? JOINT_DISTANCE : BODY_DISTANCE);
+    if (closeUp.down) return this.aimDown(centre, distance);
     const angle = this.player.facing + closeUp.turn;
     camera.position.set(
       centre.x + Math.sin(angle) * distance,
@@ -1079,6 +1090,23 @@ export class Lab {
     // (the props stand whole: their dissolve round the hero is the game views')
     updateSeeThrough(centre.x, centre.y, centre.z, 0, 0);
     return { centreX: innerWidth / 2, centreY: innerHeight / 2, width: innerHeight * 0.6, height: innerHeight };
+  }
+
+  /** the game's camera straight down onto `centre` from `distance`, north (-z) up the picture; the crop a square */
+  private aimDown(centre: THREE.Vector3, distance: number): Crop {
+    const camera = G.camera;
+    const up = camera.up.clone();
+    camera.position.set(centre.x, centre.y + distance, centre.z);
+    camera.up.set(0, 0, -1);
+    camera.fov = CLOSE_UP_FOV;
+    camera.near = 0.5;
+    camera.far = Math.max(camera.far, distance * 2);
+    camera.updateProjectionMatrix();
+    camera.lookAt(centre);
+    camera.updateMatrixWorld();
+    camera.up.copy(up);
+    updateSeeThrough(centre.x, centre.y, centre.z, 0, 0);
+    return { centreX: innerWidth / 2, centreY: innerHeight / 2, width: innerHeight, height: innerHeight };
   }
 
   /** the game's camera in one of its own views; the crop is round the hero, as large as the player sees him */
@@ -1108,7 +1136,7 @@ export class Lab {
     const camera = G.camera;
     const position = camera.position.clone();
     const quaternion = camera.quaternion.clone();
-    const { fov, near } = camera;
+    const { fov, near, far } = camera;
     const view = renderer.viewMode();
     // (`saveCamera` restores the rig exactly; a tree without it goes back to its view at zoom 1, as a run starts)
     const restoreRig = (renderer as { saveCamera?: () => () => void }).saveCamera?.();
@@ -1126,6 +1154,7 @@ export class Lab {
       camera.quaternion.copy(quaternion);
       camera.fov = fov;
       camera.near = near;
+      camera.far = far;
       camera.updateProjectionMatrix();
       camera.updateMatrixWorld();
     };

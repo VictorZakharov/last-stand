@@ -53,7 +53,8 @@ shows it (`ui/readying.ts`, 40% along: within the window, its label on one line,
 the heroes' programs are kept cold (`game/warm.ts` `chill`), its bar saying it readies the heroes and every label the
 bar can show (`readyingLabels`) on one line on this screen (`--canary` puts back the page's own "Readying the fight",
 which a class pick once said, and it must be found; a tree from before it can't keep them cold, and says so), the
-lobby's battleground button on clicked with the mouse and a key pressed after it as the browser gets them (where the
+crypt's portal card (the hero put at its stand and the portal used) left by its Leave clicked with the mouse and a
+key pressed after it as the browser gets them, the hero put back after (where the
 focus went and whether the browser shows its ring: a problem when the button kept it), the lobby's camera switched with V through every
 view and back, each glide played and drawn (every frame, each label over the dummies against where its anchor shows
 by the camera as the frame draws it: off by more than a pixel is a problem; placed with the camera's turn of the
