@@ -41,7 +41,7 @@ export const SIT_POSE = tunable('sit', {
   kneeTop: [0, 0],
   forearm: [0.25, -0.45, 1],
   /** and on the way down to the floor, the hands carried up and out over the rising knees (rig units, at its middle) */
-  floorLift: [0.15, 0.15],
+  floorLift: [0.15, 0.2],
   /** and a hand that holds something, its wrist let hang over the knee (rad, the palm bent down to the forearm) */
   dangle: 0.6,
 });
@@ -130,9 +130,12 @@ const _pole = new THREE.Vector3(), _q = new THREE.Quaternion(), _bone = new THRE
  * The hands on `sides` (0 the left, 1 the right) brought to rest on their thighs as he sits, palms down, the elbows
  * out and back (hanging at his sides sat, the arms read as a man at attention; the warrior's weapon stood up before
  * his face). Call after `sitPose` and the look (before it, a glance carried the shoulders round and the hands with them,
- * 8 cm over the knee); the arms' IK (`fitArm`) keeps them within their ranges after.
+ * 8 cm over the knee); the arms' IK (`fitArm`) keeps them within their ranges after. `lifted`: the sides lifted over
+ * the rising thighs on a seat (all of them by default; not a hand that sets a weapon down after, `plantArm`).
  */
-export function restHands(j: Joints, s: SitState | null | undefined, sides: readonly number[], turn?: RestTurn, rise = 0): void {
+export function restHands(
+  j: Joints, s: SitState | null | undefined, sides: readonly number[], turn?: RestTurn, rise = 0, lifted = sides,
+): void {
   if (!s || s.w <= 0) return;
   const floor = onFloor(s), [along, over, out] = SIT_POSE.rest;
   const pole = SIT_POSE.pole, P = j.P, w = satBy(s);
@@ -149,8 +152,9 @@ export function restHands(j: Joints, s: SitState | null | undefined, sides: read
     j.chest.worldToLocal(hand.getWorldPosition(_now));
     _now.lerp(_on, w);
     // Lift the hands over the rising thighs before resting them, rather than sweeping through them.
-    if (!floor) _now.y += SIT_POSE.handLift * Math.sin(Math.PI * w);
-    else {
+    if (!floor) {
+      if (lifted.includes(side)) _now.y += SIT_POSE.handLift * Math.sin(Math.PI * w);
+    } else {
       // (out early: at the way's own pace, the thigh rose into a hand still hanging at his side, 7 cm, 16% down)
       const arc = Math.max(Math.sin(Math.PI * Math.sqrt(w)), Math.sin(Math.PI * w));
       _now.y += SIT_POSE.floorLift[0] * arc;
