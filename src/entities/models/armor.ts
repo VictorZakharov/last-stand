@@ -327,8 +327,10 @@ export class SkirtLimbs {
  *  thigh rests on the skirt, never in it): points on the arm (`pts`, each with its radius: the ends of the hand's capsules, the
  *  cuff's) against the thigh's body (in `space`, placed) grown by `cloth` (what lies between), the shoulder turned out about its
  *  z (`side`: +1 the left arm) by the deepest's depth over its distance from the shoulder, a few times over. Pressed in between
- *  the hand and the thigh, the drape had no room to hold the skirt in behind the hand. */
-export function armOffThigh(space: THREE.Object3D, shoulder: THREE.Object3D, side: number, thigh: SkirtBody, cloth: number, pts: [JointPoint, number][]): void {
+ *  the hand and the thigh, the drape had no room to hold the skirt in behind the hand. `weight` eases it out (sat, a hand
+ *  rests on its thigh: swung out off it, it hung beside the knee). */
+export function armOffThigh(space: THREE.Object3D, shoulder: THREE.Object3D, side: number, thigh: SkirtBody, cloth: number, pts: [JointPoint, number][], weight = 1): void {
+  if (weight <= 0) return;
   _sab.subVectors(thigh.b, thigh.a);
   const L2 = Math.max(1e-9, _sab.lengthSq());
   for (let it = 0; it < 3; it++) {
@@ -340,7 +342,7 @@ export function armOffThigh(space: THREE.Object3D, shoulder: THREE.Object3D, sid
       if (d > deep) { deep = d; at = _sp.distanceTo(space.worldToLocal(shoulder.getWorldPosition(_sn))); }
     }
     if (deep <= 0.001) return;
-    shoulder.rotation.z += side * Math.min(0.12, deep / Math.max(0.2, at));
+    shoulder.rotation.z += side * weight * Math.min(0.12, deep / Math.max(0.2, at));
     shoulder.updateMatrixWorld(true);
   }
 }
@@ -433,6 +435,17 @@ export class Skirt {
       }
     }
     if (legs?.length || hands?.length) this.drape(legs ?? [], hands ?? []);
+    p.needsUpdate = true;
+    vertexNormals(this.geo);
+  }
+
+  /** Every point kept over the floor at `y` (the mesh's own space), the cloth lying on it there: a robe sat in, its hem
+   *  hung down through the floor. Call after `update`. */
+  keepAbove(y: number): void {
+    const p = this.geo.attributes.position as THREE.BufferAttribute, P = p.array as Float32Array;
+    let moved = false;
+    for (let k = 1; k < P.length; k += 3) if (P[k] < y) { P[k] = y; moved = true; }
+    if (!moved) return;
     p.needsUpdate = true;
     vertexNormals(this.geo);
   }

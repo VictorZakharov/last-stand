@@ -22,7 +22,7 @@ import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGroun
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 19;
+const PROTOCOL = 20;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** room codes: no look-alike letters or digits */
@@ -311,8 +311,12 @@ function onLook(from: string, look: Look): void {
 }
 
 /** A player's own state: its clock (ms), where it is, the way it goes and faces, its aim, whether it's in the run and
- *  holding the revive key, its energy's share and its life. */
-interface StateMsg { t: number; x: number; z: number; vx: number; vz: number; f: number; ax: number; az: number; run: 0 | 1; rv: 0 | 1; e: number; l: number }
+ *  holding the revive key, its energy's share and its life, and how far it's sat on a seat (`entities/sitting.ts`: its
+ *  share, its hips' height and its feet's way ahead, m). */
+interface StateMsg {
+  t: number; x: number; z: number; vx: number; vz: number; f: number; ax: number; az: number; run: 0 | 1; rv: 0 | 1;
+  e: number; l: number; sw: number; sh: number; sf: number;
+}
 /** A player's actions since its last frame, stamped with its clock (ms). */
 interface ActionsMsg { t: number; a: PlayerAction[] }
 
@@ -396,6 +400,7 @@ export function playSession(dt: number): void {
 function playState(p: Player, pose: Pose, m: StateMsg): void {
   const r = p.remote;
   r.x = pose.x; r.z = pose.z; r.vx = pose.vx; r.vz = pose.vz; r.f = pose.f; r.ax = m.ax; r.az = m.az;
+  r.sit.w = m.sw; r.sit.hip = m.sh; r.sit.foot = m.sf;
   p.reviving = m.rv === 1;
   p.energy = m.e * p.stats.maxEnergy;
   if (p.alive) p.life = m.l;
@@ -507,11 +512,12 @@ export function updateSession(dt: number, reviving: boolean): void {
   const due = sendT <= 0;
   if (due) {
     sendT = 1 / COOP.sendRate;
-    const p = G.player, s = p.stats;
+    const p = G.player, s = p.stats, sat = p.sitting.pose;
     const r2 = (v: number) => Math.round(v * 100) / 100;
     send('pl', {
       t, x: r2(p.pos.x), z: r2(p.pos.z), vx: r2(p.vel.x), vz: r2(p.vel.z), f: r2(p.facing), ax: r2(p.aim.x), az: r2(p.aim.z),
       run: G.mode === 'run' ? 1 : 0, rv: reviving ? 1 : 0, e: r2(p.energy / s.maxEnergy), l: r2(p.life),
+      sw: r2(sat?.w ?? 0), sh: r2(sat?.hip ?? 0), sf: r2(sat?.foot ?? 0),
     } satisfies StateMsg);
   }
   // the fight's events go out every frame, its snapshot at the send rate
