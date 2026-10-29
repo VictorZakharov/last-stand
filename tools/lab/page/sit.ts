@@ -26,7 +26,7 @@ import { armsInBody } from './armsIn';
 import { Carried, heldApart, heldNow, LOOSE_MOST, PALM_AT, turnHeld } from './sitCarried';
 import { legsThrough, legsThroughCanary, THROUGH_FROM, type LegThrough } from './sitCloth';
 import { SitFilm } from './sitFilm';
-import { FRAMED_MOST, neckOnScreen } from './sitFraming';
+import { FRAMED_MOST, neckOnScreen, type Framed } from './sitFraming';
 
 /** What `lab sit` takes. */
 export interface SitOptions {
@@ -250,7 +250,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   }
   const { at, facing } = startOff(seat);
   await lab.setup({ ...fixture, at, facing });
-  const standing = await neckOnScreen(lab);
+  const standing = neckOnScreen(lab);
   lab.player.sits = true;
   const spot = seatSpot(seat, at[0], at[1], lab.player.radius);
   if (!spot) {
@@ -280,7 +280,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   }
   const reads = await readSat(lab, options, c.name, out, watch);
   judgeSat(c, label, reads, seat, out);
-  judgeFraming(c.name, standing, await neckOnScreen(lab), out);
+  judgeFraming(c.name, standing, neckOnScreen(lab), out);
   for (const ask of c.asks) {
     await askOf(lab, c, ask, out, watch);
     watch.film.end('up');
@@ -289,10 +289,10 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
 }
 
 /** The over-the-shoulder camera zoomed in all the way: his neck as high on the screen sat as standing. */
-function judgeFraming(name: string, standing: number, sat: number, out: Out): void {
-  const off = sat - standing;
-  out.text.push(`    zoomed in over his shoulder, his neck ${sat.toFixed(2)} of the screen's half height sat, `
-    + `${standing.toFixed(2)} standing`);
+function judgeFraming(name: string, standing: Framed, sat: Framed, out: Out): void {
+  const off = sat.onScreen - standing.onScreen;
+  const said = (f: Framed) => `${f.onScreen.toFixed(2)} (neck ${f.neck.toFixed(2)} m, camera ${f.camera.toFixed(2)} m)`;
+  out.text.push(`    zoomed in over his shoulder, his neck on the screen sat ${said(sat)}, standing ${said(standing)}`);
   if (Math.abs(off) > FRAMED_MOST) {
     const way = off < 0 ? 'over' : 'under';
     out.problems.push(`sit: on the ${name}, zoomed in over his shoulder, the camera frames him `
