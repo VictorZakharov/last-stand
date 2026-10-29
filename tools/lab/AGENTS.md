@@ -9,6 +9,11 @@ The lab as an agent works with it: what every command measures, in a line here a
 - **A check run often takes minutes**, not half an hour (Don't waste compute in the root's Workflow): `--profile` it, cut what its measures don't read, run side by side what doesn't depend on each other, and while iterating run only the scenarios a change can touch.
 - **Send a long run's output to a file** in `.tmp` (an `--ab` run, a check) and read its parts: read through `head` or `tail`, a run's end was lost.
 - **Stop the server with `npm run lab -- stop`**: its supervisor starts a killed server again. It stops every command running in a process of its own from this tree too (`check`, `pwa`, one run without the server: `node/running.mjs`), which a stopped task doesn't: under Git Bash, `npm run lab` leaves its command no line back to the task, and a stopped check ran on to its end, eight browsers at full load.
+- **Each tree has its own server**, on a port of its own made from its root (`treePort` in `node/paths.mjs`; `LAB_PORT`
+  overrides it), and a server refuses a command or a `stop` from another tree's command line, saying whose it is.
+  Two sessions in two worktrees once shared a port: each one's command found the other's server running other code,
+  restarted it, and waited for it in vain (it came back on its own tree's code), and a `stop` stopped the other's.
+  Don't hand sessions a `LAB_PORT`: the default is already theirs alone.
 - **Don't load the shared PC for more than about two minutes unasked** (the root's Workflow): a whole check of the old harness for a "before" number pinned the CPU and GPU for over 17 minutes. Take old timings from past runs' `out/check/durations.json` and logs, or time one narrow job.
 - **The lab runs below normal priority, and lowers itself** (`node/priority.mjs`, #283): its command line, its server's supervisor and the server lower themselves as they start, before any browser, Vite or worker, which inherit it on Windows; each browser's processes Chrome raises (its GPU process as it starts, a page's renderer as it shows it) are lowered again after its launch and each page's load (`lowerProcesses` in `node/browser.mjs`, by the browser's own `SystemInfo.getProcessInfo`). At normal priority its runs froze the owner's desktop for 10 to 20 s, about a dozen times over one task. `lab status` and the supervisor's first line say what it runs at; check its browsers with their process tree's `PriorityClass` (a page's renderer may sit at Idle, lower still).
 
@@ -250,7 +255,8 @@ alone, each was waited out to the timeout, three minutes: a module that wouldn't
 loading screen never says it failed, and the command after it waited behind it.
 
 - `lab.mjs`: the command line. Reads and checks the command (`node/options.mjs`), and sends it to the server on
-  127.0.0.1:5196 (`LAB_PORT`; `node/client.mjs`), or runs it in a session of its own.
+  127.0.0.1 on this tree's own port (`treePort`, or `LAB_PORT`; `node/client.mjs`), or runs it in a session of its
+  own.
 - `node/`, the Node side:
   - `server.mjs`: `lab:serve`. One command at a time, the next page booted between them, and `--watch`'s changes. It
     only answers the lab's own command line: a POST of JSON for 127.0.0.1 or localhost, from no web page (a page in
