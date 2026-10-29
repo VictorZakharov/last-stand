@@ -497,7 +497,7 @@ async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out, wa
     const at = w > 0 ? 0 : 1;
     if (past && (!worst[at] || past.by > worst[at].by)) worst[at] = { by: past.by, name: past.name, w };
     if (w > 0) into.observe(lab, `${f}, ${(w * 100).toFixed(0)}% down`);
-    watchFrame(lab, label, `${(w * 100).toFixed(0)}% down`, watch, skirts);
+    watchFrame(lab, label, `frame ${f}, ${(w * 100).toFixed(1)}% down${sitting.walking ? ', walking' : ''}`, watch, skirts);
     watch.film.take(lab, w, 'down');
     if (!half && w >= 0.5) {
       half = true;
@@ -809,10 +809,11 @@ async function askOf(lab: Lab, c: SeatCase, ask: Ask, out: Out, watch: Watch): P
   const aim = player.pos.clone().addScaledVector(ahead, 4);
   const input = ask.what === 'step' ? { keys: ['w'] } : { m0: true, aim };
   const frames = Math.round((RISE_MOST + AFTER_UP) * RATE);
-  const reads = await lab.step(frames, (f) => (ask.held || f < TAP ? input : { aim }), (): AskRead => {
+  const reads = await lab.step(frames, (f) => (ask.held || f < TAP ? input : { aim }), (frame): AskRead => {
     const w = player.sitting.pose?.w ?? 0;
     // (the way up is followed until he acts: a held attack swings what he holds as it means to)
-    if (!ask.held) watchFrame(lab, c.name, `${(w * 100).toFixed(0)}% down, getting up`, watch, skirts);
+    const at = `${(w * 100).toFixed(0)}% down, getting up (${ask.what} tapped, frame ${frame})`;
+    if (!ask.held) watchFrame(lab, c.name, at, watch, skirts);
     watch.film.take(lab, w, 'up');
     return { w, at: player.pos.clone(), cast: Boolean(player.casting || player.channel) };
   });

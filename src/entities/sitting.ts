@@ -17,8 +17,9 @@ export const SIT = {
   /** his walk there (a share of his speed), how near where he'd stand counts as there (m) and how long he may go on
    *  getting no nearer before he gives it up (s, a prop in his way) */
   walk: 0.45, there: 0.1, stuck: 1.2,
-  /** how fast he turns his back to the seat (1/s), and how long it may take (s) */
-  turn: 7, turnMost: 1.2,
+  /** how fast he turns his back to the seat (1/s), as fast as a person turns at most (rad/s), and how long it may take
+   *  (s). (Eased alone, he spun about at up to 21 rad/s, a snap, and the axe in his hand went 42 cm in a frame) */
+  turn: 7, turnFastest: 5, turnMost: 1.2,
   /** the way down and the way up (s) */
   down: 1.1, up: 0.8,
   /** a foe this near gets him up (m) */
@@ -28,6 +29,14 @@ export const SIT = {
 };
 
 type Phase = 'walk' | 'turn' | 'down' | 'sat' | 'up';
+
+/** `facing` turned towards `yaw` over `dt` as he turns to his seat: eased, no faster than `SIT.turnFastest`. */
+function turnedTo(facing: number, yaw: number, dt: number): number {
+  const eased = angleDamp(facing, yaw, SIT.turn, dt);
+  const step = Math.atan2(Math.sin(eased - facing), Math.cos(eased - facing));
+  const most = SIT.turnFastest * dt;
+  return facing + Math.max(-most, Math.min(most, step));
+}
 
 /** What the sit reads of the hero and moves. */
 export interface Sitter {
@@ -146,7 +155,7 @@ export class Sitting {
       return false;
     }
     const s = this.spot!;
-    me.facing = angleDamp(me.facing, s.yaw, SIT.turn, dt);
+    me.facing = turnedTo(me.facing, s.yaw, dt);
     this.turnFor += dt;
     const off = Math.abs(Math.atan2(Math.sin(s.yaw - me.facing), Math.cos(s.yaw - me.facing)));
     if (off < 0.05 || this.turnFor > SIT.turnMost) {
@@ -185,7 +194,7 @@ export class Sitting {
     const back = smooth(Math.min(1, this.u * 1.25));
     me.pos.x = this.from.x + (s.x - this.from.x) * back;
     me.pos.z = this.from.z + (s.z - this.from.z) * back;
-    me.facing = angleDamp(me.facing, s.yaw, SIT.turn, dt);
+    me.facing = turnedTo(me.facing, s.yaw, dt);
     this.state.w = w;
     this.state.hip = s.hip;
     // (his feet where he stood, from where his hips are now)
