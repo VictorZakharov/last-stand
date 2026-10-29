@@ -459,11 +459,31 @@ export class Skirt {
   }
 
   /** Every point kept over the floor at `y` (the mesh's own space), the cloth lying on it there: a robe sat in, its hem
-   *  hung down through the floor. Call after `update`. */
+   *  hung down through the floor. Down each column from where it first meets the floor, the rest lies out along it at
+   *  its length, away from the skirt's middle: each point only lifted onto the floor, a coat hanging straight down
+   *  from a man sat on the ground piled up in a ring round his hips, a sack wider than his shoulders. Call after
+   *  `update`. */
   keepAbove(y: number): void {
-    const p = this.geo.attributes.position as THREE.BufferAttribute, P = p.array as Float32Array;
+    const p = this.geo.attributes.position as THREE.BufferAttribute, P = p.array as Float32Array, C = this.cols;
+    const R = this.rest, rows = P.length / 3 / C;
     let moved = false;
-    for (let k = 1; k < P.length; k += 3) if (P[k] < y) { P[k] = y; moved = true; }
+    for (let i = 0; i < C; i++) {
+      for (let k = 1; k < rows; k++) {
+        const j = (k * C + i) * 3, above = j - C * 3;
+        if (P[j + 1] >= y) continue;
+        moved = true;
+        // (its length to the point above it as cut, laid from that point down to the floor and out along it)
+        const len = Math.hypot(R[j] - R[above], R[j + 1] - R[above + 1], R[j + 2] - R[above + 2]);
+        const drop = Math.max(0, P[above + 1] - y), along = Math.sqrt(Math.max(0, len * len - drop * drop));
+        let ox = P[above], oz = P[above + 2];
+        const out = Math.hypot(ox, oz);
+        if (out > 1e-4) { ox /= out; oz /= out; }
+        else { ox = Math.sin(this.ang[i]); oz = Math.cos(this.ang[i]); }
+        P[j] = P[above] + ox * along;
+        P[j + 1] = y;
+        P[j + 2] = P[above + 2] + oz * along;
+      }
+    }
     if (!moved) return;
     p.needsUpdate = true;
     vertexNormals(this.geo);
